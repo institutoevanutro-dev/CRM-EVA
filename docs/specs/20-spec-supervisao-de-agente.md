@@ -118,6 +118,36 @@ para uma pessoa decidir. O cron (`app/api/v1/cron/sinal-revisao-humana`, a cada 
 `docker/scheduler/entrypoint.sh` e `vercel.ts`) audita só quando abriu algum item
 (`cron-audita-so-quando-ha-efeito`).
 
+**Folga inerente ao agendador (documentada, não é bug):** `decidirRevisaoHumana` decide
+por comparação pura de instantes — ela não sabe quando o cron rodou. O `*/15 * * * *`
+introduz até **~15 minutos** de atraso entre o prazo vencer (T+60) e o item realmente
+aparecer na Central: o pior caso é a reserva vencer o prazo logo depois de uma rodada do
+cron. O item não deixa de nascer — nasce até 15 min depois do instante exato. Testado em
+`lib/followup/revisao-do-sinal.test.ts` ("cron de 15 em 15 min: abre corretamente mesmo até
+~15min depois do vencimento"). Se essa folga for grande demais para um nicho, a cadência do
+cron é o knob a apertar (`*/5` custaria mais consultas vazias por hora), não a função pura.
+
+**Comprovante bloqueia o PRÓXIMO lembrete antes de qualquer pessoa mover o card.** O
+bloqueio por resposta (`cancelaNaResposta`/`resposta_do_contato` em
+`bloqueios-obrigatorios.ts`) olha só se houve mensagem do contato depois do último envio
+(ou da entrada no fluxo) — nunca a etapa nem quem moveu o quê. Isso exige que o nó de
+gatilho do fluxo do sinal tenha `cancel_on_reply: true` (ver seção de configuração no
+runbook de deploy). Com isso ligado, o comprovante em texto ou mídia já impede o próximo
+lembrete no mesmo instante em que a mensagem chega — a equipe pode levar horas para mover o
+card, e isso não teria acontecido ainda. Testado em `bloqueios-obrigatorios.test.ts`
+("comprovante enviado bloqueia o lembrete ANTES de qualquer pessoa mover o card").
+
+**Sinal × D1/D3/D7 nunca mandam mensagem concorrente para o mesmo contato — mas só com
+`uma_sequencia_por_contato` ligado na organização.** `outras_inscricoes_vivas` (a leitura
+que alimenta essa regra) vem de `select ... from followup_enrollments where
+organization_id=$1 and contact_id=$2 and id<>$3` — **sem filtro de `pointer_id`** — então
+uma inscrição do fluxo de sinal e uma do D1 já se enxergam como "outra inscrição viva" uma
+da outra, exatamente como duas inscrições do mesmo fluxo. Com a opção ligada, só a mais
+antiga das duas segue e a outra pausa com `sequencia_concorrente`. Testado em
+`bloqueios-obrigatorios.test.ts` ("sequência concorrente vale ENTRE FLUXOS DIFERENTES").
+**Sem essa opção ligada, os dois fluxos podem mandar mensagem no mesmo dia** — é uma escolha
+de configuração da organização, não uma garantia incondicional do código.
+
 ## Fora do escopo (declarado)
 
 - Tela para configurar vínculos e bloqueios (hoje por SQL).

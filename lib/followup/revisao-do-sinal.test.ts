@@ -56,4 +56,16 @@ describe('decidirRevisaoHumana', () => {
     expect(decidirRevisaoHumana(f, new Date('2026-09-16T13:30:00.000Z'))).toEqual({ abrir: false, motivo: 'ainda_nao_venceu_o_prazo' });
     expect(decidirRevisaoHumana(f, new Date('2026-09-16T13:45:00.000Z'))).toEqual({ abrir: true });
   });
+
+  it('cron de 15 em 15 min: abre corretamente mesmo até ~15min depois do vencimento (a folga é do agendador, não da decisão)', () => {
+    // decidirRevisaoHumana não tem noção de "quando o cron rodou" — ela só
+    // compara `agora` contra o prazo. O atraso de até ~15min entre o prazo
+    // vencer (T+60) e o item de Central realmente aparecer é inteiramente do
+    // `*/15 * * * *` do cron (docker/scheduler/entrypoint.sh), não desta
+    // função: o item não deixa de nascer, só nasce um pouco depois do
+    // instante exato. Aqui simulamos exatamente esse pior caso — o cron
+    // rodando quase 15min depois do prazo — e confirmamos que ainda abre.
+    const QUASE_15_MIN_DEPOIS = new Date('2026-09-16T14:14:59.000Z'); // prazo=14:00Z
+    expect(decidirRevisaoHumana(fatos(), QUASE_15_MIN_DEPOIS)).toEqual({ abrir: true });
+  });
 });

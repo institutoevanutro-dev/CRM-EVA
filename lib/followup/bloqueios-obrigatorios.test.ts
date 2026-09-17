@@ -137,6 +137,24 @@ describe('decidirEnvio — ligados pela organização', () => {
     expect(decidirEnvio(posterior, TUDO_LIGADO, QUARTA_MANHA)).toEqual({ envia: true });
   });
 
+  it('sequência concorrente vale ENTRE FLUXOS DIFERENTES (sinal × D1/D3/D7), não só dentro do mesmo fluxo', () => {
+    // `outras_inscricoes_vivas` vem de `select ... from followup_enrollments
+    // where organization_id=$1 and contact_id=$2 and id<>$3` (lerFatosDoEnvio)
+    // — SEM filtro de pointer_id. Uma inscrição do fluxo de sinal e uma do D1
+    // são "outras inscrições vivas" uma para a outra do mesmo jeito que duas
+    // inscrições do MESMO fluxo seriam. Com `uma_sequencia_por_contato`
+    // ligado, isso é o que impede D1/D3/D7 e o sinal mandarem mensagem ao
+    // mesmo contato ao mesmo tempo: só a mais antiga das duas segue.
+    const inscricaoDoSinal = fatos({
+      enrollment: { id: 'e0000000-0000-4000-8000-000000000010', status: 'active', started_at: '2026-09-16T12:00:00.000Z', pointer_id: 'PONTEIRO-DO-SINAL' },
+      outras_inscricoes_vivas: [{ id: 'e0000000-0000-4000-8000-000000000020', started_at: '2026-09-14T09:00:00.000Z' }],
+    });
+    expect(decidirEnvio(inscricaoDoSinal, TUDO_LIGADO, QUARTA_MANHA)).toMatchObject({
+      motivo: 'sequencia_concorrente',
+      invalida: true,
+    });
+  });
+
   it('fora da janela ADIA para a próxima abertura, sem invalidar', () => {
     // Quarta 12:30 em SP (almoço) → abre às 14:00 (17:00Z).
     const almoco = new Date('2026-09-16T15:30:00.000Z');
@@ -205,6 +223,26 @@ describe('decidirEnvio — reserva do fluxo de sinal (migration 0264)', () => {
     expect(decidirEnvio(f, config, new Date('2026-09-16T15:05:00.000Z'))).toEqual({
       envia: false,
       motivo: 'fora_da_janela_sem_encaixe',
+      invalida: true,
+    });
+  });
+
+  it('comprovante enviado bloqueia o lembrete ANTES de qualquer pessoa mover o card', () => {
+    // O bloqueio por resposta (cancelaNaResposta) não olha etapa nem quem
+    // moveu o card — só se HOUVE mensagem do contato depois do último envio
+    // (ou da entrada no fluxo, se ainda não mandou nada). Isto exige que o
+    // fluxo do sinal tenha `cancel_on_reply: true` no nó de gatilho (ver
+    // guia de configuração) — com isso, o comprovante em texto ou mídia já
+    // bloqueia o PRÓXIMO lembrete mesmo que o card continue na etapa antiga,
+    // porque ninguém da equipe teve tempo de mover nada ainda.
+    const f = fatos({
+      reserva: RESERVA_FOLGADA,
+      negocios_abertos: [{ stage_id: ETAPA_AGUARDANDO, stage_blocks_followups: false }], // card AINDA não movido
+      ultimo_envio_da_inscricao_em: '2026-09-16T13:10:00.000Z',
+      ultima_recebida_em: '2026-09-16T13:20:00.000Z', // comprovante chegou depois do envio
+    });
+    expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toMatchObject({
+      motivo: 'resposta_do_contato',
       invalida: true,
     });
   });
