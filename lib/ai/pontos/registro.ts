@@ -196,6 +196,18 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     registraEm: "llm_calls",
   },
   {
+    id: "supervisor_review",
+    rotulo: "Revisar o atendimento",
+    oQueFaz:
+      "Confere, depois de cada atendimento, o que outro agente ou a equipe fez e deixa recomendações ou ajusta o funil dentro do que você autorizou.",
+    papel: "proteger",
+    exige: {},
+    emissor: "lib/agent-engine/agent/supervisor-review.ts",
+    sintomaDeFalha:
+      "Os atendimentos continuam normalmente, mas nenhuma revisão aparece e nenhum ponto é deixado para a equipe.",
+    registraEm: "llm_calls",
+  },
+  {
     id: "automation_ai_message",
     rotulo: "Abordar quem preencheu o formulário",
     oQueFaz:

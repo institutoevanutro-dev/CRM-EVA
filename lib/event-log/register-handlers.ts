@@ -20,6 +20,7 @@ import { mediaPersistHandler } from "@/workers/media-persist-worker.handler";
 import { mediaDeriveHandler } from "@/workers/media-derive-worker.handler";
 import { webPushInboundHandler } from "@/lib/notifications/push.handler";
 import { conversaoDeVendaHandler } from "@/lib/conversoes/envio.handler";
+import { supervisaoAcionamentoHumanoHandler } from "@/lib/supervisao/acionamento-humano.handler";
 import { registerHandler } from "@/lib/event-log/dispatcher";
 
 let _registered = false;
@@ -39,6 +40,9 @@ export function ensureHandlersRegistered(): void {
   registerHandler(followupGatilhoEtapaHandler);
   registerHandler(followupGatilhoCasoHandler);
   registerHandler(followupGatilhoPresencaHandler);
+  // Migration 0263 — ação humana concluída aciona a revisão de supervisão. Depois
+  // dos gatilhos de follow-up: a revisão lê o estado que eles já deixaram.
+  registerHandler(supervisaoAcionamentoHumanoHandler);
   registerHandler(mediaPersistHandler);
   registerHandler(mediaDeriveHandler);
   registerHandler(webPushInboundHandler);

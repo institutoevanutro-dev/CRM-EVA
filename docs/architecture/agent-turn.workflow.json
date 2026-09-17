@@ -303,6 +303,15 @@
       "type": "service",
       "label": "Entrega da resposta aprovada",
       "sublabel": "Texto autorizado, fronteira e aquisição originais; recibo e liquidação recuperáveis, sem novo LLM"
+    },
+    {
+      "id": "supervisao",
+      "lane": "operacao",
+      "col": 6,
+      "type": "backend",
+      "label": "Supervisão",
+      "sublabel": "revisão por outro agente, sem ferramentas e sem canal · kind: supervisor_review",
+      "tag": "supervisor_review"
     }
   ],
   "edges": [
@@ -704,6 +713,34 @@
       "from": "approved_reply",
       "to": "reply_review",
       "label": "envio, falha ou contexto obsoleto aparecem na conversa",
+      "route": "drop"
+    },
+    {
+      "id": "turn-supervisao",
+      "from": "turn",
+      "to": "supervisao",
+      "label": "fim do turno: revisão durável se há vínculo ligado (chave org:conversa:evento:supervisor)",
+      "route": "drop"
+    },
+    {
+      "id": "eventlog-supervisao",
+      "from": "eventlog",
+      "to": "supervisao",
+      "label": "ação humana concluída (mensagem enviada, card movido)",
+      "route": "drop"
+    },
+    {
+      "id": "supervisao-stagehint",
+      "from": "supervisao",
+      "to": "stagehint",
+      "label": "move só transição autorizada, com trava; ganho/perda nunca por inferência",
+      "route": "drop"
+    },
+    {
+      "id": "supervisao-inbox",
+      "from": "supervisao",
+      "to": "inbox",
+      "label": "RECOM e BLOQ viram pendência para a equipe",
       "route": "drop"
     }
   ],

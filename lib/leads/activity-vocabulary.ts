@@ -157,7 +157,16 @@ export type ActivityType =
    * doutrina de migrations), então o banco aceitaria a divergência calado e a
    * timeline cairia no fallback.
    */
-  | "contacts_merged";
+  | "contacts_merged"
+  /**
+   * UMA REVISÃO DE SUPERVISÃO TERMINOU (migration 0263). Um agente supervisor
+   * conferiu o que outro agente — ou uma pessoa da equipe — acabou de concluir
+   * nesta conversa. A linha diz o desfecho em códigos (EXE/RECOM/BLOQ) e aponta
+   * para o registro da revisão; nunca carrega o que o paciente disse. Quando a
+   * revisão MOVE o card, a linha de `stage_changed` sai também, como em
+   * qualquer outra mão que move.
+   */
+  | "supervision_review";
 
 export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   lead_created: "Entrou pelo WhatsApp",
@@ -257,6 +266,7 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   // cadastros da mesma pessoa viraram um — e é por isso que este negócio pode
   // ter mudado de contato sem ninguém tê-lo movido.
   contacts_merged: "Contatos duplicados juntados",
+  supervision_review: "Revisão da supervisão",
 };
 
 /** Quando o tipo é legado/desconhecido, a linha ainda é honesta — sem jargão. */
