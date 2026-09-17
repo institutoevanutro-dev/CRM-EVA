@@ -26283,3 +26283,57 @@ comment on column public.crm_stages.blocks_followups is
   'Lead nesta etapa não recebe follow-up automático: a entrada invalida sequências vivas e o executor reconfere antes de cada envio. Ex.: comprovante em conferência.';
 
 notify pgrst, 'reload schema';
+
+-- ---- bloqueios do fluxo de sinal: reserva na inscrição + tipo sujeito a sinal (migration 0264) ----
+alter table public.followup_enrollments
+  add column if not exists appointment_id uuid references public.calendar_appointments(id) on delete set null;
+
+create unique index if not exists idx_followup_enrollments_one_per_appointment
+  on public.followup_enrollments (pointer_id, appointment_id)
+  where appointment_id is not null and status in ('active', 'waiting_reply', 'paused_handoff');
+
+alter table public.calendar_event_types
+  add column if not exists requires_signal boolean not null default false;
+
+comment on column public.followup_enrollments.appointment_id is
+  'Reserva (calendar_appointments) que originou a inscrição, quando o fluxo é amarrado a uma reserva específica (ex.: cobrança de sinal). NULL nos demais fluxos.';
+comment on column public.calendar_event_types.requires_signal is
+  'Tipo de compromisso exige sinal/depósito antes da confirmação. Usado pelo executor de follow-up para não cobrar sinal de quem não deve.';
+
+alter table public.agent_inbox_items
+  drop constraint if exists agent_inbox_items_kind_check;
+alter table public.agent_inbox_items
+  add constraint agent_inbox_items_kind_check
+  check (kind in (
+    'appointment_outcome_required',
+    'appointment_recovery_review',
+    'qr_rescan',
+    'routing_unassigned',
+    'job_dead',
+    'event_dead',
+    'budget_exceeded',
+    'handoff',
+    'promotion_review',
+    'judge_unaligned',
+    'followup_dead',
+    'snooze_expired',
+    'next_action_ambiguous',
+    'risk_backlog_seeded',
+    'reactivation_expired',
+    'capabilities_missing',
+    'message_send_stuck',
+    'midia_nao_lida',
+    'channel_template_review',
+    'channel_number_alert',
+    'promise_unfulfilled',
+    'contact_proposal_expired',
+    'budget_warning',
+    'conhecimento_nao_indexado',
+    'voice_call_missed',
+    'case_stale',
+    'supervision_review',
+    'sinal_revisao_humana',
+    'other'
+  ));
+
+notify pgrst, 'reload schema';

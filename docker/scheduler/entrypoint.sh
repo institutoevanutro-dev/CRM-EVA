@@ -80,6 +80,11 @@ CRONS="
 # confirmado, futuro e ainda não avisado.
 */5 * * * *|45|api/v1/cron/agenda-reminder
 */15 * * * *|45|api/v1/cron/agenda-expira-pendentes
+# T+60 DO SINAL. Só abre item de revisão (nunca libera horário nem marca
+# falta) — a cada 15 min é suficiente porque o prazo é de 60 min e o item fica
+# aberto até alguém tratar; não há corrida a vencer aqui, ao contrário do
+# lembrete acima.
+*/15 * * * *|45|api/v1/cron/sinal-revisao-humana
 */15 * * * *|60|api/v1/cron/risk-watcher
 # O CASO PARADO. De hora em hora, e não a cada 5 minutos: o prazo é de 24h, e
 # uma varredura mais frequente só gastaria consulta para descobrir o mesmo nada.

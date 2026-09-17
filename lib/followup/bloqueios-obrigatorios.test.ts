@@ -36,6 +36,7 @@ function fatos(p: Partial<FatosDoEnvio> = {}): FatosDoEnvio {
     ultimo_envio_da_inscricao_em: null,
     consultas_confirmadas_futuras: 0,
     outras_inscricoes_vivas: [],
+    reserva: null,
     ...p,
   };
 }
@@ -143,6 +144,83 @@ describe('decidirEnvio — ligados pela organização', () => {
       envia: false,
       motivo: 'fora_da_janela',
       adiarPara: new Date('2026-09-16T17:00:00.000Z'),
+    });
+  });
+});
+
+describe('decidirEnvio — reserva do fluxo de sinal (migration 0264)', () => {
+  // Reserva criada às 10:00 SP (13:00Z), consulta às 13:00 SP (16:00Z, 3h
+  // depois) → prazo = min(10:00+60min, 13:00) = 11:00 SP = 14:00Z.
+  const RESERVA_FOLGADA = { criada_em: '2026-09-16T13:00:00.000Z', consulta_em: '2026-09-16T16:00:00.000Z', sujeita_a_sinal: true };
+
+  it('sem reserva (fluxo comum), o comportamento de hoje não muda', () => {
+    expect(decidirEnvio(fatos({ reserva: null }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({ envia: true });
+  });
+
+  it('dentro do prazo (T+60 e antes da consulta), envia', () => {
+    const f = fatos({ reserva: RESERVA_FOLGADA });
+    expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({ envia: true });
+  });
+
+  it('tipo de consulta não sujeito a sinal invalida, mesmo dentro do prazo', () => {
+    const f = fatos({ reserva: { ...RESERVA_FOLGADA, sujeita_a_sinal: false } });
+    expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({
+      envia: false,
+      motivo: 'consulta_nao_sujeita_a_sinal',
+      invalida: true,
+    });
+  });
+
+  it('depois de T+60 (contado da CRIAÇÃO da reserva, não da entrada no fluxo) invalida', () => {
+    const f = fatos({ reserva: RESERVA_FOLGADA });
+    // Prazo é 14:00Z (11:00 SP). 14:30Z já venceu.
+    expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, new Date('2026-09-16T14:30:00.000Z'))).toEqual({
+      envia: false,
+      motivo: 'prazo_do_sinal_vencido',
+      invalida: true,
+    });
+  });
+
+  it('consulta que começa antes de T+60 encurta o prazo — nenhum lembrete depois do início', () => {
+    // Consulta 40 min depois da reserva: prazo = min(+60min, consulta) = a própria consulta.
+    const f = fatos({
+      reserva: { criada_em: '2026-09-16T13:00:00.000Z', consulta_em: '2026-09-16T13:40:00.000Z', sujeita_a_sinal: true },
+    });
+    expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, new Date('2026-09-16T13:30:00.000Z'))).toEqual({ envia: true });
+    expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, new Date('2026-09-16T13:45:00.000Z'))).toEqual({
+      envia: false,
+      motivo: 'prazo_do_sinal_vencido',
+      invalida: true,
+    });
+  });
+
+  it('fora da janela comercial, com o prazo vencendo antes da próxima abertura, SUPRIME — não adia', () => {
+    // Reserva 11:30 SP (14:30Z), consulta bem depois → prazo = 12:30 SP (15:30Z).
+    // Agora 12:05 SP (15:05Z): fora da janela (almoço), ainda dentro do prazo.
+    // Próxima abertura: 14:00 SP (17:00Z) — depois do prazo (15:30Z).
+    const f = fatos({
+      reserva: { criada_em: '2026-09-16T14:30:00.000Z', consulta_em: '2026-09-17T16:00:00.000Z', sujeita_a_sinal: true },
+    });
+    const config: ConfigDosBloqueios = { ...CONFIG_SEM_BLOQUEIOS_OPCIONAIS, janela: JANELA_DA_CLINICA };
+    expect(decidirEnvio(f, config, new Date('2026-09-16T15:05:00.000Z'))).toEqual({
+      envia: false,
+      motivo: 'fora_da_janela_sem_encaixe',
+      invalida: true,
+    });
+  });
+
+  it('fora da janela comercial, mas o prazo ainda cabe na próxima abertura, ADIA normalmente', () => {
+    // Quarta 08:55 SP (11:55Z), 5 min antes de abrir (09:00 SP). Reserva criada
+    // 08:50 SP: prazo = 09:50 SP (12:50Z) — depois da abertura (09:00 SP,
+    // 12:00Z), então adiar ainda entrega dentro do prazo.
+    const f = fatos({
+      reserva: { criada_em: '2026-09-16T11:50:00.000Z', consulta_em: '2026-09-18T16:00:00.000Z', sujeita_a_sinal: true },
+    });
+    const config: ConfigDosBloqueios = { ...CONFIG_SEM_BLOQUEIOS_OPCIONAIS, janela: JANELA_DA_CLINICA };
+    expect(decidirEnvio(f, config, new Date('2026-09-16T11:55:00.000Z'))).toEqual({
+      envia: false,
+      motivo: 'fora_da_janela',
+      adiarPara: new Date('2026-09-16T12:00:00.000Z'),
     });
   });
 });

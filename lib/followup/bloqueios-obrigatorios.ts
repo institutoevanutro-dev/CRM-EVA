@@ -155,6 +155,13 @@ export interface FatosDoEnvio {
   consultas_confirmadas_futuras: number;
   /** Outras inscrições vivas do contato, com início. */
   outras_inscricoes_vivas: Array<{ id: string; started_at: string }>;
+  /**
+   * A RESERVA (migration 0264) que originou a inscrição, só nos fluxos
+   * amarrados a uma reserva específica (ex.: cobrança de sinal). `null` em
+   * todo fluxo disparado por etapa ou manualmente sem reserva — o
+   * comportamento de hoje não muda para eles.
+   */
+  reserva: { criada_em: string; consulta_em: string; sujeita_a_sinal: boolean } | null;
 }
 
 export type MotivoDoBloqueio =
@@ -169,7 +176,20 @@ export type MotivoDoBloqueio =
   | 'fora_da_etapa_do_gatilho'
   | 'consulta_confirmada'
   | 'sequencia_concorrente'
-  | 'fora_da_janela';
+  | 'fora_da_janela'
+  | 'consulta_nao_sujeita_a_sinal'
+  | 'prazo_do_sinal_vencido'
+  | 'fora_da_janela_sem_encaixe';
+
+/**
+ * T+60 (medido a partir da CRIAÇÃO da reserva, nunca da entrada no fluxo — é
+ * essa distinção que corrige o node "T+40min | Contar da reserva real" do
+ * fluxo publicado, que contava da entrada). Também usado pela revisão humana
+ * de T+60 (`lib/followup/revisao-do-sinal.ts`) — mesmo prazo, duas
+ * consequências: aqui pára de mandar mensagem; lá abre um item para gente
+ * olhar. Nenhum dos dois libera horário, cancela consulta ou marca falta.
+ */
+export const PRAZO_DO_SINAL_MINUTOS = 60;
 
 export type DecisaoDoEnvio =
   | { envia: true }
@@ -224,6 +244,22 @@ export function decidirEnvio(
       return { envia: false, motivo: 'resposta_do_contato', invalida: true };
     }
   }
+  // A reserva (migration 0264) é o segundo grupo que SEMPRE vale, sem
+  // configuração: mandar cobrança de sinal fora do prazo ou de um tipo que não
+  // usa sinal é errado em qualquer nicho, do mesmo jeito que opt-out é.
+  let prazoDoSinal: number | null = null;
+  if (fatos.reserva !== null) {
+    if (!fatos.reserva.sujeita_a_sinal) {
+      return { envia: false, motivo: 'consulta_nao_sujeita_a_sinal', invalida: true };
+    }
+    prazoDoSinal = Math.min(
+      Date.parse(fatos.reserva.criada_em) + PRAZO_DO_SINAL_MINUTOS * 60_000,
+      Date.parse(fatos.reserva.consulta_em),
+    );
+    if (agora.getTime() >= prazoDoSinal) {
+      return { envia: false, motivo: 'prazo_do_sinal_vencido', invalida: true };
+    }
+  }
   if (config.exigir_etapa_do_gatilho) {
     const etapa = etapaDoGatilho(fatos.trigger_config);
     if (etapa !== null && !fatos.negocios_abertos.some((n) => n.stage_id === etapa)) {
@@ -245,6 +281,12 @@ export function decidirEnvio(
   if (config.janela !== null && !dentroDaJanela(config.janela, agora)) {
     const abre = proximaAbertura(config.janela, agora);
     if (abre === null) return { envia: false, motivo: 'configuracao_invalida', invalida: false };
+    // Reserva com prazo: adiar só é correto se o lembrete ainda CABE antes do
+    // vencimento. Adiar para depois do prazo não é "atrasar" — é mandar uma
+    // cobrança de sinal a quem já devia ter sido liberado dela. Suprime.
+    if (prazoDoSinal !== null && abre.getTime() >= prazoDoSinal) {
+      return { envia: false, motivo: 'fora_da_janela_sem_encaixe', invalida: true };
+    }
     return { envia: false, motivo: 'fora_da_janela', adiarPara: abre };
   }
   return { envia: true };
@@ -264,6 +306,10 @@ export const TEXTO_DO_BLOQUEIO: Record<MotivoDoBloqueio, string> = {
   consulta_confirmada: 'Sequência encerrada: o contato já tem consulta confirmada.',
   sequencia_concorrente: 'Sequência encerrada: outra sequência já está em andamento para este contato.',
   fora_da_janela: 'Envio adiado para a próxima janela permitida.',
+  consulta_nao_sujeita_a_sinal: 'Sequência encerrada: este tipo de consulta não cobra sinal.',
+  prazo_do_sinal_vencido: 'Sequência encerrada: o prazo do lembrete de sinal (T+60 ou início da consulta) venceu.',
+  fora_da_janela_sem_encaixe:
+    'Sequência encerrada: a próxima janela comercial só abre depois do prazo do sinal — não adiado, suprimido.',
 };
 
 // ─── leitura (pg) ────────────────────────────────────────────────────────────
@@ -283,10 +329,24 @@ export async function lerFatosDoEnvio(
   const { organizationId: org, contactId, conversationId, enrollmentId } = input;
   try {
     const [insc, contato, conversa, negocios, recebida, enviada, consultas, outras, organizacao] = await Promise.all([
-      pool.query<{ id: string; status: string; started_at: Date; pointer_id: string; trigger_config: unknown }>(
-        `select e.id, e.status, e.started_at, e.pointer_id, p.trigger_config
+      pool.query<{
+        id: string;
+        status: string;
+        started_at: Date;
+        pointer_id: string;
+        trigger_config: unknown;
+        appointment_id: string | null;
+        reserva_criada_em: Date | null;
+        reserva_consulta_em: Date | null;
+        reserva_sujeita_a_sinal: boolean | null;
+      }>(
+        `select e.id, e.status, e.started_at, e.pointer_id, p.trigger_config, e.appointment_id,
+                a.created_at as reserva_criada_em, a.starts_at as reserva_consulta_em,
+                coalesce(t.requires_signal, false) as reserva_sujeita_a_sinal
            from followup_enrollments e
            join followup_flow_pointers p on p.id = e.pointer_id and p.organization_id = e.organization_id
+           left join calendar_appointments a on a.id = e.appointment_id and a.organization_id = e.organization_id
+           left join calendar_event_types t on t.id = a.event_type_id and t.organization_id = e.organization_id
           where e.organization_id = $1 and e.id = $2 and e.contact_id = $3`,
         [org, enrollmentId, contactId],
       ),
@@ -335,6 +395,20 @@ export async function lerFatosDoEnvio(
     const o = organizacao.rows[0];
     if (e === undefined || c === undefined || v === undefined || o === undefined) return { ok: false };
     const iso = (d: Date | null | undefined): string | null => (d ? new Date(d).toISOString() : null);
+    // `appointment_id` presente mas a reserva sumiu (apagada) é "não
+    // verificável" para o QUE a reserva diria — trata como sujeita a sinal já
+    // vencido, porque a alternativa (agir como se não houvesse reserva)
+    // deixaria passar um lembrete que a reserva original devia ter barrado.
+    const reserva =
+      e.appointment_id === null
+        ? null
+        : e.reserva_criada_em !== null && e.reserva_consulta_em !== null
+          ? {
+              criada_em: iso(e.reserva_criada_em)!,
+              consulta_em: iso(e.reserva_consulta_em)!,
+              sujeita_a_sinal: e.reserva_sujeita_a_sinal ?? false,
+            }
+          : { criada_em: new Date(0).toISOString(), consulta_em: new Date(0).toISOString(), sujeita_a_sinal: true };
     return {
       ok: true,
       config: lerConfigDosBloqueios(o.settings),
@@ -348,6 +422,7 @@ export async function lerFatosDoEnvio(
         ultimo_envio_da_inscricao_em: iso(enviada.rows[0]?.em),
         consultas_confirmadas_futuras: Number(consultas.rows[0]?.n ?? '0'),
         outras_inscricoes_vivas: outras.rows.map((r) => ({ id: r.id, started_at: iso(r.started_at)! })),
+        reserva,
       },
     };
   } catch {
