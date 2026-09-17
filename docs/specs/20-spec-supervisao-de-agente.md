@@ -78,9 +78,52 @@ A reatividade (`reactivity.ts`) cancela sequências vivas quando o negócio **en
 etapa `blocks_followups`. Não existe reação de "saiu da etapa": mudança de etapa não
 reativa sequência nem remove opt-out.
 
+## Bloqueio do sinal por prazo (migration 0264)
+
+`followup_enrollments.appointment_id` (nullable) amarra uma inscrição a uma reserva
+específica (`calendar_appointments`) — só os fluxos ligados a uma reserva (cobrança de
+sinal) preenchem; os demais seguem `null`. Índice único parcial
+`idx_followup_enrollments_one_per_appointment` em `(pointer_id, appointment_id)` para
+`status in ('active','waiting_reply','paused_handoff')`: **uma tentativa por reserva**, e
+uma segunda chamada de `enrollFollowupFlow` para a mesma reserva/fluxo recebe `409
+conflict` em vez de duplicar. `calendar_event_types.requires_signal` distingue tipo de
+compromisso que exige sinal.
+
+`lib/followup/bloqueios-obrigatorios.ts` ganhou, quando `fatos.reserva` está presente:
+
+- **Elegibilidade**: `reserva.sujeita_a_sinal === false` → `BLOQ
+  consulta_nao_sujeita_a_sinal` (invalida a etapa, nunca envia lembrete de sinal fora do
+  tipo certo).
+- **Prazo**: `PRAZO_DO_SINAL_MINUTOS = 60`, contado da **criação real da reserva**
+  (`reserva.criada_em`), **capado no início da consulta** (`min(criada_em + 60min,
+  consulta_em)`) — uma consulta marcada para menos de 60 minutos à frente encurta o
+  prazo, nunca o estende. Vencido → `BLOQ prazo_do_sinal_vencido`, e nenhum lembrete de
+  sinal sai depois disso nem depois do início da consulta.
+- **Janela comercial**: fora da janela, o comportamento padrão é *adiar* para a próxima
+  abertura — mas se essa próxima abertura já está **depois** do prazo do sinal, adiar
+  enviaria o lembrete vencido. Nesse caso o envio é **suprimido** (`BLOQ
+  fora_da_janela_sem_encaixe`), nunca adiado para depois do vencimento.
+
+## Revisão humana em T+60 (`lib/followup/revisao-do-sinal.ts`, cron `sinal-revisao-humana`)
+
+Canal lateral, independente do envio de lembrete: quando o prazo do sinal vence
+(`decidirRevisaoHumana`) sem que a etapa atual já trate o comprovante
+(`etapa_atual_trata_o_sinal`) e sem item de Central já aberto para a mesma reserva
+(`ja_tem_item_aberto` — chave de idempotência por `ref_kind='calendar_appointment'` +
+`ref_id`), abre `agent_inbox_items` kind `sinal_revisao_humana`, severidade `warn`.
+
+**Garantia central, testada e não-negociável**: este caminho **nunca** muda etapa, nunca
+libera horário, nunca marca falta e nunca cancela a consulta — só abre o item de Central
+para uma pessoa decidir. O cron (`app/api/v1/cron/sinal-revisao-humana`, a cada 15 min,
+`docker/scheduler/entrypoint.sh` e `vercel.ts`) audita só quando abriu algum item
+(`cron-audita-so-quando-ha-efeito`).
+
 ## Fora do escopo (declarado)
 
 - Tela para configurar vínculos e bloqueios (hoje por SQL).
 - Revisão de ações humanas feitas fora da rota de envio e do movimento de card (ex.:
   mover em lote, editar campos).
 - Invariantes `tests/invariants/**` do SQL novo e prova e2e pela tela.
+- Sabotagem deliberada dedicada ao bloqueio do sinal (a suíte cobre os casos de decisão,
+  mas não repete o exercício adversarial de "quebrar de propósito" feito para a
+  supervisão original).
