@@ -10120,6 +10120,10 @@ alter table public.agent_inbox_items
     -- recomendada que depende de pessoa, ou bloqueio com motivo. Entra NESTA
     -- lista (bloco único por constraint, #159).
     'supervision_review',
+    -- (migration 0264) T+60 do sinal: reserva sujeita a sinal sem comprovante
+    -- tratado até o prazo — abre revisão humana, nunca libera horário nem
+    -- marca falta sozinho. Entra NESTA lista (bloco único por constraint, #159).
+    'sinal_revisao_humana',
     'other'
   ));
 
@@ -26300,40 +26304,10 @@ comment on column public.followup_enrollments.appointment_id is
 comment on column public.calendar_event_types.requires_signal is
   'Tipo de compromisso exige sinal/depósito antes da confirmação. Usado pelo executor de follow-up para não cobrar sinal de quem não deve.';
 
-alter table public.agent_inbox_items
-  drop constraint if exists agent_inbox_items_kind_check;
-alter table public.agent_inbox_items
-  add constraint agent_inbox_items_kind_check
-  check (kind in (
-    'appointment_outcome_required',
-    'appointment_recovery_review',
-    'qr_rescan',
-    'routing_unassigned',
-    'job_dead',
-    'event_dead',
-    'budget_exceeded',
-    'handoff',
-    'promotion_review',
-    'judge_unaligned',
-    'followup_dead',
-    'snooze_expired',
-    'next_action_ambiguous',
-    'risk_backlog_seeded',
-    'reactivation_expired',
-    'capabilities_missing',
-    'message_send_stuck',
-    'midia_nao_lida',
-    'channel_template_review',
-    'channel_number_alert',
-    'promise_unfulfilled',
-    'contact_proposal_expired',
-    'budget_warning',
-    'conhecimento_nao_indexado',
-    'voice_call_missed',
-    'case_stale',
-    'supervision_review',
-    'sinal_revisao_humana',
-    'other'
-  ));
+-- 'sinal_revisao_humana' entra na lista ÚNICA de agent_inbox_items_kind_check
+-- lá em cima (bloco da migration 0105/#159), não aqui — bloco único por
+-- constraint em todo o baseline (vigiado por
+-- tests/unit/midia-nao-lida.test.ts: "a constraint é reconstruída UMA vez só
+-- no baseline").
 
 notify pgrst, 'reload schema';
