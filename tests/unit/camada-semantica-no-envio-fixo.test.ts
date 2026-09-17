@@ -96,7 +96,15 @@ function job(payload: Record<string, unknown>): JobRow {
   } as JobRow;
 }
 
-/** Pool mínimo: resolve a conversa e devolve a escolha da organização. */
+/**
+ * Pool mínimo: resolve a conversa, a escolha da organização e — para o
+ * caminho dirigido por fluxo (`followup_enrollment_id`) — os bloqueios
+ * obrigatórios (migration 0263/0264, `lib/followup/bloqueios-obrigatorios.ts`).
+ * As linhas abaixo simulam "nenhum bloqueio se aplica": sem reserva
+ * (`appointment_id: null`), contato liberado, sem etapa que invalide. O que
+ * este arquivo testa é o roteamento da camada semântica, não os bloqueios —
+ * eles só precisam sair do caminho.
+ */
 function fakePool(camadaDaOrg: boolean) {
   const query = vi.fn(async (sql: string): Promise<{ rows: Array<Record<string, unknown>> }> => {
     if (sql.includes("d.fechada_em::text")) return { rows: [{ ...boundary, status: "open", demanda_fechada_em: null }] };
@@ -104,7 +112,30 @@ function fakePool(camadaDaOrg: boolean) {
       return { rows: [{ layer: "promessa_semantica", enabled: camadaDaOrg }] };
     }
     if (/from conversations/.test(sql)) {
-      return { rows: [{ id: CONVERSA, channel_session_id: CANAL, archived_at: null }] };
+      return { rows: [{ id: CONVERSA, channel_session_id: CANAL, archived_at: null, bot_silenciado: false }] };
+    }
+    if (/from followup_enrollments e\b/.test(sql)) {
+      return {
+        rows: [
+          {
+            id: "11111111-1111-4111-8111-111111111111",
+            status: "active",
+            started_at: new Date(0),
+            pointer_id: "22222222-2222-4222-8222-222222222222",
+            trigger_config: null,
+            appointment_id: null,
+            reserva_criada_em: null,
+            reserva_consulta_em: null,
+            reserva_sujeita_a_sinal: null,
+          },
+        ],
+      };
+    }
+    if (/from contacts/.test(sql)) {
+      return { rows: [{ is_blocked: false, force_human: false, is_anonymized: false }] };
+    }
+    if (/from organizations/.test(sql)) {
+      return { rows: [{ settings: {} }] };
     }
     return { rows: [] };
   });
