@@ -1,0 +1,177 @@
+/**
+ * Bloqueios obrigatórios do executor de follow-up.
+ *
+ * Cada caso liga UM fato e confere a decisão; os controles positivos (tudo
+ * limpo envia) ficam junto para que um `decidirEnvio` que vete sempre não passe
+ * por vacuidade.
+ */
+import { describe, expect, it } from 'vitest';
+
+import {
+  CONFIG_SEM_BLOQUEIOS_OPCIONAIS,
+  decidirEnvio,
+  dentroDaJanela,
+  lerConfigDosBloqueios,
+  proximaAbertura,
+  type ConfigDosBloqueios,
+  type FatosDoEnvio,
+} from './bloqueios-obrigatorios';
+
+const ETAPA_AGUARDANDO = 'a0000000-0000-4000-8000-000000000005';
+const ETAPA_AGENDAMENTO = 'a0000000-0000-4000-8000-000000000004';
+
+function fatos(p: Partial<FatosDoEnvio> = {}): FatosDoEnvio {
+  return {
+    enrollment: {
+      id: 'e0000000-0000-4000-8000-000000000002',
+      status: 'active',
+      started_at: '2026-09-15T12:00:00.000Z',
+      pointer_id: 'c0000000-0000-4000-8000-000000000001',
+    },
+    trigger_config: { kind: 'stage_change', params: { stage_id: ETAPA_AGENDAMENTO }, cancel_on_reply: true },
+    contato: { is_blocked: false, force_human: false, is_anonymized: false },
+    conversa: { bot_silenciado: false },
+    negocios_abertos: [{ stage_id: ETAPA_AGENDAMENTO, stage_blocks_followups: false }],
+    ultima_recebida_em: '2026-09-15T11:00:00.000Z',
+    ultimo_envio_da_inscricao_em: null,
+    consultas_confirmadas_futuras: 0,
+    outras_inscricoes_vivas: [],
+    ...p,
+  };
+}
+
+const JANELA_DA_CLINICA: NonNullable<ConfigDosBloqueios['janela']> = {
+  timezone: 'America/Sao_Paulo',
+  dias: [1, 2, 3, 4, 5],
+  intervalos: [
+    { inicio: '09:00', fim: '12:00' },
+    { inicio: '14:00', fim: '19:00' },
+  ],
+};
+
+const TUDO_LIGADO: ConfigDosBloqueios = {
+  janela: JANELA_DA_CLINICA,
+  exigir_etapa_do_gatilho: true,
+  bloquear_com_consulta_confirmada: true,
+  uma_sequencia_por_contato: true,
+};
+
+// Quarta, 16/09/2026, 10:30 em São Paulo (UTC-3) = 13:30Z.
+const QUARTA_MANHA = new Date('2026-09-16T13:30:00.000Z');
+
+describe('decidirEnvio — controle positivo', () => {
+  it('sem nenhum fato de bloqueio, envia (com e sem os opcionais)', () => {
+    expect(decidirEnvio(fatos(), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({ envia: true });
+    expect(decidirEnvio(fatos(), TUDO_LIGADO, QUARTA_MANHA)).toEqual({ envia: true });
+  });
+});
+
+describe('decidirEnvio — sempre valem', () => {
+  it('opt-out invalida a sequência, e vence a janela', () => {
+    const f = fatos({ contato: { is_blocked: true, force_human: false, is_anonymized: false } });
+    expect(decidirEnvio(f, TUDO_LIGADO, new Date('2026-09-16T23:00:00.000Z'))).toEqual({
+      envia: false,
+      motivo: 'opt_out',
+      invalida: true,
+    });
+  });
+
+  it('atendimento humano não envia, mas deixa a política de handoff do fluxo decidir', () => {
+    expect(decidirEnvio(fatos({ conversa: { bot_silenciado: true } }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA))
+      .toEqual({ envia: false, motivo: 'atendimento_humano', invalida: false });
+  });
+
+  it('comprovante em conferência (etapa que bloqueia) invalida — independente de qualquer auditor', () => {
+    const f = fatos({ negocios_abertos: [{ stage_id: ETAPA_AGUARDANDO, stage_blocks_followups: true }] });
+    expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({
+      envia: false,
+      motivo: 'etapa_bloqueia_followup',
+      invalida: true,
+    });
+  });
+
+  it('resposta depois do último envio invalida quando o fluxo cancela na resposta', () => {
+    const f = fatos({
+      ultimo_envio_da_inscricao_em: '2026-09-16T10:00:00.000Z',
+      ultima_recebida_em: '2026-09-16T10:05:00.000Z',
+    });
+    expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toMatchObject({ motivo: 'resposta_do_contato', invalida: true });
+    // A mensagem que ORIGINOU a sequência (antes do início) não é resposta.
+    expect(decidirEnvio(fatos(), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({ envia: true });
+    // Fluxo que não cancela na resposta segue.
+    const semCancelar = { ...f, trigger_config: { kind: 'manual' } };
+    expect(decidirEnvio(semCancelar, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({ envia: true });
+  });
+
+  it('inscrição que já não está viva não envia e não é "invalidada" de novo', () => {
+    const f = fatos({ enrollment: { ...fatos().enrollment, status: 'cancelled' } });
+    expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({
+      envia: false,
+      motivo: 'inscricao_encerrada',
+      invalida: false,
+    });
+  });
+
+  it('configuração presente e ilegível é "não verificável": não envia', () => {
+    expect(decidirEnvio(fatos(), null, QUARTA_MANHA)).toEqual({ envia: false, motivo: 'configuracao_invalida', invalida: false });
+  });
+});
+
+describe('decidirEnvio — ligados pela organização', () => {
+  it('saiu da etapa do gatilho: invalida só com a opção ligada', () => {
+    const f = fatos({ negocios_abertos: [{ stage_id: ETAPA_AGUARDANDO, stage_blocks_followups: false }] });
+    expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({ envia: true });
+    expect(decidirEnvio(f, TUDO_LIGADO, QUARTA_MANHA)).toMatchObject({ motivo: 'fora_da_etapa_do_gatilho', invalida: true });
+  });
+
+  it('consulta confirmada invalida a retomada', () => {
+    expect(decidirEnvio(fatos({ consultas_confirmadas_futuras: 1 }), TUDO_LIGADO, QUARTA_MANHA))
+      .toMatchObject({ motivo: 'consulta_confirmada', invalida: true });
+  });
+
+  it('sequência concorrente: a mais antiga segue, a posterior para', () => {
+    const anterior = fatos({ outras_inscricoes_vivas: [{ id: 'e0000000-0000-4000-8000-000000000001', started_at: '2026-09-14T12:00:00.000Z' }] });
+    expect(decidirEnvio(anterior, TUDO_LIGADO, QUARTA_MANHA)).toMatchObject({ motivo: 'sequencia_concorrente', invalida: true });
+    const posterior = fatos({ outras_inscricoes_vivas: [{ id: 'e0000000-0000-4000-8000-000000000003', started_at: '2026-09-16T12:00:00.000Z' }] });
+    expect(decidirEnvio(posterior, TUDO_LIGADO, QUARTA_MANHA)).toEqual({ envia: true });
+  });
+
+  it('fora da janela ADIA para a próxima abertura, sem invalidar', () => {
+    // Quarta 12:30 em SP (almoço) → abre às 14:00 (17:00Z).
+    const almoco = new Date('2026-09-16T15:30:00.000Z');
+    expect(decidirEnvio(fatos(), TUDO_LIGADO, almoco)).toEqual({
+      envia: false,
+      motivo: 'fora_da_janela',
+      adiarPara: new Date('2026-09-16T17:00:00.000Z'),
+    });
+  });
+});
+
+describe('janela seg–sex 09–12 / 14–19, America/Sao_Paulo', () => {
+  it('bordas: início inclusivo, fim exclusivo', () => {
+    expect(dentroDaJanela(JANELA_DA_CLINICA, new Date('2026-09-16T12:00:00.000Z'))).toBe(true); // 09:00
+    expect(dentroDaJanela(JANELA_DA_CLINICA, new Date('2026-09-16T14:59:00.000Z'))).toBe(true); // 11:59
+    expect(dentroDaJanela(JANELA_DA_CLINICA, new Date('2026-09-16T15:00:00.000Z'))).toBe(false); // 12:00
+    expect(dentroDaJanela(JANELA_DA_CLINICA, new Date('2026-09-16T22:00:00.000Z'))).toBe(false); // 19:00
+  });
+
+  it('sábado e domingo fechados; sexta à noite abre na segunda às 09:00', () => {
+    expect(dentroDaJanela(JANELA_DA_CLINICA, new Date('2026-09-19T13:00:00.000Z'))).toBe(false); // sábado 10:00
+    // Sexta 18/09 20:00 SP → segunda 21/09 09:00 SP = 12:00Z.
+    expect(proximaAbertura(JANELA_DA_CLINICA, new Date('2026-09-18T23:00:00.000Z'))).toEqual(new Date('2026-09-21T12:00:00.000Z'));
+  });
+});
+
+describe('lerConfigDosBloqueios', () => {
+  it('ausente = só os bloqueios que sempre valem', () => {
+    expect(lerConfigDosBloqueios({})).toEqual(CONFIG_SEM_BLOQUEIOS_OPCIONAIS);
+    expect(lerConfigDosBloqueios(null)).toEqual(CONFIG_SEM_BLOQUEIOS_OPCIONAIS);
+  });
+
+  it('presente e válida é lida; presente e quebrada é null (não verificável)', () => {
+    expect(lerConfigDosBloqueios({ followups: { bloqueios: TUDO_LIGADO } })).toEqual(TUDO_LIGADO);
+    expect(lerConfigDosBloqueios({ followups: { bloqueios: { janela: { ...JANELA_DA_CLINICA, timezone: 'Lua/Base' } } } })).toBeNull();
+    expect(lerConfigDosBloqueios({ followups: { bloqueios: { janela: { ...JANELA_DA_CLINICA, intervalos: [{ inicio: '12:00', fim: '09:00' }] } } } })).toBeNull();
+    expect(lerConfigDosBloqueios({ followups: { bloqueios: { desconhecido: true } } })).toBeNull();
+  });
+});

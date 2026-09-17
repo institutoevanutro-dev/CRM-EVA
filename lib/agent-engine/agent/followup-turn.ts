@@ -39,6 +39,7 @@ import {
   type LeadCheckpointRow,
 } from './inbound-turn';
 import { isLeadInHandoff } from './human-handoff';
+import { TEXTO_DO_BLOQUEIO, decidirEnvio, lerFatosDoEnvio } from '../../followup/bloqueios-obrigatorios';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import type { LeadStateRow } from './lead-state';
 import { loadReentryTemplate, pickReentryVariant } from './reentry-template';
@@ -357,6 +358,56 @@ async function runFlowDrivenTurn(
   const runLog = withFields(deps.log, { job_id: job.id, tenant_id: target.tenantId, lead_id: target.leadId, enrollment_id: enrollmentId });
 
   if (input.purpose === 'send_message') {
+    // ── BLOQUEIOS OBRIGATÓRIOS (migration 0263) ─────────────────────────────
+    //
+    // Conferidos AQUI, no último ponto antes dos dois caminhos de envio (texto
+    // fixo e turno do agente), relendo o banco agora — nunca confiando no que o
+    // tick do fluxo viu quando enfileirou. Não dependem da supervisão ter rodado.
+    // Falha fechada: sem conseguir conferir, não envia.
+    const leitura = await lerFatosDoEnvio(pool, {
+      organizationId: target.tenantId,
+      contactId: target.leadId,
+      conversationId: target.conversationId,
+      enrollmentId,
+    });
+    const bloqueio = leitura.ok
+      ? decidirEnvio(leitura.fatos, leitura.config, clock())
+      : ({ envia: false, motivo: 'nao_verificavel', invalida: false } as const);
+    if (!bloqueio.envia) {
+      runLog.info('envio do fluxo barrado por bloqueio obrigatório', { motivo: bloqueio.motivo });
+      if (bloqueio.motivo === 'fora_da_janela') {
+        await rescheduleReentry(pool, {
+          tenantId: target.tenantId,
+          leadId: target.leadId,
+          jobId: job.id,
+          at: bloqueio.adiarPara,
+          payload: job.payload,
+        });
+        return;
+      }
+      if (bloqueio.invalida) {
+        // Invalida a sequência pela MESMA porta que o envio recusado já usa: o
+        // `skipped` cancela a inscrição com o motivo, idempotente por passo.
+        await complete(pool, {
+          jobId: job.id,
+          jobClaim: claimOfJob(job),
+          organizationId: target.tenantId,
+          enrollmentId,
+          nodeId,
+          result: { kind: 'skipped', reason: TEXTO_DO_BLOQUEIO[bloqueio.motivo] },
+        });
+        return;
+      }
+      if (bloqueio.motivo === 'inscricao_encerrada') return;
+      if (bloqueio.motivo === 'nao_verificavel' || bloqueio.motivo === 'configuracao_invalida') {
+        // Não envia e NÃO some: o erro devolve o job à fila; esgotadas as
+        // tentativas, o `job_dead` abre o aviso na Central com este motivo.
+        throw new Error(TEXTO_DO_BLOQUEIO[bloqueio.motivo]);
+      }
+      // `atendimento_humano`: segue para os caminhos abaixo, que já conferem o
+      // handoff e aplicam a política do fluxo (pausar/cancelar) do jeito de sempre.
+    }
+
     const body = await resolveFlowSendBody(pool, target.tenantId, input);
     if (body !== null) {
       // Texto do operador: sem camada semântica (ver o cabeçalho de sendFixedOutbound).

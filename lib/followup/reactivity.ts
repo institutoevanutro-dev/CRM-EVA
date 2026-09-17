@@ -105,6 +105,13 @@ export interface ReactivityAdminClient {
    * não é exprimível pelo client. Daí a leitura explícita.
    */
   agoraNoBanco(): Promise<string>;
+  /**
+   * (migration 0263) A etapa para onde o negócio foi invalida follow-up?
+   * Devolve o contato do negócio e a marca `crm_stages.blocks_followups`.
+   * Opcional: adaptadores de teste que não exercitam a reação 4 podem omitir —
+   * e aí a reação é no-op, nunca erro.
+   */
+  loadStageBlockForLead?(orgId: string, leadId: string, stageId: string): Promise<{ contactId: string; blocks: boolean } | null>;
 }
 
 export interface ReactivitySummary {
@@ -359,6 +366,44 @@ async function reactToHandoffClose(
   return { matched: true, reacted };
 }
 
+// ---- reação 4: lead.stage_changed para etapa que invalida follow-up --------
+
+/**
+ * Migration 0263. Negócio que entra numa etapa marcada `blocks_followups` (ex.:
+ * comprovante em conferência) encerra TODAS as sequências vivas do contato,
+ * inclusive pausadas: "o paciente mandou o comprovante" não se desfaz porque o
+ * humano soltou o atendimento depois. Uma mudança de etapa posterior NÃO
+ * reativa nada — não existe reação de "saiu da etapa".
+ *
+ * É a primeira camada; a segunda é a conferência antes do envio
+ * (`bloqueios-obrigatorios.ts`), para o evento que atrasar.
+ */
+async function reactToBlockingStage(
+  db: ReactivityAdminClient,
+  clock: () => Date,
+  row: EventRow,
+): Promise<ReactivitySummary> {
+  const leadId = strOrNull(row.entity_id);
+  const toStageId = strOrNull(row.payload.to_stage_id);
+  if (!leadId || !toStageId || !db.loadStageBlockForLead) return { matched: false, reacted: 0 };
+  const alvo = await db.loadStageBlockForLead(row.organization_id, leadId, toStageId);
+  if (!alvo || !alvo.blocks) return { matched: false, reacted: 0 };
+  const live = await db.loadLiveEnrollmentsForContact(row.organization_id, alvo.contactId);
+  const reacted = await cancelAll(
+    db,
+    row.organization_id,
+    row.id,
+    live,
+    // `handoff`, e não `converted`: a etapa entrega o caso à conferência da
+    // equipe — contar como conversão inflaria o resultado do fluxo sem prova.
+    "handoff",
+    "etapa_bloqueia_followup",
+    "reactivity_stage_blocks",
+    clock,
+  );
+  return { matched: true, reacted };
+}
+
 /**
  * Dispatch por `event_type` — chamado por `reactivity.handler.ts` (adapter do
  * dispatcher genérico) e diretamente pelos testes DB-real. Tipo desconhecido
@@ -376,6 +421,8 @@ export async function applyReactivityEvent(
       return reactToHandoffOpen(db, clock, row);
     case "ai.handoff_resolved":
       return reactToHandoffClose(db, clock, row);
+    case "lead.stage_changed":
+      return reactToBlockingStage(db, clock, row);
     default:
       return { matched: false, reacted: 0 };
   }
@@ -454,6 +501,26 @@ export function createSupabaseReactivityClient(admin: SupabaseClient): Reactivit
     async updateEnrollment(id, orgId, patch) {
       const { error } = await admin.from("followup_enrollments").update(patch).eq("id", id).eq("organization_id", orgId);
       if (error) throw new Error(error.message);
+    },
+    async loadStageBlockForLead(orgId, leadId, stageId) {
+      const { data: lead, error: erroLead } = await admin
+        .from("crm_leads")
+        .select("contact_id, pipeline_id")
+        .eq("id", leadId)
+        .eq("organization_id", orgId)
+        .maybeSingle();
+      if (erroLead) throw new Error(erroLead.message);
+      const l = lead as { contact_id: string | null; pipeline_id: string } | null;
+      if (!l?.contact_id) return null;
+      const { data: etapa, error: erroEtapa } = await admin
+        .from("crm_stages")
+        .select("blocks_followups")
+        .eq("id", stageId)
+        .eq("organization_id", orgId)
+        .eq("pipeline_id", l.pipeline_id)
+        .maybeSingle();
+      if (erroEtapa) throw new Error(erroEtapa.message);
+      return { contactId: l.contact_id, blocks: (etapa as { blocks_followups?: boolean } | null)?.blocks_followups === true };
     },
     async agoraNoBanco() {
       const { data, error } = await admin.rpc("fn_agora" as never);

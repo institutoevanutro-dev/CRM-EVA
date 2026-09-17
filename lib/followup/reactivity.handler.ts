@@ -13,7 +13,7 @@ export const FOLLOWUP_REACTIVITY_HANDLER_KEY = "followup-reactivity.v1";
 
 export const followupReactivityHandler: EventHandler = {
   key: FOLLOWUP_REACTIVITY_HANDLER_KEY,
-  events: ["message.received", "ai.handoff_triggered", "ai.handoff_resolved"],
+  events: ["message.received", "ai.handoff_triggered", "ai.handoff_resolved", "lead.stage_changed"],
   async handle(row): Promise<HandlerResult> {
     try {
       const admin = createAdminClient();
