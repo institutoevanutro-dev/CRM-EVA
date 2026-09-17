@@ -520,6 +520,26 @@ describe('alteração humana entre a leitura e a escrita', () => {
   });
 });
 
+describe('pessoa move o card para OUTRA etapa aberta no meio da revisão', () => {
+  it('a releitura registra conflito (BLOQ), não uma recomendação que sobrescreveria a decisão', async () => {
+    // Variante sem negócio fechado: o caso acima é pego antes, por
+    // `negocio_encerrado`, e deixaria a regra de conflito sem teste próprio.
+    const banco = new BancoFalso({ etapa: E.aguardandoSinal, mensagens: [{ id: M2, direction: 'inbound', body: 'comprovante' }] });
+    banco.antesDaEscrita = () => {
+      banco.lead = { ...banco.lead, stage_id: E.emAtendimento, stage_changed_at: '2026-09-16T13:05:00.000Z' };
+      banco.mudancasHumanas.push({ activity_id: 'ab000000-0000-4000-8000-000000000002', performed_at: '2026-09-16T13:05:00.000Z' });
+    };
+    const d = deps(banco, proposta({
+      movimentacao: { para_etapa_id: E.comprovante, motivo: 'Comprovante enviado.', evidencias: [M2] },
+    }));
+    await executarRevisao(d, ORG, REVISAO);
+
+    expect(banco.lead.stage_id).toBe(E.emAtendimento);
+    expect(banco.escritasDeEtapa).toBe(0);
+    expect([...banco.acoes.values()].map((a) => [a.code, a.status])).toEqual([['BLOQ', 'bloqueada']]);
+  });
+});
+
 describe('queda depois do commit da movimentação', () => {
   it('a retentativa reaproveita a proposta, reconhece a escrita feita e não move de novo', async () => {
     const banco = new BancoFalso({ etapa: E.entendendo, mensagens: [{ id: M1, direction: 'inbound', body: 'quero agendar' }] });
