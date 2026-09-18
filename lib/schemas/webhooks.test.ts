@@ -49,6 +49,18 @@ describe("createWebhookSourceSchema", () => {
 });
 
 describe("createAutomationRuleSchema", () => {
+  it("preserva a opção explícita de vincular consulta ao criar e editar a regra", () => {
+    for (const bind of [true, false, undefined]) {
+      const config = { flow_pointer_id: UUID, ...(bind === undefined ? {} : { bind_appointment: bind }) };
+      const created = createAutomationRuleSchema.parse({
+        name: "Sinal", trigger_event: "appointment.created", conditions: [],
+        actions: [{ type: "start_message_flow", config }],
+      });
+      const updated = updateAutomationRuleSchema.parse({ actions: created.actions });
+      expect(updated.actions?.[0]?.config).toEqual(config);
+    }
+  });
+
   it("accepts a happy path with one action of each type", () => {
     const base = {
       name: "Regra 1",

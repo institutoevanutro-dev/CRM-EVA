@@ -380,6 +380,7 @@ function CallWebhookForm({
 
 function StartMessageFlowForm({ config, onChange }: FormProps<{ flow_pointer_id: string; bind_appointment?: boolean }>) {
   const t = useT();
+  const bindId = React.useId();
   const { data, isLoading } = useQuery({
     queryKey: ["followup", "flows", "list"],
     queryFn: async () => {
@@ -421,11 +422,11 @@ function StartMessageFlowForm({ config, onChange }: FormProps<{ flow_pointer_id:
       )}
       <div className="flex items-center gap-2 pt-3">
         <Switch
-          id="bind-appointment-to-flow"
+          id={bindId}
           checked={config.bind_appointment === true}
           onCheckedChange={(checked) => onChange({ ...config, bind_appointment: checked })}
         />
-        <Label htmlFor="bind-appointment-to-flow">{t("Vincular à consulta para acompanhar o sinal")}</Label>
+        <Label htmlFor={bindId}>{t("Vincular à consulta para acompanhar o sinal")}</Label>
       </div>
       <p className="text-xs text-muted-foreground">
         {t("Use com o gatilho 'Quando um horário for marcado' e um fluxo de sinal. O prazo será contado da criação da reserva.")}
