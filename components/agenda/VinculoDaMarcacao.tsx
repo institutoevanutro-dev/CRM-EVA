@@ -4,8 +4,16 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { useT } from "@/hooks/i18n/useT";
 import { NewContactDialog } from "@/components/contacts/NewContactDialog";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 type Vinculos = {
-  contacts: Array<{ id: string; name: string }>;
+  // `name` é nulo em todo contato que veio do WhatsApp — o nome está em
+  // `display_name`. Por isso o rótulo sai de `rotuloDoContato`, nunca de `name`.
+  contacts: Array<{
+    id: string;
+    name: string | null;
+    display_name: string | null;
+    phone_number: string | null;
+  }>;
   conversations: Array<{ id: string; created_at: string; status: string }>;
 };
 export function VinculoDaMarcacao({
@@ -71,7 +79,7 @@ export function VinculoDaMarcacao({
           <option value="">{t("Compromisso pessoal, sem cliente")}</option>
           {query.data?.contacts.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {rotuloDoContato(c, t)}
             </option>
           ))}
         </select>
