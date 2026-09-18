@@ -35,6 +35,8 @@ jobs:
         timeout-minutes: 5
 
       - name: Typecheck
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm typecheck
 
       - name: Lint
