@@ -277,7 +277,7 @@ describe("Cadeia real do sinal: reserva → inscrição → T+40 → bloqueios �
     try {
       await client.query('begin');
       await client.query("select set_config('request.jwt.claims',$1,true)", [JSON.stringify({ sub:user,role:'authenticated' })]);
-      await client.query("update calendar_appointments set status=$3,starts_at=now()-interval '2 hours',ends_at=now()-interval '1 hour' where organization_id=$1 and id=$2", [r.organization_id,r.id,status]);
+      await client.query("update calendar_appointments set status=$3,cancelled_at=case when $3='cancelled' then now() else null end,starts_at=now()-interval '2 hours',ends_at=now()-interval '1 hour' where organization_id=$1 and id=$2", [r.organization_id,r.id,status]);
       await client.query('commit');
     } finally { await client.query('rollback'); client.release(); }
     expect(await abrirItemDeRevisao(admin, r)).toBe(false);
