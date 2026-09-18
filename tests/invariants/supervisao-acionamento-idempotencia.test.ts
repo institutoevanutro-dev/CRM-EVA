@@ -278,3 +278,33 @@ describe('CAS e autoridade: adaptador pg real', () => {
     } finally { await writer.query('rollback'); writer.release(); }
   });
 });
+
+it('mutex serializa supervisão com conversa→contato da mesclagem, sem inverter locks', async () => {
+  const { db, input } = await cenarioDeMovimento();
+  const writer = await pool.connect();
+  let movimento: ReturnType<typeof db.moverEtapaComTrava> | undefined;
+  try {
+    await writer.query('begin');
+    await writer.query("set local lock_timeout = '3s'");
+    const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
+    await writer.query('select public.fn_service_lock($1,$2)', [input.organization_id, input.contact_id]);
+    // Ordem real da mesclagem: mutex, conversa, depois contato.
+    await writer.query('select id from conversations where organization_id=$1 and id=$2 for update', [input.organization_id, input.conversation_id]);
+    movimento = db.moverEtapaComTrava(input);
+    void movimento.catch(() => undefined);
+    await expect.poll(async () => {
+      const { rows } = await pool.query<{ waiting: boolean }>(`select exists(
+        select 1 from pg_locks l where l.locktype='advisory' and not l.granted
+          and $1::integer = any(pg_blocking_pids(l.pid))) as waiting`, [pid]);
+      return rows[0]!.waiting;
+    }, { timeout: 2000 }).toBe(true);
+    // Só pode prosseguir se a supervisão NÃO tiver travado contato antes do mutex.
+    await writer.query('update contacts set force_human=true where organization_id=$1 and id=$2', [input.organization_id, input.contact_id]);
+    await writer.query('commit');
+    expect(await movimento).toEqual({ ok:false, porque:'autorizacao_revogada' });
+  } finally {
+    await writer.query('rollback');
+    writer.release();
+    await movimento?.catch(() => undefined);
+  }
+});

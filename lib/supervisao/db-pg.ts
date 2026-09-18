@@ -281,6 +281,9 @@ export function createPgSupervisaoDb(pool: pg.Pool): SupervisaoDb {
           await client.query('rollback');
           return { ok: false, porque: 'conflito' };
         }
+        // Mesmo mutex da mesclagem/recuperação, antes de QUALQUER row lock:
+        // esses caminhos podem travar conversa/reserva antes de tocar o contato.
+        await client.query('select public.fn_service_lock($1, $2)', [input.organization_id, input.contact_id]);
         // Autoridade é conferida DENTRO da escrita. Os locks duram até commit:
         // uma troca de modo, handoff ou anonimização não pode atravessar o CAS.
         const binding = await client.query<{ enabled: boolean; mode: string; allowed_stage_moves: unknown }>(

@@ -398,3 +398,39 @@ describe('RPCs do sinal: isolamento e ACL', () => {
     expect(rows).toEqual([{ anon:false, authenticated:false, service:true }]);
   });
 });
+
+it('mutex serializa T60 com reserva→FK de contato da recuperação, sem deadlock', async () => {
+  const r = await candidata();
+  const { pointerId, versionId } = await seedFluxoDoSinal(r.organization_id);
+  const boundary = await criarOrigemDeFollowup(pool, r.organization_id, r.contact_id);
+  const writer = await pool.connect();
+  let abertura: Promise<boolean> | undefined;
+  try {
+    await writer.query('begin');
+    await writer.query("set local lock_timeout = '3s'");
+    const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
+    await writer.query('select public.fn_service_lock($1,$2)', [r.organization_id,r.contact_id]);
+    // Ordem usada por fn_appointment_recover: mutex, reserva e INSERT com FK
+    // do contato. A fixture exercita a FK real sem duplicar a política de recuperação.
+    await writer.query('select id from calendar_appointments where organization_id=$1 and id=$2 for update', [r.organization_id,r.id]);
+    abertura = abrirItemDeRevisao(admin,r);
+    void abertura.catch(() => undefined);
+    await expect.poll(async () => {
+      const { rows } = await pool.query<{ waiting: boolean }>(`select exists(
+        select 1 from pg_locks l where l.locktype='advisory' and not l.granted
+          and $1::integer = any(pg_blocking_pids(l.pid))) as waiting`, [pid]);
+      return rows[0]!.waiting;
+    }, { timeout: 2000 }).toBe(true);
+    await writer.query(`insert into followup_enrollments
+      (organization_id,pointer_id,version_id,contact_id,current_node_id,status,next_eval_at,conversation_id,service_boundary,appointment_id)
+      values($1,$2,$3,$4,'w1','active',now()+interval '1 hour',$5,$6::jsonb,$7)`,
+      [r.organization_id,pointerId,versionId,r.contact_id,boundary.conversation_id,JSON.stringify(boundary),r.id]);
+    await writer.query('commit');
+    expect(await abertura).toBe(true);
+    expect(await abrirItemDeRevisao(admin,r)).toBe(false);
+  } finally {
+    await writer.query('rollback');
+    writer.release();
+    await abertura?.catch(() => undefined);
+  }
+});

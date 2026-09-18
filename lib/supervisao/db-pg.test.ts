@@ -50,3 +50,14 @@ it('recupera recibo existente mesmo depois da revogação, sem escrever', async 
   expect(await db.moverEtapaComTrava({ ...input,somente_recuperar:true })).toEqual({ ok:true,ref:'receipt' });
   expect(query.mock.calls.map(([sql]) => sql).some((sql) => sql.includes('update '))).toBe(false);
 });
+
+it('adquire mutex do atendimento antes de qualquer row lock', async () => {
+  const { db, query } = adapter();
+  expect((await db.moverEtapaComTrava(input)).ok).toBe(true);
+  const calls = query.mock.calls;
+  const mutex = calls.findIndex(([sql]) => sql.includes('public.fn_service_lock'));
+  const firstRowLock = calls.findIndex(([sql]) => sql.includes('for update'));
+  expect(mutex).toBeGreaterThan(-1);
+  expect(mutex).toBeLessThan(firstRowLock);
+  expect(calls[mutex]![1]).toEqual([input.organization_id, input.contact_id]);
+});

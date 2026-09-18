@@ -40,7 +40,9 @@ begin
   select a.contact_id into v_contact_id from public.calendar_appointments a
     where a.organization_id = p_organization_id and a.id = p_appointment_id;
   if v_contact_id is null then return false; end if;
-  -- Contato primeiro: serializa também com anonimização e criação de negócios.
+  -- Mesmo mutex da mesclagem/recuperação, antes de qualquer row lock.
+  perform public.fn_service_lock(p_organization_id, v_contact_id);
+  -- FOR UPDATE também bloqueia novas FKs de negócios para este contato.
   perform c.id from public.contacts c where c.organization_id = p_organization_id and c.id = v_contact_id for update;
   perform a.id from public.calendar_appointments a
     where a.organization_id = p_organization_id and a.id = p_appointment_id and a.contact_id = v_contact_id for update;
