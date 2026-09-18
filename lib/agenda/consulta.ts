@@ -68,6 +68,8 @@ import { googleRpc } from "./google/sync-store";
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
+
 import { diaLocalISO } from "./fuso";
 import { horariosLivres, type ExcecaoDeData, type Slot } from "./horarios-livres";
 import { lerJornadaDoBanco } from "./jornada";
@@ -514,12 +516,17 @@ export type ResultadoDaLista =
       motivoParaCliente: string;
     };
 
-/** O embed do PostgREST vem objeto ou array conforme o gerador de tipos; aceite os dois. */
-function nomeDoContato(
-  c: { name: string | null; display_name: string | null } | { name: string | null; display_name: string | null }[] | null | undefined,
+/**
+ * O embed do PostgREST vem objeto ou array conforme o gerador de tipos; aceite
+ * os dois. A DECISÃO de como a pessoa se chama não mora aqui: era uma segunda
+ * função com o nome `nomeDoContato`, cadeia remontada à mão e sem a guarda de
+ * identificador técnico — ela devolvia `Contato 543134@lid` onde a central
+ * devolve `null`, e esse valor ia para a fala do agente sobre o compromisso.
+ */
+function contatoDoEmbed(
+  c: ContatoNomeavel | ContatoNomeavel[] | null | undefined,
 ): string | null {
-  const alvo = Array.isArray(c) ? c[0] : c;
-  return alvo?.name ?? alvo?.display_name ?? null;
+  return nomeDoContato(Array.isArray(c) ? (c[0] ?? null) : c);
 }
 
 export async function listaAgendamentos(
@@ -670,8 +677,9 @@ export async function listaAgendamentos(
       // O ID sozinho não serve a nenhum dos dois consumidores: a grade precisa do
       // nome para dizer "com quem", e o AGENTE recebia um uuid cru onde devia
       // dizer "você já tem consulta marcada, Maria". Mesma coluna que a tela do
-      // produto lê, mesmo precedente de `name` antes de `display_name`.
-      contatoNome: nomeDoContato(l.contacts),
+      // produto lê, e a MESMA decisão de nome — `lib/contacts/rotulo-do-contato.ts`,
+      // não um precedente copiado de outro arquivo.
+      contatoNome: contatoDoEmbed(l.contacts),
     })),
   };
 }

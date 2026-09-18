@@ -245,14 +245,16 @@ export interface GateContext {
    * Esse agente tem `crm_find_free_slots`, promete "vou verificar e te aviso" do mesmo
    * jeito, e ficava sem a única cura determinística que existe para isso.
    *
-   * `podeMarcar` não arma nem desarma: ele decide o TEXTO do veto. Mandar um agente que
-   * só consulta "chamar crm_book_appointment" é ensinar uma ferramenta que ele não tem —
-   * o modelo tenta, falha, e a correção vira um segundo defeito.
+   * `ferramentas` não arma nem desarma: é o TEXTO do veto — as ferramentas de agenda que
+   * ESTE agente tem, e só elas. Mandar um agente que só consulta "chamar
+   * crm_book_appointment", ou o que só tem a conjunta chamar a avulsa, é ensinar uma
+   * ferramenta que ele não tem — o modelo tenta, falha, e a correção vira um segundo
+   * defeito. Já foi um booleano (`podeMarcar`), e um booleano não diz QUAL.
    *
    * `toolCalledThisTurn` é se alguma delas já foi chamada neste turno (rastreado no call
    * site, que é quem monta as tools).
    */
-  agenda?: { active: boolean; podeMarcar: boolean; toolCalledThisTurn: boolean };
+  agenda?: { active: boolean; ferramentas: readonly string[]; toolCalledThisTurn: boolean };
 }
 
 /**
@@ -486,13 +488,24 @@ function semAcento(texto: string): string {
 }
 
 /**
+ * Nomes de ferramenta como o modelo os lê num texto de ensino: "`a`", "`a` ou `b`",
+ * "`a`, `b` ou `c`". Usado pelo veto de agenda e pelo bloco residente de agenda
+ * (`inbound-turn.ts`), que precisam nomear as MESMAS ferramentas do mesmo jeito.
+ */
+export function nomesDasFerramentas(nomes: readonly string[]): string {
+  const marcados = nomes.map((n) => `\`${n}\``);
+  if (marcados.length <= 1) return marcados.join('');
+  return `${marcados.slice(0, -1).join(', ')} ou ${marcados[marcados.length - 1]}`;
+}
+
+/**
  * Gate de AGENDA SEM CHECAR — a garantia DURA de que "vou verificar/confirmar horário" (ou
  * "está confirmado/agendado") só sai depois de a ferramenta (`crm_find_free_slots`/
  * `crm_book_appointment`/`crm_reschedule_appointment`) ter sido de fato CHAMADA neste turno.
  * Desarmado (`agenda` ausente ou `active` false) = no-op — mesmo default seguro de
  * `internalVocabularyEnforced` (caller que não conhece o campo não arma nada).
  *
- * Por que existe apesar do `AGENDA_SYSTEM_BLOCK` (instrução em texto, `inbound-turn.ts`) já
+ * Por que existe apesar do `agendaSystemBlock` (instrução em texto, `inbound-turn.ts`) já
  * dizer a mesma regra: medido em produção (2026-08-29, mesmo tenant) que o modelo
  * (`openai/gpt-5.6-terra`) ignora a instrução e ainda assim promete verificar sem chamar a
  * ferramenta — a instrução sozinha não é garantia, só ensino. Este gate é a cura
@@ -516,11 +529,17 @@ export const agendaStallGate: Gate = {
     return {
       pass: false,
       code: 'agenda_stall_sem_ferramenta',
-      // As ferramentas nomeadas são as que ESTE agente tem. Ver `podeMarcar`.
+      // O veto nomeia as ferramentas de agenda que ESTE agente tem, e só elas.
+      //
+      // ⚠️ Já nomeou uma lista fixa: `crm_find_free_slots, crm_book_appointment ou
+      // crm_reschedule_appointment` para todo agente que marca — e, desde a #831,
+      // há agente que tem SÓ `crm_find_and_book_appointment`, a quem o veto
+      // mandava chamar três ferramentas que ele não tem e nunca a que ele tem.
       reason: (() => {
-        const ferramentas = ctx.agenda.podeMarcar
-          ? 'crm_find_free_slots, crm_book_appointment ou crm_reschedule_appointment'
-          : 'crm_find_free_slots';
+        const ferramentas =
+          ctx.agenda.ferramentas.length > 0
+            ? nomesDasFerramentas(ctx.agenda.ferramentas)
+            : 'a ferramenta de agenda';
         return confirmedSemChecar
           ? `Você afirmou que um horário está confirmado/agendado sem ter chamado ${ferramentas} ` +
             'NESTE turno. Nunca diga que está confirmado sem a ferramenta ter registrado de fato — ' +
@@ -681,7 +700,7 @@ const spinningGate: Gate = {
  * que já existia — muda o TRACE, e passa a medir o vazamento onde há modelo para ensinar.
  * v7 = insere `agendaStallGate` entre `internal_vocabulary` e `disclosure` — a garantia
  * DETERMINÍSTICA de que "vou verificar/confirmar horário" só sai depois de a ferramenta de
- * agenda ter sido chamada neste turno (medido em produção, 2026-08-29: o `AGENDA_SYSTEM_BLOCK`
+ * agenda ter sido chamada neste turno (medido em produção, 2026-08-29: o `agendaSystemBlock`
  * em texto, sozinho, não bastou — o modelo prometeu checar sem chamar a ferramenta mesmo com
  * a instrução presente e por último no prompt). Nasce DESARMADO por default (ver
  * `GateContext.agenda`): só o caminho do agente o arma quando o agente publicado tem

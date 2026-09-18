@@ -1,4 +1,4 @@
--- 0263 — Supervisão de um agente por outro (revisão administrativa pós-execução).
+-- 0265 — Supervisão de um agente por outro (revisão administrativa pós-execução).
 --
 -- POR QUE: criar um segundo agente e ligar capacidades nele não faz ninguém
 -- revisar o trabalho do primeiro. O papel "Organiza o sistema" (operator_turn)

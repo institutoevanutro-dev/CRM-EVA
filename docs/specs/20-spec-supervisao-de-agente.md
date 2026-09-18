@@ -3,7 +3,7 @@
 > Estado: **implementado em código, não validado em execução real.** Os testes unitários
 > cobrem as decisões e os efeitos pedidos ao banco com um banco em memória; o SQL do
 > adaptador (`lib/supervisao/db-pg.ts`) ainda precisa de invariante contra Postgres real
-> (`pnpm test:db`). Migration `0263`.
+> (`pnpm test:db`). Migration `0265`.
 
 ## Por que
 
@@ -78,7 +78,7 @@ A reatividade (`reactivity.ts`) cancela sequências vivas quando o negócio **en
 etapa `blocks_followups`. Não existe reação de "saiu da etapa": mudança de etapa não
 reativa sequência nem remove opt-out.
 
-## Bloqueio do sinal por prazo (migration 0264)
+## Bloqueio do sinal por prazo (migration 0266)
 
 `followup_enrollments.appointment_id` (nullable) amarra uma inscrição a uma reserva
 específica (`calendar_appointments`) — só os fluxos ligados a uma reserva (cobrança de

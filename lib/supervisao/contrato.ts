@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 
 import { z } from 'zod';
 
-/** De onde veio o fato revisado. Vocabulário FECHADO — espelha o CHECK da 0263. */
+/** De onde veio o fato revisado. Vocabulário FECHADO — espelha o CHECK da 0265. */
 export const ORIGENS_DE_REVISAO = [
   'ai_run_completed',
   'human_message_sent',

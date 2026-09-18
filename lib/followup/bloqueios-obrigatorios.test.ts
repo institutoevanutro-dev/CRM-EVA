@@ -166,7 +166,7 @@ describe('decidirEnvio — ligados pela organização', () => {
   });
 });
 
-describe('decidirEnvio — reserva do fluxo de sinal (migration 0264)', () => {
+describe('decidirEnvio — reserva do fluxo de sinal (migration 0266)', () => {
   // Reserva criada às 10:00 SP (13:00Z), consulta às 13:00 SP (16:00Z, 3h
   // depois) → prazo = min(10:00+60min, 13:00) = 11:00 SP = 14:00Z.
   const RESERVA_FOLGADA = { criada_em: '2026-09-16T13:00:00.000Z', consulta_em: '2026-09-16T16:00:00.000Z', sujeita_a_sinal: true };

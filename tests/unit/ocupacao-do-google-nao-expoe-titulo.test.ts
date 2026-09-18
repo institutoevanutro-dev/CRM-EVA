@@ -62,27 +62,66 @@ import { describe, expect, it } from "vitest";
  * isso a regex casa a tabela E a view, e o controle cobra uma leitura COM
  * `select` em cada caminho, não "alguma consulta em algum lugar".
  *
+ * ⚠️ E O LUGAR DA LEITURA MUDOU — a mesma cegueira, uma TERCEIRA vez.
+ *
+ * O PR #915 (f8481845f, @webtecnica) tirou as duas consultas de dentro das
+ * pastas de tela e as juntou num módulo só — `lib/agenda/ocupacao-externa.ts` —
+ * para a semente e a rota pararem de divergir (issue #525). O recorte daqui
+ * seguia sendo as duas PASTAS, então a varredura deixou de achar consulta
+ * nenhuma, e o caso "nenhuma delas pede `title`" passou a ficar verde por
+ * VACUIDADE — exatamente o desfecho que o controle existe para negar. Medido na
+ * integração do lote 12 (778d1dcb2): `Tests 2 failed | 9 passed`, com o
+ * controle acusando `["app/app/agenda", "app/api/v1/agenda"]` sem leitura.
+ *
+ * Antes de seguir a consulta, a pergunta na ordem certa — a privacidade
+ * continua valendo no caminho novo? Continua, e por três medidas: o `select` do
+ * módulo é `"id, starts_at, ends_at, calendar_connections!inner(user_id)"`;
+ * `grep -c '\btitle\b' lib/agenda/ocupacao-externa.ts` devolve `0`; e o tipo
+ * devolvido (`BlocoExternoDaTela`) não tem campo de título, com os dois
+ * consumidores cravando `titulo: "Ocupado"`. A decisão não foi desfeita — ela
+ * mudou de endereço, e o gate é que a seguiu.
+ *
  * Se um dia a decisão mudar, o caminho é POR ORGANIZAÇÃO e com aviso de quem vê
  * — nunca por default. Quem for fazer isso troca este teste junto, de propósito:
  * é o passo que obriga a decisão a ser tomada por gente.
  */
 const RAIZ = process.cwd();
+
+/**
+ * Onde a leitura da ocupação MORA hoje (PR #915). É o alvo principal do gate: o
+ * controle de vacuidade cobra a consulta AQUI, para que mover a leitura de novo
+ * reprove em vez de deixar a varredura medindo o vazio.
+ */
+const DONO_DA_LEITURA = path.join(RAIZ, "lib", "agenda", "ocupacao-externa.ts");
+
 /**
  * Os caminhos por onde a ocupação do Google pode chegar à tela da Agenda.
  *
- * Os dois são superfície de exposição por razões diferentes: o primeiro é a
- * semente que o servidor renderiza; o segundo é a rota que a substitui no
- * primeiro refetch.
+ * Os três são superfície de exposição por razões diferentes: o primeiro é o
+ * módulo onde a consulta mora; o segundo é a semente que o servidor renderiza;
+ * o terceiro é a rota que a substitui no primeiro refetch.
+ *
+ * As duas pastas de tela seguem varridas mesmo sem consulta própria desde o
+ * #915: elas são onde uma consulta RE-INLINADA nasceria, e uma guarda de
+ * privacidade não deve depender de outro gate estar verde para enxergar o que
+ * aparecer ali. Que não exista uma terceira cópia em nenhum outro lugar de
+ * `app/` ou `lib/agenda/` é o que `ocupacao-do-google-vem-de-um-lugar-so.test.ts`
+ * mede, varrendo `git ls-files`.
  */
 const CAMINHOS_ATE_A_TELA = [
+  DONO_DA_LEITURA,
   path.join(RAIZ, "app", "app", "agenda"),
   path.join(RAIZ, "app", "api", "v1", "agenda"),
 ];
 
-function arquivos(dir: string): string[] {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-    const p = path.join(dir, e.name);
+function arquivos(alvo: string): string[] {
+  if (!fs.existsSync(alvo)) return [];
+  // O alcance tem pasta E arquivo: desde o #915 a consulta mora num módulo só,
+  // e apontar o recorte para o diretório inteiro de `lib/agenda/` traria uma
+  // dúzia de arquivos que não têm nada com a travessia para a tela.
+  if (fs.statSync(alvo).isFile()) return /\.tsx?$/.test(alvo) ? [alvo] : [];
+  return fs.readdirSync(alvo, { withFileTypes: true }).flatMap((e) => {
+    const p = path.join(alvo, e.name);
     if (e.isDirectory()) return arquivos(p);
     return e.isFile() && /\.tsx?$/.test(p) ? [p] : [];
   });
@@ -128,22 +167,27 @@ function consultasDeEventoExterno(): Array<{ caminho: string; onde: string; colu
 }
 
 describe("a ocupação do Google não leva o nome do evento para a tela", () => {
-  it("cada caminho até a tela LÊ os eventos externos com um select (senão o gate mede o vazio)", () => {
+  it("o DONO da leitura lê os eventos externos com um select (senão o gate mede o vazio)", () => {
     // Controle do instrumento. Sem isto, mover a consulta, renomear o
     // diretório ou trocar a relação lida deixaria o gate verde por não medir
     // nada — e ele afirmaria o que não mediu, que é o pior desfecho para uma
     // guarda de privacidade. Uma consulta sem `select` (o `.delete()` da
     // desconexão) não conta: ela não tem coluna para vigiar.
+    //
+    // A cobrança é sobre o DONO, e não sobre cada caminho: desde o #915 as duas
+    // pastas de tela legitimamente não têm consulta própria — quem reprova
+    // quem puser uma de volta lá é `ocupacao-do-google-vem-de-um-lugar-so`.
+    // Exigir leitura em CADA caminho transformaria a doutrina de leitura única
+    // num vermelho permanente aqui.
     const leituras = consultasDeEventoExterno().filter((c) => c.colunas !== null);
-    const caminhosSemLeitura = CAMINHOS_ATE_A_TELA.map((c) => path.relative(RAIZ, c)).filter(
-      (caminho) => !leituras.some((l) => l.caminho === caminho),
-    );
+    const dono = path.relative(RAIZ, DONO_DA_LEITURA);
     expect(
-      caminhosSemLeitura,
-      "caminho até a tela sem nenhuma leitura de `calendar_external_events` ou " +
-        "`calendar_selected_external_events` — ou a ocupação deixou de ser buscada ali, " +
-        "ou ela mudou de relação ou de lugar e este gate ficou cego",
-    ).toEqual([]);
+      leituras.filter((l) => l.caminho === dono).length,
+      `nenhuma leitura de \`calendar_external_events\` ou \`calendar_selected_external_events\` ` +
+        `com \`select\` em ${dono} — ou a ocupação deixou de ser buscada, ou ela mudou de ` +
+        `relação ou de lugar e este gate ficou cego. A varredura inteira achou: ` +
+        JSON.stringify(leituras.map((l) => l.onde)),
+    ).toBeGreaterThan(0);
   });
 
   it("nenhuma delas pede a coluna `title`", () => {

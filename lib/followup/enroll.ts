@@ -26,7 +26,7 @@ export type EnrollFollowupInput = {
   contactId: string;
   agentId?: string;
   /**
-   * A reserva (migration 0264) que originou a inscrição, para fluxos amarrados
+   * A reserva (migration 0266) que originou a inscrição, para fluxos amarrados
    * a uma reserva específica (ex.: cobrança de sinal). Omitido = fluxo comum,
    * sem mudança de comportamento. Com o campo presente, o índice único
    * `(pointer_id, appointment_id)` garante UMA tentativa por reserva — a

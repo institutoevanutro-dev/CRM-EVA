@@ -129,6 +129,41 @@ export const ApiErrorCodes = {
   // procurar um interruptor quando o problema é o banco.
   voice_estado_indeterminado: "voice_estado_indeterminado",
 
+  // ─── NEGÓCIOS E FUNIL (issues #917 e #922) ───
+  //
+  // Onze códigos de wire que a família de `/api/v1/leads` já emitia — alguns há
+  // meses — sem passar por esta lista. Pelo mesmo motivo dos blocos acima:
+  // `fail()` aceita `(string & {})`, então o código nasce no call site e vira
+  // contrato sem ninguém decidir que virou. `grep` de cada um contra este
+  // arquivo devolvia zero, inclusive para `lead_stage_changed_concurrent` e
+  // `pipeline_immutable_use_clone`, que são contrato de wire em produção.
+  //
+  // Registrados JUNTOS, e não só os dois que o lote acrescentou, porque corrigir
+  // por instância deixa as irmãs de fora — e elas não se parecem por fora.
+  //
+  // 409: a trava otimista do arrasto (`expected_updated_at` não bate).
+  lead_stage_changed_concurrent: "lead_stage_changed_concurrent",
+  // 422, o motivo da perda: exigido quando a escrita fecharia o negócio como
+  // perdido, e recusado quando não está no vocabulário do funil. Um pede
+  // informar, o outro pede escolher da lista — colapsá-los mandaria quem já
+  // informou um motivo digitar outra vez.
+  lost_reason_required: "lost_reason_required",
+  lost_reason_invalid: "lost_reason_invalid",
+  // 422, a fronteira do funil (P-01): a etapa é de outro funil, e o caminho para
+  // levar o negócio até lá é o clone, não o arrasto.
+  pipeline_immutable_use_clone: "pipeline_immutable_use_clone",
+  stage_pipeline_mismatch: "stage_pipeline_mismatch",
+  // 422, as recusas do clone — cada uma pede uma ação diferente de quem lê:
+  // escolher outro funil, reabrir o negócio, escolher outra etapa, configurar
+  // uma etapa de entrada, ou configurar uma etapa de perda no funil de origem.
+  pipeline_unchanged: "pipeline_unchanged",
+  lead_not_open: "lead_not_open",
+  stage_destino_terminal: "stage_destino_terminal",
+  pipeline_without_initial_stage: "pipeline_without_initial_stage",
+  pipeline_no_lost_stage: "pipeline_no_lost_stage",
+  // 404: o funil de destino não existe (ou não é desta organização).
+  pipeline_not_found: "pipeline_not_found",
+
   // 500 / upstream
   internal_error: "internal_error",
   upstream_unavailable: "upstream_unavailable",

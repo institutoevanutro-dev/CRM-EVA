@@ -1,6 +1,6 @@
 /**
  * Prova, contra Postgres real, a cadeia completa pedida antes do deploy da
- * Spec 20 (bloqueio do sinal, migration 0264):
+ * Spec 20 (bloqueio do sinal, migration 0266):
  *
  *   reserva real → inscrição vinculada (appointment_id) → T+40 (envia) →
  *   T+60 (bloqueios param o lembrete) → aviso interno de revisão (Central).

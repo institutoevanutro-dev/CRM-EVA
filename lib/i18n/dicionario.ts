@@ -6154,6 +6154,11 @@ export const DICIONARIO: Traducoes = {
   "Esta ação remove o que está selecionado. Não pode ser desfeita.": {
     es: "Esta acción elimina lo que está seleccionado. No se puede deshacer.",
   },
+  // Excluir UM card pelo menu do card: diz o que vai junto (o histórico de
+  // atividades, por cascade) e o que fica. "card" pelo mesmo motivo acima.
+  "O card sai do funil com o histórico de atividades. O contato e as conversas continuam. Esta ação não pode ser desfeita.": {
+    es: "La tarjeta sale del embudo con el historial de actividades. El contacto y las conversaciones se mantienen. Esta acción no se puede deshacer.",
+  },
   "Selecionar": { es: "Seleccionar" },
   "Selecionar todos em": { es: "Seleccionar todos en" },
   "Desmarcar todos em": { es: "Desmarcar todos en" },
@@ -6184,6 +6189,12 @@ export const DICIONARIO: Traducoes = {
     es: "Indica el motivo. Esta información ayuda a mejorar el embudo.",
   },
   "Detalhe (opcional)": { es: "Detalle (opcional)" },
+  // Sem esta linha, "Outro" com funil configurado é beco sem saída: a tela
+  // oferece a opção, recusa todo texto que não seja um motivo já cadastrado, e
+  // não diz ONDE se cadastra um motivo novo.
+  "Para usar um motivo que não está aqui, cadastre em Configurações › Funis.": {
+    es: "Para usar un motivo que no está aquí, configúralo en Configuración › Embudos.",
+  },
   "Ex: Cliente desistiu por X motivo": { es: "Ej: El cliente desistió por X motivo" },
   "Confirmar": { es: "Confirmar" },
   "Lead criado": { es: "Lead creado" },
@@ -8089,7 +8100,7 @@ export const DICIONARIO: Traducoes = {
   "Lead foi modificado por outro usuário. Recarregue e tente novamente.": { es: "El lead fue modificado por otro usuario. Recarga e intenta de nuevo." },
   "Liberou a conversa de volta para a fila": { es: "Liberó la conversación de vuelta a la cola" },
   "Material não encontrado.": { es: "Material no encontrado." },
-  "Move cross-pipeline não é permitido. Clone o lead para o pipeline alvo.": { es: "Mover entre pipelines no está permitido. Clona el lead hacia el pipeline destino." },
+  "Move cross-pipeline não é permitido. Use POST /api/v1/leads/[id]/clone para levar o negócio a outro funil.": { es: "Mover entre pipelines no está permitido. Usa POST /api/v1/leads/[id]/clone para llevar el negocio a otro embudo." },
   "Nada para alterar.": { es: "Nada para modificar." },
   "Nenhum arquivo foi enviado.": { es: "Ningún archivo fue enviado." },
   "Nenhum lead acessível na operação.": { es: "Ningún lead accesible en la operación." },
@@ -8160,12 +8171,17 @@ export const DICIONARIO: Traducoes = {
   "Stage não pertence ao pipeline informado.": {
     es: "El stage no pertenece al pipeline informado.",
   },
-  "Move cross-pipeline não é permitido.": { es: "Mover entre pipelines no está permitido." },
   "Lead foi modificado concorrentemente.": { es: "El lead fue modificado de forma concurrente." },
   "leads por bulk.": { es: "leads por lote." },
   "Esta sugestão já foi": { es: "Esta sugerencia ya fue" },
   "decidida": { es: "decidida" },
   "Informe o motivo da perda.": { es: "Indica el motivo de la pérdida." },
+  "Informe o motivo da perda: use “Marcar como perdido” no menu do card, que pede o motivo.": {
+    es: "Indica el motivo de la pérdida: usa “Marcar como perdido” en el menú del card, que pide el motivo.",
+  },
+  "Esse motivo de perda não está na lista deste funil — escolha um dos motivos configurados.": {
+    es: "Ese motivo de pérdida no está en la lista de este embudo — elige uno de los motivos configurados.",
+  },
   "Pipeline não tem stage de fechamento como ganho.": {
     es: "El pipeline no tiene stage de cierre como ganado.",
   },
@@ -8174,6 +8190,30 @@ export const DICIONARIO: Traducoes = {
   },
   "Perdido —": { es: "Perdido —" },
   "(negócio removido)": { es: "(negocio eliminado)" },
+  // Troca de funil (POST /api/v1/leads/[id]/clone): o rótulo da linha do negócio
+  // novo e as duas razões que não dependem do nome do funil.
+  "Veio de outro funil": { es: "Vino de otro embudo" },
+  "Levado para outro funil": { es: "Llevado a otro embudo" },
+  // As recusas da troca de funil (lib/leads/clonar-para-funil.ts e a rota).
+  "O negócio já está neste funil. Para trocar de etapa use /api/v1/leads/[id]/move.": {
+    es: "El negocio ya está en este embudo. Para cambiar de etapa usa /api/v1/leads/[id]/move.",
+  },
+  "Só um negócio aberto pode ser levado para outro funil.": {
+    es: "Solo un negocio abierto puede llevarse a otro embudo.",
+  },
+  "A etapa não pertence ao funil de destino.": {
+    es: "La etapa no pertenece al embudo de destino.",
+  },
+  "A etapa de destino é de fechamento: escolha uma etapa aberta do funil.": {
+    es: "La etapa de destino es de cierre: elige una etapa abierta del embudo.",
+  },
+  "O funil de destino não tem etapa aberta para receber o negócio.": {
+    es: "El embudo de destino no tiene etapa abierta para recibir el negocio.",
+  },
+  "Funil de destino não encontrado.": { es: "Embudo de destino no encontrado." },
+  "O funil de origem não tem etapa de perda para encerrar o negócio.": {
+    es: "El embudo de origen no tiene etapa de pérdida para cerrar el negocio.",
+  },
 
   // ─── Fase B: vocabulario de dominio persistido (reason de crm_lead_activities) ───
   //
@@ -8793,6 +8833,86 @@ export const DICIONARIO: Traducoes = {
   "Erro ao reativar tenant": { es: "Error al reactivar el tenant" },
   "Incidente resolvido com sucesso": { es: "Incidente resuelto con éxito" },
   "Erro ao resolver incidente": { es: "Error al resolver el incidente" },
+
+  // ═══ Tags: a tela do vocabulário de etiquetas, da fatia S4 da #852 ═══
+  //
+  // A tela nasceu com dez chamadas `t()` e o espanhol ficou para trás: a lista
+  // inteira caía no português em plena tela traduzida (o conferidor de chaves
+  // só enxerga o que já está escrito, e a tela é nova). Vocabulário herdado do
+  // resto do dicionário — `funil` é `embudo`, `Inbox` continua `Inbox`.
+  "As etiquetas que os agentes, o Inbox e o funil usam nesta organização. Renomear ou juntar corrige também as regras de agente que escrevem a etiqueta, na mesma operação.": {
+    es: "Las etiquetas que usan los agentes, el Inbox y el embudo en esta organización. Renombrar o unir corrige también las reglas de agente que escriben la etiqueta, en la misma operación.",
+  },
+  "Não foi possível carregar as etiquetas agora. Recarregue a página.": {
+    es: "No se pudieron cargar las etiquetas ahora. Recarga la página.",
+  },
+  "Nenhuma etiqueta nesta organização ainda. Elas aparecem aqui conforme os agentes, o Inbox e o funil usarem.": {
+    es: "Aún no hay ninguna etiqueta en esta organización. Aparecen aquí a medida que los agentes, el Inbox y el embudo las usen.",
+  },
+  "Etiquetas da organização e onde são usadas": {
+    es: "Etiquetas de la organización y dónde se usan",
+  },
+  "Regras de agente": {
+    es: "Reglas de agente",
+  },
+  "em uso, fora do vocabulário": {
+    es: "en uso, fuera del vocabulario",
+  },
+  "Etiqueta de destino": {
+    es: "Etiqueta de destino",
+  },
+  "Escolha a etiqueta que fica": {
+    es: "Elige la etiqueta que queda",
+  },
+  "Novo nome": {
+    es: "Nombre nuevo",
+  },
+  "Aplicando...": {
+    es: "Aplicando...",
+  },
+  // ── Frases do painel de etiquetas que ANTES eram template literal ──────────
+  // `traduzir()` casa a string EXATA: uma frase montada em runtime
+  // (`t(`Renomear "${tag}" para:`)`) nunca casa chave nenhuma, e o painel inteiro
+  // saía em português para quem escolheu espanhol — sem o guarda de i18n ver
+  // nada, porque ele só registra `StringLiteral` e `NoSubstitutionTemplateLiteral`.
+  // O dado agora entra FORA do `t()`, e o que sobra são estas chaves estáticas.
+  "para:": { es: "a:" },
+  "em outra etiqueta existente:": { es: "en otra etiqueta existente:" },
+  // `"de"` NÃO entra aqui: a chave já existe mais acima no arquivo (linha ~896),
+  // e repeti-la é TS1117 — o `as const` do dicionário reprova chave duplicada.
+  "contato(s),": { es: "contacto(s)," },
+  "lead(s) e": { es: "lead(s) y" },
+  "conversa(s).": { es: "conversación(es)." },
+  "Atenção:": { es: "Atención:" },
+  "regra(s) de agente continuam escrevendo esta etiqueta. Excluir aqui não apaga a regra — o agente vai recriar a etiqueta no próximo atendimento.": {
+    es: "regla(s) de agente siguen escribiendo esta etiqueta. Eliminar aquí no borra la regla — el agente volverá a crear la etiqueta en la próxima atención.",
+  },
+  "Etiqueta removida de": { es: "Etiqueta eliminada de" },
+  "Etiqueta atualizada em": { es: "Etiqueta actualizada en" },
+  "registro(s).": { es: "registro(s)." },
+  "registro(s) e em": { es: "registro(s) y en" },
+  "regra(s) de agente.": { es: "regla(s) de agente." },
+  // As frases de recusa do servidor. Três delas não tinham entrada: o argumento
+  // de `t()` ali é uma expressão `??`, que o guarda também não resolve.
+  "Confira a etiqueta e o novo nome.": { es: "Revisa la etiqueta y el nombre nuevo." },
+  "Só um gerente ou administrador da organização pode mudar as etiquetas.": {
+    es: "Solo un gerente o administrador de la organización puede cambiar las etiquetas.",
+  },
+  "Não foi possível concluir agora. Tente de novo.": {
+    es: "No se pudo completar ahora. Inténtalo de nuevo.",
+  },
+  "Não foi possível falar com o servidor. Recarregue a página e confira antes de tentar de novo.": {
+    es: "No se pudo contactar al servidor. Recarga la página y comprueba antes de intentarlo de nuevo.",
+  },
+  "Mostrando as 500 primeiras etiquetas em ordem alfabética. Se a que você procura não está aqui, arrume primeiro as que aparecem.": {
+    es: "Mostrando las primeras 500 etiquetas en orden alfabético. Si la que buscas no está aquí, arregla primero las que aparecen.",
+  },
+  // A recusa `mfa_required` do painel de etiquetas: a única frase do mapa de erros
+  // que ficou sem entrada — medida pela tela em
+  // `tests/unit/tags-vocabulario-painel-em-espanhol.test.tsx`.
+  "Confirme o segundo fator para mudar as etiquetas.": {
+    es: "Confirma el segundo factor para cambiar las etiquetas.",
+  },
   "arquivado no acervo": { es: "archivado en el acervo" },
   "Um material marcado aqui foi arquivado no acervo — o agente não lê mais ele.": { es: "Un material marcado aquí fue archivado en el acervo — el agente ya no lo lee." },
   "Materiais marcados aqui foram arquivados no acervo — o agente não lê mais eles.": { es: "Materiales marcados aquí fueron archivados en el acervo — el agente ya no los lee." },

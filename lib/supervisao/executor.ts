@@ -23,7 +23,7 @@
  *   `conflito_de_estado` — nunca sobrescreve. A serialização por conversa vem da
  *   fila: `supervisor_review` roda na lane do contato.
  * - EXE COM PROVA: só a ferramenta concluída com sucesso marca `executada`; o
- *   CHECK da 0263 recusa EXE sem referência de resultado.
+ *   CHECK da 0265 recusa EXE sem referência de resultado.
  * - SEM CANAL: nada aqui envia mensagem. O executor não recebe adaptador de
  *   canal, e o adaptador pg não tem função de envio.
  */

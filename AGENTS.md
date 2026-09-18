@@ -123,7 +123,7 @@ pnpm install          # deps (frozen-lockfile no CI)
 pnpm dev              # dev server
 pnpm build            # next build
 pnpm lint             # eslint
-pnpm typecheck        # tsc --noEmit (estrito)
+pnpm typecheck        # tsc --noEmit -p tsconfig.typecheck.json (inclui tests/)
 pnpm test:unit        # vitest — EXCLUI tests/invariants, tests/e2e e tests/journeys (lista viva em vitest.config.ts → exclude)
 pnpm test:db          # invariantes de banco + gate do baseline (PRECISA de Docker)
 pnpm test:e2e         # Playwright (PRECISA de app rodando + banco semeado)

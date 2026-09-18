@@ -159,14 +159,23 @@ export type ActivityType =
    */
   | "contacts_merged"
   /**
-   * UMA REVISÃO DE SUPERVISÃO TERMINOU (migration 0263). Um agente supervisor
+   * UMA REVISÃO DE SUPERVISÃO TERMINOU (migration 0265). Um agente supervisor
    * conferiu o que outro agente — ou uma pessoa da equipe — acabou de concluir
    * nesta conversa. A linha diz o desfecho em códigos (EXE/RECOM/BLOQ) e aponta
    * para o registro da revisão; nunca carrega o que o paciente disse. Quando a
    * revisão MOVE o card, a linha de `stage_changed` sai também, como em
    * qualquer outra mão que move.
    */
-  | "supervision_review";
+  | "supervision_review"
+  /**
+   * O negócio nasceu da TROCA DE FUNIL (`POST /api/v1/leads/[id]/clone`).
+   *
+   * ⚠️ Não é `lead_created`: aquele rótulo diz "Entrou pelo WhatsApp", e este
+   * negócio não entrou por canal nenhum — ele veio de outro funil, e é isso que
+   * quem abre o card no destino precisa ler. O outro lado da troca é a
+   * `demand_closed` da origem, com a razão "Levado para o funil X".
+   */
+  | "moved_from_pipeline";
 
 export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   lead_created: "Entrou pelo WhatsApp",
@@ -267,6 +276,7 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   // ter mudado de contato sem ninguém tê-lo movido.
   contacts_merged: "Contatos duplicados juntados",
   supervision_review: "Revisão da supervisão",
+  moved_from_pipeline: "Veio de outro funil",
 };
 
 /** Quando o tipo é legado/desconhecido, a linha ainda é honesta — sem jargão. */

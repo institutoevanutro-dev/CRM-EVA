@@ -296,7 +296,7 @@ Ver `README.md` pra detalhes de setup.
 ## Testes
 
 ```bash
-pnpm typecheck   # tsc --noEmit (estrito)
+pnpm typecheck   # tsc --noEmit -p tsconfig.typecheck.json (inclui tests/)
 pnpm lint        # eslint next/core-web-vitals
 pnpm test:unit   # Vitest (NÃO inclui tests/invariants/** — ver abaixo)
 pnpm test:db     # Postgres efêmero + baseline install/update + 364 invariantes

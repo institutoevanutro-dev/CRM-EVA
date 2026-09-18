@@ -111,7 +111,24 @@ describe("'Cliente desde' na ficha do contato", () => {
 
   it("desligada: a linha não aparece", () => {
     render(comQuery(<ContactDetailClient contactId="c-1" />));
-    expect(screen.getByText("Joana Prado")).toBeInTheDocument();
+    // O controle de vacuidade prende o ELEMENTO, não o texto: a ficha mostra o
+    // nome DUAS vezes de propósito — o `<h1>` do cabeçalho e um campo do card
+    // de visão geral —, então procurar por texto solto é ambíguo por
+    // construção. Só não era antes do PR #907 por acaso: `rotuloDoContato`
+    // preferia `display_name`, o `<h1>` saía "Joana", e a string procurada
+    // aqui ("Joana Prado", que é o `name`) casava apenas com o campo "Nome".
+    // Medido nos dois lados com esta mesma ficha: na v1.28.0, `h1="Joana"`,
+    // "Joana" x2 e "Joana Prado" x1; com o #907, `h1="Joana Prado"`, "Joana
+    // Prado" x2 e "Joana" x1. A repetição na TELA é a mesma — o título sempre
+    // espelha um dos dois campos —, o que mudou foi qual deles.
+    //
+    // A consulta também não crava QUAL nome vence: o que este arquivo vigia é
+    // "Clientes pela agenda", e amarrar aqui a precedência do #907 faria o
+    // teste reprovar por um assunto que não é o dele. O que o controle precisa
+    // provar segue provado — a ficha deste contato renderizou, logo o
+    // `queryByText` abaixo ser nulo significa que a linha não está lá, e não
+    // que a tela está vazia.
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Joana");
     expect(screen.queryByText("Cliente desde")).toBeNull();
   });
 

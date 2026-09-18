@@ -74,7 +74,7 @@ async function aplicarUpdate(org: string): Promise<unknown> {
 
 // Segunda-feira real usada nas asserções: 2026-09-21. 2026-09-19 é sábado, 2026-09-20 é domingo.
 function horaEm(diaISO: string, hhmm: string): Date {
-  const [h, m] = hhmm.split(":").map(Number);
+  const [h = Number.NaN, m = Number.NaN] = hhmm.split(":").map(Number);
   return new Date(`${diaISO}T${String(h + 3).padStart(2, "0")}:${String(m).padStart(2, "0")}:00.000Z`);
 }
 
@@ -102,7 +102,7 @@ describe("SQL do horário comercial da clínica: jsonb_set de 1 nível + coalesc
     await seedOrg(org, { followups: { algum_outro_campo: "x" } });
 
     const settings = await aplicarUpdate(org);
-    expect((settings as any).followups.algum_outro_campo).toBe("x"); // preservado
+    expect((settings as { followups: { algum_outro_campo: string } }).followups.algum_outro_campo).toBe("x"); // preservado
     const config = lerConfigDosBloqueios(settings);
     expect(config).not.toBeNull();
     expect(dentroDaJanela(config!.janela!, horaEm("2026-09-21", "15:00"))).toBe(true);
@@ -120,7 +120,7 @@ describe("SQL do horário comercial da clínica: jsonb_set de 1 nível + coalesc
     expect(config).not.toBeNull();
     expect(config!.uma_sequencia_por_contato).toBe(true);
     expect(config!.exigir_etapa_do_gatilho).toBe(true);
-    expect((settings as any).branding.accent_hex).toBe("#123456"); // fora de followups, intocado
+    expect((settings as { branding: { accent_hex: string } }).branding.accent_hex).toBe("#123456"); // fora de followups, intocado
     expect(dentroDaJanela(config!.janela!, horaEm("2026-09-21", "10:00"))).toBe(true);
   });
 });

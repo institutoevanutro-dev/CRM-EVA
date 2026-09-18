@@ -263,6 +263,25 @@ jobs:
     #   parte 2 ≈ 14,4 min de Playwright → job ≈ 22,4 min
     #   folga contra o teto: ≈ 7,6 min no pior dos dois (era 4 min, e virou −0:17)
     #
+    # ── 16/09, noite: a previsão acima NÃO se confirmou, e as duas voltam ───
+    #
+    # Medido no run 35160549180 (lote 12, head 2a847f6f0): a parte 1 ESTOUROU o
+    # teto — 30 min cravados, cancelada no caso 141 de 156, ainda passando. A
+    # parte 2 mediu 15 min e a 3, 22 min. Ou seja, a partição prevista em
+    # 21,6/22,4 virou >30 contra 15: a folga está toda na parte 2.
+    #
+    # O que cresceu não foram as specs novas: as três de QA do lote 12 que caíram
+    # na parte 1 somam 5 casos e 31 s. Cresceram os casos acrescentados às specs
+    # que já estavam lá (o arrasto duplo do #919 em `kanban-owner-filter`, entre
+    # outros), que é crescimento que nenhuma linha deste arquivo anuncia.
+    #
+    # Então `prova-painel-provedores` (199,4 s, a alavanca que o bloco abaixo já
+    # nomeava) e `navegacao` (239,2 s) vão as duas para a PARTE_2. Medido nos
+    # logs deste run: a parte 1 gastou 978 s de Playwright em 138 casos
+    # concluídos; tirar 438 s devolve ~7,3 min e põe o job perto de 22 min, com
+    # a parte 2 em ~23 min. Subir `timeout-minutes` não entra: o teto é o que
+    # denuncia o crescimento, e calá-lo devolveria o problema maior mais tarde.
+
     # ── A próxima alavanca, quando esta acabar ──────────────────────────────
     #
     # `prova-painel-provedores` é 199,4 s — 42% de toda a parte 1, num arquivo
@@ -287,7 +306,7 @@ jobs:
         confirmar-dado-do-contato.spec.ts
         credenciais-de-ia.spec.ts
         risk-radar.spec.ts invite-lifecycle.spec.ts system-update.spec.ts
-        agente-papeis-operador.spec.ts prova-painel-provedores.spec.ts
+        agente-papeis-operador.spec.ts
         followup-linguagem.spec.ts followup-ramos.spec.ts
         wizard-do-funcionario.spec.ts mfa-opcional.spec.ts inbox-responder-citando.spec.ts
         agenda-tela-do-produto.spec.ts
@@ -295,11 +314,14 @@ jobs:
         relogio-http-cron-externo.spec.ts
         j20-elegibilidade-respondi.spec.ts j20-elegibilidade-followup.spec.ts
         j20-elegibilidade-atendimento-manual.spec.ts
-        navegacao.spec.ts
         juntar-contatos-duplicados.spec.ts
         lote-no-quadro-do-funil.spec.ts
+        motivos-de-perda-do-funil.spec.ts
         importar-leads-planilha.spec.ts
         relatorio-de-atividades.spec.ts
+        qa-l12-inbox.spec.ts
+        qa-l12-troca-de-funil.spec.ts
+        qa-l12-agente-ia.spec.ts
       # ⚠️ A ORDEM DESTA LISTA NÃO DECIDE A ORDEM DE EXECUÇÃO. O Playwright
       # ordena os arquivos por CAMINHO, não pela ordem em que são passados na
       # linha de comando. Medido no run 31838253496: `marca-logo.spec.ts` estava
@@ -404,6 +426,8 @@ jobs:
         agenda-caminho-ate-os-horarios.spec.ts
         agenda-google-volta-do-consentimento.spec.ts
         agenda-google-volta-nao-desloga.spec.ts
+        qa-l12-funil.spec.ts
+        navegacao.spec.ts prova-painel-provedores.spec.ts
       # `moeda-da-organizacao` entrou na PARTE_2 em 2026-09-04, ao lado de
       # `navegacao` — mesmo domínio (Configurações) e a mesma ausência de
       # dependência: sem WAHA, Resend, Nuvemshop ou Redis. Toca a organização
@@ -618,6 +642,8 @@ jobs:
         qa-titulos-das-telas.spec.ts
         qa-equipe-pinta-na-hora.spec.ts
         qa-sugestao-rejeitada-e-motivo.spec.ts
+        qa-l12-agenda-contatos.spec.ts
+        qa-l12-tags-radar.spec.ts
 
       FORA_DO_CI: >-
         vps-fresh-onboarding.spec.ts

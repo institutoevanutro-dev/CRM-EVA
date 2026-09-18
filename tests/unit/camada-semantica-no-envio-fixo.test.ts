@@ -99,7 +99,7 @@ function job(payload: Record<string, unknown>): JobRow {
 /**
  * Pool mínimo: resolve a conversa, a escolha da organização e — para o
  * caminho dirigido por fluxo (`followup_enrollment_id`) — os bloqueios
- * obrigatórios (migration 0263/0264, `lib/followup/bloqueios-obrigatorios.ts`).
+ * obrigatórios (migration 0265/0266, `lib/followup/bloqueios-obrigatorios.ts`).
  * As linhas abaixo simulam "nenhum bloqueio se aplica": sem reserva
  * (`appointment_id: null`), contato liberado, sem etapa que invalide. O que
  * este arquivo testa é o roteamento da camada semântica, não os bloqueios —

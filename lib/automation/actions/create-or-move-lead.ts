@@ -10,6 +10,7 @@ import { originFromAutomationEvent } from "@/lib/atendimento/origem-automacao";
  * eventos derivados (anti-loop profundidade 1: regra→ação→handler→evento).
  */
 import { registerAction } from "@/lib/automation/actions";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import type { ActionCtx, ActionResultDetail } from "@/lib/automation/types";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
 import { createLeadHandler, moveLeadHandler } from "@/app/api/v1/leads/_handler";
@@ -60,7 +61,10 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
       const created = await createLeadHandler(ctx.admin, handlerCtx, {
         pipeline_id: pipelineId,
         stage_id: stageId,
-        title: contact.name ?? contact.display_name ?? contact.phone_number ?? "Lead da automação",
+        // O título nasce do MESMO resolvedor das telas. Remontado à mão, ele
+        // gravava `Contato 543134@lid` no card do funil — e título de lead
+        // não se reescreve sozinho depois.
+        title: nomeDoContato(contact) ?? contact.phone_number ?? "Lead da automação",
         contact_id: contact.id,
         source: "automation",
       } as Parameters<typeof createLeadHandler>[2]);

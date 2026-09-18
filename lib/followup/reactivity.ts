@@ -106,7 +106,7 @@ export interface ReactivityAdminClient {
    */
   agoraNoBanco(): Promise<string>;
   /**
-   * (migration 0263) A etapa para onde o negócio foi invalida follow-up?
+   * (migration 0265) A etapa para onde o negócio foi invalida follow-up?
    * Devolve o contato do negócio e a marca `crm_stages.blocks_followups`.
    * Opcional: adaptadores de teste que não exercitam a reação 4 podem omitir —
    * e aí a reação é no-op, nunca erro.
@@ -369,7 +369,7 @@ async function reactToHandoffClose(
 // ---- reação 4: lead.stage_changed para etapa que invalida follow-up --------
 
 /**
- * Migration 0263. Negócio que entra numa etapa marcada `blocks_followups` (ex.:
+ * Migration 0265. Negócio que entra numa etapa marcada `blocks_followups` (ex.:
  * comprovante em conferência) encerra TODAS as sequências vivas do contato,
  * inclusive pausadas: "o paciente mandou o comprovante" não se desfaz porque o
  * humano soltou o atendimento depois. Uma mudança de etapa posterior NÃO

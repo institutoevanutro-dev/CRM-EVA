@@ -1,7 +1,7 @@
--- 0264 — Bloqueios obrigatórios do fluxo de cobrança de sinal (T+40/T+60).
+-- 0266 — Bloqueios obrigatórios do fluxo de cobrança de sinal (T+40/T+60).
 --
 -- O fluxo "EVA | Sinal T+40min" cobra comprovante de depósito depois de uma
--- reserva. Duas coisas faltavam para o executor de follow-up (migration 0263,
+-- reserva. Duas coisas faltavam para o executor de follow-up (migration 0265,
 -- `lib/followup/bloqueios-obrigatorios.ts`) impedir um lembrete fora do prazo
 -- ou de um tipo de consulta que não usa sinal:
 --

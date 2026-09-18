@@ -357,7 +357,7 @@ DeskcommCRM/
 ## 🧪 Testes
 
 ```bash
-pnpm typecheck     # tsc --noEmit (estrito)
+pnpm typecheck     # tsc --noEmit -p tsconfig.typecheck.json (inclui tests/)
 pnpm lint          # eslint next/core-web-vitals
 pnpm test:unit     # Vitest (NÃO inclui tests/invariants/**)
 pnpm test:db       # Postgres efêmero + baseline install/update + invariantes

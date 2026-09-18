@@ -260,7 +260,7 @@ const MARCA_CONGELADA: Record<string, EntradaDeMarca> = {
   "lib/supervisao/contrato.ts": {
     categoria: "PROTOCOLO",
     motivo:
-      "prefixo de namespace do UUID v5 determinístico usado como `job_queue.source_event_id` (migration 0263). Trocar o prefixo muda todo hash já calculado — uma retentativa depois do update.sh deixaria de bater com o job já enfileirado e a deduplicação de revisão de supervisão pararia de funcionar em silêncio",
+      "prefixo de namespace do UUID v5 determinístico usado como `job_queue.source_event_id` (migration 0265). Trocar o prefixo muda todo hash já calculado — uma retentativa depois do update.sh deixaria de bater com o job já enfileirado e a deduplicação de revisão de supervisão pararia de funcionar em silêncio",
     marcas: ["deskcomm"],
   },
 

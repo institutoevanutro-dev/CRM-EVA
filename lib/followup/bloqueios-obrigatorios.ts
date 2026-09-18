@@ -1,6 +1,6 @@
 /**
  * Bloqueios OBRIGATÓRIOS do executor de follow-up — conferidos imediatamente
- * antes de cada envio de um fluxo (migration 0263).
+ * antes de cada envio de um fluxo (migration 0265).
  *
  * ═══ POR QUE AQUI, E NÃO NA SUPERVISÃO ═══
  *
@@ -156,7 +156,7 @@ export interface FatosDoEnvio {
   /** Outras inscrições vivas do contato, com início. */
   outras_inscricoes_vivas: Array<{ id: string; started_at: string }>;
   /**
-   * A RESERVA (migration 0264) que originou a inscrição, só nos fluxos
+   * A RESERVA (migration 0266) que originou a inscrição, só nos fluxos
    * amarrados a uma reserva específica (ex.: cobrança de sinal). `null` em
    * todo fluxo disparado por etapa ou manualmente sem reserva — o
    * comportamento de hoje não muda para eles.
@@ -244,7 +244,7 @@ export function decidirEnvio(
       return { envia: false, motivo: 'resposta_do_contato', invalida: true };
     }
   }
-  // A reserva (migration 0264) é o segundo grupo que SEMPRE vale, sem
+  // A reserva (migration 0266) é o segundo grupo que SEMPRE vale, sem
   // configuração: mandar cobrança de sinal fora do prazo ou de um tipo que não
   // usa sinal é errado em qualquer nicho, do mesmo jeito que opt-out é.
   let prazoDoSinal: number | null = null;

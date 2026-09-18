@@ -154,6 +154,11 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 | J4.27 | Anonimizar um contato (LGPD) | mesma causa da J4.26 na rota `/api/v1/lgpd/anonymize` — **a anonimização não acontecia**. Corrigido; guardado pelo invariante de colunas geradas, ainda **sem prova de tela** |
 | J4.25 | ⚠️ O funil de entrada de uma org nova é de **e-commerce** | `fn_seed_default_pipeline_for_org` semeia "Pedidos" com *Carrinho abandonado · Pago · Em separação…*. Numa clínica ou imobiliária, o lead nasce em **"Carrinho abandonado"**. Achado em 2026-08-06 ao provar J4.22; conserto é decisão de produto (spec 17 passo 4) |
 | J4.36 | **Editar campos do funil pela barra da conversa** | só os customizados (`settings.fields`) aparecem como inputs; título/valor ficam no dossiê. Salvar grava `custom_fields` no mesmo PATCH do quadro e a seção relê · `tests/unit/inbox-campos-lead.test.tsx` |
+| J4.37 | **Marcar como perdido oferece os motivos do FUNIL** (#918) | a janela lista `settings.lost_reasons` do funil do card, recusa em "Outro" o texto que o trigger negaria (22023) e diz onde se cadastra um motivo novo; confirmar grava o motivo com o texto do operador · `tests/e2e/motivos-de-perda-do-funil.spec.ts` (SPECS_PARTE_1) + `tests/unit/kanban-motivos-de-perda-do-funil.test.tsx` (9 casos). Evidência: `evidence/motivos-de-perda-do-funil/` |
+| J4.40 | ⚠️ **"Motivos de perda extras" da ORGANIZAÇÃO não tem consumidor** | `organizations.settings.lost_reasons_extra` (o campo "Motivos de perda extras (separados por vírgula)" em Configurações › Organização, `app/app/settings/tenant/_form.tsx`) não é lido pelo trigger `fn_validate_lost_reason_required` — que só olha `crm_pipelines.settings.lost_reasons` — nem pela janela de perder. Medido: `grep lost_reasons_extra` só devolve as telas de configuração e os schemas; no `baseline.sql` ele aparece apenas dentro de um `comment on function`. Defeito PRÉ-EXISTENTE, não introduzido pelo #938 — mas depois dele o produto tem dois campos quase homônimos, um que funciona (funil) e um que não (organização). Saídas possíveis: o trigger unir organização ∪ funil, ou o campo sair da aba Organização. Decisão do dono |
+| J4.39 | **Tag em lote oferece as tags que já existem** (#852, item 3) | o menu "Tag…" lista até 10 tags dos leads do quadro e digitar filtra. ⚠️ Defeito achado NA TRIAGEM e medido em jsdom: o typeahead do menu do Radix roubava o foco do campo na primeira tecla (digitar "goo" deixava "g" no campo) e o Enter aplicava a tag do MENU a todos os selecionados · `tests/unit/tag-em-lote-mostra-existentes.test.tsx` (4 casos, um deles no ponto de uso). **Falta prova de tela**: abrir o quadro com ≥12 tags distintas, selecionar 2 cards, digitar uma tag nova que comece como uma existente e conferir o texto inteiro no campo |
+| J4.38 | **Excluir um card pelo menu do próprio card, inclusive no toque** (#910) | o botão de ações é visível sem hover em aparelho de toque (opacidade COMPUTADA, não a string do `className`) e o menu traz "Excluir", que abre o `AlertDialog` da doutrina destrutiva · `tests/e2e/lote-no-quadro-do-funil.spec.ts` (bloco de toque) + `tests/unit/kanban-card-excluir.test.tsx` (5 casos). Evidência: `evidence/excluir-card-no-toque/` |
+| J4.41 | **Arrastar o mesmo card duas vezes seguidas** (#916, PR #919) | o segundo arrasto, feito logo depois do primeiro e com o refetch do quadro segurado (a rede lenta de uma VPS distante), responde `200` e o card chega à terceira etapa, sem o aviso "modificado por outro usuário" e sem recarregar a página; o banco guarda a etapa final. `tests/e2e/kanban-owner-filter.spec.ts`, funil próprio, arrasto pelo teclado do `@hello-pangea/dnd` (executado 2026-09-16, ambiente fresco do `baseline.sql`). Evidência: `evidence/arrastar-duas-vezes/01-depois-do-primeiro.png` (o card na segunda etapa, depois do primeiro arrasto) e `evidence/arrastar-duas-vezes/02-depois-do-segundo.png` (na terceira, depois do segundo) |
 
 ## J5 — Time: convites e atuação de atendentes `[P0]` (convite) / `[P1]` (rotina)
 
@@ -528,6 +533,9 @@ uma, para a asserção poder ser sobre o CONJUNTO DE NOMES e não sobre a contag
 | J13.8 | Sincronizar tira a linha da fila, e editar recoloca (o laço dos dois relógios) | **PASS** — medido no Postgres real: `true` → `false` com delta `00:00:00` → `true` |
 | J13.9 | A credencial do Google não é servida pelo PostgREST | **PASS** — `anon` recebe `42501 permission denied`; `service_role` recebe 200 (controle positivo) |
 | J13.10 | Cadastrar a credencial do Google pela tela do admin | **NÃO EXERCITADO** — a tela e a server action existem e o `next build` passa, mas o ambiente e2e não tem a chave mestra de cifra semeada (`fn_encrypt_oauth` levanta `NUVEMSHOP_OAUTH_ENCRYPTION_KEY ausente`), que é justamente o caminho em que a action RECUSA gravar. Falta o caso pela tela com a chave presente |
+| J13.11 | Compromisso do Google que começa antes do período desenhado aparece na grade, fatiado na borda | **NÃO COBERTO** — medido só por unidade sobre dublê do cliente Supabase (`tests/unit/agenda-recorte-do-google-atravessa-o-limite.test.ts`); falta prova pela tela num ambiente com Google conectado. ⚠️ O conserto morde na BORDA do período que a tela desenha (virada da semana na visão Semana, do mês na visão Mês, meia-noite na visão Dia). Dentro do período desenhado a grade continua atribuindo o bloco só à coluna do dia em que ele COMEÇA (`components/agenda/GradeDaAgenda.tsx`, `isSameDay(comeca, dia)`) — essa metade é item próprio |
+| J13.12 | Agendamento INTERNO que atravessa a meia-noite aparece na janela do dia seguinte | **NÃO COBERTO, e o defeito é conhecido** — `listaAgendamentos` recorta por começo e não por interseção (`lib/agenda/consulta.ts`, `.gte("starts_at", de).lt("starts_at", ate)`), enquanto `coletaOQueOcupa` no mesmo arquivo já usa interseção: mesma discordância tela↔motor da #525, do lado interno. Não consertado junto porque `listaAgendamentos` também alimenta a ferramenta MCP do agente (`lib/mcp/tools/agendamento.ts`) — mudar o recorte muda o que o agente enxerga, e isso é decisão de contrato
+| J13.13 | ⚠️ **`viewer`/`agent` continuam sem ver a ocupação do Google do COLEGA na grade** | **NÃO COBERTO, e o defeito é conhecido** — a leitura da tela é pela SESSÃO, com o embed `calendar_connections!inner` (`lib/agenda/ocupacao-externa.ts`), e a RLS `calendar_connections_dono_ou_manager_read` (`supabase/baseline.sql`) só libera `user_id = auth.uid()` ou `fn_role_at_least(org,'manager')`. O motor (`fn_agenda_ocupacao_google_do_dono`, migration 0260) é `security definer` e entrega a ocupação a TODO membro: para esses dois papéis a tela desenha livre todo compromisso do colega enquanto a marcação recusa. É a metade da #525 que o #915 **não** fecha — ele fecha a FRONTEIRA do recorte, não o PAPEL de quem olha (resíduo da #879). O dublê de `tests/unit/agenda-recorte-do-google-atravessa-o-limite.test.ts` não modela papel nem RLS, então a suíte não pode enxergar isto. Fechar é decisão de produto sobre QUEM vê |
 
 **Registro honesto do que NÃO foi exercitado:** `pnpm test:db` não rodou nesta
 máquina — o daemon do Docker travou depois de o disco encher, e o harness de
@@ -636,6 +644,8 @@ mais humilhante é que **a conexão sempre funcionou**: ninguém conseguia ver.
 | J16.3 | A conexão que o callback grava é encontrada pelo predicado do worker | **PASS** — mesmo invariante: 1 achada com o valor certo, 0 com o antigo |
 | J16.4 | Nenhuma consulta filtra por valor que a coluna proíbe | **PASS** — varredura `consulta-usa-o-vocabulario-do-banco`; previ 3 achados antes de rodar e vieram os 3 |
 | J16.5 | A lista de horários rola, e o último horário é clicável | **PASS** — `agenda-painel-cabe-na-tela.spec.ts`, viewport 1280×700. Evidência: `evidence/calendario/d4-lista-rola-1280x700.png` |
+| J16.6 | A ida ao Google pede o SELETOR de contas, e só SUGERE a do login | **PASS** — `agenda-google-connect-route.test.ts`, caso "manda para o consentimento do Google…", sobre o header `Location` de verdade: `accounts.google.com/o/oauth2/v2/auth`, `prompt` = {`consent`,`select_account`}, `login_hint` = o e-mail de quem clicou. A regra pura tem o par em `agenda-google-oauth.test.ts`, casos "pede acesso offline…" (inclusive a forma no fio, `prompt=consent+select_account`) e "deixa escolher OUTRA conta…" |
+| J16.7 | O botão da tela leva à rota que produz essa ida | **PASS** — `agenda-cartao-conexao-google.test.tsx`, `href` do `conectar-google`. Era o único elo da corrente tela→Google que nenhum teste segurava |
 
 **Três correções ao briefing, todas medidas:**
 1. A retenção do cookie no segundo salto era **dedução** marcada NÃO MEDIDA. Foi
@@ -651,6 +661,35 @@ mais humilhante é que **a conexão sempre funcionou**: ninguém conseguia ver.
 **Dívida declarada, não consertada aqui:** com o painel aberto em 1280×700 o body
 vai a 1566px contra 700 de janela. É anterior a este PR e misturá-la esconderia
 as duas.
+
+**Duas dívidas do lote 12 (grupo G4, PRs #931/#933), declaradas e não pagas:**
+
+1. **Ninguém abriu a tela do Google com duas contas logadas.** J16.6 mede o que o
+   CRM ENVIA, que é o que nos cabe; que o Google DESENHE o seletor com as duas
+   contas é dedução a partir da documentação dele, não observação. Provar exige
+   conta Google de teste com consentimento pré-aprovado — o mesmo bloqueio que
+   mantém o caso 2 de `agenda-conectar-google.spec.ts` em `test.skip`.
+2. **Trocar a conta escolhida por engano tem saída, mas a conta certa nasce sem
+   agenda de destino.** Com o seletor de volta, escolher a conta errada virou um
+   clique. A saída existe: "Desconectar" some com ela, e a tela devolve o botão
+   "Conectar Google" porque só lista conexão com `status` diferente de
+   `disconnected` (`app/app/agenda/page.tsx`). Só que `fn_google_catalog` marca o
+   calendário primário como destino apenas quando a pessoa tem UMA linha em
+   `calendar_connections` — e a desconectada continua contando. Resultado: o
+   compromisso seguinte não é reservado no Google e grava "Escolha uma agenda de
+   destino nas configurações." (que a escolha manual ali o destrave NÃO foi
+   medido). Medido em
+   Postgres descartável com o `baseline.sql` aplicado, chamando as funções do
+   banco (`fn_google_catalog`, `fn_google_appointment`) — controle: conta única
+   vira destino; conta errada desconectada + conta certa conectada: a certa sem
+   destino e o aviso gravado.
+   Controle da própria medição: invertidas as duas previsões, as duas ficaram
+   vermelhas com os valores reais. Consertar é migration, fora deste grupo.
+
+   Uma porta "Conectar outra conta" (sem desconectar a errada) foi escrita e
+   desfeita neste mesmo lote, e o motivo é medido na mesma rodada: com a errada
+   de pé, a certa entra sem destino, o compromisso vai para a agenda da ERRADA,
+   e ela só sai derrubando as duas.
 
 ---
 
@@ -2272,3 +2311,115 @@ healthcheck, levando junto o `psql` do baseline — o log do CLI é que diz
 `container is not ready: unhealthy`; e um Realtime unhealthy varrendo o WAL levou o
 Postgres a `57014 statement timeout` e o GoTrue a `504`. **O Realtime não foi
 exercitado nesta rodada.**
+
+---
+
+## J24 — O vocabulário de etiquetas da organização `[P1]` (2026-09-15)
+
+Tela nova de Configurações › Tags (PR #955, issue #852 fatia S4): a lista das
+etiquetas com o peso de cada uma e as três operações — renomear, juntar, excluir.
+
+**As três ações são irreversíveis na prática** (não há desfazer) e uma delas é
+destrutiva. Registrado aqui porque a tela foi para o lote **sem ninguém ter
+clicado nos botões uma vez**: o autor declara no PR "a tela não foi aberta em
+navegador nem coberta por Playwright", e o aceite da própria issue #852 pedia
+Playwright.
+
+Regra no banco: `tests/invariants/tags-vocabulario.test.ts` (`pnpm test:db`).
+Contrato da rota, sem banco: `tests/unit/tags-vocabulario-rota.test.ts`.
+
+| # | Caso | Resultado |
+|---|---|---|
+| J24.1 | Renomear uma etiqueta que está numa regra de automação de DOIS tipos de ação deixa a regra com as duas | **PASS por invariante** (`renomear preserva TODAS as ações da regra`). Era o defeito BLOQUEADOR achado na triagem: o `group by (regra, tipo)` truncava a regra ao subconjunto de um tipo, em toda organização, mesmo numa regra que nunca citou a etiqueta. Medido num Postgres real antes do conserto: regra com `add_tag` + `assign_owner` ficava com 1 ação |
+| J24.2 | Juntar duas etiquetas de chaves diferentes não deixa a etiqueta repetida no array | **PASS por invariante** (`juntar duas etiquetas de chaves DIFERENTES…`). Medido antes do conserto: `{VIP, obra}` juntando `obra` em `VIP` devolvia `{VIP, VIP}` — e a leitura conta OCORRÊNCIAS, então o registro passava a pesar 2 na tela que deveria arrumá-lo |
+| J24.3 | A lista carrega com as contagens, pela tela | **NÃO COBERTO** — falta Playwright e evidência visual |
+| J24.4 | Excluir mostra o aviso de quantas regras continuam escrevendo a etiqueta | **NÃO COBERTO pela tela** — a regra está no invariante (`excluir … NÃO apaga a regra`), o AVISO não foi visto por ninguém |
+| J24.5 | Quem é `viewer`/`agent` não chega à tela | **PASS por leitura de código + invariante** (`viewer é recusado antes de qualquer escrita`). O atalho de platform admin saiu da página e da rota na triagem: `fn_role_at_least` não conhece platform admin, então a tela oferecia três botões que todos voltavam 403 |
+| J24.6 | O painel em espanhol | **CORRIGIDO na triagem, sem prova de tela** — seis chamadas `t()` recebiam template literal com interpolação, que `traduzir()` nunca casa: o diálogo inteiro e os dois toasts saíam em português para quem escolheu espanhol, e o guarda de i18n não vê `TemplateExpression` |
+## Lote 12 · G2 — Inbox: painel do contato e leads recentes (PRs #909, #944, #946)
+
+**PENDENTE POR EXECUÇÃO — nenhuma linha desta seção foi provada em tela.** Ela
+existe porque a lacuna é de FERRAMENTA, não de descuido: os consertos do grupo
+estão medidos em jsdom e em dublê de banco, e um deles jsdom e dublê são
+estruturalmente incapazes de alcançar.
+
+| Caso | Prioridade | Estado |
+|---|---|---|
+| L12.G2.1 `GET /api/v1/contact-tags` responde **200** (e não um 400 de parse do PostgREST) numa organização com pelo menos um contato SEM tag e um COM tag. Abrir o painel do Inbox › "Tag" e conferir a resposta pelo DevTools; anexar em `evidence/` | `[P1]` | **NÃO MEDIDO** |
+| L12.G2.2 O rótulo "Novo Lead" cabe na fileira de botões do painel (`flex flex-wrap gap-2`, `components/inbox/CRMSidePanel.tsx`) sem quebrar a fileira nem sumir, em 400 px e no tema escuro | `[P2]` | **PARCIAL** — a PRESENÇA do botão está inscrita em `tests/e2e/encerramento-atendimento.spec.ts` (`SPECS_PARTE_3`), que o CI roda a cada PR; o ENCAIXE em 400 px continua sem medida |
+| L12.G2.3 A linha "Funil · Etapa" com nome longo de funil: medir `getBoundingClientRect().width` contra `scrollWidth` do `div.line-clamp-2`, e o mesmo em celular, onde não há hover para o `title` | `[P2]` | **NÃO MEDIDO** |
+
+**Por que L12.G2.1 não tem substituto unitário.** `app/api/v1/contact-tags/route.ts`
+filtra com `.neq("tags", "{}")` sobre uma coluna `text[]`, e quem decide se essa
+sintaxe é aceita é o PostgREST — não o Postgres, e muito menos o dublê de
+`tests/unit/tags-do-contato-rota.test.ts`, que trata `"{}"` como caso especial
+escrito à mão. Um dublê não pode reprovar uma sintaxe que ele mesmo define. É a
+ÚNICA `.neq()` sobre coluna de array no repositório; para conferir em vez de
+acreditar nesta linha (o número envelhece, o comando não):
+
+```bash
+grep -rn '\.neq(' app lib workers --include='*.ts' --include='*.tsx' \
+  | grep -v '\.test\.' | grep -v ': *//' | sed 's/.*\.neq(/.neq(/'
+```
+
+O repositório já pagou o preço de um dublê de `.neq()` que no-opava: está
+escrito, com o desfecho em produção, no comentário de `upsertConversation`, em `lib/channels/zernio/ingest.ts`.
+
+A favor de a sintaxe estar certa, e é o que sustenta `[P1]` em vez de `[P0]`: o
+schema não deixa NULL na coluna (`supabase/baseline.sql:1343`, tabela
+`contacts` — `"tags" "text"[] DEFAULT '{}'::"text"[] NOT NULL`), então não há o
+terceiro valor que fez o `<>` do zernio devolver desconhecido. E o desfecho de
+falha é contido: a rota alimenta SUGESTÃO de tag, e o editor segue gravando o
+que se digita.
+
+---
+
+## Lote 12 · QA visual em tela — 16/set/2026 `[P0]` (funil) / `[P1]` (resto)
+
+Prova em tela de dezesseis PRs, no SHA `778d1dcb2` da
+`integracao/triagem-15set-l12`, em banco montado **só pelo `supabase/baseline.sql`**
+num Supabase pg17 próprio, com **WhatsApp, IA, Resend, Google e Redis ausentes** —
+o estado de um primeiro deploy. Evidência, medições e ressalvas de ambiente em
+`evidence/triagem-16set-l12/README.md`; as specs desta sessão são
+`tests/e2e/qa-l12-*.spec.ts`.
+
+**O que esta seção NÃO é.** Nenhuma spec daqui está em `SPECS_PARTE_*` do
+`e2e.yml`: são o instrumento de UMA sessão de QA, não um gate. O que vigia cada
+conserto a cada PR continua sendo o teste de unidade/invariante que o próprio
+grupo trouxe.
+
+| # | Caso | Resultado |
+|---|---|---|
+| L12.QA.1 | **#938** · a janela de perder oferece os motivos DO FUNIL e grava o escolhido | **PASS pela tela** — os `value` dos rádios são `["Sem orçamento","Fora do perfil","other"]` num funil que cadastrou os dois primeiros; "Falha no pagamento" tem contagem 0; `POST /lose` = 200 e o banco grava `lost_reason="Sem orçamento"`. Evidência: `evidence/triagem-16set-l12/938-01-menu-motivos-do-funil.png`, `evidence/triagem-16set-l12/938-02-menu-card-perdido.png` |
+| L12.QA.2 | **#938** · "Outro" com e sem detalhe | **PASS pela tela** — com texto fora da lista, `role="alert"` e `Confirmar` desabilitado ANTES do clique; sem detalhe, `Confirmar` habilitado, `POST` = 200 e `lost_reason="other"`. Evidência: `evidence/triagem-16set-l12/938-03-outro-texto-recusado.png`, `evidence/triagem-16set-l12/938-04-outro-vazio-gravado.png` |
+| L12.QA.3 | **#935** · os TRÊS caminhos para a etapa de perda | **PASS pela tela** — menu grava; **arrasto** (teclado do `@hello-pangea/dnd`, mesmo `onDragEnd` do mouse) responde **422 `lost_reason_required`**, o card volta e o banco fica intacto; **lote** responde 422 **nomeando os dois cards** em `details.lead_ids`. Evidência: `evidence/triagem-16set-l12/935-05-arrasto-recusado-com-aviso.png`, `evidence/triagem-16set-l12/935-06-lote-dois-selecionados.png`, `evidence/triagem-16set-l12/935-07-lote-recusado.png` |
+| L12.QA.4 | ⚠️ **#935** · a recusa diz o QUE FAZER? | **FALHOU** — a tela mostra só *"Informe o motivo da perda."* (+ `ID: <requestId>`). O fragmento `.changes/etapa-de-perda-exige-motivo.md` promete a recusa *"com o que fazer"* e nomeia o caminho ("use 'Marcar como perdido' no menu do próprio card"); **esse complemento não está na tela**. **Consertado na integração** (`fix(leads): a recusa do arrasto para a perda diz a saída`): a recusa do arrasto e do lote passa a nomear “Marcar como perdido” no menu do card, a rota `/lose` (o próprio menu) mantém o texto curto, e um teste prende a frase ao rótulo real do menu. A prova de tela do conserto é esta mesma spec, `qa-l12-funil.spec.ts`, que agora afirma a saída e roda no `e2e` do CI |
+| J4.41 | **#919** · arrastar o mesmo card duas vezes seguidas | **PASS pela tela, reexecutado aqui** — `tests/e2e/kanban-owner-filter.spec.ts`, com o refetch do quadro segurado em 15 s (sem isso o teste fica verde mesmo com o conserto revertido) |
+| J4.38 | **#911** · excluir pelo menu do card, inclusive no toque | **PASS pela tela** — o menu traz "Excluir", o `AlertDialog` nomeia o card e diz que não dá para desfazer, o `POST` é `{"action":"delete",…}` = 200 e o banco devolve `[]`. Em 390×844 com `hasTouch` e **sem hover**, a opacidade COMPUTADA do botão é `1`. Evidência: `911-11`…`911-15` |
+| J4.39 | **#948** · tag em lote oferece as tags que já existem | **PASS pela tela — o caso que faltava** — quadro com **13 tags distintas**, menu oferece **10** (o teto), e digitar `verão` com `vip` na lista deixa o campo com **`"verão"` inteiro**; o `Enter` envia `params.add=["verão"]` e a tag do MENU não vai para ninguém. Evidência: `948-08`…`948-10` |
+| L12.QA.5 | **#936** · levar o negócio para outro funil | **PASS nos EFEITOS** — não há botão (o próprio fragmento declara "por enquanto pela API"). `POST /clone` = **201** do navegador logado; o clone chega ao destino com `custom_fields` inteiro (lido pelo `value` dos `<input>`, não pelo `innerText`), a linha do tempo dele diz "Veio de outro funil · Veio do funil X" e a origem fica `lost` com a atividade que nomeia o destino. Evidência: `936-01`…`936-04` |
+| L12.QA.6 | ⚠️ **#936** · a recusa de fronteira fala com desenvolvedor | **REPORTADO com ressalva** — `"Move cross-pipeline não é permitido. Use POST /api/v1/leads/[id]/clone…"` num campo que o `ApiErrorToast` mostra cru. A `main` já tinha o jargão; o lote acrescentou o verbo HTTP e a rota. **Não alcancei pela tela**: o quadro só desenha as etapas de UM funil. Vira defeito de tela quando o botão da fatia seguinte chegar |
+| J4.25 | **#941** · radar sem leads de funil arquivado | **PASS pela tela** — dois funis (ativo e arquivado) com lead aberto e frio no mesmo contato: o do ativo aparece, o do arquivado não. Evidência: `evidence/triagem-16set-l12/941-10-radar-sem-funil-arquivado.png` |
+| L12.G2.1 | **#946** · `GET /api/v1/contact-tags` responde 200 | **PASS — era NÃO MEDIDO** — 200 com corpo, numa organização com contato SEM tag e contatos COM tag; a rota é pedida quando o editor monta, no clique em "Tag". A `.neq("tags","{}")` sobre `text[]` é aceita pelo PostgREST |
+| L12.G2.2 | **#909/#944** · o painel cabe em 400 px, tema escuro | **PASS** — `documentElement.scrollWidth` 400 × `clientWidth` 400. Evidência: `evidence/triagem-16set-l12/g2-06-inbox-400px-escuro.png` |
+| L12.G2.3 | **#944** · a linha "Funil · Etapa" com nome longo | **PASS** — `scrollWidth` 245 × `clientWidth` 245 no `div.line-clamp-2`, com nome de funil de 40+ caracteres |
+| L12.QA.7 | **#909** · o botão tem o nome do diálogo que abre | **PASS pela tela** — botão "Novo Lead", título do diálogo "Novo Lead". Evidência: `evidence/triagem-16set-l12/909-01-painel-com-botao-novo-lead.png`, `evidence/triagem-16set-l12/909-02-dialogo-mesmo-nome.png` |
+| L12.QA.8 | **#944** · "Leads recentes" diz Funil · Etapa e Ganho/Perdido | **PASS pela tela** — dois leads de mesmo título aparecem distintos pela etapa; o desfecho lê **"Ganho"** e "Pago" tem contagem 0, **apesar** de o `crm_pipelines.vocabulary` daquele funil dizer `{"won":"Pago"}` no banco no mesmo instante; o lead de funil arquivado não aparece. Evidência: `evidence/triagem-16set-l12/944-03-leads-recentes-funil-e-etapa.png` |
+| L12.QA.9 | **#946** · sugestão de tags com caixa mista e duplicata | **PASS pela tela** — `"VIP"`, `"vip "` e `"vip"` em contatos diferentes colapsam num chip só, em minúscula; `+ vip` **não** é oferecido porque o contato já a tem (e a rota conhece `vip`, o que separa "não oferece" de "não existe"); clicar grava a forma normalizada. Evidência: `evidence/triagem-16set-l12/946-04-sugestao-de-tags.png`, `evidence/triagem-16set-l12/946-05-tag-gravada-normalizada.png` |
+| J24.3 | **#955** · a lista carrega com as contagens, pela tela | **PASS — era NÃO COBERTO** — a porta está em `/app/settings` (link para `/app/settings/tags`), e a linha da etiqueta traz 2 contatos e 1 regra de agente, com os três botões. Evidência: `evidence/triagem-16set-l12/955-01-porta-em-configuracoes.png`, `evidence/triagem-16set-l12/955-02-lista-com-contagens.png` |
+| J24.1 | **#955** · renomear preserva as ações da regra | **PASS pela tela** — 200, contatos renomeados **e** a regra de automação reescrita na mesma operação, com todas as ações. Evidência: `evidence/triagem-16set-l12/955-03-renomear-formulario.png`, `evidence/triagem-16set-l12/955-04-renomeada-na-tela.png` |
+| J24.2 | **#955** · juntar não duplica a etiqueta | **PASS pela tela** — o contato que tinha as duas fica com a de destino **uma vez**. Evidência: `evidence/triagem-16set-l12/955-05-juntar-formulario.png`, `evidence/triagem-16set-l12/955-06-juntadas.png` |
+| J24.4 | **#955** · excluir avisa quantas regras continuam escrevendo | **PASS — era NÃO COBERTO pela tela** — o aviso lido por ferramenta traz "Atenção: 1 regra(s) de agente continuam escrevendo esta etiqueta…", e depois do 200 a regra **continua no banco**. Evidência: `evidence/triagem-16set-l12/955-07-excluir-aviso-de-regras.png`, `evidence/triagem-16set-l12/955-08-excluida.png` |
+| J24.5 | **#955** · viewer e agent não chegam à tela | **PASS pela tela** — os dois param em `/403`, e a porta em `/app/settings` tem contagem **0** para ambos. Evidência: `evidence/triagem-16set-l12/955-09-viewer-recusado.png`, `evidence/triagem-16set-l12/955-09-agent-recusado.png` |
+| J24.6 | **#955** · o painel em espanhol | **NÃO MEDIDO nesta sessão** — segue preso por `tests/unit/tags-vocabulario-painel-em-espanhol.test.tsx` |
+| L12.QA.10 | **#955** · o aviso de teto com ≥500 etiquetas | **NÃO MEDIDO** — semear 500 etiquetas mede o `limit 500` da função, não o conserto do lote |
+| J16.8 | **#931/#933** · a instalação SEM Google | **PASS pela tela** — nenhum botão "Conectar Google" (contagem 0) e o endereço de retorno impresso para registrar no console. Evidência: `evidence/triagem-16set-l12/931-01-agenda-sem-google.png` |
+| J16.6 | **#933** · a URL com `prompt=consent select_account` | **NÃO MEDIDO nesta sessão** — exige `GOOGLE_CALENDAR_CLIENT_ID`/`SECRET`, e semeá-los mede a configuração, não o conserto. O `Location` de verdade segue preso por `tests/unit/agenda-google-connect-route.test.ts`. A dívida nº 1 do grupo G4 (ninguém abriu a tela do Google com duas contas) **continua de pé** |
+| L12.QA.11 | **#915** · o compromisso que atravessa a meia-noite | **PASS pela tela** — o bloco aparece como **"Ocupado"** e o título sensível não chega nem à tela nem à rota. ⚠️ **O RECORTE não foi exercitado**: a tela abre na visão Semana (`de=13/09 03:00Z` `ate=20/09 03:00Z`) e o evento cai inteiro dentro. Medir o recorte exige a visão **Dia**. Evidência: `evidence/triagem-16set-l12/915-04-agenda-com-bloco-ocupado.png` |
+| L12.QA.12 | **#907** · o nome editado vence o do WhatsApp | **PASS pela tela** — depois de editar em "Editar contato", o Inbox (lista, cabeçalho e painel) mostra só o nome escolhido, o radar idem, e `GET /api/v1/conversations` — a MESMA linha de onde a notificação tira o título — traz as duas colunas, com `name` primeiro na precedência. Evidência: `907-05`…`907-07` |
+| L12.QA.13 | ⚠️ `Display name` em inglês na ficha do contato | **REPORTADO, anterior ao lote** — a ficha mostra "NOME" e "DISPLAY NAME" lado a lado, a segunda crua, sem `t()`, num produto que serve pt-BR e es (`app/app/contacts/[id]/_client.tsx:148`). Está igual na `main` |
+| L12.QA.14 | **#942** · a ferramenta que confere e marca | **PARCIAL** — a CONFIGURAÇÃO está provada na tela: o pacote "Vender e mover o funil" aparece, a capacidade "Ver se o horário está livre e já marcar" mora atrás de "Escolher uma a uma (modo avançado)", nasce **desligada** e, como `admin`, o clique a liga. **O COMPORTAMENTO é NÃO MEDIDO: falta chave de IA** (`AI_GATEWAY_API_KEY`/`ANTHROPIC_API_KEY`/`OPENROUTER_API_KEY`) — sem ela o motor pula toda resposta com `reason='ai_gateway_key_missing'`. Evidência: `evidence/triagem-16set-l12/942-00-pacotes-do-agente.png`, `evidence/triagem-16set-l12/942-01-capacidade-na-tela-do-agente.png`, `evidence/triagem-16set-l12/942-02-capacidade-ligada.png` |
+| L12.QA.15 | ⚠️ O papel que a tela do agente exige para ESCREVER | **medido, não é defeito** — a porta é `minRole: "manager"`, mas `app/app/ai/agents/[id]/page.tsx:68` faz `readOnly = ROLE_RANK[role] < ROLE_RANK.admin`: como `manager` a caixa aparece **desabilitada** com `0 de 25` do teto usado. Registrado porque foi o que fez a primeira medição de #942 parecer defeito do lote |
+
+**A seção "Lote 12 · G2" acima deixa de estar PENDENTE POR EXECUÇÃO**: os três
+casos dela (L12.G2.1, G2.2 e G2.3) estão provados nas linhas acima.

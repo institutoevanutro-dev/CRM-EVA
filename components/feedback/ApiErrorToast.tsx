@@ -105,6 +105,19 @@ const COPY: Record<string, { variant: Variant; msg?: string }> = {
   // pergunta não tinha alvo. Para quem usa, isto é "escolha uma semana", não
   // "algo quebrou" — daí `info` e não `error`.
   agenda_listagem_sem_recorte: { variant: "info" },
+
+  // ---- Motivo da perda (issue #917) ----
+  //
+  // Pelo mesmo critério das quatro de agenda acima: é recusa ROTINEIRA, não
+  // quebra. O operador arrastou um card para a etapa de perda sem escolher a
+  // causa — o card volta para onde estava e nada foi tocado. Vermelho aqui
+  // ensina a ignorar vermelho, que é o que torna o vermelho de verdade invisível.
+  //
+  // Sem `msg` de propósito: a rota manda "Informe o motivo da perda." e, no
+  // inválido, a frase que nomeia a lista do funil — texto mais específico do que
+  // qualquer genérico daqui alcança.
+  lost_reason_required: { variant: "warning" },
+  lost_reason_invalid: { variant: "warning" },
 };
 
 /**
