@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * A IMPORTAÇÃO DE LEADS NÃO ACEITA NADA NO ESCURO.
  *

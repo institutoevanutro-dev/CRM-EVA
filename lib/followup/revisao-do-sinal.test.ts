@@ -2,9 +2,10 @@
  * Revisão humana de T+60 — decisão pura (leitura/escrita ficam para
  * `tests/db` / prova manual, já que dependem de Postgres real).
  */
-import { describe, expect, it } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { describe, expect, it, vi } from 'vitest';
 
-import { decidirRevisaoHumana, type FatosDaRevisao } from './revisao-do-sinal';
+import { abrirItemDeRevisao, decidirRevisaoHumana, type FatosDaRevisao } from './revisao-do-sinal';
 
 function fatos(p: Partial<FatosDaRevisao> = {}): FatosDaRevisao {
   return {
@@ -67,5 +68,30 @@ describe('decidirRevisaoHumana', () => {
     // rodando quase 15min depois do prazo — e confirmamos que ainda abre.
     const QUASE_15_MIN_DEPOIS = new Date('2026-09-16T14:14:59.000Z'); // prazo=14:00Z
     expect(decidirRevisaoHumana(fatos(), QUASE_15_MIN_DEPOIS)).toEqual({ abrir: true });
+  });
+});
+
+describe('abrirItemDeRevisao', () => {
+  const reserva = {
+    id: 'a0000000-0000-4000-8000-000000000001',
+    organization_id: 'b0000000-0000-4000-8000-000000000001',
+    contact_id: 'c0000000-0000-4000-8000-000000000001',
+    criada_em: '2026-09-16T13:00:00.000Z',
+    consulta_em: '2026-09-16T16:00:00.000Z',
+  };
+
+  it.each([true, false])('só abre aviso se o contato não estiver anonimizado (%s)', async (isAnonymized) => {
+    const insert = vi.fn(async () => ({ error: null }));
+    const eq = vi.fn();
+    const contactQuery = {
+      select: () => contactQuery,
+      eq: (key: string, value: string) => { eq(key, value); return contactQuery; },
+      maybeSingle: async () => ({ data: { is_anonymized: isAnonymized }, error: null }),
+    };
+    const admin = { from: (table: string) => table === 'contacts' ? contactQuery : { insert } } as unknown as SupabaseClient;
+    await abrirItemDeRevisao(admin, reserva);
+    expect(eq).toHaveBeenCalledWith('organization_id', reserva.organization_id);
+    expect(eq).toHaveBeenCalledWith('id', reserva.contact_id);
+    expect(insert).toHaveBeenCalledTimes(isAnonymized ? 0 : 1);
   });
 });

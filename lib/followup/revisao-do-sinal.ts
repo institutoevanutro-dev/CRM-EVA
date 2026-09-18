@@ -18,7 +18,7 @@
  *
  * ═══ IDEMPOTÊNCIA ═══
  *
- * Um item por reserva: `ref_kind='calendar_appointment'`, `ref_id=<reserva>`.
+ * Um item por reserva: `ref_kind='appointment'`, `ref_id=<reserva>`.
  * A leitura (`lerFatosDaRevisao`) confere se já existe um item ABERTO com essa
  * referência antes de abrir outro — reentrega do cron não duplica.
  */
@@ -140,6 +140,13 @@ export async function jaTemItemAberto(admin: SupabaseClient, organizationId: str
 }
 
 export async function abrirItemDeRevisao(admin: SupabaseClient, reserva: ReservaPendenteDeRevisao): Promise<void> {
+  const { data: contato, error: erroContato } = await admin.from('contacts')
+    .select('is_anonymized')
+    .eq('organization_id', reserva.organization_id)
+    .eq('id', reserva.contact_id)
+    .maybeSingle();
+  if (erroContato) throw new Error(`abrirItemDeRevisao: contato: ${erroContato.message}`);
+  if (!contato || contato.is_anonymized === true) return;
   const { error } = await admin.from('agent_inbox_items').insert({
     organization_id: reserva.organization_id,
     kind: 'sinal_revisao_humana',

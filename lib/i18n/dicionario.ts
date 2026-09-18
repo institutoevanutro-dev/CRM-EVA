@@ -7669,6 +7669,12 @@ export const DICIONARIO: Traducoes = {
     es: "Abra la conversación, revise lo que señaló la supervisión y decida el próximo paso.",
   },
   "Revisão da supervisão": { es: "Revisión de la supervisión" },
+  "Uma reserva sem sinal confirmado precisa de revisão da equipe": {
+    es: "Una reserva sin señal confirmada necesita revisión del equipo",
+  },
+  "Abra o compromisso e confira o sinal com a equipe antes de decidir sobre a reserva.": {
+    es: "Abra la cita y compruebe la señal con el equipo antes de decidir sobre la reserva.",
+  },
   // Diálogo de exclusão de canal (`frasesDoImpacto`): singular e plural.
   "chamada de voz": { es: "llamada de voz" },
   "chamadas de voz": { es: "llamadas de voz" },
