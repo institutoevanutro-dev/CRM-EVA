@@ -35,11 +35,28 @@ export async function executeStartMessageFlow(
     return { type: TYPE, status: "skipped", detail: { reason: "no_contact" } };
   }
 
+  // Apenas regras que optaram pelo vínculo de sinal herdam o prazo da reserva.
+  // A linha hidratada do banco deve corresponder ao evento e ao contato atuais.
+  let appointmentId: string | undefined;
+  if (config.bind_appointment === true) {
+    const appointment = ctx.context.appointment as { id?: unknown; contact_id?: unknown; status?: unknown } | undefined;
+    if (ctx.event.event_type !== "appointment.created" ||
+        ctx.event.entity_kind !== "calendar_appointment" ||
+        typeof ctx.event.entity_id !== "string" ||
+        appointment?.id !== ctx.event.entity_id ||
+        appointment.contact_id !== contactId ||
+        !["pending", "confirmed"].includes(String(appointment.status))) {
+      return { type: TYPE, status: "skipped", detail: { reason: "appointment_unavailable" } };
+    }
+    appointmentId = ctx.event.entity_id;
+  }
+
   const result = await enrollFollowupFlow(ctx.admin, {
     resolveServiceBoundary: () => serviceForAutomation(ctx, contactId),
     organizationId: ctx.organizationId,
     pointerId,
     contactId,
+    ...(appointmentId ? { appointmentId } : {}),
     actorUserId: null,
     requestId: `rule:${ctx.ruleId}`,
   });

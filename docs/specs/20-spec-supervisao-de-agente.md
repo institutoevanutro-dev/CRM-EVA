@@ -83,9 +83,13 @@ reativa sequência nem remove opt-out.
 `followup_enrollments.appointment_id` (nullable) amarra uma inscrição a uma reserva
 específica (`calendar_appointments`). A coluna já existia na migration 0224 para
 recuperação de faltas (`appointment_no_show`, com `appointment_revision`), que continua
-fora das regras de sinal. Inscrições sem reserva seguem `null`. A chamada de
-`enrollFollowupFlow` aceita a reserva, mas os callers atuais de inscrição manual e
-automação ainda não passam esse parâmetro; ativar T40 exige essa integração. Índice único parcial
+fora das regras de sinal. Inscrições sem reserva seguem `null`. A inscrição
+manual aceita `appointment_id`; a ação de automação `start_message_flow` aceita
+`bind_appointment: true` para eventos de agenda, opção explícita na tela de regras.
+Ambos usam `enrollFollowupFlow`, que confere organização, contato, status e
+`requires_signal` antes de vincular a reserva. Ainda é necessário publicar o
+fluxo e configurar a regra de evento, com espera de T+40; o código sozinho não
+cria nem ativa essa configuração da clínica. Índice único parcial
 `idx_followup_enrollments_one_per_appointment` em `(pointer_id, appointment_id)` para
 `status in ('active','waiting_reply','paused_handoff')`: **uma tentativa por reserva**, e
 uma segunda chamada de `enrollFollowupFlow` para a mesma reserva/fluxo recebe `409

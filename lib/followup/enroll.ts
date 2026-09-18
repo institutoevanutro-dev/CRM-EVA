@@ -17,7 +17,7 @@ import {
 import { flowGraphSchema } from "@/lib/followup/graph-schema";
 
 export const ENROLLMENT_LIST_COLUMNS =
-  "id, pointer_id, version_id, contact_id, status, current_node_id, next_eval_at, outcome, started_at, completed_at, updated_at";
+  "id, pointer_id, version_id, contact_id, appointment_id, status, current_node_id, next_eval_at, outcome, started_at, completed_at, updated_at";
 
 export type EnrollFollowupInput = {
   organizationId: string;
@@ -86,7 +86,7 @@ export async function enrollFollowupFlow(
   if (input.appointmentId !== undefined) {
     const { data: appointment, error: appointmentErr } = await supabase
       .from("calendar_appointments")
-      .select("id")
+      .select("id, status, event_type_id")
       .eq("organization_id", organizationId)
       .eq("id", input.appointmentId)
       .eq("contact_id", contactId)
@@ -94,6 +94,16 @@ export async function enrollFollowupFlow(
     if (appointmentErr) return { ok: false, code: "internal_error", message: appointmentErr.message, status: 500 };
     if (!appointment) {
       return { ok: false, code: "not_found", message: "Reserva não encontrada para este contato.", status: 404 };
+    }
+    const { data: eventType, error: eventTypeErr } = await supabase
+      .from("calendar_event_types")
+      .select("requires_signal")
+      .eq("organization_id", organizationId)
+      .eq("id", appointment.event_type_id)
+      .maybeSingle();
+    if (eventTypeErr) return { ok: false, code: "internal_error", message: eventTypeErr.message, status: 500 };
+    if (!eventType?.requires_signal || !["pending", "confirmed"].includes(appointment.status)) {
+      return { ok: false, code: "appointment_not_eligible", message: "Reserva não está apta ao fluxo de sinal.", status: 422 };
     }
   }
 

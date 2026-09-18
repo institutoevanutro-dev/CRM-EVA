@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -32,7 +33,7 @@ export type ActionItem =
   | { type: "add_tag"; config: { tags: string[] } }
   | { type: "assign_owner"; config: { user_id: string } }
   | { type: "call_webhook"; config: { url: string; secret?: string; secret_enc?: string } }
-  | { type: "start_message_flow"; config: { flow_pointer_id: string } };
+  | { type: "start_message_flow"; config: { flow_pointer_id: string; bind_appointment?: boolean } };
 
 export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
   switch (type) {
@@ -377,7 +378,7 @@ function CallWebhookForm({
   );
 }
 
-function StartMessageFlowForm({ config, onChange }: FormProps<{ flow_pointer_id: string }>) {
+function StartMessageFlowForm({ config, onChange }: FormProps<{ flow_pointer_id: string; bind_appointment?: boolean }>) {
   const t = useT();
   const { data, isLoading } = useQuery({
     queryKey: ["followup", "flows", "list"],
@@ -395,7 +396,7 @@ function StartMessageFlowForm({ config, onChange }: FormProps<{ flow_pointer_id:
       <Label>{t("Fluxo de follow-up")}</Label>
       <Select
         value={config.flow_pointer_id}
-        onValueChange={(v) => onChange({ flow_pointer_id: v })}
+        onValueChange={(v) => onChange({ ...config, flow_pointer_id: v })}
         disabled={isLoading}
       >
         <SelectTrigger>
@@ -418,6 +419,17 @@ function StartMessageFlowForm({ config, onChange }: FormProps<{ flow_pointer_id:
           {t("Só entram fluxos publicados e ativos.")}
         </p>
       )}
+      <div className="flex items-center gap-2 pt-3">
+        <Switch
+          id="bind-appointment-to-flow"
+          checked={config.bind_appointment === true}
+          onCheckedChange={(checked) => onChange({ ...config, bind_appointment: checked })}
+        />
+        <Label htmlFor="bind-appointment-to-flow">{t("Vincular à consulta para acompanhar o sinal")}</Label>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("Use com o gatilho 'Quando um horário for marcado' e um fluxo de sinal. O prazo será contado da criação da reserva.")}
+      </p>
     </div>
   );
 }

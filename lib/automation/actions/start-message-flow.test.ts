@@ -87,6 +87,39 @@ describe("executeStartMessageFlow", () => {
     );
   });
 
+  it("vincula o fluxo de sinal à reserva do evento de agenda quando configurado", async () => {
+    enroll.mockResolvedValue({ ok: true, enrollment: { id: "enr-1" } });
+    const ctx = baseCtx({
+      contact: { id: "c-1" },
+      appointment: { id: "appointment-1", contact_id: "c-1", status: "pending" },
+    });
+    ctx.event.entity_kind = "calendar_appointment";
+    ctx.event.entity_id = "appointment-1";
+    ctx.event.event_type = "appointment.created";
+    const result = await executeStartMessageFlow(ctx, {
+      flow_pointer_id: POINTER,
+      bind_appointment: true,
+    });
+    expect(result.status).toBe("success");
+    expect(enroll).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ appointmentId: "appointment-1" }));
+  });
+
+  it("recusa vínculo de sinal sem reserva válida do mesmo contato", async () => {
+    const ctx = baseCtx({
+      contact: { id: "c-1" },
+      appointment: { id: "appointment-1", contact_id: "c-2", status: "pending" },
+    });
+    ctx.event.entity_kind = "calendar_appointment";
+    ctx.event.entity_id = "appointment-1";
+    ctx.event.event_type = "appointment.created";
+    const result = await executeStartMessageFlow(ctx, {
+      flow_pointer_id: POINTER,
+      bind_appointment: true,
+    });
+    expect(result).toMatchObject({ status: "skipped" });
+    expect(enroll).not.toHaveBeenCalled();
+  });
+
   it("falha explícita em inscrição viva (conflict)", async () => {
     enroll.mockResolvedValue({
       ok: false,

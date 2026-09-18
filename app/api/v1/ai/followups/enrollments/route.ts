@@ -82,6 +82,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     organizationId: activeOrg.orgId,
     pointerId: parsed.data.pointer_id,
     contactId: parsed.data.contact_id,
+    appointmentId: parsed.data.appointment_id,
     agentId: parsed.data.agent_id,
     actorUserId: user.id,
     requestId,
