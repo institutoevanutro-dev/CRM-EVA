@@ -26452,82 +26452,6 @@ grant  execute on function public.fn_tags_normalizar(text[], text, text, boolean
 revoke execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) from public, anon;
 grant  execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) to authenticated, service_role;
 
--- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
---
--- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
-
--- dele — quem o empurrar para o meio desarma a cura para tudo que vier depois.
--- Vigiado por `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`.
---
--- A 0108 revogou anon numa LISTA de 8 funções, medida num banco instalado do
--- ZERO. Quem ATUALIZA tem outro estado: o `ALTER DEFAULT PRIVILEGES ... GRANT
--- ALL ON FUNCTIONS TO anon` do corpo deste arquivo grava uma entrada em
--- `pg_default_acl` que fica no catálogo PARA SEMPRE, e a partir daí toda função
--- criada em `public` nasce com EXECUTE para anon — inclusive as deste apêndice.
---
--- Medido numa VPS real (2026-08-07), comparando com o que um install fresco
--- produz: 6 definer expostas a anon e 5 a authenticated, entre elas
--- `fn_decrypt_oauth` — alcançável pela anon key, que vai para o browser.
---
--- Lista conserta o estoque e reabre no próximo `create function`. Esta varredura
--- é auto-curativa e roda DEPOIS de tudo que cria função, então cura no mesmo run
--- em que o defeito nasceria. Desfazer o ALTER DEFAULT PRIVILEGES não serve: ele
--- vem do `pg_dump` do Supabase e é reescrito a cada re-aplicação.
---
--- As duas origens de EXECUTE (a mesma lição da 0108): grant DIRETO a anon, que
--- `revoke from public` não remove; e grant a PUBLIC, do qual anon HERDA, que
--- `revoke from anon` não remove. O privilégio EFETIVO de authenticated e
--- service_role é medido ANTES e devolvido depois — tira anon sem tirar leitura.
-do $$
-declare
-  f record;
-  tinha_auth boolean;
-  tinha_service boolean;
-begin
-  if to_regrole('anon') is null then
-    return;
-  end if;
-
-  for f in
-    select p.oid, p.oid::regprocedure as assinatura
-      from pg_proc p
-      join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname = 'public'
-       and p.prosecdef
-  loop
-    tinha_auth := to_regrole('authenticated') is not null
-                  and has_function_privilege('authenticated', f.oid, 'EXECUTE');
-    tinha_service := to_regrole('service_role') is not null
-                     and has_function_privilege('service_role', f.oid, 'EXECUTE');
-
-    execute format('revoke execute on function %s from public, anon', f.assinatura);
-
-    if tinha_auth then
-      execute format('grant execute on function %s to authenticated', f.assinatura);
-    end if;
-    if tinha_service then
-      execute format('grant execute on function %s to service_role', f.assinatura);
-    end if;
-  end loop;
-end $$;
-
--- regra 2 (authenticated): as 5 que o update abriu e o install não abre. Aqui não
--- cabe varredura — `authenticated` PRECISA de EXECUTE nos helpers de RLS e em
--- `retrieve_top_k_chunks` (num install fresco ele tem). É julgamento por função,
--- e o alvo de cada linha é o valor que um install fresco produz, medido.
-revoke execute on function public.fn_audit_log_row() from authenticated;
-revoke execute on function public.fn_decrypt_oauth(bytea) from authenticated;
-revoke execute on function public.fn_encrypt_oauth(text) from authenticated;
-revoke execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) from authenticated;
-revoke execute on function public.fn_update_budget_consumption() from authenticated;
-
-grant execute on function public.fn_audit_log_row() to service_role;
-grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
-grant execute on function public.fn_encrypt_oauth(text) to service_role;
-grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
-grant execute on function public.fn_update_budget_consumption() to service_role;
-
-
 -- ---- Criador provisório sai na entrega (migration 0237) ----
 -- As duas funções acima já saíram com a regra; aqui fica só a COLUNA, que é
 -- o dado que faltava. Idempotente. NÃO há expurgo retroativo, de propósito:
@@ -26802,3 +26726,171 @@ comment on column public.calendar_event_types.requires_signal is
 -- no baseline").
 
 notify pgrst, 'reload schema';
+
+-- ---- Revalidação transacional e revisão do sinal (migration 0267) ----
+-- 0267 — T60 elegível antes do limite, decisão serializada e histórico preservado.
+-- A resolução humana também conta como tratada; não reabrir a mesma reserva.
+create or replace function public.sinal_reservas_elegiveis(p_agora timestamptz)
+returns table (id uuid, organization_id uuid, contact_id uuid, criada_em timestamptz, consulta_em timestamptz)
+language sql stable security invoker set search_path = public as $$
+  select a.id, a.organization_id, a.contact_id, a.created_at, a.starts_at
+  from public.calendar_appointments a
+  join public.calendar_event_types t on t.id = a.event_type_id and t.organization_id = a.organization_id
+  join public.contacts c on c.id = a.contact_id and c.organization_id = a.organization_id
+  where a.status in ('pending', 'confirmed') and t.requires_signal and not c.is_anonymized
+    and least(a.created_at + interval '60 minutes', a.starts_at) <= p_agora
+    and not exists (
+      select 1 from public.crm_leads l join public.crm_stages s
+        on s.id = l.stage_id and s.organization_id = l.organization_id
+      where l.organization_id = a.organization_id and l.contact_id = a.contact_id
+        and l.status = 'open' and s.blocks_followups
+    )
+    and not exists (
+      select 1 from public.agent_inbox_items i
+      where i.organization_id = a.organization_id and i.kind = 'sinal_revisao_humana'
+        and i.ref_kind in ('appointment', 'calendar_appointment') and i.ref_id = a.id
+    )
+$$;
+revoke execute on function public.sinal_reservas_elegiveis(timestamptz) from public, anon, authenticated;
+grant execute on function public.sinal_reservas_elegiveis(timestamptz) to service_role;
+
+create or replace function public.sinal_listar_revisoes(p_agora timestamptz, p_limite integer)
+returns table (id uuid, organization_id uuid, contact_id uuid, criada_em timestamptz, consulta_em timestamptz)
+language sql stable security invoker set search_path = public as $$
+  select * from public.sinal_reservas_elegiveis(p_agora)
+  order by criada_em, id limit greatest(0, least(p_limite, 500))
+$$;
+revoke execute on function public.sinal_listar_revisoes(timestamptz, integer) from public, anon, authenticated;
+grant execute on function public.sinal_listar_revisoes(timestamptz, integer) to service_role;
+
+create or replace function public.sinal_abrir_revisao(p_organization_id uuid, p_appointment_id uuid)
+returns boolean language plpgsql security invoker set search_path = public as $$
+declare v_contact_id uuid; v_inserted uuid;
+begin
+  select a.contact_id into v_contact_id from public.calendar_appointments a
+    where a.organization_id = p_organization_id and a.id = p_appointment_id;
+  if v_contact_id is null then return false; end if;
+  -- Contato primeiro: serializa também com anonimização e criação de negócios.
+  perform c.id from public.contacts c where c.organization_id = p_organization_id and c.id = v_contact_id for update;
+  perform a.id from public.calendar_appointments a
+    where a.organization_id = p_organization_id and a.id = p_appointment_id and a.contact_id = v_contact_id for update;
+  if not found then return false; end if;
+  perform t.id from public.calendar_event_types t join public.calendar_appointments a
+    on a.event_type_id = t.id and a.organization_id = t.organization_id
+    where a.organization_id = p_organization_id and a.id = p_appointment_id for update of t;
+  perform l.id from public.crm_leads l
+    where l.organization_id = p_organization_id and l.contact_id = v_contact_id order by l.id for update;
+  perform s.id from public.crm_stages s join public.crm_leads l
+    on s.id = l.stage_id and s.organization_id = l.organization_id
+    where l.organization_id = p_organization_id and l.contact_id = v_contact_id order by s.id for update of s;
+  -- Nova leitura DEPOIS dos locks: reentrega concorrente já vê o item commitado.
+  insert into public.agent_inbox_items (organization_id, kind, severity, title, body, ref_kind, ref_id)
+  select p_organization_id, 'sinal_revisao_humana', 'warn', 'Sinal não confirmado — revisão humana',
+    'A reserva passou do prazo (T+60 da criação, ou início da consulta) sem comprovante tratado. Nenhuma ação automática foi tomada: o horário não foi liberado, a consulta não foi cancelada e falta não foi marcada.',
+    'appointment', p_appointment_id
+  from public.sinal_reservas_elegiveis(clock_timestamp()) e
+  where e.organization_id = p_organization_id and e.id = p_appointment_id
+  returning id into v_inserted;
+  return v_inserted is not null;
+end;
+$$;
+revoke execute on function public.sinal_abrir_revisao(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.sinal_abrir_revisao(uuid, uuid) to service_role;
+
+-- appointment_id já existia para appointment_no_show (0224). A FK SET NULL
+-- não pode transformar uma inscrição vinculada em fluxo genérico liberado.
+-- Cancela só inscrições vivas cuja reserva efetivamente desapareceu/desvinculou.
+create or replace function public.followup_reserva_desvinculada()
+returns trigger language plpgsql security invoker set search_path = public as $$
+begin
+  if old.appointment_revision is null and old.appointment_id is not null and new.appointment_id is null
+     and new.status in ('active', 'waiting_reply', 'paused_handoff', 'paused_manual') then
+    new.status := 'cancelled';
+    new.cancel_reason := 'Reserva desvinculada ou excluída; sequência encerrada.';
+    new.next_eval_at := null;
+    new.claimed_until := null;
+    new.completed_at := now();
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.followup_reserva_desvinculada() from public, anon, authenticated;
+grant execute on function public.followup_reserva_desvinculada() to service_role;
+drop trigger if exists trg_followup_reserva_desvinculada on public.followup_enrollments;
+create trigger trg_followup_reserva_desvinculada before update of appointment_id on public.followup_enrollments
+  for each row execute function public.followup_reserva_desvinculada();
+
+-- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
+--
+-- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
+
+-- dele — quem o empurrar para o meio desarma a cura para tudo que vier depois.
+-- Vigiado por `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`.
+--
+-- A 0108 revogou anon numa LISTA de 8 funções, medida num banco instalado do
+-- ZERO. Quem ATUALIZA tem outro estado: o `ALTER DEFAULT PRIVILEGES ... GRANT
+-- ALL ON FUNCTIONS TO anon` do corpo deste arquivo grava uma entrada em
+-- `pg_default_acl` que fica no catálogo PARA SEMPRE, e a partir daí toda função
+-- criada em `public` nasce com EXECUTE para anon — inclusive as deste apêndice.
+--
+-- Medido numa VPS real (2026-08-07), comparando com o que um install fresco
+-- produz: 6 definer expostas a anon e 5 a authenticated, entre elas
+-- `fn_decrypt_oauth` — alcançável pela anon key, que vai para o browser.
+--
+-- Lista conserta o estoque e reabre no próximo `create function`. Esta varredura
+-- é auto-curativa e roda DEPOIS de tudo que cria função, então cura no mesmo run
+-- em que o defeito nasceria. Desfazer o ALTER DEFAULT PRIVILEGES não serve: ele
+-- vem do `pg_dump` do Supabase e é reescrito a cada re-aplicação.
+--
+-- As duas origens de EXECUTE (a mesma lição da 0108): grant DIRETO a anon, que
+-- `revoke from public` não remove; e grant a PUBLIC, do qual anon HERDA, que
+-- `revoke from anon` não remove. O privilégio EFETIVO de authenticated e
+-- service_role é medido ANTES e devolvido depois — tira anon sem tirar leitura.
+do $$
+declare
+  f record;
+  tinha_auth boolean;
+  tinha_service boolean;
+begin
+  if to_regrole('anon') is null then
+    return;
+  end if;
+
+  for f in
+    select p.oid, p.oid::regprocedure as assinatura
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.prosecdef
+  loop
+    tinha_auth := to_regrole('authenticated') is not null
+                  and has_function_privilege('authenticated', f.oid, 'EXECUTE');
+    tinha_service := to_regrole('service_role') is not null
+                     and has_function_privilege('service_role', f.oid, 'EXECUTE');
+
+    execute format('revoke execute on function %s from public, anon', f.assinatura);
+
+    if tinha_auth then
+      execute format('grant execute on function %s to authenticated', f.assinatura);
+    end if;
+    if tinha_service then
+      execute format('grant execute on function %s to service_role', f.assinatura);
+    end if;
+  end loop;
+end $$;
+
+-- regra 2 (authenticated): as 5 que o update abriu e o install não abre. Aqui não
+-- cabe varredura — `authenticated` PRECISA de EXECUTE nos helpers de RLS e em
+-- `retrieve_top_k_chunks` (num install fresco ele tem). É julgamento por função,
+-- e o alvo de cada linha é o valor que um install fresco produz, medido.
+revoke execute on function public.fn_audit_log_row() from authenticated;
+revoke execute on function public.fn_decrypt_oauth(bytea) from authenticated;
+revoke execute on function public.fn_encrypt_oauth(text) from authenticated;
+revoke execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) from authenticated;
+revoke execute on function public.fn_update_budget_consumption() from authenticated;
+
+grant execute on function public.fn_audit_log_row() to service_role;
+grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
+grant execute on function public.fn_encrypt_oauth(text) to service_role;
+grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
+grant execute on function public.fn_update_budget_consumption() to service_role;

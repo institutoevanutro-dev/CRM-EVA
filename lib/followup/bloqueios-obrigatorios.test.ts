@@ -5,6 +5,7 @@
  * limpo envia) ficam junto para que um `decidirEnvio` que vete sempre não passe
  * por vacuidade.
  */
+import type pg from 'pg';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -12,6 +13,7 @@ import {
   decidirEnvio,
   dentroDaJanela,
   lerConfigDosBloqueios,
+  lerFatosDoEnvio,
   proximaAbertura,
   type ConfigDosBloqueios,
   type FatosDoEnvio,
@@ -169,7 +171,7 @@ describe('decidirEnvio — ligados pela organização', () => {
 describe('decidirEnvio — reserva do fluxo de sinal (migration 0266)', () => {
   // Reserva criada às 10:00 SP (13:00Z), consulta às 13:00 SP (16:00Z, 3h
   // depois) → prazo = min(10:00+60min, 13:00) = 11:00 SP = 14:00Z.
-  const RESERVA_FOLGADA = { criada_em: '2026-09-16T13:00:00.000Z', consulta_em: '2026-09-16T16:00:00.000Z', sujeita_a_sinal: true };
+  const RESERVA_FOLGADA = { criada_em: '2026-09-16T13:00:00.000Z', consulta_em: '2026-09-16T16:00:00.000Z', sujeita_a_sinal: true, status: 'pending' };
 
   it('sem reserva (fluxo comum), o comportamento de hoje não muda', () => {
     expect(decidirEnvio(fatos({ reserva: null }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({ envia: true });
@@ -178,6 +180,13 @@ describe('decidirEnvio — reserva do fluxo de sinal (migration 0266)', () => {
   it('dentro do prazo (T+60 e antes da consulta), envia', () => {
     const f = fatos({ reserva: RESERVA_FOLGADA });
     expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({ envia: true });
+  });
+
+  it.each(['cancelled', 'completed', 'no_show'])('reserva %s não recebe cobrança mesmo antes de T+60', (status) => {
+    const f = fatos({ reserva: { ...RESERVA_FOLGADA, status } });
+    expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({
+      envia: false, motivo: 'reserva_encerrada', invalida: true,
+    });
   });
 
   it('tipo de consulta não sujeito a sinal invalida, mesmo dentro do prazo', () => {
@@ -202,7 +211,7 @@ describe('decidirEnvio — reserva do fluxo de sinal (migration 0266)', () => {
   it('consulta que começa antes de T+60 encurta o prazo — nenhum lembrete depois do início', () => {
     // Consulta 40 min depois da reserva: prazo = min(+60min, consulta) = a própria consulta.
     const f = fatos({
-      reserva: { criada_em: '2026-09-16T13:00:00.000Z', consulta_em: '2026-09-16T13:40:00.000Z', sujeita_a_sinal: true },
+      reserva: { criada_em: '2026-09-16T13:00:00.000Z', consulta_em: '2026-09-16T13:40:00.000Z', sujeita_a_sinal: true, status: 'pending' },
     });
     expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, new Date('2026-09-16T13:30:00.000Z'))).toEqual({ envia: true });
     expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, new Date('2026-09-16T13:45:00.000Z'))).toEqual({
@@ -217,7 +226,7 @@ describe('decidirEnvio — reserva do fluxo de sinal (migration 0266)', () => {
     // Agora 12:05 SP (15:05Z): fora da janela (almoço), ainda dentro do prazo.
     // Próxima abertura: 14:00 SP (17:00Z) — depois do prazo (15:30Z).
     const f = fatos({
-      reserva: { criada_em: '2026-09-16T14:30:00.000Z', consulta_em: '2026-09-17T16:00:00.000Z', sujeita_a_sinal: true },
+      reserva: { criada_em: '2026-09-16T14:30:00.000Z', consulta_em: '2026-09-17T16:00:00.000Z', sujeita_a_sinal: true, status: 'pending' },
     });
     const config: ConfigDosBloqueios = { ...CONFIG_SEM_BLOQUEIOS_OPCIONAIS, janela: JANELA_DA_CLINICA };
     expect(decidirEnvio(f, config, new Date('2026-09-16T15:05:00.000Z'))).toEqual({
@@ -252,7 +261,7 @@ describe('decidirEnvio — reserva do fluxo de sinal (migration 0266)', () => {
     // 08:50 SP: prazo = 09:50 SP (12:50Z) — depois da abertura (09:00 SP,
     // 12:00Z), então adiar ainda entrega dentro do prazo.
     const f = fatos({
-      reserva: { criada_em: '2026-09-16T11:50:00.000Z', consulta_em: '2026-09-18T16:00:00.000Z', sujeita_a_sinal: true },
+      reserva: { criada_em: '2026-09-16T11:50:00.000Z', consulta_em: '2026-09-18T16:00:00.000Z', sujeita_a_sinal: true, status: 'pending' },
     });
     const config: ConfigDosBloqueios = { ...CONFIG_SEM_BLOQUEIOS_OPCIONAIS, janela: JANELA_DA_CLINICA };
     expect(decidirEnvio(f, config, new Date('2026-09-16T11:55:00.000Z'))).toEqual({
@@ -289,5 +298,40 @@ describe('lerConfigDosBloqueios', () => {
     expect(lerConfigDosBloqueios({ followups: { bloqueios: { janela: { ...JANELA_DA_CLINICA, timezone: 'Lua/Base' } } } })).toBeNull();
     expect(lerConfigDosBloqueios({ followups: { bloqueios: { janela: { ...JANELA_DA_CLINICA, intervalos: [{ inicio: '12:00', fim: '09:00' }] } } } })).toBeNull();
     expect(lerConfigDosBloqueios({ followups: { bloqueios: { desconhecido: true } } })).toBeNull();
+  });
+});
+
+describe('recuperação de faltas não é cobrança de sinal', () => {
+  it.each([true, false])('preserva appointment_no_show com requires_signal=%s', (sinal) => {
+    expect(decidirEnvio(fatos({ trigger_config: { kind: 'appointment_no_show' }, reserva: {
+      criada_em: '2026-09-14T10:00:00Z', consulta_em: '2026-09-14T12:00:00Z', status: 'no_show', sujeita_a_sinal: sinal,
+    } }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, new Date('2026-09-17T10:00:00Z'))).toEqual({ envia: true });
+  });
+});
+
+describe('leitura pg distingue reserva de sinal da recuperação legada', () => {
+  it.each([null, '7'])('appointment_revision=%s mantém a origem real da inscrição', async (revision) => {
+    const query = async (sql: string) => {
+      if (sql.includes('from followup_enrollments e')) return { rows: [{
+        id:'enrollment', status:'active', started_at:new Date('2026-09-17T10:00:00Z'), pointer_id:'pointer',
+        trigger_config:{ kind:'manual' }, appointment_id:'appointment', appointment_revision:revision,
+        reserva_criada_em:new Date('2026-09-17T10:00:00Z'), reserva_consulta_em:new Date('2026-09-17T13:00:00Z'),
+        reserva_sujeita_a_sinal:true, reserva_status:'cancelled',
+      }] };
+      if (sql.includes('from contacts')) return { rows:[{ is_blocked:false,force_human:false,is_anonymized:false }] };
+      if (sql.includes('from conversations')) return { rows:[{ bot_silenciado:false }] };
+      if (sql.includes('from organizations')) return { rows:[{ settings:{} }] };
+      return { rows:[] };
+    };
+    const leitura = await lerFatosDoEnvio({ query } as unknown as Pick<pg.Pool,'query'>,
+      { organizationId:'org',contactId:'contact',conversationId:'conv',enrollmentId:'enrollment' });
+    expect(leitura.ok).toBe(true);
+    if (!leitura.ok) return;
+    if (revision === null) {
+      expect(leitura.fatos.reserva?.status).toBe('cancelled');
+      expect(decidirEnvio(leitura.fatos,leitura.config,new Date('2026-09-17T10:40:00Z'))).toMatchObject({ envia:false,motivo:'reserva_encerrada' });
+    } else {
+      expect(leitura.fatos.reserva).toBeNull();
+    }
   });
 });

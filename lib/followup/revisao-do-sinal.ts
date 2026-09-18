@@ -19,8 +19,8 @@
  * ═══ IDEMPOTÊNCIA ═══
  *
  * Um item por reserva: `ref_kind='appointment'`, `ref_id=<reserva>`.
- * A leitura (`lerFatosDaRevisao`) confere se já existe um item ABERTO com essa
- * referência antes de abrir outro — reentrega do cron não duplica.
+ * O banco serializa a criação com a reserva e revalida elegibilidade.
+ * Qualquer aviso anterior, inclusive resolvido, impede reabertura.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -30,7 +30,8 @@ export interface FatosDaRevisao {
   reserva: { id: string; criada_em: string; consulta_em: string; sujeita_a_sinal: boolean; contact_id: string };
   /** A etapa atual do negócio já bloqueia follow-up (comprovante tratado, consulta agendada…). */
   etapa_atual_trata_o_sinal: boolean;
-  /** Já existe um item de Central ABERTO para esta reserva. */
+  /** Já existe um item de Central para esta reserva, inclusive resolvido.
+   * Nome legado mantido para compatibilidade dos consumidores da decisão pura. */
   ja_tem_item_aberto: boolean;
 }
 
@@ -70,47 +71,17 @@ export interface ReservaPendenteDeRevisao {
   consulta_em: string;
 }
 
-/**
- * Candidatas: reservas de tipo sujeito a sinal, não canceladas, com contato.
- * O prazo (T+60 da criação, capado no início da consulta) é filtrado AQUI, em
- * aplicação — como `agenda-expira-pendentes` já faz para o prazo por
- * organização —, não no SQL: mantém a régua num lugar só
- * (`decidirRevisaoHumana`), testável sem banco.
- */
+/** Filtra prazo, status, contato, etapa e TODO histórico antes do limite. */
 export async function listarReservasVencidas(
   admin: SupabaseClient,
   agora: Date,
   limite: number,
 ): Promise<ReservaPendenteDeRevisao[]> {
-  const { data, error } = await admin
-    .from('calendar_appointments')
-    .select('id, organization_id, contact_id, created_at, starts_at, calendar_event_types!inner(requires_signal)')
-    .eq('calendar_event_types.requires_signal', true)
-    .neq('status', 'cancelled')
-    .not('contact_id', 'is', null)
-    .order('created_at', { ascending: true })
-    .limit(limite);
+  const { data, error } = await admin.rpc('sinal_listar_revisoes', {
+    p_agora: agora.toISOString(), p_limite: limite,
+  });
   if (error) throw new Error(`listarReservasVencidas: ${error.message}`);
-
-  const linhas = (data ?? []) as unknown as Array<{
-    id: string;
-    organization_id: string;
-    contact_id: string;
-    created_at: string;
-    starts_at: string;
-  }>;
-  return linhas
-    .filter((l) => {
-      const prazo = Math.min(Date.parse(l.created_at) + PRAZO_DO_SINAL_MINUTOS * 60_000, Date.parse(l.starts_at));
-      return agora.getTime() >= prazo;
-    })
-    .map((l) => ({
-      id: l.id,
-      organization_id: l.organization_id,
-      contact_id: l.contact_id,
-      criada_em: new Date(l.created_at).toISOString(),
-      consulta_em: new Date(l.starts_at).toISOString(),
-    }));
+  return (data ?? []) as ReservaPendenteDeRevisao[];
 }
 
 /** Etapa atual do negócio aberto do contato já bloqueia follow-up (comprovante tratado). */
@@ -133,30 +104,16 @@ export async function jaTemItemAberto(admin: SupabaseClient, organizationId: str
     .eq('organization_id', organizationId)
     .eq('kind', 'sinal_revisao_humana')
     .eq('ref_kind', 'appointment')
-    .eq('ref_id', appointmentId)
-    .eq('status', 'open');
+    .eq('ref_id', appointmentId);
   if (error) throw new Error(`jaTemItemAberto: ${error.message}`);
   return (count ?? 0) > 0;
 }
 
-export async function abrirItemDeRevisao(admin: SupabaseClient, reserva: ReservaPendenteDeRevisao): Promise<void> {
-  const { data: contato, error: erroContato } = await admin.from('contacts')
-    .select('is_anonymized')
-    .eq('organization_id', reserva.organization_id)
-    .eq('id', reserva.contact_id)
-    .maybeSingle();
-  if (erroContato) throw new Error(`abrirItemDeRevisao: contato: ${erroContato.message}`);
-  if (!contato || contato.is_anonymized === true) return;
-  const { error } = await admin.from('agent_inbox_items').insert({
-    organization_id: reserva.organization_id,
-    kind: 'sinal_revisao_humana',
-    severity: 'warn',
-    title: 'Sinal não confirmado — revisão humana',
-    body:
-      'A reserva passou do prazo (T+60 da criação, ou início da consulta) sem comprovante tratado. ' +
-      'Nenhuma ação automática foi tomada: o horário não foi liberado, a consulta não foi cancelada e falta não foi marcada.',
-    ref_kind: 'appointment',
-    ref_id: reserva.id,
+/** Retorna true só quando esta chamada realmente criou um aviso. */
+export async function abrirItemDeRevisao(admin: SupabaseClient, reserva: ReservaPendenteDeRevisao): Promise<boolean> {
+  const { data, error } = await admin.rpc('sinal_abrir_revisao', {
+    p_organization_id: reserva.organization_id, p_appointment_id: reserva.id,
   });
   if (error) throw new Error(`abrirItemDeRevisao: ${error.message}`);
+  return data === true;
 }

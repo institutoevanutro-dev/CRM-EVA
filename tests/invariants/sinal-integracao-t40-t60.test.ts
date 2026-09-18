@@ -1,29 +1,7 @@
-/**
- * Prova, contra Postgres real, a cadeia completa pedida antes do deploy da
- * Spec 20 (bloqueio do sinal, migration 0266):
- *
- *   reserva real → inscrição vinculada (appointment_id) → T+40 (envia) →
- *   T+60 (bloqueios param o lembrete) → aviso interno de revisão (Central).
- *
- * Também prova, no mesmo cenário de dados reais, os dois detalhes que só
- * tinham teste com fatos sintéticos em `bloqueios-obrigatorios.test.ts` /
- * `revisao-do-sinal.test.ts`: o comprovante bloqueia o lembrete ANTES de o
- * card mover, e a revisão de T+60 não duplica em reentrega (idempotência por
- * `ref_kind='calendar_appointment'` + `ref_id`).
- *
- * ═══ O QUE É PRODUÇÃO E O QUE É ADAPTADOR DE TESTE ═══
- *
- * `lerFatosDoEnvio` e `decidirEnvio` (bloqueios-obrigatorios.ts) são chamados
- * DIRETAMENTE — já recebem `pg.Pool`, sem adaptação. `acionarSupervisao`
- * também (arquivo irmão). Já os helpers de leitura da revisão humana
- * (`listarReservasVencidas`, `etapaJaTrataOSinal`, `jaTemItemAberto`,
- * `abrirItemDeRevisao`, em revisao-do-sinal.ts) usam `SupabaseClient`
- * (`.from()`), que não existe neste harness — só Postgres puro (sem
- * PostgREST). Por isso o bloco de revisão AQUI replica a MESMA SQL desses
- * helpers em `pg.Pool` puro (mesmo padrão de `reactivityDb()` em
- * followup-reactivity.test.ts), e usa a função pura `decidirRevisaoHumana`
- * — essa sim importada direto da produção, sem cópia.
- */
+/** Integração chama helpers de produção. O transporte RPC abaixo só liga as
+ * chamadas do Supabase às mesmas funções instaladas no Postgres do baseline. */
+import { randomUUID } from 'node:crypto';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import pg from "pg";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -33,7 +11,7 @@ import {
   lerFatosDoEnvio,
   type ConfigDosBloqueios,
 } from "@/lib/followup/bloqueios-obrigatorios";
-import { decidirRevisaoHumana, type FatosDaRevisao } from "@/lib/followup/revisao-do-sinal";
+import { listarReservasVencidas, abrirItemDeRevisao, type ReservaPendenteDeRevisao } from "@/lib/followup/revisao-do-sinal";
 import type { FlowGraph } from "@/lib/followup/graph-schema";
 
 import { criarOrigemDeFollowup } from "./followup-service-origin";
@@ -204,35 +182,30 @@ async function inserirInbound(org: string, contactId: string, conversationId: st
   );
 }
 
-// ---- réplica em pg puro dos helpers de revisao-do-sinal.ts (ver cabeçalho) ----
+// Transporte, sem réplica de elegibilidade ou SQL de criação.
+const admin = {
+  async rpc(name: string, args: Record<string, unknown>) {
+    if (name === 'sinal_listar_revisoes') {
+      const { rows } = await pool.query('select * from public.sinal_listar_revisoes($1,$2)', [args.p_agora, args.p_limite]);
+      return { data: rows, error: null };
+    }
+    if (name === 'sinal_abrir_revisao') {
+      const { rows } = await pool.query('select public.sinal_abrir_revisao($1,$2) as inserted', [args.p_organization_id, args.p_appointment_id]);
+      return { data: rows[0]!.inserted, error: null };
+    }
+    throw new Error(`RPC inesperada: ${name}`);
+  },
+} as unknown as SupabaseClient;
 
-async function etapaJaTrataOSinalPg(org: string, contactId: string): Promise<boolean> {
-  const { rows } = await pool.query<{ blocks: boolean }>(
-    `select coalesce(s.blocks_followups, false) as blocks
-       from crm_leads l join crm_stages s on s.id = l.stage_id and s.organization_id = l.organization_id
-      where l.organization_id = $1 and l.contact_id = $2 and l.status = 'open'`,
-    [org, contactId],
-  );
-  return rows.some((r) => r.blocks === true);
-}
-
-async function jaTemItemAbertoPg(org: string, appointmentId: string): Promise<boolean> {
-  const { rows } = await pool.query<{ n: string }>(
-    `select count(*)::text as n from agent_inbox_items
-      where organization_id = $1 and ref_kind = 'calendar_appointment' and ref_id = $2 and status = 'open'`,
-    [org, appointmentId],
-  );
-  return Number(rows[0]!.n) > 0;
-}
-
-async function abrirItemDeRevisaoPg(org: string, appointmentId: string): Promise<void> {
-  await pool.query(
-    `insert into agent_inbox_items (organization_id, kind, severity, title, body, ref_kind, ref_id)
-     values ($1, 'sinal_revisao_humana', 'warn', 'Sinal não confirmado — revisão humana',
-             'A reserva passou do prazo sem comprovante tratado. Nenhuma ação automática foi tomada.',
-             'calendar_appointment', $2)`,
-    [org, appointmentId],
-  );
+async function candidata(): Promise<ReservaPendenteDeRevisao> {
+  const org = idDeTeste('cafe', ++orgSeq);
+  await seedOrg(org);
+  const contactId = await seedContact(org);
+  const eventTypeId = await seedEventType(org, true);
+  const criadaEm = new Date(Date.now() - 61 * 60_000);
+  const consultaEm = new Date(Date.now() + 3 * 60 * 60_000);
+  const id = await seedReserva({ org, contactId, eventTypeId, criadaEm, consultaEm });
+  return { id, organization_id: org, contact_id: contactId, criada_em: criadaEm.toISOString(), consulta_em: consultaEm.toISOString() };
 }
 
 describe("Cadeia real do sinal: reserva → inscrição → T+40 → bloqueios → revisão", () => {
@@ -283,69 +256,68 @@ describe("Cadeia real do sinal: reserva → inscrição → T+40 → bloqueios �
     expect(decisao).toMatchObject({ envia: false, motivo: "prazo_do_sinal_vencido", invalida: true });
   });
 
-  it("T+60 vencido e sem comprovante tratado: abre o aviso interno na Central — e reentrega não duplica", async () => {
-    const org = idDeTeste("cccc", ++orgSeq);
-    await seedOrg(org);
-    const contactId = await seedContact(org);
-    const eventTypeId = await seedEventType(org, true);
-    const agora = new Date();
-    const criadaEm = new Date(agora.getTime() - 61 * 60_000);
-    const consultaEm = new Date(agora.getTime() + 3 * 60 * 60_000);
-    const appointmentId = await seedReserva({ org, contactId, eventTypeId, criadaEm, consultaEm });
-    // etapa que NÃO trata o sinal ainda — card na etapa de espera
-    const { stageId, pipelineId } = await seedPipelineEStage(org, false);
-    await seedLead(org, contactId, pipelineId, stageId);
-
-    const fatos: FatosDaRevisao = {
-      reserva: { id: appointmentId, criada_em: criadaEm.toISOString(), consulta_em: consultaEm.toISOString(), sujeita_a_sinal: true, contact_id: contactId },
-      etapa_atual_trata_o_sinal: await etapaJaTrataOSinalPg(org, contactId),
-      ja_tem_item_aberto: await jaTemItemAbertoPg(org, appointmentId),
-    };
-    const decisao1 = decidirRevisaoHumana(fatos, agora);
-    expect(decisao1).toEqual({ abrir: true });
-
-    await abrirItemDeRevisaoPg(org, appointmentId);
-    const { rows: itens } = await pool.query(
-      `select kind, severity, ref_kind, ref_id, status from agent_inbox_items where organization_id = $1 and ref_id = $2`,
-      [org, appointmentId],
-    );
-    expect(itens).toHaveLength(1);
-    expect(itens[0]).toMatchObject({ kind: "sinal_revisao_humana", severity: "warn", ref_kind: "calendar_appointment", status: "open" });
-
-    // Reentrega do cron (mesma reserva, mesmo instante ou depois): já tem
-    // item aberto — decidirRevisaoHumana não manda abrir de novo.
-    const fatos2: FatosDaRevisao = { ...fatos, ja_tem_item_aberto: await jaTemItemAbertoPg(org, appointmentId) };
-    expect(fatos2.ja_tem_item_aberto).toBe(true);
-    const decisao2 = decidirRevisaoHumana(fatos2, new Date(agora.getTime() + 5 * 60_000));
-    expect(decisao2).toEqual({ abrir: false, motivo: "ja_tem_item_aberto" });
-
-    const { rows: contagem } = await pool.query<{ n: string }>(
-      `select count(*)::text as n from agent_inbox_items where organization_id = $1 and ref_id = $2`,
-      [org, appointmentId],
-    );
-    expect(contagem[0]!.n).toBe("1"); // nenhuma duplicata
+  it('T60 concorrente cria exatamente um aviso; resolução humana não reabre', async () => {
+    const r = await candidata();
+    const resultados = await Promise.all([abrirItemDeRevisao(admin, r), abrirItemDeRevisao(admin, r)]);
+    expect(resultados.sort()).toEqual([false, true]);
+    const { rows } = await pool.query(`select kind, ref_kind from agent_inbox_items where organization_id=$1 and ref_id=$2`, [r.organization_id, r.id]);
+    expect(rows).toEqual([{ kind: 'sinal_revisao_humana', ref_kind: 'appointment' }]);
+    await pool.query(`update agent_inbox_items set status='resolved' where organization_id=$1 and ref_id=$2`, [r.organization_id, r.id]);
+    expect(await abrirItemDeRevisao(admin, r)).toBe(false);
+    expect((await listarReservasVencidas(admin, new Date(), 500)).some((a) => a.id === r.id)).toBe(false);
   });
 
-  it("comprovante chegou ANTES do prazo vencer: etapa ainda trata o sinal → revisão NÃO abre (é o caminho feliz)", async () => {
-    const org = idDeTeste("dddd", ++orgSeq);
-    await seedOrg(org);
-    const contactId = await seedContact(org);
-    const eventTypeId = await seedEventType(org, true);
-    const agora = new Date();
-    const criadaEm = new Date(agora.getTime() - 61 * 60_000);
-    const consultaEm = new Date(agora.getTime() + 3 * 60 * 60_000);
-    const appointmentId = await seedReserva({ org, contactId, eventTypeId, criadaEm, consultaEm });
-    // etapa que TRATA o sinal (ex.: "Comprovante em conferência") — comprovante já chegou e a equipe moveu o card
-    const { stageId, pipelineId } = await seedPipelineEStage(org, true);
-    await seedLead(org, contactId, pipelineId, stageId);
+  it.each(['cancelled', 'completed', 'no_show'])('revalida status %s depois da seleção', async (status) => {
+    const r = await candidata();
+    expect((await listarReservasVencidas(admin, new Date(), 500)).some((a) => a.id === r.id)).toBe(true);
+    const user = randomUUID();
+    await pool.query('insert into auth.users(id,email) values($1,$2)', [user, `${user}@test.invalid`]);
+    await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'manager',now())", [user,r.organization_id]);
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      await client.query("select set_config('request.jwt.claims',$1,true)", [JSON.stringify({ sub:user,role:'authenticated' })]);
+      await client.query("update calendar_appointments set status=$3,starts_at=now()-interval '2 hours',ends_at=now()-interval '1 hour' where organization_id=$1 and id=$2", [r.organization_id,r.id,status]);
+      await client.query('commit');
+    } finally { await client.query('rollback'); client.release(); }
+    expect(await abrirItemDeRevisao(admin, r)).toBe(false);
+    expect((await listarReservasVencidas(admin, new Date(), 500)).some((a) => a.id === r.id)).toBe(false);
+  });
 
-    const fatos: FatosDaRevisao = {
-      reserva: { id: appointmentId, criada_em: criadaEm.toISOString(), consulta_em: consultaEm.toISOString(), sujeita_a_sinal: true, contact_id: contactId },
-      etapa_atual_trata_o_sinal: await etapaJaTrataOSinalPg(org, contactId),
-      ja_tem_item_aberto: await jaTemItemAbertoPg(org, appointmentId),
-    };
-    expect(fatos.etapa_atual_trata_o_sinal).toBe(true);
-    expect(decidirRevisaoHumana(fatos, agora)).toEqual({ abrir: false, motivo: "comprovante_ja_tratado" });
+  it('revalida anonimização e etapa depois da seleção', async () => {
+    const r = await candidata();
+    const { stageId, pipelineId } = await seedPipelineEStage(r.organization_id, true);
+    await seedLead(r.organization_id, r.contact_id, pipelineId, stageId);
+    expect(await abrirItemDeRevisao(admin, r)).toBe(false);
+    await pool.query('update crm_stages set blocks_followups=false where organization_id=$1 and id=$2', [r.organization_id, stageId]);
+    await pool.query('update contacts set is_anonymized=true where organization_id=$1 and id=$2', [r.organization_id, r.contact_id]);
+    expect(await abrirItemDeRevisao(admin, r)).toBe(false);
+  });
+
+  it('501 reservas históricas tratadas não escondem a próxima do limite 500', async () => {
+    const r = await candidata();
+    await pool.query(`with antigas as (
+      insert into calendar_appointments(organization_id,event_type_id,title,starts_at,ends_at,contact_id,created_at)
+      select organization_id,event_type_id,'Histórico',starts_at,ends_at,contact_id,created_at-interval '1 day'
+      from calendar_appointments cross join generate_series(1,501) where id=$1 returning id,organization_id
+    ) insert into agent_inbox_items(organization_id,kind,severity,title,ref_kind,ref_id,status)
+      select organization_id,'sinal_revisao_humana','warn','Tratado','appointment',id,'resolved' from antigas`, [r.id]);
+    expect((await listarReservasVencidas(admin, new Date(), 500)).some((a) => a.id === r.id)).toBe(true);
+  });
+
+  it('confirmed continua elegível: status não comprova pagamento', async () => {
+    const r = await candidata();
+    await pool.query(`update calendar_appointments set status='confirmed' where organization_id=$1 and id=$2`, [r.organization_id, r.id]);
+    expect(await abrirItemDeRevisao(admin, r)).toBe(true);
+  });
+
+  it('FK excluída cancela inscrição de sinal em vez de liberar envio genérico', async () => {
+    const r = await candidata();
+    const { pointerId, versionId } = await seedFluxoDoSinal(r.organization_id);
+    const enrollmentId = await seedInscricaoDoSinal({ org:r.organization_id, contactId:r.contact_id, pointerId, versionId, appointmentId:r.id, startedAt:new Date() });
+    await pool.query('delete from calendar_appointments where organization_id=$1 and id=$2', [r.organization_id, r.id]);
+    const { rows } = await pool.query('select appointment_id,status,next_eval_at from followup_enrollments where organization_id=$1 and id=$2', [r.organization_id, enrollmentId]);
+    expect(rows).toEqual([{ appointment_id: null, status: 'cancelled', next_eval_at: null }]);
   });
 
   it("comprovante enviado bloqueia o PRÓXIMO lembrete antes de qualquer pessoa mover o card — lido do banco real (não fatos sintéticos)", async () => {
@@ -410,5 +382,19 @@ describe("Cadeia real do sinal: reserva → inscrição → T+40 → bloqueios �
       [org, contactId],
     );
     expect(rows[0]!.n).toBe("1");
+  });
+});
+
+
+describe('RPCs do sinal: isolamento e ACL', () => {
+  it('não abre aviso de reserva de outra organização', async () => {
+    const a = await candidata(); const b = await candidata();
+    expect(await abrirItemDeRevisao(admin, { ...a, organization_id:b.organization_id })).toBe(false);
+  });
+  it.each(['sinal_listar_revisoes(timestamp with time zone,integer)', 'sinal_abrir_revisao(uuid,uuid)', 'sinal_reservas_elegiveis(timestamp with time zone)'])('RPC privada: %s', async (fn) => {
+    const { rows } = await pool.query(`select has_function_privilege('anon',$1,'execute') as anon,
+      has_function_privilege('authenticated',$1,'execute') as authenticated,
+      has_function_privilege('service_role',$1,'execute') as service`, [`public.${fn}`]);
+    expect(rows).toEqual([{ anon:false, authenticated:false, service:true }]);
   });
 });

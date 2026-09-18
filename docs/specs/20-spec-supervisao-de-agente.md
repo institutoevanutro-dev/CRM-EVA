@@ -81,8 +81,11 @@ reativa sequência nem remove opt-out.
 ## Bloqueio do sinal por prazo (migration 0266)
 
 `followup_enrollments.appointment_id` (nullable) amarra uma inscrição a uma reserva
-específica (`calendar_appointments`) — só os fluxos ligados a uma reserva (cobrança de
-sinal) preenchem; os demais seguem `null`. Índice único parcial
+específica (`calendar_appointments`). A coluna já existia na migration 0224 para
+recuperação de faltas (`appointment_no_show`, com `appointment_revision`), que continua
+fora das regras de sinal. Inscrições sem reserva seguem `null`. A chamada de
+`enrollFollowupFlow` aceita a reserva, mas os callers atuais de inscrição manual e
+automação ainda não passam esse parâmetro; ativar T40 exige essa integração. Índice único parcial
 `idx_followup_enrollments_one_per_appointment` em `(pointer_id, appointment_id)` para
 `status in ('active','waiting_reply','paused_handoff')`: **uma tentativa por reserva**, e
 uma segunda chamada de `enrollFollowupFlow` para a mesma reserva/fluxo recebe `409
@@ -106,11 +109,20 @@ compromisso que exige sinal.
 
 ## Revisão humana em T+60 (`lib/followup/revisao-do-sinal.ts`, cron `sinal-revisao-humana`)
 
-Canal lateral, independente do envio de lembrete: quando o prazo do sinal vence
-(`decidirRevisaoHumana`) sem que a etapa atual já trate o comprovante
-(`etapa_atual_trata_o_sinal`) e sem item de Central já aberto para a mesma reserva
-(`ja_tem_item_aberto` — chave de idempotência por `ref_kind='calendar_appointment'` +
-`ref_id`), abre `agent_inbox_items` kind `sinal_revisao_humana`, severidade `warn`.
+Canal lateral, independente do envio de lembrete: a RPC `sinal_listar_revisoes`
+filtra prazo, tipos sujeitos a sinal, status `pending`/`confirmed`, contato não anonimizado,
+etapa que ainda não bloqueia follow-up e ausência de qualquer aviso anterior **antes**
+do limite de 500. `confirmed` não comprova pagamento.
+
+A RPC `sinal_abrir_revisao` revalida esses fatos sob locks, serializa crons concorrentes
+e retorna se criou aviso. Qualquer aviso anterior, inclusive resolvido, impede reabrir a
+mesma reserva. A referência canônica é `ref_kind='appointment'` + `ref_id`; o filtro
+reconhece também o valor legado `calendar_appointment`. O cron conta/audita apenas
+inserções reais. Nenhum histórico é apagado.
+
+Reserva de sinal cancelada, concluída, marcada como falta ou inválida impede cobrança.
+A migration 0267 também encerra inscrições vivas de sinal quando sua FK é apagada;
+a recuperação de faltas preserva a proteção já existente na migration 0224.
 
 **Garantia central, testada e não-negociável**: este caminho **nunca** muda etapa, nunca
 libera horário, nunca marca falta e nunca cancela a consulta — só abre o item de Central
@@ -157,3 +169,12 @@ de configuração da organização, não uma garantia incondicional do código.
 - Sabotagem deliberada dedicada ao bloqueio do sinal (a suíte cobre os casos de decisão,
   mas não repete o exercício adversarial de "quebrar de propósito" feito para a
   supervisão original).
+
+
+### Revalidação durante a escrita
+
+O adaptador da supervisão preserva `stage_changed_at` como texto com microssegundos.
+Na transação de movimentação, trava e revalida vínculo (ativo, modo executar, transição),
+contato, conversa, negócio e etapas. Handoff, anonimização, exigência humana ou revogação
+da configuração encerram a ação como BLOQ. A recuperação após queda apenas reencontra
+uma atividade já commitada; sem recibo não executa um movimento novo.

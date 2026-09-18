@@ -15,7 +15,7 @@
  * puramente um aviso: o desfecho financeiro/clínico não se infere aqui — a
  * mesma linha da spec 20 (supervisão) vale para este canal também.
  *
- * Idempotente por reserva: `ref_kind='calendar_appointment', ref_id=<reserva>`
+ * Idempotente por reserva: `ref_kind='appointment', ref_id=<reserva>`
  * — reentrega do cron não duplica o item.
  */
 import { randomUUID } from "node:crypto";
@@ -26,9 +26,6 @@ import { audit } from "@/lib/audit";
 import { env } from "@/lib/env";
 import {
   abrirItemDeRevisao,
-  decidirRevisaoHumana,
-  etapaJaTrataOSinal,
-  jaTemItemAberto,
   listarReservasVencidas,
 } from "@/lib/followup/revisao-do-sinal";
 import { logger } from "@/lib/logger";
@@ -64,23 +61,10 @@ async function handle(req: NextRequest): Promise<Response> {
   let ignorados = 0;
   for (const reserva of candidatas) {
     try {
-      const [etapaTrata, temItem] = await Promise.all([
-        etapaJaTrataOSinal(admin, reserva.organization_id, reserva.contact_id),
-        jaTemItemAberto(admin, reserva.organization_id, reserva.id),
-      ]);
-      const decisao = decidirRevisaoHumana(
-        {
-          reserva: { id: reserva.id, criada_em: reserva.criada_em, consulta_em: reserva.consulta_em, sujeita_a_sinal: true, contact_id: reserva.contact_id },
-          etapa_atual_trata_o_sinal: etapaTrata,
-          ja_tem_item_aberto: temItem,
-        },
-        agora,
-      );
-      if (!decisao.abrir) {
+      if (!await abrirItemDeRevisao(admin, reserva)) {
         ignorados += 1;
         continue;
       }
-      await abrirItemDeRevisao(admin, reserva);
       abertos += 1;
     } catch (error) {
       // Uma reserva com falha não derruba a rodada inteira; ela volta na próxima.

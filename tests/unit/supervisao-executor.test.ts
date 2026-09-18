@@ -14,7 +14,7 @@
  * sintéticos e nenhum envio externo existe: o executor não recebe canal, e o
  * último teste afirma essa ausência na forma dos contratos.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { chaveDeIdempotencia } from '@/lib/supervisao/contrato';
 import {
@@ -236,9 +236,10 @@ class BancoFalso implements SupervisaoDb {
       }
     }
   }
-  async moverEtapaComTrava(input: Parameters<SupervisaoDb['moverEtapaComTrava']>[0]) {
+  async moverEtapaComTrava(input: Parameters<SupervisaoDb['moverEtapaComTrava']>[0]): ReturnType<SupervisaoDb['moverEtapaComTrava']> {
     const ja = this.atividadesDeMovimento.find((a) => a.action_key === input.action_key);
     if (ja) return { ok: true as const, ref: ja.id };
+    if (input.somente_recuperar) return { ok: false as const, porque: 'conflito' as const };
     if (this.antesDaEscrita) {
       const f = this.antesDaEscrita;
       this.antesDaEscrita = null;
@@ -600,5 +601,19 @@ describe('nenhum envio externo', () => {
     for (const proibida of ['send', 'enviar', 'whatsapp', 'channel', 'canal', 'appointment', 'agendar', 'pagamento', 'payment']) {
       expect(capacidades, `capacidade proibida exposta: ${proibida}`).not.toContain(proibida);
     }
+  });
+});
+
+
+describe('autoridade revogada durante a proposta', () => {
+  it('encerra como BLOQ sem tentar de novo com vínculo antigo', async () => {
+    const banco = new BancoFalso({ etapa:E.entendendo, mensagens:[{ id:M1,direction:'inbound',body:'Quero agendar' }] });
+    const d = deps(banco, proposta({ movimentacao:{ para_etapa_id:E.agendamento,motivo:'Agendar',evidencias:[M1] } }));
+    const move = vi.spyOn(banco, 'moverEtapaComTrava').mockImplementation(async () => ({ ok:false,porque:'autorizacao_revogada' }));
+    const resultado = await executarRevisao(d,ORG,REVISAO);
+    expect(resultado).toMatchObject({ codigo:'BLOQ' });
+    expect(move).toHaveBeenCalledTimes(1);
+    expect(banco.lead.stage_id).toBe(E.entendendo);
+    expect(banco.acoesPorCodigo().EXE ?? 0).toBe(0);
   });
 });

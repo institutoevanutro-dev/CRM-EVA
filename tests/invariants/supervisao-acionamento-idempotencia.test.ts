@@ -28,6 +28,7 @@
 import pg from "pg";
 import { afterAll, describe, expect, it } from "vitest";
 
+import { createPgSupervisaoDb } from '@/lib/supervisao/db-pg';
 import { acionarSupervisao, type FatoConcluido } from "@/lib/supervisao/acionamento";
 
 const PORT = Number(process.env.TEST_DB_PORT ?? 54329);
@@ -206,5 +207,74 @@ describe("Erick supervisiona Cintia: acionamento real, evento repetido, sem envi
     const resumo = await acionarSupervisao(pool, fato);
     expect(resumo.enfileiradas).toBe(0);
     expect(resumo.filtradas.ciclo_do_supervisor).toBe(1);
+  });
+});
+
+// O adaptador real lê o carimbo do Postgres e faz a escrita transacional.
+async function cenarioDeMovimento() {
+  const org = idDeTeste('aaaa');
+  await seedOrg(org);
+  const contactId = await seedContato(org);
+  const conversationId = await seedConversa(org, contactId);
+  const erickId = await seedAgente(org, 'Supervisor');
+  const cintiaId = await seedAgente(org, 'Atendimento');
+  const pipelineId = await seedFunil(org);
+  const bindingId = await seedVinculo({ org, erickId, cintiaId, pipelineId });
+  const { rows: stages } = await pool.query<{ id: string }>(`insert into crm_stages(organization_id,pipeline_id,name,slug,position)
+    values ($1,$2,'Antes','antes',1),($1,$2,'Depois','depois',2) returning id`, [org,pipelineId]);
+  const from = stages[0]!.id; const to = stages[1]!.id;
+  const { rows: leads } = await pool.query<{ id: string }>(`insert into crm_leads(organization_id,contact_id,pipeline_id,stage_id,title)
+    values($1,$2,$3,$4,'Negócio') returning id`, [org,contactId,pipelineId,from]);
+  const leadId = leads[0]!.id;
+  await pool.query(`update crm_leads set stage_changed_at='2026-09-17 10:00:00.123456+00' where organization_id=$1 and id=$2`, [org,leadId]);
+  await pool.query(`update ai_supervision_bindings set mode='executar',allowed_stage_moves=$3::jsonb where organization_id=$1 and id=$2`,
+    [org,bindingId,JSON.stringify([{ to_stage_id:to, from_stage_ids:[from] }])]);
+  await acionarSupervisao(pool, fatoDaCintia({ org,conversationId,contactId,cintiaId,eventId:idDeTeste('bbbb') }));
+  const { rows: reviews } = await pool.query<{ id: string }>('select id from ai_supervision_reviews where organization_id=$1', [org]);
+  const db = createPgSupervisaoDb(pool);
+  const review = (await db.carregarRevisao(org,reviews[0]!.id))!;
+  const state = await db.lerEstado(review);
+  const input = { organization_id:org,lead_id:leadId,contact_id:contactId,conversation_id:conversationId,
+    de_etapa_id:from,para_etapa_id:to,stage_changed_at_esperado:state.lead!.stage_changed_at,
+    service_revision_esperada:state.conversa.service_revision,review_id:review.id,action_key:`${review.id}:move`,
+    supervisor_agent_id:erickId,trace_id:'test',motivo:'Movimento administrativo' };
+  return { db,input,bindingId };
+}
+
+describe('CAS e autoridade: adaptador pg real', () => {
+  it('preserva .123456, rejeita .123457 e move com o carimbo original', async () => {
+    const { db,input } = await cenarioDeMovimento();
+    expect(input.stage_changed_at_esperado).toContain('.123456');
+    expect(await db.moverEtapaComTrava({ ...input, stage_changed_at_esperado:'2026-09-17 10:00:00.123457+00' })).toEqual({ ok:false,porque:'conflito' });
+    const result = await db.moverEtapaComTrava(input);
+    expect(result.ok).toBe(true);
+    expect(await db.moverEtapaComTrava({ ...input,somente_recuperar:true })).toEqual(result);
+  });
+
+  it.each(['disabled','recommend','allowlist','human','anonymized','silenced','requires_human'])('recusa autoridade alterada depois da leitura: %s', async (change) => {
+    const { db,input,bindingId } = await cenarioDeMovimento();
+    const [org,contact,conv] = [input.organization_id,input.contact_id,input.conversation_id];
+    if (change === 'disabled') await pool.query('update ai_supervision_bindings set enabled=false where organization_id=$1 and id=$2', [org,bindingId]);
+    if (change === 'recommend') await pool.query("update ai_supervision_bindings set mode='recomendar' where organization_id=$1 and id=$2", [org,bindingId]);
+    if (change === 'allowlist') await pool.query("update ai_supervision_bindings set allowed_stage_moves='[]' where organization_id=$1 and id=$2", [org,bindingId]);
+    if (change === 'human') await pool.query('update contacts set force_human=true where organization_id=$1 and id=$2', [org,contact]);
+    if (change === 'anonymized') await pool.query('update contacts set is_anonymized=true where organization_id=$1 and id=$2', [org,contact]);
+    if (change === 'silenced') await pool.query("update conversations set bot_silenced_until=now()+interval '1 hour' where organization_id=$1 and id=$2", [org,conv]);
+    if (change === 'requires_human') await pool.query('update crm_stages set requires_human=true where organization_id=$1 and id=$2', [org,input.para_etapa_id]);
+    expect(await db.moverEtapaComTrava(input)).toEqual({ ok:false,porque:'autorizacao_revogada' });
+    const { rows } = await pool.query('select stage_id from crm_leads where organization_id=$1 and id=$2', [org,input.lead_id]);
+    expect(rows[0]!.stage_id).toBe(input.de_etapa_id);
+  });
+
+  it('aguarda handoff não commitado e respeita autoridade após a liberação do lock', async () => {
+    const { db,input } = await cenarioDeMovimento();
+    const writer = await pool.connect();
+    try {
+      await writer.query('begin');
+      await writer.query("update conversations set bot_silenced_until=now()+interval '1 hour' where organization_id=$1 and id=$2", [input.organization_id,input.conversation_id]);
+      const movimento = db.moverEtapaComTrava(input);
+      await writer.query('commit');
+      expect(await movimento).toEqual({ ok:false,porque:'autorizacao_revogada' });
+    } finally { await writer.query('rollback'); writer.release(); }
   });
 });

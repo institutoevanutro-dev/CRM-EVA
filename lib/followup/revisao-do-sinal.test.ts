@@ -80,18 +80,12 @@ describe('abrirItemDeRevisao', () => {
     consulta_em: '2026-09-16T16:00:00.000Z',
   };
 
-  it.each([true, false])('só abre aviso se o contato não estiver anonimizado (%s)', async (isAnonymized) => {
-    const insert = vi.fn(async () => ({ error: null }));
-    const eq = vi.fn();
-    const contactQuery = {
-      select: () => contactQuery,
-      eq: (key: string, value: string) => { eq(key, value); return contactQuery; },
-      maybeSingle: async () => ({ data: { is_anonymized: isAnonymized }, error: null }),
-    };
-    const admin = { from: (table: string) => table === 'contacts' ? contactQuery : { insert } } as unknown as SupabaseClient;
-    await abrirItemDeRevisao(admin, reserva);
-    expect(eq).toHaveBeenCalledWith('organization_id', reserva.organization_id);
-    expect(eq).toHaveBeenCalledWith('id', reserva.contact_id);
-    expect(insert).toHaveBeenCalledTimes(isAnonymized ? 0 : 1);
+  it.each([true, false])('retorna se houve inserção real (%s), decidida atomicamente pelo banco', async (inserido) => {
+    const rpc = vi.fn(async () => ({ data: inserido, error: null }));
+    const admin = { rpc } as unknown as SupabaseClient;
+    expect(await abrirItemDeRevisao(admin, reserva)).toBe(inserido);
+    expect(rpc).toHaveBeenCalledWith('sinal_abrir_revisao', {
+      p_organization_id: reserva.organization_id, p_appointment_id: reserva.id,
+    });
   });
 });

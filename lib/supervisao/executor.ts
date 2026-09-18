@@ -81,7 +81,7 @@ export interface AcaoRow {
 
 export type ResultadoDaMovimentacao =
   | { ok: true; ref: string }
-  | { ok: false; porque: 'conflito' };
+  | { ok: false; porque: 'conflito' | 'autorizacao_revogada' };
 
 export interface SupervisaoDb {
   carregarRevisao(orgId: string, reviewId: string): Promise<RevisaoRow | null>;
@@ -122,6 +122,8 @@ export interface SupervisaoDb {
    * Lança em falha técnica — a fila tenta de novo com a revisão em execução.
    */
   moverEtapaComTrava(input: {
+    /** Só reencontra recibo; nunca faz movimento novo na recuperação. */
+    somente_recuperar?: boolean;
     organization_id: string;
     lead_id: string;
     contact_id: string;
@@ -277,6 +279,7 @@ export async function executarRevisao(
       estado.lead.stage_id === proposta.movimentacao.para_etapa_id
     ) {
       const r = await db.moverEtapaComTrava({
+        somente_recuperar: true,
         organization_id: orgId,
         lead_id: estado.lead.id,
         contact_id: revisao.contact_id,
@@ -441,6 +444,13 @@ async function aplicarAcao(
     if (r.ok) {
       await db.finalizarAcao(orgId, registro.id, { status: 'executada', code: 'EXE', tool_result_ref: r.ref });
       return { status: 'executada', estado: atual };
+    }
+    if (r.porque === 'autorizacao_revogada') {
+      await db.finalizarAcao(orgId, registro.id, {
+        status: 'bloqueada', code: 'BLOQ', tool_result_ref: null,
+        reason: 'A autorização mudou durante a revisão; nenhuma mudança foi realizada.',
+      });
+      return { status: 'bloqueada', estado: atual };
     }
     // Recusada pela trava: alguém mudou o registro entre a leitura e a escrita.
     // Relê e recalcula SOBRE A MESMA PROPOSTA — sem nova chamada de modelo.

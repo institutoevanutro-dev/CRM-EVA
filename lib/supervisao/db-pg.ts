@@ -14,6 +14,7 @@ import type pg from 'pg';
 import { buildLeadActivityRow } from '@/lib/leads/activity-emitter';
 
 import type { AcaoRow, ResultadoDaMovimentacao, RevisaoRow, SupervisaoDb } from './executor';
+import { transicaoAutorizada } from './politica';
 import type { EstadoLido, TransicaoAutorizada, VinculoDeSupervisao, VinculoDoUsuario } from './politica';
 
 /** Janela de mensagens que o supervisor enxerga. Knob de código, não de env. */
@@ -99,11 +100,11 @@ export function createPgSupervisaoDb(pool: pg.Pool): SupervisaoDb {
         await Promise.all([
           pool.query<{
             id: string; pipeline_id: string; stage_id: string; status: string;
-            stage_changed_at: Date | null; owner_kind: string | null; owner_user_id: string | null;
+            stage_changed_at: string | null; owner_kind: string | null; owner_user_id: string | null;
           }>(
             // O negócio DO FUNIL SUPERVISIONADO. Com mais de um aberto, nenhum é
             // escolhido: adivinhar moveria o card errado.
-            `select id, pipeline_id, stage_id, status, stage_changed_at, owner_kind, owner_user_id
+            `select id, pipeline_id, stage_id, status, stage_changed_at::text as stage_changed_at, owner_kind, owner_user_id
                from crm_leads
               where organization_id = $1 and contact_id = $2 and pipeline_id = $3
                 and ($4::uuid is null or id = $4::uuid)
@@ -276,15 +277,58 @@ export function createPgSupervisaoDb(pool: pg.Pool): SupervisaoDb {
           return { ok: true, ref: ja.rows[0].id };
         }
 
-        // A TRAVA: etapa esperada, carimbo da última mudança e revisão da
-        // conversa, lidos antes. `for update` na conversa serializa contra o
-        // atendimento humano que esteja gravando nela agora.
-        const conv = await client.query<{ service_revision: string | null }>(
-          `select service_revision::text as service_revision from conversations
-            where organization_id = $1 and id = $2 for update`,
-          [input.organization_id, input.conversation_id],
+        if (input.somente_recuperar) {
+          await client.query('rollback');
+          return { ok: false, porque: 'conflito' };
+        }
+        // Autoridade é conferida DENTRO da escrita. Os locks duram até commit:
+        // uma troca de modo, handoff ou anonimização não pode atravessar o CAS.
+        const binding = await client.query<{ enabled: boolean; mode: string; allowed_stage_moves: unknown }>(
+          `select b.enabled, b.mode, b.allowed_stage_moves from ai_supervision_bindings b
+             join ai_supervision_reviews r on r.binding_id = b.id and r.organization_id = b.organization_id
+            where b.organization_id = $1 and r.id = $2 and b.supervisor_agent_id = $3
+              and b.pipeline_id = r.pipeline_id
+              and (r.actor_type <> 'ai_agent' or b.supervised_agent_id = r.actor_id)
+              and (r.actor_type <> 'user' or b.review_human_actions)
+            for update of b`,
+          [input.organization_id, input.review_id, input.supervisor_agent_id],
         );
-        if ((conv.rows[0]?.service_revision ?? null) !== input.service_revision_esperada) {
+        const contact = await client.query<{ is_anonymized: boolean; force_human: boolean }>(
+          `select is_anonymized, force_human from contacts where organization_id = $1 and id = $2 for update`,
+          [input.organization_id, input.contact_id],
+        );
+        const conv = await client.query<{ service_revision: string | null; humano: boolean }>(
+          `select service_revision::text as service_revision,
+                  (bot_silenced_until is not null and bot_silenced_until > clock_timestamp()) as humano
+             from conversations where organization_id = $1 and id = $2 and contact_id = $3 for update`,
+          [input.organization_id, input.conversation_id, input.contact_id],
+        );
+        const lead = await client.query<{ id: string }>(
+          `select l.id from crm_leads l join ai_supervision_reviews r
+             on r.organization_id = l.organization_id and r.pipeline_id = l.pipeline_id
+            where l.organization_id = $1 and l.id = $2 and l.contact_id = $3 and r.id = $4
+            for update of l`,
+          [input.organization_id, input.lead_id, input.contact_id, input.review_id],
+        );
+        const stages = await client.query<{ id: string; requires_human: boolean; is_archived: boolean; is_won: boolean; is_lost: boolean }>(
+          `select s.id, s.requires_human, s.is_archived, s.is_won, s.is_lost from crm_stages s
+             join crm_leads l on l.pipeline_id = s.pipeline_id and l.organization_id = s.organization_id
+            where s.organization_id = $1 and l.id = $2 and s.id = any($3::uuid[])
+            order by s.id for update of s`,
+          [input.organization_id, input.lead_id, [input.de_etapa_id, input.para_etapa_id]],
+        );
+        const b = binding.rows[0];
+        const c = contact.rows[0];
+        const v = conv.rows[0];
+        const target = stages.rows.find((s) => s.id === input.para_etapa_id);
+        if (!b?.enabled || b.mode !== 'executar' || !c || c.is_anonymized || c.force_human ||
+            !v || v.humano || !lead.rows[0] || !target || target.requires_human ||
+            stages.rows.some((s) => s.requires_human) || target.is_archived || target.is_won || target.is_lost ||
+            !transicaoAutorizada(lerTransicoes(b.allowed_stage_moves), input.de_etapa_id, input.para_etapa_id)) {
+          await client.query('rollback');
+          return { ok: false, porque: 'autorizacao_revogada' };
+        }
+        if (v.service_revision !== input.service_revision_esperada) {
           await client.query('rollback');
           return { ok: false, porque: 'conflito' };
         }
