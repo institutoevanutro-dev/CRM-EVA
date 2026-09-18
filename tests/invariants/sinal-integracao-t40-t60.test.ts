@@ -380,7 +380,7 @@ describe("Cadeia real do sinal: reserva → inscrição → T+40 → bloqueios �
     expect(decisao).toMatchObject({ envia: false, motivo: "resposta_do_contato", invalida: true });
   });
 
-  it("sequência concorrente entre o fluxo do sinal e um D1/D3/D7 do MESMO contato — com uma_sequencia_por_contato ligado, só a mais antiga segue", async () => {
+  it("o banco impede duas sequências vivas do mesmo contato, mesmo em pointers diferentes", async () => {
     const org = idDeTeste("ffff", ++orgSeq);
     const config: ConfigDosBloqueios = { ...CONFIG_SEM_BLOQUEIOS_OPCIONAIS, uma_sequencia_por_contato: true };
     await seedOrg(org, { followups: { bloqueios: config } });
@@ -403,19 +403,12 @@ describe("Cadeia real do sinal: reserva → inscrição → T+40 → bloqueios �
 
     // Fluxo do sinal: pointer DIFERENTE, iniciado DEPOIS do D1.
     const { pointerId: pointerSinal, versionId: versionSinal } = await seedFluxoDoSinal(org);
-    const enrollmentId = await seedInscricaoDoSinal({ org, pointerId: pointerSinal, versionId: versionSinal, contactId, appointmentId, startedAt: agora });
-    const conversationId = (await pool.query<{ conversation_id: string }>(`select conversation_id from followup_enrollments where id = $1`, [enrollmentId])).rows[0]!.conversation_id;
-
-    const leitura = await lerFatosDoEnvio(pool, { organizationId: org, contactId, conversationId, enrollmentId });
-    expect(leitura.ok).toBe(true);
-    if (!leitura.ok) return;
-    // `outras_inscricoes_vivas` não filtra por pointer_id — o D1 já conta.
-    expect(leitura.fatos.outras_inscricoes_vivas.length).toBeGreaterThanOrEqual(1);
-    // A config efetivamente LIDA e parseada do `organizations.settings` real —
-    // não a variável local montada acima só para o seed — é a que decide.
-    expect(leitura.config).toEqual(config);
-
-    const decisao = decidirEnvio(leitura.fatos, leitura.config, agora);
-    expect(decisao).toMatchObject({ envia: false, motivo: "sequencia_concorrente", invalida: true });
+    await expect(seedInscricaoDoSinal({ org, pointerId: pointerSinal, versionId: versionSinal, contactId, appointmentId, startedAt: agora }))
+      .rejects.toMatchObject({ code: "23505", constraint: "idx_followup_enrollments_one_live" });
+    const { rows } = await pool.query<{ n: string }>(
+      `select count(*)::text as n from followup_enrollments where organization_id = $1 and contact_id = $2 and status = 'active'`,
+      [org, contactId],
+    );
+    expect(rows[0]!.n).toBe("1");
   });
 });
