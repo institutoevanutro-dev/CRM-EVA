@@ -26,6 +26,7 @@ export type { InboxRefKind } from '@/lib/ai/inbox-destino';
  * kind numa migration adiciona aqui na mesma mudança.
  */
 export type InboxKind =
+  | 'sinal_revisao_humana'
   | 'case_stale'
   | 'appointment_outcome_required'
   | 'appointment_recovery_review'

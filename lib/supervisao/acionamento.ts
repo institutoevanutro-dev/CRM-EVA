@@ -67,15 +67,14 @@ export async function acionarSupervisao(pool: pg.Pool, fato: FatoConcluido, log?
     resumo.filtradas[porque] = (resumo.filtradas[porque] ?? 0) + 1;
   };
 
-  // Quais vínculos PODEM se interessar pelo fato. Para IA, só os que supervisionam
-  // aquele agente; para pessoa, todos os ligados da organização (o funil decide).
+  // A política recebe os vínculos da organização para registrar o motivo de
+  // filtragem, inclusive agente fora do vínculo e ciclo do próprio supervisor.
   const { rows: vinculos } = await pool.query<VinculoDeSupervisao & { allowed_stage_moves: unknown }>(
     `select id, organization_id, supervisor_agent_id, supervised_agent_id, pipeline_id, enabled,
             review_human_actions, mode, allowed_stage_moves, policy_version
        from ai_supervision_bindings
-      where organization_id = $1 and enabled
-        and ($2::text <> 'ai_agent' or supervised_agent_id = $3::uuid)`,
-    [fato.organizationId, fato.actorType, fato.actorId],
+      where organization_id = $1 and enabled`,
+    [fato.organizationId],
   );
   if (vinculos.length === 0) return resumo;
 

@@ -48,7 +48,7 @@ function idDeTeste(prefixoHex: string): string {
 }
 
 async function seedOrg(org: string): Promise<void> {
-  const name = `supervisao-${org.slice(0, 8)}`;
+  const name = `supervisao-${org.slice(-12)}`;
   await pool.query(
     `insert into organizations (id, slug, legal_name, display_name) values ($1, $2, $3, $4) on conflict (id) do nothing`,
     [org, name, name, name],

@@ -59,7 +59,7 @@ const SQL_ATUALIZA_HORARIO_COMERCIAL = `
 `;
 
 async function seedOrg(org: string, settings: unknown): Promise<void> {
-  const name = `clinica-${org.slice(0, 8)}`;
+  const name = `clinica-${org.slice(-12)}`;
   await pool.query(
     `insert into organizations (id, slug, legal_name, display_name, settings)
      values ($1, $2, $3, $4, $5) on conflict (id) do update set settings = excluded.settings`,

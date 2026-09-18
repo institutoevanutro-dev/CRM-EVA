@@ -107,7 +107,7 @@ async function seedReserva(params: {
 }): Promise<string> {
   const { rows } = await pool.query<{ id: string }>(
     `insert into calendar_appointments (organization_id, event_type_id, title, starts_at, ends_at, contact_id, created_at)
-     values ($1, $2, 'Consulta com sinal', $3, $3 + interval '30 minutes', $4, $3)
+     values ($1, $2, 'Consulta com sinal', $3::timestamptz, $3::timestamptz + interval '30 minutes', $4, $3::timestamptz)
      returning id`,
     [params.org, params.eventTypeId, params.consultaEm.toISOString(), params.contactId],
   );

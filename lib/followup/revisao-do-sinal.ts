@@ -131,7 +131,8 @@ export async function jaTemItemAberto(admin: SupabaseClient, organizationId: str
     .from('agent_inbox_items')
     .select('id', { count: 'exact', head: true })
     .eq('organization_id', organizationId)
-    .eq('ref_kind', 'calendar_appointment')
+    .eq('kind', 'sinal_revisao_humana')
+    .eq('ref_kind', 'appointment')
     .eq('ref_id', appointmentId)
     .eq('status', 'open');
   if (error) throw new Error(`jaTemItemAberto: ${error.message}`);
@@ -147,7 +148,7 @@ export async function abrirItemDeRevisao(admin: SupabaseClient, reserva: Reserva
     body:
       'A reserva passou do prazo (T+60 da criação, ou início da consulta) sem comprovante tratado. ' +
       'Nenhuma ação automática foi tomada: o horário não foi liberado, a consulta não foi cancelada e falta não foi marcada.',
-    ref_kind: 'calendar_appointment',
+    ref_kind: 'appointment',
     ref_id: reserva.id,
   });
   if (error) throw new Error(`abrirItemDeRevisao: ${error.message}`);
