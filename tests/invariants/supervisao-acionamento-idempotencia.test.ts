@@ -258,7 +258,7 @@ describe('CAS e autoridade: adaptador pg real', () => {
     if (change === 'recommend') await pool.query("update ai_supervision_bindings set mode='recomendar' where organization_id=$1 and id=$2", [org,bindingId]);
     if (change === 'allowlist') await pool.query("update ai_supervision_bindings set allowed_stage_moves='[]' where organization_id=$1 and id=$2", [org,bindingId]);
     if (change === 'human') await pool.query('update contacts set force_human=true where organization_id=$1 and id=$2', [org,contact]);
-    if (change === 'anonymized') await pool.query('update contacts set is_anonymized=true where organization_id=$1 and id=$2', [org,contact]);
+    if (change === 'anonymized') await pool.query('update contacts set is_anonymized=true, anonymized_at=now() where organization_id=$1 and id=$2', [org,contact]);
     if (change === 'silenced') await pool.query("update conversations set bot_silenced_until=now()+interval '1 hour' where organization_id=$1 and id=$2", [org,conv]);
     if (change === 'requires_human') await pool.query('update crm_stages set requires_human=true where organization_id=$1 and id=$2', [org,input.para_etapa_id]);
     expect(await db.moverEtapaComTrava(input)).toEqual({ ok:false,porque:'autorizacao_revogada' });

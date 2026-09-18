@@ -44,7 +44,7 @@ function idDeTeste(prefixoHex: string, seq: number): string {
 }
 
 async function seedOrg(org: string, settings?: unknown): Promise<void> {
-  const name = `sinal-t40-t60-${org.slice(0, 8)}`;
+  const name = `sinal-t40-t60-${org}`;
   await pool.query(
     `insert into organizations (id, slug, legal_name, display_name, settings)
      values ($1, $2, $3, $4, coalesce($5::jsonb, '{}'::jsonb))
@@ -290,7 +290,7 @@ describe("Cadeia real do sinal: reserva → inscrição → T+40 → bloqueios �
     await seedLead(r.organization_id, r.contact_id, pipelineId, stageId);
     expect(await abrirItemDeRevisao(admin, r)).toBe(false);
     await pool.query('update crm_stages set blocks_followups=false where organization_id=$1 and id=$2', [r.organization_id, stageId]);
-    await pool.query('update contacts set is_anonymized=true where organization_id=$1 and id=$2', [r.organization_id, r.contact_id]);
+    await pool.query('update contacts set is_anonymized=true, anonymized_at=now() where organization_id=$1 and id=$2', [r.organization_id, r.contact_id]);
     expect(await abrirItemDeRevisao(admin, r)).toBe(false);
   });
 
