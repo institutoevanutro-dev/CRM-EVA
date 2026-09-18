@@ -231,6 +231,18 @@ describe("processNode — wait (fixed)", () => {
     expect(result).toEqual({ kind: "wait", next_eval_at: new Date(NOW.getTime() + 300_000) });
   });
 
+  it("ancora T+40 na criação da reserva, mesmo com processamento tardio", () => {
+    const anchored: FlowNode = { ...node, config: { mode: "fixed", duration_ms: 40 * 60_000, anchor: "appointment_created_at" } };
+    const result = processNode({ node: anchored, edges, enrollment: enrollment({ appointment_id: "appt-1" }), lead: lead(), clock, waitElapsed: false, appointmentCreatedAt: "2026-07-21T11:30:00.000Z" });
+    expect(result).toEqual({ kind: "wait", next_eval_at: new Date("2026-07-21T12:10:00.000Z") });
+  });
+
+  it("falha fechado se a reserva vinculada não tem data válida", () => {
+    const anchored: FlowNode = { ...node, config: { mode: "fixed", duration_ms: 40 * 60_000, anchor: "appointment_created_at" } };
+    const result = processNode({ node: anchored, edges, enrollment: enrollment({ appointment_id: "appt-1" }), lead: lead(), clock, waitElapsed: false, appointmentCreatedAt: null });
+    expect(result).toMatchObject({ kind: "fail" });
+  });
+
   it("elapsed: advances via the 'always' edge", () => {
     const result = processNode({ node, edges, enrollment: enrollment(), lead: lead(), clock, waitElapsed: true });
     expect(result).toEqual({ kind: "advance", next_node_id: "n2", next_eval_at: NOW });

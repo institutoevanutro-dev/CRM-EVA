@@ -88,6 +88,7 @@ export const waitConfigSchema = z
     z.strictObject({
       mode: z.literal('fixed'),
       duration_ms: z.number().int().min(300_000).max(7_776_000_000),
+      anchor: z.literal('appointment_created_at').optional(),
     }),
     z.strictObject({
       mode: z.literal('smart'),

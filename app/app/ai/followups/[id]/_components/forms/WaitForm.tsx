@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -33,6 +34,7 @@ export function WaitForm({
   const [minMin, setMinMin] = useState(config.mode === "smart" ? msToMin(config.min_ms) : 5);
   const [maxMin, setMaxMin] = useState(config.mode === "smart" ? msToMin(config.max_ms) : 60);
   const [guidance, setGuidance] = useState(config.mode === "smart" ? (config.guidance ?? "") : "");
+  const [anchorToAppointment, setAnchorToAppointment] = useState(config.mode === "fixed" && config.anchor === "appointment_created_at");
   const [error, setError] = useState<string | null>(null);
 
   const commit = (next: {
@@ -41,10 +43,11 @@ export function WaitForm({
     minMin: number;
     maxMin: number;
     guidance: string;
+    anchorToAppointment: boolean;
   }) => {
     const candidate =
       next.mode === "fixed"
-        ? { mode: "fixed" as const, duration_ms: minToMs(next.durationMin) }
+        ? { mode: "fixed" as const, duration_ms: minToMs(next.durationMin), ...(next.anchorToAppointment ? { anchor: "appointment_created_at" as const } : {}) }
         : {
             mode: "smart" as const,
             min_ms: minToMs(next.minMin),
@@ -69,7 +72,7 @@ export function WaitForm({
           onValueChange={(v) => {
             const next = v as "fixed" | "smart";
             setMode(next);
-            commit({ mode: next, durationMin, minMin, maxMin, guidance });
+            commit({ mode: next, durationMin, minMin, maxMin, guidance, anchorToAppointment });
           }}
         >
           <SelectTrigger id="wait-mode">
@@ -96,9 +99,20 @@ export function WaitForm({
             onChange={(e) => {
               const v = Number(e.target.value);
               setDurationMin(v);
-              commit({ mode, durationMin: v, minMin, maxMin, guidance });
+              commit({ mode, durationMin: v, minMin, maxMin, guidance, anchorToAppointment });
             }}
           />
+          <div className="flex items-center gap-2 pt-2">
+            <Switch
+              id="wait-anchor-appointment"
+              checked={anchorToAppointment}
+              onCheckedChange={(checked) => {
+                setAnchorToAppointment(checked);
+                commit({ mode, durationMin, minMin, maxMin, guidance, anchorToAppointment: checked });
+              }}
+            />
+            <Label htmlFor="wait-anchor-appointment">{t("Contar desde a criação da reserva (fluxo de sinal)")}</Label>
+          </div>
         </div>
       ) : (
         <>
@@ -113,7 +127,7 @@ export function WaitForm({
                 onChange={(e) => {
                   const v = Number(e.target.value);
                   setMinMin(v);
-                  commit({ mode, durationMin, minMin: v, maxMin, guidance });
+                  commit({ mode, durationMin, minMin: v, maxMin, guidance, anchorToAppointment });
                 }}
               />
             </div>
@@ -127,7 +141,7 @@ export function WaitForm({
                 onChange={(e) => {
                   const v = Number(e.target.value);
                   setMaxMin(v);
-                  commit({ mode, durationMin, minMin, maxMin: v, guidance });
+                  commit({ mode, durationMin, minMin, maxMin: v, guidance, anchorToAppointment });
                 }}
               />
             </div>
@@ -140,7 +154,7 @@ export function WaitForm({
               value={guidance}
               onChange={(e) => {
                 setGuidance(e.target.value);
-                commit({ mode, durationMin, minMin, maxMin, guidance: e.target.value });
+                commit({ mode, durationMin, minMin, maxMin, guidance: e.target.value, anchorToAppointment });
               }}
             />
           </div>

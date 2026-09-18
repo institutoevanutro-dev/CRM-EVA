@@ -101,6 +101,8 @@ export interface AdminClient {
   assertAgenda?(enrollment:EnrollmentRow):Promise<void>;
   claimDueEnrollments(limit: number, leaseSeconds: number): Promise<EnrollmentRow[]>;
   loadFlowGraph(orgId: string, versionId: string): Promise<FlowGraph | null>;
+  /** Só exigido por uma espera fixa ancorada na reserva. */
+  loadAppointmentCreatedAt?(orgId: string, appointmentId: string, contactId: string): Promise<string | null>;
   loadLeadFacts(orgId: string, contactId: string): Promise<{
     lead_stage: string | null;
     tags: string[];
@@ -650,6 +652,12 @@ async function processEnrollment(
   const nextAlways = selectEdge(graph.edges, node.id, { type: "always" });
   const proximo = nextAlways ? (graph.nodes.find((n) => n.id === nextAlways.target) ?? null) : null;
 
+  const appointmentCreatedAt = node.type === "wait" && node.config.mode === "fixed" && node.config.anchor === "appointment_created_at"
+    ? enrollment.appointment_id && db.loadAppointmentCreatedAt
+      ? await db.loadAppointmentCreatedAt(enrollment.organization_id, enrollment.appointment_id, enrollment.contact_id)
+      : null
+    : undefined;
+
   const result = processNode({
     node,
     edges: graph.edges,
@@ -657,6 +665,7 @@ async function processEnrollment(
     lead,
     clock,
     waitElapsed,
+    appointmentCreatedAt,
     wokeEarly,
     lastInboundBody,
     actionEnqueued,
@@ -747,6 +756,16 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
       if (error) throw new Error(error.message);
       if (!data) return null;
       return flowGraphSchema.parse(data.graph);
+    },
+    async loadAppointmentCreatedAt(orgId, appointmentId, contactId) {
+      const { data, error } = await admin.from("calendar_appointments")
+        .select("created_at")
+        .eq("organization_id", orgId)
+        .eq("id", appointmentId)
+        .eq("contact_id", contactId)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return typeof data?.created_at === "string" ? data.created_at : null;
     },
     async loadLeadFacts(orgId, contactId) {
       const [{ data: lead, error: leadErr }, { data: contact, error: contactErr }] = await Promise.all([
