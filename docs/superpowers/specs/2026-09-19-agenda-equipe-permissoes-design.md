@@ -54,7 +54,7 @@ podem trocar a sala manualmente. A agenda usa uma grade de cinco minutos.
 Capacidade física:
 
 - Vitória: três consultórios e duas salas de aplicação.
-- Serra: uma sala de atendimento.
+- Serra: uma sala de atendimento e uma sala de aplicação.
 
 Uma sala não recebe dois pacientes no mesmo período. Um profissional não atende dois
 pacientes simultaneamente, salvo a exceção de aplicações da Isadora descrita abaixo.
@@ -64,9 +64,25 @@ pacientes simultaneamente, salvo a exceção de aplicações da Isadora descrita
 - Intramuscular: sete minutos totais.
 - Intravenosa: trinta minutos totais.
 - Não há intervalo adicional; as durações já incluem o tempo operacional.
-- Isadora pode acompanhar duas aplicações simultâneas somente quando uma for
-  intravenosa e a outra intramuscular, cada uma em uma sala de aplicação diferente.
+- Em Vitória, Isadora pode acompanhar duas aplicações simultâneas somente quando uma
+  for intravenosa e a outra intramuscular, cada uma em uma sala de aplicação diferente.
+- Na Serra, aplicações intravenosa e intramuscular não podem ocorrer simultaneamente,
+  pois existe somente uma sala de aplicação.
 - Duas intravenosas ou duas intramusculares simultâneas são bloqueadas.
+
+## Duração dos serviços
+
+O Catálogo de Produtos do CRM é a fonte da verdade para a duração dos serviços dos
+demais profissionais. A agenda lê essa duração ao selecionar o serviço e grava uma cópia
+no agendamento, preservando o histórico caso o catálogo seja alterado depois.
+
+As exceções confirmadas para aplicações são:
+
+- aplicação intramuscular: sete minutos;
+- aplicação intravenosa: trinta minutos.
+
+Um serviço sem duração cadastrada não pode ser oferecido automaticamente pela IA. O CRM
+deve solicitar o preenchimento do tempo antes de liberar o agendamento desse serviço.
 
 ## Horário e distribuição semanal
 
@@ -133,7 +149,9 @@ horário automaticamente.
 - Prestador não consegue ver agenda ou pacientes de outro profissional.
 - Colaborador, gerente e administrador acessam todas as agendas conforme suas permissões.
 - Não ocorre dupla reserva de profissional ou sala.
-- A exceção da Isadora aceita apenas uma intravenosa com uma intramuscular simultâneas.
+- Em Vitória, a exceção da Isadora aceita apenas uma intravenosa com uma intramuscular simultâneas.
+- Na Serra, nenhuma combinação de aplicações simultâneas é aceita.
+- Os demais tempos são lidos do Catálogo de Produtos e preservados no agendamento.
 - IAs cancelam somente após pedido claro e nunca prometem devolução do sinal.
 - Toda alteração fica auditável.
 - Falha no Google gera pendência e preserva o agendamento no CRM.
