@@ -104,7 +104,7 @@ async function buscar(q: string) {
 
 const BASE: Linha[] = [
   // Como a ingestão do WhatsApp grava: só display_name e telefone.
-  contato({ id: "c-whats", display_name: "André Luis Lopes", phone_number: "+5527996369879" }),
+  contato({ id: "c-whats", display_name: "André Teste Silva", phone_number: "+5527999990001" }),
   contato({ id: "c-manual", name: "Maria Souza", phone_number: "+5527991112222" }),
   contato({ id: "c-outra-org", organization_id: OUTRA_ORG, display_name: "André da Outra Clínica" }),
   // Tem `name` de propósito: assim até a busca antiga (só `name`) o alcançaria,
@@ -129,7 +129,7 @@ describe("GET /api/v1/agenda/vinculos", () => {
   });
 
   it("acha pelo telefone digitado sem o 55", async () => {
-    expect(await buscar("27996369879")).toEqual(["c-whats"]);
+    expect(await buscar("27999990001")).toEqual(["c-whats"]);
   });
 
   it("continua achando quem tem name preenchido à mão — e não o cadastro mesclado", async () => {
@@ -147,8 +147,8 @@ describe("GET /api/v1/agenda/vinculos", () => {
     const body = (await res.json()) as { data: { contacts: Array<Record<string, unknown>> } };
     expect(body.data.contacts[0]).toMatchObject({
       id: "c-whats",
-      display_name: "André Luis Lopes",
-      phone_number: "+5527996369879",
+      display_name: "André Teste Silva",
+      phone_number: "+5527999990001",
     });
   });
 
