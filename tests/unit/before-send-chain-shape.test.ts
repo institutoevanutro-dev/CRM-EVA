@@ -32,6 +32,7 @@ const ORDEM_ESPERADA = [
   "promise",
   "semantic_promise",
   "case_promise",
+  "unscheduled_followup",
   "internal_vocabulary",
   "agenda_stall",
   "disclosure",
@@ -65,8 +66,8 @@ describe("forma da cadeia before_send", () => {
     // O par (tamanho, versão) é o que amarra os dois. Acrescentar um gate sem
     // bumpar deixa o trace de auditoria mentindo sobre qual cadeia rodou — e o
     // trace é justamente a prova que as Fases 0–2 usam para dizer "não regrediu".
-    expect(BEFORE_SEND_GATES).toHaveLength(11);
-    expect(BEFORE_SEND_CHAIN_VERSION).toBe(7);
+    expect(BEFORE_SEND_GATES).toHaveLength(12);
+    expect(BEFORE_SEND_CHAIN_VERSION).toBe(8);
   });
 
   it("internal_vocabulary roda ANTES do disclosure — inspeciona o texto do modelo, não o emendado", () => {
@@ -75,7 +76,7 @@ describe("forma da cadeia before_send", () => {
     // template do tenant — e devolveria ao modelo a culpa por uma frase que não é dele.
     const nomes = BEFORE_SEND_GATES.map((g) => g.name);
     expect(nomes.indexOf("internal_vocabulary")).toBeLessThan(nomes.indexOf("disclosure"));
-    expect(nomes.indexOf("internal_vocabulary")).toBe(nomes.indexOf("case_promise") + 1);
+    expect(nomes.indexOf("internal_vocabulary")).toBe(nomes.indexOf("unscheduled_followup") + 1);
   });
 
   it("agenda_stall roda ANTES do disclosure e DEPOIS do internal_vocabulary — mesma razão: texto do modelo, não o emendado", () => {

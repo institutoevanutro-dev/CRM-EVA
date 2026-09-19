@@ -42,6 +42,7 @@ function contexto(body: string, overrides: Partial<GateContext> = {}): GateConte
     casesEnabled: true,
     hasOpenCase: false,
     openedCaseThisTurn: false,
+    unscheduledFollowUpEnforced: true,
     ...overrides,
   };
 }
@@ -55,6 +56,8 @@ const ENCAMINHAMENTOS = [
   "A recepção vai te retornar.",
   "Seu comprovante está em análise pelo financeiro.",
   "Seu pedido está em análise com a recepção.",
+  "Assim que a equipe conferir o comprovante, ela retorna para você.",
+  "Quando o financeiro confirmar, a equipe avisa por aqui.",
 ];
 
 describe("comprovantes e encaminhamentos — retaguarda nomeada pelo setor", () => {
@@ -125,6 +128,7 @@ function cadeiaReal(estado: Estado = {}) {
         now: AGORA,
         rng: () => 0,
         sleep: async () => {},
+        enforceUnscheduledFollowUp: true,
         send,
         ...estado,
       }),
@@ -187,6 +191,29 @@ describe("frase do incidente — runner before-send completo", () => {
     const f = cadeiaReal();
     expect(await f.run("Nossa equipe vai te ajudar.")).toMatchObject({ status: "sent" });
     expect(f.send).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    "Vou tentar de novo em instantes.",
+    "Vou tentar novamente daqui a pouco.",
+    "Te aviso mais tarde quando conseguir confirmar.",
+  ])("veta promessa de nova tentativa sem retorno programado: %s", async (body) => {
+    const f = cadeiaReal({ casesEnabled: false });
+    expect(await f.run(body)).toMatchObject({
+      status: "vetoed",
+      code: "unscheduled_followup_promise",
+    });
+    expect(f.send).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "Você pode tentar novamente em instantes.",
+    "Se quiser, tente de novo mais tarde.",
+    "Não consegui confirmar automaticamente por aqui.",
+  ])("preserva orientação ou estado sem promessa futura: %s", async (body) => {
+    const f = cadeiaReal({ casesEnabled: false });
+    expect(await f.run(body)).toMatchObject({ status: "sent" });
+    expect(f.send).toHaveBeenCalledExactlyOnceWith(body);
   });
 });
 

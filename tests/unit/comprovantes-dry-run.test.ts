@@ -9,6 +9,10 @@ import { loadEnv } from "@/lib/agent-engine/env";
 import type { Logger } from "@/lib/agent-engine/obs/logger";
 
 const FRASE = "Vou pedir para a equipe conferir seu comprovante e o status do seu horário";
+const PROMESSA_CONDICIONAL =
+  "Assim que a equipe conferir o comprovante, ela retorna para você confirmando o horário.";
+const RETENTATIVA_INVENTADA =
+  "Não consegui abrir esse encaminhamento automaticamente agora; vou tentar de novo em instantes.";
 const SEGURA = "Recebi o comprovante. O recebimento não confirma o pagamento nem o agendamento.";
 
 /** Entrada real do botão Testar → loader da versão → turno → tools → before-send.
@@ -92,14 +96,15 @@ it.each([false, true])(
           options.tools?.some((t) => t.type === "function" && t.name === "open_human_case"),
         ).toBe(false);
       }
-      const enviar = temEnvio && tentativas < 3;
+      const candidatas = [FRASE, PROMESSA_CONDICIONAL, RETENTATIVA_INVENTADA, SEGURA];
+      const enviar = temEnvio && tentativas < candidatas.length;
       const content = enviar
         ? [
             {
               type: "tool-call" as const,
               toolCallId: `envio-${++tentativas}`,
               toolName: "send_message",
-              input: JSON.stringify({ body: tentativas < 3 ? FRASE : SEGURA }),
+              input: JSON.stringify({ body: candidatas[tentativas - 1] }),
             },
           ]
         : [
@@ -159,9 +164,13 @@ it.each([false, true])(
           channelId: null,
         },
       );
-      expect(tentativas).toBe(3);
+      expect(tentativas).toBe(4);
       expect(result.impediments.map((i) => i.code)).toEqual(
-        Array(2).fill(casesEnabled ? "case_promise_without_case" : "human_promise_cases_disabled"),
+        [
+          casesEnabled ? "case_promise_without_case" : "human_promise_cases_disabled",
+          casesEnabled ? "case_promise_without_case" : "human_promise_cases_disabled",
+          "unscheduled_followup_promise",
+        ],
       );
       expect(result.candidates.map((c) => c.body)).toEqual([SEGURA]);
       expect(result.proposals).toEqual([]);

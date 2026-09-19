@@ -145,6 +145,16 @@ export const CONFERENCIAS_DE_SAIDA: readonly ConferenciaDeSaida[] = [
      camada: null,
   },
   {
+    nome: "unscheduled_followup",
+    rotulo: "Não prometer tentar ou avisar depois sem programação",
+    oQueProtege:
+      'Barra o "vou tentar de novo em instantes" ou "te aviso mais tarde" quando nenhuma nova ação foi programada.',
+    escolha: null,
+    porQueNaoSeDesliga:
+      "Sem uma ação programada, essa promessa deixa o cliente esperando um retorno que não acontecerá. Regra fixa, sem custo.",
+    camada: null,
+  },
+  {
     nome: "internal_vocabulary",
     rotulo: "Não falar a nossa língua com o seu cliente",
     oQueProtege:
