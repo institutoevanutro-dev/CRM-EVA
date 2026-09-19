@@ -165,15 +165,13 @@ export interface GateContext {
    */
   lgpd: (LgpdInput & { isFirstOutbound: boolean }) | null;
   /**
-   * Guardrail anti-alucinação de casos humanos (spec 15 §10.2, Wave 4) — a invariante
-   * sagrada é: o lead NUNCA recebe promessa-de-humano sem um caso aberto. `casesEnabled`
-   * false = feature off para a org → `casePromiseGate` no-op (default retrocompatível para
-   * TODOS os outros callers de `runBeforeSend`, que nem sabem desta camada). `hasOpenCase`
-   * (lido no turno via `hasOpenCaseForContact`) OU `openedCaseThisTurn` (a IA já chamou
-   * `open_human_case` neste turno) tornam o gate no-op também — só veta quando a candidata
-   * promete humano E não há caso nenhum.
+   * Configuração explícita do agente: true exige caso registrado; false veta
+   * promessa sem execução comprovada e pede somente reformulação. undefined
+   * preserva callers sem agente/configuração (ex.: aviso determinístico de handoff).
+   * hasOpenCase/openedCaseThisTurn são evidências do runtime, nunca do modelo;
+   * uma proposta de abertura no dry-run não conta como execução.
    */
-  casesEnabled: boolean;
+  casesEnabled: boolean | undefined;
   hasOpenCase: boolean;
   openedCaseThisTurn: boolean;
   /**
@@ -382,23 +380,28 @@ export const semanticPromiseGate: Gate = {
 };
 
 /**
- * Gate anti-alucinação de casos humanos (spec 15 §10.2, Wave 4) — a garantia DURA da
- * invariante "o lead nunca recebe promessa-de-humano sem caso aberto". Off (`casesEnabled`
- * false) ou já há caso (`hasOpenCase`/`openedCaseThisTurn` — a IA abriu um NESTE turno) =
- * no-op. Só veta quando o detector determinístico (`detectHumanPromise`) acha uma promessa
- * clara na candidata E nenhum caso existe. O fail-safe de 2ª camada (auto-abre caso e
- * re-roda a cadeia) vive na orquestração do `send_message` (inbound-turn.ts), não aqui — o
- * gate em si é síncrono/puro como os demais. Posição 6.5 de `BEFORE_SEND_GATES` (logo após
- * `semanticPromiseGate`, antes do `disclosureGate`): roda depois das duas camadas de
- * promessa comercial (preço/desconto) porque é uma categoria distinta de promessa
- * (envolvimento humano, não oferta).
+ * Promessa humana exige execução comprovada. Com casos habilitados, o veto
+ * case_promise_without_case mantém o fail-safe de abertura no inbound-turn.
+ * Com casos explicitamente desligados, o código próprio pede reformulação e
+ * NÃO entra nesse fail-safe. Callers sem configuração preservam o envio
+ * determinístico existente; o agente e a prévia passam o valor da versão.
  */
 export const casePromiseGate: Gate = {
   name: 'case_promise',
   evaluate: (ctx) => {
-    if (!ctx.casesEnabled) return { pass: true };
+    if (ctx.casesEnabled === undefined) return { pass: true };
     if (ctx.hasOpenCase || ctx.openedCaseThisTurn) return { pass: true };
     if (!detectHumanPromise(ctx.body, ctx.humanPromiseExtraTargets)) return { pass: true };
+    if (!ctx.casesEnabled) {
+      return {
+        pass: false,
+        code: 'human_promise_cases_disabled',
+        reason:
+          'Não há encaminhamento humano comprovado para esta resposta. Reformule sem ' +
+          'prometer encaminhamento, conferência ou ação da equipe. Informe somente o que ' +
+          'já foi confirmado, sem executar nenhuma ação adicional.',
+      };
+    }
     return {
       pass: false,
       code: 'case_promise_without_case',
@@ -827,8 +830,8 @@ export interface RunBeforeSendArgs {
   lgpd?: LgpdInput;
   /**
    * Guardrail anti-alucinação de casos humanos (spec 15 §10.2, Wave 4) — ver `GateContext`.
-   * TODOS ausentes (default) = `casesEnabled` false → `casePromiseGate` no-op, retrocompatível
-   * com todo caller de `runBeforeSend` que não conhece casos (o guardrail existente F4-01/02).
+   * Ausente preserva callers determinísticos. false explícito veta promessa não
+   * comprovada, sem abrir caso; true exige caso e mantém o fail-safe existente.
    */
   casesEnabled?: boolean;
   hasOpenCase?: boolean;
@@ -1041,7 +1044,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
         mode: args.disclosureMode ?? 'inject',
       },
       lgpd: args.lgpd !== undefined ? { ...args.lgpd, isFirstOutbound } : null,
-      casesEnabled: args.casesEnabled ?? false,
+      casesEnabled: args.casesEnabled,
       hasOpenCase: args.hasOpenCase ?? false,
       openedCaseThisTurn: args.openedCaseThisTurn ?? false,
       ...(args.humanPromiseExtraTargets !== undefined

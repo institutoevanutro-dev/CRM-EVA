@@ -15,7 +15,7 @@ import type {JobClaim} from "../queue/claim";
  *
  * ## Duas escolhas de gate que precisam estar escritas
  *
- * 1. **`casesEnabled: false` de propósito.** O `casePromiseGate` existe para o
+ * 1. **`casesEnabled` ausente de propósito.** O `casePromiseGate` existe para o
  *    lead nunca receber promessa-de-humano que o modelo inventou sem abrir caso.
  *    Este corpo promete um humano — e a promessa é VERDADEIRA por construção: a
  *    linha seguinte do chamador executa a passagem. Deixar o gate armado aqui o

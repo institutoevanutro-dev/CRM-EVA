@@ -35,6 +35,9 @@ const TARGET_WORDS = [
   "gerente",
   "supervisor",
   "departamento",
+  // Setores também nomeiam a retaguarda sem o prefixo "equipe do ...".
+  "financeiro",
+  "recepcao",
 ] as const;
 const TARGET_WORD_SET = new Set<string>(TARGET_WORDS);
 const TARGET = `(?:${TARGET_WORDS.join("|")})`;
@@ -72,7 +75,7 @@ function buildPatterns(target: string): RegExp[] {
     //     "nossa equipe ESTA a disposicao" NÃO casa ("esta" fora do grupo vai/vao/pode).
     new RegExp(
       `\\b${target}\\b${gap(20)}\\b(?:vai|vao|ira|irao|pode|podem|poderao)\\b${gap(10)}` +
-        `(?:\\b(?:te|lhe|se|nos)\\b\\s*)?(?:resolv|retorn|respond|liber|analis|verific|cuid|assum|atend|entr|aprov|confirm|contat|ajud)\\w*`,
+        `(?:\\b(?:te|lhe|se|nos)\\b\\s*)?(?:resolv|retorn|respond|liber|analis|verific|confer|cuid|assum|atend|entr|aprov|confirm|contat|ajud)\\w*`,
     ),
     // (2b) "quem resolve/cuida ... e o nosso time": "isso quem resolve e o nosso time".
     new RegExp(
