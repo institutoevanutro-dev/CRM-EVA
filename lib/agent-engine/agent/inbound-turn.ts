@@ -2757,10 +2757,10 @@ async function executarTurnoDoAgente(
         try {
           // Wave 4 (spec 15 §10.2): estado de caso lido FRESCO a cada tentativa de envio
           // (pode ter mudado dentro deste MESMO turno via open_human_case, chamado antes
-          // deste send_message). casesEnabled false (tela não habilita) → sempre false,
-          // sem query — o casePromiseGate já é no-op nesse caso de qualquer forma.
+          // deste send_message). Mesmo com casos desligados, um caso já registrado
+          // continua sendo evidência: desligar novas aberturas não apaga encaminhamentos.
           const hasOpenCase =
-            agentConfig?.casesEnabled === true
+            agentConfig !== null
               ? await hasOpenCaseForContact(pool, tenantId, input.conversationId)
               : false;
           // Args reusados EXATAMENTE (mesmo objeto) no re-run do fail-safe abaixo — só
@@ -2782,7 +2782,7 @@ async function executarTurnoDoAgente(
             now: clock(),
             sleep: deps.sleep,
             lgpd,
-            casesEnabled: agentConfig?.casesEnabled ?? false,
+            casesEnabled: agentConfig?.casesEnabled,
             hasOpenCase,
             openedCaseThisTurn,
             // Nome(s) próprio(s) que o prompt do tenant usa pra retaguarda humana (ex.:

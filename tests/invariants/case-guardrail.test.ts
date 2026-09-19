@@ -74,11 +74,11 @@ describe("casePromiseGate — a invariante sagrada (spec 15 §10.2, Wave 4)", ()
     expect(verdict.pass).toBe(true);
   });
 
-  it("pass: casesEnabled=false — gate OFF (org não habilitou casos humanos)", () => {
+  it("veto: casos explicitamente desligados pedem reformulação, sem abrir caso", () => {
     const verdict = casePromiseGate.evaluate(
       baseCtx({ casesEnabled: false, body: "vou acionar o responsável" }),
     );
-    expect(verdict.pass).toBe(true);
+    expect(verdict).toMatchObject({ pass: false, code: "human_promise_cases_disabled" });
   });
 
   it("pass: fala genérica sem promessa de humano (mesmo com casesEnabled e sem caso)", () => {
@@ -88,11 +88,9 @@ describe("casePromiseGate — a invariante sagrada (spec 15 §10.2, Wave 4)", ()
     expect(verdict.pass).toBe(true);
   });
 
-  it("retrocompatibilidade: GateContext sem os 3 campos novos não é o cenário real (TS exige-os) — o " +
-    "default seguro mora em runBeforeSend (casesEnabled ausente nos args ?? false); aqui provamos que, " +
-    "com o valor default explícito, o gate já é no-op", () => {
+  it("retrocompatibilidade: caller sem configuração preserva o envio determinístico", () => {
     const verdict = casePromiseGate.evaluate(
-      baseCtx({ body: "vou acionar o responsável" }), // casesEnabled/hasOpenCase/openedCaseThisTurn = defaults (false)
+      baseCtx({ casesEnabled: undefined, body: "vou acionar o responsável" }),
     );
     expect(verdict.pass).toBe(true);
   });

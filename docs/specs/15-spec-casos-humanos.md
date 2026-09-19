@@ -128,10 +128,15 @@ Quando o humano age na UI, um job `case_reply_turn` entra na `job_queue`. Handle
 ### 5.2 Quando ligado
 1. Injeta as tools `open_human_case` + `provide_case_update` no turno.
 2. **Injeta um bloco de sistema dedicado** — é o "contexto MCP bem carregado quando ativo" que o requisito pede. Fica no **prefixo cacheável** (system+tools), sempre residente, **não some no meio da conversa mesmo com contexto longo**. Conteúdo: quando abrir caso, o que capturar, a regra "prometer humano ⇒ abrir caso", e que a conversa não silencia. Camada análoga ao índice de skills (`inbound-turn.ts:555`).
-3. Liga o guardrail de promessa (§6).
+3. Arma o modo de exigir caso registrado, com o fail-safe de abertura (§6).
 
 ### 5.3 Quando desligado
-Nada disso existe: tools ausentes, bloco ausente, guardrail off. A tela mostra o toggle desligado.
+Tools de caso e bloco de casos ficam ausentes. A tela mostra o toggle desligado.
+O before-send ainda veta promessa humana sem execução comprovada, com
+`human_promise_cases_disabled`: pede somente reformulação sem prometer encaminhamento
+ou conferência humana. Não recomenda ferramenta e não aciona abertura automática.
+Chamadores determinísticos que omitem a configuração preservam seu fluxo; `false`
+explícito da versão do agente não equivale a configuração ausente.
 
 ---
 
@@ -141,10 +146,10 @@ Três camadas; a 3ª é a garantia dura.
 
 1. **Descrição-ensina** (nas tools, §4) + **erro-como-ensino** (retorno `{ok:false,error}` em vez de exceção).
 2. **Bloco de sistema residente** (§5.2) no prefixo cacheável.
-3. **Gate novo na cadeia `before-send`** (`lib/agent-engine/guardrails/before-send.ts` — `BEFORE_SEND_GATES`, array declarativo de gates que roda dentro do `execute` do `send_message`, antes do envio de fato). Só ativo quando `cases_enabled`. Mecânica exata:
+3. **Gate novo na cadeia `before-send`** (`lib/agent-engine/guardrails/before-send.ts` — `BEFORE_SEND_GATES`, array declarativo de gates que roda dentro do `execute` do `send_message`, antes do envio de fato). Com `cases_enabled=true`, mantém a exigência de caso e o fail-safe abaixo; com `false`, aplica somente o veto de reformulação (§5.3). Mecânica exata:
    - **Detector determinístico** `detectHumanPromise(body): boolean` (novo, molde `guardrails/promise/engine.ts`): regex PT-BR de promessa de retaguarda humana — "vou verificar com a equipe/o responsável", "nosso time vai resolver", "assim que liberarem/resolverem eu te aviso", "vou acionar/passar pro/encaminhar pro responsável". Conservador (baixo falso-positivo). Opcionalmente compõe com a camada semântica existente (`classifyPromise`) num 2º momento.
    - **Sinal no `GateContext`** (carregado sob o advisory lock, como os outros): `hasOpenCase` = existe caso `awaiting_human`/`awaiting_lead` pro contato.
-   - **Novo gate `casePromiseGate`** (clona `semanticPromiseGate`, before-send.ts:217): `pass:false, code:'case_promise_without_case'` quando `detectHumanPromise(body) && !hasOpenCase && !openedCaseThisTurn`. **Bumpar `BEFORE_SEND_CHAIN_VERSION`** (before-send.ts:298).
+   - **Novo gate `casePromiseGate`** (clona `semanticPromiseGate`, before-send.ts:217): `pass:false, code:'case_promise_without_case'` quando `casesEnabled === true && detectHumanPromise(body) && !hasOpenCase && !openedCaseThisTurn`. Os sinais de caso vêm de execução/leitura do runtime; proposta de abertura no dry-run não libera a candidata. **Bumpar `BEFORE_SEND_CHAIN_VERSION`** (before-send.ts:298).
    - **Ação fail-safe (orquestrada no `execute` do `send_message`, inbound-turn.ts:788-832):** o veto `case_promise_without_case` volta como erro-de-ensino ao modelo. Um contador por-turno rastreia as tentativas:
      1. **1ª vez:** retorna o erro instrutivo ("Você prometeu envolver um humano mas não abriu caso — chame `open_human_case` OU reformule sem prometer humano.") → o modelo re-tenta.
      2. **2ª vez (persistiu):** o sistema **auto-abre** um caso mínimo (`open_human_case` com `source='guardrail_autofallback'`, `title`/`summary`/`blocker` derivados do contexto), event `opened(source=guardrail_autofallback)`, e **libera o envio** (agora `hasOpenCase` é verdade).

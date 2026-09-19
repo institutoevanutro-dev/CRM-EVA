@@ -113,7 +113,7 @@ export async function previewGateContext(
     lgpd: { ...p.context.lgpd, isFirstOutbound: first },
     casesEnabled: p.agent.casesEnabled,
     hasOpenCase:
-      p.contactId && p.agent.casesEnabled
+      p.contactId
         ? await hasOpenCaseForContact(db, org, p.context.context.conversation_id!)
         : false,
     openedCaseThisTurn: false,
