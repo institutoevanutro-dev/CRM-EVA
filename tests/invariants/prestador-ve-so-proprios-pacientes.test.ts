@@ -81,6 +81,14 @@ describe("prestador vê e altera somente o próprio escopo", () => {
     expect(consegue(PRESTADOR_A, `update public.calendar_appointments set owner_user_id='${PRESTADOR_B}' where id='${AGENDA_A}';`)).toBe(false);
   });
 
+  it("cancela ou remarca pela porta oficial somente o próprio compromisso", () => {
+    const revisao = como(PRESTADOR_A, `select revision from public.calendar_appointments where id='${AGENDA_A}';`);
+    expect(consegue(PRESTADOR_A, `select public.fn_appointment_change('${ORG}','${AGENDA_A}',${revisao},'{"status":"cancelled","cancellation_reason":"Pedido do paciente"}'::jsonb);`)).toBe(true);
+
+    const revisaoAlheia = como(COLABORADOR, `select revision from public.calendar_appointments where id='${AGENDA_B}';`);
+    expect(consegue(PRESTADOR_A, `select public.fn_appointment_change('${ORG}','${AGENDA_B}',${revisaoAlheia},'{"starts_at":"2099-01-01T12:00:00Z","ends_at":"2099-01-01T12:30:00Z"}'::jsonb);`)).toBe(false);
+  });
+
   it("o colaborador continua vendo toda a organização", () => {
     expect(como(COLABORADOR, `select count(*) from public.calendar_appointments where organization_id='${ORG}';`)).toBe("2");
     expect(como(COLABORADOR, `select count(*) from public.contacts where organization_id='${ORG}';`)).toBe("2");
