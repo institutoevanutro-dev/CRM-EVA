@@ -54,6 +54,7 @@ type SB = SupabaseClient;
 const CODIGO_DA_RECUSA = {
   tipo_desconhecido: { status: 404, code: "not_found" },
   tipo_desativado: { status: 422, code: "agenda_tipo_desativado" },
+  servico_sem_duracao: { status: 422, code: "agenda_servico_sem_duracao" },
   sem_responsavel: { status: 422, code: "agenda_sem_responsavel" },
   jornada_mal_configurada: { status: 422, code: "agenda_disponibilidade_invalida" },
   erro_interno: { status: 500, code: "internal_error" },
