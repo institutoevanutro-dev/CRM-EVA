@@ -2145,6 +2145,9 @@ export type Database = {
       }
       calendar_appointments: {
         Row: {
+          location_id: string | null
+          room_id: string | null
+          scheduled_duration_minutes: number | null
           meeting_state: string
           meeting_request_id: string | null
           meeting_requested_at: string | null
@@ -2211,6 +2214,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          location_id?: string | null
+          room_id?: string | null
+          scheduled_duration_minutes?: number | null
           meeting_state?: string
           meeting_request_id?: string | null
           meeting_requested_at?: string | null
@@ -2277,6 +2283,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          location_id?: string | null
+          room_id?: string | null
+          scheduled_duration_minutes?: number | null
           meeting_state?: string
           meeting_request_id?: string | null
           meeting_requested_at?: string | null
@@ -2345,6 +2354,20 @@ export type Database = {
         Relationships: [
           { foreignKeyName: "calendar_appointments_meeting_delivery_job_id_fkey"; columns: ["meeting_delivery_job_id"]; isOneToOne: false; referencedRelation: "job_queue"; referencedColumns: ["id"] },
           { foreignKeyName: "calendar_appointments_outcome_message_id_fkey"; columns: ["outcome_message_id"]; isOneToOne: false; referencedRelation: "messages"; referencedColumns: ["id"] },
+          {
+            foreignKeyName: "calendar_appointments_location_fk"
+            columns: ["organization_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_locations"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "calendar_appointments_room_fk"
+            columns: ["organization_id", "location_id", "room_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_rooms"
+            referencedColumns: ["organization_id", "location_id", "id"]
+          },
           {
             foreignKeyName: "calendar_appointments_contact_id_fkey"
             columns: ["contact_id"]
@@ -2606,6 +2629,7 @@ export type Database = {
       }
       calendar_event_types: {
         Row: {
+          catalog_product_id: string | null
           booking_window_days: number
           buffer_after_minutes: number
           buffer_before_minutes: number
@@ -2632,6 +2656,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          catalog_product_id?: string | null
           booking_window_days?: number
           buffer_after_minutes?: number
           buffer_before_minutes?: number
@@ -2658,6 +2683,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          catalog_product_id?: string | null
           booking_window_days?: number
           buffer_after_minutes?: number
           buffer_before_minutes?: number
@@ -2685,6 +2711,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "calendar_event_types_catalog_product_fk"
+            columns: ["organization_id", "catalog_product_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_products"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
             foreignKeyName: "calendar_event_types_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
@@ -2692,6 +2725,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      calendar_locations: {
+        Row: { id: string; organization_id: string; name: string; slug: string; address: string | null; is_active: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; organization_id: string; name: string; slug: string; address?: string | null; is_active?: boolean; created_at?: string; updated_at?: string }
+        Update: { id?: string; organization_id?: string; name?: string; slug?: string; address?: string | null; is_active?: boolean; created_at?: string; updated_at?: string }
+        Relationships: [{ foreignKeyName: "calendar_locations_organization_id_fkey"; columns: ["organization_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] }]
+      }
+      calendar_rooms: {
+        Row: { id: string; organization_id: string; location_id: string; name: string; kind: string; is_active: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; organization_id: string; location_id: string; name: string; kind?: string; is_active?: boolean; created_at?: string; updated_at?: string }
+        Update: { id?: string; organization_id?: string; location_id?: string; name?: string; kind?: string; is_active?: boolean; created_at?: string; updated_at?: string }
+        Relationships: [{ foreignKeyName: "calendar_rooms_location_fk"; columns: ["organization_id", "location_id"]; isOneToOne: false; referencedRelation: "calendar_locations"; referencedColumns: ["organization_id", "id"] }]
       }
       calendar_external_events: {
         Row: {
@@ -8863,4 +8908,3 @@ export const Constants = {
     },
   },
 } as const
-
