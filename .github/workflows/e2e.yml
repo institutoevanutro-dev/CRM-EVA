@@ -33,6 +33,8 @@ name: e2e
 # executado. Verde que não distingue "passou" de "nem rodou" é pior que vermelho.
 on:
   pull_request:
+    # `labeled`: pôr a etiqueta `ci-completo` dispara a rodada completa.
+    types: [opened, synchronize, reopened, labeled]
     branches: [main]
   push:
     branches: [main]
@@ -55,6 +57,17 @@ on:
 # `secrets.GITHUB_TOKEN`, ausente aqui.
 permissions:
   contents: read
+
+# CI ENXUTO (repositório privado, minutos de Actions cobrados). Com a variável
+# de repositório `CI_ENXUTO=1`, os jobs pesados deste arquivo NÃO rodam em PR —
+# rodam na `main`, em tag, por workflow_dispatch, ou em PR com a etiqueta
+# `ci-completo`. Sem a variável, o comportamento é o do projeto original.
+# Push novo no mesmo PR cancela a rodada anterior daquele PR; na `main` e em
+# tag nada é cancelado — é ali que a imagem é publicada.
+# Gatilhos vigiados em tests/unit/gatilho-dos-jobs-de-entrega.test.ts.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # AS DUAS PARTES RODAM EM PARALELO, e o motivo é medido, não estético.
@@ -85,6 +98,8 @@ jobs:
   # subi-lo seria trocar um vermelho honesto por um CI que demora mais a cada
   # mês sem ninguém perceber.
   e2e-parte:
+    # CI enxuto: ver o bloco `concurrency` no topo deste arquivo.
+    if: github.event_name != 'pull_request' || vars.CI_ENXUTO != '1' || contains(github.event.pull_request.labels.*.name, 'ci-completo')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -953,7 +968,8 @@ jobs:
   # um check que nenhum run produz, e NENHUM PR mergearia. Este agregador é o
   # mesmo padrão do `imagens-ok` em `publish-image.yml`.
   e2e:
-    if: always()
+    # CI enxuto: ver o bloco `concurrency` no topo deste arquivo.
+    if: always() && (github.event_name != 'pull_request' || vars.CI_ENXUTO != '1' || contains(github.event.pull_request.labels.*.name, 'ci-completo'))
     needs: [e2e-parte]
     runs-on: ubuntu-latest
     # Nenhuma permissão: este job só lê o resultado de `needs` e escreve o

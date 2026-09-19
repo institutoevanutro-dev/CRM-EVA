@@ -63,6 +63,31 @@ const DIR = join(process.cwd(), ".github/workflows");
  * consciente: o teste reprova até alguém escrevê-la, e escrever uma condição
  * que desliga um job de entrega fica visível em code review.
  */
+/**
+ * CI ENXUTO — o interruptor deste repositório PRIVADO.
+ *
+ * Repo privado paga cada minuto de Actions, e a cota gratuita (2000 min/mês)
+ * acabou em poucos PRs: cada push rodava duas majors de Postgres, três partes de
+ * Playwright, `pnpm build` e o build das três imagens. Com a variável de
+ * repositório `CI_ENXUTO=1`, esses jobs deixam de rodar EM PR — e só em PR.
+ *
+ * Por que isto não é o `&& false` do PR #458 que este arquivo existe para barrar:
+ * - fora de `pull_request` a condição é SEMPRE verdadeira: `main`, tag e
+ *   workflow_dispatch rodam tudo, então a cadeia de entrega não perde nada;
+ * - sem a variável, a condição também é sempre verdadeira — o comportamento
+ *   é o do projeto original, byte a byte no resultado;
+ * - a etiqueta `ci-completo` no PR liga a rodada completa sob demanda.
+ * O preço, escrito para quem revisar: com `CI_ENXUTO=1`, um PR sem a etiqueta
+ * entra medido só pelo `verify`. Invariantes, e2e, build e imagens são medidos
+ * no push da `main` — depois do merge, não antes.
+ */
+const CI_ENXUTO =
+  "github.event_name != 'pull_request' || vars.CI_ENXUTO != '1' || " +
+  "contains(github.event.pull_request.labels.*.name, 'ci-completo')";
+const EM_PR_SO_COM_ETIQUETA =
+  " Com `CI_ENXUTO=1` (repo privado), em PR só roda com a etiqueta `ci-completo`; " +
+  "na `main`, em tag e por dispatch roda sempre.";
+
 const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string }> = {
   // --- a cadeia que leva o conserto até a VPS ---------------------------------
   "release.yml::abrir-pr-de-release": {
@@ -87,17 +112,17 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
       "e o `imagens-ok` leria `skipped` como reprovação.",
   },
   "publish-image.yml::build-and-push": {
-    condicao: null,
+    condicao: CI_ENXUTO,
     efeito:
       "Este job PUBLICA as três imagens no GHCR — é o artefato que o self-hoster instala. " +
-      "Desligá-lo faz a tag existir sem imagem por trás dela.",
+      "Desligá-lo faz a tag existir sem imagem por trás dela." + EM_PR_SO_COM_ETIQUETA,
   },
   "publish-image.yml::imagem-do-app-sobe": {
-    condicao: null,
+    condicao: CI_ENXUTO,
     efeito:
       "Este job prova que a imagem do app BOOTA, não só que ela constrói. Desligá-lo " +
       "devolve o defeito que derrubou a produção: imagem publicada que morre no " +
-      "`docker compose up` da VPS.",
+      "`docker compose up` da VPS." + EM_PR_SO_COM_ETIQUETA,
   },
   // A promoção do canal `stable`, que o PR #498 tirou de dentro da matriz: lá,
   // cada uma das três imagens movia o canal sozinha ao terminar, e um `stable`
@@ -121,20 +146,20 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
   // Desligá-lo devolve exatamente esse buraco: a imagem publica, o canal anda,
   // e nada prova que o laço do event_log chegou a carregar.
   "publish-image.yml::imagens-de-fundo-sobem": {
-    condicao: null,
+    condicao: CI_ENXUTO,
     efeito:
       "Este job prova que o worker BOOTA com o laço do event_log carregado e que o " +
       "scheduler tem o evento no crontab. Desligá-lo (`skipped`) faz a tag existir com " +
-      "imagens de fundo que ninguém executou — o defeito da #648, de volta e em silêncio.",
+      "imagens de fundo que ninguém executou — o defeito da #648, de volta e em silêncio." + EM_PR_SO_COM_ETIQUETA,
   },
 
   "publish-image.yml::imagens-ok": {
-    condicao: "always()",
+    condicao: `always() && (${CI_ENXUTO})`,
     efeito:
       "Este é o check obrigatório `imagens-ok`, a fachada que a branch protection exige. " +
       "Ele precisa de `always()` para poder LER `skipped` dos `needs` e reprovar — e " +
       "desligá-lo (`always() && false`) o torna `skipped` ele mesmo, que a branch " +
-      "protection lê como satisfeito.",
+      "protection lê como satisfeito." + EM_PR_SO_COM_ETIQUETA,
   },
 
   // --- os outros checks obrigatórios ------------------------------------------
@@ -151,41 +176,41 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
   // passaria a esperar para sempre um check que nenhum run produz e NENHUM PR
   // mergearia. Por isso o agregado existe — e por isso ele precisa de `always()`.
   "ci.yml::invariants": {
-    condicao: "always()",
+    condicao: `always() && (${CI_ENXUTO})`,
     efeito:
       "Este é o check obrigatório `invariants` — o agregado que LÊ o resultado de " +
       "`invariants-majors` e reprova qualquer desfecho que não seja `success`. Precisa de " +
       "`always()` para poder ler `skipped` (perna pulada não mediu nada, e `skipped` conta como " +
       "check satisfeito); desligá-lo (`always() && false`) o torna `skipped` ele mesmo, e o PR " +
-      "entra sem que nenhuma major do `baseline.sql` tenha sido medida.",
+      "entra sem que nenhuma major do `baseline.sql` tenha sido medida." + EM_PR_SO_COM_ETIQUETA,
   },
   // `fail-fast: false` é parte da declaração, não estilo: com o padrão (`true`), a
   // primeira major que reprovasse CANCELARIA a outra, e o relatório diria
   // `cancelled` em vez de medir as duas — cobertura declarada que o CI cancela é
   // o modo de falha que a #454 fecha.
   "ci.yml::invariants-majors": {
-    condicao: null,
+    condicao: CI_ENXUTO,
     efeito:
       "São as duas majors que este repo diz suportar: pg15 é o PISO real do `baseline.sql` " +
       "(`security_invoker` em view) e onde quem digita `pnpm test:db` na própria máquina cai por " +
       "padrão; pg17 é de onde o `pg_dump` do baseline saiu e o que o Supabase entrega a projeto " +
       "novo. Cada perna roda `test:db` E `test:db:update`: o segundo era um script que nenhum " +
       "workflow chamava desde 2026-08-27, e `test:db` sozinho mede um banco VAZIO — constraint " +
-      "que só quebra com linha existente passava verde.",
+      "que só quebra com linha existente passava verde." + EM_PR_SO_COM_ETIQUETA,
   },
   "e2e.yml::e2e-parte": {
-    condicao: null,
-    efeito: "São as partes da matriz Playwright; sem elas o `e2e` fica sem nada para ler.",
+    condicao: CI_ENXUTO,
+    efeito: "São as partes da matriz Playwright; sem elas o `e2e` fica sem nada para ler." + EM_PR_SO_COM_ETIQUETA,
   },
   "e2e.yml::e2e": {
-    condicao: "always()",
+    condicao: `always() && (${CI_ENXUTO})`,
     efeito:
       "Este é o check obrigatório `e2e`, a fachada da matriz. Precisa de `always()` para " +
-      "ler o resultado das partes e reprovar `skipped`.",
+      "ler o resultado das partes e reprovar `skipped`." + EM_PR_SO_COM_ETIQUETA,
   },
   "perf.yml::build-and-size": {
-    condicao: null,
-    efeito: "Este é o check obrigatório `build-and-size` (`pnpm build` em Node 22).",
+    condicao: CI_ENXUTO,
+    efeito: "Este é o check obrigatório `build-and-size` (`pnpm build` em Node 22)." + EM_PR_SO_COM_ETIQUETA,
   },
 
   // --- e o que legitimamente tem interruptor -----------------------------------

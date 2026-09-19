@@ -2,6 +2,8 @@ name: perf
 
 on:
   pull_request:
+    # `labeled`: pôr a etiqueta `ci-completo` dispara a rodada completa.
+    types: [opened, synchronize, reopened, labeled]
     branches: [main]
   push:
     branches: [main]
@@ -14,8 +16,21 @@ on:
 permissions:
   contents: read
 
+# CI ENXUTO (repositório privado, minutos de Actions cobrados). Com a variável
+# de repositório `CI_ENXUTO=1`, os jobs pesados deste arquivo NÃO rodam em PR —
+# rodam na `main`, em tag, por workflow_dispatch, ou em PR com a etiqueta
+# `ci-completo`. Sem a variável, o comportamento é o do projeto original.
+# Push novo no mesmo PR cancela a rodada anterior daquele PR; na `main` e em
+# tag nada é cancelado — é ali que a imagem é publicada.
+# Gatilhos vigiados em tests/unit/gatilho-dos-jobs-de-entrega.test.ts.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-and-size:
+    # CI enxuto: ver o bloco `concurrency` no topo deste arquivo.
+    if: github.event_name != 'pull_request' || vars.CI_ENXUTO != '1' || contains(github.event.pull_request.labels.*.name, 'ci-completo')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
