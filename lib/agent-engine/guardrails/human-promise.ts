@@ -99,6 +99,13 @@ function buildPatterns(target: string): RegExp[] {
       `\\b(?:assim que|assim q|quando|depois que|logo que|apos)\\b${gap(12)}` +
         `\\b(?:liber|aprov|autoriz|respond|retorn|verific|analis|resolv|confirm)(?:ar|er)em\\b`,
     ),
+    // (4) condição futura com ALVO coletivo no singular: "assim que a equipe conferir",
+    //     "quando o financeiro confirmar". O padrão (3) só cobria o plural sem alvo.
+    new RegExp(
+      `\\b(?:assim que|assim q|quando|depois que|logo que|apos)\\b${gap(12)}` +
+        `(?:\\b(?:a|o|as|os|um|uma)\\b\\s*)?\\b${target}\\b${gap(12)}` +
+        `\\b(?:liber|aprov|autoriz|respond|retorn|verific|analis|resolv|confirm|confer)(?:ar|er|ir)\\b`,
+    ),
   ];
 }
 
@@ -151,4 +158,15 @@ export function detectHumanPromise(body: string, extraHumanNames?: readonly stri
   if (names.length === 0) return PATTERNS.some((re) => re.test(text));
   const extendedTarget = `(?:${TARGET_WORDS.join("|")}|${names.map(escapeRegex).join("|")})`;
   return buildPatterns(extendedTarget).some((re) => re.test(text));
+}
+
+/** Detecta promessa da IA de agir depois sem execução agendada que sustente a fala. */
+export function detectUnscheduledFollowUpPromise(body: string): boolean {
+  if (body.trim() === '') return false;
+  const text = normalize(body);
+  const retry =
+    /\b(?:vou|vamos|irei|iremos)\b[^.!?\n]{0,18}\b(?:tent|retent)\w*\b[^.!?\n]{0,18}\b(?:de novo|novamente|outra vez)\b[^.!?\n]{0,18}\b(?:em instantes?|daqui a pouco|mais tarde|depois)\b/;
+  const laterNotice =
+    /\b(?:eu\s+)?(?:te|lhe)\s+(?:aviso|retorno|chamo|falo)\b[^.!?\n]{0,30}\b(?:mais tarde|depois|assim que|quando)\b/;
+  return retry.test(text) || laterNotice.test(text);
 }

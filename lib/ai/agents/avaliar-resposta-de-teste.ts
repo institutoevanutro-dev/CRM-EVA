@@ -69,6 +69,10 @@ const NAO_AVALIAVEIS_SEM_TURNO: ReadonlyArray<{ gate: string; porque: string }> 
   { gate: "semantic_promise", porque: "usa uma chamada de modelo extra, que o teste não gasta" },
   { gate: "case_promise", porque: "depende de haver um chamado aberto para este contato" },
   {
+    gate: "unscheduled_followup",
+    porque: "depende de saber se uma nova ação foi realmente programada neste atendimento",
+  },
+  {
     gate: "agenda_stall",
     porque: "depende de a ferramenta de agenda ter sido chamada neste turno — não há turno real no teste",
   },

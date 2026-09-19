@@ -2790,6 +2790,8 @@ async function executarTurnoDoAgente(
             // do CLIENTE, agora somado ao alvo genérico do `casePromiseGate` do lado do
             // que o MODELO promete. Ver `GateContext.humanPromiseExtraTargets`.
             humanPromiseExtraTargets: agentConfig?.handoffKeywords ?? [],
+            // Texto do modelo não pode prometer retorno futuro sem execução programada.
+            enforceUnscheduledFollowUp: true,
             // A rede contra vazamento de vocabulário interno arma AQUI e só aqui: este é
             // o único corpo escrito pelo MODELO, e o único caminho em que o veto vira
             // erro instrutivo que ele pode consertar no turno seguinte. O `send_template`

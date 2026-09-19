@@ -118,6 +118,7 @@ export async function previewGateContext(
         : false,
     openedCaseThisTurn: false,
     humanPromiseExtraTargets: p.agent.handoffKeywords,
+    unscheduledFollowUpEnforced: true,
     // A MESMA condição do turno real (`temFerramentaDeAgenda`): a prévia existe
     // para mostrar o que vai acontecer, e um gate que arma diferente aqui faz
     // quem afina o prompt testar contra outro sistema.

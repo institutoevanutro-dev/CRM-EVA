@@ -67,7 +67,7 @@ import {
 import type { DisclosureMode } from './disclosure/template';
 import { escalateLgpdVeto, isLegalBasisValid } from './lgpd/legal-basis';
 import type { LgpdInput } from './lgpd/legal-basis';
-import { detectHumanPromise } from './human-promise';
+import { detectHumanPromise, detectUnscheduledFollowUpPromise } from './human-promise';
 import { detectarVazamentoInterno, renderVetoDeVazamento } from './vazamento-interno';
 // Módulo PURO de propósito (`capabilities`, não `index`): o seam não arrasta o
 // adapter — e com ele o cliente HTTP do canal — para dentro do worker.
@@ -184,6 +184,8 @@ export interface GateContext {
    * detecção em 3 dias.
    */
   humanPromiseExtraTargets?: readonly string[];
+  /** Arma a proteção contra retorno futuro prometido sem execução programada. */
+  unscheduledFollowUpEnforced?: boolean;
   /**
    * Arma o `internalVocabularyGate` (vazamento de vocabulário interno ao cliente).
    *
@@ -408,6 +410,23 @@ export const casePromiseGate: Gate = {
       reason:
         'Você prometeu envolver um humano mas não abriu um caso. Chame a tool ' +
         'open_human_case (descrevendo o que precisa) OU reformule a mensagem sem prometer humano.',
+    };
+  },
+};
+
+/** Impede a IA de transformar uma falha atual numa promessa inventada de nova tentativa. */
+export const unscheduledFollowUpGate: Gate = {
+  name: 'unscheduled_followup',
+  evaluate: (ctx) => {
+    if (ctx.unscheduledFollowUpEnforced !== true) return { pass: true };
+    if (!detectUnscheduledFollowUpPromise(ctx.body)) return { pass: true };
+    return {
+      pass: false,
+      code: 'unscheduled_followup_promise',
+      reason:
+        'Não existe nova tentativa ou retorno programado para sustentar essa promessa. ' +
+        'Reformule sem dizer que tentará de novo, avisará ou retornará mais tarde. Informe ' +
+        'somente o que já aconteceu e a próxima ação realmente disponível agora.',
     };
   },
 };
@@ -709,8 +728,10 @@ const spinningGate: Gate = {
  * `GateContext.agenda`): só o caminho do agente o arma quando o agente publicado tem
  * `crm_book_appointment` nas tools, então a v7 também não muda o destino de nenhum envio que
  * já existia fora desse caso — muda o TRACE e passa a medir/impedir a promessa vazia.
+ * v8 = insere `unscheduledFollowUpGate` depois de `casePromiseGate`: uma falha atual não
+ * vira promessa de nova tentativa sem execução programada. Só agente e prévia o armam.
  */
-export const BEFORE_SEND_CHAIN_VERSION = 7;
+export const BEFORE_SEND_CHAIN_VERSION = 8;
 
 /**
  * Ordem FINAL da cadeia (F4-08/F4-09; edge-contract §before_send / blueprint órgão 5) — DADO
@@ -739,6 +760,7 @@ export const BEFORE_SEND_GATES: readonly Gate[] = [
   promiseGate,
   semanticPromiseGate,
   casePromiseGate,
+  unscheduledFollowUpGate,
   internalVocabularyGate,
   agendaStallGate,
   disclosureGate,
@@ -838,6 +860,8 @@ export interface RunBeforeSendArgs {
   openedCaseThisTurn?: boolean;
   /** Ver `GateContext.humanPromiseExtraTargets`. Ausente = só cargos genéricos. */
   humanPromiseExtraTargets?: readonly string[];
+  /** Arma o `unscheduledFollowUpGate`; ausente mantém callers determinísticos intactos. */
+  enforceUnscheduledFollowUp?: boolean;
   /**
    * Arma o `internalVocabularyGate`. Ausente (default) = gate no-op — ver a justificativa
    * do default em `GateContext.internalVocabularyEnforced`: um veto no caminho
@@ -1050,6 +1074,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       ...(args.humanPromiseExtraTargets !== undefined
         ? { humanPromiseExtraTargets: args.humanPromiseExtraTargets }
         : {}),
+      unscheduledFollowUpEnforced: args.enforceUnscheduledFollowUp ?? false,
       internalVocabularyEnforced: args.enforceInternalVocabulary ?? false,
       ...(args.agenda !== undefined ? { agenda: args.agenda } : {}),
     };
