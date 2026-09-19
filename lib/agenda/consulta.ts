@@ -115,6 +115,7 @@ export interface ParametrosDaConsulta {
   eventTypeSlug?: string | null;
   /** Ausente = o responsável padrão do tipo. */
   ownerUserId?: string | null;
+  unitId?: string | null;
   de: Date;
   ate: Date;
   /** INJETADO, como em `horariosLivres`. Relógio lido aqui dentro é o defeito que `janela-do-canal.ts` documenta. */
@@ -354,7 +355,9 @@ export async function horariosLivresDaOrg(
   }));
 
   const slots = horariosLivres({
-    jornada: leitura.jornada,
+    jornada: params.unitId
+      ? { ...leitura.jornada, windows: leitura.jornada.windows.filter((w) => !w.unit_id || w.unit_id === params.unitId) }
+      : leitura.jornada,
     excecoes,
     ocupados,
     tipo: {

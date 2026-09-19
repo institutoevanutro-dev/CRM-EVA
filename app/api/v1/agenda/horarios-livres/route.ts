@@ -49,6 +49,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 
 const querySchema = z.object({
   event_type_id: z.string().uuid(),
+  unit_id: z.string().uuid().optional(),
   owner_user_id: z.string().uuid().optional(),
   de: z.string().datetime({ offset: true }),
   ate: z.string().datetime({ offset: true }),
@@ -98,6 +99,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     eventTypeId: parsed.data.event_type_id,
     eventTypeSlug: null,
     ownerUserId: parsed.data.owner_user_id ?? null,
+    unitId: parsed.data.unit_id ?? null,
     de,
     ate,
     agora: new Date(),
@@ -124,6 +126,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       slots: consulta.slots.map((s) => ({
         inicio: s.inicio.toISOString(),
         fim: s.fim.toISOString(),
+        unit_id: parsed.data.unit_id ?? null,
       })),
       fuso_da_regra: consulta.fusoDaRegra,
       // "Não publiquei meus horários" e "não tenho vaga" chegam como a mesma

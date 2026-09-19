@@ -499,6 +499,7 @@ async function semDerrubarOTurno<T>(
 const marcarShape = {
   event_type_slug: z.string().min(1).describe("o identificador legível do tipo de atendimento"),
   starts_at: z.string().datetime({ offset: true }).describe("o instante exato do início, vindo de `crm_find_free_slots`"),
+  unit_id: z.string().uuid().optional().describe("unidade retornada junto com o horário livre"),
   contact_id: z.string().uuid().describe("quem vai ser atendido"),
   owner_user_id: z.string().uuid().optional(),
   title: z.string().min(1).max(200).optional(),
@@ -539,6 +540,7 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
         {
           event_type_id: tipo.id,
           starts_at: input.starts_at,
+          ...(input.unit_id ? { unit_id: input.unit_id } : {}),
           contact_id: input.contact_id,
           ...(input.owner_user_id ? { owner_user_id: input.owner_user_id } : {}),
           ...(input.title ? { title: input.title } : {}),

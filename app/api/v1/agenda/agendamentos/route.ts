@@ -78,6 +78,7 @@ const emailDoConvidado = z.preprocess(
 const marcarSchema = z.object({
   event_type_id: z.string().uuid(),
   starts_at: z.string().datetime({ offset: true }),
+  unit_id: z.string().uuid().optional(),
   owner_user_id: z.string().uuid().optional(),
   contact_id: z.string().uuid().optional(),
   conversation_id: z.string().uuid().optional(),

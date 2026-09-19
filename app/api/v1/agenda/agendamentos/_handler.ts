@@ -63,6 +63,7 @@ const CODIGO_DA_RECUSA = {
 export interface MarcarInput {
   event_type_id: string;
   starts_at: string;
+  unit_id?: string;
   owner_user_id?: string;
   contact_id?: string;
   conversation_id?: string;
@@ -190,6 +191,7 @@ export async function marcarAgendamentoHandler(
     donoId,
     inicio,
     fim,
+    unitId: input.unit_id ?? null,
   });
 
   const booking = tipo.location_kind === "google_meet" ? ctx.meetingBooking : undefined;
@@ -207,6 +209,7 @@ export async function marcarAgendamentoHandler(
       starts_at: inicio.toISOString(),
       ends_at: fim.toISOString(),
       duration_minutes_snapshot: duracaoMin,
+      unit_id: input.unit_id ?? null,
       // O fuso do compromisso é campo de primeira classe: é o da JORNADA, onde
       // o horário foi decidido, e ele viaja até o lembrete (ACHADO 09).
       time_zone: consulta.fusoDaRegra,
@@ -229,6 +232,8 @@ export async function marcarAgendamentoHandler(
     .select("id, starts_at, ends_at, status, time_zone, revision, meeting_state, meeting_url")
     .single();
   if (erroInsert) {
+    const recurso = erroInsert.message.match(/agenda_(unidade_obrigatoria|sem_sala_compativel|sala_incompativel|sala_ocupada|capacidade_excedida)/)?.[0];
+    if (recurso) throw new ApiError(409, recurso, undefined, ctx.requestId, erroInsert.message);
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, erroInsert.message);
   }
 
@@ -605,6 +610,7 @@ async function exigeHorarioLivre(
     donoId: string;
     inicio: Date;
     fim: Date;
+    unitId?: string | null;
     /**
      * O compromisso sendo remarcado, que não conta como ocupação de si mesmo.
      * Só o encaixe o usa. A grade não o repassa a `horariosLivresDaOrg`, então
@@ -619,6 +625,7 @@ async function exigeHorarioLivre(
     de: args.inicio,
     ate: args.fim,
     agora: new Date(),
+    unitId: args.unitId ?? null,
   });
 
   if (!consulta.ok) {
