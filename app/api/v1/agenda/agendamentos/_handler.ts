@@ -23,7 +23,7 @@ import type { Json } from "@/lib/database.types";
  * A recusa sai como `ApiError`: a rota a traduz em `fail()`, a tool a traduz
  * para o modelo, e nenhum dos dois reimplementa a decisão.
  */
-import { coletaOQueOcupa, horariosLivresDaOrg } from "@/lib/agenda/consulta";
+import { coletaOQueOcupa, horariosLivresDaOrg, resolverDuracaoDoTipo } from "@/lib/agenda/consulta";
 import { colide } from "@/lib/agenda/horarios-livres";
 import {
   atividadeDaTransicao,
@@ -106,7 +106,7 @@ export async function marcarAgendamentoHandler(
   const { data: tipo, error: erroTipo } = await supabase
     .from("calendar_event_types")
     .select(
-      "id, name, is_active, duration_minutes, default_owner_user_id, requires_confirmation, location_kind, location_details",
+      "id, name, is_active, duration_minutes, catalog_product_id, default_owner_user_id, requires_confirmation, location_kind, location_details",
     )
     .eq("organization_id", ctx.organization_id)
     .eq("id", input.event_type_id)
@@ -163,7 +163,28 @@ export async function marcarAgendamentoHandler(
     }
   }
 
-  const fim = new Date(inicio.getTime() + tipo.duration_minutes * 60_000);
+  let produto: { appointment_duration_minutes: number | null } | null = null;
+  if (tipo.catalog_product_id) {
+    const { data, error } = await supabase
+      .from("catalog_products")
+      .select("appointment_duration_minutes")
+      .eq("organization_id", ctx.organization_id)
+      .eq("id", tipo.catalog_product_id)
+      .maybeSingle();
+    if (error) throw new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
+    produto = data;
+  }
+  const duracaoMin = resolverDuracaoDoTipo(tipo, produto);
+  if (duracaoMin === null) {
+    throw new ApiError(
+      422,
+      "agenda_servico_sem_duracao",
+      undefined,
+      ctx.requestId,
+      `O serviço vinculado a "${tipo.name}" não tem duração de agenda configurada no catálogo.`,
+    );
+  }
+  const fim = new Date(inicio.getTime() + duracaoMin * 60_000);
   const consulta = await exigeHorarioLivre(supabase, ctx, {
     eventTypeId: tipo.id,
     donoId,
@@ -185,6 +206,7 @@ export async function marcarAgendamentoHandler(
       title: input.title ?? tipo.name,
       starts_at: inicio.toISOString(),
       ends_at: fim.toISOString(),
+      duration_minutes_snapshot: duracaoMin,
       // O fuso do compromisso é campo de primeira classe: é o da JORNADA, onde
       // o horário foi decidido, e ele viaja até o lembrete (ACHADO 09).
       time_zone: consulta.fusoDaRegra,
