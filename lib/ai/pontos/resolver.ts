@@ -115,6 +115,10 @@ export const PONTOS_DO_AGENTE_PUBLICADO: ReadonlySet<string> = new Set([
   "agent_turn",
   "agent_preview",
   "operator_turn",
+  // A revisão de supervisão (migration 0263) usa o modelo da versão PUBLICADA
+  // do agente supervisor: trocar por fora mudaria quem revisa sem passar pela
+  // publicação, que é onde a política dele é versionada.
+  "supervisor_review",
 ]);
 
 /**

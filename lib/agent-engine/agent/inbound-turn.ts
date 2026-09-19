@@ -175,6 +175,7 @@ import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import { renderAgora } from '@/lib/tempo/agora';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
+import { acionarSupervisao } from '@/lib/supervisao/acionamento';
 
 /**
  * Superfície ESTÁTICA das tools do agente (description + inputSchema) — parte do
@@ -3915,6 +3916,59 @@ async function executarTurnoDoAgente(
               ).slice(0, 120),
             });
           }
+        }
+      }
+    }
+
+    // ── A REVISÃO DE SUPERVISÃO (migration 0263) ───────────────────────────────
+    //
+    // Mesmo ponto e mesma disciplina do Operador: pelo RUNTIME, depois de o
+    // checkpoint existir (os registros do turno já estão persistidos), nunca por
+    // decisão do modelo. Só há efeito quando existe vínculo LIGADO supervisionando
+    // este agente — sem vínculo, uma consulta e nada mais.
+    //
+    // O fato é o job deste turno: reentrega do job gera a mesma chave e encontra a
+    // revisão existente. Falha em acionar não derruba o turno que já respondeu,
+    // mas também não morre no log: vira aviso na Central.
+    if (agentConfig !== null) {
+      try {
+        const resumo = await acionarSupervisao(
+          pool,
+          {
+            organizationId: tenantId,
+            conversationId: input.conversationId,
+            contactId: leadId,
+            actorType: 'ai_agent',
+            actorId: agentConfig.agentId,
+            eventId: liveJob().id,
+            origin: 'ai_run_completed',
+            occurredAt: new Date().toISOString(),
+            traceId: `job:${liveJob().id}`,
+          },
+          runLog,
+        );
+        if (resumo.vinculos > 0) runLog.info('supervisão acionada', { ...resumo });
+      } catch (err) {
+        runLog.error('revisão de supervisão NÃO foi acionada (o turno segue)', {
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
+        });
+        try {
+          await insertInboxItem(
+            pool,
+            tenantId,
+            {
+              kind: 'supervision_review',
+              severity: 'warn',
+              title: 'A revisão da supervisão não foi acionada para esta conversa',
+              body:
+                'O atendimento terminou, mas a revisão configurada não pôde ser registrada. ' +
+                'Confira a conversa; nenhuma ação automática foi feita por causa disso.',
+              refKind: 'conversation',
+              refId: input.conversationId,
+            },
+          );
+        } catch {
+          // O aviso é rede; o turno já respondeu ao cliente.
         }
       }
     }

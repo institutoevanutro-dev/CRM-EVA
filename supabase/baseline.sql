@@ -7733,7 +7733,8 @@ alter table job_queue add constraint job_queue_kind_check
   -- antigos rodam antes e falham em cadeia. Vigiado por
   -- tests/unit/baseline-constraint-reconstruida.test.ts.
   -- 'transactional_delivery' (0226) segue a mesma consolidação de vocabulário.
-  check (kind in ('inbound_turn','followup_turn','watchdog','flywheel','case_reply_turn','operator_turn','transactional_delivery','approved_reply'));
+  -- 'supervisor_review' (migration 0263) — mesma consolidação.
+  check (kind in ('inbound_turn','followup_turn','watchdog','flywheel','case_reply_turn','operator_turn','transactional_delivery','approved_reply','supervisor_review'));
 alter table job_queue drop constraint if exists job_queue_turn_needs_contact;
 do $$
 declare c text;
@@ -7744,7 +7745,7 @@ begin
   if c is not null then execute format('alter table job_queue drop constraint %I', c); end if;
 end $$;
 alter table job_queue add constraint job_queue_turn_needs_contact
-  check ((kind in ('inbound_turn','followup_turn','case_reply_turn','operator_turn','transactional_delivery','approved_reply')) = (contact_id is not null));
+  check ((kind in ('inbound_turn','followup_turn','case_reply_turn','operator_turn','transactional_delivery','approved_reply','supervisor_review')) = (contact_id is not null));
 
 alter table cron_jobs drop constraint if exists cron_jobs_job_kind_check;
 alter table cron_jobs add constraint cron_jobs_job_kind_check
@@ -10115,6 +10116,14 @@ alter table public.agent_inbox_items
     -- lista, não em bloco novo (#159, bloco único por constraint).
     'voice_call_missed',
     'case_stale',
+    -- (migration 0263) Pendência aberta por uma revisão de supervisão: ação
+    -- recomendada que depende de pessoa, ou bloqueio com motivo. Entra NESTA
+    -- lista (bloco único por constraint, #159).
+    'supervision_review',
+    -- (migration 0264) T+60 do sinal: reserva sujeita a sinal sem comprovante
+    -- tratado até o prazo — abre revisão humana, nunca libera horário nem
+    -- marca falta sozinho. Entra NESTA lista (bloco único por constraint, #159).
+    'sinal_revisao_humana',
     'other'
   ));
 
@@ -26443,82 +26452,6 @@ grant  execute on function public.fn_tags_normalizar(text[], text, text, boolean
 revoke execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) from public, anon;
 grant  execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) to authenticated, service_role;
 
--- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
---
--- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
-
--- dele — quem o empurrar para o meio desarma a cura para tudo que vier depois.
--- Vigiado por `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`.
---
--- A 0108 revogou anon numa LISTA de 8 funções, medida num banco instalado do
--- ZERO. Quem ATUALIZA tem outro estado: o `ALTER DEFAULT PRIVILEGES ... GRANT
--- ALL ON FUNCTIONS TO anon` do corpo deste arquivo grava uma entrada em
--- `pg_default_acl` que fica no catálogo PARA SEMPRE, e a partir daí toda função
--- criada em `public` nasce com EXECUTE para anon — inclusive as deste apêndice.
---
--- Medido numa VPS real (2026-08-07), comparando com o que um install fresco
--- produz: 6 definer expostas a anon e 5 a authenticated, entre elas
--- `fn_decrypt_oauth` — alcançável pela anon key, que vai para o browser.
---
--- Lista conserta o estoque e reabre no próximo `create function`. Esta varredura
--- é auto-curativa e roda DEPOIS de tudo que cria função, então cura no mesmo run
--- em que o defeito nasceria. Desfazer o ALTER DEFAULT PRIVILEGES não serve: ele
--- vem do `pg_dump` do Supabase e é reescrito a cada re-aplicação.
---
--- As duas origens de EXECUTE (a mesma lição da 0108): grant DIRETO a anon, que
--- `revoke from public` não remove; e grant a PUBLIC, do qual anon HERDA, que
--- `revoke from anon` não remove. O privilégio EFETIVO de authenticated e
--- service_role é medido ANTES e devolvido depois — tira anon sem tirar leitura.
-do $$
-declare
-  f record;
-  tinha_auth boolean;
-  tinha_service boolean;
-begin
-  if to_regrole('anon') is null then
-    return;
-  end if;
-
-  for f in
-    select p.oid, p.oid::regprocedure as assinatura
-      from pg_proc p
-      join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname = 'public'
-       and p.prosecdef
-  loop
-    tinha_auth := to_regrole('authenticated') is not null
-                  and has_function_privilege('authenticated', f.oid, 'EXECUTE');
-    tinha_service := to_regrole('service_role') is not null
-                     and has_function_privilege('service_role', f.oid, 'EXECUTE');
-
-    execute format('revoke execute on function %s from public, anon', f.assinatura);
-
-    if tinha_auth then
-      execute format('grant execute on function %s to authenticated', f.assinatura);
-    end if;
-    if tinha_service then
-      execute format('grant execute on function %s to service_role', f.assinatura);
-    end if;
-  end loop;
-end $$;
-
--- regra 2 (authenticated): as 5 que o update abriu e o install não abre. Aqui não
--- cabe varredura — `authenticated` PRECISA de EXECUTE nos helpers de RLS e em
--- `retrieve_top_k_chunks` (num install fresco ele tem). É julgamento por função,
--- e o alvo de cada linha é o valor que um install fresco produz, medido.
-revoke execute on function public.fn_audit_log_row() from authenticated;
-revoke execute on function public.fn_decrypt_oauth(bytea) from authenticated;
-revoke execute on function public.fn_encrypt_oauth(text) from authenticated;
-revoke execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) from authenticated;
-revoke execute on function public.fn_update_budget_consumption() from authenticated;
-
-grant execute on function public.fn_audit_log_row() to service_role;
-grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
-grant execute on function public.fn_encrypt_oauth(text) to service_role;
-grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
-grant execute on function public.fn_update_budget_consumption() to service_role;
-
-
 -- ---- Criador provisório sai na entrega (migration 0237) ----
 -- As duas funções acima já saíram com a regra; aqui fica só a COLUNA, que é
 -- o dado que faltava. Idempotente. NÃO há expurgo retroativo, de propósito:
@@ -26609,3 +26542,357 @@ drop trigger if exists trg_platform_meta_app_updated_at on public.platform_meta_
 create trigger trg_platform_meta_app_updated_at
   before update on public.platform_meta_app
   for each row execute function public.fn_set_updated_at();
+
+-- ---- supervisão de agente: bindings/reviews/actions + crm_stages.blocks_followups (migration 0263) ----
+-- Os CHECKs de job_queue (supervisor_review) e agent_inbox_items (supervision_review)
+-- NÃO estão aqui: entraram nos blocos consolidados acima (bloco único por constraint, #159).
+-- ---- 1. vínculo supervisor → supervisionado ---------------------------------
+create table if not exists public.ai_supervision_bindings (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  supervisor_agent_id uuid not null references public.ai_agents(id) on delete cascade,
+  supervised_agent_id uuid not null references public.ai_agents(id) on delete cascade,
+  pipeline_id uuid not null references public.crm_pipelines(id) on delete cascade,
+  enabled boolean not null default false,
+  -- Também revisar ações HUMANAS concluídas na conversa (mensagem enviada por
+  -- pessoa da equipe, card movido por pessoa).
+  review_human_actions boolean not null default true,
+  -- `recomendar`: nada é executado, tudo vira RECOM/BLOQ.
+  -- `executar`: só as transições listadas em `allowed_stage_moves` executam.
+  mode text not null default 'recomendar' check (mode in ('recomendar', 'executar')),
+  -- [{"to_stage_id": uuid, "from_stage_ids": [uuid, ...]}]. Lista vazia = nenhuma
+  -- movimentação executável, mesmo em modo `executar`.
+  allowed_stage_moves jsonb not null default '[]'::jsonb,
+  -- Identificador da política vigente — gravado em cada revisão.
+  policy_version text not null default 'v1',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint ai_supervision_bindings_not_self check (supervisor_agent_id <> supervised_agent_id),
+  constraint ai_supervision_bindings_moves_is_array check (jsonb_typeof(allowed_stage_moves) = 'array'),
+  unique (organization_id, supervisor_agent_id, supervised_agent_id, pipeline_id)
+);
+
+create index if not exists ai_supervision_bindings_supervised_idx
+  on public.ai_supervision_bindings (organization_id, supervised_agent_id)
+  where enabled;
+
+comment on table public.ai_supervision_bindings is
+  'Quem supervisiona quem, em qual funil. Nasce desligado e em modo recomendar. Escrita só server-side.';
+
+-- ---- 2. revisão ---------------------------------------------------------------
+create table if not exists public.ai_supervision_reviews (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  binding_id uuid not null references public.ai_supervision_bindings(id) on delete cascade,
+  idempotency_key text not null,
+  event_id uuid not null,
+  conversation_id uuid not null references public.conversations(id) on delete cascade,
+  contact_id uuid not null references public.contacts(id) on delete cascade,
+  lead_id uuid references public.crm_leads(id) on delete set null,
+  pipeline_id uuid not null references public.crm_pipelines(id) on delete cascade,
+  actor_type text not null check (actor_type in ('ai_agent', 'user')),
+  actor_id uuid not null,
+  occurred_at timestamptz not null,
+  conversation_revision bigint,
+  origin text not null check (origin in ('ai_run_completed', 'human_message_sent', 'human_stage_changed')),
+  trace_id text not null,
+  supervisor_agent_id uuid not null references public.ai_agents(id) on delete cascade,
+  status text not null default 'pendente'
+    check (status in ('pendente', 'em_execucao', 'concluida', 'bloqueada', 'falhou')),
+  outcome_code text check (outcome_code in ('EXE', 'RECOM', 'BLOQ')),
+  policy_version text not null,
+  prompt_version text,
+  -- Estado lido, só por referência (ids, etapas, flags). Nunca texto clínico,
+  -- nunca corpo de mensagem, nunca imagem de comprovante.
+  state_read jsonb not null default '{}'::jsonb,
+  -- A proposta do supervisor, gravada na PRIMEIRA leitura válida. Retentativa
+  -- reaproveita esta proposta em vez de chamar o modelo de novo: uma segunda
+  -- resposta diferente geraria ações diferentes, e a ação já executada da
+  -- primeira tentativa não teria como ser reconhecida.
+  proposal jsonb,
+  stage_before_id uuid,
+  stage_recommended_id uuid,
+  exit_reason text,
+  human_validator_user_id uuid,
+  job_id uuid,
+  attempts smallint not null default 0,
+  created_at timestamptz not null default now(),
+  started_at timestamptz,
+  finished_at timestamptz,
+  updated_at timestamptz not null default now(),
+  unique (organization_id, idempotency_key)
+);
+
+create index if not exists ai_supervision_reviews_conversation_idx
+  on public.ai_supervision_reviews (organization_id, conversation_id, created_at desc);
+
+comment on table public.ai_supervision_reviews is
+  'Revisão individual de uma execução (IA ou humana) por um agente supervisor. Chave de idempotência org:conversa:evento:supervisor. EXE só com retorno de ferramenta; RECOM/BLOQ sempre com motivo.';
+
+-- ---- 3. ações -----------------------------------------------------------------
+create table if not exists public.ai_supervision_actions (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  review_id uuid not null references public.ai_supervision_reviews(id) on delete cascade,
+  action_key text not null,
+  kind text not null check (kind in ('mover_etapa', 'registrar_pendencia')),
+  -- NULL enquanto a ação está pendente: o código só existe quando há desfecho.
+  code text check (code in ('EXE', 'RECOM', 'BLOQ')),
+  status text not null default 'pendente'
+    check (status in ('pendente', 'executada', 'recomendada', 'bloqueada', 'falhou')),
+  expected_stage_id uuid,
+  target_stage_id uuid,
+  -- ids de mensagens/atividades que sustentam a ação. Só ids.
+  evidence_ids jsonb not null default '[]'::jsonb,
+  reason text not null,
+  next_owner text,
+  tool_result_ref text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint ai_supervision_actions_code_only_when_final check ((status = 'pendente') = (code is null)),
+  -- EXE só existe com a ferramenta confirmando: status executada E referência do resultado.
+  constraint ai_supervision_actions_exe_has_result check (code is distinct from 'EXE' or (status = 'executada' and tool_result_ref is not null)),
+  unique (organization_id, action_key)
+);
+
+create index if not exists ai_supervision_actions_review_idx
+  on public.ai_supervision_actions (organization_id, review_id);
+
+-- ---- RLS: membros LEEM; só o servidor escreve --------------------------------
+alter table public.ai_supervision_bindings enable row level security;
+alter table public.ai_supervision_reviews enable row level security;
+alter table public.ai_supervision_actions enable row level security;
+
+drop policy if exists tenant_isolation_ai_supervision_bindings_select on public.ai_supervision_bindings;
+create policy tenant_isolation_ai_supervision_bindings_select on public.ai_supervision_bindings
+  for select using (organization_id in (select fn_user_org_ids()));
+drop policy if exists tenant_isolation_ai_supervision_reviews_select on public.ai_supervision_reviews;
+create policy tenant_isolation_ai_supervision_reviews_select on public.ai_supervision_reviews
+  for select using (organization_id in (select fn_user_org_ids()));
+drop policy if exists tenant_isolation_ai_supervision_actions_select on public.ai_supervision_actions;
+create policy tenant_isolation_ai_supervision_actions_select on public.ai_supervision_actions
+  for select using (organization_id in (select fn_user_org_ids()));
+
+-- O registro de auditoria não se reescreve pela REST (lição da 0258: o default
+-- ACL do Supabase concede tudo; só `revoke` explícito protege).
+revoke insert, update, delete, truncate on public.ai_supervision_bindings from public, anon, authenticated;
+revoke insert, update, delete, truncate on public.ai_supervision_reviews from public, anon, authenticated;
+revoke insert, update, delete, truncate on public.ai_supervision_actions from public, anon, authenticated;
+grant select on public.ai_supervision_bindings, public.ai_supervision_reviews, public.ai_supervision_actions to authenticated;
+grant select, insert, update on public.ai_supervision_bindings, public.ai_supervision_reviews, public.ai_supervision_actions to service_role;
+
+drop trigger if exists trg_ai_supervision_bindings_updated_at on public.ai_supervision_bindings;
+create trigger trg_ai_supervision_bindings_updated_at
+  before update on public.ai_supervision_bindings
+  for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_ai_supervision_reviews_updated_at on public.ai_supervision_reviews;
+create trigger trg_ai_supervision_reviews_updated_at
+  before update on public.ai_supervision_reviews
+  for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_ai_supervision_actions_updated_at on public.ai_supervision_actions;
+create trigger trg_ai_supervision_actions_updated_at
+  before update on public.ai_supervision_actions
+  for each row execute function public.fn_set_updated_at();
+
+-- ---- 4. etapa que invalida follow-up ------------------------------------------
+alter table public.crm_stages
+  add column if not exists blocks_followups boolean not null default false;
+
+comment on column public.crm_stages.blocks_followups is
+  'Lead nesta etapa não recebe follow-up automático: a entrada invalida sequências vivas e o executor reconfere antes de cada envio. Ex.: comprovante em conferência.';
+
+notify pgrst, 'reload schema';
+
+-- ---- bloqueios do fluxo de sinal: reserva na inscrição + tipo sujeito a sinal (migration 0264) ----
+alter table public.followup_enrollments
+  add column if not exists appointment_id uuid references public.calendar_appointments(id) on delete set null;
+
+create unique index if not exists idx_followup_enrollments_one_per_appointment
+  on public.followup_enrollments (pointer_id, appointment_id)
+  where appointment_id is not null and status in ('active', 'waiting_reply', 'paused_handoff');
+
+alter table public.calendar_event_types
+  add column if not exists requires_signal boolean not null default false;
+
+comment on column public.followup_enrollments.appointment_id is
+  'Reserva (calendar_appointments) que originou a inscrição, quando o fluxo é amarrado a uma reserva específica (ex.: cobrança de sinal). NULL nos demais fluxos.';
+comment on column public.calendar_event_types.requires_signal is
+  'Tipo de compromisso exige sinal/depósito antes da confirmação. Usado pelo executor de follow-up para não cobrar sinal de quem não deve.';
+
+-- 'sinal_revisao_humana' entra na lista ÚNICA de agent_inbox_items_kind_check
+-- lá em cima (bloco da migration 0105/#159), não aqui — bloco único por
+-- constraint em todo o baseline (vigiado por
+-- tests/unit/midia-nao-lida.test.ts: "a constraint é reconstruída UMA vez só
+-- no baseline").
+
+notify pgrst, 'reload schema';
+
+-- ---- Revalidação transacional e revisão do sinal (migration 0267) ----
+-- 0267 — T60 elegível antes do limite, decisão serializada e histórico preservado.
+-- A resolução humana também conta como tratada; não reabrir a mesma reserva.
+create or replace function public.sinal_reservas_elegiveis(p_agora timestamptz)
+returns table (id uuid, organization_id uuid, contact_id uuid, criada_em timestamptz, consulta_em timestamptz)
+language sql stable security invoker set search_path = public as $$
+  select a.id, a.organization_id, a.contact_id, a.created_at, a.starts_at
+  from public.calendar_appointments a
+  join public.calendar_event_types t on t.id = a.event_type_id and t.organization_id = a.organization_id
+  join public.contacts c on c.id = a.contact_id and c.organization_id = a.organization_id
+  where a.status in ('pending', 'confirmed') and t.requires_signal and not c.is_anonymized
+    and least(a.created_at + interval '60 minutes', a.starts_at) <= p_agora
+    and not exists (
+      select 1 from public.crm_leads l join public.crm_stages s
+        on s.id = l.stage_id and s.organization_id = l.organization_id
+      where l.organization_id = a.organization_id and l.contact_id = a.contact_id
+        and l.status = 'open' and s.blocks_followups
+    )
+    and not exists (
+      select 1 from public.agent_inbox_items i
+      where i.organization_id = a.organization_id and i.kind = 'sinal_revisao_humana'
+        and i.ref_kind in ('appointment', 'calendar_appointment') and i.ref_id = a.id
+    )
+$$;
+revoke execute on function public.sinal_reservas_elegiveis(timestamptz) from public, anon, authenticated;
+grant execute on function public.sinal_reservas_elegiveis(timestamptz) to service_role;
+
+create or replace function public.sinal_listar_revisoes(p_agora timestamptz, p_limite integer)
+returns table (id uuid, organization_id uuid, contact_id uuid, criada_em timestamptz, consulta_em timestamptz)
+language sql stable security invoker set search_path = public as $$
+  select * from public.sinal_reservas_elegiveis(p_agora)
+  order by criada_em, id limit greatest(0, least(p_limite, 500))
+$$;
+revoke execute on function public.sinal_listar_revisoes(timestamptz, integer) from public, anon, authenticated;
+grant execute on function public.sinal_listar_revisoes(timestamptz, integer) to service_role;
+
+create or replace function public.sinal_abrir_revisao(p_organization_id uuid, p_appointment_id uuid)
+returns boolean language plpgsql security invoker set search_path = public as $$
+declare v_contact_id uuid; v_inserted uuid;
+begin
+  select a.contact_id into v_contact_id from public.calendar_appointments a
+    where a.organization_id = p_organization_id and a.id = p_appointment_id;
+  if v_contact_id is null then return false; end if;
+  -- Mesmo mutex da mesclagem/recuperação, antes de qualquer row lock.
+  perform public.fn_service_lock(p_organization_id, v_contact_id);
+  -- FOR UPDATE também bloqueia novas FKs de negócios para este contato.
+  perform c.id from public.contacts c where c.organization_id = p_organization_id and c.id = v_contact_id for update;
+  perform a.id from public.calendar_appointments a
+    where a.organization_id = p_organization_id and a.id = p_appointment_id and a.contact_id = v_contact_id for update;
+  if not found then return false; end if;
+  perform t.id from public.calendar_event_types t join public.calendar_appointments a
+    on a.event_type_id = t.id and a.organization_id = t.organization_id
+    where a.organization_id = p_organization_id and a.id = p_appointment_id for update of t;
+  perform l.id from public.crm_leads l
+    where l.organization_id = p_organization_id and l.contact_id = v_contact_id order by l.id for update;
+  perform s.id from public.crm_stages s join public.crm_leads l
+    on s.id = l.stage_id and s.organization_id = l.organization_id
+    where l.organization_id = p_organization_id and l.contact_id = v_contact_id order by s.id for update of s;
+  -- Nova leitura DEPOIS dos locks: reentrega concorrente já vê o item commitado.
+  insert into public.agent_inbox_items (organization_id, kind, severity, title, body, ref_kind, ref_id)
+  select p_organization_id, 'sinal_revisao_humana', 'warn', 'Sinal não confirmado — revisão humana',
+    'A reserva passou do prazo (T+60 da criação, ou início da consulta) sem comprovante tratado. Nenhuma ação automática foi tomada: o horário não foi liberado, a consulta não foi cancelada e falta não foi marcada.',
+    'appointment', p_appointment_id
+  from public.sinal_reservas_elegiveis(clock_timestamp()) e
+  where e.organization_id = p_organization_id and e.id = p_appointment_id
+  returning id into v_inserted;
+  return v_inserted is not null;
+end;
+$$;
+revoke execute on function public.sinal_abrir_revisao(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.sinal_abrir_revisao(uuid, uuid) to service_role;
+
+-- appointment_id já existia para appointment_no_show (0224). A FK SET NULL
+-- não pode transformar uma inscrição vinculada em fluxo genérico liberado.
+-- Cancela só inscrições vivas cuja reserva efetivamente desapareceu/desvinculou.
+create or replace function public.followup_reserva_desvinculada()
+returns trigger language plpgsql security invoker set search_path = public as $$
+begin
+  if old.appointment_revision is null and old.appointment_id is not null and new.appointment_id is null
+     and new.status in ('active', 'waiting_reply', 'paused_handoff', 'paused_manual') then
+    new.status := 'cancelled';
+    new.cancel_reason := 'Reserva desvinculada ou excluída; sequência encerrada.';
+    new.next_eval_at := null;
+    new.claimed_until := null;
+    new.completed_at := now();
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.followup_reserva_desvinculada() from public, anon, authenticated;
+grant execute on function public.followup_reserva_desvinculada() to service_role;
+drop trigger if exists trg_followup_reserva_desvinculada on public.followup_enrollments;
+create trigger trg_followup_reserva_desvinculada before update of appointment_id on public.followup_enrollments
+  for each row execute function public.followup_reserva_desvinculada();
+
+-- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
+--
+-- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
+
+-- dele — quem o empurrar para o meio desarma a cura para tudo que vier depois.
+-- Vigiado por `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`.
+--
+-- A 0108 revogou anon numa LISTA de 8 funções, medida num banco instalado do
+-- ZERO. Quem ATUALIZA tem outro estado: o `ALTER DEFAULT PRIVILEGES ... GRANT
+-- ALL ON FUNCTIONS TO anon` do corpo deste arquivo grava uma entrada em
+-- `pg_default_acl` que fica no catálogo PARA SEMPRE, e a partir daí toda função
+-- criada em `public` nasce com EXECUTE para anon — inclusive as deste apêndice.
+--
+-- Medido numa VPS real (2026-08-07), comparando com o que um install fresco
+-- produz: 6 definer expostas a anon e 5 a authenticated, entre elas
+-- `fn_decrypt_oauth` — alcançável pela anon key, que vai para o browser.
+--
+-- Lista conserta o estoque e reabre no próximo `create function`. Esta varredura
+-- é auto-curativa e roda DEPOIS de tudo que cria função, então cura no mesmo run
+-- em que o defeito nasceria. Desfazer o ALTER DEFAULT PRIVILEGES não serve: ele
+-- vem do `pg_dump` do Supabase e é reescrito a cada re-aplicação.
+--
+-- As duas origens de EXECUTE (a mesma lição da 0108): grant DIRETO a anon, que
+-- `revoke from public` não remove; e grant a PUBLIC, do qual anon HERDA, que
+-- `revoke from anon` não remove. O privilégio EFETIVO de authenticated e
+-- service_role é medido ANTES e devolvido depois — tira anon sem tirar leitura.
+do $$
+declare
+  f record;
+  tinha_auth boolean;
+  tinha_service boolean;
+begin
+  if to_regrole('anon') is null then
+    return;
+  end if;
+
+  for f in
+    select p.oid, p.oid::regprocedure as assinatura
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.prosecdef
+  loop
+    tinha_auth := to_regrole('authenticated') is not null
+                  and has_function_privilege('authenticated', f.oid, 'EXECUTE');
+    tinha_service := to_regrole('service_role') is not null
+                     and has_function_privilege('service_role', f.oid, 'EXECUTE');
+
+    execute format('revoke execute on function %s from public, anon', f.assinatura);
+
+    if tinha_auth then
+      execute format('grant execute on function %s to authenticated', f.assinatura);
+    end if;
+    if tinha_service then
+      execute format('grant execute on function %s to service_role', f.assinatura);
+    end if;
+  end loop;
+end $$;
+
+-- regra 2 (authenticated): as 5 que o update abriu e o install não abre. Aqui não
+-- cabe varredura — `authenticated` PRECISA de EXECUTE nos helpers de RLS e em
+-- `retrieve_top_k_chunks` (num install fresco ele tem). É julgamento por função,
+-- e o alvo de cada linha é o valor que um install fresco produz, medido.
+revoke execute on function public.fn_audit_log_row() from authenticated;
+revoke execute on function public.fn_decrypt_oauth(bytea) from authenticated;
+revoke execute on function public.fn_encrypt_oauth(text) from authenticated;
+revoke execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) from authenticated;
+revoke execute on function public.fn_update_budget_consumption() from authenticated;
+
+grant execute on function public.fn_audit_log_row() to service_role;
+grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
+grant execute on function public.fn_encrypt_oauth(text) to service_role;
+grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
+grant execute on function public.fn_update_budget_consumption() to service_role;

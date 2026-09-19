@@ -269,6 +269,45 @@ beforeAll(() => {
     end
     $seed$;
   `);
+  // 0265: três tabelas de supervisão com linhas reais nas duas organizações.
+  // A matriz abaixo mede tanto a leitura local quanto a negação cruzada via JWT.
+  sql(`
+    do $supervision$
+    declare
+      v_org uuid;
+      v_supervisor uuid;
+      v_supervised uuid;
+      v_pipeline uuid;
+      v_contact uuid;
+      v_conversation uuid;
+      v_binding uuid;
+      v_review uuid;
+    begin
+      foreach v_org in array array['${ORG_A}'::uuid, '${ORG_B}'::uuid] loop
+        select id into v_supervised from public.ai_agents where organization_id = v_org limit 1;
+        select id into v_pipeline from public.crm_pipelines where organization_id = v_org limit 1;
+        select id, contact_id into v_conversation, v_contact
+          from public.conversations where organization_id = v_org limit 1;
+        insert into public.ai_agents (organization_id, name, system_prompt)
+          values (v_org, 'Supervisor RLS', 'Teste RLS') returning id into v_supervisor;
+        insert into public.ai_supervision_bindings
+          (organization_id, supervisor_agent_id, supervised_agent_id, pipeline_id)
+          values (v_org, v_supervisor, v_supervised, v_pipeline) returning id into v_binding;
+        insert into public.ai_supervision_reviews
+          (organization_id, binding_id, idempotency_key, event_id, conversation_id,
+           contact_id, pipeline_id, actor_type, actor_id, occurred_at, origin,
+           trace_id, supervisor_agent_id, policy_version)
+          values (v_org, v_binding, 'rls-' || v_org::text, gen_random_uuid(),
+                  v_conversation, v_contact, v_pipeline, 'ai_agent', v_supervised,
+                  now(), 'ai_run_completed', 'rls-test', v_supervisor, 'v1')
+          returning id into v_review;
+        insert into public.ai_supervision_actions
+          (organization_id, review_id, action_key, kind, reason)
+          values (v_org, v_review, 'rls-' || v_org::text, 'registrar_pendencia', 'Teste RLS');
+      end loop;
+    end
+    $supervision$;
+  `);
 });
 
 /**
@@ -316,6 +355,9 @@ export const TABLES = [
   "crm_tasks",
   // 0227 — texto de sugestões: org + visibilidade da conversa por authenticated.
   "ai_reply_drafts",
+  "ai_supervision_bindings",
+  "ai_supervision_reviews",
+  "ai_supervision_actions",
   // 0232/0235 — chamada de voz. Guarda `peer_phone` (telefone da outra ponta) e
   // `owner_user_id` (quem atendeu): vazar a linha entrega ao vizinho com quem a
   // organização falou, quando, por quanto tempo e por meio de quem. A policy

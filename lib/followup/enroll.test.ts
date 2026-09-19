@@ -10,6 +10,8 @@ const ORG = "22222222-2222-4222-8222-222222222222";
 const POINTER = "33333333-3333-4333-8333-333333333333";
 const CONTACT = "44444444-4444-4444-8444-444444444444";
 const VERSION = "55555555-5555-4555-8555-555555555555";
+const APPOINTMENT = "66666666-6666-4666-8666-666666666666";
+const EVENT_TYPE = "77777777-7777-4777-8777-777777777777";
 
 const GRAPH = flowGraphSchema.parse({
   nodes: [
@@ -21,7 +23,7 @@ const GRAPH = flowGraphSchema.parse({
 
 type Row = Record<string, unknown>;
 
-function fakeDb(pointer: Row) {
+function fakeDb(pointer: Row, appointment?: Row, eventType?: Row) {
   const tables: Record<string, Row[]> = {
     followup_flow_pointers: [pointer],
     contacts: [{ id: CONTACT, organization_id: ORG }],
@@ -29,6 +31,8 @@ function fakeDb(pointer: Row) {
     followup_enrollments: [],
     ai_agents: [],
     ai_agent_versions: [],
+    calendar_appointments: appointment ? [appointment] : [],
+    calendar_event_types: eventType ? [eventType] : [],
   };
   return {
     rpc: async () => ({ data: { organization_id: ORG, contact_id: CONTACT, conversation_id: "conv-1", service_revision: 1, demanda_id: null, demanda_revision: null, status: "open", demanda_fechada_em: null }, error: null }),
@@ -103,5 +107,30 @@ describe("enrollFollowupFlow", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe("flow_not_active");
+  });
+
+  it("aceita apenas reserva ativa do mesmo contato e de tipo sujeito a sinal", async () => {
+    const pointer = { id: POINTER, organization_id: ORG, status: "active", active_version_id: VERSION };
+    const appointment = { id: APPOINTMENT, organization_id: ORG, contact_id: CONTACT, event_type_id: EVENT_TYPE, status: "pending" };
+    const db = fakeDb(pointer, appointment, { id: EVENT_TYPE, organization_id: ORG, requires_signal: true });
+    const result = await enrollFollowupFlow(db as never, {
+      organizationId: ORG, pointerId: POINTER, contactId: CONTACT,
+      appointmentId: APPOINTMENT, actorUserId: null, requestId: "r-sinal",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.enrollment.appointment_id).toBe(APPOINTMENT);
+  });
+
+  it("recusa reserva não sujeita a sinal", async () => {
+    const db = fakeDb(
+      { id: POINTER, organization_id: ORG, status: "active", active_version_id: VERSION },
+      { id: APPOINTMENT, organization_id: ORG, contact_id: CONTACT, event_type_id: EVENT_TYPE, status: "pending" },
+      { id: EVENT_TYPE, organization_id: ORG, requires_signal: false },
+    );
+    const result = await enrollFollowupFlow(db as never, {
+      organizationId: ORG, pointerId: POINTER, contactId: CONTACT,
+      appointmentId: APPOINTMENT, actorUserId: null, requestId: "r-sem-sinal",
+    });
+    expect(result).toMatchObject({ ok: false, code: "appointment_not_eligible" });
   });
 });

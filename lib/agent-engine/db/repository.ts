@@ -26,6 +26,7 @@ export type { InboxRefKind } from '@/lib/ai/inbox-destino';
  * kind numa migration adiciona aqui na mesma mudança.
  */
 export type InboxKind =
+  | 'sinal_revisao_humana'
   | 'case_stale'
   | 'appointment_outcome_required'
   | 'appointment_recovery_review'
@@ -72,6 +73,10 @@ export type InboxKind =
   // não distingue "tocou e ninguém pegou" de "o operador recusou", e para quem
   // lê a Central os dois pedem a mesma coisa: alguém precisa ligar de volta.
   | 'voice_call_missed'
+  // (migration 0263) Pendência aberta por uma revisão de supervisão: ação que
+  // depende de pessoa, ou ação bloqueada com o motivo escrito. `ref_kind` é a
+  // conversa revisada — é lá que quem assume enxerga o contexto.
+  | 'supervision_review'
   | 'other';
 
 export interface InboxItemRow {

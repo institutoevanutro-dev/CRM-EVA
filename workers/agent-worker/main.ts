@@ -81,6 +81,7 @@ import {
 } from "@/lib/agent-engine/agent/followup-turn";
 import { createCaseReplyTurnHandler } from "@/lib/agent-engine/agent/case-reply-turn";
 import { createOperatorTurnHandler } from "@/lib/agent-engine/agent/operator-turn";
+import { createSupervisorReviewHandler } from "@/lib/agent-engine/agent/supervisor-review";
 import { completeTurnForEnrollment, createPgAdminClient } from "@/lib/followup/turn-bridge";
 import { seedPlatformPlaybook } from "@/lib/agent-engine/agent/playbook-seed";
 import { runCronLoop } from "@/lib/agent-engine/cron/scheduler";
@@ -659,6 +660,10 @@ export async function main(): Promise<void> {
   // worker que não conhecesse o kind faria os jobs morrerem em 'dead' sem que
   // ninguém entendesse por quê.
   handlers.set("operator_turn", createOperatorTurnHandler(turnDeps));
+  // Migration 0263 — a revisão de supervisão. Registrada sempre: quem decide se
+  // há revisão é `ai_supervision_bindings` (nasce desligado), lido no acionamento
+  // e de novo na execução.
+  handlers.set("supervisor_review", createSupervisorReviewHandler(turnDeps));
   await startWorker(env, handlers, log);
 }
 

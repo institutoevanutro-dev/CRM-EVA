@@ -265,6 +265,7 @@ describe("o conjunto de pontos do agente publicado", () => {
       "agent_preview",
       "agent_turn",
       "operator_turn",
+      "supervisor_review",
     ]);
   });
 

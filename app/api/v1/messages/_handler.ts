@@ -974,5 +974,26 @@ export async function sendMessageHandler(
       if (error) console.error("[messages.send] emit_event failed", error.message);
     });
 
+  // Migration 0263 — ação HUMANA concluída na conversa: pede a revisão de
+  // supervisão. Comando (`*_requested`) e não o fato `message.sent`: o fato é
+  // registro que nasce `done` (0239), e reaproveitá-lo obrigaria a drenar TODO
+  // envio — inclusive os da IA e os recibos de status do canal — para achar os
+  // poucos feitos por pessoa. Só é emitido para pessoa; quem decide se há
+  // vínculo de supervisão ligado é o consumidor (`lib/supervisao/`).
+  if (ctx.actor.type === "user" && message.status !== "failed") {
+    await supabase
+      .rpc("emit_event", {
+        p_event_type: "supervision.review_requested",
+        p_entity_kind: "message",
+        p_entity_id: message.id,
+        p_payload: { origin: "human_message_sent", conversation_id: c.id, contact_id: c.contact_id },
+        p_metadata: { request_id: ctx.requestId, actor_type: "user", actor_user_id: ctx.actor.id },
+        p_organization_id: c.organization_id,
+      })
+      .then(({ error }) => {
+        if (error) console.error("[messages.send] emit supervision.review_requested failed", error.message);
+      });
+  }
+
   return message;
 }

@@ -53,8 +53,15 @@ async function login(page: Page, email: string): Promise<void> {
 }
 
 test("filtro por responsável reflete na URL e esconde leads com dono", async ({ page }) => {
+  test.setTimeout(60_000);
   await login(page, creds.users.manager!.email);
-  await page.goto(`/app/pipelines/${creds.kanban!.pipeline_id}`);
+  // O HTML chega antes do quadro. Aguarde a resposta que carrega os cards,
+  // preservando erro HTTP como falha em vez de confundi-lo com card ausente.
+  const [quadro] = await Promise.all([
+    page.waitForResponse((r) => new URL(r.url()).pathname === `/api/v1/pipelines/${creds.kanban!.pipeline_id}/board` && r.request().method() === "GET"),
+    page.goto(`/app/pipelines/${creds.kanban!.pipeline_id}`),
+  ]);
+  expect(quadro.status()).toBe(200);
 
   const owned = page.getByRole("heading", { name: "Pedido E2E com responsavel" });
   const unowned = page.getByRole("heading", { name: "Pedido E2E sem responsavel" });

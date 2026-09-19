@@ -485,6 +485,10 @@ export const AUDIT_ACTIONS = [
   // seria "sumiu". Só a rodada que expirou alguma coisa; varredura vazia não é
   // mutação.
   "agenda.pendente_expirado",
+  // T+60 do sinal abriu item de revisão humana — nunca libera horário, cancela
+  // consulta ou marca falta; só audita quando ABRIU algum item na rodada
+  // (mesma lei do cron acima: rodada sem efeito não audita).
+  "followup.sinal_revisao_humana_aberta",
   // A rodada de renovação — e ela só audita quando FEZ algo, como manda a regra
   // do cron desta base. Uma linha por rodada com efeito, carregando a contagem:
   // é o que permite responder "quantas agendas precisaram reconectar esta

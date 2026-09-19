@@ -10,6 +10,7 @@ let creds = lerCreds();
 
 test.describe("Chaves de acesso à IA", () => {
   test("[P0] chave inválida vira frase legível, e a tela diz onde pegar outra", async ({ page }) => {
+    test.setTimeout(60_000);
     creds = await loginComoAdmin(page, creds);
     await page.goto("/app/ai/credentials");
 
@@ -28,10 +29,16 @@ test.describe("Chaves de acesso à IA", () => {
 
     await page.locator("#cred-label").fill(rotulo);
     await page.locator("#cred-key").fill("sk-ant-c••••••••••••••••••••••••");
-    await page.getByRole("button", { name: /salvar e validar/i }).click();
+    // O clique termina antes de salvar. No CI, o POST levou 4s e consumiu
+    // quase todo o timeout da asserção do card, antes de a lista recarregar.
+    const [salva] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === "/api/v1/ai/credentials" && r.request().method() === "POST"),
+      page.getByRole("button", { name: /salvar e validar/i }).click(),
+    ]);
+    expect(salva.status()).toBe(201);
 
     const card = page.locator("li", { hasText: rotulo });
-    await expect(card).toBeVisible();
+    await expect(card).toBeVisible({ timeout: 15_000 });
 
     // Resultado da validação em até 15 s (401 com rede; network_error sem). O
     // refetch client-side só acontece UMA vez, 3s depois de fechar o diálogo

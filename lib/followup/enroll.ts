@@ -17,7 +17,7 @@ import {
 import { flowGraphSchema } from "@/lib/followup/graph-schema";
 
 export const ENROLLMENT_LIST_COLUMNS =
-  "id, pointer_id, version_id, contact_id, status, current_node_id, next_eval_at, outcome, started_at, completed_at, updated_at";
+  "id, pointer_id, version_id, contact_id, appointment_id, status, current_node_id, next_eval_at, outcome, started_at, completed_at, updated_at";
 
 export type EnrollFollowupInput = {
   organizationId: string;
@@ -25,6 +25,15 @@ export type EnrollFollowupInput = {
   pointerId: string;
   contactId: string;
   agentId?: string;
+  /**
+   * A reserva (migration 0266) que originou a inscrição, para fluxos amarrados
+   * a uma reserva específica (ex.: cobrança de sinal). Omitido = fluxo comum,
+   * sem mudança de comportamento. Com o campo presente, o índice único
+   * `(pointer_id, appointment_id)` garante UMA tentativa por reserva — a
+   * SEGUNDA chamada para a mesma reserva e o mesmo fluxo recebe `conflict`,
+   * nunca uma segunda inscrição.
+   */
+  appointmentId?: string;
   actorUserId: string | null;
   requestId: string;
 };
@@ -70,6 +79,33 @@ export async function enrollFollowupFlow(
     .maybeSingle();
   if (contactErr) return { ok: false, code: "internal_error", message: contactErr.message, status: 500 };
   if (!contact) return { ok: false, code: "not_found", message: "Contato não encontrado.", status: 404 };
+
+  // A reserva, quando informada, tem de ser DESTE contato e DESTA organização —
+  // nunca confiar em um id que o chamador passou sem conferir o vínculo (a
+  // mesma razão de toda query cruzada do produto filtrar organization_id).
+  if (input.appointmentId !== undefined) {
+    const { data: appointment, error: appointmentErr } = await supabase
+      .from("calendar_appointments")
+      .select("id, status, event_type_id")
+      .eq("organization_id", organizationId)
+      .eq("id", input.appointmentId)
+      .eq("contact_id", contactId)
+      .maybeSingle();
+    if (appointmentErr) return { ok: false, code: "internal_error", message: appointmentErr.message, status: 500 };
+    if (!appointment) {
+      return { ok: false, code: "not_found", message: "Reserva não encontrada para este contato.", status: 404 };
+    }
+    const { data: eventType, error: eventTypeErr } = await supabase
+      .from("calendar_event_types")
+      .select("requires_signal")
+      .eq("organization_id", organizationId)
+      .eq("id", appointment.event_type_id)
+      .maybeSingle();
+    if (eventTypeErr) return { ok: false, code: "internal_error", message: eventTypeErr.message, status: 500 };
+    if (!eventType?.requires_signal || !["pending", "confirmed"].includes(appointment.status)) {
+      return { ok: false, code: "appointment_not_eligible", message: "Reserva não está apta ao fluxo de sinal.", status: 422 };
+    }
+  }
 
   const { data: version, error: versionErr } = await supabase
     .from("followup_flow_versions")
@@ -127,16 +163,25 @@ export async function enrollFollowupFlow(
       agent_id: agentId,
       service_boundary: boundary,
       conversation_id: boundary.conversation_id,
+      ...(input.appointmentId !== undefined ? { appointment_id: input.appointmentId } : {}),
     })
     .select(ENROLLMENT_LIST_COLUMNS)
     .single();
 
   if (insErr || !created) {
     if (insErr?.code === "23505") {
+      // Duas constraints podem disparar aqui: `idx_followup_enrollments_one_live`
+      // (pointer, contact) e, com reserva, `idx_followup_enrollments_one_per_appointment`
+      // (pointer, appointment) — a mensagem distingue qual, porque "já está em
+      // follow-up" e "esta reserva já teve uma tentativa" pedem ações diferentes
+      // de quem lê o erro.
+      const eDaReserva = input.appointmentId !== undefined && insErr.message.includes("appointment");
       return {
         ok: false,
         code: "conflict",
-        message: "Este contato já está em um follow-up ativo (1 por lead na organização).",
+        message: eDaReserva
+          ? "Esta reserva já teve uma tentativa deste fluxo (1 por reserva)."
+          : "Este contato já está em um follow-up ativo (1 por lead na organização).",
         status: 409,
       };
     }

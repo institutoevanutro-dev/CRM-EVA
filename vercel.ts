@@ -29,6 +29,7 @@ const config: VercelConfig = {
     // triagem de 14/set). O gate `cron-routes-scheduled` compara este
     // inventário com o do scheduler e reprova quando eles divergem.
     { path: "/api/v1/cron/agenda-expira-pendentes", schedule: "*/15 * * * *" },
+    { path: "/api/v1/cron/sinal-revisao-humana", schedule: "*/15 * * * *" },
     { path: "/api/v1/cron/case-stale-watcher", schedule: "7 * * * *" },
     { path: "/api/v1/cron/contact-birthdays", schedule: "7 * * * *" },
     { path: "/api/v1/cron/contact-avatars", schedule: "*/10 * * * *" },

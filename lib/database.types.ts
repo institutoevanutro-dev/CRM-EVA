@@ -4052,6 +4052,7 @@ export type Database = {
       crm_stages: {
         Row: {
           agent_stage_hint: string | null
+          blocks_followups: boolean
           color: string | null
           created_at: string
           description: string | null
@@ -4072,6 +4073,7 @@ export type Database = {
         }
         Insert: {
           agent_stage_hint?: string | null
+          blocks_followups?: boolean
           color?: string | null
           created_at?: string
           description?: string | null
@@ -4092,6 +4094,7 @@ export type Database = {
         }
         Update: {
           agent_stage_hint?: string | null
+          blocks_followups?: boolean
           color?: string | null
           created_at?: string
           description?: string | null

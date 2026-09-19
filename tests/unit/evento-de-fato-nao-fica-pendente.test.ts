@@ -159,6 +159,12 @@ const NASCE_DONE_NA_ORIGEM: Record<string, { onde: string[]; porque: string }> =
       "inserido com `status='done'` no mesmo statement (o turno do Operador é registro " +
       "por decisão explícita, documentada no cabeçalho do módulo).",
   },
+  "agent.supervisor_review": {
+    onde: ["lib/agent-engine/agent/supervisor-review.ts"],
+    porque:
+      "inserido com `status='done'` no mesmo statement: é o registro de uma revisão de " +
+      "supervisão que já terminou (migration 0265), não item de trabalho.",
+  },
   "voice_call.ended": {
     onde: ["lib/wacalls/events-bridge.ts"],
     porque:

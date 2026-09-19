@@ -53,6 +53,11 @@ describe('graph-schema', () => {
         expect(result.success).toBe(true);
       });
 
+      it('preserves appointment creation anchor on published wait config', () => {
+        expect(waitConfigSchema.parse({ mode: 'fixed', duration_ms: 40 * 60_000, anchor: 'appointment_created_at' }))
+          .toEqual({ mode: 'fixed', duration_ms: 40 * 60_000, anchor: 'appointment_created_at' });
+      });
+
       it('accepts max duration', () => {
         const result = waitConfigSchema.safeParse({
           mode: 'fixed',

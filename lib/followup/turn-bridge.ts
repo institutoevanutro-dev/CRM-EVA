@@ -276,6 +276,13 @@ export function createPgAdminClient(pool: pg.Pool): TurnBridgeAdminClient {
       if (rows.length === 0) return null;
       return flowGraphSchema.parse(rows[0]!.graph);
     },
+    async loadAppointmentCreatedAt(orgId, appointmentId, contactId) {
+      const { rows } = await pool.query<{ created_at: Date }>(
+        `select created_at from calendar_appointments where organization_id=$1 and id=$2 and contact_id=$3`,
+        [orgId, appointmentId, contactId],
+      );
+      return rows[0]?.created_at?.toISOString() ?? null;
+    },
     async loadLeadFacts(orgId, contactId) {
       const { rows: leads } = await pool.query<{
         stage_id: string | null;

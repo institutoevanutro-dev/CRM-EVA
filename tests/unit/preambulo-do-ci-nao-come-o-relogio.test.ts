@@ -49,8 +49,10 @@ const ACTION = join(process.cwd(), ".github/actions/preparar-node/action.yml");
  */
 const TETOS: Record<string, { minutos: number; razao: string }> = {
   "ci.yml::verify": {
-    minutos: 15,
-    razao: "trabalho real medido: p90 594s, máximo 609s em 51 verdes — folga de ~4m45",
+    minutos: 30,
+    razao: "no fork CRM-EVA, job 105440660087 mediu ~28 min até o fim dos 9.630 unitários; " +
+      "o teto antigo de 15 min cancelou o job 105436395909 ainda com testes passando. " +
+      "O aumento é do trabalho real no runner, não do preâmbulo (que já tem teto próprio)",
   },
   // O agregado `invariants` NÃO tem teto de propósito: ele não roda a suíte, só
   // lê o desfecho de `needs`. O teto que denuncia a suíte crescendo vive na perna

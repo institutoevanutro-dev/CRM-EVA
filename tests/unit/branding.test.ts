@@ -257,6 +257,12 @@ const MARCA_CONGELADA: Record<string, EntradaDeMarca> = {
       "sufixo do `iCalUID` e prefixo das `extendedProperties` que GRAVAMOS dentro do Google Calendar do cliente. É por essa string que reconhecemos, meses depois, quais eventos daquela agenda vieram do CRM — e é o que impede o laço de eco. Trocar pela marca do revendedor faz todo evento já criado deixar de ser reconhecido, e o sintoma é compromisso fantasma ocupando horário, sem erro nenhum",
     marcas: ["deskcomm", "deskcomm.app"],
   },
+  "lib/supervisao/contrato.ts": {
+    categoria: "PROTOCOLO",
+    motivo:
+      "prefixo de namespace do UUID v5 determinístico usado como `job_queue.source_event_id` (migration 0265). Trocar o prefixo muda todo hash já calculado — uma retentativa depois do update.sh deixaria de bater com o job já enfileirado e a deduplicação de revisão de supervisão pararia de funcionar em silêncio",
+    marcas: ["deskcomm"],
+  },
 
   // ─── INFRA — cookie/storage/contêiner. Renomear desloga ou perde estado. ───
   "app/layout.tsx": {

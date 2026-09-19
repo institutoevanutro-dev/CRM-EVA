@@ -24,7 +24,9 @@ export type JobKind =
   | 'case_reply_turn'
   | 'operator_turn'
   | 'transactional_delivery'
-  | 'approved_reply';
+  | 'approved_reply'
+  /** Revisão de supervisão (migration 0263) — não fala com o lead; lane do contato. */
+  | 'supervisor_review';
 export type JobStatus = 'pending' | 'running' | 'done' | 'failed' | 'dead';
 
 export interface JobRow {

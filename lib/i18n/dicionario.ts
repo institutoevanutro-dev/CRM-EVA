@@ -2444,6 +2444,15 @@ export const DICIONARIO: Traducoes = {
   "O cliente é atendido normalmente, mas nada aparece no funil — nenhum lead criado, nenhuma etapa movida.": {
     es: "El cliente es atendido normalmente, pero nada aparece en el embudo — ningún lead creado, ninguna etapa movida.",
   },
+  "Revisar o atendimento": {
+    es: "Revisar la atención",
+  },
+  "Confere, depois de cada atendimento, o que outro agente ou a equipe fez e deixa recomendações ou ajusta o funil dentro do que você autorizou.": {
+    es: "Revisa, después de cada atención, lo que hizo otro agente o el equipo y deja recomendaciones o ajusta el embudo dentro de lo que autorizaste.",
+  },
+  "Os atendimentos continuam normalmente, mas nenhuma revisão aparece e nenhum ponto é deixado para a equipe.": {
+    es: "Las atenciones siguen con normalidad, pero ninguna revisión aparece y ningún punto queda para el equipo.",
+  },
   "Abordar quem preencheu o formulário": {
     es: "Abordar a quien completó el formulario",
   },
@@ -7651,6 +7660,21 @@ export const DICIONARIO: Traducoes = {
     es: "Devuelva la llamada cuando pueda — quien llamó no fue atendido.",
   },
   "Ligar de volta": { es: "Devolver la llamada" },
+  // Supervisão de agente (migration 0263): rótulo e orientação do kind, e o
+  // rótulo da linha do tempo. Título e corpo do aviso NÃO entram (mesma regra).
+  "A supervisão deixou um ponto para a equipe decidir": {
+    es: "La supervisión dejó un punto para que el equipo decida",
+  },
+  "Abra a conversa, confira o que a supervisão apontou e decida o próximo passo.": {
+    es: "Abra la conversación, revise lo que señaló la supervisión y decida el próximo paso.",
+  },
+  "Revisão da supervisão": { es: "Revisión de la supervisión" },
+  "Uma reserva sem sinal confirmado precisa de revisão da equipe": {
+    es: "Una reserva sin señal confirmada necesita revisión del equipo",
+  },
+  "Abra o compromisso e confira o sinal com a equipe antes de decidir sobre a reserva.": {
+    es: "Abra la cita y compruebe la señal con el equipo antes de decidir sobre la reserva.",
+  },
   // Diálogo de exclusão de canal (`frasesDoImpacto`): singular e plural.
   "chamada de voz": { es: "llamada de voz" },
   "chamadas de voz": { es: "llamadas de voz" },
