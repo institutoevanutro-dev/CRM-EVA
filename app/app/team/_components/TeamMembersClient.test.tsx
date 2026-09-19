@@ -94,7 +94,8 @@ describe("TeamMembersClient — seletor de papel (G2-02)", () => {
     renderClient({ canManage: false });
     expect(await screen.findByText("agente@example.com")).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-    expect(screen.getByText("agent")).toBeInTheDocument();
+    expect(screen.getByText("Colaborador")).toBeInTheDocument();
+    expect(screen.queryByText(/^agent$/)).not.toBeInTheDocument();
     expect(screen.getByText("Personalizada")).toBeInTheDocument();
   });
 
@@ -108,12 +109,16 @@ describe("TeamMembersClient — seletor de papel (G2-02)", () => {
     renderClient();
 
     const trigger = await screen.findByRole("combobox", { name: /Papel de Agente/i });
-    expect(trigger).toHaveTextContent("agent");
+    expect(trigger).toHaveTextContent("Colaborador");
     await user.click(trigger);
-    await user.click(await screen.findByRole("option", { name: "manager" }));
+    expect(await screen.findByRole("option", { name: "Prestador de serviço" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Colaborador" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Gerente" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Administrador" })).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "Gerente" }));
 
     // Otimista: UI já mostra o novo papel ANTES da resposta do PATCH.
-    await waitFor(() => expect(trigger).toHaveTextContent("manager"));
+    await waitFor(() => expect(trigger).toHaveTextContent("Gerente"));
     expect(apiClient.patch).toHaveBeenCalledWith(`/api/v1/team/${AGENT_ID}`, {
       role: "manager",
     });
@@ -138,10 +143,10 @@ describe("TeamMembersClient — seletor de papel (G2-02)", () => {
 
     const trigger = await screen.findByRole("combobox", { name: /Papel de Agente/i });
     await user.click(trigger);
-    await user.click(await screen.findByRole("option", { name: "viewer" }));
+    await user.click(await screen.findByRole("option", { name: "Prestador de serviço" }));
 
     // Rollback: volta ao papel original após o erro.
-    await waitFor(() => expect(trigger).toHaveTextContent("agent"));
+    await waitFor(() => expect(trigger).toHaveTextContent("Colaborador"));
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(toast.success).not.toHaveBeenCalled();
   });
