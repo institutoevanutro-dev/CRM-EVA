@@ -12,11 +12,11 @@ import { condicoesDaBuscaDeContato } from "./busca";
 
 describe("condicoesDaBuscaDeContato", () => {
   it("busca no nome do WhatsApp (display_name), não só em name", () => {
-    const c = condicoesDaBuscaDeContato("André Luis");
-    expect(c).toContain("display_name.ilike.%André Luis%");
-    expect(c).toContain("name.ilike.%André Luis%");
-    expect(c).toContain("email.ilike.%André Luis%");
-    expect(c).toContain("phone_number.ilike.%André Luis%");
+    const c = condicoesDaBuscaDeContato("André Teste");
+    expect(c).toContain("display_name.ilike.%André Teste%");
+    expect(c).toContain("name.ilike.%André Teste%");
+    expect(c).toContain("email.ilike.%André Teste%");
+    expect(c).toContain("phone_number.ilike.%André Teste%");
   });
 
   it("termo vazio ou só espaço não vira 'todo mundo'", () => {
@@ -39,11 +39,11 @@ describe("condicoesDaBuscaDeContato", () => {
   });
 
   it("telefone sem DDI acha o cadastro com +55 e com/sem o nono dígito", () => {
-    // O cadastro real está como +5527996369879; quem marca digita sem o 55.
-    const c = condicoesDaBuscaDeContato("27996369879");
-    expect(c).toContain("phone_number.ilike.%5527996369879%");
+    // O cadastro real está como +5527999990001; quem marca digita sem o 55.
+    const c = condicoesDaBuscaDeContato("27999990001");
+    expect(c).toContain("phone_number.ilike.%5527999990001%");
     // Variante sem o nono dígito, para celular antigo gravado com 12 dígitos.
-    expect(c).toContain("phone_number.ilike.%552796369879%");
+    expect(c).toContain("phone_number.ilike.%552799990001%");
   });
 
   it("não monta variante de telefone para texto curto", () => {
