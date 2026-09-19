@@ -1,5 +1,9 @@
 # Agenda por profissional e permissões da equipe
 
+## Estado da implementação
+
+O primeiro lote está implementado na branch de revisão: papéis humanos, rótulos da equipe e isolamento de agenda/pacientes do prestador. Cadastro de salas, duração por serviço, disponibilidade semanal, exceção simultânea da Isadora e ferramentas das IAs permanecem nos lotes seguintes desta especificação.
+
 ## Objetivo
 
 Usar o CRM como agenda principal do Instituto Eva. Cada profissional terá agenda,
