@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useT } from "@/hooks/i18n/useT";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
+import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -617,9 +618,7 @@ export function CRMSidePanel({ conversation }: Props) {
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {tags.map((t) => (
-                <Badge key={t} variant="secondary" className="h-4 px-1.5 text-[10px]">
-                  {t}
-                </Badge>
+                <ChipDeEtiqueta key={t} tag={t} className="h-4 px-1.5 text-[10px]" />
               ))}
             </div>
           )}
