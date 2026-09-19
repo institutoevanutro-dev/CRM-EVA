@@ -22,6 +22,9 @@ export interface TipoRow {
   description: string | null;
   category: string;
   duration_minutes: number;
+  catalog_product_id: string | null;
+  required_room_kind: "consultation" | "application" | null;
+  concurrency_key: string | null;
   location_kind: string;
   location_details: string | null;
   default_owner_user_id: string | null;
@@ -67,6 +70,9 @@ interface Rascunho {
   duration_minutes: number;
   location_kind: string;
   default_owner_user_id: string;
+  catalog_product_id: string;
+  required_room_kind: string;
+  concurrency_key: string;
 }
 
 const VAZIO: Rascunho = {
@@ -75,6 +81,9 @@ const VAZIO: Rascunho = {
   duration_minutes: 30,
   location_kind: "in_person",
   default_owner_user_id: "",
+  catalog_product_id: "",
+  required_room_kind: "",
+  concurrency_key: "",
 };
 
 /**
@@ -179,6 +188,7 @@ export function lerDegrausExtras(bruto: string | null): number[] {
 export function TiposDeAgendamentoClient({
   tiposIniciais,
   pessoas,
+  produtos,
   podeEditar,
   usuarioAtualId,
   podeConfigurarGoogle,
@@ -187,6 +197,7 @@ export function TiposDeAgendamentoClient({
 }: {
   tiposIniciais: TipoRow[];
   pessoas: Array<{ id: string; papel: string; nome: string }>;
+  produtos: Array<{ id: string; nome: string; duracao: number | null }>;
   podeEditar: boolean;
   usuarioAtualId: string;
   podeConfigurarGoogle: boolean;
@@ -262,6 +273,9 @@ export function TiposDeAgendamentoClient({
                       category: rascunho.category,
                       duration_minutes: Number(rascunho.duration_minutes),
                       location_kind: rascunho.location_kind,
+                      catalog_product_id: rascunho.catalog_product_id || null,
+                      required_room_kind: rascunho.required_room_kind || null,
+                      concurrency_key: rascunho.concurrency_key || null,
                       ...(rascunho.default_owner_user_id
                         ? { default_owner_user_id: rascunho.default_owner_user_id }
                         : {}),
@@ -329,6 +343,22 @@ export function TiposDeAgendamentoClient({
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+                {t("Serviço do catálogo")}
+                <select value={rascunho.catalog_product_id} onChange={(e) => setRascunho((r) => ({ ...r, catalog_product_id: e.target.value }))} className="rounded-md border border-border bg-surface-elevated p-2 text-sm">
+                  <option value="">Sem vínculo</option>{produtos.map((p) => <option key={p.id} value={p.id}>{p.nome}{p.duracao ? ` · ${p.duracao} min` : " · sem duração"}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+                {t("Sala necessária")}
+                <select value={rascunho.required_room_kind} onChange={(e) => setRascunho((r) => ({ ...r, required_room_kind: e.target.value }))} className="rounded-md border border-border bg-surface-elevated p-2 text-sm">
+                  <option value="">Nenhuma</option><option value="consultation">Atendimento</option><option value="application">Aplicação</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+                {t("Chave de simultaneidade")}
+                <input value={rascunho.concurrency_key} onChange={(e) => setRascunho((r) => ({ ...r, concurrency_key: e.target.value }))} placeholder="Ex.: iv ou im" className="rounded-md border border-border bg-surface-elevated p-2 text-sm" />
               </label>
               <label className="flex flex-col gap-1 text-xs font-medium text-text-muted sm:col-span-2">
                 {/* ⚠️ SEM RESPONSÁVEL NÃO HÁ AGENDA. `lib/agenda/consulta.ts` exige
