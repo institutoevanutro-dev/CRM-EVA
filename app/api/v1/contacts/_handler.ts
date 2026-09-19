@@ -16,7 +16,8 @@ import { audit } from "@/lib/audit";
 import { traduzir } from "@/lib/i18n/dicionario";
 import type { Idioma } from "@/lib/i18n/idiomas";
 import { roleAtLeast } from "@/lib/auth/types";
-import { canonicalPhoneBR, phoneLookupVariants } from "@/lib/channels/phone-variants";
+import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
+import { condicoesDaBuscaDeContato } from "@/lib/contacts/busca";
 import { encontrarContatoPorTelefone } from "@/lib/channels/contato-por-telefone";
 import { hashCpf, encryptCpfSql } from "@/lib/contacts/cpf";
 import type { Contact } from "@/lib/types/contacts";
@@ -123,51 +124,17 @@ export async function listContactsHandler(
     .limit(q.limit + 1);
 
   if (q.search) {
-    // ⚠️ `%` e `_` são curingas do LIKE, e `,`/`(`/`)` são delimitadores do DSL
-    // do `.or()` — um nome com vírgula ("Silva, Maria") injetaria uma condição
-    // extra na string do filtro. Mesmo escape de conversations/_handler.ts.
-    const s = q.search.trim().replace(/[%_]/g, (m) => `\\${m}`).replace(/[,()]/g, " ");
+    // As condições de nome, `display_name`, e-mail e telefone vivem em
+    // `lib/contacts/busca.ts` — a mesma régua da busca da agenda. O histórico
+    // de por que `display_name` está ali (achado por um turno de agente REAL
+    // que desistiu de marcar retorno para um contato que EXISTIA) mora no
+    // cabeçalho daquele arquivo.
+    const orParts = condicoesDaBuscaDeContato(q.search);
     const digits = q.search.replace(/\D/g, "");
-    const orParts = [
-      `name.ilike.%${s}%`,
-      // ⚠️ `display_name` ESTAVA DE FORA, e é a coluna que a tela MOSTRA.
-      //
-      // Contato que entra pelo WhatsApp nasce só com `display_name` (o pushName);
-      // `name` fica nulo até alguém editar à mão, e a busca ignorava exatamente
-      // o nome que o usuário vê e digita. Medido nesta instalação: 15 de 33
-      // contatos têm `display_name` e nenhum `name`.
-      //
-      // Quem decide o nome exibido é `nomeDoContato`/`rotuloDoContato`
-      // (lib/contacts/rotulo-do-contato.ts) — a ordem em vigor se lê ali, não
-      // aqui. Esta linha já afirmou que a UI prefere `display_name`, e a issue
-      // #906 inverteu a precedência sem que a frase acompanhasse. O que
-      // justifica a coluna no OR não é a ordem: é que ela é a ÚNICA preenchida
-      // em metade da base, então buscar sem ela devolve zero para quem existe.
-      //
-      // Achado por um turno de agente REAL (IA 360 · wave 2): pedido para marcar
-      // um retorno para "Cliente Retorno E2E", o modelo chamou esta busca, levou
-      // zero resultados para um contato que EXISTE, e desistiu — a demanda
-      // morreria por uma coluna faltando no OR.
-      `display_name.ilike.%${s}%`,
-      `email.ilike.%${s}%`,
-      `phone_number.ilike.%${s}%`,
-    ];
-    if (digits.length >= 8) {
-      // 10/11 dígitos sem DDI: no Brasil é DDD+local. Sem o 55, `3284793302`
-      // não gera a variante com o 9 e o cadastro `+5532984793302` some da busca.
-      const base =
-        !digits.startsWith("55") && (digits.length === 10 || digits.length === 11)
-          ? `55${digits}`
-          : digits;
-      for (const v of phoneLookupVariants(base)) {
-        const d = v.replace(/\D/g, "");
-        if (d && d !== digits) orParts.push(`phone_number.ilike.%${d}%`);
-      }
-    }
     if (digits.length === 11) {
       orParts.push(`cpf_hash.eq.${hashCpf(digits)}`);
     }
-    query = query.or(orParts.join(","));
+    if (orParts.length > 0) query = query.or(orParts.join(","));
   }
   if (q.tag) query = query.contains("tags", [q.tag]);
   if (q.source) query = query.eq("source", q.source);
