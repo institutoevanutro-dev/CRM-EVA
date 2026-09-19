@@ -36,6 +36,9 @@ import {
 import { usePessoasDaAgenda } from "@/hooks/agenda/usePessoasDaAgenda";
 import { CalendarPlus, CaretLeft, CaretRight } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
+import { apiClient } from "@/lib/api/client";
+
+interface UnidadeDaAgenda { id: string; name: string; active: boolean }
 
 const VISOES: Array<{ id: VisaoDaAgenda; rotulo: string }> = [
   { id: "dia", rotulo: "Dia" },
@@ -153,6 +156,8 @@ export function AgendaClient({
   // O CONVIDADO, opcional. Vazio mantém o comportamento de sempre: evento no
   // Google do atendente, sem `attendees` e sem convite saindo para ninguém.
   const [emailConvidado, setEmailConvidado] = React.useState("");
+  const [unidades, setUnidades] = React.useState<UnidadeDaAgenda[]>([]);
+  const [unidadeId, setUnidadeId] = React.useState("");
   const emailConvidadoLimpo = emailConvidado.trim();
   // A MESMA pergunta que a rota faz, feita aqui só para não gastar um 422 com
   // uma letra faltando no domínio. A rota continua sendo a dona da recusa — esta
@@ -160,6 +165,14 @@ export function AgendaClient({
   // (o e-mail de verdade se prova entregando, não com regex).
   const emailConvidadoInvalido =
     emailConvidadoLimpo.length > 0 && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailConvidadoLimpo);
+
+  React.useEffect(() => {
+    if (!marcando) return;
+    void apiClient
+      .get<{ data: UnidadeDaAgenda[] }>("/api/v1/agenda/unidades")
+      .then((r) => setUnidades((r as unknown as { data: UnidadeDaAgenda[] }).data ?? []))
+      .catch(() => setUnidades([]));
+  }, [marcando]);
   const marcar = useMarcarAgendamento();
   const remarcar = useRemarcarAgendamento();
   const cancelar = useCancelarAgendamento();
@@ -233,7 +246,7 @@ export function AgendaClient({
   // 422 porque ninguém está em `attendant_availability`).
   const { data: horarios, isError: horariosFalharam } = useHorariosLivres(
     marcando && tipo
-      ? { event_type_id: tipo.id, de: janelaDeBusca.de, ate: janelaDeBusca.ate }
+      ? { event_type_id: tipo.id, de: janelaDeBusca.de, ate: janelaDeBusca.ate, unit_id: unidadeId || undefined }
       : null,
   );
 
@@ -613,6 +626,24 @@ export function AgendaClient({
               </div>
             </div>
           )}
+          {!remarcandoId && unidades.some((u) => u.active) ? (
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-text-muted" htmlFor="unidade-do-agendamento">
+                {t("Unidade")}
+              </label>
+              <select
+                id="unidade-do-agendamento"
+                value={unidadeId}
+                onChange={(e) => setUnidadeId(e.target.value)}
+                className="mt-1 w-full rounded-md border border-border bg-surface p-2 text-sm"
+              >
+                <option value="">{t("Teleconsulta ou sem unidade")}</option>
+                {unidades.filter((u) => u.active).map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           {/*
             O CONVIDADO — opcional, e é o que faz o convite do Google existir.
             Sem e-mail aqui o evento nasce só na agenda do atendente, que é o
@@ -743,6 +774,7 @@ export function AgendaClient({
                   return marcar
                     .mutateAsync({
                       event_type_id: tipo.id,
+                      unit_id: unidadeId || undefined,
                       contact_id: contactId || undefined,
                       conversation_id: conversationId || undefined,
                       starts_at: instante,

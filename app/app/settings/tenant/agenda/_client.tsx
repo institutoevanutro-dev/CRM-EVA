@@ -347,18 +347,18 @@ export function TiposDeAgendamentoClient({
               <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
                 {t("Serviço do catálogo")}
                 <select value={rascunho.catalog_product_id} onChange={(e) => setRascunho((r) => ({ ...r, catalog_product_id: e.target.value }))} className="rounded-md border border-border bg-surface-elevated p-2 text-sm">
-                  <option value="">Sem vínculo</option>{produtos.map((p) => <option key={p.id} value={p.id}>{p.nome}{p.duracao ? ` · ${p.duracao} min` : " · sem duração"}</option>)}
+                  <option value="">{t("Sem vínculo")}</option>{produtos.map((p) => <option key={p.id} value={p.id}>{p.nome}{p.duracao ? ` · ${p.duracao} min` : ` · ${t("sem duração")}`}</option>)}
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
                 {t("Sala necessária")}
                 <select value={rascunho.required_room_kind} onChange={(e) => setRascunho((r) => ({ ...r, required_room_kind: e.target.value }))} className="rounded-md border border-border bg-surface-elevated p-2 text-sm">
-                  <option value="">Nenhuma</option><option value="consultation">Atendimento</option><option value="application">Aplicação</option>
+                  <option value="">{t("Nenhuma")}</option><option value="consultation">{t("Atendimento")}</option><option value="application">{t("Aplicação")}</option>
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
                 {t("Chave de simultaneidade")}
-                <input value={rascunho.concurrency_key} onChange={(e) => setRascunho((r) => ({ ...r, concurrency_key: e.target.value }))} placeholder="Ex.: iv ou im" className="rounded-md border border-border bg-surface-elevated p-2 text-sm" />
+                <input value={rascunho.concurrency_key} onChange={(e) => setRascunho((r) => ({ ...r, concurrency_key: e.target.value }))} placeholder={t("Ex.: iv ou im")} className="rounded-md border border-border bg-surface-elevated p-2 text-sm" />
               </label>
               <label className="flex flex-col gap-1 text-xs font-medium text-text-muted sm:col-span-2">
                 {/* ⚠️ SEM RESPONSÁVEL NÃO HÁ AGENDA. `lib/agenda/consulta.ts` exige

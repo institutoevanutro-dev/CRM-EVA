@@ -12,6 +12,7 @@ export interface NovoAgendamento {
   /** ISO-8601 com offset. */
   starts_at: string;
   owner_user_id?: string;
+  unit_id?: string;
   contact_id?: string;
   conversation_id?: string;
   title?: string;
