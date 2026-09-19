@@ -8,7 +8,7 @@
 import { z } from "zod";
 import { interfaceSettingsSchema, interfaceTemDestino } from "@/lib/navigation/interface";
 
-export const ROLES = ["viewer", "agent", "manager", "admin"] as const;
+export const ROLES = ["viewer", "provider", "agent", "manager", "admin"] as const;
 export type Role = (typeof ROLES)[number];
 
 export const inviteMemberSchema = z.object({

@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 
 const querySchema = z.object({
   tenant_id: z.string().uuid().optional(),
-  role: z.enum(["viewer", "agent", "manager", "admin"]).optional(),
+  role: z.enum(["viewer", "provider", "agent", "manager", "admin"]).optional(),
   q: z.string().optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),

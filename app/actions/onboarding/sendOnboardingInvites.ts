@@ -20,7 +20,7 @@ import { marcaDaSaida } from "@/lib/branding/saida";
 import { inviteOnboardingSchema } from "@/lib/schemas/onboarding";
 import { requireOnboardingCtx, patchOnboardingState, OnboardingError } from "./_shared";
 
-type PapelHumano = "viewer" | "agent" | "manager" | "admin";
+type PapelHumano = "viewer" | "provider" | "agent" | "manager" | "admin";
 
 export type SendInvitesResult =
   | {
