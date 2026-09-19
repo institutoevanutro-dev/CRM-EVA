@@ -321,6 +321,14 @@ export const DICIONARIO: Traducoes = {
   "Compromisso pessoal, sem cliente": { es: "Cita personal, sin cliente" },
   "Conversa vinculada (opcional)": { es: "Conversación vinculada (opcional)" },
   "Sem conversa vinculada": { es: "Sin conversación vinculada" },
+  // Fluxo de sinal da reserva (WaitForm.tsx e ActionConfigForm.tsx).
+  "Contar desde a criação da reserva (fluxo de sinal)": {
+    es: "Contar desde la creación de la reserva (flujo de seña)",
+  },
+  "Vincular à consulta para acompanhar o sinal": { es: "Vincular a la cita para seguir la seña" },
+  "Use com o gatilho 'Quando um horário for marcado' e um fluxo de sinal. O prazo será contado da criação da reserva.": {
+    es: "Úselo con el disparador 'Cuando se agende un horario' y un flujo de seña. El plazo se contará desde la creación de la reserva.",
+  },
   "Não foi possível carregar os vínculos. Tente novamente.": { es: "No se pudieron cargar los vínculos. Inténtelo de nuevo." },
   "Falta confirmada pela equipe": { es: "Ausencia confirmada por el equipo" },
   "Gatilho: falta confirmada pela equipe": { es: "Disparador: ausencia confirmada por el equipo" },

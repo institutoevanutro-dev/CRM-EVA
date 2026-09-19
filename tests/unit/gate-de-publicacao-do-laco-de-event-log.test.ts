@@ -145,9 +145,17 @@ describe("o gate de publicação das imagens de fundo (#604)", () => {
     expect(fachada).toContain("if: always()");
   });
 
-  it("não pode ser pulado: sem `if:`, o job roda em PR e em tag", () => {
+  it("não pode ser pulado: o único `if:` admitido é o do CI enxuto, que só vale em PR", () => {
     const job = blocoDoJob(JOB_DE_FUNDO);
-    expect(job).not.toMatch(/^\s{4}if:/m);
+    // O repo privado liga `CI_ENXUTO=1` para não pagar este build em todo push
+    // de PR. Fora de `pull_request` a condição é sempre verdadeira — em tag e
+    // na `main` o job roda. Qualquer OUTRA condição reprova aqui; o texto exato
+    // é vigiado em gatilho-dos-jobs-de-entrega.test.ts.
+    const ifs = job.split("\n").filter((l) => /^\s{4}if:/.test(l));
+    expect(ifs).toEqual([
+      "    if: github.event_name != 'pull_request' || vars.CI_ENXUTO != '1' || " +
+        "contains(github.event.pull_request.labels.*.name, 'ci-completo')",
+    ]);
     expect(job).toMatch(/^\s{4}permissions:\n\s{6}contents: read$/m);
   });
 
