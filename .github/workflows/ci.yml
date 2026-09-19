@@ -2,6 +2,8 @@ name: ci
 
 on:
   pull_request:
+    # `labeled`: pôr a etiqueta `ci-completo` dispara a rodada completa.
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
 
@@ -21,6 +23,17 @@ on:
 # continua por job em publish-image.yml — mesma regra, menor escopo que precisa.
 permissions:
   contents: read
+
+# CI ENXUTO (repositório privado, minutos de Actions cobrados). Com a variável
+# de repositório `CI_ENXUTO=1`, os jobs pesados deste arquivo NÃO rodam em PR —
+# rodam na `main`, em tag, por workflow_dispatch, ou em PR com a etiqueta
+# `ci-completo`. Sem a variável, o comportamento é o do projeto original.
+# Push novo no mesmo PR cancela a rodada anterior daquele PR; na `main` e em
+# tag nada é cancelado — é ali que a imagem é publicada.
+# Gatilhos vigiados em tests/unit/gatilho-dos-jobs-de-entrega.test.ts.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
@@ -106,6 +119,8 @@ jobs:
     # vermelho continuar falando de schema: mantido em 20, a perna morreria por
     # relógio no meio da segunda passada.
     timeout-minutes: 30
+    # CI enxuto: ver o bloco `concurrency` no topo deste arquivo.
+    if: github.event_name != 'pull_request' || vars.CI_ENXUTO != '1' || contains(github.event.pull_request.labels.*.name, 'ci-completo')
     strategy:
       # `false` e não o padrão (`true`): com `fail-fast`, a primeira major que
       # reprovasse CANCELARIA a outra e o relatório diria "cancelled" em vez de
@@ -149,7 +164,8 @@ jobs:
   # tivesse ficado com o nome `invariants`, a proteção passaria a esperar para
   # sempre um check que nenhum run produz, e NENHUM PR mergearia.
   invariants:
-    if: always()
+    # CI enxuto: ver o bloco `concurrency` no topo deste arquivo.
+    if: always() && (github.event_name != 'pull_request' || vars.CI_ENXUTO != '1' || contains(github.event.pull_request.labels.*.name, 'ci-completo'))
     needs: [invariants-majors]
     runs-on: ubuntu-latest
     # Nenhuma permissão: este job só lê o resultado de `needs`.

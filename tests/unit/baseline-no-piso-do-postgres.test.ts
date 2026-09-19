@@ -237,7 +237,10 @@ describe("o baseline fica no piso de Postgres que dizemos suportar", () => {
     //    protection da `main` exige esse nome exato, e job de matrix se chama
     //    `invariants-majors (15)`: sem a fachada, nenhum PR mergearia.
     expect(ci).toMatch(
-      /^\s{2}invariants:\n\s+if: always\(\)\n\s+needs: \[invariants-majors\]/m,
+      // `(?:\s+#.*\n)*` e `.*` depois de `always()`: o CI enxuto deste repo
+      // privado acrescenta a condição `CI_ENXUTO` à fachada — o texto exato dela
+      // é vigiado em gatilho-dos-jobs-de-entrega.test.ts, não aqui.
+      /^\s{2}invariants:\n(?:\s+#.*\n)*\s+if: always\(\).*\n\s+needs: \[invariants-majors\]/m,
     );
   });
 });
