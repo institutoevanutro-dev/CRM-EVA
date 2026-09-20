@@ -31,6 +31,8 @@ function payload(): ExportPayload {
     appointment_notices: [],
     voice_calls: [],
     channel_identities: [],
+    campaign_recipients: [],
+    campaign_suppressions: [],
   };
 }
 
