@@ -49,6 +49,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 
 const querySchema = z.object({
   event_type_id: z.string().uuid(),
+  unit_id: z.string().uuid().optional(),
   owner_user_id: z.string().uuid().optional(),
   de: z.string().datetime({ offset: true }),
   ate: z.string().datetime({ offset: true }),
@@ -98,6 +99,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     eventTypeId: parsed.data.event_type_id,
     eventTypeSlug: null,
     ownerUserId: parsed.data.owner_user_id ?? null,
+    unitId: parsed.data.unit_id ?? null,
     de,
     ate,
     agora: new Date(),
@@ -110,6 +112,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     const status: Record<CodigoDeRecusaDaConsulta, { codigo: string; http: number }> = {
       tipo_desconhecido: { codigo: "not_found", http: 404 },
       tipo_desativado: { codigo: "validation_failed", http: 422 },
+      servico_sem_duracao: { codigo: "validation_failed", http: 422 },
       sem_responsavel: { codigo: "validation_failed", http: 422 },
       jornada_mal_configurada: { codigo: "validation_failed", http: 422 },
       erro_interno: { codigo: "internal_error", http: 500 },
@@ -123,6 +126,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       slots: consulta.slots.map((s) => ({
         inicio: s.inicio.toISOString(),
         fim: s.fim.toISOString(),
+        unit_id: parsed.data.unit_id ?? null,
       })),
       fuso_da_regra: consulta.fusoDaRegra,
       // "Não publiquei meus horários" e "não tenho vaga" chegam como a mesma
@@ -144,4 +148,3 @@ export async function GET(req: NextRequest): Promise<Response> {
     { requestId },
   );
 }
-

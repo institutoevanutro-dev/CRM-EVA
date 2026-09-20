@@ -8,6 +8,7 @@ import { clientePelaAgendaLigado } from "@/lib/schemas/settings";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 
 import { TiposDeAgendamentoClient, type TipoRow } from "./_client";
+import { RecursosDaAgenda, type SalaRow, type UnidadeRow } from "./_resources";
 
 export const dynamic = "force-dynamic";
 
@@ -43,11 +44,11 @@ export default async function TiposDeAgendamentoPage() {
   const podeEditar = (user.is_platform_admin && !user.support) || ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
 
   const supabase = await createClient();
-  const [{ data: tipos }, { data: pessoas }, { data: org }] = await Promise.all([
+  const [{ data: tipos }, { data: pessoas }, { data: org }, { data: unidades }, { data: salas }, { data: produtos }] = await Promise.all([
     supabase
       .from("calendar_event_types")
       .select(
-        "id, name, slug, description, category, duration_minutes, location_kind, location_details, default_owner_user_id, requires_confirmation, is_active, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes",
+        "id, name, slug, description, category, duration_minutes, catalog_product_id, required_room_kind, concurrency_key, location_kind, location_details, default_owner_user_id, requires_confirmation, is_active, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes",
       )
       .eq("organization_id", activeOrg.orgId)
       .order("is_active", { ascending: false })
@@ -61,6 +62,9 @@ export default async function TiposDeAgendamentoPage() {
     // pela sessão funciona (a policy de leitura é de membro); gravar é só pela
     // RPC, que a action chama.
     supabase.from("organizations").select("settings").eq("id", activeOrg.orgId).maybeSingle(),
+    supabase.from("calendar_units").select("id,name,timezone,active").eq("organization_id", activeOrg.orgId).order("name"),
+    supabase.from("calendar_rooms").select("id,unit_id,name,kind,active").eq("organization_id", activeOrg.orgId).order("name"),
+    supabase.from("catalog_products").select("id,nome,appointment_duration_minutes").eq("organization_id", activeOrg.orgId).eq("ativo", true).order("nome"),
   ]);
 
   // O NOME DE GENTE, e não o fragmento de UUID.
@@ -86,6 +90,7 @@ export default async function TiposDeAgendamentoPage() {
           {t("O que se pode marcar, quanto dura e quem atende. É isto que a tela de marcar e o agente de IA oferecem ao cliente.")}
         </p>
       </header>
+      <RecursosDaAgenda unidades={(unidades ?? []) as UnidadeRow[]} salas={(salas ?? []) as SalaRow[]} podeEditar={podeEditar} />
       <TiposDeAgendamentoClient
         tiposIniciais={(tipos ?? []) as TipoRow[]}
         pessoas={(pessoas ?? []).map((p) => ({
@@ -94,6 +99,7 @@ export default async function TiposDeAgendamentoPage() {
           nome:
             nomes.get(String(p.user_id)) ?? `${String(p.user_id).slice(0, 8)} · ${String(p.role)}`,
         }))}
+        produtos={(produtos ?? []).map((p) => ({ id: String(p.id), nome: String(p.nome), duracao: p.appointment_duration_minutes === null ? null : Number(p.appointment_duration_minutes) }))}
         usuarioAtualId={user.id}
         podeConfigurarGoogle={ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent}
         podeEditar={podeEditar}

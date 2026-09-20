@@ -38,7 +38,21 @@ const containerName: string = container;
 function sql(script: string): string {
   return execFileSync(
     "docker",
-    ["exec", "-i", containerName, "psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-tA", "-f", "-"],
+    [
+      "exec",
+      "-i",
+      containerName,
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-tA",
+      "-f",
+      "-",
+    ],
     { input: script, encoding: "utf8" },
   ).trim();
 }
@@ -59,6 +73,7 @@ function escreveComo(userId: string, comando: string): boolean {
 
 const ORG = "cab0c0da-0000-4000-8000-00000000000a";
 const VIEWER = "cab0c0da-1111-4000-8000-000000000001";
+const PROVIDER = "cab0c0da-1111-4000-8000-000000000006";
 const AGENT = "cab0c0da-1111-4000-8000-000000000002";
 const OUTRO_AGENT = "cab0c0da-1111-4000-8000-000000000003";
 const MANAGER = "cab0c0da-1111-4000-8000-000000000004";
@@ -75,11 +90,14 @@ const ADMIN = "cab0c0da-1111-4000-8000-000000000005";
  * de a RLS ser consultada. Com um id que existe, quem barra é a política.
  */
 const CONEXAO = "cab0c0da-2222-4000-8000-000000000001";
+const CONTATO_DO_PRESTADOR = "cab0c0da-3333-4000-8000-000000000001";
+const CONTATO_ALHEIO = "cab0c0da-3333-4000-8000-000000000002";
 
 beforeAll(() => {
   sql(`
     insert into auth.users (id, email) values
       ('${VIEWER}',      'agenda-rbac-viewer@invariant.test'),
+      ('${PROVIDER}',    'agenda-rbac-provider@invariant.test'),
       ('${AGENT}',       'agenda-rbac-agent@invariant.test'),
       ('${OUTRO_AGENT}', 'agenda-rbac-agent2@invariant.test'),
       ('${MANAGER}',     'agenda-rbac-manager@invariant.test'),
@@ -92,6 +110,7 @@ beforeAll(() => {
 
     insert into public.user_organizations (user_id, organization_id, role, accepted_at) values
       ('${VIEWER}',      '${ORG}', 'viewer',  now()),
+      ('${PROVIDER}',    '${ORG}', 'provider', now()),
       ('${AGENT}',       '${ORG}', 'agent',   now()),
       ('${OUTRO_AGENT}', '${ORG}', 'agent',   now()),
       ('${MANAGER}',     '${ORG}', 'manager', now()),
@@ -101,7 +120,41 @@ beforeAll(() => {
     insert into public.calendar_connections (id, organization_id, user_id, account_email, status)
       values ('${CONEXAO}', '${ORG}', '${AGENT}', 'conexao@invariant.test', 'healthy')
       on conflict (id) do nothing;
+
+    insert into public.contacts (id, organization_id, display_name, consent, tags, custom_fields)
+      values
+        ('${CONTATO_DO_PRESTADOR}', '${ORG}', 'Paciente do prestador', '{}'::jsonb, '{}'::text[], '{}'::jsonb),
+        ('${CONTATO_ALHEIO}', '${ORG}', 'Paciente alheio', '{}'::jsonb, '{}'::text[], '{}'::jsonb)
+      on conflict (id) do nothing;
+
+    insert into public.calendar_appointments
+      (organization_id, contact_id, owner_user_id, title, starts_at, ends_at)
+      values ('${ORG}', '${CONTATO_DO_PRESTADOR}', '${PROVIDER}', 'Atendimento próprio',
+              now() + interval '20 days', now() + interval '20 days 30 minutes')
+      on conflict do nothing;
   `);
+});
+
+describe("prestador — papel e vínculo canônicos", () => {
+  it("fica abaixo de colaborador na régua do banco", () => {
+    const resultado = sql(`
+      set role authenticated;
+      select set_config('request.jwt.claims', '{"sub":"${PROVIDER}"}', false);
+      select public.fn_role_at_least('${ORG}', 'provider'),
+             public.fn_role_at_least('${ORG}', 'agent');
+    `);
+    expect(resultado.split("\n").at(-1)).toBe("t|f");
+  });
+
+  it("reconhece somente paciente ligado ao próprio trabalho", () => {
+    const resultado = sql(`
+      set role authenticated;
+      select set_config('request.jwt.claims', '{"sub":"${PROVIDER}"}', false);
+      select public.fn_provider_can_access_contact('${ORG}', '${CONTATO_DO_PRESTADOR}'),
+             public.fn_provider_can_access_contact('${ORG}', '${CONTATO_ALHEIO}');
+    `);
+    expect(resultado.split("\n").at(-1)).toBe("t|f");
+  });
 });
 
 function novoTipo(quem: string, slug: string): boolean {

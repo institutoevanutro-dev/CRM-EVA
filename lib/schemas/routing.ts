@@ -62,6 +62,7 @@ export const scheduleWindowSchema = z
     dow: z.number().int().min(0).max(6),
     start: z.string().regex(HHMM, "start deve ser HH:MM"),
     end: z.string().regex(HHMM, "end deve ser HH:MM"),
+    unit_id: z.string().uuid().optional(),
   })
   .refine((w) => w.start < w.end, { message: "start deve ser antes de end" });
 export type ScheduleWindow = z.infer<typeof scheduleWindowSchema>;

@@ -67,7 +67,7 @@ export function verifyInviteToken(token: string): InvitePayload | null {
       invite_id: z.string().uuid(),
       email: z.string().email(),
       organization_id: z.string().uuid(),
-      role: z.enum(["viewer", "agent", "manager", "admin"]),
+      role: z.enum(["viewer", "provider", "agent", "manager", "admin"]),
       exp: z.number().int().positive(),
       iat: z.number().int().positive().optional(),
       invited_by: z.string().uuid().optional(),

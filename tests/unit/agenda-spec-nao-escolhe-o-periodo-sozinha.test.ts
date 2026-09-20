@@ -60,6 +60,7 @@ import { describe, expect, it } from "vitest";
 const RAIZ = process.cwd();
 const DIR_E2E = path.join(RAIZ, "tests/e2e");
 const MODULO = path.join(DIR_E2E, "helpers/agenda-semana-integra.ts");
+const TELA = path.join(RAIZ, "app/app/agenda/_client.tsx");
 
 /** As funções que o módulo publica — chamar qualquer uma satisfaz a régua 2. */
 const CHAMADAS = [
@@ -146,6 +147,16 @@ function specsDeAgenda(): string[] {
 }
 
 describe("spec de agenda não escolhe o período sozinha", () => {
+  it("só navega depois que a agenda terminou de hidratar", () => {
+    const modulo = readFileSync(MODULO, "utf8");
+    const tela = readFileSync(TELA, "utf8");
+
+    expect(modulo).toMatch(
+      /getByTestId\("tela-agenda"\)[\s\S]*toHaveAttribute\("data-hidratado", "true"/,
+    );
+    expect(tela).toMatch(/setAttribute\("data-hidratado", "true"\)/);
+  });
+
   it("a varredura ENCONTRA specs — uma lista vazia passaria por vacuidade", () => {
     // Sem este caso, quebrar o regex acima (ou renomear os `data-testid`) faria
     // os dois casos abaixo ficarem verdes sobre um conjunto vazio.

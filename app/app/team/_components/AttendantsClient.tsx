@@ -1,7 +1,7 @@
 "use client";
 
 import { useT } from "@/hooks/i18n/useT";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FUSOS_OFERECIDOS } from "@/lib/tempo/fusos";
 
 import {
@@ -54,6 +54,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Clock, Plus, Trash } from "@/lib/ui/icons";
+import { apiClient } from "@/lib/api/client";
+
+interface UnidadeDaAgenda { id: string; name: string; active: boolean }
 
 const DOW_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
@@ -144,6 +147,15 @@ function ScheduleDialog({
   const initial = attendant.availability?.schedule;
   const [timezone, setTimezone] = useState(initial?.timezone || "America/Sao_Paulo");
   const [windows, setWindows] = useState<ScheduleWindow[]>(initial?.windows ?? []);
+  const [unidades, setUnidades] = useState<UnidadeDaAgenda[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    void apiClient
+      .get<{ data: UnidadeDaAgenda[] }>("/api/v1/agenda/unidades")
+      .then((r) => setUnidades((r as unknown as { data: UnidadeDaAgenda[] }).data ?? []))
+      .catch(() => setUnidades([]));
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -185,7 +197,7 @@ function ScheduleDialog({
               </p>
             ) : null}
             {windows.map((w, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={i} className="grid items-center gap-2 sm:grid-cols-[90px_1fr_1fr_1.3fr_auto]">
                 <Select
                   value={String(w.dow)}
                   onValueChange={(v) =>
@@ -215,6 +227,24 @@ function ScheduleDialog({
                     )
                   }
                 />
+                <Select
+                  value={w.unit_id ?? "sem-unidade"}
+                  onValueChange={(v) =>
+                    setWindows((ws) =>
+                      ws.map((x, j) => (j === i ? { ...x, unit_id: v === "sem-unidade" ? undefined : v } : x)),
+                    )
+                  }
+                >
+                  <SelectTrigger aria-label={t("Unidade")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sem-unidade">{t("Teleconsulta ou sem unidade")}</SelectItem>
+                    {unidades.filter((u) => u.active).map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <span className="text-muted-foreground">–</span>
                 <Input
                   type="time"

@@ -93,13 +93,18 @@ export function InviteTeamForm() {
               crus no seletor. O produto já traduz esses papéis em
               `ROTULO_DO_PAPEL` — a tela do wizard era a única que não usava.
             */}
-            {ROLES.map((r) => (
+            {ROLES.filter((r) => r !== "viewer").map((r) => (
               <SelectItem key={r} value={r}>
                 {t(ROTULO_DO_PAPEL[r])}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {role === "provider" ? (
+          <p className="text-xs text-muted-foreground">
+            {t("Somente sua agenda e pacientes vinculados.")}
+          </p>
+        ) : null}
       </div>
 
       {undelivered.length > 0 && (

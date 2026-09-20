@@ -23,7 +23,7 @@ import type { Json } from "@/lib/database.types";
  * A recusa sai como `ApiError`: a rota a traduz em `fail()`, a tool a traduz
  * para o modelo, e nenhum dos dois reimplementa a decisão.
  */
-import { coletaOQueOcupa, horariosLivresDaOrg } from "@/lib/agenda/consulta";
+import { coletaOQueOcupa, horariosLivresDaOrg, resolverDuracaoDoTipo } from "@/lib/agenda/consulta";
 import { colide } from "@/lib/agenda/horarios-livres";
 import {
   atividadeDaTransicao,
@@ -54,6 +54,7 @@ type SB = SupabaseClient;
 const CODIGO_DA_RECUSA = {
   tipo_desconhecido: { status: 404, code: "not_found" },
   tipo_desativado: { status: 422, code: "agenda_tipo_desativado" },
+  servico_sem_duracao: { status: 422, code: "agenda_servico_sem_duracao" },
   sem_responsavel: { status: 422, code: "agenda_sem_responsavel" },
   jornada_mal_configurada: { status: 422, code: "agenda_disponibilidade_invalida" },
   erro_interno: { status: 500, code: "internal_error" },
@@ -62,6 +63,7 @@ const CODIGO_DA_RECUSA = {
 export interface MarcarInput {
   event_type_id: string;
   starts_at: string;
+  unit_id?: string;
   owner_user_id?: string;
   contact_id?: string;
   conversation_id?: string;
@@ -105,7 +107,7 @@ export async function marcarAgendamentoHandler(
   const { data: tipo, error: erroTipo } = await supabase
     .from("calendar_event_types")
     .select(
-      "id, name, is_active, duration_minutes, default_owner_user_id, requires_confirmation, location_kind, location_details",
+      "id, name, is_active, duration_minutes, catalog_product_id, default_owner_user_id, requires_confirmation, location_kind, location_details",
     )
     .eq("organization_id", ctx.organization_id)
     .eq("id", input.event_type_id)
@@ -162,12 +164,34 @@ export async function marcarAgendamentoHandler(
     }
   }
 
-  const fim = new Date(inicio.getTime() + tipo.duration_minutes * 60_000);
+  let produto: { appointment_duration_minutes: number | null } | null = null;
+  if (tipo.catalog_product_id) {
+    const { data, error } = await supabase
+      .from("catalog_products")
+      .select("appointment_duration_minutes")
+      .eq("organization_id", ctx.organization_id)
+      .eq("id", tipo.catalog_product_id)
+      .maybeSingle();
+    if (error) throw new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
+    produto = data;
+  }
+  const duracaoMin = resolverDuracaoDoTipo(tipo, produto);
+  if (duracaoMin === null) {
+    throw new ApiError(
+      422,
+      "agenda_servico_sem_duracao",
+      undefined,
+      ctx.requestId,
+      `O serviço vinculado a "${tipo.name}" não tem duração de agenda configurada no catálogo.`,
+    );
+  }
+  const fim = new Date(inicio.getTime() + duracaoMin * 60_000);
   const consulta = await exigeHorarioLivre(supabase, ctx, {
     eventTypeId: tipo.id,
     donoId,
     inicio,
     fim,
+    unitId: input.unit_id ?? null,
   });
 
   const booking = tipo.location_kind === "google_meet" ? ctx.meetingBooking : undefined;
@@ -184,6 +208,8 @@ export async function marcarAgendamentoHandler(
       title: input.title ?? tipo.name,
       starts_at: inicio.toISOString(),
       ends_at: fim.toISOString(),
+      duration_minutes_snapshot: duracaoMin,
+      unit_id: input.unit_id ?? null,
       // O fuso do compromisso é campo de primeira classe: é o da JORNADA, onde
       // o horário foi decidido, e ele viaja até o lembrete (ACHADO 09).
       time_zone: consulta.fusoDaRegra,
@@ -206,6 +232,8 @@ export async function marcarAgendamentoHandler(
     .select("id, starts_at, ends_at, status, time_zone, revision, meeting_state, meeting_url")
     .single();
   if (erroInsert) {
+    const recurso = erroInsert.message.match(/agenda_(unidade_obrigatoria|sem_sala_compativel|sala_incompativel|sala_ocupada|capacidade_excedida)/)?.[0];
+    if (recurso) throw new ApiError(409, recurso, undefined, ctx.requestId, erroInsert.message);
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, erroInsert.message);
   }
 
@@ -582,6 +610,7 @@ async function exigeHorarioLivre(
     donoId: string;
     inicio: Date;
     fim: Date;
+    unitId?: string | null;
     /**
      * O compromisso sendo remarcado, que não conta como ocupação de si mesmo.
      * Só o encaixe o usa. A grade não o repassa a `horariosLivresDaOrg`, então
@@ -596,6 +625,7 @@ async function exigeHorarioLivre(
     de: args.inicio,
     ate: args.fim,
     agora: new Date(),
+    unitId: args.unitId ?? null,
   });
 
   if (!consulta.ok) {

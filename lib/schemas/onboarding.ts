@@ -128,7 +128,7 @@ export const inviteOnboardingSchema = z.object({
     .array(
       z.object({
         email: z.string().email(),
-        role: z.enum(["viewer", "agent", "manager", "admin"]),
+        role: z.enum(["viewer", "provider", "agent", "manager", "admin"]),
       }),
     )
     .min(1)

@@ -666,7 +666,7 @@ CREATE OR REPLACE FUNCTION "public"."fn_role_at_least"("p_org" "uuid", "p_min" "
     SET "search_path" TO 'public'
     AS $$
   with levels(role, lvl) as (
-    values ('viewer',1),('agent',2),('manager',3),('admin',4)
+    values ('viewer',1),('provider',2),('agent',3),('manager',4),('admin',5)
   )
   select coalesce(
     (select user_lvl.lvl >= min_lvl.lvl
@@ -1841,7 +1841,7 @@ CREATE TABLE IF NOT EXISTS "public"."user_organizations" (
     "revoked_at" timestamp with time zone,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "user_organizations_role_check" CHECK (("role" = ANY (ARRAY['viewer'::"text", 'agent'::"text", 'manager'::"text", 'admin'::"text"])))
+    CONSTRAINT "user_organizations_role_check" CHECK (("role" = ANY (ARRAY['viewer'::"text", 'provider'::"text", 'agent'::"text", 'manager'::"text", 'admin'::"text"])))
 );
 
 
@@ -18328,7 +18328,7 @@ create or replace function public.fn_accept_team_invite(
 ) returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
 declare m public.user_organizations%rowtype;
 begin
-  if p_role not in ('viewer','agent','manager','admin') then
+  if p_role not in ('viewer','provider','agent','manager','admin') then
     raise exception 'invalid_role' using errcode = '22023';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':' || p_org::text, 0));
@@ -19000,7 +19000,7 @@ create or replace function public.fn_accept_team_invite(
 ) returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
 declare m public.user_organizations%rowtype;
 begin
-  if p_role not in ('viewer','agent','manager','admin') then
+  if p_role not in ('viewer','provider','agent','manager','admin') then
     raise exception 'invalid_role' using errcode = '22023';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':' || p_org::text, 0));
@@ -23422,7 +23422,7 @@ create table if not exists public.team_invites (
   revoked_at timestamptz,
   revoked_by uuid references auth.users(id) on delete set null,
   updated_at timestamptz not null default now(),
-  constraint team_invites_role_check check (role in ('viewer','agent','manager','admin')),
+  constraint team_invites_role_check check (role in ('viewer','provider','agent','manager','admin')),
   constraint team_invites_email_nao_vazio check (length(btrim(email)) > 0)
 );
 
@@ -26821,6 +26821,568 @@ grant execute on function public.followup_reserva_desvinculada() to service_role
 drop trigger if exists trg_followup_reserva_desvinculada on public.followup_enrollments;
 create trigger trg_followup_reserva_desvinculada before update of appointment_id on public.followup_enrollments
   for each row execute function public.followup_reserva_desvinculada();
+
+-- Prestador e um papel humano abaixo de colaborador. O escopo proprio sera
+-- aplicado pelas policies da migration seguinte; aqui nasce o vocabulario e
+-- a funcao unica que reconhece o vinculo com um paciente.
+
+alter table public.user_organizations drop constraint if exists user_organizations_role_check;
+alter table public.user_organizations add constraint user_organizations_role_check
+  check (role in ('viewer','provider','agent','manager','admin'));
+
+alter table public.team_invites drop constraint if exists team_invites_role_check;
+alter table public.team_invites add constraint team_invites_role_check
+  check (role in ('viewer','provider','agent','manager','admin'));
+
+create or replace function public.fn_role_at_least(p_org uuid, p_min text)
+returns boolean language sql stable security definer set search_path = public as $$
+  with levels(role, lvl) as (
+    values ('viewer',1),('provider',2),('agent',3),('manager',4),('admin',5)
+  )
+  select coalesce(
+    (select user_lvl.lvl >= min_lvl.lvl
+       from levels user_lvl
+       join levels min_lvl on min_lvl.role = p_min
+      where user_lvl.role = public.fn_user_role_in_org(p_org)),
+    false
+  );
+$$;
+
+create or replace function public.fn_provider_can_access_contact(
+  p_org uuid, p_contact uuid, p_user uuid default auth.uid()
+) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select
+    p_user is not null
+    and (auth.uid() is null or auth.uid() = p_user)
+    and exists (
+      select 1 from public.user_organizations u
+       where u.organization_id = p_org
+         and u.user_id = p_user
+         and u.role = 'provider'
+         and u.revoked_at is null
+    )
+    and (
+      exists (
+        select 1 from public.calendar_appointments a
+         where a.organization_id = p_org
+           and a.contact_id = p_contact
+           and a.owner_user_id = p_user
+      )
+      or exists (
+        select 1 from public.crm_leads l
+         where l.organization_id = p_org
+           and l.contact_id = p_contact
+           and l.owner_user_id = p_user
+      )
+      or exists (
+        select 1 from public.conversations c
+         where c.organization_id = p_org
+           and c.contact_id = p_contact
+           and c.assigned_to_user_id = p_user
+      )
+    );
+$$;
+revoke all on function public.fn_provider_can_access_contact(uuid,uuid,uuid) from public, anon;
+grant execute on function public.fn_provider_can_access_contact(uuid,uuid,uuid) to authenticated, service_role;
+
+create or replace function public.fn_accept_team_invite(
+  p_user uuid, p_org uuid, p_role text, p_invited_by uuid,
+  p_issued_at timestamptz, p_invited_at timestamptz,
+  p_interface_settings jsonb
+) returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
+declare m public.user_organizations%rowtype;
+begin
+  if p_role not in ('viewer','provider','agent','manager','admin') then
+    raise exception 'invalid_role' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':' || p_org::text, 0));
+  if not exists(select 1 from public.organizations where id = p_org and status = 'active') then
+    raise exception 'organization_unavailable' using errcode = '42501';
+  end if;
+  select * into m from public.user_organizations
+    where organization_id = p_org and user_id = p_user for update;
+  if found and m.revoked_at is null and m.accepted_at is not null then
+    return jsonb_build_object('id', m.id, 'changed', false);
+  end if;
+  if found and m.revoked_at is not null and (p_issued_at is null or p_issued_at <= m.revoked_at) then
+    raise exception 'invite_revoked' using errcode = '42501';
+  end if;
+  if m.id is not null then
+    update public.user_organizations set role = p_role, revoked_at = null,
+      interface_settings = p_interface_settings,
+      invited_by = coalesce(p_invited_by, invited_by), invited_at = p_invited_at,
+      accepted_at = now(), updated_at = now()
+      where organization_id = p_org and id = m.id returning * into m;
+  else
+    insert into public.user_organizations
+      (organization_id,user_id,role,invited_by,invited_at,accepted_at,interface_settings)
+    values (p_org,p_user,p_role,p_invited_by,p_invited_at,now(),p_interface_settings)
+    returning * into m;
+  end if;
+  if p_role = 'admin' then
+    delete from public.attendant_availability av
+     where av.organization_id = p_org and av.user_id <> p_user
+       and exists (select 1 from public.user_organizations uo
+                    where uo.organization_id = p_org and uo.user_id = av.user_id
+                      and uo.provisional_until_handover);
+    delete from public.user_organizations uo
+     where uo.organization_id = p_org and uo.provisional_until_handover and uo.user_id <> p_user;
+  end if;
+  return jsonb_build_object('id', m.id, 'changed', true);
+end $$;
+revoke all on function public.fn_accept_team_invite(uuid,uuid,text,uuid,timestamptz,timestamptz,jsonb) from public,anon,authenticated;
+grant execute on function public.fn_accept_team_invite(uuid,uuid,text,uuid,timestamptz,timestamptz,jsonb) to service_role;
+
+notify pgrst, 'reload schema';
+-- O prestador trabalha somente na propria agenda e nos pacientes vinculados.
+-- Colaborador, gerente e administrador preservam a visao da organizacao.
+
+alter table public.calendar_appointments enable row level security;
+drop policy if exists tenant_isolation_calendar_appointments_all on public.calendar_appointments;
+drop policy if exists calendar_appointments_select on public.calendar_appointments;
+drop policy if exists calendar_appointments_write on public.calendar_appointments;
+drop policy if exists calendar_appointments_insert on public.calendar_appointments;
+drop policy if exists calendar_appointments_update on public.calendar_appointments;
+drop policy if exists calendar_appointments_delete on public.calendar_appointments;
+
+create policy calendar_appointments_select on public.calendar_appointments
+  for select using (
+    public.fn_is_platform_admin()
+    or (
+      organization_id in (select public.fn_user_org_ids())
+      and (
+        public.fn_user_role_in_org(organization_id) <> 'provider'
+        or owner_user_id = auth.uid()
+      )
+    )
+  );
+
+create policy calendar_appointments_insert on public.calendar_appointments
+  for insert with check (
+    public.fn_is_platform_admin()
+    or (
+      organization_id in (select public.fn_user_org_ids())
+      and (
+        (public.fn_user_role_in_org(organization_id) = 'provider' and owner_user_id = auth.uid())
+        or public.fn_role_at_least(organization_id, 'agent')
+      )
+    )
+  );
+
+create policy calendar_appointments_update on public.calendar_appointments
+  for update using (
+    public.fn_is_platform_admin()
+    or (
+      organization_id in (select public.fn_user_org_ids())
+      and (
+        (public.fn_user_role_in_org(organization_id) = 'provider' and owner_user_id = auth.uid())
+        or public.fn_role_at_least(organization_id, 'agent')
+      )
+    )
+  ) with check (
+    public.fn_is_platform_admin()
+    or (
+      organization_id in (select public.fn_user_org_ids())
+      and (
+        (public.fn_user_role_in_org(organization_id) = 'provider' and owner_user_id = auth.uid())
+        or public.fn_role_at_least(organization_id, 'agent')
+      )
+    )
+  );
+
+create policy calendar_appointments_delete on public.calendar_appointments
+  for delete using (
+    public.fn_is_platform_admin()
+    or (
+      organization_id in (select public.fn_user_org_ids())
+      and (
+        (public.fn_user_role_in_org(organization_id) = 'provider' and owner_user_id = auth.uid())
+        or public.fn_role_at_least(organization_id, 'agent')
+      )
+    )
+  );
+
+alter table public.contacts enable row level security;
+drop policy if exists tenant_isolation_contacts_all on public.contacts;
+drop policy if exists contacts_select on public.contacts;
+drop policy if exists contacts_insert on public.contacts;
+drop policy if exists contacts_update on public.contacts;
+drop policy if exists contacts_delete on public.contacts;
+
+create policy contacts_select on public.contacts
+  for select using (
+    public.fn_is_platform_admin()
+    or (
+      organization_id in (select public.fn_user_org_ids())
+      and (
+        public.fn_user_role_in_org(organization_id) <> 'provider'
+        or public.fn_provider_can_access_contact(organization_id, id)
+      )
+    )
+  );
+
+-- Um prestador nao cria um contato solto: o cadastro nasce pelo fluxo de
+-- agendamento, que ja grava o vinculo. Os demais papeis mantem o comportamento.
+create policy contacts_insert on public.contacts
+  for insert with check (
+    public.fn_is_platform_admin()
+    or (
+      organization_id in (select public.fn_user_org_ids())
+      and public.fn_user_role_in_org(organization_id) <> 'provider'
+    )
+  );
+
+create policy contacts_update on public.contacts
+  for update using (
+    public.fn_is_platform_admin()
+    or (
+      organization_id in (select public.fn_user_org_ids())
+      and (
+        public.fn_user_role_in_org(organization_id) <> 'provider'
+        or public.fn_provider_can_access_contact(organization_id, id)
+      )
+    )
+  ) with check (
+    public.fn_is_platform_admin()
+    or (
+      organization_id in (select public.fn_user_org_ids())
+      and (
+        public.fn_user_role_in_org(organization_id) <> 'provider'
+        or public.fn_provider_can_access_contact(organization_id, id)
+      )
+    )
+  );
+
+create policy contacts_delete on public.contacts
+  for delete using (
+    public.fn_is_platform_admin()
+    or (
+      organization_id in (select public.fn_user_org_ids())
+      and (
+        public.fn_user_role_in_org(organization_id) <> 'provider'
+        or public.fn_provider_can_access_contact(organization_id, id)
+      )
+    )
+  );
+
+notify pgrst, 'reload schema';
+
+-- 0270 — Prestador cancela e remarca somente o próprio compromisso pela RPC.
+
+create or replace function public.fn_appointment_change_core(p_org uuid,p_id uuid,p_revision bigint,p_patch jsonb,p_remote boolean,p_base jsonb)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare a public.calendar_appointments; contact uuid; origin jsonb; event_id uuid;
+begin
+ if p_remote and (auth.uid() is not null or (p_patch-'starts_at'-'ends_at'-'time_zone'-'status'-'cancellation_reason')<>'{}'::jsonb or coalesce(p_patch->>'status','cancelled')<>'cancelled') then raise exception 'google_patch_forbidden' using errcode='42501';end if;
+ if auth.uid() is not null and ((not public.fn_role_at_least(p_org,'agent') and public.fn_user_role_in_org(p_org)<>'provider') or not public.fn_support_write_allowed(p_org)) then raise exception 'appointment_forbidden' using errcode='42501'; end if;
+ if auth.uid() is not null and not public.fn_session_mfa_proven() then raise exception 'appointment_mfa_required' using errcode='42501';end if;
+ select contact_id into contact from public.calendar_appointments where organization_id=p_org and id=p_id;
+ if not found then raise exception 'appointment_not_found' using errcode='P0002'; end if;
+ if contact is not null then perform public.fn_service_lock(p_org,contact); end if;
+ select * into a from public.calendar_appointments where organization_id=p_org and id=p_id for update;
+ if auth.uid() is not null and public.fn_user_role_in_org(p_org)='provider' and a.owner_user_id is distinct from auth.uid() then raise exception 'appointment_forbidden' using errcode='42501'; end if;
+ if a.contact_id is distinct from contact or a.revision is distinct from p_revision then raise exception 'appointment_stale' using errcode='40001'; end if;
+ if p_remote and a.status not in ('pending','confirmed') then raise exception 'google_outcome_protected' using errcode='40001';end if;
+ if a.status='cancelled' then raise exception 'appointment_cancelled' using errcode='22023'; end if;
+ if contact is not null then origin:=jsonb_build_object('kind','command','observed',public.fn_service_observe_command(p_org,contact)); end if;
+ update public.calendar_appointments set
+  google_base_projection=case when p_remote then p_base else google_base_projection end,
+  starts_at=case when p_patch?'starts_at' then (p_patch->>'starts_at')::timestamptz else starts_at end,
+  ends_at=case when p_patch?'ends_at' then (p_patch->>'ends_at')::timestamptz else ends_at end,
+  time_zone=coalesce(p_patch->>'time_zone',time_zone), status=coalesce(p_patch->>'status',status),
+  cancelled_at=case when p_patch->>'status'='cancelled' then now() else cancelled_at end,
+  cancellation_reason=case when p_patch?'cancellation_reason' then p_patch->>'cancellation_reason' else cancellation_reason end,
+  notes=case when p_patch?'notes' then p_patch->>'notes' else notes end,
+  guest_email=case when p_patch?'guest_email' then p_patch->>'guest_email' else guest_email end,
+  outcome_message_id=case when p_patch?'outcome_message_id' then (p_patch->>'outcome_message_id')::uuid else null end,
+  confirmation_next_at=case when p_patch?'confirmation_next_at' then (p_patch->>'confirmation_next_at')::timestamptz else confirmation_next_at end
+ where organization_id=p_org and id=p_id returning * into a;
+ if p_patch?'confirmation_next_at' and (a.confirmation_next_at<=now() or a.confirmation_next_at>now()+interval '24 hours') then raise exception 'appointment_invalid_snooze' using errcode='22023'; end if;
+ update public.followup_enrollments set status='cancelled',cancel_reason='O compromisso mudou. Revise o próximo passo.',completed_at=now(),next_eval_at=null,claimed_until=null
+  where organization_id=p_org and appointment_id=p_id and appointment_revision<>a.revision and status in ('active','waiting_reply','paused_handoff','paused_manual');
+ update public.agent_inbox_items set status='resolved',resolved_at=now()
+  where organization_id=p_org and ref_kind='appointment' and ref_id=p_id and status='open'
+   and (appointment_revision<>a.revision or a.status in ('completed','no_show','cancelled') or p_patch?'confirmation_next_at');
+ if contact is not null and a.status='no_show' and a.outcome_recorded_at is not null and a.revision<>p_revision then
+  insert into public.event_log(organization_id,event_type,entity_kind,entity_id,payload)
+   values(p_org,'appointment.outcome_confirmed','appointment',p_id,jsonb_build_object('appointment_revision',a.revision,'service_origin',origin)) returning id into event_id;
+ end if;
+ return to_jsonb(a);
+end; $$;
+
+revoke all on function public.fn_appointment_change_core(uuid,uuid,bigint,jsonb,boolean,jsonb) from public,anon,authenticated;
+
+-- 0271 — Unidades, salas e duração operacional dos serviços da agenda.
+create table if not exists public.calendar_units (
+ id uuid primary key default gen_random_uuid(), organization_id uuid not null references public.organizations(id) on delete cascade,
+ name text not null, timezone text not null default 'America/Sao_Paulo', active boolean not null default true,
+ created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+ constraint calendar_units_name_present check (btrim(name)<>''), unique(organization_id,id), unique(organization_id,name)
+);
+create table if not exists public.calendar_rooms (
+ id uuid primary key default gen_random_uuid(), organization_id uuid not null references public.organizations(id) on delete cascade,
+ unit_id uuid not null, name text not null, kind text not null, active boolean not null default true,
+ created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+ constraint calendar_rooms_name_present check (btrim(name)<>''),
+ constraint calendar_rooms_kind_check check(kind in ('consultation','application')),
+ constraint calendar_rooms_unit_fk foreign key(organization_id,unit_id) references public.calendar_units(organization_id,id) on delete restrict,
+ unique(organization_id,id), unique(organization_id,unit_id,id), unique(organization_id,unit_id,name)
+);
+alter table public.catalog_products add column if not exists appointment_duration_minutes integer;
+alter table public.catalog_products drop constraint if exists catalog_products_appointment_duration_check;
+alter table public.catalog_products add constraint catalog_products_appointment_duration_check check(appointment_duration_minutes is null or appointment_duration_minutes between 5 and 1440);
+create unique index if not exists catalog_products_org_id_key on public.catalog_products(organization_id,id);
+alter table public.calendar_event_types add column if not exists catalog_product_id uuid;
+alter table public.calendar_event_types add column if not exists required_room_kind text;
+alter table public.calendar_event_types add column if not exists concurrency_key text;
+alter table public.calendar_event_types drop constraint if exists calendar_event_types_catalog_product_fk;
+alter table public.calendar_event_types add constraint calendar_event_types_catalog_product_fk foreign key(organization_id,catalog_product_id) references public.catalog_products(organization_id,id) on delete set null (catalog_product_id);
+alter table public.calendar_event_types drop constraint if exists calendar_event_types_required_room_kind_check;
+alter table public.calendar_event_types add constraint calendar_event_types_required_room_kind_check check(required_room_kind is null or required_room_kind in ('consultation','application'));
+alter table public.calendar_appointments add column if not exists unit_id uuid;
+alter table public.calendar_appointments add column if not exists room_id uuid;
+alter table public.calendar_appointments add column if not exists duration_minutes_snapshot integer;
+update public.calendar_appointments set duration_minutes_snapshot=greatest(5,least(1440,round(extract(epoch from (ends_at-starts_at))/60)::integer)) where duration_minutes_snapshot is null;
+alter table public.calendar_appointments alter column duration_minutes_snapshot set not null;
+create or replace function public.fn_calendar_appointment_duration_snapshot()
+returns trigger language plpgsql set search_path=public as $$
+begin
+  if new.duration_minutes_snapshot is null then
+    new.duration_minutes_snapshot := greatest(5, least(1440, round(extract(epoch from (new.ends_at-new.starts_at))/60)::integer));
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.fn_calendar_appointment_duration_snapshot() from public, anon, authenticated;
+drop trigger if exists trg_calendar_appointment_duration_snapshot on public.calendar_appointments;
+create trigger trg_calendar_appointment_duration_snapshot before insert on public.calendar_appointments for each row execute function public.fn_calendar_appointment_duration_snapshot();
+alter table public.calendar_appointments drop constraint if exists calendar_appointments_unit_fk;
+alter table public.calendar_appointments add constraint calendar_appointments_unit_fk foreign key(organization_id,unit_id) references public.calendar_units(organization_id,id) on delete restrict;
+alter table public.calendar_appointments drop constraint if exists calendar_appointments_room_fk;
+alter table public.calendar_appointments add constraint calendar_appointments_room_fk foreign key(organization_id,unit_id,room_id) references public.calendar_rooms(organization_id,unit_id,id) on delete restrict;
+alter table public.calendar_appointments drop constraint if exists calendar_appointments_duration_snapshot_check;
+alter table public.calendar_appointments add constraint calendar_appointments_duration_snapshot_check check(duration_minutes_snapshot between 5 and 1440);
+alter table public.calendar_appointments drop constraint if exists calendar_appointments_room_requires_unit;
+alter table public.calendar_appointments add constraint calendar_appointments_room_requires_unit check(room_id is null or unit_id is not null);
+create index if not exists calendar_rooms_unit_active_idx on public.calendar_rooms(organization_id,unit_id,active);
+create index if not exists calendar_appointments_room_period_idx on public.calendar_appointments(organization_id,room_id,starts_at) where room_id is not null and status in ('pending','confirmed');
+alter table public.calendar_units enable row level security; alter table public.calendar_rooms enable row level security;
+drop policy if exists calendar_units_select on public.calendar_units;
+create policy calendar_units_select on public.calendar_units for select using(organization_id in(select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+drop policy if exists calendar_units_write on public.calendar_units;
+create policy calendar_units_write on public.calendar_units using(public.fn_is_platform_admin() or (organization_id in(select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'manager'))) with check(public.fn_is_platform_admin() or (organization_id in(select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'manager')));
+drop policy if exists calendar_rooms_select on public.calendar_rooms;
+create policy calendar_rooms_select on public.calendar_rooms for select using(organization_id in(select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+drop policy if exists calendar_rooms_write on public.calendar_rooms;
+create policy calendar_rooms_write on public.calendar_rooms using(public.fn_is_platform_admin() or (organization_id in(select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'manager'))) with check(public.fn_is_platform_admin() or (organization_id in(select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'manager')));
+revoke all on public.calendar_units,public.calendar_rooms from anon;
+grant select,insert,update,delete on public.calendar_units,public.calendar_rooms to authenticated;
+grant all on public.calendar_units,public.calendar_rooms to service_role;
+drop trigger if exists trg_calendar_units_updated_at on public.calendar_units;
+create trigger trg_calendar_units_updated_at before update on public.calendar_units for each row execute function public.fn_set_updated_at();
+drop trigger if exists trg_calendar_rooms_updated_at on public.calendar_rooms;
+create trigger trg_calendar_rooms_updated_at before update on public.calendar_rooms for each row execute function public.fn_set_updated_at();
+comment on column public.catalog_products.appointment_duration_minutes is 'Duração operacional do serviço em minutos. NULL impede oferta automática pela agenda/IA.';
+comment on column public.calendar_appointments.duration_minutes_snapshot is 'Cópia da duração usada ao marcar; preserva o histórico quando o catálogo muda.';
+
+-- 0272 — A escolha de sala e a capacidade paralela são decididas no banco.
+create or replace function public.fn_calendar_allocate_and_guard_resources()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_room_kind text;
+  v_concurrency_key text;
+  v_existing record;
+begin
+  if new.status not in ('pending', 'confirmed') then return new; end if;
+
+  select required_room_kind, concurrency_key
+    into v_room_kind, v_concurrency_key
+    from public.calendar_event_types
+   where id = new.event_type_id and organization_id = new.organization_id;
+
+  if new.owner_user_id is not null then
+    perform pg_advisory_xact_lock(hashtextextended(new.organization_id::text || ':owner:' || new.owner_user_id::text, 0));
+  end if;
+
+  if v_room_kind is not null then
+    if new.unit_id is null then
+      raise exception 'agenda_unidade_obrigatoria' using errcode = 'P0001';
+    end if;
+    perform pg_advisory_xact_lock(hashtextextended(new.organization_id::text || ':unit:' || new.unit_id::text, 0));
+
+    if new.room_id is null then
+      select r.id into new.room_id
+        from public.calendar_rooms r
+       where r.organization_id = new.organization_id
+         and r.unit_id = new.unit_id
+         and r.kind = v_room_kind
+         and r.active
+         and not exists (
+           select 1 from public.calendar_appointments a
+            where a.organization_id = new.organization_id
+              and a.room_id = r.id
+              and a.status in ('pending','confirmed')
+              and a.id is distinct from new.id
+              and a.starts_at < new.ends_at and a.ends_at > new.starts_at
+         )
+       order by r.id
+       limit 1;
+      if new.room_id is null then
+        raise exception 'agenda_sem_sala_compativel' using errcode = 'P0001';
+      end if;
+    end if;
+
+    if not exists (
+      select 1 from public.calendar_rooms r
+       where r.id = new.room_id and r.organization_id = new.organization_id
+         and r.unit_id = new.unit_id and r.kind = v_room_kind and r.active
+    ) then
+      raise exception 'agenda_sala_incompativel' using errcode = 'P0001';
+    end if;
+    if exists (
+      select 1 from public.calendar_appointments a
+       where a.organization_id = new.organization_id and a.room_id = new.room_id
+         and a.status in ('pending','confirmed') and a.id is distinct from new.id
+         and a.starts_at < new.ends_at and a.ends_at > new.starts_at
+    ) then
+      raise exception 'agenda_sala_ocupada' using errcode = 'P0001';
+    end if;
+  end if;
+
+  if new.owner_user_id is not null then
+    for v_existing in
+      select a.unit_id, t.concurrency_key
+        from public.calendar_appointments a
+        left join public.calendar_event_types t
+          on t.id = a.event_type_id and t.organization_id = a.organization_id
+       where a.organization_id = new.organization_id
+         and a.owner_user_id = new.owner_user_id
+         and a.status in ('pending','confirmed')
+         and a.id is distinct from new.id
+         and a.starts_at < new.ends_at and a.ends_at > new.starts_at
+    loop
+      if new.unit_id is null
+         or v_existing.unit_id is distinct from new.unit_id
+         or v_concurrency_key is null
+         or v_existing.concurrency_key is null
+         or v_existing.concurrency_key = v_concurrency_key then
+        raise exception 'agenda_capacidade_excedida' using errcode = 'P0001';
+      end if;
+    end loop;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.fn_calendar_allocate_and_guard_resources() from public, anon, authenticated;
+grant execute on function public.fn_calendar_allocate_and_guard_resources() to service_role;
+
+-- 0273 — Compromissos anteriores ao catálogo não disputam capacidade nova.
+create or replace function public.fn_calendar_allocate_and_guard_resources()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_room_kind text;
+  v_concurrency_key text;
+  v_existing record;
+begin
+  if new.status not in ('pending', 'confirmed') then return new; end if;
+
+  select required_room_kind, concurrency_key
+    into v_room_kind, v_concurrency_key
+    from public.calendar_event_types
+   where id = new.event_type_id and organization_id = new.organization_id;
+
+  if new.owner_user_id is not null then
+    perform pg_advisory_xact_lock(hashtextextended(new.organization_id::text || ':owner:' || new.owner_user_id::text, 0));
+  end if;
+
+  if v_room_kind is not null then
+    if new.unit_id is null then
+      raise exception 'agenda_unidade_obrigatoria' using errcode = 'P0001';
+    end if;
+    perform pg_advisory_xact_lock(hashtextextended(new.organization_id::text || ':unit:' || new.unit_id::text, 0));
+
+    if new.room_id is null then
+      select r.id into new.room_id
+        from public.calendar_rooms r
+       where r.organization_id = new.organization_id
+         and r.unit_id = new.unit_id
+         and r.kind = v_room_kind
+         and r.active
+         and not exists (
+           select 1 from public.calendar_appointments a
+            where a.organization_id = new.organization_id
+              and a.room_id = r.id
+              and a.status in ('pending','confirmed')
+              and a.id is distinct from new.id
+              and a.starts_at < new.ends_at and a.ends_at > new.starts_at
+         )
+       order by r.id
+       limit 1;
+      if new.room_id is null then
+        raise exception 'agenda_sem_sala_compativel' using errcode = 'P0001';
+      end if;
+    end if;
+
+    if not exists (
+      select 1 from public.calendar_rooms r
+       where r.id = new.room_id and r.organization_id = new.organization_id
+         and r.unit_id = new.unit_id and r.kind = v_room_kind and r.active
+    ) then
+      raise exception 'agenda_sala_incompativel' using errcode = 'P0001';
+    end if;
+    if exists (
+      select 1 from public.calendar_appointments a
+       where a.organization_id = new.organization_id and a.room_id = new.room_id
+         and a.status in ('pending','confirmed') and a.id is distinct from new.id
+         and a.starts_at < new.ends_at and a.ends_at > new.starts_at
+    ) then
+      raise exception 'agenda_sala_ocupada' using errcode = 'P0001';
+    end if;
+  end if;
+
+  if new.owner_user_id is not null and new.event_type_id is not null then
+    for v_existing in
+      select a.unit_id, t.concurrency_key
+        from public.calendar_appointments a
+        join public.calendar_event_types t
+          on t.id = a.event_type_id and t.organization_id = a.organization_id
+       where a.organization_id = new.organization_id
+         and a.owner_user_id = new.owner_user_id
+         and a.event_type_id is not null
+         and a.status in ('pending','confirmed')
+         and a.id is distinct from new.id
+         and a.starts_at < new.ends_at and a.ends_at > new.starts_at
+    loop
+      if new.unit_id is null
+         or v_existing.unit_id is distinct from new.unit_id
+         or v_concurrency_key is null
+         or v_existing.concurrency_key is null
+         or v_existing.concurrency_key = v_concurrency_key then
+        raise exception 'agenda_capacidade_excedida' using errcode = 'P0001';
+      end if;
+    end loop;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.fn_calendar_allocate_and_guard_resources() from public, anon, authenticated;
+grant execute on function public.fn_calendar_allocate_and_guard_resources() to service_role;
+drop trigger if exists trg_calendar_allocate_and_guard_resources on public.calendar_appointments;
+create trigger trg_calendar_allocate_and_guard_resources
+before insert or update of organization_id,event_type_id,owner_user_id,unit_id,room_id,starts_at,ends_at,status
+on public.calendar_appointments for each row
+execute function public.fn_calendar_allocate_and_guard_resources();
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

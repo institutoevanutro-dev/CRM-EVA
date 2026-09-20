@@ -20,13 +20,14 @@ import type { Idioma } from "@/lib/i18n/idiomas";
  * consulta `fn_user_role_in_org`, que lê `user_organizations`. O agente não é
  * usuário. A RLS segue intacta.
  */
-export type Role = "viewer" | "agent" | "ai_operator" | "manager" | "admin";
+export type Role = "viewer" | "provider" | "agent" | "ai_operator" | "manager" | "admin";
 export const ROLE_RANK: Record<Role, number> = {
   viewer: 1,
-  agent: 2,
-  ai_operator: 3,
-  manager: 4,
-  admin: 5,
+  provider: 2,
+  agent: 3,
+  ai_operator: 4,
+  manager: 5,
+  admin: 6,
 };
 
 /**
@@ -45,12 +46,19 @@ export function roleAtLeast(role: string | null | undefined, min: Role): boolean
 }
 
 /** Papéis que uma PESSOA pode ter. Espelha `user_organizations_role_check`. */
-export const PAPEIS_HUMANOS: ReadonlyArray<Role> = ["viewer", "agent", "manager", "admin"];
+export const PAPEIS_HUMANOS: ReadonlyArray<Role> = [
+  "viewer",
+  "provider",
+  "agent",
+  "manager",
+  "admin",
+];
 
 /** Rótulo pt-BR para quem configura. `ai_operator` nunca aparece em seletor de time. */
 export const ROTULO_DO_PAPEL: Record<Role, string> = {
   viewer: "Somente leitura",
-  agent: "Atendente",
+  provider: "Prestador de serviço",
+  agent: "Colaborador",
   ai_operator: "Assistente com autonomia de operação",
   manager: "Gerente",
   admin: "Administrador",

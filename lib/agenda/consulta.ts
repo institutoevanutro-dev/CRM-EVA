@@ -88,9 +88,18 @@ export const MAXIMO_DE_DIAS = 62;
 export type CodigoDeRecusaDaConsulta =
   | "tipo_desconhecido"
   | "tipo_desativado"
+  | "servico_sem_duracao"
   | "sem_responsavel"
   | "jornada_mal_configurada"
   | "erro_interno";
+
+export function resolverDuracaoDoTipo(
+  tipo: { catalog_product_id: string | null; duration_minutes: number },
+  produto: { appointment_duration_minutes: number | null } | null,
+): number | null {
+  if (!tipo.catalog_product_id) return tipo.duration_minutes;
+  return produto?.appointment_duration_minutes ?? null;
+}
 
 export interface ParametrosDaConsulta {
   /**
@@ -106,6 +115,7 @@ export interface ParametrosDaConsulta {
   eventTypeSlug?: string | null;
   /** Ausente = o responsável padrão do tipo. */
   ownerUserId?: string | null;
+  unitId?: string | null;
   de: Date;
   ate: Date;
   /** INJETADO, como em `horariosLivres`. Relógio lido aqui dentro é o defeito que `janela-do-canal.ts` documenta. */
@@ -164,7 +174,7 @@ export async function horariosLivresDaOrg(
   const { data: tipo, error: erroTipo } = await supabase
     .from("calendar_event_types")
     .select(
-      "id, name, is_active, duration_minutes, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, slot_interval_minutes, booking_window_days, default_owner_user_id",
+      "id, name, is_active, duration_minutes, catalog_product_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, slot_interval_minutes, booking_window_days, default_owner_user_id",
     )
     .eq("organization_id", organizationId)
     .eq(params.eventTypeSlug ? "slug" : "id", params.eventTypeSlug ?? params.eventTypeId ?? "")
@@ -196,6 +206,34 @@ export async function horariosLivresDaOrg(
       codigo: "tipo_desativado",
       motivoParaOperador: `"${tipo.name}" está desativado.`,
       motivoParaCliente: `"${tipo.name}" não está sendo agendado no momento. ${NAO_OFERECA}`,
+    };
+  }
+
+  let produto: { appointment_duration_minutes: number | null } | null = null;
+  if (tipo.catalog_product_id) {
+    const { data, error } = await supabase
+      .from("catalog_products")
+      .select("appointment_duration_minutes")
+      .eq("organization_id", organizationId)
+      .eq("id", tipo.catalog_product_id)
+      .maybeSingle();
+    if (error) {
+      return {
+        ok: false,
+        codigo: "erro_interno",
+        motivoParaOperador: error.message,
+        motivoParaCliente: `Não consegui consultar a duração do atendimento agora. ${NAO_OFERECA}`,
+      };
+    }
+    produto = data;
+  }
+  const duracaoMin = resolverDuracaoDoTipo(tipo, produto);
+  if (duracaoMin === null) {
+    return {
+      ok: false,
+      codigo: "servico_sem_duracao",
+      motivoParaOperador: `O serviço vinculado a "${tipo.name}" não tem duração de agenda configurada no catálogo.`,
+      motivoParaCliente: `Este atendimento ainda precisa ter a duração confirmada pela equipe. ${NAO_OFERECA}`,
     };
   }
 
@@ -317,11 +355,13 @@ export async function horariosLivresDaOrg(
   }));
 
   const slots = horariosLivres({
-    jornada: leitura.jornada,
+    jornada: params.unitId
+      ? { ...leitura.jornada, windows: leitura.jornada.windows.filter((w) => !w.unit_id || w.unit_id === params.unitId) }
+      : leitura.jornada,
     excecoes,
     ocupados,
     tipo: {
-      duracaoMin: tipo.duration_minutes,
+      duracaoMin,
       bufferAntesMin: tipo.buffer_before_minutes,
       bufferDepoisMin: tipo.buffer_after_minutes,
       avisoMinimoMin: tipo.minimum_notice_minutes,
@@ -735,6 +775,9 @@ export interface TipoDeAtendimento {
   descricao: string | null;
   categoria: string;
   duracaoMin: number;
+  produtoCatalogoId?: string | null;
+  tipoDeSalaNecessaria?: string | null;
+  chaveDeSimultaneidade?: string | null;
   localKind: string;
   localDetalhes: string | null;
   /** true = o compromisso nasce aguardando o cliente confirmar (`pending`). */
@@ -796,7 +839,7 @@ export async function listaTiposDeAtendimento(
   let q = supabase
     .from("calendar_event_types")
     .select(
-      "id, name, slug, description, category, duration_minutes, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes",
+      "id, name, slug, description, category, duration_minutes, catalog_product_id, required_room_kind, concurrency_key, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes",
     )
     // Service role bypassa a RLS: este filtro é a única proteção no caminho da
     // ferramenta MCP (ver o cabeçalho do arquivo).
@@ -823,6 +866,9 @@ export async function listaTiposDeAtendimento(
       descricao: t.description === null ? null : String(t.description),
       categoria: String(t.category),
       duracaoMin: Number(t.duration_minutes),
+      produtoCatalogoId: t.catalog_product_id === null ? null : String(t.catalog_product_id),
+      tipoDeSalaNecessaria: t.required_room_kind === null ? null : String(t.required_room_kind),
+      chaveDeSimultaneidade: t.concurrency_key === null ? null : String(t.concurrency_key),
       localKind: String(t.location_kind),
       localDetalhes: t.location_details === null ? null : String(t.location_details),
       precisaConfirmacao: Boolean(t.requires_confirmation),
