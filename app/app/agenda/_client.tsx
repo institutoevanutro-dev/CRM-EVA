@@ -110,6 +110,12 @@ export function AgendaClient({
   const localeDaData = useLocaleDeData();
   const t = useT();
   const router = useRouter();
+  const telaRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    // O HTML pode aparecer antes de o React ligar os eventos. Este marcador
+    // permite que jornadas automatizadas esperem o botão estar realmente ativo.
+    telaRef.current?.setAttribute("data-hidratado", "true");
+  }, []);
   const [marcando, setMarcando] = React.useState(false);
   // O compromisso criado NESTA abertura do painel. Serve para levar a grade até
   // ele quando o painel fechar por qualquer caminho — ver `ancoraAoFecharPainel`.
@@ -356,6 +362,7 @@ export function AgendaClient({
 
   return (
     <div
+      ref={telaRef}
       data-testid="tela-agenda"
       data-fonte={agendamentosIniciais.length > 0 ? "api" : "api-sem-dado"}
       data-fuso={fusoDeApresentacao ?? "organizacao"}

@@ -64,6 +64,11 @@ const DIAS_POR_SEMANA = 7;
  * busca quando o recorte muda, e medir no meio da troca lê a semana velha.
  */
 export async function irParaASemanaSeguinte(page: Page): Promise<string[]> {
+  await expect(
+    page.getByTestId("tela-agenda"),
+    "a agenda ainda não terminou de hidratar — clicar agora perderia o evento",
+  ).toHaveAttribute("data-hidratado", "true", { timeout: 25_000 });
+
   const colunas = page.locator('[data-testid^="coluna-dia-"]');
   await expect(
     colunas.first(),
