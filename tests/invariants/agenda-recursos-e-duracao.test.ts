@@ -26,7 +26,9 @@ function aceita(script: string): boolean {
 const ORG_A = "ea710000-0000-4000-8000-000000000001";
 const ORG_B = "ea710000-0000-4000-8000-000000000002";
 const UNIT_A = "ea710000-1000-4000-8000-000000000001";
+const UNIT_B = "ea710000-1000-4000-8000-000000000002";
 const ROOM_A = "ea710000-2000-4000-8000-000000000001";
+const ROOM_B = "ea710000-2000-4000-8000-000000000002";
 const PRODUTO_A = "ea710000-3000-4000-8000-000000000001";
 const MANAGER_A = "ea710000-4000-4000-8000-000000000001";
 const PROVIDER_A = "ea710000-4000-4000-8000-000000000002";
@@ -37,6 +39,19 @@ function como(userId: string, script: string): boolean {
     select set_config('request.jwt.claims', '{"sub":"${userId}"}', true);
     ${script}
   `);
+}
+
+function contaComo(userId: string, table: string, organizationId: string): number {
+  const out = sql(`
+    set role authenticated;
+    select set_config('request.jwt.claims', '{"sub":"${userId}"}', false);
+    select count(*) from public.${table} where organization_id='${organizationId}';
+  `);
+  const last = out.split("\n").at(-1);
+  if (last === undefined || !/^\d+$/.test(last)) {
+    throw new Error(`saída inesperada do psql: ${out}`);
+  }
+  return Number(last);
 }
 
 beforeAll(() => {
@@ -53,18 +68,25 @@ beforeAll(() => {
       ('${MANAGER_A}','${ORG_A}','manager',now()),
       ('${PROVIDER_A}','${ORG_A}','provider',now())
       on conflict do nothing;
+    insert into public.calendar_units(id,organization_id,name) values
+      ('${UNIT_A}','${ORG_A}','Vitória'),
+      ('${UNIT_B}','${ORG_B}','Serra');
+    insert into public.calendar_rooms(id,organization_id,unit_id,name,kind) values
+      ('${ROOM_A}','${ORG_A}','${UNIT_A}','Consultório 1','consultation'),
+      ('${ROOM_B}','${ORG_B}','${UNIT_B}','Sala de aplicação','application');
   `);
 });
 
 describe("recursos físicos e duração da agenda", () => {
   it("cria unidades e salas dentro da mesma organização", () => {
-    sql(`
-      insert into public.calendar_units(id,organization_id,name)
-        values('${UNIT_A}','${ORG_A}','Vitória');
-      insert into public.calendar_rooms(id,organization_id,unit_id,name,kind)
-        values('${ROOM_A}','${ORG_A}','${UNIT_A}','Consultório 1','consultation');
-    `);
     expect(sql(`select unit_id::text from public.calendar_rooms where id='${ROOM_A}';`)).toBe(UNIT_A);
+  });
+
+  it("isola unidades e salas entre organizações para usuário autenticado", () => {
+    expect(contaComo(PROVIDER_A, "calendar_units", ORG_A)).toBeGreaterThanOrEqual(1);
+    expect(contaComo(PROVIDER_A, "calendar_units", ORG_B)).toBe(0);
+    expect(contaComo(PROVIDER_A, "calendar_rooms", ORG_A)).toBeGreaterThanOrEqual(1);
+    expect(contaComo(PROVIDER_A, "calendar_rooms", ORG_B)).toBe(0);
   });
 
   it("recusa sala ligada a unidade de outra organização", () => {

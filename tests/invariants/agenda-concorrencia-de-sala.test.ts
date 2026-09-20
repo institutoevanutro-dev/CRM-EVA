@@ -37,6 +37,12 @@ beforeAll(() => {
 });
 
 describe("conflitos de profissional e sala", () => {
+  it("mantém compromissos legados sem tipo fora da regra de simultaneidade", () => {
+    expect(aceita(`insert into public.calendar_appointments(organization_id,title,starts_at,ends_at,owner_user_id,status) values
+      ('${ORG}','Legado 1',timestamp with time zone '2030-01-09 12:00Z',timestamp with time zone '2030-01-09 13:00Z','${DONO}','confirmed'),
+      ('${ORG}','Legado 2',timestamp with time zone '2030-01-09 12:05Z',timestamp with time zone '2030-01-09 13:05Z','${DONO}','confirmed')`)).toBe(true);
+  });
+
   it("seleciona automaticamente uma sala compatível", () => {
     const room = sql(`insert into public.calendar_appointments(organization_id,event_type_id,title,starts_at,ends_at,owner_user_id,status,unit_id,duration_minutes_snapshot)
       values('${ORG}','${IV}','IV',timestamp with time zone '2030-01-10 12:00Z',timestamp with time zone '2030-01-10 12:30Z','${DONO}','confirmed','${VITORIA}',30) returning room_id;`);
