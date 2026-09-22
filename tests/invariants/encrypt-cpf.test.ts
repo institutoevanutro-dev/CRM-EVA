@@ -58,9 +58,12 @@ describe("migration 0274 — encrypt_cpf", () => {
 
   it("3. o par passa em contacts_cpf_consistency; o hash sozinho continua recusado", () => {
     const par = sql(`
-      insert into public.contacts (organization_id, name, source, cpf_hash, cpf_encrypted)
-        values ('${ORG}', 'Par Completo', 'manual', '${HASH}', public.encrypt_cpf('${CPF}'))
-        returning (cpf_encrypted is not null)::text;
+      with i as (
+        insert into public.contacts (organization_id, name, source, cpf_hash, cpf_encrypted)
+          values ('${ORG}', 'Par Completo', 'manual', '${HASH}', public.encrypt_cpf('${CPF}'))
+          returning cpf_encrypted
+      )
+      select (cpf_encrypted is not null)::text from i;
     `);
     expect(lastLine(par)).toBe("true");
 
