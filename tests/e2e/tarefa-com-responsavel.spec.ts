@@ -49,10 +49,12 @@ test("criar tarefa para outra pessoa da equipe e ver o nome dela na lista", asyn
 
   // O campo nasce com quem cria ("(você)"); escolhe OUTRA pessoa da lista.
   await page.getByLabel("Responsável").click();
-  const opcoes = page.getByRole("option");
-  await expect(opcoes.first()).toBeVisible({ timeout: 20_000 });
-  const nomes = await opcoes.allInnerTexts();
-  const outra = nomes.find((n) => n !== "Ninguém" && !n.includes("(você)"));
+  // Espera a EQUIPE carregar: antes dela a lista só tem "Ninguém" e "Você"
+  // (o item de quem cria, enquanto a equipe não chega). Medido no CI: sem esta
+  // espera o teste escolhia "Você" e media a própria pressa.
+  await expect(page.getByRole("option", { name: /\(você\)/ })).toBeVisible({ timeout: 20_000 });
+  const nomes = await page.getByRole("option").allInnerTexts();
+  const outra = nomes.find((n) => !["Ninguém", "Você", "Fora da equipe"].includes(n) && !n.includes("(você)"));
   if (!outra) throw new Error(`a lista de responsáveis só tem quem cria: ${JSON.stringify(nomes)}`);
   await page.getByRole("option", { name: outra, exact: true }).click();
 
