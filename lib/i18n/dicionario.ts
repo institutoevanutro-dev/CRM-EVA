@@ -37,6 +37,31 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  // Painel Início (app/app/inicio).
+  "O que precisa da sua atenção hoje, num lugar só.": { es: "Lo que necesita tu atención hoy, en un solo lugar." },
+  "Meu dia": { es: "Mi día" },
+  "Gestão": { es: "Gestión" },
+  "Avisos da Central": { es: "Avisos de la Central" },
+  "Pacientes esperando resposta": { es: "Pacientes esperando respuesta" },
+  "Minha agenda de hoje": { es: "Mi agenda de hoy" },
+  "Minhas tarefas": { es: "Mis tareas" },
+  "Configuração pendente": { es: "Configuración pendiente" },
+  "Números de hoje": { es: "Números de hoy" },
+  "Gasto com IA no mês": { es: "Gasto de IA en el mes" },
+  "Ver todos": { es: "Ver todos" },
+  "Resolver": { es: "Resolver" },
+  "Tudo em dia ✓": { es: "Todo al día ✓" },
+  "Não consegui carregar este bloco.": { es: "No pude cargar este bloque." },
+  "Não foi possível carregar o painel. Tente novamente.": { es: "No se pudo cargar el panel. Inténtalo de nuevo." },
+  "sem responsável na agenda": { es: "sin responsable en la agenda" },
+  "WhatsApp desconectado": { es: "WhatsApp desconectado" },
+  "convite vencido": { es: "invitación vencida" },
+  "agente nunca publicado": { es: "agente nunca publicado" },
+  "Conversas com pacientes": { es: "Conversaciones con pacientes" },
+  "Agendamentos criados": { es: "Citas creadas" },
+  "sem limite configurado": { es: "sin límite configurado" },
+  "Tudo no ar": { es: "Todo en línea" },
+  "Algum serviço está fora do ar. Avise o suporte.": { es: "Algún servicio está caído. Avisa al soporte." },
   // vocabulario.ts (followups) — MatchReplyForm.tsx não traduzia, ClassifyForm.tsx sim.
   "Se a informação já existir": { es: "Si la información ya existe" },
   "Perguntar de novo e substituir": { es: "Preguntar de nuevo y reemplazar" },

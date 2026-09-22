@@ -78,6 +78,11 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 >
 > MEDIDO na tela, num tenant fresco: o funcionário criado no wizard abre no editor atual, com "Chave de acesso: A chave desta instalação (anthropic)", o pacote "Vender e mover o funil" ativo, e a contagem de capacidades que ele traz. (O número saiu daqui: já dizia 12 quando eram 16, e o teto foi de 20 para 25. Para o valor de hoje: `pnpm exec tsx -e 'import("@/lib/ai/agents/capacidades-padrao").then(m => console.log(m.capacidadesPadraoDoOnboarding().length))'`.)
 
+## J1b — Primeira tela: painel Início `[P0]`
+
+- `[P0]` Depois do login, a primeira tela é o **Início**: gerente vê "Meu dia" + "Gestão"; colaborador só "Meu dia" — `tests/e2e/painel-inicio.spec.ts`.
+- `[P0]` Tipo de atendimento sem responsável aparece em **Configuração pendente** e o botão leva à Agenda (o caso real: "Acupuntura — Dra. Ana Claudia", 2026-09-21) — mesma spec. Evidência em `.superpowers/evidence/painel-inicio-*.png`.
+
 ## J2 — Conectar WhatsApp e Central de Conexões `[P0]`
 
 | # | Caso | Expectativa |

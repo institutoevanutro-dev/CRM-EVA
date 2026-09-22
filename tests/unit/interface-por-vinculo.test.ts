@@ -37,6 +37,10 @@ describe("interface por vínculo é apresentação", () => {
     expect(hrefs(simplified, "admin", true)).not.toContain("/app/ai/credentials");
     expect(hrefs(complete, "agent")).not.toContain("/app/settings/tenant");
   });
+  it("a primeira tela é o Início quando ele está visível", () => {
+    expect(homeDaInterface(undefined, false, "agent")).toBe("/app/inicio");
+    expect(homeDaInterface(undefined, false, "admin")).toBe("/app/inicio");
+  });
   it("granular hub-only tem porta, home e busca úteis, sem grupos vazios", () => {
     const settings = interfaceSettingsSchema.parse(granular);
     expect(sidebarGroups(false, "admin", settings).map((g) => g.group.id)).toEqual([
