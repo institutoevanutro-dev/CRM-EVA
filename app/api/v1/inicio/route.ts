@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { getBudgetStatus } from "@/lib/ai/budget/check";
 import { requireRole } from "@/lib/auth/require-role";
-import { ROLE_RANK } from "@/lib/auth/types";
+import { roleAtLeast } from "@/lib/auth/types";
 import { ok } from "@/lib/api/wrappers";
 import * as gestao from "@/lib/inicio/gestao";
 import * as meuDia from "@/lib/inicio/meu-dia";
@@ -37,7 +37,9 @@ export async function GET(_req: Request) {
     fuso: fusoValido(auth.user.timezone ?? FUSO_PADRAO),
     idioma: auth.user.idioma,
   };
-  const veGestao = ROLE_RANK[auth.org.role] >= ROLE_RANK.manager;
+  // Leitura de rank que NÃO decide 401/403 (o gate é o `requireRole` acima):
+  // só escolhe quais blocos calcular — por isso `roleAtLeast` (lint:role-rank).
+  const veGestao = roleAtLeast(auth.org.role, "manager");
   const [avisos, esperando, agenda, tarefas, configuracao, numeros, gastoIa] = await Promise.all([
     isolado(() => meuDia.avisosAbertos(db, ctx)),
     isolado(() => meuDia.esperandoResposta(db, ctx)),

@@ -108,12 +108,14 @@ export const NAV_CATALOG = [
     // O painel que junta o que cada um precisa fazer hoje e, para quem
     // administra, o que impede o CRM de funcionar. É a primeira tela
     // (`homeDaInterface`). Spec: docs/superpowers/specs/2026-09-21-painel-inicio-design.md
+    // Fora da barra lateral de propósito: ela já está no limite de 900px de
+    // altura (tests/e2e/navegacao.spec.ts mede), e o Início é alcançado por ser
+    // a primeira tela, pela busca (⌘K) e pelo "Ver tudo em Atendimento".
     href: "/app/inicio",
     label: "Início",
     description: "O que precisa da sua atenção hoje, num lugar só.",
     icon: "House",
     group: "atendimento",
-    sidebar: true,
   },
   {
     href: "/app/inbox",

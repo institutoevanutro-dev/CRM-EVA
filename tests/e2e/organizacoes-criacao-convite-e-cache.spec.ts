@@ -190,6 +190,9 @@ test("org única oferece criação, responsável aceita e A→B→A não mistura
     await guest.goto(new URL(link).pathname);
     await guest.getByRole("button", { name: "Aceitar convite", exact: true }).click();
     await expect(guest.getByTestId("tenant-switcher")).toContainText(`Empresa B ${suffix}`);
+    // O aceite leva a `/app`, que abre o Início; a conversa que esta spec mede está na Inbox.
+    await guest.waitForURL("**/app/inicio", { waitUntil: "load" });
+    await guest.goto("/app/inbox");
     await expect(guest.locator("[data-conversation-id]").getByText(`Cliente B ${suffix}`, { exact: true })).toBeVisible();
     const membership = await db.from("user_organizations").select("invited_by,role").eq("organization_id", orgB).eq("user_id", users[1]).single();
     expect(membership.data).toEqual({ invited_by: users[0], role: "admin" });
