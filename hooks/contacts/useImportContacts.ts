@@ -15,6 +15,8 @@ export interface ImportContactsResult {
   imported: number;
   skipped_duplicates: number;
   errors: Array<{ linha: number; motivo: string }>;
+  /** Linhas importadas com algo deixado de fora (ex.: CPF sem cifra). */
+  avisos: Array<{ linha: number; motivo: string }>;
 }
 
 async function importarCsv(file: File): Promise<ImportContactsResult> {
