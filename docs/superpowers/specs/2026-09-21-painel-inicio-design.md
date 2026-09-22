@@ -59,7 +59,7 @@ Falha ao carregar → "Não consegui carregar este bloco" **só naquele bloco** 
 | Configuração pendente | `calendar_event_types` ativos sem `default_owner_user_id`; `team_invites` pendentes vencidos (`expires_at < now()`, sem `accepted_at`/`revoked_at`); `channel_sessions` com `status` diferente de conectado; `ai_agents` sem versão publicada | organização |
 | Números de hoje | conversas iniciadas, agendamentos criados, leads ganhos — reaproveitar os cálculos de `/app/metrics` | organização, hoje |
 | Gasto de IA | `ai_budgets` (`current_month_consumed_cents` / `monthly_limit_cents`) | organização |
-| Sistema | `/api/v1/health` + versão disponível (mesma fonte do aviso "Nova versão disponível" da sidebar) | instalação |
+| Sistema | `/api/v1/health` (status + versão no ar). **Sem** "atualização disponível": esse aviso compara com as releases do projeto original, e esta instalação atualiza pelo GHCR `:latest` do fork | instalação |
 
 Nomes exatos de status/colunas conferidos na implementação contra o `baseline.sql`.
 
