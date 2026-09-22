@@ -6660,6 +6660,8 @@ export const DICIONARIO: Traducoes = {
   "quem já conectou a agenda vai precisar conectar de novo. O Google invalida as autorizações antigas quando o aplicativo muda — não há como evitar, e ninguém perde compromisso por isso.": { es: "quien ya conectó su agenda tendrá que conectarla otra vez. Google invalida las autorizaciones anteriores cuando la aplicación cambia — no hay forma de evitarlo, y nadie pierde ninguna cita por eso." },
   "Nunca configurado por aqui.": { es: "Nunca configurado por aquí." },
   "Credenciais do Google salvas.": { es: "Credenciales de Google guardadas." },
+  "importado(s) sem CPF": { es: "importado(s) sin CPF" },
+  "CPF não foi gravado: a proteção de CPF desta instalação não está disponível. Peça ao administrador para rodar a atualização.": { es: "El CPF no fue guardado: la protección de CPF de esta instalación no está disponible. Pide al administrador que ejecute la actualización." },
   "cifra indisponível nesta instalação (GUC app.nuvemshop_oauth_key ausente) — o segredo não foi gravado": {
     es: "cifrado no disponible en esta instalación (GUC app.nuvemshop_oauth_key ausente) — el secreto no fue guardado",
   },

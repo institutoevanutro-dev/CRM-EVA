@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { POST } from "./route";
 
@@ -12,6 +13,7 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const USER = "11111111-1111-4111-8111-111111111111";
@@ -22,6 +24,7 @@ interface Resumo {
   imported: number;
   skipped_duplicates: number;
   errors: Array<{ linha: number; motivo: string }>;
+  avisos: Array<{ linha: number; motivo: string }>;
 }
 
 /** Só as fronteiras externas são dubladas; multipart, CSV e schemas são reais. */
@@ -59,10 +62,10 @@ function banco(opcoes: {
   return { tentativas, rpc };
 }
 
-async function importar(linhas: string[]): Promise<Resumo> {
+async function importar(linhas: string[], cabecalho = "nome,telefone,email"): Promise<Resumo> {
   const form = new FormData();
   form.set("file", new File(
-    [["nome,telefone,email", ...linhas].join("\n")],
+    [[cabecalho, ...linhas].join("\n")],
     "contatos.csv",
     { type: "text/csv" },
   ));
@@ -106,7 +109,7 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
     const db = banco();
     const resumo = await importar(linhas);
 
-    expect(resumo).toEqual({ total_linhas: 3, imported: 1, skipped_duplicates: 2, errors: [] });
+    expect(resumo).toEqual({ total_linhas: 3, imported: 1, skipped_duplicates: 2, errors: [], avisos: [] });
     expect(db.tentativas).toHaveLength(1);
     expect(db.tentativas[0]).toMatchObject({
       organization_id: ORG, created_by_user_id: USER, source: "import_csv",
@@ -117,7 +120,7 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
     expect(audit).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
       action: "contacts.imported",
       organizationId: ORG,
-      metadata: { actor_type: "user", total_linhas: 3, imported: 1, skipped_duplicates: 2, erros: 0 },
+      metadata: { actor_type: "user", total_linhas: 3, imported: 1, skipped_duplicates: 2, erros: 0, avisos: 0 },
     }));
   });
 
@@ -131,6 +134,7 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
     expect(resumo).toEqual({
       total_linhas: 2, imported: 1, skipped_duplicates: 0,
       errors: [{ linha: 2, motivo: expect.any(String) }],
+      avisos: [],
     });
     expect(db.tentativas).toHaveLength(1);
     expect(db.tentativas[0]).toMatchObject({ name: "Corrigida", email: "ana.silva@example.com" });
@@ -144,6 +148,7 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
     expect(resumo).toEqual({
       total_linhas: 2, imported: 1, skipped_duplicates: 0,
       errors: [{ linha: 2, motivo: "Falha de gravação" }],
+      avisos: [],
     });
     expect(db.tentativas).toHaveLength(2);
     expect(db.tentativas[1]).toMatchObject({ name: "Segunda", phone_number: PHONE });
@@ -159,7 +164,7 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
       `Nova,${PHONE},nova@example.com`,
     ]);
 
-    expect(resumo).toEqual({ total_linhas: 2, imported: 1, skipped_duplicates: 1, errors: [] });
+    expect(resumo).toEqual({ total_linhas: 2, imported: 1, skipped_duplicates: 1, errors: [], avisos: [] });
     expect(db.tentativas).toHaveLength(1);
     expect(db.tentativas[0]).toMatchObject({ name: "Nova", email: "nova@example.com" });
   });
@@ -168,7 +173,7 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
     const db = banco({ existentes: [{ phone_number: PHONE }] });
     const resumo = await importar([`Ana,${PHONE},`, `Ana,${PHONE},`]);
 
-    expect(resumo).toEqual({ total_linhas: 2, imported: 0, skipped_duplicates: 2, errors: [] });
+    expect(resumo).toEqual({ total_linhas: 2, imported: 0, skipped_duplicates: 2, errors: [], avisos: [] });
     expect(db.tentativas).toHaveLength(0);
     expect(db.rpc).not.toHaveBeenCalled();
   });
@@ -177,8 +182,55 @@ describe("POST /api/v1/contacts/import — desfecho por linha", () => {
     const db = banco({ falhas: [{ code: "23505", message: "Conflito" }, null] });
     const resumo = await importar([`Ana,${PHONE},`, "Bia,+5521999998888,"]);
 
-    expect(resumo).toEqual({ total_linhas: 2, imported: 1, skipped_duplicates: 1, errors: [] });
+    expect(resumo).toEqual({ total_linhas: 2, imported: 1, skipped_duplicates: 1, errors: [], avisos: [] });
     expect(db.tentativas).toHaveLength(2);
     expect(db.rpc).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Produção, 22/09/2026: 483 de 500 linhas com CPF morreram em
+// `contacts_cpf_consistency` — o import gravava `cpf_hash` sempre e
+// `cpf_encrypted` só quando a cifra dava certo. O par é tudo-ou-nada.
+describe("POST /api/v1/contacts/import — CPF é par (hash + cifra) ou nada", () => {
+  const CPF = "52998224725";
+
+  function cifra(resposta: { data: unknown; error: { message: string } | null }) {
+    const rpc = vi.fn().mockResolvedValue(resposta);
+    vi.mocked(createAdminClient).mockReturnValue({ rpc } as never);
+    return rpc;
+  }
+
+  it("cifra indisponível: importa a linha SEM CPF e devolve aviso nominal por linha", async () => {
+    const db = banco();
+    cifra({ data: null, error: { message: "Could not find the function public.encrypt_cpf" } });
+
+    const resumo = await importar([`Ana,${PHONE},${CPF}`, `Bia,+5521999998888,${CPF}`], "nome,telefone,cpf");
+
+    expect(resumo.imported).toBe(2);
+    expect(resumo.errors).toEqual([]);
+    expect(resumo.avisos).toEqual([
+      { linha: 2, motivo: expect.stringContaining("CPF não foi gravado") },
+      { linha: 3, motivo: expect.stringContaining("CPF não foi gravado") },
+    ]);
+    for (const linha of db.tentativas) {
+      expect(linha).not.toHaveProperty("cpf_hash");
+      expect(linha).not.toHaveProperty("cpf_encrypted");
+    }
+  });
+
+  it("cifra disponível: grava hash E cifra juntos, via service role", async () => {
+    const db = banco();
+    const rpc = cifra({ data: "\\xc30d0407", error: null });
+
+    const resumo = await importar([`Ana,${PHONE},529.982.247-25`], "nome,telefone,cpf");
+
+    expect(resumo).toMatchObject({ imported: 1, errors: [], avisos: [] });
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("encrypt_cpf", { p_plaintext: CPF });
+    expect(db.tentativas[0]).toMatchObject({
+      cpf_hash: expect.stringMatching(/^[0-9a-f]{64}$/),
+      cpf_encrypted: "\\xc30d0407",
+    });
+    // A cifra NÃO passa pelo client da sessão do usuário.
+    expect(db.rpc).not.toHaveBeenCalledWith("encrypt_cpf", expect.anything());
   });
 });

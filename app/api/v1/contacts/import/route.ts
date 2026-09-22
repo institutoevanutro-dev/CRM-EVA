@@ -24,7 +24,7 @@ import { type NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { audit } from "@/lib/audit";
-import { encryptCpfSql, hashCpf } from "@/lib/contacts/cpf";
+import { MSG_CPF_SEM_CIFRA, parDoCpf } from "@/lib/contacts/cpf";
 import { traduzir } from "@/lib/i18n/dicionario";
 import {
   CSV_MAX_BYTES,
@@ -36,6 +36,7 @@ import {
 } from "@/lib/contacts/csv";
 import { contactCreateSchema, isValidCpf } from "@/lib/schemas";
 import { phoneLookupVariants } from "@/lib/channels/phone-variants";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,8 @@ interface ImportSummary {
   imported: number;
   skipped_duplicates: number;
   errors: LinhaErro[];
+  /** Linha importada, mas com algo deixado de fora (ex.: CPF sem cifra). */
+  avisos: LinhaErro[];
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
@@ -164,6 +167,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       imported: 0,
       skipped_duplicates: 0,
       errors,
+      avisos: [],
     };
     return ok(resumo, { requestId });
   }
@@ -207,6 +211,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   // ─── Insert linha a linha com desfecho individual ─────────────────────────
   let imported = 0;
   let skippedDuplicates = 0;
+  const avisos: LinhaErro[] = [];
 
   for (const { linha, contato } of candidatos) {
     const phone = contato.phone_number as string | undefined;
@@ -235,12 +240,15 @@ export async function POST(req: NextRequest): Promise<Response> {
       source_metadata: {},
       consent: {},
     };
+    let cpfDeixadoDeFora = false;
     if (contato.cpf) {
-      insertRow.cpf_hash = hashCpf(contato.cpf as string);
-      // LGPD: além do hash (dedupe), grava a versão cifrada — igual ao create
-      // unitário, senão o contato importado nasce sem CPF recuperável.
-      const enc = await encryptCpfSql(supabase, contato.cpf as string);
-      if (enc) insertRow.cpf_encrypted = enc;
+      // CPF é par (hash + cifra) ou nada — `contacts_cpf_consistency`. Sem a
+      // cifra, a linha entra SEM CPF e com aviso nominal: derrubar a linha
+      // inteira por causa do CPF foi o que perdeu 483 de 500 contatos num
+      // import real (22/09/2026).
+      const par = await parDoCpf(createAdminClient(), contato.cpf as string);
+      if (par) Object.assign(insertRow, par);
+      else cpfDeixadoDeFora = true;
     }
 
     const { data: criado, error: insErr } = await supabase
@@ -260,6 +268,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
 
     imported += 1;
+    if (cpfDeixadoDeFora) avisos.push({ linha, motivo: t(MSG_CPF_SEM_CIFRA) });
     if (phone) existentes.add(`tel:${phone}`);
     if (email) existentes.add(`email:${email.toLowerCase()}`);
 
@@ -274,7 +283,7 @@ export async function POST(req: NextRequest): Promise<Response> {
           source: SOURCE_IMPORT_CSV,
           has_email: !!contato.email,
           has_phone: !!contato.phone_number,
-          has_cpf: !!contato.cpf,
+          has_cpf: !!insertRow.cpf_hash,
         },
         p_metadata: { request_id: requestId, actor_type: "user" },
         p_organization_id: orgId,
@@ -297,6 +306,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       imported,
       skipped_duplicates: skippedDuplicates,
       erros: errors.length,
+      avisos: avisos.length,
     },
   });
 
@@ -305,6 +315,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     imported,
     skipped_duplicates: skippedDuplicates,
     errors,
+    avisos,
   };
   return ok(resumo, { requestId });
 }

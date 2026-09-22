@@ -19,7 +19,7 @@ import { roleAtLeast } from "@/lib/auth/types";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import { condicoesDaBuscaDeContato } from "@/lib/contacts/busca";
 import { encontrarContatoPorTelefone } from "@/lib/channels/contato-por-telefone";
-import { hashCpf, encryptCpfSql } from "@/lib/contacts/cpf";
+import { hashCpf, MSG_CPF_SEM_CIFRA, parDoCpf, type ParDoCpf } from "@/lib/contacts/cpf";
 import type { Contact } from "@/lib/types/contacts";
 import { ensureConversation, sessaoProntaParaEnvio } from "@/lib/automation/start-conversation";
 import type {
@@ -331,6 +331,24 @@ export async function getContactHandler(
   };
 }
 
+/**
+ * CPF é par (`cpf_hash` + `cpf_encrypted`) ou nada — `contacts_cpf_consistency`.
+ * Na criação/edição unitária quem digitou o CPF está com o formulário aberto:
+ * sem cifra, recusa ANTES de tocar o banco (nada salvo pela metade) com 503 e
+ * a instrução, em vez do 500 da constraint que saía antes.
+ */
+async function parDoCpfOu503(cpf: string, ctx: HandlerCtx): Promise<ParDoCpf> {
+  const par = await parDoCpf(createAdminClient(), cpf);
+  if (par) return par;
+  throw new ApiError(
+    503,
+    "unavailable",
+    { field: "cpf" },
+    ctx.requestId,
+    traduzir(MSG_CPF_SEM_CIFRA, ctx.idioma ?? "pt-BR"),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // create
 // ---------------------------------------------------------------------------
@@ -361,11 +379,7 @@ export async function createContactHandler(
     consent: input.consent ?? {},
   };
 
-  if (input.cpf) {
-    insertRow.cpf_hash = hashCpf(input.cpf);
-    const enc = await encryptCpfSql(supabase, input.cpf);
-    if (enc) insertRow.cpf_encrypted = enc;
-  }
+  if (input.cpf) Object.assign(insertRow, await parDoCpfOu503(input.cpf, ctx));
 
   const { data: created, error: insErr } = await supabase
     .from("contacts")
@@ -532,11 +546,7 @@ export async function patchContactHandler(
     >;
     patch.consent = { ...anterior, ...input.consent };
   }
-  if (input.cpf !== undefined) {
-    patch.cpf_hash = hashCpf(input.cpf);
-    const enc = await encryptCpfSql(supabase, input.cpf);
-    if (enc) patch.cpf_encrypted = enc;
-  }
+  if (input.cpf !== undefined) Object.assign(patch, await parDoCpfOu503(input.cpf, ctx));
 
   if (Object.keys(patch).length === 0) {
     throw new ApiError(

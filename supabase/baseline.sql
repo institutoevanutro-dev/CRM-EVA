@@ -27384,6 +27384,41 @@ before insert or update of organization_id,event_type_id,owner_user_id,unit_id,r
 on public.calendar_appointments for each row
 execute function public.fn_calendar_allocate_and_guard_resources();
 
+-- ---- encrypt_cpf: cifra at-rest do CPF (migration 0274) ----
+-- Chave: a MESMA chave da instalação que já cifra os segredos (private.fn_oauth_key,
+-- migration 0041), semeada pelo install.sh/update.sh (`ensure_encryption_key`).
+-- Nenhuma variável nova, nenhuma ação do operador. Com separação de domínio:
+-- o CPF é cifrado com 'cpf:' || chave, então nenhum ciphertext de segredo
+-- (webhook/OAuth) decifra pelo caminho do CPF e vice-versa.
+--
+-- Só `service_role` executa: o app chama com o admin client. A função não
+-- recebe organização nem lê linha — é cifra pura de 11 dígitos —, então não é
+-- porta de leitura cross-tenant. Idempotente (create or replace + grants).
+
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+
+create or replace function public.encrypt_cpf(p_plaintext text) returns bytea
+    language plpgsql volatile security definer
+    set search_path to 'public', 'private', 'extensions', 'pg_temp'
+    as $$
+declare
+  k text := private.fn_oauth_key();
+  v_digitos text := regexp_replace(coalesce(p_plaintext, ''), '\D', '', 'g');
+begin
+  if k is null or length(k) < 32 then
+    raise exception 'chave de cifra da instalação ausente — rode o update.sh'
+      using errcode = '55000';
+  end if;
+  if length(v_digitos) <> 11 then
+    raise exception 'CPF deve ter 11 dígitos' using errcode = '22023';
+  end if;
+  return pgp_sym_encrypt(v_digitos, 'cpf:' || k, 'cipher-algo=aes256');
+end$$;
+
+revoke execute on function public.encrypt_cpf(text) from public, anon, authenticated;
+grant  execute on function public.encrypt_cpf(text) to service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
@@ -27458,3 +27493,4 @@ grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 grant execute on function public.fn_encrypt_oauth(text) to service_role;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 grant execute on function public.fn_update_budget_consumption() to service_role;
+

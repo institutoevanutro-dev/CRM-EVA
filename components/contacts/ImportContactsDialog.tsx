@@ -45,6 +45,7 @@ export function ImportContactsDialog({ open, onOpenChange }: Props) {
       setResumo(r);
       if (r.imported > 0) toast.success(`${r.imported} ${t("contato(s) importado(s)")}`);
       if (r.errors.length > 0) toast.warning(`${r.errors.length} ${t("linha(s) com problema")}`);
+      if (r.avisos.length > 0) toast.warning(`${r.avisos.length} ${t("importado(s) sem CPF")}`);
     } catch (err) {
       // Falha de requisição (arquivo grande, formato errado…): mostra no rodapé.
       const msg =
@@ -126,7 +127,25 @@ export function ImportContactsDialog({ open, onOpenChange }: Props) {
                     {resumo.errors.length} {t("com erro")}
                   </span>
                 )}
+                {resumo.avisos.length > 0 && (
+                  <span className="rounded-md px-2 py-1 font-medium">
+                    {resumo.avisos.length} {t("importado(s) sem CPF")}
+                  </span>
+                )}
               </div>
+
+              {resumo.avisos.length > 0 && (
+                <div
+                  data-testid="import-avisos"
+                  className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border p-2 text-sm"
+                >
+                  {resumo.avisos.map((aviso) => (
+                    <p key={aviso.linha}>
+                      {t("Linha")} {aviso.linha}: {aviso.motivo}
+                    </p>
+                  ))}
+                </div>
+              )}
 
               {resumo.errors.length > 0 && (
                 <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border p-2 text-sm">
