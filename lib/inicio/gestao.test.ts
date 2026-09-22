@@ -9,6 +9,7 @@ const ctx = {
   userId: "u",
   agora: new Date("2026-09-21T15:00:00Z"),
   fuso: "America/Sao_Paulo",
+  idioma: "pt-BR" as const,
 };
 
 describe("configuracaoPendente", () => {
@@ -40,6 +41,21 @@ describe("configuracaoPendente", () => {
     expect(b.itens.map((i) => i.id).sort()).toEqual(["agente:g1", "canal:s1", "convite:i1", "tipo:e1"]);
     expect(b.itens.find((i) => i.id === "tipo:e1")!.href).toBe("/app/agenda");
   });
+
+  it("o tipo sem responsável mais novo vem primeiro (não some atrás de antigos)", async () => {
+    const antigos = Array.from({ length: 6 }, (_, i) => ({
+      id: `velho${i}`, organization_id: ORG, name: `Velho ${i}`, is_active: true,
+      default_owner_user_id: null, created_at: `2026-01-0${i + 1}T00:00:00Z`,
+    }));
+    const { db } = fakeDb({
+      calendar_event_types: [...antigos, { id: "novo", organization_id: ORG, name: "Novo", is_active: true, default_owner_user_id: null, created_at: "2026-09-21T00:00:00Z" }],
+      team_invites: [], channel_sessions: [], ai_agents: [],
+    });
+    const b = await configuracaoPendente(db, ctx);
+    if (!b.ok) throw new Error("bloco falhou");
+    expect(b.itens[0]!.id).toBe("tipo:novo");
+    expect(b.total).toBe(7);
+  });
 });
 
 describe("numerosDeHoje", () => {
@@ -64,16 +80,17 @@ describe("numerosDeHoje", () => {
 });
 
 describe("gastoDeIa", () => {
-  it("lê consumo e limite do mês", async () => {
-    const { db } = fakeDb({
-      ai_budgets: [
-        { organization_id: ORG, current_month_consumed_cents: 1234, monthly_limit_cents: 5000 },
-      ],
-    });
-    expect(await gastoDeIa(db, ctx)).toEqual({ ok: true, consumidoCents: 1234, limiteCents: 5000 });
+  const status = (limit: number, consumed: number) => async (orgId: string) => {
+    expect(orgId).toBe(ORG);
+    return { monthly_limit_cents: limit, current_month_consumed_cents: consumed } as never;
+  };
+  it("lê o gasto pela régua única do mês (getBudgetStatus), não pela coluna materializada", async () => {
+    expect(await gastoDeIa(ctx, status(5000, 1234))).toEqual({ ok: true, consumidoCents: 1234, limiteCents: 5000 });
   });
-  it("sem linha de orçamento é 'sem limite', não erro", async () => {
-    const { db } = fakeDb({ ai_budgets: [] });
-    expect(await gastoDeIa(db, ctx)).toEqual({ ok: true, consumidoCents: 0, limiteCents: null });
+  it("limite 0 é 'sem limite', não 'teto zero'", async () => {
+    expect(await gastoDeIa(ctx, status(0, 10))).toEqual({ ok: true, consumidoCents: 10, limiteCents: null });
+  });
+  it("leitura que lança vira bloco com falha", async () => {
+    expect(await gastoDeIa(ctx, async () => { throw new Error("rpc"); })).toEqual({ ok: false });
   });
 });

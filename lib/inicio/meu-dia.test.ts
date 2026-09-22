@@ -12,6 +12,7 @@ const ctx = {
   userId: EU,
   agora: new Date("2026-09-21T15:00:00Z"),
   fuso: "America/Sao_Paulo",
+  idioma: "pt-BR" as const,
 };
 function ok(b: Bloco) {
   if (!b.ok) throw new Error("bloco falhou");
@@ -60,6 +61,30 @@ describe("esperandoResposta", () => {
     expect(b.total).toBe(2);
     expect(b.itens[0]!.href).toMatch(/^\/app\/inbox\?id=c[16]$/);
   });
+  it("acha a conversa esperando mesmo com mais de 200 conversas antigas fechadas atribuídas a mim", async () => {
+    const velhas = Array.from({ length: 201 }, (_, i) => ({
+      ...base,
+      id: `velha-${i}`,
+      status: "closed",
+      last_inbound_at: `2026-08-01T10:${String(i % 60).padStart(2, "0")}:00Z`,
+    }));
+    const { db } = fakeDb({
+      conversations: [...velhas, { ...base, id: "nova", last_inbound_at: "2026-09-21T10:00:00Z" }],
+    });
+    const b = ok(await esperandoResposta(db, ctx));
+    expect(b.itens.map((i) => i.id)).toEqual(["nova"]);
+  });
+
+  it("mostra o nome do paciente, não só a prévia da mensagem", async () => {
+    const { db } = fakeDb({
+      conversations: [
+        { ...base, id: "c1", last_inbound_at: "2026-09-21T10:00:00Z", last_message_preview: null,
+          contact: { name: null, display_name: "Maria Souza", phone_number: "+5527999990001" } },
+      ],
+    });
+    const b = ok(await esperandoResposta(db, ctx));
+    expect(b.itens[0]!.titulo).toBe("Maria Souza");
+  });
 });
 
 describe("agendaDeHoje", () => {
@@ -77,22 +102,32 @@ describe("agendaDeHoje", () => {
     const b = ok(await agendaDeHoje(db, ctx));
     expect(b.itens.map((i) => i.id)).toEqual(["h1", "h2"]);
   });
+
+  it("mostra o horário no fuso da clínica", async () => {
+    const { db } = fakeDb({
+      calendar_appointments: [
+        { id: "h1", organization_id: ORG, owner_user_id: EU, status: "confirmed", title: "Consulta", starts_at: "2026-09-21T13:00:00Z" },
+      ],
+    });
+    const b = ok(await agendaDeHoje(db, ctx));
+    expect(b.itens[0]!.detalhe).toBe("10:00");
+  });
 });
 
 describe("minhasTarefas", () => {
-  it("vencidas e de hoje, minhas, não concluídas", async () => {
+  it("due_date é timestamp: entra a de hoje às 9h e a vencida de ontem à noite; fica fora a de amanhã", async () => {
     const base = { organization_id: ORG, assigned_to: EU, status: "pending", title: "Ligar" };
     const { db } = fakeDb({
       crm_tasks: [
-        { ...base, id: "t1", due_date: "2026-09-20" },
-        { ...base, id: "t2", due_date: "2026-09-21" },
-        { ...base, id: "t3", due_date: "2026-09-22" },
-        { ...base, id: "t4", due_date: "2026-09-21", status: "done" },
-        { ...base, id: "t5", due_date: "2026-09-21", assigned_to: OUTRO },
-        { ...base, id: "t6", due_date: null },
+        { ...base, id: "ontem-noite", due_date: "2026-09-21T01:00:00Z" }, // 20/09 22:00 BRT
+        { ...base, id: "hoje-9h", due_date: "2026-09-21T12:00:00Z" }, // 21/09 09:00 BRT
+        { ...base, id: "amanha", due_date: "2026-09-22T12:00:00Z" },
+        { ...base, id: "outra-pessoa", due_date: "2026-09-21T12:00:00Z", assigned_to: OUTRO },
+        { ...base, id: "feita", due_date: "2026-09-21T12:00:00Z", status: "done" },
       ],
     });
     const b = ok(await minhasTarefas(db, ctx));
-    expect(b.itens.map((i) => i.id)).toEqual(["t1", "t2"]);
+    expect(b.itens.map((i) => i.id)).toEqual(["ontem-noite", "hoje-9h"]);
+    expect(b.itens[1]!.detalhe).toBe("21/09");
   });
 });

@@ -29,8 +29,9 @@ const MOTIVO: Record<string, string> = {
   agente_rascunho: "agente nunca publicado",
 };
 
-function reais(cents: number) {
-  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+/** Centavos de DÓLAR (o custo de IA é calculado em USD — ver BudgetCard). */
+function dolares(cents: number) {
+  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "USD" });
 }
 
 function Cartao({
@@ -83,8 +84,9 @@ function ListaDoBloco({ bloco, comMotivo }: { bloco: Bloco | null; comMotivo?: b
               href={i.href}
             >
               <span className="truncate">
-                {i.titulo}
-                {comMotivo && i.detalhe ? ` — ${t(MOTIVO[i.detalhe] ?? i.detalhe)}` : ""}
+                {comMotivo
+                  ? `${i.titulo}${i.detalhe ? ` — ${t(MOTIVO[i.detalhe] ?? i.detalhe)}` : ""}`
+                  : `${i.detalhe ? `${i.detalhe} · ` : ""}${i.titulo}`}
               </span>
               <span className="shrink-0 text-sm underline">{t("Resolver")}</span>
             </Link>
@@ -162,9 +164,9 @@ export function PainelInicio() {
             <Cartao titulo={t("Gasto com IA no mês")}>
               {gestao.gastoIa?.ok ? (
                 <p className="text-sm">
-                  <b className="text-2xl">{reais(gestao.gastoIa.consumidoCents)}</b>
+                  <b className="text-2xl">{dolares(gestao.gastoIa.consumidoCents)}</b>
                   {gestao.gastoIa.limiteCents != null
-                    ? ` / ${reais(gestao.gastoIa.limiteCents)}`
+                    ? ` / ${dolares(gestao.gastoIa.limiteCents)}`
                     : ` · ${t("sem limite configurado")}`}
                 </p>
               ) : (

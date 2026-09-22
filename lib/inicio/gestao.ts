@@ -5,6 +5,7 @@
  * O `detalhe` dos itens de configuração é um CÓDIGO (`sem_responsavel`, …): a
  * tela o traduz. O `titulo` é o nome do objeto, que não se traduz.
  */
+import type { BudgetStatus } from "@/lib/ai/budget/check";
 import type { createClient } from "@/lib/supabase/server";
 import {
   janelaDeHoje,
@@ -25,6 +26,8 @@ export async function configuracaoPendente(db: Db, ctx: ContextoDoInicio): Promi
       .eq("organization_id", ctx.orgId)
       .eq("is_active", true)
       .is("default_owner_user_id", null)
+      // Mais novo primeiro: o tipo que acabou de ser criado não some atrás de antigos.
+      .order("created_at", { ascending: false })
       .limit(50),
     db
       .from("team_invites")
@@ -127,18 +130,25 @@ export type GastoDeIa =
   | { ok: true; consumidoCents: number; limiteCents: number | null }
   | { ok: false };
 
-export async function gastoDeIa(db: Db, ctx: ContextoDoInicio): Promise<GastoDeIa> {
-  const { data, error } = await db
-    .from("ai_budgets")
-    .select("current_month_consumed_cents,monthly_limit_cents")
-    .eq("organization_id", ctx.orgId)
-    .limit(1);
-  if (error) return { ok: false };
-  const b = data?.[0];
-  if (!b) return { ok: true, consumidoCents: 0, limiteCents: null };
-  return {
-    ok: true,
-    consumidoCents: Number(b.current_month_consumed_cents ?? 0),
-    limiteCents: b.monthly_limit_cents == null ? null : Number(b.monthly_limit_cents),
-  };
+/**
+ * Lê pela régua ÚNICA do mês (`getBudgetStatus` → `fn_gasto_de_ia_do_mes`), a
+ * mesma da tela de Uso e do gate. A coluna `current_month_consumed_cents`
+ * acumula sem zerar e mostraria meses de gasto como "no mês" (achado da
+ * revisão). Os valores são centavos de DÓLAR; limite 0 = sem limite.
+ * `ler` é injetado: a rota passa `getBudgetStatus`, o teste passa um dublê.
+ */
+export async function gastoDeIa(
+  ctx: ContextoDoInicio,
+  ler: (orgId: string) => Promise<Pick<BudgetStatus, "monthly_limit_cents" | "current_month_consumed_cents">>,
+): Promise<GastoDeIa> {
+  try {
+    const b = await ler(ctx.orgId);
+    return {
+      ok: true,
+      consumidoCents: Number(b.current_month_consumed_cents ?? 0),
+      limiteCents: b.monthly_limit_cents > 0 ? b.monthly_limit_cents : null,
+    };
+  } catch {
+    return { ok: false };
+  }
 }

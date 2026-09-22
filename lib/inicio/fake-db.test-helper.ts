@@ -17,8 +17,11 @@ export function fakeDb(tabelas: Record<string, Linha[]>) {
       in: (c: string, vs: unknown[]) => (filtros.push((l) => vs.includes(l[c])), q),
       is: (c: string, v: unknown) => (filtros.push((l) => (l[c] ?? null) === v), q),
       not: (c: string, op: string, v: unknown) => {
-        if (op !== "is") throw new Error(`not.${op} não suportado no dublê`);
-        filtros.push((l) => (l[c] ?? null) !== v);
+        if (op === "is") filtros.push((l) => (l[c] ?? null) !== v);
+        else if (op === "in") {
+          const lista = String(v).replace(/^\(|\)$/g, "").split(",");
+          filtros.push((l) => !lista.includes(String(l[c])));
+        } else throw new Error(`not.${op} não suportado no dublê`);
         return q;
       },
       gte: (c: string, v: string) => (filtros.push((l) => l[c] != null && String(l[c]) >= v), q),

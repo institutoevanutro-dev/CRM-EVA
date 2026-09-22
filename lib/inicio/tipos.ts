@@ -6,6 +6,8 @@
  * "não consegui carregar" SÓ nele. Spec:
  * docs/superpowers/specs/2026-09-21-painel-inicio-design.md
  */
+import type { Idioma } from "@/lib/i18n/idiomas";
+
 export const FUSO_PADRAO = "America/Sao_Paulo";
 export const LIMITE_DE_ITENS = 5;
 
@@ -23,9 +25,12 @@ export interface ContextoDoInicio {
   userId: string;
   agora: Date;
   fuso: string;
+  /** Idioma de quem lê: datas e horas seguem ele, nunca "pt-BR" fixo. */
+  idioma: Idioma;
 }
 
-function fusoValido(fuso: string): string {
+/** O fuso, ou o padrão se o perfil guardar um nome que o `Intl` não conhece. */
+export function fusoValido(fuso: string): string {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: fuso });
     return fuso;

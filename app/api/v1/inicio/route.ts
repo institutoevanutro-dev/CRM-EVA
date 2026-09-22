@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 
+import { getBudgetStatus } from "@/lib/ai/budget/check";
 import { requireRole } from "@/lib/auth/require-role";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { ok } from "@/lib/api/wrappers";
 import * as gestao from "@/lib/inicio/gestao";
 import * as meuDia from "@/lib/inicio/meu-dia";
-import { FUSO_PADRAO, type ContextoDoInicio } from "@/lib/inicio/tipos";
+import { FUSO_PADRAO, fusoValido, type ContextoDoInicio } from "@/lib/inicio/tipos";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -33,7 +34,8 @@ export async function GET(_req: Request) {
     orgId: auth.org.orgId,
     userId: auth.user.id,
     agora: new Date(),
-    fuso: auth.user.timezone ?? FUSO_PADRAO,
+    fuso: fusoValido(auth.user.timezone ?? FUSO_PADRAO),
+    idioma: auth.user.idioma,
   };
   const veGestao = ROLE_RANK[auth.org.role] >= ROLE_RANK.manager;
   const [avisos, esperando, agenda, tarefas, configuracao, numeros, gastoIa] = await Promise.all([
@@ -43,7 +45,7 @@ export async function GET(_req: Request) {
     isolado(() => meuDia.minhasTarefas(db, ctx)),
     veGestao ? isolado(() => gestao.configuracaoPendente(db, ctx)) : null,
     veGestao ? isolado(() => gestao.numerosDeHoje(db, ctx)) : null,
-    veGestao ? isolado(() => gestao.gastoDeIa(db, ctx)) : null,
+    veGestao ? isolado(() => gestao.gastoDeIa(ctx, getBudgetStatus)) : null,
   ]);
   return ok(
     {

@@ -133,7 +133,10 @@ test("org única oferece criação, responsável aceita e A→B→A não mistura
     if (update.error) throw update.error;
     await conversation(orgB, `Cliente B ${suffix}`);
     await page.getByRole("link", { name: "Voltar ao aplicativo" }).click();
-    await page.waitForURL("**/app/inbox", { waitUntil: "load" });
+    // "Voltar ao aplicativo" aponta para `/app`, que abre a primeira tela (o Início);
+    // o que esta spec mede está na Inbox, então ela vai até lá.
+    await page.waitForURL("**/app/inicio", { waitUntil: "load" });
+    await page.goto("/app/inbox");
     await expect(page.locator("[data-conversation-id]").getByText(`Cliente A ${suffix}`, { exact: true })).toBeVisible();
     const cookieBeforeFailure = (await page.context().cookies()).find(cookie => cookie.name === "active_org")?.value;
     await page.route("**/app/**", async route => {

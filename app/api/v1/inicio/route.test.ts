@@ -12,6 +12,9 @@ const quebra = vi.hoisted(() => ({ agenda: false }));
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+vi.mock("@/lib/ai/budget/check", () => ({
+  getBudgetStatus: vi.fn(async () => ({ monthly_limit_cents: 0, current_month_consumed_cents: 0 })),
+}));
 vi.mock("@/lib/inicio/meu-dia", async (original) => {
   const real = await original<typeof MeuDia>();
   return {
@@ -30,7 +33,7 @@ const ORG = "org-1";
 function comoPapel(role: string) {
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
-    user: { id: "u1", timezone: null },
+    user: { id: "u1", timezone: null, idioma: "pt-BR" },
     org: { orgId: ORG, role },
   } as never);
 }
@@ -60,6 +63,7 @@ describe("GET /api/v1/inicio", () => {
     const d = (await chamar()) as { gestao: Record<string, { ok: boolean }> | null };
     expect(d.gestao).not.toBeNull();
     expect(d.gestao!.configuracao!.ok).toBe(true);
+    expect(d.gestao!.gastoIa).toEqual({ ok: true, consumidoCents: 0, limiteCents: null });
   });
 
   it("um bloco que lança vira {ok:false} e os outros continuam", async () => {
@@ -68,6 +72,23 @@ describe("GET /api/v1/inicio", () => {
     const d = (await chamar()) as { meuDia: Record<string, { ok: boolean }> };
     expect(d.meuDia.agenda).toEqual({ ok: false });
     expect(d.meuDia.avisos!.ok).toBe(true);
+  });
+
+  it("fuso inválido no perfil não derruba os blocos com hora", async () => {
+    vi.mocked(requireRole).mockResolvedValue({
+      ok: true,
+      user: { id: "u1", timezone: "Nao/Existe", idioma: "pt-BR" },
+      org: { orgId: ORG, role: "agent" },
+    } as never);
+    vi.mocked(createClient).mockResolvedValue(
+      fakeDb({
+        calendar_appointments: [
+          { id: "h1", organization_id: ORG, owner_user_id: "u1", status: "confirmed", title: "Consulta", starts_at: new Date().toISOString() },
+        ],
+      }).db as never,
+    );
+    const d = (await chamar()) as { meuDia: Record<string, { ok: boolean }> };
+    expect(d.meuDia.agenda!.ok).toBe(true);
   });
 
   it("preserva a negativa de autorização", async () => {
