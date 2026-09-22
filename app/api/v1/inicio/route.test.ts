@@ -6,13 +6,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { fakeDb } from "@/lib/inicio/fake-db.test-helper";
+import type * as MeuDia from "@/lib/inicio/meu-dia";
 
 const quebra = vi.hoisted(() => ({ agenda: false }));
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/inicio/meu-dia", async (original) => {
-  const real = await original<typeof import("@/lib/inicio/meu-dia")>();
+  const real = await original<typeof MeuDia>();
   return {
     ...real,
     agendaDeHoje: (...args: Parameters<typeof real.agendaDeHoje>) =>
@@ -58,7 +59,7 @@ describe("GET /api/v1/inicio", () => {
     comoPapel("manager");
     const d = (await chamar()) as { gestao: Record<string, { ok: boolean }> | null };
     expect(d.gestao).not.toBeNull();
-    expect(d.gestao!.configuracao.ok).toBe(true);
+    expect(d.gestao!.configuracao!.ok).toBe(true);
   });
 
   it("um bloco que lança vira {ok:false} e os outros continuam", async () => {
