@@ -53,7 +53,7 @@ Falha ao carregar → "Não consegui carregar este bloco" **só naquele bloco** 
 | Bloco | Fonte | Filtro |
 |---|---|---|
 | Avisos | `agent_inbox_items` | `status` aberto, da organização |
-| Esperando resposta | `conversations` | `assigned_to_user_id = eu` (ou sem dono, para quem atende a fila), `last_inbound_at > coalesce(last_outbound_at, '-infinity')`, não grupo |
+| Esperando resposta | `conversations` | `assigned_to_user_id = eu`, `last_inbound_at > coalesce(last_outbound_at, '-infinity')`, não grupo |
 | Agenda de hoje | `calendar_appointments` | `owner_user_id = eu`, `starts_at` hoje, não cancelado |
 | Tarefas | `crm_tasks` | `assigned_to = eu`, `due_date <= hoje`, não concluída |
 | Configuração pendente | `calendar_event_types` ativos sem `default_owner_user_id`; `team_invites` pendentes vencidos (`expires_at < now()`, sem `accepted_at`/`revoked_at`); `channel_sessions` com `status` diferente de conectado; `ai_agents` sem versão publicada | organização |
