@@ -20,6 +20,13 @@
 
 import type * as PdfjsDist from "pdfjs-dist";
 
+/**
+ * A mensagem do caso "PDF só imagem" (escaneado). É constante porque quem
+ * decide o que fazer com ele é outro módulo: `lib/messaging/media/derive.ts`
+ * manda o arquivo para a visão em vez de desistir.
+ */
+export const PDF_SEM_TEXTO = "pdfjs-dist extracted no text (possibly image-only PDF)";
+
 export class PdfExtractError extends Error {
   constructor(message: string, public readonly cause?: unknown) {
     super(message);
@@ -69,7 +76,7 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
 
     const combined = pageTexts.join("\n\n").trim();
     if (combined.length === 0) {
-      throw new PdfExtractError("pdfjs-dist extracted no text (possibly image-only PDF)");
+      throw new PdfExtractError(PDF_SEM_TEXTO);
     }
     return combined;
   } catch (err) {
