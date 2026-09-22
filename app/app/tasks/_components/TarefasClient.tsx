@@ -13,7 +13,9 @@ import {
 import { useT } from "@/hooks/i18n/useT";
 import { ArrowsClockwise, CalendarBlank, ListChecks, Plus } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
+import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useTasks } from "@/hooks/tasks/useTasks";
+import { nomeDoResponsavel } from "@/lib/tarefas/rotulo-do-responsavel";
 import type { NovaTarefa, SituacaoDaTarefa, Tarefa } from "@/lib/tarefas/tipos";
 
 import { CalendarioDeTarefas } from "./CalendarioDeTarefas";
@@ -23,8 +25,14 @@ import { ListaDeTarefas } from "./ListaDeTarefas";
 /** "aberto" não é uma situação do banco: é o filtro que a tela abre por padrão. */
 type FiltroDeSituacao = "aberto" | SituacaoDaTarefa;
 
-export function TarefasClient({ podeEditar }: { podeEditar: boolean }) {
+export function TarefasClient({ podeEditar, usuarioId }: { podeEditar: boolean; usuarioId: string }) {
   const t = useT();
+  // A equipe que pode receber tarefa. A rota exige `agent`: para o visualizador
+  // ela não carrega, e a lista simplesmente não mostra o nome.
+  const equipe = useAssignableMembers(true);
+  const membros = equipe.data;
+  const rotuloDoResponsavel = (userId: string | null) =>
+    membros ? nomeDoResponsavel(membros, userId) : null;
   const [modo, setModo] = useState<"lista" | "calendario">("lista");
   const [situacao, setSituacao] = useState<FiltroDeSituacao>("aberto");
   const [emEdicao, setEmEdicao] = useState<Tarefa | null>(null);
@@ -169,6 +177,7 @@ export function TarefasClient({ podeEditar }: { podeEditar: boolean }) {
           podeEditar={podeEditar}
           aoAbrirTarefa={abrirEdicao}
           aoClicarNoDia={abrirNova}
+          nomeDoResponsavel={rotuloDoResponsavel}
         />
       ) : (
         <ListaDeTarefas
@@ -177,6 +186,7 @@ export function TarefasClient({ podeEditar }: { podeEditar: boolean }) {
           aoAlternarConcluida={alternarConcluida}
           aoEditar={abrirEdicao}
           aoApagar={(tarefa) => apagarTarefa(tarefa.id)}
+          nomeDoResponsavel={rotuloDoResponsavel}
         />
       )}
 
@@ -187,6 +197,8 @@ export function TarefasClient({ podeEditar }: { podeEditar: boolean }) {
         tarefa={emEdicao}
         prazoSugerido={prazoSugerido}
         aoSalvar={salvar}
+        membros={membros ?? []}
+        usuarioId={usuarioId}
       />
     </div>
   );

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
+import type { AssignableMember } from "@/hooks/inbox/useAssignableMembers";
 import type {
   NovaTarefa,
   PrioridadeDaTarefa,
@@ -38,7 +39,14 @@ interface Props {
   aoSalvar: (entrada: NovaTarefa) => Promise<unknown>;
   leadId?: string | null;
   contactId?: string | null;
+  /** Quem pode receber a tarefa (`/api/v1/team/assignable`). */
+  membros?: readonly AssignableMember[];
+  /** Quem está criando — o responsável padrão de uma tarefa nova. */
+  usuarioId?: string;
 }
+
+/** O Select do Radix não aceita `""` como valor: "ninguém" precisa de um nome. */
+const NINGUEM = "__ninguem__";
 
 /**
  * ISO → os dois campos que a pessoa preenche, no fuso DELA.
@@ -65,6 +73,8 @@ export function FormularioDeTarefa({
   aoSalvar,
   leadId,
   contactId,
+  membros = [],
+  usuarioId,
 }: Props) {
   const t = useT();
   const editando = Boolean(tarefa);
@@ -82,6 +92,10 @@ export function FormularioDeTarefa({
   const [hora, setHora] = useState(tarefa?.due_date ? prazo.hora : "09:00");
   const [prioridade, setPrioridade] = useState<PrioridadeDaTarefa>(tarefa?.priority ?? "medium");
   const [situacao, setSituacao] = useState<SituacaoDaTarefa>(tarefa?.status ?? "pending");
+  // Tarefa nova nasce de quem a cria; editando, respeita o que está gravado.
+  const [responsavel, setResponsavel] = useState<string>(
+    (editando ? tarefa?.assigned_to : usuarioId) ?? NINGUEM,
+  );
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -105,6 +119,7 @@ export function FormularioDeTarefa({
         due_date: prazo,
         priority: prioridade,
         status: situacao,
+        assigned_to: responsavel === NINGUEM ? null : responsavel,
         lead_id: tarefa?.lead_id ?? leadId ?? null,
         contact_id: tarefa?.contact_id ?? contactId ?? null,
       });
@@ -203,6 +218,31 @@ export function FormularioDeTarefa({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="tarefa-responsavel">{t("Responsável")}</Label>
+            <Select value={responsavel} onValueChange={setResponsavel}>
+              <SelectTrigger id="tarefa-responsavel">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NINGUEM}>{t("Ninguém")}</SelectItem>
+                {membros.map((m) => (
+                  <SelectItem key={m.user_id} value={m.user_id}>
+                    {m.full_name?.trim() || t("Sem nome")}
+                    {m.user_id === usuarioId ? ` (${t("você")})` : ""}
+                  </SelectItem>
+                ))}
+                {/* Quem está gravado e não veio na lista (saiu da equipe) ainda
+                    precisa de um item, senão o Select mostra vazio. */}
+                {responsavel !== NINGUEM && !membros.some((m) => m.user_id === responsavel) ? (
+                  <SelectItem value={responsavel}>
+                    {responsavel === usuarioId ? t("Você") : t("Fora da equipe")}
+                  </SelectItem>
+                ) : null}
+              </SelectContent>
+            </Select>
           </div>
 
           {erro ? (

@@ -33,5 +33,5 @@ export default async function TarefasPage() {
 
   const podeEditar = (user.is_platform_admin && !user.support) || ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent;
 
-  return <TarefasClient podeEditar={podeEditar} />;
+  return <TarefasClient podeEditar={podeEditar} usuarioId={user.id} />;
 }

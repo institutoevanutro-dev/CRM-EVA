@@ -22,6 +22,8 @@ interface Props {
   aoAlternarConcluida: (tarefa: Tarefa) => Promise<unknown>;
   aoEditar: (tarefa: Tarefa) => void;
   aoApagar: (tarefa: Tarefa) => Promise<unknown>;
+  /** Nome de quem faz a tarefa; `null` = sem responsável (ou lista da equipe indisponível). */
+  nomeDoResponsavel: (userId: string | null) => string | null;
 }
 
 /** A cor é do TEMA, nunca um hex: ela tem de sobreviver ao claro e ao escuro. */
@@ -38,8 +40,10 @@ function Linha({
   aoAlternarConcluida,
   aoEditar,
   aoApagar,
+  responsavel,
 }: {
   tarefa: Tarefa;
+  responsavel: string | null;
   podeEditar: boolean;
   aoAlternarConcluida: (t: Tarefa) => Promise<unknown>;
   aoEditar: (t: Tarefa) => void;
@@ -71,6 +75,7 @@ function Linha({
 
   return (
     <div
+      data-testid="linha-da-tarefa"
       className={cn(
         "group flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-muted/40",
         encerrada && "opacity-60",
@@ -104,6 +109,11 @@ function Linha({
         </p>
         {tarefa.description ? (
           <p className="mt-0.5 truncate text-xs text-muted-foreground">{tarefa.description}</p>
+        ) : null}
+        {responsavel ? (
+          <p className="mt-0.5 text-xs text-muted-foreground" data-testid="responsavel-da-tarefa">
+            {t("Responsável")}: <span className="font-medium text-foreground">{t(responsavel)}</span>
+          </p>
         ) : null}
 
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
@@ -179,6 +189,7 @@ export function ListaDeTarefas({
   aoAlternarConcluida,
   aoEditar,
   aoApagar,
+  nomeDoResponsavel,
 }: Props) {
   const t = useT();
   const grupos = agrupaPorPrazo(tarefas);
@@ -224,6 +235,7 @@ export function ListaDeTarefas({
                 aoAlternarConcluida={aoAlternarConcluida}
                 aoEditar={aoEditar}
                 aoApagar={aoApagar}
+                responsavel={nomeDoResponsavel(tarefa.assigned_to)}
               />
             ))}
           </div>

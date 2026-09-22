@@ -15,6 +15,8 @@ interface Props {
   aoAbrirTarefa: (tarefa: Tarefa) => void;
   /** `YYYY-MM-DD` do dia clicado — o formulário abre já com esse prazo. */
   aoClicarNoDia: (dia: string) => void;
+  /** Nome de quem faz a tarefa, para o balão do dia. */
+  nomeDoResponsavel: (userId: string | null) => string | null;
 }
 
 const POR_DIA_VISIVEIS = 3;
@@ -36,7 +38,13 @@ function diasDaGrade(ano: number, mes: number): (Date | null)[] {
   return grade;
 }
 
-export function CalendarioDeTarefas({ tarefas, podeEditar, aoAbrirTarefa, aoClicarNoDia }: Props) {
+export function CalendarioDeTarefas({
+  tarefas,
+  podeEditar,
+  aoAbrirTarefa,
+  aoClicarNoDia,
+  nomeDoResponsavel,
+}: Props) {
   const t = useT();
   const tag = useTagDeIdioma();
   const hoje = new Date();
@@ -138,7 +146,11 @@ export function CalendarioDeTarefas({ tarefas, podeEditar, aoAbrirTarefa, aoClic
                 <button
                   key={tarefa.id}
                   type="button"
-                  title={tarefa.title}
+                  title={
+                    nomeDoResponsavel(tarefa.assigned_to)
+                      ? `${tarefa.title} — ${t(nomeDoResponsavel(tarefa.assigned_to)!)}`
+                      : tarefa.title
+                  }
                   onClick={(e) => {
                     e.stopPropagation();
                     aoAbrirTarefa(tarefa);

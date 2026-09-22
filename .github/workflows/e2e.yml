@@ -624,6 +624,7 @@ jobs:
       # todas. Os 3 arquivos que o cancelamento impediu de medir vêm junto, porque
       # eles são justamente o fim da fila.
       SPECS_PARTE_3: >-
+        tarefa-com-responsavel.spec.ts
         autonomia-assistida.spec.ts
         roteamento-por-canal.spec.ts
         central-avisos-destino.spec.ts
