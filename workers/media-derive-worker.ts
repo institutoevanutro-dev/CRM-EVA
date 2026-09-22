@@ -329,6 +329,11 @@ function buildDeriveDeps(
     return data?.supports_vision ?? null;
   };
   const describeImage: DeriveDeps["describeImage"] = async (buffer, mime) => {
+    // O MESMO caminho serve à foto e ao PDF escaneado (derive.ts manda o PDF
+    // para cá quando ele não tem texto). O rótulo acompanha o arquivo: dizer
+    // "não li a imagem" de um PDF manda o operador procurar a coisa errada.
+    const ehPdf = mime.split(";")[0]!.trim().toLowerCase() === "application/pdf";
+    const rotulo = ehPdf ? "documento" : "imagem";
     // ⚠️ A resposta é resolvida AQUI, não na montagem das deps, porque num
     // roteador ela depende do catálogo e a consulta é assíncrona. Antes disto
     // a pergunta ia direto ao registro, que num roteador responde pelo prefixo
@@ -361,7 +366,7 @@ function buildDeriveDeps(
         ? `o modelo ${llm.defaultModel ?? "configurado"} não enxerga imagens`
         : `não sei se o modelo ${llm.defaultModel ?? "configurado"} enxerga imagens, ` +
           `então não arrisquei enviar a foto — escolha um modelo do catálogo em Agente de IA → Provedores`;
-      await avisarMidiaNaoLida(orgId, "imagem", motivo);
+      await avisarMidiaNaoLida(orgId, rotulo, motivo);
       return MARCADOR_NAO_LIDA;
     }
     // O endereço é escolhido por quem administra a instalação (o campo de
@@ -376,7 +381,7 @@ function buildDeriveDeps(
     if (baseUrlDaVisao && chaveEhDaInstalacao) {
       await avisarMidiaNaoLida(
         orgId,
-        "imagem",
+        rotulo,
         "o endereço de IA configurado para esta empresa só é usado com a credencial dela: cadastre a chave da empresa em Agente de IA e Provedores, ou tire o endereço próprio para voltar ao provedor padrão da instalação",
       );
       return MARCADOR_NAO_LIDA;
@@ -386,7 +391,7 @@ function buildDeriveDeps(
       if (recusa) {
         await avisarMidiaNaoLida(
           orgId,
-          "imagem",
+          rotulo,
           "o endereço configurado para a visão não foi aceito como destino, então não enviei a imagem nem a chave para lá — confira o endereço do provedor em Agente de IA e Provedores",
           undefined,
           recusa,
@@ -396,7 +401,7 @@ function buildDeriveDeps(
     }
     const factory = registry[llm.provider];
     if (!factory) {
-      await avisarMidiaNaoLida(orgId, "imagem", `o provedor ${llm.provider} não está disponível nesta instalação`);
+      await avisarMidiaNaoLida(orgId, rotulo, `o provedor ${llm.provider} não está disponível nesta instalação`);
       return MARCADOR_NAO_LIDA;
     }
     const res = await generateText({
@@ -405,7 +410,12 @@ function buildDeriveDeps(
         {
           role: "user",
           content: [
-            { type: "text", text: "Descreva objetivamente esta imagem em 1-2 frases, em português, para um atendente de vendas entender o que o cliente enviou." },
+            {
+              type: "text",
+              text: ehPdf
+                ? "Este documento é um PDF sem texto (digitalizado ou fotografado). Descreva objetivamente o que ele mostra em 1-3 frases, em português, incluindo valores, datas e nomes visíveis, para um atendente entender o que o cliente enviou."
+                : "Descreva objetivamente esta imagem em 1-2 frases, em português, para um atendente de vendas entender o que o cliente enviou.",
+            },
             // AI SDK v7: file part com mediaType (o antigo image part é deprecated).
             { type: "file", data: buffer, mediaType: mime.split(";")[0]! },
           ],
