@@ -37,6 +37,10 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  // Responsável da tarefa (app/app/tasks).
+  "Ninguém": { es: "Nadie" },
+  "Fora da equipe": { es: "Fuera del equipo" },
+  "O responsável escolhido não faz parte da equipe.": { es: "El responsable elegido no forma parte del equipo." },
   // Painel Início (app/app/inicio).
   "O que precisa da sua atenção hoje, num lugar só.": { es: "Lo que necesita tu atención hoy, en un solo lugar." },
   "Meu dia": { es: "Mi día" },

@@ -33,6 +33,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
 import { registraAtividadeDaTarefa } from "@/lib/tarefas/atividade";
+import { clienteDaEquipe, responsavelValido } from "@/lib/tarefas/responsavel";
 import { PRIORIDADES_DA_TAREFA, SITUACOES_DA_TAREFA, type Tarefa } from "@/lib/tarefas/tipos";
 
 export const dynamic = "force-dynamic";
@@ -127,6 +128,15 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const supabase = await createClient();
+
+  if (
+    parsed.data.assigned_to &&
+    !(await responsavelValido(clienteDaEquipe(supabase), authz.org.orgId, parsed.data.assigned_to))
+  ) {
+    return fail("validation_failed", t("O responsável escolhido não faz parte da equipe."), 422, {
+      requestId,
+    });
+  }
   const { data, error } = await supabase
     .from("crm_tasks")
     .insert({
