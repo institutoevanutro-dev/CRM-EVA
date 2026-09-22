@@ -60,7 +60,6 @@ export const DICIONARIO: Traducoes = {
   "Conversas com pacientes": { es: "Conversaciones con pacientes" },
   "Agendamentos criados": { es: "Citas creadas" },
   "sem limite configurado": { es: "sin límite configurado" },
-  "IA pausada por orçamento": { es: "IA pausada por presupuesto" },
   "Tudo no ar": { es: "Todo en línea" },
   "Algum serviço está fora do ar. Avise o suporte.": { es: "Algún servicio está caído. Avisa al soporte." },
   // vocabulario.ts (followups) — MatchReplyForm.tsx não traduzia, ClassifyForm.tsx sim.

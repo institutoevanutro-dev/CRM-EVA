@@ -67,13 +67,13 @@ describe("gastoDeIa", () => {
   it("lê consumo e limite do mês", async () => {
     const { db } = fakeDb({
       ai_budgets: [
-        { organization_id: ORG, current_month_consumed_cents: 1234, monthly_limit_cents: 5000, is_throttled: false, is_disabled: false },
+        { organization_id: ORG, current_month_consumed_cents: 1234, monthly_limit_cents: 5000 },
       ],
     });
-    expect(await gastoDeIa(db, ctx)).toEqual({ ok: true, consumidoCents: 1234, limiteCents: 5000, pausado: false });
+    expect(await gastoDeIa(db, ctx)).toEqual({ ok: true, consumidoCents: 1234, limiteCents: 5000 });
   });
   it("sem linha de orçamento é 'sem limite', não erro", async () => {
     const { db } = fakeDb({ ai_budgets: [] });
-    expect(await gastoDeIa(db, ctx)).toEqual({ ok: true, consumidoCents: 0, limiteCents: null, pausado: false });
+    expect(await gastoDeIa(db, ctx)).toEqual({ ok: true, consumidoCents: 0, limiteCents: null });
   });
 });

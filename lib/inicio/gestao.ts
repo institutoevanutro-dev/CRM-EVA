@@ -58,7 +58,7 @@ export async function configuracaoPendente(db: Db, ctx: ContextoDoInicio): Promi
     })),
     ...(canais.data ?? []).map((c) => ({
       id: `canal:${c.id}`,
-      titulo: String(c.display_name ?? "WhatsApp"),
+      titulo: c.display_name ? String(c.display_name) : "WhatsApp",
       detalhe: "canal_fora",
       href: "/app/connections",
     })),
@@ -124,22 +124,21 @@ export async function numerosDeHoje(
 }
 
 export type GastoDeIa =
-  | { ok: true; consumidoCents: number; limiteCents: number | null; pausado: boolean }
+  | { ok: true; consumidoCents: number; limiteCents: number | null }
   | { ok: false };
 
 export async function gastoDeIa(db: Db, ctx: ContextoDoInicio): Promise<GastoDeIa> {
   const { data, error } = await db
     .from("ai_budgets")
-    .select("current_month_consumed_cents,monthly_limit_cents,is_throttled,is_disabled")
+    .select("current_month_consumed_cents,monthly_limit_cents")
     .eq("organization_id", ctx.orgId)
     .limit(1);
   if (error) return { ok: false };
   const b = data?.[0];
-  if (!b) return { ok: true, consumidoCents: 0, limiteCents: null, pausado: false };
+  if (!b) return { ok: true, consumidoCents: 0, limiteCents: null };
   return {
     ok: true,
     consumidoCents: Number(b.current_month_consumed_cents ?? 0),
     limiteCents: b.monthly_limit_cents == null ? null : Number(b.monthly_limit_cents),
-    pausado: Boolean(b.is_throttled || b.is_disabled),
   };
 }

@@ -14,7 +14,7 @@ type Numeros =
     }
   | { ok: false };
 type Gasto =
-  | { ok: true; consumidoCents: number; limiteCents: number | null; pausado: boolean }
+  | { ok: true; consumidoCents: number; limiteCents: number | null }
   | { ok: false };
 type Resposta = {
   meuDia: { avisos: Bloco; esperando: Bloco; agenda: Bloco; tarefas: Bloco };
@@ -166,7 +166,6 @@ export function PainelInicio() {
                   {gestao.gastoIa.limiteCents != null
                     ? ` / ${reais(gestao.gastoIa.limiteCents)}`
                     : ` · ${t("sem limite configurado")}`}
-                  {gestao.gastoIa.pausado ? ` · ${t("IA pausada por orçamento")}` : ""}
                 </p>
               ) : (
                 <FalhaDoBloco />
