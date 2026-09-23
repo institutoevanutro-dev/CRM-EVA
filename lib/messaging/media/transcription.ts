@@ -12,6 +12,11 @@ export interface TranscriptionCreds {
   apiKey: string;
   model?: string;
   baseUrl?: string;
+  /**
+   * ISO-639-1 ("pt", "es"). Ausente = o provedor adivinha, que é o que produzia
+   * "3102 reis 3101" para "testando 123 testando" (ver `idioma-da-transcricao.ts`).
+   */
+  language?: string;
 }
 
 const DEFAULT_BASE = "https://api.openai.com";
@@ -37,6 +42,7 @@ export function apiTranscriptionProvider(
     async transcribe(audio, mime) {
       const form = new FormData();
       form.append("model", model);
+      if (creds.language) form.append("language", creds.language);
       form.append(
         "file",
         new Blob([new Uint8Array(audio)], { type: mime.split(";")[0]!.trim() }),

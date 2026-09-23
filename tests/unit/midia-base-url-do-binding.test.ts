@@ -277,10 +277,13 @@ describe("worker de mídia: base_url do binding de visão (#855)", () => {
 
     await deriveMessageMedia(eventRow());
 
+    // `language` entrou junto: o serviço próprio também recebe o idioma da
+    // organização (sem ele o Whisper adivinha — ver idioma-da-transcricao.ts).
     expect(provedorDeTranscricaoMock).toHaveBeenCalledWith({
       apiKey: "chave-do-servico",
       baseUrl: "https://api.groq.com/openai/v1",
       model: "whisper-large-v3",
+      language: "pt",
     });
   });
 

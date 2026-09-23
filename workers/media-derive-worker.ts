@@ -17,6 +17,7 @@ import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { deriveMediaText, type DeriveDeps } from "@/lib/messaging/media/derive";
 import { TIPOS_DERIVAVEIS } from "@/lib/messaging/media/derivable";
 import { deriveVideoText } from "@/lib/messaging/media/video-derive";
+import { idiomaDaTranscricao } from "@/lib/messaging/media/idioma-da-transcricao";
 import { apiTranscriptionProvider } from "@/lib/messaging/media/transcription";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -199,7 +200,24 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
 
     // O 5º argumento é a `base_url` do binding: o factory precisa dela para não
     // cair no endpoint padrão do provedor (ver o comentário lá em cima).
-    const deps = buildDeriveDeps(llm, openaiKey, row.organization_id, admin, baseUrlDaVisao, chaveEhDaInstalacao);
+    // O idioma da ORGANIZAÇÃO vai junto com o áudio: sem ele o Whisper adivinha,
+    // e em áudio curto adivinha mal (ver `idioma-da-transcricao.ts`).
+    const { data: orgDoAudio } = await admin
+      .from("organizations")
+      .select("locale")
+      .eq("id", row.organization_id)
+      .maybeSingle();
+    const idioma = idiomaDaTranscricao(orgDoAudio?.locale ?? null);
+
+    const deps = buildDeriveDeps(
+      llm,
+      openaiKey,
+      row.organization_id,
+      admin,
+      baseUrlDaVisao,
+      chaveEhDaInstalacao,
+      idioma,
+    );
 
     const text = await deriveMediaText(msg.type, buffer, msg.media_mime ?? "application/octet-stream", deps);
     await admin.from("messages")
@@ -305,6 +323,8 @@ function buildDeriveDeps(
   // do provedor, que é o comportamento do turno do agente sem `baseUrl`.
   baseUrlDaVisao: string | null = null,
   chaveEhDaInstalacao = false,
+  /** ISO-639-1 do áudio (idioma da organização). */
+  idioma = "pt",
 ): DeriveDeps {
   const registry = createDefaultRegistry();
   // Thunk, não consulta: nada vai ao banco até a visão ser de fato perguntada,
@@ -444,7 +464,7 @@ function buildDeriveDeps(
   // continuava batendo em api.openai.com com `whisper-1`. Sem
   // `TRANSCRIPTION_API_KEY` o comportamento é exatamente o de antes.
   const transcricaoPadrao: DeriveDeps["transcriber"] = openaiKey
-    ? apiTranscriptionProvider({ apiKey: openaiKey })
+    ? apiTranscriptionProvider({ apiKey: openaiKey, language: idioma })
     : semTranscricao;
   // O endereço do serviço de transcrição vem do .env da instalação e a chamada
   // leva a chave no cabeçalho: mesma recusa do endereço da visão, e antes de a
@@ -483,6 +503,7 @@ function buildDeriveDeps(
           apiKey: chaveDeTranscricao,
           baseUrl: env.TRANSCRIPTION_BASE_URL || undefined,
           model: env.TRANSCRIPTION_MODEL || undefined,
+          language: idioma,
         }),
       )
     : transcricaoPadrao;
