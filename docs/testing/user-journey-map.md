@@ -388,6 +388,25 @@ pelo critério que já estava escrito lá: decisão humana não colapsa.
 
 ---
 
+## J9b — Limitar o horário em que os follow-ups mandam mensagem `[P1]`
+
+Contexto do código: `settings.followups.bloqueios.janela` é respeitada pelo executor
+desde a 0265 (`lib/followup/bloqueios-obrigatorios.ts` — fora do horário, adia para a
+próxima abertura) e **não tinha tela**: sem ela, lead que parava de responder às 20h
+recebia a primeira cobrança às 23h. O quadro "Horário de envio" mora na página de
+Follow-ups e grava por `PATCH /api/v1/settings/followups/horario`.
+Spec: `tests/e2e/followup-horario-de-envio.spec.ts`.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J9b.1 | Entrar em Follow-ups pelo menu | quadro diz "Sem limite", chave desligada | PASS |
+| J9b.2 | Ligar | já vem 08:00–21:00, os sete dias marcados | PASS |
+| J9b.3 | Fim antes do início | aviso "O fim precisa ser depois do início." e Salvar desabilitado | PASS |
+| J9b.4 | Salvar e recarregar | 08:00–20:30 sem domingo, voltando do banco; sem botão Salvar (nada sujo) | PASS |
+| J9b.5 | Agent | vê o quadro travado; a rota devolve 403 | PASS |
+
+Evidência: `evidence/horario-de-envio/01-antes-de-salvar.png`, `evidence/horario-de-envio/02-depois-do-reload.png`.
+
 ## J10 — Marca própria: o revendedor põe a cara dele no sistema `[P0]`
 
 Contexto do código: o épico de marca própria (PR #248 e a continuação). São
