@@ -384,7 +384,18 @@ load_env() {
         # quatro caracteres a mais, e o erro só aparece longe daqui (o psql
         # recusa a conexão, o login não bate) sem nada apontando para o .env.
         # Achado pelo teste de round-trip.
-        val="${val//"'\\''"/"'"}"
+        #
+        # ⚠️ O padrão e a troca vêm de VARIÁVEL, e a barra vai DOBRADA, por
+        # causa do bash 3.2 — o que o macOS traz em /bin/bash até hoje. Escrito
+        # como `${val//"'\''"/"'"}` (aspas literais dentro das chaves), o 3.2
+        # não faz a remoção de aspas e insere `"'"` no lugar da aspa: medido,
+        # `Sant'Ana Odontologia` voltava como `Sant"'"Ana Odontologia`. O bash 5
+        # da VPS acerta, então o defeito nunca apareceu em produção — ele
+        # aparecia no `pnpm test:shell` de quem desenvolve no Mac, como falha
+        # que parece do próprio trabalho e custa uma rodada para descartar.
+        local aspa="'" escapada
+        escapada="$(printf "\047\134\134\047\047")"  # o padrão '\'' com a barra escapada
+        val="${val//$escapada/$aspa}"
         ;;
     esac
     printf -v "$key" '%s' "$val"
