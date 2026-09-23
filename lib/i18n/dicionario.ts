@@ -8988,6 +8988,14 @@ export const DICIONARIO: Traducoes = {
   "Escolha a unidade": { es: "Elija la unidad" },
   "Nome da sala": { es: "Nombre de la sala" },
   "Adicionar sala": { es: "Añadir sala" },
+  // Horário de envio dos follow-ups (app/app/ai/followups).
+  "Horário de envio": { es: "Horario de envío" },
+  "Horário de envio salvo.": { es: "Horario de envío guardado." },
+  "Limitar horário de envio": { es: "Limitar horario de envío" },
+  "Fora deste horário a mensagem espera e sai na próxima abertura.": { es: "Fuera de este horario el mensaje espera y sale en la próxima apertura." },
+  "Sem limite: as mensagens dos fluxos saem a qualquer hora, inclusive de madrugada.": { es: "Sin límite: los mensajes de los flujos salen a cualquier hora, incluso de madrugada." },
+  "Escolha pelo menos um dia.": { es: "Elige al menos un día." },
+  "O fim precisa ser depois do início.": { es: "El fin tiene que ser después del inicio." },
 };
 
 /**

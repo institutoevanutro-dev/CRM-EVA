@@ -48,18 +48,27 @@ const intervaloSchema = z
   .strict()
   .refine((i) => minutos(i.fim) > minutos(i.inicio), { message: 'fim deve ser depois do início' });
 
+const janelaSchema = z
+  .object({
+    timezone: z.string().min(1),
+    /** 0 = domingo … 6 = sábado. */
+    dias: z.array(z.number().int().min(0).max(6)).min(1),
+    intervalos: z.array(intervaloSchema).min(1),
+  })
+  .strict();
+
+/**
+ * O que a tela manda: a janela SEM o fuso. O fuso sai da própria organização
+ * (`organizations.timezone`), nunca do corpo — um fuso digitado à mão que
+ * discordasse do da organização faria "8h" significar outra hora.
+ * `null` = sem janela (envia a qualquer hora).
+ */
+export const janelaDaTelaSchema = janelaSchema.omit({ timezone: true }).nullable();
+export type JanelaDaTela = z.infer<typeof janelaDaTelaSchema>;
+
 export const configDosBloqueiosSchema = z
   .object({
-    janela: z
-      .object({
-        timezone: z.string().min(1),
-        /** 0 = domingo … 6 = sábado. */
-        dias: z.array(z.number().int().min(0).max(6)).min(1),
-        intervalos: z.array(intervaloSchema).min(1),
-      })
-      .strict()
-      .nullable()
-      .default(null),
+    janela: janelaSchema.nullable().default(null),
     exigir_etapa_do_gatilho: z.boolean().default(false),
     bloquear_com_consulta_confirmada: z.boolean().default(false),
     uma_sequencia_por_contato: z.boolean().default(false),
@@ -86,6 +95,27 @@ export function lerConfigDosBloqueios(settings: unknown): ConfigDosBloqueios | n
   if (!parsed.success) return null;
   if (parsed.data.janela !== null && !fusoValido(parsed.data.janela.timezone)) return null;
   return parsed.data;
+}
+
+/**
+ * Os `settings` da organização com a janela trocada — e SÓ ela. As outras chaves
+ * de `settings` e os outros bloqueios sobrevivem: quem só mexeu no horário não
+ * pode desligar, sem ver, "uma sequência por contato".
+ *
+ * Bloqueios ilegíveis (`lerConfigDosBloqueios` → `null`) hoje calam TODO envio
+ * de fluxo. Salvar a janela os reescreve com os padrões — é o conserto, não uma
+ * perda: o que estava lá já não valia nada.
+ */
+export function settingsComJanela(
+  settings: unknown,
+  janela: JanelaDaTela,
+  timezone: string,
+): Record<string, unknown> {
+  const atual = (settings as Record<string, unknown> | null) ?? {};
+  const followups = (atual.followups as Record<string, unknown> | undefined) ?? {};
+  const base = lerConfigDosBloqueios(atual) ?? CONFIG_SEM_BLOQUEIOS_OPCIONAIS;
+  const bloqueios: ConfigDosBloqueios = { ...base, janela: janela && { timezone, ...janela } };
+  return { ...atual, followups: { ...followups, bloqueios } };
 }
 
 function minutos(hhmm: string): number {

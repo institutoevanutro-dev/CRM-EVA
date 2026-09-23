@@ -6,7 +6,9 @@ import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 import type { FollowupFlowPointerRow } from "@/hooks/followup/useFollowupFlows";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { lerConfigDosBloqueios } from "@/lib/followup/bloqueios-obrigatorios";
 import { FlowsList } from "./_components/FlowsList";
+import { HorarioDeEnvio } from "./_components/HorarioDeEnvio";
 import { QueueTab } from "./_components/QueueTab";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +34,14 @@ export default async function FollowupFlowsPage() {
     .order("updated_at", { ascending: false });
 
   const flows = (data ?? []) as unknown as FollowupFlowPointerRow[];
+
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("settings, timezone")
+    .eq("id", activeOrg.orgId)
+    .maybeSingle();
+  // Config ilegível abre como "sem limite": a tela existe justamente para consertá-la.
+  const janela = lerConfigDosBloqueios(org?.settings)?.janela ?? null;
   const canWrite = ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
 
   return (
@@ -44,6 +54,11 @@ export default async function FollowupFlowsPage() {
           </p>
         </div>
       </header>
+      <HorarioDeEnvio
+        initial={janela && { dias: janela.dias, intervalos: janela.intervalos }}
+        timezone={org?.timezone ?? "America/Sao_Paulo"}
+        canWrite={canWrite}
+      />
       <Tabs defaultValue="fluxos" className="flex flex-1 flex-col">
         <TabsList>
           <TabsTrigger value="fluxos">{t("Fluxos")}</TabsTrigger>
