@@ -49,7 +49,7 @@ function Cartao({
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="font-medium">{titulo}</h3>
         {verTodos ? (
-          <Link className="text-sm underline" href={verTodos}>
+          <Link className="text-sm text-accent underline" href={verTodos}>
             {t("Ver todos")}
           </Link>
         ) : null}
@@ -71,7 +71,7 @@ function FalhaDoBloco() {
 function ListaDoBloco({ bloco, comMotivo }: { bloco: Bloco | null; comMotivo?: boolean }) {
   const t = useT();
   if (!bloco || !bloco.ok) return <FalhaDoBloco />;
-  if (bloco.total === 0) return <p className="text-sm text-muted-foreground">{t("Tudo em dia ✓")}</p>;
+  if (bloco.total === 0) return <p className="text-sm text-success">{t("Tudo em dia ✓")}</p>;
   return (
     <>
       <p className="mb-2 text-3xl font-semibold">{bloco.total}</p>
@@ -88,7 +88,7 @@ function ListaDoBloco({ bloco, comMotivo }: { bloco: Bloco | null; comMotivo?: b
                   ? `${i.titulo}${i.detalhe ? ` — ${t(MOTIVO[i.detalhe] ?? i.detalhe)}` : ""}`
                   : `${i.detalhe ? `${i.detalhe} · ` : ""}${i.titulo}`}
               </span>
-              <span className="shrink-0 text-sm underline">{t("Resolver")}</span>
+              <span className="shrink-0 text-sm text-accent underline">{t("Resolver")}</span>
             </Link>
           </li>
         ))}
