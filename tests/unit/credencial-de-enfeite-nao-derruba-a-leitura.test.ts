@@ -35,8 +35,11 @@
  * guarda, a ORDEM dela e a ACL. A prova comportamental, com Postgres de verdade,
  * mora em `tests/invariants/credencial-de-enfeite-nao-derruba-a-leitura.test.ts`
  * (job obrigatório `invariants`). Aqui não se afirma "a função devolve null" —
- * isso é do invariante; aqui se afirma "a guarda existe, nesta ordem, e o único
- * `pgp_sym_decrypt` do schema está dentro dela".
+ * isso é do invariante; aqui se afirma "a guarda existe, nesta ordem, e todo
+ * `pgp_sym_decrypt` do schema está dentro de uma função que guarda a forma".
+ * Desde a 0275 são DUAS: `fn_decrypt_oauth` e `decrypt_cpf` (o CPF do paciente,
+ * que a ficha do contato revela sob pedido). A regra é "cifra nova, guarda
+ * nova" — decifra sem as três guardas não passa daqui.
  *
  * VERMELHO NA BASE (medido): sem o fix, as asserções 1–4 falham — a última
  * definição de `fn_decrypt_oauth` no baseline chama `pgp_sym_decrypt` sem guarda
@@ -73,16 +76,20 @@ interface Definicao {
 }
 
 /**
- * Todas as definições de `public.fn_decrypt_oauth` no arquivo, em ordem.
+ * Todas as definições de uma função no arquivo, em ordem.
  *
  * São várias de propósito: `baseline.sql` é o dump (uma definição) + apêndices
  * idempotentes que redefinem a função (o forward-fix da 0041, esta 0240). No
  * Postgres vence a ÚLTIMA aplicada — e é ela que este teste cobra, porque é ela
  * que fica instalada na VPS de quem atualiza.
  */
-function definicoesDe(texto: string): Definicao[] {
+/** Definições de UMA função (pelo nome), em ordem de aparição no texto. */
+function definicoesDeFuncao(texto: string, nome: string): Definicao[] {
   const out: Definicao[] = [];
-  const re = /create\s+or\s+replace\s+function\s+("?public"?\s*\.\s*)?"?fn_decrypt_oauth"?\s*\(/gi;
+  const re = new RegExp(
+    `create\\s+or\\s+replace\\s+function\\s+("?public"?\\s*\\.\\s*)?"?${nome}"?\\s*\\(`,
+    "gi",
+  );
   for (const m of texto.matchAll(re)) {
     const inicio = m.index ?? 0;
     const abre = texto.indexOf("$$", inicio);
@@ -92,6 +99,8 @@ function definicoesDe(texto: string): Definicao[] {
   }
   return out;
 }
+
+const definicoesDe = (texto: string): Definicao[] => definicoesDeFuncao(texto, "fn_decrypt_oauth");
 
 const DEFINICOES_BASELINE = definicoesDe(BASELINE);
 const EFETIVA = DEFINICOES_BASELINE[DEFINICOES_BASELINE.length - 1];
@@ -138,16 +147,41 @@ describe("credencial de enfeite não derruba a leitura (#754)", () => {
     ).toBe(EFETIVA.corpo);
   });
 
-  it("3. nenhum outro caminho de decifra no schema: todo `pgp_sym_decrypt` vive dentro de fn_decrypt_oauth", () => {
+  it("3. nenhum caminho de decifra sem guarda: todo `pgp_sym_decrypt` vive numa função que guarda a forma", () => {
+    // A regra é "cifra nova, guarda nova" — não "só existe uma função".
+    // `decrypt_cpf` (migration 0275) é a segunda decifra do schema e repete as
+    // TRÊS guardas, na mesma ordem: sem isso, uma linha cujo `cpf_encrypted`
+    // não é pacote de verdade vira 500 permanente, que é o defeito da #754
+    // mudando de lugar. Toda decifra futura entra aqui do mesmo jeito.
+    const GUARDADAS = [...DEFINICOES_BASELINE, ...definicoesDeFuncao(BASELINE, "decrypt_cpf")];
     const ocorrencias = [...BASELINE.matchAll(/pgp_sym_decrypt\s*\(/g)].map((m) => m.index ?? 0);
     expect(ocorrencias.length, "sumiu o pgp_sym_decrypt do baseline?").toBeGreaterThan(0);
     for (const i of ocorrencias) {
-      const dona = DEFINICOES_BASELINE.find((d) => d.inicio < i && i < d.fim);
+      const dona = GUARDADAS.find((d) => d.inicio < i && i < d.fim);
       expect(
         dona,
-        `há um pgp_sym_decrypt() fora de fn_decrypt_oauth (offset ${i}) — cifra nova, guarda nova`,
+        `há um pgp_sym_decrypt() fora de função guardada (offset ${i}) — cifra nova, guarda nova`,
       ).toBeDefined();
     }
+  });
+
+  it("3b. a segunda decifra (decrypt_cpf) tem as MESMAS três guardas, na mesma ordem", () => {
+    const defs = definicoesDeFuncao(BASELINE, "decrypt_cpf");
+    const efetiva = defs[defs.length - 1];
+    expect(efetiva, "decrypt_cpf não aparece no baseline — o self-host não receberia a função").toBeDefined();
+    const corpo = efetiva!.corpo;
+
+    const iNull = corpo.search(/is null/);
+    const iTamanho = corpo.indexOf(String(PISO_MEDIDO));
+    const iPacote = corpo.search(/get_byte\s*\(\s*\w+\s*,\s*0\s*\)\s*<\s*128/);
+    const iDecifra = corpo.indexOf("pgp_sym_decrypt");
+
+    expect(iNull, "falta a guarda de NULL").toBeGreaterThan(-1);
+    expect(iTamanho, `falta o piso medido (${PISO_MEDIDO} bytes)`).toBeGreaterThan(-1);
+    expect(iPacote, "falta a checagem de cara de pacote PGP (bit 7)").toBeGreaterThan(-1);
+    expect(iNull, "NULL depois do piso").toBeLessThan(iTamanho);
+    expect(iTamanho, "o piso tem de vir antes da checagem de pacote").toBeLessThan(iPacote);
+    expect(iPacote, "a checagem de pacote tem de vir antes da decifra").toBeLessThan(iDecifra);
   });
 
   it("4. a ACL não reabre: continua só service_role", () => {

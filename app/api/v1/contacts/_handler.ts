@@ -13,6 +13,7 @@ import { observeServiceOrigin } from "@/lib/atendimento/origem";
 import { ApiError } from "@/lib/api/types";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { traduzir } from "@/lib/i18n/dicionario";
 import type { Idioma } from "@/lib/i18n/idiomas";
 import { roleAtLeast } from "@/lib/auth/types";
@@ -287,20 +288,30 @@ export async function getContactHandler(
       .maybeSingle();
 
     const role = membership?.role as string | undefined;
-    if (!roleAtLeast(role, "manager")) {
+    // Piso ATENDENTE (decisão do dono do produto, 22/09/2026): quem atende no
+    // WhatsApp precisa conferir o cadastro do paciente. Visualizador continua
+    // sabendo que existe CPF (`cpf_available`) sem alcançar o número.
+    if (!roleAtLeast(role, "agent")) {
       cpfDecryptDenied = true;
     } else {
-      const { data: dec, error: decErr } = await supabase.rpc("decrypt_cpf", {
+      // `decrypt_cpf` só é executável pela service key, e é assim de propósito:
+      // ela devolve o CPF em claro e não sabe quem pergunta nem de que
+      // organização. As duas perguntas foram respondidas aqui em cima — a ficha
+      // veio filtrada por `organization_id` e o papel acabou de ser conferido.
+      const { data: dec, error: decErr } = await createAdminClient().rpc("decrypt_cpf", {
         p_contact_id: input.contactId,
       });
       if (decErr) {
-        console.warn("[contacts.get] decrypt_cpf RPC unavailable", decErr.message);
+        logger.warn("[contacts.get] decrypt_cpf falhou", { error: decErr.message });
       } else if (typeof dec === "string") {
         cpfDecrypted = dec;
       }
       const a = actorAuditPayload(ctx.actor);
       await audit({
-        action: "contact.updated",
+        // LER não é ALTERAR: esta ação era gravada como `contact.updated`, o que
+        // afogava a consulta de dado sensível no meio das edições de cadastro —
+        // e é justamente ela que a LGPD manda saber quem fez.
+        action: "contact.cpf_viewed",
         actorUserId: a.actorUserId,
         organizationId: contact.organization_id,
         resourceType: "contact",

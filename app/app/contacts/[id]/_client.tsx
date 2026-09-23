@@ -22,6 +22,7 @@ import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
 import { PropostasDeDado } from "@/components/contacts/PropostasDeDado";
 import { ConversaNoDossie } from "@/components/kanban/ConversaNoDossie";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { CpfDoContato } from "@/components/contacts/CpfDoContato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
 import { DialButton } from "@/components/voice/DialButton";
 
@@ -156,6 +157,16 @@ export function ContactDetailClient({ contactId }: Props) {
                 <dt className="text-xs uppercase text-muted-foreground">{t("Telefone")}</dt>
                 <dd className="mt-1">
                   {contact.phone_number ? phoneForDisplay(contact.phone_number) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase text-muted-foreground">CPF</dt>
+                <dd className="mt-1">
+                  <CpfDoContato
+                    contactId={contactId}
+                    disponivel={Boolean(contact.cpf_available ?? contact.cpf_hash)}
+                    podeVer={Boolean(activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent)}
+                  />
                 </dd>
               </div>
               <div>
