@@ -11,6 +11,11 @@ export interface Contact {
   email_normalized: string | null;
   phone_number: string | null;
   cpf_hash: string | null;
+  /** Só na leitura de UMA ficha: existe CPF guardado (o número não vem junto). */
+  cpf_available?: boolean;
+  /** Só quando a leitura pediu `X-Decrypt-Purpose` e o papel permitiu. */
+  cpf_decrypted?: string | null;
+  cpf_decrypt_denied?: boolean;
   birthdate: string | null;
   is_blocked: boolean;
   blocked_reason: string | null;

@@ -56,6 +56,11 @@ export const AUDIT_ACTIONS = [
   "lead.imported",
   "contact.created",
   "contact.updated",
+  // LER o CPF de alguém não é alterar a ficha, e a LGPD pergunta justamente
+  // quem consultou o dado sensível. Enquanto esta consulta era gravada como
+  // `contact.updated`, a resposta ficava afogada no meio das edições de
+  // cadastro — e não dava para distinguir uma da outra depois.
+  "contact.cpf_viewed",
   "contacts.imported",
   "contact.anonymized",
   "contact.merge_pending",
