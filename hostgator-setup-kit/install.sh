@@ -1559,6 +1559,11 @@ esac
   envq WORKER_PULL_POLICY "$PULL_POLICY_ALVO"
   envq SCHEDULER_IMAGE "${IMG_SCHEDULER}:${TAG_ALVO}"
   envq SCHEDULER_PULL_POLICY "$PULL_POLICY_ALVO"
+  # Teto de memória do worker. Nasce no valor que sempre valeu; sobe pelo .env
+  # quando o agente começa a morrer por OOM. Está aqui — e não só no compose —
+  # para o operador ENCONTRAR o botão: knob que existe e ninguém vê é knob que
+  # vira edição de arquivo versionado, que o próximo update desfaz.
+  envq WORKER_MEM_LIMIT "512m"
   envq DOMAIN "$DOMAIN"
   envq ACME_EMAIL "$ACME_EMAIL"
   printf '# Proxy reverso: "caddy" (o kit sobe o dele nas portas 80/443), "traefik"\n'

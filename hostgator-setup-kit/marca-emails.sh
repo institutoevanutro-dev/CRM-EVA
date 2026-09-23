@@ -342,57 +342,65 @@ if [ -n "$APP_URL" ]; then
   done
 fi
 
-# ── 5. Sobe ────────────────────────────────────────────────────────────────
-corpo="{
-  \"mailer_subjects_confirmation\": \"$(json_escape "Confirme seu e-mail — $APP_NOME")\",
-  \"mailer_subjects_recovery\": \"$(json_escape "Redefinir senha — $APP_NOME")\",
-  \"mailer_templates_confirmation_content\": \"$(json_escape "$HTML_CONFIRM")\",
-  \"mailer_templates_recovery_content\": \"$(json_escape "$HTML_RECOVERY")\",
+# ── 5. Sobe — EM DOIS PATCHes SEPARADOS, de propósito ───────────────────────
+#
+# Medido em 2026-09-13, contra um projeto free tier real: um ÚNICO PATCH
+# carregando `mailer_templates_*` JUNTO com `site_url`/`uri_allow_list` volta
+# 400 "Email template modification is not available for free tier projects…"
+# — e o Supabase rejeita o corpo INTEIRO, não só o campo problemático. Isso
+# derrubava também o Site URL, que não depende de plano nenhum e teria subido
+# sozinho. O sintoma era o pior dos dois mundos: a pendência mais importante
+# (o link do e-mail leva pra `localhost:3000`) ficava sem resolver por causa de
+# uma feature cosmética (a cor do botão) que nem estava disponível.
+#
+# A ordem importa: Site URL primeiro, porque é o que resolve "esqueci minha
+# senha chega quebrado" — issue #431/#426, a motivação deste script inteiro.
+# Os templates são a cereja; se o plano não deixar, o e-mail sai no padrão do
+# Supabase mas o LINK funciona.
+
+corpo_url="{
   \"site_url\": \"$(json_escape "$SITE_NOVO")\",
   \"uri_allow_list\": \"$(json_escape "$ALLOW_NOVO")\"
 }"
+resposta_url="$(api PATCH "/projects/$REF/config/auth" "$corpo_url")"
 
-resposta="$(api PATCH "/projects/$REF/config/auth" "$corpo")"
-
-# ── 6. RELEITURA — a única prova que vale ──────────────────────────────────
-#
-# Não confie no 2xx. Medido: projeto pausado devolve 400 com
-# {"message":"Project is paused."} e um script que só olhasse o código de saída
-# do curl reportaria sucesso. E o modo de falha pior é o oposto — API que
-# ACEITA e IGNORA — que nenhum código de status denuncia.
-depois="$(api GET "/projects/$REF/config/auth")"
-if grep -qF "$MARCADOR" <<<"$depois"; then
-  c_grn "✓ e-mails de acesso configurados e CONFERIDOS (reli o que gravei)"
-  c_dim "    assunto:  Confirme seu e-mail — $APP_NOME"
-  c_dim "    botão:    $ACCENT sobre texto $ACCENT_FG"
-  [ "$SITE_NOVO" = "$SITE_ATUAL" ] || c_dim "    site url: $SITE_NOVO"
-  [ "$ALLOW_NOVO" = "$ALLOW_ATUAL" ] || c_dim "    redirect: $ALLOW_NOVO"
-
-  # O MARCADOR prova os MODELOS, e só. O que faz o link do e-mail levar a algum
-  # lugar é o `site_url` — outro campo, do mesmo PATCH, que pode não ter pegado.
-  # Declarar sucesso relendo só o marcador é a mesma classe de erro que o
-  # cabeçalho deste script adverte contra ("API que ACEITA e IGNORA"), aplicada
-  # meio campo depois. E o desfecho era pior que um erro: ✓ verde, exit 0,
-  # nenhuma pendência escrita — a tela final da instalação ficava MUDA e os
-  # e-mails seguiam apontando para outro lugar.
-  #
-  # Dois caminhos chegam aqui, e o remédio é o mesmo: (a) a API aceitou e
-  # ignorou; (b) o passo 4 acima preservou de propósito um Site URL que o
-  # operador escolheu. Em ambos, o fato observado é este, e é ele que se anota.
-  SITE_DEPOIS="$(json_str "$depois" site_url)"
-  if [ -n "$APP_URL" ] && [ "${SITE_DEPOIS%/}" != "${APP_URL%/}" ]; then
-    c_ylw "  ⚠ o Site URL do projeto está em '${SITE_DEPOIS:-vazio}', não em $APP_URL"
-    c_ylw "    — os modelos subiram, mas o LINK dos e-mails ainda não leva a este app."
-    anota_pendencia "o Site URL do projeto Supabase está em '${SITE_DEPOIS:-vazio}', e este app roda em $APP_URL.
-    Os modelos de e-mail subiram; o que falta é o endereço para onde o link leva.
+# RELEITURA — a única prova que vale (projeto pausado devolve 200-com-400 ou
+# aceita e ignora; só a releitura pega os dois casos).
+depois_url="$(api GET "/projects/$REF/config/auth")"
+SITE_DEPOIS="$(json_str "$depois_url" site_url)"
+if [ -n "$APP_URL" ] && [ "${SITE_DEPOIS%/}" != "${APP_URL%/}" ]; then
+  motivo_url="$(json_str "$resposta_url" message)"
+  c_ylw "  ⚠ o Site URL do projeto está em '${SITE_DEPOIS:-vazio}', não em $APP_URL${motivo_url:+ — $motivo_url}"
+  c_ylw "    — o LINK dos e-mails ainda não leva a este app."
+  anota_pendencia "o Site URL do projeto Supabase está em '${SITE_DEPOIS:-vazio}', e este app roda em $APP_URL.
     (Se o valor atual é um domínio SEU, escolhido de propósito, eu não o
     sobrescrevo — trocar exige a sua decisão.)"
-  fi
-  exit 0
+else
+  c_grn "✓ Site URL e Redirect URLs configurados e CONFERIDOS (reli o que gravei)"
+  [ "$SITE_NOVO" = "$SITE_ATUAL" ] || c_dim "    site url: $SITE_NOVO"
+  [ "$ALLOW_NOVO" = "$ALLOW_ATUAL" ] || c_dim "    redirect: $ALLOW_NOVO"
 fi
 
-motivo="$(json_str "$resposta" message)"
-[ -n "$motivo" ] || motivo="$(json_str "$depois" message)"
-instrua_e_saia "os e-mails de acesso NÃO foram configurados${motivo:+ — $motivo}.
-    Reli a configuração depois de gravar e o conteúdo que mandei não estava lá.
-    A instalação continua funcionando; só os e-mails ficam no modelo padrão."
+corpo_templates="{
+  \"mailer_subjects_confirmation\": \"$(json_escape "Confirme seu e-mail — $APP_NOME")\",
+  \"mailer_subjects_recovery\": \"$(json_escape "Redefinir senha — $APP_NOME")\",
+  \"mailer_templates_confirmation_content\": \"$(json_escape "$HTML_CONFIRM")\",
+  \"mailer_templates_recovery_content\": \"$(json_escape "$HTML_RECOVERY")\"
+}"
+resposta_tpl="$(api PATCH "/projects/$REF/config/auth" "$corpo_templates")"
+depois_tpl="$(api GET "/projects/$REF/config/auth")"
+if grep -qF "$MARCADOR" <<<"$depois_tpl"; then
+  c_grn "✓ modelos de e-mail configurados e CONFERIDOS (reli o que gravei)"
+  c_dim "    assunto:  Confirme seu e-mail — $APP_NOME"
+  c_dim "    botão:    $ACCENT sobre texto $ACCENT_FG"
+else
+  motivo_tpl="$(json_str "$resposta_tpl" message)"
+  [ -n "$motivo_tpl" ] || motivo_tpl="$(json_str "$depois_tpl" message)"
+  c_ylw "  ⚠ os modelos de e-mail NÃO foram customizados${motivo_tpl:+ — $motivo_tpl}"
+  c_dim "    O e-mail sai no modelo padrão do Supabase (em inglês, sem a sua marca)."
+  c_dim "    Authentication → Email Templates → Confirm signup / Reset password:"
+  c_dim "      <a href=\"{{ .RedirectTo }}&token_hash={{ .TokenHash }}\">Confirmar</a>"
+  c_dim "      ⚠ o separador é & — um ? aqui quebra o link (vira ?type=x?token_hash=y)"
+fi
+
+exit 0

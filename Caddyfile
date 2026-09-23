@@ -39,6 +39,20 @@
 			}
 		}
 
+		# O botão Testar de um agente encadeia várias chamadas sequenciais ao
+		# modelo (classificador, jailbreak, resposta, checkpoint) e passa dos
+		# timeouts padrão do proxy. Medido numa VPS real: a resposta era cortada
+		# com "destination stream closed early" DEPOIS de o teste ter concluído
+		# no backend — quem testa o prompt vê falha e o custo do modelo já foi
+		# pago. Mesmo tratamento do @agentrun acima, pela mesma razão.
+		@agenttest path /api/v1/ai/agents/*/versions/*/test
+		reverse_proxy @agenttest app:3000 {
+			transport http {
+				read_timeout 320s
+				write_timeout 320s
+			}
+		}
+
 		# Todo o resto do app.
 		reverse_proxy app:3000
 	}

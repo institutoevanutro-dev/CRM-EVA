@@ -67,7 +67,14 @@ services:
     # O teto não impede o pico legítimo; impede que UM serviço leve a máquina
     # inteira. Estourá-lo mata só quem estourou, e o `restart: unless-stopped`
     # o traz de volta — falha isolada em vez de queda geral.
-    mem_limit: 512m
+    #
+    # É knob porque o teto certo depende da VPS e da carga: numa instalação real
+    # o worker foi para 1 GB, e enquanto o número morava aqui isso era EDIÇÃO DE
+    # ARQUIVO VERSIONADO — quer dizer, um `git pull` do operador desfazia o
+    # ajuste em silêncio, e a doutrina de packaging proíbe atualização que peça
+    # edição à mão. O default é o mesmo de antes, então `.env` antigo não muda
+    # de comportamento.
+    mem_limit: ${WORKER_MEM_LIMIT:-512m}
     # Imagem publicada — e não mais `build:` sozinho. O motivo é o modo de falha
     # que isso escondia: serviço build-only é PULADO por `docker compose pull`
     # ("Skipped - No image to be pulled") e imune a `up -d` sem `--build`. Ele era
