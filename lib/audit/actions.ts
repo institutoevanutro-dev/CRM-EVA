@@ -582,6 +582,8 @@ export const AUDIT_ACTIONS = [
   // Mover um card para OUTRO funil (issue #922) clona o negócio no destino e
   // encerra o original: é a escrita que mexe em DOIS funis de uma vez.
   "lead.moved_to_pipeline",
+  // Horário de envio dos follow-ups (`settings.followups.bloqueios.janela`).
+  "followup.horario_de_envio_changed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
