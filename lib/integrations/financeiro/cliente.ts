@@ -1,8 +1,9 @@
 import { z } from "zod";
 const cents = z.string().regex(/^\d{1,18}$/);
 export const ResumoFinanceiro = z.object({
-  versao: z.literal(1),
+  versao: z.union([z.literal(1), z.literal(2)]),
   paciente_id: z.string().uuid(),
+  paciente_nome: z.string().trim().min(1).max(200).optional(),
   consultado_em: z.string(),
   limitado: z.boolean(),
   propostas: z
