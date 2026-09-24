@@ -37,13 +37,20 @@ interface RouteCtx {
  * de posição: quem arrasta a coluna sabe onde ela caiu, não qual fração de
  * `position` isso vira. Mandar o número da tela duplicaria a conta que
  * `posicaoEntre` já faz — e as duas divergiriam no primeiro ajuste.
+ *
+ * `esfria_em_horas` é NULLABLE de propósito: `null` é o pedido de VOLTAR ao
+ * padrão global do Radar, e por isso precisa atravessar o schema como valor, não
+ * como ausência. O teto de 720h (30 dias) não é estético — acima disso a etapa
+ * nunca esfria na prática, e um zero digitado sem querer desligaria o Radar
+ * daquela coluna em silêncio, que é o modo de falha que o campo deveria evitar.
  */
-const bodySchema = z
+export const bodySchema = z
   .object({
     name: z.string().min(1).max(80).optional(),
     is_won: z.boolean().optional(),
     is_lost: z.boolean().optional(),
     depois_de: z.string().min(1).nullable().optional(),
+    esfria_em_horas: z.number().int().min(1).max(720).nullable().optional(),
   })
   .strict()
   .refine((b) => Object.keys(b).length > 0, { message: "Nada para alterar." });

@@ -37,6 +37,8 @@ export interface PatchDeEtapa {
   is_won?: boolean;
   is_lost?: boolean;
   depois_de?: string | null;
+  /** Horas sem atividade que esfriam o negócio nesta etapa. `null` = padrão global. */
+  esfria_em_horas?: number | null;
 }
 
 function useReler(pipelineId: string) {

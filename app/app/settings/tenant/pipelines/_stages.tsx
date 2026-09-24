@@ -181,7 +181,12 @@ type Arquivamento = {
 // varre o texto-fonte, então `sm:${...}` montado por interpolação NÃO gera CSS.
 // E o prefixo é o certo de qualquer jeito — no celular a linha empilha e largura
 // fixa espremeria os controles.
-const LARGURA = { ordem: "sm:w-[76px]", papel: "sm:w-56", arquivar: "sm:w-[104px]" } as const;
+const LARGURA = {
+  ordem: "sm:w-[76px]",
+  papel: "sm:w-56",
+  esfria: "sm:w-[108px]",
+  arquivar: "sm:w-[104px]",
+} as const;
 
 /**
  * O texto de cada rótulo, em UM lugar só — porque ele aparece em DOIS.
@@ -194,6 +199,7 @@ export const ROTULO = {
   nome: "Nome da coluna (clique para renomear)",
   ordem: "Ordem",
   papel: "O que acontece nesta coluna",
+  esfria: "Esfria em (horas)",
 } as const;
 
 export function StagesSection({
@@ -352,6 +358,7 @@ export function StagesSection({
         <span className="min-w-0 flex-1">{t(ROTULO.nome)}</span>
         <span className={`${LARGURA.ordem} shrink-0 text-center`}>{t(ROTULO.ordem)}</span>
         <span className={`${LARGURA.papel} shrink-0`}>{t(ROTULO.papel)}</span>
+        <span className={`${LARGURA.esfria} shrink-0`}>{t(ROTULO.esfria)}</span>
         <span className={`${LARGURA.arquivar} shrink-0`} />
       </div>
 
@@ -448,6 +455,17 @@ export function StagesSection({
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className={`w-full shrink-0 space-y-1 ${LARGURA.esfria} sm:space-y-0`}>
+                  <span className="block text-xs font-medium text-text-muted sm:hidden">
+                    {t(ROTULO.esfria)}
+                  </span>
+                  <EsfriamentoDaEtapa
+                    etapa={etapa}
+                    desabilitado={ocupado}
+                    aoConfirmar={(horas) => aplicar(etapa.id, { esfria_em_horas: horas })}
+                  />
                 </div>
 
                 <Button
@@ -739,6 +757,67 @@ function NomeDaEtapa({
         }
       }}
       className="min-w-0 flex-1"
+    />
+  );
+}
+
+/**
+ * Quantas horas sem atividade esfriam um negócio NESTA etapa, para o Radar.
+ *
+ * ⚠️ VAZIO NÃO É ZERO — é "use o padrão global" (`null`), e por isso o campo
+ * grava `null` quando esvaziado em vez de recusar. Zero seria o contrário:
+ * desligaria o Radar naquela coluna em silêncio, e é por isso que o schema da
+ * rota o recusa.
+ *
+ * Salva ao confirmar (Enter ou sair do campo), pelo mesmo motivo de `NomeDaEtapa`:
+ * um PATCH por tecla gravaria 2, 24, 240 enquanto alguém digita "240".
+ */
+function EsfriamentoDaEtapa({
+  etapa,
+  desabilitado,
+  aoConfirmar,
+}: {
+  etapa: EtapaDoFunil;
+  desabilitado: boolean;
+  aoConfirmar: (horas: number | null) => void;
+}) {
+  const t = useT();
+  const gravado = etapa.esfria_em_horas ?? null;
+  const [rascunho, setRascunho] = useState(gravado === null ? "" : String(gravado));
+
+  function confirmar() {
+    const texto = rascunho.trim();
+    if (texto === "") {
+      if (gravado !== null) aoConfirmar(null);
+      return;
+    }
+    const horas = Number(texto);
+    if (!Number.isInteger(horas) || horas < 1 || horas > 720) {
+      setRascunho(gravado === null ? "" : String(gravado));
+      return;
+    }
+    if (horas !== gravado) aoConfirmar(horas);
+  }
+
+  return (
+    <Input
+      type="number"
+      min={1}
+      max={720}
+      value={rascunho}
+      disabled={desabilitado}
+      placeholder={t("padrão")}
+      aria-label={`${t("Horas até esfriar em")} «${etapa.name}»`}
+      data-testid={`esfria-${etapa.id}`}
+      onChange={(e) => setRascunho(e.target.value)}
+      onBlur={confirmar}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") {
+          setRascunho(gravado === null ? "" : String(gravado));
+          e.currentTarget.blur();
+        }
+      }}
     />
   );
 }

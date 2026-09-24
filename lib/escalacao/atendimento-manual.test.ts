@@ -244,4 +244,18 @@ describe("pausarIaPorAtendimentoManual — o que NÃO grava, e o que não derrub
       pausarIaPorAtendimentoManual(admin, { organizationId: ORG, conversationId: CONV, agora: T0 }),
     ).resolves.toBe(false);
   });
+
+  /**
+   * O VALOR é decisão de produto, e por isso é vigiado aqui em vez de ficar só
+   * na prosa: os outros casos importam a constante e passariam com qualquer
+   * número, então nenhum deles reprovaria uma volta silenciosa para 60 min.
+   *
+   * 5 minutos foi medido: numa clínica cuja recepção atende pelo celular, o
+   * prazo de 60 min deixou as 13 conversas do dia silenciadas ao mesmo tempo e
+   * o agente não pegou nenhuma — o prazo renovava antes de vencer. Quem quiser
+   * atender demorado usa o handoff FORMAL, que não vence.
+   */
+  it("o prazo é 5 minutos — mudar exige mudar este teste junto", () => {
+    expect(PRAZO_DO_SILENCIO_MS).toBe(5 * 60 * 1000);
+  });
 });
