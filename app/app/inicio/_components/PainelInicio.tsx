@@ -68,13 +68,35 @@ function FalhaDoBloco() {
   );
 }
 
-function ListaDoBloco({ bloco, comMotivo }: { bloco: Bloco | null; comMotivo?: boolean }) {
+/**
+ * NEM TODO NÚMERO É PROBLEMA — e é por isso que a cor é escolhida por quem
+ * chama, não deduzida do total.
+ *
+ * "7" em Avisos da Central são sete coisas erradas; "7" em Minha agenda de hoje
+ * são sete consultas, que é o dia dando certo. Pintar o total de âmbar sempre
+ * que ele for maior que zero faria a primeira tela gritar com quem tem agenda
+ * cheia — o oposto do que ela existe para fazer.
+ *
+ * `pendencia` marca os blocos em que o total conta o que está ESPERANDO alguém.
+ */
+function ListaDoBloco({
+  bloco,
+  comMotivo,
+  pendencia,
+}: {
+  bloco: Bloco | null;
+  comMotivo?: boolean;
+  /** O total conta coisas que esperam ação humana — o número ganha cor de atenção. */
+  pendencia?: boolean;
+}) {
   const t = useT();
   if (!bloco || !bloco.ok) return <FalhaDoBloco />;
   if (bloco.total === 0) return <p className="text-sm text-success">{t("Tudo em dia ✓")}</p>;
   return (
     <>
-      <p className="mb-2 text-3xl font-semibold">{bloco.total}</p>
+      <p className={`mb-2 text-3xl font-semibold${pendencia ? " text-warning" : ""}`}>
+        {bloco.total}
+      </p>
       <ul className="space-y-1">
         {bloco.itens.map((i) => (
           <li key={i.id}>
@@ -123,10 +145,10 @@ export function PainelInicio() {
         <h2 className="mb-3 text-lg font-semibold">{t("Meu dia")}</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Cartao titulo={t("Avisos da Central")} verTodos="/app/ai/inbox">
-            <ListaDoBloco bloco={meuDia.avisos} />
+            <ListaDoBloco bloco={meuDia.avisos} pendencia />
           </Cartao>
           <Cartao titulo={t("Pacientes esperando resposta")} verTodos="/app/inbox">
-            <ListaDoBloco bloco={meuDia.esperando} />
+            <ListaDoBloco bloco={meuDia.esperando} pendencia />
           </Cartao>
           <Cartao titulo={t("Minha agenda de hoje")} verTodos="/app/agenda">
             <ListaDoBloco bloco={meuDia.agenda} />
@@ -142,7 +164,7 @@ export function PainelInicio() {
           <h2 className="mb-3 text-lg font-semibold">{t("Gestão")}</h2>
           <div className="grid gap-4 md:grid-cols-2">
             <Cartao titulo={t("Configuração pendente")}>
-              <ListaDoBloco bloco={gestao.configuracao} comMotivo />
+              <ListaDoBloco bloco={gestao.configuracao} comMotivo pendencia />
             </Cartao>
             <Cartao titulo={t("Números de hoje")} verTodos="/app/metrics">
               {gestao.numeros?.ok ? (
