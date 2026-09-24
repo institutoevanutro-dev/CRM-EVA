@@ -26,6 +26,8 @@ import { CpfDoContato } from "@/components/contacts/CpfDoContato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
 import { DialButton } from "@/components/voice/DialButton";
 
+import { FinanceiroDoContato } from "@/components/contacts/FinanceiroDoContato";
+
 interface Props {
   contactId: string;
 }
@@ -35,6 +37,7 @@ export function ContactDetailClient({ contactId }: Props) {
   const t = useT();
   const q = useContact(contactId);
   const { user, activeOrg } = useAuth();
+  const podeVerFinanceiro = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
   const clientesLigado = activeOrg?.cliente_pela_agenda === true;
   // As DEFINIÇÕES continuam no funil (`crm_pipelines.settings.fields[]`) — só o
   // VALOR mora no contato. `camposDoFunil` é o mesmo leitor que o Kanban usa.
@@ -135,6 +138,7 @@ export function ContactDetailClient({ contactId }: Props) {
         <TabsList>
           <TabsTrigger value="overview">{t("Visão geral")}</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
+          {podeVerFinanceiro && !contact.is_anonymized && <TabsTrigger value="financeiro">{t("Financeiro")}</TabsTrigger>}
           {isAdmin && <TabsTrigger value="lgpd">LGPD</TabsTrigger>}
         </TabsList>
 
@@ -222,6 +226,8 @@ export function ContactDetailClient({ contactId }: Props) {
             </dl>
           </Card>
         </TabsContent>
+
+        {podeVerFinanceiro && !contact.is_anonymized && <TabsContent value="financeiro" className="mt-4"><FinanceiroDoContato contactId={contactId} /></TabsContent>}
 
         <TabsContent value="timeline" className="mt-4">
           <TimelineView contactId={contactId} />
