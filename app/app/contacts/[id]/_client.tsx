@@ -11,6 +11,17 @@ import { Card } from "@/components/ui/card";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useContact } from "@/hooks/contacts/useContact";
 import { useUnblockContact } from "@/hooks/contacts/useUnblockContact";
@@ -126,16 +137,34 @@ export function ContactDetailClient({ contactId }: Props) {
                 Só ADMIN, como a regra nomeia: desfazer um pedido de descadastro
                 não é editar cadastro, é reabrir um canal que o cliente fechou —
                 e quem clica responde pela decisão. */}
+            {/* Confirmação antes do clique: nenhum caminho do produto bloqueia
+                de novo à mão (o único escritor de is_blocked=true é o STOP do
+                próprio cliente, em lib/channels/pos-entrada.ts), então um clique
+                errado ao lado do "Editar" reabriria um canal que só o cliente
+                consegue fechar outra vez. */}
             {contact.is_blocked && isAdmin && (
-              <Button
-                variant="outline"
-                onClick={() => desbloquear.mutate()}
-                disabled={desbloquear.isPending}
-                className="shrink-0"
-              >
-                <LockOpen size={16} weight="bold" aria-hidden />
-                <span>{t("Desbloquear")}</span>
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" disabled={desbloquear.isPending} className="shrink-0">
+                    <LockOpen size={16} weight="bold" aria-hidden />
+                    <span>{t("Desbloquear")}</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{t("Desbloquear este contato?")}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {t("Este contato pediu para não receber mais mensagens. Desbloquear volta a permitir campanhas, follow-ups e respostas da IA para ele, e a ação fica registrada na auditoria em seu nome.")}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => desbloquear.mutate()}>
+                      {t("Desbloquear")}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
             <DialButton contactId={contactId} hasPhone={!!contact.phone_number} />
             <Button variant="outline" onClick={() => setEditOpen(true)} className="shrink-0">
