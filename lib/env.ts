@@ -62,6 +62,11 @@ const diasDeRetencao = (nome: string, padrao: number) =>
     });
 
 const schema = z.object({
+  FINANCEIRO_URL: z.string().optional(),
+  FINANCEIRO_TOKEN: z.string().optional(),
+  FINANCEIRO_ORGANIZATION_ID: z.string().optional(),
+  MARKETING_ORGANIZATION_ID: z.string().optional(),
+  MARKETING_REPORT_TOKEN: z.string().optional(),
   // Node
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 

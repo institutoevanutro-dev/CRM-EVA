@@ -2447,3 +2447,10 @@ grupo trouxe.
 
 **A seção "Lote 12 · G2" acima deixa de estar PENDENTE POR EXECUÇÃO**: os três
 casos dela (L12.G2.1, G2.2 e G2.3) estão provados nas linhas acima.
+
+## Integração opcional com financeiro Eva
+- Entrada: Contatos → contato → aba Financeiro (gerente/admin, contato não anonimizado).
+- Testes de rota: `tests/unit/integracao-financeiro-rotas.test.ts`, organização errada, anonimização, perfil insuficiente, indisponibilidade.
+- Componente real: `tests/unit/financeiro-do-contato.test.tsx`, erro/retentativa e valores em centavos.
+- Jornada de vínculo/proposta: Playwright no projeto financeiro, `tests/e2e/integracao-crm.spec.ts` com banco descartável e CRM HTTPS fictício.
+- Pendente: prova autenticada dos dois sistemas publicados e configuração das credenciais pelo operador.

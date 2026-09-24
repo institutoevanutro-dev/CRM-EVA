@@ -13,12 +13,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
-import { useMetaAdAccounts, useMetaCampaigns } from "@/hooks/ads/useMetaAds";
+import { useMetaAdAccounts, useMetaCampaigns, useResultadoCrm } from "@/hooks/ads/useMetaAds";
 import { ApiError } from "@/lib/api/types";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import type { Idioma } from "@/lib/i18n/idiomas";
 
 import { TabelaDeCampanhas } from "./TabelaDeCampanhas";
+import { ResultadoCrm } from "./ResultadoCrm";
 
 /**
  * O corpo da tela: escolher conta, escolher período, atualizar, ler.
@@ -129,6 +130,11 @@ export function MetaAdsClient({ contaPadrao }: Props) {
     de: intervalo.de,
     ate: intervalo.ate,
   });
+  const resultadoCrm = useResultadoCrm({
+    contaId: contaEfetiva,
+    de: intervalo.de,
+    ate: intervalo.ate,
+  });
 
   function trocarPreset(valor: string) {
     setPreset(valor);
@@ -228,10 +234,7 @@ export function MetaAdsClient({ contaPadrao }: Props) {
       </div>
 
       {erro && (
-        <div
-          role="alert"
-          className="rounded-md border border-red-500/40 bg-red-500/10 p-4 text-sm"
-        >
+        <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 p-4 text-sm">
           <p className="font-medium">{mensagemDeErro(erro)}</p>
           {erro instanceof ApiError && (
             // O id da requisição vai junto: é o que liga esta tela ao log do
@@ -246,6 +249,28 @@ export function MetaAdsClient({ contaPadrao }: Props) {
       {campanhas.data && !erro && (
         <>
           <TabelaDeCampanhas linhas={campanhas.data.data.campanhas} moeda={moeda} />
+          <div className="mt-5 space-y-3">
+            <Button
+              variant="outline"
+              disabled={resultadoCrm.isFetching}
+              onClick={() => resultadoCrm.refetch()}
+            >
+              {resultadoCrm.isFetching
+                ? t("Consultando contatos e vendas…")
+                : t("Ver contatos e vendas por campanha")}
+            </Button>
+            {resultadoCrm.error && (
+              <p role="alert" className="text-sm text-red-600">
+                {t("Não foi possível consultar os resultados do CRM. Tente novamente.")}
+              </p>
+            )}
+            {resultadoCrm.data && !resultadoCrm.error && (
+              <ResultadoCrm
+                dados={resultadoCrm.data.data}
+                campanhas={campanhas.data.data.campanhas}
+              />
+            )}
+          </div>
           {/*
             Sem carimbo, uma tabela que falhou ao atualizar é visualmente
             idêntica a uma recém-atualizada — e a promessa desta tela é
