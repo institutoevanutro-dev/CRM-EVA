@@ -1,6 +1,7 @@
 "use client";
 
 import { useT } from "@/hooks/i18n/useT";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import type { ResultadoCrmResposta } from "@/hooks/ads/useMetaAds";
 import type { LinhaDeCampanha } from "@/lib/plataformas-de-anuncio/types";
 
@@ -18,6 +19,7 @@ export function ResultadoCrm({
   campanhas: LinhaDeCampanha[];
 }) {
   const t = useT();
+  const tagDoIdioma = useTagDeIdioma();
   const nomes = new Map(campanhas.map((c) => [c.campanhaId, c.nome]));
   return (
     <section
@@ -30,7 +32,7 @@ export function ResultadoCrm({
           "Contatos criados no período pelo anúncio identificado; vendas vinculadas no mesmo período e recebimento líquido até agora.",
         )}
       </p>
-      <p className="text-xs text-muted-foreground">{t("Consultado em")} {new Date(dados.consultado_em).toLocaleString("pt-BR")}</p>
+      <p className="text-xs text-muted-foreground">{t("Consultado em")} {new Date(dados.consultado_em).toLocaleString(tagDoIdioma)}</p>
       {dados.contatos_vinculados !== null &&
         dados.contatos_vinculados < dados.contatos_atribuidos && (
           <p className="text-sm text-amber-700" role="status">
