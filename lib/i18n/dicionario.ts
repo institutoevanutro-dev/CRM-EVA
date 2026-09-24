@@ -37,6 +37,28 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  "Financeiro do contato": { es: "Finanzas del contacto" },
+  "Propostas, vendas e pagamentos": { es: "Propuestas, ventas y pagos" },
+  "Consultando o financeiro…": { es: "Consultando las finanzas…" },
+  "Não foi possível consultar o financeiro. Use Atualizar para tentar novamente.": { es: "No se pudo consultar el sistema financiero. Use Actualizar para volver a intentarlo." },
+  "Integração não configurada para esta organização. Solicite a configuração ao administrador.": { es: "Integración no configurada para esta organización. Solicite la configuración al administrador." },
+  "Abrir no financeiro": { es: "Abrir en el sistema financiero" },
+  "Propostas, vendas e pagamentos são registrados no financeiro, com as permissões de cada usuário.": { es: "Las propuestas, ventas y pagos se registran en el sistema financiero con los permisos de cada usuario." },
+  "Este contato ainda não está vinculado a um paciente do financeiro. Abra o financeiro para conferir e vincular o cadastro.": { es: "Este contacto aún no está vinculado a un paciente del sistema financiero. Ábralo para revisar y vincular el registro." },
+  "Nenhuma proposta registrada.": { es: "No hay propuestas registradas." },
+  "Vendas e pagamentos": { es: "Ventas y pagos" },
+  "Nenhuma venda registrada.": { es: "No hay ventas registradas." },
+  "Mostrando até 100 propostas e 100 vendas recentes. Consulte o histórico completo no financeiro.": { es: "Se muestran hasta 100 propuestas y 100 ventas recientes. Consulte el historial completo en el sistema financiero." },
+  "Consultado em": { es: "Consultado el" },
+  "Atualize após registrar alterações no financeiro.": { es: "Actualice después de registrar cambios en el sistema financiero." },
+  "Total": { es: "Total" },
+  "A receber": { es: "Por cobrar" },
+  "Quitada": { es: "Pagada" },
+  "Atrasada": { es: "Vencida" },
+  "Recusada": { es: "Rechazada" },
+  "Expirada": { es: "Vencida" },
+  "Financeiro": { es: "Finanzas" },
+
   // Responsável da tarefa (app/app/tasks).
   "Ninguém": { es: "Nadie" },
   "Fora da equipe": { es: "Fuera del equipo" },
