@@ -92,6 +92,13 @@ const bodySchema = z.object({
 type EtapaComAutoria = EtapaDoMapa & {
   last_change_actor_kind: string | null;
   last_change_at: string | null;
+  /**
+   * ⚠️ ENTRA AQUI PORQUE É ESTA LEITURA QUE A TELA DE ETAPAS USA. O campo é
+   * GRAVADO pelo PATCH de `stages/[stageId]`, mas quem repõe a tela depois do
+   * recarregamento é este GET — sem o campo aqui, o valor vai para o banco e a
+   * tela volta mostrando "padrão", que lê como "não salvou".
+   */
+  expected_duration_hours?: number | null;
 };
 
 async function lerFunil(
@@ -113,7 +120,9 @@ async function lerFunil(
     // A autoria entra na MESMA leitura que a tela de etapas já faz. Uma segunda
     // consulta só para ela seria um round-trip por render numa tela de
     // configuração — e um caminho a mais para a lista e a autoria divergirem.
-    .select("id, name, is_won, is_lost, agent_stage_hint, last_change_actor_kind, last_change_at")
+    .select(
+      "id, name, is_won, is_lost, agent_stage_hint, last_change_actor_kind, last_change_at, expected_duration_hours",
+    )
     .eq("organization_id", orgId)
     .eq("pipeline_id", pipelineId)
     .eq("is_archived", false)
@@ -145,6 +154,7 @@ function corpo(etapas: EtapaComAutoria[]) {
       name: e.name,
       is_won: e.is_won,
       is_lost: e.is_lost,
+      esfria_em_horas: e.expected_duration_hours ?? null,
       last_change_actor_kind: e.last_change_actor_kind ?? null,
       last_change_at: e.last_change_at ?? null,
     })),
