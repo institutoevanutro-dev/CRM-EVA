@@ -10,7 +10,7 @@ O Financeiro incluirá `paciente_nome` na resposta autenticada de `/api/integrac
 
 ## Atualização no CRM
 
-Uma rotina agendada no CRM selecionará em lotes pequenos contatos ativos com `name` nulo ou vazio. Para cada contato, consultará o Financeiro pelo ID. Se a resposta trouxer um paciente vinculado e um nome válido, atualizará somente `contacts.name`, condicionando a gravação a o campo ainda estar vazio e à mesma organização. Não alterará `display_name`, nomes preenchidos manualmente, contatos anonimizados, nem outros dados. A atualização será auditável como origem `financeiro` e idempotente. Um vínculo novo será processado na próxima execução; não será necessária uma credencial de escrita do Financeiro no CRM.
+Uma rotina agendada no CRM selecionará em lotes pequenos contatos ativos com `name` nulo ou vazio. A coluna `financeiro_name_lookup_at` ordenará a varredura pelo contato há mais tempo sem consulta, para que cadastros sem vínculo não bloqueiem os demais. Para cada contato, consultará o Financeiro pelo ID. Se a resposta trouxer um paciente vinculado e um nome válido, atualizará somente `contacts.name`, condicionando a gravação a o campo ainda estar vazio e à mesma organização. Não alterará `display_name`, nomes preenchidos manualmente, contatos anonimizados, nem outros dados. A atualização será auditável como origem `financeiro` e idempotente. Um vínculo novo será processado em uma execução subsequente; não será necessária uma credencial de escrita do Financeiro no CRM.
 
 ## Falhas e operação
 
