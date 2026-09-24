@@ -11,7 +11,6 @@ import {
   format,
   isSameDay,
   isSameMonth,
-  startOfMonth,
   startOfWeek,
 } from "date-fns";
 
@@ -26,6 +25,7 @@ import {
   type HorarioPublicado,
   type MotivoDaGradeTravada,
 } from "@/lib/agenda/grade-interativa";
+import { inicioDaGradeDoMes, SEMANAS_DA_GRADE_DO_MES } from "@/lib/agenda/recorte-da-grade";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -645,14 +645,10 @@ function VisaoDeMes({
 }) {
   const t = useT();
   const localeDaData = useLocaleDeData();
-  const primeiro = startOfWeek(startOfMonth(ancora), { weekStartsOn: 0 });
-  // SEIS semanas sempre, mesmo quando o mês cabe em cinco.
-  //
-  // Um mês que ocupa 5 linhas e outro que ocupa 6 fariam a célula mudar de
-  // altura ao virar o mês — a grade "pula" e quem estava olhando um dia perde
-  // a referência. O custo é uma linha de dias do mês seguinte, que já nasce
-  // esmaecida.
-  const semanas: Date[][] = Array.from({ length: 6 }, (_, s) =>
+  // Mesma conta que a BUSCA usa (`lib/agenda/recorte-da-grade.ts`): o que se
+  // desenha é o que se busca.
+  const primeiro = inicioDaGradeDoMes(ancora);
+  const semanas: Date[][] = Array.from({ length: SEMANAS_DA_GRADE_DO_MES }, (_, s) =>
     Array.from({ length: 7 }, (_, d) => addDays(primeiro, s * 7 + d)),
   );
 
