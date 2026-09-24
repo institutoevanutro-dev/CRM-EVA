@@ -5,6 +5,7 @@
 export const PUBLIC_PATHS: RegExp[] = [
   // Credencial de leitura validada dentro da rota; não dispensa auth de subrotas.
   /^\/api\/v1\/integrations\/financeiro\/contacts\/[0-9a-f-]+$/i,
+  /^\/api\/v1\/integrations\/marketing\/report$/,
   /^\/$/,
   /^\/login(\/.*)?$/,
   /^\/signup$/,

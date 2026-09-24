@@ -84,3 +84,35 @@ export function useMetaCampaigns({ contaId, de, ate }: ParametrosDeCampanhas) {
     refetchOnWindowFocus: false,
   });
 }
+
+export interface ResultadoCrmResposta {
+  campanhas: Array<{
+    campanha_id: string;
+    contatos: number;
+    vendas: number | null;
+    valor_cents: string | null;
+    recebido_cents: string | null;
+  }>;
+  contatos_sem_campanha: number;
+  contatos_atribuidos: number;
+  contatos_vinculados: number | null;
+  consultado_em: string;
+  financeiro: "disponivel" | "nao_configurado" | "indisponivel";
+  criterio: string;
+}
+
+export function useResultadoCrm({ contaId, de, ate }: ParametrosDeCampanhas) {
+  return useQuery({
+    queryKey: ["ads", "meta", "resultado-crm", contaId, de, ate],
+    queryFn: async () => {
+      const qs = new URLSearchParams({ account_id: contaId as string, from: de, to: ate });
+      return apiClient.get<{ data: ResultadoCrmResposta }>(`/api/v1/ads/meta/resultado-crm?${qs}`, {
+        timeoutMs: 60000,
+      });
+    },
+    enabled: false,
+    staleTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}

@@ -339,6 +339,33 @@ export async function lerCampanhas(
   return buscarPaginado<CampanhaCrua>(url, token, "campaigns");
 }
 
+/** Identidade do anúncio para relacionar o referral do WhatsApp à campanha. */
+export async function lerAnunciosDaConta(
+  token: string,
+  contaId: string,
+): Promise<ResultadoDeLeitura<Array<{ id: string; campaign_id: string }>>> {
+  const url = montarUrl(`${encodeURIComponent(contaId)}/ads`, {
+    fields: "id,campaign_id",
+    limit: "500",
+  });
+  return buscarPaginado<{ id: string; campaign_id: string }>(url, token, "ads");
+}
+
+/** O dia de captação deve usar o mesmo fuso que a Meta usa para o gasto. */
+export async function lerFusoDaConta(token: string, contaId: string): Promise<string | null> {
+  try {
+    const r = await fetch(montarUrl(encodeURIComponent(contaId), { fields: "timezone_name" }), {
+      headers: { authorization: `Bearer ${token}` }, cache: "no-store", redirect: "error",
+      signal: AbortSignal.timeout(TEMPO_LIMITE_MS),
+    });
+    if (!r.ok) return null;
+    const fuso = (await r.json() as { timezone_name?: unknown }).timezone_name;
+    if (typeof fuso !== "string") return null;
+    new Intl.DateTimeFormat("en-US", { timeZone: fuso });
+    return fuso;
+  } catch { return null; }
+}
+
 /**
  * Os insights do período, no nível de campanha.
  *

@@ -28,3 +28,5 @@ Não há migração de schema no CRM. O banco financeiro continua separado. Logi
 
 ## Living System Checklist
 Entrada: registro de contato autenticado. Saída: paciente e telas comerciais do financeiro; resumo de volta à aba do contato. Registro: vínculo auditado em `crm_customer_links` no financeiro; nenhuma mutação contábil no CRM. Porta: aba Financeiro em Contatos. Configuração ausente: aviso na própria aba. Falha: aviso e botão Atualizar, sem mostrar saldo anterior como atual. Continuidade: equipe humana usa o fluxo financeiro existente; IA não recebe autorização financeira por esta integração. Leitura não demanda fila ou cron; não há envios pendentes que dependam de alguém abrir outra tela.
+
+A análise de campanhas usa uma segunda leitura agregada do Financeiro, limitada aos contatos vinculados e ao período: `POST /api/integracoes/crm/vendas-campanhas` (migration 0036). O protocolo e a ativação estão em [marketing-financeiro.md](marketing-financeiro.md).

@@ -37,6 +37,22 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  "Resultados no CRM e Financeiro": { es: "Resultados en CRM y Finanzas" },
+  "Contatos e vendas por campanha": { es: "Contactos y ventas por campaña" },
+  "Contatos criados no período pelo anúncio identificado; vendas vinculadas no mesmo período e recebimento líquido até agora.": { es: "Contactos creados en el período por el anuncio identificado; ventas vinculadas en el mismo período y cobros netos hasta ahora." },
+  "contatos atribuídos estão vinculados ao Financeiro; os totais de vendas são parciais.": { es: "contactos atribuidos están vinculados a Finanzas; los totales de ventas son parciales." },
+  "Financeiro não configurado: os valores de venda não estão disponíveis.": { es: "Finanzas no configuradas: los valores de venta no están disponibles." },
+  "Financeiro indisponível: os valores de venda não estão disponíveis.": { es: "Finanzas no disponibles: los valores de venta no están disponibles." },
+  "Contatos atribuídos": { es: "Contactos atribuidos" },
+  "Vendas no Financeiro": { es: "Ventas en Finanzas" },
+  "Valor vendido": { es: "Valor vendido" },
+  "Recebido até agora": { es: "Cobrado hasta ahora" },
+  "Nenhum contato com campanha identificada neste período.": { es: "Ningún contacto con campaña identificada en este período." },
+  "Sem campanha identificada": { es: "Sin campaña identificada" },
+  "Não somamos esses contatos a uma campanha pelo nome do anúncio.": { es: "No asignamos estos contactos a una campaña por el nombre del anuncio." },
+  "Consultando contatos e vendas…": { es: "Consultando contactos y ventas…" },
+  "Ver contatos e vendas por campanha": { es: "Ver contactos y ventas por campaña" },
+  "Não foi possível consultar os resultados do CRM. Tente novamente.": { es: "No se pudieron consultar los resultados del CRM. Inténtelo de nuevo." },
   "Financeiro do contato": { es: "Finanzas del contacto" },
   "Propostas, vendas e pagamentos": { es: "Propuestas, ventas y pagos" },
   "Consultando o financeiro…": { es: "Consultando las finanzas…" },

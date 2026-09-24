@@ -79,3 +79,32 @@ export async function consultaFinanceiro(c: ConfigFinanceiro, id: string) {
     throw new Error("Financeiro indisponível. Tente atualizar novamente.");
   }
 }
+export const VendaPorContato = z.object({
+  contato_id: z.string().uuid(),
+  vendas: z.number().int().nonnegative(),
+  valor_cents: cents,
+  recebido_cents: cents,
+});
+export type VendaPorContato = z.infer<typeof VendaPorContato>;
+export async function consultaVendasPorContatos(
+  c: ConfigFinanceiro,
+  contatos: string[],
+  de: string,
+  ate: string,
+): Promise<VendaPorContato[]> {
+  z.array(z.string().uuid()).min(1).max(500).parse(contatos);
+  try {
+    const r = await fetch(`${c.url}/api/integracoes/crm/vendas-campanhas`, {
+      method: "POST",
+      headers: { "x-integracao-token": c.token, "content-type": "application/json" },
+      body: JSON.stringify({ contatos, de, ate }),
+      cache: "no-store",
+      redirect: "error",
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) throw new Error();
+    return z.object({ data: z.array(VendaPorContato).max(500) }).parse(await r.json()).data;
+  } catch {
+    throw new Error("Vendas do Financeiro indisponíveis.");
+  }
+}
