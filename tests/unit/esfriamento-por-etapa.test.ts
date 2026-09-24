@@ -12,6 +12,9 @@
  * legítimo — é o pedido de voltar ao padrão — e que os extremos que apagariam o
  * radar em silêncio (0, negativo, fracionário) são recusados.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { bodySchema } from "@/app/api/v1/pipelines/[id]/stages/[stageId]/route";
@@ -46,5 +49,25 @@ describe("esfriamento por etapa — contrato do campo", () => {
 
   it("sem valor configurado, a etapa segue o padrão global de 24h", () => {
     expect(resolveStageWindow(null)).toEqual({ coldHours: 24, criticalHours: 72 });
+  });
+
+  /**
+   * O LAÇO FECHADO — e o furo que custou um deploy.
+   *
+   * Quem GRAVA é o PATCH de `stages/[stageId]`; quem REPÕE a tela depois do
+   * recarregamento é o GET de `agent-mapping`, que lê uma lista de colunas
+   * escrita à mão. O campo entrou no primeiro e não no segundo: o valor ia para
+   * o banco e a tela voltava mostrando "padrão", indistinguível de "não salvou".
+   *
+   * Por isso a asserção é sobre a STRING do select, e não sobre o resultado: é
+   * ela que esquece, e é ela que ninguém relê ao adicionar um campo.
+   */
+  it("o GET que repõe a tela lê a coluna que o PATCH grava", () => {
+    const rota = readFileSync(
+      join(process.cwd(), "app/api/v1/pipelines/[id]/agent-mapping/route.ts"),
+      "utf-8",
+    );
+    expect(rota).toContain("expected_duration_hours");
+    expect(rota).toContain("esfria_em_horas: e.expected_duration_hours");
   });
 });
