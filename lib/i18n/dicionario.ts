@@ -4532,6 +4532,9 @@ export const DICIONARIO: Traducoes = {
   },
   Ordem: { es: "Orden" },
   "O que acontece nesta coluna": { es: "Qué pasa en esta columna" },
+  "Esfria em (horas)": { es: "Se enfría en (horas)" },
+  "Horas até esfriar em": { es: "Horas hasta enfriarse en" },
+  padrão: { es: "predeterminado" },
   "a pessoa acabou de chamar e ninguém respondeu ainda": {
     es: "la persona acaba de escribir y todavía nadie respondió",
   },
