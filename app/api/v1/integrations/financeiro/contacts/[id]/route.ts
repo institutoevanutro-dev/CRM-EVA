@@ -4,6 +4,7 @@ import { validateBearerToken, ensureScope, ensureRole, McpAuthError } from "@/li
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 export const dynamic = "force-dynamic";
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const requestId = randomUUID();
@@ -34,7 +35,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       {
         id: data.id,
         organization_id: auth.organizationId,
-        name: data.display_name || data.name || data.phone_number,
+        name: rotuloDoContato(data),
         phone: data.phone_number,
         email: data.email,
       },
