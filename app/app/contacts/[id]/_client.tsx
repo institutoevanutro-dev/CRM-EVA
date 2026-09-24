@@ -5,7 +5,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { useState } from "react";
 import { format } from "date-fns";
-import { ShieldCheck, PencilSimple } from "@/lib/ui/icons";
+import { ShieldCheck, PencilSimple, LockOpen } from "@/lib/ui/icons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useContact } from "@/hooks/contacts/useContact";
+import { useUnblockContact } from "@/hooks/contacts/useUnblockContact";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
@@ -46,6 +47,10 @@ export function ContactDetailClient({ contactId }: Props) {
   const pipelineQuery = useDefaultPipeline(Boolean(activeOrg));
   const [editOpen, setEditOpen] = useState(false);
   const [anonOpen, setAnonOpen] = useState(false);
+  // Desfazer o descadastro é o override da regra W-02 — só admin, e auditado.
+  // O hook fica ANTES dos early returns: chamá-lo depois mudaria a ordem dos
+  // hooks entre renderizações e o React reprova.
+  const desbloquear = useUnblockContact(contactId);
 
   if (q.isLoading) {
     return (
@@ -110,7 +115,28 @@ export function ContactDetailClient({ contactId }: Props) {
           </div>
         </div>
         {!contact.is_anonymized && user.support?.access_mode !== "support_readonly" && (
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {/* O CAMINHO DE VOLTA do descadastro. Sem ele, o contato que pediu
+                para sair — ou que caiu num falso positivo — ficava preso para
+                sempre: `before-send` recusa todo envio, o funil não cria lead,
+                o follow-up não retoma. A regra W-02 previu o override
+                ("Tenant admin pode desbloquear manualmente; ação auditada") e o
+                produto não tinha porta nenhuma para exercê-lo.
+
+                Só ADMIN, como a regra nomeia: desfazer um pedido de descadastro
+                não é editar cadastro, é reabrir um canal que o cliente fechou —
+                e quem clica responde pela decisão. */}
+            {contact.is_blocked && isAdmin && (
+              <Button
+                variant="outline"
+                onClick={() => desbloquear.mutate()}
+                disabled={desbloquear.isPending}
+                className="shrink-0"
+              >
+                <LockOpen size={16} weight="bold" aria-hidden />
+                <span>{t("Desbloquear")}</span>
+              </Button>
+            )}
             <DialButton contactId={contactId} hasPhone={!!contact.phone_number} />
             <Button variant="outline" onClick={() => setEditOpen(true)} className="shrink-0">
               <PencilSimple size={16} weight="bold" aria-hidden />
