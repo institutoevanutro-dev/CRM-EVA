@@ -18,7 +18,7 @@
  * volta na conversa afirmando que "os dados do PIX estão sendo confirmados" —
  * algo que ela não tem nenhuma ferramenta para saber.
  *
- * ## O prazo, e por que ele é 60 minutos
+ * ## O prazo, e por que ele é 5 minutos
  *
  * O silêncio EXPIRA sozinho. Não é `'infinity'`: `'infinity'` é o handoff
  * FORMAL, aquele em que alguém clicou "assumir" na tela e assumiu junto a
@@ -28,11 +28,22 @@
  * automático daquela conversa para sempre, e ninguém fica sabendo: a conversa
  * some do robô sem aparecer para nenhum humano.
  *
- * 60 minutos porque é a ordem de grandeza de um atendimento humano de verdade
- * — quem parou para responder pelo celular termina o assunto dentro da hora —,
- * é muito mais que a janela de 5 min do composer (que cobre só o tempo de
- * digitar dentro do CRM) e é curto o bastante para que um engano se pague
- * sozinho no mesmo turno de trabalho, em vez de virar uma conversa morta.
+ * 5 minutos, e não 60, porque o prazo longo pressupõe uma operação em que
+ * responder pelo celular é a EXCEÇÃO. Onde ele é a REGRA — recepção que atende
+ * pelo aparelho o dia inteiro — 60 minutos não é uma rede, é um desligamento:
+ * medido numa clínica em 2026-09-24, as 13 conversas do dia estavam TODAS
+ * silenciadas, cada uma até exatamente uma hora depois da última fala humana,
+ * e o agente não pegou uma única conversa. O prazo renovava antes de vencer.
+ *
+ * 5 minutos cobre o que precisa cobrir: o intervalo em que alguém está de fato
+ * digitando aquela resposta. É a mesma janela que o composer já usa para quem
+ * digita DENTRO do CRM, e não há razão para o mesmo gesto valer 12× mais só
+ * porque foi feito no celular.
+ *
+ * O que 5 minutos NÃO cobre, e é bom dizer: um atendimento humano longo volta
+ * a ter a IA por perto depois do quinto minuto. Quem atende demorado deve usar
+ * o handoff FORMAL (botão "assumir"), que é `'infinity'` e não vence — e é
+ * exatamente para isso que ele existe.
  *
  * ⚠️ Quem quiser outro prazo mexe AQUI, num lugar só: a constante é lida por
  * TODO canal cuja ingestão reconhece saída feita fora do CRM, e pelo teste.
@@ -79,10 +90,10 @@ import { normalizarInstante } from "@/lib/ai/elegibilidade/gate";
 
 /**
  * Quanto tempo a IA fica calada depois de uma resposta manual pelo canal.
- * Ver "O prazo, e por que ele é 60 minutos" na docstring do módulo — o número
+ * Ver "O prazo, e por que ele é 5 minutos" na docstring do módulo — o número
  * tem motivo, e mudá-lo é uma decisão de produto, não de implementação.
  */
-export const PRAZO_DO_SILENCIO_MS = 60 * 60 * 1000;
+export const PRAZO_DO_SILENCIO_MS = 5 * 60 * 1000;
 
 const MOTIVO = "Atendimento manual pelo canal (resposta fora do CRM)";
 
