@@ -607,6 +607,42 @@ function ExcluirCanalDialog({
   );
 }
 
+/**
+ * Quando a tela do QR oferece a saída de emergência — o `force`, único caminho
+ * que resolve credencial revogada (o custo de cada modo está no cabeçalho de
+ * `app/api/v1/channel-sessions/[id]/reconnect/route.ts`).
+ *
+ * **Não pode depender só do estado instantâneo**, e isso foi medido: em
+ * 23/09/2026, reconectando os dois números do Instituto Eva, o WAHA entrou em
+ * laço `STARTING` → `Error: Connection Failure` → `Session stuck in STARTING
+ * status, force stopping the session` → `STARTING`. Num dos números a sondagem
+ * de 3s pegou o `FAILED` e o botão apareceu normalmente; no outro
+ * (5527998659879) ela nunca pegou, e a tela ficou em "Preparando o código…" por
+ * mais de um minuto — sem saída, até a chamada com `{force:true}` ser disparada
+ * à mão pelo console. O buraco não era código faltando, era CORRIDA: quem decide
+ * não pode ser só o estado que a sondagem por acaso observou.
+ *
+ * O relógio só corre enquanto o QR NUNCA apareceu. Depois de `SCAN_QR_CODE` a
+ * credencial não está revogada — quem demora ali é o humano pegando o celular, e
+ * oferecer o `force` seria cobrar um reescaneamento por lentidão, que é
+ * exatamente o que o modo suave existe para evitar.
+ */
+export const SEGUNDOS_ATE_OFERECER_NOVO_PAREAMENTO = 30;
+
+export function ofereceNovoPareamento({
+  status,
+  viuQr,
+  segundosEsperando,
+}: {
+  status: string;
+  viuQr: boolean;
+  segundosEsperando: number;
+}): boolean {
+  if (status === "FAILED" || status === "STOPPED") return true;
+  if (viuQr || status === "SCAN_QR_CODE" || status === "WORKING") return false;
+  return segundosEsperando >= SEGUNDOS_ATE_OFERECER_NOVO_PAREAMENTO;
+}
+
 function QrDialog({
   sessionId,
   title,
@@ -626,6 +662,12 @@ function QrDialog({
   const [status, setStatus] = useState<string>("STARTING");
   const [tick, setTick] = useState(0);
   const [pairing, setPairing] = useState(false);
+  const [viuQr, setViuQr] = useState(false);
+  // O relógio da espera. `sondadoEm` muda a cada sondagem (3s), o que é o que
+  // faz esta tela renderizar de novo enquanto o status não muda — sem ele, uma
+  // espera parada em STARTING nunca reavaliaria a saída.
+  const [esperandoDesde, setEsperandoDesde] = useState(() => Date.now());
+  const [sondadoEm, setSondadoEm] = useState(() => Date.now());
   const done = useRef(false);
 
   useEffect(() => {
@@ -639,12 +681,18 @@ function QrDialog({
         if (cancelled) return;
         const s = res.data.status;
         setStatus(s);
+        if (s === "SCAN_QR_CODE") setViuQr(true);
         if (s === "WORKING" && !done.current) {
           done.current = true;
           onConnected();
         }
       } catch {
         // erro transitório de rede — o próximo tick tenta de novo
+      } finally {
+        // O relógio anda mesmo quando a sondagem FALHA: serviço fora do ar
+        // também deixa a tela em "Preparando o código…" para sempre, e ali a
+        // saída precisa aparecer igual.
+        if (!cancelled) setSondadoEm(Date.now());
       }
     };
     void poll();
@@ -668,6 +716,13 @@ function QrDialog({
     const iv = setInterval(() => setTick((v) => v + 1), 15_000);
     return () => clearInterval(iv);
   }, [status]);
+
+  const ofereceSaida = ofereceNovoPareamento({
+    status,
+    viuQr,
+    segundosEsperando: Math.floor((sondadoEm - esperandoDesde) / 1000),
+  });
+  const credencialMorta = status === "FAILED" || status === "STOPPED";
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -696,17 +751,23 @@ function QrDialog({
               <CheckCircle size={28} weight="fill" aria-hidden />
               {t("Conectado!")}
             </div>
-          ) : status === "FAILED" || status === "STOPPED" ? (
+          ) : ofereceSaida ? (
             // Chegar aqui quase sempre significa credencial revogada: o número
             // foi desvinculado pelo celular e o engine não tem como voltar
             // sozinho. Antes esta tela era um beco sem saída ("tente
             // Reconectar" levava de volta ao mesmo FAILED); agora ela oferece a
-            // única ação que de fato resolve.
+            // única ação que de fato resolve — e a oferece TAMBÉM quando o
+            // estado oscila e a sondagem nunca chega a ver o FAILED (ver
+            // `ofereceNovoPareamento`).
             <div className="flex flex-col items-center gap-3 text-center">
-              <p className="text-sm text-error-fg">
-                {t(
-                  "Este número foi desvinculado do WhatsApp. Para usá-lo de novo é preciso parear outra vez.",
-                )}
+              <p className={`text-sm ${credencialMorta ? "text-error-fg" : "text-muted-foreground"}`}>
+                {credencialMorta
+                  ? t(
+                      "Este número foi desvinculado do WhatsApp. Para usá-lo de novo é preciso parear outra vez.",
+                    )
+                  : t(
+                      "O código não veio. Na maioria das vezes é porque este número foi desvinculado pelo celular — aí só um novo pareamento resolve. Se ele caiu agora há pouco, esperar mais um pouco também pode resolver.",
+                    )}
               </p>
               <Button
                 size="sm"
@@ -715,7 +776,13 @@ function QrDialog({
                   setPairing(true);
                   try {
                     await onForcePair(sessionId);
+                    // Recomeça a espera do zero: sem isto o relógio já vencido
+                    // manteria a saída na tela enquanto o novo pareamento sobe,
+                    // e o botão ofereceria a si mesmo para sempre.
                     setStatus("STARTING");
+                    setViuQr(false);
+                    setEsperandoDesde(Date.now());
+                    setSondadoEm(Date.now());
                   } catch (err) {
                     toast.error(errMsg(err, "Não foi possível gerar um novo QR.", t));
                   } finally {
