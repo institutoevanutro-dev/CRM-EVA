@@ -8,7 +8,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import { useT } from "@/hooks/i18n/useT";
 
-import { addDays, endOfMonth, format, startOfDay, startOfMonth, startOfWeek } from "date-fns";
+import { addDays, format, startOfDay, startOfWeek } from "date-fns";
 import * as React from "react";
 
 import { AvisoDaConexaoGoogle } from "./_components/AvisoDaConexaoGoogle";
@@ -16,6 +16,7 @@ import { CartaoDaConexaoGoogle } from "./_components/CartaoDaConexaoGoogle";
 
 import { AgendaInterativa } from "@/components/agenda/AgendaInterativa";
 import { FiltroDePessoas } from "@/components/agenda/FiltroDePessoas";
+import { recorteDaVisao } from "@/lib/agenda/recorte-da-grade";
 import { HistoricoDaAgenda } from "@/components/agenda/HistoricoDaAgenda";
 import type { Agendamento, HorarioLivre, VisaoDaAgenda } from "@/components/agenda/tipos";
 import { EmptyAgenda } from "@/components/empty";
@@ -282,17 +283,8 @@ export function AgendaClient({
   // Instante ISO, nunca o filtro `dia`: o cabeçalho do hook mede por que
   // (`dia=` corta em UTC e some com o compromisso das 22h no fuso de São Paulo).
   const recorteDaGrade = React.useMemo(() => {
-    const inicio =
-      visao === "mes"
-        ? startOfMonth(ancora)
-        : visao === "semana"
-          ? startOfWeek(ancora, { weekStartsOn: 0 })
-          : startOfDay(ancora);
-    const fim =
-      visao === "mes"
-        ? addDays(endOfMonth(ancora), 1)
-        : addDays(inicio, visao === "semana" ? 7 : 1);
-    return { de: inicio.toISOString(), ate: fim.toISOString() };
+    const { de, ate } = recorteDaVisao(visao, ancora);
+    return { de: de.toISOString(), ate: ate.toISOString() };
   }, [visao, ancora]);
 
   // A janela que o SERVIDOR pintou. Sem esta comparação, navegar para outra
