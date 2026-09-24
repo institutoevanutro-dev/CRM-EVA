@@ -86,6 +86,14 @@ async function escolherOTipoDoSeed(page: Page, nome: string) {
   const seletor = page.getByTestId("tipo-da-grade");
   // Organização com um tipo só não precisa de seletor, e ele não é renderizado.
   if ((await seletor.count()) === 0) return;
+  // Acima de um punhado de tipos a fileira de botões vira lista fechada, para
+  // não empurrar a grade para fora da tela. O seed tem quatro e cai no primeiro
+  // caminho — mas quem acrescentar tipos ao seed não deve descobrir isso aqui.
+  const lista = page.getByTestId("tipo-da-grade-lista");
+  if ((await lista.count()) > 0) {
+    await lista.selectOption({ label: nome });
+    return;
+  }
   await seletor.getByRole("button", { name: new RegExp(`^${nome}$`) }).click();
 }
 
