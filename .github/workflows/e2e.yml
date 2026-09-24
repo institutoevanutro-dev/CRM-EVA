@@ -422,6 +422,7 @@ jobs:
         followup-builder.spec.ts
         followup-queue.spec.ts
         distribuicao-atendimento.spec.ts
+        followup-horario-de-envio.spec.ts
         followup-journey.spec.ts
         capacidades-do-agente.spec.ts
         escopo-de-funil-do-agente.spec.ts
