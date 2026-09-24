@@ -3861,6 +3861,10 @@ export const DICIONARIO: Traducoes = {
   "Este número foi desvinculado do WhatsApp. Para usá-lo de novo é preciso parear outra vez.": {
     es: "Este número fue desvinculado de WhatsApp. Para usarlo de nuevo hay que emparejarlo otra vez.",
   },
+  "O código não veio. Na maioria das vezes é porque este número foi desvinculado pelo celular — aí só um novo pareamento resolve. Se ele caiu agora há pouco, esperar mais um pouco também pode resolver.":
+    {
+      es: "El código no llegó. La mayoría de las veces es porque este número fue desvinculado desde el celular — y ahí solo un nuevo emparejamiento lo resuelve. Si se cayó hace poco, esperar un poco más también puede resolverlo.",
+    },
   "Gerar novo QR": { es: "Generar nuevo QR" },
   "Preparando o código…": { es: "Preparando el código…" },
   "Como o cliente vai ver": { es: "Cómo lo va a ver el cliente" },
