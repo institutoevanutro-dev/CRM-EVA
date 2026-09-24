@@ -255,11 +255,18 @@ describe("GET /api/v1/pipelines/[id]/agent-mapping", () => {
     // A autoria viaja junto (migration 0101) e é `null` na fixture, que é o
     // estado honesto de uma etapa anterior à coluna. Fica no `toEqual` exato de
     // propósito: é o que impede a projeção de crescer sem ninguém decidir.
+    //
+    // `esfria_em_horas` entrou por decisão: é a janela do Radar de risco para
+    // esta etapa, e esta leitura é a que REPÕE a tela de etapas depois de um
+    // recarregamento. Sem ela aqui, o PATCH gravava e a tela voltava mostrando
+    // "padrão" — indistinguível de "não salvou". `null` na fixture é a etapa
+    // que nunca configurou, e segue o padrão global.
     expect(body.data.etapas[0]).toEqual({
       id: "e1",
       name: "Novo",
       is_won: false,
       is_lost: false,
+      esfria_em_horas: null,
       last_change_actor_kind: null,
       last_change_at: null,
     });
