@@ -287,13 +287,25 @@ export function InboxFilters({ value, onChange }: Props) {
       </div>
 
       {/* Faixa sublinhada, não caixa cinza: cinco abas num grid de 280px
-          espremiam "Fechadas" contra "Automático" até os rótulos se tocarem. */}
+          espremiam "Fechadas" contra "Automático" até os rótulos se tocarem.
+
+          ⚠️ QUEBRA LINHA EM VEZ DE CORTAR. Com `justify-between` e sem
+          `overflow`, as abas que não cabiam simplesmente sumiam da tela:
+          medido na coluna de 299px de uma clínica, a faixa pedia 359px e a
+          aba "Automático" — com 267 conversas atrás dela — ficava fora, sem
+          nada indicando que existia. O `[scrollbar-width:none]` que estava
+          aqui sugeria rolagem, mas nenhum `overflow-x` foi declarado: não
+          havia o que rolar, só conteúdo escondido.
+
+          Wrap e não `overflow-x-auto` porque rolagem lateral numa faixa de
+          seis itens curtos é gesto que ninguém descobre — e a alternativa
+          custa uma segunda linha só quando a primeira não dá conta. */}
       <Tabs
         value={value.tab}
         onValueChange={(v) => onChange({ ...value, tab: v as InboxTab })}
         className="px-3"
       >
-        <TabsList className="h-auto w-full justify-between gap-2 rounded-none bg-transparent p-0 [scrollbar-width:none]">
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-x-3 gap-y-1 rounded-none bg-transparent p-0">
           {tabs.map((tab) => {
             const meta = INBOX_TABS.find((t) => t.value === tab)!;
             const count = countFor[tab];
