@@ -29,7 +29,8 @@ export async function perfilDoRemetente(
 ): Promise<{ nome: string | null; handle: string | null; foto: string | null }> {
   const url = `${baseDoInstagram()}/${graphVersion()}/${encodeURIComponent(igsid)}?fields=name,username,profile_pic`;
   try {
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    // Teto de espera: o estouro cai no catch e a ingestão segue sem perfil.
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15_000) });
     if (!res.ok) {
       logger.info("[instagram.graph] perfil indisponível", { status: res.status });
       return { nome: null, handle: null, foto: null };

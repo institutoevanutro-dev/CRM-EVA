@@ -62,3 +62,20 @@ describe("instagramAdapter.send", () => {
     expect(instagramAdapter.resolveRecipient({ isGroup: false, groupChatId: null, phoneNumber: "5527", waIdentity: null })).toBeNull();
   });
 });
+
+describe("teto de espera nas chamadas à Graph", () => {
+  // Sem teto, uma Graph pendurada segura o envio (e o operador vê o relógio
+  // girando) ou a ingestão do webhook inteira, não só o perfil.
+  it("o envio leva AbortSignal", async () => {
+    await instagramAdapter.send({ ...base, kind: "text", body: "Oi" } as never);
+    expect(fetchMock.mock.calls[0]![1].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("a busca de perfil leva AbortSignal e, no estouro, segue best-effort (três null)", async () => {
+    const { perfilDoRemetente } = await import("@/lib/channels/instagram/graph");
+    fetchMock.mockRejectedValueOnce(new DOMException("The operation timed out.", "TimeoutError"));
+    const perfil = await perfilDoRemetente("TOKEN", "IGSID-1");
+    expect(fetchMock.mock.calls[0]![1].signal).toBeInstanceOf(AbortSignal);
+    expect(perfil).toEqual({ nome: null, handle: null, foto: null });
+  });
+});

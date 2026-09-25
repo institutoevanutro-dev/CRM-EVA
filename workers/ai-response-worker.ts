@@ -641,9 +641,15 @@ async function buildContext(input: BuildContextInput): Promise<GuardDecision> {
   // provider ausente (banco antigo, sessão sem join) não deve travar quem
   // sempre respondeu: só veta quando o campo veio e a matriz o conhece.
   const provider = c.channel_sessions?.provider;
-  if (provider && capabilitiesOf(provider as ChannelProvider).iaResponde === false) {
-    return skip("canal_sem_ia");
+  let iaResponde = true;
+  if (provider) {
+    try {
+      iaResponde = capabilitiesOf(provider as ChannelProvider).iaResponde;
+    } catch {
+      iaResponde = true; // provider desconhecido: a matriz não o conhece, não veta
+    }
   }
+  if (!iaResponde) return skip("canal_sem_ia");
   if (!c.contacts) return skip("conversation_not_found", "contact join missing");
   if (c.contacts.is_blocked) return skip("contact_blocked");
   if (c.contacts.force_human) return skip("force_human");

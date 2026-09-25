@@ -113,6 +113,16 @@ describe("ai-response-worker (legado) · Instagram não fala com a IA", () => {
     expect(queried).toContain("messages");
   });
 
+  it("provider desconhecido da matriz → o guard não veta nem derruba o worker", async () => {
+    // `capabilitiesOf` lança em provider desconhecido; o guard só veta quando
+    // a matriz CONHECE o canal e diz que a IA não fala por ele.
+    const queried: string[] = [];
+    vi.mocked(createAdminClient).mockReturnValue(makeAdminStub("canal_que_ainda_nao_existe", queried));
+    const result = await processMessageReceived(eventRow);
+    expect(result.reason).not.toBe("canal_sem_ia");
+    expect(queried).toContain("messages");
+  });
+
   it("provider ausente (banco antigo, coluna sem default alcançado) → o guard não veta", async () => {
     const queried: string[] = [];
     vi.mocked(createAdminClient).mockReturnValue(makeAdminStub(null, queried));

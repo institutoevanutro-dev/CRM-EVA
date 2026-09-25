@@ -116,6 +116,8 @@ export const instagramAdapter: ChannelAdapter = {
         message,
         ...(envelope.etiquetaHumana ? { messaging_type: "MESSAGE_TAG", tag: "HUMAN_AGENT" } : {}),
       }),
+      // Mesmo teto do checkHealth: Graph pendurada não segura o envio.
+      signal: AbortSignal.timeout(15_000),
     });
     const body = (await res.json().catch(() => ({}))) as { message_id?: string; error?: { code?: number; message?: string } };
     if (!res.ok || body.error) throw erroDoInstagram(body.error?.code ?? `http_${res.status}`, body.error?.message ?? `http_${res.status}`);

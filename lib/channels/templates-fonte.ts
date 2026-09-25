@@ -43,8 +43,8 @@ const FONTE: Record<ProviderDeMensagem, FonteDeTemplates | null> = {
   waha: null,
   meta_cloud: "oficial",
   zernio: "parceiro",
-  // Etapa 1: sem envio, sem definição a gerir — mesmo motivo do `waha`, mas
-  // pela ausência de transporte, não pela liberdade de horário.
+  // Envia desde a etapa 2, mas o Direct não tem modelo aprovado: passou dos 7
+  // dias, nada sai (nem modelo). Não há definição a listar nem a oferecer.
   meta_instagram: null,
 };
 
