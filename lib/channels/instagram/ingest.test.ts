@@ -20,6 +20,8 @@ function adminFalso(opts: {
   contatoNovo?: boolean;
   identidadeExistente?: boolean;
   updateErro?: { message: string } | null;
+  nomeAtual?: string | null;
+  tentadoEm?: string | null;
 }) {
   const chamadas: Record<"rpc" | "insert" | "update", [string, unknown][]> = { rpc: [], insert: [], update: [] };
   const admin = {
@@ -43,14 +45,22 @@ function adminFalso(opts: {
       },
       // Tabela-consciente e encadeável para QUALQUER número de `.eq()`: o
       // check de identidade (`contact_channel_identities`) usa três, a leitura
-      // de `custom_fields` (`contacts`) usa dois.
+      // de `contacts` (custom_fields, e agora display_name/source_metadata)
+      // usa dois.
       select: () => {
         const chain: { eq: () => typeof chain; maybeSingle: () => Promise<{ data: unknown; error: null }> } = {
           eq: () => chain,
           maybeSingle: async () =>
             tabela === "contact_channel_identities"
               ? { data: opts.identidadeExistente ? { contact_id: "C1" } : null, error: null }
-              : { data: { custom_fields: {} }, error: null },
+              : {
+                  data: {
+                    custom_fields: {},
+                    display_name: opts.nomeAtual ?? null,
+                    source_metadata: { perfil_tentado_em: opts.tentadoEm ?? null },
+                  },
+                  error: null,
+                },
         };
         return chain;
       },
@@ -120,10 +130,10 @@ describe("ingestão do Instagram", () => {
     expect(args.p_payload).toMatchObject({ message_id: "M1", conversation_id: "CV1" });
   });
 
-  it("identidade já cadastrada não chama a Graph nem decifra o token (só na primeira vez)", async () => {
+  it("identidade já cadastrada e com nome não chama a Graph nem decifra o token", async () => {
     perfilDoRemetenteMock.mockClear();
     decryptWebhookSecretMock.mockClear();
-    const { admin } = adminFalso({ identidadeExistente: true, contatoNovo: false });
+    const { admin } = adminFalso({ identidadeExistente: true, contatoNovo: false, nomeAtual: "Maria" });
     const r = await ingerirDoInstagram(admin as never, evento(), sessao);
     expect(r).toMatchObject({ status: "ingerida" });
     expect(decryptWebhookSecretMock).not.toHaveBeenCalled();
@@ -137,6 +147,25 @@ describe("ingestão do Instagram", () => {
     await ingerirDoInstagram(admin as never, evento(), sessao);
     expect(decryptWebhookSecretMock).toHaveBeenCalled();
     expect(perfilDoRemetenteMock).toHaveBeenCalled();
+  });
+
+  it("eco como primeira mensagem de um contato novo chama a busca de perfil", async () => {
+    perfilDoRemetenteMock.mockClear();
+    decryptWebhookSecretMock.mockClear();
+    const { admin } = adminFalso({ identidadeExistente: false, contatoNovo: true });
+    await ingerirDoInstagram(admin as never, evento({ eco: true, remetente: "IGACC", destinatario: "IGSID9" }), sessao);
+    expect(decryptWebhookSecretMock).toHaveBeenCalled();
+    expect(perfilDoRemetenteMock).toHaveBeenCalled();
+  });
+
+  it("segunda mensagem de contato sem nome, 1h depois da tentativa, não busca de novo", async () => {
+    perfilDoRemetenteMock.mockClear();
+    decryptWebhookSecretMock.mockClear();
+    const umaHoraAtras = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { admin } = adminFalso({ identidadeExistente: true, contatoNovo: false, nomeAtual: null, tentadoEm: umaHoraAtras });
+    await ingerirDoInstagram(admin as never, evento(), sessao);
+    expect(decryptWebhookSecretMock).not.toHaveBeenCalled();
+    expect(perfilDoRemetenteMock).not.toHaveBeenCalled();
   });
 
   it("falha ao gravar a origem padrão vira logger.warn, sem derrubar a ingestão", async () => {

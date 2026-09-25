@@ -24,7 +24,7 @@ import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { logger } from "@/lib/logger";
 import { marcarConversaComMensagem } from "../marcar-conversa";
 import { aplicarEfeitosPosEntrada } from "../pos-entrada";
-import { perfilDoRemetente } from "./graph";
+import { deveBuscarPerfil, preencherPerfilDoContato } from "./perfil-do-contato";
 import type { EventoDoInstagram } from "./webhook";
 
 export type ResultadoDaIngestao =
@@ -55,33 +55,46 @@ export async function ingerirDoInstagram(
   const orgId = sessao.organizationId;
   const pessoa = e.eco ? e.destinatario : e.remetente;
 
-  // Perfil (Graph + decrypt do token) só na PRIMEIRA vez, não em toda mensagem.
-  // `fn_upsert_contato_por_identidade` já atualiza a identidade existente sem
-  // pedir nome de novo — chamar a Graph de qualquer forma custava 1 request por
-  // mensagem (e por reentrega da Meta, que chega ANTES do dedup de `external_id`
-  // no insert) contra o rate limit por conta do Instagram, de graça: o nome já
-  // estava gravado desde a primeira mensagem desta pessoa.
-  let perfil = { nome: null as string | null, handle: null as string | null, foto: null as string | null };
-  if (!e.eco && sessao.tokenCifrado) {
-    const { data: identidade } = await admin
-      .from("contact_channel_identities")
-      .select("contact_id")
-      .eq("organization_id", orgId)
-      .eq("channel", "instagram")
-      .eq("external_id", pessoa)
-      .maybeSingle();
-    if (!identidade) {
-      const token = await decryptWebhookSecret(admin, sessao.tokenCifrado);
-      if (token) perfil = await perfilDoRemetente(token, pessoa);
-    }
-  }
+  // Identidade existia ANTES deste evento? Decide se a Graph é chamada agora
+  // (ver `deveBuscarPerfil`) — nome é preenchido em `contacts` depois do
+  // upsert abaixo, nunca aqui: o upsert sempre recebe perfil nulo.
+  const { data: identidade } = await admin
+    .from("contact_channel_identities")
+    .select("contact_id")
+    .eq("organization_id", orgId)
+    .eq("channel", "instagram")
+    .eq("external_id", pessoa)
+    .maybeSingle();
+  const identidadeNova = !identidade;
 
   const { data: linhasContato, error: erroContato } = await admin.rpc("fn_upsert_contato_por_identidade" as never, {
     p_org: orgId, p_canal: "instagram", p_external_id: pessoa,
-    p_handle: perfil.handle, p_nome: perfil.nome, p_avatar: perfil.foto,
+    p_handle: null, p_nome: null, p_avatar: null,
   } as never);
   const contato = (linhasContato as { contact_id: string; criado: boolean }[] | null)?.[0];
   if (erroContato || !contato) return { status: "falhou", motivo: `contato: ${erroContato?.message ?? "sem id"}` };
+
+  // Nome do contato: identidade nova sempre busca; sem nome, no máximo
+  // 1×/24h (não em toda mensagem — throttle em `deveBuscarPerfil`). Vale
+  // para inbound E eco: um eco pode ser a PRIMEIRA mensagem de alguém.
+  let nomeDoContato: string | null = null;
+  const { data: contatoParaNome } = await admin
+    .from("contacts")
+    .select("display_name, source_metadata")
+    .eq("organization_id", orgId)
+    .eq("id", contato.contact_id)
+    .maybeSingle();
+  const paraNome = contatoParaNome as { display_name: string | null; source_metadata: Record<string, unknown> } | null;
+  nomeDoContato = paraNome?.display_name ?? null;
+  const tentadoEm = (paraNome?.source_metadata?.perfil_tentado_em as string | undefined) ?? null;
+  if (sessao.tokenCifrado && deveBuscarPerfil({ identidadeNova, nomeAtual: nomeDoContato, tentadoEm, agora: new Date() })) {
+    const token = await decryptWebhookSecret(admin, sessao.tokenCifrado);
+    if (token) {
+      await preencherPerfilDoContato(admin, {
+        organizationId: orgId, contactId: contato.contact_id, igsid: pessoa, token, agora: new Date(),
+      });
+    }
+  }
 
   if (contato.criado && sessao.origemPadrao) {
     // Lê e mescla em vez de sobrescrever: o contato acabou de nascer nesta
@@ -187,7 +200,7 @@ export async function ingerirDoInstagram(
     await aplicarEfeitosPosEntrada(admin, {
       organizationId: orgId, contactId: contato.contact_id, conversationId: conversationId as string,
       messageId: messageId || null, channelSessionId: sessao.id, texto: e.texto,
-      nomeDoContato: perfil.nome ?? perfil.handle, origem: "instagram_webhook",
+      nomeDoContato, origem: "instagram_webhook",
     });
   }
   return { status: "ingerida", messageId, conversationId: conversationId as string, contatoNovo: contato.criado };

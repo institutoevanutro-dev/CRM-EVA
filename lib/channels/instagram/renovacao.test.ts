@@ -26,6 +26,11 @@ vi.mock("@/lib/webhooks/secrets", () => ({
   encryptWebhookSecret: vi.fn(async () => "\\xNOVO"),
   decryptWebhookSecret: vi.fn(async () => "token-velho-em-claro"),
 }));
+const perfilDoRemetenteMock = vi.fn(async () => ({ nome: "Maria", handle: "maria", foto: null as string | null }));
+vi.mock("./graph", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./graph")>();
+  return { ...real, perfilDoRemetente: (...a: unknown[]) => perfilDoRemetenteMock(...(a as [])) };
+});
 
 import { sincronizarSaudeDaConexao } from "@/lib/channels/health";
 
@@ -61,6 +66,13 @@ let avisosResolvidos: Array<{ organization_id: string; ref_id: string }>;
 let saudeUpserts: Record<string, unknown>[];
 /** A linha "gravada" de `channel_session_health` — o `upsert` escreve aqui, o `select` lê daqui. */
 let saudeGravada: { escalated_status: string | null } | null;
+/** Conversas sem nome que a rodada de preenchimento (`preencherNomesDaSessao`) encontra. */
+let conversasSemNome: Array<{
+  contact_id: string;
+  provider_conversation_id: string;
+  contacts: { display_name: string | null; source_metadata: Record<string, unknown> };
+}>;
+let contatosAtualizados: Array<{ id: string; campos: Record<string, unknown> }>;
 
 function admin() {
   return {
@@ -98,6 +110,49 @@ function admin() {
             saudeUpserts.push(linha);
             saudeGravada = { escalated_status: (linha.escalated_status as string | null) ?? null };
             return { error: null };
+          },
+        };
+      }
+      if (tabela === "conversations") {
+        return {
+          select: () => {
+            const chain: Record<string, unknown> = {
+              eq: () => chain,
+              not: () => chain,
+              is: () => chain,
+              limit: async () => ({ data: conversasSemNome, error: null }),
+            };
+            return chain;
+          },
+        };
+      }
+      if (tabela === "contacts") {
+        return {
+          select: () => {
+            const chain: Record<string, unknown> = {
+              eq: () => chain,
+              maybeSingle: async () => ({ data: { source_metadata: {} }, error: null }),
+            };
+            return chain;
+          },
+          update: (campos: Record<string, unknown>) => {
+            const q: Record<string, unknown> = {
+              eq: (_c: string, id: string) => { contatosAtualizados.push({ id, campos }); return q; },
+              is: () => q,
+              then: (r: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(r),
+            };
+            return q;
+          },
+        };
+      }
+      if (tabela === "contact_channel_identities") {
+        return {
+          select: () => {
+            const chain: Record<string, unknown> = {
+              eq: () => chain,
+              maybeSingle: async () => ({ data: null, error: null }),
+            };
+            return chain;
           },
         };
       }
@@ -140,9 +195,12 @@ beforeEach(() => {
   avisosResolvidos = [];
   saudeUpserts = [];
   saudeGravada = null;
+  conversasSemNome = [];
+  contatosAtualizados = [];
   vi.mocked(audit).mockClear();
   vi.mocked(encryptWebhookSecret).mockClear();
   vi.mocked(decryptWebhookSecret).mockClear();
+  perfilDoRemetenteMock.mockClear();
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -226,6 +284,51 @@ describe("renovarTokensDoInstagram", () => {
     expect(resumo.renovadas).toBe(0);
     expect(resumo.falhas).toBe(0);
     expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("token renovado com sucesso: preenche o nome de quem ficou sem nome na sessão", async () => {
+    linhas = [sessao()];
+    fetchMock.mockResolvedValue(respostaOk());
+    conversasSemNome = [
+      { contact_id: "C1", provider_conversation_id: "IGSID1", contacts: { display_name: null, source_metadata: {} } },
+    ];
+
+    const resumo = await renovarTokensDoInstagram(admin(), AGORA);
+
+    expect(resumo.nomesPreenchidos).toBe(1);
+    expect(perfilDoRemetenteMock).toHaveBeenCalledWith("token-novo", "IGSID1");
+    expect(contatosAtualizados.some((c) => c.id === "C1" && c.campos.display_name === "Maria")).toBe(true);
+  });
+
+  it("contato que já tentou há 1h fica de fora (throttle de 24h)", async () => {
+    linhas = [sessao()];
+    fetchMock.mockResolvedValue(respostaOk());
+    conversasSemNome = [
+      {
+        contact_id: "C1",
+        provider_conversation_id: "IGSID1",
+        contacts: { display_name: null, source_metadata: { perfil_tentado_em: new Date(AGORA.getTime() - 3_600_000).toISOString() } },
+      },
+    ];
+
+    const resumo = await renovarTokensDoInstagram(admin(), AGORA);
+
+    expect(resumo.nomesPreenchidos).toBe(0);
+    expect(perfilDoRemetenteMock).not.toHaveBeenCalled();
+  });
+
+  it("a auditoria da renovação carrega quantos nomes a rodada preencheu", async () => {
+    linhas = [sessao()];
+    fetchMock.mockResolvedValue(respostaOk());
+    conversasSemNome = [
+      { contact_id: "C1", provider_conversation_id: "IGSID1", contacts: { display_name: null, source_metadata: {} } },
+    ];
+
+    await renovarTokensDoInstagram(admin(), AGORA);
+
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ nomes_preenchidos: 1 }) }),
+    );
   });
 });
 
