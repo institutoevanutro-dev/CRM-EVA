@@ -79,6 +79,8 @@ Capacidades novas ou ajustadas na matriz (declaradas para **todos** os providers
 
 ### 5.5 Responder (etapa 2)
 
+> A especificação vigente da etapa 2 é [`2026-09-25-instagram-direct-etapa-2-design.md`](2026-09-25-instagram-direct-etapa-2-design.md); o texto abaixo é o esboço original e vale só onde ela não diz outra coisa.
+
 - O caminho de envio é o mesmo (`app/api/v1/messages/_handler.ts` → `getAdapter(provider)`). `resolveRecipient` passa a aceitar a identidade de canal além do telefone.
 - Antes de enviar: dentro de 24h, envia livre; entre 24h e 7 dias, **só se o autor é pessoa**, com `tag: HUMAN_AGENT`; depois de 7 dias, bloqueia com mensagem clara na tela ("A Meta só permite responder até 7 dias depois da última mensagem dessa pessoa").
 - Texto e imagem nesta etapa. Áudio fica para depois (o Instagram não aceita opus).
