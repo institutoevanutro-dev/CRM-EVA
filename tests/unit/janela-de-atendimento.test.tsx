@@ -1,7 +1,14 @@
 import { readFileSync } from "node:fs";
 
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { describe, expect, it, vi } from "vitest";
+
+const apiGetMock = vi.fn();
+vi.mock("@/lib/api/client", () => ({ apiClient: { get: (url: string) => apiGetMock(url) } }));
+vi.mock("@/hooks/inbox/useSendMessage", () => ({
+  useSendMessage: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 
 /**
  * QUANTO TEMPO RESTA PARA ESCREVER — do lado de quem atende.
@@ -23,6 +30,7 @@ import { describe, expect, it } from "vitest";
  * e que a tela não decida isso sozinha — quem sabe da regra é o seam.
  */
 import { JanelaSelo } from "@/components/inbox/JanelaSelo";
+import { JanelaFechadaAviso } from "@/components/inbox/JanelaFechadaAviso";
 import { estadoDaJanela, formatarDecorrido, formatarRestante } from "@/lib/channels/janela";
 
 const AGORA = new Date("2026-08-10T18:00:00Z");
@@ -136,6 +144,44 @@ describe("a extensão humana do Instagram (etapa 2)", () => {
     const oitoDiasAtras = new Date(Date.now() - 8 * 86_400_000).toISOString();
     render(<JanelaSelo provider="meta_instagram" lastInboundAt={oitoDiasAtras} />);
     expect(screen.getByText(/Fora do prazo do Instagram/i)).toBeInTheDocument();
+  });
+});
+
+describe("o aviso de janela fechada respeita o canal SEM template", () => {
+  function renderAviso(provider: string | null) {
+    return render(
+      <QueryClientProvider client={new QueryClient()}>
+        <JanelaFechadaAviso conversationId="conv-1" provider={provider} motivo="motivo qualquer" />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("Instagram (sete_dias, sem fonte de templates): só o texto do prazo, sem falar em modelo/Templates", () => {
+    // fonteDeTemplates("meta_instagram") é null — o Direct não gerencia
+    // definição aprovada nenhuma. Cair no texto "Crie um em Conexões →
+    // Templates" mandaria o operador procurar uma porta que não existe.
+    renderAviso("meta_instagram");
+    expect(screen.getByText("motivo qualquer")).toBeInTheDocument();
+    expect(screen.queryByText(/modelo/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Templates/i)).not.toBeInTheDocument();
+    // Sem fonte, a consulta nem sai — não há o que buscar.
+    expect(apiGetMock).not.toHaveBeenCalled();
+  });
+
+  it("WhatsApp intermediado (fonte = parceiro): o caminho do modelo aprovado segue oferecido", async () => {
+    apiGetMock.mockResolvedValueOnce({
+      data: { templates: [{ name: "boas_vindas", language: "pt_BR", status: "APPROVED" }] },
+    });
+    renderAviso("zernio");
+    expect(screen.getByText("motivo qualquer")).toBeInTheDocument();
+    expect(await screen.findByRole("combobox", { name: /modelo aprovado/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /enviar modelo/i })).toBeInTheDocument();
+  });
+
+  it("WhatsApp sem NENHUM modelo aprovado ainda: mantém o texto de criar em Conexões", async () => {
+    apiGetMock.mockResolvedValueOnce({ data: { templates: [] } });
+    renderAviso("zernio");
+    expect(await screen.findByText(/Nenhum modelo aprovado ainda/i)).toBeInTheDocument();
   });
 });
 

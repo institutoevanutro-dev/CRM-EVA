@@ -127,9 +127,17 @@ export function JanelaFechadaAviso({
     <div className="border-t border-amber-300 bg-amber-50/60 px-4 py-3 dark:border-amber-800/60 dark:bg-amber-950/30">
       <p className="mb-2 text-xs text-amber-900 dark:text-amber-200">{motivo}</p>
 
-      {aprovados.length === 0 ? (
+      {fonte === null ? null : aprovados.length === 0 ? (
         // Sem modelo aprovado não há saída por aqui, e dizer isso é melhor que
         // um seletor vazio que se lê como "ainda não carregou".
+        //
+        // `fonte === null` (acima) é um caso DIFERENTE deste: aqui o canal TEM
+        // definições aprovadas, só que zero passaram a barra; ali o canal não
+        // tem o conceito — o Instagram Direct não gerencia modelo nenhum. Cair
+        // no MESMO texto ali diria "crie um em Conexões → Templates" para um
+        // canal que não tem essa tela, e o operador procuraria uma porta que
+        // não existe. O texto dos 7 dias (`motivo`, acima) já é a saída certa:
+        // sair do CRM e responder pelo app quando a pessoa escrever de novo.
         <p className="text-xs text-amber-900/80 dark:text-amber-200/80">
           {t("Nenhum modelo aprovado ainda. Crie um em")} <strong>{t("Conexões → Templates")}</strong>{" "}
           {t("e envie quando a plataforma aprovar.")}
