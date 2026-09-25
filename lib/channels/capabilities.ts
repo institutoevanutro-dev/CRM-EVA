@@ -91,12 +91,11 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     limiteDeTexto: null,
     midiaDeEnvio: "completa",
   },
-  // Etapa 1 só recebe (webhook). O Direct não tem template aprovado nem janela
-  // de 24h formal como o WhatsApp — a restrição real da API é a janela de 24h
-  // desde a última mensagem do cliente, imposta pela PLATAFORMA (hetero-
-  // restrição), não auto-restrição por volume como o `waha`. Sem grupos, sem
-  // gestão de template, e o envio em si ainda não existe (adapter recusa) —
-  // por isso `costPerMessage: false` é o único valor honesto hoje.
+  // O Direct não tem template aprovado nem janela de 24h formal como o
+  // WhatsApp — a restrição real da API é a janela de 24h desde a última
+  // mensagem do cliente, imposta pela PLATAFORMA (hetero-restrição), não
+  // auto-restrição por volume como o `waha`. Sem grupos, sem gestão de
+  // template — por isso `costPerMessage: false` é o único valor honesto hoje.
   //
   // Etapa 2: GENTE passa a poder responder, até 7 dias desde a última mensagem
   // do cliente (a tag HUMAN_AGENT da Meta) — `janelaHumanaMs`. A IA continua
@@ -112,8 +111,9 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     voiceNote: "opus-only",
     groups: "none",
     costPerMessage: false,
-    // O adapter existe e RECEBE, mas `send()` sempre lança — envio chega na
-    // etapa 3. Quem escolhe sessão para automação lê este campo, não o nome.
+    // O adapter (etapa 2) já ENVIA texto e foto pela Graph API — mas
+    // `canSend` continua `false` até a Task 3 ligar o handler a ele. Quem
+    // escolhe sessão para automação lê este campo, não o nome.
     canSend: false,
     iaResponde: false,
     janelaHumanaMs: 7 * 24 * 60 * 60 * 1000,

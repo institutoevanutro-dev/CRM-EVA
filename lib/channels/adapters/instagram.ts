@@ -8,10 +8,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { MAX_MEDIA_BYTES, MediaTooLargeError, type FetchedMedia } from "@/lib/messaging/media/types";
 
+import { capabilitiesOf, CHANNEL_PROVIDER_INSTAGRAM } from "../capabilities";
 import { baseDoInstagram } from "../instagram/graph";
 import type { ChannelAdapter, ChannelHealth, ChannelTenantScope } from "../types";
 
-const LIMITE_DE_TEXTO = 1000;
+/**
+ * Fonte única do limite: `capabilities.ts` já declara `limiteDeTexto: 1000`
+ * para `meta_instagram` — duplicar o número aqui como constante local
+ * divergiria em silêncio no dia em que só um dos dois lugares mudasse.
+ */
+const LIMITE_DE_TEXTO = capabilitiesOf(CHANNEL_PROVIDER_INSTAGRAM).limiteDeTexto ?? 1000;
+/** Tipos aceitos por FOTO — a capability só diz `midiaDeEnvio: "so_foto"` (o QUE), não os mimes exatos (o COMO). */
 const TIPOS_DE_FOTO = new Set(["image/jpeg", "image/png"]);
 
 function erroDoInstagram(codigo: number | string, detalhe: string): Error {
