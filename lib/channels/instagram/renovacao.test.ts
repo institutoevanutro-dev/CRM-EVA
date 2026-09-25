@@ -33,6 +33,7 @@ vi.mock("./graph", async (importOriginal) => {
 });
 
 import { sincronizarSaudeDaConexao } from "@/lib/channels/health";
+import { logger } from "@/lib/logger";
 
 import { precisaRenovar, renovarTokensDoInstagram } from "./renovacao";
 
@@ -73,19 +74,27 @@ let conversasSemNome: Array<{
   contacts: { display_name: string | null; source_metadata: Record<string, unknown> };
 }>;
 let contatosAtualizados: Array<{ id: string; campos: Record<string, unknown> }>;
+/** Sessões ativas com token utilizável (passada dos nomes). `null` = as mesmas de `linhas`. */
+let sessoesComToken: Record<string, unknown>[] | null;
+let erroDasConversas: { message: string } | null;
 
 function admin() {
   return {
     from: (tabela: string) => {
       if (tabela === "channel_sessions") {
+        // Duas perguntas à mesma tabela: `lte` na validade = "quem renovar";
+        // `gt` = "quem tem token utilizável" (a passada dos nomes).
+        let modo: "renovar" | "nomes" = "renovar";
+        const dados = () => (modo === "nomes" ? (sessoesComToken ?? linhas) : linhas);
         const q = {
           select: () => q,
           eq: () => q,
           is: () => q,
           not: () => q,
-          lte: () => q,
-          limit: async () => ({ data: linhas, error: null }),
-          then: (r: (v: unknown) => void) => r({ data: linhas, error: null }),
+          lte: () => { modo = "renovar"; return q; },
+          gt: () => { modo = "nomes"; return q; },
+          limit: async () => ({ data: dados(), error: null }),
+          then: (r: (v: unknown) => void) => r({ data: dados(), error: null }),
           update: (campos: Record<string, unknown>) => ({
             eq: (_c1: string, id: string) => ({
               eq: async () => {
@@ -120,7 +129,8 @@ function admin() {
               eq: () => chain,
               not: () => chain,
               is: () => chain,
-              limit: async () => ({ data: conversasSemNome, error: null }),
+              limit: async () =>
+                erroDasConversas ? { data: null, error: erroDasConversas } : { data: conversasSemNome, error: null },
             };
             return chain;
           },
@@ -197,6 +207,8 @@ beforeEach(() => {
   saudeGravada = null;
   conversasSemNome = [];
   contatosAtualizados = [];
+  sessoesComToken = null;
+  erroDasConversas = null;
   vi.mocked(audit).mockClear();
   vi.mocked(encryptWebhookSecret).mockClear();
   vi.mocked(decryptWebhookSecret).mockClear();
@@ -315,6 +327,50 @@ describe("renovarTokensDoInstagram", () => {
 
     expect(resumo.nomesPreenchidos).toBe(0);
     expect(perfilDoRemetenteMock).not.toHaveBeenCalled();
+  });
+
+  it("sessão longe de vencer também tem os nomes preenchidos todo dia, com o token que ela já tem", async () => {
+    // Antes só a sessão perto de vencer (e renovada) preenchia: ~1 vez a cada 45 dias.
+    linhas = [];
+    sessoesComToken = [sessao({ id: "sess-2" })];
+    conversasSemNome = [
+      { contact_id: "C2", provider_conversation_id: "IGSID2", contacts: { display_name: null, source_metadata: {} } },
+    ];
+
+    const resumo = await renovarTokensDoInstagram(admin(), AGORA);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(resumo).toMatchObject({ renovadas: 0, nomesPreenchidos: 1 });
+    expect(perfilDoRemetenteMock).toHaveBeenCalledWith("token-velho-em-claro", "IGSID2");
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ renovadas: 0, nomes_preenchidos: 1 }) }),
+    );
+  });
+
+  it("sessão com token mas ninguém sem nome: nada muda, nada audita", async () => {
+    linhas = [];
+    sessoesComToken = [sessao({ id: "sess-2" })];
+
+    const resumo = await renovarTokensDoInstagram(admin(), AGORA);
+
+    expect(resumo.nomesPreenchidos).toBe(0);
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("erro ao ler as conversas sem nome vira logger.warn, sem derrubar a rodada", async () => {
+    const aviso = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    linhas = [];
+    sessoesComToken = [sessao({ id: "sess-2" })];
+    erroDasConversas = { message: "timeout" };
+
+    const resumo = await renovarTokensDoInstagram(admin(), AGORA);
+
+    expect(resumo.nomesPreenchidos).toBe(0);
+    expect(aviso).toHaveBeenCalledWith(
+      expect.stringContaining("[instagram.renovacao]"),
+      expect.objectContaining({ sessionId: "sess-2", detail: "timeout" }),
+    );
+    aviso.mockRestore();
   });
 
   it("a auditoria da renovação carrega quantos nomes a rodada preencheu", async () => {
