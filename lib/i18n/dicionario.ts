@@ -6866,6 +6866,9 @@ export const DICIONARIO: Traducoes = {
 
   // ─── Agenda interativa (PR #382, entrou pela main durante este PR) ───
   "Horários livres de": { es: "Horarios libres de" },
+  "Tipo de atendimento dos horários livres": {
+    es: "Tipo de atención de los horarios libres",
+  },
   "Você ainda não publicou seus horários de atendimento.": { es: "Todavía no publicaste tus horarios de atención." },
   "Sem eles ninguém consegue marcar clicando na grade — nem você, nem o agente.": { es: "Sin ellos nadie puede agendar haciendo clic en la grilla — ni tú, ni el agente." },
   "Não consegui carregar os horários.": { es: "No pude cargar los horarios." },
