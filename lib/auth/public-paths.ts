@@ -40,6 +40,9 @@ export const PUBLIC_PATHS: RegExp[] = [
   // qualquer sub-path futuro nascer público de carona.
   /^\/api\/v1\/agenda\/google\/callback$/,
   /^\/api\/v1\/integrations\/nuvemshop\/callback$/,
+  // Volta do login do Instagram: mesma natureza das duas acima (state assinado
+  // de INTERNAL_SECRET + cookie de vínculo, auth dentro da rota).
+  /^\/api\/v1\/channels\/instagram\/callback$/,
   /^\/api\/internal\//,
   /^\/api\/mcp(\/.*)?$/,
   // GET /api/v1/contacts aceita SESSÃO ou Bearer `dsk_...` (api_tokens) — a
