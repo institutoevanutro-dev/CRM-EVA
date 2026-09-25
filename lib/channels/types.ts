@@ -9,7 +9,7 @@ import type { OutboundMedia } from "@/lib/waha/media-send";
 
 export type { OutboundMedia };
 
-export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "wacalls";
+export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "wacalls" | "meta_instagram";
 
 /**
  * Os providers que transportam MENSAGEM — o subconjunto sobre o qual a matriz
@@ -25,6 +25,11 @@ export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "wacalls";
  * presumindo que a resposta sempre sabe mandar recado. Antes disto o CHECK do
  * banco já aceitava `'wacalls'` enquanto este union não — e uma organização que
  * pareasse voz derrubava `getAdapter` com `unknown_channel_provider`.
+ *
+ * `meta_instagram` entrou aqui na etapa 2 do canal Instagram, junto com o
+ * adapter, a matriz de capabilities e a fonte de templates: o Direct manda
+ * texto de verdade, então ele é `ProviderDeMensagem` como `waha`/`meta_cloud`/
+ * `zernio` — só `wacalls` (voz) fica de fora.
  */
 export type ProviderDeMensagem = Exclude<ChannelProvider, "wacalls">;
 
@@ -54,6 +59,20 @@ export interface ChannelCapabilities {
   groups: "full" | "limited" | "none";
   /** Mensagem entregue gera custo → decisões de envio precisam considerar orçamento. */
   costPerMessage: boolean;
+  /**
+   * O CÓDIGO sabe ENVIAR por este canal agora? `false` para um
+   * `ProviderDeMensagem` que só recebe nesta etapa (Instagram etapa 1: o
+   * adapter existe, `send()` sempre lança).
+   *
+   * Distinta de `isConfigured()` do adapter, que é por-instalação (uma
+   * credencial ausente/inválida) — esta é por-CÓDIGO: nem toda instalação com
+   * a variável certa faz este canal enviar, porque o transporte de saída
+   * ainda não foi escrito. Quem escolhe sessão para ENVIO AUTOMATIZADO
+   * filtra por aqui (`providersDeEnvioAutomatico`), não por `isConfigured()`
+   * — que para `waha` reflete env ausente em teste/instalação nova, um
+   * sinal correto mas ORTOGONAL a "este canal sabe enviar".
+   */
+  canSend: boolean;
 }
 
 /**

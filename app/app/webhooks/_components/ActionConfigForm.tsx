@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { usePipelines, usePipelineStages } from "@/hooks/webhooks/useWebhookSources";
 import { useAgentsList } from "@/hooks/ai/useAgents";
-import { channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
+import { canaisQueEnviam, channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { apiClient } from "@/lib/api/client";
 import type { FollowupFlowPointerRow } from "@/hooks/followup/useFollowupFlows";
@@ -128,7 +128,8 @@ function SendWhatsappForm({
   onChange,
 }: FormProps<{ channel_session_id: string; template: string }>) {
   const t = useT();
-  const { data: sessions } = useChannelSessions();
+  // Destino de envio: só canal que envia (a conta do Instagram só recebe).
+  const sessions = canaisQueEnviam(useChannelSessions().data);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
   const insertVar = (token: string) => {
@@ -221,7 +222,8 @@ function SendAiMessageForm({
 }: FormProps<{ agent_id: string; channel_session_id: string; instruction: string }>) {
   const t = useT();
   const { data: agentes } = useAgentsList();
-  const { data: sessions } = useChannelSessions();
+  // Destino de envio: só canal que envia (a conta do Instagram só recebe).
+  const sessions = canaisQueEnviam(useChannelSessions().data);
   const publicados = (agentes ?? []).filter((a) => Boolean(a.published_version_id));
   const semPublicado = (agentes ?? []).length > 0 && publicados.length === 0;
 

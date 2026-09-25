@@ -56,6 +56,7 @@ import { lerClientePelaAgenda } from "@/lib/contacts/cliente-pela-agenda";
 import { ehIdentificadorTecnico, rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
 
 import { emitLeadActivity } from "./activity-emitter";
+import { rotuloDoCanal } from "./activity-vocabulary";
 
 /**
  * O rótulo que aparece no card do funil quando o lead nasceu de um clique em
@@ -184,6 +185,29 @@ export async function funilDeEntrada(
 }
 
 /**
+ * O título do card quando o contato NÃO TEM NOME — nem no cadastro, nem no
+ * payload desta mensagem. Extraída como função PURA (sem `db`, sem `await`)
+ * para poder testar as duas variações de canal sem levantar um
+ * `SupabaseClient` falso: `garantirLeadDaConversa` já consulta contato,
+ * lead aberto, pipeline, stage e canal antes de chegar aqui — simular tudo
+ * isso só para provar um `if` de rótulo é o tipo de teste que ninguém
+ * mantém, e que a doutrina de QA pede evitar.
+ *
+ * `doCadastro` é o que `rotuloDoContato` já decidiu (pode ser `SEM_NOME`);
+ * `doPayloadBruto` é `dados.nomeDoContato` cru, ainda sem trim/validação.
+ */
+export function tituloDoContatoNovo(doCadastro: string, doPayloadBruto: string, canal: string): string {
+  const doPayload = doPayloadBruto.trim();
+  return doCadastro !== SEM_NOME
+    ? doCadastro
+    : doPayload !== "" && !ehIdentificadorTecnico(doPayload)
+      ? doPayload
+      : // "Sem nome" serve para uma linha de lista; um card de kanban precisa
+        // dizer de onde veio, senão o quadro vira uma coluna de anônimos iguais.
+        `Novo contato pelo ${rotuloDoCanal(canal)}`;
+}
+
+/**
  * Garante que a conversa tenha um lead. Idempotente por contato: chamar de novo
  * não cria um segundo card.
  *
@@ -261,16 +285,24 @@ export async function garantirLeadDaConversa(
   //
   // O payload entra só como reforço: o upsert do contato roda ANTES deste ponto,
   // então o cadastro já incorporou o `pushName` desta mensagem.
+  // O CANAL da conversa que originou (`conversations.channel`), não o
+  // provider — `lib/channels/` é quem sabe o provider, e nomeá-lo aqui
+  // reprovaria o `lint:channels`. Sem esta leitura, todo contato do
+  // Instagram sem foto de perfil (Graph fora do ar, ou o handle não expôs
+  // nome) abria card com "Novo contato pelo WhatsApp", que é simplesmente
+  // falso — a pessoa nunca escreveu por lá. Consulta a mais, aceita pela
+  // mesma razão do `first_service_at` acima: não é o caminho quente (só
+  // decide o RÓTULO, depois que já se sabe que o card vai nascer).
+  const { data: conversa } = await db
+    .from("conversations")
+    .select("channel")
+    .eq("organization_id", organizationId)
+    .eq("id", conversationId)
+    .maybeSingle();
+  const canal = (conversa?.channel as string | null) ?? "whatsapp";
+
   const doCadastro = rotuloDoContato(contato);
-  const doPayload = (dados.nomeDoContato ?? "").trim();
-  const titulo =
-    doCadastro !== SEM_NOME
-      ? doCadastro
-      : doPayload !== "" && !ehIdentificadorTecnico(doPayload)
-        ? doPayload
-        : // "Sem nome" serve para uma linha de lista; um card de kanban precisa
-          // dizer de onde veio, senão o quadro vira uma coluna de anônimos iguais.
-          "Novo contato pelo WhatsApp";
+  const titulo = tituloDoContatoNovo(doCadastro, dados.nomeDoContato ?? "", canal);
 
   // De onde veio: o contato já carrega a atribuição de anúncio (gravada no
   // primeiro toque, por `fn_estampar_atribuicao_de_anuncio` — ver
@@ -346,8 +378,10 @@ export async function garantirLeadDaConversa(
     // alguém arrastou.
     reason: ehCliente
       ? "cliente conhecido voltou a escrever"
-      : "primeira mensagem recebida no WhatsApp",
-    payload: { conversation_id: conversationId, cliente: ehCliente },
+      : `primeira mensagem recebida no ${rotuloDoCanal(canal)}`,
+    // `canal` viaja no payload para `activityLabel` (activity-vocabulary.ts)
+    // poder rotular "Entrou pelo X" na leitura, sem duplicar a busca acima.
+    payload: { conversation_id: conversationId, cliente: ehCliente, canal },
   });
   if (!registro.ok) {
     // O lead existe e é o que importa; a linha da timeline falhou. Devolver erro

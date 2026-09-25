@@ -29,6 +29,7 @@ vi.mock("@/lib/env", () => ({
 
 vi.mock("@/lib/channels", () => ({
   DEFAULT_CHANNEL_PROVIDER: "waha",
+  providersComFotoDePerfil: () => ["waha"],
   getAdapter: () => ({
     fetchProfilePictureUrl: async () => "https://cdn.exemplo.invalid/foto.jpg",
   }),

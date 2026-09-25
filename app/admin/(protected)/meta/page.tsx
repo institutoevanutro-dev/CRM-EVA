@@ -49,7 +49,9 @@ export default async function Page() {
   // anon/authenticated): o admin client é o único caminho.
   const { data, error } = await createAdminClient()
     .from("platform_meta_app")
-    .select("app_secret_encrypted, verify_token_encrypted, verify_token_created_at, updated_at")
+    .select(
+      "app_secret_encrypted, verify_token_encrypted, verify_token_created_at, updated_at, ig_app_id, ig_app_secret_encrypted",
+    )
     .eq("id", 1)
     .maybeSingle();
 
@@ -59,6 +61,8 @@ export default async function Page() {
         verify_token_encrypted: string | null;
         verify_token_created_at: string | null;
         updated_at: string | null;
+        ig_app_id: string | null;
+        ig_app_secret_encrypted: string | null;
       }
     | null;
 
@@ -77,6 +81,8 @@ export default async function Page() {
       // Leitura que falhou não pode virar "nunca configurado": essa frase
       // levaria o dono a gerar um token por cima do que já está colado na Meta.
       leituraFalhou={Boolean(error)}
+      instagramAppId={linha?.ig_app_id ?? null}
+      instagramTemSegredoSalvo={Boolean(linha?.ig_app_secret_encrypted)}
     />
   );
 }

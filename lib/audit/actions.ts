@@ -584,6 +584,13 @@ export const AUDIT_ACTIONS = [
   "lead.moved_to_pipeline",
   // Horário de envio dos follow-ups (`settings.followups.bloqueios.janela`).
   "followup.horario_de_envio_changed",
+  // Conta do Instagram conectada pelo login da Meta, desconectada, e o token de
+  // 60 dias renovado. Metadata leva só o username, nunca o token.
+  "channel.instagram_connected",
+  "channel.instagram_disconnected",
+  "channel.instagram_token_refreshed",
+  // Origem padrão da conta (campo + valor gravados no contato novo) trocada ou limpa.
+  "channel.instagram_origem_changed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -17,7 +17,12 @@ import {
   type ProviderDeMensagem,
 } from "@/lib/channels/capabilities";
 
-const PROVIDERS = ["waha", "meta_cloud", "zernio"] as const satisfies readonly ProviderDeMensagem[];
+const PROVIDERS = [
+  "waha",
+  "meta_cloud",
+  "zernio",
+  "meta_instagram",
+] as const satisfies readonly ProviderDeMensagem[];
 
 /**
  * Esquecer um provider aqui passa a ser erro de COMPILAÇÃO.
@@ -39,6 +44,7 @@ const CAPABILITIES = [
   "voiceNote",
   "groups",
   "costPerMessage",
+  "canSend",
 ] as const;
 
 describe("matriz capability × provider é exaustiva", () => {

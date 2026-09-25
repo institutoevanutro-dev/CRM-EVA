@@ -17,6 +17,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { CHANNEL_CAPABILITIES } from "@/lib/channels/capabilities";
 import { listSelectableChannels } from "@/lib/channels/selectable";
 import type { DbErrorLike } from "@/lib/channels/archived";
 
@@ -172,6 +173,18 @@ describe("listSelectableChannels", () => {
     expect(consulta).toContain("in(provider=");
     expect(consulta).toContain("waha");
     expect(consulta).not.toContain("wacalls");
+  });
+
+  it("não oferece canal que não sabe ENVIAR (capacidade canSend)", async () => {
+    // Quem escolhe canal aqui vai mandar mensagem por ele: uma conta que só
+    // recebe viraria destino de envio e falharia sempre, em silêncio.
+    const { db, chamadas } = fakeDb([{ data: [LINHA], error: null }, { data: [], error: null }]);
+    await listSelectableChannels(db, "org-1");
+    const consulta = chamadas[0]?.join(" ") ?? "";
+    for (const [provider, caps] of Object.entries(CHANNEL_CAPABILITIES)) {
+      if (caps.canSend) expect(consulta).toContain(provider);
+      else expect(consulta).not.toContain(provider);
+    }
   });
 
   it("o apelido continua vencendo tudo", async () => {

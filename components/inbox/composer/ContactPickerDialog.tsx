@@ -36,6 +36,11 @@ interface Props {
   /** Contato da conversa atual — não aparece na lista (não faz sentido compartilhar consigo). */
   excludeContactId?: string | null;
   sending?: boolean;
+  /**
+   * O destino precisa de telefone? O cartão de contato do WhatsApp precisa
+   * (default). Destino que não precisa mostra também quem só tem @ do Instagram.
+   */
+  exigeTelefone?: boolean;
   onPick: (payload: ContactPickPayload) => void;
 }
 
@@ -48,6 +53,7 @@ export function ContactPickerDialog({
   onOpenChange,
   excludeContactId,
   sending,
+  exigeTelefone = true,
   onPick,
 }: Props) {
   const t = useT();
@@ -79,7 +85,7 @@ export function ContactPickerDialog({
     list.data?.pages.flatMap((p) => p.data).filter((c) => {
       if (excludeContactId && c.id === excludeContactId) return false;
       if (c.is_anonymized) return false;
-      return Boolean(c.phone_number);
+      return !exigeTelefone || Boolean(c.phone_number);
     }) ?? [];
 
   const resolvedManualPhone = parseDialablePhone(manualPhone);
@@ -101,7 +107,7 @@ export function ContactPickerDialog({
   }
 
   function pickFromDb(c: Contact) {
-    const phone = c.phone_number!;
+    const phone = c.phone_number ?? "";
     onPick({
       contactId: c.id,
       name: displayName(c),

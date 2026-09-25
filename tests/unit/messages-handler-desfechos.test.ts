@@ -20,6 +20,7 @@ import { sendMessageHandler } from '@/app/api/v1/messages/_handler';
 import type { HandlerCtx } from '@/lib/api/handlers/types';
 import { deriveActor } from '@/lib/mcp/auth';
 import type { SendMessageInput } from '@/lib/schemas';
+import { CHANNEL_PROVIDER_INSTAGRAM } from '@/lib/channels/capabilities';
 
 const ORG = '11111111-1111-4111-8111-111111111111';
 const CONV = '22222222-2222-4222-8222-222222222222';
@@ -529,6 +530,30 @@ describe('sendMessageHandler — os 6 desfechos do envio', () => {
 
     expect(msg.status).toBe('failed');
     expect(msg.error_code).toBe('channel_archived');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Canal que só RECEBE (`canSend: false`, o Instagram da etapa 1): a resposta
+   * caía no ramo `!isConfigured()` e ficava `queued` para sempre, com um relógio
+   * na tela e nenhum cron que a olhasse. Falha na hora, com código e motivo.
+   * Decide pela capability, então o provider aqui vem da constante do seam.
+   */
+  it('10. canal que não envia: failed com o código do canal, nada fica na fila', async () => {
+    wahaConfigured(true);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const msg = await sendMessageHandler(
+      makeSupabase(conversationRow({ provider: CHANNEL_PROVIDER_INSTAGRAM, phoneNumber: null })),
+      ctx,
+      textInput(),
+    );
+
+    expect(msg.status).toBe('failed');
+    expect(msg.error_code).toBe('instagram_envio_indisponivel');
+    expect(msg.error_message).toMatch(/próxima versão/);
+    expect((msg.metadata as Record<string, unknown>).queued_reason).toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

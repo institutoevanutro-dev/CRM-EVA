@@ -2448,6 +2448,26 @@ grupo trouxe.
 **A seção "Lote 12 · G2" acima deixa de estar PENDENTE POR EXECUÇÃO**: os três
 casos dela (L12.G2.1, G2.2 e G2.3) estão provados nas linhas acima.
 
+## J25 — Direct do Instagram no Inbox `[P1]`
+
+Etapa 1 do Instagram Direct: o webhook do produto Instagram do app da Meta
+(`app/api/v1/webhooks/instagram/route.ts`) grava contato, conversa, mensagem e
+card no funil padrão — o mesmo caminho de entrada que o WhatsApp oficial, sem
+resposta pelo CRM ainda (etapa 2). Seed dedicado
+(`scripts/seed-e2e-instagram.ts`) grava o app da instalação (App Secret
+cifrado) e uma conexão `meta_instagram` ativa com Origem padrão apontando
+para um campo `select` do funil.
+
+| Caso | Prioridade | Resultado |
+|---|---|---|
+| Um Direct assinado com o segredo real do seed vira mensagem no Inbox, com o texto, "via @clinica_e2e" e sem `"??"` no lugar do nome (perfil da Meta indisponível no e2e → fallback "Contato do Instagram") | `[P1]` | **PASS pela tela.** `tests/e2e/instagram-receber.spec.ts`. Evidência: `evidence/instagram-direct/01-inbox.png` |
+| Uma assinatura errada (`x-hub-signature-256` inválido) é recusada com 401 | `[P1]` | **PASS** — medido na mesma spec, contra o mesmo corpo que a assinatura válida aceitou logo antes |
+| O contato novo ganha a Origem padrão da conexão (`custom_fields.origem = "Instagram Dr. André"`) e vira card no funil padrão | `[P1]` | **PASS.** `GET /api/v1/contacts` confere `custom_fields.origem`; `/app/kanban` mostra o card. Evidência: `evidence/instagram-direct/02-kanban.png` |
+
+**NÃO MEDIDO nesta etapa (fora de escopo — etapa 2):** responder pelo CRM,
+janela de 24h/7d, follow-up automático em canal `etiqueta_humana_7d`,
+Messenger. Ver `.superpowers/sdd/2026-09-24-instagram-direct-etapa-1/task-10-brief.md`.
+
 ## Integração opcional com financeiro Eva
 - Entrada: Contatos → contato → aba Financeiro (gerente/admin, contato não anonimizado).
 - Testes de rota: `tests/unit/integracao-financeiro-rotas.test.ts`, organização errada, anonimização, perfil insuficiente, indisponibilidade.

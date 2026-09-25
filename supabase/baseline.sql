@@ -9383,24 +9383,34 @@ alter table public.channel_sessions
   add column if not exists wacalls_jid text,
   add column if not exists wacalls_paired_at timestamptz;
 
+-- Instagram (migration 0277) — colunas do quinto provider, precisam existir
+-- antes das constraints abaixo referenciá-las.
+alter table public.channel_sessions
+  add column if not exists ig_account_id text,
+  add column if not exists ig_username text,
+  add column if not exists ig_token_encrypted bytea,
+  add column if not exists ig_token_expires_at timestamptz;
+
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_check;
 
 alter table public.channel_sessions
   add constraint channel_sessions_provider_check
-  -- 'wacalls' (migration 0233, chamada de voz) somado aqui — UM bloco só por
-  -- constraint, doutrina de baseline (não duplicar drop+add por migration).
-  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text]));
+  -- 'wacalls' (migration 0233, chamada de voz) e 'meta_instagram' (migration
+  -- 0277) somados aqui — UM bloco só por constraint, doutrina de baseline
+  -- (não duplicar drop+add por migration).
+  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'meta_instagram'::text]));
 
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_ref_check;
 
 alter table public.channel_sessions
   add constraint channel_sessions_provider_ref_check check (
-    (provider = 'waha'       and waha_session_name    is not null) or
-    (provider = 'meta_cloud' and meta_phone_number_id is not null) or
-    (provider = 'zernio'     and zernio_account_id    is not null) or
-    (provider = 'wacalls'    and wacalls_session_id    is not null)
+    (provider = 'waha'           and waha_session_name    is not null) or
+    (provider = 'meta_cloud'     and meta_phone_number_id is not null) or
+    (provider = 'zernio'         and zernio_account_id    is not null) or
+    (provider = 'wacalls'        and wacalls_session_id    is not null) or
+    (provider = 'meta_instagram' and ig_account_id         is not null)
   );
 
 comment on column public.channel_sessions.zernio_account_id is
@@ -23839,6 +23849,20 @@ begin
   get diagnostics v_count = row_count;
   v_counts := v_counts || jsonb_build_object('voice_calls', v_count);
 
+  -- 7c. contact_channel_identities — handle/nome/avatar do Instagram (migration 0277).
+  --     external_id e channel FICAM: são o apontador técnico (o IGSID da Meta),
+  --     não conteúdo da pessoa, e apagá-los faria o próximo evento do MESMO
+  --     IGSID criar um contato NOVO em vez de reconhecer o já anonimizado.
+  update contact_channel_identities set
+    handle = null,
+    display_name = null,
+    avatar_url = null,
+    updated_at = now()
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('contact_channel_identities', v_count);
+
   -- 8. dense audit row
   insert into api_audit_log (organization_id, action, actor_user_id, resource_type, resource_id, metadata, bypassed_rls)
   values (
@@ -27463,6 +27487,117 @@ end$$;
 
 revoke execute on function public.decrypt_cpf(uuid) from public, anon, authenticated;
 grant  execute on function public.decrypt_cpf(uuid) to service_role;
+
+
+-- ---- canal Instagram (migration 0277) ----
+-- Espelho idempotente da 0277: índice do quinto provider, vocabulário novo de
+-- `conversations_channel_check` (as colunas e o CHECK de provider de
+-- channel_sessions já foram tratados no bloco único acima, doutrina de
+-- `tests/unit/baseline-constraint-reconstruida.test.ts`), credencial do app do
+-- Instagram, identidade por canal e as duas RPCs que o webhook chama.
+create unique index if not exists uniq_channel_sessions_ig_account_ativa
+  on public.channel_sessions (ig_account_id)
+  where ig_account_id is not null and archived_at is null;
+
+alter table public.conversations drop constraint if exists conversations_channel_check;
+alter table public.conversations add constraint conversations_channel_check
+  check (channel = any (array['whatsapp','instagram']));
+
+alter table public.platform_meta_app
+  add column if not exists ig_app_id text,
+  add column if not exists ig_app_secret_encrypted bytea;
+
+create table if not exists public.contact_channel_identities (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  contact_id uuid not null references public.contacts(id) on delete cascade,
+  channel text not null check (channel = any (array['instagram'])),
+  external_id text not null,
+  handle text,
+  display_name text,
+  avatar_url text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (organization_id, channel, external_id)
+);
+create index if not exists idx_contact_channel_identities_contact
+  on public.contact_channel_identities (organization_id, contact_id);
+
+alter table public.contact_channel_identities enable row level security;
+drop policy if exists tenant_isolation_contact_channel_identities_all on public.contact_channel_identities;
+-- Escrita direta pelo PostgREST não é o caminho normal (quem grava é o
+-- webhook via fn_upsert_contato_por_identidade, service_role), mas a RLS
+-- protege o acesso direto de qualquer membro logado; piso 'agent' segue o
+-- mesmo padrão de channel_sessions/voice_calls (doutrina RBAC, migration 0150).
+create policy tenant_isolation_contact_channel_identities_all on public.contact_channel_identities
+  for all using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+  )
+  with check (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+  );
+
+drop trigger if exists trg_contact_channel_identities_updated_at on public.contact_channel_identities;
+create trigger trg_contact_channel_identities_updated_at
+  before update on public.contact_channel_identities
+  for each row execute function public.fn_set_updated_at();
+
+create or replace function public.fn_upsert_contato_por_identidade(
+  p_org uuid, p_canal text, p_external_id text, p_handle text, p_nome text, p_avatar text
+) returns table(contact_id uuid, criado boolean)
+language plpgsql security definer set search_path = public as $$
+declare v_contato uuid;
+begin
+  select i.contact_id into v_contato from public.contact_channel_identities i
+   where i.organization_id = p_org and i.channel = p_canal and i.external_id = p_external_id;
+  if v_contato is not null then
+    update public.contact_channel_identities set
+      handle = coalesce(nullif(p_handle, ''), handle),
+      display_name = coalesce(nullif(p_nome, ''), display_name),
+      avatar_url = coalesce(nullif(p_avatar, ''), avatar_url),
+      updated_at = now()
+    where organization_id = p_org and channel = p_canal and external_id = p_external_id;
+    return query select v_contato, false;
+    return;
+  end if;
+  insert into public.contacts (organization_id, source, consent, tags, source_metadata, display_name)
+  values (p_org, p_canal, '{}'::jsonb, '{}'::text[],
+          jsonb_build_object('handle', nullif(p_handle, '')),
+          coalesce(nullif(p_nome, ''), nullif(p_handle, '')))
+  returning id into v_contato;
+  insert into public.contact_channel_identities (organization_id, contact_id, channel, external_id, handle, display_name, avatar_url)
+  values (p_org, v_contato, p_canal, p_external_id, nullif(p_handle, ''), nullif(p_nome, ''), nullif(p_avatar, ''))
+  on conflict (organization_id, channel, external_id) do nothing;
+  if not found then
+    -- corrida: outra entrega criou a identidade entre o select e o insert
+    delete from public.contacts where id = v_contato;
+    select i.contact_id into v_contato from public.contact_channel_identities i
+     where i.organization_id = p_org and i.channel = p_canal and i.external_id = p_external_id;
+    return query select v_contato, false;
+    return;
+  end if;
+  return query select v_contato, true;
+end; $$;
+
+create or replace function public.fn_upsert_conversa_de_canal(
+  p_org uuid, p_contact uuid, p_session uuid, p_canal text
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  insert into public.conversations (organization_id, contact_id, channel_session_id, channel, status, is_group, unread_count_for_assignee, metadata)
+  values (p_org, p_contact, p_session, p_canal, 'open', false, 0, '{}'::jsonb)
+  on conflict (organization_id, contact_id, channel_session_id) where is_group = false
+  do update set updated_at = now()
+  returning id into v_id;
+  return v_id;
+end; $$;
+
+revoke execute on function public.fn_upsert_contato_por_identidade(uuid, text, text, text, text, text) from public, anon, authenticated;
+grant  execute on function public.fn_upsert_contato_por_identidade(uuid, text, text, text, text, text) to service_role;
+revoke execute on function public.fn_upsert_conversa_de_canal(uuid, uuid, uuid, text) from public, anon, authenticated;
+grant  execute on function public.fn_upsert_conversa_de_canal(uuid, uuid, uuid, text) to service_role;
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----

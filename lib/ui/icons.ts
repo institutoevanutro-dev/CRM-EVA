@@ -89,6 +89,7 @@ export {
   // conversation
   ChatCircle,
   Phone,
+  InstagramLogo,
   PhoneIncoming,
   PhoneOutgoing,
   PhoneX,

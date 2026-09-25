@@ -94,6 +94,20 @@ const WHATSAPP: Linha = {
   archived_at: null,
   created_at: "2026-01-01T00:00:00Z",
 };
+const INSTAGRAM: Linha = {
+  id: "conta-do-instagram",
+  organization_id: "org",
+  provider: "meta_instagram",
+  display_name: "Instagram",
+  phone_number: null,
+  status: "WORKING",
+  waha_session_name: null,
+  archived_at: null,
+  // A MAIS ANTIGA: ganharia o `[0]` e o `limit(1)` se o filtro fosse só
+  // `ProviderDeMensagem` — `meta_instagram` É provider de mensagem (recebe),
+  // mas a etapa 1 não sabe ENVIAR.
+  created_at: "2020-06-01T00:00:00Z",
+};
 
 describe("o seletor de canais não oferece a linha de chamada de voz", () => {
   it("controle positivo: o canal de mensagem continua sendo oferecido", async () => {
@@ -134,6 +148,20 @@ describe("a automação não envia texto pela linha de chamada de voz", () => {
     // O caminho de queda (`tentar(false)`, sem exigir WORKING) também precisa do
     // filtro — sem ele a voz voltava justamente quando não havia mais ninguém.
     const { db } = bancoDeMentira([VOZ]);
+    expect(await sessaoProntaParaEnvio(db, "org")).toBeNull();
+  });
+
+  it("com Instagram e WhatsApp, escolhe o WhatsApp mesmo o Instagram sendo mais antigo", async () => {
+    // `meta_instagram` É `ProviderDeMensagem` (a etapa 1 recebe), mas
+    // `isConfigured()` do adapter é `false` — a etapa 1 não sabe enviar.
+    // Sem o filtro por capacidade, a linha do Instagram (mais antiga) ganharia
+    // o `limit(1)` e a automação "enviaria" por um canal que sempre lança.
+    const { db } = bancoDeMentira([INSTAGRAM, WHATSAPP]);
+    expect(await sessaoProntaParaEnvio(db, "org")).toBe("numero-de-verdade");
+  });
+
+  it("só Instagram: devolve null em vez de um canal que não envia", async () => {
+    const { db } = bancoDeMentira([INSTAGRAM]);
     expect(await sessaoProntaParaEnvio(db, "org")).toBeNull();
   });
 });

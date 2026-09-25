@@ -29,6 +29,7 @@ import userEvent from "@testing-library/user-event";
 
 const CIFRA_DO_SEGREDO = "\\x_cifra_do_segredo_da_meta";
 const CIFRA_DO_TOKEN = "\\x_cifra_do_token_da_meta";
+const CIFRA_DO_SEGREDO_INSTAGRAM = "\\x_cifra_do_segredo_do_instagram";
 const SEGREDO_DO_ENV = "segredo-do-env-que-nao-pode-vazar";
 const TOKEN_DO_ENV = "token-do-env-que-nao-pode-vazar";
 const TOKEN_GERADO = "tOkEn_gerado_pelo_servidor_0123456789abcdef";
@@ -113,12 +114,14 @@ describe("/admin/meta — o que a página entrega ao navegador", () => {
       verify_token_encrypted: CIFRA_DO_TOKEN,
       verify_token_created_at: "2026-09-15T13:00:00.000Z",
       updated_at: "2026-09-15T13:00:00.000Z",
+      ig_app_id: "123456",
+      ig_app_secret_encrypted: CIFRA_DO_SEGREDO_INSTAGRAM,
     };
 
     const props = await propsDaPagina();
     const payload = JSON.stringify(props);
 
-    for (const segredo of [CIFRA_DO_SEGREDO, CIFRA_DO_TOKEN, SEGREDO_DO_ENV, TOKEN_DO_ENV]) {
+    for (const segredo of [CIFRA_DO_SEGREDO, CIFRA_DO_TOKEN, SEGREDO_DO_ENV, TOKEN_DO_ENV, CIFRA_DO_SEGREDO_INSTAGRAM]) {
       expect(payload, `a página entregou ${segredo} ao navegador`).not.toContain(segredo);
     }
     // O que atravessa: SE existe, e QUANDO. Nada que abra o que existe.
@@ -127,6 +130,8 @@ describe("/admin/meta — o que a página entrega ao navegador", () => {
       temTokenSalvo: true,
       temNoAmbiente: true,
       leituraFalhou: false,
+      instagramAppId: "123456",
+      instagramTemSegredoSalvo: true,
     });
     expect(props.tokenGeradoEm).toBe("15/09/2026, 10:00");
     expect(decifrar).not.toHaveBeenCalled();
@@ -165,6 +170,8 @@ const NADA_CONFIGURADO: Props = {
   atualizadoEm: null,
   temNoAmbiente: false,
   leituraFalhou: false,
+  instagramAppId: null,
+  instagramTemSegredoSalvo: false,
 };
 
 const TUDO_CONFIGURADO: Props = {

@@ -65,6 +65,24 @@ export const REF_KIND_SESSAO = "channel_session";
 export const DETALHE_CREDENCIAL_RECUSADA = "credencial_recusada_pelo_transporte";
 
 /**
+ * A renovação automática de um token de canal (ex.: Instagram, 60 dias) falhou.
+ * Vive aqui, e não só no chamador, pelo mesmo motivo de `DETALHE_CREDENCIAL_RECUSADA`:
+ * é o contrato entre quem observa (o cron de renovação) e a regra de aviso logo
+ * abaixo — `lib/channels/instagram/renovacao.ts` é o único chamador hoje, mas o
+ * detalhe é genérico o bastante para qualquer canal com token que expira.
+ */
+export const DETALHE_TOKEN_DE_RENOVACAO_VENCIDO = "token_de_renovacao_vencido";
+
+/**
+ * O episódio que a renovação abre ("precisa ser reconectado"). A varredura NÃO
+ * o fecha nem empilha outro por cima: a sonda de saúde responder bem prova que
+ * a chave vale HOJE, não que ela vai ser renovada antes de vencer — e com a
+ * chave recusada o aviso de reconectar já diz o que fazer. Só quem troca a
+ * chave (renovação que deu certo, reconexão) fecha.
+ */
+export const EPISODIO_TOKEN_DE_RENOVACAO = "TOKEN_DE_RENOVACAO_VENCIDO";
+
+/**
  * Marca do episódio aberto por um EMPURRÃO do provedor.
  *
  * A varredura não fecha episódio com esta marca: ela mede credencial e conta,
@@ -115,6 +133,20 @@ export function avisoDaConexao(saude: SaudeObservada, apelido: string): AvisoDeC
         body:
           "Escanear o QR não resolve: a chave que o CRM usa para falar com o servidor de WhatsApp não confere com a que o servidor espera. Enquanto isso durar, nenhuma mensagem entra nem sai por NENHUMA conexão. Quem cuida do servidor precisa conferir a WAHA_API_KEY do .env e recriar o contêiner do WhatsApp.",
         episodio: "CREDENCIAL_RECUSADA",
+      };
+    }
+
+    // A renovação automática do token falhou — ação é RECONECTAR pela tela, não
+    // escanear QR (este canal não usa QR). `apelido` aqui já vem com o nome do
+    // canal embutido (ex.: "Instagram @conta"), porque o título não tem aspas
+    // nem a palavra genérica "Conexão": é a frase pronta que o operador lê.
+    if (saude.detail === DETALHE_TOKEN_DE_RENOVACAO_VENCIDO) {
+      return {
+        kind: "channel_number_alert",
+        severity: "critical",
+        title: `${apelido} precisa ser reconectado`,
+        body: "A renovação automática da chave falhou. Vá em Conexões para reconectar.",
+        episodio: EPISODIO_TOKEN_DE_RENOVACAO,
       };
     }
 
@@ -243,8 +275,12 @@ export async function sincronizarSaudeDaConexao(
    * Regra: só fecha quem sabe do que está falando. O empurrão fecha qualquer
    * episódio (ele é a autoridade sobre o número); a varredura fecha só o que
    * ela mesma poderia ter aberto.
+   *
+   * `renovacao` é quem TROCA a chave de um canal com token que expira (o cron
+   * de renovação e a reconexão). É a autoridade sobre o episódio
+   * `EPISODIO_TOKEN_DE_RENOVACAO`, que a varredura não fecha.
    */
-  origem: "varredura" | "empurrao" = "varredura",
+  origem: "varredura" | "empurrao" | "renovacao" = "varredura",
 ): Promise<"avisado" | "ja_avisado" | "resolvido" | "sem_mudanca"> {
   const aviso = avisoDaConexao(saude, apelido);
 
@@ -256,11 +292,18 @@ export async function sincronizarSaudeDaConexao(
     .maybeSingle();
   const jaEscalado = (linha?.escalated_status as string | null) ?? null;
 
+  // O aviso de reconectar pertence a quem troca a chave: a varredura não o
+  // fecha (a chave ainda vale hoje não prova que vai ser renovada) nem abre um
+  // segundo aviso por cima (com a chave recusada, "reconecte" já é a ação).
+  if (origem === "varredura" && jaEscalado === EPISODIO_TOKEN_DE_RENOVACAO) {
+    return aviso ? "ja_avisado" : "sem_mudanca";
+  }
+
   if (!aviso) {
     if (!jaEscalado) return "sem_mudanca";
-    // O episódio veio do provedor e quem está observando é a varredura: ela não
+    // O episódio veio do provedor e quem está observando é outra fonte: ela não
     // tem como saber se o número deixou de estar suspenso. Não fecha.
-    if (origem === "varredura" && jaEscalado.startsWith(PREFIXO_EMPURRAO)) {
+    if (origem !== "empurrao" && jaEscalado.startsWith(PREFIXO_EMPURRAO)) {
       return "sem_mudanca";
     }
     await admin
@@ -282,6 +325,9 @@ export async function sincronizarSaudeDaConexao(
   // Mesmo episódio: já foi avisado, e repetir é ruído. Um episódio DIFERENTE
   // (caiu por QR, agora está FAILED) avisa de novo — mudou o que fazer.
   if (jaEscalado === episodio) return "ja_avisado";
+  // A sonda já avisou que a chave foi recusada (FAILED): a renovação que falha
+  // em seguida é o MESMO problema, e um segundo crítico só duplicaria a Central.
+  if (origem === "renovacao" && jaEscalado === "FAILED") return "ja_avisado";
 
   await admin.from("agent_inbox_items").insert({
     organization_id: sessao.organization_id,

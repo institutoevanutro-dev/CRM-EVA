@@ -29,6 +29,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import {
   CHANNEL_SESSION_REF_COLUMNS,
   DEFAULT_CHANNEL_PROVIDER,
+  capabilitiesOf,
   getAdapter,
   resolveSessionRef,
   type ChannelSessionRef,
@@ -593,7 +594,8 @@ export async function sendMessageHandler(
   // alcança o caso em que o embed não trouxe a sessão — impossível hoje
   // (`conversations.channel_session_id` é NOT NULL com FK ON DELETE RESTRICT),
   // e ainda assim mantido para não trocar o desfecho desse ramo defensivo.
-  const adapter = getAdapter(c.channel_sessions?.provider ?? DEFAULT_CHANNEL_PROVIDER);
+  const provider = c.channel_sessions?.provider ?? DEFAULT_CHANNEL_PROVIDER;
+  const adapter = getAdapter(provider);
   const chatId = adapter.resolveRecipient({
     isGroup: c.is_group,
     groupChatId: c.group_chat_id,
@@ -637,6 +639,23 @@ export async function sendMessageHandler(
         error_code: "channel_archived",
         error_message: "Este número foi excluído da Central de Conexões.",
       })
+      .eq("id", message.id)
+      .select(MSG_COLS)
+      .maybeSingle();
+    if (updated) message = updated as unknown as Message;
+  } else if (!capabilitiesOf(provider).canSend) {
+    // Canal que só RECEBE (o Instagram da etapa 1). Sem este ramo a mensagem
+    // caía em `!isConfigured()` e ficava `queued` para sempre: nenhum cron olha
+    // `queued`, e o operador via um relógio numa resposta que nunca ia sair.
+    // `failed` com código é terminal para a tela e para o ledger do agente.
+    const { data: updated } = await supabase
+      .from("messages")
+      .update({
+        status: "failed",
+        error_code: adapter.codes.sendFailed,
+        error_message: "Responder por este canal chega na próxima versão. Responda pelo app do canal por enquanto.",
+      })
+      .eq("organization_id", ctx.organization_id)
       .eq("id", message.id)
       .select(MSG_COLS)
       .maybeSingle();

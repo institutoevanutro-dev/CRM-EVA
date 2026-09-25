@@ -283,6 +283,24 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
 export const ACTIVITY_LABEL_FALLBACK = "Atividade registrada";
 
 /**
+ * O nome do CANAL (`conversations.channel`: 'whatsapp' | 'instagram'), nunca
+ * do provider — quem sabe o provider é `lib/channels/`, e nomeá-lo aqui
+ * reprovaria o `lint:channels`. Fonte única: quem grava `lead_created`
+ * (`lib/leads/nascimento-do-lead.ts`) e quem lê (`activityLabel` abaixo)
+ * apontam para o mesmo lugar, para não divergirem como "Entrou pelo WhatsApp"
+ * já divergiu de "stage_changed" antes deste arquivo existir.
+ */
+export const ROTULO_DE_CANAL: Record<string, string> = {
+  whatsapp: "WhatsApp",
+  instagram: "Instagram",
+};
+
+/** Canal desconhecido ou ausente (linha antiga, sem `payload.canal`) cai em WhatsApp — o canal que sempre existiu. */
+export function rotuloDoCanal(canal: string | null | undefined): string {
+  return ROTULO_DE_CANAL[canal ?? ""] ?? ROTULO_DE_CANAL.whatsapp!;
+}
+
+/**
  * Rótulo para exibir. Aceita `string` porque o banco tem histórico anterior a
  * este vocabulário — o que não se pode é ESCREVER fora dele.
  *
@@ -291,8 +309,18 @@ export const ACTIVITY_LABEL_FALLBACK = "Atividade registrada";
  * volta, pelo lado da leitura, o defeito que este arquivo existe para matar.
  * Nenhum teste pegaria: "stage_changed" não é uuid, então a asserção que caça
  * uuid na tela continuaria verde.
+ *
+ * `lead_created` é o ÚNICO rótulo que depende de dado da linha (o canal por
+ * onde o contato entrou) em vez de ser fixo por tipo — por isso não é uma
+ * entrada estática em `ACTIVITY_LABELS` (que é `Record<ActivityType, string>`
+ * de propósito, para o compilador cobrar rótulo de tipo novo): ele lê
+ * `payload.canal`, que `garantirLeadDaConversa` grava na própria linha.
  */
-export function activityLabel(type: string): string {
+export function activityLabel(type: string, payload?: Record<string, unknown> | null): string {
+  if (type === "lead_created") {
+    const canal = typeof payload?.canal === "string" ? payload.canal : undefined;
+    return `Entrou pelo ${rotuloDoCanal(canal)}`;
+  }
   return ACTIVITY_LABELS[type as ActivityType] ?? ACTIVITY_LABEL_FALLBACK;
 }
 

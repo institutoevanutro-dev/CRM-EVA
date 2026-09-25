@@ -322,6 +322,12 @@ const schema = z.object({
   GOOGLE_CALENDAR_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_CALENDAR_CLIENT_SECRET: z.string().optional().default(""),
 
+  // Instagram Direct — opcional, RESERVA. O caminho normal é a tela Admin ›
+  // API Oficial (Meta), que grava o par no banco; o `.env` só vale enquanto a
+  // tela não tem um par completo (mesma precedência de `META_APP_SECRET`).
+  INSTAGRAM_APP_ID: z.string().optional(),
+  INSTAGRAM_APP_SECRET: z.string().optional(),
+
   // Nuvemshop — opcional (template genérico open-source). Só exigidas quando
   // NUVEMSHOP_ENABLED=true; o runtime já degrada via getConfig()==null.
   NUVEMSHOP_APP_ID: z.string().optional().default(""),

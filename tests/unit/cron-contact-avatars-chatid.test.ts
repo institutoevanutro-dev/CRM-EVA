@@ -29,8 +29,12 @@ vi.mock("@/lib/env", () => ({
   env: { INTERNAL_CRON_SECRET: "segredo-de-teste", INTERNAL_SECRET: "segredo-de-teste" },
 }));
 
+/** Os `in(coluna, lista)` que o cron aplicou na busca da sessão. */
+const filtrosDeSessao: [string, unknown][] = [];
+
 vi.mock("@/lib/channels", () => ({
   DEFAULT_CHANNEL_PROVIDER: "waha",
+  providersComFotoDePerfil: () => ["waha"],
   getAdapter: () => ({
     fetchProfilePictureUrl: async (input: { recipient: string }) => {
       pedidos.push(input.recipient);
@@ -56,6 +60,9 @@ vi.mock("@/lib/supabase/admin", () => ({
                   Promise.resolve({ data: dados, error: null }).then(ok);
               }
               if (prop === "maybeSingle") return async () => ({ data: dados, error: null });
+              if (prop === "in" && tabela === "channel_sessions") {
+                return (coluna: string, lista: unknown) => (filtrosDeSessao.push([coluna, lista]), proxy);
+              }
               return () => proxy;
             },
           },
@@ -152,5 +159,23 @@ describe("cron de fotos: qual endereço vai ao canal", () => {
     await chamar();
 
     expect(pedidos).toEqual([`${LID}@lid`]);
+  });
+});
+
+describe("cron de fotos: só sessão cujo canal busca foto de contato de telefone", () => {
+  it("a sessão vem só dos providers com foto de perfil (a conta do Instagram fica de fora)", async () => {
+    filtrosDeSessao.length = 0;
+    linhaDoContato = {
+      id: CONTATO,
+      organization_id: ORG,
+      wa_identity: "phone:+5511999990000",
+      wa_lid: null,
+      phone_number: "+5511999990000",
+      avatar_storage_path: null,
+    };
+
+    await chamar();
+
+    expect(filtrosDeSessao).toEqual([["provider", ["waha"]]]);
   });
 });

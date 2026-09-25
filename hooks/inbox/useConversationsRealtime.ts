@@ -7,6 +7,7 @@ import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Conversation } from "@/lib/types/messaging";
 import type { ComandoDoBanco } from "@/lib/inbox/comando-da-conversa";
+import type { IdentidadeDeCanal } from "@/lib/contacts/rotulo-do-contato";
 
 export interface ContactSummary {
   id: string;
@@ -27,6 +28,8 @@ export interface ContactSummary {
    * atendimento aparece. Opcional: conversas em cache de antes do campo existir.
    */
   force_human?: boolean | null;
+  /** Identidades por canal (o @ do Instagram): rótulo de quem não tem telefone. */
+  contact_channel_identities?: IdentidadeDeCanal[] | null;
 }
 
 /**

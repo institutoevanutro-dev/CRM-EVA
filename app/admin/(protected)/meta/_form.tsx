@@ -40,6 +40,10 @@ interface Props {
   /** O par está no `.env` desta instalação (o piso de rollback). */
   readonly temNoAmbiente: boolean;
   readonly leituraFalhou: boolean;
+  /** App ID do Instagram Direct. Não é segredo: pode ser mostrado. */
+  readonly instagramAppId: string | null;
+  /** SE existe App Secret do Instagram gravado — nunca QUAL. */
+  readonly instagramTemSegredoSalvo: boolean;
 }
 
 /** O piso do schema da action. Abaixo disso o Zod recusa e a tela culparia o dono. */
@@ -52,10 +56,14 @@ export function FormularioDaMeta({
   atualizadoEm,
   temNoAmbiente,
   leituraFalhou,
+  instagramAppId,
+  instagramTemSegredoSalvo,
 }: Props) {
   const t = useT();
   const router = useRouter();
   const [chave, setChave] = useState("");
+  const [igAppId, setIgAppId] = useState(instagramAppId ?? "");
+  const [igChave, setIgChave] = useState("");
   /**
    * O token recém-gerado vive SÓ aqui, na memória desta aba. Recarregar a página
    * o perde — e isso é o desenho, não um defeito: a tela diz para copiar agora e
@@ -66,6 +74,8 @@ export function FormularioDaMeta({
   const [ocupado, iniciar] = useTransition();
 
   const podeSalvar = chave.trim().length >= TAMANHO_MINIMO_DA_CHAVE;
+  const igChaveValida = igChave.trim().length === 0 || igChave.trim().length >= TAMANHO_MINIMO_DA_CHAVE;
+  const podeSalvarInstagram = igChaveValida && (Boolean(igAppId.trim()) || igChave.trim().length > 0);
 
   function motivoDaRecusa(r: Extract<UpdateMetaAppResult, { ok: false }>): string {
     switch (r.error) {
@@ -99,6 +109,17 @@ export function FormularioDaMeta({
       const r = await updateMetaApp({ app_secret: chave.trim() });
       if (r.ok) setChave("");
       aoGravar(r, t("Chave secreta salva."));
+    });
+  }
+
+  function salvarInstagram() {
+    iniciar(async () => {
+      const r = await updateMetaApp({
+        ig_app_id: igAppId.trim() || undefined,
+        ig_app_secret: igChave.trim() || undefined,
+      });
+      if (r.ok) setIgChave("");
+      aoGravar(r, t("Credencial do Instagram salva."));
     });
   }
 
@@ -167,6 +188,55 @@ export function FormularioDaMeta({
               : t("Nunca configurado por aqui.")}
           </span>
           <Button data-testid="meta-salvar" disabled={!podeSalvar || ocupado} onClick={salvar}>
+            {ocupado ? t("Salvando…") : t("Salvar")}
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="flex flex-col gap-4 p-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="font-medium">{t("Instagram")}</h2>
+          <p className="text-sm text-muted-foreground">
+            {t("Painel da Meta › seu app › Instagram › Configuração da API com login do Instagram")}
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="instagram-app-id">{t("Instagram App ID")}</Label>
+          <Input
+            id="instagram-app-id"
+            data-testid="instagram-app-id"
+            autoComplete="off"
+            value={igAppId}
+            onChange={(e) => setIgAppId(e.target.value)}
+            placeholder={t("Número do App ID")}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="instagram-app-secret">{t("Instagram App Secret")}</Label>
+          <Input
+            id="instagram-app-secret"
+            data-testid="instagram-app-secret"
+            type="password"
+            autoComplete="off"
+            value={igChave}
+            onChange={(e) => setIgChave(e.target.value)}
+            placeholder={instagramTemSegredoSalvo ? t("••••••••  (já cadastrada)") : t("32 letras e números")}
+          />
+          <p className="text-xs text-muted-foreground">
+            {instagramTemSegredoSalvo
+              ? t("Já existe uma chave cadastrada. Deixe em branco para mantê-la, ou digite uma nova para substituir.")
+              : t("Guardada cifrada e nunca volta a aparecer nesta tela.")}
+          </p>
+        </div>
+
+        <div className="flex items-center justify-end gap-3">
+          <Button
+            data-testid="instagram-salvar"
+            disabled={!podeSalvarInstagram || ocupado}
+            onClick={salvarInstagram}
+          >
             {ocupado ? t("Salvando…") : t("Salvar")}
           </Button>
         </div>

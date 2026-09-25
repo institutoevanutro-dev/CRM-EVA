@@ -2,9 +2,11 @@
  * A porta de entrada do seam. Feature nenhuma importa `lib/waha/*` direto —
  * pede o adapter do provider da conversa e o descritor de capabilities.
  */
+import { instagramAdapter } from "./adapters/instagram";
 import { metaCloudAdapter } from "./adapters/meta-cloud";
 import { wahaAdapter } from "./adapters/waha";
 import { zernioAdapter } from "./adapters/zernio";
+import { CHANNEL_CAPABILITIES, PROVIDERS_DE_MENSAGEM } from "./capabilities";
 import type { ChannelAdapter, ChannelProvider, ProviderDeMensagem } from "./types";
 
 /**
@@ -15,6 +17,7 @@ const ADAPTERS: Record<ProviderDeMensagem, ChannelAdapter | null> = {
   waha: wahaAdapter,
   meta_cloud: metaCloudAdapter,
   zernio: zernioAdapter,
+  meta_instagram: instagramAdapter,
 };
 
 /**
@@ -25,6 +28,41 @@ export function getAdapter(provider: ChannelProvider): ChannelAdapter {
   const adapter = ADAPTERS[provider as ProviderDeMensagem];
   if (!adapter) throw new Error(`unknown_channel_provider: ${provider}`);
   return adapter;
+}
+
+/**
+ * Providers de mensagem que o CÓDIGO sabe enviar agora — não todo
+ * `ProviderDeMensagem`.
+ *
+ * Existe para quem escolhe sessão para ENVIO AUTOMATIZADO
+ * (`lib/automation/start-conversation.ts`). `meta_instagram` é
+ * `ProviderDeMensagem` (a etapa 1 RECEBE), mas `capabilitiesOf(...).canSend`
+ * é `false` de propósito — `send()` do adapter sempre lança, porque o
+ * transporte de saída chega numa etapa seguinte. Sem este filtro, uma
+ * organização com WhatsApp e Instagram conectados podia ter a sessão do
+ * Instagram escolhida para uma automação, e o envio falharia sempre — pior,
+ * para o contato certo, pelo canal errado, silenciosamente.
+ *
+ * Decide pela CAPABILITY declarada (`canSend`), não por `isConfigured()` do
+ * adapter nem pelo nome do provider. `isConfigured()` responde outra
+ * pergunta — se ESTA instalação tem credencial agora — e para `waha` ela é
+ * `false` sempre que a variável de ambiente não está setada (teste, banco
+ * fresco antes de escanear o QR): usá-la aqui excluiria o WhatsApp de toda
+ * automação numa instalação nova, que é o oposto do que se quer filtrar.
+ */
+export function providersDeEnvioAutomatico(): readonly ProviderDeMensagem[] {
+  return PROVIDERS_DE_MENSAGEM.filter((p) => CHANNEL_CAPABILITIES[p].canSend);
+}
+
+/**
+ * Providers cujo adapter busca a foto de perfil de um contato de TELEFONE
+ * (`fetchProfilePictureUrl`). Existe para o cron de fotos: sem ele, um
+ * `limit(1)` sobre todos os canais de mensagem podia escolher a conta do
+ * Instagram, que não sabe buscar foto de telefone, e carimbar "sem foto" em
+ * contato de WhatsApp. Pergunta ao adapter, nunca pelo nome.
+ */
+export function providersComFotoDePerfil(): readonly ProviderDeMensagem[] {
+  return PROVIDERS_DE_MENSAGEM.filter((p) => Boolean(ADAPTERS[p]?.fetchProfilePictureUrl));
 }
 
 export {

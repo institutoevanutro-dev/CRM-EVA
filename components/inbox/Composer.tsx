@@ -45,6 +45,11 @@ interface Props {
    */
   janelaFechada?: string | null;
   /**
+   * O canal desta conversa só RECEBE (capability `canSend: false`): barra a
+   * resposta, como a janela, e mostra o motivo. A nota interna segue livre.
+   */
+  semEnvio?: string | null;
+  /**
    * A mensagem que esta resposta CITA, quando o atendente escolheu responder
    * "em cima" de uma. `null` = envio solto, o caso comum.
    *
@@ -66,6 +71,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     disabled,
     blockedReason,
     janelaFechada,
+    semEnvio,
     contactName,
     currentContactId,
     respondendo,
@@ -97,7 +103,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   // A janela só alcança o que SAI. Em modo nota o composer segue liberado: a
   // nota interna nunca chega ao cliente, e é onde o atendente registra por que
   // a conversa esfriou — barrá-la tira exatamente o que ainda dá para fazer.
-  const respostaBarrada = isDisabled || (mode === "reply" && !!janelaFechada);
+  const respostaBarrada =
+    isDisabled || (mode === "reply" && !!janelaFechada) || (mode === "reply" && !!semEnvio);
 
   function autoresize() {
     const ta = taRef.current;
@@ -269,6 +276,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               <X className="size-4" />
             </button>
           </div>
+        )}
+        {semEnvio && mode === "reply" && (
+          <p className="mb-1.5 text-xs text-muted-foreground">{semEnvio}</p>
         )}
         <div className="flex items-end gap-2">
           {mode === "reply" && (
