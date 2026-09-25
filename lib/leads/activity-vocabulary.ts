@@ -296,7 +296,7 @@ export const ROTULO_DE_CANAL: Record<string, string> = {
 };
 
 /** Canal desconhecido ou ausente (linha antiga, sem `payload.canal`) cai em WhatsApp — o canal que sempre existiu. */
-export function nomeDoCanal(canal: string | null | undefined): string {
+export function rotuloDoCanal(canal: string | null | undefined): string {
   return ROTULO_DE_CANAL[canal ?? ""] ?? ROTULO_DE_CANAL.whatsapp!;
 }
 
@@ -319,7 +319,7 @@ export function nomeDoCanal(canal: string | null | undefined): string {
 export function activityLabel(type: string, payload?: Record<string, unknown> | null): string {
   if (type === "lead_created") {
     const canal = typeof payload?.canal === "string" ? payload.canal : undefined;
-    return `Entrou pelo ${nomeDoCanal(canal)}`;
+    return `Entrou pelo ${rotuloDoCanal(canal)}`;
   }
   return ACTIVITY_LABELS[type as ActivityType] ?? ACTIVITY_LABEL_FALLBACK;
 }
