@@ -35,6 +35,10 @@ describe("capabilities do canal intermediado", () => {
       groups: "limited",
       costPerMessage: true,
       canSend: true,
+      iaResponde: true,
+      janelaHumanaMs: null,
+      limiteDeTexto: null,
+      midiaDeEnvio: "completa",
     });
   });
 
@@ -131,6 +135,9 @@ describe("o envelope carrega a thread do provider", () => {
     // princípio não precisaria dela mas precisa quando o provider reaproveita a
     // conversa existente, e foi assim que ele pegou a de contato agora.
     //
+    // CINCO desde o Instagram etapa 2: `resolveRecipient` também recebe a
+    // thread, porque lá o destinatário É ela (o IGSID guardado na conversa).
+    //
     // A resposta para o cartão de contato é a mesma das outras três: o canal
     // oficial endereça por thread própria, e um cartão enviado sem ela abriria
     // conversa nova em vez de continuar a que está aberta.
@@ -138,7 +145,7 @@ describe("o envelope carrega a thread do provider", () => {
     expect(
       passagens.length,
       "todos os call sites (texto, mídia, modelo e contato) precisam passar",
-    ).toBe(4);
+    ).toBe(5);
   });
 });
 

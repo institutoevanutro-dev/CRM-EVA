@@ -175,14 +175,14 @@ describe("listSelectableChannels", () => {
     expect(consulta).not.toContain("wacalls");
   });
 
-  it("não oferece canal que não sabe ENVIAR (capacidade canSend)", async () => {
-    // Quem escolhe canal aqui vai mandar mensagem por ele: uma conta que só
-    // recebe viraria destino de envio e falharia sempre, em silêncio.
+  it("não oferece canal que não ENVIA nem canal onde a IA não responde", async () => {
+    // Quem escolhe canal aqui é a IA: uma conta que só recebe, ou onde só a
+    // equipe responde (Instagram), viraria destino de envio e falharia sempre.
     const { db, chamadas } = fakeDb([{ data: [LINHA], error: null }, { data: [], error: null }]);
     await listSelectableChannels(db, "org-1");
     const consulta = chamadas[0]?.join(" ") ?? "";
     for (const [provider, caps] of Object.entries(CHANNEL_CAPABILITIES)) {
-      if (caps.canSend) expect(consulta).toContain(provider);
+      if (caps.canSend && caps.iaResponde) expect(consulta).toContain(provider);
       else expect(consulta).not.toContain(provider);
     }
   });

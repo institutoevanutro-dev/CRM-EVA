@@ -33,7 +33,13 @@ function adminFalso(opts: {
       insert: (linha: unknown) => { chamadas.insert.push([tabela, linha]); return { select: () => ({ maybeSingle: async () => opts.insertErro ? { data: null, error: opts.insertErro } : { data: { id: "M1" }, error: null } }) }; },
       update: (linha: unknown) => {
         chamadas.update.push([tabela, linha]);
-        return { eq: () => ({ eq: async () => ({ error: opts.updateErro ?? null }) }) };
+        // Encadeável e thenable para qualquer filtro: a conversa usa eq+eq+is.
+        const q: Record<string, unknown> = {
+          eq: () => q,
+          is: () => q,
+          then: (res: (v: unknown) => unknown) => Promise.resolve({ error: opts.updateErro ?? null }).then(res),
+        };
+        return q;
       },
       // Tabela-consciente e encadeável para QUALQUER número de `.eq()`: o
       // check de identidade (`contact_channel_identities`) usa três, a leitura
@@ -66,6 +72,15 @@ describe("ingestão do Instagram", () => {
     expect(msg).toMatchObject({ organization_id: "ORG", direction: "inbound", external_id: "m1", body: "Oi" });
     expect(chamadas.update).toContainEqual(["contacts", { custom_fields: { origem: "Instagram Dr. André" } }]);
     expect(aplicarEfeitosPosEntrada).toHaveBeenCalled();
+  });
+
+  it("grava o IGSID do cliente na conversa, no inbound e no eco", async () => {
+    const inbound = adminFalso({});
+    await ingerirDoInstagram(inbound.admin as never, evento(), sessao);
+    expect(inbound.chamadas.update).toContainEqual(["conversations", { provider_conversation_id: "IGSID9" }]);
+    const eco = adminFalso({ contatoNovo: false });
+    await ingerirDoInstagram(eco.admin as never, evento({ eco: true, remetente: "IGACC", destinatario: "IGSID9" }), sessao);
+    expect(eco.chamadas.update).toContainEqual(["conversations", { provider_conversation_id: "IGSID9" }]);
   });
 
   it("entrega repetida (23505) é duplicada, sem efeitos", async () => {

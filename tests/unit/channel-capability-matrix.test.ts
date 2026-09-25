@@ -45,6 +45,10 @@ const CAPABILITIES = [
   "groups",
   "costPerMessage",
   "canSend",
+  "iaResponde",
+  "janelaHumanaMs",
+  "limiteDeTexto",
+  "midiaDeEnvio",
 ] as const;
 
 describe("matriz capability × provider é exaustiva", () => {

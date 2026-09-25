@@ -20,7 +20,7 @@ import { sendMessageHandler } from '@/app/api/v1/messages/_handler';
 import type { HandlerCtx } from '@/lib/api/handlers/types';
 import { deriveActor } from '@/lib/mcp/auth';
 import type { SendMessageInput } from '@/lib/schemas';
-import { CHANNEL_PROVIDER_INSTAGRAM } from '@/lib/channels/capabilities';
+import { CHANNEL_CAPABILITIES, CHANNEL_PROVIDER_INSTAGRAM } from '@/lib/channels/capabilities';
 
 const ORG = '11111111-1111-4111-8111-111111111111';
 const CONV = '22222222-2222-4222-8222-222222222222';
@@ -534,25 +534,33 @@ describe('sendMessageHandler — os 6 desfechos do envio', () => {
   });
 
   /**
-   * Canal que só RECEBE (`canSend: false`, o Instagram da etapa 1): a resposta
-   * caía no ramo `!isConfigured()` e ficava `queued` para sempre, com um relógio
-   * na tela e nenhum cron que a olhasse. Falha na hora, com código e motivo.
-   * Decide pela capability, então o provider aqui vem da constante do seam.
+   * Canal que só RECEBE (`canSend: false`): a resposta caía no ramo
+   * `!isConfigured()` e ficava `queued` para sempre, com um relógio na tela e
+   * nenhum cron que a olhasse. Falha na hora, com código e motivo.
+   * Nenhum canal tem `canSend: false` desde a etapa 2 do Instagram; o ramo
+   * segue valendo para o próximo, então o teste desliga a capability à mão.
    */
   it('10. canal que não envia: failed com o código do canal, nada fica na fila', async () => {
     wahaConfigured(true);
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const msg = await sendMessageHandler(
-      makeSupabase(conversationRow({ provider: CHANNEL_PROVIDER_INSTAGRAM, phoneNumber: null })),
-      ctx,
-      textInput(),
-    );
+    const caps = CHANNEL_CAPABILITIES[CHANNEL_PROVIDER_INSTAGRAM as keyof typeof CHANNEL_CAPABILITIES];
+    caps.canSend = false;
+    let msg;
+    try {
+      msg = await sendMessageHandler(
+        makeSupabase(conversationRow({ provider: CHANNEL_PROVIDER_INSTAGRAM, phoneNumber: null })),
+        ctx,
+        textInput(),
+      );
+    } finally {
+      caps.canSend = true;
+    }
 
     expect(msg.status).toBe('failed');
     expect(msg.error_code).toBe('instagram_erro_de_envio');
-    expect(msg.error_message).toMatch(/próxima versão/);
+    expect(msg.error_message).toMatch(/ainda não envia/);
     expect((msg.metadata as Record<string, unknown>).queued_reason).toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
   });

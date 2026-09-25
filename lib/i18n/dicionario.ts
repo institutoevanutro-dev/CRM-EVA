@@ -6795,7 +6795,7 @@ export const DICIONARIO: Traducoes = {
   "Desconectar esta conta?": { es: "¿Desconectar esta cuenta?" },
   "As mensagens novas do Direct deixam de entrar no CRM. As conversas que já estão aqui continuam.": { es: "Los mensajes nuevos del Direct dejan de entrar al CRM. Las conversaciones que ya están aquí continúan." },
   "Contato do Instagram": { es: "Contacto de Instagram" },
-  "Responder pelo Instagram chega na próxima versão; responda pelo app do Instagram por enquanto.": { es: "Responder por Instagram llega en la próxima versión; por ahora, responde desde la app de Instagram." },
+  "Este canal ainda não envia pelo CRM; responda pelo app dele por enquanto.": { es: "Este canal todavía no envía desde el CRM; por ahora, responde desde su app." },
 
   "O que ele consulta antes de responder": { es: "Qué consulta antes de responder" },
   "Marque o material do seu negócio que este assistente pode ler. Ele procura ali antes de responder, em vez de improvisar — e cita de onde tirou.": { es: "Marca el material de tu negocio que este asistente puede leer. Busca ahí antes de responder, en vez de improvisar — y cita de dónde lo sacó." },

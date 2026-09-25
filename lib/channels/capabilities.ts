@@ -111,10 +111,9 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     voiceNote: "opus-only",
     groups: "none",
     costPerMessage: false,
-    // O adapter (etapa 2) já ENVIA texto e foto pela Graph API — mas
-    // `canSend` continua `false` até a Task 3 ligar o handler a ele. Quem
-    // escolhe sessão para automação lê este campo, não o nome.
-    canSend: false,
+    // Etapa 2: a EQUIPE responde pelo Inbox (texto e foto). A IA não
+    // (`iaResponde: false`); quem escolhe sessão para automação lê os dois.
+    canSend: true,
     iaResponde: false,
     janelaHumanaMs: 7 * 24 * 60 * 60 * 1000,
     limiteDeTexto: 1000,
@@ -220,7 +219,8 @@ export function canalConhecidoSemMensagem(provider: string | null | undefined): 
 
 /**
  * A TELA pode oferecer "responder" nesta conversa? `false` só para canal de
- * mensagem conhecido com `canSend: false` (o Instagram da etapa 1). Provider
+ * mensagem conhecido com `canSend: false` (nenhum hoje; o Instagram foi até a
+ * etapa 2). Provider
  * ainda não lido (`null`) ou desconhecido responde `true`: travar o composer
  * por falta de dado seria pior, e quem decide o envio de fato é o handler, que
  * falha fechado (`capabilitiesOf`).
@@ -228,6 +228,17 @@ export function canalConhecidoSemMensagem(provider: string | null | undefined): 
 export function canalRespondePeloCrm(provider: string | null | undefined): boolean {
   const caps = CHANNEL_CAPABILITIES[(provider ?? "") as ProviderDeMensagem];
   return caps ? caps.canSend : true;
+}
+
+/**
+ * O canal serve de destino para AUTOMAÇÃO (as listas de "número de WhatsApp":
+ * Conexões › Números, destino das automações)? Precisa enviar E a IA poder
+ * falar por ele: o Instagram envia desde a etapa 2, mas só a equipe, pelo
+ * Inbox. Desconhecido ou `null` responde `true`, pelo mesmo motivo de cima.
+ */
+export function canalDeEnvioAutomatico(provider: string | null | undefined): boolean {
+  const caps = CHANNEL_CAPABILITIES[(provider ?? "") as ProviderDeMensagem];
+  return caps ? caps.canSend && caps.iaResponde : true;
 }
 
 export function capabilitiesOf(provider: ChannelProvider): ChannelCapabilities {

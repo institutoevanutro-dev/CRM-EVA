@@ -25,11 +25,14 @@ import { ARCHIVED_AT, queryTolerantToMissingArchived } from "./archived";
 import { CHANNEL_CAPABILITIES, PROVIDERS_DE_MENSAGEM } from "./capabilities";
 
 /**
- * Quem escolhe canal aqui vai ENVIAR por ele (agente, roteador, composição).
- * Canal de mensagem que só recebe (`canSend: false`) fica de fora: oferecê-lo
- * faria alguém tentar mandar mensagem por uma conta que não envia.
+ * Quem escolhe canal aqui é a IA (agente, roteador, primeira publicação) e o
+ * retrato da instalação. Canal que não envia, OU onde a IA não responde (o
+ * Instagram: só a equipe, pelo Inbox), fica de fora: oferecê-lo amarraria um
+ * agente a uma conta por onde ele nunca vai poder falar.
  */
-const PROVIDERS_QUE_ENVIAM = PROVIDERS_DE_MENSAGEM.filter((p) => CHANNEL_CAPABILITIES[p].canSend);
+const PROVIDERS_QUE_ENVIAM = PROVIDERS_DE_MENSAGEM.filter(
+  (p) => CHANNEL_CAPABILITIES[p].canSend && CHANNEL_CAPABILITIES[p].iaResponde,
+);
 
 /** Um canal oferecível como destino, já com o rótulo resolvido para a tela. */
 export interface SelectableChannel {

@@ -117,6 +117,24 @@ export async function ingerirDoInstagram(
   } as never);
   if (erroConversa || !conversationId) return { status: "falhou", motivo: `conversa: ${erroConversa?.message ?? "sem id"}` };
 
+  // O envio endereça o cliente pelo IGSID, que é por perfil conectado: fica na
+  // CONVERSA (migration 0278), não só na identidade do contato. Só preenche
+  // vazio. Falha aqui não derruba a mensagem; o envio recusa com
+  // `instagram_sem_destinatario` e o log diz por quê.
+  const { error: erroDestinatario } = await admin
+    .from("conversations")
+    .update({ provider_conversation_id: pessoa })
+    .eq("organization_id", orgId)
+    .eq("id", conversationId as string)
+    .is("provider_conversation_id", null);
+  if (erroDestinatario) {
+    logger.warn("[instagram.ingest] gravar o destinatário na conversa falhou", {
+      organization_id: orgId,
+      conversation_id: conversationId as string,
+      detail: erroDestinatario.message,
+    });
+  }
+
   const anexo = e.anexos[0] ?? null;
   const { data: inserida, error: erroInsert } = await admin.from("messages").insert({
     organization_id: orgId,

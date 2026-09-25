@@ -323,7 +323,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   // não sai pelo CRM ainda. O aviso da janela ("só modelo aprovado") mentiria.
   const motivoSemEnvio = canalRespondePeloCrm(selectedConversation?.channel_sessions?.provider)
     ? null
-    : t("Responder pelo Instagram chega na próxima versão; responda pelo app do Instagram por enquanto.");
+    : t("Este canal ainda não envia pelo CRM; responda pelo app dele por enquanto.");
   const motivoDaJanela =
     !motivoSemEnvio && janela.tipo === "fechada"
       ? janela.fechadaHaMs === null
