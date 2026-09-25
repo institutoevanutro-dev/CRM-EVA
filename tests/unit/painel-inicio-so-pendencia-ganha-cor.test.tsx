@@ -34,10 +34,9 @@ function bloco(total: number): Bloco {
     itens: Array.from({ length: Math.min(total, 2) }, (_, i) => ({
       id: `i${i}`,
       titulo: `Item ${i}`,
-      detalhe: null,
       href: "/app/inbox",
     })),
-  } as Bloco;
+  };
 }
 
 async function montar() {
