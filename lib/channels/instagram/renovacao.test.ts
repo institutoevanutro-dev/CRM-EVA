@@ -27,6 +27,8 @@ vi.mock("@/lib/webhooks/secrets", () => ({
   decryptWebhookSecret: vi.fn(async () => "token-velho-em-claro"),
 }));
 
+import { sincronizarSaudeDaConexao } from "@/lib/channels/health";
+
 import { precisaRenovar, renovarTokensDoInstagram } from "./renovacao";
 
 const DIA = 86_400_000;
@@ -224,5 +226,77 @@ describe("renovarTokensDoInstagram", () => {
     expect(resumo.renovadas).toBe(0);
     expect(resumo.falhas).toBe(0);
     expect(audit).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Os DOIS crons falam da mesma sessão, e têm de concordar: renovação que
+ * falhou + sonda de saúde que falha = UM aviso aberto; só um sucesso de
+ * verdade (renovação ou reconexão) fecha o "precisa ser reconectado".
+ *
+ * A sonda é chamada como o cron `channel-health` a chama: a MESMA
+ * `sincronizarSaudeDaConexao`, origem padrão ("varredura"), com o que o
+ * adapter devolve.
+ */
+describe("renovação e vigia de saúde concordam sobre o aviso", () => {
+  const alvoDaSonda = { id: "sess-1", organization_id: "org-1", status: "WORKING" };
+  const sondaFalhou = { reachable: true, status: "FAILED", detail: "chave do Instagram vencida ou revogada" };
+  const sondaOk = { reachable: true, status: "WORKING", detail: null };
+
+  it("renovação falha → aviso aberto; sonda com a chave recusada → segue UM aviso, aberto", async () => {
+    const alvo = admin();
+    linhas = [sessao()];
+    fetchMock.mockResolvedValue(respostaFalha);
+    await renovarTokensDoInstagram(alvo, AGORA);
+    expect(avisosInseridos).toHaveLength(1);
+
+    const desfecho = await sincronizarSaudeDaConexao(alvo, alvoDaSonda, sondaFalhou, "@clinica.eva");
+
+    expect(desfecho).toBe("ja_avisado");
+    expect(avisosInseridos).toHaveLength(1);
+    expect(avisosResolvidos).toHaveLength(0);
+    expect(saudeGravada?.escalated_status).toBe("TOKEN_DE_RENOVACAO_VENCIDO");
+  });
+
+  it("renovação falha → a sonda com a chave ainda válida NÃO fecha o aviso de reconectar", async () => {
+    const alvo = admin();
+    linhas = [sessao()];
+    fetchMock.mockResolvedValue(respostaFalha);
+    await renovarTokensDoInstagram(alvo, AGORA);
+
+    const desfecho = await sincronizarSaudeDaConexao(alvo, alvoDaSonda, sondaOk, "@clinica.eva");
+
+    expect(desfecho).toBe("sem_mudanca");
+    expect(avisosResolvidos).toHaveLength(0);
+    expect(saudeGravada?.escalated_status).toBe("TOKEN_DE_RENOVACAO_VENCIDO");
+  });
+
+  it("a sonda avisou primeiro (FAILED) → a renovação que falha não empilha um segundo aviso", async () => {
+    const alvo = admin();
+    await sincronizarSaudeDaConexao(alvo, alvoDaSonda, sondaFalhou, "@clinica.eva");
+    expect(avisosInseridos).toHaveLength(1);
+
+    linhas = [sessao()];
+    fetchMock.mockResolvedValue(respostaFalha);
+    await renovarTokensDoInstagram(alvo, AGORA);
+
+    expect(avisosInseridos).toHaveLength(1);
+    expect(avisosResolvidos).toHaveLength(0);
+  });
+
+  it("depois do aviso, só a renovação que dá certo fecha", async () => {
+    const alvo = admin();
+    linhas = [sessao()];
+    fetchMock.mockResolvedValue(respostaFalha);
+    await renovarTokensDoInstagram(alvo, AGORA);
+    await sincronizarSaudeDaConexao(alvo, alvoDaSonda, sondaOk, "@clinica.eva");
+    expect(avisosResolvidos).toHaveLength(0);
+
+    linhas = [sessao()];
+    fetchMock.mockResolvedValue(respostaOk());
+    await renovarTokensDoInstagram(alvo, AGORA);
+
+    expect(avisosResolvidos).toHaveLength(1);
+    expect(saudeGravada?.escalated_status).toBeNull();
   });
 });

@@ -140,11 +140,16 @@ export const instagramAdapter: ChannelAdapter = {
    * — `reachable:false` incondicional é indistinguível de "nunca perguntei" e
    * de "não consigo perguntar", e a Central não tinha como saber a diferença.
    *
-   * `reachable = res.ok`: qualquer resposta HTTP (mesmo de erro) prova que a
-   * chamada chegou — o `status` cru vai junto para quem for investigar depois.
-   * Só o erro de REDE (`fetch` lança — timeout, DNS, TLS) é "não sei", sem
-   * status. O token NUNCA entra no `detail` nem em log — só o `status` e um
-   * motivo fixo em português.
+   * Mesmo contrato do canal oficial (`meta-cloud.ts`): `status` é o
+   * VOCABULÁRIO de `channel_sessions.status`, porque o cron de saúde grava o
+   * valor na coluna e `avisoDaConexao` o lê. Qualquer resposta HTTP prova que a
+   * chamada chegou (`reachable: true`): 2xx → `WORKING`; recusa → `FAILED`,
+   * com o motivo em português. Só o erro de REDE (`fetch` lança: timeout, DNS,
+   * TLS) é "não sei", sem status. O token NUNCA entra no `detail` nem em log.
+   *
+   * Devolver o código HTTP cru ("200") foi o defeito: violava o CHECK da
+   * coluna a cada rodada e, lido como "sem problema", fechava o aviso de
+   * renovação vencida que o cron de renovação tinha acabado de abrir.
    */
   async checkHealth(
     input: ChannelTenantScope & { sessionRef: string },
@@ -164,14 +169,13 @@ export const instagramAdapter: ChannelAdapter = {
       return { reachable: false, status: null, detail: "Instagram não respondeu" };
     }
 
-    const status = String(res.status);
-    if (res.ok) return { reachable: true, status, detail: null };
+    if (res.ok) return { reachable: true, status: "WORKING", detail: null };
 
     const detail =
       res.status === 400 || res.status === 401 || res.status === 403
         ? "chave do Instagram vencida ou revogada"
         : `Instagram recusou a chamada (${res.status})`;
-    return { reachable: false, status, detail };
+    return { reachable: true, status: "FAILED", detail };
   },
   codes: {
     notConfigured: "instagram_nao_configurado",

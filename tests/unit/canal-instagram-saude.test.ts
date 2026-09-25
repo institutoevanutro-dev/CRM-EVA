@@ -60,18 +60,38 @@ describe("checkHealth do Instagram", () => {
     return instagramAdapter.checkHealth!({ organizationId: "org", sessionRef: "178414" });
   }
 
-  it("Graph responde 200 → de pé, com o status cru", async () => {
+  // O `status` é o VOCABULÁRIO de `channel_sessions.status` (o cron de saúde o
+  // grava na coluna), nunca o código HTTP: "200" violava o CHECK a cada rodada
+  // e, lido por `avisoDaConexao`, fechava o aviso de renovação vencida.
+  it("Graph responde 200 → WORKING, o mesmo contrato do canal oficial", async () => {
     globalThis.fetch = respondeCom(200);
-    expect(await saude()).toEqual({ reachable: true, status: "200", detail: null });
+    expect(await saude()).toEqual({ reachable: true, status: "WORKING", detail: null });
   });
 
-  it("chave revogada (401) → não alcançável, motivo em português", async () => {
-    globalThis.fetch = respondeCom(401);
+  it.each([400, 401, 403])("chave recusada (%i) → alcançável e FAILED, motivo em português", async (codigo) => {
+    globalThis.fetch = respondeCom(codigo);
     expect(await saude()).toEqual({
-      reachable: false,
-      status: "401",
+      reachable: true,
+      status: "FAILED",
       detail: "chave do Instagram vencida ou revogada",
     });
+  });
+
+  it("outra recusa (500) → FAILED com o código no motivo, como o canal oficial", async () => {
+    globalThis.fetch = respondeCom(500);
+    expect(await saude()).toEqual({
+      reachable: true,
+      status: "FAILED",
+      detail: "Instagram recusou a chamada (500)",
+    });
+  });
+
+  it("todo status devolvido cabe no CHECK de channel_sessions.status", async () => {
+    const validos = new Set(["STARTING", "SCAN_QR_CODE", "WORKING", "FAILED", "STOPPED", null]);
+    for (const codigo of [200, 400, 401, 403, 429, 500]) {
+      globalThis.fetch = respondeCom(codigo);
+      expect(validos.has((await saude()).status)).toBe(true);
+    }
   });
 
   it("erro de rede → não alcançável, sem status, e o token não vaza no detail", async () => {

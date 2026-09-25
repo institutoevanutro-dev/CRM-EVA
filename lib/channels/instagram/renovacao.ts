@@ -18,11 +18,10 @@
  * `sincronizarSaudeDaConexao` (`lib/channels/health.ts`) já sabe escalar UMA
  * vez por episódio e resolver quando a próxima observação vem boa — é o
  * mesmo mecanismo que o cron `channel-health` usa. Esta rotina chama essa
- * MESMA função: falha de renovação vira uma `SaudeObservada` com
- * `detail: DETALHE_TOKEN_DE_RENOVACAO_VENCIDO` (episódio próprio, então não
- * fecha sozinho um aviso que a sonda de saúde abriu por outro motivo, nem
- * vice-versa); sucesso vira uma observação "sem problema", que resolve o
- * aviso se havia um aberto. Duplicar esse select→insert→upsert aqui seria o
+ * MESMA função, com origem `renovacao`: falha de renovação vira uma
+ * `SaudeObservada` com `detail: DETALHE_TOKEN_DE_RENOVACAO_VENCIDO` (episódio
+ * próprio, que a varredura de saúde não fecha nem duplica); sucesso vira uma
+ * observação "sem problema", que resolve o aviso se havia um aberto. Duplicar esse select→insert→upsert aqui seria o
  * mesmo defeito que a doutrina do repo chama de "duplicação sem source of
  * truth declarado" — um segundo lugar para divergir do primeiro no dia em
  * que o contrato de `agent_inbox_items` mudar.
@@ -150,6 +149,7 @@ export async function renovarTokensDoInstagram(
           alvo,
           { reachable: false, status: null, detail: DETALHE_TOKEN_DE_RENOVACAO_VENCIDO },
           apelido,
+          "renovacao",
         );
         continue;
       }
@@ -162,6 +162,7 @@ export async function renovarTokensDoInstagram(
           alvo,
           { reachable: false, status: null, detail: DETALHE_TOKEN_DE_RENOVACAO_VENCIDO },
           apelido,
+          "renovacao",
         );
         continue;
       }
@@ -170,7 +171,7 @@ export async function renovarTokensDoInstagram(
       // Observação "sem problema": resolve o aviso se havia um aberto por esta
       // MESMA rotina; não mexe num aviso que a sonda de saúde abriu por outro
       // motivo (`sincronizarSaudeDaConexao` só fecha o episódio que casa).
-      await sincronizarSaudeDaConexao(admin, alvo, { reachable: true, status: null, detail: null }, apelido);
+      await sincronizarSaudeDaConexao(admin, alvo, { reachable: true, status: null, detail: null }, apelido, "renovacao");
       resumo.renovadas += 1;
     } catch (err) {
       logger.warn("[instagram.renovacao] falhou numa sessão", {
