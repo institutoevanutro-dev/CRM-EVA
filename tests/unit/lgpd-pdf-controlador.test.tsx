@@ -70,6 +70,7 @@ function payload(patch: Partial<ExportPayload> = {}): ExportPayload {
     meeting_deliveries: [],
     voice_calls: [],
   appointment_notices: [],
+    channel_identities: [],
     ...patch,
   };
 }

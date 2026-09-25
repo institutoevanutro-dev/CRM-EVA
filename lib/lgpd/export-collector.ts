@@ -171,6 +171,26 @@ export interface CaptureRow {
   received_at: string;
 }
 
+/**
+ * Identidade do titular num canal externo (migration 0277 — Instagram; a
+ * coluna `channel` é o que distingue quando um segundo canal chegar).
+ *
+ * `handle`/`display_name`/`avatar_url` são exatamente o que o passo 7c de
+ * `fn_lgpd_cascade_redact_contact` redige ao anonimizar — o que se apaga a
+ * pedido do titular é o que se entrega a pedido dele. `external_id` entra
+ * porque é o identificador da conta dele NO CANAL (o IGSID), não um ponteiro
+ * interno nosso.
+ */
+export interface ChannelIdentityRow {
+  id: string;
+  channel: string;
+  external_id: string;
+  handle: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  created_at: string;
+}
+
 export interface AuditRow {
   id: string;
   action: string;
@@ -251,6 +271,7 @@ export interface ExportPayload {
    * próprio cascade.
    */
   voice_calls: VoiceCallRow[];
+  channel_identities: ChannelIdentityRow[];
   reply_drafts?: Array<{
     id: string;
     status: string;
@@ -635,6 +656,30 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // Identidade em canal externo (migration 0277) — a MESMA classe dos blocos
+  // acima, achada pelo gate `tests/unit/lgpd-exporta-o-que-redige.test.ts`: o
+  // passo 7c de `fn_lgpd_cascade_redact_contact` redige handle/display_name/
+  // avatar_url ao anonimizar, e o que se apaga a pedido do titular é o que se
+  // entrega a pedido dele.
+  let channel_identities: ChannelIdentityRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("contact_channel_identities")
+      .select("id, channel, external_id, handle, display_name, avatar_url, created_at")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] channel identities load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      channel_identities = data;
+    }
+  }
+
   // Captação por webhook — a MESMA classe do bloco acima, achada pelo gate.
   let webhook_captures: CaptureRow[] = [];
   if (contactId) {
@@ -810,6 +855,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     meeting_deliveries,
     appointment_notices,
     voice_calls,
+    channel_identities,
   };
 }
 
@@ -841,5 +887,6 @@ function emptyPayload(
     meeting_deliveries: [],
     appointment_notices: [],
     voice_calls: [],
+    channel_identities: [],
   };
 }
