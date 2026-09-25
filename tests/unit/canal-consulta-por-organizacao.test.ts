@@ -50,6 +50,21 @@ const COLUNAS_DE_REF = CHANNEL_SESSION_REF_COLUMNS.split(",")
   .map((c) => c.trim())
   .filter((c) => c !== "provider");
 
+/**
+ * Allowlist de consultas que filtram por identificador de provider SEM
+ * `organization_id` — só entra aqui com justificativa escrita, nunca por
+ * conveniência.
+ *
+ * `lib/channels/instagram/sessao.ts` (`sessaoDoInstagramPorConta`): é a raiz do
+ * roteamento do webhook do APP (não da organização) — ainda não se sabe a
+ * organização quando ela roda, é ELA que resolve o `organization_id` para toda
+ * consulta seguinte. O índice único `uniq_channel_sessions_ig_account_ativa`
+ * (parcial, `where archived_at is null` — mantido abaixo) garante uma única
+ * linha ativa por conta, o que fecha a mesma lacuna que a issue #236 mediu para
+ * `meta_phone_number_id`/`zernio_account_id`.
+ */
+const ALLOWLIST_SEM_ORGANIZATION_ID = ["lib/channels/instagram/sessao.ts"];
+
 function arquivosTs(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
     const p = path.join(dir, e.name);
@@ -132,7 +147,8 @@ describe("lib/channels: consulta a channel_sessions por identificador do provide
     const faltando = TODAS.filter(
       (c) =>
         c.filtros.some((f) => COLUNAS_DE_REF.includes(f)) &&
-        !c.filtros.includes("organization_id"),
+        !c.filtros.includes("organization_id") &&
+        !ALLOWLIST_SEM_ORGANIZATION_ID.includes(c.arquivo),
     ).map((c) => `${c.arquivo}:${c.linha} (filtros: ${c.filtros.join(", ") || "nenhum"})`);
 
     expect(
