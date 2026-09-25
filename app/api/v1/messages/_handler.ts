@@ -721,7 +721,7 @@ export async function sendMessageHandler(
     }
   } else if (provider === CHANNEL_PROVIDER_INSTAGRAM && c.channel_sessions?.status !== "WORKING") {
     // `queued` só é honesto onde algo reenvia: o session-reconciler só
-    // conhece a sessão WAHA, e nada tira uma mensagem do Instagram da fila.
+    // conhece o WhatsApp não oficial, e nada tira uma mensagem do Instagram da fila.
     // A tela prometeria "sai sozinha" para uma resposta que nunca sairia.
     await falharAntesDeEnviar(
       "instagram_desconectado",
