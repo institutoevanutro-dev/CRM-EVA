@@ -130,7 +130,11 @@ export async function ingerirDoInstagram(
     external_id: e.externalId,
     media_url: anexo?.url ?? null,
     sent_at: e.enviadaEm.toISOString(),
-    metadata: { canal: "instagram", ...(e.eco ? { eco_do_app: true } : {}) },
+    // O eco é o que a conta escreveu no APP do Instagram (a etapa 1 não envia
+    // pelo CRM): mesma marca do `fromMe` de outro aparelho no WAHA. Sem ela a
+    // linha herdava `sent_via='crm'` e contava como resposta dada no CRM.
+    ...(e.eco ? { sent_via: "external_device" } : {}),
+    metadata: { canal: "instagram", ...(e.eco ? { eco_do_app: true, fromMe: true } : {}) },
   }).select("id").maybeSingle();
   if (erroInsert) {
     if (erroInsert.code === "23505") return { status: "duplicada" };

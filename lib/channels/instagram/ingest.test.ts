@@ -83,6 +83,11 @@ describe("ingestão do Instagram", () => {
     expect(args.p_external_id).toBe("IGSID9");
     const [, msg] = chamadas.insert.find(([t]) => t === "messages") as [string, Record<string, unknown>];
     expect(msg.direction).toBe("outbound");
+    // Escrita no app do Instagram, não no CRM: mesma marca do WAHA para o
+    // `fromMe` de outro aparelho. A bolha diz de onde saiu, e nada que conte
+    // resposta do CRM (`sent_via in ('ai','user')`) a confunde com uma.
+    expect(msg.sent_via).toBe("external_device");
+    expect(msg.metadata).toMatchObject({ fromMe: true, eco_do_app: true });
     expect(aplicarEfeitosPosEntrada).not.toHaveBeenCalled();
   });
 
