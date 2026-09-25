@@ -153,7 +153,18 @@ export function transportaMensagem(provider: string | null | undefined): boolean
  * hora de escolher por onde mandar recado, o desconhecido é tão inútil quanto a
  * voz. Aqui a pergunta é outra.
  */
-export const PROVIDERS_SEM_MENSAGEM = ["wacalls"] as const;
+export const PROVIDERS_SEM_MENSAGEM = [
+  "wacalls",
+  // `meta_instagram` (etapa 1 do canal Instagram): CATEGORIA diferente de
+  // `wacalls`, e TEMPORÁRIO — o Direct manda texto de verdade. Está aqui só
+  // porque o schema (esta migration) chegou antes do transporte: nenhum
+  // adapter, capabilities nem fonte de templates existem ainda para ele. A
+  // etapa que trouxer `lib/channels/instagram/` move este nome para
+  // `PROVIDERS_DE_MENSAGEM` (e `ProviderDeMensagem` em `./types`) no mesmo
+  // commit que o adapter — até lá, "sem mensagem" é o estado real do código,
+  // não do produto.
+  "meta_instagram",
+] as const;
 
 /**
  * Erro de COMPILAÇÃO enquanto sobrar provider fora das duas listas. Provider

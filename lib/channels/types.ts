@@ -9,7 +9,7 @@ import type { OutboundMedia } from "@/lib/waha/media-send";
 
 export type { OutboundMedia };
 
-export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "wacalls";
+export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "wacalls" | "meta_instagram";
 
 /**
  * Os providers que transportam MENSAGEM — o subconjunto sobre o qual a matriz
@@ -25,8 +25,15 @@ export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "wacalls";
  * presumindo que a resposta sempre sabe mandar recado. Antes disto o CHECK do
  * banco já aceitava `'wacalls'` enquanto este union não — e uma organização que
  * pareasse voz derrubava `getAdapter` com `unknown_channel_provider`.
+ *
+ * `meta_instagram` (etapa 1 do canal Instagram) fica no mesmo lado de fora de
+ * `wacalls` até a etapa que traz capabilities/adapter/fonte de templates: o
+ * schema já aceita a sessão (esta migration), mas `lib/channels/capabilities.ts`,
+ * `lib/channels/index.ts` e `lib/channels/templates-fonte.ts` ainda não têm a
+ * entrada dele. Colocá-lo em `ProviderDeMensagem` agora quebraria esses três
+ * `Record<ProviderDeMensagem, …>` exaustivos com trabalho que não é desta etapa.
  */
-export type ProviderDeMensagem = Exclude<ChannelProvider, "wacalls">;
+export type ProviderDeMensagem = Exclude<ChannelProvider, "wacalls" | "meta_instagram">;
 
 export interface ChannelCapabilities {
   /** Pode enviar texto livre a qualquer momento? false = exige template fora da janela. */

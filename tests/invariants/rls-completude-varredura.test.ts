@@ -164,6 +164,13 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     razao: "tests/invariants/followup-schema.test.ts — mesmo laço de FOLLOWUP_TABLES.",
   },
   {
+    tabela: "contact_channel_identities",
+    razao:
+      "tests/invariants/instagram-canal.test.ts (\"membro autenticado da " +
+      "org A NÃO lê identidade de canal da org B (cross-org real)\") prova " +
+      "isolamento com `set role authenticated` + JWT real + contagem 1/0.",
+  },
+  {
     tabela: "user_organizations",
     razao:
       "tests/invariants/gov-1b-team-manager-read.test.ts (\"cross-org: " +
