@@ -14,8 +14,11 @@
  * exatamente do jeito que a tela do admin grava, não um formato inventado
  * pelo seed.
  *
- * Idempotente. Só escreve em localhost (mesma guarda dos outros
- * `scripts/seed-e2e-*.ts`, via `anunciarDestino`/`credenciaisSupabaseDeTeste`).
+ * Idempotente. RECUSA escrever fora de localhost — mesma guarda de
+ * `seed-automacoes-e-followups.ts` (`destinoEhLocal`): este seed grava um App
+ * Secret e um token de canal cifrados numa organização real, e "escrevendo em
+ * REMOTO" no `console.warn` de `anunciarDestino` é fácil de rolar batido num
+ * terminal cheio. Sem `--permitir-remoto`, roda só em localhost.
  *
  * Run: npx tsx scripts/seed-e2e-instagram.ts
  */
@@ -26,7 +29,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import { definirOrigemPadrao, salvarConexaoDoInstagram } from "../lib/channels/instagram/conexao";
 import { encryptWebhookSecret } from "../lib/webhooks/secrets";
-import { anunciarDestino, credenciaisSupabaseDeTeste } from "./lib/env-de-teste";
+import { anunciarDestino, credenciaisSupabaseDeTeste, destinoEhLocal } from "./lib/env-de-teste";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 
@@ -44,6 +47,18 @@ interface Creds {
 async function main(): Promise<void> {
   const credenciais = credenciaisSupabaseDeTeste();
   anunciarDestino("seed-e2e-instagram", credenciais);
+
+  // Só a URL decide: este script fala apenas com a API do Supabase (admin
+  // client) e nunca abre `pg.Pool`, então o `dbUrl` não é destino dele.
+  if (!destinoEhLocal(credenciais.url) && !process.argv.includes("--permitir-remoto")) {
+    console.error(
+      `[seed-e2e-instagram] recusado: ${credenciais.url} não é local, e este seed grava um App ` +
+        "Secret e um token de canal cifrados numa organização real. Para gravar mesmo assim, " +
+        "rode de novo com --permitir-remoto.",
+    );
+    process.exit(2);
+  }
+
   const admin = createClient(credenciais.url, credenciais.serviceRole, {
     auth: { persistSession: false },
   });

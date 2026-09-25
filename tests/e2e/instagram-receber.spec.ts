@@ -105,15 +105,45 @@ test("um Direct novo aparece no Inbox com @, canal e origem", async ({ page, req
   const contatosRecentes = await page.request.get("/api/v1/contacts?limit=20");
   expect(contatosRecentes.ok()).toBe(true);
   const { data } = (await contatosRecentes.json()) as {
-    data: { custom_fields?: Record<string, unknown> }[];
+    data: { id: string; custom_fields?: Record<string, unknown> }[];
   };
-  expect(data.some((c) => c.custom_fields?.origem === ORIGEM_VALOR)).toBe(true);
+  const contato = data.find((c) => c.custom_fields?.origem === ORIGEM_VALOR);
+  expect(contato, "nenhum contato recente com custom_fields.origem === ORIGEM_VALOR").toBeTruthy();
+
+  // O ORÁCULO: existe mesmo uma linha de crm_leads para ESTE contato, no funil
+  // padrão, na primeira etapa (a regra real de `garantirLeadDaConversa`) —
+  // medido pela MESMA API que a tela do Kanban usa para desenhar o quadro
+  // (GET /api/v1/pipelines/[id]/board), não por suposição de rota ou de texto.
+  const padraoRes = await page.request.get("/api/v1/pipelines/default");
+  expect(padraoRes.ok()).toBe(true);
+  const { data: padrao } = (await padraoRes.json()) as {
+    data: { pipeline: { id: string }; stages: { id: string }[] };
+  };
+  const pipelineId = padrao.pipeline.id;
+  const primeiraEtapaId = padrao.stages[0]!.id;
+
+  const boardRes = await page.request.get(`/api/v1/pipelines/${pipelineId}/board`);
+  expect(boardRes.ok()).toBe(true);
+  const { data: board } = (await boardRes.json()) as {
+    data: { leads: { contact_id: string | null; pipeline_id: string; stage_id: string; title: string }[] };
+  };
+  const lead = board.leads.find((l) => l.contact_id === contato!.id);
+  expect(lead, "sem crm_leads para o contato do Instagram no funil padrão").toBeTruthy();
+  expect(lead!.pipeline_id).toBe(pipelineId);
+  expect(lead!.stage_id).toBe(primeiraEtapaId);
 
   // "/app/kanban" é a LISTA de funis, não o quadro — entra no funil padrão
   // pela mesma porta que o menu usa ("Funis" → o funil marcado "Padrão").
   await page.goto("/app/kanban");
   await page.getByRole("link", { name: /Pedidos Padrão/ }).click();
   await page.waitForURL(/\/app\/pipelines\//);
-  await expect(page.getByText(/Contato do Instagram|@IGSID|Instagram/).first()).toBeVisible();
+
+  // O card ESPECÍFICO desta rodada — escopado pela mensagem que só ESTE
+  // contato tem (o `texto` traz o timestamp da rodada), não pela palavra solta
+  // "Instagram" (que já apareceria na página de qualquer jeito, por causa da
+  // asserção do Inbox acima na mesma sessão — presença não prova nada).
+  const card = page.getByRole("group").filter({ hasText: texto });
+  await expect(card).toHaveCount(1);
+  await expect(card.getByText(lead!.title, { exact: true })).toBeVisible();
   await page.screenshot({ path: path.join(EVIDENCIA, "02-kanban.png"), fullPage: true });
 });
