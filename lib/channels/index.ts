@@ -49,9 +49,15 @@ export function getAdapter(provider: ChannelProvider): ChannelAdapter {
  * `false` sempre que a variável de ambiente não está setada (teste, banco
  * fresco antes de escanear o QR): usá-la aqui excluiria o WhatsApp de toda
  * automação numa instalação nova, que é o oposto do que se quer filtrar.
+ *
+ * Também exige `iaResponde`: automação é a IA falando, e o Instagram etapa 2
+ * deixa GENTE responder (janela humana de 7 dias) sem abrir a porta para a IA
+ * — `canSend` sozinho não distingue as duas.
  */
 export function providersDeEnvioAutomatico(): readonly ProviderDeMensagem[] {
-  return PROVIDERS_DE_MENSAGEM.filter((p) => CHANNEL_CAPABILITIES[p].canSend);
+  return PROVIDERS_DE_MENSAGEM.filter(
+    (p) => CHANNEL_CAPABILITIES[p].canSend && CHANNEL_CAPABILITIES[p].iaResponde,
+  );
 }
 
 /**

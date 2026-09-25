@@ -30,6 +30,10 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     groups: "full",
     costPerMessage: false,
     canSend: true,
+    iaResponde: true,
+    janelaHumanaMs: null,
+    limiteDeTexto: null,
+    midiaDeEnvio: "completa",
   },
   // Hetero-restrição: não me banem, mas a Meta me proíbe e me cobra.
   meta_cloud: {
@@ -44,6 +48,10 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     groups: "limited",
     costPerMessage: true,
     canSend: true,
+    iaResponde: true,
+    janelaHumanaMs: null,
+    limiteDeTexto: null,
+    midiaDeEnvio: "completa",
   },
   // Mesma hetero-restrição do canal oficial, por baixo: é um BSP: a WABA é da
   // Meta, os templates são aprovados pela Meta e a janela de 24h é da Meta. O
@@ -78,6 +86,10 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     groups: "limited",
     costPerMessage: true,
     canSend: true,
+    iaResponde: true,
+    janelaHumanaMs: null,
+    limiteDeTexto: null,
+    midiaDeEnvio: "completa",
   },
   // Etapa 1 só recebe (webhook). O Direct não tem template aprovado nem janela
   // de 24h formal como o WhatsApp — a restrição real da API é a janela de 24h
@@ -85,6 +97,12 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
   // restrição), não auto-restrição por volume como o `waha`. Sem grupos, sem
   // gestão de template, e o envio em si ainda não existe (adapter recusa) —
   // por isso `costPerMessage: false` é o único valor honesto hoje.
+  //
+  // Etapa 2: GENTE passa a poder responder, até 7 dias desde a última mensagem
+  // do cliente (a tag HUMAN_AGENT da Meta) — `janelaHumanaMs`. A IA continua
+  // fora (`iaResponde: false`): a extensão é para o humano, não para automação.
+  // `limiteDeTexto: 1000` e `midiaDeEnvio: "so_foto"` são limites medidos da
+  // API do Direct, não do WhatsApp.
   meta_instagram: {
     freeformOutsideWindow: false,
     requiresTemplates: false,
@@ -95,8 +113,12 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     groups: "none",
     costPerMessage: false,
     // O adapter existe e RECEBE, mas `send()` sempre lança — envio chega na
-    // etapa 2. Quem escolhe sessão para automação lê este campo, não o nome.
+    // etapa 3. Quem escolhe sessão para automação lê este campo, não o nome.
     canSend: false,
+    iaResponde: false,
+    janelaHumanaMs: 7 * 24 * 60 * 60 * 1000,
+    limiteDeTexto: 1000,
+    midiaDeEnvio: "so_foto",
   },
 };
 

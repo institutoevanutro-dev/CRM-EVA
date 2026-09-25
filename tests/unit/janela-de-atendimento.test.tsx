@@ -57,7 +57,7 @@ describe("o estado da janela", () => {
   it("cliente que NUNCA escreveu: fechada SEM prazo — nunca houve fechamento", () => {
     // Fail-closed, e `null` em vez de um número: inventar "fechada há 3 dias"
     // descreveria um prazo que nunca correu.
-    expect(estadoDaJanela("zernio", null, AGORA)).toEqual({ tipo: "fechada", fechadaHaMs: null });
+    expect(estadoDaJanela("zernio", null, AGORA)).toEqual({ tipo: "fechada", fechadaHaMs: null, regra: "modelo" });
   });
 
   it("sem canal resolvido não trava nada", () => {

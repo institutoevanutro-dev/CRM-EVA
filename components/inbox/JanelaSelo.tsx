@@ -53,6 +53,9 @@ export function JanelaSelo({
 
   const estado = estadoDaJanela(provider, lastInboundAt, agora);
   if (estado.tipo === "sem_restricao") return null;
+  // Janela humana (extensão de 7 dias do Instagram): sem selo nesta etapa —
+  // quem desenha o aviso é a Task 6.
+  if (estado.tipo === "humana") return null;
 
   if (estado.tipo === "fechada") {
     // "Fechada há 3d" responde o que o operador realmente pergunta — "passei

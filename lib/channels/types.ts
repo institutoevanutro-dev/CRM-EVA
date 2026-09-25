@@ -73,6 +73,17 @@ export interface ChannelCapabilities {
    * sinal correto mas ORTOGONAL a "este canal sabe enviar".
    */
   canSend: boolean;
+  /** A IA do CRM pode responder por este canal. `false` = só gente. */
+  iaResponde: boolean;
+  /**
+   * Janela estendida para resposta HUMANA depois das 24h (a tag HUMAN_AGENT da
+   * Meta no Instagram). `null` = o canal não tem essa extensão.
+   */
+  janelaHumanaMs: number | null;
+  /** Máximo de caracteres de um texto enviado. `null` = sem limite próprio do canal. */
+  limiteDeTexto: number | null;
+  /** O que o CRM consegue anexar por este canal. */
+  midiaDeEnvio: "completa" | "so_foto";
 }
 
 /**
