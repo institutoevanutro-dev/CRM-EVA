@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import { invalidarAppDaMeta } from "@/lib/channels/meta/app";
+import { invalidarAppDoInstagram } from "@/lib/channels/instagram/app";
 import { audit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
@@ -76,6 +77,13 @@ const entradaSchema = z.object({
    * folga para quem colou de um gerenciador de segredos sem espaços sobrando.
    */
   app_secret: z.string().trim().min(16).max(300).optional(),
+  /**
+   * O par do Instagram Direct (mesmo app da Meta, produto diferente). O App ID
+   * não é segredo — pode ir em texto puro; o App Secret segue a mesma regra do
+   * `app_secret` acima: opcional, vazio mantém o que está gravado.
+   */
+  ig_app_id: z.string().trim().min(1).max(60).optional(),
+  ig_app_secret: z.string().trim().min(16).max(300).optional(),
 });
 
 export type MetaAppInput = z.infer<typeof entradaSchema>;
@@ -115,6 +123,7 @@ async function gravar(
   // No MESMO processo que renderiza (na VPS há um processo de app só), então a
   // credencial nova vale na próxima entrega sem esperar o TTL de 30s.
   invalidarAppDaMeta();
+  invalidarAppDoInstagram();
 
   const cabecalhos = await headers();
   await audit({
@@ -156,22 +165,26 @@ async function gravar(
  * dizia `app_secret_obrigatorio` — "cadastre a chave" para quem já cadastrou.
  */
 async function oQueEstaGravado(): Promise<
-  { ok: true; temSegredo: boolean; temToken: boolean } | { ok: false; recusa: UpdateMetaAppResult }
+  | { ok: true; temSegredo: boolean; temToken: boolean; temSegredoInstagram: boolean }
+  | { ok: false; recusa: UpdateMetaAppResult }
 > {
   const { data, error } = await createAdminClient()
     .from("platform_meta_app")
-    .select("app_secret_encrypted, verify_token_encrypted")
+    .select("app_secret_encrypted, verify_token_encrypted, ig_app_secret_encrypted")
     .eq("id", 1)
     .maybeSingle();
   if (error) {
     logger.warn("[meta.app] não deu para ler o que está gravado; nada foi alterado", { codigo: error.code });
     return { ok: false, recusa: { ok: false, error: "leitura_do_app_falhou", details: { codigo: error.code } } };
   }
-  const linha = data as { app_secret_encrypted?: string | null; verify_token_encrypted?: string | null } | null;
+  const linha = data as
+    | { app_secret_encrypted?: string | null; verify_token_encrypted?: string | null; ig_app_secret_encrypted?: string | null }
+    | null;
   return {
     ok: true,
     temSegredo: texto(linha?.app_secret_encrypted) !== "",
     temToken: texto(linha?.verify_token_encrypted) !== "",
+    temSegredoInstagram: texto(linha?.ig_app_secret_encrypted) !== "",
   };
 }
 
@@ -203,10 +216,12 @@ export async function updateMetaApp(input: MetaAppInput): Promise<UpdateMetaAppR
   if (!gravado.ok) return gravado.recusa;
   const { temSegredo, temToken: jaTemToken } = gravado;
   const segredoNovo = parsed.data.app_secret;
+  const igAppIdNovo = parsed.data.ig_app_id;
+  const igSegredoNovo = parsed.data.ig_app_secret;
 
   if (!segredoNovo && !temSegredo) return SEM_SEGREDO;
 
-  if (!segredoNovo && jaTemToken) {
+  if (!segredoNovo && jaTemToken && !igAppIdNovo && !igSegredoNovo) {
     // Nada a fazer, e dizer isso é melhor que gravar uma trilha de "atualizou"
     // que não atualizou nada.
     return { ok: false, error: "nada_para_salvar" };
@@ -226,6 +241,25 @@ export async function updateMetaApp(input: MetaAppInput): Promise<UpdateMetaAppR
     }
     valores.app_secret_encrypted = cifrado;
     campos.push("app_secret_encrypted");
+  }
+
+  // App ID não é segredo: texto puro, mesma coluna sempre que o dono digitar.
+  if (igAppIdNovo) {
+    valores.ig_app_id = igAppIdNovo;
+    campos.push("ig_app_id");
+  }
+
+  if (igSegredoNovo) {
+    const cifradoInstagram = await encryptWebhookSecret(createAdminClient(), igSegredoNovo);
+    if (!cifradoInstagram) {
+      return {
+        ok: false,
+        error:
+          "cifra indisponível nesta instalação (GUC app.nuvemshop_oauth_key ausente) — o segredo do Instagram não foi gravado",
+      };
+    }
+    valores.ig_app_secret_encrypted = cifradoInstagram;
+    campos.push("ig_app_secret_encrypted");
   }
 
   let verifyToken: string | undefined;
@@ -248,6 +282,8 @@ export async function updateMetaApp(input: MetaAppInput): Promise<UpdateMetaAppR
     campos,
     segredo_trocado: Boolean(segredoNovo),
     verify_token_gerado: Boolean(verifyToken),
+    instagram_app_id_trocado: Boolean(igAppIdNovo),
+    instagram_segredo_trocado: Boolean(igSegredoNovo),
   });
   if (!r.ok) return r;
 

@@ -6754,6 +6754,17 @@ export const DICIONARIO: Traducoes = {
   "Já cadastrado na administração da instalação. Ele aparece uma vez só, quando é gerado — se não foi guardado, quem administra a instalação gera outro em Admin › API Oficial (Meta).": { es: "Ya registrado en la administración de la instalación. Aparece una sola vez, cuando se genera — si no se guardó, quien administra la instalación genera otro en Admin › API Oficial (Meta)." },
   "Ainda não configurado. Quem administra a instalação cadastra em Admin › API Oficial (Meta), e o token aparece lá pronto para copiar.": { es: "Todavía no configurado. Quien administra la instalación lo registra en Admin › API Oficial (Meta), y el token aparece allí listo para copiar." },
   "cifra indisponível nesta instalação (GUC app.nuvemshop_oauth_key ausente) — o verify token não foi gravado": { es: "cifrado no disponible en esta instalación (GUC app.nuvemshop_oauth_key ausente) — el verify token no fue guardado" },
+
+  // ─── Instagram Direct: credencial do app (/admin/meta, migration 0277) ───
+  "Instagram": { es: "Instagram" },
+  "Painel da Meta › seu app › Instagram › Configuração da API com login do Instagram": { es: "Panel de Meta › tu app › Instagram › Configuración de la API con inicio de sesión de Instagram" },
+  "Instagram App ID": { es: "Instagram App ID" },
+  "Número do App ID": { es: "Número del App ID" },
+  "Instagram App Secret": { es: "Instagram App Secret" },
+  "Guardada cifrada e nunca volta a aparecer nesta tela.": { es: "Se guarda cifrada y nunca vuelve a aparecer en esta pantalla." },
+  "cifra indisponível nesta instalação (GUC app.nuvemshop_oauth_key ausente) — o segredo do Instagram não foi gravado": { es: "cifrado no disponible en esta instalación (GUC app.nuvemshop_oauth_key ausente) — el secreto de Instagram no fue guardado" },
+  "Credencial do Instagram salva.": { es: "Credencial de Instagram guardada." },
+
   "O que ele consulta antes de responder": { es: "Qué consulta antes de responder" },
   "Marque o material do seu negócio que este assistente pode ler. Ele procura ali antes de responder, em vez de improvisar — e cita de onde tirou.": { es: "Marca el material de tu negocio que este asistente puede leer. Busca ahí antes de responder, en vez de improvisar — y cita de dónde lo sacó." },
   "Você ainda não cadastrou nenhum material.": { es: "Todavía no registraste ningún material." },
