@@ -59,6 +59,20 @@ export interface ChannelCapabilities {
   groups: "full" | "limited" | "none";
   /** Mensagem entregue gera custo → decisões de envio precisam considerar orçamento. */
   costPerMessage: boolean;
+  /**
+   * O CÓDIGO sabe ENVIAR por este canal agora? `false` para um
+   * `ProviderDeMensagem` que só recebe nesta etapa (Instagram etapa 1: o
+   * adapter existe, `send()` sempre lança).
+   *
+   * Distinta de `isConfigured()` do adapter, que é por-instalação (uma
+   * credencial ausente/inválida) — esta é por-CÓDIGO: nem toda instalação com
+   * a variável certa faz este canal enviar, porque o transporte de saída
+   * ainda não foi escrito. Quem escolhe sessão para ENVIO AUTOMATIZADO
+   * filtra por aqui (`providersDeEnvioAutomatico`), não por `isConfigured()`
+   * — que para `waha` reflete env ausente em teste/instalação nova, um
+   * sinal correto mas ORTOGONAL a "este canal sabe enviar".
+   */
+  canSend: boolean;
 }
 
 /**

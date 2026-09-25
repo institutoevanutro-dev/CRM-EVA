@@ -13,7 +13,7 @@ import { beginServiceAtOrigin } from "@/lib/atendimento/origem";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
-import { PROVIDERS_DE_MENSAGEM } from "@/lib/channels/capabilities";
+import { providersDeEnvioAutomatico } from "@/lib/channels";
 
 
 /** Sessão viva da org: WORKING primeiro; senão qualquer uma não arquivada. */
@@ -27,8 +27,11 @@ export async function sessaoProntaParaEnvio(
       .select("id")
       .eq("organization_id", organizationId);
     // Voz não manda texto: escolher a linha de chamada aqui faria a automação
-    // "enviar" por um canal sem transporte de mensagem (spec 18).
-    q = q.in("provider", [...PROVIDERS_DE_MENSAGEM]);
+    // "enviar" por um canal sem transporte de mensagem (spec 18). E um
+    // `ProviderDeMensagem` que ainda não sabe ENVIAR (Instagram etapa 1, que
+    // só recebe) é o mesmo defeito numa forma nova — por isso o filtro é pela
+    // capacidade do adapter, não pela lista bruta de providers de mensagem.
+    q = q.in("provider", [...providersDeEnvioAutomatico()]);
     if (soWorking) q = q.eq("status", "WORKING");
     if (ignorarArquivadas) q = q.is(ARCHIVED_AT, null);
     return q.order("created_at", { ascending: true }).limit(1);

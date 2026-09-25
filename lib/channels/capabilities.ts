@@ -29,6 +29,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     voiceNote: "server-convert",
     groups: "full",
     costPerMessage: false,
+    canSend: true,
   },
   // Hetero-restrição: não me banem, mas a Meta me proíbe e me cobra.
   meta_cloud: {
@@ -42,6 +43,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     voiceNote: "opus-only",
     groups: "limited",
     costPerMessage: true,
+    canSend: true,
   },
   // Mesma hetero-restrição do canal oficial, por baixo: é um BSP: a WABA é da
   // Meta, os templates são aprovados pela Meta e a janela de 24h é da Meta. O
@@ -75,6 +77,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     voiceNote: "opus-only",
     groups: "limited",
     costPerMessage: true,
+    canSend: true,
   },
   // Etapa 1 só recebe (webhook). O Direct não tem template aprovado nem janela
   // de 24h formal como o WhatsApp — a restrição real da API é a janela de 24h
@@ -91,6 +94,9 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     voiceNote: "opus-only",
     groups: "none",
     costPerMessage: false,
+    // O adapter existe e RECEBE, mas `send()` sempre lança — envio chega na
+    // etapa 2. Quem escolhe sessão para automação lê este campo, não o nome.
+    canSend: false,
   },
 };
 
