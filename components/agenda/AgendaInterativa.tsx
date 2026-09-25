@@ -39,6 +39,14 @@ import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
  * livre. Reimplementar jornada aqui seria mais rápido e criaria exatamente essa
  * discordância, que aparece como 422 na cara de quem clicou.
  */
+/**
+ * Quantos tipos ainda cabem como fileira de botões antes de virar lista.
+ *
+ * Seis é o que ocupa UMA linha na largura típica da coluna da grade; a partir
+ * do sétimo a fileira quebra e cada linha nova sai da altura da agenda.
+ */
+const MUITOS_TIPOS = 6;
+
 export function AgendaInterativa({
   visao,
   ancora,
@@ -215,23 +223,51 @@ export function AgendaInterativa({
           className="flex flex-wrap items-center gap-1.5 text-xs text-text-muted"
         >
           <span className="shrink-0">{t("Horários livres de")}</span>
-          {tipos.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              data-testid={`tipo-da-grade-${t.id}`}
-              aria-pressed={t.id === tipo?.id}
-              onClick={() => onEscolherTipo(t.id)}
-              className={cn(
-                "rounded-full border px-2.5 py-0.5 transition-colors duration-fast",
-                t.id === tipo?.id
-                  ? "border-transparent bg-accent text-accent-foreground"
-                  : "border-border hover:border-border-strong hover:text-text",
-              )}
+          {/*
+            ACIMA DE UM PUNHADO DE TIPOS, A FILEIRA DE BOTÕES VIRA UMA PAREDE.
+
+            Medido numa clínica com 21 tipos de atendimento: a fileira ocupava
+            134px em quatro linhas e empurrava a GRADE — o conteúdo da tela — para
+            76% da altura. Quem abria a agenda não via a agenda.
+
+            Até `MUITOS_TIPOS` os botões continuam, porque ali eles são melhores:
+            todas as opções visíveis, um clique cada. Acima disso o que se ganha
+            em visibilidade já se perdeu em rolagem, e a lista fechada devolve a
+            tela para o que a pessoa veio ver.
+          */}
+          {tipos.length > MUITOS_TIPOS ? (
+            <select
+              data-testid="tipo-da-grade-lista"
+              aria-label={t("Tipo de atendimento dos horários livres")}
+              value={tipo?.id ?? ""}
+              onChange={(e) => onEscolherTipo(e.target.value)}
+              className="min-w-0 max-w-[260px] rounded-full border border-border bg-transparent px-2.5 py-0.5 text-xs text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500"
             >
-              {t.nome}
-            </button>
-          ))}
+              {tipos.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nome}
+                </option>
+              ))}
+            </select>
+          ) : (
+            tipos.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                data-testid={`tipo-da-grade-${t.id}`}
+                aria-pressed={t.id === tipo?.id}
+                onClick={() => onEscolherTipo(t.id)}
+                className={cn(
+                  "rounded-full border px-2.5 py-0.5 transition-colors duration-fast",
+                  t.id === tipo?.id
+                    ? "border-transparent bg-accent text-accent-foreground"
+                    : "border-border hover:border-border-strong hover:text-text",
+                )}
+              >
+                {t.nome}
+              </button>
+            ))
+          )}
         </div>
       )}
 
