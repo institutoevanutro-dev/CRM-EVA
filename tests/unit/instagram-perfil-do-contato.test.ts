@@ -6,10 +6,23 @@ vi.mock("@/lib/channels/instagram/graph", () => ({
   perfilDoRemetente: (...a: unknown[]) => perfilDoRemetenteMock(...(a as [])),
 }));
 
-const { deveBuscarPerfil, preencherPerfilDoContato } = await import("@/lib/channels/instagram/perfil-do-contato");
+const { deveBuscarPerfil, nomeAtualDoContato, preencherPerfilDoContato } = await import(
+  "@/lib/channels/instagram/perfil-do-contato"
+);
 
 const agora = new Date("2026-09-25T12:00:00Z");
 const H = 3_600_000;
+
+describe("nomeAtualDoContato", () => {
+  it("devolve o display_name quando há um", () => {
+    expect(nomeAtualDoContato({ display_name: "Maria" })).toBe("Maria");
+  });
+  it("devolve null para registro nulo, indefinido ou sem nome", () => {
+    expect(nomeAtualDoContato(null)).toBeNull();
+    expect(nomeAtualDoContato(undefined)).toBeNull();
+    expect(nomeAtualDoContato({ display_name: null })).toBeNull();
+  });
+});
 
 describe("deveBuscarPerfil", () => {
   it("identidade nova sempre busca", () => {

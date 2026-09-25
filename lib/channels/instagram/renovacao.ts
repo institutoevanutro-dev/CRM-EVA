@@ -35,7 +35,7 @@ import { decryptWebhookSecret, encryptWebhookSecret } from "@/lib/webhooks/secre
 
 import { CHANNEL_PROVIDER_INSTAGRAM } from "../capabilities";
 import { BASE_DO_INSTAGRAM } from "./graph";
-import { deveBuscarPerfil, preencherPerfilDoContato } from "./perfil-do-contato";
+import { deveBuscarPerfil, nomeAtualDoContato, preencherPerfilDoContato } from "./perfil-do-contato";
 
 /** Renova quando faltam menos de 15 dias — folga contra uma rodada perdida. */
 const JANELA_DE_RENOVACAO_MS = 15 * 24 * 60 * 60 * 1000;
@@ -151,7 +151,7 @@ async function preencherNomesDaSessao(
   let preenchidos = 0;
   for (const linha of (data ?? []) as unknown as ConversaSemNome[]) {
     const tentadoEm = (linha.contacts?.source_metadata?.perfil_tentado_em as string | undefined) ?? null;
-    if (!deveBuscarPerfil({ identidadeNova: false, nomeAtual: linha.contacts?.display_name ?? null, tentadoEm, agora })) continue;
+    if (!deveBuscarPerfil({ identidadeNova: false, nomeAtual: nomeAtualDoContato(linha.contacts), tentadoEm, agora })) continue;
     const resultado = await preencherPerfilDoContato(admin, {
       organizationId: sessao.organization_id,
       contactId: linha.contact_id,

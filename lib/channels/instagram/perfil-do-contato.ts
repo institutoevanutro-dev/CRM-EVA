@@ -17,6 +17,19 @@ import { perfilDoRemetente } from "./graph";
 
 export const INTERVALO_ENTRE_TENTATIVAS_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * `display_name` de um registro, normalizado para `null` — nada além disso.
+ * Não é a cadeia de apresentação (`nomeDoContato`/`rotuloDoContato` em
+ * `lib/contacts/rotulo-do-contato.ts` decidem ENTRE `name`/`display_name`/
+ * telefone para a tela); aqui só se pergunta "este registro já tem
+ * `display_name`?", pra decidir se vale a pena buscar de novo.
+ */
+export function nomeAtualDoContato(registro: { display_name: string | null } | null | undefined): string | null {
+  if (!registro) return null;
+  if (registro.display_name) return registro.display_name;
+  return null;
+}
+
 /** Deve buscar o perfil agora? Identidade nova sempre; contato sem nome, no máximo 1×/24h. */
 export function deveBuscarPerfil(input: {
   identidadeNova: boolean;

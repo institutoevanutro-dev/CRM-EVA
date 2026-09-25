@@ -24,7 +24,7 @@ import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { logger } from "@/lib/logger";
 import { marcarConversaComMensagem } from "../marcar-conversa";
 import { aplicarEfeitosPosEntrada } from "../pos-entrada";
-import { deveBuscarPerfil, preencherPerfilDoContato } from "./perfil-do-contato";
+import { deveBuscarPerfil, nomeAtualDoContato, preencherPerfilDoContato } from "./perfil-do-contato";
 import type { EventoDoInstagram } from "./webhook";
 
 export type ResultadoDaIngestao =
@@ -77,7 +77,6 @@ export async function ingerirDoInstagram(
   // Nome do contato: identidade nova sempre busca; sem nome, no máximo
   // 1×/24h (não em toda mensagem — throttle em `deveBuscarPerfil`). Vale
   // para inbound E eco: um eco pode ser a PRIMEIRA mensagem de alguém.
-  let nomeDoContato: string | null = null;
   const { data: contatoParaNome } = await admin
     .from("contacts")
     .select("display_name, source_metadata")
@@ -85,7 +84,7 @@ export async function ingerirDoInstagram(
     .eq("id", contato.contact_id)
     .maybeSingle();
   const paraNome = contatoParaNome as { display_name: string | null; source_metadata: Record<string, unknown> } | null;
-  nomeDoContato = paraNome?.display_name ?? null;
+  const nomeDoContato = nomeAtualDoContato(paraNome);
   const tentadoEm = (paraNome?.source_metadata?.perfil_tentado_em as string | undefined) ?? null;
   if (sessao.tokenCifrado && deveBuscarPerfil({ identidadeNova, nomeAtual: nomeDoContato, tentadoEm, agora: new Date() })) {
     const token = await decryptWebhookSecret(admin, sessao.tokenCifrado);
