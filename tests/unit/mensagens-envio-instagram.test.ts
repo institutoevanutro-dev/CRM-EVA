@@ -45,7 +45,9 @@ const HORA = 60 * 60 * 1000;
 
 type Row = Record<string, unknown>;
 
-function conversa(o: { id?: string; provider?: string; igsid?: string | null; inboundHaMs?: number | null } = {}): Row {
+function conversa(
+  o: { id?: string; provider?: string; igsid?: string | null; inboundHaMs?: number | null; status?: string } = {},
+): Row {
   return {
     id: o.id ?? CONV,
     organization_id: ORG,
@@ -63,7 +65,7 @@ function conversa(o: { id?: string; provider?: string; igsid?: string | null; in
       ig_account_id: "IGACC",
       meta_phone_number_id: "PNID",
       waha_session_name: null,
-      status: "WORKING",
+      status: o.status ?? "WORKING",
       archived_at: null,
     },
   };
@@ -137,10 +139,36 @@ describe("envio pelo Instagram", () => {
     });
   });
 
-  it("cliente que nunca escreveu: fora_da_janela", async () => {
+  it("cliente que nunca escreveu: fora_da_janela, sem falar em 7 dias", async () => {
     const msg = await sendMessageHandler(supabaseFalso(conversa({ inboundHaMs: null })), humano, texto());
     expect(sendSpy).not.toHaveBeenCalled();
-    expect(msg).toMatchObject({ status: "failed", error_code: "fora_da_janela" });
+    expect(msg).toMatchObject({
+      status: "failed",
+      error_code: "fora_da_janela",
+      error_message:
+        "Essa pessoa ainda não escreveu para este perfil. A Meta só deixa responder depois que ela mandar uma mensagem.",
+    });
+  });
+
+  it("perfil desconectado: falha com instagram_desconectado, nunca queued (nada reenvia o Instagram)", async () => {
+    const msg = await sendMessageHandler(supabaseFalso(conversa({ status: "FAILED" })), humano, texto());
+    expect(sendSpy).not.toHaveBeenCalled();
+    expect(msg).toMatchObject({
+      status: "failed",
+      error_code: "instagram_desconectado",
+      error_message: "A conexão deste perfil do Instagram caiu. Reconecte o Instagram em Conexões e envie de novo.",
+    });
+  });
+
+  it("WhatsApp com sessão fora do ar segue na fila, como hoje", async () => {
+    const msg = await sendMessageHandler(
+      supabaseFalso(conversa({ provider: CHANNEL_PROVIDER_META, status: "FAILED" })),
+      humano,
+      texto(),
+    );
+    expect(sendSpy).not.toHaveBeenCalled();
+    expect(msg.status).not.toBe("failed");
+    expect((msg.metadata as Record<string, unknown>).queued_reason).toBe("channel_session_not_working");
   });
 
   it.each([

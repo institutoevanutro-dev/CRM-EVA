@@ -4815,6 +4815,9 @@ export const DICIONARIO: Traducoes = {
   "A Meta só deixa responder até 7 dias depois da última mensagem dessa pessoa. Responda pelo app do Instagram se ela escrever de novo.": {
     es: "Meta solo permite responder hasta 7 días después del último mensaje de esa persona. Responde por la app de Instagram si vuelve a escribir.",
   },
+  "Essa pessoa ainda não escreveu para este perfil. A Meta só deixa responder depois que ela mandar uma mensagem.": {
+    es: "Esta persona aún no escribió a este perfil. Meta solo permite responder después de que ella envíe un mensaje.",
+  },
   "Lembrete ativo": { es: "Recordatorio activo" },
   "Cancelar lembrete": { es: "Cancelar recordatorio" },
   "Em 1 hora": { es: "En 1 hora" },

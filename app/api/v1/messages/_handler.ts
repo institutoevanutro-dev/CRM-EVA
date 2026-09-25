@@ -624,8 +624,12 @@ export async function sendMessageHandler(
     if (janela.tipo === "fechada") {
       recusa = {
         code: "fora_da_janela",
+        // Sem `last_inbound_at` (só ecos do próprio perfil) não houve prazo
+        // correndo: falar em "7 dias" descreveria um vencimento que não existe.
         message:
-          "A Meta só deixa responder até 7 dias depois da última mensagem dessa pessoa. Responda pelo app do Instagram se ela escrever de novo.",
+          janela.fechadaHaMs === null
+            ? "Essa pessoa ainda não escreveu para este perfil. A Meta só deixa responder depois que ela mandar uma mensagem."
+            : "A Meta só deixa responder até 7 dias depois da última mensagem dessa pessoa. Responda pelo app do Instagram se ela escrever de novo.",
       };
     }
     etiquetaHumana = janela.tipo === "humana";
@@ -715,6 +719,14 @@ export async function sendMessageHandler(
     } else {
       await falharAntesDeEnviar("missing_phone_number", "Contato sem telefone para envio WhatsApp.");
     }
+  } else if (provider === CHANNEL_PROVIDER_INSTAGRAM && c.channel_sessions?.status !== "WORKING") {
+    // `queued` só é honesto onde algo reenvia: o session-reconciler só
+    // conhece a sessão WAHA, e nada tira uma mensagem do Instagram da fila.
+    // A tela prometeria "sai sozinha" para uma resposta que nunca sairia.
+    await falharAntesDeEnviar(
+      "instagram_desconectado",
+      "A conexão deste perfil do Instagram caiu. Reconecte o Instagram em Conexões e envie de novo.",
+    );
   } else if (!c.channel_sessions || c.channel_sessions.status !== "WORKING") {
     const { data: updated } = await supabase
       .from("messages")

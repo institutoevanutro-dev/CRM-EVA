@@ -223,6 +223,15 @@ describe("os elos que somem sem barulho", () => {
     );
   });
 
+  it("Instagram sem mensagem da pessoa não fala em 7 dias (nenhum prazo correu)", () => {
+    // Só ecos do próprio perfil: `last_inbound_at` nulo, `fechadaHaMs` nulo.
+    // "até 7 dias depois da última mensagem" descreveria uma mensagem que não existe.
+    const fonte = readFileSync("components/inbox/InboxLayout.tsx", "utf8");
+    expect(fonte).toMatch(
+      /regra === "sete_dias"\s*\?\s*janela\.fechadaHaMs === null\s*\?\s*t\(\s*"Essa pessoa ainda não escreveu para este perfil\. A Meta só deixa responder depois que ela mandar uma mensagem\.",?\s*\)/,
+    );
+  });
+
   it("e o bloqueio VENCE sozinho com a aba aberta", () => {
     // Sem relógio, quem deixa o inbox aberto a tarde inteira seguiria com o
     // composer liberado numa conversa que já venceu.
