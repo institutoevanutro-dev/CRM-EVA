@@ -13,7 +13,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { appDoInstagram, instagramPodeConectar } from "@/lib/channels/instagram/app";
 import { listarConexoesDoInstagram } from "@/lib/channels/instagram/conexao";
-import { camposDoFunil } from "@/lib/leads/campos-do-funil";
+import { camposDeListaDoFunilPadrao } from "@/lib/leads/campos-do-funil";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -27,20 +27,11 @@ export async function GET(_req: NextRequest): Promise<NextResponse> {
   const admin = createAdminClient();
 
   try {
-    const [app, contas, funil] = await Promise.all([
+    const [app, contas, campos] = await Promise.all([
       appDoInstagram(),
       listarConexoesDoInstagram(admin, orgId),
-      admin
-        .from("crm_pipelines")
-        .select("settings")
-        .eq("organization_id", orgId)
-        .eq("is_default", true)
-        .eq("is_archived", false)
-        .maybeSingle(),
+      camposDeListaDoFunilPadrao(admin, orgId),
     ]);
-    const campos = camposDoFunil((funil.data as { settings: Record<string, unknown> | null } | null)?.settings)
-      .filter((c) => c.type === "select" && (c.options?.length ?? 0) > 0)
-      .map((c) => ({ key: c.key, label: c.label, options: c.options ?? [] }));
 
     return ok(
       {

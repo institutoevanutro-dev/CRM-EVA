@@ -10,7 +10,26 @@ import { DELETE, PATCH } from "./route";
 
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn(() => ({})) }));
+/** Funil padrão com um campo `select` (origem) e um de texto (obs). Grava os filtros. */
+const filtrosDoFunil: [string, unknown][] = [];
+const settings = {
+  fields: [
+    { key: "origem", label: "Origem", type: "select", options: [{ value: "instagram", label: "Instagram" }, { value: "indicacao", label: "Indicação" }] },
+    { key: "obs", label: "Observação", type: "text" },
+  ],
+};
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: vi.fn(() => ({
+    from: () => {
+      const q = {
+        select: () => q,
+        eq: (c: string, v: unknown) => (filtrosDoFunil.push([c, v]), q),
+        maybeSingle: async () => ({ data: { settings }, error: null }),
+      };
+      return q;
+    },
+  })),
+}));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
 vi.mock("@/lib/channels/instagram/conexao", () => ({
   arquivarConexaoDoInstagram: vi.fn(),
@@ -28,6 +47,7 @@ const req = (method: string, body?: unknown) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  filtrosDoFunil.length = 0;
   vi.mocked(requireRole).mockResolvedValue({ ok: true, user: { id: "U1" }, org: { orgId: ORG, role: "manager" } } as Awaited<ReturnType<typeof requireRole>>);
 });
 
@@ -65,6 +85,32 @@ describe("rota da conta do Instagram", () => {
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "channel.instagram_origem_changed", organizationId: ORG }));
     const corpo = JSON.stringify(await r.json());
     for (const p of Object.keys(CHANNEL_CAPABILITIES)) expect(corpo).not.toContain(p);
+  });
+
+  it("PATCH com campo que não existe no funil padrão é 422 e não grava", async () => {
+    const r = await PATCH(req("PATCH", { origem_padrao: { campo: "qualquer_chave", valor: "x" } }), ctx);
+    expect(r.status).toBe(422);
+    expect((await r.json()).error.code).toBe("validation_failed");
+    expect(definirOrigemPadrao).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("PATCH com campo que não é lista é 422 e não grava", async () => {
+    expect((await PATCH(req("PATCH", { origem_padrao: { campo: "obs", valor: "x" } }), ctx)).status).toBe(422);
+    expect(definirOrigemPadrao).not.toHaveBeenCalled();
+  });
+
+  it("PATCH com campo válido e valor fora das opções é 422 e não grava", async () => {
+    expect((await PATCH(req("PATCH", { origem_padrao: { campo: "origem", valor: "tiktok" } }), ctx)).status).toBe(422);
+    expect(definirOrigemPadrao).not.toHaveBeenCalled();
+  });
+
+  it("PATCH válido lê o funil padrão DA ORG da sessão", async () => {
+    vi.mocked(definirOrigemPadrao).mockResolvedValue(true);
+    expect((await PATCH(req("PATCH", { origem_padrao: { campo: "origem", valor: "indicacao" } }), ctx)).status).toBe(200);
+    expect(filtrosDoFunil).toContainEqual(["organization_id", ORG]);
+    expect(filtrosDoFunil).toContainEqual(["is_default", true]);
+    expect(definirOrigemPadrao).toHaveBeenCalledWith(expect.anything(), ORG, ID, { campo: "origem", valor: "indicacao" });
   });
 
   it("PATCH com null limpa; corpo inválido é 422", async () => {

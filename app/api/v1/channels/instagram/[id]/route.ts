@@ -15,6 +15,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { arquivarConexaoDoInstagram, definirOrigemPadrao } from "@/lib/channels/instagram/conexao";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { camposDeListaDoFunilPadrao, origemValida } from "@/lib/leads/campos-do-funil";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -52,9 +53,16 @@ export async function PATCH(req: NextRequest, ctx: Context): Promise<NextRespons
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("validation_failed", "Origem padrão inválida.", 422, { requestId });
 
+  const origem = parsed.data.origem_padrao;
+  const admin = createAdminClient();
   let achou: boolean;
   try {
-    achou = await definirOrigemPadrao(createAdminClient(), authz.org.orgId, id, parsed.data.origem_padrao);
+    // O par vai para `custom_fields` de todo contato novo (ingest): só entra
+    // campo `select` do funil padrão com valor entre as opções. `null` limpa.
+    if (origem && !origemValida(await camposDeListaDoFunilPadrao(admin, authz.org.orgId), origem)) {
+      return fail("validation_failed", "Escolha um campo de lista do funil padrão e uma das opções dele.", 422, { requestId });
+    }
+    achou = await definirOrigemPadrao(admin, authz.org.orgId, id, origem);
   } catch {
     return fail("internal_error", "Não foi possível salvar a origem padrão.", 500, { requestId });
   }
