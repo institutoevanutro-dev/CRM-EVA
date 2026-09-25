@@ -14,7 +14,7 @@ import type { z } from "zod";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { auditMcpToolCall } from "./audit";
-import { ensureRole, ensureScope, type McpAuthResult } from "./auth";
+import { ensureRole, ensureMcpToolScope, type McpAuthResult } from "./auth";
 import { allTools } from "./tools";
 import { higienizarUuidsDeAterro } from "./uuid-de-aterro";
 import type { McpContext } from "./types";
@@ -70,7 +70,7 @@ export function createMcpServer(auth: McpAuthResult, requestId: string): McpServ
         };
 
         try {
-          ensureScope(auth.scopes, tool.requiresScope);
+          ensureMcpToolScope(auth.scopes, tool.name, tool.requiresScope);
           ensureRole(auth.role, tool.requiresRole);
 
           const result = await tool.handler(args as never, ctx);

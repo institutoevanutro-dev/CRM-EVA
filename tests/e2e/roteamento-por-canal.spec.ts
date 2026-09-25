@@ -312,7 +312,7 @@ test("configura responsáveis por canal e o cron distribui sem misturar números
       fullPage: true,
     });
     await notice.getByRole("link", { name: "Abrir conversa" }).click();
-    await expect(page).toHaveURL(new RegExp(`/app/inbox/${southConversation}$`));
+    await expect(page).toHaveURL(new RegExp(`/app/inbox\\?id=${southConversation}$`));
     await expect(
       page.getByText("Mensagem de Cliente Canal Sul", { exact: true }).first(),
     ).toBeVisible();
