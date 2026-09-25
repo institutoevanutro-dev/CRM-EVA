@@ -54,6 +54,17 @@ export function providersDeEnvioAutomatico(): readonly ProviderDeMensagem[] {
   return PROVIDERS_DE_MENSAGEM.filter((p) => CHANNEL_CAPABILITIES[p].canSend);
 }
 
+/**
+ * Providers cujo adapter busca a foto de perfil de um contato de TELEFONE
+ * (`fetchProfilePictureUrl`). Existe para o cron de fotos: sem ele, um
+ * `limit(1)` sobre todos os canais de mensagem podia escolher a conta do
+ * Instagram, que não sabe buscar foto de telefone, e carimbar "sem foto" em
+ * contato de WhatsApp. Pergunta ao adapter, nunca pelo nome.
+ */
+export function providersComFotoDePerfil(): readonly ProviderDeMensagem[] {
+  return PROVIDERS_DE_MENSAGEM.filter((p) => Boolean(ADAPTERS[p]?.fetchProfilePictureUrl));
+}
+
 export {
   capabilitiesOf,
   CHANNEL_CAPABILITIES,

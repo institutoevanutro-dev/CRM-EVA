@@ -24,11 +24,10 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
-import { DEFAULT_CHANNEL_PROVIDER, getAdapter, type ChannelProvider } from "@/lib/channels";
+import { DEFAULT_CHANNEL_PROVIDER, getAdapter, providersComFotoDePerfil, type ChannelProvider } from "@/lib/channels";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { PROVIDERS_DE_MENSAGEM } from "@/lib/channels/capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -152,7 +151,11 @@ async function handle(req: NextRequest): Promise<Response> {
         // devolver `waha_session_name` nulo: a foto de todo mundo parava de
         // atualizar em silêncio, com o `carimbar(null)` logo abaixo parecendo
         // "este contato não tem foto".
-        .in("provider", [...PROVIDERS_DE_MENSAGEM])
+        //
+        // E só canal que BUSCA foto de contato de telefone: a conta do Instagram
+        // é canal de mensagem, mas não tem `fetchProfilePictureUrl`, e ganhar
+        // este `limit(1)` carimbava "sem foto" no contato de WhatsApp.
+        .in("provider", [...providersComFotoDePerfil()])
         .limit(1)
         .maybeSingle();
       const ref = (sessao as { waha_session_name?: string | null } | null)?.waha_session_name;

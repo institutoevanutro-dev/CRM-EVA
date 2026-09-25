@@ -139,6 +139,25 @@ describe("listagem que falhou não vira 'primeira instalação'", () => {
   });
 });
 
+describe("Números lista só canal que envia", () => {
+  it("conta do Instagram (can_send: false) não vira número de WhatsApp nem entra na contagem", () => {
+    listagem.data = [canal(), canal({ id: "ig-1", display_name: "@clinica", waha_session_name: null, phone_number: null, can_send: false })];
+
+    render(wrap(<ConnectionsClient wahaConfigured />));
+
+    expect(screen.getByText(/^1 número conectado/)).toBeInTheDocument();
+    expect(screen.queryByText("@clinica")).not.toBeInTheDocument();
+  });
+
+  it("org só com Instagram vê o convite do primeiro número, não \"1 número conectado\"", () => {
+    listagem.data = [canal({ id: "ig-1", display_name: "@clinica", waha_session_name: null, phone_number: null, can_send: false })];
+
+    render(wrap(<ConnectionsClient wahaConfigured />));
+
+    expect(screen.getByText(/Conecte seu primeiro número/)).toBeInTheDocument();
+  });
+});
+
 describe("Excluir sem o serviço de WhatsApp ativo", () => {
   it("fica desabilitado para o número pareado por QR, dizendo por quê", () => {
     render(wrap(<ConnectionsClient wahaConfigured={false} />));

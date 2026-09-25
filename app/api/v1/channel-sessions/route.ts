@@ -17,7 +17,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
-import { PROVIDERS_DE_MENSAGEM } from "@/lib/channels/capabilities";
+import { PROVIDERS_DE_MENSAGEM, canalRespondePeloCrm } from "@/lib/channels/capabilities";
 import { createChannelSchema } from "@/lib/schemas/channels";
 import { createClient } from "@/lib/supabase/server";
 import { getWahaClient } from "@/lib/waha/client";
@@ -26,7 +26,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 export const dynamic = "force-dynamic";
 
 export const CHANNEL_COLUMNS =
-  "id, waha_session_name, display_name, phone_number, status, status_reason, last_health_check_at, last_status_change_at, daily_message_limit, is_warmup_complete, created_at";
+  "id, waha_session_name, display_name, phone_number, status, status_reason, last_health_check_at, last_status_change_at, daily_message_limit, is_warmup_complete, created_at, provider";
 
 export async function GET(): Promise<Response> {
   const requestId = randomUUID();
@@ -60,7 +60,14 @@ export async function GET(): Promise<Response> {
   );
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
-  return ok(data ?? [], {
+  // `can_send` e não `provider`: a tela pergunta o que o canal PERMITE, nunca
+  // qual ele é. As listas de "número de WhatsApp" (Conexões › Números, o
+  // destino das automações) mostram só quem envia; o Inbox mostra todos.
+  const canais = ((data ?? []) as unknown as Array<Record<string, unknown> & { provider?: string | null }>).map(
+    ({ provider, ...resto }) => ({ ...resto, can_send: canalRespondePeloCrm(provider) }),
+  );
+
+  return ok(canais, {
     requestId,
     ...(schemaOutdated ? { meta: { schema_outdated: true } } : {}),
   });

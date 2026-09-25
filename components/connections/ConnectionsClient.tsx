@@ -1,7 +1,7 @@
 "use client";
 
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import type { ChannelRoutingSettings } from "@/lib/routing/channel-policies";
@@ -13,6 +13,7 @@ import { randomId } from "@/lib/random-id";
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
 import {
+  canaisQueEnviam,
   channelLabel,
   useChannelSessions,
   type ChannelSession,
@@ -109,11 +110,13 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
   const t = useT();
   const qc = useQueryClient();
   const {
-    data: sessions,
+    data: todasAsSessoes,
     isLoading,
     isError,
     schemaOutdated,
   } = useChannelSessions({ refetchInterval: 10_000 });
+  // "Números" é WhatsApp: a conta do Instagram tem cartão próprio e não envia.
+  const sessions = useMemo(() => canaisQueEnviam(todasAsSessoes), [todasAsSessoes]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const createKey = useRef<string | null>(null);
   const [connectionDetail, setConnectionDetail] = useState<string | null>(null);
