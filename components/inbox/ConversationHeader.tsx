@@ -20,6 +20,7 @@ import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { comandoDaConversa, ROTULO_DO_MOTIVO } from "@/lib/inbox/comando-da-conversa";
 import { ReassignDialog } from "@/components/inbox/ReassignDialog";
+import { SeloDoCanal } from "@/components/inbox/SeloDoCanal";
 import { SnoozeButton } from "@/components/inbox/SnoozeButton";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
@@ -149,6 +150,10 @@ export function ConversationHeader({ conversation }: Props) {
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-4 py-3">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
+          <SeloDoCanal
+            canal={conversation.channel === "instagram" ? "instagram" : "whatsapp"}
+            tamanho="grande"
+          />
           <h2 className="truncate text-sm font-semibold">{displayName}</h2>
           <Badge variant="outline" className="h-4 px-1.5 text-[10px]">
             {t(STATUS_LABEL[status] ?? status)}
@@ -195,12 +200,12 @@ export function ConversationHeader({ conversation }: Props) {
           )}
         </div>
         {phone && (
-          <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+          <p className="mt-0.5 flex items-center gap-1 text-xs text-canal-whatsapp">
             <Phone size={11} weight="regular" aria-hidden /> {phone}
           </p>
         )}
         {conversation.channel === "instagram" && (
-          <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+          <p className="mt-0.5 flex items-center gap-1 text-xs text-canal-instagram">
             <InstagramLogo size={11} weight="regular" aria-hidden />
             {conversation.channel_sessions?.display_name
               ? `${t("via")} ${conversation.channel_sessions.display_name}`

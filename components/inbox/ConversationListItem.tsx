@@ -9,6 +9,7 @@ import { InstagramLogo, Phone, Robot } from "@/lib/ui/icons";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
+import { SeloDoCanal } from "@/components/inbox/SeloDoCanal";
 import { comandoDaConversa } from "@/lib/inbox/comando-da-conversa";
 import { cn } from "@/lib/utils";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
@@ -232,6 +233,11 @@ export function ConversationListItem({
           )}
           aria-hidden
         />
+        <SeloDoCanal
+          canal={viaInstagram ? "instagram" : "whatsapp"}
+          tamanho="pequeno"
+          className="absolute -bottom-0.5 -left-0.5"
+        />
       </div>
 
       <div className="min-w-0 flex-1">
@@ -304,7 +310,7 @@ export function ConversationListItem({
             {viaInstagram && (
               <Badge
                 variant="outline"
-                className="h-4 gap-1 px-1.5 text-[10px] font-normal text-text-muted"
+                className="h-4 gap-1 border-canal-instagram/30 bg-canal-instagram/10 px-1.5 text-[10px] font-normal text-canal-instagram"
               >
                 <InstagramLogo size={9} weight="regular" aria-hidden />
                 {rotuloCanal ? `${t("via")} ${rotuloCanal}` : t("Instagram")}
@@ -313,7 +319,7 @@ export function ConversationListItem({
             {!viaInstagram && mostrarCanal && rotuloCanal && (
               <Badge
                 variant="outline"
-                className="h-4 gap-1 px-1.5 text-[10px] font-normal text-text-muted"
+                className="h-4 gap-1 border-canal-whatsapp/30 bg-canal-whatsapp/10 px-1.5 text-[10px] font-normal text-canal-whatsapp"
                 title={`${t("Entrou por")} ${rotuloCanal}`}
               >
                 <Phone size={9} weight="regular" aria-hidden />
