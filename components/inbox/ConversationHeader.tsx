@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { JanelaSelo } from "@/components/inbox/JanelaSelo";
+import { capabilitiesOf } from "@/lib/channels/capabilities";
+import type { ChannelProvider } from "@/lib/channels/types";
 import { InstagramLogo, Phone, ArrowRight } from "@/lib/ui/icons";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
@@ -115,7 +117,19 @@ export function ConversationHeader({ conversation }: Props) {
    * ninguém pediu para reabrir. Oferecer uma ação que não deveria acontecer é
    * pior que não oferecer nenhuma.
    */
-  const podeDevolver = travaVigente;
+  // Canal onde a IA nunca responde (o Instagram): não há automático para
+  // devolver, pausar ou "voltar em instantes". Provider nulo/desconhecido faz
+  // `capabilitiesOf` lançar; aí vale o comportamento de sempre.
+  let iaResponde = true;
+  const providerDaConversa = conversation.channel_sessions?.provider;
+  if (providerDaConversa) {
+    try {
+      iaResponde = capabilitiesOf(providerDaConversa as ChannelProvider).iaResponde;
+    } catch {
+      iaResponde = true;
+    }
+  }
+  const podeDevolver = travaVigente && iaResponde;
   /**
    * PAUSAR só aparece quando pausar é um gesto DIFERENTE de assumir.
    *
@@ -130,7 +144,7 @@ export function ConversationHeader({ conversation }: Props) {
    * automático nenhum.
    */
   const podePausar =
-    automaticoAtivo && !encerrada && conversation.assigned_to_user_id !== null;
+    iaResponde && automaticoAtivo && !encerrada && conversation.assigned_to_user_id !== null;
 
   if (user.support?.access_mode === "support_readonly") return <header className="flex items-center justify-between border-b p-4">
     <strong>{displayName}</strong><span className="text-sm text-muted-foreground">{STATUS_LABEL[status] ?? status} · Somente leitura</span>
@@ -172,7 +186,9 @@ export function ConversationHeader({ conversation }: Props) {
               o clica, e rótulo visível é contrato. O que mudou é o texto DIZER o
               motivo — "alguém assumiu" e "pausado para este cliente" pediam ações
               diferentes e tinham a mesma frase. */}
-          {motivo !== null && (
+          {/* Sem IA no canal, o selo falaria de um automático que não existe;
+              o opt-out do cliente continua valendo e continua aparecendo. */}
+          {motivo !== null && (iaResponde || motivo === "contato_descadastrado") && (
             <Badge
               variant="outline"
               className="h-4 px-1.5 text-[10px]"

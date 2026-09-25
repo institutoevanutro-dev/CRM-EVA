@@ -147,6 +147,24 @@ export async function ingerirDoInstagram(
     });
   }
 
+  // Só a equipe responde no Instagram (a IA nunca: HUMAN_AGENT promete gente).
+  // Conversa sem dono e sem silêncio cai em "Automático" (fn_comando_da_conversa),
+  // aba onde ninguém olha. Silêncio durável ('infinity', o mesmo literal do
+  // handoff e do pause-ai) a põe na Fila. A migration 0278 cura as antigas.
+  const { error: erroSilencio } = await admin
+    .from("conversations")
+    .update({ bot_silenced_until: "infinity" })
+    .eq("organization_id", orgId)
+    .eq("id", conversationId as string)
+    .or("bot_silenced_until.is.null,bot_silenced_until.lt.infinity");
+  if (erroSilencio) {
+    logger.warn("[instagram.ingest] calar a IA na conversa falhou", {
+      organization_id: orgId,
+      conversation_id: conversationId as string,
+      detail: erroSilencio.message,
+    });
+  }
+
   const anexo = e.anexos[0] ?? null;
   const { data: inserida, error: erroInsert } = await admin.from("messages").insert({
     organization_id: orgId,

@@ -24,6 +24,7 @@ function adminFalso(opts: {
   tentadoEm?: string | null;
 }) {
   const chamadas: Record<"rpc" | "insert" | "update", [string, unknown][]> = { rpc: [], insert: [], update: [] };
+  const filtrosDoUpdate: unknown[][][] = [];
   const admin = {
     rpc: vi.fn(async (nome: string, args: unknown) => {
       chamadas.rpc.push([nome, args]);
@@ -35,10 +36,13 @@ function adminFalso(opts: {
       insert: (linha: unknown) => { chamadas.insert.push([tabela, linha]); return { select: () => ({ maybeSingle: async () => opts.insertErro ? { data: null, error: opts.insertErro } : { data: { id: "M1" }, error: null } }) }; },
       update: (linha: unknown) => {
         chamadas.update.push([tabela, linha]);
-        // Encadeável e thenable para qualquer filtro: a conversa usa eq+eq+is.
+        const filtros: unknown[][] = [];
+        filtrosDoUpdate.push(filtros);
+        // Encadeável e thenable para qualquer filtro: a conversa usa eq+eq+is/or.
         const q: Record<string, unknown> = {
-          eq: () => q,
-          is: () => q,
+          eq: (...a: unknown[]) => { filtros.push(["eq", ...a]); return q; },
+          is: (...a: unknown[]) => { filtros.push(["is", ...a]); return q; },
+          or: (...a: unknown[]) => { filtros.push(["or", ...a]); return q; },
           then: (res: (v: unknown) => unknown) => Promise.resolve({ error: opts.updateErro ?? null }).then(res),
         };
         return q;
@@ -66,7 +70,7 @@ function adminFalso(opts: {
       },
     })),
   };
-  return { admin, chamadas };
+  return { admin, chamadas, filtrosDoUpdate };
 }
 
 const sessao = { id: "S1", organizationId: "ORG", igAccountId: "IGACC", tokenCifrado: "x", origemPadrao: { campo: "origem", valor: "Instagram Dr. André" } };
@@ -91,6 +95,24 @@ describe("ingestão do Instagram", () => {
     const eco = adminFalso({ contatoNovo: false });
     await ingerirDoInstagram(eco.admin as never, evento({ eco: true, remetente: "IGACC", destinatario: "IGSID9" }), sessao);
     expect(eco.chamadas.update).toContainEqual(["conversations", { provider_conversation_id: "IGSID9" }]);
+  });
+
+  it("cala a IA na conversa para sempre (só a equipe responde no Instagram), filtrando a organização", async () => {
+    // Sem isto a conversa nova cai em "Automático" (fn_comando_da_conversa), a
+    // aba onde ninguém olha, e a IA nunca responde Instagram.
+    const { admin, chamadas, filtrosDoUpdate } = adminFalso({});
+    await ingerirDoInstagram(admin as never, evento(), sessao);
+    const i = chamadas.update.findIndex(
+      ([t, l]) => t === "conversations" && (l as Record<string, unknown>).bot_silenced_until === "infinity",
+    );
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(filtrosDoUpdate[i]).toEqual(
+      expect.arrayContaining([
+        ["eq", "organization_id", "ORG"],
+        ["eq", "id", "CV1"],
+        ["or", "bot_silenced_until.is.null,bot_silenced_until.lt.infinity"],
+      ]),
+    );
   });
 
   it("entrega repetida (23505) é duplicada, sem efeitos", async () => {
