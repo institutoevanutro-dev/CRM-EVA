@@ -48,8 +48,10 @@ export function filtrosAuxiliaresDaContagem(
   sp: URLSearchParams,
 ): FiltroDeContagem[] {
   const filtros: FiltroDeContagem[] = [];
-  const canal = sp.get("channel_session_id");
-  if (canal) filtros.push(["channel_session_id", canal]);
+  const numero = sp.get("channel_session_id");
+  if (numero) filtros.push(["channel_session_id", numero]);
+  const canal = sp.get("canal");
+  if (canal === "instagram" || canal === "whatsapp") filtros.push(["channel", canal]);
   const tag = sp.get("tag");
   if (tag) filtros.push(["tag", tag]);
   return filtros;

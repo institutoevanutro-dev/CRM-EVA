@@ -195,6 +195,9 @@ export async function listConversationsHandler(
     query = query.not("status", "in", `(${CONVERSATION_TERMINAL_STATUSES.join(",")})`);
   }
   if (q.channel_session_id) query = query.eq("channel_session_id", q.channel_session_id);
+  // "Só Instagram" / "Só WhatsApp" — mutuamente exclusivo com channel_session_id
+  // na tela (InboxFilters), mas aqui compõe: nada impede pedir os dois.
+  if (q.canal) query = query.eq("channel", q.canal);
   if (q.tag) query = query.contains("tags", [q.tag]); // tags @> array[tag] (GIN)
 
   // No BANCO, e não em memória: filtrar depois de paginar devolveria páginas curtas —

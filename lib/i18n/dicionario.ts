@@ -551,6 +551,8 @@ export const DICIONARIO: Traducoes = {
   },
   "Buscar mensagens…": { es: "Buscar mensajes…" },
   "Todos os números": { es: "Todos los números" },
+  "Só Instagram": { es: "Solo Instagram" },
+  "Só WhatsApp": { es: "Solo WhatsApp" },
   "Todas as tags": { es: "Todas las etiquetas" },
   "Apenas não lidos": { es: "Solo no leídos" },
   "Não lidos": { es: "No leídos" },

@@ -53,6 +53,8 @@ export interface InboxFiltersValue {
   search: string;
   onlyUnread: boolean;
   channel_session_id?: string;
+  /** "Só Instagram" / "Só WhatsApp" — mutuamente exclusivo com channel_session_id. */
+  canal?: "instagram" | "whatsapp";
   tag?: string;
 }
 
@@ -100,6 +102,7 @@ export function InboxFilters({ value, onChange }: Props) {
     unread: value.onlyUnread,
     tag: value.tag,
     channel_session_id: value.channel_session_id,
+    canal: value.canal,
   });
 
   const tabs = activeOrg
@@ -224,15 +227,26 @@ export function InboxFilters({ value, onChange }: Props) {
           <div className="flex gap-2">
             {showChannelSwitch && (
               <Select
-                value={value.channel_session_id ?? "all"}
-                onValueChange={(v) =>
-                  onChange({ ...value, channel_session_id: v === "all" ? undefined : v })
-                }
+                value={value.canal ? `canal:${value.canal}` : value.channel_session_id ?? "all"}
+                onValueChange={(v) => {
+                  if (v === "all") {
+                    onChange({ ...value, channel_session_id: undefined, canal: undefined });
+                  } else if (v.startsWith("canal:")) {
+                    onChange({
+                      ...value,
+                      channel_session_id: undefined,
+                      canal: v.slice(6) as "instagram" | "whatsapp",
+                    });
+                  } else {
+                    onChange({ ...value, channel_session_id: v, canal: undefined });
+                  }
+                }}
               >
                 <SelectTrigger
                   className={cn(
                     "h-8 min-w-0 flex-1 rounded-full border-transparent bg-surface-elevated px-3 text-xs shadow-none",
-                    value.channel_session_id != null && "border-accent bg-accent-soft text-accent",
+                    (value.channel_session_id != null || value.canal != null) &&
+                      "border-accent bg-accent-soft text-accent",
                   )}
                   aria-label={t("Filtrar por número de WhatsApp")}
                 >
@@ -240,6 +254,8 @@ export function InboxFilters({ value, onChange }: Props) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("Todos os números")}</SelectItem>
+                  <SelectItem value="canal:instagram">{t("Só Instagram")}</SelectItem>
+                  <SelectItem value="canal:whatsapp">{t("Só WhatsApp")}</SelectItem>
                   {filtroForaDaLista && value.channel_session_id != null && (
                     <SelectItem value={value.channel_session_id}>{t("Número removido")}</SelectItem>
                   )}
