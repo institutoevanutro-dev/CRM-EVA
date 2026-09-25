@@ -67,7 +67,7 @@ function Linha({ item, aoVivo }: { item: TimelineItemView; aoVivo?: boolean }) {
       <Marcador item={item} />
       <div className="min-w-0 flex-1">
         <p className="text-xs text-text">
-          {t(activityLabel(item.type))}
+          {t(activityLabel(item.type, item.payload))}
           {aoVivo && (
             // O que chegou AGORA fica marcado: sem isto ele entraria na lista
             // idêntico ao resto e a chegada seria indistinguível do histórico.

@@ -10,13 +10,14 @@
  * via `adapter.fetchInboundMedia`. O Instagram já entrega a URL do CDN pronta no
  * payload (`parseWebhookDoInstagram`), então ela é gravada direto em `media_url`
  * — não há id para reconstruir depois. `media.persist_requested` é emitido do
- * mesmo jeito que `ingestMetaInbound` faz: o worker é agnóstico de canal (pede o
- * adapter pela sessão) e hoje `instagramAdapter` não implementa
- * `fetchInboundMedia` (etapa 1 só recebe metadado, spec §5.5 trata envio), então
- * o worker apenas pula (`skipped: canal_sem_midia_de_entrada`) — não falha, não
- * reentrega. A URL do CDN expira antes de qualquer reprocessamento tardio: a
- * persistência real de mídia do Instagram é trabalho de uma etapa seguinte, que
- * implementa `fetchInboundMedia` no adapter.
+ * mesmo jeito que `ingestMetaInbound` faz, e o worker segue o MESMO caminho da
+ * mídia do WhatsApp: pede o adapter pela sessão e chama `fetchInboundMedia`
+ * (`lib/channels/adapters/instagram.ts`), que baixa por allowlist de host
+ * (`*.cdninstagram.com` / `*.fbcdn.net` / `*.fbsbx.com`) e grava em
+ * `whatsapp-media` — download §5.4, não envio (isso é §5.5, que continua fora
+ * desta etapa). Sem o adapter implementado a URL do CDN expiraria antes de
+ * qualquer reprocessamento tardio; com ele, a persistência acontece no mesmo
+ * ciclo do evento, como no WhatsApp oficial.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
@@ -54,10 +55,25 @@ export async function ingerirDoInstagram(
   const orgId = sessao.organizationId;
   const pessoa = e.eco ? e.destinatario : e.remetente;
 
+  // Perfil (Graph + decrypt do token) só na PRIMEIRA vez, não em toda mensagem.
+  // `fn_upsert_contato_por_identidade` já atualiza a identidade existente sem
+  // pedir nome de novo — chamar a Graph de qualquer forma custava 1 request por
+  // mensagem (e por reentrega da Meta, que chega ANTES do dedup de `external_id`
+  // no insert) contra o rate limit por conta do Instagram, de graça: o nome já
+  // estava gravado desde a primeira mensagem desta pessoa.
   let perfil = { nome: null as string | null, handle: null as string | null, foto: null as string | null };
   if (!e.eco && sessao.tokenCifrado) {
-    const token = await decryptWebhookSecret(admin, sessao.tokenCifrado);
-    if (token) perfil = await perfilDoRemetente(token, pessoa);
+    const { data: identidade } = await admin
+      .from("contact_channel_identities")
+      .select("contact_id")
+      .eq("organization_id", orgId)
+      .eq("channel", "instagram")
+      .eq("external_id", pessoa)
+      .maybeSingle();
+    if (!identidade) {
+      const token = await decryptWebhookSecret(admin, sessao.tokenCifrado);
+      if (token) perfil = await perfilDoRemetente(token, pessoa);
+    }
   }
 
   const { data: linhasContato, error: erroContato } = await admin.rpc("fn_upsert_contato_por_identidade" as never, {
@@ -79,10 +95,21 @@ export async function ingerirDoInstagram(
       .eq("organization_id", orgId)
       .maybeSingle();
     const camposAtuais = (contatoAtual as { custom_fields: Record<string, unknown> } | null)?.custom_fields ?? {};
-    await admin.from("contacts")
+    const { error: erroOrigem } = await admin.from("contacts")
       .update({ custom_fields: { ...camposAtuais, [sessao.origemPadrao.campo]: sessao.origemPadrao.valor } })
       .eq("id", contato.contact_id)
       .eq("organization_id", orgId);
+    if (erroOrigem) {
+      // Sem log aqui a origem padrão fica faltando em silêncio: nenhum erro
+      // sobe (a ingestão segue — a mensagem não pode falhar por causa disto),
+      // mas também nada avisa que o contato novo nasceu sem a origem que a
+      // sessão configurou. Sem PII: só os dois ids e a mensagem do banco.
+      logger.warn("[instagram.ingest] atualização da origem padrão falhou", {
+        organization_id: orgId,
+        contact_id: contato.contact_id,
+        detail: erroOrigem.message,
+      });
+    }
   }
 
   const { data: conversationId, error: erroConversa } = await admin.rpc("fn_upsert_conversa_de_canal" as never, {

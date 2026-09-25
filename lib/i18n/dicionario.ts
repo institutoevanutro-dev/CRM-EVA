@@ -5518,6 +5518,9 @@ export const DICIONARIO: Traducoes = {
 
   // ─── Contacts: vocabulário da timeline (lib/leads/activity-vocabulary.ts) ───
   "Entrou pelo WhatsApp": { es: "Entró por WhatsApp" },
+  // `activityLabel("lead_created", payload)` monta este rótulo por canal — a
+  // chave abaixo é o outro valor possível (`payload.canal === "instagram"`).
+  "Entrou pelo Instagram": { es: "Entró por Instagram" },
   "Mudou de estágio": { es: "Cambió de etapa" },
   "Correção do que o assistente tinha feito": { es: "Corrección de lo que había hecho el asistente" },
   "Anotação": { es: "Anotación" },

@@ -1,15 +1,26 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EventoDoInstagram } from "./webhook";
 
-vi.mock("./graph", () => ({ perfilDoRemetente: vi.fn(async () => ({ nome: "Maria", handle: "maria", foto: null })) }));
+const perfilDoRemetenteMock = vi.fn(async () => ({ nome: "Maria", handle: "maria", foto: null }));
+vi.mock("./graph", () => ({ perfilDoRemetente: (...a: unknown[]) => perfilDoRemetenteMock(...(a as [])) }));
 vi.mock("../marcar-conversa", () => ({ marcarConversaComMensagem: vi.fn(async () => undefined) }));
 vi.mock("../pos-entrada", () => ({ aplicarEfeitosPosEntrada: vi.fn(async () => undefined) }));
-vi.mock("@/lib/webhooks/secrets", () => ({ decryptWebhookSecret: async () => "TOKEN" }));
+const decryptWebhookSecretMock = vi.fn(async () => "TOKEN");
+vi.mock("@/lib/webhooks/secrets", () => ({
+  decryptWebhookSecret: (...a: unknown[]) => decryptWebhookSecretMock(...(a as [])),
+}));
+const loggerWarnMock = vi.fn();
+vi.mock("@/lib/logger", () => ({ logger: { warn: (...a: unknown[]) => loggerWarnMock(...a), info: vi.fn(), error: vi.fn() } }));
 
 const { ingerirDoInstagram } = await import("./ingest");
 const { aplicarEfeitosPosEntrada } = await import("../pos-entrada");
 
-function adminFalso(opts: { insertErro?: { code: string; message: string } | null; contatoNovo?: boolean }) {
+function adminFalso(opts: {
+  insertErro?: { code: string; message: string } | null;
+  contatoNovo?: boolean;
+  identidadeExistente?: boolean;
+  updateErro?: { message: string } | null;
+}) {
   const chamadas: Record<"rpc" | "insert" | "update", [string, unknown][]> = { rpc: [], insert: [], update: [] };
   const admin = {
     rpc: vi.fn(async (nome: string, args: unknown) => {
@@ -20,8 +31,23 @@ function adminFalso(opts: { insertErro?: { code: string; message: string } | nul
     }),
     from: vi.fn((tabela: string) => ({
       insert: (linha: unknown) => { chamadas.insert.push([tabela, linha]); return { select: () => ({ maybeSingle: async () => opts.insertErro ? { data: null, error: opts.insertErro } : { data: { id: "M1" }, error: null } }) }; },
-      update: (linha: unknown) => { chamadas.update.push([tabela, linha]); return { eq: () => ({ eq: async () => ({ error: null }) }) }; },
-      select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { custom_fields: {} }, error: null }) }) }) }),
+      update: (linha: unknown) => {
+        chamadas.update.push([tabela, linha]);
+        return { eq: () => ({ eq: async () => ({ error: opts.updateErro ?? null }) }) };
+      },
+      // Tabela-consciente e encadeável para QUALQUER número de `.eq()`: o
+      // check de identidade (`contact_channel_identities`) usa três, a leitura
+      // de `custom_fields` (`contacts`) usa dois.
+      select: () => {
+        const chain: { eq: () => typeof chain; maybeSingle: () => Promise<{ data: unknown; error: null }> } = {
+          eq: () => chain,
+          maybeSingle: async () =>
+            tabela === "contact_channel_identities"
+              ? { data: opts.identidadeExistente ? { contact_id: "C1" } : null, error: null }
+              : { data: { custom_fields: {} }, error: null },
+        };
+        return chain;
+      },
     })),
   };
   return { admin, chamadas };
@@ -58,5 +84,49 @@ describe("ingestão do Instagram", () => {
     const [, msg] = chamadas.insert.find(([t]) => t === "messages") as [string, Record<string, unknown>];
     expect(msg.direction).toBe("outbound");
     expect(aplicarEfeitosPosEntrada).not.toHaveBeenCalled();
+  });
+
+  it("anexo emite media.persist_requested para o worker baixar do CDN do Instagram", async () => {
+    const { admin, chamadas } = adminFalso({});
+    const r = await ingerirDoInstagram(
+      admin as never,
+      evento({ texto: null, anexos: [{ tipo: "image", url: "https://scontent.cdninstagram.com/foto.jpg" }] }),
+      sessao,
+    );
+    expect(r).toMatchObject({ status: "ingerida" });
+    const emit = chamadas.rpc.find(([n, a]) => n === "emit_event" && (a as Record<string, unknown>).p_event_type === "media.persist_requested");
+    expect(emit).toBeTruthy();
+    const [, args] = emit as [string, Record<string, unknown>];
+    expect(args.p_payload).toMatchObject({ message_id: "M1", conversation_id: "CV1" });
+  });
+
+  it("identidade já cadastrada não chama a Graph nem decifra o token (só na primeira vez)", async () => {
+    perfilDoRemetenteMock.mockClear();
+    decryptWebhookSecretMock.mockClear();
+    const { admin } = adminFalso({ identidadeExistente: true, contatoNovo: false });
+    const r = await ingerirDoInstagram(admin as never, evento(), sessao);
+    expect(r).toMatchObject({ status: "ingerida" });
+    expect(decryptWebhookSecretMock).not.toHaveBeenCalled();
+    expect(perfilDoRemetenteMock).not.toHaveBeenCalled();
+  });
+
+  it("identidade nova decifra o token e chama a Graph", async () => {
+    perfilDoRemetenteMock.mockClear();
+    decryptWebhookSecretMock.mockClear();
+    const { admin } = adminFalso({ identidadeExistente: false });
+    await ingerirDoInstagram(admin as never, evento(), sessao);
+    expect(decryptWebhookSecretMock).toHaveBeenCalled();
+    expect(perfilDoRemetenteMock).toHaveBeenCalled();
+  });
+
+  it("falha ao gravar a origem padrão vira logger.warn, sem derrubar a ingestão", async () => {
+    loggerWarnMock.mockClear();
+    const { admin } = adminFalso({ updateErro: { message: "falhou o update" } });
+    const r = await ingerirDoInstagram(admin as never, evento(), sessao);
+    expect(r).toMatchObject({ status: "ingerida" });
+    expect(loggerWarnMock).toHaveBeenCalledWith(
+      "[instagram.ingest] atualização da origem padrão falhou",
+      expect.objectContaining({ organization_id: "ORG", contact_id: "C1", detail: "falhou o update" }),
+    );
   });
 });

@@ -56,6 +56,7 @@ import { lerClientePelaAgenda } from "@/lib/contacts/cliente-pela-agenda";
 import { ehIdentificadorTecnico, rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
 
 import { emitLeadActivity } from "./activity-emitter";
+import { nomeDoCanal } from "./activity-vocabulary";
 
 /**
  * O rótulo que aparece no card do funil quando o lead nasceu de um clique em
@@ -261,6 +262,22 @@ export async function garantirLeadDaConversa(
   //
   // O payload entra só como reforço: o upsert do contato roda ANTES deste ponto,
   // então o cadastro já incorporou o `pushName` desta mensagem.
+  // O CANAL da conversa que originou (`conversations.channel`), não o
+  // provider — `lib/channels/` é quem sabe o provider, e nomeá-lo aqui
+  // reprovaria o `lint:channels`. Sem esta leitura, todo contato do
+  // Instagram sem foto de perfil (Graph fora do ar, ou o handle não expôs
+  // nome) abria card com "Novo contato pelo WhatsApp", que é simplesmente
+  // falso — a pessoa nunca escreveu por lá. Consulta a mais, aceita pela
+  // mesma razão do `first_service_at` acima: não é o caminho quente (só
+  // decide o RÓTULO, depois que já se sabe que o card vai nascer).
+  const { data: conversa } = await db
+    .from("conversations")
+    .select("channel")
+    .eq("organization_id", organizationId)
+    .eq("id", conversationId)
+    .maybeSingle();
+  const canal = (conversa?.channel as string | null) ?? "whatsapp";
+
   const doCadastro = rotuloDoContato(contato);
   const doPayload = (dados.nomeDoContato ?? "").trim();
   const titulo =
@@ -270,7 +287,7 @@ export async function garantirLeadDaConversa(
         ? doPayload
         : // "Sem nome" serve para uma linha de lista; um card de kanban precisa
           // dizer de onde veio, senão o quadro vira uma coluna de anônimos iguais.
-          "Novo contato pelo WhatsApp";
+          `Novo contato pelo ${nomeDoCanal(canal)}`;
 
   // De onde veio: o contato já carrega a atribuição de anúncio (gravada no
   // primeiro toque, por `fn_estampar_atribuicao_de_anuncio` — ver
@@ -346,8 +363,10 @@ export async function garantirLeadDaConversa(
     // alguém arrastou.
     reason: ehCliente
       ? "cliente conhecido voltou a escrever"
-      : "primeira mensagem recebida no WhatsApp",
-    payload: { conversation_id: conversationId, cliente: ehCliente },
+      : `primeira mensagem recebida no ${nomeDoCanal(canal)}`,
+    // `canal` viaja no payload para `activityLabel` (activity-vocabulary.ts)
+    // poder rotular "Entrou pelo X" na leitura, sem duplicar a busca acima.
+    payload: { conversation_id: conversationId, cliente: ehCliente, canal },
   });
   if (!registro.ok) {
     // O lead existe e é o que importa; a linha da timeline falhou. Devolver erro
