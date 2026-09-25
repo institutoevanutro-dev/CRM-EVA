@@ -19,6 +19,7 @@ import type { Actor } from "@/lib/api/handlers/types";
 import type { Role } from "@/lib/auth/types";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasMcpToolScope } from "./agenda-scope";
 
 export interface McpAuthResult {
   organizationId: string;
@@ -152,4 +153,10 @@ export function ensureScope(scopes: string[], required: string): void {
   if (!scopes.includes(required)) {
     throw new McpAuthError(-32002, 403, `Token missing required scope '${required}'.`);
   }
+}
+
+/** Exceção estrita para o prontuário: o escopo não libera outras ferramentas MCP. */
+export function ensureMcpToolScope(scopes: string[], toolName: string, required: "mcp:read" | "mcp:write"): void {
+  if (hasMcpToolScope(scopes, toolName, required)) return;
+  throw new McpAuthError(-32002, 403, `Token missing required scope '${required}' for '${toolName}'.`);
 }
