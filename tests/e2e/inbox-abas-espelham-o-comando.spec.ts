@@ -143,6 +143,39 @@ test.describe("Inbox: as abas perguntam quem manda", () => {
     if (orgId) await limpar(orgId);
   });
 
+  /**
+   * AS ABAS TÊM DE CABER — e isto só se mede num navegador de verdade.
+   *
+   * A faixa tinha `justify-between` e nenhum `overflow`: o que não cabia
+   * sumia. Medido na coluna de 299px de uma clínica, ela pedia 359px e
+   * "Automático" ficava fora da vista, com 267 conversas atrás. Nada na tela
+   * dizia que a aba existia.
+   *
+   * A asserção é sobre GEOMETRIA (`scrollWidth` contra `clientWidth`), não
+   * sobre a classe CSS: trocar `flex-wrap` por rolagem continuaria correto, e
+   * um teste preso à classe reprovaria uma solução melhor. Em jsdom isto não
+   * tem valor nenhum — lá todo elemento mede zero.
+   */
+  test("as abas cabem na coluna, nenhuma fica cortada fora da vista", async ({ page }) => {
+    await loginComoAdmin(page, lerCreds());
+    await page.goto("/app/inbox");
+
+    const faixa = page.getByRole("tablist").first();
+    await expect(faixa).toBeVisible({ timeout: 30_000 });
+
+    const medida = await faixa.evaluate((el) => {
+      const caixa = el.getBoundingClientRect();
+      const fora = [...el.querySelectorAll('[role="tab"]')]
+        .map((t) => ({ nome: (t.textContent ?? "").trim(), r: t.getBoundingClientRect() }))
+        .filter((t) => t.r.right > caixa.right + 1 || t.r.left < caixa.left - 1)
+        .map((t) => t.nome);
+      return { transborda: el.scrollWidth > el.clientWidth + 1, fora };
+    });
+
+    expect(medida.fora, "abas fora da caixa da faixa").toEqual([]);
+    expect(medida.transborda, "a faixa de abas transborda a coluna").toBe(false);
+  });
+
   test("Fila mostra só quem espera uma PESSOA; Automático mostra o que o robô conduz", async ({
     page,
   }) => {
