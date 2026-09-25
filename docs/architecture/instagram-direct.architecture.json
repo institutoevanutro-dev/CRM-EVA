@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Instagram Direct — etapa 1 (receber)",
+    "subtitle": "Conexões → webhook do app → Inbox/funil, com Origem padrão",
+    "output": "instagram-direct.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "Pessoa" },
+    { "id": "app", "label": "Aplicativo" },
+    { "id": "db", "label": "Banco" }
+  ],
+  "mainPath": ["conexoes", "config", "webhook", "ingest", "inbox", "funil"],
+  "nodes": [
+    {
+      "id": "conexoes",
+      "lane": "humano",
+      "col": 0,
+      "type": "ui",
+      "label": "Conexões: conectar conta do Instagram (login da Meta)"
+    },
+    {
+      "id": "config",
+      "lane": "db",
+      "col": 1,
+      "type": "database",
+      "label": "platform_meta_app (App Secret cifrado) + channel_sessions meta_instagram (Origem padrão)"
+    },
+    {
+      "id": "webhook",
+      "lane": "app",
+      "col": 2,
+      "type": "service",
+      "label": "Webhook do app: assinatura HMAC, roteia por entry.id"
+    },
+    {
+      "id": "ingest",
+      "lane": "app",
+      "col": 3,
+      "type": "service",
+      "label": "Ingestão: contato + conversa + mensagem, aplica Origem padrão"
+    },
+    {
+      "id": "inbox",
+      "lane": "humano",
+      "col": 4,
+      "type": "ui",
+      "label": "Inbox: mensagem com @ e \"via @conta\""
+    },
+    {
+      "id": "funil",
+      "lane": "humano",
+      "col": 4,
+      "type": "ui",
+      "label": "Kanban: card novo no funil padrão"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "conexoes", "to": "config", "label": "App ID/Secret + conexão ativa gravados" },
+    { "id": "e2", "from": "config", "to": "webhook", "label": "Segredo decifrado para validar a assinatura" },
+    { "id": "e3", "from": "config", "to": "ingest", "label": "ig_account_id → organização + Origem padrão" },
+    { "id": "e4", "from": "webhook", "to": "ingest", "label": "Evento parseado (texto/mídia), eco descartado" },
+    { "id": "e5", "from": "ingest", "to": "inbox", "label": "Mensagem gravada (Realtime)" },
+    { "id": "e6", "from": "ingest", "to": "funil", "label": "Contato novo → card + custom_fields.origem" },
+    { "id": "e7", "from": "inbox", "to": "conexoes", "label": "Sem @/nome: só reconfigurar a conta reconstrói o perfil" }
+  ]
+}
