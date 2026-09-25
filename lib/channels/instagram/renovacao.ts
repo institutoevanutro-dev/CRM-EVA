@@ -13,18 +13,24 @@
  * `Authorization: Bearer`. A URL nunca é logada — ela carrega o token — só o
  * status da resposta.
  *
- * ─── O aviso reusa a identidade de dedupe do vigia de saúde ────────────────
+ * ─── O aviso REUSA o helper do vigia de saúde, não copia ───────────────────
  *
- * `channel_session_health` (organization_id, channel_session_id) é a MESMA
- * linha que `lib/channels/health.ts` usa para não abrir dois avisos da mesma
- * sessão — aqui com um episódio PRÓPRIO (`INSTAGRAM_TOKEN_EXPIRADO`), para não
- * fechar sozinho um aviso que a sonda de saúde abriu por outro motivo, nem
- * vice-versa.
+ * `sincronizarSaudeDaConexao` (`lib/channels/health.ts`) já sabe escalar UMA
+ * vez por episódio e resolver quando a próxima observação vem boa — é o
+ * mesmo mecanismo que o cron `channel-health` usa. Esta rotina chama essa
+ * MESMA função: falha de renovação vira uma `SaudeObservada` com
+ * `detail: DETALHE_TOKEN_DE_RENOVACAO_VENCIDO` (episódio próprio, então não
+ * fecha sozinho um aviso que a sonda de saúde abriu por outro motivo, nem
+ * vice-versa); sucesso vira uma observação "sem problema", que resolve o
+ * aviso se havia um aberto. Duplicar esse select→insert→upsert aqui seria o
+ * mesmo defeito que a doutrina do repo chama de "duplicação sem source of
+ * truth declarado" — um segundo lugar para divergir do primeiro no dia em
+ * que o contrato de `agent_inbox_items` mudar.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
-import { REF_KIND_SESSAO } from "@/lib/channels/health";
+import { DETALHE_TOKEN_DE_RENOVACAO_VENCIDO, sincronizarSaudeDaConexao } from "@/lib/channels/health";
 import { logger } from "@/lib/logger";
 import { decryptWebhookSecret, encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
@@ -33,9 +39,6 @@ import { BASE_DO_INSTAGRAM } from "./graph";
 
 /** Renova quando faltam menos de 15 dias — folga contra uma rodada perdida. */
 const JANELA_DE_RENOVACAO_MS = 15 * 24 * 60 * 60 * 1000;
-
-/** Marca o episódio aberto por ESTA rotina, na mesma linha que o vigia usa. */
-const EPISODIO_TOKEN_EXPIRADO = "INSTAGRAM_TOKEN_EXPIRADO";
 
 /** Teto por rodada: renovar centenas de contas num tick estouraria a cota da Meta. */
 const TETO_POR_RODADA = 50;
@@ -110,68 +113,9 @@ export async function gravarTokenRenovado(
     .eq("organization_id", sessao.organization_id);
 }
 
+/** "Instagram @conta" — ou "Instagram sem nome" se a conta nunca gravou o handle. */
 function apelidoDaSessao(sessao: SessaoParaRenovar): string {
-  return sessao.ig_username ? `@${sessao.ig_username}` : "sem nome";
-}
-
-/** Abre o aviso — uma vez por episódio, pela mesma identidade que o vigia de saúde usa. */
-async function avisarFalhaDeRenovacao(admin: SupabaseClient, sessao: SessaoParaRenovar): Promise<void> {
-  const { data: linha } = await admin
-    .from("channel_session_health")
-    .select("escalated_status")
-    .eq("organization_id", sessao.organization_id)
-    .eq("channel_session_id", sessao.id)
-    .maybeSingle();
-  if ((linha?.escalated_status as string | null) === EPISODIO_TOKEN_EXPIRADO) return;
-
-  await admin.from("agent_inbox_items").insert({
-    organization_id: sessao.organization_id,
-    kind: "channel_number_alert",
-    severity: "critical",
-    title: `Instagram ${apelidoDaSessao(sessao)} precisa ser reconectado`,
-    body: "A renovação automática da chave falhou. Vá em Conexões para reconectar.",
-    ref_kind: REF_KIND_SESSAO,
-    ref_id: sessao.id,
-  });
-  await admin.from("channel_session_health").upsert(
-    {
-      organization_id: sessao.organization_id,
-      channel_session_id: sessao.id,
-      status: "TOKEN_EXPIRADO",
-      escalated_status: EPISODIO_TOKEN_EXPIRADO,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "organization_id,channel_session_id" },
-  );
-}
-
-/** Fecha o aviso — só quando o episódio aberto é o desta rotina (nunca o da sonda de saúde). */
-async function resolverAvisoDeRenovacao(admin: SupabaseClient, sessao: SessaoParaRenovar): Promise<void> {
-  const { data: linha } = await admin
-    .from("channel_session_health")
-    .select("escalated_status")
-    .eq("organization_id", sessao.organization_id)
-    .eq("channel_session_id", sessao.id)
-    .maybeSingle();
-  if ((linha?.escalated_status as string | null) !== EPISODIO_TOKEN_EXPIRADO) return;
-
-  await admin
-    .from("agent_inbox_items")
-    .update({ status: "resolved" })
-    .eq("organization_id", sessao.organization_id)
-    .eq("ref_kind", REF_KIND_SESSAO)
-    .eq("ref_id", sessao.id)
-    .eq("status", "open");
-  await admin.from("channel_session_health").upsert(
-    {
-      organization_id: sessao.organization_id,
-      channel_session_id: sessao.id,
-      status: "WORKING",
-      escalated_status: null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "organization_id,channel_session_id" },
-  );
+  return `Instagram ${sessao.ig_username ? `@${sessao.ig_username}` : "sem nome"}`;
 }
 
 export interface ResumoDaRenovacao {
@@ -194,24 +138,39 @@ export async function renovarTokensDoInstagram(
 
   for (const sessao of sessoes) {
     resumo.examinadas += 1;
+    const alvo = { id: sessao.id, organization_id: sessao.organization_id, status: null };
+    const apelido = apelidoDaSessao(sessao);
     try {
       const tokenAtual = await decryptWebhookSecret(admin, sessao.ig_token_encrypted);
       const renovado = tokenAtual ? await renovarToken(tokenAtual) : null;
       if (!renovado) {
         resumo.falhas += 1;
-        await avisarFalhaDeRenovacao(admin, sessao);
+        await sincronizarSaudeDaConexao(
+          admin,
+          alvo,
+          { reachable: false, status: null, detail: DETALHE_TOKEN_DE_RENOVACAO_VENCIDO },
+          apelido,
+        );
         continue;
       }
 
       const cifrado = await encryptWebhookSecret(admin, renovado.token);
       if (!cifrado) {
         resumo.falhas += 1;
-        await avisarFalhaDeRenovacao(admin, sessao);
+        await sincronizarSaudeDaConexao(
+          admin,
+          alvo,
+          { reachable: false, status: null, detail: DETALHE_TOKEN_DE_RENOVACAO_VENCIDO },
+          apelido,
+        );
         continue;
       }
 
       await gravarTokenRenovado(admin, sessao, cifrado, renovado.expiraEm);
-      await resolverAvisoDeRenovacao(admin, sessao);
+      // Observação "sem problema": resolve o aviso se havia um aberto por esta
+      // MESMA rotina; não mexe num aviso que a sonda de saúde abriu por outro
+      // motivo (`sincronizarSaudeDaConexao` só fecha o episódio que casa).
+      await sincronizarSaudeDaConexao(admin, alvo, { reachable: true, status: null, detail: null }, apelido);
       resumo.renovadas += 1;
     } catch (err) {
       logger.warn("[instagram.renovacao] falhou numa sessão", {

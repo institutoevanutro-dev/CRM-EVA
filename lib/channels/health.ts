@@ -65,6 +65,15 @@ export const REF_KIND_SESSAO = "channel_session";
 export const DETALHE_CREDENCIAL_RECUSADA = "credencial_recusada_pelo_transporte";
 
 /**
+ * A renovação automática de um token de canal (ex.: Instagram, 60 dias) falhou.
+ * Vive aqui, e não só no chamador, pelo mesmo motivo de `DETALHE_CREDENCIAL_RECUSADA`:
+ * é o contrato entre quem observa (o cron de renovação) e a regra de aviso logo
+ * abaixo — `lib/channels/instagram/renovacao.ts` é o único chamador hoje, mas o
+ * detalhe é genérico o bastante para qualquer canal com token que expira.
+ */
+export const DETALHE_TOKEN_DE_RENOVACAO_VENCIDO = "token_de_renovacao_vencido";
+
+/**
  * Marca do episódio aberto por um EMPURRÃO do provedor.
  *
  * A varredura não fecha episódio com esta marca: ela mede credencial e conta,
@@ -115,6 +124,20 @@ export function avisoDaConexao(saude: SaudeObservada, apelido: string): AvisoDeC
         body:
           "Escanear o QR não resolve: a chave que o CRM usa para falar com o servidor de WhatsApp não confere com a que o servidor espera. Enquanto isso durar, nenhuma mensagem entra nem sai por NENHUMA conexão. Quem cuida do servidor precisa conferir a WAHA_API_KEY do .env e recriar o contêiner do WhatsApp.",
         episodio: "CREDENCIAL_RECUSADA",
+      };
+    }
+
+    // A renovação automática do token falhou — ação é RECONECTAR pela tela, não
+    // escanear QR (este canal não usa QR). `apelido` aqui já vem com o nome do
+    // canal embutido (ex.: "Instagram @conta"), porque o título não tem aspas
+    // nem a palavra genérica "Conexão": é a frase pronta que o operador lê.
+    if (saude.detail === DETALHE_TOKEN_DE_RENOVACAO_VENCIDO) {
+      return {
+        kind: "channel_number_alert",
+        severity: "critical",
+        title: `${apelido} precisa ser reconectado`,
+        body: "A renovação automática da chave falhou. Vá em Conexões para reconectar.",
+        episodio: "TOKEN_DE_RENOVACAO_VENCIDO",
       };
     }
 
