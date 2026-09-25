@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-import { CHANNEL_PROVIDER_INSTAGRAM } from "@/lib/channels/capabilities";
+import { CHANNEL_PROVIDER_INSTAGRAM, CHANNEL_PROVIDER_META } from "@/lib/channels/capabilities";
 
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 vi.mock("@/lib/auth/require-role", () => ({
@@ -28,6 +28,7 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/waha/client", () => ({ getWahaClient: vi.fn(() => null), wahaFriendlyError: String }));
 
 const patches: Record<string, unknown>[] = [];
+let providerDaSessao: string = CHANNEL_PROVIDER_INSTAGRAM;
 const filtrosDoUpdate: [string, unknown][] = [];
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -39,7 +40,7 @@ vi.mock("@/lib/supabase/server", () => ({
           maybeSingle: async () => ({
             data: {
               id: "S1",
-              provider: CHANNEL_PROVIDER_INSTAGRAM,
+              provider: providerDaSessao,
               waha_session_name: null,
               display_name: "@clinica",
               phone_number: null,
@@ -78,6 +79,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 beforeEach(() => {
   patches.length = 0;
   filtrosDoUpdate.length = 0;
+  providerDaSessao = CHANNEL_PROVIDER_INSTAGRAM;
 });
 
 describe("DELETE /api/v1/channel-sessions/[id] apaga a chave do canal arquivado", () => {
@@ -96,5 +98,18 @@ describe("DELETE /api/v1/channel-sessions/[id] apaga a chave do canal arquivado"
       meta_token_encrypted: null,
     });
     expect(filtrosDoUpdate).toContainEqual(["organization_id", "ORG"]);
+  });
+
+  it("canal oficial do WhatsApp arquivado: não nomeia as colunas do Instagram (banco sem o baseline novo)", async () => {
+    providerDaSessao = CHANNEL_PROVIDER_META;
+    const { DELETE } = await import("@/app/api/v1/channel-sessions/[id]/route");
+    const res = await DELETE(new NextRequest("http://x/api/v1/channel-sessions/S1", { method: "DELETE" }), {
+      params: Promise.resolve({ id: "S1" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(patches[0]).toMatchObject({ archived_at: expect.any(String), meta_token_encrypted: null });
+    expect(patches[0]).not.toHaveProperty("ig_token_encrypted");
+    expect(patches[0]).not.toHaveProperty("ig_token_expires_at");
   });
 });

@@ -26,7 +26,7 @@ import { audit } from "@/lib/audit";
 import { ok, fail } from "@/lib/api/wrappers";
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { requireRole } from "@/lib/auth/require-role";
-import { CHANNEL_PROVIDER_WAHA } from "@/lib/channels/capabilities";
+import { CHANNEL_PROVIDER_INSTAGRAM, CHANNEL_PROVIDER_WAHA } from "@/lib/channels/capabilities";
 import { numeroObservadoDaSessao } from "@/lib/channels/numero-observado";
 import { isChannelStatus } from "@/lib/schemas/channels";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -358,11 +358,15 @@ export async function DELETE(
     // o que a plataforma tem configurado do outro lado deixa de valer. Só faz
     // sentido no ramo que PRESERVA a linha — no hard delete ela some inteira.
     patch.meta_token_encrypted = null;
-    // A chave de 60 dias do canal com login próprio (Instagram) sai junto: a
-    // linha arquivada fica como âncora do histórico, e token guardado nela é
-    // acesso vivo que a tela já não mostra. Nulo nos canais que não a têm.
-    patch.ig_token_encrypted = null;
-    patch.ig_token_expires_at = null;
+    // A chave de 60 dias do Instagram sai junto: a linha arquivada fica como
+    // âncora do histórico, e token guardado nela é acesso vivo que a tela já
+    // não mostra. SÓ nesse canal: num banco que ainda não recebeu o baseline
+    // novo (VPS que só puxa a imagem), nomear estas colunas ao excluir o canal
+    // oficial seria um 500.
+    if (session.provider === CHANNEL_PROVIDER_INSTAGRAM) {
+      patch.ig_token_encrypted = null;
+      patch.ig_token_expires_at = null;
+    }
     patch.webhook_path_token = randomUUID().replace(/-/g, "");
   }
 
