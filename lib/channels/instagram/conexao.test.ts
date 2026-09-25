@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+const { sincronizar } = vi.hoisted(() => ({ sincronizar: vi.fn(async (..._a: unknown[]) => "resolvido") }));
+vi.mock("@/lib/channels/health", () => ({ sincronizarSaudeDaConexao: sincronizar }));
+
 import { arquivarConexaoDoInstagram, definirOrigemPadrao, listarConexoesDoInstagram, podeConectarNaOrganizacao, salvarConexaoDoInstagram } from "./conexao";
 
 type Linha = { id: string; organization_id: string } | null;
@@ -46,10 +50,13 @@ describe("salvarConexaoDoInstagram", () => {
     expect(escritas[0]!.tipo).toBe("insert");
     expect(linha).toMatchObject({
       organization_id: "ORG", provider: "meta_instagram", status: "WORKING", ig_account_id: "IG1",
-      ig_username: "clinica", ig_token_encrypted: "\\xabc", webhook_secret_encrypted: "\\xabc",
+      ig_username: "clinica", ig_token_encrypted: "\\xabc",
       ig_token_expires_at: "2026-11-24T00:00:00.000Z", display_name: "@clinica", created_by: "U1",
     });
     expect(linha.metadata).toBeTypeOf("object");
+    // O token de 60 dias mora SÓ em `ig_token_encrypted`. A cópia aqui nunca
+    // era renovada nem apagada: sobrava uma chave viva depois de desconectar.
+    expect(linha.webhook_secret_encrypted).toEqual(Buffer.from([0]));
   });
 
   it("mesma org: atualiza token, validade, username e status da linha existente", async () => {
@@ -59,6 +66,20 @@ describe("salvarConexaoDoInstagram", () => {
     expect(escritas[0]!.tipo).toBe("update");
     expect(escritas[0]!.linha).toMatchObject({ ig_token_encrypted: "\\xabc", ig_username: "clinica", status: "WORKING" });
     expect(escritas[0]!.filtros).toEqual([["id", "S1"], ["organization_id", "ORG"]]);
+    expect(escritas[0]!.linha).not.toHaveProperty("webhook_secret_encrypted");
+  });
+
+  it("reconectar fecha o aviso de chave: quem troca a chave é a autoridade (origem renovacao)", async () => {
+    sincronizar.mockClear();
+    const { admin } = adminFalso([{ id: "S1", organization_id: "ORG" }]);
+    await salvarConexaoDoInstagram(admin, entrada);
+    expect(sincronizar).toHaveBeenCalledWith(
+      admin,
+      { id: "S1", organization_id: "ORG", status: "WORKING" },
+      { reachable: true, status: "WORKING", detail: null },
+      "Instagram @clinica",
+      "renovacao",
+    );
   });
 
   it("conta ativa em OUTRA org: recusa sem escrever nada", async () => {
@@ -139,7 +160,11 @@ describe("helpers de Conexões filtram pela organização", () => {
     expect(await arquivarConexaoDoInstagram(db, "ORG", "S1")).toEqual({ username: "clinica" });
     expect(tem(0, "eq", "organization_id", "ORG")).toBe(true);
     expect(tem(0, "eq", "id", "S1")).toBe(true);
-    expect(cadeias[0]!.find((c) => c.metodo === "update")!.args[0]).toHaveProperty("archived_at");
+    const patch = cadeias[0]!.find((c) => c.metodo === "update")!.args[0];
+    expect(patch).toHaveProperty("archived_at");
+    // Desconectar apaga a chave: arquivada com token, a conta seguia legível
+    // por 60 dias por quem tivesse o banco.
+    expect(patch).toMatchObject({ ig_token_encrypted: null, ig_token_expires_at: null });
     expect(await arquivarConexaoDoInstagram(db, "OUTRA", "S1")).toBeNull();
   });
 

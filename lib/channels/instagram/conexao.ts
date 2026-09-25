@@ -15,6 +15,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { metadataInicialDoCanal } from "@/lib/ai/elegibilidade/pre-go-live";
 import { roleAtLeast } from "@/lib/auth/types";
 import { CHANNEL_PROVIDER_INSTAGRAM } from "../capabilities";
+import { sincronizarSaudeDaConexao } from "../health";
 import { sessaoDoInstagramPorConta } from "./sessao";
 
 export interface ConexaoDoInstagram {
@@ -49,6 +50,16 @@ async function atualizar(admin: SupabaseClient, id: string, c: ConexaoDoInstagra
     .eq("id", id)
     .eq("organization_id", c.organizationId);
   if (error) throw new Error(error.message);
+  // Reconectar TROCA a chave: fecha o aviso "precisa ser reconectado" (ou o
+  // FAILED da sonda). Sem isto, o aviso da renovação ficaria aberto até a
+  // próxima renovação, que com o token novo só roda daqui a 45 dias.
+  await sincronizarSaudeDaConexao(
+    admin,
+    { id, organization_id: c.organizationId, status: "WORKING" },
+    { reachable: true, status: "WORKING", detail: null },
+    `Instagram @${c.username}`,
+    "renovacao",
+  );
   return { status: "atualizada" };
 }
 
@@ -69,9 +80,10 @@ export async function salvarConexaoDoInstagram(admin: SupabaseClient, c: Conexao
     ig_token_encrypted: c.tokenCifrado,
     ig_token_expires_at: c.expiraEm.toISOString(),
     display_name: `@${c.username}`,
-    // NOT NULL herdado do WAHA; o canal oficial grava a cifra do token aqui, e
-    // o Instagram segue o mesmo valor neutro (a assinatura do webhook é do APP).
-    webhook_secret_encrypted: c.tokenCifrado,
+    // NOT NULL herdado do WAHA. A assinatura do webhook é do APP, então aqui
+    // vai o valor neutro da linha de voz (`voice/sessions/pair`), nunca o
+    // token: a cópia não era renovada nem apagada e sobrevivia à desconexão.
+    webhook_secret_encrypted: Buffer.from([0]),
     metadata: metadataInicialDoCanal(),
     created_by: c.userId,
   });
@@ -143,11 +155,13 @@ export async function listarConexoesDoInstagram(db: SupabaseClient, organization
   }));
 }
 
-/** Arquiva a conexão ativa. Devolve o @ para o audit, ou `null` se não há linha. */
+/** Arquiva a conexão ativa e apaga a chave. Devolve o @ para o audit, ou `null` se não há linha. */
 export async function arquivarConexaoDoInstagram(admin: SupabaseClient, organizationId: string, sessionId: string): Promise<{ username: string | null } | null> {
   const { data, error } = await admin
     .from("channel_sessions")
-    .update({ archived_at: new Date().toISOString() })
+    // A chave vai junto: arquivar só esconde a linha, e um token de 60 dias
+    // guardado numa conta "desconectada" é acesso vivo sem dono na tela.
+    .update({ archived_at: new Date().toISOString(), ig_token_encrypted: null, ig_token_expires_at: null })
     .eq("id", sessionId)
     .eq("organization_id", organizationId)
     .eq("provider", CHANNEL_PROVIDER_INSTAGRAM)

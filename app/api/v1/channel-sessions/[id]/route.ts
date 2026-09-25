@@ -358,6 +358,11 @@ export async function DELETE(
     // o que a plataforma tem configurado do outro lado deixa de valer. Só faz
     // sentido no ramo que PRESERVA a linha — no hard delete ela some inteira.
     patch.meta_token_encrypted = null;
+    // A chave de 60 dias do canal com login próprio (Instagram) sai junto: a
+    // linha arquivada fica como âncora do histórico, e token guardado nela é
+    // acesso vivo que a tela já não mostra. Nulo nos canais que não a têm.
+    patch.ig_token_encrypted = null;
+    patch.ig_token_expires_at = null;
     patch.webhook_path_token = randomUUID().replace(/-/g, "");
   }
 
