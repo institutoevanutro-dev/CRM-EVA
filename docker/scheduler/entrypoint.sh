@@ -101,6 +101,7 @@ CRONS="
 0 12 * * *|60|api/v1/cron/lgpd-sla-watcher
 30 3 * * *|120|api/v1/cron/kb-conversations-batch
 15 4 * * *|60|api/v1/cron/sync-model-catalog
+17 4 * * *|60|api/v1/cron/instagram-token-refresh
 40 4 * * *|120|api/v1/cron/data-retention
 "
 
