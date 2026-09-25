@@ -42,6 +42,9 @@ import { useT } from "@/hooks/i18n/useT";
  * escondia.
  */
 const SCOPES: { id: string; label: string }[] = [
+  { id: "agenda:read", label: "Prontuário: ler compromissos da agenda" },
+  { id: "agenda:reschedule", label: "Prontuário: remarcar compromissos da agenda" },
+  { id: "role:ai_operator", label: "Operador de agenda (necessário para remarcar)" },
   { id: "mcp:read", label: "Agentes de IA podem LER o CRM (MCP)" },
   { id: "mcp:write", label: "Agentes de IA podem AGIR no CRM (MCP)" },
   // Sem isto o token nasce como 'agent' e as ferramentas de nível gerente
