@@ -71,7 +71,11 @@ test.beforeAll(async () => {
         const corpo = JSON.parse(bruto || "{}") as { recipient?: { id?: string } };
         recebidos.push({ caminho: req.url!, autorizacao: req.headers.authorization, corpo });
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ recipient_id: corpo.recipient?.id, message_id: `mid.e2e.${recebidos.length}` }));
+        // Único por RODADA: `messages` tem unique (organization_id, external_id),
+        // e um `mid.e2e.1` repetido na segunda rodada no mesmo banco colidia.
+        res.end(
+          JSON.stringify({ recipient_id: corpo.recipient?.id, message_id: `mid.e2e.${Date.now()}.${recebidos.length}` }),
+        );
         return;
       }
       // Qualquer outra chamada (perfil, saúde): a Graph de verdade também
@@ -156,7 +160,8 @@ test("a resposta sai para o IGSID da conversa, sem etiqueta dentro das 24h", asy
   await itens.filter({ hasText: NOME_IG_RECENTE }).click();
 
   const antes = recebidos.length;
-  const texto = "Olá, tudo bem?";
+  // Texto único por rodada: a bolha checada é a DESTA rodada, nunca a da anterior.
+  const texto = `Olá, tudo bem? ${Date.now()}`;
   await page.getByLabel("Mensagem", { exact: true }).fill(texto);
   await page.getByRole("button", { name: "Enviar", exact: true }).click();
 
@@ -168,10 +173,10 @@ test("a resposta sai para o IGSID da conversa, sem etiqueta dentro das 24h", asy
   expect(envio.corpo).toEqual({ recipient: { id: IGSID_RECENTE }, message: { text: texto } });
   expect(envio.corpo).not.toHaveProperty("tag");
 
-  // E a tela: a bolha nova, marcada como enviada.
-  const bolha = page.getByText(texto, { exact: true }).last();
-  await expect(bolha).toBeVisible();
-  await expect(page.getByLabel("Enviada").last()).toBeVisible();
+  // E a tela: a bolha nova, e o tique DELA (não o último da página).
+  const bolha = page.locator("div.group").filter({ has: page.getByText(texto, { exact: true }) });
+  await expect(bolha).toHaveCount(1);
+  await expect(bolha.getByLabel("Enviada", { exact: true })).toBeVisible();
   await page.screenshot({ path: path.join(EVIDENCIA, "04-resposta-enviada.png"), fullPage: true });
 });
 
