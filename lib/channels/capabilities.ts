@@ -76,6 +76,22 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     groups: "limited",
     costPerMessage: true,
   },
+  // Etapa 1 só recebe (webhook). O Direct não tem template aprovado nem janela
+  // de 24h formal como o WhatsApp — a restrição real da API é a janela de 24h
+  // desde a última mensagem do cliente, imposta pela PLATAFORMA (hetero-
+  // restrição), não auto-restrição por volume como o `waha`. Sem grupos, sem
+  // gestão de template, e o envio em si ainda não existe (adapter recusa) —
+  // por isso `costPerMessage: false` é o único valor honesto hoje.
+  meta_instagram: {
+    freeformOutsideWindow: false,
+    requiresTemplates: false,
+    canManageTemplates: false,
+    banRisk: false,
+    minIntervalMs: 1000,
+    voiceNote: "opus-only",
+    groups: "none",
+    costPerMessage: false,
+  },
 };
 
 /**
@@ -99,6 +115,8 @@ export const CHANNEL_PROVIDER_META: ChannelProvider = "meta_cloud";
 export const CHANNEL_PROVIDER_ZERNIO: ChannelProvider = "zernio";
 /** Chamada de voz WhatsApp (spec 18). Não transporta mensagem — ver abaixo. */
 export const CHANNEL_PROVIDER_WACALLS: ChannelProvider = "wacalls";
+/** Instagram Direct (etapa 1 recebe; envio chega na etapa 2 — spec §5.5). */
+export const CHANNEL_PROVIDER_INSTAGRAM: ChannelProvider = "meta_instagram";
 
 /**
  * Os providers por onde MENSAGEM entra e sai — a única lista que responde
@@ -119,6 +137,7 @@ export const PROVIDERS_DE_MENSAGEM = [
   "waha",
   "meta_cloud",
   "zernio",
+  "meta_instagram",
 ] as const satisfies readonly ProviderDeMensagem[];
 
 /**
@@ -153,18 +172,7 @@ export function transportaMensagem(provider: string | null | undefined): boolean
  * hora de escolher por onde mandar recado, o desconhecido é tão inútil quanto a
  * voz. Aqui a pergunta é outra.
  */
-export const PROVIDERS_SEM_MENSAGEM = [
-  "wacalls",
-  // `meta_instagram` (etapa 1 do canal Instagram): CATEGORIA diferente de
-  // `wacalls`, e TEMPORÁRIO — o Direct manda texto de verdade. Está aqui só
-  // porque o schema (esta migration) chegou antes do transporte: nenhum
-  // adapter, capabilities nem fonte de templates existem ainda para ele. A
-  // etapa que trouxer `lib/channels/instagram/` move este nome para
-  // `PROVIDERS_DE_MENSAGEM` (e `ProviderDeMensagem` em `./types`) no mesmo
-  // commit que o adapter — até lá, "sem mensagem" é o estado real do código,
-  // não do produto.
-  "meta_instagram",
-] as const;
+export const PROVIDERS_SEM_MENSAGEM = ["wacalls"] as const;
 
 /**
  * Erro de COMPILAÇÃO enquanto sobrar provider fora das duas listas. Provider

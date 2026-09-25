@@ -43,6 +43,9 @@ const FONTE: Record<ProviderDeMensagem, FonteDeTemplates | null> = {
   waha: null,
   meta_cloud: "oficial",
   zernio: "parceiro",
+  // Etapa 1: sem envio, sem definição a gerir — mesmo motivo do `waha`, mas
+  // pela ausência de transporte, não pela liberdade de horário.
+  meta_instagram: null,
 };
 
 /** `null` quando este canal não trabalha com definições aprovadas. */

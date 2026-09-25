@@ -26,14 +26,12 @@ export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "wacalls" | "me
  * banco já aceitava `'wacalls'` enquanto este union não — e uma organização que
  * pareasse voz derrubava `getAdapter` com `unknown_channel_provider`.
  *
- * `meta_instagram` (etapa 1 do canal Instagram) fica no mesmo lado de fora de
- * `wacalls` até a etapa que traz capabilities/adapter/fonte de templates: o
- * schema já aceita a sessão (esta migration), mas `lib/channels/capabilities.ts`,
- * `lib/channels/index.ts` e `lib/channels/templates-fonte.ts` ainda não têm a
- * entrada dele. Colocá-lo em `ProviderDeMensagem` agora quebraria esses três
- * `Record<ProviderDeMensagem, …>` exaustivos com trabalho que não é desta etapa.
+ * `meta_instagram` entrou aqui na etapa 2 do canal Instagram, junto com o
+ * adapter, a matriz de capabilities e a fonte de templates: o Direct manda
+ * texto de verdade, então ele é `ProviderDeMensagem` como `waha`/`meta_cloud`/
+ * `zernio` — só `wacalls` (voz) fica de fora.
  */
-export type ProviderDeMensagem = Exclude<ChannelProvider, "wacalls" | "meta_instagram">;
+export type ProviderDeMensagem = Exclude<ChannelProvider, "wacalls">;
 
 export interface ChannelCapabilities {
   /** Pode enviar texto livre a qualquer momento? false = exige template fora da janela. */
