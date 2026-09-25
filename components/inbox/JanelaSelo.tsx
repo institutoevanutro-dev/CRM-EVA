@@ -53,11 +53,41 @@ export function JanelaSelo({
 
   const estado = estadoDaJanela(provider, lastInboundAt, agora);
   if (estado.tipo === "sem_restricao") return null;
-  // Janela humana (extensão de 7 dias do Instagram): sem selo nesta etapa —
-  // quem desenha o aviso é a Task 6.
-  if (estado.tipo === "humana") return null;
+
+  // Janela humana (extensão de 7 dias do Instagram): mesmo desenho da
+  // "aberta" — dá para escrever texto livre —, só que quem responde é a
+  // EQUIPE (a IA segue fora, `iaResponde: false`) e o prazo se conta em dias.
+  if (estado.tipo === "humana") {
+    return (
+      <Badge
+        variant="outline"
+        className="h-4 px-1.5 text-[10px]"
+        title={t(
+          "Passou de 24h: só a equipe responde, até 7 dias depois da última mensagem da pessoa.",
+        )}
+      >
+        {t("Resposta da equipe até")} {formatarDecorrido(estado.restanteMs)}
+      </Badge>
+    );
+  }
 
   if (estado.tipo === "fechada") {
+    // Vencimento de 7 dias (Instagram): nem gente escreve mais. A saída não é
+    // "modelo aprovado" — o Direct não tem — é sair do CRM e responder pelo
+    // app, se a pessoa mandar mensagem de novo.
+    if (estado.regra === "sete_dias") {
+      return (
+        <Badge
+          variant="outline"
+          className="h-4 border-amber-400 px-1.5 text-[10px] text-amber-700 dark:border-amber-700 dark:text-amber-300"
+          title={t(
+            "A Meta só deixa responder até 7 dias depois da última mensagem dessa pessoa. Responda pelo app do Instagram se ela escrever de novo.",
+          )}
+        >
+          {t("Fora do prazo do Instagram")}
+        </Badge>
+      );
+    }
     // "Fechada há 3d" responde o que o operador realmente pergunta — "passei
     // muito?" —, e essa distância é o que decide se ainda vale insistir ou se a
     // conversa esfriou. "Fechada" sozinho não distingue vinte minutos de um mês.

@@ -4805,6 +4805,14 @@ export const DICIONARIO: Traducoes = {
     es: "Tiempo restante para escribir texto libre. Después de eso, solo modelo aprobado.",
   },
   Janela: { es: "Ventana" },
+  "Resposta da equipe até": { es: "Respuesta del equipo hasta" },
+  "Passou de 24h: só a equipe responde, até 7 dias depois da última mensagem da pessoa.": {
+    es: "Pasaron 24h: solo el equipo responde, hasta 7 días después del último mensaje de la persona.",
+  },
+  "Fora do prazo do Instagram": { es: "Fuera del plazo de Instagram" },
+  "A Meta só deixa responder até 7 dias depois da última mensagem dessa pessoa. Responda pelo app do Instagram se ela escrever de novo.": {
+    es: "Meta solo permite responder hasta 7 días después del último mensaje de esa persona. Responde por la app de Instagram si vuelve a escribir.",
+  },
   "Lembrete ativo": { es: "Recordatorio activo" },
   "Cancelar lembrete": { es: "Cancelar recordatorio" },
   "Em 1 hora": { es: "En 1 hora" },
@@ -4814,6 +4822,7 @@ export const DICIONARIO: Traducoes = {
   // ─── Inbox: composer (anexos, áudio, contato, templates) ───
   Anexar: { es: "Adjuntar" },
   "Fotos e vídeos": { es: "Fotos y vídeos" },
+  Fotos: { es: "Fotos" },
   Documento: { es: "Documento" },
   "Enviar anexo": { es: "Enviar adjunto" },
   "Legenda (opcional)": { es: "Descripción (opcional)" },

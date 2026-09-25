@@ -10,10 +10,17 @@ interface Props {
   disabled?: boolean;
   onPick: (file: File) => void;
   onPickContact?: () => void;
+  /**
+   * O Direct só aceita foto (`midiaDeEnvio: "so_foto"` em
+   * `lib/channels/capabilities.ts`, medido na doc da API). Documento e
+   * Contato somem do menu: oferecê-los levaria a um upload que o servidor
+   * (Task 3) recusa.
+   */
+  soFoto?: boolean;
 }
 
 /** Menu "+" do composer (padrão WhatsApp): Fotos e vídeos / Documento / Contato. */
-export function AttachMenu({ disabled, onPick, onPickContact }: Props) {
+export function AttachMenu({ disabled, onPick, onPickContact, soFoto }: Props) {
   const t = useT();
   const mediaRef = useRef<HTMLInputElement | null>(null);
   const docRef = useRef<HTMLInputElement | null>(null);
@@ -46,17 +53,19 @@ export function AttachMenu({ disabled, onPick, onPickContact }: Props) {
             onClick={() => mediaRef.current?.click()}
           >
             <ImageSquare size={18} weight="duotone" className="text-primary" aria-hidden />
-            {t("Fotos e vídeos")}
+            {soFoto ? t("Fotos") : t("Fotos e vídeos")}
           </button>
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted"
-            onClick={() => docRef.current?.click()}
-          >
-            <FileText size={18} weight="duotone" className="text-primary" aria-hidden />
-            {t("Documento")}
-          </button>
-          {onPickContact && (
+          {!soFoto && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted"
+              onClick={() => docRef.current?.click()}
+            >
+              <FileText size={18} weight="duotone" className="text-primary" aria-hidden />
+              {t("Documento")}
+            </button>
+          )}
+          {!soFoto && onPickContact && (
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted"
@@ -72,14 +81,22 @@ export function AttachMenu({ disabled, onPick, onPickContact }: Props) {
           popover ao fechar, e um input desmontado no meio do clique perde o
           file picker ("nada acontece"). Aqui os refs seguem válidos após o
           fechamento — o .click() síncrono no onClick preserva o user-gesture. */}
-      <input ref={mediaRef} type="file" accept="image/*,video/*" className="hidden" onChange={handle} />
       <input
-        ref={docRef}
+        ref={mediaRef}
         type="file"
-        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
+        accept={soFoto ? "image/jpeg,image/png" : "image/*,video/*"}
         className="hidden"
         onChange={handle}
       />
+      {!soFoto && (
+        <input
+          ref={docRef}
+          type="file"
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
+          className="hidden"
+          onChange={handle}
+        />
+      )}
     </>
   );
 }

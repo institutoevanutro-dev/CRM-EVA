@@ -121,6 +121,24 @@ describe("o selo na tela", () => {
   });
 });
 
+describe("a extensão humana do Instagram (etapa 2)", () => {
+  it('passou das 24h mas ainda dentro dos 7 dias: "Resposta da equipe até" + o restante', () => {
+    // 2,5 dias desde a última mensagem: dentro da janela humana de 7 dias do
+    // Instagram, restam 4,5 dias — "4d" com folga de meio dia sobre a borda,
+    // para o teste não ser refém do tempo real que passa entre o cálculo do
+    // fixture e a leitura do relógio dentro do componente.
+    const doisEMeioDiasAtras = new Date(Date.now() - 2.5 * 86_400_000).toISOString();
+    render(<JanelaSelo provider="meta_instagram" lastInboundAt={doisEMeioDiasAtras} />);
+    expect(screen.getByText("Resposta da equipe até 4d")).toBeInTheDocument();
+  });
+
+  it("passou também dos 7 dias: diz que passou do prazo do Instagram", () => {
+    const oitoDiasAtras = new Date(Date.now() - 8 * 86_400_000).toISOString();
+    render(<JanelaSelo provider="meta_instagram" lastInboundAt={oitoDiasAtras} />);
+    expect(screen.getByText(/Fora do prazo do Instagram/i)).toBeInTheDocument();
+  });
+});
+
 describe("os elos que somem sem barulho", () => {
   it("a regra mora no SEAM, não na tela", () => {
     // Um `if (provider === "zernio")` no componente é o que o invariante 1 da
