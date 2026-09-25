@@ -102,3 +102,14 @@ describe("GET /api/v1/conversations — o `tag` da query string chega ao handler
     expect([q.status, q.tag]).toEqual([["open"], "vip"]);
   });
 });
+
+// Mesma perda, outro parâmetro: o filtro "Só Instagram" nasceu no schema e no
+// handler, e a rota não lia `canal` — a lista voltava com todos os canais. Quem
+// achou foi `tests/e2e/instagram-responder.spec.ts`, pela tela.
+describe("GET /api/v1/conversations — o `canal` da query string chega ao handler", () => {
+  beforeEach(() => listConversationsHandler.mockClear());
+
+  it("com `?canal=instagram`, o handler recebe `canal: \"instagram\"`", async () => {
+    expect((await queryRecebidaCom("?canal=instagram")).canal).toBe("instagram");
+  });
+});

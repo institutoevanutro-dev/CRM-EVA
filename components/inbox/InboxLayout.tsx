@@ -198,6 +198,9 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         ? filterValue.search
         : undefined,
       channel_session_id: filterValue.channel_session_id,
+      // Sem esta linha o seletor mostrava "Só Instagram" e a lista seguia
+      // com todos os canais: a contagem das abas filtrava, a lista não.
+      canal: filterValue.canal,
       tag: filterValue.tag,
       unread: filterValue.onlyUnread || undefined,
     }),
@@ -206,6 +209,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       automaticoDaOrg,
       filterValue.search,
       filterValue.channel_session_id,
+      filterValue.canal,
       filterValue.tag,
       filterValue.onlyUnread,
     ],

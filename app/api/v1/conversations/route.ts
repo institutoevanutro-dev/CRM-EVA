@@ -57,6 +57,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     tag: url.searchParams.get("tag") ?? undefined,
     unread: url.searchParams.get("unread") ?? undefined,
     channel_session_id: url.searchParams.get("channel_session_id") ?? undefined,
+    canal: url.searchParams.get("canal") ?? undefined,
     search: url.searchParams.get("search") ?? undefined,
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: url.searchParams.get("limit") ?? undefined,
