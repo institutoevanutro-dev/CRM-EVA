@@ -94,10 +94,12 @@ function makeAdminStub(opts: ConvOpts, queried: string[]) {
       order: () => chain,
       limit: () => chain,
       maybeSingle: () => {
-        // O erro só na consulta de ELEGIBILIDADE (embed de channel_sessions),
-        // não na leitura própria do buildContext.
+        // O erro só na consulta de ELEGIBILIDADE (embed de channel_sessions
+        // trazendo `metadata`) — o buildContext TAMBÉM embute channel_sessions
+        // agora (traz `provider`, para o gate `canal_sem_ia`), então o
+        // casamento tem que ser pela coluna pedida, não só pelo nome da tabela.
         const ehConsultaElegibilidade =
-          table === "conversations" && selectCols.includes("channel_sessions:channel_session_id");
+          table === "conversations" && selectCols.includes("channel_sessions:channel_session_id(metadata)");
         if (ehConsultaElegibilidade && opts.convError) {
           return Promise.resolve({ data: null, error: { message: opts.convError } });
         }

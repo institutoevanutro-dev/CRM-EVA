@@ -72,7 +72,15 @@ export type SkipReason =
    * fail-closed, porque schema pela metade é exatamente quando não se quer a IA
    * solta.
    */
-  | "nao_elegivel_para_ia";
+  | "nao_elegivel_para_ia"
+  /**
+   * `capabilitiesOf(provider).iaResponde` é `false` para o canal desta
+   * conversa (o Instagram Direct, etapa 2, de propósito): quem responde é a
+   * EQUIPE, pelo Inbox, nunca a IA. Este worker legado é o caminho
+   * pré-engine, mas a capability é a MESMA que o agent-engine lê — não pode
+   * existir um caminho por onde a IA escapa da regra.
+   */
+  | "canal_sem_ia";
 
 export interface BotContext {
   serviceBoundary?: ServiceBoundary;

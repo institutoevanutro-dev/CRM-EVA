@@ -75,7 +75,7 @@ describe("salvarConexaoDoInstagram", () => {
     await salvarConexaoDoInstagram(admin, entrada);
     expect(sincronizar).toHaveBeenCalledWith(
       admin,
-      { id: "S1", organization_id: "ORG", status: "WORKING" },
+      { id: "S1", organization_id: "ORG", status: "WORKING", provider: "meta_instagram" },
       { reachable: true, status: "WORKING", detail: null },
       "Instagram @clinica",
       "renovacao",

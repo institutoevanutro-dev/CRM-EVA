@@ -52,6 +52,7 @@ import type {
 } from "@/lib/ai/types";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
+import { capabilitiesOf, type ChannelProvider } from "@/lib/channels";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -606,7 +607,7 @@ async function buildContext(input: BuildContextInput): Promise<GuardDecision> {
   const { data: conv, error: convErr } = await admin
     .from("conversations")
     .select(
-      "id, organization_id, contact_id, channel_session_id, last_inbound_at, bot_silenced_until, last_handoff_at, assignee_kind, contacts:contact_id(id, name, display_name, locale, is_blocked, force_human)",
+      "id, organization_id, contact_id, channel_session_id, last_inbound_at, bot_silenced_until, last_handoff_at, assignee_kind, contacts:contact_id(id, name, display_name, locale, is_blocked, force_human), channel_sessions:channel_session_id(provider)",
     )
     .eq("id", input.conversationId)
     .eq("organization_id", input.organizationId)
@@ -632,8 +633,17 @@ async function buildContext(input: BuildContextInput): Promise<GuardDecision> {
       is_blocked: boolean;
       force_human: boolean;
     } | null;
+    channel_sessions: { provider?: string | null } | null;
   };
   const c = conv as unknown as ConvRow;
+  // O Instagram (etapa 2) é respondido pela EQUIPE, pelo Inbox — a IA não fala
+  // por ele. `capabilitiesOf` falha fechado num provider desconhecido, e um
+  // provider ausente (banco antigo, sessão sem join) não deve travar quem
+  // sempre respondeu: só veta quando o campo veio e a matriz o conhece.
+  const provider = c.channel_sessions?.provider;
+  if (provider && capabilitiesOf(provider as ChannelProvider).iaResponde === false) {
+    return skip("canal_sem_ia");
+  }
   if (!c.contacts) return skip("conversation_not_found", "contact join missing");
   if (c.contacts.is_blocked) return skip("contact_blocked");
   if (c.contacts.force_human) return skip("force_human");

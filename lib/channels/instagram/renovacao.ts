@@ -137,7 +137,12 @@ export async function renovarTokensDoInstagram(
 
   for (const sessao of sessoes) {
     resumo.examinadas += 1;
-    const alvo = { id: sessao.id, organization_id: sessao.organization_id, status: null };
+    const alvo = {
+      id: sessao.id,
+      organization_id: sessao.organization_id,
+      status: null,
+      provider: CHANNEL_PROVIDER_INSTAGRAM,
+    };
     const apelido = apelidoDaSessao(sessao);
     try {
       const tokenAtual = await decryptWebhookSecret(admin, sessao.ig_token_encrypted);

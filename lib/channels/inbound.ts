@@ -159,7 +159,12 @@ async function zernioInbound(
         // O `status` que vai para `channel_session_health` é o OBSERVADO agora,
         // não o guardado: quem acabou de falar foi o provedor, e a linha do
         // episódio serve justamente para registrar o que ele disse.
-        { id: input.session.id, organization_id: input.session.organization_id, status: saude.status },
+        {
+          id: input.session.id,
+          organization_id: input.session.organization_id,
+          status: saude.status,
+          provider: input.session.provider,
+        },
         saude,
         // O APELIDO da conexão, não o texto do evento. Passar `aviso.title` aqui
         // produzia `WhatsApp "Número SUSPENSO — não é possível enviar." fora do

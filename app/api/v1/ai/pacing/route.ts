@@ -16,7 +16,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { PROVIDERS_DE_MENSAGEM } from "@/lib/channels/capabilities";
+import { providersDeEnvioAutomatico } from "@/lib/channels";
 import {
   pacingKnobsUpdateSchema,
   knobsView,
@@ -46,9 +46,12 @@ export async function GET(): Promise<Response> {
       .eq("organization_id", org.orgId)
       // Canal arquivado foi excluído pelo usuário: não volta como opção aqui.
       .is("archived_at", null)
-      // Ritmo de envio é regra de canal de MENSAGEM. A linha de chamada de voz
-      // (spec 18) não dispara nada e não tem intervalo a calibrar.
-      .in("provider", [...PROVIDERS_DE_MENSAGEM])
+      // Ritmo de envio é regra de canal onde a IA manda mensagem sozinha. A
+      // linha de chamada de voz (spec 18) não dispara nada e não tem intervalo
+      // a calibrar, e o Instagram (etapa 2) é respondido pela EQUIPE, sem
+      // throttle de robô — mesma lista que `lib/automation/start-conversation.ts`
+      // usa para escolher canal de automação, para as duas nunca divergirem.
+      .in("provider", [...providersDeEnvioAutomatico()])
       .order("created_at", { ascending: true }),
     admin
       .from("channel_knobs")

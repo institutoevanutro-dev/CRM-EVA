@@ -241,6 +241,16 @@ export function canalDeEnvioAutomatico(provider: string | null | undefined): boo
   return caps ? caps.canSend && caps.iaResponde : true;
 }
 
+/**
+ * O nome do TRANSPORTE, para aviso e log lidos por gente — nunca confundir com
+ * `nomeDoCanal` de `./estado.ts` (o APELIDO da conexão, ex.: "Vendas"). Só o
+ * Instagram diverge; todo o resto (WAHA, Cloud, BSP) fala como "WhatsApp"
+ * porque é o que o operador reconhece.
+ */
+export function nomeDoCanal(provider: string | null | undefined): "WhatsApp" | "Instagram" {
+  return provider === CHANNEL_PROVIDER_INSTAGRAM ? "Instagram" : "WhatsApp";
+}
+
 export function capabilitiesOf(provider: ChannelProvider): ChannelCapabilities {
   const caps = CHANNEL_CAPABILITIES[provider as ProviderDeMensagem];
   // Fail-closed: provider fora da matriz não herda o default do WAHA. O tipo

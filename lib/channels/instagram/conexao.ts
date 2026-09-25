@@ -55,7 +55,7 @@ async function atualizar(admin: SupabaseClient, id: string, c: ConexaoDoInstagra
   // próxima renovação, que com o token novo só roda daqui a 45 dias.
   await sincronizarSaudeDaConexao(
     admin,
-    { id, organization_id: c.organizationId, status: "WORKING" },
+    { id, organization_id: c.organizationId, status: "WORKING", provider: CHANNEL_PROVIDER_INSTAGRAM },
     { reachable: true, status: "WORKING", detail: null },
     `Instagram @${c.username}`,
     "renovacao",
