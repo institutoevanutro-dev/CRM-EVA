@@ -196,6 +196,18 @@ export function canalConhecidoSemMensagem(provider: string | null | undefined): 
   return (PROVIDERS_SEM_MENSAGEM as readonly string[]).includes(provider ?? "");
 }
 
+/**
+ * A TELA pode oferecer "responder" nesta conversa? `false` só para canal de
+ * mensagem conhecido com `canSend: false` (o Instagram da etapa 1). Provider
+ * ainda não lido (`null`) ou desconhecido responde `true`: travar o composer
+ * por falta de dado seria pior, e quem decide o envio de fato é o handler, que
+ * falha fechado (`capabilitiesOf`).
+ */
+export function canalRespondePeloCrm(provider: string | null | undefined): boolean {
+  const caps = CHANNEL_CAPABILITIES[(provider ?? "") as ProviderDeMensagem];
+  return caps ? caps.canSend : true;
+}
+
 export function capabilitiesOf(provider: ChannelProvider): ChannelCapabilities {
   const caps = CHANNEL_CAPABILITIES[provider as ProviderDeMensagem];
   // Fail-closed: provider fora da matriz não herda o default do WAHA. O tipo
