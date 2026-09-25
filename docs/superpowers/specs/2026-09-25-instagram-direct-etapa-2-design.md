@@ -16,7 +16,7 @@ Sucesso é: a equipe responde um Direct pelo Inbox, a pessoa recebe no Instagram
 
 - `capabilities.meta_instagram.canSend` passa a `true`. O caminho continua o mesmo: `app/api/v1/messages/_handler.ts` → `getAdapter(provider).send`.
 - `instagramAdapter.send` chama `POST {BASE_DO_INSTAGRAM}/{graphVersion}/{ig_account_id}/messages` com o token da sessão (`resolveInstagramToken`, já existe), corpo `{ recipient: { id: IGSID }, message: {...} }`.
-- Destinatário: o IGSID vem de `contact_channel_identities` (canal `instagram`, conta da sessão da conversa). `resolveRecipient` do adapter resolve a partir dele. Sem identidade → erro `instagram_sem_destinatario`.
+- Destinatário: o IGSID do cliente passa a ficar na conversa (`conversations.provider_conversation_id`, gravado na ingestão; conversas antigas preenchidas pela migration 0278). O IGSID é por perfil, então guardar na conversa mantém o destinatário certo se um contato tiver conversas nos dois perfis. Sem ele → erro `instagram_sem_destinatario`.
 - Texto: `message: { text }`. A API aceita até 1000 caracteres; acima disso a tela recusa antes de enviar.
 - Foto: `message: { attachment: { type: "image", payload: { url } } }`, com a URL assinada do Storage (validade curta, gerada na hora). Só imagem (jpeg/png). Áudio, vídeo e documento ficam recusados na tela com "Por enquanto o Instagram aceita só texto e foto pelo CRM".
 - Resposta ok devolve `message_id`, que vira o `external_id` da mensagem. Assim o eco que o webhook traz depois é reconhecido como a MESMA mensagem (dedupe por `organization_id, external_id`) e não duplica.
@@ -43,14 +43,14 @@ Sucesso é: a equipe responde um Direct pelo Inbox, a pessoa recebe no Instagram
 
 | Erro | O que acontece |
 |---|---|
-| Token vencido ou revogado (190) | mensagem `failed` + aviso na Central para reconectar o perfil (mesmo aviso da renovação da etapa 1) |
+| Token vencido ou revogado (190) | mensagem `failed` com "reconecte o Instagram em Conexões"; o aviso na Central vem da rodada diária de renovação/saúde da etapa 1 |
 | Fora da janela (código de janela da Meta) | `failed` com o texto da regra dos 7 dias |
 | Pessoa bloqueou ou conta indisponível (551) | `failed` com "Essa pessoa não pode receber mensagens deste perfil" |
 | Outros | `failed` com o código, sem reenviar (envio em dobro é pior que não-envio) |
 
 ## 3. Instagram e WhatsApp na tela
 
-- **Selo de canal no avatar**: canto inferior direito da foto, na lista e no cabeçalho. Instagram com o logo sobre o degradê rosa/roxo; WhatsApp com o logo sobre verde. O selo substitui o ponto roxo que hoje fica nesse canto quando não tem outro significado. Se o ponto roxo tiver significado, o selo vai no canto oposto.
+- **Selo de canal no avatar**: canto inferior direito da foto, na lista e no cabeçalho. Instagram com o logo sobre o degradê rosa/roxo; WhatsApp com o logo sobre verde. O ponto do canto direito já tem significado (quem está no comando: IA, equipe, aguardando), então o selo vai no canto inferior ESQUERDO.
 - **Etiqueta "via @conta"**: ganha a cor do canal (fundo suave). A do WhatsApp com telefone ganha o verde.
 - **Filtro**: o seletor "Todos os números" ganha, no topo, "Só Instagram" e "Só WhatsApp". O filtro usa `conversations.channel` e combina com os outros filtros.
 - As cores entram como tokens em `app/globals.css` (`--canal-instagram`, `--canal-whatsapp`), em claro e escuro, sem hex solto no componente.
@@ -61,7 +61,7 @@ Sucesso é: a equipe responde um Direct pelo Inbox, a pessoa recebe no Instagram
 - Causa medida em produção: 3 de 6 contatos do Instagram ficaram sem nome. Todos nasceram de uma mensagem ENVIADA pelo celular (eco), e a busca de perfil só acontecia quando a identidade não existia. Depois de criada, o CRM nunca mais tentava.
 - Correção na ingestão (`lib/channels/instagram/ingest.ts`): busca o perfil quando a identidade é nova OU o contato está sem `display_name`, em mensagem recebida ou eco. Limite: no máximo uma tentativa por contato a cada 24h, marcada em `source_metadata.perfil_tentado_em`, para não chamar a Meta a cada mensagem de quem não tem perfil acessível.
 - Preenchimento: a busca só preenche o que está vazio (`display_name`, handle, foto). Nunca sobrescreve nome editado pela equipe.
-- Contatos já existentes sem nome: um script de uma vez (`scripts/instagram-preencher-nomes.ts`), idempotente, que roda a mesma função para cada contato do Instagram sem `display_name`.
+- Contatos já existentes sem nome: a rodada diária de renovação do token preenche até 50 por perfil, com a mesma função (roda em produção sem ninguém executar script).
 - Exibição: nome; se não houver, `@handle`; só sem os dois aparece "Contato do Instagram".
 
 ## 5. Fora desta etapa
@@ -86,4 +86,3 @@ Entram nesta etapa, por estarem no caminho: o título do aviso de falha que aind
 
 - **Tag HUMAN_AGENT**: se a Meta exigir aprovação da tag para o app, o envio entre 24h e 7 dias falha com erro de permissão. Nesse caso a tela passa a bloquear depois de 24h (a capability troca para 24h) até a aprovação. Conferir no primeiro envio real fora das 24h.
 - **URL da foto**: a Meta baixa a imagem da URL assinada; validade curta demais faz falhar. Usar 10 minutos.
-- **Selo e ponto roxo**: o ponto roxo atual precisa ter o significado conferido antes de mexer no canto do avatar.
