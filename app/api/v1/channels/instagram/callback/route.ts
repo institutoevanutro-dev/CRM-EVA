@@ -48,7 +48,16 @@ function voltar(codigo: string): NextResponse {
       `<title>Voltando…</title></head><body><p>Voltando para as conexões…</p>` +
       `<script>location.replace(${JSON.stringify(destino)})</script>` +
       `<noscript><p><a href="${seguro}">Continuar</a></p></noscript></body></html>`,
-    { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
+    {
+      status: 200,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        // A URL desta página traz `code` e `state` da Meta: sem Referer para o
+        // destino e sem cópia em cache.
+        "referrer-policy": "no-referrer",
+        "cache-control": "no-store",
+      },
+    },
   );
   resposta.cookies.set(NOME_DO_VINCULO, "", {
     httpOnly: true,

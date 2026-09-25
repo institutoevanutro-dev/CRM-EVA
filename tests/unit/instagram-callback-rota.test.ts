@@ -140,6 +140,10 @@ describe("callback do login do Instagram", () => {
     );
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
+    // A URL de volta carrega `code`/`state` da Meta: não vaza por Referer e a
+    // página-ponte não fica em cache.
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(res.headers.get("cache-control")).toBe("no-store");
     expect(await destino(res)).toBe("https://crm.exemplo/app/connections?instagram=conectado");
     // o cookie de vínculo morre com o fluxo
     expect(res.headers.get("set-cookie")).toContain(`${NOME_DO_VINCULO}=;`);
