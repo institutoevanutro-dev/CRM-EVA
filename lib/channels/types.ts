@@ -108,6 +108,8 @@ export interface RecipientInput {
    * `waIdentity.startsWith("lid:")` — justo o caso que a regra protege.
    */
   waLid?: string | null | undefined;
+  /** Id do cliente NA CONVERSA, quando o canal endereça por conversa (IGSID do Instagram). */
+  providerConversationId?: string | null;
 }
 
 /** Contato compartilhado (vcard) — só `kind: "contact"`. */
@@ -186,6 +188,8 @@ export interface OutboundEnvelope extends ChannelTenantScope {
    * `undefined` = envio solto, que é o caso comum.
    */
   replyToExternalId?: string | null;
+  /** Envio humano fora das 24h num canal com janela humana: o adapter marca a mensagem como atendimento humano. */
+  etiquetaHumana?: boolean;
 }
 
 /**

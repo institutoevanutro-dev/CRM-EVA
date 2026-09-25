@@ -13,6 +13,11 @@ import { logger } from "@/lib/logger";
 
 export const BASE_DO_INSTAGRAM = "https://graph.instagram.com";
 
+/** Base da Graph API do Instagram. A variável existe para o e2e apontar para um receptor local. */
+export function baseDoInstagram(): string {
+  return (process.env.INSTAGRAM_GRAPH_BASE_URL ?? "").trim().replace(/\/+$/, "") || BASE_DO_INSTAGRAM;
+}
+
 /**
  * Nome, handle e foto de quem mandou a mensagem (IGSID). Best-effort: qualquer
  * falha (rede, token vencido, campo ausente) devolve os três `null` — a
@@ -22,7 +27,7 @@ export async function perfilDoRemetente(
   token: string,
   igsid: string,
 ): Promise<{ nome: string | null; handle: string | null; foto: string | null }> {
-  const url = `${BASE_DO_INSTAGRAM}/${graphVersion()}/${encodeURIComponent(igsid)}?fields=name,username,profile_pic`;
+  const url = `${baseDoInstagram()}/${graphVersion()}/${encodeURIComponent(igsid)}?fields=name,username,profile_pic`;
   try {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) {

@@ -551,7 +551,7 @@ describe('sendMessageHandler — os 6 desfechos do envio', () => {
     );
 
     expect(msg.status).toBe('failed');
-    expect(msg.error_code).toBe('instagram_envio_indisponivel');
+    expect(msg.error_code).toBe('instagram_erro_de_envio');
     expect(msg.error_message).toMatch(/próxima versão/);
     expect((msg.metadata as Record<string, unknown>).queued_reason).toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
