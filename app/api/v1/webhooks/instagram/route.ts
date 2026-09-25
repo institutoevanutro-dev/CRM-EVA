@@ -54,17 +54,45 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const admin = createAdminClient();
   let recebidas = 0;
+  // Falha de INFRAESTRUTURA (consulta da sessão ou exceção da ingestão) — nunca
+  // resolvida no corpo, sempre a responder 500 no fim do lote — versus falha
+  // DETERMINÍSTICA (`status: "falhou"` do próprio `ingerirDoInstagram`), que
+  // continua respondendo 200: reentregar o mesmo payload não vai mudar o
+  // resultado dela. `external_id` (23505) faz a reentrega ser segura nos dois casos.
+  let falhaDeInfraestrutura = false;
   for (const evento of parseWebhookDoInstagram(corpo)) {
-    const sessao = await sessaoDoInstagramPorConta(admin, evento.igAccountId);
-    if (!sessao) {
-      logger.info("[instagram.webhook] conta sem conexão ativa", { conta: evento.igAccountId });
-      continue;
+    try {
+      const resultado = await sessaoDoInstagramPorConta(admin, evento.igAccountId);
+      if (resultado.status === "erro") {
+        falhaDeInfraestrutura = true;
+        logger.error("[instagram.webhook] consulta da sessão falhou", { motivo: resultado.motivo, conta: evento.igAccountId });
+        continue;
+      }
+      if (resultado.status === "ausente") {
+        logger.info("[instagram.webhook] conta sem conexão ativa", { conta: evento.igAccountId });
+        continue;
+      }
+      const sessao = resultado.sessao;
+      const r = await ingerirDoInstagram(admin, evento, sessao);
+      if (r.status === "falhou") {
+        logger.error("[instagram.webhook] ingestão falhou", { motivo: r.motivo, organizationId: sessao.organizationId });
+      }
+      if (r.status === "ingerida") recebidas += 1;
+    } catch (err) {
+      // Uma exceção (Graph API, decrypt, RPC) NÃO pode abortar o `for`: os
+      // eventos seguintes do mesmo lote são de OUTRAS pessoas/mensagens e não
+      // têm nada a ver com o que quebrou. Loga e segue — o lote inteiro
+      // responde 500 no final, para a Meta reentregar só este batch.
+      falhaDeInfraestrutura = true;
+      logger.error("[instagram.webhook] evento abortou com exceção", {
+        conta: evento.igAccountId,
+        erro: err instanceof Error ? err.message : String(err),
+      });
     }
-    const r = await ingerirDoInstagram(admin, evento, sessao);
-    if (r.status === "falhou") {
-      logger.error("[instagram.webhook] ingestão falhou", { motivo: r.motivo, organizationId: sessao.organizationId });
-    }
-    if (r.status === "ingerida") recebidas += 1;
+  }
+
+  if (falhaDeInfraestrutura) {
+    return fail("internal_error", "falha ao processar um ou mais eventos", 500, { requestId });
   }
   return NextResponse.json({ received: recebidas }, { headers: { "X-Request-Id": requestId } });
 }

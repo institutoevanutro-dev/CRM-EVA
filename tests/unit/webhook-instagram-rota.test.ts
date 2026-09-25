@@ -14,8 +14,22 @@ vi.mock("@/lib/channels/instagram/ingest", () => ({ ingerirDoInstagram: ingerir 
 
 const { GET, POST } = await import("@/app/api/v1/webhooks/instagram/route");
 const corpo = JSON.stringify({ object: "instagram", entry: [{ id: "IGACC", time: 1, messaging: [{ sender: { id: "P" }, recipient: { id: "IGACC" }, timestamp: 1, message: { mid: "m1", text: "Oi" } }] }] });
+const corpoComDoisEventos = JSON.stringify({
+  object: "instagram",
+  entry: [
+    {
+      id: "IGACC",
+      time: 1,
+      messaging: [
+        { sender: { id: "P1" }, recipient: { id: "IGACC" }, timestamp: 1, message: { mid: "m1", text: "Primeiro" } },
+        { sender: { id: "P2" }, recipient: { id: "IGACC" }, timestamp: 2, message: { mid: "m2", text: "Segundo" } },
+      ],
+    },
+  ],
+});
 const assinar = (s: string) => `sha256=${createHmac("sha256", "SEG").update(s).digest("hex")}`;
 const post = (s: string, sig: string | null) => new NextRequest("http://x/api/v1/webhooks/instagram", { method: "POST", body: s, headers: sig ? { "x-hub-signature-256": sig } : {} });
+const sessaoOk = { id: "S", organizationId: "ORG", igAccountId: "IGACC", tokenCifrado: null, origemPadrao: null };
 
 beforeEach(() => { vi.clearAllMocks(); });
 
@@ -32,16 +46,33 @@ describe("webhook do Instagram", () => {
     expect(ingerir).not.toHaveBeenCalled();
   });
   it("conta não conectada: 200, nada gravado, log", async () => {
-    sessao.mockResolvedValue(null);
+    sessao.mockResolvedValue({ status: "ausente" });
     const r = await POST(post(corpo, assinar(corpo)));
     expect(r.status).toBe(200);
     expect(ingerir).not.toHaveBeenCalled();
     expect(logger.info).toHaveBeenCalled();
   });
   it("conta conectada: ingere com a sessão resolvida", async () => {
-    sessao.mockResolvedValue({ id: "S", organizationId: "ORG", igAccountId: "IGACC", tokenCifrado: null, origemPadrao: null });
+    sessao.mockResolvedValue({ status: "ok", sessao: sessaoOk });
     const r = await POST(post(corpo, assinar(corpo)));
     expect(r.status).toBe(200);
     expect(ingerir).toHaveBeenCalledTimes(1);
+  });
+  it("exceção na ingestão do primeiro evento não aborta o segundo, e a resposta é 500", async () => {
+    sessao.mockResolvedValue({ status: "ok", sessao: sessaoOk });
+    ingerir
+      .mockRejectedValueOnce(new Error("graph api caiu"))
+      .mockResolvedValueOnce({ status: "ingerida", messageId: "M2", conversationId: "C2", contatoNovo: false });
+    const r = await POST(post(corpoComDoisEventos, assinar(corpoComDoisEventos)));
+    expect(ingerir).toHaveBeenCalledTimes(2);
+    expect(logger.error).toHaveBeenCalled();
+    expect(r.status).toBe(500);
+  });
+  it("falha na consulta da sessão: logger.error e 500", async () => {
+    sessao.mockResolvedValue({ status: "erro", motivo: "conexão recusada" });
+    const r = await POST(post(corpo, assinar(corpo)));
+    expect(ingerir).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalled();
+    expect(r.status).toBe(500);
   });
 });
