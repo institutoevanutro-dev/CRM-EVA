@@ -22,7 +22,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { nomeDoCanal } from "@/lib/channels/estado";
 
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "./archived";
-import { PROVIDERS_DE_MENSAGEM } from "./capabilities";
+import { CHANNEL_CAPABILITIES, PROVIDERS_DE_MENSAGEM } from "./capabilities";
+
+/**
+ * Quem escolhe canal aqui vai ENVIAR por ele (agente, roteador, composição).
+ * Canal de mensagem que só recebe (`canSend: false`) fica de fora: oferecê-lo
+ * faria alguém tentar mandar mensagem por uma conta que não envia.
+ */
+const PROVIDERS_QUE_ENVIAM = PROVIDERS_DE_MENSAGEM.filter((p) => CHANNEL_CAPABILITIES[p].canSend);
 
 /** Um canal oferecível como destino, já com o rótulo resolvido para a tela. */
 export interface SelectableChannel {
@@ -65,7 +72,7 @@ export async function listSelectableChannels(
       // Uma linha de chamada de voz (spec 18) aqui vira número escolhível,
       // agente preso a um canal mudo e "1 canal conectado" numa instalação com
       // zero canal de mensagem.
-      .in("provider", [...PROVIDERS_DE_MENSAGEM]);
+      .in("provider", PROVIDERS_QUE_ENVIAM);
 
   const { data, error } = await queryTolerantToMissingArchived(
     () => base().is(ARCHIVED_AT, null).order("created_at", { ascending: true }),

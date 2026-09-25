@@ -5,7 +5,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import type { Locale } from "date-fns";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { Phone, Robot } from "@/lib/ui/icons";
+import { InstagramLogo, Phone, Robot } from "@/lib/ui/icons";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
@@ -79,7 +79,7 @@ const COR_DO_COMANDO: Record<string, string> = {
 };
 
 function initials(name: string | null | undefined, fallback: string): string {
-  const v = (name ?? "").trim();
+  const v = (name ?? "").trim().replace(/^@/, "");
   if (!v) return fallback.slice(0, 2).toUpperCase();
   const parts = v.split(/\s+/).filter(Boolean);
   if (parts.length === 0) return fallback.slice(0, 2).toUpperCase();
@@ -124,7 +124,7 @@ export function ConversationListItem({
   const t = useT();
   const c = conversation.contacts ?? null;
   const displayName = rotuloDoContato(c, t);
-  const phoneFallback = c?.phone_number ? phoneForDisplay(c.phone_number) : "??";
+  const phoneFallback = c?.phone_number ? phoneForDisplay(c.phone_number) : displayName;
   const tags = c?.tags ?? [];
   const visibleTags = tags.slice(0, 2);
   const overflow = tags.length - visibleTags.length;
@@ -181,11 +181,15 @@ export function ConversationListItem({
   // respondendo. Cai no nome do canal quando não há número (canal recém-criado).
   const canal = conversation.channel_sessions ?? null;
   const rotuloCanal = canal?.phone_number ?? canal?.display_name ?? null;
+  // Instagram: sempre diz por qual conta entrou ("via @conta"), mesmo com um
+  // canal só: é o que diferencia a conversa do Direct da do WhatsApp na lista.
+  const viaInstagram = conversation.channel === "instagram";
 
   const temSelos =
     visibleTags.length > 0 ||
     (mostrarAtendente && comando.quem === "humano") ||
     (mostrarCanal && rotuloCanal != null) ||
+    viaInstagram ||
     Boolean(c?.is_blocked) ||
     Boolean(c?.is_anonymized);
 
@@ -297,7 +301,16 @@ export function ConversationListItem({
             {mostrarAtendente && comando.quem === "humano" && (
               <OwnerBadge ownerKind="user" ownerName={comando.nome ?? t("Atendente")} compacto />
             )}
-            {mostrarCanal && rotuloCanal && (
+            {viaInstagram && (
+              <Badge
+                variant="outline"
+                className="h-4 gap-1 px-1.5 text-[10px] font-normal text-text-muted"
+              >
+                <InstagramLogo size={9} weight="regular" aria-hidden />
+                {rotuloCanal ? `${t("via")} ${rotuloCanal}` : t("Instagram")}
+              </Badge>
+            )}
+            {!viaInstagram && mostrarCanal && rotuloCanal && (
               <Badge
                 variant="outline"
                 className="h-4 gap-1 px-1.5 text-[10px] font-normal text-text-muted"

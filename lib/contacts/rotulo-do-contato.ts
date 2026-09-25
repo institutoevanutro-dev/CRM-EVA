@@ -32,7 +32,18 @@ export interface ContatoNomeavel {
   display_name?: string | null;
   name?: string | null;
   phone_number?: string | null;
+  /** Identidades por canal (Instagram etc.): quem não tem telefone é achado por aqui. */
+  contact_channel_identities?: IdentidadeDeCanal[] | null;
 }
+
+export interface IdentidadeDeCanal {
+  channel: string;
+  handle: string | null;
+  display_name: string | null;
+}
+
+/** Quando a pessoa só existe pelo Instagram e o perfil não trouxe nome nem @. */
+export const CONTATO_DO_INSTAGRAM = "Contato do Instagram";
 
 /** Quando não há nada apresentável. Um literal, não quatro. */
 export const SEM_NOME = "Sem nome";
@@ -116,6 +127,18 @@ export function rotuloDoContato(
 
   const tel = (c.phone_number ?? "").trim();
   if (tel !== "") return phoneForDisplay(tel);
+
+  // Sem telefone (Instagram): o nome do perfil, depois o @, depois o canal.
+  const ids = c.contact_channel_identities ?? [];
+  for (const i of ids) {
+    const nomeDoPerfil = (i.display_name ?? "").trim();
+    if (nomeDoPerfil !== "" && !ehIdentificadorTecnico(nomeDoPerfil)) return nomeDoPerfil;
+  }
+  for (const i of ids) {
+    const handle = (i.handle ?? "").trim().replace(/^@/, "");
+    if (handle !== "") return `@${handle}`;
+  }
+  if (ids.some((i) => i.channel === "instagram")) return t(CONTATO_DO_INSTAGRAM);
 
   return t(SEM_NOME);
 }

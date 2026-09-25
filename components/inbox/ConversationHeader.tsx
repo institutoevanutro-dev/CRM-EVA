@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { JanelaSelo } from "@/components/inbox/JanelaSelo";
-import { Phone, ArrowRight } from "@/lib/ui/icons";
+import { InstagramLogo, Phone, ArrowRight } from "@/lib/ui/icons";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useReleaseConversation } from "@/hooks/inbox/useReleaseConversation";
@@ -197,6 +197,14 @@ export function ConversationHeader({ conversation }: Props) {
         {phone && (
           <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
             <Phone size={11} weight="regular" aria-hidden /> {phone}
+          </p>
+        )}
+        {conversation.channel === "instagram" && (
+          <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+            <InstagramLogo size={11} weight="regular" aria-hidden />
+            {conversation.channel_sessions?.display_name
+              ? `${t("via")} ${conversation.channel_sessions.display_name}`
+              : t("Instagram")}
           </p>
         )}
       </div>

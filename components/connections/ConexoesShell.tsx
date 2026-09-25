@@ -3,6 +3,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+import { CanalInstagramClient } from "./CanalInstagramClient";
 import { CanalOficialClient } from "./CanalOficialClient";
 import { CanalParceiroClient } from "./CanalParceiroClient";
 import { CanalVozClient } from "./CanalVozClient";
@@ -52,7 +53,11 @@ export function ConexoesShell({
         ? "parceiro"
         : abaParam === "voz"
           ? "voz"
-          : "numeros";
+          : // A volta do login do Instagram chega com `?instagram=<código>` e sem
+            // `aba`: abre direto no cartão que mostra o resultado.
+            abaParam === "instagram" || (!abaParam && params.has("instagram"))
+            ? "instagram"
+            : "numeros";
   const sub = params.get("sub") === "templates" ? "templates" : "conexao";
 
   const irPara = (proximaAba: string, proximaSub?: string): void => {
@@ -86,7 +91,12 @@ export function ConexoesShell({
             Aqui fica o CONCEITO; lá dentro o cartão diz de quem se trata. */}
         <TabsTrigger value="parceiro">{t("Provedor parceiro")}</TabsTrigger>
         <TabsTrigger value="voz">{t("Chamada de voz")}</TabsTrigger>
+        <TabsTrigger value="instagram">{t("Instagram")}</TabsTrigger>
       </TabsList>
+
+      <TabsContent value="instagram" className="mt-0">
+        <CanalInstagramClient />
+      </TabsContent>
 
       <TabsContent value="numeros" className="mt-0">
         <ConnectionsClient wahaConfigured={wahaConfigured} />

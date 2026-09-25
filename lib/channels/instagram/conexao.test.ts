@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { podeConectarNaOrganizacao, salvarConexaoDoInstagram } from "./conexao";
+import { arquivarConexaoDoInstagram, definirOrigemPadrao, listarConexoesDoInstagram, podeConectarNaOrganizacao, salvarConexaoDoInstagram } from "./conexao";
 
 type Linha = { id: string; organization_id: string } | null;
 
@@ -97,5 +97,66 @@ describe("podeConectarNaOrganizacao", () => {
     expect(await podeConectarNaOrganizacao(admin("admin"), "ORG", "U")).toBe(true);
     expect(await podeConectarNaOrganizacao(admin("agent"), "ORG", "U")).toBe(false);
     expect(await podeConectarNaOrganizacao(admin(null), "ORG", "U")).toBe(false);
+  });
+});
+
+// ─── helpers da tela de Conexões ────────────────────────────────────────────
+
+/** Fake que grava cada cadeia montada; cada `from()` consome a próxima resposta. */
+function dbGravador(respostas: { data: unknown; error: null | { message: string } }[]) {
+  const cadeias: { metodo: string; args: unknown[] }[][] = [];
+  const db = {
+    from: () => {
+      const cadeia: { metodo: string; args: unknown[] }[] = [];
+      cadeias.push(cadeia);
+      const r = respostas.shift() ?? { data: null, error: null };
+      const proxy: Record<string, unknown> = new Proxy({}, {
+        get: (_alvo, p: string) => {
+          if (p === "then") return (ok: (v: unknown) => void) => ok(r);
+          if (p === "maybeSingle") return async () => r;
+          return (...args: unknown[]) => (cadeia.push({ metodo: p, args }), proxy);
+        },
+      });
+      return proxy;
+    },
+  } as unknown as SupabaseClient;
+  const tem = (i: number, metodo: string, ...args: unknown[]) =>
+    cadeias[i]!.some((c) => c.metodo === metodo && JSON.stringify(c.args) === JSON.stringify(args));
+  return { db, cadeias, tem };
+}
+
+describe("helpers de Conexões filtram pela organização", () => {
+  it("listar: só as ativas da org, com a origem padrão lida do metadata", async () => {
+    const { db, tem } = dbGravador([{ data: [{ id: "S1", ig_username: "clinica", status: "WORKING", ig_token_expires_at: "2026-11-24T00:00:00Z", metadata: { origem_padrao: { campo: "origem", valor: "instagram" } } }], error: null }]);
+    const contas = await listarConexoesDoInstagram(db, "ORG");
+    expect(tem(0, "eq", "organization_id", "ORG")).toBe(true);
+    expect(tem(0, "is", "archived_at", null)).toBe(true);
+    expect(contas).toEqual([{ id: "S1", username: "clinica", status: "WORKING", expiraEm: "2026-11-24T00:00:00Z", origemPadrao: { campo: "origem", valor: "instagram" } }]);
+  });
+
+  it("arquivar: grava archived_at só na linha da org; sem linha devolve null", async () => {
+    const { db, cadeias, tem } = dbGravador([{ data: { ig_username: "clinica" }, error: null }, { data: null, error: null }]);
+    expect(await arquivarConexaoDoInstagram(db, "ORG", "S1")).toEqual({ username: "clinica" });
+    expect(tem(0, "eq", "organization_id", "ORG")).toBe(true);
+    expect(tem(0, "eq", "id", "S1")).toBe(true);
+    expect(cadeias[0]!.find((c) => c.metodo === "update")!.args[0]).toHaveProperty("archived_at");
+    expect(await arquivarConexaoDoInstagram(db, "OUTRA", "S1")).toBeNull();
+  });
+
+  it("origem padrão: mescla no metadata, limpa com null, e recusa linha de outra org", async () => {
+    const { db, cadeias, tem } = dbGravador([
+      { data: { metadata: { x: 1, origem_padrao: { campo: "a", valor: "b" } } }, error: null },
+      { data: null, error: null },
+      { data: { metadata: { x: 1, origem_padrao: { campo: "a", valor: "b" } } }, error: null },
+      { data: null, error: null },
+      { data: null, error: null },
+    ]);
+    expect(await definirOrigemPadrao(db, "ORG", "S1", { campo: "origem", valor: "ig" })).toBe(true);
+    expect(tem(0, "eq", "organization_id", "ORG")).toBe(true);
+    expect(tem(1, "eq", "organization_id", "ORG")).toBe(true);
+    expect(cadeias[1]!.find((c) => c.metodo === "update")!.args[0]).toEqual({ metadata: { x: 1, origem_padrao: { campo: "origem", valor: "ig" } } });
+    expect(await definirOrigemPadrao(db, "ORG", "S1", null)).toBe(true);
+    expect(cadeias[3]!.find((c) => c.metodo === "update")!.args[0]).toEqual({ metadata: { x: 1 } });
+    expect(await definirOrigemPadrao(db, "OUTRA", "S1", null)).toBe(false);
   });
 });

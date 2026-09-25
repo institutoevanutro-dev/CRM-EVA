@@ -101,3 +101,82 @@ export async function podeConectarNaOrganizacao(admin: SupabaseClient, organizat
   if (error) return false;
   return roleAtLeast((data as { role?: string } | null)?.role, "manager");
 }
+
+// ─── Tela de Conexões: listar, desconectar, origem padrão ────────────────────
+// Todas filtram `organization_id` recebido de quem chama, que o resolve da
+// SESSÃO do usuário, nunca do corpo. O admin client ignora RLS.
+
+export interface OrigemPadrao {
+  campo: string;
+  valor: string;
+}
+
+export interface ContaDoInstagram {
+  id: string;
+  username: string | null;
+  status: string;
+  expiraEm: string | null;
+  origemPadrao: OrigemPadrao | null;
+}
+
+function origemDe(metadata: Record<string, unknown> | null): OrigemPadrao | null {
+  const o = metadata?.origem_padrao as Partial<OrigemPadrao> | undefined;
+  return o?.campo && o?.valor ? { campo: o.campo, valor: o.valor } : null;
+}
+
+export async function listarConexoesDoInstagram(db: SupabaseClient, organizationId: string): Promise<ContaDoInstagram[]> {
+  const { data, error } = await db
+    .from("channel_sessions")
+    .select("id, ig_username, status, ig_token_expires_at, metadata")
+    .eq("organization_id", organizationId)
+    .eq("provider", CHANNEL_PROVIDER_INSTAGRAM)
+    .is("archived_at", null)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  type Linha = { id: string; ig_username: string | null; status: string; ig_token_expires_at: string | null; metadata: Record<string, unknown> | null };
+  return ((data ?? []) as Linha[]).map((l) => ({
+    id: l.id,
+    username: l.ig_username,
+    status: l.status,
+    expiraEm: l.ig_token_expires_at,
+    origemPadrao: origemDe(l.metadata),
+  }));
+}
+
+/** Arquiva a conexão ativa. Devolve o @ para o audit, ou `null` se não há linha. */
+export async function arquivarConexaoDoInstagram(admin: SupabaseClient, organizationId: string, sessionId: string): Promise<{ username: string | null } | null> {
+  const { data, error } = await admin
+    .from("channel_sessions")
+    .update({ archived_at: new Date().toISOString() })
+    .eq("id", sessionId)
+    .eq("organization_id", organizationId)
+    .eq("provider", CHANNEL_PROVIDER_INSTAGRAM)
+    .is("archived_at", null)
+    .select("ig_username")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? { username: (data as { ig_username: string | null }).ig_username } : null;
+}
+
+/** Grava (ou limpa, com `null`) `metadata.origem_padrao`, mesclando o resto do metadata. */
+export async function definirOrigemPadrao(admin: SupabaseClient, organizationId: string, sessionId: string, origem: OrigemPadrao | null): Promise<boolean> {
+  const { data, error } = await admin
+    .from("channel_sessions")
+    .select("metadata")
+    .eq("id", sessionId)
+    .eq("organization_id", organizationId)
+    .eq("provider", CHANNEL_PROVIDER_INSTAGRAM)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return false;
+  const { origem_padrao: _antiga, ...resto } = ((data as { metadata: Record<string, unknown> | null }).metadata ?? {});
+  void _antiga;
+  const { error: erroUpdate } = await admin
+    .from("channel_sessions")
+    .update({ metadata: origem ? { ...resto, origem_padrao: origem } : resto })
+    .eq("id", sessionId)
+    .eq("organization_id", organizationId);
+  if (erroUpdate) throw new Error(erroUpdate.message);
+  return true;
+}

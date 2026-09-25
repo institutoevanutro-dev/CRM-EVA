@@ -589,6 +589,8 @@ export const AUDIT_ACTIONS = [
   "channel.instagram_connected",
   "channel.instagram_disconnected",
   "channel.instagram_token_refreshed",
+  // Origem padrão da conta (campo + valor gravados no contato novo) trocada ou limpa.
+  "channel.instagram_origem_changed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
