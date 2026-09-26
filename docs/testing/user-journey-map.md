@@ -2505,6 +2505,32 @@ Graph; coberta por `lib/channels/instagram/ingest.test.ts`) e o follow-up
 dentro das 24h do Instagram / preferência pelo WhatsApp (testes de unidade de
 `lib/followup/`).
 
+### J25.4 — Comentários do Instagram (task 9 de 9) `[P0]`
+
+Task final da feature: comentário casa uma regra de palavra (por mídia) →
+Direct privado e resposta pública saem pela Graph, sem toque humano; sem
+regra, um classificador determinístico (`lib/comentarios/seguranca.ts`) decide
+se é seguro publicar sozinho. O comentário chega pelo MESMO webhook assinado
+do Direct (`field: "comments"`), o worker é drenado pelo cron real
+(`app/api/v1/cron/comentarios-worker`), e o mesmo receptor local da porta
+47811 prova o que saiu (ou não saiu) para a Graph.
+
+| Caso | Prioridade | Resultado |
+|---|---|---|
+| Comentário que casa a regra ("...detalhes...", mídia com regra ativa): o Direct sai para o IGSID do autor (`{ recipient: { comment_id }, message: { text } }`), a frase pública é publicada (`{ message }` em `/{commentId}/replies`), e a linha grava `respondido_pela_regra` | `[P0]` | **PASS pela tela e pelo receptor.** `tests/e2e/comentarios-do-instagram.spec.ts`. Evidência: `.superpowers/evidence/comentarios-do-instagram/01-regra-atendida.png` |
+| A aba "Comentários" mostra o comentário atendido sem "Motivo:" nem botão "Publicar" (só `esperando_voce` ganha os dois) | `[P0]` | **PASS.** Mesma evidência acima |
+| "quanto custa" sem regra casando: o classificador acha o gatilho "preço", a linha vai para `esperando_voce` com `motivo_do_toque = "preço"`, e **zero chamadas chegam ao receptor** (nem Direct, nem pública) — o caso que protege o dono (médico, CFM, sem RQE) de uma resposta automática sobre preço | `[P0]` | **PASS.** Evidência: `.superpowers/evidence/comentarios-do-instagram/02-preco-esperando-voce.png` |
+| A aba mostra "Motivo: preço" e a caixa de Editar/Publicar só para o comentário `esperando_voce` | `[P0]` | **PASS.** Mesma evidência acima |
+| Assinatura HMAC errada no webhook de comentário é recusada com 401 | `[P0]` | **PASS** — medido contra o mesmo corpo que a assinatura válida aceitou logo antes |
+
+**NÃO MEDIDO nesta task:** a tela de criação de regra pela UI (`FormularioDeRegra`,
+provada na Task 8) e o botão "Publicar" da fila humana (idem) — esta task prova
+a integração ponta a ponta dos dois casos que protegem o produto, não repete a
+prova unitária dos componentes. `instagram_business_manage_comments` (escopo
+OAuth novo) e o Acesso Avançado da Meta para `comments` são pré-condição de
+produção que só o dono resolve pelo painel da Meta — sem eles, esta jornada
+não roda fora do e2e local (ver `.changes/comentarios-do-instagram.md`).
+
 ## Integração opcional com financeiro Eva
 - Entrada: Contatos → contato → aba Financeiro (gerente/admin, contato não anonimizado).
 - Testes de rota: `tests/unit/integracao-financeiro-rotas.test.ts`, organização errada, anonimização, perfil insuficiente, indisponibilidade.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseWebhookDoInstagram } from "./webhook";
+import { parseComentariosDoInstagram, parseWebhookDoInstagram } from "./webhook";
 
 const base = (messaging: unknown[]) => ({ object: "instagram", entry: [{ id: "17841400000000001", time: 1727170000000, messaging }] });
 
@@ -43,5 +43,124 @@ describe("parse do webhook do Instagram", () => {
   it("parseWebhookDoInstagram(null) e messaging inválido não lançam", () => {
     expect(parseWebhookDoInstagram(null)).toEqual([]);
     expect(parseWebhookDoInstagram({ object: "instagram", entry: [{ id: "1", messaging: "lixo" }] })).toEqual([]);
+  });
+});
+
+const payloadDeComentario = {
+  object: "instagram",
+  entry: [{
+    id: "IG-CONTA-1",
+    time: 1790000000,
+    changes: [{
+      field: "comments",
+      value: {
+        id: "COMENTARIO-1",
+        text: "CARDAPIO",
+        media: { id: "MEDIA-9", media_product_type: "REELS" },
+        from: { id: "IGSID-7", username: "fulana" },
+        timestamp: "2026-09-26T12:00:00+0000",
+      },
+    }],
+  }],
+};
+
+describe("parse de comentários do Instagram", () => {
+  it("lê o comentário do campo changes", () => {
+    const [c] = parseComentariosDoInstagram(payloadDeComentario);
+    expect(c).toMatchObject({
+      igAccountId: "IG-CONTA-1", externalId: "COMENTARIO-1", mediaId: "MEDIA-9",
+      texto: "CARDAPIO", autorIgsid: "IGSID-7", autorHandle: "fulana", eco: false,
+    });
+    expect(c!.comentadoEm.getTime()).toBe(new Date("2026-09-26T12:00:00+0000").getTime());
+  });
+
+  it("sem value.timestamp, usa entry.time (UNIX em SEGUNDOS, não milissegundos)", () => {
+    const semTimestamp = structuredClone(payloadDeComentario);
+    delete (semTimestamp.entry[0]!.changes[0]!.value as { timestamp?: string }).timestamp;
+    semTimestamp.entry[0]!.time = 1790000000;
+    const [c] = parseComentariosDoInstagram(semTimestamp);
+    expect(c!.comentadoEm.getTime()).toBe(1790000000 * 1000);
+    expect(c!.comentadoEm.getFullYear()).toBe(2026);
+  });
+
+  it("sem value.timestamp e sem entry.time, o evento sai mesmo assim com data preenchida", () => {
+    const semData = structuredClone(payloadDeComentario);
+    delete (semData.entry[0]!.changes[0]!.value as { timestamp?: string }).timestamp;
+    delete (semData.entry[0] as { time?: number }).time;
+    const resultado = parseComentariosDoInstagram(semData);
+    expect(resultado).toHaveLength(1);
+    expect(resultado[0]!.comentadoEm).toBeInstanceOf(Date);
+    expect(Number.isNaN(resultado[0]!.comentadoEm.getTime())).toBe(false);
+  });
+
+  it("value.timestamp como NÚMERO unix em segundos não descarta o comentário", () => {
+    const numeroSegundos = structuredClone(payloadDeComentario);
+    (numeroSegundos.entry[0]!.changes[0]!.value as { timestamp: unknown }).timestamp = 1758888888;
+    const [c] = parseComentariosDoInstagram(numeroSegundos);
+    expect(c).toBeDefined();
+    expect(c!.comentadoEm.getTime()).toBe(1758888888 * 1000);
+  });
+
+  it("value.timestamp como NÚMERO unix em milissegundos não descarta o comentário", () => {
+    const numeroMs = structuredClone(payloadDeComentario);
+    (numeroMs.entry[0]!.changes[0]!.value as { timestamp: unknown }).timestamp = 1758888888000;
+    const [c] = parseComentariosDoInstagram(numeroMs);
+    expect(c).toBeDefined();
+    expect(c!.comentadoEm.getTime()).toBe(1758888888000);
+  });
+
+  it("value.timestamp como STRING de número unix não lança e não descarta", () => {
+    const stringUnix = structuredClone(payloadDeComentario);
+    (stringUnix.entry[0]!.changes[0]!.value as { timestamp: unknown }).timestamp = "1758888888";
+    const [c] = parseComentariosDoInstagram(stringUnix);
+    expect(c).toBeDefined();
+    expect(c!.comentadoEm.getTime()).toBe(1758888888 * 1000);
+  });
+
+  it("value.timestamp como string ISO continua funcionando", () => {
+    const iso = structuredClone(payloadDeComentario);
+    (iso.entry[0]!.changes[0]!.value as { timestamp: unknown }).timestamp = "2026-09-26T12:00:00+0000";
+    const [c] = parseComentariosDoInstagram(iso);
+    expect(c!.comentadoEm.getTime()).toBe(new Date("2026-09-26T12:00:00+0000").getTime());
+  });
+
+  it("value.timestamp lixo cai pro fallback (entry.time) em vez de lançar", () => {
+    const lixo = structuredClone(payloadDeComentario);
+    (lixo.entry[0]!.changes[0]!.value as { timestamp: unknown }).timestamp = "abacaxi";
+    lixo.entry[0]!.time = 1790000000;
+    const [c] = parseComentariosDoInstagram(lixo);
+    expect(c).toBeDefined();
+    expect(Number.isNaN(c!.comentadoEm.getTime())).toBe(false);
+    expect(c!.comentadoEm.getTime()).toBe(1790000000 * 1000);
+  });
+
+  it("comentário do próprio perfil vem marcado como eco", () => {
+    const meu = structuredClone(payloadDeComentario);
+    meu.entry[0]!.changes[0]!.value.from.id = "IG-CONTA-1";
+    expect(parseComentariosDoInstagram(meu)[0]!.eco).toBe(true);
+  });
+
+  it("campo que não é comments é ignorado", () => {
+    const outro = structuredClone(payloadDeComentario);
+    outro.entry[0]!.changes[0]!.field = "live_comments";
+    expect(parseComentariosDoInstagram(outro)).toEqual([]);
+  });
+
+  it("payload de MENSAGEM não vira comentário, e continua virando mensagem", () => {
+    const msg = {
+      object: "instagram",
+      entry: [{ id: "IG-CONTA-1", messaging: [{
+        sender: { id: "IGSID-7" }, recipient: { id: "IG-CONTA-1" }, timestamp: 1790000000000,
+        message: { mid: "MID-1", text: "oi" },
+      }] }],
+    };
+    expect(parseComentariosDoInstagram(msg)).toEqual([]);
+    expect(parseWebhookDoInstagram(msg)).toHaveLength(1);
+  });
+
+  it("comentário só com emoji é lido, não descartado", () => {
+    const emoji = structuredClone(payloadDeComentario);
+    emoji.entry[0]!.changes[0]!.value.text = "🔥";
+    expect(parseComentariosDoInstagram(emoji)[0]!.texto).toBe("🔥");
   });
 });

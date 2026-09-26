@@ -7,6 +7,7 @@ import { assertDestinoResolvidoSeguro } from "@/lib/automation/outbound-ip";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { MAX_MEDIA_BYTES, MediaTooLargeError, type FetchedMedia } from "@/lib/messaging/media/types";
+import { logger } from "@/lib/logger";
 
 import { capabilitiesOf, CHANNEL_PROVIDER_INSTAGRAM } from "../capabilities";
 import { baseDoInstagram } from "../instagram/graph";
@@ -122,6 +123,102 @@ export const instagramAdapter: ChannelAdapter = {
     const body = (await res.json().catch(() => ({}))) as { message_id?: string; error?: { code?: number; message?: string } };
     if (!res.ok || body.error) throw erroDoInstagram(body.error?.code ?? `http_${res.status}`, body.error?.message ?? `http_${res.status}`);
     return { externalId: body.message_id ?? null };
+  },
+  /**
+   * Direct endereçado pelo `comment_id` — não pelo IGSID, que é o que `send`
+   * usa. Mesmo tratamento de credencial e erro do `send` (reusa
+   * `resolveInstagramToken`/`erroDoInstagram`); a decisão de janela de 7 dias
+   * e "uma por comentário" é de `lib/comentarios/acao.ts`, não daqui.
+   */
+  async respostaPrivadaAoComentario(input) {
+    const token = await resolveInstagramToken(input);
+    if (!token) throw erroDoInstagram(190, "sem chave");
+    const res = await fetch(`${baseDoInstagram()}/${graphVersion()}/${encodeURIComponent(input.sessionRef)}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient: { comment_id: input.commentId }, message: { text: input.texto } }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const body = (await res.json().catch(() => ({}))) as { message_id?: string; error?: { code?: number; message?: string } };
+    if (!res.ok || body.error) throw erroDoInstagram(body.error?.code ?? `http_${res.status}`, body.error?.message ?? `http_${res.status}`);
+    return { messageId: body.message_id ?? null };
+  },
+  /** Reply público, visível no post — endereçado pelo `comment_id`. */
+  async responderComentario(input) {
+    const token = await resolveInstagramToken(input);
+    if (!token) throw erroDoInstagram(190, "sem chave");
+    const res = await fetch(`${baseDoInstagram()}/${graphVersion()}/${encodeURIComponent(input.commentId)}/replies`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ message: input.texto }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const body = (await res.json().catch(() => ({}))) as { id?: string; error?: { code?: number; message?: string } };
+    if (!res.ok || body.error) throw erroDoInstagram(body.error?.code ?? `http_${res.status}`, body.error?.message ?? `http_${res.status}`);
+    return { replyId: body.id ?? null };
+  },
+  /**
+   * As respostas públicas que o DONO já deu a comentários da própria conta —
+   * matéria-prima de `lib/comentarios/voz.ts` (Task 7). Não há endpoint da
+   * Graph que devolva "minhas respostas" direto: a rota real é por mídia —
+   * `GET /{ig-user-id}/media?fields=comments{replies{text,from}}` — e o que
+   * conta é a REPLY cujo `from.id` é a própria conta (`sessionRef`), nunca a
+   * do comentarista original.
+   *
+   * NÃO MEDIDO contra uma conta real (mesma lacuna que `checkHealth` e
+   * `fetchInboundMedia` já declaram nesta casa): a forma exata da resposta
+   * (paginação em `comments`/`replies`, presença de `from.id`) é inferida da
+   * documentação pública da Graph API de Comments, não de um payload
+   * observado. Se a Meta devolver formato diferente ou a chamada falhar, isto
+   * degrada para lista vazia (nunca lança) — `perfilDeVoz` já trata "sem
+   * histórico" como `null`, e o worker recusa publicar sozinho nesse caso,
+   * que é o lado seguro.
+   */
+  async respostasAnterioresDoDono(input) {
+    const token = await resolveInstagramToken(input);
+    if (!token) {
+      // Config ausente, não "sem histórico" — distinto de propósito (I-5 da
+      // revisão da Tarefa 7): sem isto, os dois casos eram o MESMO `[]` e o
+      // log não dizia qual dos dois aconteceu.
+      logger.warn("[instagram] sem credencial para buscar respostas anteriores do dono", {
+        sessionRef: input.sessionRef,
+      });
+      return [];
+    }
+    const limite = input.limite ?? 25;
+    const res = await fetch(
+      `${baseDoInstagram()}/${graphVersion()}/${encodeURIComponent(input.sessionRef)}/media` +
+        `?fields=comments.limit(20){replies.limit(20){text,from}}&limit=${limite}`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15_000) },
+    );
+    const body = (await res.json().catch(() => ({}))) as {
+      data?: Array<{ comments?: { data?: Array<{ replies?: { data?: Array<{ text?: string; from?: { id?: string } }> } }> } }>;
+      error?: { code?: number; message?: string };
+    };
+    if (!res.ok || body.error) {
+      // A GRAPH RECUSOU (429, 401, 5xx…) — não é "o dono nunca respondeu
+      // nada", é "não deu para perguntar". Quem lê o log precisa distinguir
+      // as duas, porque a primeira é a feature funcionando (perfil ainda não
+      // existe) e a segunda é uma configuração ou uma cota para investigar.
+      logger.warn("[instagram] a Graph recusou a consulta de respostas anteriores do dono", {
+        sessionRef: input.sessionRef,
+        status: res.status,
+        erro: body.error?.message ?? null,
+      });
+      return [];
+    }
+
+    const frases: string[] = [];
+    for (const media of body.data ?? []) {
+      for (const comentario of media.comments?.data ?? []) {
+        for (const reply of comentario.replies?.data ?? []) {
+          if (reply.from?.id === input.sessionRef && typeof reply.text === "string" && reply.text.trim() !== "") {
+            frases.push(reply.text);
+          }
+        }
+      }
+    }
+    return frases;
   },
   /**
    * Baixa a mídia recebida — consumido por `workers/media-persist-worker.ts`,

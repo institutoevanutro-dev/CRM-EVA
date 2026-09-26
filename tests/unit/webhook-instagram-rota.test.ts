@@ -11,6 +11,8 @@ const sessao = vi.fn();
 vi.mock("@/lib/channels/instagram/sessao", () => ({ sessaoDoInstagramPorConta: sessao }));
 const ingerir = vi.fn(async () => ({ status: "ingerida", messageId: "M", conversationId: "C", contatoNovo: true }));
 vi.mock("@/lib/channels/instagram/ingest", () => ({ ingerirDoInstagram: ingerir }));
+const ingerirComentarioMock = vi.fn(async () => ({ status: "gravado", id: "IC1" }));
+vi.mock("@/lib/channels/instagram/comentarios/ingest", () => ({ ingerirComentario: ingerirComentarioMock }));
 
 const { GET, POST } = await import("@/app/api/v1/webhooks/instagram/route");
 const corpo = JSON.stringify({ object: "instagram", entry: [{ id: "IGACC", time: 1, messaging: [{ sender: { id: "P" }, recipient: { id: "IGACC" }, timestamp: 1, message: { mid: "m1", text: "Oi" } }] }] });
@@ -26,6 +28,21 @@ const corpoComDoisEventos = JSON.stringify({
       ],
     },
   ],
+});
+const corpoComentario = JSON.stringify({
+  object: "instagram",
+  entry: [{ id: "IGACC", time: 1, changes: [{ field: "comments", value: { id: "COMENTARIO-1", text: "Oi", media: { id: "MEDIA-9" }, from: { id: "IGSID9", username: "cliente" } } }] }],
+});
+const corpoComDoisComentarios = JSON.stringify({
+  object: "instagram",
+  entry: [{
+    id: "IGACC",
+    time: 1,
+    changes: [
+      { field: "comments", value: { id: "COMENTARIO-1", text: "Primeiro", media: { id: "MEDIA-9" }, from: { id: "IGSID1", username: "c1" } } },
+      { field: "comments", value: { id: "COMENTARIO-2", text: "Segundo", media: { id: "MEDIA-9" }, from: { id: "IGSID2", username: "c2" } } },
+    ],
+  }],
 });
 const assinar = (s: string) => `sha256=${createHmac("sha256", "SEG").update(s).digest("hex")}`;
 const post = (s: string, sig: string | null) => new NextRequest("http://x/api/v1/webhooks/instagram", { method: "POST", body: s, headers: sig ? { "x-hub-signature-256": sig } : {} });
@@ -74,5 +91,50 @@ describe("webhook do Instagram", () => {
     expect(ingerir).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalled();
     expect(r.status).toBe(500);
+  });
+
+  describe("laço de comentários", () => {
+    it("conta não conectada: 200, nada gravado, log", async () => {
+      sessao.mockResolvedValue({ status: "ausente" });
+      const r = await POST(post(corpoComentario, assinar(corpoComentario)));
+      expect(r.status).toBe(200);
+      expect(ingerirComentarioMock).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalled();
+    });
+
+    it("falha na consulta da sessão: logger.error e 500", async () => {
+      sessao.mockResolvedValue({ status: "erro", motivo: "conexão recusada" });
+      const r = await POST(post(corpoComentario, assinar(corpoComentario)));
+      expect(ingerirComentarioMock).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalled();
+      expect(r.status).toBe(500);
+    });
+
+    it("conta conectada: grava com a sessão resolvida", async () => {
+      sessao.mockResolvedValue({ status: "ok", sessao: sessaoOk });
+      const r = await POST(post(corpoComentario, assinar(corpoComentario)));
+      expect(r.status).toBe(200);
+      expect(ingerirComentarioMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("exceção no primeiro comentário não aborta o segundo, e a resposta é 500", async () => {
+      sessao.mockResolvedValue({ status: "ok", sessao: sessaoOk });
+      ingerirComentarioMock
+        .mockRejectedValueOnce(new Error("banco caiu"))
+        .mockResolvedValueOnce({ status: "gravado", id: "IC2" });
+      const r = await POST(post(corpoComDoisComentarios, assinar(corpoComDoisComentarios)));
+      expect(ingerirComentarioMock).toHaveBeenCalledTimes(2);
+      expect(logger.error).toHaveBeenCalled();
+      expect(r.status).toBe(500);
+    });
+
+    it("erro de insert que não é 23505 (falhou_infra) faz a rota responder 500", async () => {
+      sessao.mockResolvedValue({ status: "ok", sessao: sessaoOk });
+      ingerirComentarioMock.mockResolvedValueOnce({ status: "falhou_infra", motivo: "connection failure" } as never);
+      const r = await POST(post(corpoComentario, assinar(corpoComentario)));
+      expect(ingerirComentarioMock).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalled();
+      expect(r.status).toBe(500);
+    });
   });
 });

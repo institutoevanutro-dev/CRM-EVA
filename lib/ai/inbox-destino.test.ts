@@ -107,6 +107,13 @@ describe("destinos da Central", () => {
     const [item] = await resolverDestinosDosAvisos(leitor().client, ORG, "agent", [aviso("message_send_stuck")]);
     expect(item?.destination).toMatchObject({ rotulo: "Abrir uma conversa afetada" });
   });
+  // MENOR (revisão final): a tela da fila de comentários existe nesta mesma
+  // branch — o aviso `instagram_comment_stuck` (agregado por organização, sem
+  // ref por linha) tem que abrir nela, não ficar `sem_destino` para sempre.
+  it("comentário parado abre a aba Comentários do Inbox", async () => {
+    const [item] = await resolverDestinosDosAvisos(leitor().client, ORG, "agent", [aviso("instagram_comment_stuck", null, null)]);
+    expect(item?.destination).toMatchObject({ estado: "disponivel", href: "/app/inbox?filter=comentarios", rotulo: "Abrir fila de comentários" });
+  });
   it("textos dinâmicos do catálogo e fallbacks têm espanhol", async () => {
     const textos = new Set<string>(Object.values(REFERENCIAS_DE_AVISO).map(a => a.rotulo));
     for (const [kind, p] of Object.entries(POLITICAS_DE_AVISO)) {

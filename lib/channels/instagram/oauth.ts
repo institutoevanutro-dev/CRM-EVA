@@ -15,7 +15,8 @@ import { env } from "@/lib/env";
 import { graphVersion } from "@/lib/graph-version";
 import { BASE_DO_INSTAGRAM } from "./graph";
 
-const ESCOPOS = "instagram_business_basic,instagram_business_manage_messages";
+const ESCOPOS =
+  "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments";
 
 export const CAMINHO_DO_CALLBACK_DO_INSTAGRAM = "/api/v1/channels/instagram/callback";
 

@@ -222,6 +222,20 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     registraEm: "llm_calls",
   },
   {
+    id: "instagram_comment_reply",
+    rotulo: "Responder comentário do Instagram",
+    oQueFaz:
+      "Escreve a resposta pública a um comentário do Instagram que o classificador considerou seguro, imitando o jeito do dono de escrever.",
+    papel: "atender",
+    // Sem tools: é uma frase curta a partir do comentário e do perfil de voz
+    // — não há funil nem ferramenta para chamar aqui.
+    exige: {},
+    emissor: "workers/comentarios-worker.ts",
+    sintomaDeFalha:
+      "Comentários seguros do Instagram deixam de ganhar resposta automática e se acumulam esperando alguém da equipe.",
+    registraEm: "llm_calls",
+  },
+  {
     id: "draft_suggestion",
     rotulo: "Sugerir resposta ao atendente",
     oQueFaz:

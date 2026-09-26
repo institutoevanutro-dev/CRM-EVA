@@ -62,6 +62,13 @@ CRONS="
 * * * * *|45|api/v1/cron/event-log-drain
 * * * * *|25|api/v1/cron/routing-worker
 * * * * *|25|api/v1/cron/recover-stuck-messages
+# O COMENTÁRIO DO INSTAGRAM. A cada minuto, mesma cadência das outras filas de
+# atendimento acima: comentário novo espera uma regra/IA responder, e uma
+# varredura mais lenta deixaria o cliente esperando bem mais do que deveria
+# pra saber se alguém ia responder. Barato: só toca comentário em situação
+# novo, com teto por rodada. O aviso anti-morte (comentário parado há 1h+)
+# roda na mesma chamada e é deduplicado por linha — não espalha.
+* * * * *|25|api/v1/cron/comentarios-worker
 */5 * * * *|25|api/v1/cron/storage-redaction?limit=50
 */5 * * * *|25|api/v1/cron/snooze-watcher
 */5 * * * *|60|api/v1/cron/webhook-log-retention

@@ -25,6 +25,7 @@ import { RetentionNotice } from "./RetentionNotice";
 import { CRMSidePanel } from "./CRMSidePanel";
 import type { Message as ConversationMensagem } from "@/lib/types/messaging";
 import { InboxKeyboardShortcuts } from "./InboxKeyboardShortcuts";
+import { ComentariosPainel } from "./comentarios/ComentariosPainel";
 
 import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
 import { OpenConversationProvider } from "@/hooks/notifications/OpenConversationContext";
@@ -111,7 +112,7 @@ export function tabToFilter(
   }
 }
 
-const FILTER_TABS: InboxTab[] = ["unassigned", "mine", "all", "closed", "archived", "ai"];
+const FILTER_TABS: InboxTab[] = ["unassigned", "mine", "all", "closed", "archived", "ai", "comentarios"];
 
 /**
  * Lê ?filter= (G4-02, deep-link). ?filter=all é HONRADO mesmo para agent — a
@@ -388,6 +389,24 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   //
   // `dvh` em vez de `vh` porque no celular a `vh` ignora a barra do navegador — o
   // mesmo corte, só que pior e mudando conforme se rola a página.
+
+  // A ABA COMENTÁRIOS NÃO É CONVERSA — troca o corpo inteiro.
+  //
+  // `instagram_comments` não tem `selectedId`, não tem thread, não tem as três
+  // colunas: é uma fila. Os hooks de conversa ACIMA continuam rodando de
+  // qualquer jeito (regra do React — não dá pra pular hook por `if`), o custo é
+  // uma query de conversas que esta tela não usa enquanto a aba está aqui.
+  // `InboxFilters` segue no topo para poder trocar de aba de volta.
+  if (filterValue.tab === "comentarios") {
+    return (
+      <div className="flex h-[calc(100dvh-3.5rem-2*var(--space-6))] w-full flex-col">
+        <InboxFilters value={filterValue} onChange={setFilterValue} />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <ComentariosPainel />
+        </div>
+      </div>
+    );
+  }
 
   // TRÊS COLUNAS QUE CABEM — medido, não estimado.
   //

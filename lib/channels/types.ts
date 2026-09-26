@@ -400,6 +400,48 @@ export interface ChannelAdapter {
     /** Valores dos `{{n}}`, na ordem em que a definição os declara. */
     values: Record<string, string>;
   }): Promise<{ externalId: string | null }>;
+
+  /**
+   * Resposta PRIVADA a um comentário — Direct endereçado pelo `comment_id`,
+   * não pelo IGSID. Só o Instagram tem comentário; nenhum outro canal
+   * implementa.
+   *
+   * OPCIONAL como os demais: quem chama testa a presença do método em vez de
+   * perguntar QUAL provider é. A regra de negócio (única por comentário,
+   * dentro de 7 dias) mora em `lib/comentarios/acao.ts` — o adapter só traduz
+   * formato, nunca decide se pode mandar.
+   */
+  respostaPrivadaAoComentario?(input: ChannelTenantScope & {
+    sessionRef: string;
+    commentId: string;
+    texto: string;
+  }): Promise<{ messageId: string | null }>;
+
+  /**
+   * Resposta PÚBLICA a um comentário — reply visível no post, endereçado pelo
+   * `comment_id`. Sem prazo e sem limite de "uma só", ao contrário da privada.
+   *
+   * OPCIONAL pelo mesmo motivo do método acima.
+   */
+  responderComentario?(input: ChannelTenantScope & {
+    sessionRef: string;
+    commentId: string;
+    texto: string;
+  }): Promise<{ replyId: string | null }>;
+
+  /**
+   * As respostas PÚBLICAS que o próprio dono (uma pessoa, pelo app/site do
+   * Instagram — não este CRM) já deu a comentários da própria conta. Existe
+   * para `lib/comentarios/voz.ts` (Task 7): sem uma amostra real do "jeito
+   * dele" escrever, a IA não tem o que imitar.
+   *
+   * OPCIONAL pelo mesmo motivo dos dois acima. `limite` é teto de itens, não
+   * de chamadas — o adapter decide como paginar por trás.
+   */
+  respostasAnterioresDoDono?(input: ChannelTenantScope & {
+    sessionRef: string;
+    limite?: number;
+  }): Promise<string[]>;
 }
 
 /** O que o transporte respondeu quando perguntamos se está de pé. */

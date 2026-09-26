@@ -9,7 +9,9 @@ describe("login do Instagram", () => {
     expect(u.origin + u.pathname).toBe("https://www.instagram.com/oauth/authorize");
     expect(u.searchParams.get("client_id")).toBe("APPID");
     expect(u.searchParams.get("redirect_uri")).toBe("https://crm.x/api/v1/channels/instagram/callback");
-    expect(u.searchParams.get("scope")).toBe("instagram_business_basic,instagram_business_manage_messages");
+    expect(u.searchParams.get("scope")).toBe(
+      "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments",
+    );
     expect(u.searchParams.get("response_type")).toBe("code");
     expect(u.searchParams.get("state")).toBe("ST");
   });
