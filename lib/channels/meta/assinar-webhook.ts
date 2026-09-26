@@ -13,6 +13,13 @@
  */
 import { graphVersion } from "@/lib/graph-version";
 
+/**
+ * Sem caminho de tela: quem lê pode ser o admin de um tenant, que não abre a
+ * administração da instalação. O link aparece na tela só para quem pode (`configurarEm`).
+ */
+export const MOTIVO_SEM_TOKEN_DE_VERIFICACAO =
+  "o token de verificação do webhook não está configurado nesta instalação. Quem administra a instalação precisa cadastrá-lo";
+
 export type AssinaturaDoWebhook = { ok: true } | { ok: false; motivo: string };
 
 export async function assinarWebhookDaConta(input: {
@@ -22,11 +29,7 @@ export async function assinarWebhookDaConta(input: {
   verifyToken: string | null;
 }): Promise<AssinaturaDoWebhook> {
   if (!input.verifyToken) {
-    return {
-      ok: false,
-      motivo:
-        "o token de verificação do webhook não está configurado nesta instalação (Admin › API Oficial (Meta))",
-    };
+    return { ok: false, motivo: MOTIVO_SEM_TOKEN_DE_VERIFICACAO };
   }
   try {
     const res = await fetch(`https://graph.facebook.com/${graphVersion()}/${input.wabaId}/subscribed_apps`, {

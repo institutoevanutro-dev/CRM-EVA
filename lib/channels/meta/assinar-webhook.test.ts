@@ -7,7 +7,8 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { assinarWebhookDaConta } from "@/lib/channels/meta/assinar-webhook";
+import { MOTIVO_SEM_TOKEN_DE_VERIFICACAO, assinarWebhookDaConta } from "@/lib/channels/meta/assinar-webhook";
+import { traduzir } from "@/lib/i18n/dicionario";
 import { graphVersion } from "@/lib/graph-version";
 
 const ENTRADA = {
@@ -64,7 +65,10 @@ describe("assinarWebhookDaConta", () => {
     vi.stubGlobal("fetch", fetchMock);
     const r = await assinarWebhookDaConta({ ...ENTRADA, verifyToken: null });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.motivo).toMatch(/token de verificação/i);
+    if (!r.ok) expect(r.motivo).toBe(MOTIVO_SEM_TOKEN_DE_VERIFICACAO);
     expect(fetchMock).not.toHaveBeenCalled();
+    // Quem lê pode ser admin de um tenant: nada de mandar abrir a tela da instalação.
+    expect(MOTIVO_SEM_TOKEN_DE_VERIFICACAO).not.toContain("Admin ›");
+    expect(traduzir(MOTIVO_SEM_TOKEN_DE_VERIFICACAO, "es")).not.toBe(MOTIVO_SEM_TOKEN_DE_VERIFICACAO);
   });
 });

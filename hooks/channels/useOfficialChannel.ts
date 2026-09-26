@@ -26,6 +26,11 @@ export interface OfficialChannelState {
     /** Onde se cadastra o App da Meta — só para quem pode abrir a tela da instalação. */
     configurarEm?: string | null;
     fields: string[];
+    /**
+     * O que a Meta respondeu quando o CRM assinou o webhook desta conta.
+     * `null`/ausente = conectado antes dessa assinatura existir.
+     */
+    assinatura?: { assinado: boolean; motivo?: string; em: string } | null;
   } | null;
 }
 

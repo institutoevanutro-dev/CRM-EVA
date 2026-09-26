@@ -3710,6 +3710,12 @@ export const DICIONARIO: Traducoes = {
   "Copiado.": { es: "Copiado." },
   Copiar: { es: "Copiar" },
   "Conectado:": { es: "Conectado:" },
+  "o número informado não pertence a essa conta do WhatsApp Business. Confira o ID da conta": {
+    es: "el número informado no pertenece a esa cuenta de WhatsApp Business. Revise el ID de la cuenta",
+  },
+  "o token de verificação do webhook não está configurado nesta instalação. Quem administra a instalação precisa cadastrá-lo": {
+    es: "el token de verificación del webhook no está configurado en esta instalación. Quien administra la instalación necesita registrarlo",
+  },
   "Conectado, mas a Meta não aceitou o endereço de recebimento. As mensagens não vão chegar.": {
     es: "Conectado, pero Meta no aceptó la dirección de recepción. Los mensajes no van a llegar.",
   },

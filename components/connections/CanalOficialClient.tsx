@@ -113,6 +113,22 @@ export function CanalOficialClient() {
 
       {estado?.webhook ? (
         <Card className="flex flex-col gap-3 p-4">
+          {estado.webhook.assinatura?.assinado === false ? (
+            // Fixo, não só toast: o toast some no reload e a tela voltaria a
+            // parecer saudável com o recebimento morto.
+            <div
+              role="alert"
+              data-testid="webhook-nao-assinado"
+              className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              <p className="font-medium">
+                {t("Conectado, mas a Meta não aceitou o endereço de recebimento. As mensagens não vão chegar.")}
+              </p>
+              {estado.webhook.assinatura.motivo ? (
+                <p className="mt-1">{estado.webhook.assinatura.motivo}</p>
+              ) : null}
+            </div>
+          ) : null}
           <div>
             <h2 className="font-medium">{t("Cole isto no painel da Meta")}</h2>
             <p className="mt-1 text-sm text-muted-foreground">

@@ -31,9 +31,10 @@ import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/arch
 import { CHANNEL_PROVIDER_META } from "@/lib/channels/capabilities";
 import { appDaMeta, appDaMetaDoAmbiente } from "@/lib/channels/meta/app";
 import { assinarWebhookDaConta } from "@/lib/channels/meta/assinar-webhook";
-import { validateMetaCredentials } from "@/lib/channels/meta/validate-credentials";
+import { conferirNumeroDaConta, validateMetaCredentials } from "@/lib/channels/meta/validate-credentials";
 import { reactivateChannelSession } from "@/lib/channels/reactivate";
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { metadataInicialDoCanal } from "@/lib/ai/elegibilidade/pre-go-live";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
@@ -68,6 +69,25 @@ function publicBase(req: NextRequest): string {
 /** O endereço que a Meta chama para ESTA sessão — o mesmo que a tela manda colar. */
 function callbackDaSessao(req: NextRequest, webhookPathToken: string): string {
   return `${publicBase(req)}/api/v1/webhooks/meta/${webhookPathToken}`;
+}
+
+/**
+ * O que a Meta respondeu na última vez que esta sessão assinou o webhook da conta.
+ * Guardado em `metadata.webhook_da_conta` para a tela seguir avisando depois do
+ * reload: um toast some, e a tela voltaria a parecer saudável com o recebimento morto.
+ */
+interface AssinaturaGravada {
+  assinado: boolean;
+  motivo?: string;
+  em: string;
+}
+
+function assinaturaGravada(metadata: unknown): AssinaturaGravada | null {
+  const v = (metadata as { webhook_da_conta?: unknown } | null)?.webhook_da_conta as
+    | Partial<AssinaturaGravada>
+    | undefined;
+  if (!v || typeof v.assinado !== "boolean" || typeof v.em !== "string") return null;
+  return { assinado: v.assinado, em: v.em, ...(typeof v.motivo === "string" ? { motivo: v.motivo } : {}) };
 }
 
 /**
@@ -111,6 +131,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const authz = await requireRole("admin", { requestId, resource: "channels_official" });
   if (!authz.ok) return authz.response;
   const orgId = authz.org.orgId;
+  const t = (texto: string) => traduzir(texto, authz.user.idioma);
 
   const admin = createAdminClient();
   // Canal ARQUIVADO não conta como conectado. A linha sobrevive à exclusão como
@@ -122,7 +143,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const consultar = () =>
     admin
       .from("channel_sessions")
-      .select("id, meta_phone_number_id, meta_waba_id, meta_token_encrypted, phone_number, display_name, webhook_path_token, status")
+      .select("id, meta_phone_number_id, meta_waba_id, meta_token_encrypted, phone_number, display_name, webhook_path_token, status, metadata")
       .eq("organization_id", orgId)
       .eq("provider", CHANNEL_PROVIDER_META);
   const { data } = await queryTolerantToMissingArchived(
@@ -145,6 +166,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     webhook: data
       ? {
           callbackUrl: callbackDaSessao(req, data.webhook_path_token),
+          assinatura: (() => {
+            const a = assinaturaGravada(data.metadata);
+            return a?.motivo ? { ...a, motivo: t(a.motivo) } : a;
+          })(),
           ...(await tokenDeVerificacaoParaATela()),
           // A porta para quem PODE abrir a tela da instalação — mesma regra do
           // link de `/admin/google` na Agenda. Para o admin de um tenant qualquer
@@ -180,6 +205,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const validacao = await validateMetaCredentials({ phoneNumberId: phone_number_id, token });
   if (!validacao.ok) {
     return fail("invalid_request", validacao.motivo, 422, { requestId });
+  }
+
+  // O número tem que ser DESTA conta: o webhook é assinado por WABA, e um ID de
+  // conta errado assinaria a conta alheia, deixando este número surdo.
+  const daConta = await conferirNumeroDaConta({ wabaId: waba_id, phoneNumberId: phone_number_id, token });
+  if (!daConta.ok) {
+    return fail("invalid_request", t(daConta.motivo), 422, { requestId });
   }
 
   const admin = createAdminClient();
@@ -267,26 +299,65 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // segunda organização entrega na URL de outra sessão e nunca recebe nada
   // (medido em produção em 26/09/2026). Falhar aqui NÃO desfaz a conexão: a
   // credencial é boa, o envio funciona, e a tela avisa que o recebimento não.
-  const { data: sessao } = await admin
-    .from("channel_sessions")
-    .select("webhook_path_token")
-    .eq("organization_id", orgId)
-    .eq("provider", CHANNEL_PROVIDER_META)
-    .maybeSingle();
-  const pathToken = (sessao as { webhook_path_token?: string } | null)?.webhook_path_token;
-  const assinatura = pathToken
+  // Releitura porque `reactivateChannelSession` não devolve a linha; o filtro de
+  // arquivado é o do GET, e a linha acabou de ser (re)ativada.
+  const lerSessao = () =>
+    admin
+      .from("channel_sessions")
+      .select("id, webhook_path_token, metadata")
+      .eq("organization_id", orgId)
+      .eq("provider", CHANNEL_PROVIDER_META);
+  const { data: sessaoRaw } = await queryTolerantToMissingArchived(
+    () => lerSessao().is(ARCHIVED_AT, null).maybeSingle(),
+    () => lerSessao().maybeSingle(),
+  );
+  const sessao = sessaoRaw as { id: string; webhook_path_token?: string; metadata?: unknown } | null;
+  const assinatura = sessao?.webhook_path_token
     ? await assinarWebhookDaConta({
         wabaId: waba_id,
         token,
-        callbackUrl: callbackDaSessao(req, pathToken),
+        callbackUrl: callbackDaSessao(req, sessao.webhook_path_token),
         verifyToken: (await appDaMeta()).verifyToken,
       })
     : ({ ok: false, motivo: "channel_session_sem_webhook_path_token" } as const);
+
+  if (!assinatura.ok) {
+    logger.warn("meta.webhook_da_conta.nao_assinado", {
+      organization_id: orgId,
+      waba_id,
+      motivo: assinatura.motivo,
+    });
+  }
+  if (sessao) {
+    // ponytail: ler-mesclar-gravar do jsonb; duas conexões simultâneas na mesma org
+    // podem perder uma chave. Vira RPC com `||` se isso algum dia aparecer.
+    const base = (sessao.metadata && typeof sessao.metadata === "object" ? sessao.metadata : {}) as Record<
+      string,
+      unknown
+    >;
+    const { error: erroMetadata } = await admin
+      .from("channel_sessions")
+      .update({
+        metadata: {
+          ...base,
+          webhook_da_conta: {
+            assinado: assinatura.ok,
+            ...(assinatura.ok ? {} : { motivo: assinatura.motivo }),
+            em: new Date().toISOString(),
+          },
+        },
+      })
+      .eq("organization_id", orgId)
+      .eq("id", sessao.id);
+    if (erroMetadata) {
+      logger.warn("meta.webhook_da_conta.nao_gravado", { organization_id: orgId, motivo: erroMetadata.message });
+    }
+  }
 
   return ok({
     connected: true,
     displayName: linha.display_name,
     phoneNumber: linha.phone_number,
-    webhook: assinatura.ok ? { assinado: true } : { assinado: false, motivo: assinatura.motivo },
+    webhook: assinatura.ok ? { assinado: true } : { assinado: false, motivo: t(assinatura.motivo) },
   });
 }
