@@ -610,6 +610,14 @@ export const AUDIT_ACTIONS = [
   // parado há mais de 1h sem desfecho — webhook perdido ou escrita que falhou
   // não pode sumir em silêncio.
   "comment.stuck_alert_opened",
+  // Task 8 — um humano publicou pela tela a sugestão da IA (editada ou não)
+  // para um comentário `esperando_voce`. Distinto de `comment.replied_by_ai`:
+  // ali o worker publica sozinho, sem ninguém olhar; aqui alguém apertou o
+  // botão. `resourceId` é o id de `instagram_comments`.
+  "comment.replied_manually",
+  // Task 8 — uma regra nova em `instagram_comment_rules`, criada pela tela
+  // (palavra-gatilho → resposta pública + Direct, por mídia).
+  "instagram_comment_rule.created",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

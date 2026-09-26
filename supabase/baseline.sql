@@ -27741,6 +27741,26 @@ alter table public.instagram_comments
   add column if not exists reivindicado_em timestamptz;
 -- ---- fim: reivindicar comentário + aviso de comentário parado (migration 0280) ----
 
+-- ---- publicação manual de comentário (migration 0281) ----
+-- Task 8: `POST /api/v1/comentarios/:id/publicar` (humano publica a sugestão
+-- da IA, editada ou não) precisa de um desfecho TERMINAL que não é nenhum dos
+-- cinco valores da 0279 — `respondido_pela_ia` é o worker sozinho (Task 7);
+-- reaproveitá-lo apagaria a distinção de quem apertou o botão.
+alter table public.instagram_comments
+  drop constraint if exists instagram_comments_situacao_check;
+
+alter table public.instagram_comments
+  add constraint instagram_comments_situacao_check
+  check (situacao in (
+    'novo',
+    'respondido_pela_regra',
+    'respondido_pela_ia',
+    'esperando_voce',
+    'ignorado',
+    'respondido_manualmente'
+  ));
+-- ---- fim: publicação manual de comentário (migration 0281) ----
+
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

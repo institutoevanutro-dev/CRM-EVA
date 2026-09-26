@@ -564,6 +564,9 @@ export const DICIONARIO: Traducoes = {
   // pasta do histórico. Sem entrada própria, a aba "Arquivadas" apareceria
   // traduzida como "Cerradas" para um operador hispanofalante.
   Arquivadas: { es: "Archivadas" },
+  // A aba da fila de `instagram_comments` (Task 8) — mesmo rótulo do título do
+  // painel que ela abre.
+  Comentários: { es: "Comentarios" },
   IA: { es: "IA" },
   "Sem mensagens": { es: "Sin mensajes" },
   "Nenhuma conversa": { es: "Ninguna conversación" },
@@ -9104,6 +9107,20 @@ export const DICIONARIO: Traducoes = {
   "Sem limite: as mensagens dos fluxos saem a qualquer hora, inclusive de madrugada.": { es: "Sin límite: los mensajes de los flujos salen a cualquier hora, incluso de madrugada." },
   "Escolha pelo menos um dia.": { es: "Elige al menos un día." },
   "O fim precisa ser depois do início.": { es: "El fin tiene que ser después del inicio." },
+
+  // A aba Comentários do Inbox (Task 8, `instagram_comments`/`instagram_comment_rules`).
+  "Editar a resposta": { es: "Editar la respuesta" },
+  "Sem sugestão pronta — escreva a resposta.": { es: "Sin sugerencia lista — escribe la respuesta." },
+  "Nenhum comentário nesta fila.": { es: "Ningún comentario en esta cola." },
+  "Perfil não identificado": { es: "Perfil no identificado" },
+  "Mídia (id do post)": { es: "Publicación (id del post)" },
+  "Cole o id do post": { es: "Pega el id del post" },
+  "Palavra-gatilho": { es: "Palabra gatillo" },
+  "Ex.: preço": { es: "Ej.: precio" },
+  "Mensagem no Direct": { es: "Mensaje en el Direct" },
+  "Resposta pública": { es: "Respuesta pública" },
+  "Criar regra": { es: "Crear regla" },
+  "Nova regra": { es: "Nueva regla" },
 };
 
 /**
