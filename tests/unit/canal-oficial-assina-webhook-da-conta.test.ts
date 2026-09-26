@@ -20,6 +20,9 @@ const TOKEN = "EAAG".padEnd(30, "x");
 const assinar = vi.fn();
 const conferir = vi.fn();
 const avisos: Array<[string, Record<string, unknown>]> = [];
+/** Ordem das operações: leituras que trazem `metadata`, a chamada à Meta e as escritas. */
+const eventos: string[] = [];
+let idioma: "pt-BR" | "es" = "pt-BR";
 
 interface Estado {
   linha: Record<string, unknown> | null;
@@ -32,7 +35,7 @@ vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: async () => n
 vi.mock("@/lib/auth/require-role", () => ({
   requireRole: async () => ({
     ok: true,
-    user: { id: "u1", idioma: "pt-BR", is_platform_admin: false },
+    user: { id: "u1", idioma, is_platform_admin: false },
     org: { orgId: ORG, role: "admin" },
   }),
 }));
@@ -67,11 +70,16 @@ vi.mock("@/lib/supabase/admin", () => ({
     from: () => {
       const filtros: Array<[string, unknown]> = [];
       let patch: Record<string, unknown> | null = null;
+      let colunas = "";
       const q = {
-        select: () => q,
+        select: (c: string) => ((colunas = c), q),
         eq: (k: string, v: unknown) => (filtros.push([k, v]), q),
         is: () => q,
-        maybeSingle: async () => ({ data: db.linha, error: null }),
+        maybeSingle: async () => {
+          if (colunas.includes("metadata")) eventos.push("le_metadata");
+          // Cópia: o que a rota leu não muda se o banco mudar depois.
+          return { data: db.linha ? structuredClone(db.linha) : null, error: null };
+        },
         insert: async () => {
           db.inserts += 1;
           db.linha = { id: CANAL, webhook_path_token: PATH_TOKEN, metadata: { pre_go_live: true } };
@@ -80,6 +88,7 @@ vi.mock("@/lib/supabase/admin", () => ({
         update: (p: Record<string, unknown>) => ((patch = p), q),
         then: (res: (v: unknown) => unknown) => {
           if (patch) {
+            eventos.push("grava");
             db.updates.push({ patch, filtros });
             if (db.linha) db.linha = { ...db.linha, ...patch };
           }
@@ -115,6 +124,8 @@ beforeEach(() => {
   assinar.mockReset();
   conferir.mockReset().mockResolvedValue({ ok: true });
   avisos.length = 0;
+  eventos.length = 0;
+  idioma = "pt-BR";
   db.linha = null;
   db.inserts = 0;
   db.updates = [];
@@ -171,6 +182,37 @@ describe("POST /api/v1/channels/official — assina o webhook da conta", () => {
 
     const webhook = await webhookDaTela();
     expect(webhook.assinatura).toMatchObject({ assinado: false, motivo: "Callback verification failed" });
+  });
+
+  it("a metadata é lida DEPOIS da Meta: chave mudada durante a chamada sobrevive", async () => {
+    // O admin liga o gate da IA enquanto a Meta demora a responder.
+    assinar.mockImplementation(async () => {
+      eventos.push("meta");
+      db.linha = { ...db.linha!, metadata: { ...(db.linha!.metadata as object), ai_gate: "allowlist" } };
+      return { ok: true };
+    });
+
+    await conectar();
+
+    const iMeta = eventos.indexOf("meta");
+    expect(eventos.slice(iMeta)).toEqual(["meta", "le_metadata", "grava"]);
+    expect(metadataGravada()).toMatchObject({ ai_gate: "allowlist", pre_go_live: true, webhook_da_conta: { assinado: true } });
+  });
+
+  it("motivos do sistema saem traduzidos: prefixo de rede e sessão sem endereço", async () => {
+    idioma = "es";
+    assinar.mockResolvedValue({ ok: false, motivo: "rede indisponível: timed out" });
+    const r = await conectar();
+    expect((r.corpo.data as { webhook: { motivo: string } }).webhook.motivo).toBe("red no disponible: timed out");
+
+    // Sessão sem webhook_path_token: nem chega a chamar a Meta, e o motivo não é um código cru.
+    assinar.mockClear();
+    db.linha = { id: "x", webhook_path_token: null, metadata: {} };
+    const semEndereco = await conectar();
+    const motivo = (semEndereco.corpo.data as { webhook: { motivo: string } }).webhook.motivo;
+    expect(assinar).not.toHaveBeenCalled();
+    expect(motivo).not.toMatch(/_/);
+    expect(motivo).toContain("sesión");
   });
 
   it("número fora da WABA: 422 antes de gravar, e a Meta não é assinada", async () => {

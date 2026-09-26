@@ -3716,6 +3716,10 @@ export const DICIONARIO: Traducoes = {
   "o token de verificação do webhook não está configurado nesta instalação. Quem administra a instalação precisa cadastrá-lo": {
     es: "el token de verificación del webhook no está configurado en esta instalación. Quien administra la instalación necesita registrarlo",
   },
+  "a sessão foi gravada sem endereço de recebimento. Reconecte o canal": {
+    es: "la sesión se guardó sin dirección de recepción. Vuelva a conectar el canal",
+  },
+  "rede indisponível:": { es: "red no disponible:" },
   "Conectado, mas a Meta não aceitou o endereço de recebimento. As mensagens não vão chegar.": {
     es: "Conectado, pero Meta no aceptó la dirección de recepción. Los mensajes no van a llegar.",
   },
