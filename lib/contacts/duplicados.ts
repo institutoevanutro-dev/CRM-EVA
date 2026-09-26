@@ -31,7 +31,11 @@
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 
 /** Por que estes dois registros caíram no mesmo grupo. */
-export type MotivoDeDuplicidade = "telefone" | "email" | "telefone_em_conflito";
+export type MotivoDeDuplicidade =
+  | "telefone"
+  | "email"
+  | "telefone_em_conflito"
+  | "mesmo_nome_instagram_whatsapp";
 
 /**
  * O recorte de `contacts` que a detecção precisa. Deliberadamente menor que
@@ -49,6 +53,8 @@ export interface ContatoParaDeduplicar {
   source_metadata: Record<string, unknown> | null;
   created_at: string;
   last_activity_at: string | null;
+  /** Tem identidade de Instagram em `contact_channel_identities` (linha desse canal). */
+  do_instagram: boolean;
 }
 
 export interface GrupoDeDuplicados {
@@ -70,6 +76,23 @@ export function chaveDeTelefone(valor: string | null | undefined): string {
 export function chaveDeEmail(contato: ContatoParaDeduplicar): string {
   const bruto = contato.email_normalized ?? contato.email;
   return (bruto ?? "").trim().toLowerCase();
+}
+
+/**
+ * Chave de agrupamento por nome: NFD sem diacríticos, minúsculas, espaços
+ * colapsados. `null` para nome ausente ou de uma palavra só — "Ana" é comum
+ * demais para virar sinal de duplicidade sozinho.
+ */
+export function chaveDeNome(nome: string | null): string | null {
+  if (!nome) return null;
+  const normalizado = nome
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+  if (normalizado.split(" ").filter(Boolean).length < 2) return null;
+  return normalizado;
 }
 
 /** O telefone que a ingestão parkou por já pertencer a outro contato vivo. */
@@ -148,6 +171,26 @@ export function encontrarContatosDuplicados(
     if (!conflito) continue;
     for (const outroId of porTelefone.get(conflito) ?? []) {
       if (outroId !== contato.id) unir(contato.id, outroId, "telefone_em_conflito");
+    }
+  }
+
+  // Instagram × WhatsApp pelo nome: só contatos COM telefone entram no mapa de
+  // nomes (regra de hoje — dois com telefone e mesmo nome não agrupam), e só
+  // contatos SÓ-Instagram (sem telefone) se anexam a eles. Dois de Instagram
+  // com o mesmo nome não agrupam aqui — a junção deles é por @ (Task 4).
+  const porNome = new Map<string, string[]>();
+  for (const contato of vivos) {
+    if (contato.phone_number === null || contato.phone_number === "") continue;
+    const nome = chaveDeNome(contato.display_name ?? contato.name);
+    if (!nome) continue;
+    porNome.set(nome, [...(porNome.get(nome) ?? []), contato.id]);
+  }
+  for (const contato of vivos) {
+    if (!contato.do_instagram || contato.phone_number) continue;
+    const nome = chaveDeNome(contato.display_name ?? contato.name);
+    if (!nome) continue;
+    for (const outroId of porNome.get(nome) ?? []) {
+      unir(contato.id, outroId, "mesmo_nome_instagram_whatsapp");
     }
   }
 

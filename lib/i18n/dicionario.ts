@@ -5672,6 +5672,9 @@ export const DICIONARIO: Traducoes = {
   "telefone que o WhatsApp deixou em conflito": {
     es: "teléfono que WhatsApp dejó en conflicto",
   },
+  "mesmo nome no Instagram e no WhatsApp": {
+    es: "mismo nombre en Instagram y en WhatsApp",
+  },
   "Manter este cadastro": { es: "Mantener esta ficha" },
   "Este fica": { es: "Esta se queda" },
   "Será absorvido por quem fica": { es: "Será absorbida por la que se queda" },

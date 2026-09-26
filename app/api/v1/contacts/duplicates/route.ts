@@ -55,7 +55,7 @@ export async function GET(): Promise<Response> {
   const { data, error } = await supabase
     .from("contacts")
     .select(
-      "id, name, display_name, email, email_normalized, phone_number, is_merged_into, is_anonymized, source_metadata, created_at, last_activity_at",
+      "id, name, display_name, email, email_normalized, phone_number, is_merged_into, is_anonymized, source_metadata, created_at, last_activity_at, source",
     )
     .eq("organization_id", org.orgId)
     .is("is_merged_into", null)
@@ -66,9 +66,34 @@ export async function GET(): Promise<Response> {
     return fail("internal_error", error.message, 500, { requestId });
   }
 
-  const linhas = (data ?? []) as unknown as ContatoParaDeduplicar[];
-  const varreuTudo = linhas.length <= TETO_DE_VARREDURA;
-  const grupos = encontrarContatosDuplicados(linhas.slice(0, TETO_DE_VARREDURA));
+  const brutas = (data ?? []).slice(0, TETO_DE_VARREDURA) as unknown as (Omit<
+    ContatoParaDeduplicar,
+    "do_instagram"
+  > & { source: string | null })[];
+  const varreuTudo = (data ?? []).length <= TETO_DE_VARREDURA;
+
+  // Quem tem identidade de Instagram — uma consulta só, filtrada por org e
+  // canal, com os IDs já varridos (não estoura o teto de varredura de hoje:
+  // o `.in()` limita ao que já foi lido, nunca amplia).
+  const idsDaVarredura = brutas.map((c) => c.id);
+  const doInstagram = new Set<string>();
+  if (idsDaVarredura.length > 0) {
+    const { data: identidades } = await supabase
+      .from("contact_channel_identities")
+      .select("contact_id")
+      .eq("organization_id", org.orgId)
+      .eq("channel", "instagram")
+      .in("contact_id", idsDaVarredura);
+    for (const row of (identidades ?? []) as { contact_id: string }[]) {
+      doInstagram.add(row.contact_id);
+    }
+  }
+
+  const linhas: ContatoParaDeduplicar[] = brutas.map(({ source: _source, ...c }) => ({
+    ...c,
+    do_instagram: doInstagram.has(c.id),
+  }));
+  const grupos = encontrarContatosDuplicados(linhas);
 
   return ok(
     grupos.map((grupo) => ({
