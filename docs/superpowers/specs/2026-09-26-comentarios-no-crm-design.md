@@ -18,6 +18,7 @@ Sucesso, medido: um vídeo com chamada para comentar produz conversas no Direct 
 3. A IA só publica sozinha no que é **obviamente seguro** (elogio, emoji, "top!"). Qualquer coisa que pareça pergunta clínica, preço, medicação, agendamento ou reclamação vira **sugestão esperando um toque**. É uma IA assinando como médico num perfil público: o erro não é constrangimento, é exposição.
 4. O jeito de escrever é aprendido dos **comentários que o André já respondeu** nos próprios posts, não de exemplos digitados à mão. Ele pode corrigir o perfil de voz depois.
 5. Os comentários moram numa **aba própria dentro do Inbox**, ao lado de "Conversas".
+6. **A IA nunca chama o dono de nutrólogo, especialista ou qualquer título de especialidade** (26/09/2026). Ele não tem RQE, e anunciar especialidade sem registro é infração do CFM — aqui, publicada em público e no nome dele. O termo é "médico". A trava é na geração (§5.5), não só no prompt: prompt é pedido, trava é garantia.
 
 ## 3. Fora de escopo
 
@@ -88,7 +89,7 @@ Uma passada (cron diário, mesmo lugar da renovação do token) lê os comentár
 
 O agente que escreve é o sistema de agentes que o CRM já tem, com o perfil de voz no prompt. Nada de motor novo.
 
-**Teto de tamanho e sem link.** Resposta pública é curta e nunca leva link nem preço, mesmo que o perfil de voz tenha aprendido isso de um comentário antigo.
+**Teto de tamanho, sem link, sem título de especialidade.** Resposta pública é curta e nunca leva link, preço, nem as palavras `nutrólogo`, `nutrologia`, `especialista` ou `especializado` — mesmo que o perfil de voz as tenha aprendido de um comentário antigo. A resposta que as contiver é recusada e o comentário cai em "esperando você".
 
 ### 5.6 Tela
 

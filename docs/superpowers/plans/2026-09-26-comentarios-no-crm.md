@@ -15,6 +15,7 @@
 - **Resposta privada:** `POST https://graph.instagram.com/<versão>/<IG_ID>/messages` com `recipient: {"comment_id": "<id>"}`. **Uma única por comentário**, dentro de **7 dias** do comentário.
 - **Permissão:** o webhook `comments` e a resposta privada pedem `instagram_business_basic` + **`instagram_business_manage_comments`**. A resposta privada NÃO usa a permissão de mensagens.
 - **Nome de provider não sai de `lib/channels/`** — invariante 1 de `docs/doctrine/restricao-de-canal.md`, vigiado pelo `pnpm lint:channels`. Componente e rota falam por capability.
+- **A IA NUNCA chama o dono de nutrólogo, especialista, ou qualquer título de especialidade.** Ele não tem RQE; anunciar especialidade sem registro é infração do CFM, e aqui seria publicada em público, no nome dele. O termo permitido é "médico". Vale para a resposta gerada E para o perfil de voz, que pode ter aprendido o termo errado de um comentário antigo.
 - **A IA só publica sozinha no que é obviamente seguro.** Preço, medicação, dose, sintoma, agendamento e reclamação viram sugestão esperando toque. Nunca link, nunca preço na resposta pública.
 - **Migration exige a TRIPLA:** arquivo em `supabase/migrations/` + apêndice idempotente no `supabase/baseline.sql` + linha no `supabase/migrations/MANIFEST.md`.
 - **`situacao` é `text` + CHECK, nunca enum** (doutrina do `CLAUDE.md`).
@@ -32,7 +33,8 @@ Cinco coisas que a spec implica, que nenhuma task cobriria sozinha, e que morder
 2. **A mesma pessoa comenta a palavra duas vezes** no mesmo vídeo: a Meta permite uma resposta privada por COMENTÁRIO, então o segundo comentário é um comentário novo — mas mandar dois Directs iguais em sequência é spam. O segundo recebe só a resposta pública — Task 5.
 3. **Comentário só com emoji** (sem texto): não pode quebrar o casador nem o classificador, e é o caso mais comum de "obviamente seguro" — Tasks 4 e 6.
 4. **Palavra-chave dentro de outra palavra** ("cardápio" em "cardápios"): casar por palavra inteira, senão o CRM manda Direct para quem não pediu — Task 4.
-5. **Duas organizações com o mesmo `media_id`** (impossível na prática, trivial de errar no SQL): a regra de uma organização nunca pode agir no comentário da outra — Task 1 (invariante de RLS) e Task 4.
+5. **A resposta gerada contém "nutrólogo" ou "especialista"** (o modelo puxa do treino, ou o perfil de voz aprendeu de um comentário antigo): tem de ser recusada antes de publicar, como link e preço já são — Task 7.
+6. **Duas organizações com o mesmo `media_id`** (impossível na prática, trivial de errar no SQL): a regra de uma organização nunca pode agir no comentário da outra — Task 1 (invariante de RLS) e Task 4.
 
 ---
 
@@ -526,6 +528,7 @@ const inseguros: [string, string][] = [
   ["serve pra quem tem tireoide?", "sintoma"], ["senti tontura, é normal?", "sintoma"],
   ["como agendo?", "agendamento"], ["tem horário amanhã?", "agendamento"],
   ["paguei e ninguém me respondeu", "reclamação"], ["que golpe é esse", "reclamação"],
+  ["você é nutrólogo?", "especialidade"], ["qual sua especialidade?", "especialidade"],
 ];
 
 it.each(inseguros)("%s precisa de você (%s)", (texto) => {
@@ -617,6 +620,14 @@ it("a IA falhou: fica esperando, sem publicar vazio", async () => {
   expect(fake.publicacoes).toHaveLength(0);
 });
 
+it("resposta que chama o dono de nutrólogo é recusada, não publicada", async () => {
+  fake.comentarios = [{ ...comentario, texto: "top!" }];
+  fake.textoGerado = "Obrigado! O nutrólogo agradece 🌿";
+  await processarComentariosNovos(fake, agora);
+  expect(linha().situacao).toBe("esperando_voce");
+  expect(fake.publicacoes).toHaveLength(0);
+});
+
 it("teto por rodada é respeitado", async () => {
   fake.comentarios = Array.from({ length: 80 }, (_, i) => ({ ...comentario, external_id: `c${i}`, texto: "top!" }));
   const r = await processarComentariosNovos(fake, agora, 50);
@@ -631,7 +642,7 @@ Expected: FAIL — worker não existe.
 
 - [ ] **Step 3: Implement o worker**
 
-Lê `situacao = 'novo'` por organização, mais antigos primeiro, com teto. Para cada um: regra casa → `aplicarRegra`; não casa → `ehObviamenteSeguro`; seguro → gera pelo agente com o perfil de voz e publica (`responderComentario`); inseguro ou geração falhou → `esperando_voce` com a sugestão (quando houver) e o gatilho em `motivo_do_toque`. **Nunca publica texto vazio.** Teto de tamanho na resposta gerada, e recusa se ela contiver link (`http`) ou algarismo com `R$`.
+Lê `situacao = 'novo'` por organização, mais antigos primeiro, com teto. Para cada um: regra casa → `aplicarRegra`; não casa → `ehObviamenteSeguro`; seguro → gera pelo agente com o perfil de voz e publica (`responderComentario`); inseguro ou geração falhou → `esperando_voce` com a sugestão (quando houver) e o gatilho em `motivo_do_toque`. **Nunca publica texto vazio.** Teto de tamanho na resposta gerada, e recusa (cai em `esperando_voce`) se ela contiver link (`http`), algarismo com `R$`, ou qualquer palavra de especialidade — `nutrólogo`, `nutrologia`, `especialista`, `especializado` (sem acento e sem caixa, como no resto). O dono não tem RQE: publicar isso no nome dele é infração do CFM.
 
 - [ ] **Step 4: Write the failing test da voz**
 
