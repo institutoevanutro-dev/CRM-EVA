@@ -314,6 +314,8 @@ export const listConversationsQuerySchema = z.object({
   exclude_finished: z.boolean().optional(),
   assigned_to: z.union([z.string().uuid(), z.literal("me"), z.literal("unassigned")]).optional(),
   channel_session_id: z.string().uuid().optional(),
+  /** Todas as conversas 1:1 de um contato — a ficha do contato usa para listar os canais. */
+  contact_id: z.string().uuid().optional(),
   /** "Só Instagram" / "Só WhatsApp" — todos os números de um tipo, e não um só. */
   canal: z.enum(["instagram", "whatsapp"]).optional(),
   tag: conversationTagSchema.optional(),

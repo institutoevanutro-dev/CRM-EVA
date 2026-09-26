@@ -89,8 +89,8 @@ const SELECT_COLS = `
   unread_count_for_assignee, is_group, group_chat_id, tags, metadata,
   snooze_until, created_at, updated_at,
   bot_silenced_until, last_handoff_at,
-  comando_da_conversa,
-  contacts:contact_id (id, display_name, name, phone_number, is_anonymized, tags, is_blocked, avatar_storage_path, force_human, contact_channel_identities (channel, handle, display_name)),
+  comando_da_conversa, provider_conversation_id,
+  contacts:contact_id (id, display_name, name, phone_number, is_anonymized, tags, is_blocked, avatar_storage_path, force_human, contact_channel_identities (channel, external_id, handle, display_name)),
   channel_sessions:channel_session_id (phone_number, display_name, provider)
 `;
 
@@ -195,6 +195,9 @@ export async function listConversationsHandler(
     query = query.not("status", "in", `(${CONVERSATION_TERMINAL_STATUSES.join(",")})`);
   }
   if (q.channel_session_id) query = query.eq("channel_session_id", q.channel_session_id);
+  // A ficha do contato: todas as conversas 1:1 desta pessoa. Grupo não tem
+  // `contact_id` (SKIP CRM binding, `@g.us`), então o filtro já os exclui.
+  if (q.contact_id) query = query.eq("contact_id", q.contact_id);
   // "Só Instagram" / "Só WhatsApp" — mutuamente exclusivo com channel_session_id
   // na tela (InboxFilters), mas aqui compõe: nada impede pedir os dois.
   if (q.canal) query = query.eq("channel", q.canal);
