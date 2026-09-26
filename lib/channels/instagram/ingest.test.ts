@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EventoDoInstagram } from "./webhook";
 
-const perfilDoRemetenteMock = vi.fn(async () => ({ nome: "Maria", handle: "maria", foto: null }));
+const perfilDoRemetenteMock = vi.fn(async () => ({ nome: "Maria" as string | null, handle: "maria" as string | null, foto: null as string | null }));
 vi.mock("./graph", () => ({ perfilDoRemetente: (...a: unknown[]) => perfilDoRemetenteMock(...(a as [])) }));
 vi.mock("../marcar-conversa", () => ({ marcarConversaComMensagem: vi.fn(async () => undefined) }));
 vi.mock("../pos-entrada", () => ({ aplicarEfeitosPosEntrada: vi.fn(async () => undefined) }));
@@ -11,6 +11,8 @@ vi.mock("@/lib/webhooks/secrets", () => ({
 }));
 const loggerWarnMock = vi.fn();
 vi.mock("@/lib/logger", () => ({ logger: { warn: (...a: unknown[]) => loggerWarnMock(...a), info: vi.fn(), error: vi.fn() } }));
+const juntarPorArrobaMock = vi.fn(async (): Promise<"juntou" | "nada"> => "nada");
+vi.mock("./juntar-por-arroba", () => ({ juntarPorArroba: (...a: unknown[]) => juntarPorArrobaMock(...(a as [])) }));
 
 const { ingerirDoInstagram } = await import("./ingest");
 const { aplicarEfeitosPosEntrada } = await import("../pos-entrada");
@@ -22,6 +24,8 @@ function adminFalso(opts: {
   updateErro?: { message: string } | null;
   nomeAtual?: string | null;
   tentadoEm?: string | null;
+  /** `is_merged_into` que a releitura do contato encontra depois de "juntou". */
+  principalAposJuntar?: string | null;
 }) {
   const chamadas: Record<"rpc" | "insert" | "update", [string, unknown][]> = { rpc: [], insert: [], update: [] };
   const filtrosDoUpdate: unknown[][][] = [];
@@ -53,20 +57,25 @@ function adminFalso(opts: {
       // check de identidade (`contact_channel_identities`) usa três, a leitura
       // de `contacts` (custom_fields, e agora display_name/source_metadata)
       // usa dois.
-      select: () => {
+      select: (colunas?: string) => {
         const chain: { eq: () => typeof chain; maybeSingle: () => Promise<{ data: unknown; error: null }> } = {
           eq: () => chain,
-          maybeSingle: async () =>
-            tabela === "contact_channel_identities"
-              ? { data: opts.identidadeExistente ? { contact_id: "C1" } : null, error: null }
-              : {
-                  data: {
-                    custom_fields: {},
-                    display_name: opts.nomeAtual ?? null,
-                    source_metadata: { perfil_tentado_em: opts.tentadoEm ?? null },
-                  },
-                  error: null,
-                },
+          maybeSingle: async () => {
+            if (tabela === "contact_channel_identities") {
+              return { data: opts.identidadeExistente ? { contact_id: "C1" } : null, error: null };
+            }
+            if (colunas === "is_merged_into") {
+              return { data: { is_merged_into: opts.principalAposJuntar ?? null }, error: null };
+            }
+            return {
+              data: {
+                custom_fields: {},
+                display_name: opts.nomeAtual ?? null,
+                source_metadata: { perfil_tentado_em: opts.tentadoEm ?? null },
+              },
+              error: null,
+            };
+          },
         };
         return chain;
       },
@@ -201,5 +210,37 @@ describe("ingestão do Instagram", () => {
       "[instagram.ingest] atualização da origem padrão falhou",
       expect.objectContaining({ organization_id: "ORG", contact_id: "C1", detail: "falhou o update" }),
     );
+  });
+
+  it("perfil preenchido chama juntarPorArroba com o contato — mesmo @ vira um contato só", async () => {
+    juntarPorArrobaMock.mockClear();
+    const { admin } = adminFalso({});
+    await ingerirDoInstagram(admin as never, evento(), sessao);
+    expect(juntarPorArrobaMock).toHaveBeenCalledWith(admin, { organizationId: "ORG", contactId: "C1" });
+  });
+
+  it("perfil sem nome (sem_perfil) não chama juntarPorArroba — sem handle não há @ para comparar", async () => {
+    juntarPorArrobaMock.mockClear();
+    perfilDoRemetenteMock.mockResolvedValueOnce({ nome: null, handle: null, foto: null });
+    const { admin } = adminFalso({});
+    await ingerirDoInstagram(admin as never, evento(), sessao);
+    expect(juntarPorArrobaMock).not.toHaveBeenCalled();
+  });
+
+  it("falha em juntarPorArroba (mesmo escapando do best-effort dele) não impede o resto da ingestão", async () => {
+    juntarPorArrobaMock.mockRejectedValueOnce(new Error("boom"));
+    const { admin } = adminFalso({});
+    const r = await ingerirDoInstagram(admin as never, evento(), sessao);
+    expect(r).toMatchObject({ status: "ingerida" });
+  });
+
+  it("junção absorveu o contato da ingestão: o resto usa o principal (is_merged_into), não a lápide", async () => {
+    juntarPorArrobaMock.mockResolvedValueOnce("juntou");
+    const { admin, chamadas } = adminFalso({ principalAposJuntar: "C0" });
+    const r = await ingerirDoInstagram(admin as never, evento(), sessao);
+    expect(r).toMatchObject({ status: "ingerida" });
+    expect(chamadas.rpc).toContainEqual(["fn_upsert_conversa_de_canal", { p_org: "ORG", p_contact: "C0", p_session: "S1", p_canal: "instagram" }]);
+    const [, msg] = chamadas.insert.find(([t]) => t === "messages") as [string, Record<string, unknown>];
+    expect(msg.contact_id).toBe("C0");
   });
 });

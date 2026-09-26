@@ -24,6 +24,7 @@ import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { logger } from "@/lib/logger";
 import { marcarConversaComMensagem } from "../marcar-conversa";
 import { aplicarEfeitosPosEntrada } from "../pos-entrada";
+import { juntarPorArroba } from "./juntar-por-arroba";
 import { deveBuscarPerfil, nomeAtualDoContato, preencherPerfilDoContato } from "./perfil-do-contato";
 import type { EventoDoInstagram } from "./webhook";
 
@@ -89,9 +90,37 @@ export async function ingerirDoInstagram(
   if (sessao.tokenCifrado && deveBuscarPerfil({ identidadeNova, nomeAtual: nomeDoContato, tentadoEm, agora: new Date() })) {
     const token = await decryptWebhookSecret(admin, sessao.tokenCifrado);
     if (token) {
-      await preencherPerfilDoContato(admin, {
+      const resultadoDoPerfil = await preencherPerfilDoContato(admin, {
         organizationId: orgId, contactId: contato.contact_id, igsid: pessoa, token, agora: new Date(),
       });
+      // Só vale a pena procurar duplicata quando o handle acabou de chegar
+      // (ou já existia): sem ele não há @ para comparar. `juntarPorArroba` já
+      // é best-effort por contrato (nunca lança); o try/catch aqui é cinto e
+      // suspensório — uma mensagem não pode falhar por causa de deduplicação.
+      try {
+        if (resultadoDoPerfil === "preenchido") {
+          const juntou = await juntarPorArroba(admin, { organizationId: orgId, contactId: contato.contact_id });
+          if (juntou === "juntou") {
+            // Este contato pode ter sido o ABSORVIDO (o mais novo dos dois): o
+            // resto da ingestão usa `contato.contact_id` adiante, e ele teria
+            // ficado apontando para uma lápide. Relê e segue com o principal.
+            const { data: absorvido } = await admin
+              .from("contacts")
+              .select("is_merged_into")
+              .eq("organization_id", orgId)
+              .eq("id", contato.contact_id)
+              .maybeSingle();
+            const principal = (absorvido as { is_merged_into: string | null } | null)?.is_merged_into;
+            if (principal) contato.contact_id = principal;
+          }
+        }
+      } catch (err) {
+        logger.warn("[instagram.ingest] juntarPorArroba falhou", {
+          organization_id: orgId,
+          contact_id: contato.contact_id,
+          detail: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 

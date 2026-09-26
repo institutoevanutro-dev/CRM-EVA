@@ -254,3 +254,73 @@ describe("conversa do Instagram cai na Fila, não no Automático (migration 0278
     expect(rows[0]?.inf).toBe(true);
   });
 });
+
+describe("mesmo @ vira um contato só (fn_mesclar_contatos, dois IGSIDs de um perfil só)", () => {
+  it("o secundário fica is_merged_into = principal e as DUAS conversas (sessões diferentes) apontam pro principal", async () => {
+    const { rows: principal } = await pool.query<{ id: string }>(
+      `insert into contacts (organization_id, display_name, created_at) values ($1, 'Maria Perfil 1', now() - interval '2 days') returning id`,
+      [ORG_A],
+    );
+    const { rows: secundario } = await pool.query<{ id: string }>(
+      `insert into contacts (organization_id, display_name, created_at) values ($1, 'Maria Perfil 2', now()) returning id`,
+      [ORG_A],
+    );
+    // Mesmo @, maiúsculas diferentes — a comparação de `juntarPorArroba` é
+    // case-insensitive (`.ilike`); aqui só interessa o RESULTADO do merge.
+    await pool.query(
+      `insert into contact_channel_identities (organization_id, contact_id, channel, external_id, handle)
+         values ($1, $2, 'instagram', 'IGSID-MARIA-1', 'Maria.Silva')`,
+      [ORG_A, principal[0]!.id],
+    );
+    await pool.query(
+      `insert into contact_channel_identities (organization_id, contact_id, channel, external_id, handle)
+         values ($1, $2, 'instagram', 'IGSID-MARIA-2', 'maria.silva')`,
+      [ORG_A, secundario[0]!.id],
+    );
+    const { rows: sessaoA } = await pool.query<{ id: string }>(
+      `insert into channel_sessions (organization_id, provider, status, webhook_secret_encrypted, ig_account_id, ig_username)
+         values ($1, 'meta_instagram', 'WORKING', decode('00','hex'), '17841400000000301', 'perfil_a') returning id`,
+      [ORG_A],
+    );
+    const { rows: sessaoB } = await pool.query<{ id: string }>(
+      `insert into channel_sessions (organization_id, provider, status, webhook_secret_encrypted, ig_account_id, ig_username)
+         values ($1, 'meta_instagram', 'WORKING', decode('00','hex'), '17841400000000302', 'perfil_b') returning id`,
+      [ORG_A],
+    );
+    const { rows: conversaPrincipal } = await pool.query<{ id: string }>(
+      `insert into conversations (organization_id, contact_id, channel_session_id, channel, status)
+         values ($1, $2, $3, 'instagram', 'open') returning id`,
+      [ORG_A, principal[0]!.id, sessaoA[0]!.id],
+    );
+    const { rows: conversaSecundaria } = await pool.query<{ id: string }>(
+      `insert into conversations (organization_id, contact_id, channel_session_id, channel, status)
+         values ($1, $2, $3, 'instagram', 'open') returning id`,
+      [ORG_A, secundario[0]!.id, sessaoB[0]!.id],
+    );
+
+    // Chamada exatamente como `juntarPorArroba` chama: sem `set local role`
+    // (equivalente ao service role — `auth.uid()` nulo pula a checagem de
+    // papel, que é quem resolve `organization_id` de fonte confiável).
+    const { rows: resultado } = await pool.query<{ contato_id: string }>(
+      `select (fn_mesclar_contatos($1, $2, $3)->>'contato_id') as contato_id`,
+      [ORG_A, principal[0]!.id, [secundario[0]!.id]],
+    );
+    expect(resultado[0]?.contato_id).toBe(principal[0]!.id);
+
+    const { rows: lapide } = await pool.query<{ is_merged_into: string }>(
+      "select is_merged_into from contacts where id = $1",
+      [secundario[0]!.id],
+    );
+    expect(lapide[0]?.is_merged_into).toBe(principal[0]!.id);
+
+    // Prova o motivo do teste: as duas conversas (sessões DIFERENTES) agora
+    // apontam para o MESMO contato sem colidir com
+    // `uniq_conversations_1to1_per_contact_session` (que é por contato+sessão,
+    // não só por contato).
+    const { rows: conversas } = await pool.query<{ id: string; contact_id: string }>(
+      "select id, contact_id from conversations where id = any($1)",
+      [[conversaPrincipal[0]!.id, conversaSecundaria[0]!.id]],
+    );
+    expect(conversas.every((c) => c.contact_id === principal[0]!.id)).toBe(true);
+  });
+});
