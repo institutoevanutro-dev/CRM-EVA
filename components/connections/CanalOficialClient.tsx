@@ -72,6 +72,13 @@ export function CanalOficialClient() {
     e.preventDefault();
     const r = await conectar.mutateAsync(form);
     toast.success(`${t("Conectado:")} ${r.data.displayName} ${r.data.phoneNumber ?? ""}`.trim());
+    if (r.data.webhook?.assinado === false) {
+      // Persistente: conectado sem recebimento é o estado que parece funcionar e não funciona.
+      toast.warning(
+        t("Conectado, mas a Meta não aceitou o endereço de recebimento. As mensagens não vão chegar."),
+        { description: r.data.webhook.motivo, duration: Infinity },
+      );
+    }
     // O token some do formulário assim que grava — deixá-lo na tela seria mantê-lo
     // em memória do navegador sem motivo, e ele não volta em nenhum GET.
     setForm((f) => ({ ...f, token: "" }));

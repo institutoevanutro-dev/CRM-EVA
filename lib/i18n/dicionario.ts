@@ -3710,6 +3710,9 @@ export const DICIONARIO: Traducoes = {
   "Copiado.": { es: "Copiado." },
   Copiar: { es: "Copiar" },
   "Conectado:": { es: "Conectado:" },
+  "Conectado, mas a Meta não aceitou o endereço de recebimento. As mensagens não vão chegar.": {
+    es: "Conectado, pero Meta no aceptó la dirección de recepción. Los mensajes no van a llegar.",
+  },
   "credencial guardada": { es: "credencial guardada" },
   "sem credencial": { es: "sin credencial" },
   número: { es: "número" },

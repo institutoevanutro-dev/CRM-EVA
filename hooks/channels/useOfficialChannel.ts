@@ -47,7 +47,15 @@ export function useConnectOfficialChannel() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: ConnectInput) =>
-      apiClient.post<{ data: { connected: boolean; displayName: string; phoneNumber: string | null } }>(
+      apiClient.post<{
+        data: {
+          connected: boolean;
+          displayName: string;
+          phoneNumber: string | null;
+          /** A Meta aceitou o endereço de recebimento desta conta? Ver a rota. */
+          webhook?: { assinado: boolean; motivo?: string };
+        };
+      }>(
         "/api/v1/channels/official",
         input,
       ),

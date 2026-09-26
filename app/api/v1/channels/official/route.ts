@@ -30,6 +30,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { CHANNEL_PROVIDER_META } from "@/lib/channels/capabilities";
 import { appDaMeta, appDaMetaDoAmbiente } from "@/lib/channels/meta/app";
+import { assinarWebhookDaConta } from "@/lib/channels/meta/assinar-webhook";
 import { validateMetaCredentials } from "@/lib/channels/meta/validate-credentials";
 import { reactivateChannelSession } from "@/lib/channels/reactivate";
 import { env } from "@/lib/env";
@@ -62,6 +63,11 @@ function publicBase(req: NextRequest): string {
   return (
     usavel ?? req.headers.get("origin") ?? `${req.nextUrl.protocol}//${req.nextUrl.host}`
   );
+}
+
+/** O endereço que a Meta chama para ESTA sessão — o mesmo que a tela manda colar. */
+function callbackDaSessao(req: NextRequest, webhookPathToken: string): string {
+  return `${publicBase(req)}/api/v1/webhooks/meta/${webhookPathToken}`;
 }
 
 /**
@@ -124,7 +130,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     () => consultar().maybeSingle(),
   );
 
-  const base = publicBase(req);
   return ok({
     connected: Boolean(data),
     channel_session_id: data?.id ?? null,
@@ -139,7 +144,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     /** O que o operador precisa colar do NOSSO lado no dashboard da Meta. */
     webhook: data
       ? {
-          callbackUrl: `${base}/api/v1/webhooks/meta/${data.webhook_path_token}`,
+          callbackUrl: callbackDaSessao(req, data.webhook_path_token),
           ...(await tokenDeVerificacaoParaATela()),
           // A porta para quem PODE abrir a tela da instalação — mesma regra do
           // link de `/admin/google` na Agenda. Para o admin de um tenant qualquer
@@ -258,9 +263,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
   }
 
+  // O app da Meta tem UM callback; sem o override por WABA, a conta de uma
+  // segunda organização entrega na URL de outra sessão e nunca recebe nada
+  // (medido em produção em 26/09/2026). Falhar aqui NÃO desfaz a conexão: a
+  // credencial é boa, o envio funciona, e a tela avisa que o recebimento não.
+  const { data: sessao } = await admin
+    .from("channel_sessions")
+    .select("webhook_path_token")
+    .eq("organization_id", orgId)
+    .eq("provider", CHANNEL_PROVIDER_META)
+    .maybeSingle();
+  const pathToken = (sessao as { webhook_path_token?: string } | null)?.webhook_path_token;
+  const assinatura = pathToken
+    ? await assinarWebhookDaConta({
+        wabaId: waba_id,
+        token,
+        callbackUrl: callbackDaSessao(req, pathToken),
+        verifyToken: (await appDaMeta()).verifyToken,
+      })
+    : ({ ok: false, motivo: "channel_session_sem_webhook_path_token" } as const);
+
   return ok({
     connected: true,
     displayName: linha.display_name,
     phoneNumber: linha.phone_number,
+    webhook: assinatura.ok ? { assinado: true } : { assinado: false, motivo: assinatura.motivo },
   });
 }

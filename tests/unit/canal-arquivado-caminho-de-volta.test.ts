@@ -49,6 +49,10 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/webhooks/secrets", () => ({ encryptWebhookSecret: vi.fn() }));
 vi.mock("@/lib/channels/meta/validate-credentials", () => ({ validateMetaCredentials: vi.fn() }));
+// O POST assina o webhook da conta na Meta depois de gravar; aqui não sai rede.
+vi.mock("@/lib/channels/meta/assinar-webhook", () => ({
+  assinarWebhookDaConta: vi.fn(async () => ({ ok: true })),
+}));
 vi.mock("@/lib/waha/client", () => ({
   getWahaClient: vi.fn(),
   wahaFriendlyError: (m: string) => m,
