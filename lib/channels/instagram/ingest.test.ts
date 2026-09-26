@@ -11,7 +11,8 @@ vi.mock("@/lib/webhooks/secrets", () => ({
 }));
 const loggerWarnMock = vi.fn();
 vi.mock("@/lib/logger", () => ({ logger: { warn: (...a: unknown[]) => loggerWarnMock(...a), info: vi.fn(), error: vi.fn() } }));
-const juntarPorArrobaMock = vi.fn(async (): Promise<"juntou" | "nada"> => "nada");
+type ResultadoDaJuncao = { juntou: true; principal: string } | { juntou: false };
+const juntarPorArrobaMock = vi.fn(async (): Promise<ResultadoDaJuncao> => ({ juntou: false }));
 vi.mock("./juntar-por-arroba", () => ({ juntarPorArroba: (...a: unknown[]) => juntarPorArrobaMock(...(a as [])) }));
 
 const { ingerirDoInstagram } = await import("./ingest");
@@ -24,8 +25,6 @@ function adminFalso(opts: {
   updateErro?: { message: string } | null;
   nomeAtual?: string | null;
   tentadoEm?: string | null;
-  /** `is_merged_into` que a releitura do contato encontra depois de "juntou". */
-  principalAposJuntar?: string | null;
 }) {
   const chamadas: Record<"rpc" | "insert" | "update", [string, unknown][]> = { rpc: [], insert: [], update: [] };
   const filtrosDoUpdate: unknown[][][] = [];
@@ -57,15 +56,12 @@ function adminFalso(opts: {
       // check de identidade (`contact_channel_identities`) usa três, a leitura
       // de `contacts` (custom_fields, e agora display_name/source_metadata)
       // usa dois.
-      select: (colunas?: string) => {
+      select: () => {
         const chain: { eq: () => typeof chain; maybeSingle: () => Promise<{ data: unknown; error: null }> } = {
           eq: () => chain,
           maybeSingle: async () => {
             if (tabela === "contact_channel_identities") {
               return { data: opts.identidadeExistente ? { contact_id: "C1" } : null, error: null };
-            }
-            if (colunas === "is_merged_into") {
-              return { data: { is_merged_into: opts.principalAposJuntar ?? null }, error: null };
             }
             return {
               data: {
@@ -234,13 +230,36 @@ describe("ingestão do Instagram", () => {
     expect(r).toMatchObject({ status: "ingerida" });
   });
 
-  it("junção absorveu o contato da ingestão: o resto usa o principal (is_merged_into), não a lápide", async () => {
-    juntarPorArrobaMock.mockResolvedValueOnce("juntou");
-    const { admin, chamadas } = adminFalso({ principalAposJuntar: "C0" });
+  it("junção absorveu o contato da ingestão: o resto usa o principal que juntarPorArroba devolveu, não a lápide", async () => {
+    juntarPorArrobaMock.mockResolvedValueOnce({ juntou: true, principal: "C0" });
+    const { admin, chamadas } = adminFalso({});
     const r = await ingerirDoInstagram(admin as never, evento(), sessao);
     expect(r).toMatchObject({ status: "ingerida" });
     expect(chamadas.rpc).toContainEqual(["fn_upsert_conversa_de_canal", { p_org: "ORG", p_contact: "C0", p_session: "S1", p_canal: "instagram" }]);
     const [, msg] = chamadas.insert.find(([t]) => t === "messages") as [string, Record<string, unknown>];
     expect(msg.contact_id).toBe("C0");
+  });
+
+  it("junção absorve o contato NOVO (segunda sessão, mesmo @): a origem desta sessão nunca sobrescreve a que o principal já tinha", async () => {
+    // Achado da revisão: escrever a origem DEPOIS da junção, contra
+    // `contato.contact_id` já trocado pro principal, apagava a atribuição do
+    // primeiro perfil com a do segundo. A origem tem que ser gravada contra o
+    // contato NOVO (que vira lápide), nunca contra o principal.
+    juntarPorArrobaMock.mockResolvedValueOnce({ juntou: true, principal: "C0" });
+    const { admin, chamadas, filtrosDoUpdate } = adminFalso({ contatoNovo: true });
+    const r = await ingerirDoInstagram(
+      admin as never,
+      evento(),
+      { ...sessao, origemPadrao: { campo: "origem", valor: "Instagram @instit.eva" } },
+    );
+    expect(r).toMatchObject({ status: "ingerida" });
+    const iOrigem = chamadas.update.findIndex(
+      ([t, l]) => t === "contacts" && "custom_fields" in (l as Record<string, unknown>),
+    );
+    expect(iOrigem).toBeGreaterThanOrEqual(0);
+    // Escrita contra o contato NOVO (C1, o que vira lápide) — NUNCA contra o
+    // principal (C0), que é quem `contato.contact_id` vira depois da junção.
+    expect(filtrosDoUpdate[iOrigem]).toContainEqual(["eq", "id", "C1"]);
+    expect(filtrosDoUpdate[iOrigem]).not.toContainEqual(["eq", "id", "C0"]);
   });
 });

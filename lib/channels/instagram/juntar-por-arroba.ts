@@ -42,24 +42,49 @@ export function escolherPrincipal(
 }
 
 /**
+ * Resultado de `juntarPorArroba`: quando junta, devolve o `principal` — o
+ * caller nunca precisa reler `is_merged_into` para saber se o contato que
+ * passou virou lápide (e, se virou, para qual id seguir).
+ */
+export type ResultadoDaJuncao = { juntou: true; principal: string } | { juntou: false };
+
+const NADA: ResultadoDaJuncao = { juntou: false };
+
+/**
  * Junta `contactId` ao(s) contato(s) de mesmo @ (Instagram, case-insensitive).
- * `"nada"` quando o contato não tem handle, não há outro contato com o mesmo
- * @, o(s) outro(s) já foram absorvidos, ou o `rpc` falha — nunca lança.
+ * `{ juntou: false }` quando o contato não tem handle, não há outro contato
+ * com o mesmo @, o(s) outro(s) já foram absorvidos, a leitura do próprio
+ * handle falha, ou o `rpc` falha — nunca lança.
  */
 export async function juntarPorArroba(
   admin: SupabaseClient,
   input: { organizationId: string; contactId: string },
-): Promise<"juntou" | "nada"> {
+): Promise<ResultadoDaJuncao> {
   try {
-    const { data: identidadePropria } = await admin
+    // `.limit(1)`, não `.maybeSingle()`: depois de UM merge, o principal já
+    // fica com 2+ linhas em `contact_channel_identities` (uma por IGSID
+    // absorvido — a FK foi repontada, a linha não desaparece). `.maybeSingle()`
+    // erra com "mais de uma linha" nesse caso, e o erro não capturado (`data`
+    // vem `null` em silêncio) fazia TODO principal de um merge anterior parar
+    // de entrar na rodada seguinte. Qualquer uma das linhas serve: o handle é
+    // igual por construção (é o que trouxe as duas para o mesmo contato).
+    const { data: identidadesProprias, error: erroIdentidadePropria } = await admin
       .from("contact_channel_identities")
       .select("handle")
       .eq("organization_id", input.organizationId)
       .eq("contact_id", input.contactId)
       .eq("channel", "instagram")
-      .maybeSingle();
-    const handle = (identidadePropria as { handle: string | null } | null)?.handle;
-    if (!handle) return "nada";
+      .limit(1);
+    if (erroIdentidadePropria) {
+      logger.warn("[instagram.juntar-por-arroba] ler o handle do contato falhou", {
+        organization_id: input.organizationId,
+        contact_id: input.contactId,
+        detail: erroIdentidadePropria.message,
+      });
+      return NADA;
+    }
+    const handle = (identidadesProprias as { handle: string | null }[] | null)?.[0]?.handle;
+    if (!handle) return NADA;
 
     const { data: outrasIdentidades } = await admin
       .from("contact_channel_identities")
@@ -71,7 +96,7 @@ export async function juntarPorArroba(
     const idsCandidatos = [
       ...new Set(((outrasIdentidades as { contact_id: string }[] | null) ?? []).map((i) => i.contact_id)),
     ];
-    if (idsCandidatos.length === 0) return "nada";
+    if (idsCandidatos.length === 0) return NADA;
 
     const { data: contatosVivos } = await admin
       .from("contacts")
@@ -80,7 +105,7 @@ export async function juntarPorArroba(
       .in("id", [input.contactId, ...idsCandidatos])
       .is("is_merged_into", null);
     const escolha = escolherPrincipal((contatosVivos as { id: string; created_at: string }[] | null) ?? []);
-    if (!escolha) return "nada";
+    if (!escolha) return NADA;
     const principalId = escolha.principal;
 
     const { error: erroRpc } = await admin.rpc("fn_mesclar_contatos", {
@@ -93,7 +118,7 @@ export async function juntarPorArroba(
         organization_id: input.organizationId,
         detail: erroRpc.message,
       });
-      return "nada";
+      return NADA;
     }
 
     await audit({
@@ -105,14 +130,14 @@ export async function juntarPorArroba(
       metadata: { merged_contact_ids: escolha.secundarios, motivo: "mesmo_arroba_instagram" },
     });
 
-    return "juntou";
+    return { juntou: true, principal: principalId };
   } catch (err) {
     logger.warn("[instagram.juntar-por-arroba] falhou", {
       organization_id: input.organizationId,
       contact_id: input.contactId,
       detail: err instanceof Error ? err.message : String(err),
     });
-    return "nada";
+    return NADA;
   }
 }
 
@@ -162,7 +187,7 @@ export async function juntarDuplicadosPorArroba(
     if (vivos.length < 2) continue;
     const maisNovo = vivos.reduce((novo, atual) => (criadoEm.get(atual)! > criadoEm.get(novo)! ? atual : novo));
     const resultado = await juntarPorArroba(admin, { organizationId, contactId: maisNovo });
-    if (resultado === "juntou") total += 1;
+    if (resultado.juntou) total += 1;
   }
   return total;
 }

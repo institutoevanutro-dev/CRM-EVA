@@ -53,6 +53,7 @@ function corrente(resultado: { data: unknown; error: unknown }, registroIlike?: 
     neq: () => c,
     not: () => c,
     in: () => c,
+    limit: () => c,
     select: () => c,
     ilike: (coluna: string, valor: string) => {
       registroIlike?.push([coluna, valor]);
@@ -66,23 +67,32 @@ function corrente(resultado: { data: unknown; error: unknown }, registroIlike?: 
 }
 
 /**
- * Fake de `SupabaseClient` para `juntarPorArroba`: a PRIMEIRA leitura de
- * `contact_channel_identities` (handle do próprio contato) usa `maybeSingle`;
- * a SEGUNDA (candidatos por `ilike`) e a leitura de `contacts` resolvem via
- * `then` (lista). Como as duas leituras de `contact_channel_identities` têm a
- * mesma forma de corrente, uma fila por tabela decide qual resultado sai em
- * cada chamada.
+ * Fake de `SupabaseClient` para `juntarPorArroba`: as DUAS leituras de
+ * `contact_channel_identities` (handle do próprio contato via `.limit(1)`, e
+ * candidatos por `ilike`) e a leitura de `contacts` resolvem via `then`
+ * (lista) — nenhuma usa `maybeSingle` (a primeira NÃO pode: depois de um
+ * merge, o principal tem 2+ linhas de identidade). Uma fila por tabela decide
+ * qual resultado sai em cada chamada.
  */
 function adminFalso(opts: {
-  handleProprio?: string | null;
+  /** `undefined` = uma linha com "maria.silva"; `null` = nenhuma linha; array = linhas customizadas. */
+  handleProprio?: string | null | { handle: string }[];
+  erroLeituraHandle?: { message: string } | null;
   outrasIdentidades?: { contact_id: string }[];
   contatosVivos?: { id: string; created_at: string }[];
   rpcErro?: { message: string } | null;
 }) {
   const registroIlike: [string, string][] = [];
   const chamadasRpc: [string, unknown][] = [];
+  const linhasDoHandleProprio = Array.isArray(opts.handleProprio)
+    ? opts.handleProprio
+    : opts.handleProprio === undefined
+      ? [{ handle: "maria.silva" }]
+      : opts.handleProprio
+        ? [{ handle: opts.handleProprio }]
+        : [];
   const filaIdentidades = [
-    { data: opts.handleProprio === undefined ? { handle: "maria.silva" } : opts.handleProprio ? { handle: opts.handleProprio } : null, error: null },
+    { data: opts.erroLeituraHandle ? null : linhasDoHandleProprio, error: opts.erroLeituraHandle ?? null },
     { data: opts.outrasIdentidades ?? [], error: null },
   ];
   const admin = {
@@ -117,7 +127,7 @@ describe("juntarPorArroba", () => {
 
     const resultado = await juntarPorArroba(admin as never, { organizationId: "ORG", contactId: "C1" });
 
-    expect(resultado).toBe("juntou");
+    expect(resultado).toEqual({ juntou: true, principal: "C2" });
     expect(chamadasRpc).toContainEqual([
       "fn_mesclar_contatos",
       { p_organization_id: "ORG", p_contato_principal: "C2", p_contatos_secundarios: ["C1"] },
@@ -140,7 +150,7 @@ describe("juntarPorArroba", () => {
 
   it("contato sem handle: nada, sem rpc", async () => {
     const { admin, chamadasRpc } = adminFalso({ handleProprio: null });
-    expect(await juntarPorArroba(admin as never, { organizationId: "ORG", contactId: "C1" })).toBe("nada");
+    expect(await juntarPorArroba(admin as never, { organizationId: "ORG", contactId: "C1" })).toEqual({ juntou: false });
     expect(chamadasRpc).toHaveLength(0);
   });
 
@@ -152,7 +162,7 @@ describe("juntarPorArroba", () => {
       // absorvido nem aparece nesta lista, então só resta C1.
       contatosVivos: [{ id: "C1", created_at: "2026-01-05T00:00:00Z" }],
     });
-    expect(await juntarPorArroba(admin as never, { organizationId: "ORG", contactId: "C1" })).toBe("nada");
+    expect(await juntarPorArroba(admin as never, { organizationId: "ORG", contactId: "C1" })).toEqual({ juntou: false });
     expect(chamadasRpc).toHaveLength(0);
   });
 
@@ -166,8 +176,42 @@ describe("juntarPorArroba", () => {
       ],
       rpcErro: { message: "contato_secundario_indisponivel" },
     });
-    await expect(juntarPorArroba(admin as never, { organizationId: "ORG", contactId: "C1" })).resolves.toBe("nada");
+    await expect(juntarPorArroba(admin as never, { organizationId: "ORG", contactId: "C1" })).resolves.toEqual({
+      juntou: false,
+    });
     expect(loggerWarnMock).toHaveBeenCalled();
+  });
+
+  it("contato já é principal de um merge anterior (2+ linhas de identidade, mesmo handle): usa a primeira mesmo assim", async () => {
+    // Achado da revisão: `.maybeSingle()` erra com "mais de uma linha" quando
+    // o contato já absorveu outro IGSID antes — e o erro não capturado fazia
+    // TODO principal de um merge anterior parar de entrar na rodada seguinte,
+    // em silêncio. `.limit(1)` não erra; qualquer linha serve (mesmo handle
+    // por construção).
+    const { admin, chamadasRpc } = adminFalso({
+      handleProprio: [{ handle: "Maria.Silva" }, { handle: "Maria.Silva" }],
+      outrasIdentidades: [{ contact_id: "C3" }],
+      contatosVivos: [
+        { id: "C1", created_at: "2026-01-01T00:00:00Z" },
+        { id: "C3", created_at: "2026-01-10T00:00:00Z" },
+      ],
+    });
+    const resultado = await juntarPorArroba(admin as never, { organizationId: "ORG", contactId: "C1" });
+    expect(resultado).toEqual({ juntou: true, principal: "C1" });
+    expect(chamadasRpc).toContainEqual([
+      "fn_mesclar_contatos",
+      { p_organization_id: "ORG", p_contato_principal: "C1", p_contatos_secundarios: ["C3"] },
+    ]);
+  });
+
+  it("erro ao ler o handle do próprio contato: nada, avisa no logger, nunca lança", async () => {
+    const { admin } = adminFalso({ erroLeituraHandle: { message: "conexão caiu" } });
+    const resultado = await juntarPorArroba(admin as never, { organizationId: "ORG", contactId: "C1" });
+    expect(resultado).toEqual({ juntou: false });
+    expect(loggerWarnMock).toHaveBeenCalledWith(
+      "[instagram.juntar-por-arroba] ler o handle do contato falhou",
+      expect.objectContaining({ organization_id: "ORG", contact_id: "C1", detail: "conexão caiu" }),
+    );
   });
 });
 
@@ -177,7 +221,7 @@ describe("juntarDuplicadosPorArroba", () => {
     const filaIdentidades = [
       { data: [{ contact_id: "C1", handle: "Maria" }, { contact_id: "C2", handle: "maria" }, { contact_id: "C3", handle: "outro" }], error: null },
       // Chamada interna de `juntarPorArroba(C1)`: handle próprio.
-      { data: { handle: "Maria" }, error: null },
+      { data: [{ handle: "Maria" }], error: null },
       // Chamada interna de `juntarPorArroba(C1)`: candidatos por ilike.
       { data: [{ contact_id: "C2" }], error: null },
     ];

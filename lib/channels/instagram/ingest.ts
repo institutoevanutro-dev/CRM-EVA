@@ -75,56 +75,18 @@ export async function ingerirDoInstagram(
   const contato = (linhasContato as { contact_id: string; criado: boolean }[] | null)?.[0];
   if (erroContato || !contato) return { status: "falhou", motivo: `contato: ${erroContato?.message ?? "sem id"}` };
 
-  // Nome do contato: identidade nova sempre busca; sem nome, no máximo
-  // 1×/24h (não em toda mensagem — throttle em `deveBuscarPerfil`). Vale
-  // para inbound E eco: um eco pode ser a PRIMEIRA mensagem de alguém.
-  const { data: contatoParaNome } = await admin
-    .from("contacts")
-    .select("display_name, source_metadata")
-    .eq("organization_id", orgId)
-    .eq("id", contato.contact_id)
-    .maybeSingle();
-  const paraNome = contatoParaNome as { display_name: string | null; source_metadata: Record<string, unknown> } | null;
-  const nomeDoContato = nomeAtualDoContato(paraNome);
-  const tentadoEm = (paraNome?.source_metadata?.perfil_tentado_em as string | undefined) ?? null;
-  if (sessao.tokenCifrado && deveBuscarPerfil({ identidadeNova, nomeAtual: nomeDoContato, tentadoEm, agora: new Date() })) {
-    const token = await decryptWebhookSecret(admin, sessao.tokenCifrado);
-    if (token) {
-      const resultadoDoPerfil = await preencherPerfilDoContato(admin, {
-        organizationId: orgId, contactId: contato.contact_id, igsid: pessoa, token, agora: new Date(),
-      });
-      // Só vale a pena procurar duplicata quando o handle acabou de chegar
-      // (ou já existia): sem ele não há @ para comparar. `juntarPorArroba` já
-      // é best-effort por contrato (nunca lança); o try/catch aqui é cinto e
-      // suspensório — uma mensagem não pode falhar por causa de deduplicação.
-      try {
-        if (resultadoDoPerfil === "preenchido") {
-          const juntou = await juntarPorArroba(admin, { organizationId: orgId, contactId: contato.contact_id });
-          if (juntou === "juntou") {
-            // Este contato pode ter sido o ABSORVIDO (o mais novo dos dois): o
-            // resto da ingestão usa `contato.contact_id` adiante, e ele teria
-            // ficado apontando para uma lápide. Relê e segue com o principal.
-            const { data: absorvido } = await admin
-              .from("contacts")
-              .select("is_merged_into")
-              .eq("organization_id", orgId)
-              .eq("id", contato.contact_id)
-              .maybeSingle();
-            const principal = (absorvido as { is_merged_into: string | null } | null)?.is_merged_into;
-            if (principal) contato.contact_id = principal;
-          }
-        }
-      } catch (err) {
-        logger.warn("[instagram.ingest] juntarPorArroba falhou", {
-          organization_id: orgId,
-          contact_id: contato.contact_id,
-          detail: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-  }
-
   if (contato.criado && sessao.origemPadrao) {
+    // ANTES do preenchimento de perfil / junção por @, de propósito: se este
+    // contato acabou de nascer para um IGSID que é o MESMO @ de um contato já
+    // existente, `juntarPorArroba` (abaixo) vai absorvê-lo — e
+    // `fn_mesclar_contatos` não mescla `custom_fields` (só a lápide troca de
+    // dono; o `custom_fields` do secundário fica na linha tombada, nunca
+    // sobe pro principal). Escrever aqui, contra o contato NOVO, garante que
+    // a origem desta sessão nunca sobrescreve a origem que o principal já
+    // tinha (de um perfil diferente) — escrever DEPOIS da junção, contra
+    // `contato.contact_id` já trocado pro principal, foi o defeito medido
+    // (apagava a atribuição do primeiro perfil com a do segundo).
+    //
     // Lê e mescla em vez de sobrescrever: o contato acabou de nascer nesta
     // mesma chamada (`custom_fields` deveria ser `{}`), mas uma reentrega do
     // webhook ou uma edição concorrente do Inbox pode ter escrito algo entre a
@@ -150,6 +112,48 @@ export async function ingerirDoInstagram(
         contact_id: contato.contact_id,
         detail: erroOrigem.message,
       });
+    }
+  }
+
+  // Nome do contato: identidade nova sempre busca; sem nome, no máximo
+  // 1×/24h (não em toda mensagem — throttle em `deveBuscarPerfil`). Vale
+  // para inbound E eco: um eco pode ser a PRIMEIRA mensagem de alguém.
+  const { data: contatoParaNome } = await admin
+    .from("contacts")
+    .select("display_name, source_metadata")
+    .eq("organization_id", orgId)
+    .eq("id", contato.contact_id)
+    .maybeSingle();
+  const paraNome = contatoParaNome as { display_name: string | null; source_metadata: Record<string, unknown> } | null;
+  const nomeDoContato = nomeAtualDoContato(paraNome);
+  const tentadoEm = (paraNome?.source_metadata?.perfil_tentado_em as string | undefined) ?? null;
+  if (sessao.tokenCifrado && deveBuscarPerfil({ identidadeNova, nomeAtual: nomeDoContato, tentadoEm, agora: new Date() })) {
+    const token = await decryptWebhookSecret(admin, sessao.tokenCifrado);
+    if (token) {
+      const resultadoDoPerfil = await preencherPerfilDoContato(admin, {
+        organizationId: orgId, contactId: contato.contact_id, igsid: pessoa, token, agora: new Date(),
+      });
+      // Só vale a pena procurar duplicata quando o handle acabou de chegar
+      // (ou já existia): sem ele não há @ para comparar. `juntarPorArroba` já
+      // é best-effort por contrato (nunca lança); o try/catch aqui é cinto e
+      // suspensório — uma mensagem não pode falhar por causa de deduplicação.
+      try {
+        if (resultadoDoPerfil === "preenchido") {
+          const resultadoDaJuncao = await juntarPorArroba(admin, { organizationId: orgId, contactId: contato.contact_id });
+          // Este contato pode ter sido o ABSORVIDO (o mais novo dos dois): o
+          // resto da ingestão usa `contato.contact_id` adiante, e ele teria
+          // ficado apontando para uma lápide. `juntarPorArroba` já devolve o
+          // principal — sem reler `is_merged_into` (e sem o caminho silencioso
+          // de uma releitura que falha).
+          if (resultadoDaJuncao.juntou) contato.contact_id = resultadoDaJuncao.principal;
+        }
+      } catch (err) {
+        logger.warn("[instagram.ingest] juntarPorArroba falhou", {
+          organization_id: orgId,
+          contact_id: contato.contact_id,
+          detail: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 
