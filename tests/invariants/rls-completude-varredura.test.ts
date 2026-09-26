@@ -75,6 +75,7 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  { tabela: "prontuario_contact_links", razao: "tests/invariants/prontuario-contact-links.test.ts — membro A vê o vínculo A, não vê B e não possui escrita direta" },
   { tabela: "calendar_units", razao: "tests/invariants/agenda-recursos-e-duracao.test.ts — prestador autenticado lê unidade própria e não lê a unidade da organização vizinha" },
   { tabela: "calendar_rooms", razao: "tests/invariants/agenda-recursos-e-duracao.test.ts — prestador autenticado lê sala própria e não lê a sala da organização vizinha" },
   { tabela: "channel_routing_policies", razao: "tests/invariants/channel-routing.test.ts — dois tenants reais, leitura positiva local e negativa cruzada por JWT; FK composta rejeita canal de outra org" },

@@ -42,6 +42,8 @@ import { useT } from "@/hooks/i18n/useT";
  * escondia.
  */
 const SCOPES: { id: string; label: string }[] = [
+  { id: "prontuario:contacts:read", label: "Prontuário EVA: pesquisar cadastro de contatos" },
+  { id: "prontuario:contacts:write", label: "Prontuário EVA: criar e atualizar cadastro de contatos" },
   { id: "agenda:read", label: "Prontuário: ler compromissos da agenda" },
   { id: "agenda:reschedule", label: "Prontuário: remarcar compromissos da agenda" },
   { id: "role:ai_operator", label: "Operador de agenda (necessário para remarcar)" },

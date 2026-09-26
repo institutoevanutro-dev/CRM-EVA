@@ -626,6 +626,9 @@ export const AUDIT_ACTIONS = [
   // da regra casada. É o "laço de retorno" que a spec §9 promete: sem esta
   // trilha não dá pra medir quanto o classificador erra.
   "comment.waiting_human",
+  "prontuario.contact_linked",
+  "prontuario.contact_created",
+  "prontuario.contact_updated",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
