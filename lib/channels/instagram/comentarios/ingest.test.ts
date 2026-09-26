@@ -57,4 +57,10 @@ describe("ingerirComentario", () => {
     const r = await ingerirComentario(admin as never, comentario, sessao);
     expect(r).toMatchObject({ status: "ignorado", motivo: "ja_recebido" });
   });
+
+  it("erro de insert que não é 23505 é falha de infraestrutura, não descarte", async () => {
+    const { admin } = adminFalso({ erroDoInsert: { code: "08006", message: "connection failure" } });
+    const r = await ingerirComentario(admin as never, comentario, sessao);
+    expect(r).toMatchObject({ status: "falhou_infra", motivo: "connection failure" });
+  });
 });

@@ -92,10 +92,12 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
   }
 
-  // Mesmo tratamento de falha do laço de mensagens acima: erro de infraestrutura
-  // (consulta da sessão, exceção) marca o lote para 500; falha determinística do
-  // próprio insert só loga e segue. Nada de responder o comentário aqui — quem
-  // decide responder é o worker (Task 7).
+  // Mesmo tratamento de falha do laço de mensagens acima, com uma diferença
+  // deliberada: `falhou_infra` (erro do insert que não é 23505 — timeout/queda
+  // do Postgres) marca `falhaDeInfraestrutura` como uma exceção marcaria, para
+  // a Meta reentregar (o índice único torna a reentrega inócua). Perder o
+  // comentário para sempre é pior que uma reentrega. Nada de responder o
+  // comentário aqui — quem decide responder é o worker (Task 7).
   for (const comentario of parseComentariosDoInstagram(corpo)) {
     try {
       const resultado = await sessaoDoInstagramPorConta(admin, comentario.igAccountId);
@@ -110,8 +112,9 @@ export async function POST(req: NextRequest): Promise<Response> {
       }
       const sessao = resultado.sessao;
       const r = await ingerirComentario(admin, comentario, sessao);
-      if (r.status === "falhou") {
-        logger.error("[instagram.webhook] ingestão de comentário falhou", { motivo: r.motivo, organizationId: sessao.organizationId });
+      if (r.status === "falhou_infra") {
+        falhaDeInfraestrutura = true;
+        logger.error("[instagram.webhook] ingestão de comentário falhou (infra)", { motivo: r.motivo, organizationId: sessao.organizationId });
       }
     } catch (err) {
       falhaDeInfraestrutura = true;
