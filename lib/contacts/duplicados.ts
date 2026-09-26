@@ -29,6 +29,7 @@
  * renomeia lead/deal/won/lost. Nada aqui conhece "Paciente", "Cliente" ou etapa.
  */
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 
 /** Por que estes dois registros caíram no mesmo grupo. */
 export type MotivoDeDuplicidade =
@@ -181,13 +182,13 @@ export function encontrarContatosDuplicados(
   const porNome = new Map<string, string[]>();
   for (const contato of vivos) {
     if (contato.phone_number === null || contato.phone_number === "") continue;
-    const nome = chaveDeNome(contato.display_name ?? contato.name);
+    const nome = chaveDeNome(nomeDoContato(contato));
     if (!nome) continue;
     porNome.set(nome, [...(porNome.get(nome) ?? []), contato.id]);
   }
   for (const contato of vivos) {
     if (!contato.do_instagram || contato.phone_number) continue;
-    const nome = chaveDeNome(contato.display_name ?? contato.name);
+    const nome = chaveDeNome(nomeDoContato(contato));
     if (!nome) continue;
     for (const outroId of porNome.get(nome) ?? []) {
       unir(contato.id, outroId, "mesmo_nome_instagram_whatsapp");
