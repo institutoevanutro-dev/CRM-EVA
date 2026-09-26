@@ -2,6 +2,10 @@ import { beforeEach, expect, it, vi } from "vitest";
 import type { RegraDeComentario } from "./regra";
 
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
+const loggerErrorMock = vi.fn();
+vi.mock("@/lib/logger", () => ({
+  logger: { error: (...a: unknown[]) => loggerErrorMock(...a), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
 
 const { aplicarRegra } = await import("./acao");
 type Fake = Parameters<typeof aplicarRegra>[0] & {
@@ -38,6 +42,7 @@ function linha() {
 
 beforeEach(() => {
   ultimaLinha = undefined;
+  loggerErrorMock.mockClear();
   fake = {
     jaMandouPrivadoPara: null,
     erroDaPrivada: undefined,
@@ -107,11 +112,48 @@ it("C1 — pública falha: grava o desfecho mesmo assim (o id da privada não se
   expect(d1.ordem).toEqual(["privada"]);
   // O desfecho foi gravado apesar da pública ter lançado — não fica em "novo".
   expect(linha().private_reply_message_id).toBe("MID-1");
-  expect(linha().situacao).toBe("esperando_voce");
+  // N3 (reversão): a privada saiu, e falha SÓ da pública não vai pra fila
+  // humana — o motivo é gravado, a situação não muda.
+  expect(linha().situacao).toBe("respondido_pela_regra");
+  expect(linha().motivo_do_toque).toContain("429");
 
   const d2 = await aplicarRegra(fake, comentario, regra, new Date("2026-09-27T12:05:00Z"));
   expect(d2.ordem).toEqual([]);
   expect(chamadasPrivada).toBe(1);
+});
+
+// ─── N1: o checkpoint dentro do try da privada confundia erro de banco ─────
+it("N1 — privada e pública OK, mas o checkpoint intermediário lança (erro de banco): NÃO vira 'a privada falhou'", async () => {
+  let chamadasGravar = 0;
+  fake.gravarDesfecho = async (_id: string, patch: Record<string, unknown>) => {
+    chamadasGravar++;
+    if (chamadasGravar === 1) throw new Error("erro de banco: connection reset");
+    ultimaLinha = patch;
+  };
+
+  const d = await aplicarRegra(fake, comentario, regra, new Date("2026-09-27T12:00:00Z"));
+  expect(d.ordem).toEqual(["privada", "publica"]);
+  // A gravação final (segunda chamada) prova que privada e pública saíram —
+  // o erro de banco na primeira NUNCA vira "esperando_voce" nem aparece como
+  // motivo.
+  expect(linha().situacao).toBe("respondido_pela_regra");
+  expect(linha().motivo_do_toque).toBeNull();
+  expect(chamadasGravar).toBe(2);
+});
+
+// ─── N2: se toda gravação falha, a exceção não pode escapar ────────────────
+it("N2 — checkpoint E gravação final falham: aplicarRegra não lança, e o log guarda o rastro da privada", async () => {
+  fake.gravarDesfecho = async () => {
+    throw new Error("erro de banco: timeout");
+  };
+
+  const d = await aplicarRegra(fake, comentario, regra, new Date("2026-09-27T12:00:00Z"));
+  expect(d.ordem).toEqual(["privada", "publica"]);
+  expect(loggerErrorMock).toHaveBeenCalled();
+  const chamadaComRastro = loggerErrorMock.mock.calls.find(
+    (args) => (args[1] as Record<string, unknown> | undefined)?.privateReplyMessageId === "MID-1",
+  );
+  expect(chamadaComRastro).toBeDefined();
 });
 
 // ─── C3: nada reivindicava a linha antes de enviar ──────────────────────────

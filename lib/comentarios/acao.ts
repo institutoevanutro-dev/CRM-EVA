@@ -14,14 +14,35 @@
  * - a pública desprotegida fazia `gravarDesfecho` nunca rodar quando ela
  *   lançava, e a linha ficava presa em `situacao='novo'` — o filtro que o
  *   worker usa para escolher o que processar. Agora ela tem seu próprio
- *   try/catch, e o desfecho é gravado num `finally`.
+ *   try/catch.
  * - a trava contra reenvio virou MÉTODO (`jaMandouPrivado`), não campo de
  *   dado: um método força a pergunta a ser feita por comentário, com os dois
  *   filtros (mídia + autor) na própria assinatura.
  * - nada reivindicava a linha antes de mandar — `reivindicar` faz isso agora,
  *   e é a PRIMEIRA coisa que acontece, antes de qualquer chamada de rede.
+ *
+ * Round 3 (re-revisão do conserto acima): o próprio conserto abriu dois
+ * problemas de GRAVAÇÃO, e uma reversão de decisão:
+ * - o checkpoint gravado logo após a privada bem-sucedida (C1) morava DENTRO
+ *   do `try` que protege `enviarPrivada` — um erro de banco ali era lido como
+ *   "a privada falhou", e a linha ia para `esperando_voce` com o Direct JÁ
+ *   entregue. Ele agora tem seu próprio `try/catch`, isolado, que NUNCA toca
+ *   `situacao`/`motivoDoToque`: falhar em gravar não é a mesma coisa que
+ *   falhar em mandar.
+ * - a gravação FINAL também ganhou seu próprio `try/catch` (não um `finally`
+ *   desprotegido): se ela falhar, a exceção não escapa mais — só loga, com o
+ *   `private_reply_message_id` quando houver, porque esse é o único rastro de
+ *   que o tiro único já saiu. A linha fica em `processando` (o estado que
+ *   `reivindicar` já deixou) DE PROPÓSITO: o aviso anti-morte da Tarefa 7 vai
+ *   cobrir `processando` além de `novo`, então ela não some em silêncio.
+ * - falha SÓ da pública NÃO vai mais para `esperando_voce` (reversão de
+ *   decisão): a privada, que é o recurso caro, já foi entregue (ou nem era o
+ *   caso — a janela vencida/recusa da Meta continuam indo pra fila humana,
+ *   isso não mudou); a pública é cosmética, e um 429 não tem o que um humano
+ *   faça. O motivo ainda é gravado na linha, só não muda a situação.
  */
 import { audit } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import type { RegraDeComentario } from "./regra";
 
 /** Janela da Meta para a resposta PRIVADA — depois disso, `messages` recusa. */
@@ -127,16 +148,32 @@ export async function aplicarRegra(
       const r = await admin.enviarPrivada({ commentId: comentario.commentId, texto: regra.textoDoDirect });
       privateReplyMessageId = r.messageId;
       ordem.push("privada");
-      // C1: grava JÁ o id da privada — antes de qualquer outra chamada de
-      // rede (a pública) — para o "já mandei" não se perder se o processo
-      // cair logo depois. A gravação final (abaixo, no finally) confirma.
-      await admin.gravarDesfecho(comentario.id, {
-        situacao,
-        regra_id: regra.id,
-        resposta_publica_id: null,
-        private_reply_message_id: privateReplyMessageId,
-        motivo_do_toque: motivoDoToque,
-      });
+    } catch (err) {
+      // Falha da privada NÃO impede a pública — só pede o toque de alguém.
+      situacao = "esperando_voce";
+      motivoDoToque = err instanceof Error ? err.message : String(err);
+    }
+
+    if (ordem.includes("privada")) {
+      // N1: checkpoint ISOLADO do try acima. A privada JÁ SAIU — um erro
+      // aqui é problema de GRAVAÇÃO, nunca "a privada falhou", e por isso
+      // este catch nunca toca `situacao`/`motivoDoToque`. Fire-and-forget de
+      // propósito: a gravação final (mais abaixo) tenta de novo.
+      try {
+        await admin.gravarDesfecho(comentario.id, {
+          situacao,
+          regra_id: regra.id,
+          resposta_publica_id: null,
+          private_reply_message_id: privateReplyMessageId,
+          motivo_do_toque: motivoDoToque,
+        });
+      } catch (checkpointErr) {
+        logger.error("[comentarios.acao] checkpoint da privada falhou (a privada já saiu; isto é só a gravação intermediária)", {
+          comentarioId: comentario.id,
+          privateReplyMessageId,
+          erro: checkpointErr instanceof Error ? checkpointErr.message : String(checkpointErr),
+        });
+      }
       await audit({
         action: "comment.private_reply_sent",
         organizationId: comentario.organizationId,
@@ -144,10 +181,6 @@ export async function aplicarRegra(
         resourceId: comentario.id,
         metadata: { regraId: regra.id },
       });
-    } catch (err) {
-      // Falha da privada NÃO impede a pública — só pede o toque de alguém.
-      situacao = "esperando_voce";
-      motivoDoToque = err instanceof Error ? err.message : String(err);
     }
   }
 
@@ -166,19 +199,35 @@ export async function aplicarRegra(
       metadata: { regraId: regra.id },
     });
   } catch (err) {
-    // Não pisa num motivo que a privada já deu; só assume quando ninguém
-    // ainda tinha explicado por que a pessoa ficou sem resposta.
+    // N3 (reversão): falha SÓ da pública NÃO vai pra fila humana — a privada
+    // (o recurso caro) já foi entregue, ou nem era o caso (janela vencida e
+    // recusa da Meta continuam esperando_voce, isso não muda aqui). A
+    // pública é cosmética; um 429 nela não tem o que um humano faça. Só
+    // registra o motivo, sem tocar em `situacao`.
     if (!motivoDoToque) {
-      situacao = "esperando_voce";
       motivoDoToque = err instanceof Error ? err.message : String(err);
     }
-  } finally {
+  }
+
+  try {
     await admin.gravarDesfecho(comentario.id, {
       situacao,
       regra_id: regra.id,
       resposta_publica_id: respostaPublicaId,
       private_reply_message_id: privateReplyMessageId,
       motivo_do_toque: motivoDoToque,
+    });
+  } catch (gravarErr) {
+    // N2: se a gravação final também falhar, NÃO relançamos. A linha fica em
+    // "processando" (o estado que `reivindicar` já deixou) DE PROPÓSITO —
+    // perder o desfecho aqui não pode também perder o rastro de que a
+    // privada saiu. O aviso anti-morte da Tarefa 7 cobre "processando" além
+    // de "novo", então esta linha não some em silêncio: fica visível para
+    // revisão manual (nunca para reenviar a privada sem checar antes).
+    logger.error("[comentarios.acao] gravação final do desfecho falhou — linha fica em processando de propósito", {
+      comentarioId: comentario.id,
+      privateReplyMessageId,
+      erro: gravarErr instanceof Error ? gravarErr.message : String(gravarErr),
     });
   }
 
