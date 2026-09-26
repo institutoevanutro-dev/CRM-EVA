@@ -10,8 +10,15 @@ const inseguros: [string, string][] = [
   ["você é nutrólogo?", "especialidade"], ["qual sua especialidade?", "especialidade"],
 ];
 
-it.each(inseguros)("%s precisa de você (%s)", (texto) => {
-  expect(ehObviamenteSeguro(texto).seguro).toBe(false);
+it.each(inseguros)("%s precisa de você (%s)", (texto, categoria) => {
+  expect(ehObviamenteSeguro(texto)).toEqual({ seguro: false, gatilho: categoria });
+});
+
+// Prova de mutação (mantida): elogio na frente não muda o veredito — mata o
+// mutante que fazia "obviamente seguro" casar SUBSTRING em vez do texto
+// inteiro. Sem o ancoramento ao texto todo, "amei, quanto custa?" passaria.
+it.each(inseguros)('"amei, %s" continua inseguro (elogio não desarma o gatilho)', (texto) => {
+  expect(ehObviamenteSeguro(`amei, ${texto}`).seguro).toBe(false);
 });
 
 const seguros = ["top!", "amei 😍", "🔥🔥🔥", "parabéns doutor", "que vídeo bom"];
@@ -30,4 +37,44 @@ it("texto vazio ou nulo não é publicável", () => {
 
 it("elogio com pergunta retórica continua inseguro (a régua é conservadora)", () => {
   expect(ehObviamenteSeguro("amei! onde compro?").seguro).toBe(false);
+});
+
+// ── casos que a revisão pegou na ronda 1 (não podem voltar a passar) ────────
+const naoPodemVoltarAPassar = [
+  "top! estou amamentando, posso usar a caneta",
+  "amei, sou diabético tipo 1, posso aplicar",
+  "show! tomo losartana, tem interação",
+  "amei! onde compro",
+  "top, quais os preços",
+  "top, cuánto cuesta",
+  "parabéns, o senhor trata obesidade infantil",
+];
+
+it.each(naoPodemVoltarAPassar)("%s não pode ser publicado sozinho", (texto) => {
+  expect(ehObviamenteSeguro(texto).seguro).toBe(false);
+});
+
+// ── espanhol: vocabulário inequívoco também precisa de humano ───────────────
+const inegurosEmEspanhol: [string, string][] = [
+  ["cuánto cuesta?", "preço"],
+  ["cual es el precio?", "preço"],
+  ["puedo tomar ozempic?", "medicação"],
+  ["eres nutriologo?", "especialidade"],
+  ["tienes cita manana?", "agendamento"],
+];
+
+it.each(inegurosEmEspanhol)("%s precisa de você em espanhol (%s)", (texto, categoria) => {
+  expect(ehObviamenteSeguro(texto)).toEqual({ seguro: false, gatilho: categoria });
+});
+
+// ── texto longo não é "obviamente seguro", mesmo sem gatilho nenhum ─────────
+it("texto longo demais não é obviamente seguro", () => {
+  const longo = "muito obrigada por tudo, vocês são demais, equipe incrível, adorei o atendimento";
+  expect(longo.length).toBeGreaterThan(60);
+  expect(ehObviamenteSeguro(longo).seguro).toBe(false);
+});
+
+// ── emoji com variation selector e ZWJ também é "só emoji" ──────────────────
+it.each(["❤️", "👨🏽‍⚕️"])("%s (emoji com modificador) é obviamente seguro", (texto) => {
+  expect(ehObviamenteSeguro(texto)).toEqual({ seguro: true });
 });
