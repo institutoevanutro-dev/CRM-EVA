@@ -63,6 +63,7 @@ function makeDb(
     followup_enrollments: enrollments,
     ai_agents: agents,
     ai_agent_versions: agentVersions,
+    conversations: [],
   };
 
   function builder(table: string) {
@@ -161,7 +162,8 @@ function makeDb(
     return b;
   }
 
-  return { from: (table: string) => builder(table), rpc: async () => ({ data: { organization_id: ORG_ID, contact_id: CONTACT_ID, conversation_id: "conv-1", service_revision: 1, demanda_id: null, demanda_revision: null, status: "open", demanda_fechada_em: null }, error: null }) };
+  const rpc = vi.fn(async () => ({ data: { organization_id: ORG_ID, contact_id: CONTACT_ID, conversation_id: "conv-1", service_revision: 1, demanda_id: null, demanda_revision: null, status: "open", demanda_fechada_em: null }, error: null }));
+  return { from: (table: string) => builder(table), rpc, tables };
 }
 
 function session(effectiveRole: Role, db: ReturnType<typeof makeDb>) {
@@ -288,6 +290,27 @@ describe("POST /api/v1/ai/followups/enrollments", () => {
     expect(body.data.next_eval_at).toBeTruthy();
     expect(vi.mocked(audit)).toHaveBeenCalledWith(
       expect.objectContaining({ action: "followup_enrollment.created" }),
+    );
+  });
+
+  it("contato com conversa de WhatsApp → p_session repassado ao fn_service_begin", async () => {
+    const db = makeDb([activePointer()], [version()], [contact()]);
+    db.tables.conversations!.push({
+      organization_id: ORG_ID,
+      contact_id: CONTACT_ID,
+      channel: "whatsapp",
+      channel_session_id: "wa-session-1",
+      is_group: false,
+      last_message_at: "2026-09-20T00:00:00Z",
+      created_at: "2026-09-01T00:00:00Z",
+    });
+    session("manager", db);
+    const { POST } = await import("@/app/api/v1/ai/followups/enrollments/route");
+    const res = await POST(req("POST", { pointer_id: POINTER_ID, contact_id: CONTACT_ID }));
+    expect(res.status).toBe(201);
+    expect(db.rpc).toHaveBeenCalledWith(
+      "fn_service_begin",
+      expect.objectContaining({ p_session: "wa-session-1" }),
     );
   });
 
