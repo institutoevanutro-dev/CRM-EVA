@@ -7,6 +7,7 @@ import { assertDestinoResolvidoSeguro } from "@/lib/automation/outbound-ip";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { MAX_MEDIA_BYTES, MediaTooLargeError, type FetchedMedia } from "@/lib/messaging/media/types";
+import { logger } from "@/lib/logger";
 
 import { capabilitiesOf, CHANNEL_PROVIDER_INSTAGRAM } from "../capabilities";
 import { baseDoInstagram } from "../instagram/graph";
@@ -175,7 +176,15 @@ export const instagramAdapter: ChannelAdapter = {
    */
   async respostasAnterioresDoDono(input) {
     const token = await resolveInstagramToken(input);
-    if (!token) return [];
+    if (!token) {
+      // Config ausente, não "sem histórico" — distinto de propósito (I-5 da
+      // revisão da Tarefa 7): sem isto, os dois casos eram o MESMO `[]` e o
+      // log não dizia qual dos dois aconteceu.
+      logger.warn("[instagram] sem credencial para buscar respostas anteriores do dono", {
+        sessionRef: input.sessionRef,
+      });
+      return [];
+    }
     const limite = input.limite ?? 25;
     const res = await fetch(
       `${baseDoInstagram()}/${graphVersion()}/${encodeURIComponent(input.sessionRef)}/media` +
@@ -186,7 +195,18 @@ export const instagramAdapter: ChannelAdapter = {
       data?: Array<{ comments?: { data?: Array<{ replies?: { data?: Array<{ text?: string; from?: { id?: string } }> } }> } }>;
       error?: { code?: number; message?: string };
     };
-    if (!res.ok || body.error) return [];
+    if (!res.ok || body.error) {
+      // A GRAPH RECUSOU (429, 401, 5xx…) — não é "o dono nunca respondeu
+      // nada", é "não deu para perguntar". Quem lê o log precisa distinguir
+      // as duas, porque a primeira é a feature funcionando (perfil ainda não
+      // existe) e a segunda é uma configuração ou uma cota para investigar.
+      logger.warn("[instagram] a Graph recusou a consulta de respostas anteriores do dono", {
+        sessionRef: input.sessionRef,
+        status: res.status,
+        erro: body.error?.message ?? null,
+      });
+      return [];
+    }
 
     const frases: string[] = [];
     for (const media of body.data ?? []) {

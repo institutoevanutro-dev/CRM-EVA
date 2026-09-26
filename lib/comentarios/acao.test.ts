@@ -154,6 +154,34 @@ it("N2 — checkpoint E gravação final falham: aplicarRegra não lança, e o l
     (args) => (args[1] as Record<string, unknown> | undefined)?.privateReplyMessageId === "MID-1",
   );
   expect(chamadaComRastro).toBeDefined();
+  // I-4: a gravação final falhou — quem chama não pode contar isto como
+  // "atendido" (a linha ficou 'novo', sem o desfecho persistido).
+  expect(d.gravado).toBe(false);
+});
+
+// ─── I-4: gravação final BEM-SUCEDIDA marca gravado=true ───────────────────
+it("I-4 — gravação final OK: Desfecho.gravado é true", async () => {
+  const d = await aplicarRegra(fake, comentario, regra, new Date("2026-09-27T12:00:00Z"));
+  expect(d.gravado).toBe(true);
+});
+
+// ─── I-8: organizationId chega às três chamadas que hoje filtram por ele ───
+it("I-8 — organizationId do comentário chega a jaMandouPrivado/enviarPrivada/enviarPublica", async () => {
+  const orgsRecebidos: (string | undefined)[] = [];
+  fake.jaMandouPrivado = async (input: { organizationId: string; mediaId: string; autorIgsid: string }) => {
+    orgsRecebidos.push(input.organizationId);
+    return false;
+  };
+  fake.enviarPrivada = async (input: { organizationId: string; commentId: string; texto: string }) => {
+    orgsRecebidos.push(input.organizationId);
+    return { messageId: "MID-1" };
+  };
+  fake.enviarPublica = async (input: { organizationId: string; commentId: string; texto: string }) => {
+    orgsRecebidos.push(input.organizationId);
+    return { replyId: "REPLY-1" };
+  };
+  await aplicarRegra(fake, comentario, regra, new Date("2026-09-27T12:00:00Z"));
+  expect(orgsRecebidos).toEqual(["org", "org", "org"]);
 });
 
 // ─── C3: nada reivindicava a linha antes de enviar ──────────────────────────

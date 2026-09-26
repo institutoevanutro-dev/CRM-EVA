@@ -15,6 +15,10 @@ vi.mock("@/lib/supabase/admin", () => {
 vi.mock("@/lib/webhooks/secrets", () => ({
   decryptWebhookSecret: async () => "TOKEN-EM-CLARO",
 }));
+const loggerWarnMock = vi.fn();
+vi.mock("@/lib/logger", () => ({
+  logger: { warn: (...a: unknown[]) => loggerWarnMock(...a), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
 
 const { instagramAdapter } = await import("./instagram");
 
@@ -75,5 +79,27 @@ describe("instagramAdapter — respostas a comentário", () => {
     await expect(
       instagramAdapter.respostasAnterioresDoDono!({ organizationId: "org", sessionRef: "IG-1" }),
     ).resolves.toEqual([]);
+  });
+
+  // ─── I-5: "sem histórico" (estado normal) e "a Graph recusou" (config/rede) ─
+  // são coisas DIFERENTES — a primeira versão devolvia `[]` para as duas sem
+  // logar nada, e quem lê o log não tinha como saber qual das duas aconteceu.
+  it("respostasAnterioresDoDono LOGA quando a Graph recusa (I-5, distinção)", async () => {
+    loggerWarnMock.mockClear();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      { ok: false, status: 429, json: async () => ({ error: { message: "rate limit" } }) } as unknown as Response);
+    await instagramAdapter.respostasAnterioresDoDono!({ organizationId: "org", sessionRef: "IG-1" });
+    expect(loggerWarnMock).toHaveBeenCalled();
+    const [, meta] = loggerWarnMock.mock.calls[0]!;
+    expect((meta as Record<string, unknown>).status).toBe(429);
+  });
+
+  it("respostasAnterioresDoDono NÃO loga quando a Graph responde OK e não há histórico ainda (I-5, distinção)", async () => {
+    loggerWarnMock.mockClear();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      { ok: true, status: 200, json: async () => ({ data: [] }) } as unknown as Response);
+    const frases = await instagramAdapter.respostasAnterioresDoDono!({ organizationId: "org", sessionRef: "IG-1" });
+    expect(frases).toEqual([]);
+    expect(loggerWarnMock).not.toHaveBeenCalled();
   });
 });

@@ -32,14 +32,42 @@
  * - a gravação FINAL também ganhou seu próprio `try/catch` (não um `finally`
  *   desprotegido): se ela falhar, a exceção não escapa mais — só loga, com o
  *   `private_reply_message_id` quando houver, porque esse é o único rastro de
- *   que o tiro único já saiu. A linha fica em `processando` (o estado que
- *   `reivindicar` já deixou) DE PROPÓSITO: o aviso anti-morte da Tarefa 7 vai
- *   cobrir `processando` além de `novo`, então ela não some em silêncio.
+ *   que o tiro único já saiu.
+ *
+ *   ⚠️ CORREÇÃO (revisão da Tarefa 7, I-3): esta seção dizia que a linha
+ *   ficava em `processando` "o estado que `reivindicar` já deixou" — **isso
+ *   nunca existiu**. `reivindicar` (Tarefa 7, `workers/comentarios-worker.ts`)
+ *   NÃO muda `situacao`: ele só grava `reivindicado_em` (lease de 10 min) e a
+ *   linha continua `situacao='novo'`. Se a gravação final falhar aqui, a
+ *   linha fica `novo` com o lease vencendo — e SEM o worker saber disso, uma
+ *   rodada seguinte reivindicaria a linha de novo e **remandaria a privada**,
+ *   porque `jaMandouPrivado` só enxerga `private_reply_message_id`, que é
+ *   exatamente o que não foi gravado. Quem fecha esse buraco é o CHAMADOR
+ *   (o worker), não este arquivo: antes de reivindicar de novo, ele confere se
+ *   a linha já tinha `reivindicado_em` de uma tentativa anterior — se o lease
+ *   dela já venceu, ele NÃO tenta de novo sozinho; manda para `esperando_voce`
+ *   para revisão humana, porque só um humano pode conferir se o Direct já
+ *   saiu de fato. Ver `ComentarioNovo.reivindicadoEm` e o guard no topo do
+ *   laço de `processarComentariosNovos`.
  * - falha SÓ da pública NÃO vai mais para `esperando_voce` (reversão de
  *   decisão): a privada, que é o recurso caro, já foi entregue (ou nem era o
  *   caso — a janela vencida/recusa da Meta continuam indo pra fila humana,
  *   isso não mudou); a pública é cosmética, e um 429 não tem o que um humano
  *   faça. O motivo ainda é gravado na linha, só não muda a situação.
+ *
+ * Round 4 (revisão da Tarefa 7, I-4 + I-8):
+ * - `Desfecho` ganhou `gravado: boolean` — `false` quando a gravação FINAL (a
+ *   dali para baixo) falhou. O worker só conta o comentário como "atendido"
+ *   quando `gravado` é `true`; caso contrário a linha ficou sem o desfecho
+ *   persistido e não pode ser contada como se tivesse sido — é exatamente o
+ *   estado que o parágrafo acima descreve, e que o guard do worker intercepta
+ *   na rodada seguinte.
+ * - `jaMandouPrivado`/`enviarPrivada`/`enviarPublica` ganharam `organizationId`
+ *   na entrada. Não é usado para decidir nada aqui (a decisão continua sendo
+ *   só deste arquivo) — é repassado para quem monta `admin` de verdade poder
+ *   filtrar a query por organização, em vez de confiar só no `commentId`/
+ *   `mediaId`, que sozinhos não provam de quem é a linha (o índice único real
+ *   é `organization_id, external_id` — `external_id` sozinho não é chave).
  */
 import { audit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
@@ -90,9 +118,9 @@ export interface AdminDaAcao {
    * mídia, ou só olhando `private_reply_message_id` — que perde a resposta
    * cuja Meta não devolveu id).
    */
-  jaMandouPrivado(input: { mediaId: string; autorIgsid: string }): Promise<boolean>;
-  enviarPrivada(input: { commentId: string; texto: string }): Promise<{ messageId: string | null }>;
-  enviarPublica(input: { commentId: string; texto: string }): Promise<{ replyId: string | null }>;
+  jaMandouPrivado(input: { organizationId: string; mediaId: string; autorIgsid: string }): Promise<boolean>;
+  enviarPrivada(input: { organizationId: string; commentId: string; texto: string }): Promise<{ messageId: string | null }>;
+  enviarPublica(input: { organizationId: string; commentId: string; texto: string }): Promise<{ replyId: string | null }>;
   gravarDesfecho(comentarioId: string, patch: {
     situacao: "respondido_pela_regra" | "esperando_voce";
     regra_id: string;
@@ -108,6 +136,15 @@ export interface Desfecho {
   reivindicado: boolean;
   situacao: "respondido_pela_regra" | "esperando_voce" | null;
   motivoDoToque: string | null;
+  /**
+   * `false` = a gravação FINAL do desfecho falhou — a linha ficou sem o que
+   * está aqui persistido (fica `situacao='novo'`, só com o lease). Quem chama
+   * NÃO deve contar isto como "atendido": a rede pode ter mandado a mensagem,
+   * mas o banco não confirma, e recontar sem essa distinção é a raiz do I-4.
+   * `true` por padrão (inclusive quando `reivindicado` é `false` — não há o
+   * que gravar, então não há o que ter falhado).
+   */
+  gravado: boolean;
 }
 
 export async function aplicarRegra(
@@ -119,7 +156,7 @@ export async function aplicarRegra(
   // C3: reivindica ANTES de qualquer chamada de rede. Perder a corrida é
   // desfecho normal (outra rodada já está cuidando), não erro.
   if (!(await admin.reivindicar(comentario.id))) {
-    return { ordem: [], reivindicado: false, situacao: null, motivoDoToque: null };
+    return { ordem: [], reivindicado: false, situacao: null, motivoDoToque: null, gravado: true };
   }
 
   const ordem: Array<"privada" | "publica"> = [];
@@ -139,13 +176,23 @@ export async function aplicarRegra(
     situacao = "esperando_voce";
     motivoDoToque =
       "Passaram mais de 7 dias desde o comentário: a Meta não aceita mais a resposta privada. Só a pública saiu.";
-  } else if (await admin.jaMandouPrivado({ mediaId: comentario.mediaId, autorIgsid: comentario.autorIgsid })) {
+  } else if (
+    await admin.jaMandouPrivado({
+      organizationId: comentario.organizationId,
+      mediaId: comentario.mediaId,
+      autorIgsid: comentario.autorIgsid,
+    })
+  ) {
     // Uma privada por pessoa/vídeo — esta pessoa já recebeu. Skip silencioso:
     // não é falha de ninguém, é a regra funcionando; a pessoa já tem o que
     // foi prometido, então a situação segue "respondido_pela_regra".
   } else {
     try {
-      const r = await admin.enviarPrivada({ commentId: comentario.commentId, texto: regra.textoDoDirect });
+      const r = await admin.enviarPrivada({
+        organizationId: comentario.organizationId,
+        commentId: comentario.commentId,
+        texto: regra.textoDoDirect,
+      });
       privateReplyMessageId = r.messageId;
       ordem.push("privada");
     } catch (err) {
@@ -188,7 +235,11 @@ export async function aplicarRegra(
   // deixar o desfecho sem gravar (a linha presa em "novo" era o defeito: o
   // worker relia nesse filtro e regastava a privada a cada rodada).
   try {
-    const publica = await admin.enviarPublica({ commentId: comentario.commentId, texto: regra.frasePublica });
+    const publica = await admin.enviarPublica({
+      organizationId: comentario.organizationId,
+      commentId: comentario.commentId,
+      texto: regra.frasePublica,
+    });
     respostaPublicaId = publica.replyId;
     ordem.push("publica");
     await audit({
@@ -209,6 +260,7 @@ export async function aplicarRegra(
     }
   }
 
+  let gravado = true;
   try {
     await admin.gravarDesfecho(comentario.id, {
       situacao,
@@ -218,18 +270,25 @@ export async function aplicarRegra(
       motivo_do_toque: motivoDoToque,
     });
   } catch (gravarErr) {
-    // N2: se a gravação final também falhar, NÃO relançamos. A linha fica em
-    // "processando" (o estado que `reivindicar` já deixou) DE PROPÓSITO —
-    // perder o desfecho aqui não pode também perder o rastro de que a
-    // privada saiu. O aviso anti-morte da Tarefa 7 cobre "processando" além
-    // de "novo", então esta linha não some em silêncio: fica visível para
-    // revisão manual (nunca para reenviar a privada sem checar antes).
-    logger.error("[comentarios.acao] gravação final do desfecho falhou — linha fica em processando de propósito", {
+    // N2: se a gravação final também falhar, NÃO relançamos. A linha fica
+    // `situacao='novo'`, com o `reivindicado_em` que `reivindicar` já gravou
+    // (um lease, não um estado) — DE PROPÓSITO: perder o desfecho aqui não
+    // pode também perder o rastro de que a privada saiu.
+    //
+    // ⚠️ CORREÇÃO (I-3): esta função NÃO decide mais o que acontece depois —
+    // `gravado=false` é o sinal que devolve ao chamador. É o worker (Task 7)
+    // quem, na rodada seguinte, vê o lease vencido numa linha ainda `novo` e
+    // manda para revisão humana em vez de reivindicar e remandar a privada
+    // sozinho. Sem esse sinal explícito, o chamador não tinha como distinguir
+    // "gravou e está tudo certo" de "a rede pode ter mandado e o banco não
+    // confirma" — e contava as duas coisas como a mesma (I-4).
+    gravado = false;
+    logger.error("[comentarios.acao] gravação final do desfecho falhou — linha fica 'novo' com o lease vencendo, gravado=false", {
       comentarioId: comentario.id,
       privateReplyMessageId,
       erro: gravarErr instanceof Error ? gravarErr.message : String(gravarErr),
     });
   }
 
-  return { ordem, reivindicado: true, situacao, motivoDoToque };
+  return { ordem, reivindicado: true, situacao, motivoDoToque, gravado };
 }
