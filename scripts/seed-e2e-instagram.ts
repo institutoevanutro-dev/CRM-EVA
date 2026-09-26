@@ -1,7 +1,10 @@
 /**
  * Seed do canal Instagram para os e2e `tests/e2e/instagram-receber.spec.ts` e
  * `tests/e2e/instagram-responder.spec.ts` (este usa também as três conversas
- * dos passos 5 e 6: Instagram recente, Instagram de 8 dias e uma de WhatsApp).
+ * dos passos 5 e 6: Instagram recente, Instagram de 8 dias e uma de WhatsApp) e
+ * `tests/e2e/instagram-contato-unico.spec.ts` (passo 7: segundo perfil
+ * conectado, contato com WhatsApp e Instagram, par de mesmo @ e par de mesmo
+ * nome Instagram × WhatsApp).
  *
  * Grava o app do Instagram da instalação (App ID + App Secret cifrado — o
  * segredo `"segredo-e2e"` que a spec usa para assinar o HMAC do webhook) e uma
@@ -51,6 +54,21 @@ export const NOME_IG_RECENTE = `${PREFIXO_RESPONDER} Recente`;
 export const NOME_IG_ANTIGO = `${PREFIXO_RESPONDER} Antigo`;
 export const NOME_WHATSAPP = `${PREFIXO_RESPONDER} WhatsApp`;
 const SESSAO_WHATSAPP = "e2e-instagram-filtro-whatsapp";
+
+// Fixtures de `tests/e2e/instagram-contato-unico.spec.ts` (passo 7).
+export const IG_ACCOUNT_ID_2 = "17841400000000002";
+export const IG_USERNAME_2 = "clinica_e2e_2";
+export const NOME_CANAIS = "IgUnico Canais";
+export const HANDLE_CANAIS = "igunico_canais";
+const IGSID_CANAIS = "IGSID-E2E-UNICO-CANAIS";
+const TELEFONE_CANAIS = "+5511988880701";
+export const NOME_ARROBA = "IgUnico Arroba";
+// O mesmo @ com grafias diferentes: a junção compara sem maiúsculas.
+const ARROBA_NO_PERFIL_1 = { igsid: "IGSID-E2E-UNICO-ARROBA-1", handle: "igunico_arroba" };
+const ARROBA_NO_PERFIL_2 = { igsid: "IGSID-E2E-UNICO-ARROBA-2", handle: "IgUnico_Arroba" };
+export const NOME_PAR = "IgUnico Maria Par";
+const IGSID_PAR = "IGSID-E2E-UNICO-PAR";
+const TELEFONE_PAR = "+5511988880702";
 
 interface Creds {
   org_id: string;
@@ -248,8 +266,133 @@ async function main(): Promise<void> {
   );
   console.log("[seed] conversas de responder: Instagram recente, Instagram de 8 dias, WhatsApp");
 
+  await semearContatoUnico(admin, {
+    orgId,
+    managerId,
+    sessaoIg1: sessaoId,
+    sessaoWa: (sessaoWa as { id: string }).id,
+  });
+
   console.log("\n✅ Seed do Instagram completo.");
   console.log(`org: ${orgId} · conta: ${IG_USERNAME} (${IG_ACCOUNT_ID})`);
+}
+
+async function contatoPorIdentidade(
+  admin: SupabaseClient,
+  orgId: string,
+  i: { igsid: string; handle: string | null; nome: string },
+): Promise<string> {
+  const { data, error } = await admin.rpc("fn_upsert_contato_por_identidade" as never, {
+    p_org: orgId, p_canal: "instagram", p_external_id: i.igsid, p_handle: i.handle, p_nome: i.nome, p_avatar: null,
+  } as never);
+  const contatoId = (data as { contact_id: string }[] | null)?.[0]?.contact_id;
+  if (error || !contatoId) throw new Error(`contato ${i.nome}: ${error?.message ?? "sem id"}`);
+  return contatoId;
+}
+
+/**
+ * 7 · Contato único (etapa 3). Idempotente INCLUSIVE depois da junção: a spec
+ * dispara o cron que junta o par de mesmo @, e a rodada seguinte precisa achar
+ * o par separado de novo. Quando a identidade do segundo perfil já aponta para
+ * o principal, o seed devolve a ela (e à conversa dela) um contato próprio,
+ * mais novo — o principal continua o mesmo, e o cadastro absorvido na rodada
+ * anterior fica como lápide, fora da lista.
+ */
+async function semearContatoUnico(
+  admin: SupabaseClient,
+  s: { orgId: string; managerId: string; sessaoIg1: string; sessaoWa: string },
+): Promise<void> {
+  const { orgId } = s;
+  const agora = new Date().toISOString();
+
+  // Segundo perfil da clínica conectado: é por ele que o mesmo @ ganha outro IGSID.
+  const tokenCifrado = await encryptWebhookSecret(admin, "token-e2e-instagram-2");
+  if (!tokenCifrado) throw new Error("cifra do token do segundo perfil indisponível");
+  const conexao = await salvarConexaoDoInstagram(admin, {
+    organizationId: orgId,
+    igAccountId: IG_ACCOUNT_ID_2,
+    username: IG_USERNAME_2,
+    tokenCifrado,
+    expiraEm: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+    userId: s.managerId,
+  });
+  if (conexao.status === "conta_em_outra_organizacao") {
+    throw new Error(`a conta ${IG_ACCOUNT_ID_2} já está ativa em outra organização`);
+  }
+  const { data: sessao2, error: erroSessao2 } = await admin
+    .from("channel_sessions")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("ig_account_id", IG_ACCOUNT_ID_2)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (erroSessao2 || !sessao2) throw new Error(`segundo perfil: ${erroSessao2?.message ?? "não encontrado"}`);
+  const sessaoIg2 = (sessao2 as { id: string }).id;
+
+  // Um contato, duas conversas: WhatsApp (telefone) e Instagram (@).
+  const canais = await contatoPorIdentidade(admin, orgId, { igsid: IGSID_CANAIS, handle: HANDLE_CANAIS, nome: NOME_CANAIS });
+  const { error: erroTelefone } = await admin
+    .from("contacts")
+    .update({ phone_number: TELEFONE_CANAIS } as never)
+    .eq("organization_id", orgId)
+    .eq("id", canais);
+  if (erroTelefone) throw new Error(`telefone de ${NOME_CANAIS}: ${erroTelefone.message}`);
+  await conversaComUltimaEntrada(admin, orgId, canais, s.sessaoIg1, "instagram", {
+    provider_conversation_id: IGSID_CANAIS, em: agora, preview: `Oi pelo Instagram, sou ${NOME_CANAIS}`,
+  });
+  await conversaComUltimaEntrada(admin, orgId, canais, s.sessaoWa, "whatsapp", {
+    provider_conversation_id: null, em: agora, preview: `Oi pelo WhatsApp, sou ${NOME_CANAIS}`,
+  });
+
+  // Mesmo @ nos dois perfis: dois contatos até a rodada diária juntar.
+  const principal = await contatoPorIdentidade(admin, orgId, { ...ARROBA_NO_PERFIL_1, nome: NOME_ARROBA });
+  let segundo = await contatoPorIdentidade(admin, orgId, { ...ARROBA_NO_PERFIL_2, nome: NOME_ARROBA });
+  if (segundo === principal) {
+    const { data, error } = await admin
+      .from("contacts")
+      .insert({ organization_id: orgId, source: "instagram", display_name: NOME_ARROBA } as never)
+      .select("id")
+      .single();
+    if (error || !data) throw new Error(`separar o par de mesmo @: ${error?.message}`);
+    segundo = (data as { id: string }).id;
+    const { error: erroIdentidade } = await admin
+      .from("contact_channel_identities")
+      .update({ contact_id: segundo } as never)
+      .eq("organization_id", orgId)
+      .eq("channel", "instagram")
+      .eq("external_id", ARROBA_NO_PERFIL_2.igsid);
+    if (erroIdentidade) throw new Error(`separar o par de mesmo @: ${erroIdentidade.message}`);
+    const { error: erroConversa } = await admin
+      .from("conversations")
+      .update({ contact_id: segundo } as never)
+      .eq("organization_id", orgId)
+      .eq("contact_id", principal)
+      .eq("channel_session_id", sessaoIg2);
+    if (erroConversa) throw new Error(`separar o par de mesmo @: ${erroConversa.message}`);
+  }
+  await conversaComUltimaEntrada(admin, orgId, principal, s.sessaoIg1, "instagram", {
+    provider_conversation_id: ARROBA_NO_PERFIL_1.igsid, em: agora, preview: `Oi perfil 1, sou ${NOME_ARROBA}`,
+  });
+  await conversaComUltimaEntrada(admin, orgId, segundo, sessaoIg2, "instagram", {
+    provider_conversation_id: ARROBA_NO_PERFIL_2.igsid, em: agora, preview: `Oi perfil 2, sou ${NOME_ARROBA}`,
+  });
+
+  // Mesmo nome, um só no Instagram (sem telefone) e outro no WhatsApp.
+  await contatoPorIdentidade(admin, orgId, { igsid: IGSID_PAR, handle: null, nome: NOME_PAR });
+  const { data: parWa } = await admin
+    .from("contacts")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("phone_number", TELEFONE_PAR)
+    .is("is_merged_into", null)
+    .maybeSingle();
+  if (!parWa) {
+    const { error } = await admin
+      .from("contacts")
+      .insert({ organization_id: orgId, display_name: NOME_PAR, phone_number: TELEFONE_PAR } as never);
+    if (error) throw new Error(`contato de WhatsApp ${NOME_PAR}: ${error.message}`);
+  }
+  console.log("[seed] contato único: segundo perfil, contato com dois canais, par de mesmo @, par de mesmo nome");
 }
 
 async function conversaComUltimaEntrada(
