@@ -271,6 +271,19 @@ describe("POST /api/v1/comentarios/:id/publicar — organização do comentário
     expect(auditSpy).toHaveBeenCalledWith(
       expect.objectContaining({ action: "comment.replied_manually", organizationId: ORG, resourceId: COMENTARIO_ID }),
     );
+    // MENOR (revisão final): resourceType tem que bater com o que acao.ts e o
+    // worker gravam ("instagram_comment", singular) — divergia como
+    // "instagram_comments" aqui, plural, e uma consulta que agrupasse por
+    // resourceType veria dois "recursos" diferentes para a mesma coisa.
+    expect(auditSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ resourceType: "instagram_comment" }),
+    );
+    // IMPORTANTE 6: o texto que o humano publicou (o laço de retorno que a
+    // spec §9 promete) vai no metadata — sem ele não dá pra medir o que foi
+    // publicado, só que alguém publicou.
+    expect(auditSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ texto: "Te chamamos no Direct!" }) }),
+    );
   });
 
   it("comentário que já saiu de esperando_voce (outro clique venceu a corrida): 409, sem publicar de novo", async () => {

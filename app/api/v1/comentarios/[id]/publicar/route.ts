@@ -174,10 +174,14 @@ export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
     organizationId: org.orgId,
     actorUserId: user.id,
     action: "comment.replied_manually",
-    resourceType: "instagram_comments",
+    resourceType: "instagram_comment",
     resourceId: id,
     requestId,
-    metadata: { resposta_publica_id: replyId },
+    // IMPORTANTE 6 (revisão final): a spec (§9) promete medir quanto o
+    // classificador erra a partir do toque do dono — sem o TEXTO que ele
+    // publicou (editado ou não) no metadata, a auditoria só prova QUE alguém
+    // publicou, não O QUE foi publicado, e a medição não existe.
+    metadata: { resposta_publica_id: replyId, texto: parsed.data.texto },
   });
 
   return ok({ ...atualizado, gravado: true }, { requestId });

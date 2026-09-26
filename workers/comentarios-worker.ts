@@ -163,6 +163,31 @@ function motivoDaRecusaDaResposta(texto: string): string | null {
   return null;
 }
 
+/**
+ * IMPORTANTE 6 (revisão final): a spec (§9, "laço de retorno") promete
+ * `comment.waiting_human` na auditoria toda vez que um comentário cai para
+ * revisão humana — e nenhum dos SEIS pontos que mandam para `esperando_voce`
+ * auditava. Sem essa trilha, não dá pra medir quanto o classificador erra
+ * (era exatamente o que a spec disse que justificava mexer nele). Um wrapper
+ * só, chamado de todo lugar que hoje chama `admin.marcarEsperando` — errar um
+ * dos seis de novo (esquecer de auditar) fica impossível.
+ */
+async function marcarEsperandoAuditado(
+  admin: AdminDoWorker,
+  c: ComentarioNovo,
+  motivo: string,
+  sugestao: string | null,
+): Promise<void> {
+  await admin.marcarEsperando(c.id, motivo, sugestao);
+  await audit({
+    action: "comment.waiting_human",
+    organizationId: c.organizationId,
+    resourceType: "instagram_comment",
+    resourceId: c.id,
+    metadata: { motivo },
+  });
+}
+
 async function processarUmComentario(
   admin: AdminDoWorker,
   c: ComentarioNovo,
@@ -179,8 +204,9 @@ async function processarUmComentario(
     }
     // Lease vencido: tentativa anterior não terminou de gravar. NUNCA
     // repesca sozinho — poderia remandar uma privada que já saiu.
-    await admin.marcarEsperando(
-      c.id,
+    await marcarEsperandoAuditado(
+      admin,
+      c,
       "uma tentativa anterior não terminou de gravar o desfecho — revise manualmente antes de continuar (a mensagem privada pode já ter sido enviada)",
       null,
     );
@@ -208,14 +234,24 @@ async function processarUmComentario(
     // I-4: gravação que falhou não pode ser contada como atendida — a linha
     // continua `situacao='novo'` de verdade, só o `Desfecho` finge que não.
     if (!desfecho.gravado) return "pulado";
-    return desfecho.situacao === "esperando_voce" ? "esperando" : "atendido";
+    if (desfecho.situacao === "esperando_voce") {
+      await audit({
+        action: "comment.waiting_human",
+        organizationId: c.organizationId,
+        resourceType: "instagram_comment",
+        resourceId: c.id,
+        metadata: { motivo: desfecho.motivoDoToque },
+      });
+      return "esperando";
+    }
+    return "atendido";
   }
 
   if (!(await admin.reivindicar(c.id))) return "pulado"; // outra rodada já pegou
 
   const veredito = ehObviamenteSeguro(c.texto);
   if (!veredito.seguro) {
-    await admin.marcarEsperando(c.id, veredito.gatilho, null);
+    await marcarEsperandoAuditado(admin, c, veredito.gatilho, null);
     return "esperando";
   }
 
@@ -229,7 +265,7 @@ async function processarUmComentario(
     if (chaveCache !== null) perfilCache.set(chaveCache, perfil);
   }
   if (!perfil) {
-    await admin.marcarEsperando(c.id, "sem perfil de voz do dono para imitar", null);
+    await marcarEsperandoAuditado(admin, c, "sem perfil de voz do dono para imitar", null);
     return "esperando";
   }
 
@@ -241,13 +277,13 @@ async function processarUmComentario(
       comentarioId: c.id,
       erro: err instanceof Error ? err.message : String(err),
     });
-    await admin.marcarEsperando(c.id, "a IA não conseguiu gerar a resposta", null);
+    await marcarEsperandoAuditado(admin, c, "a IA não conseguiu gerar a resposta", null);
     return "esperando";
   }
 
   const motivoDaRecusa = motivoDaRecusaDaResposta(textoGerado);
   if (motivoDaRecusa) {
-    await admin.marcarEsperando(c.id, motivoDaRecusa, textoGerado);
+    await marcarEsperandoAuditado(admin, c, motivoDaRecusa, textoGerado);
     return "esperando";
   }
 
@@ -270,7 +306,7 @@ async function processarUmComentario(
       comentarioId: c.id,
       erro: err instanceof Error ? err.message : String(err),
     });
-    await admin.marcarEsperando(c.id, "falha ao publicar a resposta da IA", textoGerado);
+    await marcarEsperandoAuditado(admin, c, "falha ao publicar a resposta da IA", textoGerado);
     return "esperando";
   }
 }
@@ -427,13 +463,22 @@ function construirAdminDaAcaoReal(admin: AdminSupabase): AdminDaAcao {
       return (data ?? []).length > 0;
     },
     async jaMandouPrivado({ organizationId, mediaId, autorIgsid }) {
+      // `situacao='respondido_pela_regra'` é o rastro certo — só chega nesse
+      // valor quando a privada foi ENVIADA COM SUCESSO (`ordem.push("privada")`
+      // em `aplicarRegra`, `lib/comentarios/acao.ts`) ou quando um comentário
+      // anterior da MESMA pessoa/vídeo já tinha sido enviado e este pulou por
+      // isso — os dois casos significam "a privada já saiu para esta pessoa
+      // neste vídeo". `private_reply_message_id is not null` (o que era usado
+      // antes) perde a resposta cuja Meta não devolveu id: a privada saiu,
+      // `respondido_pela_regra` foi gravado, mas o filtro antigo não achava a
+      // linha e mandava um SEGUNDO Direct para a mesma pessoa.
       const { data } = await admin
         .from("instagram_comments")
         .select("id")
         .eq("organization_id", organizationId)
         .eq("media_id", mediaId)
         .eq("autor_igsid", autorIgsid)
-        .not("private_reply_message_id", "is", null)
+        .eq("situacao", "respondido_pela_regra")
         .limit(1)
         .maybeSingle();
       return Boolean(data);
@@ -548,6 +593,7 @@ export function construirAdminDoWorkerReal(admin: AdminSupabase): AdminDoWorker 
         .from("instagram_comments")
         .select("organization_id")
         .eq("situacao", "novo")
+        .order("comentado_em")
         .limit(2000);
       if (error) {
         logger.error("[comentarios-worker] consulta de organizações com fila falhou", { erro: error.message });
@@ -657,7 +703,13 @@ export function construirAdminDoAvisoAntiMorteReal(admin: AdminSupabase): AdminD
         .from("instagram_comments")
         .select("organization_id")
         .eq("situacao", "novo")
-        .lt("comentado_em", corte)
+        // Hora de CHEGADA (created_at), não `comentado_em`: um comentário
+        // reentregue pela Meta depois de uma queda tem `comentado_em` antigo
+        // (é a data original do comentário no Instagram) mas acabou de chegar
+        // — contar por `comentado_em` nasceria "parado há mais de 1h" e abriria
+        // um alarme falso no primeiro minuto (achado da revisão final).
+        .lt("created_at", corte)
+        .order("created_at")
         .limit(2000);
       if (error) {
         logger.error("[comentarios-worker] consulta de comentários parados falhou", { erro: error.message });

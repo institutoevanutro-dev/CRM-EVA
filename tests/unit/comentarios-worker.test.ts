@@ -29,6 +29,7 @@ const {
   processarComentariosNovos,
   avisarComentariosParados,
   construirAdminDoWorkerReal,
+  construirAdminDoAvisoAntiMorteReal,
 } = await import("@/workers/comentarios-worker");
 
 type ComentarioFake = {
@@ -183,6 +184,33 @@ it("comentário inseguro sem regra: NADA é publicado, fica esperando", async ()
   expect(linha().situacao).toBe("esperando_voce");
   expect(linha().motivo_do_toque).toBe("preço");
   expect(fake.publicacoes).toHaveLength(0);
+});
+
+// ─── IMPORTANTE 6 — §9 promete comment.waiting_human sempre que cai pra fila humana ─
+it("IMPORTANTE 6 — todo caminho que manda pra esperando_voce audita comment.waiting_human", async () => {
+  fake.comentarios = [{ ...comentario, texto: "quanto custa?" }];
+  await processarComentariosNovos(fake, agora);
+  expect(auditMock).toHaveBeenCalledWith(
+    expect.objectContaining({
+      action: "comment.waiting_human",
+      organizationId: comentario.organizationId,
+      resourceType: "instagram_comment",
+      resourceId: comentario.id,
+      metadata: expect.objectContaining({ motivo: "preço" }),
+    }),
+  );
+});
+
+it("IMPORTANTE 6 — regra que cai pra esperando_voce (janela de 7 dias vencida) também audita", async () => {
+  fake.comentarios = [{ ...comentario, comentadoEm: "2000-01-01T00:00:00Z" }];
+  fake.regras = [
+    { id: "regra-1", mediaId: "MEDIA-1", palavra: "top", textoDoDirect: "d", frasePublica: "p", criadaEm: "2026-09-01T00:00:00Z" },
+  ];
+  await processarComentariosNovos(fake, agora);
+  expect(linha().situacao).toBe("esperando_voce");
+  expect(auditMock).toHaveBeenCalledWith(
+    expect.objectContaining({ action: "comment.waiting_human", resourceId: comentario.id }),
+  );
 });
 
 it("a IA falhou: fica esperando, sem publicar vazio", async () => {
@@ -374,18 +402,27 @@ it("I-7 — aviso anti-morte é UM item agregado por organização, não um por 
 
 /** Espião mínimo de um cliente supabase-like — grava toda `.eq()` por tabela. */
 function criarClienteEspiao(respostas: Record<string, unknown>) {
-  const chamadas: { tabela: string; eqs: [string, unknown][] }[] = [];
+  const chamadas: { tabela: string; eqs: [string, unknown][]; ordens: string[]; lts: [string, unknown][] }[] = [];
   function chain(tabela: string) {
     const eqs: [string, unknown][] = [];
-    chamadas.push({ tabela, eqs });
+    const ordens: string[] = [];
+    const lts: [string, unknown][] = [];
+    chamadas.push({ tabela, eqs, ordens, lts });
     const obj: Record<string, (...a: unknown[]) => unknown> = {};
     obj.select = () => obj;
     obj.eq = (col: unknown, val: unknown) => {
       eqs.push([String(col), val]);
       return obj;
     };
+    obj.lt = (col: unknown, val: unknown) => {
+      lts.push([String(col), val]);
+      return obj;
+    };
     obj.not = () => obj;
-    obj.order = () => obj;
+    obj.order = (col: unknown) => {
+      ordens.push(String(col));
+      return obj;
+    };
     obj.limit = () => obj;
     obj.or = () => obj;
     obj.update = () => obj;
@@ -403,6 +440,37 @@ it("I-8 — jaMandouPrivado filtra organization_id na query real (anti-pattern n
   await adminReal.jaMandouPrivado({ organizationId: "org-x", mediaId: "m1", autorIgsid: "a1" });
   const chamada = chamadas.find((c) => c.tabela === "instagram_comments");
   expect(chamada?.eqs).toContainEqual(["organization_id", "org-x"]);
+});
+
+it("IMPORTANTE 4 — jaMandouPrivado filtra por situacao='respondido_pela_regra', NÃO só por private_reply_message_id", async () => {
+  // A Graph pode não devolver message_id mesmo com a privada enviada — filtrar
+  // só por `private_reply_message_id is not null` perdia essa linha e mandava
+  // um SEGUNDO Direct para a mesma pessoa (achado da revisão final).
+  const { client, chamadas } = criarClienteEspiao({});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adminReal = construirAdminDoWorkerReal(client as any);
+  await adminReal.jaMandouPrivado({ organizationId: "org-x", mediaId: "m1", autorIgsid: "a1" });
+  const chamada = chamadas.find((c) => c.tabela === "instagram_comments");
+  expect(chamada?.eqs).toContainEqual(["situacao", "respondido_pela_regra"]);
+  expect(chamada?.eqs.some(([col]) => col === "private_reply_message_id")).toBe(false);
+});
+
+it("MENOR — organizacoesComComentariosNovos ordena por comentado_em (não perde organização acima de 2000 linhas)", async () => {
+  const { client, chamadas } = criarClienteEspiao({});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adminReal = construirAdminDoWorkerReal(client as any);
+  await adminReal.organizacoesComComentariosNovos();
+  const chamada = chamadas.find((c) => c.tabela === "instagram_comments");
+  expect(chamada?.ordens).toContainEqual("comentado_em");
+});
+
+it("MENOR — contagemDeComentariosParados conta por created_at (hora de CHEGADA), não comentado_em", async () => {
+  const { client, chamadas } = criarClienteEspiao({});
+  const adminReal = construirAdminDoAvisoAntiMorteReal(client as unknown as Parameters<typeof construirAdminDoAvisoAntiMorteReal>[0]);
+  await adminReal.contagemDeComentariosParados("2026-09-26T00:00:00.000Z");
+  const chamada = chamadas.find((c) => c.tabela === "instagram_comments");
+  expect(chamada?.lts).toContainEqual(["created_at", "2026-09-26T00:00:00.000Z"]);
+  expect(chamada?.lts.some(([col]) => col === "comentado_em")).toBe(false);
 });
 
 it("I-10 — gerarResposta passa pelo seam medido/orçado (runModelCall), não chama o modelo direto", async () => {
