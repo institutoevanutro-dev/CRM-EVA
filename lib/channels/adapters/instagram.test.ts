@@ -41,4 +41,39 @@ describe("instagramAdapter — respostas a comentário", () => {
     expect(r.replyId).toBe("reply-1");
     expect(String((globalThis.fetch as never as ReturnType<typeof vi.fn>).mock.calls[0]![0])).toContain("/C-1/replies");
   });
+
+  it("respostasAnterioresDoDono só coleta replies cujo from.id é a própria conta", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: [
+          {
+            comments: {
+              data: [
+                {
+                  replies: {
+                    data: [
+                      { text: "Que bom que gostou! 🌿", from: { id: "IG-1" } },
+                      { text: "eu tb amei", from: { id: "IGSID-comentarista" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    } as unknown as Response);
+    const frases = await instagramAdapter.respostasAnterioresDoDono!({ organizationId: "org", sessionRef: "IG-1" });
+    expect(frases).toEqual(["Que bom que gostou! 🌿"]);
+  });
+
+  it("respostasAnterioresDoDono degrada para lista vazia (nunca lança) quando a Graph recusa", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      { ok: false, status: 500, json: async () => ({ error: { message: "fora do ar" } }) } as unknown as Response);
+    await expect(
+      instagramAdapter.respostasAnterioresDoDono!({ organizationId: "org", sessionRef: "IG-1" }),
+    ).resolves.toEqual([]);
+  });
 });

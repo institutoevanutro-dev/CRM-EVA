@@ -139,6 +139,50 @@ describe("0279 · instagram_comments", () => {
     expect(erro).toContain("instagram_comments_situacao_check");
   });
 
+  it("reivindicado_em (migration 0280) é o lease do worker — nullable, e a reivindicação só avança quem está 'novo' e sem lease vigente", () => {
+    writeCountAs(
+      AGENT_A,
+      `insert into public.instagram_comments ${COLS_COMMENT} values ${commentValues(ORG_A, "c-lease")}`,
+    );
+    // Nasce null (nunca reivindicado).
+    expect(
+      sql(
+        `select reivindicado_em is null from public.instagram_comments where organization_id = '${ORG_A}' and external_id = 'c-lease'`,
+      ),
+    ).toBe("t");
+
+    // A reivindicação real é um UPDATE condicional — provado aqui como SQL
+    // puro (o código de `reivindicar`, task 7, faz exatamente esta query).
+    // `with ... returning` + `count(*)` dá um número confiável do `psql -tA`
+    // em vez de depender do formato da linha de status do UPDATE.
+    const reivindicar = () =>
+      Number(
+        sql(
+          `with w as (
+             update public.instagram_comments set reivindicado_em = now()
+               where organization_id = '${ORG_A}' and external_id = 'c-lease'
+                 and situacao = 'novo'
+                 and (reivindicado_em is null or reivindicado_em < now() - interval '10 minutes')
+             returning id
+           ) select count(*) from w;`,
+        ),
+      );
+
+    expect(reivindicar()).toBe(1);
+
+    // Lease vigente (acabou de reivindicar) barra uma segunda reivindicação —
+    // duas rodadas simultâneas não mandam duas privadas para a mesma pessoa.
+    expect(reivindicar()).toBe(0);
+
+    // Lease vencido (>10min) libera de novo — uma rodada que morreu no meio
+    // não tranca a linha para sempre.
+    sql(
+      `update public.instagram_comments set reivindicado_em = now() - interval '11 minutes'
+         where organization_id = '${ORG_A}' and external_id = 'c-lease';`,
+    );
+    expect(reivindicar()).toBe(1);
+  });
+
   it("viewer da própria org NÃO escreve (a policy de escrita exige `agent`)", () => {
     expect(
       writeCountAs(
@@ -197,5 +241,17 @@ describe("0279 · instagram_comment_rules", () => {
         `insert into public.instagram_comment_rules ${COLS_RULE} values ${ruleValues(ORG_A, "agent-nao-escreve")}`,
       ),
     ).toBe(0);
+  });
+});
+
+describe("0280 · agent_inbox_items_kind_check ganha 'instagram_comment_stuck'", () => {
+  it("aceita o kind novo — o aviso anti-morte do worker de comentários", () => {
+    seed();
+    const inserida = sql(
+      `insert into public.agent_inbox_items (organization_id, kind, severity, title, ref_kind, ref_id)
+         values ('${ORG_A}', 'instagram_comment_stuck', 'warn', 'Comentário parado há mais de 1h', 'instagram_comment', gen_random_uuid())
+       returning id;`,
+    );
+    expect(inserida).not.toBe("");
   });
 });

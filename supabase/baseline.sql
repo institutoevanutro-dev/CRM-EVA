@@ -10134,6 +10134,12 @@ alter table public.agent_inbox_items
     -- tratado até o prazo — abre revisão humana, nunca libera horário nem
     -- marca falta sozinho. Entra NESTA lista (bloco único por constraint, #159).
     'sinal_revisao_humana',
+    -- (migration 0280) Comentário do Instagram em `situacao='novo'` parado há
+    -- mais de 1h — nunca reivindicado, ou reivindicado e sem desfecho (a
+    -- segunda condição implica a primeira: `reivindicado_em` nunca é anterior
+    -- a `comentado_em`). Webhook perdido ou escrita que falhou some em
+    -- silêncio sem este aviso. Entra NESTA lista (bloco único por constraint, #159).
+    'instagram_comment_stuck',
     'other'
   ));
 
@@ -27723,6 +27729,17 @@ create policy instagram_comment_rules_write on public.instagram_comment_rules
     or (organization_id in (select public.fn_user_org_ids())
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+
+-- ---- reivindicar comentário + aviso de comentário parado (migration 0280) ----
+-- Task 7 de 9: o worker precisa de uma coluna de LEASE para reivindicar a
+-- linha antes de agir (não um novo valor de `situacao` — `processando` não
+-- existe no CHECK da 0279, e alargar o vocabulário por um estado transitório
+-- foi decisão revertida; ver o cabeçalho da migration 0280). O lease expira
+-- sozinho (10 min, em código, não aqui) — uma rodada que morre no meio não
+-- tranca a linha para sempre.
+alter table public.instagram_comments
+  add column if not exists reivindicado_em timestamptz;
+-- ---- fim: reivindicar comentário + aviso de comentário parado (migration 0280) ----
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----

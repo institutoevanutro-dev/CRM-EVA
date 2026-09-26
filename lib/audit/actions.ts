@@ -597,6 +597,19 @@ export const AUDIT_ACTIONS = [
   // esconderia justamente esse desfecho parcial.
   "comment.private_reply_sent",
   "comment.replied",
+  // A IA escreveu e publicou sozinha um comentário seguro, sem regra que
+  // casasse — Task 7, worker de comentários. Só existe perfil de voz o
+  // suficiente para publicar; sem ele o comentário cai em `esperando_voce`.
+  "comment.replied_by_ai",
+  // Uma rodada do worker de comentários (`comentarios-worker`) que atendeu ou
+  // deixou algum comentário esperando — mesmo critério do
+  // `message.recover_stuck_run`/`conversation.snooze_watcher_run`: rodada
+  // vazia não vira linha.
+  "comment.worker_run",
+  // Aviso anti-morte: comentário `situacao='novo'` (reivindicado ou não)
+  // parado há mais de 1h sem desfecho — webhook perdido ou escrita que falhou
+  // não pode sumir em silêncio.
+  "comment.stuck_alert_opened",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

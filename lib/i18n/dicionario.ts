@@ -7824,6 +7824,9 @@ export const DICIONARIO: Traducoes = {
   "Abra o compromisso e confira o sinal com a equipe antes de decidir sobre a reserva.": {
     es: "Abra la cita y compruebe la señal con el equipo antes de decidir sobre la reserva.",
   },
+  "Confira a fila de comentários do Instagram — um comentário ficou mais de 1h sem resposta.": {
+    es: "Revise la cola de comentarios de Instagram — un comentario quedó más de 1h sin respuesta.",
+  },
   // Diálogo de exclusão de canal (`frasesDoImpacto`): singular e plural.
   "chamada de voz": { es: "llamada de voz" },
   "chamadas de voz": { es: "llamadas de voz" },

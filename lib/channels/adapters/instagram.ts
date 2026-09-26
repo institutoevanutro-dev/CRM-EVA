@@ -157,6 +157,50 @@ export const instagramAdapter: ChannelAdapter = {
     return { replyId: body.id ?? null };
   },
   /**
+   * As respostas públicas que o DONO já deu a comentários da própria conta —
+   * matéria-prima de `lib/comentarios/voz.ts` (Task 7). Não há endpoint da
+   * Graph que devolva "minhas respostas" direto: a rota real é por mídia —
+   * `GET /{ig-user-id}/media?fields=comments{replies{text,from}}` — e o que
+   * conta é a REPLY cujo `from.id` é a própria conta (`sessionRef`), nunca a
+   * do comentarista original.
+   *
+   * NÃO MEDIDO contra uma conta real (mesma lacuna que `checkHealth` e
+   * `fetchInboundMedia` já declaram nesta casa): a forma exata da resposta
+   * (paginação em `comments`/`replies`, presença de `from.id`) é inferida da
+   * documentação pública da Graph API de Comments, não de um payload
+   * observado. Se a Meta devolver formato diferente ou a chamada falhar, isto
+   * degrada para lista vazia (nunca lança) — `perfilDeVoz` já trata "sem
+   * histórico" como `null`, e o worker recusa publicar sozinho nesse caso,
+   * que é o lado seguro.
+   */
+  async respostasAnterioresDoDono(input) {
+    const token = await resolveInstagramToken(input);
+    if (!token) return [];
+    const limite = input.limite ?? 25;
+    const res = await fetch(
+      `${baseDoInstagram()}/${graphVersion()}/${encodeURIComponent(input.sessionRef)}/media` +
+        `?fields=comments.limit(20){replies.limit(20){text,from}}&limit=${limite}`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15_000) },
+    );
+    const body = (await res.json().catch(() => ({}))) as {
+      data?: Array<{ comments?: { data?: Array<{ replies?: { data?: Array<{ text?: string; from?: { id?: string } }> } }> } }>;
+      error?: { code?: number; message?: string };
+    };
+    if (!res.ok || body.error) return [];
+
+    const frases: string[] = [];
+    for (const media of body.data ?? []) {
+      for (const comentario of media.comments?.data ?? []) {
+        for (const reply of comentario.replies?.data ?? []) {
+          if (reply.from?.id === input.sessionRef && typeof reply.text === "string" && reply.text.trim() !== "") {
+            frases.push(reply.text);
+          }
+        }
+      }
+    }
+    return frases;
+  },
+  /**
    * Baixa a mídia recebida — consumido por `workers/media-persist-worker.ts`,
    * que chama `url: msg.media_url` (a URL do CDN gravada em
    * `lib/channels/instagram/ingest.ts`, que EXPIRA). Sem este método a URL

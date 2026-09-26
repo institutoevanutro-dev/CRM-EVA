@@ -423,6 +423,20 @@ export interface ChannelAdapter {
     commentId: string;
     texto: string;
   }): Promise<{ replyId: string | null }>;
+
+  /**
+   * As respostas PÚBLICAS que o próprio dono (uma pessoa, pelo app/site do
+   * Instagram — não este CRM) já deu a comentários da própria conta. Existe
+   * para `lib/comentarios/voz.ts` (Task 7): sem uma amostra real do "jeito
+   * dele" escrever, a IA não tem o que imitar.
+   *
+   * OPCIONAL pelo mesmo motivo dos dois acima. `limite` é teto de itens, não
+   * de chamadas — o adapter decide como paginar por trás.
+   */
+  respostasAnterioresDoDono?(input: ChannelTenantScope & {
+    sessionRef: string;
+    limite?: number;
+  }): Promise<string[]>;
 }
 
 /** O que o transporte respondeu quando perguntamos se está de pé. */
