@@ -254,7 +254,13 @@ export function ConversationHeader({ conversation }: Props) {
             {t("Assumir")}
           </Button>
         )}
-        {isMineAssigned && (
+        {/* "Liberar" devolve a conversa ao AUTOMÁTICO: a rota limpa
+            `bot_silenced_until` (RPC da 0173). Num canal onde a IA nunca
+            responde (o Instagram), isso tira a conversa da Fila e não põe
+            ninguém no lugar — o lead fica esperando alguém que não existe,
+            até o cliente escrever de novo e a ingestão a re-silenciar. Quem
+            pegou por engano ainda tem "Transferir". */}
+        {isMineAssigned && iaResponde && (
           <Button
             size="sm"
             variant="outline"

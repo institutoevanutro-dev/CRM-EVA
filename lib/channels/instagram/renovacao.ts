@@ -79,6 +79,12 @@ export async function sessoesParaRenovar(
  * As sessões `meta_instagram` ativas cujo token ainda vale: a passada diária
  * dos nomes roda em TODAS, não só nas que renovaram (essas renovam a cada ~45
  * dias, e o nome esperaria isso tudo).
+ *
+ * Mesmo teto da renovação: o laço que consome é sequencial, com até
+ * `TETO_DE_NOMES_POR_SESSAO` chamadas à Graph por sessão e 15s de timeout em
+ * cada — sem teto, 40 contas com a Graph lenta são 40 × 50 × 15s num tick só.
+ * ponytail: acima de 50 contas numa instalação, as demais ficam sem a passada;
+ * quando existir, ordenar por "última passada" como a fila de contatos faz.
  */
 async function sessoesComTokenUtilizavel(
   admin: SupabaseClient,
@@ -90,7 +96,8 @@ async function sessoesComTokenUtilizavel(
     .eq("provider", CHANNEL_PROVIDER_INSTAGRAM)
     .is("archived_at", null)
     .not("ig_token_encrypted", "is", null)
-    .gt("ig_token_expires_at", agora.toISOString());
+    .gt("ig_token_expires_at", agora.toISOString())
+    .limit(TETO_POR_RODADA);
   if (error || !data) return [];
   return data as SessaoParaRenovar[];
 }
@@ -152,6 +159,11 @@ interface ConversaSemNome {
  * com o token que acabou de renovar (válido em mãos). Mesma regra de
  * `deveBuscarPerfil` que a ingestão usa — aqui sempre com `identidadeNova:
  * false` (a rodada só olha contato já existente).
+ *
+ * A fila GIRA na consulta: nunca tentados primeiro, depois do tentado há mais
+ * tempo. Sem isso o `limit` devolvia sempre as mesmas 50 linhas — com 80
+ * contatos sem nome público, os 50 primeiros voltavam a ser elegíveis a cada
+ * 24h e ocupavam as vagas de novo; do 51º em diante ninguém era alcançado.
  */
 async function preencherNomesDaSessao(
   admin: SupabaseClient,
@@ -166,6 +178,9 @@ async function preencherNomesDaSessao(
     .eq("channel_session_id", sessao.id)
     .not("provider_conversation_id", "is", null)
     .is("contacts.display_name", null)
+    // Ordena o PAI pela coluna JSON do contato embutido (`order=contacts(...)`,
+    // relação to-one) — `referencedTable` ordenaria só as linhas embutidas.
+    .order("contacts(source_metadata->>perfil_tentado_em)", { nullsFirst: true })
     .limit(TETO_DE_NOMES_POR_SESSAO);
   if (error) {
     logger.warn("[instagram.renovacao] ler conversas sem nome falhou", {

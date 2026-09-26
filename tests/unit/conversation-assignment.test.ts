@@ -52,7 +52,18 @@ const CONV_ROW = {
 };
 
 function makeSupabaseStub(state: StubState) {
+  // `from` existe porque /release lê o provider da conversa antes da RPC: num
+  // canal onde a IA nunca responde, liberar tiraria o lead da Fila sem pôr
+  // ninguém no lugar. Aqui responde WhatsApp, o canal de sempre.
+  const leitura: Record<string, unknown> = {};
+  Object.assign(leitura, {
+    select: () => leitura,
+    eq: () => leitura,
+    is: () => leitura,
+    maybeSingle: () => Promise.resolve({ data: { channel_sessions: { provider: "waha" } }, error: null }),
+  });
   return {
+    from: () => leitura,
     rpc: async (fn: string, args: Record<string, unknown>) => {
       state.rpcCalls.push({ fn, args });
       if (fn === "fn_conversation_assign") return { data: state.assignRows, error: null };

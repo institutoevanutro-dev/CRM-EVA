@@ -65,7 +65,8 @@ function adminFalso(opts: { sourceMetadata?: Record<string, unknown> } = {}) {
         const q: Record<string, unknown> = {
           eq: () => q,
           is: () => q,
-          then: (res: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(res),
+          select: () => q,
+          then: (res: (v: unknown) => unknown) => Promise.resolve({ data: [{ id: "C1" }], error: null }).then(res),
         };
         return q;
       },
@@ -122,7 +123,8 @@ describe("preencherPerfilDoContato", () => {
           const q: Record<string, unknown> = {
             eq: () => q,
             is: (...args: unknown[]) => { if (tabela === "contacts" && (linha as Record<string, unknown>).display_name) isSpy(...args); return q; },
-            then: (res: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(res),
+            select: () => q,
+            then: (res: (v: unknown) => unknown) => Promise.resolve({ data: [{ id: "C1" }], error: null }).then(res),
           };
           return q;
         },
@@ -130,5 +132,71 @@ describe("preencherPerfilDoContato", () => {
     };
     await preencherPerfilDoContato(admin as never, input);
     expect(isSpy).toHaveBeenCalledWith("display_name", null);
+  });
+});
+
+/**
+ * Concorrência em `contacts.source_metadata`: o PATCH de contatos
+ * (`app/api/v1/contacts/_handler.ts`) e a reentrega do webhook escrevem a
+ * MESMA coluna. O fake é STATEFUL e simula o outro escritor gravando ENTRE a
+ * leitura e a escrita da primeira tentativa; o `update` só aplica quando o
+ * filtro `eq("source_metadata", <lido>)` bate com o que está gravado (é o
+ * compare-and-set que o PostgREST faz em jsonb, por valor).
+ */
+function adminComCorrida() {
+  let gravado: Record<string, unknown> = {};
+  let leituras = 0;
+  const canonico = (o: Record<string, unknown>) =>
+    JSON.stringify(Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : 1))));
+  const admin = {
+    from: (tabela: string) => ({
+      select: () => {
+        const chain: { eq: () => typeof chain; maybeSingle: () => Promise<{ data: unknown; error: null }> } = {
+          eq: () => chain,
+          maybeSingle: async () => {
+            if (tabela !== "contacts") return { data: null, error: null };
+            const lido = { ...gravado };
+            leituras += 1;
+            if (leituras === 1) gravado = { ...gravado, outra_chave: "do outro escritor" };
+            return { data: { source_metadata: lido }, error: null };
+          },
+        };
+        return chain;
+      },
+      update: (linha: Record<string, unknown>) => {
+        const filtros: Record<string, unknown> = {};
+        const executar = () => {
+          if (tabela !== "contacts" || !linha.source_metadata) return { data: [{ id: "C1" }], error: null };
+          if (typeof filtros.source_metadata === "string" && canonico(JSON.parse(filtros.source_metadata)) !== canonico(gravado)) {
+            return { data: [], error: null };
+          }
+          gravado = linha.source_metadata as Record<string, unknown>;
+          return { data: [{ id: "C1" }], error: null };
+        };
+        const q: Record<string, unknown> = {
+          eq: (coluna: string, valor: unknown) => { filtros[coluna] = valor; return q; },
+          is: () => q,
+          select: () => q,
+          then: (res: (v: unknown) => unknown) => Promise.resolve(executar()).then(res),
+        };
+        return q;
+      },
+    }),
+  };
+  return { admin, metadadosGravados: () => gravado };
+}
+
+describe("preencherPerfilDoContato sob concorrência", () => {
+  it("não apaga o que outro escritor gravou entre a leitura e a escrita: as duas chaves sobrevivem", async () => {
+    perfilDoRemetenteMock.mockResolvedValueOnce({ nome: "Maria", handle: "maria", foto: null });
+    const { admin, metadadosGravados } = adminComCorrida();
+
+    await preencherPerfilDoContato(admin as never, input);
+
+    expect(metadadosGravados()).toMatchObject({
+      outra_chave: "do outro escritor",
+      perfil_tentado_em: agora.toISOString(),
+      handle: "maria",
+    });
   });
 });
