@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { esquecerOrganizacaoAtiva } from "./helpers/esquecer-organizacao-ativa";
 import { test, expect } from "@playwright/test";
 
 /**
@@ -43,7 +44,7 @@ interface DuasOrgs {
 
 interface Creds {
   password: string;
-  users: Record<string, { email: string } | undefined>;
+  users: Record<string, { id: string; email: string } | undefined>;
   duas_orgs?: DuasOrgs;
 }
 
@@ -112,6 +113,13 @@ async function trocarPara(page: import("@playwright/test").Page, orgId: string, 
     await expect(seletor, `a troca para "${nome}" não pegou`).toContainText(nome, { timeout: 20_000 });
   }
 }
+
+// A troca pelo seletor fica GRAVADA no banco (migration 0282) e o `manager` é
+// do seed inteiro: sem isto, toda spec seguinte loga na última org trocada.
+test.afterAll(async () => {
+  const manager = lerCreds().users.manager;
+  if (manager) await esquecerOrganizacaoAtiva(manager.id);
+});
 
 test("membro de duas organizações vê na Agenda só os tipos da organização ativa", async ({ page }) => {
   const creds = lerCreds();
