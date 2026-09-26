@@ -362,6 +362,8 @@ export function descreveEvento(
     }
     case "action_sent":
       return { titulo: "Mensagem enviada", detalhe: null, ...motor };
+    case "action_pulado":
+      return { titulo: "Passo pulado, o fluxo seguiu", detalhe: texto(p.reason), ...motor };
     case "ai_classified":
       return {
         titulo: "O agente interpretou a resposta",

@@ -18,16 +18,22 @@ vi.mock("@/lib/agent-engine/edge/crm/send-ledger", () => ({
     return { kind: "sent", idempotencyKey: "key-1", crmMessageId: "msg-1" };
   },
 }));
+// O follow-up confere a agenda antes de enviar; aqui só importa a marca.
+vi.mock("@/lib/agenda/efeito", () => ({ assertAgendaEffectPg: async () => undefined }));
 vi.mock("@/lib/atendimento/fronteira-server", () => ({ requireCurrentServiceBoundary: async () => undefined }));
 
 const { sendTurnMessage } = await import("@/lib/agent-engine/edge/crm/send-message");
 
-const db = { query: async () => ({ rows: [{ kind: "inbound_reply", payload: {} }] }) } as never;
+let kindDoJob = "inbound_reply";
+const db = { query: async () => ({ rows: [{ kind: kindDoJob, payload: {} }] }) } as never;
 const cfg = { supabase: {} } as never;
 const envio = { tenantId: "org-1", leadId: "lead-1", jobId: "job-1", seq: 1, conversationId: "conv-1", body: "oi" };
 const ctxRecebido = () => sendMessageHandler.mock.calls.at(-1)?.[1] as Record<string, unknown>;
 
-beforeEach(() => sendMessageHandler.mockClear());
+beforeEach(() => {
+  sendMessageHandler.mockClear();
+  kindDoJob = "inbound_reply";
+});
 
 describe("sendTurnMessage repassa a origem do envio", () => {
   it("follow-up: o ctx do handler leva origemDoEnvio followup", async () => {
@@ -38,5 +44,11 @@ describe("sendTurnMessage repassa a origem do envio", () => {
   it("atendimento (sem a marca): o ctx não leva origemDoEnvio", async () => {
     await sendTurnMessage(db, cfg, envio);
     expect(ctxRecebido().origemDoEnvio).toBeUndefined();
+  });
+
+  it("turno de follow-up com IA (ferramentas do agente, sem a marca): o job decide", async () => {
+    kindDoJob = "followup_turn";
+    await sendTurnMessage(db, cfg, envio);
+    expect(ctxRecebido().origemDoEnvio).toBe("followup");
   });
 });

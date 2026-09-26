@@ -40,6 +40,7 @@ import {
 } from './inbound-turn';
 import { isLeadInHandoff } from './human-handoff';
 import { TEXTO_DO_BLOQUEIO, decidirEnvio, lerFatosDoEnvio } from '../../followup/bloqueios-obrigatorios';
+import { ERRO_FORA_DAS_24H } from '../edge/crm/send-ledger';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import type { LeadStateRow } from './lead-state';
 import { loadReentryTemplate, pickReentryVariant } from './reentry-template';
@@ -105,6 +106,7 @@ export const followupTurnPayloadSchema = z
 export type FollowupFlowTurnResult =
   | { kind: 'sent' }
   | { kind: 'skipped'; reason: string }
+  | { kind: 'pulado'; reason: string }
   | { kind: 'classified'; class: string }
   | { kind: 'planned'; propostas: PropostaDeEsperaBruta[]; modelo: string };
 
@@ -375,6 +377,18 @@ async function runFlowDrivenTurn(
       : ({ envia: false, motivo: 'nao_verificavel', invalida: false } as const);
     if (!bloqueio.envia) {
       runLog.info('envio do fluxo barrado por bloqueio obrigatório', { motivo: bloqueio.motivo });
+      if (bloqueio.motivo === 'fora_das_24h_do_instagram') {
+        // Pula ESTE passo e o fluxo segue: nem cancela, nem reagenda, nem reenvia.
+        await complete(pool, {
+          jobId: job.id,
+          jobClaim: claimOfJob(job),
+          organizationId: target.tenantId,
+          enrollmentId,
+          nodeId,
+          result: { kind: 'pulado', reason: TEXTO_DO_BLOQUEIO.fora_das_24h_do_instagram },
+        });
+        return;
+      }
       if (bloqueio.motivo === 'fora_da_janela') {
         await rescheduleReentry(pool, {
           tenantId: target.tenantId,
@@ -414,6 +428,8 @@ async function runFlowDrivenTurn(
       const sent = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body, false);
       if (sent === 'sent') {
         await complete(pool, { jobId:job.id,jobClaim:claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'sent' } });
+      } else if (sent === 'pulado') {
+        await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'pulado', reason: TEXTO_DO_BLOQUEIO.fora_das_24h_do_instagram } });
       } else if(sent === 'skipped') {
         await complete(pool,{jobId:job.id,jobClaim:claimOfJob(job),organizationId:target.tenantId,enrollmentId,nodeId,result:{kind:'skipped',reason:'O envio foi recusado pelas regras do atendimento.'}});
       }
@@ -595,11 +611,12 @@ async function sendFixedOutbound(
   body: string,
   /** `true` só na re-entrada por template — ver o cabeçalho. */
   comCamadaSemantica: boolean,
-): Promise<"sent" | "deferred" | "skipped"> {
+): Promise<"sent" | "deferred" | "skipped" | "pulado"> {
   const { tenantId, leadId, channelSessionId, conversationId } = target;
   const runLog = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, lead_id: leadId });
 
-  if (await isLeadInHandoff(pool, tenantId, leadId)) {
+  // Só roda em job de follow-up: silêncio de canal sem IA é roteamento.
+  if (await isLeadInHandoff(pool, tenantId, leadId, { followup: true })) {
     runLog.info('envio fixo pulado — lead silenciado (handoff/opt-out)', { kind: job.kind });
     return "skipped";
   }
@@ -687,8 +704,16 @@ async function sendFixedOutbound(
         queuedRetryDelayMs: deps.knobs.queuedRetryDelayMs,
       });
       throw new JobSettledError('envio fixo vetado pelo sink (is_blocked) — job cancelado em definitivo');
-    case 'failed':
+    case 'failed': {
+      // O servidor recusou por estar fora das 24h do Instagram (a conferência
+      // de antes do envio passou e o relógio virou no meio): é pulo, não falha.
+      const { rows } = await pool.query<{ error_code: string | null }>(
+        'select error_code from messages where organization_id = $1 and id = $2',
+        [tenantId, outcome.messageId],
+      );
+      if (rows[0]?.error_code === ERRO_FORA_DAS_24H) return "pulado";
       throw new Error('envio fixo: CRM marcou o envio como failed — run re-tentado pela fila');
+    }
     case 'unavailable':
       throw new Error(`envio fixo: canal indisponível (${outcome.reason}) — run re-tentado pela fila`);
   }

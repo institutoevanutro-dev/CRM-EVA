@@ -39,6 +39,9 @@
 import type pg from 'pg';
 import { z } from 'zod';
 
+import { silencioDoBotEhRoteamento } from '@/lib/channels/capabilities';
+import { fimDaJanelaAutomatica } from '@/lib/channels/janela';
+
 // ─── configuração da organização ─────────────────────────────────────────────
 
 const HORA = /^([01][0-9]|2[0-3]):([0-5][0-9])$/;
@@ -192,6 +195,12 @@ export interface FatosDoEnvio {
    * comportamento de hoje não muda para eles.
    */
   reserva: { criada_em: string; consulta_em: string; sujeita_a_sinal: boolean; status: string } | null;
+  /**
+   * Até quando o canal DESTA conversa aceita envio automático (ISO). `null` =
+   * canal sem essa regra (WhatsApp). Passou dele, o passo é pulado e o fluxo
+   * segue: não há o que adiar, só quem escreve de novo reabre a janela.
+   */
+  fim_da_janela_automatica: string | null;
 }
 
 export type MotivoDoBloqueio =
@@ -210,7 +219,8 @@ export type MotivoDoBloqueio =
   | 'consulta_nao_sujeita_a_sinal'
   | 'reserva_encerrada'
   | 'prazo_do_sinal_vencido'
-  | 'fora_da_janela_sem_encaixe';
+  | 'fora_da_janela_sem_encaixe'
+  | 'fora_das_24h_do_instagram';
 
 /**
  * T+60 (medido a partir da CRIAÇÃO da reserva, nunca da entrada no fluxo — é
@@ -231,7 +241,12 @@ export type DecisaoDoEnvio =
    * cancelada com o motivo. Sem `invalida` (atendimento humano), o envio é
    * pulado e a política de handoff do fluxo decide o resto.
    */
-  | { envia: false; motivo: Exclude<MotivoDoBloqueio, 'fora_da_janela'>; invalida: boolean };
+  | { envia: false; motivo: Exclude<MotivoDoBloqueio, 'fora_da_janela' | 'fora_das_24h_do_instagram'>; invalida: boolean }
+  /**
+   * Não envia ESTE passo e o fluxo segue para o próximo nó. Nem cancela (a
+   * sequência ainda faz sentido) nem adia (esperar não reabre a janela).
+   */
+  | { envia: false; motivo: 'fora_das_24h_do_instagram'; pula: true };
 
 function cancelaNaResposta(triggerConfig: unknown): boolean {
   return (
@@ -295,6 +310,12 @@ export function decidirEnvio(
       return { envia: false, motivo: 'prazo_do_sinal_vencido', invalida: true };
     }
   }
+  // Depois dos irrevogáveis, antes das regras de negócio e da janela da
+  // organização: o canal já não aceita o envio, e adiar não resolve.
+  const fimAuto = fatos.fim_da_janela_automatica === null ? null : Date.parse(fatos.fim_da_janela_automatica);
+  if (fimAuto !== null && agora.getTime() >= fimAuto) {
+    return { envia: false, motivo: 'fora_das_24h_do_instagram', pula: true };
+  }
   if (config.exigir_etapa_do_gatilho) {
     const etapa = etapaDoGatilho(fatos.trigger_config);
     if (etapa !== null && !fatos.negocios_abertos.some((n) => n.stage_id === etapa)) {
@@ -322,6 +343,11 @@ export function decidirEnvio(
     if (prazoDoSinal !== null && abre.getTime() >= prazoDoSinal) {
       return { envia: false, motivo: 'fora_da_janela_sem_encaixe', invalida: true };
     }
+    // Mesma lógica para as 24h: adiar para depois do fim é adiar para um envio
+    // que o canal vai recusar. Pula agora.
+    if (fimAuto !== null && abre.getTime() >= fimAuto) {
+      return { envia: false, motivo: 'fora_das_24h_do_instagram', pula: true };
+    }
     return { envia: false, motivo: 'fora_da_janela', adiarPara: abre };
   }
   return { envia: true };
@@ -346,6 +372,7 @@ export const TEXTO_DO_BLOQUEIO: Record<MotivoDoBloqueio, string> = {
   prazo_do_sinal_vencido: 'Sequência encerrada: o prazo do lembrete de sinal (T+60 ou início da consulta) venceu.',
   fora_da_janela_sem_encaixe:
     'Sequência encerrada: a próxima janela comercial só abre depois do prazo do sinal — não adiado, suprimido.',
+  fora_das_24h_do_instagram: 'Passo pulado: fora das 24h do Instagram.',
 };
 
 // ─── leitura (pg) ────────────────────────────────────────────────────────────
@@ -392,9 +419,12 @@ export async function lerFatosDoEnvio(
         `select is_blocked, force_human, is_anonymized from contacts where organization_id = $1 and id = $2`,
         [org, contactId],
       ),
-      pool.query<{ bot_silenciado: boolean }>(
-        `select (bot_silenced_until is not null and bot_silenced_until > now()) as bot_silenciado
-           from conversations where organization_id = $1 and id = $2 and contact_id = $3`,
+      pool.query<{ bot_silenciado: boolean; provider: string | null; last_inbound_at: Date | null }>(
+        `select (c.bot_silenced_until is not null and c.bot_silenced_until > now()) as bot_silenciado,
+                cs.provider, c.last_inbound_at
+           from conversations c
+           left join channel_sessions cs on cs.id = c.channel_session_id and cs.organization_id = c.organization_id
+          where c.organization_id = $1 and c.id = $2 and c.contact_id = $3`,
         [org, conversationId, contactId],
       ),
       pool.query<{ stage_id: string; stage_blocks_followups: boolean }>(
@@ -457,13 +487,16 @@ export async function lerFatosDoEnvio(
         enrollment: { id: e.id, status: e.status, started_at: iso(e.started_at)!, pointer_id: e.pointer_id },
         trigger_config: e.trigger_config,
         contato: c,
-        conversa: v,
+        // Silêncio em canal sem IA é roteamento (a conversa cai na Fila), não
+        // uma pessoa que assumiu: lá ele não bloqueia o follow-up.
+        conversa: { bot_silenciado: v.bot_silenciado && !silencioDoBotEhRoteamento(v.provider) },
         negocios_abertos: negocios.rows,
         ultima_recebida_em: iso(recebida.rows[0]?.em),
         ultimo_envio_da_inscricao_em: iso(enviada.rows[0]?.em),
         consultas_confirmadas_futuras: Number(consultas.rows[0]?.n ?? '0'),
         outras_inscricoes_vivas: outras.rows.map((r) => ({ id: r.id, started_at: iso(r.started_at)! })),
         reserva,
+        fim_da_janela_automatica: fimDaJanelaAutomatica(v.provider, iso(v.last_inbound_at))?.toISOString() ?? null,
       },
     };
   } catch {

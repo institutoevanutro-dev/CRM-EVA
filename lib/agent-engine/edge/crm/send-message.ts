@@ -143,7 +143,9 @@ export async function sendTurnMessage(
           meetingDelivery,
           approvedReply,
           agentOperation: input.agentOperation,
-          origemDoEnvio: input.origemDoEnvio,
+          // O turno de follow-up com IA (`ai_message`) manda pelas ferramentas do
+          // agente, que não conhecem a origem: o JOB, lido do banco, diz.
+          origemDoEnvio: input.origemDoEnvio ?? (sourceJobs[0]?.kind === 'followup_turn' ? 'followup' : undefined),
           internalMessageId: messageId,
         },
         {

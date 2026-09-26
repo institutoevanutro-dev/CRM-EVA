@@ -25,6 +25,7 @@ import type pg from 'pg';
 
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { ehOptOutProvavel } from '@/lib/opt-out/deteccao';
+import { PROVIDERS_COM_SILENCIO_DE_ROTEAMENTO } from '@/lib/channels/capabilities';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 
 import type { Logger } from '../obs/logger';
@@ -86,19 +87,39 @@ export function detectAmbiguousOptOut(message: string): boolean {
  * futuro — 'infinity' sempre vale). Lido no INÍCIO do turno, antes de qualquer chamada
  * de modelo. Só o humano (via CRM) libera.
  */
-export async function isLeadInHandoff(db: pg.Pool, tenantId: string, leadId: string): Promise<boolean> {
+export async function isLeadInHandoff(
+  db: pg.Pool,
+  tenantId: string,
+  leadId: string,
+  /**
+   * `followup`: o silêncio de conversa em canal sem IA (o Instagram nasce
+   * silenciado para cair na Fila) é ROTEAMENTO e não conta. `force_human` e o
+   * silêncio nos outros canais continuam valendo. Sem a opção, a consulta é a
+   * de sempre.
+   */
+  opts?: { followup?: boolean },
+): Promise<boolean> {
+  const followup = opts?.followup === true;
   const { rows } = await db.query<{ handoff: boolean }>(
     `select (
        c.force_human
        or exists (
          select 1 from conversations v
          where v.organization_id = $1 and v.contact_id = c.id
-           and v.bot_silenced_until is not null and v.bot_silenced_until > now()
+           and v.bot_silenced_until is not null and v.bot_silenced_until > now()${
+             followup
+               ? `
+           and not exists (
+             select 1 from channel_sessions s
+             where s.organization_id = $1 and s.id = v.channel_session_id and s.provider = any($3::text[])
+           )`
+               : ''
+           }
        )
      ) as handoff
      from contacts c
      where c.organization_id = $1 and c.id = $2`,
-    [tenantId, leadId],
+    followup ? [tenantId, leadId, PROVIDERS_COM_SILENCIO_DE_ROTEAMENTO] : [tenantId, leadId],
   );
   return rows[0]?.handoff === true;
 }

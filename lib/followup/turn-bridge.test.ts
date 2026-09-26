@@ -404,3 +404,28 @@ it("adapter PG preserva provenance e leitor de inbound filtra a conversa solicit
   expect(sql).toMatch(/conversation_id\s*=\s*\$3/);
   expect(values[2]).toBe("conv-1");
 });
+
+describe("completeTurnForEnrollment — 'pulado' (passo sem envio, o fluxo segue)", () => {
+  it("avança pela aresta 'always' com o evento 'action_pulado' e a razão; nunca cancela", async () => {
+    const { db, updateEnrollment, insertEnrollmentEvent } = fakeDb({ enrollment: enrollment(), graph: ACTION_GRAPH });
+
+    await completeTurnForEnrollment(db, "org-1", "enr-1", "a1", { kind: "pulado", reason: "Passo pulado: fora das 24h do Instagram." }, clock);
+
+    expect(insertEnrollmentEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_type: "action_pulado",
+        idempotency_key: "a1:4",
+        payload: { reason: "Passo pulado: fora das 24h do Instagram." },
+      }),
+    );
+    const patch = updateEnrollment.mock.calls[0]?.[2] as Record<string, unknown>;
+    expect(patch).toMatchObject({ current_node_id: "e1", status: "active", steps_taken: 5 });
+    expect(patch.cancel_reason).toBeUndefined();
+  });
+
+  it("'skipped' continua encerrando a inscrição (o significado antigo não mudou)", async () => {
+    const { db, updateEnrollment } = fakeDb({ enrollment: enrollment(), graph: ACTION_GRAPH });
+    await completeTurnForEnrollment(db, "org-1", "enr-1", "a1", { kind: "skipped", reason: "x" }, clock);
+    expect(updateEnrollment.mock.calls[0]?.[2]).toMatchObject({ status: "cancelled", cancel_reason: "x" });
+  });
+});

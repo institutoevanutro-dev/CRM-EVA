@@ -206,16 +206,24 @@ export function supabaseSendLedger(db: SupabaseClient): LedgerStore {
     },
   };
 }
+/** `messages.error_code` da recusa do servidor fora das 24h do Instagram (`_handler.ts`). */
+export const ERRO_FORA_DAS_24H = "fora_das_24h_do_instagram";
 /** Resultado do turno sem importar runtime/env; ausência de envio é terminal explícito. */
 export async function resultadoDoEnvioDoFollowup(
   db: Queryable,
   org: string,
   job: string,
-): Promise<{ kind: "sent" } | { kind: "skipped"; reason: string }> {
-  const { rows } = await db.query<{ status: string }>(
-    "select status from send_ledger where organization_id=$1 and job_id=$2",
+): Promise<{ kind: "sent" } | { kind: "skipped"; reason: string } | { kind: "pulado"; reason: string }> {
+  const { rows } = await db.query<{ status: string; error_code: string | null }>(
+    `select l.status, m.error_code from send_ledger l
+       left join messages m on m.organization_id = l.organization_id and m.id = l.crm_message_id
+      where l.organization_id=$1 and l.job_id=$2`,
     [org, job],
   );
+  // O servidor recusou por estar fora das 24h do Instagram e nada saiu: o passo
+  // é pulado e o fluxo segue (nunca retentado, nunca cancelado).
+  if (rows.length && rows.every((row) => row.status === "failed" && row.error_code === ERRO_FORA_DAS_24H))
+    return { kind: "pulado", reason: "Passo pulado: fora das 24h do Instagram." };
   if (!rows.length)
     return {
       kind: "skipped",

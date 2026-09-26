@@ -5584,6 +5584,8 @@ export const DICIONARIO: Traducoes = {
   "Pediu ao agente para interpretar a resposta": { es: "Le pidió al agente que interpretara la respuesta" },
   "Conferiu se a mensagem já tinha saído": { es: "Verificó si el mensaje ya había salido" },
   "Mensagem enviada": { es: "Mensaje enviado" },
+  "Passo pulado, o fluxo seguiu": { es: "Paso omitido, el flujo siguió" },
+  "Passo pulado: fora das 24h do Instagram.": { es: "Paso omitido: fuera de las 24 h de Instagram." },
   "O agente interpretou a resposta": { es: "El agente interpretó la respuesta" },
   "Fluxo concluído": { es: "Flujo concluido" },
   "O fluxo parou de tentar": { es: "El flujo dejó de intentar" },
