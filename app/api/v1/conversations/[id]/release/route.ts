@@ -18,6 +18,8 @@ import { registrarTrocaDeComando } from "@/lib/inbox/atividade-de-comando";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
+import { capabilitiesOf } from "@/lib/channels/capabilities";
+import type { ChannelProvider } from "@/lib/channels/types";
 import type { Conversation } from "@/lib/types/messaging";
 import { traduzir } from "@/lib/i18n/dicionario";
 
@@ -40,6 +42,40 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const user = authz.user;
+
+  // Canal onde a IA nunca responde (o Instagram): "Liberar" devolveria a
+  // conversa ao automático — a RPC limpa `bot_silenced_until` desde a 0173 —
+  // e ninguém a responderia, porque o ai-response-worker sai com
+  // `canal_sem_ia`. O lead sairia da Fila para lugar nenhum. A tela já não
+  // oferece o botão; esta é a garantia, porque MCP, API e integração não
+  // passam pela tela.
+  const { data: daConversa } = await supabase
+    .from("conversations")
+    .select("channel_sessions:channel_session_id(provider)")
+    .eq("organization_id", authz.org.orgId)
+    .eq("id", id)
+    .maybeSingle();
+  const provider = (daConversa as { channel_sessions?: { provider?: string | null } | null } | null)
+    ?.channel_sessions?.provider;
+  if (provider) {
+    let iaResponde = true;
+    // Provider que a matriz não conhece não trava nada: `capabilitiesOf` falha
+    // fechado lançando, e recusar por desconhecimento tiraria uma ação que
+    // sempre existiu num canal que talvez tenha automático.
+    try {
+      iaResponde = capabilitiesOf(provider as ChannelProvider).iaResponde;
+    } catch {
+      iaResponde = true;
+    }
+    if (!iaResponde) {
+      return fail(
+        "validation_failed",
+        t("Neste canal quem responde é a equipe, não o atendimento automático. Use Transferir para passar a conversa a outra pessoa."),
+        422,
+        { requestId },
+      );
+    }
+  }
 
   const { data, error } = await supabase.rpc("fn_conversation_assign", {
     p_organization_id: authz.org.orgId,

@@ -327,7 +327,8 @@ const schema = z.object({
   // tela não tem um par completo (mesma precedência de `META_APP_SECRET`).
   INSTAGRAM_APP_ID: z.string().optional(),
   INSTAGRAM_APP_SECRET: z.string().optional(),
-  // Só para teste local. Deixe vazio em produção.
+  // Só para teste local. Deixe vazio em produção. Em produção só loopback é honrado;
+  // outro host é ignorado (`baseDoInstagram`, lib/channels/instagram/graph.ts).
   INSTAGRAM_GRAPH_BASE_URL: z.string().optional().default(""),
 
   // Nuvemshop — opcional (template genérico open-source). Só exigidas quando

@@ -13,9 +13,33 @@ import { logger } from "@/lib/logger";
 
 export const BASE_DO_INSTAGRAM = "https://graph.instagram.com";
 
-/** Base da Graph API do Instagram. A variável existe para o e2e apontar para um receptor local. */
-export function baseDoInstagram(): string {
-  return (process.env.INSTAGRAM_GRAPH_BASE_URL ?? "").trim().replace(/\/+$/, "") || BASE_DO_INSTAGRAM;
+/** `localhost`, `127.x.x.x` ou `[::1]` — o receptor do e2e, e nada que saia da máquina. */
+const HOST_DE_LOOPBACK_RX = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/i;
+
+function apontaParaLoopback(url: string): boolean {
+  try {
+    return HOST_DE_LOOPBACK_RX.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Base da Graph API do Instagram. A variável existe para o e2e apontar para um
+ * receptor local — e é só para isso que ela vale em produção: todo chamador
+ * manda `Authorization: Bearer <token da conta do cliente>` para esta base, e
+ * um `.env` de teste copiado para a VPS entregaria o token ao host que a
+ * variável apontar. Em `NODE_ENV=production` só loopback é honrado (o e2e roda
+ * sob `next start`, que É produção); qualquer outro host cai na base da Meta.
+ *
+ * O env entra por parâmetro (como `metaPodeReceber` em `../meta/webhook.ts`):
+ * `NodeJS.ProcessEnv` exige `NODE_ENV` e obrigaria todo teste a montá-lo.
+ */
+export function baseDoInstagram(env: Record<string, string | undefined> = process.env): string {
+  const valor = (env.INSTAGRAM_GRAPH_BASE_URL ?? "").trim().replace(/\/+$/, "");
+  if (!valor) return BASE_DO_INSTAGRAM;
+  if (env.NODE_ENV === "production" && !apontaParaLoopback(valor)) return BASE_DO_INSTAGRAM;
+  return valor;
 }
 
 /**
