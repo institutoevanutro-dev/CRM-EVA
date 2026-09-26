@@ -26,6 +26,8 @@ interface RawMembershipRow {
   role: string;
   /** Só para ORDENAR — a lista decide qual organização fica ativa sem cookie. */
   accepted_at?: string | null;
+  /** Idem: quando a pessoa ativou esta organização pelo seletor (migration 0282). */
+  ultima_ativacao_em?: string | null;
   organizations: OrgJoin | OrgJoin[] | null;
 }
 
@@ -155,6 +157,22 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
   // ⚠️ `ORDER BY` NÃO É ENFEITE AQUI: esta lista decide QUAL ORGANIZAÇÃO FICA
   // ATIVA para quem não tem o cookie `active_org` — `resolveActiveOrg` pega
   // `organizations[0]`. Sem ordenação, "a primeira" é o que o Postgres devolver.
+  //
+  // O PRIMEIRO CRITÉRIO é `ultima_ativacao_em` (migration 0282): a organização
+  // que a pessoa escolheu no seletor por último. O cookie continua mandando
+  // quando existe, e esta ordem é o que decide DEPOIS do logout, que apaga o
+  // cookie de propósito. Sem ela, quem tem duas organizações reabre para sempre
+  // naquela que aceitou primeiro — no caso medido, por duas horas de diferença
+  // entre dois aceites do mesmo dia.
+  //
+  // `nullsFirst: false` é o detalhe que faz a coluna valer: NULL é "nunca
+  // troquei", e precisa PERDER para quem trocou. Com o default (nulos
+  // primeiro), a coluna nova não mudaria nada e o desempate antigo seguiria
+  // decidindo tudo, com o gate verde.
+  //
+  // ⚠️ Nada de ponto e vírgula em comentário DENTRO da cadeia abaixo: o teste
+  // `organizacao-ativa-e-deterministica` lê a consulta do `.from` até o
+  // primeiro `;`, e um em prosa esconde os `.order()` dele.
   const [{ data: paRow, error: paErro }, { data: rawMemberships, error: membErro }] =
     await Promise.all([
       supabase
@@ -166,10 +184,11 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
       supabase
         .from("user_organizations")
         .select(
-          "organization_id, role, interface_settings, accepted_at, organizations(display_name, locale)",
+          "organization_id, role, interface_settings, accepted_at, ultima_ativacao_em, organizations(display_name, locale)",
         )
         .eq("user_id", user.id)
         .is("revoked_at", null)
+        .order("ultima_ativacao_em", { ascending: false, nullsFirst: false })
         .order("accepted_at", { ascending: true, nullsFirst: true })
         .order("organization_id", { ascending: true }),
     ]);

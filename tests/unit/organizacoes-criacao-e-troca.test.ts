@@ -3,10 +3,17 @@ import { NextRequest } from "next/server";
 const h = vi.hoisted(() => ({
   guard: vi.fn(), mfa: vi.fn(), rpc: vi.fn(), audit: vi.fn(), invite: vi.fn(),
   user: vi.fn(), query: vi.fn(), cookie: vi.fn(), getCookie: vi.fn(),
+  /**
+   * O `from` do ADMIN client — hoje só `setActiveOrg` o usa, para gravar
+   * `ultima_ativacao_em` (migration 0282). Encadeável e sempre sem erro: o que
+   * esta suíte mede é a troca de organização, e a preferência é deliberadamente
+   * um efeito que não pode derrubá-la.
+   */
+  adminFrom: vi.fn(),
 }));
 vi.mock("@/lib/auth/requirePlatformAdmin", () => ({ requirePlatformAdmin: h.guard }));
 vi.mock("@/lib/auth/server", () => ({ mfaEmDivida: h.mfa, loadAuthUser: h.user }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: h.rpc }) }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: h.rpc, from: h.adminFrom }) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: h.query }) }));
 vi.mock("@/lib/audit", () => ({ audit: h.audit }));
 vi.mock("@/lib/auth/issue-invite", () => ({ issueInvite: h.invite }));
@@ -25,6 +32,12 @@ beforeEach(() => {
   vi.resetAllMocks();
   h.guard.mockResolvedValue({ user: { id: actor, email: "owner@example.test", user_metadata: {} }, platformAdmin: { scope: "full" } });
   h.user.mockResolvedValue({ id: actor, is_platform_admin: true, organizations: [] });
+  // Cadeia do admin client, encerrando em `{ error: null }` em qualquer ponto:
+  // `setActiveOrg` faz `.update().eq().eq().is()` e aguarda o resultado.
+  const cadeia: Record<string, unknown> = {};
+  for (const metodo of ["update", "eq", "is"]) cadeia[metodo] = () => cadeia;
+  cadeia.then = (resolver: (v: { error: null }) => unknown) => resolver({ error: null });
+  h.adminFrom.mockReturnValue(cadeia);
   h.mfa.mockResolvedValue(false);
   h.rpc.mockResolvedValue({ data: { id: org, display_name: "Minha organização", slug: "minha-org", created: true, invite_id: actor, issued_at: 12345 }, error: null });
   h.invite.mockResolvedValue({ accept_url: "http://localhost/invite", email_dispatched: false });
