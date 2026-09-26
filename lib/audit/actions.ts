@@ -591,6 +591,12 @@ export const AUDIT_ACTIONS = [
   "channel.instagram_token_refreshed",
   // Origem padrão da conta (campo + valor gravados no contato novo) trocada ou limpa.
   "channel.instagram_origem_changed",
+  // A regra de comentário respondeu: privado (Direct pelo comment_id, único e
+  // com prazo de 7 dias) e a resposta pública, sempre. São dois códigos porque
+  // a privada pode falhar sem impedir a pública — juntar os dois num só
+  // esconderia justamente esse desfecho parcial.
+  "comment.private_reply_sent",
+  "comment.replied",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

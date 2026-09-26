@@ -124,6 +124,39 @@ export const instagramAdapter: ChannelAdapter = {
     return { externalId: body.message_id ?? null };
   },
   /**
+   * Direct endereçado pelo `comment_id` — não pelo IGSID, que é o que `send`
+   * usa. Mesmo tratamento de credencial e erro do `send` (reusa
+   * `resolveInstagramToken`/`erroDoInstagram`); a decisão de janela de 7 dias
+   * e "uma por comentário" é de `lib/comentarios/acao.ts`, não daqui.
+   */
+  async respostaPrivadaAoComentario(input) {
+    const token = await resolveInstagramToken(input);
+    if (!token) throw erroDoInstagram(190, "sem chave");
+    const res = await fetch(`${baseDoInstagram()}/${graphVersion()}/${encodeURIComponent(input.sessionRef)}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient: { comment_id: input.commentId }, message: { text: input.texto } }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const body = (await res.json().catch(() => ({}))) as { message_id?: string; error?: { code?: number; message?: string } };
+    if (!res.ok || body.error) throw erroDoInstagram(body.error?.code ?? `http_${res.status}`, body.error?.message ?? `http_${res.status}`);
+    return { messageId: body.message_id ?? null };
+  },
+  /** Reply público, visível no post — endereçado pelo `comment_id`. */
+  async responderComentario(input) {
+    const token = await resolveInstagramToken(input);
+    if (!token) throw erroDoInstagram(190, "sem chave");
+    const res = await fetch(`${baseDoInstagram()}/${graphVersion()}/${encodeURIComponent(input.commentId)}/replies`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ message: input.texto }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const body = (await res.json().catch(() => ({}))) as { id?: string; error?: { code?: number; message?: string } };
+    if (!res.ok || body.error) throw erroDoInstagram(body.error?.code ?? `http_${res.status}`, body.error?.message ?? `http_${res.status}`);
+    return { replyId: body.id ?? null };
+  },
+  /**
    * Baixa a mídia recebida — consumido por `workers/media-persist-worker.ts`,
    * que chama `url: msg.media_url` (a URL do CDN gravada em
    * `lib/channels/instagram/ingest.ts`, que EXPIRA). Sem este método a URL
