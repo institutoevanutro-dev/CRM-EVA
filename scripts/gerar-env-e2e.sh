@@ -123,6 +123,11 @@ WAHA_API_KEY=e2e-placeholder-nao-e-segredo
 WAHA_WEBHOOK_BASE_URL=http://127.0.0.1:3001
 UPSTASH_REDIS_REST_URL=http://127.0.0.1:3998
 UPSTASH_REDIS_REST_TOKEN=e2e-placeholder-nao-e-segredo
+# Graph API do Instagram (envio, saúde, perfil) aponta para o receptor local
+# que \`tests/e2e/instagram-responder.spec.ts\` sobe NESTA porta fixa (47811) e
+# que guarda o que o app mandou. Fora dessa spec nada escuta ali: a busca de
+# perfil de \`instagram-receber\` falha rápido, como falhava contra a Meta real.
+INSTAGRAM_GRAPH_BASE_URL=http://127.0.0.1:47811
 NEXT_TELEMETRY_DISABLED=1
 # Telemetria DESLIGADA na suíte, e não é preferência: sem isto o SDK do browser
 # assume o DSN da comunidade (\`lib/sentry/dsn.ts\` → DEFAULT_SENTRY_DSN) e a suíte

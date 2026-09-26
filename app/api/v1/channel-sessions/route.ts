@@ -17,7 +17,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
-import { PROVIDERS_DE_MENSAGEM, canalRespondePeloCrm } from "@/lib/channels/capabilities";
+import { PROVIDERS_DE_MENSAGEM, canalDeEnvioAutomatico } from "@/lib/channels/capabilities";
 import { createChannelSchema } from "@/lib/schemas/channels";
 import { createClient } from "@/lib/supabase/server";
 import { getWahaClient } from "@/lib/waha/client";
@@ -64,7 +64,7 @@ export async function GET(): Promise<Response> {
   // qual ele é. As listas de "número de WhatsApp" (Conexões › Números, o
   // destino das automações) mostram só quem envia; o Inbox mostra todos.
   const canais = ((data ?? []) as unknown as Array<Record<string, unknown> & { provider?: string | null }>).map(
-    ({ provider, ...resto }) => ({ ...resto, can_send: canalRespondePeloCrm(provider) }),
+    ({ provider, ...resto }) => ({ ...resto, can_send: canalDeEnvioAutomatico(provider) }),
   );
 
   return ok(canais, {

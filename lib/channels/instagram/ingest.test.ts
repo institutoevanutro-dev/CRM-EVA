@@ -20,8 +20,11 @@ function adminFalso(opts: {
   contatoNovo?: boolean;
   identidadeExistente?: boolean;
   updateErro?: { message: string } | null;
+  nomeAtual?: string | null;
+  tentadoEm?: string | null;
 }) {
   const chamadas: Record<"rpc" | "insert" | "update", [string, unknown][]> = { rpc: [], insert: [], update: [] };
+  const filtrosDoUpdate: unknown[][][] = [];
   const admin = {
     rpc: vi.fn(async (nome: string, args: unknown) => {
       chamadas.rpc.push([nome, args]);
@@ -33,24 +36,41 @@ function adminFalso(opts: {
       insert: (linha: unknown) => { chamadas.insert.push([tabela, linha]); return { select: () => ({ maybeSingle: async () => opts.insertErro ? { data: null, error: opts.insertErro } : { data: { id: "M1" }, error: null } }) }; },
       update: (linha: unknown) => {
         chamadas.update.push([tabela, linha]);
-        return { eq: () => ({ eq: async () => ({ error: opts.updateErro ?? null }) }) };
+        const filtros: unknown[][] = [];
+        filtrosDoUpdate.push(filtros);
+        // Encadeável e thenable para qualquer filtro: a conversa usa eq+eq+is/or.
+        const q: Record<string, unknown> = {
+          eq: (...a: unknown[]) => { filtros.push(["eq", ...a]); return q; },
+          is: (...a: unknown[]) => { filtros.push(["is", ...a]); return q; },
+          or: (...a: unknown[]) => { filtros.push(["or", ...a]); return q; },
+          then: (res: (v: unknown) => unknown) => Promise.resolve({ error: opts.updateErro ?? null }).then(res),
+        };
+        return q;
       },
       // Tabela-consciente e encadeável para QUALQUER número de `.eq()`: o
       // check de identidade (`contact_channel_identities`) usa três, a leitura
-      // de `custom_fields` (`contacts`) usa dois.
+      // de `contacts` (custom_fields, e agora display_name/source_metadata)
+      // usa dois.
       select: () => {
         const chain: { eq: () => typeof chain; maybeSingle: () => Promise<{ data: unknown; error: null }> } = {
           eq: () => chain,
           maybeSingle: async () =>
             tabela === "contact_channel_identities"
               ? { data: opts.identidadeExistente ? { contact_id: "C1" } : null, error: null }
-              : { data: { custom_fields: {} }, error: null },
+              : {
+                  data: {
+                    custom_fields: {},
+                    display_name: opts.nomeAtual ?? null,
+                    source_metadata: { perfil_tentado_em: opts.tentadoEm ?? null },
+                  },
+                  error: null,
+                },
         };
         return chain;
       },
     })),
   };
-  return { admin, chamadas };
+  return { admin, chamadas, filtrosDoUpdate };
 }
 
 const sessao = { id: "S1", organizationId: "ORG", igAccountId: "IGACC", tokenCifrado: "x", origemPadrao: { campo: "origem", valor: "Instagram Dr. André" } };
@@ -66,6 +86,33 @@ describe("ingestão do Instagram", () => {
     expect(msg).toMatchObject({ organization_id: "ORG", direction: "inbound", external_id: "m1", body: "Oi" });
     expect(chamadas.update).toContainEqual(["contacts", { custom_fields: { origem: "Instagram Dr. André" } }]);
     expect(aplicarEfeitosPosEntrada).toHaveBeenCalled();
+  });
+
+  it("grava o IGSID do cliente na conversa, no inbound e no eco", async () => {
+    const inbound = adminFalso({});
+    await ingerirDoInstagram(inbound.admin as never, evento(), sessao);
+    expect(inbound.chamadas.update).toContainEqual(["conversations", { provider_conversation_id: "IGSID9" }]);
+    const eco = adminFalso({ contatoNovo: false });
+    await ingerirDoInstagram(eco.admin as never, evento({ eco: true, remetente: "IGACC", destinatario: "IGSID9" }), sessao);
+    expect(eco.chamadas.update).toContainEqual(["conversations", { provider_conversation_id: "IGSID9" }]);
+  });
+
+  it("cala a IA na conversa para sempre (só a equipe responde no Instagram), filtrando a organização", async () => {
+    // Sem isto a conversa nova cai em "Automático" (fn_comando_da_conversa), a
+    // aba onde ninguém olha, e a IA nunca responde Instagram.
+    const { admin, chamadas, filtrosDoUpdate } = adminFalso({});
+    await ingerirDoInstagram(admin as never, evento(), sessao);
+    const i = chamadas.update.findIndex(
+      ([t, l]) => t === "conversations" && (l as Record<string, unknown>).bot_silenced_until === "infinity",
+    );
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(filtrosDoUpdate[i]).toEqual(
+      expect.arrayContaining([
+        ["eq", "organization_id", "ORG"],
+        ["eq", "id", "CV1"],
+        ["or", "bot_silenced_until.is.null,bot_silenced_until.lt.infinity"],
+      ]),
+    );
   });
 
   it("entrega repetida (23505) é duplicada, sem efeitos", async () => {
@@ -105,10 +152,10 @@ describe("ingestão do Instagram", () => {
     expect(args.p_payload).toMatchObject({ message_id: "M1", conversation_id: "CV1" });
   });
 
-  it("identidade já cadastrada não chama a Graph nem decifra o token (só na primeira vez)", async () => {
+  it("identidade já cadastrada e com nome não chama a Graph nem decifra o token", async () => {
     perfilDoRemetenteMock.mockClear();
     decryptWebhookSecretMock.mockClear();
-    const { admin } = adminFalso({ identidadeExistente: true, contatoNovo: false });
+    const { admin } = adminFalso({ identidadeExistente: true, contatoNovo: false, nomeAtual: "Maria" });
     const r = await ingerirDoInstagram(admin as never, evento(), sessao);
     expect(r).toMatchObject({ status: "ingerida" });
     expect(decryptWebhookSecretMock).not.toHaveBeenCalled();
@@ -122,6 +169,25 @@ describe("ingestão do Instagram", () => {
     await ingerirDoInstagram(admin as never, evento(), sessao);
     expect(decryptWebhookSecretMock).toHaveBeenCalled();
     expect(perfilDoRemetenteMock).toHaveBeenCalled();
+  });
+
+  it("eco como primeira mensagem de um contato novo chama a busca de perfil", async () => {
+    perfilDoRemetenteMock.mockClear();
+    decryptWebhookSecretMock.mockClear();
+    const { admin } = adminFalso({ identidadeExistente: false, contatoNovo: true });
+    await ingerirDoInstagram(admin as never, evento({ eco: true, remetente: "IGACC", destinatario: "IGSID9" }), sessao);
+    expect(decryptWebhookSecretMock).toHaveBeenCalled();
+    expect(perfilDoRemetenteMock).toHaveBeenCalled();
+  });
+
+  it("segunda mensagem de contato sem nome, 1h depois da tentativa, não busca de novo", async () => {
+    perfilDoRemetenteMock.mockClear();
+    decryptWebhookSecretMock.mockClear();
+    const umaHoraAtras = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { admin } = adminFalso({ identidadeExistente: true, contatoNovo: false, nomeAtual: null, tentadoEm: umaHoraAtras });
+    await ingerirDoInstagram(admin as never, evento(), sessao);
+    expect(decryptWebhookSecretMock).not.toHaveBeenCalled();
+    expect(perfilDoRemetenteMock).not.toHaveBeenCalled();
   });
 
   it("falha ao gravar a origem padrão vira logger.warn, sem derrubar a ingestão", async () => {

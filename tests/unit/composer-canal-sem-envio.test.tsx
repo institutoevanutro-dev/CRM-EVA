@@ -1,5 +1,5 @@
 /**
- * Conversa num canal que só RECEBE (o Instagram da etapa 1): o composer não
+ * Conversa num canal que só RECEBE (nenhum hoje; foi o Instagram da etapa 1): o composer não
  * deixa escrever a resposta e diz por quê. A nota interna segue liberada, porque
  * ela nunca sai para o cliente.
  *
@@ -35,11 +35,11 @@ vi.mock("@/hooks/inbox/useDraftReply", () => ({
 
 import { Composer } from "@/components/inbox/Composer";
 
-const MOTIVO = "Responder pelo Instagram chega na próxima versão; responda pelo app do Instagram por enquanto.";
+const MOTIVO = "Este canal ainda não envia pelo CRM; responda pelo app dele por enquanto.";
 
 describe("canalRespondePeloCrm decide pela capability", () => {
-  it("canal que só recebe → false; canais que enviam → true; provider ainda não lido → true", () => {
-    expect(canalRespondePeloCrm(CHANNEL_PROVIDER_INSTAGRAM)).toBe(false);
+  it("canais que enviam → true (o Instagram desde a etapa 2); provider ainda não lido → true", () => {
+    expect(canalRespondePeloCrm(CHANNEL_PROVIDER_INSTAGRAM)).toBe(true);
     expect(canalRespondePeloCrm(CHANNEL_PROVIDER_WAHA)).toBe(true);
     expect(canalRespondePeloCrm(CHANNEL_PROVIDER_META)).toBe(true);
     expect(canalRespondePeloCrm(null)).toBe(true);

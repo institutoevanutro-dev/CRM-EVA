@@ -4,7 +4,8 @@ import { useT } from "@/hooks/i18n/useT";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { estadoDaJanela, formatarDecorrido } from "@/lib/channels/janela";
-import { canalRespondePeloCrm } from "@/lib/channels/capabilities";
+import { canalRespondePeloCrm, capabilitiesOf } from "@/lib/channels/capabilities";
+import type { ChannelProvider } from "@/lib/channels/types";
 import { JanelaFechadaAviso } from "@/components/inbox/JanelaFechadaAviso";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useCloseConversation } from "@/hooks/inbox/useCloseConversation";
@@ -197,6 +198,9 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         ? filterValue.search
         : undefined,
       channel_session_id: filterValue.channel_session_id,
+      // Sem esta linha o seletor mostrava "Só Instagram" e a lista seguia
+      // com todos os canais: a contagem das abas filtrava, a lista não.
+      canal: filterValue.canal,
       tag: filterValue.tag,
       unread: filterValue.onlyUnread || undefined,
     }),
@@ -205,6 +209,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       automaticoDaOrg,
       filterValue.search,
       filterValue.channel_session_id,
+      filterValue.canal,
       filterValue.tag,
       filterValue.onlyUnread,
     ],
@@ -323,13 +328,38 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   // não sai pelo CRM ainda. O aviso da janela ("só modelo aprovado") mentiria.
   const motivoSemEnvio = canalRespondePeloCrm(selectedConversation?.channel_sessions?.provider)
     ? null
-    : t("Responder pelo Instagram chega na próxima versão; responda pelo app do Instagram por enquanto.");
+    : t("Este canal ainda não envia pelo CRM; responda pelo app dele por enquanto.");
+  // Vencimento de 7 dias (Instagram, `regra: "sete_dias"`): nem gente escreve
+  // mais, e não há modelo aprovado no Direct — o texto muda, verbatim. Os
+  // demais canais seguem no vencimento de 24h ("modelo"). Estado `humana`
+  // (entre 24h e 7d, GENTE ainda responde) não entra aqui: não é `fechada`.
   const motivoDaJanela =
     !motivoSemEnvio && janela.tipo === "fechada"
-      ? janela.fechadaHaMs === null
-        ? t("O cliente ainda não escreveu — a janela de 24h nunca abriu. Só um modelo aprovado sai daqui.")
-        : `${t("A janela de 24h fechou há")} ${formatarDecorrido(janela.fechadaHaMs)}. ${t("Só um modelo aprovado sai daqui — texto livre é recusado pela plataforma.")}`
+      ? janela.regra === "sete_dias"
+        ? janela.fechadaHaMs === null
+          ? t(
+              "Essa pessoa ainda não escreveu para este perfil. A Meta só deixa responder depois que ela mandar uma mensagem.",
+            )
+          : t(
+              "A Meta só deixa responder até 7 dias depois da última mensagem dessa pessoa. Responda pelo app do Instagram se ela escrever de novo.",
+            )
+        : janela.fechadaHaMs === null
+          ? t("O cliente ainda não escreveu — a janela de 24h nunca abriu. Só um modelo aprovado sai daqui.")
+          : `${t("A janela de 24h fechou há")} ${formatarDecorrido(janela.fechadaHaMs)}. ${t("Só um modelo aprovado sai daqui — texto livre é recusado pela plataforma.")}`
       : null;
+
+  // Limite de texto e mídia do canal, para o Composer — protegido para
+  // provider nulo/desconhecido: `capabilitiesOf` lança fail-closed, e sem
+  // provider resolvido a única resposta honesta é "sem limite conhecido".
+  const providerDaConversa = selectedConversation?.channel_sessions?.provider ?? null;
+  let caps: ReturnType<typeof capabilitiesOf> | null = null;
+  if (providerDaConversa) {
+    try {
+      caps = capabilitiesOf(providerDaConversa as ChannelProvider);
+    } catch {
+      caps = null;
+    }
+  }
 
   const blockedReason = selectedConversation?.contacts?.is_blocked
     ? t("Contato bloqueado — envio de mensagens desabilitado.")
@@ -508,6 +538,8 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
               blockedReason={supportReadonly ? "Acompanhamento somente leitura" : blockedReason}
               janelaFechada={motivoDaJanela}
               semEnvio={motivoSemEnvio}
+              limiteDeTexto={caps?.limiteDeTexto ?? null}
+              soFoto={caps?.midiaDeEnvio === "so_foto"}
               disabled={selectedConversation.status === "closed"}
               contactName={selectedConversation.contacts?.name ?? null}
               respondendo={respondendo}

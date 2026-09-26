@@ -551,6 +551,8 @@ export const DICIONARIO: Traducoes = {
   },
   "Buscar mensagens…": { es: "Buscar mensajes…" },
   "Todos os números": { es: "Todos los números" },
+  "Só Instagram": { es: "Solo Instagram" },
+  "Só WhatsApp": { es: "Solo WhatsApp" },
   "Todas as tags": { es: "Todas las etiquetas" },
   "Apenas não lidos": { es: "Solo no leídos" },
   "Não lidos": { es: "No leídos" },
@@ -4805,6 +4807,17 @@ export const DICIONARIO: Traducoes = {
     es: "Tiempo restante para escribir texto libre. Después de eso, solo modelo aprobado.",
   },
   Janela: { es: "Ventana" },
+  "Resposta da equipe até": { es: "Respuesta del equipo hasta" },
+  "Passou de 24h: só a equipe responde, até 7 dias depois da última mensagem da pessoa.": {
+    es: "Pasaron 24h: solo el equipo responde, hasta 7 días después del último mensaje de la persona.",
+  },
+  "Fora do prazo do Instagram": { es: "Fuera del plazo de Instagram" },
+  "A Meta só deixa responder até 7 dias depois da última mensagem dessa pessoa. Responda pelo app do Instagram se ela escrever de novo.": {
+    es: "Meta solo permite responder hasta 7 días después del último mensaje de esa persona. Responde por la app de Instagram si vuelve a escribir.",
+  },
+  "Essa pessoa ainda não escreveu para este perfil. A Meta só deixa responder depois que ela mandar uma mensagem.": {
+    es: "Esta persona aún no escribió a este perfil. Meta solo permite responder después de que ella envíe un mensaje.",
+  },
   "Lembrete ativo": { es: "Recordatorio activo" },
   "Cancelar lembrete": { es: "Cancelar recordatorio" },
   "Em 1 hora": { es: "En 1 hora" },
@@ -4814,6 +4827,7 @@ export const DICIONARIO: Traducoes = {
   // ─── Inbox: composer (anexos, áudio, contato, templates) ───
   Anexar: { es: "Adjuntar" },
   "Fotos e vídeos": { es: "Fotos y vídeos" },
+  Fotos: { es: "Fotos" },
   Documento: { es: "Documento" },
   "Enviar anexo": { es: "Enviar adjunto" },
   "Legenda (opcional)": { es: "Descripción (opcional)" },
@@ -6795,7 +6809,7 @@ export const DICIONARIO: Traducoes = {
   "Desconectar esta conta?": { es: "¿Desconectar esta cuenta?" },
   "As mensagens novas do Direct deixam de entrar no CRM. As conversas que já estão aqui continuam.": { es: "Los mensajes nuevos del Direct dejan de entrar al CRM. Las conversaciones que ya están aquí continúan." },
   "Contato do Instagram": { es: "Contacto de Instagram" },
-  "Responder pelo Instagram chega na próxima versão; responda pelo app do Instagram por enquanto.": { es: "Responder por Instagram llega en la próxima versión; por ahora, responde desde la app de Instagram." },
+  "Este canal ainda não envia pelo CRM; responda pelo app dele por enquanto.": { es: "Este canal todavía no envía desde el CRM; por ahora, responde desde su app." },
 
   "O que ele consulta antes de responder": { es: "Qué consulta antes de responder" },
   "Marque o material do seu negócio que este assistente pode ler. Ele procura ali antes de responder, em vez de improvisar — e cita de onde tirou.": { es: "Marca el material de tu negocio que este asistente puede leer. Busca ahí antes de responder, en vez de improvisar — y cita de dónde lo sacó." },

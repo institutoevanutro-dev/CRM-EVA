@@ -327,6 +327,8 @@ const schema = z.object({
   // tela não tem um par completo (mesma precedência de `META_APP_SECRET`).
   INSTAGRAM_APP_ID: z.string().optional(),
   INSTAGRAM_APP_SECRET: z.string().optional(),
+  // Só para teste local. Deixe vazio em produção.
+  INSTAGRAM_GRAPH_BASE_URL: z.string().optional().default(""),
 
   // Nuvemshop — opcional (template genérico open-source). Só exigidas quando
   // NUVEMSHOP_ENABLED=true; o runtime já degrada via getConfig()==null.

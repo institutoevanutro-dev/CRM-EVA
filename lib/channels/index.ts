@@ -6,7 +6,7 @@ import { instagramAdapter } from "./adapters/instagram";
 import { metaCloudAdapter } from "./adapters/meta-cloud";
 import { wahaAdapter } from "./adapters/waha";
 import { zernioAdapter } from "./adapters/zernio";
-import { CHANNEL_CAPABILITIES, PROVIDERS_DE_MENSAGEM } from "./capabilities";
+import { canalDeEnvioAutomatico, PROVIDERS_DE_MENSAGEM } from "./capabilities";
 import type { ChannelAdapter, ChannelProvider, ProviderDeMensagem } from "./types";
 
 /**
@@ -49,9 +49,16 @@ export function getAdapter(provider: ChannelProvider): ChannelAdapter {
  * `false` sempre que a variável de ambiente não está setada (teste, banco
  * fresco antes de escanear o QR): usá-la aqui excluiria o WhatsApp de toda
  * automação numa instalação nova, que é o oposto do que se quer filtrar.
+ *
+ * Também exige `iaResponde`: automação é a IA falando, e o Instagram etapa 2
+ * deixa GENTE responder (janela humana de 7 dias) sem abrir a porta para a IA
+ * — `canSend` sozinho não distingue as duas.
+ *
+ * A regra em si (`canSend && iaResponde`) vive só em `canalDeEnvioAutomatico`
+ * — duas definições da mesma pergunta divergiriam no primeiro provider novo.
  */
 export function providersDeEnvioAutomatico(): readonly ProviderDeMensagem[] {
-  return PROVIDERS_DE_MENSAGEM.filter((p) => CHANNEL_CAPABILITIES[p].canSend);
+  return PROVIDERS_DE_MENSAGEM.filter((p) => canalDeEnvioAutomatico(p));
 }
 
 /**
@@ -72,6 +79,8 @@ export {
   PROVIDERS_DE_MENSAGEM,
   PROVIDERS_SEM_MENSAGEM,
   canalConhecidoSemMensagem,
+  canalDeEnvioAutomatico,
+  nomeDoCanal,
   transportaMensagem,
 } from "./capabilities";
 export { CHANNEL_SESSION_REF_COLUMNS, resolveSessionRef } from "./session-ref";

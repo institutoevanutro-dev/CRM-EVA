@@ -73,6 +73,17 @@ export interface ChannelCapabilities {
    * sinal correto mas ORTOGONAL a "este canal sabe enviar".
    */
   canSend: boolean;
+  /** A IA do CRM pode responder por este canal. `false` = só gente. */
+  iaResponde: boolean;
+  /**
+   * Janela estendida para resposta HUMANA depois das 24h (a tag HUMAN_AGENT da
+   * Meta no Instagram). `null` = o canal não tem essa extensão.
+   */
+  janelaHumanaMs: number | null;
+  /** Máximo de caracteres de um texto enviado. `null` = sem limite próprio do canal. */
+  limiteDeTexto: number | null;
+  /** O que o CRM consegue anexar por este canal. */
+  midiaDeEnvio: "completa" | "so_foto";
 }
 
 /**
@@ -97,6 +108,8 @@ export interface RecipientInput {
    * `waIdentity.startsWith("lid:")` — justo o caso que a regra protege.
    */
   waLid?: string | null | undefined;
+  /** Id do cliente NA CONVERSA, quando o canal endereça por conversa (IGSID do Instagram). */
+  providerConversationId?: string | null;
 }
 
 /** Contato compartilhado (vcard) — só `kind: "contact"`. */
@@ -175,6 +188,8 @@ export interface OutboundEnvelope extends ChannelTenantScope {
    * `undefined` = envio solto, que é o caso comum.
    */
   replyToExternalId?: string | null;
+  /** Envio humano fora das 24h num canal com janela humana: o adapter marca a mensagem como atendimento humano. */
+  etiquetaHumana?: boolean;
 }
 
 /**

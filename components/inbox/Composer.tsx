@@ -50,6 +50,18 @@ interface Props {
    */
   semEnvio?: string | null;
   /**
+   * Limite de caracteres do canal (Instagram: 1000, capability
+   * `limiteDeTexto`). `null`/ausente = sem limite, sem contador — inventar
+   * uma régua que o WhatsApp não tem seria ruído.
+   */
+  limiteDeTexto?: number | null;
+  /**
+   * Canal que só manda foto (Instagram: `midiaDeEnvio: "so_foto"`). Some o
+   * gravador de áudio — o Direct não aceita o ogg/opus que ele grava — e
+   * repassa ao `AttachMenu`, que reduz o menu "+" a "Fotos".
+   */
+  soFoto?: boolean;
+  /**
    * A mensagem que esta resposta CITA, quando o atendente escolheu responder
    * "em cima" de uma. `null` = envio solto, o caso comum.
    *
@@ -72,6 +84,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     blockedReason,
     janelaFechada,
     semEnvio,
+    limiteDeTexto,
+    soFoto,
     contactName,
     currentContactId,
     respondendo,
@@ -103,8 +117,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   // A janela só alcança o que SAI. Em modo nota o composer segue liberado: a
   // nota interna nunca chega ao cliente, e é onde o atendente registra por que
   // a conversa esfriou — barrá-la tira exatamente o que ainda dá para fazer.
+  // Acima do limite do canal (Instagram: 1000 caracteres), o envio trava —
+  // inclusive pelo Enter, que passa pelo MESMO `handleSubmit`.
+  const acimaDoLimite = mode === "reply" && !!limiteDeTexto && text.length > limiteDeTexto;
   const respostaBarrada =
-    isDisabled || (mode === "reply" && !!janelaFechada) || (mode === "reply" && !!semEnvio);
+    isDisabled ||
+    (mode === "reply" && !!janelaFechada) ||
+    (mode === "reply" && !!semEnvio) ||
+    acimaDoLimite;
 
   function autoresize() {
     const ta = taRef.current;
@@ -286,6 +306,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               disabled={respostaBarrada}
               onPick={setPendingFile}
               onPickContact={() => setContactPickerOpen(true)}
+              soFoto={soFoto}
             />
           )}
           <EmojiButton
@@ -356,10 +377,23 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             >
               <PaperPlaneTilt size={16} weight="fill" aria-hidden />
             </Button>
-          ) : (
+          ) : soFoto ? null : (
+            // O Direct não aceita o ogg/opus que este gravador produz —
+            // `soFoto` some com ele em vez de deixar gravar um áudio que o
+            // servidor (Task 3) vai recusar no envio.
             <AudioRecorder conversationId={conversationId} disabled={respostaBarrada} />
           )}
         </div>
+        {mode === "reply" && limiteDeTexto && (
+          <p
+            className={cn(
+              "mt-1 text-right text-[11px] text-muted-foreground",
+              acimaDoLimite && "text-destructive",
+            )}
+          >
+            {text.length}/{limiteDeTexto}
+          </p>
+        )}
       </div>
       <AttachmentPreviewDialog
         file={pendingFile}

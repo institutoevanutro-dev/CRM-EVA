@@ -90,6 +90,7 @@ export {
   ChatCircle,
   Phone,
   InstagramLogo,
+  WhatsappLogo,
   PhoneIncoming,
   PhoneOutgoing,
   PhoneX,

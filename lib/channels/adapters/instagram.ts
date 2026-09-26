@@ -1,7 +1,6 @@
 /**
- * Adapter do Instagram. Etapa 1 só RECEBE (webhook → lib/channels/instagram/ingest.ts):
- * envio chega na etapa 2 (spec §5.5). Recusar com código próprio, e não com o genérico,
- * deixa a tela explicar "responder pelo Instagram ainda não está disponível".
+ * Adapter do Instagram. Etapa 1 recebe (webhook → lib/channels/instagram/ingest.ts).
+ * Etapa 2 (esta) envia texto e foto pela Graph API (spec §5.5).
  */
 import { graphVersion } from "@/lib/graph-version";
 import { assertDestinoResolvidoSeguro } from "@/lib/automation/outbound-ip";
@@ -9,8 +8,26 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { MAX_MEDIA_BYTES, MediaTooLargeError, type FetchedMedia } from "@/lib/messaging/media/types";
 
-import { BASE_DO_INSTAGRAM } from "../instagram/graph";
+import { capabilitiesOf, CHANNEL_PROVIDER_INSTAGRAM } from "../capabilities";
+import { baseDoInstagram } from "../instagram/graph";
 import type { ChannelAdapter, ChannelHealth, ChannelTenantScope } from "../types";
+
+/**
+ * Fonte única do limite: `capabilities.ts` já declara `limiteDeTexto: 1000`
+ * para `meta_instagram` — duplicar o número aqui como constante local
+ * divergiria em silêncio no dia em que só um dos dois lugares mudasse.
+ */
+const LIMITE_DE_TEXTO = capabilitiesOf(CHANNEL_PROVIDER_INSTAGRAM).limiteDeTexto ?? 1000;
+/** Tipos aceitos por FOTO — a capability só diz `midiaDeEnvio: "so_foto"` (o QUE), não os mimes exatos (o COMO). */
+const TIPOS_DE_FOTO = new Set(["image/jpeg", "image/png"]);
+
+function erroDoInstagram(codigo: number | string, detalhe: string): Error {
+  const frases: Record<string, string> = {
+    "190": "A chave deste perfil venceu ou foi revogada. Reconecte o Instagram em Conexões.",
+    "551": "Essa pessoa não pode receber mensagens deste perfil.",
+  };
+  return new Error(`instagram_${codigo}: ${frases[String(codigo)] ?? detalhe}`);
+}
 
 /**
  * O token em claro da sessão — organização + `ig_account_id` (= `sessionRef`,
@@ -71,10 +88,40 @@ const FETCH_TIMEOUT_MS = 30_000;
 
 export const instagramAdapter: ChannelAdapter = {
   provider: "meta_instagram",
-  resolveRecipient: () => null,
-  isConfigured: () => false,
-  async send() {
-    throw new Error("instagram_envio_indisponivel");
+  resolveRecipient: (input) => (input.isGroup ? null : input.providerConversationId ?? null),
+  isConfigured: () => true,
+  async send(envelope) {
+    let message: Record<string, unknown>;
+    if (envelope.kind === "text") {
+      const texto = envelope.body ?? "";
+      if (texto.length > LIMITE_DE_TEXTO) {
+        throw new Error(`instagram_texto_longo: O Instagram aceita até ${LIMITE_DE_TEXTO} caracteres por mensagem.`);
+      }
+      message = { text: texto };
+    } else if (envelope.kind === "image" && envelope.media && TIPOS_DE_FOTO.has(envelope.media.mime ?? "")) {
+      message = { attachment: { type: "image", payload: { url: envelope.media.url } } };
+    } else {
+      throw new Error("instagram_tipo_nao_suportado: Por enquanto o Instagram aceita só texto e foto pelo CRM.");
+    }
+
+    const token = await resolveInstagramToken(envelope);
+    if (!token) throw erroDoInstagram(190, "sem chave");
+
+    await envelope.beforeSend?.();
+    const res = await fetch(`${baseDoInstagram()}/${graphVersion()}/${encodeURIComponent(envelope.sessionRef)}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipient: { id: envelope.to },
+        message,
+        ...(envelope.etiquetaHumana ? { messaging_type: "MESSAGE_TAG", tag: "HUMAN_AGENT" } : {}),
+      }),
+      // Mesmo teto do checkHealth: Graph pendurada não segura o envio.
+      signal: AbortSignal.timeout(15_000),
+    });
+    const body = (await res.json().catch(() => ({}))) as { message_id?: string; error?: { code?: number; message?: string } };
+    if (!res.ok || body.error) throw erroDoInstagram(body.error?.code ?? `http_${res.status}`, body.error?.message ?? `http_${res.status}`);
+    return { externalId: body.message_id ?? null };
   },
   /**
    * Baixa a mídia recebida — consumido por `workers/media-persist-worker.ts`,
@@ -161,7 +208,7 @@ export const instagramAdapter: ChannelAdapter = {
     try {
       // Teto de espera: sem ele, uma Graph pendurada pendura o cron de saúde
       // inteiro, não só esta sessão.
-      res = await fetch(`${BASE_DO_INSTAGRAM}/${graphVersion()}/me?fields=user_id,username`, {
+      res = await fetch(`${baseDoInstagram()}/${graphVersion()}/me?fields=user_id,username`, {
         headers: { Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(15_000),
       });
@@ -179,7 +226,7 @@ export const instagramAdapter: ChannelAdapter = {
   },
   codes: {
     notConfigured: "instagram_nao_configurado",
-    sendFailed: "instagram_envio_indisponivel",
+    sendFailed: "instagram_erro_de_envio",
     unknownError: "instagram_erro_desconhecido",
   },
 };

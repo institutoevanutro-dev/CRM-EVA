@@ -91,6 +91,38 @@ describe("NÃO mostra quando não ajuda", () => {
   });
 });
 
+describe("selo de canal no avatar", () => {
+  it("Instagram: selo com rótulo Instagram", () => {
+    render(
+      <ConversationListItem
+        conversation={{ ...base, channel: "instagram" } as ConversationWithContact}
+        isSelected={false}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText("Instagram")).toBeInTheDocument();
+  });
+
+  it("WhatsApp: selo com rótulo WhatsApp", () => {
+    render(
+      <ConversationListItem
+        conversation={base}
+        isSelected={false}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText("WhatsApp")).toBeInTheDocument();
+  });
+
+  it("a bolinha de comando continua no canto inferior DIREITO do avatar", () => {
+    const { container } = render(
+      <ConversationListItem conversation={base} isSelected={false} onSelect={() => {}} />,
+    );
+    const dot = container.querySelector('[aria-hidden][class*="-right-0.5"]');
+    expect(dot).not.toBeNull();
+  });
+});
+
 describe("o elo que some sem barulho", () => {
   it("o SELECT do listado traz a sessão — sem isso o badge nunca tem o que mostrar", () => {
     // O componente pode estar perfeito e o rótulo não aparecer nunca, porque o

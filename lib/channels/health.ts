@@ -30,7 +30,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { PROVIDERS_DE_MENSAGEM } from "./capabilities";
+import { nomeDoCanal, PROVIDERS_DE_MENSAGEM } from "./capabilities";
 
 /** Único estado em que mensagem entra e sai. Contrato do CRM (uppercase). */
 export const STATUS_SAUDAVEL = "WORKING";
@@ -112,8 +112,18 @@ export interface SaudeObservada {
  * `apelido` é como o operador chama esta conexão na tela. Entra no título porque
  * com dois números ligados "WhatsApp desconectado" não diz QUAL — e a primeira
  * pergunta de quem lê o aviso é exatamente essa.
+ *
+ * `provider` decide o NOME do canal no título (`nomeDoCanal`) — sem ele (ou com
+ * um provider que não seja Instagram) o texto continua igual ao de sempre
+ * ("WhatsApp"), porque este mecanismo nasceu para o WAHA e é o comportamento
+ * que o resto da matriz (Cloud, BSP) ainda reconhece.
  */
-export function avisoDaConexao(saude: SaudeObservada, apelido: string): AvisoDeConexao | null {
+export function avisoDaConexao(
+  saude: SaudeObservada,
+  apelido: string,
+  provider?: string | null,
+): AvisoDeConexao | null {
+  const canal = nomeDoCanal(provider);
   if (!saude.reachable) {
     // "Não deu para perguntar" tem DOIS motivos que pedem ações opostas, e
     // tratá-los igual foi o defeito medido: numa VPS real a chave do WAHA foi
@@ -129,7 +139,7 @@ export function avisoDaConexao(saude: SaudeObservada, apelido: string): AvisoDeC
       return {
         kind: "channel_number_alert",
         severity: "critical",
-        title: `Conexão "${apelido}": o servidor de WhatsApp recusou a chave de acesso`,
+        title: `Conexão "${apelido}": o servidor de ${canal} recusou a chave de acesso`,
         body:
           "Escanear o QR não resolve: a chave que o CRM usa para falar com o servidor de WhatsApp não confere com a que o servidor espera. Enquanto isso durar, nenhuma mensagem entra nem sai por NENHUMA conexão. Quem cuida do servidor precisa conferir a WAHA_API_KEY do .env e recriar o contêiner do WhatsApp.",
         episodio: "CREDENCIAL_RECUSADA",
@@ -168,6 +178,17 @@ export function avisoDaConexao(saude: SaudeObservada, apelido: string): AvisoDeC
   if (!(STATUS_QUE_AVISAM as readonly string[]).includes(status)) return null;
 
   if (status === "SCAN_QR_CODE") {
+    // O Instagram não usa QR (a conexão é OAuth) — se algum dia reportar este
+    // status, "escaneie o QR" seria uma instrução que não existe na tela dele.
+    if (canal === "Instagram") {
+      return {
+        kind: "channel_number_alert",
+        severity: "critical",
+        title: `Instagram "${apelido}" desconectado, reconecte em Conexões`,
+        body: "Enquanto isso não acontecer, nenhuma mensagem entra nem sai por esta conexão.",
+        episodio: status,
+      };
+    }
     return {
       kind: "qr_rescan",
       severity: "critical",
@@ -180,7 +201,7 @@ export function avisoDaConexao(saude: SaudeObservada, apelido: string): AvisoDeC
   return {
     kind: "channel_number_alert",
     severity: "critical",
-    title: `WhatsApp "${apelido}" fora do ar (${status})`,
+    title: `${canal} "${apelido}" fora do ar (${status})`,
     body: "Nenhuma mensagem entra nem sai por esta conexão até ela voltar.",
     episodio: status,
   };
@@ -233,6 +254,8 @@ interface SessaoParaVigiar {
   id: string;
   organization_id: string;
   status: string | null;
+  /** Decide o NOME do canal no título do aviso (`nomeDoCanal`). Omitido = WhatsApp. */
+  provider?: string | null;
 }
 
 /**
@@ -282,7 +305,7 @@ export async function sincronizarSaudeDaConexao(
    */
   origem: "varredura" | "empurrao" | "renovacao" = "varredura",
 ): Promise<"avisado" | "ja_avisado" | "resolvido" | "sem_mudanca"> {
-  const aviso = avisoDaConexao(saude, apelido);
+  const aviso = avisoDaConexao(saude, apelido, sessao.provider);
 
   const { data: linha } = await admin
     .from("channel_session_health")

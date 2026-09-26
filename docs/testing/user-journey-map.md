@@ -2468,6 +2468,25 @@ para um campo `select` do funil.
 janela de 24h/7d, follow-up automático em canal `etiqueta_humana_7d`,
 Messenger. Ver `.superpowers/sdd/2026-09-24-instagram-direct-etapa-1/task-10-brief.md`.
 
+### J25.2 — Responder o Instagram pelo Inbox (etapa 2) `[P1]`
+
+A Graph API é um receptor HTTP local na porta 47811
+(`INSTAGRAM_GRAPH_BASE_URL` no `.env.e2e`, gerado por `scripts/gerar-env-e2e.sh`),
+que responde como a Meta e guarda o que o app mandou. O seed
+(`scripts/seed-e2e-instagram.ts`, passos 5 e 6) grava uma conversa do Instagram
+recente, uma de 8 dias e uma de WhatsApp.
+
+| Caso | Prioridade | Resultado |
+|---|---|---|
+| Filtro "Só Instagram" deixa só conversas com selo Instagram; "Só WhatsApp", só com selo WhatsApp | `[P1]` | **PASS pela tela.** `tests/e2e/instagram-responder.spec.ts`. Achou bug: a rota `GET /api/v1/conversations` não lia `canal` e o Inbox não o repassava; a lista voltava com todos os canais. Corrigido na causa, com teste de rota. Evidência: `.superpowers/evidence/instagram-responder/01-filtro-so-instagram.png`, `.superpowers/evidence/instagram-responder/02-filtro-so-whatsapp.png` |
+| Conversa recente: o "+" mostra só "Fotos", sem microfone, contador 0/1000 | `[P1]` | **PASS.** Evidência: `.superpowers/evidence/instagram-responder/03-anexar-so-fotos.png` |
+| "Olá, tudo bem?" enviado pela tela chega à Graph com `{ recipient: { id: <IGSID> }, message: { text } }`, sem `tag`, com o token decifrado; a bolha aparece como enviada | `[P1]` | **PASS.** Evidência: `.superpowers/evidence/instagram-responder/04-resposta-enviada.png` |
+| Conversa de 8 dias: compositor e "+" desabilitados, texto dos 7 dias verbatim, selo "Fora do prazo do Instagram"; nada chega à Graph | `[P1]` | **PASS.** Evidência: `.superpowers/evidence/instagram-responder/05-fora-do-prazo.png` |
+
+**NÃO MEDIDO:** envio entre 24h e 7 dias com `tag: HUMAN_AGENT` (coberto por
+`tests/unit/mensagens-envio-instagram.test.ts`, não pela tela), envio de foto
+e a aceitação real da tag pela Meta (prova manual depois do deploy).
+
 ## Integração opcional com financeiro Eva
 - Entrada: Contatos → contato → aba Financeiro (gerente/admin, contato não anonimizado).
 - Testes de rota: `tests/unit/integracao-financeiro-rotas.test.ts`, organização errada, anonimização, perfil insuficiente, indisponibilidade.

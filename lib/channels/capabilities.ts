@@ -30,6 +30,10 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     groups: "full",
     costPerMessage: false,
     canSend: true,
+    iaResponde: true,
+    janelaHumanaMs: null,
+    limiteDeTexto: null,
+    midiaDeEnvio: "completa",
   },
   // Hetero-restrição: não me banem, mas a Meta me proíbe e me cobra.
   meta_cloud: {
@@ -44,6 +48,10 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     groups: "limited",
     costPerMessage: true,
     canSend: true,
+    iaResponde: true,
+    janelaHumanaMs: null,
+    limiteDeTexto: null,
+    midiaDeEnvio: "completa",
   },
   // Mesma hetero-restrição do canal oficial, por baixo: é um BSP: a WABA é da
   // Meta, os templates são aprovados pela Meta e a janela de 24h é da Meta. O
@@ -78,13 +86,22 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     groups: "limited",
     costPerMessage: true,
     canSend: true,
+    iaResponde: true,
+    janelaHumanaMs: null,
+    limiteDeTexto: null,
+    midiaDeEnvio: "completa",
   },
-  // Etapa 1 só recebe (webhook). O Direct não tem template aprovado nem janela
-  // de 24h formal como o WhatsApp — a restrição real da API é a janela de 24h
-  // desde a última mensagem do cliente, imposta pela PLATAFORMA (hetero-
-  // restrição), não auto-restrição por volume como o `waha`. Sem grupos, sem
-  // gestão de template, e o envio em si ainda não existe (adapter recusa) —
-  // por isso `costPerMessage: false` é o único valor honesto hoje.
+  // O Direct não tem template aprovado nem janela de 24h formal como o
+  // WhatsApp — a restrição real da API é a janela de 24h desde a última
+  // mensagem do cliente, imposta pela PLATAFORMA (hetero-restrição), não
+  // auto-restrição por volume como o `waha`. Sem grupos, sem gestão de
+  // template — por isso `costPerMessage: false` é o único valor honesto hoje.
+  //
+  // Etapa 2: GENTE passa a poder responder, até 7 dias desde a última mensagem
+  // do cliente (a tag HUMAN_AGENT da Meta) — `janelaHumanaMs`. A IA continua
+  // fora (`iaResponde: false`): a extensão é para o humano, não para automação.
+  // `limiteDeTexto: 1000` e `midiaDeEnvio: "so_foto"` são limites medidos da
+  // API do Direct, não do WhatsApp.
   meta_instagram: {
     freeformOutsideWindow: false,
     requiresTemplates: false,
@@ -94,9 +111,13 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     voiceNote: "opus-only",
     groups: "none",
     costPerMessage: false,
-    // O adapter existe e RECEBE, mas `send()` sempre lança — envio chega na
-    // etapa 2. Quem escolhe sessão para automação lê este campo, não o nome.
-    canSend: false,
+    // Etapa 2: a EQUIPE responde pelo Inbox (texto e foto). A IA não
+    // (`iaResponde: false`); quem escolhe sessão para automação lê os dois.
+    canSend: true,
+    iaResponde: false,
+    janelaHumanaMs: 7 * 24 * 60 * 60 * 1000,
+    limiteDeTexto: 1000,
+    midiaDeEnvio: "so_foto",
   },
 };
 
@@ -198,7 +219,8 @@ export function canalConhecidoSemMensagem(provider: string | null | undefined): 
 
 /**
  * A TELA pode oferecer "responder" nesta conversa? `false` só para canal de
- * mensagem conhecido com `canSend: false` (o Instagram da etapa 1). Provider
+ * mensagem conhecido com `canSend: false` (nenhum hoje; o Instagram foi até a
+ * etapa 2). Provider
  * ainda não lido (`null`) ou desconhecido responde `true`: travar o composer
  * por falta de dado seria pior, e quem decide o envio de fato é o handler, que
  * falha fechado (`capabilitiesOf`).
@@ -206,6 +228,27 @@ export function canalConhecidoSemMensagem(provider: string | null | undefined): 
 export function canalRespondePeloCrm(provider: string | null | undefined): boolean {
   const caps = CHANNEL_CAPABILITIES[(provider ?? "") as ProviderDeMensagem];
   return caps ? caps.canSend : true;
+}
+
+/**
+ * O canal serve de destino para AUTOMAÇÃO (as listas de "número de WhatsApp":
+ * Conexões › Números, destino das automações)? Precisa enviar E a IA poder
+ * falar por ele: o Instagram envia desde a etapa 2, mas só a equipe, pelo
+ * Inbox. Desconhecido ou `null` responde `true`, pelo mesmo motivo de cima.
+ */
+export function canalDeEnvioAutomatico(provider: string | null | undefined): boolean {
+  const caps = CHANNEL_CAPABILITIES[(provider ?? "") as ProviderDeMensagem];
+  return caps ? caps.canSend && caps.iaResponde : true;
+}
+
+/**
+ * O nome do TRANSPORTE, para aviso e log lidos por gente — nunca confundir com
+ * `nomeDoCanal` de `./estado.ts` (o APELIDO da conexão, ex.: "Vendas"). Só o
+ * Instagram diverge; todo o resto (WAHA, Cloud, BSP) fala como "WhatsApp"
+ * porque é o que o operador reconhece.
+ */
+export function nomeDoCanal(provider: string | null | undefined): "WhatsApp" | "Instagram" {
+  return provider === CHANNEL_PROVIDER_INSTAGRAM ? "Instagram" : "WhatsApp";
 }
 
 export function capabilitiesOf(provider: ChannelProvider): ChannelCapabilities {

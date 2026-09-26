@@ -35,12 +35,16 @@ import { decryptWebhookSecret, encryptWebhookSecret } from "@/lib/webhooks/secre
 
 import { CHANNEL_PROVIDER_INSTAGRAM } from "../capabilities";
 import { BASE_DO_INSTAGRAM } from "./graph";
+import { deveBuscarPerfil, nomeAtualDoContato, preencherPerfilDoContato } from "./perfil-do-contato";
 
 /** Renova quando faltam menos de 15 dias — folga contra uma rodada perdida. */
 const JANELA_DE_RENOVACAO_MS = 15 * 24 * 60 * 60 * 1000;
 
 /** Teto por rodada: renovar centenas de contas num tick estouraria a cota da Meta. */
 const TETO_POR_RODADA = 50;
+
+/** Teto de contatos sem nome preenchidos por sessão, por rodada. */
+const TETO_DE_NOMES_POR_SESSAO = 50;
 
 export function precisaRenovar(expiraEm: Date, agora: Date): boolean {
   return expiraEm.getTime() - agora.getTime() < JANELA_DE_RENOVACAO_MS;
@@ -67,6 +71,26 @@ export async function sessoesParaRenovar(
     .not("ig_token_encrypted", "is", null)
     .lte("ig_token_expires_at", limite)
     .limit(TETO_POR_RODADA);
+  if (error || !data) return [];
+  return data as SessaoParaRenovar[];
+}
+
+/**
+ * As sessões `meta_instagram` ativas cujo token ainda vale: a passada diária
+ * dos nomes roda em TODAS, não só nas que renovaram (essas renovam a cada ~45
+ * dias, e o nome esperaria isso tudo).
+ */
+async function sessoesComTokenUtilizavel(
+  admin: SupabaseClient,
+  agora: Date,
+): Promise<SessaoParaRenovar[]> {
+  const { data, error } = await admin
+    .from("channel_sessions")
+    .select("id, organization_id, ig_username, ig_token_encrypted")
+    .eq("provider", CHANNEL_PROVIDER_INSTAGRAM)
+    .is("archived_at", null)
+    .not("ig_token_encrypted", "is", null)
+    .gt("ig_token_expires_at", agora.toISOString());
   if (error || !data) return [];
   return data as SessaoParaRenovar[];
 }
@@ -117,10 +141,61 @@ function apelidoDaSessao(sessao: SessaoParaRenovar): string {
   return `Instagram ${sessao.ig_username ? `@${sessao.ig_username}` : "sem nome"}`;
 }
 
+interface ConversaSemNome {
+  contact_id: string;
+  provider_conversation_id: string;
+  contacts: { display_name: string | null; source_metadata: Record<string, unknown> } | null;
+}
+
+/**
+ * Até `TETO_DE_NOMES_POR_SESSAO` contatos sem nome desta sessão, preenchidos
+ * com o token que acabou de renovar (válido em mãos). Mesma regra de
+ * `deveBuscarPerfil` que a ingestão usa — aqui sempre com `identidadeNova:
+ * false` (a rodada só olha contato já existente).
+ */
+async function preencherNomesDaSessao(
+  admin: SupabaseClient,
+  sessao: Pick<SessaoParaRenovar, "id" | "organization_id">,
+  token: string,
+  agora: Date,
+): Promise<number> {
+  const { data, error } = await admin
+    .from("conversations")
+    .select("contact_id, provider_conversation_id, contacts:contact_id!inner(display_name, source_metadata)")
+    .eq("organization_id", sessao.organization_id)
+    .eq("channel_session_id", sessao.id)
+    .not("provider_conversation_id", "is", null)
+    .is("contacts.display_name", null)
+    .limit(TETO_DE_NOMES_POR_SESSAO);
+  if (error) {
+    logger.warn("[instagram.renovacao] ler conversas sem nome falhou", {
+      sessionId: sessao.id,
+      detail: error.message,
+    });
+    return 0;
+  }
+
+  let preenchidos = 0;
+  for (const linha of (data ?? []) as unknown as ConversaSemNome[]) {
+    const tentadoEm = (linha.contacts?.source_metadata?.perfil_tentado_em as string | undefined) ?? null;
+    if (!deveBuscarPerfil({ identidadeNova: false, nomeAtual: nomeAtualDoContato(linha.contacts), tentadoEm, agora })) continue;
+    const resultado = await preencherPerfilDoContato(admin, {
+      organizationId: sessao.organization_id,
+      contactId: linha.contact_id,
+      igsid: linha.provider_conversation_id,
+      token,
+      agora,
+    });
+    if (resultado === "preenchido") preenchidos += 1;
+  }
+  return preenchidos;
+}
+
 export interface ResumoDaRenovacao {
   examinadas: number;
   renovadas: number;
   falhas: number;
+  nomesPreenchidos: number;
 }
 
 /**
@@ -132,12 +207,19 @@ export async function renovarTokensDoInstagram(
   admin: SupabaseClient,
   agora: Date,
 ): Promise<ResumoDaRenovacao> {
-  const resumo: ResumoDaRenovacao = { examinadas: 0, renovadas: 0, falhas: 0 };
+  const resumo: ResumoDaRenovacao = { examinadas: 0, renovadas: 0, falhas: 0, nomesPreenchidos: 0 };
   const sessoes = await sessoesParaRenovar(admin, agora);
+  // Token que acabou de renovar já está em claro: a passada dos nomes o reusa.
+  const tokensEmMaos = new Map<string, string>();
 
   for (const sessao of sessoes) {
     resumo.examinadas += 1;
-    const alvo = { id: sessao.id, organization_id: sessao.organization_id, status: null };
+    const alvo = {
+      id: sessao.id,
+      organization_id: sessao.organization_id,
+      status: null,
+      provider: CHANNEL_PROVIDER_INSTAGRAM,
+    };
     const apelido = apelidoDaSessao(sessao);
     try {
       const tokenAtual = await decryptWebhookSecret(admin, sessao.ig_token_encrypted);
@@ -173,6 +255,7 @@ export async function renovarTokensDoInstagram(
       // motivo (`sincronizarSaudeDaConexao` só fecha o episódio que casa).
       await sincronizarSaudeDaConexao(admin, alvo, { reachable: true, status: null, detail: null }, apelido, "renovacao");
       resumo.renovadas += 1;
+      tokensEmMaos.set(sessao.id, renovado.token);
     } catch (err) {
       logger.warn("[instagram.renovacao] falhou numa sessão", {
         sessionId: sessao.id,
@@ -182,12 +265,34 @@ export async function renovarTokensDoInstagram(
     }
   }
 
-  // Só audita rodada que renovou algo — rodada vazia (ou só falhas) não é
-  // mutação (tests/unit/cron-audita-so-quando-ha-efeito.test.ts).
-  if (resumo.renovadas > 0) {
+  // Toda sessão com token válido preenche quem ainda ficou sem nome (o eco
+  // que chegou como primeira mensagem, por exemplo: `perfil-do-contato.ts`).
+  // Teto de 50 por sessão e throttle de 24h por contato seguem valendo.
+  for (const sessao of await sessoesComTokenUtilizavel(admin, agora)) {
+    try {
+      const token = tokensEmMaos.get(sessao.id) ?? (await decryptWebhookSecret(admin, sessao.ig_token_encrypted));
+      if (!token) continue;
+      resumo.nomesPreenchidos += await preencherNomesDaSessao(admin, sessao, token, agora);
+    } catch (err) {
+      logger.warn("[instagram.renovacao] preencher nomes falhou numa sessão", {
+        sessionId: sessao.id,
+        detail: err instanceof Error ? err.message : "erro",
+      });
+    }
+  }
+
+  // Só audita rodada que teve efeito — token renovado OU nome preenchido;
+  // rodada vazia (ou só falhas) não é mutação
+  // (tests/unit/cron-audita-so-quando-ha-efeito.test.ts).
+  if (resumo.renovadas > 0 || resumo.nomesPreenchidos > 0) {
     await audit({
       action: "channel.instagram_token_refreshed",
-      metadata: { examinadas: resumo.examinadas, renovadas: resumo.renovadas, falhas: resumo.falhas },
+      metadata: {
+        examinadas: resumo.examinadas,
+        renovadas: resumo.renovadas,
+        falhas: resumo.falhas,
+        nomes_preenchidos: resumo.nomesPreenchidos,
+      },
     });
   }
 

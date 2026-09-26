@@ -103,6 +103,32 @@ describe("quando avisar", () => {
   it("estado desconhecido não vira aviso — o vocabulário é do transporte", () => {
     expect(avisoDaConexao({ reachable: true, status: "ALGO_NOVO", detail: null }, "V")).toBeNull();
   });
+
+  it("provider meta_instagram: o título não fala em WhatsApp nem em QR", () => {
+    // O aviso é genérico (nasceu para o WAHA), e um "WhatsApp fora do ar" em
+    // cima de uma conexão do Instagram manda o operador procurar o número
+    // errado.
+    const a = avisoDaConexao(
+      { reachable: true, status: "FAILED", detail: null },
+      "Instagram @clinica",
+      "meta_instagram",
+    );
+    expect(a?.title).not.toMatch(/WhatsApp/);
+    expect(a?.title).not.toMatch(/QR/);
+    expect(a?.title).toContain("Instagram");
+  });
+
+  it("sem provider (ou 'waha'): continua igual ao de hoje — fala em WhatsApp", () => {
+    const semProvider = avisoDaConexao({ reachable: true, status: "FAILED", detail: null }, "Vendas");
+    const waha = avisoDaConexao(
+      { reachable: true, status: "FAILED", detail: null },
+      "Vendas",
+      "waha",
+    );
+    expect(semProvider?.title).toMatch(/WhatsApp/);
+    expect(waha?.title).toMatch(/WhatsApp/);
+    expect(semProvider).toEqual(waha);
+  });
 });
 
 // ---------------------------------------------------------------------------

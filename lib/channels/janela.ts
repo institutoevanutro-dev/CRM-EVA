@@ -36,6 +36,12 @@ export type EstadoDaJanela =
   /** Dá para escrever livremente; `restanteMs` é quanto falta para fechar. */
   | { tipo: "aberta"; restanteMs: number }
   /**
+   * Passou das 24h, mas GENTE ainda pode responder até `restanteMs` acabar —
+   * a extensão de `janelaHumanaMs` (a tag HUMAN_AGENT da Meta no Instagram).
+   * Canal sem essa extensão nunca produz este estado.
+   */
+  | { tipo: "humana"; restanteMs: number }
+  /**
    * Fechada: só modelo aprovado sai daqui.
    *
    * `fechadaHaMs` é HÁ QUANTO TEMPO fechou — não quando o cliente escreveu.
@@ -43,8 +49,12 @@ export type EstadoDaJanela =
    * até o vencimento é o que decide se ainda vale insistir ou se a conversa
    * esfriou. `null` quando o cliente nunca escreveu: aí não houve fechamento, e
    * inventar um número seria descrever um prazo que nunca correu.
+   *
+   * `regra` diz QUAL vencimento fechou isto: `"modelo"` é a janela de 24h
+   * comum (só sai por template aprovado); `"sete_dias"` é quem tem
+   * `janelaHumanaMs` e passou também dela — nem gente escreve mais.
    */
-  | { tipo: "fechada"; fechadaHaMs: number | null };
+  | { tipo: "fechada"; fechadaHaMs: number | null; regra: "modelo" | "sete_dias" };
 
 /**
  * O estado da janela desta conversa, agora.
@@ -65,16 +75,24 @@ export function estadoDaJanela(
   // Mostrar um relógio nele seria inventar uma urgência que não existe.
   if (caps.freeformOutsideWindow) return { tipo: "sem_restricao" };
 
-  if (!lastInboundAt) return { tipo: "fechada", fechadaHaMs: null };
+  const regra = caps.janelaHumanaMs === null ? "modelo" : "sete_dias";
+  if (!lastInboundAt) return { tipo: "fechada", fechadaHaMs: null, regra };
 
   const ultimo = new Date(lastInboundAt);
   const restanteMs = windowRemainingMs(agora, ultimo);
   if (restanteMs > 0) return { tipo: "aberta", restanteMs };
 
-  // Quanto passou DEPOIS do vencimento, não desde a mensagem: os dois números
-  // diferem em exatamente 24h, e o que o operador pergunta é "passei muito?".
-  const fechadaHaMs = Math.max(0, agora.getTime() - (ultimo.getTime() + WINDOW_MS));
-  return { tipo: "fechada", fechadaHaMs };
+  // Sem extensão humana, o vencimento de 24h é o único — cai direto para
+  // "fechada". Com ela, GENTE ainda escreve até `janelaHumanaMs`.
+  const limite = caps.janelaHumanaMs ?? WINDOW_MS;
+  const decorrido = agora.getTime() - ultimo.getTime();
+  if (decorrido < limite) return { tipo: "humana", restanteMs: limite - decorrido };
+
+  // Quanto passou DEPOIS do vencimento (o de 24h, ou os 7 dias de quem tem
+  // extensão humana), não desde a mensagem: os dois números diferem em
+  // exatamente esse vencimento, e o que o operador pergunta é "passei muito?".
+  const fechadaHaMs = Math.max(0, decorrido - limite);
+  return { tipo: "fechada", fechadaHaMs, regra };
 }
 
 /**

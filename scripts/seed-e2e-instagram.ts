@@ -1,5 +1,7 @@
 /**
- * Seed do canal Instagram para o e2e `tests/e2e/instagram-receber.spec.ts`.
+ * Seed do canal Instagram para os e2e `tests/e2e/instagram-receber.spec.ts` e
+ * `tests/e2e/instagram-responder.spec.ts` (este usa também as três conversas
+ * dos passos 5 e 6: Instagram recente, Instagram de 8 dias e uma de WhatsApp).
  *
  * Grava o app do Instagram da instalação (App ID + App Secret cifrado — o
  * segredo `"segredo-e2e"` que a spec usa para assinar o HMAC do webhook) e uma
@@ -25,7 +27,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { definirOrigemPadrao, salvarConexaoDoInstagram } from "../lib/channels/instagram/conexao";
 import { encryptWebhookSecret } from "../lib/webhooks/secrets";
@@ -38,6 +40,17 @@ export const IG_ACCOUNT_ID = "17841400000000001";
 export const IG_USERNAME = "clinica_e2e";
 export const ORIGEM_CAMPO = "origem";
 export const ORIGEM_VALOR = "Instagram Dr. André";
+
+// Fixtures de `tests/e2e/instagram-responder.spec.ts`. O prefixo comum é o que
+// a spec digita na busca do Inbox para isolar as três conversas das demais do
+// banco; o IGSID é o destinatário que o receptor local tem de ver no envio.
+export const PREFIXO_RESPONDER = "IgResp";
+export const IGSID_RECENTE = "IGSID-E2E-RESPONDER-RECENTE";
+export const IGSID_ANTIGO = "IGSID-E2E-RESPONDER-ANTIGO";
+export const NOME_IG_RECENTE = `${PREFIXO_RESPONDER} Recente`;
+export const NOME_IG_ANTIGO = `${PREFIXO_RESPONDER} Antigo`;
+export const NOME_WHATSAPP = `${PREFIXO_RESPONDER} WhatsApp`;
+const SESSAO_WHATSAPP = "e2e-instagram-filtro-whatsapp";
 
 interface Creds {
   org_id: string;
@@ -164,11 +177,113 @@ async function main(): Promise<void> {
   });
   console.log(`[seed] origem padrão: ${ORIGEM_CAMPO} = "${ORIGEM_VALOR}"`);
 
+  // 5 · Conversas para responder (etapa 2). Contato e conversa do Instagram
+  // pelos MESMOS RPCs da ingestão (`lib/channels/instagram/ingest.ts`); o
+  // IGSID em `provider_conversation_id` é o que o envio usa (migration 0278).
+  // `last_inbound_at` é regravado a cada rodada: a recente precisa estar
+  // dentro das 24h, a antiga passou dos 7 dias da Meta.
+  const sessaoId = (sessao as { id: string }).id;
+  const DIA = 24 * 60 * 60 * 1000;
+  for (const [igsid, nome, idade] of [
+    [IGSID_RECENTE, NOME_IG_RECENTE, 10 * 60 * 1000],
+    [IGSID_ANTIGO, NOME_IG_ANTIGO, 8 * DIA],
+  ] as const) {
+    const { data: linhas, error: erroContato } = await admin.rpc("fn_upsert_contato_por_identidade" as never, {
+      p_org: orgId, p_canal: "instagram", p_external_id: igsid, p_handle: null, p_nome: nome, p_avatar: null,
+    } as never);
+    const contatoId = (linhas as { contact_id: string }[] | null)?.[0]?.contact_id;
+    if (erroContato || !contatoId) throw new Error(`contato ${nome}: ${erroContato?.message ?? "sem id"}`);
+    await conversaComUltimaEntrada(admin, orgId, contatoId, sessaoId, "instagram", {
+      provider_conversation_id: igsid,
+      em: new Date(Date.now() - idade).toISOString(),
+      preview: `Oi, sou ${nome}`,
+    });
+  }
+
+  // 6 · Uma conversa de WhatsApp, para o filtro "Só WhatsApp" ter o que
+  // mostrar num banco fresco. Sessão WAHA própria (mesmo formato de
+  // `seed-e2e-queue.ts`), sem depender da ordem de outros seeds.
+  let { data: sessaoWa } = await admin
+    .from("channel_sessions")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("waha_session_name", SESSAO_WHATSAPP)
+    .maybeSingle();
+  if (!sessaoWa) {
+    const { data, error } = await admin
+      .from("channel_sessions")
+      .insert({
+        organization_id: orgId,
+        waha_session_name: SESSAO_WHATSAPP,
+        display_name: "Número Filtro E2E",
+        webhook_secret_encrypted: "\\x00",
+      } as never)
+      .select("id")
+      .single();
+    if (error || !data) throw new Error(`sessão de WhatsApp: ${error?.message}`);
+    sessaoWa = data;
+  }
+  let { data: contatoWa } = await admin
+    .from("contacts")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("display_name", NOME_WHATSAPP)
+    .maybeSingle();
+  if (!contatoWa) {
+    const { data, error } = await admin
+      .from("contacts")
+      .insert({ organization_id: orgId, display_name: NOME_WHATSAPP } as never)
+      .select("id")
+      .single();
+    if (error || !data) throw new Error(`contato de WhatsApp: ${error?.message}`);
+    contatoWa = data;
+  }
+  await conversaComUltimaEntrada(
+    admin,
+    orgId,
+    (contatoWa as { id: string }).id,
+    (sessaoWa as { id: string }).id,
+    "whatsapp",
+    { provider_conversation_id: null, em: new Date().toISOString(), preview: `Oi, sou ${NOME_WHATSAPP}` },
+  );
+  console.log("[seed] conversas de responder: Instagram recente, Instagram de 8 dias, WhatsApp");
+
   console.log("\n✅ Seed do Instagram completo.");
   console.log(`org: ${orgId} · conta: ${IG_USERNAME} (${IG_ACCOUNT_ID})`);
 }
 
-main().catch((err) => {
-  console.error("❌ Seed do Instagram falhou:", err);
-  process.exit(1);
-});
+async function conversaComUltimaEntrada(
+  admin: SupabaseClient,
+  orgId: string,
+  contatoId: string,
+  sessaoId: string,
+  canal: "instagram" | "whatsapp",
+  c: { provider_conversation_id: string | null; em: string; preview: string },
+): Promise<void> {
+  const { data: conversaId, error } = await admin.rpc("fn_upsert_conversa_de_canal" as never, {
+    p_org: orgId, p_contact: contatoId, p_session: sessaoId, p_canal: canal,
+  } as never);
+  if (error || !conversaId) throw new Error(`conversa ${c.preview}: ${error?.message ?? "sem id"}`);
+  const { error: erroUpdate } = await admin
+    .from("conversations")
+    .update({
+      provider_conversation_id: c.provider_conversation_id,
+      status: "open",
+      last_inbound_at: c.em,
+      last_message_at: c.em,
+      last_message_preview: c.preview,
+    } as never)
+    .eq("organization_id", orgId)
+    .eq("id", conversaId as string);
+  if (erroUpdate) throw new Error(`conversa ${c.preview}: ${erroUpdate.message}`);
+}
+
+// Só roda quando executado. As specs IMPORTAM as constantes daqui, e rodar o
+// seed no import derrubava o runner inteiro (`process.exit(1)`) em banco
+// fresco, antes de `loadCreds` semear as credenciais.
+if (require.main === module) {
+  main().catch((err) => {
+    console.error("❌ Seed do Instagram falhou:", err);
+    process.exit(1);
+  });
+}

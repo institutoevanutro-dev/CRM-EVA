@@ -22,9 +22,9 @@ export interface ChannelSession {
   is_warmup_complete: boolean | null;
   created_at: string;
   /**
-   * O canal ENVIA pelo CRM (capability `canSend`, calculada no servidor). A
-   * conta do Instagram da etapa 1 só recebe: aparece no Inbox, mas não é número
-   * de WhatsApp nem destino de automação. Opcional porque resposta antiga (ou
+   * O canal serve de destino de envio AUTOMÁTICO (`canSend` e `iaResponde`,
+   * calculado no servidor). A conta do Instagram só a equipe responde, pelo
+   * Inbox: aparece lá, mas não é número de WhatsApp nem destino de automação. Opcional porque resposta antiga (ou
    * dublê de teste) não o traz, e aí vale o comportamento de antes.
    */
   can_send?: boolean;

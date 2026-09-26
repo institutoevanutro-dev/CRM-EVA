@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import pg from "pg";
 
 /**
@@ -197,5 +199,58 @@ describe("RLS de contact_channel_identities", () => {
     } finally {
       client.release();
     }
+  });
+});
+
+describe("conversa do Instagram cai na Fila, não no Automático (migration 0278)", () => {
+  // O bloco LIDO do baseline pelo rótulo: é o texto que o install/update do
+  // self-host aplica, não uma cópia digitada aqui.
+  const ROTULO = "-- ---- destinatário das conversas do Instagram (migration 0278) ----";
+  const baseline = readFileSync(join(process.cwd(), "supabase", "baseline.sql"), "utf8");
+  const inicio = baseline.indexOf(ROTULO);
+  const bloco = baseline.slice(inicio, baseline.indexOf("\n-- ---- ", inicio + ROTULO.length));
+
+  it("o backfill cala a IA para sempre no Instagram, é idempotente e não toca o WhatsApp", async () => {
+    expect(inicio, "rótulo da 0278 sumiu do baseline").toBeGreaterThan(-1);
+    const { rows: ct } = await pool.query<{ id: string }>(
+      `insert into contacts (organization_id, display_name) values ($1, 'Fila Instagram') returning id`,
+      [ORG_A],
+    );
+    const { rows: ct2 } = await pool.query<{ id: string }>(
+      `insert into contacts (organization_id, display_name) values ($1, 'Fila WhatsApp') returning id`,
+      [ORG_A],
+    );
+    const { rows: sessao } = await pool.query<{ id: string }>(
+      `insert into channel_sessions (organization_id, provider, status, webhook_secret_encrypted, ig_account_id, ig_username)
+         values ($1, 'meta_instagram', 'WORKING', decode('00','hex'), '17841400000000278', 'fila') returning id`,
+      [ORG_A],
+    );
+    const { rows: ig } = await pool.query<{ id: string }>(
+      `insert into conversations (organization_id, contact_id, channel_session_id, channel, status)
+         values ($1, $2, $3, 'instagram', 'open') returning id`,
+      [ORG_A, ct[0]!.id, sessao[0]!.id],
+    );
+    const { rows: wa } = await pool.query<{ id: string }>(
+      `insert into conversations (organization_id, contact_id, channel_session_id, status)
+         values ($1, $2, $3, 'open') returning id`,
+      [ORG_A, ct2[0]!.id, sessao[0]!.id],
+    );
+    const comando = async (id: string) =>
+      (await pool.query<{ q: string }>("select comando_da_conversa(c) as q from conversations c where id = $1", [id]))
+        .rows[0]?.q;
+
+    // Controle negativo: antes do backfill, a regra real a manda para o Automático.
+    expect(await comando(ig[0]!.id)).toBe("automatico");
+
+    await pool.query(bloco);
+    await pool.query(bloco);
+
+    expect(await comando(ig[0]!.id)).toBe("aguardando");
+    expect(await comando(wa[0]!.id)).toBe("automatico");
+    const { rows } = await pool.query<{ inf: boolean }>(
+      "select bot_silenced_until = 'infinity'::timestamptz as inf from conversations where id = $1",
+      [ig[0]!.id],
+    );
+    expect(rows[0]?.inf).toBe(true);
   });
 });

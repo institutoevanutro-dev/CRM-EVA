@@ -35,6 +35,8 @@ import {
   type ChannelSessionRef,
 } from "@/lib/channels";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
+import { CHANNEL_PROVIDER_INSTAGRAM } from "@/lib/channels/capabilities";
+import { estadoDaJanela } from "@/lib/channels/janela";
 import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
 import { isMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import {
@@ -310,7 +312,7 @@ export async function sendMessageHandler(
   // envio com 42703. Sem a coluna, nada está arquivado — e a consulta sem ela é a
   // consulta certa (ver lib/channels/archived).
   const convSelect = (comArchived: boolean) =>
-    `id, organization_id, contact_id, channel_session_id, is_group, group_chat_id, bot_silenced_until, provider_conversation_id, contacts:contact_id(phone_number, wa_identity, wa_lid, is_blocked), channel_sessions:channel_session_id(${CHANNEL_SESSION_REF_COLUMNS}, status${comArchived ? `, ${ARCHIVED_AT}` : ""})`;
+    `id, organization_id, contact_id, channel_session_id, is_group, group_chat_id, bot_silenced_until, provider_conversation_id, last_inbound_at, contacts:contact_id(phone_number, wa_identity, wa_lid, is_blocked), channel_sessions:channel_session_id(${CHANNEL_SESSION_REF_COLUMNS}, status${comArchived ? `, ${ARCHIVED_AT}` : ""})`;
   //
   // O filtro por `organization_id` NÃO é redundância com a RLS — é a única
   // proteção que existe na metade dos chamadores. Este handler é a porta de
@@ -367,6 +369,8 @@ export async function sendMessageHandler(
     bot_silenced_until: string | null;
     /** Thread do provider, quando ele endereça por thread própria (migration 0132). */
     provider_conversation_id: string | null;
+    /** Última mensagem do cliente: é dela que a janela da Meta conta. */
+    last_inbound_at: string | null;
     contacts: {
       phone_number: string | null;
       wa_identity: string | null;
@@ -602,11 +606,52 @@ export async function sendMessageHandler(
     phoneNumber: c.contacts?.phone_number,
     waIdentity: c.contacts?.wa_identity,
     waLid: c.contacts?.wa_lid,
+    providerConversationId: c.provider_conversation_id,
   });
+  const caps = capabilitiesOf(provider);
+
+  // Recusas que o servidor decide ANTES de falar com o canal. A tela também
+  // avisa, mas quem garante é aqui: MCP, automação e follow-up não passam pela
+  // tela. `null` = pode seguir.
+  let recusa: { code: string; message: string } | null = null;
+  let etiquetaHumana = false;
+  if (!caps.iaResponde && ctx.actor.type !== "user") {
+    // Canal onde a IA não responde (o Instagram: a etiqueta HUMAN_AGENT é
+    // promessa de que GENTE escreveu). Agente, automação e follow-up param aqui.
+    recusa = { code: "envio_automatico_indisponivel", message: "Este canal só aceita resposta da equipe." };
+  } else if (caps.janelaHumanaMs !== null) {
+    const janela = estadoDaJanela(provider, c.last_inbound_at, new Date());
+    if (janela.tipo === "fechada") {
+      recusa = {
+        code: "fora_da_janela",
+        // Sem `last_inbound_at` (só ecos do próprio perfil) não houve prazo
+        // correndo: falar em "7 dias" descreveria um vencimento que não existe.
+        message:
+          janela.fechadaHaMs === null
+            ? "Essa pessoa ainda não escreveu para este perfil. A Meta só deixa responder depois que ela mandar uma mensagem."
+            : "A Meta só deixa responder até 7 dias depois da última mensagem dessa pessoa. Responda pelo app do Instagram se ela escrever de novo.",
+      };
+    }
+    etiquetaHumana = janela.tipo === "humana";
+  }
+
+  // Grava o desfecho terminal de uma recusa: `failed` com código, que a tela
+  // mostra e o ledger do agente lê como fim. Nunca `queued` (nada tira de lá).
+  const falharAntesDeEnviar = async (code: string, errorMessage: string) => {
+    const { data: updated } = await supabase
+      .from("messages")
+      .update({ status: "failed", error_code: code, error_message: errorMessage })
+      .eq("organization_id", ctx.organization_id)
+      .eq("id", message.id)
+      .select(MSG_COLS)
+      .maybeSingle();
+    if (updated) message = updated as unknown as Message;
+  };
 
   // Releitura no sink: o operador pode ter fechado o canal enquanto o modelo
   // gerava a resposta. Envio humano não passa por esta restrição da IA.
-  const acessoAtual = ctx.actor.type === "user" ? null : await decidirPreGoLiveDoCanalViaSupabase(supabase, {
+  // Canal sem IA não tem modo de teste da IA: a recusa de cima já responde.
+  const acessoAtual = ctx.actor.type === "user" || !caps.iaResponde ? null : await decidirPreGoLiveDoCanalViaSupabase(supabase, {
     organizationId: ctx.organization_id,
     channelSessionId: c.channel_session_id,
     contactPhoneNumber: c.contacts?.phone_number ?? "",
@@ -643,23 +688,16 @@ export async function sendMessageHandler(
       .select(MSG_COLS)
       .maybeSingle();
     if (updated) message = updated as unknown as Message;
-  } else if (!capabilitiesOf(provider).canSend) {
-    // Canal que só RECEBE (o Instagram da etapa 1). Sem este ramo a mensagem
-    // caía em `!isConfigured()` e ficava `queued` para sempre: nenhum cron olha
-    // `queued`, e o operador via um relógio numa resposta que nunca ia sair.
-    // `failed` com código é terminal para a tela e para o ledger do agente.
-    const { data: updated } = await supabase
-      .from("messages")
-      .update({
-        status: "failed",
-        error_code: adapter.codes.sendFailed,
-        error_message: "Responder por este canal chega na próxima versão. Responda pelo app do canal por enquanto.",
-      })
-      .eq("organization_id", ctx.organization_id)
-      .eq("id", message.id)
-      .select(MSG_COLS)
-      .maybeSingle();
-    if (updated) message = updated as unknown as Message;
+  } else if (!caps.canSend) {
+    // Canal que só RECEBE. Sem este ramo a mensagem caía em `!isConfigured()` e
+    // ficava `queued` para sempre: nenhum cron olha `queued`, e o operador via
+    // um relógio numa resposta que nunca ia sair.
+    await falharAntesDeEnviar(
+      adapter.codes.sendFailed,
+      "Este canal ainda não envia pelo CRM. Responda pelo app dele por enquanto.",
+    );
+  } else if (recusa) {
+    await falharAntesDeEnviar(recusa.code, recusa.message);
   } else if (!adapter.isConfigured()) {
     const { data: updated } = await supabase
       .from("messages")
@@ -671,17 +709,24 @@ export async function sendMessageHandler(
       .maybeSingle();
     if (updated) message = updated as unknown as Message;
   } else if (!chatId) {
-    const { data: updated } = await supabase
-      .from("messages")
-      .update({
-        status: "failed",
-        error_code: "missing_phone_number",
-        error_message: "Contato sem telefone para envio WhatsApp.",
-      })
-      .eq("id", message.id)
-      .select(MSG_COLS)
-      .maybeSingle();
-    if (updated) message = updated as unknown as Message;
+    if (provider === CHANNEL_PROVIDER_INSTAGRAM) {
+      // Conversa anterior à 0278 cujo contato tem mais de uma identidade do
+      // Instagram: o backfill não adivinha. A próxima mensagem do cliente grava.
+      await falharAntesDeEnviar(
+        "instagram_sem_destinatario",
+        "Não sabemos para qual perfil do Instagram responder. Quando essa pessoa escrever de novo, a resposta sai por aqui.",
+      );
+    } else {
+      await falharAntesDeEnviar("missing_phone_number", "Contato sem telefone para envio WhatsApp.");
+    }
+  } else if (provider === CHANNEL_PROVIDER_INSTAGRAM && c.channel_sessions?.status !== "WORKING") {
+    // `queued` só é honesto onde algo reenvia: o session-reconciler só
+    // conhece o WhatsApp não oficial, e nada tira uma mensagem do Instagram da fila.
+    // A tela prometeria "sai sozinha" para uma resposta que nunca sairia.
+    await falharAntesDeEnviar(
+      "instagram_desconectado",
+      "A conexão deste perfil do Instagram caiu. Reconecte o Instagram em Conexões e envie de novo.",
+    );
   } else if (!c.channel_sessions || c.channel_sessions.status !== "WORKING") {
     const { data: updated } = await supabase
       .from("messages")
@@ -787,6 +832,7 @@ export async function sendMessageHandler(
           sessionRef: resolveSessionRef(c.channel_sessions),
           to: chatId,
           providerConversationId: c.provider_conversation_id,
+          etiquetaHumana,
           kind: input.type,
           media: {
             url: signed.signedUrl,
@@ -818,6 +864,7 @@ export async function sendMessageHandler(
           sessionRef: resolveSessionRef(c.channel_sessions),
           to: chatId,
           providerConversationId: c.provider_conversation_id,
+          etiquetaHumana,
           kind: "contact",
           body: outboundBody ?? nome,
           contact: {
@@ -835,6 +882,7 @@ export async function sendMessageHandler(
           sessionRef: resolveSessionRef(c.channel_sessions),
           to: chatId,
           providerConversationId: c.provider_conversation_id,
+          etiquetaHumana,
           kind: input.type,
           body: input.body ?? "",
           replyToExternalId: citada?.external_id ?? null,

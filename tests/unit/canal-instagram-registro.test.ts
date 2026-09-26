@@ -14,11 +14,11 @@ describe("provider do Instagram registrado", () => {
     expect(resolveSessionRef({ provider: "meta_instagram", ig_account_id: "178414" })).toBe("178414");
   });
 
-  it("etapa 1 não envia: o adapter recusa com código próprio", async () => {
+  it("etapa 2: sem sessão cadastrada, o adapter recusa pedindo reconexão", async () => {
     const a = getAdapter("meta_instagram");
     await expect(
       a.send({ organizationId: "o", sessionRef: "s", to: "igsid", kind: "text", body: "oi" }),
-    ).rejects.toThrow("instagram_envio_indisponivel");
+    ).rejects.toThrow(/^instagram_190: /);
   });
 
   it("a fronteira do nome enxerga o provider novo", () => {
