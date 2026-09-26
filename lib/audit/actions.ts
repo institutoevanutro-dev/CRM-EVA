@@ -618,6 +618,14 @@ export const AUDIT_ACTIONS = [
   // Task 8 — uma regra nova em `instagram_comment_rules`, criada pela tela
   // (palavra-gatilho → resposta pública + Direct, por mídia).
   "instagram_comment_rule.created",
+  // IMPORTANTE 5 (revisão final) — um humano descartou (`situacao='ignorado'`)
+  // um comentário `esperando_voce` pela tela. Sem isto a fila só cresce.
+  "comment.discarded",
+  // IMPORTANTE 6 (revisão final) — um comentário caiu para revisão humana
+  // (`situacao='esperando_voce'`), por qualquer um dos caminhos do worker ou
+  // da regra casada. É o "laço de retorno" que a spec §9 promete: sem esta
+  // trilha não dá pra medir quanto o classificador erra.
+  "comment.waiting_human",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

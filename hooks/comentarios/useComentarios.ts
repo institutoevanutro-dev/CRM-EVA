@@ -65,3 +65,32 @@ export function useCriarRegraDeComentario() {
     onError: showApiError,
   });
 }
+
+/** IMPORTANTE 5: descarta (`situacao='ignorado'`) — sem isto a fila só cresce. */
+export function useDescartarComentario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post(`/api/v1/comentarios/${id}/descartar`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: CHAVE }),
+    onError: showApiError,
+  });
+}
+
+/**
+ * CRÍTICO 2: os perfis de Instagram conectados da organização — só para
+ * oferecer no seletor do formulário de regra quando a mídia ainda não tem
+ * comentário nenhum (a rota não tem de onde resolver o canal automaticamente
+ * nesse caso). Reusa a mesma rota que a tela de Conexões já usa — nenhuma
+ * rota nova só para listar.
+ */
+export function useCanaisDoInstagram() {
+  return useQuery({
+    queryKey: ["instagram-comments-canais"],
+    queryFn: () =>
+      apiClient
+        .get<{ data: { contas: { id: string; username: string | null; status: string }[] } }>(
+          "/api/v1/channels/instagram",
+        )
+        .then((r) => r.data.contas.filter((c) => c.status === "WORKING")),
+  });
+}

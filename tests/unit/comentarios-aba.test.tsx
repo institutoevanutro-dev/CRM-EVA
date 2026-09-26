@@ -93,6 +93,27 @@ describe("ListaDeComentarios", () => {
     fireEvent.click(screen.getByRole("button", { name: "Publicar" }));
     expect(onPublicar).toHaveBeenCalledWith("c2", "Resposta reescrita à mão");
   });
+
+  // ─── IMPORTANTE 5 — a aba tem que esvaziar ─────────────────────────────
+  it("Descartar manda o id do comentário para quem chamou", () => {
+    const onDescartar = vi.fn();
+    render(<ListaDeComentarios comentarios={[esperando]} onDescartar={onDescartar} />);
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    expect(onDescartar).toHaveBeenCalledWith("c2");
+  });
+
+  // ─── CRÍTICO 2 — de onde tirar o media_id pra criar uma regra ──────────
+  it("mostra o vídeo (media_id) de cada comentário", () => {
+    render(<ListaDeComentarios comentarios={[atendido]} />);
+    expect(screen.getByText(/m1/)).toBeTruthy();
+  });
+
+  it("'Nova regra para este vídeo' manda o media_id daquele comentário para quem chamou", () => {
+    const onNovaRegraParaMidia = vi.fn();
+    render(<ListaDeComentarios comentarios={[atendido]} onNovaRegraParaMidia={onNovaRegraParaMidia} />);
+    fireEvent.click(screen.getByRole("button", { name: /nova regra para este vídeo/i }));
+    expect(onNovaRegraParaMidia).toHaveBeenCalledWith("m1");
+  });
 });
 
 describe("FormularioDeRegra", () => {
@@ -119,6 +140,36 @@ describe("FormularioDeRegra", () => {
       texto_do_direct: "O valor é R$150.",
       frase_publica: "Te chamamos no Direct!",
     });
+  });
+
+  // ─── CRÍTICO 2 ──────────────────────────────────────────────────────────
+  it("mediaIdInicial pré-preenche o campo (aberto a partir de 'Nova regra para este vídeo')", () => {
+    render(<FormularioDeRegra onCriar={vi.fn()} mediaIdInicial="17900" />);
+    expect(screen.getByLabelText("Mídia (id do post)")).toHaveValue("17900");
+  });
+
+  it("sem canais informados, não mostra o seletor de perfil", () => {
+    render(<FormularioDeRegra onCriar={vi.fn()} />);
+    expect(screen.queryByLabelText(/perfil conectado/i)).toBeNull();
+  });
+
+  it("com canais informados, escolher um perfil manda channel_session_id no payload (mídia sem comentário ainda)", () => {
+    const onCriar = vi.fn();
+    render(
+      <FormularioDeRegra
+        onCriar={onCriar}
+        canais={[{ id: "sessao-1", username: "institutoeva" }]}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Mídia (id do post)"), { target: { value: "17900" } });
+    fireEvent.change(screen.getByLabelText("Palavra-gatilho"), { target: { value: "CARDAPIO" } });
+    fireEvent.change(screen.getByLabelText("Mensagem no Direct"), { target: { value: "Segue o cardápio!" } });
+    fireEvent.change(screen.getByLabelText("Resposta pública"), { target: { value: "Te chamei no Direct!" } });
+    fireEvent.change(screen.getByLabelText(/perfil conectado/i), { target: { value: "sessao-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Criar regra" }));
+    expect(onCriar).toHaveBeenCalledWith(
+      expect.objectContaining({ channel_session_id: "sessao-1" }),
+    );
   });
 });
 

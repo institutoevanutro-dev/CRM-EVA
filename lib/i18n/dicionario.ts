@@ -9116,7 +9116,7 @@ export const DICIONARIO: Traducoes = {
   "Mídia (id do post)": { es: "Publicación (id del post)" },
   "Cole o id do post": { es: "Pega el id del post" },
   "Palavra-gatilho": { es: "Palabra gatillo" },
-  "Ex.: preço": { es: "Ej.: precio" },
+  "Ex.: CARDAPIO": { es: "Ej.: MENU" },
   "Mensagem no Direct": { es: "Mensaje en el Direct" },
   "Resposta pública": { es: "Respuesta pública" },
   "Criar regra": { es: "Crear regla" },
@@ -9124,6 +9124,18 @@ export const DICIONARIO: Traducoes = {
   "A resposta JÁ FOI publicada no Instagram, mas não deu para atualizar aqui. Não publique de novo — isso enviaria uma segunda resposta.": {
     es: "La respuesta YA FUE publicada en Instagram, pero no se pudo actualizar aquí. No publiques de nuevo — eso enviaría una segunda respuesta.",
   },
+  // CRÍTICO 2 (revisão final) — regra por mídia sem comentário ainda: escolher o perfil.
+  "Perfil conectado (só se o vídeo ainda não tem comentário nenhum)": {
+    es: "Perfil conectado (solo si el video todavía no tiene ningún comentario)",
+  },
+  "Resolver automaticamente pelo comentário mais recente": {
+    es: "Resolver automáticamente por el comentario más reciente",
+  },
+  // IMPORTANTE 5 — descartar um comentário `esperando_voce`.
+  "Descartando…": { es: "Descartando…" },
+  // CRÍTICO 2 — mostrar o vídeo de cada comentário e abrir a regra dali.
+  "Vídeo:": { es: "Video:" },
+  "Nova regra para este vídeo": { es: "Nueva regla para este video" },
 };
 
 /**

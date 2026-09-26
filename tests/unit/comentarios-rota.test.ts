@@ -227,6 +227,15 @@ async function publicar(estado: EstadoFake, body: unknown = { texto: "Chame no D
   return POST(pedido(body), { params: Promise.resolve({ id: COMENTARIO_ID }) });
 }
 
+async function descartar(estado: EstadoFake) {
+  vi.mocked(createClient).mockResolvedValue(clienteFalso(estado) as never);
+  const { POST } = await import("@/app/api/v1/comentarios/[id]/descartar/route");
+  return POST(
+    new NextRequest(`http://localhost/api/v1/comentarios/${COMENTARIO_ID}/descartar`, { method: "POST" }),
+    { params: Promise.resolve({ id: COMENTARIO_ID }) },
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   responderComentarioSpy.mockClear();
@@ -325,6 +334,55 @@ describe("POST /api/v1/comentarios/:id/publicar — organização do comentário
   });
 });
 
+describe("POST /api/v1/comentarios/:id/descartar — IMPORTANTE 5: a aba esvazia", () => {
+  it("pede requireRole com o mínimo 'agent'", async () => {
+    vi.mocked(requireRole).mockResolvedValue(autorizacaoOk("agent"));
+    await descartar(estadoPadrao());
+    expect(requireRole).toHaveBeenCalledWith("agent", expect.objectContaining({ resource: "instagram_comments" }));
+  });
+
+  it("papel insuficiente: 403, sem descartar nada", async () => {
+    vi.mocked(requireRole).mockResolvedValue(negado());
+    const estado = estadoPadrao();
+    const res = await descartar(estado);
+    expect(res.status).toBe(403);
+    expect(estado.comentarios[0]!.situacao).toBe("esperando_voce");
+  });
+
+  it("comentário existe, mas em OUTRA organização: 404, não vaza entre tenants", async () => {
+    vi.mocked(requireRole).mockResolvedValue(autorizacaoOk("agent"));
+    const estado = estadoPadrao();
+    estado.comentarios[0]!.organization_id = OUTRA_ORG;
+    const res = await descartar(estado);
+    expect(res.status).toBe(404);
+  });
+
+  it("comentário esperando_voce: marca ignorado e audita", async () => {
+    vi.mocked(requireRole).mockResolvedValue(autorizacaoOk("agent"));
+    const estado = estadoPadrao();
+    const res = await descartar(estado);
+    expect(res.status).toBe(200);
+    expect(estado.comentarios[0]!.situacao).toBe("ignorado");
+    expect(auditSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "comment.discarded",
+        organizationId: ORG,
+        resourceId: COMENTARIO_ID,
+        resourceType: "instagram_comment",
+      }),
+    );
+  });
+
+  it("comentário que já saiu de esperando_voce: 409, não descarta de novo", async () => {
+    vi.mocked(requireRole).mockResolvedValue(autorizacaoOk("agent"));
+    const estado = estadoPadrao();
+    estado.comentarios[0]!.situacao = "respondido_manualmente";
+    const res = await descartar(estado);
+    expect(res.status).toBe(409);
+    expect(estado.comentarios[0]!.situacao).toBe("respondido_manualmente");
+  });
+});
+
 describe("POST /api/v1/comentarios/regras — exige papel manager+", () => {
   async function criarRegra(estado: EstadoFake, body: Record<string, unknown>) {
     vi.mocked(createClient).mockResolvedValue(clienteFalso(estado) as never);
@@ -365,7 +423,7 @@ describe("POST /api/v1/comentarios/regras — exige papel manager+", () => {
     expect(estado.insercoesDeRegra).toHaveLength(0);
   });
 
-  it("mídia sem nenhum comentário na organização: 422, não cria regra órfã de canal", async () => {
+  it("mídia sem nenhum comentário na organização, e SEM channel_session_id no corpo: 422, não cria regra órfã de canal", async () => {
     vi.mocked(requireRole).mockResolvedValue(autorizacaoOk("manager"));
     const estado = estadoPadrao();
     const res = await criarRegra(estado, {
@@ -373,6 +431,38 @@ describe("POST /api/v1/comentarios/regras — exige papel manager+", () => {
       palavra: "preço",
       texto_do_direct: "x",
       frase_publica: "y",
+    });
+    expect(res.status).toBe(422);
+    expect(estado.insercoesDeRegra).toHaveLength(0);
+  });
+
+  // ─── CRÍTICO 2 — "Comente CARDAPIO neste vídeo" ANTES do primeiro comentário ─
+  it("mídia sem nenhum comentário, MAS com channel_session_id de um perfil da própria organização: cria a regra com esse canal", async () => {
+    vi.mocked(requireRole).mockResolvedValue(autorizacaoOk("manager"));
+    const estado = estadoPadrao();
+    const res = await criarRegra(estado, {
+      media_id: "midia-nunca-vista",
+      palavra: "CARDAPIO",
+      texto_do_direct: "x",
+      frase_publica: "y",
+      channel_session_id: SESSAO_ID,
+    });
+    expect(res.status).toBe(201);
+    expect(estado.insercoesDeRegra).toEqual([
+      expect.objectContaining({ channel_session_id: SESSAO_ID, media_id: "midia-nunca-vista" }),
+    ]);
+  });
+
+  it("mídia sem nenhum comentário e channel_session_id de OUTRA organização: 422, não cria regra", async () => {
+    vi.mocked(requireRole).mockResolvedValue(autorizacaoOk("manager"));
+    const estado = estadoPadrao();
+    estado.sessoes[0]!.organization_id = OUTRA_ORG; // a sessão não é mais da org do manager
+    const res = await criarRegra(estado, {
+      media_id: "midia-nunca-vista",
+      palavra: "CARDAPIO",
+      texto_do_direct: "x",
+      frase_publica: "y",
+      channel_session_id: SESSAO_ID,
     });
     expect(res.status).toBe(422);
     expect(estado.insercoesDeRegra).toHaveLength(0);

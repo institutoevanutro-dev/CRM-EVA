@@ -5,7 +5,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { PaperPlaneTilt, PencilSimple, Warning } from "@/lib/ui/icons";
+import { PaperPlaneTilt, PencilSimple, Plus, Trash, Warning } from "@/lib/ui/icons";
 
 /**
  * Vocabulário FECHADO de `instagram_comments.situacao` — CHECK no banco
@@ -39,6 +39,16 @@ interface Props {
   onPublicar?: (id: string, texto: string) => void;
   /** Id do comentário cuja publicação está em voo — desabilita só o botão dele. */
   publicando?: string | null;
+  /** IMPORTANTE 5: descarta um `esperando_voce` (situacao='ignorado') — sem isto a fila só cresce. */
+  onDescartar?: (id: string) => void;
+  /** Id do comentário sendo descartado agora — desabilita só o botão dele. */
+  descartando?: string | null;
+  /**
+   * CRÍTICO 2: abre o formulário de regra JÁ com este `media_id` — sem isto
+   * não há de onde tirar o id do post dentro do CRM, e "Mídia (id do post)"
+   * como texto livre é uma feature que ninguém consegue usar de verdade.
+   */
+  onNovaRegraParaMidia?: (mediaId: string) => void;
 }
 
 /** `esperando_voce` primeiro — é o que precisa de um toque humano agora. Estável no resto. */
@@ -57,10 +67,14 @@ function ItemEsperando({
   comentario,
   onPublicar,
   publicando,
+  onDescartar,
+  descartando,
 }: {
   comentario: ComentarioDaFila;
   onPublicar?: (id: string, texto: string) => void;
   publicando?: boolean;
+  onDescartar?: (id: string) => void;
+  descartando?: boolean;
 }) {
   const t = useT();
   const [editando, setEditando] = useState(false);
@@ -102,12 +116,29 @@ function ItemEsperando({
           <PaperPlaneTilt size={14} />
           {publicando ? t("Publicando…") : t("Publicar")}
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={Boolean(descartando)}
+          onClick={() => onDescartar?.(comentario.id)}
+        >
+          <Trash size={14} />
+          {descartando ? t("Descartando…") : t("Descartar")}
+        </Button>
       </div>
     </div>
   );
 }
 
-export function ListaDeComentarios({ comentarios, onPublicar, publicando }: Props) {
+export function ListaDeComentarios({
+  comentarios,
+  onPublicar,
+  publicando,
+  onDescartar,
+  descartando,
+  onNovaRegraParaMidia,
+}: Props) {
   const t = useT();
   const localeDaData = useLocaleDeData();
   const ordenados = ordenar(comentarios);
@@ -131,6 +162,23 @@ export function ListaDeComentarios({ comentarios, onPublicar, publicando }: Prop
             </time>
           </div>
           <p className="mt-1 text-sm text-text">{c.texto}</p>
+          {/* CRÍTICO 2: sem mostrar o vídeo, não há de onde tirar o `media_id`
+              que o formulário de regra pede como texto livre. */}
+          <div className="mt-1 flex items-center justify-between gap-2 text-xs text-text-muted">
+            <span>{t("Vídeo:")} {c.media_id}</span>
+            {onNovaRegraParaMidia && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-auto px-1.5 py-0.5 text-xs"
+                onClick={() => onNovaRegraParaMidia(c.media_id)}
+              >
+                <Plus size={12} />
+                {t("Nova regra para este vídeo")}
+              </Button>
+            )}
+          </div>
           {c.situacao === "esperando_voce" && c.motivo_do_toque && (
             <p className="mt-1 flex items-center gap-1 text-xs text-warning-fg">
               <Warning size={12} weight="fill" />
@@ -142,6 +190,8 @@ export function ListaDeComentarios({ comentarios, onPublicar, publicando }: Prop
               comentario={c}
               onPublicar={onPublicar}
               publicando={publicando === c.id}
+              onDescartar={onDescartar}
+              descartando={descartando === c.id}
             />
           )}
         </li>
