@@ -20,8 +20,23 @@ const itemSchema = z.object({
 }).passthrough();
 const corpoSchema = z.object({
   object: z.literal("instagram"),
-  entry: z.array(z.object({ id: z.string(), messaging: z.array(z.unknown()).optional() }).passthrough()),
+  entry: z.array(z.object({
+    id: z.string(),
+    messaging: z.array(z.unknown()).optional(),
+    changes: z.array(z.unknown()).optional(),
+  }).passthrough()),
 });
+
+const comentarioSchema = z.object({
+  field: z.string(),
+  value: z.object({
+    id: z.string(),
+    text: z.string().optional(),
+    media: z.object({ id: z.string() }).passthrough(),
+    from: z.object({ id: z.string(), username: z.string().optional() }).passthrough(),
+    timestamp: z.string(),
+  }).passthrough(),
+}).passthrough();
 
 export interface EventoDoInstagram {
   igAccountId: string;
@@ -63,4 +78,39 @@ export function parseWebhookDoInstagram(corpo: unknown): EventoDoInstagram[] {
     }
   }
   return eventos;
+}
+
+export interface ComentarioDoInstagram {
+  igAccountId: string;
+  externalId: string;
+  mediaId: string;
+  texto: string | null;
+  autorIgsid: string;
+  autorHandle: string | null;
+  comentadoEm: Date;
+  eco: boolean;
+}
+
+export function parseComentariosDoInstagram(corpo: unknown): ComentarioDoInstagram[] {
+  const lido = corpoSchema.safeParse(corpo);
+  if (!lido.success) return [];
+  const comentarios: ComentarioDoInstagram[] = [];
+  for (const entrada of lido.data.entry) {
+    for (const bruto of entrada.changes ?? []) {
+      const mudanca = comentarioSchema.safeParse(bruto);
+      if (!mudanca.success || mudanca.data.field !== "comments") continue;
+      const v = mudanca.data.value;
+      comentarios.push({
+        igAccountId: entrada.id,
+        externalId: v.id,
+        mediaId: v.media.id,
+        texto: v.text ?? null,
+        autorIgsid: v.from.id,
+        autorHandle: v.from.username ?? null,
+        comentadoEm: new Date(v.timestamp),
+        eco: v.from.id === entrada.id,
+      });
+    }
+  }
+  return comentarios;
 }
