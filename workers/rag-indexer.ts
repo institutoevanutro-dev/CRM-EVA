@@ -216,7 +216,7 @@ async function pedacosDeDocumento(fonte: FonteRow): Promise<Pedaco[]> {
   const blobPath = meta.blob_path;
   if (!blobPath) throw new ErroDeExtracao("a fonte não aponta para nenhum arquivo");
 
-  const { texto, extensao } = await extrairTextoDoArquivo(blobPath, meta.ext);
+  const { texto, extensao } = await extrairTextoDoArquivo(fonte.organization_id, blobPath, meta.ext);
   return chunkText(texto, { maxChars: 1600, overlapChars: 200 }).map((c) => ({
     content: c,
     metadata: {

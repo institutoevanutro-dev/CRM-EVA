@@ -56,6 +56,12 @@ export function resolverExtensao(
   return null;
 }
 
+/** O caminho fica dentro da pasta da organização, sem `..` nem barra dupla. */
+export function caminhoDaOrganizacao(organizationId: string, blobPath: string): boolean {
+  if (!organizationId || !blobPath.startsWith(`${organizationId}/`)) return false;
+  return !blobPath.split("/").some((parte) => parte === "" || parte === "." || parte === "..");
+}
+
 /**
  * Baixa o arquivo do Storage e devolve o texto puro.
  *
@@ -64,9 +70,16 @@ export function resolverExtensao(
  * perfeitamente no leitor da pessoa e não tem uma letra selecionável.
  */
 export async function extrairTextoDoArquivo(
+  organizationId: string,
   blobPath: string,
   extensaoDeclarada?: string,
 ): Promise<{ texto: string; extensao: ExtensaoAceita }> {
+  // O download usa a service role e o bucket é um só para todas as organizações.
+  // O `blob_path` pode vir do corpo da requisição (`source_metadata`), então
+  // sem esta checagem um gerente da org A lia o arquivo da org B pelo caminho.
+  if (!caminhoDaOrganizacao(organizationId, blobPath)) {
+    throw new ErroDeExtracao("o arquivo não pertence a esta organização");
+  }
   const extensao = resolverExtensao(extensaoDeclarada ?? blobPath);
   if (!extensao) {
     throw new ErroDeExtracao(
