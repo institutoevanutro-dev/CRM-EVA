@@ -22,6 +22,7 @@ const corpoSchema = z.object({
   object: z.literal("instagram"),
   entry: z.array(z.object({
     id: z.string(),
+    time: z.number().optional(),
     messaging: z.array(z.unknown()).optional(),
     changes: z.array(z.unknown()).optional(),
   }).passthrough()),
@@ -34,7 +35,7 @@ const comentarioSchema = z.object({
     text: z.string().optional(),
     media: z.object({ id: z.string() }).passthrough(),
     from: z.object({ id: z.string(), username: z.string().optional() }).passthrough(),
-    timestamp: z.string(),
+    timestamp: z.string().optional(),
   }).passthrough(),
 }).passthrough();
 
@@ -100,6 +101,14 @@ export function parseComentariosDoInstagram(corpo: unknown): ComentarioDoInstagr
       const mudanca = comentarioSchema.safeParse(bruto);
       if (!mudanca.success || mudanca.data.field !== "comments") continue;
       const v = mudanca.data.value;
+      // value.timestamp não é documentado pela Meta para "comments" (só entry.time é).
+      // Cadeia de fallback pra nunca descartar o comentário por falta de data:
+      // ISO de value.timestamp (se vier) > entry.time em SEGUNDOS (se vier) > relógio.
+      const comentadoEm = v.timestamp !== undefined
+        ? new Date(v.timestamp)
+        : entrada.time !== undefined
+          ? new Date(entrada.time * 1000)
+          : new Date();
       comentarios.push({
         igAccountId: entrada.id,
         externalId: v.id,
@@ -107,7 +116,7 @@ export function parseComentariosDoInstagram(corpo: unknown): ComentarioDoInstagr
         texto: v.text ?? null,
         autorIgsid: v.from.id,
         autorHandle: v.from.username ?? null,
-        comentadoEm: new Date(v.timestamp),
+        comentadoEm,
         eco: v.from.id === entrada.id,
       });
     }

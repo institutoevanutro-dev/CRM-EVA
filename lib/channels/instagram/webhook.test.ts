@@ -71,6 +71,26 @@ describe("parse de comentários do Instagram", () => {
       igAccountId: "IG-CONTA-1", externalId: "COMENTARIO-1", mediaId: "MEDIA-9",
       texto: "CARDAPIO", autorIgsid: "IGSID-7", autorHandle: "fulana", eco: false,
     });
+    expect(c!.comentadoEm.getTime()).toBe(new Date("2026-09-26T12:00:00+0000").getTime());
+  });
+
+  it("sem value.timestamp, usa entry.time (UNIX em SEGUNDOS, não milissegundos)", () => {
+    const semTimestamp = structuredClone(payloadDeComentario);
+    delete (semTimestamp.entry[0]!.changes[0]!.value as { timestamp?: string }).timestamp;
+    semTimestamp.entry[0]!.time = 1790000000;
+    const [c] = parseComentariosDoInstagram(semTimestamp);
+    expect(c!.comentadoEm.getTime()).toBe(1790000000 * 1000);
+    expect(c!.comentadoEm.getFullYear()).toBe(2026);
+  });
+
+  it("sem value.timestamp e sem entry.time, o evento sai mesmo assim com data preenchida", () => {
+    const semData = structuredClone(payloadDeComentario);
+    delete (semData.entry[0]!.changes[0]!.value as { timestamp?: string }).timestamp;
+    delete (semData.entry[0] as { time?: number }).time;
+    const resultado = parseComentariosDoInstagram(semData);
+    expect(resultado).toHaveLength(1);
+    expect(resultado[0]!.comentadoEm).toBeInstanceOf(Date);
+    expect(Number.isNaN(resultado[0]!.comentadoEm.getTime())).toBe(false);
   });
 
   it("comentário do próprio perfil vem marcado como eco", () => {
