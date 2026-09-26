@@ -68,6 +68,7 @@
  * `AdminDaAcao` que `aplicarRegra` (Task 5) pedia como trabalho da Task 7.
  */
 import { aplicarRegra, type AdminDaAcao, type Desfecho } from "@/lib/comentarios/acao";
+import { motivoDaRecusaPorEspecialidade } from "@/lib/comentarios/especialidade";
 import { regraQueCasa, type RegraDeComentario } from "@/lib/comentarios/regra";
 import { ehObviamenteSeguro } from "@/lib/comentarios/seguranca";
 import { perfilDeVoz, type AdminDaVoz, type PerfilDeVoz } from "@/lib/comentarios/voz";
@@ -132,21 +133,15 @@ const LEASE_MS = 10 * 60 * 1000;
 const TETO_TAMANHO_DA_RESPOSTA_GERADA = 300;
 
 /**
- * RADICAIS, não palavras inteiras (C-1). A primeira versão ancorava `\b` nos
- * DOIS lados (`\bnutrologo\b`), o que só casava a forma exata — "nutrólogos"
- * (plural), "nutrologista" (derivação) e "especialização"/"especialidade"
- * (flexão) atravessavam intactos, mesmo com o PRÓPRIO prompt de sistema
- * instruindo o modelo a não usá-las. `\b` só no INÍCIO do radical: qualquer
- * sufixo depois dele ainda casa, e nenhum prefixo emenda por trás (então
- * "especialíssimo" — se existisse — casaria "especial" mas não estes
- * radicais, que são mais longos que isso).
- */
-const RADICAIS_DE_ESPECIALIDADE = ["nutrolog", "especialist", "especializ", "especialidad"];
-
-/**
  * Por que a publicação é recusada — `null` = pode publicar. Determinístico,
  * igual ao classificador de segurança: a régua não pode depender da IA
  * concordar com ela mesma.
+ *
+ * A trava de RQE (radicais de especialidade, C-1) mora em `lib/comentarios/
+ * especialidade.ts`, COMPARTILHADA com `POST /:id/publicar` — achado da
+ * revisão final: só existir aqui deixava o clique humano (que pré-preenche
+ * com esta MESMA sugestão recusada, em `sugestao_de_resposta`) publicar sem
+ * reconferir nada.
  */
 function motivoDaRecusaDaResposta(texto: string): string | null {
   if (!texto || texto.trim() === "") return "a IA gerou uma resposta vazia";
@@ -155,12 +150,7 @@ function motivoDaRecusaDaResposta(texto: string): string | null {
   const normalizado = normalizarTexto(texto);
   if (normalizado.includes("http")) return "resposta contém link";
   if (/r\$/u.test(normalizado)) return "resposta contém preço";
-  for (const radical of RADICAIS_DE_ESPECIALIDADE) {
-    if (new RegExp(`\\b${radical}`, "u").test(normalizado)) {
-      return "resposta chama o dono de título de especialidade que ele não tem";
-    }
-  }
-  return null;
+  return motivoDaRecusaPorEspecialidade(texto);
 }
 
 /**

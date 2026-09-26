@@ -286,6 +286,15 @@ describe("POST /api/v1/comentarios/:id/publicar — organização do comentário
     );
   });
 
+  it("IMPORTANTE 3 — texto com radical de especialidade (RQE) é recusado com 422, sem publicar nada", async () => {
+    vi.mocked(requireRole).mockResolvedValue(autorizacaoOk("agent"));
+    const estado = estadoPadrao();
+    const res = await publicar(estado, { texto: "O nutrólogo agradece" });
+    expect(res.status).toBe(422);
+    expect(responderComentarioSpy).not.toHaveBeenCalled();
+    expect(estado.comentarios[0]!.situacao).toBe("esperando_voce"); // não mudou
+  });
+
   it("comentário que já saiu de esperando_voce (outro clique venceu a corrida): 409, sem publicar de novo", async () => {
     vi.mocked(requireRole).mockResolvedValue(autorizacaoOk("agent"));
     const estado = estadoPadrao();

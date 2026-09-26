@@ -28,6 +28,7 @@ import {
   resolveSessionRef,
   type ChannelSessionRef,
 } from "@/lib/channels";
+import { motivoDaRecusaPorEspecialidade } from "@/lib/comentarios/especialidade";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { logger } from "@/lib/logger";
@@ -61,6 +62,17 @@ export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
       requestId,
       details: parsed.error.flatten().fieldErrors as Record<string, unknown>,
     });
+  }
+
+  // IMPORTANTE 3 (revisão final): a mesma trava de RQE que o worker aplica
+  // antes de a IA publicar sozinha — o texto recusado é gravado em
+  // `sugestao_de_resposta`, a tela pré-preenche o rascunho com ELE MESMO, e
+  // sem esta conferência o clique em Publicar mandava pro Instagram sem
+  // reconferir nada (um clique publicava "nutrólogo" no nome de um médico
+  // sem RQE). Roda ANTES de qualquer leitura de banco — recusa é barata.
+  const motivoDaRecusa = motivoDaRecusaPorEspecialidade(parsed.data.texto);
+  if (motivoDaRecusa) {
+    return fail("validation_failed", t(motivoDaRecusa), 422, { requestId });
   }
 
   const supabase = await createClient();
