@@ -43,7 +43,9 @@ function adminFalso(opts: {
           eq: (...a: unknown[]) => { filtros.push(["eq", ...a]); return q; },
           is: (...a: unknown[]) => { filtros.push(["is", ...a]); return q; },
           or: (...a: unknown[]) => { filtros.push(["or", ...a]); return q; },
-          then: (res: (v: unknown) => unknown) => Promise.resolve({ error: opts.updateErro ?? null }).then(res),
+          select: () => q,
+          then: (res: (v: unknown) => unknown) =>
+            Promise.resolve({ data: opts.updateErro ? null : [{ id: "C1" }], error: opts.updateErro ?? null }).then(res),
         };
         return q;
       },

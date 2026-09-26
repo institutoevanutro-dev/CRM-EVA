@@ -30,15 +30,15 @@ vi.mock("@/hooks/auth/AuthProvider", () => ({
   useAuth: () => ({ user: { id: "u-1" }, activeOrg: { orgId: "org-1", role: "manager" } }),
 }));
 
-function renderHeader(provider: string, channel: string, silencio: string) {
+function renderHeader(provider: string, channel: string, silencio: string, donoAtual: string | null = null) {
   const conversation = {
     id: "cv-1",
     organization_id: "org-1",
     contact_id: "ct-1",
     status: "open",
     channel,
-    assigned_to_user_id: null,
-    assignee_kind: null,
+    assigned_to_user_id: donoAtual,
+    assignee_kind: donoAtual ? "user" : null,
     bot_silenced_until: silencio,
     snooze_until: null,
     tags: [],
@@ -74,5 +74,23 @@ describe("cabeçalho de conversa do Instagram", () => {
     renderHeader(CHANNEL_PROVIDER_WAHA, "whatsapp", emUmMinuto());
     expect(screen.getByText("Automático volta em instantes")).toBeTruthy();
     expect(screen.getByTestId("devolver-ao-automatico")).toBeTruthy();
+  });
+});
+
+/**
+ * "Liberar" devolve a conversa ao AUTOMÁTICO (a rota limpa `bot_silenced_until`
+ * desde a 0173). No Instagram não há automático: a conversa sairia da Fila e
+ * ninguém a responderia, até o cliente escrever de novo e a ingestão a
+ * re-silenciar. O botão não pode existir ali.
+ */
+describe("Liberar no cabeçalho", () => {
+  it("Instagram: não oferece Liberar nem para o próprio dono", () => {
+    renderHeader(CHANNEL_PROVIDER_INSTAGRAM, "instagram", "infinity", "u-1");
+    expect(screen.queryByRole("button", { name: "Liberar" })).toBeNull();
+  });
+
+  it("controle: no WhatsApp o dono continua podendo liberar", () => {
+    renderHeader(CHANNEL_PROVIDER_WAHA, "whatsapp", emUmMinuto(), "u-1");
+    expect(screen.getByRole("button", { name: "Liberar" })).toBeTruthy();
   });
 });

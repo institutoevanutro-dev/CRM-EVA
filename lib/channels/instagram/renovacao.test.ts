@@ -78,6 +78,29 @@ let contatosAtualizados: Array<{ id: string; campos: Record<string, unknown> }>;
 let sessoesComToken: Record<string, unknown>[] | null;
 let erroDasConversas: { message: string } | null;
 
+/**
+ * Só entende a ordenação que a consulta real pede — pai ordenado por coluna
+ * JSON do contato embutido (`contacts(source_metadata->>chave)`); qualquer
+ * outra forma é erro do fake, não silêncio.
+ */
+function ordenarConversas<T extends { contacts: { source_metadata: Record<string, unknown> } }>(
+  conversas: T[],
+  ordem: { coluna: string; nullsFirst: boolean } | null,
+): T[] {
+  if (!ordem) return conversas;
+  const chave = /^contacts\(source_metadata->>(\w+)\)$/.exec(ordem.coluna)?.[1];
+  if (!chave) throw new Error(`ordenação inesperada no fake: ${ordem.coluna}`);
+  const valor = (c: T) => (c.contacts.source_metadata[chave] as string | undefined) ?? null;
+  return [...conversas].sort((a, b) => {
+    const va = valor(a);
+    const vb = valor(b);
+    if (va === vb) return 0;
+    if (va === null) return ordem.nullsFirst ? -1 : 1;
+    if (vb === null) return ordem.nullsFirst ? 1 : -1;
+    return va < vb ? -1 : 1;
+  });
+}
+
 function admin() {
   return {
     from: (tabela: string) => {
@@ -93,7 +116,8 @@ function admin() {
           not: () => q,
           lte: () => { modo = "renovar"; return q; },
           gt: () => { modo = "nomes"; return q; },
-          limit: async () => ({ data: dados(), error: null }),
+          // `limit(n)` é honrado: é o que mede o teto de sessões por rodada.
+          limit: async (n: number) => ({ data: dados().slice(0, n), error: null }),
           then: (r: (v: unknown) => void) => r({ data: dados(), error: null }),
           update: (campos: Record<string, unknown>) => ({
             eq: (_c1: string, id: string) => ({
@@ -125,12 +149,21 @@ function admin() {
       if (tabela === "conversations") {
         return {
           select: () => {
+            // O fake HONRA `order` e `limit(n)`: é o que prova que a fila gira
+            // (contato 51 alcançado) em vez de só conferir a chamada.
+            let ordem: { coluna: string; nullsFirst: boolean } | null = null;
             const chain: Record<string, unknown> = {
               eq: () => chain,
               not: () => chain,
               is: () => chain,
-              limit: async () =>
-                erroDasConversas ? { data: null, error: erroDasConversas } : { data: conversasSemNome, error: null },
+              order: (coluna: string, opts?: { nullsFirst?: boolean }) => {
+                ordem = { coluna, nullsFirst: opts?.nullsFirst ?? false };
+                return chain;
+              },
+              limit: async (n: number) =>
+                erroDasConversas
+                  ? { data: null, error: erroDasConversas }
+                  : { data: ordenarConversas(conversasSemNome, ordem).slice(0, n), error: null },
             };
             return chain;
           },
@@ -147,9 +180,10 @@ function admin() {
           },
           update: (campos: Record<string, unknown>) => {
             const q: Record<string, unknown> = {
-              eq: (_c: string, id: string) => { contatosAtualizados.push({ id, campos }); return q; },
+              eq: (c: string, id: string) => { if (c === "id") contatosAtualizados.push({ id, campos }); return q; },
               is: () => q,
-              then: (r: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(r),
+              select: () => q,
+              then: (r: (v: unknown) => unknown) => Promise.resolve({ data: [{ id: "C1" }], error: null }).then(r),
             };
             return q;
           },
@@ -329,6 +363,29 @@ describe("renovarTokensDoInstagram", () => {
     expect(perfilDoRemetenteMock).not.toHaveBeenCalled();
   });
 
+  it("a fila gira: com 50 já tentados há 1h e o 51º nunca tentado, o 51º é alcançado", async () => {
+    // Sem ordenação na consulta, o `limit(50)` devolvia sempre os MESMOS 50
+    // (tentados, descartados em JS pelo throttle) e o 51º nunca era alcançado.
+    linhas = [];
+    sessoesComToken = [sessao({ id: "sess-2" })];
+    const ha1h = new Date(AGORA.getTime() - 3_600_000).toISOString();
+    conversasSemNome = Array.from({ length: 50 }, (_, i) => ({
+      contact_id: `C${i + 1}`,
+      provider_conversation_id: `IGSID${i + 1}`,
+      contacts: { display_name: null, source_metadata: { perfil_tentado_em: ha1h } },
+    }));
+    conversasSemNome.push({
+      contact_id: "C51",
+      provider_conversation_id: "IGSID51",
+      contacts: { display_name: null, source_metadata: {} },
+    });
+
+    const resumo = await renovarTokensDoInstagram(admin(), AGORA);
+
+    expect(perfilDoRemetenteMock).toHaveBeenCalledWith("token-velho-em-claro", "IGSID51");
+    expect(resumo.nomesPreenchidos).toBe(1);
+  });
+
   it("sessão longe de vencer também tem os nomes preenchidos todo dia, com o token que ela já tem", async () => {
     // Antes só a sessão perto de vencer (e renovada) preenchia: ~1 vez a cada 45 dias.
     linhas = [];
@@ -345,6 +402,20 @@ describe("renovarTokensDoInstagram", () => {
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({ metadata: expect.objectContaining({ renovadas: 0, nomes_preenchidos: 1 }) }),
     );
+  });
+
+  it("a passada de nomes tem teto de 50 sessões por rodada, como a renovação", async () => {
+    // Sem teto: 51 sessões × até 50 chamadas à Graph × 15s de timeout num tick só.
+    linhas = [];
+    sessoesComToken = Array.from({ length: 51 }, (_, i) => sessao({ id: `sess-${i + 1}` }));
+    conversasSemNome = [
+      { contact_id: "C1", provider_conversation_id: "IGSID1", contacts: { display_name: null, source_metadata: {} } },
+    ];
+
+    const resumo = await renovarTokensDoInstagram(admin(), AGORA);
+
+    expect(decryptWebhookSecret).toHaveBeenCalledTimes(50);
+    expect(resumo.nomesPreenchidos).toBe(50);
   });
 
   it("sessão com token mas ninguém sem nome: nada muda, nada audita", async () => {
