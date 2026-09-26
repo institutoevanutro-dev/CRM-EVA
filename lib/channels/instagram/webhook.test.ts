@@ -93,6 +93,47 @@ describe("parse de comentários do Instagram", () => {
     expect(Number.isNaN(resultado[0]!.comentadoEm.getTime())).toBe(false);
   });
 
+  it("value.timestamp como NÚMERO unix em segundos não descarta o comentário", () => {
+    const numeroSegundos = structuredClone(payloadDeComentario);
+    (numeroSegundos.entry[0]!.changes[0]!.value as { timestamp: unknown }).timestamp = 1758888888;
+    const [c] = parseComentariosDoInstagram(numeroSegundos);
+    expect(c).toBeDefined();
+    expect(c!.comentadoEm.getTime()).toBe(1758888888 * 1000);
+  });
+
+  it("value.timestamp como NÚMERO unix em milissegundos não descarta o comentário", () => {
+    const numeroMs = structuredClone(payloadDeComentario);
+    (numeroMs.entry[0]!.changes[0]!.value as { timestamp: unknown }).timestamp = 1758888888000;
+    const [c] = parseComentariosDoInstagram(numeroMs);
+    expect(c).toBeDefined();
+    expect(c!.comentadoEm.getTime()).toBe(1758888888000);
+  });
+
+  it("value.timestamp como STRING de número unix não lança e não descarta", () => {
+    const stringUnix = structuredClone(payloadDeComentario);
+    (stringUnix.entry[0]!.changes[0]!.value as { timestamp: unknown }).timestamp = "1758888888";
+    const [c] = parseComentariosDoInstagram(stringUnix);
+    expect(c).toBeDefined();
+    expect(c!.comentadoEm.getTime()).toBe(1758888888 * 1000);
+  });
+
+  it("value.timestamp como string ISO continua funcionando", () => {
+    const iso = structuredClone(payloadDeComentario);
+    (iso.entry[0]!.changes[0]!.value as { timestamp: unknown }).timestamp = "2026-09-26T12:00:00+0000";
+    const [c] = parseComentariosDoInstagram(iso);
+    expect(c!.comentadoEm.getTime()).toBe(new Date("2026-09-26T12:00:00+0000").getTime());
+  });
+
+  it("value.timestamp lixo cai pro fallback (entry.time) em vez de lançar", () => {
+    const lixo = structuredClone(payloadDeComentario);
+    (lixo.entry[0]!.changes[0]!.value as { timestamp: unknown }).timestamp = "abacaxi";
+    lixo.entry[0]!.time = 1790000000;
+    const [c] = parseComentariosDoInstagram(lixo);
+    expect(c).toBeDefined();
+    expect(Number.isNaN(c!.comentadoEm.getTime())).toBe(false);
+    expect(c!.comentadoEm.getTime()).toBe(1790000000 * 1000);
+  });
+
   it("comentário do próprio perfil vem marcado como eco", () => {
     const meu = structuredClone(payloadDeComentario);
     meu.entry[0]!.changes[0]!.value.from.id = "IG-CONTA-1";
