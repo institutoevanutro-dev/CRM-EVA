@@ -7,8 +7,8 @@
  * preço ou sintoma assinada por um médico. Na dúvida, é sempre "precisa de um
  * humano": a regra final é restritiva, não permissiva.
  *
- * Determinístico, não IA: uma lista de gatilhos e um punhado de padrões
- * seguros. O motivo: uma IA julgando o que é seguro pode ser convencida por um
+ * Determinístico, não IA: uma lista de gatilhos e um vocabulário seguro
+ * fechado. O motivo: uma IA julgando o que é seguro pode ser convencida por um
  * texto; uma lista não — e o dono edita a lista sem publicar versão nova.
  *
  * ═══ RONDA 1 (revisão): "obviamente seguro" era SUBSTRING, não o texto todo ═══
@@ -20,16 +20,30 @@
  * mutação confirmou: apagando a tabela `GATILHOS` inteira, a suíte antiga
  * continuava verde, porque nenhum dos textos inseguros testados tinha a
  * palavra "amei" dentro — o furo real (elogio + assunto clínico) não tinha
- * cobertura nenhuma.
+ * cobertura nenhuma. A correção foi ancorar ao texto INTEIRO — a mesma lição
+ * de `ehPalavraIsolada` em `lib/opt-out/deteccao.ts`: lá, "parar" só conta se
+ * for a MENSAGEM INTEIRA, nunca a palavra solta no meio da frase.
  *
- * A correção é a mesma lição de `ehPalavraIsolada` em `lib/opt-out/deteccao.ts`
- * — o arquivo que este módulo espelha: lá, "parar" só conta se for a MENSAGEM
- * INTEIRA (ou verbo + objeto de comunicação), nunca a palavra solta no meio da
- * frase. Aqui, "obviamente seguro" só pode significar "o comentário INTEIRO é
- * elogio ou emoji" — nunca "contém um elogio". `GATILHOS` continua existindo,
- * mas agora é a SEGUNDA linha de defesa (e o rótulo específico do motivo);
- * quem impede a publicação por padrão é a ausência de casamento com a lista
- * fechada de frases seguras, não a presença de um gatilho.
+ * ═══ RONDA 2 (revisão): ancorar a uma LISTA DE FRASES fechadas superprotegeu ═══
+ *
+ * O ancoramento ao texto inteiro resolveu a segurança — zero perigoso vazava
+ * —, mas o critério de "seguro" era casar uma das frases inteiras de uma
+ * lista fechada (`FRASES_DE_ELOGIO`). Elogio de verdade não sai só nessas
+ * frases: "muito bom esse conteúdo", "excelente explicação", "melhor
+ * explicação que já vi" são elogio legítimo, sem risco nenhum, e todos
+ * caíam em `seguro: false` — metade dos elogios reais medidos. Isso é pior do
+ * que não ter a trava: enche a fila humana de "amei o conteúdo" para revisar.
+ *
+ * A correção não é afrouxar o ancoramento — é trocar o CRITÉRIO do que conta
+ * como elogio. Em vez de "o texto inteiro é UMA DAS frases da lista", agora é
+ * "TODO TOKEN do texto está no vocabulário seguro" (elogio, cola sem
+ * conteúdo, como chamam o dono — nunca título de especialidade — emoji,
+ * pontuação e número solto). Continua sendo ancoragem ao texto inteiro (deny-
+ * by-default: um único token desconhecido, como "caneta" ou "preço", já
+ * reprova o texto inteiro), só que a unidade de casamento é a PALAVRA, não a
+ * frase pronta — o que deixa o vocabulário compor infinitas frases de elogio
+ * sem abrir mão de barrar qualquer assunto clínico, comercial ou de
+ * agendamento que apareça junto.
  */
 
 import { normalizarTexto } from "../opt-out/deteccao";
@@ -37,7 +51,7 @@ import { normalizarTexto } from "../opt-out/deteccao";
 export type Veredito = { seguro: true } | { seguro: false; gatilho: string };
 
 /** Acima disso não é "obviamente seguro" — elogio não cabe num parágrafo. */
-const LIMITE_TAMANHO = 60;
+const LIMITE_TAMANHO = 120;
 
 /**
  * Gatilhos por assunto: qualquer casamento aqui é "precisa de um humano", e dá
@@ -69,57 +83,57 @@ const GATILHOS: ReadonlyArray<[string, RegExp]> = [
 /** Emoji "de verdade" — inclui variation selector (❤️), ZWJ e tom de pele (👨🏽‍⚕️). */
 const EMOJI_CLASSE =
   "\\p{Extended_Pictographic}\\p{Emoji_Presentation}\\u{FE0F}\\u{200D}\\u{1F3FB}-\\u{1F3FF}";
-const SOMENTE_EMOJI_RE = new RegExp(`^[${EMOJI_CLASSE}\\s]+$`, "u");
-const BORDA_EMOJI_RE = new RegExp(`^[${EMOJI_CLASSE}\\s]+|[${EMOJI_CLASSE}\\s]+$`, "gu");
+const SOMENTE_EMOJI_RE = new RegExp(`^[${EMOJI_CLASSE}]+$`, "u");
+const SOMENTE_DIGITOS_RE = /^\d+$/u;
 
-/** Pontuação que não muda o sentido do elogio e não deveria impedir o casamento. */
-const PONTUACAO_RE = /[!?.,;:()"'«»""''…-]/gu;
+/** Corta o texto em tokens: sequência de letras/dígitos, OU sequência de emoji. Pontuação some sozinha (não casa nenhuma alternativa). */
+const TOKEN_RE = new RegExp(`[\\p{L}\\p{N}]+|[${EMOJI_CLASSE}]+`, "gu");
 
 /**
- * Frases INTEIRAS que valem como "obviamente seguro" — nunca substring. É essa
- * lista fechada, e não `GATILHOS`, que decide o padrão a favor; qualquer coisa
- * fora dela (por mais elogio que comece) é `{ seguro: false }`.
+ * Vocabulário seguro — a unidade de casamento é a PALAVRA, não a frase. Todo
+ * token do comentário precisa estar aqui (ou ser emoji/dígito) para o texto
+ * inteiro contar como elogio. Três famílias, deliberadamente separadas para
+ * ficar claro o que cada uma autoriza:
+ *
+ * - ELOGIO: a palavra que carrega o sentimento positivo.
+ * - COLA_SEM_CONTEUDO: liga a frase mas não decide nada sozinha ("de", "que",
+ *   "o"...) — inclui os substantivos genéricos que só apontam pro post em si
+ *   ("vídeo", "post", "conteúdo", "explicação"), nunca pro tratamento.
+ * - COMO_CHAMAM_O_DONO: só o tratamento social. **Nunca título de
+ *   especialidade** ("nutrólogo", "especialista") — o dono não tem RQE, e
+ *   essa linha NÃO entra aqui de propósito (fica coberta por `GATILHOS`,
+ *   categoria "especialidade", que roda antes desta lista).
  */
-const FRASES_DE_ELOGIO: ReadonlySet<string> = new Set([
-  "top",
-  "show",
-  "otimo",
-  "otima",
-  "maravilhoso",
-  "maravilhosa",
-  "incrivel",
-  "sensacional",
-  "parabens",
-  "parabens doutor",
-  "parabens doutora",
-  "amei",
-  "adorei",
-  "obrigado",
-  "obrigada",
-  "gratidao",
-  "que video bom",
-  "que video otimo",
-  "que video top",
-  "que video incrivel",
-  "que post bom",
-  "que post otimo",
-  "que post top",
-  "que conteudo bom",
-  "que conteudo otimo",
-  "que conteudo top",
+const ELOGIO = [
+  "top", "amei", "amo", "adoro", "adorei", "parabens", "show", "sensacional",
+  "maravilhoso", "maravilhosa", "perfeito", "perfeita", "excelente",
+  "otimo", "otima", "bom", "boa", "bons", "boas", "melhor", "incrivel",
+  "lindo", "linda", "lindos", "lindas", "gratidao", "obrigado", "obrigada",
+  "sucesso", "arrasou", "arrasa", "demais", "gente", "nossa", "uau",
+];
+const COLA_SEM_CONTEUDO = [
+  "o", "a", "os", "as", "esse", "essa", "este", "esta", "isso", "que",
+  "de", "do", "da", "muito", "mais", "tudo", "sempre", "ja", "vi", "e",
+  "pra", "seu", "sua", "bola",
+  // assunto genérico do post — aponta pro conteúdo, não pro tratamento
+  "video", "post", "conteudo", "explicacao", "dica", "aula",
+];
+const COMO_CHAMAM_O_DONO = ["doutor", "dr", "doutora", "dra"];
+
+const VOCABULARIO_SEGURO: ReadonlySet<string> = new Set([
+  ...ELOGIO,
+  ...COLA_SEM_CONTEUDO,
+  ...COMO_CHAMAM_O_DONO,
 ]);
 
-/** Remove pontuação e colapsa espaços — só para o casamento contra `FRASES_DE_ELOGIO`. */
-function textoLimpo(normalizado: string): string {
-  return normalizado.replace(PONTUACAO_RE, "").replace(/\s+/gu, " ").trim();
-}
-
-/** O texto INTEIRO (tirando colar de emoji e espaço nas bordas) é elogio, ou é só emoji? */
-function ehElogioOuEmoji(limpo: string): boolean {
-  if (limpo === "") return false;
-  if (SOMENTE_EMOJI_RE.test(limpo)) return true;
-  const nucleo = limpo.replace(BORDA_EMOJI_RE, "").trim();
-  return FRASES_DE_ELOGIO.has(nucleo);
+/** Todo token do texto está no vocabulário seguro (ou é emoji/dígito)? Um único de fora já reprova o texto inteiro. */
+function todosOsTokensSaoSeguros(normalizado: string): boolean {
+  const tokens = normalizado.match(TOKEN_RE) ?? [];
+  if (tokens.length === 0) return false;
+  return tokens.every(
+    (token) =>
+      SOMENTE_EMOJI_RE.test(token) || SOMENTE_DIGITOS_RE.test(token) || VOCABULARIO_SEGURO.has(token),
+  );
 }
 
 export function ehObviamenteSeguro(texto: string | null): Veredito {
@@ -144,7 +158,7 @@ export function ehObviamenteSeguro(texto: string | null): Veredito {
     return { seguro: false, gatilho: "pergunta" };
   }
 
-  if (ehElogioOuEmoji(textoLimpo(normalizado))) {
+  if (todosOsTokensSaoSeguros(normalizado)) {
     return { seguro: true };
   }
 

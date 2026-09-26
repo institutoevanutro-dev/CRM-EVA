@@ -67,14 +67,44 @@ it.each(inegurosEmEspanhol)("%s precisa de você em espanhol (%s)", (texto, cate
   expect(ehObviamenteSeguro(texto)).toEqual({ seguro: false, gatilho: categoria });
 });
 
-// ── texto longo não é "obviamente seguro", mesmo sem gatilho nenhum ─────────
-it("texto longo demais não é obviamente seguro", () => {
-  const longo = "muito obrigada por tudo, vocês são demais, equipe incrível, adorei o atendimento";
-  expect(longo.length).toBeGreaterThan(60);
-  expect(ehObviamenteSeguro(longo).seguro).toBe(false);
+// ── texto longo não é "obviamente seguro", mesmo sendo TODO vocabulário seguro ─
+it("texto longo demais não é obviamente seguro, mesmo com todo token conhecido", () => {
+  const longo =
+    "muito obrigada doutor, que aula maravilhosa, perfeito, excelente, adorei o video, top demais, parabens, show de bola, sucesso";
+  expect(longo.length).toBeGreaterThan(120);
+  expect(ehObviamenteSeguro(longo)).toEqual({ seguro: false, gatilho: "texto longo demais" });
 });
 
 // ── emoji com variation selector e ZWJ também é "só emoji" ──────────────────
 it.each(["❤️", "👨🏽‍⚕️"])("%s (emoji com modificador) é obviamente seguro", (texto) => {
   expect(ehObviamenteSeguro(texto)).toEqual({ seguro: true });
+});
+
+// ── RONDA 2 (revisão): critério trocado de "frase fechada" pra "todo token no
+// vocabulário" — elogio de verdade não sai só nas frases prontas da ronda 1.
+// Estes dez são exatamente os que a medição da revisão marcou como recusados
+// indevidamente; agora precisam ser seguros. ──────────────────────────────────
+const elogiosReaisQuePrecisamPassar = [
+  "muito bom esse conteúdo",
+  "adorei o vídeo",
+  "excelente explicação",
+  "que aula!",
+  "obrigada doutor 🙏",
+  "top demais",
+  "amei o conteúdo",
+  "perfeito",
+  "show de bola",
+  "melhor explicação que já vi",
+];
+
+it.each(elogiosReaisQuePrecisamPassar)("%s é elogio real e tem de ser seguro", (texto) => {
+  expect(ehObviamenteSeguro(texto)).toEqual({ seguro: true });
+});
+
+// O princípio da ronda 2: mesmo começo, um token desconhecido no fim já vira
+// tudo inseguro — é o que faz o vocabulário seguro compor frase sem abrir mão
+// do deny-by-default.
+it("mesmo começo, um token desconhecido no fim reprova o texto inteiro", () => {
+  expect(ehObviamenteSeguro("amei o conteúdo")).toEqual({ seguro: true });
+  expect(ehObviamenteSeguro("amei o conteúdo, qual a dose").seguro).toBe(false);
 });
