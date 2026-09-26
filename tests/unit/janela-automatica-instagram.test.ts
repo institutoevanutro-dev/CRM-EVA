@@ -24,3 +24,11 @@ describe("janela do envio automático", () => {
     expect(capabilitiesOf("meta_cloud").janelaAutomaticaMs).toBeNull();
   });
 });
+
+describe("provider desconhecido", () => {
+  it("não lança: sem regra conhecida (null) e o envio automático não é barrado por janela", () => {
+    expect(() => fimDaJanelaAutomatica("provider_que_nao_existe", ha(48 * H))).not.toThrow();
+    expect(fimDaJanelaAutomatica("provider_que_nao_existe", ha(48 * H))).toBeNull();
+    expect(automaticoPodeEnviar("provider_que_nao_existe", null, agora)).toBe(true);
+  });
+});

@@ -26,9 +26,9 @@
  * `last_inbound_at`, e guardá-la criaria uma segunda verdade que envelhece
  * sozinha — parecendo autoritativa justamente quando já está errada.
  */
-import { capabilitiesOf } from "./capabilities";
+import { CHANNEL_CAPABILITIES, capabilitiesOf } from "./capabilities";
 import { WINDOW_MS, windowRemainingMs } from "@/lib/agent-engine/guardrails/messaging-window";
-import type { ChannelProvider } from "./types";
+import type { ChannelProvider, ProviderDeMensagem } from "./types";
 
 export type EstadoDaJanela =
   /** Canal sem restrição de janela: não há relógio a mostrar. */
@@ -98,12 +98,12 @@ export function estadoDaJanela(
 /**
  * Até quando um envio AUTOMÁTICO (follow-up) pode sair nesta conversa.
  *
- * `null` = o canal não tem essa regra. Com a regra e sem `lastInboundAt`, a
- * pessoa nunca escreveu: devolve `new Date(0)`, já vencida.
+ * `null` = o canal não tem essa regra (ou o provider é desconhecido: mesma
+ * busca segura de `silencioDoBotEhRoteamento`, nunca lança). Com a regra e
+ * sem `lastInboundAt`, a pessoa nunca escreveu: devolve `new Date(0)`, já vencida.
  */
 export function fimDaJanelaAutomatica(provider: string | null | undefined, lastInboundAt: string | null): Date | null {
-  if (!provider) return null;
-  const ms = capabilitiesOf(provider as ChannelProvider).janelaAutomaticaMs;
+  const ms = CHANNEL_CAPABILITIES[(provider ?? "") as ProviderDeMensagem]?.janelaAutomaticaMs ?? null;
   if (ms === null) return null;
   if (!lastInboundAt) return new Date(0);
   return new Date(new Date(lastInboundAt).getTime() + ms);

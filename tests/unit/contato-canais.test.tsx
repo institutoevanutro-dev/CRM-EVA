@@ -55,7 +55,7 @@ const conversaInstagram = {
   contacts: {
     phone_number: null,
     contact_channel_identities: [
-      { channel: "instagram", external_id: "igsid-maria", handle: "@maria.silva", display_name: "Maria Silva" },
+      { channel: "instagram", external_id: "igsid-maria", handle: "maria.silva", display_name: "Maria Silva" },
     ],
   },
   channel_sessions: {

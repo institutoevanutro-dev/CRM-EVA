@@ -64,7 +64,9 @@ export function CanaisDoContato({ contactId }: { contactId: string }) {
 
           const identificador =
             conversa.channel === "instagram"
-              ? (identidade?.handle ?? t("Instagram"))
+              ? identidade?.handle
+                ? `@${identidade.handle}`
+                : t("Instagram")
               : phoneForDisplay(conversa.contacts?.phone_number);
 
           const via =
