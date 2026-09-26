@@ -96,6 +96,26 @@ export function estadoDaJanela(
 }
 
 /**
+ * Até quando um envio AUTOMÁTICO (follow-up) pode sair nesta conversa.
+ *
+ * `null` = o canal não tem essa regra. Com a regra e sem `lastInboundAt`, a
+ * pessoa nunca escreveu: devolve `new Date(0)`, já vencida.
+ */
+export function fimDaJanelaAutomatica(provider: string | null | undefined, lastInboundAt: string | null): Date | null {
+  if (!provider) return null;
+  const ms = capabilitiesOf(provider as ChannelProvider).janelaAutomaticaMs;
+  if (ms === null) return null;
+  if (!lastInboundAt) return new Date(0);
+  return new Date(new Date(lastInboundAt).getTime() + ms);
+}
+
+/** `true` quando o canal não tem a regra ou `agora` ainda está antes do fim. */
+export function automaticoPodeEnviar(provider: string | null | undefined, lastInboundAt: string | null, agora: Date): boolean {
+  const fim = fimDaJanelaAutomatica(provider, lastInboundAt);
+  return fim === null || agora.getTime() < fim.getTime();
+}
+
+/**
  * "23h 40m", "40m", "3m".
  *
  * Sem segundos: um número que muda sozinho na tela puxa o olho para o relógio

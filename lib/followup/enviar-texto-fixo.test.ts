@@ -98,6 +98,8 @@ describe("enviarTextoFixoPendente · gate de elegibilidade", () => {
     const enviados = await enviarTextoFixoPendente(admin());
     expect(enviados).toBe(1);
     expect(sendMessageHandler).toHaveBeenCalledOnce();
+    // A marca que deixa o follow-up sair no Instagram dentro das 24h.
+    expect(sendMessageHandler.mock.calls[0]?.[1]).toMatchObject({ origemDoEnvio: "followup" });
   });
 
   it("erro ao ler elegibilidade → NÃO envia, job volta pra 'pending' (fail-closed)", async () => {

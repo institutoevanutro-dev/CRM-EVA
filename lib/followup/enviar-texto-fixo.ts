@@ -126,7 +126,7 @@ export async function enviarTextoFixoPendente(
       await assertAgendaEffectSupabase(admin,proactiveContext);
       const resultado=await sendWithLedger(supabaseSendLedger(admin),{tenantId:job.organization_id,leadId:contactId,jobId:job.id,seq:1,body},async(key,messageId)=>sendMessageHandler(
         admin,
-        {organization_id:job.organization_id,actor:{type:"webhook_source",id:enrollmentId},serviceBoundary:boundary,proactiveContext,internalMessageId:messageId,requestId:key},
+        {organization_id:job.organization_id,actor:{type:"webhook_source",id:enrollmentId},serviceBoundary:boundary,proactiveContext,origemDoEnvio:"followup",internalMessageId:messageId,requestId:key},
         {conversation_id:conversationId,type:"text",body,metadata:{idempotency_key:key}},
       ));
       if(resultado.kind!=="sent" && resultado.kind!=="already_sent") throw new Error(`message_${resultado.kind}`);

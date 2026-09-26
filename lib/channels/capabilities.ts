@@ -6,6 +6,7 @@
  * nasce de uma diferença real e medida entre WAHA e Meta Cloud; capability que
  * ninguém consome é código morto, e o teste de matriz reprova.
  */
+import { WINDOW_MS } from "@/lib/agent-engine/guardrails/messaging-window";
 import type { ChannelCapabilities, ChannelProvider, ProviderDeMensagem } from "./types";
 
 export type { ChannelProvider, ChannelCapabilities, ProviderDeMensagem };
@@ -32,6 +33,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     canSend: true,
     iaResponde: true,
     janelaHumanaMs: null,
+    janelaAutomaticaMs: null,
     limiteDeTexto: null,
     midiaDeEnvio: "completa",
   },
@@ -50,6 +52,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     canSend: true,
     iaResponde: true,
     janelaHumanaMs: null,
+    janelaAutomaticaMs: null,
     limiteDeTexto: null,
     midiaDeEnvio: "completa",
   },
@@ -88,6 +91,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     canSend: true,
     iaResponde: true,
     janelaHumanaMs: null,
+    janelaAutomaticaMs: null,
     limiteDeTexto: null,
     midiaDeEnvio: "completa",
   },
@@ -116,6 +120,9 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     canSend: true,
     iaResponde: false,
     janelaHumanaMs: 7 * 24 * 60 * 60 * 1000,
+    // Etapa 3: o FOLLOW-UP sai sozinho, mas só dentro das 24h desde a última
+    // mensagem do cliente (a janela padrão da Meta, sem etiqueta humana).
+    janelaAutomaticaMs: WINDOW_MS,
     limiteDeTexto: 1000,
     midiaDeEnvio: "so_foto",
   },

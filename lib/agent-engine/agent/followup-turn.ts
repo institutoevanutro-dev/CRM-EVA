@@ -652,7 +652,7 @@ async function sendFixedOutbound(
             ),
         }
       : {}),
-    send: (finalBody) => channel.send({ tenantId, leadId, jobId: job.id, jobClaim:claimOfJob(job), seq: 1, conversationId, body: finalBody }),
+    send: (finalBody) => channel.send({ tenantId, leadId, jobId: job.id, jobClaim:claimOfJob(job), seq: 1, conversationId, body: finalBody, origemDoEnvio: 'followup' }),
   });
 
   if (chain.status === 'vetoed') {

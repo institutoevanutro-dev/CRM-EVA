@@ -80,6 +80,11 @@ export interface ChannelCapabilities {
    * Meta no Instagram). `null` = o canal não tem essa extensão.
    */
   janelaHumanaMs: number | null;
+  /**
+   * Até quando, depois da última mensagem recebida, um envio AUTOMÁTICO
+   * (follow-up) pode sair. `null` = sem regra própria.
+   */
+  janelaAutomaticaMs: number | null;
   /** Máximo de caracteres de um texto enviado. `null` = sem limite próprio do canal. */
   limiteDeTexto: number | null;
   /** O que o CRM consegue anexar por este canal. */
