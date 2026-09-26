@@ -38,6 +38,9 @@ export const dynamic = "force-dynamic";
  */
 const TETO_DE_VARREDURA = 2000;
 
+/** Tamanho da página ao ler identidades do Instagram (o `max-rows` padrão do PostgREST é 1000). */
+const PAGINA_DE_IDENTIDADES = 1000;
+
 export async function GET(): Promise<Response> {
   const requestId = randomUUID();
 
@@ -55,7 +58,7 @@ export async function GET(): Promise<Response> {
   const { data, error } = await supabase
     .from("contacts")
     .select(
-      "id, name, display_name, email, email_normalized, phone_number, is_merged_into, is_anonymized, source_metadata, created_at, last_activity_at, source",
+      "id, name, display_name, email, email_normalized, phone_number, is_merged_into, is_anonymized, source_metadata, created_at, last_activity_at",
     )
     .eq("organization_id", org.orgId)
     .is("is_merged_into", null)
@@ -66,30 +69,34 @@ export async function GET(): Promise<Response> {
     return fail("internal_error", error.message, 500, { requestId });
   }
 
-  const brutas = (data ?? []).slice(0, TETO_DE_VARREDURA) as unknown as (Omit<
-    ContatoParaDeduplicar,
-    "do_instagram"
-  > & { source: string | null })[];
+  const brutas = (data ?? []).slice(0, TETO_DE_VARREDURA) as unknown as Omit<ContatoParaDeduplicar, "do_instagram">[];
   const varreuTudo = (data ?? []).length <= TETO_DE_VARREDURA;
 
-  // Quem tem identidade de Instagram — uma consulta só, filtrada por org e
-  // canal, com os IDs já varridos (não estoura o teto de varredura de hoje:
-  // o `.in()` limita ao que já foi lido, nunca amplia).
-  const idsDaVarredura = brutas.map((c) => c.id);
+  // Quem tem identidade de Instagram: só org + canal, interseção em memória.
+  // Um `.in("contact_id", [...até 2000 UUIDs])` estourava a URL do GET, o
+  // erro era ignorado e os pares Instagram × WhatsApp sumiam em silêncio.
+  // Paginado porque o PostgREST corta cada resposta no `max-rows`.
+  const idsDaVarredura = new Set(brutas.map((c) => c.id));
   const doInstagram = new Set<string>();
-  if (idsDaVarredura.length > 0) {
-    const { data: identidades } = await supabase
+  for (let desde = 0; idsDaVarredura.size > 0; desde += PAGINA_DE_IDENTIDADES) {
+    const { data: identidades, error: erroIdentidades } = await supabase
       .from("contact_channel_identities")
       .select("contact_id")
       .eq("organization_id", org.orgId)
       .eq("channel", "instagram")
-      .in("contact_id", idsDaVarredura);
-    for (const row of (identidades ?? []) as { contact_id: string }[]) {
-      doInstagram.add(row.contact_id);
+      .order("contact_id", { ascending: true })
+      .range(desde, desde + PAGINA_DE_IDENTIDADES - 1);
+    if (erroIdentidades) {
+      return fail("internal_error", erroIdentidades.message, 500, { requestId });
     }
+    const pagina = (identidades ?? []) as { contact_id: string }[];
+    for (const row of pagina) {
+      if (idsDaVarredura.has(row.contact_id)) doInstagram.add(row.contact_id);
+    }
+    if (pagina.length < PAGINA_DE_IDENTIDADES) break;
   }
 
-  const linhas: ContatoParaDeduplicar[] = brutas.map(({ source: _source, ...c }) => ({
+  const linhas: ContatoParaDeduplicar[] = brutas.map((c) => ({
     ...c,
     do_instagram: doInstagram.has(c.id),
   }));
