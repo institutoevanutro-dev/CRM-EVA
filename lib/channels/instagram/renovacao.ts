@@ -218,7 +218,7 @@ export interface ResumoDaRenovacao {
   contatosJuntados: number;
 }
 
-/** As organizações com sessão `meta_instagram` ativa (não arquivada) — não precisa de token: a junção por @ nunca chama a Graph. */
+/** As organizações com sessão `meta_instagram` ativa (não arquivada). O token de cada identidade a junção resolve sozinha. */
 async function organizacoesComInstagramAtivo(admin: SupabaseClient): Promise<string[]> {
   const { data, error } = await admin
     .from("channel_sessions")
@@ -312,9 +312,10 @@ export async function renovarTokensDoInstagram(
     }
   }
 
-  // Mesmo @ vira um contato só: por organização com sessão ativa, não só nas
-  // que renovaram ou nas com token — a junção é local (handle já gravado),
-  // nunca chama a Graph.
+  // Mesmo @ vira um contato só: por organização com sessão ativa. O handle
+  // gravado só acha os candidatos; antes de fundir, `juntarPorArroba` pergunta
+  // o @ VIVO de cada identidade à Graph (com o token da sessão dela) e deixa
+  // de fora quem não confere ou não pôde ser conferido.
   for (const organizationId of await organizacoesComInstagramAtivo(admin)) {
     try {
       resumo.contatosJuntados += await juntarDuplicadosPorArroba(admin, organizationId, TETO_DE_JUNCOES_POR_ORGANIZACAO);

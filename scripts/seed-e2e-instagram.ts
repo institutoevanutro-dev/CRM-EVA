@@ -64,8 +64,8 @@ const IGSID_CANAIS = "IGSID-E2E-UNICO-CANAIS";
 const TELEFONE_CANAIS = "+5511988880701";
 export const NOME_ARROBA = "IgUnico Arroba";
 // O mesmo @ com grafias diferentes: a junção compara sem maiúsculas.
-const ARROBA_NO_PERFIL_1 = { igsid: "IGSID-E2E-UNICO-ARROBA-1", handle: "igunico_arroba" };
-const ARROBA_NO_PERFIL_2 = { igsid: "IGSID-E2E-UNICO-ARROBA-2", handle: "IgUnico_Arroba" };
+export const ARROBA_NO_PERFIL_1 = { igsid: "IGSID-E2E-UNICO-ARROBA-1", handle: "igunico_arroba" };
+export const ARROBA_NO_PERFIL_2 = { igsid: "IGSID-E2E-UNICO-ARROBA-2", handle: "IgUnico_Arroba" };
 export const NOME_PAR = "IgUnico Maria Par";
 const IGSID_PAR = "IGSID-E2E-UNICO-PAR";
 const TELEFONE_PAR = "+5511988880702";

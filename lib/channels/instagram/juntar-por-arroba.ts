@@ -10,13 +10,18 @@
  * sem `auth.uid()` (o path de sistema já pode chamá-la, desde que resolva
  * `organization_id` de fonte confiável, nunca do body; aqui vem do caller).
  *
- * Best-effort sempre: erro aqui nunca pode impedir a ingestão de uma
- * mensagem nem a passada diária de renovação.
+ * O @ gravado só ACHA candidatos; o merge exige o @ VIVO de cada identidade
+ * (ver `juntarPorArroba`). Best-effort sempre: erro aqui nunca pode impedir a
+ * ingestão de uma mensagem nem a passada diária de renovação.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { audit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
+import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
+
+import { CHANNEL_PROVIDER_INSTAGRAM } from "../capabilities";
+import { perfilDoRemetente } from "./graph";
 
 /** Escapa `%`, `_` e `\` antes de um `.ilike` — os três têm sentido especial no PostgREST. */
 function escaparParaIlike(valor: string): string {
@@ -50,11 +55,85 @@ export type ResultadoDaJuncao = { juntou: true; principal: string } | { juntou: 
 
 const NADA: ResultadoDaJuncao = { juntou: false };
 
+type IdentidadeGravada = { contact_id: string; external_id: string; handle: string | null };
+
+/**
+ * Token da sessão que conversa com este IGSID: identidade → conversa
+ * (`provider_conversation_id` = IGSID) → `channel_sessions` ativa → decifra.
+ * `null` quando não há conversa, sessão ativa, token ou a decifra falha.
+ * `cache` evita decifrar o mesmo token duas vezes na mesma junção.
+ */
+async function tokenDoIgsid(
+  admin: SupabaseClient,
+  organizationId: string,
+  igsid: string,
+  cache: Map<string, string | null>,
+): Promise<string | null> {
+  const { data: conversas, error } = await admin
+    .from("conversations")
+    .select("channel_session_id")
+    .eq("organization_id", organizationId)
+    .eq("provider_conversation_id", igsid)
+    .not("channel_session_id", "is", null);
+  if (error) return null;
+  const idsDeSessao = [
+    ...new Set(((conversas as { channel_session_id: string }[] | null) ?? []).map((c) => c.channel_session_id)),
+  ];
+  if (idsDeSessao.length === 0) return null;
+  const { data: sessoes, error: erroSessao } = await admin
+    .from("channel_sessions")
+    .select("id, ig_token_encrypted")
+    .eq("organization_id", organizationId)
+    .eq("provider", CHANNEL_PROVIDER_INSTAGRAM)
+    .in("id", idsDeSessao)
+    .is("archived_at", null)
+    .not("ig_token_encrypted", "is", null)
+    .limit(1);
+  if (erroSessao) return null;
+  const sessao = (sessoes as { id: string; ig_token_encrypted: string }[] | null)?.[0];
+  if (!sessao) return null;
+  if (!cache.has(sessao.id)) cache.set(sessao.id, await decryptWebhookSecret(admin, sessao.ig_token_encrypted));
+  return cache.get(sessao.id) ?? null;
+}
+
+/**
+ * @ VIVO desta identidade, perguntado à Graph agora — e gravado quando mudou
+ * (um @ trocado ou reciclado não pode ficar no banco para a próxima rodada).
+ * `null` = sem token, Graph falhou ou conta sem @: quem chama NÃO junta.
+ */
+async function handleVivo(
+  admin: SupabaseClient,
+  organizationId: string,
+  identidade: IdentidadeGravada,
+  cache: Map<string, string | null>,
+): Promise<string | null> {
+  const token = await tokenDoIgsid(admin, organizationId, identidade.external_id, cache);
+  if (!token) return null;
+  const { handle } = await perfilDoRemetente(token, identidade.external_id);
+  if (handle && handle !== identidade.handle) {
+    await admin
+      .from("contact_channel_identities")
+      .update({ handle })
+      .eq("organization_id", organizationId)
+      .eq("channel", "instagram")
+      .eq("external_id", identidade.external_id);
+  }
+  return handle;
+}
+
 /**
  * Junta `contactId` ao(s) contato(s) de mesmo @ (Instagram, case-insensitive).
- * `{ juntou: false }` quando o contato não tem handle, não há outro contato
- * com o mesmo @, o(s) outro(s) já foram absorvidos, a leitura do próprio
- * handle falha, ou o `rpc` falha — nunca lança.
+ *
+ * O merge é IRREVERSÍVEL, e o @ gravado pode estar velho: a pessoa troca de @
+ * e outra pessoa pode passar a usar o antigo. Por isso o @ gravado só serve
+ * para ACHAR candidatos; antes de fundir, o @ de TODA identidade envolvida
+ * (a do próprio contato e a de cada candidato) é perguntado de novo à Graph,
+ * com o token da sessão que conversa com aquele IGSID, e só entra no merge o
+ * candidato cujo @ vivo ainda é igual ao vivo do próprio contato. Qualquer
+ * dúvida (sem token, Graph falhou) = aquele candidato fica de fora.
+ *
+ * `{ juntou: false }` quando não há @, candidato verificado, contato vivo, ou
+ * alguma leitura/o `rpc` falha — nunca lança.
  */
 export async function juntarPorArroba(
   admin: SupabaseClient,
@@ -63,17 +142,16 @@ export async function juntarPorArroba(
   try {
     // `.limit(1)`, não `.maybeSingle()`: depois de UM merge, o principal já
     // fica com 2+ linhas em `contact_channel_identities` (uma por IGSID
-    // absorvido — a FK foi repontada, a linha não desaparece). `.maybeSingle()`
-    // erra com "mais de uma linha" nesse caso, e o erro não capturado (`data`
-    // vem `null` em silêncio) fazia TODO principal de um merge anterior parar
-    // de entrar na rodada seguinte. Qualquer uma das linhas serve: o handle é
-    // igual por construção (é o que trouxe as duas para o mesmo contato).
+    // absorvido). `.maybeSingle()` erra com "mais de uma linha" nesse caso.
+    // Qualquer uma serve de referência: todas foram verificadas vivas quando
+    // vieram parar no mesmo contato.
     const { data: identidadesProprias, error: erroIdentidadePropria } = await admin
       .from("contact_channel_identities")
-      .select("handle")
+      .select("contact_id, external_id, handle")
       .eq("organization_id", input.organizationId)
       .eq("contact_id", input.contactId)
       .eq("channel", "instagram")
+      .not("handle", "is", null)
       .limit(1);
     if (erroIdentidadePropria) {
       logger.warn("[instagram.juntar-por-arroba] ler o handle do contato falhou", {
@@ -83,19 +161,29 @@ export async function juntarPorArroba(
       });
       return NADA;
     }
-    const handle = (identidadesProprias as { handle: string | null }[] | null)?.[0]?.handle;
-    if (!handle) return NADA;
+    const propria = (identidadesProprias as IdentidadeGravada[] | null)?.[0];
+    if (!propria?.handle) return NADA;
+
+    const cache = new Map<string, string | null>();
+    const handleDeReferencia = await handleVivo(admin, input.organizationId, propria, cache);
+    if (!handleDeReferencia) {
+      logger.info("[instagram.juntar-por-arroba] @ vivo do contato indisponível; não junta", {
+        organization_id: input.organizationId,
+        contact_id: input.contactId,
+      });
+      return NADA;
+    }
+    const referencia = handleDeReferencia.toLowerCase();
 
     const { data: outrasIdentidades } = await admin
       .from("contact_channel_identities")
-      .select("contact_id")
+      .select("contact_id, external_id, handle")
       .eq("organization_id", input.organizationId)
       .eq("channel", "instagram")
-      .ilike("handle", escaparParaIlike(handle))
+      .ilike("handle", escaparParaIlike(handleDeReferencia))
       .neq("contact_id", input.contactId);
-    const idsCandidatos = [
-      ...new Set(((outrasIdentidades as { contact_id: string }[] | null) ?? []).map((i) => i.contact_id)),
-    ];
+    const candidatas = (outrasIdentidades as IdentidadeGravada[] | null) ?? [];
+    const idsCandidatos = [...new Set(candidatas.map((i) => i.contact_id))];
     if (idsCandidatos.length === 0) return NADA;
 
     const { data: contatosVivos } = await admin
@@ -104,7 +192,31 @@ export async function juntarPorArroba(
       .eq("organization_id", input.organizationId)
       .in("id", [input.contactId, ...idsCandidatos])
       .is("is_merged_into", null);
-    const escolha = escolherPrincipal((contatosVivos as { id: string; created_at: string }[] | null) ?? []);
+    const vivos = (contatosVivos as { id: string; created_at: string }[] | null) ?? [];
+
+    // Um candidato entra só se TODAS as suas identidades de mesmo @ gravado
+    // ainda são, ao vivo, o @ de referência.
+    const verificados = new Set<string>();
+    for (const candidato of vivos) {
+      if (candidato.id === input.contactId) continue;
+      let confere = true;
+      for (const identidade of candidatas.filter((i) => i.contact_id === candidato.id)) {
+        const vivo = await handleVivo(admin, input.organizationId, identidade, cache);
+        if (vivo?.toLowerCase() !== referencia) {
+          confere = false;
+          logger.info("[instagram.juntar-por-arroba] candidato fora: @ vivo não confere ou indisponível", {
+            organization_id: input.organizationId,
+            contact_id: input.contactId,
+            candidato_id: candidato.id,
+            indisponivel: vivo === null,
+          });
+          break;
+        }
+      }
+      if (confere) verificados.add(candidato.id);
+    }
+
+    const escolha = escolherPrincipal(vivos.filter((c) => c.id === input.contactId || verificados.has(c.id)));
     if (!escolha) return NADA;
     const principalId = escolha.principal;
 
@@ -147,7 +259,8 @@ export async function juntarPorArroba(
  * propósito, é o displayed handle) e junta o contato mais novo de cada grupo
  * com 2+ contatos vivos, até `limite` grupos. `juntarPorArroba` decide o
  * principal de novo (pode não ser o "mais novo" chamado aqui) — chamar por
- * ele só evita reprocessar um contato que já é principal de outro grupo.
+ * ele só evita reprocessar um contato que já é principal de outro grupo — e
+ * passa pela MESMA verificação do @ vivo na Graph antes de fundir.
  */
 export async function juntarDuplicadosPorArroba(
   admin: SupabaseClient,

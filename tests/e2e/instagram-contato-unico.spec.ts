@@ -11,8 +11,9 @@
  *    diferentes): dois contatos até a rodada diária do Instagram — disparada
  *    pelo endpoint do cron, com o segredo do `.env.e2e`, como o scheduler da
  *    VPS dispara — juntar. Depois a lista tem um só, e a ficha mostra as duas
- *    conversas. A junção não chama a Graph (o handle já está gravado), então
- *    não há receptor na porta 47811 aqui.
+ *    conversas. Antes de fundir, a junção pergunta o @ VIVO de cada IGSID à
+ *    Graph; o receptor local na porta 47811 responde os dois @ (com as mesmas
+ *    grafias diferentes). Sem ele, a junção não confere e não funde.
  * 3. "Duplicados" sugere o par Instagram × WhatsApp de mesmo nome, com o
  *    rótulo que diz por quê.
  *
@@ -21,11 +22,14 @@
  */
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
+import * as http from "node:http";
 import * as path from "node:path";
 
 import { test, expect, type Page } from "@playwright/test";
 
 import {
+  ARROBA_NO_PERFIL_1,
+  ARROBA_NO_PERFIL_2,
   HANDLE_CANAIS,
   IG_USERNAME,
   IG_USERNAME_2,
@@ -77,8 +81,31 @@ function secaoCanais(page: Page) {
 
 test.describe.configure({ mode: "serial" });
 
-test.beforeAll(() => {
+/** Porta fixa da Graph no e2e: `INSTAGRAM_GRAPH_BASE_URL=http://127.0.0.1:47811` (`scripts/gerar-env-e2e.sh`). */
+const PORTA_DA_GRAPH = 47811;
+const ARROBA_VIVO: Record<string, string> = {
+  [ARROBA_NO_PERFIL_1.igsid]: ARROBA_NO_PERFIL_1.handle,
+  [ARROBA_NO_PERFIL_2.igsid]: ARROBA_NO_PERFIL_2.handle,
+};
+let receptor: http.Server;
+
+test.beforeAll(async () => {
   fs.mkdirSync(EVIDENCIA, { recursive: true });
+  // GET /<versão>/<IGSID>?fields=... : o perfil que a junção confere antes de fundir.
+  receptor = http.createServer((req, res) => {
+    const igsid = decodeURIComponent((req.url ?? "").split("?")[0]!.split("/")[2] ?? "");
+    const username = req.method === "GET" ? ARROBA_VIVO[igsid] : undefined;
+    res.writeHead(username ? 200 : 404, { "content-type": "application/json" });
+    res.end(JSON.stringify(username ? { username } : { error: { code: 100, message: "receptor e2e: rota não simulada" } }));
+  });
+  await new Promise<void>((ok, falha) => {
+    receptor.once("error", falha);
+    receptor.listen(PORTA_DA_GRAPH, "127.0.0.1", () => ok());
+  });
+});
+
+test.afterAll(async () => {
+  await new Promise<void>((ok) => receptor?.close(() => ok()));
 });
 
 test("a ficha mostra os dois canais, e o do Instagram abre a conversa certa", async ({ page }) => {
