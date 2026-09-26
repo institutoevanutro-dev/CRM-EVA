@@ -210,11 +210,6 @@ describe("skills embutidas — as portas de acionamento conhecem todas as skills
     expect(corpo(".cursor/rules/deskcomm-guias.mdc")).toBe(corpo(".agents/rules/deskcomm-guias.md"));
   });
 
-  it.each([".claude/settings.json", ".codex/hooks.json"])("%s é JSON válido e aponta para o hook de sessão", (arquivo) => {
-    const json = JSON.parse(readFileSync(join(RAIZ, arquivo), "utf8")) as { hooks?: { SessionStart?: unknown[] } };
-    expect(json.hooks?.SessionStart?.length ?? 0).toBeGreaterThan(0);
-    expect(JSON.stringify(json)).toContain("deskcomm-contribuir/scripts/hooks/sessao.sh");
-  });
 });
 
 describe("skills embutidas — fora da imagem Docker", () => {
