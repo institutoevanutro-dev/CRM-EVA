@@ -19,30 +19,45 @@ describe("silencioDoBotEhRoteamento", () => {
   });
 });
 
-describe("isLeadInHandoff", () => {
-  /** Uma conversa silenciada, no provider dado. Modela o `not exists ... any($3)`. */
-  function pool(provider: string) {
+describe("isLeadInHandoff — varredura do contato inteiro", () => {
+  /**
+   * As conversas do contato. Modela a SQL: silêncio no futuro conta, exceto em
+   * sessão cujo provider está na lista `$3` — se a consulta a declarar.
+   */
+  function pool(conversas: Array<{ provider: string; silenciada: boolean }>, forceHuman = false) {
     const query = vi.fn(async (sql: string, params: unknown[]) => {
       const excluidos = sql.includes("any($3::text[])") ? (params[2] as string[]) : [];
-      return { rows: [{ handoff: !excluidos.includes(provider) }] };
+      const silencio = conversas.some((c) => c.silenciada && !excluidos.includes(c.provider));
+      return { rows: [{ handoff: forceHuman || silencio }] };
     });
     return { pool: { query } as never, query };
   }
+  const IG_NA_FILA = { provider: CHANNEL_PROVIDER_INSTAGRAM, silenciada: true };
 
-  it("follow-up no Instagram silenciado: não é handoff", async () => {
-    expect(await isLeadInHandoff(pool(CHANNEL_PROVIDER_INSTAGRAM).pool, "org", "lead", { followup: true })).toBe(false);
+  it("contato unificado: o silêncio de roteamento do Instagram não cala a IA no WhatsApp", async () => {
+    const p = pool([IG_NA_FILA, { provider: DEFAULT_CHANNEL_PROVIDER, silenciada: false }]);
+    expect(await isLeadInHandoff(p.pool, "org", "lead")).toBe(false);
   });
 
-  it("follow-up no WhatsApp silenciado: continua handoff", async () => {
-    expect(await isLeadInHandoff(pool(DEFAULT_CHANNEL_PROVIDER).pool, "org", "lead", { followup: true })).toBe(true);
-  });
-
-  it("sem a opção (atendimento): a consulta é a de sempre, byte a byte", async () => {
-    const p = pool(CHANNEL_PROVIDER_INSTAGRAM);
+  it("contato unificado com silêncio HUMANO no WhatsApp: continua handoff", async () => {
+    const p = pool([IG_NA_FILA, { provider: DEFAULT_CHANNEL_PROVIDER, silenciada: true }]);
     expect(await isLeadInHandoff(p.pool, "org", "lead")).toBe(true);
-    const [sql, params] = p.query.mock.calls[0]!;
-    expect(sql).not.toContain("channel_sessions");
-    expect(params).toEqual(["org", "lead"]);
+  });
+
+  it("force_human: continua handoff", async () => {
+    expect(await isLeadInHandoff(pool([IG_NA_FILA], true).pool, "org", "lead")).toBe(true);
+  });
+
+  it("só WhatsApp: igual a antes (silenciada bloqueia, livre não)", async () => {
+    expect(await isLeadInHandoff(pool([{ provider: DEFAULT_CHANNEL_PROVIDER, silenciada: true }]).pool, "org", "lead")).toBe(true);
+    expect(await isLeadInHandoff(pool([{ provider: DEFAULT_CHANNEL_PROVIDER, silenciada: false }]).pool, "org", "lead")).toBe(false);
+  });
+
+  it("a lista excluída é a dos canais sem IA, e não contém o WhatsApp", async () => {
+    const p = pool([]);
+    await isLeadInHandoff(p.pool, "org", "lead");
+    const [, params] = p.query.mock.calls[0]!;
+    expect(params).toEqual(["org", "lead", [CHANNEL_PROVIDER_INSTAGRAM]]);
   });
 });
 
@@ -65,7 +80,7 @@ describe("decidirElegibilidadeDaConversa (pg)", () => {
     expect((await decidirElegibilidadeDaConversa(pool(DEFAULT_CHANNEL_PROVIDER), { ...base, followup: true }))?.permite).toBe(false);
   });
 
-  it("atendimento (sem follow-up) no Instagram silenciado: continua barrado", async () => {
+  it("o turno de atendimento da PRÓPRIA conversa do Instagram continua barrado", async () => {
     expect((await decidirElegibilidadeDaConversa(pool(CHANNEL_PROVIDER_INSTAGRAM), base))?.permite).toBe(false);
   });
 

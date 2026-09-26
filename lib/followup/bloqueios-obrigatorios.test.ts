@@ -376,6 +376,20 @@ describe('decidirEnvio — 24h do Instagram: o passo é pulado e o fluxo segue',
     });
   });
 
+  it('negócio fora da etapa do gatilho vence o pulo: a sequência encerra', () => {
+    const f = fatos({ fim_da_janela_automatica: iso(-HORA), negocios_abertos: [{ stage_id: ETAPA_AGUARDANDO, stage_blocks_followups: false }] });
+    expect(decidirEnvio(f, { ...CONFIG_SEM_BLOQUEIOS_OPCIONAIS, exigir_etapa_do_gatilho: true }, QUARTA_MANHA)).toEqual({
+      envia: false, motivo: 'fora_da_etapa_do_gatilho', invalida: true,
+    });
+  });
+
+  it('consulta confirmada vence o pulo: a sequência encerra', () => {
+    const f = fatos({ fim_da_janela_automatica: iso(-HORA), consultas_confirmadas_futuras: 1 });
+    expect(decidirEnvio(f, { ...CONFIG_SEM_BLOQUEIOS_OPCIONAIS, bloquear_com_consulta_confirmada: true }, QUARTA_MANHA)).toEqual({
+      envia: false, motivo: 'consulta_confirmada', invalida: true,
+    });
+  });
+
   it('opt-out e anonimizado vencem o pulo (a ordem é de gravidade)', () => {
     const vencido = iso(-HORA);
     expect(

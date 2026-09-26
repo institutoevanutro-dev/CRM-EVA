@@ -615,8 +615,7 @@ async function sendFixedOutbound(
   const { tenantId, leadId, channelSessionId, conversationId } = target;
   const runLog = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, lead_id: leadId });
 
-  // Só roda em job de follow-up: silêncio de canal sem IA é roteamento.
-  if (await isLeadInHandoff(pool, tenantId, leadId, { followup: true })) {
+  if (await isLeadInHandoff(pool, tenantId, leadId)) {
     runLog.info('envio fixo pulado — lead silenciado (handoff/opt-out)', { kind: job.kind });
     return "skipped";
   }

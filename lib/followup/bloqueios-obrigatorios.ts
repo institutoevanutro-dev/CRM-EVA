@@ -310,12 +310,6 @@ export function decidirEnvio(
       return { envia: false, motivo: 'prazo_do_sinal_vencido', invalida: true };
     }
   }
-  // Depois dos irrevogáveis, antes das regras de negócio e da janela da
-  // organização: o canal já não aceita o envio, e adiar não resolve.
-  const fimAuto = fatos.fim_da_janela_automatica === null ? null : Date.parse(fatos.fim_da_janela_automatica);
-  if (fimAuto !== null && agora.getTime() >= fimAuto) {
-    return { envia: false, motivo: 'fora_das_24h_do_instagram', pula: true };
-  }
   if (config.exigir_etapa_do_gatilho) {
     const etapa = etapaDoGatilho(fatos.trigger_config);
     if (etapa !== null && !fatos.negocios_abertos.some((n) => n.stage_id === etapa)) {
@@ -333,6 +327,13 @@ export function decidirEnvio(
       return t < minha || (t === minha && o.id < fatos.enrollment.id);
     });
     if (anterior) return { envia: false, motivo: 'sequencia_concorrente', invalida: true };
+  }
+  // Depois de tudo que encerra a sequência (ela não deve seguir, pulando ou
+  // não) e antes da janela da organização: o canal já não aceita o envio, e
+  // adiar não resolve.
+  const fimAuto = fatos.fim_da_janela_automatica === null ? null : Date.parse(fatos.fim_da_janela_automatica);
+  if (fimAuto !== null && agora.getTime() >= fimAuto) {
+    return { envia: false, motivo: 'fora_das_24h_do_instagram', pula: true };
   }
   if (config.janela !== null && !dentroDaJanela(config.janela, agora)) {
     const abre = proximaAbertura(config.janela, agora);

@@ -1751,10 +1751,7 @@ async function executarTurnoDoAgente(
   // F4-06 (acceptance 2): lead em handoff humano → NO-OP no INÍCIO do turno, antes de
   // qualquer chamada de modelo/CRM. O bot silenciou (bot_silenced_until='infinity', cache
   // do force_human do CRM) e só o humano/CRM libera — o agente nunca reassume (regra dura 2).
-  // Follow-up: o silêncio de canal sem IA (Instagram, que nasce silenciado para
-  // cair na Fila) é roteamento, não handoff — ver `silencioDoBotEhRoteamento`.
-  const ehFollowup = !preview && liveJob().kind === 'followup_turn';
-  if (!preview && (await isLeadInHandoff(pool, tenantId, leadId, { followup: ehFollowup }))) {
+  if (!preview && (await isLeadInHandoff(pool, tenantId, leadId))) {
     runLog.info('turno pulado — lead em handoff humano (bot silenciado)', { kind: liveJob().kind });
     return;
   }
@@ -1773,7 +1770,9 @@ async function executarTurnoDoAgente(
         conversationId: input.conversationId,
         agora: clock(),
         ttlMs: deps.knobs.allowlistTtlMs ?? ALLOWLIST_TTL_MS_PADRAO,
-        followup: ehFollowup,
+        // Follow-up: o silêncio de canal sem IA (Instagram, que nasce
+        // silenciado para cair na Fila) é roteamento, não atendimento humano.
+        followup: liveJob().kind === 'followup_turn',
       });
       if (elegib !== null && !elegib.permite) {
         runLog.info('turno pulado — conversa não elegível para IA', {

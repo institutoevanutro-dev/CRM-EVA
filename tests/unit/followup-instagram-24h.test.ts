@@ -131,7 +131,7 @@ describe("turno de fluxo — texto fixo", () => {
     const { pool } = fakePool({ horas: 2 });
     const d = deps();
     await criarHandler(d.deps)(job({ fixed_body: "oi" }), pool, ctx);
-    expect(isLeadInHandoff).toHaveBeenCalledWith(expect.anything(), ORG, LEAD, { followup: true });
+    expect(isLeadInHandoff).toHaveBeenCalledWith(expect.anything(), ORG, LEAD);
     expect(runBeforeSend).toHaveBeenCalledTimes(1);
     expect(resultado(d.complete)).toEqual({ kind: "sent" });
   });
