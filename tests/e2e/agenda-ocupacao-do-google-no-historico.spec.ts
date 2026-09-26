@@ -7,6 +7,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 
 import { irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
+import { esperarAgenda } from "./helpers/tela-agenda";
 
 /**
  * A OCUPAÇÃO DO GOOGLE NA LISTA "PRÓXIMOS" — e os dois botões que ela não
@@ -70,7 +71,7 @@ async function entrar(page: Page, creds: Creds) {
   await page.getByRole("button", { name: /entrar/i }).click();
   await page.waitForURL(/\/app(\/|$)/, { timeout: 20_000 });
   await page.goto("/app/agenda");
-  await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: 25_000 });
+  await esperarAgenda(page, 25_000);
 }
 
 async function instanteNoDia(page: Page, dia: string, hora: number): Promise<string> {
@@ -142,7 +143,7 @@ test("a ocupação do Google não oferece Remarcar nem Cancelar no histórico", 
   const eventoId = (evento as { id: string }).id;
 
   await page.reload();
-  await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: 25_000 });
+  await esperarAgenda(page, 25_000);
   await irParaASemanaSeguinte(page);
 
   // ─── O INVARIANTE, e ele NÃO é "a linha existe e está cinza" ──────────────

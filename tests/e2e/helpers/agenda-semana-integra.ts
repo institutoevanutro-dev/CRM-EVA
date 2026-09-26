@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { telaAgenda } from "./tela-agenda";
 
 /**
  * A SEMANA ÍNTEGRA — o único lugar destas specs onde "que dia é hoje" entra na
@@ -65,7 +66,7 @@ const DIAS_POR_SEMANA = 7;
  */
 export async function irParaASemanaSeguinte(page: Page): Promise<string[]> {
   await expect(
-    page.getByTestId("tela-agenda"),
+    telaAgenda(page),
     "a agenda ainda não terminou de hidratar — clicar agora perderia o evento",
   ).toHaveAttribute("data-hidratado", "true", { timeout: 25_000 });
 

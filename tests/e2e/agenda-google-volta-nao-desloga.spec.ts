@@ -3,6 +3,7 @@ import * as http from "node:http";
 import * as path from "node:path";
 
 import { test, expect, type Page } from "@playwright/test";
+import { esperarAgenda } from "./helpers/tela-agenda";
 
 /**
  * VOLTAR DO CONSENTIMENTO NÃO DESLOGA — e o teste segue o DESFECHO, não o header.
@@ -136,7 +137,7 @@ test("voltar do consentimento não manda a pessoa para o /login", async ({ page,
     // E continua logada de verdade, não só na URL: a Agenda é rota protegida, e
     // renderizá-la já prova a sessão — mas asserto um elemento dela para o caso
     // de a página virar um shell vazio no futuro.
-    await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: 20_000 });
+    await esperarAgenda(page, 20_000);
   } finally {
     await new Promise<void>((r) => servidor.close(() => r()));
   }
