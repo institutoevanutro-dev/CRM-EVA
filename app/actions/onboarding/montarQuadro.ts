@@ -124,8 +124,16 @@ export interface DadosDoPasso {
  * Roda no SERVIDOR, no render da página — não num clique. A pessoa chega no
  * passo com a proposta pronta na tela; pedir que ela clique em "gerar sugestão"
  * primeiro seria cobrar um passo a mais para chegar ao mesmo lugar.
+ *
+ * Não recebe a organização por parâmetro: todo export de um arquivo "use server"
+ * é uma rota POST pública, e um `orgId` vindo de fora abria o funil e a chave de
+ * IA de qualquer organização para quem soubesse o UUID. A org sai da sessão.
  */
-export async function dadosDoPasso(orgId: string, negocio: string): Promise<DadosDoPasso> {
+export async function dadosDoPasso(): Promise<DadosDoPasso> {
+  // A sugestão gasta o crédito de IA da organização: sessão de suporte só-leitura
+  // não dispara, e é isso que o `requireOnboardingCtx` barra além da sessão.
+  const { orgId, orgName: negocio } = await requireOnboardingCtx();
+
   const admin = createAdminClient();
   const atual = await carregarQuadroAtual(admin, orgId);
 
