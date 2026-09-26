@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { esquecerOrganizacaoAtiva } from "./helpers/esquecer-organizacao-ativa";
 import { test, expect, type Page } from "@playwright/test";
 
 /**
@@ -37,7 +38,7 @@ const RAIZ = path.resolve(__dirname, "../..");
 
 interface Creds {
   password: string;
-  users: Record<string, { email: string } | undefined>;
+  users: Record<string, { id: string; email: string } | undefined>;
   funis?: { segunda_org_id: string };
   duas_orgs?: { org_a_id: string };
 }
@@ -70,6 +71,13 @@ async function entrar(page: Page, creds: Creds) {
 }
 
 test.describe.configure({ timeout: 150_000 });
+
+// A troca pelo seletor fica GRAVADA no banco (migration 0282) e o `manager` é
+// do seed inteiro: sem isto, toda spec seguinte loga na última org trocada.
+test.afterAll(async () => {
+  const manager = lerCreds().users.manager;
+  if (manager) await esquecerOrganizacaoAtiva(manager.id);
+});
 
 test("trocar para uma organização não configurada leva ao wizard — e dá para voltar", async ({ page }) => {
   const creds = lerCreds();
