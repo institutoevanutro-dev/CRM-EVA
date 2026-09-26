@@ -11,9 +11,10 @@ import { fail } from "@/lib/api/wrappers";
 import { appDaMeta } from "@/lib/channels/meta/app";
 import { verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
 import { appDoInstagram } from "@/lib/channels/instagram/app";
-import { parseWebhookDoInstagram } from "@/lib/channels/instagram/webhook";
+import { parseWebhookDoInstagram, parseComentariosDoInstagram } from "@/lib/channels/instagram/webhook";
 import { sessaoDoInstagramPorConta } from "@/lib/channels/instagram/sessao";
 import { ingerirDoInstagram } from "@/lib/channels/instagram/ingest";
+import { ingerirComentario } from "@/lib/channels/instagram/comentarios/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 
@@ -86,6 +87,36 @@ export async function POST(req: NextRequest): Promise<Response> {
       falhaDeInfraestrutura = true;
       logger.error("[instagram.webhook] evento abortou com exceção", {
         conta: evento.igAccountId,
+        erro: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // Mesmo tratamento de falha do laço de mensagens acima: erro de infraestrutura
+  // (consulta da sessão, exceção) marca o lote para 500; falha determinística do
+  // próprio insert só loga e segue. Nada de responder o comentário aqui — quem
+  // decide responder é o worker (Task 7).
+  for (const comentario of parseComentariosDoInstagram(corpo)) {
+    try {
+      const resultado = await sessaoDoInstagramPorConta(admin, comentario.igAccountId);
+      if (resultado.status === "erro") {
+        falhaDeInfraestrutura = true;
+        logger.error("[instagram.webhook] consulta da sessão falhou (comentário)", { motivo: resultado.motivo, conta: comentario.igAccountId });
+        continue;
+      }
+      if (resultado.status === "ausente") {
+        logger.info("[instagram.webhook] conta sem conexão ativa (comentário)", { conta: comentario.igAccountId });
+        continue;
+      }
+      const sessao = resultado.sessao;
+      const r = await ingerirComentario(admin, comentario, sessao);
+      if (r.status === "falhou") {
+        logger.error("[instagram.webhook] ingestão de comentário falhou", { motivo: r.motivo, organizationId: sessao.organizationId });
+      }
+    } catch (err) {
+      falhaDeInfraestrutura = true;
+      logger.error("[instagram.webhook] comentário abortou com exceção", {
+        conta: comentario.igAccountId,
         erro: err instanceof Error ? err.message : String(err),
       });
     }
