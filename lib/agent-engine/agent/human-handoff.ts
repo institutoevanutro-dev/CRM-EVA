@@ -25,6 +25,7 @@ import type pg from 'pg';
 
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { ehOptOutProvavel } from '@/lib/opt-out/deteccao';
+import { PROVIDERS_COM_SILENCIO_DE_ROTEAMENTO } from '@/lib/channels/capabilities';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 
 import type { Logger } from '../obs/logger';
@@ -87,6 +88,12 @@ export function detectAmbiguousOptOut(message: string): boolean {
  * de modelo. Só o humano (via CRM) libera.
  */
 export async function isLeadInHandoff(db: pg.Pool, tenantId: string, leadId: string): Promise<boolean> {
+  // Conversa em canal sem IA (Instagram) nasce com bot_silenced_until =
+  // 'infinity' para cair na Fila: é ROTEAMENTO, não uma pessoa que assumiu.
+  // Esta varredura é do CONTATO inteiro; sem a exclusão, um contato unificado
+  // (Instagram + WhatsApp) calava a IA também no WhatsApp. A própria conversa
+  // do Instagram segue barrada pela elegibilidade (o silêncio dela conta lá) e
+  // pela recusa do servidor.
   const { rows } = await db.query<{ handoff: boolean }>(
     `select (
        c.force_human
@@ -94,11 +101,15 @@ export async function isLeadInHandoff(db: pg.Pool, tenantId: string, leadId: str
          select 1 from conversations v
          where v.organization_id = $1 and v.contact_id = c.id
            and v.bot_silenced_until is not null and v.bot_silenced_until > now()
+           and not exists (
+             select 1 from channel_sessions s
+             where s.organization_id = $1 and s.id = v.channel_session_id and s.provider = any($3::text[])
+           )
        )
      ) as handoff
      from contacts c
      where c.organization_id = $1 and c.id = $2`,
-    [tenantId, leadId],
+    [tenantId, leadId, PROVIDERS_COM_SILENCIO_DE_ROTEAMENTO],
   );
   return rows[0]?.handoff === true;
 }

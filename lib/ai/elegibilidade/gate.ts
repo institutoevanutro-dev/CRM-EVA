@@ -188,6 +188,11 @@ export function montarEstadoDeElegibilidade(raw: {
   aiAuthorizedAt: Date | string | null | undefined;
   agora: Date;
   ttlMs: number;
+  /**
+   * O silêncio desta conversa é roteamento, não atendimento humano (canal sem
+   * IA, pedido de follow-up — ver `silencioDoBotEhRoteamento`). Ignora só ele.
+   */
+  silencioEhRoteamento?: boolean;
 }): EstadoDeElegibilidade {
   const autorizadoEm = normalizarInstante(raw.aiAuthorizedAt);
   const modo = lerModoDoGate(raw.aiGate);
@@ -196,7 +201,7 @@ export function montarEstadoDeElegibilidade(raw: {
   return {
     modo,
     forceHuman: raw.forceHuman === true,
-    botSilencedUntil: normalizarInstante(raw.botSilencedUntil),
+    botSilencedUntil: raw.silencioEhRoteamento === true ? null : normalizarInstante(raw.botSilencedUntil),
     assigneeKind: raw.assigneeKind,
     aiAuthorizedAt: autorizadoEm instanceof Date ? autorizadoEm : null,
     preGoLiveAtivo: preGoLive,

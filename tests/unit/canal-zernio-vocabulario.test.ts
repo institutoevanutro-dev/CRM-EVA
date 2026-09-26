@@ -37,6 +37,7 @@ describe("capabilities do canal intermediado", () => {
       canSend: true,
       iaResponde: true,
       janelaHumanaMs: null,
+      janelaAutomaticaMs: null,
       limiteDeTexto: null,
       midiaDeEnvio: "completa",
     });

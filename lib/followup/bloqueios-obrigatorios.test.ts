@@ -18,6 +18,7 @@ import {
   type ConfigDosBloqueios,
   type FatosDoEnvio,
 } from './bloqueios-obrigatorios';
+import { CHANNEL_PROVIDER_INSTAGRAM, DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabilities';
 
 const ETAPA_AGUARDANDO = 'a0000000-0000-4000-8000-000000000005';
 const ETAPA_AGENDAMENTO = 'a0000000-0000-4000-8000-000000000004';
@@ -39,6 +40,7 @@ function fatos(p: Partial<FatosDoEnvio> = {}): FatosDoEnvio {
     consultas_confirmadas_futuras: 0,
     outras_inscricoes_vivas: [],
     reserva: null,
+    fim_da_janela_automatica: null,
     ...p,
   };
 }
@@ -333,5 +335,116 @@ describe('leitura pg distingue reserva de sinal da recuperação legada', () => 
     } else {
       expect(leitura.fatos.reserva).toBeNull();
     }
+  });
+});
+
+describe('decidirEnvio — 24h do Instagram: o passo é pulado e o fluxo segue', () => {
+  const HORA = 3_600_000;
+  const iso = (ms: number) => new Date(QUARTA_MANHA.getTime() + ms).toISOString();
+  const PULA = { envia: false, motivo: 'fora_das_24h_do_instagram', pula: true };
+
+  it('fim da janela automática 1h no passado: pula', () => {
+    expect(decidirEnvio(fatos({ fim_da_janela_automatica: iso(-HORA) }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual(PULA);
+  });
+
+  it('fim 5h no futuro e sem janela da organização: envia', () => {
+    expect(decidirEnvio(fatos({ fim_da_janela_automatica: iso(5 * HORA) }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({ envia: true });
+  });
+
+  // Quarta 16/09, 20:00 em São Paulo (23:00Z): a clínica reabre quinta 09:00 (12:00Z).
+  const QUARTA_NOITE = new Date('2026-09-16T23:00:00.000Z');
+  const soJanela: ConfigDosBloqueios = { ...CONFIG_SEM_BLOQUEIOS_OPCIONAIS, janela: JANELA_DA_CLINICA };
+
+  it('janela da organização fechada e a próxima abertura DEPOIS do fim das 24h: pula, não adia', () => {
+    const f = fatos({ fim_da_janela_automatica: '2026-09-17T11:00:00.000Z' });
+    expect(decidirEnvio(f, soJanela, QUARTA_NOITE)).toEqual(PULA);
+  });
+
+  it('janela da organização fechada e a próxima abertura ANTES do fim: adia como hoje', () => {
+    const f = fatos({ fim_da_janela_automatica: '2026-09-17T15:00:00.000Z' });
+    expect(decidirEnvio(f, soJanela, QUARTA_NOITE)).toEqual({
+      envia: false,
+      motivo: 'fora_da_janela',
+      adiarPara: new Date('2026-09-17T12:00:00.000Z'),
+    });
+  });
+
+  it('sem a regra (null): a janela da organização decide como sempre', () => {
+    expect(decidirEnvio(fatos({ fim_da_janela_automatica: null }), soJanela, QUARTA_NOITE)).toMatchObject({
+      envia: false,
+      motivo: 'fora_da_janela',
+    });
+  });
+
+  it('negócio fora da etapa do gatilho vence o pulo: a sequência encerra', () => {
+    const f = fatos({ fim_da_janela_automatica: iso(-HORA), negocios_abertos: [{ stage_id: ETAPA_AGUARDANDO, stage_blocks_followups: false }] });
+    expect(decidirEnvio(f, { ...CONFIG_SEM_BLOQUEIOS_OPCIONAIS, exigir_etapa_do_gatilho: true }, QUARTA_MANHA)).toEqual({
+      envia: false, motivo: 'fora_da_etapa_do_gatilho', invalida: true,
+    });
+  });
+
+  it('consulta confirmada vence o pulo: a sequência encerra', () => {
+    const f = fatos({ fim_da_janela_automatica: iso(-HORA), consultas_confirmadas_futuras: 1 });
+    expect(decidirEnvio(f, { ...CONFIG_SEM_BLOQUEIOS_OPCIONAIS, bloquear_com_consulta_confirmada: true }, QUARTA_MANHA)).toEqual({
+      envia: false, motivo: 'consulta_confirmada', invalida: true,
+    });
+  });
+
+  it('opt-out e anonimizado vencem o pulo (a ordem é de gravidade)', () => {
+    const vencido = iso(-HORA);
+    expect(
+      decidirEnvio(
+        fatos({ fim_da_janela_automatica: vencido, contato: { is_blocked: true, force_human: false, is_anonymized: false } }),
+        CONFIG_SEM_BLOQUEIOS_OPCIONAIS,
+        QUARTA_MANHA,
+      ),
+    ).toEqual({ envia: false, motivo: 'opt_out', invalida: true });
+    expect(
+      decidirEnvio(
+        fatos({ fim_da_janela_automatica: vencido, contato: { is_blocked: false, force_human: false, is_anonymized: true } }),
+        CONFIG_SEM_BLOQUEIOS_OPCIONAIS,
+        QUARTA_MANHA,
+      ),
+    ).toEqual({ envia: false, motivo: 'contato_anonimizado', invalida: true });
+  });
+});
+
+describe('lerFatosDoEnvio — canal da conversa', () => {
+  function pool(conversa: Record<string, unknown>) {
+    const query = async (sql: string) => {
+      if (sql.includes('from followup_enrollments e')) return { rows: [{
+        id: 'enrollment', status: 'active', started_at: new Date('2026-09-17T10:00:00Z'), pointer_id: 'pointer',
+        trigger_config: { kind: 'manual' }, appointment_id: null, appointment_revision: null,
+        reserva_criada_em: null, reserva_consulta_em: null, reserva_sujeita_a_sinal: null, reserva_status: null,
+      }] };
+      if (sql.includes('from contacts')) return { rows: [{ is_blocked: false, force_human: false, is_anonymized: false }] };
+      if (sql.includes('from conversations')) return { rows: [conversa] };
+      if (sql.includes('from organizations')) return { rows: [{ settings: {} }] };
+      return { rows: [] };
+    };
+    return { query } as unknown as Pick<pg.Pool, 'query'>;
+  }
+  const input = { organizationId: 'org', contactId: 'contact', conversationId: 'conv', enrollmentId: 'enrollment' };
+
+  it('Instagram: fim da janela = última mensagem + 24h, e o silêncio do bot é roteamento', async () => {
+    const leitura = await lerFatosDoEnvio(
+      pool({ bot_silenciado: true, provider: CHANNEL_PROVIDER_INSTAGRAM, last_inbound_at: new Date('2026-09-17T10:00:00Z') }),
+      input,
+    );
+    expect(leitura.ok).toBe(true);
+    if (!leitura.ok) return;
+    expect(leitura.fatos.fim_da_janela_automatica).toBe('2026-09-18T10:00:00.000Z');
+    expect(leitura.fatos.conversa.bot_silenciado).toBe(false);
+  });
+
+  it('WhatsApp: sem a regra das 24h, e o silêncio do bot continua valendo', async () => {
+    const leitura = await lerFatosDoEnvio(
+      pool({ bot_silenciado: true, provider: DEFAULT_CHANNEL_PROVIDER, last_inbound_at: new Date('2026-09-17T10:00:00Z') }),
+      input,
+    );
+    expect(leitura.ok).toBe(true);
+    if (!leitura.ok) return;
+    expect(leitura.fatos.fim_da_janela_automatica).toBeNull();
+    expect(leitura.fatos.conversa.bot_silenciado).toBe(true);
   });
 });

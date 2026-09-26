@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  chaveDeNome,
   chaveDeTelefone,
   encontrarContatosDuplicados,
   principalSugerido,
@@ -33,6 +34,7 @@ function contato(
     source_metadata: null,
     created_at: "2026-01-01T00:00:00.000Z",
     last_activity_at: null,
+    do_instagram: false,
     ...campos,
   };
 }
@@ -128,11 +130,86 @@ describe("principalSugerido", () => {
   });
 });
 
+describe("principalSugerido — par Instagram × WhatsApp", () => {
+  it("sugere o contato COM telefone mesmo quando o do Instagram teve atividade mais recente", () => {
+    // `fn_mesclar_contatos` descarta CPF, consentimento e custom_fields do
+    // secundário: o registro do WhatsApp é o que tem de sobreviver.
+    const grupo = encontrarContatosDuplicados([
+      contato("insta", {
+        do_instagram: true,
+        display_name: "José Souza",
+        created_at: "2025-01-01T00:00:00.000Z",
+        last_activity_at: "2026-08-01T00:00:00.000Z",
+      }),
+      contato("zap", { phone_number: "+5531998966398", name: "Jose Souza", last_activity_at: "2026-01-01T00:00:00.000Z" }),
+    ])[0]!;
+    expect(grupo.motivos).toContain("mesmo_nome_instagram_whatsapp");
+    expect(principalSugerido(grupo)).toBe("zap");
+  });
+});
+
 describe("chaveDeTelefone", () => {
   it("devolve vazio para ausência, e só dígitos para um número", () => {
     expect(chaveDeTelefone(null)).toBe("");
     expect(chaveDeTelefone("   ")).toBe("");
     expect(chaveDeTelefone("+55 (31) 99896-6398")).toMatch(/^\d+$/);
+  });
+});
+
+describe("chaveDeNome", () => {
+  it("normaliza espaços, acentos e caixa", () => {
+    expect(chaveDeNome("  José   Souza ")).toBe("jose souza");
+  });
+
+  it("null para menos de duas palavras", () => {
+    expect(chaveDeNome("Ana")).toBeNull();
+    expect(chaveDeNome(null)).toBeNull();
+    expect(chaveDeNome("  ")).toBeNull();
+  });
+});
+
+describe("encontrarContatosDuplicados — Instagram × WhatsApp pelo nome", () => {
+  it("agrupa um contato só-Instagram com um contato de telefone de mesmo nome", () => {
+    const grupos = encontrarContatosDuplicados([
+      contato("insta", { do_instagram: true, phone_number: null, display_name: "José Souza" }),
+      contato("zap", { phone_number: "+5531998966398", name: "Jose Souza" }),
+    ]);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0]!.contatos.map((c) => c.id).sort()).toEqual(["insta", "zap"]);
+    expect(grupos[0]!.motivos).toContain("mesmo_nome_instagram_whatsapp");
+  });
+
+  it("dois contatos do Instagram com o mesmo nome e sem telefone NÃO agrupam por nome", () => {
+    const grupos = encontrarContatosDuplicados([
+      contato("insta-a", { do_instagram: true, phone_number: null, display_name: "José Souza" }),
+      contato("insta-b", { do_instagram: true, phone_number: null, display_name: "José Souza" }),
+    ]);
+    expect(grupos).toHaveLength(0);
+  });
+
+  it("dois contatos com telefone e o mesmo nome NÃO agrupam (regra de hoje)", () => {
+    const grupos = encontrarContatosDuplicados([
+      contato("a", { phone_number: "+5531998966398", name: "José Souza" }),
+      contato("b", { phone_number: "+5531998966399", name: "José Souza" }),
+    ]);
+    expect(grupos).toHaveLength(0);
+  });
+
+  it("dois do WhatsApp e um do Instagram com o mesmo nome: nenhuma sugestão por nome (não dá para saber qual)", () => {
+    const grupos = encontrarContatosDuplicados([
+      contato("insta", { do_instagram: true, phone_number: null, display_name: "Maria Silva" }),
+      contato("zap-a", { phone_number: "+5531998966398", name: "Maria Silva" }),
+      contato("zap-b", { phone_number: "+5531998966399", name: "Maria Silva" }),
+    ]);
+    expect(grupos).toHaveLength(0);
+  });
+
+  it("'Ana' x 'Ana' (uma palavra) não agrupa", () => {
+    const grupos = encontrarContatosDuplicados([
+      contato("insta", { do_instagram: true, phone_number: null, display_name: "Ana" }),
+      contato("zap", { phone_number: "+5531998966398", name: "Ana" }),
+    ]);
+    expect(grupos).toHaveLength(0);
   });
 });
 

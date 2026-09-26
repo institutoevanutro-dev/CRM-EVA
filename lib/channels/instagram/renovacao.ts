@@ -35,7 +35,11 @@ import { decryptWebhookSecret, encryptWebhookSecret } from "@/lib/webhooks/secre
 
 import { CHANNEL_PROVIDER_INSTAGRAM } from "../capabilities";
 import { BASE_DO_INSTAGRAM } from "./graph";
+import { juntarDuplicadosPorArroba } from "./juntar-por-arroba";
 import { deveBuscarPerfil, nomeAtualDoContato, preencherPerfilDoContato } from "./perfil-do-contato";
+
+/** Teto de grupos de mesmo @ juntados por organização, por rodada. */
+const TETO_DE_JUNCOES_POR_ORGANIZACAO = 50;
 
 /** Renova quando faltam menos de 15 dias — folga contra uma rodada perdida. */
 const JANELA_DE_RENOVACAO_MS = 15 * 24 * 60 * 60 * 1000;
@@ -211,6 +215,18 @@ export interface ResumoDaRenovacao {
   renovadas: number;
   falhas: number;
   nomesPreenchidos: number;
+  contatosJuntados: number;
+}
+
+/** As organizações com sessão `meta_instagram` ativa (não arquivada). O token de cada identidade a junção resolve sozinha. */
+async function organizacoesComInstagramAtivo(admin: SupabaseClient): Promise<string[]> {
+  const { data, error } = await admin
+    .from("channel_sessions")
+    .select("organization_id")
+    .eq("provider", CHANNEL_PROVIDER_INSTAGRAM)
+    .is("archived_at", null);
+  if (error || !data) return [];
+  return [...new Set((data as { organization_id: string }[]).map((s) => s.organization_id))];
 }
 
 /**
@@ -222,7 +238,7 @@ export async function renovarTokensDoInstagram(
   admin: SupabaseClient,
   agora: Date,
 ): Promise<ResumoDaRenovacao> {
-  const resumo: ResumoDaRenovacao = { examinadas: 0, renovadas: 0, falhas: 0, nomesPreenchidos: 0 };
+  const resumo: ResumoDaRenovacao = { examinadas: 0, renovadas: 0, falhas: 0, nomesPreenchidos: 0, contatosJuntados: 0 };
   const sessoes = await sessoesParaRenovar(admin, agora);
   // Token que acabou de renovar já está em claro: a passada dos nomes o reusa.
   const tokensEmMaos = new Map<string, string>();
@@ -296,10 +312,25 @@ export async function renovarTokensDoInstagram(
     }
   }
 
-  // Só audita rodada que teve efeito — token renovado OU nome preenchido;
-  // rodada vazia (ou só falhas) não é mutação
+  // Mesmo @ vira um contato só: por organização com sessão ativa. O handle
+  // gravado só acha os candidatos; antes de fundir, `juntarPorArroba` pergunta
+  // o @ VIVO de cada identidade à Graph (com o token da sessão dela) e deixa
+  // de fora quem não confere ou não pôde ser conferido.
+  for (const organizationId of await organizacoesComInstagramAtivo(admin)) {
+    try {
+      resumo.contatosJuntados += await juntarDuplicadosPorArroba(admin, organizationId, TETO_DE_JUNCOES_POR_ORGANIZACAO);
+    } catch (err) {
+      logger.warn("[instagram.renovacao] juntar por arroba falhou numa organização", {
+        organization_id: organizationId,
+        detail: err instanceof Error ? err.message : "erro",
+      });
+    }
+  }
+
+  // Só audita rodada que teve efeito — token renovado, nome preenchido OU
+  // contato juntado; rodada vazia (ou só falhas) não é mutação
   // (tests/unit/cron-audita-so-quando-ha-efeito.test.ts).
-  if (resumo.renovadas > 0 || resumo.nomesPreenchidos > 0) {
+  if (resumo.renovadas > 0 || resumo.nomesPreenchidos > 0 || resumo.contatosJuntados > 0) {
     await audit({
       action: "channel.instagram_token_refreshed",
       metadata: {
@@ -307,6 +338,7 @@ export async function renovarTokensDoInstagram(
         renovadas: resumo.renovadas,
         falhas: resumo.falhas,
         nomes_preenchidos: resumo.nomesPreenchidos,
+        contatos_juntados: resumo.contatosJuntados,
       },
     });
   }

@@ -23,6 +23,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { silencioDoBotEhRoteamento } from "@/lib/channels/capabilities";
+
 import {
   decidirElegibilidade,
   montarEstadoDeElegibilidade,
@@ -37,7 +39,7 @@ interface ConversaEmbed {
     ai_authorized_at: string | null;
     phone_number: string | null;
   } | null;
-  channel_sessions: { metadata: Record<string, unknown> | null } | null;
+  channel_sessions: { metadata: Record<string, unknown> | null; provider?: string | null } | null;
 }
 
 /**
@@ -46,12 +48,19 @@ interface ConversaEmbed {
  */
 export async function decidirElegibilidadeDaConversaViaSupabase(
   admin: SupabaseClient,
-  input: { organizationId: string; conversationId: string; agora: Date; ttlMs: number },
+  input: {
+    organizationId: string;
+    conversationId: string;
+    agora: Date;
+    ttlMs: number;
+    /** Pedido por um follow-up: o silêncio de roteamento (canal sem IA) não conta. */
+    followup?: boolean;
+  },
 ): Promise<DecisaoDeElegibilidade | null> {
   const { data, error } = await admin
     .from("conversations")
     .select(
-      "bot_silenced_until, assignee_kind, contacts:contact_id(force_human, ai_authorized_at, phone_number), channel_sessions:channel_session_id(metadata)",
+      "bot_silenced_until, assignee_kind, contacts:contact_id(force_human, ai_authorized_at, phone_number), channel_sessions:channel_session_id(metadata, provider)",
     )
     .eq("organization_id", input.organizationId)
     .eq("id", input.conversationId)
@@ -75,6 +84,7 @@ export async function decidirElegibilidadeDaConversaViaSupabase(
       aiAuthorizedAt: row.contacts?.ai_authorized_at ?? null,
       agora: input.agora,
       ttlMs: input.ttlMs,
+      silencioEhRoteamento: input.followup === true && silencioDoBotEhRoteamento(row.channel_sessions?.provider),
     }),
   );
 }

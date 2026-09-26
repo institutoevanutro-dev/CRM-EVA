@@ -38,6 +38,9 @@ export interface ContatoNomeavel {
 
 export interface IdentidadeDeCanal {
   channel: string;
+  /** O id no provider (IGSID). Casa com `conversations.provider_conversation_id`
+   *  quando o contato tem mais de uma identidade no mesmo canal. */
+  external_id?: string;
   handle: string | null;
   display_name: string | null;
 }

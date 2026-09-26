@@ -14,6 +14,9 @@ import { createSupabaseAdminClient, type FollowupJobRequest } from "@/lib/follow
 import type { EnrollmentRow } from "@/lib/followup/node-handlers";
 import { completeTurnForEnrollment, type TurnBridgeAdminClient } from "@/lib/followup/turn-bridge";
 import { logger } from "@/lib/logger";
+import { automaticoPodeEnviar } from "@/lib/channels/janela";
+import { ERRO_FORA_DAS_24H } from "@/lib/agent-engine/edge/crm/send-ledger";
+import { TEXTO_DO_BLOQUEIO } from "@/lib/followup/bloqueios-obrigatorios";
 
 function ponteSupabase(admin: SupabaseClient): TurnBridgeAdminClient {
   const base = createSupabaseAdminClient(admin);
@@ -111,6 +114,7 @@ export async function enviarTextoFixoPendente(
         conversationId,
         agora: new Date(),
         ttlMs: ttlDaAutorizacaoMs(process.env),
+        followup: true,
       });
       if (elegib !== null && !elegib.permite) {
         logger.info("[followup] texto fixo não enviado — conversa não elegível para IA", {
@@ -122,13 +126,40 @@ export async function enviarTextoFixoPendente(
         continue;
       }
 
+      // Fora das 24h do Instagram o passo é PULADO e o fluxo segue: nem
+      // cancela, nem reagenda, nem reenvia. Mesma porta da recusa do servidor.
+      const pular = async () => {
+        await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {
+          kind: "pulado", reason: TEXTO_DO_BLOQUEIO.fora_das_24h_do_instagram,
+        },undefined,job.id,jobClaim);
+        await settle(job.organization_id,job.id,jobClaim.acquired_at,true);
+      };
+      const { data: canal, error: canalErr } = await admin
+        .from("conversations")
+        .select("last_inbound_at, channel_sessions:channel_session_id(provider)")
+        .eq("organization_id", job.organization_id as string)
+        .eq("id", conversationId)
+        .maybeSingle();
+      if (canalErr) throw new Error(canalErr.message);
+      const linha = canal as { last_inbound_at: string | null; channel_sessions: { provider: string | null } | null } | null;
+      if (!automaticoPodeEnviar(linha?.channel_sessions?.provider, linha?.last_inbound_at ?? null, new Date())) {
+        await pular();
+        continue;
+      }
+
       const proactiveContext={organizationId:job.organization_id as string,contactId,enrollmentId,nodeId,jobId:job.id,jobClaim};
       await assertAgendaEffectSupabase(admin,proactiveContext);
-      const resultado=await sendWithLedger(supabaseSendLedger(admin),{tenantId:job.organization_id,leadId:contactId,jobId:job.id,seq:1,body},async(key,messageId)=>sendMessageHandler(
-        admin,
-        {organization_id:job.organization_id,actor:{type:"webhook_source",id:enrollmentId},serviceBoundary:boundary,proactiveContext,internalMessageId:messageId,requestId:key},
-        {conversation_id:conversationId,type:"text",body,metadata:{idempotency_key:key}},
-      ));
+      let erroDoServidor: string | null = null;
+      const resultado=await sendWithLedger(supabaseSendLedger(admin),{tenantId:job.organization_id,leadId:contactId,jobId:job.id,seq:1,body},async(key,messageId)=>{
+        const m=await sendMessageHandler(
+          admin,
+          {organization_id:job.organization_id,actor:{type:"webhook_source",id:enrollmentId},serviceBoundary:boundary,proactiveContext,origemDoEnvio:"followup",internalMessageId:messageId,requestId:key},
+          {conversation_id:conversationId,type:"text",body,metadata:{idempotency_key:key}},
+        );
+        erroDoServidor=(m as { error_code?: string | null }).error_code ?? null;
+        return m;
+      });
+      if(resultado.kind==="failed" && erroDoServidor===ERRO_FORA_DAS_24H){ await pular(); continue; }
       if(resultado.kind!=="sent" && resultado.kind!=="already_sent") throw new Error(`message_${resultado.kind}`);
       enviados++;
       await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {

@@ -295,3 +295,15 @@ describe("os eventos que o plano de tempo trouxe", () => {
     expect(r.detalhe).toContain("máximo configurado");
   });
 });
+
+describe("passo pulado pelas 24h do Instagram", () => {
+  it("mostra que o passo foi pulado e a razão, sem falar em encerramento", () => {
+    const lido = descreveEvento(
+      evento({ node_id: "action-1", event_type: "action_pulado", payload: { reason: "Passo pulado: fora das 24h do Instagram." } }),
+      nos,
+      "pt-BR",
+    );
+    expect(lido.titulo).toBe("Passo pulado, o fluxo seguiu");
+    expect(lido.detalhe).toBe("Passo pulado: fora das 24h do Instagram.");
+  });
+});

@@ -26,6 +26,10 @@ vi.mock("@/lib/followup/engine", () => ({ createSupabaseAdminClient: () => ({}) 
 vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 import { enviarTextoFixoPendente } from "./enviar-texto-fixo";
+import { CHANNEL_PROVIDER_INSTAGRAM } from "@/lib/channels/capabilities";
+
+/** A conversa do follow-up, como o banco a devolve (canal + última mensagem do cliente). */
+let conversa: Record<string, unknown> | null = null;
 
 const boundary = { organization_id: "org-1", contact_id: "contact-1", conversation_id: "conv-1", service_revision: 1, demanda_id: null, demanda_revision: null };
 const JOB = {
@@ -59,6 +63,7 @@ function admin() {
       },
       maybeSingle: () => {
         if (table === "job_queue" && chain._upd) return Promise.resolve({ data: { id: JOB.id, locked_by:chain._upd.locked_by, locked_at:chain._upd.locked_at }, error: null });
+        if (table === "conversations") return Promise.resolve({ data: conversa, error: null });
         if (table === "followup_enrollments")
           return Promise.resolve({ data: { current_node_id: "node-1",status:"active",revision:1 }, error: null });
         return Promise.resolve({ data: null, error: null });
@@ -82,6 +87,7 @@ function admin() {
 beforeEach(() => {
   vi.clearAllMocks();
   statusUpdates.length = 0;
+  conversa = null;
 });
 
 describe("enviarTextoFixoPendente · gate de elegibilidade", () => {
@@ -98,6 +104,8 @@ describe("enviarTextoFixoPendente · gate de elegibilidade", () => {
     const enviados = await enviarTextoFixoPendente(admin());
     expect(enviados).toBe(1);
     expect(sendMessageHandler).toHaveBeenCalledOnce();
+    // A marca que deixa o follow-up sair no Instagram dentro das 24h.
+    expect(sendMessageHandler.mock.calls[0]?.[1]).toMatchObject({ origemDoEnvio: "followup" });
   });
 
   it("erro ao ler elegibilidade → NÃO envia, job volta pra 'pending' (fail-closed)", async () => {
@@ -113,4 +121,45 @@ it.each(["queued","failed"])("%s não conta envio nem avança o fluxo",async sta
  decidir.mockResolvedValue({permite:true});sendMessageHandler.mockResolvedValueOnce({id:"msg-1",status});
  expect(await enviarTextoFixoPendente(admin())).toBe(0);
  expect(completeTurnForEnrollment).not.toHaveBeenCalled();expect(statusUpdates).toContain("pending");
+});
+
+describe("enviarTextoFixoPendente · 24h do Instagram", () => {
+  const RAZAO = "Passo pulado: fora das 24h do Instagram.";
+  const horasAtras = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+
+  it("a elegibilidade é pedida como follow-up (o silêncio de roteamento não conta)", async () => {
+    decidir.mockResolvedValue({ permite: true });
+    await enviarTextoFixoPendente(admin());
+    expect(decidir.mock.calls[0]?.[1]).toMatchObject({ followup: true });
+  });
+
+  it("última mensagem há 30h: não envia, o passo é pulado e o fluxo segue", async () => {
+    decidir.mockResolvedValue({ permite: true });
+    conversa = { last_inbound_at: horasAtras(30), channel_sessions: { provider: CHANNEL_PROVIDER_INSTAGRAM } };
+    expect(await enviarTextoFixoPendente(admin())).toBe(0);
+    expect(sendMessageHandler).not.toHaveBeenCalled();
+    expect(completeTurnForEnrollment).toHaveBeenCalledWith(
+      expect.anything(), "org-1", "enr-1", "node-1", { kind: "pulado", reason: RAZAO }, undefined, "job-1", expect.anything(),
+    );
+    expect(statusUpdates).toContain("done");
+  });
+
+  it("última mensagem há 2h: envia", async () => {
+    decidir.mockResolvedValue({ permite: true });
+    conversa = { last_inbound_at: horasAtras(2), channel_sessions: { provider: CHANNEL_PROVIDER_INSTAGRAM } };
+    expect(await enviarTextoFixoPendente(admin())).toBe(1);
+    expect(sendMessageHandler).toHaveBeenCalledOnce();
+  });
+
+  it("o servidor recusa com fora_das_24h_do_instagram: pulo, não falha", async () => {
+    decidir.mockResolvedValue({ permite: true });
+    conversa = { last_inbound_at: horasAtras(2), channel_sessions: { provider: CHANNEL_PROVIDER_INSTAGRAM } };
+    sendMessageHandler.mockResolvedValueOnce({ id: "msg-1", status: "failed", error_code: "fora_das_24h_do_instagram" } as never);
+    expect(await enviarTextoFixoPendente(admin())).toBe(0);
+    expect(completeTurnForEnrollment).toHaveBeenCalledWith(
+      expect.anything(), "org-1", "enr-1", "node-1", { kind: "pulado", reason: RAZAO }, undefined, "job-1", expect.anything(),
+    );
+    expect(statusUpdates).toContain("done");
+    expect(statusUpdates).not.toContain("pending");
+  });
 });

@@ -180,6 +180,64 @@ describe("envio pelo Instagram", () => {
     expect(msg).toMatchObject({ status: "failed", error_code: "envio_automatico_indisponivel" });
   });
 
+  describe("follow-up (origemDoEnvio: followup): só dentro das 24h", () => {
+    const followup: HandlerCtx = { ...humano, actor: { type: "webhook_source", id: "enr-1" }, origemDoEnvio: "followup" };
+    const agenteDoFollowup: HandlerCtx = {
+      ...humano,
+      actor: { type: "ai_agent", id: USER, role: "manager" },
+      origemDoEnvio: "followup",
+    };
+
+    it("texto fixo a 2h da última mensagem: sai, sem etiqueta humana", async () => {
+      const msg = await sendMessageHandler(supabaseFalso(conversa({ inboundHaMs: 2 * HORA })), followup, texto());
+      expect(sendSpy).toHaveBeenCalledTimes(1);
+      expect(envelope().etiquetaHumana).toBeFalsy();
+      expect(msg.status).toBe("sent");
+    });
+
+    it("texto fixo a 30h: não chama o canal e grava fora_das_24h_do_instagram", async () => {
+      const msg = await sendMessageHandler(supabaseFalso(conversa({ inboundHaMs: 30 * HORA })), followup, texto());
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(msg).toMatchObject({
+        status: "failed",
+        error_code: "fora_das_24h_do_instagram",
+        error_message: "Passo pulado: fora das 24h do Instagram.",
+      });
+    });
+
+    it("pessoa que nunca escreveu: fora_das_24h_do_instagram", async () => {
+      const msg = await sendMessageHandler(supabaseFalso(conversa({ inboundHaMs: null })), followup, texto());
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(msg).toMatchObject({ status: "failed", error_code: "fora_das_24h_do_instagram" });
+    });
+
+    it("passo de IA do follow-up a 2h: sai", async () => {
+      const msg = await sendMessageHandler(supabaseFalso(conversa({ inboundHaMs: 2 * HORA })), agenteDoFollowup, texto());
+      expect(sendSpy).toHaveBeenCalledTimes(1);
+      expect(msg.status).toBe("sent");
+    });
+
+    it("agente de atendimento (sem origemDoEnvio) a 2h: segue recusado", async () => {
+      const msg = await sendMessageHandler(
+        supabaseFalso(conversa({ inboundHaMs: 2 * HORA })),
+        { ...humano, actor: { type: "ai_agent", id: USER, role: "manager" } },
+        texto(),
+      );
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(msg).toMatchObject({ status: "failed", error_code: "envio_automatico_indisponivel" });
+    });
+
+    it("WhatsApp oficial com origemDoEnvio followup fora das 24h: sem mudança", async () => {
+      const msg = await sendMessageHandler(
+        supabaseFalso(conversa({ provider: CHANNEL_PROVIDER_META, inboundHaMs: 30 * HORA })),
+        followup,
+        texto(),
+      );
+      expect(sendSpy).toHaveBeenCalledTimes(1);
+      expect(msg.status).toBe("sent");
+    });
+  });
+
   it("conversa sem IGSID: instagram_sem_destinatario, nunca queued", async () => {
     const msg = await sendMessageHandler(supabaseFalso(conversa({ igsid: null })), humano, texto());
     expect(sendSpy).not.toHaveBeenCalled();

@@ -64,6 +64,12 @@ export interface HandlerCtx {
   meetingBooking?: MeetingBookingContext;
   internalMessageId?: string;
   proactiveContext?: ProactiveContext;
+  /**
+   * Marca explícita de que o envio é de follow-up. Não se deduz do ator: o
+   * agente de atendimento também é `ai_agent`, e só o follow-up ganha a janela
+   * automática do canal (`janelaAutomaticaMs`).
+   */
+  origemDoEnvio?: "followup";
   /** Trusted origin captured by the runtime, never request-body metadata. */
   serviceBoundary?: ServiceBoundary | null;
   /** Origem de evento derivado; não é campo de input público. */

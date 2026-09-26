@@ -242,7 +242,11 @@ describe("o espelho entre a tela e o motor", () => {
       "utf8",
     );
     const corpo = fonte.slice(fonte.indexOf("export async function isLeadInHandoff"));
-    const sql = corpo.slice(corpo.indexOf("`"), corpo.indexOf("[tenantId, leadId]"));
+    // Até os parâmetros: o terceiro é a lista de canais cujo silêncio é
+    // roteamento (sem IA), que não é coluna de conversa.
+    const sql = corpo.slice(corpo.indexOf("`"), corpo.indexOf("[tenantId, leadId"));
+    expect(sql.length, "fatia vazia: o marcador dos parâmetros sumiu").toBeGreaterThan(0);
+    expect(sql).not.toContain("export async function");
     const colunas = ["force_human", "bot_silenced_until"];
     for (const c of colunas) expect(sql).toContain(c);
     // O controle: nenhuma OUTRA coluna de conversa entrou no gate sem que este
