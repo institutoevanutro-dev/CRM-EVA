@@ -46,4 +46,26 @@ describe("isMediaPathOwnedBy", () => {
   it("confusão de prefixo (org-1x/...) → false", () => {
     expect(isMediaPathOwnedBy(`${orgId}x/${conversationId}/foo.jpg`, orgId, conversationId)).toBe(false);
   });
+  it("o nome que o upload gera (out-<uuid>.ogg) → true", () => {
+    const p = `${orgId}/${conversationId}/out-0b7c1a52-6f7e-4e0a-9d2c-1f3b5a7c9e11.ogg`;
+    expect(isMediaPathOwnedBy(p, orgId, conversationId)).toBe(true);
+  });
+
+  // O storage-js põe o path cru em `/object/sign/<bucket>/<path>` e o `fetch`
+  // resolve o `..`: o prefixo casava e a URL assinada era de OUTRA org.
+  it.each([
+    ["subida de pasta", `${orgId}/${conversationId}/../../org-2/conv-9/foo.jpg`],
+    ["subida codificada", `${orgId}/${conversationId}/%2e%2e/%2e%2e/org-2/conv-9/foo.jpg`],
+    ["barra invertida", `${orgId}/${conversationId}/..\\..\\org-2\\foo.jpg`],
+    ["subpasta", `${orgId}/${conversationId}/sub/foo.jpg`],
+    ["só o ponto-ponto", `${orgId}/${conversationId}/..`],
+    ["nome vazio", `${orgId}/${conversationId}/`],
+  ])("%s → false", (_nome, caminho) => {
+    expect(isMediaPathOwnedBy(caminho, orgId, conversationId)).toBe(false);
+  });
+
+  it("o que o fetch faria com a subida de pasta sai mesmo da org (a razão da trava)", () => {
+    const url = new URL(`http://kong/storage/v1/object/sign/whatsapp-media/${orgId}/${conversationId}/../../org-2/x.jpg`);
+    expect(url.pathname).toBe("/storage/v1/object/sign/whatsapp-media/org-2/x.jpg");
+  });
 });
