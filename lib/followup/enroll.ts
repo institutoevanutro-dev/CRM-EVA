@@ -1,6 +1,7 @@
 import type { ServiceBoundary } from "@/lib/atendimento/fronteira";
 import { assertServiceBoundarySupabase } from "@/lib/atendimento/origem";
 import { beginServiceAtOrigin } from "@/lib/atendimento/origem";
+import { sessaoDoFollowup } from "@/lib/followup/conversa-do-followup";
 /**
  * Inscrição de um contato num fluxo publicado.
  *
@@ -147,7 +148,14 @@ export async function enrollFollowupFlow(
     );
   }
 
-  const boundary = input.resolveServiceBoundary ? await input.resolveServiceBoundary() : await beginServiceAtOrigin(supabase, organizationId, contactId);
+  const boundary = input.resolveServiceBoundary
+    ? await input.resolveServiceBoundary()
+    : await beginServiceAtOrigin(
+        supabase,
+        organizationId,
+        contactId,
+        await sessaoDoFollowup(supabase, organizationId, contactId),
+      );
   if (input.resolveServiceBoundary) await assertServiceBoundarySupabase(supabase, boundary);
   const { data: created, error: insErr } = await supabase
     .from("followup_enrollments")

@@ -8,6 +8,8 @@
  */
 import type pg from "pg";
 
+import { silencioDoBotEhRoteamento } from "@/lib/channels/capabilities";
+
 import {
   decidirElegibilidade,
   montarEstadoDeElegibilidade,
@@ -21,6 +23,7 @@ interface LinhaDeElegibilidade {
   bot_silenced_until: Date | string | null;
   ai_authorized_at: Date | string | null;
   phone_number: string | null;
+  provider: string | null;
 }
 
 /**
@@ -29,7 +32,14 @@ interface LinhaDeElegibilidade {
  */
 export async function decidirElegibilidadeDaConversa(
   pool: pg.Pool,
-  input: { organizationId: string; conversationId: string; agora: Date; ttlMs: number },
+  input: {
+    organizationId: string;
+    conversationId: string;
+    agora: Date;
+    ttlMs: number;
+    /** Pedido por um follow-up: o silêncio de roteamento (canal sem IA) não conta. */
+    followup?: boolean;
+  },
 ): Promise<DecisaoDeElegibilidade | null> {
   const { rows } = await pool.query<LinhaDeElegibilidade>(
     `select
@@ -38,7 +48,8 @@ export async function decidirElegibilidadeDaConversa(
        cv.assignee_kind             as assignee_kind,
        cv.bot_silenced_until        as bot_silenced_until,
        ct.ai_authorized_at          as ai_authorized_at,
-       ct.phone_number              as phone_number
+       ct.phone_number              as phone_number,
+       cs.provider                  as provider
      from conversations cv
      join contacts ct
        on ct.id = cv.contact_id and ct.organization_id = cv.organization_id
@@ -62,6 +73,7 @@ export async function decidirElegibilidadeDaConversa(
       aiAuthorizedAt: r.ai_authorized_at,
       agora: input.agora,
       ttlMs: input.ttlMs,
+      silencioEhRoteamento: input.followup === true && silencioDoBotEhRoteamento(r.provider),
     }),
   );
 }

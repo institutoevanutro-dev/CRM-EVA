@@ -21,6 +21,7 @@ import { EditContactDialog } from "@/components/contacts/EditContactDialog";
 import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
 import { PropostasDeDado } from "@/components/contacts/PropostasDeDado";
 import { ConversaNoDossie } from "@/components/kanban/ConversaNoDossie";
+import { CanaisDoContato } from "@/components/contacts/CanaisDoContato";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { CpfDoContato } from "@/components/contacts/CpfDoContato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
@@ -225,6 +226,9 @@ export function ContactDetailClient({ contactId }: Props) {
               </div>
             </dl>
           </Card>
+          <div className="mt-4">
+            <CanaisDoContato contactId={contactId} />
+          </div>
         </TabsContent>
 
         {podeVerFinanceiro && !contact.is_anonymized && <TabsContent value="financeiro" className="mt-4"><FinanceiroDoContato contactId={contactId} /></TabsContent>}

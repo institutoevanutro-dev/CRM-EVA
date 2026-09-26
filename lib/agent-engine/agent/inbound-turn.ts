@@ -1770,6 +1770,9 @@ async function executarTurnoDoAgente(
         conversationId: input.conversationId,
         agora: clock(),
         ttlMs: deps.knobs.allowlistTtlMs ?? ALLOWLIST_TTL_MS_PADRAO,
+        // Follow-up: o silêncio de canal sem IA (Instagram, que nasce
+        // silenciado para cair na Fila) é roteamento, não atendimento humano.
+        followup: liveJob().kind === 'followup_turn',
       });
       if (elegib !== null && !elegib.permite) {
         runLog.info('turno pulado — conversa não elegível para IA', {

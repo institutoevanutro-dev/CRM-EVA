@@ -253,7 +253,8 @@ export function occupancyEventCount(events: EnrollmentEventRef[], nodeId: string
 export function actionTurnCompleted(events: EnrollmentEventRef[], nodeId: string): boolean {
   for (let i = events.length - 1; i >= 0; i--) {
     if (events[i]!.node_id !== nodeId) break;
-    if (events[i]!.event_type === "action_sent") return true;
+    // `action_pulado`: o passo fechou sem envio (fora das 24h) e também avança.
+    if (events[i]!.event_type === "action_sent" || events[i]!.event_type === "action_pulado") return true;
   }
   return false;
 }

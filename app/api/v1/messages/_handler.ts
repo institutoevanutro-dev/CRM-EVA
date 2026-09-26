@@ -36,7 +36,7 @@ import {
 } from "@/lib/channels";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { CHANNEL_PROVIDER_INSTAGRAM } from "@/lib/channels/capabilities";
-import { estadoDaJanela } from "@/lib/channels/janela";
+import { automaticoPodeEnviar, estadoDaJanela } from "@/lib/channels/janela";
 import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
 import { isMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import {
@@ -617,8 +617,13 @@ export async function sendMessageHandler(
   let etiquetaHumana = false;
   if (!caps.iaResponde && ctx.actor.type !== "user") {
     // Canal onde a IA não responde (o Instagram: a etiqueta HUMAN_AGENT é
-    // promessa de que GENTE escreveu). Agente, automação e follow-up param aqui.
-    recusa = { code: "envio_automatico_indisponivel", message: "Este canal só aceita resposta da equipe." };
+    // promessa de que GENTE escreveu). Agente e automação param aqui. O
+    // follow-up é a exceção: sai dentro da janela automática, sem etiqueta.
+    if (ctx.origemDoEnvio !== "followup" || caps.janelaAutomaticaMs === null) {
+      recusa = { code: "envio_automatico_indisponivel", message: "Este canal só aceita resposta da equipe." };
+    } else if (!automaticoPodeEnviar(provider, c.last_inbound_at, new Date())) {
+      recusa = { code: "fora_das_24h_do_instagram", message: "Passo pulado: fora das 24h do Instagram." };
+    }
   } else if (caps.janelaHumanaMs !== null) {
     const janela = estadoDaJanela(provider, c.last_inbound_at, new Date());
     if (janela.tipo === "fechada") {

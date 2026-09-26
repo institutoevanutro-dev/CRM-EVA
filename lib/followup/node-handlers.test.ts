@@ -153,6 +153,14 @@ describe("actionTurnCompleted", () => {
     expect(actionTurnCompleted(events, "msg")).toBe(true);
   });
 
+  it("is true when the step was skipped (action_pulado) — the step closed without sending", () => {
+    const events = [
+      { node_id: "msg", idempotency_key: "msg:8", event_type: "turn_enqueued" },
+      { node_id: "msg", idempotency_key: "msg:9", event_type: "action_pulado" },
+    ];
+    expect(actionTurnCompleted(events, "msg")).toBe(true);
+  });
+
   it("is false when the send has not closed yet", () => {
     const events = [
       { node_id: "msg", idempotency_key: "msg:8", event_type: "turn_enqueued" },

@@ -61,7 +61,10 @@ async function atualizarIdentidade(
   const atual = data as { handle: string | null; display_name: string | null; avatar_url: string | null } | null;
   if (!atual) return;
   const patch: Record<string, string> = {};
-  if (!atual.handle && perfil.handle) patch.handle = perfil.handle;
+  // O handle acompanha o VIVO (sobrescreve): um @ trocado ou reciclado por
+  // outra pessoa não pode ficar gravado, porque `juntar-por-arroba.ts`
+  // compara handles. Nome e foto seguem "só preenche vazio".
+  if (perfil.handle && perfil.handle !== atual.handle) patch.handle = perfil.handle;
   if (!atual.display_name && perfil.nome) patch.display_name = perfil.nome;
   if (!atual.avatar_url && perfil.foto) patch.avatar_url = perfil.foto;
   if (Object.keys(patch).length === 0) return;

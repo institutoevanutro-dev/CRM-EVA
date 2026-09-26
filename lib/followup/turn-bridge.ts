@@ -40,6 +40,8 @@ export interface TurnBridgeAdminClient extends AdminClient {
 export type TurnResult =
   | { kind: "sent" }
   | { kind: "skipped"; reason: string }
+  /** O passo não enviou e o fluxo SEGUE (ex.: fora das 24h do Instagram). `skipped` encerra. */
+  | { kind: "pulado"; reason: string }
   | { kind: "classified"; class: string }
   /** Plano de tempo do fluxo inteiro, proposto no acionamento — cru, antes do clamp. */
   | { kind: "planned"; propostas: PropostaDeEspera[]; modelo: string };
@@ -130,6 +132,23 @@ export async function completeTurnForEnrollment(
 
   if(result.kind === "skipped"){
     await applyStep("turn_skipped",{reason:result.reason},{status:"cancelled",cancel_reason:result.reason,completed_at:now.toISOString(),next_eval_at:null});
+    return;
+  }
+
+  if (result.kind === "pulado") {
+    // match_reply: a pergunta de confirmação não saiu; o nó já espera a
+    // resposta e o prazo dele leva ao ramo "sem resposta", como no 'sent'.
+    if (node.type === "match_reply") return;
+    if (node.type !== "action") {
+      throw new Error(`completeTurnForEnrollment: resultado 'pulado' mas o nó "${node.id}" não é 'action'`);
+    }
+    const edge = selectEdge(graph.edges, node.id, { type: "always" });
+    if (!edge) throw new Error(`action node "${node.id}" sem aresta 'always' de saída`);
+    await applyStep(
+      "action_pulado",
+      { reason: result.reason },
+      { current_node_id: edge.target, status: "active", next_eval_at: now.toISOString() },
+    );
     return;
   }
 

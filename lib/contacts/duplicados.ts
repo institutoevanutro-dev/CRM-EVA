@@ -29,9 +29,14 @@
  * renomeia lead/deal/won/lost. Nada aqui conhece "Paciente", "Cliente" ou etapa.
  */
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 
 /** Por que estes dois registros caíram no mesmo grupo. */
-export type MotivoDeDuplicidade = "telefone" | "email" | "telefone_em_conflito";
+export type MotivoDeDuplicidade =
+  | "telefone"
+  | "email"
+  | "telefone_em_conflito"
+  | "mesmo_nome_instagram_whatsapp";
 
 /**
  * O recorte de `contacts` que a detecção precisa. Deliberadamente menor que
@@ -49,6 +54,8 @@ export interface ContatoParaDeduplicar {
   source_metadata: Record<string, unknown> | null;
   created_at: string;
   last_activity_at: string | null;
+  /** Tem identidade de Instagram em `contact_channel_identities` (linha desse canal). */
+  do_instagram: boolean;
 }
 
 export interface GrupoDeDuplicados {
@@ -70,6 +77,23 @@ export function chaveDeTelefone(valor: string | null | undefined): string {
 export function chaveDeEmail(contato: ContatoParaDeduplicar): string {
   const bruto = contato.email_normalized ?? contato.email;
   return (bruto ?? "").trim().toLowerCase();
+}
+
+/**
+ * Chave de agrupamento por nome: NFD sem diacríticos, minúsculas, espaços
+ * colapsados. `null` para nome ausente ou de uma palavra só — "Ana" é comum
+ * demais para virar sinal de duplicidade sozinho.
+ */
+export function chaveDeNome(nome: string | null): string | null {
+  if (!nome) return null;
+  const normalizado = nome
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+  if (normalizado.split(" ").filter(Boolean).length < 2) return null;
+  return normalizado;
 }
 
 /** O telefone que a ingestão parkou por já pertencer a outro contato vivo. */
@@ -151,6 +175,27 @@ export function encontrarContatosDuplicados(
     }
   }
 
+  // Instagram × WhatsApp pelo nome: só contatos COM telefone entram no mapa de
+  // nomes (regra de hoje — dois com telefone e mesmo nome não agrupam), e só
+  // contatos SÓ-Instagram (sem telefone) se anexam a eles — e só quando há
+  // EXATAMENTE UM contato de telefone com aquele nome: com dois "Maria Silva"
+  // no WhatsApp não dá para dizer qual é a do Instagram. Dois de Instagram
+  // com o mesmo nome não agrupam aqui — a junção deles é por @ (Task 4).
+  const porNome = new Map<string, string[]>();
+  for (const contato of vivos) {
+    if (contato.phone_number === null || contato.phone_number === "") continue;
+    const nome = chaveDeNome(nomeDoContato(contato));
+    if (!nome) continue;
+    porNome.set(nome, [...(porNome.get(nome) ?? []), contato.id]);
+  }
+  for (const contato of vivos) {
+    if (!contato.do_instagram || contato.phone_number) continue;
+    const nome = chaveDeNome(nomeDoContato(contato));
+    if (!nome) continue;
+    const comTelefone = porNome.get(nome) ?? [];
+    if (comTelefone.length === 1) unir(contato.id, comTelefone[0]!, "mesmo_nome_instagram_whatsapp");
+  }
+
   const grupos = new Map<string, ContatoParaDeduplicar[]>();
   for (const contato of vivos) {
     const r = raiz(contato.id);
@@ -181,10 +226,19 @@ export function encontrarContatosDuplicados(
  * empate, o mais antigo. Atividade recente é o que o atendente tem aberto na
  * frente; a antiguidade desempata sem sortear.
  *
+ * No par Instagram × WhatsApp, o contato COM telefone vem antes de tudo:
+ * `fn_mesclar_contatos` descarta CPF, consentimento e `custom_fields` do
+ * secundário, e é o registro do WhatsApp que costuma carregá-los.
+ *
  * É SUGESTÃO — quem decide é quem opera, na tela. Nunca aplicada sozinha.
  */
 export function principalSugerido(grupo: GrupoDeDuplicados): string {
+  const telefonePrimeiro = grupo.motivos.includes("mesmo_nome_instagram_whatsapp");
   const ordenado = [...grupo.contatos].sort((a, b) => {
+    if (telefonePrimeiro) {
+      const temTelefone = Number(Boolean(b.phone_number)) - Number(Boolean(a.phone_number));
+      if (temTelefone !== 0) return temTelefone;
+    }
     const atividade = (b.last_activity_at ?? "").localeCompare(a.last_activity_at ?? "");
     if (atividade !== 0) return atividade;
     return a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
