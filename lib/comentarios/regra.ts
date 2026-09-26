@@ -72,5 +72,5 @@ export function regraQueCasa(
     return new Date(a.criadaEm).getTime() - new Date(b.criadaEm).getTime();
   });
 
-  return casando[0];
+  return casando.at(0) ?? null;
 }
