@@ -228,3 +228,24 @@ describe("camada semântica no envio fixo — a escolha da organização alcanç
     expect(arg.body).toBe("oi, tudo bem?");
   });
 });
+
+describe("origem do envio: o turno de follow-up marca o que manda", () => {
+  it("o channel.send do texto de fluxo leva origemDoEnvio followup", async () => {
+    const send = vi.fn(async (..._a: unknown[]) => ({ kind: "sent" }));
+    const { pool } = fakePool(false);
+    await criarHandler({ ...(deps() as object), channel: () => ({ send }) } as never)(
+      job({
+        followup_enrollment_id: "11111111-1111-4111-8111-111111111111",
+        node_id: "node-1",
+        purpose: "send_message",
+        fixed_body: "oi, tudo bem?",
+      }),
+      pool,
+      ctx,
+    );
+    const arg = runBeforeSend.mock.calls[0]?.[0] as { send?: (b: string) => Promise<unknown> } | undefined;
+    expect(arg?.send, "runBeforeSend não foi chamado — instrumento morto").toBeTypeOf("function");
+    await arg?.send?.("oi, tudo bem?");
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ origemDoEnvio: "followup", body: "oi, tudo bem?" }));
+  });
+});

@@ -4,7 +4,7 @@
 --
 -- 1. REIVINDICAÇÃO (lease), não um novo valor de `situacao`. O plano original
 --    falava em `situacao='processando'`, e esse valor NÃO existe no
---    vocabulário fechado da migration 0279 (`novo`, `respondido_pela_regra`,
+--    vocabulário fechado da migration 0280 (`novo`, `respondido_pela_regra`,
 --    `respondido_pela_ia`, `esperando_voce`, `ignorado`) — alargar o CHECK
 --    só para marcar "alguém está cuidando disto agora" tornaria o vocabulário
 --    permanentemente maior por um estado transitório. Em vez disso, uma

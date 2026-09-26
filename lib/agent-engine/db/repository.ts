@@ -77,7 +77,7 @@ export type InboxKind =
   // depende de pessoa, ou ação bloqueada com o motivo escrito. `ref_kind` é a
   // conversa revisada — é lá que quem assume enxerga o contexto.
   | 'supervision_review'
-  // (migration 0280) Comentário do Instagram em situação 'novo' parado há
+  // (migration 0281) Comentário do Instagram em situação 'novo' parado há
   // mais de 1h — nunca reivindicado, ou reivindicado e sem desfecho. Webhook
   // perdido ou escrita que falhou não pode sumir em silêncio.
   | 'instagram_comment_stuck'

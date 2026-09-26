@@ -10134,7 +10134,7 @@ alter table public.agent_inbox_items
     -- tratado até o prazo — abre revisão humana, nunca libera horário nem
     -- marca falta sozinho. Entra NESTA lista (bloco único por constraint, #159).
     'sinal_revisao_humana',
-    -- (migration 0280) Comentário do Instagram em `situacao='novo'` parado há
+    -- (migration 0281) Comentário do Instagram em `situacao='novo'` parado há
     -- mais de 1h — nunca reivindicado, ou reivindicado e sem desfecho (a
     -- segunda condição implica a primeira: `reivindicado_em` nunca é anterior
     -- a `comentado_em`). Webhook perdido ou escrita que falhou some em
@@ -27634,7 +27634,22 @@ update public.conversations
    and (bot_silenced_until is null or bot_silenced_until < 'infinity'::timestamptz);
 
 
--- ---- comentários do Instagram (migration 0279) ----
+-- ---- identidade de canal só leitura para a equipe (migration 0279) ----
+-- Identidade de canal é LIDA pela equipe, nunca escrita por ela. A policy
+-- `for all` da 0277 deixava qualquer `agent` logado gravar/trocar o `handle`
+-- de uma identidade pela REST, e a junção automática por @ (service role)
+-- funde contatos de mesmo handle: um agent disparava um merge irreversível
+-- que só `manager` pode fazer. Quem escreve é só o service role (webhook,
+-- preenchimento de perfil, junção), que ignora RLS. Fica só o SELECT.
+drop policy if exists tenant_isolation_contact_channel_identities_all on public.contact_channel_identities;
+drop policy if exists tenant_isolation_contact_channel_identities_select on public.contact_channel_identities;
+create policy tenant_isolation_contact_channel_identities_select on public.contact_channel_identities
+  for select using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+  );
+
+-- ---- comentários do Instagram (migration 0280) ----
 -- Comentários capturados (fila de moderação) e regras palavra → resposta
 -- pública + Direct, por mídia. Só o banco; tasks seguintes leem/escrevem
 -- estas colunas pelo nome.
@@ -27730,21 +27745,21 @@ create policy instagram_comment_rules_write on public.instagram_comment_rules
         and public.fn_role_at_least(organization_id, 'manager'))
   );
 
--- ---- reivindicar comentário + aviso de comentário parado (migration 0280) ----
+-- ---- reivindicar comentário + aviso de comentário parado (migration 0281) ----
 -- Task 7 de 9: o worker precisa de uma coluna de LEASE para reivindicar a
 -- linha antes de agir (não um novo valor de `situacao` — `processando` não
--- existe no CHECK da 0279, e alargar o vocabulário por um estado transitório
--- foi decisão revertida; ver o cabeçalho da migration 0280). O lease expira
+-- existe no CHECK da 0280, e alargar o vocabulário por um estado transitório
+-- foi decisão revertida; ver o cabeçalho da migration 0281). O lease expira
 -- sozinho (10 min, em código, não aqui) — uma rodada que morre no meio não
 -- tranca a linha para sempre.
 alter table public.instagram_comments
   add column if not exists reivindicado_em timestamptz;
--- ---- fim: reivindicar comentário + aviso de comentário parado (migration 0280) ----
+-- ---- fim: reivindicar comentário + aviso de comentário parado (migration 0281) ----
 
--- ---- publicação manual de comentário (migration 0281) ----
+-- ---- publicação manual de comentário (migration 0282) ----
 -- Task 8: `POST /api/v1/comentarios/:id/publicar` (humano publica a sugestão
 -- da IA, editada ou não) precisa de um desfecho TERMINAL que não é nenhum dos
--- cinco valores da 0279 — `respondido_pela_ia` é o worker sozinho (Task 7);
+-- cinco valores da 0280 — `respondido_pela_ia` é o worker sozinho (Task 7);
 -- reaproveitá-lo apagaria a distinção de quem apertou o botão.
 alter table public.instagram_comments
   drop constraint if exists instagram_comments_situacao_check;
@@ -27759,7 +27774,7 @@ alter table public.instagram_comments
     'ignorado',
     'respondido_manualmente'
   ));
--- ---- fim: publicação manual de comentário (migration 0281) ----
+-- ---- fim: publicação manual de comentário (migration 0282) ----
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----

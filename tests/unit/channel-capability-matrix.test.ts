@@ -47,6 +47,7 @@ const CAPABILITIES = [
   "canSend",
   "iaResponde",
   "janelaHumanaMs",
+  "janelaAutomaticaMs",
   "limiteDeTexto",
   "midiaDeEnvio",
 ] as const;

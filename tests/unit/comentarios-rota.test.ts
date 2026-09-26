@@ -4,7 +4,7 @@
  * doutrina do repo pede conferidas de novo na rota, explicitamente:
  *
  *  1. Publicar exige papel `agent+` (mesmo piso de `instagram_comments_write`,
- *     migration 0279); criar regra exige `manager+`
+ *     migration 0280); criar regra exige `manager+`
  *     (`instagram_comment_rules_write`).
  *  2. A organização do RECURSO é filtrada explicitamente — um comentário de
  *     OUTRA organização não é alcançado só porque o id bateu.

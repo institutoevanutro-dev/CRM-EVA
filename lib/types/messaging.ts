@@ -48,6 +48,12 @@ export interface Conversation {
    * resposta de uma versão anterior, ainda em cache do react-query, não o tem.
    */
   comando_da_conversa?: string | null;
+  /**
+   * O id da conversa no provider (IGSID do Instagram) — só selecionado por quem
+   * pede (não vem em `select=*`). É a chave para casar a conversa com QUAL
+   * identidade Instagram do contato ela é (um contato pode ter uma por perfil).
+   */
+  provider_conversation_id?: string | null;
   last_handoff_at: string | null;
   created_at: string;
   updated_at: string;

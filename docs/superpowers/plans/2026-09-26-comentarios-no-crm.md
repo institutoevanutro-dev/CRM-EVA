@@ -42,7 +42,7 @@ Cinco coisas que a spec implica, que nenhuma task cobriria sozinha, e que morder
 
 | Arquivo | Responsabilidade |
 |---|---|
-| `supabase/migrations/<ts>_0279_comentarios_do_instagram.sql` (criar) | as duas tabelas, RLS, CHECK, índices |
+| `supabase/migrations/<ts>_0280_comentarios_do_instagram.sql` (criar) | as duas tabelas, RLS, CHECK, índices |
 | `lib/channels/instagram/webhook.ts` (modificar) | passa a devolver também eventos de comentário |
 | `lib/channels/instagram/comentarios/ingest.ts` (criar) | grava o comentário, idempotente |
 | `lib/comentarios/regra.ts` (criar) | PURO: qual regra casa este texto |
@@ -58,7 +58,7 @@ Cinco coisas que a spec implica, que nenhuma task cobriria sozinha, e que morder
 ### Task 1: as duas tabelas
 
 **Files:**
-- Create: `supabase/migrations/20260926120000_0279_comentarios_do_instagram.sql`
+- Create: `supabase/migrations/20260926150000_0280_comentarios_do_instagram.sql`
 - Modify: `supabase/baseline.sql` (apêndice, ANTES do bloco final de varredura anon)
 - Modify: `supabase/migrations/MANIFEST.md`
 - Test: `tests/invariants/comentarios-do-instagram.test.ts`
@@ -167,7 +167,7 @@ create policy tenant_isolation_instagram_comment_rules_all on public.instagram_c
   with check (organization_id in (select public.fn_user_org_ids()));
 ```
 
-Copiar o MESMO bloco para o apêndice do `baseline.sql`, rotulado `-- ---- comentários do Instagram (migration 0279) ----`, **antes** do bloco final de varredura anon (o cabeçalho daquele bloco diz que ele é o último de propósito). Acrescentar a linha no MANIFEST.
+Copiar o MESMO bloco para o apêndice do `baseline.sql`, rotulado `-- ---- comentários do Instagram (migration 0280) ----`, **antes** do bloco final de varredura anon (o cabeçalho daquele bloco diz que ele é o último de propósito). Acrescentar a linha no MANIFEST.
 
 - [ ] **Step 4: Run test to verify it passes**
 

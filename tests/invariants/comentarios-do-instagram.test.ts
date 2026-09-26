@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { countAs, sql, writeCountAs } from "./gov-helpers";
 
 /**
- * As duas tabelas da migration 0279: `instagram_comments` (fila de
+ * As duas tabelas da migration 0280: `instagram_comments` (fila de
  * comentários capturados) e `instagram_comment_rules` (palavra gatilho →
  * resposta pública + Direct, por mídia). Task 1 de 9 da feature de
  * comentários no CRM — só o banco; as tasks seguintes leem e escrevem estas
@@ -13,7 +13,7 @@ import { countAs, sql, writeCountAs } from "./gov-helpers";
  *  2. `(organization_id, external_id)` não duplica — o mesmo comentário não
  *     entra duas vezes quando o worker de ingestão reprocessar o webhook.
  *  3. `situacao` é vocabulário fechado por CHECK.
- *  4. O gate de papel na escrita (ver a nota na migration 0279): `viewer` não
+ *  4. O gate de papel na escrita (ver a nota na migration 0280): `viewer` não
  *     escreve em nenhuma das duas tabelas; `agent` escreve em
  *     `instagram_comments` mas NÃO em `instagram_comment_rules` (que exige
  *     `manager`). Isto não estava no briefing — é `rbac-config-ia-canais.test.ts`
@@ -75,7 +75,7 @@ function erroDe(fn: () => unknown): string {
   throw new Error("o INSERT passou — a trava não existe neste banco");
 }
 
-describe("0279 · instagram_comments", () => {
+describe("0280 · instagram_comments", () => {
   it("nasce com RLS ligada e as policies de tenant (select solto + write com papel)", () => {
     seed();
     expect(sql(`select relrowsecurity from pg_class where relname = 'instagram_comments'`)).toBe(
@@ -139,7 +139,7 @@ describe("0279 · instagram_comments", () => {
     expect(erro).toContain("instagram_comments_situacao_check");
   });
 
-  it("situacao 'respondido_manualmente' (migration 0281 — publicação humana pela tela, Task 8) é aceita", () => {
+  it("situacao 'respondido_manualmente' (migration 0282 — publicação humana pela tela, Task 8) é aceita", () => {
     // O teste negativo acima passaria mesmo que este valor NUNCA tivesse sido
     // acrescentado ao CHECK — ele só prova que o CHECK existe, não que o
     // vocabulário novo está nele. Este é o positivo: insere de verdade e
@@ -156,7 +156,7 @@ describe("0279 · instagram_comments", () => {
     expect(linhas).toBe(1);
   });
 
-  it("reivindicado_em (migration 0280) é o lease do worker — nullable, e a reivindicação só avança quem está 'novo' e sem lease vigente", () => {
+  it("reivindicado_em (migration 0281) é o lease do worker — nullable, e a reivindicação só avança quem está 'novo' e sem lease vigente", () => {
     writeCountAs(
       AGENT_A,
       `insert into public.instagram_comments ${COLS_COMMENT} values ${commentValues(ORG_A, "c-lease")}`,
@@ -219,7 +219,7 @@ describe("0279 · instagram_comments", () => {
   });
 });
 
-describe("0279 · instagram_comment_rules", () => {
+describe("0280 · instagram_comment_rules", () => {
   const COLS_RULE =
     "(organization_id, channel_session_id, media_id, palavra, texto_do_direct, frase_publica)";
   function ruleValues(org: string, palavra: string): string {
@@ -261,7 +261,7 @@ describe("0279 · instagram_comment_rules", () => {
   });
 });
 
-describe("0280 · agent_inbox_items_kind_check ganha 'instagram_comment_stuck'", () => {
+describe("0281 · agent_inbox_items_kind_check ganha 'instagram_comment_stuck'", () => {
   it("aceita o kind novo — o aviso anti-morte do worker de comentários", () => {
     seed();
     const inserida = sql(

@@ -11,7 +11,7 @@
  * A fila é POR ORGANIZAÇÃO (round 2 da revisão, I-6): cada organização recebe
  * seu próprio teto por rodada — um tenant com um vídeo viral não pode consumir
  * os `teto` slots da rodada inteira e matar os outros. A query usa o índice da
- * migration 0279 (`organization_id, situacao, comentado_em`) por inteiro.
+ * migration 0280 (`organization_id, situacao, comentado_em`) por inteiro.
  *
  * Por comentário, nesta ordem:
  *   0. `reivindicado_em` já vinha preenchido QUANDO O COMENTÁRIO FOI LIDO
@@ -344,7 +344,7 @@ export async function processarComentariosNovos(
 // ---------------------------------------------------------------------------
 // Aviso anti-morte: comentário `novo` (reivindicado ou não) parado há mais de
 // 1h. Webhook perdido ou escrita que falhou não pode sumir em silêncio — ver
-// `agent_inbox_items_kind_check` (migration 0280, kind `instagram_comment_stuck`).
+// `agent_inbox_items_kind_check` (migration 0281, kind `instagram_comment_stuck`).
 //
 // I-7: UM item AGREGADO por organização por rodada, não um por comentário —
 // a versão anterior abria um item por LINHA parada, a cada minuto: um tenant

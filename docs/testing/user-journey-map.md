@@ -2487,7 +2487,25 @@ recente, uma de 8 dias e uma de WhatsApp.
 `tests/unit/mensagens-envio-instagram.test.ts`, não pela tela), envio de foto
 e a aceitação real da tag pela Meta (prova manual depois do deploy).
 
-### J25.3 — Comentários do Instagram (task 9 de 9) `[P0]`
+### J25.3 — Instagram no contato único (etapa 3) `[P1]`
+
+Seed: `scripts/seed-e2e-instagram.ts`, passo 7 (segundo perfil conectado,
+contato com WhatsApp e Instagram, par de mesmo @ em perfis diferentes, par de
+mesmo nome Instagram × WhatsApp). O seed separa o par de mesmo @ de novo a cada
+rodada, então a spec passa duas vezes no mesmo banco (medido: 3 rodadas seguidas).
+
+| Caso | Prioridade | Status |
+|---|---|---|
+| Ficha do contato mostra "Canais" com uma linha WhatsApp e uma Instagram (selo, @, "via"); a do Instagram abre ESSA conversa no Inbox (id na URL, compositor 0/1000) | `[P1]` | **PASS pela tela.** `tests/e2e/instagram-contato-unico.spec.ts`. Evidência: `.superpowers/evidence/instagram-contato-unico/01-ficha-com-dois-canais.png`, `.superpowers/evidence/instagram-contato-unico/02-inbox-na-conversa-do-instagram.png` |
+| Mesmo @ (grafias diferentes) nos dois perfis: 2 contatos na lista; `POST /api/v1/cron/instagram-token-refresh` confere o @ VIVO de cada IGSID na Graph (receptor local na 47811) e junta; a lista mostra 1 e a ficha, as duas conversas (via cada perfil). Controle: com o receptor sem perfil, a rodada junta 0 | `[P1]` | **PASS.** Evidência: `.superpowers/evidence/instagram-contato-unico/03-antes-dois-contatos.png`, `.superpowers/evidence/instagram-contato-unico/04-depois-um-contato.png`, `.superpowers/evidence/instagram-contato-unico/05-ficha-com-as-duas-conversas.png` |
+| "Duplicados" sugere o par Instagram × WhatsApp de mesmo nome com o rótulo "mesmo nome no Instagram e no WhatsApp", e "Este fica" no cadastro com telefone | `[P1]` | **PASS.** Evidência: `.superpowers/evidence/instagram-contato-unico/06-duplicados-instagram-whatsapp.png` |
+
+**NÃO MEDIDO pela tela:** a junção na ingestão (depois da busca de perfil na
+Graph; coberta por `lib/channels/instagram/ingest.test.ts`) e o follow-up
+dentro das 24h do Instagram / preferência pelo WhatsApp (testes de unidade de
+`lib/followup/`).
+
+### J25.4 — Comentários do Instagram (task 9 de 9) `[P0]`
 
 Task final da feature: comentário casa uma regra de palavra (por mídia) →
 Direct privado e resposta pública saem pela Graph, sem toque humano; sem

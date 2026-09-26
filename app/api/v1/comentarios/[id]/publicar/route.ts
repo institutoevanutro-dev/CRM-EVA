@@ -6,7 +6,7 @@
  * pela regra/worker antes de o comentário cair aqui (Tasks 5-7, `lib/comentarios/acao.ts`).
  *
  * Exige papel `agent` — mesmo piso da policy de escrita `instagram_comments_write`
- * (migration 0279). Client de sessão preserva RLS; organização vem de
+ * (migration 0280). Client de sessão preserva RLS; organização vem de
  * `requireRole`, nunca do body. `.eq("organization_id", ...)` explícito em
  * toda query mesmo assim — doutrina do repo, não redundância (CLAUDE.md).
  *

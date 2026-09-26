@@ -38,6 +38,9 @@ export const dynamic = "force-dynamic";
  */
 const TETO_DE_VARREDURA = 2000;
 
+/** Tamanho da página ao ler identidades do Instagram (o `max-rows` padrão do PostgREST é 1000). */
+const PAGINA_DE_IDENTIDADES = 1000;
+
 export async function GET(): Promise<Response> {
   const requestId = randomUUID();
 
@@ -66,9 +69,38 @@ export async function GET(): Promise<Response> {
     return fail("internal_error", error.message, 500, { requestId });
   }
 
-  const linhas = (data ?? []) as unknown as ContatoParaDeduplicar[];
-  const varreuTudo = linhas.length <= TETO_DE_VARREDURA;
-  const grupos = encontrarContatosDuplicados(linhas.slice(0, TETO_DE_VARREDURA));
+  const brutas = (data ?? []).slice(0, TETO_DE_VARREDURA) as unknown as Omit<ContatoParaDeduplicar, "do_instagram">[];
+  const varreuTudo = (data ?? []).length <= TETO_DE_VARREDURA;
+
+  // Quem tem identidade de Instagram: só org + canal, interseção em memória.
+  // Um `.in("contact_id", [...até 2000 UUIDs])` estourava a URL do GET, o
+  // erro era ignorado e os pares Instagram × WhatsApp sumiam em silêncio.
+  // Paginado porque o PostgREST corta cada resposta no `max-rows`.
+  const idsDaVarredura = new Set(brutas.map((c) => c.id));
+  const doInstagram = new Set<string>();
+  for (let desde = 0; idsDaVarredura.size > 0; desde += PAGINA_DE_IDENTIDADES) {
+    const { data: identidades, error: erroIdentidades } = await supabase
+      .from("contact_channel_identities")
+      .select("contact_id")
+      .eq("organization_id", org.orgId)
+      .eq("channel", "instagram")
+      .order("contact_id", { ascending: true })
+      .range(desde, desde + PAGINA_DE_IDENTIDADES - 1);
+    if (erroIdentidades) {
+      return fail("internal_error", erroIdentidades.message, 500, { requestId });
+    }
+    const pagina = (identidades ?? []) as { contact_id: string }[];
+    for (const row of pagina) {
+      if (idsDaVarredura.has(row.contact_id)) doInstagram.add(row.contact_id);
+    }
+    if (pagina.length < PAGINA_DE_IDENTIDADES) break;
+  }
+
+  const linhas: ContatoParaDeduplicar[] = brutas.map((c) => ({
+    ...c,
+    do_instagram: doInstagram.has(c.id),
+  }));
+  const grupos = encontrarContatosDuplicados(linhas);
 
   return ok(
     grupos.map((grupo) => ({

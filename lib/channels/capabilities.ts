@@ -6,6 +6,7 @@
  * nasce de uma diferença real e medida entre WAHA e Meta Cloud; capability que
  * ninguém consome é código morto, e o teste de matriz reprova.
  */
+import { WINDOW_MS } from "@/lib/agent-engine/guardrails/messaging-window";
 import type { ChannelCapabilities, ChannelProvider, ProviderDeMensagem } from "./types";
 
 export type { ChannelProvider, ChannelCapabilities, ProviderDeMensagem };
@@ -32,6 +33,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     canSend: true,
     iaResponde: true,
     janelaHumanaMs: null,
+    janelaAutomaticaMs: null,
     limiteDeTexto: null,
     midiaDeEnvio: "completa",
   },
@@ -50,6 +52,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     canSend: true,
     iaResponde: true,
     janelaHumanaMs: null,
+    janelaAutomaticaMs: null,
     limiteDeTexto: null,
     midiaDeEnvio: "completa",
   },
@@ -88,6 +91,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     canSend: true,
     iaResponde: true,
     janelaHumanaMs: null,
+    janelaAutomaticaMs: null,
     limiteDeTexto: null,
     midiaDeEnvio: "completa",
   },
@@ -116,6 +120,9 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     canSend: true,
     iaResponde: false,
     janelaHumanaMs: 7 * 24 * 60 * 60 * 1000,
+    // Etapa 3: o FOLLOW-UP sai sozinho, mas só dentro das 24h desde a última
+    // mensagem do cliente (a janela padrão da Meta, sem etiqueta humana).
+    janelaAutomaticaMs: WINDOW_MS,
     limiteDeTexto: 1000,
     midiaDeEnvio: "so_foto",
   },
@@ -258,3 +265,21 @@ export function capabilitiesOf(provider: ChannelProvider): ChannelCapabilities {
   if (!caps) throw new Error(`unknown_channel_provider: ${provider}`);
   return caps;
 }
+
+/**
+ * O silêncio do bot nesta conversa é ROTEAMENTO, e não uma pessoa que assumiu?
+ * `true` em canal onde a IA nunca responde (`iaResponde: false`): lá a conversa
+ * nasce com `bot_silenced_until = 'infinity'` para cair na Fila da equipe
+ * (Instagram, etapa 2). Os bloqueios do FOLLOW-UP perguntam isto antes de ler o
+ * silêncio como atendimento humano; o resto (atribuição, `force_human`,
+ * opt-out) segue valendo. Desconhecido ou `null` responde `false`: na dúvida, o
+ * silêncio vale como sempre valeu.
+ */
+export function silencioDoBotEhRoteamento(provider: string | null | undefined): boolean {
+  const caps = CHANNEL_CAPABILITIES[(provider ?? "") as ProviderDeMensagem];
+  return caps ? !caps.iaResponde : false;
+}
+
+/** Os providers onde `silencioDoBotEhRoteamento` vale — para filtrar em SQL. */
+export const PROVIDERS_COM_SILENCIO_DE_ROTEAMENTO: readonly string[] =
+  PROVIDERS_DE_MENSAGEM.filter(silencioDoBotEhRoteamento);

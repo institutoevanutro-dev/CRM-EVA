@@ -1,4 +1,5 @@
 import { beginServiceAtOrigin } from "@/lib/atendimento/origem";
+import { sessaoDoFollowup } from "@/lib/followup/conversa-do-followup";
 /**
  * O retorno agendado do lado do CRM — adaptador de banco + as operações que a
  * capacidade da IA e a tela do humano compartilham.
@@ -92,7 +93,12 @@ export function criaRetornoDbSupabase(admin: SupabaseClient): RetornoDb {
     },
 
     async insere(orgId, input) {
-      const boundary = await beginServiceAtOrigin(admin, orgId, input.contactId);
+      const boundary = await beginServiceAtOrigin(
+        admin,
+        orgId,
+        input.contactId,
+        await sessaoDoFollowup(admin, orgId, input.contactId),
+      );
       const { data, error } = await admin
         .from("cron_jobs")
         .insert({

@@ -47,7 +47,7 @@ O webhook do Instagram já existe (`app/api/v1/webhooks/instagram/route.ts`, ass
 - Eco do próprio perfil (o `from.id` é a conta conectada) é descartado antes de qualquer coisa: responder o próprio comentário seria um laço.
 - Reentrega da Meta é esperada: o `id` do comentário é a chave de idempotência (índice único por organização), e a segunda entrega não repete ação nenhuma.
 
-### 5.2 Banco (migration 0279 + apêndice idempotente no `baseline.sql` + linha no MANIFEST)
+### 5.2 Banco (migration 0280 + apêndice idempotente no `baseline.sql` + linha no MANIFEST)
 
 Uma tabela e uma de regras. Ambas `organization_id not null` com RLS `tenant_isolation_*`, como toda tabela do repo.
 

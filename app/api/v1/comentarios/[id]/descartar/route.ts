@@ -1,13 +1,13 @@
 /**
  * POST /api/v1/comentarios/:id/descartar — marca um comentário `esperando_voce`
  * como `ignorado` (IMPORTANTE 5 da revisão final: `ignorado` está no CHECK da
- * migration 0279 e no vocabulário TypeScript, e nada no repositório o escrevia
+ * migration 0280 e no vocabulário TypeScript, e nada no repositório o escrevia
  * — sem descartar, a fila só cresce, e "a aba fecha o dia vazia" é o critério
  * de sucesso da spec, §9).
  *
  * Mesmo piso de papel e mesma conferência de organização que
  * `POST /:id/publicar` — `agent+` (`instagram_comments_write`, migration
- * 0279); client de sessão preserva RLS, `.eq("organization_id", ...)`
+ * 0280); client de sessão preserva RLS, `.eq("organization_id", ...)`
  * explícito mesmo assim.
  */
 import { randomUUID } from "node:crypto";

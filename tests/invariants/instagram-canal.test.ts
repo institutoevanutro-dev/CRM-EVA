@@ -116,18 +116,90 @@ describe("privilégio das RPCs novas", () => {
 });
 
 describe("RLS de contact_channel_identities", () => {
-  it("tem RLS ligada com a policy tenant_isolation_contact_channel_identities_all", async () => {
+  it("tem RLS ligada e UMA policy PERMISSIVA, só de SELECT (migration 0279): a equipe lê, não grava", async () => {
     const { rows: rls } = await pool.query<{ rls: boolean }>(
       `select relrowsecurity as rls from pg_class where relname = 'contact_channel_identities'`,
     );
     expect(rls[0]?.rls).toBe(true);
 
-    const { rows: pol } = await pool.query<{ n: string }>(
-      `select count(*)::int as n from pg_policies
-        where tablename = 'contact_channel_identities'
-          and policyname = 'tenant_isolation_contact_channel_identities_all'`,
+    const { rows: pol } = await pool.query<{ policyname: string; cmd: string }>(
+      // Só as permissivas: as `support_write_*` são RESTRITIVAS (só cortam, nunca
+      // concedem) e toda tabela de tenant as ganha pelo laço do modo suporte.
+      `select policyname, cmd from pg_policies
+        where tablename = 'contact_channel_identities' and permissive = 'PERMISSIVE' order by policyname`,
     );
-    expect(Number(pol[0]?.n)).toBe(1);
+    expect(pol).toEqual([{ policyname: "tenant_isolation_contact_channel_identities_select", cmd: "SELECT" }]);
+  });
+
+  it("agent autenticado lê a identidade da própria org mas não insere, não troca o handle e não apaga; service role sim", async () => {
+    const agente = "1657a000-1111-4000-8000-000000000279";
+    await pool.query(
+      `insert into auth.users (id, email) values ($1, 'instagram-canal-279@invariant.test') on conflict (id) do nothing`,
+      [agente],
+    );
+    await pool.query(
+      `insert into user_organizations (user_id, organization_id, role, accepted_at)
+         values ($1, $2, 'agent', now()) on conflict do nothing`,
+      [agente, ORG_A],
+    );
+    const { rows: contato } = await pool.query<{ id: string }>(
+      `insert into contacts (organization_id, display_name) values ($1, 'Contato 0279') returning id`,
+      [ORG_A],
+    );
+    await pool.query(
+      `insert into contact_channel_identities (organization_id, contact_id, channel, external_id, handle)
+         values ($1, $2, 'instagram', 'IGSID-0279', 'original_0279')`,
+      [ORG_A, contato[0]!.id],
+    );
+
+    const comoAgente = async <T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> => {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        await client.query("set local role authenticated");
+        await client.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: agente })]);
+        return await fn(client);
+      } finally {
+        await client.query("rollback");
+        client.release();
+      }
+    };
+
+    // Controle positivo: a leitura funciona (a RLS não está só negando tudo).
+    const lidas = await comoAgente((c) =>
+      c.query("select handle from contact_channel_identities where external_id = 'IGSID-0279'"),
+    );
+    expect(lidas.rows).toEqual([{ handle: "original_0279" }]);
+
+    await expect(
+      comoAgente((c) =>
+        c.query(
+          `insert into contact_channel_identities (organization_id, contact_id, channel, external_id, handle)
+             values ($1, $2, 'instagram', 'IGSID-0279-FORJADO', 'original_0279')`,
+          [ORG_A, contato[0]!.id],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/);
+
+    const trocou = await comoAgente((c) =>
+      c.query("update contact_channel_identities set handle = 'forjado' where external_id = 'IGSID-0279'"),
+    );
+    expect(trocou.rowCount).toBe(0);
+    const apagou = await comoAgente((c) => c.query("delete from contact_channel_identities where external_id = 'IGSID-0279'"));
+    expect(apagou.rowCount).toBe(0);
+
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      await client.query("set local role service_role");
+      const r = await client.query("update contact_channel_identities set handle = 'vivo_0279' where external_id = 'IGSID-0279'");
+      expect(r.rowCount).toBe(1);
+      await client.query("rollback");
+    } finally {
+      client.release();
+    }
+    const { rows: final } = await pool.query("select handle from contact_channel_identities where external_id = 'IGSID-0279'");
+    expect(final).toEqual([{ handle: "original_0279" }]);
   });
 
   it("membro autenticado da org A NÃO lê identidade de canal da org B (cross-org real)", async () => {
@@ -252,5 +324,75 @@ describe("conversa do Instagram cai na Fila, não no Automático (migration 0278
       [ig[0]!.id],
     );
     expect(rows[0]?.inf).toBe(true);
+  });
+});
+
+describe("mesmo @ vira um contato só (fn_mesclar_contatos, dois IGSIDs de um perfil só)", () => {
+  it("o secundário fica is_merged_into = principal e as DUAS conversas (sessões diferentes) apontam pro principal", async () => {
+    const { rows: principal } = await pool.query<{ id: string }>(
+      `insert into contacts (organization_id, display_name, created_at) values ($1, 'Maria Perfil 1', now() - interval '2 days') returning id`,
+      [ORG_A],
+    );
+    const { rows: secundario } = await pool.query<{ id: string }>(
+      `insert into contacts (organization_id, display_name, created_at) values ($1, 'Maria Perfil 2', now()) returning id`,
+      [ORG_A],
+    );
+    // Mesmo @, maiúsculas diferentes — a comparação de `juntarPorArroba` é
+    // case-insensitive (`.ilike`); aqui só interessa o RESULTADO do merge.
+    await pool.query(
+      `insert into contact_channel_identities (organization_id, contact_id, channel, external_id, handle)
+         values ($1, $2, 'instagram', 'IGSID-MARIA-1', 'Maria.Silva')`,
+      [ORG_A, principal[0]!.id],
+    );
+    await pool.query(
+      `insert into contact_channel_identities (organization_id, contact_id, channel, external_id, handle)
+         values ($1, $2, 'instagram', 'IGSID-MARIA-2', 'maria.silva')`,
+      [ORG_A, secundario[0]!.id],
+    );
+    const { rows: sessaoA } = await pool.query<{ id: string }>(
+      `insert into channel_sessions (organization_id, provider, status, webhook_secret_encrypted, ig_account_id, ig_username)
+         values ($1, 'meta_instagram', 'WORKING', decode('00','hex'), '17841400000000301', 'perfil_a') returning id`,
+      [ORG_A],
+    );
+    const { rows: sessaoB } = await pool.query<{ id: string }>(
+      `insert into channel_sessions (organization_id, provider, status, webhook_secret_encrypted, ig_account_id, ig_username)
+         values ($1, 'meta_instagram', 'WORKING', decode('00','hex'), '17841400000000302', 'perfil_b') returning id`,
+      [ORG_A],
+    );
+    const { rows: conversaPrincipal } = await pool.query<{ id: string }>(
+      `insert into conversations (organization_id, contact_id, channel_session_id, channel, status)
+         values ($1, $2, $3, 'instagram', 'open') returning id`,
+      [ORG_A, principal[0]!.id, sessaoA[0]!.id],
+    );
+    const { rows: conversaSecundaria } = await pool.query<{ id: string }>(
+      `insert into conversations (organization_id, contact_id, channel_session_id, channel, status)
+         values ($1, $2, $3, 'instagram', 'open') returning id`,
+      [ORG_A, secundario[0]!.id, sessaoB[0]!.id],
+    );
+
+    // Chamada exatamente como `juntarPorArroba` chama: sem `set local role`
+    // (equivalente ao service role — `auth.uid()` nulo pula a checagem de
+    // papel, que é quem resolve `organization_id` de fonte confiável).
+    const { rows: resultado } = await pool.query<{ contato_id: string }>(
+      `select (fn_mesclar_contatos($1, $2, $3)->>'contato_id') as contato_id`,
+      [ORG_A, principal[0]!.id, [secundario[0]!.id]],
+    );
+    expect(resultado[0]?.contato_id).toBe(principal[0]!.id);
+
+    const { rows: lapide } = await pool.query<{ is_merged_into: string }>(
+      "select is_merged_into from contacts where id = $1",
+      [secundario[0]!.id],
+    );
+    expect(lapide[0]?.is_merged_into).toBe(principal[0]!.id);
+
+    // Prova o motivo do teste: as duas conversas (sessões DIFERENTES) agora
+    // apontam para o MESMO contato sem colidir com
+    // `uniq_conversations_1to1_per_contact_session` (que é por contato+sessão,
+    // não só por contato).
+    const { rows: conversas } = await pool.query<{ id: string; contact_id: string }>(
+      "select id, contact_id from conversations where id = any($1)",
+      [[conversaPrincipal[0]!.id, conversaSecundaria[0]!.id]],
+    );
+    expect(conversas.every((c) => c.contact_id === principal[0]!.id)).toBe(true);
   });
 });

@@ -113,7 +113,7 @@ test.beforeAll(async () => {
   });
 
   // A sessão do Instagram do seed compartilhado — a regra precisa do id dela
-  // (FK not null, migration 0279).
+  // (FK not null, migration 0280).
   const { data: sessao, error } = await db
     .from("channel_sessions")
     .select("id")

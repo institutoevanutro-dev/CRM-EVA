@@ -99,7 +99,7 @@ function makeAdminStub(opts: ConvOpts, queried: string[]) {
         // agora (traz `provider`, para o gate `canal_sem_ia`), então o
         // casamento tem que ser pela coluna pedida, não só pelo nome da tabela.
         const ehConsultaElegibilidade =
-          table === "conversations" && selectCols.includes("channel_sessions:channel_session_id(metadata)");
+          table === "conversations" && selectCols.includes("channel_sessions:channel_session_id(metadata");
         if (ehConsultaElegibilidade && opts.convError) {
           return Promise.resolve({ data: null, error: { message: opts.convError } });
         }

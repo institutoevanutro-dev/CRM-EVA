@@ -2,7 +2,7 @@
  * POST /api/v1/comentarios/regras — cria uma regra em `instagram_comment_rules`
  * (palavra-gatilho → resposta pública + Direct, por mídia — Task 8 da feature
  * "comentários no CRM"). Exige papel `manager`, mesmo piso da policy de
- * escrita `instagram_comment_rules_write` (migration 0279).
+ * escrita `instagram_comment_rules_write` (migration 0280).
  *
  * A regra é POR MÍDIA e a tabela pede `channel_session_id not null`. Duas
  * formas de resolver o canal:

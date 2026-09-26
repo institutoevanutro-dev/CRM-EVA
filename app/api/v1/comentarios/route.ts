@@ -1,7 +1,7 @@
 /**
  * GET /api/v1/comentarios — a fila de `instagram_comments` da org ativa
  * (Task 8 da feature "comentários no CRM"). Leitura é aberta a qualquer
- * membro do tenant (RLS `instagram_comments_select`, migration 0279) — não
+ * membro do tenant (RLS `instagram_comments_select`, migration 0280) — não
  * pede papel além de estar autenticado na organização.
  *
  * Client de sessão preserva RLS; organização vem de `requireRole`, nunca do

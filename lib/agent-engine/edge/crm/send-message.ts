@@ -63,6 +63,8 @@ export interface SendMessageInput {
    * colidirem no ledger e o segundo virar `already_sent` sem ter saído.
    */
   template?: { name: string; language: string; values: Record<string, string> };
+  /** `"followup"` só no turno de follow-up; o atendimento não passa (ver `HandlerCtx`). */
+  origemDoEnvio?: 'followup';
 }
 
 /** Fallback do ator ai_agent quando não há agente publicado (cfg.agentActorId). */
@@ -141,6 +143,9 @@ export async function sendTurnMessage(
           meetingDelivery,
           approvedReply,
           agentOperation: input.agentOperation,
+          // O turno de follow-up com IA (`ai_message`) manda pelas ferramentas do
+          // agente, que não conhecem a origem: o JOB, lido do banco, diz.
+          origemDoEnvio: input.origemDoEnvio ?? (sourceJobs[0]?.kind === 'followup_turn' ? 'followup' : undefined),
           internalMessageId: messageId,
         },
         {

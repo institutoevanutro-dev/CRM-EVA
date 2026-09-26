@@ -26,6 +26,10 @@ vi.mock("@/lib/webhooks/secrets", () => ({
   encryptWebhookSecret: vi.fn(async () => "\\xNOVO"),
   decryptWebhookSecret: vi.fn(async () => "token-velho-em-claro"),
 }));
+const juntarDuplicadosPorArrobaMock = vi.fn(async () => 0);
+vi.mock("./juntar-por-arroba", () => ({
+  juntarDuplicadosPorArroba: (...a: unknown[]) => juntarDuplicadosPorArrobaMock(...(a as [])),
+}));
 const perfilDoRemetenteMock = vi.fn(async () => ({ nome: "Maria", handle: "maria", foto: null as string | null }));
 vi.mock("./graph", async (importOriginal) => {
   const real = await importOriginal<typeof import("./graph")>();
@@ -247,6 +251,8 @@ beforeEach(() => {
   vi.mocked(encryptWebhookSecret).mockClear();
   vi.mocked(decryptWebhookSecret).mockClear();
   perfilDoRemetenteMock.mockClear();
+  juntarDuplicadosPorArrobaMock.mockClear();
+  juntarDuplicadosPorArrobaMock.mockResolvedValue(0);
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -329,7 +335,22 @@ describe("renovarTokensDoInstagram", () => {
 
     expect(resumo.renovadas).toBe(0);
     expect(resumo.falhas).toBe(0);
+    expect(resumo.contatosJuntados).toBe(0);
     expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("junta contatos de mesmo @ por organização com sessão ativa — entra na auditoria mesmo sem renovar nem preencher nome", async () => {
+    linhas = [sessao()];
+    fetchMock.mockResolvedValue(respostaFalha);
+    juntarDuplicadosPorArrobaMock.mockResolvedValueOnce(2);
+
+    const resumo = await renovarTokensDoInstagram(admin(), AGORA);
+
+    expect(juntarDuplicadosPorArrobaMock).toHaveBeenCalledWith(expect.anything(), "org-1", 50);
+    expect(resumo).toMatchObject({ renovadas: 0, nomesPreenchidos: 0, contatosJuntados: 2 });
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ contatos_juntados: 2 }) }),
+    );
   });
 
   it("token renovado com sucesso: preenche o nome de quem ficou sem nome na sessão", async () => {

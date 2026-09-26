@@ -200,3 +200,54 @@ describe("preencherPerfilDoContato sob concorrência", () => {
     });
   });
 });
+
+/**
+ * Handle da identidade acompanha o VIVO: um @ trocado (ou reciclado por outra
+ * pessoa) não pode ficar gravado para sempre, porque a junção automática
+ * compara handles. Nome e foto seguem "só preenche vazio".
+ */
+describe("preencherPerfilDoContato: handle da identidade", () => {
+  function adminComIdentidade(identidade: Record<string, unknown>) {
+    const updates: [string, Record<string, unknown>][] = [];
+    const admin = {
+      from: (tabela: string) => ({
+        select: () => {
+          const chain: { eq: () => typeof chain; maybeSingle: () => Promise<{ data: unknown; error: null }> } = {
+            eq: () => chain,
+            maybeSingle: async () =>
+              tabela === "contacts"
+                ? { data: { source_metadata: {} }, error: null }
+                : { data: identidade, error: null },
+          };
+          return chain;
+        },
+        update: (linha: Record<string, unknown>) => {
+          updates.push([tabela, linha]);
+          const q: Record<string, unknown> = {
+            eq: () => q,
+            is: () => q,
+            select: () => q,
+            then: (res: (v: unknown) => unknown) => Promise.resolve({ data: [{ id: "C1" }], error: null }).then(res),
+          };
+          return q;
+        },
+      }),
+    };
+    return { admin, updates };
+  }
+
+  it("handle gravado @foo e o vivo é @bar: a identidade passa a @bar, sem tocar no nome já gravado", async () => {
+    perfilDoRemetenteMock.mockResolvedValueOnce({ nome: "Outra Pessoa", handle: "bar", foto: null });
+    const { admin, updates } = adminComIdentidade({ handle: "foo", display_name: "Maria", avatar_url: "x" });
+    await preencherPerfilDoContato(admin as never, input);
+    const identidade = updates.filter(([t]) => t === "contact_channel_identities").map(([, l]) => l);
+    expect(identidade).toEqual([{ handle: "bar" }]);
+  });
+
+  it("Graph sem handle (falha ou conta sem @): não apaga o handle gravado", async () => {
+    perfilDoRemetenteMock.mockResolvedValueOnce({ nome: null, handle: null, foto: null });
+    const { admin, updates } = adminComIdentidade({ handle: "foo", display_name: "Maria", avatar_url: "x" });
+    await preencherPerfilDoContato(admin as never, input);
+    expect(updates.some(([t]) => t === "contact_channel_identities")).toBe(false);
+  });
+});

@@ -2,7 +2,7 @@
  * Grava o comentário do Instagram como recebido — só isso. Responder (regra ou
  * IA) é decisão de worker (Task 7); esta rota nunca chama a Graph API.
  * Idempotência pela reentrega da Meta: `(organization_id, external_id)` é
- * único (migration 0279), então 23505 no insert é desfecho normal, não erro.
+ * único (migration 0280), então 23505 no insert é desfecho normal, não erro.
  *
  * Erro do insert que NÃO é 23505 vira `falhou_infra`, não `ignorado`: não há
  * caminho determinístico que rejeite um insert válido aqui (o payload já foi
