@@ -75,7 +75,7 @@ describe("o material do acervo salvo em cp1252", () => {
       "Política de troca: devolução em até 7 dias corridos.\nAção, coração, cabeça e avô.\n";
     servindo(cp1252(original));
 
-    const { texto } = await extrairTextoDoArquivo("org/material.txt", "txt");
+    const { texto } = await extrairTextoDoArquivo("org", "org/material.txt", "txt");
 
     // Igualdade, não `toMatch`: um sufixo de lixo colado passaria numa busca.
     expect(texto).toBe(original.trim());
@@ -87,7 +87,7 @@ describe("o material do acervo salvo em cp1252", () => {
     const original = "---\ntitulo: Política de devolução\n---\n\nAção de troca: até 7 dias.\n";
     servindo(cp1252(original));
 
-    const { texto, extensao } = await extrairTextoDoArquivo("org/material.md", "md");
+    const { texto, extensao } = await extrairTextoDoArquivo("org", "org/material.md", "md");
 
     expect(extensao).toBe("md");
     expect(texto).toBe("Ação de troca: até 7 dias.");
@@ -100,7 +100,7 @@ describe("o que já entrava certo continua entrando igual", () => {
     const original = "Política de troca: devolução em até 7 dias.\n";
     servindo(Buffer.from(original, "utf8"));
 
-    const { texto } = await extrairTextoDoArquivo("org/material.txt", "txt");
+    const { texto } = await extrairTextoDoArquivo("org", "org/material.txt", "txt");
 
     expect(texto).toBe(original.trim());
   });
@@ -116,7 +116,7 @@ describe("o que já entrava certo continua entrando igual", () => {
       Buffer.concat([limpo.subarray(0, meio), Buffer.from([0x92]), limpo.subarray(meio)]),
     );
 
-    const { texto } = await extrairTextoDoArquivo("org/material.txt", "txt");
+    const { texto } = await extrairTextoDoArquivo("org", "org/material.txt", "txt");
 
     expect(
       (texto.match(/Ação/g) ?? []).length,
@@ -128,7 +128,7 @@ describe("o que já entrava certo continua entrando igual", () => {
   it("o BOM de UTF-8 não vira caractere no começo do texto", async () => {
     servindo(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from("Ação\n", "utf8")]));
 
-    const { texto } = await extrairTextoDoArquivo("org/material.md", "md");
+    const { texto } = await extrairTextoDoArquivo("org", "org/material.md", "md");
 
     expect(texto).toBe("Ação");
   });
@@ -141,10 +141,10 @@ describe("o que não é texto é RECUSADO, nunca indexado como lixo", () => {
     // entra no acervo como trechos que o agente cita.
     servindo(Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00, 0xe7, 0x9c, 0xff]));
 
-    await expect(extrairTextoDoArquivo("org/planilha.md", "md")).rejects.toBeInstanceOf(
+    await expect(extrairTextoDoArquivo("org", "org/planilha.md", "md")).rejects.toBeInstanceOf(
       ErroDeExtracao,
     );
-    await expect(extrairTextoDoArquivo("org/planilha.md", "md")).rejects.toThrow(
+    await expect(extrairTextoDoArquivo("org", "org/planilha.md", "md")).rejects.toThrow(
       /não consegui ler este arquivo como texto/,
     );
   });
@@ -155,7 +155,7 @@ describe("o que não é texto é RECUSADO, nunca indexado como lixo", () => {
     // texto desta codificação.
     servindo(Buffer.from("\uFEFFPolítica de troca: ação em até 7 dias.\n", "utf16le"));
 
-    await expect(extrairTextoDoArquivo("org/material.txt", "txt")).rejects.toBeInstanceOf(
+    await expect(extrairTextoDoArquivo("org", "org/material.txt", "txt")).rejects.toBeInstanceOf(
       ErroDeExtracao,
     );
   });

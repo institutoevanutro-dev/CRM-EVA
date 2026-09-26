@@ -152,7 +152,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   // Recusar o ilegível ENQUANTO a pessoa olha para a tela. Descobrir isso só
   // quando o worker rodar transformaria um erro corrigível num silêncio.
   try {
-    await extrairTextoDoArquivo(blobPath, ext);
+    await extrairTextoDoArquivo(activeOrg.orgId, blobPath, ext);
   } catch (err) {
     await admin.storage.from(BUCKET_DE_CONHECIMENTO).remove([blobPath]);
     if (err instanceof ErroDeExtracao) {
