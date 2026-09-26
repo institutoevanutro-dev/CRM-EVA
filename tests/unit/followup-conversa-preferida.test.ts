@@ -20,4 +20,21 @@ describe("sessaoPreferidaParaFollowup", () => {
   it("sem conversa, undefined", () => {
     expect(sessaoPreferidaParaFollowup([])).toBeUndefined();
   });
+  it("last_message_at nulo fica atrás de uma conversa do MESMO canal com last_message_at real, mesmo criada antes", () => {
+    const semUltimaMensagem: ConversaCandidata = {
+      channel: "whatsapp",
+      channel_session_id: "wa-sem-msg",
+      is_group: false,
+      last_message_at: null,
+      created_at: "2026-09-26T00:00:00Z",
+    };
+    const comUltimaMensagem: ConversaCandidata = {
+      channel: "whatsapp",
+      channel_session_id: "wa-com-msg",
+      is_group: false,
+      last_message_at: "2026-09-10T00:00:00Z",
+      created_at: "2026-09-01T00:00:00Z",
+    };
+    expect(sessaoPreferidaParaFollowup([semUltimaMensagem, comUltimaMensagem])).toBe("wa-com-msg");
+  });
 });

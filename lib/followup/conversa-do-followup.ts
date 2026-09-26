@@ -14,9 +14,15 @@ export interface ConversaCandidata {
   created_at: string;
 }
 
+/** `order by last_message_at desc nulls last, created_at desc` (mesma regra do baseline.sql). */
 function maisRecentePrimeiro(a: ConversaCandidata, b: ConversaCandidata): number {
-  const chave = (c: ConversaCandidata) => Date.parse(c.last_message_at ?? c.created_at);
-  return chave(b) - chave(a);
+  if (a.last_message_at === null && b.last_message_at !== null) return 1;
+  if (a.last_message_at !== null && b.last_message_at === null) return -1;
+  if (a.last_message_at !== null && b.last_message_at !== null) {
+    const diff = Date.parse(b.last_message_at) - Date.parse(a.last_message_at);
+    if (diff !== 0) return diff;
+  }
+  return Date.parse(b.created_at) - Date.parse(a.created_at);
 }
 
 /** WhatsApp 1:1 mais recente; senão Instagram 1:1 mais recente; senão undefined. Puro. */
