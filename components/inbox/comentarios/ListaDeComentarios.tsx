@@ -7,13 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PaperPlaneTilt, PencilSimple, Warning } from "@/lib/ui/icons";
 
-/** Vocabulário aberto de `instagram_comments.situacao` — CHECK no banco (migration 0279). */
+/**
+ * Vocabulário FECHADO de `instagram_comments.situacao` — CHECK no banco
+ * (migration 0279 + `respondido_manualmente` da 0281). Par vigiado por
+ * `tests/invariants/vocabulario-banco-x-typescript.test.ts` — um valor novo
+ * aqui sem o CHECK acompanhar (ou vice-versa) reprova lá, não em silêncio.
+ */
 export type SituacaoDoComentario =
   | "novo"
   | "respondido_pela_regra"
   | "respondido_pela_ia"
   | "esperando_voce"
-  | "ignorado";
+  | "ignorado"
+  | "respondido_manualmente";
 
 /** O que a tela precisa de uma linha de `instagram_comments` — nada de nome de provider aqui. */
 export interface ComentarioDaFila {

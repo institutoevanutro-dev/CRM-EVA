@@ -9121,6 +9121,9 @@ export const DICIONARIO: Traducoes = {
   "Resposta pública": { es: "Respuesta pública" },
   "Criar regra": { es: "Crear regla" },
   "Nova regra": { es: "Nueva regla" },
+  "A resposta JÁ FOI publicada no Instagram, mas não deu para atualizar aqui. Não publique de novo — isso enviaria uma segunda resposta.": {
+    es: "La respuesta YA FUE publicada en Instagram, pero no se pudo actualizar aquí. No publiques de nuevo — eso enviaría una segunda respuesta.",
+  },
 };
 
 /**

@@ -18,11 +18,13 @@ import { fail } from "@/lib/api/wrappers";
 
 const auditSpy = vi.fn(async () => undefined);
 const responderComentarioSpy = vi.fn(async () => ({ replyId: "reply-1" }));
+const loggerErrorSpy = vi.fn();
 
 vi.mock("@/lib/audit", () => ({ audit: auditSpy }));
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+vi.mock("@/lib/logger", () => ({ logger: { error: loggerErrorSpy, warn: vi.fn(), info: vi.fn(), debug: vi.fn() } }));
 vi.mock("@/lib/channels", async (original) => {
   const real = await original<typeof import("@/lib/channels")>();
   return {
@@ -55,6 +57,8 @@ interface EstadoFake {
   sessoes: Array<{ id: string; organization_id: string; provider: string; ig_account_id: string }>;
   atualizacoes: Array<Record<string, unknown>>;
   insercoesDeRegra: Array<Record<string, unknown>>;
+  /** Simula o UPDATE do desfecho falhando MESMO com a linha existindo — o caso do achado 1. */
+  forcarErroDeEscrita?: boolean;
 }
 
 function clienteFalso(estado: EstadoFake): unknown {
@@ -63,6 +67,12 @@ function clienteFalso(estado: EstadoFake): unknown {
       if (tabela === "instagram_comments") {
         const filtros: Array<[string, unknown]> = [];
         let patch: Record<string, unknown> | null = null;
+        // Captura a ORDENAÇÃO de verdade — sem isto o fake sempre devolveria o
+        // primeiro do array, e um teste que só tem um comentário por mídia não
+        // prova nada sobre `.order("comentado_em", { ascending: false })`
+        // (achado 3 da revisão): trocar por `ascending: true`, ou remover o
+        // `.order()` da rota inteiro, passaria igual.
+        let ordem: { coluna: string; desc: boolean } | null = null;
         const cadeia = {
           select: () => cadeia,
           update: (p: Record<string, unknown>) => {
@@ -77,7 +87,10 @@ function clienteFalso(estado: EstadoFake): unknown {
             filtros.push([`not_${col}`, val]);
             return cadeia;
           },
-          order: () => cadeia,
+          order: (col: string, opts?: { ascending?: boolean }) => {
+            ordem = { coluna: col, desc: opts?.ascending === false };
+            return cadeia;
+          },
           limit: () => cadeia,
           maybeSingle: async () => {
             const porId = filtros.find(([c]) => c === "id")?.[1];
@@ -85,6 +98,9 @@ function clienteFalso(estado: EstadoFake): unknown {
             const porMidia = filtros.find(([c]) => c === "media_id")?.[1];
             if (patch) {
               // update — casa por id + organization_id, como a rota faz.
+              if (estado.forcarErroDeEscrita) {
+                return { data: null, error: { message: "erro de escrita simulado" } };
+              }
               const alvo = estado.comentarios.find(
                 (c) => c.id === porId && c.organization_id === porOrg,
               );
@@ -94,10 +110,18 @@ function clienteFalso(estado: EstadoFake): unknown {
               return { data: { id: alvo.id, situacao: alvo.situacao, resposta_publica_id: alvo.channel_session_id }, error: null };
             }
             if (porMidia !== undefined) {
-              // resolução do canal por mídia (rota de regras)
-              const linha = estado.comentarios
-                .filter((c) => c.organization_id === porOrg && c.media_id === porMidia && c.channel_session_id)
-                .at(0);
+              // resolução do canal por mídia (rota de regras) — respeita a
+              // ordenação capturada acima, exatamente como o Postgres faria.
+              let candidatos = estado.comentarios.filter(
+                (c) => c.organization_id === porOrg && c.media_id === porMidia && c.channel_session_id,
+              );
+              if (ordem && ordem.coluna === "comentado_em") {
+                const sinal = ordem.desc ? -1 : 1;
+                candidatos = [...candidatos].sort(
+                  (a, b) => sinal * (new Date(a.comentado_em ?? 0).getTime() - new Date(b.comentado_em ?? 0).getTime()),
+                );
+              }
+              const linha = candidatos.at(0);
               return { data: linha ? { channel_session_id: linha.channel_session_id } : null, error: null };
             }
             // leitura por id + organization_id (rota de publicar)
@@ -257,6 +281,26 @@ describe("POST /api/v1/comentarios/:id/publicar — organização do comentário
     expect(res.status).toBe(409);
     expect(responderComentarioSpy).not.toHaveBeenCalled();
   });
+
+  it("achado 1 (crítico): a publicação SAI no Instagram, mas o UPDATE do desfecho falha — 200 gravado:false, e a falha fica REGISTRADA (não invisível)", async () => {
+    vi.mocked(requireRole).mockResolvedValue(autorizacaoOk("agent"));
+    const estado = estadoPadrao();
+    estado.forcarErroDeEscrita = true;
+
+    const res = await publicar(estado, { texto: "Te chamamos no Direct!" });
+
+    expect(res.status).toBe(200);
+    const corpo = (await res.json()) as { data: { gravado: boolean; resposta_publica_id: string | null } };
+    expect(corpo.data.gravado).toBe(false);
+    expect(corpo.data.resposta_publica_id).toBe("reply-1");
+    // A resposta JÁ SAIU (o mock de `responderComentario` devolveu "reply-1")
+    // e o banco não confirmou — sem log, ninguém sabe que isto aconteceu, e o
+    // comentário volta para a fila como se nada tivesse sido publicado.
+    expect(loggerErrorSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ comentarioId: COMENTARIO_ID, resposta_publica_id: "reply-1" }),
+    );
+  });
 });
 
 describe("POST /api/v1/comentarios/regras — exige papel manager+", () => {
@@ -312,9 +356,31 @@ describe("POST /api/v1/comentarios/regras — exige papel manager+", () => {
     expect(estado.insercoesDeRegra).toHaveLength(0);
   });
 
-  it("mídia com comentário na organização: cria a regra com o channel_session_id resolvido, e audita", async () => {
+  it("achado 3: mídia com DOIS comentários, de sessões diferentes — a regra nasce com o channel_session_id do MAIS RECENTE, e audita", async () => {
     vi.mocked(requireRole).mockResolvedValue(autorizacaoOk("manager"));
     const estado = estadoPadrao();
+    const SESSAO_ANTIGA = "cccccccc-0000-4000-8000-000000000009";
+    estado.sessoes.push({
+      id: SESSAO_ANTIGA,
+      organization_id: ORG,
+      provider: "meta_instagram",
+      ig_account_id: "ig-antiga",
+    });
+    // `estadoPadrao()` já tem o comentário MAIS RECENTE (2026-09-26, sessão
+    // SESSAO_ID). Este aqui é mais ANTIGO, de OUTRA sessão, na MESMA mídia, e
+    // entra PRIMEIRO no array — se a rota não ordenasse por `comentado_em
+    // desc` de verdade (ou se o `.order()` fosse removido/invertido), o
+    // `.at(0)` do fake pegaria este e a regra nasceria com o canal ERRADO.
+    estado.comentarios.unshift({
+      id: "comentario-antigo",
+      organization_id: ORG,
+      situacao: "novo",
+      external_id: "ext-antigo",
+      channel_session_id: SESSAO_ANTIGA,
+      media_id: "midia-1",
+      comentado_em: "2026-09-20T08:00:00.000Z",
+    });
+
     const res = await criarRegra(estado, {
       media_id: "midia-1",
       palavra: "preço",
@@ -325,7 +391,7 @@ describe("POST /api/v1/comentarios/regras — exige papel manager+", () => {
     expect(estado.insercoesDeRegra).toEqual([
       expect.objectContaining({
         organization_id: ORG,
-        channel_session_id: SESSAO_ID,
+        channel_session_id: SESSAO_ID, // o do comentário de 26/09, não o de 20/09
         media_id: "midia-1",
         palavra: "preço",
       }),

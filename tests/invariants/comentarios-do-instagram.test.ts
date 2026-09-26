@@ -139,6 +139,23 @@ describe("0279 · instagram_comments", () => {
     expect(erro).toContain("instagram_comments_situacao_check");
   });
 
+  it("situacao 'respondido_manualmente' (migration 0281 — publicação humana pela tela, Task 8) é aceita", () => {
+    // O teste negativo acima passaria mesmo que este valor NUNCA tivesse sido
+    // acrescentado ao CHECK — ele só prova que o CHECK existe, não que o
+    // vocabulário novo está nele. Este é o positivo: insere de verdade e
+    // relê, provando que o valor está no conjunto aceito, não só ausente do
+    // conjunto recusado.
+    sql(
+      `insert into public.instagram_comments ${COLS_COMMENT} values ${commentValues(ORG_A, "c-manual", "respondido_manualmente")};`,
+    );
+    const linhas = Number(
+      sql(
+        `select count(*) from public.instagram_comments where organization_id = '${ORG_A}' and external_id = 'c-manual' and situacao = 'respondido_manualmente';`,
+      ),
+    );
+    expect(linhas).toBe(1);
+  });
+
   it("reivindicado_em (migration 0280) é o lease do worker — nullable, e a reivindicação só avança quem está 'novo' e sem lease vigente", () => {
     writeCountAs(
       AGENT_A,

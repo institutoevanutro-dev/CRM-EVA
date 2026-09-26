@@ -30,6 +30,7 @@ import {
 } from "@/lib/channels";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -153,8 +154,16 @@ export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
   if (erroEscrita || !atualizado) {
     // A publicação JÁ SAIU no Instagram — não repetir por reentrega. O
     // desfecho fica sem gravar; a fila mostraria o comentário de novo, e um
-    // segundo clique mandaria um segundo comentário público. Loga e devolve
-    // sucesso parcial explícito em vez de fingir erro que convidaria a repetir.
+    // segundo clique mandaria um segundo comentário público. Loga (é o ÚNICO
+    // vestígio de que a publicação saiu — sem isto a falha é invisível dos
+    // dois lados, banco e tela) e devolve sucesso parcial explícito em vez de
+    // fingir erro que convidaria a repetir.
+    logger.error("[comentarios] publicação saiu no Instagram mas o desfecho não foi gravado — não repetir", {
+      comentarioId: id,
+      organizationId: org.orgId,
+      resposta_publica_id: replyId,
+      erro: erroEscrita?.message,
+    });
     return ok(
       { id, situacao: linha.situacao, resposta_publica_id: replyId, gravado: false },
       { requestId },
