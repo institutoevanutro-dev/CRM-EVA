@@ -18,6 +18,21 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function construirRegexPalavra(palavraNormalizada: string): RegExp | null {
+  // Pular palavras vazias
+  if (palavraNormalizada.trim() === "") {
+    return null;
+  }
+
+  // Dividir por espaços em branco e escapar cada parte
+  const partes = palavraNormalizada.split(/\s+/).map(escapeRegex);
+  const padrao = partes.join("\\s+");
+
+  // Palavra inteira: precedida por início de string ou non-word character,
+  // seguida por fim de string ou non-word character
+  return new RegExp(`(^|\\W)${padrao}($|\\W)`, "u");
+}
+
 export function regraQueCasa(
   texto: string | null,
   regras: RegraDeComentario[]
@@ -32,11 +47,12 @@ export function regraQueCasa(
 
   for (const regra of regras) {
     const palavraNormalizada = normalize(regra.palavra);
-    const palavraEscapada = escapeRegex(palavraNormalizada);
+    const regex = construirRegexPalavra(palavraNormalizada);
 
-    // Palavra inteira: precedida por início de string ou non-word character,
-    // seguida por fim de string ou non-word character
-    const regex = new RegExp(`(^|\\W)${palavraEscapada}($|\\W)`, "u");
+    // Pular regras com palavra vazia
+    if (regex === null) {
+      continue;
+    }
 
     if (regex.test(textoNormalizado)) {
       casando.push(regra);

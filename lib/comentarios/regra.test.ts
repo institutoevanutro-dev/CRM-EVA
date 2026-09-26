@@ -37,3 +37,19 @@ it("texto vazio, nulo ou só emoji não casa nada", () => {
   expect(regraQueCasa("   ", [r("cardapio")])).toBeNull();
   expect(regraQueCasa("🔥🔥", [r("cardapio")])).toBeNull();
 });
+
+it("regra com palavra vazia não casa nada", () => {
+  expect(regraQueCasa("Bom dia!", [r("")])).toBeNull();
+  expect(regraQueCasa("oi  tudo", [r("   ")])).toBeNull();
+  expect(regraQueCasa("Quero o cardapio.", [r("")])).toBeNull();
+});
+
+it("palavra composta casa com espaçamento diferente", () => {
+  expect(regraQueCasa("quero plano  premium", [r("plano premium")])?.id).toBe("plano premium");
+  expect(regraQueCasa("quero plano\npremium", [r("plano premium")])?.id).toBe("plano premium");
+  expect(regraQueCasa("quero plano\tpremium", [r("plano premium")])?.id).toBe("plano premium");
+});
+
+it("emoji colado na palavra não atrapalha", () => {
+  expect(regraQueCasa("🔥CARDAPIO🔥", [r("cardapio")])?.id).toBe("cardapio");
+});
