@@ -171,6 +171,19 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "isolamento com `set role authenticated` + JWT real + contagem 1/0.",
   },
   {
+    tabela: "instagram_comments",
+    razao:
+      "tests/invariants/comentarios-do-instagram.test.ts — isolamento cross-org " +
+      "nos dois sentidos (`using` e `with check`) com `countAs`/`writeCountAs` " +
+      "reais, mais o gate de papel (`viewer` barrado, `agent` passa).",
+  },
+  {
+    tabela: "instagram_comment_rules",
+    razao:
+      "tests/invariants/comentarios-do-instagram.test.ts — mesmo arquivo, " +
+      "isolamento cross-org e gate de papel (`agent` barrado, `manager` passa).",
+  },
+  {
     tabela: "user_organizations",
     razao:
       "tests/invariants/gov-1b-team-manager-read.test.ts (\"cross-org: " +

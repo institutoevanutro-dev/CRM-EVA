@@ -20,8 +20,46 @@ const itemSchema = z.object({
 }).passthrough();
 const corpoSchema = z.object({
   object: z.literal("instagram"),
-  entry: z.array(z.object({ id: z.string(), messaging: z.array(z.unknown()).optional() }).passthrough()),
+  entry: z.array(z.object({
+    id: z.string(),
+    time: z.number().optional(),
+    messaging: z.array(z.unknown()).optional(),
+    changes: z.array(z.unknown()).optional(),
+  }).passthrough()),
 });
+
+const comentarioSchema = z.object({
+  field: z.string(),
+  value: z.object({
+    id: z.string(),
+    text: z.string().optional(),
+    media: z.object({ id: z.string() }).passthrough(),
+    from: z.object({ id: z.string(), username: z.string().optional() }).passthrough(),
+    timestamp: z.union([z.string(), z.number()]).optional(),
+  }).passthrough(),
+}).passthrough();
+
+/**
+ * `value.timestamp` não é documentado pela Meta para "comments" — quando aparece,
+ * já foi visto como string ISO, número unix (segundos) e string de número unix.
+ * Lê tolerante e nunca deixa uma data inválida escapar (`undefined` cai pro chamador,
+ * que segue a cadeia de fallback até entry.time e o relógio).
+ */
+function lerDataDoComentario(valor: string | number | undefined): Date | undefined {
+  if (valor === undefined) return undefined;
+  const numero = typeof valor === "number" ? valor : Number(valor);
+  if (Number.isFinite(numero) && String(valor).trim() !== "" && /^-?\d+$/.test(String(valor).trim())) {
+    // unix: segundos (10 dígitos) vs milissegundos (13 dígitos)
+    const ms = numero < 1e12 ? numero * 1000 : numero;
+    const data = new Date(ms);
+    if (!Number.isNaN(data.getTime())) return data;
+  }
+  if (typeof valor === "string") {
+    const data = new Date(valor);
+    if (!Number.isNaN(data.getTime())) return data;
+  }
+  return undefined;
+}
 
 export interface EventoDoInstagram {
   igAccountId: string;
@@ -63,4 +101,45 @@ export function parseWebhookDoInstagram(corpo: unknown): EventoDoInstagram[] {
     }
   }
   return eventos;
+}
+
+export interface ComentarioDoInstagram {
+  igAccountId: string;
+  externalId: string;
+  mediaId: string;
+  texto: string | null;
+  autorIgsid: string;
+  autorHandle: string | null;
+  comentadoEm: Date;
+  eco: boolean;
+}
+
+export function parseComentariosDoInstagram(corpo: unknown): ComentarioDoInstagram[] {
+  const lido = corpoSchema.safeParse(corpo);
+  if (!lido.success) return [];
+  const comentarios: ComentarioDoInstagram[] = [];
+  for (const entrada of lido.data.entry) {
+    for (const bruto of entrada.changes ?? []) {
+      const mudanca = comentarioSchema.safeParse(bruto);
+      if (!mudanca.success || mudanca.data.field !== "comments") continue;
+      const v = mudanca.data.value;
+      // value.timestamp não é documentado pela Meta para "comments" (só entry.time é).
+      // Cadeia de fallback pra nunca descartar o comentário por falta de data, nem por
+      // data ilegível: value.timestamp (string ISO ou número/string unix) > entry.time
+      // em SEGUNDOS (se vier) > relógio.
+      const comentadoEm = lerDataDoComentario(v.timestamp)
+        ?? (entrada.time !== undefined ? new Date(entrada.time * 1000) : new Date());
+      comentarios.push({
+        igAccountId: entrada.id,
+        externalId: v.id,
+        mediaId: v.media.id,
+        texto: v.text ?? null,
+        autorIgsid: v.from.id,
+        autorHandle: v.from.username ?? null,
+        comentadoEm,
+        eco: v.from.id === entrada.id,
+      });
+    }
+  }
+  return comentarios;
 }

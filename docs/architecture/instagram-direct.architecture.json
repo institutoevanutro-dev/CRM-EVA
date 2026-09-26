@@ -2,15 +2,16 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "Instagram Direct — etapa 1 (receber)",
-    "subtitle": "Conexões → webhook do app → Inbox/funil, com Origem padrão",
+    "title": "Instagram Direct e Comentários",
+    "subtitle": "Conexões → webhook do app → Inbox/funil (Direct) ou fila de comentários, com Origem padrão",
     "output": "instagram-direct.html",
     "quality_profile": "standard"
   },
   "lanes": [
     { "id": "humano", "label": "Pessoa" },
     { "id": "app", "label": "Aplicativo" },
-    { "id": "db", "label": "Banco" }
+    { "id": "db", "label": "Banco" },
+    { "id": "meta", "label": "Instagram (Meta)" }
   ],
   "mainPath": ["conexoes", "config", "webhook", "ingest", "inbox", "funil"],
   "nodes": [
@@ -55,6 +56,34 @@
       "col": 4,
       "type": "ui",
       "label": "Kanban: card novo no funil padrão"
+    },
+    {
+      "id": "comentarios_db",
+      "lane": "db",
+      "col": 3,
+      "type": "database",
+      "label": "instagram_comments + instagram_comment_rules (situação, regra, lease)"
+    },
+    {
+      "id": "comentario_worker",
+      "lane": "app",
+      "col": 4,
+      "type": "worker",
+      "label": "Cron comentarios-worker (1×/min): regra de palavra → Direct+pública; sem regra, classificador de segurança decide"
+    },
+    {
+      "id": "aba_comentarios",
+      "lane": "humano",
+      "col": 5,
+      "type": "ui",
+      "label": "Aba Comentários no Inbox: fila esperando_voce, edita e publica a sugestão"
+    },
+    {
+      "id": "instagram_graph_comentario",
+      "lane": "meta",
+      "col": 5,
+      "type": "external",
+      "label": "Graph API: Direct privado (messages) e resposta pública (replies)"
     }
   ],
   "edges": [
@@ -64,6 +93,12 @@
     { "id": "e4", "from": "webhook", "to": "ingest", "label": "Evento parseado (texto/mídia), eco descartado" },
     { "id": "e5", "from": "ingest", "to": "inbox", "label": "Mensagem gravada (Realtime)" },
     { "id": "e6", "from": "ingest", "to": "funil", "label": "Contato novo → card + custom_fields.origem" },
-    { "id": "e7", "from": "inbox", "to": "conexoes", "label": "Sem @/nome: só reconfigurar a conta reconstrói o perfil" }
+    { "id": "e7", "from": "inbox", "to": "conexoes", "label": "Sem @/nome: só reconfigurar a conta reconstrói o perfil" },
+    { "id": "e8", "from": "webhook", "to": "comentarios_db", "label": "changes field=comments parseado, eco descartado, insert idempotente" },
+    { "id": "e9", "from": "comentarios_db", "to": "comentario_worker", "label": "situacao=novo entra na fila; worker reivindica com lease de 10min" },
+    { "id": "e10", "from": "comentario_worker", "to": "instagram_graph_comentario", "label": "regra casada: Direct (messages) e depois resposta pública (replies)" },
+    { "id": "e11", "from": "comentario_worker", "to": "comentarios_db", "label": "grava desfecho: respondido_pela_regra/respondido_pela_ia/esperando_voce" },
+    { "id": "e12", "from": "comentario_worker", "to": "aba_comentarios", "label": "sem regra e inseguro (ou sem perfil de voz) → esperando_voce na fila humana" },
+    { "id": "e13", "from": "aba_comentarios", "to": "instagram_graph_comentario", "label": "Publicar: resposta editada sai como reply público (respondido_manualmente)" }
   ]
 }

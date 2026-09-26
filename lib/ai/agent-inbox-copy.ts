@@ -77,6 +77,10 @@ export const KIND_LABEL = {
   // Diz que há uma DECISÃO esperando pessoa, não que "o supervisor rodou".
   supervision_review: "A supervisão deixou um ponto para a equipe decidir",
   sinal_revisao_humana: "Uma reserva sem sinal confirmado precisa de revisão da equipe",
+  // Diz que o comentário está PARADO, não que "o worker rodou" — é o mesmo
+  // gênero de aviso anti-morte de `message_send_stuck` acima, só que para o
+  // Instagram.
+  instagram_comment_stuck: "Um comentário do Instagram está parado sem resposta",
   other: "Aviso do assistente",
 } as const satisfies Record<InboxKind, string>;
 

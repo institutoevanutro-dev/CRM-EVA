@@ -564,6 +564,9 @@ export const DICIONARIO: Traducoes = {
   // pasta do histórico. Sem entrada própria, a aba "Arquivadas" apareceria
   // traduzida como "Cerradas" para um operador hispanofalante.
   Arquivadas: { es: "Archivadas" },
+  // A aba da fila de `instagram_comments` (Task 8) — mesmo rótulo do título do
+  // painel que ela abre.
+  Comentários: { es: "Comentarios" },
   IA: { es: "IA" },
   "Sem mensagens": { es: "Sin mensajes" },
   "Nenhuma conversa": { es: "Ninguna conversación" },
@@ -7829,6 +7832,9 @@ export const DICIONARIO: Traducoes = {
   "Abra o compromisso e confira o sinal com a equipe antes de decidir sobre a reserva.": {
     es: "Abra la cita y compruebe la señal con el equipo antes de decidir sobre la reserva.",
   },
+  "Confira a fila de comentários do Instagram — um comentário ficou mais de 1h sem resposta.": {
+    es: "Revise la cola de comentarios de Instagram — un comentario quedó más de 1h sin respuesta.",
+  },
   // Diálogo de exclusão de canal (`frasesDoImpacto`): singular e plural.
   "chamada de voz": { es: "llamada de voz" },
   "chamadas de voz": { es: "llamadas de voz" },
@@ -9106,6 +9112,37 @@ export const DICIONARIO: Traducoes = {
   "Sem limite: as mensagens dos fluxos saem a qualquer hora, inclusive de madrugada.": { es: "Sin límite: los mensajes de los flujos salen a cualquier hora, incluso de madrugada." },
   "Escolha pelo menos um dia.": { es: "Elige al menos un día." },
   "O fim precisa ser depois do início.": { es: "El fin tiene que ser después del inicio." },
+
+  // A aba Comentários do Inbox (Task 8, `instagram_comments`/`instagram_comment_rules`).
+  "Editar a resposta": { es: "Editar la respuesta" },
+  "Sem sugestão pronta — escreva a resposta.": { es: "Sin sugerencia lista — escribe la respuesta." },
+  "Nenhum comentário nesta fila.": { es: "Ningún comentario en esta cola." },
+  "Perfil não identificado": { es: "Perfil no identificado" },
+  "Mídia (id do post)": { es: "Publicación (id del post)" },
+  "Cole o id do post": { es: "Pega el id del post" },
+  "Palavra-gatilho": { es: "Palabra gatillo" },
+  "Ex.: CARDAPIO": { es: "Ej.: MENU" },
+  "Mensagem no Direct": { es: "Mensaje en el Direct" },
+  "Resposta pública": { es: "Respuesta pública" },
+  "Criar regra": { es: "Crear regla" },
+  "Nova regra": { es: "Nueva regla" },
+  "A resposta JÁ FOI publicada no Instagram, mas não deu para atualizar aqui. Não publique de novo — isso enviaria uma segunda resposta.": {
+    es: "La respuesta YA FUE publicada en Instagram, pero no se pudo actualizar aquí. No publiques de nuevo — eso enviaría una segunda respuesta.",
+  },
+  // CRÍTICO 2 (revisão final) — regra por mídia sem comentário ainda: escolher o perfil.
+  "Perfil conectado (só se o vídeo ainda não tem comentário nenhum)": {
+    es: "Perfil conectado (solo si el video todavía no tiene ningún comentario)",
+  },
+  "Resolver automaticamente pelo comentário mais recente": {
+    es: "Resolver automáticamente por el comentario más reciente",
+  },
+  // IMPORTANTE 5 — descartar um comentário `esperando_voce`.
+  "Descartando…": { es: "Descartando…" },
+  // CRÍTICO 2 — mostrar o vídeo de cada comentário e abrir a regra dali.
+  "Vídeo:": { es: "Video:" },
+  "Nova regra para este vídeo": { es: "Nueva regla para este video" },
+  // MENOR (revisão final) — destino geral do aviso `instagram_comment_stuck`.
+  "Abrir fila de comentários": { es: "Abrir cola de comentarios" },
 };
 
 /**

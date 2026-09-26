@@ -18,7 +18,7 @@ import { useConversationTagVocabulary } from "@/hooks/inbox/useConversationTags"
 import { useConversationCounts } from "@/hooks/inbox/useConversationCounts";
 import type { Role, VisibilityMode } from "@/lib/auth/types";
 
-export type InboxTab = "unassigned" | "mine" | "all" | "closed" | "archived" | "ai";
+export type InboxTab = "unassigned" | "mine" | "all" | "closed" | "archived" | "ai" | "comentarios";
 
 const INBOX_TABS: { value: InboxTab; label: string }[] = [
   { value: "unassigned", label: "Fila" },
@@ -36,6 +36,10 @@ const INBOX_TABS: { value: InboxTab; label: string }[] = [
   // passou a perguntar a régua do motor), então o rótulo velho descreveria outra
   // coisa.
   { value: "ai", label: "Automático" },
+  // A fila de `instagram_comments` que espera um toque humano (Task 8 de
+  // "comentários no CRM"). Não é conversa — `tabToFilter` (InboxLayout) não
+  // ganha um case pra ela; a aba troca o CORPO inteiro pelo painel próprio.
+  { value: "comentarios", label: "Comentários" },
 ];
 
 /**
@@ -181,6 +185,11 @@ export function InboxFilters({ value, onChange }: Props) {
 
   return (
     <div className="border-b border-border bg-background">
+      {/* Busca, não-lidos e os seletores de canal/tag são filtros de CONVERSA — a
+          aba Comentários troca o corpo inteiro por `ComentariosPainel` (não é
+          conversa, não tem busca nem canal), e mostrar esta linha ali prometeria
+          um filtro que não filtra nada. */}
+      {value.tab !== "comentarios" && (
       <div className="space-y-2 px-3 pt-3 pb-2">
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
@@ -301,6 +310,7 @@ export function InboxFilters({ value, onChange }: Props) {
           </div>
         )}
       </div>
+      )}
 
       {/* Faixa sublinhada, não caixa cinza: cinco abas num grid de 280px
           espremiam "Fechadas" contra "Automático" até os rótulos se tocarem.

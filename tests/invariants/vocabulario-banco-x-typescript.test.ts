@@ -270,6 +270,20 @@ const PARES: Array<{
     arquivo: "lib/schemas/team.ts",
     simbolo: "ROLES",
   },
+  {
+    tabela: "instagram_comments",
+    coluna: "situacao",
+    // components/inbox/comentarios/ListaDeComentarios.tsx → SituacaoDoComentario.
+    //
+    // Nasce da revisão da Task 8: a migration 0282 alargou o CHECK da 0280 com
+    // `respondido_manualmente` (publicação humana pela tela, distinta de
+    // `respondido_pela_ia` — o worker sozinho, Task 7) e o par não tinha
+    // entrado junto. Sem ele, a tela podia continuar sem saber que o valor
+    // novo existe (ficaria no fallback do rótulo) ou o CHECK e o union
+    // divergirem de novo sem gate nenhum acusando.
+    arquivo: "components/inbox/comentarios/ListaDeComentarios.tsx",
+    simbolo: "SituacaoDoComentario",
+  },
 ];
 
 /** Tira um nível de parênteses externos, se ele envolver a expressão inteira. */

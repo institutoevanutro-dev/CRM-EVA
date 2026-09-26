@@ -591,6 +591,41 @@ export const AUDIT_ACTIONS = [
   "channel.instagram_token_refreshed",
   // Origem padrão da conta (campo + valor gravados no contato novo) trocada ou limpa.
   "channel.instagram_origem_changed",
+  // A regra de comentário respondeu: privado (Direct pelo comment_id, único e
+  // com prazo de 7 dias) e a resposta pública, sempre. São dois códigos porque
+  // a privada pode falhar sem impedir a pública — juntar os dois num só
+  // esconderia justamente esse desfecho parcial.
+  "comment.private_reply_sent",
+  "comment.replied",
+  // A IA escreveu e publicou sozinha um comentário seguro, sem regra que
+  // casasse — Task 7, worker de comentários. Só existe perfil de voz o
+  // suficiente para publicar; sem ele o comentário cai em `esperando_voce`.
+  "comment.replied_by_ai",
+  // Uma rodada do worker de comentários (`comentarios-worker`) que atendeu ou
+  // deixou algum comentário esperando — mesmo critério do
+  // `message.recover_stuck_run`/`conversation.snooze_watcher_run`: rodada
+  // vazia não vira linha.
+  "comment.worker_run",
+  // Aviso anti-morte: comentário `situacao='novo'` (reivindicado ou não)
+  // parado há mais de 1h sem desfecho — webhook perdido ou escrita que falhou
+  // não pode sumir em silêncio.
+  "comment.stuck_alert_opened",
+  // Task 8 — um humano publicou pela tela a sugestão da IA (editada ou não)
+  // para um comentário `esperando_voce`. Distinto de `comment.replied_by_ai`:
+  // ali o worker publica sozinho, sem ninguém olhar; aqui alguém apertou o
+  // botão. `resourceId` é o id de `instagram_comments`.
+  "comment.replied_manually",
+  // Task 8 — uma regra nova em `instagram_comment_rules`, criada pela tela
+  // (palavra-gatilho → resposta pública + Direct, por mídia).
+  "instagram_comment_rule.created",
+  // IMPORTANTE 5 (revisão final) — um humano descartou (`situacao='ignorado'`)
+  // um comentário `esperando_voce` pela tela. Sem isto a fila só cresce.
+  "comment.discarded",
+  // IMPORTANTE 6 (revisão final) — um comentário caiu para revisão humana
+  // (`situacao='esperando_voce'`), por qualquer um dos caminhos do worker ou
+  // da regra casada. É o "laço de retorno" que a spec §9 promete: sem esta
+  // trilha não dá pra medir quanto o classificador erra.
+  "comment.waiting_human",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

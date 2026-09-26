@@ -120,7 +120,12 @@ export const NAV_CATALOG = [
   {
     href: "/app/inbox",
     label: "Inbox",
-    description: "As conversas de WhatsApp, com você e a IA atendendo lado a lado.",
+    // A aba "Comentários" (Task 8, ?filter=comentarios) mora AQUI dentro — é
+    // estado interno da mesma tela, não uma rota nova, e o precedente é o
+    // resto das abas do Inbox (Fila, Minhas, Fechadas…), nenhuma com entrada
+    // própria no catálogo. A descrição cita as duas para quem busca por
+    // "comentário" no ⌘K encontrar a porta certa.
+    description: "As conversas de WhatsApp e os comentários do Instagram, com você e a IA atendendo lado a lado.",
     icon: "Inbox",
     group: "atendimento",
     sidebar: true,

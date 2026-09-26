@@ -92,10 +92,15 @@ correspondentes localizados no repo):
   isolamento, RBAC de 4 papéis, audit log append-only, onboarding de tenant.
 - **Atendimento WhatsApp** — inbox de 3 painéis em tempo real, conexões WAHA multi-número,
   mídia via Storage, anti-banimento (throttle + jitter + janela de horário), STOP detection.
-- **Instagram: recebe; resposta na etapa 2** — conectar conta profissional pelo login da
-  Meta (Conexões), webhook do app com assinatura HMAC, mensagens do Direct no mesmo Inbox
-  do WhatsApp (com @ e "via @conta"), card no funil padrão e Origem padrão por conexão.
-  Responder pelo CRM, janela de 24h/7d e follow-up automático ficam para a etapa 2.
+- **Instagram: recebe; resposta de MENSAGEM na etapa 2** — conectar conta profissional pelo
+  login da Meta (Conexões), webhook do app com assinatura HMAC, mensagens do Direct no
+  mesmo Inbox do WhatsApp (com @ e "via @conta"), card no funil padrão e Origem padrão por
+  conexão. Responder MENSAGEM (Direct comum) pelo CRM, janela de 24h/7d e follow-up
+  automático ficam para a etapa 2.
+  **COMENTÁRIO é outra coisa e já responde**: a branch `spec/comentarios-no-crm` traz a fila
+  de `instagram_comments` (aba "Comentários" do Inbox), regra palavra-gatilho → resposta
+  pública + Direct, classificador de segurança + IA para o resto, e publicação manual pela
+  tela. Ver `docs/superpowers/specs/2026-09-26-comentarios-no-crm-design.md`.
 - **CRM & pedidos** — kanban com vocabulário configurável por nicho (fractional indexing),
   customer 360, contatos, tags, Nuvemshop.
 - **IA nativa** — agentes com RAG por tenant (pgvector), sentiment, handoff IA→humano,
