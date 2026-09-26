@@ -80,6 +80,6 @@ describe("a migration 0282 chega a quem já instalou", () => {
 
   it("está no MANIFEST", () => {
     const manifest = readFileSync(join(raiz, "supabase/migrations/MANIFEST.md"), "utf8");
-    expect(manifest).toContain("0282_ultima_organizacao_ativada");
+    expect(manifest).toContain("0283_ultima_organizacao_ativada");
   });
 });

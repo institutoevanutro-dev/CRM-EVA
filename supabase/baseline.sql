@@ -27853,7 +27853,7 @@ grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid
 grant execute on function public.fn_update_budget_consumption() to service_role;
 
 
--- ---- organização que a pessoa usou por último (migration 0282) ----
+-- ---- organização que a pessoa usou por último (migration 0283) ----
 -- O logout apaga o cookie `active_org`, e sem ele `loadAuthUser` reabria na
 -- organização aceita PRIMEIRO. Esta coluna guarda a escolha do seletor para
 -- que a próxima entrada caia onde a pessoa estava. NULL = nunca trocou (o

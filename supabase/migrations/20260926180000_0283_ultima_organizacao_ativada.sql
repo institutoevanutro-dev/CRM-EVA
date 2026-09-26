@@ -1,4 +1,4 @@
--- 0282 — a organização que a pessoa usou por último, para o CRM abrir nela.
+-- 0283 — a organização que a pessoa usou por último, para o CRM abrir nela.
 --
 -- O PROBLEMA, medido numa instalação real: quem pertence a duas organizações
 -- escolhia uma pelo seletor, o cookie `active_org` guardava por 30 dias — e o
