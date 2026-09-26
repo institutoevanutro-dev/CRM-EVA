@@ -9136,6 +9136,8 @@ export const DICIONARIO: Traducoes = {
   // CRÍTICO 2 — mostrar o vídeo de cada comentário e abrir a regra dali.
   "Vídeo:": { es: "Video:" },
   "Nova regra para este vídeo": { es: "Nueva regla para este video" },
+  // MENOR (revisão final) — destino geral do aviso `instagram_comment_stuck`.
+  "Abrir fila de comentários": { es: "Abrir cola de comentarios" },
 };
 
 /**

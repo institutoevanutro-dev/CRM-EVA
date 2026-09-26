@@ -72,10 +72,17 @@ export const POLITICAS_DE_AVISO = {
   voice_call_missed: { refs: ["contact"], orientacao: "Retorne a ligação quando puder — quem ligou não foi atendido." },
   supervision_review: { refs: ["conversation"], orientacao: "Abra a conversa, confira o que a supervisão apontou e decida o próximo passo." },
   sinal_revisao_humana: { refs: ["appointment"], orientacao: "Abra o compromisso e confira o sinal com a equipe antes de decidir sobre a reserva." },
-  // Sem `ref` navegável ainda: a tela da fila de comentários do Instagram é a
-  // Task 8 desta feature, fora do escopo daqui. Mesmo padrão de `event_dead` —
-  // orientação sem destino clicável até a tela existir.
-  instagram_comment_stuck: { refs: [], orientacao: "Confira a fila de comentários do Instagram — um comentário ficou mais de 1h sem resposta." },
+  // MENOR (revisão final): esta linha dizia que a tela da fila de
+  // comentários "é a Task 8 desta feature, fora do escopo daqui" — a tela
+  // existe NESTA MESMA branch (`ComentariosPainel`, aba "Comentários" do
+  // Inbox, `?filter=comentarios`). Sem `ref` por linha (o aviso é agregado
+  // por organização, não por comentário — ver `avisarComentariosParados`),
+  // mas com destino geral clicável, no mesmo padrão de `midia_nao_lida`.
+  instagram_comment_stuck: {
+    refs: [],
+    orientacao: "Confira a fila de comentários do Instagram — um comentário ficou mais de 1h sem resposta.",
+    geral: { papel: "agent", href: "/app/inbox?filter=comentarios", rotulo: "Abrir fila de comentários" },
+  },
   other: { refs: ["lead", "channel_session", "appointment", "ai_agent"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
 } satisfies Record<InboxKind, Politica>;
 

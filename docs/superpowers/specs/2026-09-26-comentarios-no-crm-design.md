@@ -85,7 +85,21 @@ A decisão do classificador é gravada na linha: quando ele errar, dá para medi
 
 ### 5.5 O jeito de escrever
 
-Uma passada (cron diário, mesmo lugar da renovação do token) lê os comentários já respondidos nos posts do próprio perfil e monta o **perfil de voz**: as frases típicas, o tratamento, os emojis, o tamanho médio, e o que ele nunca faz. O perfil fica numa linha por sessão, editável na tela — ele corrige o que a máquina entendeu errado.
+**Correção (revisão final, 2026-09-26): esta seção descrevia um cron diário com uma linha
+editável na tela, e NADA disso foi construído — a frase envelheceu antes do PR fechar.** O
+que existe (`lib/comentarios/voz.ts`, `perfilDeVoz`) é cálculo NA HORA, dentro da própria
+rodada do worker: lê as respostas públicas que o dono já deu nos comentários daquela sessão
+(`admin.respostasAnterioresDoDono`, Graph API), e monta o perfil só com o que dá pra derivar
+sem opinião — emoji mais usados, tratamento predominante ("você"/"senhor") e até 20 frases
+típicas. Cacheado em memória POR RODADA (`workers/comentarios-worker.ts`, `perfilCache`), não
+em banco: a próxima rodada recalcula do zero. Sem sessão ou sem nenhuma resposta anterior,
+`perfilDeVoz` devolve `null` e o comentário cai em `esperando_voce` — nunca escreve "no jeito
+dele" sem amostra nenhuma.
+
+Não tem cron, não tem tabela, não tem tela de edição, e não deriva "tamanho médio" nem "o que
+ele nunca faz" — só o que está listado acima. Editar o perfil (corrigir o que a máquina
+entendeu errado) é trabalho de outra sessão: persistência (migration + coluna/tabela), tela e,
+se fizer sentido, um cron que recalcule fora do caminho do worker. Ver §10.
 
 O agente que escreve é o sistema de agentes que o CRM já tem, com o perfil de voz no prompt. Nada de motor novo.
 
@@ -133,11 +147,17 @@ Configuração na Meta, com o dono: acrescentar `instagram_business_manage_comme
 - **Tela:** aba Comentários no Inbox, com porta em `lib/navigation/catalogo.ts`.
 - **Anti-morte:** comentário `novo` que passou de 1 hora sem desfecho abre aviso na Central — senão um webhook perdido some sem ninguém notar.
 - **Laço de retorno:** quando o classificador erra, o toque do dono (publicar, editar ou descartar) fica gravado na linha; é dali que sai a medição de quanto ele erra, e é o que justifica mexer nele.
-- **Configuração com superfície:** as regras e o perfil de voz são editáveis na tela, não em variável de ambiente.
+- **Configuração com superfície:** as regras são editáveis na tela, não em variável de ambiente.
+  **Correção (revisão final): o perfil de voz NÃO é** — ele é calculado na hora, a cada
+  rodada do worker, sem tela nem persistência (§5.5). Enquanto isso não existir, a única
+  configuração possível é indireta: a lista de gatilhos e radicais de especialidade
+  (`lib/comentarios/seguranca.ts`, `lib/comentarios/especialidade.ts`) é editável sem
+  deploy, e um perfil que está saindo ruim se corrige mandando o comentário para
+  `esperando_voce` (fila humana) — nunca editando o perfil em si. Ver §10.
 
 ## 10. Riscos
 
 1. **Acesso Avançado da Meta é pré-requisito, e a App Review está parada nos vídeos.** Sem ele o webhook `comments` não chega. Isto não impede construir — e inverte a ordem a favor: o vídeo que a Meta pede para aprovar a permissão é a gravação desta tela funcionando. Construir destrava a submissão. **Mas nada disso funciona em produção antes da aprovação, e a spec não finge o contrário.**
 2. **A IA assina como médico em público.** Mitigado pelo classificador conservador (§5.4), pelo teto de tamanho e pela proibição de link e preço. Resta o risco de o classificador deixar passar algo: por isso a decisão dele é gravada e medida, e a lista de gatilhos é editável sem deploy.
-3. **O perfil de voz aprende os dias ruins.** Ele é lido de comentários reais, incluindo respostas secas ou irônicas. Mitigado por ser editável e por a publicação automática só valer no que é obviamente seguro.
+3. **O perfil de voz aprende os dias ruins.** Ele é lido de comentários reais, incluindo respostas secas ou irônicas. **Correção (revisão final): NÃO é editável** — é calculado na hora, sem tela nem persistência (§5.5). Mitigado só por a publicação automática valer apenas no que é obviamente seguro; um perfil ruim não tem hoje outra saída além da fila humana (`esperando_voce`). **Próximo passo:** persistir o perfil (migration + tabela/coluna) e dar uma tela de edição — sem isso, "o perfil aprendeu um dia ruim" só se resolve esperando os comentários recentes mudarem de assunto, ou publicando à mão pela fila.
 4. **Volume.** Um vídeo que viraliza traz centenas de comentários num minuto. O processamento é assíncrono e com teto por rodada, como a renovação do token — nunca no caminho do webhook, que precisa responder rápido para a Meta não reenviar.
