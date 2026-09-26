@@ -116,18 +116,90 @@ describe("privilégio das RPCs novas", () => {
 });
 
 describe("RLS de contact_channel_identities", () => {
-  it("tem RLS ligada com a policy tenant_isolation_contact_channel_identities_all", async () => {
+  it("tem RLS ligada e UMA policy PERMISSIVA, só de SELECT (migration 0279): a equipe lê, não grava", async () => {
     const { rows: rls } = await pool.query<{ rls: boolean }>(
       `select relrowsecurity as rls from pg_class where relname = 'contact_channel_identities'`,
     );
     expect(rls[0]?.rls).toBe(true);
 
-    const { rows: pol } = await pool.query<{ n: string }>(
-      `select count(*)::int as n from pg_policies
-        where tablename = 'contact_channel_identities'
-          and policyname = 'tenant_isolation_contact_channel_identities_all'`,
+    const { rows: pol } = await pool.query<{ policyname: string; cmd: string }>(
+      // Só as permissivas: as `support_write_*` são RESTRITIVAS (só cortam, nunca
+      // concedem) e toda tabela de tenant as ganha pelo laço do modo suporte.
+      `select policyname, cmd from pg_policies
+        where tablename = 'contact_channel_identities' and permissive = 'PERMISSIVE' order by policyname`,
     );
-    expect(Number(pol[0]?.n)).toBe(1);
+    expect(pol).toEqual([{ policyname: "tenant_isolation_contact_channel_identities_select", cmd: "SELECT" }]);
+  });
+
+  it("agent autenticado lê a identidade da própria org mas não insere, não troca o handle e não apaga; service role sim", async () => {
+    const agente = "1657a000-1111-4000-8000-000000000279";
+    await pool.query(
+      `insert into auth.users (id, email) values ($1, 'instagram-canal-279@invariant.test') on conflict (id) do nothing`,
+      [agente],
+    );
+    await pool.query(
+      `insert into user_organizations (user_id, organization_id, role, accepted_at)
+         values ($1, $2, 'agent', now()) on conflict do nothing`,
+      [agente, ORG_A],
+    );
+    const { rows: contato } = await pool.query<{ id: string }>(
+      `insert into contacts (organization_id, display_name) values ($1, 'Contato 0279') returning id`,
+      [ORG_A],
+    );
+    await pool.query(
+      `insert into contact_channel_identities (organization_id, contact_id, channel, external_id, handle)
+         values ($1, $2, 'instagram', 'IGSID-0279', 'original_0279')`,
+      [ORG_A, contato[0]!.id],
+    );
+
+    const comoAgente = async <T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> => {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        await client.query("set local role authenticated");
+        await client.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: agente })]);
+        return await fn(client);
+      } finally {
+        await client.query("rollback");
+        client.release();
+      }
+    };
+
+    // Controle positivo: a leitura funciona (a RLS não está só negando tudo).
+    const lidas = await comoAgente((c) =>
+      c.query("select handle from contact_channel_identities where external_id = 'IGSID-0279'"),
+    );
+    expect(lidas.rows).toEqual([{ handle: "original_0279" }]);
+
+    await expect(
+      comoAgente((c) =>
+        c.query(
+          `insert into contact_channel_identities (organization_id, contact_id, channel, external_id, handle)
+             values ($1, $2, 'instagram', 'IGSID-0279-FORJADO', 'original_0279')`,
+          [ORG_A, contato[0]!.id],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/);
+
+    const trocou = await comoAgente((c) =>
+      c.query("update contact_channel_identities set handle = 'forjado' where external_id = 'IGSID-0279'"),
+    );
+    expect(trocou.rowCount).toBe(0);
+    const apagou = await comoAgente((c) => c.query("delete from contact_channel_identities where external_id = 'IGSID-0279'"));
+    expect(apagou.rowCount).toBe(0);
+
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      await client.query("set local role service_role");
+      const r = await client.query("update contact_channel_identities set handle = 'vivo_0279' where external_id = 'IGSID-0279'");
+      expect(r.rowCount).toBe(1);
+      await client.query("rollback");
+    } finally {
+      client.release();
+    }
+    const { rows: final } = await pool.query("select handle from contact_channel_identities where external_id = 'IGSID-0279'");
+    expect(final).toEqual([{ handle: "original_0279" }]);
   });
 
   it("membro autenticado da org A NÃO lê identidade de canal da org B (cross-org real)", async () => {
