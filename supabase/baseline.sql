@@ -27703,3 +27703,18 @@ grant execute on function public.fn_encrypt_oauth(text) to service_role;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 grant execute on function public.fn_update_budget_consumption() to service_role;
 
+
+-- ---- organização que a pessoa usou por último (migration 0282) ----
+-- O logout apaga o cookie `active_org`, e sem ele `loadAuthUser` reabria na
+-- organização aceita PRIMEIRO. Esta coluna guarda a escolha do seletor para
+-- que a próxima entrada caia onde a pessoa estava. NULL = nunca trocou (o
+-- estado de toda instalação com uma organização só), e aí vale o desempate
+-- antigo. Racional completo no cabeçalho da migration.
+alter table public.user_organizations
+  add column if not exists ultima_ativacao_em timestamptz;
+
+comment on column public.user_organizations.ultima_ativacao_em is
+  'Quando a pessoa ativou esta organização pelo seletor. Decide em qual o CRM abre quando não há cookie active_org (o logout o apaga). NULL = nunca trocou.';
+
+create index if not exists user_organizations_ultima_ativacao_idx
+  on public.user_organizations (user_id, ultima_ativacao_em desc nulls last);
