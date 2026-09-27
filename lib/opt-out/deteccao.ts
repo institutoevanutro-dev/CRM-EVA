@@ -172,6 +172,91 @@ const DETERMINANTES_DE_OBJETO =
   "mi|mis|tu|tus|esse|essa|esses|essas|ese|esa|esos|esas|nesse|nessa";
 
 /**
+ * Listas que são a MENSAGEM em si: contatos, transmissão, mensagens, promoções.
+ * É a régua do freio de "lista qualificada": quando a frase nomeia "lista de
+ * X", só vale se X for destas. "lista de espera" é paciente querendo ser
+ * chamado; "lista de presentes" é compra; "lista de desejos" é vitrine.
+ */
+const LISTAS_DE_ENVIO =
+  "contatos?|transmissao|envios?|mensagens|disparos?|divulgacao|promocoes|" +
+  "ofertas|whatsapp|zap|voces|vcs";
+
+/**
+ * O freio em si, numa forma só, porque as duas regras que o usam precisam dele
+ * idêntico: "me tira da lista" já o tinha (o conserto do #1805) e "sair da
+ * lista" estava SEM ele na main — "quero sair da lista de espera" bloqueava o
+ * paciente (#1806). O lookahead lê de trás pra frente: ou não vem "de X"
+ * nenhum, ou o X que vem é de envio.
+ */
+const FREIO_DE_LISTA_QUALIFICADA = `(?!\\s+de\\s+(?!(?:${LISTAS_DE_ENVIO})\\b))`;
+
+/**
+ * Pronomes que já são sujeito sozinhos, sem determinante: "ele não me liga
+ * mais", "aquele não me manda mais nada".
+ */
+const PRONOMES_DE_SUJEITO = "ele|ela|eles|elas|aquele|aquela|aqueles|aquelas";
+
+/**
+ * Determinantes que ABREM um sujeito antes de "não me X mais". É a lista de
+ * `DETERMINANTES_DE_OBJETO` (o mesmo vocabulário, servindo outro ofício) mais
+ * as contrações e os possessivos de 1ª pessoa, que ali não estavam porque ali
+ * só se tratava do que vem DEPOIS do verbo.
+ *
+ * São dois cargos diferentes e é por isso que a lista não é uma só: este
+ * candidato a sujeito fica ANTES do "não me", e uma palavra só já basta para
+ * ser sujeito ("o médico não me liga mais"); lá, o candidato a determinante
+ * vem depois do verbo e precisa deixar passar "parar de mandar O PEDIDO".
+ */
+const DETERMINANTES_DE_SUJEITO =
+  `${DETERMINANTES_DE_OBJETO}|do|da|dos|das|` + "nosso|nossa|nossos|nossas|dele|dela|deles|delas";
+
+/**
+ * Palavras que NÃO abrem sujeito: preposição e conjunção. Sem esta lista o
+ * freio casaria "a partir de amanhã não me manda mais" como se "partir"
+ * fosse o sujeito — e aí a ordem deixa de bloquear. Cada uma destas é uma
+ * frase medida no corpus do #1806.
+ */
+const NAO_ABRIM_SUJEITO =
+  "de|da|do|das|dos|em|no|na|nos|nas|que|para|pra|pro|ate|desde|partir|apartir|" +
+  "partindo|com|por|pelo|pela|ao|aos|e|mas|ja|quando|como|se|sem|entao|apos|logo|porque";
+
+/**
+ * "não me liga mais" é DUAS frases diferentes com a MESMA forma, e o verbo não
+ * as separa: `liga` é o imperativo informal ("não me liga mais" = pedido) e é
+ * também a 3ª pessoa do indicativo ("meu filho não me liga mais" = relato).
+ * `manda`, `chama` e `envia` têm o mesmo duplo sentido — e é por isso que
+ * ficaram FORA de `FORMAS_DESCRITIVAS_DEPOIS_DE_ME` (ver o comentário de lá:
+ * tirá-las seria regressão, acrescentá-las seria falso positivo novo).
+ *
+ * O que separa os dois, portanto, é o SUJEITO — e ele vem ANTES de "não me".
+ * Este lookahead exige que não haja sujeito explícito de 3ª pessoa colado ali:
+ * pronome sozinho (`ele não me liga mais`) ou sintagma nominal com determinante
+ * (`meu filho não me liga mais`, `o médico não me liga mais`, `a minha mae não
+ * me chama mais`). Ele fica DENTRO de um `(?!...)`, de modo que só é cobrado
+ * para as quatro formas ambíguas: nas imperativas sem duplo sentido
+ * (`nao me mande mais`, `nao me contate mais`) não há o que separar.
+ *
+ * Medido (#1806): sem o lookahead, "meu filho não me liga mais" gravava
+ * `is_blocked` num paciente que só estava conversando; com ele, "não me liga
+ * mais" sozinho continua bloqueando. Os dois casos estão como controles
+ * negativos em `tests/unit/opt-out-deteccao.test.ts`.
+ *
+ * O `{0,2}` cobre "meu filho" (uma palavra), "meu antigo chefe" (duas) e o
+ * pronome sem determinante (zero). O `[,;:]*` cobre "meu filho, não me liga
+ * mais". E as palavras do meio não podem ser preposição — é `NAO_ABRIM_SUJEITO`
+ * que impede "a partir de amanhã não me mande mais" de casar.
+ *
+ * Os DOIS `\b` fazem questão: o da esquerda impede que o determinante seja
+ * lido de dentro de uma palavra, e o da direita impede que ele seque o começo
+ * de uma. Sem o de direita, "a partir de amanhã" casava pegando o `a` de
+ * "amanhã" e deixando "manha" na caixa de palavras do meio — a ordem de
+ * amanhã deixava de bloquear, que era um falso negativo NOVO. Medido.
+ */
+const SUJEITO_EXPLICITO_DE_TERCEIRA_PESSOA =
+  `(?<=[\\s,;:]*\\b(?:${PRONOMES_DE_SUJEITO}|${DETERMINANTES_DE_SUJEITO})\\b\\s*` +
+  `(?:(?!(?:${NAO_ABRIM_SUJEITO})\\b)[a-z]+[,;:]*\\s+){0,2}nao\\s+me\\s+)`;
+
+/**
  * Pedidos INEQUÍVOCOS de descadastro escritos por extenso. Todos exigem o objeto
  * de comunicação; nenhum casa a palavra solta.
  *
@@ -216,8 +301,17 @@ const FRASES_DE_OPT_OUT: readonly RegExp[] = [
   // diz que o objeto é quem escreve: "o dente não incomoda mais" e "o carro não
   // liga mais" não têm `me` e não bloqueiam. E `incomodar` não é verbo de
   // comunicação: "a dor não me incomoda mais" também não.
+  //
+  // E agora também o SUJEITO (#1806). `manda|chama|liga|envia` são imperativo
+  // informal E 3ª pessoa do indicativo, e esta regra enxergava as duas como a
+  // mesma ordem: "meu filho não me liga mais" virava `is_blocked` — relato de
+  // paciente, não pedido de descadastro. O lookahead isenta a frase quando há
+  // sujeito explícito de 3ª pessoa antes de "não me"; nas imperativas sem duplo
+  // sentido (`nao me mande mais`, `nao me contate mais`) ele não é cobrado.
   new RegExp(
-    `\\bnao\\s+me\\s+(?!(?:${FORMAS_DESCRITIVAS_DEPOIS_DE_ME})\\b)(?:${VERBOS_DE_COMUNICACAO})\\s+mais\\b` +
+    `\\bnao\\s+me\\s+(?!(?:${FORMAS_DESCRITIVAS_DEPOIS_DE_ME})\\b)` +
+      `(?!(?=${SUJEITO_EXPLICITO_DE_TERCEIRA_PESSOA})(?:${VERBOS_DE_COMUNICACAO})\\s+mais\\b)` +
+      `(?:${VERBOS_DE_COMUNICACAO})\\s+mais\\b` +
       `(?!\\s+(?:${DETERMINANTES_DE_OBJETO})?\\s*(?:${OBJETOS_NAO_COMUNICATIVOS})\\b)`,
     "u",
   ),
@@ -246,11 +340,16 @@ const FRASES_DE_OPT_OUT: readonly RegExp[] = [
   new RegExp(
     "\\bme\\s+(?:tira|tire|tirem|tirar|remove|remova|removam|remover|retira|retire|retirar|" +
       "exclui|exclua|excluir|apaga|apague|apagar)\\s+(?:da|dessa|desta|de\\s+sua|da\\s+sua)\\s+lista\\b" +
-      "(?!\\s+de\\s+(?!(?:contatos?|transmissao|envios?|mensagens|disparos?|divulgacao|promocoes|" +
-      "ofertas|whatsapp|zap|voces|vcs)\\b))",
+      FREIO_DE_LISTA_QUALIFICADA,
     "u",
   ),
-  /\bsair\s+d(?:a|essa|esta)\s+lista\b/u,
+  // "sair da lista" tinha EXATAMENTE o freio que o padrão de cima ganhou no
+  // #1805 — só que ele não veio junto. "quero sair da lista de espera" gravava
+  // `is_blocked` num paciente que só queria ser chamado (#1806), enquanto "me
+  // tira da lista de espera", a mesma frase com outro verbo, já não bloqueava.
+  // As duas leem hoje a MESMA constante (`LISTAS_DE_ENVIO`), que é o que torna
+  // impossível uma voltar a divergir da outra.
+  new RegExp(`\\bsair\\s+d(?:a|essa|esta)\\s+lista\\b${FREIO_DE_LISTA_QUALIFICADA}`, "u"),
   /\bcancelar?\s+(?:a\s+)?(?:inscricao|assinatura)\b/u,
   /\b(?:me\s+)?descadastr\w*\b/u,
   /\bdescadastro\b/u,

@@ -78,6 +78,15 @@ const PEDE_PARA_SAIR = [
   "nao entre mais em contato por aqui",
   "me tira da lista de transmissão",
   "me remove da lista de contatos",
+  // MESMA CLASSE, outro verbo: "sair da lista" é o irmão de "me tira da
+  // lista" e no #1806 estava sem o freio — só o segundo pedia lista de ENVIO.
+  "quero sair da lista de transmissão",
+  "sair da lista de contatos",
+  "quero sair dessa lista de mensagens",
+  // a imperativa de terceira pessoa segue bloqueando quando NÃO há sujeito:
+  // é a frase que os controles negativos abaixo precisam proteger.
+  "não me liga mais",
+  "por favor não me liga mais",
 ];
 
 /** Frases do dia a dia que usam a palavra e NÃO são pedido de descadastro. */
@@ -165,6 +174,24 @@ const NAO_PEDE_PARA_SAIR = [
   "me tira da lista de espera",
   "me tira da lista de presentes",
   "me remove da lista de desejos",
+  // #1806 (1): "sair da lista" não tinha o freio que "me tira da lista"
+  // ganhou no #1805. "lista de espera" é paciente querendo ser chamado e a
+  // frase gravava `is_blocked` — o MESMO defeito, com outro verbo.
+  "quero sair da lista de espera",
+  "quero sair dessa lista de presentes",
+  "sair da lista de desejos",
+  "quero sair da lista de espera, pode ser?",
+  // #1806 (2): `liga` é imperativo informal E 3ª pessoa do indicativo. Sem
+  // sujeito explícito a ordem bloqueia (acima); COM sujeito é relato de quem
+  // está falando, não pedido de descadastro. Os dois casos são controles
+  // negativos do mesmo freio.
+  "meu filho não me liga mais",
+  "ele não me liga mais",
+  "ela não me manda mais nada",
+  "a doutora não me chama mais",
+  "meu filho, não me liga mais",
+  "a minha equipe não me liga mais",
+  "meu antigo chefe não me liga mais",
   // "entrar em contato" com outro destinatário ou outro canal, e a reclamação
   "nao entre em contato com meu marido, fale comigo",
   "nao entrem em contato por email, so whatsapp",
