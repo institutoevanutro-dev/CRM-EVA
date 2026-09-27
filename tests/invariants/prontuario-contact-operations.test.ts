@@ -62,6 +62,7 @@ describe("operações transacionais do prontuário", () => {
     expect(lastJson(createCall()).created).toBe(false);
     expect(() => sql(patch(1, expected, "Outro Nome"))).toThrow();
     sql(`update public.contacts set name='Edicao CRM' where id='${id}';`);
+    expect(() => sql(patch(1, expected))).toThrow();
     expect(() => sql(patch(2, expected))).toThrow();
     expect(lastLine(sql(`select name from public.contacts where id='${id}';`))).toBe("Edicao CRM");
   });

@@ -92,6 +92,7 @@ begin
   end if;
   if p_revision = v_link.last_source_revision then
     if v_hash is distinct from v_link.last_payload_hash then raise exception 'prontuario_request_conflict'; end if;
+    if v_contact.updated_at is distinct from v_link.last_crm_updated_at then raise exception 'prontuario_revision_conflict'; end if;
     return jsonb_build_object('id',p_contact,'updated_at',v_link.last_crm_updated_at,'revision',p_revision,'applied',false);
   end if;
   if p_revision < v_link.last_source_revision or v_contact.updated_at is distinct from p_expected then
