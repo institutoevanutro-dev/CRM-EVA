@@ -4,8 +4,15 @@ import { MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
 export type MessageKind = "image" | "video" | "audio" | "document";
 
 /**
- * Posse do objeto no bucket: o path DEVE estar sob {org}/{conversation}/
- * (chaves do Storage são literais — sem semântica de traversal).
+ * Posse do objeto no bucket: o path DEVE ser {org}/{conversation}/<arquivo>,
+ * com um único nome de arquivo depois do prefixo.
+ *
+ * "Chaves do Storage são literais" é verdade no Storage, mas não no caminho até
+ * ele: o storage-js monta `/object/sign/<bucket>/<path>` sem codificar, e o
+ * `fetch` resolve `..` (e `%2e%2e`, e `\`) antes de a requisição sair. Um
+ * `{org}/{conv}/../../<outraOrg>/...` passava no `startsWith` e a service role
+ * assinava o arquivo de outra organização. Por isso o nome do arquivo só aceita
+ * letras, números, `.`, `_` e `-`, e nunca `.` ou `..` sozinhos.
  *
  * Morava dentro do módulo de transporte do provider legado e não tinha nada a
  * ver com o canal: valida um path do NOSSO Storage, antes de qualquer coisa
@@ -14,7 +21,10 @@ export type MessageKind = "image" | "video" | "audio" | "document";
  * `docs/doctrine/restricao-de-canal.md` proíbe.
  */
 export function isMediaPathOwnedBy(path: string, orgId: string, conversationId: string): boolean {
-  return path.startsWith(`${orgId}/${conversationId}/`);
+  const prefixo = `${orgId}/${conversationId}/`;
+  if (!path.startsWith(prefixo)) return false;
+  const arquivo = path.slice(prefixo.length);
+  return /^[A-Za-z0-9._-]+$/.test(arquivo) && arquivo !== "." && arquivo !== "..";
 }
 
 const DOCUMENT_MIMES = new Set([

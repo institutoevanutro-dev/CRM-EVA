@@ -30,9 +30,11 @@ import { requireRole } from "@/lib/auth/require-role";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { CHANNEL_PROVIDER_META } from "@/lib/channels/capabilities";
 import { appDaMeta, appDaMetaDoAmbiente } from "@/lib/channels/meta/app";
-import { validateMetaCredentials } from "@/lib/channels/meta/validate-credentials";
+import { assinarWebhookDaConta } from "@/lib/channels/meta/assinar-webhook";
+import { conferirNumeroDaConta, validateMetaCredentials } from "@/lib/channels/meta/validate-credentials";
 import { reactivateChannelSession } from "@/lib/channels/reactivate";
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { metadataInicialDoCanal } from "@/lib/ai/elegibilidade/pre-go-live";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
@@ -62,6 +64,39 @@ function publicBase(req: NextRequest): string {
   return (
     usavel ?? req.headers.get("origin") ?? `${req.nextUrl.protocol}//${req.nextUrl.host}`
   );
+}
+
+/** O endereço que a Meta chama para ESTA sessão — o mesmo que a tela manda colar. */
+function callbackDaSessao(req: NextRequest, webhookPathToken: string): string {
+  return `${publicBase(req)}/api/v1/webhooks/meta/${webhookPathToken}`;
+}
+
+/**
+ * O que a Meta respondeu na última vez que esta sessão assinou o webhook da conta.
+ * Guardado em `metadata.webhook_da_conta` para a tela seguir avisando depois do
+ * reload: um toast some, e a tela voltaria a parecer saudável com o recebimento morto.
+ */
+interface AssinaturaGravada {
+  assinado: boolean;
+  motivo?: string;
+  em: string;
+}
+
+const MOTIVO_SESSAO_SEM_ENDERECO =
+  "a sessão foi gravada sem endereço de recebimento. Reconecte o canal";
+const PREFIXO_REDE = "rede indisponível:";
+
+/** Motivo fixo vai ao dicionário; o de rede traduz só o prefixo (o resto é do sistema). */
+function traduzirMotivo(motivo: string, t: (texto: string) => string): string {
+  return motivo.startsWith(PREFIXO_REDE) ? `${t(PREFIXO_REDE)}${motivo.slice(PREFIXO_REDE.length)}` : t(motivo);
+}
+
+function assinaturaGravada(metadata: unknown): AssinaturaGravada | null {
+  const v = (metadata as { webhook_da_conta?: unknown } | null)?.webhook_da_conta as
+    | Partial<AssinaturaGravada>
+    | undefined;
+  if (!v || typeof v.assinado !== "boolean" || typeof v.em !== "string") return null;
+  return { assinado: v.assinado, em: v.em, ...(typeof v.motivo === "string" ? { motivo: v.motivo } : {}) };
 }
 
 /**
@@ -105,6 +140,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const authz = await requireRole("admin", { requestId, resource: "channels_official" });
   if (!authz.ok) return authz.response;
   const orgId = authz.org.orgId;
+  const t = (texto: string) => traduzir(texto, authz.user.idioma);
 
   const admin = createAdminClient();
   // Canal ARQUIVADO não conta como conectado. A linha sobrevive à exclusão como
@@ -116,7 +152,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const consultar = () =>
     admin
       .from("channel_sessions")
-      .select("id, meta_phone_number_id, meta_waba_id, meta_token_encrypted, phone_number, display_name, webhook_path_token, status")
+      .select("id, meta_phone_number_id, meta_waba_id, meta_token_encrypted, phone_number, display_name, webhook_path_token, status, metadata")
       .eq("organization_id", orgId)
       .eq("provider", CHANNEL_PROVIDER_META);
   const { data } = await queryTolerantToMissingArchived(
@@ -124,7 +160,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     () => consultar().maybeSingle(),
   );
 
-  const base = publicBase(req);
   return ok({
     connected: Boolean(data),
     channel_session_id: data?.id ?? null,
@@ -139,7 +174,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     /** O que o operador precisa colar do NOSSO lado no dashboard da Meta. */
     webhook: data
       ? {
-          callbackUrl: `${base}/api/v1/webhooks/meta/${data.webhook_path_token}`,
+          callbackUrl: callbackDaSessao(req, data.webhook_path_token),
+          assinatura: (() => {
+            const a = assinaturaGravada(data.metadata);
+            return a?.motivo ? { ...a, motivo: traduzirMotivo(a.motivo, t) } : a;
+          })(),
           ...(await tokenDeVerificacaoParaATela()),
           // A porta para quem PODE abrir a tela da instalação — mesma regra do
           // link de `/admin/google` na Agenda. Para o admin de um tenant qualquer
@@ -175,6 +214,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const validacao = await validateMetaCredentials({ phoneNumberId: phone_number_id, token });
   if (!validacao.ok) {
     return fail("invalid_request", validacao.motivo, 422, { requestId });
+  }
+
+  // O número tem que ser DESTA conta: o webhook é assinado por WABA, e um ID de
+  // conta errado assinaria a conta alheia, deixando este número surdo.
+  const daConta = await conferirNumeroDaConta({ wabaId: waba_id, phoneNumberId: phone_number_id, token });
+  if (!daConta.ok) {
+    return fail("invalid_request", traduzirMotivo(daConta.motivo, t), 422, { requestId });
   }
 
   const admin = createAdminClient();
@@ -258,9 +304,78 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
   }
 
+  // O app da Meta tem UM callback; sem o override por WABA, a conta de uma
+  // segunda organização entrega na URL de outra sessão e nunca recebe nada
+  // (medido em produção em 26/09/2026). Falhar aqui NÃO desfaz a conexão: a
+  // credencial é boa, o envio funciona, e a tela avisa que o recebimento não.
+  // Releitura porque `reactivateChannelSession` não devolve a linha; o filtro de
+  // arquivado é o do GET, e a linha acabou de ser (re)ativada.
+  const lerSessao = () =>
+    admin
+      .from("channel_sessions")
+      .select("id, webhook_path_token")
+      .eq("organization_id", orgId)
+      .eq("provider", CHANNEL_PROVIDER_META);
+  const { data: sessaoRaw } = await queryTolerantToMissingArchived(
+    () => lerSessao().is(ARCHIVED_AT, null).maybeSingle(),
+    () => lerSessao().maybeSingle(),
+  );
+  const sessao = sessaoRaw as { id: string; webhook_path_token?: string } | null;
+  const assinatura = sessao?.webhook_path_token
+    ? await assinarWebhookDaConta({
+        wabaId: waba_id,
+        token,
+        callbackUrl: callbackDaSessao(req, sessao.webhook_path_token),
+        verifyToken: (await appDaMeta()).verifyToken,
+      })
+    : ({ ok: false, motivo: MOTIVO_SESSAO_SEM_ENDERECO } as const);
+
+  if (!assinatura.ok) {
+    logger.warn("meta.webhook_da_conta.nao_assinado", {
+      organization_id: orgId,
+      waba_id,
+      motivo: assinatura.motivo,
+    });
+  }
+  if (sessao) {
+    // A metadata é lida AGORA, depois da Meta (até 15s), e não junto da sessão:
+    // ela guarda também `ai_gate` e os números de teste do pré-go-live, e um admin
+    // que mudasse o gate durante a chamada seria revertido em silêncio, com a IA
+    // voltando a responder contato real.
+    // ponytail: ainda é ler-mesclar-gravar; sobra uma janela de milissegundos entre
+    // este select e o update. Não há RPC genérica de merge para esta coluna (só a
+    // do pré-go-live, 0218); vira RPC com `jsonb_set` se a janela algum dia morder.
+    const { data: atual } = await admin
+      .from("channel_sessions")
+      .select("metadata")
+      .eq("organization_id", orgId)
+      .eq("id", sessao.id)
+      .maybeSingle();
+    const lida = (atual as { metadata?: unknown } | null)?.metadata;
+    const base = (lida && typeof lida === "object" ? lida : {}) as Record<string, unknown>;
+    const { error: erroMetadata } = await admin
+      .from("channel_sessions")
+      .update({
+        metadata: {
+          ...base,
+          webhook_da_conta: {
+            assinado: assinatura.ok,
+            ...(assinatura.ok ? {} : { motivo: assinatura.motivo }),
+            em: new Date().toISOString(),
+          },
+        },
+      })
+      .eq("organization_id", orgId)
+      .eq("id", sessao.id);
+    if (erroMetadata) {
+      logger.warn("meta.webhook_da_conta.nao_gravado", { organization_id: orgId, motivo: erroMetadata.message });
+    }
+  }
+
   return ok({
     connected: true,
     displayName: linha.display_name,
     phoneNumber: linha.phone_number,
+    webhook: assinatura.ok ? { assinado: true } : { assinado: false, motivo: traduzirMotivo(assinatura.motivo, t) },
   });
 }
