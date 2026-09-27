@@ -5,6 +5,7 @@ import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
+import { esperarAgenda } from "./helpers/tela-agenda";
 
 /**
  * CLIENTES PELA AGENDA — a jornada de quem liga a regra (migration 0262, PR #867).
@@ -147,7 +148,7 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
 
   // ── 1 · marca o horário PELA TELA, com a regra desligada ─────────────────
   await page.goto("/app/agenda");
-  await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: 30_000 });
+  await esperarAgenda(page, 30_000);
   const dias = await irParaASemanaSeguinte(page);
   await page.getByRole("button", { name: /novo agendamento/i }).click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible({ timeout: 15_000 });

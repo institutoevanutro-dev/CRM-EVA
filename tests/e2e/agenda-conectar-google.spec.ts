@@ -74,6 +74,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
+import { esperarAgenda } from "./helpers/tela-agenda";
 
 const ESPERA = 60_000;
 test.describe.configure({ mode: "serial", timeout: 180_000 });
@@ -112,7 +113,7 @@ test.describe("conectar a agenda do Google", () => {
     // 1. A TELA ABRE INTEIRA. Env opcional ausente degrada com explicação, não
     //    derruba o módulo — é o que `configuracaoDoGoogle()` devolvendo `null`
     //    existe para permitir.
-    await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: ESPERA });
+    await esperarAgenda(page, ESPERA);
     // `exact` porque o nome casa por SUBSTRING: com a agenda vazia, o aviso
     // "Sua agenda está livre esta semana" é um segundo heading, e os dois
     // coexistem desde que o vazio deixou de esconder a grade. Sem `exact`, dois

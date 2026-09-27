@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 
 import { escolherUltimoDiaCheio } from "./helpers/agenda-semana-integra";
+import { esperarAgenda } from "./helpers/tela-agenda";
 
 /**
  * "VER NA AGENDA" LEVA ATÉ O COMPROMISSO — o botão que não fazia nada.
@@ -67,7 +68,7 @@ test("marcar, clicar em 'Ver na agenda', e ENCONTRAR o compromisso na grade", as
   await entrar(page, creds);
 
   await page.goto("/app/agenda");
-  await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: 20_000 });
+  await esperarAgenda(page, 20_000);
 
   await page.getByRole("button", { name: /Novo agendamento/i }).click();
   // O tipo do seed, e não o primeiro da lista: só ele tem jornada publicada.

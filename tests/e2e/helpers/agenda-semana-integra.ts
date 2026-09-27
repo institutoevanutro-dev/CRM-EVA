@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { esperarAgenda, telaAgenda } from "./tela-agenda";
 
 /**
  * A SEMANA ÍNTEGRA — o único lugar destas specs onde "que dia é hoje" entra na
@@ -65,9 +66,12 @@ const DIAS_POR_SEMANA = 7;
  */
 export async function irParaASemanaSeguinte(page: Page): Promise<string[]> {
   await expect(
-    page.getByTestId("tela-agenda"),
+    telaAgenda(page),
     "a agenda ainda não terminou de hidratar — clicar agora perderia o evento",
   ).toHaveAttribute("data-hidratado", "true", { timeout: 25_000 });
+  // Hidratar não tira a cópia oculta do streaming do <body>: o clique abaixo
+  // acharia DOIS `periodo-seguinte`. Mesmo motivo de `esperarTela`.
+  await esperarAgenda(page, 25_000);
 
   const colunas = page.locator('[data-testid^="coluna-dia-"]');
   await expect(
@@ -116,6 +120,18 @@ export async function irParaASemanaDoCompromisso(page: Page, instanteISO: string
     const dd = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${dd(d.getMonth() + 1)}-${dd(d.getDate())}`;
   }, instanteISO);
+
+  // HIDRATADA antes de ler os dias, pela mesma razão de `irParaASemanaSeguinte`
+  // e mais uma: o HTML do servidor desenha a semana no fuso do CONTÊINER (UTC).
+  // No sábado entre 21h e 24h de Brasília, em UTC já é domingo — o servidor
+  // manda a semana SEGUINTE, o browser troca para a atual ao hidratar. Lendo
+  // antes, a função via o dia do compromisso "já desenhado", voltava sem clicar,
+  // e o card nunca aparecia. Medido no e2e da main em 2026-09-27 00:13Z.
+  await expect(
+    telaAgenda(page),
+    "a agenda ainda não terminou de hidratar — os dias lidos agora seriam os do servidor",
+  ).toHaveAttribute("data-hidratado", "true", { timeout: 25_000 });
+  await esperarAgenda(page, 25_000);
 
   await expect(
     page.locator('[data-testid^="coluna-dia-"]').first(),

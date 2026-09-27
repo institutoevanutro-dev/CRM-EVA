@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { mfaEmDivida } from "@/lib/auth/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
@@ -39,6 +40,14 @@ export async function POST(
   } catch {
     return fail("forbidden", "Platform admin required", 403, { requestId });
   }
+
+  if (adminCtx.platformAdmin.scope !== "full") {
+    return fail("forbidden", "Seu acesso de suporte não permite reativar organizações", 403, {
+      requestId,
+    });
+  }
+  if (await mfaEmDivida())
+    return fail("mfa_required", "Confirme a verificação em duas etapas", 403, { requestId });
 
   // Validate body
   let body: z.infer<typeof bodySchema>;
