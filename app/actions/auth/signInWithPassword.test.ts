@@ -10,13 +10,30 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { configEvalink } from "@/lib/evalink/config";
+import { reservaBloqueia } from "@/lib/evalink/reserva";
+import { audit } from "@/lib/audit";
+import { registrarFalhaDeLogin } from "@/lib/auth/rate-limit";
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+vi.mock("@/lib/evalink/config", () => ({ configEvalink: vi.fn() }));
+vi.mock("@/lib/evalink/reserva", () => ({ reservaBloqueia: vi.fn() }));
 vi.mock("@/lib/audit", async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   audit: vi.fn(async () => undefined),
 }));
+// Mantém o comportamento real (o teto de tentativas de outras suítes depende
+// dele), só embrulhado em vi.fn para permitir asserção de chamada.
+vi.mock("@/lib/auth/rate-limit", async (orig) => {
+  const original = await orig<Record<string, unknown>>();
+  return {
+    ...original,
+    registrarFalhaDeLogin: vi.fn(original.registrarFalhaDeLogin as (...a: unknown[]) => unknown),
+  };
+});
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 
 const signIn = vi.fn(async () => ({
@@ -28,6 +45,7 @@ describe("signInWithPassword — teto de tentativas", () => {
   beforeEach(() => {
     vi.resetModules();
     signIn.mockClear();
+    vi.mocked(configEvalink).mockReturnValue(null);
     vi.mocked(headers).mockResolvedValue({
       get: (k: string) => (k === "x-forwarded-for" ? "203.0.113.77" : null),
     } as never);
@@ -38,6 +56,7 @@ describe("signInWithPassword — teto de tentativas", () => {
     vi.mocked(createClient).mockResolvedValue({
       auth: {
         signInWithPassword: signIn,
+        signOut: vi.fn(async () => ({ error: null })),
         mfa: { listFactors: vi.fn(async () => ({ data: { totp: [{ id: "f1" }] } })) },
       },
     } as never);
@@ -80,5 +99,75 @@ describe("signInWithPassword — teto de tentativas", () => {
     // Nenhuma das dez foi barrada: se o sucesso contasse, a 6ª seria.
     expect(resultados.filter((r) => r?.error === "rate_limited")).toHaveLength(0);
     expect(signIn).toHaveBeenCalledTimes(10);
+  });
+});
+
+describe("signInWithPassword: senha é reserva para quem está ligado ao EvaLink", () => {
+  const signOut = vi.fn(async () => ({ error: null }));
+  const admin = { marker: "admin-client" };
+
+  beforeEach(() => {
+    vi.resetModules();
+    signOut.mockClear();
+    vi.mocked(createAdminClient).mockClear();
+    vi.mocked(createAdminClient).mockReturnValue(admin as never);
+    vi.mocked(reservaBloqueia).mockClear();
+    vi.mocked(audit).mockClear();
+    vi.mocked(registrarFalhaDeLogin).mockClear();
+    vi.mocked(headers).mockResolvedValue({ get: () => null } as never);
+    vi.mocked(createClient).mockResolvedValue({
+      auth: {
+        signInWithPassword: vi.fn(async () => ({
+          data: { user: { id: "u1" }, session: {} },
+          error: null,
+        })),
+        signOut,
+        mfa: { listFactors: vi.fn(async () => ({ data: { totp: [] } })) },
+      },
+    } as never);
+  });
+
+  it("EvaLink ligado e a regra bloqueia: recusa, encerra só a sessão local, conta a falha e audita", async () => {
+    vi.mocked(configEvalink).mockReturnValue({} as never);
+    vi.mocked(reservaBloqueia).mockResolvedValue(true);
+    const { signInWithPassword } = await import("./signInWithPassword");
+
+    const res = await signInWithPassword({ email: "ligado@example.com", password: "senha-teste-123" });
+
+    expect(res.error).toBe("invalid_credentials");
+    expect(reservaBloqueia).toHaveBeenCalledWith(admin, "u1");
+    // scope "local": só esta sessão cai, não todas as sessões da pessoa
+    // (incluindo as legítimas via EvaLink).
+    expect(signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(registrarFalhaDeLogin).toHaveBeenCalledWith("ligado@example.com", expect.anything());
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "auth.login_failed",
+        metadata: expect.objectContaining({ reason: "evalink_reserva" }),
+      }),
+    );
+  });
+
+  it("EvaLink ligado e a regra não bloqueia: entra sem encerrar sessão nem contar falha", async () => {
+    vi.mocked(configEvalink).mockReturnValue({} as never);
+    vi.mocked(reservaBloqueia).mockResolvedValue(false);
+    const { signInWithPassword } = await import("./signInWithPassword");
+
+    const res = await signInWithPassword({ email: "admin@example.com", password: "senha-teste-123" });
+
+    expect(res).toBeUndefined();
+    expect(signOut).not.toHaveBeenCalled();
+    expect(registrarFalhaDeLogin).not.toHaveBeenCalled();
+  });
+
+  it("EvaLink desligado: entra sem consultar a regra nem o admin client", async () => {
+    vi.mocked(configEvalink).mockReturnValue(null);
+    const { signInWithPassword } = await import("./signInWithPassword");
+
+    const res = await signInWithPassword({ email: "sem-evalink@example.com", password: "senha-teste-123" });
+
+    expect(res).toBeUndefined();
+    expect(createAdminClient).not.toHaveBeenCalled();
+    expect(reservaBloqueia).not.toHaveBeenCalled();
   });
 });

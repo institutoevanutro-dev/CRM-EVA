@@ -101,6 +101,7 @@ correspondentes localizados no repo):
   de `instagram_comments` (aba "Comentários" do Inbox), regra palavra-gatilho → resposta
   pública + Direct, classificador de segurança + IA para o resto, e publicação manual pela
   tela. Ver `docs/superpowers/specs/2026-09-26-comentarios-no-crm-design.md`.
+- **Entrar com o EvaLink (opcional, 2026-09-27)**: a branch `feat/entrar-com-evalink` traz login pela Conta EvaLink (OIDC, migration 0287), ligação por `sub`, derrubada de sessão e banimento por aviso assinado da Conta (salvo último admin e admin de plataforma), e prova pela tela em `tests/e2e/entrar-com-evalink.spec.ts`.
 - **CRM & pedidos** — kanban com vocabulário configurável por nicho (fractional indexing),
   customer 360, contatos, tags, Nuvemshop.
 - **IA nativa** — agentes com RAG por tenant (pgvector), sentiment, handoff IA→humano,

@@ -6,8 +6,11 @@ import { redirect } from "next/navigation";
 import { safeNext } from "@/lib/auth/safe-next";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { loginSchema, type LoginInput } from "@/lib/auth/schemas";
 import { audit, hashEmail } from "@/lib/audit";
+import { configEvalink } from "@/lib/evalink/config";
+import { reservaBloqueia } from "@/lib/evalink/reserva";
 import {
   authRateLimited,
   contaBloqueadaPorFalhas,
@@ -78,6 +81,28 @@ export async function signInWithPassword(input: LoginInput, next?: string): Prom
       metadata: {
         email_hash: hashEmail(parsed.data.email),
         reason: error?.message ?? "unknown",
+      },
+      requestId,
+      ip,
+      userAgent,
+    });
+    return { ok: false, error: "invalid_credentials" };
+  }
+
+  // Senha só é reserva para quem está ligado à Conta EvaLink: com o EvaLink
+  // ligado, quem tem vínculo em `evalink_vinculos` só entra por senha se for
+  // admin ativo (org ou plataforma). A regra em si (e o fail-closed em erro de
+  // consulta) mora em `reservaBloqueia`; aqui só a fiação.
+  if (configEvalink() && (await reservaBloqueia(createAdminClient(), data.user.id))) {
+    // scope "local": encerra só ESTA sessão recém-aberta pela senha, nunca as
+    // sessões existentes da pessoa abertas pela Conta EvaLink.
+    await supabase.auth.signOut({ scope: "local" });
+    await registrarFalhaDeLogin(parsed.data.email, AUTH_LIMITS.login);
+    await audit({
+      action: "auth.login_failed",
+      metadata: {
+        email_hash: hashEmail(parsed.data.email),
+        reason: "evalink_reserva",
       },
       requestId,
       ip,

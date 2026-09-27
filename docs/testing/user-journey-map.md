@@ -2537,3 +2537,21 @@ não roda fora do e2e local (ver `.changes/comentarios-do-instagram.md`).
 - Componente real: `tests/unit/financeiro-do-contato.test.tsx`, erro/retentativa e valores em centavos.
 - Jornada de vínculo/proposta: Playwright no projeto financeiro, `tests/e2e/integracao-crm.spec.ts` com banco descartável e CRM HTTPS fictício.
 - Pendente: prova autenticada dos dois sistemas publicados e configuração das credenciais pelo operador.
+
+## J26 — Entrar pelo EvaLink, e perder o acesso quando a Conta desliga `[P0]` (2026-09-27)
+
+Login opcional pela Conta EvaLink (migration 0287). Só aparece com as cinco
+variáveis `EVALINK_*` válidas; sem elas o CRM segue só com senha. Mapa:
+`docs/architecture/login-evalink.architecture.json`.
+
+| Caso | Prioridade | Resultado |
+|---|---|---|
+| Primeira entrada pelo botão "Entrar com o EvaLink": `/evalink/volta` responde 200 com o cookie de sessão e `/app` abre na organização padrão, com o papel da Conta | `[P0]` | **PASS pela tela.** `tests/e2e/entrar-com-evalink.spec.ts` |
+| Aviso "desligado" da Conta: 200, as sessões somem do GoTrue e recarregar `/app` leva a `/login` | `[P0]` | **PASS**, mesma spec |
+| Desligada, a senha não entra: o GoTrue recusa por banimento, e a tela mostra o erro de senha | `[P0]` | **PASS**, mesma spec |
+| Entrar de novo pelo EvaLink levanta o banimento, na mesma organização | `[P0]` | **PASS**, mesma spec |
+| Aviso com assinatura errada responde 401 | `[P1]` | **PASS**, mesma spec |
+| Usuário que não está ligado segue entrando por senha, com o botão visível | `[P0]` | **PASS**, mesma spec |
+| Quem tem TOTP verificado passa por `/login/mfa?next=/app` antes do `/app` | `[P0]` | **PASS em teste de rota**: `app/evalink/volta/route.test.ts`. NÃO MEDIDO pela tela |
+| Sem a organização padrão ativa, a recusa chega à tela com `?evalink=sem_org_padrao` e mensagem própria, e é auditada com esse motivo | `[P1]` | **PASS em unit/rota**: `lib/evalink/entrada.test.ts`, `app/evalink/volta/route.test.ts` |
+| Último admin ativo de alguma organização e admin de plataforma ativo não são banidos pelo aviso (perdem sessões e senha) | `[P1]` | **PASS em unit**: `lib/evalink/entrada.test.ts` |
