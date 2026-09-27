@@ -128,6 +128,17 @@ UPSTASH_REDIS_REST_TOKEN=e2e-placeholder-nao-e-segredo
 # que guarda o que o app mandou. Fora dessa spec nada escuta ali: a busca de
 # perfil de \`instagram-receber\` falha rápido, como falhava contra a Meta real.
 INSTAGRAM_GRAPH_BASE_URL=http://127.0.0.1:47811
+# Login pela Conta EvaLink LIGADO na suíte, contra a Conta falsa que o
+# playwright.config.ts sobe nesta porta fixa (tests/helpers/conta-falsa-servidor.ts).
+# Os usuários do seed não estão ligados à Conta, então continuam entrando por
+# senha e as outras specs não mudam. A organização padrão não vem do seed:
+# tests/e2e/entrar-com-evalink.spec.ts a cria com este id fixo. Valores de
+# teste, nenhum é segredo.
+CONTA_URL=http://127.0.0.1:47812
+EVALINK_CLIENT_ID=cliente-ficticio
+EVALINK_CLIENT_SECRET=segredo-ficticio
+EVALINK_SEGREDO_AVISO=e2e-placeholder-segredo-do-aviso-nao-e-segredo
+EVALINK_ORG_PADRAO=e7a1e2e0-0000-4000-8000-000000000001
 NEXT_TELEMETRY_DISABLED=1
 # Telemetria DESLIGADA na suíte, e não é preferência: sem isto o SDK do browser
 # assume o DSN da comunidade (\`lib/sentry/dsn.ts\` → DEFAULT_SENTRY_DSN) e a suíte

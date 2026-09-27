@@ -129,44 +129,56 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  webServer: {
-    // Produção (`next build` antes!): dev-server compila por rota (40-80s) e
-    // Turbopack dev quebra cookies() fora do request scope — inviável p/ e2e.
-    command: `pnpm exec next start --port ${PORT}`,
-    // O ambiente do servidor sob teste vem do `.env.e2e`, INJETADO aqui — e não
-    // do `.env.local`, que num checkout de trabalho aponta para PRODUÇÃO.
-    // Variável de ambiente real tem precedência sobre os arquivos `.env*` que o
-    // Next carrega sozinho, e é isto que impede a suíte de escrever no banco
-    // real (medido em 2026-08-06: sem esta injeção, ela escrevia).
-    //
-    // ⚠️ Isto cobre o SERVIDOR. Os scripts de seed que as specs chamam sozinhas
-    // liam `.env.local` direto do disco e escapavam daqui — o conserto do outro
-    // lado é `scripts/lib/env-de-teste.ts`, que faz `process.env` vencer. E é o
-    // `publicarNoProcesso` acima que garante que o `process.env` do runner tenha
-    // o que aquele conserto precisa: sem ele, num worktree sem `.env.local`, o
-    // seed não tinha NENHUMA das duas fontes.
-    env: publicarNoProcesso(envDoE2E()),
-    url: BASE_URL,
-    // false: reusar um server que já ocupa a porta pode ser OUTRO processo
-    // (ex.: bundle do Remotion na 3000) — o teste precisa do NOSSO next start.
-    reuseExistingServer: false,
-    // Sobre a precedência de `env`, MEDIDO (Playwright 1.5x, 2026-08-07) com um
-    // webServer que imprime o que recebeu:
-    //
-    //   var só no process.env        → CHEGA ao servidor (mescla, não substitui)
-    //   var só no `env:` do config   → chega
-    //   var nos DOIS, valores dif.   → vence a do `env:` do config
-    //
-    // A primeira linha é o que mantém `AUTH_RATE_LIMIT_LOGIN_IP` funcionando:
-    // ele é definido no passo do workflow e quem aplica o teto é o SERVIDOR.
-    //
-    // A terceira é a armadilha. Uma chave que exista no `.env.e2e` E no ambiente
-    // do CI silenciosamente resolve para valores DIFERENTES nos dois lados —
-    // servidor com um, processo de teste com outro. Foi assim que
-    // `INTERNAL_SECRET` derrubou 8 specs com 401. Por isso o workflow publica o
-    // `.env.e2e` inteiro no ambiente do job em vez de redigitar valores: uma
-    // fonte não colide consigo mesma.
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      // Produção (`next build` antes!): dev-server compila por rota (40-80s) e
+      // Turbopack dev quebra cookies() fora do request scope — inviável p/ e2e.
+      command: `pnpm exec next start --port ${PORT}`,
+      // O ambiente do servidor sob teste vem do `.env.e2e`, INJETADO aqui — e não
+      // do `.env.local`, que num checkout de trabalho aponta para PRODUÇÃO.
+      // Variável de ambiente real tem precedência sobre os arquivos `.env*` que o
+      // Next carrega sozinho, e é isto que impede a suíte de escrever no banco
+      // real (medido em 2026-08-06: sem esta injeção, ela escrevia).
+      //
+      // ⚠️ Isto cobre o SERVIDOR. Os scripts de seed que as specs chamam sozinhas
+      // liam `.env.local` direto do disco e escapavam daqui — o conserto do outro
+      // lado é `scripts/lib/env-de-teste.ts`, que faz `process.env` vencer. E é o
+      // `publicarNoProcesso` acima que garante que o `process.env` do runner tenha
+      // o que aquele conserto precisa: sem ele, num worktree sem `.env.local`, o
+      // seed não tinha NENHUMA das duas fontes.
+      env: publicarNoProcesso(envDoE2E()),
+      url: BASE_URL,
+      // false: reusar um server que já ocupa a porta pode ser OUTRO processo
+      // (ex.: bundle do Remotion na 3000) — o teste precisa do NOSSO next start.
+      reuseExistingServer: false,
+      // Sobre a precedência de `env`, MEDIDO (Playwright 1.5x, 2026-08-07) com um
+      // webServer que imprime o que recebeu:
+      //
+      //   var só no process.env        → CHEGA ao servidor (mescla, não substitui)
+      //   var só no `env:` do config   → chega
+      //   var nos DOIS, valores dif.   → vence a do `env:` do config
+      //
+      // A primeira linha é o que mantém `AUTH_RATE_LIMIT_LOGIN_IP` funcionando:
+      // ele é definido no passo do workflow e quem aplica o teto é o SERVIDOR.
+      //
+      // A terceira é a armadilha. Uma chave que exista no `.env.e2e` E no ambiente
+      // do CI silenciosamente resolve para valores DIFERENTES nos dois lados —
+      // servidor com um, processo de teste com outro. Foi assim que
+      // `INTERNAL_SECRET` derrubou 8 specs com 401. Por isso o workflow publica o
+      // `.env.e2e` inteiro no ambiente do job em vez de redigitar valores: uma
+      // fonte não colide consigo mesma.
+      timeout: 120_000,
+    },
+    {
+      // A Conta EvaLink falsa (JWKS, /authorize que aprova na hora, troca de
+      // código). O `.env.e2e` aponta `CONTA_URL` para esta porta fixa, e o
+      // servidor do CRM fala com ela em `/evalink/entrar` e `/evalink/volta`.
+      // Quem a usa é `tests/e2e/entrar-com-evalink.spec.ts`.
+      command: "pnpm exec tsx tests/helpers/conta-falsa-servidor.ts",
+      url: "http://127.0.0.1:47812/auth/v1/.well-known/jwks.json",
+      reuseExistingServer: false,
+      timeout: 30_000,
+    },
+  ],
   projects: [{ name: "chromium", use: { browserName: "chromium" } }],
 });
