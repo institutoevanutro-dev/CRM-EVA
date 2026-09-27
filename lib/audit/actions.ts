@@ -626,6 +626,15 @@ export const AUDIT_ACTIONS = [
   // da regra casada. É o "laço de retorno" que a spec §9 promete: sem esta
   // trilha não dá pra medir quanto o classificador erra.
   "comment.waiting_human",
+  // Tarefa 5 (consumidores): login aceito pela Conta EvaLink, usuário existente
+  // ou recém-criado. `resourceId` é o `user_id` do CRM.
+  "auth.evalink_login",
+  // Tarefa 5 (consumidores): entrada pela Conta recusada (conflito, sem
+  // organização, último admin ou falha de infraestrutura).
+  "auth.evalink_recusado",
+  // Tarefa 5 (consumidores): aviso da Conta aplicado (desligado, acesso
+  // removido, papel mudou). Reentrega com o mesmo id não gera segunda linha.
+  "auth.evalink_aviso",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
