@@ -136,6 +136,25 @@ describe("requireRole — MFA é política de sessão, não de cadastro", () => 
     expect(r.ok).toBe(false);
   });
 
+  // O atalho `allowPlatformAdmin` dispensa o papel na org, não a prova de MFA.
+  // Ele retornava antes do `mfaEmDivida()`: sessão aal1 roubada aprovava redact
+  // LGPD e conectava WhatsApp pelas rotas que usam o atalho.
+  it("atalho de platform admin em aal1 com fator é BARRADO por mfa_required", async () => {
+    preparar({ role: "viewer", temFator: true, aal: "aal1", isPlatformAdmin: true });
+    const r = await requireRole("manager", { requestId: "req-pa1", allowPlatformAdmin: true });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      const corpo = (await r.response.json()) as { error: { code: string } };
+      expect(corpo.error.code).toBe("mfa_required");
+    }
+  });
+
+  it("CONTROLE POSITIVO: o atalho de platform admin em aal2 PASSA sem papel na org", async () => {
+    preparar({ role: "viewer", temFator: true, aal: "aal2", isPlatformAdmin: true });
+    const r = await requireRole("manager", { requestId: "req-pa2", allowPlatformAdmin: true });
+    expect(r.ok).toBe(true);
+  });
+
   it("falta de PAPEL continua respondendo forbidden_role, não mfa_required", async () => {
     // A ordem importa: quem nem tem papel para chegar lá não deve descobrir,
     // pela resposta, o estado de MFA de ninguém.

@@ -85,20 +85,29 @@ export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promis
     };
   }
 
-  if (allowPlatformAdmin && user.is_platform_admin && !user.support) {
-    return { ok: true, user, org };
-  }
+  // O admin de plataforma dispensa o PAPEL na org, não a prova de MFA: o
+  // atalho retornava antes do `mfaEmDivida()`, e uma sessão `aal1` roubada de
+  // quem tem fator aprovava redact LGPD e conectava WhatsApp por estas rotas.
+  const atalhoDePlataforma = Boolean(allowPlatformAdmin && user.is_platform_admin && !user.support);
 
   // Role efetivo do banco (não do snapshot do cookie/membership em memória).
-  const supabase = await createClient();
-  const { data: effectiveRole, error } = await supabase.rpc("fn_user_role_in_org", {
-    p_org: org.orgId,
-  });
-  if (error) {
-    return { ok: false, response: fail("internal_error", error.message, 500, { requestId }) };
+  let effectiveRole: string | null = null;
+  if (!atalhoDePlataforma) {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("fn_user_role_in_org", {
+      p_org: org.orgId,
+    });
+    if (error) {
+      return { ok: false, response: fail("internal_error", error.message, 500, { requestId }) };
+    }
+    effectiveRole = (data as string | null) ?? null;
   }
 
-  const rank = effectiveRole ? (ROLE_RANK[effectiveRole as Role] ?? 0) : 0;
+  const rank = atalhoDePlataforma
+    ? ROLE_RANK[min]
+    : effectiveRole
+      ? (ROLE_RANK[effectiveRole as Role] ?? 0)
+      : 0;
 
   // MFA como política de SESSÃO, não só de cadastro.
   //
@@ -152,5 +161,6 @@ export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promis
     };
   }
 
+  if (atalhoDePlataforma) return { ok: true, user, org };
   return { ok: true, user, org: { ...org, role: effectiveRole as Role } };
 }
