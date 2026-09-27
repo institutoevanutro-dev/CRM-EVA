@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { test, expect } from "@playwright/test";
 
 import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
+import { esperarAgenda } from "./helpers/tela-agenda";
 
 /**
  * A PROVA EM TELA DA FRENTE 1 (API + motor) — agora ESCRITA, e o caminho até aqui
@@ -131,7 +132,7 @@ test("marcar um horário pela tela e vê-lo aparecer na grade — sem recarregar
   await page.waitForURL(/\/app(\/|$)/, { timeout: 20_000 });
 
   await page.goto("/app/agenda");
-  await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: 20_000 });
+  await esperarAgenda(page, 20_000);
 
   // ⚠️ A SEMANA SEGUINTE, e ela é a condição de o caso poder passar.
   //

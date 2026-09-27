@@ -152,7 +152,8 @@ describe("spec de agenda não escolhe o período sozinha", () => {
     const tela = readFileSync(TELA, "utf8");
 
     expect(modulo).toMatch(
-      /getByTestId\("tela-agenda"\)[\s\S]*toHaveAttribute\("data-hidratado", "true"/,
+      // `telaAgenda(page)` é o `tela-agenda` do <main> (helpers/tela-agenda.ts).
+      /telaAgenda\(page\)[\s\S]*toHaveAttribute\("data-hidratado", "true"/,
     );
     expect(tela).toMatch(/setAttribute\("data-hidratado", "true"\)/);
   });

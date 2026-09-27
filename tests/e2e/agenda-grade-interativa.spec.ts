@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 
 import { irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
+import { esperarAgenda } from "./helpers/tela-agenda";
 
 /**
  * A GRADE COMO AGENDA DE VERDADE — clicar num bloco marca, arrastar um card
@@ -66,7 +67,7 @@ async function entrar(page: Page, creds: Creds) {
   await page.getByRole("button", { name: /entrar/i }).click();
   await page.waitForURL(/\/app(\/|$)/, { timeout: 20_000 });
   await page.goto("/app/agenda");
-  await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: 20_000 });
+  await esperarAgenda(page, 20_000);
 }
 
 /**
@@ -336,7 +337,7 @@ test("arrastar um card remarca — e o horário novo sobrevive ao reload", async
     .toBe(horarioOferecido);
 
   await page.reload();
-  await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: 20_000 });
+  await esperarAgenda(page, 20_000);
   // ⚠️ O F5 DESFAZ A NAVEGAÇÃO — a âncora da grade é estado do React (`useState(new
   // Date())`), então recarregar devolve a tela para a semana de HOJE. O
   // compromisso vive na semana seguinte, e sem voltar até ele a asserção abaixo

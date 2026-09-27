@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
+import { esperarAgenda, telaAgenda } from "./helpers/tela-agenda";
 
 /**
  * A PROVA NA TELA DO PRODUTO — e ela existe porque a outra estava na tela errada.
@@ -44,7 +45,7 @@ test.describe("a Agenda como o dono do produto a usa", () => {
     await item.click();
 
     await expect(page).toHaveURL(/\/app\/agenda/, { timeout: ESPERA });
-    await expect(page.getByTestId("tela-agenda")).toBeVisible();
+    await esperarAgenda(page);
     // `exact` NÃO é adorno aqui, e a linha do link acima já sabia disso. Sem ele
     // o nome casa por substring e o estado VAZIO da agenda ("Sua agenda está
     // livre esta semana") vira um segundo heading — dois elementos, strict mode,
@@ -60,7 +61,7 @@ test.describe("a Agenda como o dono do produto a usa", () => {
     // vitrine, e NINGUÉM o via aqui. Componente provado e não montado é o mesmo
     // que componente ausente, do ponto de vista de quem usa.
     await page.goto("/app/agenda");
-    await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: ESPERA });
+    await esperarAgenda(page, ESPERA);
 
     const filtro = page.getByTestId("filtro-de-pessoas");
     const avatares = page.locator('[data-testid^="avatar-pessoa-"]');
@@ -138,7 +139,7 @@ test.describe("a Agenda como o dono do produto a usa", () => {
     // e jamais dado de mentira (decisão 18 — o relato de quem vê não é "tem dado
     // de teste na tela", é "estou vendo paciente de outra clínica na minha
     // agenda", e o time queima horas caçando um furo de RLS que não existe).
-    const fonte = await page.getByTestId("tela-agenda").getAttribute("data-fonte");
+    const fonte = await telaAgenda(page).getAttribute("data-fonte");
     expect(fonte, "a tela precisa declarar sua fonte no DOM").not.toBeNull();
     expect(
       fonte,
@@ -244,11 +245,11 @@ test.describe("a Agenda como o dono do produto a usa", () => {
     // tela que o cliente abre.
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto("/app/agenda");
-    await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: ESPERA });
+    await esperarAgenda(page, ESPERA);
     await page.screenshot({ path: "evidence/calendario/tela-do-produto-claro.png", fullPage: true });
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.getByTestId("tela-agenda")).toBeVisible();
+    await esperarAgenda(page);
     await page.screenshot({ path: "evidence/calendario/tela-do-produto-celular.png", fullPage: true });
 
     const estouro = await page.evaluate(

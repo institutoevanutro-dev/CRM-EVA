@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { test, expect } from "@playwright/test";
 
 import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
+import { esperarAgenda } from "./helpers/tela-agenda";
 
 /**
  * REMARCAR E CANCELAR PELA TELA — as duas ações que só a IA conseguia fazer.
@@ -80,7 +81,7 @@ async function entrar(page: import("@playwright/test").Page, creds: Creds): Prom
   await page.getByRole("button", { name: /entrar/i }).click();
   await page.waitForURL(/\/app(\/|$)/, { timeout: 20_000 });
   await page.goto("/app/agenda");
-  await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: 20_000 });
+  await esperarAgenda(page, 20_000);
   // ⚠️ A SEMANA SEGUINTE, e ela é a condição de os dois casos existirem.
   //
   // O caso de remarcar precisa de DOIS horários livres no mesmo dia ("só havia
