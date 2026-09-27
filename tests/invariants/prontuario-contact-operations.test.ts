@@ -47,6 +47,7 @@ describe("operações transacionais do prontuário", () => {
     const again = lastJson(createCall());
     expect(again.created).toBe(false);
     expect(again.id).toBe(first.id);
+    expect(() => sql(createCall(KEY, "Outro Nome"))).toThrow();
     expect(lastLine(sql(`select count(*) from public.prontuario_contact_links where source_patient_id='${PATIENT_CREATE}';`))).toBe("1");
     expect(() => sql(createCall("02810000-0000-4000-8000-000000000010"))).toThrow();
   });
@@ -58,6 +59,7 @@ describe("operações transacionais do prontuário", () => {
       `select public.fn_prontuario_patch_contact('${ORG}','${PATIENT_CREATE}','${id}',${revision},'${timestamp}','${name}','1990-01-01','+5527999990000','ficticio@invariant.test','${TOKEN}');`;
     expect(lastJson(patch(1, expected)).applied).toBe(true);
     expect(lastJson(patch(1, expected)).applied).toBe(false);
+    expect(lastJson(createCall()).created).toBe(false);
     expect(() => sql(patch(1, expected, "Outro Nome"))).toThrow();
     sql(`update public.contacts set name='Edicao CRM' where id='${id}';`);
     expect(() => sql(patch(2, expected))).toThrow();

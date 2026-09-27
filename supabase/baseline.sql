@@ -27933,6 +27933,7 @@ create trigger trg_prontuario_desvincular_contato_indisponivel
 alter table public.prontuario_contact_links
   add column if not exists last_source_revision integer not null default -1,
   add column if not exists last_payload_hash text,
+  add column if not exists create_payload_hash text,
   add column if not exists last_crm_updated_at timestamptz;
 
 create or replace function public.fn_prontuario_link_existing(
@@ -27969,17 +27970,19 @@ create or replace function public.fn_prontuario_create_contact(
   p_org uuid, p_patient uuid, p_name text, p_birth date, p_phone text,
   p_email text, p_key uuid, p_token uuid
 ) returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_link public.prontuario_contact_links%rowtype; v_contact public.contacts%rowtype;
+declare v_link public.prontuario_contact_links%rowtype; v_contact public.contacts%rowtype; v_hash text;
 begin
   if p_key is null or p_name is null or length(btrim(p_name)) < 2 then raise exception 'prontuario_input_invalid'; end if;
   if not exists(select 1 from public.api_tokens where id=p_token and organization_id=p_org and revoked_at is null) then
     raise exception 'prontuario_token_invalid';
   end if;
+  v_hash := md5(jsonb_build_object('name',p_name,'birthdate',p_birth,'phone_number',nullif(p_phone,''),'email',nullif(p_email,''))::text);
   perform pg_advisory_xact_lock(hashtextextended('prontuario:'||p_org::text||':'||p_patient::text, 0));
   select * into v_link from public.prontuario_contact_links
    where organization_id=p_org and source_patient_id=p_patient for update;
   if found then
     if v_link.create_request_key is distinct from p_key then raise exception 'prontuario_link_conflict'; end if;
+    if v_link.create_payload_hash is distinct from v_hash then raise exception 'prontuario_request_conflict'; end if;
     select * into v_contact from public.contacts where id=v_link.contact_id and organization_id=p_org;
     if not found or v_contact.is_anonymized or v_contact.is_merged_into is not null then
       raise exception 'prontuario_contact_unavailable';
@@ -27993,8 +27996,8 @@ begin
   values(p_org,p_name,p_name,p_birth,nullif(p_phone,''),nullif(p_email,''),'prontuario_eva')
   returning * into v_contact;
   insert into public.prontuario_contact_links
-    (organization_id,source_patient_id,contact_id,create_request_key,linked_by_api_token_id,last_crm_updated_at)
-  values(p_org,p_patient,v_contact.id,p_key,p_token,v_contact.updated_at);
+    (organization_id,source_patient_id,contact_id,create_request_key,create_payload_hash,linked_by_api_token_id,last_crm_updated_at)
+  values(p_org,p_patient,v_contact.id,p_key,v_hash,p_token,v_contact.updated_at);
   return jsonb_build_object('id',v_contact.id,'updated_at',v_contact.updated_at,'created',true);
 end; $$;
 
@@ -28039,6 +28042,7 @@ revoke execute on function public.fn_prontuario_patch_contact(uuid,uuid,uuid,int
 grant execute on function public.fn_prontuario_link_existing(uuid,uuid,uuid,timestamptz,uuid) to service_role;
 grant execute on function public.fn_prontuario_create_contact(uuid,uuid,text,date,text,text,uuid,uuid) to service_role;
 grant execute on function public.fn_prontuario_patch_contact(uuid,uuid,uuid,integer,timestamptz,text,date,text,text,uuid) to service_role;
+
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
