@@ -59,13 +59,26 @@ async function podeBanir(admin: SupabaseClient, userId: string): Promise<boolean
   const orgs = (minhas.data ?? []).map((l: { organization_id: string }) => l.organization_id);
   if (orgs.length === 0) return true;
 
-  const outros = await admin.from("user_organizations").select("organization_id")
+  const outros = await admin.from("user_organizations").select("organization_id, user_id")
     .in("organization_id", orgs).eq("role", "admin").is("revoked_at", null).neq("user_id", userId);
   if (outros.error) {
     logger.error("evalink_aviso_checagem_falhou", { userId, erro: outros.error.message });
     return false;
   }
-  const cobertas = new Set((outros.data ?? []).map((l: { organization_id: string }) => l.organization_id));
+  // Outro admin já banido (um aviso anterior) não conta: o vínculo dele segue ativo, mas ele
+  // não entra. Sem isto, desligar os dois admins de uma org, um depois do outro, trancava a org.
+  const linhas = (outros.data ?? []) as { organization_id: string; user_id: string }[];
+  const ativos = new Set<string>();
+  for (const id of new Set(linhas.map((l) => l.user_id))) {
+    const u = await admin.auth.admin.getUserById(id);
+    if (u.error) {
+      logger.error("evalink_aviso_checagem_falhou", { userId, erro: u.error.message });
+      return false;
+    }
+    const ate = (u.data.user as { banned_until?: string | null } | null)?.banned_until ?? null;
+    if (!ate || new Date(ate) <= new Date()) ativos.add(id);
+  }
+  const cobertas = new Set(linhas.filter((l) => ativos.has(l.user_id)).map((l) => l.organization_id));
   return orgs.every((o) => cobertas.has(o));
 }
 

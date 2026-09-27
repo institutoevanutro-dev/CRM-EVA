@@ -225,17 +225,24 @@ describe("aplicarAviso", () => {
   }
   const ORG2 = "55555555-5555-4555-8555-555555555555";
 
-  for (const [nome, cfg, bane] of [
-    ["admin de plataforma ativo: não bane", { plat: [{ user_id: U }] }, false],
-    ["último admin ativo de uma organização: não bane", { minhas: [{ organization_id: ORG }, { organization_id: ORG2 }], outros: [{ organization_id: ORG }] }, false],
-    ["admin com outro admin em toda organização: bane", { minhas: [{ organization_id: ORG }], outros: [{ organization_id: ORG }] }, true],
-    ["leitura de platform_admins falha: não bane", { platErro: true }, false],
-    ["leitura de user_organizations falha: não bane", { uoErro: true }, false],
+  const OUTRO = "66666666-6666-4666-8666-666666666666";
+  const ok = { data: { user: { banned_until: null } }, error: null };
+  const banidoResp = { data: { user: { banned_until: "2126-01-01T00:00:00Z" } }, error: null };
+
+  for (const [nome, cfg, bane, outroUser] of [
+    ["admin de plataforma ativo: não bane", { plat: [{ user_id: U }] }, false, ok],
+    ["último admin ativo de uma organização: não bane", { minhas: [{ organization_id: ORG }, { organization_id: ORG2 }], outros: [{ organization_id: ORG, user_id: OUTRO }] }, false, ok],
+    ["admin com outro admin em toda organização: bane", { minhas: [{ organization_id: ORG }], outros: [{ organization_id: ORG, user_id: OUTRO }] }, true, ok],
+    ["o outro admin já está banido: não conta, não bane", { minhas: [{ organization_id: ORG }], outros: [{ organization_id: ORG, user_id: OUTRO }] }, false, banidoResp],
+    ["leitura do outro admin falha: não bane", { minhas: [{ organization_id: ORG }], outros: [{ organization_id: ORG, user_id: OUTRO }] }, false, { data: { user: null }, error: new Error("x") }],
+    ["leitura de platform_admins falha: não bane", { platErro: true }, false, ok],
+    ["leitura de user_organizations falha: não bane", { uoErro: true }, false, ok],
   ] as const) {
     it(nome, async () => {
       const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: U, novo: true }], error: null });
       const updateUserById = vi.fn().mockResolvedValue({ error: null });
-      const admin = adminFalso({ rpc, updateUserById, from: fromProtecao(cfg) });
+      const getUserById = vi.fn().mockResolvedValue(outroUser);
+      const admin = adminFalso({ rpc, updateUserById, getUserById, from: fromProtecao(cfg) });
       await expect(aplicarAviso(admin, { ...base, motivo: "desligado" })).resolves.toEqual({ resultado: "feito", userId: U, banido: bane });
       // A senha troca sempre, e o RPC que derruba as sessões roda sempre.
       expect(updateUserById).toHaveBeenNthCalledWith(1, U, { password: expect.any(String) });
