@@ -25,7 +25,7 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
-import { FRASES_PADRAO, frasesDeGatilho } from "@/lib/comentarios/gatilho-direct";
+import { FRASES_PADRAO, frasesComoGuardadas } from "@/lib/comentarios/gatilho-direct";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { logger } from "@/lib/logger";
@@ -59,7 +59,11 @@ export async function GET(): Promise<Response> {
   }
 
   const settings = (data as { settings?: Record<string, unknown> | null } | null)?.settings ?? {};
-  return ok({ frases: frasesDeGatilho(settings.comentarios), padrao: FRASES_PADRAO }, { requestId });
+  // O GUARDADO, não o resolvido. A tela edita o que o dono escreveu; o texto
+  // de fábrica vai junto, separado, para virar placeholder. Devolver aqui a
+  // frase já resolvida fazia o campo nascer preenchido, e o primeiro Salvar
+  // congelava o padrão de hoje dentro da organização (achado do e2e).
+  return ok({ frases: frasesComoGuardadas(settings.comentarios), padrao: FRASES_PADRAO }, { requestId });
 }
 
 export async function PUT(req: NextRequest): Promise<Response> {
@@ -114,5 +118,5 @@ export async function PUT(req: NextRequest): Promise<Response> {
     metadata: { campos: ["preco", "agendamento"] },
   });
 
-  return ok({ frases: frasesDeGatilho({ preco: parsed.data.preco, agendamento: parsed.data.agendamento }) }, { requestId });
+  return ok({ frases: frasesComoGuardadas({ preco: parsed.data.preco, agendamento: parsed.data.agendamento }) }, { requestId });
 }

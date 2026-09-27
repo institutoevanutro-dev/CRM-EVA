@@ -17,7 +17,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FrasesDeAbertura } from "@/components/inbox/comentarios/FrasesDeAbertura";
-import { FRASES_PADRAO } from "@/lib/comentarios/gatilho-direct";
+import { FRASES_PADRAO, frasesComoGuardadas } from "@/lib/comentarios/gatilho-direct";
 
 const salvarMock = vi.fn();
 let dadosDoServidor: { frases: { preco: string; agendamento: string }; padrao: typeof FRASES_PADRAO } | undefined;
@@ -28,13 +28,24 @@ vi.mock("@/hooks/comentarios/useComentarios", () => ({
   useSalvarFrasesDeAbertura: () => ({ mutate: salvarMock, isPending: false }),
 }));
 
+/**
+ * O dublê é montado pela MESMA função que a rota usa para responder
+ * (`frasesComoGuardadas`), nunca por um objeto escrito à mão.
+ *
+ * Isto não é preciosismo: a primeira versão deste arquivo inventou
+ * `{ preco: "" }` — um formato que a API daquele momento NÃO produzia, porque
+ * ela resolvia o branco para o texto padrão antes de responder. Os sete
+ * testes passaram verdes contra uma ficção, e quem pegou o defeito foi o e2e,
+ * no CI. Amarrar o dublê à função impede a ficção de voltar.
+ */
+function comoARotaResponde(guardado: unknown) {
+  return { frases: frasesComoGuardadas(guardado), padrao: FRASES_PADRAO };
+}
+
 beforeEach(() => {
   salvarMock.mockClear();
   carregando = false;
-  dadosDoServidor = {
-    frases: { preco: "", agendamento: "" },
-    padrao: FRASES_PADRAO,
-  };
+  dadosDoServidor = comoARotaResponde(undefined);
 });
 
 describe("Frases do Direct", () => {
@@ -72,10 +83,7 @@ describe("Frases do Direct", () => {
   });
 
   it("o texto já configurado aparece dentro do campo, não só como sugestão", () => {
-    dadosDoServidor = {
-      frases: { preco: "Frase do dono", agendamento: "Outra frase" },
-      padrao: FRASES_PADRAO,
-    };
+    dadosDoServidor = comoARotaResponde({ preco: "Frase do dono", agendamento: "Outra frase" });
 
     render(<FrasesDeAbertura />);
 
@@ -91,7 +99,7 @@ describe("Frases do Direct", () => {
 
     // O painel recarrega a cada 30s e o hook devolve um objeto NOVO com o que
     // está no servidor (ainda vazio, porque ninguém salvou).
-    dadosDoServidor = { frases: { preco: "", agendamento: "" }, padrao: FRASES_PADRAO };
+    dadosDoServidor = comoARotaResponde(undefined);
     rerender(<FrasesDeAbertura />);
 
     expect((screen.getByLabelText(/Quando quiserem marcar/i) as HTMLTextAreaElement).value).toBe(

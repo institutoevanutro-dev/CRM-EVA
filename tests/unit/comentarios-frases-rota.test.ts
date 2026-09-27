@@ -93,9 +93,13 @@ function pedido(corpo: unknown): NextRequest {
 }
 
 describe("GET", () => {
-  it("organização sem nada configurado recebe as frases padrão", async () => {
+  it("organização sem nada configurado recebe CAMPO VAZIO, com o padrão ao lado", async () => {
+    // Esta expectativa já esteve invertida, e o e2e é que pegou: devolvendo o
+    // padrão como VALOR, o campo da tela nasce preenchido e o primeiro Salvar
+    // congela a frase de fábrica de hoje dentro da organização.
     const corpo = await (await GET()).json();
-    expect(corpo.data.frases).toEqual(FRASES_PADRAO);
+    expect(corpo.data.frases).toEqual({ preco: "", agendamento: "" });
+    expect(corpo.data.padrao).toEqual(FRASES_PADRAO);
   });
 
   it("devolve o que a organização configurou, e o padrão ao lado para a tela mostrar", async () => {
@@ -104,7 +108,7 @@ describe("GET", () => {
     const corpo = await (await GET()).json();
 
     expect(corpo.data.frases.preco).toBe("Oi! Qual seu objetivo?");
-    expect(corpo.data.frases.agendamento).toBe(FRASES_PADRAO.agendamento);
+    expect(corpo.data.frases.agendamento).toBe("");
     expect(corpo.data.padrao).toEqual(FRASES_PADRAO);
   });
 
@@ -147,7 +151,7 @@ describe("PUT", () => {
     const corpo = await res.json();
 
     expect(chamadasDeRpc[0]!.args.p_frases).toEqual({ preco: "", agendamento: "" });
-    expect(corpo.data.frases).toEqual(FRASES_PADRAO);
+    expect(corpo.data.frases).toEqual({ preco: "", agendamento: "" });
   });
 
   it("organização que não existe é 404, não 200 silencioso", async () => {

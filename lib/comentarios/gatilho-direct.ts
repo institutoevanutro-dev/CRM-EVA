@@ -72,13 +72,29 @@ const Esquema = z
  * gatilho, e desligar ainda não existe (ver `.changes/`).
  */
 export function frasesDeGatilho(bruto: unknown): FrasesDeGatilho {
-  const lido = Esquema.parse(bruto ?? {});
-  const escolher = (valor: string | undefined, padrao: string): string => {
-    const aparado = valor?.trim();
-    return aparado ? aparado : padrao;
-  };
+  const guardadas = frasesComoGuardadas(bruto);
   return {
-    preco: escolher(lido.preco, FRASES_PADRAO.preco),
-    agendamento: escolher(lido.agendamento, FRASES_PADRAO.agendamento),
+    preco: guardadas.preco || FRASES_PADRAO.preco,
+    agendamento: guardadas.agendamento || FRASES_PADRAO.agendamento,
+  };
+}
+
+/**
+ * O que está GUARDADO, sem resolver nada — é isto que a tela edita.
+ *
+ * A distinção não é cosmética, e custou um e2e vermelho para aparecer: a
+ * leitura da API devolvia a frase já RESOLVIDA, o campo da tela nascia
+ * preenchido com o texto de fábrica, e o primeiro clique em Salvar
+ * CONGELAVA a frase de hoje dentro da organização. Quem nunca configurou
+ * passaria a ter configurado sem querer, e uma melhoria futura do texto
+ * padrão nunca mais chegaria nele.
+ *
+ * Quem resolve o branco é `frasesDeGatilho`, na hora de MANDAR.
+ */
+export function frasesComoGuardadas(bruto: unknown): FrasesDeGatilho {
+  const lido = Esquema.parse(bruto ?? {});
+  return {
+    preco: lido.preco?.trim() ?? "",
+    agendamento: lido.agendamento?.trim() ?? "",
   };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FRASES_PADRAO, abreConversa, frasesDeGatilho } from "./gatilho-direct";
+import { FRASES_PADRAO, abreConversa, frasesComoGuardadas, frasesDeGatilho } from "./gatilho-direct";
 
 describe("abreConversa — quais gatilhos viram mensagem privada", () => {
   it("preço e agendamento abrem conversa: são intenção de compra", () => {
@@ -64,5 +64,28 @@ describe("frasesDeGatilho — o texto que a pessoa recebe", () => {
       expect(frase).not.toMatch(/r\$|\bre[aá]is\b|\bpre[cç]o\b|\bvalor\b/iu);
       expect(frase).not.toMatch(/nutr[oó]log|especialist|http/iu);
     }
+  });
+});
+
+describe("frasesComoGuardadas — o que a TELA edita", () => {
+  it("organização que nunca configurou recebe campo vazio, NÃO o texto padrão", () => {
+    // O defeito que o e2e pegou: a leitura resolvia o branco para o padrão
+    // antes de entregar à tela, o campo vinha preenchido, e salvar CONGELAVA
+    // a frase de fábrica de hoje dentro da organização. Quem resolve o branco
+    // é o WORKER, na hora de mandar, não a tela.
+    expect(frasesComoGuardadas(undefined)).toEqual({ preco: "", agendamento: "" });
+    expect(frasesComoGuardadas({})).toEqual({ preco: "", agendamento: "" });
+  });
+
+  it("devolve o texto do dono como ele está guardado", () => {
+    expect(frasesComoGuardadas({ preco: "  Minha frase  " })).toEqual({
+      preco: "Minha frase",
+      agendamento: "",
+    });
+  });
+
+  it("valor de tipo errado não vaza para a tela", () => {
+    expect(frasesComoGuardadas({ preco: 42 })).toEqual({ preco: "", agendamento: "" });
+    expect(frasesComoGuardadas("nada disso")).toEqual({ preco: "", agendamento: "" });
   });
 });
