@@ -11,9 +11,11 @@
  *      mostra o comentário sem pedir toque humano.
  *   2. Um comentário fora do vocabulário seguro ("quanto custa" — gatilho
  *      "preço" de `lib/comentarios/seguranca.ts`) cai em `esperando_voce` e
- *      **nada é publicado**: nem Direct, nem resposta pública. Este é o caso
- *      que protege o dono (médico, CFM, sem RQE) de uma IA respondendo sobre
- *      preço ou tratamento em público — importa mais que o primeiro.
+ *      **nada é publicado em público**. Desde a abertura de conversa por
+ *      gatilho, o Direct SAI (preço é intenção de compra, e quem pergunta não
+ *      pode esperar a fila); a resposta pública continua proibida. Este é o
+ *      caso que protege o dono (médico, CFM, sem RQE) de uma IA respondendo
+ *      sobre preço ou tratamento em público — importa mais que o primeiro.
  *
  * Mesmo receptor local do Direct (`tests/e2e/instagram-responder.spec.ts`):
  * `INSTAGRAM_GRAPH_BASE_URL=http://127.0.0.1:47811` (`scripts/gerar-env-e2e.sh`).
@@ -245,13 +247,21 @@ test("regra casada: o Direct sai, a frase pública é publicada, e a aba mostra 
   await page.screenshot({ path: path.join(EVIDENCIA, "01-regra-atendida.png"), fullPage: true });
 });
 
-test("\"quanto custa\": cai em esperando você, e zero publicações chegam ao receptor", async ({ page }) => {
-  const chamadasDoComentarioDePreco = recebidos.filter(
-    (e) =>
-      (e.corpo.recipient as { comment_id?: string })?.comment_id === EXTERNAL_ID_PRECO ||
-      e.caminho.includes(EXTERNAL_ID_PRECO),
+test("\"quanto custa\": Direct sai, NADA é publicado em público, e continua esperando você", async ({ page }) => {
+  // O que mudou, e por que este teste é o que protege o dono: preço passou a
+  // abrir conversa no PRIVADO (intenção de compra não pode esperar a fila),
+  // mas responder preço em PÚBLICO, assinando como médico, continua proibido.
+  // As duas metades são medidas separadamente de propósito — afirmar só
+  // "uma chamada saiu" deixaria a pública passar despercebida.
+  const privadasDePreco = recebidos.filter(
+    (e) => (e.corpo.recipient as { comment_id?: string })?.comment_id === EXTERNAL_ID_PRECO,
   );
-  expect(chamadasDoComentarioDePreco, "nenhuma publicação deveria sair para o comentário de preço").toHaveLength(0);
+  const publicasDePreco = recebidos.filter(
+    (e) => e.caminho.includes(EXTERNAL_ID_PRECO) && e.caminho.includes("replies"),
+  );
+  expect(privadasDePreco, "o Direct de abertura de conversa deveria ter saído uma vez").toHaveLength(1);
+  expect(publicasDePreco, "NENHUMA resposta pública pode sair para um comentário de preço").toHaveLength(0);
+  expect(String((privadasDePreco[0]!.corpo.message as { text?: string })?.text ?? "")).toMatch(/\?\s*$/);
 
   const { data: linha } = await db
     .from("instagram_comments")
@@ -261,8 +271,11 @@ test("\"quanto custa\": cai em esperando você, e zero publicações chegam ao r
     .single();
   const l = linha as { situacao: string; motivo_do_toque: string | null; private_reply_message_id: string | null; resposta_publica_id: string | null };
   expect(l.situacao).toBe("esperando_voce");
-  expect(l.motivo_do_toque).toBe("preço");
-  expect(l.private_reply_message_id).toBeNull();
+  expect(l.motivo_do_toque).toContain("preço");
+  expect(l.motivo_do_toque).toContain("mensagem privada");
+  // O id da privada GRAVADO é o que impede o segundo Direct numa rodada
+  // seguinte; sem ele, `jaMandouPrivado` não tem o que ver.
+  expect(l.private_reply_message_id).not.toBeNull();
   expect(l.resposta_publica_id).toBeNull();
 
   await login(page, creds.users.manager!.email);

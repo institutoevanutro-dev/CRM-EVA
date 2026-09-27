@@ -94,3 +94,35 @@ export function useCanaisDoInstagram() {
         .then((r) => r.data.contas.filter((c) => c.status === "WORKING")),
   });
 }
+
+/** As frases de abertura de conversa no Direct, mais o padrão para a tela mostrar. */
+export interface FrasesDeAbertura {
+  preco: string;
+  agendamento: string;
+}
+
+const CHAVE_FRASES = ["instagram-comment-frases"] as const;
+
+export function useFrasesDeAbertura() {
+  return useQuery({
+    queryKey: CHAVE_FRASES,
+    queryFn: () =>
+      apiClient
+        .get<{ data: { frases: FrasesDeAbertura; padrao: FrasesDeAbertura } }>("/api/v1/comentarios/frases")
+        .then((r) => r.data),
+  });
+}
+
+export function useSalvarFrasesDeAbertura() {
+  const qc = useQueryClient();
+  const t = useT();
+  return useMutation({
+    mutationFn: (frases: FrasesDeAbertura) =>
+      apiClient.put<{ data: { frases: FrasesDeAbertura } }>("/api/v1/comentarios/frases", frases),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: CHAVE_FRASES });
+      toast.success(t("Frases salvas."));
+    },
+    onError: showApiError,
+  });
+}

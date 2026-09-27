@@ -9139,6 +9139,24 @@ export const DICIONARIO: Traducoes = {
   "Resposta pública": { es: "Respuesta pública" },
   "Criar regra": { es: "Crear regla" },
   "Nova regra": { es: "Nueva regla" },
+  // As frases de abertura de conversa no Direct (gatilho de preço/agendamento).
+  "Frases do Direct": { es: "Frases del Direct" },
+  "Quando perguntarem preço": { es: "Cuando pregunten el precio" },
+  "Não cite valor aqui: mensagem automática com preço vira promessa.": {
+    es: "No menciones el valor aquí: un mensaje automático con precio se vuelve una promesa.",
+  },
+  "Quando quiserem marcar": { es: "Cuando quieran agendar" },
+  "Termine com uma pergunta. É o que faz a pessoa responder.": {
+    es: "Termina con una pregunta. Es lo que hace que la persona responda.",
+  },
+  "Comentário que pergunta preço ou quer marcar recebe uma mensagem no Direct para começar a conversa, e continua na fila abaixo para você responder em público se quiser. Assunto de saúde nunca recebe mensagem automática.": {
+    es: "El comentario que pregunta el precio o quiere agendar recibe un mensaje en el Direct para empezar la conversación, y sigue en la fila de abajo para que respondas en público si quieres. Un tema de salud nunca recibe mensaje automático.",
+  },
+  "Deixar em branco não desliga a mensagem: volta para o texto de fábrica.": {
+    es: "Dejarlo en blanco no apaga el mensaje: vuelve al texto de fábrica.",
+  },
+  "Salvar frases": { es: "Guardar frases" },
+  "Frases salvas.": { es: "Frases guardadas." },
   "A resposta JÁ FOI publicada no Instagram, mas não deu para atualizar aqui. Não publique de novo — isso enviaria uma segunda resposta.": {
     es: "La respuesta YA FUE publicada en Instagram, pero no se pudo actualizar aquí. No publiques de nuevo — eso enviaría una segunda respuesta.",
   },
