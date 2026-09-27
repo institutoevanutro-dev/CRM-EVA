@@ -66,6 +66,18 @@ const PEDE_PARA_SAIR = [
   "nao me escreva mais",
   "nao me perturbe mais",
   "nao volte a entrar em contato",
+  // Variações das três formas, com a regra estreitada do #1607: `me`
+  // obrigatório, imperativo, e lista de ENVIO.
+  "Não me contate mais!",
+  "por favor nao me contate mais",
+  "nao me contatem mais",
+  "nao me chame mais",
+  "nao entrem mais em contato",
+  "parem de entrar em contato comigo",
+  "pare de entrar em contato",
+  "nao entre mais em contato por aqui",
+  "me tira da lista de transmissão",
+  "me remove da lista de contatos",
 ];
 
 /** Frases do dia a dia que usam a palavra e NÃO são pedido de descadastro. */
@@ -120,6 +132,44 @@ const NAO_PEDE_PARA_SAIR = [
   "vou entrar em contato amanha",
   "quando voces vao entrar em contato?",
   "nao consegui entrar em contato ontem",
+  // ─── O que o #1607 bloqueava a mais: clínica, oficina, loja ──────────────
+  //
+  // Medido na triagem do #1607 — todas `false` na main e `true` no PR. Cada
+  // grupo é uma abertura que a regra NÃO fez:
+  //
+  // sem `me`, o sujeito não é quem escreve (3ª pessoa descritiva)
+  "o dente nao incomoda mais",
+  "o implante nao incomoda mais",
+  "o carro nao liga mais",
+  "meu celular nao liga mais",
+  "o pix nao recebe mais",
+  "meu filho nao fala mais comigo",
+  "a caneta nao escreve mais",
+  // com `me`, mas `incomodar` não é verbo de comunicação — e as formas
+  // descritivas da constante (`FORMAS_DESCRITIVAS_DEPOIS_DE_ME`) ficam fora
+  "a dor nao me incomoda mais",
+  "a dor nao me perturba mais",
+  "o convenio nao me recebe mais",
+  "a doutora nao me escreve mais a receita",
+  // infinitivo novo na constante alargaria o "parar de …"
+  "vou parar de procurar outro dentista",
+  "pode parar de falar da cirurgia?",
+  "para de falar besteira kkk",
+  // remoção sem `me`, ou com destino que não é lista de envio
+  "ja exclui do celular",
+  "apaga do whatsapp aquela foto",
+  "remove do sistema a consulta de amanha",
+  "tira da base do dente",
+  "remove da lista de desejos",
+  "tira da lista de presentes",
+  "me tira da lista de espera",
+  "me tira da lista de presentes",
+  "me remove da lista de desejos",
+  // "entrar em contato" com outro destinatário ou outro canal, e a reclamação
+  "nao entre em contato com meu marido, fale comigo",
+  "nao entrem em contato por email, so whatsapp",
+  "vou parar de entrar em contato com o fornecedor",
+  "o medico nao entra mais em contato",
   // vazios
   "",
   "   ",
