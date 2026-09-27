@@ -14,6 +14,12 @@ export async function decidirEntrada(admin: SupabaseClient,
   if (linha.motivo === null && linha.user_id) {
     const u = await admin.auth.admin.getUserById(linha.user_id);
     if (u.error || !u.data.user?.email) return { ok: false as const, motivo: "falhou" as const };
+    // Levanta um banimento herdado de uma desconexão anterior: a pessoa foi
+    // religada (a Conta mandou a entrada de novo), então o acesso volta.
+    // Sem isto, o RPC religa o vínculo mas a conta continua banida para
+    // sempre, e nem link de recovery a tira de lá.
+    const unban = await admin.auth.admin.updateUserById(linha.user_id, { ban_duration: "none" });
+    if (unban.error) return { ok: false as const, motivo: "falhou" as const };
     return { ok: true as const, userId: linha.user_id, email: u.data.user.email };
   }
   if (linha.motivo === "novo") {
@@ -33,11 +39,13 @@ export async function decidirEntrada(admin: SupabaseClient,
 
 /**
  * Desligado ou acesso removido também fecha a senha de reserva: o Supabase não aceita senha
- * nula, então vira um valor aleatório descartado.
+ * nula, então vira um valor aleatório descartado. E bane a conta: sem isto, um link de
+ * recovery/magiclink/email que a pessoa já tinha na caixa de entrada continuava dando sessão
+ * depois da desconexão. A senha de reserva é só UMA das portas, não a única.
  *
- * A troca acontece ANTES do `fn_evalink_aviso`: esse RPC já marca o aviso como visto na
- * primeira chamada, então se a troca de senha viesse depois e falhasse, a reentrega da Conta
- * bateria em "repetido" para sempre e a senha antiga ficaria valendo. Trocar antes é seguro: uma
+ * As duas trocas acontecem ANTES do `fn_evalink_aviso`: esse RPC já marca o aviso como visto na
+ * primeira chamada, então se elas viessem depois e falhassem, a reentrega da Conta bateria em
+ * "repetido" para sempre e o acesso antigo continuaria valendo. Trocar antes é seguro: uma
  * reentrega troca de novo, sem efeito colateral.
  */
 export async function aplicarAviso(admin: SupabaseClient, d: { sub: string; avisoId: string; motivo: string }) {
@@ -47,6 +55,8 @@ export async function aplicarAviso(admin: SupabaseClient, d: { sub: string; avis
     if (v.data?.user_id) {
       const u = await admin.auth.admin.updateUserById(v.data.user_id, { password: randomBytes(32).toString("base64url") });
       if (u.error) throw new Error("evalink_aviso_falhou");
+      const b = await admin.auth.admin.updateUserById(v.data.user_id, { ban_duration: "876000h" });
+      if (b.error) throw new Error("evalink_aviso_falhou");
     }
   }
   const r = await admin.rpc("fn_evalink_aviso", { p_sub: d.sub, p_aviso: d.avisoId });

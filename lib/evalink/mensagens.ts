@@ -7,6 +7,7 @@ export const MENSAGENS_EVALINK: Record<string, string> = {
     "Você não está em nenhuma organização deste CRM. Fale com o administrador.",
   ultimo_admin:
     "O CRM precisa de pelo menos um administrador em cada organização. Na Conta, mantenha seu papel como administrador ou dê esse papel a outra pessoa antes.",
+  use_o_evalink: "Entre pelo botão Entrar com o EvaLink.",
 };
 
 /**

@@ -33,12 +33,22 @@ function adminFalso(overrides: Partial<{
 const d = { sub: SUB, email: "pessoa@eva.test", papel: "agent" as const, orgPadrao: ORG };
 
 describe("decidirEntrada", () => {
-  it("motivo null com user_id: busca o e-mail e devolve ok", async () => {
+  it("motivo null com user_id: busca o e-mail, levanta o banimento e devolve ok", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: U, motivo: null }], error: null });
     const getUserById = vi.fn().mockResolvedValue({ data: { user: { email: "pessoa@eva.test" } }, error: null });
-    const admin = adminFalso({ rpc, getUserById });
+    const updateUserById = vi.fn().mockResolvedValue({ error: null });
+    const admin = adminFalso({ rpc, getUserById, updateUserById });
     await expect(decidirEntrada(admin, d)).resolves.toEqual({ ok: true, userId: U, email: "pessoa@eva.test" });
     expect(rpc).toHaveBeenCalledWith("fn_evalink_entrada", { p_sub: d.sub, p_email: d.email, p_papel: d.papel, p_org_padrao: d.orgPadrao });
+    expect(updateUserById).toHaveBeenCalledWith(U, { ban_duration: "none" });
+  });
+
+  it("motivo null com user_id, mas levantar o banimento falha: falhou", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: U, motivo: null }], error: null });
+    const getUserById = vi.fn().mockResolvedValue({ data: { user: { email: "pessoa@eva.test" } }, error: null });
+    const updateUserById = vi.fn().mockResolvedValue({ error: new Error("boom") });
+    const admin = adminFalso({ rpc, getUserById, updateUserById });
+    await expect(decidirEntrada(admin, d)).resolves.toEqual({ ok: false, motivo: "falhou" });
   });
 
   it("getUserById sem e-mail: falhou", async () => {
@@ -105,22 +115,35 @@ describe("decidirEntrada", () => {
 describe("aplicarAviso", () => {
   const base = { sub: SUB, avisoId: "44444444-4444-4444-8444-444444444444" };
 
-  it("desligado, vínculo achado, novo=true: troca a senha antes do rpc e devolve feito", async () => {
+  it("desligado, vínculo achado, novo=true: troca a senha e bane antes do rpc, devolve feito", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: U, novo: true }], error: null });
     const updateUserById = vi.fn().mockResolvedValue({ error: null });
     const admin = adminFalso({ rpc, updateUserById });
     await expect(aplicarAviso(admin, { ...base, motivo: "desligado" })).resolves.toBe("feito");
-    expect(updateUserById).toHaveBeenCalledTimes(1);
+    expect(updateUserById).toHaveBeenCalledTimes(2);
     const senha = (updateUserById.mock.calls[0]?.[1] as { password: string }).password;
     expect(senha.length).toBeGreaterThanOrEqual(40);
+    expect(updateUserById).toHaveBeenNthCalledWith(2, U, { ban_duration: "876000h" });
   });
 
-  it("acesso_removido, vínculo achado: também troca a senha", async () => {
+  it("acesso_removido, vínculo achado: também troca a senha e bane", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: U, novo: true }], error: null });
     const updateUserById = vi.fn().mockResolvedValue({ error: null });
     const admin = adminFalso({ rpc, updateUserById });
     await expect(aplicarAviso(admin, { ...base, motivo: "acesso_removido" })).resolves.toBe("feito");
-    expect(updateUserById).toHaveBeenCalledTimes(1);
+    expect(updateUserById).toHaveBeenCalledTimes(2);
+  });
+
+  it("senha trocou, mas banir falha: lança e o rpc fn_evalink_aviso NÃO é chamado", async () => {
+    const rpc = vi.fn();
+    const updateUserById = vi
+      .fn()
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: new Error("boom") });
+    const admin = adminFalso({ rpc, updateUserById });
+    await expect(aplicarAviso(admin, { ...base, motivo: "desligado" })).rejects.toThrow("evalink_aviso_falhou");
+    expect(rpc).not.toHaveBeenCalled();
+    expect(updateUserById).toHaveBeenCalledTimes(2);
   });
 
   it("papel_mudou: nunca consulta o vínculo nem troca senha", async () => {
@@ -141,12 +164,12 @@ describe("aplicarAviso", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("segunda entrega do mesmo aviso (novo=false): troca a senha de novo e devolve repetido", async () => {
+  it("segunda entrega do mesmo aviso (novo=false): troca a senha e bane de novo, devolve repetido", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: null, novo: false }], error: null });
     const updateUserById = vi.fn().mockResolvedValue({ error: null });
     const admin = adminFalso({ rpc, updateUserById });
     await expect(aplicarAviso(admin, { ...base, motivo: "desligado" })).resolves.toBe("repetido");
-    expect(updateUserById).toHaveBeenCalledTimes(1);
+    expect(updateUserById).toHaveBeenCalledTimes(2);
   });
 
   it("sem vínculo (maybeSingle sem dado): feito sem updateUserById", async () => {

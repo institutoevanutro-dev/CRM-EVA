@@ -41,7 +41,9 @@ export default async function LoginPage({
       {evalinkLigado && (
         <div className="space-y-3">
           <Button asChild className="w-full">
-            <Link href="/evalink/entrar">{t("Entrar com o EvaLink")}</Link>
+            {/* <a> puro, não <Link>: prefetch dispararia a rota que já inicia o
+                redirect OAuth, gastando o state/nonce de um fluxo que ninguém pediu. */}
+            <a href="/evalink/entrar">{t("Entrar com o EvaLink")}</a>
           </Button>
           {mensagemEvalink && (
             <div

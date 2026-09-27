@@ -10,6 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { loginSchema, type LoginInput } from "@/lib/auth/schemas";
 import { audit, hashEmail } from "@/lib/audit";
 import { configEvalink } from "@/lib/evalink/config";
+import { reservaBloqueia } from "@/lib/evalink/reserva";
 import {
   authRateLimited,
   contaBloqueadaPorFalhas,
@@ -90,50 +91,24 @@ export async function signInWithPassword(input: LoginInput, next?: string): Prom
 
   // Senha só é reserva para quem está ligado à Conta EvaLink: com o EvaLink
   // ligado, quem tem vínculo em `evalink_vinculos` só entra por senha se for
-  // admin ativo (org ou plataforma) — senão a senha vira uma segunda porta
-  // para uma conta que devia entrar só pela Conta.
-  if (configEvalink()) {
-    const admin = createAdminClient();
-    const vinculo = await admin
-      .from("evalink_vinculos")
-      .select("user_id")
-      .eq("user_id", data.user.id)
-      .maybeSingle();
-
-    if (vinculo.data) {
-      const [orgAdmin, platformAdmin] = await Promise.all([
-        admin
-          .from("user_organizations")
-          .select("id")
-          .eq("user_id", data.user.id)
-          .eq("role", "admin")
-          .is("revoked_at", null)
-          .limit(1),
-        admin
-          .from("platform_admins")
-          .select("user_id")
-          .eq("user_id", data.user.id)
-          .is("revoked_at", null)
-          .maybeSingle(),
-      ]);
-      const ehAdmin = (orgAdmin.data?.length ?? 0) > 0 || Boolean(platformAdmin.data);
-
-      if (!ehAdmin) {
-        await supabase.auth.signOut();
-        await registrarFalhaDeLogin(parsed.data.email, AUTH_LIMITS.login);
-        await audit({
-          action: "auth.login_failed",
-          metadata: {
-            email_hash: hashEmail(parsed.data.email),
-            reason: "evalink_reserva",
-          },
-          requestId,
-          ip,
-          userAgent,
-        });
-        return { ok: false, error: "invalid_credentials" };
-      }
-    }
+  // admin ativo (org ou plataforma). A regra em si (e o fail-closed em erro de
+  // consulta) mora em `reservaBloqueia`; aqui só a fiação.
+  if (configEvalink() && (await reservaBloqueia(createAdminClient(), data.user.id))) {
+    // scope "local": encerra só ESTA sessão recém-aberta pela senha, nunca as
+    // sessões existentes da pessoa abertas pela Conta EvaLink.
+    await supabase.auth.signOut({ scope: "local" });
+    await registrarFalhaDeLogin(parsed.data.email, AUTH_LIMITS.login);
+    await audit({
+      action: "auth.login_failed",
+      metadata: {
+        email_hash: hashEmail(parsed.data.email),
+        reason: "evalink_reserva",
+      },
+      requestId,
+      ip,
+      userAgent,
+    });
+    return { ok: false, error: "invalid_credentials" };
   }
 
   // MFA gating — if the user has any verified TOTP factor enrolled, they must

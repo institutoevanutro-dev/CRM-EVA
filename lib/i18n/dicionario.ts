@@ -9168,6 +9168,7 @@ export const DICIONARIO: Traducoes = {
   "O CRM precisa de pelo menos um administrador em cada organização. Na Conta, mantenha seu papel como administrador ou dê esse papel a outra pessoa antes.": {
     es: "El CRM necesita al menos un administrador en cada organización. En la Cuenta, mantenga su rol como administrador o déselo a otra persona antes.",
   },
+  "Entre pelo botão Entrar com o EvaLink.": { es: "Ingrese con el botón Entrar con EvaLink." },
 };
 
 /**
