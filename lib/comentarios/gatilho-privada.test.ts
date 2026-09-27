@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
-const auditMock = vi.fn(async () => undefined);
-vi.mock("@/lib/audit", () => ({ audit: (...a: unknown[]) => auditMock(...(a as [])) }));
+const auditMock = vi.fn(async (_arg: Record<string, unknown>) => undefined);
+vi.mock("@/lib/audit", () => ({ audit: (arg: unknown) => auditMock(arg as Record<string, unknown>) }));
 vi.mock("@/lib/logger", () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
@@ -55,7 +55,7 @@ it("o envio bem-sucedido deixa rastro na auditoria, com o gatilho que o causou",
   await enviarPrivadaDeGatilho(fake, comentario, TEXTO, "preço", logoDepois);
 
   expect(auditMock).toHaveBeenCalledTimes(1);
-  const [chamada] = auditMock.mock.calls[0] as [Record<string, unknown>];
+  const chamada = auditMock.mock.calls[0]![0];
   expect(chamada.action).toBe("comment.private_reply_sent");
   expect(chamada.resourceId).toBe("IC-1");
   expect((chamada.metadata as { gatilho: string }).gatilho).toBe("preço");
