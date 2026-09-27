@@ -3,6 +3,10 @@
  * Match precedence: array order. First match wins.
  */
 export const PUBLIC_PATHS: RegExp[] = [
+  // Bearer exclusivo do prontuário é validado na rota; nenhuma subrota herda bypass.
+  /^\/api\/v1\/prontuario\/contacts$/,
+  /^\/api\/v1\/prontuario\/contacts\/link$/,
+  /^\/api\/v1\/prontuario\/contacts\/[0-9a-f-]+$/i,
   // Credencial de leitura validada dentro da rota; não dispensa auth de subrotas.
   /^\/api\/v1\/integrations\/financeiro\/contacts\/[0-9a-f-]+$/i,
   /^\/api\/v1\/integrations\/marketing\/report$/,
