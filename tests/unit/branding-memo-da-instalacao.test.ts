@@ -62,15 +62,32 @@ const banco = vi.hoisted(() => ({
    * ela que o caso da falha pós-escrita mede.
    */
   erro: null as { code: string; message: string } | null,
+  /**
+   * A deduplicação do Next DENTRO de um render (`React.cache` em volta do
+   * `fetch`, `next/dist/server/lib/dedupe-fetch.js`). `null` = sem render em
+   * curso. Armado, todo GET SEM `signal` devolve a primeira resposta capturada
+   * no escopo — sem ir ao banco —, que é o que o Next faz. Com `signal`, a
+   * leitura passa direto, que é a exclusão que o próprio Next declara.
+   */
+  render: null as { resposta?: Record<string, unknown> | null } | null,
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: () => ({
       select: () => ({
-        eq: () => ({
-          maybeSingle: async () => {
-            banco.leituras += 1;
+        eq: () => {
+          let comSinal = false;
+          const consulta = {
+            abortSignal: () => {
+              comSinal = true;
+              return consulta;
+            },
+            maybeSingle: async () => {
+              if (banco.render && !comSinal && "resposta" in banco.render) {
+                return { data: banco.render.resposta, error: null };
+              }
+              banco.leituras += 1;
             // A linha é capturada AGORA, antes de esperar o portão — é o que um
             // banco real faz: a consulta sai antes da escrita, e a resposta que
             // volta é a de antes dela. Ler `banco.linha` depois do `await` faria
@@ -78,11 +95,14 @@ vi.mock("@/lib/supabase/admin", () => ({
             // corrida nenhuma (foi o primeiro jeito que escrevi, e a asserção de
             // controle o pegou).
             const capturada = banco.linha;
-            if (banco.portao) await banco.portao.esperar;
-            if (banco.erro) return { data: null, error: banco.erro };
-            return { data: capturada, error: null };
-          },
-        }),
+              if (banco.portao) await banco.portao.esperar;
+              if (banco.erro) return { data: null, error: banco.erro };
+              if (banco.render && !comSinal) banco.render.resposta = capturada;
+              return { data: capturada, error: null };
+            },
+          };
+          return consulta;
+        },
       }),
     }),
   }),
@@ -314,5 +334,73 @@ describe("a leitura que FALHOU depois da escrita não vira fato memoizado", () =
     expect((await tela.marcaDaInstalacao())?.logo_path).toBe(CAMINHO_SUBIDO);
     await tela.marcaDaInstalacao();
     expect(banco.leituras, "uma ida ao banco por TTL continua sendo o contrato").toBe(1);
+  });
+});
+
+/**
+ * ═══ A DEDUPLICAÇÃO DO NEXT: a leitura DEPOIS da escrita nunca chegava ao banco ═══
+ *
+ * A guarda de geração confere QUANDO a leitura começou. Ela não tem como saber
+ * que uma leitura que começou DEPOIS da invalidação voltou com a resposta de uma
+ * leitura ANTERIOR — e é o que o Next faz dentro de um render: GETs idênticos
+ * sem `signal` compartilham a primeira resposta. Os call sites de
+ * `marcaDaInstalacao()` num render (metadata, `<head>`, provider, o layout de
+ * `/app`) são GETs idênticos.
+ *
+ * MEDIDO numa página-sonda no `next start` (ler → POST do logo → ler, no mesmo
+ * render): a segunda leitura devolveu o caminho anterior, o memo ficou com ele,
+ * e `/app/inbox` saiu sem o logo novo — o sintoma de
+ * `logo-moldura-no-tema-escuro.spec.ts` (1) no run 36259318278.
+ */
+describe("a leitura depois da escrita não pode herdar a resposta de antes (dedupe do Next)", () => {
+  beforeEach(async () => {
+    banco.linha = SEM_LOGO;
+    banco.leituras = 0;
+    banco.portao = null;
+    banco.erro = null;
+    banco.render = null;
+    (await instancia()).invalidarMarcaDaInstalacao();
+  });
+
+  it("no MESMO render, a leitura seguinte à invalidação vai ao banco e vê o logo", async () => {
+    const tela = await instancia();
+    const rota = await instancia();
+    banco.render = {};
+
+    // 1. Primeira leitura do render: memo vazio, vai ao banco, volta SEM logo.
+    expect((await tela.marcaDaInstalacao())?.logo_path).toBeNull();
+
+    // 2. O POST grava e invalida no meio do render.
+    banco.linha = COM_LOGO;
+    rota.invalidarMarcaDaInstalacao();
+
+    // 3. Um call site mais adiante no MESMO render lê de novo. Sem o `signal`,
+    //    o dublê devolve a resposta do passo 1 — como o Next — e a linha sem
+    //    logo entra no memo com a geração nova.
+    expect(
+      (await tela.marcaDaInstalacao())?.logo_path,
+      "a leitura pós-escrita herdou a resposta pré-escrita do render",
+    ).toBe(CAMINHO_SUBIDO);
+
+    // 4. E o render SEGUINTE (a navegação para /app/inbox) não pode achar o
+    //    memo envenenado.
+    banco.render = null;
+    expect((await tela.marcaDaInstalacao())?.logo_path).toBe(CAMINHO_SUBIDO);
+  });
+
+  it("CONTROLE: o dublê deduplica mesmo — um GET sem sinal herda a primeira resposta", async () => {
+    // Sem este caso, o de cima passaria verde com um dublê que nunca
+    // deduplicou nada, e não provaria o conserto.
+    banco.render = {};
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const ler = () =>
+      (
+        createAdminClient().from("platform_branding").select("*").eq("id", 1) as unknown as {
+          maybeSingle: () => Promise<{ data: { logo_path: string | null } | null }>;
+        }
+      ).maybeSingle();
+    expect((await ler()).data?.logo_path).toBeNull();
+    banco.linha = COM_LOGO;
+    expect((await ler()).data?.logo_path, "o dublê não deduplicou").toBeNull();
   });
 });

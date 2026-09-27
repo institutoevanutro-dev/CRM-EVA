@@ -392,12 +392,39 @@ async function lerOuSemear(): Promise<LinhaDaMarca | null | "erro"> {
   return relida === "erro" ? null : relida;
 }
 
+/**
+ * ⚠️ O `abortSignal` NÃO é para abortar nada: é a saída da DEDUPLICAÇÃO do Next.
+ *
+ * Dentro de um render, o Next embrulha o `fetch` num `React.cache` e devolve a
+ * MESMA resposta para todo GET idêntico (`next/dist/server/lib/dedupe-fetch.js`)
+ * — e o supabase-js lê por `fetch`. Os ~5 call sites de `marcaDaInstalacao()`
+ * num render (metadata, `<head>`, provider, `app/app/layout.tsx`) fazem GETs
+ * idênticos. Um render que atravessa o POST do logo fazia isto:
+ *
+ *   1ª leitura (memo vazio)  → banco → linha SEM logo, geração G → memo
+ *   POST grava e invalida    → geração G+1, memo vazio
+ *   2ª leitura (geração G+1) → "fetch" → a MESMA resposta da 1ª, sem ir ao banco
+ *                            → a guarda de geração passa → linha SEM logo no
+ *                              memo por 30s, atrás do toast "Logo atualizado."
+ *
+ * A guarda de geração não tem como pegar isso: ela confere QUANDO a leitura
+ * começou, e esta começou depois da escrita — só que nunca chegou ao banco.
+ * MEDIDO com uma página-sonda no `next start` (ler → POST → ler, no mesmo render):
+ * a segunda leitura devolveu o caminho anterior e `/app/inbox` saiu sem o logo
+ * novo. Com o sinal, a mesma sonda devolve o caminho novo. Sintoma da CI:
+ * `logo-moldura-no-tema-escuro.spec.ts` (1), run 36259318278.
+ *
+ * Um `signal` no `init` é a exclusão que o próprio `dedupe-fetch` declara ("opts
+ * out of caching"). `cache: "no-store"` NÃO serviria: o campo `cache` fica fora
+ * da chave da deduplicação.
+ */
 async function lerLinha(): Promise<LinhaDaMarca | null | "erro"> {
   try {
     const { data, error } = await createAdminClient()
       .from("platform_branding")
       .select(COLUNAS)
       .eq("id", 1)
+      .abortSignal(new AbortController().signal)
       .maybeSingle();
     if (error) {
       avisarUmaVez(
