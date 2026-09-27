@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { configEvalink } from "./config";
 
 const ok = {
@@ -25,5 +25,20 @@ describe("configEvalink", () => {
     expect(c.emissor).toBe("https://conta.exemplo.test/auth/v1");
     expect(c.voltaUrl).toBe("https://crm.exemplo.test/evalink/volta");
     expect(c.appUrl).toBe("https://crm.exemplo.test");
+  });
+});
+
+describe("configEvalink: aviso no log", () => {
+  it("as cinco ausentes: null e nenhum aviso; malformada: avisa uma vez só por processo", async () => {
+    vi.resetModules();
+    const warn = vi.fn();
+    vi.doMock("@/lib/logger", () => ({ logger: { warn, error: vi.fn(), info: vi.fn() } }));
+    const { configEvalink: cfg } = await import("./config");
+    expect(cfg({ NEXT_PUBLIC_APP_URL: ok.NEXT_PUBLIC_APP_URL })).toBeNull();
+    expect(warn).not.toHaveBeenCalled();
+    expect(cfg({ ...ok, EVALINK_ORG_PADRAO: "instituto" })).toBeNull();
+    expect(cfg({ ...ok, EVALINK_SEGREDO_AVISO: "curto" })).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    vi.doUnmock("@/lib/logger");
   });
 });

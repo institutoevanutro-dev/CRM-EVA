@@ -14,6 +14,14 @@ export type ConfigEvalink = {
   voltaUrl: string;
 };
 
+// As rotas chamam configEvalink() a cada requisição: o aviso sai uma vez por processo, não a cada acesso.
+let avisou = false;
+const avisar = (msg: string) => {
+  if (avisou) return;
+  avisou = true;
+  logger.warn(msg);
+};
+
 const semBarra = (u: string) => u.replace(/\/+$/, "");
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ehUrl = (u: string) => {
@@ -42,12 +50,12 @@ export function configEvalink(
   if (!conta && !cid && !sec && !seg && !org) return null;
 
   if (!conta || !cid || !sec || !seg || !org || !app) {
-    logger.warn("evalink: configuração incompleta, login pela Conta desligado");
+    avisar("evalink: configuração incompleta, login pela Conta desligado");
     return null;
   }
 
   if (!ehUrl(conta) || !ehUrl(app) || seg.length < 32 || !UUID.test(org)) {
-    logger.warn("evalink: configuração inválida, login pela Conta desligado");
+    avisar("evalink: configuração inválida, login pela Conta desligado");
     return null;
   }
 

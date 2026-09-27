@@ -43,6 +43,9 @@ export const PUBLIC_PATHS: RegExp[] = [
   // Volta do login do Instagram: mesma natureza das duas acima (state assinado
   // de INTERNAL_SECRET + cookie de vínculo, auth dentro da rota).
   /^\/api\/v1\/channels\/instagram\/callback$/,
+  // Login pela Conta EvaLink: a identidade vem dos tokens da Conta (entrar/volta) ou da
+  // assinatura HMAC do aviso, conferidos DENTRO da rota. Ancorado nos três nomes.
+  /^\/evalink\/(entrar|volta|aviso)$/,
   /^\/api\/internal\//,
   /^\/api\/mcp(\/.*)?$/,
   // GET /api/v1/contacts aceita SESSÃO ou Bearer `dsk_...` (api_tokens) — a

@@ -19,6 +19,12 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/api/v1/system/relogio/tick/extra")).toBe(false);
   });
 
+  it("libera só as três rotas do EvaLink, sem sub-path de carona", () => {
+    for (const r of ["entrar", "volta", "aviso"]) expect(isPublicPath(`/evalink/${r}`)).toBe(true);
+    expect(isPublicPath("/evalink/entrar/x")).toBe(false);
+    expect(isPublicPath("/evalink")).toBe(false);
+  });
+
   it("a âncora `$` impede que um sub-path passe de carona", () => {
     expect(isPublicPath("/api/v1/system/agent/qualquer")).toBe(false);
   });
