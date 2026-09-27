@@ -138,6 +138,9 @@ importers:
       import-in-the-middle:
         specifier: ^3.5.0
         version: 3.5.0
+      jose:
+        specifier: ^6
+        version: 6.2.7
       lucide-react:
         specifier: ^1.43.0
         version: 1.43.0(react@19.3.0)

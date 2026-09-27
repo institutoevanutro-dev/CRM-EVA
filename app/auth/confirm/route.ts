@@ -8,6 +8,9 @@ import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
 import { aplicarConvite } from "@/lib/auth/aplicar-convite";
 import { audit } from "@/lib/audit";
 import { env } from "@/lib/env";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { configEvalink } from "@/lib/evalink/config";
+import { reservaBloqueia } from "@/lib/evalink/reserva";
 
 /**
  * GET /auth/confirm — troca o token do e-mail por uma sessão.
@@ -137,6 +140,19 @@ export async function GET(request: NextRequest) {
       },
       requestId,
     });
+  }
+
+  // Recovery, magiclink e email são os três tipos que dão sessão sem exigir
+  // senha nem o botão do EvaLink: sem esta trava, o link de "esqueci minha
+  // senha" seria uma segunda porta para quem está ligado e devia entrar só
+  // pela Conta (o motivo por trás da senha ser reserva em signInWithPassword.ts).
+  if (
+    (type === "recovery" || type === "magiclink" || type === "email") &&
+    configEvalink() &&
+    (await reservaBloqueia(createAdminClient(), usuario.id))
+  ) {
+    await supabase.auth.signOut({ scope: "local" });
+    return redirectTo("/login?evalink=use_o_evalink");
   }
 
   if (type === "recovery") {

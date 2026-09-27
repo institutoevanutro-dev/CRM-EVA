@@ -12,7 +12,7 @@
  * apagou `visibility_mode` em silêncio — a chave que a RLS lê para decidir
  * quem enxerga conversa de cliente (cabeçalho de
  * `app/actions/settings/updateMarcaDaOrganizacao.ts`). Aqui a escrita é uma
- * instrução só, dentro de `fn_definir_frases_de_comentario` (migration 0287),
+ * instrução só, dentro de `fn_definir_frases_de_comentario` (migration 0288),
  * chamada pelo admin client porque a função é revogada de `authenticated`.
  *
  * Campo em branco NÃO apaga a frase: volta para o padrão. Quem quer silêncio

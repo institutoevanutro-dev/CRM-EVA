@@ -9174,6 +9174,22 @@ export const DICIONARIO: Traducoes = {
   "Nova regra para este vídeo": { es: "Nueva regla para este video" },
   // MENOR (revisão final) — destino geral do aviso `instagram_comment_stuck`.
   "Abrir fila de comentários": { es: "Abrir cola de comentarios" },
+  // Tarefa 6: botão de login pela Conta EvaLink e mensagens de ?evalink=.
+  "Entrar com o EvaLink": { es: "Entrar con EvaLink" },
+  "Não foi possível entrar pelo EvaLink.": { es: "No fue posible entrar con EvaLink." },
+  "Seu e-mail já tem cadastro aqui. Peça ao administrador para ligar sua conta ao EvaLink.": {
+    es: "Su correo ya tiene registro aquí. Pida al administrador que vincule su cuenta a EvaLink.",
+  },
+  "Este CRM está sem a organização padrão do EvaLink configurada. Fale com quem administra a instalação.": {
+    es: "Este CRM no tiene configurada la organización predeterminada de EvaLink. Hable con quien administra la instalación.",
+  },
+  "Você não está em nenhuma organização deste CRM. Fale com o administrador.": {
+    es: "Usted no está en ninguna organización de este CRM. Hable con el administrador.",
+  },
+  "O CRM precisa de pelo menos um administrador em cada organização. Na Conta, mantenha seu papel como administrador ou dê esse papel a outra pessoa antes.": {
+    es: "El CRM necesita al menos un administrador en cada organización. En la Cuenta, mantenga su rol como administrador o déselo a otra persona antes.",
+  },
+  "Entre pelo botão Entrar com o EvaLink.": { es: "Ingrese con el botón Entrar con EvaLink." },
 };
 
 /**

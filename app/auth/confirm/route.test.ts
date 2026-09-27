@@ -5,6 +5,9 @@ import { aplicarConvite } from "@/lib/auth/aplicar-convite";
 import { decidirConviteDoSignup } from "@/lib/auth/convite-no-signup";
 import { ensureTenantForUser } from "@/lib/auth/provision";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { configEvalink } from "@/lib/evalink/config";
+import { reservaBloqueia } from "@/lib/evalink/reserva";
 
 /**
  * GET /auth/confirm — a rota tem de TERMINAR O SERVIÇO.
@@ -32,6 +35,9 @@ vi.mock("@/lib/auth/convite-no-signup", () => ({ decidirConviteDoSignup: vi.fn()
 vi.mock("@/lib/auth/provision", () => ({ ensureTenantForUser: vi.fn(async () => undefined) }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/env", () => ({ env: { NEXT_PUBLIC_APP_URL: "http://localhost:3000" } }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+vi.mock("@/lib/evalink/config", () => ({ configEvalink: vi.fn(() => null) }));
+vi.mock("@/lib/evalink/reserva", () => ({ reservaBloqueia: vi.fn(async () => false) }));
 
 const USUARIO = { id: "11111111-1111-4111-8111-111111111111", email: "convidado@example.com" };
 const PAYLOAD = {
@@ -55,8 +61,15 @@ function stubSupabase(c: Cenario) {
       verifyOtp: vi.fn(async () => c.verifyOtp),
       exchangeCodeForSession: vi.fn(async () => c.verifyOtp),
       getUser: vi.fn(async () => c.getUser),
+      signOut: vi.fn(async () => ({ error: null })),
     },
   };
+}
+
+function comSupabaseGlobal(c: Cenario) {
+  vi.mocked(createClient).mockResolvedValue(
+    stubSupabase(c) as unknown as Awaited<ReturnType<typeof createClient>>,
+  );
 }
 
 function requisicao(qs: string) {
@@ -166,6 +179,70 @@ describe("GET /auth/confirm", () => {
 
     expect(vi.mocked(ensureTenantForUser)).toHaveBeenCalledWith(USUARIO);
     expect(vi.mocked(aplicarConvite)).not.toHaveBeenCalled();
+    expect(destino(res)).toBe("/onboarding/welcome");
+  });
+});
+
+describe("GET /auth/confirm: link de recovery/magiclink/email não é uma porta pro EvaLink", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(configEvalink).mockReturnValue(null);
+    vi.mocked(reservaBloqueia).mockResolvedValue(false);
+    vi.mocked(createAdminClient).mockReturnValue({ marker: "admin" } as never);
+  });
+
+  it("EvaLink ligado e a regra bloqueia: encerra a sessão local e manda pro login com o aviso", async () => {
+    const signOut = vi.fn(async () => ({ error: null }));
+    vi.mocked(createClient).mockResolvedValue({
+      auth: {
+        verifyOtp: vi.fn(async () => ({ data: { user: USUARIO }, error: null })),
+        exchangeCodeForSession: vi.fn(async () => ({ data: { user: USUARIO }, error: null })),
+        getUser: vi.fn(async () => ({ data: { user: null } })),
+        signOut,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    vi.mocked(configEvalink).mockReturnValue({} as never);
+    vi.mocked(reservaBloqueia).mockResolvedValue(true);
+
+    const { GET } = await import("./route");
+    const res = await GET(requisicao("type=recovery&token_hash=abc"));
+
+    expect(destino(res)).toBe("/login?evalink=use_o_evalink");
+    expect(signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(vi.mocked(reservaBloqueia)).toHaveBeenCalledWith({ marker: "admin" }, USUARIO.id);
+  });
+
+  it("EvaLink desligado: link de recovery segue para /login/reset como antes", async () => {
+    comSupabaseGlobal({ verifyOtp: { data: { user: USUARIO }, error: null }, getUser: { data: { user: null } } });
+
+    const { GET } = await import("./route");
+    const res = await GET(requisicao("type=recovery&token_hash=abc"));
+
+    expect(destino(res)).toBe("/login/reset");
+    expect(vi.mocked(reservaBloqueia)).not.toHaveBeenCalled();
+  });
+
+  it("EvaLink ligado, mas a regra não bloqueia (não vinculado ou admin): recovery segue normal", async () => {
+    comSupabaseGlobal({ verifyOtp: { data: { user: USUARIO }, error: null }, getUser: { data: { user: null } } });
+    vi.mocked(configEvalink).mockReturnValue({} as never);
+    vi.mocked(reservaBloqueia).mockResolvedValue(false);
+
+    const { GET } = await import("./route");
+    const res = await GET(requisicao("type=recovery&token_hash=abc"));
+
+    expect(destino(res)).toBe("/login/reset");
+  });
+
+  it("EvaLink ligado e bloqueia, mas é um cadastro (signup): não bloqueia, só recovery/magiclink/email", async () => {
+    comSupabaseGlobal({ verifyOtp: { data: { user: USUARIO }, error: null }, getUser: { data: { user: null } } });
+    vi.mocked(decidirConviteDoSignup).mockReturnValue({ tipo: "provisionar" });
+    vi.mocked(configEvalink).mockReturnValue({} as never);
+    vi.mocked(reservaBloqueia).mockResolvedValue(true);
+
+    const { GET } = await import("./route");
+    const res = await GET(requisicao("type=signup&token_hash=abc"));
+
     expect(destino(res)).toBe("/onboarding/welcome");
   });
 });
