@@ -286,4 +286,30 @@ test("\"quanto custa\": Direct sai, NADA é publicado em público, e continua es
   await expect(item.getByText(/Motivo:\s*preço/)).toBeVisible();
   await expect(item.getByRole("button", { name: /Publicar/i })).toBeVisible();
   await page.screenshot({ path: path.join(EVIDENCIA, "02-preco-esperando-voce.png"), fullPage: true });
+
+  // A caixa onde o dono escreve o texto que acabou de sair. Provada aqui, na
+  // mesma sessão logada, em vez de uma spec própria: ela não tem estado de
+  // servidor para montar além do que este teste já montou.
+  await page.getByRole("button", { name: /Frases do Direct/i }).click();
+
+  const campoPreco = page.getByLabel(/Quando perguntarem preço/i);
+  await expect(campoPreco).toBeVisible();
+  // Organização que nunca configurou: campo VAZIO com o texto de fábrica
+  // como sugestão. Se o padrão viesse como valor, salvar congelaria a frase
+  // de hoje em quem só queria a de fábrica.
+  await expect(campoPreco).toHaveValue("");
+  expect(await campoPreco.getAttribute("placeholder")).toMatch(/\?$/);
+  await expect(page.getByText(/branco não desliga/i)).toBeVisible();
+
+  await campoPreco.fill("Olá! Me conta: qual é seu maior objetivo hoje?");
+  await page.getByRole("button", { name: /Salvar frases/i }).click();
+  await expect(page.getByText(/Frases salvas/i)).toBeVisible();
+  await page.screenshot({ path: path.join(EVIDENCIA, "03-frases-do-direct.png"), fullPage: true });
+
+  // Recarrega: o que foi salvo tem de voltar do banco, não do estado da tela.
+  await page.reload();
+  await page.getByRole("button", { name: /Frases do Direct/i }).click();
+  await expect(page.getByLabel(/Quando perguntarem preço/i)).toHaveValue(
+    "Olá! Me conta: qual é seu maior objetivo hoje?",
+  );
 });
