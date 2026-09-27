@@ -1,19 +1,24 @@
 import Link from "next/link";
 
 import { LoginForm } from "@/components/auth/LoginForm";
+import { Button } from "@/components/ui/button";
 import { branding } from "@/lib/branding";
 import { createClient } from "@/lib/supabase/server";
 import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { configEvalink } from "@/lib/evalink/config";
+import { mensagemDoEvalink } from "@/lib/evalink/mensagens";
 
 export const metadata = { title: "Entrar" };
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; reset?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; reset?: string; error?: string; evalink?: string }>;
 }) {
-  const { next, reset, error } = await searchParams;
+  const { next, reset, error, evalink } = await searchParams;
+  const evalinkLigado = configEvalink() !== null;
+  const mensagemEvalink = mensagemDoEvalink(evalink);
   // Fora da árvore de `app/app/layout.tsx` — sem `IdiomaProvider` do lado do
   // servidor (o cliente já tem o seu, montado em `app/(public)/layout.tsx`).
   // Quase nunca há sessão aqui (é a própria tela de entrar), mas resolve do
@@ -33,6 +38,21 @@ export default async function LoginPage({
         <h1 className="text-2xl font-semibold tracking-tight">{t("Entrar")}</h1>
         <p className="text-sm text-muted-foreground">{branding().name}</p>
       </div>
+      {evalinkLigado && (
+        <div className="space-y-3">
+          <Button asChild className="w-full">
+            <Link href="/evalink/entrar">{t("Entrar com o EvaLink")}</Link>
+          </Button>
+          {mensagemEvalink && (
+            <div
+              className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              role="alert"
+            >
+              {t(mensagemEvalink)}
+            </div>
+          )}
+        </div>
+      )}
       {reset === "success" && (
         <div
           className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm"
