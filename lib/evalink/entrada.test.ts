@@ -24,10 +24,20 @@ function adminFalso(overrides: Partial<{
   const maybeSingle = overrides.maybeSingle ?? vi.fn().mockResolvedValue({ data: { user_id: U }, error: null });
   const eq = vi.fn().mockReturnValue({ maybeSingle });
   const select = vi.fn().mockReturnValue({ eq });
-  const from = overrides.from ?? vi.fn().mockReturnValue({ select });
+  // Tabelas da checagem de banimento: por padrão ninguém é admin, então bane.
+  const from = overrides.from ?? vi.fn((t: string) =>
+    t === "evalink_vinculos" ? { select } : consulta({ data: [], error: null }));
   return {
     rpc, from, auth: { admin: { getUserById, createUser, deleteUser, updateUserById } },
   } as unknown as SupabaseClient;
+}
+
+/** Consulta encadeável do PostgREST: todo filtro devolve a si mesma, e `await` dá o resultado. */
+function consulta(resultado: { data: unknown; error: unknown }) {
+  const q: Record<string, unknown> = {};
+  for (const m of ["select", "eq", "is", "in", "neq", "limit"]) q[m] = () => q;
+  q.then = (ok: (v: unknown) => unknown) => Promise.resolve(resultado).then(ok);
+  return q;
 }
 
 const d = { sub: SUB, email: "pessoa@eva.test", papel: "agent" as const, orgPadrao: ORG };
@@ -64,7 +74,7 @@ describe("decidirEntrada", () => {
     await expect(decidirEntrada(admin, d)).resolves.toEqual({ ok: false, motivo: "falhou" });
   });
 
-  for (const motivo of ["conflito", "sem_organizacao", "ultimo_admin"] as const) {
+  for (const motivo of ["conflito", "sem_org_padrao", "sem_organizacao", "ultimo_admin"] as const) {
     it(`motivo ${motivo}: devolve ok=false com o mesmo motivo`, async () => {
       const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: null, motivo }], error: null });
       const admin = adminFalso({ rpc });
@@ -72,12 +82,17 @@ describe("decidirEntrada", () => {
     });
   }
 
-  it("motivo sem_org_padrao: falhou", async () => {
+  it("motivo sem_org_padrao: devolve o motivo e não cria usuário", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: null, motivo: "sem_org_padrao" }], error: null });
     const createUser = vi.fn();
     const admin = adminFalso({ rpc, createUser });
-    await expect(decidirEntrada(admin, d)).resolves.toEqual({ ok: false, motivo: "falhou" });
+    await expect(decidirEntrada(admin, d)).resolves.toEqual({ ok: false, motivo: "sem_org_padrao" });
     expect(createUser).not.toHaveBeenCalled();
+  });
+
+  it("motivo desconhecido do RPC: falhou", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: null, motivo: "outra_coisa" }], error: null });
+    await expect(decidirEntrada(adminFalso({ rpc }), d)).resolves.toEqual({ ok: false, motivo: "falhou" });
   });
 
   it("motivo novo: cria usuário e liga", async () => {
@@ -119,7 +134,7 @@ describe("aplicarAviso", () => {
     const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: U, novo: true }], error: null });
     const updateUserById = vi.fn().mockResolvedValue({ error: null });
     const admin = adminFalso({ rpc, updateUserById });
-    await expect(aplicarAviso(admin, { ...base, motivo: "desligado" })).resolves.toBe("feito");
+    await expect(aplicarAviso(admin, { ...base, motivo: "desligado" })).resolves.toMatchObject({ resultado: "feito" });
     expect(updateUserById).toHaveBeenCalledTimes(2);
     const senha = (updateUserById.mock.calls[0]?.[1] as { password: string }).password;
     expect(senha.length).toBeGreaterThanOrEqual(40);
@@ -130,7 +145,7 @@ describe("aplicarAviso", () => {
     const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: U, novo: true }], error: null });
     const updateUserById = vi.fn().mockResolvedValue({ error: null });
     const admin = adminFalso({ rpc, updateUserById });
-    await expect(aplicarAviso(admin, { ...base, motivo: "acesso_removido" })).resolves.toBe("feito");
+    await expect(aplicarAviso(admin, { ...base, motivo: "acesso_removido" })).resolves.toMatchObject({ resultado: "feito" });
     expect(updateUserById).toHaveBeenCalledTimes(2);
   });
 
@@ -151,7 +166,7 @@ describe("aplicarAviso", () => {
     const updateUserById = vi.fn();
     const from = vi.fn();
     const admin = adminFalso({ rpc, updateUserById, from });
-    await expect(aplicarAviso(admin, { ...base, motivo: "papel_mudou" })).resolves.toBe("feito");
+    await expect(aplicarAviso(admin, { ...base, motivo: "papel_mudou" })).resolves.toMatchObject({ resultado: "feito" });
     expect(updateUserById).not.toHaveBeenCalled();
     expect(from).not.toHaveBeenCalled();
   });
@@ -168,7 +183,7 @@ describe("aplicarAviso", () => {
     const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: null, novo: false }], error: null });
     const updateUserById = vi.fn().mockResolvedValue({ error: null });
     const admin = adminFalso({ rpc, updateUserById });
-    await expect(aplicarAviso(admin, { ...base, motivo: "desligado" })).resolves.toBe("repetido");
+    await expect(aplicarAviso(admin, { ...base, motivo: "desligado" })).resolves.toMatchObject({ resultado: "repetido" });
     expect(updateUserById).toHaveBeenCalledTimes(2);
   });
 
@@ -177,7 +192,7 @@ describe("aplicarAviso", () => {
     const updateUserById = vi.fn();
     const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
     const admin = adminFalso({ rpc, updateUserById, maybeSingle });
-    await expect(aplicarAviso(admin, { ...base, motivo: "desligado" })).resolves.toBe("feito");
+    await expect(aplicarAviso(admin, { ...base, motivo: "desligado" })).resolves.toMatchObject({ resultado: "feito" });
     expect(updateUserById).not.toHaveBeenCalled();
   });
 
@@ -190,6 +205,44 @@ describe("aplicarAviso", () => {
     expect(updateUserById).not.toHaveBeenCalled();
     expect(rpc).not.toHaveBeenCalled();
   });
+
+  it("devolve o user_id afetado e se baniu", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: U, novo: true }], error: null });
+    const updateUserById = vi.fn().mockResolvedValue({ error: null });
+    await expect(aplicarAviso(adminFalso({ rpc, updateUserById }), { ...base, motivo: "desligado" }))
+      .resolves.toEqual({ resultado: "feito", userId: U, banido: true });
+  });
+
+  /** from() com respostas por tabela; user_organizations responde na ordem das duas consultas. */
+  function fromProtecao(r: { plat?: readonly unknown[]; platErro?: boolean; minhas?: readonly unknown[]; outros?: readonly unknown[]; uoErro?: boolean }) {
+    const vinculo = { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { user_id: U }, error: null }) }) }) };
+    const uo = [r.minhas ?? [], r.outros ?? []];
+    return vi.fn((t: string) => {
+      if (t === "evalink_vinculos") return vinculo;
+      if (t === "platform_admins") return consulta(r.platErro ? { data: null, error: new Error("x") } : { data: r.plat ?? [], error: null });
+      return consulta(r.uoErro ? { data: null, error: new Error("x") } : { data: uo.shift(), error: null });
+    });
+  }
+  const ORG2 = "55555555-5555-4555-8555-555555555555";
+
+  for (const [nome, cfg, bane] of [
+    ["admin de plataforma ativo: não bane", { plat: [{ user_id: U }] }, false],
+    ["último admin ativo de uma organização: não bane", { minhas: [{ organization_id: ORG }, { organization_id: ORG2 }], outros: [{ organization_id: ORG }] }, false],
+    ["admin com outro admin em toda organização: bane", { minhas: [{ organization_id: ORG }], outros: [{ organization_id: ORG }] }, true],
+    ["leitura de platform_admins falha: não bane", { platErro: true }, false],
+    ["leitura de user_organizations falha: não bane", { uoErro: true }, false],
+  ] as const) {
+    it(nome, async () => {
+      const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: U, novo: true }], error: null });
+      const updateUserById = vi.fn().mockResolvedValue({ error: null });
+      const admin = adminFalso({ rpc, updateUserById, from: fromProtecao(cfg) });
+      await expect(aplicarAviso(admin, { ...base, motivo: "desligado" })).resolves.toEqual({ resultado: "feito", userId: U, banido: bane });
+      // A senha troca sempre, e o RPC que derruba as sessões roda sempre.
+      expect(updateUserById).toHaveBeenNthCalledWith(1, U, { password: expect.any(String) });
+      expect(updateUserById).toHaveBeenCalledTimes(bane ? 2 : 1);
+      expect(rpc).toHaveBeenCalledWith("fn_evalink_aviso", { p_sub: SUB, p_aviso: base.avisoId });
+    });
+  }
 
   it("rpc fn_evalink_aviso com erro: lança", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: new Error("boom") });

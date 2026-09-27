@@ -9162,6 +9162,9 @@ export const DICIONARIO: Traducoes = {
   "Seu e-mail já tem cadastro aqui. Peça ao administrador para ligar sua conta ao EvaLink.": {
     es: "Su correo ya tiene registro aquí. Pida al administrador que vincule su cuenta a EvaLink.",
   },
+  "Este CRM está sem a organização padrão do EvaLink configurada. Fale com quem administra a instalação.": {
+    es: "Este CRM no tiene configurada la organización predeterminada de EvaLink. Hable con quien administra la instalación.",
+  },
   "Você não está em nenhuma organização deste CRM. Fale com o administrador.": {
     es: "Usted no está en ninguna organización de este CRM. Hable con el administrador.",
   },

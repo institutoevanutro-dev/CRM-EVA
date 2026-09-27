@@ -15,6 +15,17 @@ export async function abrirSessao(email: string): Promise<boolean> {
   return !v.error && !!v.data.session;
 }
 
+/**
+ * A pessoa tem fator TOTP verificado? Então a entrada pela Conta para em /login/mfa, como o
+ * login por senha. Lido pela API admin (a sessão acabou de nascer nesta mesma requisição).
+ * Falha segura: erro de leitura conta como "tem", e a tela de MFA manda para /app quem não tem.
+ */
+export async function temMfaVerificado(userId: string): Promise<boolean> {
+  const r = await createAdminClient().auth.admin.mfa.listFactors({ userId });
+  if (r.error) return true;
+  return r.data.factors.some((f) => f.factor_type === "totp" && f.status === "verified");
+}
+
 /** Os mesmos campos de origem que o login por senha grava no audit. */
 export function origemDaRequisicao(req: NextRequest) {
   return {

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { COOKIE_LOGIN, configEvalink } from "@/lib/evalink/config";
 import { conferirVolta } from "@/lib/evalink/oidc";
 import { decidirEntrada } from "@/lib/evalink/entrada";
-import { abrirSessao, origemDaRequisicao } from "@/lib/evalink/sessao";
+import { abrirSessao, origemDaRequisicao, temMfaVerificado } from "@/lib/evalink/sessao";
 import { AUTH_LIMITS, authRateLimited } from "@/lib/auth/rate-limit";
 import { cookieSecure } from "@/lib/supabase/cookie-secure";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -12,6 +12,9 @@ export const dynamic = "force-dynamic";
 
 const PAGINA_ENTROU =
   '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/app"><title>Entrando</title><p><a href="/app">Continuar</a></p>';
+// Quem tem TOTP verificado prova o fator antes, como no login por senha.
+const PAGINA_MFA =
+  '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/login/mfa?next=/app"><title>Entrando</title><p><a href="/login/mfa?next=/app">Continuar</a></p>';
 
 const limparLogin = (res: NextResponse) => {
   res.cookies.set(COOKIE_LOGIN, "", {
@@ -27,7 +30,8 @@ const limparLogin = (res: NextResponse) => {
 /**
  * GET /evalink/volta: a Conta devolve o navegador com `code` e `state`.
  *
- * Sucesso responde 200 com uma página que navega para /app, e não 303: o cookie de sessão
+ * Sucesso responde 200 com uma página que navega para /app (ou /login/mfa, se a pessoa tem
+ * TOTP verificado), e não 303: o cookie de sessão
  * é SameSite=Strict, e um redirect ainda dentro da navegação vinda da Conta chegaria em /app
  * sem ele. A página faz a navegação seguinte partir do próprio CRM.
  */
@@ -70,11 +74,18 @@ export async function GET(req: NextRequest) {
     return vai("/login?evalink=falhou");
   }
 
-  await audit({ action: "auth.evalink_login", actorUserId: d.userId, metadata: { papel: quem.papel }, ...origem });
+  let mfa = true;
+  try {
+    mfa = await temMfaVerificado(d.userId);
+  } catch {
+    mfa = true;
+  }
+
+  await audit({ action: "auth.evalink_login", actorUserId: d.userId, metadata: { papel: quem.papel, mfa }, ...origem });
   // Os cookies de sessão gravados por abrirSessao (cookies() do next/headers) o Next anexa a
   // ESTA resposta, como faz com o redirect do /auth/confirm.
   return limparLogin(
-    new NextResponse(PAGINA_ENTROU, {
+    new NextResponse(mfa ? PAGINA_MFA : PAGINA_ENTROU, {
       status: 200,
       headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
     }),

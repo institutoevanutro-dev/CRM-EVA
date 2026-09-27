@@ -3,6 +3,8 @@ export const MENSAGENS_EVALINK: Record<string, string> = {
   falhou: "Não foi possível entrar pelo EvaLink.",
   conflito:
     "Seu e-mail já tem cadastro aqui. Peça ao administrador para ligar sua conta ao EvaLink.",
+  sem_org_padrao:
+    "Este CRM está sem a organização padrão do EvaLink configurada. Fale com quem administra a instalação.",
   sem_organizacao:
     "Você não está em nenhuma organização deste CRM. Fale com o administrador.",
   ultimo_admin:

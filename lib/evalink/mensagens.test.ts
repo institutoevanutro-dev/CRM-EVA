@@ -9,6 +9,12 @@ describe("mensagemDoEvalink", () => {
     }
   });
 
+  it("sem_org_padrao tem mensagem própria, não a genérica", () => {
+    expect(mensagemDoEvalink("sem_org_padrao")).toBe(
+      "Este CRM está sem a organização padrão do EvaLink configurada. Fale com quem administra a instalação.",
+    );
+  });
+
   it("devolve undefined para motivo desconhecido", () => {
     expect(mensagemDoEvalink("nao_existe")).toBeUndefined();
   });
