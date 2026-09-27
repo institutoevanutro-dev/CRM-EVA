@@ -28,6 +28,7 @@ begin
   if p_papel is null or p_papel not in ('viewer','agent','manager','admin') then
     raise exception 'evalink_papel_invalido';
   end if;
+  if p_email is null or btrim(p_email) = '' then raise exception 'evalink_email_invalido'; end if;
   select v.user_id into v_user from evalink_vinculos v where v.evalink_sub = p_sub;
   if v_user is null then
     if exists (select 1 from auth.users u where lower(u.email) = lower(p_email)) then
@@ -42,6 +43,13 @@ begin
   if not exists (select 1 from user_organizations uo where uo.user_id = v_user and uo.revoked_at is null) then
     return query select v_user, 'sem_organizacao'::text; return;
   end if;
+  -- trava os admins ativos de toda organização da pessoa: sem isso duas entradas
+  -- simultâneas (dois admins rebaixados ao mesmo tempo) passariam juntas pela checagem
+  perform 1 from user_organizations uo
+    where uo.organization_id in (select m.organization_id from user_organizations m
+                                 where m.user_id = v_user and m.revoked_at is null)
+      and uo.role = 'admin' and uo.revoked_at is null
+    for update of uo;
   -- tudo ou nada: se tirar o admin deixaria QUALQUER organização sem admin ativo, não muda nenhuma
   if p_papel <> 'admin' and exists (
     select 1 from user_organizations uo

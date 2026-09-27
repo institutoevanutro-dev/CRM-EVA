@@ -135,6 +135,15 @@ describe("fn_evalink_entrada", () => {
       pool.query("select public.fn_evalink_ligar_novo($1, $2, $3, 'dono')", [randomUUID(), randomUUID(), org]),
     ).rejects.toThrow("evalink_papel_invalido");
   });
+
+  it("e-mail nulo ou vazio lança", async () => {
+    const org = await organizacao();
+    for (const email of [null, "", "   "]) {
+      await expect(
+        pool.query("select * from public.fn_evalink_entrada($1, $2, 'agent', $3)", [randomUUID(), email, org]),
+      ).rejects.toThrow("evalink_email_invalido");
+    }
+  });
 });
 
 describe("fn_evalink_aviso", () => {
@@ -143,8 +152,17 @@ describe("fn_evalink_aviso", () => {
     const user = await usuario();
     await ligar(user, sub);
     for (let i = 0; i < 2; i++) {
-      await pool.query("insert into auth.sessions (id, user_id, aal) values ($1, $2, 'aal1')", [randomUUID(), user]);
+      const sessao = randomUUID();
+      await pool.query("insert into auth.sessions (id, user_id, aal) values ($1, $2, 'aal1')", [sessao, user]);
+      await pool.query("insert into auth.refresh_tokens (token, user_id, session_id) values ($1, $2, $3)", [
+        randomUUID(),
+        user,
+        sessao,
+      ]);
     }
+    const tokens = async () =>
+      (await pool.query("select count(*)::int as n from auth.refresh_tokens where user_id = $1", [user])).rows[0].n;
+    expect(await tokens()).toBe(2);
     const aviso = randomUUID();
     const sessoes = async () =>
       (await pool.query("select count(*)::int as n from auth.sessions where user_id = $1", [user])).rows[0].n;
@@ -152,6 +170,7 @@ describe("fn_evalink_aviso", () => {
     const r1 = await pool.query("select * from public.fn_evalink_aviso($1, $2)", [sub, aviso]);
     expect(r1.rows).toEqual([{ user_id: user, novo: true }]);
     expect(await sessoes()).toBe(0);
+    expect(await tokens()).toBe(0);
 
     await pool.query("insert into auth.sessions (id, user_id, aal) values ($1, $2, 'aal1')", [randomUUID(), user]);
     const r2 = await pool.query("select * from public.fn_evalink_aviso($1, $2)", [sub, aviso]);
@@ -195,5 +214,7 @@ describe("permissões", () => {
     const org = await organizacao();
     expect(await como("service_role", ENTRADA, [randomUUID(), org])).toBe(true);
     expect(await como("service_role", "select * from public.fn_evalink_aviso($1, $2)", [randomUUID(), randomUUID()])).toBe(true);
+    const user = await usuario();
+    expect(await como("service_role", "select public.fn_evalink_ligar_novo($1, $2, $3, 'agent')", [user, randomUUID(), org])).toBe(true);
   });
 });

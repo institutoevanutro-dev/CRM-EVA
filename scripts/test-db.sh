@@ -257,6 +257,13 @@ create table if not exists auth.sessions (
  id uuid primary key, user_id uuid not null references auth.users(id),
  aal text, not_after timestamptz
 );
+-- Como no GoTrue: refresh_tokens_session_id_fkey é ON DELETE CASCADE, então apagar a
+-- sessão (fn_evalink_aviso) leva junto os refresh tokens, e a sessão não renasce.
+create table if not exists auth.refresh_tokens (
+ id bigserial primary key, token text, user_id uuid,
+ session_id uuid references auth.sessions(id) on delete cascade,
+ revoked boolean default false
+);
 create table if not exists auth.mfa_factors (
  id uuid primary key, user_id uuid not null references auth.users(id), status text, factor_type text default 'totp'
 );
