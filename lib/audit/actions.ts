@@ -635,6 +635,9 @@ export const AUDIT_ACTIONS = [
   // Tarefa 5 (consumidores): aviso da Conta aplicado (desligado, acesso
   // removido, papel mudou). Reentrega com o mesmo id não gera segunda linha.
   "auth.evalink_aviso",
+  "prontuario.contact_linked",
+  "prontuario.contact_created",
+  "prontuario.contact_updated",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

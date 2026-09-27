@@ -1,4 +1,4 @@
--- 0285: entrada pela Conta EvaLink (opcional; sem as variáveis EVALINK_* nada disso é usado).
+-- 0287: entrada pela Conta EvaLink (opcional; sem as variáveis EVALINK_* nada disso é usado).
 -- Ligação pessoa da Conta (sub) com usuário do CRM é por sub, NUNCA por e-mail.
 -- Tabelas por pessoa (como platform_admins), sem organization_id: não são dados de tenant.
 -- Só a service role alcança: tabelas sem grant para anon/authenticated, funções revogadas.

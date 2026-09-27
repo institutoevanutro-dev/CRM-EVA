@@ -44,7 +44,8 @@ it("todo handler mutante do app declara guarda de suporte ou é infraestrutura i
      trechos.push([decl.name.text,decl.getText(source)]);
   }
   for(const [nome,texto] of trechos)
-   if(!texto.includes("requireSupportWrite(")&&!texto.includes("methodNotAllowed("))uncovered.push(`${path}:${nome}`);
+   // Rotas de integração usam Bearer com escopo próprio, sem sessão de suporte.
+   if(!texto.includes("requireSupportWrite(")&&!texto.includes("methodNotAllowed(")&&!texto.includes("authorizeProntuario("))uncovered.push(`${path}:${nome}`);
  }
  expect(uncovered).toEqual([]);
 });

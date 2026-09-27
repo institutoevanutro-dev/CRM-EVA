@@ -1,5 +1,5 @@
 /**
- * Entrada pela Conta EvaLink (migration 0285): as três funções security definer
+ * Entrada pela Conta EvaLink (migration 0287): as três funções security definer
  * que a rota de volta e o receptor de aviso chamam com a service role.
  *
  * Regras vigiadas: ligação só por `sub`, e-mail já cadastrado vira `conflito`,
