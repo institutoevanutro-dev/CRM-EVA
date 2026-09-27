@@ -2583,3 +2583,20 @@ na Meta e cola token.
 | J27.2 | Instalação sem App ID / Configuration ID | **NÃO PROVADO EM TELA** — o componente mostra o cartão `cadastro-incorporado-indisponivel` com o que falta e o formulário manual continua; nenhuma spec cobre ainda |
 | J27.3 | Webhook de histórico assinado + drain: a conversa nasce encerrada, sem não-lida, com "oi" e "olá" (rótulo Celular); a barra da aba mostra 20% | `tests/e2e/cadastro-incorporado.spec.ts` — prova só no CI. A não-lida é provada por dado (`/api/v1/conversations`), não por selo na tela |
 | J27.4 | Desconectar pelo celular (`PARTNER_REMOVED`) põe a sessão em `FAILED` e abre o aviso "foi desconectado pelo celular" na Central; `ACCOUNT_RECONNECTED` volta a `WORKING` e o aviso some | mesma spec — prova só no CI |
+
+### Os sons dos avisos `[P1]` (2026-10-05)
+
+Porte do DeskcommCRM original (PR #1814). Migration 0313. Spec: `tests/e2e/sons-dos-avisos.spec.ts` (job e2e). O som é medido trocando, antes de a página carregar, `HTMLMediaElement.prototype.play` e `AudioContext.prototype.createOscillator` por versões que anotam a chamada — a decisão de tocar, qual som e quando são do produto.
+
+Neste fork só o pedido de pessoa (`handoff`) toca: a etapa que avisa e a IA sem saldo no provedor, que o original também faz tocar, não existem aqui.
+
+| Caso | Esperado |
+|---|---|
+| AV.6 | A gestora vê «Sons dos avisos» em Configurações › Notificações, com «Precisa de uma pessoa» no som do sistema |
+| AV.7 | Um arquivo de texto com nome `.mp3` é recusado («O som precisa ser MP3, OGG ou WAV.») e nada muda no banco |
+| AV.8 | Um WAV entra: a tela diz «Som personalizado», o caminho fica em `settings.sons_de_aviso` sob a pasta da organização e o arquivo está no bucket `org-sounds` |
+| AV.9 | «Usar o do sistema» tira a chave e apaga o arquivo |
+| AV.10 | A visualizadora vê o som que vale e o botão «Ouvir», mas não vê «Trocar som» nem «Usar o do sistema» |
+| AV.11 | Com o site aberto, o aviso antigo não toca; a passagem NOVA toca o arquivo da organização (URL assinada); um aviso novo que não pede gente (`job_dead`) não toca nada |
+
+**NÃO coberto por esta spec:** o som saindo de um alto-falante de verdade, e o navegador que recusa áudio antes de a pessoa interagir (o hook cai no bipe e, se nem isso, o aviso segue visível).

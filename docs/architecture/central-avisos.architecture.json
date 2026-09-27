@@ -77,6 +77,20 @@
       "col": 6,
       "type": "service",
       "label": "PATCH separado: resolver ou reabrir + auditoria"
+    },
+    {
+      "id": "campainha",
+      "lane": "humano",
+      "col": 5,
+      "type": "ui",
+      "label": "Campainha do topo: aviso NOVO que pede gente toca o som (useSonsDaCentral, leitura de 30 s)"
+    },
+    {
+      "id": "sons",
+      "lane": "app",
+      "col": 5,
+      "type": "service",
+      "label": "/api/v1/settings/sons + bucket privado org-sounds (0313); regra única somDoAviso"
     }
   ],
   "edges": [
@@ -124,6 +138,21 @@
       "from": "status",
       "to": "central",
       "label": "reconsultar abertos/resolvidos"
+    },
+    {
+      "from": "central",
+      "to": "campainha",
+      "label": "abertos, relidos a cada 30 s"
+    },
+    {
+      "from": "sons",
+      "to": "campainha",
+      "label": "URL assinada de 1 h (sem arquivo: bipe do produto)"
+    },
+    {
+      "from": "campainha",
+      "to": "contexto",
+      "label": "quem ouviu abre a Central"
     }
   ]
 }
