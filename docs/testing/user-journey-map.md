@@ -2600,3 +2600,9 @@ Neste fork só o pedido de pessoa (`handoff`) toca: a etapa que avisa e a IA sem
 | AV.11 | Com o site aberto, o aviso antigo não toca; a passagem NOVA toca o arquivo da organização (URL assinada); um aviso novo que não pede gente (`job_dead`) não toca nada |
 
 **NÃO coberto por esta spec:** o som saindo de um alto-falante de verdade, e o navegador que recusa áudio antes de a pessoa interagir (o hook cai no bipe e, se nem isso, o aviso segue visível).
+
+### O push dos avisos no celular `[P1]` (2026-10-05)
+
+Porte do DeskcommCRM original (PR #1815). Migration 0314. **Sem spec de tela, e é declarado:** o que muda é o que chega a um celular com o CRM fechado, e o CI não tem aparelho nem serviço de push de navegador. A regra (só a passagem para pessoa, texto no idioma da organização, sem dado do cliente, destino da Central) está em `tests/unit/push-dos-avisos.test.ts`; o anúncio do aviso no barramento, contra Postgres, em `tests/invariants/aviso-da-central-no-barramento.test.ts`.
+
+**NÃO coberto:** a notificação aparecendo num celular de verdade (Android/iPhone), com o par VAPID configurado.
