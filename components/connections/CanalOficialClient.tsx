@@ -72,6 +72,13 @@ export function CanalOficialClient() {
     e.preventDefault();
     const r = await conectar.mutateAsync(form);
     toast.success(`${t("Conectado:")} ${r.data.displayName} ${r.data.phoneNumber ?? ""}`.trim());
+    if (r.data.webhook?.assinado === false) {
+      // Persistente: conectado sem recebimento é o estado que parece funcionar e não funciona.
+      toast.warning(
+        t("Conectado, mas a Meta não aceitou o endereço de recebimento. As mensagens não vão chegar."),
+        { description: r.data.webhook.motivo, duration: Infinity },
+      );
+    }
     // O token some do formulário assim que grava — deixá-lo na tela seria mantê-lo
     // em memória do navegador sem motivo, e ele não volta em nenhum GET.
     setForm((f) => ({ ...f, token: "" }));
@@ -106,6 +113,22 @@ export function CanalOficialClient() {
 
       {estado?.webhook ? (
         <Card className="flex flex-col gap-3 p-4">
+          {estado.webhook.assinatura?.assinado === false ? (
+            // Fixo, não só toast: o toast some no reload e a tela voltaria a
+            // parecer saudável com o recebimento morto.
+            <div
+              role="alert"
+              data-testid="webhook-nao-assinado"
+              className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              <p className="font-medium">
+                {t("Conectado, mas a Meta não aceitou o endereço de recebimento. As mensagens não vão chegar.")}
+              </p>
+              {estado.webhook.assinatura.motivo ? (
+                <p className="mt-1">{estado.webhook.assinatura.motivo}</p>
+              ) : null}
+            </div>
+          ) : null}
           <div>
             <h2 className="font-medium">{t("Cole isto no painel da Meta")}</h2>
             <p className="mt-1 text-sm text-muted-foreground">

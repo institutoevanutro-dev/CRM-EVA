@@ -56,3 +56,43 @@ export async function validateMetaCredentials(input: {
     return { ok: false, motivo: `rede indisponível: ${err instanceof Error ? err.message : "erro"}` };
   }
 }
+
+export const MOTIVO_NUMERO_FORA_DA_CONTA =
+  "o número informado não pertence a essa conta do WhatsApp Business. Confira o ID da conta";
+
+/**
+ * O número pertence à conta (WABA) informada, com o MESMO token?
+ *
+ * `validateMetaCredentials` só olha o número; um ID de conta errado passava, e o
+ * CRM assinaria o webhook da conta ERRADA na Meta, deixando o número certo sem
+ * receber nada. Rodar ANTES de gravar: é problema de credencial, não de canal.
+ */
+export async function conferirNumeroDaConta(input: {
+  wabaId: string;
+  phoneNumberId: string;
+  token: string;
+}): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  try {
+    // ponytail: uma página de até 100 números; paginar se alguma conta passar disso.
+    const res = await fetch(
+      `https://graph.facebook.com/${graphVersion()}/${input.wabaId}/phone_numbers?fields=id&limit=100`,
+      { headers: { Authorization: `Bearer ${input.token}` }, signal: AbortSignal.timeout(15_000) },
+    );
+    const body = (await res.json().catch(() => ({}))) as {
+      data?: Array<{ id?: string }>;
+      error?: { message?: string; error_data?: { details?: string } };
+    };
+    if (!res.ok || body.error) {
+      return {
+        ok: false,
+        motivo: body.error?.error_data?.details ?? body.error?.message ?? `http_${res.status}`,
+      };
+    }
+    return (body.data ?? []).some((n) => n.id === input.phoneNumberId)
+      ? { ok: true }
+      : { ok: false, motivo: MOTIVO_NUMERO_FORA_DA_CONTA };
+  } catch (err) {
+    const msg = (err as { message?: unknown } | null)?.message;
+    return { ok: false, motivo: `rede indisponível: ${typeof msg === "string" ? msg : "erro"}` };
+  }
+}

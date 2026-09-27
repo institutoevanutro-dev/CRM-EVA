@@ -48,7 +48,14 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/webhooks/secrets", () => ({ encryptWebhookSecret: vi.fn() }));
-vi.mock("@/lib/channels/meta/validate-credentials", () => ({ validateMetaCredentials: vi.fn() }));
+vi.mock("@/lib/channels/meta/validate-credentials", () => ({
+  validateMetaCredentials: vi.fn(),
+  conferirNumeroDaConta: vi.fn(async () => ({ ok: true })),
+}));
+// O POST assina o webhook da conta na Meta depois de gravar; aqui não sai rede.
+vi.mock("@/lib/channels/meta/assinar-webhook", () => ({
+  assinarWebhookDaConta: vi.fn(async () => ({ ok: true })),
+}));
 vi.mock("@/lib/waha/client", () => ({
   getWahaClient: vi.fn(),
   wahaFriendlyError: (m: string) => m,
@@ -324,6 +331,17 @@ const reqOficial = () =>
     headers: { "content-type": "application/json" },
   });
 
+/**
+ * Depois de conectar, o POST grava em `metadata.webhook_da_conta` o que a Meta
+ * respondeu à assinatura do webhook. Essa escrita não é a da conexão, e fica fora
+ * do que estes casos medem.
+ */
+function escritasDaConexao(r: Registro): Escrita[] {
+  return r.escritas.filter(
+    (e) => !(e.patch.metadata && typeof e.patch.metadata === "object" && "webhook_da_conta" in e.patch.metadata),
+  );
+}
+
 describe("POST /api/v1/channels/official — reconectar é ressuscitar", () => {
   it("⭐ canal oficial EXCLUÍDO volta ATIVO: a linha deixa de estar arquivada", async () => {
     authOk();
@@ -345,7 +363,7 @@ describe("POST /api/v1/channels/official — reconectar é ressuscitar", () => {
     const { POST } = await import("@/app/api/v1/channels/official/route");
     await POST(reqOficial());
 
-    expect(db.escritas.map((e) => e.tipo)).toEqual(["update"]);
+    expect(escritasDaConexao(db).map((e) => e.tipo)).toEqual(["update"]);
     expect(db.linhas).toHaveLength(1);
   });
 
@@ -369,7 +387,7 @@ describe("POST /api/v1/channels/official — reconectar é ressuscitar", () => {
     const res = await POST(reqOficial());
 
     expect(res.status).toBe(200);
-    expect(db.escritas.map((e) => e.tipo)).toEqual(["insert"]);
+    expect(escritasDaConexao(db).map((e) => e.tipo)).toEqual(["insert"]);
   });
 
   /**
@@ -387,7 +405,7 @@ describe("POST /api/v1/channels/official — reconectar é ressuscitar", () => {
     const res = await POST(reqOficial());
 
     expect(res.status).toBe(200);
-    expect(db.escritas.map((e) => e.recusada)).toEqual([true, false]);
+    expect(escritasDaConexao(db).map((e) => e.recusada)).toEqual([true, false]);
     expect(patchDe(db, 0)).toHaveProperty("archived_at", null);
     expect(patchDe(db, 1)).not.toHaveProperty("archived_at");
     expect(db.linhas[0]?.status).toBe("WORKING");
