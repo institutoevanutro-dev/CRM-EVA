@@ -12,8 +12,32 @@ export interface ChangelogSection {
   requiresAttention: string | null;
 }
 
-/** Teto do que o agente pode mandar. O CHANGELOG real tem ~4 KB. */
-export const CHANGELOG_MAX_BYTES = 64_000;
+/**
+ * Teto do que o agente pode mandar, sobre a string JÁ ESCAPADA no JSON.
+ *
+ * ⚠️ Estourar aqui NÃO corta o changelog: derruba o HEARTBEAT INTEIRO com 422,
+ * e sem short-circuit isso morre calado. O heartbeat é o que avisa o dono da
+ * VPS que existe versão nova, então perdê-lo é pior que perder o texto.
+ *
+ * ── Por que 128 KB, e por que ele sobe ANTES do corte do agente ────────────
+ *
+ * O `agent.sh` corta em 30.000 bytes CRUS e a margem é deliberada: o `esc()`
+ * dele dobra cada aspas, barra, tab e quebra de linha, então 30.000 crus
+ * garantem ≤60.000 escapados mesmo no pior caso, com folga sob os 64.000 de
+ * antes. O preço dessa segurança é que a seção mais nova do CHANGELOG não
+ * pode passar de 30.000 — e em 27/09/2026, com 54 fragmentos acumulados, a
+ * folga era de 117 bytes (`tests/unit/changelog-cabe-na-tela-da-vps.test.ts`).
+ *
+ * Subir para 128.000 é o PRIMEIRO dos dois passos. Ele é seguro sozinho:
+ * agente antigo continua cortando em 30.000 e nada muda para ele. O segundo
+ * passo — subir o `head -c` do `agent.sh` — só pode vir DEPOIS de este estar
+ * em produção, porque o agente mora no disco do cliente e o app vem da
+ * imagem: agente novo falando com servidor antigo manda mais do que ele
+ * aceita, e o heartbeat morre em silêncio. A ordem inversa é o defeito.
+ *
+ * O CHANGELOG real tem ~4 KB; o teto é para o salto de várias versões.
+ */
+export const CHANGELOG_MAX_BYTES = 128_000;
 
 /** `## [1.1.0] — 2026-08-02` e também `## [Não lançado]`. */
 const VERSION_HEADING = /^##\s+\[([^\]]+)\]/;

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseFragmento } from "@/lib/release/fragmento";
 import { montarSecao } from "@/lib/release/montar-secao";
-import { extractChangelogRange, extractChangelogSection } from "@/lib/system/changelog";
+import { CHANGELOG_MAX_BYTES, extractChangelogRange, extractChangelogSection } from "@/lib/system/changelog";
 
 /**
  * A seção mais nova do CHANGELOG é TELA DE PRODUTO, e ela tem um teto.
@@ -351,5 +351,38 @@ describe("o CHANGELOG da versão nova cabe no que a VPS recebe", () => {
         `VPS — o aviso não apareceria para quem vai atualizar. ${conserto} Ou mova o bloco ` +
         `para logo depois do parágrafo de abertura.`,
     ).not.toBeNull();
+  });
+});
+
+/**
+ * A REGRA DE ORDEM entre os dois tetos — o do agente e o do servidor.
+ *
+ * Eles não são independentes. O `esc()` do `agent.sh` dobra cada aspas, barra,
+ * tab e quebra de linha antes de mandar, e o Zod da rota mede a string JÁ
+ * ESCAPADA. Então o corte cru do agente, no pior caso (texto inteiro
+ * escapando), chega ao servidor com o DOBRO do tamanho.
+ *
+ * Quando essa conta não fecha, o que acontece não é changelog truncado: é
+ * 422, e o HEARTBEAT INTEIRO morre — calado, sem short-circuit. O dono da VPS
+ * deixa de ser avisado de que existe versão nova, que é a razão de o
+ * heartbeat existir.
+ *
+ * Por isso subir o corte do agente é sempre o SEGUNDO passo: o agente mora no
+ * disco do cliente e o app vem da imagem, então um agente novo pode acordar
+ * falando com um servidor antigo. Subir o servidor primeiro é inofensivo (o
+ * agente antigo só manda menos do que poderia); o inverso é o defeito.
+ *
+ * Este teste é o que impede alguém de subir só um dos dois.
+ */
+describe("os dois tetos, e a ordem entre eles", () => {
+  it("o corte do agente, dobrado pelo escape, ainda cabe no teto do servidor", () => {
+    const cru = tetoDoAgente();
+    expect(
+      cru * 2,
+      `o agente corta em ${cru} bytes crus, que no pior caso chegam ao servidor como ${cru * 2} ` +
+        `escapados, contra um teto de ${CHANGELOG_MAX_BYTES}. Suba CHANGELOG_MAX_BYTES ` +
+        `(lib/system/changelog.ts) e PUBLIQUE antes de subir o head -c do agent.sh — a ordem ` +
+        `inversa mata o heartbeat com 422, em silêncio.`,
+    ).toBeLessThanOrEqual(CHANGELOG_MAX_BYTES);
   });
 });
