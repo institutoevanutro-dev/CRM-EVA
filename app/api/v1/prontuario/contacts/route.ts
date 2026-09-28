@@ -5,6 +5,7 @@ import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { validateBearerToken, ensureScope, McpAuthError } from "@/lib/mcp/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
+import { condicoesDaBuscaDeContato } from "@/lib/contacts/busca";
 import { authorizeProntuario, createContactSchema, parseBody, crmOperationError, contactForProntuario } from "@/lib/prontuario/contacts";
 
 export const dynamic = "force-dynamic";
@@ -26,14 +27,13 @@ export async function GET(req: Request): Promise<Response> {
     if (!parsed.success) return fail("validation_failed", "Busca inválida.", 422, { requestId });
     if (!(await checkRateLimit(`prontuario-contacts-read:${auth.organizationId}:${auth.apiTokenId}`, 60, 60)).allowed)
       return fail("rate_limited", "Tente novamente em um minuto.", 429, { requestId });
-    const term = `%${parsed.data.search}%`;
     const { data, error } = await createAdminClient()
       .from("contacts")
       .select(fields)
       .eq("organization_id", auth.organizationId)
       .eq("is_anonymized", false)
       .is("is_merged_into", null)
-      .or(`name.ilike.${term},display_name.ilike.${term},phone_number.ilike.${term},email.ilike.${term}`)
+      .or(condicoesDaBuscaDeContato(parsed.data.search).join(","))
       .limit(parsed.data.limit);
     if (error) return fail("internal_error", "Consulta indisponível.", 503, { requestId });
     const response = ok((data ?? []).map(contactForProntuario), { requestId });
