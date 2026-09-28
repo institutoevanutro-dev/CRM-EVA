@@ -292,3 +292,92 @@ export async function aplicarRegra(
 
   return { ordem, reivindicado: true, situacao, motivoDoToque, gravado };
 }
+
+/**
+ * O QUE ACONTECEU com a tentativa de abrir conversa. Cada caso é distinto de
+ * propósito: quem chama escreve na linha um motivo diferente para cada um, e
+ * colapsá-los num `boolean` foi exatamente o defeito que `aplicarRegra` pagou
+ * três vezes (ver o cabeçalho deste arquivo). "Não mandou" tem quatro causas
+ * e só uma delas é problema.
+ */
+export type ResultadoDaPrivadaDeGatilho =
+  | { tipo: "enviou"; messageId: string | null }
+  | { tipo: "ja_recebeu" }
+  | { tipo: "janela_vencida" }
+  | { tipo: "data_invalida" }
+  | { tipo: "falhou"; erro: string };
+
+/** O pedaço de `AdminDaAcao` que abrir conversa por gatilho precisa. */
+export type AdminDaPrivadaDeGatilho = Pick<AdminDaAcao, "jaMandouPrivado" | "enviarPrivada">;
+
+/**
+ * Manda a privada quando foi o GATILHO da trava que pediu, não uma regra de
+ * palavra — comentário que pergunta preço ou quer marcar consulta (ver
+ * `./gatilho-direct.ts`).
+ *
+ * Diferenças para `aplicarRegra`, todas deliberadas:
+ * - **não reivindica**: o worker já reivindicou a linha antes de consultar a
+ *   trava. Reivindicar de novo devolveria `false` (a linha não está mais em
+ *   `novo` para o `update` dele) e nada sairia.
+ * - **não manda pública**: o gatilho existe justamente porque publicar
+ *   sozinho ali seria errado. Preço em público continua proibido.
+ * - **não grava nada**: quem grava é o worker, que já vai escrever
+ *   `esperando_voce` com o motivo na mesma linha. Uma gravação só, em vez de
+ *   um checkpoint que pode falhar sozinho.
+ *
+ * O que é IGUAL, e é o que importa: a mesma janela de 7 dias com a mesma
+ * margem de 1h, e a mesma trava de uma privada por (mídia, autor) — a Meta
+ * não devolve o tiro, e a pessoa que comenta preço duas vezes no mesmo vídeo
+ * não pode receber dois Direct.
+ */
+export async function enviarPrivadaDeGatilho(
+  admin: AdminDaPrivadaDeGatilho,
+  comentario: ComentarioParaAgir,
+  texto: string,
+  gatilho: string,
+  agora: Date,
+): Promise<ResultadoDaPrivadaDeGatilho> {
+  // Mensagem vazia é pior que mensagem nenhuma: gasta o tiro único e chega
+  // como um Direct em branco para alguém prestes a comprar.
+  if (!texto.trim()) {
+    return { tipo: "falhou", erro: "a frase deste gatilho está vazia" };
+  }
+
+  const diffMs = agora.getTime() - new Date(comentario.comentadoEm).getTime();
+  if (Number.isNaN(diffMs)) return { tipo: "data_invalida" };
+  if (diffMs > JANELA_DA_RESPOSTA_PRIVADA_MS - MARGEM_DE_SEGURANCA_MS) {
+    return { tipo: "janela_vencida" };
+  }
+
+  if (
+    await admin.jaMandouPrivado({
+      organizationId: comentario.organizationId,
+      mediaId: comentario.mediaId,
+      autorIgsid: comentario.autorIgsid,
+    })
+  ) {
+    return { tipo: "ja_recebeu" };
+  }
+
+  let messageId: string | null;
+  try {
+    const r = await admin.enviarPrivada({
+      organizationId: comentario.organizationId,
+      commentId: comentario.commentId,
+      texto,
+    });
+    messageId = r.messageId;
+  } catch (err) {
+    return { tipo: "falhou", erro: err instanceof Error ? err.message : String(err) };
+  }
+
+  await audit({
+    action: "comment.private_reply_sent",
+    organizationId: comentario.organizationId,
+    resourceType: "instagram_comment",
+    resourceId: comentario.id,
+    metadata: { gatilho },
+  });
+
+  return { tipo: "enviou", messageId };
+}

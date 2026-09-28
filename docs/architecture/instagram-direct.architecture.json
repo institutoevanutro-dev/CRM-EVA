@@ -8,12 +8,31 @@
     "quality_profile": "standard"
   },
   "lanes": [
-    { "id": "humano", "label": "Pessoa" },
-    { "id": "app", "label": "Aplicativo" },
-    { "id": "db", "label": "Banco" },
-    { "id": "meta", "label": "Instagram (Meta)" }
+    {
+      "id": "humano",
+      "label": "Pessoa"
+    },
+    {
+      "id": "app",
+      "label": "Aplicativo"
+    },
+    {
+      "id": "db",
+      "label": "Banco"
+    },
+    {
+      "id": "meta",
+      "label": "Instagram (Meta)"
+    }
   ],
-  "mainPath": ["conexoes", "config", "webhook", "ingest", "inbox", "funil"],
+  "mainPath": [
+    "conexoes",
+    "config",
+    "webhook",
+    "ingest",
+    "inbox",
+    "funil"
+  ],
   "nodes": [
     {
       "id": "conexoes",
@@ -69,7 +88,7 @@
       "lane": "app",
       "col": 4,
       "type": "worker",
-      "label": "Cron comentarios-worker (1×/min): regra de palavra → Direct+pública; sem regra, classificador de segurança decide"
+      "label": "Cron comentarios-worker (1×/min): regra de palavra → Direct+pública; sem regra, classificador decide, e preço/agendamento abrem conversa só no Direct"
     },
     {
       "id": "aba_comentarios",
@@ -84,21 +103,105 @@
       "col": 5,
       "type": "external",
       "label": "Graph API: Direct privado (messages) e resposta pública (replies)"
+    },
+    {
+      "id": "frases_de_abertura",
+      "lane": "humano",
+      "col": 5,
+      "type": "ui",
+      "label": "Frases do Direct: o dono escreve o texto que abre conversa (preço e agendamento), em organizations.settings.comentarios"
     }
   ],
   "edges": [
-    { "id": "e1", "from": "conexoes", "to": "config", "label": "App ID/Secret + conexão ativa gravados" },
-    { "id": "e2", "from": "config", "to": "webhook", "label": "Segredo decifrado para validar a assinatura" },
-    { "id": "e3", "from": "config", "to": "ingest", "label": "ig_account_id → organização + Origem padrão" },
-    { "id": "e4", "from": "webhook", "to": "ingest", "label": "Evento parseado (texto/mídia), eco descartado" },
-    { "id": "e5", "from": "ingest", "to": "inbox", "label": "Mensagem gravada (Realtime)" },
-    { "id": "e6", "from": "ingest", "to": "funil", "label": "Contato novo → card + custom_fields.origem" },
-    { "id": "e7", "from": "inbox", "to": "conexoes", "label": "Sem @/nome: só reconfigurar a conta reconstrói o perfil" },
-    { "id": "e8", "from": "webhook", "to": "comentarios_db", "label": "changes field=comments parseado, eco descartado, insert idempotente" },
-    { "id": "e9", "from": "comentarios_db", "to": "comentario_worker", "label": "situacao=novo entra na fila; worker reivindica com lease de 10min" },
-    { "id": "e10", "from": "comentario_worker", "to": "instagram_graph_comentario", "label": "regra casada: Direct (messages) e depois resposta pública (replies)" },
-    { "id": "e11", "from": "comentario_worker", "to": "comentarios_db", "label": "grava desfecho: respondido_pela_regra/respondido_pela_ia/esperando_voce" },
-    { "id": "e12", "from": "comentario_worker", "to": "aba_comentarios", "label": "sem regra e inseguro (ou sem perfil de voz) → esperando_voce na fila humana" },
-    { "id": "e13", "from": "aba_comentarios", "to": "instagram_graph_comentario", "label": "Publicar: resposta editada sai como reply público (respondido_manualmente)" }
+    {
+      "id": "e1",
+      "from": "conexoes",
+      "to": "config",
+      "label": "App ID/Secret + conexão ativa gravados"
+    },
+    {
+      "id": "e2",
+      "from": "config",
+      "to": "webhook",
+      "label": "Segredo decifrado para validar a assinatura"
+    },
+    {
+      "id": "e3",
+      "from": "config",
+      "to": "ingest",
+      "label": "ig_account_id → organização + Origem padrão"
+    },
+    {
+      "id": "e4",
+      "from": "webhook",
+      "to": "ingest",
+      "label": "Evento parseado (texto/mídia), eco descartado"
+    },
+    {
+      "id": "e5",
+      "from": "ingest",
+      "to": "inbox",
+      "label": "Mensagem gravada (Realtime)"
+    },
+    {
+      "id": "e6",
+      "from": "ingest",
+      "to": "funil",
+      "label": "Contato novo → card + custom_fields.origem"
+    },
+    {
+      "id": "e7",
+      "from": "inbox",
+      "to": "conexoes",
+      "label": "Sem @/nome: só reconfigurar a conta reconstrói o perfil"
+    },
+    {
+      "id": "e8",
+      "from": "webhook",
+      "to": "comentarios_db",
+      "label": "changes field=comments parseado, eco descartado, insert idempotente"
+    },
+    {
+      "id": "e9",
+      "from": "comentarios_db",
+      "to": "comentario_worker",
+      "label": "situacao=novo entra na fila; worker reivindica com lease de 10min"
+    },
+    {
+      "id": "e10",
+      "from": "comentario_worker",
+      "to": "instagram_graph_comentario",
+      "label": "regra casada: Direct (messages) e depois resposta pública (replies)"
+    },
+    {
+      "id": "e11",
+      "from": "comentario_worker",
+      "to": "comentarios_db",
+      "label": "grava desfecho: respondido_pela_regra/respondido_pela_ia/esperando_voce"
+    },
+    {
+      "id": "e12",
+      "from": "comentario_worker",
+      "to": "aba_comentarios",
+      "label": "sem regra e inseguro → esperando_voce na fila humana (preço/agendamento vão com o Direct já enviado)"
+    },
+    {
+      "id": "e13",
+      "from": "aba_comentarios",
+      "to": "instagram_graph_comentario",
+      "label": "Publicar: resposta editada sai como reply público (respondido_manualmente)"
+    },
+    {
+      "id": "e14",
+      "from": "comentario_worker",
+      "to": "instagram_graph_comentario",
+      "label": "sem regra, gatilho preço/agendamento: SÓ o Direct (messages). Pública continua proibida"
+    },
+    {
+      "id": "e15",
+      "from": "frases_de_abertura",
+      "to": "comentario_worker",
+      "label": "o worker lê estas frases por organização; leitura que falha não manda nada"
+    }
   ]
 }

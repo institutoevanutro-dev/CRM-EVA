@@ -618,6 +618,10 @@ export const AUDIT_ACTIONS = [
   // Task 8 — uma regra nova em `instagram_comment_rules`, criada pela tela
   // (palavra-gatilho → resposta pública + Direct, por mídia).
   "instagram_comment_rule.created",
+  // As frases que o Direct manda quando a trava barra por preço ou
+  // agendamento mudaram. O TEXTO não entra no metadata: é conteúdo editorial,
+  // e a trilha responde "quem mudou e quando". `resourceId` é a organização.
+  "comment.frases_updated",
   // IMPORTANTE 5 (revisão final) — um humano descartou (`situacao='ignorado'`)
   // um comentário `esperando_voce` pela tela. Sem isto a fila só cresce.
   "comment.discarded",

@@ -67,9 +67,10 @@
  * Supabase e com `lib/channels` de verdade, e é ela quem constrói o
  * `AdminDaAcao` que `aplicarRegra` (Task 5) pedia como trabalho da Task 7.
  */
-import { aplicarRegra, type AdminDaAcao, type Desfecho } from "@/lib/comentarios/acao";
+import { aplicarRegra, enviarPrivadaDeGatilho, type AdminDaAcao, type Desfecho } from "@/lib/comentarios/acao";
 import { motivoDaRecusaPorEspecialidade } from "@/lib/comentarios/especialidade";
 import { regraQueCasa, type RegraDeComentario } from "@/lib/comentarios/regra";
+import { abreConversa, chaveDoGatilho, frasesDeGatilho, type FrasesDeGatilho } from "@/lib/comentarios/gatilho-direct";
 import { ehObviamenteSeguro } from "@/lib/comentarios/seguranca";
 import { perfilDeVoz, type AdminDaVoz, type PerfilDeVoz } from "@/lib/comentarios/voz";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
@@ -120,8 +121,23 @@ export interface AdminDoWorker extends AdminDaAcao, AdminDaVoz {
   gerarResposta(comentario: ComentarioNovo, perfil: PerfilDeVoz): Promise<string>;
   /** Publica a resposta pública gerada pela IA (fora do caminho de regra). */
   publicarResposta(comentario: ComentarioNovo, texto: string): Promise<{ replyId: string | null }>;
-  /** `esperando_voce`, com motivo e sugestão (o texto que quase saiu, quando houver). */
-  marcarEsperando(comentarioId: string, motivo: string, sugestao: string | null): Promise<void>;
+  /**
+   * `esperando_voce`, com motivo e sugestão (o texto que quase saiu, quando
+   * houver).
+   *
+   * `privateReplyMessageId` só é gravado quando vem um valor. OMITIR não é o
+   * mesmo que passar `null`: escrever `null` apagaria o rastro de uma privada
+   * que JÁ saiu, que é exatamente o dado que impede o reenvio (o caminho do
+   * lease vencido chega aqui numa linha que pode ter mandado uma).
+   */
+  marcarEsperando(
+    comentarioId: string,
+    motivo: string,
+    sugestao: string | null,
+    privateReplyMessageId?: string | null,
+  ): Promise<void>;
+  /** As frases de abertura de conversa desta organização (padrão quando não configurou). */
+  frasesDeGatilho(organizationId: string): Promise<FrasesDeGatilho>;
   /** `respondido_pela_ia`. */
   marcarRespondidoPelaIa(comentarioId: string, texto: string, replyId: string | null): Promise<void>;
 }
@@ -167,8 +183,9 @@ async function marcarEsperandoAuditado(
   c: ComentarioNovo,
   motivo: string,
   sugestao: string | null,
+  privateReplyMessageId?: string | null,
 ): Promise<void> {
-  await admin.marcarEsperando(c.id, motivo, sugestao);
+  await admin.marcarEsperando(c.id, motivo, sugestao, privateReplyMessageId);
   await audit({
     action: "comment.waiting_human",
     organizationId: c.organizationId,
@@ -176,6 +193,72 @@ async function marcarEsperandoAuditado(
     resourceId: c.id,
     metadata: { motivo },
   });
+}
+
+/**
+ * A trava barrou o comentário — ela sempre barra quando há gatilho. A
+ * pergunta que resta é se esse gatilho é alguém querendo COMPRAR, e nesse
+ * caso a conversa começa por mensagem privada em vez de esperar o dono abrir
+ * a fila (ver `lib/comentarios/gatilho-direct.ts`).
+ *
+ * O comentário vai para `esperando_voce` de qualquer jeito: a privada abre a
+ * conversa, não substitui o dono, e ele ainda decide se responde algo em
+ * público. Devolve o motivo já escrito e — só quando a mensagem SAIU — o id
+ * dela, para gravar tudo numa escrita só.
+ *
+ * Nunca lança: qualquer tropeço vira motivo na linha. Um comentário que some
+ * da fila porque a leitura das frases falhou é pior que um Direct não
+ * enviado.
+ */
+async function abrirConversaSeForIntencaoDeCompra(
+  admin: AdminDoWorker,
+  c: ComentarioNovo,
+  gatilho: string,
+  agora: Date,
+): Promise<{ motivo: string; privadaId?: string | null }> {
+  if (!abreConversa(gatilho)) return { motivo: gatilho };
+
+  let frases: FrasesDeGatilho;
+  try {
+    frases = await admin.frasesDeGatilho(c.organizationId);
+  } catch (err) {
+    // Não caímos no texto padrão: se a configuração da organização não pode
+    // ser lida, não sabemos se o dono trocou a frase, e mandar a nossa em
+    // nome dele é pior que não mandar.
+    logger.error("[comentarios-worker] não deu para ler as frases de abertura; nenhuma privada saiu", {
+      organizationId: c.organizationId,
+      erro: err instanceof Error ? err.message : String(err),
+    });
+    return { motivo: `${gatilho} — não deu para ler a frase de abertura desta organização, então nada foi enviado` };
+  }
+
+  const r = await enviarPrivadaDeGatilho(
+    admin,
+    {
+      id: c.id,
+      organizationId: c.organizationId,
+      commentId: c.externalId,
+      mediaId: c.mediaId,
+      autorIgsid: c.autorIgsid,
+      comentadoEm: c.comentadoEm,
+    },
+    frases[chaveDoGatilho(gatilho)],
+    gatilho,
+    agora,
+  );
+
+  switch (r.tipo) {
+    case "enviou":
+      return { motivo: `${gatilho} — mensagem privada enviada para começar a conversa`, privadaId: r.messageId };
+    case "ja_recebeu":
+      return { motivo: `${gatilho} — esta pessoa já recebeu uma mensagem privada neste vídeo` };
+    case "janela_vencida":
+      return { motivo: `${gatilho} — passaram mais de 7 dias: a Meta não aceita mais a mensagem privada` };
+    case "data_invalida":
+      return { motivo: `${gatilho} — data do comentário inválida: não deu para calcular a janela de 7 dias` };
+    case "falhou":
+      return { motivo: `${gatilho} — a mensagem privada não saiu: ${r.erro}` };
+  }
 }
 
 async function processarUmComentario(
@@ -241,7 +324,8 @@ async function processarUmComentario(
 
   const veredito = ehObviamenteSeguro(c.texto);
   if (!veredito.seguro) {
-    await marcarEsperandoAuditado(admin, c, veredito.gatilho, null);
+    const { motivo, privadaId } = await abrirConversaSeForIntencaoDeCompra(admin, c, veredito.gatilho, agora);
+    await marcarEsperandoAuditado(admin, c, motivo, null, privadaId);
     return "esperando";
   }
 
@@ -658,12 +742,34 @@ export function construirAdminDoWorkerReal(admin: AdminSupabase): AdminDoWorker 
         texto,
       });
     },
-    async marcarEsperando(comentarioId, motivo, sugestao) {
+    async marcarEsperando(comentarioId, motivo, sugestao, privateReplyMessageId) {
       const { error } = await admin
         .from("instagram_comments")
-        .update({ situacao: "esperando_voce", motivo_do_toque: motivo, sugestao_de_resposta: sugestao, updated_at: new Date().toISOString() })
+        .update({
+          situacao: "esperando_voce",
+          motivo_do_toque: motivo,
+          sugestao_de_resposta: sugestao,
+          // Só entra na gravação quando veio valor. Um `null` aqui apagaria o
+          // `private_reply_message_id` de uma privada que já saiu — e é ele
+          // que `jaMandouPrivado` lê para não mandar a segunda.
+          ...(privateReplyMessageId === undefined ? {} : { private_reply_message_id: privateReplyMessageId }),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", comentarioId);
       if (error) throw new Error(error.message);
+    },
+    async frasesDeGatilho(organizationId) {
+      const { data, error } = await admin
+        .from("organizations")
+        .select("settings")
+        .eq("id", organizationId)
+        .maybeSingle();
+      // Lança de propósito: quem chama trata como "não deu para ler" e NÃO
+      // manda nada. Cair no texto padrão aqui mandaria, em nome do dono, uma
+      // frase que ele pode ter trocado.
+      if (error) throw new Error(error.message);
+      const settings = (data as { settings?: Record<string, unknown> | null } | null)?.settings ?? {};
+      return frasesDeGatilho(settings.comentarios);
     },
     async marcarRespondidoPelaIa(comentarioId, texto, replyId) {
       const { error } = await admin

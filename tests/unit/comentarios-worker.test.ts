@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { RegraDeComentario } from "@/lib/comentarios/regra";
 import type { PerfilDeVoz } from "@/lib/comentarios/voz";
+import { FRASES_PADRAO } from "@/lib/comentarios/gatilho-direct";
 
 const auditMock = vi.fn(async (_arg: unknown) => undefined);
 vi.mock("@/lib/audit", () => ({ audit: (arg: unknown) => auditMock(arg) }));
@@ -71,10 +72,11 @@ type Fake = Parameters<typeof processarComentariosNovos>[0] & {
   reivindicarDevolve: boolean;
   chamadasDeVoz: number;
   gravarDesfechoFalha?: boolean;
+  frases: { preco: string; agendamento: string };
 };
 
 let fake: Fake;
-let linhas: Record<string, { situacao: string; motivo_do_toque: string | null; sugestao_de_resposta: string | null; resposta_publica_id?: string | null }>;
+let linhas: Record<string, { situacao: string; motivo_do_toque: string | null; sugestao_de_resposta: string | null; resposta_publica_id?: string | null; private_reply_message_id?: string | null }>;
 function linha(id = comentario.id) {
   return linhas[id]!;
 }
@@ -96,6 +98,7 @@ beforeEach(() => {
     reivindicarDevolve: true,
     chamadasDeVoz: 0,
     gravarDesfechoFalha: false,
+    frases: { ...FRASES_PADRAO },
 
     // I-6: a fila é por organização — o fake espelha a query real (filtro por
     // organization_id + teto), não uma lista global.
@@ -146,8 +149,19 @@ beforeEach(() => {
       fake.publicacoes.push({ id: c.id, texto });
       return { replyId: "PUB-1" };
     },
-    async marcarEsperando(id: string, motivo: string, sugestao: string | null) {
-      linhas[id] = { situacao: "esperando_voce", motivo_do_toque: motivo, sugestao_de_resposta: sugestao };
+    async marcarEsperando(id: string, motivo: string, sugestao: string | null, privadaId?: string | null) {
+      linhas[id] = {
+        situacao: "esperando_voce",
+        motivo_do_toque: motivo,
+        sugestao_de_resposta: sugestao,
+        // Espelha o admin real: a coluna só entra na gravação quando veio um
+        // valor — escrever `null` aqui apagaria o rastro de uma privada que
+        // JÁ saiu (o caso do lease vencido).
+        ...(privadaId === undefined ? {} : { private_reply_message_id: privadaId }),
+      };
+    },
+    async frasesDeGatilho() {
+      return fake.frases;
     },
     async marcarRespondidoPelaIa(id: string, texto: string, replyId: string | null) {
       linhas[id] = {
@@ -179,10 +193,14 @@ it("comentário seguro sem regra: a IA escreve e publica", async () => {
 });
 
 it("comentário inseguro sem regra: NADA é publicado, fica esperando", async () => {
-  fake.comentarios = [{ ...comentario, texto: "quanto custa?" }];
+  // "medicação" e não "preço": desde a abertura de conversa por gatilho, o
+  // motivo de preço carrega TAMBÉM o que aconteceu com a mensagem privada.
+  // Aqui o que se mede é a régua de publicação, então o gatilho usado é um
+  // que não manda nada e o motivo continua sendo só o rótulo.
+  fake.comentarios = [{ ...comentario, texto: "posso tomar mounjaro?" }];
   await processarComentariosNovos(fake, agora);
   expect(linha().situacao).toBe("esperando_voce");
-  expect(linha().motivo_do_toque).toBe("preço");
+  expect(linha().motivo_do_toque).toBe("medicação");
   expect(fake.publicacoes).toHaveLength(0);
 });
 
@@ -196,7 +214,7 @@ it("IMPORTANTE 6 — todo caminho que manda pra esperando_voce audita comment.wa
       organizationId: comentario.organizationId,
       resourceType: "instagram_comment",
       resourceId: comentario.id,
-      metadata: expect.objectContaining({ motivo: "preço" }),
+      metadata: expect.objectContaining({ motivo: expect.stringContaining("preço") }),
     }),
   );
 });
@@ -483,4 +501,134 @@ it("I-10 — gerarResposta passa pelo seam medido/orçado (runModelCall), não c
     expect.anything(),
     expect.objectContaining({ tenantId: comentario.organizationId, purpose: "instagram_comment_reply" }),
   );
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Abrir conversa no Direct quando a trava barra por intenção de compra.
+//
+// A trava recusa publicar em público e diz por quê. Dois desses motivos são
+// alguém querendo comprar: quem pergunta preço e quem quer marcar. Esses
+// recebem uma mensagem privada e CONTINUAM na fila — a privada começa a
+// conversa, ela não substitui o dono. Os outros motivos não mandam nada.
+// ───────────────────────────────────────────────────────────────────────────
+
+const enviados: Array<{ commentId: string; texto: string }> = [];
+function capturarEnvios() {
+  enviados.length = 0;
+  fake.enviarPrivada = async (input) => {
+    enviados.push({ commentId: input.commentId, texto: input.texto });
+    return { messageId: "MID-GATILHO" };
+  };
+}
+
+it("preço: manda o Direct, guarda o id da mensagem e MANTÉM o comentário na fila", async () => {
+  fake.comentarios = [{ ...comentario, texto: "quanto custa?" }];
+  capturarEnvios();
+
+  const r = await processarComentariosNovos(fake, agora);
+
+  expect(enviados).toEqual([{ commentId: "C-1", texto: FRASES_PADRAO.preco }]);
+  expect(r.esperando).toBe(1);
+  expect(linha().situacao).toBe("esperando_voce");
+  expect(linha().private_reply_message_id).toBe("MID-GATILHO");
+  expect(linha().motivo_do_toque).toContain("preço");
+  expect(linha().motivo_do_toque).toContain("mensagem privada");
+});
+
+it("preço NUNCA vira resposta pública, nem com o Direct enviado", async () => {
+  fake.comentarios = [{ ...comentario, texto: "quanto custa?" }];
+  capturarEnvios();
+
+  await processarComentariosNovos(fake, agora);
+
+  expect(fake.publicacoes).toEqual([]);
+  expect(fake.acoesAplicadas).toEqual([]);
+});
+
+it("agendamento também abre conversa, com a frase dele", async () => {
+  fake.comentarios = [{ ...comentario, texto: "como faço para marcar?" }];
+  capturarEnvios();
+
+  await processarComentariosNovos(fake, agora);
+
+  expect(enviados).toEqual([{ commentId: "C-1", texto: FRASES_PADRAO.agendamento }]);
+});
+
+it("sintoma NÃO manda Direct: assunto clínico não abre conversa sozinho", async () => {
+  fake.comentarios = [{ ...comentario, texto: "sinto muita tontura, é normal isso?" }];
+  capturarEnvios();
+
+  const r = await processarComentariosNovos(fake, agora);
+
+  expect(enviados).toEqual([]);
+  expect(r.esperando).toBe(1);
+  expect(linha().private_reply_message_id).toBeUndefined();
+});
+
+it("medicação e especialidade também não mandam nada", async () => {
+  for (const texto of ["posso tomar mounjaro?", "você é nutrólogo?"]) {
+    fake.comentarios = [{ ...comentario, texto }];
+    capturarEnvios();
+    await processarComentariosNovos(fake, agora);
+    expect(enviados, texto).toEqual([]);
+  }
+});
+
+it("a frase do dono vence a padrão", async () => {
+  fake.comentarios = [{ ...comentario, texto: "qual o valor?" }];
+  fake.frases = { ...FRASES_PADRAO, preco: "Oi! Me conta: qual seu maior objetivo hoje?" };
+  capturarEnvios();
+
+  await processarComentariosNovos(fake, agora);
+
+  expect(enviados[0]!.texto).toBe("Oi! Me conta: qual seu maior objetivo hoje?");
+});
+
+it("quem já recebeu privada deste vídeo não recebe outra, e o motivo diz isso", async () => {
+  fake.comentarios = [{ ...comentario, texto: "quanto custa?" }];
+  capturarEnvios();
+  fake.jaMandouPrivado = async () => true;
+
+  await processarComentariosNovos(fake, agora);
+
+  expect(enviados).toEqual([]);
+  expect(linha().motivo_do_toque).toContain("já recebeu");
+  expect(linha().private_reply_message_id).toBeUndefined();
+});
+
+it("passados os 7 dias, não manda e o motivo explica", async () => {
+  fake.comentarios = [{ ...comentario, texto: "quanto custa?", comentadoEm: "2026-09-01T12:00:00Z" }];
+  capturarEnvios();
+
+  await processarComentariosNovos(fake, agora);
+
+  expect(enviados).toEqual([]);
+  expect(linha().motivo_do_toque).toContain("7 dias");
+});
+
+it("Meta recusando: o motivo carrega o erro e NADA finge que a mensagem saiu", async () => {
+  fake.comentarios = [{ ...comentario, texto: "quanto custa?" }];
+  fake.enviarPrivada = async () => {
+    throw new Error("(#10) Application does not have permission");
+  };
+
+  const r = await processarComentariosNovos(fake, agora);
+
+  expect(r.esperando).toBe(1);
+  expect(linha().motivo_do_toque).toContain("preço");
+  expect(linha().motivo_do_toque).toContain("does not have permission");
+  expect(linha().private_reply_message_id).toBeUndefined();
+});
+
+it("regra de palavra continua vencendo o gatilho: quem tem regra não passa por aqui", async () => {
+  fake.comentarios = [{ ...comentario, texto: "quanto custa o cardápio?" }];
+  fake.regras = [
+    { id: "regra-1", mediaId: "MEDIA-1", palavra: "cardápio", textoDoDirect: "o link", frasePublica: "te mandei", criadaEm: "2026-09-01T00:00:00Z" },
+  ];
+  capturarEnvios();
+
+  const r = await processarComentariosNovos(fake, agora);
+
+  expect(r.atendidos).toBe(1);
+  expect(enviados).toEqual([{ commentId: "C-1", texto: "o link" }]);
 });
