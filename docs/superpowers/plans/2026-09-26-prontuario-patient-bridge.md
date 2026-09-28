@@ -7,7 +7,7 @@
 - Estado local: rota de leitura, escopos visíveis e bypass ancorado do proxy implementados e testados; a permissão de escrita ainda não possui rota.
 - Acrescentar `prontuario:contacts:read` e `prontuario:contacts:write` ao seletor de tokens. Não conceder `mcp:*`, `contacts:*` ou agenda implicitamente.
 - Abrir no `public-paths.ts` somente as três rotas de integração, cada uma ancorada; autenticação Bearer e escopo ficam dentro da rota.
-- `GET /api/v1/prontuario/contacts?search=...&limit=10`: organização da linha de `api_tokens`; resposta apenas `id,name,birthdate,phone_number,email,updated_at`. Buscar só por nome/telefone/e-mail, excluir anonimizados/fundidos, limitar a 10. Testar 401/403, isolamento por organização e campos retornados.
+- `GET /api/v1/prontuario/contacts?search=...&limit=10`: organização da linha de `api_tokens`; resposta apenas `id,name,birthdate,phone_number,email,updated_at`, com `name` preenchido pelo nome exibido quando o nome cadastral estiver vazio. Buscar por nome/nome exibido/telefone/e-mail, excluir anonimizados/fundidos, limitar a 10. Testar 401/403, isolamento por organização e campos retornados.
 
 ## 2. Identidade e escrita atômica
 

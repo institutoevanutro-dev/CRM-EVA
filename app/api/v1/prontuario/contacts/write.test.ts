@@ -101,10 +101,12 @@ describe("prontuário: escrita restrita de contatos", () => {
 
   it("consulta contato vinculado somente na organização do token", async () => {
     mocked.validate.mockResolvedValueOnce({ organizationId: ORG, apiTokenId: TOKEN, scopes: ["prontuario:contacts:read"], role: "agent" });
+    mocked.maybeSingle.mockResolvedValueOnce({ data: { id: CONTACT, ...profile, name: null, display_name: profile.name, updated_at: UPDATED }, error: null });
     const { GET } = await import("./[id]/route");
     const response = await GET(new Request(`http://localhost/api/v1/prontuario/contacts/${CONTACT}`, { headers: { authorization: "Bearer dsk_test_secret" } }), { params: Promise.resolve({ id: CONTACT }) });
     expect(response.status).toBe(200);
     expect(mocked.eq).toHaveBeenCalledWith("organization_id", ORG);
-    expect(mocked.select).toHaveBeenCalledWith("id,name,birthdate,phone_number,email,updated_at");
+    expect(mocked.select).toHaveBeenCalledWith("id,name,display_name,birthdate,phone_number,email,updated_at");
+    expect((await response.json()).data.name).toBe(profile.name);
   });
 });

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { fail } from "@/lib/api/wrappers";
 import { validateBearerToken, ensureScope, McpAuthError } from "@/lib/mcp/auth";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 
 const birthdate = z.union([z.null(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value =>
   !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value && value <= new Date().toISOString().slice(0, 10),
@@ -29,6 +30,17 @@ export const patchContactSchema = profile.extend({
   revision: z.number().int().nonnegative(),
   expected_updated_at: z.iso.datetime({ offset: true }),
 }).strict();
+
+export function contactForProntuario(contact: { id: string; name: string | null; display_name: string | null; birthdate: string | null; phone_number: string | null; email: string | null; updated_at: string }) {
+  return {
+    id: contact.id,
+    name: nomeDoContato(contact) ?? "",
+    birthdate: contact.birthdate,
+    phone_number: contact.phone_number,
+    email: contact.email,
+    updated_at: contact.updated_at,
+  };
+}
 
 export async function authorizeProntuario(req: Request, scope: "prontuario:contacts:read" | "prontuario:contacts:write", requestId: string) {
   try {
