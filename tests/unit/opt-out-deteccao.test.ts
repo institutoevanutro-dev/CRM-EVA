@@ -87,6 +87,29 @@ const PEDE_PARA_SAIR = [
   // é a frase que os controles negativos abaixo precisam proteger.
   "não me liga mais",
   "por favor não me liga mais",
+  // ─── A isenção por sujeito alcançava pedido que NÃO é ambíguo (#1825) ─────
+  //
+  // Medido pelo mantenedor com a função real: com o lookahead lendo a
+  // constante de verbos INTEIRA e com `[,;:]*` entre o sintagma e "não me",
+  // as frases abaixo davam `ehPedidoDeOptOut = false` E `ehOptOutProvavel =
+  // false` — nem bloqueavam nem escalavam para humano. Na main, todas
+  // bloqueavam.
+  //
+  // vírgula depois do sintagma marca VOCATIVO: em português o sujeito não se
+  // separa do verbo por vírgula, e quem vem ali é com quem se fala, não a
+  // pessoa descrita — "minha filha, não me liga mais" é a filha pedindo.
+  "minha filha, não me liga mais",
+  "meu filho, não me liga mais",
+  "meu querido, não me manda mais nada",
+  // tratamento de 2ª pessoa com verbo de 3ª: casa como sujeito de 3ª pessoa
+  // e não é — é ordem dada a quem se está escrevendo.
+  "o senhor não me mande mais mensagem",
+  "a senhora não me manda mais mensagem",
+  "o sr não me mande mais mensagem",
+  "a sra não me manda mais mensagem",
+  // imperativa SEM duplo sentido, com sujeito: `contate` nunca é 3ª pessoa do
+  // indicativo, então não há o que separar — a isenção não alcança aqui.
+  "meu filho não me contate mais",
 ];
 
 /** Frases do dia a dia que usam a palavra e NÃO são pedido de descadastro. */
@@ -183,13 +206,14 @@ const NAO_PEDE_PARA_SAIR = [
   "quero sair da lista de espera, pode ser?",
   // #1806 (2): `liga` é imperativo informal E 3ª pessoa do indicativo. Sem
   // sujeito explícito a ordem bloqueia (acima); COM sujeito é relato de quem
-  // está falando, não pedido de descadastro. Os dois casos são controles
-  // negativos do mesmo freio.
+  // está falando, não pedido de descadastro. Os casos abaixo são controles
+  // negativos do mesmo freio. O controle COM vírgula saiu daqui no #1825: a
+  // vírgula marca vocativo, não sujeito, e a frase passou a bloquear — está
+  // em `PEDE_PARA_SAIR`.
   "meu filho não me liga mais",
   "ele não me liga mais",
   "ela não me manda mais nada",
   "a doutora não me chama mais",
-  "meu filho, não me liga mais",
   "a minha equipe não me liga mais",
   "meu antigo chefe não me liga mais",
   // "entrar em contato" com outro destinatário ou outro canal, e a reclamação

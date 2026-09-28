@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: "Sair da lista de espera" e "meu filho não me liga mais" voltam a não virar bloqueio
+titulo: "Sair da lista de espera" e "meu filho não me liga mais" deixam de virar bloqueio
 ---
 
 Duas frases de rotina gravavam `is_blocked` sem que a pessoa tivesse pedido

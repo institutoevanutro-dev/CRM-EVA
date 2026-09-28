@@ -211,14 +211,26 @@ const DETERMINANTES_DE_SUJEITO =
   `${DETERMINANTES_DE_OBJETO}|do|da|dos|das|` + "nosso|nossa|nossos|nossas|dele|dela|deles|delas";
 
 /**
- * Palavras que NÃO abrem sujeito: preposição e conjunção. Sem esta lista o
- * freio casaria "a partir de amanhã não me manda mais" como se "partir"
- * fosse o sujeito — e aí a ordem deixa de bloquear. Cada uma destas é uma
- * frase medida no corpus do #1806.
+ * Palavras que podem ocupar a vaga de sujeito SEM SER sujeito de 3ª pessoa.
+ * Duas famílias, e as duas são medidas.
+ *
+ * A primeira é preposição e conjunção: sem elas o freio casaria "a partir de
+ * amanhã não me manda mais" como se "partir" fosse o sujeito — e aí a ordem
+ * deixa de bloquear. Cada uma destas é uma frase medida no corpus do #1806.
+ *
+ * A segunda (#1825) é o que no português colado a "não me X" OCUPA o lugar
+ * do sujeito sem descrever uma 3ª pessoa: tratamento de 2ª pessoa com verbo
+ * de 3ª (`o senhor não me mande mais mensagem` casava como sujeito e isentava
+ * a frase) e vocativo (`meu querido, não me manda mais nada` — quem fala é
+ * quem escreve, não é terceiro descrito). Ambas deixavam a frase sem bloquear
+ * e sem escalar.
  */
 const NAO_ABRIM_SUJEITO =
   "de|da|do|das|dos|em|no|na|nos|nas|que|para|pra|pro|ate|desde|partir|apartir|" +
-  "partindo|com|por|pelo|pela|ao|aos|e|mas|ja|quando|como|se|sem|entao|apos|logo|porque";
+  "partindo|com|por|pelo|pela|ao|aos|e|mas|ja|quando|como|se|sem|entao|apos|logo|porque|" +
+  // tratamento de 2ª pessoa, vocativo e afeto (#1825) — medido pelo
+  // mantenedor: casam como sujeito e não são sujeito de 3ª pessoa.
+  "senhor|senhora|sr|sra|deus|amor|querido|querida|moco|moca";
 
 /**
  * "não me liga mais" é DUAS frases diferentes com a MESMA forma, e o verbo não
@@ -242,9 +254,14 @@ const NAO_ABRIM_SUJEITO =
  * negativos em `tests/unit/opt-out-deteccao.test.ts`.
  *
  * O `{0,2}` cobre "meu filho" (uma palavra), "meu antigo chefe" (duas) e o
- * pronome sem determinante (zero). O `[,;:]*` cobre "meu filho, não me liga
- * mais". E as palavras do meio não podem ser preposição — é `NAO_ABRIM_SUJEITO`
- * que impede "a partir de amanhã não me mande mais" de casar.
+ * pronome sem determinante (zero). Entre o sujeito e "não me" NÃO cabe
+ * pontuação (#1825): em português o sujeito não se separa do verbo por
+ * vírgula, e o que vem ali é quase sempre VOCATIVO — "minha filha, não me
+ * liga mais" é a filha pedindo, não a filha descrita. Havia um `[,;:]*` ali e
+ * ele isentava justamente esta frase. E as palavras do meio não podem ser
+ * preposição — é `NAO_ABRIM_SUJEITO` que impede "a partir de amanhã não me
+ * mande mais" de casar, e também que "o senhor" e "meu amor" casem como
+ * sujeito de 3ª pessoa.
  *
  * Os DOIS `\b` fazem questão: o da esquerda impede que o determinante seja
  * lido de dentro de uma palavra, e o da direita impede que ele seque o começo
@@ -254,7 +271,7 @@ const NAO_ABRIM_SUJEITO =
  */
 const SUJEITO_EXPLICITO_DE_TERCEIRA_PESSOA =
   `(?<=[\\s,;:]*\\b(?:${PRONOMES_DE_SUJEITO}|${DETERMINANTES_DE_SUJEITO})\\b\\s*` +
-  `(?:(?!(?:${NAO_ABRIM_SUJEITO})\\b)[a-z]+[,;:]*\\s+){0,2}nao\\s+me\\s+)`;
+  `(?:(?!(?:${NAO_ABRIM_SUJEITO})\\b)[a-z]+\\s+){0,2}nao\\s+me\\s+)`;
 
 /**
  * Pedidos INEQUÍVOCOS de descadastro escritos por extenso. Todos exigem o objeto
@@ -306,11 +323,14 @@ const FRASES_DE_OPT_OUT: readonly RegExp[] = [
   // informal E 3ª pessoa do indicativo, e esta regra enxergava as duas como a
   // mesma ordem: "meu filho não me liga mais" virava `is_blocked` — relato de
   // paciente, não pedido de descadastro. O lookahead isenta a frase quando há
-  // sujeito explícito de 3ª pessoa antes de "não me"; nas imperativas sem duplo
-  // sentido (`nao me mande mais`, `nao me contate mais`) ele não é cobrado.
+  // sujeito explícito de 3ª pessoa antes de "não me" — e lê SÓ as quatro
+  // formas ambíguas, `manda|chama|liga|envia`. Nas imperativas sem duplo
+  // sentido (`nao me mande mais`, `nao me contate mais`) não há o que
+  // separar, e com sujeito elas seguem bloqueando: "o senhor não me mande
+  // mais mensagem" é pedido, não relato (#1825).
   new RegExp(
     `\\bnao\\s+me\\s+(?!(?:${FORMAS_DESCRITIVAS_DEPOIS_DE_ME})\\b)` +
-      `(?!(?=${SUJEITO_EXPLICITO_DE_TERCEIRA_PESSOA})(?:${VERBOS_DE_COMUNICACAO})\\s+mais\\b)` +
+      `(?!(?=${SUJEITO_EXPLICITO_DE_TERCEIRA_PESSOA})(?:manda|chama|liga|envia)\\s+mais\\b)` +
       `(?:${VERBOS_DE_COMUNICACAO})\\s+mais\\b` +
       `(?!\\s+(?:${DETERMINANTES_DE_OBJETO})?\\s*(?:${OBJETOS_NAO_COMUNICATIVOS})\\b)`,
     "u",
