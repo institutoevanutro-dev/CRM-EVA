@@ -9,6 +9,10 @@ import { describe, it, expect } from "vitest";
 import { isPublicPath } from "@/lib/auth/public-paths";
 
 describe("isPublicPath", () => {
+  it("permite o bearer do painel apenas na rota de totais", () => {
+    expect(isPublicPath("/api/v1/integrations/marketing/financeiro-totais")).toBe(true);
+    expect(isPublicPath("/api/v1/integrations/marketing/financeiro-totais/extra")).toBe(false);
+  });
   it("libera o heartbeat do agente do host (bearer, sem cookie)", () => {
     expect(isPublicPath("/api/v1/system/agent")).toBe(true);
   });
