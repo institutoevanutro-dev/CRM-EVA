@@ -12,7 +12,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: db.client }));
 vi.mock("@/lib/ai/dispatcher/rate-limit", () => ({ checkRateLimit: vi.fn(async () => ({ allowed: true })) }));
 
 const ORG = "22222222-2222-4222-8222-222222222222";
-const row = { id: "11111111-1111-4111-8111-111111111111", name: "Pessoa Teste", birthdate: "1990-01-01", phone_number: "+5527999990000", email: "teste@example.test", updated_at: "2026-01-01T00:00:00Z", cpf_encrypted: "must-not-leak" };
+const row = { id: "11111111-1111-4111-8111-111111111111", name: null, display_name: "Pessoa Teste", birthdate: "1990-01-01", phone_number: "+5527999990000", email: "teste@example.test", updated_at: "2026-01-01T00:00:00Z", cpf_encrypted: "must-not-leak" };
 const request = (search = "Pessoa") => new Request(`http://localhost/api/v1/prontuario/contacts?search=${encodeURIComponent(search)}&limit=10`, { headers: { authorization: "Bearer dsk_test_secret" } });
 
 beforeEach(() => {
@@ -36,9 +36,10 @@ describe("prontuário: busca limitada de contatos", () => {
     const response = await GET(request());
     expect(response.status).toBe(200);
     expect(db.eq).toHaveBeenCalledWith("organization_id", ORG);
-    expect(db.select.mock.calls[0]?.[0]).toBe("id,name,birthdate,phone_number,email,updated_at");
+    expect(db.select.mock.calls[0]?.[0]).toBe("id,name,display_name,birthdate,phone_number,email,updated_at");
+    expect(db.or.mock.calls[0]?.[0]).toContain("display_name.ilike.%Pessoa%");
     const body = await response.json();
-    expect(body.data[0]).toEqual({ id: row.id, name: row.name, birthdate: row.birthdate, phone_number: row.phone_number, email: row.email, updated_at: row.updated_at });
+    expect(body.data[0]).toEqual({ id: row.id, name: row.display_name, birthdate: row.birthdate, phone_number: row.phone_number, email: row.email, updated_at: row.updated_at });
     expect(JSON.stringify(body)).not.toContain("cpf_encrypted");
   });
 

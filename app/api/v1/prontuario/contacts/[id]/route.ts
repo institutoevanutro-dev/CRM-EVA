@@ -4,7 +4,7 @@ import { audit } from "@/lib/audit";
 import { ok, fail } from "@/lib/api/wrappers";
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { authorizeProntuario, patchContactSchema, parseBody, crmOperationError } from "@/lib/prontuario/contacts";
+import { authorizeProntuario, patchContactSchema, parseBody, crmOperationError, contactForProntuario } from "@/lib/prontuario/contacts";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +17,12 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
   if (!(await checkRateLimit(`prontuario-contacts-read:${authorized.auth.organizationId}:${authorized.auth.apiTokenId}`, 60, 60)).allowed)
     return fail("rate_limited", "Tente novamente em um minuto.", 429, { requestId });
   const { data, error } = await createAdminClient().from("contacts")
-    .select("id,name,birthdate,phone_number,email,updated_at")
+    .select("id,name,display_name,birthdate,phone_number,email,updated_at")
     .eq("organization_id", authorized.auth.organizationId)
     .eq("id", id.data).eq("is_anonymized", false).is("is_merged_into", null).maybeSingle();
   if (error) return fail("internal_error", "Consulta indisponível.", 503, { requestId });
   if (!data) return fail("not_found", "Contato indisponível.", 404, { requestId });
-  return ok(data, { requestId, headers: { "Cache-Control": "no-store" } });
+  return ok(contactForProntuario(data), { requestId, headers: { "Cache-Control": "no-store" } });
 }
 
 export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {

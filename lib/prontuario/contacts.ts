@@ -30,6 +30,17 @@ export const patchContactSchema = profile.extend({
   expected_updated_at: z.iso.datetime({ offset: true }),
 }).strict();
 
+export function contactForProntuario(contact: { id: string; name: string | null; display_name: string | null; birthdate: string | null; phone_number: string | null; email: string | null; updated_at: string }) {
+  return {
+    id: contact.id,
+    name: contact.name?.trim() || contact.display_name?.trim() || "",
+    birthdate: contact.birthdate,
+    phone_number: contact.phone_number,
+    email: contact.email,
+    updated_at: contact.updated_at,
+  };
+}
+
 export async function authorizeProntuario(req: Request, scope: "prontuario:contacts:read" | "prontuario:contacts:write", requestId: string) {
   try {
     const auth = await validateBearerToken(req.headers.get("authorization"));

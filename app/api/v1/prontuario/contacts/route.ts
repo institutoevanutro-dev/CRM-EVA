@@ -5,7 +5,7 @@ import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { validateBearerToken, ensureScope, McpAuthError } from "@/lib/mcp/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
-import { authorizeProntuario, createContactSchema, parseBody, crmOperationError } from "@/lib/prontuario/contacts";
+import { authorizeProntuario, createContactSchema, parseBody, crmOperationError, contactForProntuario } from "@/lib/prontuario/contacts";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,7 @@ const searchSchema = z.object({
   limit: z.coerce.number().int().min(1).max(10).default(10),
 });
 
-const fields = "id,name,birthdate,phone_number,email,updated_at";
+const fields = "id,name,display_name,birthdate,phone_number,email,updated_at";
 
 export async function GET(req: Request): Promise<Response> {
   const requestId = randomUUID();
@@ -33,17 +33,10 @@ export async function GET(req: Request): Promise<Response> {
       .eq("organization_id", auth.organizationId)
       .eq("is_anonymized", false)
       .is("is_merged_into", null)
-      .or(`name.ilike.${term},phone_number.ilike.${term},email.ilike.${term}`)
+      .or(`name.ilike.${term},display_name.ilike.${term},phone_number.ilike.${term},email.ilike.${term}`)
       .limit(parsed.data.limit);
     if (error) return fail("internal_error", "Consulta indisponível.", 503, { requestId });
-    const response = ok((data ?? []).map(contact => ({
-      id: contact.id,
-      name: contact.name,
-      birthdate: contact.birthdate,
-      phone_number: contact.phone_number,
-      email: contact.email,
-      updated_at: contact.updated_at,
-    })), { requestId });
+    const response = ok((data ?? []).map(contactForProntuario), { requestId });
     response.headers.set("Cache-Control", "no-store");
     return response;
   } catch (error) {
