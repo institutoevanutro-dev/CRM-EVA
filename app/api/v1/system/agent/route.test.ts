@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { CHANGELOG_MAX_BYTES } from "@/lib/system/changelog";
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/env", () => ({ env: { INTERNAL_SECRET: "segredo-de-teste", INTERNAL_CRON_SECRET: "" } }));
@@ -172,10 +173,19 @@ describe("POST /api/v1/system/agent", () => {
     expect(lastUpdate("system_version")).toMatchObject({ has_known_release: true });
   });
 
+  // Derivado da constante, nunca copiado: este teste já ficou verde-por-engano
+  // quando o teto subiu de 64k para 128k e o `70_000` daqui virou um valor que
+  // PASSA. Um número copiado mede a régua de ontem.
   it("recusa changelog acima do teto", async () => {
     const { POST } = await import("./route");
-    const res = await POST(req({ ...HEARTBEAT, changelog: "x".repeat(70_000) }));
+    const res = await POST(req({ ...HEARTBEAT, changelog: "x".repeat(CHANGELOG_MAX_BYTES + 1) }));
     expect(res.status).toBe(422);
+  });
+
+  it("aceita changelog exatamente no teto", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(req({ ...HEARTBEAT, changelog: "x".repeat(CHANGELOG_MAX_BYTES) }));
+    expect(res.status).toBe(200);
   });
 
   it("heartbeat quando o lookup do run pendente falha no banco → 500 (nunca 'ninguém pediu')", async () => {
