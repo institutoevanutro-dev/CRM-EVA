@@ -256,7 +256,10 @@ const NAO_ABRIM_SUJEITO =
  * negativos em `tests/unit/opt-out-deteccao.test.ts`.
  *
  * O `{0,2}` cobre "meu filho" (uma palavra), "meu antigo chefe" (duas) e o
- * pronome sem determinante (zero). Entre o sujeito e "não me" NÃO cabe
+ * pronome sem determinante (zero). O zero é SÓ do pronome: determinante
+ * sozinho não é sujeito, e com `{0,2}` para os dois "meu não me liga mais" (o
+ * "meu" interjeição, sem vírgula) casava e deixava de bloquear. Por isso são
+ * duas alternativas, e o determinante exige `{1,2}` (#1825). Entre o sujeito e "não me" NÃO cabe
  * pontuação (#1825): em português o sujeito não se separa do verbo por
  * vírgula, e o que vem ali é quase sempre VOCATIVO — "minha filha, não me
  * liga mais" é a filha pedindo, não a filha descrita. Havia um `[,;:]*` ali e
@@ -277,8 +280,10 @@ const NAO_ABRIM_SUJEITO =
  * amanhã deixava de bloquear, que era um falso negativo NOVO. Medido.
  */
 const SUJEITO_EXPLICITO_DE_TERCEIRA_PESSOA =
-  `(?<=(?:^|[.!?,;:])\\s*(?:${PRONOMES_DE_SUJEITO}|${DETERMINANTES_DE_SUJEITO})\\b\\s*` +
-  `(?:(?!(?:${NAO_ABRIM_SUJEITO})\\b)[a-z]+\\s+){0,2}nao\\s+me\\s+)`;
+  `(?<=(?:^|[.!?,;:])\\s*(?:` +
+  `(?:${PRONOMES_DE_SUJEITO})\\b\\s*(?:(?!(?:${NAO_ABRIM_SUJEITO})\\b)[a-z]+\\s+){0,2}|` +
+  `(?:${DETERMINANTES_DE_SUJEITO})\\b\\s*(?:(?!(?:${NAO_ABRIM_SUJEITO})\\b)[a-z]+\\s+){1,2}` +
+  `)nao\\s+me\\s+)`;
 
 /**
  * Pedidos INEQUÍVOCOS de descadastro escritos por extenso. Todos exigem o objeto

@@ -121,6 +121,10 @@ const PEDE_PARA_SAIR = [
   "vou denunciar essa empresa não me manda mais nada",
   // `tu` é 2ª pessoa, a mesma classe de "o senhor": não abre sujeito de 3ª.
   "tu não me liga mais",
+  // determinante SOZINHO não é sujeito (#1825): o "meu" interjeição, sem
+  // vírgula, abria sujeito com zero palavras e isentava o pedido.
+  "meu não me liga mais",
+  "Meu não me manda mais nada",
 ];
 
 /** Frases do dia a dia que usam a palavra e NÃO são pedido de descadastro. */
