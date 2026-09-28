@@ -110,6 +110,17 @@ const PEDE_PARA_SAIR = [
   // imperativa SEM duplo sentido, com sujeito: `contate` nunca é 3ª pessoa do
   // indicativo, então não há o que separar — a isenção não alcança aqui.
   "meu filho não me contate mais",
+  // o sujeito precisa ABRIR a mensagem ou a oração (#1825): sem pontuação, o
+  // normal no WhatsApp, o fim da oração anterior ("o numero", "o plano") era
+  // lido como sujeito e o pedido nem bloqueava nem escalava. Na main, todas
+  // bloqueavam.
+  "vou bloquear o numero não me liga mais",
+  "já cancelei o plano não me manda mais mensagem",
+  "não tenho interesse nesse produto não me manda mais",
+  "odeio esse spam não me manda mais",
+  "vou denunciar essa empresa não me manda mais nada",
+  // `tu` é 2ª pessoa, a mesma classe de "o senhor": não abre sujeito de 3ª.
+  "tu não me liga mais",
 ];
 
 /** Frases do dia a dia que usam a palavra e NÃO são pedido de descadastro. */
@@ -216,6 +227,8 @@ const NAO_PEDE_PARA_SAIR = [
   "a doutora não me chama mais",
   "a minha equipe não me liga mais",
   "meu antigo chefe não me liga mais",
+  // o sujeito abre a oração depois da saudação: segue sendo relato (#1825).
+  "oi, meu filho não me liga mais",
   // "entrar em contato" com outro destinatário ou outro canal, e a reclamação
   "nao entre em contato com meu marido, fale comigo",
   "nao entrem em contato por email, so whatsapp",

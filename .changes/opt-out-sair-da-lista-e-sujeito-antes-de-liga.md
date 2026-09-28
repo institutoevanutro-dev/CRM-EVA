@@ -17,6 +17,8 @@ separa as duas é o sujeito, e ele vem antes de "não me": havendo sujeito
 explícito de 3ª pessoa — pronome (`ele`), ou nome com determinante (`meu filho`,
 `a doutora`, `meu antigo chefe`) — a frase deixa de ser tratada como pedido.
 Sem sujeito, a ordem continua bloqueando como antes, e "a partir de amanhã não
-me mande mais" também, porque ali vem uma preposição, não um sujeito.
+me mande mais" também, porque ali vem uma preposição, não um sujeito. O
+sujeito precisa abrir a mensagem ou a frase: numa mensagem sem pontuação como
+"vou bloquear o numero não me liga mais", o pedido continua bloqueando.
 
-Nenhuma das 396 frases do corpus mudou de veredito.
+Contribuição de @webtecnica (#1825)

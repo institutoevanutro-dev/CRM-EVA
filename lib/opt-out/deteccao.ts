@@ -197,10 +197,11 @@ const FREIO_DE_LISTA_QUALIFICADA = `(?!\\s+de\\s+(?!(?:${LISTAS_DE_ENVIO})\\b))`
 const PRONOMES_DE_SUJEITO = "ele|ela|eles|elas|aquele|aquela|aqueles|aquelas";
 
 /**
- * Determinantes que ABREM um sujeito antes de "não me X mais". É a lista de
- * `DETERMINANTES_DE_OBJETO` (o mesmo vocabulário, servindo outro ofício) mais
- * as contrações e os possessivos de 1ª pessoa, que ali não estavam porque ali
- * só se tratava do que vem DEPOIS do verbo.
+ * Determinantes que ABREM um sujeito de 3ª pessoa antes de "não me X mais".
+ * Lista PORTUGUESA escrita à parte, e não herdada de `DETERMINANTES_DE_OBJETO`:
+ * aquela carrega o espanhol, e `tu`/`tus`/`mi`/`mis` herdados viravam sujeito
+ * de 3ª pessoa sozinhos — "tu não me liga mais" é 2ª pessoa (a mesma classe de
+ * "o senhor") e deixava de bloquear. Medido no #1825.
  *
  * São dois cargos diferentes e é por isso que a lista não é uma só: este
  * candidato a sujeito fica ANTES do "não me", e uma palavra só já basta para
@@ -208,7 +209,8 @@ const PRONOMES_DE_SUJEITO = "ele|ela|eles|elas|aquele|aquela|aqueles|aquelas";
  * vem depois do verbo e precisa deixar passar "parar de mandar O PEDIDO".
  */
 const DETERMINANTES_DE_SUJEITO =
-  `${DETERMINANTES_DE_OBJETO}|do|da|dos|das|` + "nosso|nossa|nossos|nossas|dele|dela|deles|delas";
+  "o|a|os|as|meu|minha|meus|minhas|seu|sua|seus|suas|esse|essa|esses|essas|" +
+  "nesse|nessa|do|da|dos|das|nosso|nossa|nossos|nossas|dele|dela|deles|delas";
 
 /**
  * Palavras que podem ocupar a vaga de sujeito SEM SER sujeito de 3ª pessoa.
@@ -263,14 +265,19 @@ const NAO_ABRIM_SUJEITO =
  * mande mais" de casar, e também que "o senhor" e "meu amor" casem como
  * sujeito de 3ª pessoa.
  *
- * Os DOIS `\b` fazem questão: o da esquerda impede que o determinante seja
- * lido de dentro de uma palavra, e o da direita impede que ele seque o começo
- * de uma. Sem o de direita, "a partir de amanhã" casava pegando o `a` de
+ * O sujeito precisa ABRIR a mensagem ou a oração (`^` ou pontuação antes,
+ * #1825). Sem essa âncora, numa mensagem sem pontuação — o normal no WhatsApp —
+ * o FIM da oração anterior era lido como sujeito: "vou bloquear o numero não me
+ * liga mais" casava "o numero" e o pedido deixava de bloquear e de escalar.
+ * O custo aceito é o lado fechado: "ah meu filho não me liga mais" bloqueia.
+ *
+ * O `\b` da direita faz questão: ele impede que o determinante seque o começo
+ * de uma palavra. Sem o de direita, "a partir de amanhã" casava pegando o `a` de
  * "amanhã" e deixando "manha" na caixa de palavras do meio — a ordem de
  * amanhã deixava de bloquear, que era um falso negativo NOVO. Medido.
  */
 const SUJEITO_EXPLICITO_DE_TERCEIRA_PESSOA =
-  `(?<=[\\s,;:]*\\b(?:${PRONOMES_DE_SUJEITO}|${DETERMINANTES_DE_SUJEITO})\\b\\s*` +
+  `(?<=(?:^|[.!?,;:])\\s*(?:${PRONOMES_DE_SUJEITO}|${DETERMINANTES_DE_SUJEITO})\\b\\s*` +
   `(?:(?!(?:${NAO_ABRIM_SUJEITO})\\b)[a-z]+\\s+){0,2}nao\\s+me\\s+)`;
 
 /**
