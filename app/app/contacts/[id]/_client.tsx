@@ -159,6 +159,10 @@ export function ContactDetailClient({ contactId }: Props) {
                 <dd className="mt-1">{contact.email ?? "—"}</dd>
               </div>
               <div>
+                <dt className="text-xs uppercase text-muted-foreground">{t("Data de nascimento")}</dt>
+                <dd className="mt-1">{contact.birthdate ? format(new Date(`${contact.birthdate}T12:00:00`), "dd/MM/yyyy") : "—"}</dd>
+              </div>
+              <div>
                 <dt className="text-xs uppercase text-muted-foreground">{t("Telefone")}</dt>
                 <dd className="mt-1">
                   {contact.phone_number ? phoneForDisplay(contact.phone_number) : "—"}
@@ -173,6 +177,10 @@ export function ContactDetailClient({ contactId }: Props) {
                     podeVer={Boolean(activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent)}
                   />
                 </dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase text-muted-foreground">{t("Endereço")}</dt>
+                <dd className="mt-1 whitespace-pre-wrap">{typeof contact.custom_fields?.endereco === "string" && contact.custom_fields.endereco ? contact.custom_fields.endereco : "—"}</dd>
               </div>
               <div>
                 <dt className="text-xs uppercase text-muted-foreground">{t("Origem")}</dt>

@@ -18,7 +18,7 @@
  * a rota mudar de forma, este arquivo para de compilar em vez de continuar
  * verde medindo a forma antiga.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -112,6 +112,27 @@ describe("NewContactDialog · onCriado", () => {
     // testes de "foi chamado" e falharia em toda leitura de campo.
     expect(recebido).not.toHaveProperty("contact");
     expect(recebido).not.toHaveProperty("action");
+  });
+
+  it("envia os dados adicionais ao criar um contato", async () => {
+    const user = userEvent.setup();
+    envolver(<NewContactDialog open onOpenChange={vi.fn()} nomeInicial="Joana Prado" />);
+
+    await user.type(screen.getByLabelText(/Telefone/i), "+5511999998888");
+    await user.type(screen.getByLabelText(/^Email$/i), "joana@example.com");
+    await user.type(screen.getByLabelText(/CPF/i), "52998224725");
+    fireEvent.change(screen.getByLabelText(/Data de nascimento/i), { target: { value: "1990-04-12" } });
+    await user.type(screen.getByLabelText(/Endereço/i), "Rua das Flores, 10");
+    await user.click(screen.getByRole("button", { name: /Criar contato/i }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      email: "joana@example.com",
+      cpf: "52998224725",
+      birthdate: "1990-04-12",
+      custom_fields: { endereco: "Rua das Flores, 10" },
+    });
   });
 
   it("não chama onCriado quando a rota não devolve contato", async () => {

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { contactPatchSchema, type ContactPatch } from "@/lib/schemas/contacts";
 import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
@@ -24,6 +25,9 @@ interface FormShape {
   name?: string;
   email?: string;
   phone_number?: string;
+  birthdate?: string;
+  cpf?: string;
+  endereco?: string;
   tagsRaw?: string;
   custom_fields?: Record<string, unknown>;
 }
@@ -46,6 +50,9 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
       name: contact.name ?? "",
       email: contact.email ?? "",
       phone_number: contact.phone_number ? phoneForDisplay(contact.phone_number) : "",
+      birthdate: contact.birthdate ?? "",
+      cpf: "",
+      endereco: typeof contact.custom_fields?.endereco === "string" ? contact.custom_fields.endereco : "",
       tagsRaw: contact.tags.join(", "),
       custom_fields: contact.custom_fields ?? {},
     },
@@ -59,6 +66,9 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
         name: contact.name ?? "",
         email: contact.email ?? "",
         phone_number: contact.phone_number ? phoneForDisplay(contact.phone_number) : "",
+        birthdate: contact.birthdate ?? "",
+        cpf: "",
+        endereco: typeof contact.custom_fields?.endereco === "string" ? contact.custom_fields.endereco : "",
         tagsRaw: contact.tags.join(", "),
         custom_fields: contact.custom_fields ?? {},
       });
@@ -76,10 +86,15 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
     if (values.name?.trim()) payload.name = values.name.trim();
     if (values.email?.trim()) payload.email = values.email.trim();
     if (values.phone_number?.trim()) payload.phone_number = values.phone_number.trim();
+    if (values.birthdate) payload.birthdate = values.birthdate;
+    if (values.cpf?.trim()) payload.cpf = values.cpf.trim();
     payload.tags = tags;
     // Sempre no payload, mesmo vazio: o PATCH SUBSTITUI, e é assim que apagar um
     // campo pela tela chega ao banco.
-    payload.custom_fields = values.custom_fields ?? {};
+    const customFields = { ...values.custom_fields };
+    if (values.endereco?.trim()) customFields.endereco = values.endereco.trim();
+    else delete customFields.endereco;
+    payload.custom_fields = customFields;
 
     const parsed = contactPatchSchema.safeParse(payload);
     if (!parsed.success) {
@@ -97,7 +112,7 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("Editar contato")}</DialogTitle>
           <DialogDescription>{t("Atualize os dados deste contato.")}</DialogDescription>
@@ -114,6 +129,18 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
           <div className="space-y-2">
             <Label htmlFor="ec-phone">{t("Telefone (E.164)")}</Label>
             <Input id="ec-phone" {...form.register("phone_number")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ec-birthdate">{t("Data de nascimento")}</Label>
+            <Input id="ec-birthdate" type="date" {...form.register("birthdate")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ec-cpf">CPF</Label>
+            <Input id="ec-cpf" inputMode="numeric" autoComplete="off" placeholder={contact.cpf_available || contact.cpf_hash ? t("CPF cadastrado — digite para substituir") : t("Somente números")} {...form.register("cpf")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ec-endereco">{t("Endereço")}</Label>
+            <Textarea id="ec-endereco" rows={2} {...form.register("endereco")} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="ec-tags">Tags</Label>

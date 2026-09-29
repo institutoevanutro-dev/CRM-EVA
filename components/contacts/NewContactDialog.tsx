@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { contactCreateSchema, type ContactCreate } from "@/lib/schemas/contacts";
 import type { Contact } from "@/lib/types/contacts";
@@ -23,6 +24,8 @@ interface FormShape {
   email?: string;
   phone_number?: string;
   cpf?: string;
+  birthdate?: string;
+  endereco?: string;
   tagsRaw?: string;
 }
 
@@ -51,7 +54,7 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
   const [serverError, setServerError] = useState<string | null>(null);
 
   const form = useForm<FormShape>({
-    defaultValues: { name: nomeInicial ?? "", email: "", phone_number: "", cpf: "", tagsRaw: "" },
+    defaultValues: { name: nomeInicial ?? "", email: "", phone_number: "", cpf: "", birthdate: "", endereco: "", tagsRaw: "" },
   });
 
   async function onSubmit(values: FormShape) {
@@ -66,6 +69,8 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
     if (values.email?.trim()) payload.email = values.email.trim();
     if (values.phone_number?.trim()) payload.phone_number = values.phone_number.trim();
     if (values.cpf?.trim()) payload.cpf = values.cpf.trim();
+    if (values.birthdate) payload.birthdate = values.birthdate;
+    if (values.endereco?.trim()) payload.custom_fields = { endereco: values.endereco.trim() };
     if (tags.length) payload.tags = tags;
 
     const parsed = contactCreateSchema.safeParse(payload);
@@ -93,7 +98,7 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("Novo contato")}</DialogTitle>
           <DialogDescription>
@@ -120,6 +125,14 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
           <div className="space-y-2">
             <Label htmlFor="cpf">{t("CPF (opcional)")}</Label>
             <Input id="cpf" placeholder="00000000000" {...form.register("cpf")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="birthdate">{t("Data de nascimento")}</Label>
+            <Input id="birthdate" type="date" {...form.register("birthdate")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="endereco">{t("Endereço")}</Label>
+            <Textarea id="endereco" rows={2} {...form.register("endereco")} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="tagsRaw">{t("Tags (separadas por vírgula)")}</Label>

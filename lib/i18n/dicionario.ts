@@ -8924,6 +8924,9 @@ export const DICIONARIO: Traducoes = {
   "Oi!": { es: "¡Hola!" },
   "Passando pra lembrar do seu compromisso:": { es: "Te recuerdo tu cita:" },
   "Endereço": { es: "Dirección" },
+  "Data de nascimento": { es: "Fecha de nacimiento" },
+  "CPF cadastrado — digite para substituir": { es: "CPF registrado — escriba para reemplazarlo" },
+  "Somente números": { es: "Solo números" },
 
   // ─── lib/ai/pontos/resolver.ts (avisos do painel de Provedores de IA) ───
   "Este ponto usa o modelo definido na versão publicada do agente; a escolha do painel não se aplica.": {
