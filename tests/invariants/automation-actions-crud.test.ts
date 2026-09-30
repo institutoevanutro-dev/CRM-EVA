@@ -38,7 +38,7 @@ function sqlLiteral(v: unknown): string {
 type QResult = { data: unknown; error: { message: string; code?: string } | null };
 type RowResult = { data: Record<string, unknown> | null; error: { message: string; code?: string } | null };
 
-type FilterOp = "eq" | "is";
+type FilterOp = "eq" | "is" | "in";
 interface Filter {
   op: FilterOp;
   col: string;
@@ -92,6 +92,11 @@ class FakeQuery implements PromiseLike<QResult> {
     return this;
   }
 
+  in(col: string, vals: unknown[]): this {
+    this.filters.push({ op: "in", col, val: vals });
+    return this;
+  }
+
   order(col: string, opts: { ascending: boolean }): this {
     this.orderCol = col;
     this.orderAsc = opts.ascending;
@@ -106,7 +111,11 @@ class FakeQuery implements PromiseLike<QResult> {
   private buildWhere(): string {
     if (!this.filters.length) return "";
     const clauses = this.filters.map((f) =>
-      f.op === "is" ? `${f.col} is ${f.val === null ? "null" : sqlLiteral(f.val)}` : `${f.col} = ${sqlLiteral(f.val)}`,
+      f.op === "is"
+        ? `${f.col} is ${f.val === null ? "null" : sqlLiteral(f.val)}`
+        : f.op === "in"
+          ? `${f.col}::text = any(${sqlLiteral(f.val)})`
+          : `${f.col} = ${sqlLiteral(f.val)}`,
     );
     return ` where ${clauses.join(" and ")}`;
   }
