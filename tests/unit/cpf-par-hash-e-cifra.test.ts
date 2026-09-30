@@ -75,6 +75,13 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+/** As duas RPCs da service role respondendo: cifra e índice HMAC (64 hex). */
+function cifraNoAr() {
+  adminRpc.mockImplementation(async (fn: string) =>
+    fn === "cpf_indice" ? { data: "f".repeat(64), error: null } : { data: "\\xc30d", error: null },
+  );
+}
+
 describe("criar contato com CPF", () => {
   it("cifra fora do ar: 503 claro e NENHUM insert (nada pela metade)", async () => {
     adminRpc.mockResolvedValue({ data: null, error: { message: "function not found" } });
@@ -93,7 +100,7 @@ describe("criar contato com CPF", () => {
   });
 
   it("cifra no ar: hash E cifra no mesmo insert, cifra via service role", async () => {
-    adminRpc.mockResolvedValue({ data: "\\xc30d", error: null });
+    cifraNoAr();
     const db = banco();
 
     await createContactHandler(db.cliente, ctx, {
@@ -102,7 +109,10 @@ describe("criar contato com CPF", () => {
       source: "manual",
     } as never);
 
-    expect(adminRpc).toHaveBeenCalledExactlyOnceWith("encrypt_cpf", { p_plaintext: CPF });
+    expect(adminRpc).toHaveBeenCalledWith("encrypt_cpf", { p_plaintext: CPF });
+    // O índice de busca também é da service role (HMAC com a chave — 0289).
+    expect(adminRpc).toHaveBeenCalledWith("cpf_indice", { p_plaintext: CPF });
+    expect(adminRpc).toHaveBeenCalledTimes(2);
     expect(db.escritas[0]?.linha).toMatchObject({
       cpf_hash: expect.stringMatching(/^[0-9a-f]{64}$/),
       cpf_encrypted: "\\xc30d",
@@ -127,7 +137,7 @@ describe("editar contato com CPF", () => {
   });
 
   it("cifra no ar: o patch leva o par", async () => {
-    adminRpc.mockResolvedValue({ data: "\\xc30d", error: null });
+    cifraNoAr();
     const db = banco();
 
     await patchContactHandler(db.cliente, ctx, CONTATO, { cpf: CPF } as never);

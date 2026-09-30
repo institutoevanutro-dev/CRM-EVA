@@ -29,6 +29,7 @@
  * inteiro — quem investigar lê `payload_parsed->>'event'` e tem a mesma
  * resposta, sem que ninguém precise ensinar o formato a este arquivo.
  */
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
@@ -140,4 +141,14 @@ export async function fecharArquivoDoWebhook(
     // A linha `received` já está gravada com o corpo cru, que é o que importa.
     // Falhar aqui não pode derrubar a resposta ao provedor.
   }
+}
+
+/**
+ * O que `webhook_events_log.webhook_path_token` guarda desde a 0289: o sha256
+ * hex do token da rota, nunca o token. Quem lê a tabela (só a service role) não
+ * pode sair dela com um segredo que, com a assinatura desligada, basta para
+ * forjar mensagem recebida. Quem consulta por fonte calcula o mesmo hash.
+ */
+export function tokenArquivado(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
 }

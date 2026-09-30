@@ -20,7 +20,7 @@ import { roleAtLeast } from "@/lib/auth/types";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import { condicoesDaBuscaDeContato } from "@/lib/contacts/busca";
 import { encontrarContatoPorTelefone } from "@/lib/channels/contato-por-telefone";
-import { hashCpf, MSG_CPF_SEM_CIFRA, parDoCpf, type ParDoCpf } from "@/lib/contacts/cpf";
+import { indiceDoCpf, MSG_CPF_SEM_CIFRA, parDoCpf, type ParDoCpf } from "@/lib/contacts/cpf";
 import type { Contact } from "@/lib/types/contacts";
 import { ensureConversation, sessaoProntaParaEnvio } from "@/lib/automation/start-conversation";
 import type {
@@ -33,8 +33,11 @@ import { contactListQuerySchema } from "@/lib/schemas";
 
 type SB = SupabaseClient;
 
+// `cpf_hash` NÃO entra: desde a 0289 `authenticated` não tem SELECT nessa coluna
+// (é o índice HMAC do CPF — a resposta só diz SE há CPF, via `cpf_available`).
+// `cpf_encrypted` vem só para virar esse booleano e sai em `semCifra()`.
 const SELECT_COLS =
-  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, custom_fields, created_at, updated_at, last_activity_at, first_service_at";
+  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_encrypted, birthdate, is_blocked, blocked_reason, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, custom_fields, created_at, updated_at, last_activity_at, first_service_at";
 
 interface CursorPayload {
   sort: string | null;
@@ -82,6 +85,15 @@ function actorAuditPayload(actor: Actor): {
 // ---------------------------------------------------------------------------
 // list
 // ---------------------------------------------------------------------------
+
+/** A linha como o PostgREST devolve: com a cifra, que nunca vai para a resposta. */
+type LinhaDeContato = Omit<Contact, "cpf_available"> & { cpf_encrypted?: string | null };
+
+/** Troca a cifra por `cpf_available` — é a ÚNICA forma de o cliente saber que há CPF. */
+function semCifra(linha: LinhaDeContato): Contact {
+  const { cpf_encrypted, ...resto } = linha;
+  return { ...resto, cpf_available: cpf_encrypted != null };
+}
 
 export interface ListContactsResult {
   contacts: Contact[];
@@ -133,7 +145,21 @@ export async function listContactsHandler(
     const orParts = condicoesDaBuscaDeContato(q.search);
     const digits = q.search.replace(/\D/g, "");
     if (digits.length === 11) {
-      orParts.push(`cpf_hash.eq.${hashCpf(digits)}`);
+      // O índice do CPF só se calcula com a chave da instalação (service role),
+      // e `authenticated` não lê `cpf_hash`. Resolve os ids pela service role,
+      // filtrados pela organização; a consulta de baixo continua sob a RLS do
+      // usuário (o provider só vê o que é dele).
+      const admin = createAdminClient();
+      const indice = await indiceDoCpf(admin, digits);
+      if (indice) {
+        const { data: porCpf } = await admin
+          .from("contacts")
+          .select("id")
+          .eq("organization_id", ctx.organization_id)
+          .eq("cpf_hash", indice);
+        const ids = (porCpf ?? []).map((r) => r.id);
+        if (ids.length > 0) orParts.push(`id.in.(${ids.join(",")})`);
+      }
     }
     if (orParts.length > 0) query = query.or(orParts.join(","));
   }
@@ -168,7 +194,7 @@ export async function listContactsHandler(
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
   }
 
-  const rows = (data ?? []) as Contact[];
+  const rows = ((data ?? []) as LinhaDeContato[]).map(semCifra);
   const hasMore = rows.length > q.limit;
   const page = hasMore ? rows.slice(0, q.limit) : rows;
   const last = page[page.length - 1];
@@ -244,7 +270,6 @@ export interface GetContactInput {
 }
 
 export interface GetContactResult extends Contact {
-  cpf_available: boolean;
   cpf_decrypted: string | null;
   cpf_decrypt_denied?: boolean;
 }
@@ -273,12 +298,12 @@ export async function getContactHandler(
       traduzir("Contato não encontrado.", ctx.idioma ?? "pt-BR"),
     );
   }
-  const contact = data as Contact;
+  const contact = semCifra(data as LinhaDeContato);
 
   let cpfDecrypted: string | null = null;
   let cpfDecryptDenied = false;
 
-  if (input.decryptPurpose && contact.cpf_hash && ctx.actor.type === "user") {
+  if (input.decryptPurpose && contact.cpf_available && ctx.actor.type === "user") {
     const { data: membership } = await supabase
       .from("user_organizations")
       .select("role")
@@ -336,7 +361,6 @@ export async function getContactHandler(
 
   return {
     ...contactWithConversa,
-    cpf_available: !!contact.cpf_hash,
     cpf_decrypted: cpfDecrypted,
     cpf_decrypt_denied: cpfDecryptDenied || undefined,
   };
@@ -426,7 +450,7 @@ export async function createContactHandler(
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, insErr.message);
   }
 
-  const contact = created as Contact;
+  const contact = semCifra(created as LinhaDeContato);
   if (contact.phone_number) {
     try {
       const sessionId = await sessaoProntaParaEnvio(supabase, ctx.organization_id);
@@ -447,7 +471,7 @@ export async function createContactHandler(
         source: contact.source,
         has_email: !!contact.email,
         has_phone: !!contact.phone_number,
-        has_cpf: !!contact.cpf_hash,
+        has_cpf: contact.cpf_available,
       },
       p_metadata: { request_id: ctx.requestId, ...a.metadataActor },
       p_organization_id: contact.organization_id,
@@ -595,7 +619,7 @@ export async function patchContactHandler(
     );
   }
 
-  const contact = updated as Contact;
+  const contact = semCifra(updated as LinhaDeContato);
   const a = actorAuditPayload(ctx.actor);
   const fields = Object.keys(patch).filter((k) => k !== "updated_at");
 

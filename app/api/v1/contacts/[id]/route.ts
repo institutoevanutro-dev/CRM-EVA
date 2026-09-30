@@ -127,7 +127,10 @@ export async function DELETE(
   const requestId = randomUUID();
   const { id } = await ctx.params;
 
-  const authz = await requireRole("agent", { requestId, resource: "contacts" });
+  // Apagar a ficha leva junto conversas e mensagens (hard delete, contra a
+  // doutrina "anonimizar antes de apagar"). Piso `manager`, o mesmo que a RLS
+  // `contacts_delete` cobra desde a 0289 — a rota e o banco dizem a mesma coisa.
+  const authz = await requireRole("manager", { requestId, resource: "contacts" });
   if (!authz.ok) return authz.response;
   const user = authz.user;
   const activeOrg = authz.org;

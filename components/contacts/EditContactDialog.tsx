@@ -136,7 +136,7 @@ export function EditContactDialog({ contact, open, onOpenChange, customFieldDefs
           </div>
           <div className="space-y-2">
             <Label htmlFor="ec-cpf">CPF</Label>
-            <Input id="ec-cpf" inputMode="numeric" autoComplete="off" placeholder={contact.cpf_available || contact.cpf_hash ? t("CPF cadastrado — digite para substituir") : t("Somente números")} {...form.register("cpf")} />
+            <Input id="ec-cpf" inputMode="numeric" autoComplete="off" placeholder={contact.cpf_available ? t("CPF cadastrado — digite para substituir") : t("Somente números")} {...form.register("cpf")} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="ec-endereco">{t("Endereço")}</Label>
