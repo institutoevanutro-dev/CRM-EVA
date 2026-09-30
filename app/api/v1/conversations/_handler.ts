@@ -84,7 +84,7 @@ function idsQueCabemNaURL(ids: string[]): string[] {
 
 const SELECT_COLS = `
   id, organization_id, contact_id, channel_session_id, channel, status,
-  status_changed_at, service_revision, service_closed_at, service_started_at, current_demanda_id, assigned_to_user_id, assigned_to_user_name, assignee_kind, assigned_at, last_inbound_at,
+  status_changed_at, service_revision, service_closed_at, service_started_at, current_demanda_id, assigned_to_user_id, assigned_to_user_name, assignee_kind, assigned_at, last_inbound_at, awaiting_since,
   last_outbound_at, last_message_at, last_message_preview,
   unread_count_for_assignee, is_group, group_chat_id, tags, metadata,
   snooze_until, created_at, updated_at,
@@ -150,10 +150,11 @@ export async function listConversationsHandler(
   ctx: HandlerCtx,
   q: ListConversationsQuery,
 ): Promise<ListConversationsResult> {
-  // Fila (assigned_to=unassigned): ordena por TEMPO DE ESPERA — quem espera há
-  // mais tempo primeiro. `last_inbound_at` = última mensagem do cliente = "há
-  // quanto tempo aguarda resposta" (não `created_at`, que pode ser uma conversa
-  // antiga reaberta). Demais visões: por atividade recente (last_message_at desc).
+  // Fila: ordena por TEMPO DE ESPERA — quem espera há mais tempo primeiro. A
+  // régua é `awaiting_since` = a mensagem do cliente MAIS ANTIGA sem resposta
+  // (não `last_inbound_at`, que é reescrito a cada mensagem dele e fazia quem
+  // insiste descer para o fim da fila — #990; e não `created_at`, que pode ser uma
+  // conversa antiga reaberta). Demais visões: por atividade recente.
   // A Fila deixou de se identificar por `assigned_to=unassigned` — ela agora pede
   // `comando`. Sem esta linha o `isQueue` ficaria PARA SEMPRE falso na aba Fila e
   // a ordenação por tempo de espera sumiria **sem nenhum sintoma na tela**: a

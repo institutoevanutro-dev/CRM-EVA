@@ -985,6 +985,7 @@ export async function sendMessageHandler(
     last_message_preview: string;
     unread_count_for_assignee: number;
     bot_silenced_until?: string;
+    awaiting_since: string | null;
   } = {
     last_outbound_at: now,
     last_message_at: now,
@@ -997,6 +998,12 @@ export async function sendMessageHandler(
     // Resposta humana/CRM zera pendências — espelha fn_mark_conversation_message
     // outbound, que o envio pelo CRM não chama (só atualiza colunas à mão).
     unread_count_for_assignee: 0,
+    // E zera a ESPERA da Fila (DeskcommCRM #990): a régua é `awaiting_since`, e o
+    // valor que a resposta produz é o que `fn_reply_record_receipt` grava —
+    // `awaiting_since = last_inbound_at`, isto é, "a resposta cobre a última
+    // mensagem do cliente". Sem esta linha, o envio pelo CRM (e pelo agente) deixa
+    // a conversa contando a espera que a própria resposta acabou de encerrar.
+    awaiting_since: c.last_inbound_at,
   };
   if (ctx.actor.type === "user") {
     const silenceUntil = extendBotSilence(c.bot_silenced_until, now);

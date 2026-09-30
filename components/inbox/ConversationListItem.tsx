@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { SeloDoCanal } from "@/components/inbox/SeloDoCanal";
-import { comandoDaConversa } from "@/lib/inbox/comando-da-conversa";
+import { comandoDaConversa, esperaDaConversa } from "@/lib/inbox/comando-da-conversa";
 import { cn } from "@/lib/utils";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
@@ -101,12 +101,20 @@ function relativeTime(iso: string | null, locale: Locale): string {
   return format(d, "dd/MM");
 }
 
-/** "Aguardando há 5 min" — desde a última mensagem do cliente (fallback: criação). */
+/**
+ * "Aguardando há 5 min" — desde quando o cliente ESPERA.
+ *
+ * A régua é `esperaDaConversa`, a mesma `awaiting_since` que ordena a Fila
+ * (DeskcommCRM #990): `last_inbound_at` é a ÚLTIMA mensagem do cliente, então a
+ * pílula de quem insistia voltava para "há 1 min" a cada mensagem dele — o tempo
+ * na linha contradizia a posição do lado e a ordem da lista. O fallback segue
+ * sendo a criação, para a conversa que nunca recebeu mensagem.
+ */
 function waitingLabel(
   conversation: ConversationWithContact,
   t: (texto: string) => string = (texto) => texto, locale: Locale,
 ): string {
-  const since = conversation.last_inbound_at ?? conversation.created_at;
+  const since = esperaDaConversa(conversation);
   if (!since) return t("Aguardando");
   return `${t("Aguardando")} ${formatDistanceToNowStrict(new Date(since), { addSuffix: true, locale: locale })}`;
 }
@@ -150,7 +158,7 @@ export function ConversationListItem({
    * de distância, seriam a próxima divergência.
    */
   const horaDaOrdem = naFila
-    ? conversation.last_inbound_at ?? conversation.created_at
+    ? esperaDaConversa(conversation)
     : conversation.last_message_at;
   const time = relativeTime(horaDaOrdem, localeDaData);
   const unread = conversation.unread_count_for_assignee ?? 0;
@@ -269,7 +277,7 @@ export function ConversationListItem({
             // O mesmo lugar da tela mostra duas coisas diferentes conforme a aba:
             // na Fila é "desde quando o cliente escreveu", nas outras é "há quanto
             // tempo a conversa mexeu". O rótulo existe só onde a leitura muda.
-            title={naFila ? t("Última mensagem do cliente") : undefined}
+            title={naFila ? t("Desde quando o cliente espera resposta") : undefined}
           >
             {time}
           </span>

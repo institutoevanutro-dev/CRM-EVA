@@ -52,7 +52,7 @@ export const crmRequestHumanHandoff: McpToolDefinition<typeof inputShape> = {
     // Conversation must belong to org (defense in depth — service role bypassa RLS).
     const { data: conv, error: convErr } = await ctx.supabase
       .from("conversations")
-      .select("id, organization_id, contact_id, channel_session_id, last_inbound_at")
+      .select("id, organization_id, contact_id, channel_session_id, awaiting_since")
       .eq("organization_id", ctx.organizationId)
       .eq("id", input.conversation_id)
       .maybeSingle();
@@ -151,7 +151,7 @@ export const crmRequestHumanHandoff: McpToolDefinition<typeof inputShape> = {
         position = queued ? await getQueuePosition(
           ctx.supabase,
           ctx.organizationId,
-          conv.last_inbound_at ?? null,
+          conv.awaiting_since ?? null,
           now,
         ) : null;
       }

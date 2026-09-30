@@ -26,6 +26,15 @@ export interface Conversation {
   assignee_kind: string | null;
   assigned_at: string | null;
   last_inbound_at: string | null;
+  /**
+   * A régua da Fila (migration 0290, DeskcommCRM #990): o instante da mensagem do
+   * cliente MAIS ANTIGA que ninguém respondeu ainda — `min(sent_at)` dos inbound
+   * posteriores a `last_outbound_at`. É o que ordena a aba Fila, o que a pílula
+   * "Aguardando há…" mostra (`esperaDaConversa`) e o que a posição das ferramentas
+   * de IA conta. Opcional cobrindo o intervalo entre o deploy deste código e a
+   * migration aplicada; `null` quando o cliente nunca escreveu.
+   */
+  awaiting_since?: string | null;
   last_outbound_at: string | null;
   last_message_at: string | null;
   last_message_preview: string | null;
