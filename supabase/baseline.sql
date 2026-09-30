@@ -28404,9 +28404,9 @@ set search_path = public
 as $$
   select case
     when public.fn_is_platform_admin() then true
-    when public.fn_user_role_in_org(p_org) is null then false
-    when public.fn_user_role_in_org(p_org) = 'provider' then p_assigned_to_user_id = auth.uid()
-    when public.fn_user_role_in_org(p_org) in ('viewer','manager','admin') then true
+    when r.papel is null then false
+    when r.papel = 'provider' then p_assigned_to_user_id = auth.uid()
+    when r.papel in ('viewer','manager','admin') then true
     when p_assigned_to_user_id = auth.uid() then true
     else case coalesce(
            (select settings->>'visibility_mode' from public.organizations where id = p_org),
@@ -28415,7 +28415,11 @@ as $$
          when 'own_and_unassigned' then p_assigned_to_user_id is null
          else false
        end
-  end;
+  end
+  -- `offset 0` impede o planner de achatar a subquery e reavaliar o papel a
+  -- cada WHEN: fn_user_role_in_org custa ~0,3 ms e esta função roda POR LINHA
+  -- na RLS de crm_leads/conversations — 500 leads no Radar eram 1.500 chamadas.
+  from (select public.fn_user_role_in_org(p_org) as papel offset 0) r;
 $$;
 revoke all on function public.fn_can_view_conversation(uuid, uuid) from public;
 revoke execute on function public.fn_can_view_conversation(uuid, uuid) from anon;
@@ -28430,9 +28434,9 @@ set search_path = public
 as $$
   select case
     when public.fn_is_platform_admin() then true
-    when public.fn_user_role_in_org(p_org) is null then false
-    when public.fn_user_role_in_org(p_org) = 'provider' then p_owner_user_id = auth.uid()
-    when public.fn_user_role_in_org(p_org) in ('viewer','manager','admin') then true
+    when r.papel is null then false
+    when r.papel = 'provider' then p_owner_user_id = auth.uid()
+    when r.papel in ('viewer','manager','admin') then true
     when p_owner_user_id = auth.uid() then true
     else case coalesce(
            (select settings->>'visibility_mode' from public.organizations where id = p_org),
@@ -28441,7 +28445,11 @@ as $$
          when 'own_and_unassigned' then p_owner_user_id is null
          else false
        end
-  end;
+  end
+  -- `offset 0` impede o planner de achatar a subquery e reavaliar o papel a
+  -- cada WHEN: fn_user_role_in_org custa ~0,3 ms e esta função roda POR LINHA
+  -- na RLS de crm_leads/conversations — 500 leads no Radar eram 1.500 chamadas.
+  from (select public.fn_user_role_in_org(p_org) as papel offset 0) r;
 $$;
 revoke all on function public.fn_can_view_lead(uuid, uuid) from public;
 revoke execute on function public.fn_can_view_lead(uuid, uuid) from anon;
