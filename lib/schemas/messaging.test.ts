@@ -60,14 +60,21 @@ describe("sendMessageSchema", () => {
     expect(r.success).toBe(false);
   });
 
-  it("rejeita payload só com media_url", () => {
-    const r = sendMessageSchema.safeParse({
-      conversation_id: "11111111-1111-4111-8111-111111111111",
-      type: "image",
-      media_url: "https://cdn.example.com/foo.jpg",
-    });
-    expect(r.success).toBe(true);
-  });
+  // C4 (auditoria 2026-09-29): `media_url` do corpo era gravada e depois
+  // buscada pela rota de mídia com a X-Api-Key global do WAHA (SSRF). O envio
+  // só usa `media_storage_path`; a URL nunca foi entregue ao canal.
+  it.each(["https://cdn.example.com/foo.jpg", "http://waha:3000/api/sessions"])(
+    "rejeita media_url vinda do corpo (%s)",
+    (media_url) => {
+      const r = sendMessageSchema.safeParse({
+        conversation_id: "11111111-1111-4111-8111-111111111111",
+        type: "image",
+        body: "legenda",
+        media_url,
+      });
+      expect(r.success).toBe(false);
+    },
+  );
 
   it("rejeita body acima do limite de 4096", () => {
     const r = sendMessageSchema.safeParse({

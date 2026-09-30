@@ -1,7 +1,7 @@
 import { loadOnboardingChannel } from "@/lib/channels/onboarding-session";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { requireRole } from "@/lib/auth/require-role";
 
 /**
  * Proxy WAHA's QR endpoint so the browser can <img src="..." /> without
@@ -10,10 +10,11 @@ import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
  * WAHA exposes: GET /api/{session}/auth/qr?format=image → image/png bytes.
  */
 export async function GET() {
-  const user = await loadAuthUser();
-  if (!user) return new NextResponse(null, { status: 401 });
-  const activeOrg = await resolveActiveOrg(user);
-  if (!activeOrg) return new NextResponse(null, { status: 404 });
+  // Escanear o QR liga um aparelho ao número da empresa: é de admin, como criar
+  // a sessão (auditoria 2026-09-29, B1).
+  const auth = await requireRole("admin", { resource: "channel_sessions", allowPlatformAdmin: true });
+  if (!auth.ok) return auth.response;
+  const activeOrg = auth.org;
 
   const baseUrl = process.env.WAHA_API_BASE_URL;
   const apiKey = process.env.WAHA_API_KEY;

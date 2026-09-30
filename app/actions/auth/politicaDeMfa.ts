@@ -17,7 +17,7 @@ import { supportWriteError } from "@/lib/impersonate/support";
 import { revalidatePath } from "next/cache";
 
 import { audit } from "@/lib/audit";
-import { loadAuthUser, resolveActiveOrg, sessionAal, isMfaEnrolled } from "@/lib/auth/server";
+import { loadAuthUser, resolveActiveOrg, sessionAal, isMfaEnrolled, mfaEmDivida } from "@/lib/auth/server";
 import { empresaExigeMfa, exigeCadastroDeMfa } from "@/lib/auth/politica-mfa";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -42,6 +42,13 @@ export async function definirExigenciaDeMfa(exigir: boolean): Promise<ResultadoD
 
   if (org.role !== "admin") {
     return { ok: false, erro: "Só um administrador pode mudar essa regra." };
+  }
+
+  // Quem TEM fator prova nesta sessão antes de mudar a regra — senão a senha
+  // sozinha desliga a exigência da empresa. Admin sem fator segue podendo
+  // LIGAR a regra numa instalação nova (auditoria 2026-09-29, C2).
+  if (await mfaEmDivida()) {
+    return { ok: false, erro: "Entre de novo e informe o código de 6 dígitos antes de mudar essa regra." };
   }
 
   const admin = createAdminClient();

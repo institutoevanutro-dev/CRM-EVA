@@ -4,9 +4,13 @@
  * A URL anunciada no webhook NÃO é confiável nem correta: o HMAC é
  * best-effort (payload forjado é possível) e o WAHA anuncia seu endereço
  * INTERNO (ex.: localhost:3000 dentro do container, mapeado p/ 3030 no
- * host). Por isso o fetch é SEMPRE reconstruído sobre WAHA_API_BASE_URL,
- * aproveitando apenas path+query da URL anunciada — SSRF impossível por
- * construção (o host nunca vem do payload). A futura MetaMediaSource
+ * host). Por isso o fetch é SEMPRE reconstruído sobre WAHA_API_BASE_URL.
+ *
+ * Trocar o host NÃO bastava: path e query sobreviviam, e o fetch leva a
+ * X-Api-Key GLOBAL do WAHA. Uma `media_url` como `http://x/api/sessions` lia a
+ * API inteira do WAHA (auditoria 2026-09-29, C4). Agora só passa o arquivo da
+ * PRÓPRIA sessão: `/api/files/<sessão>/<arquivo>`, sem query. O nome de arquivo
+ * real é o id da mensagem (`false_5511…@c.us_3EB0….oga`), daí o `@`. A futura MetaMediaSource
  * implementa a mesma assinatura baixando via media_id + Graph API.
  */
 import {
@@ -17,16 +21,28 @@ import {
 
 const FETCH_TIMEOUT_MS = 30_000;
 
+const ARQUIVO = /^\/api\/files\/([^/]+)\/[A-Za-z0-9@._-]+$/;
+
 export async function fetchWahaMedia(
   mediaUrl: string,
-  hintMime?: string | null,
+  hintMime: string | null | undefined,
+  sessionName: string,
 ): Promise<FetchedMedia> {
   const base = process.env.WAHA_API_BASE_URL;
+  let advertised: URL;
+  try {
+    advertised = new URL(mediaUrl);
+  } catch {
+    throw new Error("waha_media_untrusted_host");
+  }
+  // `URL` já resolveu `..` e `%2e%2e`; o que sobra tem de ser um arquivo, não API.
+  const m = ARQUIVO.exec(advertised.pathname);
+  if (!m || decodeURIComponent(m[1]!) !== sessionName) {
+    throw new Error("waha_media_untrusted_path");
+  }
   let url: URL;
   try {
-    const advertised = new URL(mediaUrl);
-    // Host/porta descartados: só path+query sobrevivem, resolvidos na base.
-    url = new URL(advertised.pathname + advertised.search, base ?? "");
+    url = new URL(advertised.pathname, base ?? "");
   } catch {
     throw new Error("waha_media_untrusted_host");
   }

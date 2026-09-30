@@ -22,11 +22,11 @@ describe("fetchWahaMedia", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const media = await fetchWahaMedia(`${WAHA_BASE}/api/files/abc.jpg`);
+    const media = await fetchWahaMedia(`${WAHA_BASE}/api/files/default/abc.jpg`, null, "default");
     expect(media.mime).toBe("image/jpeg");
     expect(media.buffer.byteLength).toBe(3);
     expect(fetchMock).toHaveBeenCalledWith(
-      `${WAHA_BASE}/api/files/abc.jpg`,
+      `${WAHA_BASE}/api/files/default/abc.jpg`,
       expect.objectContaining({ headers: { "X-Api-Key": "hash123" } }),
     );
   });
@@ -39,9 +39,9 @@ describe("fetchWahaMedia", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    await fetchWahaMedia("http://evil.example.com/api/files/x.jpg?q=1");
+    await fetchWahaMedia("http://evil.example.com/api/files/default/x.jpg?q=1", null, "default");
     expect(fetchMock).toHaveBeenCalledWith(
-      `${WAHA_BASE}/api/files/x.jpg?q=1`,
+      `${WAHA_BASE}/api/files/default/x.jpg`,
       expect.anything(),
     );
   });
@@ -55,7 +55,7 @@ describe("fetchWahaMedia", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    await fetchWahaMedia("http://localhost:3000/api/files/sessao/sticker.webp");
+    await fetchWahaMedia("http://localhost:3000/api/files/sessao/sticker.webp", null, "sessao");
     expect(fetchMock).toHaveBeenCalledWith(
       `${WAHA_BASE}/api/files/sessao/sticker.webp`,
       expect.anything(),
@@ -64,7 +64,7 @@ describe("fetchWahaMedia", () => {
 
   it("propaga status HTTP de erro", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
-    await expect(fetchWahaMedia(`${WAHA_BASE}/api/files/gone.jpg`)).rejects.toThrow(
+    await expect(fetchWahaMedia(`${WAHA_BASE}/api/files/default/gone.jpg`, null, "default")).rejects.toThrow(
       "waha_media_404",
     );
   });
@@ -79,7 +79,7 @@ describe("fetchWahaMedia", () => {
         }),
       ),
     );
-    await expect(fetchWahaMedia(`${WAHA_BASE}/api/files/big.mp4`)).rejects.toThrow(
+    await expect(fetchWahaMedia(`${WAHA_BASE}/api/files/default/big.mp4`, null, "default")).rejects.toThrow(
       MediaTooLargeError,
     );
   });
@@ -89,11 +89,44 @@ describe("fetchWahaMedia", () => {
       "fetch",
       vi.fn().mockResolvedValue(new Response(new ArrayBuffer(2), { status: 200 })),
     );
-    const media = await fetchWahaMedia(`${WAHA_BASE}/api/files/x`, "audio/ogg; codecs=opus");
+    const media = await fetchWahaMedia(`${WAHA_BASE}/api/files/default/x`, "audio/ogg; codecs=opus", "default");
     expect(media.mime).toBe("audio/ogg; codecs=opus");
   });
 
   it("mapeia mediaUrl malformada p/ waha_media_untrusted_host", async () => {
-    await expect(fetchWahaMedia("not-a-url")).rejects.toThrow("waha_media_untrusted_host");
+    await expect(fetchWahaMedia("not-a-url", null, "default")).rejects.toThrow("waha_media_untrusted_host");
+  });
+
+  // C4 (auditoria 2026-09-29): a URL podia vir do corpo da API de envio, e o
+  // path+query sobreviviam — `GET /api/sessions` com a X-Api-Key global.
+  describe("só o diretório de arquivos da PRÓPRIA sessão", () => {
+    it.each([
+      "http://x/api/sessions",
+      "http://x/api/default/chats",
+      "http://x/api/files/outra/x.jpg",
+      "http://x/api/files/default/../../api/sessions",
+      "http://x/api/files/default/%2e%2e/x",
+      "http://x/api/files/default/sub/x.jpg",
+      "http://x/api/files/default/",
+    ])("recusa %s sem chamar o WAHA", async (u) => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(fetchWahaMedia(u, null, "default")).rejects.toThrow("waha_media_untrusted_path");
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("aceita o nome de arquivo real do WAHA (id com @ e _)", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(new Response(new ArrayBuffer(1), { status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+      await fetchWahaMedia(
+        "http://localhost:3000/api/files/default/false_5511999999999@c.us_3EB0C767D26A1D8B.oga",
+        null,
+        "default",
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${WAHA_BASE}/api/files/default/false_5511999999999@c.us_3EB0C767D26A1D8B.oga`,
+        expect.anything(),
+      );
+    });
   });
 });

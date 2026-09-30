@@ -78,13 +78,12 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   }
 
   const mime = file.type || "application/octet-stream";
-  const verdict = validateOutboundMedia(mime, file.size);
+  const bruto = Buffer.from(await file.arrayBuffer());
+  const verdict = validateOutboundMedia(mime, file.size, bruto);
   if (!verdict.ok) {
     const status = verdict.code === "payload_too_large" ? 413 : verdict.code === "unsupported_media_type" ? 415 : 422;
     return fail(verdict.code, verdict.message, status, { requestId });
   }
-
-  const bruto = Buffer.from(await file.arrayBuffer());
 
   // Nota de voz gravada no browser sai em `webm` (o Chrome não grava ogg), e o
   // canal oficial recusa depois de aceitar — `131053 Media upload error`, que

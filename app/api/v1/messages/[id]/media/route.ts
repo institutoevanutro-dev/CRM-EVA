@@ -20,6 +20,7 @@ import {
   type ChannelProvider,
   type ChannelSessionRef,
 } from "@/lib/channels";
+import { cabecalhosDeMidia } from "@/lib/messaging/media/servir";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -118,8 +119,9 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
       });
       return new Response(new Uint8Array(media.buffer), {
         status: 200,
+        // O tipo é do REMETENTE: nunca servido como veio (ver `servir.ts`).
         headers: {
-          "Content-Type": media.mime,
+          ...cabecalhosDeMidia(media.mime),
           "Cache-Control": "private, max-age=60",
           "X-Request-Id": requestId,
         },

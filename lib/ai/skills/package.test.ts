@@ -91,4 +91,16 @@ corpo`;
     expect(out.ok).toBe(true);
     if (out.ok) expect(out.pkg.matcher.any_keywords).toEqual(['frete', 'entrega']);
   });
+
+  // M8 (auditoria 2026-09-29): o nome vira segmento do caminho no Storage
+  // (`<org>/<name>/<versão>/…`) — `../outra-org` escrevia na pasta de outra organização.
+  it.each(['../outra-org', 'a/b', 'Frete', 'x'.repeat(65), '-frete', 'frete gratis'])(
+    'nome de skill inválido (%s) → skill_frontmatter_invalid',
+    (nome) => {
+      const md = validSkillMd.replace('name: frete-gratis', `name: ${nome}`);
+      const out = parseSkillPackage(makeZip({ 'SKILL.md': md }));
+      expect(out.ok).toBe(false);
+      if (!out.ok) expect(out.error.code).toBe('skill_frontmatter_invalid');
+    },
+  );
 });

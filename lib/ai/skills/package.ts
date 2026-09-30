@@ -173,6 +173,11 @@ export function parseSkillPackage(zipBytes: Uint8Array): ParseSkillResult {
   if (name === undefined || name === '') {
     return fail('skill_frontmatter_invalid', 'SKILL.md precisa de um campo "name" no frontmatter.');
   }
+  // O nome vira segmento de caminho no Storage (`<org>/<name>/…`, install.ts):
+  // `../outra-org` escrevia na pasta de outra organização (auditoria 2026-09-29, M8).
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(name)) {
+    return fail('skill_frontmatter_invalid', 'Nome da skill: só letras minúsculas, números e "-" (até 64).');
+  }
   if (description === undefined || description === '') {
     return fail('skill_frontmatter_invalid', 'SKILL.md precisa de um campo "description" no frontmatter.');
   }
