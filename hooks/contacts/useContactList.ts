@@ -1,6 +1,7 @@
 "use client";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
+import { marcarReleitura } from "@/lib/audit/releitura";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { ContactOrderBy } from "@/lib/schemas/contacts";
 import type { Contact } from "@/lib/types/contacts";
@@ -20,8 +21,10 @@ export interface ContactListFilters {
 }
 
 export function useContactList(filters: ContactListFilters) {
+  const qc = useQueryClient();
+  const queryKey = ["contacts", filters] as const;
   return useInfiniteQuery({
-    queryKey: ["contacts", filters],
+    queryKey,
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
       const qs = new URLSearchParams();
@@ -32,6 +35,7 @@ export function useContactList(filters: ContactListFilters) {
       if (filters.order_dir) qs.set("order_dir", filters.order_dir);
       if (filters.limit) qs.set("limit", String(filters.limit));
       if (pageParam) qs.set("cursor", pageParam);
+      marcarReleitura(qs, qc.getQueryData(queryKey) !== undefined);
       try {
         return await apiClient.get<ListResponse>(`/api/v1/contacts?${qs.toString()}`);
       } catch (err) {

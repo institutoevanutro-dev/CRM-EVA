@@ -12,6 +12,7 @@ import { type NextRequest } from "next/server";
 import { ApiError } from "@/lib/api/types";
 import { ok, fail, noContent } from "@/lib/api/wrappers";
 import { auditarLeitura } from "@/lib/audit/leitura";
+import { ehAberturaDeLeitura } from "@/lib/audit/releitura";
 import { requireRole } from "@/lib/auth/require-role";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -58,7 +59,7 @@ export async function GET(
       },
       { contactId: id, decryptPurpose },
     );
-    auditarLeitura({
+    if (ehAberturaDeLeitura(new URL(req.url))) auditarLeitura({
       action: "contact.viewed",
       actorUserId: user.id,
       organizationId: activeOrg.orgId,

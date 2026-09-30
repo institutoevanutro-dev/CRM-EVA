@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
 import { useRefetchDeSeguranca } from "@/hooks/realtime/useRefetchDeSeguranca";
 import { apiClient } from "@/lib/api/client";
+import { marcarReleitura } from "@/lib/audit/releitura";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Message } from "@/lib/types/messaging";
 
@@ -27,6 +28,9 @@ export function useMessagesRealtime(conversationId: string | null) {
       const qs = new URLSearchParams();
       if (pageParam) qs.set("cursor", pageParam);
       qs.set("limit", "50");
+      // Recarga do que já está na tela (Realtime, foco, rede de segurança) não
+      // é "abrir a conversa" e não vira linha de auditoria (lib/audit/releitura.ts).
+      marcarReleitura(qs, qc.getQueryData(queryKey) !== undefined);
       try {
         return await apiClient.get<MessagesResponse>(
           `/api/v1/conversations/${conversationId}/messages?${qs.toString()}`,

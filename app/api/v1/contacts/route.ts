@@ -12,6 +12,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiError } from "@/lib/api/types";
 import { ok, fail } from "@/lib/api/wrappers";
 import { auditarLeitura } from "@/lib/audit/leitura";
+import { ehAberturaDeLeitura } from "@/lib/audit/releitura";
 import type { Actor } from "@/lib/api/handlers/types";
 import { requireRole } from "@/lib/auth/require-role";
 import { extractBearer, validateBearerToken, ensureRole, ensureScope, McpAuthError } from "@/lib/mcp/auth";
@@ -154,7 +155,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       },
       qsParsed.data,
     );
-    auditarLeitura({
+    // Só a primeira página e fora de recarga (ver lib/audit/releitura.ts).
+    if (ehAberturaDeLeitura(url)) auditarLeitura({
       action: "contact.listed",
       actorUserId: apiTokenId ? null : actor.id,
       actorApiTokenId: apiTokenId ?? null,

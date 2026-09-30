@@ -22,6 +22,7 @@ import { type NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { auditarLeitura } from "@/lib/audit/leitura";
+import { ehAberturaDeLeitura } from "@/lib/audit/releitura";
 import { loadAuthUser } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
@@ -153,7 +154,7 @@ export async function GET(
       ? encodeCursor({ performed_at: last.performed_at, id: last.id })
       : null;
 
-  auditarLeitura({
+  if (ehAberturaDeLeitura(url)) auditarLeitura({
     action: "contact.viewed",
     actorUserId: user.id,
     organizationId: (contactRow as { organization_id: string }).organization_id,
