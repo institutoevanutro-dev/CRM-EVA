@@ -174,6 +174,13 @@ const NENHUMA_APROVADA: ReadonlySet<string> = new Set();
  * Elas só participam da ÚLTIMA pergunta ("todo token é conhecido?"). Os
  * gatilhos, o teto de tamanho e a interrogação final rodam antes e não olham
  * para este conjunto.
+ *
+ * CONTRATO: `aprovadas` tem de vir com as palavras JÁ normalizadas pela mesma
+ * `normalizarTexto` de `lib/opt-out/deteccao.ts` (minúsculas, sem acento). A
+ * comparação é exata contra o token normalizado e esta função NÃO normaliza o
+ * conjunto (alocaria um `Set` por comentário). Palavra fora dessa forma, como
+ * "Fantástico", nunca casa: ninguém recebe erro e a aprendizagem fica morta em
+ * silêncio. Quem grava (Tarefa 5) e quem lê (Tarefa 6) garantem a forma.
  */
 export function ehObviamenteSeguro(
   texto: string | null,

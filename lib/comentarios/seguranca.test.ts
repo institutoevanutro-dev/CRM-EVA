@@ -171,6 +171,11 @@ describe("palavras aprovadas pelo dono", () => {
     expect(ehObviamenteSeguro("fantastico?", new Set(["fantastico"])).seguro).toBe(false);
   });
 
+  it("palavra aprovada FORA da forma normalizada não libera nada, e é por isso que quem grava normaliza", () => {
+    expect(ehObviamenteSeguro("fantastico demais", new Set(["Fantástico"])).seguro).toBe(false);
+    expect(ehObviamenteSeguro("fantastico demais", new Set(["fantastico"])).seguro).toBe(true);
+  });
+
   it("conjunto vazio ou ausente se comporta igual ao de hoje", () => {
     expect(ehObviamenteSeguro("top", new Set())).toEqual({ seguro: true });
     expect(ehObviamenteSeguro("fantastico", new Set())).toEqual(
