@@ -175,6 +175,23 @@ export async function diasDesenhados(page: Page): Promise<string[]> {
  * dias por mês, que é a mesma classe de vermelho-por-calendário que ela existe
  * para fechar.
  */
+/**
+ * Espera a consulta de horários do painel responder — o momento em que algum dia
+ * acende — SEM reprovar quando o mês em tela não tem dia nenhum para acender.
+ *
+ * Os dois casos são indistinguíveis pela tela: "a consulta ainda não voltou" e
+ * "voltou, e este mês já não tem dia" desenham o mesmo mini-calendário apagado.
+ * O que os separa é o prazo. Esgotado, quem chama pula o mês e afirma lá — e é
+ * essa afirmação, não esta espera, que acusa "o seed não deixou jornada".
+ */
+async function esperarAlgumDiaAceso(page: Page): Promise<void> {
+  await page
+    .locator('[data-testid^="dia-"][data-disponivel="true"]')
+    .first()
+    .waitFor({ state: "visible", timeout: 20_000 })
+    .catch(() => undefined);
+}
+
 export async function escolherDiaDesenhado(page: Page, dias: readonly string[]): Promise<string> {
   const disponiveis = async (): Promise<string[]> =>
     (
@@ -185,18 +202,34 @@ export async function escolherDiaDesenhado(page: Page, dias: readonly string[]):
 
   // Até a consulta de horários responder, TODO dia nasce indisponível — uma
   // varredura feita antes disso leria "nenhum dia da semana desenhada" onde há.
-  await expect(
-    page.locator('[data-testid^="dia-"][data-disponivel="true"]').first(),
-    "nenhum dia disponível no painel — o seed da agenda não deixou jornada publicada",
-  ).toBeVisible({ timeout: 20_000 });
+  //
+  // ⚠️ E NO ÚLTIMO DIA DO MÊS PODE NÃO HAVER DIA NENHUM ACESO NESTE MÊS. Medido em
+  // 30/09/2026, ~17h de São Paulo: a jornada de hoje já passou do aviso mínimo,
+  // o próximo dia com horário é 1º de outubro, e o mini-calendário só acende o
+  // que é do mês em tela. A espera antiga exigia "algum dia aceso" ANTES de
+  // pular o mês, e reprovava a `main` inteira — a mesma classe de vermelho-
+  // por-calendário que o salto de mês abaixo existe para fechar, só que um
+  // degrau antes dele. Por isso a espera é tolerante: esgotado o prazo sem dia
+  // aceso, o salto de mês acontece do mesmo jeito, e é ele quem decide.
+  await esperarAlgumDiaAceso(page);
 
   let candidatos = await disponiveis();
   if (candidatos.length === 0) {
     await page.getByTestId("mes-seguinte").click();
-    await expect(
-      page.locator('[data-testid^="dia-"][data-disponivel="true"]').first(),
-      "nem o mês seguinte oferece dia — a janela de busca do painel é de 30 dias",
-    ).toBeVisible({ timeout: 20_000 });
+    // ESPERA PELOS DIAS DA SEMANA DESENHADA, não por "algum dia disponível": no
+    // quadro de transição entre os dois estados do mês visível (o `mes` do
+    // painel troca no clique; o `mesDoPainel` do `_client.tsx`, que decide a
+    // consulta, só troca no efeito), a janela do mês velho vai até
+    // `endOfMonth + 1 dia` e traz o dia 1º aceso sozinho — uma espera por
+    // "algum dia" passava nesse quadro e a varredura lia só o dia 1º.
+    await expect
+      .poll(disponiveis, {
+        timeout: 20_000,
+        message:
+          `nenhum dia da semana desenhada (${dias.join(", ")}) ficou disponível no painel ` +
+          "depois de avançar o mês — o alvo e a grade deixariam de falar do mesmo período",
+      })
+      .not.toEqual([]);
     candidatos = await disponiveis();
   }
 
@@ -259,11 +292,9 @@ async function diasCheios(page: Page): Promise<string[]> {
     return chaves.filter((k) => k > hoje).sort();
   };
 
-  await expect(
-    page.locator('[data-testid^="dia-"][data-disponivel="true"]').first(),
-    "nenhum dia disponível — o seed da agenda não deixou jornada publicada, e sem " +
-      "dia clicável a coluna de horários nunca abre (o defeito ficaria invisível)",
-  ).toBeVisible({ timeout: 20_000 });
+  // Tolerante no último dia do mês, pela mesma razão de `escolherDiaDesenhado`:
+  // sem dia aceso neste mês, quem decide é o salto de mês logo abaixo.
+  await esperarAlgumDiaAceso(page);
 
   const cheios = await varrer();
   if (cheios.length > 0) return cheios;
