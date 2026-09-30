@@ -90,6 +90,26 @@ const SOMENTE_DIGITOS_RE = /^\d+$/u;
 const TOKEN_RE = new RegExp(`[\\p{L}\\p{N}]+|[${EMOJI_CLASSE}]+`, "gu");
 
 /**
+ * Marcação de perfil do Instagram: `@` seguido do identificador (letras,
+ * dígitos, ponto, sublinhado), e só quando o `@` NÃO vem colado em
+ * letra/dígito — senão `joao@clinica.com` viraria "fale com", e um e-mail no
+ * comentário passaria a ser invisível para a trava.
+ */
+const MARCACAO_RE = /(^|[^\p{L}\p{N}])@[\p{L}\p{N}._]+/gu;
+
+/**
+ * Tira as marcações ANTES de julgar. O `$1` devolve o separador que a regex
+ * consumiu, para `"@fulano, top!"` virar `", top!"` e não `" top!"` colado no
+ * que veio antes.
+ *
+ * O texto guardado em `instagram_comments.texto` e o que a tela mostra NUNCA
+ * passam por aqui: quem escreveu escreveu.
+ */
+function semMarcacoes(texto: string): string {
+  return texto.replace(MARCACAO_RE, "$1");
+}
+
+/**
  * Vocabulário seguro — a unidade de casamento é a PALAVRA, não a frase. Todo
  * token do comentário precisa estar aqui (ou ser emoji/dígito) para o texto
  * inteiro contar como elogio. Três famílias, deliberadamente separadas para
@@ -141,7 +161,10 @@ export function ehObviamenteSeguro(texto: string | null): Veredito {
     return { seguro: false, gatilho: "vazio" };
   }
 
-  const textoAparado = texto.trim();
+  const textoAparado = semMarcacoes(texto).trim();
+  if (textoAparado === "") {
+    return { seguro: false, gatilho: "vazio" };
+  }
   const normalizado = normalizarTexto(textoAparado);
 
   for (const [gatilho, padrao] of GATILHOS) {

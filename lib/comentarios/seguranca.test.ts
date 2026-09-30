@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { ehObviamenteSeguro } from "./seguranca";
 
 const inseguros: [string, string][] = [
@@ -107,4 +107,44 @@ it.each(elogiosReaisQuePrecisamPassar)("%s é elogio real e tem de ser seguro", 
 it("mesmo começo, um token desconhecido no fim reprova o texto inteiro", () => {
   expect(ehObviamenteSeguro("amei o conteúdo")).toEqual({ seguro: true });
   expect(ehObviamenteSeguro("amei o conteúdo, qual a dose").seguro).toBe(false);
+});
+
+describe("marcação de perfil sai da análise", () => {
+  it("marcação mais emoji passa: o que decide é o resto da frase", () => {
+    expect(ehObviamenteSeguro("@dr.andreluisc 💪💪💪")).toEqual({ seguro: true });
+  });
+
+  it("marcação mais elogio conhecido passa", () => {
+    expect(ehObviamenteSeguro("@fulano @ciclano top demais")).toEqual({ seguro: true });
+  });
+
+  it("o gatilho continua vencendo: o resto da frase é que decide", () => {
+    const v = ehObviamenteSeguro("@fulano quanto custa?");
+    expect(v.seguro).toBe(false);
+    if (!v.seguro) expect(v.gatilho).toBe("preço");
+  });
+
+  // Review Focus 1: sobrar vazio não é "todos os tokens são seguros".
+  it("comentário que é SÓ marcação continua inseguro, com gatilho vazio", () => {
+    const v = ehObviamenteSeguro("@fulano");
+    expect(v.seguro).toBe(false);
+    if (!v.seguro) expect(v.gatilho).toBe("vazio");
+  });
+
+  it("só marcação com espaços em volta também", () => {
+    const v = ehObviamenteSeguro("  @fulano  @ciclano ");
+    expect(v.seguro).toBe(false);
+    if (!v.seguro) expect(v.gatilho).toBe("vazio");
+  });
+
+  // Review Focus 2: a remoção não pode emendar palavras nem comer pontuação.
+  it("marcação colada em pontuação não emenda o resto", () => {
+    expect(ehObviamenteSeguro("@fulano, top!")).toEqual({ seguro: true });
+    expect(ehObviamenteSeguro("(@fulano) show")).toEqual({ seguro: true });
+  });
+
+  it("e-mail não é marcação: o texto continua sendo julgado inteiro", () => {
+    const v = ehObviamenteSeguro("fale com joao@clinica.com");
+    expect(v.seguro).toBe(false);
+  });
 });
