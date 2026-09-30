@@ -118,7 +118,6 @@ export async function updateGoogleOAuth(input: GoogleOAuthInput): Promise<Update
     // e a trilha ficaria sem a linha — sem sintoma em tela nenhuma.
     resourceId: null,
     requestId: cabecalhos.get("x-request-id") ?? undefined,
-    ip: cabecalhos.get("x-forwarded-for") ?? undefined,
     userAgent: cabecalhos.get("user-agent") ?? undefined,
     actingAsPlatformAdmin: true,
     metadata: {

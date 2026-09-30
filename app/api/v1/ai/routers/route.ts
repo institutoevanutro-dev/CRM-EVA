@@ -15,6 +15,7 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { idsForaDaOrg } from "@/lib/tenancy/pertence-a-org";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -100,6 +101,16 @@ export async function POST(req: NextRequest): Promise<Response> {
   const input = parsed.data;
 
   const admin = createAdminClient();
+
+  // B4: a FK não olha a organização — agente de outra org não entra aqui.
+  const fallbackFora = await idsForaDaOrg(admin, org.orgId, "ai_agents", [input.fallback_agent_id]);
+  if (fallbackFora === null) return fail("internal_error", t("Erro ao verificar o agente."), 500, { requestId });
+  if (fallbackFora.length > 0) {
+    return fail("validation_failed", t("Agente não encontrado nesta organização."), 422, {
+      requestId,
+      details: { agent_ids: fallbackFora },
+    });
+  }
 
   // Arquivado não é destino válido — a linha só sobrevive por causa das FKs.
   //

@@ -303,7 +303,7 @@ contacts operacionais etc.) não são "config" e ficam fora do alvo desta fase.
 | contacts | `tenant_isolation_contacts_all` (ALL) | qualquer membro | sim | não (agent tem org:write, nota 3; viewer-write fica pra G4 junto do escopo) | G4 |
 | crm_leads / crm_lead_activities / crm_lead_links | `tenant_isolation_*` (ALL) | qualquer membro | sim | não (operacional; escopo own é G4-01) | G4-01 |
 | channel_sessions, ai_*, orders, nuvemshop_products, idempotency_keys, warmup, storage_redaction_queue | `*_tenant_isolation_*` (ALL) | qualquer membro | sim | não classificado na matriz §4 | fora do escopo G2-03 |
-| api_audit_log | `audit_log_insert_tenant_member` (insert-only, append) | qualquer membro | por design | — | manter (select manager é read, não write) |
+| api_audit_log | ~~`audit_log_insert_tenant_member`~~ — **removida na 0289**: `anon`/`authenticated` não têm INSERT; só a service role grava (`lib/audit`) | ninguém com sessão | por design | — | fechada (um membro gravava linha com ator, ação e data livres) |
 
 Resultado: as tabelas de **config org-flat** são `crm_pipelines` e `crm_stages`;
 a migration `20260716120000_0030_config_rls_role_policies.sql` aplica

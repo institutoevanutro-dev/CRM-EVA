@@ -39,7 +39,7 @@ projeto** e preenche as quatro sozinho (`hostgator-setup-kit/supabase-provision.
 | `APP_ACCENT_HEX` (ex. `#7a5cd6`) | a cor do produto (verde) na tela e nos e-mails |
 | `SUPPORT_EMAIL` | a tela de "conta suspensa" fica sem endereço de contato |
 | `RESEND_API_KEY` + `RESEND_FROM_EMAIL` | envio de e-mail **desligado**: o convite mostra o link de aceite na própria tela; o export de LGPD fica pendente. O remetente precisa ser de um domínio **verificado** na Resend, senão toda tentativa falha com mensagem opaca |
-| Telemetria (`s/N`, padrão **não enviar**) | só erros, com CPF/telefone/e-mail redigidos, sem replay. `--yes` → não envia. Copiando o `.env` do exemplo a pergunta não aparece e sai **ligada** (issue #668) — escreva `SENTRY_DSN=off` |
+| Telemetria (sem pergunta) | nasce desligada: `SENTRY_DSN=off` ou vazio não envia nada. Só liga com o DSN do Sentry do próprio operador no `.env`. |
 
 ## O que o instalador gera sozinho (não peça)
 

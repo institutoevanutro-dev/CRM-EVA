@@ -197,6 +197,18 @@ export async function devolverAtendimentoAoAgente(
     p_organization_id: organizationId,
   });
   if (emitErr) {
+    // A conversa JÁ voltou ao agente (passos 1-3): a mutação aconteceu e tem de
+    // entrar na trilha, mesmo que a resposta saia 500 (B6, auditoria 2026-09-29).
+    await audit({
+      action: "ai.reactivated_by_agent",
+      actorUserId: deps.actor.type === "user" ? deps.actor.id : null,
+      actorApiTokenId: deps.apiTokenId ?? null,
+      organizationId,
+      resourceType: "conversation",
+      resourceId: input.conversationId,
+      requestId: deps.requestId,
+      metadata: { actor_type: deps.actor.type, sinal_de_retomada: "falhou" },
+    });
     return { ok: false, erro: "resume_signal_failed", detalhe: emitErr.message };
   }
 

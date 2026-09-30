@@ -66,11 +66,14 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   }
   const { decision, approved_seq } = parsed.data;
 
-  // O lead vem pela RLS do caller — é ele que prova a org, nunca o body.
+  // A org é a ATIVA da sessão, nunca a do lead: a RLS sozinha mostra os leads
+  // de todas as orgs do membro, e quem é agent em A e viewer em B mutava B.
+  const orgId = authz.org.orgId;
   const { data: lead, error: leadErr } = await supabase
     .from("crm_leads")
     .select("id, organization_id, contact_id, status")
     .eq("id", leadId)
+    .eq("organization_id", orgId)
     .maybeSingle();
   if (leadErr) return fail("internal_error", leadErr.message, 500, { requestId });
   if (!lead) return fail("not_found", t("Lead não encontrado."), 404, { requestId });
@@ -93,7 +96,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const { data: estado, error: estadoErr } = await supabase
     .from("lead_state")
     .select("next_action, next_action_seq")
-    .eq("organization_id", row.organization_id)
+    .eq("organization_id", orgId)
     .eq("contact_id", row.contact_id)
     .maybeSingle();
   if (estadoErr) return fail("internal_error", estadoErr.message, 500, { requestId });
@@ -118,7 +121,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   }
 
   const atividade = await emitLeadActivity(supabase, {
-    organizationId: row.organization_id,
+    organizationId: orgId,
     leadId: row.id,
     contactId: row.contact_id,
     type: decision === "approve" ? "next_action_approved" : "next_action_dismissed",
@@ -140,7 +143,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const { error: limpaErr } = await supabase
     .from("lead_state")
     .update({ next_action: null })
-    .eq("organization_id", row.organization_id)
+    .eq("organization_id", orgId)
     .eq("contact_id", row.contact_id);
   if (limpaErr) return fail("internal_error", limpaErr.message, 500, { requestId });
 

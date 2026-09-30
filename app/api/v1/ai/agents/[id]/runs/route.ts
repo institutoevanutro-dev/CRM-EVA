@@ -48,6 +48,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { runsListQuerySchema } from "@/lib/ai/agents/validation";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { ID, INSTANTE, lerCursorJson } from "@/lib/api/filtro-postgrest";
 
 export const dynamic = "force-dynamic";
 
@@ -137,14 +138,7 @@ function encodeCursor(p: CursorPayload): string {
 }
 
 function decodeCursor(raw: string): CursorPayload | null {
-  try {
-    const json = Buffer.from(raw, "base64url").toString("utf8");
-    const p = JSON.parse(json) as CursorPayload;
-    if (typeof p.id !== "string" || typeof p.started_at !== "string") return null;
-    return p;
-  } catch {
-    return null;
-  }
+  return lerCursorJson(raw, { started_at: INSTANTE, id: ID });
 }
 
 export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {

@@ -111,6 +111,11 @@ export interface DbOpts {
   webhookSources?: Array<Record<string, unknown>>;
   /** Automações — `actions` é jsonb cru, sem FK para o funil. */
   automationRules?: Array<Record<string, unknown>>;
+  /**
+   * Contatos da org. O handler de lead confere que o `contact_id` é da org
+   * (B4); sem isto, o `contato-1` que as automações usam passa a ser 422.
+   */
+  contacts?: Array<Record<string, unknown>>;
   /** Erro do banco na n-ésima escrita (1-based), como o PostgREST devolveria. */
   writeError?: (n: number, table: string) => { code: string; message: string } | null;
 }
@@ -139,6 +144,7 @@ export interface Registro {
     crm_lead_activities: Linha[];
     webhook_sources: Linha[];
     automation_rules: Linha[];
+    contacts: Linha[];
   };
 }
 
@@ -158,6 +164,7 @@ export function makeDb(opts: DbOpts = {}): Registro {
       crm_lead_activities: [],
       webhook_sources: (opts.webhookSources ?? []) as Linha[],
       automation_rules: (opts.automationRules ?? []) as Linha[],
+      contacts: (opts.contacts ?? [{ id: "contato-1", organization_id: ORG_ID }]) as Linha[],
     },
   };
   const tables = registro.tabelas as unknown as Record<string, Linha[] | undefined>;

@@ -183,15 +183,11 @@ export const crmProposeContactField: McpToolDefinition<typeof propostaShape> = {
       resourceType: "contact",
       resourceId: input.contact_id,
       requestId: ctx.requestId,
-      // O par antes/depois desde a PROPOSTA, mesma grafia de `team.role_changed`.
-      // A proposta é uma intenção auditável mesmo que nunca vire escrita.
-      metadata: {
-        ...a.metadataActor,
-        proposal_id: r.id,
-        campo: input.campo,
-        old_value: r.valorAnterior,
-        new_value: input.valor,
-      },
+      // A proposta é uma intenção auditável mesmo que nunca vire escrita. O
+      // par antes/depois NÃO entra: nome, e-mail e telefone numa trilha
+      // imutável sobreviveriam ao pedido de exclusão do titular (achado A6).
+      // O valor proposto já mora na própria proposta (`proposal_id`).
+      metadata: { ...a.metadataActor, proposal_id: r.id, campo: input.campo },
     });
 
     return {

@@ -28,6 +28,7 @@
  *   mesmo comportamento da lista de contatos, que continua sendo a referência.
  */
 
+import { escaparTermoDoOr } from "@/lib/api/filtro-postgrest";
 import { phoneLookupVariants } from "@/lib/channels/phone-variants";
 
 /**
@@ -43,7 +44,7 @@ export function condicoesDaBuscaDeContato(termo: string): string[] {
   // ⚠️ `%` e `_` são curingas do LIKE, e `,`/`(`/`)` são delimitadores do DSL
   // do `.or()` — um nome com vírgula ("Silva, Maria") injetaria uma condição
   // extra na string do filtro. Mesmo escape de conversations/_handler.ts.
-  const s = bruto.replace(/[%_]/g, (m) => `\\${m}`).replace(/[,()]/g, " ");
+  const s = escaparTermoDoOr(bruto);
   const digits = bruto.replace(/\D/g, "");
 
   const condicoes = [

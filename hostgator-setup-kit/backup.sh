@@ -16,8 +16,16 @@ step "Dump do banco → $BACKUP_DIR/db-$ts.sql.gz"
 # o que a role enxerga, e com uma role menor — a que recomendamos no `.env` de
 # quem usa Supabase próprio — o backup sai PARCIAL e sai verde. Falha silenciosa
 # de backup é a pior das falhas: só aparece na hora de restaurar.
-docker run --rm postgres:17-alpine pg_dump "$(url_do_schema)" --no-owner --no-privileges \
-  | gzip > "$BACKUP_DIR/db-$ts.sql.gz"
+#
+# `--exclude-table-data=private.app_secrets`: a chave de cifra NÃO vai no mesmo
+# arquivo que os segredos cifrados com ela — quem leva o backup levaria os dois.
+# Ela vive no `.env`, e o `restore.sh` a semeia de volta. `umask 077`: o dump
+# tem dado de paciente e nasce legível só pelo dono.
+( umask 077
+  docker run --rm postgres:17-alpine pg_dump "$(url_do_schema)" --no-owner --no-privileges \
+    --exclude-table-data=private.app_secrets \
+    | gzip > "$BACKUP_DIR/db-$ts.sql.gz" )
+chmod 600 "$BACKUP_DIR/db-$ts.sql.gz"
 c_grn "✓ banco: $(du -h "$BACKUP_DIR/db-$ts.sql.gz" | awk '{print $1}')"
 
 step "Snapshot das sessões do WhatsApp → $BACKUP_DIR/waha-$ts.tgz"
@@ -26,7 +34,7 @@ proj="$(basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')"
 vol="${vol:-${proj}_waha-data}"
 docker run --rm -v "${vol}:/data:ro" -v "$BACKUP_DIR:/out" alpine:3.20 \
   tar czf "/out/waha-$ts.tgz" -C /data . 2>/dev/null \
-  && c_grn "✓ sessões WhatsApp salvas" \
+  && { chmod 600 "$BACKUP_DIR/waha-$ts.tgz" 2>/dev/null || true; c_grn "✓ sessões WhatsApp salvas"; } \
   || c_ylw "⚠ não achei o volume waha-data (nome pode variar). Ajuste manualmente se necessário."
 
 # Retenção: mantém os 14 mais recentes de cada tipo.

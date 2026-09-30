@@ -5,6 +5,7 @@
  * (created_at DESC, id DESC). Opaque to clients.
  */
 import { z } from "zod";
+import { cursorValido, ID, INSTANTE } from "@/lib/api/filtro-postgrest";
 
 export const auditQuerySchema = z.object({
   actor_id: z.string().uuid().optional(),
@@ -30,8 +31,7 @@ export function decodeAuditCursor(raw: string): AuditCursor | null {
   try {
     const decoded = Buffer.from(raw, "base64url").toString("utf8");
     const [created_at, id] = decoded.split("|");
-    if (!created_at || !id) return null;
-    return { created_at, id };
+    return cursorValido({ created_at, id }, { created_at: INSTANTE, id: ID });
   } catch {
     return null;
   }

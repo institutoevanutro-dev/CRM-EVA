@@ -424,7 +424,8 @@ describe("POST /api/v1/webhooks/in/[token] (Task 6)", () => {
     expect(eventRows.length).toBe(1);
 
     const logRows = rows(
-      `select * from public.webhook_events_log where webhook_path_token = '${TOKEN_JSON}' order by received_at desc limit 1`,
+      // 0289: a coluna guarda o sha256 hex do token, nunca o token.
+      `select * from public.webhook_events_log where webhook_path_token = encode(extensions.digest('${TOKEN_JSON}', 'sha256'), 'hex') order by received_at desc limit 1`,
     );
     expect(logRows.length).toBe(1);
     expect(logRows[0]!.provider).toBe("generic");

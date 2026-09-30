@@ -30,9 +30,11 @@ type EventLike = {
   contexts?: { trace?: { data?: Record<string, unknown> } };
   message?: string;
   exception?: { values?: Array<{ value?: string }> };
+  extra?: unknown;
+  user?: unknown;
 };
 type SpanLike = { description?: string; data?: Record<string, unknown> };
-type BreadcrumbLike = { message?: string; data?: Record<string, unknown> };
+type BreadcrumbLike = { category?: string; message?: string; data?: Record<string, unknown> };
 
 /**
  * Header sensível por PADRÃO, não por lista fechada.
@@ -49,10 +51,22 @@ export function isSensitiveHeader(name: string): boolean {
   return SENSITIVE_HEADER.test(name);
 }
 
+/**
+ * Telefone BR em qualquer grafia: `+55 (11) 9 8765-4321`, `(21) 3456-7890`,
+ * `5511987654321`. A versão anterior (`\+?\d{2}\s?\d{4,5}-?\d{4}`) deixava
+ * passar o DDD entre parênteses e cortava o E.164 no meio. As bordas
+ * `(?<![\w-])`/`(?![\w-])` impedem casar dentro de UUID ou de data.
+ */
+const TELEFONE =
+  /(?<![\w-])(?:\+?\d{2,3}[\s.-]?)?(?:\(\d{2}\)|\d{2})[\s.-]?(?:9[\s.-]?)?\d{4}[\s.-]?\d{4}(?![\w-])/g;
+
 export function scrubMessage(input: string): string {
   return input
-    .replace(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g, "[CPF]")
-    .replace(/\+?\d{2}\s?\d{4,5}-?\d{4}/g, "[PHONE]")
+    // CPF formatado primeiro (a pontuação o distingue); 11 dígitos crus são
+    // ambíguos e caem em [PHONE] — redigidos de um jeito ou de outro.
+    .replace(/(?<![\w-])\d{3}\.\d{3}\.\d{3}-\d{2}(?![\w-])/g, "[CPF]")
+    .replace(TELEFONE, "[PHONE]")
+    .replace(/(?<![\w-])\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?![\w-])/g, "[CPF]")
     .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[EMAIL]");
 }
 
@@ -152,6 +166,11 @@ function scrubEventUrls<T extends EventLike>(event: T): T {
 export const sentryScrubHooks = {
   beforeSend<T extends EventLike>(event: T): T {
     scrubEventUrls(event);
+    // `extra` e `user` são saco livre: quem chama `captureException(e, { extra })`
+    // põe o que tiver à mão, e o SDK põe e-mail/IP em `user`. Nenhum dos dois é
+    // necessário para ler um stack trace (M5).
+    delete event.extra;
+    delete event.user;
     if (typeof event.message === "string") {
       event.message = scrubMessage(event.message);
     }
@@ -175,7 +194,10 @@ export const sentryScrubHooks = {
     return span;
   },
 
-  beforeBreadcrumb<T extends BreadcrumbLike>(breadcrumb: T): T {
+  beforeBreadcrumb<T extends BreadcrumbLike>(breadcrumb: T): T | null {
+    // Breadcrumb de console é cópia do que o código imprimiu — nome, telefone,
+    // corpo de mensagem. Descartado inteiro, não "limpo" (M5).
+    if (breadcrumb.category === "console") return null;
     if (typeof breadcrumb.message === "string") {
       breadcrumb.message = scrubUrl(breadcrumb.message);
     }

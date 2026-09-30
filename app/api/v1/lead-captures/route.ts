@@ -21,6 +21,7 @@ import {
   encodeLeadCaptureCursor,
   leadCapturesQuerySchema,
 } from "@/lib/schemas/lead-captures";
+import { escaparTermoDoOr } from "@/lib/api/filtro-postgrest";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     // Busca no que a pessoa reconhece: nome, telefone, e-mail. `%` e `,` são
     // escapados porque o PostgREST separa os ramos do `or` por vírgula — um
     // termo com vírgula quebraria a expressão inteira em duas condições soltas.
-    const termo = q.q.replace(/[%,()]/g, " ").trim();
+    const termo = escaparTermoDoOr(q.q);
     if (termo) {
       query = query.or(
         `captured_name.ilike.%${termo}%,captured_phone.ilike.%${termo}%,captured_email.ilike.%${termo}%`,

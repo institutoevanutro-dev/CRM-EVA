@@ -10,11 +10,20 @@
  */
 
 import { supportWriteError, authenticatedSessionId } from "@/lib/impersonate/support";
+import { randomBytes } from "node:crypto";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { buildAuthorizeUrl } from "@/lib/nuvemshop/oauth";
 import { getConfig } from "@/lib/nuvemshop/config";
-import { issueState } from "@/lib/nuvemshop/state";
+import {
+  CAMINHO_DO_CALLBACK_NUVEMSHOP,
+  issueState,
+  NOME_DO_VINCULO_NUVEMSHOP,
+  VALIDADE_DO_VINCULO_NUVEMSHOP_S,
+  vinculoDoState,
+} from "@/lib/nuvemshop/state";
+import { cookieSecure } from "@/lib/supabase/cookie-secure";
 
 export type ConnectResult =
   | { ok: false; error: "auth_required" | "no_active_org" | "forbidden" | "not_configured" };
@@ -36,7 +45,17 @@ export async function connectNuvemshop(): Promise<ConnectResult> {
   const cfg = getConfig();
   if (!cfg) return { ok: false, error: "not_configured" };
 
-  const state = issueState(activeOrg.orgId, { userId: user.id, authSessionId: await authenticatedSessionId() });
+  const nonce = randomBytes(16).toString("hex");
+  const state = issueState(activeOrg.orgId, { userId: user.id, authSessionId: await authenticatedSessionId() }, nonce);
+  // Lax (não Strict) porque a volta é navegação top-level vinda do parceiro.
+  // O callback confere este cookie contra o nonce do `state` (M6).
+  (await cookies()).set(NOME_DO_VINCULO_NUVEMSHOP, vinculoDoState(nonce), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: cookieSecure(),
+    path: CAMINHO_DO_CALLBACK_NUVEMSHOP,
+    maxAge: VALIDADE_DO_VINCULO_NUVEMSHOP_S,
+  });
   const url = buildAuthorizeUrl({ appId: cfg.appId, state });
   redirect(url);
 }

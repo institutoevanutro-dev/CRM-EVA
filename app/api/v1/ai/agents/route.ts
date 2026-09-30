@@ -118,6 +118,21 @@ export async function POST(req: NextRequest): Promise<Response> {
     const input = parsed.data;
     const v = input.version;
 
+    // ANTES de criar o agente: recusar depois deixava um agente órfão, sem versão.
+    // O escopo aponta para coisas que EXISTEM nesta organização. Sem esta
+    // conferência, um id de outra organização (ou de um material apagado) entra no
+    // array, a versão é publicada, e o assistente não acha nada — sem erro, com a
+    // tela mostrando a marcação como se estivesse valendo.
+    const escopo = await validarEscopoDaVersao(admin, activeOrg.orgId, {
+      pipeline_ids: v.pipeline_ids,
+      knowledge_source_ids: v.knowledge_source_ids,
+      credential_id: v.credential_id,
+      channel_session_id: v.channel_session_id,
+    });
+    if (!escopo.ok) {
+      return fail("validation_failed", mensagemDoEscopo(escopo), 422, { requestId });
+    }
+
     // Insert agent first (no published_version_id yet).
     const { data: agentRow, error: agentErr } = await admin
       .from("ai_agents")
@@ -140,17 +155,6 @@ export async function POST(req: NextRequest): Promise<Response> {
       return fail("internal_error", "Erro ao criar agent.", 500, { requestId });
     }
 
-    // O escopo aponta para coisas que EXISTEM nesta organização. Sem esta
-    // conferência, um id de outra organização (ou de um material apagado) entra no
-    // array, a versão é publicada, e o assistente não acha nada — sem erro, com a
-    // tela mostrando a marcação como se estivesse valendo.
-    const escopo = await validarEscopoDaVersao(admin, activeOrg.orgId, {
-      pipeline_ids: v.pipeline_ids,
-      knowledge_source_ids: v.knowledge_source_ids,
-    });
-    if (!escopo.ok) {
-      return fail("validation_failed", mensagemDoEscopo(escopo), 422, { requestId });
-    }
     const { data: versionRow, error: versionErr } = await admin
       .from("ai_agent_versions")
       .insert({

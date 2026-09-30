@@ -7,6 +7,8 @@ import { type NextRequest } from "next/server";
 
 import { ApiError } from "@/lib/api/types";
 import { fail, ok } from "@/lib/api/wrappers";
+import { auditarLeitura } from "@/lib/audit/leitura";
+import { ehAberturaDeLeitura } from "@/lib/audit/releitura";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { listMessagesQuerySchema } from "@/lib/schemas";
@@ -64,6 +66,16 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
       conversationId,
       qsParsed.data,
     );
+    // Só a abertura: a recarga do Realtime e a paginação não viram linha.
+    if (ehAberturaDeLeitura(url)) auditarLeitura({
+      action: "conversation.viewed",
+      actorUserId: user.id,
+      organizationId: activeOrg.orgId,
+      resourceType: "conversation",
+      resourceId: conversationId,
+      requestId,
+      metadata: { mensagens: messages.length },
+    });
     return ok(messages, { requestId, meta: { cursor, has_more } });
   } catch (err) {
     if (err instanceof ApiError) {

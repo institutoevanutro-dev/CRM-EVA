@@ -10,9 +10,12 @@ export interface Contact {
   email: string | null;
   email_normalized: string | null;
   phone_number: string | null;
-  cpf_hash: string | null;
-  /** Só na leitura de UMA ficha: existe CPF guardado (o número não vem junto). */
-  cpf_available?: boolean;
+  /**
+   * Existe CPF guardado (o número não vem junto). É a única coisa que a API diz
+   * sobre o CPF: o índice (`cpf_hash`, HMAC — migration 0289) e a cifra nunca
+   * saem na resposta.
+   */
+  cpf_available: boolean;
   /** Só quando a leitura pediu `X-Decrypt-Purpose` e o papel permitiu. */
   cpf_decrypted?: string | null;
   cpf_decrypt_denied?: boolean;

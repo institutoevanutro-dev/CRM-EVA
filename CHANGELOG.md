@@ -8,6 +8,313 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [2.0.0] — 2026-09-30
+
+### ⚠️ Requer atenção
+
+- **Segundo número oficial passa a receber mensagens** Reconecte o canal oficial uma vez (Conexões, "Trocar credencial") para o CRM registrar o endereço de recebimento.
+- **Comentários do Instagram entram no CRM, com regras e resposta automática** O app do Instagram passa a pedir a permissão `instagram_business_manage_comments`:
+
+  - Reconecte os dois perfis em Configurações › Conexões. Sem reconectar, a
+    captura de comentário não funciona (o Direct continua normal).
+  - A Meta precisa liberar Acesso Avançado para `comments`. Até lá a captura
+    não roda em produção, mesmo com o código publicado.
+
+### Adicionado
+
+- **O agente confere e marca o horário na mesma chamada** Quando a pessoa já dizia o dia **e** a hora ("quinta às 14h"), o agente respondia
+  que o horário estava livre e encerrava o turno: ninguém marcava nada, e o
+  compromisso só existia na conversa.
+
+  Agora as duas coisas acontecem juntas. Se o horário estiver livre, ele é marcado
+  na mesma resposta, com as mesmas regras dos agendamentos que já existem. Se não
+  estiver, nada é marcado e o agente recebe os horários daquele dia para oferecer
+  uma alternativa.
+
+  Em quem já usa o assistente a capacidade nasce desligada: abra o assistente, em
+  "O que o agente pode fazer" ligue "Ver se o horário está livre e já marcar", e
+  publique. Instalação nova já vem com ela.
+
+- **A agenda passa a reservar unidades e salas** A agenda agora administra unidades e salas, usa a duração cadastrada no Catálogo de Produtos e bloqueia conflitos de sala e de profissional. Serviços diferentes podem ocorrer simultaneamente quando a unidade possui salas compatíveis livres e os tipos têm chaves de simultaneidade distintas.
+
+- **O lembrete de cobrança de sinal respeita o prazo da reserva, e o que vencer vira revisão humana** Quando o fluxo está amarrado a uma reserva de agenda, o lembrete de sinal passa a
+  respeitar o prazo real: contado da criação da reserva, encurtado se a consulta
+  começar antes, e nunca enviado depois do prazo nem depois do início. Fora do
+  horário comercial, se a próxima abertura já cair depois do prazo, o lembrete é
+  suprimido em vez de adiado. Uma tentativa por reserva.
+
+  Vencido o prazo sem comprovante tratado, um aviso de "revisão de sinal" chama a
+  equipe na Central. Nada é liberado, cancelado ou marcado como falta sozinho.
+
+  Nasce desligado: exige o tipo marcado como "exige sinal" e o fluxo amarrado à
+  reserva.
+
+- **Cadastro de contato com nascimento e endereço** O cadastro e a edição de contatos agora permitem informar data de nascimento e endereço. A edição também permite cadastrar ou substituir o CPF sem revelar o valor salvo.
+
+- **Comentários do Instagram entram no CRM, com regras e resposta automática** Comentário num post vira fila no CRM. Casando uma palavra configurada, o
+  sistema manda um Direct para quem comentou e responde no próprio comentário.
+  Sem regra, um classificador decide: elogio recebe resposta da IA no jeito do
+  dono; preço, sintoma, agendamento e reclamação caem na aba "Comentários"
+  esperando revisão.
+
+- **O CPF do contato pode ser visto na ficha, e quem viu fica registrado** A ficha do contato passa a mostrar o CPF: ele aparece mascarado, e um clique em "Ver CPF" revela o número. Quem atende, gerencia ou administra pode ver; quem só visualiza continua sabendo apenas que existe CPF cadastrado. O número não viaja para o navegador enquanto ninguém pedir, e cada consulta vira uma linha no registro de auditoria — a resposta para "quem viu o CPF desta pessoa", que a LGPD cobra. Nenhuma ação é necessária na VPS além da atualização normal.
+
+- **Comentário que pergunta preço ou quer marcar recebe uma mensagem no Direct** O comentário continua na fila para você responder em público se quiser. O
+  texto sai em Inbox › Comentários › "Frases do Direct".
+
+- **Login pela Conta EvaLink, opcional** Botão "Entrar com o EvaLink" na tela de entrar, ligado por cinco variáveis no `.env`
+  (`CONTA_URL`, `EVALINK_CLIENT_ID`, `EVALINK_CLIENT_SECRET`, `EVALINK_SEGREDO_AVISO`,
+  `EVALINK_ORG_PADRAO`), explicadas no `.env.example`. Sem elas, nada muda. Quem já
+  tem usuário é ligado por SQL (`insert into evalink_vinculos`). Com o EvaLink ligado,
+  a senha fica só para admins e para quem não está ligado; é regra de uso, e quem a
+  Conta desliga é banido no Supabase.
+
+- **Cada etapa do funil escolhe em quantas horas o negócio esfria** O Radar marcava como "esfriou" quem ficasse 24 horas sem atividade, em qualquer
+  etapa. A coluna que muda isso já existia no banco e era lida pelo radar, mas
+  nenhuma tela escrevia nela.
+
+  Agora Configurações → Etapas do funil tem, em cada etapa, o campo "Esfria em
+  (horas)". Vazio segue o padrão global. Para uma clínica, três horas sem resposta
+  já é lead perdido; numa negociação de contrato dois dias é normal.
+
+  A etapa crítica continua sendo 3× a de esfriamento.
+
+- **Etiquetas ganham tela própria para renomear, juntar e excluir** Configurações agora tem a tela de Etiquetas: a lista das etiquetas em uso, com quantos
+  contatos, negócios, conversas e regras de agente cada uma alcança. De lá dá para renomear,
+  juntar duas numa só e excluir. No renomear e no juntar, a regra de marcação dos agentes que
+  escrevia a etiqueta é corrigida na mesma operação, numa transação só; no excluir, a tela avisa
+  quantas regras continuam escrevendo a etiqueta e não mexe nelas.
+
+  Era esse o defeito de origem: renomear a etiqueta sem corrigir a regra deixava o agente
+  escrevendo a grafia velha na próxima conversa. Quem instala não precisa fazer nada: o
+  `update.sh` aplica a migration e a tela aparece em Configurações para gerentes e
+  administradores.
+
+- **O fluxo de sinal pode acompanhar uma reserva específica** O início de um fluxo de mensagem pode vincular explicitamente a consulta ao follow-up do sinal. A inscrição manual também aceita a reserva, com validação de contato, organização, status e tipo sujeito a sinal. A espera fixa pode contar desde a criação da reserva, inclusive se a automação for processada depois; sem reserva válida, a espera falha sem enviar.
+
+- **Horário de envio dos follow-ups na página de Follow-ups** Os fluxos de follow-up podiam mandar mensagem a qualquer hora, inclusive de madrugada, e o limite de horário só se ligava por UPDATE no banco. Agora a página de Follow-ups tem o quadro "Horário de envio": dias da semana, hora de início e de fim, no fuso da organização. Fora do horário a mensagem espera e sai na próxima abertura. Sem nada ligado, tudo continua como antes.
+
+- **Instagram no contato único e no follow-up** Mesmo @ vira um contato só.
+
+- **Instagram no Inbox** Conecte o Instagram em Conexões.
+
+- **Responder o Instagram pelo Inbox** Até 7 dias depois da última mensagem.
+
+- **Consultar propostas, vendas e pagamentos do financeiro no contato** Gerentes e administradores podem consultar o resumo do financeiro no dossiê do contato e abrir o cadastro correspondente para operar no sistema financeiro. A conexão é opcional, restrita à organização configurada e nasce desligada. Falhas de consulta aparecem na tela com opção de tentar novamente. Guia em docs/integrations/financeiro.md.
+
+- **Ver contatos e vendas vinculadas ao Financeiro por campanha Meta** A tela Meta Ads relaciona anúncios à origem dos contatos e mostra vendas e recebimentos agregados do Financeiro por campanha, com cobertura de vínculos explícita. O painel Marketing pode consultar os mesmos totais por uma rota protegida entre servidores. A integração é opcional e permanece desligada sem configuração. Guia em docs/integrations/marketing-financeiro.md.
+
+- **Levar um negócio aberto para outro funil** Negócio que começou no funil errado, ou que muda de natureza no meio do caminho,
+  não tinha por onde sair: quem tentava pela API recebia "clone o negócio",
+  apontando para um clone que não existia.
+
+  Agora a troca existe, por enquanto pela API (`POST /api/v1/leads/[id]/clone`); o
+  botão no quadro vem depois. O negócio é criado no funil de destino com os mesmos
+  dados e a origem é encerrada como perdida. Os dois lados registram a troca na
+  linha do tempo, em vez de aparecer como perda comum.
+
+  Negócio já encerrado não é clonado, e trocar de etapa dentro do mesmo funil
+  continua sendo o arrastar de sempre.
+
+- **Painel Início na primeira tela** Ao entrar no CRM, cada pessoa vê seus avisos, pacientes esperando resposta, agenda
+  e tarefas do dia. Gerentes e administradores veem também configuração pendente
+  (ex.: tipo de atendimento sem responsável), números do dia, gasto com IA e se o
+  sistema está no ar.
+
+- **Equipe distingue colaboradores, gerentes, administradores e prestadores** Prestadores trabalham somente na própria agenda e nos pacientes ligados aos seus atendimentos; gerentes, colaboradores e administradores mantêm o alcance definido pela organização.
+
+- **Um agente pode revisar o trabalho de outro, e o follow-up confere as regras obrigatórias antes de cada envio** Agora é possível ligar a **supervisão**: depois que um agente termina um
+  atendimento, outro agente revisa o que foi feito, compara com as políticas do
+  prompt dele e registra o resultado como executado, recomendado ou bloqueado.
+
+  A revisão nunca fala com o cliente, não confirma pagamento, não cria
+  agendamento, não marca falta e não classifica perda. O máximo que faz sozinha é
+  mudar a etapa de um negócio, e só nas transições que você autorizar; o resto vira
+  pendência na Central. Ela nasce **desligada** e ainda não tem tela de
+  configuração.
+
+  O executor de follow-up passou a conferir, antes de cada mensagem, se o contato
+  pediu para parar, se há atendimento humano em curso, se o negócio está numa etapa
+  que interrompe follow-ups e se o contato já respondeu. Se não conseguir conferir,
+  não envia.
+
+- **Tarefa com responsável** O formulário de tarefa ganha o campo "Responsável" (padrão: quem cria), e a lista
+  e o calendário mostram de quem é cada tarefa. O responsável precisa ser alguém
+  ativo da equipe da organização.
+
+### Alterado
+
+- **Com muitos tipos de atendimento, a agenda volta a caber na tela** O seletor de tipo, acima da grade, era uma fileira de botões: um por tipo. Numa
+  clínica com 21 tipos ela ocupava quatro linhas e empurrava a grade da semana
+  para 76% da altura da tela — quem abria a agenda não via a agenda.
+
+  Acima de seis tipos a fileira vira uma lista fechada, que cabe em uma linha. Até
+  seis os botões continuam, com todas as opções à vista.
+
+  Nada muda no que se pode escolher nem em como a grade responde.
+
+- **O botão que cria um lead no painel do Inbox passa a se chamar "Novo Lead"** No painel lateral do Inbox, o botão "Lead" passa a se chamar "Novo Lead". Ele sempre abriu o cadastro de uma negociação nova para o contato, mas o nome curto dava a entender que mostraria o lead que já existe. O lead existente continua sendo editado em "Leads recentes", no mesmo painel, e a ficha da pessoa continua em "Ver contato". Nada muda no que o botão faz. Crédito: @rafaelbatistazz.
+
+- **A IA volta 5 minutos depois de alguém responder pelo celular, não 60** Quando alguém responde o cliente pelo WhatsApp do aparelho, a IA para naquela
+  conversa. Esse silêncio durava 60 minutos e agora dura 5.
+
+  Onde responder pelo celular é a regra, e não a exceção, 60 minutos desligava o
+  agente: medido numa clínica, as 13 conversas do dia estavam silenciadas ao mesmo
+  tempo, e cada mensagem nova renovava o prazo antes de ele vencer.
+
+  Quem for atender demorado deve usar o handoff formal (botão "assumir"), que não
+  tem prazo. Essa parte não mudou.
+
+- **Na tela de Início, só o que espera alguém ganha cor de atenção** O total de cada bloco tinha sempre a mesma cor: "7" avisos abertos pesava o
+  mesmo que "Tudo em dia".
+
+  Agora ficam em âmbar os totais que contam coisas esperando alguém: avisos da
+  Central, pacientes sem resposta e configuração pendente. Agenda do dia e tarefas
+  não, porque ali um número alto é o dia dando certo.
+
+### Corrigido
+
+- **A janela de perder mostra os motivos que você cadastrou no funil** Quem cadastrava os próprios motivos de perda em Funis não os encontrava na hora de marcar um
+  card como perdido: a janela oferecia sempre a lista padrão do produto. O operador escolhia
+  "Outro", digitava o motivo à mão e só descobria no clique se aquele funil aceitava o texto —
+  com erro na cara quando não aceitava.
+
+  Agora a janela lê os motivos do funil do próprio card. Se você cadastrou "Sem orçamento" e
+  "Fora do perfil", são esses dois que aparecem, com as suas palavras; sem nada cadastrado, a
+  lista padrão continua valendo. Nos funis com motivos cadastrados, "Outro" passa a recusar ali na
+  tela o texto que aquele funil não aceita — antes do clique, em vez de depois dele — e a dizer onde
+  se cadastra um motivo novo. Deixar o detalhe em branco continua valendo em qualquer funil: grava
+  "Outro", como sempre.
+
+- **As abas do Inbox não somem mais quando não cabem** As abas que não coubessem na largura da coluna saíam da vista, sem rolagem e sem
+  indício de que havia mais: numa coluna de 299px a aba "Automático" ficava fora,
+  escondendo as conversas atrás dela. Agora elas quebram para uma segunda linha.
+
+- **Compromissos antigos não bloqueiam a nova agenda por serviço** Compromissos criados antes da configuração de tipos de serviço continuam válidos sem impedir a sincronização e as operações da agenda. As novas marcações por serviço preservam as regras de unidade, sala e simultaneidade.
+
+- **Na visão Mês da Agenda, os dias do mês vizinho mostram os compromissos** A visão Mês desenha seis semanas, incluindo os primeiros dias do mês seguinte e os últimos do anterior, mas só buscava os compromissos do mês da tela: o compromisso de 1º de outubro aparecia como um dia vazio na grade de setembro. Agora a busca cobre exatamente o que a grade desenha.
+
+- **Nome de empresa com apóstrofo volta a ser lido corretamente no Mac** Quem desenvolve no macOS via a suíte do kit de instalação falhar ao ler um `.env` antigo cujo valor tinha apóstrofo (`Sant'Ana Odontologia` voltava como `Sant"'"Ana Odontologia`). Era diferença do bash 3.2 que a Apple ainda distribui; numa VPS, com bash 5, a leitura sempre esteve correta. Nada muda para quem já tem o CRM instalado.
+
+- **Arrastar o mesmo card duas vezes seguidas no funil deixa de dar "modificado por outro usuário"** No funil, o primeiro arrastar de um card funcionava, mas arrastar o mesmo card de novo logo em seguida mostrava "Lead foi modificado por outro usuário. Recarregue e tente novamente.", sem ninguém mais usando, e só voltava a funcionar recarregando a página. O próprio movimento registra a mudança de etapa no histórico, e esse registro atualizava o card de novo depois que a tela já tinha guardado a versão anterior. Agora o servidor devolve a versão final do card e a tela a guarda na hora, então, assim que o primeiro movimento é confirmado, dá para mover o mesmo card de novo sem recarregar a página. Crédito: @rafaelbatistazz.
+
+- **A busca de cliente na marcação acha quem veio do WhatsApp** Ao marcar um horário pela agenda, o campo "Buscar cliente" não encontrava ninguém: procurava só
+  no nome cadastrado à mão, e todo contato que chega pelo WhatsApp tem o nome apenas no perfil do
+  WhatsApp. O resultado era a lista vazia para qualquer termo — e sem cliente vinculado o
+  agendamento não gerava lembrete para ninguém.
+
+  Agora a busca procura pelo nome, pelo nome do WhatsApp, pelo e-mail e pelo telefone (também sem
+  o 55 e com ou sem o nono dígito), a mesma busca da tela de Contatos. Na lista, a pessoa aparece
+  com o nome que a tela de Contatos mostra, em vez de uma opção em branco. Contatos mesclados
+  deixaram de ser oferecidos.
+
+- **Segundo número oficial passa a receber mensagens** Ao conectar o canal oficial, o CRM agora informa à Meta o endereço de recebimento
+  daquela conta. Antes, um segundo número em outra organização nunca recebia
+  mensagens. Se a Meta recusar, a conexão fica salva e a tela avisa.
+
+- **O compromisso do Google que atravessa a borda do período volta a aparecer na grade** Compromisso que começa antes do período desenhado e termina dentro dele, como das 23:30 às 00:30, passa a aparecer fatiado no pedaço que cai dentro: na virada da semana, na do mês e em toda meia-noite. Antes ele sumia da grade, e o horário que a tela mostrava livre era recusado na hora de marcar.
+
+  Para quem lê pela API, o bloco do Google vem recortado no período pedido. A grade continua recebendo só identificador, dono e os dois instantes, nunca o conteúdo do evento.
+
+- **O teste do agente não é mais cortado pelo proxy, e o e-mail de acesso aponta para o app** Três coisas que já estavam consertadas na instalação de um cliente, mas não no produto: o botão Testar de um agente era cortado pelo proxy depois de a resposta já ter sido gerada (e paga); o script que configura os e-mails de acesso mandava tudo num pedido só, e num projeto Supabase de plano gratuito o pedido inteiro era recusado — derrubando junto o endereço do app, que é o que faz o link de "esqueci minha senha" funcionar; e o teto de memória do worker agora é uma variável do .env (WORKER_MEM_LIMIT), em vez de exigir editar um arquivo que a próxima atualização desfaz.
+
+- **A tela de Início volta a usar a cor da marca** A tela de Início nasceu com os links em cinza neutro, fora do padrão do resto do
+  produto: em Contatos, Funis e no menu, o que se pode clicar é pintado com a cor
+  da instalação, e ali não era. Quem abria a primeira tela do dia via um painel
+  apagado, sem nada indicando onde clicar.
+
+  Agora "Ver todos" e "Resolver" usam a cor da marca — a mesma que o revendedor
+  troca em `platform_branding`, não um verde escrito no código —, e o "Tudo em dia"
+  usa o verde de sucesso, que é o mesmo dos outros estados positivos do produto.
+
+  Nada muda no comportamento nem na configuração: é a mesma tela, com as cores que
+  ela já deveria ter.
+
+- **Contatos com CPF voltam a ser importados e cadastrados** Importar uma planilha com a coluna CPF fazia quase todas as linhas falharem, e criar ou editar um contato com CPF pela tela dava erro: a proteção do CPF (cifra) que o sistema usava não existia no banco. A atualização cria essa proteção usando a chave de cifra que a instalação já tem, sem nenhum passo manual. Se a proteção ainda assim estiver indisponível, o import grava o contato sem o CPF e avisa linha por linha, e o cadastro unitário explica o motivo em vez de mostrar um erro genérico.
+
+- **O valor de "esfria em (horas)" continua na tela depois de recarregar** O campo por etapa gravava e a tela voltava mostrando "padrão" — indistinguível
+  de "não salvou". O valor ia para o banco e ficava lá, invisível: o Radar já o
+  respeitava, mas ninguém tinha como conferir o que estava configurado.
+
+  Quem grava é o PATCH da etapa; quem repõe a tela depois do recarregamento é
+  outra leitura, com a lista de colunas escrita à mão — e o campo entrou só no
+  primeiro.
+
+  Agora a leitura devolve o valor, e um teste vigia as duas pontas do laço.
+
+- **Mover um card para uma etapa de perda sem motivo deixa de dar erro 500** Mover um card para uma etapa que fecha o negócio como perdido sem informar o
+  motivo respondia "Erro inesperado", e o card não se movia. Acontecia no arrasto,
+  no movimento em lote e no movimento feito pelo assistente.
+
+  O motivo da perda sempre foi exigência do banco; errada estava a tela, que
+  devolvia a recusa como falha de servidor.
+
+  Agora o arrasto devolve o card e pede o motivo pelo menu "Marcar como perdido"; o
+  lote avisa antes de tentar, sem derrubar os outros cards; e o assistente não move
+  o card, avisa na Central que a decisão é de quem está no negócio.
+
+  Nada a fazer na instalação.
+
+- **Dá para excluir um card do funil pelo menu do próprio card, inclusive no celular** Para excluir um card do funil era preciso selecioná-lo e usar a barra de ações em lote. No celular e no tablet isso era impossível: a caixa de seleção e o botão de menu do card só apareciam com o mouse em cima. Agora o menu de ações do card tem "Excluir", com confirmação que diz o nome do card e o que vai junto (o histórico de atividades; o contato e as conversas continuam), e o botão do menu fica visível em telas de toque. A opção aparece para quem já podia mexer no funil. Selecionar vários cards de uma vez continua só no computador: a caixa de seleção do card segue aparecendo apenas com o mouse em cima. Crédito: @rafaelbatistazz.
+
+- **Conectar o Google Agenda deixa escolher qualquer conta do Google, não só a do e-mail de login** Ao conectar o Google Agenda, quem já tinha aberta no navegador a conta com o mesmo e-mail do login no CRM ia direto para ela, sem passar pela escolha de conta. Quem entra no CRM com um e-mail e tem a agenda em outro não conseguia vincular a agenda certa. Agora o CRM pede ao Google o seletor de contas em toda conexão, com a conta do login apenas sugerida — quem desenha essa tela é o Google. A conexão continua sem expirar sozinha. Crédito: @rafaelbatistazz e @webtecnica.
+
+- **"Leads recentes" do Inbox diz o funil, a etapa e o status em português** No painel lateral do Inbox, a seção "Leads recentes" mostrava só título, status e valor. Dois leads de mesmo nome em funis diferentes ficavam idênticos ("open · —"), e o status aparecia em inglês. Agora cada lead mostra o funil e a etapa onde está e o status traduzido (Aberto, Ganho, Perdido). Leads de funil arquivado deixam de aparecer na lista. Arquivar um funil não fecha os leads dele, então eles continuavam na lista. Nenhum dado é alterado. Crédito: @rafaelbatistazz.
+
+- **O CRM reabre na organização em que você estava** Quem pertence a mais de uma organização escolhia uma no seletor do topo e, no login seguinte, era devolvido para outra. A escolha vivia só num cookie, e sair da conta apagava esse cookie; sem ele o sistema reabria na organização mais antiga, ignorando toda troca já feita. Agora a escolha fica guardada na conta e sobrevive ao logout. Quem tem uma organização só não vê diferença.
+
+- **O logo novo aparece na barra lateral logo depois de enviado** Às vezes, depois de enviar o logo em Marca e ver a mensagem "Logo atualizado.", a
+  barra lateral continuava mostrando a marca padrão por até 30 segundos. Acontecia
+  quando outra tela estava carregando no exato momento do envio: ela guardava a
+  marca antiga e as telas seguintes a reaproveitavam.
+
+  Agora a marca é relida do banco depois do envio, e o logo aparece na próxima tela.
+  Nada a fazer na instalação.
+
+- **O nome que você edita no contato passa a aparecer no lugar do nome do WhatsApp** O nome preenchido na ficha agora vem primeiro em todo lugar: Inbox, lista de contatos, notificações, radar, Agenda, agente de IA e lembretes. O nome do perfil do WhatsApp, que às vezes é apelido ou emoji, só aparece quando o contato não tem nome cadastrado. Nada precisa ser refeito.
+
+  Um efeito fica gravado: o card de negócio criado a partir de agora leva esse nome no título. Os cards que já existem mantêm o título que receberam quando nasceram. Crédito: @rafaelbatistazz.
+
+- **PDF escaneado que o cliente envia passa a ser lido** Um PDF sem texto (o comprovante fotografado ou digitalizado) falhava na extração,
+  abria aviso crítico na Central e o agente não via nada. Agora ele vai para a
+  visão, o mesmo caminho da foto; sem visão disponível, o aviso é de atenção e diz
+  "documento", não "imagem".
+
+- **Assistente não promete nova tentativa sem ação programada** Mensagens como "vou tentar de novo em instantes" e "te aviso mais tarde" são
+  bloqueadas quando nenhuma nova ação foi programada. A conferência também reconhece
+  promessas condicionais no singular, como "assim que a equipe conferir".
+
+- **Prontuário encontra contatos pelo nome exibido** A busca do prontuário encontra contatos do CRM que só têm nome de exibição, como alguns vindos do Instagram. Nenhuma configuração adicional é necessária.
+
+- **Promessas de encaminhamento sem execução são bloqueadas com casos desligados** O agente pede reformulação quando promete uma ação humana sem registro comprovado,
+  mesmo com casos humanos desligados. Esse bloqueio não abre caso nem recomenda
+  ferramentas. Com casos ligados, continua exigindo caso registrado. Avisos determinísticos
+  de encaminhamento mantêm seu fluxo. A proteção também reconhece financeiro, recepção
+  e promessas de conferir comprovantes.
+
+- **A tela do QR não fica mais presa em "Preparando o código…"** Ao reconectar um número cuja credencial foi revogada pelo celular, o botão
+  **Gerar novo QR** só aparecia se a sondagem pegasse a sessão num estado de falha.
+  Quando o serviço entrava em laço, esse instante quase nunca era pego e a tela
+  ficava em "Preparando o código…" para sempre, sem saída.
+
+  Agora, passados 30 segundos sem o código aparecer, a tela oferece o novo
+  pareamento de qualquer jeito e explica a causa provável. O relógio só corre
+  enquanto o QR nunca apareceu: depois que ele está na tela, nada é forçado.
+
+  Nada a fazer, vale assim que a atualização sobe.
+
+- **O Radar de risco deixa de mostrar leads de funil arquivado** Depois de arquivar um funil, os leads dele continuavam aparecendo no Radar de risco, e na lista de demandas sem próximo passo, como se precisassem de atenção. Arquivar um funil não fecha os leads, e o radar lia todos os leads abertos da organização. Agora leads de funil arquivado e as demandas ligadas a eles ficam de fora do radar, tanto na tela quanto na consulta que o agente de IA faz. Nenhum dado é alterado: os leads e o histórico continuam guardados no funil arquivado. Um número ainda não acompanha: o contador "Demandas abertas sem próximo passo", na tela de Métricas, continua somando as demandas de funil arquivado — ele sai de outra consulta, e será alinhado em seguida. Até lá as duas telas mostram números diferentes para a mesma coisa, e o do Radar é o que já exclui o funil arquivado. Crédito: @rafaelbatistazz.
+
+- **A supervisão respeita mudanças de autoridade e a revisão do sinal não duplica avisos** A supervisão confere novamente permissões e atendimento humano na transação que move o negócio, preservando a precisão do carimbo da etapa. A recuperação de faltas continua independente das cobranças de sinal. A revisão T60 alcança reservas novas mesmo com histórico longo, impede avisos para reservas encerradas ou contatos anonimizados e respeita avisos já resolvidos pela equipe.
+
+- **Tag em lote no funil mostra as tags que já existem** No funil, ao selecionar vários cards, o menu "Tag…" da barra de ações só oferecia um campo para digitar uma tag nova, sem mostrar as tags que os leads já usam. Agora o menu lista até 10 tags já usadas pelos leads do funil, filtrando pelo que você digita, e clicar aplica a tag a todos os cards selecionados. Digitar uma tag nova continua funcionando. A atualização não muda nada no seu banco: a tela passa a mostrar tags que já existem. Crédito: @rafaelbatistazz.
+
+- **Tags do contato no Inbox sugerem as tags que já existem** No painel lateral do Inbox, o editor de tags do contato não sugeria nada: cada pessoa digitava a tag do zero, e a mesma ideia virava várias tags diferentes ("google", "gogle", "google ads"). Agora ele mostra, como botões "+ tag", as tags que já existem nos contatos mais recentes da organização — até oito por vez —, do mesmo jeito que o editor de tags da conversa já fazia. Clicar aplica a tag, sempre em minúsculas — é a mesma forma com que o editor já gravava o que se digita, então o rótulo do botão diz exatamente o que vai ser gravado. A atualização não mexe em nenhum dado: as tags que já estão gravadas continuam como estão, e o que muda é a sugestão aparecendo na tela. Crédito: @rafaelbatistazz.
+
+- **Áudio do cliente é transcrito no idioma da organização** O pedido de transcrição passa a levar o idioma de `organizations.locale`. Sem ele
+  o provedor adivinhava, e em áudio curto errava: "testando 123 testando" voltava
+  como "3102 reis 3101".
+
 ## [1.30.0] — 2026-09-16
 
 ### Adicionado
@@ -4983,7 +5290,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.30.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.30.0...v2.0.0
 [1.30.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.29.0...v1.30.0
 [1.29.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.28.0...v1.29.0
 [1.28.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.27.3...v1.28.0
