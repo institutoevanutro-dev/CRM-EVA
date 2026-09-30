@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
+import { auditarLeitura } from "@/lib/audit/leitura";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { collectExportData } from "@/lib/lgpd/export-collector";
@@ -109,6 +110,16 @@ export async function GET(
     audit_entries: payload.audit_log_extract.slice(0, SAMPLE_LIMIT),
     consents: payload.consents,
   };
+
+  auditarLeitura({
+    action: "lgpd.request_previewed",
+    actorUserId: authz.user.id,
+    organizationId: orgId,
+    resourceType: "lgpd_request",
+    resourceId: id,
+    requestId,
+    metadata: { contact_id: request.contact_id },
+  });
 
   return ok(
     {

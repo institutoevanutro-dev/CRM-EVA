@@ -5,6 +5,7 @@ import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { validateBearerToken, ensureScope, McpAuthError } from "@/lib/mcp/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
+import { auditarLeitura } from "@/lib/audit/leitura";
 import { condicoesDaBuscaDeContato } from "@/lib/contacts/busca";
 import { authorizeProntuario, createContactSchema, parseBody, crmOperationError, contactForProntuario } from "@/lib/prontuario/contacts";
 
@@ -36,6 +37,11 @@ export async function GET(req: Request): Promise<Response> {
       .or(condicoesDaBuscaDeContato(parsed.data.search).join(","))
       .limit(parsed.data.limit);
     if (error) return fail("internal_error", "Consulta indisponível.", 503, { requestId });
+    auditarLeitura({
+      action: "prontuario.contact_read", actorApiTokenId: auth.apiTokenId,
+      organizationId: auth.organizationId, resourceType: "contact", requestId,
+      metadata: { ids: (data ?? []).map((c) => (c as { id: string }).id) },
+    });
     const response = ok((data ?? []).map(contactForProntuario), { requestId });
     response.headers.set("Cache-Control", "no-store");
     return response;

@@ -57,13 +57,48 @@ describe("auditMcpToolCall", () => {
     expect(e.metadata.success).toBe(false);
   });
 
-  it("redige segredos nos argumentos", async () => {
+  it("guarda só ids, enums, números e booleanos — texto livre vira [redacted]", async () => {
+    // A6: a trilha é imutável e fica anos. Texto da mensagem, telefone, nome e
+    // nota do paciente não podem ficar lá depois de um pedido de exclusão.
     await auditMcpToolCall({
-      ctx, toolName: "crm_get_contact", args: { cpf: "12345678900", query: "joana" },
+      ctx, toolName: "crm_send_message",
+      args: {
+        contact_id: "11111111-1111-4111-8111-111111111111",
+        conversation_ids: ["22222222-2222-4222-8222-222222222222"],
+        campo: "email", limit: 10, only_active: true,
+        cpf: "12345678900", query: "joana", body: "meu exame deu positivo",
+        phone: "+55 11 99999-0000", name: "Joana", notes: null,
+        metadata: { telefone: "11999990000" },
+      },
       durationMs: 3, success: true,
     });
-    const e = auditSpy.mock.calls[0]![0];
-    expect(e.metadata.args.cpf).toBe("[redacted]");
-    expect(e.metadata.args.query).toBe("joana");
+    const args = auditSpy.mock.calls[0]![0].metadata.args;
+    expect(args.contact_id).toBe("11111111-1111-4111-8111-111111111111");
+    expect(args.conversation_ids).toEqual(["22222222-2222-4222-8222-222222222222"]);
+    expect(args.campo).toBe("email");
+    expect(args.limit).toBe(10);
+    expect(args.only_active).toBe(true);
+    for (const k of ["cpf", "query", "body", "phone", "name", "metadata"]) {
+      expect(args[k]).toBe("[redacted]");
+    }
+    expect(args.notes).toBeNull();
+    expect(JSON.stringify(args)).not.toMatch(/joana|positivo|99999|11999990000/i);
+  });
+
+  it("id com texto livre dentro não passa (campo *_id não é salvo-conduto)", async () => {
+    await auditMcpToolCall({
+      ctx, toolName: "crm_get_contact",
+      args: { contact_id: "Joana da Silva 11 99999-0000" },
+      durationMs: 3, success: true,
+    });
+    expect(auditSpy.mock.calls[0]![0].metadata.args.contact_id).toBe("[redacted]");
+  });
+
+  it("result_summary é só contagem", async () => {
+    await auditMcpToolCall({
+      ctx, toolName: "crm_list_contacts", args: {}, durationMs: 3, success: true,
+      resultSummary: "3 contacts",
+    });
+    expect(auditSpy.mock.calls[0]![0].metadata.result_summary).toBe("3 contacts");
   });
 });

@@ -130,3 +130,40 @@ describe("sentryScrubHooks", () => {
     expect(JSON.stringify(crumb)).not.toContain(TOKEN);
   });
 });
+
+// M5 (auditoria 2026-09-29): o scrub não cobria `extra`, `user`, breadcrumb de
+// console nem telefone formatado.
+describe("scrub — o que ainda vazava", () => {
+  it.each([
+    "(11) 98765-4321",
+    "+55 (11) 9 8765-4321",
+    "11 9 8765 4321",
+    "5511987654321",
+    "+5511987654321",
+    "11987654321",
+    "(21) 3456-7890",
+  ])("telefone formatado %s vira [PHONE] inteiro", (tel) => {
+    const out = scrubMessage(`falha ao enviar para ${tel} agora`);
+    expect(out).toBe("falha ao enviar para [PHONE] agora");
+  });
+
+  it("não come UUID nem data", () => {
+    const txt = "lead 12345678-1234-4123-8123-123456789012 em 2026-09-29T10:00:00Z";
+    expect(scrubMessage(txt)).toBe(txt);
+  });
+
+  it("beforeSend apaga extra e user", () => {
+    const ev = sentryScrubHooks.beforeSend({
+      message: "x", extra: { telefone: "11987654321" }, user: { email: "a@b.com", ip_address: "1.2.3.4" },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    expect(ev.extra).toBeUndefined();
+    expect(ev.user).toBeUndefined();
+  });
+
+  it("breadcrumb de console é descartado (console.error carrega dado de paciente)", () => {
+    expect(sentryScrubHooks.beforeBreadcrumb({ category: "console", message: "Joana 11987654321" })).toBeNull();
+    expect(sentryScrubHooks.beforeBreadcrumb({ category: "fetch", message: "GET /x" })).not.toBeNull();
+  });
+});
+
