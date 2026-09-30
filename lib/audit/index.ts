@@ -10,9 +10,12 @@
  */
 import { createHash } from "node:crypto";
 
+import { headers } from "next/headers";
+
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { env } from "@/lib/env";
+import { ipDoClienteParaInet, ipParaInet } from "@/lib/http/ip-do-cliente";
 import type { AuditAction } from "./actions";
 
 export function isServiceRoleConfigured(): boolean {
@@ -31,7 +34,7 @@ export function isServiceRoleConfigured(): boolean {
   return key.length > 0 && !key.startsWith("PLACEHOLDER");
 }
 
-interface AuditEntry {
+export interface AuditEntry {
   action: AuditAction;
   actorUserId?: string | null;
   actorApiTokenId?: string | null;
@@ -90,7 +93,7 @@ export async function audit(entry: AuditEntry): Promise<void> {
       resource_id: entry.resourceId ?? null,
       metadata: { ...entry.metadata, ...supportMetadata },
       request_id: entry.requestId ?? null,
-      actor_ip: entry.ip ?? null,
+      actor_ip: await ipDaEntrada(entry.ip),
       actor_user_agent: entry.userAgent ?? null,
       bypassed_rls: entry.bypassedRls ?? false,
       acting_as_platform_admin: !!supportMetadata.support_session_id || (entry.actingAsPlatformAdmin ?? false),
@@ -100,6 +103,22 @@ export async function audit(entry: AuditEntry): Promise<void> {
     }
   } catch (err) {
     reportAuditFailure(err instanceof Error ? err.message : String(err), entry);
+  }
+}
+
+/**
+ * IP da trilha (achado M3). O chamador que passa `ip` é validado com a mesma
+ * guarda do `inet` — XFF inteiro (`"a, b"`) derrubava o INSERT com `22P02` e a
+ * linha sumia. Quem não passa herda o da requisição corrente; fora de request
+ * (worker, cron sem request scope) `headers()` lança e a linha entra sem IP.
+ * O valor é informativo, não prova de origem — ver `lib/http/ip-do-cliente.ts`.
+ */
+async function ipDaEntrada(ip: string | null | undefined): Promise<string | null> {
+  if (ip) return ipParaInet(ip);
+  try {
+    return ipDoClienteParaInet(await headers());
+  } catch {
+    return null;
   }
 }
 

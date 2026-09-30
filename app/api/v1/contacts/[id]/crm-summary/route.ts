@@ -30,6 +30,7 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
+import { auditarLeitura } from "@/lib/audit/leitura";
 import { camposDoFunil, settingsDoEmbed } from "@/lib/leads/campos-do-funil";
 import { createClient } from "@/lib/supabase/server";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
@@ -146,6 +147,16 @@ export async function GET(
     [k: string]: unknown;
   }>;
   const nomes = await nomesDosAtendentes(linhas.map((a) => a.performed_by_user_id ?? null));
+
+  auditarLeitura({
+    action: "contact.viewed",
+    actorUserId: user.id,
+    organizationId: contactScope.organization_id,
+    resourceType: "contact",
+    resourceId: contactId,
+    requestId,
+    metadata: { recurso: "crm_summary" },
+  });
 
   return ok(
     {

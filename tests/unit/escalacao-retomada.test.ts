@@ -14,6 +14,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
+import { audit } from "@/lib/audit";
 import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
 import type { Actor } from "@/lib/api/handlers/types";
 
@@ -351,6 +352,19 @@ describe("devolver o atendimento ao agente", () => {
     // órfã o agendamento para sempre.
     expect(falhou).toMatchObject({ ok: false, erro: "resume_signal_failed" });
     expect(res.ok).toBe(true);
+  });
+
+  it("sinal de retomada que falha DEPOIS da devolução ainda audita (B6)", async () => {
+    // A conversa já voltou ao agente quando o emit_event falha: a mutação
+    // aconteceu e precisa de linha na trilha, mesmo com a resposta 500.
+    vi.mocked(audit).mockClear();
+    await retomar(cenarioComAtendimentoHumano({ erroDoEmitEvent: { message: "boom" } }), novaCaptura());
+    expect(vi.mocked(audit)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "ai.reactivated_by_agent",
+        metadata: expect.objectContaining({ sinal_de_retomada: "falhou" }),
+      }),
+    );
   });
 
   it("conversa de outra organização não é encontrada", async () => {

@@ -155,14 +155,15 @@ jobs:
     #
     #  - `a60cae2d` (main, PR #220) desligou a telemetria NO AMBIENTE DO CI:
     #    `SENTRY_DSN: "off"` no build e em todas as partes (e no `perf.yml`). Ver o
-    #    comentário do passo "Build de produção" abaixo — a armadilha é que vazio NÃO
-    #    desliga, seleciona o Sentry da comunidade.
+    #    comentário do passo "Build de produção" abaixo. (Desde 2026-09-29 não há
+    #    mais Sentry da comunidade: vazio também desliga.)
     #  - `77b4a486` (este PR) consertou O PRODUTO: o SDK do browser mandava duas SESSÕES
     #    de release health por NAVEGAÇÃO para o DSN da comunidade — de toda instalação
     #    self-host, não só do CI. `browserSessionIntegration` é default do SDK e
     #    `integrations: [x]` SOMA aos defaults, então a política "no Sentry da comunidade,
-    #    só erro" estava declarada e não estava em vigor. Detalhe em `lib/sentry/dsn.ts`;
-    #    o gate é `tests/unit/sentry-comunidade-so-erro.test.ts`.
+    #    só erro" estava declarada e não estava em vigor. (Histórico: a política saiu
+    #    junto com o DSN fixo em 2026-09-29; o gate hoje é
+    #    `tests/unit/sentry-padrao-desligado.test.ts`.)
     #
     # O ingest respondia `429` com `x-sentry-rate-limits: 60::organization:suspended` —
     # lista de categorias vazia, isto é, TODAS: a organização estava suspensa por cota, e
@@ -835,16 +836,10 @@ jobs:
         run: pnpm e2e:build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
-          # `off`, NÃO vazio. Vazio seleciona o Sentry DA COMUNIDADE — está
-          # escrito em lib/sentry/dsn.ts:8-10, e é o default de propósito num
-          # produto self-host. Só "off" desliga.
-          #
-          # Sem isto, o SDK do browser tuneliza por /monitoring (next.config.ts:71)
-          # para o Sentry real do projeto, que devolve 429 por cota. Os 429 caem
-          # no console, e `olhar-telas-do-epico` — a ÚNICA spec que afirma "não
-          # cospe erro no console" — reprova nas 7 telas de uma vez.
-          # Medido em 2026-08-10 capturando a URL: /monitoring?o=4509908078559232,
-          # que é o org id do DEFAULT_SENTRY_DSN (lib/sentry/dsn.ts:17).
+          # Explícito por clareza: desde 2026-09-29 vazio também desliga
+          # (lib/sentry/dsn.ts — não há mais DSN fixo no código). Com Sentry
+          # ligado, o SDK do browser tuneliza por /monitoring e erro de ingest
+          # cai no console, reprovando `olhar-telas-do-epico`.
           SENTRY_DSN: "off"
 
       - name: Instalar o browser

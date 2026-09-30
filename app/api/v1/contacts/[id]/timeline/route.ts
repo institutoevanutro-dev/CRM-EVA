@@ -21,6 +21,7 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
+import { auditarLeitura } from "@/lib/audit/leitura";
 import { loadAuthUser } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
@@ -70,7 +71,7 @@ export async function GET(
   // Verify contact accessible (RLS will filter); 404 if not.
   const { data: contactRow, error: cErr } = await supabase
     .from("contacts")
-    .select("id")
+    .select("id, organization_id")
     .eq("id", contactId)
     .maybeSingle();
   if (cErr) return fail("internal_error", cErr.message, 500, { requestId });
@@ -152,6 +153,15 @@ export async function GET(
       ? encodeCursor({ performed_at: last.performed_at, id: last.id })
       : null;
 
+  auditarLeitura({
+    action: "contact.viewed",
+    actorUserId: user.id,
+    organizationId: (contactRow as { organization_id: string }).organization_id,
+    resourceType: "contact",
+    resourceId: contactId,
+    requestId,
+    metadata: { recurso: "timeline", itens: page.length },
+  });
   return ok(page, {
     requestId,
     meta: { cursor: nextCursor, has_more: hasMore },

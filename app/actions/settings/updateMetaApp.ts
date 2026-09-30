@@ -139,7 +139,6 @@ async function gravar(
     // trilha ficaria sem a linha — sem sintoma em tela nenhuma.
     resourceId: null,
     requestId: cabecalhos.get("x-request-id") ?? undefined,
-    ip: cabecalhos.get("x-forwarded-for") ?? undefined,
     userAgent: cabecalhos.get("user-agent") ?? undefined,
     actingAsPlatformAdmin: true,
     // O QUE mudou, jamais o valor — nem o verify token recém-gerado.

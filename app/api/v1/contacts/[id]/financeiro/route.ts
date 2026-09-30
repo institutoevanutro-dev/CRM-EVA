@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { ok, fail } from "@/lib/api/wrappers";
+import { auditarLeitura } from "@/lib/audit/leitura";
 import { configFinanceiro, consultaFinanceiro } from "@/lib/integrations/financeiro/cliente";
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 export const dynamic = "force-dynamic";
@@ -35,7 +36,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (!(await checkRateLimit(`financeiro-summary:${auth.org.orgId}`, 120, 60)).allowed)
     return fail("rate_limited", "Tente novamente em um minuto.", 429, { requestId });
   try {
-    return response({ configurada: true, ...(await consultaFinanceiro(config, id.data)) });
+    const contactId = id.data;
+    const financeiro = await consultaFinanceiro(config, contactId);
+    auditarLeitura({
+      action: "contact.viewed",
+      actorUserId: auth.user.id,
+      organizationId: auth.org.orgId,
+      resourceType: "contact",
+      resourceId: contactId,
+      requestId,
+      metadata: { recurso: "financeiro" },
+    });
+    return response({ configurada: true, ...financeiro });
   } catch {
     return fail(
       "integration_unavailable",
