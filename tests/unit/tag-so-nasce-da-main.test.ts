@@ -102,7 +102,7 @@ describe("a tag nasce no CI, e nunca do GITHUB_TOKEN", () => {
     // O ramo que RECUSA precisa existir: zero removidos não é corte.
     expect(t).toMatch(/removidos[^\n]*-eq 0/);
     // E a condição que a guarda antiga NÃO tinha: só o App da release corta.
-    expect(t).toMatch(/deskcomm-release\[bot\]/);
+    expect(t).toMatch(/RELEASE_BOT: \$\{\{ steps\.token\.outputs\.app-slug \}\}\[bot\]/);
   });
 
   it("a tag só é criada em push na main, nunca num dispatch de branch qualquer", () => {
