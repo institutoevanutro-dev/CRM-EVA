@@ -75,7 +75,7 @@ export function fail(
   // mensagem do Postgres (tabela, constraint, valor da chave) ia para a tela.
   // Em produção o 500 sai genérico; a mensagem real fica no log, amarrada pelo
   // X-Request-Id que a resposta também leva. 502/503 ficam de fora: ali a
-  // mensagem costuma ser a instrução escrita para quem opera ("WAHA não
+  // mensagem costuma ser a instrução escrita para quem opera ("canal não
   // configurado"), não um erro de banco.
   if (status === 500 && process.env.NODE_ENV === "production") {
     logger.error("api.internal_error", { code, message, requestId, details: opts.details });
