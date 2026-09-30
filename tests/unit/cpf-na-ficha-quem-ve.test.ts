@@ -61,7 +61,9 @@ function banco(papel: string, comCpf = true) {
               organization_id: ORG,
               name: "Paciente",
               source: "manual",
-              cpf_hash: comCpf ? "a".repeat(64) : null,
+              // A linha traz a cifra (o hash não é legível pela sessão — 0289);
+              // o handler a troca por `cpf_available` antes de responder.
+              cpf_encrypted: comCpf ? "\\xc30d" : null,
             },
             error: null,
           },

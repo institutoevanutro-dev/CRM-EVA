@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import type { ApiErrorCode } from "@/lib/api/errors";
+import { logger } from "@/lib/logger";
 
 // -----------------------------------------------------------------------------
 // Tipos públicos
@@ -69,6 +70,18 @@ export function fail(
   status: number,
   opts: FailOptions = {},
 ): NextResponse<ApiError> {
+  const requestId = opts.requestId ?? randomUUID();
+  // M2: ~400 rotas fazem `fail("internal_error", err.message, 500)` e a
+  // mensagem do Postgres (tabela, constraint, valor da chave) ia para a tela.
+  // Em produção o 500 sai genérico; a mensagem real fica no log, amarrada pelo
+  // X-Request-Id que a resposta também leva. 502/503 ficam de fora: ali a
+  // mensagem costuma ser a instrução escrita para quem opera ("canal não
+  // configurado"), não um erro de banco.
+  if (status === 500 && process.env.NODE_ENV === "production") {
+    logger.error("api.internal_error", { code, message, requestId, details: opts.details });
+    message = "Erro interno. Tente de novo.";
+    opts = { ...opts, details: undefined };
+  }
   const body: ApiError = {
     error: {
       code,
@@ -78,7 +91,7 @@ export function fail(
   };
 
   const res = NextResponse.json(body, { status, headers: opts.headers });
-  res.headers.set("X-Request-Id", opts.requestId ?? randomUUID());
+  res.headers.set("X-Request-Id", requestId);
   return res;
 }
 

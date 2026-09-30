@@ -12,6 +12,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
+import { ID, INSTANTE, lerCursorJson } from "@/lib/api/filtro-postgrest";
 
 export const dynamic = "force-dynamic";
 
@@ -67,11 +68,7 @@ function encodeCursor(payload: CursorPayload): string {
 }
 
 function decodeCursor(cursor: string): CursorPayload | null {
-  try {
-    return JSON.parse(Buffer.from(cursor, "base64url").toString("utf-8")) as CursorPayload;
-  } catch {
-    return null;
-  }
+  return lerCursorJson(cursor, { due_at: INSTANTE.nullable(), received_at: INSTANTE, id: ID });
 }
 
 // ---------------------------------------------------------------------------

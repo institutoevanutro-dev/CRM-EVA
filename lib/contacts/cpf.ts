@@ -1,15 +1,15 @@
 /**
  * CPF normalization, hashing and at-rest encryption.
  *
- * O CPF de um contato é um PAR: `cpf_hash` (sha256 hex dos 11 dígitos — busca
- * exata e dedupe sem expor o número) e `cpf_encrypted` (bytea, pgp_sym AES-256
- * pela RPC `encrypt_cpf`, migration 0274). A constraint
+ * O CPF de um contato é um PAR: `cpf_hash` (HMAC-SHA256 hex dos 11 dígitos com a
+ * chave da instalação, pela RPC `cpf_indice`, migration 0289 — busca exata e
+ * dedupe sem expor o número; um sha256 sem chave se revertia inteiro numa GPU)
+ * e `cpf_encrypted` (bytea, pgp_sym AES-256 pela RPC `encrypt_cpf`, migration 0274). A constraint
  * `contacts_cpf_consistency` exige os dois nulos ou os dois preenchidos — por
  * isso quem grava CPF usa `parDoCpf()`, que devolve o par inteiro ou nada.
  * Gravar o hash sozinho foi o que derrubou 483 de 500 linhas de um import em
  * produção (22/09/2026).
  */
-import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
@@ -19,10 +19,18 @@ export function normalizeCpf(raw: string): string {
 }
 
 /**
- * Stable sha256 hex of normalized CPF for fuzzy/exact search via `cpf_hash`.
+ * Índice estável do CPF (HMAC com a chave da instalação) para busca exata em
+ * `cpf_hash`. Só a service role calcula: sem a chave não há como reverter nem
+ * forjar o índice, e é isso que faz a coluna não valer um CPF. `null` quando a
+ * RPC não responde (função ausente, chave ausente).
  */
-export function hashCpf(raw: string): string {
-  return createHash("sha256").update(normalizeCpf(raw)).digest("hex");
+export async function indiceDoCpf(admin: SupabaseClient, raw: string): Promise<string | null> {
+  const { data, error } = await admin.rpc("cpf_indice", { p_plaintext: normalizeCpf(raw) });
+  if (error || typeof data !== "string" || data === "") {
+    logger.warn("[contacts.cpf] cpf_indice falhou", { error: error?.message ?? "resposta vazia" });
+    return null;
+  }
+  return data;
 }
 
 /** As duas colunas que a constraint amarra — sempre juntas. */
@@ -50,7 +58,9 @@ export async function parDoCpf(admin: SupabaseClient, raw: string): Promise<ParD
     });
     return null;
   }
-  return { cpf_hash: hashCpf(digitos), cpf_encrypted: data };
+  const indice = await indiceDoCpf(admin, digitos);
+  if (!indice) return null;
+  return { cpf_hash: indice, cpf_encrypted: data };
 }
 
 /** Texto do aviso/erro quando a cifra está fora do ar (vai pelo dicionário). */

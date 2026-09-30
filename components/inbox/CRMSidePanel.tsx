@@ -6,7 +6,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import type { Locale } from "date-fns";
 import Link from "next/link";
 import { useT } from "@/hooks/i18n/useT";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Tag, Receipt, Users, ArrowRight } from "@/lib/ui/icons";
 import { apiClient } from "@/lib/api/client";
+import { marcarReleitura } from "@/lib/audit/releitura";
 import { toast } from "sonner";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { activityLabel, actorLabel, actorShape } from "@/lib/leads/activity-vocabulary";
@@ -474,6 +475,9 @@ export function CRMSidePanel({ conversation }: Props) {
   const [fatos, setFatos] = useState<Array<{ id: string; headline: string; body: string }>>([]);
   const [historico, setHistorico] = useState<Array<{ id: string; desfecho: string; fechada_em: string }>>([]);
   const [summaryContactId, setSummaryContactId] = useState<string | null>(null);
+  // Ref, e não o estado acima: o efeito recarrega a cada troca de comando, e a
+  // recarga do MESMO contato não é "abrir a ficha" (lib/audit/releitura.ts).
+  const resumoCarregadoDe = useRef<string | null>(null);
   /**
    * O TERCEIRO ESTADO. Antes existiam dois — carregando e "tem N itens" — e a
    * falha era traduzida para lista vazia, virando "Sem leads.": uma afirmação
@@ -523,8 +527,11 @@ export function CRMSidePanel({ conversation }: Props) {
             fatos?: Array<{ id: string; headline: string; body: string }>;
             historico?: Array<{ id: string; desfecho: string; fechada_em: string }>;
           };
-        }>(`/api/v1/contacts/${contactId}/crm-summary`);
+        }>(
+          `/api/v1/contacts/${contactId}/crm-summary?${marcarReleitura(new URLSearchParams(), resumoCarregadoDe.current === contactId)}`,
+        );
         if (cancelled) return;
+        resumoCarregadoDe.current = contactId;
         setSummaryContactId(contactId);
         setLeads(r.data.leads);
         setOrders(r.data.orders);

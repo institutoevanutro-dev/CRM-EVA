@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { createHash, randomUUID } from "node:crypto";
+import { escaparTermoDoOr, ID, INSTANTE, lerCursorJson } from "@/lib/api/filtro-postgrest";
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -35,11 +36,7 @@ function encodeCursor(payload: CursorPayload): string {
 }
 
 function decodeCursor(cursor: string): CursorPayload | null {
-  try {
-    return JSON.parse(Buffer.from(cursor, "base64url").toString("utf-8")) as CursorPayload;
-  } catch {
-    return null;
-  }
+  return lerCursorJson(cursor, { created_at: INSTANTE, id: ID });
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +94,8 @@ export async function GET(req: NextRequest) {
   }
 
   if (q) {
-    query = query.or(`display_name.ilike.%${q}%,slug::text.ilike.%${q}%,cnpj.ilike.%${q}%`);
+    const termo = escaparTermoDoOr(q);
+    if (termo) query = query.or(`display_name.ilike.%${termo}%,slug::text.ilike.%${termo}%,cnpj.ilike.%${termo}%`);
   }
 
   if (cursorPayload) {

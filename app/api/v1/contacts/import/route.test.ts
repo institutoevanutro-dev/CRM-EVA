@@ -195,7 +195,10 @@ describe("POST /api/v1/contacts/import — CPF é par (hash + cifra) ou nada", (
   const CPF = "52998224725";
 
   function cifra(resposta: { data: unknown; error: { message: string } | null }) {
-    const rpc = vi.fn().mockResolvedValue(resposta);
+    // `cpf_indice` (HMAC — 0289) responde 64 hex; `encrypt_cpf` responde o que o caso pediu.
+    const rpc = vi.fn(async (fn: string) =>
+      fn === "cpf_indice" && !resposta.error ? { data: "f".repeat(64), error: null } : resposta,
+    );
     vi.mocked(createAdminClient).mockReturnValue({ rpc } as never);
     return rpc;
   }
@@ -225,7 +228,8 @@ describe("POST /api/v1/contacts/import — CPF é par (hash + cifra) ou nada", (
     const resumo = await importar([`Ana,${PHONE},529.982.247-25`], "nome,telefone,cpf");
 
     expect(resumo).toMatchObject({ imported: 1, errors: [], avisos: [] });
-    expect(rpc).toHaveBeenCalledExactlyOnceWith("encrypt_cpf", { p_plaintext: CPF });
+    expect(rpc).toHaveBeenCalledWith("encrypt_cpf", { p_plaintext: CPF });
+    expect(rpc).toHaveBeenCalledWith("cpf_indice", { p_plaintext: CPF });
     expect(db.tentativas[0]).toMatchObject({
       cpf_hash: expect.stringMatching(/^[0-9a-f]{64}$/),
       cpf_encrypted: "\\xc30d0407",

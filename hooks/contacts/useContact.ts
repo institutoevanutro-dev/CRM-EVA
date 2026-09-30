@@ -1,6 +1,7 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
+import { marcarReleitura } from "@/lib/audit/releitura";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Contact } from "@/lib/types/contacts";
 
@@ -10,12 +11,15 @@ interface ContactResponse {
 }
 
 export function useContact(id: string) {
+  const qc = useQueryClient();
   return useQuery({
     queryKey: ["contact", id],
     enabled: !!id,
     queryFn: async () => {
       try {
-        return await apiClient.get<ContactResponse>(`/api/v1/contacts/${id}`);
+        const qs = marcarReleitura(new URLSearchParams(), qc.getQueryData(["contact", id]) !== undefined);
+        const sufixo = qs.size > 0 ? `?${qs.toString()}` : "";
+        return await apiClient.get<ContactResponse>(`/api/v1/contacts/${id}${sufixo}`);
       } catch (err) {
         showApiError(err);
         throw err;

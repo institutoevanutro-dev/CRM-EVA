@@ -11,6 +11,8 @@ import { type NextRequest } from "next/server";
 
 import { ApiError } from "@/lib/api/types";
 import { ok, fail, noContent } from "@/lib/api/wrappers";
+import { auditarLeitura } from "@/lib/audit/leitura";
+import { ehAberturaDeLeitura } from "@/lib/audit/releitura";
 import { requireRole } from "@/lib/auth/require-role";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -57,6 +59,15 @@ export async function GET(
       },
       { contactId: id, decryptPurpose },
     );
+    if (ehAberturaDeLeitura(new URL(req.url))) auditarLeitura({
+      action: "contact.viewed",
+      actorUserId: user.id,
+      organizationId: activeOrg.orgId,
+      resourceType: "contact",
+      resourceId: result.id,
+      requestId,
+      metadata: { recurso: "ficha" },
+    });
     return ok(result, { requestId });
   } catch (err) {
     if (err instanceof ApiError) {
@@ -127,7 +138,10 @@ export async function DELETE(
   const requestId = randomUUID();
   const { id } = await ctx.params;
 
-  const authz = await requireRole("agent", { requestId, resource: "contacts" });
+  // Apagar a ficha leva junto conversas e mensagens (hard delete, contra a
+  // doutrina "anonimizar antes de apagar"). Piso `manager`, o mesmo que a RLS
+  // `contacts_delete` cobra desde a 0289 — a rota e o banco dizem a mesma coisa.
+  const authz = await requireRole("manager", { requestId, resource: "contacts" });
   if (!authz.ok) return authz.response;
   const user = authz.user;
   const activeOrg = authz.org;
