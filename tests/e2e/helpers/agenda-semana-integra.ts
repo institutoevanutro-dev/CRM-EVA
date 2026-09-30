@@ -176,20 +176,28 @@ export async function diasDesenhados(page: Page): Promise<string[]> {
  * para fechar.
  */
 /**
- * Espera a consulta de horários do painel responder — o momento em que algum dia
- * acende — SEM reprovar quando o mês em tela não tem dia nenhum para acender.
+ * Espera a consulta de horários do painel RESPONDER — sem exigir que o mês em
+ * tela tenha dia para acender.
  *
- * Os dois casos são indistinguíveis pela tela: "a consulta ainda não voltou" e
- * "voltou, e este mês já não tem dia" desenham o mesmo mini-calendário apagado.
- * O que os separa é o prazo. Esgotado, quem chama pula o mês e afirma lá — e é
- * essa afirmação, não esta espera, que acusa "o seed não deixou jornada".
+ * O sinal é um dia disponível OU o botão "Próximo mês" habilitado: o
+ * `PainelDeMarcacao` só o liga quando a consulta cobriu algum dia DEPOIS do mês
+ * visível (`temDiaConsultadoDepois` deriva das chaves de `horariosPorDia`, que é
+ * o que a consulta de fato devolveu). No último dia do mês, à tarde, o primeiro
+ * nunca acende e o segundo é o que diz "a consulta voltou; o que há é no mês que
+ * vem" — e aí quem decide é o salto de mês de quem chamou. Só quando NENHUM dos
+ * dois aparece a espera reprova, e aí a frase está certa: não há jornada.
+ *
+ * (Uma versão anterior esperava o dia e engolia o prazo. O sinal do botão veio
+ * do PR #65, que o encontrou em paralelo e cobria só `escolherDiaDesenhado`.)
  */
 async function esperarAlgumDiaAceso(page: Page): Promise<void> {
-  await page
-    .locator('[data-testid^="dia-"][data-disponivel="true"]')
-    .first()
-    .waitFor({ state: "visible", timeout: 20_000 })
-    .catch(() => undefined);
+  await expect(
+    page
+      .locator('[data-testid^="dia-"][data-disponivel="true"]')
+      .or(page.locator('[data-testid="mes-seguinte"]:enabled'))
+      .first(),
+    "nenhum dia disponível no painel — o seed da agenda não deixou jornada publicada",
+  ).toBeVisible({ timeout: 20_000 });
 }
 
 export async function escolherDiaDesenhado(page: Page, dias: readonly string[]): Promise<string> {
@@ -210,7 +218,8 @@ export async function escolherDiaDesenhado(page: Page, dias: readonly string[]):
   // pular o mês, e reprovava a `main` inteira — a mesma classe de vermelho-
   // por-calendário que o salto de mês abaixo existe para fechar, só que um
   // degrau antes dele. Por isso a espera é tolerante: esgotado o prazo sem dia
-  // aceso, o salto de mês acontece do mesmo jeito, e é ele quem decide.
+  // aceso no mês em tela, o sinal é o botão de mês seguinte habilitado, e o
+  // salto de mês abaixo é quem decide.
   await esperarAlgumDiaAceso(page);
 
   let candidatos = await disponiveis();
