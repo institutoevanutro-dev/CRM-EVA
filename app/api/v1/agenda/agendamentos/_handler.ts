@@ -587,12 +587,21 @@ export function podeMarcarForaDaGrade(actor: Actor): boolean {
  *   OCUPAÇÃO acompanha a janela estreita. Dois furos, anteriores ao encaixe,
  *   foram medidos em 2026-09-15 chamando este handler com a coleta de verdade
  *   sobre o banco em memória de `tests/unit/pessoa-marca-fora-da-grade.test.ts`
- *   (sonda não versionada). Um segue aberto:
- *   · **buffer contra vizinho** (issue #876) — `coletaOQueOcupa` só traz o que
- *     cruza `[inicio, fim]`. Com `buffer_before_minutes = 30` e um compromisso
- *     que termina 12:45Z, o pedido de 13:00Z não vê o vizinho e é ACEITO — e o
- *     GET do dia não oferece 13:00Z (medição do revisor do lote 8). Para valer,
- *     a janela de coleta teria de ser alargada por `buffer_before`/`buffer_after`.
+ *   (sonda não versionada). Os três estão fechados:
+ *   · **buffer contra vizinho** (DeskcommCRM #876, PR #1027) — `coletaOQueOcupa`
+ *     só trazia o que cruza `[inicio, fim]`, e com `buffer_before_minutes = 30` o
+ *     pedido de 13:00Z não via o vizinho que termina 12:45Z. `horariosLivresDaOrg`
+ *     agora alarga a coleta por `buffer_before`/`buffer_after`. Vigiado pelos
+ *     casos de intervalo antes do atendimento no mesmo arquivo de teste.
+ *
+ *   · **remarcar contando a si mesmo** (DeskcommCRM #1084, PR #1140) — o efeito
+ *     colateral do alargamento acima: a coleta passou a ver também o PRÓPRIO
+ *     compromisso de saída. Com 30 min de intervalo antes, a IA remarcando
+ *     13:00Z → 14:00Z levava 422 `agenda_horario_indisponivel`; sem intervalo, o
+ *     mesmo movimento era aceito. A grade agora repassa `ignorarAgendamentoId` a
+ *     `horariosLivresDaOrg`. Vigiado pelos casos de remarcação com intervalo no
+ *     mesmo arquivo de teste — inclusive um CONTROLE de que o intervalo segue
+ *     valendo contra OUTRO compromisso.
  *
  *   O outro, a EXCEÇÃO DE DATA à noite, foi fechado (issue #878, PR #882): era colhida
  *   pela data UTC de `inicio`/`fim`, e em São Paulo 21:00 do dia 07 é 00:00Z do
@@ -622,9 +631,15 @@ async function exigeHorarioLivre(
     fim: Date;
     unitId?: string | null;
     /**
-     * O compromisso sendo remarcado, que não conta como ocupação de si mesmo.
-     * Só o encaixe o usa. A grade não o repassa a `horariosLivresDaOrg`, então
-     * ali o compromisso segue ocupando o horário de onde sai.
+     * O compromisso sendo remarcado: ocupa o horário de ONDE SAI, não o de DESTINO.
+     *
+     * Vale para os DOIS ramos. A pergunta é a mesma nos dois — "o que já está
+     * tomado?" — e a resposta tem de excluir este compromisso. No encaixe quem
+     * exclui é `exigeSemSobreposicao`; na grade o id vai a `horariosLivresDaOrg`,
+     * que o repassa à coleta. Sem isso, com intervalo configurado, o próprio
+     * compromisso cruzava a janela alargada e a IA remarcando para logo depois do
+     * próprio fim levava 422 `agenda_horario_indisponivel` por causa de si mesma
+     * (DeskcommCRM #1084).
      */
     ignorarAgendamentoId?: string;
   },
@@ -636,6 +651,7 @@ async function exigeHorarioLivre(
     ate: args.fim,
     agora: new Date(),
     unitId: args.unitId ?? null,
+    ignorarAgendamentoId: args.ignorarAgendamentoId,
   });
 
   if (!consulta.ok) {
