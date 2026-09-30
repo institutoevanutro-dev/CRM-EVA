@@ -53,12 +53,17 @@ export interface AuditEntry {
 
 export async function audit(entry: AuditEntry): Promise<void> {
   try {
-    // Prefer service-role admin (bypasses RLS, works for unauthenticated audit
-    // events like login_failed). Fall back to user-scoped client when service
-    // role is missing in dev — RLS policy `audit_log_insert_tenant_member` has
-    // null qual so authenticated users can insert their own audit rows.
-    const client = isServiceRoleConfigured() ? createAdminClient() : await createClient();
+    // Só a service role grava auditoria. Desde a 0289 `authenticated` não tem
+    // INSERT em `api_audit_log` (a policy `audit_log_insert_tenant_member`
+    // deixava qualquer membro gravar linha com ator, ação e data livres), então
+    // o antigo fallback para o client do usuário não teria como funcionar: sem
+    // service key a escrita falha e `reportAuditFailure` faz barulho.
+    const client = createAdminClient();
     let supportMetadata: Record<string, unknown> = {};
+    // Quem era o ator NAQUELE momento. `actor_user_id` perdeu a FK (0289): apagar
+    // o usuário já não apaga o "quem" da trilha, e este snapshot guarda o nome
+    // e o e-mail que o uuid deixará de resolver.
+    let actorSnapshot: Record<string, unknown> = {};
     try {
       if (entry.actorUserId && entry.actorAuthSessionId && entry.organizationId && !entry.actorApiTokenId) {
         // Callback SameSite=Strict não traz cookie. O state já autenticou ator/sessão;
@@ -75,6 +80,12 @@ export async function audit(entry: AuditEntry): Promise<void> {
         const db = await createClient();
         const { data: { user } } = await db.auth.getUser();
         if (user?.id === entry.actorUserId) {
+          actorSnapshot = {
+            actor_snapshot: {
+              email: user.email ?? null,
+              full_name: (user.user_metadata?.full_name as string | undefined) ?? null,
+            },
+          };
           const { readSupportContext } = await import("@/lib/impersonate/support");
           const support = await readSupportContext(db);
           if (support && support.organization_id === entry.organizationId) supportMetadata = {
@@ -91,7 +102,7 @@ export async function audit(entry: AuditEntry): Promise<void> {
       organization_id: entry.organizationId ?? null,
       resource_type: entry.resourceType ?? null,
       resource_id: entry.resourceId ?? null,
-      metadata: { ...entry.metadata, ...supportMetadata },
+      metadata: { ...entry.metadata, ...actorSnapshot, ...supportMetadata },
       request_id: entry.requestId ?? null,
       actor_ip: await ipDaEntrada(entry.ip),
       actor_user_agent: entry.userAgent ?? null,

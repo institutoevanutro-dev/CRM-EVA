@@ -1062,7 +1062,11 @@ describe("as três colunas são do sistema", () => {
         ["admin", ADMIN_A],
       ] as const) {
         const r = await tentarComoUsuario(uid, sql, [contato, forjado]);
-        expect(r, `${quem} gravou ${coluna}`).toBe("42501:colunas_de_cliente_sao_do_sistema");
+        // Desde a 0289 a policy `contacts_update` pede `agent`: o viewer nem
+        // alcança a linha (UPDATE 0, sem trigger). Para os demais, quem recusa
+        // continua sendo o BEFORE UPDATE.
+        if (quem === "viewer") expect(r, `${quem} gravou ${coluna}`).toBe("passou");
+        else expect(r, `${quem} gravou ${coluna}`).toBe("42501:colunas_de_cliente_sao_do_sistema");
       }
     }
 

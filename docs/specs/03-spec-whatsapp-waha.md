@@ -550,14 +550,13 @@ create index idx_webhook_events_external_id
   on public.webhook_events_log (organization_id, external_id)
   where external_id is not null;
 
--- RLS: super-admin lê tudo; tenant lê apenas o seu (via app, com filtro manual)
+-- RLS: só a service role lê (migration 0289). A tabela guarda o corpo cru do
+-- webhook — o WhatsApp dos últimos 7 dias — e `webhook_path_token` guarda o
+-- sha256 hex do token, nunca o token. A policy `webhook_events_log_tenant_read`
+-- que existia aqui deixava qualquer membro ler tudo pela REST; foi dropada e
+-- `anon`/`authenticated` perderam o SELECT.
 alter table public.webhook_events_log enable row level security;
-create policy "webhook_events_log_tenant_read"
-  on public.webhook_events_log for select
-  using (
-    organization_id is not null
-    and organization_id in (select organization_id from public.fn_user_org_ids())
-  );
+revoke select on public.webhook_events_log from anon, authenticated;
 -- INSERT/UPDATE: apenas service role (handler de webhook)
 revoke insert, update, delete on public.webhook_events_log from anon, authenticated;
 ```
