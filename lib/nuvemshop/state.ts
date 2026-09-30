@@ -7,6 +7,26 @@
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { assinarVinculo, vinculoConfere } from "@/lib/agenda/google/vinculo";
+
+/**
+ * Cookie que prende o `state` ao navegador que saiu (M6 da auditoria de
+ * 2026-09-29). Mesmo mecanismo do OAuth da agenda (`lib/agenda/google/vinculo.ts`,
+ * que explica por que Lax e por que assinado): a assinatura prova que o `state`
+ * é nosso, o cookie prova que quem volta é quem pediu. Mesmo nome, caminho
+ * diferente — os dois fluxos não se enxergam.
+ */
+export const NOME_DO_VINCULO_NUVEMSHOP = "crm_oauth_bind";
+export const CAMINHO_DO_CALLBACK_NUVEMSHOP = "/api/v1/integrations/nuvemshop/callback";
+export const VALIDADE_DO_VINCULO_NUVEMSHOP_S = 10 * 60;
+
+export function vinculoDoState(nonce: string): string {
+  return assinarVinculo(nonce, key());
+}
+
+export function vinculoDoStateConfere(cookie: string | undefined, nonce: string): boolean {
+  return vinculoConfere(cookie, nonce, key());
+}
 
 const TTL_MS = 10 * 60 * 1000; // 10 min
 
@@ -31,8 +51,11 @@ function b64urlDecode(s: string): string {
   return Buffer.from(s, "base64url").toString("utf8");
 }
 
-export function issueState(orgId: string, actor?: { userId: string; authSessionId: string }): string {
-  const nonce = randomBytes(16).toString("hex");
+export function issueState(
+  orgId: string,
+  actor?: { userId: string; authSessionId: string },
+  nonce: string = randomBytes(16).toString("hex"),
+): string {
   const exp = Date.now() + TTL_MS;
   const payload = `${orgId}.${nonce}.${exp}${actor ? `.${actor.userId}.${actor.authSessionId}` : ""}`;
   const sig = createHmac("sha256", key()).update(payload, "utf8").digest("hex");

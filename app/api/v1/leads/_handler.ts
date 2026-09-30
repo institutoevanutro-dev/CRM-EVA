@@ -24,6 +24,9 @@ import {
 } from "@/lib/leads/motivo-da-perda";
 import type { CreateLeadInput, UpdateLeadInput } from "@/lib/schemas";
 import { ehCorrecaoDeMovimentoDaIa } from "@/lib/leads/correcao-humana";
+import { clienteDaEquipe, responsavelValido } from "@/lib/tarefas/responsavel";
+import { idsForaDaOrg } from "@/lib/tenancy/pertence-a-org";
+import { ID, INSTANTE, lerCursorJson } from "@/lib/api/filtro-postgrest";
 
 type SB = SupabaseClient;
 
@@ -53,6 +56,21 @@ async function ownerPatchOrThrow(
   }
   if (!result.patch) return null;
 
+  // B4: dono humano tem de ser da equipe DESTA org (mesma régua do lote e das
+  // tarefas). A FK só confere que o usuário existe.
+  if (
+    result.patch.owner_user_id !== null &&
+    !(await responsavelValido(clienteDaEquipe(supabase), ctx.organization_id, result.patch.owner_user_id))
+  ) {
+    throw new ApiError(
+      422,
+      "validation_failed",
+      undefined,
+      ctx.requestId,
+      traduzir("Responsável não é um atendente ativo desta organização.", ctx.idioma ?? "pt-BR"),
+    );
+  }
+
   if (result.patch.owner_agent_id !== null) {
     const { data: agent, error: agentErr } = await supabase
       .from("ai_agents")
@@ -77,6 +95,23 @@ async function ownerPatchOrThrow(
   }
 
   return result.patch;
+}
+
+/** B4: `contact_id` do corpo é desta organização? A FK não olha a org. */
+async function exigeContatoDaOrg(supabase: SB, ctx: HandlerCtx, contactId: string | null | undefined): Promise<void> {
+  const fora = await idsForaDaOrg(supabase, ctx.organization_id, "contacts", [contactId]);
+  if (fora === null) {
+    throw new ApiError(500, "internal_error", undefined, ctx.requestId, "Falha ao conferir o contato.");
+  }
+  if (fora.length > 0) {
+    throw new ApiError(
+      422,
+      "validation_failed",
+      undefined,
+      ctx.requestId,
+      traduzir("Contato não encontrado nesta organização.", ctx.idioma ?? "pt-BR"),
+    );
+  }
 }
 
 function actorAuditPayload(actor: Actor): {
@@ -139,13 +174,7 @@ function encLeadCursor(p: LeadCursor): string {
   return Buffer.from(JSON.stringify(p), "utf8").toString("base64url");
 }
 function decLeadCursor(raw: string): LeadCursor | null {
-  try {
-    const p = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as LeadCursor;
-    if (typeof p.id !== "string" || typeof p.created_at !== "string") return null;
-    return p;
-  } catch {
-    return null;
-  }
+  return lerCursorJson(raw, { created_at: INSTANTE, id: ID });
 }
 
 export async function listLeadsHandler(
@@ -288,6 +317,8 @@ export async function createLeadHandler(
     );
   }
 
+  await exigeContatoDaOrg(supabase, ctx, input.contact_id);
+
   // next position_in_stage = MAX + 1000.
   const { data: maxRow, error: maxErr } = await supabase
     .from("crm_leads")
@@ -425,7 +456,10 @@ export async function updateLeadHandler(
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.title !== undefined) patch.title = input.title;
   if (input.description !== undefined) patch.description = input.description;
-  if (input.contact_id !== undefined) patch.contact_id = input.contact_id;
+  if (input.contact_id !== undefined) {
+    await exigeContatoDaOrg(supabase, ctx, input.contact_id);
+    patch.contact_id = input.contact_id;
+  }
   if (input.value_cents !== undefined) patch.value_cents = input.value_cents;
   if (input.currency !== undefined) patch.currency = input.currency;
   // Dono do negócio (0070): regra em lib/leads/owner-patch.ts, compartilhada

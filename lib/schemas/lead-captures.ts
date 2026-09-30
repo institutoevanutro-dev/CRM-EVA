@@ -7,6 +7,7 @@
  * quando uma ferramenta dispara um lote — pularem ou repetirem entre páginas.
  */
 import { z } from "zod";
+import { cursorValido, ID, INSTANTE } from "@/lib/api/filtro-postgrest";
 
 /** Espelha o CHECK de `webhook_lead_captures.outcome` (migration 0174). */
 export const DESFECHOS_DA_CAPTACAO = ["criado", "duplicado", "recusado"] as const;
@@ -36,8 +37,7 @@ export function decodeLeadCaptureCursor(raw: string): LeadCaptureCursor | null {
   try {
     const decoded = Buffer.from(raw, "base64url").toString("utf8");
     const [received_at, id] = decoded.split("|");
-    if (!received_at || !id) return null;
-    return { received_at, id };
+    return cursorValido({ received_at, id }, { received_at: INSTANTE, id: ID });
   } catch {
     return null;
   }
