@@ -27,6 +27,7 @@ import { createClient } from "@/lib/supabase/server";
 import { observeServiceOrigin } from "@/lib/atendimento/origem";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { RECUSA_DE_TROCA_DE_FUNIL } from "@/lib/leads/clonar-para-funil";
 
 export const dynamic = "force-dynamic";
 
@@ -154,14 +155,26 @@ export async function POST(req: NextRequest): Promise<Response> {
       // resposta também: recusa de negócio, nomeando os cards, ANTES de o banco
       // tentar. Card que já tem motivo passa: trocar de "Perdido" para outra
       // etapa de perda não é uma perda nova.
+      // A etapa é da org ATIVA (a RLS sozinha mostra as de todas as orgs do
+      // membro) e do MESMO funil dos cards: `fn_mover_leads_em_lote` é INVOKER e
+      // grava `stage_id` como vier — sem isto o lote furava a regra que a rota
+      // individual impõe (`pipeline_immutable_use_clone`).
       const { data: etapaDeDestino, error: etapaErr } = await supabase
         .from("crm_stages")
-        .select("id, name, is_lost")
+        .select("id, name, is_lost, pipeline_id")
         .eq("id", input.params.stage_id)
+        .eq("organization_id", organizationId)
         .maybeSingle();
       if (etapaErr) return fail("internal_error", etapaErr.message, 500, { requestId });
       if (!etapaDeDestino) {
         return fail("not_found", t("Stage não encontrado."), 404, { requestId });
+      }
+      const deOutroFunil = visible.filter((l) => l.pipeline_id !== etapaDeDestino.pipeline_id).map((l) => l.id);
+      if (deOutroFunil.length > 0) {
+        return fail("pipeline_immutable_use_clone", t(RECUSA_DE_TROCA_DE_FUNIL), 422, {
+          requestId,
+          details: { lead_ids: deOutroFunil, use: "/api/v1/leads/{id}/clone" },
+        });
       }
 
       const motivoDoLote = input.params.lost_reason ?? null;

@@ -17,6 +17,7 @@ import { moedaDaOrganizacao } from "@/lib/catalogo/moeda-da-org";
 import { COLUNAS_DO_PRODUTO, produtoCreateSchema } from "@/lib/schemas/produtos";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { escaparTermoDoOr } from "@/lib/api/filtro-postgrest";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   const authz = await requireRole("viewer", { requestId, resource: "catalog_products" });
   if (!authz.ok) return authz.response;
 
-  const busca = req.nextUrl.searchParams.get("busca")?.trim() ?? "";
+  const busca = escaparTermoDoOr(req.nextUrl.searchParams.get("busca") ?? "");
   const supabase = await createClient();
 
   let q = supabase

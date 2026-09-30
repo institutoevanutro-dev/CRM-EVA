@@ -8,6 +8,7 @@ import { useT } from "@/hooks/i18n/useT";
 const ERROR_MESSAGES: Record<string, string> = {
   not_configured: "Integração não configurada — configure as credenciais em .env.local.",
   invalid_state: "Sessão de autorização expirou. Tente novamente.",
+  forbidden: "Só quem administra a organização pode conectar a loja.",
   missing_code: "Resposta da Nuvemshop incompleta — code ausente.",
   token_exchange_failed: "Não foi possível trocar o code pelo access token.",
   invalid_token_response: "Resposta inesperada da Nuvemshop.",

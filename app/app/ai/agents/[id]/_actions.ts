@@ -165,6 +165,8 @@ export async function saveAgentDraftAction(
   const escopo = await validarEscopoDaVersao(admin, activeOrg.orgId, {
     pipeline_ids: v.pipeline_ids,
     knowledge_source_ids: v.knowledge_source_ids,
+    credential_id: v.credential_id,
+    channel_session_id: v.channel_session_id,
   });
   if (!escopo.ok) {
     return { ok: false, error: "validation_failed", message: mensagemDoEscopo(escopo) };
