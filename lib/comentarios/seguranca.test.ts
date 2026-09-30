@@ -148,3 +148,33 @@ describe("marcação de perfil sai da análise", () => {
     expect(v.seguro).toBe(false);
   });
 });
+
+describe("palavras aprovadas pelo dono", () => {
+  it("palavra desconhecida reprova; a mesma palavra aprovada libera", () => {
+    expect(ehObviamenteSeguro("conteudo fantastico").seguro).toBe(false);
+    expect(ehObviamenteSeguro("conteudo fantastico", new Set(["fantastico"]))).toEqual({
+      seguro: true,
+    });
+  });
+
+  // Review Focus 4: gatilho vence aprovação, hoje e numa versão futura que
+  // acrescente radicais à lista de gatilhos.
+  it("gatilho vence palavra aprovada, mesmo que o dono a tenha liberado", () => {
+    const v = ehObviamenteSeguro("otimo, quanto custa?", new Set(["custa", "quanto"]));
+    expect(v.seguro).toBe(false);
+    if (!v.seguro) expect(v.gatilho).toBe("preço");
+  });
+
+  it("aprovar não desarma o teto de tamanho nem a interrogação final", () => {
+    const longo = `${"otimo ".repeat(40)}fantastico`;
+    expect(ehObviamenteSeguro(longo, new Set(["fantastico"])).seguro).toBe(false);
+    expect(ehObviamenteSeguro("fantastico?", new Set(["fantastico"])).seguro).toBe(false);
+  });
+
+  it("conjunto vazio ou ausente se comporta igual ao de hoje", () => {
+    expect(ehObviamenteSeguro("top", new Set())).toEqual({ seguro: true });
+    expect(ehObviamenteSeguro("fantastico", new Set())).toEqual(
+      ehObviamenteSeguro("fantastico"),
+    );
+  });
+});

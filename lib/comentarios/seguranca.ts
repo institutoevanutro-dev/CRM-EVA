@@ -147,16 +147,38 @@ const VOCABULARIO_SEGURO: ReadonlySet<string> = new Set([
 ]);
 
 /** Todo token do texto está no vocabulário seguro (ou é emoji/dígito)? Um único de fora já reprova o texto inteiro. */
-function todosOsTokensSaoSeguros(normalizado: string): boolean {
+function todosOsTokensSaoSeguros(
+  normalizado: string,
+  aprovadas: ReadonlySet<string>,
+): boolean {
   const tokens = normalizado.match(TOKEN_RE) ?? [];
   if (tokens.length === 0) return false;
   return tokens.every(
     (token) =>
-      SOMENTE_EMOJI_RE.test(token) || SOMENTE_DIGITOS_RE.test(token) || VOCABULARIO_SEGURO.has(token),
+      SOMENTE_EMOJI_RE.test(token) ||
+      SOMENTE_DIGITOS_RE.test(token) ||
+      VOCABULARIO_SEGURO.has(token) ||
+      aprovadas.has(token),
   );
 }
 
-export function ehObviamenteSeguro(texto: string | null): Veredito {
+const NENHUMA_APROVADA: ReadonlySet<string> = new Set();
+
+/**
+ * `aprovadas` são as palavras que o DONO liberou (tabela
+ * `instagram_comment_vocabulario`, por organização). Entram por argumento, e
+ * não por consulta aqui dentro, porque esta função é pura de propósito: ela é
+ * a régua, e régua que faz I/O não dá para testar com 40 frases num teste de
+ * unidade.
+ *
+ * Elas só participam da ÚLTIMA pergunta ("todo token é conhecido?"). Os
+ * gatilhos, o teto de tamanho e a interrogação final rodam antes e não olham
+ * para este conjunto.
+ */
+export function ehObviamenteSeguro(
+  texto: string | null,
+  aprovadas: ReadonlySet<string> = NENHUMA_APROVADA,
+): Veredito {
   if (!texto || texto.trim() === "") {
     return { seguro: false, gatilho: "vazio" };
   }
@@ -181,7 +203,7 @@ export function ehObviamenteSeguro(texto: string | null): Veredito {
     return { seguro: false, gatilho: "pergunta" };
   }
 
-  if (todosOsTokensSaoSeguros(normalizado)) {
+  if (todosOsTokensSaoSeguros(normalizado, aprovadas)) {
     return { seguro: true };
   }
 
