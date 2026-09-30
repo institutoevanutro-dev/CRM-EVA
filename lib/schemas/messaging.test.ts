@@ -61,9 +61,9 @@ describe("sendMessageSchema", () => {
   });
 
   // C4 (auditoria 2026-09-29): `media_url` do corpo era gravada e depois
-  // buscada pela rota de mídia com a X-Api-Key global do WAHA (SSRF). O envio
+  // buscada pela rota de mídia com a chave global do canal (SSRF). O envio
   // só usa `media_storage_path`; a URL nunca foi entregue ao canal.
-  it.each(["https://cdn.example.com/foo.jpg", "http://waha:3000/api/sessions"])(
+  it.each(["https://cdn.example.com/foo.jpg", "http://canal-interno:3000/api/sessions"])(
     "rejeita media_url vinda do corpo (%s)",
     (media_url) => {
       const r = sendMessageSchema.safeParse({

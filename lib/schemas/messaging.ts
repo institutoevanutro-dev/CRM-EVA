@@ -73,7 +73,7 @@ export const sendMessageSchema = z
     type: messageTypeSchema.default("text"),
     body: z.string().min(1).max(4096).optional(),
     // Recusada no corpo (auditoria 2026-09-29, C4): era gravada e depois
-    // buscada com a X-Api-Key global do WAHA — SSRF. O envio de mídia é por
+    // buscada com a chave global do canal — SSRF. O envio de mídia é por
     // `media_storage_path` (upload em /conversations/[id]/media); `media_url`
     // só nasce na ingestão, a partir do webhook do canal.
     media_url: z.never({ message: "Use media_storage_path (envie o arquivo antes)." }).optional(),
