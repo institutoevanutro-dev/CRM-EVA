@@ -185,8 +185,15 @@ export async function escolherDiaDesenhado(page: Page, dias: readonly string[]):
 
   // Até a consulta de horários responder, TODO dia nasce indisponível — uma
   // varredura feita antes disso leria "nenhum dia da semana desenhada" onde há.
+  // O sinal de "a consulta respondeu" é um dia disponível OU o "Próximo mês"
+  // habilitado (ele só liga quando a consulta cobriu dia depois do mês visível).
+  // Exigir só o dia reprovava no fim da tarde do último dia do mês: o mês
+  // visível já não tem horário livre nenhum, e o salto abaixo nunca era tentado.
   await expect(
-    page.locator('[data-testid^="dia-"][data-disponivel="true"]').first(),
+    page
+      .locator('[data-testid^="dia-"][data-disponivel="true"]')
+      .or(page.locator('[data-testid="mes-seguinte"]:enabled'))
+      .first(),
     "nenhum dia disponível no painel — o seed da agenda não deixou jornada publicada",
   ).toBeVisible({ timeout: 20_000 });
 
