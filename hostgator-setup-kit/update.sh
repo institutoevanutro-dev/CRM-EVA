@@ -112,8 +112,13 @@ fi
 # ── 2. Backup de segurança ANTES de tocar no banco ───────────────────────────
 if [ -z "$SKIP_BACKUP" ]; then
   step "Backup de segurança (antes de mexer no banco)"
-  if bash "$(dirname "$0")/backup.sh"; then
+  bk_rc=0; bash "$(dirname "$0")/backup.sh" || bk_rc=$?
+  if [ "$bk_rc" = 0 ]; then
     c_grn "✓ backup feito — se algo der errado, dá pra restaurar (restore.sh)."
+  elif [ "$bk_rc" = 3 ]; then
+    # Banco salvo, sessões do WhatsApp não: a atualização só mexe no banco,
+    # então segue — mas o defeito fica visível (backup.sh já explicou).
+    c_ylw "⚠ banco salvo; o snapshot das sessões do WhatsApp falhou (ver acima). Seguindo."
   else
     if [ -n "${DESKCOMM_AGENT_REPORT:-}" ] || [ ! -t 0 ]; then
       die "O backup preventivo falhou. Atualização automática interrompida para proteger os dados."
