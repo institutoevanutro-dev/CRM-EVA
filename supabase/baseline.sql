@@ -28609,7 +28609,7 @@ grant execute on function public.fn_mark_conversation_message(uuid,text,text,tim
 
 notify pgrst, 'reload schema';
 
--- ---- vocabulário de comentário (migration 0291) ----
+-- ---- vocabulário de comentário (migration 0292) ----
 -- ── As palavras que o dono liberou para a IA usar ───────────────────────────
 --
 -- A trava de segurança nega por padrão: só publica quando TODO token está num
@@ -28670,7 +28670,7 @@ create policy instagram_comment_vocabulario_write on public.instagram_comment_vo
     or (organization_id in (select public.fn_user_org_ids())
         and public.fn_role_at_least(organization_id, 'manager'))
   );
--- ---- fim: vocabulário de comentário (migration 0291) ----
+-- ---- fim: vocabulário de comentário (migration 0292) ----
 
 -- ---- dedupe de event_dead atômico: índice único parcial (migration 0293) ----
 -- 0293 — o aviso `event_dead` não abre em dobro com dois drenos concorrentes
