@@ -20,12 +20,13 @@
  *
  * App da instalação: `scripts/seed-e2e-cadastro-incorporado.ts`.
  */
+import { createHmac } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { lerCreds, loginComoAdmin, type CredsE2E } from "./helpers/login-admin";
 
@@ -33,6 +34,14 @@ const EVIDENCIA = path.join(process.cwd(), ".superpowers", "evidence", "cadastro
 /** `META_GRAPH_BASE_URL=http://127.0.0.1:47813` (`scripts/gerar-env-e2e.sh`). */
 const PORTA_DA_GRAPH = 47813;
 const SEED = "scripts/seed-e2e-cadastro-incorporado.ts";
+
+// Os três testes são UMA história: o primeiro conecta, o segundo e o terceiro
+// usam a sessão que ele deixou (o `afterAll` arquiva).
+test.describe.configure({ mode: "serial" });
+
+/** Ids do payload de exemplo (`tests/fixtures/meta`) → os da conta conectada acima. */
+const WABA_CONECTADA = "222333444555";
+const PHONE_NUMBER_ID_CONECTADO = "111222333";
 
 let graph: http.Server;
 const pedidos: string[] = [];
@@ -129,4 +138,87 @@ test("[P0] admin conecta pelo botão e a aba mostra Conectado", async ({ page })
   await expect(page.getByTestId("historico-nao-pedido")).toHaveCount(0);
   await expect(page.getByText(/não conecte/i)).toHaveCount(0);
   await page.screenshot({ path: path.join(EVIDENCIA, "conectado.png"), fullPage: true });
+});
+
+/** Fixture de coexistência (índice no arquivo) com os ids da conta que o teste 1 conectou. */
+function webhookDaMeta(indice: number): string {
+  const todos = JSON.parse(fs.readFileSync("tests/fixtures/meta/coexistencia-webhooks.json", "utf8")) as unknown[];
+  return JSON.stringify(todos[indice])
+    .replaceAll('"id":"222"', `"id":"${WABA_CONECTADA}"`)
+    .replaceAll('"phone_number_id":"111"', `"phone_number_id":"${PHONE_NUMBER_ID_CONECTADO}"`);
+}
+
+const FIXTURE_HISTORICO = 1;
+const FIXTURE_CONTATOS = 3;
+const FIXTURE_DESCONECTOU = 4;
+const FIXTURE_RECONECTOU = 5;
+
+/** Entrega um webhook assinado com o App Secret do seed, pela URL que a tela mostra ao operador. */
+async function entregarWebhook(page: Page, corpo: string): Promise<void> {
+  const oficial = await page.request.get("/api/v1/channels/official").then((r) => r.json());
+  const caminho = new URL(oficial.data.webhook.callbackUrl as string).pathname;
+  const assinatura = `sha256=${createHmac("sha256", process.env.E2E_META_APP_SECRET ?? "").update(corpo).digest("hex")}`;
+  const r = await page.request.post(caminho, {
+    data: corpo,
+    headers: { "content-type": "application/json", "x-hub-signature-256": assinatura },
+  });
+  expect(r.status()).toBe(200);
+}
+
+async function drenar(page: Page): Promise<void> {
+  const segredo = process.env.INTERNAL_CRON_SECRET || process.env.INTERNAL_SECRET;
+  if (!segredo) throw new Error("e2e precisa da credencial local do cron.");
+  const r = await page.request.post("/api/v1/cron/event-log-drain", { headers: { authorization: `Bearer ${segredo}` } });
+  expect(r.status()).toBe(200);
+}
+
+test("[P0] histórico do celular entra encerrado, sem não-lida, e a barra mostra o progresso", async ({ page }) => {
+  await loginComoAdmin(page, creds);
+  const oficial = await page.request.get("/api/v1/channels/official").then((r) => r.json());
+  const sessaoId = oficial.data.channel_session_id as string;
+
+  await entregarWebhook(page, webhookDaMeta(FIXTURE_HISTORICO));
+  await entregarWebhook(page, webhookDaMeta(FIXTURE_CONTATOS)); // só preenche nome vazio: nunca cria contato
+  await drenar(page);
+
+  // Por dado, não por prosa: a conversa nasce ENCERRADA e sem não-lida (o "oi" é do cliente).
+  let conversaId = "";
+  await expect(async () => {
+    const lista = await page.request.get(`/api/v1/conversations?channel_session_id=${sessaoId}&limit=50`).then((r) => r.json());
+    const conversa = (lista.data as Array<{ id: string; status: string }>)[0];
+    expect(conversa).toBeDefined();
+    conversaId = conversa!.id;
+  }).toPass({ timeout: 30_000 });
+  const detalhe = await page.request.get(`/api/v1/conversations/${conversaId}`).then((r) => r.json());
+  expect(detalhe.data.status).toBe("closed");
+  expect(detalhe.data.unread_count_for_assignee).toBe(0);
+
+  await page.goto("/app/connections?aba=oficial");
+  await expect(page.getByTestId("historico-progresso")).toContainText("20%");
+
+  await page.goto(`/app/inbox/${conversaId}`);
+  await expect(page.getByText("oi", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("olá", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Celular", { exact: true }).first()).toBeVisible();
+  await page.screenshot({ path: path.join(EVIDENCIA, "historico.png"), fullPage: true });
+});
+
+test("[P0] desconectar pelo celular abre o aviso na Central e reconectar o fecha", async ({ page }) => {
+  await loginComoAdmin(page, creds);
+  const aviso = page.getByTestId("inbox-item").filter({ hasText: "foi desconectado pelo celular" });
+
+  await entregarWebhook(page, webhookDaMeta(FIXTURE_DESCONECTOU));
+  const caiu = await page.request.get("/api/v1/channels/official").then((r) => r.json());
+  expect(caiu.data.status).toBe("FAILED");
+  await page.goto("/app/ai/inbox");
+  await expect(aviso.first()).toBeVisible();
+  await page.screenshot({ path: path.join(EVIDENCIA, "desconectado.png"), fullPage: true });
+
+  await entregarWebhook(page, webhookDaMeta(FIXTURE_RECONECTOU));
+  const voltou = await page.request.get("/api/v1/channels/official").then((r) => r.json());
+  expect(voltou.data.status).toBe("WORKING");
+  await expect(async () => {
+    await page.goto("/app/ai/inbox");
+    await expect(aviso).toHaveCount(0, { timeout: 3_000 });
+  }).toPass({ timeout: 30_000 });
 });

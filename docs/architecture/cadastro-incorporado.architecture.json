@@ -24,6 +24,9 @@
     { "id": "mensagens", "lane": "banco", "col": 6, "type": "database", "label": "messages external_device (Celular)" },
     { "id": "central", "lane": "operador", "col": 7, "type": "frontend", "label": "Central de avisos: número desconectado pelo celular" },
     { "id": "inbox", "lane": "operador", "col": 7, "type": "frontend", "label": "Inbox: resposta do celular, IA em silêncio" },
+    { "id": "fila", "lane": "banco", "col": 6, "type": "database", "label": "event_log meta.history_chunk" },
+    { "id": "historico", "lane": "servidor", "col": 7, "type": "worker", "label": "meta-history-worker (conversa encerrada, sem não-lida; nome só onde estava vazio)" },
+    { "id": "gatilho", "lane": "banco", "col": 8, "type": "database", "label": "gatilhos de messages com guarda importada_do_historico (0297)" },
     { "id": "audit", "lane": "banco", "col": 5, "type": "database", "label": "api_audit_log channel.official_connected_es" }
   ],
   "edges": [
@@ -44,6 +47,12 @@
     { "id": "e15", "from": "webhook", "to": "conta", "label": "account_update" },
     { "id": "e16", "from": "conta", "to": "sessao", "label": "FAILED / reconectada" },
     { "id": "e17", "from": "conta", "to": "central", "label": "aviso de desconexão" },
-    { "id": "e18", "from": "central", "to": "botao", "label": "operador reconecta pelo botão" }
+    { "id": "e18", "from": "central", "to": "botao", "label": "operador reconecta pelo botão" },
+    { "id": "e19", "from": "webhook", "to": "fila", "label": "history e smb_app_state_sync: pedaço cru enfileirado" },
+    { "id": "e20", "from": "fila", "to": "historico", "label": "event-log-drain consome" },
+    { "id": "e21", "from": "historico", "to": "mensagens", "label": "messages do histórico, sem acordar a IA" },
+    { "id": "e22", "from": "mensagens", "to": "gatilho", "label": "insert com a marca do histórico" },
+    { "id": "e23", "from": "historico", "to": "sessao", "label": "progresso do histórico" },
+    { "id": "e24", "from": "sessao", "to": "aba", "label": "barra de progresso" }
   ]
 }
