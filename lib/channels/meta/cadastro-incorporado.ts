@@ -16,17 +16,19 @@ import { getWahaClient } from "@/lib/waha/client";
 
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "../archived";
 import { CHANNEL_PROVIDER_WAHA } from "../capabilities";
+import { canonicalPhoneBR } from "../phone-variants";
 import { mensagemDoErroDaMeta } from "./coexistencia";
 import { baseDaGraph } from "./graph-base";
 
 /** Motivos devolvidos ao usuário: CHAVES do dicionário (pt-BR), a rota traduz (ruling P13). */
+export const FALHA_GENERICA_DA_META = "Não foi possível concluir a conexão com a Meta. Tente de novo em instantes; se persistir, refaça o fluxo.";
 const M_OUTRO_APP = "O token devolvido não é do app desta instalação.";
 const M_TOKEN_INVALIDO = "A Meta devolveu um token inválido.";
 const M_SEM_PERMISSAO = "O token não tem as permissões do WhatsApp Business necessárias.";
 const M_SEM_NUMERO = "A Meta não devolveu o número desta conta. Refaça o fluxo.";
 const M_NAO_E_COEXISTENCIA = "O número não está marcado como coexistência. Refaça o fluxo escolhendo manter o número no celular.";
 const M_VARIOS_NUMEROS = "A conta tem mais de um número e a Meta não disse qual foi cadastrado. Use o formulário manual.";
-export const MOTIVOS_DO_CADASTRO: readonly string[] = [M_OUTRO_APP, M_TOKEN_INVALIDO, M_SEM_PERMISSAO, M_SEM_NUMERO, M_NAO_E_COEXISTENCIA, M_VARIOS_NUMEROS];
+export const MOTIVOS_DO_CADASTRO: readonly string[] = [FALHA_GENERICA_DA_META, M_OUTRO_APP, M_TOKEN_INVALIDO, M_SEM_PERMISSAO, M_SEM_NUMERO, M_NAO_E_COEXISTENCIA, M_VARIOS_NUMEROS];
 
 const ESCOPOS_EXIGIDOS = ["whatsapp_business_management", "whatsapp_business_messaging"] as const;
 
@@ -35,20 +37,33 @@ interface ErroGraph { message?: string; code?: number; error_subcode?: number; e
 export class ErroDaMeta extends Error {
   readonly codigo: number | null;
   readonly subcodigo: number | null;
+  /** Texto cru da Meta/rede: só para log e auditoria, nunca para a tela. */
+  readonly detalhe: string;
   constructor(codigo: number | null, subcodigo: number | null, cru: string) {
-    super(mensagemDoErroDaMeta(codigo, subcodigo, cru));
+    super(mensagemDoErroDaMeta(codigo, subcodigo, FALHA_GENERICA_DA_META));
+    this.name = "ErroDaMeta";
     this.codigo = codigo;
     this.subcodigo = subcodigo;
+    this.detalhe = cru;
   }
 }
 
+const detalheDe = (err: unknown) => (err instanceof ErroDaMeta ? err.detalhe : String(err));
+/** Frase para a tela: a mapeada da Meta, ou a genérica. Nunca texto cru. */
+const motivoDe = (err: unknown) => (err instanceof ErroDaMeta ? err.message : FALHA_GENERICA_DA_META);
+
 async function graph<T>(caminho: string, init: RequestInit & { token?: string } = {}): Promise<T> {
   const { token, ...resto } = init;
-  const res = await fetch(`${baseDaGraph()}/${graphVersion()}${caminho}`, {
-    ...resto,
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(resto.headers ?? {}) },
-    signal: AbortSignal.timeout(15_000),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${baseDaGraph()}/${graphVersion()}${caminho}`, {
+      ...resto,
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(resto.headers ?? {}) },
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err) {
+    throw new ErroDaMeta(null, null, err instanceof Error ? err.message : "fetch falhou");
+  }
   const body = (await res.json().catch(() => ({}))) as T & { error?: ErroGraph };
   if (!res.ok || body.error) {
     const e = body.error ?? {};
@@ -60,7 +75,7 @@ async function graph<T>(caminho: string, init: RequestInit & { token?: string } 
 export async function trocarCodigo(app: { appId: string; appSecret: string }, code: string): Promise<string> {
   const q = new URLSearchParams({ client_id: app.appId, client_secret: app.appSecret, code });
   const r = await graph<{ access_token?: string }>(`/oauth/access_token?${q}`);
-  if (!r.access_token) throw new ErroDaMeta(null, null, "troca_sem_token");
+  if (!r.access_token) throw new ErroDaMeta(null, null, "troca sem access_token");
   return r.access_token;
 }
 
@@ -75,7 +90,8 @@ export async function conferirToken(app: { appId: string; appSecret: string }, t
     if (faltam.length) return { ok: false, motivo: M_SEM_PERMISSAO };
     return { ok: true };
   } catch (err) {
-    return { ok: false, motivo: err instanceof Error ? err.message : "debug_token falhou" };
+    logger.warn("[cadastro-incorporado] debug_token falhou", { error: detalheDe(err) });
+    return { ok: false, motivo: motivoDe(err) };
   }
 }
 
@@ -134,9 +150,12 @@ export async function pedirSincronizacao(
       token,
       body: new URLSearchParams({ messaging_product: "whatsapp", sync_type: tipo }),
     });
-    return r.request_id ? { request_id: r.request_id } : { erro: "a Meta aceitou sem devolver request_id" };
+    if (r.request_id) return { request_id: r.request_id };
+    logger.warn("[cadastro-incorporado] smb_app_data sem request_id", { tipo });
+    return { erro: FALHA_GENERICA_DA_META };
   } catch (err) {
-    return { erro: err instanceof Error ? err.message : "smb_app_data falhou" };
+    logger.warn("[cadastro-incorporado] smb_app_data falhou", { tipo, error: detalheDe(err) });
+    return { erro: motivoDe(err) };
   }
 }
 
@@ -158,26 +177,35 @@ export async function arquivarSessaoLegadaDoNumero(
 ): Promise<string | null> {
   // Só o provider legado é candidato: a sessão oficial (que ainda nem existe
   // quando isto roda, ruling P1) nunca entra no filtro.
+  // O número vem da Meta formatado ("+55 27 99904-9879") e a linha WAHA pode
+  // estar gravada com/sem "+" ou sem o 9 do celular: compara canônico, em JS
+  // (uma org tem pouquíssimas sessões WAHA).
   const base = () =>
     admin
       .from("channel_sessions")
-      .select("id, waha_session_name")
+      .select("id, waha_session_name, phone_number")
       .eq("organization_id", organizationId)
       .eq("provider", CHANNEL_PROVIDER_WAHA)
-      .eq("phone_number", phoneNumber);
-  const { data } = await queryTolerantToMissingArchived(
-    () => base().is(ARCHIVED_AT, null).maybeSingle(),
-    () => base().maybeSingle(),
+      .not("phone_number", "is", null);
+  const { data, error } = await queryTolerantToMissingArchived(
+    () => base().is(ARCHIVED_AT, null),
+    () => base(),
   );
-  const legada = data as { id: string; waha_session_name: string | null } | null;
+  if (error) throw new Error(`channel_sessions: ${error.message}`);
+  const alvo = canonicalPhoneBR(phoneNumber);
+  const legada = ((data ?? []) as Array<{ id: string; waha_session_name: string | null; phone_number: string | null }>).find(
+    (l) => l.phone_number && canonicalPhoneBR(l.phone_number) === alvo,
+  );
   if (!legada) return null;
 
   const now = new Date().toISOString();
-  await admin
+  const { error: erroUpdate } = await admin
     .from("channel_sessions")
     .update({ archived_at: now, status: "STOPPED", last_status_change_at: now, status_reason: "substituida_pela_coexistencia" })
     .eq("organization_id", organizationId)
     .eq("id", legada.id);
+  // Falha aqui lança ANTES do WAHA: derrubar a sessão sem arquivá-la deixaria o índice único ocupado.
+  if (erroUpdate) throw new Error(`channel_sessions: ${erroUpdate.message}`);
 
   const waha = getWahaClient();
   if (waha && legada.waha_session_name) {

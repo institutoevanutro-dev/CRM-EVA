@@ -9345,6 +9345,9 @@ export const DICIONARIO: Traducoes = {
   "Ícone desenhado pelo sistema": { es: "Ícono dibujado por el sistema" },
   "Trocar ícone": { es: "Cambiar ícono" },
   "Enviar ícone": { es: "Subir ícono" },
+  "Não foi possível concluir a conexão com a Meta. Tente de novo em instantes; se persistir, refaça o fluxo.": {
+    es: "No fue posible completar la conexión con Meta. Inténtelo de nuevo en unos instantes; si persiste, repita el flujo.",
+  },
   "A Meta tratou o cadastro como número novo, não como coexistência. Confira a configuração do Cadastro Incorporado na instalação e tente de novo.": { es: "Meta trató el registro como un número nuevo, no como coexistencia. Revise la configuración del Registro Integrado en la instalación e inténtelo de nuevo." },
   "Este número já está em outra conta do WhatsApp Business (WABA). Remova-o de lá no Gerenciador de Negócios e tente de novo.": { es: "Este número ya está en otra cuenta de WhatsApp Business (WABA). Quítelo de allí en el Administrador de Negocios e inténtelo de nuevo." },
   "A Meta não conseguiu verificar este número no aplicativo do celular. Abra o WhatsApp Business no celular, confira a conexão e tente de novo.": { es: "Meta no pudo verificar este número en la aplicación del celular. Abra WhatsApp Business en el celular, revise la conexión e inténtelo de nuevo." },

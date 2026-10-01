@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DICIONARIO } from "@/lib/i18n/dicionario";
 
-import { arquivarSessaoLegadaDoNumero, conferirToken, ErroDaMeta, escolherNumero, gerarPin, numerosDaConta, pedirSincronizacao, registrarNumero, trocarCodigo } from "./cadastro-incorporado";
+import { getWahaClient } from "@/lib/waha/client";
+
+import { arquivarSessaoLegadaDoNumero, conferirToken, ErroDaMeta, FALHA_GENERICA_DA_META, escolherNumero, gerarPin, numerosDaConta, pedirSincronizacao, registrarNumero, trocarCodigo } from "./cadastro-incorporado";
+
+vi.mock("@/lib/waha/client", () => ({ getWahaClient: vi.fn(() => null) }));
 
 const APP = { appId: "1054112660758768", appSecret: "s".repeat(32) };
 const chamadas: Array<{ url: string; init?: RequestInit }> = [];
@@ -104,28 +108,64 @@ describe("pedirSincronizacao", () => {
 });
 
 describe("arquivarSessaoLegadaDoNumero", () => {
-  function adminFalso(linha: { id: string; waha_session_name: string | null } | null) {
+  type Linha = { id: string; waha_session_name: string | null; phone_number: string | null };
+  function adminFalso(linhas: Linha[], erros: { select?: boolean; update?: boolean } = {}) {
     const filtros: Array<[string, unknown]> = [];
     const updates: Array<Record<string, unknown>> = [];
     const q: Record<string, unknown> = {};
     q.select = () => q;
     q.eq = (c: string, v: unknown) => { filtros.push([c, v]); return q; };
     q.is = () => q;
-    q.maybeSingle = async () => ({ data: linha, error: null });
-    q.update = (u: Record<string, unknown>) => { updates.push(u); return q; };
+    q.not = () => q;
+    q.then = (ok: (r: unknown) => unknown) => ok({ data: linhas, error: erros.select ? { message: "boom", code: "XX000" } : null });
+    const u: Record<string, unknown> = {};
+    u.eq = (c: string, v: unknown) => { filtros.push([c, v]); return u; };
+    u.then = (ok: (r: unknown) => unknown) => ok({ error: erros.update ? { message: "boom" } : null });
+    q.update = (x: Record<string, unknown>) => { updates.push(x); return u; };
     return { admin: { from: () => q } as never, filtros, updates };
   }
   it("sem sessão WAHA ativa com o número, devolve null e não escreve", async () => {
-    const { admin, updates } = adminFalso(null);
-    expect(await arquivarSessaoLegadaDoNumero(admin, "org1", "+5527999049879")).toBeNull();
+    const { admin, updates } = adminFalso([{ id: "s0", waha_session_name: null, phone_number: "+5511900000000" }]);
+    expect(await arquivarSessaoLegadaDoNumero(admin, "org1", "+55 27 99904-9879")).toBeNull();
     expect(updates).toEqual([]);
   });
-  it("arquiva a sessão WAHA do número, só dentro da organização", async () => {
-    const { admin, filtros, updates } = adminFalso({ id: "s1", waha_session_name: null });
-    expect(await arquivarSessaoLegadaDoNumero(admin, "org1", "+5527999049879")).toBe("s1");
-    expect(filtros).toContainEqual(["organization_id", "org1"]);
-    expect(filtros).toContainEqual(["provider", "waha"]);
-    expect(updates[0]).toMatchObject({ status: "STOPPED", status_reason: "substituida_pela_coexistencia" });
+  it("casa o número formatado da Meta com a linha WAHA gravada em outro formato (com/sem +, com/sem o 9)", async () => {
+    for (const gravado of ["+5527999049879", "5527999049879@c.us", "552799049879", "27 99904-9879".replace(/^/, "55 ")]) {
+      const { admin, filtros, updates } = adminFalso([{ id: "s1", waha_session_name: null, phone_number: gravado }]);
+      expect(await arquivarSessaoLegadaDoNumero(admin, "org1", "+55 27 99904-9879"), gravado).toBe("s1");
+      expect(filtros).toContainEqual(["organization_id", "org1"]);
+      expect(filtros).toContainEqual(["provider", "waha"]);
+      expect(updates[0]).toMatchObject({ status: "STOPPED", status_reason: "substituida_pela_coexistencia" });
+    }
+  });
+  it("erro ao ler as sessões lança (não vira 'não havia sessão')", async () => {
+    const { admin } = adminFalso([], { select: true });
+    await expect(arquivarSessaoLegadaDoNumero(admin, "org1", "+5527999049879")).rejects.toThrow();
+  });
+  it("erro no UPDATE lança ANTES de tocar o WAHA", async () => {
+    const { admin } = adminFalso([{ id: "s1", waha_session_name: "sess", phone_number: "+5527999049879" }], { update: true });
+    const logout = vi.fn();
+    vi.mocked(getWahaClient).mockReturnValue({ logoutSession: logout, deleteSession: logout } as never);
+    await expect(arquivarSessaoLegadaDoNumero(admin, "org1", "+5527999049879")).rejects.toThrow();
+    expect(logout).not.toHaveBeenCalled();
+  });
+});
+
+describe("falhas cruas não chegam à tela", () => {
+  it("fetch que explode vira ErroDaMeta com a frase genérica, e o cru fica em .detalhe", async () => {
+    vi.stubGlobal("fetch", async () => { throw new TypeError("fetch failed"); });
+    const e = await trocarCodigo(APP, "x").catch((x) => x);
+    expect(e).toBeInstanceOf(ErroDaMeta);
+    expect(e.message).toBe(FALHA_GENERICA_DA_META);
+    expect(e.detalhe).toMatch(/fetch failed/);
+  });
+  it("conferirToken e pedirSincronizacao devolvem a frase genérica", async () => {
+    graphFalsa({ "/debug_token": { status: 500, body: { error: { message: "Internal" } } }, "/smb_app_data": { body: {} } });
+    expect(await conferirToken(APP, "t")).toEqual({ ok: false, motivo: FALHA_GENERICA_DA_META });
+    expect(await pedirSincronizacao("t", "1", "history")).toEqual({ erro: FALHA_GENERICA_DA_META });
+  });
+  it("name é ErroDaMeta", () => {
+    expect(new ErroDaMeta(1, null, "x").name).toBe("ErroDaMeta");
   });
 });
 
