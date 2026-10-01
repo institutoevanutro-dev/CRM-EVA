@@ -146,6 +146,38 @@ const VOCABULARIO_SEGURO: ReadonlySet<string> = new Set([
   ...COMO_CHAMAM_O_DONO,
 ]);
 
+/**
+ * O token já é conhecido pela trava (vocabulário fixo, emoji ou dígito)? É a
+ * ÚNICA definição de "conhecido": `todosOsTokensSaoSeguros` e os candidatos a
+ * aprovação usam esta mesma expressão, para não divergirem.
+ */
+export function ehTokenConhecido(token: string): boolean {
+  return (
+    SOMENTE_EMOJI_RE.test(token) ||
+    SOMENTE_DIGITOS_RE.test(token) ||
+    VOCABULARIO_SEGURO.has(token)
+  );
+}
+
+/**
+ * O token, sozinho, casa algum dos seis gatilhos? Usado para NUNCA oferecer
+ * palavra de gatilho ao dono: pedir que ele libere "custa" enquanto limpa a
+ * fila é pedir que desarme a própria proteção sem perceber.
+ */
+export function ehTokenDeGatilho(token: string): boolean {
+  // Os padrões não têm flag `g`, então `lastIndex` não importa; o reset é
+  // por segurança caso alguém acrescente `g` no futuro.
+  return GATILHOS.some(([, padrao]) => {
+    padrao.lastIndex = 0;
+    return padrao.test(token);
+  });
+}
+
+/** Tokens do texto, já sem marcação e normalizados: a MESMA régua da trava. */
+export function tokensParaAnalise(texto: string): string[] {
+  return normalizarTexto(semMarcacoes(texto).trim()).match(TOKEN_RE) ?? [];
+}
+
 /** Todo token do texto está no vocabulário seguro (ou é emoji/dígito)? Um único de fora já reprova o texto inteiro. */
 function todosOsTokensSaoSeguros(
   normalizado: string,
@@ -153,13 +185,7 @@ function todosOsTokensSaoSeguros(
 ): boolean {
   const tokens = normalizado.match(TOKEN_RE) ?? [];
   if (tokens.length === 0) return false;
-  return tokens.every(
-    (token) =>
-      SOMENTE_EMOJI_RE.test(token) ||
-      SOMENTE_DIGITOS_RE.test(token) ||
-      VOCABULARIO_SEGURO.has(token) ||
-      aprovadas.has(token),
-  );
+  return tokens.every((token) => ehTokenConhecido(token) || aprovadas.has(token));
 }
 
 const NENHUMA_APROVADA: ReadonlySet<string> = new Set();
