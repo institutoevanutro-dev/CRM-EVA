@@ -354,7 +354,12 @@ async function processarUmComentario(
     // deixarem de casar, matando o Direct num dia de banco instável. O aviso
     // de leitura falha entra só no motivo gravado.
     const { motivo, privadaId } = await abrirConversaSeForIntencaoDeCompra(admin, c, veredito.gatilho, agora);
-    const motivoFinal = leituraFalhou
+    // O aviso só é verdadeiro onde as palavras liberadas poderiam ter mudado o
+    // desfecho. Gatilho e teto de tamanho rodam ANTES do vocabulário, então
+    // pendurar o aviso neles afirmaria uma causa que não existe, e mandaria
+    // quem lê a fila investigar o banco por um comentário sem relação.
+    const leituraCausou = leituraFalhou && veredito.gatilho === "sem padrão seguro reconhecido";
+    const motivoFinal = leituraCausou
       ? `${motivo} (não deu para ler as palavras liberadas desta organização)`
       : motivo;
     await marcarEsperandoAuditado(admin, c, motivoFinal, null, privadaId);

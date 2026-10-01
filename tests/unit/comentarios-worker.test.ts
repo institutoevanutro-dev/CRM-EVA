@@ -657,7 +657,7 @@ it("sem a palavra aprovada, o mesmo comentário continua esperando você", async
   expect(fake.publicacoes).toEqual([]);
 });
 
-// Review Focus 3: o conjunto é POR organização.
+// Cada organização tem o seu vocabulário: a leitura é uma por organização.
 it("lê as aprovadas uma vez por organização, não uma por comentário", async () => {
   const pedidos: string[] = [];
   fake.palavrasAprovadas = async (org: string) => {
@@ -688,6 +688,8 @@ it("preço com leitura falha ainda manda o Direct: o sufixo não pode matar o ga
   await processarComentariosNovos(fake, agora);
 
   expect(enviados).toEqual(["C-1"]);
+  expect(linha().motivo_do_toque).toContain("preço");
+  expect(linha().motivo_do_toque).not.toContain("palavras liberadas");
 });
 
 it("leitura das aprovadas que falha não publica nada, e diz o motivo", async () => {
