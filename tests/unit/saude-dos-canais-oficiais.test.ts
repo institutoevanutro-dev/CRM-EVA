@@ -345,3 +345,18 @@ describe("o cron enxerga os três canais", () => {
     expect(mudos, `canais sem checkHealth: ${mudos.join(", ")}`).toEqual([]);
   });
 });
+
+describe("desconexão pelo celular (coexistência)", () => {
+  it("avisoDaConexao com detalhe de desconexão no app: crítico, título diz que foi pelo celular, corpo é o motivo", async () => {
+    const h = await import("@/lib/channels/health");
+    expect(
+      h.avisoDaConexao({ reachable: false, status: null, detail: `${h.DETALHE_DESCONECTADO_NO_APP}:USER_INITIATED_DISCONNECT` }, "Clínica"),
+    ).toMatchObject({
+      kind: "channel_number_alert",
+      severity: "critical",
+      episodio: h.EPISODIO_DESCONECTADO_NO_APP,
+      title: expect.stringMatching(/desconectad.*celular/i),
+      body: expect.stringContaining("USER_INITIATED_DISCONNECT"),
+    });
+  });
+});

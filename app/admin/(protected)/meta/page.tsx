@@ -50,7 +50,7 @@ export default async function Page() {
   const { data, error } = await createAdminClient()
     .from("platform_meta_app")
     .select(
-      "app_secret_encrypted, verify_token_encrypted, verify_token_created_at, updated_at, ig_app_id, ig_app_secret_encrypted",
+      "app_secret_encrypted, verify_token_encrypted, verify_token_created_at, updated_at, ig_app_id, ig_app_secret_encrypted, app_id, es_config_id",
     )
     .eq("id", 1)
     .maybeSingle();
@@ -63,6 +63,8 @@ export default async function Page() {
         updated_at: string | null;
         ig_app_id: string | null;
         ig_app_secret_encrypted: string | null;
+        app_id: string | null;
+        es_config_id: string | null;
       }
     | null;
 
@@ -83,6 +85,8 @@ export default async function Page() {
       leituraFalhou={Boolean(error)}
       instagramAppId={linha?.ig_app_id ?? null}
       instagramTemSegredoSalvo={Boolean(linha?.ig_app_secret_encrypted)}
+      cadastroAppId={linha?.app_id ?? null}
+      cadastroConfigId={linha?.es_config_id ?? null}
     />
   );
 }

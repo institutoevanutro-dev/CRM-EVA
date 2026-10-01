@@ -128,6 +128,16 @@ UPSTASH_REDIS_REST_TOKEN=e2e-placeholder-nao-e-segredo
 # que guarda o que o app mandou. Fora dessa spec nada escuta ali: a busca de
 # perfil de \`instagram-receber\` falha rápido, como falhava contra a Meta real.
 INSTAGRAM_GRAPH_BASE_URL=http://127.0.0.1:47811
+# Graph API do WhatsApp oficial (fluxo de conexão: troca do code, número,
+# webhook, smb_app_data) aponta para o receptor local que
+# \`tests/e2e/cadastro-incorporado.spec.ts\` sobe NESTA porta fixa (47813).
+# Só a spec de Cadastro Incorporado escuta ali. 47811 é a Graph do Instagram e
+# 47812 é a \`CONTA_URL\` abaixo.
+META_GRAPH_BASE_URL=http://127.0.0.1:47813
+# App Secret EM CLARO do app da Meta do e2e: \`scripts/seed-e2e-cadastro-incorporado.ts\`
+# o grava cifrado em \`platform_meta_app\`, e é com ele que se assina o HMAC do
+# webhook. Valor de teste, não é segredo.
+E2E_META_APP_SECRET=e2e-app-secret-0123456789abcdef
 # Login pela Conta EvaLink LIGADO na suíte, contra a Conta falsa que o
 # playwright.config.ts sobe nesta porta fixa (tests/helpers/conta-falsa-servidor.ts).
 # Os usuários do seed não estão ligados à Conta, então continuam entrando por

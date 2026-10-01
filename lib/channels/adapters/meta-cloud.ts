@@ -142,10 +142,17 @@ export const metaCloudAdapter: ChannelAdapter = {
   async checkHealth(
     input: ChannelTenantScope & { sessionRef: string },
   ): Promise<ChannelHealth> {
+    // Credencial da sessão que não decifra é queda CERTA (nada sai até o dono
+    // agir): FAILED abre o aviso. Lançar caía no `catch` do cron, que só loga.
+    // Só esta falha: lookup que falha segue lançando (pode ser oscilação do banco).
     const creds = await resolveMetaCreds(createAdminClient(), {
       organizationId: input.organizationId,
       phoneNumberId: input.sessionRef,
+    }).catch((err: unknown) => {
+      if (err instanceof Error && err.message.startsWith("meta_creds_decrypt_failed")) return "nao_decifra" as const;
+      throw err;
     });
+    if (creds === "nao_decifra") return { reachable: true, status: "FAILED", detail: "credencial_da_sessao_nao_decifra" };
     if (!creds) return { reachable: false, status: null, detail: "sem_credencial_para_a_sessao" };
 
     const version = graphVersion();

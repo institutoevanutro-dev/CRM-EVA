@@ -30,15 +30,13 @@ import { requireRole } from "@/lib/auth/require-role";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { CHANNEL_PROVIDER_META } from "@/lib/channels/capabilities";
 import { appDaMeta, appDaMetaDoAmbiente } from "@/lib/channels/meta/app";
-import { assinarWebhookDaConta } from "@/lib/channels/meta/assinar-webhook";
-import { conferirNumeroDaConta, validateMetaCredentials } from "@/lib/channels/meta/validate-credentials";
-import { reactivateChannelSession } from "@/lib/channels/reactivate";
-import { env } from "@/lib/env";
-import { logger } from "@/lib/logger";
+import { lerCoexistencia } from "@/lib/channels/meta/coexistencia";
+import { conectarCanalOficial } from "@/lib/channels/meta/conectar-canal-oficial";
+import { graphVersion } from "@/lib/graph-version";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { metadataInicialDoCanal } from "@/lib/ai/elegibilidade/pre-go-live";
-import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { traduzir } from "@/lib/i18n/dicionario";
+
+import { publicBase, traduzirMotivo } from "./route-helpers";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -48,23 +46,6 @@ const conectarSchema = z.object({
   waba_id: z.string().min(5),
   token: z.string().min(20),
 });
-
-/**
- * Base pública desta instalação — é o que o operador cola no dashboard da Meta.
- *
- * `env.*` e NÃO `process.env.NEXT_PUBLIC_APP_URL` direto: variáveis
- * `NEXT_PUBLIC_` são substituídas no BUILD, e a imagem genérica do self-host é
- * construída com `https://placeholder.invalid` (Dockerfile). Lendo direto do
- * `process.env`, a tela mostrava essa URL — e quem a colasse no dashboard
- * apontaria o webhook para o nada, sem erro em lugar nenhum.
- */
-function publicBase(req: NextRequest): string {
-  const configurada = env.NEXT_PUBLIC_APP_URL;
-  const usavel = configurada && !configurada.includes("placeholder.invalid") ? configurada : null;
-  return (
-    usavel ?? req.headers.get("origin") ?? `${req.nextUrl.protocol}//${req.nextUrl.host}`
-  );
-}
 
 /** O endereço que a Meta chama para ESTA sessão — o mesmo que a tela manda colar. */
 function callbackDaSessao(req: NextRequest, webhookPathToken: string): string {
@@ -80,15 +61,6 @@ interface AssinaturaGravada {
   assinado: boolean;
   motivo?: string;
   em: string;
-}
-
-const MOTIVO_SESSAO_SEM_ENDERECO =
-  "a sessão foi gravada sem endereço de recebimento. Reconecte o canal";
-const PREFIXO_REDE = "rede indisponível:";
-
-/** Motivo fixo vai ao dicionário; o de rede traduz só o prefixo (o resto é do sistema). */
-function traduzirMotivo(motivo: string, t: (texto: string) => string): string {
-  return motivo.startsWith(PREFIXO_REDE) ? `${t(PREFIXO_REDE)}${motivo.slice(PREFIXO_REDE.length)}` : t(motivo);
 }
 
 function assinaturaGravada(metadata: unknown): AssinaturaGravada | null {
@@ -160,8 +132,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     () => consultar().maybeSingle(),
   );
 
+  const app = await appDaMeta();
+  // Sem o segredo o POST não troca o `code`: o botão abriria um fluxo que falha no fim.
+  const presente = { META_APP_ID: app.appId, META_ES_CONFIG_ID: app.esConfigId, META_APP_SECRET: app.appSecret };
+  const faltam = (["META_APP_ID", "META_ES_CONFIG_ID", "META_APP_SECRET"] as const).filter((v) => !presente[v]);
+  const cadastroIncorporado = {
+    disponivel: faltam.length === 0,
+    appId: app.appId,
+    configId: app.esConfigId,
+    versao: graphVersion(),
+    faltam,
+    configurarEm: authz.user.is_platform_admin && !authz.user.support ? "/admin/meta" : null,
+  };
+
   return ok({
     connected: Boolean(data),
+    cadastroIncorporado,
+    coexistencia: data ? lerCoexistencia(data.metadata) : null,
     channel_session_id: data?.id ?? null,
     // `hasToken` em vez do token: uma vez gravado, a tela mostra que EXISTE, nunca
     // qual é. Devolver o segredo para preencher o campo seria vazá-lo a cada render.
@@ -184,7 +171,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           // link de `/admin/google` na Agenda. Para o admin de um tenant qualquer
           // o link seria um 404; a tela diz a ele quem procurar.
           configurarEm: authz.user.is_platform_admin && !authz.user.support ? "/admin/meta" : null,
-          fields: ["messages", "message_template_status_update"],
+          fields: ["messages", "message_template_status_update", "smb_message_echoes", "history", "smb_app_state_sync", "account_update", "account_offboarded", "account_reconnected"],
         }
       : null,
   });
@@ -209,173 +196,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const { phone_number_id, waba_id, token } = parsed.data;
 
-  // VALIDA ANTES DE GRAVAR — a rota não sabe com quem fala; ela pergunta se a
-  // credencial presta e o canal responde.
-  const validacao = await validateMetaCredentials({ phoneNumberId: phone_number_id, token });
-  if (!validacao.ok) {
-    return fail("invalid_request", validacao.motivo, 422, { requestId });
-  }
-
-  // O número tem que ser DESTA conta: o webhook é assinado por WABA, e um ID de
-  // conta errado assinaria a conta alheia, deixando este número surdo.
-  const daConta = await conferirNumeroDaConta({ wabaId: waba_id, phoneNumberId: phone_number_id, token });
-  if (!daConta.ok) {
-    return fail("invalid_request", traduzirMotivo(daConta.motivo, t), 422, { requestId });
-  }
-
-  const admin = createAdminClient();
-  const cifrado = await encryptWebhookSecret(admin, token);
-  if (!cifrado) {
-    // Sem a GUC de cifra configurada, gravar o token em claro seria pior que
-    // recusar. O operador precisa saber que falta uma configuração de servidor.
-    return fail(
-      "invalid_request",
-      t("cifra indisponível nesta instalação (GUC app.nuvemshop_oauth_key ausente) — o token não foi gravado"),
-      422,
-      { requestId },
-    );
-  }
-
-  // A busca NÃO filtra `archived_at`: um canal oficial excluído é exatamente o
-  // que este POST precisa achar para trazer de volta. Ignorá-lo criaria uma
-  // SEGUNDA linha oficial na org — e a linha velha continuaria segurando o par
-  // (org, número) na trava da 0106.
-  const buscarExistente = (colunas: string) =>
-    admin
-      .from("channel_sessions")
-      .select(colunas)
-      .eq("organization_id", orgId)
-      .eq("provider", CHANNEL_PROVIDER_META)
-      .maybeSingle();
-  const { data: existenteRaw } = await queryTolerantToMissingArchived(
-    () => buscarExistente(`id, ${ARCHIVED_AT}`),
-    () => buscarExistente("id"),
-  );
-  const existente = existenteRaw as { id: string; archived_at?: string | null } | null;
-
-  const linha = {
-    organization_id: orgId,
-    provider: CHANNEL_PROVIDER_META,
-    meta_phone_number_id: phone_number_id,
-    meta_waba_id: waba_id,
-    meta_token_encrypted: cifrado,
-    phone_number: validacao.displayPhoneNumber ? `+${validacao.displayPhoneNumber.replace(/\D/g, "")}` : null,
-    display_name: validacao.verifiedName ?? "Canal oficial",
-    status: "WORKING",
-  };
-
-  // `update` quando já existe em vez de upsert: a trava única de (org,
-  // phone_number) não serve de árbitro de `ON CONFLICT` aqui. Era DEFERRABLE
-  // (medido ao criar a sessão de teste da Fase 3b, e o Postgres recusa
-  // constraint deferível na inferência); a migration 0107 a trocou por um índice
-  // único PARCIAL (`where archived_at is null`), que só seria inferível se a
-  // cláusula repetisse o predicado — e o cliente do PostgREST não expõe isso.
-  // Mudou a razão, não a escolha.
-  //
-  // O update passa por `reactivateChannelSession` porque reconectar é
-  // ressuscitar: o mesmo patch que devolve status, credencial e número tem que
-  // devolver a linha à vida, ou o canal fica "conectado" na tela e excluído para
-  // todo o resto do sistema. Para o canal que já estava ativo é um no-op — e a
-  // auditoria de volta sai de lá, junto da ressurreição, não daqui.
-  const { error } = existente
-    ? await reactivateChannelSession(
-        admin,
-        {
-          organizationId: orgId,
-          channelSessionId: existente.id,
-          archivedAt: existente.archived_at ?? null,
-        },
-        linha,
-        {
-          userId: userId,
-          requestId,
-          metadata: { provider: CHANNEL_PROVIDER_META, phone_number: linha.phone_number },
-        },
-      )
-    : await admin.from("channel_sessions").insert({
-        ...linha,
-        webhook_secret_encrypted: cifrado,
-        metadata: metadataInicialDoCanal(),
-      });
-
-  if (error) {
-    return fail("internal_error", error.message ?? "channel_session_write_failed", 500, {
-      requestId,
-    });
-  }
-
-  // O app da Meta tem UM callback; sem o override por WABA, a conta de uma
-  // segunda organização entrega na URL de outra sessão e nunca recebe nada
-  // (medido em produção em 26/09/2026). Falhar aqui NÃO desfaz a conexão: a
-  // credencial é boa, o envio funciona, e a tela avisa que o recebimento não.
-  // Releitura porque `reactivateChannelSession` não devolve a linha; o filtro de
-  // arquivado é o do GET, e a linha acabou de ser (re)ativada.
-  const lerSessao = () =>
-    admin
-      .from("channel_sessions")
-      .select("id, webhook_path_token")
-      .eq("organization_id", orgId)
-      .eq("provider", CHANNEL_PROVIDER_META);
-  const { data: sessaoRaw } = await queryTolerantToMissingArchived(
-    () => lerSessao().is(ARCHIVED_AT, null).maybeSingle(),
-    () => lerSessao().maybeSingle(),
-  );
-  const sessao = sessaoRaw as { id: string; webhook_path_token?: string } | null;
-  const assinatura = sessao?.webhook_path_token
-    ? await assinarWebhookDaConta({
-        wabaId: waba_id,
-        token,
-        callbackUrl: callbackDaSessao(req, sessao.webhook_path_token),
-        verifyToken: (await appDaMeta()).verifyToken,
-      })
-    : ({ ok: false, motivo: MOTIVO_SESSAO_SEM_ENDERECO } as const);
-
-  if (!assinatura.ok) {
-    logger.warn("meta.webhook_da_conta.nao_assinado", {
-      organization_id: orgId,
-      waba_id,
-      motivo: assinatura.motivo,
-    });
-  }
-  if (sessao) {
-    // A metadata é lida AGORA, depois da Meta (até 15s), e não junto da sessão:
-    // ela guarda também `ai_gate` e os números de teste do pré-go-live, e um admin
-    // que mudasse o gate durante a chamada seria revertido em silêncio, com a IA
-    // voltando a responder contato real.
-    // ponytail: ainda é ler-mesclar-gravar; sobra uma janela de milissegundos entre
-    // este select e o update. Não há RPC genérica de merge para esta coluna (só a
-    // do pré-go-live, 0218); vira RPC com `jsonb_set` se a janela algum dia morder.
-    const { data: atual } = await admin
-      .from("channel_sessions")
-      .select("metadata")
-      .eq("organization_id", orgId)
-      .eq("id", sessao.id)
-      .maybeSingle();
-    const lida = (atual as { metadata?: unknown } | null)?.metadata;
-    const base = (lida && typeof lida === "object" ? lida : {}) as Record<string, unknown>;
-    const { error: erroMetadata } = await admin
-      .from("channel_sessions")
-      .update({
-        metadata: {
-          ...base,
-          webhook_da_conta: {
-            assinado: assinatura.ok,
-            ...(assinatura.ok ? {} : { motivo: assinatura.motivo }),
-            em: new Date().toISOString(),
-          },
-        },
-      })
-      .eq("organization_id", orgId)
-      .eq("id", sessao.id);
-    if (erroMetadata) {
-      logger.warn("meta.webhook_da_conta.nao_gravado", { organization_id: orgId, motivo: erroMetadata.message });
-    }
-  }
-
+  // Validação, gravação (ou ressurreição) e assinatura do webhook da conta: o
+  // mesmo caminho do Cadastro Incorporado — ver `conectarCanalOficial`.
+  const r = await conectarCanalOficial(createAdminClient(), {
+    organizationId: orgId, userId, requestId, phoneNumberId: phone_number_id, wabaId: waba_id, token, callbackBase: publicBase(req),
+  });
+  if (!r.ok) return fail(r.codigo, traduzirMotivo(r.motivo, t), r.status, { requestId });
   return ok({
-    connected: true,
-    displayName: linha.display_name,
-    phoneNumber: linha.phone_number,
-    webhook: assinatura.ok ? { assinado: true } : { assinado: false, motivo: traduzirMotivo(assinatura.motivo, t) },
+    connected: true, displayName: r.displayName, phoneNumber: r.phoneNumber,
+    webhook: r.webhook.assinado ? { assinado: true } : { assinado: false, motivo: traduzirMotivo(r.webhook.motivo, t) },
   });
 }

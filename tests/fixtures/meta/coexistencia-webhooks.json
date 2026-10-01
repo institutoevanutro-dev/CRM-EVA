@@ -1,0 +1,22 @@
+[
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "smb_message_echoes", "value": {
+      "messaging_product": "whatsapp", "metadata": { "display_phone_number": "5527999049879", "phone_number_id": "111" },
+      "message_echoes": [{ "from": "5527999049879", "to": "5531998966398", "id": "wamid.ECO1", "timestamp": "1760097600", "type": "text", "text": { "body": "respondi pelo celular" } }] } }] }] },
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "history", "value": {
+      "messaging_product": "whatsapp", "metadata": { "display_phone_number": "5527999049879", "phone_number_id": "111" },
+      "history": [{ "metadata": { "phase": 0, "chunk_order": 1, "progress": 20 }, "threads": [{ "id": "5531998966398", "messages": [
+        { "from": "5531998966398", "id": "wamid.H1", "timestamp": "1759000000", "type": "text", "text": { "body": "oi" }, "history_context": { "status": "DELIVERED" } },
+        { "from": "5527999049879", "to": "5531998966398", "id": "wamid.H2", "timestamp": "1759000100", "type": "text", "text": { "body": "olá" } } ] }] }] } }] }] },
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "history", "value": {
+      "messaging_product": "whatsapp", "metadata": { "phone_number_id": "111" },
+      "history": [{ "metadata": { "phase": 0, "chunk_order": 0, "progress": 0 }, "threads": [] }],
+      "errors": [{ "code": 2593109, "title": "History sync not shared" }] } }] }] },
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "smb_app_state_sync", "value": {
+      "messaging_product": "whatsapp", "metadata": { "phone_number_id": "111" },
+      "state_sync": [{ "type": "contact", "action": "add", "contact": { "full_name": "Maria Silva", "phone_number": "+55 31 99896-6398" }, "metadata": { "timestamp": "1760097600" } }] } }] }] },
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_update", "value": {
+      "phone_number": "+5527999049879", "event": "PARTNER_REMOVED", "disconnection_info": { "reason": "USER_INITIATED_DISCONNECT" } } }] }] },
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_update", "value": { "phone_number": "+5527999049879", "event": "ACCOUNT_RECONNECTED" } }] }] },
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_offboarded", "value": { "phone_number": "+5527999049879", "disconnection_info": { "reason": "BUSINESS_INITIATED_OFFBOARDING" } } }] }] },
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_reconnected", "value": { "phone_number": "+5527999049879" } }] }] }
+]

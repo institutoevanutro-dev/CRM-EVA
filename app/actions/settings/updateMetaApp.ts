@@ -84,6 +84,9 @@ const entradaSchema = z.object({
    */
   ig_app_id: z.string().trim().min(1).max(60).optional(),
   ig_app_secret: z.string().trim().min(16).max(300).optional(),
+  /** Público: vai ao `FB.init` do browser. Texto puro, nunca cifrado. */
+  app_id: z.string().trim().min(1).max(60).optional(),
+  es_config_id: z.string().trim().min(1).max(60).optional(),
 });
 
 export type MetaAppInput = z.infer<typeof entradaSchema>;
@@ -217,10 +220,12 @@ export async function updateMetaApp(input: MetaAppInput): Promise<UpdateMetaAppR
   const segredoNovo = parsed.data.app_secret;
   const igAppIdNovo = parsed.data.ig_app_id;
   const igSegredoNovo = parsed.data.ig_app_secret;
+  const appIdNovo = parsed.data.app_id;
+  const esConfigIdNovo = parsed.data.es_config_id;
 
   if (!segredoNovo && !temSegredo) return SEM_SEGREDO;
 
-  if (!segredoNovo && jaTemToken && !igAppIdNovo && !igSegredoNovo) {
+  if (!segredoNovo && jaTemToken && !igAppIdNovo && !igSegredoNovo && !appIdNovo && !esConfigIdNovo) {
     // Nada a fazer, e dizer isso é melhor que gravar uma trilha de "atualizou"
     // que não atualizou nada.
     return { ok: false, error: "nada_para_salvar" };
@@ -246,6 +251,15 @@ export async function updateMetaApp(input: MetaAppInput): Promise<UpdateMetaAppR
   if (igAppIdNovo) {
     valores.ig_app_id = igAppIdNovo;
     campos.push("ig_app_id");
+  }
+
+  if (appIdNovo) {
+    valores.app_id = appIdNovo;
+    campos.push("app_id");
+  }
+  if (esConfigIdNovo) {
+    valores.es_config_id = esConfigIdNovo;
+    campos.push("es_config_id");
   }
 
   if (igSegredoNovo) {
@@ -283,6 +297,7 @@ export async function updateMetaApp(input: MetaAppInput): Promise<UpdateMetaAppR
     verify_token_gerado: Boolean(verifyToken),
     instagram_app_id_trocado: Boolean(igAppIdNovo),
     instagram_segredo_trocado: Boolean(igSegredoNovo),
+    cadastro_incorporado_trocado: Boolean(appIdNovo || esConfigIdNovo),
   });
   if (!r.ok) return r;
 

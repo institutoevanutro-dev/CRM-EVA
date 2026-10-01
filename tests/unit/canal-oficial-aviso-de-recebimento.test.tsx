@@ -14,6 +14,8 @@ let estado: OfficialChannelState;
 vi.mock("@/hooks/channels/useOfficialChannel", () => ({
   useOfficialChannel: () => ({ data: { data: estado }, isPending: false }),
   useConnectOfficialChannel: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCadastroIncorporado: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSincronizarCoexistencia: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 

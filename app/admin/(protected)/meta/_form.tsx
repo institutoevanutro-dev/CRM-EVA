@@ -44,6 +44,9 @@ interface Props {
   readonly instagramAppId: string | null;
   /** SE existe App Secret do Instagram gravado — nunca QUAL. */
   readonly instagramTemSegredoSalvo: boolean;
+  /** App ID e Configuration ID do Cadastro Incorporado. Públicos (vão ao FB.init). */
+  readonly cadastroAppId: string | null;
+  readonly cadastroConfigId: string | null;
 }
 
 /** O piso do schema da action. Abaixo disso o Zod recusa e a tela culparia o dono. */
@@ -58,12 +61,16 @@ export function FormularioDaMeta({
   leituraFalhou,
   instagramAppId,
   instagramTemSegredoSalvo,
+  cadastroAppId,
+  cadastroConfigId,
 }: Props) {
   const t = useT();
   const router = useRouter();
   const [chave, setChave] = useState("");
   const [igAppId, setIgAppId] = useState(instagramAppId ?? "");
   const [igChave, setIgChave] = useState("");
+  const [appId, setAppId] = useState(cadastroAppId ?? "");
+  const [configId, setConfigId] = useState(cadastroConfigId ?? "");
   /**
    * O token recém-gerado vive SÓ aqui, na memória desta aba. Recarregar a página
    * o perde — e isso é o desenho, não um defeito: a tela diz para copiar agora e
@@ -120,6 +127,16 @@ export function FormularioDaMeta({
       });
       if (r.ok) setIgChave("");
       aoGravar(r, t("Credencial do Instagram salva."));
+    });
+  }
+
+  function salvarCadastroIncorporado() {
+    iniciar(async () => {
+      const r = await updateMetaApp({
+        app_id: appId.trim() || undefined,
+        es_config_id: configId.trim() || undefined,
+      });
+      aoGravar(r, t("Cadastro Incorporado salvo."));
     });
   }
 
@@ -236,6 +253,46 @@ export function FormularioDaMeta({
             data-testid="instagram-salvar"
             disabled={!podeSalvarInstagram || ocupado}
             onClick={salvarInstagram}
+          >
+            {ocupado ? t("Salvando…") : t("Salvar")}
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="flex flex-col gap-4 p-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="font-medium">{t("Cadastro Incorporado (conectar WhatsApp pelo botão)")}</h2>
+          <p className="text-sm text-muted-foreground">
+            {t("Painel da Meta › seu app › Facebook Login for Business › Configurations. Com os dois valores, a aba Conexões ganha o botão Conectar WhatsApp.")}
+          </p>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="meta-app-id">{t("App ID")}</Label>
+          <Input
+            id="meta-app-id"
+            data-testid="meta-app-id"
+            autoComplete="off"
+            value={appId}
+            onChange={(e) => setAppId(e.target.value)}
+            placeholder={t("Número do App ID")}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="meta-es-config-id">{t("Configuration ID do Cadastro Incorporado")}</Label>
+          <Input
+            id="meta-es-config-id"
+            data-testid="meta-es-config-id"
+            autoComplete="off"
+            value={configId}
+            onChange={(e) => setConfigId(e.target.value)}
+            placeholder={t("Número da configuração")}
+          />
+        </div>
+        <div className="flex items-center justify-end gap-3">
+          <Button
+            data-testid="cadastro-incorporado-salvar"
+            disabled={ocupado || (appId.trim() === (cadastroAppId ?? "") && configId.trim() === (cadastroConfigId ?? ""))}
+            onClick={salvarCadastroIncorporado}
           >
             {ocupado ? t("Salvando…") : t("Salvar")}
           </Button>

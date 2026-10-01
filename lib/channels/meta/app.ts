@@ -50,10 +50,18 @@ import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 export interface AppDaMetaEmVigor {
   readonly appSecret: string | null;
   readonly verifyToken: string | null;
+  /** Não é segredo: vai ao `FB.init` do browser. `null` = Cadastro Incorporado indisponível. */
+  readonly appId: string | null;
+  readonly esConfigId: string | null;
 }
+
+type ParDeSegredos = Pick<AppDaMetaEmVigor, "appSecret" | "verifyToken">;
 
 /** Os nomes das variáveis, para a tela poder dizer exatamente o que falta. */
 export const VARIAVEIS_DO_APP_DA_META = ["META_APP_SECRET", "META_WEBHOOK_VERIFY_TOKEN"] as const;
+
+/** As variáveis do Cadastro Incorporado que a tela pode nomear. */
+export const VARIAVEIS_DO_CADASTRO_INCORPORADO = ["META_APP_ID", "META_ES_CONFIG_ID"] as const;
 
 function texto(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
@@ -74,7 +82,14 @@ export function appDaMetaDoAmbiente(
   // decisão de `metaPodeReceber` (`lib/channels/meta/webhook.ts`).
   const appSecret = texto(source.META_APP_SECRET);
   const verifyToken = texto(source.META_WEBHOOK_VERIFY_TOKEN);
-  return { appSecret: appSecret || null, verifyToken: verifyToken || null };
+  const appId = texto(source.META_APP_ID);
+  const esConfigId = texto(source.META_ES_CONFIG_ID);
+  return {
+    appSecret: appSecret || null,
+    verifyToken: verifyToken || null,
+    appId: appId || null,
+    esConfigId: esConfigId || null,
+  };
 }
 
 /**
@@ -105,23 +120,26 @@ export function invalidarAppDaMeta(): void {
 interface LinhaDoApp {
   app_secret_encrypted: string | null;
   verify_token_encrypted: string | null;
+  app_id: string | null;
+  es_config_id: string | null;
 }
 
 /** Nunca lança: devolve `null` quando não há linha utilizável. */
 async function linhaDoBanco(): Promise<LinhaDoApp | null> {
   try {
-    const { data, error } = await createAdminClient()
-      .from("platform_meta_app")
-      .select("app_secret_encrypted, verify_token_encrypted")
-      .eq("id", 1)
-      .maybeSingle();
+    const ler = (colunas: string) => createAdminClient().from("platform_meta_app").select(colunas).eq("id", 1).maybeSingle();
+    let { data, error } = await ler("app_secret_encrypted, verify_token_encrypted, app_id, es_config_id");
+    // Clone sem a 0296 (imagem nova antes do baseline) devolve 42703: relê sem
+    // as colunas novas — o PAR de segredos tem de seguir vindo do banco, senão o
+    // webhook troca de segredo e toda entrega morre em 401.
+    if (error?.code === "42703") ({ data, error } = await ler("app_secret_encrypted, verify_token_encrypted"));
     // Clone que ainda não aplicou a 0257 devolve 42P01 aqui. Isso NÃO é erro
     // desta instalação — é o piso de rollback funcionando, e o `.env` assume.
     if (error) {
       logger.info("[meta.app] sem credencial no banco; vale o .env", { codigo: error.code });
       return null;
     }
-    return (data as LinhaDoApp | null) ?? null;
+    return (data as unknown as LinhaDoApp | null) ?? null;
   } catch (err) {
     logger.warn("[meta.app] leitura do banco falhou; vale o .env", {
       error: err instanceof Error ? err.message : String(err),
@@ -138,7 +156,7 @@ async function linhaDoBanco(): Promise<LinhaDoApp | null> {
  * segredo e sem o token o webhook nunca é aceito. Nos dois casos o desfecho
  * certo é o piso (o `.env` inteiro), não um par remendado.
  */
-async function parDoBanco(linha: LinhaDoApp | null): Promise<AppDaMetaEmVigor | null> {
+async function parDoBanco(linha: LinhaDoApp | null): Promise<ParDeSegredos | null> {
   const segredoCifrado = texto(linha?.app_secret_encrypted);
   const tokenCifrado = texto(linha?.verify_token_encrypted);
   if (!segredoCifrado || !tokenCifrado) return null;
@@ -166,7 +184,18 @@ export async function appDaMeta(): Promise<AppDaMetaEmVigor> {
   const memo = globalThis.__memoDoAppDaMeta;
   if (memo && memo.expiraEm > Date.now()) return memo.valor;
 
-  const valor = (await parDoBanco(await linhaDoBanco())) ?? appDaMetaDoAmbiente();
+  const linha = await linhaDoBanco();
+  const ambiente = appDaMetaDoAmbiente();
+  // O PAR de segredos é servido inteiro de uma fonte só (ver cabeçalho). Os dois
+  // identificadores públicos são independentes dele e cada um cai no `.env`
+  // sozinho: App ID no banco com config id só no `.env` é configuração válida.
+  const par = (await parDoBanco(linha)) ?? ambiente;
+  const valor: AppDaMetaEmVigor = {
+    appSecret: par.appSecret,
+    verifyToken: par.verifyToken,
+    appId: texto(linha?.app_id) || ambiente.appId,
+    esConfigId: texto(linha?.es_config_id) || ambiente.esConfigId,
+  };
   globalThis.__memoDoAppDaMeta = { valor, expiraEm: Date.now() + TTL_MS };
   return valor;
 }

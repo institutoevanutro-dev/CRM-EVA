@@ -52,7 +52,7 @@ import {
   type ChannelProvider,
   type ChannelSessionRef,
 } from "@/lib/channels";
-import { sincronizarSaudeDaConexao } from "@/lib/channels/health";
+import { STATUS_REASON_DESCONECTADO_NO_APP, sincronizarSaudeDaConexao } from "@/lib/channels/health";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -66,6 +66,7 @@ type LinhaDeSessao = ChannelSessionRef & {
   id: string;
   organization_id: string;
   status: string | null;
+  status_reason: string | null;
   display_name: string | null;
   phone_number: string | null;
   archived_at: string | null;
@@ -89,7 +90,7 @@ async function handle(req: NextRequest): Promise<Response> {
   const { data, error } = await admin
     .from("channel_sessions")
     .select(
-      `id, organization_id, status, display_name, phone_number, archived_at, ${CHANNEL_SESSION_REF_COLUMNS}`,
+      `id, organization_id, status, display_name, phone_number, archived_at, status_reason, ${CHANNEL_SESSION_REF_COLUMNS}`,
     )
     .is("archived_at", null)
     .limit(LIMITE);
@@ -144,6 +145,13 @@ async function handle(req: NextRequest): Promise<Response> {
       // O status novo vale para o banco, mas SÓ quando deu para perguntar:
       // gravar por cima com um erro de rede transitório trocaria informação boa
       // por ruído, e é o mesmo cuidado que a tela de conexões já toma.
+      // Desconexão feita pelo celular (coexistência) é um estado que a sonda
+      // não enxerga: a Graph pode seguir respondendo 200 ao número. Só o
+      // `account_reconnected` da própria Meta tira a sessão daqui.
+      const presaPeloCelular = s.status === "FAILED" && s.status_reason === STATUS_REASON_DESCONECTADO_NO_APP;
+      // Nem o aviso é da sonda: ela poderia fechar o da desconexão (alcançável)
+      // ou empilhar outro por cima (inalcançável). Só o empurrão mexe nele.
+      if (presaPeloCelular) continue;
       let statusFinal = s.status;
       if (saude.reachable && saude.status && saude.status !== s.status) {
         statusFinal = saude.status;

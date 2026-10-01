@@ -13,6 +13,8 @@
  */
 import { graphVersion } from "@/lib/graph-version";
 
+import { baseDaGraph } from "./graph-base";
+
 /**
  * Sem caminho de tela: quem lê pode ser o admin de um tenant, que não abre a
  * administração da instalação. O link aparece na tela só para quem pode (`configurarEm`).
@@ -32,7 +34,7 @@ export async function assinarWebhookDaConta(input: {
     return { ok: false, motivo: MOTIVO_SEM_TOKEN_DE_VERIFICACAO };
   }
   try {
-    const res = await fetch(`https://graph.facebook.com/${graphVersion()}/${input.wabaId}/subscribed_apps`, {
+    const res = await fetch(`${baseDaGraph()}/${graphVersion()}/${input.wabaId}/subscribed_apps`, {
       method: "POST",
       headers: { Authorization: `Bearer ${input.token}` },
       body: new URLSearchParams({

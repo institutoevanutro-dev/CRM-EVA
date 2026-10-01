@@ -842,6 +842,11 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "endpoint da Graph API do WhatsApp Cloud — 6 arquivos: envio de template, sincronização de modelos, validação de credencial, conversões e insights. É contrato da Meta, não escolha nossa.",
   },
+  "connect.facebook.net": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "CDN do SDK JavaScript da Meta (`lib/channels/meta/cadastro-incorporado-cliente.ts`), que abre a janela do Cadastro Incorporado. A Meta só entrega o `FB.login` do Embedded Signup por esse script; não há como servi-lo do domínio do revendedor.",
+  },
   "graph.instagram.com": {
     categoria: "FORNECEDOR",
     motivo:

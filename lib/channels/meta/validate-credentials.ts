@@ -12,6 +12,8 @@
  */
 import { graphVersion } from "@/lib/graph-version";
 
+import { baseDaGraph } from "./graph-base";
+
 export type ValidacaoCredencial =
   | { ok: true; displayPhoneNumber: string | null; verifiedName: string | null; qualityRating: string | null }
   | { ok: false; motivo: string };
@@ -24,7 +26,7 @@ export async function validateMetaCredentials(input: {
   const version = input.graphVersion ?? graphVersion();
   try {
     const res = await fetch(
-      `https://graph.facebook.com/${version}/${input.phoneNumberId}` +
+      `${baseDaGraph()}/${version}/${input.phoneNumberId}` +
         `?fields=display_phone_number,verified_name,quality_rating`,
       { headers: { Authorization: `Bearer ${input.token}` } },
     );
@@ -75,7 +77,7 @@ export async function conferirNumeroDaConta(input: {
   try {
     // ponytail: uma página de até 100 números; paginar se alguma conta passar disso.
     const res = await fetch(
-      `https://graph.facebook.com/${graphVersion()}/${input.wabaId}/phone_numbers?fields=id&limit=100`,
+      `${baseDaGraph()}/${graphVersion()}/${input.wabaId}/phone_numbers?fields=id&limit=100`,
       { headers: { Authorization: `Bearer ${input.token}` }, signal: AbortSignal.timeout(15_000) },
     );
     const body = (await res.json().catch(() => ({}))) as {

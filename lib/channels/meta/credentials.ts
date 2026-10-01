@@ -116,10 +116,13 @@ export async function metaCredsForPhoneNumberId(
   if (!data || !cifrado) return null;
 
   const token = await decryptWebhookSecret(admin, cifrado as unknown as string);
-  // Decifra que falha devolve null: a chave (GUC) pode não estar configurada nesta
-  // instalação. Cair no env é melhor que derrubar o envio — e o `source` no retorno
-  // deixa a diferença visível para quem depura.
-  if (!token) return null;
+  // A sessão TEM token e ele não decifrou (chave mestra trocada, GUC ausente).
+  // Cair no `.env` aqui enviaria pela conta de OUTRA instalação sem erro em
+  // lugar nenhum — o mesmo defeito da issue #236 por outra porta. Falha fechada.
+  if (!token)
+    throw new Error(
+      "meta_creds_decrypt_failed: a credencial da sessão não decifrou; o .env não é usado",
+    );
 
   return {
     phoneNumberId: data.meta_phone_number_id as string,

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { apiClient } from "@/lib/api/client";
+import type { Coexistencia } from "@/lib/channels/meta/coexistencia";
 
 export interface OfficialChannelState {
   channel_session_id?: string | null;
@@ -14,6 +15,16 @@ export interface OfficialChannelState {
   displayName: string | null;
   phoneNumber: string | null;
   status: string | null;
+  cadastroIncorporado?: {
+    disponivel: boolean;
+    appId: string | null;
+    configId: string | null;
+    versao: string;
+    faltam: ("META_APP_ID" | "META_ES_CONFIG_ID" | "META_APP_SECRET")[];
+    configurarEm: string | null;
+  };
+  /** `metadata.coexistencia` da sessão: pedidos de contatos/histórico e o progresso. */
+  coexistencia?: Coexistencia | null;
   webhook: {
     callbackUrl: string;
     verifyToken: string | null;
@@ -68,5 +79,44 @@ export function useConnectOfficialChannel() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["official-channel"] });
     },
+  });
+}
+
+export interface CadastroIncorporadoInput {
+  code: string;
+  evento: string;
+  waba_id: string | null;
+  phone_number_id: string | null;
+}
+
+export function useCadastroIncorporado() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CadastroIncorporadoInput) =>
+      apiClient.post<{
+        data: {
+          connected: boolean;
+          displayName: string;
+          phoneNumber: string | null;
+          coexistencia: boolean;
+          webhook?: { assinado: boolean; motivo?: string };
+        };
+      }>("/api/v1/channels/official/cadastro-incorporado", input),
+    onError: showApiError,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["official-channel"] }),
+  });
+}
+
+/** "Tentar de novo" do pedido de contatos/histórico (até 24 h depois da conexão). */
+export function useSincronizarCoexistencia() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      apiClient.post<{ data: { pedidos: Coexistencia["pedidos"]; ate: string } }>(
+        "/api/v1/channels/official/cadastro-incorporado/sincronizar",
+        {},
+      ),
+    onError: showApiError,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["official-channel"] }),
   });
 }

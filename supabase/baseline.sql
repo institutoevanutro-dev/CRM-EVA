@@ -28784,6 +28784,12 @@ create policy followup_flow_versions_delete on public.followup_flow_versions
   using (organization_id in (select public.fn_user_org_ids())
          and public.fn_role_at_least(organization_id, 'manager'));
 
+-- ---- cadastro incorporado: app_id e es_config_id (migration 0296) ----
+alter table public.platform_meta_app
+  add column if not exists app_id text,
+  add column if not exists es_config_id text;
+-- ---- fim: cadastro incorporado (migration 0296) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

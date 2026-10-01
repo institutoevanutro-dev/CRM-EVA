@@ -33,7 +33,8 @@ import { fail } from "@/lib/api/wrappers";
 import { appDaMeta } from "@/lib/channels/meta/app";
 import { lerEnvelopeMeta } from "@/lib/channels/meta/envelope";
 import { parseMetaWebhook, verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
-import { ingestMetaInbound } from "@/lib/channels/meta/ingest";
+import { ingestMetaEcho, ingestMetaInbound } from "@/lib/channels/meta/ingest";
+import { aplicarEventoDaConta } from "@/lib/channels/meta/saude-da-conta";
 import { metaSessionByWebhookToken } from "@/lib/channels/meta/session";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -139,12 +140,41 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       if (r.status === "failed" || r.status === "no_session") {
         // 2xx continua (a Meta re-entregaria em loop), mas a falha NÃO fica muda:
         // vai ao log estruturado e ao corpo da resposta.
-        console.error("[meta.ingest] inbound não ingerido", {
+        logger.error("[meta.ingest] inbound não ingerido", {
           status: r.status,
           reason: r.status === "failed" ? r.reason : undefined,
           external_id: e.externalId,
           phone_number_id: e.phoneNumberId,
         });
+      }
+      continue;
+    }
+
+    if (e.kind === "echo_message") {
+      // Resposta dada pelo CELULAR da clínica (coexistência): entra como
+      // "Celular" e pausa a IA, sem acordar nada de entrada (`ingestMetaEcho`).
+      const r = await ingestMetaEcho(admin, e, { organizationId: session.organizationId });
+      desfechos.push(`echo:${r.status}`);
+      if (r.status === "failed" || r.status === "no_session") {
+        logger.error("[meta.ingest] eco do celular não ingerido", {
+          status: r.status,
+          reason: r.status === "failed" ? r.reason : undefined,
+          external_id: e.externalId,
+          phone_number_id: e.phoneNumberId,
+        });
+      }
+      continue;
+    }
+
+    if (e.kind === "account_event") {
+      // Número desconectado/reconectado pelo celular: derruba a sessão e abre o
+      // aviso na Central, ou o fecha.
+      try {
+        desfechos.push(`conta:${await aplicarEventoDaConta(admin, session, e)}`);
+      } catch (err) {
+        // 200 mesmo assim: a Meta re-entregaria em loop; o rastro fica no log.
+        logger.error("[meta.conta] evento da conta falhou", { evento: e.evento, detail: err instanceof Error ? err.message : String(err) });
+        desfechos.push("conta:failed");
       }
       continue;
     }
@@ -157,12 +187,16 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .eq("waba_id", e.wabaId)
         .eq("name", e.templateName)
         .eq("language", e.templateLanguage);
-    } else {
+    } else if (e.kind === "message_status") {
       await admin
         .from("messages")
         .update({ status: e.status === "failed" ? "failed" : "sent", updated_at: now })
         .eq("organization_id", session.organizationId)
         .eq("external_id", e.externalId);
+    } else {
+      // history_chunk / state_sync: ainda sem consumidor aqui
+      // (200 para a Meta não re-entregar), até a ingestão de cada um entrar.
+      desfechos.push("ignorado");
     }
   }
 

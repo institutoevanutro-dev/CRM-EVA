@@ -210,6 +210,10 @@ export const AUDIT_ACTIONS = [
   "ai_agent.run_completed",
   "ai_agent.run_failed",
   "channel.connected",
+  // Conexão do canal oficial pelo Cadastro Incorporado (botão da Meta), com ou
+  // sem coexistência; e o novo pedido de sincronização dentro das 24 h.
+  "channel.official_connected_es",
+  "channel.official_sync_requested",
   "channel.ai_access_updated",
   "channel.reconnected",
   // Duas ações distintas de propósito: `deleted` apagou a linha (canal virgem),

@@ -23,16 +23,18 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { pausarIaPorAtendimentoManual } from "@/lib/escalacao/atendimento-manual";
 import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
+import { logger } from "@/lib/logger";
 
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "../archived";
 import { extrairAtribuicaoMeta } from "../atribuicao-de-anuncio-oficial";
 import { aplicarEfeitosPosEntrada } from "../pos-entrada";
 import { encontrarContatoPorTelefone } from "../contato-por-telefone";
 import { marcarConversaComMensagem } from "../marcar-conversa";
-import { canonicalPhoneBR, phoneLookupVariants } from "../phone-variants";
+import { canonicalPhoneBR } from "../phone-variants";
 import type { ChannelTenantScope } from "../types";
-import type { InboundMessageEvent } from "./webhook";
+import type { EchoMessageEvent, InboundMessageEvent } from "./webhook";
 
 type Admin = SupabaseClient;
 
@@ -109,8 +111,99 @@ async function findContactByVariants(
   return encontrarContatoPorTelefone(admin as never, orgId, waId);
 }
 
+/**
+ * Contato por variantes do número → `canonicalPhoneBR` → `fn_upsert_wa_contact`
+ * → `fn_upsert_wa_conversation`. ÚNICA cópia (ruling P12): inbound, eco do
+ * celular e histórico passam aqui — três resoluções divergiriam na primeira vez
+ * que alguém mexesse numa só.
+ *
+ * `waId` é o OUTRO lado da conversa (remetente no inbound, destinatário no eco).
+ * `notify` é o nome de perfil dele quando o payload o traz; `null` quando o
+ * nome no payload seria o da própria loja.
+ */
+export async function resolverContatoEConversa(
+  admin: Admin,
+  orgId: string,
+  sessaoId: string,
+  waId: string,
+  notify: string | null,
+): Promise<{ ok: true; contactId: string; conversationId: string } | { ok: false; reason: string }> {
+  const existente = await findContactByVariants(admin, orgId, waId);
+  // Celular BR grava COM o nono. A busca acima já reencontra a grafia sem o 9;
+  // a RPC promove o cadastro antigo quando ainda está nos 12 dígitos.
+  const phone = existente?.phone_number
+    ? canonicalPhoneBR(existente.phone_number)
+    : canonicalPhoneBR(`+${waId.replace(/\D/g, "")}`);
+
+  const { data: contactId, error: erroContato } = await admin.rpc(
+    "fn_upsert_wa_contact" as never,
+    { p_org: orgId, p_kind: "phone", p_phone: phone, p_lid: null, p_chat_id: waId, p_notify: notify } as never,
+  );
+  if (erroContato || !contactId) {
+    return { ok: false, reason: `contato: ${erroContato?.message ?? "sem id"}` };
+  }
+
+  const { data: conversationId, error: erroConversa } = await admin.rpc(
+    "fn_upsert_wa_conversation" as never,
+    { p_org: orgId, p_contact: contactId as string, p_session: sessaoId } as never,
+  );
+  if (erroConversa || !conversationId) {
+    return { ok: false, reason: `conversa: ${erroConversa?.message ?? "sem id"}` };
+  }
+  return { ok: true, contactId: contactId as string, conversationId: conversationId as string };
+}
+
+/**
+ * Vocabulário de `messages_type_check` (baseline, bloco
+ * `message type: template (migration 0091)`).
+ */
+export const TIPOS_DO_CRM: ReadonlySet<string> = new Set([
+  "text", "image", "video", "audio", "document", "sticker", "location", "contact", "reaction", "system", "template",
+]);
+
+/**
+ * Tipo cru da Meta → valor aceito por `messages_type_check` (ruling P4).
+ * `contacts` (plural da Meta) → `contact`; o que não tem equivalente vira
+ * `system` com body `[tipo]` — um tipo exótico nunca derruba o INSERT.
+ */
+export function tipoDoCrm(tipo: string): { type: string; bodyDeSistema: string | null } {
+  if (tipo === "contacts") return { type: "contact", bodyDeSistema: null };
+  if (TIPOS_DO_CRM.has(tipo)) return { type: tipo, bodyDeSistema: null };
+  return { type: "system", bodyDeSistema: `[${tipo || "unknown"}]` };
+}
+
+/**
+ * Pede ao worker de mídia que baixe o arquivo da Graph e o grave no Storage.
+ * Falha aqui não derruba a ingestão (a mensagem já entrou); vai ao log.
+ */
+export async function pedirPersistenciaDeMidia(
+  admin: Admin,
+  orgId: string,
+  messageId: string,
+  conversationId: string,
+  source: string,
+): Promise<void> {
+  const { error } = await admin.rpc("emit_event" as never, {
+    p_event_type: "media.persist_requested",
+    p_entity_kind: "message",
+    p_entity_id: messageId,
+    p_payload: { message_id: messageId, conversation_id: conversationId },
+    p_metadata: { source },
+    p_organization_id: orgId,
+  } as never);
+  if (error) {
+    logger.error("[meta.ingest] emit media.persist_requested failed", {
+      organization_id: orgId,
+      message_id: messageId,
+      erro: error.message,
+    });
+  }
+}
+
 /** Prévia curta para a lista de conversas. Mídia vira rótulo, nunca URL. */
-function previewOf(e: InboundMessageEvent): string {
+function previewOf(
+  e: Pick<InboundMessageEvent, "type" | "text" | "media"> & Partial<Pick<InboundMessageEvent, "sharedContact">>,
+): string {
   if (e.type === "text") return (e.text ?? "").slice(0, 120);
   if (e.type === "contact") return e.sharedContact?.name ? `👤 ${e.sharedContact.name}` : "[contato]";
   if (e.type === "audio") return e.media?.voice ? "🎤 Mensagem de voz" : "🎵 Áudio";
@@ -139,56 +232,32 @@ export async function ingestMetaInbound(
 
   const orgId = sessao.organization_id;
 
-  const existente = await findContactByVariants(admin, orgId, e.from);
-  // Celular BR grava COM o nono. A busca acima já reencontra a grafia sem o 9;
-  // a RPC promove o cadastro antigo quando ainda está nos 12 dígitos.
-  const phone = existente?.phone_number
-    ? canonicalPhoneBR(existente.phone_number)
-    : canonicalPhoneBR(`+${e.from.replace(/\D/g, "")}`);
-
-  const { data: contactId, error: erroContato } = await admin.rpc(
-    "fn_upsert_wa_contact" as never,
-    {
-      p_org: orgId,
-      p_kind: "phone",
-      p_phone: phone,
-      p_lid: null,
-      p_chat_id: e.from,
-      p_notify: e.profileName,
-    } as never,
-  );
-  if (erroContato || !contactId) {
-    return { status: "failed", reason: `contato: ${erroContato?.message ?? "sem id"}` };
-  }
+  const alvo = await resolverContatoEConversa(admin, orgId, sessao.id, e.from, e.profileName);
+  if (!alvo.ok) return { status: "failed", reason: alvo.reason };
+  const { contactId, conversationId } = alvo;
 
   // Clique em anúncio: o `referral` vem na própria mensagem e só nela. Estampar
   // AQUI, antes de `aplicarEfeitosPosEntrada`, porque é lá que o lead nasce. A
   // guarda de primeiro toque fica no banco, então a re-entrega não reescreve.
   const atribuicao = extrairAtribuicaoMeta(e.referral);
-  if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId as string, atribuicao);
+  if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
 
-  const { data: conversationId, error: erroConversa } = await admin.rpc(
-    "fn_upsert_wa_conversation" as never,
-    { p_org: orgId, p_contact: contactId as string, p_session: sessao.id } as never,
-  );
-  if (erroConversa || !conversationId) {
-    return { status: "failed", reason: `conversa: ${erroConversa?.message ?? "sem id"}` };
-  }
-
+  // Tipo fora do CHECK (`interactive`, `button`, …) derrubava o INSERT — e a
+  // mensagem do cliente sumia. Passa pelo mesmo mapa do eco e do histórico.
+  const { type, bodyDeSistema } = tipoDoCrm(e.type);
   const { data: inserida, error: erroInsert } = await admin
     .from("messages")
     .insert({
       organization_id: orgId,
-      conversation_id: conversationId as string,
+      conversation_id: conversationId,
       // NOT NULL na tabela. Esquecê-lo fez o insert falhar e — porque a rota
       // descartava o resultado — a falha virou "recebido: 1" com nada gravado.
       channel_session_id: sessao.id,
-      contact_id: contactId as string,
+      contact_id: contactId,
       direction: "inbound",
       status: "delivered",
-      // A Meta manda `contacts` (plural); o CHECK do banco espera `contact`.
-      type: e.type === "text" ? "text" : e.type,
-      body: e.type === "contact" ? (e.sharedContact?.name ?? e.text) : e.text,
+      type,
+      body: bodyDeSistema ?? (type === "contact" ? (e.sharedContact?.name ?? e.text) : e.text),
       external_id: e.externalId,
       // O webhook oficial entrega o media_id, não um arquivo que o browser
       // consiga abrir. Mantemos um ponteiro opaco para o adapter resolver pela
@@ -197,6 +266,7 @@ export async function ingestMetaInbound(
       media_mime: e.media?.mime ?? null,
       sent_at: e.sentAt.toISOString(),
       metadata: {
+        tipo_da_meta: e.type,
         ...(e.media ? { meta_media_id: e.media.id, voice: e.media.voice } : {}),
         ...(e.sharedContact ? { shared_contact: e.sharedContact } : {}),
       },
@@ -222,7 +292,7 @@ export async function ingestMetaInbound(
   // fechar. Quem decide o que fazer com a falha agora é uma função só.
   await marcarConversaComMensagem(admin, {
     organizationId: orgId,
-    conversationId: conversationId as string,
+    conversationId: conversationId,
     direction: "inbound",
     preview: previewOf(e),
     at: e.sentAt.toISOString(),
@@ -231,25 +301,12 @@ export async function ingestMetaInbound(
 
   const messageId = (inserida as { id: string } | null)?.id ?? "";
   if (e.media && messageId) {
-    const { error: erroPersistencia } = await admin.rpc("emit_event" as never, {
-      p_event_type: "media.persist_requested",
-      p_entity_kind: "message",
-      p_entity_id: messageId,
-      p_payload: { message_id: messageId, conversation_id: conversationId as string },
-      p_metadata: { source: "meta_webhook" },
-      p_organization_id: orgId,
-    } as never);
-    if (erroPersistencia) {
-      console.error(
-        "[meta.ingest] emit media.persist_requested failed",
-        erroPersistencia.message,
-      );
-    }
+    await pedirPersistenciaDeMidia(admin, orgId, messageId, conversationId, "meta_webhook");
   }
   await aplicarEfeitosPosEntrada(admin, {
     organizationId: orgId,
-    contactId: contactId as string,
-    conversationId: conversationId as string,
+    contactId: contactId,
+    conversationId: conversationId,
     messageId: messageId || null,
     channelSessionId: sessao.id,
     texto: e.text ?? null,
@@ -260,6 +317,95 @@ export async function ingestMetaInbound(
   return {
     status: "ingested",
     messageId,
-    conversationId: conversationId as string,
+    conversationId: conversationId,
   };
+}
+
+/**
+ * Eco do CELULAR (`smb_message_echoes`): uma pessoa respondeu pelo WhatsApp
+ * Business do aparelho. É o mesmo gesto do `fromMe` do outro canal
+ * (`lib/waha/ingest.ts`, `handleOutboundFromUserPhone`) e tem o mesmo desfecho:
+ * linha outbound `external_device` (a bolha a rotula "Celular"), conversa
+ * carimbada como saída (zera não-lidas, não toca `last_inbound_at`), IA pausada
+ * por `pausarIaPorAtendimentoManual` — a regra de 5 min que o composer também
+ * usa. NÃO passa por `aplicarEfeitosPosEntrada`: ninguém entrou, alguém saiu. E
+ * o trigger de `messages` só emite `message.received` para inbound
+ * (`eco-nao-acorda-a-ia.test.ts`), então nenhum worker de IA/automação acorda.
+ *
+ * Idempotente por `(organization_id, external_id)`; o `duplicate` não pausa
+ * nada — um wamid repetido pode ser reentrega de eco de envio do próprio CRM.
+ *
+ * PREMISSA (ruling P10, decidida e não provada): a Meta NÃO ecoa em
+ * `smb_message_echoes` o que foi enviado pela Cloud API — a documentação de
+ * 01/10/2026 ("message echoes") descreve mensagens enviadas pelo APLICATIVO do
+ * celular. Por isso o gate do #519 (`ehEcoDeEnvioNosso`: linha `queued` sem
+ * `external_id` na mesma conversa) não é generalizado aqui. Se a premissa
+ * cair, o sintoma é a IA calada 5 min depois do próprio envio; o teste
+ * "linha queued sem external_id não barra o eco" é o que passa a mudar.
+ */
+export async function ingestMetaEcho(
+  admin: Admin,
+  e: EchoMessageEvent,
+  dono: ChannelTenantScope,
+): Promise<IngestOutcome> {
+  let sessao: { id: string; organization_id: string } | null;
+  try {
+    sessao = await sessionByPhoneNumberId(admin, dono.organizationId, e.phoneNumberId);
+  } catch (err) {
+    return { status: "failed", reason: err instanceof Error ? err.message : "sessao_do_numero" };
+  }
+  if (!sessao) return { status: "no_session" };
+  const orgId = sessao.organization_id;
+
+  // O contato é o DESTINATÁRIO; sem `notify` (o nome do perfil aqui seria o da loja).
+  const alvo = await resolverContatoEConversa(admin, orgId, sessao.id, e.to, null);
+  if (!alvo.ok) return { status: "failed", reason: alvo.reason };
+  const { contactId, conversationId } = alvo;
+
+  const { type, bodyDeSistema } = tipoDoCrm(e.type);
+  const { data: inserida, error: erroInsert } = await admin
+    .from("messages")
+    .insert({
+      organization_id: orgId,
+      conversation_id: conversationId,
+      channel_session_id: sessao.id,
+      contact_id: contactId,
+      direction: "outbound",
+      status: "sent",
+      sent_via: "external_device",
+      type,
+      body: bodyDeSistema ?? e.text,
+      external_id: e.externalId,
+      media_url: e.media ? `meta-media:${e.media.id}` : null,
+      media_mime: e.media?.mime ?? null,
+      sent_at: e.sentAt.toISOString(),
+      metadata: {
+        origem: "celular",
+        fromMe: true,
+        tipo_da_meta: e.type,
+        ...(e.media ? { meta_media_id: e.media.id, voice: e.media.voice } : {}),
+      },
+    })
+    .select("id")
+    .maybeSingle();
+  if (erroInsert) {
+    if (erroInsert.code === "23505") return { status: "duplicate" };
+    return { status: "failed", reason: `mensagem: ${erroInsert.message}` };
+  }
+
+  await marcarConversaComMensagem(admin, {
+    organizationId: orgId,
+    conversationId,
+    direction: "outbound",
+    preview: previewOf(e),
+    at: e.sentAt.toISOString(),
+    canal: "meta",
+  });
+  await pausarIaPorAtendimentoManual(admin, { organizationId: orgId, conversationId, canal: "meta", agora: e.sentAt });
+
+  const messageId = (inserida as { id: string } | null)?.id ?? "";
+  if (e.media && messageId) {
+    await pedirPersistenciaDeMidia(admin, orgId, messageId, conversationId, "meta_echo");
+  }
+  return { status: "ingested", messageId, conversationId };
 }

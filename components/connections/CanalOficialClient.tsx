@@ -14,6 +14,7 @@ import {
 } from "@/hooks/channels/useOfficialChannel";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useT } from "@/hooks/i18n/useT";
+import { CadastroIncorporado } from "./CadastroIncorporado";
 import { ChannelAiAccess } from "./ChannelAiAccess";
 
 /** Campo somente-leitura com botão de copiar — o que o operador cola na Meta. */
@@ -184,6 +185,8 @@ export function CanalOficialClient() {
           </div>
         </Card>
       ) : null}
+
+      {estado ? <CadastroIncorporado estado={estado} /> : null}
 
       <Card className="p-4">
         <h2 className="font-medium">

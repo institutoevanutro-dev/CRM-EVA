@@ -639,8 +639,31 @@ describe("canal oficial conectado pela TELA — a credencial da sessão manda (#
     const msg = await sendMessageHandler(supabase, ctx, texto());
 
     expect(msg.status).toBe("queued");
-    expect((msg.metadata as Record<string, unknown>).queued_reason).toBe("meta_not_configured");
+    expect((msg.metadata as Record<string, unknown>).queued_reason).toBe("meta_creds_decrypt_failed");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("decifragem que falha E com env PREENCHIDO: `queued`, não usa o env", async () => {
+    // Decrypt fails mesmo com env SET: não cai no env, vai pra queued (espera intervenção do dono).
+    // Prova: no GET do token de env não há fetch nenhum — todo fetch é tentativa
+    // de enviar, e aqui não há fetch porque não enviou.
+    credencialDaSessao.token = "cifrado-que-nao-decifra";
+    credencialDaSessao.decifravel = false;
+    const NUMERO_DO_ENV_LOCAL = "999000999000";
+    process.env.META_PHONE_NUMBER_ID = NUMERO_DO_ENV_LOCAL;
+    process.env.META_SYSTEM_USER_TOKEN = "tok-do-env";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { supabase } = makeSupabase(conversaCompleta({ provider: "meta_cloud" }));
+    const msg = await sendMessageHandler(supabase, ctx, texto());
+
+    expect(msg.status).toBe("queued");
+    expect((msg.metadata as Record<string, unknown>).queued_reason).toBe("meta_creds_decrypt_failed");
+    expect(fetchMock).not.toHaveBeenCalled(); // Não usou env, não tentou enviar
+
+    delete process.env.META_PHONE_NUMBER_ID;
+    delete process.env.META_SYSTEM_USER_TOKEN;
   });
 
   it("sessão ARQUIVADA: `failed` com `channel_archived`, sem consultar credencial", async () => {

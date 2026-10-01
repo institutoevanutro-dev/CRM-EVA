@@ -73,6 +73,9 @@ commit → push → PR → merge na main → CI publica imagem → VPS puxa
 3. **Deploy na VPS.** Numa instalação real isto é `bash hostgator-setup-kit/update.sh`,
    não um `up -d` na mão: ele puxa a tag publicada, re-aplica o `baseline.sql`,
    faz backup antes e grava as três imagens no `.env`.
+   Deploy fora do `update.sh` (um `up -d` na mão): **aplique o `baseline.sql`
+   (0296 em diante) ANTES de puxar a imagem** — código novo sobre banco velho
+   degrada em silêncio (ex.: o Cadastro Incorporado some sem as colunas da 0296).
 
 > **`latest` não é a última release.** Ele é publicado a partir da branch default, então
 > segue o **topo da `main`** — código ainda não lançado. Quem quer a última release usa
