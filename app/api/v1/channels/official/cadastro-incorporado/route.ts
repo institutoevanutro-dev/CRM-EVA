@@ -42,7 +42,8 @@ import { DICIONARIO, traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
+import { CHANNEL_PROVIDER_META } from "@/lib/channels/capabilities";
+import { decryptWebhookSecret, encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 import { publicBase, traduzirMotivo } from "../route-helpers";
 
@@ -119,9 +120,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let pin: string | null = null;
   let pinCifrado: string | null = null;
   if (!coexistencia) {
-    pin = gerarPin();
-    pinCifrado = await encryptWebhookSecret(admin, pin);
-    if (!pinCifrado) {
+    // Retry do FINISH: o register anterior pode ter chegado à Meta com o PIN
+    // gravado; um PIN novo daria mismatch e trancaria o número. Reaproveita.
+    const { data: anterior } = await admin
+      .from("channel_sessions")
+      .select("metadata")
+      .eq("organization_id", orgId)
+      .eq("provider", CHANNEL_PROVIDER_META)
+      .eq("meta_phone_number_id", phoneNumberId)
+      .maybeSingle();
+    const pinAnterior = (anterior as { metadata?: { pin_cifrado?: unknown } } | null)?.metadata?.pin_cifrado;
+    if (typeof pinAnterior === "string" && pinAnterior) {
+      pinCifrado = pinAnterior;
+      pin = await decryptWebhookSecret(admin, pinAnterior);
+    } else {
+      pin = gerarPin();
+      pinCifrado = await encryptWebhookSecret(admin, pin);
+    }
+    if (!pin || !pinCifrado) {
       return fail("invalid_request", t("cifra indisponível nesta instalação (GUC app.nuvemshop_oauth_key ausente) — o token não foi gravado"), 422, { requestId });
     }
   }
@@ -152,6 +168,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     metadataExtra: {
       cadastro_incorporado: { evento, em: agora },
       ...(pinCifrado ? { pin_cifrado: pinCifrado } : {}),
+      // Número novo não é coexistência: a de uma conexão anterior não vale mais.
+      ...(coexistencia ? {} : { coexistencia: null }),
     },
   }).catch((err: unknown) => ({
     // Lançar aqui deixaria a legada arquivada sem oficial nenhuma: vira recusa e desfaz abaixo.
@@ -182,6 +200,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // 6. register só para número novo, DEPOIS da sessão gravada com o PIN cifrado
   //    (a validação da credencial funciona antes do register). Falha aqui não
   //    apaga a sessão nem o PIN: refazer o fluxo reaproveita a linha.
+  if (pin && !r.metadataGravada) {
+    // PIN não guardado: registrar agora trancaria o número com um PIN perdido.
+    logger.error("[cadastro-incorporado] metadata não gravada; register não enviado", { organization_id: orgId, session: r.sessionId });
+    return fail("internal_error", t(FALHA_GENERICA_DA_META), 500, { requestId });
+  }
   if (pin) {
     try {
       await registrarNumero(token, phoneNumberId, pin);

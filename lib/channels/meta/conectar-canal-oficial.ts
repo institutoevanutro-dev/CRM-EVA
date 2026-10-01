@@ -44,6 +44,8 @@ export type ConexaoOficialResultado =
       displayName: string;
       phoneNumber: string | null;
       webhook: { assinado: true } | { assinado: false; motivo: string };
+      /** `false` quando `metadataExtra` não foi gravado — quem depende dele (o PIN) não segue. */
+      metadataGravada: boolean;
     }
   | { ok: false; status: 422 | 500; codigo: "invalid_request" | "internal_error"; motivo: string };
 
@@ -220,6 +222,7 @@ export async function conectarCanalOficial(
     displayName: linha.display_name,
     phoneNumber: linha.phone_number,
     webhook: assinatura.ok ? { assinado: true } : { assinado: false, motivo: assinatura.motivo },
+    metadataGravada: !erroMetadata,
   };
 }
 

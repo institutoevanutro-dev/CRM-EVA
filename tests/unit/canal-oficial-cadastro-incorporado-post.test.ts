@@ -64,7 +64,10 @@ vi.mock("@/lib/auth/require-role", () => ({
 vi.mock("@/lib/channels/meta/app", () => ({
   appDaMeta: async () => ({ appId: "1234567890", appSecret: "segredo-do-app", esConfigId: "cfg-1", verifyToken: "v" }),
 }));
-vi.mock("@/lib/webhooks/secrets", () => ({ encryptWebhookSecret: async () => "\\x_pin_cifrado" }));
+vi.mock("@/lib/webhooks/secrets", () => ({
+  encryptWebhookSecret: async () => "\\x_pin_cifrado",
+  decryptWebhookSecret: async (_a: unknown, cifrado: string) => (cifrado === "\\x_pin_antigo" ? "654321" : null),
+}));
 vi.mock("@/lib/audit", () => ({ audit: async (e: Record<string, unknown>) => void m.auditorias.push(e) }));
 vi.mock("@/lib/logger", () => ({
   logger: { warn: (msg: string, ctx: Record<string, unknown>) => void m.avisos.push([msg, ctx]), info: () => undefined, error: () => undefined, debug: () => undefined },
@@ -104,7 +107,7 @@ import { POST } from "@/app/api/v1/channels/official/cadastro-incorporado/route"
 
 const COEX = { code: "AQBx1234567890", evento: "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", waba_id: "222333444555", phone_number_id: null };
 const NOVO = { ...COEX, evento: "FINISH" };
-const conectado = { ok: true, sessionId: CANAL, displayName: "Clínica", phoneNumber: "+5527999049879", webhook: { assinado: true } };
+const conectado = { ok: true, sessionId: CANAL, displayName: "Clínica", phoneNumber: "+5527999049879", webhook: { assinado: true }, metadataGravada: true };
 
 const req = (body: unknown) =>
   new NextRequest("http://localhost/api/v1/channels/official/cadastro-incorporado", { method: "POST", body: JSON.stringify(body) });
@@ -272,5 +275,25 @@ describe("POST /channels/official/cadastro-incorporado", () => {
     expect(res.status).toBe(500);
     expect(m.desarquivar).toHaveBeenCalledWith(expect.anything(), ORG, LEGADA);
     expect(m.derrubar).not.toHaveBeenCalled();
+  });
+
+  it("número novo com a metadata (o PIN cifrado) NÃO gravada: register não é chamado", async () => {
+    m.conectar.mockResolvedValueOnce({ ...conectado, metadataGravada: false });
+    const res = await POST(req(NOVO));
+    expect(res.status).toBe(500);
+    expect(m.registrar).not.toHaveBeenCalled();
+  });
+
+  it("retry do FINISH com pin_cifrado já gravado na sessão oficial: reaproveita o PIN, não gera outro", async () => {
+    db.metadata = { pin_cifrado: "\\x_pin_antigo" };
+    const res = await POST(req(NOVO));
+    expect(res.status).toBe(200);
+    expect(m.registrar).toHaveBeenCalledWith("EAAX", "111222333", "654321");
+    expect((m.conectar.mock.calls[0]![1] as { metadataExtra: Record<string, unknown> }).metadataExtra).toMatchObject({ pin_cifrado: "\\x_pin_antigo" });
+  });
+
+  it("FINISH limpa metadata.coexistencia antiga (o número deixou de ser coexistência)", async () => {
+    await POST(req(NOVO));
+    expect((m.conectar.mock.calls[0]![1] as { metadataExtra: Record<string, unknown> }).metadataExtra).toMatchObject({ coexistencia: null });
   });
 });

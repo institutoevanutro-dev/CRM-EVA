@@ -35,6 +35,8 @@ type Linha = Record<string, unknown>;
 let linhas: Linha[] = [];
 let insertErro: { code: string; message: string } | null = null;
 let inserts: Linha[] = [];
+/** O update da METADATA falha (o resto grava). */
+let metadataFalha = false;
 
 /** Banco falso que aplica os filtros `eq`/`is` de verdade: é o que separa "atualizou a linha certa" de "achou qualquer uma". */
 const admin = {
@@ -63,6 +65,7 @@ const admin = {
       update: (p: Linha) => ((patch = p), q),
       then: (res: (v: unknown) => unknown) => {
         if (patch) {
+          if (metadataFalha && "metadata" in patch) return Promise.resolve({ error: { message: "boom" } }).then(res);
           for (const l of casam()) Object.assign(l, patch);
           return Promise.resolve({ error: null }).then(res);
         }
@@ -80,9 +83,20 @@ beforeEach(() => {
   linhas = [];
   inserts = [];
   insertErro = null;
+  metadataFalha = false;
 });
 
 describe("conectarCanalOficial", () => {
+  it("metadata que não grava: conecta, mas avisa (metadataGravada=false) — quem depende dela (o PIN) não segue", async () => {
+    metadataFalha = true;
+    const r = await conectarCanalOficial(admin, { ...ENTRADA, metadataExtra: { pin_cifrado: "\\x_pin" } });
+    expect(r).toMatchObject({ ok: true, metadataGravada: false });
+  });
+
+  it("metadata gravada: metadataGravada=true", async () => {
+    expect(await conectarCanalOficial(admin, ENTRADA)).toMatchObject({ ok: true, metadataGravada: true });
+  });
+
   it("número ativo em OUTRA organização (23505 no índice de phone_number_id) recusa com 422 e a frase, não 500", async () => {
     insertErro = { code: "23505", message: 'duplicate key value violates unique constraint "channel_sessions_meta_phone_number_id_ativo_unique"' };
     const r = await conectarCanalOficial(admin, ENTRADA);
