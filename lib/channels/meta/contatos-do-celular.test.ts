@@ -1,49 +1,83 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/logger", () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
 
 import { upsertContatosDoCelular } from "./contatos-do-celular";
 
-function fakeAdmin(falhaEm: string[] = []) {
-  const rpc = vi.fn(async (_fn: string, args: { p_chat_id: string }) =>
-    falhaEm.includes(args.p_chat_id) ? { data: null, error: { message: "boom" } } : { data: "id", error: null },
-  );
-  return { rpc };
+/** Banco falso: `contactsNoBanco` = {phone, name}; só casa o que o filtro pede. */
+function fakeAdmin(contactsNoBanco: Array<{ phone: string; name: string | null }>, falhaEm: string[] = []) {
+  const chamadas: Array<{ tabela: string; set: Record<string, unknown>; filtros: unknown[] }> = [];
+  const inserts: unknown[] = [];
+  const from = (tabela: string) => ({
+    insert: (r: unknown) => (inserts.push(r), Promise.resolve({ error: null })),
+    update: (set: Record<string, unknown>) => {
+      const filtros: unknown[] = [];
+      const q: Record<string, unknown> = {};
+      q.eq = (c: string, v: unknown) => (filtros.push(["eq", c, v]), q);
+      q.is = (c: string, v: unknown) => (filtros.push(["is", c, v]), q);
+      q.in = (c: string, v: string[]) => (filtros.push(["in", c, v]), q);
+      q.or = (e: string) => (filtros.push(["or", e]), q);
+      q.select = async () => {
+        chamadas.push({ tabela, set, filtros });
+        const variantes = (filtros.find((f) => (f as string[])[0] === "in") as [string, string, string[]])[2];
+        if (variantes.some((p) => falhaEm.includes(p))) return { data: null, error: { message: "boom" } };
+        const casados = contactsNoBanco.filter((c) => variantes.includes(c.phone) && !c.name);
+        casados.forEach((c) => (c.name = set.display_name as string));
+        return { data: casados.map(() => ({ id: "x" })), error: null };
+      };
+      return q;
+    },
+  });
+  return { from, chamadas, inserts };
 }
 
-describe("upsertContatosDoCelular", () => {
-  it("chama fn_upsert_wa_contact por contato, com o nome em p_notify e o waId em p_chat_id", async () => {
-    const admin = fakeAdmin();
-    const r = await upsertContatosDoCelular(admin as never, "org-1", [
-      { waId: "5511999998888", nome: "Maria" },
-      { waId: "5521988887777", nome: null },
-    ]);
-    expect(r).toEqual({ processados: 2 });
-    expect(admin.rpc).toHaveBeenCalledTimes(2);
-    expect(admin.rpc).toHaveBeenNthCalledWith(1, "fn_upsert_wa_contact", expect.objectContaining({ p_org: "org-1", p_kind: "phone", p_chat_id: "5511999998888", p_notify: "Maria" }));
-    expect(admin.rpc).toHaveBeenNthCalledWith(2, "fn_upsert_wa_contact", expect.objectContaining({ p_chat_id: "5521988887777", p_notify: null }));
+describe("upsertContatosDoCelular (só atualiza)", () => {
+  it("preenche nome vazio de contato existente, filtrando por org, não mesclado e nome vazio", async () => {
+    const banco = [{ phone: "+5511999998888", name: null }];
+    const admin = fakeAdmin(banco);
+    const r = await upsertContatosDoCelular(admin as never, "org-1", [{ waId: "5511999998888", nome: "Maria" }]);
+    expect(r).toEqual({ processados: 1 });
+    expect(banco[0]!.name).toBe("Maria");
+    const { tabela, set, filtros } = admin.chamadas[0]!;
+    expect(tabela).toBe("contacts");
+    expect(set).toEqual({ display_name: "Maria" });
+    expect(filtros).toContainEqual(["eq", "organization_id", "org-1"]);
+    expect(filtros).toContainEqual(["is", "is_merged_into", null]);
+    expect(filtros).toContainEqual(["or", "display_name.is.null,display_name.eq."]);
+    expect(admin.inserts).toHaveLength(0);
   });
 
-  it("erro numa RPC não interrompe as demais e não conta", async () => {
-    const admin = fakeAdmin(["1"]);
+  it("nome já preenchido no CRM fica intocado", async () => {
+    const banco = [{ phone: "+5511999998888", name: "Editado" }];
+    const r = await upsertContatosDoCelular(fakeAdmin(banco) as never, "org-1", [{ waId: "5511999998888", nome: "Maria" }]);
+    expect(r).toEqual({ processados: 0 });
+    expect(banco[0]!.name).toBe("Editado");
+  });
+
+  it("número sem contato no CRM não cria nada; sem nome nem consulta", async () => {
+    const admin = fakeAdmin([]);
     const r = await upsertContatosDoCelular(admin as never, "org-1", [
+      { waId: "5521988887777", nome: "Ana" },
+      { waId: "5521977776666", nome: null },
+      { waId: "5521966665555", nome: "  " },
+    ]);
+    expect(r).toEqual({ processados: 0 });
+    expect(admin.chamadas).toHaveLength(1);
+    expect(admin.inserts).toHaveLength(0);
+  });
+
+  it("casa pelas duas grafias do nono dígito", async () => {
+    const admin = fakeAdmin([]);
+    await upsertContatosDoCelular(admin as never, "org-1", [{ waId: "553198966398", nome: "Bia" }]);
+    expect(admin.chamadas[0]!.filtros).toContainEqual(["in", "phone_number", ["+553198966398", "+5531998966398"]]);
+  });
+
+  it("erro numa atualização não interrompe as demais", async () => {
+    const banco = [{ phone: "+2", name: null }];
+    const r = await upsertContatosDoCelular(fakeAdmin(banco, ["+1"]) as never, "org-1", [
       { waId: "1", nome: "A" },
       { waId: "2", nome: "B" },
     ]);
-    expect(admin.rpc).toHaveBeenCalledTimes(2);
     expect(r).toEqual({ processados: 1 });
-  });
-});
-
-describe("contrato do baseline", () => {
-  it("a definição EM VIGOR de fn_upsert_wa_contact preenche nome só quando vazio (é o que sustenta 'nunca sobrescreve nome editado')", () => {
-    const baseline = readFileSync("supabase/baseline.sql", "utf8");
-    const cabecalho = "create or replace function public.fn_upsert_wa_contact(";
-    const ultima = baseline.lastIndexOf(cabecalho);
-    expect(ultima).toBeGreaterThan(0);
-    const corpo = baseline.slice(ultima, baseline.indexOf("$$;", baseline.indexOf("$$", ultima + cabecalho.length) + 2));
-    expect(corpo).toContain("coalesce(display_name, nullif(p_notify, ''))");
-    expect(baseline.indexOf(cabecalho, ultima + 1)).toBe(-1);
   });
 });

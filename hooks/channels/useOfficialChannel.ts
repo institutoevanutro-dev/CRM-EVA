@@ -1,4 +1,5 @@
 "use client";
+import { useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { showApiError } from "@/components/feedback/ApiErrorToast";
@@ -52,14 +53,19 @@ export interface ConnectInput {
 }
 
 export function useOfficialChannel() {
+  const marca = useRef({ visto: "", desde: 0 });
   return useQuery({
     queryKey: ["official-channel"],
     queryFn: async () => apiClient.get<{ data: OfficialChannelState }>("/api/v1/channels/official"),
     staleTime: 15_000,
     // Enquanto o histórico entra, a barra anda sozinha.
+    // Para sozinho se o progresso não muda por 30 min (celular dormindo, Meta parada).
     refetchInterval: (q) => {
       const h = q.state.data?.data.coexistencia?.historico;
-      return h && !h.concluido && !h.erro_codigo ? 5_000 : false;
+      if (!h || h.concluido || h.erro_codigo) return false;
+      const visto = `${h.fase}:${h.progresso}`;
+      if (visto !== marca.current.visto) marca.current = { visto, desde: Date.now() };
+      return Date.now() - marca.current.desde < 30 * 60_000 ? 5_000 : false;
     },
   });
 }

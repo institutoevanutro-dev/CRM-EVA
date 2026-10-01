@@ -1,33 +1,49 @@
 /**
- * Contatos da agenda do celular (`smb_app_state_sync`) → `contacts`.
+ * Contatos da agenda do celular (`smb_app_state_sync`) → nome de contato que JÁ existe.
  *
- * A regra "preenche o nome só quando vazio, nunca sobrescreve o editado no CRM"
- * é da RPC (`display_name = coalesce(display_name, nullif(p_notify,''))`), não
- * daqui — o teste de contrato do baseline a sustenta. Sem lead, conversa nem IA:
- * só o cadastro do contato, sempre dentro da `organizationId` da sessão.
+ * SÓ ATUALIZA: preenche `display_name` vazio de contato da organização achado
+ * pelo telefone (as duas grafias do nono dígito). Nunca cria contato (importaria
+ * a agenda inteira do celular), nunca sobrescreve nome, não toca em
+ * `source_metadata` nem `phone_number`. Sem lead, conversa nem IA.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
 
-import { canonicalPhoneBR } from "../phone-variants";
+import { phoneLookupVariants } from "../phone-variants";
+
+// ponytail: um UPDATE por contato, 25 em paralelo (nomes diferem, não cabe um
+// só statement sem RPC). Se agendas de dezenas de milhares pesarem, vira RPC
+// com unnest().
+const PARALELO = 25;
 
 export async function upsertContatosDoCelular(
   admin: SupabaseClient,
   organizationId: string,
   contatos: Array<{ waId: string; nome: string | null }>,
 ): Promise<{ processados: number }> {
+  const comNome = contatos
+    .map((c) => ({ variantes: phoneLookupVariants(`+${c.waId}`), nome: c.nome?.trim() ?? "" }))
+    .filter((c) => c.nome && c.variantes.length > 0);
   let processados = 0;
-  for (const c of contatos) {
-    const { error } = await admin.rpc(
-      "fn_upsert_wa_contact" as never,
-      { p_org: organizationId, p_kind: "phone", p_phone: canonicalPhoneBR(`+${c.waId}`), p_lid: null, p_chat_id: c.waId, p_notify: c.nome } as never,
+  for (let i = 0; i < comNome.length; i += PARALELO) {
+    const lote = comNome.slice(i, i + PARALELO);
+    const rs = await Promise.all(
+      lote.map((c) =>
+        admin
+          .from("contacts")
+          .update({ display_name: c.nome })
+          .eq("organization_id", organizationId)
+          .is("is_merged_into", null)
+          .in("phone_number", c.variantes)
+          .or("display_name.is.null,display_name.eq.")
+          .select("id"),
+      ),
     );
-    if (error) {
-      logger.error("[meta.contatos] contato do celular não gravado", { detail: error.message });
-      continue;
+    for (const { data, error } of rs) {
+      if (error) logger.error("[meta.contatos] nome do contato não gravado", { detail: error.message });
+      else processados += data?.length ?? 0;
     }
-    processados++;
   }
   return { processados };
 }
