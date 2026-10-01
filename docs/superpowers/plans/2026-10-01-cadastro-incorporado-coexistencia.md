@@ -54,7 +54,7 @@ Seis modos de falha que a spec implica e que nenhum teste de tarefa pegaria por 
 | Arquivo | Responsabilidade |
 |---|---|
 | `lib/channels/meta/coexistencia.ts` (criar, Task 0) | constantes (grafia do `extras`, eventos, prazo), tipo `Coexistencia` da metadata, `lerCoexistencia`, `dentroDoPrazoDeSincronizacao`, `mensagemDoErroDaMeta`. Puro, importável pelo cliente |
-| `supabase/migrations/20261001130000_0296_cadastro_incorporado.sql` (criar) | `platform_meta_app.app_id`, `es_config_id` |
+| `supabase/migrations/20261001160000_0296_cadastro_incorporado.sql` (criar) | `platform_meta_app.app_id`, `es_config_id` |
 | `lib/channels/meta/app.ts` (modificar) | `appDaMeta()` devolve `appId` e `esConfigId` (banco acima do `.env`) |
 | `app/actions/settings/updateMetaApp.ts`, `app/admin/(protected)/meta/{page,_form}.tsx` (modificar) | os dois campos na tela da instalação |
 | `app/api/v1/channels/official/route.ts` (modificar) | GET expõe `cadastroIncorporado` e `coexistencia`; POST passa a chamar `conectarCanalOficial` |
@@ -169,7 +169,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ## Task 1: `platform_meta_app.app_id` / `es_config_id` (migration 0296) e `appDaMeta()`
 
 **Files:**
-- Create: `supabase/migrations/20261001130000_0296_cadastro_incorporado.sql` (timestamp ÚNICO: `20261001120000` já é o da `0293_dedupe_de_event_dead_atomico`)
+- Create: `supabase/migrations/20261001160000_0296_cadastro_incorporado.sql` (timestamp ÚNICO: `20261001120000` já é o da `0293_dedupe_de_event_dead_atomico`)
 - Modify: `supabase/baseline.sql` (apêndice depois do bloco `-- ---- dedupe de event_dead atômico ... (migration 0293) ----`, linha ~28675, e imediatamente antes de `-- ---- VARREDURA anon ... (migration 0116) ----`, hoje linha ~28717), `supabase/migrations/MANIFEST.md`, `.env.example` (linha 379, `META_APP_ID=` já existe; acrescentar `META_ES_CONFIG_ID=`)
 - Modify: `lib/channels/meta/app.ts`
 - Test: `tests/unit/app-da-meta-cadastro-incorporado.test.ts`, `tests/invariants/cadastro-incorporado-colunas-sem-grant.test.ts`
@@ -323,7 +323,7 @@ describe("platform_meta_app.app_id / es_config_id — sem grant a anon/authentic
 - [ ] **Step 8:** commit:
 
 ```bash
-git add supabase/migrations/20261001130000_0296_cadastro_incorporado.sql supabase/baseline.sql supabase/migrations/MANIFEST.md .env.example lib/channels/meta/app.ts tests/unit/app-da-meta-cadastro-incorporado.test.ts tests/invariants/cadastro-incorporado-colunas-sem-grant.test.ts
+git add supabase/migrations/20261001160000_0296_cadastro_incorporado.sql supabase/baseline.sql supabase/migrations/MANIFEST.md .env.example lib/channels/meta/app.ts tests/unit/app-da-meta-cadastro-incorporado.test.ts tests/invariants/cadastro-incorporado-colunas-sem-grant.test.ts
 git commit -m "feat(canal-oficial): platform_meta_app ganha app_id e es_config_id (0296); appDaMeta devolve os dois
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
