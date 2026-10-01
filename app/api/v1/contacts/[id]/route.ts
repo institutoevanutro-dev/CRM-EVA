@@ -162,7 +162,9 @@ export async function DELETE(
     return noContent(requestId);
   } catch (err) {
     if (err instanceof ApiError) {
-      return fail(err.code, err.message, err.status, { requestId });
+      // `details` carrega os vínculos que barraram a exclusão (DeskcommCRM #1925);
+      // sem ele a tela só tem o texto genérico.
+      return fail(err.code, err.message, err.status, { details: err.details, requestId });
     }
     throw err;
   }
