@@ -7,6 +7,7 @@ import {
   recusaDoIcone,
   TAMANHO_MAXIMO_DO_ICONE,
 } from "@/lib/branding/icone-arquivo";
+import { versaoDoCaminho } from "@/lib/branding/icone-versao";
 
 /**
  * O ÍCONE DA ABA (migration 0291): tipo e medidas saem dos BYTES.
@@ -64,5 +65,14 @@ describe("recusaDoIcone", () => {
   });
   it("arquivo acima do teto é recusado antes de qualquer leitura", () => {
     expect(recusaDoIcone(png(512, 512, TAMANHO_MAXIMO_DO_ICONE + 1))?.codigo).toBe("payload_too_large");
+  });
+});
+
+
+describe("versaoDoCaminho (o ?v= do /icon)", () => {
+  it("muda com o arquivo enviado e é 'd' sem arquivo", () => {
+    expect(versaoDoCaminho("platform/3f2a9c1e-1111-4222-8333-444455556666.png")).toBe("3f2a9c1e");
+    expect(versaoDoCaminho(null)).toBe("d");
+    expect(versaoDoCaminho("lixo")).toBe("d");
   });
 });
