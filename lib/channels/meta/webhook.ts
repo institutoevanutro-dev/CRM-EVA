@@ -142,7 +142,56 @@ export interface MessageStatusEvent {
   errorTitle: string | null;
 }
 
-export type MetaWebhookEvent = TemplateStatusEvent | MessageStatusEvent | InboundMessageEvent;
+/** Mensagem que o dono mandou PELO CELULAR (coexistência): `to` é o contato. */
+export interface EchoMessageEvent {
+  kind: "echo_message";
+  wabaId: string;
+  phoneNumberId: string;
+  externalId: string;
+  to: string;
+  sentAt: Date;
+  type: string;
+  text: string | null;
+  media: { id: string; url: string | null; mime: string | null; voice: boolean } | null;
+}
+
+/** Um pedaço do histórico importado; `bruto` é o `value` cru, quem interpreta é a ingestão. */
+export interface HistoryChunkEvent {
+  kind: "history_chunk";
+  wabaId: string;
+  phoneNumberId: string;
+  fase: number | null;
+  progresso: number | null;
+  chunkOrder: number | null;
+  erroCodigo: number | null;
+  bruto: Record<string, unknown>;
+}
+
+/** Contatos da agenda do app (`smb_app_state_sync`). */
+export interface StateSyncEvent {
+  kind: "state_sync";
+  wabaId: string;
+  phoneNumberId: string;
+  contatos: Array<{ waId: string; nome: string | null }>;
+}
+
+/** Ciclo de vida da conta: desconexão/reconexão do número. */
+export interface AccountEvent {
+  kind: "account_event";
+  wabaId: string;
+  evento: "PARTNER_REMOVED" | "ACCOUNT_OFFBOARDED" | "ACCOUNT_RECONNECTED" | "OUTRO";
+  motivo: string | null;
+  phoneNumber: string | null;
+}
+
+export type MetaWebhookEvent =
+  | TemplateStatusEvent
+  | MessageStatusEvent
+  | InboundMessageEvent
+  | EchoMessageEvent
+  | HistoryChunkEvent
+  | StateSyncEvent
+  | AccountEvent;
 
 /**
  * O formato do fio mora em `./envelope.ts`, onde é um schema Zod — e o tipo
@@ -167,6 +216,13 @@ export function normalizeRejectedReason(v: unknown): string | null {
 
 function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+function midiaDe(raw: Record<string, unknown>, tipo: string) {
+  const corpo = raw[tipo] as Record<string, unknown> | undefined;
+  return corpo && str(corpo.id)
+    ? { id: str(corpo.id)!, url: str(corpo.url), mime: str(corpo.mime_type), voice: corpo.voice === true }
+    : null;
 }
 
 /**
@@ -211,7 +267,6 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
 
           const perfil = contatos.find((c) => str(c.wa_id) === from);
           const tipo = str(raw.type) ?? "unknown";
-          const corpoMidia = tipo !== "contacts" ? (raw[tipo] as Record<string, unknown> | undefined) : undefined;
           const sharedContact = tipo === "contacts" ? parseMetaInboundContact(raw) : null;
           const tipoCrm = tipo === "contacts" ? "contact" : tipo;
 
@@ -230,15 +285,7 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
                 ? str((raw.text as Record<string, unknown>)?.body)
                 : sharedContact?.name ?? null,
             ...(sharedContact ? { sharedContact } : {}),
-            media:
-              corpoMidia && str(corpoMidia.id)
-                ? {
-                    id: str(corpoMidia.id)!,
-                    url: str(corpoMidia.url),
-                    mime: str(corpoMidia.mime_type),
-                    voice: corpoMidia.voice === true,
-                  }
-                : null,
+            media: tipoCrm === "contact" ? null : midiaDe(raw, tipo),
             referral: raw.referral ?? null,
           });
         }
@@ -263,6 +310,66 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
             errorTitle: str(first.title),
           });
         }
+      }
+
+      if (change.field === "smb_message_echoes" && Array.isArray(v.message_echoes)) {
+        const meta = (v.metadata ?? {}) as Record<string, unknown>;
+        for (const raw of v.message_echoes as Record<string, unknown>[]) {
+          const id = str(raw.id);
+          const to = str(raw.to);
+          if (!id || !to) continue;
+          const tipo = str(raw.type) ?? "unknown";
+          out.push({
+            kind: "echo_message", wabaId, phoneNumberId: str(meta.phone_number_id) ?? "", externalId: id, to,
+            sentAt: new Date(Number(str(raw.timestamp) ?? "0") * 1000), type: tipo,
+            text: tipo === "text" ? str((raw.text as Record<string, unknown>)?.body) : null,
+            media: midiaDe(raw, tipo),
+          });
+        }
+        continue;
+      }
+      if (change.field === "history") {
+        const meta = (v.metadata ?? {}) as Record<string, unknown>;
+        const primeiro = (Array.isArray(v.history) ? (v.history[0] as Record<string, unknown> | undefined) : undefined)?.metadata as Record<string, unknown> | undefined;
+        const erros = Array.isArray(v.errors) ? (v.errors as Record<string, unknown>[]) : [];
+        out.push({
+          kind: "history_chunk", wabaId, phoneNumberId: str(meta.phone_number_id) ?? "",
+          fase: typeof primeiro?.phase === "number" ? primeiro.phase : null,
+          progresso: typeof primeiro?.progress === "number" ? primeiro.progress : null,
+          chunkOrder: typeof primeiro?.chunk_order === "number" ? primeiro.chunk_order : null,
+          erroCodigo: typeof erros[0]?.code === "number" ? erros[0].code : null,
+          bruto: v as Record<string, unknown>,
+        });
+        continue;
+      }
+      if (change.field === "smb_app_state_sync" && Array.isArray(v.state_sync)) {
+        const meta = (v.metadata ?? {}) as Record<string, unknown>;
+        const contatos: StateSyncEvent["contatos"] = [];
+        for (const raw of v.state_sync as Record<string, unknown>[]) {
+          if (str(raw.type) !== "contact" || str(raw.action) === "remove") continue;
+          const c = (raw.contact ?? {}) as Record<string, unknown>;
+          const digitos = (str(c.phone_number) ?? "").replace(/\D/g, "");
+          if (!digitos) continue;
+          contatos.push({ waId: digitos, nome: str(c.full_name) ?? str(c.first_name) });
+        }
+        out.push({ kind: "state_sync", wabaId, phoneNumberId: str(meta.phone_number_id) ?? "", contatos });
+        continue;
+      }
+      // `account_update` traz o evento em `value.event`; `account_offboarded` e
+      // `account_reconnected` são CAMPOS próprios (o campo É o evento).
+      const eventoDaConta =
+        change.field === "account_update" ? str(v.event)
+        : change.field === "account_offboarded" ? "ACCOUNT_OFFBOARDED"
+        : change.field === "account_reconnected" ? "ACCOUNT_RECONNECTED"
+        : null;
+      if (eventoDaConta) {
+        const conhecido = (["PARTNER_REMOVED", "ACCOUNT_OFFBOARDED", "ACCOUNT_RECONNECTED"] as const).find((k) => k === eventoDaConta);
+        out.push({
+          kind: "account_event", wabaId, evento: conhecido ?? "OUTRO",
+          motivo: str((v.disconnection_info as Record<string, unknown> | undefined)?.reason),
+          phoneNumber: str(v.phone_number),
+        });
+        continue;
       }
       // Qualquer outro `field` cai fora de propósito — ver o comentário acima.
     }

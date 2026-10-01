@@ -157,7 +157,9 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .eq("waba_id", e.wabaId)
         .eq("name", e.templateName)
         .eq("language", e.templateLanguage);
-    } else {
+    } else if (e.kind === "message_status") {
+      // Eventos de coexistência (echo/history/state_sync/account) ainda não têm
+      // consumidor aqui: caem fora (200) até a ingestão deles entrar.
       await admin
         .from("messages")
         .update({ status: e.status === "failed" ? "failed" : "sent", updated_at: now })
