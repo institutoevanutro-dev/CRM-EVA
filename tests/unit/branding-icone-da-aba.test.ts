@@ -86,6 +86,14 @@ describe("o ícone carrega para quem NÃO entrou", () => {
     expect(icone).toMatch(/marcaDaSaida\(null\)/);
   });
 
+  it("o manifest também é montado em runtime (nome e ícone de quem instala no celular)", () => {
+    // Medido em 01/10/2026: sem `force-dynamic` o manifest saiu do build com "DeskcommCRM"
+    // e `/icon?v=d`, numa instalação com marca e ícone próprios.
+    const manifest = fs.readFileSync(path.join(RAIZ, "app/manifest.ts"), "utf8");
+    expect(manifest).toMatch(/export const dynamic\s*=\s*"force-dynamic"/);
+    expect(manifest).toMatch(/marcaDaSaida\(null\)/);
+  });
+
   it("o layout declara o ícone — é o que mata o pedido a /favicon.ico", () => {
     // O 404 de /favicon.ico não é barato: em produção ele devolve a
     // `app/not-found.tsx` inteira (19.435 bytes) para um pedido de ícone.
