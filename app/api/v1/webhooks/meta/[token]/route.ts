@@ -34,6 +34,7 @@ import { appDaMeta } from "@/lib/channels/meta/app";
 import { lerEnvelopeMeta } from "@/lib/channels/meta/envelope";
 import { parseMetaWebhook, verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
 import { ingestMetaEcho, ingestMetaInbound } from "@/lib/channels/meta/ingest";
+import { aplicarEventoDaConta } from "@/lib/channels/meta/saude-da-conta";
 import { metaSessionByWebhookToken } from "@/lib/channels/meta/session";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -165,6 +166,13 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       continue;
     }
 
+    if (e.kind === "account_event") {
+      // Número desconectado/reconectado pelo celular: derruba a sessão e abre o
+      // aviso na Central, ou o fecha.
+      desfechos.push(`conta:${await aplicarEventoDaConta(admin, session, e)}`);
+      continue;
+    }
+
     if (e.kind === "template_status") {
       await admin
         .from("meta_templates")
@@ -180,7 +188,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .eq("organization_id", session.organizationId)
         .eq("external_id", e.externalId);
     } else {
-      // history_chunk / state_sync / account_event: ainda sem consumidor aqui
+      // history_chunk / state_sync: ainda sem consumidor aqui
       // (200 para a Meta não re-entregar), até a ingestão de cada um entrar.
       desfechos.push("ignorado");
     }

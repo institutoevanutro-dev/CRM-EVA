@@ -83,6 +83,16 @@ export const DETALHE_TOKEN_DE_RENOVACAO_VENCIDO = "token_de_renovacao_vencido";
 export const EPISODIO_TOKEN_DE_RENOVACAO = "TOKEN_DE_RENOVACAO_VENCIDO";
 
 /**
+ * Coexistência: o número foi desconectado pelo WhatsApp Business do celular
+ * (`PARTNER_REMOVED` / `ACCOUNT_OFFBOARDED`). O detalhe é `${DETALHE}:<motivo da
+ * Meta>`; `STATUS_REASON_...` é a marca em `channel_sessions.status_reason` que a
+ * varredura respeita (não promove `FAILED` → `WORKING` enquanto ela existir).
+ */
+export const DETALHE_DESCONECTADO_NO_APP = "desconectado_no_aplicativo";
+export const EPISODIO_DESCONECTADO_NO_APP = "DESCONECTADO_NO_APP";
+export const STATUS_REASON_DESCONECTADO_NO_APP = "coexistencia_desconectada";
+
+/**
  * Marca do episódio aberto por um EMPURRÃO do provedor.
  *
  * A varredura não fecha episódio com esta marca: ela mede credencial e conta,
@@ -157,6 +167,17 @@ export function avisoDaConexao(
         title: `${apelido} precisa ser reconectado`,
         body: "A renovação automática da chave falhou. Vá em Conexões para reconectar.",
         episodio: EPISODIO_TOKEN_DE_RENOVACAO,
+      };
+    }
+
+    if (saude.detail?.startsWith(`${DETALHE_DESCONECTADO_NO_APP}:`)) {
+      const motivo = saude.detail.slice(DETALHE_DESCONECTADO_NO_APP.length + 1);
+      return {
+        kind: "channel_number_alert",
+        severity: "critical",
+        title: `${canal} "${apelido}" foi desconectado pelo celular`,
+        body: `Alguém removeu a conexão no WhatsApp Business do aparelho (motivo da Meta: ${motivo || "não informado"}). Nenhuma mensagem entra nem sai até reconectar em Conexões › API Oficial.`,
+        episodio: EPISODIO_DESCONECTADO_NO_APP,
       };
     }
 
