@@ -327,6 +327,11 @@ export const AUDIT_ACTIONS = [
   "pipeline.created",
   "pipeline.updated",
   "pipeline.archived",
+  // O funil que VOLTOU do arquivo (DeskcommCRM #979). Espelha `pipeline.archived`:
+  // sem um código próprio, tirar do arquivo cairia em `pipeline.updated` e
+  // sumiria no meio dos renames — e "quem trouxe este funil de volta, e quando"
+  // é a pergunta que o painel de auditoria só responde filtrando por `action`.
+  "pipeline.unarchived",
   // Só existe para o funil que nunca recebeu negócio: com histórico, a operação
   // vira `pipeline.archived` e a linha continua no banco.
   "pipeline.deleted",
