@@ -266,8 +266,14 @@ async function diasCheios(page: Page): Promise<string[]> {
     return chaves.filter((k) => k > hoje).sort();
   };
 
+  // Mesmo sinal de "a consulta respondeu" de `escolherDiaDesenhado`: um dia
+  // disponível OU o "Próximo mês" habilitado (no fim do último dia do mês o mês
+  // visível pode não ter dia nenhum).
   await expect(
-    page.locator('[data-testid^="dia-"][data-disponivel="true"]').first(),
+    page
+      .locator('[data-testid^="dia-"][data-disponivel="true"]')
+      .or(page.locator('[data-testid="mes-seguinte"]:enabled'))
+      .first(),
     "nenhum dia disponível — o seed da agenda não deixou jornada publicada, e sem " +
       "dia clicável a coluna de horários nunca abre (o defeito ficaria invisível)",
   ).toBeVisible({ timeout: 20_000 });
