@@ -951,7 +951,12 @@ export async function sendMessageHandler(
       // responder "não configurado" travaria em `queued` um canal que funciona.
       // Quem sabe é `send()`, que pode consultar o banco — então ele lança, e a
       // tradução do desfecho acontece aqui.
-      if (msg.startsWith(adapter.codes.notConfigured)) {
+      //
+      // `meta_creds_decrypt_failed` (sessão com token que não decifra) é TÃO
+      // CRÍTICA quanto ausência de credencial — é um estado de espera pela
+      // intervenção do dono (trocar a chave mestra, configurar o GUC). Mesma
+      // semântica: `queued`, não `failed`.
+      if (msg.startsWith(adapter.codes.notConfigured) || msg.startsWith("meta_creds_decrypt_failed")) {
         const { data: emFila } = await supabase
           .from("messages")
           .update({
