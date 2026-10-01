@@ -19,8 +19,9 @@
  * Que uma sessão COM token criptografado que não decifra LANÇA com o código
  * `meta_creds_decrypt_failed`; que uma sessão SEM token criptografado continua
  * caindo no env (comportamento de transição, enquanto algumas instalações ainda
- * usam env); e que a ordem dos desfechos não muda — sem canal nenhum o desfecho
- * segue sendo "não configurado", não é um novo 500.
+ * usam env); que mesmo com env PREENCHIDO, uma decrypt que falha LANÇA (nunca
+ * silencia para outra conta); e que a ordem dos desfechos não muda — sem canal
+ * nenhum o desfecho segue sendo "não configurado", não é um novo 500.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -173,6 +174,26 @@ describe("credencial-da-sessao-nao-cai-no-env", () => {
     const { resolveMetaCreds } = await import("@/lib/channels/meta/credentials");
     const admin = (await import("@/lib/supabase/admin")).createAdminClient();
 
+    await expect(
+      resolveMetaCreds(admin, {
+        organizationId: ORG,
+        phoneNumberId: PHONE_NUMBER_ID,
+      })
+    ).rejects.toThrow("meta_creds_decrypt_failed");
+  });
+
+  it("Step 1 (brief): sessão COM token que não decifra, env PREENCHIDO → LANÇA, não cai no env", async () => {
+    // Mesmo com META_SYSTEM_USER_TOKEN e META_PHONE_NUMBER_ID no ambiente,
+    // uma decrypt que falha LANÇA — nunca silencia para a conta do env.
+    sessionData = { meta_token_encrypted: "\\xcifra-que-nao-decifra" };
+    decryptReturnsValue = null;
+    process.env.META_PHONE_NUMBER_ID = "env-number-id";
+    process.env.META_SYSTEM_USER_TOKEN = "env-token-secreto";
+
+    const { resolveMetaCreds } = await import("@/lib/channels/meta/credentials");
+    const admin = (await import("@/lib/supabase/admin")).createAdminClient();
+
+    // Deve rejeitar com o erro de decrypt, não resolver com source: "env"
     await expect(
       resolveMetaCreds(admin, {
         organizationId: ORG,

@@ -160,24 +160,29 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
     return fail("invalid_request", "no_meta_channel", 400, { requestId });
   }
 
-  // A credencial vem da SESSÃO que o operador conectou na tela, com o ambiente só
-  // como RESERVA — a mesma porta que `send`, `checkHealth` e `fetchInboundMedia` já
-  // usam. Antes disto este 400 olhava só `META_SYSTEM_USER_TOKEN`: numa instalação que
-  // conectou o número pela TELA, "Sincronizar modelos" respondia
-  // `400 missing_meta_token` a quem tinha credencial salva e visível na própria tela,
-  // e o 2º número oficial da instalação nunca sincronizava um modelo.
-  //
-  // A ORDEM dos desfechos NÃO muda: sem canal oficial a resposta continua
-  // `no_meta_channel`; com canal e sem credencial nenhuma (nem na sessão, nem no
-  // ambiente) continua `missing_meta_token` 400 — o que muda é só de ONDE a
-  // credencial sai quando existe.
-  const creds = await resolveMetaCreds(createAdminClient(), {
-    organizationId: r.orgId,
-    phoneNumberId: sessao.phoneNumberId ?? "",
-  });
-  if (!creds) return fail("invalid_request", "missing_meta_token", 400, { requestId });
-
   try {
+    // A credencial vem da SESSÃO que o operador conectou na tela, com o ambiente só
+    // como RESERVA — a mesma porta que `send`, `checkHealth` e `fetchInboundMedia` já
+    // usam. Antes disto este 400 olhava só `META_SYSTEM_USER_TOKEN`: numa instalação que
+    // conectou o número pela TELA, "Sincronizar modelos" respondia
+    // `400 missing_meta_token` a quem tinha credencial salva e visível na própria tela,
+    // e o 2º número oficial da instalação nunca sincronizava um modelo.
+    //
+    // A ORDEM dos desfechos NÃO muda: sem canal oficial a resposta continua
+    // `no_meta_channel`; com canal e sem credencial nenhuma (nem na sessão, nem no
+    // ambiente) continua `missing_meta_token` 400 — o que muda é só de ONDE a
+    // credencial sai quando existe.
+    //
+    // `resolveMetaCreds` ESTÁ DENTRO do try porque pode lançar
+    // `meta_creds_decrypt_failed` se a sessão TEM token criptografado mas não
+    // decifra (GUC ausente). Lançar é correto: credencial corrompida não é
+    // "canal não conectado", é erro na instalação. O catch abaixo retorna 502.
+    const creds = await resolveMetaCreds(createAdminClient(), {
+      organizationId: r.orgId,
+      phoneNumberId: sessao.phoneNumberId ?? "",
+    });
+    if (!creds) return fail("invalid_request", "missing_meta_token", 400, { requestId });
+
     const counts = await syncTemplates({
       organizationId: r.orgId,
       wabaId: sessao.wabaId,
@@ -187,7 +192,8 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
     return ok(counts);
   } catch (err) {
     // A falha da Graph API vira mensagem legível na tela, não 500 mudo — o
-    // operador precisa saber se é token vencido, WABA errada ou rede.
+    // operador precisa saber se é token vencido, WABA errada ou rede. Falha de
+    // decrypt também cai aqui com `meta_creds_decrypt_failed`.
     return fail("internal_error", err instanceof Error ? err.message : "sync_failed", 502, {
       requestId,
     });

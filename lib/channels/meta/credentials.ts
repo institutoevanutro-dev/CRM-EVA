@@ -119,7 +119,10 @@ export async function metaCredsForPhoneNumberId(
   // A sessão TEM token e ele não decifrou (chave mestra trocada, GUC ausente).
   // Cair no `.env` aqui enviaria pela conta de OUTRA instalação sem erro em
   // lugar nenhum — o mesmo defeito da issue #236 por outra porta. Falha fechada.
-  if (!token) throw new Error("meta_creds_decrypt_failed: a credencial da sessão não decifrou; o .env não é usado");
+  if (!token)
+    throw new Error(
+      "meta_creds_decrypt_failed: a credencial da sessão não decifrou; o .env não é usado",
+    );
 
   return {
     phoneNumberId: data.meta_phone_number_id as string,

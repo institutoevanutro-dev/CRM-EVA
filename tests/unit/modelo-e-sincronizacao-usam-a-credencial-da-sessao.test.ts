@@ -55,8 +55,9 @@ const VALORES = { "1": "Rafael", "2": "DESK-001", "3": "30/07" };
 /**
  * O "banco" que o admin client enxerga: UMA conexão por organização, com o SEU
  * número e o SEU token. É essa separação que os casos 2 e 3 medem.
+ * `token: null` simula decrypt que falha (decryptWebhookSecret devolveria null).
  */
-let sessoes: Record<string, { phoneNumberId: string; cifrado: string; token: string }> = {};
+let sessoes: Record<string, { phoneNumberId: string; cifrado: string; token: string | null }> = {};
 /** A organização que a sessão autenticada enxerga na rota. */
 let orgAtiva = ORG_A;
 
@@ -327,6 +328,30 @@ describe("a rota de sincronizar modelos", () => {
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toMatchObject({
       error: { code: "invalid_request", message: "missing_meta_token" },
+    });
+    expect(syncTemplates).not.toHaveBeenCalled();
+  });
+
+  it("token da sessão que não decifra → 502 com mensagem, não 500 silencioso", async () => {
+    // Uma sessão COM token criptografado que não decifra deve ser catched
+    // pelo try/catch da rota e retornar 502 com a mensagem do erro, não um
+    // 500 silencioso. O resolveMetaCreds deve estar dentro do try.
+    sessoes = {
+      [ORG_A]: {
+        phoneNumberId: "111",
+        cifrado: "\\xcifra-que-nao-decifra",
+        token: null, // Simula decrypt que falha (retorna null)
+      },
+    };
+    vi.stubEnv("META_PHONE_NUMBER_ID", "");
+    vi.stubEnv("META_SYSTEM_USER_TOKEN", "");
+
+    const res = await POST(pedido());
+
+    // Deve retornar 502 com a mensagem de erro, não 500
+    expect(res.status).toBe(502);
+    await expect(res.json()).resolves.toMatchObject({
+      error: { code: "internal_error" },
     });
     expect(syncTemplates).not.toHaveBeenCalled();
   });
