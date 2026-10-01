@@ -80,3 +80,28 @@ export function useConnectOfficialChannel() {
     },
   });
 }
+
+export interface CadastroIncorporadoInput {
+  code: string;
+  evento: string;
+  waba_id: string | null;
+  phone_number_id: string | null;
+}
+
+export function useCadastroIncorporado() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CadastroIncorporadoInput) =>
+      apiClient.post<{
+        data: {
+          connected: boolean;
+          displayName: string;
+          phoneNumber: string | null;
+          coexistencia: boolean;
+          webhook?: { assinado: boolean; motivo?: string };
+        };
+      }>("/api/v1/channels/official/cadastro-incorporado", input),
+    onError: showApiError,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["official-channel"] }),
+  });
+}
