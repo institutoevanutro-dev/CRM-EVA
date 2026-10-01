@@ -69,6 +69,7 @@ import {
   type ClienteDaCascata,
   type ResultadoDaVarredura,
 } from "@/lib/lgpd/cascata";
+import { limparPayloadsDaSincronizacao } from "@/lib/retencao/sincronizacao-meta";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -105,6 +106,8 @@ export interface ResultadoDaRetencao {
   retencao_fila_dias: number;
   retencao_auditoria_dias: number;
   retencao_espelho_dias: number;
+  /** Payloads de `meta.history_chunk`/`meta.state_sync` zerados após 7 dias (coexistência, LGPD). */
+  payloads_limpos?: number;
   /** Avisos de configuração — nunca ausentes em silêncio quando existem. */
   avisos: string[];
 }
@@ -215,7 +218,8 @@ export function houveEfeito(resultado: ResultadoDaRetencao): boolean {
     // A quarta, pela MESMA razão, e ela quase entrou sem: acrescentei a poda de
     // nonces ao laço e ao retorno e esqueci desta linha. O comentário acima
     // descrevia exatamente o defeito que eu estava criando um parágrafo abaixo.
-    resultado.nonces_apagados > 0
+    resultado.nonces_apagados > 0 ||
+    (resultado.payloads_limpos ?? 0) > 0
   );
 }
 
@@ -249,6 +253,8 @@ async function handle(req: NextRequest): Promise<Response> {
       JOB_QUEUE_RETENTION_DAYS: env.JOB_QUEUE_RETENTION_DAYS,
       AUDIT_LOG_RETENTION_DAYS: env.AUDIT_LOG_RETENTION_DAYS,
     });
+    // Conversa/agenda crua da coexistência que nenhum worker limpou (evento morto).
+    resultado.payloads_limpos = await limparPayloadsDaSincronizacao(admin);
     // ── A cascata de anonimização que ficou pela metade ──────────────────
     //
     // Mora AQUI, e não numa rota de cron própria, por uma razão de packaging: o

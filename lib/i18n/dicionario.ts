@@ -9373,11 +9373,12 @@ export const DICIONARIO: Traducoes = {
   "Passaram 24 horas desde a conexão. Para importar o histórico, desconecte e refaça o fluxo pelo botão.": { es: "Pasaron 24 horas desde la conexión. Para importar el historial, desconecte y repita el flujo con el botón." },
   "sem credencial da sessão": { es: "sin credencial de la sesión" },
   "Importação do histórico não foi pedida.": { es: "La importación del historial no se solicitó." },
-  "Contatos e histórico chegam na próxima versão. Não conecte o número da clínica ainda.": {
-    es: "Los contactos y el historial llegan en la próxima versión. Todavía no conecte el número de la clínica.",
-  },
   "Dá para tentar de novo até": { es: "Se puede intentar de nuevo hasta" },
   "Passaram 24 horas. Desconecte e refaça o fluxo pelo botão.": { es: "Pasaron 24 horas. Desconecte y repita el flujo con el botón." },
+  "Histórico importado.": { es: "Historial importado." },
+  "Importando histórico…": { es: "Importando historial…" },
+  "Progresso da importação do histórico": { es: "Progreso de la importación del historial" },
+  "Não deu para importar o histórico.": { es: "No se pudo importar el historial." },
 };
 
 /**

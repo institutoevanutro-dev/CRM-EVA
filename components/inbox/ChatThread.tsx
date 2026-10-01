@@ -202,7 +202,7 @@ export function ChatThread({ conversationId, onResponder }: Props) {
 
   return (
     <div {...sinalDoCanal} className="flex h-full min-w-0 flex-col">
-      <div ref={scrollerRef} className="min-w-0 flex-1 overflow-y-auto py-2">
+      <div data-testid="message-thread" ref={scrollerRef} className="min-w-0 flex-1 overflow-y-auto py-2">
         {q.hasNextPage && (
           <div className="flex justify-center py-2">
             <Button

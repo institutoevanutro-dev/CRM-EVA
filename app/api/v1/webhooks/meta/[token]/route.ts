@@ -179,6 +179,39 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       continue;
     }
 
+    if (e.kind === "history_chunk") {
+      // Histórico do celular (coexistência): o pedaço cru vai para a fila e o
+      // worker `meta.history_chunk` grava sem acordar IA, lead nem automação.
+      // Gravar aqui estouraria o prazo da resposta com 180 dias de conversa.
+      const { error } = await admin.rpc("emit_event" as never, {
+        p_event_type: "meta.history_chunk",
+        p_entity_kind: "channel_session",
+        p_entity_id: session.id,
+        p_payload: { phone_number_id: e.phoneNumberId, fase: e.fase, progresso: e.progresso, chunk_order: e.chunkOrder, erro_codigo: e.erroCodigo, value: e.bruto },
+        p_metadata: { source: "meta_webhook", request_id: requestId },
+        p_organization_id: session.organizationId,
+      } as never);
+      desfechos.push(error ? "history:falhou_enfileirar" : "history:enfileirado");
+      if (error) logger.error("[meta.webhook] history_chunk não enfileirado", { request_id: requestId, error: error.message });
+      continue;
+    }
+
+    if (e.kind === "state_sync") {
+      // Agenda do celular: só enfileira (agenda grande não segura a resposta). O
+      // worker `meta.state_sync` aplica quando o histórico já criou os contatos.
+      const { error } = await admin.rpc("emit_event" as never, {
+        p_event_type: "meta.state_sync",
+        p_entity_kind: "channel_session",
+        p_entity_id: session.id,
+        p_payload: { phone_number_id: e.phoneNumberId, contatos: e.contatos },
+        p_metadata: { source: "meta_webhook", request_id: requestId },
+        p_organization_id: session.organizationId,
+      } as never);
+      desfechos.push(error ? "contatos:falhou_enfileirar" : "contatos:enfileirado");
+      if (error) logger.error("[meta.webhook] state_sync não enfileirado", { request_id: requestId, error: error.message });
+      continue;
+    }
+
     if (e.kind === "template_status") {
       await admin
         .from("meta_templates")
@@ -194,19 +227,20 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .eq("organization_id", session.organizationId)
         .eq("external_id", e.externalId);
     } else {
-      // history_chunk / state_sync: ainda sem consumidor aqui
-      // (200 para a Meta não re-entregar), até a ingestão de cada um entrar.
       desfechos.push("ignorado");
     }
   }
 
-  // 200 SEMPRE que a assinatura confere, inclusive para evento que não nos
+  // 200 quando a assinatura confere, inclusive para evento que não nos
   // interessa: a Meta re-entrega tudo que não recebe 2xx, e recusar o que
   // ignoramos vira re-tentativa em backoff por horas.
+  // A exceção é enfileiramento que falhou (histórico/agenda): ali o pedaço só
+  // existe neste corpo, então 503 faz a Meta reentregar — tudo a jusante é
+  // idempotente por external_id.
   // `outcomes` no corpo: quem depura vê o que aconteceu com cada evento em vez de
   // ler um contador que não distingue sucesso de falha.
   return NextResponse.json(
     { received: eventos.length, outcomes: desfechos },
-    { status: 200 },
+    { status: desfechos.some((d) => d.endsWith(":falhou_enfileirar")) ? 503 : 200 },
   );
 }

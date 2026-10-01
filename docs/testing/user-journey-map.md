@@ -2568,4 +2568,5 @@ na Meta e cola token.
 |---|---|---|
 | J27.1 | Admin clica Conectar WhatsApp, escolhe manter o número no celular; a aba API Oficial mostra o canal Conectado (`WORKING`) e o CRM pede contatos e depois histórico | `tests/e2e/cadastro-incorporado.spec.ts` — SDK do Facebook simulado por `addInitScript`, Graph num receptor local (porta 47813, `META_GRAPH_BASE_URL`). Prova só no CI (parte 1 do `e2e.yml`). Evidência: `.superpowers/evidence/cadastro-incorporado/conectado.png` |
 | J27.2 | Instalação sem App ID / Configuration ID | **NÃO PROVADO EM TELA** — o componente mostra o cartão `cadastro-incorporado-indisponivel` com o que falta e o formulário manual continua; nenhuma spec cobre ainda |
-
+| J27.3 | Webhook de histórico assinado + drain: a conversa nasce encerrada, sem não-lida, com "oi" e "olá" (rótulo Celular); a barra da aba mostra 20% | `tests/e2e/cadastro-incorporado.spec.ts` — prova só no CI. A não-lida é provada por dado (`/api/v1/conversations`), não por selo na tela |
+| J27.4 | Desconectar pelo celular (`PARTNER_REMOVED`) põe a sessão em `FAILED` e abre o aviso "foi desconectado pelo celular" na Central; `ACCOUNT_RECONNECTED` volta a `WORKING` e o aviso some | mesma spec — prova só no CI |

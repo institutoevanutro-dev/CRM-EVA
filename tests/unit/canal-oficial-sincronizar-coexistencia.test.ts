@@ -141,7 +141,7 @@ describe("POST /channels/official/cadastro-incorporado/sincronizar", () => {
     expect(JSON.stringify(m.avisos)).toContain("decrypt failed");
   });
 
-  it("sem consumidor do webhook (SINCRONIZACAO_TEM_CONSUMIDOR=false): NÃO chama smb_app_data e grava pedidos nulos", async () => {
+  it("interruptor desligado (SINCRONIZACAO_TEM_CONSUMIDOR=false): NÃO chama smb_app_data e grava pedidos nulos", async () => {
     m.consumidor = false;
     db.metadata = { coexistencia: { onboarding_em: horasAtras(1), pedidos: { contatos: { erro: "x" }, historico: { erro: "y" } }, historico: null } };
     const res = await POST();

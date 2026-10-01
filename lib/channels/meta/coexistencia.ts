@@ -19,12 +19,14 @@ export const EVENTO_COEXISTENCIA = "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING";
 export const EVENTO_CANCELADO = "CANCEL";
 
 /**
- * Há quem consuma os webhooks `history` / `smb_app_state_sync`? Na Parte A, não:
- * o webhook responde "ignorado". O histórico é UM pedido só (24 h) — pedi-lo sem
- * consumidor perde o histórico para sempre. Com `false`, conexão e "Tentar de novo"
- * NÃO chamam `smb_app_data` e gravam pedidos nulos; a tela avisa. A Parte B vira isto.
+ * Há quem consuma os webhooks `history` / `smb_app_state_sync`? Desde a Parte B,
+ * sim: o histórico vai para `event_log` (`meta.history_chunk`) e o
+ * `workers/meta-history-worker.ts` o importa. O histórico é UM pedido só (24 h) —
+ * pedi-lo sem consumidor o perde para sempre. Com `false`, conexão e "Tentar de
+ * novo" NÃO chamam `smb_app_data` e gravam pedidos nulos: é o interruptor para
+ * o dia em que o consumidor precisar sair do ar.
  */
-export const SINCRONIZACAO_TEM_CONSUMIDOR: boolean = false;
+export const SINCRONIZACAO_TEM_CONSUMIDOR: boolean = true;
 
 /** A Meta aceita `smb_app_data` até 24 h depois do onboarding. */
 export const PRAZO_DA_SINCRONIZACAO_MS = 24 * 60 * 60 * 1000;

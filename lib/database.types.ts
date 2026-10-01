@@ -8298,6 +8298,10 @@ export type Database = {
         Args: { p_contact: string; p_org: string; p_session: string }
         Returns: string
       }
+      fn_upsert_wa_conversation_do_historico: {
+        Args: { p_contact: string; p_org: string; p_session: string }
+        Returns: string
+      }
       fn_user_org_ids: { Args: never; Returns: string[] }
       fn_user_role_in: { Args: { p_org: string }; Returns: number }
       fn_user_role_in_org: { Args: { p_org: string }; Returns: string }

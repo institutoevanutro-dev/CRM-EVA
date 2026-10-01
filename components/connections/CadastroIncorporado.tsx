@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
 import { useCadastroIncorporado, useSincronizarCoexistencia, type OfficialChannelState } from "@/hooks/channels/useOfficialChannel";
 import { abrirCadastroIncorporado, carregarSdk, sdkPronto } from "@/lib/channels/meta/cadastro-incorporado-cliente";
-import { dentroDoPrazoDeSincronizacao, PRAZO_DA_SINCRONIZACAO_MS, SINCRONIZACAO_TEM_CONSUMIDOR } from "@/lib/channels/meta/coexistencia";
+import { dentroDoPrazoDeSincronizacao, mensagemDoErroDaMeta, PRAZO_DA_SINCRONIZACAO_MS, SINCRONIZACAO_TEM_CONSUMIDOR } from "@/lib/channels/meta/coexistencia";
 
 export function CadastroIncorporado({ estado }: { estado: OfficialChannelState }) {
   const t = useT();
@@ -92,6 +92,7 @@ export function CadastroIncorporado({ estado }: { estado: OfficialChannelState }
       <Button className="mt-3" onClick={conectar} disabled={abrindo || concluir.isPending} data-testid="btn-conectar-whatsapp">
         {abrindo || concluir.isPending ? t("Aguardando a Meta…") : t("Conectar WhatsApp")}
       </Button>
+      <ProgressoDoHistorico historico={estado.coexistencia?.historico ?? null} t={t} />
       <AvisoDoHistorico estado={estado} sincronizar={sincronizar} t={t} />
     </Card>
   );
@@ -108,16 +109,12 @@ function AvisoDoHistorico({
   t: (texto: string) => string;
 }) {
   const coex = estado.coexistencia;
-  // Parte A: ninguém consome o histórico ainda — avisar ANTES de quem conecta perder o pedido único.
-  if (!SINCRONIZACAO_TEM_CONSUMIDOR || (coex && !coex.pedidos.contatos && !coex.pedidos.historico)) {
-    return (
-      <p role="alert" data-testid="historico-proxima-versao" className="mt-3 rounded-md border border-warning/40 bg-warning-bg p-3 text-sm">
-        {t("Contatos e histórico chegam na próxima versão. Não conecte o número da clínica ainda.")}
-      </p>
-    );
-  }
+  // Pedido nulo (conexão feita antes de existir o consumidor) é tão "não pedido"
+  // quanto pedido com erro: os dois ganham o "Tentar de novo" dentro das 24 h —
+  // o nulo só com o interruptor ligado, senão o botão não pediria nada.
   const historico = coex?.pedidos.historico;
-  if (!coex || !historico || !("erro" in historico)) return null;
+  if (!coex) return null;
+  if (historico ? !("erro" in historico) : !SINCRONIZACAO_TEM_CONSUMIDOR) return null;
   if (!dentroDoPrazoDeSincronizacao(coex.onboarding_em)) {
     return (
       <p data-testid="historico-fora-do-prazo" className="mt-3 text-sm text-muted-foreground">
@@ -144,6 +141,32 @@ function AvisoDoHistorico({
       >
         {t("Tentar de novo")}
       </Button>
+    </div>
+  );
+}
+
+function ProgressoDoHistorico({
+  historico,
+  t,
+}: {
+  historico: NonNullable<OfficialChannelState["coexistencia"]>["historico"];
+  t: (texto: string) => string;
+}) {
+  if (!historico) return null;
+  if (historico.erro_codigo) {
+    return (
+      <p className="mt-2 text-sm text-destructive" data-testid="historico-erro">
+        {t(mensagemDoErroDaMeta(historico.erro_codigo, null, "Não deu para importar o histórico."))}
+      </p>
+    );
+  }
+  const pct = historico.progresso ?? 0;
+  return (
+    <div className="mt-3" data-testid="historico-progresso">
+      <p className="text-sm">
+        {historico.concluido ? t("Histórico importado.") : t("Importando histórico…")} {pct}%
+      </p>
+      <progress className="mt-1 h-2 w-full" max={100} value={pct} aria-label={t("Progresso da importação do histórico")} />
     </div>
   );
 }
