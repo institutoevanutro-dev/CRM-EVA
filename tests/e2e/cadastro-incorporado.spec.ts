@@ -150,8 +150,28 @@ function webhookDaMeta(indice: number): string {
 
 const FIXTURE_HISTORICO = 1;
 const FIXTURE_CONTATOS = 3;
+/** Quem NÃO está no CRM: a agenda do celular nunca cria contato. */
+const NUMERO_SEM_CONTATO = "5511912345678";
 const FIXTURE_DESCONECTOU = 4;
 const FIXTURE_RECONECTOU = 5;
+
+/** A agenda do celular com a Maria (que o histórico cria) e um número que ninguém tem. */
+function webhookDosContatos(): string {
+  const corpo = JSON.parse(webhookDaMeta(FIXTURE_CONTATOS));
+  corpo.entry[0].changes[0].value.state_sync.push({
+    type: "contact", action: "add", contact: { full_name: "Fulano Sem Conversa", phone_number: `+${NUMERO_SEM_CONTATO}` },
+  });
+  return JSON.stringify(corpo);
+}
+
+/** O último pedaço do histórico (100%), sem mensagens novas. */
+function webhookDoHistoricoCompleto(): string {
+  const corpo = JSON.parse(webhookDaMeta(FIXTURE_HISTORICO));
+  const h = corpo.entry[0].changes[0].value.history[0];
+  h.metadata = { phase: 2, chunk_order: 2, progress: 100 };
+  h.threads = [];
+  return JSON.stringify(corpo);
+}
 
 /** Entrega um webhook assinado com o App Secret do seed, pela URL que a tela mostra ao operador. */
 async function entregarWebhook(page: Page, corpo: string): Promise<void> {
@@ -178,7 +198,7 @@ test("[P0] histórico do celular entra encerrado, sem não-lida, e a barra mostr
   const sessaoId = oficial.data.channel_session_id as string;
 
   await entregarWebhook(page, webhookDaMeta(FIXTURE_HISTORICO));
-  await entregarWebhook(page, webhookDaMeta(FIXTURE_CONTATOS)); // só preenche nome vazio: nunca cria contato
+  await entregarWebhook(page, webhookDosContatos()); // update-only: espera o histórico criar a Maria
   await drenar(page);
 
   // Por dado, não por prosa: a conversa nasce ENCERRADA e sem não-lida (o "oi" é do cliente).
@@ -196,9 +216,31 @@ test("[P0] histórico do celular entra encerrado, sem não-lida, e a barra mostr
   await page.goto("/app/connections?aba=oficial");
   await expect(page.getByTestId("historico-progresso")).toContainText("20%");
 
+  // Com o histórico em 20% a agenda espera: a Maria ainda não tem nome.
+  const contatoId = detalhe.data.contact_id as string;
+  const nomeDoContato = async () =>
+    (await page.request.get(`/api/v1/contacts/${contatoId}`).then((r) => r.json())).data.display_name as string | null;
+  expect(await nomeDoContato()).toBeNull();
+
+  // Histórico em 100%: a próxima passada da agenda aplica, e só nela.
+  await entregarWebhook(page, webhookDoHistoricoCompleto());
+  await drenar(page);
+  execFileSync("npx", ["tsx", SEED, "--adiantar-contatos"], { stdio: "inherit" });
+  await expect(async () => {
+    await drenar(page);
+    expect(await nomeDoContato()).toBe("Maria Silva");
+  }).toPass({ timeout: 30_000 });
+  const busca = await page.request
+    .get(`/api/v1/contacts?search=${encodeURIComponent("Fulano Sem Conversa")}`)
+    .then((r) => r.json());
+  expect(busca.data).toHaveLength(0);
+  const porTelefone = await page.request.get(`/api/v1/contacts?search=${NUMERO_SEM_CONTATO.slice(2)}`).then((r) => r.json());
+  expect(porTelefone.data).toHaveLength(0);
+
   await page.goto(`/app/inbox/${conversaId}`);
-  await expect(page.getByText("oi", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("olá", { exact: true }).first()).toBeVisible();
+  const conversa = page.getByTestId("message-thread");
+  await expect(conversa.getByText("oi", { exact: true }).first()).toBeVisible();
+  await expect(conversa.getByText("olá", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Celular", { exact: true }).first()).toBeVisible();
   await page.screenshot({ path: path.join(EVIDENCIA, "historico.png"), fullPage: true });
 });

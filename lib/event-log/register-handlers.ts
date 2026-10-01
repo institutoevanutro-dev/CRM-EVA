@@ -19,6 +19,7 @@ import { followupGatilhoCasoHandler } from "@/lib/followup/gatilho-caso.handler"
 import { mediaPersistHandler } from "@/workers/media-persist-worker.handler";
 import { mediaDeriveHandler } from "@/workers/media-derive-worker.handler";
 import { metaHistoryHandler } from "@/workers/meta-history-worker.handler";
+import { metaStateSyncHandler } from "@/workers/meta-state-sync-worker.handler";
 import { webPushInboundHandler } from "@/lib/notifications/push.handler";
 import { conversaoDeVendaHandler } from "@/lib/conversoes/envio.handler";
 import { supervisaoAcionamentoHumanoHandler } from "@/lib/supervisao/acionamento-humano.handler";
@@ -48,6 +49,7 @@ export function ensureHandlersRegistered(): void {
   registerHandler(mediaDeriveHandler);
   // Histórico do celular (coexistência): grava sem acordar ninguém (0297).
   registerHandler(metaHistoryHandler);
+  registerHandler(metaStateSyncHandler);
   registerHandler(webPushInboundHandler);
   // Por último: reportar a venda ao anúncio é o consumidor mais externo do
   // fechamento — depende de rede de terceiro e não pode atrasar quem escreve

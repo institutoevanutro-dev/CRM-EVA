@@ -33,7 +33,6 @@ import { fail } from "@/lib/api/wrappers";
 import { appDaMeta } from "@/lib/channels/meta/app";
 import { lerEnvelopeMeta } from "@/lib/channels/meta/envelope";
 import { parseMetaWebhook, verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
-import { upsertContatosDoCelular } from "@/lib/channels/meta/contatos-do-celular";
 import { ingestMetaEcho, ingestMetaInbound } from "@/lib/channels/meta/ingest";
 import { aplicarEventoDaConta } from "@/lib/channels/meta/saude-da-conta";
 import { metaSessionByWebhookToken } from "@/lib/channels/meta/session";
@@ -198,9 +197,18 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     }
 
     if (e.kind === "state_sync") {
-      // Agenda do celular: preenche só nome vazio (a regra é da RPC).
-      const r = await upsertContatosDoCelular(admin, session.organizationId, e.contatos);
-      desfechos.push(`contatos:${r.processados}`);
+      // Agenda do celular: só enfileira (agenda grande não segura a resposta). O
+      // worker `meta.state_sync` aplica quando o histórico já criou os contatos.
+      const { error } = await admin.rpc("emit_event" as never, {
+        p_event_type: "meta.state_sync",
+        p_entity_kind: "channel_session",
+        p_entity_id: session.id,
+        p_payload: { phone_number_id: e.phoneNumberId, contatos: e.contatos },
+        p_metadata: { source: "meta_webhook", request_id: requestId },
+        p_organization_id: session.organizationId,
+      } as never);
+      desfechos.push(error ? "contatos:falhou_enfileirar" : "contatos:enfileirado");
+      if (error) logger.error("[meta.webhook] state_sync não enfileirado", { request_id: requestId, error: error.message });
       continue;
     }
 

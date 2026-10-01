@@ -3,22 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const SESSAO = { id: "sess-1", organizationId: "org-1", wabaId: "222" };
 const SEGREDO = "segredo-de-teste";
-let updates: Array<Record<string, unknown>>;
+let rpcs: Array<{ fn: string; args: Record<string, unknown> }>;
 
 vi.mock("@/lib/channels/meta/session", () => ({ metaSessionByWebhookToken: async () => SESSAO }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: () => ({
       select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
-      update: (set: Record<string, unknown>) => {
-        updates.push(set);
-        const q: Record<string, unknown> = {};
-        for (const m of ["eq", "is", "in", "or"]) q[m] = () => q;
-        q.select = async () => ({ data: [{ id: "c" }], error: null });
-        return q;
-      },
     }),
-    rpc: async () => ({ data: null, error: null }),
+    rpc: async (fn: string, args: Record<string, unknown>) => (rpcs.push({ fn, args }), { data: null, error: null }),
   }),
 }));
 
@@ -34,12 +27,12 @@ function entrega(corpo: unknown) {
 const ctx = { params: Promise.resolve({ token: "t" }) } as never;
 
 beforeEach(() => {
-  updates = [];
+  rpcs = [];
   vi.stubEnv("META_APP_SECRET", SEGREDO);
 });
 
 describe("webhook da Meta: contatos do celular", () => {
-  it("smb_app_state_sync com 2 contatos → contatos:2", async () => {
+  it("smb_app_state_sync com 2 contatos → enfileirado em event_log, nada aplicado na hora", async () => {
     const corpo = {
       object: "whatsapp_business_account",
       entry: [{ id: "222", changes: [{ field: "smb_app_state_sync", value: {
@@ -53,7 +46,14 @@ describe("webhook da Meta: contatos do celular", () => {
     };
     const res = await POST(entrega(corpo), ctx);
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ outcomes: ["contatos:2"] });
-    expect(updates).toEqual([{ display_name: "Maria" }, { display_name: "João" }]);
+    expect(await res.json()).toMatchObject({ outcomes: ["contatos:enfileirado"] });
+    expect(rpcs).toHaveLength(1);
+    expect(rpcs[0]).toMatchObject({
+      fn: "emit_event",
+      args: {
+        p_event_type: "meta.state_sync", p_entity_kind: "channel_session", p_entity_id: "sess-1", p_organization_id: "org-1",
+        p_payload: { phone_number_id: "111", contatos: [{ waId: "5511999998888", nome: "Maria" }, { waId: "5511988887777", nome: "João" }] },
+      },
+    });
   });
 });
