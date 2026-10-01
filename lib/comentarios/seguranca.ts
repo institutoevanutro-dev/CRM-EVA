@@ -167,11 +167,28 @@ export function ehTokenConhecido(token: string): boolean {
 export function ehTokenDeGatilho(token: string): boolean {
   // Os padrões não têm flag `g`, então `lastIndex` não importa; o reset é
   // por segurança caso alguém acrescente `g` no futuro.
-  return GATILHOS.some(([, padrao]) => {
+  const sozinho = GATILHOS.some(([, padrao]) => {
     padrao.lastIndex = 0;
     return padrao.test(token);
   });
+  return sozinho || COMPONENTES_DE_GATILHO.some((c) => c.test(token));
 }
+
+/**
+ * Pedaços das alternativas multipalavra dos gatilhos ("voce e medico" vira
+ * "voce", "e", "medico"), DERIVADOS de `GATILHOS` e não escritos à mão: gatilho
+ * novo entra aqui sozinho. Um componente aprovado não desarma o gatilho (a
+ * trava roda sobre o texto inteiro), mas oferecê-lo ao dono é oferecer a
+ * metade de uma proteção, então nunca se oferece.
+ */
+const COMPONENTES_DE_GATILHO: readonly RegExp[] = GATILHOS.flatMap(([, padrao]) => {
+  const miolo = padrao.source.replace(/^\\b\(/, "").replace(/\)\\b$/, "");
+  return miolo
+    .split("|")
+    .filter((alt) => alt.includes("\\s+"))
+    .flatMap((alt) => alt.split("\\s+"))
+    .map((pedaco) => new RegExp(`^(?:${pedaco})$`, "u"));
+});
 
 /** Tokens do texto, já sem marcação e normalizados: a MESMA régua da trava. */
 export function tokensParaAnalise(texto: string): string[] {
@@ -222,8 +239,13 @@ export function ehObviamenteSeguro(
   }
   const normalizado = normalizarTexto(textoAparado);
 
+  // Os gatilhos multipalavra usam `\s+`, e `normalizarTexto` preserva
+  // pontuação: "voce, e medico" não casaria. Colapsa tudo que não é
+  // letra/dígito em um espaço, SÓ para este laço (o teto de tamanho e a
+  // interrogação final precisam do texto como veio).
+  const paraGatilhos = normalizado.replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   for (const [gatilho, padrao] of GATILHOS) {
-    if (padrao.test(normalizado)) {
+    if (padrao.test(paraGatilhos)) {
       return { seguro: false, gatilho };
     }
   }

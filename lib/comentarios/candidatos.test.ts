@@ -52,4 +52,14 @@ describe("candidatosDoHistorico", () => {
     const r = candidatosDoHistorico(["aula didatica", "didatica", "zebra"], nada);
     expect(r.map((c) => c.palavra)).toEqual(["didatica", "zebra"]);
   });
+
+  it("componente de gatilho multipalavra NUNCA é oferecido", () => {
+    const r = candidatosDoHistorico(
+      ["efeito colateral do tratamento", "voce e medico", "normal isso"],
+      new Set(),
+    ).map((c) => c.palavra);
+    for (const p of ["efeito", "colateral", "voce", "medico", "normal"]) {
+      expect(r, p).not.toContain(p);
+    }
+  });
 });

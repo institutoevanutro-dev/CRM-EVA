@@ -183,3 +183,17 @@ describe("palavras aprovadas pelo dono", () => {
     );
   });
 });
+
+describe("pontuação e gatilhos multipalavra", () => {
+  it("pontuação NÃO desarma gatilho multipalavra, nem com os componentes aprovados", () => {
+    const a = new Set(["efeito", "colateral", "voce", "medico", "normal", "puedo", "tomar"]);
+    for (const t of ["efeito, colateral", "voce, e medico", "voce... e medico", "normal, isso", "puedo, tomar"]) {
+      expect(ehObviamenteSeguro(t, a).seguro, t).toBe(false);
+    }
+  });
+
+  it("a interrogação final continua valendo: o colapso de pontuação é só para os gatilhos", () => {
+    expect(ehObviamenteSeguro("top?").seguro).toBe(false);
+  });
+});
+
