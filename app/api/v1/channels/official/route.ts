@@ -133,9 +133,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   );
 
   const app = await appDaMeta();
-  const faltam = (["META_APP_ID", "META_ES_CONFIG_ID"] as const).filter((v) =>
-    v === "META_APP_ID" ? !app.appId : !app.esConfigId,
-  );
+  // Sem o segredo o POST não troca o `code`: o botão abriria um fluxo que falha no fim.
+  const presente = { META_APP_ID: app.appId, META_ES_CONFIG_ID: app.esConfigId, META_APP_SECRET: app.appSecret };
+  const faltam = (["META_APP_ID", "META_ES_CONFIG_ID", "META_APP_SECRET"] as const).filter((v) => !presente[v]);
   const cadastroIncorporado = {
     disponivel: faltam.length === 0,
     appId: app.appId,

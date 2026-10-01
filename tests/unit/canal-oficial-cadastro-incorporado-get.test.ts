@@ -62,6 +62,8 @@ beforeEach(async () => {
   usuario = { id: "u1", idioma: "pt-BR", is_platform_admin: false };
   delete process.env.META_APP_ID;
   delete process.env.META_ES_CONFIG_ID;
+  delete process.env.META_APP_SECRET;
+  delete process.env.META_WEBHOOK_VERIFY_TOKEN;
   (await import("@/lib/channels/meta/app")).invalidarAppDaMeta();
 });
 
@@ -75,13 +77,20 @@ describe("GET /api/v1/channels/official — cadastroIncorporado", () => {
   it("só o App ID: indisponível e falta o Configuration ID", async () => {
     process.env.META_APP_ID = "1";
     const c = await cadastro();
-    expect(c).toMatchObject({ disponivel: false, appId: "1", configId: null, faltam: ["META_ES_CONFIG_ID"] });
+    expect(c).toMatchObject({ disponivel: false, appId: "1", configId: null, faltam: ["META_ES_CONFIG_ID", "META_APP_SECRET"] });
   });
 
-  it("os dois: disponível, nada falta", async () => {
+  it("os dois e o segredo do app: disponível, nada falta", async () => {
     process.env.META_APP_ID = "1";
     process.env.META_ES_CONFIG_ID = "2";
+    process.env.META_APP_SECRET = SEGREDO_DO_ENV;
     expect(await cadastro()).toMatchObject({ disponivel: true, configId: "2", faltam: [] });
+  });
+
+  it("os dois SEM o segredo do app: indisponível (o POST recusaria a troca do code)", async () => {
+    process.env.META_APP_ID = "1";
+    process.env.META_ES_CONFIG_ID = "2";
+    expect(await cadastro()).toMatchObject({ disponivel: false, faltam: ["META_APP_SECRET"] });
   });
 
   it("o link da tela da instalação só vai a quem administra a instalação", async () => {

@@ -20,7 +20,7 @@ export interface OfficialChannelState {
     appId: string | null;
     configId: string | null;
     versao: string;
-    faltam: ("META_APP_ID" | "META_ES_CONFIG_ID")[];
+    faltam: ("META_APP_ID" | "META_ES_CONFIG_ID" | "META_APP_SECRET")[];
     configurarEm: string | null;
   };
   /** `metadata.coexistencia` da sessão: pedidos de contatos/histórico e o progresso. */
