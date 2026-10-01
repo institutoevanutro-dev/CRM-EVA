@@ -15,6 +15,21 @@ const m = vi.hoisted(() => ({
   sessao: vi.fn(),
   creds: vi.fn(),
   auditorias: [] as Array<Record<string, unknown>>,
+  avisos: [] as Array<[string, Record<string, unknown>]>,
+  consumidor: true,
+}));
+
+vi.mock("@/lib/channels/meta/coexistencia", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/channels/meta/coexistencia")>();
+  return {
+    ...real,
+    get SINCRONIZACAO_TEM_CONSUMIDOR() {
+      return m.consumidor;
+    },
+  };
+});
+vi.mock("@/lib/logger", () => ({
+  logger: { warn: (msg: string, ctx: Record<string, unknown>) => void m.avisos.push([msg, ctx]), info: () => undefined, error: () => undefined, debug: () => undefined },
 }));
 
 vi.mock("@/lib/channels/meta/cadastro-incorporado", async (importOriginal) => ({
@@ -61,6 +76,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   m.sincronizar.mockReset();
   m.auditorias.length = 0;
+  m.avisos.length = 0;
+  m.consumidor = true;
   db.updates = [];
   m.sessao.mockResolvedValue({ id: CANAL, organizationId: ORG, wabaId: "222333444555", phoneNumberId: PNID });
   m.creds.mockResolvedValue({ phoneNumberId: PNID, token: "EAAX", graphVersion: "v23.0", source: "session" });
@@ -120,5 +137,16 @@ describe("POST /channels/official/cadastro-incorporado/sincronizar", () => {
     expect(res.status).toBe(422);
     expect((await res.json()).error.message).toBe("sem credencial da sessão");
     expect(m.sincronizar).not.toHaveBeenCalled();
+    // a causa vai ao log (sem segredo), não some no `.catch`
+    expect(JSON.stringify(m.avisos)).toContain("decrypt failed");
+  });
+
+  it("sem consumidor do webhook (SINCRONIZACAO_TEM_CONSUMIDOR=false): NÃO chama smb_app_data e grava pedidos nulos", async () => {
+    m.consumidor = false;
+    db.metadata = { coexistencia: { onboarding_em: horasAtras(1), pedidos: { contatos: { erro: "x" }, historico: { erro: "y" } }, historico: null } };
+    const res = await POST();
+    expect(res.status).toBe(200);
+    expect(m.sincronizar).not.toHaveBeenCalled();
+    expect(coexistencia().pedidos).toEqual({ contatos: null, historico: null });
   });
 });

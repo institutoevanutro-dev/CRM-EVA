@@ -13,12 +13,18 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { pedirSincronizacao } from "@/lib/channels/meta/cadastro-incorporado";
-import { dentroDoPrazoDeSincronizacao, lerCoexistencia, PRAZO_DA_SINCRONIZACAO_MS } from "@/lib/channels/meta/coexistencia";
+import {
+  dentroDoPrazoDeSincronizacao,
+  lerCoexistencia,
+  PRAZO_DA_SINCRONIZACAO_MS,
+  SINCRONIZACAO_TEM_CONSUMIDOR,
+} from "@/lib/channels/meta/coexistencia";
 import { gravarCoexistencia } from "@/lib/channels/meta/conectar-canal-oficial";
 import { resolveMetaCreds } from "@/lib/channels/meta/credentials";
 import { metaSessionForOrg } from "@/lib/channels/meta/session";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -54,14 +60,22 @@ export async function POST(): Promise<NextResponse> {
   }
   // Só a credencial DESTA sessão: a do `.env` pode ser de outro número.
   // Decifra que lança (GUC ausente, banco fora) é o mesmo "sem credencial", não 500.
-  const creds = await resolveMetaCreds(admin, { organizationId: orgId, phoneNumberId: sessao.phoneNumberId }).catch(() => null);
+  const creds = await resolveMetaCreds(admin, { organizationId: orgId, phoneNumberId: sessao.phoneNumberId }).catch((err: unknown) => {
+    logger.warn("[cadastro-incorporado] credencial da sessão não decifrou", {
+      organization_id: orgId,
+      session: sessao.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  });
   if (!creds || creds.source !== "session") return fail("invalid_request", t("sem credencial da sessão"), 422, { requestId });
 
-  const pedidos = { ...coex.pedidos };
-  if (!pedidos.contatos || "erro" in pedidos.contatos) {
+  // Sem consumidor dos webhooks (Parte A): não pede, grava nulo (ver `SINCRONIZACAO_TEM_CONSUMIDOR`).
+  const pedidos = SINCRONIZACAO_TEM_CONSUMIDOR ? { ...coex.pedidos } : { contatos: null, historico: null };
+  if (SINCRONIZACAO_TEM_CONSUMIDOR && (!pedidos.contatos || "erro" in pedidos.contatos)) {
     pedidos.contatos = await pedirSincronizacao(creds.token, creds.phoneNumberId, "smb_app_state_sync");
   }
-  if (!pedidos.historico || "erro" in pedidos.historico) {
+  if (SINCRONIZACAO_TEM_CONSUMIDOR && (!pedidos.historico || "erro" in pedidos.historico)) {
     pedidos.historico = await pedirSincronizacao(creds.token, creds.phoneNumberId, "history");
   }
   await gravarCoexistencia(admin, orgId, sessao.id, { ...coex, pedidos });

@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
 import { useCadastroIncorporado, useSincronizarCoexistencia, type OfficialChannelState } from "@/hooks/channels/useOfficialChannel";
 import { abrirCadastroIncorporado, carregarSdk, sdkPronto } from "@/lib/channels/meta/cadastro-incorporado-cliente";
-import { dentroDoPrazoDeSincronizacao, PRAZO_DA_SINCRONIZACAO_MS } from "@/lib/channels/meta/coexistencia";
+import { dentroDoPrazoDeSincronizacao, PRAZO_DA_SINCRONIZACAO_MS, SINCRONIZACAO_TEM_CONSUMIDOR } from "@/lib/channels/meta/coexistencia";
 
 export function CadastroIncorporado({ estado }: { estado: OfficialChannelState }) {
   const t = useT();
@@ -108,6 +108,14 @@ function AvisoDoHistorico({
   t: (texto: string) => string;
 }) {
   const coex = estado.coexistencia;
+  // Parte A: ninguém consome o histórico ainda — avisar ANTES de quem conecta perder o pedido único.
+  if (!SINCRONIZACAO_TEM_CONSUMIDOR || (coex && !coex.pedidos.contatos && !coex.pedidos.historico)) {
+    return (
+      <p role="alert" data-testid="historico-proxima-versao" className="mt-3 rounded-md border border-warning/40 bg-warning-bg p-3 text-sm">
+        {t("Contatos e histórico chegam na próxima versão. Não conecte o número da clínica ainda.")}
+      </p>
+    );
+  }
   const historico = coex?.pedidos.historico;
   if (!coex || !historico || !("erro" in historico)) return null;
   if (!dentroDoPrazoDeSincronizacao(coex.onboarding_em)) {

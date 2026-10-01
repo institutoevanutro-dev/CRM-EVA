@@ -10,6 +10,8 @@ O fluxo da Meta conecta o número sem colar token; o número pode continuar no
 WhatsApp Business do celular (coexistência). Resposta dada pelo celular aparece
 como Celular e pausa a IA por 5 minutos; desconectar pelo celular abre aviso na
 Central. Sem os dois valores nada muda: o formulário manual continua.
+Contatos e histórico do celular chegam na próxima versão: até lá a tela avisa
+para não conectar o número em uso.
 
 Correção que vem junto: quando a credencial gravada na sessão do canal oficial
 não decifra (chave mestra trocada, GUC ausente), a mensagem fica na fila em vez

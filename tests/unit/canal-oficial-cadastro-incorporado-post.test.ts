@@ -22,7 +22,19 @@ const m = vi.hoisted(() => ({
   avisos: [] as Array<[string, Record<string, unknown>]>,
   auditorias: [] as Array<Record<string, unknown>>,
   idioma: "pt-BR" as "pt-BR" | "es",
+  consumidor: true,
 }));
+
+// A constante real é `false` até a Parte B; os casos de pedido a ligam.
+vi.mock("@/lib/channels/meta/coexistencia", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/channels/meta/coexistencia")>();
+  return {
+    ...real,
+    get SINCRONIZACAO_TEM_CONSUMIDOR() {
+      return m.consumidor;
+    },
+  };
+});
 
 vi.mock("@/lib/channels/meta/cadastro-incorporado", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/channels/meta/cadastro-incorporado")>()),
@@ -98,6 +110,7 @@ beforeEach(() => {
   m.avisos.length = 0;
   m.auditorias.length = 0;
   m.idioma = "pt-BR";
+  m.consumidor = true;
   db.metadata = {};
   db.updates = [];
   m.conectar.mockResolvedValue(conectado);
@@ -222,5 +235,13 @@ describe("POST /channels/official/cadastro-incorporado", () => {
     expect((await res.json()).error.message).toMatch(/otra organización/);
     expect(m.sincronizar).not.toHaveBeenCalled();
     expect(m.auditorias).toHaveLength(0);
+  });
+
+  it("sem consumidor do webhook (SINCRONIZACAO_TEM_CONSUMIDOR=false): NÃO chama smb_app_data e grava pedidos nulos", async () => {
+    m.consumidor = false;
+    const res = await POST(req(COEX));
+    expect(res.status).toBe(200);
+    expect(m.sincronizar).not.toHaveBeenCalled();
+    expect(db.updates.at(-1)?.patch.metadata).toMatchObject({ coexistencia: { pedidos: { contatos: null, historico: null } } });
   });
 });

@@ -33,7 +33,7 @@ import {
   registrarNumero,
   trocarCodigo,
 } from "@/lib/channels/meta/cadastro-incorporado";
-import { EVENTO_COEXISTENCIA, EVENTO_NUMERO_NOVO, type Coexistencia } from "@/lib/channels/meta/coexistencia";
+import { EVENTO_COEXISTENCIA, EVENTO_NUMERO_NOVO, SINCRONIZACAO_TEM_CONSUMIDOR, type Coexistencia } from "@/lib/channels/meta/coexistencia";
 import { conectarCanalOficial, gravarCoexistencia } from "@/lib/channels/meta/conectar-canal-oficial";
 import { DICIONARIO, traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
@@ -169,10 +169,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // 7. coexistência: contatos, depois histórico. Falha NÃO desfaz a conexão.
+  //    Sem consumidor dos webhooks (Parte A), NÃO pede: o histórico é pedido uma vez só.
   let coex: Coexistencia | null = null;
   if (coexistencia) {
-    const contatos = await pedirSincronizacao(token, phoneNumberId, "smb_app_state_sync");
-    const historico = await pedirSincronizacao(token, phoneNumberId, "history");
+    const contatos = SINCRONIZACAO_TEM_CONSUMIDOR ? await pedirSincronizacao(token, phoneNumberId, "smb_app_state_sync") : null;
+    const historico = SINCRONIZACAO_TEM_CONSUMIDOR ? await pedirSincronizacao(token, phoneNumberId, "history") : null;
     coex = { onboarding_em: agora, pedidos: { contatos, historico }, historico: null };
     await gravarCoexistencia(admin, orgId, r.sessionId, coex);
   }
