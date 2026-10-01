@@ -76,7 +76,9 @@ export function PalavrasDaIa() {
       {data.decididas.length > 0 && (
         <details className="text-xs text-text-muted">
           <summary className="cursor-pointer">
-            {liberadas} {t("liberadas")}, {recusadas} {t("recusada(s)")}
+            {liberadas === 1 ? t("1 palavra liberada") : `${liberadas} ${t("palavras liberadas")}`}
+            {", "}
+            {recusadas === 1 ? t("1 recusada") : `${recusadas} ${t("recusadas")}`}
           </summary>
           {/* Voltar atrás é requisito: decisão que não se desfaz vira medo de
               decidir. A rota faz upsert, então decidir de novo só atualiza a

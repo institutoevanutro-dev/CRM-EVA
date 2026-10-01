@@ -49,7 +49,7 @@ describe("Palavras da IA", () => {
     dados = { candidatos: [], decididas: [{ palavra: "didatico", aprovada: true }] };
     render(<PalavrasDaIa />);
 
-    fireEvent.click(screen.getByText(/1 liberadas/i));
+    fireEvent.click(screen.getByText(/1 palavra liberada/i));
     fireEvent.click(screen.getByRole("button", { name: /Nunca/i }));
 
     await waitFor(() =>
@@ -67,7 +67,21 @@ describe("Palavras da IA", () => {
       ],
     };
     render(<PalavrasDaIa />);
-    expect(screen.getByText(/2 liberadas/i)).toBeTruthy();
-    expect(screen.getByText(/1 recusada/i)).toBeTruthy();
+    expect(screen.getByText(/2 palavras liberadas/i)).toBeTruthy();
+    expect(screen.getByText(/1 recusada\b(?!s)/i)).toBeTruthy();
+  });
+
+  it("concorda em número: 1 liberada, 2 recusadas", () => {
+    dados = {
+      candidatos: [],
+      decididas: [
+        { palavra: "a", aprovada: true },
+        { palavra: "b", aprovada: false },
+        { palavra: "c", aprovada: false },
+      ],
+    };
+    render(<PalavrasDaIa />);
+    expect(screen.getByText(/1 palavra liberada/i)).toBeTruthy();
+    expect(screen.getByText(/2 recusadas/i)).toBeTruthy();
   });
 });
