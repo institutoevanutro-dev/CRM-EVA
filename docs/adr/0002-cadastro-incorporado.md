@@ -48,10 +48,12 @@ manual. A coexistência fica em `channel_sessions.metadata` (`cadastro_incorpora
 `coexistencia`). Em coexistência a rota **não** chama `/register` — o número continua registrado
 no aplicativo do celular; pede contatos e histórico por `smb_app_data`, e falha nesse pedido não
 desfaz a conexão (há 24 h para repetir, rota `/sincronizar`).
-Enquanto `SINCRONIZACAO_TEM_CONSUMIDOR` (`lib/channels/meta/coexistencia.ts`) for `false` — a
-Parte A, em que o webhook ainda responde "ignorado" a `history`/`smb_app_state_sync` — **nenhum**
-`smb_app_data` é enviado: os pedidos ficam nulos e a tela avisa para não conectar o número em uso.
-O histórico é um pedido único de 24 h; pedi-lo sem consumidor o perderia. Para conferir:
+`SINCRONIZACAO_TEM_CONSUMIDOR` (`lib/channels/meta/coexistencia.ts`) é o interruptor desses
+pedidos: com `false`, **nenhum** `smb_app_data` é enviado e os pedidos ficam nulos. Na Parte A ele
+era `false` (o webhook respondia "ignorado" a `history`); a Parte B o ligou junto com o consumidor
+— o histórico entra por `event_log` (`meta.history_chunk`, `workers/meta-history-worker.ts`) e a
+migration 0297 impede que a mensagem importada acorde IA, demanda ou automação. O histórico é um
+pedido único de 24 h; pedi-lo sem consumidor o perderia. Para conferir o valor em vigor:
 `grep -n 'SINCRONIZACAO_TEM_CONSUMIDOR' lib/channels/meta/coexistencia.ts`.
 
 A sessão por QR do mesmo número é arquivada **só no banco** antes da gravação (o índice

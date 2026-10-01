@@ -179,6 +179,23 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       continue;
     }
 
+    if (e.kind === "history_chunk") {
+      // Histórico do celular (coexistência): o pedaço cru vai para a fila e o
+      // worker `meta.history_chunk` grava sem acordar IA, lead nem automação.
+      // Gravar aqui estouraria o prazo da resposta com 180 dias de conversa.
+      const { error } = await admin.rpc("emit_event" as never, {
+        p_event_type: "meta.history_chunk",
+        p_entity_kind: "channel_session",
+        p_entity_id: session.id,
+        p_payload: { phone_number_id: e.phoneNumberId, fase: e.fase, progresso: e.progresso, chunk_order: e.chunkOrder, erro_codigo: e.erroCodigo, value: e.bruto },
+        p_metadata: { source: "meta_webhook", request_id: requestId },
+        p_organization_id: session.organizationId,
+      } as never);
+      desfechos.push(error ? "history:falhou_enfileirar" : "history:enfileirado");
+      if (error) logger.error("[meta.webhook] history_chunk não enfileirado", { request_id: requestId, error: error.message });
+      continue;
+    }
+
     if (e.kind === "template_status") {
       await admin
         .from("meta_templates")
@@ -194,7 +211,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .eq("organization_id", session.organizationId)
         .eq("external_id", e.externalId);
     } else {
-      // history_chunk / state_sync: ainda sem consumidor aqui
+      // state_sync: ainda sem consumidor aqui
       // (200 para a Meta não re-entregar), até a ingestão de cada um entrar.
       desfechos.push("ignorado");
     }

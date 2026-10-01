@@ -8,17 +8,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { OfficialChannelState } from "@/hooks/channels/useOfficialChannel";
 
 const mutate = vi.fn();
-const flag = vi.hoisted(() => ({ consumidor: true }));
-// A constante real é `false` até a Parte B; o retry só existe com ela ligada.
-vi.mock("@/lib/channels/meta/coexistencia", async (importOriginal) => {
-  const real = await importOriginal<typeof import("@/lib/channels/meta/coexistencia")>();
-  return {
-    ...real,
-    get SINCRONIZACAO_TEM_CONSUMIDOR() {
-      return flag.consumidor;
-    },
-  };
-});
 vi.mock("@/hooks/channels/useOfficialChannel", () => ({
   useCadastroIncorporado: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSincronizarCoexistencia: () => ({ mutate, isPending: false }),
@@ -44,7 +33,7 @@ function estado(historico: { request_id: string } | { erro: string } | null, onb
 
 afterEach(() => {
   cleanup();
-  flag.consumidor = true;
+  mutate.mockClear();
 });
 
 describe("CadastroIncorporado — retry do pedido de histórico", () => {
@@ -68,20 +57,19 @@ describe("CadastroIncorporado — retry do pedido de histórico", () => {
   });
 });
 
-describe("CadastroIncorporado — sem consumidor do histórico (Parte A)", () => {
-  it("pedidos nulos: avisa que contatos e histórico chegam na próxima versão e não oferece retry", () => {
+describe("CadastroIncorporado — conexão feita antes do consumidor (pedidos nulos)", () => {
+  it("pedidos nulos dentro das 24 h: oferece o Tentar de novo, e nenhuma frase manda não conectar", () => {
     const e = estado(null, horasAtras(1));
     e.coexistencia!.pedidos.contatos = null;
-    render(<CadastroIncorporado estado={e} />);
-    expect(screen.getByTestId("historico-proxima-versao").textContent).toContain(
-      "Contatos e histórico chegam na próxima versão. Não conecte o número da clínica ainda.",
-    );
-    expect(screen.queryByTestId("btn-sincronizar")).toBeNull();
+    const { container } = render(<CadastroIncorporado estado={e} />);
+    fireEvent.click(screen.getByTestId("btn-sincronizar"));
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toMatch(/não conecte/i);
   });
 
-  it("constante desligada: o aviso aparece mesmo antes de conectar", () => {
-    flag.consumidor = false;
-    render(<CadastroIncorporado estado={{ ...estado(null, horasAtras(1)), connected: false, coexistencia: null }} />);
-    expect(screen.getByTestId("historico-proxima-versao")).toBeTruthy();
+  it("antes de conectar: nenhum aviso do histórico", () => {
+    const { container } = render(<CadastroIncorporado estado={{ ...estado(null, horasAtras(1)), connected: false, coexistencia: null }} />);
+    expect(screen.queryByTestId("historico-nao-pedido")).toBeNull();
+    expect(container.textContent).not.toMatch(/não conecte|próxima versão/i);
   });
 });

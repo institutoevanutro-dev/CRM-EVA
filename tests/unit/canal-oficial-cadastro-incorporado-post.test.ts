@@ -28,7 +28,7 @@ const m = vi.hoisted(() => ({
   consumidor: true,
 }));
 
-// A constante real é `false` até a Parte B; os casos de pedido a ligam.
+// A constante real é `true` desde a Parte B; o caso desligado prova o interruptor.
 vi.mock("@/lib/channels/meta/coexistencia", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/channels/meta/coexistencia")>();
   return {
@@ -245,7 +245,7 @@ describe("POST /channels/official/cadastro-incorporado", () => {
     expect(m.auditorias).toHaveLength(0);
   });
 
-  it("sem consumidor do webhook (SINCRONIZACAO_TEM_CONSUMIDOR=false): NÃO chama smb_app_data e grava pedidos nulos", async () => {
+  it("interruptor desligado (SINCRONIZACAO_TEM_CONSUMIDOR=false): NÃO chama smb_app_data e grava pedidos nulos", async () => {
     m.consumidor = false;
     const res = await POST(req(COEX));
     expect(res.status).toBe(200);

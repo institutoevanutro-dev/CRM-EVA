@@ -15,8 +15,8 @@
  *
  * O resto é o produto: a rota troca o `code`, confere o token, escolhe o número
  * que está no aplicativo e grava a sessão pelo mesmo caminho do formulário manual.
- * Contatos e histórico NÃO são pedidos enquanto `SINCRONIZACAO_TEM_CONSUMIDOR`
- * for `false` (Parte A): o pedido do histórico é único e ninguém o consumiria.
+ * Com o consumidor do histórico no ar (Parte B, `SINCRONIZACAO_TEM_CONSUMIDOR`),
+ * a conexão pede contatos e depois histórico, um `smb_app_data` cada.
  *
  * App da instalação: `scripts/seed-e2e-cadastro-incorporado.ts`.
  */
@@ -124,8 +124,9 @@ test("[P0] admin conecta pelo botão e a aba mostra Conectado", async ({ page })
   const conectado = page.getByTestId("canal-conectado");
   await expect(conectado).toContainText("Clínica E2E");
   await expect(conectado).toContainText("WORKING");
-  // Parte A: nenhum `smb_app_data` — e a tela diz por quê.
-  expect(pedidos).toEqual([]);
-  await expect(page.getByTestId("historico-proxima-versao")).toBeVisible();
+  // Um `smb_app_data` por tipo, contatos antes do histórico; pedidos aceitos não deixam aviso.
+  expect(pedidos.map((p) => new URLSearchParams(p).get("sync_type"))).toEqual(["smb_app_state_sync", "history"]);
+  await expect(page.getByTestId("historico-nao-pedido")).toHaveCount(0);
+  await expect(page.getByText(/não conecte/i)).toHaveCount(0);
   await page.screenshot({ path: path.join(EVIDENCIA, "conectado.png"), fullPage: true });
 });
