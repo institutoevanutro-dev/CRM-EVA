@@ -5,8 +5,8 @@ import { countAs, sql, writeCountAs } from "./gov-helpers";
 /**
  * A tabela das palavras que o dono liberou (migration 0290). Três coisas que a
  * RLS tem de garantir e que o CLAUDE.md cobra de toda tabela nova:
- * isolamento entre organizações, piso de papel (ler `agent`, escrever
- * `manager`) e unicidade da palavra por organização.
+ * isolamento entre organizações, piso de papel (ler: qualquer membro,
+ * escrever: `manager`) e unicidade da palavra por organização.
  *
  * Mesmo padrão de `comentarios-do-instagram.test.ts`: `sql()` como dono,
  * `countAs`/`writeCountAs` como usuário autenticado.
@@ -53,7 +53,7 @@ function erroDe(fn: () => unknown): string {
 }
 
 describe("0290 · instagram_comment_vocabulario", () => {
-  it("nasce com RLS ligada e as policies de tenant (select com papel + write com papel)", () => {
+  it("nasce com RLS ligada e as policies de tenant (select de tenancy + write com papel)", () => {
     seed();
     expect(
       sql(`select relrowsecurity from pg_class where relname = 'instagram_comment_vocabulario'`),
@@ -85,10 +85,12 @@ describe("0290 · instagram_comment_vocabulario", () => {
     expect(writeCountAs(MANAGER_A, insere("didatico"))).toBe(1);
   });
 
-  it("ler exige agent: agent lê, viewer não", () => {
+  it("viewer LÊ as palavras liberadas: a lista não é dado sensível, e quem segura papel na leitura é a rota", () => {
+    // Não "conserte" de volta: a policy de SELECT é só tenancy, igual à de
+    // `instagram_comments` (0280). O piso `agent` da leitura vive na rota.
     const le = `select count(*) from public.instagram_comment_vocabulario where organization_id = '${ORG_A}' and palavra = 'didatico';`;
     expect(countAs(AGENT_A, le)).toBe(1);
-    expect(countAs(VIEWER_A, le)).toBe(0);
+    expect(countAs(VIEWER_A, le)).toBe(1);
   });
 
   it("membro de A não lê as palavras de B", () => {

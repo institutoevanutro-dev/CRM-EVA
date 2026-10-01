@@ -12,8 +12,9 @@
 -- Sem coluna de contagem: quantas vezes a palavra apareceu é derivável de
 -- `instagram_comments` (Doutrina DIRC: Calcular, e anti-pattern nº 2).
 --
--- RLS: ler exige `agent`, escrever exige `manager`. Decidir o que a IA pode
--- dizer em público é decisão de gestão; `tests/invariants/rbac-config-ia-canais.test.ts`
+-- RLS: ler é de qualquer membro do tenant (a lista não é dado sensível; quem
+-- segura papel na leitura é a rota, que exige `agent`), escrever exige `manager`.
+-- Decidir o que a IA pode dizer em público é decisão de gestão; `tests/invariants/rbac-config-ia-canais.test.ts`
 -- reprova tabela nova com policy `for all` só de tenancy.
 
 create table if not exists public.instagram_comment_vocabulario (
@@ -36,9 +37,7 @@ alter table public.instagram_comment_vocabulario enable row level security;
 drop policy if exists instagram_comment_vocabulario_select on public.instagram_comment_vocabulario;
 create policy instagram_comment_vocabulario_select on public.instagram_comment_vocabulario
   for select using (
-    public.fn_is_platform_admin()
-    or (organization_id in (select public.fn_user_org_ids())
-        and public.fn_role_at_least(organization_id, 'agent'))
+    organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
   );
 
 drop policy if exists instagram_comment_vocabulario_write on public.instagram_comment_vocabulario;
