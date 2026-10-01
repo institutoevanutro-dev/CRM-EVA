@@ -22,6 +22,7 @@ import type { Agendamento, HorarioLivre, VisaoDaAgenda } from "@/components/agen
 import { EmptyAgenda } from "@/components/empty";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
 import { ancoraAoFecharPainel } from "@/lib/agenda/ancora-depois-de-marcar";
+import { ancoraLocalDoDia } from "@/lib/agenda/semana-semente";
 import { useVinculoDaMarcacao } from "@/lib/agenda/vinculo-da-marcacao";
 import { Button } from "@/components/ui/button";
 import { PainelDeMarcacao } from "@/components/agenda/PainelDeMarcacao";
@@ -74,6 +75,7 @@ const VISOES: Array<{ id: VisaoDaAgenda; rotulo: string }> = [
  */
 export function AgendaClient({
   fusoDeApresentacao,
+  hojeNaOrganizacao,
   googleConfigurado,
   contaConectada,
   enderecoDeRetorno,
@@ -84,6 +86,11 @@ export function AgendaClient({
   podeMarcarEncaixe,
 }: {
   fusoDeApresentacao: string | null;
+  /**
+   * A data de HOJE no fuso da ORGANIZAÇÃO, resolvida pelo servidor
+   * (`yyyy-MM-dd`). É a mesma que gerou a semente de compromissos.
+   */
+  hojeNaOrganizacao: string;
   googleConfigurado: boolean;
   contaConectada?: string | null;
   enderecoDeRetorno?: string;
@@ -214,7 +221,22 @@ export function AgendaClient({
     if (window.matchMedia("(max-width: 767px)").matches) setVisao("dia");
   }, []);
   const [isolada, setIsolada] = React.useState<string | null>(null);
-  const [ancora, setAncora] = React.useState(() => new Date());
+  /**
+   * A ÂNCORA NASCE DO RELÓGIO DA ORGANIZAÇÃO, não do navegador.
+   *
+   * Era `useState(() => new Date())`. O servidor desenha a semana no fuso da
+   * organização e o cliente recalculava no fuso do NAVEGADOR: das 21h de sábado
+   * à meia-noite em São Paulo, com servidor em UTC, os dois discordavam e a tela
+   * piscava a semana seguinte — e, para quem abre o CRM fora do fuso da empresa,
+   * discordava sempre.
+   *
+   * O que atravessa a fronteira é a DATA (`hojeNaOrganizacao`), nunca o
+   * instante: `domingo 00:00` em São Paulo é `sábado 22:00` em UTC-5, e
+   * `startOfWeek` sobre esse instante, em hora local, cairia na semana anterior.
+   * `ancoraLocalDoDia` transforma a data numa `Date` local ao meio-dia — a doze
+   * horas de qualquer borda de horário de verão.
+   */
+  const [ancora, setAncora] = React.useState(() => ancoraLocalDoDia(hojeNaOrganizacao));
 
   // AS PESSOAS SÃO REAIS: vêm de `/api/v1/team`, com a trilha de cor derivada do
   // `user_id`. Até esta linha o filtro por pessoa era invisível na tela do
@@ -386,7 +408,14 @@ export function AgendaClient({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setAncora(new Date())}>
+          {/* "Hoje" é o hoje DA ORGANIZAÇÃO. Com `new Date()` o botão desfazia a
+              âncora do servidor e devolvia a semana do navegador — o defeito que
+              a tela acabou de fechar, a um clique de distância. */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAncora(ancoraLocalDoDia(hojeNaOrganizacao))}
+          >
             {t("Hoje")}
           </Button>
           {/*
@@ -691,7 +720,8 @@ export function AgendaClient({
             <div className="mt-4 lg:min-h-0 lg:flex-1">
               <PainelDeMarcacao
                 className="lg:h-full"
-                ancora={new Date()}
+                // O mês que abre é o da organização, como a grade ao lado.
+                ancora={ancoraLocalDoDia(hojeNaOrganizacao)}
                 agora={new Date()}
                 responsavel={
                   // O DONO DO TIPO, não o primeiro da lista. A tela dizia "com

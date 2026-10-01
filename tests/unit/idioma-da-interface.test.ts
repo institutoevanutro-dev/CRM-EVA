@@ -110,7 +110,9 @@ describe("os elos que somem sem barulho", () => {
     // decorativo no dia em que alguém "simplificar" o resolvedor.
     const servidor = readFileSync("lib/auth/server.ts", "utf8");
     expect(servidor, "a membership deixou de trazer o idioma da organização").toMatch(
-      /organizations\(display_name, locale\)/,
+      // A cerca guarda que o embed traz `locale`; a lista exata e a ordem não
+      // são propriedade do produto (o embed ganhou `timezone` para a Agenda).
+      /organizations\((?=[^)]*\blocale\b)[^)]*\)/,
     );
     expect(servidor, "o idioma da sessão parou de cair na organização").toMatch(
       /locale \?\? \(await localeDaOrgAtiva\(memberships\)\)/,
