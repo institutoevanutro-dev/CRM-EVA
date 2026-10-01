@@ -28714,6 +28714,12 @@ create unique index if not exists agent_inbox_event_dead_aberto_unico
   on public.agent_inbox_items (organization_id, kind, title)
   where status = 'open' and kind = 'event_dead';
 
+-- ---- cadastro incorporado: app_id e es_config_id (migration 0296) ----
+alter table public.platform_meta_app
+  add column if not exists app_id text,
+  add column if not exists es_config_id text;
+-- ---- fim: cadastro incorporado (migration 0296) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
