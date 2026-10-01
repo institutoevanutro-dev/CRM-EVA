@@ -49,7 +49,7 @@ vi.mock("@/lib/channels/meta/cadastro-incorporado", async (importOriginal) => ({
   pedirSincronizacao: m.sincronizar,
   arquivarSessaoLegadaDoNumero: m.arquivar,
   desarquivarSessaoLegada: m.desarquivar,
-  derrubarSessaoLegadaNoWaha: m.derrubar,
+  derrubarSessaoLegadaNoTransporte: m.derrubar,
   // escolherNumero e ErroDaMeta: os ORIGINAIS (puros)
 }));
 vi.mock("@/lib/channels/meta/conectar-canal-oficial", async (importOriginal) => ({

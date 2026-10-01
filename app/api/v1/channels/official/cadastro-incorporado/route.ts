@@ -24,7 +24,7 @@ import { appDaMeta } from "@/lib/channels/meta/app";
 import {
   arquivarSessaoLegadaDoNumero,
   conferirToken,
-  derrubarSessaoLegadaNoWaha,
+  derrubarSessaoLegadaNoTransporte,
   desarquivarSessaoLegada,
   ErroDaMeta,
   escolherNumero,
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   //    ANTES de gravar a oficial (ruling P1): o índice único
   //    `channel_sessions_phone_per_org_unique (organization_id, phone_number)
   //    where archived_at is null` ainda tem a linha legada ativa com este número.
-  //    Só no BANCO: o WAHA só cai depois da oficial gravada (passo 5).
+  //    Só no BANCO: a sessão por QR só cai depois da oficial gravada (passo 5).
   let legada: SessaoLegadaArquivada | null = null;
   try {
     legada = phoneNumber ? await arquivarSessaoLegadaDoNumero(admin, orgId, phoneNumber) : null;
@@ -187,7 +187,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return fail(r.codigo, t(FALHA_GENERICA_DA_META), r.status, { requestId });
   }
 
-  if (legada) await derrubarSessaoLegadaNoWaha(orgId, legada);
+  if (legada) await derrubarSessaoLegadaNoTransporte(orgId, legada);
 
   // 6. register só para número novo, DEPOIS da sessão gravada com o PIN cifrado
   //    (a validação da credencial funciona antes do register). Falha aqui não

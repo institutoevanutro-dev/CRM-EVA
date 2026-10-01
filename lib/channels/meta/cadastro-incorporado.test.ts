@@ -4,7 +4,7 @@ import { DICIONARIO } from "@/lib/i18n/dicionario";
 
 import { getWahaClient } from "@/lib/waha/client";
 
-import { arquivarSessaoLegadaDoNumero, conferirToken, derrubarSessaoLegadaNoWaha, desarquivarSessaoLegada, ErroDaMeta, FALHA_GENERICA_DA_META, escolherNumero, gerarPin, numerosDaConta, pedirSincronizacao, registrarNumero, trocarCodigo } from "./cadastro-incorporado";
+import { arquivarSessaoLegadaDoNumero, conferirToken, derrubarSessaoLegadaNoTransporte, desarquivarSessaoLegada, ErroDaMeta, FALHA_GENERICA_DA_META, escolherNumero, gerarPin, numerosDaConta, pedirSincronizacao, registrarNumero, trocarCodigo } from "./cadastro-incorporado";
 
 vi.mock("@/lib/waha/client", () => ({ getWahaClient: vi.fn(() => null) }));
 
@@ -167,7 +167,7 @@ describe("arquivarSessaoLegadaDoNumero", () => {
   it("derrubar no WAHA faz logout e delete, e erro do WAHA não lança", async () => {
     const logout = vi.fn(async () => { throw new Error("waha fora"); });
     vi.mocked(getWahaClient).mockReturnValue({ logoutSession: logout, deleteSession: vi.fn() } as never);
-    await expect(derrubarSessaoLegadaNoWaha("org1", { id: "s1", wahaSessionName: "sess", statusAnterior: "WORKING", statusReasonAnterior: null })).resolves.toBeUndefined();
+    await expect(derrubarSessaoLegadaNoTransporte("org1", { id: "s1", wahaSessionName: "sess", statusAnterior: "WORKING", statusReasonAnterior: null })).resolves.toBeUndefined();
     expect(logout).toHaveBeenCalledWith("sess");
   });
 });

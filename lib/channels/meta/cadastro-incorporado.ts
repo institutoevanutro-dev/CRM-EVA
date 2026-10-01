@@ -171,7 +171,7 @@ export interface SessaoLegadaArquivada {
  * A Meta desconecta todos os aparelhos vinculados no onboarding: a sessão WAHA
  * deste mesmo número cai. Arquiva SÓ NO BANCO (não apaga: conversas ficam) e
  * devolve o que desfaz, ou `null` se não havia. O WAHA é derrubado à parte
- * (`derrubarSessaoLegadaNoWaha`), só depois da oficial gravada: se a gravação
+ * (`derrubarSessaoLegadaNoTransporte`), só depois da oficial gravada: se a gravação
  * falhar, `desarquivarSessaoLegada` devolve a linha e o QR segue de pé.
  *
  * Roda ANTES de gravar a sessão oficial: o índice
@@ -241,7 +241,7 @@ export async function desarquivarSessaoLegada(
 }
 
 /** Logout + delete no WAHA, depois da oficial gravada. Nunca lança: o banco já está certo. */
-export async function derrubarSessaoLegadaNoWaha(organizationId: string, legada: SessaoLegadaArquivada): Promise<void> {
+export async function derrubarSessaoLegadaNoTransporte(organizationId: string, legada: SessaoLegadaArquivada): Promise<void> {
   const waha = getWahaClient();
   if (!waha || !legada.wahaSessionName) return;
   try {
