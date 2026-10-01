@@ -78,6 +78,7 @@ describe("persistMessageMedia", () => {
     updateEqMock.mockReset();
     rpcMock.mockReset().mockResolvedValue({ error: null });
     messageRow.media_storage_path = null;
+    messageRow.metadata = { raw_type: "image" };
     vi.mocked(fetchWahaMedia).mockResolvedValue({
       buffer: Buffer.from([1, 2, 3]),
       mime: "image/jpeg",
@@ -113,6 +114,14 @@ describe("persistMessageMedia", () => {
       "emit_event",
       expect.objectContaining({ p_event_type: "media.derive_requested", p_entity_id: "msg1" }),
     );
+  });
+
+  it("mensagem importada do histórico persiste a mídia mas NÃO pede derivação (sem transcrição/visão paga)", async () => {
+    messageRow.metadata = { raw_type: "image", importada_do_historico: true } as typeof messageRow.metadata;
+    const result = await persistMessageMedia(eventRow());
+    expect(result.status).toBe("ok");
+    expect(uploadMock).toHaveBeenCalled();
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 
   it("pula mensagem já persistida (idempotência)", async () => {

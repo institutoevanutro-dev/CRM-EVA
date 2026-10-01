@@ -59,10 +59,10 @@ describe("webhook da Meta: histórico do celular", () => {
     expect((rpcs[0]!.args.p_payload as { value: { history: unknown[] } }).value.history).toHaveLength(1);
   });
 
-  it("falha ao enfileirar responde 200 mesmo assim e diz no corpo", async () => {
+  it("falha ao enfileirar responde 503 (a Meta reentrega; o resto é idempotente) e diz no corpo", async () => {
     erroRpc = { message: "banco fora" };
     const res = await POST(entrega(F[1]), ctx);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ outcomes: ["history:falhou_enfileirar"] });
   });
 });

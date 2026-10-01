@@ -143,6 +143,11 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
     media_mime: media.mime,
   });
 
+  // Histórico importado (coexistência) guarda a mídia, mas não gasta IA em transcrição/visão.
+  if ((msg.metadata as { importada_do_historico?: boolean } | null)?.importada_do_historico) {
+    return { consumer_key, status: "ok" };
+  }
+
   // Dispara a derivação textual (Onda 3) — fire-and-forget, mesmo padrão do
   // resto do repo: falha de emit não reverte a persistência já concluída.
   const { error: emitErr } = await admin.rpc("emit_event" as never, {

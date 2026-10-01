@@ -23,6 +23,9 @@ function linha(idadeMs: number): EventRow {
 }
 
 let historico: Record<string, unknown> | null;
+let metadataDaSessao: Record<string, unknown> | null;
+let pedidoHistorico: Record<string, unknown> | null;
+let onboardingEm: string;
 let updates: Array<{ tabela: string; patch: Record<string, unknown>; filtros: Record<string, unknown> }>;
 
 function adminFalso(): SupabaseClient {
@@ -34,7 +37,10 @@ function adminFalso(): SupabaseClient {
       eq: (c: string, v: unknown) => ((filtros[c] = v), alvo),
       update: (p: Record<string, unknown>) => ((patch = p), alvo),
       maybeSingle: async () => ({
-        data: { metadata: { coexistencia: { onboarding_em: "2026-10-01T00:00:00Z", pedidos: {}, historico } }, archived_at: null },
+        data: {
+          metadata: metadataDaSessao ?? { coexistencia: { onboarding_em: onboardingEm, pedidos: { historico: pedidoHistorico }, historico } },
+          archived_at: null,
+        },
         error: null,
       }),
       then: (ok: (v: unknown) => unknown) => {
@@ -51,6 +57,9 @@ beforeEach(() => {
   aplicar.mockClear();
   updates = [];
   historico = null;
+  metadataDaSessao = null;
+  pedidoHistorico = { request_id: "req-1" };
+  onboardingEm = "2026-10-01T00:00:00Z";
   vi.useFakeTimers();
   vi.setSystemTime(AGORA);
 });
@@ -89,5 +98,24 @@ describe("processarStateSync", () => {
     expect(r.status).toBe("ok");
     expect(aplicar).toHaveBeenCalledTimes(1);
     expect(updates).toHaveLength(1);
+  });
+
+  it("sem metadata de coexistência: não há histórico por vir, aplica já", async () => {
+    metadataDaSessao = {};
+    expect((await processarStateSync(linha(HORA), adminFalso())).status).toBe("ok");
+    expect(aplicar).toHaveBeenCalledTimes(1);
+  });
+
+  it("pedido de histórico sem request_id fora da janela de 24 h: aplica já", async () => {
+    pedidoHistorico = null; // onboarding 36 h antes de AGORA
+    expect((await processarStateSync(linha(HORA), adminFalso())).status).toBe("ok");
+    expect(aplicar).toHaveBeenCalledTimes(1);
+  });
+
+  it("pedido sem request_id DENTRO da janela: continua esperando (admin ainda pode repetir)", async () => {
+    pedidoHistorico = null;
+    onboardingEm = "2026-10-02T06:00:00Z";
+    expect((await processarStateSync(linha(HORA), adminFalso())).status).toBe("retry");
+    expect(aplicar).not.toHaveBeenCalled();
   });
 });

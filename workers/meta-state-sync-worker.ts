@@ -10,7 +10,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { lerCoexistencia } from "@/lib/channels/meta/coexistencia";
+import { dentroDoPrazoDeSincronizacao, lerCoexistencia } from "@/lib/channels/meta/coexistencia";
 import { upsertContatosDoCelular } from "@/lib/channels/meta/contatos-do-celular";
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { logger } from "@/lib/logger";
@@ -56,8 +56,12 @@ export async function processarStateSync(
     return resultado("skipped", "sessao_ausente_ou_arquivada");
   }
 
-  const h = lerCoexistencia((sessao as { metadata?: unknown }).metadata)?.historico;
-  const historicoFechou = Boolean(h && ((h.progresso ?? 0) >= 100 || h.erro_codigo));
+  const coex = lerCoexistencia((sessao as { metadata?: unknown }).metadata);
+  const h = coex?.historico;
+  // "Sem histórico por vir": sem coexistência, ou pedido sem request_id e a janela de 24 h já passou.
+  const semHistoricoPorVir =
+    !coex || (!(coex.pedidos.historico && "request_id" in coex.pedidos.historico) && !dentroDoPrazoDeSincronizacao(coex.onboarding_em));
+  const historicoFechou = semHistoricoPorVir || Boolean(h && ((h.progresso ?? 0) >= 100 || h.erro_codigo));
   const idade = Date.now() - Date.parse(row.created_at ?? new Date().toISOString());
   if (!historicoFechou && idade < PRAZO_MS) {
     return resultado("retry", "historico_em_andamento", new Date(Date.now() + REAVALIAR_EM_MS).toISOString());

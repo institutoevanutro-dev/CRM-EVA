@@ -52,6 +52,24 @@ export interface ConnectInput {
   token: string;
 }
 
+/**
+ * Quanto esperar até a próxima leitura do progresso do histórico (`false` = parar).
+ * Anda enquanto o histórico entra OU foi pedido (request_id) e o primeiro pedaço
+ * ainda não chegou; para se o progresso não muda por 30 min (celular dormindo, Meta parada).
+ */
+export function intervaloDoHistorico(
+  coex: OfficialChannelState["coexistencia"] | undefined,
+  marca: { visto: string; desde: number },
+  agora: number,
+  gravarMarca: (m: { visto: string; desde: number }) => void,
+): number | false {
+  const h = coex?.historico ?? null;
+  if (h ? h.concluido || h.erro_codigo : !(coex?.pedidos.historico && "request_id" in coex.pedidos.historico)) return false;
+  const visto = h ? `${h.fase}:${h.progresso}` : "pedido";
+  if (visto !== marca.visto) gravarMarca((marca = { visto, desde: agora }));
+  return agora - marca.desde < 30 * 60_000 ? 5_000 : false;
+}
+
 export function useOfficialChannel() {
   const marca = useRef({ visto: "", desde: 0 });
   return useQuery({
@@ -60,13 +78,7 @@ export function useOfficialChannel() {
     staleTime: 15_000,
     // Enquanto o histórico entra, a barra anda sozinha.
     // Para sozinho se o progresso não muda por 30 min (celular dormindo, Meta parada).
-    refetchInterval: (q) => {
-      const h = q.state.data?.data.coexistencia?.historico;
-      if (!h || h.concluido || h.erro_codigo) return false;
-      const visto = `${h.fase}:${h.progresso}`;
-      if (visto !== marca.current.visto) marca.current = { visto, desde: Date.now() };
-      return Date.now() - marca.current.desde < 30 * 60_000 ? 5_000 : false;
-    },
+    refetchInterval: (q) => intervaloDoHistorico(q.state.data?.data.coexistencia, marca.current, Date.now(), (m) => (marca.current = m)),
   });
 }
 

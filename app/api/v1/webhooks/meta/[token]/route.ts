@@ -231,13 +231,16 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     }
   }
 
-  // 200 SEMPRE que a assinatura confere, inclusive para evento que não nos
+  // 200 quando a assinatura confere, inclusive para evento que não nos
   // interessa: a Meta re-entrega tudo que não recebe 2xx, e recusar o que
   // ignoramos vira re-tentativa em backoff por horas.
+  // A exceção é enfileiramento que falhou (histórico/agenda): ali o pedaço só
+  // existe neste corpo, então 503 faz a Meta reentregar — tudo a jusante é
+  // idempotente por external_id.
   // `outcomes` no corpo: quem depura vê o que aconteceu com cada evento em vez de
   // ler um contador que não distingue sucesso de falha.
   return NextResponse.json(
     { received: eventos.length, outcomes: desfechos },
-    { status: 200 },
+    { status: desfechos.some((d) => d.endsWith(":falhou_enfileirar")) ? 503 : 200 },
   );
 }

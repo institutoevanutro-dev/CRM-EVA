@@ -27,6 +27,8 @@ vi.mock("@/lib/env", () => ({
     AUDIT_LOG_RETENTION_DAYS: "",
   },
 }));
+// A limpeza de payloads da coexistência tem teste próprio (retencao-da-sincronizacao-meta).
+vi.mock("@/lib/retencao/sincronizacao-meta", () => ({ limparPayloadsDaSincronizacao: async () => 0 }));
 const auditou = vi.fn();
 vi.mock("@/lib/audit", () => ({ audit: (...args: unknown[]) => auditou(...args) }));
 
@@ -318,5 +320,17 @@ describe("o handler HTTP — a falha entra na trilha, o vazio não", () => {
       action: "retention.sweep_run",
       metadata: { falhou: true },
     });
+  });
+});
+
+describe("houveEfeito — payloads da sincronização Meta limpos", () => {
+  it("rodada que só limpou payloads (coexistência) audita", () => {
+    const vazio = {
+      jobs_apagados: 0, auditoria_apagada: 0, lotes_fila: 0, lotes_auditoria: 0, fila_tem_resto: false, auditoria_tem_resto: false,
+      nonces_apagados: 0, espelho_apagado: 0, lotes_espelho: 0, espelho_tem_resto: false,
+      retencao_fila_dias: 0, retencao_auditoria_dias: 0, retencao_espelho_dias: 0, avisos: [],
+    };
+    expect(houveEfeito(vazio)).toBe(false);
+    expect(houveEfeito({ ...vazio, payloads_limpos: 3 })).toBe(true);
   });
 });

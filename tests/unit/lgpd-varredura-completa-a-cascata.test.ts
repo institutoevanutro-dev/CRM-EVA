@@ -49,6 +49,8 @@ vi.mock("@/lib/env", () => ({
   },
 }));
 const auditou = vi.fn();
+// Limpeza de payloads da coexistência: teste próprio (retencao-da-sincronizacao-meta).
+vi.mock("@/lib/retencao/sincronizacao-meta", () => ({ limparPayloadsDaSincronizacao: async () => 0 }));
 vi.mock("@/lib/audit", () => ({ audit: (...args: unknown[]) => auditou(...args) }));
 
 /** O banco que o handler do cron enxerga nesta rodada. */
