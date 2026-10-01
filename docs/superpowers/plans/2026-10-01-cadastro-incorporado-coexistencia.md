@@ -85,7 +85,9 @@ Cinco modos de falha que a spec implica e que nenhum teste de tarefa pegaria por
 **Interfaces:**
 - Produces: `CHAVE_DO_TIPO_DE_RECURSO_V4: string`, `TIPO_DE_RECURSO_COEXISTENCIA`, `EVENTO_NUMERO_NOVO`, `EVENTO_COEXISTENCIA`, `PRAZO_DA_SINCRONIZACAO_MS`, `montarExtras(): Record<string, unknown>`.
 
-- [ ] **Step 1 (dono, no browser):** abrir `https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users`, **Step 2** ("Launch Embedded Signup"), e copiar o objeto `extras` exatamente como está no exemplo de código da v4. Anotar: a chave do tipo de recurso é `featureType` ou `feature_type`? O valor é `whatsapp_business_app_onboarding`? Há `sessionInfoVersion`?
+> **Conferido em 01/10/2026 (coordenador, página em pt-BR, Etapa 2):** `extras: { setup: {}, "featureType": "whatsapp_business_app_onboarding", "sessionInfoVersion": "3" }`. Chave = `featureType` (camelCase); o exemplo oficial mantém `sessionInfoVersion: "3"` — incluir em `montarExtras()`.
+
+- [x] **Step 1 (dono, no browser):** abrir `https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users`, **Step 2** ("Launch Embedded Signup"), e copiar o objeto `extras` exatamente como está no exemplo de código da v4. Anotar: a chave do tipo de recurso é `featureType` ou `feature_type`? O valor é `whatsapp_business_app_onboarding`? Há `sessionInfoVersion`?
 
 - [ ] **Step 2:** criar `lib/channels/meta/coexistencia.ts` com o que foi lido:
 
@@ -99,7 +101,7 @@ Cinco modos de falha que a spec implica e que nenhum teste de tarefa pegaria por
  * documentação de coexistência em <DATA>, por <QUEM>. O `.md` publicado omite o
  * trecho; grafia errada produz o erro 3441030 (entrou pelo fluxo normal).
  */
-export const CHAVE_DO_TIPO_DE_RECURSO_V4 = "featureType"; // ← trocar se a tela disser outra coisa
+export const CHAVE_DO_TIPO_DE_RECURSO_V4 = "featureType"; // conferido na doc em 01/10/2026
 export const TIPO_DE_RECURSO_COEXISTENCIA = "whatsapp_business_app_onboarding";
 
 /** Eventos do `postMessage` da Meta (`type: "WA_EMBEDDED_SIGNUP"`). */
