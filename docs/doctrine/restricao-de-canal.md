@@ -228,3 +228,8 @@ canal, cifrada** — em vez de env global, que hoje limita a instalação a uma 
 **Lição de método:** eu escrevi "Fase 5 = Embedded Signup" em três planos sem perguntar se
 ela cabia no modelo do produto. Vinha do TomikCRM, que é SaaS — lá faz sentido. Premissa
 copiada de outro contexto não vira verdade por estar escrita em três lugares.
+
+**Revisão (2026-10-01):** quando a instalação tem um app de Tech Provider à disposição (caso
+EvaLink), o Cadastro Incorporado passa a existir como caminho opcional, ligado por
+`platform_meta_app.es_config_id`; o BYO continua sendo o padrão do produto aberto. Decisão e
+limites em [`docs/adr/0002-cadastro-incorporado.md`](../adr/0002-cadastro-incorporado.md).

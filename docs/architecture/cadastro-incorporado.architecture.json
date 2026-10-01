@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "Cadastro Incorporado da Meta", "subtitle": "Botão opcional, coexistência com o celular, eco e eventos da conta pelo webhook (ADR-0002)", "output": "cadastro-incorporado.html", "quality_profile": "standard" },
+  "lanes": [
+    { "id": "operador", "label": "Operação" },
+    { "id": "servidor", "label": "Servidor" },
+    { "id": "banco", "label": "Persistência" },
+    { "id": "externo", "label": "Meta" }
+  ],
+  "mainPath": ["admin", "config", "botao", "rota", "conectar", "sessao", "aba"],
+  "nodes": [
+    { "id": "admin", "lane": "operador", "col": 1, "type": "frontend", "label": "Admin › API Oficial (Meta): App ID + Configuration ID" },
+    { "id": "config", "lane": "banco", "col": 1, "type": "database", "label": "platform_meta_app.app_id / es_config_id (0296)" },
+    { "id": "botao", "lane": "operador", "col": 2, "type": "frontend", "label": "Conexões › API Oficial: CadastroIncorporado.tsx" },
+    { "id": "meta", "lane": "externo", "col": 2, "type": "service", "label": "SDK + Graph da Meta (code, debug_token, phone_numbers, smb_app_data)" },
+    { "id": "rota", "lane": "servidor", "col": 3, "type": "route", "label": "POST /api/v1/channels/official/cadastro-incorporado (+ /sincronizar)" },
+    { "id": "conectar", "lane": "servidor", "col": 4, "type": "lib", "label": "conectarCanalOficial (mesmo caminho do formulário manual)" },
+    { "id": "sessao", "lane": "banco", "col": 4, "type": "database", "label": "channel_sessions meta_cloud · metadata.coexistencia" },
+    { "id": "aba", "lane": "operador", "col": 5, "type": "frontend", "label": "Aba API Oficial: canal Conectado / aviso do histórico" },
+    { "id": "webhook", "lane": "servidor", "col": 5, "type": "route", "label": "Webhook da Meta (smb_message_echoes, account_update)" },
+    { "id": "eco", "lane": "servidor", "col": 6, "type": "lib", "label": "ingestMetaEcho → pausarIaPorAtendimentoManual (5 min)" },
+    { "id": "conta", "lane": "servidor", "col": 6, "type": "lib", "label": "aplicarEventoDaConta (saude-da-conta.ts)" },
+    { "id": "mensagens", "lane": "banco", "col": 6, "type": "database", "label": "messages external_device (Celular)" },
+    { "id": "central", "lane": "operador", "col": 7, "type": "frontend", "label": "Central de avisos: número desconectado pelo celular" },
+    { "id": "inbox", "lane": "operador", "col": 7, "type": "frontend", "label": "Inbox: resposta do celular, IA em silêncio" },
+    { "id": "audit", "lane": "banco", "col": 5, "type": "database", "label": "api_audit_log channel.official_connected_es" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "admin", "to": "config", "label": "grava App ID e Configuration ID" },
+    { "id": "e2", "from": "config", "to": "botao", "label": "es_config_id vazio = botão ausente (BYO)" },
+    { "id": "e3", "from": "botao", "to": "meta", "label": "FB.login com config_id" },
+    { "id": "e4", "from": "meta", "to": "botao", "label": "code + WA_EMBEDDED_SIGNUP (waba_id)" },
+    { "id": "e5", "from": "botao", "to": "rota", "label": "code, evento, waba_id" },
+    { "id": "e6", "from": "rota", "to": "meta", "label": "troca do code, número, smb_app_data (sem /register em coexistência)" },
+    { "id": "e7", "from": "rota", "to": "conectar", "label": "token + número escolhido" },
+    { "id": "e8", "from": "conectar", "to": "sessao", "label": "sessão WORKING, credencial cifrada" },
+    { "id": "e9", "from": "sessao", "to": "aba", "label": "GET /channels/official" },
+    { "id": "e10", "from": "rota", "to": "audit", "label": "sem token, sem PIN" },
+    { "id": "e11", "from": "meta", "to": "webhook", "label": "eco do celular e eventos da conta" },
+    { "id": "e12", "from": "webhook", "to": "eco", "label": "smb_message_echoes" },
+    { "id": "e13", "from": "eco", "to": "mensagens", "label": "saída pelo celular" },
+    { "id": "e14", "from": "mensagens", "to": "inbox", "label": "bolha Celular" },
+    { "id": "e15", "from": "webhook", "to": "conta", "label": "account_update" },
+    { "id": "e16", "from": "conta", "to": "sessao", "label": "FAILED / reconectada" },
+    { "id": "e17", "from": "conta", "to": "central", "label": "aviso de desconexão" },
+    { "id": "e18", "from": "central", "to": "botao", "label": "operador reconecta pelo botão" }
+  ]
+}
