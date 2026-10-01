@@ -7390,26 +7390,10 @@ alter table followup_flow_pointers enable row level security;
 alter table followup_enrollments enable row level security;
 alter table followup_enrollment_events enable row level security;
 
-do $$ begin
-  create policy tenant_isolation_followup_flow_versions_all on followup_flow_versions
-    for all using (organization_id in (select fn_user_org_ids()))
-    with check (organization_id in (select fn_user_org_ids()));
-exception when duplicate_object then null; end $$;
-do $$ begin
-  create policy tenant_isolation_followup_flow_pointers_all on followup_flow_pointers
-    for all using (organization_id in (select fn_user_org_ids()))
-    with check (organization_id in (select fn_user_org_ids()));
-exception when duplicate_object then null; end $$;
-do $$ begin
-  create policy tenant_isolation_followup_enrollments_all on followup_enrollments
-    for all using (organization_id in (select fn_user_org_ids()))
-    with check (organization_id in (select fn_user_org_ids()));
-exception when duplicate_object then null; end $$;
-do $$ begin
-  create policy tenant_isolation_followup_enrollment_events_all on followup_enrollment_events
-    for all using (organization_id in (select fn_user_org_ids()))
-    with check (organization_id in (select fn_user_org_ids()));
-exception when duplicate_object then null; end $$;
+-- As policies `for all` das quatro tabelas saíram daqui: followup_flow_pointers e
+-- followup_enrollments na migration 0294 (DeskcommCRM #1913), followup_flow_versions e
+-- followup_enrollment_events na 0295 (DeskcommCRM #1915). As policies por operação estão
+-- nos apêndices delas.
 
 -- Claim atômico do worker (SKIP LOCKED) — service role only
 create or replace function fn_claim_due_followup_enrollments(p_limit int, p_lease_seconds int)
@@ -28713,6 +28697,92 @@ update public.agent_inbox_items i
 create unique index if not exists agent_inbox_event_dead_aberto_unico
   on public.agent_inbox_items (organization_id, kind, title)
   where status = 'open' and kind = 'event_dead';
+
+-- ---- followup_enrollments e followup_flow_pointers: RLS por operação (migration 0294) ----
+-- A policy `for all` sem papel mínimo deixava `viewer` apagar inscrição e fluxo pelo PostgREST,
+-- e a cascata levava turnos e trilha (DeskcommCRM #1913; o PR #1912 abriria o buraco inteiro).
+-- Escrita = `manager`, como as rotas. Não cria função. Corpo e porquê: a migration 0294.
+
+drop policy if exists tenant_isolation_followup_enrollments_all on public.followup_enrollments;
+
+drop policy if exists followup_enrollments_select on public.followup_enrollments;
+create policy followup_enrollments_select on public.followup_enrollments
+  for select using (organization_id in (select public.fn_user_org_ids()));
+
+drop policy if exists followup_enrollments_insert on public.followup_enrollments;
+create policy followup_enrollments_insert on public.followup_enrollments
+  for insert
+  with check (organization_id in (select public.fn_user_org_ids())
+              and public.fn_role_at_least(organization_id, 'manager'));
+
+drop policy if exists followup_enrollments_update on public.followup_enrollments;
+create policy followup_enrollments_update on public.followup_enrollments
+  for update
+  using (organization_id in (select public.fn_user_org_ids())
+         and public.fn_role_at_least(organization_id, 'manager'))
+  with check (organization_id in (select public.fn_user_org_ids())
+              and public.fn_role_at_least(organization_id, 'manager'));
+
+drop policy if exists followup_enrollments_delete on public.followup_enrollments;
+create policy followup_enrollments_delete on public.followup_enrollments
+  for delete
+  using (organization_id in (select public.fn_user_org_ids())
+         and public.fn_role_at_least(organization_id, 'manager'));
+
+drop policy if exists tenant_isolation_followup_flow_pointers_all on public.followup_flow_pointers;
+
+drop policy if exists followup_flow_pointers_select on public.followup_flow_pointers;
+create policy followup_flow_pointers_select on public.followup_flow_pointers
+  for select using (organization_id in (select public.fn_user_org_ids()));
+
+drop policy if exists followup_flow_pointers_insert on public.followup_flow_pointers;
+create policy followup_flow_pointers_insert on public.followup_flow_pointers
+  for insert
+  with check (organization_id in (select public.fn_user_org_ids())
+              and public.fn_role_at_least(organization_id, 'manager'));
+
+drop policy if exists followup_flow_pointers_update on public.followup_flow_pointers;
+create policy followup_flow_pointers_update on public.followup_flow_pointers
+  for update
+  using (organization_id in (select public.fn_user_org_ids())
+         and public.fn_role_at_least(organization_id, 'manager'))
+  with check (organization_id in (select public.fn_user_org_ids())
+              and public.fn_role_at_least(organization_id, 'manager'));
+
+drop policy if exists followup_flow_pointers_delete on public.followup_flow_pointers;
+create policy followup_flow_pointers_delete on public.followup_flow_pointers
+  for delete
+  using (organization_id in (select public.fn_user_org_ids())
+         and public.fn_role_at_least(organization_id, 'manager'));
+
+-- ---- followup_enrollment_events e followup_flow_versions: RLS por operação (migration 0295) ----
+-- A policy `for all` sem papel mínimo deixava `viewer` apagar ou reescrever a trilha de uma
+-- inscrição e as versões de um fluxo pelo PostgREST (DeskcommCRM #1915). Escrita só onde uma rota
+-- escreve pela sessão (`manager`); o resto fica com o motor. Corpo e porquê: a migration 0295.
+
+drop policy if exists tenant_isolation_followup_enrollment_events_all on public.followup_enrollment_events;
+
+drop policy if exists followup_enrollment_events_select on public.followup_enrollment_events;
+create policy followup_enrollment_events_select on public.followup_enrollment_events
+  for select using (organization_id in (select public.fn_user_org_ids()));
+
+drop policy if exists followup_enrollment_events_insert on public.followup_enrollment_events;
+create policy followup_enrollment_events_insert on public.followup_enrollment_events
+  for insert
+  with check (organization_id in (select public.fn_user_org_ids())
+              and public.fn_role_at_least(organization_id, 'manager'));
+
+drop policy if exists tenant_isolation_followup_flow_versions_all on public.followup_flow_versions;
+
+drop policy if exists followup_flow_versions_select on public.followup_flow_versions;
+create policy followup_flow_versions_select on public.followup_flow_versions
+  for select using (organization_id in (select public.fn_user_org_ids()));
+
+drop policy if exists followup_flow_versions_delete on public.followup_flow_versions;
+create policy followup_flow_versions_delete on public.followup_flow_versions
+  for delete
+  using (organization_id in (select public.fn_user_org_ids())
+         and public.fn_role_at_least(organization_id, 'manager'));
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
