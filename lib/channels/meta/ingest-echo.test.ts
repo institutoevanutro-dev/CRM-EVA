@@ -45,24 +45,39 @@ let rpcs: Array<{ fn: string; args: Record<string, unknown> }>;
 let inserts: Array<Record<string, unknown>>;
 let insertErro: { code: string; message: string } | null;
 let db: { messages: Array<Record<string, unknown>> };
+let semSessao: boolean;
+let erroContato: { message: string } | null;
 
 function adminFalso(): SupabaseClient {
   const from = (tabela: string) => {
     let payload: Record<string, unknown> | null = null;
+    // Os filtros valem de verdade: uma consulta a `messages` devolve as linhas
+    // de `db.messages` que casam com eq/is — a pré-condição do caso P10 existe.
+    const filtros: Record<string, unknown> = {};
     const resposta = () => {
-      if (tabela === "channel_sessions") return { data: { id: SESSAO, organization_id: ORG }, error: null };
+      if (tabela === "channel_sessions") {
+        return { data: semSessao ? null : { id: SESSAO, organization_id: ORG }, error: null };
+      }
       if (tabela === "messages" && payload) {
         if (insertErro) return { data: null, error: insertErro };
         db.messages.push({ id: "m-eco", ...payload });
         return { data: { id: "m-eco" }, error: null };
       }
+      if (tabela === "messages") {
+        const linhas = db.messages.filter((m) => Object.entries(filtros).every(([k, v]) => (m[k] ?? null) === v));
+        return { data: linhas, error: null };
+      }
       // `contacts` por variantes: ninguém cadastrado ainda.
       return { data: [], error: null };
     };
+    const filtrar = (coluna: string, valor: unknown) => {
+      filtros[coluna] = valor;
+      return alvo;
+    };
     const alvo: Record<string, unknown> = {
       select: () => alvo,
-      eq: () => alvo,
-      is: () => alvo,
+      eq: filtrar,
+      is: filtrar,
       in: () => alvo,
       order: () => alvo,
       limit: () => alvo,
@@ -71,14 +86,17 @@ function adminFalso(): SupabaseClient {
         inserts.push(p);
         return alvo;
       },
-      maybeSingle: async () => resposta(),
+      maybeSingle: async () => {
+        const r = resposta();
+        return Array.isArray(r.data) ? { data: r.data[0] ?? null, error: r.error } : r;
+      },
       then: (ok: (v: unknown) => unknown, ko?: (e: unknown) => unknown) => Promise.resolve(resposta()).then(ok, ko),
     };
     return alvo;
   };
   const rpc = async (fn: string, args: Record<string, unknown>) => {
     rpcs.push({ fn, args });
-    if (fn === "fn_upsert_wa_contact") return { data: CONTATO, error: null };
+    if (fn === "fn_upsert_wa_contact") return erroContato ? { data: null, error: erroContato } : { data: CONTATO, error: null };
     if (fn === "fn_upsert_wa_conversation") return { data: CONV, error: null };
     return { data: null, error: null };
   };
@@ -92,6 +110,8 @@ beforeEach(() => {
   inserts = [];
   insertErro = null;
   db = { messages: [] };
+  semSessao = false;
+  erroContato = null;
   pausar.mockClear();
   posEntrada.mockClear();
   marcar.mockClear();
@@ -139,7 +159,18 @@ describe("ingestMetaEcho — mensagem que a clínica mandou pelo celular", () =>
     // ecoa o que o próprio CRM enviou. Em `smb_message_echoes` a doc descreve só o
     // que saiu do APLICATIVO; se a premissa cair, o custo é a IA calada 5 min depois
     // do próprio envio — e este caso é o que vai mudar.
-    db.messages.push({ id: "m-queued", conversation_id: CONV, direction: "outbound", status: "queued", external_id: null });
+    db.messages.push({ id: "m-queued", organization_id: ORG, conversation_id: CONV, direction: "outbound", status: "queued", external_id: null });
+    // A pré-condição é real: a consulta que um gate do #519 faria acha a linha.
+    const { data: pendentes } = await admin
+      .from("messages")
+      .select("id")
+      .eq("organization_id", ORG)
+      .eq("conversation_id", CONV)
+      .eq("direction", "outbound")
+      .eq("status", "queued")
+      .is("external_id", null);
+    expect(pendentes).toEqual([expect.objectContaining({ id: "m-queued" })]);
+
     expect(await ingestMetaEcho(admin, ECO, { organizationId: ORG })).toMatchObject({ status: "ingested" });
     expect(pausar).toHaveBeenCalledTimes(1);
   });
@@ -159,6 +190,23 @@ describe("ingestMetaEcho — mensagem que a clínica mandou pelo celular", () =>
     expect(rpcs.find((r) => r.fn === "emit_event")?.args).toMatchObject({
       p_event_type: "media.persist_requested",
       p_entity_id: "m-eco",
+      p_metadata: { source: "meta_echo" },
     });
+  });
+
+  it("número que a organização não administra → no_session, nada gravado nem pausado", async () => {
+    semSessao = true;
+    expect(await ingestMetaEcho(admin, ECO, { organizationId: ORG })).toEqual({ status: "no_session" });
+    expect(inserts).toEqual([]);
+    expect(rpcs).toEqual([]);
+    expect(pausar).not.toHaveBeenCalled();
+  });
+
+  it("contato que não resolve → failed com o motivo, sem mensagem nem pausa", async () => {
+    erroContato = { message: "rls" };
+    expect(await ingestMetaEcho(admin, ECO, { organizationId: ORG })).toEqual({ status: "failed", reason: "contato: rls" });
+    expect(inserts).toEqual([]);
+    expect(pausar).not.toHaveBeenCalled();
+    expect(marcar).not.toHaveBeenCalled();
   });
 });

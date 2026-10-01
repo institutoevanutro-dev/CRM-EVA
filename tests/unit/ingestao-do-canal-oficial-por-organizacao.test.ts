@@ -1,8 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ingestMetaInbound } from "@/lib/channels/meta/ingest";
 import type { InboundMessageEvent } from "@/lib/channels/meta/webhook";
+
+// Só os casos que chegam ao INSERT passam por aqui; os de sessão param antes.
+vi.mock("@/lib/channels/pos-entrada", () => ({ aplicarEfeitosPosEntrada: async () => undefined }));
+vi.mock("@/lib/channels/marcar-conversa", () => ({ marcarConversaComMensagem: async () => undefined }));
 
 /**
  * A ORGANIZAÇÃO dona de uma mensagem recebida vem do TOKEN, não do corpo.
@@ -156,5 +160,54 @@ describe("ingestão do canal oficial — a organização vem do token", () => {
       organization_id: ORG_DO_TOKEN,
       meta_phone_number_id: "111",
     });
+  });
+});
+
+describe("ingestão do canal oficial — tipo da Meta passa por tipoDoCrm", () => {
+  /** Sessão existe, contato e conversa resolvem, e o payload do INSERT fica registrado. */
+  function adminQueGrava() {
+    const inserts: Array<Record<string, unknown>> = [];
+    const from = (tabela: string) => {
+      let inserido = false;
+      const alvo: Record<string, unknown> = {
+        select: () => alvo,
+        eq: () => alvo,
+        is: () => alvo,
+        in: () => alvo,
+        order: () => alvo,
+        limit: () => alvo,
+        insert: (p: Record<string, unknown>) => {
+          inserido = true;
+          inserts.push(p);
+          return alvo;
+        },
+        maybeSingle: async () =>
+          tabela === "channel_sessions"
+            ? { data: { id: "sessao-1", organization_id: ORG_DO_TOKEN }, error: null }
+            : { data: inserido ? { id: "m-1" } : null, error: null },
+        then: (ok: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(ok),
+      };
+      return alvo;
+    };
+    const rpc = async (fn: string) => ({
+      data: fn === "fn_upsert_wa_contact" ? "contato-1" : fn === "fn_upsert_wa_conversation" ? "conversa-1" : null,
+      error: null,
+    });
+    return { inserts, client: { from, rpc } as unknown as SupabaseClient };
+  }
+
+  for (const tipo of ["interactive", "button"]) {
+    it(`inbound \`${tipo}\` entra como system com [${tipo}] e guarda o tipo cru em metadata.tipo_da_meta`, async () => {
+      const { client, inserts } = adminQueGrava();
+      const r = await ingestMetaInbound(client, { ...EVENTO, type: tipo, text: null }, { organizationId: ORG_DO_TOKEN });
+      expect(r).toMatchObject({ status: "ingested" });
+      expect(inserts[0]).toMatchObject({ type: "system", body: `[${tipo}]`, metadata: { tipo_da_meta: tipo } });
+    });
+  }
+
+  it("texto continua texto, com o corpo da mensagem", async () => {
+    const { client, inserts } = adminQueGrava();
+    await ingestMetaInbound(client, EVENTO, { organizationId: ORG_DO_TOKEN });
+    expect(inserts[0]).toMatchObject({ type: "text", body: "oi", metadata: { tipo_da_meta: "text" } });
   });
 });

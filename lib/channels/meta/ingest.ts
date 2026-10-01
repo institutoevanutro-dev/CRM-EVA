@@ -157,7 +157,7 @@ export async function resolverContatoEConversa(
  * Vocabulário de `messages_type_check` (baseline, bloco
  * `message type: template (migration 0091)`).
  */
-const TIPOS_DO_CRM = new Set([
+export const TIPOS_DO_CRM: ReadonlySet<string> = new Set([
   "text", "image", "video", "audio", "document", "sticker", "location", "contact", "reaction", "system", "template",
 ]);
 
@@ -242,6 +242,9 @@ export async function ingestMetaInbound(
   const atribuicao = extrairAtribuicaoMeta(e.referral);
   if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
 
+  // Tipo fora do CHECK (`interactive`, `button`, …) derrubava o INSERT — e a
+  // mensagem do cliente sumia. Passa pelo mesmo mapa do eco e do histórico.
+  const { type, bodyDeSistema } = tipoDoCrm(e.type);
   const { data: inserida, error: erroInsert } = await admin
     .from("messages")
     .insert({
@@ -253,9 +256,8 @@ export async function ingestMetaInbound(
       contact_id: contactId,
       direction: "inbound",
       status: "delivered",
-      // A Meta manda `contacts` (plural); o CHECK do banco espera `contact`.
-      type: e.type === "text" ? "text" : e.type,
-      body: e.type === "contact" ? (e.sharedContact?.name ?? e.text) : e.text,
+      type,
+      body: bodyDeSistema ?? (type === "contact" ? (e.sharedContact?.name ?? e.text) : e.text),
       external_id: e.externalId,
       // O webhook oficial entrega o media_id, não um arquivo que o browser
       // consiga abrir. Mantemos um ponteiro opaco para o adapter resolver pela
@@ -264,6 +266,7 @@ export async function ingestMetaInbound(
       media_mime: e.media?.mime ?? null,
       sent_at: e.sentAt.toISOString(),
       metadata: {
+        tipo_da_meta: e.type,
         ...(e.media ? { meta_media_id: e.media.id, voice: e.media.voice } : {}),
         ...(e.sharedContact ? { shared_contact: e.sharedContact } : {}),
       },
@@ -402,7 +405,7 @@ export async function ingestMetaEcho(
 
   const messageId = (inserida as { id: string } | null)?.id ?? "";
   if (e.media && messageId) {
-    await pedirPersistenciaDeMidia(admin, orgId, messageId, conversationId, "meta_webhook");
+    await pedirPersistenciaDeMidia(admin, orgId, messageId, conversationId, "meta_echo");
   }
   return { status: "ingested", messageId, conversationId };
 }
