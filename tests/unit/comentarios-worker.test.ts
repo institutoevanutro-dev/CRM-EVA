@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { RegraDeComentario } from "@/lib/comentarios/regra";
 import type { PerfilDeVoz } from "@/lib/comentarios/voz";
+import { ehObviamenteSeguro, GATILHO_SEM_PADRAO_SEGURO } from "@/lib/comentarios/seguranca";
 import { FRASES_PADRAO } from "@/lib/comentarios/gatilho-direct";
 
 const auditMock = vi.fn(async (_arg: unknown) => undefined);
@@ -703,4 +704,13 @@ it("leitura das aprovadas que falha não publica nada, e diz o motivo", async ()
   expect(r.esperando).toBe(1);
   expect(fake.publicacoes).toEqual([]);
   expect(linha().motivo_do_toque).toContain("palavras liberadas");
+});
+
+it("o aviso de leitura falha está preso ao rótulo real, não a uma cópia do texto", () => {
+  // Se alguém reescrever o rótulo em seguranca.ts sem tocar aqui, este teste
+  // reprova em vez de o aviso sumir calado.
+  expect(ehObviamenteSeguro("conteudo fantastico").seguro).toBe(false);
+  expect((ehObviamenteSeguro("conteudo fantastico") as { gatilho: string }).gatilho).toBe(
+    GATILHO_SEM_PADRAO_SEGURO,
+  );
 });

@@ -48,6 +48,15 @@
 
 import { normalizarTexto } from "../opt-out/deteccao";
 
+/**
+ * O veredito de "nenhum gatilho, mas o texto tem palavra que a trava não
+ * conhece". É o ÚNICO que as palavras liberadas pelo dono podem mudar, e por
+ * isso o worker compara contra ele. Constante, e não string solta nos dois
+ * lados: reescrever este texto sem reescrever a comparação faria o aviso de
+ * leitura falha sumir sem ninguém notar.
+ */
+export const GATILHO_SEM_PADRAO_SEGURO = "sem padrão seguro reconhecido";
+
 export type Veredito = { seguro: true } | { seguro: false; gatilho: string };
 
 /** Acima disso não é "obviamente seguro" — elogio não cabe num parágrafo. */
@@ -262,5 +271,5 @@ export function ehObviamenteSeguro(
     return { seguro: true };
   }
 
-  return { seguro: false, gatilho: "sem padrão seguro reconhecido" };
+  return { seguro: false, gatilho: GATILHO_SEM_PADRAO_SEGURO };
 }

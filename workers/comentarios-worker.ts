@@ -71,7 +71,7 @@ import { aplicarRegra, enviarPrivadaDeGatilho, type AdminDaAcao, type Desfecho }
 import { motivoDaRecusaPorEspecialidade } from "@/lib/comentarios/especialidade";
 import { regraQueCasa, type RegraDeComentario } from "@/lib/comentarios/regra";
 import { abreConversa, chaveDoGatilho, frasesDeGatilho, type FrasesDeGatilho } from "@/lib/comentarios/gatilho-direct";
-import { ehObviamenteSeguro } from "@/lib/comentarios/seguranca";
+import { ehObviamenteSeguro, GATILHO_SEM_PADRAO_SEGURO } from "@/lib/comentarios/seguranca";
 import { perfilDeVoz, type AdminDaVoz, type PerfilDeVoz } from "@/lib/comentarios/voz";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/credentials";
@@ -358,7 +358,7 @@ async function processarUmComentario(
     // desfecho. Gatilho e teto de tamanho rodam ANTES do vocabulário, então
     // pendurar o aviso neles afirmaria uma causa que não existe, e mandaria
     // quem lê a fila investigar o banco por um comentário sem relação.
-    const leituraCausou = leituraFalhou && veredito.gatilho === "sem padrão seguro reconhecido";
+    const leituraCausou = leituraFalhou && veredito.gatilho === GATILHO_SEM_PADRAO_SEGURO;
     const motivoFinal = leituraCausou
       ? `${motivo} (não deu para ler as palavras liberadas desta organização)`
       : motivo;
