@@ -1,10 +1,11 @@
-import { addDays, startOfWeek } from "date-fns";
 import { redirect } from "next/navigation";
 
 import { enderecoDeRetorno, faltaParaConectarOGoogle, googleEstaConfigurado } from "@/lib/agenda/google/config";
 import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
 import { PROVEDOR_GOOGLE } from "@/lib/agenda/tipos";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
+import { diaDeHojeNoFuso, semanaSemente } from "@/lib/agenda/semana-semente";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
@@ -83,9 +84,34 @@ export default async function AgendaPage() {
    */
   const supabase = await createClient();
 
-  // A semana da âncora, que é o que a grade abre por padrão.
-  const inicio = startOfWeek(new Date(), { weekStartsOn: 0 });
-  const fim = addDays(inicio, 7);
+  /**
+   * A semana da âncora, que é o que a grade abre por padrão — e O RELÓGIO É DA
+   * ORGANIZAÇÃO.
+   *
+   * `startOfWeek(new Date())` usava o fuso do contêiner (UTC), e o cliente
+   * recalculava no fuso do navegador: das 21h de sábado à meia-noite em São
+   * Paulo, UTC já virou domingo e o servidor mandava a SEMANA SEGUINTE. Quem
+   * abria a Agenda nessa janela via a semana errada até a página hidratar, e a
+   * consulta que este arquivo adianta logo abaixo era feita para o período
+   * errado — o dado chegava e era descartado.
+   *
+   * ⚠️ `user.timezone` NÃO entra nesta conta. O servidor não conhece o fuso do
+   * NAVEGADOR de quem abre, então qualquer degrau que dependa da pessoa volta a
+   * ser palpite no primeiro render. `organizations.timezone` é `NOT NULL` com
+   * default (`baseline.sql`), então aqui sempre há resposta — e é a MESMA que o
+   * cliente vai usar, porque ela viaja como prop logo abaixo. Cinco pessoas da
+   * mesma clínica olham a MESMA semana; de quem é cada compromisso é filtro e
+   * cor, não fuso.
+   *
+   * `fusoUtilizavel` fica porque a coluna não é validada por escritor nenhum e
+   * `Intl` LANÇA com fuso inválido: um acento no campo viraria tela branca.
+   *
+   * Portado do projeto original (DeskcommCRM, issue #1350).
+   */
+  const fusoDaAgenda = fusoUtilizavel(activeOrg.timezone);
+  const { de: inicio, ate: fim } = semanaSemente(new Date(), fusoDaAgenda);
+  /** A data de hoje NO FUSO DA ORGANIZAÇÃO, para o cliente ancorar na mesma. */
+  const hojeNaOrganizacao = diaDeHojeNoFuso(new Date(), fusoDaAgenda);
 
   // `.eq("organization_id", activeOrg.orgId)` em TODA consulta desta página, e
   // não só a RLS. A `fn_user_org_ids()` que as policies usam devolve TODAS as
@@ -201,6 +227,10 @@ export default async function AgendaPage() {
   return (
     <AgendaClient
       fusoDeApresentacao={fusoDeApresentacao}
+      // A MESMA data que a semente acima usou. Sem isto, o cliente recalcula com
+      // `new Date()` do navegador e a divergência volta INTEIRA — não só na
+      // janela de sábado, mas para todo usuário fora do fuso da organização.
+      hojeNaOrganizacao={hojeNaOrganizacao}
       googleConfigurado={googleConfigurado}
       contaConectada={conexoes?.map(c => c.account_email).join(", ") || null}
       enderecoDeRetorno={enderecoDeRetorno()}

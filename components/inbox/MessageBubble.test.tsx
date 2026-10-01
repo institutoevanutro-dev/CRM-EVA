@@ -127,3 +127,29 @@ describe("MessageBubble — rótulo de origem", () => {
     }
   });
 });
+
+describe("MessageBubble — contenção de layout e quebra de palavras", () => {
+  // Portado do projeto original (DeskcommCRM, issue #1802, commits f7b1ef40 e
+  // 8e6220a6): link longo ou código Pix sem espaço estufava a bolha para além
+  // da coluna e a conversa inteira ganhava rolagem horizontal.
+  it("texto longo sem espaços (ex: chave Pix) tem quebra forçada wrap-anywhere e bolha tem min-w-0", () => {
+    const pixLongo =
+      "00020126580014br.gov.bcb.pix0136a1b2c3d4-e5f6-7890-abcd-ef1234567890520400005303986540510.005802BR5913TESTE TESTE6008BRASILIA62070503***6304ABCD";
+    const { container } = render(<MessageBubble message={msg({ body: pixLongo })} />);
+
+    const p = screen.getByText(pixLongo);
+    expect(p).toBeInTheDocument();
+    expect(p.className).toContain("wrap-anywhere");
+    // O Tailwind 4 gera `.break-words` (overflow-wrap: break-word) DEPOIS da
+    // classe arbitrária `[overflow-wrap:anywhere]`, com a mesma especificidade:
+    // juntas, vence o break-word e a quebra forçada fica sem efeito.
+    expect(p.className).not.toContain("break-words");
+
+    const bolha = p.closest(".max-w-\\[75\\%\\]");
+    expect(bolha).not.toBeNull();
+    expect(bolha?.className).toContain("min-w-0");
+
+    const linha = container.firstElementChild as HTMLElement;
+    expect(linha.className).toContain("min-w-0");
+  });
+});

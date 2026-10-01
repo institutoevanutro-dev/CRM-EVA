@@ -120,6 +120,19 @@ export interface ParametrosDaConsulta {
   ate: Date;
   /** INJETADO, como em `horariosLivres`. Relógio lido aqui dentro é o defeito que `janela-do-canal.ts` documenta. */
   agora: Date;
+  /**
+   * Um agendamento que NÃO conta como ocupação — o que está sendo REMARCADO.
+   *
+   * Ele ocupa o horário de ONDE SAI, não o de DESTINO. Sem o intervalo, o próprio
+   * compromisso já não atrapalhava a si mesmo por acaso: a janela dele não cruza a
+   * janela pedida. Com intervalo, a coleta alarga para trás/para frente e o
+   * horário de saída passa a cruzar a janela do destino — a IA remarcando para
+   * logo depois do próprio fim levava 422 `agenda_horario_indisponivel` por causa
+   * de si mesma (DeskcommCRM #1084). Quem remarca diz quem remarcar; quem só
+   * OFERECE horário (rota, ferramenta MCP) não passa nada, e a grade segue
+   * contando tudo.
+   */
+  ignorarAgendamentoId?: string;
 }
 
 export type ResultadoDaConsulta =
@@ -162,6 +175,16 @@ export type ResultadoDaConsulta =
  * de um lado devolve dia que a grade pergunta e o mapa não tem.
  */
 const DIA = 86_400_000;
+
+/**
+ * O intervalo antes/depois do atendimento é regra de OFERTA — quem o aplica é o
+ * motor, inflando cada candidato (`horarios-livres.ts`). A COLETA, porém, precisa
+ * enxergar o que esse intervalo alcança: um compromisso que termina dentro dele
+ * não cruza a janela pedida e ficava invisível. Sem ele, a ESCRITA aceitava o
+ * horário que a LEITURA escondia (issue #876). Alargar só a coleta põe as duas
+ * pontas na mesma régua sem duplicar regra: quem decide continua sendo o motor.
+ */
+const MINUTO = 60_000;
 
 const NAO_OFERECA =
   "Não ofereça horários e não diga que está sem vaga — avise que alguém da equipe confirma o horário.";
@@ -311,7 +334,14 @@ export async function horariosLivresDaOrg(
       .eq("user_id", donoId)
       .gte("exception_date", primeiroDiaDaRegra)
       .lte("exception_date", ultimoDiaDaRegra),
-    coletaOQueOcupa(supabase, organizationId, { donoId, de: params.de, ate: params.ate }),
+    coletaOQueOcupa(supabase, organizationId, {
+      donoId,
+      de: new Date(params.de.getTime() - Number(tipo.buffer_before_minutes ?? 0) * MINUTO),
+      ate: new Date(params.ate.getTime() + Number(tipo.buffer_after_minutes ?? 0) * MINUTO),
+      // Remarcar: o compromisso de saída não é ocupação do destino (DeskcommCRM
+      // #1084). A janela alargada acima é justamente o que o fazia parecer um vizinho.
+      ignorarAgendamentoId: params.ignorarAgendamentoId,
+    }),
   ]);
 
   if (erroExc) {
