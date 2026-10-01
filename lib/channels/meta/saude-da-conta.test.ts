@@ -14,6 +14,7 @@ vi.mock("@/lib/channels/health", async (orig) => ({
 const SESSAO = { id: "sess-1", organizationId: "org-1", wabaId: "222" };
 let escalado: string | null = null;
 let erroDoUpdate: { message: string } | null = null;
+let numeroDaSessao: string | null = "+5527999049879";
 const updates: Array<{ patch: Record<string, unknown>; filtros: Record<string, unknown> }> = [];
 
 const admin = {
@@ -31,7 +32,7 @@ const admin = {
         return cadeia;
       },
       maybeSingle: async () => ({
-        data: tabela === "channel_session_health" ? { escalated_status: escalado } : { display_name: "Clínica", phone_number: "+55" },
+        data: tabela === "channel_session_health" ? { escalated_status: escalado } : { display_name: "Clínica", phone_number: numeroDaSessao },
       }),
       then: (ok: (v: unknown) => unknown) => {
         if (patch) updates.push({ patch, filtros });
@@ -54,10 +55,24 @@ beforeEach(() => {
   updates.length = 0;
   escalado = "PUSH:DESCONECTADO_NO_APP";
   erroDoUpdate = null;
+  numeroDaSessao = "+5527999049879";
   sincronizar.mockReset();
 });
 
 describe("aplicarEventoDaConta", () => {
+  it("evento de OUTRO número da mesma WABA é ignorado: nada cai, nenhum aviso", async () => {
+    const e = { ...ev("PARTNER_REMOVED"), phoneNumber: "5511988887777" };
+    expect(await aplicarEventoDaConta(admin, SESSAO, e)).toBe("ignorado");
+    expect(updates).toHaveLength(0);
+    expect(sincronizar).not.toHaveBeenCalled();
+  });
+
+  it("o MESMO número em outra grafia (sem +, sem o 9) é da sessão: cai", async () => {
+    const e = { ...ev("PARTNER_REMOVED"), phoneNumber: "552799049879" };
+    expect(await aplicarEventoDaConta(admin, SESSAO, e)).toBe("caiu");
+    expect(updates[0]?.patch).toMatchObject({ status: "FAILED" });
+  });
+
   it("PARTNER_REMOVED: sessão FAILED com status_reason e aviso pelo empurrão, com o motivo da Meta", async () => {
     expect(await aplicarEventoDaConta(admin, SESSAO, ev("PARTNER_REMOVED", "USER_INITIATED_DISCONNECT"))).toBe("caiu");
     expect(updates[0]?.patch).toMatchObject({ status: "FAILED", status_reason: "coexistencia_desconectada" });

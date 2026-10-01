@@ -15,6 +15,7 @@ import {
 import { logger } from "@/lib/logger";
 
 import { CHANNEL_PROVIDER_META } from "../capabilities";
+import { canonicalPhoneBR } from "../phone-variants";
 import type { MetaWebhookSession } from "./session";
 import type { AccountEvent } from "./webhook";
 
@@ -24,6 +25,15 @@ export async function aplicarEventoDaConta(
   e: AccountEvent,
 ): Promise<"caiu" | "voltou" | "ignorado"> {
   if (e.evento === "OUTRO") return "ignorado";
+  const { data } = await admin
+    .from("channel_sessions")
+    .select("display_name, phone_number")
+    .eq("organization_id", sessao.organizationId)
+    .eq("id", sessao.id)
+    .maybeSingle();
+  // A WABA pode ter mais de um número: evento de OUTRO número não derruba esta sessão.
+  const numeroDaSessao = data?.phone_number as string | null | undefined;
+  if (e.phoneNumber && numeroDaSessao && canonicalPhoneBR(e.phoneNumber) !== canonicalPhoneBR(numeroDaSessao)) return "ignorado";
   const caiu = e.evento !== "ACCOUNT_RECONNECTED";
   const status = caiu ? "FAILED" : "WORKING";
   const { error } = await admin
@@ -47,12 +57,6 @@ export async function aplicarEventoDaConta(
       .maybeSingle();
     if (saudeAtual?.escalated_status !== `${PREFIXO_EMPURRAO}${EPISODIO_DESCONECTADO_NO_APP}`) return "voltou";
   }
-  const { data } = await admin
-    .from("channel_sessions")
-    .select("display_name, phone_number")
-    .eq("organization_id", sessao.organizationId)
-    .eq("id", sessao.id)
-    .maybeSingle();
   const apelido = (data?.display_name as string | null) ?? (data?.phone_number as string | null) ?? "sem nome";
   await sincronizarSaudeDaConexao(
     admin,
