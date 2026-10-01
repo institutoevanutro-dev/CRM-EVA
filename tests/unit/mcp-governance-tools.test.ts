@@ -287,12 +287,12 @@ describe("crm_get_queue_status", () => {
   const now = new Date("2026-07-18T12:00:00.000Z");
   // Fila: 3 conversas esperando 10/20/30s ⇒ avg 20s. 2 atendentes elegíveis.
   const resolve: Resolver = (q) => {
-    if (q.table === "conversations" && q.select === "last_inbound_at") {
+    if (q.table === "conversations" && q.select === "awaiting_since") {
       return {
         data: [
-          { last_inbound_at: new Date(now.getTime() - 10_000).toISOString() },
-          { last_inbound_at: new Date(now.getTime() - 20_000).toISOString() },
-          { last_inbound_at: new Date(now.getTime() - 30_000).toISOString() },
+          { awaiting_since: new Date(now.getTime() - 10_000).toISOString() },
+          { awaiting_since: new Date(now.getTime() - 20_000).toISOString() },
+          { awaiting_since: new Date(now.getTime() - 30_000).toISOString() },
         ],
         error: null,
       };
