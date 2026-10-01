@@ -34,6 +34,7 @@ import { assinarWebhookDaConta } from "@/lib/channels/meta/assinar-webhook";
 import { conferirNumeroDaConta, validateMetaCredentials } from "@/lib/channels/meta/validate-credentials";
 import { reactivateChannelSession } from "@/lib/channels/reactivate";
 import { env } from "@/lib/env";
+import { graphVersion } from "@/lib/graph-version";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { metadataInicialDoCanal } from "@/lib/ai/elegibilidade/pre-go-live";
@@ -160,8 +161,24 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     () => consultar().maybeSingle(),
   );
 
+  const app = await appDaMeta();
+  const faltam = (["META_APP_ID", "META_ES_CONFIG_ID"] as const).filter((v) =>
+    v === "META_APP_ID" ? !app.appId : !app.esConfigId,
+  );
+  const cadastroIncorporado = {
+    disponivel: faltam.length === 0,
+    appId: app.appId,
+    configId: app.esConfigId,
+    versao: graphVersion(),
+    faltam,
+    configurarEm: authz.user.is_platform_admin && !authz.user.support ? "/admin/meta" : null,
+  };
+
   return ok({
     connected: Boolean(data),
+    cadastroIncorporado,
+    // ponytail: Task 5 troca por lerCoexistencia(data.metadata) quando a Task 4 existir.
+    coexistencia: null,
     channel_session_id: data?.id ?? null,
     // `hasToken` em vez do token: uma vez gravado, a tela mostra que EXISTE, nunca
     // qual é. Devolver o segredo para preencher o campo seria vazá-lo a cada render.

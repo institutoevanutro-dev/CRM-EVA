@@ -14,6 +14,16 @@ export interface OfficialChannelState {
   displayName: string | null;
   phoneNumber: string | null;
   status: string | null;
+  cadastroIncorporado?: {
+    disponivel: boolean;
+    appId: string | null;
+    configId: string | null;
+    versao: string;
+    faltam: ("META_APP_ID" | "META_ES_CONFIG_ID")[];
+    configurarEm: string | null;
+  };
+  /** Task 4 troca por `Coexistencia | null`. */
+  coexistencia?: unknown;
   webhook: {
     callbackUrl: string;
     verifyToken: string | null;

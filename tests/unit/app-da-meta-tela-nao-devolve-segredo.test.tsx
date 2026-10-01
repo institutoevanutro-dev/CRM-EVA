@@ -172,6 +172,8 @@ const NADA_CONFIGURADO: Props = {
   leituraFalhou: false,
   instagramAppId: null,
   instagramTemSegredoSalvo: false,
+  cadastroAppId: null,
+  cadastroConfigId: null,
 };
 
 const TUDO_CONFIGURADO: Props = {
