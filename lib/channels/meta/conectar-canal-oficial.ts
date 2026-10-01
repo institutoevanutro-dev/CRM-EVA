@@ -262,13 +262,17 @@ export async function pinCifradoDaSessaoOficial(
   organizationId: string,
   phoneNumberId: string,
 ): Promise<string | null> {
-  const { data } = await admin
-    .from("channel_sessions")
-    .select("metadata")
-    .eq("organization_id", organizationId)
-    .eq("provider", CHANNEL_PROVIDER_META)
-    .eq("meta_phone_number_id", phoneNumberId)
-    .maybeSingle();
+  const base = () =>
+    admin
+      .from("channel_sessions")
+      .select("metadata")
+      .eq("organization_id", organizationId)
+      .eq("provider", CHANNEL_PROVIDER_META)
+      .eq("meta_phone_number_id", phoneNumberId);
+  const { data } = await queryTolerantToMissingArchived(
+    () => base().is(ARCHIVED_AT, null).maybeSingle(),
+    () => base().maybeSingle(),
+  );
   const pin = (data as { metadata?: { pin_cifrado?: unknown } } | null)?.metadata?.pin_cifrado;
   return typeof pin === "string" && pin ? pin : null;
 }
