@@ -20,6 +20,7 @@ import { audit } from "@/lib/audit";
 import { loadAuthUser, mfaEmDivida } from "@/lib/auth/server";
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { recusaDoIcone } from "@/lib/branding/icone-arquivo";
+import { invalidarVersaoDoIcone } from "@/lib/branding/icone-versao";
 import {
   baseDoStorage,
   BUCKET_DE_LOGOS,
@@ -80,6 +81,7 @@ async function gravarCaminho(caminho: string | null): Promise<boolean> {
     logger.error("[marca/icone] gravação falhou", { codigo: error.code, detalhe: error.message });
     return false;
   }
+  invalidarVersaoDoIcone();
   return true;
 }
 
