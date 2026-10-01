@@ -12,5 +12,6 @@ como Celular e pausa a IA por 5 minutos; desconectar pelo celular abre aviso na
 Central. Sem os dois valores nada muda: o formulário manual continua.
 
 Correção que vem junto: quando a credencial gravada na sessão do canal oficial
-não decifra (chave mestra trocada, GUC ausente), o envio passa a falhar com o
-motivo visível em vez de sair, em silêncio, pela conta do `.env` da instalação.
+não decifra (chave mestra trocada, GUC ausente), a mensagem fica na fila em vez
+de sair pela conta do `.env` da instalação, e o problema aparece no aviso de
+saúde do canal.

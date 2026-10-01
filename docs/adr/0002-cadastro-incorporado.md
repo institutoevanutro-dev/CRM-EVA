@@ -67,8 +67,8 @@ desfaz a conexão (há 24 h para repetir, rota `/sincronizar`).
   conseguir entregar não é reconstruído pelo CRM.
 - **A sessão por QR do mesmo número cai:** a Meta desconecta os aparelhos vinculados no
   onboarding. A rota arquiva a sessão legada do número antes de gravar a oficial.
-- Envio do canal oficial falha fechado quando a credencial gravada na sessão não decifra, em vez
-  de sair pela conta do `.env` (Task 9).
+- Quando a credencial gravada na sessão não decifra, a mensagem fica na fila (`queued`) e nunca
+  sai pela conta do `.env`; o problema aparece no aviso de saúde do canal (Task 9).
 
 ## Recusados
 

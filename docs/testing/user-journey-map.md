@@ -718,17 +718,6 @@ as duas.
 
 ---
 
-## J27 — Conectar o WhatsApp oficial pelo botão, com o número no celular `[P0]`
-
-**Por que P0:** é a primeira ação de quem conecta o número oficial numa
-instalação com app de Tech Provider (ADR-0002). Sem o botão, o cliente cria app
-na Meta e cola token.
-
-| # | Caso | Resultado |
-|---|---|---|
-| J27.1 | Admin clica Conectar WhatsApp, escolhe manter o número no celular; a aba API Oficial mostra o canal Conectado (`WORKING`) e o CRM pede contatos e depois histórico | `tests/e2e/cadastro-incorporado.spec.ts` — SDK do Facebook simulado por `addInitScript`, Graph num receptor local (porta 47813, `META_GRAPH_BASE_URL`). Prova só no CI (parte 1 do `e2e.yml`). Evidência: `.superpowers/evidence/cadastro-incorporado/conectado.png` |
-| J27.2 | Instalação sem App ID / Configuration ID | **NÃO PROVADO EM TELA** — o componente mostra o cartão `cadastro-incorporado-indisponivel` com o que falta e o formulário manual continua; nenhuma spec cobre ainda |
-
 ## J22 — Cadastrar o App da Meta pela tela, e colar na Meta o token que vale `[P0]`
 
 **Por que P0:** é a primeira coisa que o dono faz para receber pelo número
@@ -2568,3 +2557,15 @@ variáveis `EVALINK_*` válidas; sem elas o CRM segue só com senha. Mapa:
 | Quem tem TOTP verificado passa por `/login/mfa?next=/app` antes do `/app` | `[P0]` | **PASS em teste de rota**: `app/evalink/volta/route.test.ts`. NÃO MEDIDO pela tela |
 | Sem a organização padrão ativa, a recusa chega à tela com `?evalink=sem_org_padrao` e mensagem própria, e é auditada com esse motivo | `[P1]` | **PASS em unit/rota**: `lib/evalink/entrada.test.ts`, `app/evalink/volta/route.test.ts` |
 | Último admin ativo de alguma organização e admin de plataforma ativo não são banidos pelo aviso (perdem sessões e senha) | `[P1]` | **PASS em unit**: `lib/evalink/entrada.test.ts` |
+
+## J27 — Conectar o WhatsApp oficial pelo botão, com o número no celular `[P0]`
+
+**Por que P0:** é a primeira ação de quem conecta o número oficial numa
+instalação com app de Tech Provider (ADR-0002). Sem o botão, o cliente cria app
+na Meta e cola token.
+
+| # | Caso | Resultado |
+|---|---|---|
+| J27.1 | Admin clica Conectar WhatsApp, escolhe manter o número no celular; a aba API Oficial mostra o canal Conectado (`WORKING`) e o CRM pede contatos e depois histórico | `tests/e2e/cadastro-incorporado.spec.ts` — SDK do Facebook simulado por `addInitScript`, Graph num receptor local (porta 47813, `META_GRAPH_BASE_URL`). Prova só no CI (parte 1 do `e2e.yml`). Evidência: `.superpowers/evidence/cadastro-incorporado/conectado.png` |
+| J27.2 | Instalação sem App ID / Configuration ID | **NÃO PROVADO EM TELA** — o componente mostra o cartão `cadastro-incorporado-indisponivel` com o que falta e o formulário manual continua; nenhuma spec cobre ainda |
+
