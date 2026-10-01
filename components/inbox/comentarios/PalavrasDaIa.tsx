@@ -13,7 +13,7 @@ import { usePalavrasDaIa, useDecidirPalavra } from "@/hooks/comentarios/useComen
  * O comentário de origem foi oferecido ao dono e recusado em favor da tela
  * menor; se aprovação distraída virar problema, é o primeiro ajuste a fazer.
  *
- * Palavra de assunto sensível nunca chega aqui: a lista já vem sem elas, e a
+ * Palavra de assunto sensível não chega aqui: a lista já vem sem elas, e a
  * rota recusa de novo. Quem decide se o clique vale é a rota (papel `manager`).
  */
 export function PalavrasDaIa() {
@@ -32,7 +32,7 @@ export function PalavrasDaIa() {
     <div className="flex flex-col gap-3 px-3 py-4">
       <p className="text-sm text-text-muted">
         {t(
-          "Estas palavras apareceram em comentários que você respondeu. Liberando uma, a IA passa a responder sozinha os elogios que a usem. Assunto de saúde, preço e agendamento nunca aparecem aqui.",
+          "Estas palavras apareceram em comentários que você respondeu. Liberando uma palavra, a IA pode responder sozinha comentários curtos em que TODAS as palavras estejam liberadas. A IA nunca responde sozinha sobre saúde, preço ou agendamento.",
         )}
       </p>
 
@@ -47,7 +47,7 @@ export function PalavrasDaIa() {
               <span className="text-sm text-text">
                 {c.palavra}{" "}
                 <span className="text-xs text-text-muted">
-                  {t("em")} {c.vezes} {c.vezes === 1 ? t("comentário seu") : t("comentários seus")}
+                  {t("em")} {c.vezes} {t("que você respondeu")}
                 </span>
               </span>
               <span className="flex gap-1">

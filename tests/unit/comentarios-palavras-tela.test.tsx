@@ -28,6 +28,11 @@ describe("Palavras da IA", () => {
     expect(container.textContent).not.toMatch(/coment[áa]rio de origem|exemplo/i);
   });
 
+  it("não promete o histórico inteiro: a consulta olha só os comentários recentes", () => {
+    const { container } = render(<PalavrasDaIa />);
+    expect(container.textContent).not.toMatch(/hist[óo]rico/i);
+  });
+
   it("Pode usar manda aprovada true; Nunca manda false", async () => {
     render(<PalavrasDaIa />);
 
