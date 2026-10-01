@@ -71,7 +71,7 @@ import { aplicarRegra, enviarPrivadaDeGatilho, type AdminDaAcao, type Desfecho }
 import { motivoDaRecusaPorEspecialidade } from "@/lib/comentarios/especialidade";
 import { regraQueCasa, type RegraDeComentario } from "@/lib/comentarios/regra";
 import { abreConversa, chaveDoGatilho, frasesDeGatilho, type FrasesDeGatilho } from "@/lib/comentarios/gatilho-direct";
-import { ehObviamenteSeguro } from "@/lib/comentarios/seguranca";
+import { ehObviamenteSeguro, ehTokenDeGatilho, GATILHO_SEM_PADRAO_SEGURO } from "@/lib/comentarios/seguranca";
 import { perfilDeVoz, type AdminDaVoz, type PerfilDeVoz } from "@/lib/comentarios/voz";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/credentials";
@@ -115,6 +115,8 @@ export interface AdminDoWorker extends AdminDaAcao, AdminDaVoz {
   organizacoesComComentariosNovos(): Promise<string[]>;
   /** `situacao='novo'` DESTA organização, mais antigos primeiro, até `teto`. */
   comentariosNovos(organizationId: string, teto: number): Promise<ComentarioNovo[]>;
+  /** As palavras que o dono liberou nesta organização. Lida UMA vez por rodada. */
+  palavrasAprovadas(organizationId: string): Promise<ReadonlySet<string>>;
   /** Regras ativas desta mídia, nesta organização. */
   regrasDaMidia(organizationId: string, mediaId: string): Promise<RegraDeComentario[]>;
   /** Pede à IA o texto de resposta. Lança se o modelo falhar, recusar por orçamento, ou não estiver configurado. */
@@ -261,11 +263,34 @@ async function abrirConversaSeForIntencaoDeCompra(
   }
 }
 
+/**
+ * O conjunto da rodada, mais o aviso de que ele pode estar incompleto.
+ *
+ * Falha de leitura NÃO vira conjunto vazio em silêncio: isso faria a fila
+ * inchar sem ninguém entender por quê, num dia em que o banco tossiu. Vira
+ * conjunto vazio COM aviso, e o aviso é escrito na linha de cada comentário
+ * que cair na fila por causa disso.
+ */
+type AprovadasDaRodada = { palavras: ReadonlySet<string>; leituraFalhou: boolean };
+
+async function aprovadasDaRodada(admin: AdminDoWorker, organizationId: string): Promise<AprovadasDaRodada> {
+  try {
+    return { palavras: await admin.palavrasAprovadas(organizationId), leituraFalhou: false };
+  } catch (err) {
+    logger.error("[comentarios-worker] não deu para ler as palavras liberadas", {
+      organizationId,
+      erro: err instanceof Error ? err.message : String(err),
+    });
+    return { palavras: new Set(), leituraFalhou: true };
+  }
+}
+
 async function processarUmComentario(
   admin: AdminDoWorker,
   c: ComentarioNovo,
   agora: Date,
   perfilCache: Map<string, PerfilDeVoz | null>,
+  { palavras: aprovadas, leituraFalhou }: AprovadasDaRodada,
 ): Promise<"atendido" | "esperando" | "pulado"> {
   // I-3: repesque de um comentário que uma rodada anterior (ou esta mesma,
   // por corrida) já tocou. Ver o cabeçalho do arquivo.
@@ -322,10 +347,22 @@ async function processarUmComentario(
 
   if (!(await admin.reivindicar(c.id))) return "pulado"; // outra rodada já pegou
 
-  const veredito = ehObviamenteSeguro(c.texto);
+  const veredito = ehObviamenteSeguro(c.texto, aprovadas);
   if (!veredito.seguro) {
+    // O rótulo vai PURO para a abertura de conversa: ela decide por
+    // `abreConversa(gatilho)`, e um sufixo faria preço e agendamento
+    // deixarem de casar, matando o Direct num dia de banco instável. O aviso
+    // de leitura falha entra só no motivo gravado.
     const { motivo, privadaId } = await abrirConversaSeForIntencaoDeCompra(admin, c, veredito.gatilho, agora);
-    await marcarEsperandoAuditado(admin, c, motivo, null, privadaId);
+    // O aviso só é verdadeiro onde as palavras liberadas poderiam ter mudado o
+    // desfecho. Gatilho e teto de tamanho rodam ANTES do vocabulário, então
+    // pendurar o aviso neles afirmaria uma causa que não existe, e mandaria
+    // quem lê a fila investigar o banco por um comentário sem relação.
+    const leituraCausou = leituraFalhou && veredito.gatilho === GATILHO_SEM_PADRAO_SEGURO;
+    const motivoFinal = leituraCausou
+      ? `${motivo} (não deu para ler as palavras liberadas desta organização)`
+      : motivo;
+    await marcarEsperandoAuditado(admin, c, motivoFinal, null, privadaId);
     return "esperando";
   }
 
@@ -399,10 +436,12 @@ export async function processarComentariosNovos(
 
   for (const organizationId of organizacoes) {
     const comentarios = await admin.comentariosNovos(organizationId, teto);
+    // Uma leitura por organização e por rodada, não uma por comentário.
+    const aprovadas = await aprovadasDaRodada(admin, organizationId);
 
     for (const c of comentarios) {
       try {
-        const resultado = await processarUmComentario(admin, c, agora, perfilCache);
+        const resultado = await processarUmComentario(admin, c, agora, perfilCache, aprovadas);
         if (resultado === "atendido") atendidos++;
         else if (resultado === "esperando") esperando++;
         // "pulado" não conta em nenhum dos dois — reflete corrida normal ou
@@ -674,6 +713,27 @@ export function construirAdminDoWorkerReal(admin: AdminSupabase): AdminDoWorker 
         return [];
       }
       return [...new Set((data ?? []).map((row) => (row as { organization_id: string }).organization_id))];
+    },
+    async palavrasAprovadas(organizationId) {
+      const { data, error } = await admin
+        .from("instagram_comment_vocabulario")
+        .select("palavra")
+        .eq("organization_id", organizationId)
+        .eq("aprovada", true);
+      if (error) throw new Error(error.message);
+      // I-3: a LEITURA reconfere, não só a gravação. A rota recusa palavra de
+      // gatilho na hora de salvar, mas conserto de régua não desfaz o que já
+      // está no banco: um clone que rodou a versão em que `ehTokenDeGatilho`
+      // casava palavra inteira tem "valores" e "doses" gravados como
+      // aprovados, e ficaria furado para sempre. Filtrar aqui cura sozinho,
+      // sem migration de dados — e é barato (a lista é de dezenas de linhas).
+      //
+      // `palavra` já é gravada normalizada (contrato da tabela): usa direto.
+      return new Set(
+        (data ?? [])
+          .map((r) => (r as { palavra: string }).palavra)
+          .filter((p) => !ehTokenDeGatilho(p)),
+      );
     },
     async comentariosNovos(organizationId, teto) {
       const { data, error } = await admin

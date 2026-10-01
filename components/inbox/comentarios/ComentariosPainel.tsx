@@ -12,6 +12,7 @@ import {
 import { ListaDeComentarios } from "./ListaDeComentarios";
 import { FormularioDeRegra } from "./FormularioDeRegra";
 import { FrasesDeAbertura } from "./FrasesDeAbertura";
+import { PalavrasDaIa } from "./PalavrasDaIa";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -30,6 +31,7 @@ export function ComentariosPainel() {
   const { data: canais } = useCanaisDoInstagram();
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [mostrarFrases, setMostrarFrases] = useState(false);
+  const [mostrarPalavras, setMostrarPalavras] = useState(false);
   // CRÍTICO 2: qual mídia abriu o formulário — `undefined` quando é "Nova
   // regra" solto (sem partir de um comentário da lista); string vazia é um
   // valor válido de mediaId, então null/undefined marcam "não veio de lá".
@@ -50,6 +52,9 @@ export function ComentariosPainel() {
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <h2 className="text-sm font-semibold text-text">{t("Comentários")}</h2>
         <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setMostrarPalavras((v) => !v)}>
+            {mostrarPalavras ? t("Fechar") : t("Palavras da IA")}
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => setMostrarFrases((v) => !v)}>
             {mostrarFrases ? t("Fechar") : t("Frases do Direct")}
           </Button>
@@ -65,6 +70,11 @@ export function ComentariosPainel() {
       {mostrarFrases && (
         <div className="border-b border-border">
           <FrasesDeAbertura />
+        </div>
+      )}
+      {mostrarPalavras && (
+        <div className="border-b border-border">
+          <PalavrasDaIa />
         </div>
       )}
       {mostrarFormulario && (

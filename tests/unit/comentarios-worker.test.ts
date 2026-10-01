@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { RegraDeComentario } from "@/lib/comentarios/regra";
 import type { PerfilDeVoz } from "@/lib/comentarios/voz";
+import { ehObviamenteSeguro, GATILHO_SEM_PADRAO_SEGURO } from "@/lib/comentarios/seguranca";
 import { FRASES_PADRAO } from "@/lib/comentarios/gatilho-direct";
 
 const auditMock = vi.fn(async (_arg: unknown) => undefined);
@@ -73,6 +74,7 @@ type Fake = Parameters<typeof processarComentariosNovos>[0] & {
   chamadasDeVoz: number;
   gravarDesfechoFalha?: boolean;
   frases: { preco: string; agendamento: string };
+  aprovadas: Set<string>;
 };
 
 let fake: Fake;
@@ -99,6 +101,7 @@ beforeEach(() => {
     chamadasDeVoz: 0,
     gravarDesfechoFalha: false,
     frases: { ...FRASES_PADRAO },
+    aprovadas: new Set<string>(),
 
     // I-6: a fila é por organização — o fake espelha a query real (filtro por
     // organization_id + teto), não uma lista global.
@@ -162,6 +165,9 @@ beforeEach(() => {
     },
     async frasesDeGatilho() {
       return fake.frases;
+    },
+    async palavrasAprovadas() {
+      return fake.aprovadas;
     },
     async marcarRespondidoPelaIa(id: string, texto: string, replyId: string | null) {
       linhas[id] = {
@@ -631,4 +637,107 @@ it("regra de palavra continua vencendo o gatilho: quem tem regra não passa por 
 
   expect(r.atendidos).toBe(1);
   expect(enviados).toEqual([{ commentId: "C-1", texto: "o link" }]);
+});
+
+it("palavra aprovada pela organização faz a IA responder sozinha", async () => {
+  fake.comentarios = [{ ...comentario, texto: "conteudo fantastico" }];
+  fake.aprovadas = new Set(["fantastico"]);
+
+  const r = await processarComentariosNovos(fake, agora);
+
+  expect(r.atendidos).toBe(1);
+  expect(fake.publicacoes).toHaveLength(1);
+});
+
+it("sem a palavra aprovada, o mesmo comentário continua esperando você", async () => {
+  fake.comentarios = [{ ...comentario, texto: "conteudo fantastico" }];
+
+  const r = await processarComentariosNovos(fake, agora);
+
+  expect(r.esperando).toBe(1);
+  expect(fake.publicacoes).toEqual([]);
+});
+
+// Cada organização tem o seu vocabulário: a leitura é uma por organização.
+it("lê as aprovadas uma vez por organização, não uma por comentário", async () => {
+  const pedidos: string[] = [];
+  fake.palavrasAprovadas = async (org: string) => {
+    pedidos.push(org);
+    return new Set(["fantastico"]);
+  };
+  fake.comentarios = [
+    { ...comentario, id: "IC-1", texto: "conteudo fantastico" },
+    { ...comentario, id: "IC-2", externalId: "C-2", texto: "video fantastico" },
+  ];
+
+  await processarComentariosNovos(fake, agora);
+
+  expect(pedidos).toEqual(["org"]);
+});
+
+it("preço com leitura falha ainda manda o Direct: o sufixo não pode matar o gatilho", async () => {
+  fake.comentarios = [{ ...comentario, texto: "quanto custa?" }];
+  fake.palavrasAprovadas = async () => {
+    throw new Error("banco fora do ar");
+  };
+  const enviados: string[] = [];
+  fake.enviarPrivada = async (i) => {
+    enviados.push(i.commentId);
+    return { messageId: "MID-1" };
+  };
+
+  await processarComentariosNovos(fake, agora);
+
+  expect(enviados).toEqual(["C-1"]);
+  expect(linha().motivo_do_toque).toContain("preço");
+  expect(linha().motivo_do_toque).not.toContain("palavras liberadas");
+});
+
+it("leitura das aprovadas que falha não publica nada, e diz o motivo", async () => {
+  fake.comentarios = [{ ...comentario, texto: "conteudo fantastico" }];
+  fake.palavrasAprovadas = async () => {
+    throw new Error("banco fora do ar");
+  };
+
+  const r = await processarComentariosNovos(fake, agora);
+
+  expect(r.esperando).toBe(1);
+  expect(fake.publicacoes).toEqual([]);
+  expect(linha().motivo_do_toque).toContain("palavras liberadas");
+});
+
+it("o aviso de leitura falha está preso ao rótulo real, não a uma cópia do texto", () => {
+  // Se alguém reescrever o rótulo em seguranca.ts sem tocar aqui, este teste
+  // reprova em vez de o aviso sumir calado.
+  expect(ehObviamenteSeguro("conteudo fantastico").seguro).toBe(false);
+  expect((ehObviamenteSeguro("conteudo fantastico") as { gatilho: string }).gatilho).toBe(
+    GATILHO_SEM_PADRAO_SEGURO,
+  );
+});
+
+/**
+ * I-3 (revisão final) — a quinta falha silenciosa: ninguém reconferia a
+ * palavra na LEITURA.
+ *
+ * A rota recusa palavra de gatilho na gravação, mas consertar a régua não
+ * desfaz o que já está no banco. Um clone que rodou a versão em que
+ * `ehTokenDeGatilho` casava palavra INTEIRA tem "valores" e "doses" gravados
+ * como aprovados — e ficaria furado para sempre. A leitura filtra, e cura
+ * sozinha, sem migration de dados.
+ */
+it("I-3 — palavra de gatilho já gravada no banco não entra no conjunto da rodada", async () => {
+  const linhas = [{ palavra: "fantastico" }, { palavra: "valores" }, { palavra: "doses" }, { palavra: "didatico" }];
+  // Thenable mínimo: `select`/`eq` encadeiam, o `await` resolve as linhas.
+  const chain: Record<string, unknown> = {};
+  chain.select = () => chain;
+  chain.eq = () => chain;
+  chain.then = (resolve: (v: unknown) => unknown) => resolve({ data: linhas, error: null });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adminReal = construirAdminDoWorkerReal({ from: () => chain } as any);
+  const aprovadas = await adminReal.palavrasAprovadas("org-x");
+
+  expect([...aprovadas].sort()).toEqual(["didatico", "fantastico"]);
+  expect(aprovadas.has("valores")).toBe(false);
+  expect(aprovadas.has("doses")).toBe(false);
 });

@@ -48,6 +48,15 @@
 
 import { normalizarTexto } from "../opt-out/deteccao";
 
+/**
+ * O veredito de "nenhum gatilho, mas o texto tem palavra que a trava não
+ * conhece". É o ÚNICO que as palavras liberadas pelo dono podem mudar, e por
+ * isso o worker compara contra ele. Constante, e não string solta nos dois
+ * lados: reescrever este texto sem reescrever a comparação faria o aviso de
+ * leitura falha sumir sem ninguém notar.
+ */
+export const GATILHO_SEM_PADRAO_SEGURO = "sem padrão seguro reconhecido";
+
 export type Veredito = { seguro: true } | { seguro: false; gatilho: string };
 
 /** Acima disso não é "obviamente seguro" — elogio não cabe num parágrafo. */
@@ -90,6 +99,26 @@ const SOMENTE_DIGITOS_RE = /^\d+$/u;
 const TOKEN_RE = new RegExp(`[\\p{L}\\p{N}]+|[${EMOJI_CLASSE}]+`, "gu");
 
 /**
+ * Marcação de perfil do Instagram: `@` seguido do identificador (letras,
+ * dígitos, ponto, sublinhado), e só quando o `@` NÃO vem colado em
+ * letra/dígito — senão `joao@clinica.com` viraria "fale com", e um e-mail no
+ * comentário passaria a ser invisível para a trava.
+ */
+const MARCACAO_RE = /(^|[^\p{L}\p{N}])@[\p{L}\p{N}._]+/gu;
+
+/**
+ * Tira as marcações ANTES de julgar. O `$1` devolve o separador que a regex
+ * consumiu, para `"@fulano, top!"` virar `", top!"` e não `" top!"` colado no
+ * que veio antes.
+ *
+ * O texto guardado em `instagram_comments.texto` e o que a tela mostra NUNCA
+ * passam por aqui: quem escreveu escreveu.
+ */
+function semMarcacoes(texto: string): string {
+  return texto.replace(MARCACAO_RE, "$1");
+}
+
+/**
  * Vocabulário seguro — a unidade de casamento é a PALAVRA, não a frase. Todo
  * token do comentário precisa estar aqui (ou ser emoji/dígito) para o texto
  * inteiro contar como elogio. Três famílias, deliberadamente separadas para
@@ -126,26 +155,157 @@ const VOCABULARIO_SEGURO: ReadonlySet<string> = new Set([
   ...COMO_CHAMAM_O_DONO,
 ]);
 
-/** Todo token do texto está no vocabulário seguro (ou é emoji/dígito)? Um único de fora já reprova o texto inteiro. */
-function todosOsTokensSaoSeguros(normalizado: string): boolean {
-  const tokens = normalizado.match(TOKEN_RE) ?? [];
-  if (tokens.length === 0) return false;
-  return tokens.every(
-    (token) =>
-      SOMENTE_EMOJI_RE.test(token) || SOMENTE_DIGITOS_RE.test(token) || VOCABULARIO_SEGURO.has(token),
+/**
+ * O token já é conhecido pela trava (vocabulário fixo, emoji ou dígito)? É a
+ * ÚNICA definição de "conhecido": `todosOsTokensSaoSeguros` e os candidatos a
+ * aprovação usam esta mesma expressão, para não divergirem.
+ */
+export function ehTokenConhecido(token: string): boolean {
+  return (
+    SOMENTE_EMOJI_RE.test(token) ||
+    SOMENTE_DIGITOS_RE.test(token) ||
+    VOCABULARIO_SEGURO.has(token)
   );
 }
 
-export function ehObviamenteSeguro(texto: string | null): Veredito {
+/**
+ * RADICAIS dos gatilhos de uma palavra só, DERIVADOS de `GATILHOS` e não
+ * escritos à mão: gatilho novo entra aqui sozinho.
+ *
+ * Por que radical e não a palavra inteira: `GATILHOS` ancora `\b` nos DOIS
+ * lados, então nenhuma FLEXÃO casa — e `ehTokenDeGatilho` herdava a cegueira.
+ * A lista de candidatos ordena por frequência, então "valores", "doses",
+ * "dores", "horarios", "especialistas", "nutrologos" e "medicamentos" subiam
+ * ao TOPO da tela, para o dono aprovar sem perceber que estava desarmando a
+ * própria proteção. O precedente é `lib/comentarios/especialidade.ts`, que já
+ * pagou esta lição ("RADICAIS, não palavras inteiras").
+ *
+ * Sobre-recusar ("dormir" começa com "dor", "citar" com "cita") é a direção
+ * certa do erro: o custo é não oferecer uma palavra, nunca liberar um assunto.
+ *
+ * ⚠️ RADICAL NÃO É "A PALAVRA MENOS O SUFIXO" EM PORTUGUÊS. A primeira versão
+ * deste bloco cortava só o `\w*` e parou no plural REGULAR — "valores",
+ * "doses". O plural de -ão e de -em troca a sílaba final em vez de acrescentar
+ * letra ("promocao"→"promocoes", "medicacao"→"medicacoes", "reacao"→"reacoes",
+ * "dosagem"→"dosagens"), então os quatro atravessavam e eram oferecidos ao
+ * dono: aprovados, a IA publicava sozinha sobre preço e medicação. O radical
+ * precisa parar ANTES da sílaba que muda — e o corte é DERIVADO, para um
+ * gatilho novo em -ão nascer coberto.
+ *
+ * ⚠️ Isto radicaliza só a OFERTA. Os `GATILHOS` em si continuam com `\b` nos
+ * dois lados — radicalizá-los muda o veredito de todo comentário de todo
+ * mundo, e é PR próprio. Consequência conhecida e aceita: "quais os valores",
+ * sem nenhuma palavra aprovada, não dispara o gatilho de preço — ele reprova
+ * por "sem padrão seguro reconhecido", porque "valores" não está no
+ * vocabulário e nunca poderá entrar.
+ */
+const RADICAIS_DE_GATILHO: readonly string[] = GATILHOS.flatMap(([, padrao]) =>
+  padrao.source
+    .replace(/^\\b\(/, "")
+    .replace(/\)\\b$/, "")
+    .split("|")
+    .filter((alt) => !alt.includes("\\s+"))
+    .map((alt) => alt.replace(/\\w\*$/, ""))
+    // O corte do plural irregular: "promocao" → "promoc" cobre a palavra E o
+    // plural, porque `startsWith` só pede o prefixo comum aos dois.
+    .map((radical) => radical.replace(/(?:ao|em)$/u, "")),
+);
+
+/**
+ * O token, sozinho, casa algum dos seis gatilhos? Usado para NUNCA oferecer
+ * palavra de gatilho ao dono: pedir que ele libere "custa" enquanto limpa a
+ * fila é pedir que desarme a própria proteção sem perceber.
+ */
+export function ehTokenDeGatilho(token: string): boolean {
+  return (
+    RADICAIS_DE_GATILHO.some((radical) => token.startsWith(radical)) ||
+    COMPONENTES_DE_GATILHO.some((c) => c.test(token))
+  );
+}
+
+/**
+ * Pedaços das alternativas multipalavra dos gatilhos ("voce e medico" vira
+ * "voce", "e", "medico"), DERIVADOS de `GATILHOS` e não escritos à mão: gatilho
+ * novo entra aqui sozinho. Um componente aprovado não desarma o gatilho (a
+ * trava roda sobre o texto inteiro), mas oferecê-lo ao dono é oferecer a
+ * metade de uma proteção, então nunca se oferece.
+ */
+const COMPONENTES_DE_GATILHO: readonly RegExp[] = GATILHOS.flatMap(([, padrao]) => {
+  const miolo = padrao.source.replace(/^\\b\(/, "").replace(/\)\\b$/, "");
+  return miolo
+    .split("|")
+    .filter((alt) => alt.includes("\\s+"))
+    .flatMap((alt) => alt.split("\\s+"))
+    .map((pedaco) => new RegExp(`^(?:${pedaco})$`, "u"));
+});
+
+/** Tokens do texto, já sem marcação e normalizados: a MESMA régua da trava. */
+export function tokensParaAnalise(texto: string): string[] {
+  return normalizarTexto(semMarcacoes(texto).trim()).match(TOKEN_RE) ?? [];
+}
+
+/** Todo token do texto está no vocabulário seguro (ou é emoji/dígito)? Um único de fora já reprova o texto inteiro. */
+function todosOsTokensSaoSeguros(
+  normalizado: string,
+  aprovadas: ReadonlySet<string>,
+): boolean {
+  const tokens = normalizado.match(TOKEN_RE) ?? [];
+  if (tokens.length === 0) return false;
+  return tokens.every((token) => ehTokenConhecido(token) || aprovadas.has(token));
+}
+
+const NENHUMA_APROVADA: ReadonlySet<string> = new Set();
+
+/**
+ * `aprovadas` são as palavras que o DONO liberou (tabela
+ * `instagram_comment_vocabulario`, por organização). Entram por argumento, e
+ * não por consulta aqui dentro, porque esta função é pura de propósito: ela é
+ * a régua, e régua que faz I/O não dá para testar com 40 frases num teste de
+ * unidade.
+ *
+ * Elas só participam da ÚLTIMA pergunta ("todo token é conhecido?"). Os
+ * gatilhos, o teto de tamanho e a interrogação final rodam antes e não olham
+ * para este conjunto.
+ *
+ * CONTRATO: `aprovadas` tem de vir com as palavras JÁ normalizadas pela mesma
+ * `normalizarTexto` de `lib/opt-out/deteccao.ts` (minúsculas, sem acento). A
+ * comparação é exata contra o token normalizado e esta função NÃO normaliza o
+ * conjunto (alocaria um `Set` por comentário). Palavra fora dessa forma, como
+ * "Fantástico", nunca casa: ninguém recebe erro e a aprendizagem fica morta em
+ * silêncio. Quem grava (Tarefa 5) e quem lê (Tarefa 6) garantem a forma.
+ */
+export function ehObviamenteSeguro(
+  texto: string | null,
+  aprovadas: ReadonlySet<string> = NENHUMA_APROVADA,
+): Veredito {
   if (!texto || texto.trim() === "") {
     return { seguro: false, gatilho: "vazio" };
   }
 
-  const textoAparado = texto.trim();
+  const textoAparado = semMarcacoes(texto).trim();
+  if (textoAparado === "") {
+    return { seguro: false, gatilho: "vazio" };
+  }
   const normalizado = normalizarTexto(textoAparado);
 
+  // Os gatilhos julgam o texto ORIGINAL, com as marcações ainda lá — e isso é
+  // uma correção de regressão, não enfeite. Enquanto este laço rodava sobre o
+  // texto já podado, um `@` na frente de qualquer palavra APAGAVA o gatilho:
+  // "@mounjaro top demais", "@ozempic amei", "top @dose" e "doutor @nutrologo
+  // top" passavam todos como "obviamente seguro", porque `semMarcacoes` tinha
+  // comido a única palavra que decidia. Antes do vocabulário, `\bmounjaro\b`
+  // casava o texto cru e barrava. Só a análise de TOKEN usa o texto sem
+  // marcação (o perfil citado não é conteúdo); os seis gatilhos, não.
+  //
+  // Os gatilhos multipalavra usam `\s+`, e `normalizarTexto` preserva
+  // pontuação: "voce, e medico" não casaria. Colapsa tudo que não é
+  // letra/dígito em um espaço, SÓ para este laço (o teto de tamanho e a
+  // interrogação final precisam do texto como veio).
+  const paraGatilhos = normalizarTexto(texto)
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
   for (const [gatilho, padrao] of GATILHOS) {
-    if (padrao.test(normalizado)) {
+    if (padrao.test(paraGatilhos)) {
       return { seguro: false, gatilho };
     }
   }
@@ -158,9 +318,9 @@ export function ehObviamenteSeguro(texto: string | null): Veredito {
     return { seguro: false, gatilho: "pergunta" };
   }
 
-  if (todosOsTokensSaoSeguros(normalizado)) {
+  if (todosOsTokensSaoSeguros(normalizado, aprovadas)) {
     return { seguro: true };
   }
 
-  return { seguro: false, gatilho: "sem padrão seguro reconhecido" };
+  return { seguro: false, gatilho: GATILHO_SEM_PADRAO_SEGURO };
 }

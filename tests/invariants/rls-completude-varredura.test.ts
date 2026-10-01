@@ -185,6 +185,13 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "isolamento cross-org e gate de papel (`agent` barrado, `manager` passa).",
   },
   {
+    tabela: "instagram_comment_vocabulario",
+    razao:
+      "tests/invariants/vocabulario-de-comentario.test.ts — isolamento cross-org " +
+      "nos dois sentidos (`using` e `with check`) e gate de papel (`viewer` não " +
+      "lê, `agent` lê mas não escreve, `manager` escreve).",
+  },
+  {
     tabela: "user_organizations",
     razao:
       "tests/invariants/gov-1b-team-manager-read.test.ts (\"cross-org: " +

@@ -126,3 +126,30 @@ export function useSalvarFrasesDeAbertura() {
     onError: showApiError,
   });
 }
+
+export interface PalavrasDaIaResposta {
+  candidatos: Array<{ palavra: string; vezes: number }>;
+  decididas: Array<{ palavra: string; aprovada: boolean }>;
+}
+
+const CHAVE_PALAVRAS = ["instagram-comment-vocabulario"] as const;
+
+export function usePalavrasDaIa() {
+  return useQuery({
+    queryKey: CHAVE_PALAVRAS,
+    queryFn: () =>
+      apiClient
+        .get<{ data: PalavrasDaIaResposta }>("/api/v1/comentarios/vocabulario")
+        .then((r) => r.data),
+  });
+}
+
+export function useDecidirPalavra() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (corpo: { palavra: string; aprovada: boolean }) =>
+      apiClient.post<{ data: { palavra: string } }>("/api/v1/comentarios/vocabulario", corpo),
+    onSuccess: () => qc.invalidateQueries({ queryKey: CHAVE_PALAVRAS }),
+    onError: showApiError,
+  });
+}

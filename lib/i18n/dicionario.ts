@@ -9165,6 +9165,28 @@ export const DICIONARIO: Traducoes = {
   "Nova regra": { es: "Nueva regla" },
   // As frases de abertura de conversa no Direct (gatilho de preço/agendamento).
   "Frases do Direct": { es: "Frases del Direct" },
+  // As palavras que a IA pode usar sozinha (vocabulário que aprende).
+  "Palavras da IA": { es: "Palabras de la IA" },
+  "Estas palavras apareceram em comentários que você respondeu. Liberando uma palavra, a IA pode responder sozinha comentários curtos em que TODAS as palavras estejam liberadas. A IA nunca responde sozinha sobre saúde, preço ou agendamento.": {
+    es: "Estas palabras aparecieron en comentarios que usted respondió. Si libera una palabra, la IA puede responder sola comentarios cortos en los que TODAS las palabras estén liberadas. La IA nunca responde sola sobre salud, precio o agendamiento.",
+  },
+  "Nada novo para decidir. As palavras aparecem aqui conforme você responde comentários.": {
+    es: "Nada nuevo por decidir. Las palabras aparecen aquí a medida que usted responde comentarios.",
+  },
+  // "em 4 comentários que você respondeu" — o substantivo faltava na tela.
+  // (`em` já tinha espanhol, lá em cima: a revisão final o deu por ausente.)
+  "comentários que você respondeu": { es: "comentarios que usted respondió" },
+  "Não foi possível carregar as palavras. Atualize a página para tentar de novo.": {
+    es: "No fue posible cargar las palabras. Actualice la página para intentarlo de nuevo.",
+  },
+  "Pode usar": { es: "Puede usar" },
+  "Nunca": { es: "Nunca" },
+  "1 palavra liberada": { es: "1 palabra liberada" },
+  "palavras liberadas": { es: "palabras liberadas" },
+  "1 recusada": { es: "1 rechazada" },
+  "recusadas": { es: "rechazadas" },
+  "(liberada)": { es: "(liberada)" },
+  "(recusada)": { es: "(rechazada)" },
   "Quando perguntarem preço": { es: "Cuando pregunten el precio" },
   "Não cite valor aqui: mensagem automática com preço vira promessa.": {
     es: "No menciones el valor aquí: un mensaje automático con precio se vuelve una promesa.",
