@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /** Rota: account_update chega ao handler de saúde da conta e a Meta recebe 200. */
 const SESSAO = { id: "sess-1", organizationId: "org-1", wabaId: "222" };
 const SEGREDO = "segredo-de-teste";
-const aplicar = vi.fn(async () => "caiu");
+const aplicar = vi.fn(async (..._a: unknown[]) => "caiu");
 
 vi.mock("@/lib/channels/meta/session", () => ({ metaSessionByWebhookToken: async () => SESSAO }));
-vi.mock("@/lib/channels/meta/saude-da-conta", () => ({ aplicarEventoDaConta: (...a: unknown[]) => aplicar(...(a as [])) }));
+vi.mock("@/lib/channels/meta/saude-da-conta", () => ({ aplicarEventoDaConta: (...a: unknown[]) => aplicar(...a) }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }),
