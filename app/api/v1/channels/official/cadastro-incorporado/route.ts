@@ -24,6 +24,8 @@ import { appDaMeta } from "@/lib/channels/meta/app";
 import {
   arquivarSessaoLegadaDoNumero,
   conferirToken,
+  derrubarSessaoLegadaNoWaha,
+  desarquivarSessaoLegada,
   ErroDaMeta,
   escolherNumero,
   FALHA_GENERICA_DA_META,
@@ -31,6 +33,7 @@ import {
   numerosDaConta,
   pedirSincronizacao,
   registrarNumero,
+  type SessaoLegadaArquivada,
   trocarCodigo,
 } from "@/lib/channels/meta/cadastro-incorporado";
 import { EVENTO_COEXISTENCIA, EVENTO_NUMERO_NOVO, SINCRONIZACAO_TEM_CONSUMIDOR, type Coexistencia } from "@/lib/channels/meta/coexistencia";
@@ -127,7 +130,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   //    ANTES de gravar a oficial (ruling P1): o índice único
   //    `channel_sessions_phone_per_org_unique (organization_id, phone_number)
   //    where archived_at is null` ainda tem a linha legada ativa com este número.
-  let legada: string | null = null;
+  //    Só no BANCO: o WAHA só cai depois da oficial gravada (passo 5).
+  let legada: SessaoLegadaArquivada | null = null;
   try {
     legada = phoneNumber ? await arquivarSessaoLegadaDoNumero(admin, orgId, phoneNumber) : null;
   } catch (err) {
@@ -149,13 +153,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       cadastro_incorporado: { evento, em: agora },
       ...(pinCifrado ? { pin_cifrado: pinCifrado } : {}),
     },
-  });
+  }).catch((err: unknown) => ({
+    // Lançar aqui deixaria a legada arquivada sem oficial nenhuma: vira recusa e desfaz abaixo.
+    ok: false as const,
+    status: 500,
+    codigo: "internal_error" as const,
+    motivo: err instanceof Error ? err.message : String(err),
+  }));
   if (!r.ok) {
+    // A oficial não foi gravada: devolve a legada (o QR segue de pé).
+    if (legada) {
+      await desarquivarSessaoLegada(admin, orgId, legada).catch((err: unknown) =>
+        logger.error("[cadastro-incorporado] sessão legada não desarquivada", {
+          organization_id: orgId,
+          session: legada!.id,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
     // Frase do dicionário sai traduzida; texto cru (da Meta ou do banco) só vai ao log.
     if (r.motivo in DICIONARIO) return fail(r.codigo, t(r.motivo), r.status, { requestId });
     logger.warn("[cadastro-incorporado] conexão recusada", { organization_id: orgId, status: r.status, motivo: r.motivo });
     return fail(r.codigo, t(FALHA_GENERICA_DA_META), r.status, { requestId });
   }
+
+  if (legada) await derrubarSessaoLegadaNoWaha(orgId, legada);
 
   // 6. register só para número novo, DEPOIS da sessão gravada com o PIN cifrado
   //    (a validação da credencial funciona antes do register). Falha aqui não
@@ -186,7 +208,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     resourceType: "channel_session",
     resourceId: r.sessionId,
     requestId,
-    metadata: { coexistencia, evento, waba_id, phone_number_id: phoneNumberId, sessao_legada_arquivada: legada, pedidos: coex?.pedidos ?? null },
+    metadata: { coexistencia, evento, waba_id, phone_number_id: phoneNumberId, sessao_legada_arquivada: legada?.id ?? null, pedidos: coex?.pedidos ?? null },
   });
 
   return ok({

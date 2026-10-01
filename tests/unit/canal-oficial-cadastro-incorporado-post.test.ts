@@ -11,13 +11,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const ORG = "22222222-2222-4222-8222-222222222222";
 const CANAL = "aaaaaaaa-0000-4000-8000-000000000001";
 
+const LEGADA = { id: "sessao-waha-antiga", wahaSessionName: "clinica", statusAnterior: "WORKING", statusReasonAnterior: null };
 const m = vi.hoisted(() => ({
   trocar: vi.fn(async (): Promise<string> => "EAAX"),
   conferir: vi.fn(async () => ({ ok: true }) as { ok: true } | { ok: false; motivo: string }),
   numeros: vi.fn(async () => [{ id: "111222333", displayPhoneNumber: "+55 27 99904-9879", isOnBizApp: true }]),
   registrar: vi.fn(async (..._a: unknown[]) => undefined),
   sincronizar: vi.fn(),
-  arquivar: vi.fn(async (..._a: unknown[]): Promise<string | null> => "sessao-waha-antiga"),
+  arquivar: vi.fn(async (..._a: unknown[]): Promise<{ id: string; wahaSessionName: string | null; statusAnterior: string | null; statusReasonAnterior: string | null } | null> => LEGADA),
+  desarquivar: vi.fn(async (..._a: unknown[]) => undefined),
+  derrubar: vi.fn(async (..._a: unknown[]) => undefined),
   conectar: vi.fn(),
   avisos: [] as Array<[string, Record<string, unknown>]>,
   auditorias: [] as Array<Record<string, unknown>>,
@@ -45,6 +48,8 @@ vi.mock("@/lib/channels/meta/cadastro-incorporado", async (importOriginal) => ({
   gerarPin: () => "123456",
   pedirSincronizacao: m.sincronizar,
   arquivarSessaoLegadaDoNumero: m.arquivar,
+  desarquivarSessaoLegada: m.desarquivar,
+  derrubarSessaoLegadaNoWaha: m.derrubar,
   // escolherNumero e ErroDaMeta: os ORIGINAIS (puros)
 }));
 vi.mock("@/lib/channels/meta/conectar-canal-oficial", async (importOriginal) => ({
@@ -243,5 +248,29 @@ describe("POST /channels/official/cadastro-incorporado", () => {
     expect(res.status).toBe(200);
     expect(m.sincronizar).not.toHaveBeenCalled();
     expect(db.updates.at(-1)?.patch.metadata).toMatchObject({ coexistencia: { pedidos: { contatos: null, historico: null } } });
+  });
+
+  it("conexão recusada com sessão legada arquivada: DESARQUIVA (mesma org) e não derruba o WAHA", async () => {
+    m.conectar.mockResolvedValueOnce({ ok: false, status: 422, codigo: "invalid_request", motivo: "este número já está conectado em outra organização" });
+    const res = await POST(req(COEX));
+    expect(res.status).toBe(422);
+    expect(m.desarquivar).toHaveBeenCalledWith(expect.anything(), ORG, LEGADA);
+    expect(m.derrubar).not.toHaveBeenCalled();
+  });
+
+  it("conexão gravada: derruba a sessão legada no WAHA DEPOIS da gravação e não desarquiva", async () => {
+    const res = await POST(req(COEX));
+    expect(res.status).toBe(200);
+    expect(m.derrubar).toHaveBeenCalledWith(ORG, LEGADA);
+    expect(m.conectar.mock.invocationCallOrder[0]!).toBeLessThan(m.derrubar.mock.invocationCallOrder[0]!);
+    expect(m.desarquivar).not.toHaveBeenCalled();
+  });
+
+  it("conectarCanalOficial que LANÇA também desarquiva a legada (500 genérico)", async () => {
+    m.conectar.mockRejectedValueOnce(new Error("fetch failed"));
+    const res = await POST(req(COEX));
+    expect(res.status).toBe(500);
+    expect(m.desarquivar).toHaveBeenCalledWith(expect.anything(), ORG, LEGADA);
+    expect(m.derrubar).not.toHaveBeenCalled();
   });
 });

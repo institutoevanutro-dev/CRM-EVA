@@ -159,11 +159,20 @@ export async function pedirSincronizacao(
   }
 }
 
+/** O que `arquivarSessaoLegadaDoNumero` mudou — o bastante para desfazer. */
+export interface SessaoLegadaArquivada {
+  id: string;
+  wahaSessionName: string | null;
+  statusAnterior: string | null;
+  statusReasonAnterior: string | null;
+}
+
 /**
  * A Meta desconecta todos os aparelhos vinculados no onboarding: a sessão WAHA
- * deste mesmo número já caiu. Arquiva (não apaga: conversas ficam) e tenta
- * limpar a sessão no WAHA, sem falhar a conexão se o WAHA não responder.
- * Devolve o id arquivado, ou `null` se não havia.
+ * deste mesmo número cai. Arquiva SÓ NO BANCO (não apaga: conversas ficam) e
+ * devolve o que desfaz, ou `null` se não havia. O WAHA é derrubado à parte
+ * (`derrubarSessaoLegadaNoWaha`), só depois da oficial gravada: se a gravação
+ * falhar, `desarquivarSessaoLegada` devolve a linha e o QR segue de pé.
  *
  * Roda ANTES de gravar a sessão oficial: o índice
  * `channel_sessions_phone_per_org_unique (organization_id, phone_number) where
@@ -174,7 +183,7 @@ export async function arquivarSessaoLegadaDoNumero(
   admin: SupabaseClient,
   organizationId: string,
   phoneNumber: string,
-): Promise<string | null> {
+): Promise<SessaoLegadaArquivada | null> {
   // Só o provider legado é candidato: a sessão oficial (que ainda nem existe
   // quando isto roda, ruling P1) nunca entra no filtro.
   // O número vem da Meta formatado ("+55 27 99904-9879") e a linha WAHA pode
@@ -183,7 +192,7 @@ export async function arquivarSessaoLegadaDoNumero(
   const base = () =>
     admin
       .from("channel_sessions")
-      .select("id, waha_session_name, phone_number")
+      .select("id, waha_session_name, phone_number, status, status_reason")
       .eq("organization_id", organizationId)
       .eq("provider", CHANNEL_PROVIDER_WAHA)
       .not("phone_number", "is", null);
@@ -193,9 +202,8 @@ export async function arquivarSessaoLegadaDoNumero(
   );
   if (error) throw new Error(`channel_sessions: ${error.message}`);
   const alvo = canonicalPhoneBR(phoneNumber);
-  const legada = ((data ?? []) as Array<{ id: string; waha_session_name: string | null; phone_number: string | null }>).find(
-    (l) => l.phone_number && canonicalPhoneBR(l.phone_number) === alvo,
-  );
+  type Linha = { id: string; waha_session_name: string | null; phone_number: string | null; status?: string | null; status_reason?: string | null };
+  const legada = ((data ?? []) as Linha[]).find((l) => l.phone_number && canonicalPhoneBR(l.phone_number) === alvo);
   if (!legada) return null;
 
   const now = new Date().toISOString();
@@ -204,21 +212,46 @@ export async function arquivarSessaoLegadaDoNumero(
     .update({ archived_at: now, status: "STOPPED", last_status_change_at: now, status_reason: "substituida_pela_coexistencia" })
     .eq("organization_id", organizationId)
     .eq("id", legada.id);
-  // Falha aqui lança ANTES do WAHA: derrubar a sessão sem arquivá-la deixaria o índice único ocupado.
   if (erroUpdate) throw new Error(`channel_sessions: ${erroUpdate.message}`);
+  return {
+    id: legada.id,
+    wahaSessionName: legada.waha_session_name,
+    statusAnterior: legada.status ?? null,
+    statusReasonAnterior: legada.status_reason ?? null,
+  };
+}
 
+/** Desfaz o arquivamento (a oficial não foi gravada). Escopo pela organização. */
+export async function desarquivarSessaoLegada(
+  admin: SupabaseClient,
+  organizationId: string,
+  legada: SessaoLegadaArquivada,
+): Promise<void> {
+  const { error } = await admin
+    .from("channel_sessions")
+    .update({
+      archived_at: null,
+      status: legada.statusAnterior,
+      status_reason: legada.statusReasonAnterior,
+      last_status_change_at: new Date().toISOString(),
+    })
+    .eq("organization_id", organizationId)
+    .eq("id", legada.id);
+  if (error) throw new Error(`channel_sessions: ${error.message}`);
+}
+
+/** Logout + delete no WAHA, depois da oficial gravada. Nunca lança: o banco já está certo. */
+export async function derrubarSessaoLegadaNoWaha(organizationId: string, legada: SessaoLegadaArquivada): Promise<void> {
   const waha = getWahaClient();
-  if (waha && legada.waha_session_name) {
-    try {
-      await waha.logoutSession(legada.waha_session_name);
-      await waha.deleteSession(legada.waha_session_name);
-    } catch (err) {
-      logger.warn("[cadastro-incorporado] sessão legada arquivada no banco, mas o WAHA não limpou", {
-        organization_id: organizationId,
-        session: legada.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+  if (!waha || !legada.wahaSessionName) return;
+  try {
+    await waha.logoutSession(legada.wahaSessionName);
+    await waha.deleteSession(legada.wahaSessionName);
+  } catch (err) {
+    logger.warn("[cadastro-incorporado] sessão legada arquivada no banco, mas o WAHA não limpou", {
+      organization_id: organizationId,
+      session: legada.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
-  return legada.id;
 }

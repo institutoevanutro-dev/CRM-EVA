@@ -4,7 +4,7 @@ import { DICIONARIO } from "@/lib/i18n/dicionario";
 
 import { getWahaClient } from "@/lib/waha/client";
 
-import { arquivarSessaoLegadaDoNumero, conferirToken, ErroDaMeta, FALHA_GENERICA_DA_META, escolherNumero, gerarPin, numerosDaConta, pedirSincronizacao, registrarNumero, trocarCodigo } from "./cadastro-incorporado";
+import { arquivarSessaoLegadaDoNumero, conferirToken, derrubarSessaoLegadaNoWaha, desarquivarSessaoLegada, ErroDaMeta, FALHA_GENERICA_DA_META, escolherNumero, gerarPin, numerosDaConta, pedirSincronizacao, registrarNumero, trocarCodigo } from "./cadastro-incorporado";
 
 vi.mock("@/lib/waha/client", () => ({ getWahaClient: vi.fn(() => null) }));
 
@@ -108,7 +108,7 @@ describe("pedirSincronizacao", () => {
 });
 
 describe("arquivarSessaoLegadaDoNumero", () => {
-  type Linha = { id: string; waha_session_name: string | null; phone_number: string | null };
+  type Linha = { id: string; waha_session_name: string | null; phone_number: string | null; status?: string | null; status_reason?: string | null };
   function adminFalso(linhas: Linha[], erros: { select?: boolean; update?: boolean } = {}) {
     const filtros: Array<[string, unknown]> = [];
     const updates: Array<Record<string, unknown>> = [];
@@ -132,7 +132,7 @@ describe("arquivarSessaoLegadaDoNumero", () => {
   it("casa o número formatado da Meta com a linha WAHA gravada em outro formato (com/sem +, com/sem o 9)", async () => {
     for (const gravado of ["+5527999049879", "5527999049879@c.us", "552799049879", "27 99904-9879".replace(/^/, "55 ")]) {
       const { admin, filtros, updates } = adminFalso([{ id: "s1", waha_session_name: null, phone_number: gravado }]);
-      expect(await arquivarSessaoLegadaDoNumero(admin, "org1", "+55 27 99904-9879"), gravado).toBe("s1");
+      expect((await arquivarSessaoLegadaDoNumero(admin, "org1", "+55 27 99904-9879"))?.id, gravado).toBe("s1");
       expect(filtros).toContainEqual(["organization_id", "org1"]);
       expect(filtros).toContainEqual(["provider", "waha"]);
       expect(updates[0]).toMatchObject({ status: "STOPPED", status_reason: "substituida_pela_coexistencia" });
@@ -148,6 +148,27 @@ describe("arquivarSessaoLegadaDoNumero", () => {
     vi.mocked(getWahaClient).mockReturnValue({ logoutSession: logout, deleteSession: logout } as never);
     await expect(arquivarSessaoLegadaDoNumero(admin, "org1", "+5527999049879")).rejects.toThrow();
     expect(logout).not.toHaveBeenCalled();
+  });
+  it("só arquiva NO BANCO e devolve o que desfaz (id, sessão WAHA, status anterior) — o WAHA fica intacto", async () => {
+    const { admin } = adminFalso([{ id: "s1", waha_session_name: "sess", phone_number: "+5527999049879", status: "WORKING", status_reason: null }]);
+    const logout = vi.fn();
+    vi.mocked(getWahaClient).mockReturnValue({ logoutSession: logout, deleteSession: logout } as never);
+    expect(await arquivarSessaoLegadaDoNumero(admin, "org1", "+5527999049879")).toEqual({
+      id: "s1", wahaSessionName: "sess", statusAnterior: "WORKING", statusReasonAnterior: null,
+    });
+    expect(logout).not.toHaveBeenCalled();
+  });
+  it("desarquivar devolve a linha (archived_at nulo, status anterior), filtrando organização e id", async () => {
+    const { admin, filtros, updates } = adminFalso([]);
+    await desarquivarSessaoLegada(admin, "org1", { id: "s1", wahaSessionName: "sess", statusAnterior: "WORKING", statusReasonAnterior: null });
+    expect(updates[0]).toMatchObject({ archived_at: null, status: "WORKING", status_reason: null });
+    expect(filtros).toEqual(expect.arrayContaining([["organization_id", "org1"], ["id", "s1"]]));
+  });
+  it("derrubar no WAHA faz logout e delete, e erro do WAHA não lança", async () => {
+    const logout = vi.fn(async () => { throw new Error("waha fora"); });
+    vi.mocked(getWahaClient).mockReturnValue({ logoutSession: logout, deleteSession: vi.fn() } as never);
+    await expect(derrubarSessaoLegadaNoWaha("org1", { id: "s1", wahaSessionName: "sess", statusAnterior: "WORKING", statusReasonAnterior: null })).resolves.toBeUndefined();
+    expect(logout).toHaveBeenCalledWith("sess");
   });
 });
 
