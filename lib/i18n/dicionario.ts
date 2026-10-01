@@ -9361,6 +9361,19 @@ export const DICIONARIO: Traducoes = {
   "A Meta não devolveu o número desta conta. Refaça o fluxo.": { es: "Meta no devolvió el número de esta cuenta. Repita el flujo." },
   "O número não está marcado como coexistência. Refaça o fluxo escolhendo manter o número no celular.": { es: "El número no está marcado como coexistencia. Repita el flujo eligiendo mantener el número en el celular." },
   "A conta tem mais de um número e a Meta não disse qual foi cadastrado. Use o formulário manual.": { es: "La cuenta tiene más de un número y Meta no indicó cuál se registró. Use el formulario manual." },
+  // Cadastro Incorporado — rotas POST e /sincronizar, retry da tela (Task 5)
+  "este número já está conectado em outra organização": { es: "este número ya está conectado en otra organización" },
+  "code, evento e waba_id são obrigatórios": { es: "code, evento y waba_id son obligatorios" },
+  "o fluxo da Meta não terminou. Tente de novo.": { es: "el flujo de Meta no terminó. Inténtelo de nuevo." },
+  "a Meta não devolveu a conta do WhatsApp Business. Tente de novo.": { es: "Meta no devolvió la cuenta de WhatsApp Business. Inténtelo de nuevo." },
+  "o Cadastro Incorporado não está configurado nesta instalação": { es: "el Registro Integrado no está configurado en esta instalación" },
+  "Nenhum canal oficial conectado.": { es: "Ningún canal oficial conectado." },
+  "Este canal não foi conectado em coexistência.": { es: "Este canal no se conectó en coexistencia." },
+  "Passaram 24 horas desde a conexão. Para importar o histórico, desconecte e refaça o fluxo pelo botão.": { es: "Pasaron 24 horas desde la conexión. Para importar el historial, desconecte y repita el flujo con el botón." },
+  "sem credencial da sessão": { es: "sin credencial de la sesión" },
+  "Importação do histórico não foi pedida.": { es: "La importación del historial no se solicitó." },
+  "Dá para tentar de novo até": { es: "Se puede intentar de nuevo hasta" },
+  "Passaram 24 horas. Desconecte e refaça o fluxo pelo botão.": { es: "Pasaron 24 horas. Desconecte y repita el flujo con el botón." },
 };
 
 /**

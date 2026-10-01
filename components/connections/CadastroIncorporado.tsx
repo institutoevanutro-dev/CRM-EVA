@@ -6,12 +6,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
-import { useCadastroIncorporado, type OfficialChannelState } from "@/hooks/channels/useOfficialChannel";
+import { useCadastroIncorporado, useSincronizarCoexistencia, type OfficialChannelState } from "@/hooks/channels/useOfficialChannel";
 import { abrirCadastroIncorporado, carregarSdk, sdkPronto } from "@/lib/channels/meta/cadastro-incorporado-cliente";
+import { dentroDoPrazoDeSincronizacao, PRAZO_DA_SINCRONIZACAO_MS } from "@/lib/channels/meta/coexistencia";
 
 export function CadastroIncorporado({ estado }: { estado: OfficialChannelState }) {
   const t = useT();
   const concluir = useCadastroIncorporado();
+  const sincronizar = useSincronizarCoexistencia();
   const [abrindo, setAbrindo] = useState(false);
   const cfg = estado.cadastroIncorporado;
   const disponivel = cfg?.disponivel === true;
@@ -90,6 +92,50 @@ export function CadastroIncorporado({ estado }: { estado: OfficialChannelState }
       <Button className="mt-3" onClick={conectar} disabled={abrindo || concluir.isPending} data-testid="btn-conectar-whatsapp">
         {abrindo || concluir.isPending ? t("Aguardando a Meta…") : t("Conectar WhatsApp")}
       </Button>
+      <AvisoDoHistorico estado={estado} sincronizar={sincronizar} t={t} />
     </Card>
+  );
+}
+
+/** O pedido do histórico falhou: dá para repetir até 24 h depois da conexão; depois, só refazendo o fluxo. */
+function AvisoDoHistorico({
+  estado,
+  sincronizar,
+  t,
+}: {
+  estado: OfficialChannelState;
+  sincronizar: ReturnType<typeof useSincronizarCoexistencia>;
+  t: (texto: string) => string;
+}) {
+  const coex = estado.coexistencia;
+  const historico = coex?.pedidos.historico;
+  if (!coex || !historico || !("erro" in historico)) return null;
+  if (!dentroDoPrazoDeSincronizacao(coex.onboarding_em)) {
+    return (
+      <p data-testid="historico-fora-do-prazo" className="mt-3 text-sm text-muted-foreground">
+        {t("Passaram 24 horas. Desconecte e refaça o fluxo pelo botão.")}
+      </p>
+    );
+  }
+  const ate = new Date(new Date(coex.onboarding_em).getTime() + PRAZO_DA_SINCRONIZACAO_MS).toLocaleString(undefined, {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+  return (
+    <div role="alert" data-testid="historico-nao-pedido" className="mt-3 rounded-md border border-warning/40 bg-warning-bg p-3 text-sm">
+      <p>
+        {t("Importação do histórico não foi pedida.")} {t("Dá para tentar de novo até")} {ate}.
+      </p>
+      <Button
+        size="sm"
+        variant="outline"
+        className="mt-2"
+        onClick={() => sincronizar.mutate()}
+        disabled={sincronizar.isPending}
+        data-testid="btn-sincronizar"
+      >
+        {t("Tentar de novo")}
+      </Button>
+    </div>
   );
 }

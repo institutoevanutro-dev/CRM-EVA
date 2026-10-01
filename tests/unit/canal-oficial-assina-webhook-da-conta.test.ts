@@ -75,6 +75,8 @@ vi.mock("@/lib/supabase/admin", () => ({
         select: (c: string) => ((colunas = c), q),
         eq: (k: string, v: unknown) => (filtros.push([k, v]), q),
         is: () => q,
+        order: () => q,
+        limit: () => q,
         maybeSingle: async () => {
           if (colunas.includes("metadata")) eventos.push("le_metadata");
           // Cópia: o que a rota leu não muda se o banco mudar depois.
@@ -92,7 +94,8 @@ vi.mock("@/lib/supabase/admin", () => ({
             db.updates.push({ patch, filtros });
             if (db.linha) db.linha = { ...db.linha, ...patch };
           }
-          return Promise.resolve({ error: null }).then(res);
+          // Sem patch é a LISTA das sessões oficiais da org (`conectarCanalOficial`).
+          return Promise.resolve(patch ? { error: null } : { data: db.linha ? [structuredClone(db.linha)] : [], error: null }).then(res);
         },
       };
       return q;
