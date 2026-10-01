@@ -312,4 +312,12 @@ test("\"quanto custa\": Direct sai, NADA é publicado em público, e continua es
   await expect(page.getByLabel(/Quando perguntarem preço/i)).toHaveValue(
     "Olá! Me conta: qual é seu maior objetivo hoje?",
   );
+
+  // A marcação deixou de derrubar o comentário: o mesmo texto que ontem caía
+  // na fila agora é julgado pelo resto da frase.
+  await page.getByRole("button", { name: /Palavras da IA/i }).click();
+  await expect(
+    page.getByText(/conforme você responde/i).or(page.getByRole("button", { name: /Pode usar/i }).first()),
+  ).toBeVisible();
+  await page.screenshot({ path: path.join(EVIDENCIA, "04-palavras-da-ia.png"), fullPage: true });
 });

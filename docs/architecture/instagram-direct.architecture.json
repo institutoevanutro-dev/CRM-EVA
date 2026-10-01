@@ -88,7 +88,7 @@
       "lane": "app",
       "col": 4,
       "type": "worker",
-      "label": "Cron comentarios-worker (1×/min): regra de palavra → Direct+pública; sem regra, classificador decide, e preço/agendamento abrem conversa só no Direct"
+      "label": "Cron comentarios-worker (1×/min): regra de palavra → Direct+pública; sem regra, a trava decide consultando o vocabulário que o dono liberou, e preço/agendamento abrem conversa só no Direct"
     },
     {
       "id": "aba_comentarios",
@@ -96,6 +96,13 @@
       "col": 5,
       "type": "ui",
       "label": "Aba Comentários no Inbox: fila esperando_voce, edita e publica a sugestão"
+    },
+    {
+      "id": "vocabulario_da_ia",
+      "lane": "humano",
+      "col": 6,
+      "type": "ui",
+      "label": "Palavras da IA (Inbox › Comentários): o dono libera palavra por palavra; gatilho nunca é oferecido"
     },
     {
       "id": "instagram_graph_comentario",
@@ -202,6 +209,18 @@
       "from": "frases_de_abertura",
       "to": "comentario_worker",
       "label": "o worker lê estas frases por organização; leitura que falha não manda nada"
+    },
+    {
+      "id": "e16",
+      "from": "aba_comentarios",
+      "to": "vocabulario_da_ia",
+      "label": "o dono libera palavra por palavra"
+    },
+    {
+      "id": "e17",
+      "from": "vocabulario_da_ia",
+      "to": "comentario_worker",
+      "label": "o worker lê as aprovadas uma vez por rodada"
     }
   ]
 }
