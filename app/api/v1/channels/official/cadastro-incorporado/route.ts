@@ -37,12 +37,11 @@ import {
   trocarCodigo,
 } from "@/lib/channels/meta/cadastro-incorporado";
 import { EVENTO_COEXISTENCIA, EVENTO_NUMERO_NOVO, SINCRONIZACAO_TEM_CONSUMIDOR, type Coexistencia } from "@/lib/channels/meta/coexistencia";
-import { conectarCanalOficial, gravarCoexistencia } from "@/lib/channels/meta/conectar-canal-oficial";
+import { conectarCanalOficial, gravarCoexistencia, pinCifradoDaSessaoOficial } from "@/lib/channels/meta/conectar-canal-oficial";
 import { DICIONARIO, traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { CHANNEL_PROVIDER_META } from "@/lib/channels/capabilities";
 import { decryptWebhookSecret, encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 import { publicBase, traduzirMotivo } from "../route-helpers";
@@ -122,15 +121,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!coexistencia) {
     // Retry do FINISH: o register anterior pode ter chegado à Meta com o PIN
     // gravado; um PIN novo daria mismatch e trancaria o número. Reaproveita.
-    const { data: anterior } = await admin
-      .from("channel_sessions")
-      .select("metadata")
-      .eq("organization_id", orgId)
-      .eq("provider", CHANNEL_PROVIDER_META)
-      .eq("meta_phone_number_id", phoneNumberId)
-      .maybeSingle();
-    const pinAnterior = (anterior as { metadata?: { pin_cifrado?: unknown } } | null)?.metadata?.pin_cifrado;
-    if (typeof pinAnterior === "string" && pinAnterior) {
+    const pinAnterior = await pinCifradoDaSessaoOficial(admin, orgId, phoneNumberId);
+    if (pinAnterior) {
       pinCifrado = pinAnterior;
       pin = await decryptWebhookSecret(admin, pinAnterior);
     } else {

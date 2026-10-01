@@ -256,6 +256,23 @@ async function mesclarMetadata(
   return error?.message ?? null;
 }
 
+/** O `pin_cifrado` que um FINISH anterior deixou na sessão oficial deste número, ou `null`. */
+export async function pinCifradoDaSessaoOficial(
+  admin: SupabaseClient,
+  organizationId: string,
+  phoneNumberId: string,
+): Promise<string | null> {
+  const { data } = await admin
+    .from("channel_sessions")
+    .select("metadata")
+    .eq("organization_id", organizationId)
+    .eq("provider", CHANNEL_PROVIDER_META)
+    .eq("meta_phone_number_id", phoneNumberId)
+    .maybeSingle();
+  const pin = (data as { metadata?: { pin_cifrado?: unknown } } | null)?.metadata?.pin_cifrado;
+  return typeof pin === "string" && pin ? pin : null;
+}
+
 /** Grava `metadata.coexistencia` da sessão oficial (rota do cadastro, `/sincronizar`, worker do histórico). */
 export async function gravarCoexistencia(
   admin: SupabaseClient,
