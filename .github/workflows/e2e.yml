@@ -5,13 +5,13 @@ name: e2e
 #
 # NÃO conte aqui quantas são: o summary do job CONTA em vez de afirmar, e
 # `tests/unit/e2e-cobertura-completa.test.ts` reprova o build quando uma spec do
-# disco não está em nenhuma das três listas abaixo. Um número escrito nesta linha
+# disco não está em nenhuma das listas abaixo. Um número escrito nesta linha
 # é a quarta fonte da mesma verdade, e as três anteriores já divergiram — este
 # cabeçalho dizia "29 de 33" quando o disco tinha 45 e o job rodava 44.
 #
 # A execução é dividida em DUAS invocações do playwright de propósito: o
 # limitador de login do produto é por IP (60/300s) e no CI todos os specs vêm do
-# mesmo 127.0.0.1. Ver o comentário do passo "E2E — parte 1 de 3".
+# mesmo 127.0.0.1. Ver o comentário do passo "E2E — parte N de 4".
 #
 # É CHECK OBRIGATÓRIO. A régua, para reconferir em vez de acreditar nesta linha:
 #   $ gh api repos/melgarafael/DeskcommCRM/branches/main/protection \
@@ -108,7 +108,7 @@ jobs:
       # uma rodada por parte.
       fail-fast: false
       matrix:
-        parte: [1, 2, 3]
+        parte: [1, 2, 3, 4]
     # ─────────────────────────────────────────────────────────────────────────
     # A COBERTURA DEIXA DE SER PROSA DIGITADA À MÃO.
     #
@@ -121,7 +121,7 @@ jobs:
     # Cobertura parcial silenciosa se lê como cobertura total. Agora há UMA fonte
     # por lista, o summary CONTA em vez de afirmar, e
     # `tests/unit/e2e-cobertura-completa.test.ts` reprova o build quando um arquivo
-    # de spec não está em nenhuma das três listas.
+    # de spec não está em nenhuma das listas.
     #
     # FORA_DO_CI exige motivo escrito no próprio nome do bloco abaixo — spec fora
     # do gate sem razão declarada é a dívida voltando pela porta de serviço.
@@ -445,7 +445,6 @@ jobs:
         agenda-google-volta-do-consentimento.spec.ts
         agenda-google-volta-nao-desloga.spec.ts
         qa-l12-funil.spec.ts
-        navegacao.spec.ts prova-painel-provedores.spec.ts
         instagram-receber.spec.ts instagram-responder.spec.ts
         instagram-contato-unico.spec.ts comentarios-do-instagram.spec.ts
       # `moeda-da-organizacao` entrou na PARTE_2 em 2026-09-04, ao lado de
@@ -629,9 +628,7 @@ jobs:
       # eles são justamente o fim da fila.
       SPECS_PARTE_3: >-
         cpf-na-ficha-do-contato.spec.ts
-        tarefa-com-responsavel.spec.ts
         autonomia-assistida.spec.ts
-        roteamento-por-canal.spec.ts
         central-avisos-destino.spec.ts
         agenda-presenca-recuperacao.spec.ts
         agenda-google-sync.spec.ts
@@ -639,34 +636,65 @@ jobs:
         encerramento-atendimento.spec.ts
         interface-por-vinculo.spec.ts
         olhar-telas-do-epico.spec.ts
-        pipelines-gestao.spec.ts
-        qa-agente-usa-as-maos.spec.ts
-        qa-selo-no-funil-usado.spec.ts
-        qa-telas-descobertas-w4.spec.ts
-        retorno-anti-morte.spec.ts
-        webhooks.spec.ts
         marca-logo.spec.ts
         logo-moldura-no-tema-escuro.spec.ts
         historico-de-captacao.spec.ts
         inbox-quem-manda.spec.ts
         inbox-rotulo-de-origem.spec.ts
-        troca-de-organizacao-tem-volta.spec.ts
-        organizacoes-criacao-convite-e-cache.spec.ts
-        suporte-temporario.spec.ts
         i18n-espanhol-na-tela.spec.ts
         inbox-abas-espelham-o-comando.spec.ts
         moeda-da-organizacao.spec.ts
-        zona-de-perigo-apaga-dados-de-teste.spec.ts
         central-avisos-resolver-em-lote.spec.ts
-        voz-desligada-por-padrao.spec.ts
-        voz-primeiro-pareamento.spec.ts
         inbox-busca-e-filtros-dizem-a-verdade.spec.ts
-        qa-titulos-das-telas.spec.ts
-        qa-equipe-pinta-na-hora.spec.ts
-        qa-sugestao-rejeitada-e-motivo.spec.ts
-        qa-l12-agenda-contatos.spec.ts
-        qa-l12-tags-radar.spec.ts
         entrar-com-evalink.spec.ts
+
+      # ─── PARTE 4 — nasceu em 2026-10-01, pelo mesmo motivo que a 3 ─────────
+      #
+      # A parte 2 foi CANCELADA aos 30 min no PR #56 (144 de 150 casos passados
+      # no corte, nenhum vermelho), no #65 e na própria `main` (30/09–01/10).
+      # Medido em 4 runs verdes da `main` e de PRs (36801465882, 36801494134,
+      # 36797490953, 36801490961), pelo relógio entre linhas do `--reporter=list`
+      # (que inclui hooks, ao contrário da soma das durações de caso):
+      #
+      #   setup (até "Running N tests"): 4,4–6,4 min, média 5,5
+      #   parte 1:  7,9– 9,7 min de Playwright (média  9,1) → job 13–15 min
+      #   parte 2: 20,6–24,3 min de Playwright (média 21,9) → job 25–30 min
+      #   parte 3: 16,5–21,0 min de Playwright (média 19,7) → job 21–27 min
+      #
+      # A parte 2 rodava a 0–5 min do teto MESMO VERDE; a 3, a 3–9.
+      #
+      # O que veio para cá, e a média medida que trouxe:
+      #   - da parte 2, os dois maiores arquivos dela, que já trocaram de parte
+      #     duas vezes sem efeito colateral (ver o bloco de 16/09 acima):
+      #     `navegacao` (294 s) e `prova-painel-provedores` (231 s);
+      #   - da parte 3, a CAUDA ALFABÉTICA a partir de
+      #     `organizacoes-criacao-convite-e-cache` (5,2 min). Cauda porque a
+      #     ordem de execução é por caminho: as que ficaram na 3 rodam com os
+      #     mesmos predecessores de antes, e as que vieram mantêm a ordem
+      #     relativa entre si — inclusive `organizacoes-` (promove platform
+      #     admin) antes de `qa-agente-usa-as-maos`, como já era.
+      #   `navegacao` cai em primeiro aqui (n < o), então a precondição dela
+      #   (admin de tenant puro) roda antes de qualquer promoção desta parte.
+      #   Nenhuma spec de follow-up veio, e `relogio-http-cron-externo` segue
+      #   sozinha na parte 1 — a restrição do tick global não muda.
+      #
+      # Previsão pelas médias (a rodada deste PR é que mede):
+      #   parte 1  9,1 · parte 2 13,2 · parte 3 14,5 · parte 4 14,0 min
+      #   → pior job ≈ 20 min, ≥ 9 min de folga contra o teto que FICA em 30.
+      #
+      # A próxima alavanca é a parte 1, a mais leve — mas ela tem a restrição
+      # do `relogio-` com as specs de follow-up; leia o bloco dela antes.
+      # Para remedir: o roteiro no topo desta seção (`gh run view --job ... --log`)
+      # e, por spec, o delta de timestamp entre linhas `✓ N [chromium] › ...`.
+      SPECS_PARTE_4: >-
+        navegacao.spec.ts prova-painel-provedores.spec.ts
+        organizacoes-criacao-convite-e-cache.spec.ts
+        pipelines-gestao.spec.ts qa-agente-usa-as-maos.spec.ts qa-equipe-pinta-na-hora.spec.ts
+        qa-l12-agenda-contatos.spec.ts qa-l12-tags-radar.spec.ts qa-selo-no-funil-usado.spec.ts
+        qa-sugestao-rejeitada-e-motivo.spec.ts qa-telas-descobertas-w4.spec.ts qa-titulos-das-telas.spec.ts
+        retorno-anti-morte.spec.ts roteamento-por-canal.spec.ts suporte-temporario.spec.ts
+        tarefa-com-responsavel.spec.ts troca-de-organizacao-tem-volta.spec.ts voz-desligada-por-padrao.spec.ts
+        voz-primeiro-pareamento.spec.ts webhooks.spec.ts zona-de-perigo-apaga-dados-de-teste.spec.ts
 
       FORA_DO_CI: >-
         vps-fresh-onboarding.spec.ts
@@ -928,7 +956,7 @@ jobs:
       # workers, dois specs gerando o mesmo código no mesmo intervalo de 30s
       # fazem o segundo ser recusado como replay. Foi o que derrubava a
       # `reset-password-mfa` (issue #80): ela passa sozinha e falha em paralelo.
-      - name: E2E — parte ${{ matrix.parte }} de 3
+      - name: E2E — parte ${{ matrix.parte }} de 4
         run: |
           set -euo pipefail
           # A lista sai da matrix, e as duas variáveis continuam existindo no
@@ -939,6 +967,7 @@ jobs:
             1) LISTA="$SPECS_PARTE_1" ;;
             2) LISTA="$SPECS_PARTE_2" ;;
             3) LISTA="$SPECS_PARTE_3" ;;
+            4) LISTA="$SPECS_PARTE_4" ;;
             *) echo "::error::parte ${{ matrix.parte }} sem lista"; exit 1 ;;
           esac
           # Falha alto se a variável vier vazia: sem isto, um typo no nome faria
@@ -1058,13 +1087,13 @@ jobs:
                       dentro { exit }
                     ' .github/workflows/e2e.yml | grep -oE "[a-z0-9-]+\.spec\.ts" | sort -u; }
           NO_DISCO=$(ls tests/e2e/*.spec.ts | wc -l | tr -d " ")
-          RODOU=$( { bloco SPECS_PARTE_1; bloco SPECS_PARTE_2; bloco SPECS_PARTE_3; } | sort -u | wc -l | tr -d " ")
+          RODOU=$( { bloco SPECS_PARTE_1; bloco SPECS_PARTE_2; bloco SPECS_PARTE_3; bloco SPECS_PARTE_4; } | sort -u | wc -l | tr -d " ")
           FORA_LISTA=$(bloco FORA_DO_CI)
           FORA=$(echo "$FORA_LISTA" | grep -c . || true)
           # E o recorte passa a ter CONTROLE, não só um piso.
           #
           # `tests/unit/e2e-cobertura-completa.test.ts` já garante que toda spec
-          # do disco está em exatamente uma das três listas, sem duplicata e sem
+          # do disco está em exatamente uma das listas, sem duplicata e sem
           # fantasma. Logo `RODOU + FORA` TEM de dar `NO_DISCO` — e quando não
           # der, o recorte leu a mais ou a menos. Sem esta linha, ler a mais é
           # invisível: o passo imprime um número maior e segue verde, que é
@@ -1085,5 +1114,5 @@ jobs:
             for s in $FORA_LISTA; do echo "- \`${s}\` — precisa de WAHA + Redis + Resend + Nuvemshop (P0 da doutrina de QA Visual)"; done
             echo ""
             echo "A soma é conferida mecanicamente por \`tests/unit/e2e-cobertura-completa.test.ts\`:"
-            echo "spec no disco que não esteja em nenhuma das três listas reprova o build."
+            echo "spec no disco que não esteja em nenhuma das listas reprova o build."
           } >> "$GITHUB_STEP_SUMMARY"

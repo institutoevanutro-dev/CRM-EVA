@@ -67,9 +67,12 @@ function listaDoWorkflow(yml: string, chave: string): string[] {
 }
 
 const yml = readFileSync(WORKFLOW, "utf8");
-const parte1 = listaDoWorkflow(yml, "SPECS_PARTE_1");
-const parte2 = listaDoWorkflow(yml, "SPECS_PARTE_2");
-const parte3 = listaDoWorkflow(yml, "SPECS_PARTE_3");
+// As partes são DESCOBERTAS no workflow, nunca enumeradas aqui: a parte 4
+// entrou em 2026-10-01 e uma lista fixa de três deixaria as specs dela
+// acusadas de "sem lista" — ou, pior, uma quinta passaria sem cobrança.
+const nomesDasPartes = [...yml.matchAll(/^ {6}(SPECS_PARTE_\d+):/gm)].map((m) => m[1]!);
+const partes = nomesDasPartes.map((nome) => ({ nome, specs: listaDoWorkflow(yml, nome) }));
+const nasPartes = partes.flatMap((p) => p.specs);
 const foraDoCi = listaDoWorkflow(yml, "FORA_DO_CI");
 const noDisco = readdirSync(DIR_SPECS)
   .filter((f) => f.endsWith(".spec.ts"))
@@ -83,19 +86,19 @@ describe("cobertura do e2e no CI", () => {
     expect(noDisco.length, "nenhuma spec no disco — o diretório mudou de lugar?").toBeGreaterThan(
       30,
     );
-    expect(parte1.length, "SPECS_PARTE_1 não foi lida do workflow").toBeGreaterThan(10);
-    expect(parte2.length, "SPECS_PARTE_2 não foi lida do workflow").toBeGreaterThan(10);
-    expect(parte3.length, "SPECS_PARTE_3 não foi lida do workflow").toBeGreaterThan(10);
+    expect(partes.length, "menos de duas SPECS_PARTE_N no workflow — o parser mudou?").toBeGreaterThan(1);
+    for (const p of partes)
+      expect(p.specs.length, `${p.nome} não foi lida do workflow`).toBeGreaterThan(10);
     expect(foraDoCi.length, "FORA_DO_CI não foi lida do workflow").toBeGreaterThan(0);
   });
 
   it("toda spec do disco está em exatamente uma lista", () => {
-    const declaradas = [...parte1, ...parte2, ...parte3, ...foraDoCi];
+    const declaradas = [...nasPartes, ...foraDoCi];
     const semLista = noDisco.filter((f) => !declaradas.includes(f));
     expect(
       semLista,
       "Spec no disco que não roda no CI nem está declarada como fora. Ponha em " +
-        "SPECS_PARTE_1/2/3 (se rodar sem WAHA/Redis/Resend) ou em FORA_DO_CI com o " +
+        "uma SPECS_PARTE_N (se rodar sem WAHA/Redis/Resend) ou em FORA_DO_CI com o " +
         "motivo escrito. Cobertura parcial silenciosa se lê como cobertura total.\n",
     ).toEqual([]);
 
@@ -109,7 +112,7 @@ describe("cobertura do e2e no CI", () => {
     // O sentido inverso, e ele é pior: `playwright test naoexiste.spec.ts` não
     // acha nada e o job termina VERDE. Uma renomeação silenciosamente desliga a
     // cobertura daquele arquivo.
-    const fantasmas = [...parte1, ...parte2, ...parte3, ...foraDoCi].filter(
+    const fantasmas = [...nasPartes, ...foraDoCi].filter(
       (f) => !noDisco.includes(f),
     );
     expect(fantasmas, "lista do CI aponta para spec inexistente — renomeada ou apagada").toEqual(
@@ -150,15 +153,19 @@ describe("cobertura do e2e no CI", () => {
     // para impedir. As partes são DESCOBERTAS no próprio workflow: quem
     // acrescentar uma quarta não precisa lembrar de nada — e se esquecer de
     // ligá-la, é aqui que descobre.
-    const partesDeclaradas = [...yml.matchAll(/^ {6}(SPECS_PARTE_\d+):/gm)].map((m) => m[1]!);
-    expect(
-      partesDeclaradas.length,
-      "nenhuma SPECS_PARTE_N no workflow — o parser mudou?",
-    ).toBeGreaterThan(1);
+    const partesDeclaradas = nomesDasPartes;
     for (const parte of partesDeclaradas)
       expect(yml, `${parte} não alimenta a variável que roda`).toMatch(
         new RegExp(`LISTA="\\$${parte}"`),
       );
+    // E a matrix tem de INSTANCIAR cada parte: uma SPECS_PARTE_4 ligada ao
+    // `case` com a matrix ainda em `[1, 2, 3]` é uma lista que nenhum job roda,
+    // e todo o resto deste caso ficaria verde.
+    const matrix = /^ {8}parte: \[([^\]]*)\]/m.exec(yml)?.[1] ?? "";
+    expect(
+      matrix.split(",").map((s) => `SPECS_PARTE_${s.trim()}`),
+      "a matrix `parte:` do e2e-parte não instancia exatamente as SPECS_PARTE_N declaradas",
+    ).toEqual(partesDeclaradas);
     expect(yml, "a lista escolhida não é passada ao Playwright").toMatch(
       /playwright test --workers=1 \$LISTA/,
     );
