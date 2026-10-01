@@ -191,8 +191,10 @@ outputSchema: z.object({
 inputSchema: z.object({
   conversation_id: z.string().uuid(),
   body: z.string().min(1).max(4096),
-  media_url: z.string().url().optional()
 })
+// `media_url` saiu em 2026-09-29 (SSRF, auditoria C4): a URL era gravada e depois
+// buscada com a X-Api-Key do WAHA, e nunca chegava ao canal. Mídia = upload +
+// `media_storage_path` pela API REST.
 
 outputSchema: z.object({
   message_id: z.string().uuid(),

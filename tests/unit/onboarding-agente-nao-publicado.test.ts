@@ -61,6 +61,10 @@ vi.mock("@/lib/auth/server", () => ({
   resolveActiveOrg: vi.fn(async () => ({ orgId: ORG, name: "QA", role: "admin" })),
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => clienteFalso() }));
+// O papel do onboarding é relido do banco (`fn_user_role_in_org`) — o dono é admin.
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: async () => ({ rpc: async () => ({ data: "admin", error: null }) }),
+}));
 
 import { createDefaultAgent, type CreateAgentResult } from "@/app/actions/onboarding/createDefaultAgent";
 

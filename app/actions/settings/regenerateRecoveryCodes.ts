@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit, isServiceRoleConfigured } from "@/lib/audit";
+import { sessionAal } from "@/lib/auth/server";
 import { generateRecoveryCodes, hashRecoveryCode } from "@/lib/auth/recovery-codes";
 
 export type RegenerateRecoveryCodesResult =
@@ -31,6 +32,11 @@ export async function regenerateRecoveryCodes(): Promise<RegenerateRecoveryCodes
   const { data: factors } = await supabase.auth.mfa.listFactors();
   const hasFactor = factors?.totp?.some((f) => f.status === "verified");
   if (!hasFactor) return { ok: false, error: "mfa_not_enrolled" };
+
+  // Códigos de recuperação apagam o TOTP (`useRecoveryCode`): gerá-los com a
+  // sessão `aal1` que o login deixa antes do desafio transformava a senha
+  // sozinha em "desligar a verificação em duas etapas" (auditoria 2026-09-29, C2).
+  if ((await sessionAal()) !== "aal2") return { ok: false, error: "mfa_required" };
 
   const codes = generateRecoveryCodes();
   const rows = codes.map((c) => ({ user_id: user.id, code_hash: hashRecoveryCode(c) }));

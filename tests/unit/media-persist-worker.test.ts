@@ -84,6 +84,16 @@ describe("persistMessageMedia", () => {
     });
   });
 
+  it("não guarda tipo executável do remetente como Content-Type (C3)", async () => {
+    vi.mocked(fetchWahaMedia).mockResolvedValue({ buffer: Buffer.from("<b>"), mime: "text/html" });
+    await persistMessageMedia(eventRow());
+    expect(uploadMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Buffer),
+      expect.objectContaining({ contentType: "application/octet-stream" }),
+    );
+  });
+
   it("baixa, sobe pro bucket e atualiza a mensagem", async () => {
     const result = await persistMessageMedia(eventRow());
     expect(result.status).toBe("ok");

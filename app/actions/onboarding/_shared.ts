@@ -5,8 +5,9 @@
  * session — no body-derived ids ever).
  */
 import { supportWriteError } from "@/lib/impersonate/support";
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import type { OnboardingState } from "@/lib/schemas/onboarding";
 
 export class OnboardingError extends Error {
@@ -39,11 +40,27 @@ export async function requireOnboardingCtx(): Promise<OnboardingCtx> {
   if (supportWriteError(user.support)) throw new OnboardingError("forbidden", "Acompanhamento somente leitura ou encerrado.");
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) throw new OnboardingError("no_active_org", "Sem organização ativa.");
+
+  // O onboarding configura a organização inteira — agente, memória, funil e
+  // convites COM PAPEL — e as ações usam service role. Sem esta checagem um
+  // viewer convidava outra conta sua como admin (auditoria 2026-09-29, C1).
+  // O papel vem do banco (a mesma função das policies), não do cookie.
+  const supabase = await createClient();
+  const { data: papel, error } = await supabase.rpc("fn_user_role_in_org", { p_org: activeOrg.orgId });
+  if (error) throw new OnboardingError("db_error", error.message);
+  if (papel !== "admin" && !user.is_platform_admin) {
+    throw new OnboardingError("forbidden", "Só o administrador configura a organização.");
+  }
+  // Quem tem fator TOTP prova na sessão — o mesmo gate de `requireRole`.
+  if (await mfaEmDivida()) {
+    throw new OnboardingError("forbidden", "Esta sessão precisa da verificação em duas etapas.");
+  }
+
   return {
     userId: user.id,
     orgId: activeOrg.orgId,
     orgName: activeOrg.name,
-    role: activeOrg.role,
+    role: (papel as string | null) ?? activeOrg.role,
     fullName: user.full_name,
     email: user.email,
   };

@@ -26,10 +26,12 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
+import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { requireRole } from "@/lib/auth/require-role";
 import {
   CHANNEL_SESSION_REF_COLUMNS,
   DEFAULT_CHANNEL_PROVIDER,
@@ -138,6 +140,17 @@ export async function GET(): Promise<Response> {
   );
 }
 
+const corpoSchema = z.discriminatedUnion("acao", [
+  z.object({
+    acao: z.literal("criar"),
+    name: z.string().min(1).max(512),
+    language: z.string().min(2).max(16),
+    category: z.enum(["AUTHENTICATION", "MARKETING", "UTILITY"]).default("UTILITY"),
+    components: z.array(z.unknown()).min(1).max(20),
+  }),
+  z.object({ acao: z.literal("sincronizar").optional() }),
+]);
+
 /**
  * Sincroniza com a plataforma, ou CRIA uma definição nova.
  *
@@ -149,6 +162,11 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (supportDenied) return supportDenied;
 
   const requestId = randomUUID();
+  // Mexe na conta do WhatsApp da empresa: é de admin, como na rota do canal
+  // oficial (auditoria 2026-09-29, M7). O GET fica aberto a membros — é dele
+  // que o seletor do inbox lê as definições aprovadas.
+  const authz = await requireRole("admin", { requestId, resource: "channels_templates" });
+  if (!authz.ok) return authz.response;
   const r = await contexto(requestId);
   if (!r.ok) return r.res;
   const t = (texto: string) => traduzir(texto, r.ctx.idioma);
@@ -158,19 +176,14 @@ export async function POST(req: NextRequest): Promise<Response> {
     return fail("not_implemented", t("Este canal não gerencia definições."), 501, { requestId });
   }
 
-  const corpo = (await req.json().catch(() => ({}))) as {
-    acao?: string;
-    name?: string;
-    language?: string;
-    category?: string;
-    components?: unknown[];
-  };
+  const lido = corpoSchema.safeParse(await req.json().catch(() => ({})));
+  if (!lido.success) {
+    return fail("invalid_request", t("Faltam nome, idioma ou conteúdo."), 400, { requestId });
+  }
+  const corpo = lido.data;
 
   try {
     if (corpo.acao === "criar") {
-      if (!corpo.name || !corpo.language || !Array.isArray(corpo.components)) {
-        return fail("invalid_request", t("Faltam nome, idioma ou conteúdo."), 400, { requestId });
-      }
       // A plataforma valida o formato do nome e devolve o motivo com código. Não
       // duplicamos a regra: regra copiada envelhece separado da fonte.
       await adapter.templates.create({
@@ -179,7 +192,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         draft: {
           name: corpo.name,
           language: corpo.language,
-          category: (corpo.category ?? "UTILITY") as "AUTHENTICATION" | "MARKETING" | "UTILITY",
+          category: corpo.category,
           components: corpo.components,
         },
       });

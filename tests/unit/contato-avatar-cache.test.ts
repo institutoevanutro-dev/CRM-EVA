@@ -65,6 +65,12 @@ vi.mock("@/lib/auth/server", () => ({
   resolveActiveOrg: async () => orgAtiva,
 }));
 
+// A leitura do contato é pelo client de SESSÃO (a RLS decide quem vê quem);
+// a service role só assina.
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: async () => ({ from: () => ({ select: () => chain() }) }),
+}));
+
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: () => ({ select: () => chain() }),

@@ -19,6 +19,7 @@ import type { NextRequest } from "next/server";
 import { fail } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -57,10 +58,12 @@ export async function GET(
     return fail("no_active_org", "No active organization.", 403, { requestId });
   }
 
-  const admin = createAdminClient();
-  // Service role bypassa RLS: o filtro por organization_id é obrigatório e vem
-  // da sessão, nunca do path (doutrina do CLAUDE.md).
-  const { data: contato } = await admin
+  // Client de SESSÃO: a RLS de `contacts` decide quem vê qual contato — o
+  // Prestador só alcança quem atende (`fn_provider_can_access_contact`). Com a
+  // service role, ele pegava a foto de qualquer contato da organização pelo
+  // UUID. O filtro por organization_id segue como defesa em profundidade.
+  const supabase = await createClient();
+  const { data: contato } = await supabase
     .from("contacts")
     .select("avatar_storage_path, is_anonymized")
     .eq("id", id)
@@ -74,6 +77,8 @@ export async function GET(
     return new Response(null, { status: 404 });
   }
 
+  // Service role só para ASSINAR — o acesso já foi decidido acima.
+  const admin = createAdminClient();
   const { data: signed, error } = await admin.storage
     .from("whatsapp-media")
     .createSignedUrl(row.avatar_storage_path, SIGNED_TTL_SECONDS);
