@@ -5,7 +5,14 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { DETALHE_DESCONECTADO_NO_APP, STATUS_REASON_DESCONECTADO_NO_APP, sincronizarSaudeDaConexao } from "@/lib/channels/health";
+import {
+  DETALHE_DESCONECTADO_NO_APP,
+  EPISODIO_DESCONECTADO_NO_APP,
+  PREFIXO_EMPURRAO,
+  STATUS_REASON_DESCONECTADO_NO_APP,
+  sincronizarSaudeDaConexao,
+} from "@/lib/channels/health";
+import { logger } from "@/lib/logger";
 
 import { CHANNEL_PROVIDER_META } from "../capabilities";
 import type { MetaWebhookSession } from "./session";
@@ -19,11 +26,27 @@ export async function aplicarEventoDaConta(
   if (e.evento === "OUTRO") return "ignorado";
   const caiu = e.evento !== "ACCOUNT_RECONNECTED";
   const status = caiu ? "FAILED" : "WORKING";
-  await admin
+  const { error } = await admin
     .from("channel_sessions")
     .update({ status, status_reason: caiu ? STATUS_REASON_DESCONECTADO_NO_APP : null, last_status_change_at: new Date().toISOString() })
     .eq("organization_id", sessao.organizationId)
     .eq("id", sessao.id);
+  if (error) {
+    // Sem a queda gravada, abrir o aviso mentiria; a Meta não re-entrega 200.
+    logger.error("[meta.conta] não gravou o estado da sessão", { sessionId: sessao.id, evento: e.evento, detail: error.message });
+    return "ignorado";
+  }
+  if (!caiu) {
+    // Reconectar fecha SÓ o aviso que a desconexão abriu: outro episódio
+    // (suspensão, token vencido) segue valendo.
+    const { data: saudeAtual } = await admin
+      .from("channel_session_health")
+      .select("escalated_status")
+      .eq("organization_id", sessao.organizationId)
+      .eq("channel_session_id", sessao.id)
+      .maybeSingle();
+    if (saudeAtual?.escalated_status !== `${PREFIXO_EMPURRAO}${EPISODIO_DESCONECTADO_NO_APP}`) return "voltou";
+  }
   const { data } = await admin
     .from("channel_sessions")
     .select("display_name, phone_number")

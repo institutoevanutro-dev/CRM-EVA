@@ -149,8 +149,11 @@ async function handle(req: NextRequest): Promise<Response> {
       // não enxerga: a Graph pode seguir respondendo 200 ao número. Só o
       // `account_reconnected` da própria Meta tira a sessão daqui.
       const presaPeloCelular = s.status === "FAILED" && s.status_reason === STATUS_REASON_DESCONECTADO_NO_APP;
+      // Nem o aviso é da sonda: ela poderia fechar o da desconexão (alcançável)
+      // ou empilhar outro por cima (inalcançável). Só o empurrão mexe nele.
+      if (presaPeloCelular) continue;
       let statusFinal = s.status;
-      if (!presaPeloCelular && saude.reachable && saude.status && saude.status !== s.status) {
+      if (saude.reachable && saude.status && saude.status !== s.status) {
         statusFinal = saude.status;
         const agora = new Date().toISOString();
         await admin

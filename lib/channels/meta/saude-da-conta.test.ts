@@ -12,10 +12,12 @@ vi.mock("@/lib/channels/health", async (orig) => ({
 }));
 
 const SESSAO = { id: "sess-1", organizationId: "org-1", wabaId: "222" };
+let escalado: string | null = null;
+let erroDoUpdate: { message: string } | null = null;
 const updates: Array<{ patch: Record<string, unknown>; filtros: Record<string, unknown> }> = [];
 
 const admin = {
-  from: () => {
+  from: (tabela: string) => {
     const filtros: Record<string, unknown> = {};
     let patch: Record<string, unknown> | null = null;
     const cadeia: Record<string, unknown> = {
@@ -28,10 +30,12 @@ const admin = {
         filtros[k] = v;
         return cadeia;
       },
-      maybeSingle: async () => ({ data: { display_name: "Clínica", phone_number: "+55" } }),
+      maybeSingle: async () => ({
+        data: tabela === "channel_session_health" ? { escalated_status: escalado } : { display_name: "Clínica", phone_number: "+55" },
+      }),
       then: (ok: (v: unknown) => unknown) => {
         if (patch) updates.push({ patch, filtros });
-        return Promise.resolve({ error: null }).then(ok);
+        return Promise.resolve({ error: erroDoUpdate }).then(ok);
       },
     };
     return cadeia;
@@ -48,6 +52,8 @@ const ev = (evento: AccountEvent["evento"], motivo: string | null = null): Accou
 
 beforeEach(() => {
   updates.length = 0;
+  escalado = "PUSH:DESCONECTADO_NO_APP";
+  erroDoUpdate = null;
   sincronizar.mockReset();
 });
 
@@ -91,5 +97,22 @@ describe("aplicarEventoDaConta", () => {
   it("o update filtra organization_id e id (service role sem filtro de org é o anti-pattern 10)", async () => {
     await aplicarEventoDaConta(admin, SESSAO, ev("PARTNER_REMOVED"));
     expect(updates[0]?.filtros).toMatchObject({ organization_id: SESSAO.organizationId, id: SESSAO.id });
+  });
+
+  it("reconexão NÃO fecha outro episódio aberto (suspensão por empurrão, token vencido): só vira WORKING", async () => {
+    for (const outro of ["PUSH:SUSPENSO", "TOKEN_DE_RENOVACAO_VENCIDO", null]) {
+      sincronizar.mockReset();
+      updates.length = 0;
+      escalado = outro;
+      expect(await aplicarEventoDaConta(admin, SESSAO, ev("ACCOUNT_RECONNECTED"))).toBe("voltou");
+      expect(updates[0]?.patch).toMatchObject({ status: "WORKING", status_reason: null });
+      expect(sincronizar, String(outro)).not.toHaveBeenCalled();
+    }
+  });
+
+  it("erro no update: loga, não abre o aviso e não lança", async () => {
+    erroDoUpdate = { message: "boom" };
+    await expect(aplicarEventoDaConta(admin, SESSAO, ev("PARTNER_REMOVED"))).resolves.toBe("ignorado");
+    expect(sincronizar).not.toHaveBeenCalled();
   });
 });

@@ -42,4 +42,9 @@ describe("webhook da Meta: eventos da conta", () => {
     expect(res.status).toBe(200);
     expect(aplicar.mock.calls[0]![2]).toMatchObject({ evento: "ACCOUNT_RECONNECTED" });
   });
+  it("se o handler lançar, a rota ainda responde 200 (a Meta não re-entrega em loop)", async () => {
+    aplicar.mockRejectedValueOnce(new Error("banco fora"));
+    const res = await POST(entrega("account_update", { event: "PARTNER_REMOVED" }), ctx);
+    expect(res.status).toBe(200);
+  });
 });

@@ -64,7 +64,18 @@ describe("cron channel-health e a desconexão pelo celular", () => {
     checkHealth.mockResolvedValue({ reachable: true, status: "WORKING", detail: null });
     await rodar();
     expect(db.updates.filter((u) => "status" in u.patch)).toHaveLength(0);
-    expect(sincronizar).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: "s1", status: "FAILED" }), expect.anything(), "Clínica");
+    // e a sonda NÃO mexe no aviso: nem abre outro por cima, nem fecha o da desconexão
+    expect(sincronizar).not.toHaveBeenCalled();
+  });
+
+  it("sonda inalcançável e depois alcançável numa sessão presa pelo celular: nunca toca no aviso, status segue FAILED", async () => {
+    db.sessoes = [SESSAO_CAIDA];
+    checkHealth.mockResolvedValueOnce({ reachable: false, status: null, detail: "ECONNREFUSED" });
+    await rodar();
+    checkHealth.mockResolvedValueOnce({ reachable: true, status: "WORKING", detail: null });
+    await rodar();
+    expect(sincronizar).not.toHaveBeenCalled();
+    expect(db.updates).toHaveLength(0);
   });
 
   it("FAILED por OUTRO motivo continua sendo promovido pela sonda (comportamento de hoje)", async () => {

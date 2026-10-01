@@ -169,7 +169,13 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     if (e.kind === "account_event") {
       // Número desconectado/reconectado pelo celular: derruba a sessão e abre o
       // aviso na Central, ou o fecha.
-      desfechos.push(`conta:${await aplicarEventoDaConta(admin, session, e)}`);
+      try {
+        desfechos.push(`conta:${await aplicarEventoDaConta(admin, session, e)}`);
+      } catch (err) {
+        // 200 mesmo assim: a Meta re-entregaria em loop; o rastro fica no log.
+        logger.error("[meta.conta] evento da conta falhou", { evento: e.evento, detail: err instanceof Error ? err.message : String(err) });
+        desfechos.push("conta:failed");
+      }
       continue;
     }
 
