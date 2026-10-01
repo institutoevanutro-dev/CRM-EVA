@@ -123,6 +123,21 @@ describe("POST", () => {
     expect(upserts).toEqual([]);
   });
 
+  // A ordem normalizar -> gatilho é o que impede liberar "Custa" ou "Nutrólogo"
+  // pela forma crua. Sem estes dois, trocar `palavra` por `parsed.data.palavra`
+  // na checagem deixa a suíte inteira verde e abre a trava.
+  it("RECUSA palavra de gatilho com maiúscula, porque normaliza ANTES de checar", async () => {
+    const res = await POST(pedido({ palavra: "Custa", aprovada: true }));
+    expect(res.status).toBe(422);
+    expect(upserts).toEqual([]);
+  });
+
+  it("RECUSA palavra de gatilho com acento e espaços, pelo mesmo motivo", async () => {
+    const res = await POST(pedido({ palavra: "  Nutrólogo ", aprovada: true }));
+    expect(res.status).toBe(422);
+    expect(upserts).toEqual([]);
+  });
+
   it("recusa palavra vazia e palavra com espaço no meio", async () => {
     expect((await POST(pedido({ palavra: "  ", aprovada: true }))).status).toBe(422);
     expect((await POST(pedido({ palavra: "duas palavras", aprovada: true }))).status).toBe(422);
