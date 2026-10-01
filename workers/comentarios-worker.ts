@@ -71,7 +71,7 @@ import { aplicarRegra, enviarPrivadaDeGatilho, type AdminDaAcao, type Desfecho }
 import { motivoDaRecusaPorEspecialidade } from "@/lib/comentarios/especialidade";
 import { regraQueCasa, type RegraDeComentario } from "@/lib/comentarios/regra";
 import { abreConversa, chaveDoGatilho, frasesDeGatilho, type FrasesDeGatilho } from "@/lib/comentarios/gatilho-direct";
-import { ehObviamenteSeguro, GATILHO_SEM_PADRAO_SEGURO } from "@/lib/comentarios/seguranca";
+import { ehObviamenteSeguro, ehTokenDeGatilho, GATILHO_SEM_PADRAO_SEGURO } from "@/lib/comentarios/seguranca";
 import { perfilDeVoz, type AdminDaVoz, type PerfilDeVoz } from "@/lib/comentarios/voz";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/credentials";
@@ -721,8 +721,19 @@ export function construirAdminDoWorkerReal(admin: AdminSupabase): AdminDoWorker 
         .eq("organization_id", organizationId)
         .eq("aprovada", true);
       if (error) throw new Error(error.message);
+      // I-3: a LEITURA reconfere, não só a gravação. A rota recusa palavra de
+      // gatilho na hora de salvar, mas conserto de régua não desfaz o que já
+      // está no banco: um clone que rodou a versão em que `ehTokenDeGatilho`
+      // casava palavra inteira tem "valores" e "doses" gravados como
+      // aprovados, e ficaria furado para sempre. Filtrar aqui cura sozinho,
+      // sem migration de dados — e é barato (a lista é de dezenas de linhas).
+      //
       // `palavra` já é gravada normalizada (contrato da tabela): usa direto.
-      return new Set((data ?? []).map((r) => (r as { palavra: string }).palavra));
+      return new Set(
+        (data ?? [])
+          .map((r) => (r as { palavra: string }).palavra)
+          .filter((p) => !ehTokenDeGatilho(p)),
+      );
     },
     async comentariosNovos(organizationId, teto) {
       const { data, error } = await admin

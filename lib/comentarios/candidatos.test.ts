@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { candidatosDoHistorico } from "./candidatos";
+import { ehObviamenteSeguro } from "./seguranca";
 
 const nada = new Set<string>();
 
@@ -61,5 +62,55 @@ describe("candidatosDoHistorico", () => {
     for (const p of ["efeito", "colateral", "voce", "medico", "normal"]) {
       expect(r, p).not.toContain(p);
     }
+  });
+});
+
+/**
+ * O TESTE QUE TERIA PEGO C-1 — a ida e volta, não só a ida.
+ *
+ * Os outros casos deste arquivo perguntam "a lista oferece a palavra certa?".
+ * Nenhum fechava o laço: pegar o que a tela oferece, aprovar TUDO (é o que o
+ * dono faz limpando a fila) e reconferir a trava. Com `ehTokenDeGatilho`
+ * casando palavra inteira, "valores", "doses", "dores", "horarios",
+ * "especialistas", "nutrologos" e "medicamentos" eram oferecidos — e aprovados
+ * tornavam SEGURO o comentário de onde tinham saído.
+ *
+ * Por isso o corpus é de comentários de assunto sensível em FLEXÃO: é a forma
+ * que a tela realmente mostrava.
+ */
+describe("ida e volta: aprovar o que a tela oferece não pode liberar assunto sensível", () => {
+  const sensiveis = [
+    "me passa os valores",
+    "quais os valores doutor",
+    "quais as doses",
+    "tenho dores fortes",
+    "quais os horarios",
+    "voce indica especialistas",
+    "tem nutrologos ai",
+    "quais medicamentos",
+  ];
+
+  it.each(sensiveis)(
+    '"%s" continua precisando de humano com TODAS as palavras oferecidas aprovadas',
+    (texto) => {
+      const oferecidas = new Set(candidatosDoHistorico([texto], new Set()).map((c) => c.palavra));
+      expect(ehObviamenteSeguro(texto, oferecidas).seguro).toBe(false);
+    },
+  );
+
+  it("o corpus inteiro junto também não vira seguro", () => {
+    const todas = new Set(candidatosDoHistorico(sensiveis, new Set()).map((c) => c.palavra));
+    for (const texto of sensiveis) {
+      expect(ehObviamenteSeguro(texto, todas).seguro, texto).toBe(false);
+    }
+  });
+
+  // CONTROLE POSITIVO: sem ele, o teste acima ficaria verde se a lista
+  // parasse de oferecer qualquer coisa — que é o conserto errado.
+  it("CONTROLE: elogio real continua sendo oferecido E liberando o comentário", () => {
+    const elogio = "conteudo fantastico e didatico";
+    const oferecidas = new Set(candidatosDoHistorico([elogio], new Set()).map((c) => c.palavra));
+    expect([...oferecidas].sort()).toEqual(["didatico", "fantastico"]);
+    expect(ehObviamenteSeguro(elogio, oferecidas)).toEqual({ seguro: true });
   });
 });

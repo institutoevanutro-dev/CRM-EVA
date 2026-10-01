@@ -169,18 +169,46 @@ export function ehTokenConhecido(token: string): boolean {
 }
 
 /**
+ * RADICAIS dos gatilhos de uma palavra só, DERIVADOS de `GATILHOS` e não
+ * escritos à mão: gatilho novo entra aqui sozinho.
+ *
+ * Por que radical e não a palavra inteira: `GATILHOS` ancora `\b` nos DOIS
+ * lados, então nenhuma FLEXÃO casa — e `ehTokenDeGatilho` herdava a cegueira.
+ * A lista de candidatos ordena por frequência, então "valores", "doses",
+ * "dores", "horarios", "especialistas", "nutrologos" e "medicamentos" subiam
+ * ao TOPO da tela, para o dono aprovar sem perceber que estava desarmando a
+ * própria proteção. O precedente é `lib/comentarios/especialidade.ts`, que já
+ * pagou esta lição ("RADICAIS, não palavras inteiras").
+ *
+ * Sobre-recusar ("dormir" começa com "dor", "citar" com "cita") é a direção
+ * certa do erro: o custo é não oferecer uma palavra, nunca liberar um assunto.
+ *
+ * ⚠️ Isto radicaliza só a OFERTA. Os `GATILHOS` em si continuam com `\b` nos
+ * dois lados — radicalizá-los muda o veredito de todo comentário de todo
+ * mundo, e é PR próprio. Consequência conhecida e aceita: "quais os valores",
+ * sem nenhuma palavra aprovada, não dispara o gatilho de preço — ele reprova
+ * por "sem padrão seguro reconhecido", porque "valores" não está no
+ * vocabulário e nunca poderá entrar.
+ */
+const RADICAIS_DE_GATILHO: readonly string[] = GATILHOS.flatMap(([, padrao]) =>
+  padrao.source
+    .replace(/^\\b\(/, "")
+    .replace(/\)\\b$/, "")
+    .split("|")
+    .filter((alt) => !alt.includes("\\s+"))
+    .map((alt) => alt.replace(/\\w\*$/, "")),
+);
+
+/**
  * O token, sozinho, casa algum dos seis gatilhos? Usado para NUNCA oferecer
  * palavra de gatilho ao dono: pedir que ele libere "custa" enquanto limpa a
  * fila é pedir que desarme a própria proteção sem perceber.
  */
 export function ehTokenDeGatilho(token: string): boolean {
-  // Os padrões não têm flag `g`, então `lastIndex` não importa; o reset é
-  // por segurança caso alguém acrescente `g` no futuro.
-  const sozinho = GATILHOS.some(([, padrao]) => {
-    padrao.lastIndex = 0;
-    return padrao.test(token);
-  });
-  return sozinho || COMPONENTES_DE_GATILHO.some((c) => c.test(token));
+  return (
+    RADICAIS_DE_GATILHO.some((radical) => token.startsWith(radical)) ||
+    COMPONENTES_DE_GATILHO.some((c) => c.test(token))
+  );
 }
 
 /**
@@ -248,11 +276,22 @@ export function ehObviamenteSeguro(
   }
   const normalizado = normalizarTexto(textoAparado);
 
+  // Os gatilhos julgam o texto ORIGINAL, com as marcações ainda lá — e isso é
+  // uma correção de regressão, não enfeite. Enquanto este laço rodava sobre o
+  // texto já podado, um `@` na frente de qualquer palavra APAGAVA o gatilho:
+  // "@mounjaro top demais", "@ozempic amei", "top @dose" e "doutor @nutrologo
+  // top" passavam todos como "obviamente seguro", porque `semMarcacoes` tinha
+  // comido a única palavra que decidia. Antes do vocabulário, `\bmounjaro\b`
+  // casava o texto cru e barrava. Só a análise de TOKEN usa o texto sem
+  // marcação (o perfil citado não é conteúdo); os seis gatilhos, não.
+  //
   // Os gatilhos multipalavra usam `\s+`, e `normalizarTexto` preserva
   // pontuação: "voce, e medico" não casaria. Colapsa tudo que não é
   // letra/dígito em um espaço, SÓ para este laço (o teto de tamanho e a
   // interrogação final precisam do texto como veio).
-  const paraGatilhos = normalizado.replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const paraGatilhos = normalizarTexto(texto)
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
   for (const [gatilho, padrao] of GATILHOS) {
     if (padrao.test(paraGatilhos)) {
       return { seguro: false, gatilho };

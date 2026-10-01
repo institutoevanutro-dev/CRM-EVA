@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ehObviamenteSeguro } from "./seguranca";
+import { ehObviamenteSeguro, ehTokenDeGatilho } from "./seguranca";
 
 const inseguros: [string, string][] = [
   ["quanto custa?", "preço"], ["qual o valor da consulta", "preço"], ["tem desconto?", "preço"],
@@ -143,8 +143,12 @@ describe("marcação de perfil sai da análise", () => {
     expect(ehObviamenteSeguro("(@fulano) show")).toEqual({ seguro: true });
   });
 
+  // I-7: o caso anterior era "fale com joao@clinica.com", e ele reprovava com
+  // ou sem a guarda do `@` colado ("fale"/"com" já são desconhecidos). Com
+  // "top@clinica.com" o teste MORDE: sem a guarda, `semMarcacoes` comeria
+  // "@clinica.com" inteiro, sobraria "top", e o e-mail sairia publicado.
   it("e-mail não é marcação: o texto continua sendo julgado inteiro", () => {
-    const v = ehObviamenteSeguro("fale com joao@clinica.com");
+    const v = ehObviamenteSeguro("top@clinica.com");
     expect(v.seguro).toBe(false);
   });
 });
@@ -197,3 +201,65 @@ describe("pontuação e gatilhos multipalavra", () => {
   });
 });
 
+
+// ── C-2 (revisão final): a marcação apagava o gatilho ───────────────────────
+//
+// `semMarcacoes` rodava antes de tudo e os gatilhos julgavam o texto já
+// podado, então um `@` na frente de QUALQUER palavra desarmava a trava. É
+// regressão desta branch: antes dela, `\bmounjaro\b` casava o texto cru.
+describe("C-2: @ na frente da palavra não apaga o gatilho", () => {
+  const comArroba: [string, string][] = [
+    ["@mounjaro top demais", "medicação"],
+    ["@ozempic amei", "medicação"],
+    ["top @dose", "medicação"],
+    ["doutor @nutrologo top", "especialidade"],
+    ["@valor show", "preço"],
+    ["amei @agendamento", "agendamento"],
+  ];
+
+  it.each(comArroba)("%s continua barrado (%s)", (texto, categoria) => {
+    expect(ehObviamenteSeguro(texto)).toEqual({ seguro: false, gatilho: categoria });
+  });
+
+  // Os quatro da spec §2 não podem ter sido sacrificados pelo conserto: a
+  // marcação continua saindo da ANÁLISE DE TOKEN, só não sai dos gatilhos.
+  it("marcação comum continua passando: @perfil não é conteúdo", () => {
+    expect(ehObviamenteSeguro("@dr.andreluisc 💪💪💪")).toEqual({ seguro: true });
+    expect(ehObviamenteSeguro("@fulano @ciclano top demais")).toEqual({ seguro: true });
+    expect(ehObviamenteSeguro("@fulano quanto custa?")).toEqual({ seguro: false, gatilho: "preço" });
+    expect(ehObviamenteSeguro("@fulano")).toEqual({ seguro: false, gatilho: "vazio" });
+  });
+});
+
+// ── C-1 (revisão final): a oferta ao dono era cega a flexão ─────────────────
+describe("C-1: ehTokenDeGatilho casa por RADICAL", () => {
+  // Estas sete subiam ao TOPO da tela de aprovação, por frequência.
+  it.each(["valores", "doses", "dores", "horarios", "especialistas", "nutrologos", "medicamentos"])(
+    "%s NUNCA pode ser oferecida ao dono",
+    (token) => {
+      expect(ehTokenDeGatilho(token)).toBe(true);
+    },
+  );
+
+  it.each(["quais", "didatico", "fantastico", "atendimento", "esclarecedor", "zebra"])(
+    "%s continua sendo oferecida (o radical não pode comer a tela inteira)",
+    (token) => {
+      expect(ehTokenDeGatilho(token)).toBe(false);
+    },
+  );
+
+  // A direção do erro é decidida: sobre-recusar custa uma palavra não
+  // oferecida; sub-recusar custa a trava.
+  it("sobre-recusa aceita: 'dormir' começa com o radical 'dor'", () => {
+    expect(ehTokenDeGatilho("dormir")).toBe(true);
+  });
+
+  // NÃO radicalizamos os GATILHOS em si (seria PR próprio): "quais os
+  // valores" reprova por vocabulário, não por gatilho de preço. Este teste
+  // existe para que a troca dessa decisão seja deliberada.
+  it("os GATILHOS continuam com \\b nos dois lados: a flexão reprova pelo vocabulário", () => {
+    const v = ehObviamenteSeguro("quais os valores");
+    expect(v.seguro).toBe(false);
+    if (!v.seguro) expect(v.gatilho).toBe("sem padrão seguro reconhecido");
+  });
+});

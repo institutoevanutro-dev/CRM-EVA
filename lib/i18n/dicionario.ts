@@ -9152,7 +9152,12 @@ export const DICIONARIO: Traducoes = {
   "Nada novo para decidir. As palavras aparecem aqui conforme você responde comentários.": {
     es: "Nada nuevo por decidir. Las palabras aparecen aquí a medida que usted responde comentarios.",
   },
-  "que você respondeu": { es: "que usted respondió" },
+  // "em 4 comentários que você respondeu" — o substantivo faltava na tela.
+  // (`em` já tinha espanhol, lá em cima: a revisão final o deu por ausente.)
+  "comentários que você respondeu": { es: "comentarios que usted respondió" },
+  "Não foi possível carregar as palavras. Atualize a página para tentar de novo.": {
+    es: "No fue posible cargar las palabras. Actualice la página para intentarlo de nuevo.",
+  },
   "Pode usar": { es: "Puede usar" },
   "Nunca": { es: "Nunca" },
   "1 palavra liberada": { es: "1 palabra liberada" },

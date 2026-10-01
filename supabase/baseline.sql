@@ -28512,8 +28512,15 @@ notify pgrst, 'reload schema';
 --
 -- RLS: ler é de qualquer membro do tenant (a lista não é dado sensível; quem
 -- segura papel na leitura é a rota, que exige `agent`), escrever exige `manager`.
--- Decidir o que a IA pode dizer em público é decisão de gestão; `tests/invariants/rbac-config-ia-canais.test.ts`
--- reprova tabela nova com policy `for all` só de tenancy.
+-- Decidir o que a IA pode dizer em público é decisão de gestão — doutrina da
+-- migration 0150. Quem reprova tabela nova que entre com `for all` só de
+-- tenancy é UM caso de `tests/invariants/rbac-config-ia-canais.test.ts`, o
+-- "nenhuma tabela NOVA entra com policy ALL só-tenancy", que varre
+-- `pg_policies` inteiro; os demais casos daquele arquivo são fixtures sobre
+-- `ai_agents` e NÃO olham para esta tabela. A revisão final leu só os
+-- fixtures e deu a afirmação por falsa — para ver a varredura em vez de
+-- acreditar em qualquer das duas linhas:
+--   grep -n "nenhuma tabela NOVA" -A 13 tests/invariants/rbac-config-ia-canais.test.ts
 
 create table if not exists public.instagram_comment_vocabulario (
   id uuid primary key default uuid_generate_v4(),

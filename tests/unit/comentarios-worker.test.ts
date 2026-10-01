@@ -714,3 +714,30 @@ it("o aviso de leitura falha está preso ao rótulo real, não a uma cópia do t
     GATILHO_SEM_PADRAO_SEGURO,
   );
 });
+
+/**
+ * I-3 (revisão final) — a quinta falha silenciosa: ninguém reconferia a
+ * palavra na LEITURA.
+ *
+ * A rota recusa palavra de gatilho na gravação, mas consertar a régua não
+ * desfaz o que já está no banco. Um clone que rodou a versão em que
+ * `ehTokenDeGatilho` casava palavra INTEIRA tem "valores" e "doses" gravados
+ * como aprovados — e ficaria furado para sempre. A leitura filtra, e cura
+ * sozinha, sem migration de dados.
+ */
+it("I-3 — palavra de gatilho já gravada no banco não entra no conjunto da rodada", async () => {
+  const linhas = [{ palavra: "fantastico" }, { palavra: "valores" }, { palavra: "doses" }, { palavra: "didatico" }];
+  // Thenable mínimo: `select`/`eq` encadeiam, o `await` resolve as linhas.
+  const chain: Record<string, unknown> = {};
+  chain.select = () => chain;
+  chain.eq = () => chain;
+  chain.then = (resolve: (v: unknown) => unknown) => resolve({ data: linhas, error: null });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adminReal = construirAdminDoWorkerReal({ from: () => chain } as any);
+  const aprovadas = await adminReal.palavrasAprovadas("org-x");
+
+  expect([...aprovadas].sort()).toEqual(["didatico", "fantastico"]);
+  expect(aprovadas.has("valores")).toBe(false);
+  expect(aprovadas.has("doses")).toBe(false);
+});

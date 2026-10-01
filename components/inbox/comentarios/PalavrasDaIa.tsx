@@ -18,8 +18,19 @@ import { usePalavrasDaIa, useDecidirPalavra } from "@/hooks/comentarios/useComen
  */
 export function PalavrasDaIa() {
   const t = useT();
-  const { data, isLoading } = usePalavrasDaIa();
+  const { data, isLoading, isError } = usePalavrasDaIa();
   const decidir = useDecidirPalavra();
+
+  // I-5: erro de rede, 500 ou 403 deixavam "Carregando…" para sempre — a tela
+  // mentia dizendo que ainda estava a caminho. Ramo próprio, antes do
+  // carregando: quem não conseguiu ler precisa saber que não leu.
+  if (isError) {
+    return (
+      <p className="px-3 py-4 text-sm text-text-muted">
+        {t("Não foi possível carregar as palavras. Atualize a página para tentar de novo.")}
+      </p>
+    );
+  }
 
   if (isLoading || !data) {
     return <p className="px-3 py-4 text-sm text-text-muted">{t("Carregando…")}</p>;
@@ -47,13 +58,17 @@ export function PalavrasDaIa() {
               <span className="text-sm text-text">
                 {c.palavra}{" "}
                 <span className="text-xs text-text-muted">
-                  {t("em")} {c.vezes} {t("que você respondeu")}
+                  {t("em")} {c.vezes} {t("comentários que você respondeu")}
                 </span>
               </span>
               <span className="flex gap-1">
+                {/* I-6: sem o rótulo, um leitor de tela anuncia uma coluna de
+                    "Pode usar"/"Nunca" idênticos, e quem navega por botão não
+                    sabe qual palavra está liberando. */}
                 <Button
                   size="sm"
                   variant="outline"
+                  aria-label={`${t("Pode usar")} ${c.palavra}`}
                   disabled={decidir.isPending}
                   onClick={() => decidir.mutate({ palavra: c.palavra, aprovada: true })}
                 >
@@ -62,6 +77,7 @@ export function PalavrasDaIa() {
                 <Button
                   size="sm"
                   variant="ghost"
+                  aria-label={`${t("Nunca")} ${c.palavra}`}
                   disabled={decidir.isPending}
                   onClick={() => decidir.mutate({ palavra: c.palavra, aprovada: false })}
                 >
@@ -92,6 +108,7 @@ export function PalavrasDaIa() {
                 <Button
                   size="sm"
                   variant="ghost"
+                  aria-label={`${d.aprovada ? t("Nunca") : t("Pode usar")} ${d.palavra}`}
                   disabled={decidir.isPending}
                   onClick={() => decidir.mutate({ palavra: d.palavra, aprovada: !d.aprovada })}
                 >
