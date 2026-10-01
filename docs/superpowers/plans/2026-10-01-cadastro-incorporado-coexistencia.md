@@ -4,7 +4,7 @@
 
 **Goal:** um admin clica em **Conectar WhatsApp** na aba Conexões › API Oficial, conclui o fluxo da Meta (Embedded Signup v4, variação de coexistência) e o canal oficial da organização fica Conectado sem colar token, WABA ou phone number id. Mensagem do celular aparece como "Celular" e silencia a IA na conversa; o histórico do celular entra sem IA, lead, automação ou janela de 24 h; desconexão pelo celular vira aviso na Central.
 
-**Architecture:** a coexistência é **metadado da sessão `meta_cloud`**, não provider novo. A configuração da instalação (`app_id`, `es_config_id`) mora em `platform_meta_app` ao lado do `app_secret` que já existe. O caminho de gravação da conexão oficial (validar → cifrar → ressuscitar/inserir → assinar webhook → `metadata.webhook_da_conta`) sai da rota `POST /api/v1/channels/official` para `lib/channels/meta/conectar-canal-oficial.ts` e passa a ser usado pelos dois POSTs. Os webhooks novos entram pela rota existente; o eco do celular reaproveita `pausarIaPorAtendimentoManual` (que já é a regra do WAHA `fromMe`); o histórico vai para `event_log` e é processado por worker, com o gatilho `fn_emit_message_event` ignorando mensagem marcada como importada. Toda chamada à Graph passa por `baseDaGraph()` (override só em loopback), o que permite o e2e com Graph simulada no mesmo molde do Instagram.
+**Architecture:** a coexistência é **metadado da sessão `meta_cloud`**, não provider novo. A configuração da instalação (`app_id`, `es_config_id`) mora em `platform_meta_app` ao lado do `app_secret` que já existe. O caminho de gravação da conexão oficial (validar → cifrar → ressuscitar/inserir → assinar webhook → `metadata.webhook_da_conta`) sai da rota `POST /api/v1/channels/official` para `lib/channels/meta/conectar-canal-oficial.ts` e passa a ser usado pelos dois POSTs. Os webhooks novos entram pela rota existente; o eco do celular reaproveita `pausarIaPorAtendimentoManual` (que já é a regra do WAHA `fromMe`); o histórico vai para `event_log` e é processado por worker, com os três gatilhos `AFTER INSERT` de `messages` (`fn_emit_message_event`, `fn_demanda_abre_no_inbound`, `fn_reply_inbound_revision`) ignorando mensagem marcada como importada. **As chamadas do fluxo de conexão** (validar credencial, assinar webhook, troca do `code`, `debug_token`, `phone_numbers`, `register`, `smb_app_data`) passam por `baseDaGraph()` (override só em loopback), o que permite o e2e com Graph simulada no mesmo molde do Instagram. `send-template.ts` e `template-sync.ts` continuam na URL fixa: o e2e só conecta, não envia template.
 
 **Tech Stack:** Next.js 16 App Router, React 19, TypeScript estrito, Vitest, Playwright, Postgres/Supabase com RLS, `event_log` + drain.
 
@@ -22,24 +22,30 @@
 - **`smb_app_state_sync` preenche nome só quando vazio** — nunca sobrescreve nome editado.
 - **`channel_sessions.status` só aceita** `STARTING | SCAN_QR_CODE | WORKING | STOPPED | FAILED` (CHECK no banco): "failed" da spec é `FAILED`.
 - **Nome de provider e domínio da Meta só em `lib/channels/meta/`** (`pnpm lint:channels`; padrão em `scripts/lint-channels.pattern.ts`). Versão da Graph só por `graphVersion()` (`tests/unit/versao-da-graph-num-lugar-so.test.ts`).
-- **Tripla de migration:** arquivo `supabase/migrations/<ts>_<NNNN>_<slug>.sql` (próximo NNNN por `ls supabase/migrations/ | grep -oE '_[0-9]{4}_' | tr -d _ | sort -n | tail -1`, hoje `0292` → **0293** no PR 1, **0294** no PR 2) + apêndice idempotente em `supabase/baseline.sql` **antes** do bloco `-- ---- VARREDURA anon ... (migration 0116) ----` + linha em `supabase/migrations/MANIFEST.md`.
-- **Função nova em `public` revoga `public` e `anon`** (duas origens de EXECUTE). Este plano não cria função nova; recria `fn_emit_message_event` (trigger, não `security definer`), e o recreate entra antes da varredura.
-- **Texto novo de tela exige espanhol** em `lib/i18n/dicionario.ts` (`tests/unit/i18n-espanhol-cobre-a-tela.test.ts`). Sem travessão (—) em texto que o usuário lê.
+- **Tripla de migration:** arquivo `supabase/migrations/<ts>_<NNNN>_<slug>.sql` + apêndice idempotente em `supabase/baseline.sql` **antes** do bloco `-- ---- VARREDURA anon ... (migration 0116) ----` + linha em `supabase/migrations/MANIFEST.md`. **Numeração (ruling do ledger):** a `main` já tem a `0293` (`20261001120000_0293_dedupe_de_event_dead_atomico.sql`) e o PR aberto `fix/followup-rls-por-operacao` vai até a `0295`; este plano usa **0296** no PR 1 (`20261001130000`) e **0297** no PR 2 (`20261001140000`). Timestamp e `NNNN` são ambos únicos: mesmo timestamp = mesma `version` no histórico do Supabase. Se colidir de novo antes do merge, renumerar (`manifest-x-migrations` reprova). O apêndice entra **depois** do bloco `-- ---- dedupe de event_dead atômico ... (migration 0293) ----` e **imediatamente antes** da varredura.
+- **Função nova em `public` revoga `public` e `anon`** (duas origens de EXECUTE). Este plano não cria função nova; a 0297 recria `fn_emit_message_event` (trigger, não `security definer`) **e** `fn_demanda_abre_no_inbound` e `fn_reply_inbound_revision` (as duas `security definer`): o `create or replace` repete os `revoke` das duas origens para cada uma, e os três recreates entram antes da varredura.
+- **Texto novo de tela exige espanhol** em `lib/i18n/dicionario.ts` (`tests/unit/i18n-espanhol-cobre-a-tela.test.ts`). Sem travessão (—) em texto que o usuário lê. **Toda frase nova voltada ao usuário entra no dicionário com `es` e é traduzida na borda**, inclusive as que nascem em `lib/` (erros da Meta em `MENSAGENS_POR_CODIGO`, motivos de `escolherNumero`/`conferirToken`, prazo de 24 h, número em outra organização): o teste de espanhol não varre `lib/`, então a lista explícita está na Task 5 Step 6. O erro do histórico é guardado como **código** (`erro_codigo`) e traduzido na tela (Task 12).
+- **Valores de teste passam no Zod da rota** (`code` com ≥10 caracteres, `waba_id`/`phone_number_id` com ≥5): `code: "AQBx1234567890"`, `waba_id: "222333444555"`, `phone_number_id: "111222333"`. O `"AQB"`/`"222"` curto devolve 422 e o teste que espera 200 reprova sem dizer por quê.
+- **Tipo de mensagem só com valor do CHECK** (`messages_type_check`: text, image, video, audio, document, sticker, location, contact, reaction, system, template). Eco e histórico passam o tipo cru da Meta por `tipoDoCrm()` (`contacts` → `contact`; `interactive`, `button`, `order`, `unsupported`, `unknown` → `system` com `body` `[tipo]`). Erro numa mensagem do histórico pula só ela (contada no `detail`), nunca derruba o chunk.
+- **Número já ativo em outra organização recusa com 422**, não 500: o 23505 do índice `channel_sessions_meta_phone_number_id_ativo_unique` vira `invalid_request` com a frase "este número já está conectado em outra organização".
+- **O worker do histórico limpa `payload.value` do `event_log` ao concluir `ok`** (LGPD): o pedaço cru tem até 180 dias de conversa e não há expurgo de `event_log` em `lib/retencao` nem na cascata de redact.
 - **Audit em toda mutação** bem-sucedida (ação nova entra em `lib/audit/actions.ts`), sem token nem PIN no metadata.
 - **`resolveMetaCreds` não cai no `.env`** quando a sessão tem token próprio e a decifra falha: lança.
 - **Nenhuma segunda sessão oficial por org:** o POST novo reaproveita a linha existente (ativa ou arquivada), como hoje.
-- **Fragmento em `.changes/`** com `impacto: capacidade_nova` (PR 1) e outro no PR 2.
+- **Fragmento em `.changes/`** com `impacto: capacidade_nova` (PR 1, e ele cita também a mudança da Task 9: token da sessão que não decifra agora lança em vez de cair no `.env`) e outro no PR 2.
+- **`META_ES_CONFIG_ID` e `META_GRAPH_BASE_URL` só em `.env.example`**, lidos de `process.env`, como `META_APP_SECRET` (não entram em `lib/env.ts`; `env-example-sync.test.ts` só cobra o inverso). `appId`/`esConfigId` caem no `.env` cada um sozinho (só o par de segredos é atômico). Decisão registrada no ADR (Task 10).
 - **E2E com `FB` simulado e Graph simulada** (servidor HTTP em loopback, no molde de `tests/e2e/instagram-responder.spec.ts`), spec listada em `SPECS_PARTE_4` de `.github/workflows/e2e.yml`.
 
 ## Review Focus
 
-Cinco modos de falha que a spec implica e que nenhum teste de tarefa pegaria por acaso; cada um tem o teste na tarefa dona:
+Seis modos de falha que a spec implica e que nenhum teste de tarefa pegaria por acaso; cada um tem o teste na tarefa dona:
 
-1. **Mensagem de histórico acorda a IA pelo gatilho do banco.** `trg_messages_emit_event` emite `message.received` em TODO insert inbound, e `ai-response-worker`, sentimento, follow-up, push e automação consomem esse evento. Sem a guarda na função do gatilho, o worker do histórico "não chama IA" e a IA acorda mesmo assim. Teste: `tests/invariants/historico-importado-nao-emite-evento.test.ts` (Task 11).
-2. **Eco do celular que é, na verdade, eco de envio do CRM.** Pela Cloud API o CRM grava a linha com `external_id = wamid` da resposta de envio; o `smb_message_echoes` só cobre o que saiu do APP do celular, mas um `wamid` repetido tem de cair em `duplicate`, nunca silenciar a IA. Teste: `lib/channels/meta/ingest-echo.test.ts`, caso "wamid já gravado não silencia" (Task 7).
+1. **Mensagem de histórico acorda a IA (ou abre demanda) pelo gatilho do banco.** `messages` tem TRÊS `AFTER INSERT`: `trg_messages_emit_event` emite `message.received` em todo insert inbound (e `ai-response-worker`, sentimento, follow-up, push e automação consomem); `trg_demanda_abre_no_inbound` chama `fn_service_inbound`, que abre uma `demandas` `aberta` por contato com inbound (180 dias de histórico = uma demanda "sem próximo passo" por contato, inflando `demandas_sem_proximo_passo`); `trg_reply_inbound_revision` incrementa `conversations.reply_context_revision`. Sem a guarda `importada_do_historico` nas três funções, o worker "não chama IA" e o banco chama por ele. Teste: `tests/invariants/historico-importado-nao-emite-evento.test.ts` conta `event_log`, `demandas` e `reply_context_revision` (Task 11).
+2. **Eco do celular que é, na verdade, eco de envio do CRM.** Pela Cloud API o CRM grava a linha com `external_id = wamid` da resposta de envio; o `smb_message_echoes` só cobre o que saiu do APP do celular, mas um `wamid` repetido tem de cair em `duplicate`, nunca silenciar a IA. **Premissa escrita no corpo de `ingestMetaEcho`:** a Meta não ecoa envio feito pela API em `smb_message_echoes` (doc de 01/10, "message echoes" = mensagens enviadas pelo aplicativo), por isso o gate do #519 (`ehEcoDeEnvioNosso`, linha `queued` sem `external_id`) NÃO é generalizado aqui; custo se a premissa falhar: a IA fica 5 min em silêncio depois do próprio envio. Testes: `lib/channels/meta/ingest-echo.test.ts`, casos "wamid já gravado não silencia" e "linha queued sem id na mesma conversa não barra o eco" (Task 7).
 3. **Token de outro app passa pela troca.** `GET /oauth/access_token` devolve token para qualquer `code` válido do app, mas um `code` forjado de outro app/config retornaria um token cujo `debug_token.app_id` não é o nosso. Teste: `lib/channels/meta/cadastro-incorporado.test.ts`, caso "token de outro app é recusado" (Task 4).
 4. **Segunda tentativa de sincronização depois das 24 h.** A rota `/sincronizar` tem de recusar com mensagem que manda refazer o fluxo, e nunca gravar `request_id` novo. Teste: `lib/channels/meta/coexistencia.test.ts`, `dentroDoPrazoDeSincronizacao` na borda (Task 4) + rota (Task 5).
 5. **`account_reconnected` fecha o aviso certo e só ele.** Reconexão deve resolver o aviso aberto por `PARTNER_REMOVED` desta sessão (origem `empurrao`), sem fechar aviso de outra sessão e sem reabrir nada. Teste: `lib/channels/meta/saude-da-conta.test.ts` (Task 8).
+6. **A varredura de saúde desfaz a desconexão pelo celular.** O cron `app/api/v1/cron/channel-health/route.ts` (linhas ~144-153) grava por cima de `status` o que a sonda devolve quando `reachable`; se a Graph ainda responder 200 ao `GET /{phone_number_id}` depois do `PARTNER_REMOVED`, a sonda devolve `WORKING` e o `FAILED` da Task 8 some em até 1 min (o aviso fica, a faixa "conexão caída" desaparece). A sonda **não promove** `FAILED` → `WORKING` enquanto `status_reason = 'coexistencia_desconectada'`; só `account_reconnected` limpa. Teste: `tests/unit/channel-health-nao-promove-desconectada-no-app.test.ts` (Task 8).
 
 ---
 
@@ -48,11 +54,12 @@ Cinco modos de falha que a spec implica e que nenhum teste de tarefa pegaria por
 | Arquivo | Responsabilidade |
 |---|---|
 | `lib/channels/meta/coexistencia.ts` (criar, Task 0) | constantes (grafia do `extras`, eventos, prazo), tipo `Coexistencia` da metadata, `lerCoexistencia`, `dentroDoPrazoDeSincronizacao`, `mensagemDoErroDaMeta`. Puro, importável pelo cliente |
-| `supabase/migrations/20261001120000_0293_cadastro_incorporado.sql` (criar) | `platform_meta_app.app_id`, `es_config_id` |
+| `supabase/migrations/20261001130000_0296_cadastro_incorporado.sql` (criar) | `platform_meta_app.app_id`, `es_config_id` |
 | `lib/channels/meta/app.ts` (modificar) | `appDaMeta()` devolve `appId` e `esConfigId` (banco acima do `.env`) |
 | `app/actions/settings/updateMetaApp.ts`, `app/admin/(protected)/meta/{page,_form}.tsx` (modificar) | os dois campos na tela da instalação |
 | `app/api/v1/channels/official/route.ts` (modificar) | GET expõe `cadastroIncorporado` e `coexistencia`; POST passa a chamar `conectarCanalOficial` |
-| `lib/channels/meta/conectar-canal-oficial.ts` (criar) | o caminho de gravação extraído do POST, usado pelos dois POSTs |
+| `lib/channels/meta/conectar-canal-oficial.ts` (criar) | o caminho de gravação extraído do POST, usado pelos dois POSTs; `gravarCoexistencia`; 23505 do número em outra org vira 422 |
+| `app/api/v1/channels/official/route-helpers.ts` (criar) | `publicBase`, `traduzirMotivo` (saem de `route.ts`; o GET/POST existentes importam de lá) |
 | `lib/channels/meta/graph-base.ts` (criar) | `baseDaGraph()` com override só em loopback (`META_GRAPH_BASE_URL`) |
 | `lib/channels/meta/cadastro-incorporado.ts` (criar) | troca do `code`, `debug_token`, números da conta, `register`, `smb_app_data`, arquivar sessão legada do número |
 | `lib/channels/meta/cadastro-incorporado-cliente.ts` (criar) | carrega o SDK, `FB.init`/`FB.login`, escuta `message` da Meta |
@@ -61,12 +68,13 @@ Cinco modos de falha que a spec implica e que nenhum teste de tarefa pegaria por
 | `app/api/v1/channels/official/cadastro-incorporado/route.ts` (criar) | POST da troca/conexão |
 | `app/api/v1/channels/official/cadastro-incorporado/sincronizar/route.ts` (criar) | POST do retry em 24 h |
 | `lib/channels/meta/webhook.ts` (modificar) | eventos `echo_message`, `history_chunk`, `state_sync`, `account_event` |
-| `lib/channels/meta/ingest.ts` (modificar) | `ingestMetaEcho` |
+| `lib/channels/meta/ingest.ts` (modificar) | `resolverContatoEConversa` (extraído do inbound; usado por inbound, eco e histórico), `tipoDoCrm`, `ingestMetaEcho` |
 | `lib/channels/meta/saude-da-conta.ts` (criar) | `PARTNER_REMOVED`/offboarded/reconnected → sessão + Central |
-| `lib/channels/health.ts` (modificar) | aviso com motivo do celular |
+| `lib/channels/health.ts` (modificar) | aviso com motivo do celular; `STATUS_REASON_DESCONECTADO_NO_APP` |
+| `app/api/v1/cron/channel-health/route.ts` (modificar) | a sonda não promove `FAILED` → `WORKING` enquanto `status_reason` for a desconexão pelo celular |
 | `app/api/v1/webhooks/meta/[token]/route.ts` (modificar) | roteia os eventos novos |
 | `lib/channels/meta/credentials.ts` (modificar) | decifra que falha lança |
-| `supabase/migrations/20261006120000_0294_historico_importado_nao_emite_evento.sql` (criar, PR 2) | guarda em `fn_emit_message_event` |
+| `supabase/migrations/20261001140000_0297_historico_importado_nao_emite_evento.sql` (criar, PR 2) | guarda `importada_do_historico` em `fn_emit_message_event`, `fn_demanda_abre_no_inbound` e `fn_reply_inbound_revision` |
 | `workers/meta-history-worker.ts` + `.handler.ts` (criar, PR 2) | processa `meta.history_chunk` |
 | `lib/channels/meta/contatos-do-celular.ts` (criar, PR 2) | upsert de contato do `smb_app_state_sync` |
 | `docs/adr/0002-cadastro-incorporado.md`, `docs/doctrine/restricao-de-canal.md`, `docs/index.md`, `docs/architecture/cadastro-incorporado.architecture.json`, `.changes/*.md` | doutrina e registro |
@@ -83,9 +91,9 @@ Cinco modos de falha que a spec implica e que nenhum teste de tarefa pegaria por
 - Test: `lib/channels/meta/coexistencia.test.ts`
 
 **Interfaces:**
-- Produces: `CHAVE_DO_TIPO_DE_RECURSO_V4: string`, `TIPO_DE_RECURSO_COEXISTENCIA`, `EVENTO_NUMERO_NOVO`, `EVENTO_COEXISTENCIA`, `PRAZO_DA_SINCRONIZACAO_MS`, `montarExtras(): Record<string, unknown>`.
+- Produces: `CHAVE_DO_TIPO_DE_RECURSO_V4: string`, `TIPO_DE_RECURSO_COEXISTENCIA`, `VERSAO_DO_SESSION_INFO`, `EVENTO_NUMERO_NOVO`, `EVENTO_COEXISTENCIA`, `EVENTO_CANCELADO`, `PRAZO_DA_SINCRONIZACAO_MS`, `montarExtras(): Record<string, unknown>`.
 
-> **Conferido em 01/10/2026 (coordenador, página em pt-BR, Etapa 2):** `extras: { setup: {}, "featureType": "whatsapp_business_app_onboarding", "sessionInfoVersion": "3" }`. Chave = `featureType` (camelCase); o exemplo oficial mantém `sessionInfoVersion: "3"` — incluir em `montarExtras()`.
+> **Conferido em 01/10/2026 (coordenador, página em pt-BR, Etapa 2):** `extras: { setup: {}, "featureType": "whatsapp_business_app_onboarding", "sessionInfoVersion": "3" }`. Chave = `featureType` (camelCase); o exemplo oficial mantém `sessionInfoVersion: "3"`. **Ruling P15a:** `montarExtras()` leva os TRÊS (código e teste abaixo já estão assim; a spec diz o mesmo desde o mesmo commit).
 
 - [x] **Step 1 (dono, no browser):** abrir `https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users`, **Step 2** ("Launch Embedded Signup"), e copiar o objeto `extras` exatamente como está no exemplo de código da v4. Anotar: a chave do tipo de recurso é `featureType` ou `feature_type`? O valor é `whatsapp_business_app_onboarding`? Há `sessionInfoVersion`?
 
@@ -103,17 +111,24 @@ Cinco modos de falha que a spec implica e que nenhum teste de tarefa pegaria por
  */
 export const CHAVE_DO_TIPO_DE_RECURSO_V4 = "featureType"; // conferido na doc em 01/10/2026
 export const TIPO_DE_RECURSO_COEXISTENCIA = "whatsapp_business_app_onboarding";
+/** O exemplo oficial da v4 (pt-BR, 01/10/2026) manda `sessionInfoVersion: "3"`. */
+export const VERSAO_DO_SESSION_INFO = "3";
 
 /** Eventos do `postMessage` da Meta (`type: "WA_EMBEDDED_SIGNUP"`). */
 export const EVENTO_NUMERO_NOVO = "FINISH";
 export const EVENTO_COEXISTENCIA = "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING";
+/** A pessoa fechou a janela da Meta antes de terminar. */
 export const EVENTO_CANCELADO = "CANCEL";
 
 /** A Meta aceita `smb_app_data` até 24 h depois do onboarding. */
 export const PRAZO_DA_SINCRONIZACAO_MS = 24 * 60 * 60 * 1000;
 
 export function montarExtras(): Record<string, unknown> {
-  return { setup: {}, [CHAVE_DO_TIPO_DE_RECURSO_V4]: TIPO_DE_RECURSO_COEXISTENCIA };
+  return {
+    setup: {},
+    [CHAVE_DO_TIPO_DE_RECURSO_V4]: TIPO_DE_RECURSO_COEXISTENCIA,
+    sessionInfoVersion: VERSAO_DO_SESSION_INFO,
+  };
 }
 ```
 
@@ -125,8 +140,12 @@ import { describe, expect, it } from "vitest";
 import { CHAVE_DO_TIPO_DE_RECURSO_V4, montarExtras, TIPO_DE_RECURSO_COEXISTENCIA } from "./coexistencia";
 
 describe("extras da v4", () => {
-  it("leva setup vazio e o tipo de recurso de coexistência sob a chave conferida", () => {
-    expect(montarExtras()).toEqual({ setup: {}, [CHAVE_DO_TIPO_DE_RECURSO_V4]: TIPO_DE_RECURSO_COEXISTENCIA });
+  it("leva setup vazio, o tipo de recurso sob a chave conferida e sessionInfoVersion 3 (exemplo oficial de 01/10/2026)", () => {
+    expect(montarExtras()).toEqual({
+      setup: {},
+      [CHAVE_DO_TIPO_DE_RECURSO_V4]: TIPO_DE_RECURSO_COEXISTENCIA,
+      sessionInfoVersion: "3",
+    });
   });
   it("a chave foi conferida (não é o placeholder)", () => {
     expect(["featureType", "feature_type"]).toContain(CHAVE_DO_TIPO_DE_RECURSO_V4);
@@ -147,11 +166,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-## Task 1: `platform_meta_app.app_id` / `es_config_id` (migration 0293) e `appDaMeta()`
+## Task 1: `platform_meta_app.app_id` / `es_config_id` (migration 0296) e `appDaMeta()`
 
 **Files:**
-- Create: `supabase/migrations/20261001120000_0293_cadastro_incorporado.sql`
-- Modify: `supabase/baseline.sql` (apêndice antes de `-- ---- VARREDURA anon ... (migration 0116) ----`, hoje linha ~28676), `supabase/migrations/MANIFEST.md`, `.env.example` (linha 379, `META_APP_ID=` já existe; acrescentar `META_ES_CONFIG_ID=`)
+- Create: `supabase/migrations/20261001130000_0296_cadastro_incorporado.sql` (timestamp ÚNICO: `20261001120000` já é o da `0293_dedupe_de_event_dead_atomico`)
+- Modify: `supabase/baseline.sql` (apêndice depois do bloco `-- ---- dedupe de event_dead atômico ... (migration 0293) ----`, linha ~28675, e imediatamente antes de `-- ---- VARREDURA anon ... (migration 0116) ----`, hoje linha ~28717), `supabase/migrations/MANIFEST.md`, `.env.example` (linha 379, `META_APP_ID=` já existe; acrescentar `META_ES_CONFIG_ID=`)
 - Modify: `lib/channels/meta/app.ts`
 - Test: `tests/unit/app-da-meta-cadastro-incorporado.test.ts`, `tests/invariants/cadastro-incorporado-colunas-sem-grant.test.ts`
 
@@ -162,7 +181,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - [ ] **Step 1:** migration:
 
 ```sql
--- 0293 — Cadastro Incorporado (Embedded Signup v4): o App ID e o Configuration
+-- 0296 — Cadastro Incorporado (Embedded Signup v4): o App ID e o Configuration
 -- ID da instalação. Nenhum dos dois é segredo (o App ID vai para o browser no
 -- `FB.init`); o segredo continua em `app_secret_encrypted` (0257). Aditiva e
 -- idempotente. A tabela já é server-side only (RLS sem policy, grants
@@ -178,20 +197,20 @@ comment on column public.platform_meta_app.es_config_id is
   'Configuration ID da variação Embedded Signup (Facebook Login for Business › Configurations). Piso: META_ES_CONFIG_ID.';
 ```
 
-- [ ] **Step 2:** apêndice no `baseline.sql`, inserido logo após `-- ---- fim: vocabulário de comentário (migration 0292) ----` e antes do bloco da varredura:
+- [ ] **Step 2:** apêndice no `baseline.sql`, inserido logo após o `create unique index if not exists agent_inbox_event_dead_aberto_unico ...` do bloco 0293 e imediatamente antes de `-- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----` (conferir com `grep -n 'VARREDURA anon' supabase/baseline.sql`; o bloco 0291 que aparece DEPOIS da varredura é defeito preexistente, não molde):
 
 ```sql
--- ---- cadastro incorporado: app_id e es_config_id (migration 0293) ----
+-- ---- cadastro incorporado: app_id e es_config_id (migration 0296) ----
 alter table public.platform_meta_app
   add column if not exists app_id text,
   add column if not exists es_config_id text;
--- ---- fim: cadastro incorporado (migration 0293) ----
+-- ---- fim: cadastro incorporado (migration 0296) ----
 ```
 
-- [ ] **Step 3:** linha no MANIFEST (tabela Applied, depois da 0291):
+- [ ] **Step 3:** linha no MANIFEST (tabela Applied, depois da 0293; se a 0294/0295 do PR `fix/followup-rls-por-operacao` já estiverem lá, depois delas):
 
 ```
-| `20261001120000` | `0293_cadastro_incorporado` | `platform_meta_app.app_id` e `es_config_id` (texto, não secretos): o App ID e o Configuration ID do Embedded Signup v4 da instalação, cadastrados em Admin › API Oficial (Meta). Piso `META_APP_ID`/`META_ES_CONFIG_ID`. Sem os dois o botão "Conectar WhatsApp" não aparece. Aditiva, idempotente, server-side only como o resto da tabela. ADR `docs/adr/0002-cadastro-incorporado.md`. |
+| `20261001130000` | `0296_cadastro_incorporado` | `platform_meta_app.app_id` e `es_config_id` (texto, não secretos): o App ID e o Configuration ID do Embedded Signup v4 da instalação, cadastrados em Admin › API Oficial (Meta). Piso `META_APP_ID`/`META_ES_CONFIG_ID`. Sem os dois o botão "Conectar WhatsApp" não aparece. Aditiva, idempotente, server-side only como o resto da tabela. ADR `docs/adr/0002-cadastro-incorporado.md`. |
 ```
 
 - [ ] **Step 4:** teste unit (falha antes):
@@ -245,7 +264,7 @@ interface LinhaDoApp {
   es_config_id: string | null;
 }
 // no select de linhaDoBanco(): "app_secret_encrypted, verify_token_encrypted, app_id, es_config_id"
-// ⚠️ clone sem a 0293 devolve 42703 aqui; o `if (error)` já degrada para o `.env`.
+// ⚠️ clone sem a 0296 devolve 42703 aqui; o `if (error)` já degrada para o `.env`.
 
 type ParDeSegredos = Pick<AppDaMetaEmVigor, "appSecret" | "verifyToken">;
 // parDoBanco passa a devolver Promise<ParDeSegredos | null> — corpo igual.
@@ -271,7 +290,7 @@ export async function appDaMeta(): Promise<AppDaMetaEmVigor> {
 }
 ```
 
-- [ ] **Step 6:** invariante (mede o Supabase real: a tabela nasce concedida pelo default ACL; a 0257 revogou; coluna nova não pode reabrir nada):
+- [ ] **Step 6:** invariante. Honestidade da régua: a tabela já é revogada pela 0257 e o prelude de `scripts/test-db.sh` reproduz o default ACL do Supabase só para FUNÇÕES, não para TABELAS; logo este teste mede o que já está garantido e serve de sentinela contra um `grant` futuro, não de prova contra o Supabase real (a nota do CLAUDE.md sobre `audit-log-sob-o-default-acl-do-supabase` vale aqui):
 
 ```ts
 // tests/invariants/cadastro-incorporado-colunas-sem-grant.test.ts
@@ -304,8 +323,8 @@ describe("platform_meta_app.app_id / es_config_id — sem grant a anon/authentic
 - [ ] **Step 8:** commit:
 
 ```bash
-git add supabase/migrations/20261001120000_0293_cadastro_incorporado.sql supabase/baseline.sql supabase/migrations/MANIFEST.md .env.example lib/channels/meta/app.ts tests/unit/app-da-meta-cadastro-incorporado.test.ts tests/invariants/cadastro-incorporado-colunas-sem-grant.test.ts
-git commit -m "feat(canal-oficial): platform_meta_app ganha app_id e es_config_id (0293); appDaMeta devolve os dois
+git add supabase/migrations/20261001130000_0296_cadastro_incorporado.sql supabase/baseline.sql supabase/migrations/MANIFEST.md .env.example lib/channels/meta/app.ts tests/unit/app-da-meta-cadastro-incorporado.test.ts tests/invariants/cadastro-incorporado-colunas-sem-grant.test.ts
+git commit -m "feat(canal-oficial): platform_meta_app ganha app_id e es_config_id (0296); appDaMeta devolve os dois
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -471,52 +490,90 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   ```ts
   export interface ResultadoDoCadastro { code: string; evento: string; wabaId: string | null; phoneNumberId: string | null }
   export type DesfechoDoCadastro = { ok: true; resultado: ResultadoDoCadastro } | { ok: false; motivo: "cancelado" | "sem_code" | "sdk_indisponivel" | "sem_evento" };
-  export async function abrirCadastroIncorporado(input: { appId: string; configId: string; versao: string; win?: Window }): Promise<DesfechoDoCadastro>
+  export async function abrirCadastroIncorporado(input: { appId: string; configId: string; versao: string; win?: Window; esperaDoEventoMs?: number }): Promise<DesfechoDoCadastro>
   ```
+  `esperaDoEventoMs` (padrão 3000): depois do callback do `login`, o cliente espera o `postMessage` até esse prazo antes de decidir `sem_evento` (ruling P15i). Motivos distintos (ruling P8): `cancelado` = a Meta mandou `CANCEL`, ou não houve `code` nem evento; `sem_code` = houve evento de término sem `authResponse.code`; `sem_evento` = houve `code` e nenhum evento válido no prazo.
 - `useCadastroIncorporado()` — mutation `POST /api/v1/channels/official/cadastro-incorporado` com `{ code, evento, waba_id, phone_number_id }` (rota na Task 5).
 
 - [ ] **Step 1:** teste com `FB` simulado em `window` (é o mesmo truque que o e2e usa: se `window.FB` já existe, o módulo não carrega o script):
 
 ```ts
-// lib/channels/meta/cadastro-incorporado-cliente.ts.test — nome real: cadastro-incorporado-cliente.test.ts
+// lib/channels/meta/cadastro-incorporado-cliente.test.ts
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { EVENTO_COEXISTENCIA } from "./coexistencia";
 import { abrirCadastroIncorporado } from "./cadastro-incorporado-cliente";
+import { EVENTO_CANCELADO, EVENTO_COEXISTENCIA } from "./coexistencia";
 
-function fbFalso(opts: { code?: string; evento?: string; wabaId?: string }) {
+const ENTRADA = { appId: "1", configId: "2", versao: "v22.0", esperaDoEventoMs: 50 };
+
+/**
+ * `FB` simulado (o mesmo truque do e2e: se `window.FB` existe, o script não é
+ * carregado). O `postMessage` é disparado DENTRO do `login`, ou seja, depois de o
+ * módulo ligar o listener: é a única ordem em que o filtro de origem é exercitado.
+ * `atrasoDoEventoMs` simula a Meta mandando o evento DEPOIS do callback.
+ */
+function fbFalso(opts: { code?: string; evento?: string; wabaId?: string; origem?: string; atrasoDoEventoMs?: number }) {
   const w = window as unknown as { FB?: unknown };
+  const disparar = () =>
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        origin: opts.origem ?? "https://www.facebook.com",
+        data: JSON.stringify({ type: "WA_EMBEDDED_SIGNUP", event: opts.evento, data: { waba_id: opts.wabaId } }),
+      }),
+    );
   w.FB = {
     init: () => undefined,
     login: (cb: (r: { authResponse?: { code?: string } }) => void) => {
-      if (opts.evento) {
-        window.dispatchEvent(
-          new MessageEvent("message", {
-            origin: "https://www.facebook.com",
-            data: JSON.stringify({ type: "WA_EMBEDDED_SIGNUP", event: opts.evento, data: { waba_id: opts.wabaId } }),
-          }),
-        );
-      }
+      if (opts.evento && !opts.atrasoDoEventoMs) disparar();
       cb({ authResponse: opts.code ? { code: opts.code } : undefined });
+      if (opts.evento && opts.atrasoDoEventoMs) setTimeout(disparar, opts.atrasoDoEventoMs);
     },
   };
 }
 
+afterEach(() => {
+  delete (window as unknown as { FB?: unknown }).FB;
+});
+
 describe("abrirCadastroIncorporado", () => {
   it("junta o code do login com o evento do postMessage", async () => {
-    fbFalso({ code: "AQB", evento: EVENTO_COEXISTENCIA, wabaId: "123" });
-    const r = await abrirCadastroIncorporado({ appId: "1", configId: "2", versao: "v22.0" });
-    expect(r).toEqual({ ok: true, resultado: { code: "AQB", evento: EVENTO_COEXISTENCIA, wabaId: "123", phoneNumberId: null } });
+    fbFalso({ code: "AQBx1234567890", evento: EVENTO_COEXISTENCIA, wabaId: "222333444555" });
+    expect(await abrirCadastroIncorporado(ENTRADA)).toEqual({
+      ok: true,
+      resultado: { code: "AQBx1234567890", evento: EVENTO_COEXISTENCIA, wabaId: "222333444555", phoneNumberId: null },
+    });
   });
-  it("sem code é cancelado (o usuário fechou a janela)", async () => {
+  it("evento que chega DEPOIS do callback do login ainda é lido (espera até o prazo)", async () => {
+    fbFalso({ code: "AQBx1234567890", evento: EVENTO_COEXISTENCIA, wabaId: "222333444555", atrasoDoEventoMs: 10 });
+    expect(await abrirCadastroIncorporado(ENTRADA)).toMatchObject({ ok: true, resultado: { wabaId: "222333444555" } });
+  });
+  it("CANCEL da Meta é cancelado", async () => {
+    fbFalso({ evento: EVENTO_CANCELADO });
+    expect(await abrirCadastroIncorporado(ENTRADA)).toEqual({ ok: false, motivo: "cancelado" });
+  });
+  it("sem code e sem evento é cancelado (o usuário fechou a janela)", async () => {
     fbFalso({});
-    expect(await abrirCadastroIncorporado({ appId: "1", configId: "2", versao: "v22.0" })).toEqual({ ok: false, motivo: "cancelado" });
+    expect(await abrirCadastroIncorporado(ENTRADA)).toEqual({ ok: false, motivo: "cancelado" });
   });
-  it("mensagem de outra origem é ignorada", async () => {
-    fbFalso({ code: "AQB" });
-    window.dispatchEvent(new MessageEvent("message", { origin: "https://evil.example", data: JSON.stringify({ type: "WA_EMBEDDED_SIGNUP", event: EVENTO_COEXISTENCIA, data: { waba_id: "x" } }) }));
-    expect(await abrirCadastroIncorporado({ appId: "1", configId: "2", versao: "v22.0" })).toEqual({ ok: false, motivo: "sem_evento" });
+  it("evento de término sem code é sem_code (não é cancelamento: a Meta terminou e o login não devolveu o code)", async () => {
+    fbFalso({ evento: EVENTO_COEXISTENCIA, wabaId: "222333444555" });
+    expect(await abrirCadastroIncorporado(ENTRADA)).toEqual({ ok: false, motivo: "sem_code" });
+  });
+  it("mensagem de outra origem é ignorada: com code e sem evento válido no prazo, sem_evento", async () => {
+    fbFalso({ code: "AQBx1234567890", evento: EVENTO_COEXISTENCIA, wabaId: "x", origem: "https://evil.example" });
+    expect(await abrirCadastroIncorporado(ENTRADA)).toEqual({ ok: false, motivo: "sem_evento" });
+  });
+  it('origem "null" (iframe opaco) não lança: é ignorada', async () => {
+    fbFalso({ code: "AQBx1234567890", evento: EVENTO_COEXISTENCIA, wabaId: "x", origem: "null" });
+    await expect(abrirCadastroIncorporado(ENTRADA)).resolves.toEqual({ ok: false, motivo: "sem_evento" });
+  });
+  it("sem SDK (script não carregou) é sdk_indisponivel", async () => {
+    // sem window.FB; o script é anexado e `onerror` dispara no jsdom sem rede
+    const p = abrirCadastroIncorporado(ENTRADA);
+    const script = document.querySelector('script[src*="connect.facebook.net"]') as HTMLScriptElement | null;
+    script?.onerror?.(new Event("error"));
+    expect(await p).toEqual({ ok: false, motivo: "sdk_indisponivel" });
   });
 });
 ```
@@ -564,39 +621,74 @@ export async function abrirCadastroIncorporado(input: {
   configId: string;
   versao: string;
   win?: Window;
+  /** Quanto esperar o `postMessage` depois do callback do `login` (ruling P15i). */
+  esperaDoEventoMs?: number;
 }): Promise<DesfechoDoCadastro> {
   const win = input.win ?? window;
   const fb = await carregarSdk(win);
   if (!fb) return { ok: false, motivo: "sdk_indisponivel" };
   fb.init({ appId: input.appId, autoLogAppEvents: true, xfbml: true, version: input.versao });
 
-  let evento: { nome: string; wabaId: string | null; phoneNumberId: string | null } | null = null;
+  // Guardado num objeto, não numa `let`: atribuição dentro da closure faz o TS
+  // estreitar a variável para `null` fora dela (TS2339 em `evento?.nome`).
+  const recebido: { evento: EventoDaMeta | null } = { evento: null };
   const ouvir = (ev: MessageEvent) => {
-    if (!ORIGEM_DA_META.test(new URL(ev.origin).hostname)) return;
+    if (!origemDaMeta(ev.origin)) return;
     try {
       const d = JSON.parse(String(ev.data)) as { type?: string; event?: string; data?: { waba_id?: string; phone_number_id?: string } };
       if (d.type !== "WA_EMBEDDED_SIGNUP" || !d.event) return;
-      evento = { nome: d.event, wabaId: d.data?.waba_id ?? null, phoneNumberId: d.data?.phone_number_id ?? null };
+      recebido.evento = { nome: d.event, wabaId: d.data?.waba_id ?? null, phoneNumberId: d.data?.phone_number_id ?? null };
     } catch {
       /* mensagem que não é nossa */
     }
   };
   win.addEventListener("message", ouvir);
 
-  const code = await new Promise<string | null>((resolve) =>
-    fb.login((r) => resolve(r.authResponse?.code ?? null), {
-      config_id: input.configId,
-      response_type: "code",
-      override_default_response_type: true,
-      extras: montarExtras(),
-    }),
-  );
-  win.removeEventListener("message", ouvir);
+  try {
+    const code = await new Promise<string | null>((resolve) =>
+      fb.login((r) => resolve(r.authResponse?.code ?? null), {
+        config_id: input.configId,
+        response_type: "code",
+        override_default_response_type: true,
+        extras: montarExtras(),
+      }),
+    );
+    // A Meta pode mandar o `postMessage` depois do callback do `login`: espera
+    // até o prazo, saindo cedo assim que o evento chega.
+    await esperarEvento(() => recebido.evento !== null, input.esperaDoEventoMs ?? ESPERA_DO_EVENTO_MS);
 
-  if (!code) return { ok: false, motivo: evento?.nome === EVENTO_CANCELADO ? "cancelado" : "cancelado" };
-  if (!evento) return { ok: false, motivo: "sem_evento" };
-  const e = evento as { nome: string; wabaId: string | null; phoneNumberId: string | null };
-  return { ok: true, resultado: { code, evento: e.nome, wabaId: e.wabaId, phoneNumberId: e.phoneNumberId } };
+    const evento = recebido.evento;
+    if (evento?.nome === EVENTO_CANCELADO) return { ok: false, motivo: "cancelado" };
+    if (!code && !evento) return { ok: false, motivo: "cancelado" };
+    if (!code) return { ok: false, motivo: "sem_code" };
+    if (!evento) return { ok: false, motivo: "sem_evento" };
+    return { ok: true, resultado: { code, evento: evento.nome, wabaId: evento.wabaId, phoneNumberId: evento.phoneNumberId } };
+  } finally {
+    win.removeEventListener("message", ouvir);
+  }
+}
+
+interface EventoDaMeta { nome: string; wabaId: string | null; phoneNumberId: string | null }
+const ESPERA_DO_EVENTO_MS = 3000;
+
+/** `ev.origin` pode ser a string "null" (iframe opaco): `new URL("null")` lança. */
+function origemDaMeta(origin: string): boolean {
+  try {
+    return ORIGEM_DA_META.test(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function esperarEvento(chegou: () => boolean, prazoMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    const inicio = Date.now();
+    const tique = () => {
+      if (chegou() || Date.now() - inicio >= prazoMs) return resolve();
+      setTimeout(tique, 25);
+    };
+    tique();
+  });
 }
 ```
 
@@ -716,7 +808,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Create: `lib/channels/meta/graph-base.ts`, `lib/channels/meta/cadastro-incorporado.ts`
-- Modify: `lib/channels/meta/validate-credentials.ts` (linhas 26, 73), `lib/channels/meta/assinar-webhook.ts` (linha 37), `lib/channels/meta/coexistencia.ts` (tipo e regras puras), `.env.example` (ao lado de `META_GRAPH_VERSION`: `META_GRAPH_BASE_URL=` com comentário "só loopback em produção")
+- Modify: `lib/channels/meta/validate-credentials.ts` (linhas 27, 78), `lib/channels/meta/assinar-webhook.ts` (linha 35), `lib/channels/meta/coexistencia.ts` (tipo e regras puras), `.env.example` (ao lado de `META_GRAPH_VERSION`: `META_GRAPH_BASE_URL=` com comentário "só loopback em produção")
 - Test: `lib/channels/meta/graph-base.test.ts`, `lib/channels/meta/cadastro-incorporado.test.ts`, `lib/channels/meta/coexistencia.test.ts` (acrescentar)
 
 **Interfaces:**
@@ -726,7 +818,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   export interface Coexistencia {
     onboarding_em: string;
     pedidos: { contatos: { request_id: string } | { erro: string } | null; historico: { request_id: string } | { erro: string } | null };
-    historico: { fase: number | null; progresso: number | null; concluido: boolean; erro: string | null } | null;
+    /** `erro_codigo` guarda o CÓDIGO da Meta (ex.: 2593109); a frase é montada na tela, traduzida (ruling P13). */
+    historico: { fase: number | null; progresso: number | null; concluido: boolean; erro_codigo: number | null } | null;
   }
   export function lerCoexistencia(metadata: unknown): Coexistencia | null
   export function dentroDoPrazoDeSincronizacao(onboardingEm: string, agora?: Date): boolean
@@ -743,10 +836,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   export function gerarPin(): string
   export async function registrarNumero(token: string, phoneNumberId: string, pin: string): Promise<void>
   export async function pedirSincronizacao(token: string, phoneNumberId: string, tipo: "smb_app_state_sync" | "history"): Promise<{ request_id: string } | { erro: string }>
-  export async function arquivarSessaoLegadaDoNumero(admin: SupabaseClient, organizationId: string, phoneNumber: string, excetoSessionId: string): Promise<string | null>
+  export async function arquivarSessaoLegadaDoNumero(admin: SupabaseClient, organizationId: string, phoneNumber: string): Promise<string | null>
   ```
+  (filtra `provider = waha`, então a sessão oficial nunca é candidata; não precisa de `excetoSessionId`. É chamada ANTES de `conectarCanalOficial`, ruling P1.)
 
-- [ ] **Step 1:** `graph-base.ts` + teste (3 casos: default, override em dev, override não-loopback ignorado em produção) — corpo igual a `baseDoInstagram` trocando a variável para `META_GRAPH_BASE_URL` e a constante para `BASE_DA_GRAPH = "https://graph.facebook.com"`. Trocar as três URLs existentes por `` `${baseDaGraph()}/${graphVersion()}/…` ``. Rodar `pnpm vitest run lib/channels/meta/validate-credentials.test.ts lib/channels/meta/assinar-webhook.test.ts tests/unit/versao-da-graph-num-lugar-so.test.ts` → passed.
+- [ ] **Step 1:** `graph-base.ts` + teste (3 casos: default, override em dev, override não-loopback ignorado em produção) — corpo igual a `baseDoInstagram` trocando a variável para `META_GRAPH_BASE_URL` e a constante para `BASE_DA_GRAPH = "https://graph.facebook.com"`. Trocar as três URLs do **fluxo de conexão** (`validate-credentials.ts:27` e `:78`, `assinar-webhook.ts:35`; `send-template.ts:93` e `template-sync.ts:228` ficam como estão, o e2e não envia template) por `` `${baseDaGraph()}/${graphVersion()}/…` ``. Rodar `pnpm vitest run lib/channels/meta/validate-credentials.test.ts lib/channels/meta/assinar-webhook.test.ts tests/unit/versao-da-graph-num-lugar-so.test.ts` → passed.
 
 - [ ] **Step 2:** regras puras em `coexistencia.ts` (teste primeiro, no arquivo da Task 0):
 
@@ -1043,21 +1137,26 @@ export async function pedirSincronizacao(
  * deste mesmo número já caiu. Arquiva (não apaga: conversas ficam) e tenta
  * limpar a sessão no WAHA, sem falhar a conexão se o WAHA não responder.
  * Devolve o id arquivado, ou `null` se não havia.
+ *
+ * Roda ANTES de gravar a sessão oficial: o índice
+ * `channel_sessions_phone_per_org_unique (organization_id, phone_number) where
+ * archived_at is null` ainda tem a linha WAHA do mesmo número, e gravar a
+ * oficial antes de arquivá-la é 23505 exatamente no caso da clínica.
  */
 export async function arquivarSessaoLegadaDoNumero(
   admin: SupabaseClient,
   organizationId: string,
   phoneNumber: string,
-  excetoSessionId: string,
 ): Promise<string | null> {
+  // Só o provider legado é candidato: a sessão oficial (que ainda nem existe
+  // quando isto roda, ruling P1) nunca entra no filtro.
   const base = () =>
     admin
       .from("channel_sessions")
       .select("id, waha_session_name")
       .eq("organization_id", organizationId)
       .eq("provider", CHANNEL_PROVIDER_WAHA)
-      .eq("phone_number", phoneNumber)
-      .neq("id", excetoSessionId);
+      .eq("phone_number", phoneNumber);
   const { data } = await queryTolerantToMissingArchived(
     () => base().is(ARCHIVED_AT, null).maybeSingle(),
     () => base().maybeSingle(),
@@ -1105,12 +1204,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ## Task 5: `conectarCanalOficial` extraído, rota do Cadastro Incorporado e rota `/sincronizar`
 
 **Files:**
-- Create: `lib/channels/meta/conectar-canal-oficial.ts`
-- Modify: `app/api/v1/channels/official/route.ts` (POST: linhas 212-380 viram uma chamada; `publicBase`/`callbackDaSessao`/`traduzirMotivo`/`assinaturaGravada` ficam na rota porque o GET os usa; a nova função recebe `callbackBase`)
+- Create: `lib/channels/meta/conectar-canal-oficial.ts`, `app/api/v1/channels/official/route-helpers.ts` (`publicBase` e `traduzirMotivo` saem de `route.ts` para cá, porque a rota nova também os usa; Next ignora arquivo sem `route.ts` no nome)
+- Modify: `app/api/v1/channels/official/route.ts` (POST: linhas 212-380 viram uma chamada; `callbackDaSessao` e `assinaturaGravada` ficam no GET; a nova função recebe `callbackBase`)
 - Create: `app/api/v1/channels/official/cadastro-incorporado/route.ts`, `app/api/v1/channels/official/cadastro-incorporado/sincronizar/route.ts`
 - Modify: `lib/audit/actions.ts` (perto de `"channel.connected"`, linha 212): `"channel.official_connected_es"`, `"channel.official_sync_requested"`
 - Modify: `components/connections/CadastroIncorporado.tsx` (retry), `hooks/channels/useOfficialChannel.ts` (`useSincronizarCoexistencia`), `lib/i18n/dicionario.ts`
-- Test: `tests/unit/canal-oficial-assina-webhook-da-conta.test.ts` (existente, continua verde), `tests/unit/canal-oficial-cadastro-incorporado-post.test.ts`, `tests/unit/canal-oficial-sincronizar-coexistencia.test.ts`
+- Test: `tests/unit/canal-oficial-assina-webhook-da-conta.test.ts` (existente, continua verde), `lib/channels/meta/conectar-canal-oficial.test.ts` (23505 → 422), `tests/unit/canal-oficial-cadastro-incorporado-post.test.ts`, `tests/unit/canal-oficial-sincronizar-coexistencia.test.ts`
 
 **Interfaces:**
 - ```ts
@@ -1119,8 +1218,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
     | { ok: true; sessionId: string; displayName: string; phoneNumber: string | null; webhook: { assinado: true } | { assinado: false; motivo: string } }
     | { ok: false; status: 422 | 500; codigo: "invalid_request" | "internal_error"; motivo: string };
   export async function conectarCanalOficial(admin: SupabaseClient, input: ConexaoOficialInput): Promise<ConexaoOficialResultado>
+  export const MOTIVO_NUMERO_EM_OUTRA_ORG = "este número já está conectado em outra organização";
+  export async function gravarCoexistencia(admin: SupabaseClient, organizationId: string, sessionId: string, coex: Coexistencia): Promise<void>
   ```
-  `motivo` volta SEM traduzir; a rota aplica `traduzirMotivo`. `metadataExtra` é mesclado na metadata junto de `webhook_da_conta` (é onde `coexistencia` entra).
+  `motivo` volta SEM traduzir; a rota aplica `traduzirMotivo`. `metadataExtra` é mesclado na metadata junto de `webhook_da_conta` (é onde `coexistencia` entra). **Erro de gravação `23505`** (índice `channel_sessions_meta_phone_number_id_ativo_unique`: o número está ativo em OUTRA organização) devolve `{ ok: false, status: 422, codigo: "invalid_request", motivo: MOTIVO_NUMERO_EM_OUTRA_ORG }` — hoje o POST devolve 500 para qualquer erro de gravação (`route.ts:302`), e a spec manda recusar (ruling P15b). `gravarCoexistencia` é ler-mesclar-gravar de `metadata` filtrando `organization_id` e `id` (mesmo `ponytail:` do POST atual), usada pela rota nova, pela `/sincronizar` e pelo worker da Task 11.
 - POST `/api/v1/channels/official/cadastro-incorporado` — body `{ code: string; evento: string; waba_id: string | null; phone_number_id: string | null }`; guardas `requireSupportWrite()` + `requireRole("admin")`; resposta `{ connected: true, displayName, phoneNumber, coexistencia: boolean, webhook }`.
 - POST `/api/v1/channels/official/cadastro-incorporado/sincronizar` — sem body; só os pedidos que ainda não têm `request_id`; 422 fora das 24 h.
 
@@ -1139,44 +1240,151 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 Rodar `pnpm vitest run tests/unit/canal-oficial-assina-webhook-da-conta.test.ts tests/unit/canal-oficial-aviso-de-recebimento.test.tsx` → passed (os `vi.mock` são por caminho de módulo e continuam valendo dentro do módulo novo).
 
-- [ ] **Step 2:** teste da rota nova (mocks no molde do teste existente; `cadastro-incorporado` mockado por função):
+No mesmo passo, o 23505 (ruling P15b). Onde hoje está `return fail("internal_error", error.message ?? "channel_session_write_failed", 500, ...)` (`route.ts:302`), a função devolve:
+
+```ts
+  if (error) {
+    if (error.code === "23505") return { ok: false, status: 422, codigo: "invalid_request", motivo: MOTIVO_NUMERO_EM_OUTRA_ORG };
+    return { ok: false, status: 500, codigo: "internal_error", motivo: error.message ?? "channel_session_write_failed" };
+  }
+```
+
+Teste `lib/channels/meta/conectar-canal-oficial.test.ts` (o `adminFalso` do teste de assinatura, com `insertErro` configurável; `validateMetaCredentials`/`conferirNumeroDaConta`/`encryptWebhookSecret` mockados como lá):
+
+```ts
+it("número ativo em OUTRA organização (23505 no índice de phone_number_id) recusa com 422 e a frase, não 500", async () => {
+  insertErro = { code: "23505", message: 'duplicate key value violates unique constraint "channel_sessions_meta_phone_number_id_ativo_unique"' };
+  const r = await conectarCanalOficial(admin, ENTRADA);
+  expect(r).toEqual({ ok: false, status: 422, codigo: "invalid_request", motivo: MOTIVO_NUMERO_EM_OUTRA_ORG });
+  expect(assinaturas).toHaveLength(0); // não assinou webhook de uma sessão que não gravou
+});
+it("outro erro de gravação continua 500", async () => {
+  insertErro = { code: "XX000", message: "disco cheio" };
+  expect(await conectarCanalOficial(admin, ENTRADA)).toMatchObject({ ok: false, status: 500, codigo: "internal_error" });
+});
+```
+
+- [ ] **Step 2:** teste da rota nova (mocks no molde do teste existente). **Ruling P7:** os dois `vi.mock` usam `importOriginal` e sobrescrevem só o que o teste controla; sem isso `gravarCoexistencia` (usada pela rota e vinda do mesmo módulo de `conectarCanalOficial`) fica `undefined` e a rota lança. **Ruling P5:** valores que passam no Zod. Cada função controlada é um `vi.fn` declarado antes do mock (hoisting: usar `vi.hoisted`).
 
 ```ts
 // tests/unit/canal-oficial-cadastro-incorporado-post.test.ts
-vi.mock("@/lib/channels/meta/cadastro-incorporado", () => ({
-  trocarCodigo: async () => "EAAX",
-  conferirToken: async () => ({ ok: true }),
-  numerosDaConta: async () => [{ id: "111", displayPhoneNumber: "+55 27 99904-9879", isOnBizApp: true }],
-  escolherNumero: (ns: unknown[], i: { coexistencia: boolean }) => (i.coexistencia ? { ok: true, numero: (ns as { id: string }[])[0] } : { ok: true, numero: (ns as { id: string }[])[0] }),
-  registrarNumero: (...a: unknown[]) => registrar(...a),
-  gerarPin: () => "123456",
-  pedirSincronizacao: (...a: unknown[]) => sincronizar(...a),
-  arquivarSessaoLegadaDoNumero: async () => "sessao-waha-antiga",
-  ErroDaMeta: class extends Error { codigo = null; subcodigo = null },
-}));
-vi.mock("@/lib/channels/meta/conectar-canal-oficial", () => ({
-  conectarCanalOficial: (...a: unknown[]) => conectar(...a),
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const m = vi.hoisted(() => ({
+  trocar: vi.fn(async () => "EAAX"),
+  conferir: vi.fn(async () => ({ ok: true }) as { ok: true } | { ok: false; motivo: string }),
+  numeros: vi.fn(async () => [{ id: "111222333", displayPhoneNumber: "+55 27 99904-9879", isOnBizApp: true }]),
+  registrar: vi.fn(async () => undefined),
+  sincronizar: vi.fn(),
+  arquivar: vi.fn(async () => "sessao-waha-antiga"),
+  conectar: vi.fn(),
 }));
 
-it("coexistência: não registra, pede contatos e histórico, grava metadata.coexistencia e audita sem token", async () => {
-  conectar.mockResolvedValue({ ok: true, sessionId: CANAL, displayName: "Clínica", phoneNumber: "+5527999049879", webhook: { assinado: true } });
-  sincronizar.mockResolvedValueOnce({ request_id: "c-1" }).mockResolvedValueOnce({ request_id: "h-1" });
-  const res = await POST(req({ code: "AQB", evento: "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", waba_id: "222", phone_number_id: null }));
-  expect(res.status).toBe(200);
-  expect(registrar).not.toHaveBeenCalled();
-  expect(sincronizar.mock.calls.map((c) => c[2])).toEqual(["smb_app_state_sync", "history"]);
-  expect(db.updates.at(-1)?.patch.metadata).toMatchObject({ coexistencia: { pedidos: { contatos: { request_id: "c-1" }, historico: { request_id: "h-1" } } } });
-  expect(JSON.stringify(auditorias)).not.toContain("EAAX");
-  expect(auditorias[0]).toMatchObject({ action: "channel.official_connected_es", metadata: { coexistencia: true, sessao_legada_arquivada: "sessao-waha-antiga" } });
+vi.mock("@/lib/channels/meta/cadastro-incorporado", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/channels/meta/cadastro-incorporado")>()),
+  trocarCodigo: m.trocar,
+  conferirToken: m.conferir,
+  numerosDaConta: m.numeros,
+  registrarNumero: m.registrar,
+  gerarPin: () => "123456",
+  pedirSincronizacao: m.sincronizar,
+  arquivarSessaoLegadaDoNumero: m.arquivar,
+  // escolherNumero e ErroDaMeta: os ORIGINAIS (puros)
+}));
+vi.mock("@/lib/channels/meta/conectar-canal-oficial", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/channels/meta/conectar-canal-oficial")>()),
+  conectarCanalOficial: m.conectar,
+  // gravarCoexistencia: a ORIGINAL, que grava no adminFalso (é o que o 1º caso afirma)
+}));
+// + mocks de requireRole/requireSupportWrite/appDaMeta/createAdminClient/audit/encryptWebhookSecret
+//   no molde de tests/unit/canal-oficial-assina-webhook-da-conta.test.ts (adminFalso com `db.updates`, `auditorias`)
+
+import { ErroDaMeta } from "@/lib/channels/meta/cadastro-incorporado";
+import { POST } from "@/app/api/v1/channels/official/cadastro-incorporado/route";
+
+const CANAL = "aaaaaaaa-0000-4000-8000-000000000001";
+const COEX = { code: "AQBx1234567890", evento: "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", waba_id: "222333444555", phone_number_id: null };
+const NOVO = { ...COEX, evento: "FINISH" };
+const conectado = { ok: true, sessionId: CANAL, displayName: "Clínica", phoneNumber: "+5527999049879", webhook: { assinado: true } };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  m.conectar.mockResolvedValue(conectado);
+  m.sincronizar.mockResolvedValueOnce({ request_id: "c-1" }).mockResolvedValueOnce({ request_id: "h-1" });
 });
 
-it("número novo (FINISH): registra com PIN e não pede sincronização", async () => { /* registrar chamado 1x com pin "123456"; sincronizar 0x; metadata sem coexistencia */ });
+describe("POST /channels/official/cadastro-incorporado", () => {
+  it("coexistência: arquiva a sessão legada ANTES de conectar, não registra, pede contatos e histórico, grava metadata.coexistencia e audita sem token", async () => {
+    const res = await POST(req(COEX));
+    expect(res.status).toBe(200);
+    expect(m.registrar).not.toHaveBeenCalled();
+    expect(m.arquivar).toHaveBeenCalledWith(expect.anything(), ORG, "+5527999049879");
+    // ordem (ruling P1): o índice (org, phone_number) ativo ainda tem a linha WAHA
+    expect(m.arquivar.mock.invocationCallOrder[0]!).toBeLessThan(m.conectar.mock.invocationCallOrder[0]!);
+    expect(m.sincronizar.mock.calls.map((c) => c[2])).toEqual(["smb_app_state_sync", "history"]);
+    expect(db.updates.at(-1)?.patch.metadata).toMatchObject({ coexistencia: { pedidos: { contatos: { request_id: "c-1" }, historico: { request_id: "h-1" } } } });
+    expect(JSON.stringify(auditorias)).not.toContain("EAAX");
+    expect(auditorias[0]).toMatchObject({ action: "channel.official_connected_es", metadata: { coexistencia: true, sessao_legada_arquivada: "sessao-waha-antiga" } });
+    expect(await res.json()).toMatchObject({ data: { connected: true, coexistencia: true, displayName: "Clínica" } });
+  });
 
-it("falha no smb_app_data não desfaz a conexão: 200 com o erro gravado em pedidos.historico", async () => { /* sincronizar 2ª chamada { erro: "x" } → status 200, metadata.coexistencia.pedidos.historico.erro === "x" */ });
+  it("número novo (FINISH): registra com o PIN, guarda o PIN cifrado na metadata e não pede sincronização", async () => {
+    const res = await POST(req(NOVO));
+    expect(res.status).toBe(200);
+    expect(m.registrar).toHaveBeenCalledTimes(1);
+    expect(m.registrar).toHaveBeenCalledWith("EAAX", "111222333", "123456");
+    expect(m.sincronizar).not.toHaveBeenCalled();
+    const entrada = m.conectar.mock.calls[0]![1] as { metadataExtra?: Record<string, unknown> };
+    expect(entrada.metadataExtra).toMatchObject({ pin_cifrado: expect.any(String), cadastro_incorporado: { evento: "FINISH" } });
+    expect(JSON.stringify(entrada.metadataExtra)).not.toContain("123456");
+    expect(db.updates.some((u) => "coexistencia" in ((u.patch.metadata as Record<string, unknown> | undefined) ?? {}))).toBe(false);
+    expect(await res.json()).toMatchObject({ data: { coexistencia: false } });
+  });
 
-it("token de outro app → 422 sem gravar nada", async () => { /* conferirToken mock { ok:false } via vi.mocked → conectar não chamado */ });
+  it("falha no smb_app_data não desfaz a conexão: 200 com o erro gravado em pedidos.historico", async () => {
+    m.sincronizar.mockReset().mockResolvedValueOnce({ request_id: "c-1" }).mockResolvedValueOnce({ erro: "x" });
+    const res = await POST(req(COEX));
+    expect(res.status).toBe(200);
+    expect(db.updates.at(-1)?.patch.metadata).toMatchObject({ coexistencia: { pedidos: { contatos: { request_id: "c-1" }, historico: { erro: "x" } } } });
+  });
 
-it("code vencido → 422 com a mensagem da Meta", async () => { /* trocarCodigo rejeita ErroDaMeta → 422 */ });
+  it("token de outro app → 422 sem gravar nada", async () => {
+    m.conferir.mockResolvedValueOnce({ ok: false, motivo: "o token devolvido não é do app desta instalação" });
+    const res = await POST(req(COEX));
+    expect(res.status).toBe(422);
+    expect(m.conectar).not.toHaveBeenCalled();
+    expect(m.arquivar).not.toHaveBeenCalled();
+    expect(db.updates).toHaveLength(0);
+    expect(auditorias).toHaveLength(0);
+  });
+
+  it("code vencido → 422 com a mensagem da Meta", async () => {
+    m.trocar.mockRejectedValueOnce(new ErroDaMeta(100, 36007, "This authorization code has expired"));
+    const res = await POST(req(COEX));
+    expect(res.status).toBe(422);
+    expect((await res.json()).error.message).toContain("expired");
+    expect(m.conectar).not.toHaveBeenCalled();
+  });
+
+  it("evento que não é de término (CANCEL) → 422 antes de falar com a Meta", async () => {
+    const res = await POST(req({ ...COEX, evento: "CANCEL" }));
+    expect(res.status).toBe(422);
+    expect(m.trocar).not.toHaveBeenCalled();
+  });
+
+  it("body curto demais (code < 10, waba_id < 5) → 422 do Zod", async () => {
+    expect((await POST(req({ ...COEX, code: "AQB" }))).status).toBe(422);
+    expect((await POST(req({ ...COEX, waba_id: "222" }))).status).toBe(422);
+  });
+
+  it("conexão recusada (número em outra org, 422 do conectarCanalOficial) sobe com a frase traduzida e não pede sincronização", async () => {
+    m.conectar.mockResolvedValueOnce({ ok: false, status: 422, codigo: "invalid_request", motivo: "este número já está conectado em outra organização" });
+    const res = await POST(req(COEX));
+    expect(res.status).toBe(422);
+    expect((await res.json()).error.message).toMatch(/outra organização/);
+    expect(m.sincronizar).not.toHaveBeenCalled();
+  });
+});
 ```
 
 - [ ] **Step 3:** rota:
@@ -1196,14 +1404,14 @@ import {
   pedirSincronizacao, registrarNumero, trocarCodigo,
 } from "@/lib/channels/meta/cadastro-incorporado";
 import { EVENTO_COEXISTENCIA, EVENTO_NUMERO_NOVO, type Coexistencia } from "@/lib/channels/meta/coexistencia";
-import { conectarCanalOficial } from "@/lib/channels/meta/conectar-canal-oficial";
+import { conectarCanalOficial, gravarCoexistencia } from "@/lib/channels/meta/conectar-canal-oficial";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
-import { publicBase, traduzirMotivo } from "../route-helpers"; // extrair de ../route.ts neste passo (publicBase, traduzirMotivo)
+import { publicBase, traduzirMotivo } from "../route-helpers"; // criado no Step 1 (saem de ../route.ts)
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -1243,11 +1451,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     token = await trocarCodigo({ appId: app.appId, appSecret: app.appSecret }, code);
   } catch (err) {
-    const msg = err instanceof ErroDaMeta ? err.message : t("a troca do código com a Meta falhou. Tente de novo.");
+    // `ErroDaMeta.message` já é a frase de `MENSAGENS_POR_CODIGO` (ou o cru da Meta);
+    // `t()` traduz as conhecidas e devolve o cru intacto (ruling P13).
+    const msg = err instanceof ErroDaMeta ? t(err.message) : t("a troca do código com a Meta falhou. Tente de novo.");
     return fail("invalid_request", msg, 422, { requestId });
   }
   const conferido = await conferirToken({ appId: app.appId, appSecret: app.appSecret }, token);
-  if (!conferido.ok) return fail("invalid_request", conferido.motivo, 422, { requestId });
+  if (!conferido.ok) return fail("invalid_request", t(conferido.motivo), 422, { requestId });
 
   // 2. número
   let numeros;
@@ -1257,6 +1467,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const escolha = escolherNumero(numeros, { phoneNumberId: phone_number_id, coexistencia });
   if (!escolha.ok) return fail("invalid_request", t(escolha.motivo), 422, { requestId });
   const phoneNumberId = escolha.numero.id;
+  // `+` + dígitos: a MESMA grafia que `conectarCanalOficial` grava em `phone_number`
+  // (e a que `canonicalPhoneBR` produz para a sessão WAHA). Ver "Dúvidas" 11.
+  const phoneNumber = escolha.numero.displayPhoneNumber ? `+${escolha.numero.displayPhoneNumber.replace(/\D/g, "")}` : null;
 
   // 3. register só para número novo
   const admin = createAdminClient();
@@ -1270,7 +1483,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // 4. o MESMO caminho do formulário manual
+  // 4. a sessão WAHA deste número já caiu (a Meta desconecta os aparelhos).
+  //    ANTES de gravar a oficial (ruling P1): o índice único
+  //    `channel_sessions_phone_per_org_unique (organization_id, phone_number)
+  //    where archived_at is null` ainda tem a linha WAHA ativa com este número;
+  //    gravar a oficial primeiro é 23505 no cenário da clínica.
+  const legada = phoneNumber ? await arquivarSessaoLegadaDoNumero(admin, orgId, phoneNumber) : null;
+
+  // 5. o MESMO caminho do formulário manual
   const agora = new Date().toISOString();
   const r = await conectarCanalOficial(admin, {
     organizationId: orgId, userId: authz.user.id, requestId, phoneNumberId, wabaId: waba_id, token, callbackBase: publicBase(req),
@@ -1279,9 +1499,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ...(pinCifrado ? { pin_cifrado: pinCifrado } : {}),
     },
   });
-  if (!r.ok) return fail(r.codigo, traduzirMotivo(r.motivo, t), r.status, { requestId });
+  if (!r.ok) return fail(r.codigo, t(traduzirMotivo(r.motivo, t)), r.status, { requestId });
 
-  // 5. coexistência: contatos, depois histórico. Falha NÃO desfaz a conexão.
+  // 6. coexistência: contatos, depois histórico. Falha NÃO desfaz a conexão.
   let coex: Coexistencia | null = null;
   if (coexistencia) {
     const contatos = await pedirSincronizacao(token, phoneNumberId, "smb_app_state_sync");
@@ -1289,9 +1509,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     coex = { onboarding_em: agora, pedidos: { contatos, historico }, historico: null };
     await gravarCoexistencia(admin, orgId, r.sessionId, coex);
   }
-
-  // 6. a sessão WAHA deste número já caiu (a Meta desconecta os aparelhos)
-  const legada = r.phoneNumber ? await arquivarSessaoLegadaDoNumero(admin, orgId, r.phoneNumber, r.sessionId) : null;
 
   // 7. trilha — sem token, sem PIN
   void audit({
@@ -1307,7 +1524,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 }
 ```
 
-`gravarCoexistencia(admin, orgId, sessionId, coex)` vive em `lib/channels/meta/conectar-canal-oficial.ts` (exportada; ler-mesclar-gravar de `metadata`, mesmo `ponytail:` do POST atual) para a rota `/sincronizar` e a Task 11 reutilizarem. `publicBase`/`traduzirMotivo` saem de `official/route.ts` para `app/api/v1/channels/official/route-helpers.ts` (Next ignora arquivo sem `route.ts` no nome; o GET/POST existentes importam de lá).
+`gravarCoexistencia` e `route-helpers.ts` já nasceram no Step 1 (ver Interfaces). O `t(traduzirMotivo(...))` é de propósito: `traduzirMotivo` cobre os motivos antigos do formulário; `t()` cobre `MOTIVO_NUMERO_EM_OUTRA_ORG` e o resto do dicionário.
 
 - [ ] **Step 4:** rota `/sincronizar`:
 
@@ -1348,14 +1565,23 @@ Teste `tests/unit/canal-oficial-sincronizar-coexistencia.test.ts`: (a) pedido co
 </div>
 ```
 
-(`ate` = `new Date(onboarding_em + PRAZO).toLocaleTimeString(...)`); fora do prazo, texto fixo "Passaram 24 horas. Desconecte e refaça o fluxo pelo botão."
+(`ate` = `new Date(onboarding_em + PRAZO).toLocaleTimeString(...)`); fora do prazo, `<p data-testid="historico-fora-do-prazo">{t("Passaram 24 horas. Desconecte e refaça o fluxo pelo botão.")}</p>` (com `t()`: ruling P13).
 
-- [ ] **Step 6:** espanhol; `pnpm vitest run tests/unit/canal-oficial-cadastro-incorporado-post.test.ts tests/unit/canal-oficial-sincronizar-coexistencia.test.ts tests/unit/canal-oficial-assina-webhook-da-conta.test.ts tests/unit/i18n-espanhol-cobre-a-tela.test.ts`; `pnpm lint:channels`; `pnpm typecheck`; `pnpm test:unit > /tmp/vt.log 2>&1; echo "exit=$?"` com as sondas do CLAUDE.md.
+- [ ] **Step 6:** espanhol (ruling P13). O teste `i18n-espanhol-cobre-a-tela` só varre `app/` e `components/`, então as frases que nascem em `lib/` entram no dicionário por esta lista, e a rota passa cada uma por `t()` antes de devolver:
+  - as 9 frases de `MENSAGENS_POR_CODIGO` (`coexistencia.ts`, Task 4);
+  - `escolherNumero`: "a Meta não devolveu o número desta conta. Refaça o fluxo.", "o número não está marcado como coexistência (is_on_biz_app). Refaça o fluxo escolhendo manter o número no celular.", "a conta tem mais de um número e a Meta não disse qual foi cadastrado. Use o formulário manual.";
+  - `conferirToken`: "o token devolvido não é do app desta instalação", "a Meta devolveu um token inválido" (o motivo com a lista de permissões é montado: traduzir só o prefixo "o token não tem as permissões");
+  - `MOTIVO_NUMERO_EM_OUTRA_ORG`;
+  - rota: "code, evento e waba_id são obrigatórios", "o fluxo da Meta não terminou. Tente de novo.", "a Meta não devolveu a conta do WhatsApp Business. Tente de novo.", "o Cadastro Incorporado não está configurado nesta instalação", "a troca do código com a Meta falhou. Tente de novo.";
+  - `/sincronizar`: "Nenhum canal oficial conectado.", "Este canal não foi conectado em coexistência.", "Passaram 24 horas desde a conexão. Para importar o histórico, desconecte e refaça o fluxo pelo botão.", "sem credencial da sessão";
+  - componente: "Importação do histórico não foi pedida.", "Dá para tentar de novo até", "Tentar de novo", "Passaram 24 horas. Desconecte e refaça o fluxo pelo botão.".
+
+  `pnpm vitest run lib/channels/meta/conectar-canal-oficial.test.ts tests/unit/canal-oficial-cadastro-incorporado-post.test.ts tests/unit/canal-oficial-sincronizar-coexistencia.test.ts tests/unit/canal-oficial-assina-webhook-da-conta.test.ts tests/unit/i18n-espanhol-cobre-a-tela.test.ts`; `pnpm lint:channels`; `pnpm typecheck`; `pnpm test:unit > /tmp/vt.log 2>&1; echo "exit=$?"` com as sondas do CLAUDE.md.
 
 - [ ] **Step 7:** commit:
 
 ```bash
-git add lib/channels/meta/conectar-canal-oficial.ts app/api/v1/channels/official/route.ts app/api/v1/channels/official/route-helpers.ts app/api/v1/channels/official/cadastro-incorporado/route.ts app/api/v1/channels/official/cadastro-incorporado/sincronizar/route.ts lib/audit/actions.ts components/connections/CadastroIncorporado.tsx hooks/channels/useOfficialChannel.ts lib/i18n/dicionario.ts tests/unit/canal-oficial-cadastro-incorporado-post.test.ts tests/unit/canal-oficial-sincronizar-coexistencia.test.ts
+git add lib/channels/meta/conectar-canal-oficial.ts lib/channels/meta/conectar-canal-oficial.test.ts app/api/v1/channels/official/route.ts app/api/v1/channels/official/route-helpers.ts app/api/v1/channels/official/cadastro-incorporado/route.ts app/api/v1/channels/official/cadastro-incorporado/sincronizar/route.ts lib/audit/actions.ts components/connections/CadastroIncorporado.tsx hooks/channels/useOfficialChannel.ts lib/i18n/dicionario.ts tests/unit/canal-oficial-cadastro-incorporado-post.test.ts tests/unit/canal-oficial-sincronizar-coexistencia.test.ts
 git commit -m "feat(canal-oficial): POST cadastro-incorporado conecta pelo mesmo caminho do formulário, pede sincronização e arquiva a sessão legada; retry em 24 h
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -1400,9 +1626,13 @@ export type MetaWebhookEvent = TemplateStatusEvent | MessageStatusEvent | Inboun
       "state_sync": [{ "type": "contact", "action": "add", "contact": { "full_name": "Maria Silva", "phone_number": "+55 31 99896-6398" }, "metadata": { "timestamp": "1760097600" } }] } }] }] },
   { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_update", "value": {
       "phone_number": "+5527999049879", "event": "PARTNER_REMOVED", "disconnection_info": { "reason": "USER_INITIATED_DISCONNECT" } } }] }] },
-  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_update", "value": { "phone_number": "+5527999049879", "event": "ACCOUNT_RECONNECTED" } }] }] }
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_update", "value": { "phone_number": "+5527999049879", "event": "ACCOUNT_RECONNECTED" } }] }] },
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_offboarded", "value": { "phone_number": "+5527999049879", "disconnection_info": { "reason": "BUSINESS_INITIATED_OFFBOARDING" } } }] }] },
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_reconnected", "value": { "phone_number": "+5527999049879" } }] }] }
 ]
 ```
+
+(Fixtures 7 e 8: `account_offboarded` e `account_reconnected` como CAMPOS próprios, ruling P15g. A doc de 01/10 lista os dois ao lado de `account_update`; o formato do `value` é o mesmo palpite das demais e se confere no dia.)
 
 - [ ] **Step 2:** teste (molde: `tests/unit/meta-webhook-inbound.test.ts`):
 
@@ -1431,6 +1661,15 @@ describe("coexistência — parser", () => {
   it("account_update PARTNER_REMOVED traz o motivo; ACCOUNT_RECONNECTED não", () => {
     expect(parseMetaWebhook(F[4]!)[0]).toMatchObject({ kind: "account_event", evento: "PARTNER_REMOVED", motivo: "USER_INITIATED_DISCONNECT", phoneNumber: "+5527999049879" });
     expect(parseMetaWebhook(F[5]!)[0]).toMatchObject({ kind: "account_event", evento: "ACCOUNT_RECONNECTED", motivo: null });
+  });
+  it("account_offboarded e account_reconnected como CAMPOS viram o mesmo account_event", () => {
+    expect(parseMetaWebhook(F[6]!)[0]).toMatchObject({ kind: "account_event", evento: "ACCOUNT_OFFBOARDED", motivo: "BUSINESS_INITIATED_OFFBOARDING", phoneNumber: "+5527999049879" });
+    expect(parseMetaWebhook(F[7]!)[0]).toMatchObject({ kind: "account_event", evento: "ACCOUNT_RECONNECTED", motivo: null, phoneNumber: "+5527999049879" });
+  });
+  it("tipo exótico no eco é preservado cru no evento (quem mapeia para o CHECK é tipoDoCrm, no ingest)", () => {
+    const eco = structuredClone(F[0]!) as { entry: Array<{ changes: Array<{ value: { message_echoes: Array<{ type: string }> } }> }> };
+    eco.entry[0]!.changes[0]!.value.message_echoes[0]!.type = "interactive";
+    expect(parseMetaWebhook(eco as never)[0]).toMatchObject({ kind: "echo_message", type: "interactive", text: null });
   });
 });
 ```
@@ -1480,9 +1719,15 @@ describe("coexistência — parser", () => {
         out.push({ kind: "state_sync", wabaId, phoneNumberId: str(meta.phone_number_id) ?? "", contatos });
         continue;
       }
-      if (change.field === "account_update" && str(v.event)) {
-        const ev = str(v.event)!;
-        const conhecido = (["PARTNER_REMOVED", "ACCOUNT_OFFBOARDED", "ACCOUNT_RECONNECTED"] as const).find((k) => k === ev);
+      // `account_update` traz o evento no `value.event`; `account_offboarded` e
+      // `account_reconnected` são CAMPOS próprios (o campo É o evento).
+      const eventoDaConta =
+        change.field === "account_update" ? str(v.event)
+        : change.field === "account_offboarded" ? "ACCOUNT_OFFBOARDED"
+        : change.field === "account_reconnected" ? "ACCOUNT_RECONNECTED"
+        : null;
+      if (eventoDaConta) {
+        const conhecido = (["PARTNER_REMOVED", "ACCOUNT_OFFBOARDED", "ACCOUNT_RECONNECTED"] as const).find((k) => k === eventoDaConta);
         out.push({
           kind: "account_event", wabaId, evento: conhecido ?? "OUTRO",
           motivo: str((v.disconnection_info as Record<string, unknown> | undefined)?.reason),
@@ -1491,8 +1736,6 @@ describe("coexistência — parser", () => {
         continue;
       }
 ```
-
-(`account_offboarded` e `account_reconnected` como CAMPOS próprios: tratar `change.field === "account_offboarded"` → evento `ACCOUNT_OFFBOARDED`, `"account_reconnected"` → `ACCOUNT_RECONNECTED`, mesmo objeto. Fixture 7 e 8 para os dois.)
 
 - [ ] **Step 4:** `pnpm vitest run tests/unit/meta-webhook-coexistencia.test.ts tests/unit/meta-webhook-inbound.test.ts tests/unit/meta-webhook.test.ts tests/unit/contrato-do-webhook-meta.test.ts` → passed (o envelope continua loose; nada muda em `envelope.ts`).
 
@@ -1510,13 +1753,19 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ## Task 7: Eco do celular entra como "Celular" e silencia a IA
 
 **Files:**
-- Modify: `lib/channels/meta/ingest.ts` (nova função `ingestMetaEcho`), `app/api/v1/webhooks/meta/[token]/route.ts` (ramo `echo_message` no `for`, ~linha 130), `app/api/v1/channels/official/route.ts` (GET, `fields` linha 187)
-- Test: `lib/channels/meta/ingest-echo.test.ts`
+- Modify: `lib/channels/meta/ingest.ts` (extrai `resolverContatoEConversa` e `tipoDoCrm`; nova função `ingestMetaEcho`), `app/api/v1/webhooks/meta/[token]/route.ts` (ramo `echo_message` no `for`, ~linha 130), `app/api/v1/channels/official/route.ts` (GET, `fields` linha 187)
+- Test: `lib/channels/meta/ingest-echo.test.ts`, `lib/channels/meta/tipo-do-crm.test.ts`, `tests/unit/ingestao-do-canal-oficial-por-organizacao.test.ts` (existente: continua verde depois da extração)
 
 **Interfaces:**
-- `export async function ingestMetaEcho(admin: SupabaseClient, e: EchoMessageEvent, dono: ChannelTenantScope): Promise<IngestOutcome>`
-- Consome `pausarIaPorAtendimentoManual` (`lib/escalacao/atendimento-manual.ts`), `marcarConversaComMensagem`, `encontrarContatoPorTelefone`, `fn_upsert_wa_contact`/`fn_upsert_wa_conversation`.
-- `fields` do GET passa a ser `["messages", "message_template_status_update", "smb_message_echoes", "history", "smb_app_state_sync", "account_update"]`.
+- ```ts
+  /** Contato por variantes do número → canonicalPhoneBR → fn_upsert_wa_contact → fn_upsert_wa_conversation. ÚNICA cópia (ruling P12): inbound, eco e histórico passam aqui. */
+  export async function resolverContatoEConversa(admin: Admin, orgId: string, sessaoId: string, waId: string, notify: string | null): Promise<{ ok: true; contactId: string; conversationId: string } | { ok: false; reason: string }>
+  /** Tipo cru da Meta → valor aceito por `messages_type_check` (ruling P4). `contacts` → `contact`; o que não tem equivalente vira `system` com body `[tipo]`. */
+  export function tipoDoCrm(tipo: string): { type: string; bodyDeSistema: string | null }
+  export async function ingestMetaEcho(admin: SupabaseClient, e: EchoMessageEvent, dono: ChannelTenantScope): Promise<IngestOutcome>
+  ```
+- Consome `pausarIaPorAtendimentoManual` (`lib/escalacao/atendimento-manual.ts`), `marcarConversaComMensagem`, `encontrarContatoPorTelefone` (`lib/channels/contato-por-telefone.ts`), `canonicalPhoneBR` (`lib/channels/phone-variants.ts`), `fn_upsert_wa_contact`/`fn_upsert_wa_conversation`.
+- `fields` do GET passa a ser `["messages", "message_template_status_update", "smb_message_echoes", "history", "smb_app_state_sync", "account_update", "account_offboarded", "account_reconnected"]` (ruling P15g: o parser trata os dois como campo).
 
 - [ ] **Step 1:** teste com o `adminFalso` de `tests/unit/ingestao-do-canal-oficial-por-organizacao.test.ts` (copiar a fábrica para este arquivo; registrar `rpc` chamadas e `insert` payloads):
 
@@ -1545,11 +1794,74 @@ it("o contato é o DESTINATÁRIO e o nome do perfil não é passado (seria o da 
   await ingestMetaEcho(admin, ECO, { organizationId: ORG });
   expect(rpcs.find((r) => r.fn === "fn_upsert_wa_contact")?.args).toMatchObject({ p_chat_id: "5531998966398", p_notify: null });
 });
+it("linha `queued` sem external_id na mesma conversa NÃO barra o eco (premissa decidida: a Meta não ecoa envio feito pela API)", async () => {
+  // O gate do #519 (`ehEcoDeEnvioNosso`, lib/waha/ingest.ts) existe porque o WAHA
+  // ecoa o que o próprio CRM enviou. Em `smb_message_echoes` a doc descreve só o
+  // que saiu do APLICATIVO; se a premissa cair, o custo é a IA calada 5 min depois
+  // do próprio envio — e este caso é o que vai mudar.
+  db.messages.push({ id: "m-queued", conversation_id: CONV, direction: "outbound", status: "queued", external_id: null });
+  expect(await ingestMetaEcho(admin, ECO, { organizationId: ORG })).toMatchObject({ status: "ingested" });
+  expect(pausar).toHaveBeenCalledTimes(1);
+});
+it("tipo exótico (interactive) entra como system com body [interactive], nunca viola o CHECK", async () => {
+  await ingestMetaEcho(admin, { ...ECO, type: "interactive", text: null }, { organizationId: ORG });
+  expect(inserts[0]).toMatchObject({ type: "system", body: "[interactive]" });
+});
 ```
 
-- [ ] **Step 2:** implementação em `ingest.ts` (depois de `ingestMetaInbound`):
+E `lib/channels/meta/tipo-do-crm.test.ts`:
 
 ```ts
+import { describe, expect, it } from "vitest";
+import { tipoDoCrm } from "./ingest";
+
+describe("tipoDoCrm", () => {
+  it("passa os tipos do CHECK intactos", () => {
+    for (const t of ["text", "image", "video", "audio", "document", "sticker", "location", "contact", "reaction", "system", "template"]) {
+      expect(tipoDoCrm(t)).toEqual({ type: t, bodyDeSistema: null });
+    }
+  });
+  it("contacts (plural da Meta) vira contact", () => {
+    expect(tipoDoCrm("contacts")).toEqual({ type: "contact", bodyDeSistema: null });
+  });
+  it("sem equivalente vira system com o rótulo", () => {
+    for (const t of ["interactive", "button", "order", "unsupported", "unknown", ""]) {
+      expect(tipoDoCrm(t)).toEqual({ type: "system", bodyDeSistema: `[${t || "unknown"}]` });
+    }
+  });
+});
+```
+
+- [ ] **Step 2 (refactor primeiro, sem mudar comportamento):** extrair de `ingestMetaInbound` o bloco "achar contato por variantes → `canonicalPhoneBR` → `fn_upsert_wa_contact` → `fn_upsert_wa_conversation`" (hoje ~linhas 142-170) para `resolverContatoEConversa`, e o inbound passa a chamá-la. Rodar `pnpm vitest run tests/unit/ingestao-do-canal-oficial-por-organizacao.test.ts` → passed. Depois, `tipoDoCrm` e `ingestMetaEcho`:
+
+```ts
+/** Vocabulário de `messages_type_check` (baseline, bloco `message type: template (migration 0091)`). */
+const TIPOS_DO_CRM = new Set(["text", "image", "video", "audio", "document", "sticker", "location", "contact", "reaction", "system", "template"]);
+
+export function tipoDoCrm(tipo: string): { type: string; bodyDeSistema: string | null } {
+  if (tipo === "contacts") return { type: "contact", bodyDeSistema: null };
+  if (TIPOS_DO_CRM.has(tipo)) return { type: tipo, bodyDeSistema: null };
+  return { type: "system", bodyDeSistema: `[${tipo || "unknown"}]` };
+}
+
+export async function resolverContatoEConversa(
+  admin: Admin,
+  orgId: string,
+  sessaoId: string,
+  waId: string,
+  notify: string | null,
+): Promise<{ ok: true; contactId: string; conversationId: string } | { ok: false; reason: string }> {
+  const existente = await findContactByVariants(admin, orgId, waId);
+  const phone = existente?.phone_number ? canonicalPhoneBR(existente.phone_number) : canonicalPhoneBR(`+${waId.replace(/\D/g, "")}`);
+  const { data: contactId, error: erroContato } = await admin.rpc("fn_upsert_wa_contact" as never,
+    { p_org: orgId, p_kind: "phone", p_phone: phone, p_lid: null, p_chat_id: waId, p_notify: notify } as never);
+  if (erroContato || !contactId) return { ok: false, reason: `contato: ${erroContato?.message ?? "sem id"}` };
+  const { data: conversationId, error: erroConversa } = await admin.rpc("fn_upsert_wa_conversation" as never,
+    { p_org: orgId, p_contact: contactId as string, p_session: sessaoId } as never);
+  if (erroConversa || !conversationId) return { ok: false, reason: `conversa: ${erroConversa?.message ?? "sem id"}` };
+  return { ok: true, contactId: contactId as string, conversationId: conversationId as string };
+}
+
 /**
  * Eco do CELULAR (`smb_message_echoes`): uma pessoa respondeu pelo WhatsApp
  * Business do aparelho. É o mesmo gesto do `fromMe` do outro canal
@@ -1560,6 +1872,14 @@ it("o contato é o DESTINATÁRIO e o nome do perfil não é passado (seria o da 
  *
  * Idempotente por `(organization_id, external_id)`; o `duplicate` não pausa
  * nada — um wamid repetido pode ser reentrega de eco de envio do próprio CRM.
+ *
+ * PREMISSA (ruling P10, decidida e não provada): a Meta NÃO ecoa em
+ * `smb_message_echoes` o que foi enviado pela Cloud API — a documentação de
+ * 01/10/2026 ("message echoes") descreve mensagens enviadas pelo APLICATIVO do
+ * celular. Por isso o gate do #519 (`ehEcoDeEnvioNosso`: linha `queued` sem
+ * `external_id` na mesma conversa) não é generalizado aqui. Se a premissa
+ * cair, o sintoma é a IA calada 5 min depois do próprio envio; o teste
+ * "linha queued sem external_id não barra o eco" é o que passa a mudar.
  */
 export async function ingestMetaEcho(admin: Admin, e: EchoMessageEvent, dono: ChannelTenantScope): Promise<IngestOutcome> {
   let sessao: { id: string; organization_id: string } | null;
@@ -1568,49 +1888,45 @@ export async function ingestMetaEcho(admin: Admin, e: EchoMessageEvent, dono: Ch
   if (!sessao) return { status: "no_session" };
   const orgId = sessao.organization_id;
 
-  const existente = await findContactByVariants(admin, orgId, e.to);
-  const phone = existente?.phone_number ? canonicalPhoneBR(existente.phone_number) : canonicalPhoneBR(`+${e.to.replace(/\D/g, "")}`);
-  const { data: contactId, error: erroContato } = await admin.rpc("fn_upsert_wa_contact" as never,
-    { p_org: orgId, p_kind: "phone", p_phone: phone, p_lid: null, p_chat_id: e.to, p_notify: null } as never);
-  if (erroContato || !contactId) return { status: "failed", reason: `contato: ${erroContato?.message ?? "sem id"}` };
+  // O contato é o DESTINATÁRIO; sem `notify` (o nome do perfil aqui seria o da loja).
+  const alvo = await resolverContatoEConversa(admin, orgId, sessao.id, e.to, null);
+  if (!alvo.ok) return { status: "failed", reason: alvo.reason };
+  const { contactId, conversationId } = alvo;
 
-  const { data: conversationId, error: erroConversa } = await admin.rpc("fn_upsert_wa_conversation" as never,
-    { p_org: orgId, p_contact: contactId as string, p_session: sessao.id } as never);
-  if (erroConversa || !conversationId) return { status: "failed", reason: `conversa: ${erroConversa?.message ?? "sem id"}` };
-
+  const { type, bodyDeSistema } = tipoDoCrm(e.type);
   const { data: inserida, error: erroInsert } = await admin.from("messages").insert({
-    organization_id: orgId, conversation_id: conversationId as string, channel_session_id: sessao.id, contact_id: contactId as string,
+    organization_id: orgId, conversation_id: conversationId, channel_session_id: sessao.id, contact_id: contactId,
     direction: "outbound", status: "sent", sent_via: "external_device",
-    type: e.type, body: e.text, external_id: e.externalId,
+    type, body: bodyDeSistema ?? e.text, external_id: e.externalId,
     media_url: e.media ? `meta-media:${e.media.id}` : null, media_mime: e.media?.mime ?? null,
     sent_at: e.sentAt.toISOString(),
-    metadata: { origem: "celular", fromMe: true, ...(e.media ? { meta_media_id: e.media.id, voice: e.media.voice } : {}) },
+    metadata: { origem: "celular", fromMe: true, tipo_da_meta: e.type, ...(e.media ? { meta_media_id: e.media.id, voice: e.media.voice } : {}) },
   }).select("id").maybeSingle();
   if (erroInsert) {
     if (erroInsert.code === "23505") return { status: "duplicate" };
     return { status: "failed", reason: `mensagem: ${erroInsert.message}` };
   }
 
-  await marcarConversaComMensagem(admin, { organizationId: orgId, conversationId: conversationId as string, direction: "outbound", preview: previewDoEco(e), at: e.sentAt.toISOString(), canal: "meta" });
-  await pausarIaPorAtendimentoManual(admin, { organizationId: orgId, conversationId: conversationId as string, canal: "meta", agora: e.sentAt });
+  await marcarConversaComMensagem(admin, { organizationId: orgId, conversationId, direction: "outbound", preview: previewDoEco(e), at: e.sentAt.toISOString(), canal: "meta" });
+  await pausarIaPorAtendimentoManual(admin, { organizationId: orgId, conversationId, canal: "meta", agora: e.sentAt });
 
   const messageId = (inserida as { id: string } | null)?.id ?? "";
-  if (e.media && messageId) await pedirPersistenciaDeMidia(admin, orgId, messageId, conversationId as string); // extraído do inbound neste passo
-  return { status: "ingested", messageId, conversationId: conversationId as string };
+  if (e.media && messageId) await pedirPersistenciaDeMidia(admin, orgId, messageId, conversationId, "meta_webhook");
+  return { status: "ingested", messageId, conversationId };
 }
 ```
 
-(`previewDoEco` é o `previewOf` existente com a assinatura trocada para `Pick<InboundMessageEvent, "type" | "text" | "media"> & Partial<Pick<InboundMessageEvent, "sharedContact">>`, que serve aos dois eventos.)
+`previewDoEco` é o `previewOf` existente com a assinatura trocada para `Pick<InboundMessageEvent, "type" | "text" | "media"> & Partial<Pick<InboundMessageEvent, "sharedContact">>` (serve aos dois eventos; uma função só). `pedirPersistenciaDeMidia(admin, orgId, messageId, conversationId, source)` é o bloco `emit_event("media.persist_requested")` de `ingestMetaInbound` (hoje ~linhas 233-247) extraído, com o `console.error` trocado por `logger.error` (anti-pattern 14); o inbound passa a chamá-la com `"meta_webhook"`, o worker da Task 11 com `"meta_history"`.
 
 - [ ] **Step 3:** rota do webhook: `if (e.kind === "echo_message") { const r = await ingestMetaEcho(admin, e, { organizationId: session.organizationId }); desfechos.push(\`echo:${r.status}\`); continue; }` antes do ramo `template_status`. Os kinds `history_chunk`, `state_sync` e `account_event` recebem `desfechos.push("ignorado")` nesta task (Tasks 8, 11 e 12 os ligam). ⚠️ O `else` final hoje trata TUDO que não é template como `message_status`; com os kinds novos, trocar por `if (e.kind === "message_status")` explícito.
 
-- [ ] **Step 4:** `pnpm vitest run lib/channels/meta/ingest-echo.test.ts tests/unit/ingestao-do-canal-oficial-por-organizacao.test.ts tests/unit/webhook-meta-le-do-banco.test.ts tests/unit/rotulo-de-origem-tem-emissor.test.ts` → passed (a bolha já rotula `external_device` como "Celular": `components/inbox/MessageBubble.tsx:96`, nada a mudar na UI).
+- [ ] **Step 4:** `pnpm vitest run lib/channels/meta/ingest-echo.test.ts lib/channels/meta/tipo-do-crm.test.ts tests/unit/ingestao-do-canal-oficial-por-organizacao.test.ts tests/unit/webhook-meta-le-do-banco.test.ts tests/unit/rotulo-de-origem-tem-emissor.test.ts` → passed (a bolha já rotula `external_device` como "Celular": `components/inbox/MessageBubble.tsx:96`, nada a mudar na UI).
 
 - [ ] **Step 5:** commit:
 
 ```bash
-git add lib/channels/meta/ingest.ts lib/channels/meta/ingest-echo.test.ts "app/api/v1/webhooks/meta/[token]/route.ts" app/api/v1/channels/official/route.ts
-git commit -m "feat(canal-oficial): eco do celular entra como Celular, carimba a conversa e pausa a IA pela regra do atendimento manual
+git add lib/channels/meta/ingest.ts lib/channels/meta/ingest-echo.test.ts lib/channels/meta/tipo-do-crm.test.ts "app/api/v1/webhooks/meta/[token]/route.ts" app/api/v1/channels/official/route.ts
+git commit -m "feat(canal-oficial): eco do celular entra como Celular, carimba a conversa e pausa a IA pela regra do atendimento manual; contato/conversa e tipo resolvidos num lugar só
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -1621,12 +1937,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Create: `lib/channels/meta/saude-da-conta.ts`
-- Modify: `lib/channels/health.ts` (constante + ramo em `avisoDaConexao`, ao lado de `DETALHE_TOKEN_DE_RENOVACAO_VENCIDO`, ~linha 150), `app/api/v1/webhooks/meta/[token]/route.ts`
-- Test: `lib/channels/meta/saude-da-conta.test.ts`, `tests/unit/saude-dos-canais-oficiais.test.ts` (existente, continua verde)
+- Modify: `lib/channels/health.ts` (constantes + ramo em `avisoDaConexao`, ao lado de `DETALHE_TOKEN_DE_RENOVACAO_VENCIDO`, ~linha 74-83 e ~150), `app/api/v1/webhooks/meta/[token]/route.ts`, `app/api/v1/cron/channel-health/route.ts` (select ~linha 93 ganha `status_reason`; a promoção de status ~linhas 144-153 ganha a guarda)
+- Test: `lib/channels/meta/saude-da-conta.test.ts`, `tests/unit/channel-health-nao-promove-desconectada-no-app.test.ts`, `tests/unit/saude-dos-canais-oficiais.test.ts` e `tests/unit/channel-health-aviso.test.ts` (existentes, continuam verdes)
 
 **Interfaces:**
-- `export const DETALHE_DESCONECTADO_NO_APP = "desconectado_no_aplicativo"` e `EPISODIO_DESCONECTADO_NO_APP = "DESCONECTADO_NO_APP"` em `health.ts`; `avisoDaConexao` reconhece `detail` que começa com `${DETALHE_DESCONECTADO_NO_APP}:` e usa o resto como corpo.
+- Em `health.ts` (provider-agnóstico, por isso NÃO em `lib/channels/meta/`: o cron em `app/` importa daqui): `export const DETALHE_DESCONECTADO_NO_APP = "desconectado_no_aplicativo"`, `EPISODIO_DESCONECTADO_NO_APP = "DESCONECTADO_NO_APP"`, `STATUS_REASON_DESCONECTADO_NO_APP = "coexistencia_desconectada"`; `avisoDaConexao` reconhece `detail` que começa com `${DETALHE_DESCONECTADO_NO_APP}:` e usa o resto como corpo.
 - `export async function aplicarEventoDaConta(admin: SupabaseClient, sessao: MetaWebhookSession, e: AccountEvent): Promise<"caiu" | "voltou" | "ignorado">`
+- Cron `channel-health` (ruling P9): a sonda **não promove** `FAILED` → outro status enquanto `status_reason === STATUS_REASON_DESCONECTADO_NO_APP`; só `account_reconnected` (que zera `status_reason`) tira a sessão de lá. Sem isto, se a Graph ainda responder 200 ao `GET /{phone_number_id}` após o `PARTNER_REMOVED`, a varredura devolve `WORKING` em até 1 min e desfaz o `FAILED` (o aviso fica, a faixa de "conexão caída" some).
 
 - [ ] **Step 1:** testes:
 
@@ -1640,8 +1957,26 @@ it("PARTNER_REMOVED: sessão FAILED com status_reason e aviso pelo empurrão, co
   expect(sincronizar).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: SESSAO.id, status: "FAILED" }),
     { reachable: false, status: null, detail: `${DETALHE_DESCONECTADO_NO_APP}:USER_INITIATED_DISCONNECT` }, "Clínica", "empurrao");
 });
-it("ACCOUNT_RECONNECTED: WORKING, status_reason nulo, observação boa pelo empurrão (resolve o aviso)", async () => { /* status WORKING; sincronizar com { reachable: true, status: "WORKING", detail: null }, "empurrao" */ });
-it("evento desconhecido é ignorado sem tocar na sessão", async () => { /* "OUTRO" → "ignorado", zero updates */ });
+it("ACCOUNT_OFFBOARDED também derruba (mesmo caminho do PARTNER_REMOVED)", async () => {
+  expect(await aplicarEventoDaConta(admin, SESSAO, { kind: "account_event", wabaId: "222", evento: "ACCOUNT_OFFBOARDED", motivo: null, phoneNumber: null })).toBe("caiu");
+  expect(updates[0]?.patch).toMatchObject({ status: "FAILED", status_reason: "coexistencia_desconectada" });
+  expect(sincronizar.mock.calls[0]![2]).toEqual({ reachable: false, status: null, detail: `${DETALHE_DESCONECTADO_NO_APP}:` });
+});
+it("ACCOUNT_RECONNECTED: WORKING, status_reason nulo, observação boa pelo empurrão (resolve o aviso)", async () => {
+  expect(await aplicarEventoDaConta(admin, SESSAO, { kind: "account_event", wabaId: "222", evento: "ACCOUNT_RECONNECTED", motivo: null, phoneNumber: null })).toBe("voltou");
+  expect(updates[0]?.patch).toMatchObject({ status: "WORKING", status_reason: null });
+  expect(sincronizar).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: SESSAO.id, status: "WORKING" }),
+    { reachable: true, status: "WORKING", detail: null }, "Clínica", "empurrao");
+});
+it("evento desconhecido é ignorado sem tocar na sessão", async () => {
+  expect(await aplicarEventoDaConta(admin, SESSAO, { kind: "account_event", wabaId: "222", evento: "OUTRO", motivo: null, phoneNumber: null })).toBe("ignorado");
+  expect(updates).toHaveLength(0);
+  expect(sincronizar).not.toHaveBeenCalled();
+});
+it("o update filtra organization_id e id (service role sem filtro de org é o anti-pattern 10)", async () => {
+  await aplicarEventoDaConta(admin, SESSAO, { kind: "account_event", wabaId: "222", evento: "PARTNER_REMOVED", motivo: null, phoneNumber: null });
+  expect(updates[0]?.filtros).toMatchObject({ organization_id: SESSAO.organizationId, id: SESSAO.id });
+});
 
 // em tests/unit/saude-dos-canais-oficiais.test.ts (ou novo describe aqui) — o aviso:
 it("avisoDaConexao com detalhe de desconexão no app: crítico, título diz que foi pelo celular, corpo é o motivo", () => {
@@ -1651,7 +1986,28 @@ it("avisoDaConexao com detalhe de desconexão no app: crítico, título diz que 
 });
 ```
 
-- [ ] **Step 2:** `health.ts` — depois do ramo do token de renovação:
+E o teste do cron, `tests/unit/channel-health-nao-promove-desconectada-no-app.test.ts` (molde de mocks: o teste existente do cron em `tests/unit/` que mocka `getAdapter`/`createAdminClient`; o `adminFalso` devolve UMA sessão e registra `updates`):
+
+```ts
+const SESSAO_CAIDA = { id: "s1", organization_id: ORG, status: "FAILED", status_reason: "coexistencia_desconectada", display_name: "Clínica", phone_number: "+5527999049879", archived_at: null, provider: "meta_cloud", meta_phone_number_id: "111222333" };
+
+it("sonda WORKING numa sessão FAILED por desconexão no app NÃO promove: só account_reconnected tira dali", async () => {
+  db.sessoes = [SESSAO_CAIDA];
+  checkHealth.mockResolvedValue({ reachable: true, status: "WORKING", detail: null });
+  await GET(reqDoCron());
+  expect(db.updates.filter((u) => "status" in u.patch)).toHaveLength(0);
+  // e a saúde é sincronizada com o status que FICOU (FAILED), não com o da sonda
+  expect(sincronizar).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: "s1", status: "FAILED" }), expect.anything(), "Clínica");
+});
+it("FAILED por OUTRO motivo continua sendo promovido pela sonda (comportamento de hoje)", async () => {
+  db.sessoes = [{ ...SESSAO_CAIDA, status_reason: "token_vencido" }];
+  checkHealth.mockResolvedValue({ reachable: true, status: "WORKING", detail: null });
+  await GET(reqDoCron());
+  expect(db.updates.at(-1)?.patch).toMatchObject({ status: "WORKING" });
+});
+```
+
+- [ ] **Step 2:** `health.ts` — constantes ao lado de `DETALHE_TOKEN_DE_RENOVACAO_VENCIDO` e, depois do ramo do token de renovação em `avisoDaConexao`:
 
 ```ts
     if (saude.detail?.startsWith(`${DETALHE_DESCONECTADO_NO_APP}:`)) {
@@ -1670,12 +2026,10 @@ it("avisoDaConexao com detalhe de desconexão no app: crítico, título diz que 
 
 ```ts
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DETALHE_DESCONECTADO_NO_APP, sincronizarSaudeDaConexao } from "@/lib/channels/health";
+import { DETALHE_DESCONECTADO_NO_APP, STATUS_REASON_DESCONECTADO_NO_APP, sincronizarSaudeDaConexao } from "@/lib/channels/health";
 import { CHANNEL_PROVIDER_META } from "../capabilities";
 import type { MetaWebhookSession } from "./session";
 import type { AccountEvent } from "./webhook";
-
-export const STATUS_REASON_COEXISTENCIA_DESCONECTADA = "coexistencia_desconectada";
 
 export async function aplicarEventoDaConta(admin: SupabaseClient, sessao: MetaWebhookSession, e: AccountEvent): Promise<"caiu" | "voltou" | "ignorado"> {
   if (e.evento === "OUTRO") return "ignorado";
@@ -1683,7 +2037,7 @@ export async function aplicarEventoDaConta(admin: SupabaseClient, sessao: MetaWe
   const now = new Date().toISOString();
   const status = caiu ? "FAILED" : "WORKING";
   await admin.from("channel_sessions")
-    .update({ status, status_reason: caiu ? STATUS_REASON_COEXISTENCIA_DESCONECTADA : null, last_status_change_at: now })
+    .update({ status, status_reason: caiu ? STATUS_REASON_DESCONECTADO_NO_APP : null, last_status_change_at: now })
     .eq("organization_id", sessao.organizationId).eq("id", sessao.id);
   const { data } = await admin.from("channel_sessions").select("display_name, phone_number").eq("organization_id", sessao.organizationId).eq("id", sessao.id).maybeSingle();
   const apelido = (data?.display_name as string | null) ?? (data?.phone_number as string | null) ?? "sem nome";
@@ -1700,13 +2054,24 @@ export async function aplicarEventoDaConta(admin: SupabaseClient, sessao: MetaWe
 
 Rota: `if (e.kind === "account_event") { desfechos.push(\`conta:${await aplicarEventoDaConta(admin, session, e)}\`); continue; }`.
 
-- [ ] **Step 4:** `pnpm vitest run lib/channels/meta/saude-da-conta.test.ts tests/unit/saude-dos-canais-oficiais.test.ts` → passed. `pnpm lint:channels`.
+Cron `app/api/v1/cron/channel-health/route.ts`: acrescentar `status_reason` ao `select` (linha ~93) e, na promoção (linha ~144):
+
+```ts
+      // Desconexão feita pelo celular (coexistência) é um estado que a sonda
+      // não enxerga: a Graph pode seguir respondendo 200 ao número. Só o
+      // `account_reconnected` da própria Meta tira a sessão daqui.
+      const presaPeloCelular = s.status === "FAILED" && s.status_reason === STATUS_REASON_DESCONECTADO_NO_APP;
+      let statusFinal = s.status;
+      if (!presaPeloCelular && saude.reachable && saude.status && saude.status !== s.status) {
+```
+
+- [ ] **Step 4:** `pnpm vitest run lib/channels/meta/saude-da-conta.test.ts tests/unit/channel-health-nao-promove-desconectada-no-app.test.ts tests/unit/saude-dos-canais-oficiais.test.ts tests/unit/channel-health-aviso.test.ts tests/unit/cron-audita-so-quando-ha-efeito.test.ts` → passed. `pnpm lint:channels` (o cron importa de `@/lib/channels/health`, sem nome de provider).
 
 - [ ] **Step 5:** commit:
 
 ```bash
-git add lib/channels/meta/saude-da-conta.ts lib/channels/meta/saude-da-conta.test.ts lib/channels/health.ts "app/api/v1/webhooks/meta/[token]/route.ts" tests/unit/saude-dos-canais-oficiais.test.ts
-git commit -m "feat(canal-oficial): desconexão pelo celular derruba a sessão e abre aviso na Central; reconexão fecha
+git add lib/channels/meta/saude-da-conta.ts lib/channels/meta/saude-da-conta.test.ts lib/channels/health.ts "app/api/v1/webhooks/meta/[token]/route.ts" app/api/v1/cron/channel-health/route.ts tests/unit/saude-dos-canais-oficiais.test.ts tests/unit/channel-health-nao-promove-desconectada-no-app.test.ts
+git commit -m "feat(canal-oficial): desconexão pelo celular derruba a sessão e abre aviso na Central; reconexão fecha; a varredura não desfaz
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -1716,8 +2081,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ## Task 9: `resolveMetaCreds` não cai no `.env` quando a decifra da sessão falha
 
 **Files:**
-- Modify: `lib/channels/meta/credentials.ts` (linhas 131-136)
+- Modify: `lib/channels/meta/credentials.ts` (linhas 131-136: o ponto de mudança é `metaCredsForPhoneNumberId`, que `resolveMetaCreds` chama; o comentário "Cair no env é melhor que derrubar o envio" é reescrito, não só o `return`)
 - Test: `tests/unit/credencial-da-sessao-nao-cai-no-env.test.ts`; conferir `tests/unit/modelo-e-sincronizacao-usam-a-credencial-da-sessao.test.ts` e `tests/unit/saude-dos-canais-oficiais.test.ts`
+- Release: a mudança é visível a quem opera a VPS (envio que antes saía pela conta do `.env` passa a falhar com motivo); o fragmento `.changes/cadastro-incorporado-v4.md` da Task 10 a cita (ruling P15f) — não há fragmento separado.
 
 - [ ] **Step 1:** teste: sessão com `meta_token_encrypted` e `fn_decrypt_oauth` devolvendo `null`, `META_SYSTEM_USER_TOKEN` no ambiente → `resolveMetaCreds` **rejeita** com `meta_creds_decrypt_failed`; sem token cifrado na sessão continua caindo no env (`source: "env"`).
 
@@ -1730,7 +2096,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   if (!token) throw new Error("meta_creds_decrypt_failed: a credencial da sessão não decifrou; o .env não é usado");
 ```
 
-Atualizar o comentário acima dele. Quem chama (`send`, `checkHealth`, template sync) já trata throw de `metaCredsForPhoneNumberId` (o caso PGRST116 lança desde a #236); conferir em `grep -rn "resolveMetaCreds(" lib app` que cada chamador está dentro de `try` ou propaga para um desfecho `failed` visível.
+Atualizar o comentário acima dele. Quem chama (`send`, `checkHealth`, template sync) já trata throw de `metaCredsForPhoneNumberId` (o caso PGRST116 lança desde a #236); conferir em `grep -rn "resolveMetaCreds(" lib app` que cada um dos 5 chamadores (`lib/channels/meta/meta-cloud.ts` ~145/189/269, `send-template-for-session.ts` ~74, `app/api/v1/channels/templates/route.ts` ~174) está dentro de `try` ou propaga para um desfecho `failed` visível.
 
 - [ ] **Step 3:** `pnpm vitest run tests/unit/credencial-da-sessao-nao-cai-no-env.test.ts tests/unit/modelo-e-sincronizacao-usam-a-credencial-da-sessao.test.ts tests/unit/saude-dos-canais-oficiais.test.ts tests/unit/channel-adapter-meta.test.ts` → passed (ajustar expectativa que afirmava o fallback, se houver, com o motivo no commit).
 
@@ -1751,7 +2117,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `docs/adr/0002-cadastro-incorporado.md`, `docs/architecture/cadastro-incorporado.architecture.json`, `.changes/cadastro-incorporado-v4.md`, `scripts/seed-e2e-cadastro-incorporado.ts`, `tests/e2e/cadastro-incorporado.spec.ts`
 - Modify: `docs/doctrine/restricao-de-canal.md` (seção "Embedded Signup não cabe em self-host", linhas 199-230), `docs/index.md` (linha 96, ao lado do ADR-0001), `docs/testing/user-journey-map.md`, `scripts/gerar-env-e2e.sh` (ao lado de `INSTAGRAM_GRAPH_BASE_URL`), `.github/workflows/e2e.yml` (`SPECS_PARTE_4`)
 
-- [ ] **Step 1:** ADR (molde: `docs/adr/0001-packaging-e-distribuicao.md`): Status aceito; Contexto (a doutrina de 2026-07-30 dizia que Embedded Signup não cabe em self-host; no EvaLink a instalação usa o app de Tech Provider do EvaLink, app 1054112660758768; o produto aberto segue BYO por padrão); Decisões (configuração no banco, `es_config_id` vazio = botão ausente, BYO fica; coexistência é metadado; histórico por `event_log`; sem `/register` em coexistência); Consequências (limite de 10 clientes/7 dias sem verificação; webhook fora do ar perde histórico; WAHA do número cai); Recusados (provider novo `meta_coex`; extrair um segundo helper de silêncio quando `pausarIaPorAtendimentoManual` já é a regra; chamar `/register` "por garantia").
+- [ ] **Step 1:** ADR (molde: `docs/adr/0001-packaging-e-distribuicao.md`): Status aceito; Contexto (a doutrina de 2026-07-30 dizia que Embedded Signup não cabe em self-host; no EvaLink a instalação usa o app de Tech Provider do EvaLink, app 1054112660758768; o produto aberto segue BYO por padrão); Decisões (configuração no banco, `es_config_id` vazio = botão ausente, BYO fica; coexistência é metadado; histórico por `event_log`; sem `/register` em coexistência; **`appId`/`esConfigId` caem no `.env` cada um sozinho** enquanto o PAR de segredos é atômico — desvio consciente do "mesmo padrão de par" da spec §1, ruling P15e; `META_ES_CONFIG_ID`/`META_GRAPH_BASE_URL` só em `.env.example` + `process.env`, como `META_APP_SECRET`); Consequências (limite de 10 clientes/7 dias sem verificação; webhook fora do ar perde histórico; WAHA do número cai); Recusados (provider novo `meta_coex`; extrair um segundo helper de silêncio quando `pausarIaPorAtendimentoManual` já é a regra; chamar `/register` "por garantia").
 
 - [ ] **Step 2:** doutrina — ao fim da seção, um parágrafo: "**Revisão (2026-10-01):** quando a instalação tem um app de Tech Provider à disposição (caso EvaLink), o Cadastro Incorporado passa a existir como caminho opcional, ligado por `platform_meta_app.es_config_id`; o BYO continua sendo o padrão do produto aberto. Decisão e limites em [`docs/adr/0002-cadastro-incorporado.md`](../adr/0002-cadastro-incorporado.md)." Linha em `docs/index.md`. Mapa `.architecture.json` com lanes operador/servidor/banco/externo e ≥2 arestas (botão → rota → `conectarCanalOficial` → `channel_sessions`; webhook → eco → `pausarIaPorAtendimentoManual`; webhook → `aplicarEventoDaConta` → Central). Rodar `pnpm vitest run tests/unit/mapas-de-arquitetura.test.ts tests/unit/documentacao-aponta-para-o-que-existe.test.ts`.
 
@@ -1770,9 +2136,13 @@ O fluxo da Meta conecta o número sem colar token; o número pode continuar no
 WhatsApp Business do celular (coexistência). Resposta dada pelo celular aparece
 como Celular e pausa a IA por 5 minutos; desconectar pelo celular abre aviso na
 Central. Sem os dois valores nada muda: o formulário manual continua.
+
+Correção que vem junto: quando a credencial gravada na sessão do canal oficial
+não decifra (chave mestra trocada, GUC ausente), o envio passa a falhar com o
+motivo visível em vez de sair, em silêncio, pela conta do `.env` da instalação.
 ```
 
-- [ ] **Step 4:** ambiente do e2e: em `scripts/gerar-env-e2e.sh`, `META_GRAPH_BASE_URL=http://127.0.0.1:47812` (comentário: só a spec de Cadastro Incorporado escuta ali). Seed `scripts/seed-e2e-cadastro-incorporado.ts` (molde: `seed-e2e-instagram.ts` linhas 100-120): upsert em `platform_meta_app` de `app_id: "e2e-app"`, `es_config_id: "e2e-config"`, `app_secret_encrypted` e `verify_token_encrypted` cifrados por `encryptWebhookSecret`; arquiva qualquer sessão `meta_cloud` ativa da org do seed.
+- [ ] **Step 4:** ambiente do e2e: em `scripts/gerar-env-e2e.sh`, ao lado de `INSTAGRAM_GRAPH_BASE_URL` (linha 130), `META_GRAPH_BASE_URL=http://127.0.0.1:47813` (ruling P6: **47811** é a Graph do Instagram e **47812** é `CONTA_URL`/`conta-falsa-servidor.ts`; 47813 está livre — conferir com `grep -rn 4781 scripts tests`) com o comentário "só a spec de Cadastro Incorporado escuta ali". Também `E2E_META_APP_SECRET=e2e-app-secret-0123456789abcdef` (o segredo EM CLARO: o seed cifra este valor e a Task 13 assina o HMAC do webhook com ele; molde do `INTERNAL_CRON_SECRET`). Seed `scripts/seed-e2e-cadastro-incorporado.ts` (molde: `seed-e2e-instagram.ts` linhas 100-120): upsert em `platform_meta_app` de `app_id: "e2e-app"`, `es_config_id: "e2e-config"`, `app_secret_encrypted = encryptWebhookSecret(process.env.E2E_META_APP_SECRET)` e `verify_token_encrypted` cifrado; arquiva qualquer sessão `meta_cloud` ativa da org do seed.
 
 - [ ] **Step 5:** spec `tests/e2e/cadastro-incorporado.spec.ts` (login com `creds.users.admin`, como `instagram-receber.spec.ts`):
 
@@ -1783,14 +2153,21 @@ test.beforeAll(async () => {
     const responder = (b: unknown) => { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(b)); };
     if (url.includes("/oauth/access_token")) return responder({ access_token: "EAAX-e2e" });
     if (url.includes("/debug_token")) return responder({ data: { app_id: "e2e-app", is_valid: true, scopes: ["whatsapp_business_management", "whatsapp_business_messaging"] } });
-    if (url.includes("/phone_numbers")) return responder({ data: [{ id: "111", display_phone_number: "+55 27 99904-9879", verified_name: "Clínica E2E", is_on_biz_app: true }] });
-    if (url.endsWith("/111?fields=display_phone_number,verified_name,quality_rating")) return responder({ display_phone_number: "+55 27 99904-9879", verified_name: "Clínica E2E" });
+    if (url.includes("/phone_numbers")) return responder({ data: [{ id: "111222333", display_phone_number: "+55 27 99904-9879", verified_name: "Clínica E2E", is_on_biz_app: true }] });
+    if (url.endsWith("/111222333?fields=display_phone_number,verified_name,quality_rating")) return responder({ display_phone_number: "+55 27 99904-9879", verified_name: "Clínica E2E" });
     if (url.includes("/subscribed_apps")) return responder({ success: true });
-    if (url.includes("/smb_app_data")) { pedidos.push(String(req.read())); return responder({ request_id: `req-${pedidos.length}` }); }
+    if (url.includes("/smb_app_data")) {
+      // `req.read()` sem ouvir `data` devolve null (ruling P6): acumular o corpo.
+      let corpo = "";
+      req.on("data", (c: Buffer) => { corpo += c.toString(); });
+      req.on("end", () => { pedidos.push(corpo); responder({ request_id: `req-${pedidos.length}` }); });
+      return;
+    }
     res.statusCode = 404; responder({ error: { message: `não simulado: ${url}` } });
   });
-  await new Promise<void>((ok) => graph.listen(47812, "127.0.0.1", ok));
+  await new Promise<void>((ok) => graph.listen(PORTA_DA_GRAPH, "127.0.0.1", ok));
 });
+// const PORTA_DA_GRAPH = 47813; — `META_GRAPH_BASE_URL=http://127.0.0.1:47813` (`scripts/gerar-env-e2e.sh`)
 
 test("[P0] admin conecta pelo botão e a aba mostra Conectado", async ({ page }) => {
   await page.addInitScript(() => {
@@ -1798,8 +2175,8 @@ test("[P0] admin conecta pelo botão e a aba mostra Conectado", async ({ page })
       init: () => undefined,
       login: (cb: (r: unknown) => void) => {
         window.dispatchEvent(new MessageEvent("message", { origin: "https://www.facebook.com",
-          data: JSON.stringify({ type: "WA_EMBEDDED_SIGNUP", event: "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", data: { waba_id: "222" } }) }));
-        cb({ authResponse: { code: "AQB-e2e" } });
+          data: JSON.stringify({ type: "WA_EMBEDDED_SIGNUP", event: "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", data: { waba_id: "222333444555" } }) }));
+        cb({ authResponse: { code: "AQB-e2e-1234567890" } }); // >= 10 caracteres: passa no Zod da rota
       },
     };
   });
@@ -1832,27 +2209,34 @@ Abrir o PR 1 (`gh pr create`) com a lista de verificação do DoD; não fazer me
 
 # Parte B = PR 2 (branch `feat/coexistencia-historico`, a partir da `main` com o PR 1 mergeado)
 
-## Task 11: Histórico do celular: fila em `event_log`, worker idempotente, gatilho que não acorda ninguém (migration 0294)
+## Task 11: Histórico do celular: fila em `event_log`, worker idempotente, gatilhos que não acordam ninguém (migration 0297)
 
 **Files:**
-- Create: `supabase/migrations/20261006120000_0294_historico_importado_nao_emite_evento.sql`, `workers/meta-history-worker.ts`, `workers/meta-history-worker.handler.ts`
-- Modify: `supabase/baseline.sql` (apêndice antes da varredura), `supabase/migrations/MANIFEST.md`, `lib/event-log/register-handlers.ts`, `app/api/v1/webhooks/meta/[token]/route.ts` (ramo `history_chunk`), `lib/channels/meta/conectar-canal-oficial.ts` (`gravarCoexistencia` já existe)
+- Create: `supabase/migrations/20261001140000_0297_historico_importado_nao_emite_evento.sql`, `workers/meta-history-worker.ts`, `workers/meta-history-worker.handler.ts`
+- Modify: `supabase/baseline.sql` (apêndice depois do bloco 0296 e antes da varredura), `supabase/migrations/MANIFEST.md`, `lib/event-log/register-handlers.ts`, `app/api/v1/webhooks/meta/[token]/route.ts` (ramo `history_chunk`), `lib/channels/meta/conectar-canal-oficial.ts` (`gravarCoexistencia` já existe), `lib/channels/meta/ingest.ts` (`resolverContatoEConversa`, `tipoDoCrm` e `pedirPersistenciaDeMidia` já existem desde a Task 7; o worker importa)
 - Test: `workers/meta-history-worker.test.ts`, `tests/invariants/historico-importado-nao-emite-evento.test.ts`
 
 **Interfaces:**
 - Evento `meta.history_chunk` (`event_type_format` do banco exige `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`): `entity_kind: "channel_session"`, `entity_id: session.id`, `payload: { phone_number_id, fase, progresso, chunk_order, erro_codigo, value: <bruto> }`, `metadata: { source: "meta_webhook", request_id }`.
 - `export const META_HISTORY_CONSUMER_KEY = "meta-history-worker"`; `export async function processarChunkDeHistorico(row: EventRow, admin?: SupabaseClient): Promise<HandlerResult>`.
-- Marca na mensagem: `metadata.importada_do_historico: true` (é o que o gatilho lê).
+- Marca na mensagem: `metadata.importada_do_historico: true` (é o que os três gatilhos leem). O worker usa `resolverContatoEConversa`/`tipoDoCrm`/`pedirPersistenciaDeMidia` de `lib/channels/meta/ingest.ts` (ruling P12): nenhuma cópia local.
+- Direção (ruling P15c): `canonicalPhoneBR("+" + digitos(m.from)) === canonicalPhoneBR(sessao.phone_number)` — comparar dígitos crus falha em número BR com/sem o 9.
+- Erro numa mensagem (ruling P4): pula só ela, conta em `falhas`, loga, segue; o chunk só devolve `error` quando a SESSÃO não resolve.
+- LGPD (ruling P14): ao devolver `ok`, o worker regrava `event_log.payload` sem `value` (`{ ...payload, value: null, limpo_em }`), filtrando `organization_id` e `id`.
+- Lote (ruling P15d): insert sequencial por mensagem fica; `ponytail:` no worker — medir o tamanho típico de chunk no dia; lote com `on conflict do nothing` só se > ~500 mensagens.
 
-- [ ] **Step 1 (migration + baseline + MANIFEST):**
+- [ ] **Step 1 (migration + baseline + MANIFEST):** `messages` tem TRÊS `AFTER INSERT` que o histórico não pode acionar (ruling P2). Os três recebem a mesma guarda; `fn_demanda_abre_no_inbound` e `fn_reply_inbound_revision` são `security definer`, então o `create or replace` repete os `revoke` das duas origens (baseline linhas ~19218-19221 e ~21770-21777 são a versão em vigor de cada uma).
 
 ```sql
--- 0294 — Mensagem IMPORTADA DO HISTÓRICO (coexistência) não emite evento.
--- `trg_messages_emit_event` emite `message.received` em todo insert inbound e
--- é o que acorda IA, sentimento, follow-up, push e automação. Um worker que
--- "não chama a IA" não basta: o gatilho chama por ele. A guarda vive no
--- gatilho porque é o único lugar por onde TODOS os consumidores passam.
--- Corpo derivado da versão em vigor (0152: `body_preview`); só a guarda entra.
+-- 0297 — Mensagem IMPORTADA DO HISTÓRICO (coexistência) não acorda ninguém.
+-- `messages` tem três AFTER INSERT: `trg_messages_emit_event` emite
+-- `message.received` (IA, sentimento, follow-up, push, automação);
+-- `trg_demanda_abre_no_inbound` abre uma `demandas` por contato com inbound
+-- (180 dias de histórico = uma demanda "sem próximo passo" por contato);
+-- `trg_reply_inbound_revision` incrementa `reply_context_revision`. Um worker
+-- que "não chama a IA" não basta: o banco chama por ele. A guarda vive nos
+-- gatilhos porque é o único lugar por onde TODOS os consumidores passam.
+-- Corpos derivados das versões em vigor; só a guarda entra em cada um.
 create or replace function public.fn_emit_message_event() returns trigger
 language plpgsql set search_path to 'public', 'pg_temp' as $$
 declare
@@ -1883,22 +2267,82 @@ begin
   );
   return new;
 end$$;
+
+-- A demanda: `fn_service_inbound` já ignora o que não é inbound; a guarda entra
+-- ANTES da chamada para o histórico nem chegar lá.
+create or replace function public.fn_demanda_abre_no_inbound()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+  if coalesce(new.metadata->>'importada_do_historico', '') = 'true' then
+    return new;
+  end if;
+  perform public.fn_service_inbound(new.id);
+  return new;
+end; $$;
+revoke execute on function public.fn_demanda_abre_no_inbound() from public, anon, authenticated;
+
+-- A revisão de contexto de resposta: histórico importado não é inbound ao vivo
+-- (o próprio comentário da função já dizia isso; agora o corpo também).
+create or replace function public.fn_reply_inbound_revision()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+  if new.direction = 'inbound' and coalesce(new.metadata->>'importada_do_historico', '') <> 'true' then
+    update public.conversations set reply_context_revision = reply_context_revision + 1
+     where organization_id = new.organization_id and id = new.conversation_id and contact_id = new.contact_id;
+  end if;
+  return new;
+end; $$;
+revoke all on function public.fn_reply_inbound_revision() from public, anon, authenticated;
 ```
 
-Apêndice idêntico sob `-- ---- histórico importado não emite evento (migration 0294) ----`, ANTES da varredura (`tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts` proíbe `create function` depois dela). MANIFEST: "Guarda em `fn_emit_message_event`: linha com `metadata.importada_do_historico = true` não emite `message.*`. Sem isso o histórico da coexistência acordaria IA, follow-up, push e automação pelo gatilho. Idempotente (`create or replace`)."
+Apêndice idêntico sob `-- ---- histórico importado não acorda ninguém (migration 0297) ----`, depois do bloco 0296 e ANTES da varredura (`tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts` proíbe `create function` depois dela; `tests/invariants/hardening-definer-varredura.test.ts` mede os `revoke`). MANIFEST (`20261001140000` | `0297_historico_importado_nao_emite_evento`): "Guarda `metadata.importada_do_historico = true` em `fn_emit_message_event`, `fn_demanda_abre_no_inbound` e `fn_reply_inbound_revision`: mensagem importada do histórico da coexistência não emite `message.*`, não abre demanda nem revisa o contexto de resposta. Sem isso o histórico acordaria IA, follow-up, push e automação, e abriria uma demanda por contato. Idempotente (`create or replace` + `revoke`)."
 
-- [ ] **Step 2:** invariante:
+- [ ] **Step 2:** invariante (seed de `tests/invariants/gov-helpers.ts`: `seedGov()` cria org, usuários, sessão `GOV_SESSION`, contatos e a conversa `GOV_CONV_UNASSIGNED` do contato `GOV_CONTACT_1` — conferir as linhas ~177-183 do helper antes de confiar no par conversa/contato):
 
 ```ts
 // tests/invariants/historico-importado-nao-emite-evento.test.ts
-it("insert inbound marcado como importado NÃO cria linha em event_log; sem a marca, cria", () => {
-  // seed: org, contato, sessão, conversa (sql() do psql-transporte, como fazem os invariantes de canal)
-  const antes = sql(`select count(*) from public.event_log where organization_id='${ORG}'`).trim();
-  sql(`insert into public.messages (organization_id, conversation_id, channel_session_id, contact_id, direction, status, type, body, external_id, sent_at, metadata)
-       values ('${ORG}','${CONV}','${SESSAO}','${CONTATO}','inbound','delivered','text','velha','wamid.H1',now()-interval '30 days','{"importada_do_historico":true}')`);
-  expect(sql(`select count(*) from public.event_log where organization_id='${ORG}'`).trim()).toBe(antes);
-  sql(`insert into public.messages (...) values (... 'wamid.N1' ..., '{}')`);
-  expect(Number(sql(`select count(*) from public.event_log where organization_id='${ORG}'`))).toBe(Number(antes) + 1);
+import { beforeAll, describe, expect, it } from "vitest";
+
+import { GOV_CONTACT_1, GOV_CONV_UNASSIGNED, GOV_ORG, GOV_SESSION, seedGov, sql } from "./gov-helpers";
+
+const n = (q: string) => Number(sql(q).trim());
+const eventos = () => n(`select count(*) from public.event_log where organization_id = '${GOV_ORG}' and event_type like 'message.%'`);
+const demandas = () => n(`select count(*) from public.demandas where organization_id = '${GOV_ORG}'`);
+const revisao = () => n(`select reply_context_revision from public.conversations where id = '${GOV_CONV_UNASSIGNED}'`);
+
+function inserir(externalId: string, metadata: string): void {
+  sql(`insert into public.messages
+         (organization_id, conversation_id, channel_session_id, contact_id, direction, status, type, body, external_id, sent_at, metadata)
+       values ('${GOV_ORG}', '${GOV_CONV_UNASSIGNED}', '${GOV_SESSION}', '${GOV_CONTACT_1}', 'inbound', 'delivered', 'text', 'oi',
+               '${externalId}', now() - interval '30 days', '${metadata}'::jsonb);`);
+}
+
+describe("mensagem importada do histórico não acorda ninguém (0297)", () => {
+  beforeAll(() => seedGov());
+
+  it("inbound marcado como importado: zero event_log, zero demanda, revisão intacta", () => {
+    const [e0, d0, r0] = [eventos(), demandas(), revisao()];
+    inserir("wamid.HIST1", '{"importada_do_historico": true}');
+    expect([eventos(), demandas(), revisao()]).toEqual([e0, d0, r0]);
+  });
+
+  it("o mesmo insert SEM a marca: +1 event_log, +1 demanda, +1 revisão (prova que a régua mede)", () => {
+    const [e0, d0, r0] = [eventos(), demandas(), revisao()];
+    inserir("wamid.VIVA1", "{}");
+    expect(eventos()).toBe(e0 + 1);
+    expect(demandas()).toBe(d0 + 1);
+    expect(revisao()).toBe(r0 + 1);
+  });
+
+  it("as três funções do gatilho têm a guarda e as duas security definer seguem revogadas de anon/authenticated/public", () => {
+    for (const fn of ["fn_emit_message_event", "fn_demanda_abre_no_inbound", "fn_reply_inbound_revision"]) {
+      expect(sql(`select prosrc from pg_proc where proname = '${fn}' and pronamespace = 'public'::regnamespace`)).toContain("importada_do_historico");
+    }
+    for (const fn of ["fn_demanda_abre_no_inbound", "fn_reply_inbound_revision"]) {
+      expect(sql(`select string_agg(r, ',') from unnest(array['anon','authenticated','public']) r
+                  where has_function_privilege(r, 'public.${fn}()', 'execute')`).trim()).toBe("");
+    }
+  });
 });
 ```
 
@@ -1924,11 +2368,72 @@ it("reprocessar o mesmo chunk não duplica (23505 é ok) e devolve ok", async ()
   insertErro = { code: "23505", message: "dup" };
   expect(await processarChunkDeHistorico(LINHA, admin)).toMatchObject({ status: "ok" });
 });
-it("mídia dos últimos 14 dias pede media.persist_requested; mais velha vira midia_indisponivel", async () => { /* duas mensagens image, timestamps 3 dias e 40 dias */ });
-it("progresso vai para metadata.coexistencia.historico; progresso 100 marca concluido", async () => { /* updates no channel_sessions.metadata */ });
-it("erro 2593109 grava historico.erro com a frase do celular", async () => { /* payload.erro_codigo 2593109 → historico.erro match /não compartilhou/ */ });
-it("sessão arquivada/ausente → skipped", async () => {});
+it("direção com/sem o 9: from '552799049879' (sem o 9) ainda é o número do negócio '+5527999049879'", async () => {
+  const linha = comMensagens([{ from: "552799049879", id: "wamid.H9", timestamp: "1759000200", type: "text", text: { body: "sem o nove" } }]);
+  await processarChunkDeHistorico(linha, admin);
+  expect(inserts[0]).toMatchObject({ external_id: "wamid.H9", direction: "outbound" });
+});
+it("mídia dos últimos 14 dias pede media.persist_requested; mais velha vira midia_indisponivel", async () => {
+  const ha3dias = String(Math.floor((Date.now() - 3 * 86_400_000) / 1000));
+  const ha40dias = String(Math.floor((Date.now() - 40 * 86_400_000) / 1000));
+  const linha = comMensagens([
+    { from: "5531998966398", id: "wamid.IMG3", timestamp: ha3dias, type: "image", image: { id: "media-3", mime_type: "image/jpeg" } },
+    { from: "5531998966398", id: "wamid.IMG40", timestamp: ha40dias, type: "image", image: { id: "media-40", mime_type: "image/jpeg" } },
+  ]);
+  await processarChunkDeHistorico(linha, admin);
+  expect(inserts[0]).toMatchObject({ media_url: "meta-media:media-3", metadata: { meta_media_id: "media-3" } });
+  expect(inserts[1]).toMatchObject({ media_url: null, metadata: { midia_indisponivel: true } });
+  const persistencias = rpcs.filter((r) => r.fn === "emit_event" && (r.args as { p_event_type: string }).p_event_type === "media.persist_requested");
+  expect(persistencias).toHaveLength(1);
+  expect((persistencias[0]!.args as { p_metadata: { source: string } }).p_metadata.source).toBe("meta_history");
+});
+it("tipo exótico entra como system com body [tipo] (CHECK do banco)", async () => {
+  const linha = comMensagens([{ from: "5531998966398", id: "wamid.BTN", timestamp: "1759000300", type: "button", button: { text: "Sim" } }]);
+  await processarChunkDeHistorico(linha, admin);
+  expect(inserts[0]).toMatchObject({ type: "system", body: "[button]", metadata: { tipo_da_meta: "button" } });
+});
+it("erro numa mensagem pula só ela: as outras entram e o chunk devolve ok com a contagem", async () => {
+  insertErroPorExternalId = { "wamid.H1": { code: "23514", message: "check violation" } };
+  const r = await processarChunkDeHistorico(LINHA, admin);
+  expect(inserts.map((i) => i.external_id)).toEqual(["wamid.H2"]);
+  expect(r).toMatchObject({ status: "ok", detail: expect.stringContaining("falhas=1") });
+});
+it("progresso vai para metadata.coexistencia.historico; progresso 100 marca concluido", async () => {
+  await processarChunkDeHistorico(LINHA, admin);
+  expect(updates.find((u) => u.tabela === "channel_sessions")?.patch.metadata).toMatchObject({ coexistencia: { historico: { fase: 0, progresso: 20, concluido: false, erro_codigo: null } } });
+  updates.length = 0;
+  await processarChunkDeHistorico({ ...LINHA, payload: { ...LINHA.payload, progresso: 100 } }, admin);
+  expect(updates.find((u) => u.tabela === "channel_sessions")?.patch.metadata).toMatchObject({ coexistencia: { historico: { progresso: 100, concluido: true } } });
+});
+it("erro 2593109 grava historico.erro_codigo (a frase é montada na tela, traduzida)", async () => {
+  await processarChunkDeHistorico({ ...LINHA, payload: { ...LINHA.payload, erro_codigo: 2593109, value: { history: [] } } }, admin);
+  expect(updates.find((u) => u.tabela === "channel_sessions")?.patch.metadata).toMatchObject({ coexistencia: { historico: { erro_codigo: 2593109 } } });
+});
+it("ao concluir ok, limpa payload.value do event_log (LGPD) filtrando organization_id e id", async () => {
+  await processarChunkDeHistorico(LINHA, admin);
+  const limpeza = updates.find((u) => u.tabela === "event_log");
+  expect(limpeza?.filtros).toMatchObject({ organization_id: ORG, id: "ev1" });
+  expect((limpeza?.patch.payload as { value: unknown }).value).toBeNull();
+});
+it("prévia da conversa só avança se o histórico é mais novo que o que já há, e nunca por fn_mark_conversation_message", async () => {
+  db.conversas[CONV] = { last_message_at: "2026-10-01T00:00:00.000Z", last_message_preview: "atual" };
+  await processarChunkDeHistorico(LINHA, admin); // mensagens de 2025-09-27: mais velhas
+  expect(updates.filter((u) => u.tabela === "conversations")).toHaveLength(0);
+  db.conversas[CONV] = { last_message_at: "2025-01-01T00:00:00.000Z", last_message_preview: "velha" };
+  await processarChunkDeHistorico(LINHA, admin);
+  expect(updates.find((u) => u.tabela === "conversations")?.patch).toMatchObject({ last_message_at: "2025-09-27T18:28:20.000Z", last_message_preview: "olá" });
+});
+it("sessão arquivada → skipped sem gravar nada", async () => {
+  db.sessoes[SESSAO]!.archived_at = "2026-10-01T00:00:00.000Z";
+  expect(await processarChunkDeHistorico(LINHA, admin)).toMatchObject({ status: "skipped", detail: "sessao_arquivada" });
+  expect(inserts).toHaveLength(0);
+});
+it("sessão ausente → skipped", async () => {
+  expect(await processarChunkDeHistorico({ ...LINHA, entity_id: "nao-existe" }, admin)).toMatchObject({ status: "skipped" });
+});
 ```
+
+(`comMensagens(msgs)` monta uma `LINHA` com um `value.history[0].threads[0].messages = msgs` para a thread `5531998966398`; `insertErroPorExternalId` faz o `adminFalso` falhar o insert de um `external_id` escolhido.)
 
 - [ ] **Step 4:** worker:
 
@@ -1940,13 +2445,20 @@ it("sessão arquivada/ausente → skipped", async () => {});
  * O que NÃO faz, de propósito: IA, lead, automação, notificação, carimbo da
  * conversa (`fn_mark_conversation_message` mexeria em `last_inbound_at`, que
  * é a janela de 24 h — a Meta não honra janela aberta por mensagem anterior ao
- * onboarding — e em não-lidas). O gatilho do banco é desarmado pela marca
- * `metadata.importada_do_historico` (migration 0294).
+ * onboarding — e em não-lidas). Os três gatilhos do banco são desarmados pela
+ * marca `metadata.importada_do_historico` (migration 0297).
+ *
+ * Uma mensagem que não entra (CHECK, dado torto) é pulada e contada: um chunk
+ * de 180 dias não pode virar evento morto por causa de uma linha exótica.
+ *
+ * ponytail: insert sequencial por mensagem. Medir o tamanho típico de chunk no
+ * dia da conexão; lote com `on conflict do nothing` só se passar de ~500.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { encontrarContatoPorTelefone } from "@/lib/channels/contato-por-telefone";
+
+import { lerCoexistencia } from "@/lib/channels/meta/coexistencia";
 import { gravarCoexistencia } from "@/lib/channels/meta/conectar-canal-oficial";
-import { lerCoexistencia, mensagemDoErroDaMeta } from "@/lib/channels/meta/coexistencia";
+import { pedirPersistenciaDeMidia, resolverContatoEConversa, tipoDoCrm } from "@/lib/channels/meta/ingest";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { logger } from "@/lib/logger";
@@ -1958,73 +2470,96 @@ const JANELA_DE_MIDIA_MS = 14 * 24 * 60 * 60 * 1000;
 interface MensagemCrua { id?: string; from?: string; to?: string; timestamp?: string; type?: string; text?: { body?: string }; [k: string]: unknown }
 
 function digitos(v: unknown): string { return typeof v === "string" ? v.replace(/\D/g, "") : ""; }
+/** Com/sem o 9 e com/sem `+`: a mesma régua do inbound (ruling P15c). */
+function mesmoNumero(a: unknown, b: unknown): boolean {
+  const da = digitos(a); const db = digitos(b);
+  return Boolean(da && db) && canonicalPhoneBR(`+${da}`) === canonicalPhoneBR(`+${db}`);
+}
+const resultado = (status: HandlerResult["status"], detail: string): HandlerResult => ({ consumer_key: META_HISTORY_CONSUMER_KEY, status, detail });
 
 export async function processarChunkDeHistorico(row: EventRow, admin: SupabaseClient = createAdminClient()): Promise<HandlerResult> {
   const orgId = row.organization_id;
   const sessionId = row.entity_id;
   const p = row.payload as { phone_number_id?: string; fase?: number | null; progresso?: number | null; erro_codigo?: number | null; value?: Record<string, unknown> };
-  if (!sessionId) return { consumer_key: META_HISTORY_CONSUMER_KEY, status: "skipped", detail: "sem_sessao" };
+  if (!sessionId) return resultado("skipped", "sem_sessao");
 
   const { data: sessao } = await admin.from("channel_sessions").select("id, phone_number, metadata, archived_at").eq("organization_id", orgId).eq("id", sessionId).maybeSingle();
-  if (!sessao || (sessao as { archived_at?: string | null }).archived_at) return { consumer_key: META_HISTORY_CONSUMER_KEY, status: "skipped", detail: "sessao_arquivada" };
-  const numeroDoNegocio = digitos((sessao as { phone_number: string | null }).phone_number);
+  if (!sessao || (sessao as { archived_at?: string | null }).archived_at) return resultado("skipped", "sessao_arquivada");
+  const numeroDoNegocio = (sessao as { phone_number: string | null }).phone_number;
   const agora = Date.now();
 
-  let gravadas = 0, duplicadas = 0;
+  let gravadas = 0, duplicadas = 0, falhas = 0;
   const threads = Array.isArray((p.value?.history as Array<Record<string, unknown>> | undefined)?.[0]?.threads)
     ? ((p.value!.history as Array<Record<string, unknown>>)[0]!.threads as Array<Record<string, unknown>>)
     : [];
   for (const thread of threads) {
     const chatId = digitos(thread.id);
-    if (!chatId || thread.id && String(thread.id).endsWith("@g.us")) continue; // grupos: a Cloud API não entrega em coexistência
-    const existente = await encontrarContatoPorTelefone(admin as never, orgId, chatId);
-    const phone = existente?.phone_number ? canonicalPhoneBR(existente.phone_number) : canonicalPhoneBR(`+${chatId}`);
-    const { data: contactId } = await admin.rpc("fn_upsert_wa_contact" as never, { p_org: orgId, p_kind: "phone", p_phone: phone, p_lid: null, p_chat_id: chatId, p_notify: null } as never);
-    if (!contactId) continue;
-    const { data: conversationId } = await admin.rpc("fn_upsert_wa_conversation" as never, { p_org: orgId, p_contact: contactId as string, p_session: sessionId } as never);
-    if (!conversationId) continue;
+    if (!chatId || String(thread.id ?? "").endsWith("@g.us")) continue; // grupos: a Cloud API não entrega em coexistência
+    const alvo = await resolverContatoEConversa(admin, orgId, sessionId, chatId, null);
+    if (!alvo.ok) { falhas += 1; logger.warn("[meta.history] thread pulada", { organization_id: orgId, session: sessionId, reason: alvo.reason }); continue; }
+    const { contactId, conversationId } = alvo;
 
+    let maisNova: { at: string; preview: string } | null = null;
     for (const m of (Array.isArray(thread.messages) ? thread.messages : []) as MensagemCrua[]) {
       if (!m.id) continue;
-      const outbound = digitos(m.from) === numeroDoNegocio;
+      const outbound = mesmoNumero(m.from, numeroDoNegocio);
       const sentAt = new Date(Number(m.timestamp ?? "0") * 1000);
-      const tipo = m.type ?? "unknown";
-      const corpoMidia = tipo !== "text" ? (m[tipo] as { id?: string; mime_type?: string } | undefined) : undefined;
+      const tipoDaMeta = m.type ?? "unknown";
+      const { type, bodyDeSistema } = tipoDoCrm(tipoDaMeta);
+      const corpoMidia = tipoDaMeta !== "text" ? (m[tipoDaMeta] as { id?: string; mime_type?: string } | undefined) : undefined;
       const temMidia = Boolean(corpoMidia?.id);
       const midiaRecente = temMidia && agora - sentAt.getTime() <= JANELA_DE_MIDIA_MS;
+      const body = bodyDeSistema ?? (tipoDaMeta === "text" ? (m.text?.body ?? null) : null);
       const { data: inserida, error } = await admin.from("messages").insert({
-        organization_id: orgId, conversation_id: conversationId as string, channel_session_id: sessionId, contact_id: contactId as string,
+        organization_id: orgId, conversation_id: conversationId, channel_session_id: sessionId, contact_id: contactId,
         direction: outbound ? "outbound" : "inbound", status: outbound ? "sent" : "delivered",
         ...(outbound ? { sent_via: "external_device" } : {}),
-        type: tipo === "contacts" ? "contact" : tipo, body: tipo === "text" ? (m.text?.body ?? null) : null,
+        type, body,
         external_id: m.id, media_url: midiaRecente ? `meta-media:${corpoMidia!.id}` : null, media_mime: corpoMidia?.mime_type ?? null,
         sent_at: sentAt.toISOString(),
-        metadata: { importada_do_historico: true, origem: outbound ? "celular" : "contato", ...(midiaRecente ? { meta_media_id: corpoMidia!.id } : temMidia ? { midia_indisponivel: true } : {}) },
+        metadata: { importada_do_historico: true, origem: outbound ? "celular" : "contato", tipo_da_meta: tipoDaMeta, ...(midiaRecente ? { meta_media_id: corpoMidia!.id } : temMidia ? { midia_indisponivel: true } : {}) },
       }).select("id").maybeSingle();
-      if (error) { if (error.code === "23505") { duplicadas += 1; continue; } return { consumer_key: META_HISTORY_CONSUMER_KEY, status: "error", detail: error.message }; }
-      gravadas += 1;
-      const messageId = (inserida as { id: string } | null)?.id;
-      if (midiaRecente && messageId) {
-        await admin.rpc("emit_event" as never, { p_event_type: "media.persist_requested", p_entity_kind: "message", p_entity_id: messageId,
-          p_payload: { message_id: messageId, conversation_id: conversationId }, p_metadata: { source: "meta_history" }, p_organization_id: orgId } as never);
+      if (error) {
+        if (error.code === "23505") { duplicadas += 1; continue; }
+        falhas += 1;
+        logger.warn("[meta.history] mensagem pulada", { organization_id: orgId, session: sessionId, external_id: m.id, code: error.code, reason: error.message });
+        continue;
       }
+      gravadas += 1;
+      if (!maisNova || sentAt.toISOString() > maisNova.at) maisNova = { at: sentAt.toISOString(), preview: (body ?? `[${type}]`).slice(0, 120) };
+      const messageId = (inserida as { id: string } | null)?.id;
+      if (midiaRecente && messageId) await pedirPersistenciaDeMidia(admin, orgId, messageId, conversationId, "meta_history");
     }
     // Só a ordenação/prévia da lista, e só se o histórico for mais novo que o que já há.
     // NÃO passa por fn_mark_conversation_message (last_inbound_at, não-lidas).
-    await atualizarPreviaSeMaisNova(admin, orgId, conversationId as string, thread);
+    if (maisNova) await atualizarPreviaSeMaisNova(admin, orgId, conversationId, maisNova);
   }
 
   const coex = lerCoexistencia((sessao as { metadata?: unknown }).metadata);
   if (coex) {
-    const erro = p.erro_codigo ? mensagemDoErroDaMeta(p.erro_codigo, null, `erro ${p.erro_codigo}`) : coex.historico?.erro ?? null;
-    await gravarCoexistencia(admin, orgId, sessionId, { ...coex, historico: { fase: p.fase ?? null, progresso: p.progresso ?? null, concluido: (p.progresso ?? 0) >= 100, erro } });
+    const erro_codigo = p.erro_codigo ?? coex.historico?.erro_codigo ?? null;
+    await gravarCoexistencia(admin, orgId, sessionId, { ...coex, historico: { fase: p.fase ?? null, progresso: p.progresso ?? null, concluido: (p.progresso ?? 0) >= 100, erro_codigo } });
   }
-  logger.info("[meta.history] chunk processado", { organization_id: orgId, session: sessionId, gravadas, duplicadas, fase: p.fase, progresso: p.progresso });
-  return { consumer_key: META_HISTORY_CONSUMER_KEY, status: "ok", detail: `gravadas=${gravadas} duplicadas=${duplicadas}` };
+
+  // LGPD (ruling P14): o pedaço cru tem até 180 dias de conversa e `event_log`
+  // não entra em retenção nem na cascata de redact. Concluído, o dado sai da fila.
+  await admin.from("event_log").update({ payload: { ...row.payload, value: null, limpo_em: new Date().toISOString() } })
+    .eq("organization_id", orgId).eq("id", row.id);
+
+  logger.info("[meta.history] chunk processado", { organization_id: orgId, session: sessionId, gravadas, duplicadas, falhas, fase: p.fase, progresso: p.progresso });
+  return resultado("ok", `gravadas=${gravadas} duplicadas=${duplicadas} falhas=${falhas}`);
+}
+
+async function atualizarPreviaSeMaisNova(admin: SupabaseClient, orgId: string, conversationId: string, nova: { at: string; preview: string }): Promise<void> {
+  const { data } = await admin.from("conversations").select("last_message_at").eq("organization_id", orgId).eq("id", conversationId).maybeSingle();
+  const atual = (data as { last_message_at: string | null } | null)?.last_message_at;
+  if (atual && atual >= nova.at) return;
+  await admin.from("conversations").update({ last_message_at: nova.at, last_message_preview: nova.preview })
+    .eq("organization_id", orgId).eq("id", conversationId);
 }
 ```
 
-`atualizarPreviaSeMaisNova`: lê `last_message_at` da conversa; se a última mensagem da thread (maior `timestamp`) é mais nova, `update { last_message_at, last_message_preview }` filtrando `organization_id` e `id`. Handler:
+Handler:
 
 ```ts
 // workers/meta-history-worker.handler.ts
@@ -2048,13 +2583,13 @@ export const metaHistoryHandler: EventHandler = { key: META_HISTORY_CONSUMER_KEY
     }
 ```
 
-- [ ] **Step 5:** `pnpm vitest run workers/meta-history-worker.test.ts tests/unit/webhook-meta-le-do-banco.test.ts tests/unit/cron-audita-so-quando-ha-efeito.test.ts` → passed; `pnpm test:db` → verde com o invariante novo; `pnpm lint:channels` (o worker fica em `workers/`, que o lint varre: nenhum nome de provider nele — `meta` sozinho não está no padrão; `meta_cloud` fica em `lib/channels`).
+- [ ] **Step 5:** `pnpm vitest run workers/meta-history-worker.test.ts tests/unit/webhook-meta-le-do-banco.test.ts tests/unit/cron-audita-so-quando-ha-efeito.test.ts tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts` → passed; `pnpm test:db` → verde com o invariante novo (inclui `hardening-definer-varredura`, que mede os `revoke` das duas `security definer` recriadas); `pnpm lint:channels` (o worker fica em `workers/`, que o lint varre: nenhum nome de provider nele — `meta` sozinho não está no padrão; `meta_cloud` fica em `lib/channels`).
 
 - [ ] **Step 6:** commit:
 
 ```bash
-git add supabase/migrations/20261006120000_0294_historico_importado_nao_emite_evento.sql supabase/baseline.sql supabase/migrations/MANIFEST.md workers/meta-history-worker.ts workers/meta-history-worker.handler.ts workers/meta-history-worker.test.ts lib/event-log/register-handlers.ts "app/api/v1/webhooks/meta/[token]/route.ts" tests/invariants/historico-importado-nao-emite-evento.test.ts
-git commit -m "feat(canal-oficial): histórico do celular entra por event_log, idempotente, sem IA/lead/automação e sem abrir janela (0294)
+git add supabase/migrations/20261001140000_0297_historico_importado_nao_emite_evento.sql supabase/baseline.sql supabase/migrations/MANIFEST.md workers/meta-history-worker.ts workers/meta-history-worker.handler.ts workers/meta-history-worker.test.ts lib/event-log/register-handlers.ts "app/api/v1/webhooks/meta/[token]/route.ts" tests/invariants/historico-importado-nao-emite-evento.test.ts
+git commit -m "feat(canal-oficial): histórico do celular entra por event_log, idempotente, sem IA/lead/demanda/automação e sem abrir janela (0297)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -2071,23 +2606,42 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - `export async function upsertContatosDoCelular(admin: SupabaseClient, organizationId: string, contatos: Array<{ waId: string; nome: string | null }>): Promise<{ processados: number }>` — chama `fn_upsert_wa_contact` com `p_notify = nome`. **A regra "preenche só quando vazio" já é a da RPC** (`display_name = coalesce(display_name, nullif(p_notify,''))`, `supabase/baseline.sql:13559`); não há segunda regra em TypeScript.
 
-- [ ] **Step 1:** teste: 2 contatos → 2 chamadas a `fn_upsert_wa_contact` com `p_notify` = nome e `p_chat_id` = waId; nome `null` passa `null`; erro numa RPC não interrompe as demais (log) e conta só os ok. Mais um teste de contrato, lendo o `baseline.sql` e afirmando que a definição em vigor de `fn_upsert_wa_contact` contém `coalesce(display_name, nullif(p_notify, ''))` — é o que sustenta "nunca sobrescreve nome editado".
+- [ ] **Step 1:** teste: 2 contatos → 2 chamadas a `fn_upsert_wa_contact` com `p_notify` = nome e `p_chat_id` = waId; nome `null` passa `null`; erro numa RPC não interrompe as demais (log) e conta só os ok. Mais um teste de contrato (ruling P15j): o `baseline.sql` tem TRÊS `create or replace function public.fn_upsert_wa_contact(` (linhas ~5108, ~11397, ~13559) e só a ÚLTIMA está em vigor — o teste olha a última:
+
+```ts
+it("a definição EM VIGOR de fn_upsert_wa_contact preenche nome só quando vazio (é o que sustenta 'nunca sobrescreve nome editado')", () => {
+  const baseline = readFileSync("supabase/baseline.sql", "utf8");
+  const cabecalho = "create or replace function public.fn_upsert_wa_contact(";
+  const ultima = baseline.lastIndexOf(cabecalho);
+  expect(ultima).toBeGreaterThan(0);
+  const corpo = baseline.slice(ultima, baseline.indexOf("$$;", baseline.indexOf("$$", ultima + cabecalho.length) + 2));
+  expect(corpo).toContain("coalesce(display_name, nullif(p_notify, ''))");
+  // e a varredura não deixa outra definição DEPOIS desta
+  expect(baseline.indexOf(cabecalho, ultima + 1)).toBe(-1);
+});
+```
 
 - [ ] **Step 2:** implementação (≈25 linhas) + ramo na rota: `if (e.kind === "state_sync") { const r = await upsertContatosDoCelular(admin, session.organizationId, e.contatos); desfechos.push(\`contatos:${r.processados}\`); continue; }`.
 
 - [ ] **Step 3:** UI — no card do `CadastroIncorporado`, quando `estado.coexistencia` existe:
 
 ```tsx
-{coex?.historico && !coex.historico.erro ? (
+{coex?.historico && !coex.historico.erro_codigo ? (
   <div className="mt-3" data-testid="historico-progresso">
     <p className="text-sm">{coex.historico.concluido ? t("Histórico importado.") : t("Importando histórico…")} {coex.historico.progresso ?? 0}%</p>
     <progress className="mt-1 h-2 w-full" max={100} value={coex.historico.progresso ?? 0} aria-label={t("Progresso da importação do histórico")} />
   </div>
 ) : null}
-{coex?.historico?.erro ? <p className="mt-2 text-sm text-destructive" data-testid="historico-erro">{coex.historico.erro}</p> : null}
+{coex?.historico?.erro_codigo ? (
+  <p className="mt-2 text-sm text-destructive" data-testid="historico-erro">
+    {t(mensagemDoErroDaMeta(coex.historico.erro_codigo, null, "Não deu para importar o histórico."))}
+  </p>
+) : null}
 ```
 
-`useOfficialChannel` com `refetchInterval: 5_000` enquanto `coexistencia?.historico && !concluido` (no `useQuery`, `refetchInterval: (q) => precisaAcompanhar(q.state.data) ? 5_000 : false`). Teste de render (`@testing-library/react`, como `canal-oficial-aviso-de-recebimento.test.tsx`): progresso 20 → barra com `value=20` e texto "Importando histórico… 20%"; `concluido` → "Histórico importado."; `erro` → texto do erro.
+(`mensagemDoErroDaMeta` de `@/lib/channels/meta/coexistencia`, puro; o código fica no banco e a frase nasce aqui, traduzida — ruling P13. As frases de `MENSAGENS_POR_CODIGO` já estão no dicionário desde a Task 5.)
+
+`useOfficialChannel` com `refetchInterval: 5_000` enquanto `coexistencia?.historico && !concluido` (no `useQuery`, `refetchInterval: (q) => precisaAcompanhar(q.state.data) ? 5_000 : false`). Teste de render (`@testing-library/react`, como `canal-oficial-aviso-de-recebimento.test.tsx`): progresso 20 → barra com `value=20` e texto "Importando histórico… 20%"; `concluido` → "Histórico importado."; `erro_codigo: 2593109` → texto contém "não compartilhou o histórico"; `erro_codigo: 999` → "Não deu para importar o histórico.".
 
 - [ ] **Step 4:** espanhol; `pnpm vitest run lib/channels/meta/contatos-do-celular.test.ts tests/unit/cadastro-incorporado-progresso.test.tsx tests/unit/i18n-espanhol-cobre-a-tela.test.ts tests/unit/controle-decorativo.test.ts` → passed.
 
@@ -2108,7 +2662,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `tests/e2e/cadastro-incorporado.spec.ts`, `docs/architecture/cadastro-incorporado.architecture.json`, `docs/testing/user-journey-map.md`
 - Create: `.changes/coexistencia-historico.md`
 
-- [ ] **Step 1:** segundo teste na spec: depois de conectar, enviar ao webhook da sessão (`/api/v1/webhooks/meta/<token>`, token lido pela API `GET /api/v1/channels/official` → `webhook.callbackUrl`) o fixture de `history` assinado com HMAC SHA-256 do `APP_SECRET` do seed (molde: `instagram-receber.spec.ts`), chamar o drain (`POST /api/v1/cron/event-log-drain` com `Bearer INTERNAL_CRON_SECRET`, como as specs de follow-up fazem), e afirmar pela tela: `historico-progresso` mostra "20%", e o Inbox mostra a conversa com a mensagem "olá" rotulada "Celular" e "oi" sem não-lida (`unread_count_for_assignee` não sobe: conferir que a conversa não aparece com badge de não-lida). Terceiro teste: fixture de `account_update PARTNER_REMOVED` → Central mostra o aviso "foi desconectado pelo celular"; `ACCOUNT_RECONNECTED` → aviso some.
+- [ ] **Step 1:** segundo teste na spec: depois de conectar, enviar ao webhook da sessão (`/api/v1/webhooks/meta/<token>`, token lido pela API `GET /api/v1/channels/official` → `webhook.callbackUrl`) o fixture de `history` assinado com HMAC SHA-256 de `process.env.E2E_META_APP_SECRET` (o segredo em claro que o seed da Task 10 cifrou; molde: `instagram-receber.spec.ts`), chamar o drain (`POST /api/v1/cron/event-log-drain` com `Bearer INTERNAL_CRON_SECRET`, como as specs de follow-up fazem), e afirmar pela tela: `historico-progresso` mostra "20%", e o Inbox mostra a conversa com a mensagem "olá" rotulada "Celular" e "oi" sem não-lida. A asserção de não-lida é por dado, não por prosa: `expect(await page.request.get("/api/v1/conversations/<id>").then((r) => r.json())).toMatchObject({ data: { unread_count_for_assignee: 0 } })` (conferir o nome do campo na rota) **e** `expect(linhaDaConversa.locator("[data-testid='unread-badge']")).toHaveCount(0)` (conferir o `data-testid` real do badge em `components/inbox/` com `grep -rn "unread" components/inbox | grep testid`; se não houver, dar um ao badge nesta task). Terceiro teste: fixture de `account_update PARTNER_REMOVED` → Central mostra o aviso "foi desconectado pelo celular"; `ACCOUNT_RECONNECTED` → aviso some.
 
 - [ ] **Step 2:** arestas novas no mapa (webhook → `event_log meta.history_chunk` → worker → `messages`; gatilho com guarda). Jornada no mapa de jornadas. Fragmento:
 
@@ -2141,13 +2695,13 @@ Abrir o PR 2. **Só depois do merge do PR 2 em produção** acontece o dia da co
 ## Dúvidas e lacunas encontradas lendo o código (para o dono decidir antes de executar)
 
 1. **Helper de silêncio: a spec manda extrair de `messages/_handler.ts:276`; o repo já tem o helper certo.** `pausarIaPorAtendimentoManual` (`lib/escalacao/atendimento-manual.ts`) é a regra do `fromMe` do WAHA — mesmo gesto (resposta pelo celular), mesmos 5 minutos, renovação a cada mensagem, nunca encurta `'infinity'`, e ainda grava `last_handoff_at`/`last_handoff_reason`. `extendBotSilence` do composer é o mesmo valor em outro lugar. O plano usa o existente (Task 7) e NÃO cria um terceiro; se o dono quiser unificar o composer também, é refactor separado.
-2. **O gatilho do banco acorda a IA mesmo que o worker não.** `trg_messages_emit_event` emite `message.received` em todo insert inbound; IA, sentimento, follow-up, push e automação consomem. A spec não menciona isso. A Task 11 põe a guarda no gatilho (migration 0294, PR 2) — sem ela a promessa "sem IA, sem automação" seria falsa.
+2. **Os gatilhos do banco acordam a IA (e abrem demanda) mesmo que o worker não.** `trg_messages_emit_event` emite `message.received` em todo insert inbound (IA, sentimento, follow-up, push e automação consomem); `trg_demanda_abre_no_inbound` abre uma demanda por contato; `trg_reply_inbound_revision` revisa o contexto de resposta. A spec não menciona isso. A Task 11 põe a guarda nos três (migration 0297, PR 2) — sem ela a promessa "sem IA, sem automação" seria falsa.
 3. **`fn_mark_conversation_message` não serve ao histórico.** Além de `last_inbound_at`, ela incrementa `unread_count_for_assignee` e mexe em `awaiting_since` (a régua da Fila, 0290). O worker não a chama e só atualiza prévia/ordem quando o histórico é mais novo que o que há.
 4. **`status` "failed" da spec = `FAILED`.** CHECK `channel_sessions_status_check` só aceita maiúsculas.
 5. **Rate limit na rota nova.** Não existe helper genérico de rate limit para rotas no repo (`lib/auth/rate-limit.ts` é só do login; `grep -rn "X-RateLimit" app/api/v1` vazio). O plano não inventa um: a rota exige `admin` + `requireSupportWrite`, e o `code` é de uso único com 30 s. Se o dono quiser, vira item próprio.
 6. **Códigos de erro da Meta: `code` ou `error_subcode`?** A página de erros não diz em qual campo cada número chega; `mensagemDoErroDaMeta` consulta os dois. Conferir no primeiro erro real.
 7. **Formato dos payloads de coexistência.** As fixtures da Task 6 vêm da documentação, não de um payload real (o repo só tem `inbound-webhooks.json` reais). Trocar pelo real no dia da conexão; o parser é tolerante (campo que faltar vira `null`, nunca throw).
 8. **`conferirNumeroDaConta` dentro de `conectarCanalOficial`** repete a chamada `GET /{waba}/phone_numbers` que a rota nova já fez. Custo: uma chamada a mais, uma vez por conexão. Deixado assim para o caminho de gravação ser literalmente o mesmo do formulário.
-9. **Sem `register` em coexistência está certo; para número NOVO (`FINISH`) o PIN cifrado vai para `metadata.pin_cifrado`.** A spec diz "guardado cifrado" sem dizer onde; não há coluna e criar uma por um caso que o EvaLink não vai usar agora é DIRC falhando. Se o dono preferir coluna, é uma linha a mais na 0293.
+9. **Sem `register` em coexistência está certo; para número NOVO (`FINISH`) o PIN cifrado vai para `metadata.pin_cifrado`.** A spec diz "guardado cifrado" sem dizer onde; não há coluna e criar uma por um caso que o EvaLink não vai usar agora é DIRC falhando. Se o dono preferir coluna, é uma linha a mais na 0296.
 10. **`META_GRAPH_BASE_URL` é novo** (só loopback em produção, molde do Instagram). Entra para o e2e poder simular a Graph, como a spec pede; sem ele o e2e teria de bater na Meta real.
 11. **O número da clínica hoje é WAHA.** `arquivarSessaoLegadaDoNumero` arquiva pelo `phone_number` igual; se a linha WAHA tiver o número em grafia diferente (`+55…` vs sem `+`), não casa. `channel_sessions.phone_number` do WAHA é gravado por `canonicalPhoneBR`; `conectarCanalOficial` grava `+${digits}`. Conferir no dia com `select phone_number, provider from channel_sessions where organization_id = …`.
