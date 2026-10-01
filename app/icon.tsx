@@ -4,6 +4,9 @@ import { marcaEhADoProduto } from "@/lib/branding";
 import { CORES_DA_MARCA, SIMBOLO } from "@/lib/branding/desenho";
 import { letraDoIcone } from "@/lib/branding/icone";
 import { marcaDaSaida, NEUTROS_DE_SAIDA } from "@/lib/branding/saida";
+import { BUCKET_DE_LOGOS } from "@/lib/branding/logo";
+import { logger } from "@/lib/logger";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * O ícone da aba, DESENHADO em runtime com a marca da instalação.
@@ -76,6 +79,15 @@ export const size = { width: 64, height: 64 };
 export const contentType = "image/png";
 
 export default async function Icon() {
+  // O ícone ENVIADO pela tela (migration 0291) vence o desenhado. Lido do
+  // bucket do próprio projeto pelo cliente admin — caminho validado por CHECK
+  // no banco, nunca uma URL digitada —, então continua sem SSRF. Qualquer falha
+  // cai no desenho de sempre: o ícone da aba nunca pode virar erro.
+  const enviado = await iconeEnviado();
+  if (enviado) {
+    return new Response(enviado, { headers: { "content-type": "image/png", ...CACHE } });
+  }
+
   const marca = await marcaDaSaida(null);
 
   if (marcaEhADoProduto({ name: marca.nome, logoUrl: marca.logoUrl })) {
@@ -139,3 +151,21 @@ export default async function Icon() {
 // ano tornaria a tela de marca uma promessa que o ícone não cumpre; `no-store`
 // faria o satori rodar a cada navegação.
 const CACHE = { "cache-control": "public, max-age=60, stale-while-revalidate=600" };
+
+async function iconeEnviado(): Promise<ArrayBuffer | null> {
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin.from("platform_branding").select("icone_path").eq("id", 1).maybeSingle();
+    const caminho = (data as { icone_path?: string | null } | null)?.icone_path;
+    if (error || !caminho) return null;
+    const { data: arquivo, error: erroArquivo } = await admin.storage.from(BUCKET_DE_LOGOS).download(caminho);
+    if (erroArquivo || !arquivo) {
+      logger.warn("[icon] ícone enviado não pôde ser lido; usando o desenhado", { detalhe: erroArquivo?.message });
+      return null;
+    }
+    return await arquivo.arrayBuffer();
+  } catch (e) {
+    logger.warn("[icon] falha ao buscar o ícone enviado; usando o desenhado", { detalhe: String(e) });
+    return null;
+  }
+}

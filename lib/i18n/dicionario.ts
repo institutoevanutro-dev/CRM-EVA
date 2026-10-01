@@ -9219,6 +9219,16 @@ export const DICIONARIO: Traducoes = {
   "Só quem administra a organização pode conectar a loja.": {
     es: "Solo quien administra la organización puede conectar la tienda.",
   },
+  // Ícone da aba (migration 0291, components/branding/CampoDeIcone.tsx)
+  "Não consegui trocar o ícone agora.": { es: "No pude cambiar el ícono ahora." },
+  "Ícone atualizado. A aba troca em até um minuto.": { es: "Ícono actualizado. La pestaña cambia en hasta un minuto." },
+  "Ícone removido. A aba volta ao ícone desenhado pelo sistema.": { es: "Ícono eliminado. La pestaña vuelve al ícono dibujado por el sistema." },
+  "Ícone da aba": { es: "Ícono de la pestaña" },
+  "A imagem pequena que aparece na aba do navegador e nos favoritos. PNG quadrado, de preferência 512×512.": { es: "La imagen pequeña que aparece en la pestaña del navegador y en los favoritos. PNG cuadrado, de preferencia 512×512." },
+  "Ícone da aba atual": { es: "Ícono actual de la pestaña" },
+  "Ícone desenhado pelo sistema": { es: "Ícono dibujado por el sistema" },
+  "Trocar ícone": { es: "Cambiar ícono" },
+  "Enviar ícone": { es: "Subir ícono" },
 };
 
 /**

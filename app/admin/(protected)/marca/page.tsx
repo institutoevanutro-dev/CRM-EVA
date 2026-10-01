@@ -9,6 +9,10 @@ import { tagDeIdioma } from "@/lib/i18n/datas";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
 
+import { CampoDeIcone } from "@/components/branding/CampoDeIcone";
+import { baseDoStorage, urlPublicaDoLogo } from "@/lib/branding/logo";
+import { createAdminClient } from "@/lib/supabase/admin";
+
 import { FormularioDaMarca } from "./_form";
 
 export const metadata = { title: "Marca da instalação" };
@@ -78,6 +82,16 @@ export default async function Page() {
     REGUA_DO_PRODUTO,
   );
 
+  // Coluna lida à parte (migration 0291), e não por `marcaDaInstalacao()`: o
+  // SELECT daquele resolvedor é tudo-ou-nada e roda em toda página; o ícone só
+  // importa aqui e no `/icon`.
+  const { data: icone } = await createAdminClient()
+    .from("platform_branding")
+    .select("icone_path")
+    .eq("id", 1)
+    .maybeSingle();
+  const iconePath = (icone as { icone_path?: string | null } | null)?.icone_path ?? null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -110,6 +124,8 @@ export default async function Page() {
         fallbackEm={instanteLegivel(linha?.fallback_at ?? null, tagDeIdioma(idioma))}
         fallbackMotivo={linha?.fallback_reason ?? null}
       />
+
+      <CampoDeIcone iconeUrl={iconePath ? urlPublicaDoLogo(iconePath, baseDoStorage()) : null} />
     </div>
   );
 }
