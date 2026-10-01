@@ -9144,6 +9144,22 @@ export const DICIONARIO: Traducoes = {
   "Nova regra": { es: "Nueva regla" },
   // As frases de abertura de conversa no Direct (gatilho de preço/agendamento).
   "Frases do Direct": { es: "Frases del Direct" },
+  // As palavras que a IA pode usar sozinha (vocabulário que aprende).
+  "Palavras da IA": { es: "Palabras de la IA" },
+  "Estas palavras apareceram em comentários que você respondeu. Liberando uma, a IA passa a responder sozinha os elogios que a usem. Assunto de saúde, preço e agendamento nunca aparecem aqui.": {
+    es: "Estas palabras aparecieron en comentarios que usted respondió. Si libera una, la IA pasa a responder sola los elogios que la usen. Los temas de salud, precio y agendamiento nunca aparecen aquí.",
+  },
+  "Nada novo para decidir. As palavras aparecem aqui conforme você responde comentários.": {
+    es: "Nada nuevo por decidir. Las palabras aparecen aquí a medida que usted responde comentarios.",
+  },
+  "comentário seu": { es: "comentario suyo" },
+  "comentários seus": { es: "comentarios suyos" },
+  "Pode usar": { es: "Puede usar" },
+  "Nunca": { es: "Nunca" },
+  "liberadas": { es: "liberadas" },
+  "recusada(s)": { es: "rechazada(s)" },
+  "(liberada)": { es: "(liberada)" },
+  "(recusada)": { es: "(rechazada)" },
   "Quando perguntarem preço": { es: "Cuando pregunten el precio" },
   "Não cite valor aqui: mensagem automática com preço vira promessa.": {
     es: "No menciones el valor aquí: un mensaje automático con precio se vuelve una promesa.",
