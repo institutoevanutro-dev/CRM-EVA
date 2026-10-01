@@ -28,3 +28,55 @@ export function montarExtras(): Record<string, unknown> {
     sessionInfoVersion: VERSAO_DO_SESSION_INFO,
   };
 }
+
+export interface Coexistencia {
+  onboarding_em: string;
+  pedidos: {
+    contatos: { request_id: string } | { erro: string } | null;
+    historico: { request_id: string } | { erro: string } | null;
+  };
+  /** `erro_codigo` guarda o CÓDIGO da Meta (ex.: 2593109); a frase é montada na tela, traduzida (ruling P13). */
+  historico: { fase: number | null; progresso: number | null; concluido: boolean; erro_codigo: number | null } | null;
+}
+
+export function lerCoexistencia(metadata: unknown): Coexistencia | null {
+  const c = (metadata as { coexistencia?: unknown } | null)?.coexistencia as Partial<Coexistencia> | undefined;
+  if (!c || typeof c.onboarding_em !== "string") return null;
+  return {
+    onboarding_em: c.onboarding_em,
+    pedidos: { contatos: c.pedidos?.contatos ?? null, historico: c.pedidos?.historico ?? null },
+    historico: c.historico ?? null,
+  };
+}
+
+export function dentroDoPrazoDeSincronizacao(onboardingEm: string, agora: Date = new Date()): boolean {
+  const inicio = new Date(onboardingEm).getTime();
+  return Number.isFinite(inicio) && agora.getTime() - inicio < PRAZO_DA_SINCRONIZACAO_MS;
+}
+
+const OUTRO_PARCEIRO =
+  "Este número está ligado a outro parceiro. Desconecte-o no aplicativo (Configurações › Ferramentas comerciais) e espere 15 minutos antes de tentar de novo.";
+
+/**
+ * Códigos da página `embedded-signup/errors` (01/10/2026). A Meta entrega o
+ * código ora em `error.code`, ora em `error.error_subcode`: consultamos os dois.
+ * As frases são CHAVES do dicionário (pt-BR): a rota traduz com `t()`.
+ */
+const MENSAGENS_POR_CODIGO: Record<number, string> = {
+  3441030: "A Meta tratou o cadastro como número novo, não como coexistência. Confira a configuração do Cadastro Incorporado na instalação e tente de novo.",
+  3441041: "Este número já está em outra conta do WhatsApp Business (WABA). Remova-o de lá no Gerenciador de Negócios e tente de novo.",
+  3441042: "A Meta não conseguiu verificar este número no aplicativo do celular. Abra o WhatsApp Business no celular, confira a conexão e tente de novo.",
+  3441045: "O WhatsApp Business do celular precisa estar atualizado para a coexistência. Atualize o aplicativo e tente de novo.",
+  2655093: OUTRO_PARCEIRO,
+  3441049: OUTRO_PARCEIRO,
+  2655094: OUTRO_PARCEIRO,
+  4563015: "O aplicativo do WhatsApp Business no celular está desatualizado. Atualize-o e tente de novo.",
+  2593109: "O celular não compartilhou o histórico. A conexão continua; o histórico pode ser pedido de novo em até 24 horas.",
+};
+
+/** Todas as frases possíveis (para o teste do dicionário). */
+export const MENSAGENS_DA_META_PARA_O_USUARIO: readonly string[] = [...new Set(Object.values(MENSAGENS_POR_CODIGO))];
+
+export function mensagemDoErroDaMeta(codigo: number | null, subcodigo: number | null, padrao: string): string {
+  return (subcodigo !== null && MENSAGENS_POR_CODIGO[subcodigo]) || (codigo !== null && MENSAGENS_POR_CODIGO[codigo]) || padrao;
+}

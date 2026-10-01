@@ -9345,6 +9345,19 @@ export const DICIONARIO: Traducoes = {
   "Ícone desenhado pelo sistema": { es: "Ícono dibujado por el sistema" },
   "Trocar ícone": { es: "Cambiar ícono" },
   "Enviar ícone": { es: "Subir ícono" },
+  "A Meta tratou o cadastro como número novo, não como coexistência. Confira a configuração do Cadastro Incorporado na instalação e tente de novo.": { es: "Meta trató el registro como un número nuevo, no como coexistencia. Revise la configuración del Registro Integrado en la instalación e inténtelo de nuevo." },
+  "Este número já está em outra conta do WhatsApp Business (WABA). Remova-o de lá no Gerenciador de Negócios e tente de novo.": { es: "Este número ya está en otra cuenta de WhatsApp Business (WABA). Quítelo de allí en el Administrador de Negocios e inténtelo de nuevo." },
+  "A Meta não conseguiu verificar este número no aplicativo do celular. Abra o WhatsApp Business no celular, confira a conexão e tente de novo.": { es: "Meta no pudo verificar este número en la aplicación del celular. Abra WhatsApp Business en el celular, revise la conexión e inténtelo de nuevo." },
+  "O WhatsApp Business do celular precisa estar atualizado para a coexistência. Atualize o aplicativo e tente de novo.": { es: "El WhatsApp Business del celular debe estar actualizado para la coexistencia. Actualice la aplicación e inténtelo de nuevo." },
+  "Este número está ligado a outro parceiro. Desconecte-o no aplicativo (Configurações › Ferramentas comerciais) e espere 15 minutos antes de tentar de novo.": { es: "Este número está vinculado a otro socio. Desconéctelo en la aplicación (Configuración › Herramientas comerciales) y espere 15 minutos antes de intentarlo de nuevo." },
+  "O aplicativo do WhatsApp Business no celular está desatualizado. Atualize-o e tente de novo.": { es: "La aplicación de WhatsApp Business del celular está desactualizada. Actualícela e inténtelo de nuevo." },
+  "O celular não compartilhou o histórico. A conexão continua; o histórico pode ser pedido de novo em até 24 horas.": { es: "El celular no compartió el historial. La conexión continúa; el historial puede solicitarse de nuevo dentro de 24 horas." },
+  "O token devolvido não é do app desta instalação.": { es: "El token devuelto no es de la app de esta instalación." },
+  "A Meta devolveu um token inválido.": { es: "Meta devolvió un token inválido." },
+  "O token não tem as permissões do WhatsApp Business necessárias.": { es: "El token no tiene los permisos de WhatsApp Business necesarios." },
+  "A Meta não devolveu o número desta conta. Refaça o fluxo.": { es: "Meta no devolvió el número de esta cuenta. Repita el flujo." },
+  "O número não está marcado como coexistência. Refaça o fluxo escolhendo manter o número no celular.": { es: "El número no está marcado como coexistencia. Repita el flujo eligiendo mantener el número en el celular." },
+  "A conta tem mais de um número e a Meta não disse qual foi cadastrado. Use o formulário manual.": { es: "La cuenta tiene más de un número y Meta no indicó cuál se registró. Use el formulario manual." },
 };
 
 /**
