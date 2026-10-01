@@ -90,6 +90,8 @@ describe("o ícone carrega para quem NÃO entrou", () => {
     // O 404 de /favicon.ico não é barato: em produção ele devolve a
     // `app/not-found.tsx` inteira (19.435 bytes) para um pedido de ícone.
     const layout = fs.readFileSync(path.join(RAIZ, "app/layout.tsx"), "utf8");
-    expect(layout).toMatch(/icons:\s*\{\s*icon:\s*"\/icon"\s*\}/);
+    // o `?v=` é a versão do ícone enviado (lib/branding/icone-versao.ts): o Safari
+    // guarda o favicon pelo endereço e só troca quando o endereço muda.
+    expect(layout).toMatch(/icons:\s*\{\s*icon:\s*`\/icon\?v=\$\{versaoIcone\}`/);
   });
 });

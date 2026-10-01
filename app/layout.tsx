@@ -3,6 +3,7 @@ import { Atkinson_Hyperlegible, IBM_Plex_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import { Toaster } from "sonner";
 import { coresDaBarraDoNavegador } from "@/lib/branding/barra-do-navegador";
+import { versaoDoIcone } from "@/lib/branding/icone-versao";
 import { MarcaDaInstalacaoProvider } from "@/lib/branding/contexto";
 import { cssDaMarca } from "@/lib/branding/css";
 import {
@@ -78,6 +79,7 @@ async function marcaResolvida(): Promise<{
  * motivo medido.
  */
 export async function generateMetadata(): Promise<Metadata> {
+  const versaoIcone = await versaoDoIcone();
   const { marca } = await marcaResolvida();
   const { name } = marca;
   return {
@@ -104,7 +106,9 @@ export async function generateMetadata(): Promise<Metadata> {
     // `/icon` faz o pedido ir para `app/icon.tsx`, que desenha a marca da
     // instalação em runtime — ver o cabeçalho daquele arquivo para por que ele
     // não pode ser um arquivo estático em `public/`.
-    icons: { icon: "/icon" },
+    // `?v=` muda quando o ícone enviado muda (lib/branding/icone-versao.ts): o
+    // Safari guarda o favicon pelo endereço e não pede o mesmo endereço de novo.
+    icons: { icon: `/icon?v=${versaoIcone}`, apple: `/icon?v=${versaoIcone}` },
   };
 }
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { countAs, sql, writeCountAs } from "./gov-helpers";
 
 /**
- * A tabela das palavras que o dono liberou (migration 0291). Três coisas que a
+ * A tabela das palavras que o dono liberou (migration 0292). Três coisas que a
  * RLS tem de garantir e que o CLAUDE.md cobra de toda tabela nova:
  * isolamento entre organizações, piso de papel (ler: qualquer membro,
  * escrever: `manager`) e unicidade da palavra por organização.
@@ -52,7 +52,7 @@ function erroDe(fn: () => unknown): string {
   throw new Error("o INSERT passou: a trava não existe neste banco");
 }
 
-describe("0291 · instagram_comment_vocabulario", () => {
+describe("0292 · instagram_comment_vocabulario", () => {
   it("nasce com RLS ligada e as policies de tenant (select de tenancy + write com papel)", () => {
     seed();
     expect(
