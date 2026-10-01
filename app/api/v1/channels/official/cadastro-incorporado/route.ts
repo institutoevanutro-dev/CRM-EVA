@@ -35,7 +35,7 @@ import {
 } from "@/lib/channels/meta/cadastro-incorporado";
 import { EVENTO_COEXISTENCIA, EVENTO_NUMERO_NOVO, type Coexistencia } from "@/lib/channels/meta/coexistencia";
 import { conectarCanalOficial, gravarCoexistencia } from "@/lib/channels/meta/conectar-canal-oficial";
-import { traduzir } from "@/lib/i18n/dicionario";
+import { DICIONARIO, traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -109,19 +109,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // `+` + dígitos: a MESMA grafia que `conectarCanalOficial` grava em `phone_number`.
   const phoneNumber = escolha.numero.displayPhoneNumber ? `+${escolha.numero.displayPhoneNumber.replace(/\D/g, "")}` : null;
 
-  // 3. register só para número novo (coexistência mantém o número no aplicativo)
+  // 3. PIN do número novo, cifrado ANTES de qualquer coisa: ele vai na metadata
+  //    da sessão e só depois disso é enviado à Meta no `register` (passo 6) —
+  //    PIN registrado na Meta e perdido aqui trancaria o número.
   const admin = createAdminClient();
+  let pin: string | null = null;
   let pinCifrado: string | null = null;
   if (!coexistencia) {
-    const pin = gerarPin();
+    pin = gerarPin();
     pinCifrado = await encryptWebhookSecret(admin, pin);
     if (!pinCifrado) {
       return fail("invalid_request", t("cifra indisponível nesta instalação (GUC app.nuvemshop_oauth_key ausente) — o token não foi gravado"), 422, { requestId });
-    }
-    try {
-      await registrarNumero(token, phoneNumberId, pin);
-    } catch (err) {
-      return fail("invalid_request", t(frasePara("register", err, orgId)), 422, { requestId });
     }
   }
 
@@ -152,10 +150,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ...(pinCifrado ? { pin_cifrado: pinCifrado } : {}),
     },
   });
-  // `traduzirMotivo` cobre os motivos do formulário (prefixo de rede); `t()` os do dicionário.
-  if (!r.ok) return fail(r.codigo, traduzirMotivo(r.motivo, t), r.status, { requestId });
+  if (!r.ok) {
+    // Frase do dicionário sai traduzida; texto cru (da Meta ou do banco) só vai ao log.
+    if (r.motivo in DICIONARIO) return fail(r.codigo, t(r.motivo), r.status, { requestId });
+    logger.warn("[cadastro-incorporado] conexão recusada", { organization_id: orgId, status: r.status, motivo: r.motivo });
+    return fail(r.codigo, t(FALHA_GENERICA_DA_META), r.status, { requestId });
+  }
 
-  // 6. coexistência: contatos, depois histórico. Falha NÃO desfaz a conexão.
+  // 6. register só para número novo, DEPOIS da sessão gravada com o PIN cifrado
+  //    (a validação da credencial funciona antes do register). Falha aqui não
+  //    apaga a sessão nem o PIN: refazer o fluxo reaproveita a linha.
+  if (pin) {
+    try {
+      await registrarNumero(token, phoneNumberId, pin);
+    } catch (err) {
+      return fail("invalid_request", t(frasePara("register", err, orgId)), 422, { requestId });
+    }
+  }
+
+  // 7. coexistência: contatos, depois histórico. Falha NÃO desfaz a conexão.
   let coex: Coexistencia | null = null;
   if (coexistencia) {
     const contatos = await pedirSincronizacao(token, phoneNumberId, "smb_app_state_sync");
@@ -164,7 +177,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await gravarCoexistencia(admin, orgId, r.sessionId, coex);
   }
 
-  // 7. trilha — sem token, sem PIN
+  // 8. trilha — sem token, sem PIN
   void audit({
     action: "channel.official_connected_es",
     actorUserId: authz.user.id,

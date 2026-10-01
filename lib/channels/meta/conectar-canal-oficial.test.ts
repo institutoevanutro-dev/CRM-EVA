@@ -73,7 +73,7 @@ const admin = {
   },
 } as never;
 
-import { conectarCanalOficial, MOTIVO_NUMERO_EM_OUTRA_ORG } from "./conectar-canal-oficial";
+import { conectarCanalOficial, MOTIVO_NUMERO_EM_OUTRA_ORG, MOTIVO_NUMERO_EM_OUTRO_CANAL_DA_ORG } from "./conectar-canal-oficial";
 
 beforeEach(() => {
   assinar.mockReset().mockResolvedValue({ ok: true });
@@ -88,6 +88,18 @@ describe("conectarCanalOficial", () => {
     const r = await conectarCanalOficial(admin, ENTRADA);
     expect(r).toEqual({ ok: false, status: 422, codigo: "invalid_request", motivo: MOTIVO_NUMERO_EM_OUTRA_ORG });
     expect(assinar).not.toHaveBeenCalled(); // não assinou webhook de uma sessão que não gravou
+  });
+
+  it("número ativo em OUTRO canal DESTA org (23505 no índice (org, phone_number)) recusa com a frase própria, não 'outra organização'", async () => {
+    insertErro = { code: "23505", message: 'duplicate key value violates unique constraint "channel_sessions_phone_per_org_unique"' };
+    const r = await conectarCanalOficial(admin, ENTRADA);
+    expect(r).toEqual({ ok: false, status: 422, codigo: "invalid_request", motivo: MOTIVO_NUMERO_EM_OUTRO_CANAL_DA_ORG });
+    expect(assinar).not.toHaveBeenCalled();
+  });
+
+  it("23505 de outra trava (nem número de outra org, nem canal da org) não inventa motivo: 500", async () => {
+    insertErro = { code: "23505", message: 'duplicate key value violates unique constraint "channel_sessions_zernio_account_id_ativo_unique"' };
+    expect(await conectarCanalOficial(admin, ENTRADA)).toMatchObject({ ok: false, status: 500, codigo: "internal_error" });
   });
 
   it("outro erro de gravação continua 500", async () => {

@@ -48,6 +48,7 @@ export type ConexaoOficialResultado =
   | { ok: false; status: 422 | 500; codigo: "invalid_request" | "internal_error"; motivo: string };
 
 export const MOTIVO_NUMERO_EM_OUTRA_ORG = "este número já está conectado em outra organização";
+export const MOTIVO_NUMERO_EM_OUTRO_CANAL_DA_ORG = "este número já está em outro canal desta organização";
 const MOTIVO_CIFRA_INDISPONIVEL =
   "cifra indisponível nesta instalação (GUC app.nuvemshop_oauth_key ausente) — o token não foi gravado";
 const MOTIVO_SESSAO_SEM_ENDERECO = "a sessão foi gravada sem endereço de recebimento. Reconecte o canal";
@@ -108,6 +109,9 @@ export async function conectarCanalOficial(
       .eq("organization_id", orgId)
       .eq("provider", CHANNEL_PROVIDER_META)
       .order("created_at", { ascending: true })
+      // ponytail: teto de 20 linhas oficiais por org (hoje são 1-2); acima disso a
+      // do mesmo número pode ficar de fora e virar INSERT → 23505. Filtrar por
+      // `meta_phone_number_id` numa segunda consulta se alguma org chegar perto.
       .limit(20);
   const { data: existentesRaw } = await queryTolerantToMissingArchived(
     () => buscarExistentes(`id, meta_phone_number_id, ${ARCHIVED_AT}`),
@@ -149,10 +153,18 @@ export async function conectarCanalOficial(
       });
 
   if (error) {
-    // 23505 aqui é `channel_sessions_meta_phone_number_id_ativo_unique`: o número
-    // está ativo em OUTRA org (a desta foi achada acima). Recusa, não 500 (P15b).
+    // 23505 é recusa, não 500 (P15b) — mas só quando a trava diz QUAL é o caso:
+    // `..._meta_phone_number_id_ativo_unique` = o número está ativo em OUTRA org
+    // (a linha desta foi achada acima); `..._phone_per_org_unique` = outro canal
+    // DESTA org (ex.: a sessão por QR) já tem o número. Outra trava cai no 500.
     if (error.code === "23505") {
-      return { ok: false, status: 422, codigo: "invalid_request", motivo: MOTIVO_NUMERO_EM_OUTRA_ORG };
+      const trava = error.message ?? "";
+      if (trava.includes("channel_sessions_meta_phone_number_id_ativo_unique")) {
+        return { ok: false, status: 422, codigo: "invalid_request", motivo: MOTIVO_NUMERO_EM_OUTRA_ORG };
+      }
+      if (trava.includes("channel_sessions_phone_per_org_unique")) {
+        return { ok: false, status: 422, codigo: "invalid_request", motivo: MOTIVO_NUMERO_EM_OUTRO_CANAL_DA_ORG };
+      }
     }
     return { ok: false, status: 500, codigo: "internal_error", motivo: error.message ?? "channel_session_write_failed" };
   }

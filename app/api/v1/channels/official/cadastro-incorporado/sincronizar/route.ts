@@ -53,7 +53,8 @@ export async function POST(): Promise<NextResponse> {
     );
   }
   // Só a credencial DESTA sessão: a do `.env` pode ser de outro número.
-  const creds = await resolveMetaCreds(admin, { organizationId: orgId, phoneNumberId: sessao.phoneNumberId });
+  // Decifra que lança (GUC ausente, banco fora) é o mesmo "sem credencial", não 500.
+  const creds = await resolveMetaCreds(admin, { organizationId: orgId, phoneNumberId: sessao.phoneNumberId }).catch(() => null);
   if (!creds || creds.source !== "session") return fail("invalid_request", t("sem credencial da sessão"), 422, { requestId });
 
   const pedidos = { ...coex.pedidos };

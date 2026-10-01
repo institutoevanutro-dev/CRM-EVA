@@ -113,6 +113,12 @@ describe("POST /channels/official/cadastro-incorporado/sincronizar", () => {
     db.metadata = { coexistencia: { onboarding_em: horasAtras(1), pedidos: { contatos: null, historico: null }, historico: null } };
     m.creds.mockResolvedValueOnce({ phoneNumberId: PNID, token: "ENV", graphVersion: "v23.0", source: "env" });
     expect((await POST()).status).toBe(422);
+
+    // decifra que lança (GUC ausente, banco fora) também é "sem credencial", não 500
+    m.creds.mockRejectedValueOnce(new Error("decrypt failed"));
+    const res = await POST();
+    expect(res.status).toBe(422);
+    expect((await res.json()).error.message).toBe("sem credencial da sessão");
     expect(m.sincronizar).not.toHaveBeenCalled();
   });
 });

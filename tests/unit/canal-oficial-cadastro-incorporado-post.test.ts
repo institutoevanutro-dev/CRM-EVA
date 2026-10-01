@@ -140,6 +140,38 @@ describe("POST /channels/official/cadastro-incorporado", () => {
     expect(JSON.stringify([corpo, m.auditorias, m.avisos])).not.toContain("123456");
   });
 
+  it("número novo: o register vem DEPOIS da conexão gravada (o PIN cifrado já está salvo quando a Meta é chamada)", async () => {
+    await POST(req(NOVO));
+    expect(m.conectar.mock.invocationCallOrder[0]!).toBeLessThan(m.registrar.mock.invocationCallOrder[0]!);
+  });
+
+  it("número novo com conexão recusada: register NÃO é chamado", async () => {
+    m.conectar.mockResolvedValueOnce({ ok: false, status: 422, codigo: "invalid_request", motivo: "este número já está conectado em outra organização" });
+    const res = await POST(req(NOVO));
+    expect(res.status).toBe(422);
+    expect(m.registrar).not.toHaveBeenCalled();
+  });
+
+  it("número novo com register recusado: 422 traduzido, mas a sessão e o pin_cifrado ficam gravados", async () => {
+    m.registrar.mockRejectedValueOnce(new ErroDaMeta(100, 133005, "Two step verification PIN mismatch"));
+    m.idioma = "es";
+    const res = await POST(req(NOVO));
+    expect(res.status).toBe(422);
+    const msg = (await res.json()).error.message as string;
+    expect(msg).not.toContain("PIN mismatch");
+    expect(msg).toBe("No fue posible completar la conexión con Meta. Inténtelo de nuevo en unos instantes; si persiste, repita el flujo.");
+    expect(m.conectar).toHaveBeenCalledTimes(1);
+    expect((m.conectar.mock.calls[0]![1] as { metadataExtra: Record<string, unknown> }).metadataExtra).toMatchObject({ pin_cifrado: "\\x_pin_cifrado" });
+  });
+
+  it("motivo cru da Meta (fora do dicionário) vindo do conectarCanalOficial: frase genérica na tela, cru no log", async () => {
+    m.conectar.mockResolvedValueOnce({ ok: false, status: 422, codigo: "invalid_request", motivo: "(#100) Invalid parameter phone_number_id" });
+    const res = await POST(req(COEX));
+    expect(res.status).toBe(422);
+    expect((await res.json()).error.message).toBe(FALHA_GENERICA_DA_META);
+    expect(JSON.stringify(m.avisos)).toContain("Invalid parameter");
+  });
+
   it("falha no smb_app_data não desfaz a conexão: 200 com o erro gravado em pedidos.historico", async () => {
     m.sincronizar.mockReset().mockResolvedValueOnce({ request_id: "c-1" }).mockResolvedValueOnce({ erro: "x" });
     const res = await POST(req(COEX));

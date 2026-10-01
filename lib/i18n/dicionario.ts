@@ -9363,6 +9363,7 @@ export const DICIONARIO: Traducoes = {
   "A conta tem mais de um número e a Meta não disse qual foi cadastrado. Use o formulário manual.": { es: "La cuenta tiene más de un número y Meta no indicó cuál se registró. Use el formulario manual." },
   // Cadastro Incorporado — rotas POST e /sincronizar, retry da tela (Task 5)
   "este número já está conectado em outra organização": { es: "este número ya está conectado en otra organización" },
+  "este número já está em outro canal desta organização": { es: "este número ya está en otro canal de esta organización" },
   "code, evento e waba_id são obrigatórios": { es: "code, evento y waba_id son obligatorios" },
   "o fluxo da Meta não terminou. Tente de novo.": { es: "el flujo de Meta no terminó. Inténtelo de nuevo." },
   "a Meta não devolveu a conta do WhatsApp Business. Tente de novo.": { es: "Meta no devolvió la cuenta de WhatsApp Business. Inténtelo de nuevo." },
