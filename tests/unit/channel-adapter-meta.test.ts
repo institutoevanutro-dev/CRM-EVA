@@ -377,14 +377,18 @@ describe("elegibilidade é do `send` — os desfechos da #674", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("decifragem que falha, sem env: meta_not_configured (não vira `sent` sem id)", async () => {
+  it("decifragem que falha, sem env: meta_creds_decrypt_failed (falha fechada)", async () => {
+    // Uma sessão COM token criptografado que não decifra lança (GUC ausente ou chave
+    // trocada), em vez de cair no env — que enviaria pela conta de OUTRA instalação.
+    // Falha de resolução fecha a ação, não vira caminho feliz. Este é um erro
+    // DIFERENTE de "sem credencial nenhuma" (que seria meta_not_configured).
     sessaoNoBanco.token = "cifrado-existe";
     sessaoNoBanco.decifravel = false;
     const spy = vi.fn();
     vi.stubGlobal("fetch", spy);
     await expect(
       a().send({ organizationId: ORG, sessionRef: "sessao-pn", to: "5531", kind: "text", body: "oi" }),
-    ).rejects.toThrow(/meta_not_configured/);
+    ).rejects.toThrow(/meta_creds_decrypt_failed/);
     expect(spy).not.toHaveBeenCalled();
   });
 
