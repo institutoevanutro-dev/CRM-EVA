@@ -254,6 +254,45 @@ describe("C-1: ehTokenDeGatilho casa por RADICAL", () => {
     expect(ehTokenDeGatilho("dormir")).toBe(true);
   });
 
+  // ── RESÍDUO da mesma espécie: o plural IRREGULAR ─────────────────────────
+  //
+  // Cortar só o sufixo cobre "valores" e "doses" e para aí: o plural de -ão e
+  // de -em TROCA a sílaba final em vez de acrescentar letra. Estes quatro
+  // eram oferecidos ao dono depois do conserto do C-1, e aprovados faziam a
+  // IA publicar sozinha sobre preço e medicação.
+  it.each(["promocoes", "medicacoes", "reacoes", "dosagens"])(
+    "%s (plural de -ão / -em) NUNCA pode ser oferecida",
+    (token) => {
+      expect(ehTokenDeGatilho(token)).toBe(true);
+    },
+  );
+
+  // O corte é cego: ele não sabe o que é gatilho, só encurta. Estas seis
+  // terminam igual e NÃO têm nada a ver com os seis assuntos — se o radical
+  // ficar curto demais, elas caem junto e a tela do dono esvazia.
+  it.each(["acao", "coracao", "emocoes", "opcoes", "questoes", "informacoes"])(
+    "%s não vira gatilho por acidente do corte",
+    (token) => {
+      expect(ehTokenDeGatilho(token)).toBe(false);
+    },
+  );
+
+  // A derivação é de `GATILHOS`, não lista à mão: um gatilho novo em -ão
+  // nasce coberto. Este teste é o que reprova se alguém trocar o `.map` do
+  // corte por uma lista escrita.
+  it("o corte vale para TODA alternativa em -ão, não para as três de hoje", () => {
+    const pares: [string, string][] = [
+      ["promocao", "promocoes"],
+      ["medicacao", "medicacoes"],
+      ["reacao", "reacoes"],
+      ["dosagem", "dosagens"],
+    ];
+    for (const [palavra, plural] of pares) {
+      expect(ehTokenDeGatilho(palavra), palavra).toBe(true);
+      expect(ehTokenDeGatilho(plural), plural).toBe(true);
+    }
+  });
+
   // NÃO radicalizamos os GATILHOS em si (seria PR próprio): "quais os
   // valores" reprova por vocabulário, não por gatilho de preço. Este teste
   // existe para que a troca dessa decisão seja deliberada.

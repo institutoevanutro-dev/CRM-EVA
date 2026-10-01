@@ -88,6 +88,15 @@ describe("ida e volta: aprovar o que a tela oferece não pode liberar assunto se
     "voce indica especialistas",
     "tem nutrologos ai",
     "quais medicamentos",
+    // O corpus acima só tinha plural REGULAR, e por isso ficou verde enquanto
+    // "promocoes", "medicacoes", "reacoes" e "dosagens" ainda eram oferecidos:
+    // o viés foi da língua de quem escreveu o corpus, não da régua. Plural de
+    // -ão e de -em entra aqui para o próximo resíduo dessa classe aparecer
+    // sozinho, e com frase que alguém escreveria mesmo.
+    "amei, voces tem promocoes",
+    "quais medicacoes voce indica",
+    "tive reacoes fortes",
+    "quais as dosagens",
   ];
 
   it.each(sensiveis)(

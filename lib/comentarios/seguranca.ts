@@ -183,6 +183,15 @@ export function ehTokenConhecido(token: string): boolean {
  * Sobre-recusar ("dormir" começa com "dor", "citar" com "cita") é a direção
  * certa do erro: o custo é não oferecer uma palavra, nunca liberar um assunto.
  *
+ * ⚠️ RADICAL NÃO É "A PALAVRA MENOS O SUFIXO" EM PORTUGUÊS. A primeira versão
+ * deste bloco cortava só o `\w*` e parou no plural REGULAR — "valores",
+ * "doses". O plural de -ão e de -em troca a sílaba final em vez de acrescentar
+ * letra ("promocao"→"promocoes", "medicacao"→"medicacoes", "reacao"→"reacoes",
+ * "dosagem"→"dosagens"), então os quatro atravessavam e eram oferecidos ao
+ * dono: aprovados, a IA publicava sozinha sobre preço e medicação. O radical
+ * precisa parar ANTES da sílaba que muda — e o corte é DERIVADO, para um
+ * gatilho novo em -ão nascer coberto.
+ *
  * ⚠️ Isto radicaliza só a OFERTA. Os `GATILHOS` em si continuam com `\b` nos
  * dois lados — radicalizá-los muda o veredito de todo comentário de todo
  * mundo, e é PR próprio. Consequência conhecida e aceita: "quais os valores",
@@ -196,7 +205,10 @@ const RADICAIS_DE_GATILHO: readonly string[] = GATILHOS.flatMap(([, padrao]) =>
     .replace(/\)\\b$/, "")
     .split("|")
     .filter((alt) => !alt.includes("\\s+"))
-    .map((alt) => alt.replace(/\\w\*$/, "")),
+    .map((alt) => alt.replace(/\\w\*$/, ""))
+    // O corte do plural irregular: "promocao" → "promoc" cobre a palavra E o
+    // plural, porque `startsWith` só pede o prefixo comum aos dois.
+    .map((radical) => radical.replace(/(?:ao|em)$/u, "")),
 );
 
 /**
