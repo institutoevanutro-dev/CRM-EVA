@@ -30,7 +30,10 @@ const acao = readFileSync(join(raiz, "app/actions/shell/setActiveOrg.ts"), "utf8
 
 describe("a organização que a pessoa usou por último", () => {
   it("é lida por loadAuthUser, e a coluna vem no select", () => {
-    expect(servidor).toContain("ultima_ativacao_em, organizations(display_name, locale)");
+    // A cerca guarda que `ultima_ativacao_em` está no select, ao lado do embed
+    // da organização; a lista exata de colunas do embed não é propriedade do
+    // produto (ele ganhou `timezone` para a Agenda abrir no fuso da empresa).
+    expect(servidor).toMatch(/ultima_ativacao_em, organizations\(display_name, locale\b[^)]*\)/);
   });
 
   it("ordena com os nulos POR ÚLTIMO — sem isso, quem nunca trocou vence quem trocou", () => {

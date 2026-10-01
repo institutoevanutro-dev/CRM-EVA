@@ -173,6 +173,11 @@ export const AUDIT_ACTIONS = [
   "ai.credential_created",
   "ai.credential_deleted",
   "ai.credential_revalidated",
+  // A chave de IA girada NO LUGAR (PATCH /ai/credentials/:id). Distinto de
+  // `ai.credential_created` e `ai.credential_revalidated`: aqui o id não muda, e
+  // "quando esta chave foi trocada, e por quem" é a pergunta que só esta linha
+  // responde — a coluna `updated_at` se move por qualquer motivo.
+  "ai.credential_updated",
   "ai_agent.created",
   "ai_agent.updated",
   "ai_agent.archived",

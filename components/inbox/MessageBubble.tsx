@@ -109,7 +109,7 @@ export function MessageBubble({
   return (
     <div
       className={cn(
-        "group flex w-full items-center gap-1 px-4 py-1",
+        "group flex w-full min-w-0 items-center gap-1 px-4 py-1",
         isOutbound ? "justify-end" : "justify-start",
       )}
     >
@@ -150,7 +150,7 @@ export function MessageBubble({
       )}
       <div
         className={cn(
-          "max-w-[75%] text-sm",
+          "max-w-[75%] min-w-0 text-sm",
           isBareSticker
             ? "px-0 py-0"
             : cn(
@@ -190,7 +190,7 @@ export function MessageBubble({
               continuava legível dentro de cada resposta que a citou. O fio
               permanece (a citação some, não a resposta); o conteúdo, não.
             */}
-            <div className={cn("line-clamp-2 opacity-70", citada.revoked_at && "italic")}>
+            <div className={cn("line-clamp-2 wrap-anywhere opacity-70", citada.revoked_at && "italic")}>
               {citada.revoked_at
                 ? t("Esta mensagem foi apagada")
                 : citada.body?.trim() || t("(sem texto)")}
@@ -210,7 +210,7 @@ export function MessageBubble({
           // Nem corpo nem mídia: o anexo apagado também sai. Em itálico e
           // esmaecido porque não é texto de ninguém — é o CRM narrando o que
           // aconteceu com aquele lugar da conversa.
-          <p className="whitespace-pre-wrap break-words italic leading-snug opacity-60">
+          <p className="whitespace-pre-wrap wrap-anywhere italic leading-snug opacity-60">
             {t("Esta mensagem foi apagada")}
           </p>
         ) : (
@@ -228,7 +228,7 @@ export function MessageBubble({
             )}
 
             {message.body && !isContact && (
-              <p className="whitespace-pre-wrap break-words leading-snug">{message.body}</p>
+              <p className="whitespace-pre-wrap wrap-anywhere leading-snug">{message.body}</p>
             )}
           </>
         )}
