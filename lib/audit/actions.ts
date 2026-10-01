@@ -642,6 +642,21 @@ export const AUDIT_ACTIONS = [
   "prontuario.contact_linked",
   "prontuario.contact_created",
   "prontuario.contact_updated",
+  // LEITURA de dado de paciente (achado A8, auditoria 2026-09-29). Para dado de
+  // saúde a LGPD (arts. 37 e 46) espera saber quem consultou, não só quem
+  // alterou. Emitidas por `lib/audit/leitura.ts`, com `metadata.acesso =
+  // "leitura"`; listagens gravam 1 linha por página, com os ids em `metadata.ids`.
+  "contact.viewed",
+  "contact.listed",
+  "conversation.viewed",
+  "message.media_viewed",
+  "prontuario.contact_read",
+  "lgpd.request_previewed",
+  // B6 — mutações que não deixavam linha: o arquivo que o atendente sobe para
+  // mandar numa conversa, e a exportação da própria trilha (quem levou 10 mil
+  // linhas de auditoria para fora, e com que filtro).
+  "conversation.media_uploaded",
+  "audit.exported",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

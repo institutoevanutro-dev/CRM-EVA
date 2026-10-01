@@ -9193,6 +9193,11 @@ export const DICIONARIO: Traducoes = {
     es: "El CRM necesita al menos un administrador en cada organización. En la Cuenta, mantenga su rol como administrador o déselo a otra persona antes.",
   },
   "Entre pelo botão Entrar com o EvaLink.": { es: "Ingrese con el botón Entrar con EvaLink." },
+  "Contato não encontrado nesta organização.": { es: "Contacto no encontrado en esta organización." },
+  "Erro ao verificar o agente.": { es: "Error al verificar el agente." },
+  "Só quem administra a organização pode conectar a loja.": {
+    es: "Solo quien administra la organización puede conectar la tienda.",
+  },
 };
 
 /**

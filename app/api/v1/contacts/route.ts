@@ -11,6 +11,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ApiError } from "@/lib/api/types";
 import { ok, fail } from "@/lib/api/wrappers";
+import { auditarLeitura } from "@/lib/audit/leitura";
+import { ehAberturaDeLeitura } from "@/lib/audit/releitura";
 import type { Actor } from "@/lib/api/handlers/types";
 import { requireRole } from "@/lib/auth/require-role";
 import { extractBearer, validateBearerToken, ensureRole, ensureScope, McpAuthError } from "@/lib/mcp/auth";
@@ -50,7 +52,15 @@ export const dynamic = "force-dynamic";
  * do proxy antes de chegar neste arquivo. Ver o comentário lá.
  */
 type ContactsAuth =
-  | { ok: true; organizationId: string; actor: Actor; supabase: SupabaseClient; idioma?: Idioma }
+  | {
+      ok: true;
+      organizationId: string;
+      actor: Actor;
+      /** Presente só no ramo Bearer: quem lê é o token, não uma linha de auth.users. */
+      apiTokenId?: string;
+      supabase: SupabaseClient;
+      idioma?: Idioma;
+    }
   | { ok: false; response: Response };
 
 async function resolveContactsAuth(req: NextRequest, requestId: string): Promise<ContactsAuth> {
@@ -93,6 +103,7 @@ async function resolveContactsAuth(req: NextRequest, requestId: string): Promise
       ok: true,
       organizationId: auth.organizationId,
       actor: auth.actor,
+      apiTokenId: auth.apiTokenId,
       supabase: createAdminClient(),
     };
   }
@@ -113,7 +124,7 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const auth = await resolveContactsAuth(req, requestId);
   if (!auth.ok) return auth.response;
-  const { organizationId, actor, supabase, idioma } = auth;
+  const { organizationId, actor, apiTokenId, supabase, idioma } = auth;
   const t = (texto: string) => traduzir(texto, idioma ?? "pt-BR");
 
   const url = new URL(req.url);
@@ -144,6 +155,17 @@ export async function GET(req: NextRequest): Promise<Response> {
       },
       qsParsed.data,
     );
+    // Só a primeira página e fora de recarga (ver lib/audit/releitura.ts).
+    if (ehAberturaDeLeitura(url)) auditarLeitura({
+      action: "contact.listed",
+      actorUserId: apiTokenId ? null : actor.id,
+      actorApiTokenId: apiTokenId ?? null,
+      organizationId,
+      resourceType: "contact",
+      requestId,
+      // Só ids: o termo buscado pode ser nome ou telefone do paciente.
+      metadata: { ids: contacts.map((c) => c.id), busca: Boolean(qsParsed.data.search) },
+    });
     return ok(contacts, { requestId, meta: { cursor, has_more } });
   } catch (err) {
     if (err instanceof ApiError) {

@@ -140,17 +140,15 @@ EVALINK_CLIENT_SECRET=segredo-ficticio
 EVALINK_SEGREDO_AVISO=e2e-placeholder-segredo-do-aviso-nao-e-segredo
 EVALINK_ORG_PADRAO=e7a1e2e0-0000-4000-8000-000000000001
 NEXT_TELEMETRY_DISABLED=1
-# Telemetria DESLIGADA na suíte, e não é preferência: sem isto o SDK do browser
-# assume o DSN da comunidade (\`lib/sentry/dsn.ts\` → DEFAULT_SENTRY_DSN) e a suíte
-# MANDA DADO para o Sentry de produção do projeto — mesma família do e2e que
-# escrevia no banco de produção. E o inverso morde igual: em 2026-08-10 a
+# Telemetria DESLIGADA na suíte, explícita. Desde 2026-09-29 vazio também
+# desliga (\`lib/sentry/dsn.ts\` não tem mais DSN fixo), mas a suíte não pode
+# depender de um default. Histórico: em 2026-08-10 a
 # organização do Sentry estava suspensa por cota, o ingest respondeu 429 a tudo, o
 # SDK cuspiu erro de console em toda tela e \`olhar-telas-do-epico\` reprovou. A cor
 # do CI não pode depender do estado de cobrança de um terceiro.
 #
-# Consequência aceita: com \`off\` o cliente não inicializa, então a suíte NÃO
-# exercita a política do DSN da comunidade — quem a guarda é
-# \`tests/unit/sentry-comunidade-so-erro.test.ts\`.
+# Quem guarda a regra "vazio = desligado" é
+# \`tests/unit/sentry-padrao-desligado.test.ts\`.
 SENTRY_DSN=off
 EOF
 

@@ -32,6 +32,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
+import { idsForaDaOrg } from "@/lib/tenancy/pertence-a-org";
 import { registraAtividadeDaTarefa } from "@/lib/tarefas/atividade";
 import { clienteDaEquipe, responsavelValido } from "@/lib/tarefas/responsavel";
 import { PRIORIDADES_DA_TAREFA, SITUACOES_DA_TAREFA, type Tarefa } from "@/lib/tarefas/tipos";
@@ -137,6 +138,18 @@ export async function POST(req: NextRequest): Promise<Response> {
       requestId,
     });
   }
+  // B4: a FK aceita negócio/contato de outra organização (checa só existência).
+  const [leadsFora, contatosFora] = await Promise.all([
+    idsForaDaOrg(supabase, authz.org.orgId, "crm_leads", [parsed.data.lead_id]),
+    idsForaDaOrg(supabase, authz.org.orgId, "contacts", [parsed.data.contact_id]),
+  ]);
+  if (leadsFora === null || contatosFora === null) {
+    return fail("internal_error", t("Erro ao salvar a tarefa."), 500, { requestId });
+  }
+  if (leadsFora.length > 0 || contatosFora.length > 0) {
+    return fail("validation_failed", t("O negócio ou contato vinculado não existe."), 422, { requestId });
+  }
+
   const { data, error } = await supabase
     .from("crm_tasks")
     .insert({

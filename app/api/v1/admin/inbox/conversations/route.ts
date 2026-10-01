@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { randomUUID } from "node:crypto";
+import { ID, INSTANTE, lerCursorJson } from "@/lib/api/filtro-postgrest";
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -32,11 +33,7 @@ function encodeCursor(payload: CursorPayload): string {
 }
 
 function decodeCursor(cursor: string): CursorPayload | null {
-  try {
-    return JSON.parse(Buffer.from(cursor, "base64url").toString("utf-8")) as CursorPayload;
-  } catch {
-    return null;
-  }
+  return lerCursorJson(cursor, { last_inbound_at: INSTANTE.nullable(), id: ID });
 }
 
 // ---------------------------------------------------------------------------

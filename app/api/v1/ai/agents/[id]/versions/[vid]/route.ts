@@ -11,6 +11,7 @@ import { type NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { versionPatchSchema } from "@/lib/ai/agents/validation";
@@ -99,6 +100,15 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       requestId,
       details: { current_status: existing.status },
     });
+  }
+
+  // B4: a FK não olha a organização — chave/número de outra org seriam gravados.
+  const escopo = await validarEscopoDaVersao(admin, activeOrg.orgId, {
+    credential_id: patch.credential_id,
+    channel_session_id: patch.channel_session_id,
+  });
+  if (!escopo.ok) {
+    return fail("validation_failed", mensagemDoEscopo(escopo), 422, { requestId });
   }
 
   const update: Record<string, unknown> = {};

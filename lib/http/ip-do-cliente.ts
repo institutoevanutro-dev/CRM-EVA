@@ -69,8 +69,13 @@ export function ipDoCliente(headers: Headers): string | null {
  * A validação é de FORMA, não de veracidade — ver o cabeçalho.
  */
 export function ipDoClienteParaInet(headers: Headers): string | null {
-  const bruto = ipDoCliente(headers);
-  if (bruto === null) return null;
+  return ipParaInet(ipDoCliente(headers));
+}
+
+/** A mesma guarda, para um valor que já chegou pronto (ex.: `audit({ ip })`). */
+export function ipParaInet(valor: string | null | undefined): string | null {
+  const bruto = valor?.trim();
+  if (!bruto) return null;
   if (bruto.includes("%") || bruto.includes("/")) return null;
   return isIP(bruto) === 0 ? null : bruto;
 }

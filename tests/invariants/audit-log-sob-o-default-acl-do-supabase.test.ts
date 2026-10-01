@@ -197,7 +197,7 @@ describe("migration 0258 sob o default ACL de tabelas do Supabase", () => {
     expect(sobrou, "a linha vencida sobreviveu ao expurgo").toBe("0");
   });
 
-  it("as FKs `on delete set null` seguem funcionando quando service_role apaga org, usuário e token", () => {
+  it("as FKs `on delete set null` seguem funcionando quando service_role apaga org e token (e o ator fica)", () => {
     // A ação referencial roda como o DONO de api_audit_log, não como quem apagou
     // a linha referenciada. Se rodasse como quem chamou, apagar uma organização
     // passaria a falhar com permission denied depois da 0258.
@@ -224,6 +224,10 @@ describe("migration 0258 sob o default ACL de tabelas do Supabase", () => {
              || ',' || coalesce(actor_api_token_id::text, 'null')
         from public.api_audit_log where id = '${LINHA}';
     `);
-    expect(depois, "a linha de auditoria sumiu ou não perdeu as referências").toBe("null,null,null");
+    // `actor_user_id` NÃO tem mais FK (0289): apagar o usuário deixava a trilha
+    // sem o "quem". O uuid fica; organização e token seguem `set null`.
+    expect(depois, "a linha de auditoria sumiu ou não perdeu as referências").toBe(
+      "null,25800000-0000-4000-8000-000000000001,null",
+    );
   });
 });

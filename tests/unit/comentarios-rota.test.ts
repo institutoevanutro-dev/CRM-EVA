@@ -18,7 +18,7 @@ import { fail } from "@/lib/api/wrappers";
 
 const auditSpy = vi.fn(async () => undefined);
 const responderComentarioSpy = vi.fn(async () => ({ replyId: "reply-1" }));
-const loggerErrorSpy = vi.fn();
+const loggerErrorSpy = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/audit", () => ({ audit: auditSpy }));
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));

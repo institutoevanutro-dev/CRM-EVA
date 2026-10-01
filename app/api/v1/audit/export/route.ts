@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
 import { fail } from "@/lib/api/wrappers";
+import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { auditQuerySchema } from "@/lib/schemas/audit";
@@ -94,6 +95,21 @@ export async function GET(req: NextRequest): Promise<Response> {
     );
   }
   const csv = lines.join("\n") + "\n";
+  // B6: levar a trilha para fora é ato auditável — quem, quando, com que filtro.
+  void audit({
+    action: "audit.exported",
+    actorUserId: authz.user.id,
+    organizationId: activeOrg.orgId,
+    resourceType: "api_audit_log",
+    requestId,
+    metadata: {
+      linhas: rows.length,
+      filtros: {
+        actor_id: q.actor_id ?? null, action: q.action ?? null, resource_type: q.resource_type ?? null,
+        from: q.from ?? null, to: q.to ?? null,
+      },
+    },
+  });
   return new Response(csv, {
     status: 200,
     headers: {

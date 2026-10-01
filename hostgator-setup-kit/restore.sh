@@ -17,6 +17,15 @@ step "Restaurando $DUMP"
 gunzip -c "$DUMP" | docker run --rm -i postgres:17-alpine psql "$(url_do_schema)" \
   && c_grn "✓ banco restaurado" || die "Falha na restauração — veja o log acima."
 
+# O backup não leva a chave de cifra (`private.app_secrets` sai sem dados); ela
+# vem do `.env`. Sem chave no `.env` NÃO geramos outra: uma chave nova deixaria
+# ilegível tudo o que foi cifrado com a antiga.
+if [ -n "${NUVEMSHOP_OAUTH_ENCRYPTION_KEY:-}" ]; then
+  ensure_encryption_key .env
+else
+  c_ylw "⚠ .env sem NUVEMSHOP_OAUTH_ENCRYPTION_KEY: copie a chave da instalação antiga para o .env e rode update.sh, senão segredos cifrados não serão lidos."
+fi
+
 # Restaura o estado das sessões do WhatsApp (WAHA) se o snapshot emparelhado existir
 WAHA_TAR="${DUMP/db-/waha-}"
 WAHA_TAR="${WAHA_TAR%.sql.gz}.tgz"

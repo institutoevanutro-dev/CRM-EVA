@@ -65,8 +65,8 @@ discordarem, vale o guia; quando o guia e `install.sh` discordarem, vale o insta
 
    Ele valida cada resposta na hora, aceita `voltar`, retoma se interromper e mostra uma tela de
    conferência numerada. Evite `--yes` com o `.env` copiado do exemplo: isso instala no canal móvel
-   `stable` e liga a telemetria sem perguntar (issue #668); se precisar, apague as linhas
-   `*_IMAGE`/`*_PULL_POLICY` e escreva `SENTRY_DSN=off`.
+   `stable`; se precisar, apague as linhas `*_IMAGE`/`*_PULL_POLICY`. A telemetria nasce
+   desligada (`SENTRY_DSN=off` ou vazio) — só liga com o DSN do Sentry do próprio operador.
 4. **Primeiro acesso.** `https://<domínio>` (o cadeado leva ~1 min), login com o e-mail e a senha do
    admin. **A verificação em duas etapas é opcional** — liga em Configurações › Segurança. No
    onboarding, o WhatsApp é conectado por QR (deixe o app do celular já aberto em Aparelhos

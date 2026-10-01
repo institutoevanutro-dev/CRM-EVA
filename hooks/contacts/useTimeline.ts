@@ -1,6 +1,7 @@
 "use client";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
+import { marcarReleitura } from "@/lib/audit/releitura";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { TimelineItemView } from "@/lib/types/contacts";
 
@@ -10,14 +11,17 @@ interface TimelineResponse {
 }
 
 export function useTimeline(contactId: string, types?: string[]) {
+  const qc = useQueryClient();
+  const queryKey = ["timeline", contactId, types ?? null] as const;
   return useInfiniteQuery({
-    queryKey: ["timeline", contactId, types ?? null],
+    queryKey,
     enabled: !!contactId,
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
       const qs = new URLSearchParams();
       if (pageParam) qs.set("cursor", pageParam);
       qs.set("limit", "30");
+      marcarReleitura(qs, qc.getQueryData(queryKey) !== undefined);
       if (types && types.length > 0) {
         for (const t of types) qs.append("type", t);
       }

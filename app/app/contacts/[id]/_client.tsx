@@ -173,7 +173,7 @@ export function ContactDetailClient({ contactId }: Props) {
                 <dd className="mt-1">
                   <CpfDoContato
                     contactId={contactId}
-                    disponivel={Boolean(contact.cpf_available ?? contact.cpf_hash)}
+                    disponivel={Boolean(contact.cpf_available)}
                     podeVer={Boolean(activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent)}
                   />
                 </dd>

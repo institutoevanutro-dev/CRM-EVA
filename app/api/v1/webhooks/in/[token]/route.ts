@@ -11,6 +11,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { tokenArquivado } from "@/lib/channels/arquivo-de-webhook";
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -161,7 +162,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   await admin.from("webhook_events_log").insert({
     organization_id: source.organization_id,
     provider: "generic",
-    webhook_path_token: token,
+    webhook_path_token: tokenArquivado(token),
     http_method: "POST",
     headers: headersJson,
     raw_body: rawBody,

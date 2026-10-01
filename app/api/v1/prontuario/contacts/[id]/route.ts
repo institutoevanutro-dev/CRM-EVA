@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
+import { auditarLeitura } from "@/lib/audit/leitura";
 import { ok, fail } from "@/lib/api/wrappers";
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -22,6 +23,11 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     .eq("id", id.data).eq("is_anonymized", false).is("is_merged_into", null).maybeSingle();
   if (error) return fail("internal_error", "Consulta indisponível.", 503, { requestId });
   if (!data) return fail("not_found", "Contato indisponível.", 404, { requestId });
+  const contactId = id.data;
+  auditarLeitura({
+    action: "prontuario.contact_read", actorApiTokenId: authorized.auth.apiTokenId,
+    organizationId: authorized.auth.organizationId, resourceType: "contact", resourceId: contactId, requestId,
+  });
   return ok(contactForProntuario(data), { requestId, headers: { "Cache-Control": "no-store" } });
 }
 

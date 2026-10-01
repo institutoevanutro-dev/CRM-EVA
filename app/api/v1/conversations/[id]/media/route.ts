@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
+import { audit } from "@/lib/audit";
 import { resolveAuthDual } from "@/lib/api/auth-dual";
 import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { extFromMime, MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
@@ -104,6 +105,24 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     console.error("[conversations.media] upload failed", upErr.message);
     return fail("internal_error", t("Erro ao subir o arquivo."), 500, { requestId });
   }
+
+  // B6: o arquivo fica no bucket mesmo que o envio nunca aconteça. Nome do
+  // arquivo não entra (pode ser "exame-joana.pdf"); o caminho é opaco.
+  void audit({
+    action: "conversation.media_uploaded",
+    actorUserId: authz.via === "session" ? authz.actor.id : null,
+    organizationId: activeOrg.orgId,
+    resourceType: "conversation",
+    resourceId: conversationId,
+    requestId,
+    metadata: {
+      actor_type: authz.actor.type,
+      ...(authz.via === "token" ? { actor_id: authz.actor.id } : {}),
+      storage_path: storagePath,
+      media_mime: mimeFinal,
+      media_size_bytes: buffer.length,
+    },
+  });
 
   return ok(
     {

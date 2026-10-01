@@ -1414,33 +1414,13 @@ fi
 # 'traefik', então a variável está pronta para o .env logo abaixo.
 garantir_rede_do_proxy
 
-# ── Telemetria: perguntar, não presumir ─────────────────────────────────────
-# Issue #100. Antes, quem não definisse SENTRY_DSN mandava relatório de erro pro
-# Sentry da comunidade sem ter decidido nada — e só ficava sabendo na mensagem
-# final, DEPOIS de instalado. Num produto que roda na infraestrutura do usuário,
-# com dados de clientes dele, o consentimento vem antes.
-# Quem já tem valor no .env manda: a pergunta não sobrescreve escolha anterior.
+# ── Telemetria: desligada, salvo DSN próprio ────────────────────────────────
+# Não existe mais Sentry "da comunidade" (achado M5, auditoria 2026-09-29): o
+# DSN fixo no código era de um projeto upstream do qual esta instalação não faz
+# parte. Vazio ou "off" = nada sai daqui. Quem quer relatório de erro escreve o
+# DSN do PRÓPRIO Sentry no .env. Quem já tem valor no .env manda.
 if [ -z "${SENTRY_DSN+x}" ]; then
-  if [ "$NONINTERACTIVE" = 1 ]; then
-    # Automação não consente por ninguém. Sem valor explícito, fica desligado.
-    SENTRY_DSN="off"
-  else
-    step "Telemetria de erros (opcional)"
-    printf '%s\n' "Podemos receber os relatórios de ERRO desta instalação (stack trace) para"
-    printf '%s\n' "corrigir bugs que afetam todo mundo. CPF, telefone e e-mail são substituídos,"
-    printf '%s\n' "cabeçalhos sensíveis removidos e tokens de webhook/convite redigidos da URL."
-    printf '%s\n' "NÃO enviamos rastreamento de performance nem replay de sessão."
-    printf '%s\n' "Seus dados de clientes, conversas e banco NUNCA saem daqui."
-    printf '\n%s\n' "Você pode mudar depois no .env, a qualquer momento."
-    read -r -p "  Enviar relatórios de erro anonimizados? (s/N) " _tel
-    if resposta_sim "${_tel:-}"; then
-      SENTRY_DSN=""
-      c_grn "✓ Telemetria de erros ligada — obrigado, isso ajuda o projeto."
-    else
-      SENTRY_DSN="off"
-      c_grn "✓ Telemetria desligada — nada será enviado."
-    fi
-  fi
+  SENTRY_DSN="off"
 fi
 
 step "Escrevendo .env"
@@ -1669,11 +1649,9 @@ esac
   printf '# e cole as duas chaves aqui (depois: docker compose up -d app).\n'
   envq VAPID_PUBLIC_KEY "${VAPID_PUBLIC_KEY:-}"
   envq VAPID_PRIVATE_KEY "${VAPID_PRIVATE_KEY:-}"
-  printf '# Telemetria de erros (você escolheu isto durante a instalação).\n'
-  printf '#   "off"  = não envia nada.\n'
-  printf '#   vazio  = só ERRO pro Sentry da comunidade, com CPF/telefone/e-mail\n'
-  printf '#            substituídos e token de URL redigido. Sem trace, sem replay.\n'
-  printf '#   <dsn>  = manda pro SEU Sentry (aí com performance e replay).\n'
+  printf '# Telemetria de erros.\n'
+  printf '#   "off" ou vazio = não envia nada (padrão).\n'
+  printf '#   <dsn>          = manda pro SEU Sentry, com CPF/telefone/e-mail redigidos.\n'
   envq SENTRY_DSN "${SENTRY_DSN:-}"
   envq INTERNAL_SECRET "$INTERNAL_SECRET"
   envq INTERNAL_CRON_SECRET "$INTERNAL_CRON_SECRET"
@@ -2174,17 +2152,14 @@ INCOMPLETO
   exit 1
 fi
 
-# O banner dizia "por padrão os erros são enviados" para TODA instalação — e a
-# pergunta de consentimento acima tem padrão NÃO enviar (issue #668 mediu o
-# .env do exemplo saindo com a telemetria ligada sem ninguém escolher). O texto
-# passa a refletir a escolha feita, em vez de afirmar um padrão.
+# O banner reflete o que está no .env, em vez de afirmar um padrão (issue #668).
 telemetria_no_banner() {
-  if [ "${SENTRY_DSN:-}" = "off" ]; then
+  if [ "${SENTRY_DSN:-}" = "off" ] || [ -z "${SENTRY_DSN:-}" ]; then
     printf '%s\n' "  Telemetria: DESLIGADA — nenhum relatório de erro sai desta instalação."
-    printf '%s\n' "  Para ligar, apague a linha SENTRY_DSN do .env e rode: docker compose $(dc_files) up -d"
+    printf '%s\n' "  Para ligar, escreva SENTRY_DSN=<dsn do seu Sentry> no .env e rode: docker compose $(dc_files) up -d"
   else
-    printf '%s\n' "  Telemetria: LIGADA — só relatórios de erro anonimizados vão ao Sentry do"
-    printf '%s\n' "  projeto. Para desligar, ponha SENTRY_DSN='off' no .env e rode: docker compose $(dc_files) up -d"
+    printf '%s\n' "  Telemetria: LIGADA — relatórios de erro vão ao Sentry de SENTRY_DSN (o seu)."
+    printf '%s\n' "  Para desligar, ponha SENTRY_DSN='off' no .env e rode: docker compose $(dc_files) up -d"
   fi
 }
 

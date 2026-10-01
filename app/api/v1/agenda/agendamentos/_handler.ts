@@ -25,6 +25,7 @@ import type { Json } from "@/lib/database.types";
  */
 import { coletaOQueOcupa, horariosLivresDaOrg, resolverDuracaoDoTipo } from "@/lib/agenda/consulta";
 import { colide } from "@/lib/agenda/horarios-livres";
+import { idsForaDaOrg } from "@/lib/tenancy/pertence-a-org";
 import {
   atividadeDaTransicao,
   autorParaTimeline,
@@ -162,6 +163,15 @@ export async function marcarAgendamentoHandler(
     if (!contato) {
       throw new ApiError(404, "not_found", undefined, ctx.requestId, "Contato não encontrado.");
     }
+  }
+
+  // B4: mesma borda do `contact_id` acima — a FK aceita conversa de outra org.
+  const conversasFora = await idsForaDaOrg(supabase, ctx.organization_id, "conversations", [input.conversation_id]);
+  if (conversasFora === null) {
+    throw new ApiError(500, "internal_error", undefined, ctx.requestId, "Falha ao conferir a conversa.");
+  }
+  if (conversasFora.length > 0) {
+    throw new ApiError(422, "validation_failed", undefined, ctx.requestId, "Conversa não encontrada nesta organização.");
   }
 
   let produto: { appointment_duration_minutes: number | null } | null = null;
