@@ -28585,3 +28585,28 @@ comment on column public.user_organizations.ultima_ativacao_em is
 
 create index if not exists user_organizations_ultima_ativacao_idx
   on public.user_organizations (user_id, ultima_ativacao_em desc nulls last);
+
+
+-- ---- ícone da aba da instalação (migration 0291) ----
+-- O `/icon` passa a servir um PNG enviado pela tela (Admin › Marca) quando há
+-- um; sem ele, segue desenhado. Mesmo bucket e mesmo formato de caminho do
+-- logo_path (0158). Backfill antes da constraint: o update.sh roda sem
+-- ON_ERROR_STOP. Racional completo no cabeçalho da migration.
+alter table public.platform_branding
+  add column if not exists icone_path text;
+
+comment on column public.platform_branding.icone_path is
+  'Caminho do ícone da aba (favicon) em storage/brand-logos, sempre platform/<uuid>.png. Caminho e NÃO url (DIRC-C). Lido por app/icon.tsx, que serve os bytes; sem ele, o ícone é desenhado (símbolo do produto ou cor + inicial). Escrito por app/api/v1/marca/icone/route.ts.';
+
+update public.platform_branding
+   set icone_path = null
+ where icone_path is not null
+   and icone_path !~ '^platform/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$';
+
+alter table public.platform_branding
+  drop constraint if exists platform_branding_icone_path;
+alter table public.platform_branding
+  add constraint platform_branding_icone_path check (
+    icone_path is null
+    or icone_path ~ '^platform/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$'
+  );
