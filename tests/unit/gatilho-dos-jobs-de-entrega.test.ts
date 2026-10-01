@@ -104,6 +104,12 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
       "tag nasce, nenhuma imagem sai, `stable` congela, e a descoberta é um cliente " +
       "rodando `update.sh` e não recebendo nada.",
   },
+  "recuperar-release-2-0-0.yml::recuperar": {
+    condicao: "github.ref == 'refs/heads/main'",
+    efeito:
+      "Este job de uso único repõe a tag do PR #55 no commit conferido. " +
+      "Pulado, a versão 2.0.0 continua sem imagens publicadas.",
+  },
   "publish-image.yml::a-tag-veio-da-main": {
     condicao: null,
     efeito:

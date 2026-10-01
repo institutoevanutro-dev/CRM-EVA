@@ -65,9 +65,10 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           VERSAO: ${{ steps.corte.outputs.versao }}
+          RELEASE_BOT: ${{ steps.token.outputs.app-slug }}[bot]
         run: |
           set -euo pipefail
-          git config user.name  'deskcomm-release[bot]'
+          git config user.name  "$RELEASE_BOT"
           git config user.email '${{ steps.token.outputs.app-slug }}[bot]@users.noreply.github.com'
           git checkout -b "release/${VERSAO}"
           git add CHANGELOG.md .changes
@@ -110,6 +111,8 @@ jobs:
 
       - name: Este push foi um corte de release?
         id: pendente
+        env:
+          RELEASE_BOT: ${{ steps.token.outputs.app-slug }}[bot]
         run: |
           set -euo pipefail
 
@@ -150,7 +153,7 @@ jobs:
           # "vive em secrets", e isso é FALSO.
           #
           # `%an` é o NOME DO AUTOR: campo de texto que qualquer um define.
-          # `git -c user.name='deskcomm-release[bot]' commit` devolve exatamente
+          # `git -c user.name='crm-eva-release[bot]' commit` devolve exatamente
           # a string que a comparação abaixo procura. Medido.
           #
           # Nem adianta trocar por conferência criptográfica: os cinco cortes
@@ -214,7 +217,7 @@ jobs:
             echo "::notice::O CHANGELOG anuncia ${versao} sem tag, mas este push não apagou fragmento nenhum."
             echo "::notice::Tag não criada. Uma release sai do workflow 'release' (Run workflow), nunca de um merge comum."
             echo "cortar=nao" >> "$GITHUB_OUTPUT"
-          elif [ "${assinante}" != "deskcomm-release[bot]" ]; then
+          elif [ "${assinante}" != "${RELEASE_BOT}" ]; then
             # Alto, e não `notice`: alguém apagou fragmento de `.changes/` num
             # commit que não veio do workflow de release. Ou é forja, ou é
             # engano — e o silêncio é exatamente o que fez a #472 passar dias
@@ -240,9 +243,10 @@ jobs:
         if: steps.pendente.outputs.cortar == 'sim'
         env:
           VERSAO: ${{ steps.pendente.outputs.versao }}
+          RELEASE_BOT: ${{ steps.token.outputs.app-slug }}[bot]
         run: |
           set -euo pipefail
-          git config user.name  'deskcomm-release[bot]'
+          git config user.name  "$RELEASE_BOT"
           git config user.email '${{ steps.token.outputs.app-slug }}[bot]@users.noreply.github.com'
           # Tag ANOTADA: guarda autor e data, e é o que `git describe
           # --exact-match` do agent.sh espera encontrar na VPS.

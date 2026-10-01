@@ -46,7 +46,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  */
 
 const RAIZ = process.cwd();
-const BOT = "deskcomm-release[bot]";
+const BOT = "crm-eva-release[bot]";
 
 /** O bloco `run:` do passo que decide se este push foi um corte. */
 function bashDaGuarda(): string {
@@ -143,7 +143,7 @@ function decisaoPara(sha: string): string {
     const saida = execFileSync("bash", ["-c", script], {
       cwd: repo,
       encoding: "utf8",
-      env: { ...process.env, GITHUB_OUTPUT: saidaDoGithub },
+      env: { ...process.env, GITHUB_OUTPUT: saidaDoGithub, RELEASE_BOT: BOT },
       stdio: ["ignore", "pipe", "pipe"],
     });
     const escrito = readFileSync(saidaDoGithub, "utf8");

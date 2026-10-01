@@ -1,0 +1,63 @@
+name: Recuperar release 2.0.0
+
+# Uso único: o PR #55 consumiu os fragmentos, mas release.yml recusou o novo
+# nome do GitHub App antes de criar a tag. Disparar somente após revisão humana.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  recuperar:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: token
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v7
+        with:
+          ref: d2fb47745f1cad3ac649a9155823a48b989de2c6
+          fetch-depth: 0
+          token: ${{ steps.token.outputs.token }}
+
+      - uses: ./.github/actions/preparar-node
+        timeout-minutes: 5
+
+      - name: Conferir o corte e publicar a tag ausente
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          RELEASE_BOT: ${{ steps.token.outputs.app-slug }}[bot]
+        run: |
+          set -euo pipefail
+          sha=d2fb47745f1cad3ac649a9155823a48b989de2c6
+          versao=2.0.0
+          [ "$(git rev-parse HEAD)" = "$sha" ]
+          [ "$(git log -1 --format=%an HEAD)" = "$RELEASE_BOT" ]
+          [ "$(git diff --diff-filter=D --name-only HEAD^ HEAD -- .changes/ | grep -c '\.md$')" -eq 56 ]
+          [ "$(pnpm exec tsx scripts/cortar-release.ts --versao-do-changelog)" = "$versao" ]
+          tag_sha=$(git ls-remote origin "refs/tags/v${versao}^{}" | cut -f1)
+          if [ -n "$tag_sha" ]; then
+            [ "$tag_sha" = "$sha" ] || { echo "::error::tag existente aponta para outro commit"; exit 1; }
+          else
+            git config user.name "$RELEASE_BOT"
+            git config user.email '${{ steps.token.outputs.app-slug }}[bot]@users.noreply.github.com'
+            git tag -a "v${versao}" -m "v${versao}"
+            git push origin "v${versao}"
+          fi
+
+          pnpm exec tsx -e '
+            import fs from "node:fs";
+            import { extractChangelogSection } from "./lib/system/changelog";
+            const s = extractChangelogSection(fs.readFileSync("CHANGELOG.md", "utf8"), "2.0.0");
+            if (!s) process.exit(1);
+            const atencao = s.requiresAttention ? `### ⚠️ Requer atenção\n\n${s.requiresAttention}\n\n` : "";
+            fs.writeFileSync("/tmp/notas.md", atencao + s.body);
+          '
+          if ! gh release view "v${versao}" >/dev/null 2>&1; then
+            gh release create "v${versao}" --title "v${versao}" --notes-file /tmp/notas.md
+          fi
