@@ -37,7 +37,9 @@ const SEED = "scripts/seed-e2e-cadastro-incorporado.ts";
 
 // Os três testes são UMA história: o primeiro conecta, o segundo e o terceiro
 // usam a sessão que ele deixou (o `afterAll` arquiva).
-test.describe.configure({ mode: "serial" });
+// Cada teste encadeia webhooks, drenagem da fila e carga de página, com esperas
+// internas de até 45 s: o padrão de 30 s do Playwright não cabia.
+test.describe.configure({ mode: "serial", timeout: 180_000 });
 
 /** Ids do payload de exemplo (`tests/fixtures/meta`) → os da conta conectada acima. */
 const WABA_CONECTADA = "222333444555";
@@ -214,7 +216,7 @@ test("[P0] histórico do celular entra encerrado, sem não-lida, e a barra mostr
   expect(detalhe.data.unread_count_for_assignee).toBe(0);
 
   await page.goto("/app/connections?aba=oficial");
-  await expect(page.getByTestId("historico-progresso")).toContainText("20%");
+  await expect(page.getByTestId("historico-progresso")).toContainText("20%", { timeout: 20_000 });
 
   // Com o histórico em 20% a agenda espera: a Maria ainda não tem nome.
   const contatoId = detalhe.data.contact_id as string;
