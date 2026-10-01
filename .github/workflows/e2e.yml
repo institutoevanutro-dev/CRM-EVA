@@ -647,6 +647,7 @@ jobs:
         central-avisos-resolver-em-lote.spec.ts
         inbox-busca-e-filtros-dizem-a-verdade.spec.ts
         entrar-com-evalink.spec.ts
+        funil-arquivado-volta-pela-tela.spec.ts
 
       # ─── PARTE 4 — nasceu em 2026-10-01, pelo mesmo motivo que a 3 ─────────
       #
