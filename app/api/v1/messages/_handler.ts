@@ -956,11 +956,17 @@ export async function sendMessageHandler(
       // CRÍTICA quanto ausência de credencial — é um estado de espera pela
       // intervenção do dono (trocar a chave mestra, configurar o GUC). Mesma
       // semântica: `queued`, não `failed`.
-      if (msg.startsWith(adapter.codes.notConfigured) || msg.startsWith("meta_creds_decrypt_failed")) {
+      // Motivo PRÓPRIO na fila: "não configurado" mandaria o dono configurar o
+      // que já está configurado; o que falta é a chave que decifra.
+      const naoDecifra = msg.startsWith("meta_creds_decrypt_failed");
+      if (msg.startsWith(adapter.codes.notConfigured) || naoDecifra) {
         const { data: emFila } = await supabase
           .from("messages")
           .update({
-            metadata: { ...(message.metadata ?? {}), queued_reason: adapter.codes.notConfigured },
+            metadata: {
+              ...(message.metadata ?? {}),
+              queued_reason: naoDecifra ? "meta_creds_decrypt_failed" : adapter.codes.notConfigured,
+            },
           })
           .eq("id", message.id)
           .select(MSG_COLS)

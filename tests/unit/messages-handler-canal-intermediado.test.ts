@@ -639,7 +639,7 @@ describe("canal oficial conectado pela TELA — a credencial da sessão manda (#
     const msg = await sendMessageHandler(supabase, ctx, texto());
 
     expect(msg.status).toBe("queued");
-    expect((msg.metadata as Record<string, unknown>).queued_reason).toBe("meta_not_configured");
+    expect((msg.metadata as Record<string, unknown>).queued_reason).toBe("meta_creds_decrypt_failed");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -659,7 +659,7 @@ describe("canal oficial conectado pela TELA — a credencial da sessão manda (#
     const msg = await sendMessageHandler(supabase, ctx, texto());
 
     expect(msg.status).toBe("queued");
-    expect((msg.metadata as Record<string, unknown>).queued_reason).toBe("meta_not_configured");
+    expect((msg.metadata as Record<string, unknown>).queued_reason).toBe("meta_creds_decrypt_failed");
     expect(fetchMock).not.toHaveBeenCalled(); // Não usou env, não tentou enviar
 
     delete process.env.META_PHONE_NUMBER_ID;

@@ -25,6 +25,9 @@ const FRASES: Record<string, string> = {
   waha_not_configured: "A conexão de WhatsApp ainda não foi configurada nesta instalação.",
   meta_not_configured: "A conexão de WhatsApp ainda não foi configurada nesta instalação.",
   zernio_not_configured: "A conexão de WhatsApp ainda não foi configurada nesta instalação.",
+  // Credencial da sessão gravada, mas que não decifra (chave mestra trocada, GUC ausente).
+  meta_creds_decrypt_failed:
+    "A credencial desta conexão não pôde ser lida nesta instalação. Reconecte em Conexões — a mensagem sai sozinha quando ela voltar.",
   // Canal excluído da Central de Conexões (migration 0106).
   channel_archived:
     "Esse número foi excluído da Central de Conexões. Escolha outro número nesta automação.",
