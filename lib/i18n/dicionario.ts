@@ -7335,6 +7335,7 @@ export const DICIONARIO: Traducoes = {
   "Faça login.": { es: "Inicia sesión." },
   "Faça login para continuar.": { es: "Inicia sesión para continuar." },
   "Falha ao atualizar o aviso.": { es: "Fallo al actualizar el aviso." },
+  "Já existe um aviso idêntico aberto nesta organização — reabrir duplicaria o alerta.": { es: "Ya existe un aviso idéntico abierto en esta organización: reabrir duplicaría la alerta." },
   "Falha ao carregar as propostas.": { es: "Fallo al cargar las propuestas." },
   "Falha ao carregar conexões/knobs.": { es: "Fallo al cargar conexiones/knobs." },
   "Falha ao carregar o caso.": { es: "Fallo al cargar el caso." },
