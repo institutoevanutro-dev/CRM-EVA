@@ -271,11 +271,23 @@ test("desativar tira o tipo da tela de marcar, e reativar o traz de volta", asyn
 
   // Continua NA LISTA, marcado como desativado — `calendar_appointments` aponta
   // para o tipo, e apagar levaria junto a história de que consulta foi feita.
+  //
+  // ⚠️ O PRAZO VAI NA ASSERÇÃO QUE ESPERA A MUDANÇA. Aqui estavam duas: "a linha
+  // continua visível", com 20 s, e "a linha diz desativado", com o prazo padrão
+  // de 5 s. A primeira já era verdade ANTES do clique — não espera nada —, e a
+  // segunda é a que aguarda o DELETE e o `router.refresh()` da tela trazerem o
+  // estado novo do servidor. Num runner lento a ida e volta passou de 5 s e a
+  // spec reprovou um PR que não tocava a Agenda (PR #76, run 36887651876: 14
+  // leituras seguidas da linha ainda com o botão "Desativar"). A metade de
+  // reativar, logo abaixo, sempre teve o prazo no lugar certo.
+  //
+  // Uma asserção só cobre os dois desfechos ruins: se a linha SUMIR, o texto
+  // também não aparece, e a mensagem diz as duas hipóteses.
   await expect(
     linha,
-    "o tipo sumiu da lista ao desativar — desativar não é apagar",
-  ).toBeVisible({ timeout: 20_000 });
-  await expect(linha).toContainText("desativado");
+    "cliquei em Desativar e a linha não passou a dizer 'desativado' — ou o estado " +
+      "não chegou da volta do servidor, ou o tipo sumiu da lista (desativar não é apagar)",
+  ).toContainText("desativado", { timeout: 20_000 });
   await expect(
     linha.getByRole("button", { name: "Reativar" }),
     "desativei e não há caminho de volta",
