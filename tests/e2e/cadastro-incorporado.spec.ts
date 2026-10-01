@@ -14,8 +14,9 @@
  *   (`scripts/gerar-env-e2e.sh`). Ele guarda o corpo de cada `smb_app_data`.
  *
  * O resto é o produto: a rota troca o `code`, confere o token, escolhe o número
- * que está no aplicativo, grava a sessão pelo mesmo caminho do formulário manual
- * e pede contatos e histórico — nessa ordem.
+ * que está no aplicativo e grava a sessão pelo mesmo caminho do formulário manual.
+ * Contatos e histórico NÃO são pedidos enquanto `SINCRONIZACAO_TEM_CONSUMIDOR`
+ * for `false` (Parte A): o pedido do histórico é único e ninguém o consumiria.
  *
  * App da instalação: `scripts/seed-e2e-cadastro-incorporado.ts`.
  */
@@ -123,6 +124,8 @@ test("[P0] admin conecta pelo botão e a aba mostra Conectado", async ({ page })
   const conectado = page.getByTestId("canal-conectado");
   await expect(conectado).toContainText("Clínica E2E");
   await expect(conectado).toContainText("WORKING");
-  expect(pedidos.map((p) => new URLSearchParams(p).get("sync_type"))).toEqual(["smb_app_state_sync", "history"]);
+  // Parte A: nenhum `smb_app_data` — e a tela diz por quê.
+  expect(pedidos).toEqual([]);
+  await expect(page.getByTestId("historico-proxima-versao")).toBeVisible();
   await page.screenshot({ path: path.join(EVIDENCIA, "conectado.png"), fullPage: true });
 });
