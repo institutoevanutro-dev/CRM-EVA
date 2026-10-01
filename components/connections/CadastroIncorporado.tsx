@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
 import { useCadastroIncorporado, useSincronizarCoexistencia, type OfficialChannelState } from "@/hooks/channels/useOfficialChannel";
 import { abrirCadastroIncorporado, carregarSdk, sdkPronto } from "@/lib/channels/meta/cadastro-incorporado-cliente";
-import { dentroDoPrazoDeSincronizacao, PRAZO_DA_SINCRONIZACAO_MS } from "@/lib/channels/meta/coexistencia";
+import { dentroDoPrazoDeSincronizacao, PRAZO_DA_SINCRONIZACAO_MS, SINCRONIZACAO_TEM_CONSUMIDOR } from "@/lib/channels/meta/coexistencia";
 
 export function CadastroIncorporado({ estado }: { estado: OfficialChannelState }) {
   const t = useT();
@@ -109,9 +109,11 @@ function AvisoDoHistorico({
 }) {
   const coex = estado.coexistencia;
   // Pedido nulo (conexão feita antes de existir o consumidor) é tão "não pedido"
-  // quanto pedido com erro: os dois ganham o "Tentar de novo" dentro das 24 h.
+  // quanto pedido com erro: os dois ganham o "Tentar de novo" dentro das 24 h —
+  // o nulo só com o interruptor ligado, senão o botão não pediria nada.
   const historico = coex?.pedidos.historico;
-  if (!coex || (historico && !("erro" in historico))) return null;
+  if (!coex) return null;
+  if (historico ? !("erro" in historico) : !SINCRONIZACAO_TEM_CONSUMIDOR) return null;
   if (!dentroDoPrazoDeSincronizacao(coex.onboarding_em)) {
     return (
       <p data-testid="historico-fora-do-prazo" className="mt-3 text-sm text-muted-foreground">

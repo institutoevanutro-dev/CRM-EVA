@@ -120,6 +120,10 @@ async function findContactByVariants(
  * `waId` é o OUTRO lado da conversa (remetente no inbound, destinatário no eco).
  * `notify` é o nome de perfil dele quando o payload o traz; `null` quando o
  * nome no payload seria o da própria loja.
+ *
+ * `historico`: a conversa que ainda não existe nasce ENCERRADA
+ * (`fn_upsert_wa_conversation_do_historico`, migration 0297), fora da fila de
+ * roteamento; a que já existe fica como está.
  */
 export async function resolverContatoEConversa(
   admin: Admin,
@@ -127,6 +131,7 @@ export async function resolverContatoEConversa(
   sessaoId: string,
   waId: string,
   notify: string | null,
+  opcoes: { historico?: boolean } = {},
 ): Promise<{ ok: true; contactId: string; conversationId: string } | { ok: false; reason: string }> {
   const existente = await findContactByVariants(admin, orgId, waId);
   // Celular BR grava COM o nono. A busca acima já reencontra a grafia sem o 9;
@@ -144,7 +149,7 @@ export async function resolverContatoEConversa(
   }
 
   const { data: conversationId, error: erroConversa } = await admin.rpc(
-    "fn_upsert_wa_conversation" as never,
+    (opcoes.historico ? "fn_upsert_wa_conversation_do_historico" : "fn_upsert_wa_conversation") as never,
     { p_org: orgId, p_contact: contactId as string, p_session: sessaoId } as never,
   );
   if (erroConversa || !conversationId) {

@@ -89,7 +89,7 @@ export async function processarChunkDeHistorico(
   }
   const { data: sessao, error: erroSessao } = await admin
     .from("channel_sessions")
-    .select("id, phone_number, metadata, archived_at")
+    .select("id, phone_number, archived_at")
     .eq("organization_id", orgId)
     .eq("id", sessionId)
     .maybeSingle();
@@ -112,7 +112,7 @@ export async function processarChunkDeHistorico(
   for (const thread of threads) {
     const chatId = digitos(thread.id);
     if (!chatId || String(thread.id ?? "").endsWith("@g.us")) continue; // grupo: fora do CRM, como no inbound
-    const alvo = await resolverContatoEConversa(admin, orgId, sessionId, chatId, null);
+    const alvo = await resolverContatoEConversa(admin, orgId, sessionId, chatId, null, { historico: true });
     if (!alvo.ok) {
       falhas += 1;
       logger.warn("[meta.history] thread pulada", { organization_id: orgId, session: sessionId, reason: alvo.reason });
@@ -123,8 +123,15 @@ export async function processarChunkDeHistorico(
     let maisNova: { at: string; preview: string } | null = null;
     for (const m of Array.isArray(thread.messages) ? thread.messages : []) {
       if (!m?.id) continue;
+      const segundos = Number(m.timestamp);
+      if (!m.timestamp || !Number.isFinite(segundos) || segundos <= 0) {
+        // Sem a hora original a mensagem cairia em 1970 no topo/fundo da conversa.
+        falhas += 1;
+        logger.warn("[meta.history] mensagem sem timestamp pulada", { organization_id: orgId, session: sessionId, external_id: m.id });
+        continue;
+      }
       const outbound = mesmoNumero(m.from, numeroDoNegocio);
-      const sentAt = new Date(Number(m.timestamp ?? "0") * 1000).toISOString();
+      const sentAt = new Date(segundos * 1000).toISOString();
       const tipoDaMeta = m.type ?? "unknown";
       const { type, bodyDeSistema } = tipoDoCrm(tipoDaMeta);
       const midia = tipoDaMeta !== "text" ? (m[tipoDaMeta] as { id?: string; mime_type?: string } | undefined) : undefined;
@@ -178,20 +185,49 @@ export async function processarChunkDeHistorico(
     if (maisNova) await atualizarPreviaSeMaisNova(admin, orgId, conversationId, maisNova);
   }
 
-  const coex = lerCoexistencia((sessao as { metadata?: unknown }).metadata);
-  if (coex) {
-    const erro_codigo = p.erro_codigo ?? coex.historico?.erro_codigo ?? null;
-    await gravarCoexistencia(admin, orgId, sessionId, {
-      ...coex,
-      historico: { fase: p.fase ?? null, progresso: p.progresso ?? null, concluido: (p.progresso ?? 0) >= 100, erro_codigo },
-    });
-  }
-
+  await gravarProgresso(admin, orgId, sessionId, p);
   await limparBruto();
   logger.info("[meta.history] chunk processado", {
     organization_id: orgId, session: sessionId, gravadas, duplicadas, falhas, fase: p.fase, progresso: p.progresso,
   });
   return resultado("ok", `gravadas=${gravadas} duplicadas=${duplicadas} falhas=${falhas}`);
+}
+
+/** O maior dos dois; `null` só quando os dois faltam. */
+function maior(a: number | null | undefined, b: number | null | undefined): number | null {
+  if (typeof a !== "number") return typeof b === "number" ? b : null;
+  return typeof b === "number" ? Math.max(a, b) : a;
+}
+
+/**
+ * Progresso em `metadata.coexistencia.historico`. Lê a metadata MAIS RECENTE
+ * logo antes de gravar (a do início do chunk pode ter `pedidos` velhos, que o
+ * "Tentar de novo" troca enquanto o chunk roda) e só mexe no `historico`.
+ * Fase e progresso nunca regridem: a Meta pode entregar pedaços fora de ordem.
+ * `erro_codigo` só entra pelo pedaço que o traz e sai quando chega a 100% sem erro.
+ */
+async function gravarProgresso(
+  admin: SupabaseClient,
+  orgId: string,
+  sessionId: string,
+  p: { fase?: number | null; progresso?: number | null; erro_codigo?: number | null },
+): Promise<void> {
+  const { data, error } = await admin
+    .from("channel_sessions")
+    .select("metadata")
+    .eq("organization_id", orgId)
+    .eq("id", sessionId)
+    .maybeSingle();
+  const coex = lerCoexistencia((data as { metadata?: unknown } | null)?.metadata);
+  if (error || !coex) return;
+  const antes = coex.historico;
+  const progresso = maior(antes?.progresso, p.progresso);
+  const concluido = (progresso ?? 0) >= 100;
+  const erro_codigo = typeof p.erro_codigo === "number" ? p.erro_codigo : concluido ? null : (antes?.erro_codigo ?? null);
+  await gravarCoexistencia(admin, orgId, sessionId, {
+    ...coex,
+    historico: { fase: maior(antes?.fase, p.fase), progresso, concluido, erro_codigo },
+  });
 }
 
 async function atualizarPreviaSeMaisNova(

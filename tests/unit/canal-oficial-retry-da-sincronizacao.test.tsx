@@ -8,6 +8,17 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { OfficialChannelState } from "@/hooks/channels/useOfficialChannel";
 
 const mutate = vi.fn();
+const flag = vi.hoisted(() => ({ consumidor: true }));
+// A constante real é `true`; o caso desligado prova que o botão nunca fica morto.
+vi.mock("@/lib/channels/meta/coexistencia", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/channels/meta/coexistencia")>();
+  return {
+    ...real,
+    get SINCRONIZACAO_TEM_CONSUMIDOR() {
+      return flag.consumidor;
+    },
+  };
+});
 vi.mock("@/hooks/channels/useOfficialChannel", () => ({
   useCadastroIncorporado: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSincronizarCoexistencia: () => ({ mutate, isPending: false }),
@@ -34,6 +45,7 @@ function estado(historico: { request_id: string } | { erro: string } | null, onb
 afterEach(() => {
   cleanup();
   mutate.mockClear();
+  flag.consumidor = true;
 });
 
 describe("CadastroIncorporado — retry do pedido de histórico", () => {
@@ -65,6 +77,14 @@ describe("CadastroIncorporado — conexão feita antes do consumidor (pedidos nu
     fireEvent.click(screen.getByTestId("btn-sincronizar"));
     expect(mutate).toHaveBeenCalledTimes(1);
     expect(container.textContent).not.toMatch(/não conecte/i);
+  });
+
+  it("interruptor desligado: pedido nulo não ganha um Tentar de novo que não pediria nada", () => {
+    flag.consumidor = false;
+    const e = estado(null, horasAtras(1));
+    e.coexistencia!.pedidos.contatos = null;
+    render(<CadastroIncorporado estado={e} />);
+    expect(screen.queryByTestId("btn-sincronizar")).toBeNull();
   });
 
   it("antes de conectar: nenhum aviso do histórico", () => {

@@ -54,6 +54,8 @@ function adminFalso(): SupabaseClient {
     const resposta = () => {
       if (patch) {
         updates.push({ tabela, patch, filtros: { ...filtros } });
+        const s = tabela === "channel_sessions" ? db.sessoes[String(filtros.id)] : undefined;
+        if (s && patch.metadata) s.metadata = patch.metadata as Record<string, unknown>;
         return { data: null, error: null };
       }
       if (tabela === "messages" && insert) {
@@ -64,7 +66,7 @@ function adminFalso(): SupabaseClient {
       }
       if (tabela === "channel_sessions") {
         const s = db.sessoes[String(filtros.id)];
-        return { data: s && filtros.organization_id === ORG ? s : null, error: null };
+        return { data: s && filtros.organization_id === ORG ? structuredClone(s) : null, error: null }; // cópia: como o banco, a leitura não acompanha mudanças posteriores
       }
       if (tabela === "conversations") return { data: db.conversas[String(filtros.id)] ?? null, error: null };
       return { data: [], error: null }; // contacts por variantes: ninguém ainda
@@ -87,13 +89,17 @@ function adminFalso(): SupabaseClient {
   };
   const rpc = async (fn: string, args: Record<string, unknown>) => {
     rpcs.push({ fn, args });
-    if (fn === "fn_upsert_wa_contact") return { data: CONTATO, error: null };
-    if (fn === "fn_upsert_wa_conversation") return { data: CONV, error: null };
+    if (fn === "fn_upsert_wa_contact") {
+      aoResolverContato?.();
+      return { data: CONTATO, error: null };
+    }
+    if (fn === "fn_upsert_wa_conversation" || fn === "fn_upsert_wa_conversation_do_historico") return { data: CONV, error: null };
     return { data: null, error: null };
   };
   return { from, rpc } as unknown as SupabaseClient;
 }
 
+let aoResolverContato: (() => void) | null;
 let admin: SupabaseClient;
 const metadataGravada = () => updates.find((u) => u.tabela === "channel_sessions")?.patch.metadata;
 
@@ -107,6 +113,7 @@ beforeEach(() => {
     sessoes: { [SESSAO]: { id: SESSAO, phone_number: "+5527999049879", metadata: { coexistencia: COEX }, archived_at: null } },
     conversas: {},
   };
+  aoResolverContato = null;
   posEntrada.mockClear();
   marcar.mockClear();
   admin = adminFalso();
@@ -221,6 +228,50 @@ describe("processarChunkDeHistorico", () => {
     expect(await processarChunkDeHistorico(LINHA, admin)).toMatchObject({ status: "skipped", detail: "sessao_arquivada" });
     expect(inserts).toHaveLength(0);
     expect(updates.map((u) => u.tabela)).toEqual(["event_log"]);
+  });
+
+  it("conversa criada pelo histórico usa a variante que nasce encerrada (sem roteamento)", async () => {
+    await processarChunkDeHistorico(LINHA, admin);
+    const fns = rpcs.map((r) => r.fn);
+    expect(fns).toContain("fn_upsert_wa_conversation_do_historico");
+    expect(fns).not.toContain("fn_upsert_wa_conversation");
+  });
+
+  it("mensagem sem timestamp é pulada e contada em falhas (nada de 1970)", async () => {
+    const r = await processarChunkDeHistorico(
+      comMensagens([
+        { from: "5531998966398", id: "wamid.SEMTS", type: "text", text: { body: "sem hora" } },
+        { from: "5531998966398", id: "wamid.COMTS", timestamp: "1759000300", type: "text", text: { body: "com hora" } },
+      ]),
+      admin,
+    );
+    expect(inserts.map((i) => i.external_id)).toEqual(["wamid.COMTS"]);
+    expect(r).toMatchObject({ status: "ok", detail: "gravadas=1 duplicadas=0 falhas=1" });
+  });
+
+  it("progresso e fase nunca regridem (chunk atrasado não puxa a barra para trás)", async () => {
+    await processarChunkDeHistorico({ ...LINHA, payload: { ...LINHA.payload, fase: 1, progresso: 60 } }, admin);
+    await processarChunkDeHistorico({ ...LINHA, payload: { ...LINHA.payload, fase: 0, progresso: 20 } }, admin);
+    expect(db.sessoes[SESSAO]!.metadata).toMatchObject({ coexistencia: { historico: { fase: 1, progresso: 60, concluido: false } } });
+  });
+
+  it("grava só o historico sobre a metadata MAIS RECENTE: pedidos mudados durante o chunk não voltam", async () => {
+    aoResolverContato = () => {
+      db.sessoes[SESSAO]!.metadata = { coexistencia: { ...COEX, pedidos: { contatos: null, historico: { request_id: "novo" } } }, outra: 1 };
+    };
+    await processarChunkDeHistorico(LINHA, admin);
+    expect(db.sessoes[SESSAO]!.metadata).toMatchObject({
+      outra: 1,
+      coexistencia: { pedidos: { historico: { request_id: "novo" } }, historico: { progresso: 20 } },
+    });
+  });
+
+  it("erro_codigo: só o chunk COM erro o grava; chunk sem erro não o apaga; 100% sem erro o limpa", async () => {
+    await processarChunkDeHistorico({ ...LINHA, payload: { ...LINHA.payload, erro_codigo: 2593109, value: { history: [] } } }, admin);
+    await processarChunkDeHistorico({ ...LINHA, payload: { ...LINHA.payload, progresso: 40 } }, admin);
+    expect(db.sessoes[SESSAO]!.metadata).toMatchObject({ coexistencia: { historico: { erro_codigo: 2593109, progresso: 40 } } });
+    await processarChunkDeHistorico({ ...LINHA, payload: { ...LINHA.payload, progresso: 100 } }, admin);
+    expect(db.sessoes[SESSAO]!.metadata).toMatchObject({ coexistencia: { historico: { erro_codigo: null, progresso: 100, concluido: true } } });
   });
 
   it("sessão ausente → skipped", async () => {
