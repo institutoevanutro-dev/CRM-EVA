@@ -1,0 +1,124 @@
+"use client";
+import { Button } from "@/components/ui/button";
+import { useT } from "@/hooks/i18n/useT";
+import { usePalavrasDaIa, useDecidirPalavra } from "@/hooks/comentarios/useComentarios";
+
+/**
+ * As palavras que a IA pode usar sozinha.
+ *
+ * Mostra a palavra e em quantos comentários SEUS ela apareceu, e nada mais.
+ * `vezes` conta nos últimos 500 comentários respondidos, não no histórico
+ * inteiro: por isso a tela não diz "sempre" nem "no histórico".
+ *
+ * O comentário de origem foi oferecido ao dono e recusado em favor da tela
+ * menor; se aprovação distraída virar problema, é o primeiro ajuste a fazer.
+ *
+ * Palavra de assunto sensível não chega aqui: a lista já vem sem elas, e a
+ * rota recusa de novo. Quem decide se o clique vale é a rota (papel `manager`).
+ */
+export function PalavrasDaIa() {
+  const t = useT();
+  const { data, isLoading, isError } = usePalavrasDaIa();
+  const decidir = useDecidirPalavra();
+
+  // I-5: erro de rede, 500 ou 403 deixavam "Carregando…" para sempre — a tela
+  // mentia dizendo que ainda estava a caminho. Ramo próprio, antes do
+  // carregando: quem não conseguiu ler precisa saber que não leu.
+  if (isError) {
+    return (
+      <p className="px-3 py-4 text-sm text-text-muted">
+        {t("Não foi possível carregar as palavras. Atualize a página para tentar de novo.")}
+      </p>
+    );
+  }
+
+  if (isLoading || !data) {
+    return <p className="px-3 py-4 text-sm text-text-muted">{t("Carregando…")}</p>;
+  }
+
+  const liberadas = data.decididas.filter((d) => d.aprovada).length;
+  const recusadas = data.decididas.length - liberadas;
+
+  return (
+    <div className="flex flex-col gap-3 px-3 py-4">
+      <p className="text-sm text-text-muted">
+        {t(
+          "Estas palavras apareceram em comentários que você respondeu. Liberando uma palavra, a IA pode responder sozinha comentários curtos em que TODAS as palavras estejam liberadas. A IA nunca responde sozinha sobre saúde, preço ou agendamento.",
+        )}
+      </p>
+
+      {data.candidatos.length === 0 ? (
+        <p className="text-sm text-text-muted">
+          {t("Nada novo para decidir. As palavras aparecem aqui conforme você responde comentários.")}
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {data.candidatos.map((c) => (
+            <li key={c.palavra} className="flex items-center justify-between gap-2 py-1">
+              <span className="text-sm text-text">
+                {c.palavra}{" "}
+                <span className="text-xs text-text-muted">
+                  {t("em")} {c.vezes} {t("comentários que você respondeu")}
+                </span>
+              </span>
+              <span className="flex gap-1">
+                {/* I-6: sem o rótulo, um leitor de tela anuncia uma coluna de
+                    "Pode usar"/"Nunca" idênticos, e quem navega por botão não
+                    sabe qual palavra está liberando. */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  aria-label={`${t("Pode usar")} ${c.palavra}`}
+                  disabled={decidir.isPending}
+                  onClick={() => decidir.mutate({ palavra: c.palavra, aprovada: true })}
+                >
+                  {t("Pode usar")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`${t("Nunca")} ${c.palavra}`}
+                  disabled={decidir.isPending}
+                  onClick={() => decidir.mutate({ palavra: c.palavra, aprovada: false })}
+                >
+                  {t("Nunca")}
+                </Button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {data.decididas.length > 0 && (
+        <details className="text-xs text-text-muted">
+          <summary className="cursor-pointer">
+            {liberadas === 1 ? t("1 palavra liberada") : `${liberadas} ${t("palavras liberadas")}`}
+            {", "}
+            {recusadas === 1 ? t("1 recusada") : `${recusadas} ${t("recusadas")}`}
+          </summary>
+          {/* Voltar atrás é requisito: decisão que não se desfaz vira medo de
+              decidir. A rota faz upsert, então decidir de novo só atualiza a
+              linha. */}
+          <ul className="mt-2 flex flex-col gap-1">
+            {data.decididas.map((d) => (
+              <li key={d.palavra} className="flex items-center justify-between gap-2">
+                <span>
+                  {d.palavra} {d.aprovada ? t("(liberada)") : t("(recusada)")}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`${d.aprovada ? t("Nunca") : t("Pode usar")} ${d.palavra}`}
+                  disabled={decidir.isPending}
+                  onClick={() => decidir.mutate({ palavra: d.palavra, aprovada: !d.aprovada })}
+                >
+                  {d.aprovada ? t("Nunca") : t("Pode usar")}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}

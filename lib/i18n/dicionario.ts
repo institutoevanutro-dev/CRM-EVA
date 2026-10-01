@@ -3598,6 +3598,74 @@ export const DICIONARIO: Traducoes = {
   "A IA não devolveu texto. Revise o contexto que você escreveu para ela.": {
     es: "La IA no devolvió texto. Revisa el contexto que le escribiste.",
   },
+  // ─── motivos de parada da aba Atividade (issue #1090) ───
+  // O gate de espanhol resolve a tabela `MOTIVO_DA_PARADA` (ele atravessa
+  // `t(MOTIVO_DA_PARADA[reason])`), mas NÃO enxerga `t(<variável>)`: o valor que
+  // chega por `action.error` e a frase que vem de `detail.explicacao` passam
+  // fora. Estas chaves são acrescentadas à mão pelo motivo de sempre — a tela
+  // desce para o português, calada, quando falta a linha.
+  "Não deu para saber quem atende este contato: a consulta ao sistema falhou na hora (rede ou banco), e não é erro de configuração. Tente de novo em alguns minutos.":
+    {
+      es: "No se pudo saber quién atiende a este contacto: la consulta al sistema falló en ese momento (red o base de datos), y no es un error de configuración. Vuelve a intentarlo en unos minutos.",
+    },
+  "A pessoa escolhida como responsável não é atendente desta equipe. Escolha outra pessoa na automação.":
+    {
+      es: "La persona elegida como responsable no es agente de este equipo. Elige a otra persona en la automatización.",
+    },
+  "A pessoa escolhida como responsável não pode atender — o papel dela é só de visualização. Escolha um atendente.":
+    {
+      es: "La persona elegida como responsable no puede atender — su rol es solo de visualización. Elige a un agente.",
+    },
+  "A ação não recebeu o que precisava (o lead do evento ou a pessoa configurada). Abra a automação e revise.":
+    {
+      es: "La acción no recibió lo que necesitaba (el lead del evento o la persona configurada). Abre la automatización y revísala.",
+    },
+  "Esta ação não tem nenhuma etiqueta escolhida. Abra a automação e escolha pelo menos uma.": {
+    es: "Esta acción no tiene ninguna etiqueta elegida. Abre la automatización y elige al menos una.",
+  },
+  "O evento que disparou a regra não trouxe um lead nem um contato para etiquetar.": {
+    es: "El evento que disparó la regla no trajo un lead ni un contacto para etiquetar.",
+  },
+  "O evento que disparou a regra não trouxe um lead para criar ou mover.": {
+    es: "El evento que disparó la regla no trajo un lead para crear o mover.",
+  },
+  "Mover um lead para outro funil está desligado nesta organização.": {
+    es: "Mover un lead a otro embudo está desactivado en esta organización.",
+  },
+  "O funil escolhido não está ativo, então a inscrição não foi feita. Ative o funil ou escolha outro na automação.":
+    {
+      es: "El embudo elegido no está activo, así que la inscripción no se hizo. Activa el embudo o elige otro en la automatización.",
+    },
+  "O contato já está em um funil ativo — esta ação não inscreve duas vezes.": {
+    es: "El contacto ya está en un embudo activo — esta acción no inscribe dos veces.",
+  },
+  "O contato não autorizou o recebimento de mensagens de marketing.": {
+    es: "El contacto no autorizó recibir mensajes de marketing.",
+  },
+  "O compromisso que disparou esta regra não está mais marcado para este contato — foi cancelado, concluído ou trocado —, então a sequência de mensagens não começou.": {
+    es: "La cita que disparó esta regla ya no está agendada para este contacto — fue cancelada, concluida o cambiada —, así que la secuencia de mensajes no empezó.",
+  },
+  "O número deste canal ainda não entrou no pré-go-live, então a mensagem escrita pela IA não sai por ele.":
+    {
+      es: "El número de este canal todavía no entró en el pre-go-live, así que el mensaje escrito por la IA no sale por él.",
+    },
+  "Este número está marcado como número de teste do canal.": {
+    es: "Este número está marcado como número de prueba del canal.",
+  },
+  "Este número está fora da lista de teste do canal, então a mensagem escrita pela IA não sai por ele.": {
+    es: "Este número está fuera de la lista de prueba del canal, así que el mensaje escrito por la IA no sale por él.",
+  },
+  "Não deu para saber se este número pode receber a mensagem da IA: a consulta falhou na hora (rede ou banco), e não é erro de configuração. Tente de novo em alguns minutos.":
+    {
+      es: "No se pudo saber si este número puede recibir el mensaje de la IA: la consulta falló en ese momento (red o base de datos), y no es un error de configuración. Vuelve a intentarlo en unos minutos.",
+    },
+  "Esta ação de webhook não tem endereço configurado. Abra a automação e preencha.": {
+    es: "Esta acción de webhook no tiene dirección configurada. Abre la automatización y complétala.",
+  },
+  "A regra usa um tipo de ação que esta instalação não tem (pode ter saído em uma atualização). Abra a automação e escolha outra ação.":
+    {
+      es: "La regla usa un tipo de acción que esta instalación no tiene (puede haber salido en una actualización). Abre la automatización y elige otra acción.",
+    },
   "Título do lead": { es: "Título del lead" },
   "Nome do lead": { es: "Nombre del lead" },
   "Tags do lead": { es: "Etiquetas del lead" },
@@ -9166,6 +9234,28 @@ export const DICIONARIO: Traducoes = {
   "Nova regra": { es: "Nueva regla" },
   // As frases de abertura de conversa no Direct (gatilho de preço/agendamento).
   "Frases do Direct": { es: "Frases del Direct" },
+  // As palavras que a IA pode usar sozinha (vocabulário que aprende).
+  "Palavras da IA": { es: "Palabras de la IA" },
+  "Estas palavras apareceram em comentários que você respondeu. Liberando uma palavra, a IA pode responder sozinha comentários curtos em que TODAS as palavras estejam liberadas. A IA nunca responde sozinha sobre saúde, preço ou agendamento.": {
+    es: "Estas palabras aparecieron en comentarios que usted respondió. Si libera una palabra, la IA puede responder sola comentarios cortos en los que TODAS las palabras estén liberadas. La IA nunca responde sola sobre salud, precio o agendamiento.",
+  },
+  "Nada novo para decidir. As palavras aparecem aqui conforme você responde comentários.": {
+    es: "Nada nuevo por decidir. Las palabras aparecen aquí a medida que usted responde comentarios.",
+  },
+  // "em 4 comentários que você respondeu" — o substantivo faltava na tela.
+  // (`em` já tinha espanhol, lá em cima: a revisão final o deu por ausente.)
+  "comentários que você respondeu": { es: "comentarios que usted respondió" },
+  "Não foi possível carregar as palavras. Atualize a página para tentar de novo.": {
+    es: "No fue posible cargar las palabras. Actualice la página para intentarlo de nuevo.",
+  },
+  "Pode usar": { es: "Puede usar" },
+  "Nunca": { es: "Nunca" },
+  "1 palavra liberada": { es: "1 palabra liberada" },
+  "palavras liberadas": { es: "palabras liberadas" },
+  "1 recusada": { es: "1 rechazada" },
+  "recusadas": { es: "rechazadas" },
+  "(liberada)": { es: "(liberada)" },
+  "(recusada)": { es: "(rechazada)" },
   "Quando perguntarem preço": { es: "Cuando pregunten el precio" },
   "Não cite valor aqui: mensagem automática com preço vira promessa.": {
     es: "No menciones el valor aquí: un mensaje automático con precio se vuelve una promesa.",

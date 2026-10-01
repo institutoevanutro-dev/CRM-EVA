@@ -627,6 +627,10 @@ export const AUDIT_ACTIONS = [
   // agendamento mudaram. O TEXTO não entra no metadata: é conteúdo editorial,
   // e a trilha responde "quem mudou e quando". `resourceId` é a organização.
   "comment.frases_updated",
+  // O dono liberou ou recusou uma palavra para a IA usar sozinha. Régua de
+  // segurança que afrouxa precisa dizer quem afrouxou. `resourceId` é a
+  // organização; a palavra e a decisão vão no metadata.
+  "comment.vocabulary_decided",
   // IMPORTANTE 5 (revisão final) — um humano descartou (`situacao='ignorado'`)
   // um comentário `esperando_voce` pela tela. Sem isto a fila só cresce.
   "comment.discarded",
