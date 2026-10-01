@@ -171,7 +171,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           // link de `/admin/google` na Agenda. Para o admin de um tenant qualquer
           // o link seria um 404; a tela diz a ele quem procurar.
           configurarEm: authz.user.is_platform_admin && !authz.user.support ? "/admin/meta" : null,
-          fields: ["messages", "message_template_status_update"],
+          fields: ["messages", "message_template_status_update", "smb_message_echoes", "history", "smb_app_state_sync", "account_update", "account_offboarded", "account_reconnected"],
         }
       : null,
   });

@@ -33,7 +33,7 @@ import { fail } from "@/lib/api/wrappers";
 import { appDaMeta } from "@/lib/channels/meta/app";
 import { lerEnvelopeMeta } from "@/lib/channels/meta/envelope";
 import { parseMetaWebhook, verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
-import { ingestMetaInbound } from "@/lib/channels/meta/ingest";
+import { ingestMetaEcho, ingestMetaInbound } from "@/lib/channels/meta/ingest";
 import { metaSessionByWebhookToken } from "@/lib/channels/meta/session";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -149,6 +149,22 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       continue;
     }
 
+    if (e.kind === "echo_message") {
+      // Resposta dada pelo CELULAR da clínica (coexistência): entra como
+      // "Celular" e pausa a IA, sem acordar nada de entrada (`ingestMetaEcho`).
+      const r = await ingestMetaEcho(admin, e, { organizationId: session.organizationId });
+      desfechos.push(`echo:${r.status}`);
+      if (r.status === "failed" || r.status === "no_session") {
+        logger.error("[meta.ingest] eco do celular não ingerido", {
+          status: r.status,
+          reason: r.status === "failed" ? r.reason : undefined,
+          external_id: e.externalId,
+          phone_number_id: e.phoneNumberId,
+        });
+      }
+      continue;
+    }
+
     if (e.kind === "template_status") {
       await admin
         .from("meta_templates")
@@ -158,13 +174,15 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .eq("name", e.templateName)
         .eq("language", e.templateLanguage);
     } else if (e.kind === "message_status") {
-      // Eventos de coexistência (echo/history/state_sync/account) ainda não têm
-      // consumidor aqui: caem fora (200) até a ingestão deles entrar.
       await admin
         .from("messages")
         .update({ status: e.status === "failed" ? "failed" : "sent", updated_at: now })
         .eq("organization_id", session.organizationId)
         .eq("external_id", e.externalId);
+    } else {
+      // history_chunk / state_sync / account_event: ainda sem consumidor aqui
+      // (200 para a Meta não re-entregar), até a ingestão de cada um entrar.
+      desfechos.push("ignorado");
     }
   }
 
