@@ -32,15 +32,33 @@ export type DesfechoDoCadastro =
   | { ok: true; resultado: ResultadoDoCadastro }
   | { ok: false; motivo: "cancelado" | "sem_code" | "sdk_indisponivel" | "sem_evento" };
 
-function carregarSdk(win: Window): Promise<FbSdk | null> {
+const ESPERA_DO_SDK_MS = 10_000;
+
+/** O SDK já está carregado? O clique só abre a janela de forma síncrona se sim. */
+export function sdkPronto(win: Window = window): boolean {
+  return Boolean((win as unknown as { FB?: FbSdk }).FB);
+}
+
+/**
+ * Carrega o script do SDK (ou devolve o `FB` existente). Chamada na montagem da
+ * tela, para o clique não esperar rede e perder o gesto do usuário (bloqueador
+ * de popup). Resolve `null` se o script falha ou não inicializa no prazo.
+ */
+export function carregarSdk(win: Window = window, prazoMs = ESPERA_DO_SDK_MS): Promise<FbSdk | null> {
   const w = win as unknown as { FB?: FbSdk; fbAsyncInit?: () => void };
   if (w.FB) return Promise.resolve(w.FB);
   return new Promise((resolve) => {
-    w.fbAsyncInit = () => resolve(w.FB ?? null);
     const s = win.document.createElement("script");
+    const fim = (fb: FbSdk | null) => {
+      clearTimeout(timer);
+      if (!fb) s.remove(); // permite nova tentativa sem acumular <script>
+      resolve(fb);
+    };
+    const timer = setTimeout(() => fim(null), prazoMs);
+    w.fbAsyncInit = () => fim(w.FB ?? null);
     s.src = SDK;
     s.async = true;
-    s.onerror = () => resolve(null);
+    s.onerror = () => fim(null);
     win.document.body.appendChild(s);
   });
 }
@@ -72,9 +90,10 @@ export async function abrirCadastroIncorporado(input: {
   win?: Window;
   /** Quanto esperar o `postMessage` depois do callback do `login` (ruling P15i). */
   esperaDoEventoMs?: number;
+  esperaDoSdkMs?: number;
 }): Promise<DesfechoDoCadastro> {
   const win = input.win ?? window;
-  const fb = await carregarSdk(win);
+  const fb = await carregarSdk(win, input.esperaDoSdkMs);
   if (!fb) return { ok: false, motivo: "sdk_indisponivel" };
   fb.init({ appId: input.appId, autoLogAppEvents: true, xfbml: true, version: input.versao });
 

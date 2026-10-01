@@ -3812,6 +3812,9 @@ export const DICIONARIO: Traducoes = {
   "Token de verificação": { es: "Token de verificación" },
   "Campos a assinar": { es: "Campos a suscribir" },
   "Trocar credencial": { es: "Cambiar credencial" },
+  "Não foi possível carregar a janela da Meta. Desative bloqueadores e tente de novo.": {
+    es: "No se pudo cargar la ventana de Meta. Desactiva los bloqueadores e inténtalo de nuevo.",
+  },
   "Conectar WhatsApp pelo botão": { es: "Conectar WhatsApp con el botón" },
   "Falta configurar na instalação:": { es: "Falta configurar en la instalación:" },
   "Enquanto isso, use o formulário abaixo.": { es: "Mientras tanto, usa el formulario de abajo." },

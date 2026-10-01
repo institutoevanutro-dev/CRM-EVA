@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { abrirCadastroIncorporado } from "./cadastro-incorporado-cliente";
-import { EVENTO_CANCELADO, EVENTO_COEXISTENCIA } from "./coexistencia";
+import { abrirCadastroIncorporado, carregarSdk, sdkPronto } from "./cadastro-incorporado-cliente";
+import { EVENTO_CANCELADO, EVENTO_COEXISTENCIA, montarExtras } from "./coexistencia";
 
 const ENTRADA = { appId: "1", configId: "2", versao: "v22.0", esperaDoEventoMs: 50 };
 
@@ -73,5 +73,30 @@ describe("abrirCadastroIncorporado", () => {
     const script = document.querySelector('script[src*="connect.facebook.net"]') as HTMLScriptElement | null;
     script?.onerror?.(new Event("error"));
     expect(await p).toEqual({ ok: false, motivo: "sdk_indisponivel" });
+  });
+  it("passa ao login config_id, response_type code, override e os extras da v4", async () => {
+    const login = vi.fn((cb: (r: unknown) => void, _o: unknown) => cb({}));
+    (window as unknown as { FB?: unknown }).FB = { init: () => undefined, login };
+    await abrirCadastroIncorporado(ENTRADA);
+    expect(login.mock.calls[0]?.[1]).toEqual({
+      config_id: "2",
+      response_type: "code",
+      override_default_response_type: true,
+      extras: montarExtras(),
+    });
+  });
+  it("com o SDK pré-carregado, o login é chamado sem esperar carga de script (só microtasks)", async () => {
+    const login = vi.fn();
+    (window as unknown as { FB?: unknown }).FB = { init: () => undefined, login };
+    expect(sdkPronto()).toBe(true);
+    void abrirCadastroIncorporado(ENTRADA);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(login).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('script[src*="connect.facebook.net"]')).toBeNull();
+  });
+  it("script que carrega mas nunca inicializa vira sdk_indisponivel no prazo", async () => {
+    expect(await carregarSdk(window, 20)).toBeNull();
+    expect(await abrirCadastroIncorporado({ ...ENTRADA, esperaDoSdkMs: 20 })).toEqual({ ok: false, motivo: "sdk_indisponivel" });
   });
 });
