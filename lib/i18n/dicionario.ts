@@ -9375,6 +9375,10 @@ export const DICIONARIO: Traducoes = {
   "Importação do histórico não foi pedida.": { es: "La importación del historial no se solicitó." },
   "Dá para tentar de novo até": { es: "Se puede intentar de nuevo hasta" },
   "Passaram 24 horas. Desconecte e refaça o fluxo pelo botão.": { es: "Pasaron 24 horas. Desconecte y repita el flujo con el botón." },
+  "Histórico importado.": { es: "Historial importado." },
+  "Importando histórico…": { es: "Importando historial…" },
+  "Progresso da importação do histórico": { es: "Progreso de la importación del historial" },
+  "Não deu para importar o histórico.": { es: "No se pudo importar el historial." },
 };
 
 /**

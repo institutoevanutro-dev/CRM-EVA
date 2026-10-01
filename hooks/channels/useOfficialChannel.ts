@@ -56,6 +56,11 @@ export function useOfficialChannel() {
     queryKey: ["official-channel"],
     queryFn: async () => apiClient.get<{ data: OfficialChannelState }>("/api/v1/channels/official"),
     staleTime: 15_000,
+    // Enquanto o histórico entra, a barra anda sozinha.
+    refetchInterval: (q) => {
+      const h = q.state.data?.data.coexistencia?.historico;
+      return h && !h.concluido && !h.erro_codigo ? 5_000 : false;
+    },
   });
 }
 
