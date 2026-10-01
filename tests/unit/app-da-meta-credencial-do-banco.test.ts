@@ -53,15 +53,20 @@ let estoura: Error | null = null;
 let leituras = 0;
 /** O que a decifra devolve, por texto cifrado. `undefined` = não decifrou. */
 let decifrado: Record<string, string | null> = {};
+/** Clone com a 0257 e sem a 0296: o select que pede `app_id` devolve 42703. */
+let semColunasDa0296 = false;
 
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: () => ({
-      select: () => ({
+      select: (colunas: string) => ({
         eq: () => ({
           maybeSingle: async () => {
             leituras += 1;
             if (estoura) throw estoura;
+            if (semColunasDa0296 && colunas.includes("app_id")) {
+              return { data: null, error: { code: "42703", message: 'column platform_meta_app.app_id does not exist' } };
+            }
             return { data: linhaDoBanco, error: erroDaLeitura };
           },
         }),
@@ -106,6 +111,7 @@ beforeEach(() => {
   estoura = null;
   leituras = 0;
   decifrado = {};
+  semColunasDa0296 = false;
   delete process.env.META_APP_SECRET;
   delete process.env.META_WEBHOOK_VERIFY_TOKEN;
 });
@@ -151,6 +157,20 @@ describe("appDaMeta: banco primeiro, .env como piso", () => {
 
     expect(app.appSecret).toBe("segredo-do-env");
     expect(app.verifyToken).toBe("token-do-env");
+  });
+
+  it("clone sem a 0296 (42703 em app_id): o PAR de segredos continua vindo do banco", async () => {
+    // Imagem nova sobre banco que não reaplicou o baseline: cair no `.env` aqui
+    // trocaria o par que o webhook usa — toda entrega morreria em 401.
+    semColunasDa0296 = true;
+    linhaDoBanco = LINHA_CHEIA;
+    decifrado = { "\\xSEGREDO_CIFRADO": "segredo-do-banco", "\\xTOKEN_CIFRADO": "token-do-banco" };
+
+    const { appDaMeta } = await importarComEnv(NO_ENV);
+    const app = await appDaMeta();
+
+    expect(app.appSecret).toBe("segredo-do-banco");
+    expect(app.verifyToken).toBe("token-do-banco");
   });
 
   it("leitura que ESTOURA não sobe — a rota responde com o que o .env tem", async () => {

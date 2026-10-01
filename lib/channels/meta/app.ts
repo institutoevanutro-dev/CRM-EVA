@@ -127,19 +127,19 @@ interface LinhaDoApp {
 /** Nunca lança: devolve `null` quando não há linha utilizável. */
 async function linhaDoBanco(): Promise<LinhaDoApp | null> {
   try {
-    const { data, error } = await createAdminClient()
-      .from("platform_meta_app")
-      .select("app_secret_encrypted, verify_token_encrypted, app_id, es_config_id")
-      .eq("id", 1)
-      .maybeSingle();
+    const ler = (colunas: string) => createAdminClient().from("platform_meta_app").select(colunas).eq("id", 1).maybeSingle();
+    let { data, error } = await ler("app_secret_encrypted, verify_token_encrypted, app_id, es_config_id");
+    // Clone sem a 0296 (imagem nova antes do baseline) devolve 42703: relê sem
+    // as colunas novas — o PAR de segredos tem de seguir vindo do banco, senão o
+    // webhook troca de segredo e toda entrega morre em 401.
+    if (error?.code === "42703") ({ data, error } = await ler("app_secret_encrypted, verify_token_encrypted"));
     // Clone que ainda não aplicou a 0257 devolve 42P01 aqui. Isso NÃO é erro
     // desta instalação — é o piso de rollback funcionando, e o `.env` assume.
-    // Clone sem a 0296 devolve 42703 (coluna inexistente): mesmo desfecho.
     if (error) {
       logger.info("[meta.app] sem credencial no banco; vale o .env", { codigo: error.code });
       return null;
     }
-    return (data as LinhaDoApp | null) ?? null;
+    return (data as unknown as LinhaDoApp | null) ?? null;
   } catch (err) {
     logger.warn("[meta.app] leitura do banco falhou; vale o .env", {
       error: err instanceof Error ? err.message : String(err),
