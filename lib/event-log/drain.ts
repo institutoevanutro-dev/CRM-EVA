@@ -109,7 +109,7 @@ export async function avisarEventoMorto(
     });
     if (error) {
       // `23505` é o outro dreno chegando primeiro: o índice único parcial
-      // `agent_inbox_event_dead_aberto_unico` (migration 0292) recusou a segunda
+      // `agent_inbox_event_dead_aberto_unico` (migration 0293) recusou a segunda
       // linha, e recusar é o que este aviso PROMETE — um por organização e por
       // família. Antes do índice os dois passavam pelo "não existe" e os dois
       // inseriam; agora quem chega segundo recebe `23505`, que é o mesmo desfecho

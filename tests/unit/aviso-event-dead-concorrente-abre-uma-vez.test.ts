@@ -15,7 +15,7 @@
  *
  *   1. A GARANTIA ESTÁ NO BANCO. Os índices únicos desta tabela são LIDOS do
  *      SQL do repositório (migrations + baseline) e é essa leitura que decide
- *      se o dublê recusa a segunda linha. Sem a migration 0292 não há índice,
+ *      se o dublê recusa a segunda linha. Sem a migration 0293 não há índice,
  *      o dublê aceita as duas e o caso abaixo fica vermelho — é ele que prende
  *      a corrida.
  *   2. A corrida em si, com as DUAS escritas disparadas juntas: os dois
@@ -311,7 +311,7 @@ describe("a garantia do dedupe de `event_dead` mora no banco", () => {
       join(process.cwd(), "supabase", "migrations", "MANIFEST.md"),
       "utf8",
     );
-    expect(manifest).toContain("0292_dedupe_de_event_dead_atomico");
+    expect(manifest).toContain("0293_dedupe_de_event_dead_atomico");
   });
 
   it("o caso que prende: dois drenos juntos abrem UM aviso, e ninguém loga erro", async () => {

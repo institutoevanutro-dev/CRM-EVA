@@ -59,7 +59,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
     .select("id, kind, severity, title, body, ref_kind, ref_id, status, created_at")
     .maybeSingle();
   if (error) {
-    // `23505` — o índice único parcial da migration 0292 recusou a virada para
+    // `23505` — o índice único parcial da migration 0293 recusou a virada para
     // `open`: já existe um aviso ABERTO idêntico nesta organização (mesmo kind,
     // mesmo título). É 409 e não 500: a ação pedida não cabe no estado atual, e
     // "falha ao atualizar" esconderia que foi o próprio banco que impediu o

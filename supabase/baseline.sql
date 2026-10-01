@@ -28672,8 +28672,8 @@ create policy instagram_comment_vocabulario_write on public.instagram_comment_vo
   );
 -- ---- fim: vocabulário de comentário (migration 0291) ----
 
--- ---- dedupe de event_dead atômico: índice único parcial (migration 0292) ----
--- 0292 — o aviso `event_dead` não abre em dobro com dois drenos concorrentes
+-- ---- dedupe de event_dead atômico: índice único parcial (migration 0293) ----
+-- 0293 — o aviso `event_dead` não abre em dobro com dois drenos concorrentes
 -- (DeskcommCRM #880). O dedupe era uma pergunta seguida de uma escrita: `lib/event-log/
 -- drain.ts` consulta "já existe um aviso aberto?" e depois insere, e o `insert …
 -- where not exists` de `insertInboxItem` (`lib/agent-engine/db/repository.ts`)

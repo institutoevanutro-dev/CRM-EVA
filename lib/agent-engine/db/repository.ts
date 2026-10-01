@@ -150,7 +150,7 @@ export type InboxDedupe = 'kind' | 'kind_e_ref' | 'kind_e_titulo' | 'kind_ref_e_
  * modo. Mas `where not exists` sozinho não fecha a corrida de dois inserts
  * simultâneos: os dois leem "não existe" antes de qualquer escrita e os dois
  * inserem (DeskcommCRM #880). Quem fecha a corrida é o BANCO: o índice único parcial
- * `agent_inbox_event_dead_aberto_unico` (migration 0292) recusa a segunda linha
+ * `agent_inbox_event_dead_aberto_unico` (migration 0293) recusa a segunda linha
  * com `23505`, capturado abaixo — a condição deixa de morar só na consulta.
  * Escopo dele é `event_dead`, o único dedupe por kind desta tabela; os outros
  * três modos querem várias linhas abertas com o mesmo título e não têm índice.
@@ -209,7 +209,7 @@ export async function insertInboxItem(
     return rows[0] ?? null;
   } catch (err) {
     // `23505` — o BANCO recusou a segunda linha, e é ele quem fecha a corrida
-    // (migration 0292). O `where not exists` acima vale para os quatro modos, mas
+    // (migration 0293). O `where not exists` acima vale para os quatro modos, mas
     // sozinho não separa dois inserts simultâneos: ambos leem "não existe" antes
     // de qualquer escrita (DeskcommCRM #880). Quem chega segundo recebe `23505` do
     // índice único parcial — e "o aviso já estava aberto" é o mesmo desfecho de

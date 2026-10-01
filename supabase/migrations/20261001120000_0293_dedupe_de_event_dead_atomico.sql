@@ -1,6 +1,6 @@
 -- Portado do projeto original (melgarafael/DeskcommCRM, PR #1928 de @webtecnica,
 -- migration 0491 lá).
--- 0292: o aviso `event_dead` não abre em dobro com dois drenos concorrentes
+-- 0293: o aviso `event_dead` não abre em dobro com dois drenos concorrentes
 -- (DeskcommCRM #880).
 --
 -- O dedupe de `agent_inbox_items` era uma PERGUNTA e uma ESCRITA separadas: o
