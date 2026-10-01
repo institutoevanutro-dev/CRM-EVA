@@ -4,4 +4,4 @@ secao: adicionado
 titulo: A IA aprende quais palavras pode usar, com o seu aval
 ---
 
-Marcar alguém num comentário não manda mais ele para a fila. Em Inbox › Comentários › "Palavras da IA" você libera as palavras, uma a uma. Preço, saúde e agendamento nunca aparecem lá.
+Comentário com @marcação não vai mais direto para a fila: a IA julga o resto da frase. Em Inbox › Comentários › "Palavras da IA" você libera, uma a uma, palavras dos comentários que respondeu. Preço, saúde e agendamento nunca aparecem lá.

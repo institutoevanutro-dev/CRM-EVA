@@ -313,8 +313,9 @@ test("\"quanto custa\": Direct sai, NADA é publicado em público, e continua es
     "Olá! Me conta: qual é seu maior objetivo hoje?",
   );
 
-  // A marcação deixou de derrubar o comentário: o mesmo texto que ontem caía
-  // na fila agora é julgado pelo resto da frase.
+  // Prova só a tela: o painel abre e mostra a lista ou o estado vazio. A regra
+  // de marcação de perfil e de palavra liberada é provada em unit, em
+  // lib/comentarios/seguranca.test.ts e lib/comentarios/candidatos.test.ts.
   await page.getByRole("button", { name: /Palavras da IA/i }).click();
   await expect(
     page.getByText(/conforme você responde/i).or(page.getByRole("button", { name: /Pode usar/i }).first()),
