@@ -262,7 +262,8 @@ mkdir -p "$SRC/supabase"; printf 'select 1;\n' > "$SRC/supabase/baseline.sql"
 printf 'services:\n  app:\n    image: \${APP_IMAGE:-x}\n' > "$SRC/docker-compose.prod.yml"
 printf '.env\n' > "$SRC/.gitignore"
 cd "$SRC" || exit 1
-git init --quiet; git config user.email t@t.t; git config user.name t
+git init --quiet; git branch -M main
+git config user.email t@t.t; git config user.name t
 git add -A; git commit --quiet -m "release antiga"; git tag v0.9.0
 echo topo > topo.txt; git add -A; git commit --quiet -m "main, depois da release"
 
