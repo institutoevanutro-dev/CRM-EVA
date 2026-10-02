@@ -28882,6 +28882,195 @@ revoke execute on function public.fn_upsert_wa_conversation_do_historico(uuid, u
 grant execute on function public.fn_upsert_wa_conversation_do_historico(uuid, uuid, uuid) to service_role;
 -- ---- fim: histórico importado não acorda ninguém (migration 0297) ----
 
+-- 0299: operational writes require a writing role.
+-- Viewers cannot mutate operational data or launch business automations.
+do $policies$
+declare t text; minimum_role text;
+begin
+  foreach t in array array['messages','agent_cases','agent_inbox_items','channel_knobs'] loop
+    minimum_role := case when t='channel_knobs' then 'manager' else 'agent' end;
+    execute format('drop policy if exists security_role_insert on public.%I', t);
+    execute format('drop policy if exists security_role_update on public.%I', t);
+    execute format('drop policy if exists security_role_delete on public.%I', t);
+    execute format('create policy security_role_insert on public.%I as restrictive for insert to authenticated with check (public.fn_role_at_least(organization_id,%L))',t,minimum_role);
+    execute format('create policy security_role_update on public.%I as restrictive for update to authenticated using (public.fn_role_at_least(organization_id,%L)) with check (public.fn_role_at_least(organization_id,%L))',t,minimum_role,minimum_role);
+    execute format('create policy security_role_delete on public.%I as restrictive for delete to authenticated using (public.fn_role_at_least(organization_id,%L))',t,minimum_role);
+  end loop;
+end $policies$;
+
+-- Pacing entries are produced by the worker, never by tenant clients.
+revoke insert, update, delete, truncate, references, trigger on public.pacing_ledger from public, anon, authenticated;
+grant select on public.pacing_ledger to authenticated;
+grant all on public.pacing_ledger to service_role;
+
+CREATE OR REPLACE FUNCTION public.emit_event(p_event_type text, p_entity_kind text, p_entity_id uuid, p_payload jsonb DEFAULT '{}'::jsonb, p_metadata jsonb DEFAULT '{}'::jsonb, p_organization_id uuid DEFAULT NULL::uuid)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_org_id uuid;
+  v_event_id uuid;
+  v_contact uuid;
+  v_origin jsonb;
+begin
+  -- message.received nasce somente do INSERT inbound interno. Um chamador
+  -- público não pode reapresentar uma mensagem existente como evento novo.
+  if auth.uid() is not null and p_event_type in ('message.received','appointment.outcome_confirmed') then
+    raise exception 'reserved_message_received' using errcode='42501';
+  end if;
+  -- Eventos LGPD disparam efeito IRREVERSÍVEL (o redact anonimiza o contato) e
+  -- só nascem no servidor: webhook da Nuvemshop, aprovação do pedido (que exige
+  -- papel e usa a service role) e os próprios workers. Um viewer chamava esta
+  -- função pela REST com `lgpd.redact_received` e anonimizava sem aprovação.
+  if auth.uid() is not null and p_event_type like 'lgpd.%' then
+    raise exception 'reserved_lgpd_event' using errcode='42501';
+  end if;
+  -- Estes campos autorizam efeitos operacionais; não são payload público.
+  if auth.uid() is not null and (
+    coalesce(p_payload,'{}'::jsonb) ?| array['service_origin','service_boundary']
+    or coalesce(p_metadata,'{}'::jsonb) ?| array['service_origin','service_boundary']
+  ) then raise exception 'reserved_service_origin' using errcode='42501'; end if;
+  v_org_id := coalesce(p_organization_id, (public.fn_support_context()->>'organization_id')::uuid);
+  if v_org_id is null then
+    select organization_id into v_org_id
+      from public.user_organizations
+      where user_id = auth.uid() and revoked_at is null
+      limit 1;
+  end if;
+  if v_org_id is null then
+    raise exception 'emit_event: organization_id obrigatorio';
+  end if;
+
+  if auth.uid() is not null
+     and not public.fn_role_at_least(v_org_id, 'agent') then
+    raise exception 'caller_not_authorized_for_org'
+      using errcode = '42501', hint = 'emit_event: caller must have agent role in the organization';
+  end if;
+
+  if not public.fn_support_write_allowed(v_org_id) then raise exception 'support_readonly' using errcode='42501'; end if;
+
+  -- A ORIGEM E RESERVADA AO SERVIDOR — ENTAO O SERVIDOR TEM DE ESCREVE-LA.
+  --
+  -- O bloco acima recusa `service_origin` vindo de chamador autenticado (42501,
+  -- e com razao: e o campo que AUTORIZA efeito operacional, nao payload
+  -- publico). So que ninguem o escrevia no lugar dele. Efeito medido: quem move
+  -- o negocio pela IA carimba a origem no servidor (`agent-stage-sync`,
+  -- `appointment-stage-move`, `handoff-stage-move`) e o follow-up nasce; quem
+  -- move PELO QUADRO — o operador, pela rota HTTP autenticada — emitia um
+  -- evento SEM origem, `fn_service_event_origin` caia no `service_stale` final
+  -- (40001), `serviceForEvent` engolia como `stale_origin` e o follow-up nunca
+  -- nascia. Sem erro em lugar nenhum: o gatilho de etapa era inalcancavel pelo
+  -- caminho que o produto oferece na tela.
+  --
+  -- O retrato e tirado AQUI, no instante da emissao, que e exatamente a
+  -- semantica de procedencia que a 0223 quer: "quando este evento nasceu, o
+  -- atendimento estava assim". A resolucao do contato repete a mesma regra de
+  -- `fn_service_event_origin` — se ela nao souber resolver o tipo, nao ha o que
+  -- carimbar e o evento segue sem origem, como antes.
+  if not (coalesce(p_payload,'{}'::jsonb) ? 'service_origin')
+     and not (coalesce(p_metadata,'{}'::jsonb) ? 'service_origin') then
+    if p_event_type in ('lead.created','lead.stage_changed','lead.tag_added') and p_entity_kind='crm_lead' then
+      select contact_id into v_contact from public.crm_leads where organization_id=v_org_id and id=p_entity_id;
+    elsif p_event_type='contact.tag_added' and p_entity_kind='contact' then
+      select id into v_contact from public.contacts where organization_id=v_org_id and id=p_entity_id;
+    end if;
+    if v_contact is not null
+       and exists(select 1 from public.contacts
+                   where organization_id=v_org_id and id=v_contact
+                     and not is_anonymized and is_merged_into is null) then
+      v_origin := jsonb_build_object('kind','command',
+        'observed', public.fn_service_observe_command(v_org_id, v_contact));
+    end if;
+  end if;
+
+  insert into public.event_log
+    (organization_id, event_type, entity_kind, entity_id, payload, metadata)
+  values
+    (v_org_id, p_event_type, p_entity_kind, p_entity_id,
+     coalesce(p_payload, '{}'::jsonb)
+       || case when v_origin is null then '{}'::jsonb else jsonb_build_object('service_origin', v_origin) end,
+     coalesce(p_metadata, '{}'::jsonb)
+       || jsonb_build_object('emitted_at', extract(epoch from now())))
+  returning id into v_event_id;
+
+  return v_event_id;
+end $function$;
+revoke execute on function public.emit_event(text,text,uuid,jsonb,jsonb,uuid) from public, anon;
+grant execute on function public.emit_event(text,text,uuid,jsonb,jsonb,uuid) to authenticated, service_role;
+
+-- ---- outbound media lifecycle (migration 0300) ----
+-- Outbound uploads reserve quota before Storage and expire unless consumed.
+create table if not exists public.outbound_media_uploads (
+  object_path text primary key,
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  conversation_id uuid references public.conversations(id) on delete set null,
+  size_bytes bigint not null check (size_bytes > 0 and size_bytes <= 52428800),
+  state text not null default 'pending' check (state in ('pending','attached','deleting','deleted')),
+  expires_at timestamptz not null default (now() + interval '24 hours')
+);
+alter table public.outbound_media_uploads enable row level security;
+revoke all on public.outbound_media_uploads from public, anon, authenticated;
+grant all on public.outbound_media_uploads to service_role;
+create index if not exists outbound_media_pending_org on public.outbound_media_uploads (organization_id) where state in ('pending','deleting');
+create index if not exists outbound_media_expiry on public.outbound_media_uploads (expires_at) where state in ('pending','deleting');
+
+create or replace function public.fn_reserve_outbound_media(p_org uuid, p_conversation uuid, p_path text, p_bytes bigint)
+returns boolean language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if p_bytes <= 0 or p_bytes > 52428800 or p_path not like p_org::text || '/' || p_conversation::text || '/out-%' then
+    raise exception 'invalid upload';
+  end if;
+  if not exists (select 1 from public.conversations where id = p_conversation and organization_id = p_org) then
+    raise exception 'invalid conversation';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('outbound-media:' || p_org::text, 0));
+  if (select count(*) >= 20 or coalesce(sum(size_bytes), 0) + p_bytes > 104857600
+      from public.outbound_media_uploads where organization_id = p_org and state in ('pending','deleting')) then
+    return false;
+  end if;
+  insert into public.outbound_media_uploads(object_path, organization_id, conversation_id, size_bytes)
+    values (p_path, p_org, p_conversation, p_bytes);
+  return true;
+end;
+$$;
+revoke all on function public.fn_reserve_outbound_media(uuid,uuid,text,bigint) from public, anon, authenticated;
+grant execute on function public.fn_reserve_outbound_media(uuid,uuid,text,bigint) to service_role;
+
+create or replace function public.fn_attach_outbound_media()
+returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
+declare upload public.outbound_media_uploads;
+begin
+  if new.media_storage_path is null then return new; end if;
+  select * into upload from public.outbound_media_uploads where object_path = new.media_storage_path for update;
+  if not found then return new; end if; -- Legacy / inbound media retains its existing ownership guards.
+  if upload.organization_id <> new.organization_id or upload.conversation_id is distinct from new.conversation_id
+     or upload.state in ('deleting','deleted') or (upload.state = 'pending' and upload.expires_at <= now()) then
+    raise exception 'media upload expired or outside conversation' using errcode = '23514';
+  end if;
+  update public.outbound_media_uploads set state = 'attached' where object_path = upload.object_path;
+  return new;
+end;
+$$;
+revoke all on function public.fn_attach_outbound_media() from public, anon, authenticated;
+drop trigger if exists trg_attach_outbound_media on public.messages;
+create trigger trg_attach_outbound_media before insert or update of media_storage_path on public.messages
+for each row execute function public.fn_attach_outbound_media();
+
+create or replace function public.fn_claim_expired_outbound_media(p_limit integer default 50)
+returns setof public.outbound_media_uploads language sql security definer set search_path = public, pg_temp as $$
+  with candidates as (
+    select object_path from public.outbound_media_uploads
+    where state in ('pending','deleting') and expires_at <= now()
+    order by expires_at limit greatest(1, least(p_limit, 200)) for update skip locked
+  )
+  update public.outbound_media_uploads u set state = 'deleting', expires_at = now() + interval '5 minutes'
+  from candidates c where u.object_path = c.object_path returning u.*;
+$$;
+revoke all on function public.fn_claim_expired_outbound_media(integer) from public, anon, authenticated;
+grant execute on function public.fn_claim_expired_outbound_media(integer) to service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

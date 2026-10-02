@@ -319,6 +319,18 @@ refuse() { c_red "✖ $*"; exit "$REFUSED_RC"; }
 # história ANTES de perguntar, e, se não der, devolvemos 2 — o chamador
 # recusa. Falhar fechado é o certo num script que roda como root na máquina de
 # quem não sabe consertar.
+# Só uma tag contida na main recém-buscada pode fornecer código ao root.
+trusted_release_commit() {
+  local tag="$1" sha
+  git check-ref-format "refs/tags/$tag" >/dev/null 2>&1 || return 1
+  sha="$(git rev-parse --verify "refs/tags/${tag}^{commit}" 2>/dev/null)" || return 1
+  if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+    git fetch --unshallow --quiet origin 2>/dev/null || return 1
+  fi
+  git merge-base --is-ancestor "$sha" refs/remotes/origin/main 2>/dev/null || return 1
+  printf '%s' "$sha"
+}
+
 is_already_in_head() {
   local ref="$1"
   if [ "$(git rev-parse --is-shallow-repository 2>/dev/null || echo unknown)" = "true" ]; then
@@ -820,9 +832,10 @@ setup_event_log_drain_cron() {
   # ('existe alguma linha de event-log-drain?'), uma instalação nova numa VPS
   # que já roda outra se achava veterana e pulava a higienização de eventos.
   local first_time=1
-  if crontab -l 2>/dev/null | grep -qF -e "$url_drain"; then first_time=0; fi
+  if crontab -l 2>/dev/null | grep -qF -e "$url_drain" -e "$marcador"; then first_time=0; fi
 
-  local cron_line="* * * * * curl -fsS -H \"Authorization: Bearer ${secret}\" \"${url_drain}\" >/dev/null 2>&1 ${marcador}"
+  local quoted_dir; printf -v quoted_dir '%q' "$PROJECT_DIR"
+  local cron_line="* * * * * cd ${quoted_dir} && bash hostgator-setup-kit/event-log-drain.sh >/dev/null 2>&1 ${marcador}"
   # ⚠️ `|| true` OBRIGATÓRIO, e não é defensividade: `crontab -l` sai com status
   # 1 (sem stdout, só um aviso no stderr) quando o usuário NUNCA teve crontab —
   # o caso NORMAL de uma VPS recém-provisionada, que é o caso normal de quem

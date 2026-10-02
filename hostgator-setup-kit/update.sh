@@ -41,11 +41,11 @@ setup_update_agent_cron
 
 # ── 1. Tem atualização mesmo? ────────────────────────────────────────────────
 step "Procurando atualizações"
-git fetch --tags --quiet origin 2>/dev/null || c_ylw "⚠ não consegui falar com o GitHub — sigo com o código que já está aqui."
+git fetch --tags --quiet origin +refs/heads/main:refs/remotes/origin/main 2>/dev/null || refuse "Não consegui verificar a main no GitHub. Atualização recusada sem alterar o app."
 [ -n "$TARGET_TAG" ] || TARGET_TAG="$(git tag -l 'v*' --sort=-v:refname | head -1)"
 [ -n "$TARGET_TAG" ] || die "Não encontrei nenhuma versão publicada para instalar."
-git rev-parse --verify --quiet "${TARGET_TAG}^{commit}" >/dev/null \
-  || die "Não conheço a versão $TARGET_TAG aqui. Confira o nome (ex.: v1.1.0) ou tente de novo quando o servidor conseguir falar com o GitHub."
+TARGET_COMMIT="$(trusted_release_commit "$TARGET_TAG")" \
+  || refuse "A versão $TARGET_TAG não foi comprovada como parte da main. Atualização recusada."
 CURRENT_TAG="$(git describe --tags --exact-match HEAD 2>/dev/null || true)"
 
 # O código estar em dia NÃO significa que o app está: quem roda é a imagem.
@@ -135,7 +135,7 @@ fi
 
 # ── 3. Código novo ───────────────────────────────────────────────────────────
 step "Baixando o código novo"
-if ! git checkout --quiet "$TARGET_TAG" 2>&1; then
+if ! git checkout --quiet "$TARGET_COMMIT" 2>&1; then
   die "Não consegui trocar para a versão $TARGET_TAG (parece haver mudanças locais que divergem).
      Rode 'git status' pra ver, ou peça ajuda. NÃO mexi no banco — está tudo como estava."
 fi

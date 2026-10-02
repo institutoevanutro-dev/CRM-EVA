@@ -46,6 +46,7 @@ vi.mock("@/lib/channels/archived", () => ({
 vi.mock("@/lib/audit", () => ({ audit: async () => undefined }));
 
 vi.mock("@/lib/waha/webhook-auth", () => ({
+  validGlobalWahaBearer: () => false,
   authenticateWahaWebhook: () => ({ ok: true, signatureVerified: true }),
 }));
 
@@ -103,7 +104,7 @@ const lerEnvelopeWaha = (rawBody: string) => {
 
 const pedido = (corpo: unknown) =>
   ({
-    text: async () => (typeof corpo === "string" ? corpo : JSON.stringify(corpo)),
+    body: new Response(typeof corpo === "string" ? corpo : JSON.stringify(corpo)).body,
     headers: new Headers({ "x-webhook-hmac": "sha512=abc" }),
   }) as never;
 
@@ -248,4 +249,21 @@ describe("a rota — o desfecho que o provider enxerga", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "invalid_request", message: "invalid_json" } });
   });
+});
+
+it("global unsigned requests are refused before reading the body or dispatching", async () => {
+  const body = vi.fn();
+  const response = await POST({ headers: new Headers(), get body() { return body(); } } as never);
+  expect(response.status).toBe(401);
+  expect(body).not.toHaveBeenCalled();
+});
+
+it("global signed requests still enforce the body limit before dispatching", async () => {
+  despachados.length = 0;
+  const response = await POST(new Request("http://localhost/api/v1/webhooks/waha", {
+    method: "POST", body: "x".repeat(5 * 1024 * 1024 + 1),
+    headers: { "x-webhook-hmac": "sha512=abc" },
+  }) as never);
+  expect(response.status).toBe(413);
+  expect(despachados).toHaveLength(0);
 });

@@ -25,16 +25,6 @@ fi
 # encontrasse no código o definiria no `.env` e não veria efeito.
 APP_ORIGIN="http://app:3000"
 
-# O crond executa cada linha por `/bin/sh -c`, então o segredo é REAVALIADO pelo
-# shell na hora de disparar. Interpolá-lo cru dentro de aspas duplas fazia com
-# que um `$` no valor virasse expansão de variável (o header sairia truncado, e
-# todo cron responderia 401 em silêncio) e uma crase virasse substituição de
-# comando — execução arbitrária a cada minuto. Medido com um segredo hostil: a
-# versão com aspas duplas entregava `segrafaelmelgacoredo/Users/rafaelmelgaco…`,
-# com o `whoami` EXECUTADO. Aqui o valor vai entre aspas SIMPLES, com as aspas
-# simples internas escapadas — dentro delas o sh não interpreta nada.
-SEGREDO_SEGURO="$(printf '%s' "$INTERNAL_SECRET" | sed "s/'/'\\\\''/g")"
-
 # minuto|timeout|caminho — uma linha por cron. O caminho vai COMPLETO de
 # propósito: o literal `api/v1/cron/<rota>` é o contrato que
 # tests/unit/cron-routes-scheduled.test.ts (e mais dois) leem por grep — esse
@@ -119,11 +109,14 @@ CRONS="
 DESTINO="${CRONTAB_PATH:-/etc/crontabs/root}"
 
 umask 077
+HEADER_FILE="$(mktemp)"
+printf 'Authorization: Bearer %s\n' "$INTERNAL_SECRET" > "$HEADER_FILE"
+HEADER_ARG="$(printf '%s' "$HEADER_FILE" | sed "s/'/'\\\\''/g")"
 : > "$DESTINO"
 echo "$CRONS" | while IFS='|' read -r quando timeout rota; do
   [ -n "$rota" ] || continue
-  printf '%s curl -fsS -m%s -H '"'"'Authorization: Bearer %s'"'"' "%s/%s" >/dev/null 2>&1\n' \
-    "$quando" "$timeout" "$SEGREDO_SEGURO" "$APP_ORIGIN" "$rota" >> "$DESTINO"
+  printf '%s curl -fsS -m%s -H '"'"'@%s'"'"' "%s/%s" >/dev/null 2>&1\n' \
+    "$quando" "$timeout" "$HEADER_ARG" "$APP_ORIGIN" "$rota" >> "$DESTINO"
 done
 
 exec crond -f -l 2

@@ -1,3 +1,4 @@
+import { readWebhookBody } from "@/lib/http/limited-body";
 /**
  * GET|POST /api/v1/webhooks/meta/[token] — webhook da WhatsApp Cloud API.
  *
@@ -73,7 +74,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   const session = await metaSessionByWebhookToken(token);
   if (!session) return fail("not_found", "unknown webhook token", 404, { requestId });
 
-  const rawBody = await req.text();
+  const rawBody = await readWebhookBody(req, requestId);
+  if (typeof rawBody !== "string") return rawBody;
   // Do mesmo lugar que o handshake: BANCO primeiro, `.env` como piso (0257). Sem
   // segredo nenhum configurado a verificação devolve `false` e a entrega morre em
   // 401 — que é o desfecho de hoje, e não um 500.

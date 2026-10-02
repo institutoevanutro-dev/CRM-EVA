@@ -26,6 +26,7 @@ const updates: { tabela: string; patch: Record<string, unknown> }[] = [];
 const removes: { bucket: string; caminhos: string[] }[] = [];
 
 let contatoRow: { avatar_storage_path: string | null } | null = null;
+let expiredUploads: Record<string, unknown>[] = [];
 let filaPendente: Record<string, unknown>[] = [];
 let erroDoRemove: { message: string } | null = null;
 let erroDoInsert: { code?: string; message: string } | null = null;
@@ -91,6 +92,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     },
     rpc: (...args: unknown[]) => {
       ops.push("rpc");
+      if (args[0] === "fn_claim_expired_outbound_media") return { data: expiredUploads, error: null };
       return rpcMock(...args);
     },
   }),
@@ -110,6 +112,7 @@ beforeEach(() => {
   updates.length = 0;
   removes.length = 0;
   filaPendente = [];
+  expiredUploads = [];
   erroDoRemove = null;
   erroDoInsert = null;
   contatoRow = { avatar_storage_path: CAMINHO };
@@ -224,4 +227,15 @@ describe("drainStorageRedactionQueue — o arquivo sai do bucket", () => {
       status: "skipped",
     });
   });
+});
+
+it("reaps only claimed expired uploads and keeps failed removals retryable", async () => {
+  expiredUploads = [{ object_path: "synthetic/out-abandoned", organization_id: ORG }];
+  erroDoRemove = { message: "storage unavailable" };
+  await drainStorageRedactionQueue();
+  expect(removes).toContainEqual({ bucket: "whatsapp-media", caminhos: ["synthetic/out-abandoned"] });
+  expect(updates.some((item) => item.tabela === "outbound_media_uploads")).toBe(false);
+  erroDoRemove = { message: "Object not found" };
+  await drainStorageRedactionQueue();
+  expect(updates).toContainEqual({ tabela: "outbound_media_uploads", patch: { state: "deleted" } });
 });

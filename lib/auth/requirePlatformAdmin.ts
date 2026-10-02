@@ -4,7 +4,7 @@
  * Flow:
  *  1. Validate JWT via getUser() (NEVER getSession on backend per CLAUDE.md).
  *  2. Confirm row in platform_admins (active = no revoked_at).
- *  3. Enforce MFA AAL2 if `mfa_required` (default true for platform admins).
+ *  3. Enforce MFA AAL2 for enrolled factors or a required enrollment policy.
  *
  * Redirects:
  *  - no user        → /login?next=/admin
@@ -18,6 +18,7 @@
  */
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
+import { mfaEmDivida } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 
 export interface PlatformAdminInfo {
@@ -52,6 +53,8 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminContext> {
   if (!paRow) {
     redirect("/admin/forbidden");
   }
+
+  if (await mfaEmDivida()) redirect("/login/mfa?next=/admin");
 
   if (paRow.mfa_required) {
     const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();

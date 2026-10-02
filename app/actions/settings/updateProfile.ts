@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { audit } from "@/lib/audit";
 import {
@@ -64,7 +65,7 @@ export async function updateProfile(input: ProfileInput): Promise<UpdateProfileR
 
   // Best-effort emit (event_log is org-scoped; skip if no org).
   if (activeOrg && authUser.support?.access_mode !== "support_readonly") {
-    await supabase
+    await createAdminClient()
       .rpc("emit_event", {
         p_event_type: "user.profile_updated",
         p_entity_kind: "user",

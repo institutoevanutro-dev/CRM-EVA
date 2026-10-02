@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createDefaultRegistry } from "@/lib/agent-engine/edge/llm/providers";
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("createDefaultRegistry", () => {
   it("registra os providers que a tela oferece", () => {
@@ -18,7 +20,14 @@ describe("createDefaultRegistry", () => {
     expect(() => reg.openai!("k", "gpt-5")).not.toThrow();
     expect(() => reg.google!("k", "gemini-2.5-pro")).not.toThrow();
     expect(() => reg.openrouter!("k", "meta-llama/llama-3.3-70b-instruct")).not.toThrow();
-    // Endpoint próprio (gateway compatível, ou modelo local no roteiro).
+    // Endpoint próprio precisa ser autorizado pelo operador da instalação.
+    vi.stubEnv("OPENROUTER_BASE_URL", "https://gateway.exemplo/v1");
     expect(() => reg.openrouter!("k", "x/y", "https://gateway.exemplo/v1")).not.toThrow();
   });
+});
+
+it("registry bloqueia endpoint arbitrário antes de construir o cliente com a chave", () => {
+  vi.stubEnv("OPENROUTER_BASE_URL", "");
+  expect(() => createDefaultRegistry().openrouter!("platform-secret", "x/y", "https://attacker.example/v1"))
+    .toThrow("ai_endpoint_not_authorized");
 });

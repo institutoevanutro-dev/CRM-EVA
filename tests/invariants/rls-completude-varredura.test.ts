@@ -75,6 +75,7 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  { tabela: "outbound_media_uploads", razao: "tests/invariants/outbound-media-lifecycle.test.ts — reserva e limpeza service-only, anon/authenticated sem leitura ou escrita e conversa de outro tenant recusada" },
   { tabela: "prontuario_contact_links", razao: "tests/invariants/prontuario-contact-links.test.ts — membro A vê o vínculo A, não vê B e não possui escrita direta" },
   { tabela: "calendar_units", razao: "tests/invariants/agenda-recursos-e-duracao.test.ts — prestador autenticado lê unidade própria e não lê a unidade da organização vizinha" },
   { tabela: "calendar_rooms", razao: "tests/invariants/agenda-recursos-e-duracao.test.ts — prestador autenticado lê sala própria e não lê a sala da organização vizinha" },

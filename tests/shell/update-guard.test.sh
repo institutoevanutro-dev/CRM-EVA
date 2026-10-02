@@ -164,6 +164,8 @@ chmod 600 "$PROJ/.env"
 
 cd "$PROJ" || exit 1
 git init --quiet
+git branch -M main
+git remote add origin "$PROJ"
 git config user.email t@t.t; git config user.name t
 git add -A
 git commit --quiet -m "v0.9.0"
@@ -260,7 +262,8 @@ mkdir -p "$SRC/supabase"; printf 'select 1;\n' > "$SRC/supabase/baseline.sql"
 printf 'services:\n  app:\n    image: \${APP_IMAGE:-x}\n' > "$SRC/docker-compose.prod.yml"
 printf '.env\n' > "$SRC/.gitignore"
 cd "$SRC" || exit 1
-git init --quiet; git config user.email t@t.t; git config user.name t
+git init --quiet; git branch -M main
+git config user.email t@t.t; git config user.name t
 git add -A; git commit --quiet -m "release antiga"; git tag v0.9.0
 echo topo > topo.txt; git add -A; git commit --quiet -m "main, depois da release"
 
@@ -302,7 +305,7 @@ git remote set-url origin "$WORK/nao-existe"  # …mas perdeu o caminho de volta
 HEAD_ANTES="$(git rev-parse HEAD)"
 run_update
 check "aborta com o código de recusa (3)" test "$RC" -eq 3
-check "diz que não teve CERTEZA, em vez de agir" grep -q "consegui ter CERTEZA" "$OUTFILE"
+check "diz que não teve CERTEZA, em vez de agir" grep -q "Não consegui verificar a main" "$OUTFILE"
 check "não chegou a rodar o backup" test ! -f "$BACKUP_MARK"
 check "NÃO rebobinou: o HEAD é o mesmo de antes" test "$(git rev-parse HEAD)" = "$HEAD_ANTES"
 

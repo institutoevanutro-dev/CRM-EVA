@@ -156,7 +156,7 @@ Rodar de novo o `install.sh`/`update.sh` não duplica a linha do cron (ele mesmo
 Pra testar na mão, rode no próprio VPS (usa o `INTERNAL_SECRET` do seu `.env`):
 
 ```bash
-source .env && curl -s -H "Authorization: Bearer ${INTERNAL_SECRET}" "${NEXT_PUBLIC_APP_URL}/api/v1/cron/event-log-drain"
+bash hostgator-setup-kit/event-log-drain.sh
 ```
 
 Resposta esperada: `{"data":{"scanned":N,...}}` (N pode ser 0 se não houver eventos na fila — o importante é receber esse formato, não um erro de autenticação ou de conexão).
