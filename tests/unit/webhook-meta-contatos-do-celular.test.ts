@@ -20,7 +20,7 @@ import { POST } from "@/app/api/v1/webhooks/meta/[token]/route";
 function entrega(corpo: unknown) {
   const cru = JSON.stringify(corpo);
   return {
-    text: async () => cru,
+    body: new Response(cru).body,
     headers: new Headers({ "x-hub-signature-256": `sha256=${createHmac("sha256", SEGREDO).update(cru, "utf8").digest("hex")}` }),
   } as never;
 }

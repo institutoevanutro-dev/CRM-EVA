@@ -1,3 +1,4 @@
+import { readWebhookBody } from "@/lib/http/limited-body";
 /**
  * POST /api/v1/webhooks/nuvemshop/[event]
  *
@@ -47,7 +48,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     return fail("not_found", `unknown nuvemshop event slug: ${slug}`, 404);
   }
 
-  const rawBody = await req.text();
+  const rawBody = await readWebhookBody(req);
+  if (typeof rawBody !== "string") return rawBody;
   let body: NuvemshopPayload;
   try {
     body = JSON.parse(rawBody) as NuvemshopPayload;

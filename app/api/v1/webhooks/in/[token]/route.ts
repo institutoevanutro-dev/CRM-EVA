@@ -1,3 +1,4 @@
+import { readWebhookBody } from "@/lib/http/limited-body";
 /**
  * POST /api/v1/webhooks/in/[token] — captação pública de leads.
  *
@@ -95,7 +96,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     return fail("not_found", "unknown webhook token", 404, { requestId });
   }
 
-  const rawBody = await req.text();
+  const rawBody = await readWebhookBody(req, requestId);
+  if (typeof rawBody !== "string") return rawBody;
   const contentType = req.headers.get("content-type") ?? "";
   const isForm = contentType.includes("application/x-www-form-urlencoded");
   let payload: Record<string, unknown>;

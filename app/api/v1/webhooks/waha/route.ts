@@ -1,3 +1,4 @@
+import { readWebhookBody } from "@/lib/http/limited-body";
 /**
  * POST /api/v1/webhooks/waha — global webhook receiver (no path token).
  *
@@ -28,7 +29,8 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const requestId = randomUUID();
 
-  const rawBody = await req.text();
+  const rawBody = await readWebhookBody(req, requestId);
+  if (typeof rawBody !== "string") return rawBody;
   // ─── O contrato do fio, em DOIS momentos ─────────────────────────────────
   //
   // Isto era `JSON.parse(rawBody) as WahaEnvelope`: um cast, que não checa nada

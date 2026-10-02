@@ -1,3 +1,4 @@
+import { readWebhookBody } from "@/lib/http/limited-body";
 /**
  * POST /api/v1/webhooks/channel/[token] — entrada por token, para qualquer canal.
  *
@@ -56,7 +57,8 @@ export async function POST(
     return fail("not_found", "unknown webhook token", 404, { requestId });
   }
 
-  const rawBody = await req.text();
+  const rawBody = await readWebhookBody(req, requestId);
+  if (typeof rawBody !== "string") return rawBody;
   const admin = createAdminClient();
 
   const { data } = await queryTolerantToMissingArchived(

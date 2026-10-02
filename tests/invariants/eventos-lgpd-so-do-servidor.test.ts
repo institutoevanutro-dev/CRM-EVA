@@ -57,8 +57,8 @@ it.each(["lgpd.redact_received", "lgpd.data_request_received", "lgpd.redact_appl
   },
 );
 
-it("viewer continua emitindo evento comum (a trava é só para lgpd.*)", async () => {
-  await expect(comoViewer("contact.tag_added")).resolves.toMatch(/^[0-9a-f-]{36}$/);
+it("viewer também não emite evento comum (0299)", async () => {
+  await expect(comoViewer("contact.tag_added")).rejects.toMatchObject({ code: "42501", message: "caller_not_authorized_for_org" });
 });
 
 it("o servidor (service role, sem auth.uid) continua emitindo lgpd.*", async () => {

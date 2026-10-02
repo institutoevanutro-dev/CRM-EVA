@@ -284,5 +284,5 @@ function explicacaoDoErro(e: Bruto | null): string | null {
  * URL crua para o browser: o que ela devolve é para BAIXAR e guardar, agora.
  */
 export function zernioMediaFetchInit(apiKey: string): RequestInit {
-  return { headers: { Authorization: `Bearer ${apiKey}` } };
+  return { headers: { Authorization: `Bearer ${apiKey}` }, redirect: "error", signal: AbortSignal.timeout(30_000) };
 }
