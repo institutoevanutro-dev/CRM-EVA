@@ -70,10 +70,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const state = verifyState(stateParam);
   if (!state) {
-    await audit({
-      action: "nuvemshop.oauth_failed",
-      metadata: { reason: "invalid_state" },
-    });
+    // State não autenticado não pode criar linhas duráveis em audit_log.
     return redirectTo(`/app/integrations/nuvemshop?error=invalid_state`);
   }
 

@@ -192,3 +192,10 @@ describe("ida (connectNuvemshop)", () => {
     expect(destino(res)).toBe("?ok=1");
   });
 });
+
+ it("state forjado não produz registro durável de auditoria", async () => {
+   fake.audit.mockClear();
+   const res = await GET(volta("forjado.invalid", null));
+   expect(res.status).toBe(307);
+   expect(fake.audit).not.toHaveBeenCalled();
+ });

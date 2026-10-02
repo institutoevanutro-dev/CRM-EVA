@@ -20,7 +20,7 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { conferirContratoWaha, lerRoteamentoWaha } from "@/lib/waha/envelope";
 import { dispatchWahaEvent } from "@/lib/waha/ingest";
-import { authenticateWahaWebhook } from "@/lib/waha/webhook-auth";
+import { authenticateWahaWebhook, validGlobalWahaBearer } from "@/lib/waha/webhook-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,6 +28,11 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const requestId = randomUUID();
 
+  const sigHeader = req.headers.get("x-webhook-hmac");
+  const bearerVerified = validGlobalWahaBearer(req.headers.get("authorization"));
+  if (!sigHeader && !bearerVerified) {
+    return fail("unauthorized", "webhook_auth_required", 401, { requestId });
+  }
   const rawBody = await req.text();
   // ─── O contrato do fio, em DOIS momentos ─────────────────────────────────
   //
@@ -106,7 +111,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // Autenticação fail-closed — regras e o porquê em lib/waha/webhook-auth.ts.
-  const sigHeader = req.headers.get("x-webhook-hmac") ?? req.headers.get("X-Webhook-Hmac");
   let sessionSecret: string | null = null;
   try {
     const dec = await admin.rpc("fn_decrypt_oauth", {

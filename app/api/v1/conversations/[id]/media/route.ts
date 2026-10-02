@@ -98,6 +98,11 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
 
   const storagePath = `${activeOrg.orgId}/${conversationId}/out-${randomUUID()}.${extFromMime(mimeFinal)}`;
   const admin = createAdminClient();
+  const { data: reserved, error: reserveError } = await admin.rpc("fn_reserve_outbound_media", {
+    p_org: activeOrg.orgId, p_conversation: conversationId, p_path: storagePath, p_bytes: buffer.length,
+  });
+  if (reserveError) return fail("internal_error", t("Erro ao reservar espaço para o arquivo."), 500, { requestId });
+  if (!reserved) return fail("rate_limited", t("Limite de anexos pendentes atingido. Envie os anexos já carregados ou aguarde a limpeza."), 429, { requestId });
   const { error: upErr } = await admin.storage
     .from("whatsapp-media")
     .upload(storagePath, buffer, { contentType: mimeFinal, upsert: false });
@@ -106,8 +111,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     return fail("internal_error", t("Erro ao subir o arquivo."), 500, { requestId });
   }
 
-  // B6: o arquivo fica no bucket mesmo que o envio nunca aconteça. Nome do
-  // arquivo não entra (pode ser "exame-joana.pdf"); o caminho é opaco.
+  // Upload abandonado expira em 24h; o nome original não entra na auditoria.
   void audit({
     action: "conversation.media_uploaded",
     actorUserId: authz.via === "session" ? authz.actor.id : null,

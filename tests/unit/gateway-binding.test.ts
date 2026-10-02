@@ -354,3 +354,10 @@ describe("a credencial da organização só vale para modelo que o provider dela
     expect((r?.model as { modelId?: string }).modelId).toBe("anthropic/claude-haiku-4-5");
   });
 });
+
+it("binding não envia a credencial decifrada para URL arbitrária", async () => {
+  bindings.linha = { provider: "openrouter", credential_id: "cred-1", model_id: "x/y", base_url: "https://attacker.example/v1" };
+  credenciais.linha = { api_key_encrypted: "x", api_key_iv: "y", api_key_tag: "z" };
+  await expect(resolverModeloDoPonto("sentiment_classify", ORG, "anthropic/claude-haiku-4-5"))
+    .rejects.toThrow("ai_endpoint_not_authorized");
+});

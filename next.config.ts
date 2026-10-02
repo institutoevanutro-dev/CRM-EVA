@@ -34,6 +34,9 @@ const nextConfig: NextConfig = {
    */
   outputFileTracingIncludes: {
     "/**": [
+      "./lib/ai/rag/extractors/pdf-worker.mjs",
+      "./node_modules/pdfjs-dist/**",
+      "./node_modules/.pnpm/pdfjs-dist@*/node_modules/pdfjs-dist/**",
       "./node_modules/.pnpm/@swc+helpers@*/node_modules/@swc/helpers/**",
       // Mesmo defeito do @swc/helpers acima: js-binding.js do @napi-rs/canvas
       // resolve o binário nativo com `require()` computado em runtime

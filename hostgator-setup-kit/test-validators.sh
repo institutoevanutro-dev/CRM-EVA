@@ -2641,7 +2641,8 @@ STUB
   (cd "$VPS_PROJ" && git init -q -b main . \
     && git -c user.email=t@exemplo -c user.name=teste add -A \
     && git -c user.email=t@exemplo -c user.name=teste commit -qm base \
-    && git tag v9.9.9) >/dev/null 2>&1
+    && git tag v9.9.9 \
+    && git remote add origin "$VPS_PROJ") >/dev/null 2>&1
 
   saida="$(rodar update.sh "" "SUPABASE_DB_ADMIN_URL='$URL_DO_DONO'
 INTERNAL_SECRET='segredo-de-teste'
@@ -2685,7 +2686,8 @@ STUB
   (cd "$VPS_PROJ" && git init -q -b main . \
     && git -c user.email=t@exemplo -c user.name=teste add -A \
     && git -c user.email=t@exemplo -c user.name=teste commit -qm base \
-    && git tag v9.9.9) >/dev/null 2>&1
+    && git tag v9.9.9 \
+    && git remote add origin "$VPS_PROJ") >/dev/null 2>&1
 
   extra="INTERNAL_SECRET='segredo-de-teste'
 NEXT_PUBLIC_APP_URL='https://crm.exemplo.com.br'"
@@ -2765,7 +2767,8 @@ STUB
   (cd "$VPS_PROJ" && git init -q -b main . \
     && git -c user.email=t@exemplo -c user.name=teste add -A \
     && git -c user.email=t@exemplo -c user.name=teste commit -qm base \
-    && git tag v9.9.9) >/dev/null 2>&1
+    && git tag v9.9.9 \
+    && git remote add origin "$VPS_PROJ") >/dev/null 2>&1
 
   # INTERNAL_SECRET/NEXT_PUBLIC_APP_URL entram porque é o que faz o update.sh
   # chegar ao agendamento de cron — o dublê do crontab precisa ser exercitado
@@ -2813,7 +2816,8 @@ STUB
   (cd "$VPS_PROJ" && git init -q -b main . \
     && git -c user.email=t@exemplo -c user.name=teste add -A \
     && git -c user.email=t@exemplo -c user.name=teste commit -qm base \
-    && git tag v9.9.9) >/dev/null 2>&1
+    && git tag v9.9.9 \
+    && git remote add origin "$VPS_PROJ") >/dev/null 2>&1
 
   saida="$(rodar update.sh --skip-backup "REVERSE_PROXY='npm'
 PROXY_NETWORK_NAME='proxy_network'
@@ -2853,7 +2857,8 @@ STUB
     (cd "$VPS_PROJ" && git init -q -b main . \
       && git -c user.email=t@exemplo -c user.name=teste add -A \
       && git -c user.email=t@exemplo -c user.name=teste commit -qm base \
-      && git tag v9.9.9) >/dev/null 2>&1
+      && git tag v9.9.9 \
+    && git remote add origin "$VPS_PROJ") >/dev/null 2>&1
     rodar update.sh --skip-backup "REVERSE_PROXY='${rp}'
 ${extra}
 INTERNAL_SECRET='segredo-de-teste'

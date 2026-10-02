@@ -46,6 +46,7 @@ vi.mock("@/lib/channels/archived", () => ({
 vi.mock("@/lib/audit", () => ({ audit: async () => undefined }));
 
 vi.mock("@/lib/waha/webhook-auth", () => ({
+  validGlobalWahaBearer: () => false,
   authenticateWahaWebhook: () => ({ ok: true, signatureVerified: true }),
 }));
 
@@ -248,4 +249,11 @@ describe("a rota — o desfecho que o provider enxerga", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "invalid_request", message: "invalid_json" } });
   });
+});
+
+it("global unsigned requests are refused before reading the body or dispatching", async () => {
+  const text = vi.fn();
+  const response = await POST({ headers: new Headers(), text } as never);
+  expect(response.status).toBe(401);
+  expect(text).not.toHaveBeenCalled();
 });

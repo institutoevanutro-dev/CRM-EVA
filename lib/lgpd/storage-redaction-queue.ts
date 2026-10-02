@@ -40,6 +40,18 @@ export async function drainStorageRedactionQueue(
   const admin = createAdminClient();
   const limit = opts.limit ?? DEFAULT_BATCH;
 
+  // Claim and message attachment lock the same row: cleanup cannot delete media
+  // while an accepted message is attaching it. Failed removals retry after the lease.
+  const { data: expired, error: claimError } = await admin.rpc("fn_claim_expired_outbound_media", { p_limit: limit });
+  if (claimError) logger.warn("[media-cleanup] claim failed", { code: claimError.code });
+  for (const upload of expired ?? []) {
+    const { error: removeError } = await admin.storage.from("whatsapp-media").remove([upload.object_path]);
+    if (!removeError || /not\s+found|not_found|no such/i.test(removeError.message ?? "")) {
+      await admin.from("outbound_media_uploads").update({ state: "deleted" })
+        .eq("object_path", upload.object_path).eq("organization_id", upload.organization_id).eq("state", "deleting");
+    }
+  }
+
   const stats: DrainStats = { attempted: 0, deleted: 0, failed: 0, skipped: 0 };
 
   const { data: rows, error } = await admin
