@@ -1,3 +1,4 @@
+import { readWebhookBody } from "@/lib/http/limited-body";
 /**
  * POST /api/v1/webhooks/nuvemshop/store-redact
  *
@@ -78,7 +79,8 @@ function verifyHmacSha256(
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // 1. Read raw body for HMAC
-  const rawBody = await req.text();
+  const rawBody = await readWebhookBody(req);
+  if (typeof rawBody !== "string") return rawBody;
 
   // 2. Parse JSON
   let body: NuvemshopStoreRedactPayload;

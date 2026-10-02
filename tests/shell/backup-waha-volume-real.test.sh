@@ -62,7 +62,19 @@ check "monta o volume real" grep -q -- "-v deskcommcrm_waha-data:/data:ro" "$WOR
 check "não cria o volume curto 'waha-data'" test ! -d "$WORK/vols/waha-data"
 check "arquivo tem as sessões" bash -c "tar tzf '$(arquivo)' | grep -q creds.json"
 modo="$(stat -c %a "$(arquivo)" 2>/dev/null || stat -f %Lp "$(arquivo)" 2>/dev/null)"
-check "arquivo nasce 600 (era $modo)" test "$modo" = "600"
+check "arquivo final 600 (era $modo)" test "$modo" = "600"
+# O Docker não herda umask do host. Executa o comando REAL do container sob
+# 022, trocando só o tar por um dublê que observa a máscara antes da escrita.
+container_command="$(sed -n "s/.*sh -c '\(.*\)' sh .*/\1/p" "$KIT_DIR/backup.sh")"
+cat > "$WORK/bin/tar-probe" <<'PROBE'
+#!/usr/bin/env sh
+umask
+PROBE
+chmod +x "$WORK/bin/tar-probe"
+container_command="${container_command/exec tar/exec tar-probe}"
+mask="$(umask 022; sh -c "$container_command" sh /out/test.tgz)"
+check "container restringe permissão ANTES de criar o arquivo" test "$mask" = "0077"
+
 
 echo "sem contêiner no ar → <projeto>_waha-data"
 rm -f "$WORK/ctr"

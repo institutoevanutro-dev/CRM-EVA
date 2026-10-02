@@ -30,7 +30,7 @@ const F = JSON.parse(readFileSync("tests/fixtures/meta/coexistencia-webhooks.jso
 function entrega(corpo: unknown) {
   const cru = JSON.stringify(corpo);
   return {
-    text: async () => cru,
+    body: new Response(cru).body,
     headers: new Headers({ "x-hub-signature-256": `sha256=${createHmac("sha256", SEGREDO).update(cru, "utf8").digest("hex")}` }),
   } as never;
 }

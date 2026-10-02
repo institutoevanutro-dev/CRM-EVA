@@ -51,7 +51,7 @@ if ! docker volume inspect "$vol" >/dev/null 2>&1; then
 else
   ( umask 077
     docker run --rm -v "${vol}:/data:ro" -v "$BACKUP_DIR:/out" alpine:3.20 \
-      tar czf "/out/waha-$ts.tgz" -C /data . ) || true
+      sh -c 'umask 077; exec tar czf "$1" -C /data .' sh "/out/waha-$ts.tgz" ) || true
   chmod 600 "$arq" 2>/dev/null || true
   # Arquivo vazio não é backup: apagá-lo impede que a retenção troque um
   # snapshot bom por ele.

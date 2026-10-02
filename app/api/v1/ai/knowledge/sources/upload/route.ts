@@ -1,3 +1,4 @@
+import { BodyLimitError, readLimitedFormData } from "@/lib/http/limited-body";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
  * POST /api/v1/ai/knowledge/sources/upload
@@ -60,8 +61,9 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   let formData: FormData;
   try {
-    formData = await req.formData();
-  } catch {
+    formData = await readLimitedFormData(req, TAMANHO_MAXIMO + 1_048_576);
+  } catch (error) {
+    if (error instanceof BodyLimitError) return fail("invalid_body", error.message, error.status, { requestId });
     return fail("invalid_request", t("Falha ao processar o envio do arquivo."), 400, { requestId });
   }
 

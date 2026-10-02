@@ -1,3 +1,4 @@
+import { readLimitedBody } from "@/lib/http/limited-body";
 /**
  * Adapter do canal intermediado — o transporte de um BSP.
  *
@@ -348,7 +349,7 @@ export const zernioAdapter: ChannelAdapter = {
       throw new Error(`zernio_media_failed: ${res.status} ${res.statusText}`.trim());
     }
 
-    const buffer = Buffer.from(await res.arrayBuffer());
+    const buffer = Buffer.from(await readLimitedBody(res, 50 * 1024 * 1024));
     // O `content-type` da resposta manda sobre a dica do webhook: é o que o
     // arquivo REALMENTE é, e é ele que vai no `contentType` do upload.
     const mime = res.headers.get("content-type")?.split(";")[0]?.trim() || input.hintMime || "application/octet-stream";
