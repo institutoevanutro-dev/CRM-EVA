@@ -1,7 +1,8 @@
 // @vitest-environment node
 import type { ExecFileOptionsWithStringEncoding, ExecFileException } from "node:child_process";
+import { pdfBudgetFixture } from "../fixtures/pdf-budget-fixture";
 import * as childProcess from "node:child_process";
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -32,10 +33,5 @@ it("kills an unresponsive parser; its deadline and heap budget are enforced outs
 });
 
 it("limits extracted text, even when a small PDF reuses a large text page", async () => {
-  let pdf = readFileSync(join(process.cwd(), "tests/fixtures/sample-text.pdf"), "latin1");
-  pdf = pdf.replace("/Kids [3 0 R] /Count 1", `/Kids [${"3 0 R ".repeat(6)}] /Count 6`)
-    .replace("DeskcommCRM RAG fixture", "A".repeat(210_000));
-  const stream = pdf.split("stream\n")[1]!.split("\nendstream")[0]!;
-  pdf = pdf.replace("/Length 54", `/Length ${Buffer.byteLength(stream, "latin1")}`);
-  await expect(extractPdfText(Buffer.from(pdf, "latin1"))).rejects.toThrow(/milhão de caracteres/);
+  await expect(extractPdfText(pdfBudgetFixture(6, "A".repeat(210_000)))).rejects.toThrow(/milhão de caracteres/);
 });

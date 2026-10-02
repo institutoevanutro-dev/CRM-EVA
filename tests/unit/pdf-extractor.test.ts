@@ -15,6 +15,7 @@
 // As fixtures são PDFs 1.4 escritos à mão (texto puro, `cat`-áveis), sem compressão
 // e sem gerador — determinísticas byte a byte.
 
+import { pdfBudgetFixture } from "../fixtures/pdf-budget-fixture";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -86,9 +87,8 @@ describe("extractPdfText", () => {
 
   it("recusa um PDF com mais de 200 páginas", async () => {
     const { extractPdfText } = await import("@/lib/ai/rag/extractors/pdf");
-    const pdf = fixture("sample-text.pdf").toString("latin1")
-      .replace("/Kids [3 0 R] /Count 1", `/Kids [${"3 0 R ".repeat(201)}] /Count 201`);
-    await expect(extractPdfText(Buffer.from(pdf, "latin1"))).rejects.toThrow(/200 páginas/);
+    expect(await extractPdfText(pdfBudgetFixture(2, "Synthetic"))).toBe("Synthetic\n\nSynthetic");
+    await expect(extractPdfText(pdfBudgetFixture(201, "Synthetic"))).rejects.toThrow(/200 páginas/);
   });
 
   it("tem uma engine só: pdf-parse não volta como dependência", async () => {
