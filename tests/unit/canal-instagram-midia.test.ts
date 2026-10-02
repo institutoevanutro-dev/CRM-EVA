@@ -5,10 +5,9 @@
  *
  * O guard é em DUAS camadas, e os casos abaixo provam as duas:
  *   1. allowlist de host por SUFIXO (textual, antes de qualquer rede);
- *   2. resolução de DNS real (`assertDestinoResolvidoSeguro`), que pega um
- *      host que resolve para IP privado NO MOMENTO do fetch — por isso os
- *      hosts de teste são domínios PÚBLICOS de verdade (mesmo padrão de
- *      `tests/unit/channel-adapter-zernio.test.ts`), com `fetch` mockado.
+ *   2. validação do IP resolvido (`assertDestinoResolvidoSeguro`), com DNS
+ *      controlado no teste para exercitar endereços públicos e privados sem
+ *      depender da rede da máquina. O `fetch` também é mockado.
  *
  * O que se prova é COMPORTAMENTO — `fetch` não chamado — e não só a exceção:
  * um guard que lançasse DEPOIS do fetch já teria vazado a tentativa.
@@ -17,6 +16,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
+
+const lookupMock = vi.hoisted(() => vi.fn());
+vi.mock("node:dns/promises", () => ({ lookup: lookupMock, default: { lookup: lookupMock } }));
 
 import { instagramAdapter } from "@/lib/channels/adapters/instagram";
 
@@ -33,9 +35,18 @@ function corpoOk(bytes: number, contentType = "image/jpeg") {
 
 beforeEach(() => {
   fetchMock.mockReset();
+  lookupMock.mockReset().mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
 });
 
 describe("fetchInboundMedia do Instagram", () => {
+  it("recusa host permitido que resolve para IP privado antes de buscar a mídia", async () => {
+    lookupMock.mockResolvedValueOnce([{ address: "10.0.0.5", family: 4 }]);
+    await expect(instagramAdapter.fetchInboundMedia!({
+      organizationId: ORG, sessionRef: "178414", url: "https://scontent.cdninstagram.com/foto.jpg",
+    })).rejects.toThrow("unsafe_url:private_ip");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("baixa de um host permitido (sufixo .cdninstagram.com)", async () => {
     corpoOk(4);
     const r = await instagramAdapter.fetchInboundMedia!({
