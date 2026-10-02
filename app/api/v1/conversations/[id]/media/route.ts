@@ -1,3 +1,4 @@
+import { BodyLimitError, readLimitedFormData } from "@/lib/http/limited-body";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
  * POST /api/v1/conversations/[id]/media — upload outbound (multipart).
@@ -72,7 +73,10 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     return fail("payload_too_large", t("Arquivo acima de 50MB."), 413, { requestId });
   }
 
-  const form = await req.formData().catch(() => null);
+  let form: FormData;
+  try { form = await readLimitedFormData(req, MAX_MEDIA_BYTES + 1_048_576); } catch (error) {
+    return fail("invalid_request", "Unable to read upload.", error instanceof BodyLimitError ? error.status : 400, { requestId });
+  }
   const file = form?.get("file");
   if (!(file instanceof File)) {
     return fail("validation_failed", t("Campo 'file' (multipart) obrigatório."), 422, { requestId });

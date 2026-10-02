@@ -104,7 +104,7 @@ const lerEnvelopeWaha = (rawBody: string) => {
 
 const pedido = (corpo: unknown) =>
   ({
-    text: async () => (typeof corpo === "string" ? corpo : JSON.stringify(corpo)),
+    body: new Response(typeof corpo === "string" ? corpo : JSON.stringify(corpo)).body,
     headers: new Headers({ "x-webhook-hmac": "sha512=abc" }),
   }) as never;
 
@@ -252,8 +252,18 @@ describe("a rota — o desfecho que o provider enxerga", () => {
 });
 
 it("global unsigned requests are refused before reading the body or dispatching", async () => {
-  const text = vi.fn();
-  const response = await POST({ headers: new Headers(), text } as never);
+  const body = vi.fn();
+  const response = await POST({ headers: new Headers(), get body() { return body(); } } as never);
   expect(response.status).toBe(401);
-  expect(text).not.toHaveBeenCalled();
+  expect(body).not.toHaveBeenCalled();
+});
+
+it("global signed requests still enforce the body limit before dispatching", async () => {
+  despachados.length = 0;
+  const response = await POST(new Request("http://localhost/api/v1/webhooks/waha", {
+    method: "POST", body: "x".repeat(5 * 1024 * 1024 + 1),
+    headers: { "x-webhook-hmac": "sha512=abc" },
+  }) as never);
+  expect(response.status).toBe(413);
+  expect(despachados).toHaveLength(0);
 });

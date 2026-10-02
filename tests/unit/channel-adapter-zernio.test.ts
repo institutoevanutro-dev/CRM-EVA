@@ -371,7 +371,7 @@ describe("fetchInboundMedia não busca onde o payload mandar", () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      arrayBuffer: async () => new ArrayBuffer(4),
+      body: new ReadableStream({ start(c) { c.enqueue(new Uint8Array(4)); c.close(); } }),
       headers: new Headers({ "content-type": "image/png" }),
     });
     const r = await zernioAdapter.fetchInboundMedia!({
@@ -382,4 +382,25 @@ describe("fetchInboundMedia não busca onde o payload mandar", () => {
     expect(r.mime).toBe("image/png");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+  it("recusa redirecionamento antes de enviar a chave ao destino", async () => {
+    fetchMock.mockImplementationOnce(async (_url, init) => {
+      if (init.redirect === "error") throw new TypeError("redirect rejected");
+      throw new Error("credential forwarded to redirect target");
+    });
+    await expect(zernioAdapter.fetchInboundMedia!({ organizationId: ORG, sessionRef: CREDS.accountId,
+      url: "https://zernio.com/api/v1/media/redirect" })).rejects.toThrow("redirect rejected");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[1].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("interrompe download acima do limite mesmo sem Content-Length", async () => {
+    let cancelled = false;
+    fetchMock.mockResolvedValueOnce({ ok: true, headers: new Headers(), body: new ReadableStream({
+      pull(c) { c.enqueue(new Uint8Array(1024 * 1024)); }, cancel() { cancelled = true; },
+    }) });
+    await expect(zernioAdapter.fetchInboundMedia!({ organizationId: ORG, sessionRef: CREDS.accountId,
+      url: "https://zernio.com/api/v1/media/large" })).rejects.toMatchObject({ status: 413 });
+    expect(cancelled).toBe(true);
+  });
+
 });

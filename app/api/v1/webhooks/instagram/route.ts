@@ -1,3 +1,4 @@
+import { readWebhookBody } from "@/lib/http/limited-body";
 /**
  * Webhook do produto Instagram do app da Meta. Um callback para todas as contas
  * conectadas na instalação; roteia por entry.id. Assinatura com o Instagram App
@@ -32,7 +33,8 @@ export async function GET(req: NextRequest): Promise<Response> {
 
 export async function POST(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
-  const raw = await req.text();
+  const raw = await readWebhookBody(req, requestId);
+  if (typeof raw !== "string") return raw;
   const { appSecret } = await appDoInstagram();
   if (!appSecret || !verifyMetaSignature(raw, req.headers.get("x-hub-signature-256"), appSecret)) {
     // Recusa COM log: a rota do WhatsApp oficial recusava em silêncio (401 mudo),

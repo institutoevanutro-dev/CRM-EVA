@@ -19,7 +19,7 @@ import { POST } from "@/app/api/v1/webhooks/meta/[token]/route";
 function entrega(field: string, value: Record<string, unknown>) {
   const cru = JSON.stringify({ object: "whatsapp_business_account", entry: [{ id: "222", changes: [{ field, value }] }] });
   return {
-    text: async () => cru,
+    body: new Response(cru).body,
     headers: new Headers({ "x-hub-signature-256": `sha256=${createHmac("sha256", SEGREDO).update(cru, "utf8").digest("hex")}` }),
   } as never;
 }
