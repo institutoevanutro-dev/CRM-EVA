@@ -44,10 +44,10 @@ rodar() { # $1 = valor de INTERNAL_SECRET ("" = ausente)
   local out="$TMP/crontab"
   : > "$out"
   if [ -z "$1" ]; then
-    env -u INTERNAL_SECRET PATH="$TMP/bin:$PATH" CRONTAB_PATH="$out" \
+    env -u INTERNAL_SECRET TMPDIR="$TMP" PATH="$TMP/bin:$PATH" CRONTAB_PATH="$out" \
       sh "$ENTRYPOINT" >"$TMP/saida" 2>&1
   else
-    env INTERNAL_SECRET="$1" PATH="$TMP/bin:$PATH" CRONTAB_PATH="$out" \
+    env INTERNAL_SECRET="$1" TMPDIR="$TMP" PATH="$TMP/bin:$PATH" CRONTAB_PATH="$out" \
       sh "$ENTRYPOINT" >"$TMP/saida" 2>&1
   fi
   echo $?
@@ -72,7 +72,7 @@ check "gerou o crontab mesmo com segredo cheio de metacaractere" test "$RC" -eq 
 # A medição que importa: pegar a PRIMEIRA linha, tirar o prefixo de agendamento,
 # e mandar um `sh` de verdade avaliá-la — exatamente o que o crond faz. O `curl`
 # é dublado por um script que imprime o header que recebeu.
-printf '#!/bin/sh\nwhile [ $# -gt 0 ]; do [ "$1" = "-H" ] && { printf "%%s" "$2"; exit 0; }; shift; done\nexit 1\n' > "$TMP/bin/curl"
+printf '#!/bin/sh\nwhile [ $# -gt 0 ]; do [ "$1" = "-H" ] && { cat "${2#@}"; exit 0; }; shift; done\nexit 1\n' > "$TMP/bin/curl"
 chmod +x "$TMP/bin/curl"
 LINHA="$(head -1 "$TMP/crontab")"
 COMANDO="${LINHA#* * * * * }"                 # tira o agendamento de 5 campos
@@ -89,8 +89,7 @@ else
 fi
 # Controle negativo do próprio instrumento: se a crase tivesse sido executada, o
 # crontab conteria a saída de `whoami` no lugar dela, não o texto literal.
-check "a crase NÃO foi executada (está literal no arquivo)" \
-  grep -q 'whoami' "$TMP/crontab"
+check "o segredo não aparece no crontab" test "$(grep -c 'whoami' "$TMP/crontab")" -eq 0
 
 echo "scheduler: sem INTERNAL_SECRET, recusa em vez de subir mudo"
 RC="$(rodar '')"

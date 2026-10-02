@@ -1,3 +1,4 @@
+import { trustedAiBaseUrl } from "@/lib/ai/trusted-base-url";
 /**
  * Registro de providers da camada agnóstica. ÚNICO lugar (junto do resto de
  * edge/llm/) onde SDK de vendor é importado. Instância POR CHAMADA com a chave
@@ -96,15 +97,9 @@ export function createDefaultRegistry(opts?: { allowedHosts?: string[] }): Provi
       createOpenAI({ apiKey, fetch: contain(OPENAI_ENDPOINT) })(modelId),
     google: (apiKey, modelId) =>
       createGoogleGenerativeAI({ apiKey, fetch: contain(GOOGLE_ENDPOINT) })(modelId),
-    /**
-     * O `baseUrl` do painel é honrado aqui, e a allowlist do egress passa a ser
-     * a DELE — não a da OpenRouter mais um furo. Apontar para um gateway
-     * próprio é escolha legítima do operador; deixar a allowlist fixa no
-     * endpoint canônico faria o egress bloquear a própria configuração que a
-     * tela ofereceu, com erro de rede que ninguém liga ao painel.
-     */
+    // O tenant só escolhe entre o endpoint oficial e o autorizado pelo operador.
     openrouter: (apiKey, modelId, baseUrl) => {
-      const endpoint = baseUrl ?? OPENROUTER_ENDPOINT;
+      const endpoint = trustedAiBaseUrl("openrouter", baseUrl) ?? OPENROUTER_ENDPOINT;
       return createOpenAI({
         apiKey,
         baseURL: endpoint,

@@ -15,6 +15,7 @@
 // As fixtures são PDFs 1.4 escritos à mão (texto puro, `cat`-áveis), sem compressão
 // e sem gerador — determinísticas byte a byte.
 
+import { pdfBudgetFixture } from "../fixtures/pdf-budget-fixture";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -79,26 +80,15 @@ describe("extractPdfText", () => {
     );
   });
 
-  it("diz o que fazer quando o binário nativo do canvas falta", async () => {
-    // O pdfjs 6 estoura no import sem @napi-rs/canvas. Sem esta tradução o
-    // self-hoster vê "DOMMatrix is not defined" e não tem como ligar isso a uma
-    // dependência opcional que ele nem sabe que existe.
-    //
-    // Na VPS o erro nasce no IMPORT do módulo. Aqui ele nasce no getDocument, e é
-    // fiel ao que importa: o branch decide pela MENSAGEM, não pelo ponto de origem.
-    // (Mockar o factory para lançar não serve — o vitest reembrulha e a mensagem some.)
-    vi.doMock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
-      GlobalWorkerOptions: {},
-      getDocument: () => {
-        throw new Error("DOMMatrix is not defined");
-      },
-    }));
-    vi.resetModules();
+  it("recusa antes de iniciar o parser quando o arquivo excede 50 MiB", async () => {
+    const { extractPdfText } = await import("@/lib/ai/rag/extractors/pdf");
+    await expect(extractPdfText(Buffer.alloc(50 * 1024 * 1024 + 1))).rejects.toThrow("pdf_input_limit");
+  });
 
-    const { extractPdfText, PdfExtractError } = await import("@/lib/ai/rag/extractors/pdf");
-    await expect(extractPdfText(fixture("sample-text.pdf"))).rejects.toThrow(PdfExtractError);
-    await expect(extractPdfText(fixture("sample-text.pdf"))).rejects.toThrow(/@napi-rs\/canvas/);
-    vi.doUnmock("pdfjs-dist/legacy/build/pdf.mjs");
+  it("recusa um PDF com mais de 200 páginas", async () => {
+    const { extractPdfText } = await import("@/lib/ai/rag/extractors/pdf");
+    expect(await extractPdfText(pdfBudgetFixture(2, "Synthetic"))).toBe("Synthetic\n\nSynthetic");
+    await expect(extractPdfText(pdfBudgetFixture(201, "Synthetic"))).rejects.toThrow(/200 páginas/);
   });
 
   it("tem uma engine só: pdf-parse não volta como dependência", async () => {

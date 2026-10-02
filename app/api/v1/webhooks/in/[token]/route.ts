@@ -77,14 +77,6 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     return fail("not_found", "unknown webhook token", 404, { requestId });
   }
 
-  const rl = await checkRateLimit(`webhook_in:${token}`, RATE_LIMIT_PER_MIN, 60);
-  if (!rl.allowed) {
-    return fail("rate_limited", "Too many requests.", 429, {
-      requestId,
-      headers: { "Retry-After": "60" },
-    });
-  }
-
   const admin = createAdminClient();
   const { data: source, error: srcErr } = await admin
     .from("webhook_sources")
@@ -153,6 +145,14 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       rejectReason: "assinatura_invalida",
     });
     return fail("unauthenticated", "invalid_signature", 401, { requestId });
+  }
+
+  const rl = await checkRateLimit(`webhook_in:${token}`, RATE_LIMIT_PER_MIN, 60);
+  if (!rl.allowed) {
+    return fail("rate_limited", "Too many requests.", 429, {
+      requestId,
+      headers: { "Retry-After": "60" },
+    });
   }
 
   const headersJson: Record<string, string> = {};

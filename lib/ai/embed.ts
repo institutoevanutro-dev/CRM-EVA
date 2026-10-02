@@ -80,6 +80,7 @@ export async function embedText(
     ? modelId
     : createOpenAI({
         apiKey: chave.apiKey ?? "",
+        fetch: (input, init) => fetch(input, { ...init, redirect: "error" }),
         ...(chave.baseUrl ? { baseURL: chave.baseUrl } : {}),
       }).textEmbeddingModel(modelId.replace(/^openai\//, ""));
 

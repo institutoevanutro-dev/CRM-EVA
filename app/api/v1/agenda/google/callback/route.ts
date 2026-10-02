@@ -156,13 +156,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return voltar("erro=retorno_nao_verificavel");
   }
   if (!estado) {
-    // Um motivo só para assinatura inválida, prazo vencido e formato estranho:
-    // distinguir na URL entregaria a um atacante a diferença que ele precisa
-    // para calibrar. O detalhe fica no audit, que é do servidor.
-    await audit({
-      action: "agenda.google.conexao_falhou",
-      metadata: { reason: "state_invalido" },
-    });
+    // State não autenticado não pode criar linhas duráveis em audit_log.
     return voltar("erro=retorno_nao_verificavel");
   }
   const { organizationId, userId } = estado;

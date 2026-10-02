@@ -433,9 +433,7 @@ describe("GET /api/v1/agenda/google/callback", () => {
   it("state inválido dá UM motivo só — distinguir na URL ajudaria um atacante", async () => {
     const res = await chamar({ code: "c", state: "forjado.zzz" });
     expect(await destino(res)).toBe("https://crm.exemplo/app/agenda?erro=retorno_nao_verificavel");
-    expect(audit).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "agenda.google.conexao_falhou" }),
-    );
+    expect(audit).not.toHaveBeenCalled();
     expect(upsertRecebido).toBeNull();
   });
 

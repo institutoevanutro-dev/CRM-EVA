@@ -48,8 +48,8 @@ post() {  # post <json> → corpo da resposta em 2xx; VAZIO em qualquer falha
   # (quem chama, ex. o laço de retry do run_result, usa "saiu vazio" como sinal
   # de falha — por isso o corpo só é impresso no ramo de sucesso).
   local out http_code body
-  out="$(curl -sS -X POST "$API" \
-    -H "Authorization: Bearer ${SECRET}" \
+  out="$(printf 'Authorization: Bearer %s\n' "$SECRET" | curl -sS -X POST "$API" \
+    -H @- \
     -H 'Content-Type: application/json' \
     --max-time 20 -d "$1" \
     -w $'\n%{http_code}' 2>&1)" || true
@@ -104,7 +104,7 @@ esc() {
 
 # ── 1. Que versão está instalada e qual é a última publicada? ────────────────
 FETCH_OK=1
-git fetch --tags --quiet origin 2>/dev/null || FETCH_OK=0
+git fetch --tags --quiet origin +refs/heads/main:refs/remotes/origin/main 2>/dev/null || FETCH_OK=0
 
 CURRENT_TAG="$(git describe --tags --exact-match HEAD 2>/dev/null || true)"
 CURRENT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo '?')"
@@ -138,6 +138,10 @@ fi
 # silêncio como boa notícia e diria "você está em dia" a uma instalação
 # atrasada. Por isso o "não sei" viaja explícito no heartbeat.
 COMPARE_FAILED=false
+if [ "$FETCH_OK" != 1 ] || { [ -n "$LATEST_TAG" ] && ! trusted_release_commit "$LATEST_TAG" >/dev/null; }; then
+  COMPARE_FAILED=true
+  LATEST_TAG=""
+fi
 if [ -n "$LATEST_TAG" ]; then
   is_already_in_head "$LATEST_TAG" && CONTIDA=0 || CONTIDA=$?
   [ "$CONTIDA" = 2 ] && COMPARE_FAILED=true

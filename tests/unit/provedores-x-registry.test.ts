@@ -15,7 +15,7 @@
  *    ninguém consegue escolher pela tela — trabalho feito e inalcançável, que é
  *    a forma como funcionalidade morre neste produto.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, afterEach } from "vitest";
 
 import { createDefaultRegistry } from "@/lib/agent-engine/edge/llm/providers";
 import {
@@ -24,6 +24,8 @@ import {
   PROVEDORES,
   PROVEDOR_POR_ID,
 } from "@/lib/ai/pontos/provedores";
+
+afterEach(() => vi.unstubAllEnvs());
 
 const registry = createDefaultRegistry();
 
@@ -90,7 +92,8 @@ describe("forma de cada provedor", () => {
 });
 
 describe("o endpoint próprio chega até a fábrica", () => {
-  it("a fábrica da OpenRouter aceita o terceiro argumento", () => {
+  it("a fábrica aceita o endpoint aprovado pela instalação", () => {
+    vi.stubEnv("OPENROUTER_BASE_URL", "https://gateway.exemplo/v1");
     // A assinatura precisa aceitar baseUrl, senão `ai_purpose_bindings.base_url`
     // seria uma coluna que a tela preenche e o runtime ignora — configuração
     // que não configura nada.

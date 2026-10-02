@@ -1,3 +1,4 @@
+import { trustedAiBaseUrl } from "@/lib/ai/trusted-base-url";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
  * GET/PUT /api/v1/ai/providers — a configuração de IA de cada ponto do sistema.
@@ -250,6 +251,10 @@ export async function PUT(req: NextRequest): Promise<Response> {
     .eq("model_id", corpo.model_id)
     .is("deprecated_at", null)
     .maybeSingle();
+
+  try { trustedAiBaseUrl(corpo.provider, corpo.base_url); } catch {
+    return fail("endpoint_not_authorized", "Use o endpoint oficial ou um gateway autorizado na configuração da instalação.", 422);
+  }
 
   const validacao = validarBinding({
     pontoId: corpo.purpose,
