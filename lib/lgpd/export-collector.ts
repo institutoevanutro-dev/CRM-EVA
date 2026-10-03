@@ -59,6 +59,12 @@ export interface MessageRow {
   status: string;
   body: string | null;
   has_media: boolean;
+  /**
+   * Transcrição do áudio / texto extraído da mídia (OCR) que a IA leu
+   * (migration 0058). O binário nunca vai no pacote (só `has_media`); sem esta
+   * coluna o export não trazia nem o texto que a IA efetivamente processou.
+   */
+  media_derived_text: string | null;
   sent_at: string | null;
   created_at: string;
 }
@@ -561,7 +567,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
 
     const { data, error } = await admin
       .from("messages")
-      .select("id, conversation_id, direction, type, status, body, media_url, sent_at, created_at")
+      .select("id, conversation_id, direction, type, status, body, media_url, media_derived_text, sent_at, created_at")
       .eq("organization_id", organizationId)
       .eq("contact_id", contactId)
       .order("created_at", { ascending: false })
@@ -580,6 +586,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         status: m.status,
         body: m.body,
         has_media: Boolean(m.media_url),
+        media_derived_text: m.media_derived_text ?? null,
         sent_at: m.sent_at,
         created_at: m.created_at,
       }));
