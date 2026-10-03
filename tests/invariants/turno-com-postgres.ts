@@ -1,7 +1,9 @@
 import { expect } from "vitest";
 import pg from "pg";
 
+import type { embedText } from "@/lib/ai/embed";
 import type * as InboundTurn from "@/lib/agent-engine/agent/inbound-turn";
+import type { ChannelAdapter, ChannelSendInput } from "@/lib/agent-engine/channel-adapter";
 import type * as Providers from "@/lib/agent-engine/edge/llm/providers";
 import type * as Queue from "@/lib/agent-engine/queue/queue";
 import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
@@ -95,29 +97,23 @@ export function modeloDeControle(aoChamar: () => void) {
   };
 }
 
-export interface EnvioDoCanal {
-  body: string;
-  seq: number;
-  metadata?: Record<string, string>;
-}
-
-/** Canal que entrega a `capturar` o que seria enviado e responde `sent`. */
-export function canalQueCaptura(capturar: (i: EnvioDoCanal) => Promise<number>) {
+/** Canal que entrega a `capturar` o que seria enviado e responde `sent` com o número devolvido. */
+export function canalQueCaptura(capturar: (i: ChannelSendInput) => Promise<number>): ChannelAdapter {
   return {
     channel: "captura",
-    send: async (i: EnvioDoCanal) => {
+    send: async (i) => {
       const n = await capturar(i);
-      return { kind: "sent" as const, idempotencyKey: `k${n}`, messageId: `m${n}` };
+      return { kind: "sent", idempotencyKey: `k${n}`, messageId: `m${n}` };
     },
-    sessionHealth: async () => ({ healthy: true, status: "WORKING" }),
-    capabilities: () => ({ freeform: true, media: true, audio: true }),
-    costPerMessage: () => ({ currency: "BRL", cents: 0 }),
-  } as never;
+    sessionHealth: async () => ({ healthy: true, status: "WORKING", since: null }),
+    capabilities: () => ({ freeformAnytime: true, serviceWindowHours: null }),
+    costPerMessage: () => ({ perMessageUsdCents: 0, model: "flat" }),
+  };
 }
 
 export function montaHandler(
   m: Motor,
-  o: { aoChamarModelo: () => void; canal: () => never; embed?: never },
+  o: { aoChamarModelo: () => void; canal: () => ChannelAdapter; embed?: typeof embedText },
 ) {
   return m.createInboundTurnHandler({
     crmCfg: { supabase: {} as never },

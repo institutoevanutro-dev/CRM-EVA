@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import type { embedText } from "@/lib/ai/embed";
 import type * as RespostaPronta from "@/lib/agent-engine/agent/resposta-pronta";
 import type * as Spinning from "@/lib/agent-engine/spinning/store";
 
@@ -14,7 +15,6 @@ import {
   recriarConversa,
   rodaTurno,
   semearBase,
-  type EnvioDoCanal,
   type Motor,
 } from "./turno-com-postgres";
 
@@ -59,14 +59,19 @@ let m: Motor;
 let tentarRespostaPronta: typeof RespostaPronta.tentarRespostaPronta;
 let recordCopy: typeof Spinning.recordCopy;
 
-let enviados: EnvioDoCanal[] = [];
+interface Enviado {
+  body: string;
+  seq: number;
+  metadata: Record<string, string> | undefined;
+}
+let enviados: Enviado[] = [];
 let modeloChamado = 0;
 let embedChamado = 0;
 let embedFalha = false;
 let aoEnviar: (() => Promise<void>) | null = null;
 
 /** Vetor fixo por assunto: "limpeza" no texto → eixo 0; o resto → eixo 2. */
-const embedFalso = (async (texto: string) => {
+const embedFalso: typeof embedText = async (texto) => {
   embedChamado += 1;
   if (embedFalha) throw new Error("embedding fora do ar");
   return {
@@ -74,25 +79,51 @@ const embedFalso = (async (texto: string) => {
     promptTokens: 0,
     model: MODELO,
   };
-}) as never;
+};
 
+/**
+ * Captura o envio E grava a linha `accepted` do `send_ledger`, como o adapter
+ * de verdade (`sendWithLedger`) faria — é o recibo que o replay consulta.
+ */
 const canal = () =>
   canalQueCaptura(async (i) => {
     enviados.push({ body: i.body, seq: i.seq, metadata: i.metadata });
+    await pool.query(
+      `insert into send_ledger (organization_id, contact_id, job_id, seq, body_hash, status)
+       values ($1,$2,$3,$4,'h','accepted') on conflict (job_id, seq) do nothing`,
+      [i.tenantId, i.leadId, i.jobId, i.seq],
+    );
     if (aoEnviar) await aoEnviar();
     return enviados.length;
   });
 
-/** Grava os inbounds (uma rajada) e roda UM turno pinado no primeiro. */
-async function rodaTurnoCom(...textos: string[]): Promise<void> {
-  const handler = montaHandler(m, {
+function handlerCom(embed: typeof embedText = embedFalso) {
+  return montaHandler(m, {
     aoChamarModelo: () => {
       modeloChamado += 1;
     },
     canal,
-    embed: embedFalso,
+    embed,
   });
-  await rodaTurno(pool, m, ALVO, handler, textos, "pronta");
+}
+
+/** Grava os inbounds (uma rajada) e roda UM turno pinado no primeiro. */
+async function rodaTurnoCom(...textos: string[]): Promise<void> {
+  await rodaTurno(pool, m, ALVO, handlerCom(), textos, "pronta");
+}
+
+/** O MESMO job de novo, como depois de um crash e re-claim. */
+async function reprocessaOUltimoJob(): Promise<void> {
+  const { rows } = await pool.query<{ id: string }>(
+    "select id from job_queue where organization_id = $1 order by created_at desc limit 1",
+    [ORG],
+  );
+  const jobId = rows[0]!.id;
+  await pool.query("update job_queue set status = 'pending', run_after = now() where id = $1", [jobId]);
+  const [claimed] = await m.queue.claimJobs(pool, { workerId: "replay", maxConcurrency: 1 });
+  expect(claimed?.id).toBe(jobId);
+  await handlerCom()(claimed!, pool, { workerId: "replay" });
+  await m.queue.completeJob(pool, claimed!.id, "replay");
 }
 
 async function semearItem(org: string, id: string): Promise<void> {
@@ -205,24 +236,13 @@ describe("resposta pronta no turno de inbound", () => {
   });
 
   it("erro de banco dentro do atalho: o turno segue para a IA", async () => {
-    // Mata a consulta de similaridade (a tabela de perguntas some no meio do
-    // caminho, depois do embedding): erro inesperado, nunca turno derrubado.
-    const embedQueApagaAsPerguntas = (async (texto: string) => {
-      await pool.query("alter table respostas_prontas_perguntas rename to respostas_prontas_perguntas_x");
-      return (embedFalso as unknown as (t: string) => Promise<unknown>)(texto);
-    }) as never;
-    const handler = montaHandler(m, {
-      aoChamarModelo: () => {
-        modeloChamado += 1;
-      },
-      canal,
-      embed: embedQueApagaAsPerguntas,
-    });
-    try {
-      await rodaTurno(pool, m, ALVO, handler, ["Quanto custa a limpeza?"], "pronta");
-    } finally {
-      await pool.query("alter table respostas_prontas_perguntas_x rename to respostas_prontas_perguntas");
-    }
+    // Vetor de 3 dimensões contra a coluna vector(1536): o `<=>` da consulta de
+    // similaridade estoura no Postgres — erro inesperado, nunca turno derrubado.
+    const embedTorto: typeof embedText = async () => {
+      embedChamado += 1;
+      return { embedding: [1, 0, 0], promptTokens: 0, model: MODELO };
+    };
+    await rodaTurno(pool, m, ALVO, handlerCom(embedTorto), ["Quanto custa a limpeza?"], "pronta");
     expect(embedChamado).toBeGreaterThan(0);
     expect(modeloChamado).toBeGreaterThan(0);
     expect(saiuARespostaPronta()).toBe(false);
@@ -310,6 +330,33 @@ describe("resposta pronta no turno de inbound", () => {
     const segunda = await tentarRespostaPronta(pool, ids, opts);
     expect(primeira.respondeu).toBe(true);
     expect(segunda.respondeu).toBe(true);
+    expect(enviados, "o replay reenviou a resposta pronta").toHaveLength(1);
     expect(await contarUsos()).toBe(1);
+  });
+
+  it("replay com o spinning armado no meio: nem reenvia, nem a IA responde de novo", async () => {
+    await rodaTurnoCom("Quanto custa a limpeza?");
+    expect(enviados).toHaveLength(1);
+    // Outros pacientes receberam o mesmo texto entre o crash e o re-claim: na
+    // 2ª passada a cadeia vetaria a 3ª cópia.
+    await recordCopy(pool, ORG, ALVO.session, enviados[0]!.body, AGORA);
+    await recordCopy(pool, ORG, ALVO.session, enviados[0]!.body, AGORA);
+    await reprocessaOUltimoJob();
+    expect(modeloChamado, "resposta em dobro: a IA respondeu no replay").toBe(0);
+    expect(enviados).toHaveLength(1);
+    expect(await contarUsos()).toBe(1);
+  });
+
+  it("replay sem o registro do uso: o ledger sozinho prova que já respondeu", async () => {
+    aoEnviar = async () => {
+      await pool.query("delete from respostas_prontas where id = $1", [ITEM]);
+    };
+    await rodaTurnoCom("Quanto custa a limpeza?");
+    aoEnviar = null;
+    expect(await contarUsos(), "o uso devia ter falhado — o caso mediu outra coisa").toBe(0);
+    await semearItem(ORG, ITEM);
+    await reprocessaOUltimoJob();
+    expect(modeloChamado, "resposta em dobro: a IA respondeu no replay").toBe(0);
+    expect(enviados).toHaveLength(1);
   });
 });

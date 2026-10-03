@@ -36,6 +36,7 @@ import {
   umAssuntoSo,
 } from '@/lib/respostas-prontas/casamento';
 
+import { reconcileAcceptedSend } from '../edge/crm/send-ledger';
 import { runBeforeSend } from '../guardrails/before-send';
 import { detectUrgencySignal } from '../guardrails/sinal-de-urgencia';
 import type { AvisoDeEscalacaoIds, AvisoDeEscalacaoOpts } from './aviso-de-escalacao';
@@ -43,7 +44,8 @@ import type { AvisoDeEscalacaoIds, AvisoDeEscalacaoOpts } from './aviso-de-escal
 export const SEQ_DA_RESPOSTA_PRONTA = -1;
 
 export type DesfechoDaRespostaPronta =
-  | { respondeu: true; respostaProntaId: string }
+  /** `null` só no replay em que o ledger provou o envio e o uso não foi registrado. */
+  | { respondeu: true; respostaProntaId: string | null }
   | { respondeu: false; motivo: string };
 
 export type RespostaProntaOpts = Omit<AvisoDeEscalacaoOpts, 'motivo'> & {
@@ -100,6 +102,14 @@ async function tentar(
   ids: AvisoDeEscalacaoIds,
   opts: RespostaProntaOpts,
 ): Promise<DesfechoDaRespostaPronta> {
+  // REPLAY: este job já respondeu pronto (crash depois do envio, re-claim). Os
+  // gates abaixo rodariam DE NOVO antes da dedup do ledger — o spinning, com a
+  // cópia de outros pacientes no meio, vetaria, e a IA mandaria uma segunda
+  // resposta num seq novo. O ledger é a prova primária (o registro do uso pode
+  // ter falhado); o uso é a reserva.
+  const replay = await jaRespondeuNesteJob(pool, ids);
+  if (replay !== undefined) return { respondeu: true, respostaProntaId: replay };
+
   const { rows: configs } = await pool.query<{ limite: number; tem_perguntas: boolean }>(SQL_CONFIG, [
     ids.tenantId,
     MODELO_DE_EMBEDDING,
@@ -190,4 +200,29 @@ async function tentar(
     });
   }
   return { respondeu: true, respostaProntaId: item.id };
+}
+
+/** `undefined` = este job ainda não respondeu pronto; senão o item (ou `null` se só o ledger sabe). */
+async function jaRespondeuNesteJob(
+  pool: pg.Pool,
+  ids: AvisoDeEscalacaoIds,
+): Promise<string | null | undefined> {
+  const doLedger = await reconcileAcceptedSend(pool, {
+    tenantId: ids.tenantId,
+    jobId: ids.jobId,
+    seq: SEQ_DA_RESPOSTA_PRONTA,
+  });
+  const { rows } = await pool.query<{ ledger: boolean; item: string | null }>(
+    `select exists (
+              select 1 from send_ledger
+               where organization_id = $1 and job_id = $2 and seq = $3
+                 and status in ('accepted', 'queued')
+            ) as ledger,
+            (select resposta_pronta_id::text from respostas_prontas_usos
+              where organization_id = $1 and job_id = $2) as item`,
+    [ids.tenantId, ids.jobId, SEQ_DA_RESPOSTA_PRONTA],
+  );
+  const r = rows[0];
+  if (r?.item != null) return r.item;
+  return doLedger || r?.ledger === true ? null : undefined;
 }
