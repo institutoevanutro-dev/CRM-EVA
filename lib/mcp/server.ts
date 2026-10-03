@@ -15,6 +15,7 @@ import type { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { auditMcpToolCall } from "./audit";
 import { ensureRole, ensureMcpToolScope, type McpAuthResult } from "./auth";
+import { verificarTetoMcp } from "./rate-limit";
 import { allTools } from "./tools";
 import { higienizarUuidsDeAterro } from "./uuid-de-aterro";
 import type { McpContext } from "./types";
@@ -70,6 +71,11 @@ export function createMcpServer(auth: McpAuthResult, requestId: string): McpServ
         };
 
         try {
+          // ANTES de escopo e papel: quem está em laço estourando o teto não
+          // deve pagar o custo de mais nada. Dentro do `try` de propósito — o
+          // `catch` abaixo é quem AUDITA, e recusa sem rastro em
+          // `api_audit_log` faria "o agente parou" virar mistério.
+          await verificarTetoMcp(auth, tool.category);
           ensureMcpToolScope(auth.scopes, tool.name, tool.requiresScope);
           ensureRole(auth.role, tool.requiresRole);
 
