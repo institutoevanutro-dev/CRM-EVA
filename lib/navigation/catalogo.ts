@@ -359,6 +359,19 @@ export const NAV_CATALOG = [
     minRole: "manager",
   },
   {
+    // Respostas prontas antes da IA (spec EvaLink 2026-10-03). O rótulo é
+    // "Perguntas frequentes" e não "Respostas prontas": este segundo nome já é
+    // o dos modelos de mensagem no MCP e no dicionário. Sem `sidebar: true`,
+    // como as vizinhas — a sidebar estoura a dobra em 900px (navegacao.spec.ts).
+    href: "/app/ai/perguntas-frequentes",
+    label: "Perguntas frequentes",
+    description: "Respostas prontas que saem sem chamar a IA quando a pergunta é clara.",
+    icon: "FileText",
+    group: "ia",
+    section: "Ensinar o agente",
+    minRole: "manager",
+  },
+  {
     href: "/app/ai/memory",
     label: "Memória",
     description: "O que o agente já aprendeu sobre a sua operação e reaproveita.",
