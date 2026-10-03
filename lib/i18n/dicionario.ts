@@ -9391,6 +9391,10 @@ export const DICIONARIO: Traducoes = {
   "Progresso da importação do histórico": { es: "Progreso de la importación del historial" },
   "Não deu para importar o histórico.": { es: "No se pudo importar el historial." },
   "Resposta pronta": { es: "Respuesta lista" },
+  "Erro ao ler as perguntas frequentes.": { es: "Error al leer las preguntas frecuentes." },
+  "Erro ao salvar a pergunta frequente.": { es: "Error al guardar la pregunta frecuente." },
+  "Pergunta frequente não encontrada.": { es: "Pregunta frecuente no encontrada." },
+  "Erro ao salvar a configuração.": { es: "Error al guardar la configuración." },
 };
 
 /**

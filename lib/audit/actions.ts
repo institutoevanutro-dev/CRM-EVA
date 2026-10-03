@@ -676,6 +676,13 @@ export const AUDIT_ACTIONS = [
   // linhas de auditoria para fora, e com que filtro).
   "conversation.media_uploaded",
   "audit.exported",
+  // Respostas prontas antes da IA (migration 0306). Mutações da tela de
+  // Perguntas frequentes; o ENVIO da resposta é auditado pelo handler de
+  // mensagens como qualquer envio do motor.
+  "resposta_pronta.created",
+  "resposta_pronta.updated",
+  "resposta_pronta.config_changed",
+  "resposta_pronta.embeddings_calculated",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
