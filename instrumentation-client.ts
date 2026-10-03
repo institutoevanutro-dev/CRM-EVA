@@ -4,6 +4,7 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { resolveSentryDsn } from "./lib/sentry/dsn";
+import { integracoesDeReplay, pararReplayEmRotaComCredencial } from "./lib/sentry/replay";
 import { sentryScrubHooks } from "./lib/sentry/scrub";
 
 const sentryDsn = resolveSentryDsn(
@@ -13,8 +14,13 @@ const sentryDsn = resolveSentryDsn(
 Sentry.init({
   dsn: sentryDsn,
 
-  // O replayIntegration() sem argumentos já aplica maskAllText/blockAllMedia.
-  integrations: [Sentry.replayIntegration()],
+  // O replayIntegration() mantém os defaults maskAllText/blockAllMedia. Vai com o
+  // scrub de URL do projeto, e sem gravar a página que tem credencial na URL
+  // (ver lib/sentry/replay.ts).
+  integrations: integracoesDeReplay(
+    typeof window !== "undefined" ? window.location.href : "",
+    Sentry.replayIntegration,
+  ),
 
   tracesSampleRate: 1,
   enableLogs: true,
@@ -27,4 +33,7 @@ Sentry.init({
   ...sentryScrubHooks,
 });
 
-export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
+export function onRouterTransitionStart(href: string, navigationType: string): void {
+  pararReplayEmRotaComCredencial(href, Sentry.getReplay());
+  Sentry.captureRouterTransitionStart(href, navigationType);
+}
