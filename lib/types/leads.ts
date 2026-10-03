@@ -97,6 +97,16 @@ export interface Lead {
   external_id: string | null;
   custom_fields: Record<string, unknown>;
   tags: string[];
+  /**
+   * Derivado (não é coluna): os marcadores do CONTATO deste negócio.
+   *
+   * O produto tem DUAS caixas de marcador e elas não são a mesma: `tags`, acima,
+   * é do negócio e se escreve em "Editar lead"; esta é da pessoa, e se escreve
+   * no Inbox e na ficha — é a que a campanha lê. O quadro precisa das duas para
+   * o filtro não mentir, e por não ser coluna ela é opcional: um negócio sem
+   * contato (criado à mão ou por webhook) simplesmente não tem.
+   */
+  contact_tags?: string[];
   created_at: string;
   updated_at: string;
   created_by_user_id: string | null;

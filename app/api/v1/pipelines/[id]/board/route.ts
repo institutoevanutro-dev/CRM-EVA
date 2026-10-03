@@ -296,6 +296,55 @@ async function withConversas(
   };
 }
 
+/**
+ * Anexa os marcadores do CONTATO — a outra caixa de marcador do produto.
+ *
+ * O filtro de marcador do quadro lia só `crm_leads.tags`, escrita em "Editar
+ * lead". Quem marca a PESSOA (no Inbox ou na ficha) escreve em `contacts.tags`,
+ * e esse marcador não chegava ao quadro: não filtrava e nem aparecia na lista
+ * de opções. É o mesmo desencontro que o Inbox tinha no filtro dele.
+ *
+ * LEFT, como o score e a conversa: negócio sem contato é estado normal, e o
+ * card dele não pode sumir do quadro por não ter marcador de pessoa.
+ *
+ * Marcador vazio não vira campo: `contact_tags` só é escrito quando há alguma
+ * etiqueta, para o payload do quadro não engordar com array vazio em todo card.
+ */
+async function withMarcadoresDoContato(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  leads: Lead[],
+): Promise<{ leads: Lead[]; error: string | null }> {
+  const contactIds = [...new Set(leads.map((l) => l.contact_id).filter((c): c is string => !!c))];
+  if (contactIds.length === 0) return { leads, error: null };
+
+  // Em lotes, como as demais leituras por contato deste quadro: a lista de ids
+  // viaja na URL e um funil grande estouraria o teto dela.
+  const { data, error } = await buscaEmLotes(contactIds, (lote) =>
+    supabase
+      .from("contacts")
+      .select("id, tags")
+      .eq("organization_id", organizationId)
+      .in("id", lote),
+  );
+  if (error) return { leads, error: error.message };
+
+  const porContato = new Map<string, string[]>();
+  for (const row of (data ?? []) as Array<{ id: string; tags: string[] | null }>) {
+    const tags = row.tags ?? [];
+    if (tags.length > 0) porContato.set(row.id, tags);
+  }
+  if (porContato.size === 0) return { leads, error: null };
+
+  return {
+    leads: leads.map((lead) => {
+      const contact_tags = lead.contact_id ? porContato.get(lead.contact_id) : undefined;
+      return contact_tags ? { ...lead, contact_tags } : lead;
+    }),
+    error: null,
+  };
+}
+
 async function withNextActions(
   supabase: Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
@@ -441,10 +490,19 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
     return fail("internal_error", leadsComConversa.error, 500, { requestId });
   }
 
+  const leadsComMarcadores = await withMarcadoresDoContato(
+    supabase,
+    (pipeline as Pipeline).organization_id,
+    leadsComConversa.leads,
+  );
+  if (leadsComMarcadores.error) {
+    return fail("internal_error", leadsComMarcadores.error, 500, { requestId });
+  }
+
   const board: BoardData = {
     pipeline: pipeline as Pipeline,
     stages: (stages ?? []) as Stage[],
-    leads: leadsComConversa.leads,
+    leads: leadsComMarcadores.leads,
   };
 
   return ok(board, { requestId });

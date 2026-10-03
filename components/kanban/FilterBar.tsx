@@ -15,6 +15,7 @@ import { useUser } from "@/hooks/auth/AuthProvider";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAssignableAgents } from "@/hooks/kanban/useAssignableAgents";
 import type { Lead, OwnerKind } from "@/lib/types/leads";
+import { marcadoresDoCard } from "@/lib/kanban/marcadores-do-card";
 import { OwnerBadge } from "./OwnerBadge";
 import {
   agentOwnerFilter,
@@ -54,9 +55,17 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
 
+  /**
+   * Quem OFERECE lê a MESMA regra de quem FILTRA (`applyFilters`) — ver
+   * lib/kanban/marcadores-do-card.ts. Antes eram só `l.tags`, a caixa do
+   * negócio: o marcador escrito no CONTATO não aparecia aqui nem casava lá.
+   *
+   * A varredura alcança o funil inteiro: a rota do quadro devolve todos os
+   * cards de uma vez, sem paginar.
+   */
   const tagOptions = useMemo(() => {
     const set = new Set<string>();
-    for (const l of leads) for (const t of l.tags) set.add(t);
+    for (const l of leads) for (const t of marcadoresDoCard(l)) set.add(t);
     return Array.from(set).sort();
   }, [leads]);
 
