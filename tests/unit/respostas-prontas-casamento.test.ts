@@ -46,6 +46,7 @@ describe("trava 3 — mensagem curta e de um assunto só", () => {
     "Aceitam convênio Amil?",
     "Qual o horário de funcionamento, por favor?",
     "Quanto custa a limpeza, doutora?",
+    "Quanto custa a limpeza, por favor?",
   ];
   for (const frase of PASSAM) {
     it(`passa: "${frase}"`, () => {
@@ -57,6 +58,8 @@ describe("trava 3 — mensagem curta e de um assunto só", () => {
     ["Quanto custa a limpeza e tem horário amanhã?", "mais_de_um_assunto"],
     ["Qual o endereço e o horário?", "mais_de_um_assunto"],
     ["quero marcar uma limpeza e saber o preço", "mais_de_um_assunto"],
+    ["Quanto custa a limpeza e clareamento?", "mais_de_um_assunto"],
+    ["valor da limpeza e clareamento", "mais_de_um_assunto"],
     ["Quanto custa a limpeza? E o clareamento?", "mais_de_uma_pergunta"],
     [`Quanto custa a limpeza? ${"Estou com uma dúvida grande sobre o tratamento todo. ".repeat(3)}`, "mensagem_longa"],
     ["", "vazia"],
@@ -95,7 +98,7 @@ describe("travas 1 e 2 — similaridade por item", () => {
     expect(d).toEqual({ casou: true, respostaProntaId: "limpeza", similaridade: 0.88 });
   });
 
-  it("trava 2: outro item abaixo de 0,70 responde, mesmo dentro da margem", () => {
+  it("trava 2: outro item fora da margem responde; abaixo do limite, a trava 1 vale primeiro", () => {
     const d = decidirRespostaPronta(new Map([["limpeza", 0.745], ["clareamento", 0.69]]), LIMITE_PADRAO);
     expect(d.casou).toBe(false); // 0,745 < limite 0,82: trava 1 vale primeiro
     const ok = decidirRespostaPronta(new Map([["limpeza", 0.9], ["clareamento", 0.69]]), LIMITE_PADRAO);

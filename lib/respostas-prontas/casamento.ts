@@ -19,11 +19,13 @@ export const LIMITE_MINIMO = 0.78;
 export const LIMITE_MAXIMO = 0.95;
 /**
  * Trava 2 — outro item é "perto demais" quando a similaridade dele é >= este
- * piso E >= (melhor - MARGEM_OUTRO_ITEM), com folga de 1e-9 contra erro de ponto flutuante. Relativa de propósito: itens irmãos
- * (preço da limpeza vs. do clareamento) ficam ~0,75 numa pergunta de preço cujo
- * melhor é ~0,88; um corte absoluto em 0,70 mandaria toda pergunta de preço para
- * a IA. Mistura de assuntos na mesma mensagem também é pega pela trava 3. Fixos
- * no código: por clínica, abriria combinação insegura com o limite da trava 1.
+ * piso E >= (melhor - MARGEM_OUTRO_ITEM). Relativa de propósito: itens irmãos
+ * (preço da limpeza vs. do clareamento) ficam ~0,75 numa pergunta de preço
+ * cujo melhor é ~0,88; um corte absoluto em 0,70 mandaria toda pergunta de
+ * preço para a IA. Mistura de assuntos na mesma mensagem também é pega pela
+ * trava 3. Fixos no código: por clínica, abriria combinação insegura com o
+ * limite da trava 1. O piso é rede de segurança: com LIMITE_MINIMO 0,78 e
+ * margem 0,06 ele não chega a morder com as constantes atuais.
  */
 export const LIMITE_OUTRO_ITEM = 0.7;
 export const MARGEM_OUTRO_ITEM = 0.06;
@@ -35,6 +37,13 @@ const SAUDACAO =
 
 /** Orações que não são assunto: polidez e vocativo. */
 const POLIDEZ: ReadonlySet<string> = new Set([
+  "doutora",
+  "doutor",
+  "dra",
+  "dr",
+  "obrigado",
+  "obrigada",
+  "gentileza",
   "por favor",
   "muito obrigado",
   "muito obrigada",
@@ -73,7 +82,7 @@ export function umAssuntoSo(texto: string): FormaDaMensagem {
   const oracoes = normalizarTexto(t)
     .split(/[?!.;,\n]+|\s(?:e|ou)\s/)
     .map((o) => o.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim())
-    .filter((o) => o.split(" ").length >= 2 && !POLIDEZ.has(o));
+    .filter((o) => o !== "" && !POLIDEZ.has(o));
   if (oracoes.length > 1) return { ok: false, motivo: "mais_de_um_assunto" };
   return { ok: true };
 }
@@ -106,6 +115,7 @@ export function decidirRespostaPronta(
   const segundo = ordenados[1];
   if (primeiro === undefined) return { casou: false, motivo: "sem_candidato", similaridade: null };
   if (primeiro[1] < corte) return { casou: false, motivo: "abaixo_do_limite", similaridade: primeiro[1] };
+  // 1e-9: 0,9 - 0,06 > 0,84 em ponto flutuante; sem folga a borda exata escaparia.
   if (segundo !== undefined && segundo[1] >= LIMITE_OUTRO_ITEM && primeiro[1] - segundo[1] <= MARGEM_OUTRO_ITEM + 1e-9) {
     return { casou: false, motivo: "assunto_misturado", similaridade: primeiro[1] };
   }
