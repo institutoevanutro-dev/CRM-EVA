@@ -133,6 +133,14 @@
       "type": "database",
       "label": "api_audit_log",
       "sublabel": "resposta_pronta.created/updated/config_changed/embeddings_calculated"
+    },
+    {
+      "id": "telaauditoria",
+      "lane": "humano",
+      "col": 2,
+      "type": "frontend",
+      "label": "/app/audit",
+      "sublabel": "action + metadata na tela: quem cadastrou, editou ou ligou a função"
     }
   ],
   "edges": [
@@ -235,8 +243,14 @@
     {
       "id": "e17",
       "from": "audit",
+      "to": "telaauditoria",
+      "label": "a linha vira texto legível (action + metadata)"
+    },
+    {
+      "id": "e18",
+      "from": "telaauditoria",
       "to": "tela",
-      "label": "quem mudou o quê, e quando"
+      "label": "quem vê uma mudança suspeita volta à lista e corrige"
     }
   ]
 }
