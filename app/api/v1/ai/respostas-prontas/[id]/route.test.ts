@@ -44,14 +44,14 @@ function banco() {
   ops = g.ops;
 }
 
-function patch(corpo: unknown) {
+function patch(corpo: unknown, id: string = ITEM) {
   return PATCH(
-    new NextRequest(`http://localhost/api/v1/ai/respostas-prontas/${ITEM}`, {
+    new NextRequest(`http://localhost/api/v1/ai/respostas-prontas/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(corpo),
     }),
-    { params: Promise.resolve({ id: ITEM }) },
+    { params: Promise.resolve({ id }) },
   );
 }
 
@@ -93,6 +93,32 @@ describe("PATCH /api/v1/ai/respostas-prontas/:id", () => {
     const up = ops.find((o) => o.tabela === "respostas_prontas" && o.acao === "update");
     expect(up?.dados).toMatchObject({ ativo: false });
     expect(up?.dados).not.toHaveProperty("revisado_em");
+  });
+
+  it("mesmas formas de perguntar, noutra ordem: não é revisão nem mexe no banco das perguntas", async () => {
+    await patch({ perguntas: ["Quanto custa a limpeza?", "Quanto é a limpeza?"] });
+    const up = ops.find((o) => o.tabela === "respostas_prontas" && o.acao === "update");
+    expect(up?.dados).not.toHaveProperty("revisado_em");
+    expect(ops.some((o) => o.tabela === "respostas_prontas_perguntas" && o.acao !== "select")).toBe(false);
+  });
+
+  it("resposta reenviada com o MESMO texto: não é revisão", async () => {
+    await patch({ resposta: "antiga" });
+    const up = ops.find((o) => o.tabela === "respostas_prontas" && o.acao === "update");
+    expect(up?.dados).not.toHaveProperty("revisado_em");
+  });
+
+  it("só o título mudou: não é revisão", async () => {
+    await patch({ titulo: "Limpeza (preço)" });
+    const up = ops.find((o) => o.tabela === "respostas_prontas" && o.acao === "update");
+    expect(up?.dados).toMatchObject({ titulo: "Limpeza (preço)" });
+    expect(up?.dados).not.toHaveProperty("revisado_em");
+  });
+
+  it("id que não é UUID: 422, sem tocar no banco", async () => {
+    const r = await patch({ revisado: true }, "nao-e-uuid");
+    expect(r.status).toBe(422);
+    expect(ops).toHaveLength(0);
   });
 
   it("corpo vazio: 422", async () => {

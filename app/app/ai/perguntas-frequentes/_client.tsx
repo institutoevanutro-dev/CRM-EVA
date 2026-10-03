@@ -23,7 +23,7 @@ import {
 } from "@/hooks/ai/useRespostasProntas";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
-import { LIMITE_MAXIMO, LIMITE_MINIMO } from "@/lib/respostas-prontas/casamento";
+import { LIMITE_MAXIMO, LIMITE_MINIMO, limiteAceito } from "@/lib/respostas-prontas/casamento";
 
 interface Rascunho {
   id?: string;
@@ -147,7 +147,10 @@ export function PerguntasFrequentesClient() {
               {t("Quanto maior, mais parecida a mensagem precisa ser com uma das formas de perguntar. Entre 0,78 e 0,95; o padrão é 0,82.")}
             </p>
           </div>
-          <Button onClick={() => void salvarConfiguracao()} disabled={salvarConfig.isPending}>
+          <Button
+            onClick={() => void salvarConfiguracao()}
+            disabled={salvarConfig.isPending || !limiteAceito(limite)}
+          >
             {t("Salvar configuração")}
           </Button>
         </CardContent>

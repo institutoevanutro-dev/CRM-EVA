@@ -19,6 +19,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
+import { logger } from "@/lib/logger";
 import { LIMITE_PADRAO } from "@/lib/respostas-prontas/casamento";
 import { embedarPerguntas } from "@/lib/respostas-prontas/embeddings";
 import { criarRespostaProntaSchema } from "@/lib/respostas-prontas/esquemas";
@@ -118,7 +119,19 @@ export async function POST(req: NextRequest): Promise<Response> {
       .insert(perguntas.map((p) => ({ organization_id: org.orgId, resposta_pronta_id: item.id, ...p })));
     if (erroPerguntas) {
       // Item sem pergunta nunca casa e confunde a tela: desfaz.
-      await supabase.from("respostas_prontas").delete().eq("organization_id", org.orgId).eq("id", item.id);
+      const { error: erroDesfazer } = await supabase
+        .from("respostas_prontas")
+        .delete()
+        .eq("organization_id", org.orgId)
+        .eq("id", item.id);
+      if (erroDesfazer) {
+        logger.error("resposta pronta: item ficou sem pergunta e não foi desfeito", {
+          organization_id: org.orgId,
+          resposta_pronta_id: item.id,
+          request_id: requestId,
+          error: erroDesfazer.message,
+        });
+      }
       throw new Error("perguntas");
     }
     const semReconhecimento = perguntas.filter((p) => p.embedding === null).length;

@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   apoio: vi.fn(),
   audit: vi.fn(),
   embedar: vi.fn(),
+  logErro: vi.fn(),
   cliente: null as unknown,
 }));
 
@@ -16,6 +17,7 @@ vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: h.apoio }));
 vi.mock("@/lib/audit", () => ({ audit: h.audit }));
 vi.mock("@/lib/respostas-prontas/embeddings", () => ({ embedarPerguntas: h.embedar }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => h.cliente }));
+vi.mock("@/lib/logger", () => ({ logger: { error: h.logErro, warn: vi.fn(), info: vi.fn(), debug: vi.fn() } }));
 
 import { GET, POST } from "@/app/api/v1/ai/respostas-prontas/route";
 import { PUT } from "@/app/api/v1/ai/respostas-prontas/config/route";
@@ -146,8 +148,26 @@ describe("POST /api/v1/ai/respostas-prontas", () => {
       req("/api/v1/ai/respostas-prontas", "POST", { titulo: "t", resposta: "r", perguntas: ["Quanto custa a limpeza?"] }),
     );
     expect(r.status).toBe(500);
-    expect(ops.some((o) => o.tabela === "respostas_prontas" && o.acao === "delete")).toBe(true);
+    const desfaz = ops.find((o) => o.tabela === "respostas_prontas" && o.acao === "delete");
+    expect(desfaz?.filtros).toContainEqual(["eq", "organization_id", ORG]);
     expect(h.audit).not.toHaveBeenCalled();
+    expect(h.logErro).not.toHaveBeenCalled();
+  });
+
+  it("desfazer TAMBÉM falhou: registra o item órfão no log em vez de engolir", async () => {
+    banco((op) => {
+      if (op.tabela === "respostas_prontas" && op.acao === "insert") return { data: { id: "item-1" }, error: null };
+      if (op.tabela === "respostas_prontas" && op.acao === "delete") return { data: null, error: { message: "sem rede" } };
+      if (op.tabela === "respostas_prontas_perguntas") return { data: null, error: { message: "falhou" } };
+      return { data: null, error: null };
+    });
+    h.embedar.mockResolvedValue([{ texto: "Quanto custa a limpeza?", embedding: null, modelo_embedding: null }]);
+    const r = await POST(
+      req("/api/v1/ai/respostas-prontas", "POST", { titulo: "t", resposta: "r", perguntas: ["Quanto custa a limpeza?"] }),
+    );
+    expect(r.status).toBe(500);
+    expect(h.logErro).toHaveBeenCalledTimes(1);
+    expect(h.logErro.mock.calls[0]![1]).toMatchObject({ organization_id: ORG, resposta_pronta_id: "item-1" });
   });
 });
 

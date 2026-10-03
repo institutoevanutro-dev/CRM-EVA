@@ -2,8 +2,9 @@
  * PATCH /api/v1/ai/respostas-prontas/[id] — edita título, resposta, formas de
  * perguntar; desativa/reativa; ou só marca como revisada.
  *
- * `revisado_em` anda quando a resposta muda, quando as formas de perguntar
- * mudam, ou com `revisado: true`. Desativar NÃO conta como revisão.
+ * `revisado_em` anda quando o TEXTO da resposta muda, quando o CONJUNTO das
+ * formas de perguntar muda (reordenar não conta), ou com `revisado: true`.
+ * Título e desativar NÃO contam como revisão.
  * Formas de perguntar: as novas são embedadas e gravadas PRIMEIRO, depois as que
  * saíram da lista são apagadas — uma falha no meio deixa pergunta a mais, nunca
  * item sem pergunta. Sem DELETE de item: só desativa (as FKs de uso fazem
@@ -11,6 +12,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
+import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
@@ -37,6 +39,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams): Promise<
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user, org } = authz;
   const { id } = await params;
+  if (!z.string().uuid().safeParse(id).success) {
+    return fail("validation_failed", t("Dados inválidos."), 422, { requestId, details: { id: ["uuid"] } });
+  }
 
   const parsed = editarRespostaProntaSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -57,6 +62,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams): Promise<
   if (!atual) return fail("not_found", t("Pergunta frequente não encontrada."), 404, { requestId });
 
   let semReconhecimento = 0;
+  let perguntasMudaram = false;
   if (d.perguntas !== undefined) {
     const lista = d.perguntas;
     const { data: existentes, error } = await supabase
@@ -78,6 +84,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams): Promise<
       if (erroNovas) return fail("internal_error", t("Erro ao salvar a pergunta frequente."), 500, { requestId });
     }
     const sair = existentes.filter((p) => !lista.includes(p.texto)).map((p) => p.id);
+    perguntasMudaram = novas.length > 0 || sair.length > 0;
     if (sair.length > 0) {
       const { error: erroSair } = await supabase
         .from("respostas_prontas_perguntas")
@@ -90,7 +97,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams): Promise<
 
   const agora = new Date().toISOString();
   const revisou =
-    d.revisado === true || d.perguntas !== undefined || (d.resposta !== undefined && d.resposta !== atual.resposta);
+    d.revisado === true || perguntasMudaram || (d.resposta !== undefined && d.resposta !== atual.resposta);
   const { error: erroItem } = await supabase
     .from("respostas_prontas")
     .update({

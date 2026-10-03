@@ -18,6 +18,12 @@ export const LIMITE_PADRAO = 0.82;
 export const LIMITE_MINIMO = 0.78;
 export const LIMITE_MAXIMO = 0.95;
 
+/** O campo da tela é texto: vazio, NaN ou fora da faixa não é salvável. */
+export function limiteAceito(texto: string): boolean {
+  const n = texto.trim() === "" ? Number.NaN : Number(texto);
+  return n >= LIMITE_MINIMO && n <= LIMITE_MAXIMO;
+}
+
 /**
  * Dor, sangramento, inchaço, dente quebrado: paciente com sintoma recebe a IA
  * (e quem a supervisiona), nunca a tabela de preço. Mais largo que o

@@ -1,11 +1,13 @@
 /**
  * POST /api/v1/ai/respostas-prontas/embeddings — calcula o embedding das formas
- * de perguntar que ficaram sem (instalação sem chave no cadastro, ou falha). É o
+ * de perguntar que ficaram sem (instalação sem chave no cadastro, ou falha) ou
+ * com OUTRO modelo (o motor só compara `MODELO_DE_EMBEDDING`). É o
  * "Calcular agora" da tela: o laço de retorno do "não reconhecida".
  * Audita só quando calculou alguma — chamada sem efeito não é mutação.
  */
 import { randomUUID } from "node:crypto";
 
+import { MODELO_DE_EMBEDDING } from "@/lib/ai/embeddings/chave";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
@@ -31,7 +33,7 @@ export async function POST(): Promise<Response> {
     .from("respostas_prontas_perguntas")
     .select("id, texto")
     .eq("organization_id", org.orgId)
-    .is("modelo_embedding", null)
+    .or(`modelo_embedding.is.null,modelo_embedding.neq."${MODELO_DE_EMBEDDING}"`)
     .limit(200);
   if (error || !faltando) return fail("internal_error", t("Erro ao ler as perguntas frequentes."), 500, { requestId });
 

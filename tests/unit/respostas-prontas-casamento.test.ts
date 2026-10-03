@@ -5,6 +5,7 @@ import {
   LIMITE_PADRAO,
   TAMANHO_MAXIMO,
   decidirRespostaPronta,
+  limiteAceito,
   sinalClinico,
   textoParaComparar,
   umAssuntoSo,
@@ -168,4 +169,9 @@ describe("sinalClinico — dor e sintoma nunca recebem resposta pronta", () => {
   it.each(NEUTROS)("não acha sintoma em %j", (t) => {
     expect(sinalClinico(t)).toBe(false);
   });
+});
+
+describe("limiteAceito — o botão de salvar não manda o que o banco recusa", () => {
+  it.each(["0.78", "0.82", "0.95"])("aceita %s", (v) => expect(limiteAceito(v)).toBe(true));
+  it.each(["", "abc", "0.5", "0.96", "1", "NaN"])("recusa %j", (v) => expect(limiteAceito(v)).toBe(false));
 });

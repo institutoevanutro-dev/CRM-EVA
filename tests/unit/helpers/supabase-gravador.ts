@@ -47,6 +47,10 @@ export function supabaseGravador(responder: (op: OperacaoGravada) => Resposta = 
       eq: filtro("eq"),
       in: filtro("in"),
       is: filtro("is"),
+      or: (expressao: string) => {
+        op.filtros.push(["or", expressao, null]);
+        return b;
+      },
       gte: filtro("gte"),
       order: () => b,
       limit: () => b,

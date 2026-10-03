@@ -46,6 +46,17 @@ describe("POST /api/v1/ai/respostas-prontas/embeddings", () => {
     expect(ops).toHaveLength(0);
   });
 
+  it("calcula as sem modelo E as de OUTRO modelo (essas o motor não compara)", async () => {
+    h.embedar.mockResolvedValue([]);
+    await POST();
+    const sel = ops.find((o) => o.acao === "select")!;
+    expect(sel.filtros).toContainEqual([
+      "or",
+      'modelo_embedding.is.null,modelo_embedding.neq."openai/text-embedding-3-small"',
+      null,
+    ]);
+  });
+
   it("calcula só as sem modelo, da org da sessão, e audita quando calculou", async () => {
     h.embedar.mockResolvedValue([
       { texto: "a", embedding: "[1]", modelo_embedding: "m" },
@@ -55,7 +66,6 @@ describe("POST /api/v1/ai/respostas-prontas/embeddings", () => {
     expect((await r.json()).data).toEqual({ calculadas: 1, faltando: 1 });
     const sel = ops.find((o) => o.acao === "select")!;
     expect(sel.filtros).toContainEqual(["eq", "organization_id", ORG]);
-    expect(sel.filtros).toContainEqual(["is", "modelo_embedding", null]);
     const ups = ops.filter((o) => o.acao === "update");
     expect(ups).toHaveLength(1);
     expect(ups[0]!.filtros).toContainEqual(["eq", "id", "p1"]);
