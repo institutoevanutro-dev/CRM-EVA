@@ -223,6 +223,58 @@ export function houveEfeito(resultado: ResultadoDaRetencao): boolean {
   );
 }
 
+export interface ResultadoDaCadeia {
+  linhas: number;
+  total_problemas: number;
+  problemas: { cadeia_seq: number; problema: string }[];
+  cabeca_seq: number | null;
+  cabeca_hash: string | null;
+}
+
+/**
+ * A verificação diária da cadeia de hash da trilha (migration 0305, achado M9).
+ *
+ * Pendurada aqui pelo mesmo motivo da cascata de anonimização: todo clone já
+ * roda este cron, e um cron novo só chegaria a quem trocasse a imagem do
+ * scheduler. Roda DEPOIS do expurgo, que apaga só o começo da cadeia.
+ *
+ * A cabeça vai para o log todo dia, com ou sem problema: é a âncora fora do
+ * banco. Quem tem a `DB_URL` consegue apagar as últimas linhas e a conta da
+ * cadeia continua fechando; contra o log de ontem, não fecha. Problema achado
+ * vira `logger.error` e uma linha `audit.chain_broken`, que é efeito e audita.
+ * Falha da própria verificação não derruba o relatório da poda.
+ */
+async function verificarCadeiaDaAuditoria(requestId: string): Promise<ResultadoDaCadeia | null> {
+  try {
+    const { data, error } = await createAdminClient().rpc("fn_verificar_cadeia_auditoria" as never);
+    if (error) throw new Error(error.message);
+    const cadeia = data as unknown as ResultadoDaCadeia;
+    logger.info("[auditoria] cabeça da cadeia", {
+      seq: cadeia.cabeca_seq,
+      hash: cadeia.cabeca_hash,
+      linhas: cadeia.linhas,
+      requestId,
+    });
+    if (cadeia.total_problemas > 0) {
+      logger.error("[auditoria] cadeia de hash quebrada", { ...cadeia, requestId });
+      void audit({
+        action: "audit.chain_broken",
+        organizationId: null,
+        bypassedRls: true,
+        metadata: cadeia as unknown as Record<string, unknown>,
+        requestId,
+      });
+    }
+    return cadeia;
+  } catch (err) {
+    logger.error("[auditoria] verificação da cadeia falhou", {
+      error: err instanceof Error ? err.message : String(err),
+      requestId,
+    });
+    return null;
+  }
+}
+
 async function handle(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
 
@@ -314,6 +366,8 @@ async function handle(req: NextRequest): Promise<Response> {
     });
   }
 
+  const cadeia = await verificarCadeiaDaAuditoria(requestId);
+
   for (const falha of varredura.falhas) {
     logger.error("[data-retention] retomada de anonimização falhou", { falha, requestId });
   }
@@ -351,6 +405,7 @@ async function handle(req: NextRequest): Promise<Response> {
       anonimizacoes_examinadas: varredura.examinados,
       anonimizacoes_completadas: varredura.completados.length,
       anonimizacoes_tem_resto: varredura.temResto,
+      cadeia_da_auditoria: cadeia,
     },
     { requestId },
   );
