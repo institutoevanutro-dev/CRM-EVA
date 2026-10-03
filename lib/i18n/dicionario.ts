@@ -3323,6 +3323,42 @@ export const DICIONARIO: Traducoes = {
   "Esta sessão precisa da verificação em duas etapas. Entre novamente com o código do aplicativo.": {
     es: "Esta sesión necesita la verificación en dos pasos. Entra de nuevo con el código de la aplicación.",
   },
+  "Perfil conectado": {
+    es: "Perfil conectado",
+  },
+  "Escolha o vídeo": {
+    es: "Elige el video",
+  },
+  "Carregando vídeos…": {
+    es: "Cargando videos…",
+  },
+  "Não deu para buscar os vídeos agora. Tente de novo ou cole o id do post.": {
+    es: "No fue posible buscar los videos ahora. Inténtalo de nuevo o pega el id de la publicación.",
+  },
+  "Este perfil ainda não tem publicações.": {
+    es: "Este perfil aún no tiene publicaciones.",
+  },
+  "Vídeos do perfil": {
+    es: "Videos del perfil",
+  },
+  "Publicação": {
+    es: "Publicación",
+  },
+  "Sem legenda": {
+    es: "Sin descripción",
+  },
+  "Ou cole o id do post": {
+    es: "O pega el id de la publicación",
+  },
+  "Id do post": {
+    es: "Id de la publicación",
+  },
+  "Escolha o perfil conectado.": {
+    es: "Elige el perfil conectado.",
+  },
+  "Perfil conectado não encontrado ou não lista publicações.": {
+    es: "Perfil conectado no encontrado o no lista publicaciones.",
+  },
   "Muitas imagens enviadas. Tente de novo em uma hora.": {
     es: "Demasiadas imágenes enviadas. Inténtalo de nuevo en una hora.",
   },

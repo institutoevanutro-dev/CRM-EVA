@@ -33,6 +33,19 @@ vi.mock("@/hooks/contacts/useContactTagVocabulary", () => ({
 vi.mock("@/hooks/inbox/useConversationCounts", () => ({
   useConversationCounts: () => ({ data: {} }),
 }));
+// A lista de vídeos do perfil consulta a Graph por trás de uma rota; aqui só
+// importa o que o formulário faz com ela.
+const publicacoes = vi.hoisted(() => ({ canalPedido: null as string | null }));
+vi.mock("@/hooks/comentarios/useComentarios", () => ({
+  usePublicacoesDoInstagram: (canal: string | null) => {
+    publicacoes.canalPedido = canal;
+    return {
+      isLoading: false,
+      isError: false,
+      data: canal ? [{ id: "M-NOVO", legenda: "Comente ROTEIRO", tipo: "VIDEO", miniatura: null, link: null, publicadaEm: null }] : [],
+    };
+  },
+}));
 
 const atendido: ComentarioDaFila = {
   id: "c1",
@@ -126,7 +139,7 @@ describe("FormularioDeRegra", () => {
     const botao = screen.getByRole("button", { name: "Criar regra" });
     expect(botao).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Mídia (id do post)"), { target: { value: "17900" } });
+    fireEvent.change(screen.getByLabelText("Ou cole o id do post"), { target: { value: "17900" } });
     fireEvent.change(screen.getByLabelText("Palavra-gatilho"), { target: { value: "preço" } });
     fireEvent.change(screen.getByLabelText("Mensagem no Direct"), {
       target: { value: "O valor é R$150." },
@@ -148,7 +161,7 @@ describe("FormularioDeRegra", () => {
   // ─── CRÍTICO 2 ──────────────────────────────────────────────────────────
   it("mediaIdInicial pré-preenche o campo (aberto a partir de 'Nova regra para este vídeo')", () => {
     render(<FormularioDeRegra onCriar={vi.fn()} mediaIdInicial="17900" />);
-    expect(screen.getByLabelText("Mídia (id do post)")).toHaveValue("17900");
+    expect(screen.getByLabelText("Ou cole o id do post")).toHaveValue("17900");
   });
 
   it("sem canais informados, não mostra o seletor de perfil", () => {
@@ -164,7 +177,7 @@ describe("FormularioDeRegra", () => {
         canais={[{ id: "sessao-1", username: "institutoeva" }]}
       />,
     );
-    fireEvent.change(screen.getByLabelText("Mídia (id do post)"), { target: { value: "17900" } });
+    fireEvent.change(screen.getByLabelText("Ou cole o id do post"), { target: { value: "17900" } });
     fireEvent.change(screen.getByLabelText("Palavra-gatilho"), { target: { value: "CARDAPIO" } });
     fireEvent.change(screen.getByLabelText("Mensagem no Direct"), { target: { value: "Segue o cardápio!" } });
     fireEvent.change(screen.getByLabelText("Resposta pública"), { target: { value: "Te chamei no Direct!" } });
@@ -173,6 +186,37 @@ describe("FormularioDeRegra", () => {
     expect(onCriar).toHaveBeenCalledWith(
       expect.objectContaining({ channel_session_id: "sessao-1" }),
     );
+  });
+
+  it("clicar num vídeo da lista preenche o id e leva o perfil dono do vídeo", () => {
+    const onCriar = vi.fn();
+    render(
+      <FormularioDeRegra
+        onCriar={onCriar}
+        canais={[{ id: "sessao-1", username: "institutoeva" }, { id: "sessao-2", username: "dr" }]}
+      />,
+    );
+    // Sem escolha, a lista é do primeiro perfil.
+    expect(publicacoes.canalPedido).toBe("sessao-1");
+    fireEvent.change(screen.getByLabelText(/perfil conectado/i), { target: { value: "sessao-2" } });
+    expect(publicacoes.canalPedido).toBe("sessao-2");
+
+    const video = screen.getByRole("button", { name: /Comente ROTEIRO/ });
+    fireEvent.click(video);
+    expect(video).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Ou cole o id do post")).toHaveValue("M-NOVO");
+
+    fireEvent.change(screen.getByLabelText("Palavra-gatilho"), { target: { value: "ROTEIRO" } });
+    fireEvent.change(screen.getByLabelText("Mensagem no Direct"), { target: { value: "Segue o roteiro!" } });
+    fireEvent.change(screen.getByLabelText("Resposta pública"), { target: { value: "Te chamei no Direct!" } });
+    fireEvent.click(screen.getByRole("button", { name: "Criar regra" }));
+    expect(onCriar).toHaveBeenCalledWith(expect.objectContaining({ media_id: "M-NOVO", channel_session_id: "sessao-2" }));
+  });
+
+  it("aberto a partir de um comentário, não consulta a lista (o vídeo já é conhecido)", () => {
+    render(<FormularioDeRegra onCriar={vi.fn()} mediaIdInicial="17900" canais={[{ id: "sessao-1", username: "x" }]} />);
+    expect(publicacoes.canalPedido).toBeNull();
+    expect(screen.queryByText("Escolha o vídeo")).toBeNull();
   });
 });
 

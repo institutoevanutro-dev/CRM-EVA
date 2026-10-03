@@ -442,6 +442,30 @@ export interface ChannelAdapter {
     sessionRef: string;
     limite?: number;
   }): Promise<string[]>;
+
+  /**
+   * As publicações mais recentes do perfil, para quem cria uma regra de
+   * comentário escolher o vídeo na tela em vez de colar o id do post.
+   * `null` = não deu para perguntar (token, cota, rede), distinto de `[]`.
+   *
+   * OPCIONAL pelo mesmo motivo dos acima.
+   */
+  listarPublicacoes?(input: ChannelTenantScope & {
+    sessionRef: string;
+    limite?: number;
+  }): Promise<PublicacaoDoCanal[] | null>;
+}
+
+/** Uma publicação do perfil, como a tela de regras de comentário a mostra. */
+export interface PublicacaoDoCanal {
+  id: string;
+  legenda: string | null;
+  /** `VIDEO`, `IMAGE`, `CAROUSEL_ALBUM`… como o provedor diz. */
+  tipo: string | null;
+  /** Capa do vídeo ou a própria imagem. URL de CDN que expira — só para exibir. */
+  miniatura: string | null;
+  link: string | null;
+  publicadaEm: string | null;
 }
 
 /** O que o transporte respondeu quando perguntamos se está de pé. */

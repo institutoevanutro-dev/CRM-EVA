@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { usePublicacoesDoInstagram } from "@/hooks/comentarios/useComentarios";
 
 export interface NovaRegraDeComentario {
   media_id: string;
@@ -51,6 +52,15 @@ export function FormularioDeRegra({ onCriar, enviando, mediaIdInicial, canais }:
   const [textoDoDirect, setTextoDoDirect] = useState("");
   const [frasePublica, setFrasePublica] = useState("");
   const [channelSessionId, setChannelSessionId] = useState("");
+  // A lista de vídeos é do perfil escolhido; sem escolha, do primeiro conectado.
+  const canalDaLista = channelSessionId || canais?.[0]?.id || null;
+  const publicacoes = usePublicacoesDoInstagram(mediaIdInicial ? null : canalDaLista);
+
+  function escolherPublicacao(id: string) {
+    setMediaId(id);
+    // O vídeo é deste perfil: a regra nasce nele mesmo sem comentário nenhum.
+    if (canalDaLista) setChannelSessionId(canalDaLista);
+  }
 
   const valido =
     mediaId.trim() !== "" &&
@@ -66,33 +76,22 @@ export function FormularioDeRegra({ onCriar, enviando, mediaIdInicial, canais }:
       palavra: palavra.trim(),
       texto_do_direct: textoDoDirect.trim(),
       frase_publica: frasePublica.trim(),
-      ...(channelSessionId ? { channel_session_id: channelSessionId } : {}),
+      ...(canalDaLista ? { channel_session_id: canalDaLista } : {}),
     });
   }
 
   return (
     <form onSubmit={submeter} className="space-y-3 p-3">
-      <div className="space-y-1">
-        <Label htmlFor="regra-media-id">{t("Mídia (id do post)")}</Label>
-        <Input
-          id="regra-media-id"
-          value={mediaId}
-          onChange={(e) => setMediaId(e.target.value)}
-          placeholder={t("Cole o id do post")}
-          disabled={enviando}
-        />
-      </div>
       {canais && canais.length > 0 && (
         <div className="space-y-1">
-          <Label htmlFor="regra-canal">{t("Perfil conectado (só se o vídeo ainda não tem comentário nenhum)")}</Label>
+          <Label htmlFor="regra-canal">{t("Perfil conectado")}</Label>
           <select
             id="regra-canal"
             className="w-full rounded-md border border-input bg-background p-2 text-sm"
-            value={channelSessionId}
+            value={canalDaLista ?? ""}
             onChange={(e) => setChannelSessionId(e.target.value)}
             disabled={enviando}
           >
-            <option value="">{t("Resolver automaticamente pelo comentário mais recente")}</option>
             {canais.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.username ? `@${c.username}` : c.id}
@@ -101,6 +100,60 @@ export function FormularioDeRegra({ onCriar, enviando, mediaIdInicial, canais }:
           </select>
         </div>
       )}
+      {!mediaIdInicial && canalDaLista && (
+        <div className="space-y-1">
+          <Label>{t("Escolha o vídeo")}</Label>
+          {publicacoes.isLoading ? (
+            <p className="text-sm text-text-muted">{t("Carregando vídeos…")}</p>
+          ) : publicacoes.isError ? (
+            <p className="text-sm text-text-muted">
+              {t("Não deu para buscar os vídeos agora. Tente de novo ou cole o id do post.")}
+            </p>
+          ) : (publicacoes.data ?? []).length === 0 ? (
+            <p className="text-sm text-text-muted">{t("Este perfil ainda não tem publicações.")}</p>
+          ) : (
+            <ul className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto" aria-label={t("Vídeos do perfil")}>
+              {(publicacoes.data ?? []).map((p) => {
+                const escolhida = p.id === mediaId.trim();
+                return (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => escolherPublicacao(p.id)}
+                      disabled={enviando}
+                      aria-pressed={escolhida}
+                      title={p.legenda ?? ""}
+                      className={`flex w-full flex-col overflow-hidden rounded-md border text-left text-xs ${
+                        escolhida ? "border-primary ring-2 ring-primary" : "border-border"
+                      }`}
+                    >
+                      {p.miniatura ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- CDN da Meta, URL que expira; next/image exigiria allowlist fixa.
+                        <img src={p.miniatura} alt="" className="aspect-square w-full object-cover" loading="lazy" />
+                      ) : (
+                        <span className="flex aspect-square w-full items-center justify-center bg-muted text-text-muted">
+                          {p.tipo === "VIDEO" ? t("Vídeo") : t("Publicação")}
+                        </span>
+                      )}
+                      <span className="line-clamp-2 p-1 text-text">{p.legenda || t("Sem legenda")}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+      <div className="space-y-1">
+        <Label htmlFor="regra-media-id">{t("Ou cole o id do post")}</Label>
+        <Input
+          id="regra-media-id"
+          value={mediaId}
+          onChange={(e) => setMediaId(e.target.value)}
+          placeholder={t("Id do post")}
+          disabled={enviando}
+        />
+      </div>
       <div className="space-y-1">
         <Label htmlFor="regra-palavra">{t("Palavra-gatilho")}</Label>
         <Input
