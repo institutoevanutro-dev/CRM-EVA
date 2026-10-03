@@ -40,6 +40,12 @@ const tagsRef: { current: string[] | undefined } = { current: undefined };
 vi.mock("@/hooks/inbox/useConversationTags", () => ({
   useConversationTagVocabulary: () => ({ data: tagsRef.current }),
 }));
+// As opções do seletor são a UNIÃO das duas caixas (#1206): o vocabulário do
+// CONTATO também é lido. Aqui ele fica ausente, e a oscilação medida é a da
+// caixa da conversa — sem o mock, o hook real pede um QueryClient.
+vi.mock("@/hooks/contacts/useContactTagVocabulary", () => ({
+  useContactTagVocabulary: () => ({ data: undefined }),
+}));
 vi.mock("@/hooks/inbox/useConversationCounts", () => ({
   useConversationCounts: () => ({ data: { fila: 3, mine: 2, all: 5 } }),
 }));

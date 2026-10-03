@@ -94,6 +94,22 @@ const SELECT_COLS = `
   channel_sessions:channel_session_id (phone_number, display_name, provider)
 `;
 
+/**
+ * `{valor}` como operando de `cs` DENTRO de um `or=` do PostgREST.
+ *
+ * Duas gramáticas, uma dentro da outra: o literal de array do Postgres
+ * (`{"vip"}`, com `"` e `\` escapados por barra) e, por fora, o valor entre
+ * aspas do `or=` (mesmo escape). Sem as aspas de fora, marcador com `,` ou `)`
+ * quebra a árvore lógica, e com `{`/`}` o PostgREST nem reconhece o array —
+ * `pLogicSingleVal` só aceita `{…}` sem chave dentro. O `termoSeguroParaOr` da
+ * busca não serve aqui: ele troca esses caracteres por curinga, e marcador é
+ * igualdade exata.
+ */
+function arrayDeUmValorParaOr(valor: string): string {
+  const escapa = (t: string) => t.replace(/[\\"]/g, (c) => `\\${c}`);
+  return `"${escapa(`{"${escapa(valor)}"}`)}"`;
+}
+
 interface CursorPayload {
   sort: string | null;
   id: string;
@@ -202,7 +218,24 @@ export async function listConversationsHandler(
   // "Só Instagram" / "Só WhatsApp" — mutuamente exclusivo com channel_session_id
   // na tela (InboxFilters), mas aqui compõe: nada impede pedir os dois.
   if (q.canal) query = query.eq("channel", q.canal);
-  if (q.tag) query = query.contains("tags", [q.tag]); // tags @> array[tag] (GIN)
+  // ⚠️ O MARCADOR FILTRADO É O DA CONVERSA **OU** O DO CONTATO.
+  //
+  // Era só `conversations.tags`, e o relato mede o buraco: *"adicionei a tag nele
+  // para testar e ele n aparece no filtro"* — o marcador fora posto no CONTATO
+  // (`ContactTagsEditor`, a mesma caixa da ficha e da campanha). Trocar a fonte
+  // pelo contato consertaria o relato e tiraria o filtro de quem marca a
+  // CONVERSA (`ConversationTagsEditor`, e a IA por `crm_manage_tags`): o marcador
+  // continuaria editável e deixaria de ser filtrável. As duas caixas, então.
+  //
+  // O lado do contato é o campo calculado `tags_do_contato` (migration 0303), e
+  // não um `contact_id.in.(…)`: a lista de ids viaja na URL e tem teto (ver
+  // `idsQueCabemNaURL`) — numa org com mais contatos marcados que isso, conversas
+  // sumiriam do filtro sem aviso. Este `or=` compõe por AND com o da busca e o do
+  // cursor: o PostgREST junta os parâmetros repetidos com E.
+  if (q.tag) {
+    const marcador = arrayDeUmValorParaOr(q.tag);
+    query = query.or(`tags.cs.${marcador},tags_do_contato.cs.${marcador}`);
+  }
 
   // No BANCO, e não em memória: filtrar depois de paginar devolveria páginas curtas —
   // e, quando a página inteira estivesse lida, uma lista vazia que a tela apresentava
