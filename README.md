@@ -507,8 +507,9 @@ Este é um projeto **self-host**: cada pessoa roda o CRM na **própria infraestr
 - **Telemetria (Sentry):** **desligada por padrão** — `SENTRY_DSN` vazio ou `off` não envia
   nada a ninguém. Para mandar os erros ao **seu** Sentry: `SENTRY_DSN=<seu-dsn>` no `.env`;
   vão com CPF, telefone e e-mail substituídos, cabeçalhos sensíveis, `extra`, `user` e
-  breadcrumbs de console removidos, e token de webhook/convite redigido da URL. O que é
-  redigido, e por quê, está em
+  breadcrumbs de console removidos, e token de webhook/convite redigido da URL. A gravação
+  de sessão (Replay) passa pelo mesmo filtro de URL e não grava as páginas com credencial
+  na URL ([`lib/sentry/replay.ts`](lib/sentry/replay.ts)). O que é redigido, e por quê, está em
   [`lib/sentry/scrub.ts`](lib/sentry/scrub.ts); a resolução do DSN em
   [`lib/sentry/dsn.ts`](lib/sentry/dsn.ts).
 
