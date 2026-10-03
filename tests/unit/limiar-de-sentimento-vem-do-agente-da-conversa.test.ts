@@ -120,8 +120,19 @@ function fazerAdmin(banco: Banco, rpcs: Linha[]) {
         } else if (c.op === "in") {
           const [col, vals] = c.args as [string, unknown[]];
           linhas = linhas.filter((l) => vals.includes(l[col]));
+        } else if (c.op === "filter") {
+          // Só o operador que o worker usa: `isdistinct` casa NULL (é `IS
+          // DISTINCT FROM`), e um operador desconhecido explode em vez de casar
+          // tudo calado.
+          const [col, op, val] = c.args as [string, string, unknown];
+          if (op !== "isdistinct") throw new Error(`filter não emulado: ${op}`);
+          linhas = linhas.filter((l) => (l[col] ?? null) !== val);
         }
       }
+      // O UPDATE é APLICADO às linhas que casaram: sem isso a guarda LGPD do
+      // worker não teria como ser medida (DeskcommCRM PR 2191).
+      const update = chamadas.find((c) => c.op === "update");
+      if (update) for (const l of linhas) Object.assign(l, update.args[0] as Linha);
       const ordens = chamadas.filter((c) => c.op === "order");
       if (ordens.length > 0) {
         linhas.sort((a, b) => {
@@ -288,6 +299,45 @@ beforeEach(() => {
     object: { sentiment_score: NOTA, reasoning_short: "cliente reclamando de recorrência" },
     usage: { inputTokens: 10, outputTokens: 5 },
   } as unknown as Awaited<ReturnType<typeof generateObject>>);
+});
+
+describe("LGPD: a nota não volta para uma mensagem anonimizada durante a medição", () => {
+  // Portado do projeto original (DeskcommCRM PR 2191 de @melgarafael). A
+  // corrida: o worker lê a mensagem, o contato é anonimizado enquanto o modelo
+  // classifica (body vira o sentinela, metadata vira `{}`), e o UPDATE
+  // regravaria a foto antiga da metadata mais a nota.
+  function cenario() {
+    const banco = montarBanco({ sessaoDaConversa: SESSAO_CLINICA });
+    banco.messages[0]!.metadata = { push_name: "Maria Silva" };
+    vi.mocked(createAdminClient).mockReturnValue(
+      fazerAdmin(banco, []) as unknown as ReturnType<typeof createAdminClient>,
+    );
+    return banco;
+  }
+
+  it("lê → anonimiza → grava: metadata continua `{}`", async () => {
+    const banco = cenario();
+    vi.mocked(generateObject).mockImplementationOnce((async () => {
+      Object.assign(banco.messages[0]!, { body: "[mensagem anonimizada]", metadata: {} });
+      return {
+        object: { sentiment_score: NOTA, reasoning_short: "cliente repetindo o pedido" },
+        usage: { inputTokens: 40, outputTokens: 12 },
+      };
+    }) as unknown as typeof generateObject);
+
+    await processSentiment(evento);
+
+    expect(generateObject).toHaveBeenCalledTimes(1);
+    expect(banco.messages[0]!.metadata).toEqual({});
+  });
+
+  it("mensagem viva grava a nota — controle", async () => {
+    const banco = cenario();
+
+    await processSentiment(evento);
+
+    expect(banco.messages[0]!.metadata).toMatchObject({ push_name: "Maria Silva", sentiment_score: NOTA });
+  });
 });
 
 describe("limiar de sentimento — o agente da conversa é quem manda (#486)", () => {
