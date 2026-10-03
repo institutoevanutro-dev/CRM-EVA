@@ -21,7 +21,7 @@ import {
 /**
  * O TURNO INTEIRO CONTRA POSTGRES DE VERDADE — a resposta pronta sai sem modelo,
  * marcada e registrada; e em TODO desvio do caminho feliz a IA responde como
- * antes. Harness em `turno-com-postgres.ts` (o mesmo de
+ * antes. Harness em `turno-com-postgres.ts` (espelho do de
  * `handoff-avisa-o-lead.test.ts`), mais o embedding INJETADO: vetores fixos,
  * sem rede.
  *

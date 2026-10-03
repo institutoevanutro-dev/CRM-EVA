@@ -7,14 +7,13 @@ import type * as Queue from "@/lib/agent-engine/queue/queue";
 import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
 
 /**
- * O TURNO INTEIRO CONTRA POSTGRES DE VERDADE — o harness que os invariantes de
- * turno dividem (`handoff-avisa-o-lead`, `resposta-pronta-no-turno`).
+ * O TURNO INTEIRO CONTRA POSTGRES DE VERDADE — harness de `resposta-pronta-no-turno`.
+ * Espelha o de `handoff-avisa-o-lead.test.ts`, que é congelado (freeze-invariants) e por isso guarda a própria cópia.
  *
  * `createInboundTurnHandler` real, canal que CAPTURA em vez de enviar,
  * `createFakeRegistry` para o modelo (um CONTROLE que conta as chamadas),
  * relógio fixo dentro da janela anti-ban (sem ele o `pacing` veta e a medição é
- * do motivo errado) e `sleep` no-op. Nasceu copiado em
- * `limite-de-envios-por-turno.test.ts`; aqui mora uma vez só.
+ * do motivo errado) e `sleep` no-op.
  */
 
 const container = process.env.TEST_DB_CONTAINER;
