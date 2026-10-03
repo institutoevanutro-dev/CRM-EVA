@@ -52,6 +52,7 @@ vi.mock("@/lib/auth/server", () => ({
   resolveActiveOrg: async () => ({ orgId: "org-1", role: "admin", interface_settings: null }),
   isMfaEnrolled: async () => true,
   requiresMfa: async () => false,
+  sessionAal: async () => "aal2",
 }));
 vi.mock("@/lib/auth/vinculo-revogado", () => ({ acessoFoiRevogado: async () => false }));
 vi.mock("next/navigation", () => ({
