@@ -17,6 +17,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/resend";
 import { audit } from "@/lib/audit";
 import { env } from "@/lib/env";
+import { diasAtePrazo, diasDeAtraso, prazoEmBr } from "./sla";
 import type { LgpdRequest } from "./types";
 
 export type AlarmThreshold = "data_request_d5" | "redact_d10";
@@ -67,13 +68,17 @@ export async function triggerSlaAlarm(
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 2. Compute days overdue (best-effort; MVP uses calendar days as approx)
+  // 2. Dias de atraso — contados em DIAS CIVIS, no eixo em que o prazo foi
+  //    contado. Ver `lib/lgpd/sla.ts`: `due_at` é a meia-noite UTC de um dia
+  //    útil, e o prazo vai até o FIM desse dia.
+  //
+  //    A versão anterior (`Math.round((now - due_at) / 86_400_000)`) media
+  //    milissegundos e arredondava meio dia para cima: às 09h do dia do prazo,
+  //    em São Paulo, o e-mail dizia "1 dia(s) em atraso".
   // ──────────────────────────────────────────────────────────────────────────
-  const dueAtMs = new Date(request.due_at).getTime();
-  const nowMs = Date.now();
-  const daysOverdue = Math.round((nowMs - dueAtMs) / 86_400_000);
+  const daysOverdue = diasDeAtraso(request.due_at, new Date());
 
-  const daysToDue = -daysOverdue; // negative = overdue
+  const daysToDue = diasAtePrazo(request.due_at, new Date()); // negativo = atrasado
 
   // ──────────────────────────────────────────────────────────────────────────
   // 3. Sentry warning — zero PII in payload
@@ -123,12 +128,10 @@ export async function triggerSlaAlarm(
           ? "D+5 (acesso a dados)"
           : "D+10 (anonimização/exclusão)";
 
-      const dueFmt = new Date(request.due_at).toLocaleString("pt-BR", {
-        timeZone: "America/Sao_Paulo",
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      });
+      // A DATA vem do dia civil que a coluna guarda, não do instante com fuso:
+      // `toLocaleString` com `timeZone: America/Sao_Paulo` devolvia o dia
+      // ANTERIOR (a meia-noite UTC do dia 05 é 21:00 do dia 04 em São Paulo).
+      const dueFmt = prazoEmBr(request.due_at) ?? new Date(request.due_at).toISOString().slice(0, 10);
 
       // `#dc2626` FICA, e não vira o accent: é semântica de ALERTA, não marca.
       // Um atraso que aparece em verde-sálvia porque o revendedor escolheu
