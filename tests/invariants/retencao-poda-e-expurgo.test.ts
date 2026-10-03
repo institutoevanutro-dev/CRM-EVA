@@ -191,8 +191,10 @@ describe("fn_expurgar_auditoria_vencida — a retenção que a doutrina prometia
     // auditoria". A função NÃO TEM seletor de linha — nem org, nem ator, nem
     // ação, nem id — e o único predicado é a idade, com piso no corpo. Não
     // existe argumento que a faça apagar a linha de ontem que incomoda.
-    auditar({ id: id(52), idadeDias: 10 });
+    // Em ordem cronológica: desde a 0305 o expurgo só apaga o COMEÇO da cadeia
+    // de hash, e uma linha antiga inserida depois de uma recente espera por ela.
     auditar({ id: id(53), idadeDias: 400 });
+    auditar({ id: id(52), idadeDias: 10 });
     expect(conta(`select public.fn_expurgar_auditoria_vencida(0, 1000)`)).toBe(1);
     expect(conta(`select count(*) from api_audit_log where id = '${id(52)}'`)).toBe(1);
   });

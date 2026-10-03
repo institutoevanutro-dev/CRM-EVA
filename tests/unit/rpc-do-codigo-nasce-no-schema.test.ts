@@ -85,7 +85,7 @@ const BASELINE = "supabase/baseline.sql";
 
 const CONGELADAS: Record<string, { degradacao: string; porque: string }> = {
   jsonb_set_last_alarm_at: {
-    degradacao: "lib/lgpd/sla-alarm.ts:203",
+    degradacao: "lib/lgpd/sla-alarm.ts:206",
     porque:
       "Existe fallback explícito no mesmo `try`: com erro na RPC, o alarme de SLA " +
       "faz o `update` cru em `lgpd_requests` com o filtro de organização na query. " +

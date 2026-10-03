@@ -10,7 +10,7 @@ import { type NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { resolveAuthDual } from "@/lib/api/auth-dual";
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { extFromMime, MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
 import { validateOutboundMedia } from "@/lib/messaging/media/upload-validation";
@@ -45,6 +45,10 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     scope: "mcp:write",
   });
   if (!authz.ok) return authz.response;
+  // Rota que aceita Bearer (PUBLIC_PATHS): o que não for contado aqui não é
+  // contado em lugar nenhum. Cada upload sobe arquivo de até 50 MB.
+  const teto = await tetoDeEscritaDoToken(authz, "conversation_media", requestId);
+  if (teto) return teto;
   // O ramo do token não carrega idioma de usuário: cai no padrão do produto.
   const t = (texto: string) => traduzir(texto, authz.idioma ?? IDIOMA_PADRAO);
   const activeOrg = { orgId: authz.organizationId };
