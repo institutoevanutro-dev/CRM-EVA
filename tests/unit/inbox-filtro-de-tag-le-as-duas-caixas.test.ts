@@ -19,7 +19,7 @@ import { listConversationsHandler } from "@/app/api/v1/conversations/_handler";
  * Trocar a fonte pelo contato consertaria o relato e tiraria o filtro de quem
  * marca a conversa: o marcador continuaria editável e deixaria de ser
  * filtrável. O filtro casa `tags` (conversa) OU `tags_do_contato` — o campo
- * calculado da migration 0303, que dispensa lista de ids na URL.
+ * calculado da migration 0304, que dispensa lista de ids na URL.
  *
  * ## Por que o caso com caracteres reservados
  *

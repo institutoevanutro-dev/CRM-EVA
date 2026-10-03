@@ -5,7 +5,7 @@
  *
  * O marcador mora em DUAS caixas: o marcador da CONVERSA (`conversations.tags`,
  * `text[]`, migration 0033) e o marcador do CONTATO, que a conversa enxerga pelo
- * campo calculado `tags_do_contato` (migration 0303). Quem filtra por marcador
+ * campo calculado `tags_do_contato` (migration 0304). Quem filtra por marcador
  * tem de casar as duas.
  *
  * Enquanto a régua morava dentro de quem LISTA, quem CONTA respondeu à mesma

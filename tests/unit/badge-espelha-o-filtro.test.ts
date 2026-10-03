@@ -57,7 +57,7 @@ describe("quais filtros a contagem aplica", () => {
   it("o marcador NÃO vira igualdade numa coluna que não existe (#1223)", () => {
     // `conversations` não tem coluna `tag` — `tag` é o nome do parâmetro da URL.
     // O marcador mora em `conversations.tags` (text[], migration 0033) e no campo
-    // calculado `tags_do_contato` (migration 0303), e por isso não é igualdade: é
+    // calculado `tags_do_contato` (migration 0304), e por isso não é igualdade: é
     // um `or=` sobre as duas caixas. Enquanto ele entrava nesta lista, a contagem
     // pedia `.eq("tag", valor)`, o PostgREST devolvia 42703 (`undefined_column`) e
     // a rota INTEIRA respondia 500 — com um marcador filtrado, toda aba do Inbox

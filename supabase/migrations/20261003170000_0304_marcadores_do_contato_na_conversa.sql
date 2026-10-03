@@ -1,4 +1,4 @@
--- 0303 — os marcadores do CONTATO alcançam o filtro de conversas (campo calculado)
+-- 0304 — os marcadores do CONTATO alcançam o filtro de conversas (campo calculado)
 --
 -- ═══ O QUE ISTO DESTRAVA ═══
 --
@@ -41,7 +41,7 @@ as $$
 $$;
 
 comment on function public.tags_do_contato(public.conversations) is
-  'Campo calculado do PostgREST: os marcadores do contato da conversa. Permite ao filtro ?tag= do Inbox casar conversations.tags OU contacts.tags num único or= (migration 0303).';
+  'Campo calculado do PostgREST: os marcadores do contato da conversa. Permite ao filtro ?tag= do Inbox casar conversations.tags OU contacts.tags num único or= (migration 0304).';
 
 revoke execute on function public.tags_do_contato(public.conversations) from public, anon;
 grant  execute on function public.tags_do_contato(public.conversations) to authenticated, service_role;

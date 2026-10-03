@@ -29115,7 +29115,7 @@ begin
   end loop;
 end $$;
 
--- ---- marcadores do contato no filtro de conversas (migration 0303) ----
+-- ---- marcadores do contato no filtro de conversas (migration 0304) ----
 -- Campo calculado do PostgREST: o filtro ?tag= do Inbox casa conversations.tags
 -- OU contacts.tags num único or=, sem lista de ids na URL. SECURITY INVOKER (a
 -- RLS de contacts vale para quem chama); as duas origens de EXECUTE revogadas.
@@ -29130,7 +29130,7 @@ as $$
 $$;
 
 comment on function public.tags_do_contato(public.conversations) is
-  'Campo calculado do PostgREST: os marcadores do contato da conversa. Permite ao filtro ?tag= do Inbox casar conversations.tags OU contacts.tags num único or= (migration 0303).';
+  'Campo calculado do PostgREST: os marcadores do contato da conversa. Permite ao filtro ?tag= do Inbox casar conversations.tags OU contacts.tags num único or= (migration 0304).';
 
 revoke execute on function public.tags_do_contato(public.conversations) from public, anon;
 grant  execute on function public.tags_do_contato(public.conversations) to authenticated, service_role;

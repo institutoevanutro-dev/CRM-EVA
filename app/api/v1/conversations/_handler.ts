@@ -212,7 +212,7 @@ export async function listConversationsHandler(
   // CONVERSA (`ConversationTagsEditor`, e a IA por `crm_manage_tags`): o marcador
   // continuaria editável e deixaria de ser filtrável. As duas caixas, então.
   //
-  // O lado do contato é o campo calculado `tags_do_contato` (migration 0303), e
+  // O lado do contato é o campo calculado `tags_do_contato` (migration 0304), e
   // não um `contact_id.in.(…)`: a lista de ids viaja na URL e tem teto (ver
   // `idsQueCabemNaURL`) — numa org com mais contatos marcados que isso, conversas
   // sumiriam do filtro sem aviso. Este `or=` compõe por AND com o da busca e o do
