@@ -1,0 +1,242 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Respostas prontas antes da IA — o atalho que nunca bloqueia",
+    "subtitle": "três travas, a mesma cadeia de envio, e o laço de retorno pela tela",
+    "output": "respostas-prontas.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "humano",
+      "label": "O que o humano vê"
+    },
+    {
+      "id": "borda",
+      "label": "Borda HTTP"
+    },
+    {
+      "id": "regra",
+      "label": "Decisão pura"
+    },
+    {
+      "id": "motor",
+      "label": "Motor do turno"
+    },
+    {
+      "id": "dados",
+      "label": "Banco"
+    }
+  ],
+  "mainPath": [
+    "turno",
+    "tentar",
+    "cadeia",
+    "mensagens",
+    "balao",
+    "tela"
+  ],
+  "nodes": [
+    {
+      "id": "tela",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "Perguntas frequentes (/app/ai/perguntas-frequentes)",
+      "sublabel": "itens · chave liga/desliga · rigor · revisado em · medição"
+    },
+    {
+      "id": "balao",
+      "lane": "humano",
+      "col": 4,
+      "type": "frontend",
+      "label": "MessageBubble",
+      "sublabel": "\"Resposta pronta\" quando sent_via='ai' + metadata.resposta_pronta_id"
+    },
+    {
+      "id": "api",
+      "lane": "borda",
+      "col": 1,
+      "type": "api",
+      "label": "/api/v1/ai/respostas-prontas",
+      "sublabel": "GET/POST · PATCH :id · PUT config · POST embeddings · GET metricas — manager+, auditado"
+    },
+    {
+      "id": "embed",
+      "lane": "borda",
+      "col": 2,
+      "type": "service",
+      "label": "embedarPerguntas",
+      "sublabel": "text-embedding-3-small no cadastro; sem chave salva NULL e a tela avisa"
+    },
+    {
+      "id": "travas",
+      "lane": "regra",
+      "col": 3,
+      "type": "service",
+      "label": "lib/respostas-prontas/casamento.ts",
+      "sublabel": "trava 1 ≥ limite (0,82) · trava 2 outro item < 0,70 · trava 3 curta e de um assunto"
+    },
+    {
+      "id": "turno",
+      "lane": "motor",
+      "col": 2,
+      "type": "service",
+      "label": "runAgentTurn",
+      "sublabel": "depois de pedido de humano e opt-out; antes da compactação e do modelo"
+    },
+    {
+      "id": "tentar",
+      "lane": "motor",
+      "col": 3,
+      "type": "service",
+      "label": "tentarRespostaPronta",
+      "sublabel": "nunca lança; qualquer desvio devolve o turno à IA"
+    },
+    {
+      "id": "cadeia",
+      "lane": "motor",
+      "col": 4,
+      "type": "service",
+      "label": "runBeforeSend + channel.send",
+      "sublabel": "seq -1 no send_ledger; spinning ARMADO (vetada → IA)"
+    },
+    {
+      "id": "perguntas",
+      "lane": "dados",
+      "col": 1,
+      "type": "database",
+      "label": "respostas_prontas + _perguntas + _config",
+      "sublabel": "RLS tenant + restritivas manager; sem linha de config = desligado"
+    },
+    {
+      "id": "usos",
+      "lane": "dados",
+      "col": 3,
+      "type": "database",
+      "label": "respostas_prontas_usos",
+      "sublabel": "1 por job; escrita só do serviço; nunca llm_calls"
+    },
+    {
+      "id": "mensagens",
+      "lane": "dados",
+      "col": 4,
+      "type": "database",
+      "label": "messages",
+      "sublabel": "metadata.resposta_pronta_id + idempotency_key"
+    },
+    {
+      "id": "audit",
+      "lane": "dados",
+      "col": 2,
+      "type": "database",
+      "label": "api_audit_log",
+      "sublabel": "resposta_pronta.created/updated/config_changed/embeddings_calculated"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "tela",
+      "to": "api",
+      "label": "cadastrar, editar, desativar, revisar, ligar, calcular"
+    },
+    {
+      "id": "e2",
+      "from": "api",
+      "to": "embed",
+      "label": "formas de perguntar novas"
+    },
+    {
+      "id": "e3",
+      "from": "api",
+      "to": "perguntas",
+      "label": "client de sessão (RLS faz tenant e papel)"
+    },
+    {
+      "id": "e4",
+      "from": "api",
+      "to": "audit",
+      "label": "uma mutação = uma linha"
+    },
+    {
+      "id": "e5",
+      "from": "turno",
+      "to": "tentar",
+      "label": "inboundsPendentes · só inbound_turn real"
+    },
+    {
+      "id": "e6",
+      "from": "tentar",
+      "to": "perguntas",
+      "label": "config ligada? · max(1 - (embedding <=> vetor)) por item"
+    },
+    {
+      "id": "e7",
+      "from": "tentar",
+      "to": "travas",
+      "label": "textoParaComparar · umAssuntoSo · decidirRespostaPronta"
+    },
+    {
+      "id": "e8",
+      "from": "tentar",
+      "to": "cadeia",
+      "label": "corpo cadastrado + metadata.resposta_pronta_id"
+    },
+    {
+      "id": "e9",
+      "from": "cadeia",
+      "to": "mensagens",
+      "label": "sendTurnMessage → sendMessageHandler"
+    },
+    {
+      "id": "e10",
+      "from": "tentar",
+      "to": "usos",
+      "label": "depois do envio aceito; falha aqui NÃO devolve à IA"
+    },
+    {
+      "id": "e11",
+      "from": "mensagens",
+      "to": "balao",
+      "label": "o atendente vê que não foi a IA"
+    },
+    {
+      "id": "e12",
+      "from": "usos",
+      "to": "tela",
+      "label": "medição: resolvidas × respondidas pela IA × custo evitado"
+    },
+    {
+      "id": "e13",
+      "from": "balao",
+      "to": "tela",
+      "label": "LAÇO DE RETORNO: resposta fora de lugar → gestor desativa o item ou sobe o rigor"
+    },
+    {
+      "id": "e14",
+      "from": "embed",
+      "to": "perguntas",
+      "label": "grava o vetor de cada forma de perguntar"
+    },
+    {
+      "id": "e15",
+      "from": "travas",
+      "to": "tentar",
+      "label": "veredito: responde ou devolve à IA"
+    },
+    {
+      "id": "e16",
+      "from": "turno",
+      "to": "cadeia",
+      "label": "sem atalho: a resposta do modelo passa pela mesma cadeia"
+    },
+    {
+      "id": "e17",
+      "from": "audit",
+      "to": "tela",
+      "label": "quem mudou o quê, e quando"
+    }
+  ]
+}
