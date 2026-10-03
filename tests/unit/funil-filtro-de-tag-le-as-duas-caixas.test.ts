@@ -69,6 +69,14 @@ describe("marcadoresDoCard — as duas caixas numa lista só", () => {
     expect(marcadoresDoCard(card({ tags: ["vip"], contact_tags: ["vip"] }))).toEqual(["vip"]);
   });
 
+  it("une também os marcadores das CONVERSAS do contato (decisão do dono, 19/09)", () => {
+    expect(
+      marcadoresDoCard(
+        card({ tags: ["recompra"], contact_tags: ["vip"], conversation_tags: ["reclamacao", "vip"] }),
+      ),
+    ).toEqual(["recompra", "vip", "reclamacao"]);
+  });
+
   it("negócio sem contato não quebra — `contact_tags` é opcional", () => {
     expect(marcadoresDoCard(card({ tags: ["recompra"], contact_id: null }))).toEqual(["recompra"]);
   });
@@ -91,6 +99,14 @@ describe("applyFilters — filtro por marcador", () => {
     expect(filtrar(leads, "recompra")).toEqual(["com"]);
   });
 
+  it("acha o card pelo marcador da CONVERSA — a terceira caixa", () => {
+    const leads = [
+      card({ id: "com", conversation_tags: ["reclamacao"] }),
+      card({ id: "sem", conversation_tags: ["outro"] }),
+    ];
+    expect(filtrar(leads, "reclamacao")).toEqual(["com"]);
+  });
+
   it("marcador que não existe em nenhuma das duas não casa", () => {
     const leads = [card({ id: "a", tags: ["recompra"], contact_tags: ["vip"] })];
     expect(filtrar(leads, "inexistente")).toEqual([]);
@@ -111,6 +127,14 @@ describe("os pontos de chamada — a regra só vale se quem a usa a chama", () =
     expect(fonte, "o resultado de withMarcadoresDoContato não chega à resposta").toMatch(
       /leads:\s*leadsComMarcadores\.leads/,
     );
+  });
+
+  it("a consulta de conversas do quadro traz as `tags` e as devolve no card", () => {
+    const fonte = readFileSync("app/api/v1/pipelines/[id]/board/route.ts", "utf8");
+    expect(fonte, "withConversas não seleciona `tags` das conversas").toMatch(
+      /from\("conversations"\)\s*\.select\("[^"]*\btags\b[^"]*"\)/,
+    );
+    expect(fonte, "o card não recebe `conversation_tags`").toContain("conversation_tags:");
   });
 
   it("o seletor OFERECE os marcadores pela mesma regra", () => {

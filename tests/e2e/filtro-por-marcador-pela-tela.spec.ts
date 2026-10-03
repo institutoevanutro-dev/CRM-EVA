@@ -15,10 +15,11 @@
  *  · Inbox: marca uma conversa pelo editor da CONVERSA e outra pelo do
  *    CONTATO; o seletor oferece os dois (a união dos vocabulários) e cada
  *    marcador filtra até a conversa certa, sem trazer a outra nem a neutra.
- *  · Funil: marca o contato em "Tags do contato" no Inbox; no quadro, o
- *    marcador aparece no seletor e filtra até o card. Controle negativo: um
- *    marcador posto SÓ em "Tags da conversa" não é do negócio nem da pessoa,
- *    e NÃO aparece no quadro.
+ *  · Funil: marca o contato em "Tags do contato" e a conversa em "Tags da
+ *    conversa", no Inbox; no quadro, os DOIS marcadores aparecem no seletor e
+ *    cada um filtra até o card (a conversa entrou no filtro por decisão do
+ *    dono, doc 40, 19/09 — este caso dizia o contrário até então). Controle
+ *    negativo: o card neutro nunca aparece filtrado.
  */
 import { randomInt, randomUUID } from "node:crypto";
 
@@ -177,7 +178,7 @@ test.describe("filtro por marcador, pela tela", () => {
     await captura(page, "filtro-tela-03-inbox-pela-conversa");
   });
 
-  test("Funil (#1208): o marcador do contato filtra o quadro; o da conversa não aparece nele", async ({
+  test("Funil (#1208): o marcador do contato E o da conversa filtram o quadro", async ({
     page,
   }) => {
     const nome = `Filtro Funil ${SUFIXO}`;
@@ -231,9 +232,10 @@ test.describe("filtro por marcador, pela tela", () => {
     await expect(page.getByRole("menuitem", { name: tagDoContato, exact: true })).toBeVisible({
       timeout: 30_000,
     });
-    // Controle negativo: o marcador da CONVERSA não é do negócio nem da pessoa.
-    await expect(page.getByRole("menuitem", { name: soNaConversa, exact: true })).toHaveCount(0);
-    await captura(page, "filtro-tela-04-quadro-oferece-o-do-contato");
+    // O da CONVERSA também é oferecido: é a terceira caixa, e o dono decidiu
+    // que ela filtra o quadro (doc 40, item 7, 19/09).
+    await expect(page.getByRole("menuitem", { name: soNaConversa, exact: true })).toBeVisible();
+    await captura(page, "filtro-tela-04-quadro-oferece-o-do-contato-e-o-da-conversa");
 
     await page.getByRole("menuitem", { name: tagDoContato, exact: true }).click();
     await expect(page.getByRole("group", { name: `Lead: ${cardMarcado}` })).toBeVisible({
@@ -241,5 +243,15 @@ test.describe("filtro por marcador, pela tela", () => {
     });
     await expect(page.getByRole("group", { name: `Lead: ${cardNeutro}` })).toHaveCount(0);
     await captura(page, "filtro-tela-05-quadro-filtrado-pelo-contato");
+
+    // E pelo marcador da conversa: o mesmo card, e o neutro continua fora.
+    // Com um marcador escolhido, o botão do seletor passa a se chamar por ele.
+    await page.getByRole("button", { name: tagDoContato, exact: true }).click();
+    await page.getByRole("menuitem", { name: soNaConversa, exact: true }).click();
+    await expect(page.getByRole("group", { name: `Lead: ${cardMarcado}` })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByRole("group", { name: `Lead: ${cardNeutro}` })).toHaveCount(0);
+    await captura(page, "filtro-tela-06-quadro-filtrado-pela-conversa");
   });
 });

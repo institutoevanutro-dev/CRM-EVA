@@ -81,8 +81,9 @@ export function applyFilters(leads: Lead[], f: LeadFilters): Lead[] {
       }
     }
     if (f.status && f.status !== "all" && l.status !== f.status) return false;
-    // As DUAS caixas de marcador — ver lib/kanban/marcadores-do-card.ts. Só
-    // `l.tags` deixava o marcador escrito no CONTATO sem casar card nenhum.
+    // As TRÊS caixas de marcador (negócio, contato, conversa) — ver
+    // lib/kanban/marcadores-do-card.ts. Só `l.tags` deixava o marcador escrito
+    // no contato ou na conversa sem casar card nenhum.
     if (f.tag && !cardTemMarcador(l, f.tag)) return false;
     if (
       search &&

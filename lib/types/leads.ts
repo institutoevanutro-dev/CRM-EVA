@@ -107,6 +107,13 @@ export interface Lead {
    * contato (criado à mão ou por webhook) simplesmente não tem.
    */
   contact_tags?: string[];
+  /**
+   * Derivado (não é coluna): os marcadores das CONVERSAS do contato deste
+   * negócio — a terceira caixa, "Tags da conversa" no painel do Inbox, onde a
+   * IA também escreve. União de TODAS as conversas do contato, não só da mais
+   * recente. Filtrar por ela é decisão do dono (doc 40, item 7, 19/09).
+   */
+  conversation_tags?: string[];
   created_at: string;
   updated_at: string;
   created_by_user_id: string | null;

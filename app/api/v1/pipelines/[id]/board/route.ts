@@ -247,6 +247,12 @@ async function withScores(
  *
  * Ordena por `last_message_at` e fica com a primeira de cada contato — as
  * conversas já vêm ordenadas, então o primeiro visto é o mais recente.
+ *
+ * A MESMA consulta traz os marcadores de TODAS as conversas do contato
+ * (`conversation_tags`, a terceira caixa — decisão do dono, doc 40, 19/09).
+ * Aqui e não numa função própria porque ela já lê cada conversa do contato:
+ * uma coluna a mais custa bytes; outra consulta com a mesma lista de ids na URL
+ * custaria outra ida ao banco por quadro aberto.
  */
 async function withConversas(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -262,7 +268,7 @@ async function withConversas(
   const { data, error } = await buscaEmLotes(contactIds, (lote) =>
     supabase
       .from("conversations")
-      .select("id, contact_id, last_message_preview, last_message_at, unread_count_for_assignee")
+      .select("id, contact_id, last_message_preview, last_message_at, unread_count_for_assignee, tags")
       .eq("organization_id", organizationId)
       .in("contact_id", lote)
       .order("last_message_at", { ascending: false, nullsFirst: false }),
@@ -270,13 +276,21 @@ async function withConversas(
   if (error) return { leads, error: error.message };
 
   const porContato = new Map<string, NonNullable<Lead["conversa"]>>();
+  const marcadoresPorContato = new Map<string, Set<string>>();
   for (const row of (data ?? []) as Array<{
     id: string;
     contact_id: string;
     last_message_preview: string | null;
     last_message_at: string | null;
     unread_count_for_assignee: number | null;
+    tags: string[] | null;
   }>) {
+    // Os marcadores somam TODAS as conversas; a linha do card é só a mais recente.
+    for (const tag of row.tags ?? []) {
+      const doContato = marcadoresPorContato.get(row.contact_id) ?? new Set<string>();
+      doContato.add(tag);
+      marcadoresPorContato.set(row.contact_id, doContato);
+    }
     // Primeira vista vence: a consulta já veio ordenada por atividade.
     if (porContato.has(row.contact_id)) continue;
     porContato.set(row.contact_id, {
@@ -289,8 +303,15 @@ async function withConversas(
 
   return {
     leads: leads.map((lead) => {
-      const conversa = lead.contact_id ? porContato.get(lead.contact_id) : undefined;
-      return conversa ? { ...lead, conversa } : lead;
+      if (!lead.contact_id) return lead;
+      const conversa = porContato.get(lead.contact_id);
+      const marcadores = marcadoresPorContato.get(lead.contact_id);
+      return {
+        ...lead,
+        ...(conversa ? { conversa } : {}),
+        // Vazio não vira campo, como `contact_tags`: o payload não engorda.
+        ...(marcadores && marcadores.size > 0 ? { conversation_tags: [...marcadores] } : {}),
+      };
     }),
     error: null,
   };
