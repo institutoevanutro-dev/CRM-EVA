@@ -17,6 +17,20 @@ import { normalizarTexto } from "@/lib/opt-out/deteccao";
 export const LIMITE_PADRAO = 0.82;
 export const LIMITE_MINIMO = 0.78;
 export const LIMITE_MAXIMO = 0.95;
+
+/**
+ * Dor, sangramento, inchaço, dente quebrado: paciente com sintoma recebe a IA
+ * (e quem a supervisiona), nunca a tabela de preço. Mais largo que o
+ * `detectUrgencySignal` compartilhado DE PROPÓSITO e só aqui: ali uma palavra a
+ * mais vira escalação em todo canal; aqui o falso positivo custa só uma chamada
+ * de modelo. Texto já sem acento (`normalizarTexto`).
+ */
+const SINAL_CLINICO =
+  /\b(dor|dores|doi|doeu|doendo|dolorid[oa]s?|inchad[oa]s?|inchaco|inchou|sangr\w*|febre|pus|quebr(ou|ad[oa])|lasc(ou|ad[oa])|latej\w*|sensibilidade|sensivel)\b/u;
+
+export function sinalClinico(texto: string): boolean {
+  return SINAL_CLINICO.test(normalizarTexto(texto));
+}
 /**
  * Trava 2 — outro item é "perto demais" quando a similaridade dele é >= este
  * piso E >= (melhor - MARGEM_OUTRO_ITEM). Relativa de propósito: itens irmãos

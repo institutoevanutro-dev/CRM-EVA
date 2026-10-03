@@ -7,7 +7,7 @@
  * o mesmo encanamento de `avisarLeadDaEscalacao`.
  *
  * ## Nunca bloqueia o atendimento
- * Desligada, sem perguntas, sinal de urgência, trava reprovada, embedding fora do
+ * Desligada, sem perguntas, sinal de urgência ou de sintoma, trava reprovada, embedding fora do
  * ar, veto da cadeia, canal recusando, erro inesperado: tudo devolve
  * `respondeu: false`, e o turno segue para a IA exatamente como antes. A ÚNICA
  * coisa que não devolve `false` é falha DEPOIS do envio aceito (o registro do
@@ -32,6 +32,7 @@ import { embedText } from '@/lib/ai/embed';
 import { MODELO_DE_EMBEDDING } from '@/lib/ai/embeddings/chave';
 import {
   decidirRespostaPronta,
+  sinalClinico,
   textoParaComparar,
   umAssuntoSo,
 } from '@/lib/respostas-prontas/casamento';
@@ -42,6 +43,7 @@ import { detectUrgencySignal } from '../guardrails/sinal-de-urgencia';
 import type { AvisoDeEscalacaoIds, AvisoDeEscalacaoOpts } from './aviso-de-escalacao';
 
 export const SEQ_DA_RESPOSTA_PRONTA = -1;
+const TEMPO_MAXIMO_DO_EMBEDDING_MS = 3000;
 
 export type DesfechoDaRespostaPronta =
   /** `null` só no replay em que o ledger provou o envio e o uso não foi registrado. */
@@ -121,6 +123,11 @@ async function tentar(
   if (opts.pendentes.some((t) => detectUrgencySignal(t))) {
     return { respondeu: false, motivo: 'sinal_de_urgencia' };
   }
+  // Dor, inchaço, dente quebrado: sintoma vai para a IA mesmo quando a frase
+  // também fala de um item cadastrado ("a limpeza doeu?").
+  if (opts.pendentes.some((t) => sinalClinico(t))) {
+    return { respondeu: false, motivo: 'sinal_clinico' };
+  }
 
   const texto = textoParaComparar(opts.pendentes);
   const forma = umAssuntoSo(texto);
@@ -132,6 +139,9 @@ async function tentar(
       await (opts.embed ?? embedText)(texto, {
         organizationId: ids.tenantId,
         ponto: 'embedding_consultar',
+        // O cliente está esperando: sem resposta em 3s, a IA atende.
+        abortSignal: AbortSignal.timeout(TEMPO_MAXIMO_DO_EMBEDDING_MS),
+        maxRetries: 0,
       })
     ).embedding;
   } catch (err) {

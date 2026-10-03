@@ -35,6 +35,10 @@ export interface EmbedOptions {
    */
   chave?: ChaveDeEmbedding;
   model?: ModelId;
+  /** Caminho quente (resposta pronta antes da IA): quem espera um cliente corta
+   *  a chamada em vez de pendurar o turno. Sem isto, o padrão do SDK. */
+  abortSignal?: AbortSignal;
+  maxRetries?: number;
 }
 
 export interface EmbedResult {
@@ -90,6 +94,8 @@ export async function embedText(
     headers: chave.viaGateway
       ? gatewayHeaders({ organizationId: opts.organizationId })
       : undefined,
+    ...(opts.abortSignal !== undefined ? { abortSignal: opts.abortSignal } : {}),
+    ...(opts.maxRetries !== undefined ? { maxRetries: opts.maxRetries } : {}),
   });
 
   // Dimensão asserida a cada chamada: divergir de modelo quebra o recall em

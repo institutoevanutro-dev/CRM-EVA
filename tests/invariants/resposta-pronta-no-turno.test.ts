@@ -235,6 +235,38 @@ describe("resposta pronta no turno de inbound", () => {
     expect(await contarUsos()).toBe(0);
   });
 
+  it("embedding que nunca responde: corta em 3s, sem retentativa, e o turno segue para a IA", async () => {
+    let recebido: { abortSignal?: AbortSignal; maxRetries?: number } = {};
+    // Só termina quando o sinal aborta — como o fetch do SDK de verdade.
+    const embedPendurado: typeof embedText = (_texto, o) => {
+      embedChamado += 1;
+      recebido = { abortSignal: o.abortSignal, maxRetries: o.maxRetries };
+      return new Promise((_ok, falha) => {
+        o.abortSignal?.addEventListener("abort", () => falha(o.abortSignal?.reason));
+      });
+    };
+    const inicio = Date.now();
+    await rodaTurno(pool, m, ALVO, handlerCom(embedPendurado), ["Quanto custa a limpeza?"], "pronta");
+    expect(embedChamado).toBeGreaterThan(0);
+    expect(recebido.maxRetries).toBe(0);
+    expect(recebido.abortSignal, "o atalho não passou sinal de corte").toBeDefined();
+    expect(Date.now() - inicio).toBeLessThan(10_000);
+    expect(modeloChamado).toBeGreaterThan(0);
+    expect(saiuARespostaPronta()).toBe(false);
+    expect(await contarUsos()).toBe(0);
+  }, 20_000);
+
+  // "a limpeza doeu é normal?" já caía na trava 3 (o "é" sem acento lê como
+  // conjunção); "A limpeza doeu?" passa nas três travas e casa com a limpeza —
+  // é ela que prova a guarda de sintoma.
+  it.each(["A limpeza doeu?", "a limpeza doeu é normal?"])("dor depois do procedimento (%j): nem com a pergunta frequente casando sai resposta pronta", async (frase) => {
+    await rodaTurnoCom(frase);
+    expect(embedChamado, "sintoma não pode nem chegar ao casamento").toBe(0);
+    expect(modeloChamado).toBeGreaterThan(0);
+    expect(saiuARespostaPronta()).toBe(false);
+    expect(await contarUsos()).toBe(0);
+  });
+
   it("erro de banco dentro do atalho: o turno segue para a IA", async () => {
     // Vetor de 3 dimensões contra a coluna vector(1536): o `<=>` da consulta de
     // similaridade estoura no Postgres — erro inesperado, nunca turno derrubado.

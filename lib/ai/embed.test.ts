@@ -142,4 +142,22 @@ describe("embedText", () => {
 
     await expect(embedText("oi", { organizationId: "org-1" })).rejects.toThrow(/1536/);
   });
+
+  it("repassa abortSignal e maxRetries ao SDK — o caminho quente não pode pendurar", async () => {
+    const sinal = AbortSignal.timeout(3000);
+    await embedText("oi", { organizationId: "org-1", abortSignal: sinal, maxRetries: 0 });
+
+    const arg = embedSpy.mock.calls[0]?.[0] as { abortSignal?: AbortSignal; maxRetries?: number };
+    expect(arg.abortSignal).toBe(sinal);
+    expect(arg.maxRetries).toBe(0);
+  });
+
+  it("sem as opções, o SDK fica no padrão dele (indexação segue com retentativa)", async () => {
+    await embedText("oi", { organizationId: "org-1" });
+
+    const arg = embedSpy.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(arg.abortSignal).toBeUndefined();
+    expect(arg.maxRetries).toBeUndefined();
+  });
 });
+

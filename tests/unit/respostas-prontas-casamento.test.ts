@@ -5,6 +5,7 @@ import {
   LIMITE_PADRAO,
   TAMANHO_MAXIMO,
   decidirRespostaPronta,
+  sinalClinico,
   textoParaComparar,
   umAssuntoSo,
 } from "@/lib/respostas-prontas/casamento";
@@ -130,5 +131,41 @@ describe("travas 1 e 2 — similaridade por item", () => {
 
   it("limite abaixo do piso é levado ao piso 0,78", () => {
     expect(decidirRespostaPronta(new Map([["limpeza", 0.6]]), 0.1).casou).toBe(false);
+  });
+});
+
+describe("sinalClinico — dor e sintoma nunca recebem resposta pronta", () => {
+  const CLINICOS = [
+    "a limpeza doeu é normal?",
+    "Estou com DOR depois da extração",
+    "o dente dói quando bebo gelado",
+    "tá doendo muito",
+    "a gengiva ficou dolorida",
+    "meu rosto está inchado",
+    "a bochecha inchou",
+    "a gengiva sangrou na escovação",
+    "está sangrando",
+    "tive febre ontem",
+    "saiu pus do dente",
+    "o dente quebrou",
+    "a restauração lascou",
+    "está latejando",
+    "fiquei com sensibilidade depois do clareamento",
+  ];
+  const NEUTROS = [
+    "Quanto custa a limpeza?",
+    "Vocês atendem sábado?",
+    "o dourado da coroa é ouro?",
+    "a doutora atende amanhã?",
+    "adorei o atendimento",
+    "qual o endereço?",
+  ];
+
+  it.each(CLINICOS)("acha sintoma em %j", (t) => {
+    expect(sinalClinico(t)).toBe(true);
+  });
+
+  it.each(NEUTROS)("não acha sintoma em %j", (t) => {
+    expect(sinalClinico(t)).toBe(false);
   });
 });
