@@ -64,6 +64,22 @@ describe("MessageBubble — rótulo de origem", () => {
     expect(screen.getByText("Celular")).toBeInTheDocument();
   });
 
+  it("resposta pronta (ai + metadata.resposta_pronta_id) mostra 'Resposta pronta', não 'IA'", () => {
+    render(
+      <MessageBubble message={msg({ sent_via: "ai", metadata: { resposta_pronta_id: "item-1" } })} />,
+    );
+    expect(screen.getByText("Resposta pronta")).toBeInTheDocument();
+    expect(screen.queryByText("IA")).not.toBeInTheDocument();
+  });
+
+  it("a marca só vale para o que saiu pelo motor: digitado por humano continua 'Atendente'", () => {
+    render(
+      <MessageBubble message={msg({ sent_via: "user", metadata: { resposta_pronta_id: "item-1" } })} />,
+    );
+    expect(screen.getByText("Atendente")).toBeInTheDocument();
+    expect(screen.queryByText("Resposta pronta")).not.toBeInTheDocument();
+  });
+
   it("automação não inventa rótulo — ninguém grava esse valor", () => {
     render(<MessageBubble message={msg({ sent_via: "automation" })} />);
     expect(screen.queryByText("Automação")).not.toBeInTheDocument();

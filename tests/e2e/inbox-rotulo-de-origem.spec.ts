@@ -204,6 +204,10 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
       { ...base, direction: "outbound", status: "sent", sent_via: "ai", body: "RESPOSTA DO AGENTE", sent_at: new Date(t0 + 2000).toISOString() },
       { ...base, direction: "outbound", status: "sent", sent_via: "user", sent_by_user_id: creds.users.agent!.id, body: "RESPOSTA DIGITADA POR MIM", sent_at: new Date(t0 + 3000).toISOString() },
       { ...base, direction: "outbound", status: "sent", sent_via: "user", sent_by_user_id: creds.users.manager!.id, body: "RESPOSTA DIGITADA PELO COLEGA", sent_at: new Date(t0 + 4000).toISOString() },
+      // A RESPOSTA PRONTA: o motor envia com `sent_via='ai'` e carimba
+      // `metadata.resposta_pronta_id` (lib/agent-engine/agent/resposta-pronta.ts).
+      // Mesmo `sent_via` da linha do agente — quem separa é a metadata.
+      { ...base, direction: "outbound", status: "sent", sent_via: "ai", body: "RESPOSTA PRONTA CADASTRADA", metadata: { resposta_pronta_id: "0306eeee-0000-4000-8000-000000000001" }, sent_at: new Date(t0 + 5000).toISOString() },
     ];
     // Uma a uma, e não em lote: no insert em LOTE o PostgREST une as chaves de
     // todas as linhas e manda NULL onde a linha não a tem — então uma linha que
@@ -259,6 +263,7 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
       ["RESPOSTA DO AGENTE", "IA"],
       ["RESPOSTA DIGITADA POR MIM", "Você"],
       ["RESPOSTA DIGITADA PELO COLEGA", "Atendente"],
+      ["RESPOSTA PRONTA CADASTRADA", "Resposta pronta"],
     ];
 
     for (const [corpo, rotulo] of esperado) {
@@ -284,12 +289,19 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
       "o balão do colega não pode dizer 'Você' — sent_via='user' não diz QUAL humano digitou",
     ).not.toContainText("Você");
 
+    // A resposta pronta NÃO diz "IA": o atendente leria o texto da clínica como
+    // algo que o modelo inventou.
+    await expect(
+      balaoCom("RESPOSTA PRONTA CADASTRADA").getByText("IA", { exact: true }),
+      "a resposta pronta não pode levar o rótulo 'IA'",
+    ).toHaveCount(0);
+
     // O CONTROLE NEGATIVO, e ele é o que separa "rotula certo" de "rotula
     // tudo": a mensagem RECEBIDA não leva rótulo de origem nenhum. Sem ele,
     // um componente que carimbasse "Celular" em toda bolha passaria nos
     // casos acima.
     const bolhaDoCliente = balaoCom("PERGUNTA DO CLIENTE");
-    for (const rotulo of ["Celular", "IA", "Você", "Atendente"]) {
+    for (const rotulo of ["Celular", "IA", "Você", "Atendente", "Resposta pronta"]) {
       await expect(
         bolhaDoCliente,
         `a mensagem do cliente não pode levar o rótulo "${rotulo}"`,

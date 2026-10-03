@@ -9390,6 +9390,7 @@ export const DICIONARIO: Traducoes = {
   "Importando histórico…": { es: "Importando historial…" },
   "Progresso da importação do histórico": { es: "Progreso de la importación del historial" },
   "Não deu para importar o histórico.": { es: "No se pudo importar el historial." },
+  "Resposta pronta": { es: "Respuesta lista" },
 };
 
 /**

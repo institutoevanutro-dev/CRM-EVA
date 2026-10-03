@@ -65,6 +65,8 @@ export interface SendMessageInput {
   template?: { name: string; language: string; values: Record<string, string> };
   /** `"followup"` só no turno de follow-up; o atendimento não passa (ver `HandlerCtx`). */
   origemDoEnvio?: 'followup';
+  /** Ver `ChannelSendInput.metadata`. A `idempotency_key` do ledger sempre vence. */
+  metadata?: Record<string, string>;
 }
 
 /** Fallback do ator ai_agent quando não há agente publicado (cfg.agentActorId). */
@@ -159,7 +161,7 @@ export async function sendTurnMessage(
               }
             : { type: 'text' as const }),
           body: input.body,
-          metadata: { idempotency_key: idempotencyKey },
+          metadata: { ...input.metadata, idempotency_key: idempotencyKey },
         },
       );
     } catch (err) {

@@ -92,7 +92,12 @@ export function MessageBubble({
   // Vigiado nas duas direções por tests/unit/rotulo-de-origem-tem-emissor.
   const senderLabel = (() => {
     if (!isOutbound) return null;
-    if (message.sent_via === "ai") return "IA";
+    if (message.sent_via === "ai") {
+      // Texto escrito pela organização e enviado SEM modelo
+      // (`lib/agent-engine/agent/resposta-pronta.ts` carimba a metadata). O
+      // atendente precisa saber que não foi a IA nem uma pessoa.
+      return typeof message.metadata?.resposta_pronta_id === "string" ? "Resposta pronta" : "IA";
+    }
     if (message.sent_via === "external_device") return "Celular";
     if (message.sent_via === "user" || message.sent_via === "crm") {
       // "Você" exige as DUAS pontas: saber quem lê e saber quem enviou. Falta
