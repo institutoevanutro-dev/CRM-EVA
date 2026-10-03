@@ -9,6 +9,11 @@
  */
 import { z } from "zod";
 
+import {
+  MAXIMO_DE_ETIQUETAS_NO_FILTRO,
+  MODOS_DE_ETIQUETA,
+} from "@/lib/inbox/marcador-da-conversa";
+
 const PHONE_REGEX = /^\+\d{8,15}$/;
 const CPF_DIGITS = /^\d{11}$/;
 
@@ -81,7 +86,32 @@ export const CONTACT_ORDER_BY = [
 
 export const contactListQuerySchema = z.object({
   search: z.string().optional(),
-  tag: z.string().optional(),
+  // ⚠️ VÁRIAS etiquetas (#1274). Aceita `string` OU `string[]`, e a
+  // repetição na URL (`?tag=vip&tag=orçamento`) é lida por `getAll`. Aceitar as
+  // DUAS formas é o que mantém o `?tag=vip` singular funcionando: `get` devolve
+  // string e `getAll` devolve array de um, e os dois precisam passar pelo MESMO
+  // schema — se este só aceitasse array, toda chamada antiga quebraria com 422.
+  tag: z
+    .union([z.string(), z.array(z.string()).max(MAXIMO_DE_ETIQUETAS_NO_FILTRO)])
+    .optional()
+    .transform((v) => {
+      if (v === undefined) return undefined;
+      const lista = Array.isArray(v) ? v : [v];
+      // Lista VAZIA vira `undefined`, e não `[]` — mesma razão do schema do
+      // Inbox: `getAll` devolve `[]` sem o parâmetro, e `[]` num `cs` é um filtro
+      // que não casa nada, com o filtro desligado.
+      return lista.length > 0 ? lista : undefined;
+    }),
+  /**
+   * E ou OU entre as etiquetas escolhidas (#1274). `e` é o padrão — e é o que
+   * uma etiqueta só já significava, logo o parâmetro só importa havendo duas.
+   *
+   * `z.enum` recusa o valor fora dos dois, e a recusa vira 422: `?modo=xou` é
+   * quase sempre alguém copiando o nome do parâmetro errado, e a resposta
+   * ensina o integrador a corrigir. Na TELA quem lê é `modoDeEtiqueta`, que cai
+   * no `e` — uma tela não pode quebrar por um parâmetro inventado.
+   */
+  modo: z.enum(MODOS_DE_ETIQUETA).optional(),
   source: z.string().optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),

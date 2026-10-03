@@ -16,6 +16,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { CONVERSATION_TERMINAL_STATUSES } from "@/lib/schemas";
 import { orgTemAutomatico } from "@/lib/ai/agents/org-tem-automatico";
 import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
+import { aplicarMarcadores, modoDeEtiqueta } from "@/lib/inbox/marcador-da-conversa";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -52,8 +53,14 @@ export function filtrosAuxiliaresDaContagem(
   if (numero) filtros.push(["channel_session_id", numero]);
   const canal = sp.get("canal");
   if (canal === "instagram" || canal === "whatsapp") filtros.push(["channel", canal]);
-  const tag = sp.get("tag");
-  if (tag) filtros.push(["tag", tag]);
+  // O MARCADOR não entra nesta lista, e não é esquecimento: ele não é
+  // IGUALDADE numa coluna, é um `or=` sobre DUAS caixas — `conversations.tags`
+  // e o campo calculado do contato. `conversations` não tem coluna `tag` (`tag`
+  // é o nome do parâmetro da URL): com ele aqui, o laço lá embaixo pedia
+  // `.eq("tag", …)`, o PostgREST devolvia 42703 (`undefined_column`) e a rota
+  // INTEIRA respondia 500 — com um marcador filtrado, toda aba do Inbox ficava
+  // sem número, a "Fechadas" inclusive (#1223). Quem aplica o marcador é
+  // `aplicarMarcador`, a mesma régua que a lista usa.
   return filtros;
 }
 
@@ -89,6 +96,13 @@ export async function GET(req: NextRequest): Promise<Response> {
   const sp = req.nextUrl.searchParams;
   const auxiliares = filtrosAuxiliaresDaContagem(sp);
   const soNaoLidas = contagemSoNaoLidas(sp);
+  // ⚠️ O badge conta o MESMO que a lista mostra, então o marcador é lido com
+  // `getAll` e o `modo` viaja junto (#1274). Ler com `get` aqui deixaria o badge
+  // de um filtro de duas etiquetas contando uma só — e a aba diria "Fila 3"
+  // listando duas: exatamente a divergência que este arquivo existe para
+  // impedir, agora pelo caminho do marcador em vez do de canal.
+  const marcadores = sp.getAll("tag");
+  const modo = modoDeEtiqueta(sp.get("modo")) ?? "e";
 
   // ⚠️ TODA contagem nasce daqui, e daqui já sai com `organization_id` E com os
   // filtros auxiliares. Herdar tira a opção de esquecer: não existe o caminho
@@ -99,6 +113,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       .select("id", { count: "exact", head: true })
       .eq("organization_id", org);
     for (const [coluna, valor] of auxiliares) q = q.eq(coluna, valor);
+    // O marcador entra pela régua da LISTA — a mesma função, não uma segunda.
+    q = aplicarMarcadores(q, marcadores, modo);
     if (soNaoLidas) q = q.gt("unread_count_for_assignee", 0);
     return q;
   };

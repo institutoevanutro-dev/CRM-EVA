@@ -18,6 +18,7 @@ import type {
 import type { Conversation } from "@/lib/types/messaging";
 import { normalizarTermoDeBusca } from "@/lib/inbox/termo-de-busca";
 import { ORDEM_DA_ESPERA, ehAFila } from "@/lib/inbox/comando-da-conversa";
+import { aplicarMarcadores } from "@/lib/inbox/marcador-da-conversa";
 
 /**
  * Prepara o termo digitado para viajar dentro de um `or=` do PostgREST.
@@ -202,7 +203,31 @@ export async function listConversationsHandler(
   // "Só Instagram" / "Só WhatsApp" — mutuamente exclusivo com channel_session_id
   // na tela (InboxFilters), mas aqui compõe: nada impede pedir os dois.
   if (q.canal) query = query.eq("channel", q.canal);
-  if (q.tag) query = query.contains("tags", [q.tag]); // tags @> array[tag] (GIN)
+  // ⚠️ O MARCADOR FILTRADO É O DA CONVERSA **OU** O DO CONTATO.
+  //
+  // Era só `conversations.tags`, e o relato mede o buraco: *"adicionei a tag nele
+  // para testar e ele n aparece no filtro"* — o marcador fora posto no CONTATO
+  // (`ContactTagsEditor`, a mesma caixa da ficha e da campanha). Trocar a fonte
+  // pelo contato consertaria o relato e tiraria o filtro de quem marca a
+  // CONVERSA (`ConversationTagsEditor`, e a IA por `crm_manage_tags`): o marcador
+  // continuaria editável e deixaria de ser filtrável. As duas caixas, então.
+  //
+  // O lado do contato é o campo calculado `tags_do_contato` (migration 0304), e
+  // não um `contact_id.in.(…)`: a lista de ids viaja na URL e tem teto (ver
+  // `idsQueCabemNaURL`) — numa org com mais contatos marcados que isso, conversas
+  // sumiriam do filtro sem aviso. Este `or=` compõe por AND com o da busca e o do
+  // cursor: o PostgREST junta os parâmetros repetidos com E.
+  // A régua do marcador mora num lugar só (`lib/inbox/marcador-da-conversa.ts`),
+  // porque a segunda régua sempre diverge: foi assim que a contagem das abas
+  // passou a pedir uma coluna que não existe (#1223). Aqui ela é só aplicada.
+  //
+  // ⚠️ `aplicarMarcadores`, e o `modo` vai junto (#1274). O filtro passou a
+  // aceitar VÁRIAS etiquetas com E/OU, e `aplicarMarcadores` é quem sabe as
+  // duas coisas: que uma etiqueta só tem de sair byte a byte como antes, e que
+  // E (`cs`) e OU (`ov`) são operadores diferentes. Chamar `aplicarMarcador`
+  // aqui com a lista inteira faria o TypeScript aceitar e o filtro casar o
+  // ARRAY como se fosse um marcador só — lista vazia, sem erro.
+  if (q.tag) query = aplicarMarcadores(query, q.tag, q.modo);
 
   // No BANCO, e não em memória: filtrar depois de paginar devolveria páginas curtas —
   // e, quando a página inteira estivesse lida, uma lista vazia que a tela apresentava

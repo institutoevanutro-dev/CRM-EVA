@@ -1,6 +1,6 @@
 "use client";
 import { useT } from "@/hooks/i18n/useT";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MagnifyingGlass } from "@/lib/ui/icons";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,8 +12,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  type ModoDeEtiqueta,
+  marcadoresEscolhidos,
+} from "@/lib/inbox/marcador-da-conversa";
 import { channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useAuth } from "@/hooks/auth/AuthProvider";
+import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
 import { useConversationTagVocabulary } from "@/hooks/inbox/useConversationTags";
 import { useConversationCounts } from "@/hooks/inbox/useConversationCounts";
 import type { Role, VisibilityMode } from "@/lib/auth/types";
@@ -59,7 +75,17 @@ export interface InboxFiltersValue {
   channel_session_id?: string;
   /** "Só Instagram" / "Só WhatsApp" — mutuamente exclusivo com channel_session_id. */
   canal?: "instagram" | "whatsapp";
-  tag?: string;
+  /**
+   * A etiqueta escolhida, ou VÁRIAS (#1274).
+   *
+   * `string` continua aceito e continua significando a MESMA coisa: é o que o
+   * `InboxLayout`, o deep-link e qualquer chamada antiga produzem. Uma etiqueta
+   * só nunca tem dois sentidos, porque o caminho singular da régua
+   * (`aplicarMarcador`) é o mesmo de antes — byte a byte.
+   */
+  tag?: string | readonly string[];
+  /** E ou OU entre as etiquetas escolhidas (#1274). `e` é o padrão. */
+  tagMode?: ModoDeEtiqueta;
 }
 
 interface Props {
@@ -98,13 +124,42 @@ export function InboxFilters({ value, onChange }: Props) {
   }, [value.search]);
   const { data: channels } = useChannelSessions({ refetchInterval: 30_000 });
   const { activeOrg } = useAuth();
-  const { data: tagVocabulary } = useConversationTagVocabulary(activeOrg?.orgId ?? null);
+  /**
+   * As opções são a UNIÃO das duas caixas — as mesmas que o filtro consulta
+   * (`conversations.tags` ou `contacts.tags`, no handler da lista).
+   *
+   * Vinham só do vocabulário de CONVERSA: o marcador escrito no contato nem
+   * aparecia para ser escolhido. Quem oferece e quem filtra lendo fontes
+   * diferentes é o defeito espelhado — ou a opção existe e devolve vazio, ou o
+   * marcador que funciona nunca é oferecido.
+   */
+  const orgId = activeOrg?.orgId ?? null;
+  const { data: tagsDeConversa } = useConversationTagVocabulary(orgId);
+  const { data: tagsDeContato } = useContactTagVocabulary(orgId);
+  const tagVocabulary = useMemo(
+    () =>
+      tagsDeConversa == null && tagsDeContato == null
+        ? undefined
+        : [...new Set([...(tagsDeConversa ?? []), ...(tagsDeContato ?? [])])].sort((a, b) =>
+            a.localeCompare(b),
+          ),
+    [tagsDeConversa, tagsDeContato],
+  );
+  // A lista de etiquetas escolhida, normalizada pelo MESMO caminho do servidor
+  // (`marcadoresEscolhidos`): sem vazio, sem repetido, com a ordem da primeira
+  // aparição. Duas fontes de verdade para "quantas etiquetas estão escolhidas"
+  // fariam a tela mostrar um filtro e a lista aplicar outro.
+  const etiquetas = useMemo(
+    () => marcadoresEscolhidos(typeof value.tag === "string" ? [value.tag] : (value.tag ?? [])),
+    [value.tag],
+  );
   // Os MESMOS filtros que a lista aplicou. Badge que conta o que a aba não mostra
   // manda o atendente procurar trabalho que não existe — a regra já estava escrita
   // na rota; faltava alcançar os filtros ao lado da aba.
   const { data: counts } = useConversationCounts(activeOrg?.orgId ?? null, {
     unread: value.onlyUnread,
-    tag: value.tag,
+    tag: etiquetas,
+    tagMode: value.tagMode,
     channel_session_id: value.channel_session_id,
     canal: value.canal,
   });
@@ -178,11 +233,40 @@ export function InboxFilters({ value, onChange }: Props) {
   // vocabulário vazio, e é justamente ela que precisa do seletor de volta para
   // desfazer o filtro que continua valendo.
   const vocabularioConhecido = tagVocabulary != null || ultimoVocabulario.length > 0;
-  const tagForaDoVocabulario =
-    value.tag != null &&
-    vocabularioConhecido &&
-    !vocabularioDoSeletor.includes(value.tag);
-  const mostrarSeletorDeTag = vocabularioDoSeletor.length > 0 || tagForaDoVocabulario;
+  // ⚠️ A VALIDAÇÃO DO FILTRO ÓRFÃO PASSOU A SER SOBRE A LISTA (#1274). Com uma
+  // etiqueta só, "está no vocabulário" é uma pergunta; com VÁRIAS, é outra: basta
+  // uma das escolhidas ter sumido do vocabulário para o operador precisar da
+  // válvula. O sintoma sem isto seria o pior dos dois: um filtro de duas
+  // etiquetas, uma delas apagada, e a tela sem dizer que há filtro nenhum.
+  // ⚠️ `&&` AQUI DEVOLVERIA `false | string[]`, e `false.length` não existe. A
+  // forma é um ternário que devolve SEMPRE lista: o resto do componente só
+  // precisa do comprimento, e um `false` no meio obrigaria cada uso a checar.
+  const etiquetasForaDoVocabulario =
+    etiquetas.length > 0 && vocabularioConhecido
+      ? etiquetas.filter((tag) => !vocabularioDoSeletor.includes(tag))
+      : [];
+  const mostrarSeletorDeTag =
+    vocabularioDoSeletor.length > 0 || etiquetasForaDoVocabulario.length > 0;
+  // O menu não fecha a cada clique: quem escolhe duas etiquetas não pode ter de
+  // reabrir o menu entre a primeira e a segunda, e o `DropdownMenuCheckboxItem`
+  // é o item que NÃO fecha (o `Select` de hoje fecha). A regra é do componente,
+  // e por isso o gatilho é um botão com `aria-expanded` em vez de um `Select`.
+  const opcoesDoSeletor = [
+    ...vocabularioDoSeletor,
+    ...etiquetasForaDoVocabulario,
+  ];
+  const alternaEtiqueta = (tag: string) => {
+    const escolhida = etiquetas.includes(tag);
+    const proximas = escolhida ? etiquetas.filter((t) => t !== tag) : [...etiquetas, tag];
+    onChange({
+      ...value,
+      tag: proximas.length === 0 ? undefined : proximas,
+      // O `modo` só faz sentido com DUAS: ao voltar para uma etiqueta só, ele
+      // sai, porque `?tag=vip&modo=ou` é um link que não significa nada e
+      // polui a URL (e a chave de cache do react-query) à toa.
+      tagMode: proximas.length > 1 ? value.tagMode : undefined,
+    });
+  };
 
   // O timer lê o valor MAIS RECENTE, não o do render em que foi agendado.
   //
@@ -315,34 +399,84 @@ export function InboxFilters({ value, onChange }: Props) {
             )}
 
             {mostrarSeletorDeTag && (
-              <Select
-                value={value.tag ?? "all"}
-                onValueChange={(v) => onChange({ ...value, tag: v === "all" ? undefined : v })}
-              >
-                <SelectTrigger
-                  className={cn(
-                    "h-8 min-w-0 flex-1 rounded-full border-transparent bg-surface-elevated px-3 text-xs shadow-none",
-                    value.tag != null && "border-accent bg-accent-soft text-accent",
+              <DropdownMenu>
+                {/*
+                  ⚠️ POR QUE ISTO DEIXOU DE SER UM `Select` (#1274).
+                  O `Select` do Radix é de escolha ÚNICA e — o que mata a
+                  multi-seleção — FECHA o menu a cada item escolhido. Para uma
+                  etiqueta só isso era certo; para duas, o operador teria de
+                  reabrir o menu entre a primeira e a segunda. O
+                  `DropdownMenuCheckboxItem` marca e NÃO fecha, que é a
+                  diferença entre um filtro de duas etiquetas e um formulário.
+
+                  O gatilho continua com `aria-label="Filtrar por tag"` e a MESMA
+                  aparência de cápsula, porque quem procura este controle no
+                  Inbox (e o teste `inbox-filtro-de-tag-nao-desmonta`, que
+                  vigia a desmontagem) não pode ver o filtro mudar de figura.
+                */}
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "h-8 min-w-0 flex-1 truncate rounded-full border border-transparent bg-surface-elevated px-3 text-left text-xs shadow-none",
+                      "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      etiquetas.length > 0 && "border-accent bg-accent-soft text-accent",
+                    )}
+                    aria-label={t("Filtrar por tag")}
+                  >
+                    {etiquetas.length === 0
+                      ? t("Todas as tags")
+                      : etiquetas.length === 1
+                        ? etiquetas[0]
+                        : `${etiquetas[0]} +${etiquetas.length - 1}`}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuLabel>{t("Todas as tags")}</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() => onChange({ ...value, tag: undefined, tagMode: undefined })}
+                  >
+                    {t("Todas as tags")}
+                  </DropdownMenuItem>
+                  {/*
+                    O E/OU só aparece havendo DUAS etiquetas. Com uma só o parâmetro
+                    não muda o resultado, e um botão que não muda nada é um
+                    controle morto.
+                  */}
+                  {etiquetas.length > 1 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      {/* Rádio, e não item comum: marca o modo ATIVO (e só ele) e
+                          expõe `aria-checked` a quem usa leitor de tela. */}
+                      <DropdownMenuRadioGroup
+                        value={value.tagMode === "ou" ? "ou" : "e"}
+                        onValueChange={(modo) =>
+                          onChange({ ...value, tagMode: modo === "ou" ? "ou" : undefined })
+                        }
+                      >
+                        <DropdownMenuRadioItem value="e">{t("Todas (E)")}</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="ou">
+                          {t("Qualquer uma (OU)")}
+                        </DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </>
                   )}
-                  aria-label={t("Filtrar por tag")}
-                >
-                  <SelectValue placeholder={t("Todas as tags")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("Todas as tags")}</SelectItem>
-                  {/* A órfã entra na lista: sem ela o Select mostraria o
-                      placeholder no lugar do valor JÁ selecionado, e o operador
-                      veria "Todas as tags" com um filtro ativo. */}
-                  {[
-                    ...vocabularioDoSeletor,
-                    ...(tagForaDoVocabulario && value.tag ? [value.tag] : []),
-                  ].map((tag) => (
-                    <SelectItem key={tag} value={tag}>
+                  <DropdownMenuSeparator />
+                  {/* As órfãs entram na lista: sem elas o gatilho mostraria o
+                      resumo de um filtro cujas opções não estão mais lá, e o
+                      operador não teria como tirá-las. */}
+                  {opcoesDoSeletor.map((tag) => (
+                    <DropdownMenuCheckboxItem
+                      key={tag}
+                      checked={etiquetas.includes(tag)}
+                      onCheckedChange={() => alternaEtiqueta(tag)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
                       {tag}
-                    </SelectItem>
+                    </DropdownMenuCheckboxItem>
                   ))}
-                </SelectContent>
-              </Select>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         )}
