@@ -8,6 +8,83 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.1.0] — 2026-10-03
+
+### Adicionado
+
+- **O financeiro passa a ler a tabela de Produtos** Nova rota só de leitura, `GET /api/v1/integrations/financeiro/products`, para o
+  Catálogo do financeiro receber nome, categoria e preço dos serviços cadastrados
+  em Produtos. Usa o mesmo token e a mesma organização da integração que já
+  existe; quem não usa o financeiro não percebe diferença.
+
+- **Regra de comentário escolhe o vídeo na lista, sem colar o id do post** Em Inbox › Comentários › Nova regra, o formulário mostra os vídeos e publicações mais recentes do perfil conectado. Basta clicar no vídeo, mesmo que ele ainda não tenha nenhum comentário. Colar o id do post continua possível, para publicações mais antigas que não aparecem na lista.
+
+### Corrigido
+
+- **A anonimização de um contato não é mais desfeita por um worker de mídia ou de clima que estava no meio do trabalho** O worker que guarda a mídia recebida e o que mede o clima da conversa passam a
+  aplicar, na própria gravação, a mesma guarda do worker de transcrição: mensagem
+  já anonimizada não recebe dado de volta. Se a mídia terminar de subir depois da
+  anonimização, o arquivo é removido do armazenamento e a transcrição não é pedida.
+  Portado do DeskcommCRM PR 2191 (@melgarafael).
+
+- **Anonimizar um contato passa a apagar também a memória da IA, o registro das ferramentas e a próxima ação da lead** A anonimização deixava intactas as anotações que a IA guarda sobre o contato, o
+  texto e os argumentos das ferramentas que ela usou no atendimento e a próxima ação
+  e a qualificação da lead. Agora tudo isso é apagado junto (fica só o nome de cada
+  ferramenta usada), e a atualização corrige os contatos já anonimizados antes.
+  Portado do DeskcommCRM PR 1973 (@webtecnica).
+
+- **Anonimizar um contato pela ficha passa a apagar também o que ele escreveu nas conversas** O botão Anonimizar da ficha trocava o nome e os dados do contato, mas o texto das
+  mensagens, a transcrição dos áudios, a prévia da última mensagem, o resumo que a IA
+  guarda do atendimento e os arquivos enviados continuavam guardados. Agora a
+  anonimização, por qualquer caminho, apaga tudo isso, e a atualização corrige os
+  contatos já anonimizados antes. Portado do DeskcommCRM PR 1501 (@melgarafael).
+
+- **Anonimizar um contato passa a apagar também a transcrição dos áudios e o texto lido das imagens dele** Pelo pedido formal de LGPD, o texto das mensagens virava "[mensagem anonimizada]",
+  mas a transcrição automática dos áudios e o texto lido das imagens continuavam
+  guardados e legíveis, inclusive para o agente de IA. Agora a anonimização apaga
+  esse texto junto, e a atualização limpa também os contatos já anonimizados.
+  Portado do DeskcommCRM PR 1989 (@melgarafael).
+
+- **A exportação de dados do titular inclui a memória e os registros da IA sobre ele** O arquivo do direito de acesso (`data.json`) passa a trazer as notas de memória da IA
+  (`lead_notes`), o nome e os argumentos das ferramentas que a IA chamou
+  (`ai_agent_runs.tool_calls`) e a próxima ação e a qualificação do funil (`lead_state`).
+  O resultado das ferramentas e o texto intermediário do modelo ficam de fora, porque podem
+  trazer dado de outros contatos. Portado do DeskcommCRM PR 1969 de @webtecnica.
+
+- **A exportação de dados do titular inclui a transcrição e o texto extraído da mídia** O arquivo do direito de acesso (`data.json` e `report.pdf`) dizia que a mensagem tinha
+  mídia, mas não trazia a transcrição do áudio nem o texto extraído da imagem, que é o que
+  a IA leu. Agora traz `media_derived_text` de cada mensagem do titular; o binário continua
+  fora. Na prévia da solicitação a transcrição aparece mascarada, como o corpo da mensagem.
+  Portado do DeskcommCRM PR 2020 de @webtecnica.
+
+- **O MCP passa a ter teto de chamadas por token, por organização e para escrita** O endereço que as ferramentas de IA externas usam (`/api/mcp`) não limitava quantas vezes um token válido chamava as ferramentas; um agente em laço podia disparar mensagens de WhatsApp sem parar.
+
+  Agora cada token faz até 60 chamadas por minuto, a organização até 600 e cada token até 30 nas ferramentas que alteram dados. Passando do teto, a chamada é recusada antes de a ferramenta rodar, a resposta diz quando tentar de novo e a recusa fica no log de auditoria. A IA do próprio sistema não passa por esse teto. Sem Redis, a contagem é feita na memória de cada processo.
+
+  Portado do projeto original (DeskcommCRM PR 1446 de @Alencaf).
+
+- **A transcrição de um áudio não volta para uma mensagem anonimizada enquanto ela era lida** Se o contato fosse anonimizado enquanto o áudio ou a imagem dele estava sendo
+  transcrito, o resultado era gravado mesmo assim na mensagem já anonimizada. Agora
+  a gravação recusa mensagem anonimizada e o trabalho termina como pulado.
+  Portado do DeskcommCRM PR 2030 (@webtecnica).
+
+- **O prazo de uma solicitação LGPD sai no dia certo no e-mail ao DPO, e a lista não marca "Vencido" na véspera** O prazo é gravado como a meia-noite UTC do dia útil contado, e quem lia esse valor
+  redesenhava o instante no fuso de São Paulo, o que jogava o prazo um dia para trás. O
+  e-mail de alerta ao DPO mostrava a data do dia anterior e dizia "1 dia(s) em atraso" no
+  próprio dia do prazo; a lista de solicitações marcava "Vencido" a partir das 21h da
+  véspera. Agora o e-mail traz o dia contado e o selo da lista lê o dia, não o instante.
+  Nenhuma solicitação muda de prazo. As telas de detalhe, o painel da instalação e a lista
+  da administração da plataforma ainda seguem a régua antiga e ficam para um próximo
+  conserto. Portado do DeskcommCRM PR 2101 de @Tong-bit-art.
+
+- **A gravação de sessão do diagnóstico de erros passa pelo mesmo filtro de URL do resto da telemetria** Para quem ligou o Sentry com o próprio DSN: a gravação de sessão (Replay) que acompanha os relatórios de erro passa a aplicar às URLs o mesmo filtro que o resto da telemetria já aplicava. Valores de parâmetro e segmentos de credencial no caminho saem redigidos, e o cabeçalho `Referer` e a origem e o destino das trocas de página também. Nas páginas que trazem credencial na própria URL, como o link de convite, a gravação de sessão não acontece. O relatório de erro dessas páginas continua sendo enviado. Com a telemetria desligada, que é o padrão, nada muda. Não é preciso fazer nada na instalação.
+
+  Portado do projeto original (DeskcommCRM PR 2186 de @melgarafael).
+
+- **Teto de escrita por token nas rotas que aceitam token de servidor** As rotas que aceitam token de servidor (Bearer `dsk_`) não tinham teto nenhum: envio de mensagem (`messages`), upload de mídia da conversa e abertura de conversa pelo contato compartilhado. Uma integração em laço podia mandar mensagens sem limite pelo número da operação. Agora cada uma dessas rotas aceita até 30 chamadas por minuto por token e 600 por minuto por organização, e responde 429 com `Retry-After` quando passa disso. O anexo de nota interna recebe o mesmo teto como defesa em profundidade. Quem usa pela tela do navegador não tem teto e não percebe diferença. Não é preciso fazer nada na instalação.
+
+  Portado do projeto original (DeskcommCRM PR 2012 de @webtecnica).
+
 ## [3.0.0] — 2026-10-03
 
 ### ⚠️ Requer atenção
@@ -5510,7 +5587,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.0.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.30.0...v2.0.0
 [1.30.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.29.0...v1.30.0
