@@ -6,6 +6,7 @@ import {
   TAMANHO_MAXIMO,
   decidirRespostaPronta,
   limiteAceito,
+  motivoParaPular,
   sinalClinico,
   textoParaComparar,
   umAssuntoSo,
@@ -134,6 +135,19 @@ describe("travas 1 e 2 — similaridade por item", () => {
 
   it("limite abaixo do piso é levado ao piso 0,78", () => {
     expect(decidirRespostaPronta(new Map([["limpeza", 0.6]]), 0.1).casou).toBe(false);
+  });
+});
+
+describe("motivoParaPular — as guardas antes do embedding, na ordem do motor", () => {
+  it("urgência vem antes de sintoma, sintoma antes da trava 3", () => {
+    expect(motivoParaPular(["é urgente, quanto custa a limpeza?"])).toBe("sinal_de_urgencia");
+    expect(motivoParaPular(["A limpeza doeu? E o clareamento?"])).toBe("sinal_clinico");
+    expect(motivoParaPular(["Quanto custa a limpeza? E o clareamento?"])).toBe("mais_de_uma_pergunta");
+    expect(motivoParaPular(["Oi, boa tarde!"])).toBe("vazia");
+  });
+
+  it("mensagem limpa segue para a comparação", () => {
+    expect(motivoParaPular(["Oi!", "Quanto custa a limpeza?"])).toBeNull();
   });
 });
 

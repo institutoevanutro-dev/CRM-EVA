@@ -6,9 +6,19 @@ import { createHash } from "node:crypto";
  * variações reais que precisam cair no item; NAO_DEVEM_CASAR são as que, se
  * caírem em QUALQUER item, reprovam o teste — falso positivo é o pior caso.
  *
- * Formas de perguntar além das quatro primeiras de cada item entraram para fazer
- * frases de DEVEM_CASAR passarem da trava 1 — o mesmo remédio que o gestor tem
- * na tela. O limite nunca desce para um acerto passar.
+ * Formas de perguntar além das originais entraram para fazer frases de
+ * DEVEM_CASAR passarem — o mesmo remédio que o gestor tem na tela; o limite
+ * nunca desce para um acerto passar. Isso torna essas frases de DEVEM_CASAR
+ * parcialmente "vistas" (sobreajuste). Quais, e por qual forma:
+ *  - "qual o preço da limpeza dental?"          ← "Quanto custa a limpeza dental?"
+ *  - "funcionam no sábado?"                     ← "Vocês funcionam aos sábados?", "Funciona no sábado?"
+ *  - "Qual o horário de atendimento de vocês?"  ← "Qual o horário de atendimento?"
+ *  - "Onde vocês ficam?"                        ← "Onde vocês estão localizados?", "Onde vocês ficam localizados?"
+ *  - "Me passa o endereço, por favor"           ← "Qual é o endereço de vocês?", "Me passa o endereço da clínica",
+ *                                                 "Pode me passar o endereço, por favor?"
+ *  - "vocês trabalham com plano odontológico?"  ← "Vocês trabalham com convênio?", "Vocês aceitam plano odontológico?",
+ *                                                 "Vocês trabalham com plano dental?"
+ * Por isso existe FORA_DA_AMOSTRA, abaixo: a medida honesta de recall.
  *
  * Mexeu aqui? Regrave: `OPENAI_API_KEY=... pnpm exec tsx scripts/respostas-prontas-gravar-similaridades.ts`.
  */
@@ -115,6 +125,26 @@ export const NAO_DEVEM_CASAR: readonly string[] = [
   // foi falado antes — o item que casasse seria um chute.
   "Unimed",
   "e o valor?",
+];
+
+/**
+ * FORA DA AMOSTRA — paráfrases que NUNCA foram usadas para escolher formas de
+ * perguntar do CADASTRO. Não as use para isso: virariam DEVEM_CASAR e a medida
+ * perderia o sentido. O teste exige precisão (nunca o item ERRADO) e mede o
+ * recall, com piso brando de 50%.
+ */
+export const FORA_DA_AMOSTRA: ReadonlyArray<{ mensagem: string; item: string }> = [
+  { mensagem: "a clínica abre aos sábados?", item: "horario" },
+  { mensagem: "até que horas fica aberto?", item: "horario" },
+  { mensagem: "que horário vocês fecham?", item: "horario" },
+  { mensagem: "qual o valor pra fazer uma limpeza?", item: "preco_limpeza" },
+  { mensagem: "quanto custa pra limpar os dentes?", item: "preco_limpeza" },
+  { mensagem: "aceitam convênio odontológico?", item: "convenio" },
+  { mensagem: "vocês atendem por plano de saúde?", item: "convenio" },
+  { mensagem: "em que rua fica o consultório?", item: "endereco" },
+  { mensagem: "vocês ficam em qual bairro?", item: "endereco" },
+  { mensagem: "quanto sai um clareamento?", item: "preco_clareamento" },
+  { mensagem: "preço do clareamento?", item: "preco_clareamento" },
 ];
 
 /** Muda quando o cadastro muda — o arquivo gravado carrega este hash. */

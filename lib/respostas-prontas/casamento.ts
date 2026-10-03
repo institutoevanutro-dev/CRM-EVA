@@ -11,6 +11,7 @@
  * embedar as formas de perguntar com o MESMO recorte de texto da mensagem) e o
  * script que grava as similaridades do corpus (Tarefa 3 do plano).
  */
+import { detectUrgencySignal } from "@/lib/agent-engine/guardrails/sinal-de-urgencia";
 import { normalizarTexto } from "@/lib/opt-out/deteccao";
 
 /** Trava 1 — padrão conservador; a clínica ajusta entre o mínimo e o máximo. */
@@ -113,6 +114,25 @@ export function umAssuntoSo(texto: string): FormaDaMensagem {
     .filter((o) => o !== "" && !POLIDEZ.has(o));
   if (oracoes.length > 1) return { ok: false, motivo: "mais_de_um_assunto" };
   return { ok: true };
+}
+
+export type MotivoParaPular = "sinal_de_urgencia" | "sinal_clinico" | Exclude<FormaDaMensagem, { ok: true }>["motivo"];
+
+/**
+ * As guardas que vêm ANTES de gastar embedding, na ordem do motor: urgência
+ * (falta de ar, dor forte), sintoma clínico, e a trava 3. Devolve o motivo de
+ * pular a resposta pronta, ou null quando a mensagem pode ir à comparação.
+ * Um lugar só para o motor e para o teste do corpus — guarda nova entra aqui e
+ * os dois a enxergam.
+ */
+export function motivoParaPular(pendentes: readonly string[]): MotivoParaPular | null {
+  // Dor, sangramento, falta de ar: nunca responder com tabela de preço.
+  if (pendentes.some((t) => detectUrgencySignal(t))) return "sinal_de_urgencia";
+  // Dor, inchaço, dente quebrado: sintoma vai para a IA mesmo quando a frase
+  // também fala de um item cadastrado ("a limpeza doeu?").
+  if (pendentes.some((t) => sinalClinico(t))) return "sinal_clinico";
+  const forma = umAssuntoSo(textoParaComparar(pendentes));
+  return forma.ok ? null : forma.motivo;
 }
 
 export type DecisaoDeCasamento =

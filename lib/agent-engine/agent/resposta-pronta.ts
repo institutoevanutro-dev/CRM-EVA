@@ -30,16 +30,10 @@ import type pg from 'pg';
 
 import { embedText } from '@/lib/ai/embed';
 import { MODELO_DE_EMBEDDING } from '@/lib/ai/embeddings/chave';
-import {
-  decidirRespostaPronta,
-  sinalClinico,
-  textoParaComparar,
-  umAssuntoSo,
-} from '@/lib/respostas-prontas/casamento';
+import { decidirRespostaPronta, motivoParaPular, textoParaComparar } from '@/lib/respostas-prontas/casamento';
 
 import { reconcileAcceptedSend } from '../edge/crm/send-ledger';
 import { runBeforeSend } from '../guardrails/before-send';
-import { detectUrgencySignal } from '../guardrails/sinal-de-urgencia';
 import type { AvisoDeEscalacaoIds, AvisoDeEscalacaoOpts } from './aviso-de-escalacao';
 
 export const SEQ_DA_RESPOSTA_PRONTA = -1;
@@ -119,19 +113,11 @@ async function tentar(
   const config = configs[0];
   if (config === undefined) return { respondeu: false, motivo: 'desligada' };
   if (!config.tem_perguntas) return { respondeu: false, motivo: 'sem_perguntas' };
-  // Dor, sangramento, falta de ar: nunca responder com tabela de preço.
-  if (opts.pendentes.some((t) => detectUrgencySignal(t))) {
-    return { respondeu: false, motivo: 'sinal_de_urgencia' };
-  }
-  // Dor, inchaço, dente quebrado: sintoma vai para a IA mesmo quando a frase
-  // também fala de um item cadastrado ("a limpeza doeu?").
-  if (opts.pendentes.some((t) => sinalClinico(t))) {
-    return { respondeu: false, motivo: 'sinal_clinico' };
-  }
+  // Urgência, sintoma clínico e trava 3 — antes de gastar embedding.
+  const pular = motivoParaPular(opts.pendentes);
+  if (pular !== null) return { respondeu: false, motivo: pular };
 
   const texto = textoParaComparar(opts.pendentes);
-  const forma = umAssuntoSo(texto);
-  if (!forma.ok) return { respondeu: false, motivo: forma.motivo };
 
   let vetor: number[];
   try {

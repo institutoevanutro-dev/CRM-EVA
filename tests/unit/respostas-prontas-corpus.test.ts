@@ -3,17 +3,16 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { detectUrgencySignal } from "@/lib/agent-engine/guardrails/sinal-de-urgencia";
 import { MODELO_DE_EMBEDDING } from "@/lib/ai/embeddings/chave";
-import {
-  LIMITE_PADRAO,
-  decidirRespostaPronta,
-  sinalClinico,
-  textoParaComparar,
-  umAssuntoSo,
-} from "@/lib/respostas-prontas/casamento";
+import { LIMITE_PADRAO, decidirRespostaPronta, motivoParaPular } from "@/lib/respostas-prontas/casamento";
 
-import { CADASTRO, DEVEM_CASAR, NAO_DEVEM_CASAR, hashDoCadastro } from "../fixtures/respostas-prontas/corpus";
+import {
+  CADASTRO,
+  DEVEM_CASAR,
+  FORA_DA_AMOSTRA,
+  NAO_DEVEM_CASAR,
+  hashDoCadastro,
+} from "../fixtures/respostas-prontas/corpus";
 
 /**
  * O CORPUS CONTRA O MODELO REAL — sem rede. As similaridades vêm de
@@ -30,7 +29,7 @@ interface Gravado {
 
 const ARQUIVO = join(process.cwd(), "tests/fixtures/respostas-prontas/similaridades.json");
 
-function gravado(): Gravado {
+function lerGravado(): Gravado {
   if (!existsSync(ARQUIVO)) {
     throw new Error(
       "similaridades.json ausente — rode `OPENAI_API_KEY=... pnpm exec tsx scripts/respostas-prontas-gravar-similaridades.ts`",
@@ -39,50 +38,83 @@ function gravado(): Gravado {
   return JSON.parse(readFileSync(ARQUIVO, "utf8")) as Gravado;
 }
 
+const gravado = lerGravado();
+
 /**
- * O que o motor faria com esta mensagem, no limite padrão — a mesma sequência de
- * `tentarRespostaPronta` (lib/agent-engine/agent/resposta-pronta.ts): urgência,
- * sinal clínico, trava 3, e só então as travas 1 e 2 sobre as similaridades.
+ * O que o motor faria com esta mensagem, no limite padrão: as mesmas guardas de
+ * `tentarRespostaPronta` (`motivoParaPular`), e só então as travas 1 e 2 sobre
+ * as similaridades gravadas.
  */
-function decidir(mensagem: string, g: Gravado) {
-  if (detectUrgencySignal(mensagem)) return { casou: false as const, motivo: "sinal_de_urgencia" };
-  if (sinalClinico(mensagem)) return { casou: false as const, motivo: "sinal_clinico" };
-  const forma = umAssuntoSo(textoParaComparar([mensagem]));
-  if (!forma.ok) return { casou: false as const, motivo: forma.motivo };
-  const porItem = g.similaridades[mensagem];
+function decidir(mensagem: string) {
+  const pular = motivoParaPular([mensagem]);
+  if (pular !== null) return { casou: false as const, motivo: pular };
+  const porItem = gravado.similaridades[mensagem];
   if (porItem === undefined) throw new Error(`"${mensagem}" não está gravada — regrave o arquivo`);
   return decidirRespostaPronta(new Map(Object.entries(porItem)), LIMITE_PADRAO);
 }
 
+const sims = (mensagem: string) => JSON.stringify(gravado.similaridades[mensagem] ?? {});
+
 describe("corpus odontológico — modelo real, sem rede", () => {
   it("o arquivo gravado é do modelo e do cadastro atuais", () => {
-    const g = gravado();
-    expect(g.modelo).toBe(MODELO_DE_EMBEDDING);
-    expect(g.cadastro_hash, "o CADASTRO mudou — regrave o arquivo").toBe(hashDoCadastro());
+    expect(gravado.modelo).toBe(MODELO_DE_EMBEDDING);
+    expect(gravado.cadastro_hash, "o CADASTRO mudou — regrave o arquivo").toBe(hashDoCadastro());
   });
 
   it("toda frase gravada tem similaridade com todos os itens do cadastro", () => {
-    const g = gravado();
     const itens = CADASTRO.map((i) => i.id).sort();
-    for (const frase of [...NAO_DEVEM_CASAR, ...DEVEM_CASAR.map((d) => d.mensagem)]) {
-      expect(Object.keys(g.similaridades[frase] ?? {}).sort(), frase).toEqual(itens);
+    const todas = [...NAO_DEVEM_CASAR, ...DEVEM_CASAR.map((d) => d.mensagem), ...FORA_DA_AMOSTRA.map((d) => d.mensagem)];
+    for (const frase of todas) {
+      expect(Object.keys(gravado.similaridades[frase] ?? {}).sort(), frase).toEqual(itens);
     }
   });
 
   for (const frase of NAO_DEVEM_CASAR) {
     it(`NÃO responde pronto: "${frase.slice(0, 60)}"`, () => {
-      const d = decidir(frase, gravado());
-      expect(d.casou, JSON.stringify(gravado().similaridades[frase] ?? {})).toBe(false);
+      expect(decidir(frase).casou, sims(frase)).toBe(false);
     });
   }
 
   for (const { mensagem, item } of DEVEM_CASAR) {
     it(`responde com "${item}": "${mensagem}"`, () => {
-      const d = decidir(mensagem, gravado());
-      expect(d, JSON.stringify(gravado().similaridades[mensagem] ?? {})).toMatchObject({
+      expect(decidir(mensagem), sims(mensagem)).toMatchObject({
         casou: true,
         respostaProntaId: item,
       });
     });
   }
+});
+
+/**
+ * Fora da amostra: paráfrases que não ajudaram a escolher o CADASTRO. Precisão
+ * é inegociável (nunca o item errado); o recall é medido e impresso.
+ */
+describe("corpus odontológico — fora da amostra", () => {
+  for (const { mensagem, item } of FORA_DA_AMOSTRA) {
+    it(`nunca responde com item errado: "${mensagem}"`, () => {
+      const d = decidir(mensagem);
+      if (d.casou) expect(d.respostaProntaId, sims(mensagem)).toBe(item);
+    });
+  }
+
+  it("recall medido (e o menor afastamento do item certo para o segundo)", () => {
+    const acertos = FORA_DA_AMOSTRA.filter(({ mensagem, item }) => {
+      const d = decidir(mensagem);
+      return d.casou && d.respostaProntaId === item;
+    }).length;
+    const afastamentos = FORA_DA_AMOSTRA.map(({ mensagem, item }) => {
+      const porItem = gravado.similaridades[mensagem] ?? {};
+      const outros = Object.entries(porItem).filter(([k]) => k !== item).map(([, v]) => v);
+      return (porItem[item] ?? 0) - Math.max(...outros);
+    });
+    const recall = acertos / FORA_DA_AMOSTRA.length;
+    process.stdout.write(
+      `[corpus fora da amostra] recall ${acertos}/${FORA_DA_AMOSTRA.length} = ${(recall * 100).toFixed(0)}% · ` +
+        `menor afastamento certo→segundo ${Math.min(...afastamentos).toFixed(3)}\n`,
+    );
+    // PENDENTE de decisão: o piso pedido é 50%, e o medido é 5/11 (45%). Os
+    // limites NÃO descem para alcançá-lo; até a decisão, a catraca é o medido —
+    // perder um acerto fora da amostra reprova.
+    expect(acertos, "recall fora da amostra caiu").toBeGreaterThanOrEqual(5);
+  });
 });

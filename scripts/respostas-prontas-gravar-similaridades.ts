@@ -17,7 +17,7 @@ import { embedMany } from "ai";
 
 import { textoParaComparar } from "@/lib/respostas-prontas/casamento";
 
-import { CADASTRO, DEVEM_CASAR, NAO_DEVEM_CASAR, hashDoCadastro } from "../tests/fixtures/respostas-prontas/corpus";
+import { CADASTRO, DEVEM_CASAR, FORA_DA_AMOSTRA, NAO_DEVEM_CASAR, hashDoCadastro } from "../tests/fixtures/respostas-prontas/corpus";
 
 /**
  * Literal, e não importado de `lib/ai/embeddings/chave.ts`: aquele módulo puxa o
@@ -46,7 +46,9 @@ async function main(): Promise<void> {
   const perguntas = CADASTRO.flatMap((item) =>
     item.perguntas.map((p) => ({ item: item.id, texto: textoParaComparar([p]) || p })),
   );
-  const mensagens = [...new Set([...DEVEM_CASAR.map((d) => d.mensagem), ...NAO_DEVEM_CASAR])];
+  const mensagens = [
+    ...new Set([...DEVEM_CASAR.map((d) => d.mensagem), ...NAO_DEVEM_CASAR, ...FORA_DA_AMOSTRA.map((d) => d.mensagem)]),
+  ];
   const textosDasMensagens = mensagens.map((m) => textoParaComparar([m]) || m);
 
   const { embeddings } = await embedMany({
