@@ -348,6 +348,22 @@ test.describe("Lote 12 — painel do contato no Inbox", () => {
       expect(daConversa).not.toContain(semMarca);
 
       expect(await idsDoFiltro(reservado)).toEqual([peloContato]);
+
+      // #1259 — A CONTAGEM DAS ABAS TEM DE SOBREVIVER AO MESMO FILTRO.
+      // O contador aplicava `eq("tag", …)` numa tabela que só tem `tags`:
+      // com um marcador filtrado, o Postgres devolvia 42703 e a rota virava
+      // 500 — os números das abas sumiam da tela justamente quando alguém
+      // filtrava. Contra a main de hoje este caso é 500 (controle positivo).
+      const contagem = await page.request.get(
+        `/api/v1/conversations/counts?tag=${encodeURIComponent(soNoContato)}`,
+      );
+      const corpoDaContagem = await contagem.text();
+      registra(
+        `#1259 · GET counts?tag=${soNoContato} = ${contagem.status()} · ${corpoDaContagem.slice(0, 200)}`,
+      );
+      expect(contagem.status(), "a contagem das abas responde com marcador filtrado").toBe(200);
+      const { data: numeros } = JSON.parse(corpoDaContagem) as { data: { all: number } };
+      expect(numeros.all, "a aba Todas conta a conversa que o filtro acha").toBeGreaterThanOrEqual(1);
     } finally {
       await admin.from("conversations").delete().in("id", [peloContato, pelaConversa, semMarca]);
       await admin.from("channel_sessions").delete().eq("id", canal);
