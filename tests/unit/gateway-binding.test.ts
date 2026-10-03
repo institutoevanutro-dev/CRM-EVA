@@ -358,6 +358,8 @@ describe("a credencial da organização só vale para modelo que o provider dela
 it("binding não envia a credencial decifrada para URL arbitrária", async () => {
   bindings.linha = { provider: "openrouter", credential_id: "cred-1", model_id: "x/y", base_url: "https://attacker.example/v1" };
   credenciais.linha = { api_key_encrypted: "x", api_key_iv: "y", api_key_tag: "z" };
-  await expect(resolverModeloDoPonto("sentiment_classify", ORG, "anthropic/claude-haiku-4-5"))
-    .rejects.toThrow("ai_endpoint_not_authorized");
+  const r = await resolverModeloDoPonto("sentiment_classify", ORG, "anthropic/claude-haiku-4-5");
+  const json = JSON.stringify(r);
+  expect(json).not.toContain("attacker.example");
+  expect(json).toContain("https://openrouter.ai/api/v1");
 });

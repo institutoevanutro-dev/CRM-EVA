@@ -1,4 +1,4 @@
-import { trustedAiBaseUrl } from "@/lib/ai/trusted-base-url";
+import { trustedAiBaseUrlOrDefault } from "@/lib/ai/trusted-base-url";
 /**
  * Registro de providers da camada agnóstica. ÚNICO lugar (junto do resto de
  * edge/llm/) onde SDK de vendor é importado. Instância POR CHAMADA com a chave
@@ -99,7 +99,7 @@ export function createDefaultRegistry(opts?: { allowedHosts?: string[] }): Provi
       createGoogleGenerativeAI({ apiKey, fetch: contain(GOOGLE_ENDPOINT) })(modelId),
     // O tenant só escolhe entre o endpoint oficial e o autorizado pelo operador.
     openrouter: (apiKey, modelId, baseUrl) => {
-      const endpoint = trustedAiBaseUrl("openrouter", baseUrl) ?? OPENROUTER_ENDPOINT;
+      const endpoint = trustedAiBaseUrlOrDefault("openrouter", baseUrl) ?? OPENROUTER_ENDPOINT;
       return createOpenAI({
         apiKey,
         baseURL: endpoint,

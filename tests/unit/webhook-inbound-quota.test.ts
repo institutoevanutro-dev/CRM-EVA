@@ -21,8 +21,16 @@ async function call(valid: boolean) {
   }), { params: Promise.resolve({ token: "test-token" }) });
 }
 it("assinatura inválida não consome a cota da fonte", async () => {
+  state.limit.mockResolvedValueOnce({ allowed: true });
   expect((await call(false)).status).toBe(401);
-  expect(state.limit).not.toHaveBeenCalled();
+  expect(state.limit).toHaveBeenCalledExactlyOnceWith("webhook_in_recusa:test-token", 30, 60);
+  expect(state.audit).toHaveBeenCalledOnce();
+  expect(state.capture).toHaveBeenCalledOnce();
+});
+it("recusa acima do teto continua 401, mas não grava auditoria nem captação", async () => {
+  expect((await call(false)).status).toBe(401);
+  expect(state.audit).not.toHaveBeenCalled();
+  expect(state.capture).not.toHaveBeenCalled();
 });
 it("assinatura válida continua sujeita à cota", async () => {
   expect((await call(true)).status).toBe(429);

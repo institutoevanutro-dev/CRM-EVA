@@ -47,6 +47,7 @@ import { supportCallbackWriteAllowed } from "@/lib/impersonate/support";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { PROVEDOR_GOOGLE } from "@/lib/agenda/tipos";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
@@ -153,10 +154,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     estado = verificarEstado(stateBruto, { segredo: env.INTERNAL_SECRET, agora: new Date() });
   } catch {
+    logger.warn("[agenda/google/callback] state não verificável");
     return voltar("erro=retorno_nao_verificavel");
   }
   if (!estado) {
     // State não autenticado não pode criar linhas duráveis em audit_log.
+    logger.warn("[agenda/google/callback] state inválido", { hasState: Boolean(stateBruto) });
     return voltar("erro=retorno_nao_verificavel");
   }
   const { organizationId, userId } = estado;

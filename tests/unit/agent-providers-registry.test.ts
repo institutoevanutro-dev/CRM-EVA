@@ -26,8 +26,8 @@ describe("createDefaultRegistry", () => {
   });
 });
 
-it("registry bloqueia endpoint arbitrário antes de construir o cliente com a chave", () => {
+it("registry ignora endpoint arbitrário e constrói o cliente no endpoint padrão", () => {
   vi.stubEnv("OPENROUTER_BASE_URL", "");
-  expect(() => createDefaultRegistry().openrouter!("platform-secret", "x/y", "https://attacker.example/v1"))
-    .toThrow("ai_endpoint_not_authorized");
+  const model = createDefaultRegistry().openrouter!("platform-secret", "x/y", "https://attacker.example/v1");
+  expect(JSON.stringify(model)).not.toContain("attacker.example");
 });

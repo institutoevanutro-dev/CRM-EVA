@@ -13,6 +13,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { env } from "@/lib/env";
 import { audit } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getConfig, SUBSCRIBED_EVENTS, eventToSlug } from "@/lib/nuvemshop/config";
 import { exchangeCodeForToken } from "@/lib/nuvemshop/oauth";
@@ -71,6 +72,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const state = verifyState(stateParam);
   if (!state) {
     // State não autenticado não pode criar linhas duráveis em audit_log.
+    logger.warn("[nuvemshop/callback] state inválido", { hasState: Boolean(stateParam) });
     return redirectTo(`/app/integrations/nuvemshop?error=invalid_state`);
   }
 

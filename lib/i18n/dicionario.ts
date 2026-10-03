@@ -3317,6 +3317,9 @@ export const DICIONARIO: Traducoes = {
   "Esta sessão precisa da verificação em duas etapas. Entre novamente com o código do aplicativo.": {
     es: "Esta sesión necesita la verificación en dos pasos. Entra de nuevo con el código de la aplicación.",
   },
+  "Muitas imagens enviadas. Tente de novo em uma hora.": {
+    es: "Demasiadas imágenes enviadas. Inténtalo de nuevo en una hora.",
+  },
   "Muitas trocas seguidas. Tente de novo em alguns minutos.": {
     es: "Demasiados cambios seguidos. Intenta de nuevo en unos minutos.",
   },

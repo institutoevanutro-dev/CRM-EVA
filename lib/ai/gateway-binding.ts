@@ -1,4 +1,4 @@
-import { trustedAiBaseUrl } from "./trusted-base-url";
+import { trustedAiBaseUrlOrDefault } from "./trusted-base-url";
 /**
  * O PAINEL DE PROVEDORES ALCANÇA TAMBÉM A PILHA ANTIGA.
  *
@@ -287,7 +287,7 @@ function instanciar(
     case "google":
       return createGoogleGenerativeAI({ apiKey })(modelId);
     case "openrouter":
-      return createOpenAI({ apiKey, baseURL: trustedAiBaseUrl(provider, baseUrl) ?? OPENROUTER_BASE_URL, fetch: (input, init) => fetch(input, { ...init, redirect: "error" }) })(modelId);
+      return createOpenAI({ apiKey, baseURL: trustedAiBaseUrlOrDefault(provider, baseUrl) ?? OPENROUTER_BASE_URL, fetch: (input, init) => fetch(input, { ...init, redirect: "error" }) })(modelId);
     default:
       return null;
   }
