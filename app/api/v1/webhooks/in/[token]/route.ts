@@ -120,14 +120,26 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   };
 
   const sigHeader = req.headers.get("x-deskcomm-signature");
-  // secret cifrado at-rest (migration 0041). Decrypt falhou (chave da GUC
-  // ausente/trocada)? Precedente WAHA: pula a validação em vez de derrubar a
-  // captação — secret aqui é defesa opcional, não gate de disponibilidade.
+  // Um segredo configurado é obrigatório: falha de decifragem nunca desliga HMAC.
   let sourceSecret: string | null = null;
-  let hmacSkipped = false;
   if (source.secret_encrypted) {
     sourceSecret = await decryptWebhookSecret(admin, source.secret_encrypted as unknown as string);
-    if (sourceSecret === null) hmacSkipped = true;
+    if (!sourceSecret) {
+      await audit({
+        action: "webhook.inbound_secret_unavailable",
+        organizationId: source.organization_id,
+        resourceType: "webhook_source",
+        resourceId: source.id,
+        requestId,
+      });
+      await registrarCaptacao(admin, {
+        ...fonteDaCaptacao,
+        ...origemDaCaptacao,
+        outcome: "recusado",
+        rejectReason: "segredo_indisponivel",
+      });
+      return fail("service_unavailable", "Webhook temporarily unavailable.", 503, { requestId });
+    }
   }
   const validSignature = sourceSecret ? verifyInboundSignature(rawBody, sigHeader, sourceSecret) : null;
   if (sourceSecret && !validSignature) {
@@ -170,10 +182,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     raw_body: rawBody,
     payload_parsed: payload,
     signature_header: sigHeader ?? null,
-    // hmacSkipped (decrypt indisponível) conta como "não validado mas aceito",
-    // igual ao webhook WAHA — o feed da UI não pinta de vermelho.
     valid_signature: validSignature ?? true,
-    event_type: hmacSkipped ? "lead_capture.received_hmac_skipped" : "lead_capture.received",
+    event_type: "lead_capture.received",
     external_id: null,
     status: "received",
     attempts: 0,

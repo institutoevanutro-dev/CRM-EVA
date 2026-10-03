@@ -20,6 +20,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
 
+const lookupMock = vi.hoisted(() => vi.fn());
+vi.mock("node:dns/promises", () => ({ lookup: lookupMock, default: { lookup: lookupMock } }));
+
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 
 const credsRef: { current: unknown } = { current: null };
@@ -61,6 +64,8 @@ const corpo = () => JSON.parse(ultimaChamada().init.body ?? "{}") as Record<stri
 
 beforeEach(() => {
   fetchMock.mockReset();
+  // DNS determinístico: o teste de transporte não depende da rede da máquina.
+  lookupMock.mockReset().mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
   credsRef.current = CREDS;
 });
 
@@ -362,6 +367,14 @@ describe("fetchInboundMedia não busca onde o payload mandar", () => {
       ).not.toHaveBeenCalled();
     });
   }
+
+  it("recusa hostname público que resolve para IP privado antes de buscar a mídia", async () => {
+    lookupMock.mockResolvedValueOnce([{ address: "10.0.0.5", family: 4 }]);
+    await expect(zernioAdapter.fetchInboundMedia!({
+      organizationId: ORG, sessionRef: CREDS.accountId, url: "https://zernio.com/api/v1/media/abc123",
+    })).rejects.toThrow("unsafe_url:private_ip");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 
   it("deixa passar uma URL pública do provedor (guarda de vacuidade)", async () => {
     // Sem este caso, um guard que recusasse TUDO deixaria os de cima verdes e
