@@ -170,4 +170,39 @@ describe("0306 · respostas prontas chegam ao clone com isolamento e papel", () 
     );
     expect(erro).toContain("respostas_prontas_config_limite");
   });
+
+  it("nenhuma policy ALL só-tenancy: escrita por policy exige manager (padrão da 0181)", () => {
+    const tabelas = TABELAS.filter((t) => t !== "respostas_prontas_usos").map((t) => `'${t}'`).join(",");
+    expect(
+      sql(`
+        select coalesce(string_agg(tablename || ':' || policyname, ',' order by tablename), '') from pg_policies
+         where schemaname = 'public' and tablename in (${tabelas})
+           and cmd = 'ALL' and permissive = 'PERMISSIVE'
+           and (coalesce(qual, '') || coalesce(with_check, '')) not like '%role_at_least%';
+      `),
+    ).toBe("");
+  });
+
+  it("authenticated não tem TRUNCATE, REFERENCES nem TRIGGER (TRUNCATE ignora a RLS)", () => {
+    const lista = TABELAS.map((t) => `'${t}'`).join(",");
+    expect(
+      sql(`
+        select coalesce(string_agg(table_name || ':' || grantee || ':' || privilege_type, ','), '')
+          from information_schema.role_table_grants
+         where table_schema = 'public' and table_name in (${lista})
+           and grantee in ('anon', 'authenticated', 'PUBLIC')
+           and privilege_type in ('TRUNCATE', 'REFERENCES', 'TRIGGER');
+      `),
+    ).toBe("");
+  });
+
+  it("usos.job_id tem índice (a poda da fila faz set null por essa FK)", () => {
+    expect(
+      sql(`
+        select count(*) from pg_indexes
+         where schemaname = 'public' and tablename = 'respostas_prontas_usos'
+           and indexdef like '%(job_id)';
+      `),
+    ).toBe("1");
+  });
 });

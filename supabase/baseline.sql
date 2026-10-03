@@ -29625,7 +29625,9 @@ grant execute on function public.fn_expurgar_auditoria_vencida(int, int) to serv
 -- ---- respostas prontas antes da IA (migration 0306) ----
 -- Itens, formas de perguntar (com embedding), configuração (sem linha =
 -- desligado) e usos (escritos só pelo serviço). Idempotente: create if not
--- exists, drop/create de policy, revoke/grant. Nenhuma função criada aqui.
+-- exists, drop/create de policy, revoke/grant, create or replace function.
+-- Uma função criada aqui (`fn_respostas_prontas_metricas`), com o revoke das
+-- duas origens de EXECUTE — e por isso ANTES do bloco da VARREDURA anon.
 
 create table if not exists public.respostas_prontas (
   id uuid primary key default gen_random_uuid(),
@@ -29678,6 +29680,10 @@ create table if not exists public.respostas_prontas_usos (
 );
 create index if not exists respostas_prontas_usos_org_tempo_idx
   on public.respostas_prontas_usos (organization_id, created_at);
+-- A FK `job_id -> job_queue on delete set null` precisa de índice no lado
+-- filho: sem ele, cada job podado pela fila varre a tabela inteira de usos.
+create index if not exists respostas_prontas_usos_job_idx
+  on public.respostas_prontas_usos (job_id);
 
 alter table public.respostas_prontas enable row level security;
 alter table public.respostas_prontas_perguntas enable row level security;
@@ -29689,10 +29695,17 @@ declare t text;
 begin
   foreach t in array array['respostas_prontas','respostas_prontas_perguntas','respostas_prontas_config'] loop
     execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || t || '_all', t);
+    execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || t || '_select', t);
     execute format(
-      'create policy %I on public.%I using (organization_id in (select public.fn_user_org_ids())) '
-      'with check (organization_id in (select public.fn_user_org_ids()))',
-      'tenant_isolation_' || t || '_all', t);
+      'create policy %I on public.%I for select using (organization_id in (select public.fn_user_org_ids()))',
+      'tenant_isolation_' || t || '_select', t);
+    execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || t || '_write', t);
+    execute format(
+      'create policy %I on public.%I for all using ('
+      'organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id, %L)'
+      ') with check ('
+      'organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id, %L))',
+      'tenant_isolation_' || t || '_write', t, 'manager', 'manager');
     execute format('drop policy if exists security_role_insert on public.%I', t);
     execute format('drop policy if exists security_role_update on public.%I', t);
     execute format('drop policy if exists security_role_delete on public.%I', t);
@@ -29703,7 +29716,8 @@ begin
                    t, 'manager', 'manager');
     execute format('create policy security_role_delete on public.%I as restrictive for delete to authenticated '
                    'using (public.fn_role_at_least(organization_id, %L))', t, 'manager');
-    execute format('revoke all on public.%I from anon', t);
+    execute format('revoke all on public.%I from public, anon', t);
+    execute format('revoke truncate, references, trigger on public.%I from authenticated', t);
     execute format('grant select, insert, update, delete on public.%I to authenticated', t);
     execute format('grant all on public.%I to service_role', t);
   end loop;

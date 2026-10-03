@@ -10,11 +10,16 @@
 --   respostas_prontas_usos       uma linha por resposta pronta enviada — a métrica.
 --                                Nunca `llm_calls`: ali é chamada de modelo.
 --
--- Escrita das três primeiras: manager+ (restritivas `security_role_*`, o mesmo
--- desenho da 0299). Usos: só o serviço (o worker grava com o pool do motor).
+-- Escrita das três primeiras: manager+. A policy de tenancy é partida como na
+-- 0181 (ai_faq_items): `_select` só-tenancy e `_write` (for all) com tenancy E
+-- `fn_role_at_least(...,'manager')` — policy ALL só-tenancy é dívida de RBAC que
+-- `tests/invariants/rbac-config-ia-canais.test.ts` reprova. As restritivas
+-- `security_role_*` (desenho da 0299) ficam como segunda trava.
+-- Usos: só o serviço (o worker grava com o pool do motor).
 -- `mfa_provada` explícita: o bloco da 0301 varre as tabelas que JÁ existiam, e
 -- num install fresco estas nascem depois dele.
--- Sem função nova: nada aqui precisa da varredura de anon (0116).
+-- Uma função nova, `fn_respostas_prontas_metricas` (security invoker), com
+-- `revoke ... from public, anon` explícito no fim — as duas origens de EXECUTE.
 
 create table if not exists public.respostas_prontas (
   id uuid primary key default gen_random_uuid(),
@@ -67,6 +72,10 @@ create table if not exists public.respostas_prontas_usos (
 );
 create index if not exists respostas_prontas_usos_org_tempo_idx
   on public.respostas_prontas_usos (organization_id, created_at);
+-- A FK `job_id -> job_queue on delete set null` precisa de índice no lado
+-- filho: sem ele, cada job podado pela fila varre a tabela inteira de usos.
+create index if not exists respostas_prontas_usos_job_idx
+  on public.respostas_prontas_usos (job_id);
 
 alter table public.respostas_prontas enable row level security;
 alter table public.respostas_prontas_perguntas enable row level security;
@@ -78,10 +87,17 @@ declare t text;
 begin
   foreach t in array array['respostas_prontas','respostas_prontas_perguntas','respostas_prontas_config'] loop
     execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || t || '_all', t);
+    execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || t || '_select', t);
     execute format(
-      'create policy %I on public.%I using (organization_id in (select public.fn_user_org_ids())) '
-      'with check (organization_id in (select public.fn_user_org_ids()))',
-      'tenant_isolation_' || t || '_all', t);
+      'create policy %I on public.%I for select using (organization_id in (select public.fn_user_org_ids()))',
+      'tenant_isolation_' || t || '_select', t);
+    execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || t || '_write', t);
+    execute format(
+      'create policy %I on public.%I for all using ('
+      'organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id, %L)'
+      ') with check ('
+      'organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id, %L))',
+      'tenant_isolation_' || t || '_write', t, 'manager', 'manager');
     execute format('drop policy if exists security_role_insert on public.%I', t);
     execute format('drop policy if exists security_role_update on public.%I', t);
     execute format('drop policy if exists security_role_delete on public.%I', t);
@@ -92,7 +108,8 @@ begin
                    t, 'manager', 'manager');
     execute format('create policy security_role_delete on public.%I as restrictive for delete to authenticated '
                    'using (public.fn_role_at_least(organization_id, %L))', t, 'manager');
-    execute format('revoke all on public.%I from anon', t);
+    execute format('revoke all on public.%I from public, anon', t);
+    execute format('revoke truncate, references, trigger on public.%I from authenticated', t);
     execute format('grant select, insert, update, delete on public.%I to authenticated', t);
     execute format('grant all on public.%I to service_role', t);
   end loop;
