@@ -21,6 +21,7 @@ import {
 } from "@/lib/channels";
 import { storagePathFor } from "@/lib/messaging/media/types";
 import { tipoParaGuardar } from "@/lib/messaging/media/servir";
+import { MENSAGEM_REDIGIDA } from "@/lib/lgpd/cascata";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -66,13 +67,26 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
   if (!msg?.media_url) return { consumer_key, status: "skipped", detail: "no media_url" };
   if (msg.media_storage_path) return { consumer_key, status: "skipped", detail: "already stored" };
 
-  const markStatus = async (media_status: "stored" | "failed", patch: Record<string, unknown> = {}) => {
-    const { error: updErr } = await admin
+  // Devolve se a linha foi gravada. `metadata` aqui é a foto lida acima: se a
+  // anonimização do contato roda entre essa leitura e esta escrita, a linha já
+  // está redigida (body sentinela, metadata `{}`, mídia zerada) e regravá-la
+  // devolveria o que a cascata LGPD apagou. Portado do DeskcommCRM PR 2191: a
+  // guarda é a mesma do media-derive-worker, no próprio UPDATE — checar antes
+  // deixaria a janela aberta. `isdistinct`, nunca `neq`: mídia sem legenda tem
+  // body NULL.
+  const markStatus = async (
+    media_status: "stored" | "failed",
+    patch: Record<string, unknown> = {},
+  ): Promise<boolean> => {
+    const { data: gravadas, error: updErr } = await admin
       .from("messages")
       .update({ metadata: { ...(msg.metadata ?? {}), media_status }, ...patch })
       .eq("id", msg.id)
-      .eq("organization_id", msg.organization_id);
+      .eq("organization_id", msg.organization_id)
+      .filter("body", "isdistinct", MENSAGEM_REDIGIDA)
+      .select("id");
     if (updErr) throw new Error(`message update failed: ${updErr.message}`);
+    return (gravadas?.length ?? 0) > 0;
   };
 
   const isLastAttempt = row.attempts >= DRAIN_MAX_ATTEMPTS - 1;
@@ -137,11 +151,26 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
     return { consumer_key, status: "error", detail: uploadErr.message };
   }
 
-  await markStatus("stored", {
+  const gravada = await markStatus("stored", {
     media_storage_path: path,
     media_size_bytes: media.buffer.byteLength,
     media_mime: media.mime,
   });
+  if (!gravada) {
+    // A mensagem foi anonimizada enquanto a mídia descia. A cascata já enfileirou
+    // para expurgo o que existia quando ela rodou; o objeto que ACABOU de subir
+    // nasceu depois e não seria alcançado por ninguém — sem esta remoção o
+    // arquivo da pessoa anonimizada ficaria no Storage, órfão.
+    const { error: rmErr } = await admin.storage.from("whatsapp-media").remove([path]);
+    if (rmErr) {
+      logger.error("[media-persist] mensagem anonimizada durante a persistência; remoção do objeto falhou", {
+        message_id: msg.id,
+        organization_id: msg.organization_id,
+        detail: rmErr.message,
+      });
+    }
+    return { consumer_key, status: "skipped", detail: "message_redacted" };
+  }
 
   // Histórico importado (coexistência) guarda a mídia, mas não gasta IA em transcrição/visão.
   if ((msg.metadata as { importada_do_historico?: boolean } | null)?.importada_do_historico) {

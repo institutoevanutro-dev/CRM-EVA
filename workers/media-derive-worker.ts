@@ -21,6 +21,7 @@ import { idiomaDaTranscricao } from "@/lib/messaging/media/idioma-da-transcricao
 import { apiTranscriptionProvider } from "@/lib/messaging/media/transcription";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { MENSAGEM_REDIGIDA } from "@/lib/lgpd/cascata";
 import { assertDestinoResolvidoSeguro } from "@/lib/automation/outbound-ip";
 import { assertSafeOutboundUrl } from "@/lib/automation/outbound-url";
 import { DETALHE_TECNICO } from "@/lib/event-log/aviso-de-evento-morto";
@@ -220,9 +221,30 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
     );
 
     const text = await deriveMediaText(msg.type, buffer, msg.media_mime ?? "application/octet-stream", deps);
-    await admin.from("messages")
+
+    // ─── LGPD: nunca gravar transcrição em mensagem já redigida ────────────
+    //
+    // Portado do DeskcommCRM PR 2030 (@webtecnica). A anonimização apaga o body
+    // (vira `'[mensagem anonimizada]'`) e zera a mídia. Se ela acontece ENTRE a
+    // leitura desta mensagem e esta gravação, a linha já está redigida — e este
+    // UPDATE regravaria o `media_derived_text` que a cascata LGPD mandou zerar
+    // (a varredura diária de `lib/lgpd/cascata.ts` só alcança em D+1). A guarda
+    // `body IS DISTINCT FROM '[...]'` faz o PostgREST casar ZERO linhas;
+    // conferimos o resultado para não devolver "ok" sobre uma escrita recusada.
+    //
+    // `isdistinct`, nunca `neq`: áudio sem legenda tem body NULL, e
+    // `NULL <> '...'` é NULL — o `neq` recusaria TODA nota de voz.
+    const { data: gravados, error: erroDaGravacao } = await admin
+      .from("messages")
       .update({ media_derived_text: text, media_derived_status: "ready" })
-      .eq("id", msg.id).eq("organization_id", msg.organization_id);
+      .eq("id", msg.id)
+      .eq("organization_id", msg.organization_id)
+      .filter("body", "isdistinct", MENSAGEM_REDIGIDA)
+      .select("id");
+    if (erroDaGravacao) return { consumer_key, status: "error", detail: erroDaGravacao.message };
+    if (!gravados || gravados.length === 0) {
+      return { consumer_key, status: "skipped", detail: "message_redacted" };
+    }
     return { consumer_key, status: "ok" };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
