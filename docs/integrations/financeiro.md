@@ -15,6 +15,8 @@ O financeiro precisa também de um token de API do CRM, restrito à organizaçã
 
 A exportação mínima de contato fica em `GET /api/v1/integrations/financeiro/contacts/[id]`: Bearer existente, organização derivada do token e comparada com a configurada, scope de leitura, limite de 120/min por org. Não exporta contato anonimizado. Os cinco campos são id, organization_id, name, phone, email.
 
+A tabela de serviços fica em `GET /api/v1/integrations/financeiro/products`: mesmo Bearer, mesma organização derivada do token e comparada com a configurada, scope de leitura, limite de 60 chamadas por minuto. Devolve `id`, `codigo`, `nome`, `categoria`, `preco_cents`, `moeda` e `ativo` de cada produto de **Produtos**; o custo não sai. O financeiro usa a lista para manter o Catálogo dele: o que some daqui fica inativo lá, por isso a resposta é a lista inteira ou erro (acima de 2.000 produtos, erro), nunca uma lista cortada.
+
 A consulta do resumo pelo navegador passa por `/api/v1/contacts/[id]/financeiro`: sessão, MFA/role manager do gate existente, organização ativa e contato não anonimizado. Só o servidor chama o financeiro. `Cache-Control: no-store`; timeout de 8s; sem redirects. Limite de 120/min por org.
 
 ## Implantação e verificação
