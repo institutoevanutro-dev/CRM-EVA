@@ -84,6 +84,7 @@ import {
   avisarLeadLendoOContato,
   type DesfechoDoAviso,
 } from './aviso-de-escalacao';
+import { tentarRespostaPronta } from './resposta-pronta';
 import {
   applyRequestHumanHandoff,
   buildHandoffSummary,
@@ -2228,6 +2229,25 @@ async function executarTurnoDoAgente(
       lead_avisado: aviso.avisado,
     });
     return; // bot silencia: a confirmação já saiu, e nada mais sai neste turno
+  }
+
+  // RESPOSTA PRONTA (spec EvaLink 2026-10-03): DEPOIS dos dois desvios acima —
+  // pedido de humano e opt-out vêm sempre primeiro — e ANTES da compactação e
+  // do modelo. Só no inbound real. Nunca bloqueia: `respondeu: false` segue o
+  // turno como sempre foi. Os argumentos são os mesmos do aviso de escalação
+  // (canal, LGPD, STOP lido no turno, relógio) — é o mesmo encanamento.
+  if (!preview && liveJob().kind === 'inbound_turn') {
+    const pronta = await tentarRespostaPronta(pool, avisoDaEscalacao().ids, {
+      ...avisoDaEscalacao().base,
+      pendentes: inboundsPendentes,
+      ...(deps.embed !== undefined ? { embed: deps.embed } : {}),
+    });
+    if (pronta.respondeu) {
+      runLog.info('respondido com resposta pronta — sem chamada de modelo', {
+        resposta_pronta_id: pronta.respostaProntaId,
+      });
+      return;
+    }
   }
 
   // F3-07: compaction + flush pré-compaction. Quando o histórico cresce além do limiar,

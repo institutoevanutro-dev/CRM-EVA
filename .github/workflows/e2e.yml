@@ -695,7 +695,7 @@ jobs:
         pipelines-gestao.spec.ts qa-agente-usa-as-maos.spec.ts qa-equipe-pinta-na-hora.spec.ts
         qa-l12-agenda-contatos.spec.ts qa-l12-tags-radar.spec.ts qa-selo-no-funil-usado.spec.ts
         qa-sugestao-rejeitada-e-motivo.spec.ts qa-telas-descobertas-w4.spec.ts qa-titulos-das-telas.spec.ts
-        retorno-anti-morte.spec.ts roteamento-por-canal.spec.ts suporte-temporario.spec.ts
+        respostas-prontas.spec.ts retorno-anti-morte.spec.ts roteamento-por-canal.spec.ts suporte-temporario.spec.ts
         tarefa-com-responsavel.spec.ts troca-de-organizacao-tem-volta.spec.ts voz-desligada-por-padrao.spec.ts
         voz-primeiro-pareamento.spec.ts webhooks.spec.ts zona-de-perigo-apaga-dados-de-teste.spec.ts
 

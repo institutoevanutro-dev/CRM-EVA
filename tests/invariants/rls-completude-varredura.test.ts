@@ -75,6 +75,10 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  { tabela: "respostas_prontas", razao: "tests/invariants/respostas-prontas-rls.test.ts — gestor A escreve, agent A só lê, gestor B não vê nem escreve com o org A (with check)" },
+  { tabela: "respostas_prontas_perguntas", razao: "tests/invariants/respostas-prontas-rls.test.ts — leitura cruzada zero por JWT e FK composta recusa item de outra org" },
+  { tabela: "respostas_prontas_config", razao: "tests/invariants/respostas-prontas-rls.test.ts — leitura cruzada zero por JWT; nasce desligada" },
+  { tabela: "respostas_prontas_usos", razao: "tests/invariants/respostas-prontas-rls.test.ts — leitura cruzada zero por JWT e escrita negada a authenticated (só o serviço grava)" },
   { tabela: "outbound_media_uploads", razao: "tests/invariants/outbound-media-lifecycle.test.ts — reserva e limpeza service-only, anon/authenticated sem leitura ou escrita e conversa de outro tenant recusada" },
   { tabela: "prontuario_contact_links", razao: "tests/invariants/prontuario-contact-links.test.ts — membro A vê o vínculo A, não vê B e não possui escrita direta" },
   { tabela: "calendar_units", razao: "tests/invariants/agenda-recursos-e-duracao.test.ts — prestador autenticado lê unidade própria e não lê a unidade da organização vizinha" },

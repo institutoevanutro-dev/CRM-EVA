@@ -111,6 +111,7 @@ correspondentes localizados no repo):
 - **Webhooks & automação** — captação + regras QUANDO/SE/ENTÃO + gatilhos externos.
 - **Operação visível** — transparência do motivo de retenção anti-ban, central de avisos,
   knobs de proteção de envio, propostas do flywheel com gate humano.
+- **Respostas prontas antes da IA** (migration das respostas prontas): perguntas frequentes por organização, reconhecidas por embedding com três travas, respondidas sem modelo dentro de `runAgentTurn` (depois de pedido de humano e opt-out), marcadas "Resposta pronta" no balão e medidas por período. Começa desligada. Tela em `/app/ai/perguntas-frequentes`. Para ver o que está em vigor: `grep -nE "LIMITE_|MARGEM_" lib/respostas-prontas/casamento.ts`.
 
 ### Épico de Governança de Atendimento (G1–G6) — COMPLETO
 

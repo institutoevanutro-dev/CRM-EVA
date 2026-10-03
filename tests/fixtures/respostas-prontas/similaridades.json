@@ -1,0 +1,357 @@
+{
+  "modelo": "openai/text-embedding-3-small",
+  "cadastro_hash": "ca0e03e60be8faf6ea0b14a4ec2bbadd1ccb27372698f9c430a0030e7faf5723",
+  "gerado_em": "2026-10-03T21:35:27.687Z",
+  "similaridades": {
+    "quanto tá a limpeza": {
+      "preco_limpeza": 0.8611,
+      "horario": 0.3586,
+      "endereco": 0.353,
+      "convenio": 0.3842,
+      "preco_clareamento": 0.5591
+    },
+    "Oi, boa tarde! Qual o valor da profilaxia?": {
+      "preco_limpeza": 0.9196,
+      "horario": 0.282,
+      "endereco": 0.3312,
+      "convenio": 0.4286,
+      "preco_clareamento": 0.4995
+    },
+    "Quanto vocês cobram pela limpeza?": {
+      "preco_limpeza": 0.8795,
+      "horario": 0.4062,
+      "endereco": 0.3302,
+      "convenio": 0.3876,
+      "preco_clareamento": 0.5653
+    },
+    "qual o preço da limpeza dental?": {
+      "preco_limpeza": 0.959,
+      "horario": 0.304,
+      "endereco": 0.3505,
+      "convenio": 0.5569,
+      "preco_clareamento": 0.7946
+    },
+    "Vocês abrem que horas?": {
+      "preco_limpeza": 0.3071,
+      "horario": 0.8627,
+      "endereco": 0.4569,
+      "convenio": 0.4201,
+      "preco_clareamento": 0.2691
+    },
+    "funcionam no sábado?": {
+      "preco_limpeza": 0.2943,
+      "horario": 0.8849,
+      "endereco": 0.3011,
+      "convenio": 0.3594,
+      "preco_clareamento": 0.1806
+    },
+    "Qual o horário de atendimento de vocês?": {
+      "preco_limpeza": 0.3028,
+      "horario": 0.8831,
+      "endereco": 0.6062,
+      "convenio": 0.4474,
+      "preco_clareamento": 0.2667
+    },
+    "Onde vocês ficam?": {
+      "preco_limpeza": 0.2556,
+      "horario": 0.4241,
+      "endereco": 0.876,
+      "convenio": 0.3787,
+      "preco_clareamento": 0.2646
+    },
+    "Me passa o endereço, por favor": {
+      "preco_limpeza": 0.2678,
+      "horario": 0.3853,
+      "endereco": 0.9116,
+      "convenio": 0.2985,
+      "preco_clareamento": 0.242
+    },
+    "qual a localização da clínica?": {
+      "preco_limpeza": 0.3429,
+      "horario": 0.4945,
+      "endereco": 0.9104,
+      "convenio": 0.4394,
+      "preco_clareamento": 0.4498
+    },
+    "Aceita convênio?": {
+      "preco_limpeza": 0.3373,
+      "horario": 0.4068,
+      "endereco": 0.3957,
+      "convenio": 0.893,
+      "preco_clareamento": 0.3185
+    },
+    "vocês trabalham com plano odontológico?": {
+      "preco_limpeza": 0.4577,
+      "horario": 0.4659,
+      "endereco": 0.3669,
+      "convenio": 0.9397,
+      "preco_clareamento": 0.4745
+    },
+    "Quanto fica o clareamento?": {
+      "preco_limpeza": 0.6332,
+      "horario": 0.3197,
+      "endereco": 0.483,
+      "convenio": 0.4837,
+      "preco_clareamento": 0.9566
+    },
+    "A limpeza doeu, é normal?": {
+      "preco_limpeza": 0.5845,
+      "horario": 0.2942,
+      "endereco": 0.281,
+      "convenio": 0.3386,
+      "preco_clareamento": 0.4154
+    },
+    "Quanto custa a limpeza e tem horário amanhã?": {
+      "preco_limpeza": 0.7473,
+      "horario": 0.5348,
+      "endereco": 0.384,
+      "convenio": 0.4007,
+      "preco_clareamento": 0.5071
+    },
+    "Minha gengiva está sangrando depois da limpeza": {
+      "preco_limpeza": 0.5736,
+      "horario": 0.2762,
+      "endereco": 0.3553,
+      "convenio": 0.4583,
+      "preco_clareamento": 0.4571
+    },
+    "Quero remarcar minha consulta de quinta": {
+      "preco_limpeza": 0.2995,
+      "horario": 0.4597,
+      "endereco": 0.4422,
+      "convenio": 0.4173,
+      "preco_clareamento": 0.2995
+    },
+    "Vocês fazem implante?": {
+      "preco_limpeza": 0.3588,
+      "horario": 0.4461,
+      "endereco": 0.3921,
+      "convenio": 0.6002,
+      "preco_clareamento": 0.3663
+    },
+    "Quanto custa um implante?": {
+      "preco_limpeza": 0.5386,
+      "horario": 0.2647,
+      "endereco": 0.3364,
+      "convenio": 0.4627,
+      "preco_clareamento": 0.5762
+    },
+    "Quanto custa o aparelho?": {
+      "preco_limpeza": 0.5468,
+      "horario": 0.3216,
+      "endereco": 0.3595,
+      "convenio": 0.4423,
+      "preco_clareamento": 0.5955
+    },
+    "Qual o valor da consulta de avaliação?": {
+      "preco_limpeza": 0.5361,
+      "horario": 0.3848,
+      "endereco": 0.3628,
+      "convenio": 0.4261,
+      "preco_clareamento": 0.5017
+    },
+    "Meu dente quebrou, o que eu faço?": {
+      "preco_limpeza": 0.4561,
+      "horario": 0.3216,
+      "endereco": 0.3649,
+      "convenio": 0.5108,
+      "preco_clareamento": 0.4671
+    },
+    "A dentista que fez minha limpeza ainda atende aí?": {
+      "preco_limpeza": 0.5971,
+      "horario": 0.5218,
+      "endereco": 0.5151,
+      "convenio": 0.6242,
+      "preco_clareamento": 0.4754
+    },
+    "Posso levar meu filho de 5 anos?": {
+      "preco_limpeza": 0.2744,
+      "horario": 0.3105,
+      "endereco": 0.3427,
+      "convenio": 0.35,
+      "preco_clareamento": 0.2283
+    },
+    "Paguei a limpeza e não recebi o recibo": {
+      "preco_limpeza": 0.5733,
+      "horario": 0.302,
+      "endereco": 0.3671,
+      "convenio": 0.3455,
+      "preco_clareamento": 0.3428
+    },
+    "O estacionamento é pago?": {
+      "preco_limpeza": 0.4284,
+      "horario": 0.3837,
+      "endereco": 0.409,
+      "convenio": 0.3635,
+      "preco_clareamento": 0.3483
+    },
+    "Vocês abrem no feriado de 12 de outubro?": {
+      "preco_limpeza": 0.2359,
+      "horario": 0.6728,
+      "endereco": 0.3734,
+      "convenio": 0.4011,
+      "preco_clareamento": 0.2141
+    },
+    "Fiz a limpeza semana passada e meu dente ficou sensível, isso passa? Estou preocupada porque nunca senti isso antes e amanhã viajo": {
+      "preco_limpeza": 0.5279,
+      "horario": 0.3189,
+      "endereco": 0.3614,
+      "convenio": 0.4584,
+      "preco_clareamento": 0.4496
+    },
+    "obrigada!": {
+      "preco_limpeza": 0.225,
+      "horario": 0.3429,
+      "endereco": 0.3994,
+      "convenio": 0.3008,
+      "preco_clareamento": 0.2048
+    },
+    "ok": {
+      "preco_limpeza": 0.141,
+      "horario": 0.2488,
+      "endereco": 0.2918,
+      "convenio": 0.2538,
+      "preco_clareamento": 0.1269
+    },
+    "Quanto custa a limpeza? E o clareamento?": {
+      "preco_limpeza": 0.8182,
+      "horario": 0.3647,
+      "endereco": 0.4627,
+      "convenio": 0.5012,
+      "preco_clareamento": 0.8485
+    },
+    "A limpeza doeu?": {
+      "preco_limpeza": 0.6488,
+      "horario": 0.3137,
+      "endereco": 0.306,
+      "convenio": 0.3509,
+      "preco_clareamento": 0.4372
+    },
+    "meu dente doi quanto custa o canal": {
+      "preco_limpeza": 0.597,
+      "horario": 0.3284,
+      "endereco": 0.3919,
+      "convenio": 0.5255,
+      "preco_clareamento": 0.5987
+    },
+    "sangrando depois da extração, é normal?": {
+      "preco_limpeza": 0.3642,
+      "horario": 0.2863,
+      "endereco": 0.2495,
+      "convenio": 0.3873,
+      "preco_clareamento": 0.3378
+    },
+    "quanto custa a limpeza e clareamento?": {
+      "preco_limpeza": 0.7987,
+      "horario": 0.3142,
+      "endereco": 0.4444,
+      "convenio": 0.4738,
+      "preco_clareamento": 0.8904
+    },
+    "quanto fica a limpeza com clareamento?": {
+      "preco_limpeza": 0.7848,
+      "horario": 0.2933,
+      "endereco": 0.4259,
+      "convenio": 0.4744,
+      "preco_clareamento": 0.8777
+    },
+    "valor da limpeza + clareamento": {
+      "preco_limpeza": 0.7194,
+      "horario": 0.254,
+      "endereco": 0.3685,
+      "convenio": 0.4012,
+      "preco_clareamento": 0.6976
+    },
+    "Unimed": {
+      "preco_limpeza": 0.277,
+      "horario": 0.3195,
+      "endereco": 0.3793,
+      "convenio": 0.3683,
+      "preco_clareamento": 0.224
+    },
+    "e o valor?": {
+      "preco_limpeza": 0.536,
+      "horario": 0.3338,
+      "endereco": 0.3541,
+      "convenio": 0.3896,
+      "preco_clareamento": 0.4096
+    },
+    "a clínica abre aos sábados?": {
+      "preco_limpeza": 0.3255,
+      "horario": 0.6529,
+      "endereco": 0.6337,
+      "convenio": 0.4772,
+      "preco_clareamento": 0.3585
+    },
+    "até que horas fica aberto?": {
+      "preco_limpeza": 0.2892,
+      "horario": 0.7999,
+      "endereco": 0.3682,
+      "convenio": 0.2902,
+      "preco_clareamento": 0.2405
+    },
+    "que horário vocês fecham?": {
+      "preco_limpeza": 0.3195,
+      "horario": 0.8231,
+      "endereco": 0.4766,
+      "convenio": 0.3785,
+      "preco_clareamento": 0.2584
+    },
+    "qual o valor pra fazer uma limpeza?": {
+      "preco_limpeza": 0.9015,
+      "horario": 0.3567,
+      "endereco": 0.3678,
+      "convenio": 0.4582,
+      "preco_clareamento": 0.6469
+    },
+    "quanto custa pra limpar os dentes?": {
+      "preco_limpeza": 0.9223,
+      "horario": 0.3042,
+      "endereco": 0.3278,
+      "convenio": 0.5502,
+      "preco_clareamento": 0.7532
+    },
+    "aceitam convênio odontológico?": {
+      "preco_limpeza": 0.4809,
+      "horario": 0.3406,
+      "endereco": 0.3796,
+      "convenio": 0.7233,
+      "preco_clareamento": 0.4838
+    },
+    "vocês atendem por plano de saúde?": {
+      "preco_limpeza": 0.3614,
+      "horario": 0.6054,
+      "endereco": 0.4254,
+      "convenio": 0.6878,
+      "preco_clareamento": 0.3059
+    },
+    "em que rua fica o consultório?": {
+      "preco_limpeza": 0.3496,
+      "horario": 0.4466,
+      "endereco": 0.6691,
+      "convenio": 0.4508,
+      "preco_clareamento": 0.3262
+    },
+    "vocês ficam em qual bairro?": {
+      "preco_limpeza": 0.2918,
+      "horario": 0.452,
+      "endereco": 0.642,
+      "convenio": 0.3971,
+      "preco_clareamento": 0.2461
+    },
+    "quanto sai um clareamento?": {
+      "preco_limpeza": 0.5658,
+      "horario": 0.2578,
+      "endereco": 0.3792,
+      "convenio": 0.4244,
+      "preco_clareamento": 0.8805
+    },
+    "preço do clareamento?": {
+      "preco_limpeza": 0.6309,
+      "horario": 0.2802,
+      "endereco": 0.4437,
+      "convenio": 0.4633,
+      "preco_clareamento": 0.9231
+    }
+  }
+}

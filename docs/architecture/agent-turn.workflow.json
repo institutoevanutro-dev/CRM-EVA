@@ -312,6 +312,15 @@
       "label": "Supervisão",
       "sublabel": "revisão por outro agente, sem ferramentas e sem canal · kind: supervisor_review",
       "tag": "supervisor_review"
+    },
+    {
+      "id": "resposta_pronta",
+      "lane": "worker",
+      "col": 4,
+      "type": "backend",
+      "label": "Resposta pronta",
+      "sublabel": "entre opt-out e compactação: pergunta frequente cadastrada, 3 travas, sem modelo; na dúvida devolve à IA",
+      "tag": "tentarRespostaPronta"
     }
   ],
   "edges": [
@@ -741,6 +750,28 @@
       "from": "supervisao",
       "to": "inbox",
       "label": "RECOM e BLOQ viram pendência para a equipe",
+      "route": "drop"
+    },
+    {
+      "id": "turn-resposta-pronta",
+      "from": "turn",
+      "to": "resposta_pronta",
+      "label": "só inbound_turn · depois de humano e opt-out",
+      "route": "drop"
+    },
+    {
+      "id": "resposta-pronta-gates",
+      "from": "resposta_pronta",
+      "to": "gates",
+      "label": "mesma cadeia, seq -1 no send_ledger",
+      "route": "drop"
+    },
+    {
+      "id": "resposta-pronta-turn",
+      "from": "resposta_pronta",
+      "to": "turn",
+      "label": "qualquer desvio: segue ao modelo",
+      "variant": "dashed",
       "route": "drop"
     }
   ],

@@ -1029,6 +1029,19 @@ respeitá-lo. `label`/`segmento` são display-only (dependem da tela).
 
 ---
 
+## J28 — Responder pergunta frequente sem gastar IA `[P1]`
+
+Spec: `evalink-conta/docs/superpowers/specs/2026-10-03-respostas-prontas-antes-da-ia-design.md`.
+
+- [ ] Gestor cadastra uma pergunta frequente; a tela diz se ela já é reconhecida (sem chave no CI: "não reconhecida" + "Calcular agora") — `tests/e2e/respostas-prontas.spec.ts` — spec escrita, ainda não rodada (roda no CI do PR)
+- [ ] Liga a função e aperta o rigor; a escolha sobrevive ao recarregar — idem — spec escrita, ainda não rodada (roda no CI do PR)
+- [ ] Desativa, reativa e marca como revisada — idem — spec escrita, ainda não rodada (roda no CI do PR)
+- [ ] Atendente (agent) não chega à tela — idem — spec escrita, ainda não rodada (roda no CI do PR)
+- [ ] O balão de uma resposta pronta diz "Resposta pronta", nunca "IA" — `tests/e2e/inbox-rotulo-de-origem.spec.ts` — spec escrita, ainda não rodada (roda no CI do PR)
+- [x] Turno real contra Postgres: responde sem modelo; humano/opt-out vêm antes; embedding fora do ar → IA; anti-ban vetando → IA — `tests/invariants/resposta-pronta-no-turno.test.ts`
+- [ ] Mensagem real pelo WhatsApp numa VPS com WAHA pareado: medido à mão no piloto (parte 4)
+- [ ] Corpus com modelo real (Tarefa 3): ainda não feito, aguarda chave de API
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

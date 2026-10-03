@@ -42,6 +42,12 @@ export interface ChannelSendInput {
   };
   /** `"followup"` só quando quem envia é o turno de follow-up (ver `HandlerCtx.origemDoEnvio`). */
   origemDoEnvio?: 'followup';
+  /**
+   * Marcas de origem gravadas em `messages.metadata`, ao lado da
+   * `idempotency_key` (que sempre vence). Hoje só a resposta pronta usa
+   * (`resposta_pronta_id`) — é o que o balão lê para dizer "Resposta pronta".
+   */
+  metadata?: Record<string, string>;
 }
 
 /**
