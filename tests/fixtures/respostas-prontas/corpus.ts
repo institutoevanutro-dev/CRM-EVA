@@ -131,7 +131,9 @@ export const NAO_DEVEM_CASAR: readonly string[] = [
  * FORA DA AMOSTRA — paráfrases que NUNCA foram usadas para escolher formas de
  * perguntar do CADASTRO. Não as use para isso: virariam DEVEM_CASAR e a medida
  * perderia o sentido. O teste exige precisão (nunca o item ERRADO) e mede o
- * recall, com piso brando de 50%.
+ * recall. Medido: 5/11 com precisão 11/11 (aceito em 03/10). O piso no teste é
+ * catraca nesse valor, não meta: quem não casa vai para a IA, e o recall cresce
+ * com formas de perguntar por clínica, medido no piloto.
  */
 export const FORA_DA_AMOSTRA: ReadonlyArray<{ mensagem: string; item: string }> = [
   { mensagem: "a clínica abre aos sábados?", item: "horario" },

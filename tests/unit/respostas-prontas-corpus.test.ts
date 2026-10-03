@@ -112,9 +112,9 @@ describe("corpus odontológico — fora da amostra", () => {
       `[corpus fora da amostra] recall ${acertos}/${FORA_DA_AMOSTRA.length} = ${(recall * 100).toFixed(0)}% · ` +
         `menor afastamento certo→segundo ${Math.min(...afastamentos).toFixed(3)}\n`,
     );
-    // PENDENTE de decisão: o piso pedido é 50%, e o medido é 5/11 (45%). Os
-    // limites NÃO descem para alcançá-lo; até a decisão, a catraca é o medido —
-    // perder um acerto fora da amostra reprova.
+    // Catraca no medido (5/11, decisão de 03/10), não meta de qualidade: quem
+    // não casa vai para a IA, e o recall cresce com formas de perguntar por
+    // clínica, medido no piloto. Perder um acerto fora da amostra reprova.
     expect(acertos, "recall fora da amostra caiu").toBeGreaterThanOrEqual(5);
   });
 });
