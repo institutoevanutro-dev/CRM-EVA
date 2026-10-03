@@ -220,6 +220,44 @@ export const instagramAdapter: ChannelAdapter = {
     }
     return frases;
   },
+  async listarPublicacoes(input) {
+    const token = await resolveInstagramToken(input);
+    if (!token) {
+      logger.warn("[instagram] sem credencial para listar publicações", { sessionRef: input.sessionRef });
+      return null;
+    }
+    const limite = Math.min(Math.max(input.limite ?? 30, 1), 50);
+    const res = await fetch(
+      `${baseDoInstagram()}/${graphVersion()}/${encodeURIComponent(input.sessionRef)}/media` +
+        `?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=${limite}`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15_000) },
+    ).catch(() => null);
+    const body = (await res?.json().catch(() => ({}))) as {
+      data?: Array<{
+        id?: string; caption?: string; media_type?: string; media_url?: string;
+        thumbnail_url?: string; permalink?: string; timestamp?: string;
+      }>;
+      error?: { message?: string };
+    } | undefined;
+    if (!res?.ok || !body || body.error) {
+      logger.warn("[instagram] a Graph recusou a lista de publicações", {
+        sessionRef: input.sessionRef,
+        status: res?.status ?? null,
+        erro: body?.error?.message ?? null,
+      });
+      return null;
+    }
+    return (body.data ?? [])
+      .filter((m): m is typeof m & { id: string } => typeof m.id === "string" && m.id !== "")
+      .map((m) => ({
+        id: m.id,
+        legenda: m.caption ?? null,
+        tipo: m.media_type ?? null,
+        miniatura: m.thumbnail_url ?? (m.media_type === "VIDEO" ? null : m.media_url ?? null),
+        link: m.permalink ?? null,
+        publicadaEm: m.timestamp ?? null,
+      }));
+  },
   /**
    * Baixa a mídia recebida — consumido por `workers/media-persist-worker.ts`,
    * que chama `url: msg.media_url` (a URL do CDN gravada em

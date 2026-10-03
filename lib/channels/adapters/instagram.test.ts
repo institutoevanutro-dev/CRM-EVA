@@ -102,4 +102,32 @@ describe("instagramAdapter — respostas a comentário", () => {
     expect(frases).toEqual([]);
     expect(loggerWarnMock).not.toHaveBeenCalled();
   });
+
+  it("listarPublicacoes devolve capa do vídeo, imagem como capa e ignora item sem id", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: [
+          { id: "M-1", caption: "Comente CARDAPIO", media_type: "VIDEO", media_url: "https://x/v.mp4", thumbnail_url: "https://x/capa.jpg", permalink: "https://ig/p/1", timestamp: "2026-10-01T10:00:00+0000" },
+          { id: "M-2", media_type: "IMAGE", media_url: "https://x/foto.jpg" },
+          { caption: "sem id" },
+        ],
+      }),
+    } as unknown as Response);
+    const lista = await instagramAdapter.listarPublicacoes!({ organizationId: "org", sessionRef: "IG-1" });
+    expect(String((globalThis.fetch as never as ReturnType<typeof vi.fn>).mock.calls[0]![0])).toContain("/IG-1/media?fields=");
+    expect(lista).toEqual([
+      { id: "M-1", legenda: "Comente CARDAPIO", tipo: "VIDEO", miniatura: "https://x/capa.jpg", link: "https://ig/p/1", publicadaEm: "2026-10-01T10:00:00+0000" },
+      { id: "M-2", legenda: null, tipo: "IMAGE", miniatura: "https://x/foto.jpg", link: null, publicadaEm: null },
+    ]);
+  });
+
+  it("listarPublicacoes devolve null (não lista vazia) quando a Graph recusa ou a rede cai", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      { ok: false, status: 400, json: async () => ({ error: { message: "sem permissão" } }) } as unknown as Response);
+    await expect(instagramAdapter.listarPublicacoes!({ organizationId: "org", sessionRef: "IG-1" })).resolves.toBeNull();
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("timeout"));
+    await expect(instagramAdapter.listarPublicacoes!({ organizationId: "org", sessionRef: "IG-1" })).resolves.toBeNull();
+  });
 });

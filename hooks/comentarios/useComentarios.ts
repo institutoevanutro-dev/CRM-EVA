@@ -6,6 +6,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { useT } from "@/hooks/i18n/useT";
 import type { ComentarioDaFila } from "@/components/inbox/comentarios/ListaDeComentarios";
 import type { NovaRegraDeComentario } from "@/components/inbox/comentarios/FormularioDeRegra";
+import type { PublicacaoDoCanal } from "@/lib/channels/types";
 
 const CHAVE = ["instagram-comments"] as const;
 
@@ -92,6 +93,26 @@ export function useCanaisDoInstagram() {
           "/api/v1/channels/instagram",
         )
         .then((r) => r.data.contas.filter((c) => c.status === "WORKING")),
+  });
+}
+
+/**
+ * As publicações recentes de um perfil, para escolher o vídeo da regra na tela.
+ * Consulta a Graph na hora; cinco minutos de cache bastam para abrir e fechar
+ * o formulário sem perguntar de novo.
+ */
+export function usePublicacoesDoInstagram(canal: string | null) {
+  return useQuery({
+    queryKey: ["instagram-publicacoes", canal],
+    enabled: !!canal,
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: () =>
+      apiClient
+        .get<{ data: { publicacoes: PublicacaoDoCanal[] } }>(
+          `/api/v1/comentarios/publicacoes?canal=${encodeURIComponent(canal ?? "")}`,
+        )
+        .then((r) => r.data.publicacoes),
   });
 }
 

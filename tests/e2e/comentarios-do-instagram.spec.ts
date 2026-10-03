@@ -55,6 +55,10 @@ const TEXTO_DO_COMENTARIO_DE_PRECO = `quanto custa ${SUFIXO}`;
 const EXTERNAL_ID_PRECO = `COMMENT-PRECO-E2E-${SUFIXO}`;
 const IGSID_PRECO = `IGSID-COMENTARIO-PRECO-E2E-${SUFIXO}`;
 
+// O vídeo NOVO, sem comentário nenhum, que a tela oferece na lista do perfil.
+const MEDIA_ID_DA_LISTA = `MEDIA-LISTA-E2E-${SUFIXO}`;
+const LEGENDA_DA_LISTA = `Comente VIDEO para receber o roteiro ${SUFIXO}`;
+
 interface Creds {
   password: string;
   org_id: string;
@@ -82,6 +86,7 @@ interface EnvioRecebido {
 }
 const recebidos: EnvioRecebido[] = [];
 let receptor: http.Server;
+let sessaoId = "";
 
 test.beforeAll(async () => {
   fs.mkdirSync(EVIDENCIA, { recursive: true });
@@ -94,6 +99,15 @@ test.beforeAll(async () => {
     req.on("data", (parte) => (bruto += parte));
     req.on("end", () => {
       const caminho = req.url ?? "";
+      // A lista de publicações do perfil (formulário de regra, sem colar id).
+      if (req.method === "GET" && caminho.includes(`/${IG_ACCOUNT_ID}/media?`)) {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ data: [
+          { id: MEDIA_ID_DA_LISTA, caption: LEGENDA_DA_LISTA, media_type: "VIDEO", permalink: "https://instagram.invalid/p/e2e" },
+          { id: MEDIA_ID, caption: `Post antigo ${SUFIXO}`, media_type: "IMAGE" },
+        ] }));
+        return;
+      }
       if (req.method === "POST" && /\/(messages|replies)$/.test(caminho)) {
         const corpo = JSON.parse(bruto || "{}") as Record<string, unknown>;
         recebidos.push({ caminho, corpo });
@@ -124,7 +138,7 @@ test.beforeAll(async () => {
     .is("archived_at", null)
     .maybeSingle();
   if (error || !sessao) throw new Error(`sessão do Instagram do seed não encontrada: ${error?.message}`);
-  const sessaoId = (sessao as { id: string }).id;
+  sessaoId = (sessao as { id: string }).id;
 
   const { error: erroRegra } = await db.from("instagram_comment_rules").insert({
     organization_id: creds.org_id,
@@ -321,4 +335,37 @@ test("\"quanto custa\": Direct sai, NADA é publicado em público, e continua es
     page.getByText(/conforme você responde/i).or(page.getByRole("button", { name: /Pode usar/i }).first()),
   ).toBeVisible();
   await page.screenshot({ path: path.join(EVIDENCIA, "04-palavras-da-ia.png"), fullPage: true });
+});
+
+test("nova regra: escolhe o vídeo na lista do perfil, sem colar o id do post", async ({ page }) => {
+  await login(page, creds.users.manager!.email);
+  await page.goto("/app/inbox?filter=comentarios");
+  await page.getByRole("button", { name: /Nova regra/i }).click();
+
+  const video = page.getByRole("button", { name: new RegExp(LEGENDA_DA_LISTA) });
+  await expect(video).toBeVisible();
+  await page.screenshot({ path: path.join(EVIDENCIA, "05-lista-de-videos.png"), fullPage: true });
+  await video.click();
+  await expect(video).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel(/Ou cole o id do post/i)).toHaveValue(MEDIA_ID_DA_LISTA);
+
+  await page.getByLabel(/Palavra-gatilho/i).fill("VIDEO");
+  await page.getByLabel(/Mensagem no Direct/i).fill(`Aqui está o roteiro! ${SUFIXO}`);
+  await page.getByLabel(/Resposta pública/i).fill(`Te mandei no Direct! ${SUFIXO}`);
+  await page.getByRole("button", { name: /Criar regra/i }).click();
+
+  // O vídeo não tem comentário nenhum: a regra só nasce porque a escolha na
+  // lista levou junto o perfil dono do vídeo.
+  await expect
+    .poll(async () => {
+      const { data } = await db
+        .from("instagram_comment_rules")
+        .select("channel_session_id, palavra")
+        .eq("organization_id", creds.org_id)
+        .eq("media_id", MEDIA_ID_DA_LISTA)
+        .maybeSingle();
+      return data as { channel_session_id: string; palavra: string } | null;
+    })
+    .toMatchObject({ channel_session_id: sessaoId });
+  await page.screenshot({ path: path.join(EVIDENCIA, "06-regra-criada-pela-lista.png"), fullPage: true });
 });
