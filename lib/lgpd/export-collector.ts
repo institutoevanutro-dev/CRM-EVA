@@ -99,6 +99,23 @@ export interface ActivityRow {
 }
 
 /**
+ * O resumo que o agente guarda sobre o titular (`lead_checkpoints`).
+ *
+ * Entra porque a anonimização o REDIGE (migration 0308): o resumo corrido, os
+ * compromissos e a próxima ação são texto que o modelo escreveu SOBRE a pessoa,
+ * e o que se apaga a pedido do titular é o que se entrega a pedido dele.
+ * Portado do DeskcommCRM PR 1501 (@melgarafael).
+ */
+export interface CheckpointRow {
+  id: string;
+  rolling_summary: string;
+  commitments: unknown;
+  objections: unknown;
+  next_action: string | null;
+  created_at: string;
+}
+
+/**
  * Compromisso da agenda do titular.
  *
  * As colunas são as MESMAS que a migration 0184 redige ao anonimizar — e não é
@@ -261,6 +278,8 @@ export interface ExportPayload {
   leads: LeadRow[];
   orders: OrderRow[];
   activities: ActivityRow[];
+  /** Opcional: o JSON leva; o PDF não o lê. */
+  checkpoints?: CheckpointRow[];
   appointments: AppointmentRow[];
   tasks: TaskRow[];
   webhook_captures: CaptureRow[];
@@ -668,6 +687,26 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // Resumos do agente — contact_id direto em lead_checkpoints.
+  let checkpoints: CheckpointRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("lead_checkpoints")
+      .select("id, rolling_summary, commitments, objections, next_action, created_at")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] checkpoints load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      checkpoints = data;
+    }
+  }
+
   // Agenda — contact_id direto em calendar_appointments.
   //
   // ⚠️ ESTA METADE FALTAVA, e a outra tinha gate. A migration 0184 declarou esta
@@ -1011,6 +1050,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     leads,
     orders,
     activities,
+    checkpoints,
     appointments,
     tasks,
     webhook_captures,
