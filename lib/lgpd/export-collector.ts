@@ -282,6 +282,23 @@ export interface ExportPayload {
     feedback: unknown;
     created_at: string;
   }>;
+  /**
+   * Notas internas das conversas do titular — o texto que a equipe escreveu
+   * SOBRE ele e a mídia anexada junto. A cascata de anonimização redige esta
+   * tabela (migration 0303), e o que se apaga a pedido dele é o que se entrega
+   * a pedido dele (Art. 18 II). A mídia vem como METADADO: nenhum binário
+   * trafega pelo export.
+   */
+  conversation_notes?: Array<{
+    id: string;
+    conversation_id: string;
+    body: string;
+    media_storage_path: string | null;
+    media_mime: string | null;
+    media_size_bytes: number | null;
+    created_at: string;
+    created_by_name: string | null;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -747,6 +764,24 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       if (!data || data.length < 500) break;
     }
   }
+  // Notas internas: sem FK para `contacts`, só para `conversations` — o escopo
+  // são as conversas do titular já carregadas acima.
+  const conversation_notes: NonNullable<ExportPayload["conversation_notes"]> = [];
+  const conversationIds = conversations.map((c) => c.id);
+  for (let batch = 0; batch < conversationIds.length; batch += 100) {
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await admin
+        .from("conversation_notes")
+        .select("id, conversation_id, body, media_storage_path, media_mime, media_size_bytes, created_at, created_by_name")
+        .eq("organization_id", organizationId)
+        .in("conversation_id", conversationIds.slice(batch, batch + 100))
+        .order("id")
+        .range(offset, offset + 499);
+      if (error) throw error;
+      conversation_notes.push(...(data ?? []));
+      if (!data || data.length < 500) break;
+    }
+  }
   const meeting_deliveries: MeetingDeliveryRow[] = [];
   const appointment_notices: AppointmentNoticeRow[] = [];
   if (contactId) {
@@ -852,6 +887,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     webhook_captures,
     audit_log_extract,
     reply_drafts,
+    conversation_notes,
     meeting_deliveries,
     appointment_notices,
     voice_calls,
