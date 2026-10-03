@@ -6856,6 +6856,180 @@ export type Database = {
           },
         ]
       }
+      respostas_prontas: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          id: string
+          organization_id: string
+          resposta: string
+          revisado_em: string
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          organization_id: string
+          resposta: string
+          revisado_em?: string
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          organization_id?: string
+          resposta?: string
+          revisado_em?: string
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "respostas_prontas_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      respostas_prontas_config: {
+        Row: {
+          ligado: boolean
+          limite_similaridade: number
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          ligado?: boolean
+          limite_similaridade?: number
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          ligado?: boolean
+          limite_similaridade?: number
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "respostas_prontas_config_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      respostas_prontas_perguntas: {
+        Row: {
+          created_at: string
+          embedding: string | null
+          id: string
+          modelo_embedding: string | null
+          organization_id: string
+          resposta_pronta_id: string
+          texto: string
+        }
+        Insert: {
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          modelo_embedding?: string | null
+          organization_id: string
+          resposta_pronta_id: string
+          texto: string
+        }
+        Update: {
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          modelo_embedding?: string | null
+          organization_id?: string
+          resposta_pronta_id?: string
+          texto?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "respostas_prontas_perguntas_item_fk"
+            columns: ["organization_id", "resposta_pronta_id"]
+            isOneToOne: false
+            referencedRelation: "respostas_prontas"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "respostas_prontas_perguntas_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      respostas_prontas_usos: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          id: string
+          job_id: string | null
+          organization_id: string
+          resposta_pronta_id: string
+          similaridade: number
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          organization_id: string
+          resposta_pronta_id: string
+          similaridade: number
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          organization_id?: string
+          resposta_pronta_id?: string
+          similaridade?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "respostas_prontas_usos_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "respostas_prontas_usos_item_fk"
+            columns: ["organization_id", "resposta_pronta_id"]
+            isOneToOne: false
+            referencedRelation: "respostas_prontas"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "respostas_prontas_usos_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "job_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "respostas_prontas_usos_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       send_ledger: {
         Row: {
           body_hash: string
