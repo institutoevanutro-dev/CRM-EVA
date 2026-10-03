@@ -9,6 +9,9 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/api\/v1\/prontuario\/contacts\/[0-9a-f-]+$/i,
   // Credencial de leitura validada dentro da rota; não dispensa auth de subrotas.
   /^\/api\/v1\/integrations\/financeiro\/contacts\/[0-9a-f-]+$/i,
+  // Sem esta linha o proxy devolve 401 ("Authentication required") antes de a rota ler o
+  // Bearer: a rota existia, o teste dela passava, e o financeiro nunca recebia a lista (medido na v3.1.0).
+  /^\/api\/v1\/integrations\/financeiro\/products$/,
   /^\/api\/v1\/integrations\/marketing\/report$/,
   /^\/api\/v1\/integrations\/marketing\/financeiro-totais$/,
   /^\/$/,
