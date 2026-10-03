@@ -105,12 +105,14 @@ describe("travas 1 e 2 — similaridade por item", () => {
     expect(d.casou).toBe(false); // 0,745 < limite 0,82: trava 1 vale primeiro
     const ok = decidirRespostaPronta(new Map([["limpeza", 0.9], ["clareamento", 0.69]]), LIMITE_PADRAO);
     expect(ok.casou).toBe(true);
-    expect(MARGEM_OUTRO_ITEM).toBe(0.06);
+    expect(MARGEM_OUTRO_ITEM).toBe(0.12);
   });
 
   it("trava 2: borda — outro item exatamente em topo - margem e >= 0,70 é misturado", () => {
-    const d = decidirRespostaPronta(new Map([["limpeza", 0.9], ["clareamento", 0.84]]), LIMITE_PADRAO);
+    const d = decidirRespostaPronta(new Map([["limpeza", 0.9], ["clareamento", 0.78]]), LIMITE_PADRAO);
     expect(d.casou).toBe(false);
+    const fora = decidirRespostaPronta(new Map([["limpeza", 0.9], ["clareamento", 0.779]]), LIMITE_PADRAO);
+    expect(fora.casou).toBe(true);
   });
 
   it("o limite da clínica vale (mais rigoroso)", () => {

@@ -44,11 +44,19 @@ export function sinalClinico(texto: string): boolean {
  * cujo melhor é ~0,88; um corte absoluto em 0,70 mandaria toda pergunta de
  * preço para a IA. Mistura de assuntos na mesma mensagem também é pega pela
  * trava 3. Fixos no código: por clínica, abriria combinação insegura com o
- * limite da trava 1. O piso é rede de segurança: com LIMITE_MINIMO 0,78 e
- * margem 0,06 ele não chega a morder com as constantes atuais.
+ * limite da trava 1. O piso morde quando a clínica baixa o limite: com o melhor
+ * em 0,78, um vizinho a 0,67 está na margem mas abaixo de 0,70 e não conta.
+ *
+ * A margem era 0,06 e subiu para 0,12 com o corpus do modelo real
+ * (`tests/fixtures/respostas-prontas/similaridades.json`): "quanto fica a
+ * limpeza com clareamento?" dá clareamento 0,878 e limpeza 0,785 — distância
+ * 0,093, que passava pela margem antiga e mandava o preço de UM procedimento
+ * para quem perguntou de dois (o " com " não separa oração na trava 3). 0,12 =
+ * essa distância + 0,02, arredondado para cima. O menor afastamento entre o
+ * item certo e o segundo, entre as frases que devem casar, é 0,164.
  */
 export const LIMITE_OUTRO_ITEM = 0.7;
-export const MARGEM_OUTRO_ITEM = 0.06;
+export const MARGEM_OUTRO_ITEM = 0.12;
 /** Trava 3 — caracteres, contados depois de tirar a saudação. */
 export const TAMANHO_MAXIMO = 120;
 
@@ -135,7 +143,7 @@ export function decidirRespostaPronta(
   const segundo = ordenados[1];
   if (primeiro === undefined) return { casou: false, motivo: "sem_candidato", similaridade: null };
   if (primeiro[1] < corte) return { casou: false, motivo: "abaixo_do_limite", similaridade: primeiro[1] };
-  // 1e-9: 0,9 - 0,06 > 0,84 em ponto flutuante; sem folga a borda exata escaparia.
+  // 1e-9: 0,9 - 0,78 > 0,12 em ponto flutuante; sem folga a borda exata escaparia.
   if (segundo !== undefined && segundo[1] >= LIMITE_OUTRO_ITEM && primeiro[1] - segundo[1] <= MARGEM_OUTRO_ITEM + 1e-9) {
     return { casou: false, motivo: "assunto_misturado", similaridade: primeiro[1] };
   }

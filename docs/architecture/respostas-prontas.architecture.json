@@ -76,7 +76,7 @@
       "col": 3,
       "type": "service",
       "label": "lib/respostas-prontas/casamento.ts",
-      "sublabel": "trava 1 ≥ limite (0,82) · trava 2 outro item < 0,70 · trava 3 curta e de um assunto"
+      "sublabel": "trava 1 ≥ limite (0,82) · trava 2 nenhum outro item ≥ 0,70 a menos de 0,12 do melhor · trava 3 curta e de um assunto"
     },
     {
       "id": "turno",
