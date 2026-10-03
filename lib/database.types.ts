@@ -7923,6 +7923,15 @@ export type Database = {
       }
     }
     Functions: {
+      fn_respostas_prontas_metricas: {
+        Args: { p_org: string; p_desde: string; p_ate?: string }
+        Returns: {
+          resolvidas: number
+          respondidas_pela_ia: number
+          custo_total_cents: number
+          custo_incompleto: boolean
+        }[]
+      }
       fn_channel_routing_claim: {
         Args: {
           p_channel: string

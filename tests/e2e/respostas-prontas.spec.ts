@@ -118,6 +118,8 @@ test.describe("Perguntas frequentes — o gestor cadastra, liga e revisa", () =>
         page.getByText("Não foi possível calcular agora. Confira a chave da OpenAI em Credenciais."),
       ).toBeVisible({ timeout: 30_000 });
     }
+    // Medição do período: nasce em zero numa clínica que nunca respondeu pronto.
+    await expect(page.getByTestId("rp-resolvidas")).toHaveText("0");
     await captura(page, "cadastrada");
   });
 

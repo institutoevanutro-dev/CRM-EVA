@@ -114,3 +114,32 @@ create policy tenant_isolation_respostas_prontas_usos_select on public.respostas
 revoke all on public.respostas_prontas_usos from public, anon, authenticated;
 grant select on public.respostas_prontas_usos to authenticated;
 grant all on public.respostas_prontas_usos to service_role;
+
+-- Medição por clínica e período, agregada NO BANCO: o PostgREST corta em
+-- max_rows=1000, e contar linhas no cliente truncaria em silêncio a clínica
+-- movimentada. SECURITY INVOKER: a RLS do chamador vale (manager da org);
+-- organization_id filtrado à mão mesmo assim.
+create or replace function public.fn_respostas_prontas_metricas(
+  p_org uuid, p_desde timestamptz, p_ate timestamptz default now()
+) returns table (
+  resolvidas bigint,
+  respondidas_pela_ia bigint,
+  custo_total_cents numeric,
+  custo_incompleto boolean
+)
+language sql stable security invoker
+set search_path = public, pg_temp
+as $fn$
+  select
+    (select count(*) from public.respostas_prontas_usos u
+      where u.organization_id = p_org and u.created_at >= p_desde and u.created_at < p_ate),
+    count(distinct c.job_id),
+    coalesce(sum(c.cost_cents), 0),
+    coalesce(bool_or(c.cost_cents is null), false)
+  from public.llm_calls c
+  where c.organization_id = p_org and c.purpose = 'agent_turn' and c.job_id is not null
+    and c.created_at >= p_desde and c.created_at < p_ate;
+$fn$;
+
+revoke execute on function public.fn_respostas_prontas_metricas(uuid, timestamptz, timestamptz) from public, anon;
+grant  execute on function public.fn_respostas_prontas_metricas(uuid, timestamptz, timestamptz) to authenticated, service_role;

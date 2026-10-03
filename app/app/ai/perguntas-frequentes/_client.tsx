@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   useAlterarRespostaPronta,
   useCalcularReconhecimento,
+  useMetricasRespostasProntas,
   useRespostasProntas,
   useSalvarConfig,
   useSalvarRespostaPronta,
@@ -152,6 +153,8 @@ export function PerguntasFrequentesClient() {
         </CardContent>
       </Card>
 
+      <MedicaoDoPeriodo />
+
       {naoReconhecidas > 0 && (
         <div role="status" className="flex flex-col gap-2 rounded-md border border-warning/40 bg-warning-bg p-3 text-sm text-warning-fg sm:flex-row sm:items-center sm:justify-between">
           <span>
@@ -241,5 +244,50 @@ export function PerguntasFrequentesClient() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function MedicaoDoPeriodo() {
+  const t = useT();
+  const tagDoIdioma = useTagDeIdioma();
+  const [dias, setDias] = React.useState<7 | 30 | 90>(30);
+  const { data } = useMetricasRespostasProntas(dias);
+  const dolar = (centavos: number | null) =>
+    centavos === null
+      ? "—"
+      : (centavos / 100).toLocaleString(tagDoIdioma, { style: "currency", currency: "USD" });
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-3">
+        <CardTitle>{t("Resultado")}</CardTitle>
+        <div className="flex gap-1" role="group" aria-label={t("Período")}>
+          {([7, 30, 90] as const).map((d) => (
+            <Button key={d} size="sm" variant={d === dias ? "default" : "outline"} onClick={() => setDias(d)}>
+              {d === 7 ? t("7 dias") : d === 30 ? t("30 dias") : t("90 dias")}
+            </Button>
+          ))}
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <p className="text-xs text-muted-foreground">{t("Resolvidas por resposta pronta")}</p>
+          <p className="text-2xl font-semibold" data-testid="rp-resolvidas">{data?.resolvidas_por_resposta_pronta ?? "—"}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">{t("Respondidas pela IA")}</p>
+          <p className="text-2xl font-semibold">{data?.respondidas_pela_ia ?? "—"}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">{t("Custo de IA evitado (estimado)")}</p>
+          <p className="text-2xl font-semibold">{dolar(data?.custo_evitado_estimado_cents ?? null)}</p>
+          {data?.custo_incompleto && (
+            <p className="text-xs text-muted-foreground">
+              {t("Parte das chamadas de IA não tem preço conhecido; a estimativa fica abaixo do real.")}
+            </p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

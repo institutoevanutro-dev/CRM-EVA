@@ -75,3 +75,20 @@ export function useCalcularReconhecimento() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: KEY }),
   });
 }
+
+export interface MetricasRespostasProntas {
+  dias: number;
+  resolvidas_por_resposta_pronta: number;
+  respondidas_pela_ia: number;
+  custo_medio_turno_cents: number | null;
+  custo_evitado_estimado_cents: number | null;
+  custo_incompleto: boolean;
+}
+
+export function useMetricasRespostasProntas(dias: 7 | 30 | 90) {
+  return useQuery({
+    queryKey: [...KEY, "metricas", dias],
+    queryFn: () =>
+      apiClient.get<{ data: MetricasRespostasProntas }>(`${BASE}/metricas?dias=${dias}`).then((r) => r.data),
+  });
+}
