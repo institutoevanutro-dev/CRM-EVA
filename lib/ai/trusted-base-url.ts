@@ -1,3 +1,5 @@
+import { logger } from "@/lib/logger";
+
 /** Tenant settings cannot choose where provider credentials are sent. */
 export function trustedAiBaseUrl(provider: string, value: string | null | undefined): string | undefined {
   if (!value) return undefined;
@@ -18,4 +20,19 @@ export function trustedAiBaseUrl(provider: string, value: string | null | undefi
   const allowed = [canonical[provider], configured].filter((url): url is string => Boolean(url));
   if (!allowed.some((url) => normalize(url) === candidate)) throw new Error("ai_endpoint_not_authorized");
   return candidate;
+}
+
+/**
+ * Para o caminho de execução: uma `base_url` gravada antes da regra acima não
+ * pode parar agente, follow-up nem RAG. Ela é ignorada (cai no endpoint
+ * canônico) e o log diz qual. Quem grava continua usando `trustedAiBaseUrl`,
+ * que recusa.
+ */
+export function trustedAiBaseUrlOrDefault(provider: string, value: string | null | undefined): string | undefined {
+  try {
+    return trustedAiBaseUrl(provider, value);
+  } catch {
+    logger.warn("[ai] base_url fora da lista confiável ignorada; usando o endpoint padrão", { provider });
+    return undefined;
+  }
 }

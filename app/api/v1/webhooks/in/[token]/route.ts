@@ -50,6 +50,14 @@ interface RouteCtx {
 }
 
 const RATE_LIMIT_PER_MIN = 60;
+// Recusas não consomem a cota da fonte (a cota é de quem assina), mas cada uma
+// grava auditoria e captação. Sem teto próprio, quem não tem o segredo inunda
+// as duas tabelas em laço. Passado o teto, a recusa continua; só não registra.
+const RECUSAS_REGISTRADAS_POR_MIN = 30;
+
+async function recusaRegistravel(token: string): Promise<boolean> {
+  return (await checkRateLimit(`webhook_in_recusa:${token}`, RECUSAS_REGISTRADAS_POR_MIN, 60)).allowed;
+}
 
 // ponytail: mirrors the default phone aliases in lib/webhooks/inbound.ts —
 // duplicated (not exported there) only so the route can flag a phone-looking
@@ -125,6 +133,9 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   if (source.secret_encrypted) {
     sourceSecret = await decryptWebhookSecret(admin, source.secret_encrypted as unknown as string);
     if (!sourceSecret) {
+      if (!(await recusaRegistravel(token))) {
+        return fail("service_unavailable", "Webhook temporarily unavailable.", 503, { requestId });
+      }
       await audit({
         action: "webhook.inbound_secret_unavailable",
         organizationId: source.organization_id,
@@ -143,6 +154,9 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   }
   const validSignature = sourceSecret ? verifyInboundSignature(rawBody, sigHeader, sourceSecret) : null;
   if (sourceSecret && !validSignature) {
+    if (!(await recusaRegistravel(token))) {
+      return fail("unauthenticated", "invalid_signature", 401, { requestId });
+    }
     await audit({
       action: "webhook.inbound_invalid_signature",
       organizationId: source.organization_id,

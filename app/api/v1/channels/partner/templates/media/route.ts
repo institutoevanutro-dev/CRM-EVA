@@ -26,6 +26,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
+import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { extensaoDe, farejarTipo, pareceSvg } from "@/lib/branding/logo-arquivo";
@@ -54,6 +55,15 @@ const VALIDADE_SEGUNDOS = 7 * 24 * 60 * 60;
 const TIPOS = new Set(["image/jpeg", "image/png"]);
 const TAMANHO_MAX = 5 * 1024 * 1024;
 
+/**
+ * O arquivo fica no bucket depois do envio (ninguém o consome), então cada
+ * upload é permanente. Um teto por organização limita o lixo a 20 imagens de
+ * 5 MB por hora.
+ * ponytail: teto por hora, não reserva com expiração; a reserva da 0300 é
+ * presa a conversa e apagaria a imagem antes de a Meta terminar a revisão.
+ */
+const UPLOADS_POR_HORA = 20;
+
 export async function POST(req: NextRequest): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
@@ -64,6 +74,13 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!authz.ok) return authz.response;
   const { user, org } = authz;
   const t = (texto: string) => traduzir(texto, user.idioma);
+
+  if (!(await checkRateLimit(`template_media:${org.orgId}`, UPLOADS_POR_HORA, 3600)).allowed) {
+    return fail("rate_limited", t("Muitas imagens enviadas. Tente de novo em uma hora."), 429, {
+      requestId,
+      headers: { "Retry-After": "3600" },
+    });
+  }
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");

@@ -1,4 +1,4 @@
-import { trustedAiBaseUrl } from "../trusted-base-url";
+import { trustedAiBaseUrlOrDefault } from "../trusted-base-url";
 /**
  * DE ONDE VEM A CHAVE QUE INDEXA E CONSULTA O SEU MATERIAL.
  *
@@ -114,7 +114,7 @@ export async function resolverChaveDeEmbedding(
       }
       return {
         apiKey: credencial.apiKey,
-        baseUrl: trustedAiBaseUrl("openai", binding.base_url) ?? null,
+        baseUrl: trustedAiBaseUrlOrDefault("openai", binding.base_url) ?? null,
         viaGateway: false,
         origem: "binding_do_ponto",
         rotulo: credencial.rotulo,
