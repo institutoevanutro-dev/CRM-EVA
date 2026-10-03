@@ -7637,20 +7637,12 @@ create index if not exists idx_conversation_notes_conversation
 
 alter table conversation_notes enable row level security;
 
-drop policy if exists "conversation_notes_select" on conversation_notes;
-create policy "conversation_notes_select" on conversation_notes
-  for select using (
-    organization_id in (select fn_user_org_ids()) or fn_is_platform_admin()
-  );
-
-drop policy if exists "conversation_notes_write" on conversation_notes;
-create policy "conversation_notes_write" on conversation_notes
-  for all using (
-    organization_id in (select fn_user_org_ids()) and fn_role_at_least(organization_id, 'agent')
-  )
-  with check (
-    organization_id in (select fn_user_org_ids()) and fn_role_at_least(organization_id, 'agent')
-  );
+-- As policies de `conversation_notes` foram para o apêndice da 0302: deixar a
+-- definição aqui embaixo (versão antiga, só-organização) significaria que cada
+-- `update.sh` instala a política vazante ANTES da final — janela em que a nota
+-- vaza para quem não pode ver a conversa. O `drop policy if exists` do
+-- apêndice já cuida do clone antigo; é o que o gate
+-- `baseline-nao-constroi-o-que-derruba` exige ("tire a intermediária").
 
 -- ---- human cases (migration 0066) ----
 create table if not exists agent_cases (
@@ -29070,6 +29062,79 @@ returns setof public.outbound_media_uploads language sql security definer set se
 $$;
 revoke all on function public.fn_claim_expired_outbound_media(integer) from public, anon, authenticated;
 grant execute on function public.fn_claim_expired_outbound_media(integer) to service_role;
+
+-- ---- notas internas: realtime + visibilidade herdada da conversa (migration 0302, #1863) ----
+-- Fica ANTES do bloco da 0301 de propósito: no install, a `mfa_provada` só
+-- nasce em tabela que já tem policy permissiva, e as de `conversation_notes`
+-- nascem aqui.
+-- F1: `conversation_notes` estava FORA da publicação supabase_realtime. O hook
+-- (`hooks/inbox/useConversationNotes.ts`) abria o canal, o Supabase respondia
+-- `SUBSCRIBED` e nenhum evento chegava — falha muda, sem erro. A anotação só
+-- aparecia para os demais quando alguém recarregava. Mesmo desenho idempotente
+-- do `foreach` lá acima: checa `pg_publication_tables` antes de adicionar.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'conversation_notes'
+  ) then
+    execute 'alter publication supabase_realtime add table public.conversation_notes';
+  end if;
+end $$;
+
+comment on table public.conversation_notes is
+  'Nota interna da conversa (Onda 5.2) — anotação de procedimento interno que NUNCA vai ao cliente. Realtime desde a 0302 (o canal assinava e não recebia nada); visibilidade herdada da conversa desde a 0302, igual a ai_reply_drafts.';
+
+-- F2: a policy testava só `fn_user_org_ids()`, enquanto `fn_can_view_conversation`
+-- (21 usos) é quem implementa `visibility_mode`. Em `own_and_unassigned`, o
+-- atendente que não abria a conversa lia as notas dela, e quem perdeu a
+-- conversa continuava vendo. Molde: `tenant_isolation_ai_reply_drafts_all`.
+drop policy if exists "conversation_notes_select" on public.conversation_notes;
+create policy "conversation_notes_select" on public.conversation_notes
+  for select using (
+    organization_id in (select public.fn_user_org_ids())
+    and exists (
+      select 1 from public.conversations c
+      where c.organization_id = conversation_notes.organization_id
+        and c.id = conversation_notes.conversation_id
+        and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+    )
+  );
+
+-- ⚠️ A política de ESCRITA precisa da MESMA condição: policies são OR e
+-- `conversation_notes_write` é `for all`, que concede SELECT junto — sem isto
+-- a policy nova de SELECT é anulada. O teste `F2: ... não lê a nota` pegou
+-- exatamente isso (devolveu 1 em vez de 0) antes do conserto.
+drop policy if exists "conversation_notes_write" on public.conversation_notes;
+create policy "conversation_notes_write" on public.conversation_notes
+  for all using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+    and exists (
+      select 1 from public.conversations c
+      where c.organization_id = conversation_notes.organization_id
+        and c.id = conversation_notes.conversation_id
+        and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+    )
+  )
+  with check (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+    and exists (
+      select 1 from public.conversations c
+      where c.organization_id = conversation_notes.organization_id
+        and c.id = conversation_notes.conversation_id
+        and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+    )
+  );
+
+-- O ramo `or fn_is_platform_admin()` da política antiga vira policy própria:
+-- o admin de plataforma não é membro de organização nenhuma por definição.
+drop policy if exists "conversation_notes_select_platform_admin" on public.conversation_notes;
+create policy "conversation_notes_select_platform_admin" on public.conversation_notes
+  for select using (public.fn_is_platform_admin());
 
 -- ---- segundo fator vale na REST (migration 0301) ----
 -- Quem cadastrou o segundo fator precisa prová-lo também para ler e gravar
