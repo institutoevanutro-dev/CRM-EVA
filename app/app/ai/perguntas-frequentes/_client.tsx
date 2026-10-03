@@ -275,7 +275,7 @@ function MedicaoDoPeriodo() {
           <p className="text-2xl font-semibold" data-testid="rp-resolvidas">{data?.resolvidas_por_resposta_pronta ?? "—"}</p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">{t("Respondidas pela IA")}</p>
+          <p className="text-xs text-muted-foreground">{t("Respondidas pela IA (estimado)")}</p>
           <p className="text-2xl font-semibold">{data?.respondidas_pela_ia ?? "—"}</p>
         </div>
         <div>

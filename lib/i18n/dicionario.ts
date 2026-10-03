@@ -9396,7 +9396,7 @@ export const DICIONARIO: Traducoes = {
   "30 dias": { es: "30 días" },
   "90 dias": { es: "90 días" },
   "Resolvidas por resposta pronta": { es: "Resueltas con respuesta lista" },
-  "Respondidas pela IA": { es: "Respondidas por la IA" },
+  "Respondidas pela IA (estimado)": { es: "Respondidas por la IA (estimado)" },
   "Custo de IA evitado (estimado)": { es: "Costo de IA evitado (estimado)" },
   "Parte das chamadas de IA não tem preço conhecido; a estimativa fica abaixo do real.": { es: "Parte de las llamadas de IA no tiene precio conocido; la estimación queda por debajo de lo real." },
   "Erro ao salvar a pergunta frequente.": { es: "Error al guardar la pregunta frecuente." },
