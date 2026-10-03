@@ -5,7 +5,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
-import { resolveAuthDual } from "@/lib/api/auth-dual";
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { ApiError } from "@/lib/api/types";
 import { fail, ok } from "@/lib/api/wrappers";
 import { sendMessageSchema, validateRequest, type SendMessageInput } from "@/lib/schemas";
@@ -33,6 +33,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     scope: "mcp:write",
   });
   if (!authz.ok) return authz.response;
+  // Rota que aceita Bearer (PUBLIC_PATHS) e envia WhatsApp: um laço aqui bane
+  // o NÚMERO da operação. O teto por token e por organização é o único que existe.
+  const teto = await tetoDeEscritaDoToken(authz, "messages", requestId);
+  if (teto) return teto;
   const { supabase, organizationId, actor, idioma } = authz;
 
   let input;
