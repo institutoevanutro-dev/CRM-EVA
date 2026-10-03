@@ -1,10 +1,15 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import pg from "pg";
 
-import type * as InboundTurn from "@/lib/agent-engine/agent/inbound-turn";
-import type * as Providers from "@/lib/agent-engine/edge/llm/providers";
-import type * as Queue from "@/lib/agent-engine/queue/queue";
-import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
+import {
+  abrirPool,
+  canalQueCaptura,
+  carregarMotor,
+  montaHandler,
+  recriarConversa,
+  rodaTurno,
+  semearBase,
+  type Motor,
+} from "./turno-com-postgres";
 
 /**
  * O TURNO INTEIRO, CONTRA POSTGRES DE VERDADE: quem pede um atendente RECEBE UMA
@@ -34,34 +39,22 @@ import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
  *
  * ## Harness
  *
- * Copiado de `limite-de-envios-por-turno.test.ts`: `createInboundTurnHandler`
- * real, canal que CAPTURA em vez de enviar, `createFakeRegistry` para o modelo,
- * relógio fixo dentro da janela anti-ban (sem ele o `pacing` veta e a medição é
- * do motivo errado) e `sleep` no-op.
+ * `tests/invariants/turno-com-postgres.ts` (dividido com
+ * `resposta-pronta-no-turno.test.ts`): handler real, canal que CAPTURA, modelo
+ * fake, relógio dentro da janela anti-ban e `sleep` no-op.
  *
  * O modelo fake aqui é um CONTROLE, não um ator: se ele for chamado num turno de
  * pedido explícito, o desvio determinístico deixou de ser determinístico.
  */
 
-const container = process.env.TEST_DB_CONTAINER;
-if (!container) {
-  throw new Error("TEST_DB_CONTAINER not set — rode via `pnpm test:db` (scripts/test-db.sh)");
-}
-
-process.env.NEXT_PUBLIC_SUPABASE_URL ??= "https://placeholder.supabase.co";
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??= "placeholder-anon";
-process.env.SUPABASE_SERVICE_ROLE_KEY ??= "placeholder-service";
-
-const PORT = Number(process.env.TEST_DB_PORT ?? 54329);
-const pool = new pg.Pool({
-  connectionString: `postgresql://postgres:postgres@127.0.0.1:${PORT}/postgres`,
-  max: 2,
-});
-
-const ORG = "eeee0000-0000-4000-8000-000000000001";
-const CONTACT = "eeee0000-0000-4000-8000-000000000002";
-const SESSION = "eeee0000-0000-4000-8000-000000000003";
-const CONV = "eeee0000-0000-4000-8000-000000000004";
+const pool = abrirPool();
+const ALVO = {
+  org: "eeee0000-0000-4000-8000-000000000001",
+  contact: "eeee0000-0000-4000-8000-000000000002",
+  session: "eeee0000-0000-4000-8000-000000000003",
+  conv: "eeee0000-0000-4000-8000-000000000004",
+};
+const { org: ORG, contact: CONTACT, conv: CONV } = ALVO;
 
 interface EnvioCapturado {
   body: string;
@@ -69,185 +62,40 @@ interface EnvioCapturado {
   forceHumanNoEnvio: boolean;
 }
 
-type Modules = {
-  createInboundTurnHandler: typeof InboundTurn.createInboundTurnHandler;
-  queue: typeof Queue;
-  createLogger: typeof ObsLogger.createLogger;
-  createFakeRegistry: typeof Providers.createFakeRegistry;
-};
-let m: Modules;
-
+let m: Motor;
 let enviados: EnvioCapturado[] = [];
 let modeloChamado = 0;
 
-const USO = {
-  inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-  outputTokens: { total: 1, text: 1, reasoning: 0 },
-};
-
-/**
- * Modelo de CONTROLE: encerra o turno com um checkpoint válido e conta quantas
- * vezes foi chamado. Num turno de pedido explícito ele tem de ficar em ZERO.
- */
-function modeloDeControle() {
-  return async () => {
-    modeloChamado += 1;
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({
-            commitments: [],
-            objections: [],
-            next_action: null,
-            rolling_summary: "turno de teste",
-          }),
-        },
-      ],
-      finishReason: { unified: "stop" as const, raw: undefined },
-      usage: USO,
-      warnings: [],
-    };
-  };
-}
-
-function montaHandler() {
-  return m.createInboundTurnHandler({
-    crmCfg: { supabase: {} as never },
-    llmCfg: { anthropicApiKey: "fake" } as never,
-    knobs: {
-      historyLimit: 10,
-      maxContextTokens: 1000,
-      notesIndexMaxTokens: 500,
-      maxSteps: 12,
-      queuedRetryDelayMs: 1000,
-      breaker: {
-        exactFailureWarn: 2,
-        exactFailureBlock: 5,
-        sameToolFailureWarn: 3,
-        sameToolFailureHalt: 8,
-        noProgressWarn: 3,
-        noProgressBlock: 5,
-      },
-    },
-    log: m.createLogger(),
-    registry: m.createFakeRegistry(modeloDeControle() as never),
-    channel: () =>
-      ({
-        channel: "captura",
-        send: async (i: { body: string }) => {
-          // A leitura acontece DENTRO do envio, contra o banco: é o instante
-          // exato em que a pergunta "a trava já está armada?" tem resposta.
-          const { rows } = await pool.query<{ force_human: boolean }>(
-            "select force_human from contacts where id = $1",
-            [CONTACT],
-          );
-          enviados.push({ body: i.body, forceHumanNoEnvio: rows[0]?.force_human === true });
-          return {
-            kind: "sent" as const,
-            idempotencyKey: `k${enviados.length}`,
-            messageId: `m${enviados.length}`,
-          };
-        },
-        sessionHealth: async () => ({ healthy: true, status: "WORKING" }),
-        capabilities: () => ({ freeform: true, media: true, audio: true }),
-        costPerMessage: () => ({ currency: "BRL", cents: 0 }),
-      }) as never,
-    // Terça, 15h BRT: dentro da janela anti-ban (7h-22h). Sem isto o gate
-    // `pacing` vetaria por horário e o arquivo mediria o motivo errado — o
-    // mesmo cuidado de `limite-de-envios-por-turno.test.ts`.
-    clock: () => new Date("2026-07-28T18:00:00Z"),
-    sleep: async () => {},
-  });
-}
-
 /** Grava um inbound e roda UM turno completo por cima dele. */
 async function rodaTurnoCom(texto: string): Promise<void> {
-  const msgId = crypto.randomUUID();
-  await pool.query(
-    `insert into messages (id, organization_id, conversation_id, channel_session_id, contact_id,
-       type, direction, status, body, sent_via, sent_at)
-     values ($1,$2,$3,$4,$5,'text','inbound','delivered',$6,'external_device', now())`,
-    [msgId, ORG, CONV, SESSION, CONTACT, texto],
-  );
-  await pool.query("update job_queue set status = 'done' where status = 'pending'");
-  const { job } = await m.queue.enqueueJob(pool, ORG, {
-    kind: "inbound_turn",
-    leadId: CONTACT,
-    payload: {
-      conversation_id: CONV,
-      contact_id: CONTACT,
-      channel_session_id: SESSION,
-      inbound_message_id: msgId,
-      crm_event_id: crypto.randomUUID(),
+  const handler = montaHandler(m, {
+    aoChamarModelo: () => {
+      modeloChamado += 1;
     },
-    maxAttempts: 1,
+    canal: () =>
+      canalQueCaptura(async (i) => {
+        // A leitura acontece DENTRO do envio, contra o banco: é o instante
+        // exato em que a pergunta "a trava já está armada?" tem resposta.
+        const { rows } = await pool.query<{ force_human: boolean }>(
+          "select force_human from contacts where id = $1",
+          [CONTACT],
+        );
+        enviados.push({ body: i.body, forceHumanNoEnvio: rows[0]?.force_human === true });
+        return enviados.length;
+      }),
   });
-  const [claimed] = await m.queue.claimJobs(pool, { workerId: "aviso", maxConcurrency: 1 });
-  expect(claimed?.id).toBe(job.id);
-  try {
-    await montaHandler()(claimed!, pool, { workerId: "aviso" });
-    await m.queue.completeJob(pool, claimed!.id, "aviso");
-  } catch (err) {
-    await m.queue.failJob(pool, claimed!.id, "aviso", err);
-    throw err;
-  }
+  await rodaTurno(pool, m, ALVO, handler, [texto], "aviso");
 }
 
 beforeAll(async () => {
-  m = {
-    createInboundTurnHandler: (await import("@/lib/agent-engine/agent/inbound-turn"))
-      .createInboundTurnHandler,
-    queue: await import("@/lib/agent-engine/queue/queue"),
-    createLogger: (await import("@/lib/agent-engine/obs/logger")).createLogger,
-    createFakeRegistry: (await import("@/lib/agent-engine/edge/llm/providers")).createFakeRegistry,
-  };
-
-  await pool.query(
-    `insert into organizations (id, slug, legal_name, display_name)
-     values ($1,'handoff-avisa','Handoff Avisa','Handoff Avisa') on conflict (id) do nothing`,
-    [ORG],
-  );
-  await pool.query(
-    `insert into channel_sessions (id, organization_id, waha_session_name, status, webhook_secret_encrypted)
-     values ($1,$2,'handoff-avisa-session','WORKING','\\x00'::bytea) on conflict (id) do nothing`,
-    [SESSION, ORG],
-  );
-  // Camada `platform` do playbook: o ritual de abertura recusa o turno sem ela
-  // ("publique uma versão platform e aponte antes do primeiro run"). Mesma
-  // semente de `limite-de-envios-por-turno.test.ts`.
-  await pool.query(
-    `with v as (
-       insert into playbook_versions (organization_id, layer, content)
-       select null, 'platform', E'## Identidade\nAssistente de teste.'
-       where not exists (select 1 from playbook_pointers where organization_id is null and layer = 'platform')
-       returning id)
-     insert into playbook_pointers (organization_id, layer, version_id)
-     select null, 'platform', id from v`,
-  );
+  m = await carregarMotor();
+  await semearBase(pool, ALVO, "handoff-avisa");
 });
 
 beforeEach(async () => {
   enviados = [];
   modeloChamado = 0;
-  // Estado limpo a cada caso: `force_human` é IRREVOGÁVEL em produção, então um
-  // caso herdando a trava do anterior mediria o turno pulado, não o desvio.
-  await pool.query("delete from messages where organization_id = $1", [ORG]);
-  await pool.query("delete from send_ledger where organization_id = $1", [ORG]);
-  await pool.query("delete from outbound_copies where organization_id = $1", [ORG]);
-  await pool.query("delete from agent_inbox_items where organization_id = $1", [ORG]);
-  await pool.query("delete from conversations where organization_id = $1", [ORG]);
-  await pool.query("delete from contacts where organization_id = $1", [ORG]);
-  await pool.query(
-    `insert into contacts (id, organization_id, name, phone_number, force_human)
-     values ($1,$2,'Lead que pede humano','+5511900000777', false)`,
-    [CONTACT, ORG],
-  );
-  await pool.query(
-    `insert into conversations (id, organization_id, contact_id, channel_session_id, status, is_group)
-     values ($1,$2,$3,$4,'ai_handling',false)`,
-    [CONV, ORG, CONTACT, SESSION],
-  );
+  await recriarConversa(pool, ALVO, "Lead que pede humano", "+5511900000777");
 });
 
 describe("pedido explícito de atendente", () => {
