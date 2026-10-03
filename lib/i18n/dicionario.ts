@@ -4972,6 +4972,8 @@ export const DICIONARIO: Traducoes = {
   "Velocidade de reprodução": { es: "Velocidad de reproducción" },
   "Ampliar imagem": { es: "Ampliar imagen" },
   "Imagem recebida": { es: "Imagen recibida" },
+  // Anexo da nota interna — "recebida" mentiria: quem anexou é o time.
+  "Imagem da nota interna": { es: "Imagen de la nota interna" },
   Baixar: { es: "Descargar" },
   "Abrir conversa com este contato": { es: "Abrir conversación con este contacto" },
   "Não foi possível abrir a conversa.": { es: "No se pudo abrir la conversación." },
