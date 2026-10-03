@@ -154,24 +154,31 @@ test.describe("filtro por marcador, pela tela", () => {
     await marcar(page, "Adicionar tag ao contato", "/contacts/", tagDoContato);
 
     // 3. O seletor oferece a UNIÃO dos dois vocabulários.
-    const seletor = page.getByRole("combobox", { name: "Filtrar por tag" });
+    const seletor = page.getByRole("button", { name: "Filtrar por tag" });
     await seletor.click();
-    await expect(page.getByRole("option", { name: tagDaConversa, exact: true })).toBeVisible({
+    await expect(page.getByRole("menuitemcheckbox", { name: tagDaConversa, exact: true })).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByRole("option", { name: tagDoContato, exact: true })).toBeVisible();
+    await expect(page.getByRole("menuitemcheckbox", { name: tagDoContato, exact: true })).toBeVisible();
     await captura(page, "filtro-tela-01-inbox-uniao-dos-vocabularios");
 
     // 4. O marcador do CONTATO acha a conversa dele — e só ela.
-    await page.getByRole("option", { name: tagDoContato, exact: true }).click();
+    await page.getByRole("menuitemcheckbox", { name: tagDoContato, exact: true }).click();
+    // O menu de checkbox marca e NÃO fecha (#1274): fecha-se para a lista voltar
+    // a ser alcançável (o Radix marca o resto da página com aria-hidden).
+    await page.keyboard.press("Escape");
     await expect(itemDaLista(page, b.conversa)).toBeVisible({ timeout: 30_000 });
     await expect(itemDaLista(page, a.conversa)).toHaveCount(0);
     await expect(itemDaLista(page, n.conversa)).toHaveCount(0);
     await captura(page, "filtro-tela-02-inbox-pelo-contato");
 
     // 5. O marcador da CONVERSA acha a outra — e só ela.
+    // Com várias etiquetas o padrão é E na MESMA caixa: marcar a da conversa
+    // sem desmarcar a do contato zeraria a lista. Troca-se, como antes.
     await seletor.click();
-    await page.getByRole("option", { name: tagDaConversa, exact: true }).click();
+    await page.getByRole("menuitemcheckbox", { name: tagDoContato, exact: true }).click();
+    await page.getByRole("menuitemcheckbox", { name: tagDaConversa, exact: true }).click();
+    await page.keyboard.press("Escape");
     await expect(itemDaLista(page, a.conversa)).toBeVisible({ timeout: 30_000 });
     await expect(itemDaLista(page, b.conversa)).toHaveCount(0);
     await expect(itemDaLista(page, n.conversa)).toHaveCount(0);
@@ -229,15 +236,16 @@ test.describe("filtro por marcador, pela tela", () => {
     await expect(page.getByRole("group", { name: `Lead: ${cardNeutro}` })).toBeVisible();
 
     await page.getByRole("button", { name: "Tag: todas" }).click();
-    await expect(page.getByRole("menuitem", { name: tagDoContato, exact: true })).toBeVisible({
+    await expect(page.getByRole("menuitemcheckbox", { name: tagDoContato, exact: true })).toBeVisible({
       timeout: 30_000,
     });
     // O da CONVERSA também é oferecido: é a terceira caixa, e o dono decidiu
     // que ela filtra o quadro (doc 40, item 7, 19/09).
-    await expect(page.getByRole("menuitem", { name: soNaConversa, exact: true })).toBeVisible();
+    await expect(page.getByRole("menuitemcheckbox", { name: soNaConversa, exact: true })).toBeVisible();
     await captura(page, "filtro-tela-04-quadro-oferece-o-do-contato-e-o-da-conversa");
 
-    await page.getByRole("menuitem", { name: tagDoContato, exact: true }).click();
+    await page.getByRole("menuitemcheckbox", { name: tagDoContato, exact: true }).click();
+    await page.keyboard.press("Escape");
     await expect(page.getByRole("group", { name: `Lead: ${cardMarcado}` })).toBeVisible({
       timeout: 30_000,
     });
@@ -245,9 +253,13 @@ test.describe("filtro por marcador, pela tela", () => {
     await captura(page, "filtro-tela-05-quadro-filtrado-pelo-contato");
 
     // E pelo marcador da conversa: o mesmo card, e o neutro continua fora.
-    // Com um marcador escolhido, o botão do seletor passa a se chamar por ele.
-    await page.getByRole("button", { name: tagDoContato, exact: true }).click();
-    await page.getByRole("menuitem", { name: soNaConversa, exact: true }).click();
+    // Com um marcador escolhido, o botão do seletor passa a se chamar
+    // "Tag: <marcador>". E o segundo marcador SOMA (E na mesma caixa), então
+    // desmarca-se o do contato antes, para trocar em vez de misturar caixas.
+    await page.getByRole("button", { name: `Tag: ${tagDoContato}`, exact: true }).click();
+    await page.getByRole("menuitemcheckbox", { name: tagDoContato, exact: true }).click();
+    await page.getByRole("menuitemcheckbox", { name: soNaConversa, exact: true }).click();
+    await page.keyboard.press("Escape");
     await expect(page.getByRole("group", { name: `Lead: ${cardMarcado}` })).toBeVisible({
       timeout: 30_000,
     });

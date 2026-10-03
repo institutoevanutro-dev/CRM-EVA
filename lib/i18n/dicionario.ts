@@ -557,6 +557,12 @@ export const DICIONARIO: Traducoes = {
   "Só Instagram": { es: "Solo Instagram" },
   "Só WhatsApp": { es: "Solo WhatsApp" },
   "Todas as tags": { es: "Todas las etiquetas" },
+  // #1274 — filtro por VÁRIAS etiquetas (E/OU). As duas entradas novas do menu
+  // de etiqueta das TRÊS listas (Inbox, funil e contatos); o rótulo do item do
+  // menu é a pergunta, e o "✓" que marca o modo corrente é um caractere, não uma
+  // string traduzível.
+  "Todas (E)": { es: "Todas (Y)" },
+  "Qualquer uma (OU)": { es: "Cualquiera (O)" },
   "Apenas não lidos": { es: "Solo no leídos" },
   "Não lidos": { es: "No leídos" },
   Fila: { es: "Cola" },
