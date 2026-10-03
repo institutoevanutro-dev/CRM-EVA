@@ -130,7 +130,10 @@ export async function GET(req: NextRequest): Promise<Response> {
   const url = new URL(req.url);
   const qsParsed = contactListQuerySchema.safeParse({
     search: url.searchParams.get("search") ?? undefined,
-    tag: url.searchParams.get("tag") ?? undefined,
+    // `getAll` (#1274): a repetição na URL só é lida pelo `getAll`. Um `get` leria
+    // só a primeira e a tela mostraria uma escolha que a lista ignora.
+    tag: url.searchParams.getAll("tag"),
+    modo: url.searchParams.get("modo") ?? undefined,
     source: url.searchParams.get("source") ?? undefined,
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: url.searchParams.get("limit") ?? undefined,

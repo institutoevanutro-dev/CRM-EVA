@@ -21,7 +21,7 @@ import { useCreateNote } from "@/hooks/inbox/useCreateNote";
 import { useMessageTemplates, type MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
 import { X } from "lucide-react";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
-import { useUploadMedia } from "@/hooks/inbox/useUploadMedia";
+import { useUploadMedia, type DestinoDoUpload } from "@/hooks/inbox/useUploadMedia";
 import { imagemDoClipboard } from "@/lib/inbox/clipboard-image";
 import { interpolateTemplate } from "@/lib/inbox/template-vars";
 import { cn } from "@/lib/utils";
@@ -96,6 +96,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const t = useT();
   const [text, setText] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  /**
+   * O modo em que o arquivo foi ESCOLHIDO, congelado na escolha — e não o modo
+   * em que o diálogo está aberto agora. Sem isto, um anexo escolhido em "Nota
+   * interna" e enviado depois de trocar para "Responder" sairia pela rota de
+   * MENSAGEM e iria para o cliente.
+   */
+  const [pendingEm, setPendingEm] = useState<"reply" | "note">("reply");
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [menuDismissed, setMenuDismissed] = useState(false);
   const [mode, setMode] = useState<"reply" | "note">("reply");
@@ -125,6 +132,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     (mode === "reply" && !!janelaFechada) ||
     (mode === "reply" && !!semEnvio) ||
     acimaDoLimite;
+
+  /** Escolhe o arquivo e MARCA o modo da escolha (ver `pendingEm`). */
+  function escolherArquivo(file: File) {
+    setPendingFile(file);
+    setPendingEm(mode);
+  }
 
   function autoresize() {
     const ta = taRef.current;
@@ -189,18 +202,25 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
    * abre o preview com legenda e envia por ali. Nada de atalho paralelo — a
    * validação, o toast de erro e o retry já vivem lá.
    *
-   * As três guardas antes de olhar o clipboard não são zelo: em "Nota interna"
-   * não existe anexo (a nota é só texto e o envio nem passa pelo upload), com
-   * um anexo já em preview a colagem substituiria em silêncio o que o operador
-   * escolheu, e desabilitado é desabilitado. Em qualquer um desses casos o
-   * Ctrl+V precisa continuar sendo o Ctrl+V de sempre.
+   * As DUAS guardas antes de olhar o clipboard não são zelo: com um anexo já em
+   * preview a colagem substituiria em silêncio o que o operador escolheu, e
+   * desabilitado é desabilitado. Em qualquer um desses casos o Ctrl+V precisa
+   * continuar sendo o Ctrl+V de sempre.
+   *
+   * O MODO saiu da guarda (#1863, F3): "Nota interna" passou a aceitar anexo,
+   * e a imagem colada ali vira exatamente o mesmo preview de sempre — com o
+   * modo congelado na escolha (`escolherArquivo`), para ela não escapar para o
+   * cliente se o operador trocar de aba no meio. `respostaBarrada` já cobre os
+   * dois modos: em nota ele é só `isDisabled` (a janela fechada barra a
+   * RESPOSTA, e só ela — a nota continua sendo o lugar onde se registra por que
+   * a conversa esfriou).
    */
   function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
-    if (mode !== "reply" || respostaBarrada || pendingFile) return;
+    if (respostaBarrada || pendingFile) return;
     const imagem = imagemDoClipboard(e.clipboardData, new Date());
     if (!imagem) return; // colagem de texto segue o caminho normal do browser
     e.preventDefault();
-    setPendingFile(imagem);
+    escolherArquivo(imagem);
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -301,14 +321,16 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           <p className="mb-1.5 text-xs text-muted-foreground">{semEnvio}</p>
         )}
         <div className="flex items-end gap-2">
-          {mode === "reply" && (
-            <AttachMenu
-              disabled={respostaBarrada}
-              onPick={setPendingFile}
-              onPickContact={() => setContactPickerOpen(true)}
-              soFoto={soFoto}
-            />
-          )}
+          {/* O "+" existe nos DOIS modos: em "Nota interna" a nota aceita anexo
+              (foto/vídeo e documento). Contato some — cartão de contato é uma
+              MENSAGEM para o cliente — e a restrição do canal (`soFoto`) não
+              vale, porque a nota não sai para canal nenhum. */}
+          <AttachMenu
+            disabled={respostaBarrada}
+            onPick={escolherArquivo}
+            onPickContact={mode === "reply" ? () => setContactPickerOpen(true) : undefined}
+            soFoto={mode === "reply" ? soFoto : false}
+          />
           <EmojiButton
             disabled={isDisabled}
             onPick={(emoji) => {
@@ -397,12 +419,41 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       </div>
       <AttachmentPreviewDialog
         file={pendingFile}
-        sending={upload.isPending || send.isPending}
+        sending={upload.isPending || send.isPending || createNote.isPending}
         onCancel={() => setPendingFile(null)}
         onSend={async (caption) => {
           if (!pendingFile) return;
+          // A BIFURCAÇÃO (#1863, F3) — e ela é decidida pelo modo CONGELADO NA
+          // ESCOLHA (`pendingEm`), não pelo modo de agora.
+          //
+          //   reply  → upload em `whatsapp-media` + `useSendMessage`: exatamente
+          //            o que era antes, byte por byte. Nada aqui mudou para o
+          //            cliente.
+          //   note   → upload em `internal-media` + `useCreateNote`, com o trio
+          //            como `anexo`. Não existe passo de envio: a nota não é
+          //            mensagem, não tem `type`, não tem destino no WhatsApp.
+          //
+          // O `try/catch` continua cobrindo SÓ o upload (falha de gravação da
+          // nota é tratada pelo onError do próprio hook, e o diálogo fica aberto
+          // nos dois casos).
+          const destino: DestinoDoUpload = pendingEm === "note" ? "nota" : "mensagem";
           try {
-            const uploaded = await upload.mutateAsync({ conversationId, file: pendingFile });
+            const uploaded = await upload.mutateAsync({ conversationId, file: pendingFile, destino });
+            if (destino === "nota") {
+              createNote.mutate(
+                {
+                  conversation_id: conversationId,
+                  body: caption,
+                  anexo: {
+                    storage_path: uploaded.storage_path,
+                    media_mime: uploaded.media_mime,
+                    media_size_bytes: uploaded.media_size_bytes,
+                  },
+                },
+                { onSuccess: () => setPendingFile(null) },
+              );
+              return;
+            }
             send.mutate(
               {
                 conversation_id: conversationId,

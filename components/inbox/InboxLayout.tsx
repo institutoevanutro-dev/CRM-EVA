@@ -203,6 +203,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       // com todos os canais: a contagem das abas filtrava, a lista não.
       canal: filterValue.canal,
       tag: filterValue.tag,
+      tagMode: filterValue.tagMode,
       unread: filterValue.onlyUnread || undefined,
     }),
     [
@@ -212,6 +213,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       filterValue.channel_session_id,
       filterValue.canal,
       filterValue.tag,
+      filterValue.tagMode,
       filterValue.onlyUnread,
     ],
   );

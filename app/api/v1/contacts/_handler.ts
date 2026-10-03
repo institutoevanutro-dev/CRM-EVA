@@ -30,6 +30,7 @@ import type {
   ContactListQueryParams,
 } from "@/lib/schemas";
 import { contactListQuerySchema } from "@/lib/schemas";
+import { arrayDeUmValorParaOr } from "@/lib/inbox/marcador-da-conversa";
 
 type SB = SupabaseClient;
 
@@ -163,7 +164,22 @@ export async function listContactsHandler(
     }
     if (orParts.length > 0) query = query.or(orParts.join(","));
   }
-  if (q.tag) query = query.contains("tags", [q.tag]);
+  // ⚠️ E/OU (#1274). E e OU viraram DOIS textos, e o que os separa é o
+  // operador — a mesma régua do Inbox (`lib/inbox/marcador-da-conversa.ts`), com
+  // a diferença de que aqui existe UMA caixa só (`contacts.tags`).
+  //
+  // - E: `tags=cs.{a,b}` — `contains` com a LISTA, que o builder já sabe escrever.
+  //   Uma etiqueta só continua `tags=cs.{a}`, byte a byte o que era antes.
+  // - OU: um `or=` com um `ov` por etiqueta. ⚠️ NÃO é `overlaps` repetido: o
+  //   builder escreve `tags=ov.…` no MESMO parametro cada vez, e parâmetro
+  //   repetido no PostgREST é E — que é o modo oposto com o nome de OU.
+  if (q.tag && q.tag.length > 1 && q.modo === "ou") {
+    query = query.or(
+      q.tag.map((marcador) => `tags.ov.${arrayDeUmValorParaOr(marcador)}`).join(","),
+    );
+  } else if (q.tag) {
+    query = query.contains("tags", q.tag);
+  }
   if (q.source) query = query.eq("source", q.source);
 
   if (q.cursor) {
