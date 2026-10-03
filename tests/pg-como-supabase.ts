@@ -228,6 +228,18 @@ class ConsultaPg<T> implements PromiseLike<RespostaFalsa<T[]>> {
     return this;
   }
 
+  /**
+   * `not(coluna, "is", null)` — SEXTA vez que o `naoImplementado` se paga: a
+   * cascata de LGPD passou a apagar a transcrição da mídia filtrando
+   * `.not("media_derived_text", "is", null)` (`lib/lgpd/cascata.ts`). Só a forma
+   * "is null" existe; outra combinação estoura em vez de filtrar errado.
+   */
+  not(coluna: string, operador: string, valor: unknown): this {
+    if (operador !== "is" || valor !== null) return naoImplementado(`not(${operador}, ${String(valor)})`);
+    this.filtros.push(["is not null", coluna, null]);
+    return this;
+  }
+
   /** Presentes para ESTOURAR: o código que os usar precisa de implementação real. */
   neq(): never {
     return naoImplementado("neq");
@@ -236,6 +248,7 @@ class ConsultaPg<T> implements PromiseLike<RespostaFalsa<T[]>> {
   private montar(): { texto: string; valores: unknown[] } {
     const valores: unknown[] = [];
     const onde = this.filtros.map(([op, c, v]) => {
+      if (op === "is not null") return `"${c}" is not null`;
       valores.push(v);
       // `= any` recebe o array inteiro num placeholder só; os demais operadores
       // são infixos comuns.
@@ -369,6 +382,7 @@ class InsercaoPg<T> implements PromiseLike<RespostaFalsa<null>> {
  */
 class AtualizacaoPg<T> implements PromiseLike<RespostaFalsa<unknown>> {
   private filtros: Array<[string, unknown]> = [];
+  private naoNulos: string[] = [];
   private colunasDeVolta: string | null = null;
 
   constructor(
@@ -379,6 +393,13 @@ class AtualizacaoPg<T> implements PromiseLike<RespostaFalsa<unknown>> {
 
   eq(coluna: string, valor: unknown): this {
     this.filtros.push([coluna, valor]);
+    return this;
+  }
+
+  /** Mesma regra do `not` da consulta: só `"is", null`. */
+  not(coluna: string, operador: string, valor: unknown): this {
+    if (operador !== "is" || valor !== null) return naoImplementado(`not(${operador}, ${String(valor)})`);
+    this.naoNulos.push(coluna);
     return this;
   }
 
@@ -398,6 +419,7 @@ class AtualizacaoPg<T> implements PromiseLike<RespostaFalsa<unknown>> {
       valores.push(v);
       return `"${c}" = $${valores.length}`;
     });
+    for (const c of this.naoNulos) onde.push(`"${c}" is not null`);
     let texto = `update public."${this.tabela}" set ${sets.join(", ")}`;
     if (onde.length > 0) texto += ` where ${onde.join(" and ")}`;
     if (this.colunasDeVolta) texto += ` returning ${colunasSql(this.colunasDeVolta)}`;

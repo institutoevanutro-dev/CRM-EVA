@@ -37,6 +37,7 @@ import {
   type ClienteDaCascata,
   completarRedacaoDoContato,
   houveRedacao,
+  MENSAGEM_REDIGIDA,
   varrerRedacoesIncompletas,
 } from "@/lib/lgpd/cascata";
 
@@ -77,6 +78,8 @@ interface Linha {
   title?: string | null;
   payload?: unknown;
   is_anonymized?: boolean;
+  body?: string | null;
+  media_derived_text?: string | null;
 }
 
 interface Escrita {
@@ -106,11 +109,18 @@ function banco(linhas: Linha[]) {
       const casar = (
         filtros: Array<[string, unknown]>,
         dentro: [string, string[]] | null,
+        naoNulos: string[] = [],
       ): Linha[] =>
         linhas.filter((l) => {
           if ((l.id.split(":")[0] ?? "") !== tabela) return false;
           for (const [col, val] of filtros) {
             if ((l as unknown as Record<string, unknown>)[col] !== val) return false;
+          }
+          // `.not(col, "is", null)` do passo da transcrição (0307). Ignorá-lo
+          // faria a mensagem já limpa voltar como resíduo e mascararia a idempotência.
+          for (const col of naoNulos) {
+            const atual = (l as unknown as Record<string, unknown>)[col];
+            if (atual === null || atual === undefined) return false;
           }
           // O `.in()` da cascata vem em DUAS colunas — `id` no UPDATE das
           // atividades, `contact_id` na detecção em bloco. Um dublê que
@@ -128,6 +138,7 @@ function banco(linhas: Linha[]) {
         patch: Record<string, unknown>,
       ) => {
         const filtros: Array<[string, unknown]> = [];
+        const naoNulos: string[] = [];
         let dentro: [string, string[]] | null = null;
         let teto: number | null = null;
         const q: Record<string, unknown> = {
@@ -139,12 +150,16 @@ function banco(linhas: Linha[]) {
             dentro = [col, vals];
             return q;
           },
+          not: (col: string) => {
+            naoNulos.push(col);
+            return q;
+          },
           limit: (n: number) => {
             teto = n;
             return q;
           },
           then: (r: (v: unknown) => unknown) => {
-            let achadas = casar(filtros, dentro);
+            let achadas = casar(filtros, dentro, naoNulos);
             if (teto !== null) achadas = achadas.slice(0, teto);
             if (modo === "update") {
               aplicar(tabela, patch, achadas);
@@ -328,9 +343,11 @@ describe("varredura: a retomada acontece sem ninguém clicar", () => {
 
 describe("a unidade que as duas bocas compartilham", () => {
   it("houveRedacao distingue trabalho feito de nada a fazer", () => {
-    expect(houveRedacao({ leadsRedigidas: [], atividadesRedigidas: 0, tabelas: [], falhas: [] })).toBe(false);
-    expect(houveRedacao({ leadsRedigidas: ["x"], atividadesRedigidas: 0, tabelas: [], falhas: [] })).toBe(true);
-    expect(houveRedacao({ leadsRedigidas: [], atividadesRedigidas: 1, tabelas: [], falhas: [] })).toBe(true);
+    const vazio = { leadsRedigidas: [], atividadesRedigidas: 0, transcricoesRedigidas: 0, tabelas: [], falhas: [] };
+    expect(houveRedacao(vazio)).toBe(false);
+    expect(houveRedacao({ ...vazio, leadsRedigidas: ["x"] })).toBe(true);
+    expect(houveRedacao({ ...vazio, atividadesRedigidas: 1 })).toBe(true);
+    expect(houveRedacao({ ...vazio, transcricoesRedigidas: 1 })).toBe(true);
   });
 
   it("⭐ `tabelas` lista só o que foi tocado — não o literal das três", async () => {
@@ -344,6 +361,73 @@ describe("a unidade que as duas bocas compartilham", () => {
 
     expect(r.tabelas, "afirmou ter redigido tabelas que não tocou").toEqual([]);
     expect(alvo.escritas).toEqual([]);
+  });
+});
+
+describe("a transcrição da mídia sai junto (0307, DeskcommCRM PR 1989)", () => {
+  // O pedido formal redige o body da mensagem; a transcrição (`media_derived_text`)
+  // ficava. A varredura é quem alcança a que o `media-derive-worker` grava
+  // DEPOIS da anonimização — nenhum SQL dispara ali.
+  const audio = (sufixo: string, over: Partial<Linha> = {}): Linha => ({
+    id: `messages:${sufixo}`,
+    organization_id: ORG,
+    contact_id: "contacts:a",
+    body: MENSAGEM_REDIGIDA,
+    media_derived_text: "oi, aqui é a Maria, meu CPF é 123",
+    ...over,
+  });
+
+  it("⭐ mensagem anonimizada que guardou a transcrição: a varredura apaga", async () => {
+    alvo = banco([contatoAnonimizado(), audio("1")]);
+
+    const r = await varrerRedacoesIncompletas(alvo.cliente);
+
+    expect(r.completados).toHaveLength(1);
+    expect(r.completados[0]!.resultado.transcricoesRedigidas).toBe(1);
+    expect(r.completados[0]!.resultado.tabelas).toContain("messages:media_derived_text");
+    expect(alvo.linhas.find((l) => l.id === "messages:1")!.media_derived_text).toBeNull();
+  });
+
+  it("⭐ poupa quem voltou a escrever, o vizinho e a outra org", async () => {
+    alvo = banco([
+      contatoAnonimizado(),
+      // body de verdade: mensagem NOVA de quem voltou.
+      audio("nova", { body: null, media_derived_text: "voltei, quero o orçamento" }),
+      // mesmo body-sentinela, mas de OUTRO contato da mesma org, não anonimizado.
+      audio("vizinho", { contact_id: "contacts:b" }),
+      // mesmo contact_id em OUTRA org — só existe se algo já vazou.
+      audio("outra-org", { organization_id: OUTRA_ORG }),
+    ]);
+
+    const r = await varrerRedacoesIncompletas(alvo.cliente);
+
+    expect(r.completados).toEqual([]);
+    expect(alvo.linhas.find((l) => l.id === "messages:nova")!.media_derived_text).toBe("voltei, quero o orçamento");
+    expect(alvo.linhas.find((l) => l.id === "messages:vizinho")!.media_derived_text).not.toBeNull();
+    expect(alvo.linhas.find((l) => l.id === "messages:outra-org")!.media_derived_text).not.toBeNull();
+  });
+
+  it("⭐ idempotente: a segunda passada não escreve nada", async () => {
+    alvo = banco([contatoAnonimizado(), audio("1"), audio("2")]);
+
+    const primeira = await varrerRedacoesIncompletas(alvo.cliente);
+    expect(primeira.completados[0]!.resultado.transcricoesRedigidas).toBe(2);
+    const escritas = alvo.escritas.length;
+
+    const segunda = await varrerRedacoesIncompletas(alvo.cliente);
+
+    expect(segunda.completados).toEqual([]);
+    expect(alvo.escritas.length).toBe(escritas);
+  });
+
+  it("a rota (completarRedacaoDoContato) apaga pelo mesmo passo", async () => {
+    alvo = banco([contatoAnonimizado(), audio("1")]);
+
+    const r = await completarRedacaoDoContato(alvo.cliente, { id: "contacts:a", organizationId: ORG });
+
+    expect(r.transcricoesRedigidas).toBe(1);
+    expect(houveRedacao(r)).toBe(true);
+    expect(alvo.linhas.find((l) => l.id === "messages:1")!.media_derived_text).toBeNull();
   });
 });
 

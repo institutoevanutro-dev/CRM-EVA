@@ -25,6 +25,7 @@ import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { logInvocation } from "@/lib/ai/log-invocation";
 import { SENTIMENT_SYSTEM_PROMPT } from "@/lib/ai/prompts/sentiment";
 import type { EventRow } from "@/lib/event-log/dispatcher";
+import { MENSAGEM_REDIGIDA } from "@/lib/lgpd/cascata";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const SENTIMENT_MODEL = DEFAULT_CLASSIFIER_MODEL; // "anthropic/claude-haiku-4-5"
@@ -286,7 +287,12 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       .from("messages")
       .update({ metadata: updatedMetadata })
       .eq("id", messageId)
-      .eq("organization_id", event.organization_id);
+      .eq("organization_id", event.organization_id)
+      // Mesma guarda LGPD do media-derive-worker (DeskcommCRM PR 2191):
+      // `updatedMetadata` parte da foto lida antes da classificação, e a
+      // anonimização que rodar nesse meio tempo zera `metadata` — regravá-la
+      // devolveria o dado apagado, mais a nota, a uma mensagem já redigida.
+      .filter("body", "isdistinct", MENSAGEM_REDIGIDA);
 
     if (updateErr) {
       console.warn("[ai-sentiment-worker] metadata update failed", {

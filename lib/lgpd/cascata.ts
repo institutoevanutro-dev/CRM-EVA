@@ -83,8 +83,17 @@ export function tituloRedigido(titulo: string | null): string {
 export interface Filtravel<T> extends PromiseLike<T> {
   eq(coluna: string, valor: string | boolean): Filtravel<T>;
   in(coluna: string, valores: string[]): Filtravel<T>;
+  not(coluna: string, operador: "is", valor: null): Filtravel<T>;
   limit(n: number): Filtravel<T>;
 }
+
+/**
+ * O body que a anonimização do BANCO grava em toda mensagem redigida
+ * (`fn_lgpd_cascade_redact_contact`, passo 3). Só ela o escreve — por isso ele
+ * é o marcador de "esta mensagem já passou pela anonimização", e poupa quem
+ * voltou a escrever depois (mensagem nova tem body de verdade).
+ */
+export const MENSAGEM_REDIGIDA = "[mensagem anonimizada]";
 
 export interface ClienteDaCascata {
   from(tabela: string): {
@@ -98,6 +107,8 @@ export interface ResultadoDaRedacao {
   leadsRedigidas: string[];
   /** Quantas atividades foram redigidas AGORA. */
   atividadesRedigidas: number;
+  /** Quantas mensagens já anonimizadas tiveram a transcrição da mídia apagada AGORA (0307). */
+  transcricoesRedigidas: number;
   /**
    * As tabelas que esta execução REALMENTE tocou.
    *
@@ -115,7 +126,7 @@ export interface ResultadoDaRedacao {
 
 /** Houve trabalho? É o que separa uma retomada de um "não faltava nada". */
 export function houveRedacao(r: ResultadoDaRedacao): boolean {
-  return r.leadsRedigidas.length > 0 || r.atividadesRedigidas > 0;
+  return r.leadsRedigidas.length > 0 || r.atividadesRedigidas > 0 || r.transcricoesRedigidas > 0;
 }
 
 /**
@@ -242,7 +253,44 @@ export async function completarRedacaoDoContato(
     else tabelas.push("followup_enrollments");
   }
 
-  return { leadsRedigidas, atividadesRedigidas, tabelas, falhas };
+  // ── Passo 5 — TRANSCRIÇÃO DA MÍDIA (`messages.media_derived_text`) — 0307 ──
+  //
+  // Portado do DeskcommCRM PR 1989. A 0307 fecha o pedido formal e cura o
+  // passado; este passo fecha a janela que nenhum SQL alcança: o
+  // `media-derive-worker` que leu a mídia ANTES da anonimização e grava o texto
+  // DEPOIS dela.
+  //
+  // Só mensagem com body `MENSAGEM_REDIGIDA`: é a que o banco já anonimizou.
+  // Mensagem com body de verdade é de quem voltou a escrever, e fica. O UPDATE
+  // repete o predicado em vez de uma lista de ids — um contato pode ter
+  // centenas de áudios, e `.in()` vira URL (ver `CONTATOS_POR_BLOCO`).
+  let transcricoesRedigidas = 0;
+  const { data: transcData, error: transcSelErr } = await db
+    .from("messages")
+    .select("id")
+    .eq("organization_id", contato.organizationId)
+    .eq("contact_id", contato.id)
+    .eq("body", MENSAGEM_REDIGIDA)
+    .not("media_derived_text", "is", null);
+  if (transcSelErr) falhas.push(`messages media_derived_text select: ${transcSelErr.message}`);
+
+  const comTranscricao = ((transcData ?? []) as { id: string }[]).length;
+  if (comTranscricao > 0) {
+    const { error } = await db
+      .from("messages")
+      .update({ media_derived_text: null })
+      .eq("organization_id", contato.organizationId)
+      .eq("contact_id", contato.id)
+      .eq("body", MENSAGEM_REDIGIDA)
+      .not("media_derived_text", "is", null);
+    if (error) falhas.push(`messages media_derived_text: ${error.message}`);
+    else {
+      transcricoesRedigidas = comTranscricao;
+      tabelas.push("messages:media_derived_text");
+    }
+  }
+
+  return { leadsRedigidas, atividadesRedigidas, transcricoesRedigidas, tabelas, falhas };
 }
 
 /**
@@ -291,10 +339,12 @@ export interface ResultadoDaVarredura {
   falhas: string[];
 }
 
-/** Um contato tem resíduo se alguma lead ou atividade dele ainda não foi redigida. */
+/** Um contato tem resíduo se alguma lead, atividade ou transcrição dele ainda não foi redigida. */
 function idsComResiduo(
   leads: { contact_id: string | null; title: string | null }[],
   atividades: { contact_id: string | null; payload: unknown }[],
+  /** Já filtradas no banco: mensagem anonimizada que ainda guarda transcrição. */
+  transcricoes: { contact_id: string | null }[],
 ): Set<string> {
   const comResiduo = new Set<string>();
   for (const l of leads) {
@@ -304,6 +354,9 @@ function idsComResiduo(
     if (a.contact_id && (a.payload as { redacted?: unknown } | null)?.redacted !== true) {
       comResiduo.add(a.contact_id);
     }
+  }
+  for (const m of transcricoes) {
+    if (m.contact_id) comResiduo.add(m.contact_id);
   }
   return comResiduo;
 }
@@ -366,9 +419,21 @@ export async function varrerRedacoesIncompletas(
       .in("contact_id", bloco);
     if (atvErr) falhas.push(`crm_lead_activities varredura: ${atvErr.message}`);
 
+    // Filtrado no BANCO, ao contrário das consultas acima: um contato tem
+    // milhares de mensagens, e trazer todas para decidir em memória custaria a
+    // rodada saudável inteira. Em regime a resposta é vazia.
+    const { data: transcricoes, error: transcErr } = await db
+      .from("messages")
+      .select("contact_id")
+      .in("contact_id", bloco)
+      .eq("body", MENSAGEM_REDIGIDA)
+      .not("media_derived_text", "is", null);
+    if (transcErr) falhas.push(`messages media_derived_text varredura: ${transcErr.message}`);
+
     const achados = idsComResiduo(
       (leads ?? []) as { contact_id: string | null; title: string | null }[],
       (atvs ?? []) as { contact_id: string | null; payload: unknown }[],
+      (transcricoes ?? []) as { contact_id: string | null }[],
     );
     // A detecção não filtra org (ver o cabeçalho): um `contact_id` que não
     // saiu da lista de contatos anonimizados não vira visita.
