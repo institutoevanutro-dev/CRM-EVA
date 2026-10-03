@@ -454,6 +454,10 @@ export const AUDIT_ACTIONS = [
   // a própria erosão em vez de encolher sem deixar marca.
   "retention.sweep_run",
 
+  // A verificação diária da cadeia de hash da trilha (migration 0305) achou
+  // linha alterada, removida ou fora de ordem. Só existe quando há problema.
+  "audit.chain_broken",
+
   // ── A agenda conectada do Google (frente 3 do Calendário Vivo) ───────────
   // TRÊS e não uma, e a razão é a mesma das três do teto de gasto: cada uma
   // responde a uma pergunta diferente que alguém vai fazer ao painel meses
