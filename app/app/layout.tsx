@@ -1,7 +1,7 @@
 import { InterfaceRefresh } from "@/hooks/auth/InterfaceRefresh";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { isMfaEnrolled, loadAuthUser, requiresMfa, resolveActiveOrg } from "@/lib/auth/server";
+import { isMfaEnrolled, loadAuthUser, requiresMfa, resolveActiveOrg, sessionAal } from "@/lib/auth/server";
 import { DEFAULT_VISIBILITY_MODE, type VisibilityMode } from "@/lib/auth/types";
 import { clientePelaAgendaLigado } from "@/lib/schemas/settings";
 import { AuthProvider } from "@/hooks/auth/AuthProvider";
@@ -177,6 +177,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     enrolled = isEnrolled;
     needsMfaGate = mfaRequired;
   }
+
+  // Quem tem fator e ainda não o provou nesta sessão vai para o desafio. Desde a
+  // 0301 o banco não entrega dado de organização a essa sessão, então seguir
+  // adiante mostraria um CRM vazio em vez da pergunta do código.
+  if (enrolled && !user.support && (await sessionAal()) !== "aal2") redirect("/login/mfa?next=/app");
 
   // Read sidebar collapsed state SSR to avoid flash.
   const store = await cookies();
