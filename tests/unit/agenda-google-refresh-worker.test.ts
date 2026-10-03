@@ -182,6 +182,19 @@ describe("renovarAgendasDoGoogle", () => {
     expect(atualizacoes[0]?.campos).toMatchObject({ status: "token_expired" });
   });
 
+  it("`invalid_grant` com descrição do Google também pede reconexão", async () => {
+    linhas = [conexao()];
+    vi.mocked(fetch).mockResolvedValue(
+      respostaHttp({ error: "invalid_grant", error_description: "Token has been expired or revoked." }, 400),
+    );
+
+    const { renovarAgendasDoGoogle } = await carregarWorker();
+    const resumo = await renovarAgendasDoGoogle(admin(), { agora: AGORA });
+
+    expect(resumo.reautenticar).toBe(1);
+    expect(atualizacoes[0]?.campos).toMatchObject({ status: "token_expired" });
+  });
+
   it("uma conexão que falha NÃO leva as outras junto", async () => {
     // Um timeout numa agenda não pode deixar as demais sem renovar — é o motivo
     // de `renovarToken` e `classificarErroDoGoogle` não lançarem.

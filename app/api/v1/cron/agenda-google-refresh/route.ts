@@ -132,7 +132,7 @@ export async function renovarAgendasDoGoogle(
 
     const leitura = await renovarToken(app, refresh, { agora: opcoes.agora });
     if (!leitura.ok) {
-      const classificacao = classificarErroDoGoogle({ error: leitura.detalhe }, "token");
+      const classificacao = classificarErroDoGoogle({ message: leitura.detalhe }, "token");
       const novoEstado = estadoDaConexaoApos(classificacao.desfecho);
       if (novoEstado && novoEstado !== "healthy") {
         await marcarConexao(admin, linha, novoEstado, classificacao.mensagem);
