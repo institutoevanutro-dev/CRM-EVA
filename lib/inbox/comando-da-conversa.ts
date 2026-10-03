@@ -168,7 +168,7 @@ const MENOS_INFINITO = "-infinity";
  * `conversations.status='resolved'` (só há leitores), então isto não muda nada
  * hoje — e passa a importar no instante em que o banco calcular o mesmo comando.
  */
-const STATUS_ENCERRADOS = new Set(["closed", "archived", "resolved"]);
+export const STATUS_ENCERRADOS = new Set(["closed", "archived", "resolved"]);
 
 /**
  * O silêncio, lido do jeito que o Postgres o entrega.
