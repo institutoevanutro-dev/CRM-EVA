@@ -55,8 +55,13 @@ const DIVIDA_LGPD_CONHECIDA: Record<string, string> = {
     "Achado do levantamento 13 §2 (QAVivo/maestro). Guarda title e notes do compromisso. " +
     "Conserto DESPACHADO ao Arquiteto — sai desta lista no mesmo commit que acrescentar a tabela à cascata.",
   lead_notes:
-    "Anotação livre do atendente SOBRE o contato (coluna body). Dívida anterior à agenda; " +
-    "nenhum commit a declarou. Sai quando o cascade a alcançar.",
+    "Memória livre do agente SOBRE o contato (headline/body). " +
+    "⚠️ ELA JÁ ESTÁ PROTEGIDA: desde a 0309 o gatilho `fn_redigir_conversas_ao_anonimizar` " +
+    "(0308) troca headline/body por '(anonimizado)' e anula o embedding na virada de " +
+    "is_anonymized, e `tests/invariants/lgpd-anonimizar-alcanca-memoria-e-ferramentas.test.ts` " +
+    "prova o efeito. A entrada existe só porque ESTE instrumento lê UMA função e não enxerga " +
+    "trigger — a mesma razão de crm_tasks. Sai no dia em que `tabelasNaCascata()` derivar " +
+    "também os triggers de `contacts`, ou no dia em que a função ganhar o passo.",
   crm_tasks:
     "Migration 0210 (extração do PR #418). A tabela guarda `title` — texto livre que " +
     "na prática nomeia a pessoa (\"Ligar para Fulano confirmar o orçamento\"). " +
