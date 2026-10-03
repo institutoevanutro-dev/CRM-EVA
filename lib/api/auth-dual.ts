@@ -27,6 +27,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type NextRequest } from "next/server";
 
+import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import type { Actor } from "@/lib/api/handlers/types";
 import { fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
@@ -127,4 +128,53 @@ export async function resolveAuthDual(
     idioma: authz.user.idioma,
     via: "session",
   };
+}
+
+/**
+ * Teto de escrita POR TOKEN (30/min) e agregado POR ORGANIZAÇÃO (600/min).
+ * Números da Spec 11 §7 (os mesmos que o upstream usa no MCP e em `/messages`).
+ *
+ * Toda rota que aceita Bearer está em `PUBLIC_PATHS`, e isso quer dizer que não
+ * há estrangulamento a montante: o que não for contado na rota não é contado em
+ * lugar nenhum. Pela sessão não há teto — quem digita é uma pessoa — e por isso
+ * a sessão devolve `null` sem tocar no contador.
+ *
+ * `recurso` separa os baldes por rota (`messages:tok:…`, `conversation_media:tok:…`):
+ * uma integração em laço numa rota não come a cota da outra. O agregado por
+ * organização existe porque `api_tokens` não limita quantos tokens uma org emite.
+ */
+export const TETO_DE_ESCRITA = 30;
+export const TETO_POR_ORGANIZACAO = 600;
+export const JANELA_SEGUNDOS = 60;
+
+export async function tetoDeEscritaDoToken(
+  authz: Extract<AuthDual, { ok: true }>,
+  recurso: string,
+  requestId: string,
+): Promise<Response | null> {
+  if (authz.via !== "token") return null;
+  const { actor, organizationId } = authz;
+  const tokenId = actor.type === "ai_agent" ? (actor.api_token_id ?? actor.id) : actor.id;
+
+  // Sequencial de propósito: `checkRateLimit` INCREMENTA ao consultar, e a
+  // chamada já recusada pelo teto do token não deve gastar a cota da org.
+  const teto = await checkRateLimit(`${recurso}:tok:${tokenId}`, TETO_DE_ESCRITA, JANELA_SEGUNDOS);
+  if (!teto.allowed) {
+    return fail("rate_limited", "Too many requests.", 429, {
+      requestId,
+      headers: { "Retry-After": String(JANELA_SEGUNDOS) },
+    });
+  }
+  const tetoOrg = await checkRateLimit(
+    `${recurso}:org:${organizationId}`,
+    TETO_POR_ORGANIZACAO,
+    JANELA_SEGUNDOS,
+  );
+  if (!tetoOrg.allowed) {
+    return fail("rate_limited", "Too many requests for organization.", 429, {
+      requestId,
+      headers: { "Retry-After": String(JANELA_SEGUNDOS) },
+    });
+  }
+  return null;
 }

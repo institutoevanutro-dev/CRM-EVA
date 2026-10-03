@@ -271,6 +271,11 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
                   {fmtDate(m.created_at)} · {m.direction} · {m.type} · {m.status}
                 </Text>
                 <Text>{m.body ? m.body.slice(0, 280) : m.has_media ? "[mídia]" : "—"}</Text>
+                {m.media_derived_text ? (
+                  <Text style={styles.small}>
+                    transcrição/texto extraído da mídia: {m.media_derived_text.slice(0, 280)}
+                  </Text>
+                ) : null}
               </View>
             ))}
           </View>

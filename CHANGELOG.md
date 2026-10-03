@@ -8,6 +8,226 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.0.0] — 2026-10-03
+
+### ⚠️ Requer atenção
+
+- **Destinos de IA, webhooks e recursos de processamento protegidos** Antes de publicar, confira o WAHA externo: a rota global exige HMAC válido ou `Authorization: Bearer <WAHA_HMAC_SECRET>`. O Compose deste pacote envia o header automaticamente ao recriar o WAHA; instalações externas precisam configurar o header no emissor. A exigência explícita de assinatura permanece válida. A rota por token mantém seu contrato.
+
+  Gateways próprios de IA precisam corresponder ao `OPENROUTER_BASE_URL` ou `AI_GATEWAY_BASE_URL` autorizado pelo operador. Sem essa autorização, a chamada é recusada. Não alteramos essas variáveis em nenhuma instalação.
+
+  Aplique a migração 0300 antes do novo app. Mantenha o scheduler de `storage-redaction` ativo: uploads novos abandonados expiram em 24h e contam na cota até serem removidos. Arquivos anteriores à migração não são apagados automaticamente. PDFs acima de 200 páginas ou 1 milhão de caracteres devem ser divididos.
+
+### Adicionado
+
+- **Anexo de imagem, arquivo, áudio ou vídeo dentro da nota interna** A nota interna passa a aceitar anexo (até 50 MB). O arquivo fica num espaço
+  próprio, separado da mídia do WhatsApp, nunca vai para o cliente e só abre para
+  quem pode ver a conversa. No pedido de exclusão de dados (LGPD), o texto da nota
+  é redigido e o anexo vai para a fila de remoção; a exportação do titular passa a
+  listar as notas. Portado do projeto original (DeskcommCRM #1883, de @webtecnica).
+
+- **Conectar o WhatsApp oficial pelo botão, mantendo o número no celular** Em Conexões › API Oficial aparece o botão Conectar WhatsApp quando quem administra
+  a instalação cadastra o App ID e o Configuration ID em Admin › API Oficial (Meta).
+  O fluxo da Meta conecta o número sem colar token; o número pode continuar no
+  WhatsApp Business do celular (coexistência). Resposta dada pelo celular aparece
+  como Celular e pausa a IA por 5 minutos; desconectar pelo celular abre aviso na
+  Central. Sem os dois valores nada muda: o formulário manual continua.
+
+  Correção que vem junto: quando a credencial gravada na sessão do canal oficial
+  não decifra (chave mestra trocada, GUC ausente), a mensagem fica na fila em vez
+  de sair pela conta do `.env` da instalação, e o problema aparece no aviso de
+  saúde do canal.
+
+- **O histórico do celular entra no CRM depois de conectar em coexistência** Até 180 dias de conversas do WhatsApp Business do celular aparecem no Inbox depois
+  da conexão pelo botão, com barra de progresso na aba Conexões. Nada disso acorda a
+  IA, cria lead, dispara automação ou abre janela de 24 horas. Mídia só dos últimos
+  14 dias. Os nomes dos contatos do celular preenchem apenas quem ainda não tinha nome.
+
+- **Filtre a lista por várias etiquetas de uma vez — todas (E) ou qualquer uma (OU)** O filtro de etiqueta passa a aceitar mais de uma escolha nas três listas: Inbox, Funil e Contatos. Você marca quantas quiser no menu (o menu não fecha mais a cada clique) e escolhe o sentido:
+
+  - **Todas (E)** — a lista mostra só quem tem todas as etiquetas escolhidas, juntas na mesma caixa (na conversa ou no contato), que era o sentido de filtrar por duas e comparar na cabeça.
+  - **Qualquer uma (OU)** — a lista mostra quem tem pelo menos uma delas, em qualquer caixa.
+
+  O modo aparece no menu só quando há duas ou mais etiquetas, porque com uma ele não muda nada. O gatilho do filtro resume a escolha ("vip +1") e "Limpar filtros" continua limpando tudo. Os filtros continuam nos endereços: `?tag=vip&tag=orçamento` com `&modo=ou`, e qualquer link salvo ou chamada de API com uma etiqueta só segue funcionando igual, sem mudança.
+
+  Uma combinação ainda não é possível: "vip na conversa **e** orçamento no contato", misturando as caixas. Ela fica registrada como decisão de produto pendente — as duas caixas de hoje não a expressam, e o filtro não finge que expressa.
+
+  Portado do projeto original (DeskcommCRM PR 1886 de @webtecnica).
+
+- **O funil arquivado tem caminho de volta** A tela de Funis ganha a gaveta "Funis arquivados": de lá o funil volta para a
+  lista de trabalho ou é excluído de vez. Antes, arquivar era caminho sem volta.
+  Portado do DeskcommCRM (issue 979, PR 1295).
+
+- **O filtro por marcador do funil enxerga também as "Tags da conversa"** O filtro por marcador do quadro do funil já olhava o marcador do negócio e o da pessoa. Agora olha também as "Tags da conversa", a caixa do painel do Inbox onde a equipe e a IA marcam a conversa: o seletor oferece as três caixas juntas, sem repetir, e filtrar por um marcador de conversa acha o negócio daquele contato. Vale para qualquer conversa do contato, não só a mais recente. A marcação em lote continua gravando no negócio. Decisão do dono, 19/09. Você não precisa fazer nada.
+
+- **O ícone da aba pode ser a sua imagem** Em Administração › Marca, quem administra a instalação envia um PNG quadrado e ele passa a aparecer na aba do navegador e nos favoritos. Sem imagem enviada, a aba segue com o ícone desenhado pelo sistema. A atualização cria a coluna sozinha.
+
+- **Relatório por etiqueta — volume, espera e desfecho de cada assunto no período** Quem opera agora pode perguntar à API **qual assunto ocupou a operação em um período e quanto tempo o cliente esperou**. `GET /api/v1/reports/tags` devolve, para cada etiqueta em uso, quantos atendimentos começaram no período, quantos ainda estão abertos e quantos foram encerrados, a espera média pela nossa resposta e a fatia de cada etiqueta sobre o total. A lista de etiquetas vem das que existem de fato nas conversas: uma etiqueta sem atendimento no período aparece com zero em vez de sumir, e um período sem dado nenhum diz isso na resposta em vez de devolver uma tabela de zeros. O pedido aceita `de`, `ate` (datas válidas, até 90 dias) e `tz`, porque a janela é contada no fuso de quem lê. Quando a janela tem mais conversas do que a leitura alcança, a resposta avisa que está cortada. É só leitura, sem migration e ainda sem tela: a tela vem depois. Portado do projeto original (DeskcommCRM PR 1888 de @webtecnica).
+
+- **A chave de IA pode ser editada no lugar, sem excluir e recriar** Em IA › Credenciais, "Editar credencial" troca a chave ou o nome mantendo os
+  agentes ligados nela. O contador "Em uso por" passa a contar toda versão que
+  usa a chave, como o banco faz. Portado do DeskcommCRM (PR #1112).
+
+- **A IA aprende quais palavras pode usar, com o seu aval** Comentário com @marcação não vai mais direto para a fila: a IA julga o resto da frase. Em Inbox › Comentários › "Palavras da IA" você libera, uma a uma, palavras dos comentários que respondeu. Preço, saúde e agendamento nunca aparecem lá.
+
+### Alterado
+
+- **Telemetria desligada por padrão; auditoria registra leituras** Com `SENTRY_DSN` vazio a telemetria fica desligada. A auditoria registra quem abre fichas e conversas.
+
+### Corrigido
+
+- **A IA volta a remarcar para logo depois do próprio fim quando há intervalo** Com intervalo configurado, remarcar um atendimento para o horário logo após o
+  fim dele mesmo voltava "horário não disponível": o próprio atendimento contava
+  como ocupação do destino. Portado do DeskcommCRM #1084 (PR #1140).
+
+- **A Agenda abre na semana certa, no fuso da empresa** Na noite de sábado a Agenda abria na semana seguinte e só se corrigia depois.
+  Servidor, tela e o botão "Hoje" passam a usar o fuso de Configurações ›
+  Empresa. Portado do projeto original (DeskcommCRM #1350).
+
+- **Agenda Google avisa quando a autorização precisa ser renovada** Quando o Google revoga ou expira a chave de renovação da agenda, o CRM deixa de
+  mostrar a conexão como saudável e indica que é preciso reconectá-la. O erro
+  deixa de repetir silenciosamente enquanto horários ocupados ficam sem leitura.
+
+- **A trilha de auditoria denuncia linha alterada ou apagada** Cada registro novo da auditoria guarda uma assinatura que depende do registro anterior. Todo dia o sistema refaz a conta e, se alguém tiver alterado, apagado ou intercalado um registro direto no banco, isso aparece no log e na própria auditoria. Registros antigos, de antes desta versão, ficam como estavam.
+
+- **O aviso de evento morto não abre mais em dobro na Central** Dois processos podiam abrir o mesmo aviso ao mesmo tempo. Agora o banco
+  recusa o segundo, e reabrir um aviso quando já há um igual aberto responde
+  com clareza em vez de erro interno. Portado do DeskcommCRM (issue 880,
+  PR 1928).
+
+- **O backup volta a salvar as sessões do WhatsApp — e falha alto quando não consegue** O `backup.sh` montava um volume `waha-data` vazio no lugar do volume real das
+  sessões (`<projeto>_waha-data`) e mesmo assim dizia "✓": os arquivos `waha-*.tgz`
+  tinham poucos bytes e não restauravam nada. Agora o nome vem do contêiner do
+  WAHA, e volume inexistente ou snapshot vazio viram erro em vermelho (saída 3:
+  banco salvo, sessões não) — sem trocar backups bons por arquivos vazios na
+  retenção. A atualização automática segue com aviso nesse caso, porque só mexe
+  no banco. O script também aponta o volume solto `waha-data` que a versão
+  antiga deixou, para você remover se estiver vazio.
+
+- **A contagem das abas do Inbox volta a mostrar número com um marcador filtrado** O Inbox tem um filtro por marcador, e ele enxerga tanto o marcador do contato
+  quanto o da conversa. Com um marcador filtrado, as abas de cima perdiam o
+  número: "Todas", "Fechadas" e "Arquivadas" ficavam sem contagem nenhuma, e o
+  atendente perdia a referência de quantas conversas havia em cada visão.
+
+  A lista de conversas sempre soube procurar o marcador nas duas caixas onde se
+  marca. A contagem das abas pedia outra coisa — igualdade numa coluna de marcador
+  que só existe dentro da conversa —, e o banco recusava a consulta inteira. Não
+  era um número errado: era nenhum número, em todas as abas, sempre que o filtro
+  por marcador estava ligado.
+
+  Agora a contagem pergunta do mesmo jeito que a lista: o marcador vale se estiver
+  no contato ou na conversa, e as abas voltam a estampar a contagem certa sob
+  qualquer marcador. Sem marcador filtrado, a contagem é a que já era.
+
+  Nada muda para quem opera: nenhuma variável nova, nenhum passo na atualização.
+
+- **A credencial usada por versão antiga explica por que não sai e qual é a saída** Excluir uma chave usada só por versões antigas de agente dava um beco:
+  "aponte a versão para outra chave", o que versão publicada não aceita. A
+  recusa agora diz onde está o uso e aponta "Editar credencial". Portado do
+  DeskcommCRM (issue 1142, PR 1215).
+
+- **Excluir contato com compromisso avisa o que barra e como resolver** No lugar de "registros vinculados", a tela diz quantos compromissos o contato
+  tem na Agenda, o que fazer, e oferece abrir a Agenda. Portado do
+  DeskcommCRM #1925 (PR #1949).
+
+- **A Fila para de empurrar para o fim quem insiste** A posição na Fila era pela última mensagem do cliente: quem cobrava de novo
+  reiniciava a própria espera e descia. Agora conta da primeira mensagem sem
+  resposta, na lista, na pílula "Aguardando há…" e na posição dita pela IA. A
+  atualização preenche a coluna nova sozinha. Portado do DeskcommCRM #990.
+
+- **O filtro de etiqueta do Inbox para de fechar sozinho** O menu "Filtrar por tag" fechava sozinho enquanto a lista de etiquetas era
+  relida em segundo plano. Portado do projeto original (DeskcommCRM #1336).
+
+- **Só gerente ou administrador altera ou apaga follow-up pelo acesso direto ao banco** Qualquer membro, inclusive Somente leitura, conseguia apagar ou alterar uma
+  inscrição de follow-up, o fluxo, o histórico e as versões falando direto com o
+  banco, sem passar pelas telas nem pela auditoria. Agora a escrita exige o
+  mesmo papel das telas. Leitura e envios automáticos seguem iguais. Portado do
+  DeskcommCRM (issues 1913 e 1915).
+
+- **O filtro por marcador do funil enxerga também o marcador do contato** O produto tem mais de uma caixa de marcador, e duas delas importam para o
+  funil. Uma é o marcador do negócio, o campo de texto dentro de "Editar lead". A
+  outra é o marcador da pessoa, o que você escreve em "Tags do contato" no Inbox e
+  na ficha do contato — o mesmo que a campanha lê, e o que a maioria usa no dia a
+  dia.
+
+  O filtro do funil só enxergava o primeiro. Quem marcava o cliente e depois
+  tentava filtrar o quadro por esse marcador não achava o card, e o seletor nem
+  oferecia a opção: ele montava a lista da mesma fonte, então só aparecia o que
+  alguém tivesse digitado dentro de algum card. Quadros inteiros ficavam com uma
+  ou duas etiquetas no seletor, nenhuma delas a que se usava.
+
+  Agora o quadro traz os marcadores do contato junto dos cards, o seletor lista as
+  duas caixas juntas, sem repetir, e filtrar por qualquer uma acha o negócio.
+
+  Nada deixa de funcionar: o marcador escrito dentro do card continua filtrável
+  como antes. As "Tags da conversa", a terceira caixa do Inbox, seguem fora do
+  filtro do funil. Negócio sem contato — criado à mão ou por webhook — continua
+  aparecendo normalmente. Nenhuma variável nova, nenhum passo na atualização.
+
+- **Funil com algumas centenas de negócios volta a abrir** O quadro de um funil com cerca de 400 negócios ou mais parava de carregar. O servidor buscava os dados dos cards (score, próxima ação, contato, conversa) passando todos os ids numa consulta só, e a resposta do banco trazia um cabeçalho maior que o limite do Node — a busca falhava como "fetch failed" e o quadro não abria. Agora essas consultas saem em lotes de 100 ids, e o tamanho do funil não derruba mais o quadro.
+
+- **Excluir um funil arquivado pede confirmação como no resto do produto** A exclusão pela gaveta de arquivados passa a usar o mesmo painel de
+  confirmação do quadro, e a linha do funil arquivado pode ser aberta. Portado
+  do DeskcommCRM (issue 1298, PR 1332).
+
+- **O ícone novo da aba aparece também no Safari** O endereço do ícone muda quando o ícone é trocado, e o Safari, que guardava o antigo pelo endereço, passa a buscar o novo sozinho.
+
+- **O filtro por marcador do Inbox procura nas duas caixas onde você marca** O Inbox tem duas caixas de marcadores no mesmo painel: a do contato — a mesma
+  da ficha e a mesma que a campanha lê — e a da conversa, onde o atendimento
+  automático também encosta os próprios marcadores. O filtro da lista de
+  conversas procurava só na caixa da conversa.
+
+  O efeito era marcar um cliente, filtrar por esse marcador e receber "nenhuma
+  conversa". Sem erro, sem aviso — a leitura natural é que o CRM perdeu o
+  marcador. E a lista de opções do filtro sofria do mesmo desencontro: oferecia
+  só os marcadores da conversa, então o que você acabara de escrever no contato
+  nem aparecia para ser escolhido.
+
+  Agora o filtro encontra a conversa quando o marcador está em qualquer uma das
+  duas caixas, e a lista de opções junta os marcadores das duas, sem repetir.
+  Quem já filtrava por marcador de conversa continua achando o mesmo. Sem
+  marcador filtrado, a lista é a mesma de antes.
+
+  Nada muda para quem opera: nenhuma variável nova, nenhum passo na atualização.
+  A atualização aplica sozinha a função nova do banco que o filtro usa.
+
+- **Link ou código Pix comprido no Inbox não estoura mais a largura da tela** Texto sem espaço estufava a bolha e o Inbox ganhava rolagem horizontal. Agora
+  quebra onde precisa. Portado do projeto original (DeskcommCRM #1802).
+
+- **O intervalo antes do atendimento passa a valer também ao marcar** A grade escondia o horário que invadia o respiro do atendimento anterior, mas
+  a marcação o aceitava. Agora recusa nos dois lugares. Portado do
+  DeskcommCRM #876 (PR #1027).
+
+- **O atalho na tela do celular leva o nome e o ícone da sua marca** Quem instala o sistema na tela inicial do celular passa a ver o nome e o ícone configurados na instalação, e não os do produto.
+
+- **O marcador novo posto numa conversa aparece na hora no filtro do Inbox** Ao criar um marcador novo em "Tags da conversa", ele só aparecia no filtro por marcador do Inbox e nas sugestões depois de até cinco minutos, ou recarregando a página: a lista de marcadores ficava guardada e ninguém mandava relê-la. Agora gravar o marcador manda reler a lista, como o lado do contato já fazia. Nada muda para quem opera a instalação.
+
+- **A verificação em duas etapas também protege o acesso direto ao banco** Quem ativou a verificação em duas etapas precisa confirmar o código também para ler dados pela API do banco, e não só pelas telas. Antes, só a senha bastava para ler contatos e conversas por esse caminho. Quem não ativou a verificação não percebe diferença. Quem ativou e ainda não digitou o código nesta sessão é levado direto à tela do código.
+
+- **Na aba Atividade, o motivo de parada deixa de aparecer como código** Dezoito motivos que as automações emitem apareciam como código cru (por
+  exemplo, user_not_in_org). Todos ganharam frase, em português e espanhol, e o
+  detalhe técnico do erro passa a aparecer na linha. Portado do DeskcommCRM
+  (issue 1090, PR 1216).
+
+- **A nota interna chega na hora para quem pode ver a conversa, e some para quem não pode** A nota interna passa a aparecer em tempo real para os demais atendentes; antes
+  só aparecia depois de recarregar a página. As notas também seguem a mesma regra
+  de visibilidade da conversa: quem não pode abrir uma conversa deixa de ler e de
+  escrever notas nela. Portado do projeto original (DeskcommCRM #1868, de @webtecnica).
+
+- **O papel de cada pessoa vale também no banco** Quem só visualiza não altera fichas, o parceiro vê só o que é dele e o índice de CPF ganha chave da instalação. A atualização converte tudo sozinha.
+
+- **Destinos de IA, webhooks e recursos de processamento protegidos** Endpoints de IA escolhidos pelo tenant só aceitam o provedor oficial ou o gateway autorizado pela instalação. O webhook global WAHA exige autenticação também com proxy externo. Atualizações recusam tags fora da main e downloads sem comprovação atual. Estados OAuth inválidos não geram auditoria persistente; assinaturas inválidas não consomem a cota do webhook. O segredo dos crons sai dos argumentos dos processos. PDFs têm limites e rodam em processo separado. Uploads abandonados expiram, com reserva atômica de espaço por organização.
+
+- **Proteção das filas internas e da assinatura de formulários** As filas de processamento e exclusão de arquivos deixam de aceitar escrita direta por usuários autenticados. Formulários com segredo configurado recusam temporariamente o envio se a chave não puder ser decifrada; a recusa aparece no histórico de captação. Restaure a chave de criptografia da instalação e reenvie os eventos recusados nesse caso.
+
+- **Permissões de escrita e limites de entrada reforçados** O perfil de visualização não grava mensagens, casos, avisos ou controles de envio, nem dispara eventos de negócio. O administrador com segundo fator cadastrado precisa verificá-lo. Webhooks e uploads recusam corpos acima dos limites antes de materializá-los; downloads de mídia Zernio recusam redirecionamentos e têm limite de tamanho e tempo. O backup das sessões do WhatsApp nasce com acesso exclusivo ao dono.
+
+- **Recusas de webhook com teto e IA que não para por endereço antigo** Assinaturas inválidas no webhook de captação continuam recusadas, mas só as 30 primeiras por minuto geram registro, para que ninguém inunde a auditoria. Uma `base_url` de IA gravada antes da nova regra não para mais agente, follow-up nem RAG: ela é ignorada, a chamada usa o endpoint oficial e o log avisa. O envio de imagem de cabeçalho de modelo tem limite de 20 por hora por organização. Retornos OAuth inválidos aparecem no log.
+
+- **Correções de segurança no onboarding, na verificação em duas etapas e na mídia** Só o administrador conclui o onboarding; códigos de recuperação exigem a verificação em duas etapas; anexo recebido que não é imagem, áudio, vídeo ou PDF só baixa.
+
+- **Loja, buscas e vínculos presos à organização** Vínculos a registros de outra organização são recusados, e o backup não leva mais a chave de cifra.
+
 ## [2.0.0] — 2026-09-30
 
 ### ⚠️ Requer atenção
@@ -5290,7 +5510,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v2.0.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.30.0...v2.0.0
 [1.30.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.29.0...v1.30.0
 [1.29.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.28.0...v1.29.0
