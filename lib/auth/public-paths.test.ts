@@ -13,6 +13,12 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/api/v1/integrations/marketing/financeiro-totais")).toBe(true);
     expect(isPublicPath("/api/v1/integrations/marketing/financeiro-totais/extra")).toBe(false);
   });
+  it("as rotas que o financeiro chama por Bearer atravessam o proxy, sem sub-path de carona", () => {
+    expect(isPublicPath("/api/v1/integrations/financeiro/products")).toBe(true);
+    expect(isPublicPath("/api/v1/integrations/financeiro/products/extra")).toBe(false);
+    expect(isPublicPath("/api/v1/integrations/financeiro/contacts/11111111-1111-4111-8111-111111111111")).toBe(true);
+    expect(isPublicPath("/api/v1/integrations/financeiro")).toBe(false);
+  });
   it("libera o heartbeat do agente do host (bearer, sem cookie)", () => {
     expect(isPublicPath("/api/v1/system/agent")).toBe(true);
   });
