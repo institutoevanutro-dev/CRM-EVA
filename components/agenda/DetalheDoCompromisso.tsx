@@ -16,6 +16,12 @@ type Detalhe = {
   google_sync?: SyncDetail;
   id: string;
   title: string;
+  /**
+   * A anotação INTERNA do compromisso — o resumo que o assistente grava ao
+   * marcar. Fica no CRM (não sobe para o calendário do cliente), e é o que quem
+   * vai atender precisa ler. A coluna era gravada e não aparecia em tela nenhuma.
+   */
+  notes: string | null;
   starts_at: string;
   ends_at: string;
   time_zone: string;
@@ -154,6 +160,13 @@ export function DetalheDoCompromisso({
             <p data-testid="compromisso-horario">
               {formatoDeData.formatRange(new Date(a.starts_at), new Date(a.ends_at))}
             </p>
+            {/* Com rótulo, e não o texto solto: sem rótulo ninguém sabe que é interna. */}
+            {a.notes?.trim() ? (
+              <div data-testid="compromisso-anotacao">
+                <p className="text-sm text-text-muted">{t("Anotação")}</p>
+                <p className="whitespace-pre-wrap">{a.notes}</p>
+              </div>
+            ) : null}
             <p>
               {t(
                 (
