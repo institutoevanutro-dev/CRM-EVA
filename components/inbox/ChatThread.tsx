@@ -20,6 +20,8 @@ import type { Message, Note } from "@/lib/types/messaging";
 
 interface Props {
   conversationId: string | null;
+  /** Termo da busca dentro da conversa; vazio = sem busca. */
+  searchTerm?: string;
   /** Escolher uma mensagem para responder. Sobe até o composer. */
   onResponder?: (m: Message) => void;
 }
@@ -47,7 +49,7 @@ function dayLabel(d: Date, t: (texto: string) => string = (texto) => texto, loca
   return format(d, "dd/MM/yyyy", { locale: locale });
 }
 
-export function ChatThread({ conversationId, onResponder }: Props) {
+export function ChatThread({ conversationId, onResponder, searchTerm = "" }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const q = useMessagesRealtime(conversationId);
@@ -65,6 +67,37 @@ export function ChatThread({ conversationId, onResponder }: Props) {
     () => q.data?.pages.flatMap((p) => p.data) ?? [],
     [q.data],
   );
+
+  /**
+   * BUSCA NO QUE JÁ ESTÁ NA TELA (porte do original, #1793). Não vai ao
+   * servidor: filtra as páginas carregadas, e o rótulo diz isso para ninguém ler
+   * "zero" como "não existe na conversa". Apagada e oculta ficam de fora: o
+   * texto delas não aparece na bolha.
+   */
+  const termo = searchTerm.trim().toLocaleLowerCase();
+  const resultados = useMemo(
+    () =>
+      new Set(
+        messages
+          .filter(
+            (m) =>
+              termo &&
+              !m.revoked_at &&
+              !(m.metadata as { crm_hidden_at?: unknown } | null)?.crm_hidden_at &&
+              m.body?.toLocaleLowerCase().includes(termo),
+          )
+          .map((m) => m.id),
+      ),
+    [messages, termo],
+  );
+  // Só o TERMO leva à ocorrência: depender dos resultados faria cada mensagem
+  // nova do tempo real arrancar quem lê de volta à primeira.
+  useEffect(() => {
+    if (termo)
+      scrollerRef.current
+        ?.querySelector('[data-search-match="true"]')
+        ?.scrollIntoView({ block: "nearest" });
+  }, [termo]);
 
   /**
    * As mensagens por id, para resolver a CITADA sem ir ao servidor.
@@ -202,6 +235,11 @@ export function ChatThread({ conversationId, onResponder }: Props) {
 
   return (
     <div {...sinalDoCanal} className="flex h-full min-w-0 flex-col">
+      {termo && (
+        <div className="px-4 py-1 text-xs text-muted-foreground" role="status">
+          {t("Resultados nas mensagens carregadas")}: {resultados.size}
+        </div>
+      )}
       <div data-testid="message-thread" ref={scrollerRef} className="min-w-0 flex-1 overflow-y-auto py-2">
         {q.hasNextPage && (
           <div className="flex justify-center py-2">
@@ -240,6 +278,7 @@ export function ChatThread({ conversationId, onResponder }: Props) {
                 <MessageBubble
                   key={`msg-${item.data.id}`}
                   message={item.data}
+                  searchMatch={resultados.has(item.data.id)}
                   debugCitations={debugCitations}
                   onResponder={onResponder}
                   // A citada sai da MESMA lista já carregada: buscar no servidor
