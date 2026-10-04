@@ -551,6 +551,18 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
+    // Fora da barra lateral de propósito: a dobra de 1280×900 já está no
+    // limite com Atividades (ver `app/app/analise/page.tsx`). A porta é o hub
+    // `/app/analise`, que lista o grupo inteiro. Sem `minRole`: o piso da rota
+    // `/api/v1/reports/tags` é `viewer`, e o recorte por atendente é da RLS.
+    href: "/app/tag-report",
+    label: "Por etiqueta",
+    description: "Qual assunto ocupou a operação no período — e quanto tempo ele esperou.",
+    icon: "Tag",
+    group: "analise",
+    section: "Os números do período",
+  },
+  {
     // Observabilidade, não configuração: por isso não fica junto dos agentes.
     href: "/app/ai/evolution",
     label: "Evolução da IA",
