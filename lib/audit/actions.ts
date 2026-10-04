@@ -687,7 +687,7 @@ export const AUDIT_ACTIONS = [
   "resposta_pronta.updated",
   "resposta_pronta.config_changed",
   "resposta_pronta.embeddings_calculated",
-  // Campanhas (migration 0343). Toda mudança de ESTADO da campanha audita: são
+  // Campanhas (migration 0316). Toda mudança de ESTADO da campanha audita: são
   // as ações que fazem mensagem sair para gente que não pediu, e "quem mandou
   // isso, e quando?" precisa de resposta. Edição de rascunho não audita — não
   // saiu nada dela.
@@ -703,7 +703,7 @@ export const AUDIT_ACTIONS = [
   // Rodada do cron que MEXEU em alguma campanha (enviou, pulou, concluiu,
   // promoveu agendada). Rodada vazia não audita — o critério do `CLAUDE.md`.
   "cron.campaign_worker",
-  // Lista de exclusão da operação (migration 0344). Audita porque é decisão que
+  // Lista de exclusão da operação (migration 0316). Audita porque é decisão que
   // tira alguém de todo envio futuro — "quem tirou este número, e quando?"
   // precisa de resposta. O telefone NÃO entra no payload: só os últimos dígitos.
   "campaign.suppression_added",
@@ -712,6 +712,11 @@ export const AUDIT_ACTIONS = [
   // ritmo que campanha nova herda). Auditável porque muda o comportamento de
   // TODA campanha futura, e a de atribuição muda a métrica das já enviadas.
   "campaign.settings_updated",
+  // ── Sons dos avisos da Central (migration 0313) ─────────────────────────
+  // O arquivo de som que a organização escolheu para o pedido de pessoa — e a
+  // volta ao bipe do produto.
+  "settings.notification_sound_updated",
+  "settings.notification_sound_removed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -77,6 +77,41 @@
       "col": 6,
       "type": "service",
       "label": "PATCH separado: resolver ou reabrir + auditoria"
+    },
+    {
+      "id": "campainha",
+      "lane": "humano",
+      "col": 5,
+      "type": "ui",
+      "label": "Campainha do topo: aviso NOVO que pede gente toca o som (useSonsDaCentral, leitura de 30 s)"
+    },
+    {
+      "id": "sons",
+      "lane": "app",
+      "col": 5,
+      "type": "service",
+      "label": "/api/v1/settings/sons + bucket privado org-sounds (0313); regra única somDoAviso"
+    },
+    {
+      "id": "barramento",
+      "lane": "db",
+      "col": 1,
+      "type": "database",
+      "label": "trg_aviso_da_central_criado → event_log central.aviso_criado (0314, sem I/O)"
+    },
+    {
+      "id": "push",
+      "lane": "app",
+      "col": 2,
+      "type": "service",
+      "label": "push.handler: somDoAviso decide o que vai ao celular (idioma da organização)"
+    },
+    {
+      "id": "celular",
+      "lane": "humano",
+      "col": 3,
+      "type": "ui",
+      "label": "Notificação no celular, com o CRM fechado"
     }
   ],
   "edges": [
@@ -124,6 +159,41 @@
       "from": "status",
       "to": "central",
       "label": "reconsultar abertos/resolvidos"
+    },
+    {
+      "from": "central",
+      "to": "campainha",
+      "label": "abertos, relidos a cada 30 s"
+    },
+    {
+      "from": "sons",
+      "to": "campainha",
+      "label": "URL assinada de 1 h (sem arquivo: bipe do produto)"
+    },
+    {
+      "from": "campainha",
+      "to": "contexto",
+      "label": "quem ouviu abre a Central"
+    },
+    {
+      "from": "produtores",
+      "to": "barramento",
+      "label": "todo aviso de organização anuncia que nasceu"
+    },
+    {
+      "from": "barramento",
+      "to": "push",
+      "label": "dreno do event_log"
+    },
+    {
+      "from": "push",
+      "to": "celular",
+      "label": "passagem para pessoa (VAPID)"
+    },
+    {
+      "from": "celular",
+      "to": "contexto",
+      "label": "toque abre a conversa"
     }
   ]
 }
