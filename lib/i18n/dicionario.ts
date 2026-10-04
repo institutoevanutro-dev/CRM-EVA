@@ -3359,6 +3359,9 @@ export const DICIONARIO: Traducoes = {
   "Perfil conectado não encontrado ou não lista publicações.": {
     es: "Perfil conectado no encontrado o no lista publicaciones.",
   },
+  "Abrir no Instagram": {
+    es: "Abrir en Instagram",
+  },
   "Muitas imagens enviadas. Tente de novo em uma hora.": {
     es: "Demasiadas imágenes enviadas. Inténtalo de nuevo en una hora.",
   },
