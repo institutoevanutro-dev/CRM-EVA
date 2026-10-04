@@ -9466,6 +9466,22 @@ export const DICIONARIO: Traducoes = {
   "Reconhecimento calculado.": { es: "Reconocimiento calculado." },
   "Não foi possível calcular agora. Confira a chave da OpenAI em Credenciais.": { es: "No fue posible calcular ahora. Revise la clave de OpenAI en Credenciales." },
   "Ligado": { es: "Encendido" },
+  // ─── Relatório por etiqueta (/app/tag-report) ───
+  "Por etiqueta": { es: "Por etiqueta" },
+  "Qual assunto ocupou a operação no período — e quanto tempo ele esperou.": {
+    es: "Qué tema ocupó la operación en el período — y cuánto tiempo esperó.",
+  },
+  "Nenhuma conversa com etiqueta no período": { es: "Ninguna conversación con etiqueta en el período" },
+  "Etiquete as conversas na Inbox para ver aqui qual assunto ocupou a operação — ou aumente o período.": {
+    es: "Etiquete las conversaciones en la Inbox para ver aquí qué tema ocupó la operación — o amplíe el período.",
+  },
+  Iniciadas: { es: "Iniciadas" },
+  Abertas: { es: "Abiertas" },
+  "Espera média": { es: "Espera promedio" },
+  Fatia: { es: "Proporción" },
+  "O período tem conversas demais: os números cobrem só as mais recentes.": {
+    es: "El período tiene demasiadas conversaciones: los números cubren solo las más recientes.",
+  },
 };
 
 /**
