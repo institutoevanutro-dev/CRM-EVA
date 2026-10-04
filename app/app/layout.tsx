@@ -5,6 +5,7 @@ import { isMfaEnrolled, loadAuthUser, requiresMfa, resolveActiveOrg, sessionAal 
 import { DEFAULT_VISIBILITY_MODE, type VisibilityMode } from "@/lib/auth/types";
 import { clientePelaAgendaLigado } from "@/lib/schemas/settings";
 import { AuthProvider } from "@/hooks/auth/AuthProvider";
+import { ProvedorDeCoresDasEtiquetas } from "@/components/tags/CoresDasEtiquetas";
 import { AppShell } from "./_components/AppShell";
 import { EstiloDaMarcaDaOrganizacao } from "./_components/EstiloDaMarcaDaOrganizacao";
 import { MfaEnrollGate } from "@/components/auth/MfaEnrollGate";
@@ -204,6 +205,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // acoplamento com a autenticação que derrubou 32 casos.
     <IdiomaProvider locale={user.idioma}>
     <AuthProvider user={user} activeOrg={activeOrg}>
+      {/*
+        A COR DA ETIQUETA, uma leitura por tela.
+
+        O chip aparece em LISTA — uma fila de duzentas conversas desenha quatro
+        centenas deles — e todos consultam o mesmo mapa, montado uma vez aqui.
+        Um `useQuery` por chip seria o mesmo cache (o react-query deduplica a
+        rede), mas cada atualização acordaria todas as assinaturas.
+
+        Dentro do `AuthProvider` porque a leitura é da organização ativa, e FORA
+        do `AppShell` porque o gate de MFA substitui a casca: o mapa precisa
+        sobreviver ao portão, e não ser relido quando ele sai.
+      */}
+      <ProvedorDeCoresDasEtiquetas>
       <InterfaceRefresh userId={user.id} org={activeOrg} support={!!user.support} />
       {/*
         O MARCADOR da marca da organização — o elemento cuja existência define o
@@ -233,6 +247,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           shell
         )}
       </div>
+      </ProvedorDeCoresDasEtiquetas>
     </AuthProvider>
     </IdiomaProvider>
   );

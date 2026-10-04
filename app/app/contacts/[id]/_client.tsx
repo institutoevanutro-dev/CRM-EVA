@@ -8,6 +8,7 @@ import { format } from "date-fns";
 import { ShieldCheck, PencilSimple } from "@/lib/ui/icons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -102,9 +103,7 @@ export function ContactDetailClient({ contactId }: Props) {
           </div>
           <div className="mt-2 flex flex-wrap gap-1">
             {contact.tags.map((t) => (
-              <Badge key={t} variant="neutral">
-                {t}
-              </Badge>
+              <ChipDeEtiqueta key={t} tag={t} />
             ))}
             {contact.is_blocked && <Badge variant="warning">{t("Bloqueado")}</Badge>}
             {contact.is_anonymized && <Badge variant="destructive">{t("Anonimizado")}</Badge>}
@@ -226,9 +225,7 @@ export function ContactDetailClient({ contactId }: Props) {
                   {contact.tags.length === 0
                     ? "—"
                     : contact.tags.map((t) => (
-                        <Badge key={t} variant="neutral">
-                          {t}
-                        </Badge>
+                        <ChipDeEtiqueta key={t} tag={t} />
                       ))}
                 </dd>
               </div>

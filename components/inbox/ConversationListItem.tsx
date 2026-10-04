@@ -8,6 +8,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { InstagramLogo, Phone, Robot } from "@/lib/ui/icons";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { SeloDoCanal } from "@/components/inbox/SeloDoCanal";
 import { comandoDaConversa, esperaDaConversa } from "@/lib/inbox/comando-da-conversa";
@@ -305,9 +306,7 @@ export function ConversationListItem({
         {temSelos && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             {visibleTags.map((t) => (
-              <Badge key={t} variant="secondary" className="h-4 px-1.5 text-[10px]">
-                {t}
-              </Badge>
+              <ChipDeEtiqueta key={t} tag={t} className="h-4 px-1.5 text-[10px]" />
             ))}
             {overflow > 0 && (
               <span className="text-[10px] text-text-muted">+{overflow}</span>

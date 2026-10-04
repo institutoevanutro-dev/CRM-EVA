@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PontoDaEtiqueta } from "@/components/tags/PontoDaEtiqueta";
 import { useUser } from "@/hooks/auth/AuthProvider";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAssignableAgents } from "@/hooks/kanban/useAssignableAgents";
@@ -225,6 +226,9 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" disabled={tagOptions.length === 0}>
+            {marcadoresEscolhidos[0] ? (
+              <PontoDaEtiqueta tag={marcadoresEscolhidos[0]} className="mr-2" />
+            ) : null}
             {tagLabel}
           </Button>
         </DropdownMenuTrigger>
@@ -263,6 +267,7 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
               onCheckedChange={() => alternaEtiqueta(tag)}
               onSelect={(e) => e.preventDefault()}
             >
+              <PontoDaEtiqueta tag={tag} className="mr-2" />
               {tag}
             </DropdownMenuCheckboxItem>
           ))}
