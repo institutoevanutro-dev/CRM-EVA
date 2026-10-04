@@ -9483,6 +9483,12 @@ export const DICIONARIO: Traducoes = {
     es: "El período tiene demasiadas conversaciones: los números cubren solo las más recientes.",
   },
   // Campanhas (migration 0316)
+  Responderam: { es: "Respondieron" },
+  Progresso: { es: "Progreso" },
+  terminou: { es: "terminó" },
+  "Fale com uma lista de contatos que você escolhe, no ritmo do número.": {
+    es: "Envía mensajes a una lista de contactos que elijas, al ritmo del número.",
+  },
   "Sem telefone no cadastro": { es: "Sin teléfono en el registro" },
   "Telefone fora do formato de envio": { es: "Teléfono con formato no válido para envío" },
   "Recusou receber contato comercial": { es: "Rechazó recibir contacto comercial" },

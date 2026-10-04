@@ -433,7 +433,7 @@ async function rodarUmaCampanha(
   // MESMO lock, relê o `pacing_ledger` sob ele e só então envia e registra.
   // Sem isso, agente e campanha (ou duas rodadas sobrepostas) leriam o mesmo
   // "último envio" e falariam pelo número com menos de 5 s entre si.
-  // ponytail: o lock fica retido durante o envio ao WAHA, como no agente —
+  // ponytail: o lock fica retido durante o envio ao canal, como no agente —
   // aceitável num envio por número por rodada.
   const conexao = await pool.connect();
   try {

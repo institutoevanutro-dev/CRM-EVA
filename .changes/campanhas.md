@@ -16,6 +16,8 @@ A campanha também exige que você declare **com base em quê** está falando co
 
 Você acompanha pela tela: quantas saíram, chegaram, foram lidas e **responderam**, mais quem ficou de fora e por quê. Pode pausar e retomar a qualquer momento; cancelar é definitivo, e quem ainda não recebeu não recebe mais. Antes de iniciar, dá para mandar um **teste** para um contato à sua escolha, pelo mesmo número e com o mesmo texto do envio real.
 
-Nada muda para quem não usar: nenhuma campanha existe até alguém criar a primeira, e nenhum arquivo de configuração precisa ser editado. Organização suspensa não dispara campanha.
+Entre duas mensagens do mesmo número passam **no mínimo 5 segundos**, com uma variação aleatória por cima — e na prática bem mais: a rodada roda uma vez por minuto e manda no máximo uma mensagem por número. Campanha e atendente automático disputam a mesma vez do número, então um não fura o ritmo do outro. Grupos nunca recebem campanha.
 
-Crédito: @lussandro.
+Nada muda para quem não usar: nenhuma campanha existe até alguém criar a primeira, e nenhum arquivo de configuração precisa ser editado. Organização suspensa ou parada não dispara campanha.
+
+Crédito: porte do DeskcommCRM original — @lussandro (módulo), @melgarafael (organização parada, teto no fuso do cliente) e @JowaniOrantes (traduções).
