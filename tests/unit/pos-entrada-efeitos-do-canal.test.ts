@@ -30,8 +30,12 @@ import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 
 const audit = vi.fn(async () => {});
 const garantirLeadDaConversa = vi.fn(async () => ({ criado: true, leadId: "lead-1" }) as never);
+const encerraDemanda = vi.fn(async () => ({ lead: {}, jaEstava: false }) as never);
 
 vi.mock("@/lib/audit", () => ({ audit: (...a: unknown[]) => audit(...(a as [])) }));
+vi.mock("@/lib/leads/encerramento", () => ({
+  encerraDemanda: (...a: unknown[]) => encerraDemanda(...(a as [])),
+}));
 vi.mock("@/lib/leads/nascimento-do-lead", () => ({
   garantirLeadDaConversa: (...a: unknown[]) => garantirLeadDaConversa(...(a as [])),
 }));
@@ -49,6 +53,11 @@ let updateErro: { message: string } | null = null;
 let rpcErro: { message: string } | null = null;
 let ultimoUpdate: Record<string, unknown> | null = null;
 let ultimaRpc: Record<string, unknown> | null = null;
+/** Os negócios ABERTOS do contato, como a leitura de `crm_leads` os devolve. */
+let leadsAbertos: Array<{ id: string }> = [];
+let leadsErro: { message: string } | null = null;
+/** Os `.eq()` da leitura de `crm_leads` — provam organização, contato e "só os abertos". */
+let filtrosDeLeads: Array<[string, unknown]> = [];
 
 /** Imita o builder do PostgREST: encadeável, o efeito acontece no `await`. */
 function cadeia(rotulo: string): Record<string, unknown> {
@@ -74,6 +83,19 @@ const admin = {
       update(payload: Record<string, unknown>) {
         ultimoUpdate = payload;
         return cadeia(`update:${tabela}`);
+      },
+      select(_colunas: string) {
+        const consulta = {
+          eq(coluna: string, valor: unknown) {
+            if (tabela === "crm_leads") filtrosDeLeads.push([coluna, valor]);
+            return consulta;
+          },
+          then(resolve: (v: unknown) => void) {
+            sequencia.push(`select:${tabela}`);
+            return Promise.resolve({ data: leadsAbertos, error: leadsErro }).then(resolve);
+          },
+        };
+        return consulta;
       },
     };
   },
@@ -107,6 +129,11 @@ beforeEach(() => {
   rpcErro = null;
   ultimoUpdate = null;
   ultimaRpc = null;
+  leadsAbertos = [];
+  leadsErro = null;
+  filtrosDeLeads = [];
+  encerraDemanda.mockReset();
+  encerraDemanda.mockResolvedValue({ lead: {}, jaEstava: false } as never);
   audit.mockClear();
   garantirLeadDaConversa.mockClear();
   garantirLeadDaConversa.mockResolvedValue({ criado: true, leadId: "lead-1" } as never);
@@ -215,6 +242,109 @@ describe("opt-out", () => {
     updateErro = { message: "banco indisponível" };
     await rodar({ texto: "PARAR" });
     expect(garantirLeadDaConversa).toHaveBeenCalled();
+    expect(sequencia).toContain("rpc:ai_agent.dispatch_requested");
+  });
+});
+
+describe("opt-out fecha o negócio aberto como perdido", () => {
+  it("quem pede para sair tem cada negócio aberto encerrado como perda pedida pelo cliente", async () => {
+    leadsAbertos = [{ id: "lead-a" }, { id: "lead-b" }];
+
+    await rodar({ texto: "PARAR" });
+
+    expect(encerraDemanda).toHaveBeenCalledTimes(2);
+    for (const [i, leadId] of ["lead-a", "lead-b"].entries()) {
+      const [cliente, ctx, entrada] = encerraDemanda.mock.calls[i] as unknown as [
+        unknown,
+        Record<string, unknown>,
+        Record<string, unknown>,
+      ];
+      expect(cliente).toBe(admin);
+      expect(ctx).toMatchObject({
+        organization_id: "org-1",
+        // Não foi uma pessoa: a mensagem chegou pelo canal e o produto agiu.
+        actor: { type: "webhook_source", id: "canal-inbound" },
+      });
+      expect(entrada).toMatchObject({
+        leadId,
+        desfecho: "lost",
+        // Decisão do dono (doc 85, opção B): motivo próprio. "Cliente solicitou
+        // cancelamento" diria algo que o cliente não pediu — pedir silêncio não é
+        // cancelar.
+        motivo: "opted_out_of_messages",
+      });
+      expect(entrada.motivo).not.toBe("requested_by_customer");
+    }
+  });
+
+  it("lê só os negócios ABERTOS do contato, na organização certa", async () => {
+    await rodar({ texto: "PARAR" });
+
+    expect(filtrosDeLeads).toEqual(
+      expect.arrayContaining([
+        ["organization_id", "org-1"],
+        ["contact_id", "contato-1"],
+        ["status", "open"],
+      ]),
+    );
+  });
+
+  it("fecha DEPOIS de gravar o bloqueio e ANTES de o lead nascer", async () => {
+    leadsAbertos = [{ id: "lead-a" }];
+    encerraDemanda.mockImplementation(async () => {
+      sequencia.push("encerra:lead-a");
+      return { lead: {}, jaEstava: false } as never;
+    });
+    garantirLeadDaConversa.mockImplementation(async () => {
+      sequencia.push("lead-nasce");
+      return { criado: false, motivo: "contato_bloqueado" } as never;
+    });
+
+    await rodar({ texto: "PARAR" });
+
+    const bloqueio = sequencia.indexOf("update:contacts");
+    const encerra = sequencia.indexOf("encerra:lead-a");
+    const nasce = sequencia.indexOf("lead-nasce");
+    expect(bloqueio, "o bloqueio não foi gravado").toBeGreaterThanOrEqual(0);
+    expect(encerra, "o negócio não foi encerrado").toBeGreaterThan(bloqueio);
+    expect(nasce, "o lead nasceu antes do fechamento").toBeGreaterThan(encerra);
+  });
+
+  it("mensagem que não pede para sair não fecha nada", async () => {
+    leadsAbertos = [{ id: "lead-a" }];
+
+    await rodar({ texto: "oi, tudo bem?" });
+
+    expect(encerraDemanda).not.toHaveBeenCalled();
+    expect(sequencia).not.toContain("select:crm_leads");
+  });
+
+  it("falha ao gravar o bloqueio NÃO fecha o negócio de quem o sistema não protegeu", async () => {
+    updateErro = { message: "boom" };
+    leadsAbertos = [{ id: "lead-a" }];
+
+    await rodar({ texto: "PARAR" });
+
+    expect(encerraDemanda).not.toHaveBeenCalled();
+  });
+
+  it("um negócio que não fecha não impede o seguinte nem o resto da ingestão", async () => {
+    leadsAbertos = [{ id: "lead-a" }, { id: "lead-b" }];
+    encerraDemanda.mockRejectedValueOnce(new Error("pipeline_no_lost_stage"));
+
+    await rodar({ texto: "PARAR" });
+
+    expect(encerraDemanda).toHaveBeenCalledTimes(2);
+    expect(garantirLeadDaConversa).toHaveBeenCalledTimes(1);
+    expect(sequencia).toContain("rpc:ai_agent.dispatch_requested");
+  });
+
+  it("falha na leitura dos negócios não impede o resto da ingestão", async () => {
+    leadsErro = { message: "leitura falhou" };
+
+    await rodar({ texto: "PARAR" });
+
+    expect(encerraDemanda).not.toHaveBeenCalled();
     expect(sequencia).toContain("rpc:ai_agent.dispatch_requested");
   });
 });

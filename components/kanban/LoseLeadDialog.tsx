@@ -27,6 +27,7 @@ const REASON_LABELS: Record<(typeof CANONICAL_LOST_REASONS)[number], string> = {
   cancelled_by_customer: "Cancelado pelo cliente",
   payment_failed: "Falha no pagamento",
   other: "Outro motivo",
+  opted_out_of_messages: "Pediu para não receber mensagens",
 };
 
 interface LoseLeadDialogProps {
