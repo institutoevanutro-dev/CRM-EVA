@@ -8,6 +8,63 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.2.0] — 2026-10-04
+
+### Adicionado
+
+- **A fila de comentários mostra o vídeo, não o número dele** Em Inbox › Comentários, cada comentário mostra a capa e o começo da legenda do vídeo onde foi feito, com link para abrir no Instagram. Vídeos mais antigos, fora das publicações recentes do perfil, continuam aparecendo pelo número.
+
+- **Quem responde PARAR tem o negócio aberto fechado como perdido, com o motivo "Pediu para não receber mensagens"** Quando um contato respondia PARAR, o sistema já o bloqueava na hora, mas o
+  negócio dele ficava aberto até alguém arrastá-lo à mão para Perdido. Agora,
+  junto com o bloqueio, cada negócio aberto do contato é encerrado como perdido
+  com um motivo próprio, que também aparece na janela de perder. Reabrir continua
+  manual. Se o funil não tiver etapa de perdido, o negócio fica como estava e o
+  motivo vai para o log. A atualização aplica a mudança no banco sozinha.
+
+  Portado do projeto original (DeskcommCRM PR 2049, de @paulolimajr77).
+
+### Corrigido
+
+- **A anotação interna do compromisso aparece no painel de detalhe da Agenda** O assistente marcava a reunião e gravava o resumo do lead na anotação interna
+  do compromisso, mas ela não aparecia em tela nenhuma. Agora o painel de detalhe
+  mostra a anotação, com o rótulo "Anotação". Ela segue interna ao CRM.
+
+- **Anonimizar pela ficha do contato apaga também as notas internas da conversa** Pelo botão Anonimizar, o texto das notas internas e o anexo delas continuavam
+  guardados; só o pedido formal de LGPD os alcançava. Agora os dois caminhos
+  redigem a nota e enviam o anexo para remoção. Na atualização, contatos já
+  anonimizados recebem a mesma limpeza nas notas anteriores à anonimização.
+
+- **Campos diferentes gravados ao mesmo tempo no mesmo negócio não se apagam mais** Quando duas gravações dos campos personalizados de um mesmo negócio chegavam
+  juntas (quem atende salvando a ficha enquanto o assistente anotava outro campo
+  pelo MCP), a segunda gravava por cima da primeira e um dos campos sumia, sem
+  erro. Agora a soma dos campos acontece dentro do banco, numa única gravação, e
+  os campos de cada uma ficam. A ficha do dossiê ainda reenvia os campos que
+  mostrava ao abrir; esse ajuste do formulário segue à parte. Nada a configurar.
+
+  Portado do projeto original (DeskcommCRM PR 2009, de @paulolimajr77).
+
+- **Janelas com conteúdo alto rolam por dentro, e os botões ficam alcançáveis** A janela base ganhou teto de altura (a altura da tela menos uma margem) e rola por
+  dentro quando o conteúdo passa disso. Antes, numa tela baixa, os botões Salvar e
+  Cancelar podiam ficar abaixo da borda. Janelas que já tinham altura própria
+  continuam com a delas.
+
+- **Três auxiliares do agente leem o JSON do modelo mesmo com cerca de código, prosa ou repetição** Os auxiliares do agente pedem JSON no prompt e leem o texto de volta. A leitura
+  antiga recortava do primeiro `{` ao último `}`, e quando o modelo repetia o
+  objeto (comum via OpenRouter) o recorte pegava as duas cópias e o parse falhava.
+  O novo `extrairJsonDoTexto` tenta o texto inteiro e, se não der, devolve o
+  primeiro objeto que parsear, respeitando strings. Passam a usá-lo o roteador de
+  intenções, a compactação e o flywheel de propostas.
+
+  Portado do projeto original (DeskcommCRM PR 2096 de @webtecnica).
+
+- **O roteador de intenções passa a classificar a transcrição do áudio** Num roteador com `sticky` ligado, um áudio do cliente nunca chegava ao
+  classificador: o texto do turno vinha só da coluna `body`, que é vazia para
+  áudio, e a conversa ficava presa no agente anterior. Agora o áudio já
+  transcrito é classificado como qualquer texto; o áudio ainda sem transcrição
+  segue como antes e mantém o agente atual. Não é preciso fazer nada na instalação.
+
+  Portado do projeto original (DeskcommCRM PR 2082 de @webtecnica).
+
 ## [3.1.1] — 2026-10-04
 
 ### Corrigido
@@ -5602,7 +5659,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.1.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.1.1...v3.2.0
 [3.1.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v2.0.0...v3.0.0
