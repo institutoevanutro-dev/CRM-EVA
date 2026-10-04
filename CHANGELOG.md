@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.1.1] — 2026-10-04
+
+### Corrigido
+
+- **A rota de Produtos para o financeiro passa a responder ao token** A rota `GET /api/v1/integrations/financeiro/products`, que saiu na 3.1.0, era
+  barrada com 401 antes de ler o token, porque faltava na lista de caminhos que
+  dispensam sessão de navegador. O financeiro nunca chegava a receber a lista.
+
 ## [3.1.0] — 2026-10-03
 
 ### Adicionado
@@ -5594,7 +5602,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.1.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.1.1...HEAD
+[3.1.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.30.0...v2.0.0
