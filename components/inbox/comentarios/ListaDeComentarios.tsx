@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import type { PublicacaoDoCanal } from "@/lib/channels/types";
 import { format } from "date-fns";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
@@ -49,6 +50,8 @@ interface Props {
    * como texto livre é uma feature que ninguém consegue usar de verdade.
    */
   onNovaRegraParaMidia?: (mediaId: string) => void;
+  /** Capa e legenda por `media_id`. Vídeo ausente aqui aparece pelo número. */
+  publicacoes?: Map<string, PublicacaoDoCanal>;
 }
 
 /** `esperando_voce` primeiro — é o que precisa de um toque humano agora. Estável no resto. */
@@ -131,6 +134,33 @@ function ItemEsperando({
   );
 }
 
+function VideoDoComentario({ mediaId, publicacao }: { mediaId: string; publicacao?: PublicacaoDoCanal }) {
+  const t = useT();
+  if (!publicacao) return <span>{t("Vídeo:")} {mediaId}</span>;
+  const conteudo = (
+    <>
+      {publicacao.miniatura && (
+        // eslint-disable-next-line @next/next/no-img-element -- CDN da Meta, URL que expira; next/image exigiria allowlist fixa.
+        <img src={publicacao.miniatura} alt="" className="h-10 w-10 shrink-0 rounded-md object-cover" loading="lazy" />
+      )}
+      <span className="line-clamp-2 text-text">{publicacao.legenda || t("Sem legenda")}</span>
+    </>
+  );
+  return publicacao.link ? (
+    <a
+      href={publicacao.link}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={t("Abrir no Instagram")}
+      className="flex min-w-0 items-center gap-2 hover:underline"
+    >
+      {conteudo}
+    </a>
+  ) : (
+    <span className="flex min-w-0 items-center gap-2">{conteudo}</span>
+  );
+}
+
 export function ListaDeComentarios({
   comentarios,
   onPublicar,
@@ -138,6 +168,7 @@ export function ListaDeComentarios({
   onDescartar,
   descartando,
   onNovaRegraParaMidia,
+  publicacoes,
 }: Props) {
   const t = useT();
   const localeDaData = useLocaleDeData();
@@ -165,7 +196,7 @@ export function ListaDeComentarios({
           {/* CRÍTICO 2: sem mostrar o vídeo, não há de onde tirar o `media_id`
               que o formulário de regra pede como texto livre. */}
           <div className="mt-1 flex items-center justify-between gap-2 text-xs text-text-muted">
-            <span>{t("Vídeo:")} {c.media_id}</span>
+            <VideoDoComentario mediaId={c.media_id} publicacao={publicacoes?.get(c.media_id)} />
             {onNovaRegraParaMidia && (
               <Button
                 type="button"

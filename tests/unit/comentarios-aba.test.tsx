@@ -132,6 +132,23 @@ describe("ListaDeComentarios", () => {
   });
 });
 
+describe("ListaDeComentarios — o vídeo do comentário", () => {
+  const base = {
+    id: "c9", texto: "lindo", media_id: "M-1", autor_handle: "ana", comentado_em: "2026-10-03T10:00:00Z",
+    situacao: "esperando_voce" as const, sugestao_de_resposta: null, motivo_do_toque: null,
+  };
+  it("mostra a legenda com link para o Instagram quando conhece o vídeo", () => {
+    const publicacoes = new Map([["M-1", { id: "M-1", legenda: "Comente ROTEIRO", tipo: "VIDEO", miniatura: null, link: "https://ig/p/1", publicadaEm: null }]]);
+    render(<ListaDeComentarios comentarios={[base]} publicacoes={publicacoes} />);
+    expect(screen.getByText("Comente ROTEIRO").closest("a")).toHaveAttribute("href", "https://ig/p/1");
+    expect(screen.queryByText(/M-1/)).toBeNull();
+  });
+  it("vídeo desconhecido continua aparecendo pelo número", () => {
+    render(<ListaDeComentarios comentarios={[base]} publicacoes={new Map()} />);
+    expect(screen.getByText(/M-1/)).toBeInTheDocument();
+  });
+});
+
 describe("FormularioDeRegra", () => {
   it("só habilita Criar regra com os quatro campos preenchidos, e manda o payload certo", () => {
     const onCriar = vi.fn();
