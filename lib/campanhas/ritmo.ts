@@ -21,6 +21,8 @@
  * silêncio, e a mais cara quando erra.
  */
 
+import { CAMPAIGN_MIN_GAP_MS } from "@/lib/agent-engine/pacing/defaults";
+
 import { horaNoFuso } from "./relogio";
 
 export interface RitmoDaCampanha {
@@ -125,4 +127,31 @@ export function proximaTentativa(veto: VetoDeRitmo, agora: Date): Date | null {
     case "teto_diario":
       return new Date(ms + 30 * 60_000);
   }
+}
+
+/**
+ * O número está livre para a CAMPANHA falar agora?
+ *
+ * O motor de pacing do agente (`decidePacing`) devolve `allow: true` com um
+ * `waitMs` quando o número falou há menos que throttle + jitter: o agente
+ * DORME esse tempo e envia. A campanha não dorme — ela espera a próxima rodada
+ * —, então `allow` sozinho não basta: `waitMs > 0` também é "agora não".
+ *
+ * Por cima disso, o piso da campanha: no mínimo `CAMPAIGN_MIN_GAP_MS` (5 s)
+ * desde o último envio do número, de QUALQUER origem (o `pacing_ledger` conta
+ * agente e campanha), mais o jitter do canal. Fora da janela do canal e com o
+ * teto diário batido o próprio `decidePacing` já devolve `allow: false`.
+ */
+export function numeroLivreParaCampanha(
+  decisao: { allow: boolean; waitMs?: number },
+  ultimoEnvio: Date | null,
+  agora: Date,
+  knobs: { throttleMs: number; jitterMaxMs: number },
+  rng: () => number = Math.random,
+): boolean {
+  if (!decisao.allow || (decisao.waitMs ?? 0) > 0) return false;
+  if (!ultimoEnvio) return true;
+  const jitter = Math.floor(rng() * (knobs.jitterMaxMs + 1));
+  const piso = Math.max(knobs.throttleMs, CAMPAIGN_MIN_GAP_MS) + jitter;
+  return agora.getTime() - ultimoEnvio.getTime() >= piso;
 }

@@ -35,6 +35,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type pg from "pg";
 
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
@@ -54,7 +55,7 @@ import { motivoParaExcluir, recusouMarketing } from "./elegibilidade";
 import { hashDoEndereco } from "./exclusoes";
 import { renderizar } from "./renderizador";
 import { escolherNumero, poolDaCampanha, type NumeroDisponivel } from "./rodizio";
-import { podeMandarAgora, proximaTentativa, type RitmoDaCampanha } from "./ritmo";
+import { numeroLivreParaCampanha, podeMandarAgora, proximaTentativa, type RitmoDaCampanha } from "./ritmo";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { TEXTO_DA_EXCLUSAO } from "./tipos";
 
@@ -372,6 +373,7 @@ async function rodarUmaCampanha(
   // ─── O RODÍZIO: qual número fala com esta pessoa ───
   const disponiveis: NumeroDisponivel[] = [];
   const knobsPorNumero = new Map<string, Awaited<ReturnType<typeof loadChannelKnobs>>>();
+  const limitePorNumero = new Map<string, number | null>();
   for (const sessionId of numeros) {
     const k =
       sessionId === campanha.channel_session_id
@@ -389,6 +391,7 @@ async function rodarUmaCampanha(
     // Número fora do ar não entra no rodízio: mandar por ele seria fabricar uma
     // mensagem presa em `sending` que o recovery depois marca como falha.
     if (!linha || linha.status !== "WORKING") continue;
+    limitePorNumero.set(sessionId, linha.daily_message_limit ?? null);
 
     const estadoDoNumero = await loadPacingState(pool, campanha.organization_id, sessionId, {
       now: agora,
@@ -407,7 +410,7 @@ async function rodarUmaCampanha(
         linha.daily_message_limit === null
           ? null
           : Math.max(0, linha.daily_message_limit - estadoDoNumero.sentToday),
-      podeAgora: decisao.allow,
+      podeAgora: numeroLivreParaCampanha(decisao, estadoDoNumero.lastSentAt, agora, k.knobs),
       ultimoEnvio: estadoDoNumero.lastSentAt,
     });
   }
@@ -419,7 +422,58 @@ async function rodarUmaCampanha(
     return { enviadas: 0, pulados: 0, concluidas: 0, detalhe: "canal:sem_numero_livre" };
   }
   const sessionEscolhida = escolha.sessionId;
-  const knobs = knobsPorNumero.get(sessionEscolhida)!.knobs;
+  const knobsDoEscolhido = knobsPorNumero.get(sessionEscolhida)!;
+  const knobs = knobsDoEscolhido.knobs;
+
+  // ─── A vez do número: o MESMO lock da cadeia de envio do agente ───
+  //
+  // Adaptação deste fork. `runBeforeSend` (lib/agent-engine/guardrails/
+  // before-send.ts) serializa todo envio do agente por número com
+  // `pg_advisory_xact_lock(hashtext(channel_session_id))`; a campanha pega o
+  // MESMO lock, relê o `pacing_ledger` sob ele e só então envia e registra.
+  // Sem isso, agente e campanha (ou duas rodadas sobrepostas) leriam o mesmo
+  // "último envio" e falariam pelo número com menos de 5 s entre si.
+  // ponytail: o lock fica retido durante o envio ao WAHA, como no agente —
+  // aceitável num envio por número por rodada.
+  const conexao = await pool.connect();
+  try {
+    await conexao.query("begin");
+    await conexao.query("select pg_advisory_xact_lock(hashtext($1))", [sessionEscolhida]);
+    const agoraSobLock = new Date(Math.max(agora.getTime(), Date.now()));
+    const estadoSobLock = await loadPacingState(conexao, campanha.organization_id, sessionEscolhida, {
+      now: agoraSobLock,
+      timezone: knobs.timezone,
+      numberActivatedAt: knobsDoEscolhido.numberActivatedAt,
+    });
+    const decisaoSobLock = decidePacing({
+      now: agoraSobLock,
+      knobs,
+      state: estadoSobLock,
+      crmDailyLimit: limitePorNumero.get(sessionEscolhida) ?? null,
+    });
+    if (!numeroLivreParaCampanha(decisaoSobLock, estadoSobLock.lastSentAt, agoraSobLock, knobs)) {
+      return { enviadas: 0, pulados: 0, concluidas: 0, detalhe: "canal:ritmo_do_numero" };
+    }
+    return await enviarSobOLock(admin, conexao, campanha, alvo, sessionEscolhida, knobs.timezone, escolha.motivo, agora);
+  } finally {
+    // Sem efeito a registrar, o commit só solta o lock. Se algo falhou dentro
+    // da transação, o commit vira rollback e o lock sai do mesmo jeito.
+    await conexao.query("commit").catch(() => undefined);
+    conexao.release();
+  }
+}
+
+async function enviarSobOLock(
+  admin: SupabaseClient,
+  conexao: pg.PoolClient,
+  campanha: CampanhaRow,
+  alvo: DestinatarioRow,
+  sessionEscolhida: string,
+  fuso: string,
+  motivoDoNumero: string,
+  agora: Date,
+): Promise<{ enviadas: number; pulados: number; concluidas: number; detalhe: string }> {
+  const contato = alvo.contacts;
 
   // ─── O envio ───
   // O id da mensagem nasce AQUI, e não do insert: com ele, o destinatário já
@@ -445,7 +499,7 @@ async function rodarUmaCampanha(
   const corpo = renderizar(
     congelado,
     { nome: nomeDoContato(contato) },
-    { agora, fuso: knobs.timezone },
+    { agora, fuso },
   ).texto;
 
   try {
@@ -490,7 +544,9 @@ async function rodarUmaCampanha(
         },
       } as Parameters<typeof sendMessageHandler>[2],
     );
-    await recordSend(pool, campanha.organization_id, sessionEscolhida, agora);
+    // Sob o lock e com a hora REAL do envio: é este registro que a próxima
+    // decisão (do agente ou da campanha) lê como "último envio do número".
+    await recordSend(conexao, campanha.organization_id, sessionEscolhida, new Date());
 
     // O desfecho vem do ESTADO da mensagem, nunca da ausência de exceção — o
     // handler marca `failed` e devolve normalmente.
@@ -518,7 +574,7 @@ async function rodarUmaCampanha(
       enviadas: falhou ? 0 : 1,
       pulados: 0,
       concluidas: 0,
-      detalhe: `enviado:${status ?? "?"}:${escolha.motivo}`,
+      detalhe: `enviado:${status ?? "?"}:${motivoDoNumero}`,
     };
   } catch (err) {
     logger.warn("[campanha] envio falhou", { campanha: campanha.id, destinatario: alvo.id });
