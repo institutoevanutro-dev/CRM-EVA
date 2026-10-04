@@ -17,6 +17,8 @@ import {
 
 interface Props {
   message: Message;
+  /** A bolha casa com a busca dentro da conversa. */
+  searchMatch?: boolean;
   debugCitations?: boolean;
   /** Escolher esta mensagem para responder "em cima" dela. */
   onResponder?: (m: Message) => void;
@@ -50,6 +52,7 @@ function AckIndicator({ status, t }: { status: string; t: (texto: string) => str
 
 export function MessageBubble({
   message,
+  searchMatch = false,
   debugCitations,
   onResponder,
   citada,
@@ -113,6 +116,7 @@ export function MessageBubble({
 
   return (
     <div
+      data-search-match={searchMatch || undefined}
       className={cn(
         "group flex w-full min-w-0 items-center gap-1 px-4 py-1",
         isOutbound ? "justify-end" : "justify-start",
@@ -154,6 +158,8 @@ export function MessageBubble({
         </button>
       )}
       <div
+        // Identidade, não aparência: specs contam bolhas por este id, não pela classe.
+        data-testid="message-bubble"
         className={cn(
           "max-w-[75%] min-w-0 text-sm",
           isBareSticker
@@ -165,6 +171,9 @@ export function MessageBubble({
                   : "rounded-bl-sm bg-muted text-foreground",
               ),
           isFailed && "border border-destructive",
+          // A marca da busca é ANEL, não cor de fundo: o fundo já diz de quem é
+          // a mensagem, e trocá-lo apagaria essa leitura justo na bolha achada.
+          searchMatch && "ring-2 ring-foreground ring-offset-2 ring-offset-background",
         )}
       >
         {/*

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useContactList } from "@/hooks/contacts/useContactList";
 import { ContactsTable } from "@/components/contacts/ContactsTable";
+import { PontoDaEtiqueta } from "@/components/tags/PontoDaEtiqueta";
 import { NewContactDialog } from "@/components/contacts/NewContactDialog";
 import { ImportContactsDialog } from "@/components/contacts/ImportContactsDialog";
 import { TAG_DE_CLIENTE } from "@/lib/contacts/cliente";
@@ -169,6 +170,7 @@ export function ContactsListClient() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" disabled={tagOptions.length === 0}>
+              {tags[0] ? <PontoDaEtiqueta tag={tags[0]} className="mr-2" /> : null}
               {/* Resumo, e não a lista inteira: o gatilho tem a largura do filtro de
                   origem ao lado. Uma etiqueta mostra o nome; duas mostram a
                   primeira e o resto em contagem. */}
@@ -226,6 +228,7 @@ export function ContactsListClient() {
                 }}
                 onSelect={(e) => e.preventDefault()}
               >
+                <PontoDaEtiqueta tag={tagOption} className="mr-2" />
                 {tagOption}
               </DropdownMenuCheckboxItem>
             ))}

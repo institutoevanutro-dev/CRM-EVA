@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
-import { Badge } from "@/components/ui/badge";
+import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X, Plus } from "@/lib/ui/icons";
@@ -50,8 +50,7 @@ export function ConversationTagsEditor({ conversationId, orgId, tags }: Props) {
       <div className="mt-2 flex flex-wrap gap-1">
         {tags.length > 0 ? (
           tags.map((tag) => (
-            <Badge key={tag} variant="secondary" className="h-5 gap-1 px-1.5 text-[10px]">
-              {tag}
+            <ChipDeEtiqueta key={tag} tag={tag} className="h-5 gap-1 px-1.5 text-[10px]">
               <button
                 type="button"
                 onClick={() => remove(tag)}
@@ -61,7 +60,7 @@ export function ConversationTagsEditor({ conversationId, orgId, tags }: Props) {
               >
                 <X size={10} weight="bold" aria-hidden />
               </button>
-            </Badge>
+            </ChipDeEtiqueta>
           ))
         ) : (
           <span className="text-xs text-muted-foreground">{t("Sem tags.")}</span>
