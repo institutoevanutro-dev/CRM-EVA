@@ -66,6 +66,13 @@ export const CANONICAL_LOST_REASONS = [
   "cancelled_by_customer",
   "payment_failed",
   "other",
+  /**
+   * Motivo do SISTEMA para quem respondeu PARAR (migration 0310, portado do
+   * DeskcommCRM PR 2049): a ingestão fecha sozinha todo negócio aberto do
+   * contato com ele. Não é `requested_by_customer` porque pedir silêncio não é
+   * cancelar. CONTA como perda — é oportunidade que foi embora.
+   */
+  "opted_out_of_messages",
 ] as const;
 export type CanonicalLostReason = (typeof CANONICAL_LOST_REASONS)[number];
 

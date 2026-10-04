@@ -30363,6 +30363,43 @@ update public.lead_state l set
 
 notify pgrst, 'reload schema';
 
+-- ---- motivo de perda de quem respondeu PARAR (migration 0310) ----
+-- Portado do DeskcommCRM PR 2049. `opted_out_of_messages` entra no array
+-- canônico de `fn_validate_lost_reason_required`: a ingestão fecha como perdido
+-- todo negócio aberto de quem pediu para não receber mensagens. Corpo IDÊNTICO
+-- ao da migration 0310; `create or replace`, re-aplicável, sem dado a curar.
+create or replace function public.fn_validate_lost_reason_required() returns trigger
+    language plpgsql
+    set search_path to 'public', 'pg_temp'
+    as $$
+declare
+  v_canonical text[] := array['requested_by_customer','price','no_response','product_unavailable',
+                              'cancelled_by_store','cancelled_by_customer','payment_failed','other',
+                              'opted_out_of_messages'];
+  v_pipeline_extra text[];
+begin
+  if new.status = 'lost' then
+    if new.lost_reason is null or length(new.lost_reason) = 0 then
+      raise exception 'lost_reason_required' using errcode = '22023';
+    end if;
+
+    select coalesce(
+      array(select jsonb_array_elements_text(settings->'lost_reasons')), '{}'::text[]
+    ) into v_pipeline_extra
+    from public.crm_pipelines where id = new.pipeline_id;
+
+    if not (new.lost_reason = any (v_canonical) or new.lost_reason = any (v_pipeline_extra)) then
+      raise exception 'lost_reason_invalid: %', new.lost_reason using errcode = '22023';
+    end if;
+  end if;
+  return new;
+end$$;
+
+-- Função de trigger: o EXECUTE não é conferido no disparo, então tirar de
+-- public/anon não muda quem consegue perder um negócio — só fecha a RPC.
+revoke execute on function public.fn_validate_lost_reason_required() from public, anon;
+grant execute on function public.fn_validate_lost_reason_required() to authenticated, service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
