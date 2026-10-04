@@ -54,6 +54,15 @@ export const KNOB_BOUNDS = {
   hourEnd: 24,
 } as const;
 
+/**
+ * Piso de intervalo da CAMPANHA por número (CLAUDE.md, anti-banimento:
+ * "Campanha 1 msg/5s"). Vale por cima do `throttleMs` do canal — quem baixa o
+ * throttle do número para responder rápido não acelera disparo em massa — e o
+ * jitter do canal é somado a ele, porque intervalo fixo é assinatura de bot.
+ * Lido por `numeroLivreParaCampanha` (`lib/campanhas/ritmo.ts`).
+ */
+export const CAMPAIGN_MIN_GAP_MS = 5_000;
+
 export const PACING_DEFAULTS: PacingKnobs = {
   throttleMs: 1200, // 1 msg / 1,2s
   jitterMaxMs: 800,

@@ -102,6 +102,7 @@ beforeAll(() => {
       v_agent uuid;
       v_version uuid;
       v_boundary jsonb;
+      v_camp uuid;
     begin
       foreach v_org in array array['${ORG_A}'::uuid, '${ORG_B}'::uuid] loop
         select id into v_sess from public.channel_sessions where organization_id = v_org limit 1;
@@ -265,6 +266,38 @@ beforeAll(() => {
               'auth-rls'
             );
         end if;
+
+        -- migration 0316 (0374/0375 no original) -- a campanha e quem ela alcancou. A tabela
+        -- campaigns NAO entra na lista de TABLES porque nao tem FK para
+        -- contacts; as duas que guardam pessoa, sim. channel_session_id e
+        -- obrigatorio e reusa a sessao que esta semente ja criou.
+        if not exists (select 1 from public.campaigns where organization_id = v_org) then
+          -- um id por ORGANIZACAO: o loop roda para as duas, e um uuid sorteado
+          -- na declaracao seria o MESMO nas duas voltas (campaigns_pkey).
+          v_camp := gen_random_uuid();
+          insert into public.campaigns
+            (id, organization_id, name, channel_session_id, base_legal, lia_ref)
+            values (v_camp, v_org, 'RLS invariant campanha', v_sess,
+                    'legitimate_interest', 'LIA-RLS-INVARIANTE');
+
+          insert into public.campaign_recipients
+            (organization_id, campaign_id, contact_id, recipient_address, rendered_body)
+            values (v_org, v_camp, v_contact, '+5500000000000', 'RLS invariant mensagem');
+
+          insert into public.campaign_suppressions
+            (organization_id, contact_id, recipient_address_hash, address_tail, reason)
+            values (v_org, v_contact, md5(v_org::text || 'rls-invariante'), '0000', 'RLS invariant');
+
+          -- o texto salvo e o pool de numeros da campanha: as duas sao
+          -- tenant-aware e entram na lista abaixo pelo mesmo motivo.
+          insert into public.campaign_templates
+            (organization_id, name, body)
+            values (v_org, 'RLS invariant modelo', 'RLS invariant corpo');
+
+          insert into public.campaign_channel_sessions
+            (organization_id, campaign_id, channel_session_id)
+            values (v_org, v_camp, v_sess);
+        end if;
       end loop;
     end
     $seed$;
@@ -375,6 +408,14 @@ export const TABLES = [
   // natural seria afrouxar a policy para caber no molde. A prova dela vive em
   // `tests/invariants/historico-de-captacao-rls.test.ts`, que mede as duas
   // direções MAIS o gate de papel (o `viewer` que não lê o formulário).
+  // migration 0316 (0374/0375 no original) — a campanha guarda o que foi DITO à pessoa
+  // (`rendered_body`) e o endereço para onde foi. Entram aqui no MESMO commit
+  // da migration, como a nota acima exige.
+  "campaign_recipients",
+  "campaign_suppressions",
+  "campaigns",
+  "campaign_templates",
+  "campaign_channel_sessions",
 ] as const;
 
 describe("RLS tenant isolation (fn_user_org_ids pattern)", () => {
