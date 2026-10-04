@@ -3362,6 +3362,18 @@ export const DICIONARIO: Traducoes = {
   "Abrir no Instagram": {
     es: "Abrir en Instagram",
   },
+  "Resultados nas mensagens carregadas": {
+    es: "Resultados en los mensajes cargados",
+  },
+  "Buscar nesta conversa": {
+    es: "Buscar en esta conversación",
+  },
+  "Buscar nas mensagens carregadas": {
+    es: "Buscar en los mensajes cargados",
+  },
+  "Fechar busca": {
+    es: "Cerrar búsqueda",
+  },
   "Muitas imagens enviadas. Tente de novo em uma hora.": {
     es: "Demasiadas imágenes enviadas. Inténtalo de nuevo en una hora.",
   },

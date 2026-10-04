@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { JanelaSelo } from "@/components/inbox/JanelaSelo";
 import { capabilitiesOf } from "@/lib/channels/capabilities";
 import type { ChannelProvider } from "@/lib/channels/types";
-import { InstagramLogo, Phone, ArrowRight } from "@/lib/ui/icons";
+import { InstagramLogo, Phone, ArrowRight, MagnifyingGlass } from "@/lib/ui/icons";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useReleaseConversation } from "@/hooks/inbox/useReleaseConversation";
@@ -30,6 +30,13 @@ import { phoneForDisplay } from "@/lib/channels/phone-variants";
 
 interface Props {
   conversation: ConversationWithContact;
+  /**
+   * A busca DENTRO da conversa: abre um campo que filtra só as mensagens já
+   * carregadas. O ref devolve o foco a este botão quando o campo fecha.
+   */
+  onBuscar?: () => void;
+  buscaAberta?: boolean;
+  botaoBuscaRef?: RefObject<HTMLButtonElement | null>;
 }
 
 /**
@@ -58,7 +65,7 @@ const STATUS_LABEL: Record<string, string> = {
   archived: "Arquivada",
 };
 
-export function ConversationHeader({ conversation }: Props) {
+export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoBuscaRef }: Props) {
   const t = useT();
   const { user } = useAuth();
   const claim = useClaimConversation();
@@ -234,6 +241,22 @@ export function ConversationHeader({ conversation }: Props) {
           barra pode encolher e quebrar internamente, e os botões continuam
           todos visíveis e clicáveis — só que em duas linhas quando preciso. */}
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        {/* Primeira da barra e só ícone: é ferramenta de LEITURA, não ação de
+            atendimento, e não muda de lugar com o estado da conversa. */}
+        {onBuscar && (
+          <Button
+            ref={botaoBuscaRef}
+            size="sm"
+            variant="ghost"
+            className="w-11 px-0 lg:w-8"
+            onClick={onBuscar}
+            aria-label={t("Buscar nesta conversa")}
+            title={t("Buscar nesta conversa")}
+            aria-expanded={buscaAberta}
+          >
+            <MagnifyingGlass size={16} aria-hidden />
+          </Button>
+        )}
         {isOpen && (
           <Button
             size="sm"
