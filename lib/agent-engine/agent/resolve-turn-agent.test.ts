@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { resolveTurnAgent } from './resolve-turn-agent';
+import { resolveConversationTurn, resolveTurnAgent } from './resolve-turn-agent';
 import type { PublishedAgentConfig } from './agent-config';
 import type { LoadedRouter } from './router-config';
 
@@ -296,5 +296,58 @@ describe('resolveTurnAgent', () => {
     expect(out.config).toBeNull();
     expect(out.outcome).toBe('no_match');
     expect(warn).toHaveBeenCalled();
+  });
+});
+
+describe('resolveConversationTurn — áudio transcrito chega ao classificador', () => {
+  type SignalRowMock = {
+    body: string | null;
+    type?: string;
+    media_url?: string | null;
+    media_storage_path?: string | null;
+    media_derived_text?: string | null;
+  };
+  /** Banco falso: conversa com agente sticky e a última inbound. */
+  function fakeDb(signalRow: SignalRowMock | null) {
+    return {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes('from conversations')) return { rows: [{ active_ai_agent_id: 'agent-vendas', active_intent: 'vendas' }] };
+        return { rows: signalRow ? [{ type: 'text', media_url: null, media_storage_path: null, media_derived_text: null, ...signalRow }] : [] };
+      }),
+    };
+  }
+  function deps() {
+    const classifyIntent = vi.fn().mockResolvedValue({ intentName: 'vendas', confidence: 0.9 });
+    return {
+      classifyIntent,
+      deps: makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(router({ sticky: true })),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        classifyIntent,
+      }),
+    };
+  }
+
+  it('áudio transcrito classifica: o sinal carrega a transcrição', async () => {
+    const db = fakeDb({ body: null, type: 'audio', media_storage_path: 'p0', media_derived_text: 'Que dia você teria vaga para a consulta?' });
+    const { classifyIntent, deps: d } = deps();
+    await resolveConversationTurn(db as never, {} as never, { ...baseInput, inbound: true }, d);
+    expect(classifyIntent).toHaveBeenCalled();
+    expect(classifyIntent.mock.calls[0]![2].signal).toContain('Que dia você teria vaga para a consulta?');
+  });
+
+  it('áudio ainda sem transcrição mantém o agente sticky: o classificador nem roda', async () => {
+    const db = fakeDb({ body: null, type: 'audio', media_storage_path: 'p0' });
+    const { classifyIntent, deps: d } = deps();
+    const r = await resolveConversationTurn(db as never, {} as never, { ...baseInput, inbound: true }, d);
+    expect(classifyIntent).not.toHaveBeenCalled();
+    expect(r.outcome).toBe('sticky');
+  });
+
+  it('texto digitado não muda: o sinal é o próprio corpo', async () => {
+    const db = fakeDb({ body: 'Quero marcar uma consulta' });
+    const { classifyIntent, deps: d } = deps();
+    await resolveConversationTurn(db as never, {} as never, { ...baseInput, inbound: true }, d);
+    expect(classifyIntent.mock.calls[0]![2].signal).toBe('Quero marcar uma consulta');
   });
 });

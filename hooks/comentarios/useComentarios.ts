@@ -1,5 +1,5 @@
 "use client";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
@@ -114,6 +114,31 @@ export function usePublicacoesDoInstagram(canal: string | null) {
         )
         .then((r) => r.data.publicacoes),
   });
+}
+
+/**
+ * Capa e legenda de cada vídeo dos perfis conectados, por id, para a fila
+ * mostrar o vídeo em vez do número. Reusa a mesma consulta (e o mesmo cache) do
+ * formulário de regra. Vídeo antigo, fora das publicações recentes, não entra:
+ * a fila cai no número.
+ */
+export function usePublicacoesDosPerfis(canais: { id: string }[] | undefined): Map<string, PublicacaoDoCanal> {
+  const consultas = useQueries({
+    queries: (canais ?? []).map((c) => ({
+      queryKey: ["instagram-publicacoes", c.id],
+      staleTime: 5 * 60_000,
+      retry: false,
+      queryFn: () =>
+        apiClient
+          .get<{ data: { publicacoes: PublicacaoDoCanal[] } }>(
+            `/api/v1/comentarios/publicacoes?canal=${encodeURIComponent(c.id)}`,
+          )
+          .then((r) => r.data.publicacoes),
+    })),
+  });
+  const porId = new Map<string, PublicacaoDoCanal>();
+  for (const q of consultas) for (const p of q.data ?? []) porId.set(p.id, p);
+  return porId;
 }
 
 /** As frases de abertura de conversa no Direct, mais o padrão para a tela mostrar. */

@@ -257,6 +257,8 @@ test("regra casada: o Direct sai, a frase pública é publicada, e a aba mostra 
   const item = page.locator("li", { hasText: TEXTO_DO_COMENTARIO_DA_REGRA });
   await expect(item).toHaveCount(1);
   await expect(item.getByText(/Motivo:/)).toHaveCount(0);
+  // A fila mostra o vídeo pela legenda (lista do perfil), não pelo número.
+  await expect(item.getByText(`Post antigo ${SUFIXO}`)).toBeVisible();
   await expect(item.getByRole("button", { name: /Publicar/i })).toHaveCount(0);
   await page.screenshot({ path: path.join(EVIDENCIA, "01-regra-atendida.png"), fullPage: true });
 });

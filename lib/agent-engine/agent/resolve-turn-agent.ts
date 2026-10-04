@@ -67,6 +67,7 @@ import {
   type PublishedAgentConfig,
 } from './agent-config';
 import { classifyIntent } from './intent-classifier';
+import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-context';
 
 export interface TurnAgentResolution {
   config: PublishedAgentConfig | null; // null ⇒ turno segue no genérico (comportamento atual)
@@ -261,12 +262,21 @@ export async function resolveConversationTurn(
     'select active_ai_agent_id,active_intent from conversations where organization_id=$1 and id=$2',
     [input.tenantId, input.conversationId],
   );
-  const signal = input.inbound
-    ? (await db.query<{ body: string | null }>(
-        "select body from messages where organization_id=$1 and conversation_id=$2 and direction='inbound' order by sent_at desc,created_at desc,id desc limit 1",
+  const signalRow = input.inbound
+    ? (await db.query<CorpoDaMensagemRow>(
+        "select body,type,media_url,media_storage_path,media_derived_text from messages where organization_id=$1 and conversation_id=$2 and direction='inbound' order by sent_at desc,created_at desc,id desc limit 1",
         [input.tenantId, input.conversationId],
-      )).rows[0]?.body ?? null
+      )).rows[0] ?? null
     : null;
+  // signal = o texto EFETIVO do turno, composto pelo mesmo caminho do agente
+  // (#617): o que o cliente digitou OU a transcrição do áudio já pronta. Lido
+  // cru, um áudio (body NULL) virava `null` → regra 6, e a conversa ficava presa
+  // no agente sticky sem o classificador rodar. Áudio AINDA sem transcrição
+  // segue como `null` (mantém o agente atual).
+  const signal =
+    signalRow !== null && (signalRow.body !== null || (signalRow.media_derived_text ?? '').trim() !== '')
+      ? corpoDaMensagem(signalRow)
+      : null;
   return resolveTurnAgent(db, llmCfg, {
     ...input,
     signal,
