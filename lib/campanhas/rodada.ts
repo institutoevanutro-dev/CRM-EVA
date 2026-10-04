@@ -38,7 +38,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
-import { decidePacing } from "@/lib/agent-engine/pacing/engine";
+import { decidePacing, dayStartInTz } from "@/lib/agent-engine/pacing/engine";
 import { loadChannelKnobs, loadPacingState, recordSend } from "@/lib/agent-engine/pacing/store";
 import { beginServiceAtOrigin } from "@/lib/atendimento/origem";
 import { logger } from "@/lib/logger";
@@ -302,12 +302,16 @@ async function rodarUmaCampanha(
     tetoDiario: campanha.teto_diario,
     tetoHorario: campanha.teto_horario,
   };
-  const estado = await estadoDeEnvio(admin, campanha.id, agora);
   const numeros = await numerosDaCampanha(admin, campanha);
   // O fuso da janela da campanha é o do número PRINCIPAL: ela é uma decisão da
   // campanha, e precisa de um relógio só — três números em fusos diferentes
   // fariam a mesma campanha abrir e fechar a janela três vezes.
   const knobsDoPrincipal = await loadChannelKnobs(pool, campanha.organization_id, campanha.channel_session_id);
+  // ⚠️ O estado do ritmo é lido DEPOIS dos knobs porque precisa do MESMO fuso
+  // que a janela usa. Com `setUTCHours`, o "dia" virava 21h no horário de
+  // Brasília — DENTRO da janela de envio —, e uma campanha que já tinha batido
+  // o teto diário voltava a enviar com uma hora de janela pela frente.
+  const estado = await estadoDeEnvio(admin, campanha.id, agora, knobsDoPrincipal.knobs.timezone);
   const doRitmo = podeMandarAgora(ritmo, estado, agora, knobsDoPrincipal.knobs.timezone);
   if (!doRitmo.pode) {
     // Espera não é falha: grava QUANDO tentar de novo para a fila não ser varrida
@@ -571,13 +575,15 @@ async function numeroDoHistorico(
 }
 
 /** Quantas saíram hoje e na última hora, mais o último envio — o estado do ritmo. */
-async function estadoDeEnvio(
+export async function estadoDeEnvio(
   admin: SupabaseClient,
   campanhaId: string,
   agora: Date,
+  fuso: string,
 ): Promise<{ ultimoEnvio: Date | null; enviadasHoje: number; enviadasNaUltimaHora: number }> {
-  const inicioDoDia = new Date(agora);
-  inicioDoDia.setUTCHours(0, 0, 0, 0);
+  // O dia do teto diário é o dia DO CLIENTE, como o resto do ritmo. Ver a nota
+  // no chamador: `setUTCHours` fazia o dia virar 21h em `America/Sao_Paulo`.
+  const inicioDoDia = dayStartInTz(agora, fuso);
   const { data } = await admin
     .from("campaign_recipients")
     .select("sent_at")
