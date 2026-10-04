@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidCpf } from "@/lib/schemas/contacts";
 import { fail } from "@/lib/api/wrappers";
 import { validateBearerToken, ensureScope, McpAuthError } from "@/lib/mcp/auth";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
@@ -7,7 +8,16 @@ const birthdate = z.union([z.null(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/).ref
   !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value && value <= new Date().toISOString().slice(0, 10),
 )]);
 const phone = z.union([z.literal(""), z.string().regex(/^\+[1-9]\d{7,14}$/)]);
+export const addressSchema = z.object({
+  cep:z.string().trim().regex(/^(?:\d{5}-?\d{3})?$/).transform(v=>v.replace('-','')).optional(),
+  logradouro:z.string().trim().max(200).optional(),numero:z.string().trim().max(30).optional(),
+  complemento:z.string().trim().max(100).optional(),bairro:z.string().trim().max(100).optional(),
+  cidade:z.string().trim().max(100).optional(),
+  uf:z.union([z.literal(''),z.enum(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'])]).optional(),
+}).strict();
 const profile = z.object({
+  cpf:z.string().trim().max(18).refine(v=>!v||(/^[\d.\-\s]+$/.test(v)&&isValidCpf(v))).transform(v=>v.replace(/\D/g,'')).optional(),
+  address:addressSchema.optional(),
   name: z.string().trim().min(2).max(200),
   birthdate,
   phone_number: phone,
@@ -31,8 +41,10 @@ export const patchContactSchema = profile.extend({
   expected_updated_at: z.iso.datetime({ offset: true }),
 }).strict();
 
-export function contactForProntuario(contact: { id: string; name: string | null; display_name: string | null; birthdate: string | null; phone_number: string | null; email: string | null; updated_at: string }) {
+export function contactForProntuario(contact: { id: string; name: string | null; display_name: string | null; birthdate: string | null; phone_number: string | null; email: string | null; updated_at: string; cpf_encrypted?:string|null;custom_fields?:Record<string,unknown>|null }) {
   return {
+    cpf_available:!!contact.cpf_encrypted,
+    address:typeof contact.custom_fields?.endereco==="string"?contact.custom_fields.endereco:"",
     id: contact.id,
     name: nomeDoContato(contact) ?? "",
     birthdate: contact.birthdate,
@@ -68,7 +80,7 @@ export function crmOperationError(message: string, code: string | undefined, req
   if (message.includes("prontuario_token_invalid")) return fail("forbidden", "Credencial sem acesso.", 403, { requestId });
   if (message.includes("prontuario_contact_unavailable") || message.includes("prontuario_link_unavailable") || code === "23503")
     return fail("not_found", "Contato ou vínculo indisponível.", 404, { requestId });
-  if (message.includes("prontuario_revision_conflict") || message.includes("prontuario_link_conflict") || message.includes("prontuario_request_conflict") || code === "23505")
+  if (message.includes("prontuario_demographics_conflict") || message.includes("prontuario_revision_conflict") || message.includes("prontuario_link_conflict") || message.includes("prontuario_request_conflict") || code === "23505")
     return fail("conflict", "Cadastro ou revisão mudou. Revise antes de tentar novamente.", 409, { requestId });
   if (message.includes("prontuario_input_invalid") || code === "23514" || code === "22007")
     return fail("validation_failed", "Cadastro inválido.", 422, { requestId });

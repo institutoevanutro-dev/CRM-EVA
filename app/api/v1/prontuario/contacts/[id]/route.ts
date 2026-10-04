@@ -18,7 +18,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
   if (!(await checkRateLimit(`prontuario-contacts-read:${authorized.auth.organizationId}:${authorized.auth.apiTokenId}`, 60, 60)).allowed)
     return fail("rate_limited", "Tente novamente em um minuto.", 429, { requestId });
   const { data, error } = await createAdminClient().from("contacts")
-    .select("id,name,display_name,birthdate,phone_number,email,updated_at")
+    .select("id,name,display_name,birthdate,phone_number,email,updated_at,cpf_encrypted,custom_fields")
     .eq("organization_id", authorized.auth.organizationId)
     .eq("id", id.data).eq("is_anonymized", false).is("is_merged_into", null).maybeSingle();
   if (error) return fail("internal_error", "Consulta indisponível.", 503, { requestId });
@@ -45,7 +45,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
   if (!(await checkRateLimit(`prontuario-contacts-write:${auth.organizationId}:${auth.apiTokenId}`, 30, 60)).allowed)
     return fail("rate_limited", "Tente novamente em um minuto.", 429, { requestId });
   const input = parsed.data;
-  const { data, error } = await createAdminClient().rpc("fn_prontuario_patch_contact", {
+  const { data, error } = await createAdminClient().rpc("fn_prontuario_patch_contact_v2", {
     p_org: auth.organizationId,
     p_patient: input.source_patient_id,
     p_contact: id.data,
@@ -55,6 +55,8 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
     p_birth: input.birthdate,
     p_phone: input.phone_number,
     p_email: input.email,
+    p_cpf: input.cpf || null,
+    p_address: input.address ?? {},
     p_token: auth.apiTokenId,
   });
   if (error) return crmOperationError(error.message, error.code, requestId);
