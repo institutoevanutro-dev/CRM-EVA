@@ -8,6 +8,7 @@ import {
   useCriarRegraDeComentario,
   useDescartarComentario,
   useCanaisDoInstagram,
+  usePublicacoesDosPerfis,
 } from "@/hooks/comentarios/useComentarios";
 import { ListaDeComentarios } from "./ListaDeComentarios";
 import { FormularioDeRegra } from "./FormularioDeRegra";
@@ -29,6 +30,7 @@ export function ComentariosPainel() {
   const descartar = useDescartarComentario();
   const criarRegra = useCriarRegraDeComentario();
   const { data: canais } = useCanaisDoInstagram();
+  const publicacoes = usePublicacoesDosPerfis(canais);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [mostrarFrases, setMostrarFrases] = useState(false);
   const [mostrarPalavras, setMostrarPalavras] = useState(false);
@@ -98,6 +100,7 @@ export function ComentariosPainel() {
           onDescartar={(id) => descartar.mutate(id)}
           descartando={descartar.isPending ? (descartar.variables ?? null) : null}
           onNovaRegraParaMidia={abrirFormulario}
+          publicacoes={publicacoes}
         />
       )}
     </div>
