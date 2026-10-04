@@ -175,7 +175,7 @@ const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
       "com segurança sem medir o disparo de cada trigger.",
   },
   {
-    fn: "fn_vocabulario_de_tags_operar(uuid,text,text,text)",
+    fn: "fn_vocabulario_de_tags_operar(uuid,text,text,text,text)",
     razao:
       "POST app/api/v1/tags/vocabulario/route.ts chama com createClient da " +
       "sessão (a tela de Tags é manager+, com suporte de escrita e MFA). A " +
@@ -184,10 +184,15 @@ const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
       "organização e as ações add_tag de automation_rules numa transação só — é " +
       "essa atomicidade que impede o rename de deixar a regra do agente " +
       "apontando para o nome velho. " +
+      "A assinatura tem CINCO argumentos desde a 0315 (issue #1271): " +
+      "`p_cor text default null` para a ação `definir_cor`, que mexe só em " +
+      "organizations.settings.tags e sai antes dos laços (cor não mora nas " +
+      "linhas). " +
       "tests/invariants/tags-vocabulario.test.ts prova duas orgs com a MESMA " +
       "etiqueta (a de fora não é tocada), viewer recusado, anon sem EXECUTE, " +
       "junção 'vip'+'VIP' sem duplicata e exclusão que informa — sem apagar — a " +
-      "regra do agente.",
+      "regra do agente; tests/invariants/tags-cor-de-etiqueta.test.ts prova a " +
+      "cor.",
   },
 ];
 

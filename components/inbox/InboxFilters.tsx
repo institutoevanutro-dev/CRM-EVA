@@ -27,6 +27,7 @@ import {
   type ModoDeEtiqueta,
   marcadoresEscolhidos,
 } from "@/lib/inbox/marcador-da-conversa";
+import { PontoDaEtiqueta } from "@/components/tags/PontoDaEtiqueta";
 import { channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
@@ -424,6 +425,9 @@ export function InboxFilters({ value, onChange }: Props) {
                     )}
                     aria-label={t("Filtrar por tag")}
                   >
+                    {etiquetas[0] ? (
+                      <PontoDaEtiqueta tag={etiquetas[0]} className="mr-1.5" />
+                    ) : null}
                     {etiquetas.length === 0
                       ? t("Todas as tags")
                       : etiquetas.length === 1
@@ -472,7 +476,10 @@ export function InboxFilters({ value, onChange }: Props) {
                       onCheckedChange={() => alternaEtiqueta(tag)}
                       onSelect={(e) => e.preventDefault()}
                     >
-                      {tag}
+                      <span className="inline-flex items-center gap-2">
+                        <PontoDaEtiqueta tag={tag} />
+                        {tag}
+                      </span>
                     </DropdownMenuCheckboxItem>
                   ))}
                 </DropdownMenuContent>
