@@ -687,6 +687,11 @@ export const AUDIT_ACTIONS = [
   "resposta_pronta.updated",
   "resposta_pronta.config_changed",
   "resposta_pronta.embeddings_calculated",
+  // ── Sons dos avisos da Central (migration 0313) ─────────────────────────
+  // O arquivo de som que a organização escolheu para o pedido de pessoa — e a
+  // volta ao bipe do produto.
+  "settings.notification_sound_updated",
+  "settings.notification_sound_removed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
