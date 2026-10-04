@@ -647,6 +647,7 @@ jobs:
         i18n-espanhol-na-tela.spec.ts
         inbox-abas-espelham-o-comando.spec.ts
         moeda-da-organizacao.spec.ts
+        etapa-pela-conversa.spec.ts
         central-avisos-resolver-em-lote.spec.ts
         inbox-busca-e-filtros-dizem-a-verdade.spec.ts
         entrar-com-evalink.spec.ts
