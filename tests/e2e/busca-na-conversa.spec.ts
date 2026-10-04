@@ -191,8 +191,9 @@ test.describe("busca dentro da conversa", () => {
         viewport: window.innerWidth,
         botoes: filhos.length,
         fileiras: new Set(filhos.map((r) => Math.round(r.top + r.height / 2))).size,
-        lupaNaPrimeiraFileira:
-          Math.round(b.getBoundingClientRect().top) === Math.round(Math.min(...filhos.map((r) => r.top))),
+        // Primeira FILHA da barra: a barra deste fork centraliza botões de alturas
+        // diferentes, então comparar o topo do retângulo mede o alinhamento, não a posição.
+        lupaNaPrimeiraFileira: b.parentElement?.firstElementChild === b,
       };
     });
     console.info(`busca-na-conversa · barra de ações: ${JSON.stringify(barra)}`);

@@ -335,6 +335,7 @@ jobs:
         motivos-de-perda-do-funil.spec.ts
         importar-leads-planilha.spec.ts
         relatorio-de-atividades.spec.ts
+        relatorio-por-etiqueta.spec.ts
         qa-l12-inbox.spec.ts
         filtro-por-marcador-pela-tela.spec.ts
         qa-l12-troca-de-funil.spec.ts
@@ -646,7 +647,11 @@ jobs:
         i18n-espanhol-na-tela.spec.ts
         inbox-abas-espelham-o-comando.spec.ts
         moeda-da-organizacao.spec.ts
+<<<<<<< HEAD
         busca-na-conversa.spec.ts
+=======
+        etapa-pela-conversa.spec.ts
+>>>>>>> origin/main
         central-avisos-resolver-em-lote.spec.ts
         inbox-busca-e-filtros-dizem-a-verdade.spec.ts
         entrar-com-evalink.spec.ts
