@@ -554,7 +554,7 @@ export function AttendantsClient({ canManage }: Props) {
                       <TableCell>
                         {soAgenda ? (
                           <span
-                            className="text-xs text-muted-foreground"
+                            className="whitespace-nowrap text-xs text-muted-foreground"
                             title={t("Prestador de serviço não entra no roteamento de conversas.")}
                           >
                             {t("Fora do roteamento")}
