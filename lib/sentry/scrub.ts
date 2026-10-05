@@ -52,22 +52,60 @@ export function isSensitiveHeader(name: string): boolean {
 }
 
 /**
- * Telefone BR em qualquer grafia: `+55 (11) 9 8765-4321`, `(21) 3456-7890`,
- * `5511987654321`. A versão anterior (`\+?\d{2}\s?\d{4,5}-?\d{4}`) deixava
- * passar o DDD entre parênteses e cortava o E.164 no meio. As bordas
- * `(?<![\w-])`/`(?![\w-])` impedem casar dentro de UUID ou de data.
+ * Identificador de depuração reconhecido pela FORMA, não dado do titular: UUID
+ * (8-4-4-4-12 em hexadecimal) e hash/id em hexadecimal corrido de 32 ou mais
+ * (md5, sha1, sha256, id de requisição do provedor). Eles são separados do texto
+ * ANTES dos padrões de CPF e telefone, que por isso não precisam de borda de
+ * letra: com a borda, o número grudado no rótulo (`cpf12345678909`,
+ * `tel-11987654321`) saía inteiro; sem ela e sem esta separação, os padrões
+ * comeriam pedaço de UUID e — medido — de 597 em 5.000 sha256. O grupo de
+ * captura faz o `split` devolver o identificador nas posições ímpares.
+ */
+const IDENTIFICADOR = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,})/i;
+
+/**
+ * Telefone BR como se escreve: `+55 (11) 9 8765-4321`, `(21) 3456-7890`,
+ * `5511987654321`, e também SEM DDD (`98765-4321`, `3456-7890`), com hífen,
+ * ponto, espaço ou nada entre os blocos. Sem DDD o padrão é curto (8 dígitos), e
+ * as bordas `(?<![\w-])`/`(?![\w-])` são o que o tira de dentro de hash, de data
+ * e de nome de modelo (`…-sonnet-20241022`).
  */
 const TELEFONE =
-  /(?<![\w-])(?:\+?\d{2,3}[\s.-]?)?(?:\(\d{2}\)|\d{2})[\s.-]?(?:9[\s.-]?)?\d{4}[\s.-]?\d{4}(?![\w-])/g;
+  /(?<![\w-])(?:\+?\d{2,3}[\s.-]?)?(?:(?:\(\d{2}\)|\d{2})[\s.-]?)?(?:9[\s.-]?)?\d{4}[\s.-]?\d{4}(?![\w-])/g;
+
+/**
+ * O número com DDD GRUDADO num rótulo (`zap11987654321`, `tel-5511987654321`),
+ * que a borda de cima deixa passar. Só exige que o vizinho não seja outro
+ * dígito: um código numérico mais longo que um telefone fica inteiro, em vez de
+ * sair meio apagado (`[PHONE]2345`) — que não protege o titular nem deixa depurar.
+ */
+const TELEFONE_GRUDADO = /(?<!\d)(?:\+?55)?\d{2}\s?\d{4,5}-?\d{4}(?!\d)/g;
+
+/**
+ * CPF com qualquer separador entre os blocos (ponto, espaço, hífen ou nada):
+ * `123 456 789 09` e `123.456.789.09` também são CPF de quem digita rápido.
+ * Mesma borda só de dígito, pelo mesmo motivo.
+ */
+const CPF = /(?<!\d)\d{3}[.\s-]?\d{3}[.\s-]?\d{3}[.\s-]?\d{2}(?!\d)/g;
 
 export function scrubMessage(input: string): string {
   return input
-    // CPF formatado primeiro (a pontuação o distingue); 11 dígitos crus são
-    // ambíguos e caem em [PHONE] — redigidos de um jeito ou de outro.
-    .replace(/(?<![\w-])\d{3}\.\d{3}\.\d{3}-\d{2}(?![\w-])/g, "[CPF]")
+    // E-mail antes dos números: senão o telefone comia a parte numérica do
+    // endereço (`11987654321@…`) e o domínio seguia inteiro.
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[EMAIL]")
+    .split(IDENTIFICADOR)
+    .map((trecho, i) => (i % 2 === 1 ? trecho : apagarCpfETelefone(trecho)))
+    .join("");
+}
+
+function apagarCpfETelefone(trecho: string): string {
+  // Telefone primeiro: 11 dígitos crus são ambíguos (CPF ou celular) e caem em
+  // [PHONE] — redigidos de um jeito ou de outro. O CPF com pontuação não tem
+  // quatro dígitos seguidos, então nenhum padrão de telefone o alcança.
+  return trecho
     .replace(TELEFONE, "[PHONE]")
-    .replace(/(?<![\w-])\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?![\w-])/g, "[CPF]")
-    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[EMAIL]");
+    .replace(TELEFONE_GRUDADO, "[PHONE]")
+    .replace(CPF, "[CPF]");
 }
 
 /**
