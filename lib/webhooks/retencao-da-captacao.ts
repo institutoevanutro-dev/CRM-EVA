@@ -38,10 +38,40 @@
  * que escreveu `LEAD_CAPTURE_RETENTION_DAYS=1` descobriria pela ausência de
  * efeito — falha fechada na ação e fechada também na informação, que é o pior
  * dos dois mundos.
+ *
+ * ─── A ordem e o erro, na MESMA régua das podas irmãs (issue #1721) ─────────
+ *
+ * Esta poda nasceu no molde antigo e ficou nele em dois pontos, ambos medidos
+ * contra a décima poda do `data-retention`, que a casa já corrigiu no #1719:
+ *
+ *   1. o DELETE ia `.limit(lote)` SEM `order`. O PostgREST 12.2 recusa isso
+ *      com 400 PGRST109 (medido no v12.2.12 pelo mantenedor; com `order=id`
+ *      volta 200) — e, aqui, a recusa virava `apagadas: 0`. A ordem também é o
+ *      que torna a drenagem DETERMINÍSTICA: sem `order`, cada lote apaga um
+ *      subconjunto arbitrário, e a sequência de lotes deixa de ser repetível.
+ *      A coluna é `id`, ASCENDENTE — a mesma da décima poda, e pela mesma
+ *      razão: é a chave primária, logo a ordem é estável e o recorte é
+ *      repetível.
+ *
+ *      (CRM EvaLink, revisão do PR 125.) `order` + `limit` no DELETE só
+ *      conserta o PostgREST 12: o 13 tirou o recurso e ignora o `limit`. O
+ *      lote hoje sai de `lib/retencao/apagar-lote-vencido.ts`, que vale nas
+ *      duas versões;
+ *   2. o erro do DELETE era ENGOLIDO (`logger.warn` + `apagadas: 0`). O
+ *      `warn` é a evidência, não o aviso: a resposta do cron dizia "não havia
+ *      nada vencido", indistinguível de uma instalação em dia, e o único sinal
+ *      vivia num log dentro do contêiner, atrás de um `curl` que joga tudo
+ *      para /dev/null. Agora a falha SOBE, como em `drenar`
+ *      (`app/api/v1/cron/data-retention/route.ts`): quem chama involve a
+ *      captação num `try` próprio, escreve a linha `retention.sweep_run` com
+ *      `falhou: true` e responde 500. O que se perde é UMA rodada de um
+ *      expurgo — o que já foi apagado no banco não volta atrás, porque cada
+ *      lote fecha a própria transação.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
+import { apagarLoteVencido } from "@/lib/retencao/apagar-lote-vencido";
 import {
   interpretarRetencao,
   RETENCAO_CAPTACAO_DIAS_PADRAO,
@@ -83,24 +113,24 @@ export async function podarHistoricoDeCaptacao(
   // com este predicado em mente (migration 0174). Sem filtro de organização de
   // propósito: a poda varre pela ponta mais velha e não sabe escolher tenant —
   // é o que a torna incapaz de ser usada como apagador dirigido.
-  const { data, error } = await admin
-    .from("webhook_lead_captures")
-    .delete()
-    .lt("received_at", limite)
-    .select("id")
-    .limit(lote);
-
-  if (error) {
-    // Falha ABERTA na ação (o banco cresce um pouco mais) e ABERTA na
-    // informação: uma poda que falha em silêncio vira "o disco encheu e
-    // ninguém sabe por quê" seis meses depois.
-    logger.warn("[retencao-captacao] não consegui apagar o lote", {
-      detail: error.message.slice(0, 160),
-      dias_aplicados: dias,
-    });
-    return { apagadas: 0, temMais: false, diasAplicados: dias };
-  }
-
-  const apagadas = (data ?? []).length;
-  return { apagadas, temMais: apagadas >= lote, diasAplicados: dias };
+  // O lote sai de `apagarLoteVencido`, que não põe `limit` no DELETE: do
+  // PostgREST 13 em diante ele é ignorado e a rodada apagava o acumulado
+  // inteiro de uma vez (medido; o racional está no arquivo dela). A ordem
+  // segue a da décima poda do `data-retention`: `id` ascendente.
+  //
+  // A falha SOBE — o mesmo caminho de `drenar`
+  // (`app/api/v1/cron/data-retention/route.ts`). O `warn` que vivia aqui
+  // dizia a causa e devolvia `apagadas: 0`, que na resposta do cron é
+  // indistinguível de "não havia nada vencido": um banco que parou de aceitar
+  // o DELETE ficava indistinguível de um banco em dia, e o sinal morava num
+  // log de contêiner atrás de um `curl` que joga tudo para /dev/null. Quem
+  // chama pega a exceção num `try` PRÓPRIO — o que já foi apagado no arquivo
+  // forense não se perde com ela, cada lote fecha a sua transação — e
+  // responde 500 com a linha `falhou: true` na trilha.
+  const { apagadas, temMais } = await apagarLoteVencido(admin, "webhook_lead_captures", {
+    coluna: "received_at",
+    antesDe: limite,
+    lote,
+  });
+  return { apagadas, temMais, diasAplicados: dias };
 }

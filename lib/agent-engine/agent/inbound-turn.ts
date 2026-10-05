@@ -1038,7 +1038,8 @@ export interface InboundTurnKnobs {
    * Skills situacionais (F3-09): diretório onde os near-misses de matching viram
    * candidatos ao golden set (GOLDEN_CANDIDATES_DIR). Ausente = misses NÃO gravados (o
    * matching + injeção de corpo seguem valendo) — main.ts sempre o preenche pelo env;
-   * testes injetam um dir TEMP e nunca o golden real (freeze do tree).
+   * testes injetam um dir TEMP e nunca o golden real (freeze do tree). O arquivo leva
+   * rótulo e ponteiros, nunca o texto do lead.
    */
   goldenCandidatesDir?: string;
   /**
@@ -2470,7 +2471,6 @@ async function executarTurnoDoAgente(
         tenantId,
         leadId,
         jobId: liveJob().id,
-        signal: skillSignal,
         candidates: skillMatch.missCandidates,
       },
       runLog,
@@ -4106,7 +4106,6 @@ async function executarTurnoDoAgente(
           tenantId,
           leadId,
           jobId: liveJob().id,
-          signal: skillSignal,
           divergence: { suggested: stageSuggestion, confirmed: confirmedStage },
         },
         runLog,

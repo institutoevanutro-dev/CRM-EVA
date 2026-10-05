@@ -8,6 +8,215 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.4.0] — 2026-10-05
+
+### Adicionado
+
+- **Botão Desbloquear na ficha do contato que pediu para parar** Quem respondia PARAR, ou era bloqueado por engano, ficava bloqueado para
+  sempre: não recebia lembrete, follow-up nem resposta, e não havia como desfazer
+  pela tela. Agora a ficha do contato bloqueado mostra o botão Desbloquear.
+
+  Só administrador vê o botão. Antes de desbloquear, o sistema pede confirmação e
+  explica o que volta a acontecer. Quem usa a verificação em duas etapas precisa
+  ter entrado com o código nesta sessão. O desbloqueio fica registrado na
+  auditoria, com o nome de quem fez.
+
+  Desbloquear não reabre o negócio que foi fechado como perdido quando o contato
+  pediu para parar: se for o caso, reabra à mão.
+
+  Portado do projeto original (DeskcommCRM, de @Opp4System e @melgarafael).
+
+### Alterado
+
+- **Sai a rota de Produtos para o financeiro** A rota `GET /api/v1/integrations/financeiro/products`, que entrou na 3.1.0, foi
+  removida. Desde 04/10/2026 o financeiro recebe os serviços só do PrecificaEva e
+  deixou de chamá-la; o caminho também saiu da lista dos que dispensam sessão de
+  navegador. A exportação de contato para o financeiro e os totais para o painel
+  de marketing seguem como estavam.
+
+### Corrigido
+
+- **A tela Execuções deixa de poder mostrar a chave do provedor de IA numa mensagem de erro** Quando um provedor de IA recusava uma chamada e repetia a chave de acesso no texto do
+  erro, a tela IA › Execuções podia mostrar essa chave inteira. O filtro que deveria
+  trocá-la por `[CHAVE]` existia, mas nunca funcionou: um caractere invisível no lugar
+  errado fazia ele não reconhecer chave nenhuma (Anthropic, OpenAI, Google, OpenRouter,
+  nem o cabeçalho de autorização).
+
+  Agora a chave aparece como `[CHAVE]` nas falhas novas. As mensagens que já estavam
+  gravadas não são reescritas; se você suspeita que alguma chave apareceu ali, gere uma
+  nova no painel do provedor e troque em IA › Credenciais.
+
+- **CPF e telefone somem das mensagens de erro em mais jeitos de escrever** As mensagens de erro que o sistema guarda (inclusive o erro da IA que aparece em IA › Execuções)
+  passam por um filtro que troca CPF e telefone por `[CPF]` e `[PHONE]`. Esse filtro deixava
+  passar inteiro:
+
+  - telefone sem DDD (`98765-4321`), agrupado de três em três (`27 999 991 234`) ou de fora do
+    Brasil com o `+` na frente (`+351 912 345 678`);
+  - CPF com espaços, só com pontos, com barra ou com vírgula (`123 456 789 09`, `123.456.789.09`,
+    `123.456.789/09`);
+  - CPF ou telefone grudado numa palavra (`cpf12345678909`, `zap11987654321`);
+  - o final de um e-mail que começa por número.
+
+  Agora todos esses saem apagados. O que serve para investigar um erro continua aparecendo
+  inteiro: identificadores e códigos longos, endereço de servidor (IP) e números soltos como um
+  limite de uso. As mensagens que já
+  estavam gravadas não são reescritas.
+
+- **A faxina diária do sistema volta a rodar inteira** Toda madrugada o sistema faz uma faxina: apaga registros antigos, termina
+  anonimizações de pacientes que ficaram pela metade e confere se o histórico de
+  auditoria não foi adulterado. Um dos passos dessa faxina falhava todas as
+  noites por um erro de nome entre o programa e o banco de dados.
+
+  Agora esse passo funciona. E, se algum dia um passo voltar a falhar, os outros
+  rodam mesmo assim, e a falha fica registrada na auditoria em vez de passar em
+  silêncio. Na primeira noite depois da atualização a faxina limpa o que ficou
+  acumulado. Você não precisa fazer nada.
+
+  Baseado em correção do projeto original (DeskcommCRM, commit aec9edae0).
+
+- **A IA não grava mais o texto do paciente em arquivos no servidor** Para ajudar a revisar a qualidade do atendimento, a IA anotava em arquivos no
+  servidor alguns casos em que ela poderia ter respondido melhor. Junto da
+  anotação ia a mensagem que o paciente escreveu. Esses arquivos ficavam fora do
+  banco de dados, sem prazo para sair, e a anonimização de um paciente não os
+  alcançava.
+
+  Agora a anotação guarda só o tipo do caso e a referência da conversa. O texto
+  do paciente não vai mais para arquivo nenhum; quem for revisar abre a conversa
+  pela ficha, onde a anonimização funciona. Você não precisa fazer nada.
+
+  Os arquivos gravados antes desta atualização continuam no servidor: a
+  atualização não apaga nada sozinha. A remoção deles é um passo à parte.
+
+  Baseado em correções do projeto original (DeskcommCRM PR 1708, de
+  @hiro-nikaitou, e PR 1720, de @webtecnica).
+
+- **A limpeza dos registros antigos de webhooks e de formulários passa a apagar de verdade** O sistema guarda por um tempo o registro técnico do que chega por webhook e o
+  histórico dos formulários de captação (nome, telefone e mensagem de quem
+  preencheu). Passado o prazo, uma limpeza automática deveria apagar esses
+  registros. Dependendo da versão do banco de dados, o banco recusava o pedido de
+  apagar e o erro não aparecia em lugar nenhum: os dados ficavam guardados além
+  do prazo e o banco só crescia.
+
+  Agora a limpeza apaga em lotes pequenos, em qualquer versão do banco de dados,
+  para nunca travar a chegada de mensagens. Se um dia ela falhar, a falha fica
+  registrada no log a cada tentativa e na auditoria uma vez por dia, em vez de
+  passar em silêncio. A primeira limpeza depois da atualização
+  pode ter bastante coisa acumulada e vai apagando aos poucos. Você não precisa
+  fazer nada.
+
+  Portado do projeto original (DeskcommCRM PRs 1721 e 1769, de @webtecnica).
+
+- **A verificação em duas etapas não é dispensada quando a leitura dos fatores falha** Quando o serviço de login não responde no momento de conferir se a conta tem a verificação em duas etapas, a ação agora é recusada em vez de seguir como se a conta não tivesse o fator. Basta tentar de novo quando o serviço voltar.
+
+- **O pedido de parar passa a entender "não me contate mais", e "sair da lista de espera" deixa de bloquear o paciente** Três jeitos comuns de pedir para não receber mais mensagens passavam batido, e
+  a pessoa continuava recebendo: "não me contate mais", "não entrem mais em
+  contato" e "pode me remover da lista". Agora eles bloqueiam o contato na hora,
+  como o PARAR já fazia, e o negócio aberto dele é fechado como perdido do mesmo
+  jeito.
+
+  No sentido contrário, frases de rotina da clínica bloqueavam o paciente por
+  engano, e ele deixava de receber lembrete sem ninguém perceber: "quero sair da
+  lista de espera" e "meu filho não me liga mais". Elas deixam de bloquear.
+  Perguntas como "parar de tomar o remédio faz mal?" continuam sem bloquear.
+
+  Pedir para mudar o horário, o número ou o canal não é pedir para parar. Frases
+  como "não me liguem mais de manhã, só à tarde", "não entre em contato antes das
+  9h" e "não me contate mais por telefone, só whatsapp" não bloqueiam: o
+  atendimento segue normalmente. "Não deixe de entrar em contato" também não.
+
+  Quando a frase deixa dúvida (por exemplo "se eu não confirmar, não entre em
+  contato", ou "me tira da lista" de uma lista que o sistema não conhece), o
+  contato não é bloqueado sozinho: o robô para de responder e a conversa vai para
+  uma pessoa da equipe decidir.
+
+  Quem já foi bloqueado por engano antes desta versão não é desbloqueado sozinho.
+
+  Portado do projeto original (DeskcommCRM, issues 1607 e 1825, de
+  @deskcommopp4s-cmd, @webtecnica e @melgarafael).
+
+- **Acesso de suporte "somente leitura" ao painel do dono deixa de conseguir alterar o sistema** O painel do dono tem dois níveis de acesso: o completo e o de suporte "somente leitura", que
+  serve para alguém olhar sem poder mexer. Esse segundo nível ainda conseguia alterar várias
+  coisas: trocar a marca, o logo e o ícone do sistema, mudar quem pode criar conta, trocar as
+  chaves do Google e da Meta, disparar a atualização do servidor e, nas empresas em que a pessoa
+  também era membro, mexer em configurações como se fosse administradora — inclusive apagar os
+  dados da empresa.
+
+  Agora toda alteração feita pelo painel do dono exige o acesso completo e a verificação em duas
+  etapas confirmada na sessão. Quem tem o acesso "somente leitura" continua vendo as telas, e ao
+  tentar salvar lê o motivo ("Seu acesso à administração da plataforma é somente leitura.") em vez
+  de uma tela de erro.
+
+  Para quem é o dono da instalação, com acesso completo, nada muda.
+
+## [3.3.0] — 2026-10-04
+
+### Adicionado
+
+- **Busca dentro da conversa, nas mensagens já carregadas** Na Inbox, o botão de lupa no cabeçalho da conversa abre um campo que procura um
+  termo nas mensagens que já estão na tela, sem diferenciar maiúsculas. As bolhas
+  que batem ganham um contorno, a primeira vai para o campo de visão e um contador
+  diz quantas foram achadas. A busca não consulta o servidor: mensagens mais
+  antigas só entram depois de "Carregar mais antigas", e o rótulo diz isso para
+  que "0" não seja lido como "não existe na conversa". Mensagens apagadas ou
+  ocultas ficam de fora. Esc ou o botão de fechar encerram a busca, e trocar de
+  conversa também.
+  Contribuição de @gustavorodcruz96 (extraída do #1793).
+
+- **Campanhas — falar com uma lista de contatos, no ritmo do número** O CRM passa a ter **Campanhas**: você escolhe um recorte dos contatos que já tem, escreve uma mensagem, confere quantas pessoas aquilo pega — e só então dispara. A tela fica em CRM › Ver tudo em CRM › Campanhas.
+
+  O ritmo é o ponto. Uma campanha manda **uma mensagem por vez, pelo número escolhido**, respeitando o intervalo, a janela de horário e o teto diário que aquele número já tem configurado em Conexões › Proteção de envio. Se quiser ir ainda mais devagar nesta campanha específica, dá para apertar o intervalo, a janela e o teto — mas só para menos: campanha nenhuma consegue furar o limite do número. Quem dispara em rajada queima o número, e número queimado não volta em dias, volta em semanas.
+
+  Antes de gravar a lista, a prévia mostra **quantos entram e quantos ficam de fora, com o motivo de cada um**: quem pediu para não receber, quem não tem telefone, quem tem o mesmo telefone de outro cadastro, quem já está em outra campanha ainda não concluída. Depois de preparada, a lista é congelada — mexer numa etiqueta não muda mais quem vai receber aquele envio, e o número que você conferiu é o número que sai.
+
+  Quem pediu para parar não recebe, e isso é conferido **duas vezes**: quando a lista é montada e de novo no instante de cada envio. Entre uma coisa e outra podem passar horas, e honrar o pedido com um dia de atraso é o mesmo que não honrar.
+
+  A campanha também exige que você declare **com base em quê** está falando com aquelas pessoas — consentimento ou interesse legítimo. No segundo caso, a referência da avaliação (LIA) é obrigatória: é ela que permite responder a quem perguntar por que recebeu a mensagem.
+
+  Você acompanha pela tela: quantas saíram, chegaram, foram lidas e **responderam**, mais quem ficou de fora e por quê. Pode pausar e retomar a qualquer momento; cancelar é definitivo, e quem ainda não recebeu não recebe mais. Antes de iniciar, dá para mandar um **teste** para um contato à sua escolha, pelo mesmo número e com o mesmo texto do envio real.
+
+  Entre duas mensagens do mesmo número passam **no mínimo 5 segundos**, com uma variação aleatória por cima — e na prática bem mais: a rodada roda uma vez por minuto e manda no máximo uma mensagem por número. Campanha e atendente automático disputam a mesma vez do número, então um não fura o ritmo do outro. Grupos nunca recebem campanha.
+
+  Nada muda para quem não usar: nenhuma campanha existe até alguém criar a primeira, e nenhum arquivo de configuração precisa ser editado. Organização suspensa ou parada não dispara campanha.
+
+  Crédito: porte do DeskcommCRM original — @lussandro (módulo), @melgarafael (organização parada, teto no fuso do cliente) e @JowaniOrantes (traduções).
+
+- **As etiquetas ganham cor — e o filtro passa a mostrar a mesma cor que a lista** A tela Configurações › Tags passa a deixar você escolher a COR de cada etiqueta, numa paleta de oito tons. A paleta não foi escolhida a olho: cada tom foi medido contra os outros, inclusive para quem tem daltonismo, e o texto de dentro do marcador é escolhido pelo contraste — cor não deixa etiqueta ilegível.
+
+  A cor aparece onde a etiqueta aparece: na lista de conversas, no painel lateral do atendimento, na lista e na ficha do contato, no funil e no filtro de etiqueta das três telas, que agora mostra um ponto da mesma cor antes do nome. Numa fila de duzentas conversas é a cor que faz achar "reclamação" antes de ler o texto — e é ela que denuncia a duplicata de vocabulário ("orçamento" e "orçamento novo" em dois tons do mesmo verde) que o número de uso sozinho não mostra.
+
+  Nada muda para as etiquetas que você não pintar: elas continuam exatamente como estavam. E escolher cor para uma etiqueta que ainda não estava no vocabulário (uma que existe só porque alguém escreveu no contato, por exemplo) passa a trazê-la para o vocabulário curado — é o efeito de decidir como ela deve aparecer.
+
+  Crédito: @webtecnica.
+
+- **Mudar a etapa do negócio pela conversa, sem abrir o quadro do funil** O painel da conversa ganhou o seletor "Etapa do funil" no bloco "Leads
+  recentes": quando o cliente confirma pelo WhatsApp, quem atende passa o negócio
+  para a etapa seguinte (por exemplo, "Pedido confirmado") sem sair da conversa.
+  É o mesmo caminho do "Mover para…" do quadro, então a atividade, a auditoria e
+  o aviso da etapa na Central saem iguais. Etapa de perda continua pelo quadro,
+  onde se informa o motivo.
+
+- **Os avisos que pedem gente chegam ao celular** Com o push ligado no aparelho (Configurações › Notificações), o aviso de que a
+  IA passou uma conversa para a equipe passa a chegar como notificação no
+  celular, mesmo com o CRM fechado. É o mesmo aviso que toca som com o site
+  aberto; o resto da Central continua só na tela. O texto sai no idioma da
+  organização, sem o nome nem o telefone do cliente, e o toque abre a conversa.
+  Precisa do par VAPID no `.env` (`VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY`), como
+  o push de mensagem nova; sem ele, nada muda. Porte do DeskcommCRM original;
+  contribuição de @jmpo.
+
+- **Os avisos que pedem gente tocam o som que a organização escolher** Em Configurações › Notificações, a seção «Sons dos avisos» deixa trocar o som
+  do pedido de pessoa na Central (o assistente passou a conversa para alguém da
+  equipe). MP3, OGG ou WAV de até 1 MB; sem arquivo, toca o som do sistema.
+  Todo mundo ouve; trocar é de gestor para cima.
+
+  O som toca com o site aberto, quando o aviso chega na Central — que passa a ser
+  relida a cada 30 segundos, em vez de a cada minuto. Porte do DeskcommCRM
+  original; contribuição de @jmpo.
+
+- **Relatório por etiqueta ganha tela em Análise** Em Análise › Por etiqueta, cada etiqueta usada nas conversas aparece com as
+  conversas iniciadas, abertas e encerradas no período, a espera média e a fatia
+  de cada assunto, ordenadas por volume. O período vai de 7 a 90 dias.
+
 ## [3.2.0] — 2026-10-04
 
 ### Adicionado
@@ -5659,7 +5868,9 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.2.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.4.0...HEAD
+[3.4.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.3.0...v3.4.0
+[3.3.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.1.1...v3.2.0
 [3.1.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.0.0...v3.1.0

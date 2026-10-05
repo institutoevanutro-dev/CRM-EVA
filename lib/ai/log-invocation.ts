@@ -5,7 +5,10 @@
  * return without waiting for the audit insert; failures bubble to logger only.
  */
 
-import { normalizarErro } from "@/lib/agent-engine/edge/llm/run-model-call";
+import {
+  normalizarErro,
+  redigirMensagemDoProvedor,
+} from "@/lib/agent-engine/edge/llm/run-model-call";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -98,8 +101,13 @@ export function logInvocation(row: LogInvocationInput): void {
           // código num problema de fatura. `normalizarErro` já reconhece esse
           // texto como `limite_ou_saldo`, que é a linha que resolve.
           error_code: row.error_payload ? codigoDoErro(row.error_payload) : null,
+          // REDIGIDA, como a do motor. Esta coluna tem dois escritores e uma
+          // tela só (IA › Execuções): o motor já passava pelo redator, e este
+          // caminho gravava o payload cru — chave, CPF e telefone que o
+          // provedor ecoasse chegavam à tela por aqui. O redator já trunca em
+          // 500, DEPOIS de redigir (cortar antes deixaria meia chave passar).
           error_message: row.error_payload
-            ? String(JSON.stringify(row.error_payload)).slice(0, 500)
+            ? redigirMensagemDoProvedor(JSON.stringify(row.error_payload))
             : null,
         });
         if (error) {

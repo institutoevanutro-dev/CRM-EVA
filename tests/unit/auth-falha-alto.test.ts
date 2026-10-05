@@ -107,6 +107,16 @@ describe("loadAuthUser — falha de permissão não vira 'sem organização'", (
     expect(u?.organizations).toEqual([]);
   });
 
+  // Porte de melgarafael/DeskcommCRM 5aaab3aba (só o trecho do scope): sem o
+  // scope na sessão, todo atalho de papel enxergava o `support_readonly` como
+  // dono da instalação.
+  it("traz o scope do platform admin; quem não é platform admin fica com null", async () => {
+    consultas.platformAdmins = { data: { user_id: "u1", scope: "support_readonly", revoked_at: null }, error: null };
+    const soLeitura = await loadAuthUser();
+    expect(soLeitura?.is_platform_admin).toBe(true);
+    expect(soLeitura?.platform_admin_scope).toBe("support_readonly");
+  });
+
   it("usuário com organização resolve normalmente", async () => {
     consultas.memberships = {
       data: [{ organization_id: "o1", role: "admin", organizations: { display_name: "Acme" } }],

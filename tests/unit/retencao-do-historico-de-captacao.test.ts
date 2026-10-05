@@ -19,8 +19,11 @@ import {
  * casos são o que impede a proteção de sumir num refactor.
  *
  * Os demais casos são sobre o que a poda NÃO faz: não filtra por organização
- * (não sabe ser dirigida), não pede lote sem teto (não segura a tabela), e não
- * mente sobre o que aconteceu quando o banco recusa.
+ * (não sabe ser dirigida), não pede lote sem teto (não segura a tabela), e — no
+ * que o #1721 mudou de doutrina — não engole a falha do banco. A ordem do
+ * DELETE e o canal de reporte da falha são medidos em
+ * `retencao-captacao-ordena-e-fala-a-falha.test.ts`, que é o arquivo criado
+ * junto com o conserto.
  *
  * A política (padrão, piso, aviso) vem de `lib/retencao/politica.ts`, o mesmo
  * módulo da poda da fila e do expurgo da auditoria — estes casos provam que ela
@@ -38,7 +41,11 @@ interface Pedido {
 
 /** Duble mínimo do client: registra o que foi pedido, devolve o que mandarem. */
 function fakeAdmin(resposta: { data?: { id: string }[]; error?: { message: string } } = {}) {
+  // Só os DELETEs entram aqui: é deles que os casos perguntam. A consulta da
+  // FRONTEIRA do lote (o SELECT com `range`, ver
+  // `lib/retencao/apagar-lote-vencido.ts`) só empresta o tamanho do lote.
   const pedidos: Pedido[] = [];
+  let loteDaFronteira: number | undefined;
   const admin = {
     from(tabela: string) {
       const p: Pedido = { tabela, op: "", filtrouOrganizacao: false };
@@ -59,13 +66,30 @@ function fakeAdmin(resposta: { data?: { id: string }[]; error?: { message: strin
         select() {
           return q;
         },
-        limit(n: number) {
-          p.loteRecebido = n;
+        // O `order` existe no dublê porque a poda o chama (issue #1721) — sem
+        // isto o teste do PISO quebraria por um detalhe de superfície, e o
+        // defeito (a ordem) ficaria escondido atrás de um erro de dublê.
+        order() {
+          return q;
+        },
+        lte() {
+          return q;
+        },
+        // A FRONTEIRA: a poda pede a lote-ésima linha vencida. Existe quando
+        // há ao menos um lote inteiro — é o que faz `temMais` sair `true`.
+        range(_de: number, ate: number) {
+          loteDaFronteira = ate + 1;
+          const linhas = resposta.data ?? [];
+          return Promise.resolve({ data: linhas.length > ate ? [linhas[ate]] : [], error: null });
+        },
+        // O DELETE não tem mais `limit`: quem o encerra é o `await`.
+        then(ok: (v: unknown) => unknown, falhou?: (e: unknown) => unknown) {
+          p.loteRecebido = loteDaFronteira;
           pedidos.push(p);
           return Promise.resolve({
             data: resposta.data ?? [],
             error: resposta.error ?? null,
-          });
+          }).then(ok, falhou);
         },
       };
       return q;
@@ -171,15 +195,22 @@ describe("poda do histórico de captação — o que ela NÃO faz", () => {
     });
   });
 
-  it("erro do banco devolve zero e NÃO lança — a poda não derruba o cron", () => {
-    // O cron poda o arquivo forense antes; uma exceção aqui perderia aquele
-    // trabalho. Falha aberta na ação, e a causa vai para o log (não silêncio).
+  it("erro do banco SOBE — a poda não engole a falha (issue #1721)", async () => {
+    // Este caso mudou de doutrina no #1721, e é a mudança que a issue pediu.
+    // Antes: `logger.warn` + `{ apagadas: 0 }`, porque o cron do arquivo
+    // forense roda antes e uma exceção aqui perderia aquele trabalho. O
+    // conserto é do MESMOJEITO que a casa já aplicou nas podas irmãs: a falha
+    // sobe, e quem chama a pega num `try` PRÓPRIO — cada lote fecha a sua
+    // transação, então o que já foi apagado no banco não se perde com ela.
+    //
+    // O que NÃO pode voltar é o `apagadas: 0`: na resposta do cron, "o banco
+    // recusou o DELETE" e "não havia nada vencido" eram a mesma linha, e o
+    // único sinal vivia num log de contêiner. O canal da falha agora é o das
+    // irmãs — medido em `retencao-captacao-ordena-e-fala-a-falha.test.ts`.
     const { admin } = fakeAdmin({ error: { message: "connection reset" } });
-    return podarHistoricoDeCaptacao(admin, { diasBrutos: "365" }).then((r) => {
-      expect(r.apagadas).toBe(0);
-      expect(r.temMais).toBe(false);
-      expect(r.diasAplicados).toBe(365);
-    });
+    await expect(podarHistoricoDeCaptacao(admin, { diasBrutos: "365" })).rejects.toThrow(
+      /webhook_lead_captures: connection reset/,
+    );
   });
 });
 

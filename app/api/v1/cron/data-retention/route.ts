@@ -33,7 +33,14 @@
  *     recover-stuck-messages). Um cron diário que auditasse sempre seria mais
  *     uma fonte do problema que ele existe para resolver. A ÚNICA exceção é a
  *     rodada que FALHOU: sem ela, uma poda que parou de funcionar num clone
- *     ficaria idêntica, na trilha, a uma poda sem nada a fazer.
+ *     ficaria idêntica, na trilha, a uma poda sem nada a fazer;
+ *   - **uma etapa que falha não leva as outras junto.** As quatro podas, a
+ *     limpeza da sincronização, a retomada da LGPD e a conferência da cadeia
+ *     dividem o relógio, não o desfecho. Enquanto a falha de uma subia como
+ *     exceção, a quarta poda quebrada (nome de parâmetro errado) suspendeu, toda
+ *     noite, tudo que vinha depois dela — inclusive a retomada de anonimizações.
+ *     Agora cada falha vira uma linha em `falhas`, é dita no log e na trilha, e
+ *     a rodada segue.
  *
  * O laço de retorno desta peça é a própria trilha. `retention.sweep_run` aparece
  * no painel de auditoria (o código vem de `AUDIT_ACTIONS`, então entra no filtro
@@ -106,33 +113,57 @@ export interface ResultadoDaRetencao {
   retencao_fila_dias: number;
   retencao_auditoria_dias: number;
   retencao_espelho_dias: number;
+  /** Etapas que falharam nesta rodada (`função: motivo`). Vazio é o esperado. */
+  falhas: string[];
   /** Payloads de `meta.history_chunk`/`meta.state_sync` zerados após 7 dias (coexistência, LGPD). */
   payloads_limpos?: number;
   /** Avisos de configuração — nunca ausentes em silêncio quando existem. */
   avisos: string[];
 }
 
-/** Só a superfície que este cron usa — o teste injeta uma implementação. */
-export interface PodaDb {
-  rpc(
-    nome: "fn_podar_fila_de_jobs" | "fn_expurgar_auditoria_vencida" | "fn_expurgar_espelho_da_agenda" | "fn_expurgar_nonces_de_oauth",
-    args: { p_retencao_dias: number; p_limite: number },
-  ): Promise<{ data: number | null; error: { message: string } | null }>;
+type Poda =
+  | "fn_podar_fila_de_jobs"
+  | "fn_expurgar_auditoria_vencida"
+  | "fn_expurgar_espelho_da_agenda"
+  | "fn_expurgar_nonces_de_oauth";
+
+type ArgsDaPoda = { p_retencao_dias: number; p_limite: number } | { p_dias: number; p_lote: number };
+
+/**
+ * O PostgREST acha a função pelo NOME dos argumentos, e a quarta poda nasceu
+ * (migration 0190) com nomes diferentes das três irmãs. Mandar a ela os nomes
+ * das outras devolvia "Could not find the function" toda noite. O par certo é
+ * conferido contra o `baseline.sql` em `tests/unit/retencao-poda-em-lotes.test.ts`.
+ */
+function argsDaPoda(nome: Poda, dias: number): ArgsDaPoda {
+  return nome === "fn_expurgar_nonces_de_oauth"
+    ? { p_dias: dias, p_lote: TAMANHO_DO_LOTE }
+    : { p_retencao_dias: dias, p_limite: TAMANHO_DO_LOTE };
 }
 
+/** Só a superfície que este cron usa — o teste injeta uma implementação. */
+export interface PodaDb {
+  rpc(nome: Poda, args: ArgsDaPoda): Promise<{ data: number | null; error: { message: string } | null }>;
+}
+
+const motivo = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/**
+ * Nunca lança: a falha volta em `falha` (com o que já tinha sido apagado antes
+ * dela) para a poda seguinte rodar mesmo assim.
+ */
 async function drenar(
   db: PodaDb,
-  nome: "fn_podar_fila_de_jobs" | "fn_expurgar_auditoria_vencida" | "fn_expurgar_espelho_da_agenda" | "fn_expurgar_nonces_de_oauth",
+  nome: Poda,
   dias: number,
-): Promise<{ apagadas: number; lotes: number; temResto: boolean }> {
+): Promise<{ apagadas: number; lotes: number; temResto: boolean; falha?: string }> {
   let apagadas = 0;
   let lotes = 0;
   for (let i = 0; i < MAX_LOTES; i += 1) {
-    const { data, error } = await db.rpc(nome, {
-      p_retencao_dias: dias,
-      p_limite: TAMANHO_DO_LOTE,
-    });
-    if (error) throw new Error(`${nome}: ${error.message}`);
+    const { data, error } = await db
+      .rpc(nome, argsDaPoda(nome, dias))
+      .catch((err: unknown) => ({ data: null, error: { message: motivo(err) } }));
+    if (error) return { apagadas, lotes, temResto: false, falha: `${nome}: ${error.message}` };
     const n = data ?? 0;
     lotes += 1;
     apagadas += n;
@@ -198,6 +229,9 @@ export async function podarHistorico(
     retencao_espelho_dias: espelho.dias,
     avisos: [fila.aviso, auditoria.aviso, espelho.aviso].filter(
       (a): a is string => a !== null,
+    ),
+    falhas: [jobs.falha, linhas.falha, eventos.falha, nonces.falha].filter(
+      (f): f is string => f !== undefined,
     ),
   };
 }
@@ -306,7 +340,12 @@ async function handle(req: NextRequest): Promise<Response> {
       AUDIT_LOG_RETENTION_DAYS: env.AUDIT_LOG_RETENTION_DAYS,
     });
     // Conversa/agenda crua da coexistência que nenhum worker limpou (evento morto).
-    resultado.payloads_limpos = await limparPayloadsDaSincronizacao(admin);
+    // Try próprio, como a varredura abaixo: falhar aqui não suspende a LGPD.
+    try {
+      resultado.payloads_limpos = await limparPayloadsDaSincronizacao(admin);
+    } catch (err) {
+      resultado.falhas.push(motivo(err));
+    }
     // ── A cascata de anonimização que ficou pela metade ──────────────────
     //
     // Mora AQUI, e não numa rota de cron própria, por uma razão de packaging: o
@@ -328,17 +367,13 @@ async function handle(req: NextRequest): Promise<Response> {
     try {
       varredura = await varrerRedacoesIncompletas(admin as unknown as ClienteDaCascata);
     } catch (err) {
-      varredura.falhas.push(err instanceof Error ? err.message : String(err));
+      varredura.falhas.push(motivo(err));
     }
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
+    // Só chega aqui o que impede a rodada INTEIRA de começar (o client de
+    // service role sem env, por exemplo): as etapas acima não lançam.
+    const detail = motivo(err);
     logger.error("[data-retention] poda falhou", { error: detail, requestId });
-    // A falha ENTRA na trilha, e é o único caso em que uma rodada que não apagou
-    // nada audita. É o laço de retorno desta peça: sem esta linha, uma poda que
-    // parou de funcionar — grants que não vieram no `update.sh` de um clone,
-    // função ausente — seria indistinguível de uma poda que não tinha nada a
-    // fazer, e o único sinal viveria num `logger.error` dentro do contêiner,
-    // atrás de um `curl` que manda tudo para /dev/null. Teto de 1 linha/dia.
     void audit({
       action: "retention.sweep_run",
       organizationId: null,
@@ -353,15 +388,31 @@ async function handle(req: NextRequest): Promise<Response> {
     logger.warn("[data-retention] configuração de retenção ajustada", { aviso, requestId });
   }
 
+  const falhou = resultado.falhas.length > 0;
+  for (const falha of resultado.falhas) {
+    logger.error("[data-retention] etapa da faxina falhou", { falha, requestId });
+  }
+
   // Ver o cabeçalho: rodada que não apagou nada não é mutação. E rodada que
   // apagou SEMPRE deixa rastro — é isto que impede o expurgo do audit de ser
   // encolhimento silencioso da trilha.
-  if (houveEfeito(resultado)) {
+  //
+  // A falha TAMBÉM entra, e é o único caso em que uma rodada que não apagou nada
+  // audita. É o laço de retorno desta peça: sem `falhou`, uma poda que parou de
+  // funcionar — grants que não vieram no `update.sh` de um clone, função
+  // ausente — seria indistinguível de uma poda que não tinha nada a fazer, e o
+  // único sinal viveria num `logger.error` dentro do contêiner, atrás de um
+  // `curl` que manda tudo para /dev/null. Uma linha só por rodada: a que falhou
+  // numa etapa e apagou em outra diz as duas coisas.
+  if (houveEfeito(resultado) || falhou) {
     void audit({
       action: "retention.sweep_run",
       organizationId: null,
       bypassedRls: true,
-      metadata: resultado as unknown as Record<string, unknown>,
+      metadata: {
+        ...resultado,
+        ...(falhou ? { falhou: true, erro: resultado.falhas.join(" | ").slice(0, 300) } : {}),
+      },
       requestId,
     });
   }
@@ -397,6 +448,11 @@ async function handle(req: NextRequest): Promise<Response> {
         },
       });
     }
+  }
+
+  // Só DEPOIS de tudo ter rodado: o 500 é o sinal para quem chama, não um atalho.
+  if (falhou) {
+    return fail("internal_error", "Failed to prune history.", 500, { requestId });
   }
 
   return ok(

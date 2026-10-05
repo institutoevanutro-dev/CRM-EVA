@@ -3362,6 +3362,18 @@ export const DICIONARIO: Traducoes = {
   "Abrir no Instagram": {
     es: "Abrir en Instagram",
   },
+  "Resultados nas mensagens carregadas": {
+    es: "Resultados en los mensajes cargados",
+  },
+  "Buscar nesta conversa": {
+    es: "Buscar en esta conversación",
+  },
+  "Buscar nas mensagens carregadas": {
+    es: "Buscar en los mensajes cargados",
+  },
+  "Fechar busca": {
+    es: "Cerrar búsqueda",
+  },
   "Muitas imagens enviadas. Tente de novo em uma hora.": {
     es: "Demasiadas imágenes enviadas. Inténtalo de nuevo en una hora.",
   },
@@ -6358,6 +6370,13 @@ export const DICIONARIO: Traducoes = {
   "Cliente desde": { es: "Cliente desde" },
   // Clientes pela agenda (migration 0262): o interruptor em Tipos de agendamento e a porta no rodapé de Funis.
   "Acompanhamento somente leitura ou encerrado.": { es: "Acompañamiento de solo lectura o finalizado." },
+  // A recusa de ESCRITA do painel do dono (`lib/auth/recusa-de-escrita-de-admin.ts`).
+  "Seu acesso à administração da plataforma é somente leitura.": {
+    es: "Su acceso a la administración de la plataforma es de solo lectura.",
+  },
+  "Confirme a verificação em duas etapas nesta sessão.": {
+    es: "Confirme la verificación en dos pasos en esta sesión.",
+  },
   "Confirme a verificação em duas etapas.": { es: "Confirma la verificación en dos pasos." },
   "Outra mudança estava em andamento. Tente de novo.": { es: "Otro cambio estaba en curso. Inténtalo de nuevo." },
   "Clientes pela agenda": { es: "Clientes por la agenda" },
@@ -7277,6 +7296,11 @@ export const DICIONARIO: Traducoes = {
   "Conexão sem identificador utilizável.": { es: "Conexión sin identificador utilizable." },
   "Conflito de versionamento — tente novamente.": { es: "Conflicto de versionado — intenta de nuevo." },
   "Contato não encontrado.": { es: "Contacto no encontrado." },
+  "Contato inválido.": { es: "Contacto inválido." },
+  "Não foi possível desbloquear o contato.": { es: "No fue posible desbloquear el contacto." },
+  Desbloquear: { es: "Desbloquear" },
+  "Desbloquear este contato?": { es: "¿Desbloquear este contacto?" },
+  "Este contato pediu para não receber mais mensagens. Se você desbloquear, ele volta a receber lembretes, campanhas e respostas. O negócio fechado como perdido continua fechado. O desbloqueio fica registrado no seu nome.": { es: "Este contacto pidió no recibir más mensajes. Si lo desbloqueas, vuelve a recibir recordatorios, campañas y respuestas. El negocio cerrado como perdido sigue cerrado. El desbloqueo queda registrado a tu nombre." },
   "content é obrigatório.": { es: "content es obligatorio." },
   "Conversa do caso sem contato associado.": { es: "La conversación del caso no tiene contacto asociado." },
   "Conversa não encontrada.": { es: "Conversación no encontrada." },
@@ -9243,6 +9267,31 @@ export const DICIONARIO: Traducoes = {
   // As frases de recusa do servidor. Três delas não tinham entrada: o argumento
   // de `t()` ali é uma expressão `??`, que o guarda também não resolve.
   "Confira a etiqueta e o novo nome.": { es: "Revisa la etiqueta y el nombre nuevo." },
+  // ── A COR DA ETIQUETA (fatia S6 da #1271) ─────────────────────────────────
+  //
+  // Os oito tons têm NOME além de cor, e é de propósito: quem não distingue
+  // matiz — ou está com o brilho no mínimo, ou usa leitor de tela — escolhe e
+  // reconhece por "Âmbar"/"Roxo". A fileira de tons é a única escolha de cor do
+  // produto, e sem estas entradas ela sairia MUDA para quem escolheu espanhol.
+  //
+  // `"Cor"` NÃO entra aqui: a chave já existe no arquivo (linha ~3312, do
+  // seletor de cor da marca) e repeti-la é TS1117 no `as const` do dicionário.
+  "Confira a etiqueta, o novo nome e a cor.": {
+    es: "Revisa la etiqueta, el nombre nuevo y el color.",
+  },
+  "Cor da etiqueta": { es: "Color de la etiqueta" },
+  "nas listas e nos filtros:": { es: "en las listas y en los filtros:" },
+  "Sem cor": { es: "Sin color" },
+  "Prévia:": { es: "Vista previa:" },
+  "Cor da etiqueta atualizada.": { es: "Color de la etiqueta actualizado." },
+  Amarelo: { es: "Amarillo" },
+  Âmbar: { es: "Ámbar" },
+  Vermelho: { es: "Rojo" },
+  "Verde-água": { es: "Verde agua" },
+  Azul: { es: "Azul" },
+  Índigo: { es: "Índigo" },
+  Roxo: { es: "Morado" },
+  Cinza: { es: "Gris" },
   "Só um gerente ou administrador da organização pode mudar as etiquetas.": {
     es: "Solo un gerente o administrador de la organización puede cambiar las etiquetas.",
   },
@@ -9466,6 +9515,258 @@ export const DICIONARIO: Traducoes = {
   "Reconhecimento calculado.": { es: "Reconocimiento calculado." },
   "Não foi possível calcular agora. Confira a chave da OpenAI em Credenciais.": { es: "No fue posible calcular ahora. Revise la clave de OpenAI en Credenciales." },
   "Ligado": { es: "Encendido" },
+  // ─── sons dos avisos (migration 0313; app/app/settings/notifications/_sons.tsx) ───
+  "Sons dos avisos": { es: "Sonidos de los avisos" },
+  "Tocam com o site aberto quando o aviso chega na Central. MP3, OGG ou WAV de até 1 MB.": {
+    es: "Suenan con el sitio abierto cuando el aviso llega a la Central. MP3, OGG o WAV de hasta 1 MB.",
+  },
+  "Precisa de uma pessoa": { es: "Necesita una persona" },
+  "Quando o assistente passa a conversa para alguém da equipe.": {
+    es: "Cuando el asistente pasa la conversación a alguien del equipo.",
+  },
+  "Som personalizado": { es: "Sonido personalizado" },
+  "Som do sistema": { es: "Sonido del sistema" },
+  "Ouvir": { es: "Escuchar" },
+  "Trocar som": { es: "Cambiar sonido" },
+  "Usar o do sistema": { es: "Usar el del sistema" },
+  "Som salvo": { es: "Sonido guardado" },
+  "Voltou ao som do sistema": { es: "Volvió al sonido del sistema" },
+  "Erro ao subir o som.": { es: "Error al subir el sonido." },
+  "Erro ao salvar o som.": { es: "Error al guardar el sonido." },
+  "Escolha o aviso e o arquivo de som.": { es: "Elige el aviso y el archivo de sonido." },
+  "O som pode ter no máximo 1 MB.": { es: "El sonido puede tener como máximo 1 MB." },
+  "O som precisa ser MP3, OGG ou WAV.": { es: "El sonido tiene que ser MP3, OGG o WAV." },
+  "Aviso desconhecido.": { es: "Aviso desconocido." },
+  // ─── lib/notifications/push-dos-avisos.ts (migration 0314) ───
+  "A IA passou uma conversa para a equipe": { es: "La IA pasó una conversación al equipo" },
+  "Abra a conversa para responder o cliente.": { es: "Abre la conversación para responder al cliente." },
+  // ─── Relatório por etiqueta (/app/tag-report) ───
+  "Por etiqueta": { es: "Por etiqueta" },
+  "Qual assunto ocupou a operação no período — e quanto tempo ele esperou.": {
+    es: "Qué tema ocupó la operación en el período — y cuánto tiempo esperó.",
+  },
+  "Nenhuma conversa com etiqueta no período": { es: "Ninguna conversación con etiqueta en el período" },
+  "Etiquete as conversas na Inbox para ver aqui qual assunto ocupou a operação — ou aumente o período.": {
+    es: "Etiquete las conversaciones en la Inbox para ver aquí qué tema ocupó la operación — o amplíe el período.",
+  },
+  Iniciadas: { es: "Iniciadas" },
+  Abertas: { es: "Abiertas" },
+  "Espera média": { es: "Espera promedio" },
+  Fatia: { es: "Proporción" },
+  "O período tem conversas demais: os números cobrem só as mais recentes.": {
+    es: "El período tiene demasiadas conversaciones: los números cubren solo las más recientes.",
+  },
+  // Campanhas (migration 0316)
+  Responderam: { es: "Respondieron" },
+  Progresso: { es: "Progreso" },
+  terminou: { es: "terminó" },
+  "Fale com uma lista de contatos que você escolhe, no ritmo do número.": {
+    es: "Envía mensajes a una lista de contactos que elijas, al ritmo del número.",
+  },
+  "Sem telefone no cadastro": { es: "Sin teléfono en el registro" },
+  "Telefone fora do formato de envio": { es: "Teléfono con formato no válido para envío" },
+  "Recusou receber contato comercial": { es: "Rechazó recibir contacto comercial" },
+  "Excluído à mão desta campanha": { es: "Excluido manualmente de esta campaña" },
+  "Mesmo telefone de outro contato da lista": { es: "Mismo teléfono que otro contacto de la lista" },
+  "Falta um dado que a mensagem usa": { es: "Falta un dato que usa el mensaje" },
+  "Já está em outra campanha ainda não concluída": { es: "Ya está en otra campaña que todavía no termina" },
+  "Está na lista de exclusão de campanhas": { es: "Está en la lista de exclusión de campañas" },
+  "Nenhum contato encontrado.": { es: "Ningún contacto encontrado." },
+  "Agendar": { es: "Programar" },
+  "ainda não enviadas": { es: "aún no enviadas" },
+  "Ainda não enviadas": { es: "Aún no enviadas" },
+  "A lista ainda não foi montada. Use Preparar para ver quem entra.": {
+    es: "La lista aún no fue armada. Use Preparar para ver quién entra.",
+  },
+  "Base legal": { es: "Base legal" },
+  "Base legal do envio": { es: "Base legal del envío" },
+  "Busque o contato pelo nome ou telefone": { es: "Busque el contacto por nombre o teléfono" },
+  "Campanhas": { es: "Campañas" },
+  "Cancelar campanha": { es: "Cancelar campaña" },
+  "Cancelar é definitivo: quem ainda não recebeu não recebe mais, e a campanha não volta a rodar.": {
+    es: "Cancelar es definitivo: quien aún no recibió ya no recibe, y la campaña no vuelve a ejecutarse.",
+  },
+  "Com alguma destas etiquetas": { es: "Con alguna de estas etiquetas" },
+  "começa": { es: "empieza" },
+  "Começar a enviar para": { es: "Empezar a enviar a" },
+  "começou": { es: "empezó" },
+  "consentimento": { es: "consentimiento" },
+  "Consentimento — estas pessoas pediram para receber": {
+    es: "Consentimiento — estas personas pidieron recibir",
+  },
+  "Contando…": { es: "Contando…" },
+  "Contato do teste": { es: "Contacto de la prueba" },
+  "contatos na lista": { es: "contactos en la lista" },
+  "criada": { es: "creada" },
+  "Em branco, vale o ritmo do número (Conexões › Proteção de envio). O que você puser aqui só pode deixar mais devagar.": {
+    es: "En blanco, vale el ritmo del número (Conexiones › Protección de envío). Lo que ponga aquí solo puede hacerlo más lento.",
+  },
+  "Entregues": { es: "Entregadas" },
+  "Enviadas": { es: "Enviadas" },
+  "Enviar para este": { es: "Enviar a este" },
+  "Enviar pelo número": { es: "Enviar por el número" },
+  "Enviar só a partir das (hora)": { es: "Enviar solo a partir de las (hora)" },
+  "Enviar teste": { es: "Enviar prueba" },
+  "Erro ao carregar as campanhas.": { es: "Error al cargar las campañas." },
+  "Escolha o público, escreva a mensagem e acompanhe quem recebeu.": {
+    es: "Elija el público, escriba el mensaje y acompañe quién lo recibió.",
+  },
+  "Escolha pelo menos um critério — uma lista sem recorte ninguém confere antes de apertar.": {
+    es: "Elija al menos un criterio — una lista sin recorte nadie la revisa antes de apretar.",
+  },
+  "Escolha um número": { es: "Elija un número" },
+  "Escreva como você falaria com uma pessoa só.": { es: "Escriba como le hablaría a una sola persona." },
+  "Ex.: LIA-2026-01": { es: "Ej.: LIA-2026-01" },
+  "Ex.: Reativação de clientes parados": { es: "Ej.: Reactivación de clientes inactivos" },
+  "falharam": { es: "fallaron" },
+  "Falharam": { es: "Fallaron" },
+  "ficam de fora": { es: "quedan fuera" },
+  "Filtrar destinatários": { es: "Filtrar destinatarios" },
+  "fora": { es: "fuera" },
+  "Fora da lista": { es: "Fuera de la lista" },
+  "Iniciar envio": { es: "Iniciar envío" },
+  "interesse legítimo": { es: "interés legítimo" },
+  "Interesse legítimo — com avaliação (LIA) registrada": {
+    es: "Interés legítimo — con evaluación (LIA) registrada",
+  },
+  "Intervalo mínimo entre mensagens (segundos)": { es: "Intervalo mínimo entre mensajes (segundos)" },
+  "Isto cria um rascunho. Nada é enviado antes de você preparar a lista e iniciar.": {
+    es: "Esto crea un borrador. No se envía nada antes de que usted prepare la lista e inicie.",
+  },
+  "Lidas": { es: "Leídas" },
+  "lista ainda não preparada": { es: "lista aún no preparada" },
+  "Máximo de contatos nesta campanha": { es: "Máximo de contactos en esta campaña" },
+  "Máximo por dia": { es: "Máximo por día" },
+  "Na lista": { es: "En la lista" },
+  "Não foi possível carregar a campanha.": { es: "No fue posible cargar la campaña." },
+  "Nenhuma campanha ainda.": { es: "Ninguna campaña todavía." },
+  "Nenhum número conectado. Conecte um em Conexões antes de criar a campanha.": {
+    es: "Ningún número conectado. Conecte uno en Conexiones antes de crear la campaña.",
+  },
+  "Nome da campanha": { es: "Nombre de la campaña" },
+  "Nova campanha": { es: "Nueva campaña" },
+  "Parar de enviar às (hora)": { es: "Dejar de enviar a las (hora)" },
+  "pediram para parar": { es: "pidieron parar" },
+  "podem receber": { es: "pueden recibir" },
+  "Preparar lista": { es: "Preparar lista" },
+  "Progresso do envio": { es: "Progreso del envío" },
+  "Público": { es: "Público" },
+  "Quem está na lista": { es: "Quién está en la lista" },
+  "Quem não tiver o dado que a mensagem usa fica de fora, com o motivo na lista — mensagem com buraco não sai.": {
+    es: "Quien no tenga el dato que el mensaje usa queda fuera, con el motivo en la lista — un mensaje con hueco no sale.",
+  },
+  "Quem recebe pode perguntar por que recebeu, e a resposta precisa existir antes do envio.": {
+    es: "Quien recibe puede preguntar por qué lo recibió, y la respuesta debe existir antes del envío.",
+  },
+  "Referência da avaliação (LIA)": { es: "Referencia de la evaluación (LIA)" },
+  "Ritmo desta campanha": { es: "Ritmo de esta campaña" },
+  "Sai pelo mesmo número e com o mesmo texto do envio real — inclusive o horário da saudação. Não entra nos números da campanha.": {
+    es: "Sale por el mismo número y con el mismo texto del envío real — incluido el horario del saludo. No entra en los números de la campaña.",
+  },
+  "Sem falar com a gente há (dias)": { es: "Sin hablar con nosotros hace (días)" },
+  "Sem nenhuma destas etiquetas": { es: "Sin ninguna de estas etiquetas" },
+  "separe por vírgula": { es: "separe por coma" },
+  "Último problema": { es: "Último problema" },
+  "Uma campanha fala com uma lista de contatos que você escolhe, no ritmo do número — nunca em rajada.": {
+    es: "Una campaña habla con una lista de contactos que usted elige, al ritmo del número — nunca en ráfaga.",
+  },
+  "Ver quantas pessoas": { es: "Ver cuántas personas" },
+  "Você pode usar:": { es: "Puede usar:" },
+  "Máximo por hora": { es: "Máximo por hora" },
+  "Ritmo salvo.": { es: "Ritmo guardado." },
+  "Salvar ritmo": { es: "Guardar ritmo" },
+  "Editar campanha": { es: "Editar campaña" },
+  "Enquanto é rascunho, tudo muda. Depois de preparada, só o ritmo.": {
+    es: "Mientras es borrador, todo cambia. Una vez preparada, solo el ritmo.",
+  },
+  "Esta campanha já foi preparada: cada pessoa da lista tem o texto que vai receber guardado. Para mudar o texto ou o público, volte a campanha para rascunho — isso descarta a lista montada.": {
+    es: "Esta campaña ya fue preparada: cada persona de la lista tiene guardado el texto que va a recibir. Para cambiar el texto o el público, vuelva la campaña a borrador — eso descarta la lista armada.",
+  },
+  "O ritmo você ajusta na própria tela da campanha, sem descartar nada.": {
+    es: "El ritmo se ajusta en la propia pantalla de la campaña, sin descartar nada.",
+  },
+  "Voltar para a campanha": { es: "Volver a la campaña" },
+  "funil removido": { es: "embudo eliminado" },
+  "agente indisponível": { es: "agente no disponible" },
+  "Agente publicado no número (padrão)": { es: "Agente publicado en el número (predeterminado)" },
+  "Com negócio no funil": { es: "Con negocio en el embudo" },
+  "Em branco, tudo segue como hoje: o card nasce no funil do número e quem atende é o agente publicado nele.": {
+    es: "En blanco, todo sigue como hoy: la tarjeta nace en el embudo del número y quien atiende es el agente publicado en él.",
+  },
+  "Funil do número (padrão)": { es: "Embudo del número (predeterminado)" },
+  "Na etapa": { es: "En la etapa" },
+  "Primeira etapa do funil": { es: "Primera etapa del embudo" },
+  "Qualquer etapa": { es: "Cualquier etapa" },
+  "Qualquer um": { es: "Cualquiera" },
+  "Quem atende a resposta": { es: "Quién atiende la respuesta" },
+  "Quem responder": { es: "Quien responda" },
+  "Vale só para conversas que nascem desta campanha: quem já falava com você continua com quem o atendia. Quem aborda precisa saber dizer de onde veio o contato — essa resposta tem de estar no material do agente escolhido.": {
+    es: "Vale solo para conversaciones que nacen de esta campaña: quien ya hablaba con usted sigue con quien lo atendía. Quien aborda necesita saber decir de dónde vino el contacto — esa respuesta tiene que estar en el material del agente elegido.",
+  },
+  "Vira card no funil": { es: "Se convierte en tarjeta en el embudo" },
+  "pessoa?": { es: "persona?" },
+  "pessoas?": { es: "personas?" },
+  "O envio segue o ritmo do número e pode levar horas.": {
+    es: "El envío sigue el ritmo del número y puede llevar horas.",
+  },
+  "A cada envio, a campanha usa o número com mais folga no teto do dia — e o número que a pessoa já conhece, quando ela já conversou com algum deles.": {
+    es: "En cada envío, la campaña usa el número con más margen en el tope del día — y el número que la persona ya conoce, cuando ya conversó con alguno de ellos.",
+  },
+  "A campanha reveza entre os números marcados, escolhendo a cada envio o que tem mais folga no teto do dia. Quem já conversa com você por um deles recebe por esse mesmo, para não chegar de um número desconhecido.": {
+    es: "La campaña alterna entre los números marcados, eligiendo en cada envío el que tiene más margen en el tope del día. Quien ya conversa con usted por uno de ellos recibe por ese mismo, para no llegar desde un número desconocido.",
+  },
+  "Atenção: o intervalo e os tetos da CAMPANHA somam todos os números. Para o rodízio aumentar o volume, deixe o ritmo da campanha em branco e cada número usa o dele.": {
+    es: "Atención: el intervalo y los topes de la CAMPAÑA suman todos los números. Para que la alternancia aumente el volumen, deje el ritmo de la campaña en blanco y cada número usa el suyo.",
+  },
+  "Falar também por estes números": {
+    es: "Hablar también por estos números",
+  },
+  "Números desta campanha": {
+    es: "Números de esta campaña",
+  },
+  "Apagar": { es: "Eliminar" },
+  "A proteção do número — ritmo, janela e aquecimento que valem para tudo que sai por ele — fica em": {
+    es: "La protección del número — ritmo, franja y calentamiento que valen para todo lo que sale por él — está en",
+  },
+  "Campo vazio significa herdar o número. Toda campanha nova nasce com estes valores e pode ficar mais devagar, nunca mais rápida.": {
+    es: "Campo vacío significa heredar el número. Toda campaña nueva nace con estos valores y puede ir más lenta, nunca más rápida.",
+  },
+  "Conexões › Proteção de envio": { es: "Conexiones › Protección de envío" },
+  "Configuração de campanhas": { es: "Configuración de campañas" },
+  "Contar como resposta até (horas depois do envio)": {
+    es: "Contar como respuesta hasta (horas después del envío)",
+  },
+  "Copy que você reusa entre campanhas. Mudar um texto aqui não muda mensagem que já foi preparada nem que já foi enviada.": {
+    es: "Texto que usted reutiliza entre campañas. Cambiarlo aquí no cambia un mensaje ya preparado ni ya enviado.",
+  },
+  "Excluir das campanhas": { es: "Excluir de las campañas" },
+  "Ex.: Primeiro contato — produtor": { es: "Ej.: Primer contacto — productor" },
+  "Lista de exclusão": { es: "Lista de exclusión" },
+  "Nenhum número excluído.": { es: "Ningún número excluido." },
+  "Nenhum texto salvo ainda.": { es: "Ningún texto guardado todavía." },
+  "Números que nenhuma campanha alcança. Diferente de quem pediu para parar: aqui o atendimento continua normal se a pessoa escrever — isto é uma decisão sua, não dela.": {
+    es: "Números que ninguna campaña alcanza. Distinto de quien pidió parar: aquí la atención sigue normal si la persona escribe — esta es una decisión suya, no de ella.",
+  },
+  "O que vale para todas as campanhas, e não para uma só.": {
+    es: "Lo que vale para todas las campañas, y no para una sola.",
+  },
+  "Padrões desta organização": { es: "Valores por defecto de esta organización" },
+  "Padrões salvos.": { es: "Valores guardados." },
+  "Salvar padrões": { es: "Guardar valores" },
+  "Salvar texto": { es: "Guardar texto" },
+  "Telefone com DDI e DDD": { es: "Teléfono con código de país y área" },
+  "termina em": { es: "termina en" },
+  "Texto": { es: "Texto" },
+  "Textos salvos": { es: "Textos guardados" },
+  "Nome do contato, como está no cadastro":
+    { es: "Nombre del contacto, tal como está en el registro" },
+  "Só a primeira palavra do nome": { es: "Solo la primera palabra del nombre" },
+  "Bom dia / Boa tarde / Boa noite, na hora do envio":
+    { es: "Buenos días / Buenas tardes / Buenas noches, a la hora del envío" },
+  "Tirar da lista": { es: "Quitar de la lista" },
+  "Uma mensagem que chega depois desse prazo é conversa nova, não resposta à campanha. Isso muda o número de respostas que a tela mostra, inclusive das campanhas já enviadas.": {
+    es: "Un mensaje que llega después de ese plazo es una conversación nueva, no una respuesta a la campaña. Eso cambia la cantidad de respuestas que muestra la pantalla, incluso de las campañas ya enviadas.",
+  },
 };
 
 /**

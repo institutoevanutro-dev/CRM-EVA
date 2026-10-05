@@ -5,13 +5,26 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { useState } from "react";
 import { format } from "date-fns";
-import { ShieldCheck, PencilSimple } from "@/lib/ui/icons";
+import { ShieldCheck, PencilSimple, LockOpen } from "@/lib/ui/icons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useContact } from "@/hooks/contacts/useContact";
+import { useUnblockContact } from "@/hooks/contacts/useUnblockContact";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
@@ -45,6 +58,10 @@ export function ContactDetailClient({ contactId }: Props) {
   const pipelineQuery = useDefaultPipeline(Boolean(activeOrg));
   const [editOpen, setEditOpen] = useState(false);
   const [anonOpen, setAnonOpen] = useState(false);
+  // Desfazer o descadastro é o override da regra W-02 — só admin, e auditado.
+  // O hook fica ANTES dos early returns: chamá-lo depois mudaria a ordem dos
+  // hooks entre renderizações e o React reprova.
+  const desbloquear = useUnblockContact(contactId);
 
   if (q.isLoading) {
     return (
@@ -102,16 +119,53 @@ export function ContactDetailClient({ contactId }: Props) {
           </div>
           <div className="mt-2 flex flex-wrap gap-1">
             {contact.tags.map((t) => (
-              <Badge key={t} variant="neutral">
-                {t}
-              </Badge>
+              <ChipDeEtiqueta key={t} tag={t} />
             ))}
             {contact.is_blocked && <Badge variant="warning">{t("Bloqueado")}</Badge>}
             {contact.is_anonymized && <Badge variant="destructive">{t("Anonimizado")}</Badge>}
           </div>
         </div>
         {!contact.is_anonymized && user.support?.access_mode !== "support_readonly" && (
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {/* O CAMINHO DE VOLTA do descadastro. Sem ele, o contato que pediu
+                para sair — ou que caiu num falso positivo — ficava preso para
+                sempre: `before-send` recusa todo envio, o funil não cria lead,
+                o follow-up não retoma. A regra W-02 previu o override
+                ("Tenant admin pode desbloquear manualmente; ação auditada") e o
+                produto não tinha porta nenhuma para exercê-lo.
+
+                Só ADMIN, como a regra nomeia: desfazer um pedido de descadastro
+                não é editar cadastro, é reabrir um canal que o cliente fechou —
+                e quem clica responde pela decisão. */}
+            {/* Confirmação antes do clique: nenhum caminho do produto bloqueia
+                de novo à mão (o único escritor de is_blocked=true é o STOP do
+                próprio cliente, em lib/channels/pos-entrada.ts), então um clique
+                errado ao lado do "Editar" reabriria um canal que só o cliente
+                consegue fechar outra vez. */}
+            {contact.is_blocked && isAdmin && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" disabled={desbloquear.isPending} className="shrink-0">
+                    <LockOpen size={16} weight="bold" aria-hidden />
+                    <span>{t("Desbloquear")}</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{t("Desbloquear este contato?")}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {t("Este contato pediu para não receber mais mensagens. Se você desbloquear, ele volta a receber lembretes, campanhas e respostas. O negócio fechado como perdido continua fechado. O desbloqueio fica registrado no seu nome.")}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => desbloquear.mutate()}>
+                      {t("Desbloquear")}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
             <DialButton contactId={contactId} hasPhone={!!contact.phone_number} />
             <Button variant="outline" onClick={() => setEditOpen(true)} className="shrink-0">
               <PencilSimple size={16} weight="bold" aria-hidden />
@@ -226,9 +280,7 @@ export function ContactDetailClient({ contactId }: Props) {
                   {contact.tags.length === 0
                     ? "—"
                     : contact.tags.map((t) => (
-                        <Badge key={t} variant="neutral">
-                          {t}
-                        </Badge>
+                        <ChipDeEtiqueta key={t} tag={t} />
                       ))}
                 </dd>
               </div>

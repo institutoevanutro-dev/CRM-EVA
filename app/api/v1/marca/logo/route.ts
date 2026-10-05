@@ -57,8 +57,9 @@ import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { EscritaDePlatformAdminNegada, requirePlatformAdminEscrita } from "@/lib/auth/requirePlatformAdmin";
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
-import { roleAtLeast } from "@/lib/auth/types";
+import { escreveComoPlatformAdmin, roleAtLeast } from "@/lib/auth/types";
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { invalidarMarcaDaInstalacao } from "@/lib/branding/instalacao";
 import {
@@ -112,15 +113,19 @@ type Recusa = { readonly codigo: string; readonly mensagem: string; readonly sta
  * O gate, por escopo. Devolve o contexto JÁ com o prefixo montado de fonte
  * confiável — assim nenhum caminho abaixo tem a oportunidade de montá-lo do body.
  *
- * ── Por que `mfaEmDivida` e não o `requirePlatformAdmin()` das telas ─────────
+ * ── Por que `requirePlatformAdminEscrita` dentro de `try/catch` ──────────────
  *
- * `requirePlatformAdmin()` REDIRECIONA (é o gate do layout de `/admin`), e um
- * `307` para `/login` como resposta a um `fetch()` de upload chega ao navegador
- * como HTML no lugar de JSON — a tela mostraria "erro inesperado" para um caso
- * que tem nome. Aqui o predicado é o mesmo que `lib/auth/require-role.ts` aplica
- * em todo `/api/v1`: papel + `mfaEmDivida`. A diferença de comportamento entre os
- * dois é só para quem AINDA NÃO cadastrou fator — e essa pessoa é barrada antes,
- * pelo gate de cadastro do layout, que é onde ela pode resolver.
+ * Trocar o logo da INSTALAÇÃO é escrita de platform admin e exige o que toda
+ * escrita dessas exige: linha ativa, scope `full` (o `support_readonly` lê o
+ * painel e nada muda) e sessão sem dívida de MFA — quem confere as três é
+ * `requirePlatformAdminEscrita`. Ele REDIRECIONA quem não é platform admin (é o
+ * gate do layout de `/admin`), e um `307` como resposta a um `fetch()` de upload
+ * chega ao navegador como HTML no lugar de JSON — a tela mostraria "erro
+ * inesperado" para um caso que tem nome. Por isso a chamada fica num
+ * `try/catch`: a recusa nomeada vira o seu código e o redirect vira
+ * `forbidden_role`. No escopo da ORGANIZAÇÃO o predicado segue o de
+ * `lib/auth/require-role.ts`: papel `admin` (ou platform admin com scope `full`,
+ * `escreveComoPlatformAdmin`) + `mfaEmDivida`.
  */
 async function abrirContexto(escopo: Escopo): Promise<{ ctx: Contexto } | { recusa: Recusa }> {
   const user = await loadAuthUser();
@@ -129,25 +134,16 @@ async function abrirContexto(escopo: Escopo): Promise<{ ctx: Contexto } | { recu
   }
 
   if (escopo === "instalacao") {
-    if (!user.is_platform_admin) {
+    try {
+      await requirePlatformAdminEscrita();
+    } catch (err) {
+      if (err instanceof EscritaDePlatformAdminNegada) {
+        return { recusa: { codigo: err.code, mensagem: err.message, status: 403 } };
+      }
       return {
         recusa: {
           codigo: "forbidden_role",
           mensagem: "Só quem administra a instalação pode trocar o logo do sistema.",
-          status: 403,
-        },
-      };
-    }
-    // ⚠️ Sem argumentos desde o merge com a frente que tornou a verificação em
-    // duas etapas opcional — o porquê está por extenso em
-    // `app/actions/settings/updateMarcaDaOrganizacao.ts`. Em uma linha: a função
-    // parou de consultar a política, então quem TEM fator prova sempre. Passar
-    // papel aqui não é só inútil, é o modelo mental errado gravado no código.
-    if (await mfaEmDivida()) {
-      return {
-        recusa: {
-          codigo: "mfa_required",
-          mensagem: "Confirme o segundo fator nesta sessão para trocar o logo.",
           status: 403,
         },
       };
@@ -161,7 +157,7 @@ async function abrirContexto(escopo: Escopo): Promise<{ ctx: Contexto } | { recu
       recusa: { codigo: "forbidden_tenant", mensagem: "Sem organização ativa.", status: 403 },
     };
   }
-  if (!user.is_platform_admin && !roleAtLeast(org.role, "admin")) {
+  if (!escreveComoPlatformAdmin(user) && !roleAtLeast(org.role, "admin")) {
     return {
       recusa: {
         codigo: "forbidden_role",

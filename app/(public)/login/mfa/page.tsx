@@ -19,9 +19,14 @@ export default async function MfaChallengePage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: factorsData } = await supabase.auth.mfa.listFactors();
+  // Leitura que FALHOU não é "sem fator": o `listFactors()` devolve
+  // `{ data: null, error }` em vez de lançar. Devolver para `/app` nesse caso
+  // faria esta página e o `app/app/layout.tsx` (que manda para cá quem tem fator
+  // e sessão `aal1`) se devolverem uma à outra enquanto a leitura oscila. Na
+  // dúvida, fica o formulário: quem não tem fator só não consegue confirmar.
+  const { data: factorsData, error: falhaAoLerFatores } = await supabase.auth.mfa.listFactors();
   const hasVerified = !!factorsData?.totp?.some((f) => f.status === "verified");
-  if (!hasVerified) redirect("/app");
+  if (!falhaAoLerFatores && !hasVerified) redirect("/app");
 
   const idioma = await idiomaDoVisitante(
     (user.user_metadata?.locale as string | undefined) ?? null,

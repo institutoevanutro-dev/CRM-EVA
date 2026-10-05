@@ -119,6 +119,14 @@ const ADMIN_DA_INSTALACAO = {
 };
 
 describe("updateMetaApp — o gate da instalação", () => {
+  // Porte de melgarafael/DeskcommCRM 0fee473d0 + cc62928d0.
+  it("support_readonly TEM a linha e mesmo assim não grava: a escrita exige scope full", async () => {
+    linhaDeAdmin = { ...ADMIN_DA_INSTALACAO, scope: "support_readonly" };
+    const { updateMetaApp } = await acoes();
+    await expect(updateMetaApp({ app_secret: SEGREDO })).resolves.toEqual({ ok: false, error: "forbidden_scope" });
+    expect(tabelasDoServiceRole).toEqual([]);
+  });
+
   it("⭐ sessão SEM linha em platform_admins é mandada para /admin/forbidden antes de tocar o banco", async () => {
     const { updateMetaApp } = await acoes();
 

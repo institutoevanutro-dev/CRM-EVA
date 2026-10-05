@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 
 import { audit } from "@/lib/audit";
-import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
+import { escritaDeAdminOuRecusa } from "@/lib/auth/escritaDeAdminOuRecusa";
 import { invalidarMarcaDaInstalacao } from "@/lib/branding/instalacao";
 import { normalizarHex } from "@/lib/branding/rampa";
 import { platformBrandingSchema, type PlatformBrandingInput } from "@/lib/schemas/settings";
@@ -55,11 +55,13 @@ export type UpdateBrandingResult =
  *
  * `requirePlatformAdmin()` já checa as três coisas (JWT, linha ativa em
  * `platform_admins`, e `aal2` quando `mfa_required`) e é o MESMO gate do layout
- * de `/admin` — então, para quem chega pela tela, nada muda: essa pessoa já
- * passou por ele para ver o formulário. O que muda é o caminho que não passa
- * pela tela. Ele redireciona em vez de devolver `{ ok: false }`, e o formulário
- * não embrulha a chamada em `try/catch`, então o `NEXT_REDIRECT` sobe para o
- * runtime como deve.
+ * de `/admin`. A ESCRITA pede uma quarta, que a leitura não pede: scope `full`
+ * — o `support_readonly` vê o formulário e não salva. Por isso o guarda daqui é
+ * `escritaDeAdminOuRecusa()`: quem não é platform admin segue REDIRECIONADO (o
+ * formulário não embrulha a chamada em `try/catch`, então o `NEXT_REDIRECT`
+ * sobe para o runtime como deve); só-leitura e MFA pendente voltam como
+ * `{ ok: false, error }`, para a tela dizer o motivo em vez de cair no error
+ * boundary.
  *
  * ── Por que NÃO emite `event_log` ───────────────────────────────────────────
  *
@@ -77,7 +79,9 @@ export async function updateBranding(
     return { ok: false, error: "validation_failed", details: parsed.error.flatten() };
   }
 
-  const { user: authUser } = await requirePlatformAdmin();
+  const escrita = await escritaDeAdminOuRecusa();
+  if (!escrita.ok) return escrita;
+  const { user: authUser } = escrita.ctx;
 
   const hdrs = await headers();
   const requestId = hdrs.get("x-request-id");

@@ -8,6 +8,7 @@
  * may not have a valid token if the disconnect was triggered by token expiry).
  */
 
+import { escreveComoPlatformAdmin } from "@/lib/auth/types";
 import { supportWriteError } from "@/lib/impersonate/support";
 import { revalidatePath } from "next/cache";
 import { audit } from "@/lib/audit";
@@ -26,7 +27,7 @@ export async function disconnectNuvemshop(): Promise<DisconnectResult> {
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) return { ok: false, error: "no_active_org" };
 
-  if (activeOrg.role !== "admin" && !user.is_platform_admin) {
+  if (activeOrg.role !== "admin" && !escreveComoPlatformAdmin(user)) {
     return { ok: false, error: "forbidden" };
   }
 

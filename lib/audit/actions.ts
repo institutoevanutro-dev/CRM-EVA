@@ -126,6 +126,12 @@ export const AUDIT_ACTIONS = [
   // como falha (rodada vazia não vira linha — varredura não é mutação).
   "message.recover_stuck_run",
   "contact.blocked",
+  // O pedido de descadastro é do cliente e o padrão é irreversível — mas a
+  // regra W-02 do catálogo de negócio prevê o override: admin desbloqueia à
+  // mão. Sem esta linha, a ação existiria sem rastro de QUEM a desfez, que é
+  // o dado que importa quando alguém pergunta "por que este cliente voltou a
+  // receber?". Código novo entra no FIM, nunca renomeia o de cima.
+  "contact.unblocked",
   "ai.handoff_triggered",
   "ai.reactivated_by_agent",
   "conversation.usable_for_rag_toggled",
@@ -687,6 +693,40 @@ export const AUDIT_ACTIONS = [
   "resposta_pronta.updated",
   "resposta_pronta.config_changed",
   "resposta_pronta.embeddings_calculated",
+  // Campanhas (migration 0316). Toda mudança de ESTADO da campanha audita: são
+  // as ações que fazem mensagem sair para gente que não pediu, e "quem mandou
+  // isso, e quando?" precisa de resposta. Edição de rascunho não audita — não
+  // saiu nada dela.
+  "campaign.created",
+  "campaign.prepared",
+  "campaign.test_sent",
+  "campaign.scheduled",
+  "campaign.started",
+  "campaign.paused",
+  "campaign.resumed",
+  "campaign.cancelled",
+  "campaign.duplicated",
+  // Rodada do cron que MEXEU em alguma campanha (enviou, pulou, concluiu,
+  // promoveu agendada). Rodada vazia não audita — o critério do `CLAUDE.md`.
+  "cron.campaign_worker",
+  // Lista de exclusão da operação (migration 0316). Audita porque é decisão que
+  // tira alguém de todo envio futuro — "quem tirou este número, e quando?"
+  // precisa de resposta. O telefone NÃO entra no payload: só os últimos dígitos.
+  "campaign.suppression_added",
+  "campaign.suppression_removed",
+  // Padrões de campanha da organização (janela de atribuição de resposta e o
+  // ritmo que campanha nova herda). Auditável porque muda o comportamento de
+  // TODA campanha futura, e a de atribuição muda a métrica das já enviadas.
+  "campaign.settings_updated",
+  // ── Sons dos avisos da Central (migration 0313) ─────────────────────────
+  // O arquivo de som que a organização escolheu para o pedido de pessoa — e a
+  // volta ao bipe do produto.
+  "settings.notification_sound_updated",
+  "settings.notification_sound_removed",
+  // Importador de clínicas (scripts/importar-clinicas.ts): vínculo criado pela
+  // planilha da agência, sem convite. O convite, quando pedido com --convidar,
+  // audita `member.invited` pelo caminho de sempre.
+  "member.added_by_import",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

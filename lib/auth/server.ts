@@ -178,7 +178,7 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
     await Promise.all([
       supabase
         .from("platform_admins")
-        .select("user_id, revoked_at")
+        .select("user_id, scope, revoked_at")
         .eq("user_id", user.id)
         .is("revoked_at", null)
         .maybeSingle(),
@@ -262,6 +262,7 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
     full_name: fullName,
     avatar_url: avatarUrl,
     is_platform_admin: !!paRow,
+    platform_admin_scope: paRow?.scope ?? null,
     locale,
     idioma,
     timezone,
@@ -309,10 +310,18 @@ export async function requireAuth(): Promise<AuthUser> {
 /**
  * Returns true if the current session has at least one verified TOTP factor.
  * Use only in Server Components / Server Actions (cookie session).
+ *
+ * LANÇA quando não conseguiu ler os fatores. O `listFactors()` do auth-js não
+ * lança: ele chama `getUser()` pela rede e, se falhar, DEVOLVE
+ * `{ data: null, error }`. Ler só `data` transformava essa falha em "não tem
+ * fator" — e `mfaEmDivida` liberava a sessão `aal1` de quem TEM fator. Uma
+ * leitura que não aconteceu não pode virar resposta: quem decide acesso falha
+ * fechado (a exceção vira 500 na rota, nunca 200).
  */
 export const isMfaEnrolled = cache(async (): Promise<boolean> => {
   const supabase = await createClient();
-  const { data } = await supabase.auth.mfa.listFactors();
+  const { data, error } = await supabase.auth.mfa.listFactors();
+  if (error) throw error;
   return !!data?.totp?.some((f) => f.status === "verified");
 });
 
