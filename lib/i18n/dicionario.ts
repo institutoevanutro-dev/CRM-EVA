@@ -6370,6 +6370,13 @@ export const DICIONARIO: Traducoes = {
   "Cliente desde": { es: "Cliente desde" },
   // Clientes pela agenda (migration 0262): o interruptor em Tipos de agendamento e a porta no rodapé de Funis.
   "Acompanhamento somente leitura ou encerrado.": { es: "Acompañamiento de solo lectura o finalizado." },
+  // A recusa de ESCRITA do painel do dono (`lib/auth/recusa-de-escrita-de-admin.ts`).
+  "Seu acesso à administração da plataforma é somente leitura.": {
+    es: "Su acceso a la administración de la plataforma es de solo lectura.",
+  },
+  "Confirme a verificação em duas etapas nesta sessão.": {
+    es: "Confirme la verificación en dos pasos en esta sesión.",
+  },
   "Confirme a verificação em duas etapas.": { es: "Confirma la verificación en dos pasos." },
   "Outra mudança estava em andamento. Tente de novo.": { es: "Otro cambio estaba en curso. Inténtalo de nuevo." },
   "Clientes pela agenda": { es: "Clientes por la agenda" },

@@ -21,7 +21,7 @@ import type { NextResponse } from "next/server";
 import { fail, type ApiError } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
-import { ROLE_RANK, type ActiveOrg, type AuthUser, type Role } from "@/lib/auth/types";
+import { ROLE_RANK, escreveComoPlatformAdmin, type ActiveOrg, type AuthUser, type Role } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
 
@@ -34,8 +34,15 @@ interface RequireRoleOpts {
   requestId?: string;
   /** resource_type gravado no audit `authz.denied` (ex.: "api_tokens"). */
   resource?: string;
-  /** Platform admin (role transversal) bypassa o rank do tenant. */
-  allowPlatformAdmin?: boolean;
+  /**
+   * Platform admin (role transversal) bypassa o rank do tenant.
+   * - `true`: rota que ESCREVE — só `scope === 'full'`; `support_readonly` cai
+   *   no rank normal do tenant.
+   * - `"leitura"`: qualquer scope. Só em handler `GET` exportado — `requireRole`
+   *   não recebe o método, e quem garante isso é
+   *   `tests/unit/admin-escrita-exige-scope-full.test.ts`.
+   */
+  allowPlatformAdmin?: boolean | "leitura";
   /**
    * Override da org onde o role é resolvido (default: org ativa do cookie).
    * Use quando a autorização é sobre a org do RECURSO (ex.: LGPD anonymize —
@@ -88,7 +95,16 @@ export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promis
   // O admin de plataforma dispensa o PAPEL na org, não a prova de MFA: o
   // atalho retornava antes do `mfaEmDivida()`, e uma sessão `aal1` roubada de
   // quem tem fator aprovava redact LGPD e conectava WhatsApp por estas rotas.
-  const atalhoDePlataforma = Boolean(allowPlatformAdmin && user.is_platform_admin && !user.support);
+  //
+  // E dispensa o papel para ESCREVER só com scope `full`: o `support_readonly`
+  // tem a mesma linha em `platform_admins`, e com a flag sozinha ele conectava
+  // WhatsApp e anonimizava contato de qualquer organização.
+  const atalhoDePlataforma = Boolean(
+    allowPlatformAdmin &&
+      user.is_platform_admin &&
+      !user.support &&
+      (allowPlatformAdmin === "leitura" || escreveComoPlatformAdmin(user)),
+  );
 
   // Role efetivo do banco (não do snapshot do cookie/membership em memória).
   let effectiveRole: string | null = null;

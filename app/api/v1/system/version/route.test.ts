@@ -9,6 +9,23 @@ vi.mock("@/lib/auth/server", () => ({
   loadAuthUser: vi.fn(),
   mfaEmDivida: vi.fn(async () => false),
 }));
+vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+vi.mock("@/lib/auth/requirePlatformAdmin", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/auth/requirePlatformAdmin")>();
+  const { loadAuthUser: usuarioDoCaso } = await import("@/lib/auth/server");
+  return {
+    ...real,
+    // Segue o usuário do caso: o dono do servidor passa; os demais levam o
+    // redirect que o helper real faria. Scope e MFA são medidos em
+    // lib/auth/requirePlatformAdmin.test.ts e em
+    // tests/unit/admin-so-leitura-nao-escreve-na-instalacao.test.ts.
+    requirePlatformAdminEscrita: async () => {
+      const u = await usuarioDoCaso();
+      if (!u?.is_platform_admin) throw new Error("NEXT_REDIRECT;/admin/forbidden");
+      return { user: { id: u.id }, platformAdmin: { user_id: u.id, scope: "full", mfa_required: false } };
+    },
+  };
+});
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 

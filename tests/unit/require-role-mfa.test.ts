@@ -62,6 +62,9 @@ function preparar(cenario: Cenario): void {
     id: USER_ID,
     email: "admin@teste.local",
     is_platform_admin: cenario.isPlatformAdmin ?? false,
+    // O atalho de papel exige scope `full` (lib/auth/require-role.test.ts mede o
+    // `support_readonly`); esta suíte mede só o segundo fator.
+    platform_admin_scope: cenario.isPlatformAdmin ? "full" : null,
     organizations: [],
   } as unknown as AuthUser;
 

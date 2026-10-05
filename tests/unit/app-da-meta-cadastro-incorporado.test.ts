@@ -20,7 +20,7 @@ describe("updateMetaApp — App ID e Configuration ID", () => {
     const upserts: Record<string, unknown>[] = [];
     const auditorias: { metadata?: Record<string, unknown> }[] = [];
     vi.doMock("@/lib/auth/requirePlatformAdmin", () => ({
-      requirePlatformAdmin: async () => ({ user: { id: "11111111-1111-4111-8111-111111111111" } }),
+      requirePlatformAdminEscrita: async () => ({ user: { id: "11111111-1111-4111-8111-111111111111" } }),
     }));
     vi.doMock("next/headers", () => ({ headers: async () => new Headers() }));
     vi.doMock("@/lib/supabase/admin", () => ({

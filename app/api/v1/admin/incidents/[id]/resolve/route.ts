@@ -11,8 +11,11 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 
-import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
-import { mfaEmDivida } from "@/lib/auth/server";
+import {
+  falhaDaEscritaDePlatformAdmin,
+  requirePlatformAdminEscrita,
+  type PlatformAdminContext,
+} from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
@@ -34,20 +37,13 @@ export async function POST(
   const requestId = randomUUID();
   const { id } = await params;
 
-  let adminCtx: Awaited<ReturnType<typeof requirePlatformAdmin>>;
+  // Escrita de platform admin: scope `full` e segundo fator provado na sessão.
+  let adminCtx: PlatformAdminContext;
   try {
-    adminCtx = await requirePlatformAdmin();
-  } catch {
-    return fail("forbidden", "Platform admin required", 403, { requestId });
+    adminCtx = await requirePlatformAdminEscrita();
+  } catch (err) {
+    return falhaDaEscritaDePlatformAdmin(err, requestId);
   }
-
-  if (adminCtx.platformAdmin.scope !== "full") {
-    return fail("forbidden", "Seu acesso de suporte não permite resolver incidentes", 403, {
-      requestId,
-    });
-  }
-  if (await mfaEmDivida())
-    return fail("mfa_required", "Confirme a verificação em duas etapas", 403, { requestId });
 
   let body: z.infer<typeof bodySchema>;
   try {

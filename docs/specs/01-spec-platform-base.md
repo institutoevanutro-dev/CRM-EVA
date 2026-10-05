@@ -1214,6 +1214,7 @@ export async function rateLimitMiddleware(req: Request, orgId: string) {
 | `mfa_invalid` | 401 | TOTP não confere |
 | `mfa_enrollment_required` | 403 | Admin sem MFA enrolado |
 | `forbidden_role` | 403 | Role insuficiente |
+| `forbidden_scope` | 403 | Platform admin `support_readonly` tentando escrever (só `scope = 'full'` grava) |
 | `tenant_not_found` | 404 | Org inexistente ou não acessível |
 | `resource_not_found` | 404 | UUID não encontrado |
 | `idempotency_conflict` | 409 | Mesma key, body diferente |

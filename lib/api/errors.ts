@@ -25,6 +25,7 @@ export const ApiErrorCodes = {
   // 403 — authz
   forbidden: "forbidden",
   forbidden_role: "forbidden_role",
+  forbidden_scope: "forbidden_scope", // platform admin `support_readonly` tentando escrever
   forbidden_tenant: "forbidden_tenant",
   lgpd_anonymization_irreversible: "lgpd_anonymization_irreversible",
 

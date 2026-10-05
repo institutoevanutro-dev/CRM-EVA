@@ -45,6 +45,27 @@ export function roleAtLeast(role: string | null | undefined, min: Role): boolean
   return rank >= ROLE_RANK[min];
 }
 
+/**
+ * O platform admin pode ESCREVER pulando o papel do tenant?
+ *
+ * `is_platform_admin` sozinho responde "tem a linha em platform_admins" — e o
+ * `support_readonly` também tem. Todo atalho do tipo
+ * `!user.is_platform_admin && ROLE_RANK[...] < ROLE_RANK.admin` deixava o
+ * `support_readonly` que é membro comum de uma empresa escrever nela como se
+ * administrasse. Só `scope === "full"` escreve; ausente = sem escrita.
+ *
+ * Mora aqui, e não em `requirePlatformAdmin.ts`, porque é puro: as server actions
+ * que o usam já importam `ROLE_RANK` daqui e não ganham dependência de servidor.
+ * MFA não entra: quem chama já confere `mfaEmDivida` como fazia antes.
+ *
+ * Porte de melgarafael/DeskcommCRM 34a554b37.
+ */
+export function escreveComoPlatformAdmin(
+  user: Pick<AuthUser, "is_platform_admin" | "platform_admin_scope">,
+): boolean {
+  return user.is_platform_admin && user.platform_admin_scope === "full";
+}
+
 /** Papéis que uma PESSOA pode ter. Espelha `user_organizations_role_check`. */
 export const PAPEIS_HUMANOS: ReadonlyArray<Role> = [
   "viewer",
@@ -103,6 +124,11 @@ export interface AuthUser {
   full_name: string | null;
   avatar_url: string | null;
   is_platform_admin: boolean;
+  /**
+   * `platform_admins.scope` (`full` | `support_readonly`), nulo para quem não é
+   * platform admin. Escrita de platform admin exige `=== "full"`; ausente = sem escrita.
+   */
+  platform_admin_scope?: string | null;
   /**
    * Idioma da interface, de `user_metadata.locale`.
    *
