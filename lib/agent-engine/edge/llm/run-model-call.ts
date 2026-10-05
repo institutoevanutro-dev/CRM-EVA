@@ -618,10 +618,21 @@ export function redigirMensagemDoProvedor(bruto: string): string {
     // `sk-or-v1-…`, `sk-proj-…`, `sk-…`, e as do Google (`AIza…`).
     .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, '[CHAVE]')
     .replace(/\bAIza[A-Za-z0-9_-]{10,}/g, '[CHAVE]')
-    // O header inteiro, em qualquer caixa, com ou sem `Authorization:` na
-    // frente — é assim que ele costuma aparecer ecoado num corpo de erro.
-    .replace(/\b[Bb]earer\s+[A-Za-z0-9._-]{8,}/g, 'Bearer [CHAVE]')
-    .replace(/\b(x-api-key|api[-_]?key|authorization)\b\s*[:=]\s*\S+/gi, '$1: [CHAVE]');
+    // O header inteiro, em qualquer caixa (`BEARER` também), com ou sem
+    // `Authorization:` na frente — é assim que ele costuma aparecer ecoado num
+    // corpo de erro. A cauda aceita `+ / =`: token em base64 saía pela metade.
+    .replace(/\bbearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer [CHAVE]')
+    // O cabeçalho pelo NOME, que é o que pega a chave sem prefixo conhecido (a
+    // do gateway, a de um endpoint próprio). Três formas que passavam inteiras:
+    // ecoado em JSON (`{"x-api-key":"…"}` — as aspas ficam entre o nome e os
+    // dois-pontos), `API key: …` escrito com espaço, e esquema que não é
+    // Bearer (`Authorization: Basic …`), em que o `\S+` comia só a palavra do
+    // esquema e deixava a credencial. A palavra opcional antes do valor é o
+    // esquema; sem esquema ela come uma palavra a mais, que é o lado seguro.
+    .replace(
+      /\b(x-api-key|api[-_ ]?key|authorization)\b["']?\s*[:=]\s*["']?(?:[A-Za-z][\w-]*\s+)?[^\s"',}]+/gi,
+      '$1: [CHAVE]',
+    );
   return scrubMessage(semSegredo).slice(0, 500);
 }
 
