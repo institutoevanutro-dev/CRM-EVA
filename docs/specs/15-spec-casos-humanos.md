@@ -222,7 +222,16 @@ create table if not exists agent_case_events (
 );
 create index if not exists agent_case_events_case_idx on agent_case_events (case_id, created_at);
 ```
-Append-only, sem RLS de UPDATE/DELETE (como `api_audit_log`). RLS select/insert por org.
+Append-only, sem RLS de UPDATE/DELETE (como `api_audit_log`). **Desde a migration 0319, só
+existe RLS de SELECT, aqui e em `agent_cases`**: a policy de escrita saiu junto com o GRANT de
+escrita de `authenticated`. Quem escreve caso é o motor (`pg.Pool` em
+`lib/agent-engine/agent/human-cases.ts`) e o cron (service role); nenhum caminho do produto
+escrevia por login de usuário, e enquanto a porta existiu um atendente reescrevia pelo PostgREST
+o texto que a equipe lê para decidir. A leitura herda a visibilidade da conversa do caso: quem
+não vê a conversa não vê o caso nem a linha do tempo dele — e é por isso que as rotas da tela
+leem com o cliente de sessão. Para ver o que está em vigor sem confiar nesta linha:
+`grep -nEi 'policy .*(agent_cases|agent_case_events)' supabase/baseline.sql`. Vigiado por
+`tests/invariants/casos-so-o-servidor-escreve.test.ts`.
 
 ### 8.3 Alterações em tabelas existentes
 - `ai_agent_versions add column if not exists cases_enabled boolean not null default false;`

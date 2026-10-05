@@ -38,6 +38,7 @@ import {
 import { performHumanHandoff } from "@/lib/agent-engine/agent/human-handoff";
 import { avisarLeadDoCrm } from "@/lib/ai/handoff/aviso-ao-lead";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { createLogger } from "@/lib/agent-engine/obs/logger";
 import { enqueueJob } from "@/lib/agent-engine/queue/queue";
@@ -100,6 +101,19 @@ export async function POST(req: NextRequest, { params }: RouteParams): Promise<R
     });
   }
   const { action, body } = parsed.data;
+
+  // Quem responde tem de ENXERGAR o caso. A leitura e a escrita abaixo usam o
+  // pool do motor, que não passa por RLS; esta pergunta, com o cliente de
+  // sessão, é a mesma regra da lista e do detalhe (a RLS de `agent_cases` herda
+  // a visibilidade da conversa, migration 0319). 404 e não 403: não confirma a
+  // existência do caso para quem não pode vê-lo.
+  const { data: visivel } = await (await createClient())
+    .from("agent_cases")
+    .select("id")
+    .eq("id", caseId)
+    .eq("organization_id", org.orgId)
+    .maybeSingle();
+  if (!visivel) return fail("not_found", t("Caso não encontrado."), 404, { requestId });
 
   let pool;
   try {
