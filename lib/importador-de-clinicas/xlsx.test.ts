@@ -38,6 +38,37 @@ describe("lerXlsx", () => {
     expect(linhas![3]).toEqual(["Sorriso & Cia", "", "27999998888", ""]);
   });
 
+  it("decodifica os escapes _xHHHH_ do Excel (CR de várias linhas) em compartilhada, inline e t=\"str\"", () => {
+    const x = (s: string) => strToU8(s);
+    const bytes = zipSync({
+      "xl/workbook.xml": x(`<workbook><sheets><sheet name="A" r:id="rId1"/></sheets></workbook>`),
+      "xl/_rels/workbook.xml.rels": x(`<Relationships><Relationship Id="rId1" Target="worksheets/a.xml"/></Relationships>`),
+      "xl/sharedStrings.xml": x(`<sst><si><t xml:space="preserve">Aceita convênio?_x000D_\nTem Amil?_x000D_\nE Uniodonto?</t></si></sst>`),
+      "xl/worksheets/a.xml": x(
+        `<worksheet><sheetData><row r="1">` +
+          `<c r="A1" t="s"><v>0</v></c>` +
+          `<c r="B1" t="inlineStr"><is><t>um_x000D_\ndois</t></is></c>` +
+          `<c r="C1" t="str"><v>tr_x00EA_s_x005F_x000D_</v></c>` +
+          `</row></sheetData></worksheet>`,
+      ),
+    });
+    const [a, b, c] = lerXlsx(bytes).get("A")![0]!;
+    expect(a!.split(/\r?\n/)).toEqual(["Aceita convênio?", "Tem Amil?", "E Uniodonto?"]);
+    expect(b).toBe("um\r\ndois");
+    expect(c).toBe("três_x000D_");
+  });
+
+  it("<t/> autofechado não engole o run seguinte", () => {
+    const x = (s: string) => strToU8(s);
+    const bytes = zipSync({
+      "xl/workbook.xml": x(`<workbook><sheets><sheet name="A" r:id="rId1"/></sheets></workbook>`),
+      "xl/_rels/workbook.xml.rels": x(`<Relationships><Relationship Id="rId1" Target="worksheets/a.xml"/></Relationships>`),
+      "xl/sharedStrings.xml": x(`<sst><si><r><t/></r><r><t>abc</t></r></si></sst>`),
+      "xl/worksheets/a.xml": x(`<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>`),
+    });
+    expect(lerXlsx(bytes).get("A")![0]).toEqual(["abc"]);
+  });
+
   it("arquivo que não é zip vira XlsxIlegivel, nunca um erro cru", () => {
     expect(() => lerXlsx(strToU8("Código;Nome\nA;B"))).toThrow(XlsxIlegivel);
   });

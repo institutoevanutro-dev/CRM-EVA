@@ -33,6 +33,11 @@ function desescapar(s: string): string {
   });
 }
 
+/** Texto de célula: entidades XML e, depois, os escapes ST_Xstring do Excel (`_x000D_` = CR; `_x005F_` = `_`). */
+function textoDaCelula(s: string): string {
+  return desescapar(s).replace(/_x([0-9A-Fa-f]{4})_/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
+}
+
 function escapar(s: string): string {
   return s
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
@@ -49,8 +54,8 @@ function atributo(tag: string, nome: string): string | undefined {
 
 /** Junta os `<t>` (rich text vem em vários runs) e ignora a transliteração fonética. */
 function textoDosRuns(xml: string): string {
-  return [...xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, "").matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)]
-    .map((m) => desescapar(m[1]!))
+  return [...xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, "").matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)]
+    .map((m) => textoDaCelula(m[1]!))
     .join("");
 }
 
@@ -86,7 +91,7 @@ function linhasDaAba(xml: string, compartilhadas: readonly string[]): string[][]
             ? textoDosRuns(corpo)
             : v === undefined
               ? ""
-              : desescapar(v);
+              : textoDaCelula(v);
     }
     linhas[numero - 1] = Array.from(celulas, (x) => x ?? "");
   }
