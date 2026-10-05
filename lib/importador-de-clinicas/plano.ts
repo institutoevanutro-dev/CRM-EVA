@@ -13,7 +13,12 @@ export interface MarcaDoImportador {
   codigo: string;
   memoria_sha256?: string;
   prompt_sha256?: string;
+  /** Por título: o que o importador gravou da última vez (resposta + formas). */
+  perguntas_sha256?: Record<string, string>;
 }
+
+export const hashDaPergunta = (resposta: string, formas: string[]) =>
+  sha256(JSON.stringify([resposta, [...formas].sort()]));
 
 export interface EstadoDaClinica {
   org: {
@@ -101,7 +106,12 @@ export function planejarClinica(d: DadosDaClinica, e: EstadoDaClinica): PlanoDaC
   }
   const acoes: Acao[] = [];
   const avisos: string[] = [];
-  const marca: MarcaDoImportador = { ...(marcaAtual ?? {}), codigo: clinica.codigo };
+  const marca: MarcaDoImportador = {
+    ...(marcaAtual ?? {}),
+    codigo: clinica.codigo,
+    perguntas_sha256: { ...(marcaAtual?.perguntas_sha256 ?? {}) },
+  };
+  const hashes = marca.perguntas_sha256!;
 
   // 1 · empresa (o funil só na criação: depois disso ele é da clínica)
   if (!e.org) acoes.push({ tipo: "criar_org" }, { tipo: "montar_funil" });
@@ -126,6 +136,7 @@ export function planejarClinica(d: DadosDaClinica, e: EstadoDaClinica): PlanoDaC
         resposta: p.resposta,
         perguntas: p.perguntas,
       });
+      hashes[p.titulo] = hashDaPergunta(p.resposta, p.perguntas);
       continue;
     }
     if (iguais.length > 1) {
@@ -135,19 +146,31 @@ export function planejarClinica(d: DadosDaClinica, e: EstadoDaClinica): PlanoDaC
       continue;
     }
     const atual = iguais[0]!;
+    const desejado = hashDaPergunta(p.resposta, p.perguntas);
+    const doBanco = hashDaPergunta(
+      atual.resposta,
+      atual.perguntas.map((x) => x.texto),
+    );
+    if (doBanco === desejado) {
+      hashes[p.titulo] = desejado;
+      continue;
+    }
+    if (hashes[p.titulo] !== doBanco) {
+      avisos.push(
+        `pergunta "${p.titulo}" foi editada na tela; não foi sobrescrita (resposta e formas de perguntar mantidas)`,
+      );
+      continue;
+    }
     const textos = new Set(atual.perguntas.map((x) => x.texto));
-    const novas = p.perguntas.filter((t) => !textos.has(t));
-    const sair = atual.perguntas.filter((x) => !p.perguntas.includes(x.texto)).map((x) => x.id);
-    const resposta = atual.resposta === p.resposta ? null : p.resposta;
-    if (resposta !== null || novas.length > 0 || sair.length > 0)
-      acoes.push({
-        tipo: "atualizar_pergunta",
-        id: atual.id,
-        titulo: p.titulo,
-        resposta,
-        novas,
-        sair,
-      });
+    acoes.push({
+      tipo: "atualizar_pergunta",
+      id: atual.id,
+      titulo: p.titulo,
+      resposta: atual.resposta === p.resposta ? null : p.resposta,
+      novas: p.perguntas.filter((t) => !textos.has(t)),
+      sair: atual.perguntas.filter((x) => !p.perguntas.includes(x.texto)).map((x) => x.id),
+    });
+    hashes[p.titulo] = desejado;
   }
   const titulosDaPlanilha = new Set(d.perguntas.map((p) => p.titulo));
   for (const t of porTitulo.keys())
@@ -236,7 +259,9 @@ export function planejarClinica(d: DadosDaClinica, e: EstadoDaClinica): PlanoDaC
     marcaMudou:
       marca.codigo !== marcaAtual?.codigo ||
       marca.memoria_sha256 !== marcaAtual?.memoria_sha256 ||
-      marca.prompt_sha256 !== marcaAtual?.prompt_sha256,
+      marca.prompt_sha256 !== marcaAtual?.prompt_sha256 ||
+      Object.keys(hashes).length !== Object.keys(marcaAtual?.perguntas_sha256 ?? {}).length ||
+      Object.entries(hashes).some(([t, h]) => marcaAtual?.perguntas_sha256?.[t] !== h),
   };
 }
 
