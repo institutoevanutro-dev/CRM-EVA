@@ -32266,11 +32266,13 @@ revoke all on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) fro
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) to service_role;
 
 -- ---- anonimização: o botão da ficha chama a cascata do pedido formal (migration 0317) ----
--- 0317 — o botão "Anonimizar" da ficha passa a limpar tudo o que o pedido formal limpa
+-- 0317 — o botão "Anonimizar" da ficha passa a limpar tudo o que o pedido formal
+--        limpa, e a anonimização alcança o caso que a IA abriu sobre a pessoa
 --
--- Porte do DeskcommCRM original (commits e8e5252b8, e74e343ae, 3eaf5b5fe,
--- ca39e824e e 0fb069e44, de webtecnica, issue #1504; migration 0414 de lá),
--- reescrito sobre as funções VIGENTES deste fork.
+-- Porte do DeskcommCRM original, reescrito sobre as funções VIGENTES deste fork:
+--   * commits e8e5252b8, e74e343ae, 3eaf5b5fe, ca39e824e e 0fb069e44, de
+--     webtecnica, issue #1504 (migration 0414 de lá) — o botão chama a cascata;
+--   * commit 50ede48cb (migration 0280 de lá) — a cascata alcança o caso.
 --
 -- ─── O defeito ────────────────────────────────────────────────────────────
 --
@@ -32320,6 +32322,16 @@ grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) 
 --        deixava a pessoa reidentificável (IGSID + token da página devolvem @
 --        e nome) e presa a um contato que não pode ser editado. Passa a valer
 --        o mesmo do WhatsApp: quem volta a escrever é um contato novo.
+--    7d  agent_cases: título, resumo, bloqueio e o recorte da conversa que foi
+--        ao modelo. `updated_at` fica fora (o cobrador de caso parado o lê).
+--    7e  agent_case_events: corpo e metadata da linha do tempo do caso.
+--    7f  demandas: o assunto e o próximo passo.
+--    7g  agent_inbox_items: todo aviso da Central que aponta para a pessoa
+--        (contato, conversa, caso, follow-up ou compromisso dela) é resolvido
+--        e perde título, corpo e referência.
+--
+--    Nenhum caminho alcançava 7d–7g: o relato que a IA escreveu sobre o
+--    paciente sobrevivia à anonimização, com o relatório dizendo "executado".
 --
 -- 3. Cura de quem JÁ estava anonimizado (fim do arquivo).
 --
@@ -32642,6 +32654,120 @@ begin
   get diagnostics v_count = row_count;
   v_counts := v_counts || jsonb_build_object('contact_channel_identities', v_count);
 
+  -- 7d. agent_cases — o que a IA escreveu SOBRE a pessoa quando travou
+  --     (migration 0317; 0280 no original).
+  --
+  -- O caso é o texto que a equipe lê antes de decidir: `title`, `summary` e
+  -- `blocker` saem do modelo a partir da conversa, e `context_snapshot` é o
+  -- recorte dessa conversa que o motor mandou para ele. Nada disso é registro
+  -- de operação — é o relato do problema de uma pessoa identificável. As três
+  -- colunas de texto são NOT NULL: recebem rótulo e texto fixo, nunca `null`.
+  --
+  -- ⚠️ `updated_at` FICA FORA DO `set`, de propósito. O cobrador de caso parado
+  -- (`app/api/v1/cron/case-stale-watcher/route.ts`) o lê como "alguém da equipe
+  -- encostou neste caso". A cascata não é alguém encostando: escrever ali
+  -- adiaria a cobrança de um caso que continua parado.
+  --
+  -- O vínculo é pela CONVERSA porque `agent_cases` não tem FK para `contacts`.
+  update agent_cases set
+    title = v_anon_label,
+    summary = '[resumo anonimizado]',
+    blocker = '[bloqueio anonimizado]',
+    context_snapshot = '{}'::jsonb
+  where organization_id = p_organization_id
+    and conversation_id in (
+      select id from conversations
+        where contact_id = p_contact_id and organization_id = p_organization_id
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_cases', v_count);
+
+  -- 7e. agent_case_events — a linha do tempo do caso. `body` é o que a pessoa
+  --     da equipe escreveu ao responder e o que o agente registrou sobre o que
+  --     o cliente disse; `metadata` leva o recorte que o motor anexou. `kind`,
+  --     `actor_kind`, `human_action` e `created_at` FICAM: são o registro de
+  --     que houve um toque humano e quando.
+  update agent_case_events set
+    body = null,
+    metadata = '{}'::jsonb
+  where organization_id = p_organization_id
+    and case_id in (
+      select id from agent_cases
+        where organization_id = p_organization_id
+          and conversation_id in (
+            select id from conversations
+              where contact_id = p_contact_id and organization_id = p_organization_id
+          )
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_case_events', v_count);
+
+  -- 7f. demandas — o assunto do pedido e o próximo passo, os dois texto livre
+  --     sobre o que a pessoa pediu ("Ligar para a Maria sobre o exame"). O
+  --     resto da linha é a operação da demanda (origem, estado, dono, prazo,
+  --     desfecho) e fica. O próximo passo vira texto FIXO, não nulo: demanda
+  --     aberta sem próximo passo entra no Radar como "ninguém marcou o que
+  --     fazer", e cobraria a equipe por quem pediu para ser esquecido.
+  update demandas set
+    assunto = null,
+    proximo_passo = case when proximo_passo is null then null else '[próximo passo anonimizado]' end
+  where organization_id = p_organization_id
+    and contact_id = p_contact_id;
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('demandas', v_count);
+
+  -- 7g. agent_inbox_items — os avisos da Central sobre esta pessoa.
+  --
+  -- O original redige só `handoff` e `case_stale`. Medido nos produtores DESTE
+  -- fork, outros tipos também levam dado da pessoa: `voice_call_missed` põe o
+  -- TELEFONE no título (`lib/wacalls/events-bridge.ts`), o `handoff` do motor
+  -- leva o resumo da conversa (`lib/agent-engine/agent/human-handoff.ts`),
+  -- `next_action_ambiguous` cita a proposta, `supervision_review` leva texto da
+  -- revisão, `case_stale` embute o título do caso. Uma lista de tipos escrita
+  -- aqui envelheceria no próximo tipo novo — e tipo fora da lista casa zero
+  -- linha e devolve sucesso. Por isso a regra é pela REFERÊNCIA: todo aviso
+  -- que aponta para o contato, uma conversa, um caso, um follow-up ou um
+  -- compromisso dele. Sai o texto (título e corpo), a referência é solta e o
+  -- aviso é resolvido; o tipo, a severidade e as datas ficam.
+  --
+  -- A referência é polimórfica (sem FK). O `ref_kind` não entra no predicado de
+  -- propósito: o mesmo contato aparece como `contact`, `lgpd_escalation` e
+  -- `jailbreak_escalation`, e um id de contato não é id de mais nada.
+  --
+  -- Ficam de fora dois tipos que só usam a conversa como exemplo de um
+  -- problema da ORGANIZAÇÃO (`message_send_stuck`, `capabilities_missing`): o
+  -- texto deles é fixo, sem dado da pessoa, e resolvê-los esconderia um
+  -- defeito que continua de pé.
+  update agent_inbox_items set
+    status = 'resolved',
+    resolved_at = coalesce(resolved_at, now()),
+    title = 'Aviso de contato anonimizado',
+    body = 'Contato anonimizado.',
+    ref_id = null
+  where organization_id = p_organization_id
+    and kind not in ('message_send_stuck', 'capabilities_missing')
+    and ref_id is not null
+    and (
+      ref_id = p_contact_id
+      or ref_id in (
+        select id from conversations
+          where contact_id = p_contact_id and organization_id = p_organization_id)
+      or ref_id in (
+        select id from agent_cases
+          where organization_id = p_organization_id
+            and conversation_id in (
+              select id from conversations
+                where contact_id = p_contact_id and organization_id = p_organization_id))
+      or ref_id in (
+        select id from followup_enrollments
+          where contact_id = p_contact_id and organization_id = p_organization_id)
+      or ref_id in (
+        select id from calendar_appointments
+          where contact_id = p_contact_id and organization_id = p_organization_id)
+    );
+  get diagnostics v_count = row_count;
+  v_counts := v_counts || jsonb_build_object('agent_inbox_items', v_count);
+
   -- 8. dense audit row
   insert into api_audit_log (organization_id, action, actor_user_id, resource_type, resource_id, metadata, bypassed_rls)
   values (
@@ -32765,6 +32891,80 @@ update public.contacts set
   avatar_updated_at = now()
  where is_anonymized
    and avatar_storage_path is not null;
+
+-- A5. O caso que a IA abriu: título, resumo, bloqueio e o recorte da conversa.
+--     `updated_at` fica fora, como na cascata.
+update public.agent_cases ac set
+  title = 'Cliente Anonimizado #' || substring(k.id::text from 1 for 8),
+  summary = '[resumo anonimizado]',
+  blocker = '[bloqueio anonimizado]',
+  context_snapshot = '{}'::jsonb
+  from public.conversations c, public.contacts k
+ where c.id = ac.conversation_id
+   and c.organization_id = ac.organization_id
+   and k.id = c.contact_id
+   and k.organization_id = c.organization_id
+   and k.is_anonymized
+   and ac.created_at <= k.anonymized_at
+   and (ac.summary <> '[resumo anonimizado]'
+        or ac.blocker <> '[bloqueio anonimizado]'
+        or ac.context_snapshot <> '{}'::jsonb);
+
+-- A6. A linha do tempo do caso.
+update public.agent_case_events e set
+  body = null,
+  metadata = '{}'::jsonb
+  from public.agent_cases ac, public.conversations c, public.contacts k
+ where ac.id = e.case_id
+   and ac.organization_id = e.organization_id
+   and c.id = ac.conversation_id
+   and c.organization_id = ac.organization_id
+   and k.id = c.contact_id
+   and k.organization_id = c.organization_id
+   and k.is_anonymized
+   and e.created_at <= k.anonymized_at
+   and (e.body is not null or e.metadata <> '{}'::jsonb);
+
+-- A7. A demanda: assunto e próximo passo.
+update public.demandas d set
+  assunto = null,
+  proximo_passo = case when d.proximo_passo is null then null else '[próximo passo anonimizado]' end
+  from public.contacts k
+ where k.id = d.contact_id
+   and k.organization_id = d.organization_id
+   and k.is_anonymized
+   and d.created_at <= k.anonymized_at
+   and (d.assunto is not null
+        or (d.proximo_passo is not null and d.proximo_passo <> '[próximo passo anonimizado]'));
+
+-- A8. Os avisos da Central sobre a pessoa (mesma regra do passo 7g). Aviso já
+--     tratado fica sem referência e não é achado de novo.
+update public.agent_inbox_items a set
+  status = 'resolved',
+  resolved_at = coalesce(a.resolved_at, now()),
+  title = 'Aviso de contato anonimizado',
+  body = 'Contato anonimizado.',
+  ref_id = null
+  from public.contacts k
+ where k.is_anonymized
+   and a.organization_id = k.organization_id
+   and a.kind not in ('message_send_stuck', 'capabilities_missing')
+   and a.created_at <= k.anonymized_at
+   and a.ref_id is not null
+   and (a.ref_id = k.id
+        or a.ref_id in (
+          select c.id from public.conversations c
+           where c.contact_id = k.id and c.organization_id = k.organization_id)
+        or a.ref_id in (
+          select ac.id from public.agent_cases ac
+            join public.conversations c on c.id = ac.conversation_id and c.organization_id = ac.organization_id
+           where c.contact_id = k.id and c.organization_id = k.organization_id)
+        or a.ref_id in (
+          select f.id from public.followup_enrollments f
+           where f.contact_id = k.id and f.organization_id = k.organization_id)
+        or a.ref_id in (
+          select ap.id from public.calendar_appointments ap
+           where ap.contact_id = k.id and ap.organization_id = k.organization_id));
 
 -- ── (B) Só quem foi anonimizado pelo BOTÃO ANTIGO ──
 --

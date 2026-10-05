@@ -418,6 +418,75 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
           </View>
         ) : null}
 
+        {/* O caso que a IA abriu quando o atendimento travou, a demanda e os
+            avisos sobre a pessoa. Vão no PDF porque é ele que o titular recebe,
+            e este é o trecho em que a pessoa é DESCRITA por máquina (migration
+            0317: a anonimização apaga, o relatório entrega). */}
+        {data.cases?.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Atendimentos encaminhados para a equipe</Text>
+            {data.cases.map((caso) => (
+              <View key={caso.id} style={styles.itemBlock}>
+                <Text>
+                  {caso.title} · {caso.status}
+                </Text>
+                <Text style={styles.small}>Resumo: {caso.summary}</Text>
+                <Text style={styles.small}>O que faltava: {caso.blocker}</Text>
+                {(data.case_events ?? [])
+                  .filter((evento) => evento.case_id === caso.id && evento.body)
+                  .map((evento) => (
+                    <Text key={evento.id} style={styles.small}>
+                      {fmtDate(evento.created_at)} · {evento.actor_kind}: {evento.body}
+                    </Text>
+                  ))}
+                <Text style={styles.small}>
+                  Aberto em {fmtDate(caso.opened_at)}
+                  {caso.closed_at ? ` · Encerrado em ${fmtDate(caso.closed_at)}` : ""}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {data.demandas?.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Pedidos em acompanhamento</Text>
+            {data.demandas.map((demanda) => (
+              <View key={demanda.id} style={styles.itemBlock}>
+                <Text>
+                  {demanda.assunto ?? "(sem assunto)"} · {demanda.estado}
+                  {demanda.desfecho ? ` · ${demanda.desfecho}` : ""}
+                </Text>
+                {demanda.proximo_passo ? (
+                  <Text style={styles.small}>Próximo passo anotado: {demanda.proximo_passo}</Text>
+                ) : null}
+                <Text style={styles.small}>
+                  Aberto em {fmtDate(demanda.aberta_em)}
+                  {demanda.fechada_em ? ` · Fechado em ${fmtDate(demanda.fechada_em)}` : ""}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {data.avisos_da_central?.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Avisos internos sobre o atendimento</Text>
+            {data.avisos_da_central.map((aviso) => (
+              <View key={aviso.id} style={styles.itemBlock}>
+                <Text>
+                  {aviso.title} · {noticeStatus[aviso.status] ?? aviso.status}
+                </Text>
+                {aviso.body ? <Text style={styles.small}>{aviso.body}</Text> : null}
+                <Text style={styles.small}>
+                  Criado em {fmtDate(aviso.created_at)}
+                  {aviso.resolved_at ? ` · Resolvido em ${fmtDate(aviso.resolved_at)}` : ""}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         {/* Comentários do Instagram — o que a pessoa escreveu num post da
             organização e o que ficou guardado sobre ele. A anonimização apaga
             este texto (migration 0317); o relatório o entrega. */}

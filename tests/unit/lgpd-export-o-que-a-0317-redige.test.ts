@@ -137,3 +137,72 @@ describe("LGPD export: comentários do Instagram do titular (0317)", () => {
     expect(payload.instagram_comments).toEqual([]);
   });
 });
+
+describe("LGPD export: o caso que a IA abriu, a demanda e os avisos (0317)", () => {
+  const CONVERSA = "conversa-da-joana";
+  const CONVERSA_ALHEIA = "conversa-do-pedro";
+
+  beforeEach(() => {
+    rows.conversations = [
+      { id: CONVERSA, organization_id: ORG, contact_id: TITULAR, status: "open", channel: "whatsapp" },
+      { id: CONVERSA_ALHEIA, organization_id: ORG, contact_id: "contato-b", status: "open", channel: "whatsapp" },
+    ];
+    rows.agent_cases = [
+      { id: "caso-dela", organization_id: ORG, conversation_id: CONVERSA, status: "awaiting_human", title: "Estorno da Joana", summary: "Joana pagou duas vezes", blocker: "Falta o comprovante", source: "agent", context_snapshot: { recorte: "NAO-EXPORTAR" } },
+      { id: "caso-do-pedro", organization_id: ORG, conversation_id: CONVERSA_ALHEIA, status: "awaiting_human", title: "Troca do Pedro", summary: "Pedro quer trocar", blocker: "Falta o pedido", source: "agent" },
+      { id: "caso-de-outra-org", organization_id: OUTRA_ORG, conversation_id: CONVERSA, status: "awaiting_human", title: "Outra org", summary: "x", blocker: "y", source: "agent" },
+    ];
+    rows.agent_case_events = [
+      { id: "evento-dela", organization_id: ORG, case_id: "caso-dela", kind: "human_replied", actor_kind: "human", body: "Liguei para a Joana", metadata: {} },
+      { id: "evento-do-pedro", organization_id: ORG, case_id: "caso-do-pedro", kind: "human_replied", actor_kind: "human", body: "Liguei para o Pedro", metadata: {} },
+    ];
+    rows.demandas = [
+      { id: "demanda-dela", organization_id: ORG, contact_id: TITULAR, agent_case_id: "caso-dela", origem: "handoff", assunto: "Estorno", estado: "em_atendimento", dono_kind: "humano", proximo_passo: "Ligar para a Joana amanhã" },
+      { id: "demanda-do-pedro", organization_id: ORG, contact_id: "contato-b", origem: "inbound", assunto: "Troca", estado: "aberta", dono_kind: "ia", proximo_passo: null },
+    ];
+    rows.agent_inbox_items = [
+      { id: "aviso-pelo-contato", organization_id: ORG, kind: "voice_call_missed", title: "Chamada perdida de +5527999990000", body: "Ninguém atendeu", status: "open", ref_kind: "contact", ref_id: TITULAR },
+      { id: "aviso-pela-conversa", organization_id: ORG, kind: "handoff", title: "Assumir a conversa", body: "Resumo: Joana quer estorno", status: "open", ref_kind: "conversation", ref_id: CONVERSA },
+      { id: "aviso-pelo-caso", organization_id: ORG, kind: "case_stale", title: "Um atendimento espera decisão", body: "\"Estorno da Joana\" está aguardando", status: "open", ref_kind: "agent_case", ref_id: "caso-dela" },
+      { id: "aviso-do-pedro", organization_id: ORG, kind: "case_stale", title: "Um atendimento espera decisão", body: "\"Troca do Pedro\"", status: "open", ref_kind: "agent_case", ref_id: "caso-do-pedro" },
+      { id: "aviso-sem-referencia", organization_id: ORG, kind: "qr_rescan", title: "Reconecte o WhatsApp", body: null, status: "open", ref_kind: null, ref_id: null },
+    ];
+  });
+
+  it("entram os casos das conversas DELA, os eventos desses casos e as demandas dela — de mais ninguém", async () => {
+    const payload = await collectExportData(pedido);
+
+    expect(payload.cases?.map((c) => c.id)).toEqual(["caso-dela"]);
+    expect(payload.cases?.[0]).toMatchObject({ title: "Estorno da Joana", summary: "Joana pagou duas vezes", blocker: "Falta o comprovante" });
+    expect(payload.case_events?.map((e) => e.id)).toEqual(["evento-dela"]);
+    expect(payload.demandas?.map((d) => d.id)).toEqual(["demanda-dela"]);
+    expect(payload.demandas?.[0]).toMatchObject({ assunto: "Estorno", proximo_passo: "Ligar para a Joana amanhã" });
+    const tudo = JSON.stringify(payload);
+    expect(tudo).not.toContain("Pedro");
+    // O recorte da conversa que foi ao modelo não sai: as mensagens já saem no bloco delas.
+    expect(tudo).not.toContain("NAO-EXPORTAR");
+  });
+
+  it("entram os avisos que apontam para ela, para a conversa dela ou para o caso dela", async () => {
+    const payload = await collectExportData(pedido);
+
+    expect((payload.avisos_da_central ?? []).map((a) => a.id).sort()).toEqual([
+      "aviso-pela-conversa",
+      "aviso-pelo-caso",
+      "aviso-pelo-contato",
+    ]);
+    expect(payload.avisos_da_central?.find((a) => a.id === "aviso-pelo-contato")?.title).toBe(
+      "Chamada perdida de +5527999990000",
+    );
+  });
+
+  it("titular sem conversa não consulta caso nenhum — `in ()` vazio não vira varredura da tabela", async () => {
+    rows.conversations = [];
+
+    const payload = await collectExportData(pedido);
+
+    expect(payload.cases).toEqual([]);
+    expect(payload.case_events).toEqual([]);
+  });
+});
+

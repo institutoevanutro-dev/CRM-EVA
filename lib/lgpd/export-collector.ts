@@ -262,6 +262,67 @@ export interface AppointmentNoticeRow {
   resolved_at: string | null;
 }
 
+/**
+ * Um caso aberto pela IA sobre o titular — o que ela entendeu quando travou.
+ *
+ * O vínculo é pela CONVERSA: `agent_cases` não tem FK para `contacts`. O
+ * `context_snapshot` fica fora: é o recorte da conversa que foi ao modelo, e
+ * as mensagens dele já saem no bloco próprio.
+ */
+export interface CaseRow {
+  id: string;
+  conversation_id: string;
+  status: string;
+  title: string;
+  summary: string;
+  blocker: string;
+  source: string;
+  opened_at: string;
+  closed_at: string | null;
+  created_at: string;
+}
+
+/** Uma linha do tempo do caso: quem tocou, quando, e o que escreveu. */
+export interface CaseEventRow {
+  id: string;
+  case_id: string;
+  kind: string;
+  actor_kind: string;
+  human_action: string | null;
+  body: string | null;
+  metadata: unknown;
+  created_at: string;
+}
+
+/** Uma demanda do titular — o pedido, o próximo passo e o desfecho. */
+export interface DemandaRow {
+  id: string;
+  agent_case_id: string | null;
+  origem: string;
+  assunto: string | null;
+  estado: string;
+  dono_kind: string;
+  proximo_passo: string | null;
+  desfecho: string | null;
+  aberta_em: string;
+  fechada_em: string | null;
+}
+
+/**
+ * Um aviso da Central que aponta para o titular, uma conversa dele ou um caso
+ * dele. O título e o corpo podem citar o telefone, o resumo da conversa ou o
+ * título do caso — é o que o passo 7g da cascata apaga.
+ */
+export interface CentralNoticeRow {
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  status: string;
+  created_at: string;
+  resolved_at: string | null;
+}
+
 /** Uma chamada de voz do titular — o registro, não a gravação (não gravamos). */
 export interface VoiceCallRow {
   id: string;
@@ -356,6 +417,20 @@ export interface ExportPayload {
   channel_identities: ChannelIdentityRow[];
   /** Comentários do titular em posts da organização. Opcional como `reply_drafts`. */
   instagram_comments?: InstagramCommentRow[];
+  /**
+   * Casos, linha do tempo do caso, demandas e avisos da Central (migration 0317).
+   *
+   * Entram porque a 0317 os pôs na cascata de anonimização, e o que se apaga a
+   * pedido do titular é o que se entrega a pedido dele. Sem estes blocos o
+   * relatório mostrava a conversa e não mencionava que o atendimento tinha
+   * parado, o que a IA entendeu do problema, nem o que a equipe anotou — a
+   * parte em que uma pessoa identificável é DESCRITA por máquina. Opcionais
+   * como `reply_drafts`.
+   */
+  cases?: CaseRow[];
+  case_events?: CaseEventRow[];
+  demandas?: DemandaRow[];
+  avisos_da_central?: CentralNoticeRow[];
   /**
    * Campanhas que falaram com o titular (migration 0343).
    *
@@ -1023,6 +1098,10 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   const ai_agent_runs: NonNullable<ExportPayload["ai_agent_runs"]> = [];
   const lead_state: NonNullable<ExportPayload["lead_state"]> = [];
   const instagram_comments: InstagramCommentRow[] = [];
+  const cases: CaseRow[] = [];
+  const case_events: CaseEventRow[] = [];
+  const demandas: DemandaRow[] = [];
+  const avisos_da_central: CentralNoticeRow[] = [];
   if (contactId) {
     const titular = contactId;
     const paginar = async <T,>(
@@ -1105,6 +1184,70 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       if (vistos.has(c.id)) continue;
       vistos.add(c.id);
       instagram_comments.push(c);
+    }
+
+    // Casos, linha do tempo, demandas e avisos — o que a 0317 pôs na cascata.
+    // O escopo do CASO é a conversa do titular (`agent_cases` não tem FK para
+    // `contacts`); o do evento é o caso já coletado — um `case_id` fora de
+    // `cases` seria de outro titular.
+    const EM_LOTE = 100; // Mantém o filtro IN abaixo dos limites de URL dos proxies.
+    for (let lote = 0; lote < conversationIds.length; lote += EM_LOTE) {
+      const ids = conversationIds.slice(lote, lote + EM_LOTE);
+      cases.push(
+        ...(await paginar<CaseRow>((de, ate) =>
+          admin
+            .from("agent_cases")
+            .select("id, conversation_id, status, title, summary, blocker, source, opened_at, closed_at, created_at")
+            .eq("organization_id", organizationId)
+            .in("conversation_id", ids)
+            .order("id")
+            .range(de, ate),
+        )),
+      );
+    }
+    const caseIds = cases.map((caso) => caso.id);
+    for (let lote = 0; lote < caseIds.length; lote += EM_LOTE) {
+      const ids = caseIds.slice(lote, lote + EM_LOTE);
+      case_events.push(
+        ...(await paginar<CaseEventRow>((de, ate) =>
+          admin
+            .from("agent_case_events")
+            .select("id, case_id, kind, actor_kind, human_action, body, metadata, created_at")
+            .eq("organization_id", organizationId)
+            .in("case_id", ids)
+            .order("id")
+            .range(de, ate),
+        )),
+      );
+    }
+    demandas.push(
+      ...(await paginar<DemandaRow>((de, ate) =>
+        admin
+          .from("demandas")
+          .select("id, agent_case_id, origem, assunto, estado, dono_kind, proximo_passo, desfecho, aberta_em, fechada_em")
+          .eq("organization_id", organizationId)
+          .eq("contact_id", titular)
+          .order("id")
+          .range(de, ate),
+      )),
+    );
+    // Avisos: a referência é polimórfica (sem FK), então o escopo são os ids
+    // que comprovadamente são do titular — ele, as conversas e os casos dele.
+    // Os de compromisso já saem em `appointment_notices`.
+    const referencias = [titular, ...conversationIds, ...caseIds];
+    for (let lote = 0; lote < referencias.length; lote += EM_LOTE) {
+      const ids = referencias.slice(lote, lote + EM_LOTE);
+      avisos_da_central.push(
+        ...(await paginar<CentralNoticeRow>((de, ate) =>
+          admin
+            .from("agent_inbox_items")
+            .select("id, kind, title, body, status, created_at, resolved_at")
+            .eq("organization_id", organizationId)
+            .in("ref_id", ids)
+            .order("id")
+            .range(de, ate),
+        )),
+      );
     }
   }
   const meeting_deliveries: MeetingDeliveryRow[] = [];
@@ -1222,6 +1365,10 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     ai_agent_runs,
     lead_state,
     instagram_comments,
+    cases,
+    case_events,
+    demandas,
+    avisos_da_central,
     campaign_recipients,
     campaign_suppressions,
   };
