@@ -5,6 +5,7 @@ CLI utilities pra operação local e de produção.
 ## Lista
 
 - `seed-tenant.ts` — Cria um tenant manualmente (modo BPO). Placeholder; implementação na Spec 01.
+- `importar-clinicas.ts` — importa as clínicas da planilha da agência (empresa, funil, perguntas frequentes, agente em rascunho, atendentes). Só mostra o plano sem `--aplicar`; exige `--destino`. Modelo: `--gerar-modelo <arquivo.xlsx>`.
 
 ## Convenções
 
