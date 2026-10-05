@@ -20,8 +20,12 @@ import { etapasParaGravar } from "@/lib/onboarding/proposta-de-funil";
 import type { PerguntaEmbedada } from "@/lib/respostas-prontas/embeddings";
 
 import { DESCRICAO_DO_AGENTE, NOME_DO_AGENTE } from "./modelo-odontologico";
+import type { ErroDaPlanilha, Papel, PlanilhaLida } from "./planilha";
 import {
+  descreverAcao,
   ESTADO_VAZIO,
+  planejarClinica,
+  type Acao,
   type DadosDaClinica,
   type EstadoDaClinica,
   type MarcaDoImportador,
@@ -408,8 +412,170 @@ export async function aplicarPlano(
     }
     await c.query("commit");
   } catch (err) {
-    await c.query("rollback");
+    // Rollback que falha não esconde o erro da clínica; quem chama descarta a conexão.
+    await c.query("rollback").catch(() => {});
     throw err;
   }
   return orgId;
+}
+
+export interface Dependencias {
+  criarUsuario(email: string, nome: string): Promise<string>;
+  embedar(orgId: string, textos: readonly string[]): Promise<PerguntaEmbedada[]>;
+  /** Devolve se o e-mail do convite saiu. */
+  convidar(c: { orgId: string; orgNome: string; email: string; papel: Papel; ator: Ator }): Promise<boolean>;
+  capacidades: readonly string[];
+}
+
+export interface Opcoes {
+  aplicar: boolean;
+  convidar: boolean;
+  ator: Ator | null;
+}
+
+export interface ResultadoDaClinica {
+  codigo: string;
+  nome: string;
+  status: "ok" | "erro" | "recusada";
+  motivo: string | null;
+  acoes: Acao[];
+  avisos: string[];
+}
+
+export interface Resumo {
+  clinicas: ResultadoDaClinica[];
+  errosGerais: ErroDaPlanilha[];
+  avisosGerais: string[];
+}
+
+const mensagem = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/**
+ * Uma clínica por vez, cada uma isolada: erro da planilha com o código dela,
+ * recusa da trava de posse ou falha na gravação ficam no resultado DELA e a
+ * próxima segue. Sem `aplicar`, só planeja.
+ */
+export async function importarClinicas(
+  pool: pg.Pool,
+  planilha: PlanilhaLida,
+  opcoes: Opcoes,
+  deps: Dependencias,
+): Promise<Resumo> {
+  if (planilha.fatal) throw new Error(`planilha ilegível: ${planilha.fatal}`);
+  if (opcoes.aplicar && !opcoes.ator) throw new Error("--aplicar exige quem está importando (--ator)");
+  if (opcoes.aplicar) {
+    const semPoder = await conferirPapel(pool);
+    if (semPoder) throw new Error(semPoder);
+  }
+  const ator = opcoes.ator;
+
+  // Qualquer erro com o código da clínica a barra inteira, com as perguntas e
+  // os atendentes dela — inclusive a primeira linha de um código repetido.
+  const clinicas: ResultadoDaClinica[] = [];
+  const errosPorCodigo = new Map<string, ErroDaPlanilha[]>();
+  for (const e of planilha.erros)
+    if (e.codigo) errosPorCodigo.set(e.codigo, [...(errosPorCodigo.get(e.codigo) ?? []), e]);
+  for (const [codigo, erros] of errosPorCodigo)
+    clinicas.push({
+      codigo,
+      nome: planilha.clinicas.find((c) => c.codigo === codigo)?.nome ?? "",
+      status: "erro",
+      motivo: erros.map((e) => `${e.aba}, linha ${e.linha}: ${e.mensagem}`).join("; "),
+      acoes: [],
+      avisos: [],
+    });
+
+  const emails = [...new Set(planilha.atendentes.map((a) => a.email))];
+  const { rows } = await pool.query(`select id, lower(email) as email from auth.users where lower(email) = any($1::text[])`, [emails]);
+  const usuarios = new Map<string, string>(rows.map((r) => [r.email as string, r.id as string]));
+
+  for (const clinica of planilha.clinicas) {
+    if (errosPorCodigo.has(clinica.codigo)) continue;
+    const d: DadosDaClinica = {
+      clinica,
+      perguntas: planilha.perguntas.filter((p) => p.codigo === clinica.codigo),
+      atendentes: planilha.atendentes.filter((a) => a.codigo === clinica.codigo),
+    };
+    const resultado: ResultadoDaClinica = { codigo: clinica.codigo, nome: clinica.nome, status: "ok", motivo: null, acoes: [], avisos: [] };
+    clinicas.push(resultado);
+    try {
+      const estado = await lerEstado(pool, clinica.slug);
+      const plano = planejarClinica(d, estado);
+      resultado.acoes = plano.acoes;
+      resultado.avisos = [...plano.avisos];
+      if (plano.recusa) {
+        resultado.status = "recusada";
+        resultado.motivo = plano.recusa;
+        continue;
+      }
+      if (!opcoes.aplicar || !ator) continue;
+
+      // Contas fora da transação: o Auth não participa dela. Conta criada para
+      // uma clínica que falhar depois fica sem vínculo — inofensiva, e a próxima
+      // rodada a reaproveita.
+      for (const a of plano.acoes)
+        if (a.tipo === "vincular" && !usuarios.has(a.email)) usuarios.set(a.email, await deps.criarUsuario(a.email, a.nome));
+
+      // aplicarPlano abre e fecha a transação; em falha, a conexão é descartada.
+      const c = await pool.connect();
+      let orgId: string;
+      try {
+        orgId = await aplicarPlano(c, d, estado, plano, { ator, usuarios, embedar: deps.embedar, capacidades: deps.capacidades });
+      } catch (err) {
+        c.release(err instanceof Error ? err : true);
+        throw err;
+      }
+      c.release();
+
+      if (opcoes.convidar)
+        for (const a of plano.acoes) {
+          if (a.tipo !== "vincular") continue;
+          try {
+            const saiu = await deps.convidar({ orgId, orgNome: clinica.nome, email: a.email, papel: a.papel, ator });
+            if (!saiu) resultado.avisos.push(`convite de ${a.email} criado, mas o e-mail não saiu (veja Equipe › Convites)`);
+          } catch (err) {
+            resultado.avisos.push(`convite de ${a.email} falhou: ${mensagem(err)}`);
+          }
+        }
+    } catch (err) {
+      resultado.status = "erro";
+      resultado.motivo = mensagem(err);
+    }
+  }
+
+  const codigosDaPlanilha = new Set([...planilha.clinicas.map((c) => c.codigo), ...errosPorCodigo.keys()]);
+  const { rows: marcadas } = await pool.query(
+    `select settings->'importador'->>'codigo' as codigo, display_name from public.organizations where settings ? 'importador'`,
+  );
+  const avisosGerais = [...planilha.avisos];
+  for (const o of marcadas)
+    if (!codigosDaPlanilha.has(o.codigo as string))
+      avisosGerais.push(`a clínica ${o.codigo as string} (${o.display_name as string}) não está na planilha; nada foi apagado`);
+
+  return { clinicas, errosGerais: planilha.erros.filter((e) => e.codigo === null), avisosGerais };
+}
+
+export function formatarResumo(r: Resumo, aplicar: boolean): string {
+  const l: string[] = [aplicar ? "═══ APLICADO ═══" : "═══ SÓ O PLANO — nada foi gravado ═══", ""];
+  for (const c of r.clinicas) {
+    const marca = c.status === "ok" ? "✅" : c.status === "recusada" ? "⛔" : "❌";
+    l.push(`${marca} ${c.codigo} ${c.nome}${c.motivo ? ` — ${c.motivo}` : ""}`);
+    if (c.status === "ok") {
+      if (c.acoes.length === 0) l.push("   · nada mudou");
+      for (const a of c.acoes) l.push(`   · ${descreverAcao(a)}`);
+    }
+    for (const a of c.avisos) l.push(`   ⚠️  ${a}`);
+  }
+  if (r.errosGerais.length > 0) {
+    l.push("", "Erros da planilha:");
+    for (const e of r.errosGerais) l.push(`  - ${e.aba}, linha ${e.linha}: ${e.mensagem}`);
+  }
+  if (r.avisosGerais.length > 0) {
+    l.push("", "Avisos:");
+    for (const a of r.avisosGerais) l.push(`  - ${a}`);
+  }
+  const conta = (s: ResultadoDaClinica["status"]) => r.clinicas.filter((c) => c.status === s).length;
+  l.push("", `Clínicas: ${conta("ok")} ok · ${conta("erro")} com erro · ${conta("recusada")} recusada(s)`);
+  if (!aplicar) l.push("Para gravar: rode de novo com --aplicar --ator <seu e-mail de administrador da plataforma>");
+  return l.join("\n");
 }
