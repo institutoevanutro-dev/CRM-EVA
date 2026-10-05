@@ -29103,32 +29103,15 @@ create policy "conversation_notes_select" on public.conversation_notes
     )
   );
 
--- ⚠️ A política de ESCRITA precisa da MESMA condição: policies são OR e
--- `conversation_notes_write` é `for all`, que concede SELECT junto — sem isto
--- a policy nova de SELECT é anulada. O teste `F2: ... não lê a nota` pegou
--- exatamente isso (devolveu 1 em vez de 0) antes do conserto.
+-- A ESCRITA não é mais definida aqui. Até a 0319 este bloco criava
+-- `conversation_notes_write`, uma `for all` que não olhava o autor: qualquer
+-- atendente que visse a conversa editava ou apagava a nota de um colega. A regra
+-- por operação (inserir a própria; editar e apagar só o autor ou o gestor) está
+-- no bloco da migration 0319, no fim do arquivo. Recriar a `for all` aqui faria
+-- cada `update.sh` reabrir a brecha até aquele bloco rodar; fica só o `drop`,
+-- que limpa o clone antigo. Sem policy de escrita a sessão não escreve, então
+-- entre este ponto e o bloco da 0319 a tabela está MAIS fechada, nunca menos.
 drop policy if exists "conversation_notes_write" on public.conversation_notes;
-create policy "conversation_notes_write" on public.conversation_notes
-  for all using (
-    organization_id in (select public.fn_user_org_ids())
-    and public.fn_role_at_least(organization_id, 'agent')
-    and exists (
-      select 1 from public.conversations c
-      where c.organization_id = conversation_notes.organization_id
-        and c.id = conversation_notes.conversation_id
-        and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
-    )
-  )
-  with check (
-    organization_id in (select public.fn_user_org_ids())
-    and public.fn_role_at_least(organization_id, 'agent')
-    and exists (
-      select 1 from public.conversations c
-      where c.organization_id = conversation_notes.organization_id
-        and c.id = conversation_notes.conversation_id
-        and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
-    )
-  );
 
 -- O ramo `or fn_is_platform_admin()` da política antiga vira policy própria:
 -- o admin de plataforma não é membro de organização nenhuma por definição.
@@ -32264,6 +32247,103 @@ $$;
 
 revoke all on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) from public, anon, authenticated;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) to service_role;
+
+-- ---- travas no banco: nota interna, casos da IA e bloqueio de contato (migration 0319) ----
+-- Espelho da migration (ver o cabeçalho dela). Entra ANTES da VARREDURA anon.
+--
+-- Três regras que já valiam nas telas e nas rotas, mas não no banco. O PostgREST
+-- fala com a tabela direto pelo JWT da sessão, então "a rota barra" não protege
+-- de quem chama o banco por fora. Idempotente: `drop policy if exists` +
+-- `create policy`, `create or replace function`, `drop trigger if exists`,
+-- `revoke` (repetir não muda nada). Nenhum dado é tocado.
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- 1 · NOTA INTERNA: editar e apagar só o autor ou o gestor
+-- ════════════════════════════════════════════════════════════════════════════
+-- Porte do DeskcommCRM original: d9c3afdfc (webtecnica, PR 1870) e da2b3462f
+-- (melgarafael, PR 2080); lá, migration 0509.
+--
+-- A 0302 fez a nota seguir a visibilidade da conversa, mas a escrita ficou numa
+-- policy única `for all` (`conversation_notes_write`): organização + papel
+-- `agent` + ver a conversa, sem olhar QUEM escreveu. Entre quem vê a conversa,
+-- qualquer atendente editava ou apagava a nota de um colega pelo PostgREST. A
+-- rota de apagar (`app/api/v1/conversations/[id]/notes/[noteId]/route.ts`) já
+-- exigia autor ou gestor; o banco não.
+--
+--   INSERT         organização + `agent` + ver a conversa + autor = a sessão
+--   UPDATE/DELETE  organização + `agent` + ver a conversa E (autor OU gestor)
+--
+-- Policies permissivas somam por OR: sem derrubar a `for all`, ela continuaria
+-- liberando quem não é o autor. As de leitura (`conversation_notes_select` e
+-- `conversation_notes_select_platform_admin`, 0302) e a restritiva do segundo
+-- fator (`mfa_provada`, 0301) ficam como estão.
+--
+-- O anexo (0303) não precisa de regra própria: o bucket `internal-media` não
+-- tem policy em `storage.objects`, então sessão nenhuma lê, troca ou apaga o
+-- arquivo direto. O único jeito de um colega "trocar o arquivo" era reapontar
+-- `media_storage_path` da nota alheia, e isso é o UPDATE que esta seção fecha.
+drop policy if exists "conversation_notes_write" on public.conversation_notes;
+
+drop policy if exists "conversation_notes_insert" on public.conversation_notes;
+create policy "conversation_notes_insert" on public.conversation_notes
+  for insert
+  with check (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+    and created_by_user_id = auth.uid()
+    and exists (
+      select 1 from public.conversations c
+      where c.organization_id = conversation_notes.organization_id
+        and c.id = conversation_notes.conversation_id
+        and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+    )
+  );
+
+-- O `with check` repete o `using`: o autor não passa a nota para outro nome, e
+-- o gestor que edita a nota de um atendente mantém o autor original.
+drop policy if exists "conversation_notes_update" on public.conversation_notes;
+create policy "conversation_notes_update" on public.conversation_notes
+  for update
+  using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+    and (created_by_user_id = auth.uid() or public.fn_role_at_least(organization_id, 'manager'))
+    and exists (
+      select 1 from public.conversations c
+      where c.organization_id = conversation_notes.organization_id
+        and c.id = conversation_notes.conversation_id
+        and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+    )
+  )
+  with check (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+    and (created_by_user_id = auth.uid() or public.fn_role_at_least(organization_id, 'manager'))
+    and exists (
+      select 1 from public.conversations c
+      where c.organization_id = conversation_notes.organization_id
+        and c.id = conversation_notes.conversation_id
+        and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+    )
+  );
+
+drop policy if exists "conversation_notes_delete" on public.conversation_notes;
+create policy "conversation_notes_delete" on public.conversation_notes
+  for delete
+  using (
+    organization_id in (select public.fn_user_org_ids())
+    and public.fn_role_at_least(organization_id, 'agent')
+    and (created_by_user_id = auth.uid() or public.fn_role_at_least(organization_id, 'manager'))
+    and exists (
+      select 1 from public.conversations c
+      where c.organization_id = conversation_notes.organization_id
+        and c.id = conversation_notes.conversation_id
+        and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+    )
+  );
+
+notify pgrst, 'reload schema';
+-- ---- fim: travas no banco (migration 0319) ----
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
