@@ -154,7 +154,7 @@ export function ContactDetailClient({ contactId }: Props) {
                   <AlertDialogHeader>
                     <AlertDialogTitle>{t("Desbloquear este contato?")}</AlertDialogTitle>
                     <AlertDialogDescription>
-                      {t("Este contato pediu para não receber mais mensagens. Desbloquear volta a permitir campanhas, follow-ups e respostas da IA para ele, e a ação fica registrada na auditoria em seu nome.")}
+                      {t("Este contato pediu para não receber mais mensagens. Se você desbloquear, ele volta a receber lembretes, campanhas e respostas. O negócio fechado como perdido continua fechado. O desbloqueio fica registrado no seu nome.")}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

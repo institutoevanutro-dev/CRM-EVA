@@ -5,6 +5,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { mfaEmDivida } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -50,6 +51,10 @@ type Context = { params: Promise<{ id: string }> };
  * Não reativa follow-up nem campanha que o bloqueio cancelou. Quem quiser
  * retomar, retoma pelo fluxo normal — esta rota devolve o DIREITO de enviar,
  * não dispara envio nenhum.
+ *
+ * Não reabre o negócio. No CRM EvaLink o pedido de parar fecha o negócio aberto
+ * como perdido (`lib/channels/pos-entrada.ts`); desbloquear toca só
+ * `contacts`, e reabrir continua sendo decisão de quem atende, à mão.
  */
 export async function POST(_req: NextRequest, ctx: Context): Promise<Response> {
   const supportDenied = await requireSupportWrite();
@@ -61,6 +66,13 @@ export async function POST(_req: NextRequest, ctx: Context): Promise<Response> {
   const authz = await requireRole("admin", { requestId, resource: "contacts" });
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
+  // CRM EvaLink: mesma régua das outras ações sensíveis de administrador
+  // (conectar canal, vocabulário de etiquetas). Quem TEM segundo fator precisa
+  // tê-lo provado nesta sessão — sessão só com senha não reabre o canal que o
+  // paciente fechou. Quem não cadastrou fator segue normalmente.
+  if (await mfaEmDivida()) {
+    return fail("mfa_required", t("Confirme a verificação em duas etapas."), 403, { requestId });
+  }
 
   if (!z.uuid().safeParse(id).success) {
     return fail("validation_failed", t("Contato inválido."), 422, { requestId });

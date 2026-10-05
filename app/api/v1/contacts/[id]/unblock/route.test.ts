@@ -3,13 +3,13 @@ import { NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit";
 import { fail } from "@/lib/api/wrappers";
-import { loadAuthUser } from "@/lib/auth/server";
+import { loadAuthUser, mfaEmDivida } from "@/lib/auth/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { POST } from "./route";
 
-vi.mock("@/lib/auth/server", () => ({ loadAuthUser: vi.fn() }));
+vi.mock("@/lib/auth/server", () => ({ loadAuthUser: vi.fn(), mfaEmDivida: vi.fn() }));
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
@@ -23,6 +23,8 @@ const filters: Record<string, unknown> = {};
 let patchEnviado: Record<string, unknown> | null = null;
 let resultRow: Record<string, unknown> | null = null;
 let updateError: { message: string } | null = null;
+/** Toda tabela que a rota tocou — desbloquear NÃO pode alcançar o negócio. */
+let tabelasTocadas: string[] = [];
 
 const contexto = (id = contato) => ({ params: Promise.resolve({ id }) });
 const req = () =>
@@ -35,6 +37,8 @@ beforeEach(() => {
   resultRow = { id: contato, display_name: "Mello", phone_number: "+5541999953255", is_blocked: false, blocked_reason: null, blocked_at: null };
   updateError = null;
   vi.mocked(loadAuthUser).mockResolvedValue(null);
+  vi.mocked(mfaEmDivida).mockResolvedValue(false);
+  tabelasTocadas = [];
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
     user: { id: org },
@@ -60,7 +64,10 @@ beforeEach(() => {
     },
   };
   vi.mocked(createAdminClient).mockReturnValue({
-    from: () => query,
+    from: (tabela: string) => {
+      tabelasTocadas.push(tabela);
+      return query;
+    },
   } as unknown as ReturnType<typeof createAdminClient>);
 });
 
@@ -125,6 +132,30 @@ describe("desbloquear contato (override da regra W-02)", () => {
     const resposta = await POST(req(), contexto("nao-e-uuid"));
     expect(resposta.status).toBe(422);
     expect(createAdminClient).not.toHaveBeenCalled();
+  });
+
+  // ── CRM EvaLink ───────────────────────────────────────────────────────────
+  //
+  // Decisão do fork: desbloquear segue o padrão das ações sensíveis de
+  // administrador. Quem TEM segundo fator precisa tê-lo provado NESTA sessão —
+  // senão uma sessão roubada só com a senha reabre o canal que o paciente
+  // fechou. `requireRole` está falsificado aqui, então este caso mede a
+  // checagem que a própria rota faz, e não a que ela herdaria.
+  it("sessão sem o segundo fator provado é recusada com mfa_required, antes do banco", async () => {
+    vi.mocked(mfaEmDivida).mockResolvedValue(true);
+    const resposta = await POST(req(), contexto());
+    expect(resposta.status).toBe(403);
+    expect(((await resposta.json()) as { error: { code: string } }).error.code).toBe("mfa_required");
+    expect(createAdminClient).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("não reabre o negócio fechado como perdido — só a tabela de contatos é tocada", async () => {
+    // O PARAR fecha o negócio aberto como perdido (PR 113 do fork). Desbloquear
+    // devolve o direito de enviar; reabrir o negócio é decisão de quem atende.
+    const resposta = await POST(req(), contexto());
+    expect(resposta.status).toBe(200);
+    expect(tabelasTocadas).toEqual(["contacts"]);
   });
 
   it("falha do banco vira 500 e NÃO audita sucesso", async () => {
