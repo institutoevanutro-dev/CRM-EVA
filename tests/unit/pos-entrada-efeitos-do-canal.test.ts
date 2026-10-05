@@ -319,6 +319,45 @@ describe("opt-out fecha o negócio aberto como perdido", () => {
     expect(sequencia).not.toContain("select:crm_leads");
   });
 
+  it.each(["nao me contate mais", "nao entrem mais em contato", "pode me remover da lista"])(
+    "o pedido por extenso que a regra passou a reconhecer também fecha o negócio: %s",
+    async (texto) => {
+      // A regra de texto e o fechamento são peças diferentes: a frase nova só
+      // fecha o negócio porque passa pela MESMA porta do "PARAR".
+      leadsAbertos = [{ id: "lead-a" }];
+
+      await rodar({ texto });
+
+      expect(ultimoUpdate).toMatchObject({ is_blocked: true, blocked_reason: "stop_keyword" });
+      expect(encerraDemanda).toHaveBeenCalledTimes(1);
+      const [, , fechamento] = encerraDemanda.mock.calls[0] as unknown as [
+        unknown,
+        unknown,
+        Record<string, unknown>,
+      ];
+      expect(fechamento).toMatchObject({
+        leadId: "lead-a",
+        desfecho: "lost",
+        motivo: "opted_out_of_messages",
+      });
+    },
+  );
+
+  it.each([
+    "quero sair da lista de espera",
+    "meu filho nao me liga mais",
+    "parar de tomar o remedio faz mal?",
+  ])("frase de rotina da clínica não bloqueia nem fecha o negócio: %s", async (texto) => {
+    // Bloqueio por engano aqui custa em dobro: o paciente para de receber
+    // lembrete E o negócio dele vai para perdido sem ninguém ter decidido.
+    leadsAbertos = [{ id: "lead-a" }];
+
+    await rodar({ texto });
+
+    expect(sequencia).not.toContain("update:contacts");
+    expect(encerraDemanda).not.toHaveBeenCalled();
+  });
+
   it("falha ao gravar o bloqueio NÃO fecha o negócio de quem o sistema não protegeu", async () => {
     updateErro = { message: "boom" };
     leadsAbertos = [{ id: "lead-a" }];

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import { scrubMessage, scrubUrl, sentryScrubHooks } from "./scrub";
@@ -167,3 +169,206 @@ describe("scrub — o que ainda vazava", () => {
   });
 });
 
+
+// Porte de melgarafael/DeskcommCRM 126efd2e3, bb2469f90 e c6bee7d6a — a ideia e os
+// casos, não o diff (o `scrubMessage` daqui foi reescrito na auditoria M5). O
+// mesmo texto é o `error_message` que a tela IA › Execuções mostra. O critério é
+// o número SUMIR, não o rótulo: 11 dígitos crus são CPF ou celular.
+describe("scrubMessage — os formatos que ainda passavam", () => {
+  it("apaga telefone nos jeitos em que se escreve no Brasil, com ou sem DDD", () => {
+    for (const tel of [
+      "(11) 98765-4321",
+      "(11)98765-4321",
+      "(11) 3456-7890",
+      "11 98765-4321",
+      "11 98765 4321",
+      "11987654321",
+      "5511987654321",
+      "+55 11 98765-4321",
+      "+55 (11) 98765-4321",
+      "98765-4321",
+      "98765 4321",
+      "3456-7890",
+      "11-98765-4321",
+      "11.98765.4321",
+      "(11)-98765-4321",
+      "98765.4321",
+      "(11) 9 8765-4321",
+      "+55 (11) 9 8765-4321",
+    ]) {
+      const out = scrubMessage(`meu zap ${tel}, obrigado`);
+      expect(out, tel).not.toMatch(/\d{3}/);
+      expect(out, tel).toMatch(/^meu zap \[(PHONE|CPF)\], obrigado$/);
+    }
+  });
+
+  // Quem digita rápido não segue a máscara.
+  it("apaga CPF com qualquer separador entre os blocos", () => {
+    for (const cpf of [
+      "123.456.789-09",
+      "123 456 789 09",
+      "123.456.789.09",
+      "123-456-789-09",
+      "123.456.789 09",
+      "12345678909",
+    ]) {
+      const out = scrubMessage(`meu cpf ${cpf}, obrigado`);
+      expect(out, cpf).not.toMatch(/\d{3}/);
+      expect(out, cpf).toMatch(/^meu cpf \[(PHONE|CPF)\], obrigado$/);
+    }
+  });
+
+  it("dois telefones na mesma frase saem os dois", () => {
+    expect(scrubMessage("98765-4321 ou (21) 3456-7890")).toBe("[PHONE] ou [PHONE]");
+  });
+
+  // Uma borda de letra/hífen nos padrões (posta para poupar UUID) deixava sair
+  // inteiro o número grudado justamente nos rótulos que alguém digita colado.
+  it("apaga CPF e telefone grudados no rótulo, inclusive por hífen", () => {
+    for (const [texto, rotulo] of [
+      ["zap11987654321", "zap"],
+      ["cpf12345678909", "cpf"],
+      ["CPF123.456.789-09", "CPF"],
+      ["doc12345678909", "doc"],
+      ["fone11987654321", "fone"],
+      ["telefone11987654321", "telefone"],
+      ["tel-11987654321", "tel-"],
+      ["lead-123.456.789-09", "lead-"],
+      // Só no fork: fixo (10 dígitos) e número com o 55 na frente.
+      ["fixo1134567890", "fixo"],
+      ["zap5511987654321", "zap"],
+    ] as const) {
+      const out = scrubMessage(texto);
+      expect(out, texto).not.toMatch(/\d{3}/);
+      expect(out, texto).toMatch(new RegExp(`^${rotulo}\\[(PHONE|CPF)\\]$`));
+    }
+    expect(scrubMessage("12345678909-joao")).toMatch(/^\[(PHONE|CPF)\]-joao$/);
+  });
+
+  it("apaga o CPF e poupa o UUID na mesma frase", () => {
+    const uuid = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+    const out = scrubMessage(`cpf12345678909 no agente ${uuid}`);
+    expect(out).toMatch(/^cpf\[(PHONE|CPF)\] no agente /);
+    expect(out).toContain(uuid);
+  });
+
+  // Um UUID fixo passa por sorte. Por isso milhares, gerados de forma
+  // determinística (sha256 do índice): a mesma amostra em toda execução, e uma
+  // falha reproduzível pelo índice.
+  it("não come pedaço de UUID — em milhares deles", () => {
+    const alterados: string[] = [];
+    for (let i = 0; i < 5000; i++) {
+      const h = createHash("sha256").update(`uuid-${i}`).digest("hex");
+      const variante = "89ab"[parseInt(h[16]!, 16) % 4];
+      const uuid = `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${variante}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+      const texto = `agente ${uuid} falhou`;
+      if (scrubMessage(texto) !== texto) alterados.push(`${i}: ${uuid} -> ${scrubMessage(texto)}`);
+    }
+    expect(alterados.slice(0, 5)).toEqual([]);
+  });
+
+  // Só no fork: sem borda de letra, um trecho de 10 ou 11 dígitos entre letras
+  // de um hash casava como telefone ou CPF — medido, 597 de 5.000 sha256, 337 de
+  // 5.000 sha1 e 281 de 5.000 ids de 32 saíam alterados.
+  it("não come pedaço de hash em hexadecimal — em milhares deles", () => {
+    const alterados: string[] = [];
+    for (let i = 0; i < 5000; i++) {
+      const sha256 = createHash("sha256").update(`hash-${i}`).digest("hex");
+      const sha1 = createHash("sha1").update(`hash-${i}`).digest("hex");
+      for (const id of [sha256, sha1, sha256.slice(0, 32)]) {
+        const texto = `requisição req_${id} recusada`;
+        if (scrubMessage(texto) !== texto) alterados.push(`${i}: ${texto} -> ${scrubMessage(texto)}`);
+      }
+    }
+    expect(alterados.slice(0, 5)).toEqual([]);
+  });
+
+  it("não come pedaço de hora, de data nem de nome de modelo", () => {
+    for (const txt of [
+      "em 2026-09-23T18:46:39Z",
+      "em 2026-09-23 18:46:39",
+      "modelo claude-3-5-sonnet-20241022 recusou",
+    ]) {
+      expect(scrubMessage(txt), txt).toBe(txt);
+    }
+  });
+
+  // Só no fork: sem borda de letra, o padrão de 11 dígitos comeria o começo de
+  // um código numérico longo e deixaria o resto — nem apaga, nem deixa depurar.
+  it("código numérico mais longo que um telefone fica inteiro", () => {
+    for (const txt of ["conta 123456789012345 recusada", "arquivo 20260706210000_0027_x.sql"]) {
+      expect(scrubMessage(txt), txt).toBe(txt);
+    }
+  });
+
+  // O e-mail sai ANTES dos números: senão o telefone comia a parte numérica do
+  // endereço e o domínio seguia inteiro.
+  it("e-mail que começa por número sai inteiro", () => {
+    expect(scrubMessage("falha para 11987654321@exemplo.com")).toBe("falha para [EMAIL]");
+  });
+});
+
+// ─── Revisão do PR 125 ───────────────────────────────────────────────────────
+//
+// A reescrita protegia UUID e hexadecimal de 32+, e media só esses dois. Fora
+// deles o filtro comia o que serve para investigar um erro — tudo abaixo saía
+// inteiro na main e alterado no PR, medido um a um.
+describe("scrubMessage — o que serve para depurar continua inteiro", () => {
+  it.each([
+    // id em hexadecimal mais curto que um hash: ObjectId (24), id de trace (16), sha de git
+    "id 5f8d04b12345678901a2b3c4",
+    "span 0af7651916cd43dd trace 1234567890abcdef",
+    "git 1a2b3c4d55667788990a",
+    // endereço IP no formato ddd.ddd.ddd.dd casava como CPF só com pontos
+    "connect ECONNREFUSED 192.168.100.10:5432",
+    // oito dígitos corridos, sem DDD e sem separador, não são telefone
+    "rate limit: 40000000 tokens per day",
+    "Key (external_order_id)=(12345678) already exists",
+  ])("%s", (texto) => {
+    expect(scrubMessage(texto)).toBe(texto);
+  });
+
+  it("rótulo só de letras de hexadecimal não vira identificador — o número grudado sai", () => {
+    // `cafe`, `face`, `dad`: letras que também são dígito de hexadecimal. O que
+    // distingue o rótulo do id é a forma: letras e depois só números.
+    expect(scrubMessage("cafe11987654321")).toMatch(/^cafe\[(PHONE|CPF)\]$/);
+  });
+});
+
+// Formatos de CPF e telefone que ainda passavam inteiros (mesma revisão).
+describe("scrubMessage — mais jeitos de escrever o mesmo número", () => {
+  it.each(["123.456.789/09", "123,456,789-09", "123 . 456 . 789 - 09"])("CPF %s", (cpf) => {
+    const out = scrubMessage(`meu cpf ${cpf}, obrigado`);
+    expect(out, cpf).not.toMatch(/\d{3}/);
+    expect(out, cpf).toMatch(/^meu cpf \[(PHONE|CPF)\], obrigado$/);
+  });
+
+  it.each([
+    "27 999 991 234",
+    "27.999.991.234",
+    "(27) 9999-91234",
+    // de fora do Brasil: o `+` na frente é o que diz que é telefone
+    "+351 912 345 678",
+    "+1 (415) 555-2671",
+  ])("telefone %s", (tel) => {
+    const out = scrubMessage(`meu zap ${tel}, obrigado`);
+    expect(out, tel).not.toMatch(/\d{3}/);
+    expect(out, tel).toMatch(/^meu zap \[(PHONE|CPF)\], obrigado$/);
+  });
+
+  // Exigir separador no número sem DDD (acima) não pode soltar o fixo grudado
+  // no rótulo com o DDD entre parênteses — medido num sorteio de 200 mil
+  // entradas contra o filtro anterior.
+  it.each(["zap(85) 31107016", "tel-55(59)9.94630282", "zap55(76)9 02476848"])(
+    "grudado no rótulo, com DDD entre parênteses: %s",
+    (texto) => {
+      const out = scrubMessage(texto);
+      expect(out, texto).not.toMatch(/\d{3}/);
+    },
+  );
+
+  it("lista de números separada por vírgula e espaço não é CPF", () => {
+    const texto = "dimensões esperadas: 768, 512, 256, 64";
+    expect(scrubMessage(texto)).toBe(texto);
+  });
+});

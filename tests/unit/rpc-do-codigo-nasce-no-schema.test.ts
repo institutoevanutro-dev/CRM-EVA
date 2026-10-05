@@ -38,14 +38,19 @@
  * ## Fora do escopo, de propósito
  *
  * Nome passado por VARIÁVEL fica fora: `.rpc(nome, ...)` não tem literal para
- * cruzar. Hoje são 3 sítios — `app/api/v1/cron/data-retention/route.ts:128`,
- * `app/api/v1/cron/data-retention/route.ts:244` e
+ * cruzar. Hoje são 3 sítios — dois em `app/api/v1/cron/data-retention/route.ts`
+ * (o laço `drenar` e o adaptador do handler) e
  * `lib/agenda/google/sync-store.ts:62`. Cobri-los exigiria análise de fluxo; o
- * gate prefere dizer o que não vê a fingir que vê. Os quatro nomes que a união
- * de `data-retention` pode passar (`fn_podar_fila_de_jobs`,
- * `fn_expurgar_auditoria_vencida`, `fn_expurgar_espelho_da_agenda`,
- * `fn_expurgar_nonces_de_oauth`) estão declarados no schema — sem buraco vivo
- * hoje, apenas sem rede.
+ * gate prefere dizer o que não vê a fingir que vê.
+ *
+ * NOME DE ARGUMENTO também fica fora, e este cabeçalho já pagou por não dizer
+ * isso: ele afirmava que os quatro nomes da união de `data-retention` estavam
+ * declarados no schema, "sem buraco vivo hoje". Estavam — e a quarta,
+ * `fn_expurgar_nonces_de_oauth`, recebia `{ p_retencao_dias, p_limite }` quando
+ * declara `(p_dias, p_lote)`. O PostgREST acha função pelo nome do ARGUMENTO, e
+ * a poda falhou toda noite em produção com este gate verde. Quem mede os
+ * argumentos daquela rota hoje é `tests/unit/retencao-poda-em-lotes.test.ts`,
+ * que roda o handler e cruza o que ele manda com o `baseline.sql`.
  *
  * ## O gate não nasce vazio
  *

@@ -6,6 +6,7 @@
  */
 import { supportWriteError } from "@/lib/impersonate/support";
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
+import { escreveComoPlatformAdmin } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { OnboardingState } from "@/lib/schemas/onboarding";
@@ -48,7 +49,9 @@ export async function requireOnboardingCtx(): Promise<OnboardingCtx> {
   const supabase = await createClient();
   const { data: papel, error } = await supabase.rpc("fn_user_role_in_org", { p_org: activeOrg.orgId });
   if (error) throw new OnboardingError("db_error", error.message);
-  if (papel !== "admin" && !user.is_platform_admin) {
+  // O atalho do dono da instalação exige scope `full`: o `support_readonly` tem
+  // a mesma linha em `platform_admins` e não configura organização nenhuma.
+  if (papel !== "admin" && !escreveComoPlatformAdmin(user)) {
     throw new OnboardingError("forbidden", "Só o administrador configura a organização.");
   }
   // Quem tem fator TOTP prova na sessão — o mesmo gate de `requireRole`.

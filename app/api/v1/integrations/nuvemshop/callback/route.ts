@@ -53,10 +53,15 @@ async function aindaPodeConectar(orgId: string, userId: string): Promise<boolean
       .eq("user_id", userId)
       .is("revoked_at", null)
       .maybeSingle(),
-    admin.from("platform_admins").select("user_id").eq("user_id", userId).is("revoked_at", null).maybeSingle(),
+    admin.from("platform_admins").select("user_id, scope").eq("user_id", userId).is("revoked_at", null).maybeSingle(),
   ]);
   if (e1 || e2) return false;
-  return (vinculo as { role?: string } | null)?.role === "admin" || Boolean(plataforma);
+  // Conectar é ESCRITA: do lado da plataforma só o scope `full` vale — a linha do
+  // `support_readonly` também existe.
+  return (
+    (vinculo as { role?: string } | null)?.role === "admin" ||
+    (plataforma as { scope?: string } | null)?.scope === "full"
+  );
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {

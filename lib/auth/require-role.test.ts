@@ -27,13 +27,14 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
 
-function authUserFixture(role: Role | null, platformAdmin = false): AuthUser {
+function authUserFixture(role: Role | null, platformAdmin = false, scope = "full"): AuthUser {
   return {
     id: USER_ID,
     email: "user@example.com",
     full_name: null,
     avatar_url: null,
     is_platform_admin: platformAdmin,
+    platform_admin_scope: platformAdmin ? scope : null,
     idioma: "pt-BR" as const,
     organizations: role
       ? [{ organization_id: ORG_ID, organization_name: "Org", role }]
@@ -42,11 +43,14 @@ function authUserFixture(role: Role | null, platformAdmin = false): AuthUser {
 }
 
 /** Configura sessão + role efetivo devolvido pelo banco (fn_user_role_in_org). */
-function session(role: Role | null, opts: { dbRole?: string | null; platformAdmin?: boolean } = {}) {
+function session(
+  role: Role | null,
+  opts: { dbRole?: string | null; platformAdmin?: boolean; scope?: string } = {},
+) {
   const platformAdmin = opts.platformAdmin ?? false;
   const dbRole = opts.dbRole === undefined ? role : opts.dbRole;
   vi.mocked(loadAuthUser).mockResolvedValue(
-    role || platformAdmin ? authUserFixture(role, platformAdmin) : null,
+    role || platformAdmin ? authUserFixture(role, platformAdmin, opts.scope ?? "full") : null,
   );
   vi.mocked(resolveActiveOrg).mockResolvedValue(
     role ? { orgId: ORG_ID, name: "Org", role } : null,
@@ -200,5 +204,39 @@ describe("requireRole — helper único (spec 13 §4)", () => {
     session("viewer", { platformAdmin: true });
     const granted = await requireRole("admin", { allowPlatformAdmin: true });
     expect(granted.ok).toBe(true);
+  });
+});
+
+// Porte de melgarafael/DeskcommCRM 9c0cf9114 — só o trecho do scope (a parte de
+// organização suspensa é de outra frente e não existe aqui).
+describe("o atalho de platform admin exige scope full para ESCREVER", () => {
+  it("allowPlatformAdmin:true com support_readonly NÃO bypassa (cai no rank → 403)", async () => {
+    session("viewer", { platformAdmin: true, scope: "support_readonly" });
+    const res = await requireRole("admin", { allowPlatformAdmin: true });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect((await res.response.json()).error.code).toBe("forbidden_role");
+  });
+
+  it("…nem na org do RECURSO, onde ele não tem vínculo nenhum (era o caminho do anonimizar)", async () => {
+    session("viewer", { platformAdmin: true, scope: "support_readonly", dbRole: null });
+    const res = await requireRole("admin", {
+      allowPlatformAdmin: true,
+      organizationId: "33333333-3333-4333-8333-333333333333",
+    });
+    expect(res.ok).toBe(false);
+  });
+
+  it("allowPlatformAdmin:'leitura' libera support_readonly", async () => {
+    session("viewer", { platformAdmin: true, scope: "support_readonly" });
+    expect((await requireRole("admin", { allowPlatformAdmin: "leitura" })).ok).toBe(true);
+  });
+
+  it("CONTROLE: full bypassa sem ler papel; sem scope na sessão, não bypassa", async () => {
+    session("viewer", { platformAdmin: true });
+    expect((await requireRole("admin", { allowPlatformAdmin: true })).ok).toBe(true);
+    expect(createClient).not.toHaveBeenCalled();
+
+    vi.mocked(loadAuthUser).mockResolvedValue({ ...authUserFixture("viewer", true), platform_admin_scope: undefined });
+    expect((await requireRole("admin", { allowPlatformAdmin: true })).ok).toBe(false);
   });
 });

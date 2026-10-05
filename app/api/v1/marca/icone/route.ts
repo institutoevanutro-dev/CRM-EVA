@@ -3,7 +3,7 @@
  *
  * Irmã de `app/api/v1/marca/logo/route.ts` no escopo de instalação, com as
  * mesmas guardas e na mesma ordem: suporte em modo leitura não escreve, só
- * platform admin, segundo fator provado na sessão, teto de trocas por usuário,
+ * platform admin de scope `full`, segundo fator provado na sessão, teto de trocas por usuário,
  * tipo e medidas decididos pelos BYTES (`lib/branding/icone-arquivo.ts`),
  * caminho não-enumerável em `brand-logos/platform/<uuid>.png`, ponteiro gravado
  * no banco ANTES de apagar o arquivo anterior, e auditoria em
@@ -17,7 +17,8 @@ import { randomUUID } from "node:crypto";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { loadAuthUser, mfaEmDivida } from "@/lib/auth/server";
+import { EscritaDePlatformAdminNegada, requirePlatformAdminEscrita } from "@/lib/auth/requirePlatformAdmin";
+import { loadAuthUser } from "@/lib/auth/server";
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { recusaDoIcone } from "@/lib/branding/icone-arquivo";
 import { invalidarVersaoDoIcone } from "@/lib/branding/icone-versao";
@@ -43,20 +44,20 @@ type Recusa = { readonly codigo: string; readonly mensagem: string; readonly sta
 async function quemPode(): Promise<{ userId: string } | { recusa: Recusa }> {
   const user = await loadAuthUser();
   if (!user) return { recusa: { codigo: "unauthenticated", mensagem: "Faça login.", status: 401 } };
-  if (!user.is_platform_admin) {
+  // Linha ativa em `platform_admins`, scope `full` (o `support_readonly` lê o
+  // painel e nada muda) e segundo fator provado na sessão. O guarda REDIRECIONA
+  // quem não é platform admin; aqui o redirect vira recusa, porque 307 para HTML
+  // num fetch de upload chega à tela como "erro inesperado".
+  try {
+    await requirePlatformAdminEscrita();
+  } catch (err) {
+    if (err instanceof EscritaDePlatformAdminNegada) {
+      return { recusa: { codigo: err.code, mensagem: err.message, status: 403 } };
+    }
     return {
       recusa: {
         codigo: "forbidden_role",
         mensagem: "Só quem administra a instalação pode trocar o ícone do sistema.",
-        status: 403,
-      },
-    };
-  }
-  if (await mfaEmDivida()) {
-    return {
-      recusa: {
-        codigo: "mfa_required",
-        mensagem: "Confirme o segundo fator nesta sessão para trocar o ícone.",
         status: 403,
       },
     };

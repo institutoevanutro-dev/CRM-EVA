@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 const h = vi.hoisted(() => ({
   guard: vi.fn(), mfa: vi.fn(), rpc: vi.fn(), audit: vi.fn(), invite: vi.fn(),
-  user: vi.fn(), query: vi.fn(), cookie: vi.fn(), getCookie: vi.fn(),
+  user: vi.fn(), escrita: vi.fn(), query: vi.fn(), cookie: vi.fn(), getCookie: vi.fn(),
   /**
    * O `from` do ADMIN client — hoje só `setActiveOrg` o usa, para gravar
    * `ultima_ativacao_em` (migration 0282). Encadeável e sempre sem erro: o que
@@ -11,7 +11,11 @@ const h = vi.hoisted(() => ({
    */
   adminFrom: vi.fn(),
 }));
-vi.mock("@/lib/auth/requirePlatformAdmin", () => ({ requirePlatformAdmin: h.guard }));
+vi.mock("@/lib/auth/requirePlatformAdmin", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/requirePlatformAdmin")>()),
+  requirePlatformAdmin: h.guard,
+  requirePlatformAdminEscrita: h.escrita,
+}));
 vi.mock("@/lib/auth/server", () => ({ mfaEmDivida: h.mfa, loadAuthUser: h.user }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: h.rpc, from: h.adminFrom }) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: h.query }) }));
@@ -19,6 +23,7 @@ vi.mock("@/lib/audit", () => ({ audit: h.audit }));
 vi.mock("@/lib/auth/issue-invite", () => ({ issueInvite: h.invite }));
 vi.mock("@/lib/supabase/cookie-secure", () => ({ cookieSecure: () => false }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ set: h.cookie, get: h.getCookie }) }));
+import { EscritaDePlatformAdminNegada } from "@/lib/auth/requirePlatformAdmin";
 import { POST } from "@/app/api/v1/admin/tenants/route";
 import { setActiveOrg } from "@/app/actions/shell/setActiveOrg";
 const actor = "a2180000-0000-4000-8000-000000000001";
@@ -31,6 +36,7 @@ function request(email = "owner@example.test", key = "a2180000-0000-4000-8000-00
 beforeEach(() => {
   vi.resetAllMocks();
   h.guard.mockResolvedValue({ user: { id: actor, email: "owner@example.test", user_metadata: {} }, platformAdmin: { scope: "full" } });
+  h.escrita.mockResolvedValue({ user: { id: actor, email: "owner@example.test", user_metadata: {} }, platformAdmin: { scope: "full" } });
   h.user.mockResolvedValue({ id: actor, is_platform_admin: true, organizations: [] });
   // Cadeia do admin client, encerrando em `{ error: null }` em qualquer ponto:
   // `setActiveOrg` faz `.update().eq().eq().is()` e aguarda o resultado.
@@ -43,12 +49,14 @@ beforeEach(() => {
   h.invite.mockResolvedValue({ accept_url: "http://localhost/invite", email_dispatched: false });
 });
 describe("criação administrativa", () => {
-  it("não cria nem convida em suporte readonly, sem auth ou em dívida MFA", async () => {
-    h.guard.mockRejectedValueOnce(new Error("forbidden"));
+  it("não cria nem convida quando a escrita de platform admin é recusada (sem auth, readonly, dívida MFA)", async () => {
+    h.escrita.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
     expect((await POST(request())).status).toBe(403);
-    h.guard.mockResolvedValueOnce({ user: { id: actor }, platformAdmin: { scope: "support_readonly" } });
-    expect((await POST(request())).status).toBe(403);
-    h.mfa.mockResolvedValueOnce(true);
+    h.escrita.mockRejectedValueOnce(new EscritaDePlatformAdminNegada("forbidden_scope", "somente leitura"));
+    const readonly = await POST(request());
+    expect(readonly.status).toBe(403);
+    expect((await readonly.json()).error.code).toBe("forbidden_scope");
+    h.escrita.mockRejectedValueOnce(new EscritaDePlatformAdminNegada("mfa_required", "mfa"));
     expect((await POST(request())).status).toBe(403);
     expect(h.rpc).not.toHaveBeenCalled();
   });

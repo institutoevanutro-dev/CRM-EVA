@@ -6370,6 +6370,13 @@ export const DICIONARIO: Traducoes = {
   "Cliente desde": { es: "Cliente desde" },
   // Clientes pela agenda (migration 0262): o interruptor em Tipos de agendamento e a porta no rodapé de Funis.
   "Acompanhamento somente leitura ou encerrado.": { es: "Acompañamiento de solo lectura o finalizado." },
+  // A recusa de ESCRITA do painel do dono (`lib/auth/recusa-de-escrita-de-admin.ts`).
+  "Seu acesso à administração da plataforma é somente leitura.": {
+    es: "Su acceso a la administración de la plataforma es de solo lectura.",
+  },
+  "Confirme a verificação em duas etapas nesta sessão.": {
+    es: "Confirme la verificación en dos pasos en esta sesión.",
+  },
   "Confirme a verificação em duas etapas.": { es: "Confirma la verificación en dos pasos." },
   "Outra mudança estava em andamento. Tente de novo.": { es: "Otro cambio estaba en curso. Inténtalo de nuevo." },
   "Clientes pela agenda": { es: "Clientes por la agenda" },
@@ -7289,6 +7296,11 @@ export const DICIONARIO: Traducoes = {
   "Conexão sem identificador utilizável.": { es: "Conexión sin identificador utilizable." },
   "Conflito de versionamento — tente novamente.": { es: "Conflicto de versionado — intenta de nuevo." },
   "Contato não encontrado.": { es: "Contacto no encontrado." },
+  "Contato inválido.": { es: "Contacto inválido." },
+  "Não foi possível desbloquear o contato.": { es: "No fue posible desbloquear el contacto." },
+  Desbloquear: { es: "Desbloquear" },
+  "Desbloquear este contato?": { es: "¿Desbloquear este contacto?" },
+  "Este contato pediu para não receber mais mensagens. Se você desbloquear, ele volta a receber lembretes, campanhas e respostas. O negócio fechado como perdido continua fechado. O desbloqueio fica registrado no seu nome.": { es: "Este contacto pidió no recibir más mensajes. Si lo desbloqueas, vuelve a recibir recordatorios, campañas y respuestas. El negocio cerrado como perdido sigue cerrado. El desbloqueo queda registrado a tu nombre." },
   "content é obrigatório.": { es: "content es obligatorio." },
   "Conversa do caso sem contato associado.": { es: "La conversación del caso no tiene contacto asociado." },
   "Conversa não encontrada.": { es: "Conversación no encontrada." },

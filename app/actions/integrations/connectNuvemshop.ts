@@ -9,6 +9,7 @@
  * so the UI can render the "configure env" card without crashing.
  */
 
+import { escreveComoPlatformAdmin } from "@/lib/auth/types";
 import { supportWriteError, authenticatedSessionId } from "@/lib/impersonate/support";
 import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
@@ -38,7 +39,7 @@ export async function connectNuvemshop(): Promise<ConnectResult> {
 
   // Only `admin` can wire up integrations (RBAC). `manager`/`agent`/`viewer`
   // see the UI read-only.
-  if (activeOrg.role !== "admin" && !user.is_platform_admin) {
+  if (activeOrg.role !== "admin" && !escreveComoPlatformAdmin(user)) {
     return { ok: false, error: "forbidden" };
   }
 

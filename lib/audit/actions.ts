@@ -126,6 +126,12 @@ export const AUDIT_ACTIONS = [
   // como falha (rodada vazia não vira linha — varredura não é mutação).
   "message.recover_stuck_run",
   "contact.blocked",
+  // O pedido de descadastro é do cliente e o padrão é irreversível — mas a
+  // regra W-02 do catálogo de negócio prevê o override: admin desbloqueia à
+  // mão. Sem esta linha, a ação existiria sem rastro de QUEM a desfez, que é
+  // o dado que importa quando alguém pergunta "por que este cliente voltou a
+  // receber?". Código novo entra no FIM, nunca renomeia o de cima.
+  "contact.unblocked",
   "ai.handoff_triggered",
   "ai.reactivated_by_agent",
   "conversation.usable_for_rag_toggled",

@@ -22,13 +22,14 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 
-function sessao(opts: { cookieRole: string; dbRole: string | null; platformAdmin?: boolean }) {
+function sessao(opts: { cookieRole: string; dbRole: string | null; platformAdmin?: boolean; scope?: string }) {
   vi.mocked(loadAuthUser).mockResolvedValue({
     id: "11111111-1111-4111-8111-111111111111",
     email: "a@example.com",
     full_name: null,
     avatar_url: null,
     is_platform_admin: opts.platformAdmin ?? false,
+    platform_admin_scope: opts.platformAdmin ? (opts.scope ?? "full") : null,
     idioma: "pt-BR",
     organizations: [],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -73,6 +74,14 @@ describe("requireOnboardingCtx — só admin configura a organização", () => {
   it("aceita o admin de plataforma (o dono criado pelo install.sh)", async () => {
     sessao({ cookieRole: "agent", dbRole: "agent", platformAdmin: true });
     await expect(requireOnboardingCtx()).resolves.toMatchObject({ orgId: ORG });
+  });
+
+  // Só no fork (este arquivo não é "use server", então a cerca do AST não o vê):
+  // o `support_readonly` tem a mesma linha em `platform_admins`, e com a flag
+  // sozinha ele reconfigurava a organização em que é membro comum.
+  it("nega o admin de plataforma SÓ LEITURA que é agente na organização", async () => {
+    sessao({ cookieRole: "agent", dbRole: "agent", platformAdmin: true, scope: "support_readonly" });
+    await expect(requireOnboardingCtx()).rejects.toMatchObject({ code: "forbidden" });
   });
 
   it("nega admin com fator TOTP cadastrado e sessão aal1", async () => {

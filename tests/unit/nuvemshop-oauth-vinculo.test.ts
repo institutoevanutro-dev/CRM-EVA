@@ -19,6 +19,7 @@ const fake = vi.hoisted(() => ({
   audit: vi.fn(),
   papel: "admin" as string | null,
   platformAdmin: false,
+  scope: "full",
   nonces: new Set<string>(),
   upserts: 0,
 }));
@@ -70,7 +71,7 @@ vi.mock("@/lib/supabase/admin", () => ({
             return { data: fake.papel ? { role: fake.papel } : null, error: null };
           }
           if (tabela === "platform_admins") {
-            return { data: fake.platformAdmin ? { user_id: "x" } : null, error: null };
+            return { data: fake.platformAdmin ? { user_id: "x", scope: fake.scope } : null, error: null };
           }
           return { data: null, error: null };
         },
@@ -112,6 +113,7 @@ function destino(res: Response): string {
 beforeEach(() => {
   fake.papel = "admin";
   fake.platformAdmin = false;
+  fake.scope = "full";
   fake.upserts = 0;
   fake.audit.mockReset();
 });
@@ -167,6 +169,19 @@ describe("callback da Nuvemshop", () => {
     const state = issueState(ORG, { userId: USER, authSessionId: randomUUID() }, nonce);
     const res = await GET(volta(state, vinculoDoState(nonce)));
     expect(destino(res)).toBe("?ok=1");
+  });
+
+  // Só no fork: a releitura do papel no callback olhava só a EXISTÊNCIA da linha
+  // em `platform_admins` — a do `support_readonly` também existe.
+  it("admin da plataforma SÓ LEITURA, sem papel de admin na empresa, não conecta", async () => {
+    fake.papel = "agent";
+    fake.platformAdmin = true;
+    fake.scope = "support_readonly";
+    const nonce = randomUUID();
+    const state = issueState(ORG, { userId: USER, authSessionId: randomUUID() }, nonce);
+    const res = await GET(volta(state, vinculoDoState(nonce)));
+    expect(destino(res)).toBe("?error=forbidden");
+    expect(fake.upserts).toBe(0);
   });
 
   it("state sem ator (formato antigo) é recusado", async () => {

@@ -19,8 +19,8 @@
  * Misses de matching ('devia ter usado a skill X e não usou') viram candidatos ao golden
  * set (blueprint 3.3): um `probe_keyword` que dispara SEM o `any_keyword` do hard-match é um
  * near-miss — o runtime grava o trace em GOLDEN_CANDIDATES_DIR (fs em runtime, não a tool
- * Write) para curadoria humana. O sinal (texto do lead, PII) vai ao ARQUIVO de curadoria,
- * mas NUNCA a log (regra dura 8).
+ * Write) para curadoria humana. O sinal (texto do lead, PII) NÃO vai ao arquivo nem a log
+ * (regra dura 8): o arquivo leva o rótulo e os ponteiros.
  *
  * tenant_id é fonte confiável (row do job); skill de um tenant NUNCA vaza para outro.
  */
@@ -297,13 +297,18 @@ export function latestInboundSignal(messages: readonly LeadContextMessage[]): st
 /**
  * Grava os near-misses como candidatos ao golden set (blueprint 3.3) — fs em RUNTIME
  * (mkdir recursivo + writeFile), NÃO a tool Write, então o freeze do golden não se aplica
- * a este caminho executado. O arquivo é para CURADORIA HUMANA: carrega o sinal (texto do
- * lead), então NUNCA é logado (regra dura 8) — só a CONTAGEM e os nomes das skills vão a log.
+ * a este caminho executado. O arquivo é para CURADORIA HUMANA e leva só o RÓTULO (qual
+ * skill, por quê) e os ponteiros (`lead_id`, `job_id`).
+ *
+ * O texto do lead NÃO entra — nem redigido. O arquivo mora no disco do contêiner, sem prazo
+ * e fora da cascata de anonimização (que alcança o banco), e mascarar CPF/telefone/e-mail
+ * deixava o corpo da mensagem, que numa clínica é o dado de saúde. Por isso o sinal saiu da
+ * ASSINATURA: quem chama não tem como mandá-lo. Quem cura abre a conversa pela ficha.
  * Um arquivo por (skill, job): retry re-grava o mesmo candidato, não acumula duplicata.
  */
 export async function recordSkillMissCandidates(
   dir: string,
-  trace: { tenantId: string; leadId: string; jobId: string; signal: string; candidates: readonly SkillMissCandidate[] },
+  trace: { tenantId: string; leadId: string; jobId: string; candidates: readonly SkillMissCandidate[] },
   log: Logger,
 ): Promise<void> {
   if (trace.candidates.length === 0) {
@@ -322,13 +327,11 @@ export async function recordSkillMissCandidates(
       job_id: trace.jobId,
       expected_skill: c.skill,
       reason: c.reason,
-      // sinal do turno (texto do lead — PII): fica no ARQUIVO de curadoria, jamais em log.
-      signal: trace.signal,
     };
     const file = path.join(dir, `skill-miss_${c.skill}_${trace.jobId}.json`);
     await writeFile(file, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
   }
-  // PII fora do log: só contagem e nomes das skills (não o sinal).
+  // Log: só contagem e nomes das skills.
   log.info('candidatos ao golden set registrados (skill match miss)', {
     count: trace.candidates.length,
     skills: trace.candidates.map((c) => c.skill),
