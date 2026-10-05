@@ -670,33 +670,46 @@ update public.demandas d set
         or (d.proximo_passo is not null and d.proximo_passo <> '[próximo passo anonimizado]'));
 
 -- A8. Os avisos da Central sobre a pessoa (mesma regra do passo 7g). Aviso já
---     tratado fica sem referência e não é achado de novo.
+--     tratado fica sem referência e não é achado de novo. A lista de
+--     referências é montada a partir dos anonimizados (poucos), e só então
+--     casada com os avisos — reaplicar o baseline não varre a Central inteira
+--     contato por contato.
 update public.agent_inbox_items a set
   status = 'resolved',
   resolved_at = coalesce(a.resolved_at, now()),
   title = 'Aviso de contato anonimizado',
   body = 'Contato anonimizado.',
   ref_id = null
-  from public.contacts k
- where k.is_anonymized
-   and a.organization_id = k.organization_id
-   and a.kind not in ('message_send_stuck', 'capabilities_missing')
-   and a.created_at <= k.anonymized_at
-   and a.ref_id is not null
-   and (a.ref_id = k.id
-        or a.ref_id in (
-          select c.id from public.conversations c
-           where c.contact_id = k.id and c.organization_id = k.organization_id)
-        or a.ref_id in (
-          select ac.id from public.agent_cases ac
-            join public.conversations c on c.id = ac.conversation_id and c.organization_id = ac.organization_id
-           where c.contact_id = k.id and c.organization_id = k.organization_id)
-        or a.ref_id in (
-          select f.id from public.followup_enrollments f
-           where f.contact_id = k.id and f.organization_id = k.organization_id)
-        or a.ref_id in (
-          select ap.id from public.calendar_appointments ap
-           where ap.contact_id = k.id and ap.organization_id = k.organization_id));
+  from (
+    select k.organization_id, k.anonymized_at, k.id as ref
+      from public.contacts k
+     where k.is_anonymized
+    union all
+    select k.organization_id, k.anonymized_at, c.id
+      from public.contacts k
+      join public.conversations c on c.contact_id = k.id and c.organization_id = k.organization_id
+     where k.is_anonymized
+    union all
+    select k.organization_id, k.anonymized_at, ac.id
+      from public.contacts k
+      join public.conversations c on c.contact_id = k.id and c.organization_id = k.organization_id
+      join public.agent_cases ac on ac.conversation_id = c.id and ac.organization_id = c.organization_id
+     where k.is_anonymized
+    union all
+    select k.organization_id, k.anonymized_at, f.id
+      from public.contacts k
+      join public.followup_enrollments f on f.contact_id = k.id and f.organization_id = k.organization_id
+     where k.is_anonymized
+    union all
+    select k.organization_id, k.anonymized_at, ap.id
+      from public.contacts k
+      join public.calendar_appointments ap on ap.contact_id = k.id and ap.organization_id = k.organization_id
+     where k.is_anonymized
+  ) r
+ where a.organization_id = r.organization_id
+   and a.ref_id = r.ref
+   and a.created_at <= r.anonymized_at
+   and a.kind not in ('message_send_stuck', 'capabilities_missing');
 
 -- ── (B) Só quem foi anonimizado pelo BOTÃO ANTIGO ──
 --
