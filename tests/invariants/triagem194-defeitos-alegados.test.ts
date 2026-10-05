@@ -221,7 +221,10 @@ describe("defeito 3 — anonimização LGPD", () => {
       rows[0]!.is_anonymized,
       `a anonimização NÃO aconteceu — resposta ${res.status} ${JSON.stringify(corpo)}`,
     ).toBe(true);
-    expect(rows[0]!.name, "o nome do titular continua no banco").toBeNull();
+    // Desde a migration 0317 o botão chama a cascata do pedido formal, e ela
+    // grava o rótulo nos dois campos de nome (antes o botão deixava `name` nulo).
+    expect(rows[0]!.name, "o nome do titular continua no banco").not.toBe("Titular Real");
+    expect(rows[0]!.name, "rótulo único dos dois caminhos").toMatch(/^Cliente Anonimizado #[0-9a-f]{8}$/);
     expect(rows[0]!.email, "o e-mail do titular continua no banco").toBeNull();
   });
 
