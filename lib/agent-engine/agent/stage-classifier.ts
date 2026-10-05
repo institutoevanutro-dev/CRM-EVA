@@ -16,8 +16,8 @@
  * Divergência classificador×modelo (o classifier sugeriu X, o modelo confirmou Y≠Y via
  * update_lead_state) vira candidato ao golden set — gravado por fs em RUNTIME (mkdir +
  * writeFile, NÃO a tool Write que o hook de freeze bloqueia), mesmo padrão da F3-09. O
- * trace carrega o sinal do turno (texto do lead — PII) para curadoria; log só leva os
- * NOMES dos estágios (regra dura 8).
+ * arquivo e o log levam só os NOMES dos estágios e os ponteiros; o texto do lead (PII) não
+ * vai a nenhum dos dois (regra dura 8).
  *
  * tenant_id/lead_id vêm da ROW do job (closure do run), nunca do payload (regra dura 1).
  */
@@ -25,8 +25,6 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type pg from 'pg';
-
-import { scrubMessage } from '@/lib/sentry/scrub';
 
 import type { Logger } from '../obs/logger';
 import type { ProviderRegistry } from '../edge/llm/providers';
@@ -154,10 +152,10 @@ export interface StageDivergence {
 /**
  * Grava a divergência classificador×modelo como candidato ao golden set (SalesGPT/blueprint
  * 7.6) — fs em RUNTIME (mkdir recursivo + writeFile), NÃO a tool Write, então o freeze do
- * golden não se aplica a este caminho executado. O arquivo é para CURADORIA HUMANA: carrega
- * o sinal (texto do lead — PII, redigido por `scrubMessage` antes de ir a disco), então
- * NUNCA é logado (regra dura 8) — só os NOMES dos
- * estágios vão a log. Um arquivo por job: retry re-grava o mesmo candidato, não duplica.
+ * golden não se aplica a este caminho executado. O arquivo é para CURADORIA HUMANA e leva
+ * só o RÓTULO (os dois estágios) e os ponteiros (`lead_id`, `job_id`). O texto do lead NÃO
+ * entra, nem redigido, e saiu da assinatura — o motivo está em `recordSkillMissCandidates`.
+ * Um arquivo por job: retry re-grava o mesmo candidato, não duplica.
  */
 export async function recordStageDivergenceCandidate(
   dir: string,
@@ -165,7 +163,6 @@ export async function recordStageDivergenceCandidate(
     tenantId: string;
     leadId: string;
     jobId: string;
-    signal: string;
     divergence: StageDivergence;
   },
   log: Logger,
@@ -183,16 +180,10 @@ export async function recordStageDivergenceCandidate(
     job_id: trace.jobId,
     suggested_stage: suggested,
     confirmed_stage: confirmed,
-    // sinal do turno (texto do lead — PII): fica no ARQUIVO de curadoria, jamais em log, e
-    // passa pelo redator antes de tocar o disco. Um CPF, telefone ou e-mail dentro deste
-    // arquivo sobrevive à cascata de anonimização, que alcança o banco e não o disco do
-    // contêiner. O que o redator NÃO tira é o corpo da mensagem — o candidato ir para uma
-    // tabela, com retenção e cascata, é o conserto inteiro.
-    signal: scrubMessage(trace.signal),
   };
   const file = path.join(dir, `stage-divergence_${trace.jobId}.json`);
   await writeFile(file, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
-  // PII fora do log: só os nomes dos estágios (não o sinal).
+  // Log: só os nomes dos estágios.
   log.info('candidato ao golden set registrado (divergência de estágio classificador×modelo)', {
     suggested,
     confirmed,

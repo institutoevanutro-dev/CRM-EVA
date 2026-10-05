@@ -160,7 +160,8 @@ const envSchema = z.object({
   PRUNE_TOOL_RESULTS_WINDOW_TURNS: z.coerce.number().int().positive().default(4),
   PRUNE_TOOL_RESULTS_MIN_RESULT_TOKENS: z.coerce.number().int().positive().default(200),
   // Skills situacionais — near-misses viram candidatos ao golden set (curadoria
-  // humana; escrita por fs em runtime, gitignored).
+  // humana; escrita por fs em runtime, gitignored). O arquivo leva rótulo e
+  // ponteiros, nunca o texto do lead.
   GOLDEN_CANDIDATES_DIR: z.string().min(1).default('lib/agent-engine/golden-candidates'),
   // Classificadores auxiliares (modelo BARATO; sem valor = default da org).
   STAGE_CLASSIFIER_MODEL: z.string().min(1).optional(),
