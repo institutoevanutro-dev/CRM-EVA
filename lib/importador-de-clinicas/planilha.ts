@@ -133,7 +133,7 @@ const emailValido = (s: string) => z.string().email().safeParse(s).success;
 
 export function fusoValido(fuso: string): boolean {
   try {
-    new Intl.DateTimeFormat("pt-BR", { timeZone: fuso });
+    new Intl.DateTimeFormat(undefined, { timeZone: fuso });
     return true;
   } catch {
     return false;
