@@ -717,6 +717,10 @@ export const AUDIT_ACTIONS = [
   // volta ao bipe do produto.
   "settings.notification_sound_updated",
   "settings.notification_sound_removed",
+  // Importador de clínicas (scripts/importar-clinicas.ts): vínculo criado pela
+  // planilha da agência, sem convite. O convite, quando pedido com --convidar,
+  // audita `member.invited` pelo caminho de sempre.
+  "member.added_by_import",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
