@@ -513,3 +513,36 @@ describe("o runtime do agente usa a MESMA regra da ingestão", () => {
     expect(detectAmbiguousOptOut("posso sair antes das 15h?")).toBe(false);
   });
 });
+
+/**
+ * ═══ CLÍNICA (CRM EvaLink) — as frases do pedido de porte, ao pé da letra ═══
+ *
+ * As listas de cima vieram do projeto original e ficam iguais às dele, para o
+ * próximo porte aplicar sem conflito. Este bloco é do fork: as seis frases que o
+ * dono do produto nomeou, na grafia SEM acento em que o paciente digita no
+ * celular, medidas nos dois níveis (bloquear e escalar).
+ *
+ * "parar de tomar o remédio faz mal?" já não bloqueava antes do porte — `tomar`
+ * nunca foi verbo de comunicação. Está aqui como CONTROLE, não como prova do
+ * conserto: é a frase de clínica que qualquer alargamento futuro de
+ * `VERBOS_DE_COMUNICACAO` bloquearia primeiro.
+ */
+describe("clínica — as frases que o porte prometeu, sem acento como no celular", () => {
+  it.each(["nao me contate mais", "nao entrem mais em contato", "pode me remover da lista"])(
+    "bloqueia: %s",
+    (texto) => {
+      expect(ehPedidoDeOptOut(texto)).toBe(true);
+      expect(ehOptOutProvavel(texto)).toBe(true);
+    },
+  );
+
+  it.each([
+    "quero sair da lista de espera",
+    "meu filho nao me liga mais",
+    "parar de tomar o remedio faz mal?",
+    "parar de tomar o remédio faz mal?",
+  ])("NÃO bloqueia nem escala: %s", (texto) => {
+    expect(ehPedidoDeOptOut(texto)).toBe(false);
+    expect(ehOptOutProvavel(texto)).toBe(false);
+  });
+});
