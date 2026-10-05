@@ -28,9 +28,16 @@ describe("promptDaClinica", () => {
     expect(p).not.toContain("Seu nome é");
   });
 
+  it("não promete agenda nem perguntas frequentes que o agente não enxerga", () => {
+    const p = promptDaClinica(clinica);
+    expect(p).not.toMatch(/horários disponíveis|próximo horário|perguntas frequentes/);
+    expect(p).toContain("Quer marcar: pergunte o melhor dia e turno, confirme nome completo e telefone e diga que a recepção confirma o horário.");
+    expect(p).toContain("consulte os materiais;");
+  });
+
   it("é estável: mesma entrada, mesmo texto (a reimportação depende disso)", () => {
     // Hash fixo: qualquer mudança no texto do prompt reprova (a reimportação compara por ele).
-    expect(sha256(promptDaClinica(clinica))).toBe("0d04b499f468da954c70c226ba0715b1540bb35a9f0a1ce7407346749a9d9b69");
+    expect(sha256(promptDaClinica(clinica))).toBe("eb3df8545e3674fe7c9c7378b85deb31c77825ec5704a552dbd9b06a8f59f6b4");
     expect(sha256(memoriaDaClinica(clinica))).toBe("26f3603e07ef5e684d8f1662df27e789c7a23a85091935db7ee15686c05f7842");
   });
 });
