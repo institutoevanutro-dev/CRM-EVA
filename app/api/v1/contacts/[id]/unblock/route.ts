@@ -14,6 +14,8 @@ export const dynamic = "force-dynamic";
 
 type Context = { params: Promise<{ id: string }> };
 
+const COLUNAS = "id, display_name, phone_number, is_blocked, blocked_reason, blocked_at";
+
 /**
  * DESFAZ O DESCADASTRO DO CONTATO — o override que a regra W-02 prevê.
  *
@@ -86,13 +88,40 @@ export async function POST(_req: NextRequest, ctx: Context): Promise<Response> {
     .update({ is_blocked: false, blocked_reason: null, blocked_at: null })
     .eq("organization_id", authz.org.orgId)
     .eq("id", id)
-    .select("id, display_name, phone_number, is_blocked, blocked_reason, blocked_at")
+    // Só desfaz o que ESTÁ feito. Sem estes dois filtros a rota "desbloqueava"
+    // quem não estava bloqueado e auditava mesmo assim — e a trilha que
+    // responde "quem reabriu o canal que o paciente fechou" ganhava linhas de
+    // um desbloqueio que não desfez nada (chamada direta, ou duas abas
+    // confirmando o mesmo diálogo).
+    .eq("is_blocked", true)
+    .eq("is_anonymized", false)
+    .select(COLUNAS)
     .maybeSingle();
 
   if (error) {
     return fail("internal_error", t("Não foi possível desbloquear o contato."), 500, { requestId });
   }
-  if (!data) return fail("not_found", t("Contato não encontrado."), 404, { requestId });
+  if (!data) {
+    // Nada foi tocado. Falta dizer POR QUÊ — e nenhum dos três casos audita.
+    const { data: atual } = await admin
+      .from("contacts")
+      .select(`${COLUNAS}, is_anonymized`)
+      .eq("organization_id", authz.org.orgId)
+      .eq("id", id)
+      .maybeSingle();
+    if (!atual) return fail("not_found", t("Contato não encontrado."), 404, { requestId });
+    if (atual.is_anonymized) {
+      // Mesma resposta de editar contato anonimizado (`contacts/_handler.ts`).
+      return fail(
+        "lgpd_anonymization_irreversible",
+        t("Contato anonimizado — edição bloqueada (LGPD)."),
+        403,
+        { requestId },
+      );
+    }
+    // Já estava desbloqueado: o pedido está atendido, e não houve mutação.
+    return ok(atual, { requestId });
+  }
 
   // Espelha o registro do bloqueio (`lib/channels/pos-entrada.ts`): mesmo
   // `resourceType`, mesmo `contact_id` no metadata. O telefone NÃO entra —

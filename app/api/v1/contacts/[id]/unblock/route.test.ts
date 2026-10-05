@@ -22,6 +22,14 @@ const filters: Record<string, unknown> = {};
 /** O UPDATE que a rota mandou — é o que prova que ela limpa os três campos. */
 let patchEnviado: Record<string, unknown> | null = null;
 let resultRow: Record<string, unknown> | null = null;
+/**
+ * Como a linha ESTÁ no banco antes da chamada. O falso banco cobra os filtros
+ * de estado que a rota mandar (`is_blocked`, `is_anonymized`): sem isso, uma
+ * rota que "desbloqueia" quem não está bloqueado passaria por vacuidade.
+ */
+let estadoNoBanco = { is_blocked: true, is_anonymized: false };
+/** `true` enquanto a consulta em curso é o UPDATE (e não a leitura de conferência). */
+let ehUpdate = false;
 let updateError: { message: string } | null = null;
 /** Toda tabela que a rota tocou — desbloquear NÃO pode alcançar o negócio. */
 let tabelasTocadas: string[] = [];
@@ -36,6 +44,7 @@ beforeEach(() => {
   patchEnviado = null;
   resultRow = { id: contato, display_name: "Mello", phone_number: "+5541999953255", is_blocked: false, blocked_reason: null, blocked_at: null };
   updateError = null;
+  estadoNoBanco = { is_blocked: true, is_anonymized: false };
   vi.mocked(loadAuthUser).mockResolvedValue(null);
   vi.mocked(mfaEmDivida).mockResolvedValue(false);
   tabelasTocadas = [];
@@ -48,6 +57,7 @@ beforeEach(() => {
   const query = {
     update: (valores: Record<string, unknown>) => {
       patchEnviado = valores;
+      ehUpdate = true;
       return query;
     },
     eq: (k: string, v: unknown) => {
@@ -60,12 +70,21 @@ beforeEach(() => {
       // O recorte por organização e por id é o que impede um id de OUTRA
       // organização de ser desbloqueado — e o falso banco precisa cobrá-lo.
       const casa = filters["id"] === contato && filters["organization_id"] === org;
-      return { data: casa ? resultRow : null, error: null };
+      if (!casa) return { data: null, error: null };
+      if (!ehUpdate) return { data: { ...resultRow, ...estadoNoBanco }, error: null };
+      // O UPDATE só alcança a linha cujo estado casa com os filtros mandados.
+      const alcanca = (["is_blocked", "is_anonymized"] as const).every(
+        (coluna) => !(coluna in filters) || filters[coluna] === estadoNoBanco[coluna],
+      );
+      return { data: alcanca ? resultRow : null, error: null };
     },
   };
   vi.mocked(createAdminClient).mockReturnValue({
     from: (tabela: string) => {
       tabelasTocadas.push(tabela);
+      // Cada `from` é uma consulta nova: os filtros da anterior não valem.
+      for (const k of Object.keys(filters)) delete filters[k];
+      ehUpdate = false;
       return query;
     },
   } as unknown as ReturnType<typeof createAdminClient>);
@@ -156,6 +175,29 @@ describe("desbloquear contato (override da regra W-02)", () => {
     const resposta = await POST(req(), contexto());
     expect(resposta.status).toBe(200);
     expect(tabelasTocadas).toEqual(["contacts"]);
+  });
+
+  // ── Revisão do PR 125 ─────────────────────────────────────────────────────
+  //
+  // A trilha responde "quem reabriu o canal que o paciente fechou". Uma linha
+  // `contact.unblocked` para quem NÃO estava bloqueado (chamada direta, ou duas
+  // abas confirmando o mesmo diálogo) é um desbloqueio que não desfez nada.
+  it("contato que NÃO está bloqueado: 200, e nenhuma linha de auditoria", async () => {
+    estadoNoBanco = { is_blocked: false, is_anonymized: false };
+    const resposta = await POST(req(), contexto());
+    expect(resposta.status).toBe(200);
+    expect(audit).not.toHaveBeenCalled();
+    expect(filters["organization_id"]).toBe(org);
+  });
+
+  it("contato anonimizado não é reaberto: 403, e nenhuma linha de auditoria", async () => {
+    estadoNoBanco = { is_blocked: true, is_anonymized: true };
+    const resposta = await POST(req(), contexto());
+    expect(resposta.status).toBe(403);
+    expect(((await resposta.json()) as { error: { code: string } }).error.code).toBe(
+      "lgpd_anonymization_irreversible",
+    );
+    expect(audit).not.toHaveBeenCalled();
   });
 
   it("falha do banco vira 500 e NÃO audita sucesso", async () => {
