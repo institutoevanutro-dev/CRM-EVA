@@ -63,8 +63,32 @@ export const STATUS_DA_REGUA_VIVA = ["active", "waiting_reply", "paused_handoff"
  */
 export const MOTIVO_CANCELAMENTO_POR_LGPD = "Contato anonimizado (LGPD)";
 
+/**
+ * O título que a cascata do BANCO grava no negócio (`fn_lgpd_cascade_redact_contact`,
+ * passo 5: `'Cliente Anonimizado #' || <8 do id do contato>`). Desde a migration
+ * 0317 o botão da ficha também passa por ela — sem reconhecer este rótulo, o
+ * passo 2 abaixo o cortaria em 20 letras logo depois de o banco gravá-lo.
+ */
+const ROTULO_DA_CASCATA_DO_BANCO = /^Cliente Anonimizado #[0-9a-f]{8}$/;
+
 export function jaRedigida(titulo: string | null): boolean {
-  return (titulo ?? "").endsWith(SUFIXO_ANONIMIZADO);
+  const t = titulo ?? "";
+  return t.endsWith(SUFIXO_ANONIMIZADO) || ROTULO_DA_CASCATA_DO_BANCO.test(t);
+}
+
+/**
+ * A atividade ainda tem conteúdo a redigir?
+ *
+ * `{ redacted: true }` é a marca desta cascata; `{}` é o que a do banco deixa
+ * (e o que uma atividade sem conteúdo sempre teve). Nenhum dos dois é resíduo:
+ * tratá-los como tal fazia a varredura regravar toda atividade de quem foi
+ * anonimizado pelo banco e auditar uma retomada que não houve.
+ */
+export function atividadePendente(payload: unknown): boolean {
+  if (payload === null || payload === undefined) return false;
+  if (typeof payload !== "object") return true;
+  if ((payload as { redacted?: unknown }).redacted === true) return false;
+  return Object.keys(payload).length > 0;
 }
 
 export function tituloRedigido(titulo: string | null): string {
@@ -184,7 +208,7 @@ export async function completarRedacaoDoContato(
   if (atvSelErr) falhas.push(`crm_lead_activities select: ${atvSelErr.message}`);
 
   const pendentes = ((atvData ?? []) as { id: string; payload: unknown }[])
-    .filter((a) => (a.payload as { redacted?: unknown } | null)?.redacted !== true)
+    .filter((a) => atividadePendente(a.payload))
     .map((a) => a.id);
 
   let atividadesRedigidas = 0;
@@ -351,9 +375,7 @@ function idsComResiduo(
     if (l.contact_id && !jaRedigida(l.title)) comResiduo.add(l.contact_id);
   }
   for (const a of atividades) {
-    if (a.contact_id && (a.payload as { redacted?: unknown } | null)?.redacted !== true) {
-      comResiduo.add(a.contact_id);
-    }
+    if (a.contact_id && atividadePendente(a.payload)) comResiduo.add(a.contact_id);
   }
   for (const m of transcricoes) {
     if (m.contact_id) comResiduo.add(m.contact_id);

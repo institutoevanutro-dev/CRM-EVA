@@ -214,6 +214,26 @@ export interface ChannelIdentityRow {
   created_at: string;
 }
 
+/**
+ * Um comentário que o titular fez num post da organização no Instagram
+ * (migration 0280).
+ *
+ * Entra porque a anonimização o REDIGE (passo 7c-1 da cascata, migration
+ * 0317): texto, @, sugestão de resposta e motivo. O que se apaga a pedido do
+ * titular é o que se entrega a pedido dele. O IGSID não se repete aqui — já
+ * está em `channel_identities`.
+ */
+export interface InstagramCommentRow {
+  id: string;
+  media_id: string;
+  texto: string | null;
+  autor_handle: string | null;
+  comentado_em: string;
+  situacao: string;
+  sugestao_de_resposta: string | null;
+  motivo_do_toque: string | null;
+}
+
 export interface AuditRow {
   id: string;
   action: string;
@@ -334,6 +354,8 @@ export interface ExportPayload {
    */
   voice_calls: VoiceCallRow[];
   channel_identities: ChannelIdentityRow[];
+  /** Comentários do titular em posts da organização. Opcional como `reply_drafts`. */
+  instagram_comments?: InstagramCommentRow[];
   /**
    * Campanhas que falaram com o titular (migration 0343).
    *
@@ -1000,6 +1022,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   const lead_notes: NonNullable<ExportPayload["lead_notes"]> = [];
   const ai_agent_runs: NonNullable<ExportPayload["ai_agent_runs"]> = [];
   const lead_state: NonNullable<ExportPayload["lead_state"]> = [];
+  const instagram_comments: InstagramCommentRow[] = [];
   if (contactId) {
     const titular = contactId;
     const paginar = async <T,>(
@@ -1047,6 +1070,42 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
           .range(de, ate),
       )),
     );
+    // Comentários do Instagram. A ingestão não grava `contact_id`: quem liga o
+    // comentário à pessoa é o IGSID de quem comentou — os mesmos dois braços do
+    // passo 7c-1 da cascata. Identidade já anonimizada não tem mais IGSID.
+    const colunasDoComentario =
+      "id, media_id, texto, autor_handle, comentado_em, situacao, sugestao_de_resposta, motivo_do_toque";
+    const igsids = channel_identities
+      .filter((i) => i.channel === "instagram" && !i.external_id.startsWith("anonimizado:"))
+      .map((i) => i.external_id);
+    const comentarios = await paginar<InstagramCommentRow>((de, ate) =>
+      admin
+        .from("instagram_comments")
+        .select(colunasDoComentario)
+        .eq("organization_id", organizationId)
+        .eq("contact_id", titular)
+        .order("id")
+        .range(de, ate),
+    );
+    if (igsids.length > 0) {
+      comentarios.push(
+        ...(await paginar<InstagramCommentRow>((de, ate) =>
+          admin
+            .from("instagram_comments")
+            .select(colunasDoComentario)
+            .eq("organization_id", organizationId)
+            .in("autor_igsid", igsids)
+            .order("id")
+            .range(de, ate),
+        )),
+      );
+    }
+    const vistos = new Set<string>();
+    for (const c of comentarios) {
+      if (vistos.has(c.id)) continue;
+      vistos.add(c.id);
+      instagram_comments.push(c);
+    }
   }
   const meeting_deliveries: MeetingDeliveryRow[] = [];
   const appointment_notices: AppointmentNoticeRow[] = [];
@@ -1162,6 +1221,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     lead_notes,
     ai_agent_runs,
     lead_state,
+    instagram_comments,
     campaign_recipients,
     campaign_suppressions,
   };

@@ -418,6 +418,30 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
           </View>
         ) : null}
 
+        {/* Comentários do Instagram — o que a pessoa escreveu num post da
+            organização e o que ficou guardado sobre ele. A anonimização apaga
+            este texto (migration 0317); o relatório o entrega. */}
+        {data.instagram_comments?.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Comentários no Instagram</Text>
+            {data.instagram_comments.map((c) => (
+              <View key={c.id} style={styles.itemBlock}>
+                <Text>{c.texto ?? "—"}</Text>
+                <Text style={styles.small}>
+                  {c.autor_handle ? `@${c.autor_handle} · ` : ""}
+                  {fmtDate(c.comentado_em)} · {c.situacao}
+                </Text>
+                {c.sugestao_de_resposta ? (
+                  <Text style={styles.small}>Resposta sugerida: {c.sugestao_de_resposta}</Text>
+                ) : null}
+                {c.motivo_do_toque ? (
+                  <Text style={styles.small}>Anotação: {c.motivo_do_toque}</Text>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         {/* Audit */}
         {data.audit_log_extract.length > 0 ? (
           <View style={styles.section}>
