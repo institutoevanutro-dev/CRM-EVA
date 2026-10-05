@@ -52,41 +52,84 @@ export function isSensitiveHeader(name: string): boolean {
 }
 
 /**
- * Identificador de depuração reconhecido pela FORMA, não dado do titular: UUID
- * (8-4-4-4-12 em hexadecimal) e hash/id em hexadecimal corrido de 32 ou mais
- * (md5, sha1, sha256, id de requisição do provedor). Eles são separados do texto
- * ANTES dos padrões de CPF e telefone, que por isso não precisam de borda de
- * letra: com a borda, o número grudado no rótulo (`cpf12345678909`,
- * `tel-11987654321`) saía inteiro; sem ela e sem esta separação, os padrões
- * comeriam pedaço de UUID e — medido — de 597 em 5.000 sha256. O grupo de
- * captura faz o `split` devolver o identificador nas posições ímpares.
+ * Identificador de depuração reconhecido pela FORMA, não dado do titular. Eles
+ * são separados do texto ANTES dos padrões de CPF e telefone, que por isso não
+ * precisam de borda de letra: com a borda, o número grudado no rótulo
+ * (`cpf12345678909`, `tel-11987654321`) saía inteiro; sem ela e sem esta
+ * separação, os padrões comeriam pedaço de UUID e — medido — de 597 em 5.000
+ * sha256. O grupo de captura (um só) faz o `split` devolver o identificador nas
+ * posições ímpares.
+ *
+ * São quatro formas, cada uma medida saindo furada antes de entrar aqui:
+ *   - UUID (8-4-4-4-12 em hexadecimal);
+ *   - hash em hexadecimal corrido de 32 ou mais (md5, sha1, sha256);
+ *   - id em hexadecimal mais CURTO que um hash — ObjectId de 24, id de trace de
+ *     16, sha de git — que saía como `5f8d04b[PHONE]a2b3c4`. Precisa estar
+ *     isolado (sem letra nem dígito vizinho) e ter ao menos uma letra: onze
+ *     dígitos puros são CPF ou celular. E não pode ter a forma "letras e depois
+ *     só números", que é rótulo grudado (`cafe11987654321`), não id;
+ *   - endereço IPv4: `192.168.100.10` tem a forma do CPF só com pontos. Um CPF
+ *     escrito assim tem bloco acima de 255 em 98% dos casos; o resto é o preço.
  */
-const IDENTIFICADOR = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,})/i;
+const OCTETO = "(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)";
+const IDENTIFICADOR = new RegExp(
+  "(" +
+    "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" +
+    "|[0-9a-f]{32,}" +
+    "|(?<![0-9a-z])(?=\\d*[a-f])(?![a-f]+\\d+(?![0-9a-z]))[0-9a-f]{12,31}(?![0-9a-z])" +
+    `|(?<![\\d.])(?:${OCTETO}\\.){3}${OCTETO}(?![\\d.])` +
+    ")",
+  "i",
+);
 
 /**
- * Telefone BR como se escreve: `+55 (11) 9 8765-4321`, `(21) 3456-7890`,
- * `5511987654321`, e também SEM DDD (`98765-4321`, `3456-7890`), com hífen,
- * ponto, espaço ou nada entre os blocos. Sem DDD o padrão é curto (8 dígitos), e
- * as bordas `(?<![\w-])`/`(?![\w-])` são o que o tira de dentro de hash, de data
- * e de nome de modelo (`…-sonnet-20241022`).
+ * Telefone como se escreve. Cada alternativa é um jeito medido:
+ *
+ *   1. BR com DDD: `+55 (11) 9 8765-4321`, `(21) 3456-7890`, `5511987654321`,
+ *      com hífen, ponto, espaço ou nada entre os blocos;
+ *   2. BR sem DDD (`98765-4321`, `3456-7890`) — aqui o separador é OBRIGATÓRIO:
+ *      oito dígitos corridos são limite de tokens, id de pedido, contagem
+ *      (`rate limit: 40000000 tokens` saía `[PHONE] tokens`);
+ *   3. DDD e o número em trios (`27 999 991 234`) ou com o hífen fora do lugar
+ *      (`(27) 9999-91234`);
+ *   4. de fora do Brasil, quando o `+` na frente diz que é telefone
+ *      (`+351 912 345 678`, `+1 (415) 555-2671`).
+ *
+ * As bordas `(?<![\w-])`/`(?![\w-])` são o que o tira de dentro de hash, de
+ * data e de nome de modelo (`…-sonnet-20241022`).
  */
-const TELEFONE =
-  /(?<![\w-])(?:\+?\d{2,3}[\s.-]?)?(?:(?:\(\d{2}\)|\d{2})[\s.-]?)?(?:9[\s.-]?)?\d{4}[\s.-]?\d{4}(?![\w-])/g;
+const DDD = "(?:\\(\\d{2}\\)|\\d{2})";
+const TELEFONE = new RegExp(
+  "(?<![\\w-])(?:" +
+    `(?:\\+?\\d{2,3}[\\s.-]?)?${DDD}[\\s.-]?(?:9[\\s.-]?)?\\d{4}[\\s.-]?\\d{4}` +
+    "|(?:9[\\s.-]?)?\\d{4}[\\s.-]\\d{4}" +
+    `|${DDD}[\\s.-]?(?:\\d{3}[\\s.-]\\d{3}[\\s.-]\\d{3}|\\d{4}[\\s.-]\\d{5})` +
+    "|\\+\\d{1,3}[\\s.-]?(?:\\(\\d{1,4}\\)|\\d{1,4})(?:[\\s.-]?\\d{2,4}){2,3}" +
+    ")(?![\\w-])",
+  "g",
+);
 
 /**
- * O número com DDD GRUDADO num rótulo (`zap11987654321`, `tel-5511987654321`),
- * que a borda de cima deixa passar. Só exige que o vizinho não seja outro
- * dígito: um código numérico mais longo que um telefone fica inteiro, em vez de
- * sair meio apagado (`[PHONE]2345`) — que não protege o titular nem deixa depurar.
+ * O número com DDD GRUDADO num rótulo (`zap11987654321`, `tel-5511987654321`,
+ * `zap(85) 3110-7016`), que a borda de cima deixa passar. É a alternativa 1 de
+ * `TELEFONE` com outra borda: só exige que o vizinho não seja outro dígito. Um
+ * código numérico mais longo que um telefone fica inteiro, em vez de sair meio
+ * apagado (`[PHONE]2345`) — que não protege o titular nem deixa depurar.
  */
-const TELEFONE_GRUDADO = /(?<!\d)(?:\+?55)?\d{2}\s?\d{4,5}-?\d{4}(?!\d)/g;
+const TELEFONE_GRUDADO = new RegExp(
+  `(?<!\\d)(?:\\+?55[\\s.-]?)?${DDD}[\\s.-]?(?:9[\\s.-]?)?\\d{4}[\\s.-]?\\d{4}(?!\\d)`,
+  "g",
+);
 
 /**
- * CPF com qualquer separador entre os blocos (ponto, espaço, hífen ou nada):
- * `123 456 789 09` e `123.456.789.09` também são CPF de quem digita rápido.
+ * CPF com qualquer separador entre os blocos: `123 456 789 09` e
+ * `123.456.789.09` também são CPF de quem digita rápido, e `123.456.789/09`,
+ * `123,456,789-09` e `123 . 456 . 789 - 09` de quem erra a máscara. A vírgula
+ * só vale COLADA: "768, 512, 256, 64" é lista de números, não CPF.
  * Mesma borda só de dígito, pelo mesmo motivo.
  */
-const CPF = /(?<!\d)\d{3}[.\s-]?\d{3}[.\s-]?\d{3}[.\s-]?\d{2}(?!\d)/g;
+const SEP = "(?:\\s?[./-]\\s?|,|\\s)?";
+const CPF = new RegExp(`(?<!\\d)\\d{3}${SEP}\\d{3}${SEP}\\d{3}${SEP}\\d{2}(?!\\d)`, "g");
 
 export function scrubMessage(input: string): string {
   return input

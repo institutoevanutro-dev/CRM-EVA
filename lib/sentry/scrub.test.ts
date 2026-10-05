@@ -307,3 +307,68 @@ describe("scrubMessage — os formatos que ainda passavam", () => {
     expect(scrubMessage("falha para 11987654321@exemplo.com")).toBe("falha para [EMAIL]");
   });
 });
+
+// ─── Revisão do PR 125 ───────────────────────────────────────────────────────
+//
+// A reescrita protegia UUID e hexadecimal de 32+, e media só esses dois. Fora
+// deles o filtro comia o que serve para investigar um erro — tudo abaixo saía
+// inteiro na main e alterado no PR, medido um a um.
+describe("scrubMessage — o que serve para depurar continua inteiro", () => {
+  it.each([
+    // id em hexadecimal mais curto que um hash: ObjectId (24), id de trace (16), sha de git
+    "id 5f8d04b12345678901a2b3c4",
+    "span 0af7651916cd43dd trace 1234567890abcdef",
+    "git 1a2b3c4d55667788990a",
+    // endereço IP no formato ddd.ddd.ddd.dd casava como CPF só com pontos
+    "connect ECONNREFUSED 192.168.100.10:5432",
+    // oito dígitos corridos, sem DDD e sem separador, não são telefone
+    "rate limit: 40000000 tokens per day",
+    "Key (external_order_id)=(12345678) already exists",
+  ])("%s", (texto) => {
+    expect(scrubMessage(texto)).toBe(texto);
+  });
+
+  it("rótulo só de letras de hexadecimal não vira identificador — o número grudado sai", () => {
+    // `cafe`, `face`, `dad`: letras que também são dígito de hexadecimal. O que
+    // distingue o rótulo do id é a forma: letras e depois só números.
+    expect(scrubMessage("cafe11987654321")).toMatch(/^cafe\[(PHONE|CPF)\]$/);
+  });
+});
+
+// Formatos de CPF e telefone que ainda passavam inteiros (mesma revisão).
+describe("scrubMessage — mais jeitos de escrever o mesmo número", () => {
+  it.each(["123.456.789/09", "123,456,789-09", "123 . 456 . 789 - 09"])("CPF %s", (cpf) => {
+    const out = scrubMessage(`meu cpf ${cpf}, obrigado`);
+    expect(out, cpf).not.toMatch(/\d{3}/);
+    expect(out, cpf).toMatch(/^meu cpf \[(PHONE|CPF)\], obrigado$/);
+  });
+
+  it.each([
+    "27 999 991 234",
+    "27.999.991.234",
+    "(27) 9999-91234",
+    // de fora do Brasil: o `+` na frente é o que diz que é telefone
+    "+351 912 345 678",
+    "+1 (415) 555-2671",
+  ])("telefone %s", (tel) => {
+    const out = scrubMessage(`meu zap ${tel}, obrigado`);
+    expect(out, tel).not.toMatch(/\d{3}/);
+    expect(out, tel).toMatch(/^meu zap \[(PHONE|CPF)\], obrigado$/);
+  });
+
+  // Exigir separador no número sem DDD (acima) não pode soltar o fixo grudado
+  // no rótulo com o DDD entre parênteses — medido num sorteio de 200 mil
+  // entradas contra o filtro anterior.
+  it.each(["zap(85) 31107016", "tel-55(59)9.94630282", "zap55(76)9 02476848"])(
+    "grudado no rótulo, com DDD entre parênteses: %s",
+    (texto) => {
+      const out = scrubMessage(texto);
+      expect(out, texto).not.toMatch(/\d{3}/);
+    },
+  );
+
+  it("lista de números separada por vírgula e espaço não é CPF", () => {
+    const texto = "dimensões esperadas: 768, 512, 256, 64";
+    expect(scrubMessage(texto)).toBe(texto);
+  });
+});
