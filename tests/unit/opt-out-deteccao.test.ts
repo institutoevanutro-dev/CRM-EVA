@@ -546,3 +546,125 @@ describe("clínica — as frases que o porte prometeu, sem acento como no celula
     expect(ehOptOutProvavel(texto)).toBe(false);
   });
 });
+
+/**
+ * ═══ REVISÃO DO PORTE (CRM EvaLink, PR 125) — o que as frases novas pegavam a mais ═══
+ *
+ * No CRM EvaLink o bloqueio custa mais do que no projeto original: além de
+ * `is_blocked`, o pedido de parar fecha todo negócio aberto do paciente como
+ * perdido (`lib/channels/pos-entrada.ts`). E o nível de baixo também não é de
+ * graça: a suspeita de opt-out avisa o paciente de que os envios pararam,
+ * silencia o agente e cancela os follow-ups. Por isso são TRÊS listas, e cada
+ * frase foi medida nos dois níveis com a função da `main` e a do PR lado a lado.
+ *
+ * (1) RESTRIÇÃO, RELATO e DUPLA NEGAÇÃO — o paciente quer continuar sendo
+ *     atendido. Todas davam `false` na main e `true` no PR antes desta revisão.
+ */
+const QUER_CONTINUAR_SENDO_ATENDIDO = [
+  // dupla negação: "não deixe de" é pedir o contato
+  "Se abrir vaga antes, não deixe de entrar em contato",
+  "nao deixem de entrar em contato se tiver desistencia",
+  // `entre` é também o subjuntivo de quem escreve ("caso eu não entre")
+  "Caso eu nao entre em contato ate sexta pode liberar meu horario",
+  "talvez eu não entre em contato essa semana, estou viajando",
+  // relato em primeira pessoa, com o infinitivo
+  "desculpa deixar de entrar em contato, tive um imprevisto",
+  // restrição de HORÁRIO
+  "por favor não entre em contato antes das 9h",
+  "não entre em contato antes das 8",
+  "peço que não entrem em contato hoje, estou internada",
+  "não entrem em contato hoje, estou em cirurgia",
+  "não entrem em contato de madrugada",
+  "nao me liguem mais de manha, so a tarde",
+  "nao me contatem mais nesse horario",
+  "não me liguem mais nesse horário",
+  // troca de NÚMERO: a frase diz que existe outro
+  "não entre em contato nesse numero, mudei de telefone",
+  "não me escreva mais nesse número, uso o outro agora",
+  // troca de CANAL — o mesmo precedente de "não quero receber ligação, só whatsapp"
+  "não me contate mais por ligação, só mensagem",
+  "não me contate mais por telefone, só whatsapp",
+  "não me liguem mais, prefiro whatsapp",
+  // "chamar DE" é tratamento, não contato
+  "não me chamem mais de dona, pode ser só Maria",
+  // `molesta` é 3ª pessoa descritiva: quem não molesta mais é a dor
+  "o refluxo nao me molesta mais",
+  "a dor não me molesta mais",
+  // INFINITIVO depois de "não me" é relato de terceiro, não ordem
+  "meu ex prometeu não me ligar mais",
+  "pedi pro laboratório não me enviar mais o resultado por email",
+  "decidi não me perturbar mais com isso",
+  // terceiro de quem o paciente RECLAMA: não é a clínica, e não é vocativo
+  "o plano não me manda mais a carteirinha",
+  "o laboratório não me envia mais o resultado",
+];
+
+/**
+ * (2) Pedidos CLAROS que o freio comia. As de lista bloqueavam na main e no PR
+ *     não bloqueavam nem escalavam; as de "em contato" são a frase que o porte
+ *     anunciou, com o complemento mais comum do WhatsApp (sem vírgula).
+ */
+const PEDIDO_CLARO_QUE_O_FREIO_COMIA = [
+  "me tira da lista de marketing",
+  "me tira da lista de propaganda",
+  "me tire da lista de mensagem",
+  "me tira da lista de msg",
+  "me remove da lista de e-mails",
+  "quero sair da lista de clientes",
+  "me tira da lista de pacientes",
+  "não entrem mais em contato por favor",
+  "não entre mais em contato por gentileza",
+  "não entrem mais em contato com esse número",
+  "não entrem mais em contato pelo amor de deus",
+  "parem de entrar em contato por favor",
+  // CONTROLES do freio de restrição: ele não pode engolir o pedido inteiro.
+  "não me mande mais mensagem por favor",
+  "não me liga mais de jeito nenhum",
+  "não me chamem mais de jeito nenhum",
+  "nao me chamem mais nesse numero",
+  "se eu quiser eu ligo, não entrem mais em contato",
+  "podem parar de entrar em contato",
+  // o infinitivo saiu de "não me X mais" (é relato de terceiro), MENOS depois
+  // de quem pede: esta é a forma educada do pedido, e o PR já a bloqueava.
+  "favor não me enviar mais mensagens",
+  "peço para não me ligar mais",
+];
+
+/**
+ * (3) O que a regra NÃO sabe decidir sozinha: não bloqueia, mas para o agente e
+ *     chama uma pessoa. Antes desta revisão as três famílias caíam no vazio —
+ *     nem bloqueavam nem escalavam.
+ */
+const UMA_PESSOA_DECIDE = [
+  // condição: pode ser "se eu faltar" ou pode ser "se eu quiser eu procuro"
+  "se eu não confirmar, não entre em contato",
+  "caso eu falte, não entrem em contato",
+  // sujeito que pode ser vocativo ("meu amigo") ou a própria clínica
+  "meu amigo não me manda mais mensagem",
+  "meu anjo não me liga mais",
+  "essa clínica não me manda mais nada",
+  "esse número não me liga mais",
+  // lista que não é de envio conhecida nem de clínica conhecida
+  "me tira da lista de aniversariantes",
+  "quero sair da lista de vip",
+];
+
+describe("revisão do porte — restrição, relato e dupla negação não são pedido de parar", () => {
+  it.each(QUER_CONTINUAR_SENDO_ATENDIDO)("NÃO bloqueia nem escala: %s", (texto) => {
+    expect(ehPedidoDeOptOut(texto), `bloquearia "${texto}"`).toBe(false);
+    expect(ehOptOutProvavel(texto), `escalaria "${texto}"`).toBe(false);
+  });
+});
+
+describe("revisão do porte — o freio não engole pedido claro", () => {
+  it.each(PEDIDO_CLARO_QUE_O_FREIO_COMIA)("bloqueia: %s", (texto) => {
+    expect(ehPedidoDeOptOut(texto), `deveria ter reconhecido "${texto}"`).toBe(true);
+  });
+});
+
+describe("revisão do porte — na dúvida, quem decide é uma pessoa", () => {
+  it.each(UMA_PESSOA_DECIDE)("não bloqueia, mas escala: %s", (texto) => {
+    expect(ehPedidoDeOptOut(texto), `bloquearia "${texto}"`).toBe(false);
+    expect(ehOptOutProvavel(texto), `deixaria passar "${texto}"`).toBe(true);
+  });
+});
