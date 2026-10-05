@@ -115,9 +115,14 @@ async function main(): Promise<number> {
 
   const env = carregarEnvLocal();
   const creds = credenciaisSupabaseDeTeste();
+  // A trava confere o que GRAVA, não o que credenciaisSupabaseDeTeste resolveu:
+  // contas e convites saem pelo createAdminClient, que lê o process.env
+  // efetivo (lib/env). Os dois divergem quando a URL está no ambiente e a
+  // service role não — aí as credenciais vêm do .env.local, e a URL não.
+  const apiUrl = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
   const dbUrl = env.SUPABASE_DB_ADMIN_URL || creds.dbUrl;
-  anunciarDestino("importar-clinicas", { ...creds, dbUrl });
-  const veredito = conferirDestino(creds.url, dbUrl, opcao("destino"));
+  anunciarDestino("importar-clinicas", { ...creds, url: apiUrl, dbUrl });
+  const veredito = conferirDestino(apiUrl, dbUrl, opcao("destino"));
   if (!veredito.ok) {
     console.error(`❌ destino recusado: ${veredito.motivo}. Nada foi lido nem gravado.`);
     return 2;

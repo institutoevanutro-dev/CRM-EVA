@@ -3,7 +3,7 @@
  * informa; isto RECUSA: host diferente do `--destino`, banco ausente, banco
  * misto (local × remoto) ou banco de outro projeto do Supabase da nuvem.
  */
-import { destinoEhLocal } from "../../scripts/lib/env-de-teste";
+import { destinoEhLocal } from "@/lib/destino-local";
 
 export type VereditoDoDestino = { ok: true } | { ok: false; motivo: string };
 

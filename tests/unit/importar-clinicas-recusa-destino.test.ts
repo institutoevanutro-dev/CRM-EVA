@@ -6,7 +6,7 @@
  * que a porta ABRE: com o destino certo ele passa e para no arquivo ausente.
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,18 +18,26 @@ const SCRIPT = join(RAIZ, "scripts", "importar-clinicas.ts");
 const VAZIO = mkdtempSync(join(tmpdir(), "importar-clinicas-"));
 afterAll(() => rmSync(VAZIO, { recursive: true, force: true }));
 
-function roda(args: string[]): { status: number | null; saida: string } {
+const AMBIENTE = {
+  NEXT_PUBLIC_SUPABASE_URL: "https://abcdefgh.supabase.co",
+  SUPABASE_SERVICE_ROLE_KEY: "chave-de-teste-que-nunca-sai-daqui",
+  SUPABASE_DB_URL: "postgresql://postgres.abcdefgh:x@aws-0-sa-east-1.pooler.supabase.com:5432/postgres",
+};
+
+function roda(
+  args: string[],
+  ambiente: Record<string, string> = AMBIENTE,
+  cwd = VAZIO,
+): { status: number | null; saida: string } {
   const r = spawnSync(process.execPath, [TSX_CLI, SCRIPT, ...args], {
-    cwd: VAZIO,
+    cwd,
     env: {
       NODE_ENV: "test",
       PATH: process.env.PATH ?? "",
       HOME: process.env.HOME ?? "",
       // Fora da raiz o tsx não acha o tsconfig, e o alias `@/` não resolve.
       TSX_TSCONFIG_PATH: join(RAIZ, "tsconfig.json"),
-      NEXT_PUBLIC_SUPABASE_URL: "https://abcdefgh.supabase.co",
-      SUPABASE_SERVICE_ROLE_KEY: "chave-de-teste-que-nunca-sai-daqui",
-      SUPABASE_DB_URL: "postgresql://postgres.abcdefgh:x@aws-0-sa-east-1.pooler.supabase.com:5432/postgres",
+      ...ambiente,
     },
     encoding: "utf8",
     timeout: 120_000,
@@ -70,5 +78,33 @@ describe("importar-clinicas: destino", { timeout: 150_000 }, () => {
     expect(r.saida).toContain("--ator");
     expect(r.saida).not.toContain("REMOTO");
     expect(r.status, r.saida).toBe(2);
+  });
+
+  it("confere a URL que GRAVA: ambiente com a URL e .env.local de outro projeto não passam", () => {
+    // Sem service role no ambiente, as credenciais vêm do .env.local (outro
+    // projeto), mas o createAdminClient grava na URL do ambiente (abcdefgh).
+    // Conferir as credenciais aprovaria `outro` e gravaria em `abcdefgh`.
+    const dir = mkdtempSync(join(tmpdir(), "importar-clinicas-misto-"));
+    try {
+      writeFileSync(
+        join(dir, ".env.local"),
+        [
+          "NEXT_PUBLIC_SUPABASE_URL=https://outroproj.supabase.co",
+          "SUPABASE_SERVICE_ROLE_KEY=chave-do-arquivo",
+          "SUPABASE_DB_URL=postgresql://postgres.outroproj:x@aws-0-sa-east-1.pooler.supabase.com:5432/postgres",
+        ].join("\n"),
+      );
+      const r = roda(
+        ["nao-existe.xlsx", "--destino", "outroproj.supabase.co"],
+        { NEXT_PUBLIC_SUPABASE_URL: "https://abcdefgh.supabase.co" },
+        dir,
+      );
+      expect(r.saida).toContain("abcdefgh.supabase.co");
+      expect(r.saida).toContain("destino recusado");
+      expect(r.saida).not.toContain("nao-existe.xlsx");
+      expect(r.status, r.saida).toBe(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
