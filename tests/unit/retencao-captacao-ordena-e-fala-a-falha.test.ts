@@ -32,8 +32,19 @@
  *
  * O que estes casos NÃO medem: o que o Postgres aceita de fato, medido contra
  * um banco real em `tests/invariants/`. Aqui o dublê só carrega a régua.
+ *
+ * ─── Revisão do PR 125: o lote sai de uma FRONTEIRA, não de `limit` ─────────
+ *
+ * `order` + `limit` num DELETE é recurso do PostgREST 12; o 13 o removeu e
+ * ignora o `limit`. A poda hoje acha a fronteira do lote com um SELECT
+ * (`order("id")` + `range`) e apaga até ela — ver
+ * `lib/retencao/apagar-lote-vencido.ts` e, para as duas versões lado a lado,
+ * `retencao-lote-em-qualquer-postgrest.test.ts`. O dublê daqui acompanha: é o
+ * `range` da fronteira que ele recusa sem `order`, e é dele que sai o lote.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { esquecerFalhasAvisadas } from "@/lib/retencao/falha-avisada";
 
 import { podarHistoricoDeCaptacao } from "@/lib/webhooks/retencao-da-captacao";
 
@@ -67,26 +78,35 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (tabela: string) => {
       if (tabela === "webhook_lead_captures") {
-        // O heart da cerca: `limit` sem `order` LANÇA, como o PostgREST 12.2
-        // faz (400 PGRST109). O `ordenado` é lido pelo `limit` abaixo.
+        // O coração da cerca: recortar o lote sem `order` LANÇA. Sem ordem a
+        // fronteira é uma linha qualquer, e o lote sai arbitrário — a mesma
+        // propriedade que o PGRST109 do PostgREST 12.2 cobrava do `limit`.
         let ordenado = false;
+        // Cada `from` é UMA consulta: ou a busca da fronteira, ou o DELETE.
+        let ehDelete = false;
         const apagando: Record<string, unknown> = {
-          delete: () => apagando,
+          delete: () => {
+            ehDelete = true;
+            return apagando;
+          },
           lt: () => apagando,
+          lte: () => apagando,
           select: () => apagando,
           order: (coluna: string) => {
             ordenado = true;
             ordensPedidas.push({ coluna });
             return apagando;
           },
-          limit: (n: number) => {
+          range: (_de: number, ate: number) => {
             if (!ordenado) {
-              throw new Error("PGRST109: A 'limit' was applied without an explicit 'order'");
+              throw new Error("fronteira do lote pedida sem `order`: o recorte sairia arbitrário");
             }
-            lotePedido = n;
+            lotePedido = ate + 1;
             return apagando;
           },
-          then: (r: (v: unknown) => unknown) => Promise.resolve(respostaDelete).then(r),
+          // Sem fronteira (menos de um lote vencido): o DELETE leva o que veio.
+          then: (r: (v: unknown) => unknown) =>
+            Promise.resolve(ehDelete ? respostaDelete : { data: [], error: null }).then(r),
         };
         return apagando;
       }
@@ -104,6 +124,8 @@ vi.mock("@/lib/supabase/admin", () => ({
         in: () => busca,
         delete: () => buscaApagadas,
         limit: () => busca,
+        // A fronteira do DELETE do arquivo: aqui nunca há um lote inteiro.
+        range: () => Promise.resolve({ data: [], error: null }),
         then: (r: (v: unknown) => unknown) =>
           Promise.resolve({ data: linhasDoArquivo, error: null }).then(r),
       };
@@ -111,6 +133,7 @@ vi.mock("@/lib/supabase/admin", () => ({
         select: () => buscaApagadas,
         is: () => buscaApagadas,
         lt: () => buscaApagadas,
+        lte: () => buscaApagadas,
         order: () => buscaApagadas,
         limit: () => buscaApagadas,
         then: (r: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(r),
@@ -149,12 +172,11 @@ describe("o DELETE da captação ordena o lote antes de limitá-lo", () => {
     expect(ordensPedidas).toEqual([{ coluna: "id" }]);
   });
 
-  it("ordena ANTES de limitar — o dublê recusa `limit` sem `order` (PGRST109)", async () => {
+  it("ordena ANTES de recortar o lote — o dublê recusa a fronteira sem `order`", async () => {
     // A direção que este teste NÃO mede é a do banco real: aqui o dublê LANÇA
-    // no `limit` sem `order`, como o PostgREST 12.2 (400 PGRST109, medido pelo
-    // mantenedor no v12.2.12). Tirar o `.order()` do código faz este caso
-    // reprovar — e, sem o `.order()`, a poda não apagaria NADA em nenhum clone
-    // novo, que é o defeito que a casa já corrigiu na décima poda.
+    // quando a fronteira do lote é pedida sem `order`. Tirar o `.order()` do
+    // código faz este caso reprovar — sem ele o lote sairia arbitrário, a
+    // mesma propriedade que o PGRST109 do PostgREST 12.2 cobrava do `limit`.
     const admin = await banco({ data: [{ id: "c1" }] });
     const r = await podarHistoricoDeCaptacao(admin, { diasBrutos: "365", lote: 7 });
     // Chega aqui porque o `order` veio antes do `limit` — e o lote pedido é o
@@ -209,6 +231,9 @@ describe("a falha do DELETE sobe — ela não vira `apagadas: 0`", () => {
 describe("o handler do cron — a falha da captação sai pelo mesmo canal das irmãs", () => {
   beforeEach(() => {
     auditou.mockClear();
+    // O teto de uma linha de falha por dia (`lib/retencao/falha-avisada.ts`)
+    // é memória do processo: cada caso começa sem falha avisada.
+    esquecerFalhasAvisadas();
     capturou.mockClear();
   });
 

@@ -54,6 +54,11 @@
  *      continuar crescendo ~23 MB/dia contra o teto de 500 MB do plano
  *      gratuito. Onde o banco aceitasse, sem ordem o lote sai ARBITRÁRIO e
  *      a drenagem deixa de ser reproduzível.
+ *
+ *      (CRM EvaLink, revisão do PR 125.) `order` + `limit` no DELETE só
+ *      conserta o PostgREST 12: o 13 tirou o recurso e ignora o `limit`. O
+ *      lote hoje sai de `lib/retencao/apagar-lote-vencido.ts`, que vale nas
+ *      duas versões.
  *   2. o erro do DELETE era ENGOLIDO (`logger.warn` + `apagadas: 0`). Na
  *      resposta do cron, "o banco recusou o DELETE" e "não havia nada
  *      vencido" eram a MESMA linha, e o único sinal vivia num log de
@@ -71,6 +76,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
+import { apagarLoteVencido } from "@/lib/retencao/apagar-lote-vencido";
 
 /** Quantas linhas cada rodada esvazia. Ver o cabeçalho: lote pequeno é o ponto. */
 export const LOTE_PADRAO = 500;
@@ -179,33 +185,20 @@ export async function podarArquivoDeWebhooks(
   // então o que se perde é o registro de que um evento existiu — aceitável
   // passados meses, e é o único jeito de a tabela não crescer para sempre em
   // número de linhas.
-  const { data: apagadasRows, error: erroDelete } = await admin
-    .from("webhook_events_log")
-    .delete()
-    .lt("received_at", limiteEm(opcoes.diasParaApagar))
-    .select("id")
-    // O `order` ANTES do `limit` (issue #1769), na MESMA coluna e na MESMA
-    // direção da poda irmã (`webhook_lead_captures`, #1721) e da décima poda do
-    // `data-retention`: `id` ASCENDENTE. Duas propriedades, e as duas
-    // importam.
-    //
-    // A PRIMEIRA é o que o PostgREST 12.2 exige: `limit` sem `order` num
-    // DELETE volta 400 PGRST109 (medido pelo mantenedor no v12.2.12), e sem
-    // esta linha esta poda nunca apaga nada em nenhum clone novo. Para esta
-    // tabela, cujo arquivo é 468 MB de um banco de 545 MB, isso é a diferença
-    // entre o banco deixar de crescer e ele continuar crescendo ~23 MB/dia sem
-    // teto — em silêncio, porque o erro vivia num `warn`.
-    //
-    // A SEGUNDA é a drenagem: sem ordem o banco devolve um subconjunto
-    // ARBITRÁRIO dentro de `lt(received_at, limite)`, então duas rodadas com o
-    // mesmo backlog não apagam as mesmas linhas e a sequência de lotes deixa
-    // de ser reproduzível. A coluna é `id` e não `received_at` pela mesma razão
-    // das irmãs: é a chave primária, logo a ordem é estável — `received_at`
-    // muda de valor conforme entra linha nova, e a ordem junto.
-    .order("id")
-    .limit(lote);
-
-  if (erroDelete) {
+  //
+  // O lote sai de `apagarLoteVencido`, que não põe `limit` no DELETE: do
+  // PostgREST 13 em diante ele é ignorado, e a rodada apagava o acumulado
+  // inteiro de uma vez — a trava longa na tabela em que TODO webhook escreve
+  // (medido; o racional está no arquivo dela). A ordem é a das irmãs: `id`
+  // ASCENDENTE, a chave primária, que é o que deixa a drenagem reproduzível.
+  let apagadas: number;
+  try {
+    ({ apagadas } = await apagarLoteVencido(admin, "webhook_events_log", {
+      coluna: "received_at",
+      antesDe: limiteEm(opcoes.diasParaApagar),
+      lote,
+    }));
+  } catch (err) {
     // A falha SOBE — o mesmo caminho de `podarHistoricoDeCaptacao`
     // (`lib/webhooks/retencao-da-captacao.ts`, #1721) e de `drenar`
     // (`app/api/v1/cron/data-retention/route.ts`, #1719). O `warn` que vivia
@@ -213,14 +206,14 @@ export async function podarArquivoDeWebhooks(
     // MESMA linha de "não havia nada vencido": um banco que parou de aceitar o
     // DELETE ficava indistinguível de um banco em dia, e o único sinal morava
     // num log de contêiner atrás de um `curl -fsS` que joga tudo para
-    // /dev/null. O NOME da tabela vai na frente porque a mesma rodada tem uma
-    // poda irmã, e o operador precisa saber qual das duas falhou. E o que o
-    // PASSO 1 já esvaziou vai PRESO na exceção (`ErroAoApagarLinhasVelhas`),
-    // porque essa é a informação que o `catch` do handler não tem e não pode
-    // reconstruir: uma rodada que esvaziou 500 linhas e falhou ao apagar não
-    // é a mesma que uma que não fez nada, e reportar `esvaziadas: 0` na
-    // segunda seria inventar um número.
-    throw new ErroAoApagarLinhasVelhas(`webhook_events_log: ${erroDelete.message}`, {
+    // /dev/null. O NOME da tabela vem na frente da mensagem porque a mesma
+    // rodada tem uma poda irmã, e o operador precisa saber qual das duas
+    // falhou. E o que o PASSO 1 já esvaziou vai PRESO na exceção
+    // (`ErroAoApagarLinhasVelhas`), porque essa é a informação que o `catch`
+    // do handler não tem e não pode reconstruir: uma rodada que esvaziou 500
+    // linhas e falhou ao apagar não é a mesma que uma que não fez nada, e
+    // reportar `esvaziadas: 0` na segunda seria inventar um número.
+    throw new ErroAoApagarLinhasVelhas(err instanceof Error ? err.message : String(err), {
       esvaziadas,
       apagadas: 0,
       // `temMais` olha o que a BUSCA escolheu, e não o que o DELETE apaga: a
@@ -233,7 +226,7 @@ export async function podarArquivoDeWebhooks(
 
   return {
     esvaziadas,
-    apagadas: (apagadasRows ?? []).length,
+    apagadas,
     // Lote cheio = ainda há fila. Quem chama pode usar isto para saber que a
     // poda ainda não alcançou o estado estável — útil no primeiro dia, quando
     // há 31 mil linhas atrasadas e a varredura leva várias rodadas.

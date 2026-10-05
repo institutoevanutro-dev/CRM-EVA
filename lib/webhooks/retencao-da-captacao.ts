@@ -51,8 +51,12 @@
  *      subconjunto arbitrário, e a sequência de lotes deixa de ser repetível.
  *      A coluna é `id`, ASCENDENTE — a mesma da décima poda, e pela mesma
  *      razão: é a chave primária, logo a ordem é estável e o recorte é
- *      repetível, e é a coluna que casa com o índice de `received_at` sem
- *      exigir que o planner troque de caminho;
+ *      repetível.
+ *
+ *      (CRM EvaLink, revisão do PR 125.) `order` + `limit` no DELETE só
+ *      conserta o PostgREST 12: o 13 tirou o recurso e ignora o `limit`. O
+ *      lote hoje sai de `lib/retencao/apagar-lote-vencido.ts`, que vale nas
+ *      duas versões;
  *   2. o erro do DELETE era ENGOLIDO (`logger.warn` + `apagadas: 0`). O
  *      `warn` é a evidência, não o aviso: a resposta do cron dizia "não havia
  *      nada vencido", indistinguível de uma instalação em dia, e o único sinal
@@ -67,6 +71,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
+import { apagarLoteVencido } from "@/lib/retencao/apagar-lote-vencido";
 import {
   interpretarRetencao,
   RETENCAO_CAPTACAO_DIAS_PADRAO,
@@ -108,35 +113,24 @@ export async function podarHistoricoDeCaptacao(
   // com este predicado em mente (migration 0174). Sem filtro de organização de
   // propósito: a poda varre pela ponta mais velha e não sabe escolher tenant —
   // é o que a torna incapaz de ser usada como apagador dirigido.
-  const { data, error } = await admin
-    .from("webhook_lead_captures")
-    .delete()
-    .lt("received_at", limite)
-    .select("id")
-    // O `order` ANTES do `limit` (issue #1721), na MESMA coluna e na mesma
-    // direção da décima poda do `data-retention`: `id` ascendente. Duas
-    // propriedades, e as duas importam. A PRIMEIRA é o que o PostgREST 12.2
-    // exige: `limit` sem `order` num DELETE volta 400 PGRST109, e sem esta
-    // linha a poda da captação nunca apaga nada em nenhum clone novo. A
-    // SEGUNDA é a drenagem: sem ordem o banco escolhe um subconjunto
-    // arbitrário a cada lote, então duas rodadas com o mesmo backlog não
-    // apagam as mesmas linhas e a sequência de lotes não é reproduzível.
-    .order("id")
-    .limit(lote);
-
-  if (error) {
-    // A falha SOBE — o mesmo caminho de `drenar`
-    // (`app/api/v1/cron/data-retention/route.ts`). O `warn` que vivia aqui
-    // dizia a causa e devolvia `apagadas: 0`, que na resposta do cron é
-    // indistinguível de "não havia nada vencido": um banco que parou de
-    // aceitar o DELETE ficava indistinguível de um banco em dia, e o sinal
-    // morava num log de contêiner atrás de um `curl` que joga tudo para
-    // /dev/null. Quem chama pega a exceção num `try` PRÓPRIO — o que já
-    // foi apagado no arquivo forense não se perde com ela, cada lote fecha a
-    // sua transação — e responde 500 com a linha `falhou: true` na trilha.
-    throw new Error(`webhook_lead_captures: ${error.message}`);
-  }
-
-  const apagadas = (data ?? []).length;
-  return { apagadas, temMais: apagadas >= lote, diasAplicados: dias };
+  // O lote sai de `apagarLoteVencido`, que não põe `limit` no DELETE: do
+  // PostgREST 13 em diante ele é ignorado e a rodada apagava o acumulado
+  // inteiro de uma vez (medido; o racional está no arquivo dela). A ordem
+  // segue a da décima poda do `data-retention`: `id` ascendente.
+  //
+  // A falha SOBE — o mesmo caminho de `drenar`
+  // (`app/api/v1/cron/data-retention/route.ts`). O `warn` que vivia aqui
+  // dizia a causa e devolvia `apagadas: 0`, que na resposta do cron é
+  // indistinguível de "não havia nada vencido": um banco que parou de aceitar
+  // o DELETE ficava indistinguível de um banco em dia, e o sinal morava num
+  // log de contêiner atrás de um `curl` que joga tudo para /dev/null. Quem
+  // chama pega a exceção num `try` PRÓPRIO — o que já foi apagado no arquivo
+  // forense não se perde com ela, cada lote fecha a sua transação — e
+  // responde 500 com a linha `falhou: true` na trilha.
+  const { apagadas, temMais } = await apagarLoteVencido(admin, "webhook_lead_captures", {
+    coluna: "received_at",
+    antesDe: limite,
+    lote,
+  });
+  return { apagadas, temMais, diasAplicados: dias };
 }

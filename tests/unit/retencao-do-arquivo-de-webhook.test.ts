@@ -45,6 +45,10 @@ function fakeAdmin(opts: { alvos?: { id: string }[]; apagadas?: { id: string }[]
         in(_c: string, ids: string[]) { ctx.ids = ids; return q; },
         update(valores: Record<string, unknown>) { ctx.op = "update"; ctx.valores = valores; return q; },
         delete() { ctx.op = "delete"; return q; },
+        lte() { return q; },
+        // A fronteira do lote do DELETE (`lib/retencao/apagar-lote-vencido.ts`).
+        // Aqui nunca há um lote inteiro de linhas velhas demais: sem fronteira.
+        range() { return Promise.resolve({ data: [], error: null }); },
         limit() {
           chamadas.push(ctx);
           return ctx.op === "delete"
@@ -53,7 +57,8 @@ function fakeAdmin(opts: { alvos?: { id: string }[]; apagadas?: { id: string }[]
         },
         then(res: (v: unknown) => unknown) {
           chamadas.push(ctx);
-          return Promise.resolve({ data: null, error: null }).then(res);
+          const data = ctx.op === "delete" ? (opts.apagadas ?? []) : null;
+          return Promise.resolve({ data, error: null }).then(res);
         },
       };
       return q;

@@ -41,7 +41,11 @@ interface Pedido {
 
 /** Duble mínimo do client: registra o que foi pedido, devolve o que mandarem. */
 function fakeAdmin(resposta: { data?: { id: string }[]; error?: { message: string } } = {}) {
+  // Só os DELETEs entram aqui: é deles que os casos perguntam. A consulta da
+  // FRONTEIRA do lote (o SELECT com `range`, ver
+  // `lib/retencao/apagar-lote-vencido.ts`) só empresta o tamanho do lote.
   const pedidos: Pedido[] = [];
+  let loteDaFronteira: number | undefined;
   const admin = {
     from(tabela: string) {
       const p: Pedido = { tabela, op: "", filtrouOrganizacao: false };
@@ -68,13 +72,24 @@ function fakeAdmin(resposta: { data?: { id: string }[]; error?: { message: strin
         order() {
           return q;
         },
-        limit(n: number) {
-          p.loteRecebido = n;
+        lte() {
+          return q;
+        },
+        // A FRONTEIRA: a poda pede a lote-ésima linha vencida. Existe quando
+        // há ao menos um lote inteiro — é o que faz `temMais` sair `true`.
+        range(_de: number, ate: number) {
+          loteDaFronteira = ate + 1;
+          const linhas = resposta.data ?? [];
+          return Promise.resolve({ data: linhas.length > ate ? [linhas[ate]] : [], error: null });
+        },
+        // O DELETE não tem mais `limit`: quem o encerra é o `await`.
+        then(ok: (v: unknown) => unknown, falhou?: (e: unknown) => unknown) {
+          p.loteRecebido = loteDaFronteira;
           pedidos.push(p);
           return Promise.resolve({
             data: resposta.data ?? [],
             error: resposta.error ?? null,
-          });
+          }).then(ok, falhou);
         },
       };
       return q;

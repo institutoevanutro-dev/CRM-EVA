@@ -39,8 +39,21 @@
  *
  * O que estes casos NÃO medem: o que o Postgres aceita de fato, medido contra
  * um banco real em `tests/invariants/`. Aqui o dublê só carrega a régua.
+ *
+ * ─── Revisão do PR 125: o lote sai de uma FRONTEIRA, não de `limit` ─────────
+ *
+ * `order` + `limit` num DELETE é recurso do PostgREST 12; o 13 o removeu e
+ * ignora o `limit`. A poda hoje acha a fronteira do lote com um SELECT
+ * (`order("id")` + `range`) e apaga até ela — ver
+ * `lib/retencao/apagar-lote-vencido.ts` e, para as duas versões lado a lado,
+ * `retencao-lote-em-qualquer-postgrest.test.ts`. O dublê daqui acompanha: é o
+ * `range` da fronteira que ele recusa sem `order`, e é dele que sai o lote.
+ * A marca `apagando` das ordens registradas passou a dizer "é a ordem do LOTE
+ * que o DELETE apaga" — quem a põe é o `range`.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { esquecerFalhasAvisadas } from "@/lib/retencao/falha-avisada";
 
 import { ErroAoApagarLinhasVelhas, podarArquivoDeWebhooks } from "@/lib/channels/retencao-do-arquivo";
 
@@ -105,16 +118,38 @@ vi.mock("@/lib/supabase/admin", () => ({
       // closure) e não uma propriedade do objeto, para que o dublê não finja
       // ter um campo `apagando` que o `supabase-js` não tem.
       let apagando = false;
+      // A consulta que só procura a fronteira do lote (ver `range`, abaixo).
+      let recortando = false;
       const cadeia: Record<string, unknown> = {
         delete: () => {
           apagando = true;
           return cadeia;
         },
         lt: () => cadeia,
+        lte: () => cadeia,
         is: () => cadeia,
         in: () => cadeia,
         update: () => cadeia,
         select: () => cadeia,
+        // A FRONTEIRA do lote do DELETE. Sem `order` antes ela é uma linha
+        // qualquer e o lote sai arbitrário: o dublê recusa, como recusava o
+        // `limit` sem `order`. É aqui que o par ordem + lote se fecha, e é
+        // este `order` que os casos chamam de "do DELETE".
+        range: (_de: number, ate: number) => {
+          if (!ordenado) {
+            throw new Error("fronteira do lote pedida sem `order`: o recorte sairia arbitrário");
+          }
+          recortando = true;
+          for (let i = ordensPedidas.length - 1; i >= 0; i -= 1) {
+            const o = ordensPedidas[i];
+            if (o && o.tabela === tabela) {
+              o.lote = ate + 1;
+              o.apagando = true;
+              break;
+            }
+          }
+          return cadeia;
+        },
         order: (coluna: string) => {
           ordenado = true;
           // A coluna e a direção: `id` ascendente, a mesma da poda irmã e da
@@ -144,7 +179,12 @@ vi.mock("@/lib/supabase/admin", () => ({
           return cadeia;
         },
         then: (r: (v: unknown) => unknown) => {
-          const resposta = apagando ? respostaDelete() : respostaBusca();
+          // Sem fronteira (menos de um lote vencido): o DELETE leva o que veio.
+          const resposta = recortando
+            ? { data: [], error: null }
+            : apagando
+              ? respostaDelete()
+              : respostaBusca();
           return Promise.resolve(resposta).then(r);
         },
       };
@@ -187,11 +227,11 @@ describe("o DELETE do arquivo de webhooks ordena o lote antes de limitá-lo", ()
     ]);
   });
 
-  it("ordena ANTES de limitar — o dublê recusa `limit` sem `order` (PGRST109)", async () => {
+  it("ordena ANTES de recortar o lote — o dublê recusa a fronteira sem `order`", async () => {
     // A direção que este teste NÃO mede é a do banco real: aqui o dublê LANÇA
-    // no `limit` sem `order`, como o PostgREST 12.2. Tirar o `.order()` do
-    // código faz este caso reprovar — e, sem o `.order()`, a poda que segura o
-    // ESPAÇO não apagaria NADA em nenhum clone novo, que é o defeito inteiro.
+    // quando a fronteira do lote é pedida sem `order`. Tirar o `.order()` do
+    // código faz este caso reprovar — sem ele o lote sairia arbitrário, a
+    // mesma propriedade que o PGRST109 do PostgREST 12.2 cobrava do `limit`.
     const admin = await banco({ arquivo: { data: [{ id: "e1" }, { id: "e2" }] } });
     const r = await podarArquivoDeWebhooks(admin, { diasComCorpo: 7, diasParaApagar: 90, lote: 7 });
     expect(r.apagadas).toBe(2);
@@ -300,6 +340,9 @@ describe("a falha do DELETE sobe — ela não vira `apagadas: 0`", () => {
 describe("o handler do cron — a falha do arquivo sai pelo mesmo canal das irmãs", () => {
   beforeEach(() => {
     auditou.mockClear();
+    // O teto de uma linha de falha por dia (`lib/retencao/falha-avisada.ts`)
+    // é memória do processo: cada caso começa sem falha avisada.
+    esquecerFalhasAvisadas();
     capturou.mockClear();
   });
 

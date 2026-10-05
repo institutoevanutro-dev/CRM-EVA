@@ -66,6 +66,7 @@ import {
 import { podarHistoricoDeCaptacao } from "@/lib/webhooks/retencao-da-captacao";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { deveAvisarFalha } from "@/lib/retencao/falha-avisada";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -139,9 +140,17 @@ export async function GET(req: NextRequest): Promise<Response> {
     // `linhaDeFalhaDePoda` (que só monta o objeto) e `avisaSentry` — e a
     // chamada de `audit()` fica na mão do `catch`, que é onde a doutrina a
     // quer de qualquer jeito.
+    //
+    // E sob `deveAvisarFalha`, que é o TETO (revisão do PR 125): este cron roda
+    // de 5 em 5 minutos, e uma causa persistente gravava 288 linhas idênticas
+    // por dia e por tabela — a classe "batida de cron" que a doutrina de
+    // auditoria proíbe. A trilha e o Sentry falam UMA vez por dia por poda; o
+    // log de erro e o 500 seguem em toda rodada.
     registraFalhaDePoda("arquivo de webhooks", err, requestId);
-    void audit(linhaDeFalhaDePoda("webhook_events_log", detalhe, requestId));
-    avisaSentry(err, requestId, "webhook_events_log");
+    if (deveAvisarFalha("webhook_events_log")) {
+      void audit(linhaDeFalhaDePoda("webhook_events_log", detalhe, requestId));
+      avisaSentry(err, requestId, "webhook_events_log");
+    }
   }
 
   // O HISTÓRICO de captação (`webhook_lead_captures`) roda no MESMO tique, e
@@ -170,9 +179,12 @@ export async function GET(req: NextRequest): Promise<Response> {
     // A LINHA DE TRILHA dentro do `catch`, pelo mesmo motivo da poda de cima —
     // o guarda de classe reconhece a condição andando para cima a partir da
     // chamada, e uma função fora a deixaria invisível para ele.
-    void audit(linhaDeFalhaDePoda("webhook_lead_captures", detalhe, requestId));
+    // Mesmo teto de uma vez por dia.
     registraFalhaDePoda("captação", err, requestId);
-    avisaSentry(err, requestId, "webhook_lead_captures");
+    if (deveAvisarFalha("webhook_lead_captures")) {
+      void audit(linhaDeFalhaDePoda("webhook_lead_captures", detalhe, requestId));
+      avisaSentry(err, requestId, "webhook_lead_captures");
+    }
     // 500, como `data-retention` e `media-retention` respondem quando uma
     // poda falha: o `curl -fsS` do scheduler passa a ver a falha, e não um 200
     // de "tudo certo". O que o arquivo forense conseguiu vem em `details` — a
