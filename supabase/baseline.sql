@@ -32564,6 +32564,86 @@ end $function$;
 revoke execute on function public.emit_event(text,text,uuid,jsonb,jsonb,uuid) from public, anon;
 grant execute on function public.emit_event(text,text,uuid,jsonb,jsonb,uuid) to authenticated, service_role;
 
+-- ════════════════════════════════════════════════════════════════════════════
+-- 3 · BLOQUEIO DO CONTATO: só o servidor muda
+-- ════════════════════════════════════════════════════════════════════════════
+-- Correção própria do fork (pendência da revisão do Pacote 1, PR 125).
+--
+-- `contacts.is_blocked`, `blocked_reason` e `blocked_at` são o pedido de "parem
+-- de me escrever". Quem grava é a ingestão, quando o paciente pede
+-- (lib/channels/pos-entrada.ts, que audita `contact.blocked`), e quem desfaz é
+-- a rota de desbloquear (app/api/v1/contacts/[id]/unblock: só administrador,
+-- segundo fator provado, `contact.unblocked` na auditoria). As duas usam o
+-- service role — são os DOIS únicos escritores no código (censo:
+-- rg -n "is_blocked|blocked_reason|blocked_at" app lib workers scripts).
+--
+-- Só que as três colunas eram graváveis pela sessão: `contacts_update` deixa o
+-- `agent` editar a ficha, e nada separava o bloqueio dos outros campos. Um
+-- atendente desbloqueava (ou bloqueava) um contato pelo PostgREST, sem papel de
+-- administrador e sem linha na auditoria.
+--
+-- TRIGGER e não grant de coluna, pelo mesmo motivo da 0262
+-- (`fn_colunas_de_cliente_sao_do_sistema`): seria `revoke update on contacts` +
+-- `grant update (<todas as outras>)`, o `GRANT ALL ON TABLE contacts` do corpo
+-- do baseline devolveria o privilégio a cada `update.sh`, e toda coluna nova de
+-- `contacts` nasceria não-gravável em silêncio.
+--
+-- Quem é barrado é a SESSÃO, por dois sinais somados: `auth.uid()` preenchido
+-- (o JWT de um usuário, que continua valendo dentro de função `security
+-- definer`) ou o papel `authenticated`/`anon`. O service role (PostgREST com a
+-- service key: sem `sub`, papel `service_role`), o `pg.Pool` do motor e as
+-- migrations passam. Erro 42501 com o nome da regra, e não "zero linhas": o
+-- PostgREST devolveria sucesso num UPDATE que não pegou.
+create or replace function public.fn_bloqueio_do_contato_so_o_servidor()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if auth.uid() is not null or current_user in ('authenticated', 'anon') then
+    if tg_op = 'INSERT' then
+      if new.is_blocked is true or new.blocked_reason is not null or new.blocked_at is not null then
+        raise exception 'bloqueio_do_contato_so_o_servidor' using errcode = '42501';
+      end if;
+    elsif new.is_blocked is distinct from old.is_blocked
+       or new.blocked_reason is distinct from old.blocked_reason
+       or new.blocked_at is distinct from old.blocked_at then
+      raise exception 'bloqueio_do_contato_so_o_servidor' using errcode = '42501';
+    end if;
+  end if;
+  return new;
+end $$;
+
+comment on function public.fn_bloqueio_do_contato_so_o_servidor() is
+  'Guarda de contacts (migration 0319): sessão nenhuma muda is_blocked, blocked_reason ou blocked_at '
+  '(42501 bloqueio_do_contato_so_o_servidor), nem cria contato já bloqueado; o service role, o motor e as '
+  'migrations passam. Bloquear é da ingestão (pedido de parar) e desbloquear é da rota do administrador, '
+  'as duas auditadas. Provado em tests/invariants/bloqueio-do-contato-so-o-servidor.test.ts.';
+
+-- Função de trigger não exige EXECUTE de quem dispara a escrita, então ninguém
+-- precisa de grant. Revogadas as duas origens (o grant a PUBLIC e o grant direto
+-- do `alter default privileges`).
+revoke execute on function public.fn_bloqueio_do_contato_so_o_servidor() from public, anon, authenticated;
+
+-- UPDATE sem lista de colunas, com a WHEN comparando VALORES: `update of`
+-- dispararia quando a coluna é só mencionada (um cliente que devolve a linha
+-- inteira), e o caso comum — nenhuma das três mudou — nem chama a função.
+drop trigger if exists trg_contato_bloqueio_so_o_servidor_update on public.contacts;
+create trigger trg_contato_bloqueio_so_o_servidor_update
+  before update on public.contacts
+  for each row
+  when (old.is_blocked is distinct from new.is_blocked
+     or old.blocked_reason is distinct from new.blocked_reason
+     or old.blocked_at is distinct from new.blocked_at)
+  execute function public.fn_bloqueio_do_contato_so_o_servidor();
+
+drop trigger if exists trg_contato_bloqueio_so_o_servidor_insert on public.contacts;
+create trigger trg_contato_bloqueio_so_o_servidor_insert
+  before insert on public.contacts
+  for each row
+  when (new.is_blocked is true or new.blocked_reason is not null or new.blocked_at is not null)
+  execute function public.fn_bloqueio_do_contato_so_o_servidor();
+
 notify pgrst, 'reload schema';
 -- ---- fim: travas no banco (migration 0319) ----
 
