@@ -8,6 +8,12 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
+import {
+  camposDoTitular,
+  definicoesDoFunil,
+  semCpfNoTexto,
+  type CampoLegivel,
+} from "@/lib/lgpd/campos-personalizados";
 import type { Json } from "@/lib/database.types";
 
 // ---------------------------------------------------------------------------
@@ -32,6 +38,20 @@ export interface ContactSnapshot {
   last_activity_at: string | null;
   /** Primeiro atendimento marcado. Sobrevive à anonimização: é registro de operação. */
   first_service_at: string | null;
+  /**
+   * Campos personalizados — onde este fork guarda o endereço
+   * (`custom_fields.endereco`) e os campos do funil preenchidos na ficha. A
+   * anonimização já os zera; o relatório os lia e jogava fora.
+   *
+   * ⚠️ SEM CPF: um CPF digitado num campo livre fica fora da coluna cifrada, e
+   * este objeto vai inteiro para o arquivo de dados. `camposDoTitular` o tira
+   * (pela chave e pelo valor) antes de ele chegar aqui.
+   */
+  custom_fields: Record<string, unknown>;
+  /** Para o PDF: nome do campo + valor (ver `campos-personalizados.ts`). */
+  campos_legiveis: CampoLegivel[];
+  /** Havia CPF em campo personalizado. O relatório diz que existe; nunca mostra o número. */
+  cpf_em_campo_personalizado: boolean;
 }
 
 export interface ConsentRow {
@@ -415,6 +435,24 @@ export interface ExportPayload {
    */
   voice_calls: VoiceCallRow[];
   channel_identities: ChannelIdentityRow[];
+  /**
+   * O que a IA propôs para o cadastro do titular (`contact_field_proposals`):
+   * nome, e-mail ou telefone que ela ouviu na conversa, com o trecho. A
+   * anonimização APAGA estas linhas — e o que se apaga a pedido do titular é o
+   * que se entrega a pedido dele. Opcional como `reply_drafts`.
+   */
+  contact_field_proposals?: Array<{
+    id: string;
+    campo: string;
+    valor_proposto: string;
+    valor_anterior: string | null;
+    conversation_id: string | null;
+    trecho: string | null;
+    status: string;
+    proposed_at: string;
+    decided_at: string | null;
+    motivo_recusa: string | null;
+  }>;
   /** Comentários do titular em posts da organização. Opcional como `reply_drafts`. */
   instagram_comments?: InstagramCommentRow[];
   /**
@@ -648,6 +686,28 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       });
     }
     if (data) {
+      // O rótulo de cada campo vem das definições do funil padrão — as mesmas
+      // que a ficha do contato usa (`camposDoFunil`). Sem funil, a chave vira
+      // texto legível.
+      const { data: funil, error: funilErr } = await admin
+        .from("crm_pipelines")
+        .select("settings")
+        .eq("organization_id", organizationId)
+        .eq("is_default", true)
+        .eq("is_archived", false)
+        .maybeSingle();
+      if (funilErr) {
+        logger.warn("[lgpd-export-worker] default pipeline load failed", {
+          request_id: requestId,
+          error: funilErr.message,
+        });
+      }
+      const personalizados = camposDoTitular(
+        data.custom_fields && typeof data.custom_fields === "object" && !Array.isArray(data.custom_fields)
+          ? (data.custom_fields as Record<string, unknown>)
+          : {},
+        definicoesDoFunil((funil as { settings?: unknown } | null)?.settings),
+      );
       contact = {
         id: data.id,
         name: data.name ?? null,
@@ -665,6 +725,9 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         created_at: data.created_at,
         last_activity_at: data.last_activity_at ?? null,
         first_service_at: data.first_service_at ?? null,
+        custom_fields: personalizados.semCpf,
+        campos_legiveis: personalizados.campos,
+        cpf_em_campo_personalizado: personalizados.cpfInformado,
       };
     }
   }
@@ -1098,6 +1161,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   const ai_agent_runs: NonNullable<ExportPayload["ai_agent_runs"]> = [];
   const lead_state: NonNullable<ExportPayload["lead_state"]> = [];
   const instagram_comments: InstagramCommentRow[] = [];
+  const contact_field_proposals: NonNullable<ExportPayload["contact_field_proposals"]> = [];
   const cases: CaseRow[] = [];
   const case_events: CaseEventRow[] = [];
   const demandas: DemandaRow[] = [];
@@ -1149,6 +1213,31 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
           .range(de, ate),
       )),
     );
+    // Propostas de campo. POR PÁGINA, não por teto: a IA alimenta esta fila
+    // enquanto a conversa dura, e um `limit` faria as mais antigas sumirem do
+    // relatório sem ninguém saber. A chave é `id` (única) — ordenar por
+    // `proposed_at` deixaria empates decidirem a página. O texto passa pelo
+    // mesmo filtro de CPF dos campos personalizados: o trecho é fala do
+    // paciente, e "meu CPF é…" cabe nele.
+    for (const p of await paginar<NonNullable<ExportPayload["contact_field_proposals"]>[number]>((de, ate) =>
+      admin
+        .from("contact_field_proposals")
+        .select(
+          "id, campo, valor_proposto, valor_anterior, conversation_id, trecho, status, proposed_at, decided_at, motivo_recusa",
+        )
+        .eq("organization_id", organizationId)
+        .eq("contact_id", titular)
+        .order("id")
+        .range(de, ate),
+    )) {
+      contact_field_proposals.push({
+        ...p,
+        valor_proposto: semCpfNoTexto(p.valor_proposto ?? "").texto,
+        valor_anterior: p.valor_anterior === null ? null : semCpfNoTexto(p.valor_anterior).texto,
+        trecho: p.trecho === null ? null : semCpfNoTexto(p.trecho).texto,
+      });
+    }
+
     // Comentários do Instagram. A ingestão não grava `contact_id`: quem liga o
     // comentário à pessoa é o IGSID de quem comentou — os mesmos dois braços do
     // passo 7c-1 da cascata. Identidade já anonimizada não tem mais IGSID.
@@ -1364,6 +1453,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     lead_notes,
     ai_agent_runs,
     lead_state,
+    contact_field_proposals,
     instagram_comments,
     cases,
     case_events,

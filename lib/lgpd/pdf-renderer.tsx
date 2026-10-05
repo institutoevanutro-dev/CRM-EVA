@@ -132,6 +132,18 @@ const deliveryStatus: Record<string, string> = {
   failed: "Falha no processamento",
   dead: "Tentativas encerradas",
 };
+// `contact_field_proposals.campo` e `.status` — os vocabulários do CHECK do banco.
+const campoDaProposta: Record<string, string> = {
+  name: "Nome",
+  email: "E-mail",
+  phone_number: "Telefone",
+};
+const statusDaProposta: Record<string, string> = {
+  pending: "aguardando decisão",
+  accepted: "aceito",
+  dismissed: "recusado",
+  expired: "expirou sem decisão",
+};
 const noticeStatus: Record<string, string> = {
   open: "Aberto",
   resolved: "Resolvido",
@@ -203,8 +215,15 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
             </View>
             <View style={styles.row}>
               <Text style={styles.label}>CPF:</Text>
+              {/* UMA linha de CPF, e nunca o número: o do cadastro é cifrado; o
+                  que alguém digitou num campo personalizado é tirado pelo
+                  coletor e só deixa esta frase. */}
               <Text style={styles.value}>
-                {data.contact.cpf_present ? "Armazenado (criptografado)" : "—"}
+                {data.contact.cpf_present
+                  ? "Armazenado (criptografado)"
+                  : data.contact.cpf_em_campo_personalizado
+                    ? "Informado em campo personalizado (valor não exibido)"
+                    : "—"}
               </Text>
             </View>
             <View style={styles.row}>
@@ -219,6 +238,42 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
               <Text style={styles.label}>Anonimizado:</Text>
               <Text style={styles.value}>{data.contact.is_anonymized ? "Sim" : "Não"}</Text>
             </View>
+          </View>
+        ) : null}
+
+        {/* Endereço e campos personalizados. O nome do campo em linha própria:
+            rótulo de campo é frase ("Como conheceu a clínica?"), e na coluna de
+            110pt dos dados fixos ele quebraria no meio da palavra. */}
+        {data.contact && (data.contact.campos_legiveis ?? []).length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Endereço e campos personalizados</Text>
+            {data.contact.campos_legiveis.map((campo, i) => (
+              <View key={i} style={styles.itemBlock}>
+                <Text style={styles.small}>{campo.rotulo}</Text>
+                <Text>{campo.valor}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {/* O que a IA ouviu na conversa e propôs gravar no cadastro. */}
+        {data.contact_field_proposals?.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Dados sugeridos pela IA para o seu cadastro</Text>
+            {data.contact_field_proposals.map((p) => (
+              <View key={p.id} style={styles.itemBlock}>
+                <Text>
+                  {campoDaProposta[p.campo] ?? p.campo}: {p.valor_proposto} · {statusDaProposta[p.status] ?? p.status}
+                </Text>
+                {p.valor_anterior ? <Text style={styles.small}>Valor anterior: {p.valor_anterior}</Text> : null}
+                {p.trecho ? <Text style={styles.small}>Trecho da conversa: {p.trecho.slice(0, 280)}</Text> : null}
+                {p.motivo_recusa ? <Text style={styles.small}>Motivo da recusa: {p.motivo_recusa}</Text> : null}
+                <Text style={styles.small}>
+                  Sugerido em {fmtDate(p.proposed_at)}
+                  {p.decided_at ? ` · Decidido em ${fmtDate(p.decided_at)}` : ""}
+                </Text>
+              </View>
+            ))}
           </View>
         ) : null}
 

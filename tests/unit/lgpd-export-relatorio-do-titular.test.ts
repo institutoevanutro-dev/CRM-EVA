@@ -6,11 +6,13 @@ vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn() } }));
 import { collectExportData } from "@/lib/lgpd/export-collector";
 
 /**
- * O RELATÓRIO DO TITULAR ENTREGA O QUE A MIGRATION 0317 PASSOU A APAGAR.
+ * O RELATÓRIO DO TITULAR: o que entra, de quem, e o que não pode sair.
  *
  * `tests/unit/lgpd-exporta-o-que-redige.test.ts` prova que a TABELA é visitada.
- * Aqui se prova o recorte: o que entra é do titular (e só dele), e o que não
- * pode sair não sai.
+ * Aqui se prova o recorte de cada bloco acrescentado junto com a migration 0317
+ * (comentários do Instagram, caso da IA, demanda, avisos) e dos campos
+ * personalizados e propostas da IA: o que entra é do titular (e só dele), e o
+ * CPF guardado em campo personalizado não sai em claro.
  */
 
 type Row = Record<string, unknown>;
@@ -19,6 +21,7 @@ const OUTRA_ORG = "org-b";
 const TITULAR = "contato-a";
 const pedido = { organizationId: ORG, requestId: "pedido-0317", contactId: TITULAR, externalCustomerId: null };
 let rows: Record<string, Row[]>;
+const leituras: { tabela: string; pagina: [number, number] }[] = [];
 
 /** PostgREST de mentira: aplica `eq`, `in`, `range` e devolve só as colunas pedidas. */
 class Consulta {
@@ -64,6 +67,7 @@ class Consulta {
     return this.executar().then(ok, falha);
   }
   async executar() {
+    leituras.push({ tabela: this.tabela, pagina: this.pagina });
     const data = (rows[this.tabela] ?? [])
       .filter((l) => this.filtros.every(([c, v]) => l[c] === v))
       .filter((l) => this.dentro.every(([c, vs]) => vs.includes(l[c])))
@@ -78,6 +82,7 @@ class Consulta {
 }
 
 beforeEach(() => {
+  leituras.length = 0;
   rows = {
     organizations: [{ id: ORG, legal_name: "Clínica Exemplo LTDA", display_name: "Clínica Exemplo", dpo_email: null }],
     contacts: [{ id: TITULAR, organization_id: ORG, name: "Joana Teste", created_at: "2026-09-01T00:00:00Z" }],
@@ -203,6 +208,136 @@ describe("LGPD export: o caso que a IA abriu, a demanda e os avisos (0317)", () 
 
     expect(payload.cases).toEqual([]);
     expect(payload.case_events).toEqual([]);
+  });
+});
+
+describe("LGPD export: endereço, campos personalizados e propostas da IA", () => {
+  // CPF de teste com dígitos verificadores válidos.
+  const CPF = "52998224725";
+
+  beforeEach(() => {
+    rows.contacts = [
+      {
+        id: TITULAR,
+        organization_id: ORG,
+        name: "Joana Teste",
+        created_at: "2026-09-01T00:00:00Z",
+        custom_fields: {
+          endereco: "Rua das Flores, 100 — Vitória/ES",
+          convenio: "unimed",
+          cpf: CPF,
+          observacao: `informou o CPF 529.982.247-25 na recepção`,
+        },
+      },
+    ];
+    rows.crm_pipelines = [
+      {
+        id: "funil-padrao",
+        organization_id: ORG,
+        is_default: true,
+        is_archived: false,
+        settings: { fields: [{ key: "convenio", label: "Convênio", type: "select", options: [{ value: "unimed", label: "Unimed Vitória" }] }] },
+      },
+      // Funil de OUTRA organização com a mesma chave: o rótulo dele não pode vazar.
+      {
+        id: "funil-alheio",
+        organization_id: OUTRA_ORG,
+        is_default: true,
+        is_archived: false,
+        settings: { fields: [{ key: "convenio", label: "ROTULO-DE-OUTRA-ORG", type: "text" }] },
+      },
+    ];
+  });
+
+  it("⭐ o endereço e os campos personalizados saem, com o nome do campo", async () => {
+    const payload = await collectExportData(pedido);
+
+    expect(payload.contact?.campos_legiveis).toEqual([
+      { rotulo: "Endereço", valor: "Rua das Flores, 100 — Vitória/ES" },
+      { rotulo: "Convênio", valor: "Unimed Vitória" },
+      { rotulo: "Observacao", valor: "informou o CPF [CPF omitido] na recepção" },
+    ]);
+    expect(payload.contact?.custom_fields).toMatchObject({ endereco: "Rua das Flores, 100 — Vitória/ES", convenio: "unimed" });
+    expect(JSON.stringify(payload)).not.toContain("ROTULO-DE-OUTRA-ORG");
+  });
+
+  it("⭐ o CPF guardado em campo personalizado não sai em claro em NENHUM lugar do arquivo de dados", async () => {
+    const payload = await collectExportData(pedido);
+
+    const tudo = JSON.stringify(payload);
+    expect(tudo).not.toContain(CPF);
+    expect(tudo).not.toContain("529.982");
+    expect(payload.contact?.custom_fields).not.toHaveProperty("cpf");
+    expect(payload.contact?.cpf_em_campo_personalizado).toBe(true);
+    // A coluna cifrada não foi inventada: o relatório distingue os dois.
+    expect(payload.contact?.cpf_present).toBe(false);
+  });
+
+  it("contato sem campo personalizado: bloco vazio, sem acusar CPF", async () => {
+    rows.contacts = [{ id: TITULAR, organization_id: ORG, name: "Joana Teste", created_at: "2026-09-01T00:00:00Z" }];
+
+    const payload = await collectExportData(pedido);
+
+    expect(payload.contact?.custom_fields).toEqual({});
+    expect(payload.contact?.campos_legiveis).toEqual([]);
+    expect(payload.contact?.cpf_em_campo_personalizado).toBe(false);
+  });
+
+  const proposta = (id: string, over: Row = {}): Row => ({
+    id,
+    organization_id: ORG,
+    contact_id: TITULAR,
+    campo: "phone_number",
+    valor_proposto: "+5527988887777",
+    valor_anterior: null,
+    conversation_id: "conversa-a",
+    trecho: "meu celular é esse",
+    status: "pending",
+    proposed_at: "2026-09-16T00:00:00Z",
+    decided_at: null,
+    motivo_recusa: null,
+    ...over,
+  });
+
+  it("⭐ as propostas de dado que a IA fez para o cadastro saem — só as do titular", async () => {
+    rows.contact_field_proposals = [
+      proposta("dela"),
+      proposta("de-outro-contato", { contact_id: "contato-b", valor_proposto: "+5527900000000" }),
+      proposta("de-outra-org", { organization_id: OUTRA_ORG }),
+    ];
+
+    const payload = await collectExportData(pedido);
+
+    expect(payload.contact_field_proposals?.map((p) => p.id)).toEqual(["dela"]);
+    expect(payload.contact_field_proposals?.[0]).toMatchObject({
+      campo: "phone_number",
+      valor_proposto: "+5527988887777",
+      trecho: "meu celular é esse",
+      status: "pending",
+    });
+  });
+
+  it("o trecho da conversa guardado na proposta também não leva CPF em claro", async () => {
+    rows.contact_field_proposals = [proposta("com-cpf", { campo: "name", valor_proposto: "Joana Teste", trecho: `sou a Joana, CPF ${CPF}` })];
+
+    const payload = await collectExportData(pedido);
+
+    expect(payload.contact_field_proposals?.[0]?.trecho).toBe("sou a Joana, CPF [CPF omitido]");
+    expect(JSON.stringify(payload.contact_field_proposals)).not.toContain(CPF);
+  });
+
+  it("as propostas saem por página, não por teto — 501 saem 501", async () => {
+    // A fila é alimentada pela IA enquanto a conversa dura: um `limit` entregaria
+    // um relatório de acesso incompleto, em silêncio.
+    rows.contact_field_proposals = Array.from({ length: 501 }, (_, i) => proposta(`proposta-${i}`));
+
+    const payload = await collectExportData(pedido);
+
+    expect(payload.contact_field_proposals).toHaveLength(501);
+    expect(leituras.filter((l) => l.tabela === "contact_field_proposals").map((l) => l.pagina)).toEqual([
+      [0, 499],
+      [500, 999],
+    ]);
   });
 });
 
