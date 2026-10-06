@@ -816,6 +816,11 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "sufixo do JID do WhatsApp. Aparece em `lib/waha/resolve-contact-whatsapp-id.ts` desde antes desta régua existir, num `endsWith` que distingue `@lid`, `@c.us` e `@s.whatsapp.net` — é o protocolo do WhatsApp falando, não endereço que o produto chama nem palavra de interface. Trocar pela marca do revendedor faz o CRM deixar de reconhecer o identificador que o próprio WhatsApp manda.",
   },
+  "schemas.openxmlformats.org": {
+    categoria: "PROTOCOLO",
+    motivo:
+      "namespace XML obrigatório do formato .xlsx (`lib/importador-de-clinicas/xlsx.ts`): o Excel e o Google Planilhas só reconhecem o arquivo com esses URIs literais. É identificador de formato, nunca é acessado pela rede nem aparece na tela; trocar pela marca do revendedor tornaria a planilha ilegível.",
+  },
   // ── destino de chamada: o código fala com eles, sempre foi assim ──────────
   "api.openai.com": {
     categoria: "FORNECEDOR",
@@ -1101,6 +1106,11 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // protocolo manda. Entrou aqui porque a régua nova do #914 passou a
       // enxergá-lo, e não porque o produto ganhou host novo.
       "s.whatsapp.net",
+      // Decisão escrita: `schemas.openxmlformats.org` é o namespace XML que o
+      // formato .xlsx exige (`lib/importador-de-clinicas/xlsx.ts`). Identificador
+      // de formato, nunca acessado pela rede nem exibido; entrou porque o
+      // importador de clínicas passou a ler e gerar planilhas.
+      "schemas.openxmlformats.org",
       "tusitio.com",
     ]);
   });

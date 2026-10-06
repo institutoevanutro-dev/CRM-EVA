@@ -6342,6 +6342,11 @@ export const DICIONARIO: Traducoes = {
   "Capacidade": { es: "Capacidad" },
   "Horário": { es: "Horario" },
   "Disponível": { es: "Disponible" },
+  "Só agenda": { es: "Solo agenda" },
+  "Fora do roteamento": { es: "Fuera del enrutamiento" },
+  "Prestador de serviço não entra no roteamento de conversas.": {
+    es: "El prestador de servicios no entra en el enrutamiento de conversaciones.",
+  },
   "Capacidade de": { es: "Capacidad de" },
   "Editar horário de": { es: "Editar horario de" },
   "Disponibilidade de": { es: "Disponibilidad de" },

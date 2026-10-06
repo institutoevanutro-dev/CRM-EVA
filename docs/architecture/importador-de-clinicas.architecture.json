@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Importador de clínicas — da planilha da agência à clínica pronta para atender",
+    "subtitle": "plano puro, uma transação por clínica, trava de posse e avisos em vez de apagar",
+    "output": "importador-de-clinicas.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "Quem opera e quem vê" },
+    { "id": "borda", "label": "Comando" },
+    { "id": "regra", "label": "Decisão pura" },
+    { "id": "dados", "label": "Banco" }
+  ],
+  "mainPath": ["planilha", "cli", "leitura", "plano", "aplicar", "orgs", "telas"],
+  "nodes": [
+    { "id": "planilha", "lane": "humano", "col": 1, "type": "frontend", "label": "Planilha da agência (.xlsx)", "sublabel": "Clínicas · Perguntas frequentes · Atendentes; modelo gerado por --gerar-modelo" },
+    { "id": "cli", "lane": "borda", "col": 1, "type": "service", "label": "scripts/importar-clinicas.ts", "sublabel": "--destino obrigatório · só o plano por padrão · --aplicar --ator · --convidar" },
+    { "id": "leitura", "lane": "regra", "col": 2, "type": "service", "label": "xlsx.ts + planilha.ts", "sublabel": "fflate; conferências com aba e linha" },
+    { "id": "plano", "lane": "regra", "col": 3, "type": "service", "label": "plano.ts", "sublabel": "trava de posse; segunda rodada = plano vazio; hash do que o importador escreveu" },
+    { "id": "aplicar", "lane": "borda", "col": 4, "type": "service", "label": "importar.ts", "sublabel": "pg direto, uma transação por clínica, auditoria na mesma transação" },
+    { "id": "orgs", "lane": "dados", "col": 4, "type": "database", "label": "organizations + funil + user_organizations", "sublabel": "settings.importador.codigo; onboarded_at na criação" },
+    { "id": "faq", "lane": "dados", "col": 5, "type": "database", "label": "respostas_prontas(+perguntas)", "sublabel": "chave (org, título); embedding por embedarPerguntas; função segue desligada" },
+    { "id": "agente", "lane": "dados", "col": 5, "type": "database", "label": "ai_agents / ai_agent_versions + org_memory", "sublabel": "Recepção em rascunho; regras da casa na memória" },
+    { "id": "auditoria", "lane": "dados", "col": 6, "type": "database", "label": "api_audit_log", "sublabel": "origem script:importar-clinicas, ator = administrador de plataforma" },
+    { "id": "telas", "lane": "humano", "col": 6, "type": "frontend", "label": "Telas da clínica", "sublabel": "Perguntas frequentes · Agentes (Publicar) · Memória · Equipe · Auditoria" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "planilha", "to": "cli", "label": "arquivo" },
+    { "id": "e2", "from": "cli", "to": "leitura", "label": "bytes" },
+    { "id": "e3", "from": "leitura", "to": "plano", "label": "dados conferidos" },
+    { "id": "e4", "from": "orgs", "to": "plano", "label": "estado atual (lerEstado)" },
+    { "id": "e5", "from": "plano", "to": "aplicar", "label": "ações, avisos, recusa" },
+    { "id": "e6", "from": "aplicar", "to": "orgs", "label": "cria / atualiza / vincula" },
+    { "id": "e7", "from": "aplicar", "to": "faq", "label": "cria / atualiza por título" },
+    { "id": "e8", "from": "aplicar", "to": "agente", "label": "rascunho + memória" },
+    { "id": "e9", "from": "aplicar", "to": "auditoria", "label": "1 linha por mudança" },
+    { "id": "e10", "from": "faq", "to": "telas", "label": "revisar, ligar a função" },
+    { "id": "e11", "from": "agente", "to": "telas", "label": "revisar e publicar" },
+    { "id": "e12", "from": "auditoria", "to": "telas", "label": "quem importou o quê" },
+    { "id": "e13", "from": "cli", "to": "planilha", "label": "resumo: ok / erro+motivo / avisos (laço de retorno)" }
+  ]
+}
