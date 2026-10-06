@@ -25,9 +25,19 @@ import { StaleServiceBoundaryError, parseServiceBoundary, assertCurrentServiceBo
  * é ORG-WIDE `(organization_id, contact_id)` (migration 0062, Task 8.6) — um
  * contato já vivo em QUALQUER fluxo da org barra novo enrollment (1 follow-up
  * vivo por lead), 23505 vira skip silencioso (`insertEnrollment` devolve
- * `inserted:false`), nunca erro. Um contato que COMPLETOU ou foi cancelado
- * pode ser re-enrollado na varredura seguinte se continuar silencioso —
- * aceitável no MVP, sem cooldown table.
+ * `inserted:false`), nunca erro.
+ *
+ * Episódio (migration 0324, spec docs/superpowers/specs/2026-10-06-followup-
+ * nao-recomeca-design.md): um contato entra num ponteiro no máximo UMA vez por
+ * silêncio — inscrição deste ponteiro, em qualquer status, com started_at >= a
+ * última mensagem recebida (created_at) barra a próxima. Só uma resposta abre
+ * episódio novo. Antes disto, quem COMPLETOU ou foi cancelado era reinscrito
+ * no tick seguinte e a sequência recomeçava para sempre. Vigência: silêncio
+ * anterior a `followup_flow_pointers.active_since` não conta (ligar o fluxo
+ * não cobra quem calou antes). Portados do DeskcommCRM original: o pré-filtro
+ * de inscrição viva (8e50867db) e o índice da consulta (0411, 2240b215e); o
+ * cooldown do original (ee0a911bc/2240b215e) não, porque a dedup por episódio
+ * o contém.
  *
  * agent_id: cada pointer é gateado por `resolveAgentForAutomaticTrigger`, que
  * devolve o agente publicado que ARMA o pointer (menor uuid se >1) — esse
@@ -101,6 +111,19 @@ export interface SilenceSweepDb {
    * continua tratado no insert: ele cobre a corrida, não o caso comum.
    */
   loadContatosComInscricaoViva(orgId: string, contactIds: string[]): Promise<Set<string>>;
+  /**
+   * Por contato, o maior `started_at` de inscrição DESTE ponteiro, em qualquer
+   * status, com `started_at >= desdeIso` (a menor última entrada do lote — o
+   * filtro limita a leitura ao episódio corrente, mesmo em contatos com
+   * centenas de linhas deixadas pelo laço antigo). Só fatos: a regra de
+   * episódio mora em `runSilenceSweep`, onde o invariante a executa.
+   */
+  loadUltimaInscricaoNoPonteiro(
+    orgId: string,
+    pointerId: string,
+    contactIds: string[],
+    desdeIso: string,
+  ): Promise<Map<string, string>>;
   /** Insere o enrollment nascendo no nó trigger; `inserted:false` = 23505 (já vivo nesse pointer) → skip. */
   insertEnrollment(input: {
     organization_id: string;
@@ -120,6 +143,8 @@ export interface SilenceSweepSummary {
   skipped_existing: number;
   /** Calou antes de o ponteiro valer — "nada aconteceu", fora da auditoria. */
   skipped_before_activation: number;
+  /** Já inscrito neste ponteiro neste silêncio — "nada aconteceu", fora da auditoria. */
+  skipped_same_episode: number;
 }
 
 export interface SilenceSweepDeps {
@@ -136,6 +161,7 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     enrolled: 0,
     skipped_existing: 0,
     skipped_before_activation: 0,
+    skipped_same_episode: 0,
   };
 
   const pointers = await db.loadActiveSilencePointers();
@@ -180,7 +206,31 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
       },
     );
     if (contatos.length === 0) continue;
-    const contactIds = contatos.map((c) => c.contact_id);
+    // Episódio: um contato entra neste ponteiro no máximo UMA vez por
+    // silêncio. Já existe inscrição deste ponteiro (qualquer status: viva,
+    // completed, dead, cancelled) com started_at >= a última mensagem
+    // recebida → mesmo episódio, pula. A resposta do contato é posterior ao
+    // started_at e abre episódio novo. Relógio do banco nos dois lados
+    // (started_at e messages.created_at). Comparado por instante, não texto.
+    const desde = contatos.reduce(
+      (m, c) => (Date.parse(c.ultima_entrada_gravada_em) < Date.parse(m) ? c.ultima_entrada_gravada_em : m),
+      contatos[0]!.ultima_entrada_gravada_em,
+    );
+    const ultimaInscricao = await db.loadUltimaInscricaoNoPonteiro(
+      pointer.organization_id,
+      pointer.id,
+      contatos.map((c) => c.contact_id),
+      desde,
+    );
+    const contactIds = contatos
+      .filter((c) => {
+        const inscrita = ultimaInscricao.get(c.contact_id);
+        if (inscrita === undefined || Date.parse(inscrita) < Date.parse(c.ultima_entrada_gravada_em)) return true;
+        summary.skipped_same_episode++;
+        return false;
+      })
+      .map((c) => c.contact_id);
+    if (contactIds.length === 0) continue;
     const nextEvalAt = clock().toISOString();
     const comInscricaoViva = await db.loadContatosComInscricaoViva(pointer.organization_id, contactIds);
 
@@ -218,8 +268,8 @@ type ContactEmbed =
     }
   | null;
 
-/** Página do keyset de conversas: abaixo do `max_rows` padrão (1000) do PostgREST. */
-const LIMITE_DE_CONVERSAS = 500;
+/** Página dos keysets (conversas, inscrições): abaixo do `max_rows` padrão (1000) do PostgREST. */
+const TAMANHO_DA_PAGINA = 500;
 
 /** Lote do `in(contact_id, …)`: a lista vai na URL do PostgREST. */
 const LOTE_DE_CONTATOS = 100;
@@ -301,7 +351,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
           .not("last_inbound_at", "is", null)
           .not("status", "in", `(${CONVERSATION_TERMINAL_STATUSES.join(",")})`)
           .order("id", { ascending: true })
-          .limit(LIMITE_DE_CONVERSAS);
+          .limit(TAMANHO_DA_PAGINA);
         if (depois) consulta = consulta.gt("id", depois);
         const { data, error } = await consulta;
         if (error) throw new Error(error.message);
@@ -391,6 +441,40 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         for (const row of (data ?? []) as Array<{ contact_id: string }>) vivos.add(row.contact_id);
       }
       return vivos;
+    },
+
+    async loadUltimaInscricaoNoPonteiro(orgId, pointerId, contactIds, desdeIso) {
+      const ultima = new Map<string, string>();
+      for (let i = 0; i < contactIds.length; i += LOTE_DE_CONTATOS) {
+        let depois: string | undefined;
+        // Keyset por id; só página VAZIA prova o fim (max_rows ajustável).
+        for (;;) {
+          let consulta = admin
+            .from("followup_enrollments")
+            .select("id, contact_id, started_at")
+            .eq("organization_id", orgId)
+            .eq("pointer_id", pointerId)
+            .in("contact_id", contactIds.slice(i, i + LOTE_DE_CONTATOS))
+            .gte("started_at", desdeIso)
+            .order("id", { ascending: true })
+            .limit(TAMANHO_DA_PAGINA);
+          if (depois) consulta = consulta.gt("id", depois);
+          const { data, error } = await consulta;
+          if (error) throw new Error(error.message);
+          const pagina = (data ?? []) as Array<{ id: string; contact_id: string; started_at: string }>;
+          if (pagina.length === 0) break;
+          const ultimo = pagina[pagina.length - 1]!.id;
+          if (depois && ultimo <= depois) throw new Error("silence_episode_page_did_not_advance");
+          for (const row of pagina) {
+            const atual = ultima.get(row.contact_id);
+            if (atual === undefined || Date.parse(row.started_at) > Date.parse(atual)) {
+              ultima.set(row.contact_id, row.started_at);
+            }
+          }
+          depois = ultimo;
+        }
+      }
+      return ultima;
     },
 
     async loadTriggerNodeId(orgId, versionId) {

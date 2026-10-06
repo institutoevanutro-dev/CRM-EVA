@@ -18,7 +18,9 @@ const contato = (id: string, sentAt: string, createdAt = sentAt): ContatoEmSilen
 function fakeDb(opts: {
   activeSince?: string;
   contatos: ContatoEmSilencio[];
+  ultimaInscricao?: Map<string, string>;
   vivos?: Set<string>;
+  onUltimaInscricao?: (contactIds: string[], desdeIso: string) => void;
 }) {
   const insert = vi.fn(async () => ({ inserted: true }));
   const db: SilenceSweepDb = {
@@ -33,6 +35,10 @@ function fakeDb(opts: {
       },
     ],
     loadSilentContacts: async () => opts.contatos,
+    loadUltimaInscricaoNoPonteiro: async (_org, _pointer, contactIds, desdeIso) => {
+      opts.onUltimaInscricao?.(contactIds, desdeIso);
+      return opts.ultimaInscricao ?? new Map();
+    },
     loadContatosComInscricaoViva: async () => opts.vivos ?? new Set(),
     loadTriggerNodeId: async () => "t-1",
     insertEnrollment: insert,
@@ -74,5 +80,67 @@ describe("sem passado: silêncio anterior à vigência do ponteiro não conta", 
     });
     await runSilenceSweep({ db, ...DEPS });
     expect(insert).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("episódio de silêncio: a sequência não recomeça sozinha", () => {
+  const ENTRADA = "2026-10-06T12:00:00.000Z";
+
+  it("(c) já há inscrição deste ponteiro depois da última entrada → sem insert, skipped_same_episode (sem olhar status)", async () => {
+    const { db, insert } = fakeDb({
+      contatos: [contato("A", ENTRADA)],
+      ultimaInscricao: new Map([["A", "2026-10-06T12:30:00.000Z"]]),
+    });
+    const summary = await runSilenceSweep({ db, ...DEPS });
+    expect(insert).not.toHaveBeenCalled();
+    expect(summary.skipped_same_episode).toBe(1);
+    expect(summary.skipped_existing).toBe(0);
+  });
+
+  it("(d) a inscrição é anterior à última entrada (o contato respondeu depois) → episódio novo, inscreve", async () => {
+    const { db, insert } = fakeDb({
+      contatos: [contato("A", ENTRADA)],
+      ultimaInscricao: new Map([["A", "2026-10-06T11:00:00.000Z"]]),
+    });
+    await runSilenceSweep({ db, ...DEPS });
+    expect(insert).toHaveBeenCalledTimes(1);
+  });
+
+  it("(e) started_at igual à entrada conta como do mesmo episódio (>=)", async () => {
+    const { db, insert } = fakeDb({
+      contatos: [contato("A", ENTRADA)],
+      ultimaInscricao: new Map([["A", "2026-10-06T12:00:00+00:00"]]),
+    });
+    const summary = await runSilenceSweep({ db, ...DEPS });
+    expect(insert).not.toHaveBeenCalled();
+    expect(summary.skipped_same_episode).toBe(1);
+  });
+
+  it("(f) o episódio compara com o created_at (relógio do banco), e o desde passado é o MENOR deles", async () => {
+    const chamadas: Array<{ contactIds: string[]; desde: string }> = [];
+    const { db, insert } = fakeDb({
+      contatos: [
+        // enviada às 11:00, gravada às 12:10 — chegou depois da inscrição das 12:05
+        contato("A", "2026-10-06T11:00:00.000Z", "2026-10-06T12:10:00.000Z"),
+        contato("B", "2026-10-06T11:30:00.000Z", "2026-10-06T11:30:00.000Z"),
+      ],
+      ultimaInscricao: new Map([["A", "2026-10-06T12:05:00.000Z"]]),
+      onUltimaInscricao: (contactIds, desde) => chamadas.push({ contactIds, desde }),
+    });
+    await runSilenceSweep({ db, ...DEPS });
+    expect(chamadas).toEqual([{ contactIds: ["A", "B"], desde: "2026-10-06T11:30:00.000Z" }]);
+    expect(insert).toHaveBeenCalledTimes(2); // A abriu episódio novo pelo created_at
+  });
+
+  it("(g) do mesmo episódio E vivo conta skipped_same_episode, não skipped_existing (não audita)", async () => {
+    const { db, insert } = fakeDb({
+      contatos: [contato("A", ENTRADA)],
+      ultimaInscricao: new Map([["A", "2026-10-06T12:30:00.000Z"]]),
+      vivos: new Set(["A"]),
+    });
+    const summary = await runSilenceSweep({ db, ...DEPS });
+    expect(insert).not.toHaveBeenCalled();
+    expect(summary.skipped_same_episode).toBe(1);
+    expect(summary.skipped_existing).toBe(0);
   });
 });

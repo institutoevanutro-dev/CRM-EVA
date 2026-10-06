@@ -33,6 +33,7 @@ function fakeDb(opts: { vivos: Set<string>; insert: SilenceSweepDb["insertEnroll
         ultima_entrada_em: "2026-10-02T10:00:00.000Z",
         ultima_entrada_gravada_em: "2026-10-02T10:00:00.000Z",
       })),
+    loadUltimaInscricaoNoPonteiro: async () => new Map<string, string>(),
     loadContatosComInscricaoViva: async () => opts.vivos,
     loadTriggerNodeId: async () => "t-1",
     insertEnrollment: opts.insert,

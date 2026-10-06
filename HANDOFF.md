@@ -186,6 +186,11 @@
   contato que completou/cancelou pode re-enrollar na varredura seguinte se
   continuar silencioso — aceitável no MVP, sem cooldown table (fora de escopo
   por instrução explícita do brief).
+  > **Deixou de valer em 2026-10-06** (migration 0324, spec
+  > `docs/superpowers/specs/2026-10-06-followup-nao-recomeca-design.md`): a
+  > varredura inscreve no máximo uma vez por episódio de silêncio e ignora
+  > silêncio anterior a `followup_flow_pointers.active_since`. A frase acima
+  > fica como registro histórico.
   **`app/api/v1/cron/followup-flow-worker/route.ts`** — chama `runSilenceSweep`
   com `createSupabaseSilenceSweepDb(admin)` + `createSupabaseFollowupGateDb(admin)`
   depois do tick; audita `followup.silence_sweep_run` (nova action em

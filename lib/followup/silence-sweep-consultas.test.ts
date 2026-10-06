@@ -187,3 +187,82 @@ describe("loadActiveSilencePointers — lê a vigência", () => {
     expect(pointers[0]!.active_since).toBe("2026-10-06T12:00:00+00:00");
   });
 });
+
+/** Registra cada consulta e responde com a próxima página roteirizada (vazia quando acabam). */
+function supabaseRoteirizado(paginas: unknown[][]) {
+  const consultas: Chamada[][] = [];
+  const from = (tabela: string) => {
+    const chamadas: Chamada[] = [{ metodo: "from", args: [tabela] }];
+    const data = paginas[consultas.length] ?? [];
+    consultas.push(chamadas);
+    const chain: Record<string, unknown> = new Proxy(
+      {},
+      {
+        get(_t, prop) {
+          if (prop === "then") return (resolve: (v: unknown) => unknown) => resolve({ data, error: null });
+          return (...args: unknown[]) => {
+            chamadas.push({ metodo: String(prop), args });
+            return chain;
+          };
+        },
+      },
+    );
+    return chain;
+  };
+  return { admin: { from } as never, consultas };
+}
+
+describe("loadUltimaInscricaoNoPonteiro — a consulta de produção", () => {
+  const DESDE = "2026-10-06T11:00:00.000Z";
+
+  it("pergunta por organização, ponteiro, contatos e started_at >= desde, em keyset por id", async () => {
+    const { admin, consultas } = supabaseRoteirizado([[]]);
+    await createSupabaseSilenceSweepDb(admin).loadUltimaInscricaoNoPonteiro("org", "p-1", ["c-1"], DESDE);
+    const c = consultas[0]!;
+    expect(c[0]).toEqual({ metodo: "from", args: ["followup_enrollments"] });
+    expect(c).toContainEqual({ metodo: "eq", args: ["organization_id", "org"] });
+    expect(c).toContainEqual({ metodo: "eq", args: ["pointer_id", "p-1"] });
+    expect(c).toContainEqual({ metodo: "in", args: ["contact_id", ["c-1"]] });
+    expect(c).toContainEqual({ metodo: "gte", args: ["started_at", DESDE] });
+    expect(c).toContainEqual({ metodo: "order", args: ["id", { ascending: true }] });
+    expect(c).toContainEqual({ metodo: "limit", args: [500] });
+    // não filtra status: inscrição de QUALQUER status conta como do episódio
+    expect(c.some((x) => x.args[0] === "status")).toBe(false);
+  });
+
+  it("reduz várias linhas do mesmo contato ao MAIOR started_at, e pagina até a página vazia", async () => {
+    const { admin, consultas } = supabaseRoteirizado([
+      [
+        { id: "e-1", contact_id: "c-1", started_at: "2026-10-06T12:00:00+00:00" },
+        { id: "e-2", contact_id: "c-1", started_at: "2026-10-06T13:00:00+00:00" },
+      ],
+      [{ id: "e-3", contact_id: "c-1", started_at: "2026-10-06T12:30:00+00:00" }],
+    ]);
+    const m = await createSupabaseSilenceSweepDb(admin).loadUltimaInscricaoNoPonteiro("org", "p-1", ["c-1"], DESDE);
+    expect(m.get("c-1")).toBe("2026-10-06T13:00:00+00:00");
+    expect(consultas).toHaveLength(3); // duas páginas + a vazia
+    expect(consultas[1]!).toContainEqual({ metodo: "gt", args: ["id", "e-2"] });
+  });
+
+  it("lotes de 100 contatos; lista vazia não bate no banco", async () => {
+    const ids = Array.from({ length: 150 }, (_, i) => `c-${i}`);
+    const { admin, consultas } = supabaseRoteirizado([]);
+    await createSupabaseSilenceSweepDb(admin).loadUltimaInscricaoNoPonteiro("org", "p-1", ids, DESDE);
+    const lotes = consultas.map(
+      (c) => (c.find((x) => x.metodo === "in" && x.args[0] === "contact_id")?.args[1] as string[]).length,
+    );
+    expect(lotes).toEqual([100, 50]);
+
+    const vazio = supabaseRoteirizado([]);
+    await createSupabaseSilenceSweepDb(vazio.admin).loadUltimaInscricaoNoPonteiro("org", "p-1", [], DESDE);
+    expect(vazio.consultas).toHaveLength(0);
+  });
+
+  it("página que não avança lança", async () => {
+    const pagina = [{ id: "e-1", contact_id: "c-1", started_at: "2026-10-06T12:00:00+00:00" }];
+    const { admin } = supabaseRoteirizado([pagina, pagina]);
+    await expect(
+      createSupabaseSilenceSweepDb(admin).loadUltimaInscricaoNoPonteiro("org", "p-1", ["c-1"], DESDE),
+    ).rejects.toThrow("silence_episode_page_did_not_advance");
+  });
+});

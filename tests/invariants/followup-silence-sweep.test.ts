@@ -148,6 +148,18 @@ function silenceSweepDb(): SilenceSweepDb {
           ultima_entrada_gravada_em: r.last_inbound_at.toISOString(),
         }));
     },
+    // Mesma pergunta do adaptador de produção: maior started_at deste ponteiro,
+    // qualquer status, a partir de `desde`.
+    async loadUltimaInscricaoNoPonteiro(orgId, pointerId, contactIds, desdeIso) {
+      const { rows } = await pool.query<{ contact_id: string; ultima: Date }>(
+        `select contact_id, max(started_at) as ultima from followup_enrollments
+          where organization_id = $1 and pointer_id = $2 and contact_id = any($3::uuid[])
+            and started_at >= $4
+          group by contact_id`,
+        [orgId, pointerId, contactIds, desdeIso],
+      );
+      return new Map(rows.map((r) => [r.contact_id, r.ultima.toISOString()]));
+    },
     // Mesma pergunta do adaptador de produção: vivo em QUALQUER fluxo da org.
     async loadContatosComInscricaoViva(orgId, contactIds) {
       const { rows } = await pool.query<{ contact_id: string }>(
@@ -386,10 +398,12 @@ describe("runSilenceSweep — enrolla contato silencioso gateado, sem duplicar",
     expect(enrollment.rows[0]!.current_node_id).toBe("t1");
     expect(enrollment.rows[0]!.status).toBe("active");
 
-    // 2ª varredura: unique-live index barra duplicata — vira skipped_existing, não erro.
+    // 2ª varredura: mesmo episódio — nem tenta o insert, nem conta como
+    // skipped_existing (que audita). Vivo DESTE ponteiro não gera auditoria.
     const summary2 = await runSilenceSweep(deps);
     expect(summary2.enrolled).toBe(0);
-    expect(summary2.skipped_existing).toBeGreaterThanOrEqual(1);
+    expect(summary2.skipped_same_episode).toBeGreaterThanOrEqual(1);
+    expect(summary2.skipped_existing).toBe(0);
     expect(await countEnrollments(pointerId, contactId)).toBe(1);
 
     expect(versionId).toBeTruthy(); // sanity — version foi realmente usada (current_node_id veio do grafo pinado nela)
@@ -592,6 +606,82 @@ describe("runSilenceSweep — sem passado (active_since)", () => {
     await seedConversation(org, b, 90);
     await runSilenceSweep(deps);
     expect(await countEnrollments(pointerId, b)).toBe(0);
+  });
+});
+
+// ---- 3e. episódio: a sequência não recomeça sozinha --------------------
+
+async function seedInscricao(
+  org: string,
+  flow: { pointerId: string; versionId: string },
+  contactId: string,
+  status: "completed" | "dead" | "cancelled",
+  startedAgoMinutes: number,
+): Promise<void> {
+  await pool.query(
+    `insert into followup_enrollments
+       (organization_id, pointer_id, version_id, contact_id, current_node_id, status, next_eval_at, started_at,
+        cancel_reason, completed_at)
+     values ($1, $2, $3, $4, 't1', $5, null, now() - ($6 || ' minutes')::interval,
+             case when $5 = 'cancelled' then 'atendimento_humano' end,
+             case when $5 <> 'cancelled' then now() end)`,
+    [org, flow.pointerId, flow.versionId, contactId, status, String(startedAgoMinutes)],
+  );
+}
+
+describe("runSilenceSweep — episódio de silêncio: a sequência não recomeça", () => {
+  for (const status of ["completed", "dead", "cancelled"] as const) {
+    it(`inscrição ${status} no mesmo silêncio → não reinscreve em 3 varreduras`, async () => {
+      const org = nextOrgId();
+      await seedOrg(org);
+      const flow = await seedSilenceFlow(org, { thresholdMinutes: 30 });
+      await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [flow.pointerId] });
+      const contactId = await seedContact(org);
+      await seedConversation(org, contactId, 90); // calado há 90 min
+      await seedInscricao(org, flow, contactId, status, 60); // começou depois da última entrada
+
+      const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
+      for (let i = 0; i < 3; i++) {
+        const s = await runSilenceSweep(deps);
+        expect(s.enrolled).toBe(0);
+        expect(s.skipped_same_episode).toBeGreaterThanOrEqual(1);
+      }
+      expect(await countEnrollments(flow.pointerId, contactId)).toBe(1);
+    });
+  }
+
+  it("resposta depois da inscrição + novo silêncio → episódio novo, reinscreve", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const flow = await seedSilenceFlow(org, { thresholdMinutes: 30 });
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [flow.pointerId] });
+    const contactId = await seedContact(org);
+    await seedConversation(org, contactId, 40); // respondeu há 40 min (calado > 30)
+    await seedInscricao(org, flow, contactId, "completed", 60); // a anterior começou antes da resposta
+
+    const s = await runSilenceSweep({ db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK });
+    expect(s.enrolled).toBe(1);
+    expect(await countEnrollments(flow.pointerId, contactId)).toBe(2);
+  });
+
+  it("laço real fechado ponta a ponta: inscreve, termina (End), e as varreduras seguintes não recomeçam", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const flow = await seedSilenceFlow(org, { thresholdMinutes: 30 });
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [flow.pointerId] });
+    const contactId = await seedContact(org);
+    await seedConversation(org, contactId, 90);
+
+    const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
+    expect((await runSilenceSweep(deps)).enrolled).toBe(1);
+    await pool.query(
+      `update followup_enrollments set status = 'completed', completed_at = now(), next_eval_at = null, updated_at = now()
+        where pointer_id = $1 and contact_id = $2`,
+      [flow.pointerId, contactId],
+    );
+    await runSilenceSweep(deps);
+    await runSilenceSweep(deps);
+    expect(await countEnrollments(flow.pointerId, contactId)).toBe(1);
   });
 });
 
