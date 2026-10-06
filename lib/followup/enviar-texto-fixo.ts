@@ -20,6 +20,10 @@ import { OUTCOME_DO_BLOQUEIO, TEXTO_DO_BLOQUEIO, conferirAntesDoEnvio } from "@/
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { adiarAteAJanelaAbrir } from "@/lib/automation/janela-do-canal";
 import { espacarEnvio } from "@/lib/automation/throttle";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { interpolateTemplate } from "@/lib/inbox/template-vars";
+
+const TEM_VARIAVEL_DO_NOME = /\{\{\s*(nome|primeiro_nome)\s*\}\}/i;
 
 function ponteSupabase(admin: SupabaseClient): TurnBridgeAdminClient {
   const base = createSupabaseAdminClient(admin);
@@ -208,12 +212,25 @@ export async function enviarTextoFixoPendente(
       const proactiveContext={organizationId:job.organization_id as string,contactId,enrollmentId,nodeId,jobId:job.id,jobClaim};
       await assertAgendaEffectSupabase(admin,proactiveContext);
       await espacarEnvio(linha.channel_session_id);
+      // {{nome}}/{{primeiro_nome}} com o contato de AGORA, a mesma regra do
+      // worker (`resolveFlowSendBody`). O ledger guarda o texto que saiu.
+      let texto = body;
+      if (TEM_VARIAVEL_DO_NOME.test(body)) {
+        const { data: pessoa, error: pessoaErr } = await admin
+          .from("contacts")
+          .select("name, display_name")
+          .eq("organization_id", job.organization_id as string)
+          .eq("id", contactId)
+          .maybeSingle();
+        if (pessoaErr) throw new Error(pessoaErr.message);
+        texto = interpolateTemplate(body, { name: nomeDoContato(pessoa) }, { semValor: "remover" });
+      }
       let erroDoServidor: string | null = null;
-      const resultado=await sendWithLedger(supabaseSendLedger(admin),{tenantId:job.organization_id,leadId:contactId,jobId:job.id,seq:1,body},async(key,messageId)=>{
+      const resultado=await sendWithLedger(supabaseSendLedger(admin),{tenantId:job.organization_id,leadId:contactId,jobId:job.id,seq:1,body:texto},async(key,messageId)=>{
         const m=await sendMessageHandler(
           admin,
           {organization_id:job.organization_id,actor:{type:"webhook_source",id:enrollmentId},serviceBoundary:boundary,proactiveContext,origemDoEnvio:"followup",internalMessageId:messageId,requestId:key},
-          {conversation_id:conversationId,type:"text",body,metadata:{idempotency_key:key}},
+          {conversation_id:conversationId,type:"text",body:texto,metadata:{idempotency_key:key}},
         );
         erroDoServidor=(m as { error_code?: string | null }).error_code ?? null;
         return m;

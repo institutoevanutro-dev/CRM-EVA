@@ -7020,6 +7020,7 @@ export const DICIONARIO: Traducoes = {
   "{{volta}}": { es: "{{volta}}" },
   "{{voltas}}": { es: "{{voltas}}" },
   "viram o número da volta.": { es: "se vuelven el número de la vuelta." },
+  "{{nome}} e {{primeiro_nome}} viram o nome do contato; sem nome, a variável sai do texto.": { es: "{{nome}} y {{primeiro_nome}} se vuelven el nombre del contacto; sin nombre, la variable sale del texto." },
   "Contém": { es: "Contiene" },
   "É igual a": { es: "Es igual a" },
   "Não gravar": { es: "No guardar" },

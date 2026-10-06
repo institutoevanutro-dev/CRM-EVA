@@ -42,6 +42,8 @@ import { isLeadInHandoff } from './human-handoff';
 import { OUTCOME_DO_BLOQUEIO, TEXTO_DO_BLOQUEIO, conferirAntesDoEnvio } from '../../followup/bloqueios-obrigatorios';
 import { ERRO_FORA_DAS_24H } from '../edge/crm/send-ledger';
 import { fusoDaOrganizacao } from './fuso-da-org';
+import { nomeDoContato } from '@/lib/contacts/rotulo-do-contato';
+import { interpolateTemplate } from '@/lib/inbox/template-vars';
 import type { LeadStateRow } from './lead-state';
 import { loadReentryTemplate, pickReentryVariant } from './reentry-template';
 import {
@@ -421,7 +423,7 @@ async function runFlowDrivenTurn(
       }
     }
 
-    const body = await resolveFlowSendBody(pool, target.tenantId, input);
+    const body = await resolveFlowSendBody(pool, target.tenantId, target.leadId, input);
     if (body !== null) {
       // Texto do operador: sem camada semântica (ver o cabeçalho de sendFixedOutbound).
       const sent = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body, false);
@@ -548,9 +550,24 @@ function interpolarVoltaDoPayload(texto: string, index: number | undefined, tota
   return texto.replaceAll('{{volta}}', String(index)).replaceAll('{{voltas}}', String(total));
 }
 
+/**
+ * {{nome}}/{{primeiro_nome}} com o contato lido AGORA (o nome vale como está na
+ * hora em que a mensagem sai). Sem nome, a variável sai do texto: o follow-up
+ * não tem quem revise antes de enviar.
+ */
+async function interpolarNomeDoContato(pool: pg.Pool, tenantId: string, contactId: string, texto: string): Promise<string> {
+  if (!/\{\{\s*(nome|primeiro_nome)\s*\}\}/i.test(texto)) return texto;
+  const { rows } = await pool.query<{ name: string | null; display_name: string | null }>(
+    'select name, display_name from contacts where organization_id = $1 and id = $2',
+    [tenantId, contactId],
+  );
+  return interpolateTemplate(texto, { name: nomeDoContato(rows[0]) }, { semValor: 'remover' });
+}
+
 async function resolveFlowSendBody(
   pool: pg.Pool,
   tenantId: string,
+  contactId: string,
   input: {
     fixedBody: string | undefined;
     templateId: string | undefined;
@@ -559,7 +576,7 @@ async function resolveFlowSendBody(
   },
 ): Promise<string | null> {
   if (input.fixedBody !== undefined) {
-    return interpolarVoltaDoPayload(input.fixedBody, input.voltaIndex, input.voltaTotal);
+    return interpolarNomeDoContato(pool, tenantId, contactId, interpolarVoltaDoPayload(input.fixedBody, input.voltaIndex, input.voltaTotal));
   }
   if (input.templateId === undefined) return null;
   const { rows } = await pool.query<{ body: string }>(
@@ -570,7 +587,7 @@ async function resolveFlowSendBody(
   if (body === undefined || body.length === 0) {
     throw new Error('followup_turn sem modelo de mensagem — o template_id do passo não existe nesta organização');
   }
-  return interpolarVoltaDoPayload(body, input.voltaIndex, input.voltaTotal);
+  return interpolarNomeDoContato(pool, tenantId, contactId, interpolarVoltaDoPayload(body, input.voltaIndex, input.voltaTotal));
 }
 
 /**

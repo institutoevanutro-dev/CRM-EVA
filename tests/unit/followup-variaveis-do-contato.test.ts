@@ -1,8 +1,7 @@
 /**
- * Humano ativo no worker: o turno de fluxo (texto, modelo e IA) não envia e
- * ENCERRA a inscrição com `outcome: 'handoff'` quando uma pessoa da equipe
- * respondeu ou a conversa está atribuída a alguém. A decisão é a de
- * `conferirAntesDoEnvio` — a mesma do atalho do texto fixo.
+ * {{nome}} e {{primeiro_nome}} no worker: o texto e o modelo do passo saem com
+ * o nome do contato (o `name`, depois o `display_name` do perfil) lido NA HORA
+ * do envio; sem nome, a variável sai do texto. {{volta}} segue funcionando.
  */
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,7 +9,6 @@ import type * as FollowupTurnModule from "@/lib/agent-engine/agent/followup-turn
 import type * as InboundTurnModule from "@/lib/agent-engine/agent/inbound-turn";
 import type { JobRow } from "@/lib/agent-engine/queue/queue";
 import { DEFAULT_CHANNEL_PROVIDER } from "@/lib/channels/capabilities";
-import { TEXTO_DO_BLOQUEIO } from "@/lib/followup/bloqueios-obrigatorios";
 
 const runBeforeSend = vi.fn(async (_args: Record<string, unknown>): Promise<Record<string, unknown>> => ({
   status: "sent",
@@ -49,16 +47,19 @@ function job(payload: Record<string, unknown>): JobRow {
   } as JobRow;
 }
 
-function fakePool(conversa: { humano_respondeu?: boolean; atribuida_a_pessoa?: boolean }) {
-  const query = vi.fn(async (sql: string): Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }> => {
+function fakePool(contato: { name: string | null; display_name: string | null }, modelo = "Olá {{nome}}") {
+  const query = vi.fn(async (sql: string, params?: unknown[]): Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }> => {
     if (sql.includes("d.fechada_em::text")) return { rows: [{ ...boundary, status: "open", demanda_fechada_em: null }] };
-    if (/from send_ledger l/.test(sql)) return { rows: [{ status: "accepted", error_code: null }] };
-    if (/from message_templates/.test(sql)) return { rows: [{ body: "Olá do modelo" }] };
+    if (/select name, display_name from contacts/.test(sql)) {
+      // O filtro por organização é obrigatório: service role não tem RLS.
+      expect(params).toEqual([ORG, LEAD]);
+      return { rows: [contato] };
+    }
+    if (/from message_templates/.test(sql)) return { rows: [{ body: modelo }] };
     if (/from conversations/.test(sql)) {
       return { rows: [{
         id: CONVERSA, channel_session_id: "canal-1", archived_at: null, bot_silenciado: false,
-        provider: DEFAULT_CHANNEL_PROVIDER, last_inbound_at: new Date(),
-        humano_respondeu: conversa.humano_respondeu ?? false, atribuida_a_pessoa: conversa.atribuida_a_pessoa ?? false,
+        provider: DEFAULT_CHANNEL_PROVIDER, last_inbound_at: new Date(), humano_respondeu: false, atribuida_a_pessoa: false,
       }] };
     }
     if (/from followup_enrollments e\b/.test(sql)) {
@@ -97,39 +98,42 @@ beforeEach(() => {
   runAgentTurn.mockClear();
 });
 
-const resultado = (complete: ReturnType<typeof vi.fn>) => (complete.mock.calls[0]?.[1] as { result?: unknown } | undefined)?.result;
-const ENCERRA = { kind: "skipped", reason: TEXTO_DO_BLOQUEIO.atendimento_humano, outcome: "handoff" };
+const corpoEnviado = () => (runBeforeSend.mock.calls[0]?.[0] as { body?: string } | undefined)?.body;
 
-describe("worker — humano ativo encerra o passo em todos os modos", () => {
-  it("texto: uma pessoa respondeu → não chega à cadeia de envio; encerra com handoff", async () => {
-    const d = deps();
-    await criarHandler(d.deps)(job({ fixed_body: "oi" }), fakePool({ humano_respondeu: true }), ctx);
-    expect(runBeforeSend).not.toHaveBeenCalled();
-    expect(resultado(d.complete)).toEqual(ENCERRA);
-  });
-
-  it("modelo: conversa atribuída a uma pessoa → idem", async () => {
-    const d = deps();
-    await criarHandler(d.deps)(
-      job({ template_id: "33333333-3333-4333-8333-333333333333" }),
-      fakePool({ atribuida_a_pessoa: true }),
+describe("worker — variáveis do contato no texto e no modelo do passo", () => {
+  it("texto: {{primeiro_nome}} vira o primeiro nome do perfil (display_name) quando não há name", async () => {
+    await criarHandler(deps().deps)(
+      job({ fixed_body: "Ei, {{primeiro_nome}}, tá por aí?" }),
+      fakePool({ name: null, display_name: "João Lima" }),
       ctx,
     );
-    expect(runBeforeSend).not.toHaveBeenCalled();
-    expect(resultado(d.complete)).toEqual(ENCERRA);
+    expect(corpoEnviado()).toBe("Ei, João, tá por aí?");
   });
 
-  it("IA: uma pessoa respondeu → o turno do agente nem roda", async () => {
-    const d = deps();
-    await criarHandler(d.deps)(job({ prompt_hint: "retome" }), fakePool({ humano_respondeu: true }), ctx);
-    expect(runAgentTurn).not.toHaveBeenCalled();
-    expect(resultado(d.complete)).toEqual(ENCERRA);
+  it("texto sem nome nenhum: a variável sai do texto", async () => {
+    await criarHandler(deps().deps)(
+      job({ fixed_body: "Ei, {{primeiro_nome}}, tá por aí?" }),
+      fakePool({ name: null, display_name: null }),
+      ctx,
+    );
+    expect(corpoEnviado()).toBe("Ei, tá por aí?");
   });
 
-  it("controle: tudo limpo → o texto chega à cadeia de envio", async () => {
-    const d = deps();
-    await criarHandler(d.deps)(job({ fixed_body: "oi" }), fakePool({}), ctx);
-    expect(runBeforeSend).toHaveBeenCalledTimes(1);
-    expect(resultado(d.complete)).toEqual({ kind: "sent" });
+  it("modelo: {{nome}} do message_templates vira o nome inteiro", async () => {
+    await criarHandler(deps().deps)(
+      job({ template_id: "33333333-3333-4333-8333-333333333333" }),
+      fakePool({ name: null, display_name: "João Lima" }),
+      ctx,
+    );
+    expect(corpoEnviado()).toBe("Olá João Lima");
+  });
+
+  it("{{volta}} continua funcionando junto", async () => {
+    await criarHandler(deps().deps)(
+      job({ fixed_body: "{{nome}}, tentativa {{volta}} de {{voltas}}", volta_index: 2, volta_total: 3 }),
+      fakePool({ name: "Bia Ramos", display_name: null }),
+      ctx,
+    );
+    expect(corpoEnviado()).toBe("Bia Ramos, tentativa 2 de 3");
   });
 });

@@ -48,6 +48,8 @@ import { TEXTO_DO_BLOQUEIO } from "@/lib/followup/bloqueios-obrigatorios";
 
 /** A conversa do follow-up, como o banco a devolve (canal + última mensagem do cliente). */
 let conversa: Record<string, unknown> | null = null;
+/** O contato do job, como `contacts` o devolve (nome escolhido + nome do perfil). */
+let contato: Record<string, unknown> | null = null;
 
 const boundary = { organization_id: "org-1", contact_id: "contact-1", conversation_id: "conv-1", service_revision: 1, demanda_id: null, demanda_revision: null };
 const JOB = {
@@ -84,6 +86,7 @@ function admin() {
       maybeSingle: () => {
         if (table === "job_queue" && chain._upd) return Promise.resolve({ data: { id: JOB.id, locked_by:chain._upd.locked_by, locked_at:chain._upd.locked_at }, error: null });
         if (table === "conversations") return Promise.resolve({ data: conversa, error: null });
+        if (table === "contacts") return Promise.resolve({ data: contato, error: null });
         if (table === "followup_enrollments")
           return Promise.resolve({ data: { current_node_id: "node-1",status:"active",revision:1 }, error: null });
         return Promise.resolve({ data: null, error: null });
@@ -109,6 +112,8 @@ beforeEach(() => {
   statusUpdates.length = 0;
   settles.length = 0;
   conversa = { last_inbound_at: null, channel_session_id: "sess-1", channel_sessions: { provider: null } };
+  contato = { name: null, display_name: null };
+  JOB.payload.fixed_body = "Oi, tudo bem?";
   conferir.mockResolvedValue({ envia: true });
   adiarAteAJanelaAbrir.mockResolvedValue(null);
 });
@@ -272,5 +277,25 @@ describe("enviarTextoFixoPendente · a mesma decisão de envio do worker", () =>
     expect(await enviarTextoFixoPendente(admin())).toBe(1);
     expect(espacarEnvio).toHaveBeenCalledWith("sess-1");
     expect(espacarEnvio.mock.invocationCallOrder[0]!).toBeLessThan(sendMessageHandler.mock.invocationCallOrder[0]!);
+  });
+});
+
+describe("enviarTextoFixoPendente · {{nome}} e {{primeiro_nome}}", () => {
+  beforeEach(() => {
+    decidir.mockResolvedValue({ permite: true });
+    JOB.payload.fixed_body = "Oi {{primeiro_nome}}!";
+  });
+  const corpo = () => (sendMessageHandler.mock.calls[0]?.[2] as { body?: string } | undefined)?.body;
+
+  it("o nome do perfil (display_name) preenche quando não há name", async () => {
+    contato = { name: null, display_name: "Bia Ramos" };
+    expect(await enviarTextoFixoPendente(admin())).toBe(1);
+    expect(corpo()).toBe("Oi Bia!");
+  });
+
+  it("sem nome nenhum, a variável sai do texto", async () => {
+    contato = { name: null, display_name: null };
+    expect(await enviarTextoFixoPendente(admin())).toBe(1);
+    expect(corpo()).toBe("Oi!");
   });
 });

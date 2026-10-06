@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
 
@@ -611,7 +612,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
               limiteDeTexto={caps?.limiteDeTexto ?? null}
               soFoto={caps?.midiaDeEnvio === "so_foto"}
               disabled={selectedConversation.status === "closed"}
-              contactName={selectedConversation.contacts?.name ?? null}
+              contactName={nomeDoContato(selectedConversation.contacts)}
               respondendo={respondendo}
               onCancelarResposta={() => setRespondendo(null)}
               currentContactId={selectedConversation.contact_id}
