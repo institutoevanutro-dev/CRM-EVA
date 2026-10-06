@@ -1,0 +1,246 @@
+# Lembrete da agenda editável, pelo WhatsApp, refeito ao remarcar
+
+Data: 2026-10-06 · Branch: `feat/lembrete-editavel` (criada da `origin/main` 5b2e640f3)
+Origem: Fase 2, item 4 de `docs/superpowers/specs/2026-10-05-funil-comercial-dr-andre-design.md`
+("Lembrete da véspera editável, com 'amanhã', data, hora e unidade, saindo sempre pelo WhatsApp").
+
+Todas as referências `arquivo:linha` abaixo foram lidas neste worktree, na base 5b2e640f3.
+
+---
+
+## 1. O problema, medido
+
+### 1.1 O texto é fixo e não diz "amanhã"
+
+- `app/api/v1/cron/agenda-reminder/route.ts:121-173` (`montarLembrete`) monta sempre
+  "Oi, {nome}! Passando pra lembrar do seu compromisso: {título}, {dia da semana, dd/MM} às {HH:mm}. Endereço: {local}."
+  A data é sempre absoluta (`:146-157`). Nada na tela nem na API muda essa frase.
+- A única troca possível é por SQL: `calendar_event_types.reminder_template_name` aponta
+  para um `message_templates` (`:345-354`), e o `body` sai cru, sem variável nenhuma.
+  A busca também não exclui modelo pessoal (`owner_user_id`).
+- A tela (`app/app/settings/tenant/agenda/_client.tsx:112-160`) só liga o aviso e escolhe
+  os minutos. O PATCH (`app/api/v1/agenda/tipos/route.ts:154`, `:268-311`) não tem campo de texto.
+
+### 1.2 O endereço ignora a unidade
+
+- `{local}` = `linha.location_details ?? tipo.location_details` (`route.ts:341`). A linha
+  recebe uma cópia do tipo na marcação (`app/api/v1/agenda/agendamentos/_handler.ts:232`).
+- `calendar_appointments.unit_id` (`_handler.ts:222`) não está na consulta do cron
+  (`route.ts:234-236`). `calendar_units` tem `name` e `timezone` e **não tem endereço**
+  (`supabase/baseline.sql:27164-27169`).
+
+### 1.3 O canal pode ser o Instagram
+
+- `route.ts:311-317`: `channel_sessions` com `status = 'WORKING'`, `.limit(1)`, sem ordem
+  e sem filtro de provider. Numa organização com Instagram e WhatsApp conectados, o
+  lembrete cai em qualquer um, e a escolha pode mudar entre uma rodada e outra.
+- A abstração certa já existe: `providersDeEnvioAutomatico()` (`lib/channels/index.ts:60`)
+  exclui o Instagram (`iaResponde: false`) e a voz, sem nomear provider. É a que
+  `sessaoProntaParaEnvio` usa (`lib/automation/start-conversation.ts:34`).
+- O cron também não prefere a conversa em que o paciente já fala: escolhe um número da
+  organização, e `ensureConversation` (`start-conversation.ts:47-54`) abre ou reabre a
+  conversa naquele número.
+
+### 1.4 Remarcar não refaz o lembrete, e marcar perto demais manda lembrete na hora
+
+- Nada zera nem reinterpreta `reminder_sent_offsets_minutes` quando `starts_at` muda. A
+  remarcação (`_handler.ts:331-362`) grava `starts_at`/`ends_at`/`time_zone` por
+  `fn_appointment_change` (`_handler.ts:921`) e não toca no lembrete. O baseline não tem
+  gatilho que o faça. A véspera que saiu para a data antiga suprime para sempre a véspera
+  da data nova.
+- A ferramenta MCP promete o contrário: "o lembrete é refeito sozinho"
+  (`lib/mcp/tools/agendamento.ts:826`).
+- `degrausPendentes` (`route.ts:202-214`) não sabe quando o compromisso foi marcado. Consulta
+  marcada às 18h30 para as 16h do dia seguinte tem a véspera (1440 min) vencida desde as
+  16h de hoje, e o lembrete sai na primeira varredura, minutos depois da marcação. É o defeito
+  #2223 do projeto original, medido lá.
+- O carimbo é gravado **depois** do envio (`route.ts:375-389`) e o `error` do update é
+  ignorado. Uma exceção entre o envio e o carimbo reenvia a mesma mensagem 5 min depois
+  (medido no original: 18:35:01 e 18:40:01, idênticas).
+
+### 1.5 O fuso é o da organização, não o do compromisso
+
+- `route.ts:330-342` formata a hora com `organizations.timezone`.
+- O compromisso tem fuso próprio: `calendar_appointments.time_zone` = `fusoDaRegra`, o fuso da
+  jornada (que segue a unidade) em que o horário foi decidido (`_handler.ts:223-225` na
+  marcação, `:361` na remarcação). O comentário em `_handler.ts:223-224` diz que esse fuso
+  "viaja até o lembrete". Hoje não viaja. Numa unidade em outro fuso, o lembrete diz a hora errada.
+
+---
+
+## 2. Comportamento exigido
+
+1. **Texto editável por tipo**, em Configurações › Agenda, num campo de texto com a lista de
+   variáveis e uma prévia ao vivo. Em branco = a frase padrão de hoje, byte a byte.
+2. **Variáveis**: `{{primeiro_nome}}`, `{{nome}}`, `{{quando}}`, `{{data}}`, `{{hora}}`,
+   `{{dia_semana}}`, `{{unidade}}`, `{{endereco}}`, `{{profissional}}`, `{{tipo}}`. Também
+   `{{titulo}}` e `{{dia}}`, por compatibilidade com o original (ver 3.2).
+   - `{{quando}}`: "hoje", "amanhã" ou "segunda-feira, 12/10", no dia LOCAL do fuso do compromisso.
+   - Nome: `nomeDoContato()` (`lib/contacts/rotulo-do-contato.ts:106`), que já tenta
+     `name` e depois `display_name` e recusa identificador técnico.
+   - Variável conhecida sem valor vira texto vazio, sem chaves. Espaços duplos que sobram viram um só.
+   - Variável desconhecida é **recusada no PATCH** (422). No cron fica literal, como no original.
+3. **Legado**: com `reminder_body` nulo e `reminder_template_name` resolvendo para um modelo,
+   sai o `body` do modelo **cru**, como hoje.
+4. **Validação**: Zod no PATCH do tipo, até 1000 caracteres; em branco grava `null`.
+5. **Endereço e unidade**: `{{unidade}}` = nome da unidade do compromisso (`unit_id` →
+   `calendar_units.name`). Sem unidade, cai em `location_details`. `{{endereco}}` =
+   `location_details` da linha e, na falta dele, o do tipo, porque a unidade não tem endereço.
+6. **Canal**: sempre um canal de envio automático (WhatsApp, nunca Instagram). A ordem:
+   1. o número da conversa mais recente do contato, se esse número estiver `WORKING`,
+      não arquivado e for de envio automático;
+   2. senão, o número `WORKING` mais antigo da organização (`created_at`, depois `id`).
+   3. Sem nenhum, `pular("sem_canal")`, como hoje.
+7. **Remarcar refaz o lembrete** da data nova, por qualquer caminho de remarcação. Marcar
+   ou remarcar para dentro da antecedência de um degrau **não** dispara esse degrau. A
+   descrição da ferramenta MCP fica verdadeira.
+8. **Fuso**: `calendar_appointments.time_zone`, e `organizations.timezone` só como reserva.
+9. **Schema**: uma migration só, **0323**, com a tripla completa (arquivo + apêndice
+   idempotente no `baseline.sql` antes da VARREDURA anon + linha no MANIFEST), mais
+   `lib/database.types.ts` (mantido à mão neste repo, como os portes fazem).
+10. **i18n**: todo texto novo de tela e de mensagem tem a versão em espanhol em `lib/i18n/dicionario.ts`.
+
+---
+
+## 3. Decisões e por quê
+
+### 3.1 O que é PORTADO do original (`upstream`) e o que é adaptado
+
+| Commit do original | O que traz | Como entra aqui |
+|---|---|---|
+| `6ed38c78c` degrau vencido na marcação não dispara (#2223) | `vencidoNaMarcacao`, `criadoEm` em `degrausPendentes`, `created_at` na consulta, **carimbo antes do envio** com o erro do update tratado (`pular("carimbo_falhou")`), `espacarEnvio` dentro do `try` | **Portado.** Adaptação: a consulta do fork não tem o embed `organizations!inner(status)` nem `ehOperante` (correções de "org parada" que este fork não tem). O porte não as traz. Teste `lib/agenda/aviso-do-compromisso-lembrete.test.ts` portado. |
+| `b85d7615d` dois erros de digitação | só comentário | Portado junto, pela proximidade. |
+| `9e5027f1f` remarcação reposiciona a régua (#2230) | coluna `calendar_appointments.starts_at_marked_at`, função `fn_starts_at_marked_at`, gatilho `trg_starts_at_marked_at` (`before update of starts_at`, guarda `is distinct from`), `remarcadoEm` em `degrausPendentes` | **Portado, com o número trocado**: a migration `0536` do original vira parte da **0323** daqui. O rótulo do bloco no baseline e o teste estrutural `tests/unit/remarcacao-carimba-quando-o-horario-foi-marcado.test.ts` apontam para o arquivo 0323. O corpo SQL fica idêntico. |
+| `5c6c8d6f3` remarcar para mais longe rearma o degrau (#2243) | `enviadoEm` (`reminder_sent_at`) na consulta e o rearme em memória dentro de `degrausPendentes` | **Portado** como está. |
+| `e174c8484` o rearme exige a régua e meio intervalo (#2249) | só rearma com `remarcadoEm` e com o alvo novo a ≥ metade do degrau depois do último envio | **Portado** como está. |
+| `6146539da` texto próprio do lembrete no tipo | coluna `calendar_event_types.reminder_body` (0265 no original), `aplicarMoldeDoLembrete`, `reminder_body` só no PATCH (em branco → `null`), limpeza de `undefined` antes do UPDATE, campo na tela, `lembreteMensagem` em `listaTiposDeAtendimento`, e2e | **Portado e estendido**, com o mesmo nome de coluna para facilitar merges futuros. Adaptações em 3.2. |
+| `22c9a1dbd` lembrete por degrau + endereços salvos da org | `reminder_bodies` por degrau, teto de 3 extras → 20, tabela de endereços, tela redesenhada | **Não portado.** É outra funcionalidade (texto por degrau, catálogo de endereços), com tela nova inteira. Nada no pedido exige isso. Ver 4. |
+
+### 3.2 Adaptações sobre o `6146539da`
+
+- **Nome da coluna: `reminder_body`, não `reminder_text`.** O pedido sugeria `reminder_text`
+  só como exemplo. Usar o nome do original deixa um merge futuro do `upstream` sem conflito de schema.
+- **`{{quando}}` muda de sentido.** No original é "segunda-feira, 12/10 às 14:00". Aqui é
+  "hoje"/"amanhã"/"segunda-feira, 12/10", sem hora, como pede a Fase 2. `{{dia}}` (data com
+  dia da semana) e `{{titulo}}` continuam com o sentido do original. É uma divergência
+  consciente, e um merge futuro precisa preservá-la.
+- **Variáveis novas**: `data` (dd/MM), `dia_semana`, `unidade`, `profissional`. A tabela de
+  variáveis vira uma constante exportada (`VARIAVEIS_DO_LEMBRETE`), lida pela validação do
+  PATCH, pela ajuda da tela e pela renderização. Uma lista só, para as três nunca divergirem.
+- **A renderização sai do `route.ts` para `lib/agenda/texto-do-lembrete.ts`** (pura, sem
+  import de servidor), porque a prévia da tela precisa dela no cliente. O `route.ts`
+  reexporta `montarLembrete` e `aplicarMoldeDoLembrete`, então o teste existente e a forma
+  do original continuam valendo.
+- **Legado cru.** O original passa o `body` de `message_templates` pelo molde. Aqui o legado
+  sai cru, como hoje (exigência 3). Molde só se aplica a `reminder_body`.
+- **Variável desconhecida recusada no PATCH.** O original deixava `{{foo}}` chegar ao paciente
+  "para quem digitou ver o erro". Com a prévia na tela, o erro aparece antes de salvar, e a
+  rota recusa com uma mensagem fixa e traduzível.
+- **Prévia** (não existe no original): renderiza o próprio texto digitado com um paciente de
+  exemplo ("Maria Silva"), o tipo e o local do formulário, e um compromisso amanhã às 14:30
+  no fuso do navegador.
+
+### 3.3 "Remarcar zera `reminder_sent_offsets_minutes`": cumprido pelo efeito, sem zerar
+
+O pedido diz "zerar ao mudar `starts_at`". O original resolveu o mesmo defeito **sem zerar**,
+e o porte segue o original, porque zerar na escrita tem dois defeitos medidos lá:
+
+- empurrar a consulta 30 min depois de a véspera sair zeraria a lista, e a véspera da data
+  nova sairia 30 min depois da primeira: duas mensagens quase iguais em sequência, o que leva
+  a denúncia do número (o guarda 2 do `e174c8484` existe por isso);
+- linhas remarcadas antes da migration não têm régua (`starts_at_marked_at` nulo). Zerar
+  soltaria, na primeira rodada após o update, uma véspera já vencida.
+
+O efeito exigido é a data nova ganhar o lembrete dela, por qualquer caminho. Isso vale
+porque a **régua é gravada por gatilho** em todo UPDATE que muda `starts_at` (tela, MCP,
+reconciliação do Google por `fn_appointment_change_core`), e a decisão de rearmar fica em
+`degrausPendentes`, na leitura. A lista gravada continua sendo a autoridade do que saiu, e o
+carimbo da rodada a regrava.
+
+**Fica para decisão do dono:** se ele quiser literalmente a lista zerada, é uma linha no
+gatilho (`new.reminder_sent_offsets_minutes := '{}'`). O plano não a escreve.
+
+### 3.4 Efeito colateral do `6ed38c78c` sobre o Dr. André (ATENÇÃO)
+
+A seção 4.10 do documento de negócio diz: "Consulta marcada para o dia seguinte, com menos
+de 24h: o lembrete sai minutos depois do resumo." **Depois deste porte, não sai mais**: a
+véspera venceu antes da marcação e é descartada. Para quem marca na véspera receber algum
+aviso, o tipo precisa de um segundo degrau mais curto (ex.: 120 ou 180 min). Isso é
+configuração, não código. O documento de negócio fica na pasta principal, que esta sessão
+não pode tocar. A correção dele vai como pendência no PR.
+
+### 3.5 Canal: a regra pura fica separada da consulta
+
+`escolherCanalDoLembrete(sessoes, conversas)` é pura e exportada do `route.ts` (como
+`degrausPendentes`):
+
+- recebe as sessões `WORKING`, não arquivadas e de envio automático, em ordem determinística;
+- recebe as conversas do contato, da mais recente para a mais antiga (`last_message_at desc nulls last`);
+- devolve o número da primeira conversa cujo número está na lista, ou o primeiro da lista;
+- a regra repete o filtro `providersDeEnvioAutomatico()`, para o Instagram nunca ganhar mesmo
+  que a consulta mude.
+
+As consultas ficam no `route.ts`, filtradas por `organization_id` da linha. É isso que os
+testes estruturais de isolamento (`route.test.ts:121-149`) leem. Nenhum provider é nomeado
+(`pnpm lint:channels`).
+
+Não se reutiliza `sessaoProntaParaEnvio`: ela cai para sessão **não** `WORKING`. Com o
+carimbo antes do envio, mandar por número desconectado perderia o lembrete em silêncio.
+Hoje o cron pula (`sem_canal`) e tenta na próxima rodada, e isso se mantém.
+
+### 3.6 `{{profissional}}`
+
+`owner_user_id` → `nomesDosAtendentes()` (`lib/users/nome-do-atendente.ts:52`), que lê
+`user_metadata.full_name` pelo admin e devolve `null` sem service role. O GoTrue só é
+consultado quando o molde contém `profissional`, para não gastar uma chamada HTTP por
+lembrete. O e-mail **nunca** entra no lugar do nome, porque iria para o WhatsApp de um paciente.
+
+### 3.7 Multi-tenancy
+
+Toda leitura nova usa o cliente admin e filtra `organization_id` vindo da linha do
+compromisso (`const org = linha.organization_id`): `calendar_units`, `conversations`,
+`channel_sessions`. A tela grava pelo PATCH existente (`requireRole("manager")`, admin com
+`.eq("organization_id", autorizado.org.orgId)`). A migration não cria tabela, então não há RLS nova.
+
+### 3.8 Auditoria
+
+Nenhuma ação nova. O PATCH já audita `agenda.tipo_alterado` com a lista de campos, e
+`reminder_body` entra nela. O cron continua auditando só com `enviados > 0`. `carimbo_falhou`
+é motivo de pulo, não mutação.
+
+---
+
+## 4. O que fica de fora
+
+- Texto por degrau (`reminder_bodies`), teto de extras e catálogo de endereços da org (`22c9a1dbd`).
+- Endereço na unidade (`calendar_units.address`): a tabela não tem a coluna e o Dr. André usa
+  um tipo por unidade, com o endereço no tipo (seção 4.7 do documento de negócio). Se for
+  preciso, entra numa migration futura e `{{endereco}}` passa a preferir a unidade.
+- Correções de "organização parada" do original (`53302e236`, `8b3cd60ee`, `7b8ac558b`) e
+  `autorizaCron()` (`f917b3b7b`): ausentes no fork e fora deste item.
+- Lembrete para compromisso `pending`, lembrete "às 9h" fixo, `force_human`/bot silenciado.
+- Janela de 24h do WhatsApp oficial (texto livre fora da janela falha no provedor). O
+  `reminder_template_name` é o caminho para isso e segue como está.
+- Filtro de modelo pessoal (`owner_user_id`) na busca do legado: mudaria o comportamento do
+  legado, que deve ficar igual.
+- Ocupação do Google, marcação além de 30 dias e o "dead-man" do follow-up: são de outras sessões.
+- `lib/channels/pos-entrada.ts`: não é tocado.
+
+---
+
+## 5. Como se prova
+
+- Unit: `lib/agenda/aviso-do-compromisso-lembrete.test.ts` (portado), `lib/agenda/texto-do-lembrete.test.ts`
+  (hoje, amanhã, data, fuso, sem nome, vazia some, desconhecida, legado),
+  `app/api/v1/cron/agenda-reminder/route.test.ts` (escolha do canal, fuso da linha, unidade,
+  régua da remarcação, carimbo antes do envio), `app/api/v1/agenda/tipos/route.test.ts`
+  (PATCH com `reminder_body`: grava, limpa para `null`, recusa 1001 caracteres, recusa
+  variável desconhecida, isolamento entre organizações), `tests/unit/remarcacao-carimba-quando-o-horario-foi-marcado.test.ts`
+  (portado, apontando para a 0323).
+- Banco: `tests/invariants/lembrete-remarcacao-carimba.test.ts` (novo). UPDATE de `notes`
+  ou `status` não mexe em `starts_at_marked_at`; UPDATE de `starts_at` o grava; a função não
+  é executável por `anon`. Mais `pnpm test:db` inteiro (install com `ON_ERROR_STOP=1` + update).
+- Suíte: `pnpm test:unit` sem caminho, `pnpm typecheck`, `pnpm lint`, `pnpm lint:channels`.
+- Tela: caso novo em `tests/e2e/agenda-tipos-de-agendamento.spec.ts` (portado do `6146539da`,
+  mais a prévia). Se não der para rodar Playwright em ambiente fresco, o PR declara
+  **NÃO MEDIDO** para a prova de tela.
