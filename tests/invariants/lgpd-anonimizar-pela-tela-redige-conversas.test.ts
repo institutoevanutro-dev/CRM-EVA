@@ -143,6 +143,9 @@ describe("LGPD: anonimizar redige mensagens, transcrição, conversa e resumo do
     for (const c of TODOS) expect(await residuo(c)).toBe("conversations,lead_checkpoints,messages");
   });
 
+  // Até a migration 0317 este UPDATE era o que `fn_lgpd_anonymize_contact` fazia;
+  // hoje ela chama a cascata do pedido formal. O gatilho continua valendo para
+  // qualquer caminho que vire `is_anonymized`, e é ele que este caso mede.
   it("⭐ pela TELA: o UPDATE de fn_lgpd_anonymize_contact redige tudo e enfileira a mídia", async () => {
     await q(
       `update contacts set name = null, display_name = 'Contato Anonimizado #x', email = null, phone_number = null,
