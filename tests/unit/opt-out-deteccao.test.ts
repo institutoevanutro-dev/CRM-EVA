@@ -697,6 +697,21 @@ describe("comecaComPalavraDeSaida — qual frase o cliente lê quando a IA sai d
     }
   });
 
+  it("nenhuma frase de controle do corpus casa — o mesmo lado negativo que protege o bloqueio", () => {
+    // Sem isto, "pare de mandar o pedido nesse endereco" (cliente irritado com a
+    // entrega, candidato natural a `low_sentiment`) lia "Encerro os envios
+    // automáticos deste canal agora mesmo".
+    const casam = [...NAO_PEDE_PARA_SAIR, ...ESPANHOL_NAO_PEDE].filter((t) => comecaComPalavraDeSaida(t));
+    expect(casam).toEqual([]);
+    for (const t of [
+      "Parar de tomar o remédio faz mal?",
+      "Parar o tratamento agora é ruim?",
+      "Pare de doer o dente, quando?",
+    ]) {
+      expect(comecaComPalavraDeSaida(t), t).toBe(false);
+    }
+  });
+
   it("texto ausente é falso, sem lançar", () => {
     expect(comecaComPalavraDeSaida(null)).toBe(false);
     expect(comecaComPalavraDeSaida(undefined)).toBe(false);

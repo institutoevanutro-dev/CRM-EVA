@@ -18,7 +18,8 @@ conta, e o próximo sai normalmente.
 E quem responde começando com "parar" (por exemplo "Parar não é daqui") e cai
 nessa passagem recebe a confirmação de que as mensagens automáticas vão parar,
 e não a promessa de que um atendente vai responder. Perguntas como "tem como
-parar a dor?" não mudam nada.
+parar a dor?" ou "parar de tomar o remédio faz mal?", e frases como "pare de
+mandar o pedido nesse endereço", não mudam nada.
 
 As frases do aviso também perderam o travessão.
 

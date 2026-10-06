@@ -727,7 +727,15 @@ const PALAVRAS_DE_SAIDA_DO_RODAPE: ReadonlySet<string> = new Set(["parar", "pare
  */
 export function comecaComPalavraDeSaida(texto: string | null | undefined): boolean {
   if (!texto) return false;
-  const primeira = normalizarTexto(texto.trim()).match(/[a-z]+/u)?.[0];
+  const normalizado = normalizarTexto(texto.trim());
+  const primeira = normalizado.match(/[a-z]+/u)?.[0];
   if (primeira === undefined) return false;
-  return PALAVRAS_DE_SAIDA_DO_RODAPE.has(primeira) && PALAVRAS_DE_OPT_OUT.has(primeira);
+  if (!PALAVRAS_DE_SAIDA_DO_RODAPE.has(primeira) || !PALAVRAS_DE_OPT_OUT.has(primeira)) return false;
+  // "Pare de mandar o pedido nesse endereço", "Parar de tomar o remédio faz mal?":
+  // "<palavra> de …" e pergunta já têm dono — a regra de cessação com objeto
+  // de comunicação. Delega a ela em vez de decidir pela primeira palavra.
+  if (/^[^a-z]*[a-z]+\s+de\b/u.test(normalizado) || normalizado.includes("?")) {
+    return ehOptOutProvavel(texto);
+  }
+  return true;
 }
