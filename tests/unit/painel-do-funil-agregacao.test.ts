@@ -84,12 +84,22 @@ describe("chegou à etapa — as duas gramáticas de payload", () => {
     expect(posicaoAlcancada({ stage_id: "novo" }, [], POR_ID)).toBe(10);
   });
 
-  it("lê from/to (humano) e de/para (máquina); voltar não apaga o avanço", () => {
+  // Cada gramática sozinha leva o card a uma etapa que NENHUM outro caminho
+  // alcança (a atual é "novo"): se a leitura dela quebrar, o caso cai.
+  it("lê from/to (humano); voltar não apaga o avanço", () => {
     const movimentos = [
       mov({ from_stage_id: "novo", to_stage_id: "negociacao" }),
-      mov({ de: "negociacao", para: "interagiu" }),
+      mov({ from_stage_id: "negociacao", to_stage_id: "novo" }),
     ];
-    expect(posicaoAlcancada({ stage_id: "interagiu" }, movimentos, POR_ID)).toBe(30);
+    expect(posicaoAlcancada({ stage_id: "novo" }, movimentos, POR_ID)).toBe(30);
+  });
+
+  it("lê de/para (máquina); voltar não apaga o avanço", () => {
+    const movimentos = [
+      mov({ de: "interagiu", para: "negociacao" }),
+      mov({ de: "negociacao", para: "novo" }),
+    ];
+    expect(posicaoAlcancada({ stage_id: "novo" }, movimentos, POR_ID)).toBe(30);
   });
 
   it("etapa de perda não conta como avanço", () => {
