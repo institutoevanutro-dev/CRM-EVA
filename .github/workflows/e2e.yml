@@ -445,6 +445,7 @@ jobs:
         agenda-ver-na-agenda.spec.ts
         agenda-escopo-da-organizacao.spec.ts
         agenda-caminho-ate-os-horarios.spec.ts
+        prestador-publica-jornada.spec.ts
         agenda-google-volta-do-consentimento.spec.ts
         agenda-google-volta-nao-desloga.spec.ts
         qa-l12-funil.spec.ts
