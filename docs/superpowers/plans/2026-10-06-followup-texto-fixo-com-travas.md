@@ -57,12 +57,13 @@ Qualquer falha aqui é pré-existente: registre nome e motivo no PR.
 
 1. `lib/dev/kick-local-pipeline.test.ts`: aplique o hunk do commit. O teste exige que `applyReactivityEvent` rode **antes** do `select` de `waiting_reply` de `aplicarTextoNosFollowups`.
 2. `lib/followup/node-handlers.test.ts`: aplique o hunk do commit. Um `match_reply` acordado sem texto desta pergunta fica em `wait`/`waiting_reply`.
-3. `lib/followup/engine-match-reply-inbound.test.ts` (arquivo novo).
-   - Fonte: os casos de `git show f90f236aa:lib/followup/engine-match-reply-inbound.test.ts`.
-   - Ajuste os imports para o fork.
+3. `lib/followup/engine-match-reply-inbound.test.ts` (arquivo novo, nome do original).
+   - Fonte: os dois casos de `f90f236aa` em `git show f90f236aa:lib/followup/engine-match-reply-inbound.test.ts`.
+   - O primeiro caso do arquivo original depende de `36827ea36` (não portado) e fica de fora, dito no cabeçalho.
    - O caso: a ocupação de `wait_started` recém-gravada não vira timeout.
-4. `lib/followup/reactivity-acordar.test.ts` (arquivo novo).
-   - Fonte: os casos de `git show f90f236aa:lib/followup/reactivity-dormente.test.ts`.
+4. `lib/followup/reactivity-dormente.test.ts` (arquivo novo, **nome do original**, para facilitar merges).
+   - Fonte: o caso de `f90f236aa` em `git show f90f236aa:lib/followup/reactivity-dormente.test.ts`, com o harness `montarDb`.
+   - O fork não tem o status `dormente`: vêm só o caso do commit e um controle, dito no cabeçalho.
    - O caso: um inbound com `sent_at` anterior ao `updated_at` da inscrição não acorda.
 
 Rode `V` em cada um dos quatro. Todos devem falhar.
@@ -97,11 +98,13 @@ cd /Users/andreluislopescosta/crm-f2-followup-envio && git show f90f236aa --form
 **Testes primeiro**, em `lib/followup/bloqueios-obrigatorios.test.ts`:
 
 - `fatos()` ganha `conversa: { bot_silenciado: false, atribuida_a_pessoa: false, humano_respondeu: false }`.
+- `fatos()` ganha também `handoff_policy: 'pause'`.
 - Casos novos, um fato por vez:
   - `atribuida_a_pessoa: true` → `{envia:false, motivo:'atendimento_humano', invalida:true}`;
   - `humano_respondeu: true` → o mesmo;
   - `force_human: true` → o mesmo;
-  - `bot_silenciado: true` → o mesmo.
+  - `bot_silenciado: true` → o mesmo;
+  - com `handoff_policy: 'allow'`: atribuição e resposta humana enviam; `force_human` e bot silenciado continuam encerrando.
 - O caso existente da linha 86 passa a esperar `invalida: true`.
 - `OUTCOME_DO_BLOQUEIO`: `atendimento_humano → 'handoff'`, `resposta_do_contato → 'replied'`, `opt_out → 'opted_out'`. Um motivo sem desfecho dá `undefined`.
 - Controle positivo: todos os fatos limpos → `envia: true`. Esse caso já existe; confira que segue verde.
@@ -130,11 +133,15 @@ cd /Users/andreluislopescosta/crm-f2-followup-envio && git show f90f236aa --form
   - o mesmo com `sent_via='user'` → `true`;
   - com `sent_via='ai'` → `false` (controle);
   - um humano **antes** do inbound → `false`;
+  - um humano depois do inbound mas **antes do `started_at`** da inscrição (gatilho manual) → `false`;
+  - o mesmo com gatilho de **silêncio** → `true`;
+  - um humano **antes da retomada** (`handoff_resumed`) → `false`; um depois dela → `true`;
+  - **eco não removido** do nosso envio (`external_device` com o id bare de uma saída `ai`) → `false`;
   - um humano em **outra conversa** do contato → `false`;
-  - conversa com `assignee_kind='user'` → `atribuida_a_pessoa=true`;
-  - outra organização com o mesmo cenário não vaza: os filtros por `organization_id`.
+  - uma mensagem humana com `organization_id` da **org B** e `conversation_id` da conversa da org A → `false` (a FK de `conversation_id` é de coluna única; é a única forma de o filtro por organização fazer diferença);
+  - conversa com `assignee_kind='user'` → `atribuida_a_pessoa=true`; `handoff_policy` lido do pointer.
 
-**Mudança.** A consulta da conversa em `lerFatosDoEnvio` ganha as duas colunas da spec (D4).
+**Mudança.** A consulta da conversa em `lerFatosDoEnvio` ganha as duas colunas da spec (D4), e a da inscrição lê `p.handoff_policy`.
 
 **Verificação** (exige Docker):
 
@@ -143,7 +150,14 @@ cd /Users/andreluislopescosta/crm-f2-followup-envio && pnpm test:db > /private/t
 grep -aE "Test Files|Tests |Errors " /private/tmp/claude-501/-Users-andreluislopescosta-CRM-EVA/593e1a6a-d6d4-440d-bbe0-937b5ad1210e/scratchpad/b-db-2b.log
 ```
 
-**Sabotagem.** Troque `('user','external_device')` por `('user')`: o caso do celular fica vermelho.
+**Sabotagem**, uma por vez, cada uma deixa vermelho o seu caso:
+
+- `('user','external_device')` → `('user')`: o caso do celular;
+- tirar `h.organization_id = c.organization_id`: o caso da org B;
+- desligar a exclusão do eco: o caso do eco;
+- trocar `'handoff_resumed'` por um tipo que não existe: o caso da retomada;
+- tirar o `started_at`: o caso do gatilho manual;
+- tirar a exceção de silêncio: o caso do silêncio.
 
 ### 2c. A ponte grava o desfecho
 
@@ -205,6 +219,8 @@ A conversa do stub passa a devolver `channel_session_id`. Casos:
 
 Os casos existentes (elegibilidade, Instagram) continuam verdes, com `conferirAntesDoEnvio` devolvendo `envia:true`.
 
+**E2E sem depender da hora do CI.** O atalho passa a respeitar a janela do número (7h–22h BRT por padrão). Abra a janela (0h–24h, domingo liberado) no setup das seis specs que dependem do atalho: `followup-journey`, `followup-dossie`, `followup-ramos`, `followup-tempo-adaptativo`, `j20-elegibilidade-followup` (por `tests/e2e/utils/janela-de-envio.ts` → subcomando `abrir-janela-de-envio` de `scripts/e2e-followup-journey-helpers.ts`) e `agenda-presenca-recuperacao` (upsert em `channel_knobs` na fixture que cria o número). O adiamento fica coberto só com relógio injetado.
+
 **Mudança** em `lib/followup/enviar-texto-fixo.ts`:
 
 - `settle` ganha o adiamento genérico: `adiar?: { ate: string }` → `p_retry_at: ate`, `p_hold: true`. O caminho da agenda (`AgendaDeferredError`) continua igual.
@@ -235,28 +251,24 @@ Os casos existentes (elegibilidade, Instagram) continuam verdes, com `conferirAn
 
 ### 4a. Helper
 
+**Não crie `nomeDoContato`.** Ele já existe em `lib/contacts/rotulo-do-contato.ts`, com a ordem certa e a proteção contra identificador técnico. `TemplateContact.name` passa a receber o nome **já resolvido**.
+
 **Testes primeiro** em `tests/unit/template-vars.test.ts`. Os casos atuais continuam iguais (o modo padrão é `manter`). Novos casos:
 
-- `nomeDoContato({name:null, display_name:'Ana Souza'})` → `'Ana Souza'`;
-- `name` com só espaços cai no `display_name`;
-- `name` tem precedência sobre `display_name`;
-- `interpolateTemplate('Oi {{primeiro_nome}}', {name:null, display_name:'Ana Souza'})` → `'Oi Ana'`;
-- a tabela de remoção da spec D6 com `{semValor:'remover'}`, os cinco exemplos;
+- a tabela de remoção da spec D6 com `{semValor:'remover'}`, os sete exemplos, incluindo `"{{primeiro_nome}}! Tudo bem?"` → `"Tudo bem?"` e `"{{nome}} tudo certo?"` → `"Tudo certo?"`;
+- com nome, `remover` troca normalmente;
 - `{{codigo}}` desconhecida continua literal mesmo em `remover`;
+- `display_name` técnico (`5511999998888`, `543134@lid`) resolvido por `nomeDoContato` conta como sem nome e sai do texto;
+- `nomeDoContato({name:'  ', display_name:'Ana Souza'})` preenche `{{primeiro_nome}}` com `Ana`;
 - sem nome em `manter` → literal (controle da caixa de entrada).
 
-**Mudança** em `lib/inbox/template-vars.ts`:
+**Mudança** em `lib/inbox/template-vars.ts`: a opção `semValor` e a remoção local (spec D6). O cabeçalho do arquivo passa a descrever os dois modos e de onde vem o nome.
 
-- `TemplateContact` ganha `display_name?`;
-- crie `nomeDoContato`;
-- a opção `semValor` e a remoção local (spec D6).
-- O cabeçalho do arquivo diz que variável sem valor "mantém o literal": atualize para os dois modos.
-
-**Sabotagem.** Faça `nomeDoContato` ignorar o `display_name`.
+**Sabotagem.** Tire a remoção da pontuação no começo do texto: os casos do começo ficam vermelhos.
 
 ### 4b. Caixa de entrada
 
-**Mudança.** Em `components/inbox/InboxLayout.tsx:614`: `contactName={nomeDoContato(selectedConversation.contacts ?? {}) || null}`. O tipo de `contacts` já tem `display_name` (`lib/types/contacts.ts:9`).
+**Mudança.** Em `components/inbox/InboxLayout.tsx:614`: `contactName={nomeDoContato(selectedConversation.contacts)}`, importado de `@/lib/contacts/rotulo-do-contato`. O tipo de `contacts` já tem `display_name` (`lib/types/contacts.ts:9`).
 
 **Verificação.** `pnpm typecheck`. O composer só repassa o valor; a regra testada é a do 4a.
 
@@ -275,7 +287,7 @@ Os casos existentes (elegibilidade, Instagram) continuam verdes, com `conferirAn
 select name, display_name from contacts where organization_id=$1 and id=$2
 ```
 
-O `contactId` vem de `target.leadId`, passado como argumento. Aplique `interpolateTemplate(corpo, contato, {semValor:'remover'})`.
+O `contactId` vem de `target.leadId`, passado como argumento. Aplique `interpolateTemplate(corpo, { name: nomeDoContato(contato) }, {semValor:'remover'})`, só quando o texto tem a variável.
 
 **Sabotagem.** Tire a chamada: os três casos ficam vermelhos.
 
@@ -283,7 +295,7 @@ O `contactId` vem de `target.leadId`, passado como argumento. Aplique `interpola
 
 **Teste primeiro.** Em `enviar-texto-fixo.test.ts`, o job com `fixed_body:'Oi {{primeiro_nome}}!'` e o stub de `contacts` devolvendo `{name:null, display_name:'Bia Ramos'}`: `sendMessageHandler` recebe `body:'Oi Bia!'`. Sem nome, recebe `'Oi!'`.
 
-**Mudança.** Leia `contacts.name` e `contacts.display_name` com `.eq('organization_id', org).eq('id', contactId)` e interpole antes de `sendWithLedger`. O `body` interpolado é o que vai para o ledger, porque o hash é do texto que saiu.
+**Mudança.** Leia `contacts.name` e `contacts.display_name` com `.eq('organization_id', org).eq('id', contactId)`, resolva com `nomeDoContato` e interpole antes de `sendWithLedger`. O `body` interpolado é o que vai para o ledger, porque o hash é do texto que saiu.
 
 **Sabotagem.** Envie `body` cru.
 
@@ -322,21 +334,23 @@ Não traga `retornoQueSeguraOFluxo` nem `held_by_return`.
 
 ### 5b. O turno lê o campo e envia a reserva
 
-**Teste primeiro.** Crie `tests/unit/followup-modelo-de-reserva.test.ts`, no harness do passo 2d. O ledger do `fakePool` é configurável, e o `message_templates` devolve `"Oi {{primeiro_nome}}, ainda posso ajudar?"`. Casos:
+**Teste primeiro.** Crie `tests/unit/followup-modelo-de-reserva.test.ts`, no harness do passo 2d. O ledger do `fakePool` é configurável, e o `message_templates` devolve `"Oi {{primeiro_nome}}, ainda posso ajudar?"`. A reserva só é tentada em **dois** gatilhos: veto da cadeia (todos os envios da IA vetados) e erro na última tentativa. Casos:
 
-1. **IA sem envio, ledger vazio, travas limpas.** `runBeforeSend` é chamado uma vez com o corpo da reserva interpolado. O `channel.send` usa `seq: 1000`. `completeFollowupTurn` recebe `{kind:'sent', via:'modelo_de_reserva'}`.
+1. **Todos os envios da IA vetados, travas limpas.** `runBeforeSend` é chamado uma vez com o corpo da reserva interpolado. O `channel.send` usa `seq: 1000`. `completeFollowupTurn` recebe `{kind:'sent', via:'modelo_de_reserva'}`.
 2. **IA enviou** (ledger `accepted`). A reserva não é chamada; o resultado é `sent` sem `via`. É o controle.
 3. **Humano entrou durante o turno.** A segunda leitura dá `humano_respondeu: true`. A reserva não sai, e o resultado é `skipped` com `outcome:'handoff'`.
-4. **Contato não elegível** (allowlist). A reserva não sai, e o resultado é o `skipped` original.
+4. **Contato não elegível** (allowlist). A elegibilidade é pedida com `followup: true`. A reserva não sai, e o resultado é o `skipped` original.
 5. **Reserva vetada pela cadeia** (`runBeforeSend` → `vetoed`, não janela). O resultado é `skipped` com o motivo "A IA não enviou a mensagem e o modelo de reserva também foi recusado pelas regras do atendimento."
 6. **Reserva adiada pela janela anti-ban** (`vetoed` com `outside_window`). `completeFollowupTurn` **não** é chamado.
 7. **`runAgentTurn` lança `Error('llm')`:**
    - com `attempts < max_attempts`: relança, e a reserva não é tentada;
-   - com `attempts === max_attempts`: a reserva sai e o resultado é `sent` via reserva;
+   - com `attempts === max_attempts` e nada aceito/pendente/na fila: a reserva sai e o resultado é `sent` via reserva;
+   - com `attempts === max_attempts` e uma linha da IA `queued`: a reserva **não** sai e o erro é relançado (essa mensagem ainda sai pelo reconciliador);
    - se a reserva também é vetada: o erro original é relançado.
-8. **`runAgentTurn` lança `JobSettledError`** (janela). Relança, e a reserva não é tentada.
+8. **Erros terminais da fila** (`JobSettledError`, `AgendaDeferredError`, `StaleServiceBoundaryError`, `terminal: true`) na última tentativa: relançam, e a reserva não é tentada.
 9. **Retry depois de queda.** O ledger já tem seq 1000 `accepted`. `runAgentTurn` **não** é chamado, e o resultado é `sent` via reserva.
-10. **Sem `fallback_template_id`.** O comportamento é o de hoje (`skipped` "O assistente concluiu…").
+10. **Sem `fallback_template_id`.** O comportamento é o de hoje.
+11. **Ledger vazio** (a IA concluiu sem enviar; agente pausado ou assistido). A reserva **não** sai; o resultado é o `skipped` de hoje.
 
 **Mudança** em `lib/agent-engine/agent/followup-turn.ts`. Mantenha os nomes do original:
 
@@ -344,20 +358,24 @@ Não traga `retornoQueSeguraOFluxo` nem `held_by_return`.
 - `fallbackTemplateId: payload.fallback_template_id` na chamada;
 - o campo na assinatura de `runFlowDrivenTurn`;
 - `const SEQ_DO_MODELO_DE_RESERVA = 1000`;
-- `sendFixedOutbound` ganha um último parâmetro `seq = 1`, usado em `channel.send` (`:671`);
-- uma função local `tentarModeloDeReserva(...)` com o fluxo da spec D7:
+- `sendFixedOutbound` ganha um último parâmetro `seq = 1`, usado em `channel.send`;
+- a tradução do veredito vira uma função local `aplicarBloqueio`, usada pelo passo e pela reserva;
+- `iaNaoEnviouDeVez(pool, job, err)`: última tentativa, erro fora das classes terminais, ledger do job sem `accepted`/`requested`/`queued`;
+- `tentarModeloDeReserva(...)` com o fluxo da spec D7:
   - `conferirAntesDoEnvio`;
-  - `decidirElegibilidadeDaConversa`, de `lib/ai/elegibilidade/consulta-pg` (o mesmo que `inbound-turn.ts` usa);
+  - `decidirElegibilidadeDaConversa` de `lib/ai/elegibilidade/consulta-pg`, **com `followup: true`**;
   - `resolveFlowSendBody({templateId: fallback, ...})`;
   - `sendFixedOutbound(..., false, SEQ_DO_MODELO_DE_RESERVA)`.
 - `reconcileAcceptedSend` (já exportado de `send-ledger.ts`) antes de `runAgentTurn`.
+- `MOTIVO_ENVIO_VETADO` exportado de `send-ledger.ts` e usado por `resultadoDoEnvioDoFollowup`.
 - `FollowupFlowTurnResult.sent` ganha `via?: 'modelo_de_reserva'`.
 
 **Sabotagem.**
 
 1. Pule `tentarModeloDeReserva`: os casos 1 e 7b ficam vermelhos.
 2. Tire a reconferência: o caso 3 fica vermelho.
-3. Use `seq` 1: o caso 9 fica vermelho, porque a reserva viraria `already_sent` da tentativa da IA.
+3. Use `seq` 1: os casos 1 e 9 ficam vermelhos.
+4. Ignore o ledger na guarda do erro: o caso 7c fica vermelho.
 
 ### 5c. Ponte e dossiê
 
@@ -370,9 +388,15 @@ Não traga `retornoQueSeguraOFluxo` nem `held_by_return`.
 
 - `TurnResult.sent` ganha `via?`; o `applyStep` do `sent` passa `result.via ? {via} : {}`.
 - `descreveEvento('action_sent')` lê `p.via`.
-- Se o `detalhe` passa por `t()` na tela, ponha a entrada `es` no dicionário. Confira com os três guardas de i18n do passo 4e.
+- **Obrigatório:** o dossiê passa o `detalhe` por `t()` (`DossieDoFollowup.tsx:143`), e `turn_skipped` usa o `reason` como detalhe. Ponha a entrada `es` em `lib/i18n/dicionario.ts` para os três textos novos: "pelo modelo de reserva: a IA não escreveu a mensagem", o novo `TEXTO_DO_BLOQUEIO.atendimento_humano` e "A IA não enviou a mensagem e o modelo de reserva também foi recusado pelas regras do atendimento.". Confira com os três guardas de i18n do passo 4e.
 
 **Commit (5a–5c):** `fix(followup): o modelo de reserva sai quando a IA não envia, pelas mesmas travas`
+
+---
+
+## Dependência de merge
+
+Este PR **não vai para a `main` antes do item silêncio (0324)**: com os sinais novos, a varredura de silêncio reinscreve no tick seguinte quem foi encerrado por humano ativo, em laço (spec §4).
 
 ---
 
