@@ -17,6 +17,15 @@
  *    conjunto gravado que `varredura()` abaixo replica — a prova de que a
  *    segunda rodada não repete a primeira.
  *
+ * A regra 3 (issue #2230) é a mesma pergunta com outra régua: **remarcar
+ * reposiciona o instante da marcação.** `created_at` não acompanha o horário
+ * movido, então a reunião criada 3 dias antes e remarcada às 18:30 para as 16h
+ * do dia seguinte mantinha a véspera "vencida desde 16:00 de HOJE" e saía na
+ * varredura das 18:35 — a mesma medição da #2223 com a remarcação no meio. O
+ * gatilho `trg_starts_at_marked_at` (migration 0536) grava
+ * `starts_at_marked_at` a cada mudança de `starts_at`, e `degrausPendentes`
+ * prefere ele a `criadoEm`.
+ *
  * O controle de 60 min entra de propósito no mesmo arquivo: o conserto não pode
  * apagar o lembrete que funciona (a regressão silenciosa seria pior que o defeito).
  *
@@ -33,8 +42,13 @@ const d = (iso: string) => new Date(iso);
 interface LinhaDeTeste {
   /** Início da reunião. */
   comeca: string;
-  /** `created_at` — quando a reunião foi marcada. */
+  /** `created_at` — quando a reunião ORIGINALMENTE foi marcada. */
   criadoEm?: string | null;
+  /**
+   * `starts_at_marked_at` — quando o horário ATUAL foi gravado na remarcação
+   * (#2230). `null`/ausente = nunca remarcada, e aí vale `criadoEm`.
+   */
+  remarcadoEm?: string | null;
   principal: number;
   extras?: number[] | null;
 }
@@ -52,6 +66,7 @@ function varredura(estado: { enviados: number[] | null }, linha: LinhaDeTeste, a
     extras: linha.extras ?? null,
     jaEnviados: estado.enviados,
     criadoEm: linha.criadoEm ? d(linha.criadoEm) : null,
+    remarcadoEm: linha.remarcadoEm ? d(linha.remarcadoEm) : null,
   });
   estado.enviados = [...new Set([...(estado.enviados ?? []), ...pendentes])];
   return pendentes;
@@ -159,5 +174,97 @@ describe("o lembrete de véspera (1440 min) e a marcação (#2223)", () => {
       extras: null,
     };
     expect(varredura(estado, linha, "2026-10-03T16:00:30.000Z")).toEqual([]);
+  });
+});
+
+describe("remarcação reposiciona a régua (#2230)", () => {
+  it("criada 3 dias antes, remarcada às 18:30 para as 16h do dia seguinte: a varredura das 18:35 NÃO manda a véspera", () => {
+    // O caso medido na issue. A hora da véspera NOVA é 16:00 de hoje, que já
+    // passou quando o agente gravou o novo horário — a ocasião de avisar "na
+    // véspera" desta data nunca existiu.
+    const linha: LinhaDeTeste = {
+      comeca: "2026-10-04T16:00:00.000Z",
+      criadoEm: "2026-09-30T18:30:00.000Z",
+      remarcadoEm: "2026-10-03T18:30:00.000Z",
+      principal: 1440,
+      extras: null,
+    };
+    expect(varredura({ enviados: null }, linha, "2026-10-03T18:35:00.000Z")).toEqual([]);
+    // Os dois horários do relato da issue, que davam o MESMO texto.
+    expect(varredura({ enviados: null }, linha, "2026-10-03T18:40:00.000Z")).toEqual([]);
+  });
+
+  it("controle: sem a coluna nova a MESMA linha dispara — é a régua antiga que a issue mediu", () => {
+    // Sem o `remarcadoEm`, quem lê cai em `criadoEm` (30/09), que é anterior
+    // à hora do degrau — e nada descarta. É o `[1440]` da issue.
+    const linha: LinhaDeTeste = {
+      comeca: "2026-10-04T16:00:00.000Z",
+      criadoEm: "2026-09-30T18:30:00.000Z",
+      principal: 1440,
+      extras: null,
+    };
+    expect(varredura({ enviados: null }, linha, "2026-10-03T18:35:00.000Z")).toEqual([1440]);
+  });
+
+  it("remarcada para uma hora ainda DISTANTE: o degrau continua armado e sai na hora certa", () => {
+    // O outro lado da mesma régua: a remarcação não pode APAGAR o lembrete
+    // legítimo (a regressão silenciosa seria pior que o defeito).
+    const linha: LinhaDeTeste = {
+      comeca: "2026-10-05T16:00:00.000Z",
+      criadoEm: "2026-10-01T10:00:00.000Z",
+      remarcadoEm: "2026-10-03T18:30:00.000Z",
+      principal: 1440,
+      extras: null,
+    };
+    expect(varredura({ enviados: null }, linha, "2026-10-04T15:55:00.000Z")).toEqual([]);
+    expect(varredura({ enviados: null }, linha, "2026-10-04T16:05:00.000Z")).toEqual([1440]);
+  });
+
+  it("remarcação para CURTO prazo mata a véspera que a marcação original deixaria sair", () => {
+    // Criada 01/10 para 05/10 16h — véspera armada para 04/10 16h. Remarcada
+    // em 03/10 às 18:35 para as 21:30 do mesmo dia: a hora da véspera NOVA é
+    // 02/10 21:30, anterior à remarcação.
+    const linha: LinhaDeTeste = {
+      comeca: "2026-10-03T21:30:00.000Z",
+      criadoEm: "2026-10-01T10:00:00.000Z",
+      remarcadoEm: "2026-10-03T18:35:00.000Z",
+      principal: 1440,
+      extras: null,
+    };
+    expect(varredura({ enviados: null }, linha, "2026-10-03T18:36:00.000Z")).toEqual([]);
+    // Controle: com a régua antiga (só `criadoEm`) a mesma linha mandava.
+    expect(varredura({ enviados: null }, { ...linha, remarcadoEm: null }, "2026-10-03T18:36:00.000Z")).toEqual([
+      1440,
+    ]);
+  });
+
+  it("o atraso legítimo de cron continua saindo depois de uma remarcação anterior à hora do degrau", () => {
+    // Cron parado: a véspera venceu às 16:00 de 03/10 e a varredura só roda às
+    // 18:20. A remarcação de 02/10 não muda nada — a hora do degrau nasceu
+    // DEPOIS dela, e apagá-la em silêncio seria o defeito oposto.
+    const linha: LinhaDeTeste = {
+      comeca: "2026-10-04T16:00:00.000Z",
+      criadoEm: "2026-09-28T09:00:00.000Z",
+      remarcadoEm: "2026-10-02T11:00:00.000Z",
+      principal: 1440,
+      extras: null,
+    };
+    expect(varredura({ enviados: null }, linha, "2026-10-03T18:20:00.000Z")).toEqual([1440]);
+  });
+
+  it("linha que nunca foi remarcada continua inteiramente sob `created_at`", () => {
+    // Sem backfill, dado legado não muda de comportamento: o que a coluna nova
+    // faz é acrescentar a régua, não trocar a que já estava valendo.
+    const linha: LinhaDeTeste = {
+      comeca: "2026-10-04T16:00:00.000Z",
+      criadoEm: "2026-10-03T16:00:00.000Z",
+      remarcadoEm: null,
+      principal: 1440,
+      extras: null,
+    };
+    expect(varredura({ enviados: null }, linha, "2026-10-03T16:00:30.000Z")).toEqual([]);
+    expect(
+      varredura({ enviados: null }, { ...linha, criadoEm: "2026-10-03T15:00:00.000Z" }, "2026-10-03T16:05:00.000Z"),
+    ).toEqual([1440]);
   });
 });

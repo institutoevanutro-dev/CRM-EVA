@@ -46,6 +46,19 @@
  * `created_at`; o atraso LEGÍTIMO de cron continua saindo, porque ali a hora
  * venceu DEPOIS de a linha existir — e é a diferença que os dois casos têm.
  *
+ * **REMARCAÇÃO REPOSICIONA A RÉGUA (issue #2230).** `created_at` não muda quando a
+ * reunião é movida, e uma reunião criada dias antes remarcada para menos de 24h
+ * mantinha a véspera "vencida" desde a marcação ORIGINAL: a varredura de
+ * minutos depois da remarcação mandava o aviso, com a hora do degrau tendo
+ * passado antes da NOVA data existir. A régua deixa de ser "quando a linha
+ * nasceu" e passa a ser "quando ESTA data foi marcada" — `starts_at_marked_at`,
+ * gravado pelo gatilho `trg_starts_at_marked_at` (migration 0323, porte da 0536
+ * do original) a cada remarcação, com fallback em `created_at` para a linha
+ * nunca movida. As duas alternativas que a issue levantou foram medidas e
+ * recusadas lá: `updated_at` reescreve com o link do Meet e com cada revisão
+ * (mataria degrau ARMADO) e `revision_started_at` vira também com status e
+ * conversa (confirmar um compromisso já dentro de 24h mataria a véspera armada).
+ *
  * **O carimbo vai ANTES do envio.** O caso medido mandou o lembrete às
  * 18:35:01 e a MESMA mensagem saiu de novo às 18:40:01 — para o mesmo
  * compromisso, o mesmo degrau. O carimbo não chegava à linha por nenhum dos
@@ -130,6 +143,12 @@ interface CompromissoAVencer {
   starts_at: string;
   /** Quando a reunião foi MARCADA — a régua do degrau vencido na marcação (#2223). */
   created_at: string | null;
+  /**
+   * Quando o `starts_at` ATUAL foi gravado — `null` = a linha nunca foi
+   * remarcada (#2230). Com ela a régua vira "quando ESTA data foi marcada";
+   * sem ela, vale `created_at`.
+   */
+  starts_at_marked_at: string | null;
   location_details: string | null;
   reminder_sent_offsets_minutes: number[] | null;
   /** Instante do último carimbo — a condição do carimbo da rodada (spec 3.9). */
@@ -226,10 +245,18 @@ export function estaNaHora(agora: Date, comeca: Date, antecedenciaMin: number): 
  * o lembrete de véspera saía um minuto depois de o agente confirmar a reunião,
  * e a cada nova tentativa (o carimbo que não saía) saía outra vez.
  *
- * A régua é `created_at`, e não `updated_at`: o link do Meet e cada revisão
- * reescrevem a linha, e usar `updated_at` descartaria degraus ARMADOS quando o
- * link ficasse pronto dentro da última hora antes da reunião — sumindo com o
- * lembrete em silêncio, que é o defeito simétrico ao deste fix.
+ * A régua é o instante da MARCAÇÃO DESTA DATA, e não `updated_at`: o link do
+ * Meet e cada revisão reescrevem a linha, e usar `updated_at` descartaria
+ * degraus ARMADOS quando o link ficasse pronto dentro da última hora antes da
+ * reunião — sumindo com o lembrete em silêncio, que é o defeito simétrico ao
+ * deste fix. É a mesma razão pela qual a régua não é `revision_started_at`
+ * (#2230): ele vira também com `status` e `conversation_id`, e confirmar um
+ * compromisso já dentro de 24h reposicionaria a régua para DEPOIS da hora da
+ * véspera.
+ *
+ * Quem ESCOLHE o instante é `degrausPendentes`: `starts_at_marked_at` quando a
+ * linha já foi remarcada, `created_at` quando nunca foi (#2230). Esta função
+ * continua perguntando só "a hora passou antes de quem marcou marcar?".
  *
  * Sem `marcadoEm` a guarda fica fora do caminho (linha que não sabe quando foi
  * marcada não é punida). `<=`, e não `<`: marcado no MESMO instante da hora do
@@ -268,7 +295,8 @@ export function degrausPendentes(input: {
   extras: number[] | null;
   jaEnviados: number[] | null;
   /**
-   * `created_at` da linha — QUANDO A REUNIÃO FOI MARCADA (issue #2223).
+   * `created_at` da linha — QUANDO A REUNIÃO ORIGINALMENTE FOI MARCADA
+   * (issue #2223).
    *
    * `null`/ausente = a linha não diz (registro anterior à coluna, ou dublê de
    * teste): a regra fica DESLIGADA e vale o comportamento antigo. Falha fechada
@@ -276,15 +304,33 @@ export function degrausPendentes(input: {
    * vencido antes da marcação é descartado.
    */
   criadoEm?: Date | null;
+  /**
+   * `starts_at_marked_at` da linha — QUANDO ESTA DATA FOI MARCADA na última
+   * remarcação (issue #2230).
+   *
+   * `created_at` não acompanha a remarcação, então uma reunião criada dias
+   * antes e movida para menos de 24h mantinha a véspera "vencida" desde a
+   * marcação ORIGINAL e saía minutos depois do agente confirmar o novo horário.
+   * Com esta coluna a régua vira o instante da remarcação — que, por construção,
+   * nunca é ANTERIOR a `criadoEm` (o gatilho só escreve em UPDATE), por isso
+   * `??` escolhe a mais recente e não há o que comparar.
+   *
+   * `null`/ausente = a linha nunca foi remarcada; cai em `criadoEm`, que é o
+   * comportamento de antes, sem mudança para dado legado.
+   */
+  remarcadoEm?: Date | null;
 }): number[] {
   const enviados = new Set(input.jaEnviados ?? []);
   const todos = new Set([input.principal, ...(input.extras ?? [])]);
+  // A régua de `vencidoNaMarcacao` é UM instante: o da última marcação DESTA
+  // data. `remarcadoEm` vem antes de propósito — é ele que sabe do movimento.
+  const marcadoEm = input.remarcadoEm ?? input.criadoEm ?? null;
   return [...todos]
     .filter(
       (degrau) =>
         !enviados.has(degrau) &&
         estaNaHora(input.agora, input.comeca, degrau) &&
-        !vencidoNaMarcacao(input.comeca, degrau, input.criadoEm),
+        !vencidoNaMarcacao(input.comeca, degrau, marcadoEm),
     )
     .sort((a, b) => b - a);
 }
@@ -308,7 +354,7 @@ async function handle(req: NextRequest): Promise<Response> {
   const { data, error } = await admin
     .from("calendar_appointments")
     .select(
-      "id, organization_id, contact_id, title, starts_at, created_at, location_details, reminder_sent_offsets_minutes, reminder_sent_at, " +
+      "id, organization_id, contact_id, title, starts_at, created_at, starts_at_marked_at, location_details, reminder_sent_offsets_minutes, reminder_sent_at, " +
         "calendar_event_types!inner(name, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_template_name, location_details)",
     )
     .eq("status", "confirmed")
@@ -356,6 +402,9 @@ async function handle(req: NextRequest): Promise<Response> {
       extras: tipo.reminder_extra_offsets_minutes,
       jaEnviados: linha.reminder_sent_offsets_minutes,
       criadoEm: linha.created_at ? new Date(linha.created_at) : null,
+      // A régua da remarcação (#2230): nulo = nunca remarcada, e aí vale
+      // `created_at` — a rota não decide nada, só repassa os dois instantes.
+      remarcadoEm: linha.starts_at_marked_at ? new Date(linha.starts_at_marked_at) : null,
     });
     if (pendentes.length === 0) {
       pular("ainda_nao");

@@ -33408,6 +33408,45 @@ notify pgrst, 'reload schema';
 
 -- ---- fim: travas no banco (migration 0319) ----
 
+-- ---- lembrete editável e régua da remarcação (migration 0323) ----
+-- (1) Porte da 0536 do original (9e5027f1f, #2230): `starts_at_marked_at`,
+-- gravado por gatilho a cada mudança REAL de `starts_at` (`is distinct from`,
+-- porque o RPC de alteração sempre nomeia a coluna no SET), é a régua do degrau
+-- vencido na remarcação. Sem backfill: linha nunca remarcada cai em
+-- `created_at` no leitor (`app/api/v1/cron/agenda-reminder/route.ts`).
+-- (2) O comentário de `reminder_sent_at` deixa de dizer "informativo": ele é a
+-- régua do rearme e é gravado antes do envio.
+-- A função entra ANTES da varredura anon de propósito. Razões completas no
+-- cabeçalho de supabase/migrations/20261006120323_0323_lembrete_editavel.sql.
+alter table public.calendar_appointments
+  add column if not exists starts_at_marked_at timestamptz;
+
+comment on column public.calendar_appointments.starts_at_marked_at is
+  'Instante em que o starts_at ATUAL foi gravado — a régua do degrau de lembrete vencido na marcação (#2223) depois de uma remarcação (#2230). NULL = a linha nunca foi remarcada; quem lê (a rota agenda-reminder) cai em created_at.';
+
+create or replace function public.fn_starts_at_marked_at() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if new.starts_at is distinct from old.starts_at then
+    new.starts_at_marked_at := clock_timestamp();
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function public.fn_starts_at_marked_at() from public, anon, authenticated;
+grant execute on function public.fn_starts_at_marked_at() to service_role;
+
+drop trigger if exists trg_starts_at_marked_at on public.calendar_appointments;
+create trigger trg_starts_at_marked_at
+  before update of starts_at on public.calendar_appointments
+  for each row execute function public.fn_starts_at_marked_at();
+
+comment on column public.calendar_appointments.reminder_sent_at is
+  'Instante do último carimbo de lembrete, gravado ANTES do envio. Depois de uma remarcação é a régua do rearme: um degrau já carimbado volta a ser candidato quando o alvo novo dele fica meio intervalo ou mais depois deste instante. NÃO é filtro de quem recebe; o que já saiu é reminder_sent_offsets_minutes.';
+
+-- ---- fim: lembrete editável (migration 0323) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

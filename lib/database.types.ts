@@ -2208,6 +2208,7 @@ export type Database = {
           rescheduled_from_id: string | null
           source: string
           starts_at: string
+          starts_at_marked_at: string | null
           status: string
           time_zone: string
           title: string
@@ -2277,6 +2278,7 @@ export type Database = {
           rescheduled_from_id?: string | null
           source?: string
           starts_at: string
+          starts_at_marked_at?: string | null
           status?: string
           time_zone?: string
           title: string
@@ -2346,6 +2348,7 @@ export type Database = {
           rescheduled_from_id?: string | null
           source?: string
           starts_at?: string
+          starts_at_marked_at?: string | null
           status?: string
           time_zone?: string
           title?: string

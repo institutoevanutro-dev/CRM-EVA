@@ -232,3 +232,24 @@ describe("o carimbo vem ANTES do envio e é condicional (#2223, spec 3.9)", () =
     expect(fonte).toContain('pular("mudou_na_rodada")');
   });
 });
+
+describe("a rota lê a régua da remarcação (#2230)", () => {
+  const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+
+  it("seleciona starts_at_marked_at — sem a coluna na consulta não há por onde saber que a data mudou", () => {
+    // Estrutural, como as de cima: o que a rota PEDE ao banco é propriedade do
+    // texto, e um dublê de Supabase provaria o dublê. Sem a coluna no SELECT,
+    // `linha.starts_at_marked_at` seria `undefined` e a régua voltaria a ser
+    // `created_at` sem erro nenhum — o defeito nasceria calado.
+    const consulta = fonte.slice(fonte.indexOf(".select("), fonte.indexOf('.eq("status"'));
+    expect(consulta).toContain("starts_at_marked_at");
+  });
+
+  it("repassa os dois instantes para degrausPendentes e deixa a função decidir", () => {
+    expect(fonte).toContain("remarcadoEm: linha.starts_at_marked_at");
+    expect(fonte).toContain("criadoEm: linha.created_at");
+    // A precedência mora na função, não na rota: `remarcadoEm` sabe do
+    // movimento e `criadoEm` é o fallback da linha nunca remarcada.
+    expect(fonte).toContain("input.remarcadoEm ?? input.criadoEm");
+  });
+});
