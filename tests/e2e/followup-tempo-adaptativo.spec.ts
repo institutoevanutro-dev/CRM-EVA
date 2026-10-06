@@ -47,6 +47,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { test, expect, type Page } from "@playwright/test";
+import { abrirJanelaDeEnvio } from "./utils/janela-de-envio";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 // evidence/ é versionado; e2e-artifacts/ está no .gitignore e evidência citada
@@ -78,6 +79,7 @@ function loadCreds(): Creds {
 }
 
 const creds = loadCreds();
+test.beforeAll(() => abrirJanelaDeEnvio());
 
 async function login(page: Page, email: string): Promise<void> {
   await page.goto("/login");

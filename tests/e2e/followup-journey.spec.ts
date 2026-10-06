@@ -40,6 +40,7 @@ import * as path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 
 import { afirmarAdminDeTenantPuro } from "./utils/precondicao";
+import { abrirJanelaDeEnvio } from "./utils/janela-de-envio";
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
 
@@ -90,6 +91,7 @@ let creds = loadCreds();
 // medindo o escape. O raciocínio inteiro está em `utils/precondicao.ts`.
 test.beforeAll(async () => {
   await afirmarAdminDeTenantPuro(creds.users.admin!.email);
+  abrirJanelaDeEnvio();
 });
 const secret = loadInternalSecret();
 
