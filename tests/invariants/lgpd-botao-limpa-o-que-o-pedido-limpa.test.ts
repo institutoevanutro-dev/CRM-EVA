@@ -48,8 +48,8 @@ const PEDIDO = randomUUID();
 
 interface Pessoa {
   id: string;
-  /** Só para dar e-mail e telefone distintos a cada um. */
-  n: number;
+  /** Só para dar e-mail e telefone distintos a cada um (largura fixa). */
+  n: string;
   igsid: string;
   arroba: string;
   conflito: string;
@@ -65,13 +65,16 @@ let sequencia = 0;
 function pessoa(): Pessoa {
   sequencia += 1;
   const id = randomUUID();
+  // Largura FIXA: com dez pessoas, `.arroba.1` seria pedaço de `.arroba.10` e a
+  // varredura por texto acharia o vizinho.
+  const s = String(sequencia).padStart(2, "0");
   return {
     id,
-    n: sequencia,
-    igsid: `1784140000000${sequencia}99`,
-    arroba: `paciente.arroba.${sequencia}`,
-    conflito: `+55279888877${String(sequencia).padStart(2, "0")}`,
-    lid: `9000000000${sequencia}`,
+    n: s,
+    igsid: `1784140000000${s}99`,
+    arroba: `paciente.arroba.${s}`,
+    conflito: `+55279888877${s}`,
+    lid: `9000000000${s}`,
     conversa: randomUUID(),
     comentario: randomUUID(),
     negocio: randomUUID(),
@@ -87,6 +90,8 @@ const VIZINHO = pessoa();
 const BOTAO_ANTIGO = pessoa();
 /** Anonimizado pelo pedido formal ANTES da 0317 (a identidade ficava com o IGSID). */
 const PEDIDO_ANTIGO = pessoa();
+/** Botão antigo, e depois a pessoa voltou a escrever por um chat @lid (revisão do PR). */
+const BOTAO_ANTIGO_LID = pessoa();
 
 /** `quando`: idade das linhas — a cura só alcança o que existia até `anonymized_at`. */
 async function semear(p: Pessoa, quando = "now()") {
@@ -258,8 +263,19 @@ beforeAll(async () => {
     [PEDIDO, ORG],
   );
   for (const p of [PELO_BOTAO, PELO_PEDIDO, VIZINHO]) await semear(p);
-  for (const p of [BOTAO_ANTIGO, PEDIDO_ANTIGO]) await semear(p, "now() - interval '2 hours'");
+  for (const p of [BOTAO_ANTIGO, PEDIDO_ANTIGO, BOTAO_ANTIGO_LID]) {
+    await semear(p, "now() - interval '2 hours'");
+  }
 });
+
+/** O bloco da 0278 como o `update.sh` o reaplica: lido do baseline, pelo rótulo. */
+async function backfillDa0278() {
+  const baseline = readFileSync(join(process.cwd(), "supabase", "baseline.sql"), "utf8");
+  const rotulo = "-- ---- destinatário das conversas do Instagram (migration 0278) ----";
+  const inicio = baseline.indexOf(rotulo);
+  expect(inicio, "rótulo da 0278 sumiu do baseline").toBeGreaterThan(-1);
+  await q(baseline.slice(inicio, baseline.indexOf("\n-- ---- ", inicio + rotulo.length)));
+}
 
 describe("LGPD: o botão da ficha limpa o mesmo que o pedido formal (0317)", () => {
   it("ANTES: o @ e o IGSID estão legíveis em mais de uma tabela (controle da varredura)", async () => {
@@ -441,5 +457,46 @@ describe("LGPD: o botão da ficha limpa o mesmo que o pedido formal (0317)", () 
     // Quem não é anonimizado não é tocado.
     expect((await contato(VIZINHO)).source_metadata).toMatchObject({ handle: VIZINHO.arroba });
     expect(await ondeAparece(VIZINHO.igsid)).toEqual(["contact_channel_identities", "conversations", "instagram_comments"]);
+  });
+
+  it("⭐ a cura solta o telefone que o WhatsApp regravou pelo LID depois do botão antigo", async () => {
+    // O botão antigo deixava o LID em `source_metadata`, e `fn_upsert_wa_contact`
+    // casa por `wa_lid` sem olhar `is_anonymized`: a pessoa voltou a escrever por
+    // um chat @lid com o telefone junto, e o telefone voltou para o contato
+    // anonimizado. Tirar o LID não basta — o telefone sozinho segue casando.
+    const p = BOTAO_ANTIGO_LID;
+    const telefone = "+5527999000706";
+    await comoOBotaoAntigo(p);
+    const { rows: volta } = await q("select public.fn_upsert_wa_contact($1,'lid',$2,$3,$3,'Marina') id", [
+      ORG, telefone, `${p.lid}@lid`,
+    ]);
+    // Controle: a mensagem caiu mesmo no anonimizado e trouxe o telefone de volta.
+    expect(volta[0].id).toBe(p.id);
+    expect((await q("select phone_number from contacts where id = $1", [p.id])).rows[0].phone_number).toBe(telefone);
+
+    await cura();
+    await cura();
+
+    const { rows } = await q("select phone_number, wa_identity, wa_lid, source_metadata from contacts where id = $1", [p.id]);
+    expect(rows[0]).toEqual({ phone_number: null, wa_identity: null, wa_lid: null, source_metadata: {} });
+    // A próxima mensagem do mesmo número é um contato NOVO, como em quem foi
+    // anonimizado pela cascata.
+    const { rows: novo } = await q("select public.fn_upsert_wa_contact($1,'c.us',$2,null,$3,'Marina') id", [
+      ORG, telefone, "5527999000706@c.us",
+    ]);
+    expect(novo[0].id).not.toBe(p.id);
+  });
+
+  it("reaplicar o baseline não devolve à conversa anonimizada a marca da identidade como destinatário", async () => {
+    // O backfill da 0278 preenche o destinatário vazio com o `external_id` da
+    // identidade única — e na identidade anonimizada esse valor é a MARCA
+    // `anonimizado:<id>`. Sem a guarda, cada `update.sh` gravava a marca e a cura
+    // da 0317 a apagava de novo: duas escritas por conversa a cada atualização.
+    await backfillDa0278();
+    const { rows } = await q("select provider_conversation_id from conversations where id = $1", [PELO_BOTAO.conversa]);
+    expect(rows[0].provider_conversation_id).toBeNull();
+    // Controle: a conversa do vizinho continua com o destinatário dela.
+    const { rows: vizinho } = await q("select provider_conversation_id from conversations where id = $1", [VIZINHO.conversa]);
+    expect(vizinho[0].provider_conversation_id).toBe(VIZINHO.igsid);
   });
 });

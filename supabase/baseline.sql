@@ -27591,6 +27591,9 @@ grant  execute on function public.fn_upsert_conversa_de_canal(uuid, uuid, uuid, 
 -- conectado. Guardá-lo na conversa (e não só na identidade do contato) mantém
 -- o destinatário certo quando um contato tiver conversas em dois perfis.
 -- Backfill idempotente: só preenche onde está vazio e a identidade é única.
+-- A identidade ANONIMIZADA não tem IGSID: o `external_id` dela é a marca
+-- `anonimizado:<id>` (migration 0317), que não é destinatário de ninguém. Sem
+-- a guarda, cada reaplicação gravava a marca e a cura da 0317 a apagava.
 update public.conversations c
    set provider_conversation_id = i.external_id
   from public.contact_channel_identities i
@@ -27599,6 +27602,7 @@ update public.conversations c
    and i.organization_id = c.organization_id
    and i.contact_id = c.contact_id
    and i.channel = 'instagram'
+   and i.external_id not like 'anonimizado:%'
    and (select count(*) from public.contact_channel_identities i2
          where i2.organization_id = c.organization_id and i2.contact_id = c.contact_id and i2.channel = 'instagram') = 1;
 
@@ -32335,6 +32339,14 @@ grant execute on function public.fn_lgpd_cascade_redact_contact(uuid,uuid,uuid) 
 --
 -- 3. Cura de quem JÁ estava anonimizado (fim do arquivo).
 --
+-- 4. Só no baseline.sql: o backfill da 0278 ("destinatário das conversas do
+--    Instagram") passa a ignorar a identidade anonimizada. Ele preenche o
+--    destinatário vazio com o `external_id` da identidade única — e, depois do
+--    7c, esse valor é a marca `anonimizado:<id>`. Sem a guarda, cada
+--    `update.sh` gravava a marca como destinatário e o A2 da cura a apagava em
+--    seguida. A migration 0278 em si não muda: rodou uma vez, antes de a marca
+--    existir.
+--
 -- O que NÃO muda: assinaturas (lib/database.types.ts igual), policies, grants,
 -- gatilhos. Nenhuma tabela ou coluna nova.
 
@@ -32942,6 +32954,13 @@ update public.demandas d set
 --     referências é montada a partir dos anonimizados (poucos), e só então
 --     casada com os avisos — reaplicar o baseline não varre a Central inteira
 --     contato por contato.
+--
+--     `corte` é até quando um aviso é dado ANTIGO. Para contato, conversa,
+--     follow-up e compromisso é `anonymized_at`, como nas outras curas. Para o
+--     CASO aberto antes da anonimização não há corte: o cobrador de caso parado
+--     (`case-stale-watcher`) seguiu abrindo avisos sobre ele depois, e cada um
+--     copia no corpo o título que a IA escreveu ANTES — a data do aviso é nova,
+--     o texto não. Caso aberto depois é dado novo e fica fora (como no A5).
 update public.agent_inbox_items a set
   status = 'resolved',
   resolved_at = coalesce(a.resolved_at, now()),
@@ -32949,7 +32968,7 @@ update public.agent_inbox_items a set
   body = 'Contato anonimizado.',
   ref_id = null
   from (
-    select k.organization_id, k.anonymized_at, k.id as ref
+    select k.organization_id, k.anonymized_at as corte, k.id as ref
       from public.contacts k
      where k.is_anonymized
     union all
@@ -32958,11 +32977,12 @@ update public.agent_inbox_items a set
       join public.conversations c on c.contact_id = k.id and c.organization_id = k.organization_id
      where k.is_anonymized
     union all
-    select k.organization_id, k.anonymized_at, ac.id
+    select k.organization_id, 'infinity'::timestamptz, ac.id
       from public.contacts k
       join public.conversations c on c.contact_id = k.id and c.organization_id = k.organization_id
       join public.agent_cases ac on ac.conversation_id = c.id and ac.organization_id = c.organization_id
      where k.is_anonymized
+       and ac.created_at <= k.anonymized_at
     union all
     select k.organization_id, k.anonymized_at, f.id
       from public.contacts k
@@ -32976,7 +32996,7 @@ update public.agent_inbox_items a set
   ) r
  where a.organization_id = r.organization_id
    and a.ref_id = r.ref
-   and a.created_at <= r.anonymized_at
+   and a.created_at <= r.corte
    and a.kind not in ('message_send_stuck', 'capabilities_missing');
 
 -- ── (B) Só quem foi anonimizado pelo BOTÃO ANTIGO ──
@@ -33068,9 +33088,17 @@ update public.orders o set
 -- B5. O contato, POR ÚLTIMO: consentimento, dados de origem (o @, o telefone
 --     em conflito, o LID), etiquetas — e o rótulo da cascata, que tira a marca
 --     do botão antigo e encerra a cura deste contato.
+--
+--     E o TELEFONE de novo. O botão antigo o zerava, mas deixava o LID, e
+--     `fn_upsert_wa_contact` casa por `wa_lid` sem olhar `is_anonymized`: se a
+--     pessoa voltou a escrever por um chat @lid com o telefone junto, o
+--     telefone foi regravado no anonimizado. Sem zerá-lo, `wa_identity` seguia
+--     `phone:…`, o índice único impedia o contato novo, e toda mensagem futura
+--     caía aqui, em claro (o gatilho da 0308 não dispara de novo).
 update public.contacts set
   name = 'Cliente Anonimizado #' || substring(id::text from 1 for 8),
   display_name = 'Cliente Anonimizado #' || substring(id::text from 1 for 8),
+  phone_number = null,
   consent = '{}'::jsonb,
   source_metadata = '{}'::jsonb,
   tags = '{}'::text[]

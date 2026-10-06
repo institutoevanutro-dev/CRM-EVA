@@ -25,4 +25,6 @@ situação estava, quem atendeu e quando. Assim as contagens de atendimento não
 O relatório de dados do titular (o que a clínica entrega quando o paciente pede os dados dele)
 passa a trazer esses mesmos registros.
 
-Quem já tinha sido anonimizado antes desta atualização é corrigido sozinho na hora de atualizar.
+Quem já tinha sido anonimizado antes desta atualização é corrigido sozinho na hora de atualizar —
+inclusive os avisos de "atendimento parado" que o sistema continuou abrindo depois da
+anonimização, que repetiam o título antigo do caso.

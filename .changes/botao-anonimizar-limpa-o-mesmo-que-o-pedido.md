@@ -25,7 +25,10 @@ também passou a apagar, nos dois caminhos:
   só o registro de que houve um comentário naquele post.
 
 Quem já tinha sido anonimizado antes desta atualização é corrigido sozinho na hora de atualizar,
-sem precisar clicar de novo.
+sem precisar clicar de novo. Isso inclui um caso raro: se a pessoa, depois de anonimizada pelo
+botão antigo, voltou a escrever pelo WhatsApp, o telefone dela tinha voltado para o cadastro
+anonimizado e as mensagens novas continuavam caindo ali. A correção tira esse telefone, e a
+próxima mensagem dela abre um contato novo.
 
 O nome que aparece no lugar passa a ser "Cliente Anonimizado #…" nos dois caminhos (o botão
 gravava "Contato Anonimizado #…").

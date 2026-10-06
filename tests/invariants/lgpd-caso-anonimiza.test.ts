@@ -386,11 +386,21 @@ describe("0317 — a cascata de LGPD alcança o caso que a IA abriu", () => {
     `);
     const casoNovo = "03170000-4444-4000-8000-000000000099";
     const avisoNovo = "03170000-7771-4000-8000-000000000099";
+    // O cobrador de caso parado continuou trabalhando DEPOIS da anonimização
+    // (nada fechava o caso): o aviso nasceu agora, mas o corpo copia o título
+    // que a IA escreveu ANTES — é dado antigo, e a data do aviso não o torna novo.
+    const avisoParadoDepois = "03170000-7776-4000-8000-000000000004";
+    // ...e o do caso NOVO é dado novo: fica.
+    const avisoParadoDoCasoNovo = "03170000-7776-4000-8000-000000000099";
     sql(`
       insert into public.agent_cases (id, organization_id, conversation_id, title, summary, blocker, status)
         values ('${casoNovo}', '${ORG}', '${ANTIGO.conversa}', 'Voltou a escrever', 'Quer marcar retorno.', 'Falta o horario.', 'awaiting_human');
       insert into public.agent_inbox_items (id, organization_id, kind, severity, title, body, ref_kind, ref_id, status)
-        values ('${avisoNovo}', '${ORG}', 'handoff', 'critical', 'Handoff', 'Voltou a escrever hoje.', 'conversation', '${ANTIGO.conversa}', 'open');
+        values ('${avisoNovo}', '${ORG}', 'handoff', 'critical', 'Handoff', 'Voltou a escrever hoje.', 'conversation', '${ANTIGO.conversa}', 'open'),
+               ('${avisoParadoDepois}', '${ORG}', 'case_stale', 'warn', 'Um atendimento espera decisao ha um dia',
+                '"Cobranca duplicada de ${ANTIGO.nome}" esta aguardando alguem da equipe.', 'agent_case', '${ANTIGO.caso}', 'open'),
+               ('${avisoParadoDoCasoNovo}', '${ORG}', 'case_stale', 'warn', 'Um atendimento espera decisao ha um dia',
+                '"Voltou a escrever" esta aguardando alguem da equipe.', 'agent_case', '${casoNovo}', 'open');
     `);
     // Controle: o resíduo existe mesmo.
     expect(campoDoCaso(ANTIGO.caso, "summary")).toContain(ANTIGO.nome);
@@ -414,11 +424,17 @@ describe("0317 — a cascata de LGPD alcança o caso que a IA abriu", () => {
       expect(campoDoAviso(aviso, "ref_id")).toBe("<null>");
     }
     expect(campoDoAviso(ANTIGO.avisoDaOrganizacao, "status")).toBe("open");
+    // O aviso de caso parado aberto DEPOIS da anonimização, sobre o caso de antes.
+    expect(campoDoAviso(avisoParadoDepois, "body")).toBe("Contato anonimizado.");
+    expect(campoDoAviso(avisoParadoDepois, "ref_id")).toBe("<null>");
+    expect(campoDoAviso(avisoParadoDepois, "status")).toBe("resolved");
 
     // O que nasceu DEPOIS de `anonymized_at` não é da cura.
     expect(campoDoCaso(casoNovo, "summary")).toBe("Quer marcar retorno.");
     expect(campoDoAviso(avisoNovo, "body")).toBe("Voltou a escrever hoje.");
     expect(campoDoAviso(avisoNovo, "status")).toBe("open");
+    expect(campoDoAviso(avisoParadoDoCasoNovo, "body")).toContain("Voltou a escrever");
+    expect(campoDoAviso(avisoParadoDoCasoNovo, "ref_id")).toBe(casoNovo);
     // E quem não é anonimizado não é tocado.
     expect(campoDoCaso(VIZINHO.caso, "summary")).toContain("Joao");
   });
