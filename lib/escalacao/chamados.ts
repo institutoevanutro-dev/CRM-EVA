@@ -103,25 +103,43 @@ export interface ResultadoDaLista {
   abertos: number;
 }
 
+/** Onde a página anterior parou: o último caso dela, na ordem da lista. */
+export interface PontoDaLista {
+  opened_at: string;
+  id: string;
+}
+
 export async function listarChamados(
   supabase: SupabaseClient,
   organizationId: string,
-  /**
-   * `soConversas`: o recorte do escopo do turno do agente — só os casos destas
-   * conversas, na lista E na contagem. Ausente = a organização inteira (tela e
-   * fora do turno, como antes). Lista vazia é recorte válido: nenhum caso passa.
-   */
-  opts: { estado: "abertos" | "fechados"; limite?: number; soConversas?: string[] },
+  opts: {
+    estado: "abertos" | "fechados";
+    limite?: number;
+    /** Só os casos que vêm DEPOIS deste na lista. Quem chama valida a forma (vai para `.or()`). */
+    depoisDe?: PontoDaLista;
+    /**
+     * O recorte do escopo do turno do agente — só os casos destas conversas, na
+     * lista E na contagem. Ausente = a organização inteira (tela e fora do
+     * turno, como antes). Lista vazia é recorte válido: nenhum caso passa.
+     */
+    soConversas?: string[];
+  },
 ): Promise<ResultadoDaLista> {
   const estados = opts.estado === "abertos" ? ESTADOS_ABERTOS : ESTADOS_FECHADOS;
 
+  // `id` desempata: dois casos abertos no mesmo instante não podem cair um em
+  // cada página, nem os dois na mesma e nenhum na outra.
   let filtrada = supabase
     .from("agent_cases")
     .select(COLUNAS_LISTA)
     .eq("organization_id", organizationId)
     .in("status", estados as unknown as string[]);
   if (opts.soConversas) filtrada = filtrada.in("conversation_id", opts.soConversas);
-  const base = filtrada.order("opened_at", { ascending: false });
+  let base = filtrada.order("opened_at", { ascending: false }).order("id", { ascending: false });
+  if (opts.depoisDe) {
+    const { opened_at, id } = opts.depoisDe;
+    base = base.or(`opened_at.lt.${opened_at},and(opened_at.eq.${opened_at},id.lt.${id})`);
+  }
 
   const { data, error } = await (opts.limite === undefined ? base : base.limit(opts.limite));
   if (error) throw new Error(error.message);

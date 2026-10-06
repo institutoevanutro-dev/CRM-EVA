@@ -220,7 +220,7 @@ export async function juntarPorArroba(
     if (!escolha) return NADA;
     const principalId = escolha.principal;
 
-    const { error: erroRpc } = await admin.rpc("fn_mesclar_contatos", {
+    const { data: fusao, error: erroRpc } = await admin.rpc("fn_mesclar_contatos", {
       p_organization_id: input.organizationId,
       p_contato_principal: principalId,
       p_contatos_secundarios: escolha.secundarios,
@@ -239,7 +239,15 @@ export async function juntarPorArroba(
       organizationId: input.organizationId,
       resourceType: "contact",
       resourceId: principalId,
-      metadata: { merged_contact_ids: escolha.secundarios, motivo: "mesmo_arroba_instagram" },
+      metadata: {
+        merged_contact_ids: escolha.secundarios,
+        motivo: "mesmo_arroba_instagram",
+        // O principal saiu bloqueado porque um dos juntados pediu para parar
+        // (migration 0319): fica escrito na auditoria por que a ficha parou.
+        ...((fusao as { bloqueio_herdado?: boolean } | null)?.bloqueio_herdado
+          ? { block_inherited: true }
+          : {}),
+      },
     });
 
     return { juntou: true, principal: principalId };

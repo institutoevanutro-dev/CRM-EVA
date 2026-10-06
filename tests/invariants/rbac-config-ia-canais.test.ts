@@ -179,7 +179,7 @@ describe("0150 — o segredo cifrado some da superfície do browser", () => {
  * cima passando.
  */
 const DIVIDA_RBAC_CONHECIDA = new Set([
-  "agent_cases", "agent_inbox_items", "ai_agent_runs",
+  "agent_inbox_items", "ai_agent_runs",
   "ai_invocations", "ai_router_decisions",
   "before_send_traces", "channel_knobs", "channel_session_health", "channel_session_warmup",
   "contact_field_proposals", "contacts", "crm_lead_reactivations", "crm_lead_risk_states",
