@@ -474,9 +474,77 @@ export const internalVocabularyGate: Gate = {
  * [...] e te passo assim que tiver a confirmação", "estou confirmando com a equipe os
  * horários disponíveis" — não uma gramática geral de intenção, que erraria para o lado do
  * falso positivo em texto livre de WhatsApp.
+ *
+ * ─── #1019: o SERVIÇO também é substantivo de agenda, e "organizar" é checagem ──
+ *
+ * Medido no relato do projeto original: com as capacidades de agenda ligadas, o agente
+ * chamou `crm_list_event_types` 7× e zero vezes `crm_find_free_slots`; o texto que saiu
+ * foi "vou verificar/organizar seu atendimento". O gate estava armado e passou batido —
+ * duas faltas na lista, uma por frase:
+ *
+ *   - SUBSTANTIVO: "atendimento" não estava lá, e é a palavra que este produto usa para
+ *     o serviço que se agenda — o rótulo da capacidade é "Marcar consulta ou sessão".
+ *     `consulta` e `sess[aã]?o` entram pelo mesmo motivo (e `sess[aã]?o` aceita a forma
+ *     sem acento porque o corpo chega normalizado).
+ *   - VERBO: "organizar" não estava na lista. O modelo não prometeu verificar — prometeu
+ *     ORGANIZAR, que é a mesma promessa vazia vista de outro ângulo.
+ *
+ * ─── #1038: o substantivo do SERVIÇO colado ao verbo de checagem ──────────────
+ *
+ * Dar ao serviço a MESMA folga de 80 chars dos substantivos de agenda vetava demais —
+ * medido contra nove frases, SEIS casavam, todas com o serviço como ASSUNTO (e duas
+ * delas são a fala de toda clínica):
+ *
+ *   "Vou confirmar se o plano cobre a consulta"
+ *   "Vou verificar o valor da sessão de fisioterapia"
+ *   "Vou consultar o resultado da sua consulta com o médico"
+ *   "Estou verificando o histórico do seu atendimento anterior"
+ *   "Vou verificar o status do seu pedido e já retorno sobre o atendimento"
+ *   "Vou organizar as informações do seu atendimento"
+ *
+ * Por isso só os substantivos do SERVIÇO (`atendimento`, `consulta`, `sess[aã]?o`) exigem
+ * OBJETO DIRETO COLADO — verbo de checagem, artigo/possessivo OPCIONAL ("o", "a", "seu",
+ * "sua", "nosso"…) e o substantivo, sem nada entre eles. "vou verificar seu atendimento"
+ * casa; "vou verificar o valor da sessão" não. Os substantivos de AGENDA mantêm a folga de
+ * 80 chars: são eles que carregam as frases medidas do incidente original, em que o
+ * substantivo vem QUALIFICADO ("as opções de horário") e nunca colado.
+ *
+ * Preço declarado: uma promessa em que o serviço aparece só como assunto deixa de ser
+ * vetada. O que guarda esta fronteira é `tests/unit/gate-agenda-stall.test.ts` (as SEIS
+ * como controle NEGATIVO, ao lado dos controles que continuam vetando).
  */
 const AGENDA_STALL_PATTERN =
-  /\b(vou|estou|iremos|vamos)\b[^.!?\n]{0,10}\b(verificando|verificar|confirmando|confirmar|consultando|consultar)\b[^.!?\n]{0,80}\b(hor[aá]rios?|agenda|disponibilidade|agendamento|marca[çc][aã]o|encaixe|vagas?)\b/i;
+  /\b(vou|estou|iremos|vamos)\b[^.!?\n]{0,10}\b(verificando|verificar|confirmando|confirmar|consultando|consultar|organizando|organizar)\b(?:[^.!?\n]{0,80}\b(?:hor[aá]rios?|agenda|disponibilidade|agendamento|marca[çc][aã]o|encaixe|vagas?)\b|\s+(?:[oa]s?\s+)?(?:meu\s+|minha\s+|seu\s+|sua\s+|nosso\s+|nossa\s+|teu\s+|tua\s+)?(?:atendimento|consulta|sess[aã]?o)\b)/i;
+
+/**
+ * A janela de 10 chars entre "vou" e o verbo de checagem não alcança a construção medida
+ * "vou chamar a responsável pra ver os horários": o verbo útil é "ver", e ele vem depois
+ * da pessoa. Sem isto o gate passa e o modelo encerra o turno sem `crm_find_free_slots`.
+ * Continua exigindo substantivo de agenda. `\bver\b` não casa "verificar".
+ *
+ * "Ver" é verbo comum demais para a janela larga dos outros padrões, e este gate não tem
+ * fail-safe: o veto se repete até o modelo chamar a ferramenta ou mudar a frase. A
+ * primeira versão (80 caracteres antes do "ver", 40 depois) vetou 9 de 12 frases que não
+ * prometem consultar agenda. Três cortes, cada um nomeando a família que ele tira:
+ *
+ * - quem vê é o CLIENTE: `voce`/`vc`/`ce`/`tu` perto do "ver" ("pra você ver a agenda do
+ *   evento", "ver o que você precisa: agendamento…");
+ * - "a ver" não é verbo de checagem ("nada a ver com o seu agendamento", "te ajudar a ver
+ *   horários"), nem "ver" seguido de `:`/`;`/`,` ("vamos ver: horário de funcionamento é…");
+ * - o substantivo vem logo depois (≤25: "ver se tem vaga", "ver quais horários"), não uma
+ *   oração inteira adiante ("ver se faz sentido marcar um horário").
+ *
+ * Com este corte, num corpus escrito (não tráfego de produção): 1 de 12 e 1 de 10 frases
+ * inocentes vetadas, e 10 de 12 promessas vetadas. O que ficou de fora dos dois lados está
+ * preso em `tests/unit/gate-agenda-stall.test.ts`.
+ */
+const PRONOME_DO_CLIENTE = String.raw`\b(?:voce|vc|ce|tu)\b`;
+const AGENDA_STALL_VER_PATTERN = new RegExp(
+  String.raw`\b(vou|estou|iremos|vamos)\b(?:(?!${PRONOME_DO_CLIENTE})[^.!?\n]){0,50}` +
+    String.raw`(?<!\ba )\bver\b(?!\s*[:;,])(?:(?!${PRONOME_DO_CLIENTE})[^.!?\n]){0,25}` +
+    String.raw`\b(hor[aá]rios?|agenda|disponibilidade|agendamento|marca[çc][aã]o|encaixe|vagas?)\b`,
+  'i',
+);
 
 /**
  * Padrão irmão do `AGENDA_STALL_PATTERN`, mas para a outra metade do mesmo defeito: não
@@ -545,7 +613,8 @@ export const agendaStallGate: Gate = {
     if (ctx.agenda === undefined || !ctx.agenda.active) return { pass: true };
     if (ctx.agenda.toolCalledThisTurn) return { pass: true };
     const bodySemAcento = semAcento(ctx.body);
-    const stall = AGENDA_STALL_PATTERN.test(bodySemAcento);
+    const stall =
+      AGENDA_STALL_PATTERN.test(bodySemAcento) || AGENDA_STALL_VER_PATTERN.test(bodySemAcento);
     const confirmedSemChecar = AGENDA_CONFIRMED_PATTERN.test(bodySemAcento);
     if (!stall && !confirmedSemChecar) return { pass: true };
     return {
