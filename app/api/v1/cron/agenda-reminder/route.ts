@@ -129,11 +129,12 @@ import { ensureConversation } from "@/lib/automation/start-conversation";
 import { adiarAteAJanelaAbrir } from "@/lib/automation/janela-do-canal";
 import { espacarEnvio } from "@/lib/automation/throttle";
 import { env } from "@/lib/env";
-import { aplicarMoldeDoLembrete, montarLembrete } from "@/lib/agenda/texto-do-lembrete";
+import { aplicarMoldeDoLembrete, montarLembrete, variaveisDoMolde } from "@/lib/agenda/texto-do-lembrete";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 
 export const dynamic = "force-dynamic";
 
@@ -149,6 +150,8 @@ interface TipoDoCompromisso {
   reminder_minutes_before: number;
   reminder_extra_offsets_minutes: number[] | null;
   reminder_template_name: string | null;
+  /** Texto próprio do lembrete (0323). Nulo = a frase padrão. */
+  reminder_body: string | null;
   location_details: string | null;
 }
 
@@ -158,6 +161,16 @@ interface CompromissoAVencer {
   contact_id: string;
   title: string;
   starts_at: string;
+  /**
+   * O fuso em que o horário foi decidido (o da jornada, que segue a unidade).
+   * `not null default 'America/Sao_Paulo'` no banco, e toda marcação grava
+   * `fusoDaRegra` — é nele que a hora e o "hoje/amanhã" do lembrete saem.
+   */
+  time_zone: string;
+  /** O profissional dono, para `{{profissional}}`. */
+  owner_user_id: string | null;
+  /** A unidade, embutida pela FK composta (mesma organização por construção). */
+  calendar_units: { name: string } | Array<{ name: string }> | null;
   /** Quando a reunião foi MARCADA — a régua do degrau vencido na marcação (#2223). */
   created_at: string | null;
   /**
@@ -385,8 +398,11 @@ async function handle(req: NextRequest): Promise<Response> {
   const { data, error } = await admin
     .from("calendar_appointments")
     .select(
-      "id, organization_id, contact_id, title, starts_at, created_at, starts_at_marked_at, location_details, reminder_sent_offsets_minutes, reminder_sent_at, " +
-        "calendar_event_types!inner(name, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_template_name, location_details)",
+      "id, organization_id, contact_id, title, starts_at, time_zone, owner_user_id, created_at, starts_at_marked_at, location_details, reminder_sent_offsets_minutes, reminder_sent_at, " +
+        "calendar_event_types!inner(name, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_template_name, reminder_body, location_details), " +
+        // A unidade pela FK composta `(organization_id, unit_id)`: só casa
+        // unidade da MESMA organização, e poupa uma consulta por linha.
+        "calendar_units!calendar_appointments_unit_fk(name)",
     )
     .eq("status", "confirmed")
     .eq("calendar_event_types.reminder_enabled", true)
@@ -489,20 +505,38 @@ async function handle(req: NextRequest): Promise<Response> {
 
     const { data: organizacao } = await admin
       .from("organizations")
-      .select("timezone, locale")
+      .select("locale")
       .eq("id", org)
       .maybeSingle();
+
+    // O texto próprio do tipo vence; sem ele, o modelo legado
+    // (`reminder_template_name`) sai CRU, como sempre saiu; sem os dois, a
+    // frase padrão.
+    const molde = tipo.reminder_body?.trim() || null;
+    // O GoTrue custa uma chamada HTTP por pessoa: só quando o molde usa a
+    // variável, e pela MESMA extração da validação (sem diferenciar
+    // maiúsculas). O e-mail nunca entra no lugar do nome.
+    const profissional =
+      molde && linha.owner_user_id && variaveisDoMolde(molde).includes("profissional")
+        ? ((await nomesDosAtendentes([linha.owner_user_id])).get(linha.owner_user_id) ?? null)
+        : null;
+    const unidade = Array.isArray(linha.calendar_units) ? linha.calendar_units[0] : linha.calendar_units;
 
     let corpo = montarLembrete({
       nomeDoContato: nomeDoContato(contato),
       titulo: linha.title,
       quando: new Date(linha.starts_at),
-      timezone: organizacao?.timezone ?? "America/Sao_Paulo",
+      timezone: linha.time_zone,
       local: linha.location_details ?? tipo.location_details ?? null,
       idioma: normalizarIdioma(organizacao?.locale),
+      molde,
+      tipoNome: tipo.name,
+      unidade: unidade?.name ?? null,
+      profissional,
+      agora,
     });
 
-    if (tipo.reminder_template_name) {
+    if (!molde && tipo.reminder_template_name) {
       const { data: modelo } = await admin
         .from("message_templates")
         .select("body")

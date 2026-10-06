@@ -288,3 +288,39 @@ describe("a ferramenta de remarcar descreve o lembrete como esta rota o manda", 
     expect(descricao).toContain("lembrete da data nova");
   });
 });
+
+describe("o lembrete usa o texto do tipo, o fuso, a unidade e o profissional DO COMPROMISSO", () => {
+  const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+  const consulta = fonte.slice(fonte.indexOf(".select("), fonte.indexOf('.eq("status"'));
+
+  it("a varredura traz o fuso, o dono, a unidade embutida e o texto do tipo", () => {
+    expect(consulta).toContain("time_zone");
+    expect(consulta).toContain("owner_user_id");
+    expect(consulta).toContain("reminder_body");
+    // A unidade vem pela FK composta (organization_id, unit_id): ela só casa
+    // unidade da MESMA organização, e o embed tira a consulta por linha.
+    expect(consulta).toContain("calendar_units!calendar_appointments_unit_fk(name)");
+    expect(fonte).not.toContain('.from("calendar_units")');
+  });
+
+  it("o fuso é o do compromisso, não o da organização", () => {
+    expect(fonte).toContain("timezone: linha.time_zone,");
+    expect(fonte).not.toMatch(/timezone: organizacao\?\.timezone/);
+  });
+
+  it("o GoTrue só é consultado quando o molde usa {{profissional}}, pela mesma extração da validação", () => {
+    // `molde.includes("profissional")` cru deixaria `{{Profissional}}` passar
+    // no PATCH e sair vazio em silêncio.
+    const chamada = fonte.indexOf("nomesDosAtendentes(");
+    expect(chamada).toBeGreaterThan(0);
+    expect(fonte.slice(Math.max(0, chamada - 300), chamada)).toContain(
+      'variaveisDoMolde(molde).includes("profissional")',
+    );
+  });
+
+  it("o modelo legado continua saindo cru — o molde só vale para reminder_body", () => {
+    const legado = fonte.slice(fonte.indexOf('.from("message_templates")'));
+    expect(legado.slice(0, 600)).toContain("corpo = modelo.body");
+    expect(fonte).toContain("if (!molde && tipo.reminder_template_name)");
+  });
+});
