@@ -100,6 +100,18 @@ function makeSupabase(preexistentes: Row[] = []) {
     if (table !== 'messages') throw new Error(`fake: tabela inesperada '${table}'`);
 
     return {
+      // A leitura da mensagem CITADA (id + organização + conversa).
+      select: () => {
+        const filtros: Array<(r: Row) => boolean> = [];
+        const q = {
+          eq(col: string, val: unknown) {
+            filtros.push((r) => r[col] === val);
+            return q;
+          },
+          maybeSingle: async () => ({ data: filtrar(filtros)[0] ?? null, error: null }),
+        };
+        return q;
+      },
       insert: (row: Row) => {
         const nova: Row = { id: `msg-${messages.length + 1}`, external_id: null, ack: null, error_code: null, error_message: null, ...row };
         messages.push(nova);
@@ -358,5 +370,45 @@ describe('o eco que entra ENTRE a limpeza e o carimbo do id (DeskcommCRM #1855)'
     expect(doEnvio.status, 'a mensagem que saiu ficou presa em queued').toBe('sent');
     expect(doEnvio.external_id).toBeNull();
     expect(messages.find((m) => m.id === 'outro-1')).toBeDefined();
+  });
+});
+
+describe('citar a mensagem que a clínica digitou no celular (revisão do PR #134)', () => {
+  /**
+   * O eco do celular grava o id CURTO, e a citação de uma linha bare remonta o
+   * composto com o chat do envio de HOJE (`true_<to>_<bare>`). Quando o chat do
+   * eco foi outro — PN de um lado, @lid do outro —, o `reply_to` saía com um id
+   * que nunca existiu. Antes do PR a linha guardava o composto que o WAHA
+   * entregou, e ele ia como estava. A ingestão agora guarda esse composto em
+   * `metadata.external_id_original`, e a citação usa ele.
+   */
+  const ORIGINAL = `true_250302204792918@lid_${BARE}`;
+
+  function corpoDoEnvio(): Record<string, unknown> {
+    const chamadas = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const init = chamadas.at(-1)![1] as { body: string };
+    return JSON.parse(init.body) as Record<string, unknown>;
+  }
+
+  it('o `reply_to` sai com o id que o WAHA entregou, não com um remontado no chat de hoje', async () => {
+    wahaRespondendo('3EB0RESPOSTA');
+    const { supabase } = makeSupabase([
+      ecoDoWebhook({ id: 'cel-1', external_id: BARE, metadata: { fromMe: true, external_id_original: ORIGINAL } }),
+    ]);
+
+    await sendMessageHandler(supabase, ctx, { ...input, reply_to_message_id: 'cel-1' } as SendMessageInput);
+
+    expect(corpoDoEnvio().reply_to).toBe(ORIGINAL);
+  });
+
+  it('CONTROLE: linha bare sem o original (o envio do CRM) segue remontada com o chat do envio', async () => {
+    wahaRespondendo('3EB0RESPOSTA');
+    const { supabase } = makeSupabase([
+      ecoDoWebhook({ id: 'crm-1', external_id: BARE, sent_via: 'user', metadata: {} }),
+    ]);
+
+    await sendMessageHandler(supabase, ctx, { ...input, reply_to_message_id: 'crm-1' } as SendMessageInput);
+
+    expect(corpoDoEnvio().reply_to).toBe(COMPOSTO);
   });
 });

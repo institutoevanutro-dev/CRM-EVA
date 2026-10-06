@@ -512,10 +512,15 @@ export async function sendMessageHandler(
   // Recusar em silêncio (citar nada) seria pior que recusar alto: quem clicou
   // "responder" veria a mensagem sair sem o fio e não saberia por quê.
   let citada: { id: string; external_id: string | null } | null = null;
+  // O id que a citação manda ao CANAL. É o `external_id`, exceto quando a
+  // ingestão gravou a forma canônica e guardou ao lado a que o canal entregou
+  // (`metadata.external_id_original`): remontar a partir da canônica pode errar
+  // o chat, e aí a citação aponta para uma mensagem que não existe.
+  let idDaCitadaNoCanal: string | null = null;
   if (input.reply_to_message_id) {
     const { data: alvo } = await supabase
       .from("messages")
-      .select("id, external_id")
+      .select("id, external_id, metadata")
       .eq("id", input.reply_to_message_id)
       .eq("organization_id", ctx.organization_id)
       .eq("conversation_id", c.id)
@@ -531,6 +536,8 @@ export async function sendMessageHandler(
       );
     }
     citada = alvo as { id: string; external_id: string | null };
+    const original = (alvo as { metadata?: Record<string, unknown> | null }).metadata?.external_id_original;
+    idDaCitadaNoCanal = typeof original === "string" ? original : citada.external_id;
   }
 
   const insertRow = {
@@ -847,7 +854,7 @@ export async function sendMessageHandler(
           },
           // O id que a PLATAFORMA conhece, lido da linha citada agora — não uma
           // cópia guardada no envio, que poderia divergir da linha.
-          replyToExternalId: citada?.external_id ?? null,
+          replyToExternalId: idDaCitadaNoCanal,
         }));
       } else if (input.type === "contact") {
         const sc = outboundMetadata.shared_contact as
@@ -890,7 +897,7 @@ export async function sendMessageHandler(
           etiquetaHumana,
           kind: input.type,
           body: input.body ?? "",
-          replyToExternalId: citada?.external_id ?? null,
+          replyToExternalId: idDaCitadaNoCanal,
         }));
       }
 

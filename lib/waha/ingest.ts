@@ -877,7 +877,10 @@ async function handleOutboundFromUserPhone(
       media_mime: mediaMimeOf(p),
       sent_via: "external_device",
       sent_at: dataDoTimestamp(p.timestamp, now),
-      metadata: { raw_type: p.type, fromMe: true },
+      // O composto que o WAHA entregou fica guardado para CITAR esta mensagem:
+      // remontá-lo do bare usa o chat do envio de hoje, que pode não ser o do
+      // eco (PN de um lado, @lid do outro). Ver `idDaCitadaNoCanal` no handler.
+      metadata: { raw_type: p.type, fromMe: true, ...(bare !== p.id ? { external_id_original: p.id } : {}) },
     })
     .select("id")
     .maybeSingle();

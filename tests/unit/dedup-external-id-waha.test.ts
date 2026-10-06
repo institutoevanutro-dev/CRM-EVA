@@ -267,6 +267,9 @@ describe("eco do próprio envio — a mesma string de identidade nas duas trilha
     expect(messages[0]!.external_id).toBe(BARE);
     expect(messages[0]!.direction).toBe("outbound");
     expect(messages[0]!.sent_via).toBe("external_device");
+    // Revisão do PR #134: o composto que o WAHA entregou fica guardado — é ele
+    // que a citação manda quando o chat do eco não é o do envio de hoje.
+    expect((messages[0]!.metadata as Record<string, unknown>).external_id_original).toBe(COMPOSTO);
   });
 
   it("controle: um eco de OUTRA mensagem na mesma janela continua sendo inserido", async () => {
