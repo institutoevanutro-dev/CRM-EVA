@@ -107,7 +107,7 @@ Li os três commits indicados. Também li os três vizinhos do mesmo arquivo, pa
 | Commit do original | O que faz | Cobre aqui? |
 |---|---|---|
 | `ee0a911bc` | `loadContactIdsEmCooldown`: não reinscreve se uma inscrição **deste ponteiro** começou depois de `agora − threshold`. Contador `skipped_cooldown`. | **Parcial.** Apenas espaça o laço, de 1 min para `threshold`. Com 2 h de limiar, ainda são 12 sequências por dia para um contato que nunca responde. |
-| `2240b215e` | Ancora o cooldown no `updated_at` de inscrição **terminal**, tira `skipped_cooldown` da auditoria e cria o índice `idx_followup_enrollments_pointer_contact_cooldown` (`0411` lá). | **Parcial.** Continua sendo "uma sequência a cada `threshold` desde o fim", não "uma por episódio". O índice e a regra de auditoria **são portados**. |
+| `2240b215e` | Ancora o cooldown no `updated_at` de inscrição **terminal**, tira `skipped_cooldown` da auditoria e cria o índice `idx_followup_enrollments_pointer_contact_cooldown` (`0411` lá). | **Parcial.** Sozinho, continua sendo "uma sequência a cada `threshold` desde o fim", não "uma por episódio". **Portado inteiro** (índice, auditoria e a regra `loadContactIdsEmCooldown`, com o teste da consulta), como segunda regra ao lado do episódio — ver o parágrafo abaixo. |
 | `8e50867db` | `loadContatosComInscricaoViva`: lê, em lotes de 100, quem já está vivo em qualquer fluxo da org e pula sem tentar o INSERT. | **Sim**, para o desperdício da §2.6. **Portado quase literal.** |
 | `132c7d0d1` (vizinho) | `reentry_pause_minutes`, campo de tela, e pula conversa com pessoa no comando. | Fora (§6). O commit diz que o cooldown "no segundo caso só espaça o laço, sem encerrá-lo"; a dedup por episódio encerra. |
 | `1eec26679` (vizinho) | `max_silence_minutes`: teto de idade do silêncio, configurável na tela. | Fora (§6). Resolve o defeito 2 por **idade**; o negócio pede por **ativação** ("quem mandou depois que a cadência foi ligada"). |
@@ -116,11 +116,18 @@ Li os três commits indicados. Também li os três vizinhos do mesmo arquivo, pa
 **O que nenhum deles cobre:** dedup por episódio (defeito 1 de verdade), âncora de ativação
 (defeito 2 pelo critério do negócio), anonimizado (defeito 3) e paginação (defeito 4).
 
-**Por que a regra de cooldown do original não é portada como está:** a dedup por episódio a
-contém. No mesmo episódio, nunca reinscreve, o que é mais forte que "não antes de `threshold`".
-Em episódio novo, a resposta que abre o episódio é a mesma que cancela a inscrição anterior,
-então o cooldown e o limiar vencem juntos e o cooldown não acrescenta nada (o próprio
-`132c7d0d1` registra isso). Manter as duas regras seria código sem efeito.
+**Por que a regra de cooldown do original também é portada (revisão de 2026-10-06).** A
+primeira versão deste spec dizia que a dedup por episódio a continha, porque "a resposta que
+abre o episódio é a mesma que cancela a inscrição anterior". Isso só vale com
+`cancel_on_reply` ligado. No padrão (desligado), a resposta durante a inscrição **acorda** o
+nó e o fluxo segue até o End, às vezes dias depois (o `wait` aceita até 90 dias). Essa
+resposta é posterior ao `started_at`, então abre episódio novo; já passou do limiar; e o tick
+seguinte à conclusão reinscrevia, com a mensagem 1 encostada na última da sequência anterior.
+É o mesmo defeito que o `2240b215e` registrou ao trocar o início pela conclusão. Com as duas
+regras, o limiar conta a partir de `max(última entrada, fim da última inscrição deste
+ponteiro)`; com `cancel_on_reply` ligado o fim é o instante da resposta e nada muda.
+**Adaptado:** a consulta do original vai inteira numa chamada; aqui ela vai em lotes de 100
+contatos, como as outras do arquivo, e só para quem passou do episódio.
 
 ---
 
@@ -168,7 +175,7 @@ Como nenhuma coluna existente serve (§2.3), decidi criar uma.
 
 - O embed de contato passa a trazer `is_anonymized`, e o contato é pulado no mesmo ponto que `is_blocked` (`silence-sweep.ts:276`).
 - Fica no adaptador, como o bloqueado, porque é filtro de contato e não de ponteiro.
-- **Prova:** um teste unitário da consulta de produção, com sabotagem. O invariante também cobre, pelo espelho em SQL; a ressalva do espelho está escrita no próprio teste.
+- **Prova:** só o teste unitário da consulta de produção (`silence-sweep-consultas.test.ts`), com sabotagem. O invariante **não** conta como cobertura: o filtro mora no adaptador, e o adaptador do invariante é dublê; o caso que havia lá provava o espelho e foi retirado na revisão. O que roda em `runSilenceSweep` e protege o anonimizado é o episódio (inscrição cancelada no mesmo silêncio não volta), coberto pelo caso `cancelled` do invariante.
 
 ### 4.4 Paginação determinística das conversas
 
@@ -191,7 +198,7 @@ Como nenhuma coluna existente serve (§2.3), decidi criar uma.
 - **O índice entra na `0324`, idêntico ao do original:** nome `idx_followup_enrollments_pointer_contact_cooldown`, colunas `(organization_id, pointer_id, contact_id, updated_at)`.
   - A consulta de episódio daqui usa o prefixo `(organization_id, pointer_id, contact_id)`. Por contato e ponteiro, sobram poucas linhas para filtrar `started_at`.
   - **Por que idêntico e não com `started_at` no lugar de `updated_at`:** se o `0411` do original vier num merge futuro, o `create index if not exists` vira no-op. Com outro nome, seriam dois índices quase iguais na tabela mais quente do follow-up.
-- **Auditoria:** os contadores novos (`skipped_same_episode`, `skipped_before_activation`) **não** entram em `route.ts:127` nem em `executar.ts:137`. É a mesma decisão do item 3 do `2240b215e`.
+- **Auditoria:** os contadores novos (`skipped_same_episode`, `skipped_before_activation`, `skipped_cooldown`) **não** entram em `route.ts:127` nem em `executar.ts:137`. É a mesma decisão do item 3 do `2240b215e`.
 
 ### 4.7 O que não muda
 

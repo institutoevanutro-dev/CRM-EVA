@@ -160,6 +160,18 @@ function silenceSweepDb(): SilenceSweepDb {
       );
       return new Map(rows.map((r) => [r.contact_id, r.ultima.toISOString()]));
     },
+    // Mesma pergunta do adaptador de produção: inscrição TERMINAL deste
+    // ponteiro com updated_at >= corte (cooldown pela conclusão, 2240b215e).
+    async loadContactIdsEmCooldown(orgId, pointerId, contactIds, cutoffIso) {
+      const { rows } = await pool.query<{ contact_id: string }>(
+        `select distinct contact_id from followup_enrollments
+          where organization_id = $1 and pointer_id = $2 and contact_id = any($3::uuid[])
+            and status not in ('active','waiting_reply','paused_handoff','paused_manual')
+            and updated_at >= $4`,
+        [orgId, pointerId, contactIds, cutoffIso],
+      );
+      return new Set(rows.map((r) => r.contact_id));
+    },
     // Mesma pergunta do adaptador de produção: vivo em QUALQUER fluxo da org.
     async loadContatosComInscricaoViva(orgId, contactIds) {
       const { rows } = await pool.query<{ contact_id: string }>(
@@ -551,26 +563,12 @@ describe("runSilenceSweep — redução anti-spam (multi-conversa + never-inboun
   });
 });
 
-// ---- 3c. anonimizado fica fora -----------------------------------------
-
-describe("runSilenceSweep — contato anonimizado não entra", () => {
-  // ⚠️ Este caso prova o ESPELHO em SQL deste arquivo, não a consulta de
-  // produção: o filtro mora no adaptador, e o adaptador aqui é dublê (ver o
-  // cabeçalho de `tests/unit/sweep-nao-cobra-conversa-encerrada.test.ts`).
-  // Quem prova a produção é `lib/followup/silence-sweep-consultas.test.ts`.
-  it("anonimizado calado há 90 min, fluxo armado → 0 inscrições em 3 varreduras", async () => {
-    const org = nextOrgId();
-    await seedOrg(org);
-    const { pointerId } = await seedSilenceFlow(org, { thresholdMinutes: 30 });
-    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [pointerId] });
-    const contactId = await seedContact(org, { isAnonymized: true });
-    await seedConversation(org, contactId, 90);
-
-    const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
-    for (let i = 0; i < 3; i++) expect((await runSilenceSweep(deps)).enrolled).toBe(0);
-    expect(await countEnrollments(pointerId, contactId)).toBe(0);
-  });
-});
+// ---- 3c. anonimizado fica fora ----------------------------------------
+// Sem caso aqui de propósito: o filtro mora no adaptador, e o adaptador deste
+// arquivo é dublê — um caso aqui provaria o espelho, não a produção. A prova é
+// `lib/followup/silence-sweep-consultas.test.ts` ("anonimizado fica fora"); a
+// defesa que roda em `runSilenceSweep` (inscrição cancelada no mesmo silêncio
+// não volta) é o caso `cancelled` do bloco de episódio abaixo.
 
 // ---- 3d. sem passado: silêncio anterior à vigência do ponteiro -----------
 
@@ -617,15 +615,18 @@ async function seedInscricao(
   contactId: string,
   status: "completed" | "dead" | "cancelled",
   startedAgoMinutes: number,
+  /** Há quanto tempo TERMINOU (completed_at e updated_at, como o motor grava). Padrão: agora. */
+  endedAgoMinutes = 0,
 ): Promise<void> {
   await pool.query(
     `insert into followup_enrollments
        (organization_id, pointer_id, version_id, contact_id, current_node_id, status, next_eval_at, started_at,
-        cancel_reason, completed_at)
+        cancel_reason, completed_at, updated_at)
      values ($1, $2, $3, $4, 't1', $5, null, now() - ($6 || ' minutes')::interval,
              case when $5 = 'cancelled' then 'atendimento_humano' end,
-             case when $5 <> 'cancelled' then now() end)`,
-    [org, flow.pointerId, flow.versionId, contactId, status, String(startedAgoMinutes)],
+             case when $5 <> 'cancelled' then now() - ($7 || ' minutes')::interval end,
+             now() - ($7 || ' minutes')::interval)`,
+    [org, flow.pointerId, flow.versionId, contactId, status, String(startedAgoMinutes), String(endedAgoMinutes)],
   );
 }
 
@@ -657,14 +658,38 @@ describe("runSilenceSweep — episódio de silêncio: a sequência não recomeç
     await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [flow.pointerId] });
     const contactId = await seedContact(org);
     await seedConversation(org, contactId, 40); // respondeu há 40 min (calado > 30)
-    await seedInscricao(org, flow, contactId, "completed", 60); // a anterior começou antes da resposta
+    await seedInscricao(org, flow, contactId, "completed", 60, 45); // começou e terminou antes da resposta
 
     const s = await runSilenceSweep({ db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK });
     expect(s.enrolled).toBe(1);
     expect(await countEnrollments(flow.pointerId, contactId)).toBe(2);
   });
 
-  it("laço real fechado ponta a ponta: inscreve, termina (End), e as varreduras seguintes não recomeçam", async () => {
+  it("resposta DURANTE a inscrição, que termina agora → não encosta outra sequência; só depois do limiar contado do fim", async () => {
+    // cancel_on_reply desligado (o padrão): a resposta acorda a inscrição e o
+    // fluxo segue até o End. A resposta é posterior ao started_at (episódio
+    // novo), e sem o cooldown pela conclusão a mensagem 1 saía no tick seguinte.
+    const org = nextOrgId();
+    await seedOrg(org);
+    const flow = await seedSilenceFlow(org, { thresholdMinutes: 30 });
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [flow.pointerId] });
+    const contactId = await seedContact(org);
+    await seedConversation(org, contactId, 50); // respondeu há 50 min
+    await seedInscricao(org, flow, contactId, "completed", 60, 0); // começou há 60, terminou agora
+
+    const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
+    for (let i = 0; i < 3; i++) {
+      const s = await runSilenceSweep(deps);
+      expect(s.enrolled).toBe(0);
+      expect(s.skipped_cooldown).toBeGreaterThanOrEqual(1);
+    }
+    expect(await countEnrollments(flow.pointerId, contactId)).toBe(1);
+
+    const depoisDoLimiar = () => new Date(Date.now() + 31 * 60_000);
+    expect((await runSilenceSweep({ ...deps, clock: depoisDoLimiar })).enrolled).toBe(1);
+  });
+
+  it("conclusão gravada como o motor grava (UPDATE, não o motor rodando): as varreduras seguintes não recomeçam", async () => {
     const org = nextOrgId();
     await seedOrg(org);
     const flow = await seedSilenceFlow(org, { thresholdMinutes: 30 });

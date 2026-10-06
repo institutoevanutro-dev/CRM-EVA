@@ -35,9 +35,12 @@ import { StaleServiceBoundaryError, parseServiceBoundary, assertCurrentServiceBo
  * no tick seguinte e a sequência recomeçava para sempre. Vigência: silêncio
  * anterior a `followup_flow_pointers.active_since` não conta (ligar o fluxo
  * não cobra quem calou antes). Portados do DeskcommCRM original: o pré-filtro
- * de inscrição viva (8e50867db) e o índice da consulta (0411, 2240b215e); o
- * cooldown do original (ee0a911bc/2240b215e) não, porque a dedup por episódio
- * o contém.
+ * de inscrição viva (8e50867db), o índice da consulta (0411) e o cooldown
+ * pela CONCLUSÃO (2240b215e). O episódio não basta sozinho: com
+ * cancel_on_reply desligado (o padrão), a resposta durante a inscrição só a
+ * acorda, o fluxo segue até o End, e essa resposta — posterior ao started_at —
+ * abria episódio novo na conclusão, com a mensagem 1 encostada na última da
+ * sequência anterior. O cooldown conta o limiar a partir do FIM.
  *
  * agent_id: cada pointer é gateado por `resolveAgentForAutomaticTrigger`, que
  * devolve o agente publicado que ARMA o pointer (menor uuid se >1) — esse
@@ -112,6 +115,19 @@ export interface SilenceSweepDb {
    */
   loadContatosComInscricaoViva(orgId: string, contactIds: string[]): Promise<Set<string>>;
   /**
+   * Dentre `contactIds`, quais têm um enrollment TERMINAL (completed,
+   * cancelled ou dead) deste pointer CONCLUÍDO depois de `cutoffIso` — ainda
+   * em cooldown, não podem ser reinscritos agora. Enrollment VIVO fica de fora
+   * de propósito: esse caso é do pré-filtro e do índice único
+   * (`skipped_existing`). Porte do 2240b215e do original.
+   */
+  loadContactIdsEmCooldown(
+    orgId: string,
+    pointerId: string,
+    contactIds: string[],
+    cutoffIso: string,
+  ): Promise<Set<string>>;
+  /**
    * Por contato, o maior `started_at` de inscrição DESTE ponteiro, em qualquer
    * status, com `started_at >= desdeIso` (a menor última entrada do lote — o
    * filtro limita a leitura ao episódio corrente, mesmo em contatos com
@@ -145,6 +161,8 @@ export interface SilenceSweepSummary {
   skipped_before_activation: number;
   /** Já inscrito neste ponteiro neste silêncio — "nada aconteceu", fora da auditoria. */
   skipped_same_episode: number;
+  /** Episódio novo, mas a inscrição anterior terminou há menos que o limiar — fora da auditoria (2240b215e). */
+  skipped_cooldown: number;
 }
 
 export interface SilenceSweepDeps {
@@ -162,6 +180,7 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     skipped_existing: 0,
     skipped_before_activation: 0,
     skipped_same_episode: 0,
+    skipped_cooldown: 0,
   };
 
   const pointers = await db.loadActiveSilencePointers();
@@ -222,7 +241,7 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
       contatos.map((c) => c.contact_id),
       desde,
     );
-    const contactIds = contatos
+    const episodioNovo = contatos
       .filter((c) => {
         const inscrita = ultimaInscricao.get(c.contact_id);
         if (inscrita === undefined || Date.parse(inscrita) < Date.parse(c.ultima_entrada_gravada_em)) return true;
@@ -230,6 +249,15 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
         return false;
       })
       .map((c) => c.contact_id);
+    if (episodioNovo.length === 0) continue;
+    // Cooldown pela conclusão: o limiar conta também a partir do FIM da
+    // inscrição anterior deste ponteiro, não só da última mensagem.
+    const emCooldown = await db.loadContactIdsEmCooldown(pointer.organization_id, pointer.id, episodioNovo, cutoffIso);
+    const contactIds = episodioNovo.filter((id) => {
+      if (!emCooldown.has(id)) return true;
+      summary.skipped_cooldown++;
+      return false;
+    });
     if (contactIds.length === 0) continue;
     const nextEvalAt = clock().toISOString();
     const comInscricaoViva = await db.loadContatosComInscricaoViva(pointer.organization_id, contactIds);
@@ -441,6 +469,25 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         for (const row of (data ?? []) as Array<{ contact_id: string }>) vivos.add(row.contact_id);
       }
       return vivos;
+    },
+
+    async loadContactIdsEmCooldown(orgId, pointerId, contactIds, cutoffIso) {
+      const emCooldown = new Set<string>();
+      for (let i = 0; i < contactIds.length; i += LOTE_DE_CONTATOS) {
+        // updated_at de inscrição TERMINAL: o commit que grava completed_at
+        // (ou o cancelamento) regrava updated_at junto.
+        const { data, error } = await admin
+          .from("followup_enrollments")
+          .select("contact_id")
+          .eq("organization_id", orgId)
+          .eq("pointer_id", pointerId)
+          .in("contact_id", contactIds.slice(i, i + LOTE_DE_CONTATOS))
+          .not("status", "in", `(${STATUS_VIVOS.join(",")})`)
+          .gte("updated_at", cutoffIso);
+        if (error) throw new Error(error.message);
+        for (const row of (data ?? []) as Array<{ contact_id: string }>) emCooldown.add(row.contact_id);
+      }
+      return emCooldown;
     },
 
     async loadUltimaInscricaoNoPonteiro(orgId, pointerId, contactIds, desdeIso) {

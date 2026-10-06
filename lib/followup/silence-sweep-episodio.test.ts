@@ -20,6 +20,8 @@ function fakeDb(opts: {
   contatos: ContatoEmSilencio[];
   ultimaInscricao?: Map<string, string>;
   vivos?: Set<string>;
+  emCooldown?: Set<string>;
+  onCooldown?: (contactIds: string[], cutoffIso: string) => void;
   onUltimaInscricao?: (contactIds: string[], desdeIso: string) => void;
 }) {
   const insert = vi.fn(async () => ({ inserted: true }));
@@ -40,6 +42,10 @@ function fakeDb(opts: {
       return opts.ultimaInscricao ?? new Map();
     },
     loadContatosComInscricaoViva: async () => opts.vivos ?? new Set(),
+    loadContactIdsEmCooldown: async (_org, _pointer, contactIds, cutoffIso) => {
+      opts.onCooldown?.(contactIds, cutoffIso);
+      return opts.emCooldown ?? new Set();
+    },
     loadTriggerNodeId: async () => "t-1",
     insertEnrollment: insert,
   };
@@ -142,5 +148,39 @@ describe("episódio de silêncio: a sequência não recomeça sozinha", () => {
     expect(insert).not.toHaveBeenCalled();
     expect(summary.skipped_same_episode).toBe(1);
     expect(summary.skipped_existing).toBe(0);
+  });
+});
+
+describe("cooldown pela conclusão: a sequência não encosta na anterior", () => {
+  // Porte do 2240b215e do original. Com cancel_on_reply desligado (o padrão),
+  // a resposta durante a inscrição só a ACORDA; o fluxo segue até o End. A
+  // resposta é posterior ao started_at — episódio novo pela regra acima —, e
+  // sem o cooldown a sequência recomeçava no tick seguinte à conclusão.
+  it("(h) episódio novo, mas a inscrição anterior TERMINOU há menos que o limiar → sem insert, skipped_cooldown", async () => {
+    const chamadas: Array<{ contactIds: string[]; cutoff: string }> = [];
+    const { db, insert } = fakeDb({
+      contatos: [contato("A", "2026-10-06T12:00:00.000Z"), contato("B", "2026-10-06T12:00:00.000Z")],
+      ultimaInscricao: new Map([["A", "2026-10-06T11:00:00.000Z"]]), // começou ANTES da resposta
+      emCooldown: new Set(["A"]),
+      onCooldown: (contactIds, cutoff) => chamadas.push({ contactIds, cutoff }),
+    });
+    const summary = await runSilenceSweep({ db, ...DEPS });
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ contact_id: "B" }));
+    expect(summary.skipped_cooldown).toBe(1);
+    expect(summary.skipped_same_episode).toBe(0);
+    // o corte é o mesmo do silêncio: agora (15:00) − 60 min
+    expect(chamadas).toEqual([{ contactIds: ["A", "B"], cutoff: "2026-10-06T14:00:00.000Z" }]);
+  });
+
+  it("(i) quem já é do mesmo episódio nem chega à consulta de cooldown", async () => {
+    const chamadas: string[][] = [];
+    const { db } = fakeDb({
+      contatos: [contato("A", "2026-10-06T12:00:00.000Z")],
+      ultimaInscricao: new Map([["A", "2026-10-06T12:30:00.000Z"]]),
+      onCooldown: (contactIds) => chamadas.push(contactIds),
+    });
+    await runSilenceSweep({ db, ...DEPS });
+    expect(chamadas).toEqual([]);
   });
 });
