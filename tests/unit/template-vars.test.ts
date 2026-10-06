@@ -43,6 +43,8 @@ describe("interpolateTemplate · sem nome no follow-up (semValor: 'remover')", (
     // Nada além da variável: texto vazio — quem chama não envia.
     ["{{primeiro_nome}}", ""],
     ["{{nome}}?", ""],
+    // Sobra só pontuação em volta: também é vazio.
+    ["— {{nome}} —", ""],
   ])("%s → %s", (texto, esperado) => {
     expect(remover(texto)).toBe(esperado);
   });
