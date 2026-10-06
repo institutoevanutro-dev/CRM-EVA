@@ -66,7 +66,20 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
   if (error) return { consumer_key, status: "error", detail: error.message };
 
   const msg = data as MessageRow | null;
-  if (!msg?.media_storage_path) return { consumer_key, status: "skipped", detail: "no media" };
+  if (!msg) return { consumer_key, status: "skipped", detail: "no media" };
+
+  // Desistir DE PROPÓSITO grava `skipped` (terminal em DERIVACAO_TERMINADA).
+  // Sem a marca, a linha ficava com status null para sempre e o drain do turno,
+  // que espera a mídia da CONVERSA, segurava a resposta do texto seguinte até o
+  // teto de 120s por uma leitura que nunca ia acontecer.
+  const markSkipped = async (detail: string): Promise<HandlerResult> => {
+    await admin.from("messages")
+      .update({ media_derived_status: "skipped" })
+      .eq("id", msg.id).eq("organization_id", msg.organization_id);
+    return { consumer_key, status: "skipped", detail };
+  };
+
+  if (!msg.media_storage_path) return markSkipped("no media");
   if (msg.media_derived_status === "ready") return { consumer_key, status: "skipped", detail: "already derived" };
   if (!TIPOS_DERIVAVEIS.has(msg.type)) return { consumer_key, status: "skipped", detail: `type ${msg.type}` };
   // Vídeo é opt-in (custo: ffmpeg + N chamadas de visão): só deriva se algum agente
@@ -80,7 +93,7 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       .eq("video_frames_enabled", true)
       .limit(1)
       .maybeSingle();
-    if (!flag) return { consumer_key, status: "skipped", detail: "video_frames_disabled" };
+    if (!flag) return markSkipped("video_frames_disabled");
   }
 
   /** O que o operador chama de "isto" — o aviso não pode falar em `msg.type`. */
@@ -90,9 +103,28 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       string
     >)[msg.type] ?? "mídia";
 
+  // Grava o MARCADOR junto do `failed`, e é o que separa "o agente não sabe que
+  // existe arquivo" de "o agente sabe que não conseguiu ler".
+  //
+  // Sem ele, `get-lead-context` cai no marcador de tipo — `[documento]` — que
+  // diz que veio um arquivo e não diz que a leitura falhou. Medido numa VPS em
+  // produção (17/09): um PDF de catálogo, sem camada de texto, falhou no
+  // extrator; o agente recebeu `[documento]` e respondeu ao cliente que o
+  // material "parece ser de distribuidora/promocional" — uma afirmação sobre um
+  // conteúdo que ele nunca leu. As RECUSAS já entregavam este marcador há
+  // tempos (`MARCADOR_NAO_LIDA`, seis caminhos); só a falha permanente não
+  // entregava, e é justamente a que erra por invenção em vez de silêncio.
+  //
+  // O turno que já rodou não volta atrás — o dreno tem teto de espera. O que
+  // isto conserta é todo turno seguinte da conversa, que lê o histórico.
   const markFailed = async () => {
-    await admin.from("messages").update({ media_derived_status: "failed" })
-      .eq("id", msg.id).eq("organization_id", msg.organization_id);
+    await admin.from("messages")
+      .update({ media_derived_text: MARCADOR_NAO_LIDA, media_derived_status: "failed" })
+      .eq("id", msg.id).eq("organization_id", msg.organization_id)
+      // A mesma guarda LGPD do caminho `ready`: a anonimização que acontecer no
+      // meio da leitura zera o texto derivado, e gravar o marcador aqui
+      // devolveria conteúdo à linha que a cascata redigiu.
+      .filter("body", "isdistinct", MENSAGEM_REDIGIDA);
   };
 
   try {
@@ -274,10 +306,11 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       // parou; este diz o que fazer (a orientação da política aponta
       // Provedores de IA).
       //
-      // ⚠️ Aqui o agente NÃO recebeu o marcador de "não consegui interpretar":
-      // a exceção não grava `media_derived_text`, e o turno já seguiu sem o
-      // texto no teto de espera do dreno do agent-engine. Por isso a
-      // consequência é outra que a das recusas, e vai explícita.
+      // O marcador de "não consegui interpretar" agora É gravado por
+      // `markFailed` — a consequência é a mesma das recusas dali em diante. O
+      // que continua valendo é o turno que já correu: ele seguiu sem o texto,
+      // dentro do teto de espera do dreno do agent-engine, e por isso a frase
+      // fala do PRÓXIMO turno, não do que passou.
       //
       // O `detail` entra porque é a frase do PROVEDOR, e é ela que distingue
       // "chave errada" de "modelo que sua conta não assina" — duas ações
@@ -287,7 +320,7 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
         msg.organization_id,
         rotuloDoTipo,
         "a leitura deu erro em todas as tentativas, ao abrir o arquivo ou ao chamar o provedor de IA",
-        "O conteúdo do arquivo não chegou ao agente.",
+        "O conteúdo do arquivo não chegou ao agente. Da próxima mensagem em diante ele sabe que houve um arquivo que não deu para ler, e responde avisando em vez de supor o que estava nele.",
         detail.slice(0, 200),
       );
     }
