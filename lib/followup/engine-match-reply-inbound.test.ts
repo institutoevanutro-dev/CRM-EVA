@@ -5,9 +5,8 @@
  * `node_advanced` com a mesma chave e era descartado. O `inbound_woke` ainda
  * regrava `updated_at`, então o piso do inbound escondia o "1".
  *
- * Porte parcial (f90f236aa): ficam só os dois casos daquele commit. O caso
- * "avança para o ramo do '1'…" do original depende de 36827ea36 (piso do
- * inbound pelo wait_started), que não foi portado para este fork.
+ * Porte de f90f236aa + 36827ea36: os três casos do original, com o mesmo nome
+ * de arquivo para facilitar merges futuros.
  */
 import { describe, expect, it, vi } from "vitest";
 
@@ -18,6 +17,7 @@ import type { FlowGraph } from "./graph-schema";
 const NOW = new Date("2026-09-20T17:03:00.000Z");
 const PARK = "2026-09-20T17:02:31.053Z";
 const WAKE_AT = "2026-09-20T17:02:48.380Z";
+const REPLY_AT = "2026-09-20T17:02:45.000Z";
 
 const GRAFO = {
   nodes: [
@@ -65,7 +65,55 @@ function enrollment(): EnrollmentRow {
   };
 }
 
+const EVENTOS: EnrollmentEventRef[] = [
+  {
+    node_id: "match_reply-1",
+    idempotency_key: "match_reply-1:3",
+    event_type: "wait_started",
+    payload: { wake_status: "waiting_reply", next_eval_at: "2026-09-20T19:02:31.053Z" },
+  },
+  {
+    node_id: "match_reply-1",
+    idempotency_key: "match_reply-1:3:wake",
+    event_type: "inbound_woke",
+    payload: {},
+  },
+];
+
 describe("match_reply — resposta do lead após wait_started na mesma chave", () => {
+  it("avança para o ramo do '1' mesmo com steps_taken desalinhado e updated_at depois da mensagem", async () => {
+    const passos: Array<Record<string, unknown>> = [];
+    const chaves = new Set(EVENTOS.map((e) => e.idempotency_key).filter((k): k is string => !!k));
+    const inboundPorPiso: string[] = [];
+
+    const db = {
+      loadFlowGraph: vi.fn(async () => GRAFO),
+      loadLeadFacts: vi.fn(async () => ({ lead_stage: null, tags: [] })),
+      loadEnrollmentEvents: vi.fn(async () => EVENTOS),
+      loadLastInboundBody: vi.fn(async (_org: string, _c: string, _conv: string | null, naoAntesDe?: string | null) => {
+        inboundPorPiso.push(naoAntesDe ?? "");
+        if (!naoAntesDe || REPLY_AT >= naoAntesDe) return "1";
+        return null;
+      }),
+      loadFlowPointerName: vi.fn(async () => null),
+      insertEnrollmentEvent: vi.fn(async (event: { idempotency_key: string }) => {
+        if (chaves.has(event.idempotency_key)) return { inserted: false };
+        chaves.add(event.idempotency_key);
+        return { inserted: true };
+      }),
+      updateEnrollment: vi.fn(async (_id: string, _org: string, patch: Record<string, unknown>) => {
+        passos.push(patch);
+      }),
+    } as unknown as AdminClient;
+
+    const deps: TickDeps = { db, clock: () => NOW, enqueueJob: async () => {} };
+    await avancarEnrollmentAtivo(deps, enrollment());
+
+    expect(inboundPorPiso[0]).toBe(PARK);
+    expect(passos.some((p) => p.current_node_id === "action-7")).toBe(true);
+    expect(passos.some((p) => p.current_node_id === "action-6")).toBe(false);
+  });
+
   it("espera recém-estacionada + inbound_woke sem texto desta pergunta não dispara ALWAYS nem no_reply", async () => {
     // Produção: o "." não casou 1/2/3, o ALWAYS reenviou o menu, o kick
     // acordou a espera nova com a mesma mensagem, e occupancy+ALWAYS

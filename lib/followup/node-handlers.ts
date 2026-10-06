@@ -287,6 +287,33 @@ export function resolveWaitPhase(events: EnrollmentEventRef[], nodeId: string, s
   return events.some((e) => e.node_id === nodeId && e.idempotency_key === priorKey);
 }
 
+/**
+ * Piso do inbound que casa neste `match_reply`: o instante em que a espera
+ * começou, não o `updated_at` da inscrição.
+ *
+ * O `inbound_woke` (e qualquer tick depois) regrava `updated_at`. Usar essa
+ * coluna como piso esconde a mensagem que ACORDOU a espera — ela chegou
+ * segundos antes do wake. `wait_started.payload.next_eval_at` é park+graça,
+ * então park = next_eval_at − grace_timeout_ms.
+ */
+export function pisoDoInboundDaEspera(
+  node: Extract<FlowNode, { type: "match_reply" }>,
+  events: EnrollmentEventRef[],
+  fallback: string,
+): string {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.node_id !== node.id) continue;
+    if (e.event_type !== "wait_started") continue;
+    const next = e.payload?.next_eval_at;
+    if (typeof next !== "string") break;
+    const start = Date.parse(next) - node.config.grace_timeout_ms;
+    if (Number.isFinite(start)) return new Date(start).toISOString();
+    break;
+  }
+  return fallback;
+}
+
 function evaluateCheck(
   check: { field: "lead_stage" | "tag" | "steps_taken" | "last_outcome"; op: "eq" | "neq" | "gte" | "lte" | "contains"; value: string | number },
   lead: LeadFacts,

@@ -4,7 +4,8 @@
  * ainda não tem o status `dormente`, então só vêm os casos que medem a guarda
  * do f90f236aa: uma mensagem ANTERIOR ao estacionamento (`updated_at`) não
  * acorda a espera nova — senão o kick que agora acorda antes de aplicar o
- * texto despejaria o fluxo inteiro de uma vez.
+ * texto despejaria o fluxo inteiro de uma vez. E a asserção de 36827ea36: o
+ * wake não regrava `updated_at`.
  */
 
 import { describe, expect, it } from "vitest";
@@ -108,5 +109,9 @@ describe("reatividade — a mensagem anterior ao estacionamento", () => {
 
     expect(s.reacted).toBe(1);
     expect(espiao.eventos.map((e) => e.event_type)).toEqual(["inbound_woke"]);
+    // 36827ea36: o wake não regrava `updated_at` — senão a mensagem que acordou
+    // a espera parece anterior à pergunta e o texto dela é descartado.
+    expect(espiao.patches[0]?.patch.updated_at).toBeUndefined();
+    expect(espiao.patches[0]?.patch.next_eval_at).toBeDefined();
   });
 });

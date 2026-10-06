@@ -260,7 +260,7 @@ async function reactToInbound(
 
 async function acordarPorInbound(
   db: ReactivityAdminClient,
-  clock: () => Date,
+  _clock: () => Date,
   row: EventRow,
   e: LiveEnrollmentRef,
 ): Promise<boolean> {
@@ -280,7 +280,10 @@ async function acordarPorInbound(
     wakeKey,
     "inbound_woke",
     {},
-    { next_eval_at: agora, updated_at: clock().toISOString() },
+    // Não toca `updated_at`: o piso do inbound da pergunta é o instante em que
+    // o nó estacionou. Regravar agora faria a mensagem que acordou a espera
+    // parecer anterior à pergunta (`enviadaEm >= updated_at` falha).
+    { next_eval_at: agora },
   );
 }
 

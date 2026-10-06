@@ -27,6 +27,7 @@ import {
   ehConfirmacao,
   latestRepeatIndex,
   occupancyEventCount,
+  pisoDoInboundDaEspera,
   actionTurnCompleted,
   processNode,
   repeatTakenFromEvents,
@@ -393,9 +394,17 @@ async function applyResult(
     const frescos = await db.loadEnrollmentEvents(enrollment.id);
     const prior = frescos.find((e) => e.idempotency_key === idemKey);
     if (prior?.event_type && prior.event_type !== wantedType) {
-      if (result.kind === "advance" && (prior.event_type === "action_sent" || prior.event_type === "action_pulado")) {
-        // action_sent gravado; o update do completeTurn pode ter se perdido —
-        // aplica só o avanço sem inventar outro evento.
+      // Evento do passo gravado; o update da inscrição pode ter se perdido.
+      // `wait_started` é o irmão do `action_sent`: o insert ocupa `${nó}:${passo}`
+      // e o tick seguinte (resposta do lead) tenta `node_advanced` com a MESMA
+      // chave. Sem este resgate o match_reply fica preso para sempre — a
+      // mensagem de resposta nunca é enfileirada.
+      if (
+        result.kind === "advance" &&
+        (prior.event_type === "action_sent" ||
+          prior.event_type === "action_pulado" ||
+          prior.event_type === "wait_started")
+      ) {
         await db.updateEnrollment(enrollment.id, enrollment.organization_id, {
           current_node_id: result.next_node_id,
           status: "active",
@@ -655,7 +664,9 @@ async function processEnrollment(
         enrollment.organization_id,
         enrollment.contact_id,
         null,
-        enrollment.updated_at,
+        node.type === "match_reply"
+          ? pisoDoInboundDaEspera(node, events, enrollment.updated_at)
+          : enrollment.updated_at,
       )) ?? "";
     if (node.type === "match_reply" && lastInboundBody.trim()) {
       wokeEarly = true;
