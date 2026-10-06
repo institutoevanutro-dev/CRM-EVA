@@ -234,6 +234,34 @@ function semear() {
         created_at: ANTES,
         closed_at: NO_PERIODO,
       },
+      // Cards da MESMA org no OUTRO funil: só o filtro de funil os tira de P.
+      // Valor alto de propósito — se vazar, a receita de P muda.
+      {
+        id: "L-P2",
+        organization_id: ORG,
+        pipeline_id: P2,
+        stage_id: "s-p2",
+        status: "won",
+        contact_id: "C1",
+        custom_fields: {},
+        value_cents: 777700,
+        currency: "BRL",
+        created_at: NO_PERIODO,
+        closed_at: NO_PERIODO,
+      },
+      {
+        id: "L-P2b",
+        organization_id: ORG,
+        pipeline_id: P2,
+        stage_id: "s-p2",
+        status: "open",
+        contact_id: "C3",
+        custom_fields: {},
+        value_cents: null,
+        currency: "BRL",
+        created_at: NO_PERIODO,
+        closed_at: null,
+      },
       // O vizinho com o MESMO funil no payload: só o filtro de org o tira.
       {
         id: "L-VIZ",
@@ -284,6 +312,24 @@ function semear() {
         starts_at: NO_PERIODO,
         ends_at: NO_PERIODO,
       },
+      // Vinculado SÓ a card do funil P2: não é agenda de P.
+      {
+        id: "A3",
+        organization_id: ORG,
+        contact_id: "C1",
+        status: "completed",
+        starts_at: NO_PERIODO,
+        ends_at: NO_PERIODO,
+      },
+      // Sem vínculo, e o contato só tem card em P2: não é agenda de P.
+      {
+        id: "A4",
+        organization_id: ORG,
+        contact_id: "C3",
+        status: "confirmed",
+        starts_at: NO_PERIODO,
+        ends_at: NO_PERIODO,
+      },
       {
         id: "A-VIZ",
         organization_id: OUTRA,
@@ -302,6 +348,14 @@ function semear() {
         target_id: "A1",
         created_at: NO_PERIODO,
       },
+      {
+        id: "k-p2",
+        organization_id: ORG,
+        lead_id: "L-P2",
+        target_kind: "appointment",
+        target_id: "A3",
+        created_at: NO_PERIODO,
+      },
     ],
     contacts: [
       {
@@ -314,6 +368,14 @@ function semear() {
       },
       {
         id: "C2",
+        organization_id: ORG,
+        custom_fields: {},
+        tags: [],
+        is_anonymized: false,
+        source_metadata: {},
+      },
+      {
+        id: "C3",
         organization_id: ORG,
         custom_fields: {},
         tags: [],
@@ -429,6 +491,79 @@ describe("escopo de organização", () => {
     expect(corpo.data.numeros.receita).toEqual([{ moeda: "BRL", cents: "50000" }]);
     expect(corpo.data.numeros.agendados).toBe(2);
     expect(m.investimento).toHaveBeenCalledWith(expect.anything(), ORG, "2026-09-01", "2026-09-30");
+  });
+});
+
+describe("escopo de funil", () => {
+  it("o outro funil da MESMA org não entra em P, e aparece quando é o escolhido", async () => {
+    const p = (await chamar()).corpo.data;
+    for (const c of consultas.filter((x) => x.tabela === "crm_leads")) {
+      expect(c.filtros).toContainEqual(["pipeline_id", "eq", P]);
+    }
+    // Pelo EFEITO: sem o filtro, L-P2 (R$ 7.777) e L-P2b entrariam, e A3/A4 também.
+    expect(p.numeros).toMatchObject({
+      leads: 2,
+      ganhos: 1,
+      receita: [{ moeda: "BRL", cents: "50000" }],
+      ganhos_de_anuncio: 1,
+      agendados: 2,
+    });
+
+    const p2 = (await chamar(`de=2026-09-01&ate=2026-09-30&pipeline_id=${P2}`)).corpo.data;
+    expect(p2.funil).toEqual({ id: P2, nome: "Acompanhamento" });
+    expect(p2.numeros).toMatchObject({
+      leads: 2,
+      interagiram: null,
+      ganhos: 1,
+      receita: [{ moeda: "BRL", cents: "777700" }],
+      agendados: 2,
+    });
+  });
+
+  it("funil sem etapa de interação: o recorte mostra null, nunca 0", async () => {
+    const { corpo } = await chamar(
+      `de=2026-09-01&ate=2026-09-30&pipeline_id=${P2}&dimensao=campo_contato&campo=origem`,
+    );
+    const linhas = corpo.data.dimensao.linhas as Array<{ interagiram: number | null }>;
+    expect(linhas.length).toBeGreaterThan(0);
+    for (const l of linhas) expect(l.interagiram).toBeNull();
+  });
+});
+
+describe("contato anonimizado", () => {
+  it("não conta como ganho de anúncio, nem em custo, nem em ROAS", async () => {
+    banco.contacts!.push({
+      id: "C4",
+      organization_id: ORG,
+      custom_fields: {},
+      tags: [],
+      is_anonymized: true,
+      // Ainda aponta para o anúncio da campanha: só a anonimização o tira.
+      source_metadata: { ad_platform: "meta_ads", ad_raw: { source_id: "900001" } },
+    });
+    banco.crm_leads!.push({
+      id: "L4",
+      organization_id: ORG,
+      pipeline_id: P,
+      stage_id: "s-ganho",
+      status: "won",
+      contact_id: "C4",
+      custom_fields: {},
+      value_cents: 30000,
+      currency: "BRL",
+      created_at: ANTES,
+      closed_at: NO_PERIODO,
+    });
+    const { corpo } = await chamar();
+    expect(corpo.data.numeros).toMatchObject({
+      ganhos: 2,
+      ganhos_de_anuncio: 1,
+      custo_por_venda_cents: 10000,
+      roas: 5,
+    });
+    const linhas = (await chamar("de=2026-09-01&ate=2026-09-30&dimensao=campanha")).corpo.data
+      .dimensao.linhas as Array<{ chave: string; ganhos: number }>;
+    expect(linhas.find((l) => l.chave === "__sem_valor")?.ganhos).toBe(1);
   });
 });
 
