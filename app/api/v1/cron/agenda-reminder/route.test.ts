@@ -274,3 +274,17 @@ describe("a rota repassa o instante do último carimbo (#2243)", () => {
     expect(fonte).not.toMatch(/\.is\(\s*["']reminder_sent_at["']/);
   });
 });
+
+describe("a ferramenta de remarcar descreve o lembrete como esta rota o manda", () => {
+  // A descrição é o que a IA repete ao cliente. Ela prometia "o lembrete é
+  // refeito sozinho" quando nada refazia; depois da régua da remarcação a data
+  // nova ganha o lembrete dela, MAS não o degrau que já venceu na remarcação.
+  const ferramenta = readFileSync(join(process.cwd(), "lib/mcp/tools/agendamento.ts"), "utf8");
+  const descricao = ferramenta.slice(ferramenta.indexOf('name: "crm_reschedule_appointment"'), ferramenta.indexOf("inputSchema: remarcarShape"));
+
+  it("não promete mais do que o cron cumpre", () => {
+    expect(descricao.length).toBeGreaterThan(0);
+    expect(descricao).not.toContain("o lembrete é refeito sozinho");
+    expect(descricao).toContain("lembrete da data nova");
+  });
+});

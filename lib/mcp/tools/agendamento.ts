@@ -823,7 +823,8 @@ export const crmRescheduleAppointment: McpToolDefinition<typeof remarcarShape> =
     "Move um compromisso já marcado para outro horário, mantendo o mesmo cliente e o mesmo tipo. " +
     "Use quando o cliente pediu para mudar o dia ou a hora. " +
     "REMARCAR NÃO É CANCELAR E MARCAR DE NOVO: é o MESMO compromisso mudando de hora, o histórico " +
-    "continua um só e o lembrete é refeito sozinho. Se você cancelar e marcar, o cliente recebe " +
+    "continua um só e o lembrete da data nova sai sozinho na hora configurada (se a data nova já " +
+    "estiver dentro da antecedência do aviso, ele não sai). Se você cancelar e marcar, o cliente recebe " +
     "dois avisos contraditórios e a linha do tempo dele passa a contar que ele desistiu e voltou — " +
     "o que não aconteceu. " +
     "Confirme o horário novo com `crm_find_free_slots` antes: horário indisponível é recusado.",
