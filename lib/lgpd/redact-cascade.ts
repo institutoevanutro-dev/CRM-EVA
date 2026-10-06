@@ -93,10 +93,11 @@ export async function cascadeRedactContact(args: CascadeArgs): Promise<CascadeRe
   // bucket: a pessoa "anonimizada" continuaria com o rosto guardado. Numa
   // auditoria LGPD isso é o mesmo que não ter anonimizado.
   //
-  // Fica no app, e não dentro da função SQL, de propósito: aquela função tem
-  // ~200 linhas e um `create or replace` exigiria copiá-la inteira só para
-  // acrescentar uma coluna — risco de divergir do original sem necessidade.
-  // Aqui o efeito é o mesmo e a mudança é auditável.
+  // Desde a migration 0317 a função SQL TAMBÉM enfileira a foto e apaga o
+  // ponteiro (passo 0b) — é o que cobre o botão da ficha, que não passa por
+  // este arquivo. Este bloco continua aqui porque falha FECHADO e com o
+  // `request_id` do pedido: sem a linha na fila, a cascata nem começa. Quando
+  // ele roda, o passo 0b encontra o ponteiro já nulo e não faz nada.
   //
   // A fila é idempotente (`unique (bucket, object_path)`), então re-executar
   // uma anonimização não duplica nada.

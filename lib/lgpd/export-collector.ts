@@ -8,6 +8,13 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
+import {
+  camposDoTitular,
+  definicoesDoFunil,
+  semCpfNoJson,
+  semCpfNoTexto,
+  type CampoLegivel,
+} from "@/lib/lgpd/campos-personalizados";
 import type { Json } from "@/lib/database.types";
 
 // ---------------------------------------------------------------------------
@@ -32,6 +39,20 @@ export interface ContactSnapshot {
   last_activity_at: string | null;
   /** Primeiro atendimento marcado. Sobrevive à anonimização: é registro de operação. */
   first_service_at: string | null;
+  /**
+   * Campos personalizados — onde este fork guarda o endereço
+   * (`custom_fields.endereco`) e os campos do funil preenchidos na ficha. A
+   * anonimização já os zera; o relatório os lia e jogava fora.
+   *
+   * ⚠️ SEM CPF: um CPF digitado num campo livre fica fora da coluna cifrada, e
+   * este objeto vai inteiro para o arquivo de dados. `camposDoTitular` o tira
+   * (pela chave e pelo valor) antes de ele chegar aqui.
+   */
+  custom_fields: Record<string, unknown>;
+  /** Para o PDF: nome do campo + valor (ver `campos-personalizados.ts`). */
+  campos_legiveis: CampoLegivel[];
+  /** Havia CPF em campo personalizado. O relatório diz que existe; nunca mostra o número. */
+  cpf_em_campo_personalizado: boolean;
 }
 
 export interface ConsentRow {
@@ -78,6 +99,14 @@ export interface LeadRow {
   value_cents: number | null;
   currency: string | null;
   created_at: string;
+  /**
+   * Descrição e campos do NEGÓCIO — o passo 5 da cascata os apaga, e o que se
+   * apaga a pedido do titular é o que se entrega a pedido dele. Sem CPF, como
+   * os campos do contato; o rótulo vem do funil DO negócio.
+   */
+  description: string | null;
+  custom_fields: Record<string, unknown>;
+  campos_legiveis: CampoLegivel[];
 }
 
 export interface OrderRow {
@@ -96,6 +125,26 @@ export interface ActivityRow {
   type: string;
   source_module: string | null;
   performed_at: string;
+  /** O conteúdo que o passo 4 da cascata apaga (sem CPF). Só no arquivo de dados. */
+  payload: unknown;
+  metadata: unknown;
+  reason: string | null;
+}
+
+/**
+ * Um cadastro antigo UNIDO ao do titular (lápide de `fn_mesclar_contatos`). A
+ * fusão deixa nele o nome, o e-mail e o telefone de quando era um cadastro
+ * separado, e a anonimização os apaga (passo 0c da 0317).
+ */
+export interface MergedContactRow {
+  id: string;
+  name: string | null;
+  display_name: string | null;
+  email: string | null;
+  phone_number: string | null;
+  birthdate: string | null;
+  created_at: string;
+  merged_at: string | null;
 }
 
 /**
@@ -214,6 +263,26 @@ export interface ChannelIdentityRow {
   created_at: string;
 }
 
+/**
+ * Um comentário que o titular fez num post da organização no Instagram
+ * (migration 0280).
+ *
+ * Entra porque a anonimização o REDIGE (passo 7c-1 da cascata, migration
+ * 0317): texto, @, sugestão de resposta e motivo. O que se apaga a pedido do
+ * titular é o que se entrega a pedido dele. O IGSID não se repete aqui — já
+ * está em `channel_identities`.
+ */
+export interface InstagramCommentRow {
+  id: string;
+  media_id: string;
+  texto: string | null;
+  autor_handle: string | null;
+  comentado_em: string;
+  situacao: string;
+  sugestao_de_resposta: string | null;
+  motivo_do_toque: string | null;
+}
+
 export interface AuditRow {
   id: string;
   action: string;
@@ -235,6 +304,67 @@ export interface MeetingDeliveryRow {
 export interface AppointmentNoticeRow {
   id: string;
   ref_id: string | null;
+  title: string;
+  body: string | null;
+  status: string;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+/**
+ * Um caso aberto pela IA sobre o titular — o que ela entendeu quando travou.
+ *
+ * O vínculo é pela CONVERSA: `agent_cases` não tem FK para `contacts`. O
+ * `context_snapshot` fica fora: é o recorte da conversa que foi ao modelo, e
+ * as mensagens dele já saem no bloco próprio.
+ */
+export interface CaseRow {
+  id: string;
+  conversation_id: string;
+  status: string;
+  title: string;
+  summary: string;
+  blocker: string;
+  source: string;
+  opened_at: string;
+  closed_at: string | null;
+  created_at: string;
+}
+
+/** Uma linha do tempo do caso: quem tocou, quando, e o que escreveu. */
+export interface CaseEventRow {
+  id: string;
+  case_id: string;
+  kind: string;
+  actor_kind: string;
+  human_action: string | null;
+  body: string | null;
+  metadata: unknown;
+  created_at: string;
+}
+
+/** Uma demanda do titular — o pedido, o próximo passo e o desfecho. */
+export interface DemandaRow {
+  id: string;
+  agent_case_id: string | null;
+  origem: string;
+  assunto: string | null;
+  estado: string;
+  dono_kind: string;
+  proximo_passo: string | null;
+  desfecho: string | null;
+  aberta_em: string;
+  fechada_em: string | null;
+}
+
+/**
+ * Um aviso da Central que aponta para o titular, uma conversa dele ou um caso
+ * dele. O título e o corpo podem citar o telefone, o resumo da conversa ou o
+ * título do caso — é o que o passo 7g da cascata apaga.
+ */
+export interface CentralNoticeRow {
+  id: string;
+  kind: string;
   title: string;
   body: string | null;
   status: string;
@@ -308,6 +438,8 @@ export interface ExportPayload {
   generated_at: string;
   no_local_footprint: boolean;
   contact: ContactSnapshot | null;
+  /** Cadastros unidos ao do titular. Opcional como `reply_drafts`. */
+  contatos_unidos?: MergedContactRow[];
   consents: ConsentRow[];
   conversations: ConversationRow[];
   messages_count_total: number;
@@ -334,6 +466,40 @@ export interface ExportPayload {
    */
   voice_calls: VoiceCallRow[];
   channel_identities: ChannelIdentityRow[];
+  /**
+   * O que a IA propôs para o cadastro do titular (`contact_field_proposals`):
+   * nome, e-mail ou telefone que ela ouviu na conversa, com o trecho. A
+   * anonimização APAGA estas linhas — e o que se apaga a pedido do titular é o
+   * que se entrega a pedido dele. Opcional como `reply_drafts`.
+   */
+  contact_field_proposals?: Array<{
+    id: string;
+    campo: string;
+    valor_proposto: string;
+    valor_anterior: string | null;
+    conversation_id: string | null;
+    trecho: string | null;
+    status: string;
+    proposed_at: string;
+    decided_at: string | null;
+    motivo_recusa: string | null;
+  }>;
+  /** Comentários do titular em posts da organização. Opcional como `reply_drafts`. */
+  instagram_comments?: InstagramCommentRow[];
+  /**
+   * Casos, linha do tempo do caso, demandas e avisos da Central (migration 0317).
+   *
+   * Entram porque a 0317 os pôs na cascata de anonimização, e o que se apaga a
+   * pedido do titular é o que se entrega a pedido dele. Sem estes blocos o
+   * relatório mostrava a conversa e não mencionava que o atendimento tinha
+   * parado, o que a IA entendeu do problema, nem o que a equipe anotou — a
+   * parte em que uma pessoa identificável é DESCRITA por máquina. Opcionais
+   * como `reply_drafts`.
+   */
+  cases?: CaseRow[];
+  case_events?: CaseEventRow[];
+  demandas?: DemandaRow[];
+  avisos_da_central?: CentralNoticeRow[];
   /**
    * Campanhas que falaram com o titular (migration 0343).
    *
@@ -501,6 +667,15 @@ export function toolCallsParaOTitular(toolCalls: unknown): unknown[] {
   });
 }
 
+/**
+ * Texto livre sem CPF — o mesmo filtro do `trecho` das propostas. Vale para
+ * todo bloco escrito sobre a pessoa (caso, demanda, aviso, comentário,
+ * atividade): "paciente informou CPF …" cabe em qualquer um deles.
+ */
+function textoSemCpf<T extends string | null | undefined>(texto: T): T {
+  return typeof texto === "string" ? (semCpfNoTexto(texto).texto as T) : texto;
+}
+
 export async function collectExportData(args: CollectArgs): Promise<ExportPayload> {
   const admin = createAdminClient();
   const { organizationId, requestId, externalCustomerId } = args;
@@ -551,6 +726,28 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       });
     }
     if (data) {
+      // O rótulo de cada campo vem das definições do funil padrão — as mesmas
+      // que a ficha do contato usa (`camposDoFunil`). Sem funil, a chave vira
+      // texto legível.
+      const { data: funil, error: funilErr } = await admin
+        .from("crm_pipelines")
+        .select("settings")
+        .eq("organization_id", organizationId)
+        .eq("is_default", true)
+        .eq("is_archived", false)
+        .maybeSingle();
+      if (funilErr) {
+        logger.warn("[lgpd-export-worker] default pipeline load failed", {
+          request_id: requestId,
+          error: funilErr.message,
+        });
+      }
+      const personalizados = camposDoTitular(
+        data.custom_fields && typeof data.custom_fields === "object" && !Array.isArray(data.custom_fields)
+          ? (data.custom_fields as Record<string, unknown>)
+          : {},
+        definicoesDoFunil((funil as { settings?: unknown } | null)?.settings),
+      );
       contact = {
         id: data.id,
         name: data.name ?? null,
@@ -568,9 +765,35 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         created_at: data.created_at,
         last_activity_at: data.last_activity_at ?? null,
         first_service_at: data.first_service_at ?? null,
+        custom_fields: personalizados.semCpf,
+        campos_legiveis: personalizados.campos,
+        cpf_em_campo_personalizado: personalizados.cpfInformado,
       };
     }
   }
+
+  // Cadastros UNIDOS ao do titular (lápides de fusão). Além do que a lápide
+  // guarda, a conversa que colidiu com a do principal na fusão FICA nela — por
+  // isso as conversas abaixo são lidas dos dois.
+  let contatos_unidos: MergedContactRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("contacts")
+      .select("id, name, display_name, email, phone_number, birthdate, created_at, merged_at")
+      .eq("organization_id", organizationId)
+      .eq("is_merged_into", contactId)
+      .order("created_at", { ascending: true })
+      .limit(100);
+    if (error) {
+      logger.warn("[lgpd-export-worker] merged contacts load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      contatos_unidos = data as MergedContactRow[];
+    }
+  }
+  const cadastrosDoTitular = contactId ? [contactId, ...contatos_unidos.map((c) => c.id)] : [];
 
   // No `consents` table in current schema; legal basis is in contacts.consent JSONB.
   const consents: ConsentRow[] = [];
@@ -601,7 +824,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       .from("conversations")
       .select("id, status, channel, last_inbound_at, last_message_at, is_group, created_at")
       .eq("organization_id", organizationId)
-      .eq("contact_id", contactId)
+      .in("contact_id", cadastrosDoTitular)
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(500);
     if (error) {
@@ -670,10 +893,11 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
 
   // Leads (direct contact_id FK on crm_leads).
   let leads: LeadRow[] = [];
+  let cpfEmCampoDeNegocio = false;
   if (contactId) {
     const { data, error } = await admin
       .from("crm_leads")
-      .select("id, pipeline_id, stage_id, title, status, value_cents, currency, created_at")
+      .select("id, pipeline_id, stage_id, title, status, value_cents, currency, created_at, description, custom_fields")
       .eq("organization_id", organizationId)
       .eq("contact_id", contactId)
       .order("created_at", { ascending: false })
@@ -684,7 +908,42 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         error: error.message,
       });
     } else if (data) {
-      leads = data;
+      // O rótulo de cada campo vem do funil DO negócio.
+      const funis = [...new Set(data.map((l) => l.pipeline_id))];
+      const { data: definicoes, error: funisErr } = funis.length
+        ? await admin.from("crm_pipelines").select("id, settings").eq("organization_id", organizationId).in("id", funis)
+        : { data: [], error: null };
+      if (funisErr) {
+        logger.warn("[lgpd-export-worker] lead pipelines load failed", {
+          request_id: requestId,
+          error: funisErr.message,
+        });
+      }
+      const porFunil = new Map(
+        ((definicoes ?? []) as { id: string; settings: unknown }[]).map((f) => [f.id, definicoesDoFunil(f.settings)]),
+      );
+      leads = data.map((l) => {
+        const campos = camposDoTitular(
+          l.custom_fields && typeof l.custom_fields === "object" && !Array.isArray(l.custom_fields)
+            ? (l.custom_fields as Record<string, unknown>)
+            : {},
+          porFunil.get(l.pipeline_id) ?? new Map(),
+        );
+        if (campos.cpfInformado) cpfEmCampoDeNegocio = true;
+        return {
+          id: l.id,
+          pipeline_id: l.pipeline_id,
+          stage_id: l.stage_id,
+          title: textoSemCpf(l.title),
+          status: l.status,
+          value_cents: l.value_cents,
+          currency: l.currency,
+          created_at: l.created_at,
+          description: textoSemCpf(l.description ?? null),
+          custom_fields: campos.semCpf,
+          campos_legiveis: campos.campos,
+        };
+      });
     }
   }
 
@@ -728,7 +987,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   if (contactId) {
     const { data, error } = await admin
       .from("crm_lead_activities")
-      .select("id, lead_id, type, source_module, performed_at")
+      .select("id, lead_id, type, source_module, performed_at, payload, metadata, reason")
       .eq("organization_id", organizationId)
       .eq("contact_id", contactId)
       .order("performed_at", { ascending: false })
@@ -739,7 +998,16 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         error: error.message,
       });
     } else if (data) {
-      activities = data;
+      activities = data.map((a) => ({
+        id: a.id,
+        lead_id: a.lead_id,
+        type: a.type,
+        source_module: a.source_module,
+        performed_at: a.performed_at,
+        payload: semCpfNoJson(a.payload),
+        metadata: semCpfNoJson(a.metadata),
+        reason: textoSemCpf(a.reason ?? null),
+      }));
     }
   }
 
@@ -926,7 +1194,9 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         error: error.message,
       });
     } else if (data) {
-      webhook_captures = data;
+      // `fields` é o formulário como chegou — e o formulário de captação pede
+      // CPF. Sai pelo mesmo filtro dos campos personalizados.
+      webhook_captures = data.map((c) => ({ ...c, fields: semCpfNoJson(c.fields) }));
     }
   }
 
@@ -1000,6 +1270,12 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   const lead_notes: NonNullable<ExportPayload["lead_notes"]> = [];
   const ai_agent_runs: NonNullable<ExportPayload["ai_agent_runs"]> = [];
   const lead_state: NonNullable<ExportPayload["lead_state"]> = [];
+  const instagram_comments: InstagramCommentRow[] = [];
+  const contact_field_proposals: NonNullable<ExportPayload["contact_field_proposals"]> = [];
+  const cases: CaseRow[] = [];
+  const case_events: CaseEventRow[] = [];
+  const demandas: DemandaRow[] = [];
+  const avisos_da_central: CentralNoticeRow[] = [];
   if (contactId) {
     const titular = contactId;
     const paginar = async <T,>(
@@ -1047,6 +1323,149 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
           .range(de, ate),
       )),
     );
+    // Propostas de campo. POR PÁGINA, não por teto: a IA alimenta esta fila
+    // enquanto a conversa dura, e um `limit` faria as mais antigas sumirem do
+    // relatório sem ninguém saber. A chave é `id` (única) — ordenar por
+    // `proposed_at` deixaria empates decidirem a página. O texto passa pelo
+    // mesmo filtro de CPF dos campos personalizados: o trecho é fala do
+    // paciente, e "meu CPF é…" cabe nele.
+    for (const p of await paginar<NonNullable<ExportPayload["contact_field_proposals"]>[number]>((de, ate) =>
+      admin
+        .from("contact_field_proposals")
+        .select(
+          "id, campo, valor_proposto, valor_anterior, conversation_id, trecho, status, proposed_at, decided_at, motivo_recusa",
+        )
+        .eq("organization_id", organizationId)
+        .eq("contact_id", titular)
+        .order("id")
+        .range(de, ate),
+    )) {
+      contact_field_proposals.push({
+        ...p,
+        valor_proposto: semCpfNoTexto(p.valor_proposto ?? "").texto,
+        valor_anterior: textoSemCpf(p.valor_anterior),
+        trecho: textoSemCpf(p.trecho),
+      });
+    }
+
+    // Comentários do Instagram. A ingestão não grava `contact_id`: quem liga o
+    // comentário à pessoa é o IGSID de quem comentou — os mesmos dois braços do
+    // passo 7c-1 da cascata. Identidade já anonimizada não tem mais IGSID.
+    const colunasDoComentario =
+      "id, media_id, texto, autor_handle, comentado_em, situacao, sugestao_de_resposta, motivo_do_toque";
+    const igsids = channel_identities
+      .filter((i) => i.channel === "instagram" && !i.external_id.startsWith("anonimizado:"))
+      .map((i) => i.external_id);
+    const comentarios = await paginar<InstagramCommentRow>((de, ate) =>
+      admin
+        .from("instagram_comments")
+        .select(colunasDoComentario)
+        .eq("organization_id", organizationId)
+        .eq("contact_id", titular)
+        .order("id")
+        .range(de, ate),
+    );
+    if (igsids.length > 0) {
+      comentarios.push(
+        ...(await paginar<InstagramCommentRow>((de, ate) =>
+          admin
+            .from("instagram_comments")
+            .select(colunasDoComentario)
+            .eq("organization_id", organizationId)
+            .in("autor_igsid", igsids)
+            .order("id")
+            .range(de, ate),
+        )),
+      );
+    }
+    const vistos = new Set<string>();
+    for (const c of comentarios) {
+      if (vistos.has(c.id)) continue;
+      vistos.add(c.id);
+      instagram_comments.push({
+        ...c,
+        texto: textoSemCpf(c.texto),
+        sugestao_de_resposta: textoSemCpf(c.sugestao_de_resposta),
+        motivo_do_toque: textoSemCpf(c.motivo_do_toque),
+      });
+    }
+
+    // Casos, linha do tempo, demandas e avisos — o que a 0317 pôs na cascata.
+    // O escopo do CASO é a conversa do titular (`agent_cases` não tem FK para
+    // `contacts`); o do evento é o caso já coletado — um `case_id` fora de
+    // `cases` seria de outro titular.
+    const EM_LOTE = 100; // Mantém o filtro IN abaixo dos limites de URL dos proxies.
+    for (let lote = 0; lote < conversationIds.length; lote += EM_LOTE) {
+      const ids = conversationIds.slice(lote, lote + EM_LOTE);
+      cases.push(
+        ...(
+          await paginar<CaseRow>((de, ate) =>
+            admin
+              .from("agent_cases")
+              .select("id, conversation_id, status, title, summary, blocker, source, opened_at, closed_at, created_at")
+              .eq("organization_id", organizationId)
+              .in("conversation_id", ids)
+              .order("id")
+              .range(de, ate),
+          )
+        ).map((caso) => ({
+          ...caso,
+          title: textoSemCpf(caso.title),
+          summary: textoSemCpf(caso.summary),
+          blocker: textoSemCpf(caso.blocker),
+        })),
+      );
+    }
+    const caseIds = cases.map((caso) => caso.id);
+    for (let lote = 0; lote < caseIds.length; lote += EM_LOTE) {
+      const ids = caseIds.slice(lote, lote + EM_LOTE);
+      case_events.push(
+        ...(
+          await paginar<CaseEventRow>((de, ate) =>
+            admin
+              .from("agent_case_events")
+              .select("id, case_id, kind, actor_kind, human_action, body, metadata, created_at")
+              .eq("organization_id", organizationId)
+              .in("case_id", ids)
+              .order("id")
+              .range(de, ate),
+          )
+        ).map((evento) => ({ ...evento, body: textoSemCpf(evento.body), metadata: semCpfNoJson(evento.metadata) })),
+      );
+    }
+    demandas.push(
+      ...(
+        await paginar<DemandaRow>((de, ate) =>
+          admin
+            .from("demandas")
+            .select("id, agent_case_id, origem, assunto, estado, dono_kind, proximo_passo, desfecho, aberta_em, fechada_em")
+            .eq("organization_id", organizationId)
+            .eq("contact_id", titular)
+            .order("id")
+            .range(de, ate),
+        )
+      ).map((d) => ({ ...d, assunto: textoSemCpf(d.assunto), proximo_passo: textoSemCpf(d.proximo_passo) })),
+    );
+    // Avisos: a referência é polimórfica (sem FK), então o escopo são os ids
+    // que comprovadamente são do titular — ele, as conversas e os casos dele.
+    // Os de compromisso já saem em `appointment_notices`.
+    const referencias = [titular, ...conversationIds, ...caseIds];
+    for (let lote = 0; lote < referencias.length; lote += EM_LOTE) {
+      const ids = referencias.slice(lote, lote + EM_LOTE);
+      avisos_da_central.push(
+        ...(
+          await paginar<CentralNoticeRow>((de, ate) =>
+            admin
+              .from("agent_inbox_items")
+              .select("id, kind, title, body, status, created_at, resolved_at")
+              .eq("organization_id", organizationId)
+              .in("ref_id", ids)
+              .order("id")
+              .range(de, ate),
+          )
+        ).map((a) => ({ ...a, title: textoSemCpf(a.title), body: textoSemCpf(a.body) })),
+      );
+    }
   }
   const meeting_deliveries: MeetingDeliveryRow[] = [];
   const appointment_notices: AppointmentNoticeRow[] = [];
@@ -1132,6 +1551,9 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // CPF em campo do NEGÓCIO acende a mesma linha do PDF que o do contato.
+  if (contact && cpfEmCampoDeNegocio) contact.cpf_em_campo_personalizado = true;
+
   return {
     request_id: requestId,
     organization_id: organizationId,
@@ -1141,6 +1563,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     generated_at: new Date().toISOString(),
     no_local_footprint: !contact && conversations.length === 0 && orders.length === 0,
     contact,
+    contatos_unidos,
     consents,
     conversations,
     messages_count_total,
@@ -1162,6 +1585,12 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     lead_notes,
     ai_agent_runs,
     lead_state,
+    contact_field_proposals,
+    instagram_comments,
+    cases,
+    case_events,
+    demandas,
+    avisos_da_central,
     campaign_recipients,
     campaign_suppressions,
   };
