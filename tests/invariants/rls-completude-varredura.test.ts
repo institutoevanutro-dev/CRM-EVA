@@ -75,6 +75,10 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  { tabela: "conversation_notes", razao: "tests/invariants/nota-interna-somente-autor-ou-gestor.test.ts — atendentes da org leem a nota; o administrador de outra organização lê 0 e não cria, edita nem apaga (saiu da dívida na 0319)" },
+  { tabela: "agent_cases", razao: "tests/invariants/casos-so-o-servidor-escreve.test.ts — membros leem só o caso da conversa que veem, o administrador de outra organização lê 0, e sessão nenhuma escreve (saiu da dívida na 0319)" },
+  { tabela: "agent_case_events", razao: "tests/invariants/casos-so-o-servidor-escreve.test.ts — mesmo arquivo: a linha do tempo segue o caso, leitura cruzada zero, escrita só do servidor" },
+  { tabela: "conversation_assignment_events", razao: "tests/invariants/casos-so-o-servidor-escreve.test.ts — leitura cruzada zero por JWT e escrita negada a toda sessão; gov-3-assignment-events.test.ts prova o escopo herdado da conversa" },
   { tabela: "respostas_prontas", razao: "tests/invariants/respostas-prontas-rls.test.ts — gestor A escreve, agent A só lê, gestor B não vê nem escreve com o org A (with check)" },
   { tabela: "respostas_prontas_perguntas", razao: "tests/invariants/respostas-prontas-rls.test.ts — leitura cruzada zero por JWT e FK composta recusa item de outra org" },
   { tabela: "respostas_prontas_config", razao: "tests/invariants/respostas-prontas-rls.test.ts — leitura cruzada zero por JWT; nasce desligada" },
@@ -270,8 +274,6 @@ const RAZAO_DEBITO_CONHECIDO =
   "por esta mudança — não é declaração de que a tabela está segura.";
 
 const DEBITO_CONHECIDO: readonly Excecao[] = [
-  "agent_case_events",
-  "agent_cases",
   "agent_inbox_items",
   "ai_agent_runs",
   "ai_agent_versions",
@@ -294,8 +296,6 @@ const DEBITO_CONHECIDO: readonly Excecao[] = [
   "channel_session_health",
   "channel_session_warmup",
   "channel_sessions",
-  "conversation_assignment_events",
-  "conversation_notes",
   "crm_lead_activities",
   "crm_lead_links",
   "crm_lead_reactivations",
