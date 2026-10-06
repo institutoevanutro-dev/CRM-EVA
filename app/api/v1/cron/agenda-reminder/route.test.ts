@@ -23,7 +23,10 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { degrausPendentes, estaNaHora, montarLembrete } from "./route";
+import { providersDeEnvioAutomatico } from "@/lib/channels";
+import { CHANNEL_PROVIDER_INSTAGRAM } from "@/lib/channels/capabilities";
+
+import { degrausPendentes, escolherCanalDoLembrete, estaNaHora, montarLembrete } from "./route";
 
 const MIN = 60_000;
 
@@ -322,5 +325,79 @@ describe("o lembrete usa o texto do tipo, o fuso, a unidade e o profissional DO 
     const legado = fonte.slice(fonte.indexOf('.from("message_templates")'));
     expect(legado.slice(0, 600)).toContain("corpo = modelo.body");
     expect(fonte).toContain("if (!molde && tipo.reminder_template_name)");
+  });
+});
+
+describe("escolherCanalDoLembrete — sempre um canal de envio automático, de preferência o da conversa", () => {
+  const ZAP = providersDeEnvioAutomatico()[0] as string;
+  // O Instagram não é de envio automático (a IA não responde por ele): é o
+  // provider que o lembrete NUNCA pode escolher.
+  const INSTA = CHANNEL_PROVIDER_INSTAGRAM as string;
+
+  it("o controle do teste: o Instagram não está entre os de envio automático", () => {
+    expect(ZAP).toBeTruthy();
+    expect(providersDeEnvioAutomatico() as readonly string[]).not.toContain(INSTA);
+  });
+
+  it("prefere o número da conversa mais recente, mesmo que não seja o mais antigo", () => {
+    const sessoes = [
+      { id: "zap-antigo", provider: ZAP },
+      { id: "zap-novo", provider: ZAP },
+    ];
+    expect(escolherCanalDoLembrete(sessoes, [{ channel_session_id: "zap-novo" }])).toBe("zap-novo");
+  });
+
+  it("conversa mais recente no Instagram: vale o WhatsApp da conversa mais antiga", () => {
+    const sessoes = [
+      { id: "zap-1", provider: ZAP },
+      { id: "zap-2", provider: ZAP },
+      { id: "insta", provider: INSTA },
+    ];
+    const conversas = [{ channel_session_id: "insta" }, { channel_session_id: "zap-2" }];
+    expect(escolherCanalDoLembrete(sessoes, conversas)).toBe("zap-2");
+  });
+
+  it("sem conversa, o primeiro da lista — a ordem é de quem consulta", () => {
+    expect(
+      escolherCanalDoLembrete(
+        [
+          { id: "zap-1", provider: ZAP },
+          { id: "zap-2", provider: ZAP },
+        ],
+        [],
+      ),
+    ).toBe("zap-1");
+  });
+
+  it("só Instagram conectado: nenhum canal — o lembrete pula, não sai pelo Instagram", () => {
+    expect(escolherCanalDoLembrete([{ id: "insta", provider: INSTA }], [{ channel_session_id: "insta" }])).toBeNull();
+  });
+
+  it("conversa num número fora da lista (desconectado): cai no primeiro da lista", () => {
+    expect(
+      escolherCanalDoLembrete([{ id: "zap-1", provider: ZAP }], [{ channel_session_id: "zap-desconectado" }]),
+    ).toBe("zap-1");
+  });
+});
+
+describe("as consultas do canal (estrutural)", () => {
+  const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+
+  it("sessões: da organização, WORKING, de envio automático, não arquivadas, em ordem fixa", () => {
+    const sessoes = fonte.slice(fonte.indexOf('.from("channel_sessions")')).slice(0, 500);
+    expect(sessoes).toContain('.eq("organization_id", org)');
+    expect(sessoes).toContain('.eq("status", "WORKING")');
+    expect(sessoes).toContain('.in("provider", [...providersDeEnvioAutomatico()])');
+    expect(sessoes).toContain('.is("archived_at", null)');
+    expect(sessoes).toContain('.order("created_at"');
+    expect(sessoes).not.toContain(".limit(1)");
+  });
+
+  it("conversas: do contato, na organização, da mais recente para a mais antiga", () => {
+    const conversas = fonte.slice(fonte.indexOf('.from("conversations")')).slice(0, 500);
+    expect(fonte).toContain('.from("conversations")');
+    expect(conversas).toContain('.eq("organization_id", org)');
+    expect(conversas).toContain('.eq("contact_id", contato.id)');
+    expect(conversas).toContain('.order("last_message_at"');
   });
 });

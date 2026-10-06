@@ -128,6 +128,7 @@ import { audit } from "@/lib/audit";
 import { ensureConversation } from "@/lib/automation/start-conversation";
 import { adiarAteAJanelaAbrir } from "@/lib/automation/janela-do-canal";
 import { espacarEnvio } from "@/lib/automation/throttle";
+import { providersDeEnvioAutomatico } from "@/lib/channels";
 import { env } from "@/lib/env";
 import { aplicarMoldeDoLembrete, montarLembrete, variaveisDoMolde } from "@/lib/agenda/texto-do-lembrete";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
@@ -205,6 +206,31 @@ function tipoDe(linha: CompromissoAVencer): TipoDoCompromisso | null {
  * para o teste desta rota e a forma do original continuarem valendo.
  */
 export { aplicarMoldeDoLembrete, montarLembrete };
+
+/**
+ * Por qual número o lembrete sai.
+ *
+ * Antes era `channel_sessions` WORKING com `.limit(1)` sem ordem nem filtro de
+ * provider: numa organização com Instagram e WhatsApp conectados o lembrete
+ * caía em qualquer um, e a escolha podia mudar de uma rodada para a outra.
+ *
+ * Agora: só canal de envio automático (`providersDeEnvioAutomatico()`, que
+ * exclui o Instagram sem nomeá-lo); entre eles, o número da conversa mais
+ * recente do contato, onde a pessoa já fala; senão, o primeiro da lista, que
+ * quem consulta entrega em ordem fixa. Nenhum: `null`, e a rodada pula.
+ *
+ * A regra repete o filtro de provider de propósito: se a consulta mudar, o
+ * Instagram continua sem ganhar. Pura e exportada, como `degrausPendentes`.
+ */
+export function escolherCanalDoLembrete(
+  sessoes: ReadonlyArray<{ id: string; provider: string }>,
+  conversas: ReadonlyArray<{ channel_session_id: string | null }>,
+): string | null {
+  const automaticos = new Set<string>(providersDeEnvioAutomatico());
+  const elegiveis = new Set(sessoes.filter((s) => automaticos.has(s.provider)).map((s) => s.id));
+  const daConversa = conversas.find((c) => c.channel_session_id && elegiveis.has(c.channel_session_id));
+  return daConversa?.channel_session_id ?? [...elegiveis][0] ?? null;
+}
 
 /**
  * Está na hora de lembrar?
@@ -484,20 +510,35 @@ async function handle(req: NextRequest): Promise<Response> {
       continue;
     }
 
-    const { data: canal } = await admin
+    // O canal: WhatsApp (envio automático), de preferência o da conversa em
+    // que o paciente já fala. Ver `escolherCanalDoLembrete`. Não reutiliza
+    // `sessaoProntaParaEnvio`: ela cai para sessão NÃO WORKING, e com o carimbo
+    // antes do envio mandar por número desconectado perderia o lembrete em
+    // silêncio. Sem canal, pula e tenta na próxima rodada.
+    const { data: sessoes } = await admin
       .from("channel_sessions")
-      .select("id")
+      .select("id, provider")
       .eq("organization_id", org)
       .eq("status", "WORKING")
-      .limit(1)
-      .maybeSingle();
+      .in("provider", [...providersDeEnvioAutomatico()])
+      .is("archived_at", null)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
+    const { data: conversas } = await admin
+      .from("conversations")
+      .select("channel_session_id")
+      .eq("organization_id", org)
+      .eq("contact_id", contato.id)
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .limit(20);
+    const canalId = escolherCanalDoLembrete(sessoes ?? [], conversas ?? []);
 
-    if (!canal) {
+    if (!canalId) {
       pular("sem_canal");
       continue;
     }
 
-    const foraDaJanela = await adiarAteAJanelaAbrir(admin, org, canal.id);
+    const foraDaJanela = await adiarAteAJanelaAbrir(admin, org, canalId);
     if (foraDaJanela) {
       pular("fora_da_janela");
       continue;
@@ -601,8 +642,8 @@ async function handle(req: NextRequest): Promise<Response> {
     }
 
     try {
-      await espacarEnvio(canal.id);
-      const conversaId = await ensureConversation(admin, org, contato.id, canal.id);
+      await espacarEnvio(canalId);
+      const conversaId = await ensureConversation(admin, org, contato.id, canalId);
       // `webhook_source` é o ator que esta base dá a envio nascido de worker —
       // o mesmo que `lib/followup/enviar-texto-fixo.ts` usa. O `id` é o
       // compromisso, para o audit da mensagem correlacionar com a linha que a
