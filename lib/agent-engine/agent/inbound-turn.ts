@@ -910,6 +910,72 @@ const AGENDA_CONSULTA_SYSTEM_BLOCK =
   'primeiro, e aí diga a quem passa.';
 
 /**
+ * O PRIMEIRO PASSO da cadeia de agenda, residente (#1019).
+ *
+ * ─── O que faltava, medido ──────────────────────────────────────────────────
+ *
+ * Os dois blocos acima nomeiam `crm_find_free_slots` em toda frase e
+ * `crm_list_event_types` em NENHUMA. A cadeia de dois passos — listar os tipos,
+ * pegar o `slug`, consultar os horários COM esse slug — existia só na
+ * `description` da própria ferramenta, que é onde o modelo a lê por último e
+ * sem o peso de uma instrução. Um agente com as três capacidades ligadas
+ * chamava a lista e parava ali; o relato da issue mede 4 chamadas de lista com
+ * o slug disponível e zero de `crm_find_free_slots` na sequência.
+ *
+ * ─── Por que este bloco é CONDICIONAL, e não texto fixo ─────────────────────
+ *
+ * Nomear `crm_list_event_types` para quem não a tem seria exatamente o erro que
+ * a divisão dos outros dois blocos já evita (`AGENDA_CONSULTA_SYSTEM_BLOCK`:
+ * "dar a ele o bloco inteiro seria pior — ensinaria uma ferramenta que ele não
+ * tem, e o modelo tentaria chamá-la"). Por isso o bloco entra só quando o
+ * agente tem as DUAS pontas: a lista e quem consome o slug.
+ *
+ * Ensino, não garantia: a garantia determinística é o `agendaStallGate`
+ * (`before-send.ts`), que agora reconhece a promessa feita com o nome do
+ * serviço. Os dois juntos é que fecham o caso — um ensina o caminho, o outro
+ * impede que a resposta saia por fora dele.
+ */
+const AGENDA_CADEIA_SYSTEM_BLOCK =
+  '## Agenda — os dois passos, no mesmo turno\n' +
+  'Para falar de um horário REAL você precisa de duas coisas: o TIPO de atendimento (o `slug`) e os ' +
+  'horários daquele tipo. Você tem `crm_list_event_types` para a primeira e `crm_find_free_slots` para ' +
+  'a segunda — e o segundo passo PRECISA do `slug` que o primeiro devolve.\n' +
+  'Se o lead pediu horário e você ainda não tem o `slug` do tipo (ou não sabe a qual tipo ele se ' +
+  'refere), chame `crm_list_event_types` NESTE turno, escolha o tipo pelo que o lead descreveu e chame ' +
+  '`crm_find_free_slots` com esse `slug` NO MESMO TURNO, antes de responder. Parar depois da lista e ' +
+  'responder "vou verificar/organizar" é o defeito: a lista é o começo da conversa com a agenda, não a ' +
+  'resposta. Se o tipo que o lead pediu não estiver na lista, diga isso a ele nomeando o que existe — ' +
+  'não prometa verificar o que você já sabe que não tem.\n' +
+  'Nunca invente um `slug`: ele vem da lista, escrito igualzinho.';
+
+/**
+ * Os blocos de agenda que ESTE agente recebe — a decisão num lugar só, testável.
+ *
+ * A régua é o que o agente TEM: os dois blocos de ensino nomeiam ferramentas, e
+ * nomear uma ferramenta ausente faz o modelo tentar chamá-la.
+ */
+export function blocosDeAgendaResidentes(toolIds: readonly string[]): string[] {
+  const blocos: string[] = [];
+  // A régua de "quem marca" é a da #831: `temFerramentaDeMarcacao` conta
+  // também `crm_find_and_book_appointment`, e o texto do bloco nomeia só as
+  // ferramentas que ESTE agente tem — usar um texto fixo aqui desfaria a #831 no
+  // caminho do turno.
+  if (temFerramentaDeMarcacao(toolIds)) {
+    blocos.push(agendaSystemBlock(toolIds));
+  } else if (toolIds.includes('crm_find_free_slots')) {
+    // Só consulta: o bloco de cima nomeia uma ferramenta que ele não tem.
+    blocos.push(AGENDA_CONSULTA_SYSTEM_BLOCK);
+  }
+  if (
+    toolIds.includes('crm_list_event_types') &&
+    toolIds.includes('crm_find_free_slots')
+  ) {
+    blocos.push(AGENDA_CADEIA_SYSTEM_BLOCK);
+  }
+  return blocos;
+}
+
+/**
  * Tools de agenda cuja EXECUÇÃO neste turno arma o `agendaStallGate` (before-send.ts) —
  * ver o wrap no loop de montagem das tools MCP, mais abaixo.
  */
@@ -990,10 +1056,11 @@ export function ferramentasDeAgendaDoAgente(toolIds: readonly string[]): string[
  * exatamente onde o texto ensina, ou não, uma ferramenta que o agente não tem.
  */
 export function blocoResidenteDaAgenda(toolIds: readonly string[]): string | null {
-  if (temFerramentaDeMarcacao(toolIds)) return agendaSystemBlock(toolIds);
-  // Só consulta: o bloco de cima nomeia ferramentas de marcar que ele não tem.
-  if (toolIds.includes('crm_find_free_slots')) return AGENDA_CONSULTA_SYSTEM_BLOCK;
-  return null;
+  // Uma lei só: quem decide os blocos residentes da Agenda é
+  // `blocosDeAgendaResidentes` — a #1019 acrescentou a CADEIA de dois passos como
+  // segundo bloco. Aqui fica o PRIMEIRO deles (o de marcar ou o de só consultar),
+  // que é o par que o teste da #831 prende.
+  return blocosDeAgendaResidentes(toolIds)[0] ?? null;
 }
 
 export interface InboundTurnKnobs {
@@ -2062,8 +2129,10 @@ async function executarTurnoDoAgente(
   // não depende de nenhuma feature — todo agente publicado o recebe.
   const blocosResidentes = [systemWithMemory, TRANSPARENCIA_SYSTEM_BLOCK];
   if (agentConfig !== null && agentConfig.casesEnabled) blocosResidentes.push(CASES_SYSTEM_BLOCK);
-  const blocoDaAgenda = agentConfig === null ? null : blocoResidenteDaAgenda(agentConfig.toolIds);
-  if (blocoDaAgenda !== null) blocosResidentes.push(blocoDaAgenda);
+  // A régua é o que o agente TEM — ver `blocosDeAgendaResidentes`, que decide isto
+  // num lugar só para poder ser testada (o bloco da cadeia nomeia
+  // `crm_list_event_types`, e nomear ferramenta ausente faz o modelo tentar chamá-la).
+  if (agentConfig !== null) blocosResidentes.push(...blocosDeAgendaResidentes(agentConfig.toolIds));
   if (preview)
     blocosResidentes.push(
       'MODO PRÉVIA: proponha a resposta com send_message. Operações são propostas separadas; nunca diga que executou uma proposta. Nenhum envio real acontece.',
