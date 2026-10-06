@@ -392,6 +392,30 @@ pelo critério que já estava escrito lá: decisão humana não colapsa.
 
 ---
 
+## J9c — A sequência por silêncio não recomeça sozinha `[P1]` (2026-10-06)
+
+Contexto do código: `lib/followup/silence-sweep.ts` (varredura a cada minuto) e a
+migration 0324 (`followup_flow_pointers.active_since`). Spec:
+`docs/superpowers/specs/2026-10-06-followup-nao-recomeca-design.md`. Achado ao
+desenhar o funil do Dr. André: depois que a sequência terminava sem resposta, o
+contato calado era inscrito de novo no minuto seguinte, para sempre.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J9c.1 | Sequência termina (End), contato segue calado | nenhuma reinscrição nas varreduras seguintes | PASS (invariante, laço real) |
+| J9c.2 | Inscrição `completed`/`dead`/`cancelled` no mesmo silêncio | não reinscreve | PASS (invariante) |
+| J9c.3 | Contato responde e cala de novo | sequência nova do primeiro toque | PASS (invariante) |
+| J9c.4 | Ativar o fluxo com conversas caladas há meses | ninguém que calou antes da ativação entra | PASS (invariante + unit) |
+| J9c.5 | Desativar e publicar de novo | vigência zera; republicar versão num fluxo ativo não zera | PASS (invariante) |
+| J9c.6 | Contato anonimizado calado | não entra | PASS (unit da consulta de produção) |
+| J9c.7 | Mais de 1000 conversas abertas | todas consideradas (keyset até a página vazia) | PASS (unit) |
+| J9c.8 | Pela tela, ponta a ponta | `followup-journey` e `j20-elegibilidade-followup` recuam a vigência que semeiam | NÃO RODADO localmente — prova no `e2e` do CI |
+
+**Limite declarado:** "qualquer resposta encerra a sequência" só vale com
+"cancelar ao responder" ligado no gatilho (vem desligado).
+
+---
+
 ## J9b — Limitar o horário em que os follow-ups mandam mensagem `[P1]`
 
 Contexto do código: `settings.followups.bloqueios.janela` é respeitada pelo executor
