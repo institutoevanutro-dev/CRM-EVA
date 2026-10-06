@@ -43,13 +43,24 @@ import type { ServiceBoundary } from "@/lib/atendimento/fronteira";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
-import { motivoDoAviso, textoDoAviso } from "@/lib/escalacao/aviso-ao-lead";
+import {
+  motivoDoAviso,
+  textoDoAviso,
+  type MotivoDoAviso,
+} from "@/lib/escalacao/aviso-ao-lead";
+import { comecaComPalavraDeSaida } from "@/lib/opt-out/deteccao";
 import { carregarRosterDeAtendimento, podeAssumirAgora } from "@/lib/escalacao/atendentes";
 import type { QuemPodeAssumir } from "@/lib/escalacao/disponibilidade";
 import { logger } from "@/lib/logger";
 
 /** Ator do envio — é o automático falando, não uma pessoa. */
 const ATOR_DO_AVISO = "handoff-orchestrator";
+
+/** Um aviso por conversa dentro desta janela (ver as guardas em `avisarLeadDoCrm`). */
+const JANELA_DO_AVISO_MS = 24 * 60 * 60 * 1000;
+
+/** Status de `messages` que significam "chegou ao cliente". */
+const STATUS_ENTREGUE = new Set(["sent", "delivered", "read"]);
 
 export interface AvisoDoCrmInput {
   serviceBoundary?: ServiceBoundary;
@@ -71,8 +82,67 @@ export async function avisarLeadDoCrm(
   input: AvisoDoCrmInput,
 ): Promise<{ avisado: boolean; porque?: string }> {
   try {
+    // ═══ DUAS GUARDAS ANTES DE QUALQUER TEXTO ═══
+    //
+    // 1. A IA precisa ter FALADO nesta conversa. O aviso existe para o cliente
+    //    não ficar falando com o vazio quando a IA se retira; numa conversa em
+    //    que ela nunca falou, não há retirada a anunciar. O worker de sentimento
+    //    roda para TODA mensagem, com ou sem agente, e no original mandou "Já
+    //    acionei o time" a clientes que nunca tinham falado com IA. O próprio
+    //    aviso NÃO conta como fala (`aviso_de_escalacao`): sem essa distinção,
+    //    o primeiro aviso indevido legitimaria o segundo.
+    //
+    //    Neste fork todo envio de ator que não é pessoa grava `sent_via='ai'`
+    //    (`_handler.ts`), inclusive campanha, automação e agente externo por
+    //    MCP — então a guarda os conta como fala automática, e a exceção de
+    //    MCP externo do original não é necessária aqui.
+    //
+    // 2. UM aviso por conversa por janela de 24 h, contado no BANCO. Quando o
+    //    envio trava (canal fora do ar) e o disparo é refeito, cada tentativa
+    //    virava mensagem nova (no original, quatro avisos em cinco minutos). O
+    //    `requestId` não segura, porque cada disparo é uma chamada nova.
+    //
+    // Leitura que falha não avisa (fail-closed): mandar a frase para quem nunca
+    // falou com IA é o defeito que estas guardas existem para impedir.
+    const { data: falas, error: erroDasFalas } = await admin
+      .from("messages")
+      .select("metadata, created_at, status")
+      .eq("organization_id", input.organizationId)
+      .eq("conversation_id", input.conversationId)
+      .eq("direction", "outbound")
+      .eq("sent_via", "ai")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (erroDasFalas) {
+      logger.warn("[handoff-orchestrator] falas da IA não lidas — aviso não enviado", {
+        conversation_id: input.conversationId,
+        error: erroDasFalas.message.slice(0, 200),
+      });
+      return { avisado: false, porque: "falas_da_ia_nao_lidas" };
+    }
+    const linhas = (falas ?? []) as {
+      metadata: Record<string, unknown> | null;
+      created_at: string;
+      status: string | null;
+    }[];
+    const iaJaFalou = linhas.some((m) => m.metadata?.aviso_de_escalacao !== true);
+    if (!iaJaFalou) return { avisado: false, porque: "ia_nunca_falou_nesta_conversa" };
+    // Aviso `failed` não conta: ele nunca chegou. `queued`/`sending` contam: o
+    // `session-reconciler` reenvia o que está preso, e era isso que repetia.
+    const corte = Date.now() - JANELA_DO_AVISO_MS;
+    const avisosRecentes = linhas.filter(
+      (m) =>
+        m.metadata?.aviso_de_escalacao === true &&
+        m.status !== "failed" &&
+        new Date(m.created_at).getTime() > corte,
+    );
+    // Quem é barrado por um aviso já ENTREGUE foi avisado: a Central não pode
+    // escrever "o cliente NÃO foi avisado" para quem recebeu o aviso há minutos.
+    if (avisosRecentes.some((m) => STATUS_ENTREGUE.has(m.status ?? ""))) return { avisado: true };
+    if (avisosRecentes.length > 0) return { avisado: false, porque: "aviso_ja_enviado_na_janela" };
+
     const body = textoDoAviso(
-      motivoDoAviso(input.reason),
+      await motivoDaFrase(admin, input),
       await quemPodeAssumir(admin, input.organizationId),
       input.contactId,
     );
@@ -108,6 +178,41 @@ export async function avisarLeadDoCrm(
   }
 }
 
+
+/**
+ * Qual frase o cliente lê. Parte do motivo gravado (`last_handoff_reason`) e só
+ * o troca num caso: o motivo é o GENÉRICO ("outro" — clima ruim, baixa
+ * confiança…) e a última coisa que o cliente escreveu COMEÇA com a palavra de
+ * saída ("Parar não é daqui"). Aí a frase é a de suspeita de opt-out ("Entendi.
+ * Vou parar de te enviar mensagens automáticas por aqui.") e não "passei seu
+ * pedido para um atendente humano", que promete atendimento a quem acabou de
+ * dizer que não quer mais mensagens. `pediu_humano` e `orcamento_de_ia` têm
+ * frase própria e não são reavaliados.
+ *
+ * Leitura que falha devolve o motivo gravado: errar para o lado de como era antes.
+ */
+async function motivoDaFrase(
+  admin: SupabaseClient,
+  input: AvisoDoCrmInput,
+): Promise<MotivoDoAviso> {
+  const gravado = motivoDoAviso(input.reason);
+  if (gravado !== "outro") return gravado;
+  try {
+    const { data } = await admin
+      .from("messages")
+      .select("body")
+      .eq("organization_id", input.organizationId)
+      .eq("conversation_id", input.conversationId)
+      .eq("direction", "inbound")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const ultima = (data as { body?: string | null } | null)?.body ?? null;
+    return comecaComPalavraDeSaida(ultima) ? "suspeita_de_opt_out" : gravado;
+  } catch {
+    return gravado;
+  }
+}
 
 /**
  * Quantos podem assumir agora, no vocabulário que o texto espera.
