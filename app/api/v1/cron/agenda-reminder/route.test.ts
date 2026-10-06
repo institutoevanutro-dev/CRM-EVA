@@ -290,6 +290,16 @@ describe("a ferramenta de remarcar descreve o lembrete como esta rota o manda", 
     expect(descricao).not.toContain("o lembrete é refeito sozinho");
     expect(descricao).toContain("lembrete da data nova");
   });
+
+  it("diz as DUAS exceções do rearme — e o que fazer nelas", () => {
+    // A guarda de meio intervalo (`degrausPendentes`, porte de e174c8484) segura
+    // o aviso da data nova que cairia pouco depois de um lembrete já enviado —
+    // de qualquer degrau. A descrição prometia o envio nesse caso, e a IA
+    // dizia ao paciente que ele receberia um aviso que não sai.
+    expect(descricao).toContain("dentro da antecedência do aviso");
+    expect(descricao).toContain("pouco depois de um lembrete que já saiu");
+    expect(descricao).toContain("na própria conversa");
+  });
 });
 
 describe("o lembrete usa o texto do tipo, o fuso, a unidade e o profissional DO COMPROMISSO", () => {

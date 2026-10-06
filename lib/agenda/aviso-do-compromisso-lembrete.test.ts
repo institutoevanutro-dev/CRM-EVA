@@ -461,4 +461,38 @@ describe("os outros lados do rearma (#2243, triagem do #2249)", () => {
     expect(varredura(estado, terceira, "2026-10-17T16:05:00.000Z")).toEqual([1440]);
     expect(varredura(estado, terceira, "2026-10-17T16:10:00.000Z")).toEqual([]);
   });
+
+  // ─── O QUE A GUARDA 2 CUSTA, PRESO DE PROPÓSITO ─────────────────────────────
+  //
+  // A guarda de meio intervalo (e174c8484) foi mantida como no original, e não
+  // zerada no gatilho (spec 3.3, decisão pendente do dono). O preço são os dois
+  // casos abaixo: a data nova fica sem o aviso daquele degrau, e quem avisa é a
+  // IA na conversa — é o que a descrição de `crm_reschedule_appointment` diz.
+  // Se o dono escolher zerar, estes dois testes são os que devem virar.
+
+  it("remarcada para MAIS TARDE a menos de meio intervalo do envio: a data nova fica sem véspera", () => {
+    // A véspera saiu 03/10 16:05; às 18:00 a consulta vai de 04/10 16:00 para
+    // 04/10 23:00. A véspera nova (03/10 23:00) não estava vencida na
+    // remarcação, mas fica 6h55 depois do envio, abaixo de 1440/2 = 12h.
+    const estado = vespera();
+    const tarde = { ...base, comeca: "2026-10-04T23:00:00.000Z", remarcadoEm: "2026-10-03T18:00:00.000Z" };
+    expect(varredura(estado, tarde, "2026-10-03T23:05:00.000Z")).toEqual([]);
+    expect(varredura(estado, tarde, "2026-10-04T22:55:00.000Z")).toEqual([]);
+  });
+
+  it("multidegrau: o carimbo do aviso de 60 suprime a véspera da data nova, e só o de 60 sai", () => {
+    // A régua é o ÚLTIMO carimbo, de qualquer degrau. O aviso de 60 saiu 10/10
+    // 15:05; às 15:30 a consulta vai para 11/10 16:00. A véspera nova (10/10
+    // 16:00) fica 55 min depois do envio, abaixo de 720 min, e não sai.
+    const estado = { enviados: [1440, 60] as number[] | null, enviadoEm: "2026-10-10T15:05:00.000Z" as string | null };
+    const linha: LinhaDeTeste = {
+      comeca: "2026-10-11T16:00:00.000Z",
+      criadoEm: "2026-10-01T10:00:00.000Z",
+      remarcadoEm: "2026-10-10T15:30:00.000Z",
+      principal: 60,
+      extras: [1440],
+    };
+    expect(varredura(estado, linha, "2026-10-10T16:05:00.000Z")).toEqual([]);
+    expect(varredura(estado, linha, "2026-10-11T15:05:00.000Z")).toEqual([60]);
+  });
 });
