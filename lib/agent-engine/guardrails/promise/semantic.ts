@@ -23,6 +23,7 @@ import type { Logger } from '../../obs/logger';
 import type { ProviderRegistry } from '../../edge/llm/providers';
 import { runModelCall, type LlmEdgeConfig } from '../../edge/llm/run-model-call';
 import type { LlmResolveOverride } from '../../edge/llm/credentials';
+import { extrairObjetoJsonDoTexto } from '@/lib/agent-engine/texto/extrair-json-do-texto';
 
 /** Veredito binário do classificador. suspectPhrase = null quando isPromise = false. */
 export interface PromiseClassification {
@@ -63,27 +64,26 @@ function buildPromiseMessage(candidate: string): string {
  * F4-01 já rodou); a camada semântica NUNCA bloqueia envio por falha de parse do auxiliar.
  */
 export function parsePromiseClassification(text: string, log?: Logger): PromiseClassification {
-  const match = /\{[\s\S]*\}/.exec(text);
-  if (match === null) {
+  // Primeiro OBJETO parseável (prosa, cerca de código, JSON REPETIDO ou dentro de
+  // array: o recorte antigo abria no primeiro `{` e fechava no último `}`,
+  // abrangendo as DUAS cópias). A falha não muda: sem objeto, o mesmo fail-open
+  // para "sem promessa" com o MESMO warn, e o `reason` pelo critério de antes
+  // (havia `{`…`}` = JSON candidato que não parseou → invalid_json; sem → no_json).
+  const obj = extrairObjetoJsonDoTexto(text);
+  if (obj === null) {
+    const haviaJsonCandidato = /\{[\s\S]*\}/.test(text);
     // degrade OBSERVÁVEL (F4-08 ressalva 2): sem o warn, um classificador sistematicamente
     // quebrado ficaria invisível (todo envio "sem promessa"). Loga só o FATO do parse-fail —
     // nunca o texto do modelo (poderia carregar trecho da candidata, PII fora de log).
-    log?.warn('classificador semântico de promessa: saída sem JSON — fail-open p/ "sem promessa"', {
-      event: 'promise_semantic_parse_fail',
-      reason: 'no_json',
-    });
-    return { isPromise: false, suspectPhrase: null };
-  }
-  let obj: Record<string, unknown>;
-  try {
-    obj = JSON.parse(match[0]) as Record<string, unknown>;
-  } catch {
-    // saída do auxiliar não é JSON válido → degrada para "sem promessa" (não bloqueia envio
-    // por falha de parse; a camada determinística já cobriu o valor estruturado).
-    log?.warn('classificador semântico de promessa: JSON inválido — fail-open p/ "sem promessa"', {
-      event: 'promise_semantic_parse_fail',
-      reason: 'invalid_json',
-    });
+    log?.warn(
+      haviaJsonCandidato
+        ? 'classificador semântico de promessa: JSON inválido — fail-open p/ "sem promessa"'
+        : 'classificador semântico de promessa: saída sem JSON — fail-open p/ "sem promessa"',
+      {
+        event: 'promise_semantic_parse_fail',
+        reason: haviaJsonCandidato ? 'invalid_json' : 'no_json',
+      },
+    );
     return { isPromise: false, suspectPhrase: null };
   }
   const isPromise = obj.isPromise === true || obj.isPromise === 'true';

@@ -21,6 +21,7 @@ import type { Logger } from '../../obs/logger';
 import type { ProviderRegistry } from '../../edge/llm/providers';
 import { LlmBudgetExceededError, runModelCall, type LlmEdgeConfig } from '../../edge/llm/run-model-call';
 import type { LlmResolveOverride } from '../../edge/llm/credentials';
+import { extrairObjetoJsonDoTexto } from '@/lib/agent-engine/texto/extrair-json-do-texto';
 
 /** Severidade do sinal: none (limpo) < low (suspeito) < high (jailbreak/injeção claro). */
 export type JailbreakLevel = 'none' | 'low' | 'high';
@@ -76,14 +77,10 @@ function buildJailbreakMessage(message: string): string {
  */
 export function parseJailbreakClassification(text: string): JailbreakClassification {
   const clean = (): JailbreakClassification => ({ flag: false, level: 'none', reason: null });
-  const match = /\{[\s\S]*\}/.exec(text);
-  if (match === null) return clean();
-  let obj: Record<string, unknown>;
-  try {
-    obj = JSON.parse(match[0]) as Record<string, unknown>;
-  } catch {
-    return clean();
-  }
+  // Primeiro OBJETO parseável (prosa, cerca de código, JSON REPETIDO ou dentro de
+  // array). Sem objeto, o fail-open de sempre: nenhuma regra de bloqueio mudou.
+  const obj = extrairObjetoJsonDoTexto(text);
+  if (obj === null) return clean();
   const raw = typeof obj.level === 'string' ? obj.level.trim().toLowerCase() : '';
   const level: JailbreakLevel = raw === 'high' ? 'high' : raw === 'low' ? 'low' : 'none';
   if (level === 'none') return clean();

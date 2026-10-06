@@ -1,3 +1,4 @@
+import { extrairObjetoJsonDoTexto } from '@/lib/agent-engine/texto/extrair-json-do-texto';
 import { setExecutionAgentOperation } from '@/lib/atendimento/fronteira-server';
 import { TIPOS_DE_CASO, TIPOS_DE_CASO_PARA_A_IA } from "@/lib/ai/case-copy";
 import { DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabilities';
@@ -1234,23 +1235,15 @@ async function insertCheckpoint(
 }
 
 /**
- * Extrai e valida o JSON do fechamento. Tolerante a cerca de código e prosa em
- * volta (pega do primeiro '{' ao último '}'); inválido → erro SEM o texto do
- * modelo na mensagem (pode carregar PII da conversa) — o job re-tenta.
+ * Extrai e valida o JSON do fechamento. Tolerante a cerca de código, prosa em
+ * volta, objeto REPETIDO e resposta dentro de array (primeiro objeto
+ * parseável); sem objeto → erro SEM o texto do modelo na mensagem (pode
+ * carregar PII da conversa) — o job re-tenta.
  */
 export function parseCheckpointText(text: string): CheckpointContent {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end <= start) {
+  const raw = extrairObjetoJsonDoTexto(text);
+  if (raw === null) {
     throw new Error('fechamento do turno sem JSON de checkpoint — run re-tentado pela fila');
-  }
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text.slice(start, end + 1));
-  } catch {
-    throw new Error(
-      'JSON de checkpoint inválido no fechamento do turno — run re-tentado pela fila',
-    );
   }
   const parsed = checkpointContentSchema.safeParse(raw);
   if (!parsed.success) {

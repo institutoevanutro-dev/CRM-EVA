@@ -14,7 +14,7 @@
  */
 import type pg from 'pg';
 
-import { extrairJsonDoTexto } from '@/lib/agent-engine/texto/extrair-json-do-texto';
+import { extrairObjetoJsonDoTexto } from '@/lib/agent-engine/texto/extrair-json-do-texto';
 
 import type { Logger } from '../obs/logger';
 import { runModelCall, type LlmEdgeConfig } from '../edge/llm/run-model-call';
@@ -58,8 +58,8 @@ export function buildClassifierPrompt(members: RouterMember[], signal: string): 
  */
 export function parseIntentVerdict(text: string, members: RouterMember[]): IntentVerdict {
   const nullVerdict: IntentVerdict = { intentName: null, confidence: 0 };
-  const parsed = extrairJsonDoTexto(text);
-  if (typeof parsed !== 'object' || parsed === null) return nullVerdict;
+  const parsed = extrairObjetoJsonDoTexto(text);
+  if (parsed === null) return nullVerdict;
 
   const raw = parsed as { intent?: unknown; confidence?: unknown };
   const confidence = typeof raw.confidence === 'number' && !Number.isNaN(raw.confidence)
