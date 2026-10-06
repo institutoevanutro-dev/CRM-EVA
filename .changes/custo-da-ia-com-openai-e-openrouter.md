@@ -1,5 +1,5 @@
 ---
-impacto: nada_mudou
+impacto: capacidade_nova
 secao: corrigido
 titulo: O gasto com a IA passa a ser contado também quando a clínica usa OpenAI ou OpenRouter
 ---
@@ -21,3 +21,7 @@ nenhum agente de IA está no ar, e a mensagem "no credits remaining" da OpenAI p
 mostrada como falta de saldo, e não como erro desconhecido.
 
 As respostas antigas continuam sem custo; só as novas passam a ter.
+
+Vale uma olhada em "Uso e orçamento" depois de atualizar: se você definiu um limite mensal com a
+opção "Parar a IA", esse limite agora passa a ser alcançado de verdade e, quando for, a IA para de
+responder. Confira se o valor ainda faz sentido com o gasto real.
