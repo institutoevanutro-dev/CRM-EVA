@@ -416,6 +416,7 @@ export async function GET(req: NextRequest): Promise<Response> {
         ...(d.tipo === "etiqueta" ? { prefixo: d.prefixo } : {}),
         linhas: agregarPorDimensao({
           dimensao: d,
+          temEtapaDeInteracao: interacao !== null,
           coorte: coorte.linhas.map((c) => ({
             chaves: chaves(c, c.contact_id),
             interagiu: interagiu(

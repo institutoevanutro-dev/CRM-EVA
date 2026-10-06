@@ -429,6 +429,7 @@ describe("tabela por dimensão", () => {
   };
   const r = agregarPorDimensao({
     dimensao: modalidade,
+    temEtapaDeInteracao: true,
     coorte: [
       { chaves: ["online"], interagiu: true },
       { chaves: ["online"], interagiu: false },
@@ -480,6 +481,7 @@ describe("tabela por dimensão", () => {
   it("interagiram é null quando o funil não tem a etapa de interação", () => {
     const sem = agregarPorDimensao({
       dimensao: modalidade,
+      temEtapaDeInteracao: false,
       coorte: [{ chaves: ["online"], interagiu: null }],
       ganhos: [],
       agenda: [],
@@ -487,9 +489,26 @@ describe("tabela por dimensão", () => {
     expect(sem[0]!.interagiram).toBeNull();
   });
 
+  // O "não dá para medir" vem da ETAPA, não do conteúdo da coorte: sem card
+  // criado no período, `coorte.some(...)` não tem o que ler e virava 0 falso,
+  // enquanto o cartão do topo mostrava "—" no mesmo carregamento.
+  it("coorte vazia sem etapa de interação: null, nunca 0; com a etapa, 0 é zero de verdade", () => {
+    const entrada = {
+      dimensao: modalidade,
+      coorte: [],
+      ganhos: [{ chaves: ["online"], value_cents: 100, currency: "BRL" }],
+      agenda: [{ chaves: ["online"], status: "completed" }],
+    };
+    const sem = agregarPorDimensao({ ...entrada, temEtapaDeInteracao: false });
+    expect(sem.map((l) => l.interagiram)).toEqual([null, null, null]);
+    const com = agregarPorDimensao({ ...entrada, temEtapaDeInteracao: true });
+    expect(com.map((l) => l.interagiram)).toEqual([0, 0, 0]);
+  });
+
   it("campanha: rótulo do insight, id quando não houve gasto, investimento por linha", () => {
     const linhas = agregarPorDimensao({
       dimensao: { tipo: "campanha" },
+      temEtapaDeInteracao: true,
       coorte: [
         { chaves: ["111"], interagiu: true },
         { chaves: ["222"], interagiu: false },

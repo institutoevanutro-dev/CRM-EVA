@@ -309,18 +309,23 @@ export interface LinhaDaDimensao {
 
 export function agregarPorDimensao({
   dimensao,
+  temEtapaDeInteracao,
   coorte,
   ganhos,
   agenda,
   campanhas,
 }: {
   dimensao: Dimensao;
+  /**
+   * `etapaDeInteracao(etapas) !== null`. O "não dá para medir" vem da ETAPA, não
+   * da coorte: coorte vazia não tem card para dizer que falta a etapa.
+   */
+  temEtapaDeInteracao: boolean;
   coorte: { chaves: string[]; interagiu: boolean | null }[];
   ganhos: { chaves: string[]; value_cents: number | string | null; currency: string | null }[];
   agenda: { chaves: string[]; status: string }[];
   campanhas?: Map<string, { nome: string; cents: number }>;
 }): LinhaDaDimensao[] {
-  const semInteracao = coorte.some((c) => c.interagiu === null);
   const usadas = new Set([...coorte, ...ganhos, ...agenda].flatMap((x) => x.chaves));
   const especiais = [SEM_VALOR, FORA_DA_LISTA].filter((k) => usadas.has(k));
 
@@ -357,7 +362,7 @@ export function agregarPorDimensao({
       chave,
       rotulo,
       leads: coorteDaqui.length,
-      interagiram: semInteracao ? null : coorteDaqui.filter((c) => c.interagiu).length,
+      interagiram: temEtapaDeInteracao ? coorteDaqui.filter((c) => c.interagiu).length : null,
       ganhos: ganhosDaqui.length,
       receita: somarPorMoeda(ganhosDaqui),
       agendados: agendaDaqui.length,
