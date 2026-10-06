@@ -100,3 +100,57 @@ describe("loadSilentContacts — anonimizado fica fora", () => {
     expect(select).toMatch(/contacts:contact_id\([^)]*is_anonymized/);
   });
 });
+
+const muitas = (n: number) =>
+  Array.from({ length: n }, (_, i) => {
+    const k = String(i).padStart(5, "0");
+    return conversa(`c-${k}`, { id: `conv-${k}` });
+  });
+
+describe("loadSilentContacts — paginação determinística das conversas", () => {
+  it("1200 conversas caladas de 1200 contatos: voltam as 1200 (não o recorte de 1000 do max_rows)", async () => {
+    const { admin } = supabaseDeConversas(muitas(1200));
+    const contatos = await createSupabaseSilenceSweepDb(admin).loadSilentContacts("org", CORTE, []);
+    expect(new Set(contatos.map((c) => c.contact_id)).size).toBe(1200);
+  });
+
+  it("pede order(id asc) e limit(500) no nível das conversas, e keyset por gt(id)", async () => {
+    const { admin, consultas } = supabaseDeConversas(muitas(600));
+    await createSupabaseSilenceSweepDb(admin).loadSilentContacts("org", CORTE, []);
+    const primeira = consultas[0]!;
+    expect(primeira).toContainEqual({ metodo: "order", args: ["id", { ascending: true }] });
+    expect(primeira).toContainEqual({ metodo: "limit", args: [500] });
+    expect(consultas[1]!).toContainEqual({ metodo: "gt", args: ["id", "conv-00499"] });
+  });
+
+  it("para na página VAZIA, não na curta: com max_rows abaixo de 500 a leitura continua completa", async () => {
+    // O dono da instalação pode baixar o max_rows do PostgREST no painel do
+    // Supabase. Uma página curta, então, não prova que a leitura acabou
+    // (mesma lição de lib/agenda/protecao-followup.ts).
+    const { admin, consultas } = supabaseDeConversas(muitas(450), { maxRows: 200 });
+    const contatos = await createSupabaseSilenceSweepDb(admin).loadSilentContacts("org", CORTE, []);
+    expect(contatos).toHaveLength(450);
+    expect(consultas).toHaveLength(4); // 200 + 200 + 50 + vazia
+  });
+
+  it("página que não avança lança, em vez de laço infinito", async () => {
+    const pagina = muitas(500);
+    const admin = {
+      from: () => {
+        const chain: Record<string, unknown> = new Proxy(
+          {},
+          {
+            get(_t, prop) {
+              if (prop === "then") return (resolve: (v: unknown) => unknown) => resolve({ data: pagina, error: null });
+              return () => chain;
+            },
+          },
+        );
+        return chain;
+      },
+    } as never;
+    await expect(createSupabaseSilenceSweepDb(admin).loadSilentContacts("org", CORTE, [])).rejects.toThrow(
+      "silence_page_did_not_advance",
+    );
+  });
+});

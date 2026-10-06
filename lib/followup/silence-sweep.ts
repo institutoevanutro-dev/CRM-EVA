@@ -202,6 +202,9 @@ type ContactEmbed =
     }
   | null;
 
+/** Página do keyset de conversas: abaixo do `max_rows` padrão (1000) do PostgREST. */
+const LIMITE_DE_CONVERSAS = 500;
+
 /** Lote do `in(contact_id, …)`: a lista vai na URL do PostgREST. */
 const LOTE_DE_CONTATOS = 100;
 
@@ -250,21 +253,6 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       // conversa, inclusive uma que um humano já fechou de propósito — medido
       // ao desenhar o primeiro fluxo de silêncio real (tenant YADEA): o gatilho
       // só faz sentido enquanto "o fluxo da conversa ainda está ativo".
-      const { data, error } = await admin
-        .from("conversations")
-        .select(
-          "id, service_revision, current_demanda_id, demandas!conversations_current_demanda_id_fkey(revision,fechada_em), status, messages!messages_conversation_id_fkey(organization_id,contact_id,conversation_id,service_revision,demanda_id,demanda_revision,sent_at,created_at), contact_id, last_inbound_at, contacts:contact_id(tags, is_blocked, is_anonymized, ai_authorized_at, phone_number), sessao:channel_session_id(metadata)",
-        )
-        .eq("organization_id", orgId).eq("demandas.organization_id", orgId)
-        .eq("contacts.organization_id", orgId).eq("sessao.organization_id", orgId)
-        .eq("messages.organization_id", orgId).eq("messages.direction", "inbound")
-        .not("messages.service_revision", "is", null)
-        .order("sent_at", { referencedTable: "messages", ascending: false })
-        .limit(1, { referencedTable: "messages" })
-        .not("last_inbound_at", "is", null)
-        .not("status", "in", `(${CONVERSATION_TERMINAL_STATUSES.join(",")})`);
-      if (error) throw new Error(error.message);
-
       type Row = {
         id: string; service_revision: number; current_demanda_id: string | null; demandas: { revision: number; fechada_em: string | null } | null;
         status: string; messages: Array<ServiceBoundary & { sent_at: string; created_at: string }>;
@@ -273,6 +261,40 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         contacts: ContactEmbed;
         sessao: { metadata: Record<string, unknown> | null } | null;
       };
+      // Keyset por conversations.id: sem ordem nem página, o PostgREST cortava
+      // em max_rows (1000) e cada tick via um recorte que o banco escolhia.
+      // Uma página bem-sucedida pode ter sido truncada pelo max_rows (que o
+      // dono da instalação ajusta no painel) — só página VAZIA prova que a
+      // leitura terminou, como em lib/agenda/protecao-followup.ts.
+      const rows: Row[] = [];
+      let depois: string | undefined;
+      for (;;) {
+        let consulta = admin
+          .from("conversations")
+          .select(
+            "id, service_revision, current_demanda_id, demandas!conversations_current_demanda_id_fkey(revision,fechada_em), status, messages!messages_conversation_id_fkey(organization_id,contact_id,conversation_id,service_revision,demanda_id,demanda_revision,sent_at,created_at), contact_id, last_inbound_at, contacts:contact_id(tags, is_blocked, is_anonymized, ai_authorized_at, phone_number), sessao:channel_session_id(metadata)",
+          )
+          .eq("organization_id", orgId).eq("demandas.organization_id", orgId)
+          .eq("contacts.organization_id", orgId).eq("sessao.organization_id", orgId)
+          .eq("messages.organization_id", orgId).eq("messages.direction", "inbound")
+          .not("messages.service_revision", "is", null)
+          .order("sent_at", { referencedTable: "messages", ascending: false })
+          .limit(1, { referencedTable: "messages" })
+          .not("last_inbound_at", "is", null)
+          .not("status", "in", `(${CONVERSATION_TERMINAL_STATUSES.join(",")})`)
+          .order("id", { ascending: true })
+          .limit(LIMITE_DE_CONVERSAS);
+        if (depois) consulta = consulta.gt("id", depois);
+        const { data, error } = await consulta;
+        if (error) throw new Error(error.message);
+        const pagina = (data ?? []) as unknown as Row[];
+        if (pagina.length === 0) break;
+        const ultimo = pagina[pagina.length - 1]!.id;
+        if (depois && ultimo <= depois) throw new Error("silence_page_did_not_advance");
+        rows.push(...pagina);
+        depois = ultimo;
+      }
+
       const cutoff = new Date(cutoffIso).getTime();
       const agora = new Date();
       const ttlMs = ttlDaAutorizacaoMs(process.env);
@@ -283,7 +305,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
           tags: string[]; blocked: boolean; anonymized: boolean; permitidoPeloGate: boolean;
         }
       >();
-      for (const row of (data ?? []) as unknown as Row[]) {
+      for (const row of rows) {
         const source = row.messages?.[0];
         const boundary = parseServiceBoundary(source);
         if (!source || !boundary) continue;

@@ -36,12 +36,15 @@ import { createSupabaseAdminClient } from "@/lib/followup/engine";
  */
 
 function supabaseComConversas(data: unknown[]) {
+  // A leitura pagina por keyset e só para na página VAZIA: a 1ª chamada
+  // devolve as linhas, as seguintes devolvem [].
+  let chamadas = 0;
   const chain: Record<string, unknown> = new Proxy(
     {},
     {
       get(_target, prop) {
         if (prop === "then") {
-          return (resolve: (value: unknown) => unknown) => resolve({ data, error: null });
+          return (resolve: (value: unknown) => unknown) => resolve({ data: chamadas++ === 0 ? data : [], error: null });
         }
         return () => chain;
       },
