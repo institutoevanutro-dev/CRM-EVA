@@ -154,7 +154,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     requestAnimationFrame(() => autoresize());
 
     const restoreOnError = () => {
-      setText(body);
+      // Se a pessoa já começou a próxima resposta, preserve os dois textos.
+      setText((current) => (current ? `${body}\n${current}` : body));
       requestAnimationFrame(() => autoresize());
     };
 
@@ -171,7 +172,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       },
       {
         onSuccess: () => {
-          setText("");
+          // O campo já foi limpo no envio. Limpar de novo aqui apagava o que a
+          // atendente começou a digitar enquanto esta saía (DeskcommCRM f82545d00).
           // A citação vale para UMA mensagem. Mantê-la depois do envio faria a
           // próxima frase sair citando algo que o atendente já respondeu.
           onCancelarResposta?.();
