@@ -56,7 +56,9 @@ function clientFalso() {
       let contar = false;
       const resolver = () => {
         if (erroEm === tabela) return { data: null, error: { message: "falhou" }, count: null };
-        const todas = (banco[tabela] ?? []).filter((l) => filtros.every(([c, op, v]) => casa(l[c], op, v)));
+        const todas = (banco[tabela] ?? []).filter((l) =>
+          filtros.every(([c, op, v]) => casa(l[c], op, v)),
+        );
         const [de, ate] = faixa ?? [0, todas.length - 1];
         return {
           data: todas.slice(de, Math.min(ate + 1, de + MAX_ROWS)),
@@ -129,37 +131,195 @@ const ANTES = "2026-07-01T15:00:00.000Z";
 function semear() {
   banco = {
     crm_pipelines: [
-      { id: P, organization_id: ORG, name: "Comercial", is_default: true, is_archived: false, position: 1, settings: { fields: CAMPOS } },
-      { id: P2, organization_id: ORG, name: "Acompanhamento", is_default: false, is_archived: false, position: 2, settings: { fields: [] } },
-      { id: P_OUTRA, organization_id: OUTRA, name: "Do vizinho", is_default: true, is_archived: false, position: 1, settings: {} },
+      {
+        id: P,
+        organization_id: ORG,
+        name: "Comercial",
+        is_default: true,
+        is_archived: false,
+        position: 1,
+        settings: { fields: CAMPOS },
+      },
+      {
+        id: P2,
+        organization_id: ORG,
+        name: "Acompanhamento",
+        is_default: false,
+        is_archived: false,
+        position: 2,
+        settings: { fields: [] },
+      },
+      {
+        id: P_OUTRA,
+        organization_id: OUTRA,
+        name: "Do vizinho",
+        is_default: true,
+        is_archived: false,
+        position: 1,
+        settings: {},
+      },
     ],
     crm_stages: [
-      { id: "s-novo", organization_id: ORG, pipeline_id: P, name: "Novo", position: 10, is_won: false, is_lost: false, is_archived: false, agent_stage_hint: null },
-      { id: "s-int", organization_id: ORG, pipeline_id: P, name: "Interagiu", position: 20, is_won: false, is_lost: false, is_archived: false, agent_stage_hint: "contacted" },
-      { id: "s-ganho", organization_id: ORG, pipeline_id: P, name: "Ganho", position: 40, is_won: true, is_lost: false, is_archived: false, agent_stage_hint: null },
+      {
+        id: "s-novo",
+        organization_id: ORG,
+        pipeline_id: P,
+        name: "Novo",
+        position: 10,
+        is_won: false,
+        is_lost: false,
+        is_archived: false,
+        agent_stage_hint: null,
+      },
+      {
+        id: "s-int",
+        organization_id: ORG,
+        pipeline_id: P,
+        name: "Interagiu",
+        position: 20,
+        is_won: false,
+        is_lost: false,
+        is_archived: false,
+        agent_stage_hint: "contacted",
+      },
+      {
+        id: "s-ganho",
+        organization_id: ORG,
+        pipeline_id: P,
+        name: "Ganho",
+        position: 40,
+        is_won: true,
+        is_lost: false,
+        is_archived: false,
+        agent_stage_hint: null,
+      },
     ],
     crm_leads: [
-      { id: "L1", organization_id: ORG, pipeline_id: P, stage_id: "s-novo", status: "open", contact_id: "C1", custom_fields: { modalidade: "online" }, value_cents: null, currency: "BRL", created_at: NO_PERIODO, closed_at: null },
-      { id: "L2", organization_id: ORG, pipeline_id: P, stage_id: "s-int", status: "open", contact_id: "C2", custom_fields: { modalidade: "TEXTO-LIVRE-SECRETO" }, value_cents: null, currency: "BRL", created_at: NO_PERIODO, closed_at: null },
-      { id: "L3", organization_id: ORG, pipeline_id: P, stage_id: "s-ganho", status: "won", contact_id: "C1", custom_fields: { modalidade: "presencial" }, value_cents: 50000, currency: "BRL", created_at: ANTES, closed_at: NO_PERIODO },
+      {
+        id: "L1",
+        organization_id: ORG,
+        pipeline_id: P,
+        stage_id: "s-novo",
+        status: "open",
+        contact_id: "C1",
+        custom_fields: { modalidade: "online" },
+        value_cents: null,
+        currency: "BRL",
+        created_at: NO_PERIODO,
+        closed_at: null,
+      },
+      {
+        id: "L2",
+        organization_id: ORG,
+        pipeline_id: P,
+        stage_id: "s-int",
+        status: "open",
+        contact_id: "C2",
+        custom_fields: { modalidade: "TEXTO-LIVRE-SECRETO" },
+        value_cents: null,
+        currency: "BRL",
+        created_at: NO_PERIODO,
+        closed_at: null,
+      },
+      {
+        id: "L3",
+        organization_id: ORG,
+        pipeline_id: P,
+        stage_id: "s-ganho",
+        status: "won",
+        contact_id: "C1",
+        custom_fields: { modalidade: "presencial" },
+        value_cents: 50000,
+        currency: "BRL",
+        created_at: ANTES,
+        closed_at: NO_PERIODO,
+      },
       // O vizinho com o MESMO funil no payload: só o filtro de org o tira.
-      { id: "L-VIZ", organization_id: OUTRA, pipeline_id: P, stage_id: "s-novo", status: "won", contact_id: "C-VIZ", custom_fields: {}, value_cents: 999900, currency: "BRL", created_at: NO_PERIODO, closed_at: NO_PERIODO },
+      {
+        id: "L-VIZ",
+        organization_id: OUTRA,
+        pipeline_id: P,
+        stage_id: "s-novo",
+        status: "won",
+        contact_id: "C-VIZ",
+        custom_fields: {},
+        value_cents: 999900,
+        currency: "BRL",
+        created_at: NO_PERIODO,
+        closed_at: NO_PERIODO,
+      },
     ],
     crm_lead_activities: [
-      { id: "a1", organization_id: ORG, lead_id: "L2", type: "stage_changed", payload: { from_stage_id: "s-novo", to_stage_id: "s-int" }, performed_at: NO_PERIODO },
-      { id: "a-viz", organization_id: OUTRA, lead_id: "L1", type: "stage_changed", payload: { de: "s-novo", para: "s-ganho" }, performed_at: NO_PERIODO },
+      {
+        id: "a1",
+        organization_id: ORG,
+        lead_id: "L2",
+        type: "stage_changed",
+        payload: { from_stage_id: "s-novo", to_stage_id: "s-int" },
+        performed_at: NO_PERIODO,
+      },
+      {
+        id: "a-viz",
+        organization_id: OUTRA,
+        lead_id: "L1",
+        type: "stage_changed",
+        payload: { de: "s-novo", para: "s-ganho" },
+        performed_at: NO_PERIODO,
+      },
     ],
     calendar_appointments: [
-      { id: "A1", organization_id: ORG, contact_id: "C1", status: "completed", starts_at: NO_PERIODO, ends_at: NO_PERIODO },
-      { id: "A2", organization_id: ORG, contact_id: "C2", status: "no_show", starts_at: NO_PERIODO, ends_at: NO_PERIODO },
-      { id: "A-VIZ", organization_id: OUTRA, contact_id: "C1", status: "completed", starts_at: NO_PERIODO, ends_at: NO_PERIODO },
+      {
+        id: "A1",
+        organization_id: ORG,
+        contact_id: "C1",
+        status: "completed",
+        starts_at: NO_PERIODO,
+        ends_at: NO_PERIODO,
+      },
+      {
+        id: "A2",
+        organization_id: ORG,
+        contact_id: "C2",
+        status: "no_show",
+        starts_at: NO_PERIODO,
+        ends_at: NO_PERIODO,
+      },
+      {
+        id: "A-VIZ",
+        organization_id: OUTRA,
+        contact_id: "C1",
+        status: "completed",
+        starts_at: NO_PERIODO,
+        ends_at: NO_PERIODO,
+      },
     ],
     crm_lead_links: [
-      { id: "k1", organization_id: ORG, lead_id: "L1", target_kind: "appointment", target_id: "A1", created_at: NO_PERIODO },
+      {
+        id: "k1",
+        organization_id: ORG,
+        lead_id: "L1",
+        target_kind: "appointment",
+        target_id: "A1",
+        created_at: NO_PERIODO,
+      },
     ],
     contacts: [
-      { id: "C1", organization_id: ORG, custom_fields: { origem: "instagram" }, tags: ["Criativo-A"], is_anonymized: false, source_metadata: { ad_platform: "meta_ads", ad_raw: { source_id: "900001" } } },
-      { id: "C2", organization_id: ORG, custom_fields: {}, tags: [], is_anonymized: false, source_metadata: {} },
+      {
+        id: "C1",
+        organization_id: ORG,
+        custom_fields: { origem: "instagram" },
+        tags: ["Criativo-A"],
+        is_anonymized: false,
+        source_metadata: { ad_platform: "meta_ads", ad_raw: { source_id: "900001" } },
+      },
+      {
+        id: "C2",
+        organization_id: ORG,
+        custom_fields: {},
+        tags: [],
+        is_anonymized: false,
+        source_metadata: {},
+      },
     ],
   };
 }
@@ -183,6 +343,8 @@ function autorizar(idioma = "pt-BR") {
 
 const chamar = async (qs = "de=2026-09-01&ate=2026-09-30") => {
   const r = await GET(new NextRequest(`http://localhost/api/v1/metrics/funil?${qs}`));
+  // O corpo é JSON navegado por caminho nas asserções; tipá-lo inteiro repetiria o hook.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return { status: r.status, corpo: (await r.json()) as Record<string, any> };
 };
 
@@ -199,7 +361,10 @@ beforeEach(() => {
 
 describe("papel", () => {
   it("negado devolve a resposta do requireRole e não lê nada", async () => {
-    m.requireRole.mockResolvedValueOnce({ ok: false, response: new Response("{}", { status: 403 }) });
+    m.requireRole.mockResolvedValueOnce({
+      ok: false,
+      response: new Response("{}", { status: 403 }),
+    });
     const { status } = await chamar();
     expect(status).toBe(403);
     expect(m.createClient).not.toHaveBeenCalled();
@@ -208,7 +373,10 @@ describe("papel", () => {
 
   it("pede manager", async () => {
     await chamar();
-    expect(m.requireRole).toHaveBeenCalledWith("manager", expect.objectContaining({ resource: "metrics" }));
+    expect(m.requireRole).toHaveBeenCalledWith(
+      "manager",
+      expect.objectContaining({ resource: "metrics" }),
+    );
   });
 });
 
@@ -248,7 +416,9 @@ describe("validação", () => {
 
 describe("escopo de organização", () => {
   it("toda leitura filtra pela org do requireRole, mesmo com outra na query", async () => {
-    const { status, corpo } = await chamar(`de=2026-09-01&ate=2026-09-30&organization_id=${OUTRA}&dimensao=campo_contato&campo=origem`);
+    const { status, corpo } = await chamar(
+      `de=2026-09-01&ate=2026-09-30&organization_id=${OUTRA}&dimensao=campo_contato&campo=origem`,
+    );
     expect(status).toBe(200);
     expect(consultas.length).toBeGreaterThan(0);
     for (const c of consultas) {
@@ -263,19 +433,34 @@ describe("escopo de organização", () => {
 });
 
 describe("falhas e corte", () => {
-  it.each(["crm_leads", "crm_lead_activities", "crm_stages", "calendar_appointments", "crm_lead_links", "contacts"])(
-    "erro lendo %s vira 500, nunca números zerados",
-    async (tabela) => {
-      erroEm = tabela;
-      const { status, corpo } = await chamar("de=2026-09-01&ate=2026-09-30&dimensao=campo_contato&campo=origem");
-      expect(status).toBe(500);
-      expect(corpo.data).toBeUndefined();
-    },
-  );
+  it.each([
+    "crm_leads",
+    "crm_lead_activities",
+    "crm_stages",
+    "calendar_appointments",
+    "crm_lead_links",
+    "contacts",
+  ])("erro lendo %s vira 500, nunca números zerados", async (tabela) => {
+    erroEm = tabela;
+    const { status, corpo } = await chamar(
+      "de=2026-09-01&ate=2026-09-30&dimensao=campo_contato&campo=origem",
+    );
+    expect(status).toBe(500);
+    expect(corpo.data).toBeUndefined();
+  });
 
   it("coorte maior que 10 páginas: truncado", async () => {
     for (let i = 0; i < 10_001; i++) {
-      banco.crm_leads!.push({ id: `X${i}`, organization_id: ORG, pipeline_id: P, stage_id: "s-novo", status: "open", contact_id: null, custom_fields: {}, created_at: NO_PERIODO });
+      banco.crm_leads!.push({
+        id: `X${i}`,
+        organization_id: ORG,
+        pipeline_id: P,
+        stage_id: "s-novo",
+        status: "open",
+        contact_id: null,
+        custom_fields: {},
+        created_at: NO_PERIODO,
+      });
     }
     const { corpo } = await chamar();
     expect(corpo.data.truncado).toBe(true);
@@ -283,7 +468,14 @@ describe("falhas e corte", () => {
 
   it("lote de movimentos com mais linhas do que cabe: truncado", async () => {
     for (let i = 0; i < 10_001; i++) {
-      banco.crm_lead_activities!.push({ id: `m${i}`, organization_id: ORG, lead_id: "L1", type: "stage_changed", payload: {}, performed_at: NO_PERIODO });
+      banco.crm_lead_activities!.push({
+        id: `m${i}`,
+        organization_id: ORG,
+        lead_id: "L1",
+        type: "stage_changed",
+        payload: {},
+        performed_at: NO_PERIODO,
+      });
     }
     const { corpo } = await chamar();
     expect(corpo.data.truncado).toBe(true);
@@ -313,37 +505,69 @@ describe("resposta", () => {
       taxa_comparecimento: 0.5,
     });
     expect(d.por_etapa.map((e: { alcancaram: number }) => e.alcancaram)).toEqual([2, 1, 0]);
-    expect(d.investimento).toEqual({ estado: "ok", conta: "Conta principal", moeda: "BRL", cents: 10000 });
+    expect(d.investimento).toEqual({
+      estado: "ok",
+      conta: "Conta principal",
+      moeda: "BRL",
+      cents: 10000,
+    });
     expect(d.opcoes.funis.map((f: { id: string }) => f.id)).toEqual([P, P2]);
-    expect(d.opcoes.campos_contato).toEqual([{ key: "modalidade", label: "Modalidade" }, { key: "origem", label: "Origem" }]);
+    expect(d.opcoes.campos_contato).toEqual([
+      { key: "modalidade", label: "Modalidade" },
+      { key: "origem", label: "Origem" },
+    ]);
     expect(d.dimensao).toBeNull();
 
     const chaves = new Set<string>();
     const varrer = (v: unknown) => {
       if (Array.isArray(v)) v.forEach(varrer);
-      else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) (chaves.add(k), varrer(x));
+      else if (v && typeof v === "object")
+        for (const [k, x] of Object.entries(v)) {
+          chaves.add(k);
+          varrer(x);
+        }
     };
     varrer(corpo);
-    for (const k of ["name", "phone_number", "email", "contact_id", "lead_id", "custom_fields", "tags"]) expect(chaves).not.toContain(k);
+    for (const k of [
+      "name",
+      "phone_number",
+      "email",
+      "contact_id",
+      "lead_id",
+      "custom_fields",
+      "tags",
+    ])
+      expect(chaves).not.toContain(k);
     const texto = JSON.stringify(corpo);
-    for (const proibido of ["L1", "L2", "C1", "C2", "TEXTO-LIVRE-SECRETO"]) expect(texto).not.toContain(`"${proibido}"`);
+    for (const proibido of ["L1", "L2", "C1", "C2", "TEXTO-LIVRE-SECRETO"])
+      expect(texto).not.toContain(`"${proibido}"`);
     expect(texto).not.toContain("TEXTO-LIVRE-SECRETO");
   });
 
   it("sem dimensão e com investimento ok: ganhos de anúncio, custo e ROAS calculados", async () => {
     const { corpo } = await chamar();
-    expect(corpo.data.numeros).toMatchObject({ ganhos_de_anuncio: 1, custo_por_venda_cents: 10000, roas: 5 });
+    expect(corpo.data.numeros).toMatchObject({
+      ganhos_de_anuncio: 1,
+      custo_por_venda_cents: 10000,
+      roas: 5,
+    });
   });
 
   it("sem investimento: ganhos de anúncio, custo e ROAS null", async () => {
     m.investimento.mockResolvedValueOnce({ estado: "nao_conectado" });
     const { corpo } = await chamar();
     expect(corpo.data.investimento).toEqual({ estado: "nao_conectado" });
-    expect(corpo.data.numeros).toMatchObject({ ganhos_de_anuncio: null, custo_por_venda_cents: null, roas: null });
+    expect(corpo.data.numeros).toMatchObject({
+      ganhos_de_anuncio: null,
+      custo_por_venda_cents: null,
+      roas: null,
+    });
   });
 
   it("recorte por campo do card: opções do funil escolhido, fora da lista sem o texto", async () => {
-    const { corpo } = await chamar("de=2026-09-01&ate=2026-09-30&dimensao=campo_card&campo=modalidade");
+    const { corpo } = await chamar(
+      "de=2026-09-01&ate=2026-09-30&dimensao=campo_card&campo=modalidade",
+    );
     const linhas = corpo.data.dimensao.linhas as Array<Record<string, unknown>>;
     expect(linhas.map((l) => [l.chave, l.leads, l.ganhos, l.agendados])).toEqual([
       ["online", 1, 0, 1],
@@ -361,6 +585,12 @@ describe("resposta", () => {
   it("recorte por campanha: rótulo da campanha e gasto por linha", async () => {
     const { corpo } = await chamar("de=2026-09-01&ate=2026-09-30&dimensao=campanha");
     const linhas = corpo.data.dimensao.linhas as Array<Record<string, unknown>>;
-    expect(linhas[0]).toMatchObject({ chave: "120300001", rotulo: "Setembro", leads: 1, ganhos: 1, investimento_cents: 10000 });
+    expect(linhas[0]).toMatchObject({
+      chave: "120300001",
+      rotulo: "Setembro",
+      leads: 1,
+      ganhos: 1,
+      investimento_cents: 10000,
+    });
   });
 });

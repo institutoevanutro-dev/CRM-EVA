@@ -69,7 +69,11 @@ const querySchema = z.object({
   ate: z.iso.date().optional(),
   pipeline_id: z.uuid().optional(),
   dimensao: z.enum(["campo_contato", "campo_card", "etiqueta", "campanha"]).optional(),
-  campo: z.string().max(40).regex(/^[a-z][a-z0-9_]*$/i).optional(),
+  campo: z
+    .string()
+    .max(40)
+    .regex(/^[a-z][a-z0-9_]*$/i)
+    .optional(),
   prefixo: z.string().trim().min(1).max(40).optional(),
 });
 
@@ -93,7 +97,11 @@ interface Contato {
 
 class ErroDeLeitura extends Error {}
 
-type Resposta = { data: unknown[] | null; error: { message: string } | null; count?: number | null };
+type Resposta = {
+  data: unknown[] | null;
+  error: { message: string } | null;
+  count?: number | null;
+};
 type Pagina = (inicio: number, fim: number) => PromiseLike<Resposta>;
 
 /** Lê tudo até o teto, página a página. Erro LANÇA — vira 500, nunca zero. */
@@ -197,7 +205,9 @@ export async function GET(req: NextRequest): Promise<Response> {
 
     let dimensao: Dimensao | null = null;
     if (q.dimensao === "campo_contato" || q.dimensao === "campo_card") {
-      const campo = (q.dimensao === "campo_contato" ? camposContato : camposCard).find((c) => c.key === q.campo);
+      const campo = (q.dimensao === "campo_contato" ? camposContato : camposCard).find(
+        (c) => c.key === q.campo,
+      );
       if (!campo) return invalido("O campo escolhido não é um campo de lista deste funil.");
       dimensao = { tipo: q.dimensao, campo: campo.key, opcoes: campo.options ?? [] };
     } else if (q.dimensao === "etiqueta") {
@@ -213,9 +223,13 @@ export async function GET(req: NextRequest): Promise<Response> {
       .eq("organization_id", orgId)
       .eq("pipeline_id", funil.id);
     if (erroEtapas) throw new ErroDeLeitura(erroEtapas.message);
-    const etapas = ((etapasBrutas ?? []) as Etapa[]).map((e) => ({ ...e, position: Number(e.position) }));
+    const etapas = ((etapasBrutas ?? []) as Etapa[]).map((e) => ({
+      ...e,
+      position: Number(e.position),
+    }));
 
-    const COLUNAS_CARD = "id, stage_id, status, contact_id, custom_fields, value_cents, currency, created_at";
+    const COLUNAS_CARD =
+      "id, stage_id, status, contact_id, custom_fields, value_cents, currency, created_at";
     const coorte = await paginar<Card>((a, b) =>
       db
         .from("crm_leads")
@@ -258,17 +272,21 @@ export async function GET(req: NextRequest): Promise<Response> {
         .range(a, b),
     );
 
-    const compromissos = await paginar<{ id: string; status: string; ends_at: string; contact_id: string | null }>(
-      (a, b) =>
-        db
-          .from("calendar_appointments")
-          .select("id, status, ends_at, contact_id", { count: "exact" })
-          .eq("organization_id", orgId)
-          .gte("starts_at", janela.inicio)
-          .lt("starts_at", janela.fimExclusivo)
-          .order("starts_at")
-          .order("id")
-          .range(a, b),
+    const compromissos = await paginar<{
+      id: string;
+      status: string;
+      ends_at: string;
+      contact_id: string | null;
+    }>((a, b) =>
+      db
+        .from("calendar_appointments")
+        .select("id, status, ends_at, contact_id", { count: "exact" })
+        .eq("organization_id", orgId)
+        .gte("starts_at", janela.inicio)
+        .lt("starts_at", janela.fimExclusivo)
+        .order("starts_at")
+        .order("id")
+        .range(a, b),
     );
 
     const vinculos = await emLotes<{ lead_id: string; target_id: string; created_at: string }>(
@@ -303,24 +321,33 @@ export async function GET(req: NextRequest): Promise<Response> {
     const contatosSemVinculo = compromissos.linhas
       .filter((c) => !vinculosPorCompromisso.has(c.id) && c.contact_id)
       .map((c) => c.contact_id!);
-    const cardsDosContatos = await emLotes<Card>(contatosSemVinculo, (lote) => (a, b) =>
-      db
-        .from("crm_leads")
-        .select(COLUNAS_CARD, { count: "exact" })
-        .eq("organization_id", orgId)
-        .eq("pipeline_id", funil.id)
-        .in("contact_id", lote)
-        .order("created_at")
-        .order("id")
-        .range(a, b),
+    const cardsDosContatos = await emLotes<Card>(
+      contatosSemVinculo,
+      (lote) => (a, b) =>
+        db
+          .from("crm_leads")
+          .select(COLUNAS_CARD, { count: "exact" })
+          .eq("organization_id", orgId)
+          .eq("pipeline_id", funil.id)
+          .in("contact_id", lote)
+          .order("created_at")
+          .order("id")
+          .range(a, b),
     );
-    const cardsDaAgenda = new Map([...cardsVinculados.linhas, ...cardsDosContatos.linhas].map((c) => [c.id, c]));
+    const cardsDaAgenda = new Map(
+      [...cardsVinculados.linhas, ...cardsDosContatos.linhas].map((c) => [c.id, c]),
+    );
     const cardsPorContato = agruparPor(
       cardsDosContatos.linhas.filter((c) => c.contact_id),
       (c) => c.contact_id!,
     );
     const agenda = compromissos.linhas.flatMap((c) => {
-      const card = cardDoCompromisso(c, vinculosPorCompromisso.get(c.id) ?? [], cardsDaAgenda, cardsPorContato);
+      const card = cardDoCompromisso(
+        c,
+        vinculosPorCompromisso.get(c.id) ?? [],
+        cardsDaAgenda,
+        cardsPorContato,
+      );
       return card ? [{ ...c, card }] : [];
     });
 
@@ -331,18 +358,22 @@ export async function GET(req: NextRequest): Promise<Response> {
     const idsDeContato = [
       ...(investimentoOk ? ganhos.linhas : []),
       ...(dimensaoDeContato ? [...coorte.linhas, ...ganhos.linhas] : []),
-      ...(dimensaoDeContato ? agenda.map((c) => ({ contact_id: c.card.contact_id ?? c.contact_id })) : []),
+      ...(dimensaoDeContato
+        ? agenda.map((c) => ({ contact_id: c.card.contact_id ?? c.contact_id }))
+        : []),
     ]
       .map((c) => c.contact_id)
       .filter((id): id is string => Boolean(id));
-    const contatos = await emLotes<Contato>(idsDeContato, (lote) => (a, b) =>
-      db
-        .from("contacts")
-        .select("id, custom_fields, tags, source_metadata, is_anonymized", { count: "exact" })
-        .eq("organization_id", orgId)
-        .in("id", lote)
-        .order("id")
-        .range(a, b),
+    const contatos = await emLotes<Contato>(
+      idsDeContato,
+      (lote) => (a, b) =>
+        db
+          .from("contacts")
+          .select("id, custom_fields, tags, source_metadata, is_anonymized", { count: "exact" })
+          .eq("organization_id", orgId)
+          .in("id", lote)
+          .order("id")
+          .range(a, b),
     );
     const contatoPorId = new Map(contatos.linhas.map((c) => [c.id, c]));
     // Contato anonimizado não tem campanha — mesma exclusão da tela Meta Ads.
@@ -357,7 +388,9 @@ export async function GET(req: NextRequest): Promise<Response> {
     const numerosCoorte = agregarCoorte({ etapas, cards: coorte.linhas, movimentosPorCard });
     const numerosGanhos = agregarGanhos(ganhos.linhas);
     const numerosAgenda = agregarAgenda(agenda, Date.now());
-    const ganhosDeAnuncio = investimentoOk ? ganhos.linhas.filter((g) => campanhaDe(g.contact_id)) : null;
+    const ganhosDeAnuncio = investimentoOk
+      ? ganhos.linhas.filter((g) => campanhaDe(g.contact_id))
+      : null;
     const custo = custoERoas({
       investimento,
       ganhosDeAnuncio: ganhosDeAnuncio?.length ?? 0,
@@ -385,18 +418,31 @@ export async function GET(req: NextRequest): Promise<Response> {
           dimensao: d,
           coorte: coorte.linhas.map((c) => ({
             chaves: chaves(c, c.contact_id),
-            interagiu: interagiu(posicaoAlcancada(c, movimentosPorCard.get(c.id) ?? [], porId), interacao),
+            interagiu: interagiu(
+              posicaoAlcancada(c, movimentosPorCard.get(c.id) ?? [], porId),
+              interacao,
+            ),
           })),
           ganhos: ganhos.linhas.map((g) => ({ ...g, chaves: chaves(g, g.contact_id) })),
-          agenda: agenda.map((c) => ({ status: c.status, chaves: chaves(c.card, c.card.contact_id ?? c.contact_id) })),
+          agenda: agenda.map((c) => ({
+            status: c.status,
+            chaves: chaves(c.card, c.card.contact_id ?? c.contact_id),
+          })),
           campanhas: investimentoOk?.porCampanha,
         }),
       };
     }
 
-    const truncado = [coorte, movimentos, ganhos, compromissos, vinculos, cardsVinculados, cardsDosContatos, contatos].some(
-      (r) => r.truncado,
-    );
+    const truncado = [
+      coorte,
+      movimentos,
+      ganhos,
+      compromissos,
+      vinculos,
+      cardsVinculados,
+      cardsDosContatos,
+      contatos,
+    ].some((r) => r.truncado);
 
     return ok(
       {
@@ -418,7 +464,12 @@ export async function GET(req: NextRequest): Promise<Response> {
         por_etapa: numerosCoorte.por_etapa,
         dimensao: respostaDimensao,
         investimento: investimentoOk
-          ? { estado: "ok", conta: investimentoOk.conta.nome, moeda: investimentoOk.moeda, cents: investimentoOk.cents }
+          ? {
+              estado: "ok",
+              conta: investimentoOk.conta.nome,
+              moeda: investimentoOk.moeda,
+              cents: investimentoOk.cents,
+            }
           : investimento,
         opcoes: {
           funis: funis.map((f) => ({ id: f.id, nome: f.name, padrao: f.is_default })),

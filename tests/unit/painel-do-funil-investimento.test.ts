@@ -29,12 +29,20 @@ const ORG = "10000000-0000-4000-8000-000000000001";
 const admin = {} as never;
 const ler = () => investimentoDoPeriodo(admin, ORG, "2026-09-01", "2026-09-30");
 
-const conta = (id: string, status = 1, moeda = "BRL") => ({ id, nome: `Conta ${id}`, moeda, status });
+const conta = (id: string, status = 1, moeda = "BRL") => ({
+  id,
+  nome: `Conta ${id}`,
+  moeda,
+  status,
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
   m.cred.mockResolvedValue({ ok: true, credencial: { accessToken: "tok", contaPadrao: null } });
-  m.contas.mockResolvedValue({ ok: true, dados: [conta("act_1", 2), conta("act_2", 1), conta("act_3", 1)] });
+  m.contas.mockResolvedValue({
+    ok: true,
+    dados: [conta("act_1", 2), conta("act_2", 1), conta("act_3", 1)],
+  });
   m.insights.mockResolvedValue({
     ok: true,
     dados: [
@@ -58,7 +66,12 @@ describe("investimento do período", () => {
 
   it("sem conta padrão: a primeira ATIVA, como a tela Meta Ads", async () => {
     const r = await ler();
-    expect(r).toMatchObject({ estado: "ok", conta: { id: "act_2", nome: "Conta act_2" }, moeda: "BRL", cents: 20000 });
+    expect(r).toMatchObject({
+      estado: "ok",
+      conta: { id: "act_2", nome: "Conta act_2" },
+      moeda: "BRL",
+      cents: 20000,
+    });
     expect(m.insights).toHaveBeenCalledWith("tok", "act_2", "2026-09-01", "2026-09-30");
   });
 
@@ -68,12 +81,18 @@ describe("investimento do período", () => {
   });
 
   it("conta padrão gravada vence a regra", async () => {
-    m.cred.mockResolvedValueOnce({ ok: true, credencial: { accessToken: "tok", contaPadrao: "act_3" } });
+    m.cred.mockResolvedValueOnce({
+      ok: true,
+      credencial: { accessToken: "tok", contaPadrao: "act_3" },
+    });
     expect(await ler()).toMatchObject({ estado: "ok", conta: { id: "act_3" } });
   });
 
   it("padrão que o token não alcança: indisponível, sem insights e sem moeda presumida", async () => {
-    m.cred.mockResolvedValueOnce({ ok: true, credencial: { accessToken: "tok", contaPadrao: "act_77" } });
+    m.cred.mockResolvedValueOnce({
+      ok: true,
+      credencial: { accessToken: "tok", contaPadrao: "act_77" },
+    });
     const r = await ler();
     expect(r).toEqual({ estado: "indisponivel", motivo: "conta_fora_do_alcance" });
     expect(JSON.stringify(r)).not.toContain("BRL");

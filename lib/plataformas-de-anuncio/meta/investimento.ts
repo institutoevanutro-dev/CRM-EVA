@@ -33,7 +33,10 @@ export type Investimento =
     }
   | { estado: "nao_conectado" }
   | { estado: "sem_conta" }
-  | { estado: "indisponivel"; motivo: FalhaDeLeitura | "cifra_indisponivel" | "conta_fora_do_alcance" };
+  | {
+      estado: "indisponivel";
+      motivo: FalhaDeLeitura | "cifra_indisponivel" | "conta_fora_do_alcance";
+    };
 
 /**
  * Reais → centavos. `ponytail:` vale para as moedas de 2 casas servidas

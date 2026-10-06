@@ -37,10 +37,15 @@ export function janelaDoPeriodo({ de, ate, fuso }: { de: string; ate: string; fu
   fimExclusivo: string;
   dias: number;
 } {
-  const dias = Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / DIA_MS) + 1;
+  const dias =
+    Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / DIA_MS) + 1;
   if (dias < 1) throw new RangeError("periodo_invertido");
   if (dias > DIAS_MAXIMOS) throw new RangeError("periodo_longo");
-  return { inicio: inicioDoDiaNoFuso(de, fuso), fimExclusivo: inicioDoDiaNoFuso(somarDias(ate, 1), fuso), dias };
+  return {
+    inicio: inicioDoDiaNoFuso(de, fuso),
+    fimExclusivo: inicioDoDiaNoFuso(somarDias(ate, 1), fuso),
+    dias,
+  };
 }
 
 // ─── Etapas ─────────────────────────────────────────────────────────────────
@@ -112,10 +117,10 @@ export function agregarCoorte({
 }) {
   const porId = new Map(etapas.map((e) => [e.id, e]));
   const interacao = etapaDeInteracao(etapas);
-  const alcancadas = cards.map((c) => posicaoAlcancada(c, movimentosPorCard.get(c.id) ?? [], porId));
-  const interagiram = interacao
-    ? alcancadas.filter((a) => interagiu(a, interacao)).length
-    : null;
+  const alcancadas = cards.map((c) =>
+    posicaoAlcancada(c, movimentosPorCard.get(c.id) ?? [], porId),
+  );
+  const interagiram = interacao ? alcancadas.filter((a) => interagiu(a, interacao)).length : null;
   return {
     leads: cards.length,
     interagiram,
@@ -141,7 +146,9 @@ export interface ValorPorMoeda {
   cents: string;
 }
 
-function somarPorMoeda(itens: { value_cents: number | string | null; currency: string | null }[]): ValorPorMoeda[] {
+function somarPorMoeda(
+  itens: { value_cents: number | string | null; currency: string | null }[],
+): ValorPorMoeda[] {
   const soma = new Map<string, bigint>();
   for (const i of itens) {
     if (i.value_cents === null || !i.currency) continue;
@@ -152,7 +159,9 @@ function somarPorMoeda(itens: { value_cents: number | string | null; currency: s
     .map(([moeda, cents]) => ({ moeda, cents: cents.toString() }));
 }
 
-export function agregarGanhos(cards: { value_cents: number | string | null; currency: string | null }[]) {
+export function agregarGanhos(
+  cards: { value_cents: number | string | null; currency: string | null }[],
+) {
   return {
     ganhos: cards.length,
     receita: somarPorMoeda(cards),
@@ -195,7 +204,8 @@ export function custoERoas({
   }
   const receita = receitaDeAnuncio.find((r) => r.moeda === investimento.moeda);
   return {
-    custo_por_venda_cents: ganhosDeAnuncio > 0 ? Math.round(investimento.cents / ganhosDeAnuncio) : null,
+    custo_por_venda_cents:
+      ganhosDeAnuncio > 0 ? Math.round(investimento.cents / ganhosDeAnuncio) : null,
     roas: receita && investimento.cents > 0 ? Number(receita.cents) / investimento.cents : null,
   };
 }
@@ -208,7 +218,11 @@ export const SEM_VALOR = "__sem_valor";
 export const FORA_DA_LISTA = "__fora_da_lista";
 
 export type Dimensao =
-  | { tipo: "campo_contato" | "campo_card"; campo: string; opcoes: { value: string; label: string }[] }
+  | {
+      tipo: "campo_contato" | "campo_card";
+      campo: string;
+      opcoes: { value: string; label: string }[];
+    }
   | { tipo: "etiqueta"; prefixo: string }
   | { tipo: "campanha" };
 
@@ -237,12 +251,16 @@ export function valoresDaDimensao(
     card,
     contato,
     campanha,
-  }: { card?: { custom_fields: unknown } | null; contato?: ContatoDaDimensao | null; campanha?: string | null },
+  }: {
+    card?: { custom_fields: unknown } | null;
+    contato?: ContatoDaDimensao | null;
+    campanha?: string | null;
+  },
 ): string[] {
   if (d.tipo === "campo_card") return [valorDoCampo(card?.custom_fields, d.campo, d.opcoes)];
   if (!contato || contato.is_anonymized) return [SEM_VALOR];
-  if (d.tipo === "campo_contato") return [valorDoCampo(contato.custom_fields, d.campo, d.opcoes)];
   if (d.tipo === "campanha") return [campanha ?? SEM_VALOR];
+  if (d.tipo !== "etiqueta") return [valorDoCampo(contato.custom_fields, d.campo, d.opcoes)];
   // A etiqueta de CONTATO é gravada como foi digitada (`tag-normalizada.ts`).
   const prefixo = normalizarTag(d.prefixo);
   const achadas = [...new Set((contato.tags ?? []).map(normalizarTag))].filter(
@@ -315,7 +333,10 @@ export function agregarPorDimensao({
       .sort((a, b) => a.localeCompare(b))
       .map((k) => ({ chave: k, rotulo: k }));
   } else {
-    const ids = new Set([...(campanhas?.keys() ?? []), ...[...usadas].filter((k) => !especiais.includes(k))]);
+    const ids = new Set([
+      ...(campanhas?.keys() ?? []),
+      ...[...usadas].filter((k) => !especiais.includes(k)),
+    ]);
     base = [...ids]
       .map((id) => ({ chave: id, rotulo: campanhas?.get(id)?.nome ?? id }))
       .sort(
@@ -327,7 +348,8 @@ export function agregarPorDimensao({
 
   const linhas = [...base, ...especiais.map((chave) => ({ chave, rotulo: null }))];
   return linhas.map(({ chave, rotulo }) => {
-    const daqui = <T extends { chaves: string[] }>(xs: T[]) => xs.filter((x) => x.chaves.includes(chave));
+    const daqui = <T extends { chaves: string[] }>(xs: T[]) =>
+      xs.filter((x) => x.chaves.includes(chave));
     const coorteDaqui = daqui(coorte);
     const ganhosDaqui = daqui(ganhos);
     const agendaDaqui = daqui(agenda).filter((a) => a.status !== "cancelled");

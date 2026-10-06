@@ -50,7 +50,9 @@ const mov = (payload: unknown) => ({ payload });
 // ─── Passo 1 ────────────────────────────────────────────────────────────────
 describe("janela do período no fuso da organização", () => {
   it("vira instantes UTC semiabertos no fuso", () => {
-    expect(janelaDoPeriodo({ de: "2026-09-01", ate: "2026-09-30", fuso: "America/Sao_Paulo" })).toEqual({
+    expect(
+      janelaDoPeriodo({ de: "2026-09-01", ate: "2026-09-30", fuso: "America/Sao_Paulo" }),
+    ).toEqual({
       inicio: "2026-09-01T03:00:00.000Z",
       fimExclusivo: "2026-10-01T03:00:00.000Z",
       dias: 30,
@@ -91,7 +93,13 @@ describe("chegou à etapa — as duas gramáticas de payload", () => {
   });
 
   it("etapa de perda não conta como avanço", () => {
-    expect(posicaoAlcancada({ stage_id: "perdido" }, [mov({ de: "interagiu", para: "perdido" })], POR_ID)).toBe(20);
+    expect(
+      posicaoAlcancada(
+        { stage_id: "perdido" },
+        [mov({ de: "interagiu", para: "perdido" })],
+        POR_ID,
+      ),
+    ).toBe(20);
   });
 
   it("etapa de outro funil e payload torto são ignorados sem lançar", () => {
@@ -172,9 +180,14 @@ describe("coorte: leads, interagiram e funil por etapa", () => {
   it("etapa ARQUIVADA com o passo é ignorada; vale a ativa", () => {
     // Duas ATIVAS com o mesmo passo são impossíveis (uniq_crm_stages_pipeline_hint);
     // a arquivada que guardou o passo é o caso real.
-    const comArquivada = [...ETAPAS.filter((e) => e.id !== "velha"), etapa("velha", 5, { is_archived: true, agent_stage_hint: "contacted" })];
+    const comArquivada = [
+      ...ETAPAS.filter((e) => e.id !== "velha"),
+      etapa("velha", 5, { is_archived: true, agent_stage_hint: "contacted" }),
+    ];
     expect(etapaDeInteracao(comArquivada)?.id).toBe("interagiu");
-    const soArquivada = comArquivada.map((e) => (e.id === "interagiu" ? { ...e, agent_stage_hint: null } : e));
+    const soArquivada = comArquivada.map((e) =>
+      e.id === "interagiu" ? { ...e, agent_stage_hint: null } : e,
+    );
     expect(etapaDeInteracao(soArquivada)).toBeNull();
     const r = agregarCoorte({ etapas: soArquivada, cards, movimentosPorCard });
     expect(r.interagiram).toBeNull();
@@ -215,14 +228,32 @@ describe("agenda", () => {
     const c = (status: string, ends_at = passado) => ({ status, ends_at });
     expect(
       agregarAgenda(
-        [c("completed"), c("completed"), c("completed"), c("no_show"), c("confirmed"), c("pending", futuro), c("cancelled"), c("cancelled")],
+        [
+          c("completed"),
+          c("completed"),
+          c("completed"),
+          c("no_show"),
+          c("confirmed"),
+          c("pending", futuro),
+          c("cancelled"),
+          c("cancelled"),
+        ],
         agora,
       ),
-    ).toEqual({ agendados: 6, realizados: 3, faltas: 1, sem_baixa: 1, cancelados: 2, taxa_comparecimento: 0.75 });
+    ).toEqual({
+      agendados: 6,
+      realizados: 3,
+      faltas: 1,
+      sem_baixa: 1,
+      cancelados: 2,
+      taxa_comparecimento: 0.75,
+    });
   });
 
   it("só cancelados: taxa null", () => {
-    expect(agregarAgenda([{ status: "cancelled", ends_at: passado }], agora).taxa_comparecimento).toBeNull();
+    expect(
+      agregarAgenda([{ status: "cancelled", ends_at: passado }], agora).taxa_comparecimento,
+    ).toBeNull();
   });
 });
 
@@ -230,28 +261,51 @@ describe("agenda", () => {
 describe("custo por venda e ROAS", () => {
   const ok = { estado: "ok" as const, moeda: "BRL", cents: 100000 };
   it("custo = investimento ÷ ganhos de anúncio; ROAS na moeda da conta", () => {
-    expect(custoERoas({ investimento: ok, ganhosDeAnuncio: 4, receitaDeAnuncio: [{ moeda: "BRL", cents: "300000" }] })).toEqual({
+    expect(
+      custoERoas({
+        investimento: ok,
+        ganhosDeAnuncio: 4,
+        receitaDeAnuncio: [{ moeda: "BRL", cents: "300000" }],
+      }),
+    ).toEqual({
       custo_por_venda_cents: 25000,
       roas: 3,
     });
   });
   it("receita em outra moeda: ROAS null, custo continua", () => {
-    expect(custoERoas({ investimento: ok, ganhosDeAnuncio: 4, receitaDeAnuncio: [{ moeda: "USD", cents: "300000" }] })).toEqual({
+    expect(
+      custoERoas({
+        investimento: ok,
+        ganhosDeAnuncio: 4,
+        receitaDeAnuncio: [{ moeda: "USD", cents: "300000" }],
+      }),
+    ).toEqual({
       custo_por_venda_cents: 25000,
       roas: null,
     });
   });
   it("0 ganhos de anúncio: custo null", () => {
-    expect(custoERoas({ investimento: ok, ganhosDeAnuncio: 0, receitaDeAnuncio: [] }).custo_por_venda_cents).toBeNull();
+    expect(
+      custoERoas({ investimento: ok, ganhosDeAnuncio: 0, receitaDeAnuncio: [] })
+        .custo_por_venda_cents,
+    ).toBeNull();
   });
   it("investimento 0: ROAS null", () => {
     expect(
-      custoERoas({ investimento: { ...ok, cents: 0 }, ganhosDeAnuncio: 1, receitaDeAnuncio: [{ moeda: "BRL", cents: "100" }] }).roas,
+      custoERoas({
+        investimento: { ...ok, cents: 0 },
+        ganhosDeAnuncio: 1,
+        receitaDeAnuncio: [{ moeda: "BRL", cents: "100" }],
+      }).roas,
     ).toBeNull();
   });
   it("sem investimento ok: os dois null", () => {
     expect(
-      custoERoas({ investimento: { estado: "nao_conectado" }, ganhosDeAnuncio: 3, receitaDeAnuncio: [{ moeda: "BRL", cents: "1" }] }),
+      custoERoas({
+        investimento: { estado: "nao_conectado" },
+        ganhosDeAnuncio: 3,
+        receitaDeAnuncio: [{ moeda: "BRL", cents: "1" }],
+      }),
     ).toEqual({ custo_por_venda_cents: null, roas: null });
   });
 });
@@ -274,22 +328,34 @@ const contato = (extra: Record<string, unknown> = {}) => ({
 
 describe("valor da dimensão por card", () => {
   it("campo do contato: opção, ausente, fora da lista, contato nulo", () => {
-    expect(valoresDaDimensao(ORIGEM, { contato: contato({ custom_fields: { origem: "indicacao" } }) })).toEqual(["indicacao"]);
+    expect(
+      valoresDaDimensao(ORIGEM, { contato: contato({ custom_fields: { origem: "indicacao" } }) }),
+    ).toEqual(["indicacao"]);
     expect(valoresDaDimensao(ORIGEM, { contato: contato() })).toEqual([SEM_VALOR]);
-    expect(valoresDaDimensao(ORIGEM, { contato: contato({ custom_fields: { origem: "tiktok" } }) })).toEqual([FORA_DA_LISTA]);
+    expect(
+      valoresDaDimensao(ORIGEM, { contato: contato({ custom_fields: { origem: "tiktok" } }) }),
+    ).toEqual([FORA_DA_LISTA]);
     expect(valoresDaDimensao(ORIGEM, { contato: null })).toEqual([SEM_VALOR]);
   });
 
   it("campo do card lê o card", () => {
     const modalidade: Dimensao = { ...ORIGEM, tipo: "campo_card", campo: "modalidade" };
-    expect(valoresDaDimensao(modalidade, { card: { custom_fields: { modalidade: "instagram" } } })).toEqual(["instagram"]);
-    expect(valoresDaDimensao(modalidade, { card: { custom_fields: { modalidade: 3 } } })).toEqual([FORA_DA_LISTA]);
+    expect(
+      valoresDaDimensao(modalidade, { card: { custom_fields: { modalidade: "instagram" } } }),
+    ).toEqual(["instagram"]);
+    expect(valoresDaDimensao(modalidade, { card: { custom_fields: { modalidade: 3 } } })).toEqual([
+      FORA_DA_LISTA,
+    ]);
   });
 
   it("etiqueta: normaliza prefixo e CADA etiqueta, sem repetir", () => {
     const d: Dimensao = { tipo: "etiqueta", prefixo: "Criativo-" };
-    expect(valoresDaDimensao(d, { contato: contato({ tags: ["criativo-a", "criativo-b", "vip"] }) })).toEqual(["criativo-a", "criativo-b"]);
-    expect(valoresDaDimensao(d, { contato: contato({ tags: ["Criativo-A", "criativo-a"] }) })).toEqual(["criativo-a"]);
+    expect(
+      valoresDaDimensao(d, { contato: contato({ tags: ["criativo-a", "criativo-b", "vip"] }) }),
+    ).toEqual(["criativo-a", "criativo-b"]);
+    expect(
+      valoresDaDimensao(d, { contato: contato({ tags: ["Criativo-A", "criativo-a"] }) }),
+    ).toEqual(["criativo-a"]);
     expect(valoresDaDimensao(d, { contato: contato({ tags: ["vip"] }) })).toEqual([SEM_VALOR]);
   });
 
@@ -300,10 +366,18 @@ describe("valor da dimensão por card", () => {
   });
 
   it("contato anonimizado não tem valor em dimensão nenhuma do contato", () => {
-    const anon = contato({ is_anonymized: true, custom_fields: { origem: "indicacao" }, tags: ["criativo-a"] });
+    const anon = contato({
+      is_anonymized: true,
+      custom_fields: { origem: "indicacao" },
+      tags: ["criativo-a"],
+    });
     expect(valoresDaDimensao(ORIGEM, { contato: anon })).toEqual([SEM_VALOR]);
-    expect(valoresDaDimensao({ tipo: "etiqueta", prefixo: "criativo-" }, { contato: anon })).toEqual([SEM_VALOR]);
-    expect(valoresDaDimensao({ tipo: "campanha" }, { contato: anon, campanha: "123" })).toEqual([SEM_VALOR]);
+    expect(
+      valoresDaDimensao({ tipo: "etiqueta", prefixo: "criativo-" }, { contato: anon }),
+    ).toEqual([SEM_VALOR]);
+    expect(valoresDaDimensao({ tipo: "campanha" }, { contato: anon, campanha: "123" })).toEqual([
+      SEM_VALOR,
+    ]);
   });
 });
 
@@ -320,11 +394,20 @@ describe("compromisso → card deste funil", () => {
       { lead_id: "card-b", created_at: "2026-09-02T00:00:00Z" },
       { lead_id: "card-a", created_at: "2026-09-08T00:00:00Z" },
     ];
-    expect(cardDoCompromisso({ contact_id: "pessoa-1" }, vinculos, cards, porContato)?.id).toBe("card-a");
+    expect(cardDoCompromisso({ contact_id: "pessoa-1" }, vinculos, cards, porContato)?.id).toBe(
+      "card-a",
+    );
   });
 
   it("vínculo só a card de outro funil: não é deste funil", () => {
-    expect(cardDoCompromisso({ contact_id: "pessoa-1" }, [{ lead_id: "outro", created_at: "2026-09-02T00:00:00Z" }], cards, porContato)).toBeNull();
+    expect(
+      cardDoCompromisso(
+        { contact_id: "pessoa-1" },
+        [{ lead_id: "outro", created_at: "2026-09-02T00:00:00Z" }],
+        cards,
+        porContato,
+      ),
+    ).toBeNull();
   });
 
   it("sem vínculo: card mais recente do contato neste funil", () => {
@@ -364,7 +447,12 @@ describe("tabela por dimensão", () => {
 
   it("todas as opções aparecem (zeradas), e os baldes especiais só com contagem", () => {
     expect(r.map((l) => l.chave)).toEqual(["online", "presencial", "hibrido", FORA_DA_LISTA]);
-    expect(r.find((l) => l.chave === "hibrido")).toMatchObject({ rotulo: "Híbrido", leads: 0, ganhos: 0, agendados: 0 });
+    expect(r.find((l) => l.chave === "hibrido")).toMatchObject({
+      rotulo: "Híbrido",
+      leads: 0,
+      ganhos: 0,
+      agendados: 0,
+    });
   });
 
   it("cada linha conta leads, interagiram, ganhos, receita, agendados, realizados", () => {
@@ -378,7 +466,13 @@ describe("tabela por dimensão", () => {
       agendados: 1,
       realizados: 1,
     });
-    expect(r[1]).toMatchObject({ chave: "presencial", leads: 0, ganhos: 1, agendados: 1, realizados: 0 });
+    expect(r[1]).toMatchObject({
+      chave: "presencial",
+      leads: 0,
+      ganhos: 1,
+      agendados: 1,
+      realizados: 0,
+    });
     // O balde fora da lista não carrega o texto digitado.
     expect(r[3]).toMatchObject({ chave: FORA_DA_LISTA, rotulo: null, leads: 1 });
   });
@@ -414,6 +508,7 @@ describe("tabela por dimensão", () => {
 
   it("privacidade: nenhum id de card/contato nem valor fora da lista no resultado", () => {
     const texto = JSON.stringify(r);
-    for (const proibido of ["card-a", "card-b", "pessoa-1", "tiktok"]) expect(texto).not.toContain(proibido);
+    for (const proibido of ["card-a", "card-b", "pessoa-1", "tiktok"])
+      expect(texto).not.toContain(proibido);
   });
 });
