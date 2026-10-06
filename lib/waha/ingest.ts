@@ -289,16 +289,26 @@ export function mediaMimeOf(p: WahaPayload): string | null {
  * Invalid time value`, derrubando o webhook inteiro e perdendo a mensagem.
  * A unidade é inferida pela ordem de grandeza; valor ausente/inválido cai no
  * `agora`. Nunca lança. (Porte do DeskcommCRM 85bacc79d.)
+ *
+ * Data mais de um dia à frente do `agora` também cai no `agora`: não existe
+ * mensagem do futuro, e uma data dessas ou é recusada pelo Postgres (o ano
+ * 58684 sai como `+058684-…`, e a mensagem se perde) ou prende a conversa no
+ * topo da lista para sempre — a lista ordena por data, decrescente.
  */
 export function dataDoTimestamp(timestamp: number | null | undefined, agora: string): string {
   if (typeof timestamp !== "number" || !Number.isFinite(timestamp) || timestamp <= 0) {
     return agora;
   }
-  // `Date` aceita até 8.64e15 ms. Segundos (~1.7e9) ×1000; ms (~1.7e12) direto;
-  // ns (~1.7e18) ÷1e6. Faixas separadas por ordem de grandeza.
-  const ms = timestamp >= 1e16 ? timestamp / 1e6 : timestamp >= 1e11 ? timestamp : timestamp * 1000;
+  // Segundos (~1.7e9) ×1000; ms (~1.7e12) direto; µs (~1.7e15) ÷1e3; ns
+  // (~1.7e18) ÷1e6. Faixas separadas por ordem de grandeza.
+  const ms =
+    timestamp >= 1e17 ? timestamp / 1e6
+    : timestamp >= 1e14 ? timestamp / 1e3
+    : timestamp >= 1e11 ? timestamp
+    : timestamp * 1000;
   const d = new Date(ms);
-  return Number.isNaN(d.getTime()) ? agora : d.toISOString();
+  if (Number.isNaN(d.getTime()) || d.getTime() > Date.parse(agora) + 86_400_000) return agora;
+  return d.toISOString();
 }
 
 /**

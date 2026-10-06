@@ -37,6 +37,18 @@ describe("dataDoTimestamp — tolera segundos, ms e ns", () => {
     expect(dataDoTimestamp(NS, AGORA)).toBe("2026-09-18T09:20:00.000Z");
   });
 
+  // Revisão do PR #134: µs (~1.7e15) caía na faixa de ms e virava o ano 58684 —
+  // literal que o Postgres recusa (mensagem perdida) ou que prende a conversa no
+  // topo da lista para sempre.
+  it("microssegundos", () => {
+    expect(dataDoTimestamp(1789723200000000, AGORA)).toBe("2026-09-18T09:20:00.000Z");
+  });
+
+  it("data no futuro distante, em qualquer unidade, cai no agora", () => {
+    expect(dataDoTimestamp(9e10, AGORA)).toBe(AGORA); // "segundos" do ano 4822
+    expect(dataDoTimestamp(5e20, AGORA)).toBe(AGORA); // "ns" além do ano 9999
+  });
+
   it("ausente/ inválido cai no agora — nunca lança", () => {
     expect(dataDoTimestamp(null, AGORA)).toBe(AGORA);
     expect(dataDoTimestamp(undefined, AGORA)).toBe(AGORA);
