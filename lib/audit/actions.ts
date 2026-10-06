@@ -29,6 +29,7 @@
  * `tests/unit/audit-lista-do-painel-e-derivada.test.tsx` reprova quem tentar.
  */
 export const AUDIT_ACTIONS = [
+  "agenda.historico_importado",
   "auth.login_success",
   "auth.login_failed",
   /** Teto de tentativas barrou antes de chegar ao provedor (issue #64). */

@@ -49,7 +49,10 @@ function admin(pendentes: Array<Record<string, unknown>>, capturado: Record<stri
           eq: (col: string, val: string) => {
             capturado.selectEq = { col, val };
             return {
-              order: () => ({ limit: async () => ({ data: pendentes, error: null }) }),
+              neq: (col: string, val: string) => {
+                capturado.selectNeq = { col, val };
+                return { order: () => ({ limit: async () => ({ data: pendentes, error: null }) }) };
+              },
             };
           },
         }),
@@ -62,7 +65,10 @@ function admin(pendentes: Array<Record<string, unknown>>, capturado: Record<stri
                 eq: (col: string, val: string) => {
                   capturado.updateEq = { col, val };
                   return {
-                    select: async () => ({ data: ids.map((id) => ({ id })), error: null }),
+                    neq: (col: string, val: string) => {
+                      capturado.updateNeq = { col, val };
+                      return { select: async () => ({ data: ids.map((id) => ({ id })), error: null }) };
+                    },
                   };
                 },
               };
@@ -122,6 +128,8 @@ describe("agenda-expira-pendentes", () => {
     // linha. Sem este `.eq` o compromisso recém-confirmado seria cancelado.
     expect(capturado.selectEq).toEqual({ col: "status", val: "pending" });
     expect(capturado.updateEq).toEqual({ col: "status", val: "pending" });
+    expect(capturado.selectNeq).toEqual({ col: "source", val: "historical_import" });
+    expect(capturado.updateNeq).toEqual({ col: "source", val: "historical_import" });
     expect((capturado.patch as Record<string, string>).status).toBe("cancelled");
   });
 

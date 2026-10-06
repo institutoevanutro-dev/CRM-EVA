@@ -133,6 +133,15 @@ values
    now() + interval '2 days', now() + interval '2 days 30 minutes', 'confirmed', 'user', 'ui')
 on conflict do nothing;
 
+-- Histórico precisa sobreviver às próximas atualizações sem virar agenda viva.
+insert into public.calendar_appointments
+  (organization_id, contact_id, owner_user_id, title, starts_at, ends_at,
+   status, created_by_kind, source, history_import_key)
+values
+  ('22222222-0000-4000-8000-00000000000a', '33333333-0000-4000-8000-000000000001',
+   '11111111-0000-4000-8000-000000000002', 'Histórico', '2020-01-01 10:00-03',
+   '2020-01-01 11:00-03', 'completed', 'user', 'historical_import', repeat('a',64));
+
 insert into public.calendar_availability_exceptions
   (organization_id, user_id, exception_date, reason)
 values ('22222222-0000-4000-8000-00000000000a', '11111111-0000-4000-8000-000000000002',
@@ -177,4 +186,10 @@ if [ "$depois" != "$linhas" ]; then
 fi
 echo "    ✓ $depois linhas, iguais antes e depois"
 
+historico=$(docker exec "$CONTAINER" psql -U postgres -d postgres -tAc "
+  select count(*) from public.calendar_appointments
+  where source='historical_import' and history_import_key=repeat('a',64)
+    and status='completed' and starts_at='2020-01-01 10:00-03'::timestamptz
+    and ends_at='2020-01-01 11:00-03'::timestamptz and not needs_google_push;")
+[ "$historico" = 1 ] || { echo "FATAL: o histórico mudou ou entrou na fila Google." >&2; exit 1; }
 echo "==> update-com-dados verde"
