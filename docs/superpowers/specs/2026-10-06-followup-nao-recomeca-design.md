@@ -4,8 +4,14 @@
 **Item:** A da Fase 2, item 1 do funil do Dr. André (`CRM-EVA/docs/superpowers/specs/2026-10-05-funil-comercial-dr-andre-design.md`, §5 e §6).
 **Migration reservada:** `0324`. A `0323` é do lembrete; `0320`–`0322` e `0325+` são de outras sessões.
 
-Este documento só desenha. Nada foi implementado ainda. O plano TDD está em
-`docs/superpowers/plans/2026-10-06-followup-nao-recomeca.md`.
+O plano TDD está em `docs/superpowers/plans/2026-10-06-followup-nao-recomeca.md`.
+
+**Revisado depois da revisão do plano (2026-10-06).** Mudaram quatro decisões: a coluna
+`active_since` nasce **sem backfill** (§4.2), o trigger só olha **status, `kind` e
+`segments`** (§4.2), a paginação para na **página vazia** (§4.4), e a regra 2 do negócio
+fica dita como **dependente de "cancelar ao responder"** (§1). Também foram corrigidas a
+descrição de `skipped_existing` (§4.1), o argumento do relógio (§4.1), a do rollback
+(§2.3) e a janela do §6.1.
 
 ---
 
@@ -18,8 +24,19 @@ Da §5 do funil:
 - **Fim:** depois do último toque, a sequência termina e **não recomeça sozinha**.
 - **Pessoa da equipe atendendo:** nada sai e a sequência é encerrada.
 
-Hoje o código quebra as três primeiras regras. A quarta, o envio já cumpre, mas o
+Hoje o código quebra a primeira e a terceira regras. A quarta, o envio já cumpre, mas o
 encerramento vira um laço (defeito 1).
+
+**A regra 2 só vale com "cancelar ao responder" ligado no gatilho.** O encerramento na
+resposta é o `cancel_on_reply`, que é opcional e vem **desligado** (`lib/followup/api-schemas.ts:19-24`,
+"Default false quando ausente"; o envio só o aplica com `=== true`,
+`bloqueios-obrigatorios.ts:287`). Com o padrão, a resposta **acorda** o próximo nó ou a
+classificação (`reactivity.ts:214-250`) e a sequência continua. Este trabalho não muda
+isso: a dedup por episódio impede o RECOMEÇO, não encerra inscrição viva. A segunda metade
+da regra ("se sumir de novo, começa do primeiro toque") passa a valer com este trabalho,
+nos dois modos. Fazer a regra 2 valer sem configuração é decisão de produto à parte, fora
+deste item; na implantação do Dr. André, o gatilho de silêncio tem de ser salvo com
+"cancelar ao responder" ligado.
 
 ---
 
@@ -57,7 +74,7 @@ O que acontece:
 
 | Candidato | O que registra | Serve? |
 |---|---|---|
-| `followup_flow_versions.created_at` (`baseline.sql:7313-7319`) | A versão nasce na publicação: `fn_publish_followup_flow_version` insere a versão e liga o ponteiro na mesma transação (`baseline.sql:7437-7474`). | **Só na publicação.** Há dois caminhos que ativam sem criar versão: o **rollback**, que aponta para uma versão velha (`app/api/v1/ai/followup-flows/[id]/rollback/route.ts:84`), e o **PATCH do `trigger_config`**, que vale na hora num ponteiro já ativo. A tela salva o gatilho por PATCH, separado do publicar (`TriggerConfigControl.tsx:210` → `app/api/v1/ai/followup-flows/[id]/route.ts:144`). Exemplo: um fluxo publicado em março como "manual" e trocado para "silêncio" em outubro teria como âncora `created_at = março`, e todo silêncio desde março entraria. |
+| `followup_flow_versions.created_at` (`baseline.sql:7313-7319`) | A versão nasce na publicação: `fn_publish_followup_flow_version` insere a versão e liga o ponteiro na mesma transação (`baseline.sql:7437-7474`). | **Só na publicação.** O **PATCH do `trigger_config`** muda o gatilho sem criar versão e vale na hora num ponteiro já ativo. (O **rollback** não ativa nada: só troca `active_version_id` e não mexe em `status`, `app/api/v1/ai/followup-flows/[id]/rollback/route.ts:80-86`. Ativar, neste schema, é só `fn_publish_followup_flow_version`, `baseline.sql:7466-7470`; desativar é `disable/route.ts:50-52`.) A tela salva o gatilho por PATCH, separado do publicar (`TriggerConfigControl.tsx:210` → `app/api/v1/ai/followup-flows/[id]/route.ts:144`). Exemplo: um fluxo publicado em março como "manual" e trocado para "silêncio" em outubro teria como âncora `created_at = março`, e todo silêncio desde março entraria. |
 | `followup_flow_pointers.updated_at` | Qualquer escrita no ponteiro, inclusive cada salvamento do rascunho (`draft_graph`) e renomear. | **Não.** Editar o rascunho de um fluxo no ar descartaria em silêncio todo episódio em andamento. |
 | `followup_flow_pointers.created_at` | A criação do rascunho. | Não. |
 
@@ -118,30 +135,33 @@ ponteiro para o contato, **em qualquer status**, com `started_at >=` essa mensag
 
 - **Resposta abre episódio novo.** A nova mensagem é posterior ao `started_at` da inscrição anterior, então ela deixa de contar como "deste episódio". O `cancel_on_reply` continua como está (`lib/followup/reactivity.ts:214-250` e `bloqueios-obrigatorios.ts:287-292`), e só depois de `threshold` sem resposta o contato entra de novo.
 - **Que relógio compara.** A comparação é entre `followup_enrollments.started_at` (`default now()` do banco) e `messages.created_at` da mensagem qualificante (também `now()` do banco, na ingestão). Não uso `sent_at`, que vem do relógio do WhatsApp.
-  - **Por quê:** é o mesmo relógio que o `cancel_on_reply` já usa no envio. O `bloqueios-obrigatorios.ts` lê `max(created_at)` das inbound e compara com `started_at`.
+  - **Por quê:** o `created_at` é o relógio do banco, o mesmo do `started_at`. É também a coluna que o `cancel_on_reply` lê, mas **a regra dele não é a mesma**: o envio compara `max(created_at)` de **toda** entrada do contato (sem filtro de carimbo nem de conversa, `bloqueios-obrigatorios.ts:439-440`) com o **último envio da inscrição**, e só sem envio com `started_at` (`:288`). A varredura usa o `created_at` da mensagem mais nova **por `sent_at`**, entre as carimbadas de conversas abertas (`silence-sweep.ts`, embed ordenado por `sent_at desc limit 1`).
   - **O caso que isso evita:** uma mensagem enviada às 10:00, entregue às 10:02, depois de uma inscrição criada às 10:01. O `cancel_on_reply` trata como resposta (`created_at` 10:02 > 10:01) e cancela. Com `sent_at`, a varredura acharia que é o mesmo episódio (10:00 < 10:01) e o contato perderia a sequência daquele silêncio.
+  - **O caso de borda que sobra:** duas mensagens A e B, com A de `sent_at` mais antigo e `created_at` mais novo que B (entrega fora de ordem). A varredura escolhe B (mais nova por `sent_at`) e compara o `created_at` de B; o `cancel_on_reply` vê o `created_at` de A. Uma resposta pode, então, cancelar pelo `cancel_on_reply` sem abrir episódio novo na varredura. O erro vai para o lado de **não** mandar e se corrige na próxima mensagem do contato.
   - O **limiar** do silêncio continua medido por `sent_at`, como hoje (`silence-sweep.ts:247`).
 - **Onde mora a regra.** Em `runSilenceSweep` (TypeScript puro). O adaptador só devolve fatos: `Map<contact_id, maior started_at deste ponteiro>`.
   - **Por quê:** o invariante com Postgres real injeta um adaptador em SQL próprio, porque o `test:db` não sobe PostgREST. O que mora no adaptador, o invariante não vigia; quem mediu isso foi `tests/unit/sweep-nao-cobra-conversa-encerrada.test.ts:12-25`. Com a regra em `runSilenceSweep`, o invariante executa o código de produção contra linhas reais.
 - **A leitura** filtra `organization_id`, `pointer_id`, `contact_id in (lote de 100)` e `started_at >= menor âncora do lote`, com keyset por `id`. O filtro de data limita o volume ao episódio corrente, mesmo em contatos com centenas de linhas deixadas pelo laço antigo.
 - **Contador novo `skipped_same_episode`.** Fica **fora** da condição de auditoria e do `mexeu`, porque é "nada aconteceu" (doutrina do CLAUDE.md, "Audit log").
-- **Ordem no laço:** episódio primeiro, depois "vivo em qualquer fluxo". Um contato parado numa espera longa **deste** fluxo cai em `skipped_same_episode`, que não audita. Assim ele não gera uma linha de auditoria por minuto. O `skipped_existing` passa a significar "vivo em **outro** fluxo, ou corrida no 23505".
+- **Ordem no laço:** episódio primeiro, depois "vivo em qualquer fluxo". Um contato parado numa espera longa **deste** fluxo cai em `skipped_same_episode`, que não audita. Assim ele não gera uma linha de auditoria por minuto. O `skipped_existing` passa a contar: vivo em **outro** fluxo; corrida no 23505; e as recusas de `insertEnrollment` que devolvem `inserted:false` sem 23505 — origem ausente, `StaleServiceBoundaryError` e a agenda mandando adiar (`protection.adiar`). Essas recusas continuam auditando a cada minuto (dívida no §6.4).
 - **Inscrição manual ou por automação** (`lib/followup/enroll.ts`, chamada pela rota de inscrições e por `lib/automation/actions/start-message-flow.ts`) no mesmo ponteiro, depois da última mensagem, também conta como do episódio. A varredura não cria uma segunda. É o comportamento certo.
 
 ### 4.2 Sem passado: coluna `followup_flow_pointers.active_since`
 
 Como nenhuma coluna existente serve (§2.3), decidi criar uma.
 
-- **Coluna:** `active_since timestamptz not null default now()`. Significa: desde quando o ponteiro vale com o **status, a versão e o gatilho atuais**.
-- **Quem grava:** um trigger `BEFORE UPDATE` (`fn_followup_ponteiro_marca_vigencia`), com `WHEN` comparando valores (o mesmo molde da `0319`, `trg_contato_bloqueio_so_o_servidor_update`). Ele faz `new.active_since := now()` quando muda `status`, `active_version_id` ou `trigger_config`.
-  - **Por que trigger e não código:** são quatro escritores hoje (publicar, rollback, PATCH, desativar). Uma regra no banco cobre os quatro e o próximo. O trigger não faz HTTP, então não fere o anti-pattern 9.
-  - **O que NÃO dispara:** salvar rascunho, renomear e mudar `handoff_policy`. Isso é testado nos dois sentidos.
+- **Coluna:** `active_since timestamptz not null default now()`. Significa: desde quando o ponteiro vale com o **status e o gatilho (`kind` e `segments`) atuais**.
+- **Quem grava:** um trigger `BEFORE UPDATE` (`fn_followup_ponteiro_marca_vigencia`), com `WHEN` comparando valores (o mesmo molde da `0319`, `trg_contato_bloqueio_so_o_servidor_update`). Ele faz `new.active_since := now()` quando muda `status`, `trigger_config->>'kind'` ou `trigger_config->'params'->'segments'` (com `[]` e ausente tratados como iguais).
+  - **Por que trigger e não código:** são vários escritores (publicar, PATCH, desativar). Uma regra no banco cobre todos e o próximo. O trigger não faz HTTP, então não fere o anti-pattern 9.
+  - **O que NÃO dispara:** versão nova num fluxo já ativo (republicar ou rollback), limiar, `cancel_on_reply`, salvar rascunho, renomear e mudar `handoff_policy`. Isso é testado nos dois sentidos.
+  - **Por que não a versão, o limiar nem o `cancel_on_reply`:** a tela salva esses campos juntos com o gatilho (`TriggerConfigControl.tsx:202-210`), e o publicar de um fluxo já ativo só troca a versão. Zerar ali descartaria todos os episódios em andamento a cada ajuste de texto ou de limiar, sem que nada de novo tivesse sido configurado.
   - O `INSERT` é coberto pelo `default now()`.
 - **Regra na varredura**, em `runSilenceSweep`: só conta silêncio cuja mensagem qualificante tenha `sent_at > active_since`. Aqui `sent_at` é o certo, porque a pergunta é "quando o paciente falou". Assim, uma importação tardia de histórico velho não conta como mensagem nova. Os pulados entram no contador `skipped_before_activation`, que também não audita.
-- **Backfill de quem já tem dados:** `active_since = coalesce(versão ativa.created_at, ponteiro.updated_at)`.
-  - Um ponteiro publicado continua aceitando os silêncios posteriores à publicação dele, que é o comportamento de hoje sem o passado anterior. Ninguém perde cobertura ao atualizar.
-  - O laço de quem já estava preso para pela dedup da §4.1.
-- **Efeito colateral aceito:** publicar uma nova versão, voltar uma versão ou mudar o gatilho zera a vigência. Os episódios já em andamento naquele instante não recebem a sequência; só silêncios que começarem depois. Erra para o lado de **não** mandar, que é o lado certo para anti-banimento. Está escrito no comentário da coluna.
+- **Sem backfill.** A coluna nasce com `add column if not exists active_since timestamptz not null default now()`, num comando só; todo ponteiro existente fica com o instante da atualização.
+  - **Por quê:** a versão com backfill (`coalesce(versão ativa.created_at, updated_at)`, depois `set default`, depois `set not null`) tinha dois defeitos. (1) Corrida no `update.sh`, que aplica o banco antes de trocar a imagem (`hostgator-setup-kit/update.sh:154` e `:258-279`), em autocommit e sem `ON_ERROR_STOP`: um ponteiro inserido pelo app antigo entre o backfill e o `set default` ficava NULL, o `set not null` falhava calado, e `Date.parse(null)` deixava esse ponteiro sem inscrever ninguém para sempre. (2) Fluxo publicado há meses e nunca armado por agente receberia `active_since` = data da versão; ao armar o agente, todo silêncio desde então entraria de uma vez, que é o defeito 2.
+  - **O custo:** na atualização, os episódios em andamento (silêncio ainda menor que o limiar) não recebem a sequência; só silêncios que começarem depois. Erra para o lado de não mandar. O laço de quem já estava preso para pela dedup da §4.1.
+  - Sem backfill, não há código de backfill a testar: o `test:db:update` não o exercitaria (aplica o baseline atual e reaplica, sem semear ponteiros).
+- **Efeito colateral aceito:** desativar e ativar de novo, ou mudar o `kind` ou os segmentos, zera a vigência. Os episódios já em andamento naquele instante não recebem a sequência; só silêncios que começarem depois. Erra para o lado de **não** mandar, que é o lado certo para anti-banimento. Está escrito no comentário da coluna.
 - **Por que não o teto `max_silence_minutes` do original:** o negócio pede "quem falou depois que ligamos", não "silêncio de no máximo N". O teto do original pode entrar depois, junto com a tela dele (§6). As duas regras convivem.
 
 ### 4.3 Anonimizado fora na inscrição
@@ -154,9 +174,9 @@ Como nenhuma coluna existente serve (§2.3), decidi criar uma.
 
 - Keyset por `conversations.id`: `.order("id")` + `.gt("id", último)` + `.limit(500)`.
   - **Por que 500:** fica abaixo do `max_rows` de 1000, então o PostgREST nunca corta a página.
-- **Parada:** a primeira página com menos de 500 linhas.
-  - **Por que página curta e não vazia** (a `protecao-followup.ts` para na vazia): com `limite < max_rows`, uma página curta prova que acabou. Além disso, os três dublês de cliente já existentes (`lib/followup/silence-sweep-pre-go-live.test.ts`, `tests/unit/fronteira-exige-procedencia-e-o-backfill-cobre-o-legado.test.ts`, `tests/unit/sweep-nao-cobra-conversa-encerrada.test.ts`) devolvem a mesma lista em toda chamada. Parar na vazia exigiria reescrever os três.
-  - Comentário `ponytail:` no código: o teto é `max_rows >= 500`.
+- **Parada:** a primeira página **vazia**, como em `lib/agenda/protecao-followup.ts:79-80`.
+  - **Por que vazia e não curta:** o `max_rows` do PostgREST é ajustável no painel do Supabase hospedado, que é o banco do self-host. Com ele abaixo de 500, uma página curta não prova que acabou, e parar nela devolveria o defeito 4 em silêncio. Custa uma consulta a mais por ponteiro por tick.
+  - Os dublês de `silence-sweep-pre-go-live.test.ts` e `fronteira-exige-procedencia-e-o-backfill-cobre-o-legado.test.ts` devolvem `[]` a partir da 2ª chamada; o de `sweep-nao-cobra-conversa-encerrada.test.ts` já devolvia `[]` sempre.
 - **Trava contra não avançar** (o último id de uma página não maior que o da anterior): lança, como em `protecao-followup.ts:95`.
 - **O `.limit(1)` do embed de `messages`** continua por conversa, com `referencedTable`.
 
@@ -189,14 +209,16 @@ Como nenhuma coluna existente serve (§2.3), decidi criar uma.
 | Arquivo | Mudança |
 |---|---|
 | `lib/followup/silence-sweep.ts` | `SilencePointer.active_since`. `loadSilentContactIds` vira `loadSilentContacts` e devolve `{contact_id, ultima_entrada_em, ultima_entrada_gravada_em}`, com paginação, `is_anonymized` e `created_at` no embed. Métodos novos `loadUltimaInscricaoNoPonteiro` e `loadContatosComInscricaoViva` (porte). Regras de episódio e de vigência em `runSilenceSweep`. Dois contadores. O cabeçalho deixa de dizer "aceitável no MVP". |
-| `supabase/migrations/<ts>_0324_silencio_nao_recomeca.sql` | Índice (porte do `0411`), coluna `active_since` com backfill, função de trigger com `revoke` das duas origens, e o trigger. |
+| `supabase/migrations/20261006120000_0324_silencio_nao_recomeca.sql` | Índice (porte do `0411`), coluna `active_since not null default now()` sem backfill, função de trigger com `revoke` das duas origens, e o trigger. |
 | `supabase/baseline.sql` | Apêndice idempotente com o **mesmo corpo de função** da migration (`apendice-do-baseline-nao-diverge-da-cadeia.test.ts`), antes da `VARREDURA anon` (`baseline.sql:33411`). |
 | `supabase/migrations/MANIFEST.md` | Uma linha. |
 | `lib/database.types.ts` | `active_since` em `followup_flow_pointers` (Row, Insert e Update). |
 | `tests/invariants/followup-silence-sweep.test.ts` | O espelho SQL ganha os métodos novos. `seedSilenceFlow` passa a semear `active_since` 30 dias atrás por padrão. Casos novos. Ajuste do RED→GREEN. |
 | Testes que chamam `loadSilentContactIds` (os três unitários e `tests/e2e/encerramento-atendimento.spec.ts`) | Renome e `.map((c) => c.contact_id)`. |
-| `scripts/e2e-followup-journey-helpers.ts`, `scripts/e2e-elegibilidade-helpers.ts` | Subcomando `recuar-vigencia <pointerId> <minutos>`. As specs `followup-journey` e `j20-elegibilidade-followup` semeiam silêncio **anterior** à publicação e, sem isso, passariam a ser recusadas pela regra nova. As duas estão no CI. |
+| `scripts/e2e-followup-journey-helpers.ts`, `scripts/e2e-elegibilidade-helpers.ts` | Subcomando `recuar-vigencia <pointerId> <minutos>`; a organização vem de `creds.org_id`, como nos outros subcomandos, sem argumento novo. As specs `followup-journey` e `j20-elegibilidade-followup` semeiam silêncio **anterior** à publicação e, sem isso, passariam a ser recusadas pela regra nova. As duas estão no CI. |
 | `.changes/silencio-nao-recomeca.md` | `impacto: nada_mudou`, `secao: corrigido`. |
+| `HANDOFF.md:186-187` | A frase "pode re-enrollar … aceitável no MVP" ganha nota de que deixou de valer. |
+| `tests/invariants/followup-reenrollment-apos-conclusao.test.ts` | O cabeçalho cita o cabeçalho antigo do `silence-sweep.ts`; ganha nota de que o silêncio passou a deduplicar por episódio e o gatilho de etapa segue sem carência. |
 
 **Sem tela nova e sem texto novo de tela**, então não há i18n. A rota de cron não muda,
 porque os contadores novos ficam fora da condição de auditoria só por não estarem nela.
@@ -206,12 +228,12 @@ porque os contadores novos ficam fora da condição de auditoria só por não es
 ## 6. O que fica de fora, e por quê
 
 1. **Armar o fluxo no agente depois de publicar.** O gate (`agent-followup-gate.ts`) libera o ponteiro quando um agente publicado o lista, e essa publicação não mexe em `active_since`.
-   - **O risco:** silêncios que começaram entre a publicação do fluxo e a do agente entram juntos quando o agente é publicado. A janela é limitada a esse intervalo, e não a "meses atrás".
+   - **O risco:** silêncios que começaram entre a vigência do fluxo e a publicação do agente entram juntos quando o agente é publicado. Para fluxo publicado **depois** desta atualização, a janela é o intervalo entre publicar o fluxo e armar o agente. Para ponteiro que já existia, a vigência é o instante da atualização (sem backfill, §4.2), então a janela vai da atualização até armar o agente — nunca antes da atualização.
    - **Por que não tratar:** ligar a vigência à publicação do agente zeraria os episódios em andamento a cada ajuste de prompt.
-   - **O que fazer na implantação:** republicar o fluxo depois de armar o agente zera a vigência. Isso vai para a nota de implantação do Dr. André.
+   - **O que fazer na implantação:** depois de armar o agente, **desativar e publicar de novo** o fluxo zera a vigência (republicar um fluxo já ativo só troca a versão e não zera). Isso vai para a nota de implantação do Dr. André.
 2. **`max_silence_minutes`, `reentry_pause_minutes` e `reentry_pause_basis`** do original (`1eec26679`, `132c7d0d1`, `7bbc36805`). São capacidades novas com tela e i18n, e a dedup por episódio já cumpre o que o negócio pede. Ficam para um porte próprio; a coluna `active_since` não conflita com elas.
 3. **Pular a conversa com pessoa no comando antes de inscrever** (`132c7d0d1`). O churn que ela evitava acaba com a dedup: o contato é inscrito uma vez, o envio cancela por atendimento humano e ele não volta no mesmo episódio. "Quem escreveu sem Assumir" é o item de atendimento humano da Fase 2, de outra frente.
-4. **Auditoria por minuto de `skipped_existing` e `pointers_gated_out`** (`route.ts:127`, `executar.ts:137`). Já existia antes deste trabalho, e o original mantém. Tirar mudaria o que a trilha registra para uma condição que não é deste item. Registro como dívida: os dois são "nada aconteceu" pela régua do CLAUDE.md.
+4. **Auditoria por minuto de `skipped_existing` e `pointers_gated_out`** (`route.ts:127`, `executar.ts:137`). Já existia antes deste trabalho, e o original mantém. Tirar mudaria o que a trilha registra para uma condição que não é deste item. Registro como dívida: os dois são "nada aconteceu" pela régua do CLAUDE.md. Isso inclui as recusas de `insertEnrollment` sem 23505 que caem em `skipped_existing` (origem ausente, `StaleServiceBoundaryError`, agenda mandando adiar — `silence-sweep.ts`, `insertEnrollment`): um contato com reserva protegida continua gerando uma linha de auditoria por minuto. O conserto é separar essas recusas num contador próprio fora da condição de auditoria; fica para um item próprio.
 5. **Ordem dos ponteiros** (`loadActiveSilencePointers` sem `order`). Quando dois fluxos de silêncio disputam o mesmo contato no mesmo tick, o vencedor segue arbitrário. O índice já garante um só vivo.
 6. **`paused_handoff` que nunca volta** quando a conversa é encerrada em vez de devolvida. É outro item.
 7. **O dead-man de ~11 h** (`a1c6c4d1e`, `092081b61`). É da outra sessão.

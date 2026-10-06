@@ -1,6 +1,11 @@
 # Plano TDD: o gatilho de silêncio não recomeça
 
 **Spec:** `docs/superpowers/specs/2026-10-06-followup-nao-recomeca-design.md` (leia antes).
+
+**Revisado depois da revisão (2026-10-06):** paginação para na página vazia (Passo 4);
+migration sem backfill e trigger só em status/`kind`/`segments` (Passo 5); caso de vigência
+do invariante usa desativar + publicar (Passo 6); ajuste do caso das linhas 334-366 do
+invariante e nota no `HANDOFF.md` (Passo 7); `$3 = creds.org_id` (Passo 8).
 **Worktree:** `/Users/andreluislopescosta/crm-f2-followup-sweep`, branch `fix/followup-nao-recomeca`.
 **Migration:** `0324`, e só ela.
 
@@ -187,8 +192,8 @@ Falha porque hoje há uma chamada só, sem `order` nem `limit`. O dublê sem `li
 **GREEN** em `loadSilentContacts`:
 
 ```ts
-// ponytail: keyset com página de 500 < max_rows (1000) — página curta = fim.
-// Se algum dia max_rows < 500, troque a parada para "página vazia".
+// Keyset; só página VAZIA prova o fim (o max_rows é ajustável no painel do
+// Supabase — mesma regra de lib/agenda/protecao-followup.ts).
 const LIMITE_DE_CONVERSAS = 500;
 let depois: string | undefined;
 for (;;) {
@@ -198,15 +203,15 @@ for (;;) {
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   const pagina = (data ?? []) as unknown as Row[];
-  for (const row of pagina) { /* corpo atual do laço */ }
-  if (pagina.length < LIMITE_DE_CONVERSAS) break;
+  if (pagina.length === 0) break;
+  rows.push(...pagina); // o corpo atual do laço roda depois, sobre `rows`
   const ultimo = pagina[pagina.length - 1]!.id;
   if (depois && ultimo <= depois) throw new Error("silence_page_did_not_advance");
   depois = ultimo;
 }
 ```
 
-Os dublês dos testes antigos devolvem menos de 500 linhas e param na primeira página, sem mudança.
+Os dublês de `silence-sweep-pre-go-live.test.ts` e `fronteira-exige-procedencia-…test.ts` passam a devolver `[]` a partir da 2ª chamada de `then` (o de `sweep-nao-cobra-…` já devolve `[]` sempre). Caso a mais no RED: (d) com `max_rows` 200 no dublê e 450 conversas, voltam as 450 em 4 consultas (200 + 200 + 50 + vazia). Sabotagem extra: parar na página curta deixa (d) vermelho.
 
 **Verificar:**
 
@@ -227,15 +232,15 @@ cd $W && pnpm vitest run lib/followup/silence-sweep-consultas.test.ts lib/follow
 **RED.** No invariante, um `describe` novo, "vigência do ponteiro (active_since)". O banco vem do `baseline.sql`, então falha enquanto o apêndice não existe. Casos:
 
 - (a) `insert` de ponteiro ativo: `active_since` fica perto de `now()` (±5 s).
-- (b) `update … set active_version_id = <outra versão>`: `active_since` avança.
+- (b) `update … set active_version_id = <outra versão>` num fluxo já ativo (republicar, rollback): `active_since` **não** muda.
 - (c) `update … set status='disabled'` e depois `'active'`: avança nas duas vezes.
-- (d) `update … set trigger_config = <outro jsonb>`: avança.
+- (d) `update … set trigger_config` trocando o `kind`, ou os `segments`: avança.
 - (e) `update … set draft_graph = …, name = …, handoff_policy = …`: **não** muda (compare igual).
-- (f) `update … set trigger_config = <o mesmo jsonb>`: **não** muda.
+- (f) `update … set trigger_config = <o mesmo jsonb>`, e depois mudando só o limiar e o `cancel_on_reply` (com `segments` ausente no lugar de `[]`): **não** muda.
 - (g) O índice `idx_followup_enrollments_pointer_contact_cooldown` existe, com as colunas `(organization_id, pointer_id, contact_id, updated_at)`.
 - (h) `has_function_privilege('anon', 'public.fn_followup_ponteiro_marca_vigencia()', 'execute')` é `false`, e o mesmo para `public`.
 
-Para medir o avanço em (b), (c) e (d), primeiro recue `active_since` para `now() - interval '1 day'` com um update que só mexe nessa coluna. O trigger não dispara nesse update, e isso também fica provado.
+Para medir o avanço em (c) e (d), e o não-avanço em (b), (e) e (f), primeiro recue `active_since` para `now() - interval '1 day'` com um update que só mexe nessa coluna. O trigger não dispara nesse update, e isso também fica provado.
 
 **GREEN.** Antes de criar o arquivo, confira a numeração com o comando do Passo 0, item 3. Crie `supabase/migrations/20261006120000_0324_silencio_nao_recomeca.sql`:
 
@@ -246,16 +251,10 @@ Para medir o avanço em (b), (c) e (d), primeiro recue `active_since` para `now(
 create index if not exists idx_followup_enrollments_pointer_contact_cooldown
   on public.followup_enrollments (organization_id, pointer_id, contact_id, updated_at);
 
--- (2) vigência: desde quando o ponteiro vale com o status, a versão e o gatilho atuais.
-alter table public.followup_flow_pointers add column if not exists active_since timestamptz;
-update public.followup_flow_pointers p
-   set active_since = coalesce(
-         (select v.created_at from public.followup_flow_versions v
-           where v.id = p.active_version_id and v.organization_id = p.organization_id),
-         p.updated_at)
- where p.active_since is null;
-alter table public.followup_flow_pointers alter column active_since set default now();
-alter table public.followup_flow_pointers alter column active_since set not null;
+-- (2) vigência: desde quando o ponteiro vale com o status e o gatilho (kind, segments) atuais.
+--     Sem backfill: not null default now() num comando só (spec §4.2).
+alter table public.followup_flow_pointers
+  add column if not exists active_since timestamptz not null default now();
 comment on column public.followup_flow_pointers.active_since is '...';  -- texto da spec §4.2
 
 create or replace function public.fn_followup_ponteiro_marca_vigencia()
@@ -271,17 +270,18 @@ create trigger trg_followup_ponteiro_marca_vigencia
   before update on public.followup_flow_pointers
   for each row
   when (old.status is distinct from new.status
-     or old.active_version_id is distinct from new.active_version_id
-     or old.trigger_config is distinct from new.trigger_config)
+     or old.trigger_config ->> 'kind' is distinct from new.trigger_config ->> 'kind'
+     or coalesce(old.trigger_config -> 'params' -> 'segments', '[]'::jsonb)
+        is distinct from coalesce(new.trigger_config -> 'params' -> 'segments', '[]'::jsonb))
   execute function public.fn_followup_ponteiro_marca_vigencia();
 ```
 
-O backfill só toca linhas com `active_since is null`. Na reaplicação do `update.sh` ele não acha nada, e o `set default` e o `set not null` viram no-op. Use o **mesmo** texto nos dois artefatos.
+Sem backfill (spec §4.2): o backfill com `set default`/`set not null` depois abria uma corrida no `update.sh` (app antigo grava NULL entre os comandos, e o `set not null` falha calado sem `ON_ERROR_STOP`) e reabria o passado de fluxo publicado há meses e armado agora. Na reaplicação, `add column if not exists` vira no-op. Use o **mesmo** texto nos dois artefatos.
 
 Os outros artefatos:
 
 - **`supabase/baseline.sql`:** bloco `-- ---- o gatilho de silêncio não recomeça (migration 0324) ----` com o mesmo SQL, logo **antes** de `-- ---- VARREDURA anon` (hoje na linha 33411). O corpo da função tem de ser idêntico ao da migration, porque `apendice-do-baseline-nao-diverge-da-cadeia.test.ts` compara.
-- **`supabase/migrations/MANIFEST.md`:** uma linha na tabela, no formato das vizinhas. Diga o quê (índice portado, `active_since` com trigger e backfill), o porquê (defeitos 2 e da §2.3), "sem dado reescrito além do backfill" e "função de trigger sem EXECUTE para ninguém".
+- **`supabase/migrations/MANIFEST.md`:** uma linha na tabela, no formato das vizinhas. Diga o quê (índice portado, `active_since` com trigger, sem backfill e por quê), o porquê (defeitos 2 e da §2.3), "nenhum dado reescrito" e "função de trigger sem EXECUTE para ninguém".
 - **`lib/database.types.ts`:** `active_since: string` em Row, e `active_since?: string` em Insert e Update de `followup_flow_pointers`.
 
 **Verificar:**
@@ -292,12 +292,12 @@ pnpm vitest run tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts te
   tests/unit/baseline-reaplicavel.test.ts tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts > /tmp/p5.log 2>&1; echo "exit=$?"
 ```
 
-O `test:db` aplica o baseline em modo install (`ON_ERROR_STOP=1`) e reaplica (update). Os dois têm de passar. Rode também `pnpm test:db:update`, que é a atualização de um banco **com dados** e exercita o backfill.
+O `test:db` aplica o baseline em modo install (`ON_ERROR_STOP=1`) e reaplica (update). Os dois têm de passar. (O `pnpm test:db:update` não exercitaria backfill nenhum — aplica o baseline atual e reaplica, sem semear ponteiros —, e por isso a decisão foi não ter backfill.)
 
 **Sabotar:**
 
-- Tire `trigger_config` do `WHEN`: (d) fica vermelho.
-- Troque o `WHEN` por `true`: (e) fica vermelho.
+- Tire os `segments` do `WHEN`: (d) fica vermelho.
+- Troque o `WHEN` por `true`: (b), (e) e (f) ficam vermelhos.
 - Tire o `revoke`: (h) fica vermelho.
 
 **Commit:** `feat(followup): ponteiro registra desde quando vale (active_since) e índice da consulta de episódio — migration 0324`.
@@ -314,7 +314,7 @@ O `test:db` aplica o baseline em modo install (`ON_ERROR_STOP=1`) e reaplica (up
 - Invariante:
   - `seedSilenceFlow` passa a semear `active_since = now() - interval '30 days'` por padrão, com a opção `activeSince`. Sem isso, todos os casos antigos quebrariam, porque semeiam silêncio no passado.
   - Caso: o fluxo é semeado com `activeSince: now()` e o contato está calado há 90 min. Resultado: 0 inscrições.
-  - Caso: o fluxo tem vigência de 30 dias atrás, o contato está calado há 90 min e ele é inscrito. Depois disso, `update` do `active_version_id` para uma versão nova (o trigger avança a vigência) e um segundo contato, calado há 90 min, **não** é inscrito.
+  - Caso: o fluxo tem vigência de 30 dias atrás, o contato está calado há 90 min e ele é inscrito. Depois disso, o fluxo é desativado e publicado de novo (`status` disabled → active; o trigger avança a vigência) e um segundo contato, calado há 90 min, **não** é inscrito.
 - Espelho SQL: `loadActiveSilencePointers` seleciona `active_since::text`.
 
 **GREEN**
@@ -356,6 +356,7 @@ O `test:db` aplica o baseline em modo install (`ON_ERROR_STOP=1`) e reaplica (up
 - Unit de consulta, em `silence-sweep-consultas.test.ts`:
   - `loadUltimaInscricaoNoPonteiro` pede `followup_enrollments`, `eq organization_id`, `eq pointer_id`, `in contact_id` (lotes de 100), `gte started_at desde`, `order id` e `limit 500`, com keyset;
   - reduz várias linhas do mesmo contato ao **maior** `started_at`.
+- Invariante, caso existente das linhas 334-366 ("pointer silence habilitado … 2ª varredura não duplica"): o contato vivo DESTE ponteiro passa a contar `skipped_same_episode`, não `skipped_existing`. Troque as asserções da 2ª varredura por `summary2.skipped_same_episode >= 1` e `summary2.skipped_existing === 0`, e o comentário ("mesmo episódio — nem tenta, nem audita"). O caso vira também a prova de que vivo do mesmo ponteiro não gera auditoria.
 - Invariante, `describe("episódio de silêncio — a sequência não recomeça")`:
   - Para cada status `completed`, `dead` e `cancelled` (este com `cancel_reason='atendimento_humano'`):
     - o contato está calado há 90 min;
@@ -386,7 +387,7 @@ O `test:db` aplica o baseline em modo install (`ON_ERROR_STOP=1`) e reaplica (up
 **GREEN**
 
 - Interface: `loadUltimaInscricaoNoPonteiro(orgId, pointerId, contactIds, desdeIso): Promise<Map<string, string>>`.
-- Adaptador: lotes de 100 por `in`; dentro de cada lote, keyset por `id` (página de 500, parada na página curta, trava contra não avançar). Reduz ao maior `started_at`.
+- Adaptador: lotes de 100 por `in`; dentro de cada lote, keyset por `id` (página de 500, parada na página VAZIA, trava contra não avançar). Reduz ao maior `started_at`.
 - Em `runSilenceSweep`, depois do filtro de vigência:
 
   ```ts
@@ -403,7 +404,7 @@ O `test:db` aplica o baseline em modo install (`ON_ERROR_STOP=1`) e reaplica (up
 
   Compare por `Date.parse`, não por string: o Postgres e o JS formatam o ISO de jeitos diferentes. O `reduce` acima também tem de comparar por `Date.parse`; troque ao implementar.
 - `SilenceSweepSummary` ganha `skipped_same_episode`, fora da auditoria.
-- Reescreva o cabeçalho de `silence-sweep.ts:24-30`: tire "aceitável no MVP, sem cooldown table" e descreva o episódio, a vigência e o porte do original. Afirmação de estado desatualizada é o item 16 da DoD.
+- Reescreva o cabeçalho de `silence-sweep.ts:24-30`: tire "aceitável no MVP, sem cooldown table" e descreva o episódio, a vigência e o porte do original. Afirmação de estado desatualizada é o item 16 da DoD. No mesmo commit, anote `HANDOFF.md:186-187` ("pode re-enrollar … aceitável no MVP") e o cabeçalho de `tests/invariants/followup-reenrollment-apos-conclusao.test.ts`, que cita a frase antiga.
 
 **Verificar:** `pnpm vitest run lib/followup/silence-sweep-episodio.test.ts lib/followup/silence-sweep-consultas.test.ts` e `pnpm test:db tests/invariants/followup-silence-sweep.test.ts`.
 
@@ -432,6 +433,8 @@ O `test:db` aplica o baseline em modo install (`ON_ERROR_STOP=1`) e reaplica (up
   where id = $1 and organization_id = $3
   ```
 
+  `$3 = creds.org_id`, sem argumento novo, como os outros subcomandos fazem (`scripts/e2e-followup-journey-helpers.ts:107`, `scripts/e2e-elegibilidade-helpers.ts:208`).
+
   O trigger não dispara porque só `active_since` muda.
 - Cada spec chama o subcomando logo depois de publicar, com `threshold + 60`.
 - Comentário na spec: "recua a vigência porque o contato semeado calou antes da publicação; a regra 'sem passado' (migration 0324) recusaria".
@@ -448,7 +451,8 @@ O `test:db` aplica o baseline em modo install (`ON_ERROR_STOP=1`) e reaplica (up
   - `impacto: nada_mudou`, `secao: corrigido`;
   - título: "A sequência de retomada não recomeça sozinha";
   - corpo para leigo: uma vez por silêncio, recomeça só depois de uma resposta, contato antigo não recebe nada ao ligar o fluxo, anonimizado fica fora;
-  - a dica de republicar o fluxo depois de armar o agente;
+  - a dica de desativar e publicar de novo o fluxo depois de armar o agente (republicar um fluxo já ativo não zera a vigência);
+  - que "qualquer resposta encerra a sequência" exige "cancelar ao responder" ligado no gatilho (vem desligado);
   - "Nenhuma ação é necessária".
 
   Confira com `pnpm release:conferir`.
