@@ -106,25 +106,33 @@ export interface ResultadoDaLista {
 export async function listarChamados(
   supabase: SupabaseClient,
   organizationId: string,
-  opts: { estado: "abertos" | "fechados"; limite?: number },
+  /**
+   * `soConversas`: o recorte do escopo do turno do agente — só os casos destas
+   * conversas, na lista E na contagem. Ausente = a organização inteira (tela e
+   * fora do turno, como antes). Lista vazia é recorte válido: nenhum caso passa.
+   */
+  opts: { estado: "abertos" | "fechados"; limite?: number; soConversas?: string[] },
 ): Promise<ResultadoDaLista> {
   const estados = opts.estado === "abertos" ? ESTADOS_ABERTOS : ESTADOS_FECHADOS;
 
-  const base = supabase
+  let filtrada = supabase
     .from("agent_cases")
     .select(COLUNAS_LISTA)
     .eq("organization_id", organizationId)
-    .in("status", estados as unknown as string[])
-    .order("opened_at", { ascending: false });
+    .in("status", estados as unknown as string[]);
+  if (opts.soConversas) filtrada = filtrada.in("conversation_id", opts.soConversas);
+  const base = filtrada.order("opened_at", { ascending: false });
 
   const { data, error } = await (opts.limite === undefined ? base : base.limit(opts.limite));
   if (error) throw new Error(error.message);
 
-  const { count } = await supabase
+  let contagem = supabase
     .from("agent_cases")
     .select("id", { count: "exact", head: true })
     .eq("organization_id", organizationId)
     .in("status", ESTADOS_ABERTOS as unknown as string[]);
+  if (opts.soConversas) contagem = contagem.in("conversation_id", opts.soConversas);
+  const { count } = await contagem;
 
   return {
     chamados: ((data ?? []) as unknown as LinhaComContato[]).map(achatarContato),
@@ -137,13 +145,16 @@ export async function lerChamado(
   supabase: SupabaseClient,
   organizationId: string,
   caseId: string,
+  /** O mesmo recorte de `listarChamados`: caso fora destas conversas = `null`. */
+  opts: { soConversas?: string[] } = {},
 ): Promise<ChamadoDetalhado | null> {
-  const { data: caseRow, error: caseErr } = await supabase
+  let consulta = supabase
     .from("agent_cases")
     .select(COLUNAS_DETALHE)
     .eq("id", caseId)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+    .eq("organization_id", organizationId);
+  if (opts.soConversas) consulta = consulta.in("conversation_id", opts.soConversas);
+  const { data: caseRow, error: caseErr } = await consulta.maybeSingle();
   if (caseErr) throw new Error(caseErr.message);
   if (!caseRow) return null;
 
