@@ -6791,6 +6791,8 @@ export const DICIONARIO: Traducoes = {
   "avisa o cliente": { es: "avisa al cliente" },
   "antes": { es: "antes" },
   "O lembrete precisa sair pelo menos 15 minutos antes do compromisso.": { es: "El recordatorio debe salir al menos 15 minutos antes de la cita." },
+  "A mensagem do lembrete cabe em 1000 caracteres.": { es: "El mensaje del recordatorio admite hasta 1000 caracteres." },
+  "A mensagem do lembrete usa uma variável que não existe. Use só as da lista.": { es: "El mensaje del recordatorio usa una variable que no existe. Use solo las de la lista." },
   "O lembrete não pode sair mais de 7 dias (10080 minutos) antes.": { es: "El recordatorio no puede salir más de 7 días (10080 minutos) antes." },
   "Ação contém": { es: "La acción contiene" },
   "Ator": { es: "Actor" },

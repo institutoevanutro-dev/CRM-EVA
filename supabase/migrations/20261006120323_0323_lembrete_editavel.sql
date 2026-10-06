@@ -1,5 +1,5 @@
 -- 20261006120323_0323_lembrete_editavel.sql
--- 0323 — lembrete da agenda: a régua da remarcação.
+-- 0323 — lembrete da agenda: o texto no tipo e a régua da remarcação.
 --
 -- Spec: docs/superpowers/specs/2026-10-06-lembrete-editavel-design.md.
 --
@@ -43,6 +43,14 @@
 -- candidato. E é gravado ANTES do envio (porte de 6ed38c78c). Continua NÃO sendo
 -- filtro de quem recebe.
 --
+-- (3) O TEXTO DO LEMBRETE MORA NO TIPO. Porte da 0265 do original (6146539da),
+-- com o mesmo nome de coluna para um merge futuro não conflitar:
+-- `calendar_event_types.reminder_body`, nullable, sem backfill. NULL = a frase
+-- padrão do cron, o comportamento de antes. DIRC: a frase é do MOLDE, não do
+-- compromisso marcado e não de `message_templates` (scripts do inbox). Mudar o
+-- texto do tipo não reescreve o que já saiu. As variáveis deste fork são mais
+-- que as do original; a lista é `VARIAVEIS_DO_LEMBRETE`.
+--
 -- Idempotente: `add column if not exists`, `create or replace`, `drop trigger if
 -- exists`, `comment on` (repetir não muda nada).
 -- ---- lembrete editável e régua da remarcação (migration 0323) ----
@@ -72,3 +80,9 @@ create trigger trg_starts_at_marked_at
 
 comment on column public.calendar_appointments.reminder_sent_at is
   'Instante do último carimbo de lembrete, gravado ANTES do envio. Depois de uma remarcação é a régua do rearme: um degrau já carimbado volta a ser candidato quando o alvo novo dele fica meio intervalo ou mais depois deste instante. NÃO é filtro de quem recebe; o que já saiu é reminder_sent_offsets_minutes.';
+
+alter table public.calendar_event_types
+  add column if not exists reminder_body text;
+
+comment on column public.calendar_event_types.reminder_body is
+  'Texto do lembrete no WhatsApp. NULL = a frase padrão do cron. Variáveis {{primeiro_nome}}, {{nome}}, {{quando}}, {{data}}, {{hora}}, {{dia_semana}}, {{unidade}}, {{endereco}}, {{profissional}}, {{tipo}}, {{titulo}}, {{dia}}; a lista mora em lib/agenda/texto-do-lembrete.ts. Distinto de reminder_template_name, o modelo legado, que sai cru.';

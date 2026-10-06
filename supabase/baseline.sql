@@ -33416,6 +33416,8 @@ notify pgrst, 'reload schema';
 -- `created_at` no leitor (`app/api/v1/cron/agenda-reminder/route.ts`).
 -- (2) O comentário de `reminder_sent_at` deixa de dizer "informativo": ele é a
 -- régua do rearme e é gravado antes do envio.
+-- (3) Porte da 0265 do original (6146539da): `calendar_event_types.reminder_body`,
+-- o texto próprio do lembrete. NULL = a frase padrão do cron.
 -- A função entra ANTES da varredura anon de propósito. Razões completas no
 -- cabeçalho de supabase/migrations/20261006120323_0323_lembrete_editavel.sql.
 alter table public.calendar_appointments
@@ -33444,6 +33446,12 @@ create trigger trg_starts_at_marked_at
 
 comment on column public.calendar_appointments.reminder_sent_at is
   'Instante do último carimbo de lembrete, gravado ANTES do envio. Depois de uma remarcação é a régua do rearme: um degrau já carimbado volta a ser candidato quando o alvo novo dele fica meio intervalo ou mais depois deste instante. NÃO é filtro de quem recebe; o que já saiu é reminder_sent_offsets_minutes.';
+
+alter table public.calendar_event_types
+  add column if not exists reminder_body text;
+
+comment on column public.calendar_event_types.reminder_body is
+  'Texto do lembrete no WhatsApp. NULL = a frase padrão do cron. Variáveis {{primeiro_nome}}, {{nome}}, {{quando}}, {{data}}, {{hora}}, {{dia_semana}}, {{unidade}}, {{endereco}}, {{profissional}}, {{tipo}}, {{titulo}}, {{dia}}; a lista mora em lib/agenda/texto-do-lembrete.ts. Distinto de reminder_template_name, o modelo legado, que sai cru.';
 
 -- ---- fim: lembrete editável (migration 0323) ----
 

@@ -2651,6 +2651,7 @@ export type Database = {
           name: string
           organization_id: string
           position: number
+          reminder_body: string | null
           reminder_enabled: boolean
           reminder_minutes_before: number
           reminder_extra_offsets_minutes: number[]
@@ -2680,6 +2681,7 @@ export type Database = {
           name: string
           organization_id: string
           position?: number
+          reminder_body?: string | null
           reminder_enabled?: boolean
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
@@ -2709,6 +2711,7 @@ export type Database = {
           name?: string
           organization_id?: string
           position?: number
+          reminder_body?: string | null
           reminder_enabled?: boolean
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
