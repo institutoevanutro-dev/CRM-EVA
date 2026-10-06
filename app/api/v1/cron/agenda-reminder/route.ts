@@ -637,6 +637,12 @@ async function handle(req: NextRequest): Promise<Response> {
       continue;
     }
     if (!carimbada || carimbada.length === 0) {
+      // Sem envio não há audit (rodada sem efeito não audita), então o log é
+      // o único rastro se o UPDATE condicional passar a não casar NUNCA.
+      logger.warn("[agenda-reminder] mudou_na_rodada: a linha mudou entre a leitura e o carimbo", {
+        appointmentId: linha.id,
+        requestId,
+      });
       pular("mudou_na_rodada");
       continue;
     }

@@ -312,7 +312,9 @@ Living System Checklist — lembrete editável, pelo WhatsApp, refeito ao remarc
     reminder_sent_at que a próxima rodada lê.
 [x] Que atividade/log eu emito?  audit agenda.tipo_alterado com `reminder_body` na
     lista de campos; audit agenda.lembrete_enviado com `motivos`, que agora inclui
-    `carimbo_falhou` e `mudou_na_rodada`; a própria mensagem na conversa.
+    `carimbo_falhou` e `mudou_na_rodada` (só quando a rodada enviou algo: rodada sem
+    envio não audita); `logger.error` em `carimbo_falhou` e `logger.warn` em
+    `mudou_na_rodada`, que valem em toda rodada; a própria mensagem na conversa.
 [x] Onde eu apareço na tela?  Configurações › Agenda (campo, ajuda, prévia e o selo
     "· texto próprio" na lista); a mensagem enviada na conversa do Inbox.
 [x] Por qual porta se chega até mim?  a tela já existente /app/settings/tenant/agenda,
@@ -325,8 +327,10 @@ Living System Checklist — lembrete editável, pelo WhatsApp, refeito ao remarc
 [x] Qual a continuidade IA↔humano?  N/A: envio de sistema; a descrição de
     crm_reschedule_appointment passa a dizer à IA o que o lembrete faz de verdade.
 [x] Qual meu LAÇO DE RETORNO?  (1) a prévia: quem escreve vê o texto que o paciente
-    recebe antes de salvar, e variável errada vira aviso e 422; (2) os `motivos` do
-    audit agenda.lembrete_enviado (`carimbo_falhou`, `mudou_na_rodada`, `sem_canal`);
+    recebe antes de salvar, e variável errada vira aviso e 422; (2) os `motivos` da
+    resposta do cron, que entram no audit agenda.lembrete_enviado quando a rodada
+    enviou algo; na rodada sem envio, o rastro de `carimbo_falhou` e
+    `mudou_na_rodada` é o log (error/warn), porque cron sem efeito não audita;
     (3) a resposta do paciente volta à mesma conversa, porque o canal é o dela.
 [x] Atualizei o mapa vivo?  N/A: nenhuma peça nova; o cron, a tela e as tabelas já
     existiam. `docs/architecture/` não modela o agenda-reminder hoje.
