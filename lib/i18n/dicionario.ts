@@ -7024,6 +7024,7 @@ export const DICIONARIO: Traducoes = {
   "Sequência encerrada: uma pessoa da equipe está atendendo esta conversa.": { es: "Secuencia finalizada: una persona del equipo está atendiendo esta conversación." },
   "A IA não enviou a mensagem e o modelo de reserva também foi recusado pelas regras do atendimento.": { es: "La IA no envió el mensaje y la plantilla de respaldo también fue rechazada por las reglas de atención." },
   "{{nome}} e {{primeiro_nome}} viram o nome do contato; sem nome, a variável sai do texto.": { es: "{{nome}} y {{primeiro_nome}} se vuelven el nombre del contacto; sin nombre, la variable sale del texto." },
+  "Passo pulado: sem o nome do contato, a mensagem ficaria vazia.": { es: "Paso omitido: sin el nombre del contacto, el mensaje quedaría vacío." },
   "Contém": { es: "Contiene" },
   "É igual a": { es: "Es igual a" },
   "Não gravar": { es: "No guardar" },

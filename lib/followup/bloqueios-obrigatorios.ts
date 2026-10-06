@@ -401,6 +401,14 @@ export const TEXTO_DO_BLOQUEIO: Record<MotivoDoBloqueio, string> = {
 };
 
 /**
+ * O texto do passo era só o nome do contato (`{{primeiro_nome}}`), e o contato
+ * não tem nome: a variável sai e não sobra mensagem. O passo é pulado — mandar
+ * `""` falharia no canal e mataria a inscrição por tentativa esgotada.
+ */
+export const MOTIVO_TEXTO_VAZIO_SEM_NOME =
+  'Passo pulado: sem o nome do contato, a mensagem ficaria vazia.';
+
+/**
  * O desfecho gravado em `followup_enrollments.outcome` quando o bloqueio encerra
  * a sequência. Motivo sem entrada encerra sem desfecho (só o `cancel_reason`).
  */

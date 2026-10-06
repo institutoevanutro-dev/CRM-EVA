@@ -16,11 +16,15 @@ import { completeTurnForEnrollment, type TurnBridgeAdminClient } from "@/lib/fol
 import { logger } from "@/lib/logger";
 import { automaticoPodeEnviar } from "@/lib/channels/janela";
 import { ERRO_FORA_DAS_24H } from "@/lib/agent-engine/edge/crm/send-ledger";
-import { OUTCOME_DO_BLOQUEIO, TEXTO_DO_BLOQUEIO, conferirAntesDoEnvio } from "@/lib/followup/bloqueios-obrigatorios";
+import {
+  MOTIVO_TEXTO_VAZIO_SEM_NOME,
+  OUTCOME_DO_BLOQUEIO,
+  TEXTO_DO_BLOQUEIO,
+  conferirAntesDoEnvio,
+} from "@/lib/followup/bloqueios-obrigatorios";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { adiarAteAJanelaAbrir } from "@/lib/automation/janela-do-canal";
 import { espacarEnvio } from "@/lib/automation/throttle";
-import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { interpolateTemplate } from "@/lib/inbox/template-vars";
 
 const TEM_VARIAVEL_DO_NOME = /\{\{\s*(nome|primeiro_nome)\s*\}\}/i;
@@ -223,7 +227,14 @@ export async function enviarTextoFixoPendente(
           .eq("id", contactId)
           .maybeSingle();
         if (pessoaErr) throw new Error(pessoaErr.message);
-        texto = interpolateTemplate(body, { name: nomeDoContato(pessoa) }, { semValor: "remover" });
+        texto = interpolateTemplate(body, pessoa ?? {}, { semValor: "remover" });
+      }
+      if (texto === "") {
+        await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {
+          kind: "pulado", reason: MOTIVO_TEXTO_VAZIO_SEM_NOME,
+        },undefined,job.id,jobClaim);
+        await settle(job.organization_id,job.id,jobClaim.acquired_at,true);
+        continue;
       }
       let erroDoServidor: string | null = null;
       const resultado=await sendWithLedger(supabaseSendLedger(admin),{tenantId:job.organization_id,leadId:contactId,jobId:job.id,seq:1,body:texto},async(key,messageId)=>{

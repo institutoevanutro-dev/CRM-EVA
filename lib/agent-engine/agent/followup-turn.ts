@@ -43,6 +43,7 @@ import {
 } from './inbound-turn';
 import { isLeadInHandoff } from './human-handoff';
 import {
+  MOTIVO_TEXTO_VAZIO_SEM_NOME,
   OUTCOME_DO_BLOQUEIO,
   TEXTO_DO_BLOQUEIO,
   conferirAntesDoEnvio,
@@ -50,7 +51,6 @@ import {
 } from '../../followup/bloqueios-obrigatorios';
 import { ERRO_FORA_DAS_24H } from '../edge/crm/send-ledger';
 import { fusoDaOrganizacao } from './fuso-da-org';
-import { nomeDoContato } from '@/lib/contacts/rotulo-do-contato';
 import { interpolateTemplate } from '@/lib/inbox/template-vars';
 import type { LeadStateRow } from './lead-state';
 import { loadReentryTemplate, pickReentryVariant } from './reentry-template';
@@ -438,6 +438,10 @@ async function runFlowDrivenTurn(
     }
 
     const body = await resolveFlowSendBody(pool, target.tenantId, target.leadId, input);
+    if (body === '') {
+      await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'pulado', reason: MOTIVO_TEXTO_VAZIO_SEM_NOME } });
+      return;
+    }
     if (body !== null) {
       // Texto do operador: sem camada semântica (ver o cabeçalho de sendFixedOutbound).
       const sent = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body, false);
@@ -620,7 +624,7 @@ async function interpolarNomeDoContato(pool: pg.Pool, tenantId: string, contactI
     'select name, display_name from contacts where organization_id = $1 and id = $2',
     [tenantId, contactId],
   );
-  return interpolateTemplate(texto, { name: nomeDoContato(rows[0]) }, { semValor: 'remover' });
+  return interpolateTemplate(texto, rows[0] ?? {}, { semValor: 'remover' });
 }
 
 async function resolveFlowSendBody(
@@ -881,6 +885,7 @@ async function tentarModeloDeReserva(
     voltaIndex: input.voltaIndex,
     voltaTotal: input.voltaTotal,
   });
+  if (body === '') return { kind: 'pulado', reason: MOTIVO_TEXTO_VAZIO_SEM_NOME };
   // Texto do operador: sem camada semântica, como o texto fixo do fluxo.
   const saiu = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body!, false, SEQ_DO_MODELO_DE_RESERVA);
   if (saiu === 'sent') return { kind: 'sent', via: 'modelo_de_reserva' };

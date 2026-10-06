@@ -298,4 +298,16 @@ describe("enviarTextoFixoPendente · {{nome}} e {{primeiro_nome}}", () => {
     expect(await enviarTextoFixoPendente(admin())).toBe(1);
     expect(corpo()).toBe("Oi!");
   });
+
+  it("texto que era só a variável, sem nome: não envia '' — pula o passo, como o worker", async () => {
+    JOB.payload.fixed_body = "{{primeiro_nome}}";
+    contato = { name: null, display_name: null };
+    expect(await enviarTextoFixoPendente(admin())).toBe(0);
+    expect(sendMessageHandler).not.toHaveBeenCalled();
+    expect(completeTurnForEnrollment.mock.calls[0]?.[4]).toEqual({
+      kind: "pulado",
+      reason: "Passo pulado: sem o nome do contato, a mensagem ficaria vazia.",
+    });
+    expect(statusUpdates).toContain("done");
+  });
 });

@@ -128,6 +128,18 @@ describe("worker — variáveis do contato no texto e no modelo do passo", () =>
     expect(corpoEnviado()).toBe("Olá João Lima");
   });
 
+  it("texto que era só {{primeiro_nome}}, sem nome: não envia '' — pula o passo com motivo legível", async () => {
+    const d = deps();
+    await criarHandler(d.deps)(job({ fixed_body: "{{primeiro_nome}}" }), fakePool({ name: null, display_name: null }), ctx);
+    expect(runBeforeSend).not.toHaveBeenCalled();
+    expect(d.complete).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        result: { kind: "pulado", reason: "Passo pulado: sem o nome do contato, a mensagem ficaria vazia." },
+      }),
+    );
+  });
+
   it("{{volta}} continua funcionando junto", async () => {
     await criarHandler(deps().deps)(
       job({ fixed_body: "{{nome}}, tentativa {{volta}} de {{voltas}}", volta_index: 2, volta_total: 3 }),
