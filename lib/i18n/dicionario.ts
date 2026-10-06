@@ -7077,7 +7077,7 @@ export const DICIONARIO: Traducoes = {
   "Não consegui carregar os horários": { es: "No pude cargar los horarios" },
   "Os dias ficam bloqueados até eu conseguir — é mais seguro que oferecer um horário que talvez não exista. Numa instalação nova, isso costuma ser a jornada de atendimento que ainda não foi publicada.": { es: "Los días quedan bloqueados hasta que lo logre — es más seguro que ofrecer un horario que quizá no exista. En una instalación nueva, esto suele ser la jornada de atención que todavía no se publicó." },
   "Nenhum horário livre em": { es: "Ningún horario libre en" },
-  "Os próximos 30 dias são o que está publicado hoje — meses adiante aparecem conforme a data se aproxima.": { es: "Los próximos 30 días son lo que está publicado hoy — los meses siguientes aparecen conforme la fecha se acerca." },
+  "Não há horário livre publicado neste mês.": { es: "No hay horario libre publicado en este mes." },
   "Conferindo a chave com a OpenAI — leva alguns segundos.": { es: "Verificando la clave con OpenAI — toma unos segundos." },
   "Pronto para preparar material.": { es: "Listo para preparar material." },
   "Falta uma chave da OpenAI para o agente aprender o seu material": { es: "Falta una clave de OpenAI para que el agente aprenda tu material" },
