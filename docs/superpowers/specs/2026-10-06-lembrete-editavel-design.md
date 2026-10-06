@@ -171,8 +171,23 @@ reconciliação do Google por `fn_appointment_change_core`), e a decisão de rea
 `degrausPendentes`, na leitura. A lista gravada continua sendo a autoridade do que saiu, e o
 carimbo da rodada a regrava.
 
+**O preço da guarda 2, medido na revisão.** O pedido de zerar NÃO foi cumprido ao pé da
+letra, e há dois casos em que a data nova fica sem o aviso de um degrau:
+
+- remarcar para MAIS TARDE a menos de meio intervalo do último envio (véspera saiu qui
+  16:05, consulta vai de sex 16:00 para sex 23:00: a véspera nova, qui 23:00, fica 6h55
+  depois do envio, abaixo de 12h, e não sai);
+- multidegrau: a régua é o último carimbo de QUALQUER degrau, então o aviso de 60 min que
+  acabou de sair suprime a véspera da data nova remarcada para o dia seguinte.
+
+Os dois estão presos em `lib/agenda/aviso-do-compromisso-lembrete.test.ts` como
+comportamento escolhido, e a descrição de `crm_reschedule_appointment` diz as duas
+exceções e manda a IA confirmar o novo horário na própria conversa. Antes ela prometia o
+envio nesses casos (achado da revisão).
+
 **Fica para decisão do dono:** se ele quiser literalmente a lista zerada, é uma linha no
-gatilho (`new.reminder_sent_offsets_minutes := '{}'`). O plano não a escreve.
+gatilho (`new.reminder_sent_offsets_minutes := '{}'`), aceitando o segundo aviso em
+sequência; os dois testes acima são os que devem virar. O plano não a escreve.
 
 ### 3.4 Efeito colateral do `6ed38c78c` sobre o Dr. André (ATENÇÃO)
 
