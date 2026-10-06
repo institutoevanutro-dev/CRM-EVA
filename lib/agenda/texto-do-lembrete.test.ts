@@ -62,6 +62,23 @@ describe("variáveis vazias somem sem deixar chave nem espaço sobrando", () => 
     expect(lembrete("Oi {{nome}}! Até {{quando}}.", { nomeDoContato: null })).toBe("Oi! Até hoje.");
   });
 
+  it("sem nome, a vírgula ANTES da variável não fica órfã ('Olá,!')", () => {
+    // O molde mais natural de quem copia a frase padrão. Medido na revisão:
+    // saía "Olá,! Sua consulta é hoje às 14:30." para o WhatsApp do paciente.
+    expect(lembrete("Olá, {{primeiro_nome}}! Sua consulta é {{quando}} às {{hora}}.", { nomeDoContato: null })).toBe(
+      "Olá! Sua consulta é hoje às 14:30.",
+    );
+    expect(lembrete("Unidade: {{unidade}}. Endereço: {{endereco}}.", { unidade: null, local: null })).toBe(
+      "Unidade. Endereço.",
+    );
+  });
+
+  it("controle: pontuação que não encosta em outra continua onde estava", () => {
+    expect(lembrete("Olá, {{primeiro_nome}}! Às {{hora}}: até lá; obrigado.")).toBe(
+      "Olá, Maria! Às 14:30: até lá; obrigado.",
+    );
+  });
+
   it("primeiro nome é a primeira palavra", () => {
     expect(lembrete("Oi {{primeiro_nome}}", { nomeDoContato: "Maria  Silva" })).toBe("Oi Maria");
   });

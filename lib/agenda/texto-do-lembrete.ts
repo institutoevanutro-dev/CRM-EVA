@@ -82,6 +82,11 @@ function limparEspacos(texto: string): string {
   return texto
     .replace(/[ \t]{2,}/g, " ")
     .replace(/ ([,.!?])/g, "$1")
+    // Vírgula, ponto e vírgula ou dois-pontos que encostam em outra pontuação
+    // são o rastro da variável vazia: "Olá, {{primeiro_nome}}!" sem nome vira
+    // "Olá!", e não "Olá,!". "14:30" e "https:" não casam: depois deles vem
+    // dígito ou barra.
+    .replace(/[,;:][ \t]*([!?.,;:])/g, "$1")
     .replace(/^[ \t]+|[ \t]+$/gm, "")
     .trim();
 }
