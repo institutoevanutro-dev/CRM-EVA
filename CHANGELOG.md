@@ -8,6 +8,176 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.6.1] — 2026-10-06
+
+### Corrigido
+
+- **Anonimizar um paciente passa a apagar também o que a IA e a equipe escreveram sobre ele quando o atendimento travou** Quando a IA não consegue resolver um atendimento, ela abre um "caso" para a equipe: escreve um
+  título, um resumo do problema, o que está faltando e guarda um trecho das últimas mensagens do
+  paciente. A equipe responde nesse caso, o pedido ganha um assunto e um próximo passo, e a Central
+  recebe avisos — alguns com o resumo da conversa, e o de chamada perdida com o telefone no título.
+
+  Nada disso era apagado ao anonimizar. O paciente aparecia como "Cliente Anonimizado", mas o relato
+  sobre ele continuava legível nessas telas, com nome e tudo, e o sistema dizia que a anonimização
+  tinha sido feita.
+
+  Agora, ao anonimizar (pelo pedido formal ou pelo botão da ficha):
+
+  - o caso fica sem título, resumo e trecho de conversa, e as respostas da equipe dentro dele somem;
+  - o pedido fica sem assunto e sem o texto do próximo passo;
+  - os avisos da Central sobre aquela pessoa são encerrados e ficam sem texto.
+
+  O que é registro do trabalho da clínica continua: que houve um caso, quando foi aberto, em que
+  situação estava, quem atendeu e quando. Assim as contagens de atendimento não mudam.
+
+  O relatório de dados do titular (o que a clínica entrega quando o paciente pede os dados dele)
+  passa a trazer esses mesmos registros.
+
+  Quem já tinha sido anonimizado antes desta atualização é corrigido sozinho na hora de atualizar —
+  inclusive os avisos de "atendimento parado" que o sistema continuou abrindo depois da
+  anonimização, que repetiam o título antigo do caso.
+
+- **O bloqueio de um contato só muda pelo pedido do paciente ou pelo botão do administrador** Quando um paciente pede para não receber mais mensagens, o contato fica
+  bloqueado. Só o administrador pode desbloquear, pelo botão na ficha do contato,
+  e isso fica registrado na auditoria.
+
+  Essa regra valia na tela, mas não no banco: um atendente com algum conhecimento
+  técnico conseguia desbloquear (ou bloquear) um contato por fora do sistema, sem
+  ser administrador e sem deixar registro.
+
+  Agora o próprio banco recusa. O bloqueio só é gravado quando o paciente pede
+  para parar, e só é desfeito pelo botão Desbloquear. Editar os outros dados da
+  ficha continua igual para todos. Nenhuma ação é necessária.
+
+  Dois atalhos que desfaziam o bloqueio sem desbloquear também foram fechados:
+
+  - O telefone de um contato bloqueado não pode mais ser trocado nem apagado pela
+    ficha. Trocar o número fazia a próxima mensagem do paciente abrir um contato
+    novo, sem bloqueio. Quem tentar vê o aviso "Este contato pediu para não
+    receber mensagens" e precisa pedir ao administrador para desbloquear antes.
+    Nome, e-mail e os outros campos continuam editáveis.
+  - Ao juntar dois contatos da mesma pessoa, se um deles estava bloqueado, o
+    contato que sobra fica bloqueado também. Antes, juntar um contato bloqueado a
+    uma duplicata livre fazia o bloqueio sumir.
+
+- **O botão "Anonimizar" da ficha passa a apagar tudo o que o pedido formal de LGPD apaga** Existem dois jeitos de anonimizar um paciente: pelo pedido formal (tela de pedidos de LGPD) e
+  pelo botão "Anonimizar contato" na ficha. O botão apagava menos coisa. Depois de clicar, ainda
+  ficavam guardados:
+
+  - as etiquetas, os consentimentos e os "dados de origem" do contato — onde ficam o @ do
+    Instagram, o telefone anotado como "em conflito" e o identificador do WhatsApp da pessoa;
+  - a foto de perfil;
+  - o @, o nome e a foto do perfil do Instagram ligado ao contato;
+  - a descrição, os campos e as etiquetas do negócio, além das primeiras letras do título;
+  - o telefone nas chamadas de voz e os dados pessoais dentro de pedidos de loja.
+
+  Agora o botão usa a mesma rotina do pedido formal, e os dois apagam a mesma coisa. Essa rotina
+  também passou a apagar, nos dois caminhos:
+
+  - o identificador do Instagram da pessoa (o número interno que a Meta usa para ela). Antes ele
+    ficava guardado mesmo depois de anonimizar. Com isso, se a pessoa voltar a escrever pelo
+    Instagram, ela entra como um contato novo — como já acontece no WhatsApp;
+  - os comentários que ela fez em posts da clínica: o texto, o @ e a sugestão de resposta somem; fica
+    só o registro de que houve um comentário naquele post;
+  - os cadastros antigos da mesma pessoa que tinham sido juntados ao dela (pela tela "Juntar
+    duplicados" ou pela junção automática do Instagram). Ao juntar, o cadastro antigo ficava
+    guardado por trás, com nome, e-mail, telefone e foto; agora ele é anonimizado junto.
+
+  Quem já tinha sido anonimizado antes desta atualização é corrigido sozinho na hora de atualizar,
+  sem precisar clicar de novo. Isso inclui um caso raro: se a pessoa, depois de anonimizada pelo
+  botão antigo, voltou a escrever pelo WhatsApp, o telefone dela tinha voltado para o cadastro
+  anonimizado e as mensagens novas continuavam caindo ali. A correção tira esse telefone, e a
+  próxima mensagem dela abre um contato novo.
+
+  O nome que aparece no lugar passa a ser "Cliente Anonimizado #…" nos dois caminhos (o botão
+  gravava "Contato Anonimizado #…").
+
+- **Casos da IA — só o sistema escreve, e cada atendente vê só os casos das conversas que pode ver** Quando a IA pede ajuda da equipe, ela abre um Caso com um resumo do atendimento.
+  Dois problemas foram fechados:
+
+  - Um usuário com algum conhecimento técnico conseguia, falando direto com o
+    banco, reescrever o que a IA anotou num caso, incluir um registro falso na
+    linha do tempo e até fazer o histórico dizer que alguém assumiu uma conversa
+    que ninguém assumiu. Agora só o próprio sistema grava essas informações.
+    Responder a um caso pela tela continua igual.
+  - Na tela IA › Casos, o atendente via título, resumo, nome e telefone de casos
+    de conversas que ele não pode abrir. Agora a lista, o detalhe e a resposta ao
+    caso seguem a mesma regra das conversas, escolhida em Configurações ›
+    Atendimento: quem não vê a conversa não vê nem responde o caso dela. Gestor e
+    administrador continuam vendo todos.
+
+  O que cada atendente passa a ver em IA › Casos depende dessa escolha:
+
+  - "Todos veem tudo": nada muda.
+  - "Os seus, mais os que ainda não têm dono" (o padrão): ele vê os casos das
+    conversas dele e das que estão sem dono, como as que a IA atende sozinha.
+    Deixa de ver os casos de conversas que já são de um colega.
+  - "Só os seus": ele vê apenas os casos das conversas dele. Os casos das
+    conversas que a IA atende sozinha aparecem só para gestor e administrador.
+
+  Junto com isso:
+
+  - Assumir, transferir ou soltar uma conversa só é aceito de quem enxerga essa
+    conversa. Antes, por fora das telas, um atendente conseguia assumir a conversa
+    de um colega e, com isso, passar a ler o caso e as notas dela.
+  - O aviso "um atendimento espera decisão", que aparece na Central para toda a
+    equipe, deixa de trazer o título do caso. Quem pode abrir o caso lê o título
+    nele; quem não pode vê só o aviso.
+  - A aba Concluídos de IA › Casos abre com os 200 casos mais recentes e tem o
+    botão "Carregar mais" para ver os anteriores. Assim ela abre rápido mesmo em
+    clínicas com muito histórico, e nenhum caso antigo fica de fora.
+
+  Portado do projeto original (DeskcommCRM).
+
+- **Nota interna só pode ser editada ou apagada por quem escreveu ou por um gestor** A tela já escondia o botão de apagar a nota de um colega, mas a regra só valia
+  na tela. Um atendente com algum conhecimento técnico conseguia, falando direto
+  com o banco, alterar ou apagar a nota interna que outra pessoa escreveu numa
+  conversa, e até criar uma nota em nome de um colega.
+
+  Agora o próprio banco recusa. Cada atendente cria as suas notas e só mexe nas
+  suas; gestor e administrador continuam podendo editar e apagar qualquer nota das
+  conversas que enxergam. O arquivo anexado a uma nota segue a mesma regra: não dá
+  para trocar o anexo da nota de outra pessoa.
+
+  O nome que aparece assinando a nota e a data dela também passam a ser gravados
+  pelo próprio sistema, a partir do cadastro de quem escreveu. Antes dava para, por
+  fora das telas, assinar uma nota com o nome de outra pessoa ou com uma data
+  antiga, e um gestor conseguia passar a nota de um atendente para o nome de outro.
+
+  O anexo de uma nota passa a ser sempre um arquivo da própria conversa. Antes,
+  por fora das telas, dava para apontar uma nota para o arquivo que um colega
+  anexou na conversa de outro paciente; quando o paciente da primeira nota pedia
+  a remoção dos dados, o arquivo do colega era apagado junto.
+
+  Apagar uma conversa inteira por fora das telas (o que levava junto as notas dos
+  colegas) agora só é aceito de gestor ou administrador, a mesma regra de apagar um
+  contato.
+
+  Nada muda no uso do dia a dia e nenhuma ação é necessária.
+
+  Portado do projeto original (DeskcommCRM, de webtecnica e melgarafael).
+
+- **O relatório de dados do paciente passa a trazer o endereço, os campos personalizados e o que a IA sugeriu para o cadastro** Quando um paciente pede "quais dados vocês têm de mim", a clínica gera um relatório (um PDF, com
+  um arquivo de dados guardado junto). Esse relatório deixava de fora duas coisas que o sistema
+  guarda:
+
+  - o endereço e os campos personalizados da ficha (convênio, como conheceu a clínica e o que mais
+    a clínica tiver criado). O sistema lia esses campos e não colocava no relatório;
+  - as sugestões de cadastro feitas pela IA: quando ela percebe na conversa um nome, e-mail ou
+    telefone diferente do cadastrado, ela propõe a troca e guarda o trecho da conversa.
+
+  Agora os dois aparecem no PDF e no arquivo de dados. Também passam a aparecer a descrição e os
+  campos de cada negócio do paciente, o texto das atividades (só no arquivo de dados) e os
+  cadastros antigos dele que foram juntados ao atual. Os campos saem com o nome que a clínica deu a
+  eles (por exemplo "Convênio: Unimed"), e não com o código interno.
+
+  Um cuidado com o CPF: se alguém digitou o CPF do paciente num campo personalizado ou numa
+  observação, o número **não** sai no relatório. A linha do CPF só diz "Informado em campo
+  personalizado (valor não exibido)", uma vez, do mesmo jeito que o CPF do cadastro já aparecia só
+  como "Armazenado (criptografado)". Isso vale para o PDF e para o arquivo de dados, e também para
+  os outros textos do relatório: o formulário de captação, o caso que a IA abriu, os pedidos, os
+  avisos e os comentários do Instagram. O CPF é reconhecido com ou sem pontos, espaços e hífens.
+
 ## [3.6.0] — 2026-10-06
 
 ### Corrigido
@@ -5887,7 +6057,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.6.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.6.1...HEAD
+[3.6.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.6.0...v3.6.1
 [3.6.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.5.0...v3.6.0
 [3.5.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.3.0...v3.4.0
