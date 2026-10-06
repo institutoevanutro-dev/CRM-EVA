@@ -473,9 +473,15 @@ export async function GET(req: NextRequest): Promise<Response> {
             }
           : investimento,
         opcoes: {
-          funis: funis.map((f) => ({ id: f.id, nome: f.name, padrao: f.is_default })),
+          // Os campos de card vão POR funil: a tela oferece os do funil escolhido
+          // no formulário, que pode não ser o carregado.
+          funis: funis.map((f) => ({
+            id: f.id,
+            nome: f.name,
+            padrao: f.is_default,
+            campos_card: camposDeLista(f.settings).map((c) => ({ key: c.key, label: c.label })),
+          })),
           campos_contato: camposContato.map((c) => ({ key: c.key, label: c.label })),
-          campos_card: camposCard.map((c) => ({ key: c.key, label: c.label })),
         },
         truncado,
       },

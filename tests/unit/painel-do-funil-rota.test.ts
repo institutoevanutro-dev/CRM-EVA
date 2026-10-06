@@ -646,7 +646,19 @@ describe("resposta", () => {
       moeda: "BRL",
       cents: 10000,
     });
-    expect(d.opcoes.funis.map((f: { id: string }) => f.id)).toEqual([P, P2]);
+    // Os campos de card vão por funil: a tela oferece os do funil escolhido no formulário.
+    expect(d.opcoes.funis).toEqual([
+      {
+        id: P,
+        nome: "Comercial",
+        padrao: true,
+        campos_card: [
+          { key: "modalidade", label: "Modalidade" },
+          { key: "origem", label: "Origem" },
+        ],
+      },
+      { id: P2, nome: "Acompanhamento", padrao: false, campos_card: [] },
+    ]);
     expect(d.opcoes.campos_contato).toEqual([
       { key: "modalidade", label: "Modalidade" },
       { key: "origem", label: "Origem" },

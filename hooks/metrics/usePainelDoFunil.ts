@@ -40,9 +40,13 @@ export interface PainelDoFunil {
     | { estado: "nao_conectado" | "sem_conta" }
     | { estado: "indisponivel"; motivo: string };
   opcoes: {
-    funis: { id: string; nome: string; padrao: boolean }[];
+    funis: {
+      id: string;
+      nome: string;
+      padrao: boolean;
+      campos_card: { key: string; label: string }[];
+    }[];
     campos_contato: { key: string; label: string }[];
-    campos_card: { key: string; label: string }[];
   };
   truncado: boolean;
 }

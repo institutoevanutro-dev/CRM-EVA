@@ -78,6 +78,11 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
   const [filtros, setFiltros] = useState<FiltrosDoPainel>({});
   const consulta = usePainelDoFunil(filtros);
   const painel = consulta.data?.data;
+  // O formulário lê da ÚLTIMA resposta boa: um Aplicar que volta 422 zera `data`
+  // da chave nova, e sem isto o formulário perdia funis, campos e o período.
+  const [ultimoBom, setUltimoBom] = useState<PainelDoFunil>();
+  if (painel && painel !== ultimoBom) setUltimoBom(painel);
+  const base = painel ?? ultimoBom;
 
   const pct = (x: number | null) =>
     x === null
@@ -113,9 +118,16 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
     return "";
   }
 
-  const opcoes = painel?.opcoes;
+  const opcoes = base?.opcoes;
+  const funilDoRascunho = rascunho.pipeline_id ?? base?.funil.id;
   const camposDoRecorte =
-    rascunho.dimensao === "campo_contato" ? opcoes?.campos_contato : opcoes?.campos_card;
+    rascunho.dimensao === "campo_contato"
+      ? opcoes?.campos_contato
+      : opcoes?.funis.find((f) => f.id === funilDoRascunho)?.campos_card;
+  const faltaEscolha =
+    ((rascunho.dimensao === "campo_contato" || rascunho.dimensao === "campo_card") &&
+      !rascunho.campo) ||
+    (rascunho.dimensao === "etiqueta" && !rascunho.prefixo?.trim());
 
   const filtrosForm = (
     <form
@@ -128,7 +140,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
         <Input
           type="date"
           className="w-40"
-          value={rascunho.de ?? painel?.periodo.de ?? ""}
+          value={rascunho.de ?? base?.periodo.de ?? ""}
           onChange={(e) => mudar({ de: e.target.value })}
         />
       </label>
@@ -137,14 +149,14 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
         <Input
           type="date"
           className="w-40"
-          value={rascunho.ate ?? painel?.periodo.ate ?? ""}
+          value={rascunho.ate ?? base?.periodo.ate ?? ""}
           onChange={(e) => mudar({ ate: e.target.value })}
         />
       </label>
       <div className="flex flex-col gap-1 text-sm">
         <span>{t("Funil")}</span>
         <Select
-          value={rascunho.pipeline_id ?? painel?.funil.id ?? ""}
+          value={funilDoRascunho ?? ""}
           onValueChange={(v) => mudar({ pipeline_id: v, campo: undefined })}
         >
           <SelectTrigger className="w-52" aria-label={t("Funil")}>
@@ -211,7 +223,9 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
           />
         </label>
       ) : null}
-      <Button type="submit">{t("Aplicar")}</Button>
+      <Button type="submit" disabled={faltaEscolha}>
+        {t("Aplicar")}
+      </Button>
     </form>
   );
 
