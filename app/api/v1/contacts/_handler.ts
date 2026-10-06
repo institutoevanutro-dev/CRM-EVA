@@ -17,7 +17,7 @@ import { logger } from "@/lib/logger";
 import { traduzir } from "@/lib/i18n/dicionario";
 import type { Idioma } from "@/lib/i18n/idiomas";
 import { roleAtLeast } from "@/lib/auth/types";
-import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
+import { canonicalPhoneBR, samePhone } from "@/lib/channels/phone-variants";
 import { condicoesDaBuscaDeContato } from "@/lib/contacts/busca";
 import { encontrarContatoPorTelefone } from "@/lib/channels/contato-por-telefone";
 import { indiceDoCpf, MSG_CPF_SEM_CIFRA, parDoCpf, type ParDoCpf } from "@/lib/contacts/cpf";
@@ -529,7 +529,7 @@ export async function patchContactHandler(
     // patch dele passou a ser MERGE (ver abaixo), e merge precisa do estado
     // anterior.
     .select(
-      "id, organization_id, is_anonymized, tags, email, phone_number, name, display_name, consent, custom_fields",
+      "id, organization_id, is_anonymized, is_blocked, tags, email, phone_number, name, display_name, consent, custom_fields",
     )
     .eq("organization_id", ctx.organization_id)
     .eq("id", contactId)
@@ -570,6 +570,24 @@ export async function patchContactHandler(
   if (input.email !== undefined) patch.email = input.email;
   if (input.phone_number !== undefined) {
     patch.phone_number = input.phone_number ? canonicalPhoneBR(input.phone_number) : input.phone_number;
+  }
+  // CONTATO BLOQUEADO: o telefone não muda pela ficha. O bloqueio é desta linha,
+  // e o telefone é o que liga a linha à pessoa — trocá-lo soltaria o número de
+  // quem pediu para parar, e a próxima mensagem dela criaria um contato novo,
+  // livre. O banco recusa (migration 0319, `fn_contato_bloqueado_guarda_a_identidade`);
+  // aqui a recusa vira uma resposta que explica, em vez de um 500.
+  //
+  // O MESMO número em outra grafia não é mudança: o formulário reenvia o telefone
+  // a cada gravação, já normalizado, e sem isto não daria para corrigir o nome de
+  // um contato bloqueado cujo telefone foi gravado sem o nono dígito.
+  const bloqueado = (existing as { is_blocked?: boolean }).is_blocked === true;
+  if (bloqueado && patch.phone_number !== undefined) {
+    const gravadoHoje = (existing as { phone_number?: string | null }).phone_number ?? null;
+    const pedido = (patch.phone_number as string | null) ?? null;
+    const mesmoNumero =
+      pedido === gravadoHoje || (!!pedido && !!gravadoHoje && samePhone(pedido, gravadoHoje));
+    if (!mesmoNumero) throw contatoBloqueadoNaoTrocaIdentidade(ctx);
+    delete patch.phone_number;
   }
   if (input.birthdate !== undefined) patch.birthdate = input.birthdate;
   if (input.tags !== undefined) patch.tags = input.tags;
@@ -623,6 +641,12 @@ export async function patchContactHandler(
     .maybeSingle();
 
   if (updErr) {
+    // A recusa do banco para o caso que a pré-checagem acima não vê: integração
+    // que manda `source_metadata`, ou o contato ser bloqueado entre a leitura e
+    // a gravação.
+    if (updErr.message?.includes("contato_bloqueado_identidade_so_o_servidor")) {
+      throw contatoBloqueadoNaoTrocaIdentidade(ctx);
+    }
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, updErr.message);
   }
   if (!updated) {
@@ -707,6 +731,19 @@ export async function patchContactHandler(
   });
 
   return contact;
+}
+
+function contatoBloqueadoNaoTrocaIdentidade(ctx: HandlerCtx): ApiError {
+  return new ApiError(
+    409,
+    "state_conflict",
+    undefined,
+    ctx.requestId,
+    traduzir(
+      "Este contato pediu para não receber mensagens. O telefone só pode ser alterado depois que um administrador desbloquear o contato.",
+      ctx.idioma ?? "pt-BR",
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------

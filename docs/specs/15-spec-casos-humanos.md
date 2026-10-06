@@ -222,7 +222,16 @@ create table if not exists agent_case_events (
 );
 create index if not exists agent_case_events_case_idx on agent_case_events (case_id, created_at);
 ```
-Append-only, sem RLS de UPDATE/DELETE (como `api_audit_log`). RLS select/insert por org.
+Append-only, sem RLS de UPDATE/DELETE (como `api_audit_log`). **Desde a migration 0319, só
+existe RLS de SELECT, aqui e em `agent_cases`**: a policy de escrita saiu junto com o GRANT de
+escrita de `authenticated`. Quem escreve caso é o motor (`pg.Pool` em
+`lib/agent-engine/agent/human-cases.ts`) e o cron (service role); nenhum caminho do produto
+escrevia por login de usuário, e enquanto a porta existiu um atendente reescrevia pelo PostgREST
+o texto que a equipe lê para decidir. A leitura herda a visibilidade da conversa do caso: quem
+não vê a conversa não vê o caso nem a linha do tempo dele — e é por isso que as rotas da tela
+leem com o cliente de sessão. Para ver o que está em vigor sem confiar nesta linha:
+`grep -nEi 'policy .*(agent_cases|agent_case_events)' supabase/baseline.sql`. Vigiado por
+`tests/invariants/casos-so-o-servidor-escreve.test.ts`.
 
 ### 8.3 Alterações em tabelas existentes
 - `ai_agent_versions add column if not exists cases_enabled boolean not null default false;`
@@ -241,7 +250,7 @@ Reusa o shell `app/app/ai/inbox/` (assistente), **seção/tab própria "Casos"**
   - `[ Não consigo → escalar ]` → `human_action=escalate`
   - `[ Enviar p/ IA ]` → POST cria event `human_replied` + enfileira `case_reply_turn` (ou dispara handoff se `escalate`).
 - **Clareza (requisito):** o estado do caso é sempre visível (esperando você / esperando cliente / resolvido / escalado). A UI não deixa ambíguo de quem é a bola.
-- Rota API: `POST /api/v1/ai/cases/[id]/reply` — molde `app/api/v1/leads/[id]/win/route.ts`: `requireRole("agent", {requestId, resource})` (valida JWT via `getUser()`, org do cookie validado — nunca do body), Zod no body, `audit(...)`, `ok()`/`fail()`, `X-Request-Id`. **Sem rate-limit** (rota autenticada de staff, não pública — doutrina: rate-limit só em rota pública). `GET /api/v1/ai/cases` e `GET /api/v1/ai/cases/[id]` (detalhe + timeline) seguem o molde de `app/api/v1/ai/inbox/route.ts`.
+- Rota API: `POST /api/v1/ai/cases/[id]/reply` — molde `app/api/v1/leads/[id]/win/route.ts`: `requireRole("agent", {requestId, resource})` (valida JWT via `getUser()`, org do cookie validado — nunca do body), Zod no body, `audit(...)`, `ok()`/`fail()`, `X-Request-Id`. **Sem rate-limit** (rota autenticada de staff, não pública — doutrina: rate-limit só em rota pública). `GET /api/v1/ai/cases` e `GET /api/v1/ai/cases/[id]` (detalhe + timeline) seguem o molde de `app/api/v1/ai/inbox/route.ts`. Desde a migration 0319 as duas leem com a sessão (a RLS do caso herda a visibilidade da conversa), e `?status=resolved` vem em páginas de 200: `meta.has_more` e `meta.cursor` (opaco, `opened_at` + `id`), próxima página com `?status=resolved&cursor=…`; os abertos vêm numa página só.
 
 ---
 
