@@ -43,6 +43,13 @@ export interface AtendenteDoRoster {
 export async function carregarRosterDeAtendimento(
   admin: SupabaseClient,
   organizationId: string,
+  /**
+   * `incluirPrestadores` serve só à TELA de jornada (Equipe › Atendimento): o
+   * `provider` atende pela agenda e precisa publicar `schedule`, mas não entra
+   * no roteamento nem na escalação. Quem decide "quem pode assumir" nunca passa
+   * esta opção — o padrão é o roster de atendimento (agent+).
+   */
+  opcoes: { incluirPrestadores?: boolean } = {},
 ): Promise<AtendenteDoRoster[]> {
   const { data: members, error: mErr } = await admin
     .from("user_organizations")
@@ -53,7 +60,9 @@ export async function carregarRosterDeAtendimento(
 
   // Atendentes = agent+ (viewer não é insumo de roteamento).
   const atendentes = ((members ?? []) as Array<{ user_id: string; role: Role }>).filter(
-    (m) => ROLE_RANK[m.role] >= ROLE_RANK.agent,
+    (m) =>
+      ROLE_RANK[m.role] >= ROLE_RANK.agent ||
+      (opcoes.incluirPrestadores === true && m.role === "provider"),
   );
   const userIds = atendentes.map((m) => m.user_id);
   if (userIds.length === 0) return [];

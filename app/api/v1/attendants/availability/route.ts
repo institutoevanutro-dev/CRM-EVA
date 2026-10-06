@@ -3,7 +3,8 @@
  *
  * Visível a agent+ (matriz spec 13 §4 nota 5: a disponibilidade da equipe é
  * insumo operacional do roteamento — quem está online / com folga / com quanta
- * carga). Retorna UMA linha por membro agent+ da org (LEFT JOIN availability),
+ * carga). Retorna UMA linha por membro agent+ da org — e por `provider`, que
+ * não roteia mas publica jornada de agenda — (LEFT JOIN availability),
  * com nome/carga — o painel de gestão (G5-04) consome só este endpoint.
  *
  * Por que service role + filtro manual de org (doutrina): a RLS de
@@ -66,7 +67,12 @@ export async function GET(_req: NextRequest): Promise<Response> {
   // a regra morou aqui dentro, o agente escalava para uma fila cega.
   let roster;
   try {
-    roster = await carregarRosterDeAtendimento(admin, activeOrg.orgId);
+    // Prestadores entram AQUI (e só aqui): esta lista é a única porta da tela
+    // para publicar a jornada que a Agenda lê. O roteamento segue agent+ — ele
+    // tem o próprio filtro de papel em `loadEligibleAttendants`.
+    roster = await carregarRosterDeAtendimento(admin, activeOrg.orgId, {
+      incluirPrestadores: true,
+    });
   } catch (err) {
     return fail("internal_error", err instanceof Error ? err.message : "roster", 500, {
       requestId,
