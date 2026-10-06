@@ -69,6 +69,14 @@ describe("Transcrição do áudio no balão do Inbox (#2133)", () => {
     expect(screen.queryByTestId("transcricao-de-audio")).not.toBeInTheDocument();
   });
 
+  // Revisão do PR #134: o inbox do super-admin usa o mesmo balão, e a rota
+  // dele não seleciona as colunas da transcrição. Coluna AUSENTE (undefined)
+  // não é "processando" — é "não sei", e "não sei" não promete texto.
+  it("leitura sem as colunas da transcrição não mostra 'Transcrevendo…'", () => {
+    audio({});
+    expect(screen.queryByTestId("transcricao-de-audio-pendente")).not.toBeInTheDocument();
+  });
+
   it("áudio do composer (outbound, sent_via crm) não promete transcrição: a ingestão nunca a pede", () => {
     audio({ direction: "outbound", sent_via: "crm", media_derived_status: null, media_derived_text: null });
     expect(screen.queryByTestId("transcricao-de-audio-pendente")).not.toBeInTheDocument();

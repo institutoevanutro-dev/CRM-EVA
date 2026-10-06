@@ -50,8 +50,10 @@ export function MediaRenderer({
       // O worker não grava "pending": null é "ainda processando". Mas só para
       // o que a ingestão manda derivar (recebido, ou enviado pelo celular) e por
       // pouco tempo — `created_at`, nunca `sent_at`, que no inbound é o relógio
-      // do aparelho.
+      // do aparelho. E só quando a leitura TROUXE a coluna: `undefined` é "a
+      // rota não seleciona" (o inbox do super-admin), não "processando".
       const pendente =
+        message.media_derived_status !== undefined &&
         !DERIVACAO_TERMINADA.has(message.media_derived_status ?? "") &&
         (message.direction === "inbound" || message.sent_via === "external_device") &&
         agora - new Date(message.created_at).getTime() < TETO_AVISO_TRANSCREVENDO_MS;
