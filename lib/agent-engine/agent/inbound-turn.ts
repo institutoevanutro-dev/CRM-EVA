@@ -1828,8 +1828,12 @@ async function executarTurnoDoAgente(
   // Só a JANELA adia. Cap diário e warm-up continuam com o gate de envio: eles
   // dependem de quanto já saiu hoje, e antecipá-los aqui adiaria turno que, na
   // hora do envio, teria passado.
+  // Guardados para a régua de resposta obsoleta (`send_message`), que precisa
+  // saber se a janela ainda estará aberta quando o turno seguinte rodar.
+  let knobsDaJanela: Awaited<ReturnType<typeof loadChannelKnobs>>['knobs'] | null = null;
   if (!preview && turnoVaiFalarComOLead(liveJob())) {
     const { knobs } = await loadChannelKnobs(pool, tenantId, input.channelSessionId, runLog);
+    knobsDaJanela = knobs;
     const agora = clock();
     if (!janelaDeEnvioAberta(agora, knobs)) {
       const abertura = proximaAberturaDaJanela(agora, knobs);
@@ -2783,13 +2787,23 @@ async function executarTurnoDoAgente(
         // Só antes do PRIMEIRO envio — cortar a meio uma resposta já começada é pior
         // que a duplicata. A mensagem nova tem job próprio, que lê a conversa inteira
         // e responde a tudo de uma vez. Ver `respostaFicouObsoleta`.
+        //
+        // E só se esse job ainda puder ENVIAR: ele roda depois deste e passa de
+        // novo pela janela anti-ban e pelo horário do agente. Descartar às 21:59
+        // com a janela fechando às 22h deixava o cliente sem nada até as 7h. A
+        // folga é o próprio teto, que cobre o turno seguinte inteiro.
+        const tetoObsoleta = deps.knobs.respostaObsoletaTetoMs ?? 0;
+        const quandoOProximoEnvia = new Date(clock().getTime() + tetoObsoleta);
         if (
           !preview &&
           seq === 0 &&
+          (knobsDaJanela === null || janelaDeEnvioAberta(quandoOProximoEnvia, knobsDaJanela)) &&
+          (agentConfig?.janelaDeAtendimento == null ||
+            msAteAJanelaAbrir(agentConfig.janelaDeAtendimento, quandoOProximoEnvia) === null) &&
           (await respostaFicouObsoleta(
             pool,
             { organizationId: tenantId, conversationId: input.conversationId, jobId: liveJob().id },
-            deps.knobs.respostaObsoletaTetoMs ?? 0,
+            tetoObsoleta,
           ))
         ) {
           runLog.info('resposta descartada — o cliente escreveu de novo durante o turno', {

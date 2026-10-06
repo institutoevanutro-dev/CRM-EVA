@@ -172,7 +172,12 @@ function modelo(chegada: { sentAt?: string } | null) {
 }
 
 /** Reivindica o próximo job da fila (tem de ser `jobId`) e o roda até o fim. */
-async function rodarJob(jobId: string, fake: ReturnType<typeof modelo>): Promise<void> {
+async function rodarJob(
+  jobId: string,
+  fake: ReturnType<typeof modelo>,
+  // Dentro da janela anti-ban (7h-22h BRT), como os vizinhos.
+  agora = new Date("2026-07-28T18:00:00Z"),
+): Promise<void> {
   const [claimed] = await m.queue.claimJobs(pool, { workerId: "descartada", maxConcurrency: 1 });
   expect(claimed?.id).toBe(jobId);
   const handler = m.createInboundTurnHandler({
@@ -207,8 +212,7 @@ async function rodarJob(jobId: string, fake: ReturnType<typeof modelo>): Promise
         capabilities: () => ({ freeform: true, media: true, audio: true }),
         costPerMessage: () => ({ currency: "BRL", cents: 0 }),
       }) as never,
-    // Dentro da janela anti-ban (7h-22h BRT), como os vizinhos.
-    clock: () => new Date("2026-07-28T18:00:00Z"),
+    clock: () => agora,
     sleep: async () => {},
   });
   await handler(claimed!, pool, { workerId: "descartada" });
@@ -216,7 +220,10 @@ async function rodarJob(jobId: string, fake: ReturnType<typeof modelo>): Promise
 }
 
 /** O turno de "Tudo bem?", durante o qual a pergunta chega. */
-async function turnoDuranteOQualAPerguntaChega(chegada: { sentAt?: string }): Promise<void> {
+async function turnoDuranteOQualAPerguntaChega(
+  chegada: { sentAt?: string },
+  agora?: Date,
+): Promise<void> {
   await inbound("Oi", haSegundos(20));
   const msg = await inbound("Tudo bem?", haSegundos(15));
   const { job } = await m.queue.enqueueJob(pool, ORG, {
@@ -231,7 +238,7 @@ async function turnoDuranteOQualAPerguntaChega(chegada: { sentAt?: string }): Pr
     },
     maxAttempts: 1,
   });
-  await rodarJob(job.id, modelo(chegada));
+  await rodarJob(job.id, modelo(chegada), agora);
 }
 
 /** Jobs de turno criados para a pergunta que chegou durante o turno. */
@@ -279,6 +286,11 @@ beforeAll(async () => {
 beforeEach(async () => {
   enviados = 0;
   await pool.query("delete from send_ledger where organization_id = $1", [ORG]);
+  // Ritmo e cópia de envio são contados por número, fora das tabelas acima: os
+  // envios dos casos anteriores (a mesma frase do modelo fake) acionariam o
+  // throttle e o anti-cópia-em-massa do caso seguinte.
+  await pool.query("delete from pacing_ledger where organization_id = $1", [ORG]);
+  await pool.query("delete from outbound_copies where organization_id = $1", [ORG]);
   await pool.query("delete from messages where organization_id = $1", [ORG]);
   await pool.query("delete from job_queue where organization_id = $1", [ORG]);
   await pool.query("delete from event_log where organization_id = $1", [ORG]);
@@ -336,6 +348,14 @@ describe("a resposta descartada tem quem responda depois", () => {
         TETO,
       ),
     ).toBe(false);
+  });
+
+  it("perto de a janela de envio fechar, a resposta sai: o turno seguinte só responderia amanhã", async () => {
+    // 21:59 BRT, janela anti-ban até 22h. O turno da pergunta seria reivindicado
+    // depois das 22h e reagendado para as 7h: descartar aqui troca uma resposta
+    // um pouco desatualizada por uma noite de silêncio.
+    await turnoDuranteOQualAPerguntaChega({}, new Date("2026-07-29T00:59:00Z"));
+    expect(enviados).toBe(1);
   });
 
   it("a reentregue com atraso, que o drain não vai atender, não segura a resposta", async () => {

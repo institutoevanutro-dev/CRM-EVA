@@ -16,7 +16,10 @@ mensagem do paciente, a IA não responde a ela uma segunda vez.
 
 Para quem escreve sem parar não ficar sem resposta, essa espera vale só
 enquanto a mensagem mais antiga sem resposta tiver menos de 2 minutos. Depois
-disso a resposta sai mesmo assim. Nenhuma configuração é necessária.
+disso a resposta sai mesmo assim. E nos últimos minutos antes de fechar o
+horário de envio (ou o horário de atendimento do agente), a resposta também sai
+mesmo assim, para o paciente não esperar até o dia seguinte. Nenhuma
+configuração é necessária.
 
 Portado do projeto original (DeskcommCRM, trabalho de Elias Gervanno,
 automatikpg-ux e melgarafael).
