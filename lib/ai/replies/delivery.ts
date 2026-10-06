@@ -94,14 +94,14 @@ export async function recordApprovedReplyReceiptSupabase(
   externalId: string | null,
   echoIds: string[],
 ) {
-  const gravar = () =>
+  const gravar = (comId = true) =>
     db.rpc("fn_reply_record_receipt", {
       p_org: c.organizationId,
       p_job: c.jobId,
       p_worker: c.jobClaim.worker_id,
       p_acquired_at: c.jobClaim.acquired_at,
       p_message: messageId,
-      p_external: externalId,
+      p_external: comId ? externalId : null,
       p_echo_ids: echoIds,
     });
   let result;
@@ -110,9 +110,14 @@ export async function recordApprovedReplyReceiptSupabase(
     // O eco do WhatsApp por QR grava o mesmo id curto que o envio; se ele
     // commitar entre o `delete` e o `update` da função, o unique recusa o
     // carimbo (23505) e a transação inteira volta. Chamar de novo é seguro e a
-    // segunda chamada já vê o eco para apagar. Uma vez só: colidir de novo é
-    // outra linha com o id, e vira o erro de persistência de sempre.
+    // segunda chamada já vê o eco para apagar.
     if (result.error?.code === "23505") result = await gravar();
+    // Colidir de novo é o eco preso em OUTRA conversa (a mesma pessoa
+    // cadastrada duas vezes), que a função não apaga — e não deve. A mensagem
+    // JÁ SAIU: lançar aqui deixava a linha `queued` e o ledger `requested`, e o
+    // watchdog e a nova tentativa do job a mandavam de novo ao paciente. O
+    // recibo é gravado sem o id, como o handler e o watchdog já fazem.
+    if (result.error?.code === "23505") result = await gravar(false);
   } catch (error) {
     throw new ApprovedReplyReceiptPersistenceError(error);
   }
