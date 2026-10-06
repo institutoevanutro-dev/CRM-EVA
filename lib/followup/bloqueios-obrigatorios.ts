@@ -43,6 +43,7 @@
 import type pg from 'pg';
 import { z } from 'zod';
 
+import { decidirElegibilidade, montarEstadoDeElegibilidade, ttlDaAutorizacaoMs } from '@/lib/ai/elegibilidade/gate';
 import { silencioDoBotEhRoteamento } from '@/lib/channels/capabilities';
 import { fimDaJanelaAutomatica } from '@/lib/channels/janela';
 
@@ -198,6 +199,20 @@ export interface FatosDoEnvio {
      */
     humano_respondeu: boolean;
   };
+  /**
+   * Liberação do NÚMERO para mensagem automática (o gate de elegibilidade do
+   * canal: modo de teste/pré-go-live e autorização por origem). Os vetos
+   * humanos do gate (`force_human`, silêncio, atribuição) são os campos acima,
+   * com a `handoff_policy`; daqui só vem o que é do canal.
+   */
+  liberacao: {
+    ai_gate: unknown;
+    ai_gate_mode: unknown;
+    ai_test_phone_numbers: unknown;
+    telefone: string | null;
+    ai_autorizado_em: string | null;
+    ttl_ms: number;
+  };
   /** Negócios ABERTOS do contato, com a etapa atual. */
   negocios_abertos: Array<{ stage_id: string; stage_blocks_followups: boolean }>;
   /** Última mensagem recebida do contato e último envio desta inscrição. */
@@ -229,6 +244,7 @@ export type MotivoDoBloqueio =
   | 'opt_out'
   | 'contato_anonimizado'
   | 'atendimento_humano'
+  | 'conversa_nao_liberada'
   | 'etapa_bloqueia_followup'
   | 'resposta_do_contato'
   | 'fora_da_etapa_do_gatilho'
@@ -305,6 +321,25 @@ export function decidirEnvio(
   if (fatos.contato.force_human || fatos.conversa.bot_silenciado || humanoSemPedido) {
     return { envia: false, motivo: 'atendimento_humano', invalida: true };
   }
+  // O gate do canal (modo de teste, autorização por origem): a MESMA regra pura
+  // do drain e do turno. Os vetos humanos já foram decididos acima, com a
+  // `handoff_policy` — por isso entram neutros aqui. Antes, só o atalho o
+  // conferia (e deixava a inscrição rechecando até morrer); o worker enviava.
+  const liberacao = decidirElegibilidade(
+    montarEstadoDeElegibilidade({
+      aiGate: fatos.liberacao.ai_gate,
+      aiGateMode: fatos.liberacao.ai_gate_mode,
+      aiTestPhoneNumbers: fatos.liberacao.ai_test_phone_numbers,
+      contactPhoneNumber: fatos.liberacao.telefone,
+      forceHuman: false,
+      assigneeKind: null,
+      botSilencedUntil: null,
+      aiAuthorizedAt: fatos.liberacao.ai_autorizado_em,
+      agora,
+      ttlMs: fatos.liberacao.ttl_ms,
+    }),
+  );
+  if (!liberacao.permite) return { envia: false, motivo: 'conversa_nao_liberada', invalida: true };
   if (fatos.negocios_abertos.some((n) => n.stage_blocks_followups)) {
     return { envia: false, motivo: 'etapa_bloqueia_followup', invalida: true };
   }
@@ -386,6 +421,8 @@ export const TEXTO_DO_BLOQUEIO: Record<MotivoDoBloqueio, string> = {
   opt_out: 'Sequência encerrada: o contato pediu para não receber mensagens.',
   contato_anonimizado: 'Sequência encerrada: o contato foi anonimizado.',
   atendimento_humano: 'Sequência encerrada: uma pessoa da equipe está atendendo esta conversa.',
+  conversa_nao_liberada:
+    'Sequência encerrada: este número não está liberado para mensagens automáticas a este contato (modo de teste ou sem autorização).',
   etapa_bloqueia_followup: 'Sequência encerrada: o negócio está numa etapa que interrompe follow-ups.',
   resposta_do_contato: 'Sequência encerrada: o contato respondeu.',
   fora_da_etapa_do_gatilho: 'Sequência encerrada: o negócio saiu da etapa que iniciou o fluxo.',
@@ -459,13 +496,21 @@ export async function lerFatosDoEnvio(
           where e.organization_id = $1 and e.id = $2 and e.contact_id = $3`,
         [org, enrollmentId, contactId],
       ),
-      pool.query<{ is_blocked: boolean; force_human: boolean; is_anonymized: boolean }>(
-        `select is_blocked, force_human, is_anonymized from contacts where organization_id = $1 and id = $2`,
+      pool.query<{
+        is_blocked: boolean;
+        force_human: boolean;
+        is_anonymized: boolean;
+        phone_number: string | null;
+        ai_authorized_at: Date | null;
+      }>(
+        `select is_blocked, force_human, is_anonymized, phone_number, ai_authorized_at
+           from contacts where organization_id = $1 and id = $2`,
         [org, contactId],
       ),
       pool.query<{
         bot_silenciado: boolean;
         provider: string | null;
+        canal_metadata: Record<string, unknown> | null;
         last_inbound_at: Date | null;
         atribuida_a_pessoa: boolean | null;
         humano_respondeu: boolean | null;
@@ -495,7 +540,7 @@ export async function lerFatosDoEnvio(
         // não conta a linha cujo id "bare" (a cauda depois do último `_`, ver
         // `bareWaMessageId`) coincide com uma saída nossa da mesma conversa.
         `select (c.bot_silenced_until is not null and c.bot_silenced_until > now()) as bot_silenciado,
-                cs.provider, c.last_inbound_at,
+                cs.provider, cs.metadata as canal_metadata, c.last_inbound_at,
                 (c.assignee_kind = 'user') as atribuida_a_pessoa,
                 exists (
                   select 1 from messages h
@@ -596,13 +641,21 @@ export async function lerFatosDoEnvio(
         enrollment: { id: e.id, status: e.status, started_at: iso(e.started_at)!, pointer_id: e.pointer_id },
         trigger_config: e.trigger_config,
         handoff_policy: e.handoff_policy === 'allow' || e.handoff_policy === 'cancel' ? e.handoff_policy : 'pause',
-        contato: c,
+        contato: { is_blocked: c.is_blocked, force_human: c.force_human, is_anonymized: c.is_anonymized },
         // Silêncio em canal sem IA é roteamento (a conversa cai na Fila), não
         // uma pessoa que assumiu: lá ele não bloqueia o follow-up.
         conversa: {
           bot_silenciado: v.bot_silenciado && !silencioDoBotEhRoteamento(v.provider),
           atribuida_a_pessoa: v.atribuida_a_pessoa === true,
           humano_respondeu: v.humano_respondeu === true,
+        },
+        liberacao: {
+          ai_gate: v.canal_metadata?.ai_gate,
+          ai_gate_mode: v.canal_metadata?.ai_gate_mode,
+          ai_test_phone_numbers: v.canal_metadata?.ai_test_phone_numbers,
+          telefone: c.phone_number ?? null,
+          ai_autorizado_em: iso(c.ai_authorized_at),
+          ttl_ms: ttlDaAutorizacaoMs(process.env),
         },
         negocios_abertos: negocios.rows,
         ultima_recebida_em: iso(recebida.rows[0]?.em),

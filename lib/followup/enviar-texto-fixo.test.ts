@@ -10,16 +10,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as Bloqueios from "@/lib/followup/bloqueios-obrigatorios";
 
 const sendMessageHandler = vi.fn(async (..._a: unknown[]) => ({ id: "msg-1",status:"sent" }));
-const decidir = vi.fn();
 const completeTurnForEnrollment = vi.fn(async (..._a: unknown[]) => {});
 
 vi.mock("@/app/api/v1/messages/_handler", () => ({ sendMessageHandler: (...a: unknown[]) => sendMessageHandler(...a) }));
 vi.mock("@/lib/automation/start-conversation", () => ({
   ensureConversation: async () => "conv-1",
   sessaoProntaParaEnvio: async () => "sess-1",
-}));
-vi.mock("@/lib/ai/elegibilidade/consulta-supabase", () => ({
-  decidirElegibilidadeDaConversaViaSupabase: (...a: unknown[]) => decidir(...a),
 }));
 vi.mock("@/lib/followup/turn-bridge", () => ({
   completeTurnForEnrollment: (...a: unknown[]) => completeTurnForEnrollment(...a),
@@ -118,17 +114,24 @@ beforeEach(() => {
   adiarAteAJanelaAbrir.mockResolvedValue(null);
 });
 
-describe("enviarTextoFixoPendente · gate de elegibilidade", () => {
-  it("conversa NÃO elegível → NÃO envia, job vira 'done'", async () => {
-    decidir.mockResolvedValue({ permite: false, motivo: "sem_autorizacao", bloqueioPorAllowlist: true });
+describe("enviarTextoFixoPendente · liberação do número (gate do canal)", () => {
+  // O gate do canal mora na decisão compartilhada (`conferirAntesDoEnvio`), não
+  // num segundo veredito só do atalho: a inscrição encerra com motivo legível em
+  // vez de ficar rechecando até morrer, e "Permitir durante handoff" vale igual
+  // nos dois caminhos.
+  it("canal não liberado → NÃO envia; encerra a inscrição com o motivo e o job vira 'done'", async () => {
+    conferir.mockResolvedValue({ envia: false, motivo: "conversa_nao_liberada", invalida: true });
     const enviados = await enviarTextoFixoPendente(admin());
     expect(enviados).toBe(0);
     expect(sendMessageHandler).not.toHaveBeenCalled();
+    expect(completeTurnForEnrollment.mock.calls[0]?.[4]).toEqual({
+      kind: "skipped",
+      reason: TEXTO_DO_BLOQUEIO.conversa_nao_liberada,
+    });
     expect(statusUpdates).toContain("done");
   });
 
-  it("conversa elegível → envia normalmente", async () => {
-    decidir.mockResolvedValue({ permite: true, motivo: "autorizado", bloqueioPorAllowlist: false });
+  it("decisão libera (inclusive 'allow' com conversa atribuída) → envia; nenhum outro gate no meio", async () => {
     const enviados = await enviarTextoFixoPendente(admin());
     expect(enviados).toBe(1);
     expect(sendMessageHandler).toHaveBeenCalledOnce();
@@ -136,8 +139,8 @@ describe("enviarTextoFixoPendente · gate de elegibilidade", () => {
     expect(sendMessageHandler.mock.calls[0]?.[1]).toMatchObject({ origemDoEnvio: "followup" });
   });
 
-  it("erro ao ler elegibilidade → NÃO envia, job volta pra 'pending' (fail-closed)", async () => {
-    decidir.mockRejectedValue(new Error("db down"));
+  it("erro ao conferir → NÃO envia, job volta pra 'pending' (fail-closed)", async () => {
+    conferir.mockRejectedValue(new Error("db down"));
     const enviados = await enviarTextoFixoPendente(admin());
     expect(enviados).toBe(0);
     expect(sendMessageHandler).not.toHaveBeenCalled();
@@ -146,7 +149,7 @@ describe("enviarTextoFixoPendente · gate de elegibilidade", () => {
 });
 
 it.each(["queued","failed"])("%s não conta envio nem avança o fluxo",async status=>{
- decidir.mockResolvedValue({permite:true});sendMessageHandler.mockResolvedValueOnce({id:"msg-1",status});
+ sendMessageHandler.mockResolvedValueOnce({id:"msg-1",status});
  expect(await enviarTextoFixoPendente(admin())).toBe(0);
  expect(completeTurnForEnrollment).not.toHaveBeenCalled();expect(statusUpdates).toContain("pending");
 });
@@ -155,14 +158,7 @@ describe("enviarTextoFixoPendente · 24h do Instagram", () => {
   const RAZAO = "Passo pulado: fora das 24h do Instagram.";
   const horasAtras = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
 
-  it("a elegibilidade é pedida como follow-up (o silêncio de roteamento não conta)", async () => {
-    decidir.mockResolvedValue({ permite: true });
-    await enviarTextoFixoPendente(admin());
-    expect(decidir.mock.calls[0]?.[1]).toMatchObject({ followup: true });
-  });
-
   it("última mensagem há 30h: não envia, o passo é pulado e o fluxo segue", async () => {
-    decidir.mockResolvedValue({ permite: true });
     conversa = { last_inbound_at: horasAtras(30), channel_session_id: "sess-1", channel_sessions: { provider: CHANNEL_PROVIDER_INSTAGRAM } };
     expect(await enviarTextoFixoPendente(admin())).toBe(0);
     expect(sendMessageHandler).not.toHaveBeenCalled();
@@ -173,14 +169,12 @@ describe("enviarTextoFixoPendente · 24h do Instagram", () => {
   });
 
   it("última mensagem há 2h: envia", async () => {
-    decidir.mockResolvedValue({ permite: true });
     conversa = { last_inbound_at: horasAtras(2), channel_session_id: "sess-1", channel_sessions: { provider: CHANNEL_PROVIDER_INSTAGRAM } };
     expect(await enviarTextoFixoPendente(admin())).toBe(1);
     expect(sendMessageHandler).toHaveBeenCalledOnce();
   });
 
   it("o servidor recusa com fora_das_24h_do_instagram: pulo, não falha", async () => {
-    decidir.mockResolvedValue({ permite: true });
     conversa = { last_inbound_at: horasAtras(2), channel_session_id: "sess-1", channel_sessions: { provider: CHANNEL_PROVIDER_INSTAGRAM } };
     sendMessageHandler.mockResolvedValueOnce({ id: "msg-1", status: "failed", error_code: "fora_das_24h_do_instagram" } as never);
     expect(await enviarTextoFixoPendente(admin())).toBe(0);
@@ -199,9 +193,6 @@ describe("enviarTextoFixoPendente · a mesma decisão de envio do worker", () =>
       expect.anything(), "org-1", "enr-1", "node-1", resultado, undefined, "job-1", expect.anything(),
     );
 
-  beforeEach(() => {
-    decidir.mockResolvedValue({ permite: true });
-  });
 
   it("a decisão é pedida com a inscrição e a conversa do job", async () => {
     await enviarTextoFixoPendente(admin());
@@ -282,7 +273,6 @@ describe("enviarTextoFixoPendente · a mesma decisão de envio do worker", () =>
 
 describe("enviarTextoFixoPendente · {{nome}} e {{primeiro_nome}}", () => {
   beforeEach(() => {
-    decidir.mockResolvedValue({ permite: true });
     JOB.payload.fixed_body = "Oi {{primeiro_nome}}!";
   });
   const corpo = () => (sendMessageHandler.mock.calls[0]?.[2] as { body?: string } | undefined)?.body;

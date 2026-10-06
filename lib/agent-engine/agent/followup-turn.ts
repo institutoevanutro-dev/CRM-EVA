@@ -2,7 +2,6 @@ import {claimOfJob,type JobClaim} from "../queue/claim";
 import {MOTIVO_ENVIO_VETADO,reconcileAcceptedSend,resultadoDoEnvioDoFollowup} from "../edge/crm/send-ledger";
 import { parseServiceBoundary, StaleServiceBoundaryError } from "@/lib/atendimento/fronteira";
 import { AgendaDeferredError } from "@/lib/agenda/protecao-followup";
-import { decidirElegibilidadeDaConversa } from "@/lib/ai/elegibilidade/consulta-pg";
 import { requireCurrentServiceBoundary } from "@/lib/atendimento/fronteira-server";
 /**
  * Handler do job `followup_turn` (F3-03; blueprint 1.3) — a peça BUILD da
@@ -34,7 +33,6 @@ import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
 import { classifyPromise } from '../guardrails/promise/semantic';
 import { scheduleCronJob } from '../cron/scheduler';
 import {
-  ALLOWLIST_TTL_MS_PADRAO,
   JobSettledError,
   ritualBlocks,
   runAgentTurn,
@@ -491,14 +489,14 @@ async function runFlowDrivenTurn(
       // a reserva sai. Se ela também não sair, o erro original segue para o
       // `job_dead` e o aviso na Central, como sempre.
       if (reserva === undefined || !(await iaNaoEnviouDeVez(pool, job, err))) throw err;
-      let saida: FollowupFlowTurnResult | 'tratado' | null;
+      let saida: FollowupFlowTurnResult | 'tratado';
       try {
         saida = await daReserva();
       } catch {
         throw err;
       }
       if (saida === 'tratado') return;
-      if (saida === null || saida.kind !== 'sent') throw err;
+      if (saida.kind !== 'sent') throw err;
       await fechar(saida);
       return;
     }
@@ -508,7 +506,7 @@ async function runFlowDrivenTurn(
     if (reserva !== undefined && result.kind === 'skipped' && result.reason === MOTIVO_ENVIO_VETADO) {
       const saida = await daReserva();
       if (saida === 'tratado') return;
-      if (saida !== null) result = saida;
+      result = saida;
     }
     await fechar(result);
     return;
@@ -840,11 +838,11 @@ async function iaNaoEnviouDeVez(pool: pg.Pool, job: JobRow, err: unknown): Promi
 /**
  * O modelo de reserva do passo `ai_message`: as travas conferidas DE NOVO (um
  * humano pode ter entrado durante o turno; o opt-out vetado aparece como
- * `is_blocked`), a elegibilidade do canal (como follow-up), e o envio pela
- * MESMA porta guardada do texto fixo, com a seq da reserva.
+ * `is_blocked`) — a liberação do número entra nelas —, e o envio pela MESMA
+ * porta guardada do texto fixo, com a seq da reserva.
  *
  * `'tratado'`: um bloqueio foi aplicado ou o envio foi adiado — o passo já tem
- * dono. `null`: conversa não elegível — fica o resultado da IA.
+ * dono.
  */
 async function tentarModeloDeReserva(
   deps: InboundTurnDeps,
@@ -855,7 +853,7 @@ async function tentarModeloDeReserva(
   target: ReentrySendTarget,
   aplicarBloqueio: (b: Exclude<DecisaoDoEnvio, { envia: true }>) => Promise<void>,
   input: { enrollmentId: string; fallbackTemplateId: string; voltaIndex: number | undefined; voltaTotal: number | undefined },
-): Promise<FollowupFlowTurnResult | 'tratado' | null> {
+): Promise<FollowupFlowTurnResult | 'tratado'> {
   const bloqueio = await conferirAntesDoEnvio(
     pool,
     { organizationId: target.tenantId, contactId: target.leadId, conversationId: target.conversationId, enrollmentId: input.enrollmentId },
@@ -865,20 +863,6 @@ async function tentarModeloDeReserva(
     await aplicarBloqueio(bloqueio);
     return 'tratado';
   }
-  let elegivel: boolean;
-  try {
-    const elegib = await decidirElegibilidadeDaConversa(pool, {
-      organizationId: target.tenantId,
-      conversationId: target.conversationId,
-      agora: clock(),
-      ttlMs: deps.knobs.allowlistTtlMs ?? ALLOWLIST_TTL_MS_PADRAO,
-      followup: true,
-    });
-    elegivel = elegib === null || elegib.permite;
-  } catch {
-    elegivel = false; // sem confirmar, não manda
-  }
-  if (!elegivel) return null;
   const body = await resolveFlowSendBody(pool, target.tenantId, target.leadId, {
     fixedBody: undefined,
     templateId: input.fallbackTemplateId,

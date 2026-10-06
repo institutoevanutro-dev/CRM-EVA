@@ -38,6 +38,14 @@ function fatos(p: Partial<FatosDoEnvio> = {}): FatosDoEnvio {
     contato: { is_blocked: false, force_human: false, is_anonymized: false },
     handoff_policy: 'pause',
     conversa: { bot_silenciado: false, atribuida_a_pessoa: false, humano_respondeu: false },
+    liberacao: {
+      ai_gate: null,
+      ai_gate_mode: null,
+      ai_test_phone_numbers: null,
+      telefone: '+5585987654321',
+      ai_autorizado_em: null,
+      ttl_ms: 21 * 24 * 60 * 60 * 1000,
+    },
     negocios_abertos: [{ stage_id: ETAPA_AGENDAMENTO, stage_blocks_followups: false }],
     ultima_recebida_em: '2026-09-15T11:00:00.000Z',
     ultimo_envio_da_inscricao_em: null,
@@ -115,6 +123,39 @@ describe('decidirEnvio — sempre valem', () => {
       expect(allow({ ...limpa, humano_respondeu: true })).toEqual({ envia: true });
       expect(allow(limpa, true)).toEqual(HUMANO);
       expect(allow({ ...limpa, bot_silenciado: true })).toEqual(HUMANO);
+    });
+  });
+
+  describe('liberação do número (gate do canal) — a mesma decisão nos dois caminhos', () => {
+    const NAO_LIBERADA = { envia: false, motivo: 'conversa_nao_liberada', invalida: true };
+    const liberacao = (over: Partial<FatosDoEnvio['liberacao']>) => ({ ...fatos().liberacao, ...over });
+    it('canal aberto (padrão) envia', () => {
+      expect(decidirEnvio(fatos(), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({ envia: true });
+    });
+    it('allowlist sem autorização do contato → encerra com motivo legível (não fica rechecando)', () => {
+      const f = fatos({ liberacao: liberacao({ ai_gate: 'allowlist' }) });
+      expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual(NAO_LIBERADA);
+    });
+    it('allowlist com autorização vigente envia; vencida encerra', () => {
+      const vigente = fatos({ liberacao: liberacao({ ai_gate: 'allowlist', ai_autorizado_em: '2026-09-10T00:00:00.000Z' }) });
+      expect(decidirEnvio(vigente, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({ envia: true });
+      const vencida = fatos({ liberacao: liberacao({ ai_gate: 'allowlist', ai_autorizado_em: '2026-01-01T00:00:00.000Z' }) });
+      expect(decidirEnvio(vencida, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual(NAO_LIBERADA);
+    });
+    it('pré-go-live: só o número de teste do canal', () => {
+      const teste = { ai_gate: 'allowlist', ai_gate_mode: 'pre_go_live', ai_test_phone_numbers: ['+5585987654321'] };
+      expect(decidirEnvio(fatos({ liberacao: liberacao(teste) }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA))
+        .toEqual({ envia: true });
+      expect(
+        decidirEnvio(fatos({ liberacao: liberacao({ ...teste, telefone: '+5585900000000' }) }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA),
+      ).toEqual(NAO_LIBERADA);
+    });
+    it('"Permitir durante handoff" com conversa atribuída: o gate do canal não a barra de novo', () => {
+      const f = fatos({
+        handoff_policy: 'allow',
+        conversa: { bot_silenciado: false, atribuida_a_pessoa: true, humano_respondeu: false },
+      });
+      expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual({ envia: true });
     });
   });
 

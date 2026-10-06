@@ -11,7 +11,7 @@
 import pg from "pg";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { lerFatosDoEnvio } from "@/lib/followup/bloqueios-obrigatorios";
+import { conferirAntesDoEnvio, lerFatosDoEnvio } from "@/lib/followup/bloqueios-obrigatorios";
 
 import { criarOrigemDeFollowup } from "./followup-service-origin";
 import { isolarFixtureDeFollowup } from "./followup-isolamento";
@@ -279,5 +279,57 @@ describe("atribuida_a_pessoa e handoff_policy", () => {
     const f = await fatos(c);
     expect(f.conversa.atribuida_a_pessoa).toBe(true);
     expect(f.handoff_policy).toBe("allow");
+  });
+});
+
+describe("a mesma decisão para o atalho e o worker — conferirAntesDoEnvio contra o banco", () => {
+  const conferir = (c: Cenario) =>
+    conferirAntesDoEnvio(
+      pool,
+      { organizationId: c.org, contactId: c.contactId, conversationId: c.conversationId, enrollmentId: c.enrollmentId },
+      new Date(),
+    );
+
+  async function atribuirAUmaPessoa(c: Cenario): Promise<void> {
+    const { rows: u } = await pool.query<{ id: string }>(`select id from auth.users limit 1`);
+    let userId = u[0]?.id;
+    if (!userId) {
+      const { rows } = await pool.query<{ id: string }>(
+        `insert into auth.users (id, email) values (gen_random_uuid(), 'humano-ativo-' || gen_random_uuid()::text || '@teste.local') returning id`,
+      );
+      userId = rows[0]!.id;
+    }
+    await pool.query(
+      `update conversations set assignee_kind = 'user', assigned_to_user_id = $3 where organization_id = $1 and id = $2`,
+      [c.org, c.conversationId, userId],
+    );
+  }
+
+  it("'Permitir durante handoff' com conversa atribuída a uma pessoa → envia (nos dois caminhos)", async () => {
+    const c = await montar({ handoffPolicy: "allow" });
+    await atribuirAUmaPessoa(c);
+    expect(await conferir(c)).toEqual({ envia: true });
+  });
+
+  it("'pause' com conversa atribuída a uma pessoa → encerra com atendimento humano (controle)", async () => {
+    const c = await montar({ handoffPolicy: "pause" });
+    await atribuirAUmaPessoa(c);
+    expect(await conferir(c)).toEqual({ envia: false, motivo: "atendimento_humano", invalida: true });
+  });
+
+  it("número em allowlist e contato sem autorização → encerra com 'conversa_nao_liberada'; autorizado → envia", async () => {
+    const c = await montar();
+    await pool.query(
+      `update channel_sessions set metadata = coalesce(metadata, '{}'::jsonb) || '{"ai_gate":"allowlist"}'::jsonb
+        where organization_id = $1 and id = $2`,
+      [c.org, c.channelSessionId],
+    );
+    const f = await fatos(c);
+    expect(f.liberacao.ai_gate).toBe("allowlist");
+    expect(f.liberacao.ai_autorizado_em).toBeNull();
+    expect(await conferir(c)).toEqual({ envia: false, motivo: "conversa_nao_liberada", invalida: true });
+
+    await pool.query(`update contacts set ai_authorized_at = now() where organization_id = $1 and id = $2`, [c.org, c.contactId]);
+    expect(await conferir(c)).toEqual({ envia: true });
   });
 });

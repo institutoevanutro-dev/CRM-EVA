@@ -35,11 +35,6 @@ vi.mock("@/lib/agent-engine/edge/crm/get-lead-context", () => ({
 vi.mock("@/lib/agent-engine/edge/crm/send-message", () => ({ applySendOutcome: vi.fn(async () => undefined) }));
 vi.mock("@/lib/agent-engine/cron/scheduler", () => ({ scheduleCronJob: vi.fn(async () => undefined) }));
 
-const elegibilidade = vi.fn(async (..._a: unknown[]): Promise<unknown> => null);
-vi.mock("@/lib/ai/elegibilidade/consulta-pg", () => ({
-  decidirElegibilidadeDaConversa: (...a: unknown[]) => elegibilidade(...a),
-}));
-
 const runAgentTurn = vi.fn(async (..._a: unknown[]): Promise<void> => undefined);
 vi.mock("@/lib/agent-engine/agent/inbound-turn", async (original) => {
   const real = await original<typeof InboundTurnModule>();
@@ -75,6 +70,8 @@ interface Cenario {
   reservaAceita?: boolean;
   /** `humano_respondeu` na 1ª, 2ª… leitura da conversa. */
   humano?: boolean[];
+  /** Canal em allowlist e contato sem autorização: o número não está liberado. */
+  naoLiberado?: boolean;
 }
 
 function fakePool(c: Cenario = {}) {
@@ -93,6 +90,7 @@ function fakePool(c: Cenario = {}) {
       return { rows: [{
         id: CONVERSA, channel_session_id: "canal-1", archived_at: null, bot_silenciado: false,
         provider: DEFAULT_CHANNEL_PROVIDER, last_inbound_at: new Date(), humano_respondeu: humano, atribuida_a_pessoa: false,
+        canal_metadata: c.naoLiberado ? { ai_gate: "allowlist" } : null,
       }] };
     }
     if (/from followup_enrollments e\b/.test(sql)) {
@@ -133,8 +131,6 @@ beforeEach(() => {
   runBeforeSend.mockImplementation(enviaPeloCanal);
   runAgentTurn.mockReset();
   runAgentTurn.mockResolvedValue(undefined);
-  elegibilidade.mockReset();
-  elegibilidade.mockResolvedValue(null);
 });
 
 const resultado = (complete: ReturnType<typeof vi.fn>) => (complete.mock.calls[0]?.[1] as { result?: unknown } | undefined)?.result;
@@ -165,13 +161,14 @@ describe("modelo de reserva — quando a IA não conseguiu enviar", () => {
     expect(resultado(d.complete)).toEqual({ kind: "skipped", reason: TEXTO_DO_BLOQUEIO.atendimento_humano, outcome: "handoff" });
   });
 
-  it("4. conversa não elegível (allowlist) → a reserva não sai; fica o resultado da IA", async () => {
-    elegibilidade.mockResolvedValue({ permite: false, motivo: "sem_autorizacao" });
+  it("4. número não liberado (allowlist sem autorização) → nem a IA nem a reserva; encerra com o motivo", async () => {
+    // O gate do canal é parte da decisão compartilhada: barra antes do turno,
+    // com o mesmo motivo que o atalho do texto fixo daria.
     const d = deps();
-    await criarHandler(d.deps)(job(), fakePool({ ledger: [{ status: "vetoed" }] }), ctx);
-    expect(elegibilidade.mock.calls[0]?.[1]).toMatchObject({ followup: true });
+    await criarHandler(d.deps)(job(), fakePool({ ledger: [{ status: "vetoed" }], naoLiberado: true }), ctx);
+    expect(runAgentTurn).not.toHaveBeenCalled();
     expect(runBeforeSend).not.toHaveBeenCalled();
-    expect(resultado(d.complete)).toEqual({ kind: "skipped", reason: VETADO });
+    expect(resultado(d.complete)).toEqual({ kind: "skipped", reason: TEXTO_DO_BLOQUEIO.conversa_nao_liberada });
   });
 
   it("5. a reserva também vetada pela cadeia → encerra com o motivo das duas recusas", async () => {

@@ -8,8 +8,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { ApiError } from "@/lib/api/types";
-import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
-import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 import { createSupabaseAdminClient, type FollowupJobRequest } from "@/lib/followup/engine";
 import type { EnrollmentRow } from "@/lib/followup/node-handlers";
 import { completeTurnForEnrollment, type TurnBridgeAdminClient } from "@/lib/followup/turn-bridge";
@@ -60,7 +58,8 @@ function ponteSupabase(admin: SupabaseClient): TurnBridgeAdminClient {
  *
  * Disputa o mesmo job com o worker, então decide o envio com a MESMA função
  * (`conferirAntesDoEnvio`: janela da organização, resposta com cancel_on_reply,
- * humano ativo, etapa que bloqueia, anonimizado…) e respeita a janela anti-ban
+ * humano ativo, liberação do número (gate do canal), etapa que bloqueia,
+ * anonimizado…) e respeita a janela anti-ban
  * do canal e o ritmo da automação. O resto da cadeia `runBeforeSend` (caps,
  * repetição, LGPD, promessas) continua só no worker.
  */
@@ -162,29 +161,6 @@ export async function enviarTextoFixoPendente(
         // Não verificável / configuração inválida: falha fechada, como o throw do worker.
         throw new Error(TEXTO_DO_BLOQUEIO[decisao.motivo]);
       }
-      // GATE DE ELEGIBILIDADE — este envio inline BYPASSA `executarTurnoDoAgente`
-      // (é o atalho "sem cron e sem agent-worker"), então precisa da checagem
-      // por conta própria. Mesma regra pura do drain/turno. Canal 'open' → passa.
-      // Bloqueio definitivo → o follow-up NÃO sai e o job vira `done`. Erro de
-      // leitura → job volta pra `pending` (pode ser transitório) — fail-closed:
-      // não envia sem confirmar.
-      const elegib = await decidirElegibilidadeDaConversaViaSupabase(admin, {
-        organizationId: job.organization_id as string,
-        conversationId,
-        agora: new Date(),
-        ttlMs: ttlDaAutorizacaoMs(process.env),
-        followup: true,
-      });
-      if (elegib !== null && !elegib.permite) {
-        logger.info("[followup] texto fixo não enviado — conversa não elegível para IA", {
-          organization_id: job.organization_id,
-          conversation_id: conversationId,
-          motivo: elegib.motivo,
-        });
-        await settle(job.organization_id,job.id,jobClaim.acquired_at,true);
-        continue;
-      }
-
       // Fora das 24h do Instagram o passo é PULADO e o fluxo segue: nem
       // cancela, nem reagenda, nem reenvia. Mesma porta da recusa do servidor.
       const pular = async () => {
