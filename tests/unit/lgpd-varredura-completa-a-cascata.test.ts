@@ -489,6 +489,46 @@ describe("o laço de retorno: a varredura deixa rastro por contato", () => {
   });
 });
 
+describe("o que a cascata do BANCO já redigiu não é redigido de novo (migration 0317)", () => {
+  // Desde a 0317 o botão da ficha chama `fn_lgpd_cascade_redact_contact`, que
+  // grava no negócio o rótulo `Cliente Anonimizado #<8>` e esvazia o payload da
+  // atividade (`{}`). Sem reconhecer essas duas marcas, a parte do app tomava o
+  // que o banco acabara de redigir por resíduo: cortava o rótulo em 20 letras
+  // ("Cliente Anonimizado  (anonimizado)") e regravava toda atividade — no
+  // clique, e de novo na varredura da noite seguinte ao pedido formal, com a
+  // auditoria registrando uma retomada que não houve.
+  const ROTULO = "Cliente Anonimizado #33333333";
+
+  it("⭐ título com o rótulo da cascata e atividade de payload vazio: nenhuma escrita", async () => {
+    alvo = banco([
+      contatoAnonimizado(),
+      { id: "crm_leads:1", organization_id: ORG, contact_id: "contacts:a", title: ROTULO },
+      { id: "crm_lead_activities:1", organization_id: ORG, contact_id: "contacts:a", payload: {} },
+    ]);
+
+    const direto = await completarRedacaoDoContato(alvo.cliente, { id: "contacts:a", organizationId: ORG });
+    const varredura = await varrerRedacoesIncompletas(alvo.cliente);
+
+    expect(houveRedacao(direto), "a cascata do app redigiu o que o banco já tinha redigido").toBe(false);
+    expect(varredura.comResiduo).toBe(0);
+    expect(alvo.escritas).toEqual([]);
+    expect(alvo.linhas.find((l) => l.id === "crm_leads:1")!.title).toBe(ROTULO);
+  });
+
+  it("CONTROLE: negócio que só COMEÇA parecido e atividade com conteúdo continuam sendo resíduo", async () => {
+    alvo = banco([
+      contatoAnonimizado(),
+      { id: "crm_leads:1", organization_id: ORG, contact_id: "contacts:a", title: "Cliente Anonimizado pediu retorno" },
+      { id: "crm_lead_activities:1", organization_id: ORG, contact_id: "contacts:a", payload: { texto: "PII" } },
+    ]);
+
+    const r = await completarRedacaoDoContato(alvo.cliente, { id: "contacts:a", organizationId: ORG });
+
+    expect(r.leadsRedigidas).toEqual(["crm_leads:1"]);
+    expect(r.atividadesRedigidas).toBe(1);
+  });
+});
+
 describe("a varredura não derruba a poda junto com ela", () => {
   function requisicaoAutorizada() {
     return { headers: new Headers({ authorization: "Bearer segredo" }) } as never;
