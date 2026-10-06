@@ -101,8 +101,9 @@ function silenceSweepDb(): SilenceSweepDb {
         organization_id: string;
         active_version_id: string | null;
         trigger_config: { kind: string; params?: { threshold_minutes: number; segments?: string[] } };
+        active_since: Date;
       }>(
-        `select id, organization_id, active_version_id, trigger_config
+        `select id, organization_id, active_version_id, trigger_config, active_since
          from followup_flow_pointers
          where status = 'active' and active_version_id is not null`,
       );
@@ -115,6 +116,7 @@ function silenceSweepDb(): SilenceSweepDb {
           active_version_id: row.active_version_id,
           threshold_minutes: row.trigger_config.params!.threshold_minutes,
           segments: row.trigger_config.params!.segments ?? [],
+          active_since: row.active_since.toISOString(),
         });
       }
       return pointers;
@@ -124,9 +126,9 @@ function silenceSweepDb(): SilenceSweepDb {
     // mensagem qualificante saem iguais aqui (na produção são duas colunas).
     async loadSilentContacts(orgId, cutoffIso, segments) {
       const { rows } = await pool.query<{
-        contact_id: string; last_inbound_at: string; tags: string[]; is_blocked: boolean; is_anonymized: boolean;
+        contact_id: string; last_inbound_at: Date; tags: string[]; is_blocked: boolean; is_anonymized: boolean;
       }>(
-        `select conv.contact_id, max(conv.last_inbound_at)::text as last_inbound_at,
+        `select conv.contact_id, max(conv.last_inbound_at) as last_inbound_at,
                 c.tags as tags, c.is_blocked as is_blocked, c.is_anonymized as is_anonymized
          from conversations conv
          join contacts c on c.id = conv.contact_id
@@ -138,12 +140,12 @@ function silenceSweepDb(): SilenceSweepDb {
       const cutoff = new Date(cutoffIso).getTime();
       return rows
         .filter((r) => !r.is_blocked && !r.is_anonymized)
-        .filter((r) => new Date(r.last_inbound_at).getTime() <= cutoff)
+        .filter((r) => r.last_inbound_at.getTime() <= cutoff)
         .filter((r) => segments.length === 0 || segments.some((s) => r.tags.includes(s)))
         .map((r) => ({
           contact_id: r.contact_id,
-          ultima_entrada_em: r.last_inbound_at,
-          ultima_entrada_gravada_em: r.last_inbound_at,
+          ultima_entrada_em: r.last_inbound_at.toISOString(),
+          ultima_entrada_gravada_em: r.last_inbound_at.toISOString(),
         }));
     },
     // Mesma pergunta do adaptador de produção: vivo em QUALQUER fluxo da org.
@@ -291,9 +293,14 @@ async function seedConversationAt(org: string, contactId: string, atIso: string)
   return rows[0]!.id;
 }
 
+/**
+ * `activeSince` é a vigência do ponteiro (migration 0324). O padrão é 30 dias
+ * atrás, porque os casos deste arquivo semeiam silêncio NO PASSADO e a regra
+ * "sem passado" recusaria silêncio anterior a ela. `"now"` = vigência agora.
+ */
 async function seedSilenceFlow(
   org: string,
-  opts?: { thresholdMinutes?: number; segments?: string[] },
+  opts?: { thresholdMinutes?: number; segments?: string[]; activeSince?: "now" },
 ): Promise<{ pointerId: string; versionId: string }> {
   const graph: FlowGraph = {
     nodes: [
@@ -312,9 +319,9 @@ async function seedSilenceFlow(
     params: { threshold_minutes: opts?.thresholdMinutes ?? 60, segments: opts?.segments ?? [] },
   };
   const { rows: pointerRows } = await pool.query<{ id: string }>(
-    `insert into followup_flow_pointers (organization_id, name, status, active_version_id, trigger_config)
-     values ($1, $2, 'active', $3, $4) returning id`,
-    [org, `Silence Flow ${Date.now()}-${Math.random()}`, versionId, JSON.stringify(triggerConfig)],
+    `insert into followup_flow_pointers (organization_id, name, status, active_version_id, trigger_config, active_since)
+     values ($1, $2, 'active', $3, $4, case when $5 then now() else now() - interval '30 days' end) returning id`,
+    [org, `Silence Flow ${Date.now()}-${Math.random()}`, versionId, JSON.stringify(triggerConfig), opts?.activeSince === "now"],
   );
   return { pointerId: pointerRows[0]!.id, versionId };
 }
@@ -548,6 +555,43 @@ describe("runSilenceSweep — contato anonimizado não entra", () => {
     const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
     for (let i = 0; i < 3; i++) expect((await runSilenceSweep(deps)).enrolled).toBe(0);
     expect(await countEnrollments(pointerId, contactId)).toBe(0);
+  });
+});
+
+// ---- 3d. sem passado: silêncio anterior à vigência do ponteiro -----------
+
+describe("runSilenceSweep — sem passado (active_since)", () => {
+  it("fluxo que passou a valer AGORA não cobra quem calou antes → 0 inscrições", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org, { thresholdMinutes: 30, activeSince: "now" });
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [pointerId] });
+    const contactId = await seedContact(org);
+    await seedConversation(org, contactId, 90);
+
+    const summary = await runSilenceSweep({ db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK });
+    expect(summary.pointers_gated_out).toBe(0);
+    expect(summary.skipped_before_activation).toBeGreaterThanOrEqual(1);
+    expect(await countEnrollments(pointerId, contactId)).toBe(0);
+  });
+
+  it("desativar e publicar de novo zera a vigência: quem calou antes deixa de entrar", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org, { thresholdMinutes: 30 }); // vigência há 30 dias
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [pointerId] });
+    const a = await seedContact(org);
+    await seedConversation(org, a, 90);
+    const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
+    expect((await runSilenceSweep(deps)).enrolled).toBe(1);
+
+    // desativar → publicar (fn_publish_followup_flow_version põe status='active')
+    await pool.query(`update followup_flow_pointers set status = 'disabled' where id = $1`, [pointerId]);
+    await pool.query(`update followup_flow_pointers set status = 'active' where id = $1`, [pointerId]);
+    const b = await seedContact(org);
+    await seedConversation(org, b, 90);
+    await runSilenceSweep(deps);
+    expect(await countEnrollments(pointerId, b)).toBe(0);
   });
 });
 

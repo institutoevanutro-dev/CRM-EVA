@@ -76,6 +76,8 @@ export interface SilencePointer {
   active_version_id: string;
   threshold_minutes: number;
   segments: string[];
+  /** Desde quando o ponteiro vale com o status e o gatilho atuais (migration 0324). */
+  active_since: string;
 }
 
 /** DB surface o sweep precisa — narrow por consumidor (mesma doutrina de `AdminClient`/`ReactivityAdminClient`/`FollowupGateDb`). */
@@ -116,6 +118,8 @@ export interface SilenceSweepSummary {
   pointers_gated_out: number;
   enrolled: number;
   skipped_existing: number;
+  /** Calou antes de o ponteiro valer — "nada aconteceu", fora da auditoria. */
+  skipped_before_activation: number;
 }
 
 export interface SilenceSweepDeps {
@@ -131,6 +135,7 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     pointers_gated_out: 0,
     enrolled: 0,
     skipped_existing: 0,
+    skipped_before_activation: 0,
   };
 
   const pointers = await db.loadActiveSilencePointers();
@@ -163,7 +168,18 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     if (!triggerNodeId) continue;
 
     const cutoffIso = new Date(clock().getTime() - pointer.threshold_minutes * 60_000).toISOString();
-    const contatos = await db.loadSilentContacts(pointer.organization_id, cutoffIso, pointer.segments);
+    // Sem passado: só conta silêncio cuja última mensagem (pelo `sent_at`,
+    // quando o contato falou) é POSTERIOR à vigência do ponteiro. Ligar o
+    // fluxo não cobra quem calou antes — inclusive conversa aberta de meses.
+    const vigencia = Date.parse(pointer.active_since);
+    const contatos = (await db.loadSilentContacts(pointer.organization_id, cutoffIso, pointer.segments)).filter(
+      (c) => {
+        if (Date.parse(c.ultima_entrada_em) > vigencia) return true;
+        summary.skipped_before_activation++;
+        return false;
+      },
+    );
+    if (contatos.length === 0) continue;
     const contactIds = contatos.map((c) => c.contact_id);
     const nextEvalAt = clock().toISOString();
     const comInscricaoViva = await db.loadContatosComInscricaoViva(pointer.organization_id, contactIds);
@@ -215,7 +231,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
     async loadActiveSilencePointers() {
       const { data, error } = await admin
         .from("followup_flow_pointers")
-        .select("id, organization_id, active_version_id, trigger_config")
+        .select("id, organization_id, active_version_id, trigger_config, active_since")
         .eq("status", "active")
         .not("active_version_id", "is", null);
       if (error) throw new Error(error.message);
@@ -226,6 +242,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         organization_id: string;
         active_version_id: string | null;
         trigger_config: unknown;
+        active_since: string;
       }>) {
         if (!row.active_version_id) continue;
         const parsed = triggerConfigSchema.safeParse(row.trigger_config);
@@ -236,6 +253,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
           active_version_id: row.active_version_id,
           threshold_minutes: parsed.data.params.threshold_minutes,
           segments: parsed.data.params.segments ?? [],
+          active_since: row.active_since,
         });
       }
       return pointers;

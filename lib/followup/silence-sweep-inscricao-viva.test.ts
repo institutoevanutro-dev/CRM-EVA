@@ -18,7 +18,14 @@ import { runSilenceSweep, type SilenceSweepDb } from "./silence-sweep";
 function fakeDb(opts: { vivos: Set<string>; insert: SilenceSweepDb["insertEnrollment"] }): SilenceSweepDb {
   return {
     loadActiveSilencePointers: async () => [
-      { id: "p-1", organization_id: "org-1", active_version_id: "v-1", threshold_minutes: 60, segments: [] },
+      {
+        id: "p-1",
+        organization_id: "org-1",
+        active_version_id: "v-1",
+        threshold_minutes: 60,
+        segments: [],
+        active_since: "2026-10-01T00:00:00.000Z",
+      },
     ],
     loadSilentContacts: async () =>
       ["vivo", "livre"].map((contact_id) => ({

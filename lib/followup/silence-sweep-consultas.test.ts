@@ -154,3 +154,36 @@ describe("loadSilentContacts — paginação determinística das conversas", () 
     );
   });
 });
+
+describe("loadActiveSilencePointers — lê a vigência", () => {
+  it("pede active_since e a devolve no ponteiro", async () => {
+    const consultas: Chamada[][] = [];
+    const linha = {
+      id: "p-1",
+      organization_id: "org",
+      active_version_id: "v-1",
+      trigger_config: { kind: "silence", params: { threshold_minutes: 30 } },
+      active_since: "2026-10-06T12:00:00+00:00",
+    };
+    const from = (tabela: string) => {
+      const chamadas: Chamada[] = [{ metodo: "from", args: [tabela] }];
+      consultas.push(chamadas);
+      const chain: Record<string, unknown> = new Proxy(
+        {},
+        {
+          get(_t, prop) {
+            if (prop === "then") return (resolve: (v: unknown) => unknown) => resolve({ data: [linha], error: null });
+            return (...args: unknown[]) => {
+              chamadas.push({ metodo: String(prop), args });
+              return chain;
+            };
+          },
+        },
+      );
+      return chain;
+    };
+    const pointers = await createSupabaseSilenceSweepDb({ from } as never).loadActiveSilencePointers();
+    expect(consultas[0]!.find((c) => c.metodo === "select")?.args[0]).toMatch(/\bactive_since\b/);
+    expect(pointers[0]!.active_since).toBe("2026-10-06T12:00:00+00:00");
+  });
+});
