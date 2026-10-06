@@ -16,6 +16,13 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (!provided || !accepted.length || !accepted.includes(provided)) {
     return fail("forbidden", "Cron secret missing or invalid.", 403, { requestId });
   }
+  // Integração opcional e não ligada (as três variáveis vazias, como nascem no
+  // .env.example) não é falha: é rodada sem nada a fazer. Um 503 aqui o
+  // scheduler escreve no log como FALHOU a cada 10 min (entrypoint.sh). Ligada
+  // pela metade continua 503 abaixo — essa o operador precisa ver.
+  if (!env.FINANCEIRO_ORGANIZATION_ID && !env.FINANCEIRO_URL && !env.FINANCEIRO_TOKEN) {
+    return ok({ skipped: "not_configured" }, { requestId });
+  }
   const org = env.FINANCEIRO_ORGANIZATION_ID;
   const config = org ? configFinanceiro(org) : null;
   if (!org || !config) {
