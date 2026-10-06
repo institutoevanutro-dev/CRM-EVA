@@ -177,6 +177,11 @@ import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import { renderAgora } from '@/lib/tempo/agora';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
+import {
+  anotarUltimaInboundVista,
+  respostaFicouObsoleta,
+  ultimaInboundJaRespondida,
+} from './turno-ja-respondido';
 import { acionarSupervisao } from '@/lib/supervisao/acionamento';
 
 /**
@@ -1015,6 +1020,11 @@ export interface InboundTurnKnobs {
   maxSendsPerTurn?: number;
   /** atraso do reagendamento em veto/queued herdado da F2-06 (SEND_QUEUED_RETRY_MS) */
   queuedRetryDelayMs: number;
+  /**
+   * Teto da régua de resposta obsoleta (RESPOSTA_OBSOLETA_TETO_MS) — ver
+   * `respostaFicouObsoleta`. Ausente = desligada (testes que não a exercitam).
+   */
+  respostaObsoletaTetoMs?: number;
   /** circuit breaker de tools por run (F2-15) — env TOOL_BREAKER_* */
   breaker: ToolBreakerThresholds;
   /**
@@ -2769,6 +2779,33 @@ async function executarTurnoDoAgente(
             },
           };
         }
+        // RESPOSTA OBSOLETA: o cliente escreveu de novo enquanto este turno pensava.
+        // Só antes do PRIMEIRO envio — cortar a meio uma resposta já começada é pior
+        // que a duplicata. A mensagem nova tem job próprio, que lê a conversa inteira
+        // e responde a tudo de uma vez. Ver `respostaFicouObsoleta`.
+        if (
+          !preview &&
+          seq === 0 &&
+          (await respostaFicouObsoleta(
+            pool,
+            { organizationId: tenantId, conversationId: input.conversationId, jobId: liveJob().id },
+            deps.knobs.respostaObsoletaTetoMs ?? 0,
+          ))
+        ) {
+          runLog.info('resposta descartada — o cliente escreveu de novo durante o turno', {
+            job_id: liveJob().id,
+            conversation_id: input.conversationId,
+          });
+          return {
+            ok: false,
+            error: {
+              code: 'resposta_obsoleta',
+              message:
+                'O cliente mandou mensagem nova enquanto você escrevia; esta resposta ficou desatualizada e NÃO foi enviada. ' +
+                'NÃO chame send_message de novo neste turno — encerre agora. O próximo turno lê a conversa inteira e responde a tudo de uma vez.',
+            },
+          };
+        }
         // F4-04: sinaliza (independente do gate F4-01/F4-08) se ESTA candidata é uma
         // promessa fora de tabela — usado só para correlacionar com o jailbreak no fim do
         // turno. A detecção é determinística (decidePromise); sem tabela do tenant = no-op.
@@ -4317,6 +4354,26 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       return;
     }
     if (operationAgent?.pausedAt) return;
+    // UMA RESPOSTA POR MENSAGEM: um turno que rodou antes deste pode ter lido a
+    // mensagem que acordou este job e já respondido a ela — ver o cabeçalho de
+    // `turno-ja-respondido.ts`, com o caso medido. A anotação vem DEPOIS da
+    // pergunta e ANTES de `runAgentTurn` ler a conversa: é ela que deixa o
+    // próximo turno fazer a mesma pergunta a respeito deste.
+    const alvo = {
+      organizationId: job.organization_id,
+      contactId: job.contact_id,
+      conversationId: payload.conversation_id,
+      jobId: job.id,
+    };
+    if (await ultimaInboundJaRespondida(pool, alvo)) {
+      deps.log.info('turno pulado — outro turno já viu e respondeu a última mensagem do cliente', {
+        job_id: job.id,
+        conversation_id: payload.conversation_id,
+        inbound_message_id: payload.inbound_message_id,
+      });
+      return;
+    }
+    await anotarUltimaInboundVista(pool, alvo);
     await runAgentTurn(deps, job, pool, ctx, {
       resolvedAgent,
       channelSessionId: payload.channel_session_id,
