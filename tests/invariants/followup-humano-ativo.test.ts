@@ -32,6 +32,7 @@ beforeEach(async () => {
 
 const T0 = new Date("2026-09-20T12:00:00.000Z"); // início da inscrição
 const min = (n: number) => new Date(T0.getTime() + n * 60_000);
+const seg = (n: number) => new Date(T0.getTime() + n * 1_000);
 
 async function novaOrg(): Promise<string> {
   const { rows } = await pool.query<{ id: string }>(
@@ -165,6 +166,40 @@ describe("humano_respondeu — a consulta real", () => {
     const c = await montar({ gatilho: { kind: "silence", params: { threshold_minutes: 30 } } });
     await mensagem(c, { direction: "inbound", em: min(-30) });
     await mensagem(c, { direction: "outbound", sentVia: "user", em: min(-10) });
+    expect((await fatos(c)).conversa.humano_respondeu).toBe(true);
+  });
+
+  it("etapa → mensagem humana → passo: a proposta mandada DEPOIS de mover a etapa não encerra a cobrança → false", async () => {
+    // A ordem comum do funil: o vendedor move para "Proposta enviada" (a
+    // inscrição nasce) e só então manda a proposta. Ninguém respondeu a nada
+    // desta inscrição ainda.
+    const c = await montar({ gatilho: { kind: "stage_change", params: { stage_id: "00000000-0000-4000-8000-000000000001" } } });
+    await mensagem(c, { direction: "inbound", em: min(-60) });
+    await mensagem(c, { direction: "outbound", sentVia: "user", em: seg(30) });
+    expect((await fatos(c)).conversa.humano_respondeu).toBe(false);
+  });
+
+  it("depois que o fluxo enviou um passo, a mensagem humana volta a contar → true", async () => {
+    const c = await montar({ gatilho: { kind: "stage_change", params: { stage_id: "00000000-0000-4000-8000-000000000001" } } });
+    await mensagem(c, { direction: "inbound", em: min(-60) });
+    await pool.query(
+      `insert into followup_enrollment_events (organization_id, enrollment_id, node_id, event_type, payload, idempotency_key, created_at)
+       values ($1, $2, 'a1', 'action_sent', '{}'::jsonb, 'passo-' || gen_random_uuid()::text, $3)`,
+      [c.org, c.enrollmentId, min(5).toISOString()],
+    );
+    await mensagem(c, { direction: "outbound", sentVia: "user", em: min(6) });
+    expect((await fatos(c)).conversa.humano_respondeu).toBe(true);
+  });
+
+  it("resposta automática do WhatsApp Business (celular a 3 s do inbound) → false", async () => {
+    // Saudação/ausência do app do celular: sincroniza como fromMe e entra como
+    // external_device logo depois do inbound que a disparou.
+    const c = await montar();
+    await mensagem(c, { direction: "inbound", em: min(10) });
+    await mensagem(c, { direction: "outbound", sentVia: "external_device", em: new Date(min(10).getTime() + 3_000) });
+    expect((await fatos(c)).conversa.humano_respondeu).toBe(false);
+    // O composer não tem resposta automática: a 3 s do inbound, ainda é uma pessoa.
+    await mensagem(c, { direction: "outbound", sentVia: "user", em: new Date(min(10).getTime() + 3_000) });
     expect((await fatos(c)).conversa.humano_respondeu).toBe(true);
   });
 

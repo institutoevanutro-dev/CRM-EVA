@@ -191,7 +191,10 @@ export interface FatosDoEnvio {
     /**
      * Mensagem de saída de uma pessoa da equipe (`sent_via` `user`/`external_device`)
      * depois do último marco: a última mensagem recebida nesta conversa, a última
-     * retomada desta inscrição (`handoff_resumed`) e o início dela. Ver a consulta.
+     * retomada desta inscrição (`handoff_resumed`) e o início dela. Fora do gatilho
+     * de silêncio, só conta se o contato falou depois do início ou o fluxo já
+     * enviou um passo antes; a resposta automática do WhatsApp Business (celular
+     * até 10 s depois de um inbound) não conta. Ver a consulta.
      */
     humano_respondeu: boolean;
   };
@@ -461,7 +464,7 @@ export async function lerFatosDoEnvio(
       }>(
         // Humano respondeu: saída de pessoa (composer grava `user`, celular grava
         // `external_device`; IA, automação e o próprio follow-up gravam `ai`)
-        // depois do MAIOR destes marcos:
+        // depois do MAIOR destes marcos (lateral `m`):
         //   - a última mensagem recebida nesta conversa (`sent_at`, a ordem em
         //     que as mensagens foram ditas);
         //   - a última retomada desta inscrição (`handoff_resumed`): "devolver
@@ -471,6 +474,14 @@ export async function lerFatosDoEnvio(
         //     humana (gatilho de etapa, inscrição manual) não morre no 1º envio.
         //     EXCETO no gatilho de silêncio: ele nasce depois do inbound a que
         //     reage, e uma resposta humana nesse meio é o atendimento em curso.
+        // Fora do silêncio, a pessoa só conta se estava RESPONDENDO a algo desta
+        // inscrição: o contato falou depois do início, ou o fluxo já tinha
+        // enviado um passo antes dela. "Move para Proposta enviada e manda a
+        // proposta" é a ordem comum do funil, e a proposta não pode matar a cobrança.
+        // A saída do celular até 10 s depois de uma mensagem recebida não conta:
+        // é a saudação ou a ausência automática do WhatsApp Business, disparada
+        // pelo próprio inbound. Uma pessoa que responde em menos de 10 s passa;
+        // o passo seguinte já a enxerga.
         // O eco do nosso próprio envio pode sobrar como `external_device` quando
         // a remoção dele falha (`removerEcoDoProprioEnvio`, `removeRedriveEcho`):
         // não conta a linha cujo id "bare" (a cauda depois do último `_`, ver
@@ -482,17 +493,16 @@ export async function lerFatosDoEnvio(
                   select 1 from messages h
                    where h.organization_id = c.organization_id and h.conversation_id = c.id
                      and h.direction = 'outbound' and h.sent_via in ('user', 'external_device')
-                     and h.sent_at > greatest(
-                           (select max(i.sent_at) from messages i
-                             where i.organization_id = c.organization_id and i.conversation_id = c.id
-                               and i.direction = 'inbound'),
-                           (select max(ev.created_at) from followup_enrollment_events ev
-                             where ev.organization_id = c.organization_id and ev.enrollment_id = $4
-                               and ev.event_type = 'handoff_resumed'),
-                           (select case when fp.trigger_config->>'kind' = 'silence' then null else fe.started_at end
-                              from followup_enrollments fe
-                              join followup_flow_pointers fp on fp.id = fe.pointer_id and fp.organization_id = fe.organization_id
-                             where fe.organization_id = c.organization_id and fe.id = $4))
+                     and h.sent_at > greatest(m.ultimo_inbound, m.retomada, case when m.silencio then null else m.inicio end)
+                     and (m.silencio or m.ultimo_inbound > m.inicio or exists (
+                           select 1 from followup_enrollment_events s
+                            where s.organization_id = c.organization_id and s.enrollment_id = $4
+                              and s.event_type = 'action_sent' and s.created_at < h.sent_at))
+                     and not (h.sent_via = 'external_device' and exists (
+                           select 1 from messages a
+                            where a.organization_id = c.organization_id and a.conversation_id = c.id
+                              and a.direction = 'inbound'
+                              and a.sent_at <= h.sent_at and a.sent_at > h.sent_at - interval '10 seconds'))
                      and not (h.sent_via = 'external_device' and h.external_id is not null and exists (
                            select 1 from messages eco
                             where eco.organization_id = c.organization_id and eco.conversation_id = c.id
@@ -502,6 +512,19 @@ export async function lerFatosDoEnvio(
                 ) as humano_respondeu
            from conversations c
            left join channel_sessions cs on cs.id = c.channel_session_id and cs.organization_id = c.organization_id
+           left join lateral (
+             select (select max(i.sent_at) from messages i
+                      where i.organization_id = c.organization_id and i.conversation_id = c.id
+                        and i.direction = 'inbound') as ultimo_inbound,
+                    (select max(ev.created_at) from followup_enrollment_events ev
+                      where ev.organization_id = c.organization_id and ev.enrollment_id = $4
+                        and ev.event_type = 'handoff_resumed') as retomada,
+                    fe.started_at as inicio,
+                    coalesce(fp.trigger_config->>'kind' = 'silence', false) as silencio
+               from followup_enrollments fe
+               join followup_flow_pointers fp on fp.id = fe.pointer_id and fp.organization_id = fe.organization_id
+              where fe.organization_id = c.organization_id and fe.id = $4
+           ) m on true
           where c.organization_id = $1 and c.id = $2 and c.contact_id = $3`,
         [org, conversationId, contactId, enrollmentId],
       ),
