@@ -9775,6 +9775,13 @@ export const DICIONARIO: Traducoes = {
   "Uma mensagem que chega depois desse prazo é conversa nova, não resposta à campanha. Isso muda o número de respostas que a tela mostra, inclusive das campanhas já enviadas.": {
     es: "Un mensaje que llega después de ese plazo es una conversación nueva, no una respuesta a la campaña. Eso cambia la cantidad de respuestas que muestra la pantalla, incluso de las campañas ya enviadas.",
   },
+  // Painel do funil (app/app/painel-do-funil e /api/v1/metrics/funil).
+  "Informe o prefixo da etiqueta.": { es: "Indique el prefijo de la etiqueta." },
+  "Escolha o campo do recorte.": { es: "Elija el campo del desglose." },
+  "A data inicial é depois da final.": { es: "La fecha inicial es posterior a la final." },
+  "O painel cobre no máximo 90 dias.": { es: "El panel cubre como máximo 90 días." },
+  "O campo escolhido não é um campo de lista deste funil.": { es: "El campo elegido no es un campo de lista de este embudo." },
+  "Não consegui ler os dados do painel.": { es: "No pude leer los datos del panel." },
 };
 
 /**
