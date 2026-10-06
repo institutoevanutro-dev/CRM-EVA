@@ -13,6 +13,8 @@ import { toast } from "sonner";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { Button } from "@/components/ui/button";
 import { LOCAIS_DE_ATENDIMENTO } from "@/lib/agenda/locais";
+import { montarLembrete, VARIAVEIS_DO_LEMBRETE, variaveisDesconhecidas } from "@/lib/agenda/texto-do-lembrete";
+import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 import { apiClient } from "@/lib/api/client";
 
 export interface TipoRow {
@@ -33,6 +35,7 @@ export interface TipoRow {
   reminder_enabled: boolean;
   reminder_minutes_before: number;
   reminder_extra_offsets_minutes: number[] | null;
+  reminder_body: string | null;
 }
 
 /**
@@ -107,11 +110,42 @@ const VAZIO: Rascunho = {
  * ⚠️ **CAMPO DESABILITADO NÃO ENTRA NO `FormData`, e isso é o desenho.** Com o
  * aviso desligado o `PATCH` manda `reminder_enabled: false` e OMITE os minutos:
  * a antecedência guardada fica intacta para quando alguém religar, em vez de
- * ser sobrescrita por um valor que a tela não deixou ninguém escolher.
+ * ser sobrescrita por um valor que a tela não deixou ninguém escolher. O mesmo
+ * vale para o texto: desligado, ele não vai no PATCH e fica guardado.
+ *
+ * ─── O texto, a ajuda e a prévia (porte de 6146539da, estendido) ─────────
+ *
+ * A prévia chama a MESMA `montarLembrete` do cron, com um paciente de exemplo
+ * e um compromisso amanhã às 14:30 no fuso do navegador: o que aparece aqui é
+ * o que o paciente recebe. Variável que não existe vira aviso antes de salvar
+ * — a rota a recusa de qualquer jeito, mas descobrir no toast é descobrir tarde.
  */
-function LembreteDoCompromisso({ tipo }: { tipo: TipoRow }) {
+// `titulo` e `dia` seguem aceitas (compatibilidade com o original), mas a ajuda
+// mostra só as do pedido: `{{tipo}}` e `{{quando}}` dizem o mesmo com menos ruído.
+const VARIAVEIS_NA_AJUDA = VARIAVEIS_DO_LEMBRETE.filter((v) => v !== "titulo" && v !== "dia");
+
+export function LembreteDoCompromisso({ tipo, profissional }: { tipo: TipoRow; profissional?: string | null }) {
   const t = useT();
+  const idioma = useIdioma();
   const [ligado, setLigado] = React.useState(tipo.reminder_enabled);
+  const [texto, setTexto] = React.useState(tipo.reminder_body ?? "");
+  const desconhecidas = variaveisDesconhecidas(texto);
+  const previa = React.useMemo(() => {
+    const amanha = new Date();
+    amanha.setDate(amanha.getDate() + 1);
+    amanha.setHours(14, 30, 0, 0);
+    return montarLembrete({
+      nomeDoContato: "Maria Silva",
+      titulo: tipo.name,
+      quando: amanha,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      local: tipo.location_details,
+      idioma,
+      molde: texto,
+      tipoNome: tipo.name,
+      profissional: profissional ?? null,
+    });
+  }, [texto, tipo.name, tipo.location_details, idioma, profissional]);
 
   return (
     <>
@@ -158,6 +192,40 @@ function LembreteDoCompromisso({ tipo }: { tipo: TipoRow }) {
           {t("Opcional. Até 3, separados por vírgula. Ex.: 180 avisa de novo 3 horas antes.")}
         </span>
       </label>
+      <label className="flex flex-col gap-1 text-xs text-text-muted sm:col-span-3">
+        {t("Mensagem do lembrete")}
+        <textarea
+          name="reminder_body"
+          rows={4}
+          maxLength={1000}
+          disabled={!ligado}
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          placeholder={t("Oi {{primeiro_nome}}! Passando pra lembrar da sua consulta {{quando}} às {{hora}}.")}
+          data-testid={`editar-lembrete-texto-${tipo.id}`}
+          className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text disabled:opacity-50"
+        />
+        <span data-testid={`variaveis-lembrete-${tipo.id}`} className="text-[11px] text-text-muted">
+          {t("Deixe em branco para o texto padrão. Variáveis:")}{" "}
+          {VARIAVEIS_NA_AJUDA.map((v) => `{{${v}}}`).join(" ")}
+          {". "}
+          {t("{{quando}} vira hoje, amanhã ou o dia da semana com a data. {{unidade}} fica vazia quando o compromisso não tem unidade.")}
+        </span>
+        {desconhecidas.length > 0 ? (
+          <span data-testid={`aviso-variavel-lembrete-${tipo.id}`} className="text-[11px] text-warning">
+            {t("Variável que não existe: use só as da lista.")} {desconhecidas.join(" ")}
+          </span>
+        ) : null}
+      </label>
+      <div className="flex flex-col gap-1 text-xs text-text-muted sm:col-span-3">
+        {t("Prévia")}
+        <p
+          data-testid={`previa-lembrete-${tipo.id}`}
+          className="whitespace-pre-line rounded-md border border-border bg-surface p-2 text-sm text-text"
+        >
+          {previa}
+        </p>
+      </div>
     </>
   );
 }
@@ -462,6 +530,7 @@ export function TiposDeAgendamentoClient({
                     .sort((a, b) => b - a)
                     .join(", ")}{" "}
                   min {t("antes")}
+                  {tipo.reminder_body ? ` · ${t("texto próprio")}` : ""}
                 </span>
               ) : null}
               {!tipo.is_active ? <span className="text-xs text-text-subtle">{t("desativado")}</span> : null}
@@ -561,6 +630,8 @@ export function TiposDeAgendamentoClient({
                               reminder_extra_offsets_minutes: lerDegrausExtras(
                                 String(dados.get("reminder_extra_offsets_minutes") ?? ""),
                               ),
+                              // Em branco = volta à frase padrão (a rota grava `null`).
+                              reminder_body: String(dados.get("reminder_body") ?? ""),
                             }
                           : {}),
                         ...(dados.get("reminder_minutes_before")
@@ -613,7 +684,10 @@ export function TiposDeAgendamentoClient({
                     ))}
                   </select>
                 </label>
-                <LembreteDoCompromisso tipo={tipo} />
+                <LembreteDoCompromisso
+                  tipo={tipo}
+                  profissional={pessoas.find((p) => p.id === tipo.default_owner_user_id)?.nome ?? null}
+                />
                 <div className="flex justify-end sm:col-span-3">
                   <Button type="submit" size="sm" data-testid={`salvar-${tipo.id}`} disabled={salvando}>
                     {salvando ? t("Salvando…") : t("Salvar")}
