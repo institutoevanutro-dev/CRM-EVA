@@ -1415,12 +1415,27 @@ export function buildOpeningMessage(
           '## Mensagem atual do cliente',
           'Não há texto utilizável na mensagem mais recente. Consulte o histórico antes de responder.',
         ];
+  // O job aponta UMA mensagem, mas o cliente pode ter mandado outras antes dela
+  // que ninguém respondeu — a rajada que o drain coalesce, ou a pergunta cuja
+  // resposta foi descartada por ter ficado desatualizada (`respostaFicouObsoleta`
+  // devolve a vez a este turno, pinado na mensagem MAIS NOVA). Sem a lista, o
+  // "responda a ESTA mensagem" acima deixava a pergunta anterior para trás.
+  const pendentes = inboundsNaoRespondidos(context.messages);
+  const pendentesBlock =
+    pendentes.length > 1
+      ? [
+          'Desde a última resposta nossa o cliente mandou mais de uma mensagem, e nenhuma foi respondida ainda.',
+          'Responda a todas juntas, numa resposta só, sem deixar pergunta para trás:',
+          JSON.stringify({ mensagens_sem_resposta: pendentes }),
+        ]
+      : [];
   return [
     'Novo turno de atendimento: o lead enviou uma mensagem (a última inbound do histórico abaixo).',
     '',
     ...ritualBlocks(previous, leadState, context, notesIndexBlock, projeta, compromissosBlock),
     '',
     ...mensagemAtualBlock,
+    ...pendentesBlock,
     '',
     'Responda ao lead usando a tool send_message — NUNCA escreva a resposta como texto direto',
     '(texto fora de tool é descartado pelo runtime). Use get_lead_context se precisar reler o contexto.',
