@@ -415,5 +415,17 @@ test("ligo o aviso do compromisso pela tela, e ele fica ligado", async ({ page }
     "Oi {{primeiro_nome}}, te espero {{quando}} às {{hora}}.",
   );
 
+  // ── A VARREDURA DO CRON PASSA PELO POSTGREST DE VERDADE. Os testes da rota
+  //    usam dublê; só aqui o embed `calendar_units!calendar_appointments_unit_fk`
+  //    e as colunas da 0323 são resolvidos pelo schema cache. Se um deles não
+  //    resolver, a consulta inteira falha e a rota dá 500 em toda rodada —
+  //    nenhum lembrete sai em instalação nenhuma.
+  const segredo = process.env.INTERNAL_CRON_SECRET || process.env.INTERNAL_SECRET;
+  if (!segredo) throw new Error("O e2e precisa da credencial local do cron.");
+  const cron = await page.request.post("/api/v1/cron/agenda-reminder", {
+    headers: { authorization: `Bearer ${segredo}` },
+  });
+  expect(cron.status(), "a varredura do lembrete não passou pelo PostgREST").toBe(200);
+
   await page.screenshot({ path: "evidence/calendario/lembrete-ligado.png", fullPage: true });
 });
