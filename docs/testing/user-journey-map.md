@@ -1055,6 +1055,7 @@ Desenho: `docs/superpowers/specs/2026-10-06-painel-do-funil-design.md`. Tela `/a
 - [x] Investimento: conta pela regra da tela Meta Ads, estados sem zero falso — `tests/unit/painel-do-funil-investimento.test.ts`
 - [x] Rota: papel, Zod, `organization_id` pelo efeito, truncado dentro do lote, sem PII, espanhol das mensagens — `tests/unit/painel-do-funil-rota.test.ts`
 - [x] Porta no catálogo, com espanhol do rótulo — `tests/unit/painel-do-funil-navegacao.test.ts`
+- [x] Componente montado (hook dublado, jsdom): texto de "não conectado" e "—" em custo/ROAS, réguas com os dois fusos, formulário que guarda as opções depois de um 422, campos do card do funil escolhido no formulário, Aplicar desligado sem campo/prefixo — `tests/unit/painel-do-funil-tela.test.tsx`. Não substitui a prova de tela abaixo: não passa pelo navegador nem pelo banco
 - [ ] Prova de tela (Leads, Interagiram, Ganhos, Realizados, Faltas, comparecimento, "não conectado", recorte por campo do card) — `tests/e2e/painel-do-funil.spec.ts` — spec escrita e registrada em `SPECS_PARTE_4`, **NÃO MEDIDA localmente** (máquina sem o Supabase do CRM de pé e com carga alta); roda no CI do PR
 
 ## J7 — Exploração completa `[P2]`
