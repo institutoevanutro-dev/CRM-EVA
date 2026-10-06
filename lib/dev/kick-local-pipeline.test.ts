@@ -1,6 +1,8 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import type * as AplicarInbound from "@/lib/followup/aplicar-inbound";
+import type * as Reactivity from "@/lib/followup/reactivity";
 import type { LiveEnrollmentRef, ReactivityAdminClient } from "@/lib/followup/reactivity";
 
 vi.mock("@/lib/event-log/drain", () => ({
@@ -19,7 +21,7 @@ const estado = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/followup/reactivity", async (importOriginal) => {
-  const real = await importOriginal<typeof import("@/lib/followup/reactivity")>();
+  const real = await importOriginal<typeof Reactivity>();
   return {
     ...real,
     createSupabaseReactivityClient: (): ReactivityAdminClient => ({
@@ -47,7 +49,7 @@ vi.mock("@/lib/followup/reactivity", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/followup/aplicar-inbound", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/followup/aplicar-inbound")>()),
+  ...(await importOriginal<typeof AplicarInbound>()),
   aplicarTextoNosFollowups: vi.fn(async () => {
     estado.vistoPeloTexto.push(estado.inscricoes.map((e) => ({ ...e })));
   }),
