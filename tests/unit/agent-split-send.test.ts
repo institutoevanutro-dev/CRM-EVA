@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { sendInBubbles } from "@/lib/agent-engine/agent/split-message";
@@ -72,5 +74,78 @@ describe("sendInBubbles", () => {
     const out = await sendInBubbles(text, { enabled: true, maxChars: 20, send, sleep, jitter: () => 0 });
     expect(out.kind).toBe("blocked");
     expect(send).toHaveBeenCalledTimes(2); // parou na 2ª
+  });
+});
+
+// Um parágrafo = uma bolha. Sem teto, um único send_message de 7 parágrafos
+// sairia em 7 mensagens físicas no mesmo turno — o que MAX_SENDS_PER_TURN
+// ("bolhas incluídas") existe para barrar. O que passa do teto vai junto na
+// última. Portado de melgarafael/DeskcommCRM 0f07c5e01 (autor: melgarafael).
+describe("sendInBubbles — o teto do turno vale para as bolhas", () => {
+  const seteParagrafos = ["Opções:", "1. Manhã", "2. Tarde", "3. Noite", "4. Sábado", "5. Online", "Qual prefere?"];
+
+  it("com maxBubbles 3, 7 parágrafos saem em 3 envios, o excedente junto na última, na ordem", async () => {
+    const send = vi.fn(async (_b: string) => ({ kind: "sent", messageId: "m" }));
+    await sendInBubbles(seteParagrafos.join("\n\n"), {
+      enabled: true,
+      maxChars: 600,
+      maxBubbles: 3,
+      send,
+      sleep: async () => undefined,
+      jitter: () => 0,
+    });
+    expect(send.mock.calls.map((c) => c[0])).toEqual([
+      "Opções:",
+      "1. Manhã",
+      seteParagrafos.slice(2).join("\n\n"),
+    ]);
+  });
+
+  it("com maxBubbles 1, sai uma bolha só com o texto inteiro", async () => {
+    const send = vi.fn(async (_b: string) => ({ kind: "sent", messageId: "m" }));
+    await sendInBubbles(seteParagrafos.join("\n\n"), {
+      enabled: true,
+      maxChars: 600,
+      maxBubbles: 1,
+      send,
+      sleep: async () => undefined,
+      jitter: () => 0,
+    });
+    expect(send.mock.calls.map((c) => c[0])).toEqual([seteParagrafos.join("\n\n")]);
+  });
+
+  it("o turno passa às bolhas o que resta do teto", () => {
+    const turno = readFileSync("lib/agent-engine/agent/inbound-turn.ts", "utf8");
+    expect(turno).toMatch(/maxBubbles: Math\.max\(1, maxSendsPerTurn - seq\)/);
+  });
+});
+
+/**
+ * Corpo em branco nunca vira mensagem. O schema da tool exige `min(1)`, mas
+ * um "\n" ou um espaço passa e chega ao canal como bolha em branco (medido no
+ * original, 2026-09-19). A recusa mora dentro de `send_message.execute`, antes
+ * do teto e da cadeia de envio, e volta ao modelo para ele reescrever.
+ * Portado de melgarafael/DeskcommCRM 0e6ad378a (autor: VANDER GUSTAVO ALVES).
+ */
+describe("send_message recusa corpo em branco antes de qualquer envio", () => {
+  const FONTE = readFileSync("lib/agent-engine/agent/inbound-turn.ts", "utf8");
+  const corpoDoSend = (() => {
+    const i = FONTE.indexOf("send_message: tool({");
+    const j = FONTE.indexOf("update_lead_state: tool({", i);
+    expect(i).toBeGreaterThan(-1);
+    expect(j).toBeGreaterThan(i);
+    return FONTE.slice(i, j);
+  })();
+
+  it("a guarda existe e devolve corpo_vazio ao modelo", () => {
+    expect(corpoDoSend).toMatch(/if \(body\.trim\(\) === ''\)/);
+    expect(corpoDoSend).toContain("code: 'corpo_vazio'");
+  });
+
+  it("roda antes do teto do turno e da cadeia de envio", () => {
+    const guarda = corpoDoSend.indexOf("code: 'corpo_vazio'");
+    expect(guarda).toBeGreaterThan(-1);
+    expect(guarda).toBeLessThan(corpoDoSend.indexOf("seq >= maxSendsPerTurn"));
+    expect(guarda).toBeLessThan(corpoDoSend.indexOf("runBeforeSend("));
   });
 });
