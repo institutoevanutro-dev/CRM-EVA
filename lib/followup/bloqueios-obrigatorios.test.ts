@@ -10,6 +10,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CONFIG_SEM_BLOQUEIOS_OPCIONAIS,
+  OUTCOME_DO_BLOQUEIO,
+  conferirAntesDoEnvio,
+  TEXTO_DO_BLOQUEIO,
   decidirEnvio,
   dentroDaJanela,
   lerConfigDosBloqueios,
@@ -33,7 +36,8 @@ function fatos(p: Partial<FatosDoEnvio> = {}): FatosDoEnvio {
     },
     trigger_config: { kind: 'stage_change', params: { stage_id: ETAPA_AGENDAMENTO }, cancel_on_reply: true },
     contato: { is_blocked: false, force_human: false, is_anonymized: false },
-    conversa: { bot_silenciado: false },
+    handoff_policy: 'pause',
+    conversa: { bot_silenciado: false, atribuida_a_pessoa: false, humano_respondeu: false },
     negocios_abertos: [{ stage_id: ETAPA_AGENDAMENTO, stage_blocks_followups: false }],
     ultima_recebida_em: '2026-09-15T11:00:00.000Z',
     ultimo_envio_da_inscricao_em: null,
@@ -81,9 +85,47 @@ describe('decidirEnvio — sempre valem', () => {
     });
   });
 
-  it('atendimento humano não envia, mas deixa a política de handoff do fluxo decidir', () => {
-    expect(decidirEnvio(fatos({ conversa: { bot_silenciado: true } }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA))
-      .toEqual({ envia: false, motivo: 'atendimento_humano', invalida: false });
+  describe('humano ativo encerra a sequência, um sinal por vez', () => {
+    const HUMANO = { envia: false, motivo: 'atendimento_humano', invalida: true };
+    const limpa = { bot_silenciado: false, atribuida_a_pessoa: false, humano_respondeu: false };
+    it('bot silenciado', () => {
+      expect(decidirEnvio(fatos({ conversa: { ...limpa, bot_silenciado: true } }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA))
+        .toEqual(HUMANO);
+    });
+    it('force_human no contato', () => {
+      const f = fatos({ contato: { is_blocked: false, force_human: true, is_anonymized: false } });
+      expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual(HUMANO);
+    });
+    it('conversa atribuída a uma pessoa', () => {
+      expect(decidirEnvio(fatos({ conversa: { ...limpa, atribuida_a_pessoa: true } }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA))
+        .toEqual(HUMANO);
+    });
+    it('uma pessoa respondeu depois da última mensagem do contato', () => {
+      expect(decidirEnvio(fatos({ conversa: { ...limpa, humano_respondeu: true } }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA))
+        .toEqual(HUMANO);
+    });
+    it('"Permitir durante handoff" (allow) ignora atribuição e resposta humana, mas não o pedido de humano', () => {
+      const allow = (conversa: typeof limpa, force_human = false) =>
+        decidirEnvio(
+          fatos({ handoff_policy: 'allow', conversa, contato: { is_blocked: false, force_human, is_anonymized: false } }),
+          CONFIG_SEM_BLOQUEIOS_OPCIONAIS,
+          QUARTA_MANHA,
+        );
+      expect(allow({ ...limpa, atribuida_a_pessoa: true })).toEqual({ envia: true });
+      expect(allow({ ...limpa, humano_respondeu: true })).toEqual({ envia: true });
+      expect(allow(limpa, true)).toEqual(HUMANO);
+      expect(allow({ ...limpa, bot_silenciado: true })).toEqual(HUMANO);
+    });
+  });
+
+  it('o desfecho de cada bloqueio que encerra', () => {
+    expect(OUTCOME_DO_BLOQUEIO.atendimento_humano).toBe('handoff');
+    expect(OUTCOME_DO_BLOQUEIO.resposta_do_contato).toBe('replied');
+    expect(OUTCOME_DO_BLOQUEIO.opt_out).toBe('opted_out');
+    expect(OUTCOME_DO_BLOQUEIO.etapa_bloqueia_followup).toBeUndefined();
+    expect(TEXTO_DO_BLOQUEIO.atendimento_humano).toBe(
+      'Sequência encerrada: uma pessoa da equipe está atendendo esta conversa.',
+    );
   });
 
   it('comprovante em conferência (etapa que bloqueia) invalida — independente de qualquer auditor', () => {
@@ -446,5 +488,28 @@ describe('lerFatosDoEnvio — canal da conversa', () => {
     if (!leitura.ok) return;
     expect(leitura.fatos.fim_da_janela_automatica).toBeNull();
     expect(leitura.fatos.conversa.bot_silenciado).toBe(true);
+  });
+
+  it('humano ativo e política de handoff vêm da leitura', async () => {
+    const leitura = await lerFatosDoEnvio(
+      pool({ bot_silenciado: false, provider: DEFAULT_CHANNEL_PROVIDER, last_inbound_at: null, atribuida_a_pessoa: true, humano_respondeu: true }),
+      input,
+    );
+    expect(leitura.ok).toBe(true);
+    if (!leitura.ok) return;
+    expect(leitura.fatos.conversa).toEqual({ bot_silenciado: false, atribuida_a_pessoa: true, humano_respondeu: true });
+    expect(leitura.fatos.handoff_policy).toBe('pause');
+  });
+});
+
+describe('conferirAntesDoEnvio', () => {
+  const input = { organizationId: 'org', contactId: 'contact', conversationId: 'conv', enrollmentId: 'enrollment' };
+  it('leitura que falha é "não verificável" (falha fechada)', async () => {
+    const quebrado = { query: async () => { throw new Error('db fora'); } } as unknown as Pick<pg.Pool, 'query'>;
+    expect(await conferirAntesDoEnvio(quebrado, input, QUARTA_MANHA)).toEqual({
+      envia: false,
+      motivo: 'nao_verificavel',
+      invalida: false,
+    });
   });
 });

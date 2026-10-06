@@ -15,9 +15,13 @@
  *
  * SEMPRE VALEM (corretos em qualquer nicho, sem configuração):
  *   - opt-out (`contacts.is_blocked`) e contato anonimizado;
- *   - atendimento humano pedido/em curso (`force_human` ou bot silenciado — a
- *     mesma definição de `isLeadInHandoff`; conversa apenas ATRIBUÍDA a alguém
- *     não conta, porque o roteamento atribui responsável a toda conversa);
+ *   - atendimento humano pedido/em curso: `force_human`, bot silenciado, conversa
+ *     atribuída a uma pessoa (`assignee_kind='user'`) ou uma pessoa da equipe que
+ *     respondeu depois da última mensagem do contato (composer ou celular). O
+ *     gate de elegibilidade já barrava `assignee_kind='user'` no modo IA e no
+ *     atalho; o texto fixo e o modelo pelo worker passaram a barrar também. Com
+ *     `handoff_policy='allow'` ("Permitir durante handoff"), atribuição e resposta
+ *     humana não barram — só o pedido explícito (`force_human`/bot silenciado);
  *   - negócio em etapa que invalida follow-up (`crm_stages.blocks_followups`,
  *     ex.: comprovante em conferência);
  *   - resposta do contato depois do último envio, quando o fluxo cancela na
@@ -178,7 +182,19 @@ export interface FatosDoEnvio {
   /** `trigger_config` cru do pointer. */
   trigger_config: unknown;
   contato: { is_blocked: boolean; force_human: boolean; is_anonymized: boolean };
-  conversa: { bot_silenciado: boolean };
+  /** `handoff_policy` do pointer: com `allow`, atribuição e resposta humana não barram. */
+  handoff_policy: 'pause' | 'cancel' | 'allow';
+  conversa: {
+    bot_silenciado: boolean;
+    /** `conversations.assignee_kind = 'user'`. */
+    atribuida_a_pessoa: boolean;
+    /**
+     * Mensagem de saída de uma pessoa da equipe (`sent_via` `user`/`external_device`)
+     * depois do último marco: a última mensagem recebida nesta conversa, a última
+     * retomada desta inscrição (`handoff_resumed`) e o início dela. Ver a consulta.
+     */
+    humano_respondeu: boolean;
+  };
   /** Negócios ABERTOS do contato, com a etapa atual. */
   negocios_abertos: Array<{ stage_id: string; stage_blocks_followups: boolean }>;
   /** Última mensagem recebida do contato e último envio desta inscrição. */
@@ -238,8 +254,9 @@ export type DecisaoDoEnvio =
   | { envia: false; motivo: 'fora_da_janela'; adiarPara: Date }
   /**
    * Não envia. `invalida`: a sequência não tem mais razão de seguir e é
-   * cancelada com o motivo. Sem `invalida` (atendimento humano), o envio é
-   * pulado e a política de handoff do fluxo decide o resto.
+   * cancelada com o motivo (e o desfecho de `OUTCOME_DO_BLOQUEIO`). Sem
+   * `invalida` (não verificável, configuração inválida, inscrição encerrada),
+   * nada muda na inscrição.
    */
   | { envia: false; motivo: Exclude<MotivoDoBloqueio, 'fora_da_janela' | 'fora_das_24h_do_instagram'>; invalida: boolean }
   /**
@@ -278,8 +295,12 @@ export function decidirEnvio(
   }
   if (fatos.contato.is_anonymized) return { envia: false, motivo: 'contato_anonimizado', invalida: true };
   if (fatos.contato.is_blocked) return { envia: false, motivo: 'opt_out', invalida: true };
-  if (fatos.contato.force_human || fatos.conversa.bot_silenciado) {
-    return { envia: false, motivo: 'atendimento_humano', invalida: false };
+  // Humano ativo ENCERRA (outcome `handoff`): seguir adiante acabava cancelado
+  // com motivo errado no worker, ou rechecando até morrer no atalho.
+  const humanoSemPedido =
+    fatos.handoff_policy !== 'allow' && (fatos.conversa.atribuida_a_pessoa || fatos.conversa.humano_respondeu);
+  if (fatos.contato.force_human || fatos.conversa.bot_silenciado || humanoSemPedido) {
+    return { envia: false, motivo: 'atendimento_humano', invalida: true };
   }
   if (fatos.negocios_abertos.some((n) => n.stage_blocks_followups)) {
     return { envia: false, motivo: 'etapa_bloqueia_followup', invalida: true };
@@ -361,7 +382,7 @@ export const TEXTO_DO_BLOQUEIO: Record<MotivoDoBloqueio, string> = {
   inscricao_encerrada: 'Envio não feito: a sequência já tinha sido encerrada.',
   opt_out: 'Sequência encerrada: o contato pediu para não receber mensagens.',
   contato_anonimizado: 'Sequência encerrada: o contato foi anonimizado.',
-  atendimento_humano: 'Envio não feito: há atendimento humano pedido ou em curso.',
+  atendimento_humano: 'Sequência encerrada: uma pessoa da equipe está atendendo esta conversa.',
   etapa_bloqueia_followup: 'Sequência encerrada: o negócio está numa etapa que interrompe follow-ups.',
   resposta_do_contato: 'Sequência encerrada: o contato respondeu.',
   fora_da_etapa_do_gatilho: 'Sequência encerrada: o negócio saiu da etapa que iniciou o fluxo.',
@@ -374,6 +395,16 @@ export const TEXTO_DO_BLOQUEIO: Record<MotivoDoBloqueio, string> = {
   fora_da_janela_sem_encaixe:
     'Sequência encerrada: a próxima janela comercial só abre depois do prazo do sinal — não adiado, suprimido.',
   fora_das_24h_do_instagram: 'Passo pulado: fora das 24h do Instagram.',
+};
+
+/**
+ * O desfecho gravado em `followup_enrollments.outcome` quando o bloqueio encerra
+ * a sequência. Motivo sem entrada encerra sem desfecho (só o `cancel_reason`).
+ */
+export const OUTCOME_DO_BLOQUEIO: Partial<Record<MotivoDoBloqueio, 'handoff' | 'replied' | 'opted_out'>> = {
+  atendimento_humano: 'handoff',
+  resposta_do_contato: 'replied',
+  opt_out: 'opted_out',
 };
 
 // ─── leitura (pg) ────────────────────────────────────────────────────────────
@@ -399,6 +430,7 @@ export async function lerFatosDoEnvio(
         started_at: Date;
         pointer_id: string;
         trigger_config: unknown;
+        handoff_policy: string | null;
         appointment_id: string | null;
         appointment_revision: string | null;
         reserva_criada_em: Date | null;
@@ -406,7 +438,7 @@ export async function lerFatosDoEnvio(
         reserva_sujeita_a_sinal: boolean | null;
         reserva_status: string | null;
       }>(
-        `select e.id, e.status, e.started_at, e.pointer_id, p.trigger_config, e.appointment_id, e.appointment_revision,
+        `select e.id, e.status, e.started_at, e.pointer_id, p.trigger_config, p.handoff_policy, e.appointment_id, e.appointment_revision,
                 a.created_at as reserva_criada_em, a.starts_at as reserva_consulta_em, a.status as reserva_status,
                 coalesce(t.requires_signal, false) as reserva_sujeita_a_sinal
            from followup_enrollments e
@@ -420,13 +452,54 @@ export async function lerFatosDoEnvio(
         `select is_blocked, force_human, is_anonymized from contacts where organization_id = $1 and id = $2`,
         [org, contactId],
       ),
-      pool.query<{ bot_silenciado: boolean; provider: string | null; last_inbound_at: Date | null }>(
+      pool.query<{
+        bot_silenciado: boolean;
+        provider: string | null;
+        last_inbound_at: Date | null;
+        atribuida_a_pessoa: boolean | null;
+        humano_respondeu: boolean | null;
+      }>(
+        // Humano respondeu: saída de pessoa (composer grava `user`, celular grava
+        // `external_device`; IA, automação e o próprio follow-up gravam `ai`)
+        // depois do MAIOR destes marcos:
+        //   - a última mensagem recebida nesta conversa (`sent_at`, a ordem em
+        //     que as mensagens foram ditas);
+        //   - a última retomada desta inscrição (`handoff_resumed`): "devolver
+        //     ao agente" limpa o silêncio e volta a inscrição pausada para
+        //     `active`, e as respostas do atendimento não podem encerrá-la depois;
+        //   - o início da inscrição: o fluxo que cobra DEPOIS de uma mensagem
+        //     humana (gatilho de etapa, inscrição manual) não morre no 1º envio.
+        // O eco do nosso próprio envio pode sobrar como `external_device` quando
+        // a remoção dele falha (`removerEcoDoProprioEnvio`, `removeRedriveEcho`):
+        // não conta a linha cujo id "bare" (a cauda depois do último `_`, ver
+        // `bareWaMessageId`) coincide com uma saída nossa da mesma conversa.
         `select (c.bot_silenced_until is not null and c.bot_silenced_until > now()) as bot_silenciado,
-                cs.provider, c.last_inbound_at
+                cs.provider, c.last_inbound_at,
+                (c.assignee_kind = 'user') as atribuida_a_pessoa,
+                exists (
+                  select 1 from messages h
+                   where h.organization_id = c.organization_id and h.conversation_id = c.id
+                     and h.direction = 'outbound' and h.sent_via in ('user', 'external_device')
+                     and h.sent_at > greatest(
+                           (select max(i.sent_at) from messages i
+                             where i.organization_id = c.organization_id and i.conversation_id = c.id
+                               and i.direction = 'inbound'),
+                           (select max(ev.created_at) from followup_enrollment_events ev
+                             where ev.organization_id = c.organization_id and ev.enrollment_id = $4
+                               and ev.event_type = 'handoff_resumed'),
+                           (select fe.started_at from followup_enrollments fe
+                             where fe.organization_id = c.organization_id and fe.id = $4))
+                     and not (h.sent_via = 'external_device' and h.external_id is not null and exists (
+                           select 1 from messages eco
+                            where eco.organization_id = c.organization_id and eco.conversation_id = c.id
+                              and eco.direction = 'outbound' and eco.sent_via in ('ai', 'user')
+                              and eco.id <> h.id and eco.external_id is not null
+                              and regexp_replace(eco.external_id, '^.*_', '') = regexp_replace(h.external_id, '^.*_', '')))
+                ) as humano_respondeu
            from conversations c
            left join channel_sessions cs on cs.id = c.channel_session_id and cs.organization_id = c.organization_id
           where c.organization_id = $1 and c.id = $2 and c.contact_id = $3`,
-        [org, conversationId, contactId],
+        [org, conversationId, contactId, enrollmentId],
       ),
       pool.query<{ stage_id: string; stage_blocks_followups: boolean }>(
         `select l.stage_id, coalesce(s.blocks_followups, false) as stage_blocks_followups
@@ -487,10 +560,15 @@ export async function lerFatosDoEnvio(
       fatos: {
         enrollment: { id: e.id, status: e.status, started_at: iso(e.started_at)!, pointer_id: e.pointer_id },
         trigger_config: e.trigger_config,
+        handoff_policy: e.handoff_policy === 'allow' || e.handoff_policy === 'cancel' ? e.handoff_policy : 'pause',
         contato: c,
         // Silêncio em canal sem IA é roteamento (a conversa cai na Fila), não
         // uma pessoa que assumiu: lá ele não bloqueia o follow-up.
-        conversa: { bot_silenciado: v.bot_silenciado && !silencioDoBotEhRoteamento(v.provider) },
+        conversa: {
+          bot_silenciado: v.bot_silenciado && !silencioDoBotEhRoteamento(v.provider),
+          atribuida_a_pessoa: v.atribuida_a_pessoa === true,
+          humano_respondeu: v.humano_respondeu === true,
+        },
         negocios_abertos: negocios.rows,
         ultima_recebida_em: iso(recebida.rows[0]?.em),
         ultimo_envio_da_inscricao_em: iso(enviada.rows[0]?.em),
@@ -503,4 +581,19 @@ export async function lerFatosDoEnvio(
   } catch {
     return { ok: false };
   }
+}
+
+/**
+ * A decisão de envio inteira (leitura + regra), a MESMA nos dois caminhos que
+ * enviam passo de fluxo: o worker (`runFlowDrivenTurn`) e o atalho do texto
+ * fixo (`enviarTextoFixoPendente`). Leitura que falha não envia.
+ */
+export async function conferirAntesDoEnvio(
+  pool: Pick<pg.Pool, 'query'>,
+  input: { organizationId: string; contactId: string; conversationId: string; enrollmentId: string },
+  agora: Date,
+): Promise<DecisaoDoEnvio> {
+  const leitura = await lerFatosDoEnvio(pool, input);
+  if (!leitura.ok) return { envia: false, motivo: 'nao_verificavel', invalida: false };
+  return decidirEnvio(leitura.fatos, leitura.config, agora);
 }

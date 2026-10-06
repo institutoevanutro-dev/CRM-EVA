@@ -428,4 +428,14 @@ describe("completeTurnForEnrollment — 'pulado' (passo sem envio, o fluxo segue
     await completeTurnForEnrollment(db, "org-1", "enr-1", "a1", { kind: "skipped", reason: "x" }, clock);
     expect(updateEnrollment.mock.calls[0]?.[2]).toMatchObject({ status: "cancelled", cancel_reason: "x" });
   });
+
+  it("'skipped' com desfecho grava o outcome (humano ativo → handoff); sem desfecho, a chave nem aparece", async () => {
+    const com = fakeDb({ enrollment: enrollment(), graph: ACTION_GRAPH });
+    await completeTurnForEnrollment(com.db, "org-1", "enr-1", "a1", { kind: "skipped", reason: "x", outcome: "handoff" }, clock);
+    expect(com.updateEnrollment.mock.calls[0]?.[2]).toMatchObject({ status: "cancelled", outcome: "handoff", cancel_reason: "x" });
+
+    const sem = fakeDb({ enrollment: enrollment(), graph: ACTION_GRAPH });
+    await completeTurnForEnrollment(sem.db, "org-1", "enr-1", "a1", { kind: "skipped", reason: "x" }, clock);
+    expect(sem.updateEnrollment.mock.calls[0]?.[2]).not.toHaveProperty("outcome");
+  });
 });

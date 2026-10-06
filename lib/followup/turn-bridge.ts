@@ -20,7 +20,7 @@ import type pg from "pg";
 
 import type { AdminClient, EnrollmentPatch } from "./engine";
 import { flowGraphSchema } from "./graph-schema";
-import { classEdgeMatch, selectEdge, type EnrollmentRow } from "./node-handlers";
+import { classEdgeMatch, selectEdge, type EnrollmentOutcome, type EnrollmentRow } from "./node-handlers";
 import { coletarEsperasAdaptativas, montarTimingPlan, type PropostaDeEspera } from "./timing-plan";
 import { persistirRespostaFollowupPg } from "./persistir-resposta";
 
@@ -39,7 +39,8 @@ export interface TurnBridgeAdminClient extends AdminClient {
 /** Resultado de um turno `followup_turn` dirigido por fluxo, por `purpose`. */
 export type TurnResult =
   | { kind: "sent" }
-  | { kind: "skipped"; reason: string }
+  /** Encerra a inscrição. `outcome` (ex.: humano ativo → `handoff`) vai à coluna quando presente. */
+  | { kind: "skipped"; reason: string; outcome?: EnrollmentOutcome }
   /** O passo não enviou e o fluxo SEGUE (ex.: fora das 24h do Instagram). `skipped` encerra. */
   | { kind: "pulado"; reason: string }
   | { kind: "classified"; class: string }
@@ -131,7 +132,7 @@ export async function completeTurnForEnrollment(
   };
 
   if(result.kind === "skipped"){
-    await applyStep("turn_skipped",{reason:result.reason},{status:"cancelled",cancel_reason:result.reason,completed_at:now.toISOString(),next_eval_at:null});
+    await applyStep("turn_skipped",{reason:result.reason},{status:"cancelled",...(result.outcome?{outcome:result.outcome}:{}),cancel_reason:result.reason,completed_at:now.toISOString(),next_eval_at:null});
     return;
   }
 

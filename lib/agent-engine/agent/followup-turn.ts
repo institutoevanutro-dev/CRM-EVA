@@ -39,7 +39,7 @@ import {
   type LeadCheckpointRow,
 } from './inbound-turn';
 import { isLeadInHandoff } from './human-handoff';
-import { TEXTO_DO_BLOQUEIO, decidirEnvio, lerFatosDoEnvio } from '../../followup/bloqueios-obrigatorios';
+import { OUTCOME_DO_BLOQUEIO, TEXTO_DO_BLOQUEIO, conferirAntesDoEnvio } from '../../followup/bloqueios-obrigatorios';
 import { ERRO_FORA_DAS_24H } from '../edge/crm/send-ledger';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import type { LeadStateRow } from './lead-state';
@@ -105,7 +105,7 @@ export const followupTurnPayloadSchema = z
  *  (agent-engine não importa followup/* — regra dura de dependência numa direção só). */
 export type FollowupFlowTurnResult =
   | { kind: 'sent' }
-  | { kind: 'skipped'; reason: string }
+  | { kind: 'skipped'; reason: string; outcome?: 'converted' | 'replied' | 'exhausted' | 'opted_out' | 'handoff' }
   | { kind: 'pulado'; reason: string }
   | { kind: 'classified'; class: string }
   | { kind: 'planned'; propostas: PropostaDeEsperaBruta[]; modelo: string };
@@ -365,16 +365,13 @@ async function runFlowDrivenTurn(
     // Conferidos AQUI, no último ponto antes dos dois caminhos de envio (texto
     // fixo e turno do agente), relendo o banco agora — nunca confiando no que o
     // tick do fluxo viu quando enfileirou. Não dependem da supervisão ter rodado.
-    // Falha fechada: sem conseguir conferir, não envia.
-    const leitura = await lerFatosDoEnvio(pool, {
-      organizationId: target.tenantId,
-      contactId: target.leadId,
-      conversationId: target.conversationId,
-      enrollmentId,
-    });
-    const bloqueio = leitura.ok
-      ? decidirEnvio(leitura.fatos, leitura.config, clock())
-      : ({ envia: false, motivo: 'nao_verificavel', invalida: false } as const);
+    // Falha fechada: sem conseguir conferir, não envia. É a MESMA decisão do
+    // atalho do texto fixo (`lib/followup/enviar-texto-fixo.ts`).
+    const bloqueio = await conferirAntesDoEnvio(
+      pool,
+      { organizationId: target.tenantId, contactId: target.leadId, conversationId: target.conversationId, enrollmentId },
+      clock(),
+    );
     if (!bloqueio.envia) {
       runLog.info('envio do fluxo barrado por bloqueio obrigatório', { motivo: bloqueio.motivo });
       if (bloqueio.motivo === 'fora_das_24h_do_instagram') {
@@ -408,7 +405,11 @@ async function runFlowDrivenTurn(
           organizationId: target.tenantId,
           enrollmentId,
           nodeId,
-          result: { kind: 'skipped', reason: TEXTO_DO_BLOQUEIO[bloqueio.motivo] },
+          result: {
+            kind: 'skipped',
+            reason: TEXTO_DO_BLOQUEIO[bloqueio.motivo],
+            ...(OUTCOME_DO_BLOQUEIO[bloqueio.motivo] ? { outcome: OUTCOME_DO_BLOQUEIO[bloqueio.motivo] } : {}),
+          },
         });
         return;
       }
@@ -418,8 +419,6 @@ async function runFlowDrivenTurn(
         // tentativas, o `job_dead` abre o aviso na Central com este motivo.
         throw new Error(TEXTO_DO_BLOQUEIO[bloqueio.motivo]);
       }
-      // `atendimento_humano`: segue para os caminhos abaixo, que já conferem o
-      // handoff e aplicam a política do fluxo (pausar/cancelar) do jeito de sempre.
     }
 
     const body = await resolveFlowSendBody(pool, target.tenantId, input);
