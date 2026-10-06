@@ -296,3 +296,41 @@ O instante cobre o caso do rearme, em que a lista regravada fica igual.
 - Tela: caso novo em `tests/e2e/agenda-tipos-de-agendamento.spec.ts` (portado do `6146539da`,
   mais a prévia). Se não der para rodar Playwright em ambiente fresco, o PR declara
   **NÃO MEDIDO** para a prova de tela.
+
+---
+
+## 6. Living System Checklist (DoD 13) e registro de jornada
+
+```
+Living System Checklist — lembrete editável, pelo WhatsApp, refeito ao remarcar
+[x] Quem me alimenta?  calendar_event_types.reminder_body, gravado pelo PATCH de
+    app/api/v1/agenda/tipos/route.ts; calendar_appointments (starts_at, time_zone,
+    unit_id → calendar_units.name, owner_user_id, starts_at_marked_at gravado pelo
+    gatilho trg_starts_at_marked_at); conversations e channel_sessions do contato.
+[x] Quem eu alimento?  sendMessageHandler (a mensagem no inbox da conversa do
+    paciente, com o desfecho da entrega) e o carimbo reminder_sent_offsets_minutes /
+    reminder_sent_at que a próxima rodada lê.
+[x] Que atividade/log eu emito?  audit agenda.tipo_alterado com `reminder_body` na
+    lista de campos; audit agenda.lembrete_enviado com `motivos`, que agora inclui
+    `carimbo_falhou` e `mudou_na_rodada`; a própria mensagem na conversa.
+[x] Onde eu apareço na tela?  Configurações › Agenda (campo, ajuda, prévia e o selo
+    "· texto próprio" na lista); a mensagem enviada na conversa do Inbox.
+[x] Por qual porta se chega até mim?  a tela já existente /app/settings/tenant/agenda,
+    que está no NAV_CATALOG; nenhuma tela nova.
+[x] Qual meu mecanismo anti-morte?  N/A: o lembrete não abre demanda. Sem canal ou
+    fora da janela, a rodada pula sem carimbar e tenta na seguinte.
+[x] Onde se CONFIGURA o que eu uso?  a mesma tela (ver e mudar). Falta de canal vira
+    o motivo `sem_canal` no audit; não vira aviso na Central (dívida antiga, não
+    desta mudança).
+[x] Qual a continuidade IA↔humano?  N/A: envio de sistema; a descrição de
+    crm_reschedule_appointment passa a dizer à IA o que o lembrete faz de verdade.
+[x] Qual meu LAÇO DE RETORNO?  (1) a prévia: quem escreve vê o texto que o paciente
+    recebe antes de salvar, e variável errada vira aviso e 422; (2) os `motivos` do
+    audit agenda.lembrete_enviado (`carimbo_falhou`, `mudou_na_rodada`, `sem_canal`);
+    (3) a resposta do paciente volta à mesma conversa, porque o canal é o dela.
+[x] Atualizei o mapa vivo?  N/A: nenhuma peça nova; o cron, a tela e as tabelas já
+    existiam. `docs/architecture/` não modela o agenda-reminder hoje.
+```
+
+Registro de jornada: `docs/testing/user-journey-map.md`, J13.14, com status
+**NÃO MEDIDO** para a prova de tela em ambiente fresco.

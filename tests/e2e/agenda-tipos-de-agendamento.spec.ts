@@ -397,5 +397,23 @@ test("ligo o aviso do compromisso pela tela, e ele fica ligado", async ({ page }
   ).toBeVisible({ timeout: 20_000 });
   await expect(depois).toContainText("60 min");
 
+  // ── O TEXTO PRÓPRIO (porte de 6146539da), com a prévia deste fork. A prévia
+  //    usa a mesma função do cron: o que aparece é o que o paciente recebe.
+  await depois.getByRole("button", { name: "Editar" }).click();
+  const texto = depois.getByTestId(/^editar-lembrete-texto-/).first();
+  await expect(texto).toBeEnabled();
+  await texto.fill("Oi {{primeiro_nome}}, te espero {{quando}} às {{hora}}.");
+  await expect(depois.getByTestId(/^previa-lembrete-/).first()).toContainText("Oi Maria, te espero amanhã às 14:30.");
+  await depois.getByTestId(/^salvar-/).first().click();
+
+  await expect(depois).toContainText("texto próprio", { timeout: 20_000 });
+  await page.reload();
+  const gravado = page.getByTestId("lista-de-tipos").getByRole("listitem").filter({ hasText: nome });
+  await expect(gravado).toContainText("texto próprio", { timeout: 20_000 });
+  await gravado.getByRole("button", { name: "Editar" }).click();
+  await expect(gravado.getByTestId(/^editar-lembrete-texto-/).first()).toHaveValue(
+    "Oi {{primeiro_nome}}, te espero {{quando}} às {{hora}}.",
+  );
+
   await page.screenshot({ path: "evidence/calendario/lembrete-ligado.png", fullPage: true });
 });
