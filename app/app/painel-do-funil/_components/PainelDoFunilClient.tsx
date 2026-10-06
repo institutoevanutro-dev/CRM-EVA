@@ -346,7 +346,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
               : "—"
           }
           regua={t(
-            "Investimento ÷ ganhos de anúncio. O gasto é da conta inteira: com mais de um funil, o custo de cada um sai maior do que é.",
+            "Investimento ÷ ganhos de anúncio. O gasto é da conta inteira: com mais de um funil, o custo de cada um sai maior do que é. O gasto usa as datas no fuso da conta; os ganhos, no da organização.",
           )}
         />
         <Numero
@@ -358,7 +358,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
               : `${new Intl.NumberFormat(tag, { maximumFractionDigits: 2 }).format(n.roas)}×`
           }
           regua={t(
-            "Receita dos ganhos de anúncio na moeda da conta ÷ investimento. O gasto é da conta inteira.",
+            "Receita dos ganhos de anúncio na moeda da conta ÷ investimento. O gasto é da conta inteira e usa as datas no fuso da conta; os ganhos, no da organização.",
           )}
         />
         <Numero

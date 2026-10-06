@@ -127,6 +127,17 @@ describe("sem investimento", () => {
   });
 });
 
+describe("réguas que dividem gasto por ganho", () => {
+  // O gasto fecha o dia no fuso da CONTA; os ganhos, no da ORGANIZAÇÃO. A régua
+  // do Investimento já dizia isso; as duas divisões que o usam também precisam.
+  it.each(["custo_por_venda", "roas"])("%s declara os dois fusos", (id) => {
+    render(<PainelDoFunilClient podeConectar />);
+    const texto = document.querySelector(`[data-numero="${id}"]`)?.textContent ?? "";
+    expect(texto).toContain("fuso da conta");
+    expect(texto).toContain("no da organização");
+  });
+});
+
 describe("formulário depois de um Aplicar com erro", () => {
   it("mantém funis, campos e período da última resposta boa e mostra o erro", async () => {
     const user = userEvent.setup();

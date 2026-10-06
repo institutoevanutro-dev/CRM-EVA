@@ -231,7 +231,10 @@ UMA vez, pelo vínculo mais recente (`created_at`) a um card deste funil.
    PII). Valor fora das opções vira o balde "(fora da lista)", sem o texto.
 8. **Fuso:** CRM no fuso da organização (`fusoUtilizavel(authz.org.timezone)`);
    gasto no fuso da conta de anúncios (é como a plataforma fecha o dia). As mesmas
-   datas civis vão para os dois; a régua do Investimento diz isso.
+   datas civis vão para os dois; a régua do Investimento diz isso, e as do Custo
+   por venda e do ROAS também, porque dividem números de janelas que podem não
+   coincidir (achado da revisão de 2026-10-06; a tela Meta Ads alinha o CRM ao
+   fuso da conta, mas o pedido aqui fixa o fuso da organização).
 9. **Leituras da plataforma por carregamento:** contas, depois insights +
    anúncios em paralelo (3 chamadas; as contas vêm antes porque escolhem a conta). A tela usa `staleTime` de 5 min e não recarrega ao focar a janela; o
    cliente não re-tenta (`retry: false`), porque cada tentativa gasta cota.
