@@ -95,8 +95,10 @@ export const ESCOPO_DAS_ESCRITAS: Readonly<Record<string, Readonly<Record<string
   crm_schedule_followup: { lead_id: "negocio", contact_id: "contato" },
   crm_cancel_followup: { followup_id: "retorno" },
 
-  // ---- sem registro de paciente ----
-  crm_save_org_memory: {},
+  // `crm_save_org_memory` fica FORA de propósito, e por isso é recusada no
+  // turno: a memória da clínica entra no prompt de TODO atendimento, e o que a
+  // IA anotasse na conversa de um paciente chegaria à conversa de outro. Fora
+  // de conversa (sem contato do turno) ela segue como antes.
 };
 
 export type VereditoDaEscrita =

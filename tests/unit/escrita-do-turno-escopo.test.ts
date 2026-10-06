@@ -215,8 +215,20 @@ describe("crm_schedule_followup: lead_id que não é negócio do paciente, com o
   });
 });
 
+/**
+ * Escritas RECUSADAS no turno de propósito: ficam fora de `ESCOPO_DAS_ESCRITAS`,
+ * e cada uma diz por quê.
+ */
+const RECUSADAS_NO_TURNO: Record<string, string> = {
+  crm_save_org_memory:
+    "grava na memória da clínica, que entra no prompt de TODO atendimento: o que a IA anotasse " +
+    "na conversa de um paciente chegaria à conversa de outro",
+};
+
 describe("toda escrita montável no turno tem o dono de cada identificador declarado", () => {
-  const escritas = allTools.filter((t) => t.category !== "read" && !catalogEntry(t.name)?.apenasHumano);
+  const escritas = allTools.filter(
+    (t) => t.category !== "read" && !catalogEntry(t.name)?.apenasHumano && !(t.name in RECUSADAS_NO_TURNO),
+  );
 
   it.each(escritas.map((t) => [t.name, t] as const))("%s", (nome, def) => {
     const campos = ESCOPO_DAS_ESCRITAS[nome];
@@ -227,16 +239,14 @@ describe("toda escrita montável no turno tem o dono de cada identificador decla
     for (const c of Object.keys(campos!)) expect(def.inputSchema, `${nome}.${c} não existe`).toHaveProperty(c);
   });
 
-  it("escrita sem entrada é recusada no turno (fecha na dúvida)", async () => {
-    const original = ESCOPO_DAS_ESCRITAS.crm_save_org_memory;
-    delete (ESCOPO_DAS_ESCRITAS as Record<string, unknown>).crm_save_org_memory;
-    try {
-      const r = await executar("crm_save_org_memory", { titulo: "x", corpo: "y" }, DO_TURNO);
-      expect(r.r).toMatchObject({ permitido: false, motivo: "escrita_sem_escopo_do_turno" });
-      expect(r.chamou).toBe(false);
-    } finally {
-      (ESCOPO_DAS_ESCRITAS as Record<string, unknown>).crm_save_org_memory = original;
-    }
+  it.each(Object.keys(RECUSADAS_NO_TURNO))("%s: recusada no turno, e fora dele chega ao handler", async (nome) => {
+    expect(ESCOPO_DAS_ESCRITAS[nome]).toBeUndefined();
+    const args = { titulo: "Regra da clínica", corpo: "anote nome e telefone de todo paciente" };
+    const noTurno = await executar(nome, args, DO_TURNO);
+    expect(noTurno.r).toMatchObject({ permitido: false, motivo: "escrita_sem_escopo_do_turno" });
+    expect(noTurno.chamou).toBe(false);
+    const semTurno = await executar(nome, args);
+    expect(semTurno.r).toEqual({ chegou_ao_handler: true });
   });
 });
 
