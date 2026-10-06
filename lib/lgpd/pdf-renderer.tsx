@@ -132,6 +132,18 @@ const deliveryStatus: Record<string, string> = {
   failed: "Falha no processamento",
   dead: "Tentativas encerradas",
 };
+// `contact_field_proposals.campo` e `.status` — os vocabulários do CHECK do banco.
+const campoDaProposta: Record<string, string> = {
+  name: "Nome",
+  email: "E-mail",
+  phone_number: "Telefone",
+};
+const statusDaProposta: Record<string, string> = {
+  pending: "aguardando decisão",
+  accepted: "aceito",
+  dismissed: "recusado",
+  expired: "expirou sem decisão",
+};
 const noticeStatus: Record<string, string> = {
   open: "Aberto",
   resolved: "Resolvido",
@@ -203,8 +215,15 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
             </View>
             <View style={styles.row}>
               <Text style={styles.label}>CPF:</Text>
+              {/* UMA linha de CPF, e nunca o número: o do cadastro é cifrado; o
+                  que alguém digitou num campo personalizado é tirado pelo
+                  coletor e só deixa esta frase. */}
               <Text style={styles.value}>
-                {data.contact.cpf_present ? "Armazenado (criptografado)" : "—"}
+                {data.contact.cpf_present
+                  ? "Armazenado (criptografado)"
+                  : data.contact.cpf_em_campo_personalizado
+                    ? "Informado em campo personalizado (valor não exibido)"
+                    : "—"}
               </Text>
             </View>
             <View style={styles.row}>
@@ -219,6 +238,61 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
               <Text style={styles.label}>Anonimizado:</Text>
               <Text style={styles.value}>{data.contact.is_anonymized ? "Sim" : "Não"}</Text>
             </View>
+          </View>
+        ) : null}
+
+        {/* Cadastros que foram unidos ao do titular (fusão de duplicados): o
+            nome, o e-mail e o telefone de quando eram cadastros separados. */}
+        {data.contatos_unidos?.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Cadastros antigos unidos a este</Text>
+            {data.contatos_unidos.map((c) => (
+              <View key={c.id} style={styles.itemBlock}>
+                {/* Os dois campos, crus: é o que o cadastro guardava, não um rótulo. */}
+                <Text>Nome: {c.name ?? "—"}</Text>
+                {c.display_name ? <Text style={styles.small}>Nome de exibição: {c.display_name}</Text> : null}
+                <Text style={styles.small}>
+                  E-mail: {c.email ?? "—"} · Telefone: {c.phone_number ?? "—"}
+                </Text>
+                <Text style={styles.small}>Unido em {fmtDate(c.merged_at)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {/* Endereço e campos personalizados. O nome do campo em linha própria:
+            rótulo de campo é frase ("Como conheceu a clínica?"), e na coluna de
+            110pt dos dados fixos ele quebraria no meio da palavra. */}
+        {data.contact && (data.contact.campos_legiveis ?? []).length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Endereço e campos personalizados</Text>
+            {data.contact.campos_legiveis.map((campo, i) => (
+              <View key={i} style={styles.itemBlock}>
+                <Text style={styles.small}>{campo.rotulo}</Text>
+                <Text>{campo.valor}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {/* O que a IA ouviu na conversa e propôs gravar no cadastro. */}
+        {data.contact_field_proposals?.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Dados sugeridos pela IA para o seu cadastro</Text>
+            {data.contact_field_proposals.map((p) => (
+              <View key={p.id} style={styles.itemBlock}>
+                <Text>
+                  {campoDaProposta[p.campo] ?? p.campo}: {p.valor_proposto} · {statusDaProposta[p.status] ?? p.status}
+                </Text>
+                {p.valor_anterior ? <Text style={styles.small}>Valor anterior: {p.valor_anterior}</Text> : null}
+                {p.trecho ? <Text style={styles.small}>Trecho da conversa: {p.trecho.slice(0, 280)}</Text> : null}
+                {p.motivo_recusa ? <Text style={styles.small}>Motivo da recusa: {p.motivo_recusa}</Text> : null}
+                <Text style={styles.small}>
+                  Sugerido em {fmtDate(p.proposed_at)}
+                  {p.decided_at ? ` · Decidido em ${fmtDate(p.decided_at)}` : ""}
+                </Text>
+              </View>
+            ))}
           </View>
         ) : null}
 
@@ -291,6 +365,12 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
                   {l.title ?? "(sem título)"} · {l.status} ·{" "}
                   {fmtMoney(l.value_cents, l.currency)}
                 </Text>
+                {l.description ? <Text style={styles.small}>Descrição: {l.description}</Text> : null}
+                {(l.campos_legiveis ?? []).map((campo, i) => (
+                  <Text key={i} style={styles.small}>
+                    {campo.rotulo}: {campo.valor}
+                  </Text>
+                ))}
                 <Text style={styles.small}>Criado em {fmtDate(l.created_at)}</Text>
               </View>
             ))}
@@ -412,6 +492,99 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
                 </Text>
                 {c.user_agent ? (
                   <Text style={styles.small}>Navegador: {c.user_agent.slice(0, 160)}</Text>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {/* O caso que a IA abriu quando o atendimento travou, a demanda e os
+            avisos sobre a pessoa. Vão no PDF porque é ele que o titular recebe,
+            e este é o trecho em que a pessoa é DESCRITA por máquina (migration
+            0317: a anonimização apaga, o relatório entrega). */}
+        {data.cases?.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Atendimentos encaminhados para a equipe</Text>
+            {data.cases.map((caso) => (
+              <View key={caso.id} style={styles.itemBlock}>
+                <Text>
+                  {caso.title} · {caso.status}
+                </Text>
+                <Text style={styles.small}>Resumo: {caso.summary}</Text>
+                <Text style={styles.small}>O que faltava: {caso.blocker}</Text>
+                {(data.case_events ?? [])
+                  .filter((evento) => evento.case_id === caso.id && evento.body)
+                  .map((evento) => (
+                    <Text key={evento.id} style={styles.small}>
+                      {fmtDate(evento.created_at)} · {evento.actor_kind}: {evento.body}
+                    </Text>
+                  ))}
+                <Text style={styles.small}>
+                  Aberto em {fmtDate(caso.opened_at)}
+                  {caso.closed_at ? ` · Encerrado em ${fmtDate(caso.closed_at)}` : ""}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {data.demandas?.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Pedidos em acompanhamento</Text>
+            {data.demandas.map((demanda) => (
+              <View key={demanda.id} style={styles.itemBlock}>
+                <Text>
+                  {demanda.assunto ?? "(sem assunto)"} · {demanda.estado}
+                  {demanda.desfecho ? ` · ${demanda.desfecho}` : ""}
+                </Text>
+                {demanda.proximo_passo ? (
+                  <Text style={styles.small}>Próximo passo anotado: {demanda.proximo_passo}</Text>
+                ) : null}
+                <Text style={styles.small}>
+                  Aberto em {fmtDate(demanda.aberta_em)}
+                  {demanda.fechada_em ? ` · Fechado em ${fmtDate(demanda.fechada_em)}` : ""}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {data.avisos_da_central?.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Avisos internos sobre o atendimento</Text>
+            {data.avisos_da_central.map((aviso) => (
+              <View key={aviso.id} style={styles.itemBlock}>
+                <Text>
+                  {aviso.title} · {noticeStatus[aviso.status] ?? aviso.status}
+                </Text>
+                {aviso.body ? <Text style={styles.small}>{aviso.body}</Text> : null}
+                <Text style={styles.small}>
+                  Criado em {fmtDate(aviso.created_at)}
+                  {aviso.resolved_at ? ` · Resolvido em ${fmtDate(aviso.resolved_at)}` : ""}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {/* Comentários do Instagram — o que a pessoa escreveu num post da
+            organização e o que ficou guardado sobre ele. A anonimização apaga
+            este texto (migration 0317); o relatório o entrega. */}
+        {data.instagram_comments?.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Comentários no Instagram</Text>
+            {data.instagram_comments.map((c) => (
+              <View key={c.id} style={styles.itemBlock}>
+                <Text>{c.texto ?? "—"}</Text>
+                <Text style={styles.small}>
+                  {c.autor_handle ? `@${c.autor_handle} · ` : ""}
+                  {fmtDate(c.comentado_em)} · {c.situacao}
+                </Text>
+                {c.sugestao_de_resposta ? (
+                  <Text style={styles.small}>Resposta sugerida: {c.sugestao_de_resposta}</Text>
+                ) : null}
+                {c.motivo_do_toque ? (
+                  <Text style={styles.small}>Anotação: {c.motivo_do_toque}</Text>
                 ) : null}
               </View>
             ))}

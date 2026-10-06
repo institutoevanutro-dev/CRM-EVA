@@ -86,7 +86,11 @@ async function naFila(caminho: string, bucket = "internal-media"): Promise<numbe
   return rows[0].n;
 }
 
-/** O UPDATE que `fn_lgpd_anonymize_contact` faz (a RPC exige sessão com MFA provado). */
+/**
+ * O UPDATE que `fn_lgpd_anonymize_contact` fazia até a migration 0317 — hoje ela
+ * chama a cascata do pedido formal. O gatilho medido aqui continua valendo para
+ * QUALQUER caminho que vire `is_anonymized`, e é isso que este UPDATE exercita.
+ */
 async function anonimizarPelaTela(contato: string, org = ORG) {
   await q(
     `update contacts set name = null, display_name = 'Contato Anonimizado #x', email = null, phone_number = null,
