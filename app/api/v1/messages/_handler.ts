@@ -904,31 +904,40 @@ export async function sendMessageHandler(
         message=await recordApprovedReplyReceiptSupabase(supabase,ctx.approvedReply,message.id,externalId,
           externalId?(adapter.echoExternalIds?.({externalId,recipient:chatId})??[externalId]):[]) as unknown as Message;
       } else {
-      await removerEcoDoProprioEnvio(
-        supabase,
-        ctx.organization_id,
-        c.id,
-        message.id,
-        externalId,
-        externalId
-          ? (adapter.echoExternalIds?.({ externalId, recipient: chatId }) ?? [externalId])
-          : [],
-      );
-      const { data: updated } = await supabase
-        .from("messages")
-        .update({
-          status: "sent",
-          external_id: externalId,
-          ack: 0,
-          // Colunas só do template — é o que responde custo e conformidade de
-          // janela depois, sem varrer jsonb.
-          ...(input.type === "template"
-            ? { template_name: input.template_name, template_language: input.template_language }
-            : {}),
-        })
-        .eq("id", message.id)
-        .select(MSG_COLS)
-        .maybeSingle();
+      const candidatosDoEco = externalId
+        ? (adapter.echoExternalIds?.({ externalId, recipient: chatId }) ?? [externalId])
+        : [];
+      const limparEco = () =>
+        removerEcoDoProprioEnvio(supabase, ctx.organization_id, c.id, message.id, externalId, candidatosDoEco);
+      const marcarEnviada = (comId: boolean) =>
+        supabase
+          .from("messages")
+          .update({
+            status: "sent",
+            ...(comId ? { external_id: externalId } : {}),
+            ack: 0,
+            // Colunas só do template — é o que responde custo e conformidade de
+            // janela depois, sem varrer jsonb.
+            ...(input.type === "template"
+              ? { template_name: input.template_name, template_language: input.template_language }
+              : {}),
+          })
+          .eq("id", message.id)
+          .select(MSG_COLS)
+          .maybeSingle();
+      await limparEco();
+      let { data: updated, error: erroAoMarcar } = await marcarEnviada(true);
+      // O eco que o webhook inseriu ENTRE a limpeza e este UPDATE já ocupa o id
+      // (o eco grava a mesma forma bare que o envio — DeskcommCRM #1855), e o
+      // unique recusa. Mesma recusa que o watchdog trata em `markRedriveSent`:
+      // limpar de novo e carimbar outra vez; se ainda colidir, a mensagem SAIU e
+      // fica `sent` sem o id — nunca `queued`, que é pedir para ser reenviada.
+      // (Porte do DeskcommCRM 098aef895.)
+      if (erroAoMarcar?.code === "23505") {
+        await limparEco();
+        ({ data: updated, error: erroAoMarcar } = await marcarEnviada(true));
+        if (erroAoMarcar?.code === "23505") ({ data: updated } = await marcarEnviada(false));
+      }
       if (updated) message = updated as unknown as Message;
       }
     } catch (err) {

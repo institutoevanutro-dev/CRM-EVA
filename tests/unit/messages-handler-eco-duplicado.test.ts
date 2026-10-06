@@ -287,3 +287,76 @@ describe('o que a correção NÃO pode apagar', () => {
     expect(messages.find((m) => m.id === 'crm-1'), 'apagou uma linha que não era eco de dispositivo').toBeDefined();
   });
 });
+
+describe('o eco que entra ENTRE a limpeza e o carimbo do id (DeskcommCRM #1855)', () => {
+  /**
+   * Porte do DeskcommCRM 098aef895 (autor original: melgarafael).
+   *
+   * Com o eco gravando o id curto (bare) — o mesmo que o envio grava —, a
+   * colisão no unique `(organization_id, external_id)` passou a poder cair do
+   * lado do ENVIO: a limpeza do eco e o UPDATE que carimba o id são duas
+   * chamadas, e o eco que o webhook insere entre elas ocupa o id primeiro. O
+   * UPDATE volta `23505`, e ignorar esse erro deixava a linha do envio em
+   * `queued`, sem id — sem ack e à mercê de um reenvio.
+   *
+   * O dublê não tem relógio: o eco é injetado logo depois do DELETE, que é
+   * exatamente a ordem que a corrida produz.
+   */
+  function ecoEntraDepoisDaLimpeza(
+    supabase: ReturnType<typeof makeSupabase>['supabase'],
+    messages: Row[],
+    eco: Row,
+  ) {
+    const from = supabase.from.bind(supabase);
+    let injetado = false;
+    (supabase as unknown as { from: (t: string) => unknown }).from = (tabela: string) => {
+      const q = from(tabela) as unknown as { delete?: () => { then: PromiseLike<unknown>['then'] } };
+      if (tabela !== 'messages' || !q.delete) return q;
+      const del = q.delete.bind(q);
+      q.delete = () => {
+        const cadeia = del();
+        const then = cadeia.then.bind(cadeia);
+        cadeia.then = (ok, falha) =>
+          then((v) => {
+            if (!injetado) {
+              injetado = true;
+              messages.push(eco);
+            }
+            return ok ? ok(v) : v;
+          }, falha) as never;
+        return cadeia;
+      };
+      return q;
+    };
+  }
+
+  it('o envio fica `sent` com o id, e a frase aparece uma vez só', async () => {
+    wahaRespondendo(BARE);
+    const { supabase, messages } = makeSupabase();
+    ecoEntraDepoisDaLimpeza(supabase, messages, ecoDoWebhook({ external_id: BARE }));
+
+    await sendMessageHandler(supabase, ctx, input);
+
+    const daMensagem = messages.filter((m) => m.external_id === BARE);
+    expect(daMensagem, 'a mesma frase ficou duas vezes, ou nenhuma linha ficou com o id').toHaveLength(1);
+    expect(daMensagem[0]!.sent_via, 'sobrou o eco do webhook, não a linha do envio').toBe('user');
+    expect(daMensagem[0]!.status).toBe('sent');
+  });
+
+  it('se o id segue ocupado por linha que não é eco, o envio fica `sent` sem id — nunca preso em `queued`', async () => {
+    // Uma linha de OUTRA conversa com o mesmo id não é apagada (o escopo da
+    // limpeza é a conversa). O unique recusa de novo; a mensagem já saiu, então
+    // o desfecho é o do watchdog: `sent`, sem o id.
+    wahaRespondendo(BARE);
+    const { supabase, messages } = makeSupabase([
+      ecoDoWebhook({ id: 'outro-1', conversation_id: OUTRA_CONV, external_id: BARE }),
+    ]);
+
+    await sendMessageHandler(supabase, ctx, input);
+
+    const doEnvio = messages.find((m) => m.sent_via === 'user')!;
+    expect(doEnvio.status, 'a mensagem que saiu ficou presa em queued').toBe('sent');
+    expect(doEnvio.external_id).toBeNull();
+    expect(messages.find((m) => m.id === 'outro-1')).toBeDefined();
+  });
+});

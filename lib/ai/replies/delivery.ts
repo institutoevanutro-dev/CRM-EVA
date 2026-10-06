@@ -94,9 +94,8 @@ export async function recordApprovedReplyReceiptSupabase(
   externalId: string | null,
   echoIds: string[],
 ) {
-  let result;
-  try {
-    result = await db.rpc("fn_reply_record_receipt", {
+  const gravar = () =>
+    db.rpc("fn_reply_record_receipt", {
       p_org: c.organizationId,
       p_job: c.jobId,
       p_worker: c.jobClaim.worker_id,
@@ -105,6 +104,15 @@ export async function recordApprovedReplyReceiptSupabase(
       p_external: externalId,
       p_echo_ids: echoIds,
     });
+  let result;
+  try {
+    result = await gravar();
+    // O eco do WhatsApp por QR grava o mesmo id curto que o envio; se ele
+    // commitar entre o `delete` e o `update` da função, o unique recusa o
+    // carimbo (23505) e a transação inteira volta. Chamar de novo é seguro e a
+    // segunda chamada já vê o eco para apagar. Uma vez só: colidir de novo é
+    // outra linha com o id, e vira o erro de persistência de sempre.
+    if (result.error?.code === "23505") result = await gravar();
   } catch (error) {
     throw new ApprovedReplyReceiptPersistenceError(error);
   }
