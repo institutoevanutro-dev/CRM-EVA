@@ -469,6 +469,8 @@ export async function lerFatosDoEnvio(
         //     `active`, e as respostas do atendimento não podem encerrá-la depois;
         //   - o início da inscrição: o fluxo que cobra DEPOIS de uma mensagem
         //     humana (gatilho de etapa, inscrição manual) não morre no 1º envio.
+        //     EXCETO no gatilho de silêncio: ele nasce depois do inbound a que
+        //     reage, e uma resposta humana nesse meio é o atendimento em curso.
         // O eco do nosso próprio envio pode sobrar como `external_device` quando
         // a remoção dele falha (`removerEcoDoProprioEnvio`, `removeRedriveEcho`):
         // não conta a linha cujo id "bare" (a cauda depois do último `_`, ver
@@ -487,7 +489,9 @@ export async function lerFatosDoEnvio(
                            (select max(ev.created_at) from followup_enrollment_events ev
                              where ev.organization_id = c.organization_id and ev.enrollment_id = $4
                                and ev.event_type = 'handoff_resumed'),
-                           (select fe.started_at from followup_enrollments fe
+                           (select case when fp.trigger_config->>'kind' = 'silence' then null else fe.started_at end
+                              from followup_enrollments fe
+                              join followup_flow_pointers fp on fp.id = fe.pointer_id and fp.organization_id = fe.organization_id
                              where fe.organization_id = c.organization_id and fe.id = $4))
                      and not (h.sent_via = 'external_device' and h.external_id is not null and exists (
                            select 1 from messages eco

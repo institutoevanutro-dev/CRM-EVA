@@ -49,7 +49,9 @@ interface Cenario {
   enrollmentId: string;
 }
 
-async function montar(opts: { handoffPolicy?: "pause" | "cancel" | "allow" } = {}): Promise<Cenario> {
+async function montar(
+  opts: { handoffPolicy?: "pause" | "cancel" | "allow"; gatilho?: Record<string, unknown> } = {},
+): Promise<Cenario> {
   const org = await novaOrg();
   const { rows: c } = await pool.query<{ id: string }>(
     `insert into contacts (organization_id, display_name) values ($1, 'Contato Humano Ativo') returning id`,
@@ -64,8 +66,8 @@ async function montar(opts: { handoffPolicy?: "pause" | "cancel" | "allow" } = {
   );
   const { rows: p } = await pool.query<{ id: string }>(
     `insert into followup_flow_pointers (organization_id, name, status, active_version_id, trigger_config, handoff_policy)
-     values ($1, 'Fluxo ' || gen_random_uuid()::text, 'active', $2, '{"kind":"manual"}'::jsonb, $3) returning id`,
-    [org, v[0]!.id, opts.handoffPolicy ?? "pause"],
+     values ($1, 'Fluxo ' || gen_random_uuid()::text, 'active', $2, $4::jsonb, $3) returning id`,
+    [org, v[0]!.id, opts.handoffPolicy ?? "pause", JSON.stringify(opts.gatilho ?? { kind: "manual" })],
   );
   const { rows: e } = await pool.query<{ id: string }>(
     `insert into followup_enrollments
@@ -155,6 +157,15 @@ describe("humano_respondeu — a consulta real", () => {
     await mensagem(c, { direction: "inbound", em: min(-30) });
     await mensagem(c, { direction: "outbound", sentVia: "user", em: min(-10) });
     expect((await fatos(c)).conversa.humano_respondeu).toBe(false);
+  });
+
+  it("gatilho de SILÊNCIO: humano entre o inbound e o início da inscrição → true (é quem está atendendo)", async () => {
+    // A inscrição de silêncio nasce DEPOIS do inbound a que reage (threshold);
+    // uma resposta humana nesse meio é exatamente o atendimento em curso.
+    const c = await montar({ gatilho: { kind: "silence", params: { threshold_minutes: 30 } } });
+    await mensagem(c, { direction: "inbound", em: min(-30) });
+    await mensagem(c, { direction: "outbound", sentVia: "user", em: min(-10) });
+    expect((await fatos(c)).conversa.humano_respondeu).toBe(true);
   });
 
   it("humano antes da retomada (handoff_resumed) → false", async () => {
