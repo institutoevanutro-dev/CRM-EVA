@@ -208,3 +208,27 @@ describe("o cron NÃO pode filtrar por reminder_sent_at", () => {
     expect(fonte).toMatch(/reminder_sent_offsets_minutes/);
   });
 });
+
+describe("o carimbo vem ANTES do envio e é condicional (#2223, spec 3.9)", () => {
+  const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+  const carimbo = fonte.slice(fonte.indexOf("reminder_sent_at: new Date()"));
+
+  it("carimba antes de chamar o envio, e o erro do carimbo impede o envio", () => {
+    expect(fonte.indexOf("reminder_sent_at: new Date()")).toBeGreaterThan(0);
+    expect(fonte.indexOf("reminder_sent_at: new Date()")).toBeLessThan(fonte.indexOf("sendMessageHandler("));
+    expect(fonte).toContain('pular("carimbo_falhou")');
+  });
+
+  it("só carimba a linha como foi LIDA — cancelada, remarcada ou carimbada por outra rodada não envia", () => {
+    // Sem a condição, uma linha cancelada no meio da rodada (até 200 linhas,
+    // 1,2 s + jitter cada) ou carimbada por uma rodada sobreposta seria
+    // carimbada de novo e enviada: em dobro, ou com a data antiga.
+    const update = carimbo.slice(0, 1600);
+    expect(update).toContain('.eq("status", "confirmed")');
+    expect(update).toContain('.eq("starts_at", linha.starts_at)');
+    expect(update).toContain('.filter("reminder_sent_offsets_minutes", "eq"');
+    expect(update).toContain('.eq("reminder_sent_at", linha.reminder_sent_at)');
+    expect(update).toContain('.select("id")');
+    expect(fonte).toContain('pular("mudou_na_rodada")');
+  });
+});
