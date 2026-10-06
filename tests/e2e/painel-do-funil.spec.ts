@@ -169,14 +169,21 @@ test("o gestor lê o funil do período com a régua de cada número", async ({ p
     expect(r.status()).toBe(201);
     cards.push(((await r.json()) as { data: { id: string; updated_at: string } }).data);
   }
-  await db
-    .from("crm_leads")
-    .update({ custom_fields: { modalidade: "online" } })
-    .eq("id", cards[0]!.id);
-  await db
-    .from("crm_leads")
-    .update({ custom_fields: { modalidade: "presencial" } })
-    .eq("id", cards[2]!.id);
+  // A escrita direta muda o updated_at do card; o /move compara essa versão
+  // (expected_updated_at) e recusa com 409 se o teste mandar a da criação.
+  for (const [i, modalidade] of [
+    [0, "online"],
+    [2, "presencial"],
+  ] as const) {
+    const { data, error } = await db
+      .from("crm_leads")
+      .update({ custom_fields: { modalidade } })
+      .eq("id", cards[i]!.id)
+      .select("updated_at")
+      .single();
+    expect(error).toBeNull();
+    cards[i]!.updated_at = (data as { updated_at: string }).updated_at;
+  }
 
   // Card 1 interage; card 2 interage e é ganho.
   const mover = async (card: { id: string; updated_at: string }, stageId: string) => {
