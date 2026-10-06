@@ -24,6 +24,35 @@ absolutos ou `git -C $W`.
   Leia o exit code, o rodapé (`Test Files`/`Tests`/`Errors`) e a lista de `FAIL`.
 - Não crie `.env.local`. Não toque em `lib/channels/pos-entrada.ts`.
 
+## Correções da revisão (2026-10-06), que valem por cima do texto dos passos
+
+- **Passo 1**: o UPDATE do carimbo ganha `.eq("status","confirmed")`, `.eq("starts_at", linha.starts_at)`,
+  a lista lida (`.filter("reminder_sent_offsets_minutes","eq","{…}")`), o `reminder_sent_at` lido
+  quando não é nulo (`.eq`, nunca `.is`, que o teste do cron proíbe) e `.select("id")`. Sem linha
+  devolvida, `pular("mudou_na_rodada")`. Spec 3.9.
+- **Passo 2**: o teste estrutural portado tem **quatro** trocas: MIGRATION, BLOCO, a guarda de
+  vacuidade da primeira linha (`/^-- 20261006120323_0323_/` em vez de `/^-- manifest: \S/`) e o
+  carimbo e o número do último caso (`20261006120323_` e `_0323_`). Timestamp
+  `20261006120323`, conferido na `origin/main` no commit. A 0323 também regrava o
+  `comment on column calendar_appointments.reminder_sent_at` (spec 3.10).
+- **Passo 3**: o parágrafo do cabeçalho do `route.ts` que diz "ninguém consegue LIGAR o lembrete
+  pela tela" é reescrito.
+- **Passo 5**: `variaveisDesconhecidas` recusa qualquer `{{…}}` que não seja exatamente uma
+  variável (`/\{\{([^{}]*)\}\}/g`, aparado e em minúsculas) e `{`/`}` soltos que sobrem. Casos
+  vermelhos novos: `{nome}` e `{{primeiro nome}}`. O teste 5 (`reminder_body: undefined`) **sai**:
+  ele já passa hoje (o `JSON.stringify` descarta `undefined`), então o filtro de `undefined` entra
+  como porte sem prova. O vermelho do dublê `lembreteMensagem: null` só aparece em `pnpm typecheck`.
+- **Passo 6**: a limpeza com molde colapsa só `[ \t]{2,}` e ` ([,.!?])`, nunca `\n`. Caso novo:
+  molde de 3 linhas sai com as 3 linhas.
+- **Passo 7**: `calendar_units!calendar_appointments_unit_fk(name)` embutido na consulta da varredura
+  (sem consulta por linha). `{{unidade}}` vazio sem `unit_id`. Fuso = `linha.time_zone` direto, sem
+  reserva e sem o teste `timezone: linha.time_zone ||`. `profissional` detectado por
+  `variaveisDoMolde(molde).includes("profissional")`; caso `{{Profissional}}` no teste.
+- **Passo 11**: o fragmento de correção se divide (o degrau vencido na marcação vai com
+  `secao: alterado`, `impacto: capacidade_nova`); checklist do Sistema Vivo respondido no PR com os
+  artefatos; linha no `docs/testing/user-journey-map.md`.
+- **Pendências**: sem recomendar degrau novo; a correção mínima do documento é apagar a linha da 4.10.
+
 ---
 
 ## Passo 0: base
@@ -94,7 +123,7 @@ pnpm --dir $W vitest run lib/agenda/aviso-do-compromisso-lembrete.test.ts app/ap
 
 1. `tests/unit/remarcacao-carimba-quando-o-horario-foi-marcado.test.ts`: versão do
    `9e5027f1f`, com duas trocas:
-   - `MIGRATION` aponta para `20261006120000_0323_lembrete_editavel.sql`;
+   - `MIGRATION` aponta para `20261006120323_0323_lembrete_editavel.sql`;
    - `BLOCO` = `-- ---- lembrete editável e régua da remarcação (migration 0323) ----`.
 
    Vermelho: o arquivo não existe.
@@ -106,8 +135,8 @@ pnpm --dir $W vitest run lib/agenda/aviso-do-compromisso-lembrete.test.ts app/ap
 
 **Mudança mínima:**
 
-- Arquivo novo `supabase/migrations/20261006120000_0323_lembrete_editavel.sql`. Comece com
-  o cabeçalho no padrão do repo (`-- 20261006120000_0323_lembrete_editavel.sql` / `-- 0323 — …`)
+- Arquivo novo `supabase/migrations/20261006120323_0323_lembrete_editavel.sql`. Comece com
+  o cabeçalho no padrão do repo (`-- 20261006120323_0323_lembrete_editavel.sql` / `-- 0323 — …`)
   e o corpo da `0536` do original, idêntico: coluna `starts_at_marked_at`, `comment`,
   `fn_starts_at_marked_at` com `set search_path = ''`, `revoke … from public, anon, authenticated`,
   `grant … to service_role`, `drop trigger if exists` + `create trigger trg_starts_at_marked_at before update of starts_at`.
@@ -115,7 +144,7 @@ pnpm --dir $W vitest run lib/agenda/aviso-do-compromisso-lembrete.test.ts app/ap
 - `supabase/baseline.sql`: o mesmo bloco, rotulado como em `BLOCO`, inserido **depois** de
   `-- ---- fim: travas no banco (migration 0319) ----` e **antes** de
   `-- ---- VARREDURA anon: …` (hoje `baseline.sql:33409-33411`). Confira a posição com `grep -n`.
-- `supabase/migrations/MANIFEST.md`: linha nova `20261006120000 | 0323_lembrete_editavel`,
+- `supabase/migrations/MANIFEST.md`: linha nova `20261006120323 | 0323_lembrete_editavel`,
   descrevendo o quê, o porquê e o porte. A linha cresce no passo 5.
 - `lib/database.types.ts`: `starts_at_marked_at: string | null` (Row) e `?: string | null`
   (Insert/Update) em `calendar_appointments`, como no `9e5027f1f`.
@@ -453,7 +482,8 @@ grep -aE "^ *FAIL " $S/db.log | sed 's/ > .*//' | sort | uniq -c
 - O documento de negócio (`docs/superpowers/specs/2026-10-05-funil-comercial-dr-andre-design.md`
   na pasta principal) precisa mudar em três pontos:
   - **4.10**: o lembrete não sai mais minutos depois de marcar uma consulta para menos de
-    24h. Sugerir um degrau extra de 120 min nos tipos do Dr. André.
+    24h. A correção mínima é apagar a linha. Um degrau extra curto custa dois avisos para todo
+    paciente marcado com mais de 24h; a escolha é do dono, sem recomendação.
   - **4.10**: "o sistema não refaz o lembrete" deixa de ser verdade.
   - **Seção 8**: o lembrete deixa de sair por qualquer conexão.
 - Decisão do dono, registrada no spec (3.3): rearmar por régua (portado) ou zerar a lista no gatilho.
