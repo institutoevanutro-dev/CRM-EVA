@@ -92,6 +92,12 @@ const BOTAO_ANTIGO = pessoa();
 const PEDIDO_ANTIGO = pessoa();
 /** Botão antigo, e depois a pessoa voltou a escrever por um chat @lid (revisão do PR). */
 const BOTAO_ANTIGO_LID = pessoa();
+/** Dois cadastros da mesma pessoa, UNIDOS antes do clique: o secundário vira lápide. */
+const PRINCIPAL = pessoa();
+const LAPIDE = pessoa();
+/** O mesmo par, com o principal anonimizado ANTES da 0317 — a lápide ficou para trás. */
+const PRINCIPAL_ANTIGO = pessoa();
+const LAPIDE_ANTIGA = pessoa();
 
 /** `quando`: idade das linhas — a cura só alcança o que existia até `anonymized_at`. */
 async function semear(p: Pessoa, quando = "now()") {
@@ -262,11 +268,16 @@ beforeAll(async () => {
      values($1,$2,'redact','manual','contact',now() + interval '15 days')`,
     [PEDIDO, ORG],
   );
-  for (const p of [PELO_BOTAO, PELO_PEDIDO, VIZINHO]) await semear(p);
-  for (const p of [BOTAO_ANTIGO, PEDIDO_ANTIGO, BOTAO_ANTIGO_LID]) {
+  for (const p of [PELO_BOTAO, PELO_PEDIDO, VIZINHO, PRINCIPAL, LAPIDE]) await semear(p);
+  for (const p of [BOTAO_ANTIGO, PEDIDO_ANTIGO, BOTAO_ANTIGO_LID, PRINCIPAL_ANTIGO, LAPIDE_ANTIGA]) {
     await semear(p, "now() - interval '2 hours'");
   }
 });
+
+/** A fusão de verdade (a função que a tela "Juntar duplicados" e a junção por @ chamam). */
+async function unir(principal: Pessoa, secundario: Pessoa) {
+  await q("select public.fn_mesclar_contatos($1,$2,array[$3]::uuid[])", [ORG, principal.id, secundario.id]);
+}
 
 /** O bloco da 0278 como o `update.sh` o reaplica: lido do baseline, pelo rótulo. */
 async function backfillDa0278() {
@@ -498,5 +509,55 @@ describe("LGPD: o botão da ficha limpa o mesmo que o pedido formal (0317)", () 
     // Controle: a conversa do vizinho continua com o destinatário dela.
     const { rows: vizinho } = await q("select provider_conversation_id from conversations where id = $1", [VIZINHO.conversa]);
     expect(vizinho[0].provider_conversation_id).toBe(VIZINHO.igsid);
+  });
+
+  /** O que identifica a pessoa e só existe no cadastro dela (o nome é comum a todos aqui). */
+  const marcas = (p: Pessoa) => [p.igsid, p.arroba, p.conflito, p.lid, `marina.${p.n}@exemplo.test`, `+55279990000${p.n}`];
+
+  it("⭐ anonimizar o principal alcança o cadastro que foi UNIDO a ele (a lápide)", async () => {
+    // A fusão só marca `is_merged_into` no secundário: nome, e-mail, telefone,
+    // origem, etiquetas e foto ficam na linha dele, legíveis para qualquer membro
+    // da organização. E a conversa que colide com a do principal no mesmo número
+    // de atendimento FICA na lápide.
+    await unir(PRINCIPAL, LAPIDE);
+    // Controle: a lápide existe e guarda o dado da pessoa.
+    const { rows: antes } = await q("select is_merged_into, display_name, email from contacts where id = $1", [LAPIDE.id]);
+    expect(antes[0]).toEqual({ is_merged_into: PRINCIPAL.id, display_name: "Marina Boaventura", email: `marina.${LAPIDE.n}@exemplo.test` });
+
+    await peloBotao(PRINCIPAL.id);
+
+    const { rows } = await q(
+      `select name, display_name, email, phone_number, birthdate, consent, source_metadata, tags, avatar_storage_path, is_anonymized
+         from contacts where id = $1`,
+      [LAPIDE.id],
+    );
+    const rotulo = `Cliente Anonimizado #${LAPIDE.id.slice(0, 8)}`;
+    expect(rows[0]).toEqual({
+      name: rotulo, display_name: rotulo, email: null, phone_number: null, birthdate: null,
+      consent: {}, source_metadata: {}, tags: [], avatar_storage_path: null, is_anonymized: true,
+    });
+    const { rows: fila } = await q("select status from storage_redaction_queue where bucket = 'whatsapp-media' and object_path = $1", [
+      LAPIDE.avatar,
+    ]);
+    expect(fila).toEqual([{ status: "pending" }]);
+    for (const marca of marcas(LAPIDE)) expect(await ondeAparece(marca), marca).toEqual([]);
+  });
+
+  it("⭐ a cura alcança a lápide de quem JÁ estava anonimizado", async () => {
+    await unir(PRINCIPAL_ANTIGO, LAPIDE_ANTIGA);
+    await comoOBotaoAntigo(PRINCIPAL_ANTIGO);
+    // Controle: o @ e o e-mail da lápide seguem legíveis antes da cura.
+    expect(await ondeAparece(`marina.${LAPIDE_ANTIGA.n}@exemplo.test`)).toEqual(["contacts"]);
+
+    await cura();
+    await cura();
+
+    const { rows } = await q("select is_anonymized, display_name, email, source_metadata from contacts where id = $1", [
+      LAPIDE_ANTIGA.id,
+    ]);
+    expect(rows[0]).toEqual({
+      is_anonymized: true, display_name: `Cliente Anonimizado #${LAPIDE_ANTIGA.id.slice(0, 8)}`, email: null, source_metadata: {},
+    });
+    for (const marca of marcas(LAPIDE_ANTIGA)) expect(await ondeAparece(marca), marca).toEqual([]);
   });
 });

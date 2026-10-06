@@ -45,6 +45,9 @@
 --    0b  foto de perfil: o arquivo vai para a fila de remoção e o ponteiro é
 --        apagado. No pedido formal quem fazia era o app, antes de chamar a
 --        função; pelo botão ninguém fazia.
+--    0c  cadastros UNIDOS a este (lápides de fusão): cada um recebe a cascata
+--        inteira. A fusão só marcava `is_merged_into`, e a lápide guardava
+--        nome, e-mail, telefone, @, LID e foto, legíveis por qualquer membro.
 --    2   a conversa do Instagram perde `provider_conversation_id`, que nela é
 --        o IGSID da pessoa (0278).
 --    7c-1 comentários do Instagram da pessoa (achados pelo IGSID): saem texto,
@@ -89,6 +92,7 @@ declare
   v_anon_label text;
   v_count int;
   v_igsids text[] := '{}';
+  v_lapide uuid;
 begin
   perform public.fn_service_lock(p_organization_id,p_contact_id);
   select is_anonymized into v_already
@@ -104,6 +108,27 @@ begin
   end if;
 
   v_anon_label := 'Cliente Anonimizado #' || substring(p_contact_id::text from 1 for 8);
+
+  -- 0c. CADASTROS UNIDOS A ESTE (migration 0317, revisão) — a lápide de uma
+  --     fusão é a MESMA pessoa. `fn_mesclar_contatos` só marca `is_merged_into`
+  --     nela: nome, e-mail, telefone, origem (@, LID), etiquetas e foto ficam na
+  --     linha, e a conversa que colidiu com a do principal FICA nela. Cada
+  --     lápide recebe a cascata inteira, com a auditoria dela — um passo
+  --     escrito à mão aqui divergiria do que a cascata faz. A fusão achata a
+  --     cadeia (quem apontava para o secundário passa a apontar para o
+  --     vencedor), então um nível basta; a recursão cobre o resto.
+  v_count := 0;
+  for v_lapide in
+    select id from contacts
+     where organization_id = p_organization_id
+       and is_merged_into = p_contact_id
+       and not is_anonymized
+     order by id
+  loop
+    perform public.fn_lgpd_cascade_redact_contact(p_organization_id, v_lapide, p_request_id);
+    v_count := v_count + 1;
+  end loop;
+  v_counts := v_counts || jsonb_build_object('contatos_unidos', v_count);
 
   -- Collect media storage paths (we only delete what we own — media_storage_path)
   select coalesce(array_agg(distinct media_storage_path) filter (where media_storage_path is not null), '{}')
@@ -572,6 +597,25 @@ grant execute on function public.fn_lgpd_anonymize_contact(uuid,uuid) to authent
 -- (mesmo critério das 0308, 0309 e 0312).
 --
 -- ── (A) TODOS os anonimizados, por qualquer caminho: o que a 0317 acrescenta ──
+
+-- A0. A lápide de quem já estava anonimizado recebe a cascata inteira (passo
+--     0c): unida a um contato, ela é a mesma pessoa (e `fn_mesclar_contatos`
+--     recusa principal anonimizado, então a fusão veio antes). Depois da
+--     primeira passada a lápide está anonimizada e não é achada de novo.
+do $$
+declare r record;
+begin
+  for r in
+    select s.organization_id, s.id
+      from public.contacts s
+      join public.contacts k on k.id = s.is_merged_into and k.organization_id = s.organization_id
+     where k.is_anonymized
+       and not s.is_anonymized
+     order by s.id
+  loop
+    perform public.fn_lgpd_cascade_redact_contact(r.organization_id, r.id, null);
+  end loop;
+end $$;
 
 -- A1. Comentários do Instagram. ANTES do A3, que apaga o IGSID por onde o
 --     comentário é achado.

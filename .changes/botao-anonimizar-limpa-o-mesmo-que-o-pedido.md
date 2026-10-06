@@ -22,7 +22,10 @@ também passou a apagar, nos dois caminhos:
   ficava guardado mesmo depois de anonimizar. Com isso, se a pessoa voltar a escrever pelo
   Instagram, ela entra como um contato novo — como já acontece no WhatsApp;
 - os comentários que ela fez em posts da clínica: o texto, o @ e a sugestão de resposta somem; fica
-  só o registro de que houve um comentário naquele post.
+  só o registro de que houve um comentário naquele post;
+- os cadastros antigos da mesma pessoa que tinham sido juntados ao dela (pela tela "Juntar
+  duplicados" ou pela junção automática do Instagram). Ao juntar, o cadastro antigo ficava
+  guardado por trás, com nome, e-mail, telefone e foto; agora ele é anonimizado junto.
 
 Quem já tinha sido anonimizado antes desta atualização é corrigido sozinho na hora de atualizar,
 sem precisar clicar de novo. Isso inclui um caso raro: se a pessoa, depois de anonimizada pelo
