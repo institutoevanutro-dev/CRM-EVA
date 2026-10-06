@@ -169,7 +169,7 @@
   EXISTIA (populado por `fn_ingest_message`, já usado por
   `workers/ai-response-worker.ts` e `lib/routing/queue.ts`) — **zero
   migration**. Ressalva real: é POR CONVERSA, o enrollment é POR CONTATO (um
-  contato pode ter 2+ conversas/channel_sessions) — `loadSilentContactIds`
+  contato pode ter 2+ conversas/channel_sessions) — `loadSilentContacts`
   busca todas as conversas da org com embed de contato (mesmo padrão 1:1 de
   `ai-response-worker.ts:255`) e reduz client-side pro `last_inbound_at` MAIS
   RECENTE por contato (Map). Decisão deliberada: NÃO criei uma function SQL

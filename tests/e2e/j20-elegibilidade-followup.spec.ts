@@ -4,7 +4,7 @@
  * Num canal com o gate LIGADO (`channel_sessions.metadata.ai_gate='allowlist'`),
  * a varredura de silêncio (`lib/followup/silence-sweep.ts`, dentro do cron
  * `followup-flow-worker`) só inscreve um contato silencioso se ele estiver
- * AUTORIZADO — `loadSilentContactIds` pula `gateAllowlist && !autorizado`. Um
+ * AUTORIZADO — `loadSilentContacts` pula `gateAllowlist && !autorizado`. Um
  * cliente atual que nunca passou por origem elegível NÃO é enrolado: a IA não
  * "enrola" quem ela não deveria atender.
  *
