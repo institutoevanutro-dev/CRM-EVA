@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.6.0] — 2026-10-06
+
+### Corrigido
+
+- **Prestador de serviço aparece em Equipe › Atendimento para publicar a jornada da agenda** Quem tem o papel "Prestador de serviço" (fisioterapeuta, nutricionista, massoterapeuta) não aparecia na lista de Equipe › Atendimento, a única tela onde se publica a jornada semanal que a Agenda usa para oferecer horários. Agora ele aparece marcado como "Só agenda": o gerente edita os horários e as unidades dele normalmente, e ele continua fora da distribuição de conversas — a chave de plantão não se aplica e a API recusa ligá-la.
+
 ## [3.5.0] — 2026-10-06
 
 ### Adicionado
@@ -5881,7 +5887,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.5.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.6.0...HEAD
+[3.6.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.5.0...v3.6.0
 [3.5.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.2.0...v3.3.0
