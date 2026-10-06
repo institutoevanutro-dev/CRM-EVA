@@ -22,10 +22,15 @@
  * `porque` devolvido.
  *
  * Portado de melgarafael/DeskcommCRM 4446d7541 (autor: jmpo) e c39a50232
- * (autor: melgarafael). Adaptação do fork: aqui todo envio de ator que não é
- * pessoa grava `sent_via='ai'` (inclusive o agente externo por MCP), então a
- * exceção `origem: "mcp_externo"` do original não existe; e o desfecho não tem
- * `motivoCodigo`.
+ * (autor: melgarafael). Adaptações do fork, cada uma com caso abaixo:
+ *  - aqui todo envio de ator que não é pessoa grava `sent_via='ai'` — campanha,
+ *    lembrete da Agenda e automação inclusive. Fala da IA é a linha que o AGENTE
+ *    escreveu (`ai_actor_id`, `ai_generated` ou `texto_escrito_pela_ia`);
+ *  - a guarda 1 só vale para a passagem do worker de sentimento (o único que
+ *    roda sem agente atendendo). A exceção `mcp_externo` do original fica
+ *    contida nisso;
+ *  - a janela de 24 h recomeça quando a IA volta a falar depois do aviso;
+ *  - o desfecho não tem `motivoCodigo`.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -92,7 +97,13 @@ const ENTRADA = {
 
 const agora = () => new Date().toISOString();
 const horasAtras = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000).toISOString();
-const falaDaIa = (created_at: string): Fala => ({ metadata: null, created_at, status: "sent" });
+const falaDaIa = (created_at: string): Fala => ({
+  metadata: { ai_actor_id: "agent-engine" },
+  created_at,
+  status: "sent",
+});
+/** Lembrete da Agenda / disparo de campanha: `sent_via='ai'` aqui, mas não é fala da IA. */
+const lembrete = (created_at: string): Fala => ({ metadata: {}, created_at, status: "sent" });
 const aviso = (created_at: string, status = "sent"): Fala => ({
   metadata: { aviso_de_escalacao: true, handoff_reason: "low_sentiment" },
   created_at,
@@ -124,6 +135,33 @@ describe("guarda 1 — a IA precisa ter falado nesta conversa", () => {
     expect(r).toEqual({ avisado: true });
     expect(enviar).toHaveBeenCalledTimes(1);
   });
+
+  it("lembrete da Agenda ou campanha (sent_via='ai' sem autoria de agente) não é fala da IA", async () => {
+    // Neste fork `_handler.ts` grava `sent_via='ai'` para todo ator que não é
+    // pessoa. O paciente que só recebeu o lembrete e respondeu irritado não
+    // falou com IA nenhuma.
+    const r = await avisarLeadDoCrm(banco([lembrete(horasAtras(2))]), ENTRADA);
+    expect(r).toEqual({ avisado: false, porque: "ia_nunca_falou_nesta_conversa" });
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it("texto escrito pela IA numa automação conta como fala", async () => {
+    const r = await avisarLeadDoCrm(
+      banco([{ metadata: { texto_escrito_pela_ia: true }, created_at: horasAtras(2), status: "sent" }]),
+      ENTRADA,
+    );
+    expect(r).toEqual({ avisado: true });
+    expect(enviar).toHaveBeenCalledTimes(1);
+  });
+
+  it("passagem pedida pelo agente (ferramenta MCP) antes de qualquer fala: a frase sai", async () => {
+    // O agente externo chamou `crm_request_human_handoff` na primeira mensagem,
+    // sem ter enviado nada. O contrato da ferramenta manda o agente NÃO avisar
+    // (o aviso é daqui); sem esta frase o paciente ficaria sem resposta nenhuma.
+    const r = await avisarLeadDoCrm(banco([]), { ...ENTRADA, reason: "requested_human" });
+    expect(r).toEqual({ avisado: true });
+    expect(enviar).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("guarda 2 — um aviso por conversa a cada 24 h", () => {
@@ -145,6 +183,15 @@ describe("guarda 2 — um aviso por conversa a cada 24 h", () => {
 
   it("aviso recente que FALHOU não conta: o cliente nunca o recebeu, a frase sai", async () => {
     const r = await avisarLeadDoCrm(banco([aviso(horasAtras(1), "failed"), falaDaIa(horasAtras(2))]), ENTRADA);
+    expect(r).toEqual({ avisado: true });
+    expect(enviar).toHaveBeenCalledTimes(1);
+  });
+
+  it("a IA voltou a falar depois do aviso: a passagem nova é outra, e o aviso sai", async () => {
+    // 09:00 aviso entregue; uma pessoa devolveu a conversa à IA, que atendeu a
+    // tarde inteira; 15:00 nova passagem. Barrar aqui diria à Central que o
+    // paciente foi avisado de uma passagem que ele nunca soube.
+    const r = await avisarLeadDoCrm(banco([falaDaIa(horasAtras(2)), aviso(horasAtras(6))]), ENTRADA);
     expect(r).toEqual({ avisado: true });
     expect(enviar).toHaveBeenCalledTimes(1);
   });

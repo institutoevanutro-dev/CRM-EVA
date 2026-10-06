@@ -11,9 +11,16 @@ recebe um aviso como "Já acionei o time". Esse aviso saía em casos errados:
   (o detector de clima da conversa roda em toda mensagem, mesmo sem IA ligada);
 - repetido várias vezes seguidas quando o envio travava e era tentado de novo.
 
-Agora o aviso só sai se já houve mensagem automática na conversa, e no máximo
-uma vez a cada 24 horas por conversa. Um aviso que falhou e nunca chegou não
-conta, e o próximo sai normalmente.
+Agora, quando é o detector de clima que passa a conversa, o aviso só sai se a
+IA já tinha conversado com o paciente ali. Lembrete da Agenda e campanha não
+contam como conversa com a IA. Quando é a própria IA (ou o agente conectado)
+que pede a passagem, o aviso sai mesmo que ela ainda não tenha respondido nada,
+para o paciente não ficar sem resposta.
+
+E o aviso sai no máximo uma vez a cada 24 horas por conversa. Se uma pessoa
+devolveu a conversa para a IA e a IA voltou a conversar, uma nova passagem avisa
+de novo. Um aviso que falhou e nunca chegou não conta, e o próximo sai
+normalmente.
 
 E quem responde começando com "parar" (por exemplo "Parar não é daqui") e cai
 nessa passagem recebe a confirmação de que as mensagens automáticas vão parar,

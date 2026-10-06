@@ -78,7 +78,7 @@ function banco() {
               Promise.resolve({
                 data:
                   direcao === "outbound"
-                    ? [{ metadata: null, created_at: new Date().toISOString(), status: "sent" }]
+                    ? [{ metadata: { ai_actor_id: "agent-engine" }, created_at: new Date().toISOString(), status: "sent" }]
                     : null,
                 error: null,
               }),

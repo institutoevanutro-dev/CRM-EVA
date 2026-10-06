@@ -62,6 +62,30 @@ const JANELA_DO_AVISO_MS = 24 * 60 * 60 * 1000;
 /** Status de `messages` que significam "chegou ao cliente". */
 const STATUS_ENTREGUE = new Set(["sent", "delivered", "read"]);
 
+/**
+ * Motivos cuja passagem pode nascer SEM agente atendendo a conversa — só o
+ * worker de sentimento, que roda para toda mensagem. Os demais emissores
+ * (ferramenta `crm_request_human_handoff`, runtime nativo, worker de resposta)
+ * só disparam de dentro de um atendimento de IA, mesmo antes da primeira fala.
+ */
+const MOTIVOS_QUE_EXIGEM_FALA_PREVIA = new Set(["low_sentiment"]);
+
+type LinhaDeFala = { metadata: Record<string, unknown> | null; created_at: string; status: string | null };
+
+/**
+ * A linha é FALA da IA: escrita por agente. Neste fork `sent_via='ai'` não
+ * basta — `_handler.ts` grava assim todo ator que não é pessoa, e campanha,
+ * lembrete da Agenda e automação enviam como `webhook_source`. Quem marca a
+ * autoria: `ai_actor_id` (ator `ai_agent`, o motor e o runtime nativo),
+ * `ai_generated` (worker legado) e `texto_escrito_pela_ia` (automação "mensagem
+ * escrita pela IA"). O próprio aviso nunca conta.
+ */
+function ehFalaDaIa(m: LinhaDeFala): boolean {
+  const meta = m.metadata ?? {};
+  if (meta.aviso_de_escalacao === true) return false;
+  return typeof meta.ai_actor_id === "string" || meta.ai_generated === true || meta.texto_escrito_pela_ia === true;
+}
+
 export interface AvisoDoCrmInput {
   serviceBoundary?: ServiceBoundary;
   organizationId: string;
@@ -92,15 +116,20 @@ export async function avisarLeadDoCrm(
     //    aviso NÃO conta como fala (`aviso_de_escalacao`): sem essa distinção,
     //    o primeiro aviso indevido legitimaria o segundo.
     //
-    //    Neste fork todo envio de ator que não é pessoa grava `sent_via='ai'`
-    //    (`_handler.ts`), inclusive campanha, automação e agente externo por
-    //    MCP — então a guarda os conta como fala automática, e a exceção de
-    //    MCP externo do original não é necessária aqui.
+    //    Fala é o que o AGENTE escreveu (`ehFalaDaIa`): lembrete e campanha
+    //    também gravam `sent_via='ai'` neste fork e não contam.
+    //
+    //    A guarda só vale para o sentimento (`MOTIVOS_QUE_EXIGEM_FALA_PREVIA`):
+    //    a passagem pedida pelo agente — inclusive o externo por MCP, que chama
+    //    a ferramenta antes de enviar qualquer coisa — avisa mesmo sem fala
+    //    prévia. Sem isso o paciente ficaria sem resposta nenhuma.
     //
     // 2. UM aviso por conversa por janela de 24 h, contado no BANCO. Quando o
     //    envio trava (canal fora do ar) e o disparo é refeito, cada tentativa
     //    virava mensagem nova (no original, quatro avisos em cinco minutos). O
-    //    `requestId` não segura, porque cada disparo é uma chamada nova.
+    //    `requestId` não segura, porque cada disparo é uma chamada nova. Aviso
+    //    seguido de fala da IA é episódio encerrado: a pessoa devolveu a conversa
+    //    e a IA voltou a atender, então a passagem seguinte avisa de novo.
     //
     // Leitura que falha não avisa (fail-closed): mandar a frase para quem nunca
     // falou com IA é o defeito que estas guardas existem para impedir.
@@ -120,16 +149,17 @@ export async function avisarLeadDoCrm(
       });
       return { avisado: false, porque: "falas_da_ia_nao_lidas" };
     }
-    const linhas = (falas ?? []) as {
-      metadata: Record<string, unknown> | null;
-      created_at: string;
-      status: string | null;
-    }[];
-    const iaJaFalou = linhas.some((m) => m.metadata?.aviso_de_escalacao !== true);
-    if (!iaJaFalou) return { avisado: false, porque: "ia_nunca_falou_nesta_conversa" };
+    const linhas = (falas ?? []) as LinhaDeFala[];
+    const ultimaFala = linhas.find(ehFalaDaIa);
+    if (ultimaFala === undefined && MOTIVOS_QUE_EXIGEM_FALA_PREVIA.has(input.reason)) {
+      return { avisado: false, porque: "ia_nunca_falou_nesta_conversa" };
+    }
     // Aviso `failed` não conta: ele nunca chegou. `queued`/`sending` contam: o
     // `session-reconciler` reenvia o que está preso, e era isso que repetia.
-    const corte = Date.now() - JANELA_DO_AVISO_MS;
+    const corte = Math.max(
+      Date.now() - JANELA_DO_AVISO_MS,
+      ultimaFala ? new Date(ultimaFala.created_at).getTime() : 0,
+    );
     const avisosRecentes = linhas.filter(
       (m) =>
         m.metadata?.aviso_de_escalacao === true &&
