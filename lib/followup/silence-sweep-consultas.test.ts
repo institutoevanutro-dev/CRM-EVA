@@ -185,6 +185,21 @@ describe("loadSilentContacts — paginação determinística das conversas", () 
   });
 });
 
+describe("loadSilentContacts — piso da vigência no servidor", () => {
+  it("com desde, pede last_inbound_at > desde em toda página; sem desde, não pede", async () => {
+    const com = supabaseDeConversas(muitas(600));
+    await createSupabaseSilenceSweepDb(com.admin).loadSilentContacts("org", CORTE, [], "2026-08-01T00:00:00.000Z");
+    expect(com.consultas.length).toBeGreaterThan(1);
+    for (const c of com.consultas) {
+      expect(c).toContainEqual({ metodo: "gt", args: ["last_inbound_at", "2026-08-01T00:00:00.000Z"] });
+    }
+
+    const sem = supabaseDeConversas([]);
+    await createSupabaseSilenceSweepDb(sem.admin).loadSilentContacts("org", CORTE, []);
+    expect(sem.consultas[0]!.some((c) => c.args[0] === "last_inbound_at" && c.metodo === "gt")).toBe(false);
+  });
+});
+
 describe("loadActiveSilencePointers — lê a vigência", () => {
   it("pede active_since e a devolve no ponteiro", async () => {
     const consultas: Chamada[][] = [];

@@ -21,6 +21,7 @@ function fakeDb(opts: {
   ultimaInscricao?: Map<string, string>;
   vivos?: Set<string>;
   emCooldown?: Set<string>;
+  onSilentContacts?: (desdeIso: string | undefined) => void;
   onCooldown?: (contactIds: string[], cutoffIso: string) => void;
   onUltimaInscricao?: (contactIds: string[], desdeIso: string) => void;
 }) {
@@ -36,7 +37,10 @@ function fakeDb(opts: {
         active_since: opts.activeSince ?? "2026-01-01T00:00:00.000Z",
       },
     ],
-    loadSilentContacts: async () => opts.contatos,
+    loadSilentContacts: async (_org, _cutoff, _segments, desdeIso) => {
+      opts.onSilentContacts?.(desdeIso);
+      return opts.contatos;
+    },
     loadUltimaInscricaoNoPonteiro: async (_org, _pointer, contactIds, desdeIso) => {
       opts.onUltimaInscricao?.(contactIds, desdeIso);
       return opts.ultimaInscricao ?? new Map();
@@ -77,6 +81,17 @@ describe("sem passado: silêncio anterior à vigência do ponteiro não conta", 
     expect(insert).toHaveBeenCalledTimes(1);
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ contact_id: "depois" }));
     expect(summary.skipped_before_activation).toBe(1);
+  });
+
+  it("passa a vigência do ponteiro à leitura, como piso no servidor", async () => {
+    const pisos: Array<string | undefined> = [];
+    const { db } = fakeDb({
+      activeSince: "2026-10-06T12:00:00.000Z",
+      contatos: [],
+      onSilentContacts: (desde) => pisos.push(desde),
+    });
+    await runSilenceSweep({ db, ...DEPS });
+    expect(pisos).toEqual(["2026-10-06T12:00:00.000Z"]);
   });
 
   it("compara instantes, não texto: o ISO do PostgREST (+00:00) contra o do JS (Z)", async () => {

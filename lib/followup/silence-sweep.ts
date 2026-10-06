@@ -97,8 +97,18 @@ export interface SilencePointer {
 export interface SilenceSweepDb {
   /** Pointers ativos com trigger_config.kind='silence', de TODAS as orgs. */
   loadActiveSilencePointers(): Promise<SilencePointer[]>;
-  /** Contatos da org sem inbound desde `cutoffIso` (inclusive); `segments` vazio = todos. */
-  loadSilentContacts(orgId: string, cutoffIso: string, segments: string[]): Promise<ContatoEmSilencio[]>;
+  /**
+   * Contatos da org sem inbound desde `cutoffIso` (inclusive); `segments` vazio = todos.
+   * `desdeIso` (a vigência do ponteiro) é um piso aplicado NO SERVIDOR sobre
+   * `last_inbound_at`, só para a leitura não crescer com toda conversa aberta
+   * da org; a regra da vigência continua em `runSilenceSweep`. Omitido = sem piso.
+   */
+  loadSilentContacts(
+    orgId: string,
+    cutoffIso: string,
+    segments: string[],
+    desdeIso?: string,
+  ): Promise<ContatoEmSilencio[]>;
   /** id do nó `trigger` do grafo pinado da version; `null` se version/nó não existir (defensivo — não deveria acontecer, validate-publish garante 1 trigger). */
   loadTriggerNodeId(orgId: string, versionId: string): Promise<string | null>;
   /**
@@ -217,7 +227,9 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     // quando o contato falou) é POSTERIOR à vigência do ponteiro. Ligar o
     // fluxo não cobra quem calou antes — inclusive conversa aberta de meses.
     const vigencia = Date.parse(pointer.active_since);
-    const contatos = (await db.loadSilentContacts(pointer.organization_id, cutoffIso, pointer.segments)).filter(
+    const contatos = (
+      await db.loadSilentContacts(pointer.organization_id, cutoffIso, pointer.segments, pointer.active_since)
+    ).filter(
       (c) => {
         if (Date.parse(c.ultima_entrada_em) > vigencia) return true;
         summary.skipped_before_activation++;
@@ -337,7 +349,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       return pointers;
     },
 
-    async loadSilentContacts(orgId, cutoffIso, segments) {
+    async loadSilentContacts(orgId, cutoffIso, segments, desdeIso) {
       // last_inbound_at é POR CONVERSA; o enrollment é POR CONTATO — reduz
       // client-side pro MAIS RECENTE `last_inbound_at` entre as conversas do
       // contato (um contato com 2+ channel_sessions não pode ser marcado
@@ -381,6 +393,13 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
           .order("id", { ascending: true })
           .limit(TAMANHO_DA_PAGINA);
         if (depois) consulta = consulta.gt("id", depois);
+        // Piso da vigência no servidor. Seguro: fn_mark_conversation_message
+        // grava last_inbound_at = greatest(last_inbound_at, p_at), então ele é
+        // >= o sent_at de toda entrada marcada; conversa com last_inbound_at
+        // <= vigência só traria entrada que a regra "sem passado" recusa.
+        // ponytail: ainda lê uma vez por ponteiro; memoizar por (org, piso)
+        // dentro do tick se 2+ ponteiros de silêncio na mesma org pesarem.
+        if (desdeIso) consulta = consulta.gt("last_inbound_at", desdeIso);
         const { data, error } = await consulta;
         if (error) throw new Error(error.message);
         const pagina = (data ?? []) as unknown as Row[];

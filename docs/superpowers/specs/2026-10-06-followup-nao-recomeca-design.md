@@ -186,6 +186,7 @@ Como nenhuma coluna existente serve (§2.3), decidi criar uma.
   - Os dublês de `silence-sweep-pre-go-live.test.ts` e `fronteira-exige-procedencia-e-o-backfill-cobre-o-legado.test.ts` devolvem `[]` a partir da 2ª chamada; o de `sweep-nao-cobra-conversa-encerrada.test.ts` já devolvia `[]` sempre.
 - **Trava contra não avançar** (o último id de uma página não maior que o da anterior): lança, como em `protecao-followup.ts:95`.
 - **O `.limit(1)` do embed de `messages`** continua por conversa, com `referencedTable`.
+- **Piso da vigência no servidor (revisão de 2026-10-06).** Sem teto, cada tick lia todas as conversas abertas da org, por ponteiro. A consulta passa a pedir `last_inbound_at > active_since`. É seguro porque `fn_mark_conversation_message` grava `last_inbound_at = greatest(last_inbound_at, p_at)`, então ele é `>=` o `sent_at` de toda entrada marcada, e conversa abaixo do piso só traria entrada que a regra "sem passado" recusa. A regra continua em `runSilenceSweep` (o piso só corta leitura). Não há memoização por organização entre ponteiros dentro do tick; fica para quando 2+ ponteiros de silêncio na mesma org pesarem.
 
 ### 4.5 Porte de `8e50867db` (não tentar quem já está vivo)
 

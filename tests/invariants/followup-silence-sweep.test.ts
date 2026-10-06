@@ -124,7 +124,7 @@ function silenceSweepDb(): SilenceSweepDb {
     // O seed deste arquivo não cria mensagens: a última entrada é o
     // `last_inbound_at` da conversa, e por isso `sent_at` e `created_at` da
     // mensagem qualificante saem iguais aqui (na produção são duas colunas).
-    async loadSilentContacts(orgId, cutoffIso, segments) {
+    async loadSilentContacts(orgId, cutoffIso, segments, desdeIso) {
       const { rows } = await pool.query<{
         contact_id: string; last_inbound_at: Date; tags: string[]; is_blocked: boolean; is_anonymized: boolean;
       }>(
@@ -134,8 +134,9 @@ function silenceSweepDb(): SilenceSweepDb {
          join contacts c on c.id = conv.contact_id
          where conv.organization_id = $1 and conv.last_inbound_at is not null
            and conv.status <> all($2::text[])
+           and ($3::timestamptz is null or conv.last_inbound_at > $3)
          group by conv.contact_id, c.tags, c.is_blocked, c.is_anonymized`,
-        [orgId, CONVERSATION_TERMINAL_STATUSES],
+        [orgId, CONVERSATION_TERMINAL_STATUSES, desdeIso ?? null],
       );
       const cutoff = new Date(cutoffIso).getTime();
       return rows
@@ -583,7 +584,9 @@ describe("runSilenceSweep — sem passado (active_since)", () => {
 
     const summary = await runSilenceSweep({ db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK });
     expect(summary.pointers_gated_out).toBe(0);
-    expect(summary.skipped_before_activation).toBeGreaterThanOrEqual(1);
+    // Sem `skipped_before_activation` aqui: o piso da vigência vai à consulta
+    // (last_inbound_at > active_since) e a conversa nem volta. O contador é
+    // da regra em `runSilenceSweep`, vigiada em silence-sweep-episodio.test.ts.
     expect(await countEnrollments(pointerId, contactId)).toBe(0);
   });
 
