@@ -5569,12 +5569,14 @@ create policy "conversations_agent_update" on public.conversations
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'agent'))
   );
-create policy "conversations_agent_delete" on public.conversations
-  for delete using (
-    public.fn_is_platform_admin()
-    or ((organization_id in (select public.fn_user_org_ids()))
-        and public.fn_role_at_least(organization_id, 'agent'))
-  );
+-- `conversations_agent_delete` não é mais criada aqui (migration 0319): ela
+-- liberava o DELETE da conversa a qualquer atendente, e a cascata levava a nota
+-- do colega, o caso da IA e o histórico de atribuição. A regra de apagar (piso
+-- `manager`, como `contacts_delete`) está no bloco da 0319, no fim do arquivo.
+-- Recriar a aberta aqui faria cada `update.sh` reabrir a brecha até aquele bloco
+-- rodar; fica só o `drop` acima, que limpa o clone antigo. Sem policy de DELETE a
+-- sessão não apaga, então entre este ponto e o bloco da 0319 a tabela está MAIS
+-- fechada, nunca menos.
 
 drop policy if exists "messages_tenant_isolation_all" on public.messages;
 drop policy if exists "messages_select" on public.messages;
@@ -32323,8 +32325,9 @@ create policy "conversation_notes_insert" on public.conversation_notes
     )
   );
 
--- O `with check` repete o `using`: o autor não passa a nota para outro nome, e
--- o gestor que edita a nota de um atendente mantém o autor original.
+-- O `with check` repete o `using`: o autor não passa a nota para outro nome.
+-- Para o GESTOR o `with check` aceita qualquer autor (ele pode editar nota
+-- alheia); quem impede que ele troque o autor é a trava de autoria da seção 7.
 drop policy if exists "conversation_notes_update" on public.conversation_notes;
 create policy "conversation_notes_update" on public.conversation_notes
   for update
@@ -32644,7 +32647,126 @@ create trigger trg_contato_bloqueio_so_o_servidor_insert
   when (new.is_blocked is true or new.blocked_reason is not null or new.blocked_at is not null)
   execute function public.fn_bloqueio_do_contato_so_o_servidor();
 
+-- ════════════════════════════════════════════════════════════════════════════
+-- 4 · APAGAR A CONVERSA: do gestor, como apagar o contato
+-- ════════════════════════════════════════════════════════════════════════════
+-- Revisão do PR 128. As seções 1 e 2 não valiam para o APAGAR:
+-- `conversations_agent_delete` liberava o DELETE da conversa a qualquer
+-- atendente, e `conversation_notes`, `agent_cases` (e por ele
+-- `agent_case_events`) e `conversation_assignment_events` pendem dela com `on
+-- delete cascade`. A cascata de FK roda como dono da tabela filha: ignora as
+-- policies da nota e o revoke das três tabelas do caso. Um atendente apagava a
+-- conversa pelo PostgREST e levava a nota do colega, o caso da IA e o histórico
+-- de atribuição, sem linha na auditoria.
+--
+-- O único caminho do produto que apaga conversa com a sessão é a exclusão do
+-- contato (app/api/v1/contacts/_handler.ts), que exige `manager` na rota e na
+-- RLS de `contacts` desde a 0289. A conversa passa a ter o mesmo piso, com a
+-- mesma forma da `contacts_delete`.
+--
+-- `messages_delete` fica como está: o envio do atendente apaga o eco do próprio
+-- envio com a sessão (`removerEcoDoProprioEnvio`, app/api/v1/messages/_handler.ts).
+drop policy if exists "conversations_agent_delete" on public.conversations;
+drop policy if exists "conversations_delete" on public.conversations;
+create policy "conversations_delete" on public.conversations
+  for delete using (
+    public.fn_is_platform_admin()
+    or (
+      organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager')
+    )
+  );
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- 7 · NOTA INTERNA: quem assina e o que se anexa é o banco
+-- ════════════════════════════════════════════════════════════════════════════
+-- Revisão do PR 128. A seção 1 amarra `created_by_user_id = auth.uid()` no
+-- INSERT, mas o autor que a TELA mostra é `created_by_name`
+-- (components/inbox/NoteCard.tsx), o mesmo campo que vai para o relatório de LGPD
+-- e para a continuidade que a IA lê (lib/escalacao/continuidade.ts). Era texto
+-- livre: o atendente assinava a própria nota como "Dra. Maria (gestora)", com
+-- data antiga, e o gestor passava a nota de um atendente para o nome de outro
+-- (o `with check` do UPDATE aceita qualquer autor quando quem grava é gestor).
+--
+-- Para toda escrita com sessão:
+--   INSERT  o nome é o de `auth.users` (o mesmo `full_name` que a rota manda) e
+--           a data é a do servidor, seja o que for que o cliente enviou;
+--   UPDATE  autor, nome do autor e data de criação não mudam (42501).
+-- `security definer` porque `authenticated` não lê `auth.users`; por isso o
+-- sinal é só `auth.uid()` (dentro de uma definer o papel é o dono). O service
+-- role, o motor e as migrations não têm `sub` e gravam o que mandarem: a
+-- anonimização só mexe em corpo e anexo.
+--
+-- O ANEXO também (revisão do PR 128). `media_storage_path` era texto livre, e o
+-- autor apontava a própria nota para o arquivo da nota de um colega em OUTRA
+-- conversa (o caminho é legível para quem vê a conversa: não há nome a
+-- adivinhar). A anonimização do contato DELE enfileirava então o arquivo do
+-- colega, de outro paciente, para apagar (`fn_redigir_notas_internas_ao_anonimizar`
+-- e o passo 6d só conferem o prefixo da organização). A regra é a da rota de
+-- criar nota (`isMediaPathOwnedBy`, lib/messaging/media/upload-validation.ts):
+-- `{organização}/{conversa da nota}/{arquivo}`, arquivo com nome simples. Vale
+-- quando a sessão grava um caminho (INSERT), troca o caminho, ou leva para outra
+-- conversa uma nota que tem anexo; caminho antigo que ninguém mexe não é
+-- conferido de novo (42501 `nota_interna_anexo_fora_da_conversa`).
+create or replace function public.fn_nota_interna_autoria_e_do_banco()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_prefixo text;
+  v_arquivo text;
+begin
+  if auth.uid() is null then
+    return new;
+  end if;
+  if new.media_storage_path is not null
+     and (tg_op = 'INSERT'
+          or new.media_storage_path is distinct from old.media_storage_path
+          or new.conversation_id is distinct from old.conversation_id
+          or new.organization_id is distinct from old.organization_id) then
+    v_prefixo := new.organization_id::text || '/' || new.conversation_id::text || '/';
+    v_arquivo := substr(new.media_storage_path, length(v_prefixo) + 1);
+    if left(new.media_storage_path, length(v_prefixo)) is distinct from v_prefixo
+       or v_arquivo !~ '^[A-Za-z0-9._-]+$'
+       or v_arquivo in ('.', '..') then
+      raise exception 'nota_interna_anexo_fora_da_conversa' using errcode = '42501';
+    end if;
+  end if;
+  if tg_op = 'INSERT' then
+    new.created_by_name := (
+      select nullif(btrim(u.raw_user_meta_data ->> 'full_name'), '')
+        from auth.users u where u.id = auth.uid()
+    );
+    new.created_at := now();
+    return new;
+  end if;
+  if new.created_by_user_id is distinct from old.created_by_user_id
+     or new.created_by_name is distinct from old.created_by_name
+     or new.created_at is distinct from old.created_at then
+    raise exception 'nota_interna_autoria_nao_muda' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+comment on function public.fn_nota_interna_autoria_e_do_banco() is
+  'Guarda de conversation_notes (migration 0319): na escrita com sessão, o nome do autor vem de auth.users e a '
+  'data é a do servidor (INSERT); autor, nome e data de criação não mudam (UPDATE, 42501 '
+  'nota_interna_autoria_nao_muda); o anexo é um arquivo da conversa da própria nota, {org}/{conversa}/{arquivo} '
+  '(42501 nota_interna_anexo_fora_da_conversa). O service role passa. Provado em '
+  'tests/invariants/nota-interna-autoria-vem-do-banco.test.ts e nota-interna-anexo-da-propria-conversa.test.ts.';
+
+revoke execute on function public.fn_nota_interna_autoria_e_do_banco() from public, anon, authenticated;
+
+drop trigger if exists trg_nota_interna_autoria on public.conversation_notes;
+create trigger trg_nota_interna_autoria
+  before insert or update on public.conversation_notes
+  for each row
+  execute function public.fn_nota_interna_autoria_e_do_banco();
+
 notify pgrst, 'reload schema';
+
 -- ---- fim: travas no banco (migration 0319) ----
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----

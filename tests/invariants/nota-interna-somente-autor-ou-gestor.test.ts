@@ -35,6 +35,7 @@ import {
   seedGov,
   sql,
   writeCountAs,
+  writeErrorAs,
 } from "./gov-helpers";
 
 const id = (n: number) => `d0d0d0d0-0319-4000-8000-${String(n).padStart(12, "0")}`;
@@ -129,13 +130,18 @@ describe("0319 — o colega que vê a conversa não mexe na nota de quem a escre
   });
 
   it("o autor não passa a autoria da própria nota para um colega (sem a 0319 → 1)", () => {
+    // A recusa vem da trava de autoria (0319, seção 7), com o nome da regra,
+    // antes do `with check` da policy; o que importa é a autoria não mudar.
+    const erro = writeErrorAs(
+      GOV_AGENT_B,
+      `update public.conversation_notes set created_by_user_id = '${GOV_AGENT_A}'
+        where id = '${DO_AUTOR_EDITA}'`,
+    );
+    expect(erro, "o autor passou a autoria da nota sem erro").not.toBeNull();
+    expect(erro).toContain("nota_interna_autoria_nao_muda");
     expect(
-      writeCountAs(
-        GOV_AGENT_B,
-        `update public.conversation_notes set created_by_user_id = '${GOV_AGENT_A}'
-          where id = '${DO_AUTOR_EDITA}'`,
-      ),
-    ).toBe(0);
+      sql(`select created_by_user_id from public.conversation_notes where id = '${DO_AUTOR_EDITA}';`),
+    ).toBe(GOV_AGENT_B);
   });
 });
 
