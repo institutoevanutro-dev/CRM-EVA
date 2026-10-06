@@ -196,6 +196,7 @@ type ContactEmbed =
   | {
       tags: string[] | null;
       is_blocked: boolean | null;
+      is_anonymized: boolean | null;
       ai_authorized_at: string | null;
       phone_number: string | null;
     }
@@ -252,7 +253,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       const { data, error } = await admin
         .from("conversations")
         .select(
-          "id, service_revision, current_demanda_id, demandas!conversations_current_demanda_id_fkey(revision,fechada_em), status, messages!messages_conversation_id_fkey(organization_id,contact_id,conversation_id,service_revision,demanda_id,demanda_revision,sent_at,created_at), contact_id, last_inbound_at, contacts:contact_id(tags, is_blocked, ai_authorized_at, phone_number), sessao:channel_session_id(metadata)",
+          "id, service_revision, current_demanda_id, demandas!conversations_current_demanda_id_fkey(revision,fechada_em), status, messages!messages_conversation_id_fkey(organization_id,contact_id,conversation_id,service_revision,demanda_id,demanda_revision,sent_at,created_at), contact_id, last_inbound_at, contacts:contact_id(tags, is_blocked, is_anonymized, ai_authorized_at, phone_number), sessao:channel_session_id(metadata)",
         )
         .eq("organization_id", orgId).eq("demandas.organization_id", orgId)
         .eq("contacts.organization_id", orgId).eq("sessao.organization_id", orgId)
@@ -279,7 +280,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         string,
         {
           boundary: ServiceBoundary; at: number; sentAt: string; createdAt: string;
-          tags: string[]; blocked: boolean; permitidoPeloGate: boolean;
+          tags: string[]; blocked: boolean; anonymized: boolean; permitidoPeloGate: boolean;
         }
       >();
       for (const row of (data ?? []) as unknown as Row[]) {
@@ -313,6 +314,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
             boundary, at, sentAt: source.sent_at, createdAt: source.created_at,
             tags: row.contacts?.tags ?? [],
             blocked: row.contacts?.is_blocked ?? false,
+            anonymized: row.contacts?.is_anonymized ?? false,
             permitidoPeloGate: acesso.permite,
           });
         }
@@ -320,7 +322,10 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
 
       const silentes: ContatoEmSilencio[] = [];
       for (const [contactId, v] of latest) {
-        if (v.blocked) continue;
+        // Anonimizado (LGPD) sai aqui e não no envio: o envio cancela
+        // (`contato_anonimizado`), mas a conversa segue aberta e calada, e o
+        // contato voltava a ser inscrito no tick seguinte.
+        if (v.blocked || v.anonymized) continue;
         // A mesma regra do atendimento de entrada vale antes de criar o
         // enrollment: no pré-go-live só testadores avançam; no allowlist comum
         // continua valendo a autorização temporária da origem.

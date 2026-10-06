@@ -123,19 +123,21 @@ function silenceSweepDb(): SilenceSweepDb {
     // `last_inbound_at` da conversa, e por isso `sent_at` e `created_at` da
     // mensagem qualificante saem iguais aqui (na produção são duas colunas).
     async loadSilentContacts(orgId, cutoffIso, segments) {
-      const { rows } = await pool.query<{ contact_id: string; last_inbound_at: string; tags: string[]; is_blocked: boolean }>(
+      const { rows } = await pool.query<{
+        contact_id: string; last_inbound_at: string; tags: string[]; is_blocked: boolean; is_anonymized: boolean;
+      }>(
         `select conv.contact_id, max(conv.last_inbound_at)::text as last_inbound_at,
-                c.tags as tags, c.is_blocked as is_blocked
+                c.tags as tags, c.is_blocked as is_blocked, c.is_anonymized as is_anonymized
          from conversations conv
          join contacts c on c.id = conv.contact_id
          where conv.organization_id = $1 and conv.last_inbound_at is not null
            and conv.status <> all($2::text[])
-         group by conv.contact_id, c.tags, c.is_blocked`,
+         group by conv.contact_id, c.tags, c.is_blocked, c.is_anonymized`,
         [orgId, CONVERSATION_TERMINAL_STATUSES],
       );
       const cutoff = new Date(cutoffIso).getTime();
       return rows
-        .filter((r) => !r.is_blocked)
+        .filter((r) => !r.is_blocked && !r.is_anonymized)
         .filter((r) => new Date(r.last_inbound_at).getTime() <= cutoff)
         .filter((r) => segments.length === 0 || segments.some((s) => r.tags.includes(s)))
         .map((r) => ({
@@ -225,10 +227,15 @@ async function seedOrg(org: string): Promise<void> {
   );
 }
 
-async function seedContact(org: string, opts?: { tags?: string[]; isBlocked?: boolean }): Promise<string> {
+async function seedContact(
+  org: string,
+  opts?: { tags?: string[]; isBlocked?: boolean; isAnonymized?: boolean },
+): Promise<string> {
+  // `anonymized_at` acompanha por causa do CHECK `contacts_anonymized_locked`.
   const { rows } = await pool.query<{ id: string }>(
-    `insert into contacts (organization_id, display_name, tags, is_blocked) values ($1, 'Silence Contact', $2, $3) returning id`,
-    [org, opts?.tags ?? [], opts?.isBlocked ?? false],
+    `insert into contacts (organization_id, display_name, tags, is_blocked, is_anonymized, anonymized_at)
+     values ($1, 'Silence Contact', $2, $3, $4, case when $4 then now() end) returning id`,
+    [org, opts?.tags ?? [], opts?.isBlocked ?? false, opts?.isAnonymized ?? false],
   );
   return rows[0]!.id;
 }
@@ -519,6 +526,27 @@ describe("runSilenceSweep — redução anti-spam (multi-conversa + never-inboun
 
     const summary = await runSilenceSweep({ db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK });
     expect(summary.enrolled).toBe(0);
+    expect(await countEnrollments(pointerId, contactId)).toBe(0);
+  });
+});
+
+// ---- 3c. anonimizado fica fora -----------------------------------------
+
+describe("runSilenceSweep — contato anonimizado não entra", () => {
+  // ⚠️ Este caso prova o ESPELHO em SQL deste arquivo, não a consulta de
+  // produção: o filtro mora no adaptador, e o adaptador aqui é dublê (ver o
+  // cabeçalho de `tests/unit/sweep-nao-cobra-conversa-encerrada.test.ts`).
+  // Quem prova a produção é `lib/followup/silence-sweep-consultas.test.ts`.
+  it("anonimizado calado há 90 min, fluxo armado → 0 inscrições em 3 varreduras", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org, { thresholdMinutes: 30 });
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [pointerId] });
+    const contactId = await seedContact(org, { isAnonymized: true });
+    await seedConversation(org, contactId, 90);
+
+    const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
+    for (let i = 0; i < 3; i++) expect((await runSilenceSweep(deps)).enrolled).toBe(0);
     expect(await countEnrollments(pointerId, contactId)).toBe(0);
   });
 });
