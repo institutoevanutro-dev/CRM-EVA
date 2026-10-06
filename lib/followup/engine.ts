@@ -118,7 +118,8 @@ export interface AdminClient {
     custom_fields?: Record<string, unknown>;
   }>;
   loadEnrollmentEvents(enrollmentId: string): Promise<EnrollmentEventRef[]>;
-  /** Latest inbound `messages.body` for the contact (optionally scoped to the enrollment conversation). */
+  /** Latest inbound `messages.body` for the contact (optionally scoped to the enrollment conversation).
+   *  `null` = nenhuma mensagem; `""` = a mensagem existe mas não tem texto (áudio, imagem). */
   loadLastInboundBody(
     orgId: string,
     contactId: string,
@@ -598,6 +599,8 @@ async function processEnrollment(
   let repeatTaken: number | undefined;
   let repeatTotal: number | null | undefined;
   let matchReplyOcupado = false;
+  let respondeuSemTexto = false;
+  let prazoDaEspera: Date | undefined;
   let events: EnrollmentEventRef[] = [];
 
   const smartWaits = node.type === "trigger" ? coletarEsperasAdaptativas(graph.nodes) : [];
@@ -659,17 +662,22 @@ async function processEnrollment(
   ) {
     // Sempre no contato inteiro: a captação e o WhatsApp podem ser conversas
     // diferentes, e filtrar pela conversation_id do enrollment esconde o SIM.
-    lastInboundBody =
-      (await db.loadLastInboundBody(
-        enrollment.organization_id,
-        enrollment.contact_id,
-        null,
-        node.type === "match_reply"
-          ? pisoDoInboundDaEspera(node, events, enrollment.updated_at)
-          : enrollment.updated_at,
-      )) ?? "";
-    if (node.type === "match_reply" && lastInboundBody.trim()) {
-      wokeEarly = true;
+    const piso =
+      node.type === "match_reply"
+        ? pisoDoInboundDaEspera(node, events, enrollment.updated_at)
+        : enrollment.updated_at;
+    const corpo = await db.loadLastInboundBody(
+      enrollment.organization_id,
+      enrollment.contact_id,
+      null,
+      piso,
+    );
+    lastInboundBody = corpo ?? "";
+    if (node.type === "match_reply") {
+      respondeuSemTexto = corpo !== null && !corpo.trim();
+      const prazo = Date.parse(piso) + node.config.grace_timeout_ms;
+      if (Number.isFinite(prazo)) prazoDaEspera = new Date(prazo);
+      if (lastInboundBody.trim() || respondeuSemTexto) wokeEarly = true;
     }
   }
 
@@ -692,6 +700,8 @@ async function processEnrollment(
     appointmentCreatedAt,
     wokeEarly,
     lastInboundBody,
+    respondeuSemTexto,
+    prazoDaEspera,
     actionEnqueued,
     actionRecheckCount,
     actionCompleted,
@@ -828,7 +838,8 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
       if (naoAntesDe) q = q.gte("sent_at", naoAntesDe);
       const { data, error } = await q.order("sent_at", { ascending: false }).limit(1).maybeSingle();
       if (error) throw new Error(error.message);
-      return typeof data?.body === "string" ? data.body : null;
+      if (!data) return null;
+      return typeof data.body === "string" ? data.body : "";
     },
     async loadEnrollmentEvents(enrollmentId) {
       const { data, error } = await admin

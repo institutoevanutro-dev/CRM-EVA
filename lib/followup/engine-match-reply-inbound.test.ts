@@ -157,6 +157,38 @@ describe("match_reply — resposta do lead após wait_started na mesma chave", (
     expect(passos.some((p) => p.current_node_id === "action-6")).toBe(false);
     expect(passos.some((p) => p.current_node_id === "action-7")).toBe(false);
     expect(passos.some((p) => p.status === "waiting_reply")).toBe(true);
+    // Acordar sem resposta desta pergunta não reinicia o prazo da espera.
+    const espera = passos.find((p) => p.status === "waiting_reply");
+    expect(espera?.next_eval_at).toBe("2026-09-20T21:35:47.000Z");
+  });
+
+  it("resposta sem texto (áudio, imagem) depois da pergunta conta como resposta: segue o ALWAYS", async () => {
+    // messages.body é null para mídia na ingestão; o adaptador devolve "" quando
+    // a mensagem existe e null quando não há mensagem nenhuma.
+    const passos: Array<Record<string, unknown>> = [];
+    const chaves = new Set(EVENTOS.map((e) => e.idempotency_key).filter((k): k is string => !!k));
+
+    const db = {
+      loadFlowGraph: vi.fn(async () => GRAFO),
+      loadLeadFacts: vi.fn(async () => ({ lead_stage: null, tags: [] })),
+      loadEnrollmentEvents: vi.fn(async () => EVENTOS),
+      loadLastInboundBody: vi.fn(async () => ""),
+      loadFlowPointerName: vi.fn(async () => null),
+      insertEnrollmentEvent: vi.fn(async (event: { idempotency_key: string }) => {
+        if (chaves.has(event.idempotency_key)) return { inserted: false };
+        chaves.add(event.idempotency_key);
+        return { inserted: true };
+      }),
+      updateEnrollment: vi.fn(async (_id: string, _org: string, patch: Record<string, unknown>) => {
+        passos.push(patch);
+      }),
+    } as unknown as AdminClient;
+
+    const deps: TickDeps = { db, clock: () => NOW, enqueueJob: async () => {} };
+    await avancarEnrollmentAtivo(deps, enrollment());
+
+    expect(passos.some((p) => p.current_node_id === "action-6")).toBe(true);
+    expect(passos.some((p) => p.status === "waiting_reply")).toBe(false);
   });
 
   it("occupancy sem inbound e sem timeout não cai em no_reply", async () => {

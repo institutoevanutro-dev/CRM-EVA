@@ -336,8 +336,9 @@ export function createPgAdminClient(pool: pg.Pool): TurnBridgeAdminClient {
          order by sent_at desc limit 1`,
         params,
       );
-      const body = rows[0]?.body;
-      return typeof body === "string" ? body : null;
+      if (rows.length === 0) return null;
+      const body = rows[0]!.body;
+      return typeof body === "string" ? body : "";
     },
     async loadEnrollmentEvents(enrollmentId) {
       const { rows } = await pool.query(

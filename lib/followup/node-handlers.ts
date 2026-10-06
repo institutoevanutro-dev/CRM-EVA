@@ -379,6 +379,12 @@ export function processNode(input: {
   wokeEarly?: boolean;
   /** Last inbound `messages.body` for this contact/conversation — engine loads on `match_reply` + wokeEarly. */
   lastInboundBody?: string;
+  /** `match_reply`: chegou mensagem do contato depois da pergunta, mas sem texto (áudio, imagem,
+   *  figurinha). É resposta — só não casa ramo nenhum. */
+  respondeuSemTexto?: boolean;
+  /** `match_reply`: o prazo da espera em curso (`wait_started`). Acordar sem resposta desta
+   *  pergunta não reinicia a contagem. */
+  prazoDaEspera?: Date;
   /** action occupancy guard: a `turn_enqueued` event for THIS stay on the action node already
    *  exists (an entry/recheck happened before). Resolved by the engine via `resolveWaitPhase`
    *  — same prior-step-event check as `wait`. When true, the send turn is in flight: DON'T
@@ -414,6 +420,8 @@ export function processNode(input: {
     waitElapsed,
     wokeEarly,
     lastInboundBody,
+    respondeuSemTexto,
+    prazoDaEspera,
     actionEnqueued,
     actionRecheckCount,
     actionCompleted,
@@ -571,14 +579,17 @@ export function processNode(input: {
       }
       if (wokeEarly) {
         const body = (lastInboundBody ?? "").trim().toLowerCase();
-        // inbound_woke sem texto desta pergunta (piso excluiu o "." que
+        // inbound_woke sem mensagem desta pergunta (piso excluiu o "." que
         // enfileirou o menu) NÃO é ALWAYS nem no_reply — senão o fluxo
-        // dispara o cardápio inteiro no mesmo request.
-        if (!body) {
+        // dispara o cardápio inteiro no mesmo request. Continua esperando até
+        // o prazo que já corria. Mensagem SEM TEXTO desta pergunta (áudio,
+        // imagem) é resposta: segue como "respondeu algo", como antes.
+        if (!body && !respondeuSemTexto) {
           if (!waitElapsed) {
             return {
               kind: "wait",
-              next_eval_at: new Date(clock().getTime() + node.config.grace_timeout_ms),
+              next_eval_at:
+                prazoDaEspera ?? new Date(clock().getTime() + node.config.grace_timeout_ms),
               wake_status: "waiting_reply",
             };
           }
