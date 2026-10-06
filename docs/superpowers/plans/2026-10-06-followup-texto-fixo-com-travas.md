@@ -402,7 +402,7 @@ Este PR **não vai para a `main` antes do item silêncio (0324)**: com os sinais
 
 ## Passo 6: fechamento
 
-1. **Fragmento de release.** Crie `.changes/followup-mesmas-travas-em-todo-envio.md` com `impacto: nada_mudou`, `secao: corrigido` e um texto para o operador. O texto cobre:
+1. **Fragmento de release.** Crie `.changes/followup-texto-fixo-com-travas.md` com `impacto: nada_mudou`, `secao: corrigido` e um texto para o operador. O texto cobre:
    - janela e resposta valem para o texto fixo;
    - o follow-up não fala por cima de quem está atendendo;
    - o nome do contato sai preenchido;
