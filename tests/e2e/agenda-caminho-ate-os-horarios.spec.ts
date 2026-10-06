@@ -246,7 +246,7 @@ test("o editor de jornada cabe no diálogo em 1280px, com Fim e Salvar inteiros"
       return { left: b.left, right: b.right, top: b.top, bottom: b.bottom };
     };
     const fins = d.querySelectorAll('input[aria-label="Fim"]');
-    const fim = fins[fins.length - 1];
+    const fim = fins[fins.length - 1] ?? null;
     const linha = fim?.parentElement ?? null;
     return {
       dialogo: r(d),
