@@ -89,6 +89,26 @@ export function writeCountAs(userId: string, dml: string): number {
   }
 }
 
+/**
+ * Runs a statement (no trailing `;`) as the `authenticated` role with the
+ * user's claims and returns the Postgres error text — or `null` when the
+ * statement went through. For denials that are NOT row-level security
+ * (a revoked privilege says "permission denied for table …", a guard trigger
+ * raises its own name), where `writeCountAs` would rethrow.
+ */
+export function writeErrorAs(userId: string, statement: string): string | null {
+  try {
+    sql(`
+      set role authenticated;
+      select set_config('request.jwt.claims', '{"sub":"${userId}"}', false);
+      ${statement};
+    `);
+    return null;
+  } catch (err) {
+    return String((err as { stderr?: string }).stderr || err);
+  }
+}
+
 export function tableExists(table: string): boolean {
   return (
     sql(
