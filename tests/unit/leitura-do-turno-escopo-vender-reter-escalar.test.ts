@@ -271,6 +271,19 @@ describe("crm_list_appointments: a agenda, no turno, é a do contato da conversa
     expect(listaAgendamentos).not.toHaveBeenCalled();
   });
 
+  // O contexto do turno rotula o CONTATO como `lead_id` (issue #509), e o
+  // paciente tem UM negócio aberto. A ponte trocava o id por esse negócio
+  // também na leitura: a agenda saía filtrada pelos vínculos do negócio, e o
+  // compromisso marcado sem vínculo sumia — a IA dizia "nada marcado".
+  it("⭐ lead_id igual ao contato do turno lista pelo CONTATO, não pelo negócio aberto dele", async () => {
+    supabase = bancoFalso(tabelas());
+    await executar("crm_list_appointments", { lead_id: DA_CONVERSA }, DA_CONVERSA);
+    expect(vi.mocked(listaAgendamentos).mock.calls[0]![2]).toMatchObject({
+      contactId: DA_CONVERSA,
+      leadId: null,
+    });
+  });
+
   it("o negócio do contato do turno lista, dentro do contato", async () => {
     supabase = bancoFalso(tabelas());
     await executar("crm_list_appointments", { lead_id: NEGOCIO_DO_TURNO }, DA_CONVERSA);
@@ -329,6 +342,15 @@ describe("crm_list_followups: os retornos, no turno, são os do contato da conve
   it("⭐ sem alvo, usa o contato do turno", async () => {
     supabase = bancoFalso(tabelas());
     await executar("crm_list_followups", {}, DA_CONVERSA);
+    expect(vi.mocked(listaRetornosNoCrm).mock.calls[0]![1]).toEqual({
+      leadId: null,
+      contactId: DA_CONVERSA,
+    });
+  });
+
+  it("⭐ lead_id igual ao contato do turno lista pelo CONTATO, não pelo negócio aberto dele", async () => {
+    supabase = bancoFalso(tabelas());
+    await executar("crm_list_followups", { lead_id: DA_CONVERSA }, DA_CONVERSA);
     expect(vi.mocked(listaRetornosNoCrm).mock.calls[0]![1]).toEqual({
       leadId: null,
       contactId: DA_CONVERSA,

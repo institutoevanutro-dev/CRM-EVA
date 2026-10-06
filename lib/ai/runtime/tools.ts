@@ -193,7 +193,12 @@ function wrapMcpTool(
         (args ?? {}) as Record<string, unknown>,
       );
       const argsRecord = higiene.limpos;
-      if ("lead_id" in argsRecord) {
+      // Só ESCRITA traduz. Na leitura, o handler trata `lead_id` igual ao
+      // contato do turno como o CONTATO (`crm_list_appointments` e irmãs):
+      // trocado aqui pelo negócio aberto, a agenda saía filtrada pelos vínculos
+      // desse negócio, e a consulta marcada sem vínculo sumia — a IA dizia ao
+      // paciente que ele não tinha nada marcado.
+      if (def.category !== "read" && "lead_id" in argsRecord) {
         const traduzido = await leadIdDoContatoDoTurno(
           input.supabase,
           input.ctx.organizationId,
