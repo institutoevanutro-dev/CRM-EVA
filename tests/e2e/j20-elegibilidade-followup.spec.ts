@@ -123,6 +123,9 @@ async function publicarFluxoDeSilencio(page: Page): Promise<string> {
 
   const publicar = await page.request.post(`${APP_URL}/api/v1/ai/followup-flows/${pointerId}/publish`);
   expect(publicar.status(), await publicar.text()).toBe(200);
+  // Recua a vigência: os contatos semeados calaram ANTES desta publicação, e a
+  // regra "sem passado" (migration 0324) os recusaria.
+  helper("recuar-vigencia", pointerId, String(THRESHOLD_MIN + 60));
   return pointerId;
 }
 
