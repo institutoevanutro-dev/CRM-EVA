@@ -578,6 +578,7 @@ async function processEnrollment(
   let planRecheckCount: number | undefined;
   let repeatTaken: number | undefined;
   let repeatTotal: number | null | undefined;
+  let matchReplyOcupado = false;
   let events: EnrollmentEventRef[] = [];
 
   const smartWaits = node.type === "trigger" ? coletarEsperasAdaptativas(graph.nodes) : [];
@@ -603,10 +604,12 @@ async function processEnrollment(
     waitElapsed = resolveWaitPhase(events, node.id, enrollment.steps_taken);
     // match_reply de captação: a confirmação já enfileirou um evento neste nó.
     // O claim seguinte às vezes chega com steps_taken desalinhado da chave
-    // `${node}:${steps-1}` — sem isto o motor trata como 1ª visita e MANDA A
-    // PERGUNTA DE NOVO em vez de ler o SIM.
+    // `${node}:${steps-1}` — sem o sufixo de ocupação o motor não lê o SIM.
+    // Occupancy NÃO implica timeout: wait_started recém-gravado no mesmo
+    // request (ALWAYS → menu → espera de novo) faria no_reply/ALWAYS em
+    // cadeia e dispararia o fluxo inteiro de uma vez.
     if (node.type === "match_reply") {
-      waitElapsed = waitElapsed || occupancyEventCount(events, node.id) > 0;
+      matchReplyOcupado = occupancyEventCount(events, node.id) > 0;
     }
     if (node.type === "ai_classify" || node.type === "match_reply" || node.type === "wait") {
       const wakeKey = `${node.id}:${enrollment.steps_taken}:wake`;
@@ -632,7 +635,7 @@ async function processEnrollment(
   if (textoInbound && node.type === "match_reply") {
     lastInboundBody = textoInbound;
   } else if (
-    (node.type === "match_reply" && (wokeEarly || waitElapsed)) ||
+    (node.type === "match_reply" && (wokeEarly || waitElapsed || matchReplyOcupado)) ||
     (node.type === "repeat" && repeatTotal == null)
   ) {
     // Sempre no contato inteiro: a captação e o WhatsApp podem ser conversas

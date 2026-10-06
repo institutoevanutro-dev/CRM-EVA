@@ -886,6 +886,21 @@ describe("processNode — match_reply", () => {
     expect(result).toMatchObject({ kind: "advance", next_node_id: "escape" });
   });
 
+  it("wokeEarly sem texto desta pergunta permanece na espera — não ALWAYS", () => {
+    const result = processNode({
+      node: matchNode(),
+      edges,
+      enrollment: enrollment(),
+      lead: lead(),
+      clock,
+      waitElapsed: false,
+      wokeEarly: true,
+      lastInboundBody: "",
+    });
+    expect(result.kind).toBe("wait");
+    expect(result).toMatchObject({ wake_status: "waiting_reply" });
+  });
+
   it("wokeEarly + save_to sem aresta Sempre usa o primeiro ramo que não é no_reply", () => {
     const node = matchNode({ save_to: { kind: "contact_name" } });
     const soRamo = [

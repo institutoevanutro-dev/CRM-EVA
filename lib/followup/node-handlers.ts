@@ -544,28 +544,41 @@ export function processNode(input: {
       }
       if (wokeEarly) {
         const body = (lastInboundBody ?? "").trim().toLowerCase();
-        const hit =
-          node.config.save_to !== undefined
-            ? undefined
-            : node.config.branches.find((b) => {
-                const needle = b.pattern.trim().toLowerCase();
-                if (needle.length === 0) return false;
-                return b.op === "eq" ? body === needle : body.includes(needle);
-              });
-        const edge = hit
-          ? selectEdge(edges, node.id, { type: "branch", branch_id: hit.id })
-          : selectEdge(edges, node.id, { type: "always" }) ??
-            (() => {
-              const ramo = node.config.branches.find((b) => b.id !== NO_REPLY_BRANCH_ID);
-              return ramo ? selectEdge(edges, node.id, { type: "branch", branch_id: ramo.id }) : null;
-            })();
-        if (!edge) {
-          return {
-            kind: "fail",
-            error: `match_reply node "${node.id}" has no edge for branch "${hit?.id ?? "else"}" (fallback also missing)`,
-          };
+        // inbound_woke sem texto desta pergunta (piso excluiu o "." que
+        // enfileirou o menu) NÃO é ALWAYS nem no_reply — senão o fluxo
+        // dispara o cardápio inteiro no mesmo request.
+        if (!body) {
+          if (!waitElapsed) {
+            return {
+              kind: "wait",
+              next_eval_at: new Date(clock().getTime() + node.config.grace_timeout_ms),
+              wake_status: "waiting_reply",
+            };
+          }
+        } else {
+          const hit =
+            node.config.save_to !== undefined
+              ? undefined
+              : node.config.branches.find((b) => {
+                  const needle = b.pattern.trim().toLowerCase();
+                  if (needle.length === 0) return false;
+                  return b.op === "eq" ? body === needle : body.includes(needle);
+                });
+          const edge = hit
+            ? selectEdge(edges, node.id, { type: "branch", branch_id: hit.id })
+            : selectEdge(edges, node.id, { type: "always" }) ??
+              (() => {
+                const ramo = node.config.branches.find((b) => b.id !== NO_REPLY_BRANCH_ID);
+                return ramo ? selectEdge(edges, node.id, { type: "branch", branch_id: ramo.id }) : null;
+              })();
+          if (!edge) {
+            return {
+              kind: "fail",
+              error: `match_reply node "${node.id}" has no edge for branch "${hit?.id ?? "else"}" (fallback also missing)`,
+            };
+          }
+          return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
         }
-        return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
       }
       const edge = selectEdge(edges, node.id, classEdgeMatch(node, NO_REPLY_BRANCH_ID));
       if (!edge) {
