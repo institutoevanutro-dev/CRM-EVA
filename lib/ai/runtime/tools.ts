@@ -270,7 +270,19 @@ function wrapMcpTool(
             input.contatoDoTurno,
             argsRecord.lead_id,
           );
-          if (!alvo.ok) {
+          // `lead_id` OPCIONAL com o `contact_id` ao lado (`crm_schedule_followup`):
+          // sem negócio a trocar, a escrita segue pelo contato, como se o modelo
+          // tivesse mandado só ele — recusar perdia o retorno prometido ao
+          // paciente. O `contact_id` já foi conferido acima: é o do turno.
+          const peloContato =
+            !alvo.ok &&
+            alvo.motivo !== "indisponivel" &&
+            typeof argsRecord.contact_id === "string" &&
+            (def.inputSchema as Record<string, z.ZodTypeAny>).lead_id?.safeParse(undefined).success === true;
+          if (peloContato) {
+            logger.info("lead_id fora do contato do turno — segue pelo contato", { tool: def.name });
+            delete argsRecord.lead_id;
+          } else if (!alvo.ok) {
             void auditMcpToolCall({
               ctx: input.ctx,
               toolName: def.name,
@@ -280,8 +292,7 @@ function wrapMcpTool(
               errorMessage: `negocio_da_conversa:${alvo.motivo}`,
             });
             return { permitido: false, motivo: alvo.motivo, mensagem: alvo.mensagem };
-          }
-          if (alvo.trocado) {
+          } else if (alvo.trocado) {
             // Não é cosmético: é a única forma de saber que o modelo chuta, e
             // com que frequência.
             logger.info("lead_id fora do contato do turno — trocado pelo negócio aberto dele", {

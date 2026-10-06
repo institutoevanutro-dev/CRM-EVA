@@ -108,8 +108,9 @@ async function executar(nome: string, args: Linha, contatoDoTurno?: string) {
   } as never);
   const r = await ferramentas[nome]!.execute!(args, { toolCallId: "c1", messages: [] } as never);
   const chamou = handler.mock.calls.length > 0;
+  const recebido = handler.mock.calls[0]?.[0] as Linha | undefined;
   handler.mockRestore();
-  return { r: r as Linha, chamou, consultas: supabase.contagem() };
+  return { r: r as Linha, chamou, recebido, consultas: supabase.contagem() };
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -161,6 +162,56 @@ describe.each(CASOS)("$nome $args", ({ nome, args, doTurno, deB }) => {
   it("controle sem turno: o registro de outro cliente chega ao handler, como antes", async () => {
     const semTurno = await executar(nome, args(deB));
     expect(semTurno.r).toEqual({ chegou_ao_handler: true });
+  });
+});
+
+describe("crm_schedule_followup: lead_id que não é negócio do paciente, com o contact_id do turno ao lado", () => {
+  // O modelo copia o `lead_id` do contexto do turno — que é o CONTATO — e manda
+  // o `contact_id` junto. Sem negócio aberto, ou com vários, não há negócio
+  // para trocar; o retorno viaja por contato, e o handler resolve por ele
+  // (`resolveAlvoDoRetorno`). Recusar aqui perdia o retorno prometido.
+  const aberto = (id: string) => ({ ...TABELAS.crm_leads![1]!, id });
+  const casos: Array<[string, Linha[]]> = [
+    ["sem negócio aberto", [{ ...aberto(NEGOCIO_DO_TURNO), status: "won" }]],
+    ["com dois negócios abertos", [aberto(NEGOCIO_DO_TURNO), aberto("33333333-3333-4333-8333-000000000002")]],
+  ];
+  const pedido = (extra: Linha) => ({ lead_id: DO_TURNO, in_hours: 72, reason: "retorno", promise: "volto a falar", ...extra });
+
+  it.each(casos)("%s: chega ao handler pelo contato, sem o lead_id", async (_, negocios) => {
+    const original = TABELAS.crm_leads!;
+    TABELAS.crm_leads = negocios;
+    try {
+      const r = await executar("crm_schedule_followup", pedido({ contact_id: DO_TURNO }), DO_TURNO);
+      expect(r.r).toEqual({ chegou_ao_handler: true });
+      expect(r.recebido).toMatchObject({ contact_id: DO_TURNO });
+      expect(r.recebido).not.toHaveProperty("lead_id");
+    } finally {
+      TABELAS.crm_leads = original;
+    }
+  });
+
+  it.each(casos)("%s: sem contact_id, a recusa continua", async (_, negocios) => {
+    const original = TABELAS.crm_leads!;
+    TABELAS.crm_leads = negocios;
+    try {
+      const r = await executar("crm_schedule_followup", pedido({}), DO_TURNO);
+      expect(r.r).toMatchObject({ permitido: false });
+      expect(r.chamou).toBe(false);
+    } finally {
+      TABELAS.crm_leads = original;
+    }
+  });
+
+  it("lead_id OBRIGATÓRIO (crm_update_lead) não cai pelo contato: a recusa continua", async () => {
+    const original = TABELAS.crm_leads!;
+    TABELAS.crm_leads = [];
+    try {
+      const r = await executar("crm_update_lead", { lead_id: DO_TURNO, contact_id: DO_TURNO }, DO_TURNO);
+      expect(r.r).toMatchObject({ permitido: false, motivo: "sem_negocio" });
+      expect(r.chamou).toBe(false);
+    } finally {
+      TABELAS.crm_leads = original;
+    }
   });
 });
 
