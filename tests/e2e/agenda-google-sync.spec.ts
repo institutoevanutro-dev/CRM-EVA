@@ -248,9 +248,14 @@ test("fontes e destino entre duas contas, somente leitura e ocupação imediatam
     status: "confirmed",
     transparency: "opaque",
   });
+  expect(externalId, "o evento externo da fixture não ganhou id").toBeTruthy();
   await page.goto("/app/agenda");
   await irParaASemanaDoCompromisso(page, start);
-  const card = page.getByTestId(`agendamento-${externalId}`);
+  // Pela ORIGEM, não pelo id do evento: a leitura por
+  // `fn_agenda_ocupacao_google_do_dono` devolve ocupação sem identidade, e o id
+  // do bloco é derivado (dono + fatia). Porte de melgarafael/DeskcommCRM
+  // 83f52dd61 e 0d1486806.
+  const card = page.locator('[data-origem="google_sync"]');
   await card.scrollIntoViewIfNeeded();
   await expect(card).toBeVisible();
   await expect(block).toBeDisabled();
@@ -272,9 +277,13 @@ test("fontes e destino entre duas contas, somente leitura e ocupação imediatam
   const occupiedUrl = `/api/v1/agenda/agendamentos?de=${encodeURIComponent(start)}&ate=${encodeURIComponent(end)}&owner_user_id=${f.user}`;
   const before = await page.request.get(occupiedUrl);
   expect(before.ok()).toBe(true);
-  expect((await before.json()).data.some((item: { id: string }) => item.id === externalId)).toBe(
-    true,
-  );
+  // `origem` é discriminador exato aqui: a rota a estampa só nos blocos externos.
+  const ocupacaoDoGoogle = (corpo: { data: Array<{ origem?: string }> }) =>
+    corpo.data.some((item) => item.origem === "google_sync");
+  expect(
+    ocupacaoDoGoogle(await before.json()),
+    "a ocupação do Google não veio na lista da agenda",
+  ).toBe(true);
   await page.goto("/app/settings/tenant/agenda");
   const section = page.getByRole("region", { name: "Suas agendas Google" });
   await expect(section.getByText("Principal local", { exact: true })).toBeVisible();
@@ -306,9 +315,12 @@ test("fontes e destino entre duas contas, somente leitura e ocupação imediatam
     `/api/v1/agenda/agendamentos?de=${encodeURIComponent(start)}&ate=${encodeURIComponent(end)}&owner_user_id=${f.user}`,
   );
   expect(occupied.ok()).toBe(true);
-  expect((await occupied.json()).data.some((item: { id: string }) => item.id === externalId)).toBe(
-    false,
-  );
+  // Comparar com `externalId` ficaria falso para QUALQUER resposta (o id não é
+  // mais o do evento) — verde sem medir. Pela origem, mede o que o caso quer.
+  expect(
+    ocupacaoDoGoogle(await occupied.json()),
+    "a agenda deixou de ser lida e a ocupação dela continua na lista",
+  ).toBe(false);
   const cache = await db.from("calendar_external_events").select("id").eq("organization_id", f.org);
   expect(cache.data).toHaveLength(1);
   await evidence(page, info, "selecao", "section[aria-label='Suas agendas Google']");

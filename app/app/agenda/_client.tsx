@@ -22,6 +22,7 @@ import type { Agendamento, HorarioLivre, VisaoDaAgenda } from "@/components/agen
 import { EmptyAgenda } from "@/components/empty";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
 import { ancoraAoFecharPainel } from "@/lib/agenda/ancora-depois-de-marcar";
+import { resolverResponsavelDoPainel } from "@/lib/agenda/responsavel-do-painel";
 import { ancoraLocalDoDia } from "@/lib/agenda/semana-semente";
 import { useVinculoDaMarcacao } from "@/lib/agenda/vinculo-da-marcacao";
 import { Button } from "@/components/ui/button";
@@ -76,6 +77,7 @@ const VISOES: Array<{ id: VisaoDaAgenda; rotulo: string }> = [
 export function AgendaClient({
   fusoDeApresentacao,
   hojeNaOrganizacao,
+  usuarioId,
   googleConfigurado,
   contaConectada,
   enderecoDeRetorno,
@@ -91,6 +93,8 @@ export function AgendaClient({
    * (`yyyy-MM-dd`). É a mesma que gerou a semente de compromissos.
    */
   hojeNaOrganizacao: string;
+  /** Id de quem está logado — a única fonte para o rótulo "Você". */
+  usuarioId: string;
   googleConfigurado: boolean;
   contaConectada?: string | null;
   enderecoDeRetorno?: string;
@@ -238,7 +242,7 @@ export function AgendaClient({
    */
   const [ancora, setAncora] = React.useState(() => ancoraLocalDoDia(hojeNaOrganizacao));
 
-  // AS PESSOAS SÃO REAIS: vêm de `/api/v1/team`, com a trilha de cor derivada do
+  // AS PESSOAS SÃO REAIS: vêm de `/api/v1/agenda/pessoas`, com a trilha de cor derivada do
   // `user_id`. Até esta linha o filtro por pessoa era invisível na tela do
   // produto — `FiltroDePessoas` devolve `null` com menos de duas pessoas, e a
   // lista estava vazia. Ele existia, estava provado na vitrine, e ninguém o via
@@ -727,8 +731,11 @@ export function AgendaClient({
                   // O DONO DO TIPO, não o primeiro da lista. A tela dizia "com
                   // <primeira pessoa>" enquanto oferecia a jornada de outra —
                   // e marcava na agenda da primeira, que não tinha jornada.
-                  pessoas.find((p) => p.id === tipo.donoId) ??
-                  pessoas[0] ?? { id: "", nome: "Você", trilha: 1 }
+                  //
+                  // "Você" só quando o dono da agenda É quem está logado: com a
+                  // lista vazia, o fallback fixo dizia "Você" para a jornada da
+                  // médica (porte de melgarafael/DeskcommCRM d7d18345b, #896).
+                  resolverResponsavelDoPainel({ pessoas, donoId: tipo.donoId, usuarioId })
                 }
                 tipo={tipo.nome}
                 duracaoMin={tipo.duracaoMin}

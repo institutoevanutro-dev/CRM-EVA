@@ -7120,6 +7120,12 @@ export const DICIONARIO: Traducoes = {
     es: "Tipo de atención de los horarios libres",
   },
   "Você ainda não publicou seus horários de atendimento.": { es: "Todavía no publicaste tus horarios de atención." },
+  // Porte de melgarafael/DeskcommCRM 83f52dd61 e 297e7ff5a (#896): a jornada de
+  // quem a agenda mostra, sem acusar quem está logado, e o porquê da barra vazia.
+  "A jornada de atendimento ainda não foi publicada.": { es: "La jornada de atención todavía no fue publicada." },
+  "A jornada de atendimento ainda não foi publicada": { es: "La jornada de atención todavía no fue publicada" },
+  "Sem eles ninguém consegue marcar — nem quem atende, nem o agente.": { es: "Sin ellos nadie puede agendar — ni quien atiende, ni el agente." },
+  "Os nomes da equipe na agenda pedem um papel acima de Somente leitura. A grade continua funcionando.": { es: "Los nombres del equipo en la agenda requieren un rol superior a Solo lectura. La grilla sigue funcionando." },
   "Sem eles ninguém consegue marcar clicando na grade — nem você, nem o agente.": { es: "Sin ellos nadie puede agendar haciendo clic en la grilla — ni tú, ni el agente." },
   "Não consegui carregar os horários.": { es: "No pude cargar los horarios." },
   "Os blocos ficam bloqueados até eu conseguir — é mais seguro que oferecer um horário que talvez não exista.": { es: "Los bloques quedan bloqueados hasta que lo logre — es más seguro que ofrecer un horario que quizá no exista." },

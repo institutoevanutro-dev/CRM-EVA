@@ -603,11 +603,19 @@ export function PainelDeMarcacao({
             data-testid="sem-jornada-publicada"
             className="mb-3 rounded-sm border border-warning/40 bg-warning-bg p-3"
           >
+            {/* "Você" só quando a jornada é de quem está logado: a recepção abre
+                a agenda da médica, e ali a frase acusava a pessoa errada. O
+                rótulo vem de `lib/agenda/responsavel-do-painel.ts` (porte do
+                commit 83f52dd61 do projeto original, #896). */}
             <p className="text-sm font-semibold text-text">
-              {t("Você ainda não publicou seus horários de atendimento")}
+              {responsavel.nome === "Você"
+                ? t("Você ainda não publicou seus horários de atendimento")
+                : t("A jornada de atendimento ainda não foi publicada")}
             </p>
             <p className="mt-1 text-xs leading-4 text-text-muted">
-              {t("Sem eles ninguém consegue marcar — nem você, nem o agente.")}
+              {responsavel.nome === "Você"
+                ? t("Sem eles ninguém consegue marcar — nem você, nem o agente.")
+                : t("Sem eles ninguém consegue marcar — nem quem atende, nem o agente.")}
             </p>
             {/*
               O AVISO VIRA PORTA.
