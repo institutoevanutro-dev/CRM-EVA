@@ -6,6 +6,8 @@
   Contexto de negócio: `docs/superpowers/specs/2026-10-05-funil-comercial-dr-andre-design.md`, seções 5 e 6 (no checkout principal).
 - **Schema:** nenhuma mudança. Sem migration, sem apêndice no `baseline.sql`, sem linha no MANIFEST.
   Os números 0323 e 0324 são de outros itens (lembrete e silêncio) e este item não usa número nenhum.
+- **Revisão de 2026-10-06:** os achados dos revisores e o que mudou estão na §7. Onde a §3 diz
+  outra coisa, vale a §7.
 
 ---
 
@@ -145,6 +147,8 @@ A cadeia `runBeforeSend` exige `getLeadContext` (`crmCfg`, contexto LGPD) e o ad
 
 Fica só no worker o resto da cadeia: caps de warm-up e diário (contados no `pacing_ledger`), repetição, LGPD e as promessas. É o risco que sobra (ver §4). No atalho o texto é do operador, e o `sendMessageHandler` continua barrando `is_blocked`.
 
+**Revisão (achado "caps e repetição no atalho"): continua de fora, de propósito, e o operador é avisado.** A saída certa é o atalho chamar `runBeforeSend` inteiro — ele já é auto-suficiente com o pool `pg` (`getRequestPool()`), e a base legal sai de `deriveLgpdFromContact`, sem o `getLeadContext` do worker. Não entrou nesta rodada porque o e2e obrigatório depende do atalho e roda num número do rig com idade 0 (teto de warm-up de 20/dia, contado também pelas campanhas) e com textos iguais entre specs (a trava de repetição veta a 3ª cópia): passar a cadeia sem ajustar o rig deixaria o `e2e` vermelho, e o rig não roda nesta máquina (sem Supabase CLI). Fica nomeado no fragmento de release.
+
 ### D4. Humano ativo é um fato de `decidirEnvio`, e encerra
 
 `FatosDoEnvio` ganha `handoff_policy` (lido do pointer, na consulta da inscrição, que já faz join nele) e `FatosDoEnvio.conversa` ganha dois campos: `atribuida_a_pessoa` e `humano_respondeu`. Ambos são lidos na mesma consulta da conversa (`bloqueios-obrigatorios.ts`, `lerFatosDoEnvio`):
@@ -190,7 +194,7 @@ Os quatro sinais (`force_human`, bot silenciado, atribuída a pessoa, humano res
 - **`handoff_policy='allow'`** ("Permitir durante handoff", `PublishBar.tsx:58-62`). Com ela, atribuição e resposta humana **não** encerram: a opção continua fazendo o que a tela promete. `force_human` e bot silenciado continuam encerrando mesmo com `allow`: hoje eles já cancelavam no worker por `isLeadInHandoff`, então a opção nunca valeu para eles no envio.
 - **Atribuída a pessoa.** O gate de elegibilidade já barra `assignee_kind='user'` no modo IA e no atalho (`lib/ai/elegibilidade/gate.ts:119`). A mudança alinha o worker, em texto e modelo, com esses dois. O comentário de `bloqueios-obrigatorios.ts:18-20` foi reescrito.
 
-### D5. Ordem: porte inteiro de `f90f236aa`, sem tocar em `pos-entrada.ts`
+### D5. Ordem: porte inteiro de `f90f236aa` e de `36827ea36`, sem tocar em `pos-entrada.ts`
 
 A troca de ordem mora em `lib/dev/kick-local-pipeline.ts`, e `lib/channels/pos-entrada.ts` **não muda**: outra branch pode encostar nele.
 
@@ -203,13 +207,19 @@ Portar só a troca reabriria o defeito que o original consertou junto: o acordar
 
 Conferido com `git apply --check`: o código entra com deslocamento de linha. Só o `select` de `reactivity.ts` muda à mão (`LIVE_STATUSES` aqui, `statuses` lá). Os dois arquivos de teste que não existem no fork viram arquivos novos **com o mesmo nome do original**, para facilitar merges futuros:
 
-- `lib/followup/engine-match-reply-inbound.test.ts`: os dois casos de `f90f236aa`. O primeiro caso do arquivo original ("avança para o ramo do '1'…") depende de `36827ea36` (piso do inbound pelo `wait_started`), que não foi portado, e ficou de fora; o cabeçalho diz isso.
+- `lib/followup/engine-match-reply-inbound.test.ts`: os três casos do original (`f90f236aa` + `36827ea36`).
+
+**`36827ea36` é pré-requisito, não opcional** (achado da revisão). Sem ele o wake continuava regravando
+`updated_at`; o acordar sintético do kick (sem `sent_at`) rodava primeiro, gravava `updated_at=agora`,
+e o texto e o tick seguinte descartavam o "1" do contato como anterior à pergunta. Portado igual ao
+original: o `inbound_woke` não toca `updated_at`, `pisoDoInboundDaEspera` (piso = início da espera,
+a partir do `wait_started`) e o resgate do replay aceitando `wait_started`.
 - `lib/followup/reactivity-dormente.test.ts`: o caso "não acorda espera estacionada depois da mensagem" e um controle. O fork não tem o status `dormente`, então os demais casos do original não se aplicam; o cabeçalho diz isso.
 
 ### D6. Variáveis resolvidas na hora do envio, num helper só
 
 - **O nome.** `nomeDoContato` de `lib/contacts/rotulo-do-contato.ts`, que já existe com a ordem certa (`name`, depois `display_name`) e com `ehIdentificadorTecnico`: telefone e `@lid` contam como sem nome. A campanha já o usa (`lib/campanhas/acoes.ts`, `lib/inicio/meu-dia.ts`, `lib/leads/radar-de-risco.ts`). Nada de helper novo.
-- **O helper de interpolação.** `lib/inbox/template-vars.ts`: `TemplateContact.name` passa a ser o nome **já resolvido** por quem chama, e `interpolateTemplate` ganha a opção `{ semValor: 'manter' | 'remover' }`. O padrão é `'manter'`, a caixa de entrada de hoje.
+- **O helper de interpolação.** `lib/inbox/template-vars.ts`: `interpolateTemplate` recebe o contato bruto (`name` + `display_name`) e chama `nomeDoContato` por dentro — a regra fica num lugar só (revisão: antes, cada chamador resolvia o nome, e um chamador novo que passasse `contacts.name` deixava `{{nome}}` cru). Ganha a opção `{ semValor: 'manter' | 'remover' }`; o padrão é `'manter'`, a caixa de entrada de hoje.
 - **A regra de remover** age só em volta da variável, nunca no texto inteiro:
 
   | Caso | O que acontece | Exemplo |
@@ -224,7 +234,8 @@ Conferido com `git apply --check`: o código entra com deslocamento de linha. S�
   - O worker, em `resolveFlowSendBody` (texto, modelo e modelo de reserva), lê `name` e `display_name` pelo `pool`, filtrando `organization_id`, só quando o texto tem a variável.
   - O atalho lê o mesmo par pelo admin, filtrando `organization_id`, e o texto interpolado é o que vai ao ledger.
   - O nome vale como está na hora em que a mensagem sai, e a regra é uma só.
-- **Na caixa de entrada.** `InboxLayout.tsx` passa `nomeDoContato(selectedConversation.contacts)`; a consulta já traz `display_name` (`app/api/v1/conversations/_handler.ts:94`). O `Composer.tsx` não muda.
+- **Na caixa de entrada.** O `Composer` recebe o contato (`contact`, não mais `contactName`) e o `InboxLayout` passa `selectedConversation.contacts`; a consulta já traz `display_name` (`app/api/v1/conversations/_handler.ts:94`). Provado por render em `tests/unit/composer-template-nome-do-perfil.test.tsx`.
+- **Modo `remover`, depois da revisão:** só espaço horizontal é ajustado; variável no começo de uma linha que não é a primeira segue a regra do começo e a linha vazia sai inteira; parênteses em volta saem junto; se não sobra nada além de pontuação, o helper devolve `""` e o passo é **pulado** com "Passo pulado: sem o nome do contato, a mensagem ficaria vazia." (atalho, worker e reserva) — mandar `""` falharia no canal e mataria a inscrição por tentativa esgotada.
 - **Na tela do passo.** A dica do `ActionForm` (texto) cita `{{nome}}` e `{{primeiro_nome}}`, com a entrada em espanhol no dicionário.
 - O renderizador de campanha (`lib/campanhas/renderizador.ts`) tem regra própria (pula o contato sem nome) e não muda.
 
@@ -251,7 +262,7 @@ O fluxo em `runFlowDrivenTurn` (`ai_message`) fica assim:
    - **Ledger vazio não dispara.** A IA que concluiu sem enviar decidiu não falar: instruções condicionais do próprio negócio ("só sai se a última mensagem foi uma pergunta nossa") e o agente pausado ou em modo assistido (`inbound-turn.ts:1911`) terminam assim. A tela promete "se a IA não **conseguir** escrever", e isso é falha, não decisão. Mantém o `skipped` de hoje.
 3. **Antes de a reserva sair:**
    1. As travas são conferidas de novo com `conferirAntesDoEnvio`. Um humano pode ter entrado durante o turno, e o opt-out vetado pelo handler aparece como `is_blocked`. Se bloqueia, aplica o bloqueio (mesma tradução de D2) e a reserva não sai.
-   2. A elegibilidade do canal (`decidirElegibilidadeDaConversa`, a versão `pg` do mesmo gate) também é conferida, **com `followup: true`** (como `inbound-turn.ts:1771-1785`): sem isso o silêncio de roteamento do Instagram barraria a reserva. Não elegível (ou leitura que falha): mantém o resultado da IA.
+   2. ~~A elegibilidade do canal por `decidirElegibilidadeDaConversa`.~~ Depois da revisão, o gate do canal é parte de `decidirEnvio` (passo 1); a reserva não tem gate próprio.
    3. O corpo é resolvido por `resolveFlowSendBody({templateId: fallback})`, com volta e nome.
    4. O envio usa `sendFixedOutbound(..., seq)` com a seq da reserva. Ela ganha um parâmetro `seq` com padrão `1`, e o `runBeforeSend` vem inteiro: STOP, janela, ritmo, caps, LGPD, repetição.
 4. **O desfecho da reserva:**
@@ -273,7 +284,8 @@ O atalho passa a respeitar a janela anti-ban do número, que por padrão é 7h�
 
 | Do original | Aqui |
 |---|---|
-| `f90f236aa` (ordem do kick + guardas em `engine.ts`, `node-handlers.ts`, `reactivity.ts` + fragmento) | **Portado** inteiro; `reactivity.ts` à mão (`LIVE_STATUSES`). Testes com o nome do original, parciais (ver D5). |
+| `f90f236aa` (ordem do kick + guardas em `engine.ts`, `node-handlers.ts`, `reactivity.ts` + fragmento) | **Portado** inteiro; `reactivity.ts` à mão (`LIVE_STATUSES`). Testes com o nome do original (ver D5). **Adaptado** depois da revisão: no `match_reply` acordado, mensagem SEM TEXTO (áudio, imagem) é resposta e segue o ALWAYS, como na main; acordar sem mensagem desta pergunta mantém o prazo que já corria em vez de `agora + grace` (o original ainda faz `agora + grace`). `loadLastInboundBody` distingue "nenhuma mensagem" (`null`) de "mensagem sem texto" (`""`). |
+| `36827ea36` (o wake não regrava `updated_at`; piso do inbound pelo `wait_started`; resgate do replay com `wait_started`; fragmento) | **Portado** igual ao original, com os testes dele. |
 | `b94446a5c` — `fallback_template_id` em `FollowupJobRequest.payload`, `turnPayloadExtras`, `followupTurnPayloadSchema`, `fallbackTemplateId` na entrada de `runFlowDrivenTurn` | **Portado** com os mesmos nomes. |
 | `b94446a5c` — semântica (modelo aprovado da Meta no lugar da IA com a janela de 24h fechada) | **Adaptado**: `message_templates`, depois de a IA não conseguir enviar (D7). O resto do commit (modo `template` com modelo aprovado, `held_by_return`, rota de modelos aprovados) não veio. |
 | `a1c6c4d1e`, `092081b61` (dead-man de ~11h) | **Não tocado**: é da outra sessão. |
@@ -282,9 +294,11 @@ O atalho passa a respeitar a janela anti-ban do número, que por padrão é 7h�
 
 - **O passo que espera a janela morre pelo dead-man (cerca de 11h).** É da outra sessão (commits `a1c6c4d1e` e `092081b61` do original). O adiamento do atalho (D2/D3) deixa o job pendente até a abertura: em janela fechada por mais de ~11h15, a inscrição ainda pode morrer antes. Não mexo.
 - **Caps, warm-up, repetição, LGPD e promessas no atalho.** Continuam só no worker (D3). Mitigação existente: no self-host o worker pega a maioria dos jobs em 2 s. Fechar isso exige a cadeia `runBeforeSend` no app ou o worker no e2e.
-- **A varredura de silêncio reinscreve quem foi encerrado por humano ativo ou anonimizado**, no tick seguinte (`silence-sweep.ts:28-30`, sem cooldown). Hoje o laço só acontece com `force_human`; com os sinais novos ele se torna comum para todo contato em que uma pessoa respondeu: a cada volta a inscrição nasce, roda o planejamento (`plan_timing`, um turno de LLM quando há espera inteligente), grava eventos e é encerrada de novo no primeiro envio. **Este PR não pode ir para a `main` antes da deduplicação por episódio do item silêncio (0324)**, que não inscreve quem já teve inscrição deste pointer depois do último inbound nem quem teve resposta humana depois dele. A guarda mínima em `runSilenceSweep` não veio aqui de propósito: é o arquivo que o item 0324 reescreve, e duas versões da mesma regra em branches paralelas divergem no merge.
+- ~~A varredura de silêncio reinscreve em laço quem foi encerrado por humano ativo.~~ **Resolvido na revisão:** a frase "não entra antes do 0324" estava só aqui, e nada impedia o merge fora de ordem. O adaptador de produção (`createSupabaseSilenceSweepDb().insertEnrollment`) não insere quando já existe inscrição deste ponteiro com `outcome='handoff'` e `started_at` depois da última mensagem do contato (`encerradaPorHumanoNesteSilencio`). É o recorte mínimo da deduplicação por episódio do item 0324, que o cobre por inteiro; mora no corpo de `insertEnrollment`, que a branch do 0324 não altera. O laço por contato anonimizado é anterior a este item (o `decidirEnvio` da main já encerrava) e fica com o 0324.
 - **O lembrete da agenda não respeita humano ativo.** É do item lembrete (0323).
-- **Bloqueio de elegibilidade não humano no atalho** (allowlist, pré-go-live). Continua `settle(done)` e recheck. Só os motivos humanos passam a encerrar, via `decidirEnvio`, antes do gate.
+- ~~Bloqueio de elegibilidade não humano no atalho.~~ **Resolvido na revisão:** o gate do canal (modo de teste, autorização por origem) entrou em `decidirEnvio` (fatos lidos por `lerFatosDoEnvio`), com motivo `conversa_nao_liberada`, que encerra. O atalho e a reserva não têm mais gate próprio; "Permitir durante handoff" vale igual nos dois caminhos (atribuída a pessoa + `allow` envia). No modo IA, a IA continua sem falar em conversa de humano (o gate do turno), e a reserva — texto do operador — segue a decisão compartilhada.
+- **Prova pela tela (DoD 12) — pendente.** As jornadas J20.20–J20.22 estão provadas por unit, render (`Composer`) e invariante contra o banco, não por Playwright. O rig e2e não roda nesta máquina (sem Supabase CLI), e spec nova entra no check obrigatório `e2e`: uma spec escrita sem rodar seria um vermelho provável no CI. Fica para quem tiver o rig: (1) resposta pelo composer → dossiê com o motivo humano; (2) dossiê com "pelo modelo de reserva"; (3) modelo com `{{primeiro_nome}}` no composer para contato só com `display_name`.
+- **Reserva quando a IA conclui sem enviar — desvio do escopo, registrado.** O escopo pedia a reserva sempre que o passo `ai_message` termina sem envio por motivo que não seja bloqueio. Aqui ela só sai em veto da cadeia ou erro na última tentativa (D7). O ledger vazio junta casos que pedem respostas opostas: agente pausado ou em modo assistido (a chave de desligar do operador — mandar o modelo ali contrariaria a escolha dele em todo fluxo publicado com caminho de 24h+, onde a reserva é obrigatória) e a IA que não produziu texto (falha, que pediria a reserva). Separar os dois exige que `runAgentTurn` devolva o motivo do no-op estruturado (11 retornos antecipados num caminho quente), e isso não coube nesta rodada. A tela promete "se a IA não **conseguir** escrever", que é o que acontece.
 - **`schedule_followup` disponível no turno IA do fluxo.** Pode abrir um retorno paralelo.
 - **O resto de `b94446a5c`**: envio de modelo aprovado da Meta no modo `template`, `held_by_return`, a rota de modelos aprovados.
 - **Commits do original no mesmo arquivo, sem relação com o item.** `3bfa7b59c` (job vencido no mesmo milissegundo) e `401c018fc`/`099fac569` (org suspensa) são candidatos a porte pela sessão Graphify.
@@ -299,3 +313,37 @@ O atalho passa a respeitar a janela anti-ban do número, que por padrão é 7h�
 - **Eco classificado errado.** O eco que sobra como `external_device` é excluído pela comparação do id bare (D4). Sobra o caso em que o eco chega sem `external_id` ou com um id cuja cauda não coincide com a nossa saída: aí o follow-up é encerrado por "humano ativo".
 - **Fluxos já publicados com `handoff_policy='pause'` ou `'cancel'`.** Passam a encerrar quando uma pessoa responde pelo celular ou pela caixa de entrada sem "Assumir". É a exigência do item; o fragmento de release diz isso ao operador.
 - **Dependência de merge.** Ver §4: o item silêncio (0324) entra antes.
+
+## 6. Living System Checklist (DoD 13, `docs/doctrine/sistema-vivo.md`)
+
+| Pergunta | Artefato concreto |
+|---|---|
+| Entrada | Job `followup_turn` enfileirado pelo engine (`lib/followup/engine.ts`); a mensagem do contato no webhook (`acelerarPipelineDeEventos`); a varredura de silêncio (`runSilenceSweep`). |
+| Saída | A mensagem pelo `send_ledger` (`sendWithLedger`/`sendFixedOutbound`); `followup_enrollments.outcome`/`cancel_reason`; eventos `turn_skipped`, `action_sent` (com `via: 'modelo_de_reserva'`) e `action_pulado` em `followup_enrollment_events`. |
+| Log | `logger.info("[followup] texto fixo barrado por bloqueio obrigatório", { motivo })` no atalho; `envio fixo …` no worker; o motivo legível vai ao `cancel_reason`. |
+| Tela | Dossiê do follow-up (`app/app/ai/followups/enrollments/[id]`, `DossieDoFollowup.tsx`): motivo do encerramento ("uma pessoa da equipe está atendendo esta conversa", "este número não está liberado…", "Passo pulado: sem o nome…") e "pelo modelo de reserva". Dica de `{{nome}}`/`{{primeiro_nome}}` no `ActionForm`. |
+| Porta | A tela do fluxo e o dossiê já estão no catálogo de navegação (Follow-ups); nenhuma tela nova. |
+| Anti-morte | Nenhum bloqueio deixa a inscrição rechecando até virar `dead`: humano ativo e número não liberado encerram com motivo; texto vazio pula o passo; fora da janela adia para a abertura. |
+| Laço de retorno (invariante 7) | O `outcome='handoff'` entra em `lib/followup/outcome-stats.ts`, que o flywheel lê (`lib/agent-engine/flywheel/live.ts`): um fluxo com muitos encerramentos por humano aparece na métrica dele. O erro conhecido da trava é o falso "humano ativo" (eco sem `external_id`, resposta automática do celular fora dos 10 s): o operador vê o motivo no dossiê e reinscreve. **Dívida declarada:** nada distingue automaticamente o encerramento por humano real do falso positivo; o retorno termina no operador. |
+| Mapa vivo | `docs/architecture/followup-dossie.architecture.json` (peças e arestas do envio com travas). |
+
+## 7. Revisão de 2026-10-06 — achados e o que mudou
+
+| Achado | Veredito | O que mudou |
+|---|---|---|
+| Kick acorda antes do texto sem o 36827ea36 (o "1" se perdia) | Real | Porte de `36827ea36` (D5); teste do kick por comportamento. |
+| Áudio/imagem no menu deixava de contar como resposta; prazo reiniciado | Real | Mensagem sem texto é resposta; prazo mantido (tabela de portes). |
+| Resposta automática do WhatsApp Business encerrava todo passo | Real | Celular até 10 s depois de um inbound não conta (D4, consulta). |
+| Proposta mandada depois de mover a etapa matava a cobrança | Real | Fora do silêncio, a pessoa só conta se o contato falou depois do início ou um passo já saiu. |
+| `{{nome}}` em começo de linha colava na linha anterior | Real | Regra de começo de linha (D6). |
+| Laço da varredura de silêncio | Real | Guarda mínima no adaptador (§4). |
+| Atalho × worker com `allow` + atribuída; allowlist só no atalho | Real | Gate do canal dentro de `decidirEnvio` (§4). |
+| Caps, repetição, LGPD e promessas só no worker | Real | **Não consertado** nesta rodada; motivo em D3; nomeado no fragmento. |
+| Sem prova pela tela | Real | **Pendente** (§4). |
+| Helper não resolvia o nome; inbox sem teste | Real | Helper resolve; `Composer` recebe o contato; teste de render. |
+| Checklist do sistema vivo ausente | Real | §6. |
+| Teste do kick lia o código-fonte | Real | Teste por comportamento com a reatividade real. |
+| Reserva com ledger vazio | Real (escopo) | **Desvio registrado** (§4). |
+| Corpo vazio ou com parênteses quebrados | Real | `""` pula o passo; parênteses saem juntos. |
+| Atalho sem prova contra o banco | Parcial | `conferirAntesDoEnvio` provado contra o banco (`allow` + atribuída, `pause` + atribuída, allowlist); a composição atalho → `getRequestPool` segue só no e2e. |
+
