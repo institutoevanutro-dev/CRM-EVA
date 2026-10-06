@@ -190,8 +190,8 @@ function chatIdOf(m: QueuedRow): string | null {
  * Marca `sent` a mensagem que o WAHA acabou de aceitar.
  *
  * Devolve `true` quando o id NÃO pôde ser gravado porque o eco dela já o ocupa.
- * No WEBJS o eco grava o `_serialized`, exatamente a string que o envio devolve,
- * e o unique `(organization_id, external_id)` recusa uma segunda linha com o
+ * O eco grava exatamente a string que o envio devolve (o bare, nos dois engines
+ * — `parseWahaMessageId` e `lib/waha/ingest.ts`), e o unique `(organization_id, external_id)` recusa uma segunda linha com o
  * mesmo id. Antes, essa recusa caía no `catch` do laço como "erro transiente —
  * mantida queued", e o cliente recebia a mesma mensagem de novo a cada tick — a
  * armadilha medida na issue #196 do DeskcommCRM. Aqui a mensagem sai `sent` sem

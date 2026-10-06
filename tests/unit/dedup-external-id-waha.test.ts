@@ -55,6 +55,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
 
 import { dispatchWahaEvent, type WahaEnvelope, type WahaPayload } from "@/lib/waha/ingest";
+import { parseWahaMessageId } from "@/lib/waha/message-id";
 
 interface LinhaMessage {
   id: string;
@@ -309,5 +310,23 @@ describe("eco do próprio envio — a mesma string de identidade nas duas trilha
 
     expect(messages, "a mensagem antiga apareceu duas vezes depois do reenvio").toHaveLength(1);
     expect(messages[0]!.external_id).toBe(COMPOSTO);
+  });
+
+  it("WEBJS: a resposta do envio traz o WAMessageKey inteiro, e o envio grava a MESMA forma que o eco", async () => {
+    // Revisão do PR #134. No WEBJS o envio devolve `{ id: { fromMe, remote, id,
+    // _serialized } }`. Preferindo o `_serialized`, o envio carimbava o
+    // COMPOSTO, o eco (agora bare) não colidia, e a corrida voltava: frase em
+    // dobro e a IA pausada pela própria mensagem. O id carimbado aqui é o que o
+    // parse da resposta REAL devolve — não uma constante que o teste escolhe.
+    const respostaWebjs = {
+      id: { fromMe: true, remote: "250302204792918@lid", id: BARE, _serialized: COMPOSTO },
+    };
+    const carimbo = parseWahaMessageId(respostaWebjs)!;
+    const { admin, messages } = bancoDeMentira([ENVIO_EM_VOO], { carimbaEnvioAntesDoInsert: carimbo });
+
+    await dispatchWahaEvent(admin as never, SESSION as never, envelope(ECO), "req-1");
+
+    expect(messages, "WEBJS: a mesma frase apareceu duas vezes na conversa").toHaveLength(1);
+    expect(messages[0]!.external_id).toBe(BARE);
   });
 });
