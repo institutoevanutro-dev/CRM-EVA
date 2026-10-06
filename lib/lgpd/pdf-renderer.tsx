@@ -248,7 +248,9 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
             <Text style={styles.sectionTitle}>Cadastros antigos unidos a este</Text>
             {data.contatos_unidos.map((c) => (
               <View key={c.id} style={styles.itemBlock}>
-                <Text>{c.name ?? c.display_name ?? "—"}</Text>
+                {/* Os dois campos, crus: é o que o cadastro guardava, não um rótulo. */}
+                <Text>Nome: {c.name ?? "—"}</Text>
+                {c.display_name ? <Text style={styles.small}>Nome de exibição: {c.display_name}</Text> : null}
                 <Text style={styles.small}>
                   E-mail: {c.email ?? "—"} · Telefone: {c.phone_number ?? "—"}
                 </Text>
