@@ -101,6 +101,36 @@ describe("loadSilentContacts — anonimizado fica fora", () => {
   });
 });
 
+describe("loadSilentContacts — cada relógio alimenta a sua regra", () => {
+  // sent_at → vigência ("sem passado": quando o contato falou); created_at →
+  // episódio (relógio do banco, o mesmo do started_at). Trocar os dois não
+  // reprovava nada: os consumidores do adaptador só olhavam contact_id. Com
+  // created_at na vigência, histórico velho importado depois da ativação
+  // contaria como silêncio novo — o disparo em massa de volta.
+  it("ultima_entrada_em é o sent_at e ultima_entrada_gravada_em é o created_at", async () => {
+    const atrasada = conversa("atrasada");
+    atrasada.messages[0]!.sent_at = "2026-08-01T10:00:00.000Z"; // escrita em agosto
+    atrasada.messages[0]!.created_at = "2026-09-01T10:00:00.000Z"; // ingerida em setembro
+    const { admin } = supabaseDeConversas([atrasada]);
+    const contatos = await createSupabaseSilenceSweepDb(admin).loadSilentContacts("org", CORTE, []);
+    expect(contatos).toEqual([
+      {
+        contact_id: "atrasada",
+        ultima_entrada_em: "2026-08-01T10:00:00.000Z",
+        ultima_entrada_gravada_em: "2026-09-01T10:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("o embed de messages pede sent_at e created_at", async () => {
+    const { admin, consultas } = supabaseDeConversas([]);
+    await createSupabaseSilenceSweepDb(admin).loadSilentContacts("org", CORTE, []);
+    const select = consultas[0]!.find((c) => c.metodo === "select")?.args[0] as string;
+    const embed = select.match(/messages!messages_conversation_id_fkey\(([^)]*)\)/)?.[1] ?? "";
+    expect(embed.split(",")).toEqual(expect.arrayContaining(["sent_at", "created_at"]));
+  });
+});
+
 const muitas = (n: number) =>
   Array.from({ length: n }, (_, i) => {
     const k = String(i).padStart(5, "0");
