@@ -1,11 +1,13 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: A IA só mexe na ficha do paciente com quem está conversando
+titulo: A IA só enxerga e mexe nos dados do paciente com quem está conversando
 ---
 
-Quando a IA anota algo num negócio durante uma conversa (valor, etapa, campos), ela informa qual negócio é, e às vezes informava errado. Se o código fosse de um negócio de **outro** paciente, no mesmo funil, a anotação era aceita e ia para a ficha errada, sem erro nenhum para alguém perceber.
+No meio de uma conversa, a IA conseguia buscar a ficha, o telefone, as conversas, o histórico de mensagens, os negócios, a agenda e os retornos de **outro** paciente da clínica, se alguém pedisse com jeito. E, quando anotava algo (um valor, uma etiqueta, uma marcação ou remarcação de consulta), podia gravar na ficha de outro paciente sem que ninguém percebesse.
 
-Agora toda anotação da IA numa conversa é conferida contra os negócios do paciente daquela conversa. Se o negócio é dele, segue. Se não é e ele tem um único negócio aberto, a anotação vai para esse. Com nenhum ou com vários abertos, a IA recebe a recusa com o motivo, que fica registrada na auditoria, e segue a conversa em vez de escolher por palpite. Anotações feitas pela equipe, pela API ou por automações não mudam.
+Agora, durante o atendimento, a IA só lê e altera o que é do paciente daquela conversa. Qualquer pedido sobre outra pessoa volta para ela como recusa, com o motivo, e a recusa fica registrada na auditoria. Se a IA informa o negócio errado ao anotar algo e o paciente tem um único negócio aberto, a anotação vai para esse negócio; com nenhum ou com vários, ela recusa em vez de escolher por palpite.
 
-Porte do projeto original (DeskcommCRM), trabalho de Paulo Lima Jr, jmpo e Rafael Melgaço.
+O que a equipe faz pela tela, as automações e as integrações por chave continuam como antes. A marcação de consulta pela IA segue funcionando normalmente para o paciente da conversa.
+
+Porte do projeto original (DeskcommCRM), trabalho de Rafael Melgaço, webtecnica, Paulo Lima Jr e jmpo.
