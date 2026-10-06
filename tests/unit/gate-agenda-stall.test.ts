@@ -8,6 +8,7 @@ import {
   BEFORE_SEND_GATES,
   type GateContext,
 } from "@/lib/agent-engine/guardrails/before-send";
+import { execucaoChecaAgenda } from "@/lib/agent-engine/agent/inbound-turn";
 import { PACING_DEFAULTS } from "@/lib/agent-engine/pacing/defaults";
 import { SPINNING_DEFAULTS } from "@/lib/agent-engine/spinning/defaults";
 
@@ -466,5 +467,64 @@ describe("#1038 — serviço colado ao verbo, nunca o assunto da frase", () => {
     ]) {
       expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(false);
     }
+  });
+});
+
+/**
+ * ─── Revisão do PR #140: o ramo do serviço colado vetava o que não é promessa ──
+ *
+ * O ramo novo ("verbo de checagem + serviço colado") pegou duas famílias que
+ * passavam antes dele e não prometem consultar horário nenhum:
+ *
+ *   - CONFIRMAR A CONSULTA é o fluxo de confirmação de presença, que tem
+ *     ferramenta própria (`crm_confirm_appointment`) e não é checagem de
+ *     disponibilidade. O lembrete de clínica ("Estou confirmando sua consulta de
+ *     amanhã às 9h… Podemos contar com você?") era vetado e o veto mandava
+ *     chamar `crm_find_free_slots`/`crm_book_appointment` — marcar de novo um
+ *     horário que já é do paciente.
+ *   - O serviço é objeto, mas a checagem é de CONVÊNIO ("vou verificar o
+ *     atendimento pelo seu convênio"): a mesma família que a #1038 quis tirar.
+ *
+ * E o turno que FEZ o certo — chamou `crm_confirm_appointment` — não contava
+ * como checagem: "Seu horário está confirmado" depois de confirmar era vetado.
+ */
+describe("revisão #140 — confirmação de presença e convênio não são promessa de agenda", () => {
+  const armado = { active: true, ferramentas: TODAS, toolCalledThisTurn: false };
+
+  it.each([
+    "Oi Maria! Estou confirmando sua consulta de amanhã às 9h com a Dra. Ana. Podemos contar com você?",
+    "Perfeito! Estou confirmando sua consulta de quinta às 14h.",
+    "Vamos confirmar sua consulta de amanhã às 9h?",
+    "Vou confirmar a consulta com o convênio",
+    "Vou verificar o atendimento pelo seu convênio",
+    "Vou consultar a sessão no seu plano de saúde e já te falo",
+  ])("passa: %s", (body) => {
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(true);
+  });
+
+  it.each([
+    // "confirmar" continua sendo checagem quando o objeto é a AGENDA.
+    "Vou confirmar o horário da sua consulta e te aviso.",
+    // Convênio na frase não salva quem também promete olhar horário.
+    "Vou verificar a consulta pelo convênio e os horários livres.",
+    // O relato da #1019 segue vetado.
+    "Vou verificar sua consulta e já te retorno.",
+  ])("continua vetando: %s", (body) => {
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(false);
+  });
+
+  it("confirmar o horário com crm_confirm_appointment conta como ter checado a agenda", () => {
+    expect(execucaoChecaAgenda("crm_confirm_appointment")).toBe(true);
+    for (const t of TODAS) expect(execucaoChecaAgenda(t)).toBe(true);
+    // Ferramentas VIZINHAS de leitura não contam: o relato da #1019 é o modelo
+    // chamando a lista e parando ali. Contá-las reabriria o defeito.
+    expect(execucaoChecaAgenda("crm_list_appointments")).toBe(false);
+    expect(execucaoChecaAgenda("crm_list_event_types")).toBe(false);
+  });
+
+  it("fiação: a marcação de execução usa a mesma régua", () => {
+    expect(FONTE_INBOUND).toMatch(
+      /if \(execucaoChecaAgenda\(name\) && typeof mcpTool\.execute === 'function'\)/,
+    );
   });
 });

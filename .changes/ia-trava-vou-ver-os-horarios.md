@@ -15,7 +15,11 @@ ela é obrigada a consultar os horários de verdade na mesma conversa e responde
 com o que encontrou.
 
 Frases normais continuam passando, como "vou confirmar se o plano cobre a
-consulta" ou "vou verificar o valor da sessão". Nada muda na tela.
+consulta", "vou verificar o valor da sessão", "vou verificar o atendimento pelo
+seu convênio" e o lembrete "estou confirmando sua consulta de amanhã às 9h,
+podemos contar com você?". E quando a IA confirma a presença do paciente na
+agenda, ela pode dizer "seu horário está confirmado" sem ser barrada. Nada muda
+na tela.
 
 Portado do projeto original (DeskcommCRM, contribuições de webtecnica, Gyanu
 Mayank e Rafael Melgaço).

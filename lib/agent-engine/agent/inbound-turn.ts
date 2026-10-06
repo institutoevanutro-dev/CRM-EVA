@@ -991,6 +991,22 @@ const AGENDA_TOOL_NAMES = new Set([
 ]);
 
 /**
+ * A EXECUÇÃO desta ferramenta conta como "checou a agenda neste turno" para o
+ * `agendaStallGate`? As que armam o gate, mais `crm_confirm_appointment`: o
+ * turno que confirmou a presença e responde "seu horário está confirmado" fez o
+ * certo, e o veto o mandava procurar horário livre ou marcar de novo.
+ *
+ * `crm_confirm_appointment` fica FORA de `AGENDA_TOOL_NAMES` de propósito: lá
+ * ela armaria o gate e seria nomeada no veto de "vou verificar os horários" —
+ * uma ferramenta de escrita como cura de promessa de disponibilidade. E as
+ * vizinhas de LEITURA (`crm_list_appointments`, `crm_list_event_types`) não
+ * contam: o relato da #1019 é o modelo chamando a lista e parando ali.
+ */
+export function execucaoChecaAgenda(toolName: string): boolean {
+  return AGENDA_TOOL_NAMES.has(toolName) || toolName === 'crm_confirm_appointment';
+}
+
+/**
  * O agente consegue GRAVAR um horário sozinho (marcar ou remarcar)?
  *
  * Duas ferramentas MARCAM um horário novo: `crm_book_appointment` e, desde a issue
@@ -3561,7 +3577,7 @@ async function executarTurnoDoAgente(
             if (name in rawTools) continue;
             // Marca a EXECUÇÃO (não só a decisão de chamar) — é isso que o agendaStallGate
             // precisa saber para não vetar um turno que já checou a agenda de verdade.
-            if (AGENDA_TOOL_NAMES.has(name) && typeof mcpTool.execute === 'function') {
+            if (execucaoChecaAgenda(name) && typeof mcpTool.execute === 'function') {
               const executeOriginal = mcpTool.execute.bind(mcpTool);
               rawTools[name] = {
                 ...mcpTool,

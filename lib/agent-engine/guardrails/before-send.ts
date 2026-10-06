@@ -512,9 +512,25 @@ export const internalVocabularyGate: Gate = {
  * Preço declarado: uma promessa em que o serviço aparece só como assunto deixa de ser
  * vetada. O que guarda esta fronteira é `tests/unit/gate-agenda-stall.test.ts` (as SEIS
  * como controle NEGATIVO, ao lado dos controles que continuam vetando).
+ *
+ * ─── Fork (revisão do PR #140): dois cortes no ramo do serviço ─────────────────
+ *
+ * Aqui o fork diverge do original. As duas famílias abaixo passavam antes do ramo do
+ * serviço existir, e ele as vetava sem cura:
+ *
+ *   - `confirmar`/`confirmando` NÃO entram no ramo do serviço. "Confirmar a consulta" é a
+ *     confirmação de PRESENÇA — o lembrete "Estou confirmando sua consulta de amanhã às
+ *     9h, podemos contar com você?" —, que não consulta disponibilidade. O veto mandava
+ *     o modelo procurar horário livre ou marcar de novo um horário que já é do paciente.
+ *     "Confirmar" segue valendo no ramo da AGENDA ("vou confirmar o horário").
+ *   - CONVÊNIO adiante na frase tira o ramo do serviço: "vou verificar o atendimento pelo
+ *     seu convênio" checa cobertura, não horário. Mesma família da #1038.
+ *
+ * Preço: "vou confirmar sua consulta" como enrolação de marcação passa, como passava
+ * antes do PR #140; "plano de tratamento" adiante também solta o ramo do serviço.
  */
 const AGENDA_STALL_PATTERN =
-  /\b(vou|estou|iremos|vamos)\b[^.!?\n]{0,10}\b(verificando|verificar|confirmando|confirmar|consultando|consultar|organizando|organizar)\b(?:[^.!?\n]{0,80}\b(?:hor[aá]rios?|agenda|disponibilidade|agendamento|marca[çc][aã]o|encaixe|vagas?)\b|\s+(?:[oa]s?\s+)?(?:meu\s+|minha\s+|seu\s+|sua\s+|nosso\s+|nossa\s+|teu\s+|tua\s+)?(?:atendimento|consulta|sess[aã]?o)\b)/i;
+  /\b(vou|estou|iremos|vamos)\b[^.!?\n]{0,10}\b(verificando|verificar|confirmando|confirmar|consultando|consultar|organizando|organizar)\b(?:[^.!?\n]{0,80}\b(?:hor[aá]rios?|agenda|disponibilidade|agendamento|marca[çc][aã]o|encaixe|vagas?)\b|(?<!confirm(?:ando|ar))\s+(?:[oa]s?\s+)?(?:meu\s+|minha\s+|seu\s+|sua\s+|nosso\s+|nossa\s+|teu\s+|tua\s+)?(?:atendimento|consulta|sess[aã]?o)\b(?![^.!?\n]*\b(?:convenios?|planos?|cobertura|cobre|reembolso)\b))/i;
 
 /**
  * A janela de 10 chars entre "vou" e o verbo de checagem não alcança a construção medida
