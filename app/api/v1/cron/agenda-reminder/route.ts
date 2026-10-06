@@ -129,9 +129,8 @@ import { ensureConversation } from "@/lib/automation/start-conversation";
 import { adiarAteAJanelaAbrir } from "@/lib/automation/janela-do-canal";
 import { espacarEnvio } from "@/lib/automation/throttle";
 import { env } from "@/lib/env";
-import { tagDeIdioma } from "@/lib/i18n/datas";
-import { traduzir } from "@/lib/i18n/dicionario";
-import { IDIOMA_PADRAO, normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas";
+import { aplicarMoldeDoLembrete, montarLembrete } from "@/lib/agenda/texto-do-lembrete";
+import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -188,66 +187,11 @@ function tipoDe(linha: CompromissoAVencer): TipoDoCompromisso | null {
 }
 
 /**
- * O texto do lembrete.
- *
- * `reminder_template_name` é a outra coluna que a 0177 criou e ninguém leu.
- * Quando ela aponta para um modelo de mensagem da organização, ele vence; sem
- * ela, sai o texto abaixo, que diz as três coisas que a pessoa precisa saber:
- * o que é, quando, e onde.
+ * O texto do lembrete mora em `lib/agenda/texto-do-lembrete.ts`, puro, porque a
+ * prévia da tela de Configurações › Agenda usa a MESMA função. Reexportado aqui
+ * para o teste desta rota e a forma do original continuarem valendo.
  */
-export function montarLembrete(input: {
-  nomeDoContato: string | null;
-  titulo: string;
-  quando: Date;
-  timezone: string;
-  local: string | null;
-  /**
-   * O idioma da ORGANIZAÇÃO (`organizations.locale`), e não um literal.
-   *
-   * `tests/unit/i18n-a-data-segue-o-idioma.test.ts` proíbe `"pt-BR"` escrito à
-   * mão em formatação de data fora de `lib/i18n/datas.ts` — e o motivo não é
-   * estética: uma instalação em espanhol receberia o lembrete com "jueves, 03/09"
-   * no meio de uma frase em português, que é a tela meio traduzida que aquele
-   * guarda existe para impedir. Aqui vale em dobro, porque isto não é tela: é
-   * mensagem que sai para o WhatsApp de um cliente e não dá para desfazer.
-   *
-   * Opcional com o padrão do produto para a função seguir pura e testável sem
-   * banco — o mesmo desenho de `montarPares` em `lib/metrics/atrito.ts`.
-   */
-  idioma?: Idioma;
-}): string {
-  const idioma = input.idioma ?? IDIOMA_PADRAO;
-  const t = (texto: string) => traduzir(texto, idioma);
-  const etiqueta = tagDeIdioma(idioma);
-
-  const dia = new Intl.DateTimeFormat(etiqueta, {
-    timeZone: input.timezone,
-    weekday: "long",
-    day: "2-digit",
-    month: "2-digit",
-  }).format(input.quando);
-  const hora = new Intl.DateTimeFormat(etiqueta, {
-    timeZone: input.timezone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(input.quando);
-
-  // Cada `t()` cobre só a parte FIXA da frase: nome, título, data e endereço
-  // são dado do tenant e nunca passam por tradução.
-  // A pontuação entra na CHAVE de propósito: em espanhol a exclamação abre a
-  // frase ("¡Hola"), e um `t("Oi")` solto com o `!` colado do lado de fora
-  // devolveria "Hola, Rose!" — meio traduzido, que é o defeito que o guarda de
-  // i18n existe para impedir.
-  const saudacao = input.nomeDoContato
-    ? `${t("Oi,")} ${input.nomeDoContato}!`
-    : t("Oi!");
-  const onde = input.local ? ` ${t("Endereço")}: ${input.local}.` : "";
-  return (
-    `${saudacao} ${t("Passando pra lembrar do seu compromisso:")} ` +
-    `${input.titulo}, ${dia} ${t("às")} ${hora}.${onde}`
-  );
-}
+export { aplicarMoldeDoLembrete, montarLembrete };
 
 /**
  * Está na hora de lembrar?

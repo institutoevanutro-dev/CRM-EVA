@@ -9122,6 +9122,8 @@ export const DICIONARIO: Traducoes = {
   // só que irreversível, porque a mensagem já saiu. `às` já existia acima.
   "Oi,": { es: "¡Hola," },
   "Oi!": { es: "¡Hola!" },
+  "hoje": { es: "hoy" },
+  "amanhã": { es: "mañana" },
   "Passando pra lembrar do seu compromisso:": { es: "Te recuerdo tu cita:" },
   "Endereço": { es: "Dirección" },
   "Data de nascimento": { es: "Fecha de nacimiento" },
