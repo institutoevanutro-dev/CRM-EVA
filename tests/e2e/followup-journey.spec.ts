@@ -338,9 +338,6 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
     await expect(page.getByText("Fluxo publicado.")).toBeVisible();
     await expect(page.locator('[aria-label="status: Ativo"]')).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "followup-8.3-01-flow-published.png"), fullPage: true });
-    // Recua a vigência do fluxo: o contato semeado na seção 3 calou ANTES desta
-    // publicação, e a regra "sem passado" (migration 0324) o recusaria.
-    runHelper(["recuar-vigencia", flowId, "65"]);
 
     // A partir daqui o pointer é `status='active'` com `trigger_config.kind=
     // 'silence'` — a MOMENTO que o agente (seção 2) for publicado com
@@ -417,6 +414,10 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
       expect(persisted.status).toBe("published");
       expect(persisted.followup.enabled).toBe(true);
       expect(persisted.followup.flow_pointer_ids).toContain(flowId);
+      // Recua a vigência do fluxo DEPOIS de publicar o agente: armar o ponteiro
+      // num agente também a avança (migration 0324), e o contato semeado na
+      // seção 3 calou antes disso — a regra "sem passado" o recusaria.
+      runHelper(["recuar-vigencia", flowId, "65"]);
 
       // =========================================================================
       // 3. [REAL — service role] Semeia um contato silencioso: última conversa

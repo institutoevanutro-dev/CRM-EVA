@@ -123,9 +123,6 @@ async function publicarFluxoDeSilencio(page: Page): Promise<string> {
 
   const publicar = await page.request.post(`${APP_URL}/api/v1/ai/followup-flows/${pointerId}/publish`);
   expect(publicar.status(), await publicar.text()).toBe(200);
-  // Recua a vigência: os contatos semeados calaram ANTES desta publicação, e a
-  // regra "sem passado" (migration 0324) os recusaria.
-  helper("recuar-vigencia", pointerId, String(THRESHOLD_MIN + 60));
   return pointerId;
 }
 
@@ -159,6 +156,10 @@ test.describe("J20.12 — o follow-up automático respeita o gate", () => {
       // `admin`/MFA; o que está sob teste é a varredura, não a criação do agente).
       pointerId = await publicarFluxoDeSilencio(page);
       agentId = helper<{ agentId: string }>("publish-agent", pointerId).agentId;
+      // Recua a vigência DEPOIS de armar o agente (armar também a avança,
+      // migration 0324): os contatos semeados abaixo calaram antes disso, e a
+      // regra "sem passado" os recusaria.
+      helper("recuar-vigencia", pointerId, String(THRESHOLD_MIN + 60));
 
       // (2) Dois contatos silenciosos no MESMO canal com gate — um de cada lado.
       const a = helper<{ contactId: string }>("seed-silent-contact", "1", String(THRESHOLD_MIN));

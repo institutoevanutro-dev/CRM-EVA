@@ -34320,7 +34320,7 @@ create index if not exists idx_followup_enrollments_pointer_contact_cooldown
 alter table public.followup_flow_pointers
   add column if not exists active_since timestamptz not null default now();
 comment on column public.followup_flow_pointers.active_since is
-  'Desde quando o ponteiro vale com o status, o kind e os segments atuais do gatilho (trigger trg_followup_ponteiro_marca_vigencia). A varredura de silêncio ignora silêncio cuja última mensagem recebida é anterior. Trocar versão, limiar ou cancel_on_reply não mexe: só desativar e ativar de novo, ou mudar o kind ou os segmentos. Episódios em andamento nesse instante não recebem a sequência (erra para o lado de não mandar).';
+  'Desde quando o ponteiro vale com o status, o kind e os segments atuais do gatilho (trigger trg_followup_ponteiro_marca_vigencia). A varredura de silêncio ignora silêncio cuja última mensagem recebida é anterior. Trocar versão, limiar ou cancel_on_reply não mexe: só desativar e ativar de novo, mudar o kind ou os segmentos, ou armá-lo num agente quando nenhum o armava (trigger trg_followup_ponteiro_armado_marca_vigencia). Episódios em andamento nesse instante não recebem a sequência (erra para o lado de não mandar).';
 
 create or replace function public.fn_followup_ponteiro_marca_vigencia()
 returns trigger
@@ -34345,6 +34345,55 @@ create trigger trg_followup_ponteiro_marca_vigencia
        is distinct from coalesce(new.trigger_config -> 'params' -> 'segments', '[]'::jsonb)
   )
   execute function public.fn_followup_ponteiro_marca_vigencia();
+
+-- (3) Armar o ponteiro num agente também é passar a valer. O gate da varredura
+--     (lib/followup/agent-followup-gate.ts) só libera o ponteiro que um agente
+--     PUBLICADO arma (followup.enabled e flow_pointer_ids). Um fluxo ativo há
+--     semanas e armado só agora inscreveria de uma vez todo silêncio desde a
+--     vigência — o disparo em massa por outro caminho. Ao publicar uma versão
+--     que arma o ponteiro, a vigência avança SE ninguém o armava até ali:
+--     nem outro agente publicado, nem a versão que esta acabou de substituir
+--     (fn_publish_ai_agent_version grava superseded_at = published_at da
+--     nova, na mesma transação). Republicar o agente com o ponteiro ainda
+--     armado não mexe — ajuste de prompt não descarta episódio em andamento.
+--     Desarmar e armar de novo avança. Só UPDATE de status: publicar é UPDATE
+--     (fn_publish_ai_agent_version); nenhum caminho insere versão já
+--     publicada. `followup` é imutável fora do rascunho
+--     (fn_ai_agent_version_content_immutable), então só a publicação arma.
+create or replace function public.fn_followup_ponteiro_armado_marca_vigencia()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if new.followup -> 'enabled' is distinct from 'true'::jsonb
+     or jsonb_typeof(new.followup -> 'flow_pointer_ids') is distinct from 'array' then
+    return null;
+  end if;
+  update public.followup_flow_pointers p
+     set active_since = now()
+   where p.organization_id = new.organization_id
+     and new.followup -> 'flow_pointer_ids' ? p.id::text
+     and not exists (
+       select 1 from public.ai_agent_versions v
+        where v.organization_id = new.organization_id
+          and v.id <> new.id
+          and v.followup -> 'enabled' = 'true'::jsonb
+          and v.followup -> 'flow_pointer_ids' ? p.id::text
+          and (v.status = 'published'
+               or (v.agent_id = new.agent_id and v.status = 'superseded'
+                   and v.superseded_at = new.published_at)));
+  return null;
+end
+$$;
+revoke execute on function public.fn_followup_ponteiro_armado_marca_vigencia() from public, anon, authenticated;
+
+drop trigger if exists trg_followup_ponteiro_armado_marca_vigencia on public.ai_agent_versions;
+create trigger trg_followup_ponteiro_armado_marca_vigencia
+  after update of status on public.ai_agent_versions
+  for each row
+  when (new.status = 'published' and old.status is distinct from 'published')
+  execute function public.fn_followup_ponteiro_armado_marca_vigencia();
 
 -- ---- fim: o gatilho de silêncio não recomeça (migration 0324) ----
 

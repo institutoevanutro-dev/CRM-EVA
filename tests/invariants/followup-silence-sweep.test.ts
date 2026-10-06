@@ -1166,6 +1166,83 @@ describe("vigência do ponteiro (active_since)", () => {
     expect(rows[0]!.indexdef).toMatch(/\(organization_id, pointer_id, contact_id, updated_at\)/);
   });
 
+  /** Publica pelo caminho real (fn_publish_ai_agent_version): rascunho novo → publicado. */
+  async function publicarAgente(org: string, agentId: string | null, pointerIds: string[]): Promise<string> {
+    const id =
+      agentId ??
+      (
+        await pool.query<{ id: string }>(
+          `insert into ai_agents (organization_id, name, system_prompt) values ($1, $2, 'prompt') returning id`,
+          [org, `Arma ${Date.now()}-${Math.random()}`],
+        )
+      ).rows[0]!.id;
+    const sessionId = await seedChannelSession(org);
+    const { rows } = await pool.query<{ id: string }>(
+      `insert into ai_agent_versions
+         (organization_id, agent_id, version_number, system_prompt, provider, model, channel_session_id, status, followup)
+       values ($1, $2, (select coalesce(max(version_number), 0) + 1 from ai_agent_versions where agent_id = $2),
+               'prompt', 'anthropic', 'claude-sonnet-4-6', $3, 'draft', $4)
+       returning id`,
+      [org, id, sessionId, JSON.stringify({ enabled: true, flow_pointer_ids: pointerIds })],
+    );
+    await pool.query(`select * from fn_publish_ai_agent_version($1, $2, $3, true, null)`, [org, id, rows[0]!.id]);
+    return id;
+  }
+
+  it("(i) armar num agente um ponteiro ativo há 30 dias avança a vigência; quem calou antes não entra", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org, { thresholdMinutes: 30 }); // vigência há 30 dias
+    const contactId = await seedContact(org);
+    await seedConversation(org, contactId, 90);
+    await publicarAgente(org, null, [pointerId]);
+    avancou(await vigencia(pointerId));
+    expect((await runSilenceSweep({ db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK })).enrolled).toBe(0);
+    expect(await countEnrollments(pointerId, contactId)).toBe(0);
+  });
+
+  it("(j) republicar o agente com o ponteiro ainda armado NÃO muda a vigência", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    const agentId = await publicarAgente(org, null, [pointerId]);
+    const antes = await recuar(pointerId);
+    await publicarAgente(org, agentId, [pointerId]);
+    expect(await vigencia(pointerId)).toEqual(antes);
+  });
+
+  it("(k) desarmar e armar de novo avança a vigência", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    const agentId = await publicarAgente(org, null, [pointerId]);
+    const antes = await recuar(pointerId);
+    await publicarAgente(org, agentId, []); // desarma
+    expect(await vigencia(pointerId)).toEqual(antes);
+    await publicarAgente(org, agentId, [pointerId]); // arma de novo
+    avancou(await vigencia(pointerId));
+  });
+
+  it("(l) um segundo agente armando o que outro já arma NÃO muda a vigência", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    await publicarAgente(org, null, [pointerId]);
+    const antes = await recuar(pointerId);
+    await publicarAgente(org, null, [pointerId]);
+    expect(await vigencia(pointerId)).toEqual(antes);
+  });
+
+  it("(m) a função do trigger de armar não é executável por anon nem por PUBLIC", async () => {
+    const { rows } = await pool.query<{ anon: boolean; publico: boolean }>(
+      `select has_function_privilege('anon', 'public.fn_followup_ponteiro_armado_marca_vigencia()', 'execute') as anon,
+              exists (select 1 from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                       where p.oid = 'public.fn_followup_ponteiro_armado_marca_vigencia()'::regprocedure
+                         and a.grantee = 0 and a.privilege_type = 'EXECUTE') as publico`,
+    );
+    expect(rows[0]).toEqual({ anon: false, publico: false });
+  });
+
   it("(h) a função do trigger não é executável por anon nem por PUBLIC", async () => {
     const { rows } = await pool.query<{ anon: boolean; publico: boolean }>(
       `select has_function_privilege('anon', 'public.fn_followup_ponteiro_marca_vigencia()', 'execute') as anon,
