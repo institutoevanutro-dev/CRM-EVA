@@ -213,3 +213,64 @@ test("o selo de plantão distingue de plantão, fora do horário e desligado", a
 
   await page.screenshot({ path: ".superpowers/evidence/plantao-tres-estados.png" });
 });
+
+/**
+ * A LINHA DA JANELA CABE NO DIÁLOGO — medido, não olhado.
+ *
+ * ═══ O defeito ═══════════════════════════════════════════════════════════════
+ * O seletor de Unidade entrou na linha DEPOIS do grid de 5 colunas
+ * (`90px_1fr_1fr_1.3fr_auto`), e entrou no meio: dia, início, UNIDADE, "–",
+ * fim, lixeira — 6 filhos em 5 colunas. Em 1280px a lixeira descia para uma
+ * segunda linha, o campo "Fim" ficava cortado na borda direita do diálogo e o
+ * botão Salvar do rodapé também.
+ *
+ * A asserção é geométrica: todo controle da linha na MESMA linha (faixas que se cruzam),
+ * e "Fim", lixeira e Salvar inteiros dentro do retângulo do diálogo.
+ */
+test("o editor de jornada cabe no diálogo em 1280px, com Fim e Salvar inteiros", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const creds = lerCreds();
+  await entrar(page, creds);
+  await page.goto("/app/team?aba=atendimento");
+  await expect(page.getByTestId("atendentes-e-horarios")).toBeVisible({ timeout: 20_000 });
+
+  await page.getByRole("button", { name: /Editar horário de/ }).first().click();
+  const dialogo = page.getByRole("dialog");
+  await expect(dialogo).toBeVisible();
+  await dialogo.getByRole("button", { name: /Adicionar janela/ }).click();
+
+  const medida = await dialogo.evaluate((d) => {
+    const r = (el: Element | null) => {
+      if (!el) return null;
+      const b = el.getBoundingClientRect();
+      return { left: b.left, right: b.right, top: b.top, bottom: b.bottom };
+    };
+    const fins = d.querySelectorAll('input[aria-label="Fim"]');
+    const fim = fins[fins.length - 1];
+    const linha = fim?.parentElement ?? null;
+    return {
+      dialogo: r(d),
+      fim: r(fim),
+      lixeira: r(linha?.querySelector('[aria-label="Remover janela"]') ?? null),
+      salvar: r([...d.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Salvar") ?? null),
+      faixas: linha ? [...linha.children].map((c) => r(c)!) : [],
+    };
+  });
+
+  const dentro = (nome: string, e: { left: number; right: number } | null) => {
+    expect(e, `${nome} não foi achado no diálogo`).not.toBeNull();
+    expect(e!.left, `${nome} começa fora do diálogo`).toBeGreaterThanOrEqual(medida.dialogo!.left);
+    expect(e!.right, `${nome} está cortado na borda direita do diálogo`).toBeLessThanOrEqual(medida.dialogo!.right);
+  };
+  dentro("o campo Fim", medida.fim);
+  dentro("a lixeira", medida.lixeira);
+  dentro("o botão Salvar", medida.salvar);
+  // Mesma linha = as faixas verticais se cruzam (`items-center` dá a cada
+  // controle um topo diferente; o que não pode é um começar abaixo do fim do outro).
+  const maiorTopo = Math.max(...medida.faixas.map((f) => f.top));
+  const menorFundo = Math.min(...medida.faixas.map((f) => f.bottom));
+  expect(medida.faixas.length, "a linha da janela não tem os 6 controles").toBe(6);
+  expect(maiorTopo, "os controles da janela quebraram em mais de uma linha").toBeLessThan(menorFundo);
+
+  await dialogo.screenshot({ path: "evidence/equipe/editor-de-jornada-cabe-1280.png" });
+});
