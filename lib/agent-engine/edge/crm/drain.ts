@@ -19,7 +19,11 @@ import { insertInboxItem } from '../../db/repository';
 import type { Logger } from '../../obs/logger';
 import { enqueueJob } from '../../queue/queue';
 import { avisoDeEventoMorto, IA_QUE_NAO_RESPONDEU } from '@/lib/event-log/aviso-de-evento-morto';
-import { TIPOS_DERIVAVEIS, DERIVACAO_TERMINADA } from '@/lib/messaging/media/derivable';
+import {
+  TIPOS_DERIVAVEIS,
+  DERIVACAO_TERMINADA,
+  TETO_ESPERA_DERIVACAO_MS,
+} from '@/lib/messaging/media/derivable';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 
 const DRAIN_CONSUMER = 'agent-engine';
@@ -190,8 +194,10 @@ const ESPERA_DERIVACAO_MS = 4_000;
  * falha transitória, não do Whisper em si, e nenhum teto razoável a cobre sem
  * o cliente esperando minutos pela primeira resposta. 120s cobre o caso comum
  * de transcrição lenta (como o do Alfran) sem impor essa espera longa.
+ *
+ * O valor (`TETO_ESPERA_DERIVACAO_MS`) mora em `lib/messaging/media/derivable.ts`:
+ * a anotação do turno usa a mesma régua.
  */
-const TETO_ESPERA_DERIVACAO_MS = 120_000;
 
 type DesfechoEvento = 'processado' | 'adiar';
 

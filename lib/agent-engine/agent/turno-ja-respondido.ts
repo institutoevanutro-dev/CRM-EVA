@@ -33,6 +33,12 @@
  */
 import type pg from 'pg';
 
+import {
+  DERIVACAO_TERMINADA,
+  TETO_ESPERA_DERIVACAO_MS,
+  TIPOS_DERIVAVEIS,
+} from '@/lib/messaging/media/derivable';
+
 type Queryable = Pick<pg.Pool, 'query'>;
 
 export interface AlvoDoTurno {
@@ -46,6 +52,19 @@ export interface AlvoDoTurno {
  * Anota no job a inbound mais nova visível AGORA — chamar antes de o turno ler
  * a conversa. Um statement: o `||` do jsonb não pisa em chave alheia do payload
  * (`held_run_after` do session-watchdog, por exemplo).
+ *
+ * "Visível" é o que o turno pode LER, não só o que já foi gravado:
+ *
+ *  - Mídia ainda sendo transcrita ou descrita não entra. O turno a lê como
+ *    "[áudio]"; contá-la como vista calaria o turno que o drain cria quando a
+ *    transcrição fica pronta, e a pergunta do áudio ficaria sem resposta. A régua
+ *    é a do drain: derivável, com arquivo, sem estado final e mais nova que o
+ *    teto de espera (passado o teto, o drain segue sem o texto, e o turno também).
+ *
+ *  - Retentativa de um job que JÁ enviou (`send_ledger` aceito, na fila ou em
+ *    voo) não reescreve a anotação: o ledger devolve "já enviado" e nada novo
+ *    sai, então a resposta que existe é a do que a primeira tentativa viu.
+ *    Reescrever faria a mensagem que chegou no meio-tempo parecer respondida.
  */
 export async function anotarUltimaInboundVista(db: Queryable, alvo: AlvoDoTurno): Promise<void> {
   await db.query(
@@ -53,9 +72,24 @@ export async function anotarUltimaInboundVista(db: Queryable, alvo: AlvoDoTurno)
         set payload = payload || jsonb_build_object(
           'ultima_inbound_vista_em',
           (select max(m.created_at) from messages m
-            where m.organization_id = $1 and m.conversation_id = $2 and m.direction = 'inbound'))
-      where organization_id = $1 and id = $3`,
-    [alvo.organizationId, alvo.conversationId, alvo.jobId],
+            where m.organization_id = $1 and m.conversation_id = $2 and m.direction = 'inbound'
+              and not (m.type = any($4::text[])
+                       and m.media_url is not null
+                       and coalesce(m.media_derived_status, '') <> all($5::text[])
+                       and m.created_at > now() - ($6 * interval '1 millisecond'))))
+      where organization_id = $1 and id = $3
+        and not exists (
+          select 1 from send_ledger s
+           where s.organization_id = $1 and s.job_id = $3
+             and s.status in ('requested', 'accepted', 'queued'))`,
+    [
+      alvo.organizationId,
+      alvo.conversationId,
+      alvo.jobId,
+      [...TIPOS_DERIVAVEIS],
+      [...DERIVACAO_TERMINADA],
+      TETO_ESPERA_DERIVACAO_MS,
+    ],
   );
 }
 

@@ -24,3 +24,11 @@ export const TIPOS_DERIVAVEIS: ReadonlySet<string> = new Set([
  * segurava a resposta do texto seguinte até o teto.
  */
 export const DERIVACAO_TERMINADA: ReadonlySet<string> = new Set(["ready", "failed", "skipped"]);
+
+/**
+ * Quanto o drain espera a derivação de uma mídia antes de despachar o turno sem
+ * ela (o racional e as medições estão em `edge/crm/drain.ts`). Mora aqui porque
+ * a anotação do turno (`agent/turno-ja-respondido.ts`) usa a mesma régua para
+ * saber o que o turno pôde ler.
+ */
+export const TETO_ESPERA_DERIVACAO_MS = 120_000;

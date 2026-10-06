@@ -347,6 +347,82 @@ describe("a régua: outro turno já viu e respondeu a última mensagem do client
   });
 });
 
+describe("a anotação só promete o que o turno pôde ler", () => {
+  // A régua do drain compara com o relógio real; os instantes também.
+  const haSegundos = (s: number): string => new Date(Date.now() - s * 1000).toISOString();
+
+  /** Áudio do cliente ainda sendo transcrito (o turno só enxerga "[áudio]"). */
+  async function audioPendente(em: string): Promise<string> {
+    const id = crypto.randomUUID();
+    await pool.query(
+      `insert into messages (id, organization_id, conversation_id, channel_session_id, contact_id,
+         type, direction, status, body, media_url, sent_via, sent_at, created_at)
+       values ($1,$2,$3,$4,$5,'audio','inbound','delivered',null,'waha:audio','external_device',$6,$6)`,
+      [id, ORG, CONV, SESSION, CONTACT, em],
+    );
+    return id;
+  }
+
+  /** A resposta que o turno `jobId` mandou, com a linha aceita do `send_ledger`. */
+  async function envioAceito(jobId: string, em: string): Promise<void> {
+    const msgId = crypto.randomUUID();
+    await pool.query(
+      `insert into messages (id, organization_id, conversation_id, channel_session_id, contact_id,
+         type, direction, status, body, sent_via, sent_at, created_at)
+       values ($1,$2,$3,$4,$5,'text','outbound','sent','Olá, como posso ajudar?','ai',$6,$6)`,
+      [msgId, ORG, CONV, SESSION, CONTACT, em],
+    );
+    await pool.query(
+      `insert into send_ledger (organization_id, contact_id, job_id, seq, body_hash, status, crm_message_id)
+       values ($1,$2,$3,1,'h','accepted',$4)`,
+      [ORG, CONTACT, jobId, msgId],
+    );
+  }
+
+  it("áudio ainda sem transcrição não conta como visto: o turno dele responde depois", async () => {
+    // "Oi" e, 5 s depois, a pergunta em áudio. O turno do "Oi" começou com o
+    // áudio ainda sendo transcrito, leu "[áudio]" e respondeu "Olá, como posso
+    // ajudar?". Se a anotação cobrisse o áudio, o turno criado quando a
+    // transcrição ficou pronta seria pulado e a pergunta nunca teria resposta.
+    await inbound("Oi", haSegundos(30));
+    const audio = await audioPendente(haSegundos(25));
+    const turnoDoOi = await turnoTerminado({ vistoAte: null });
+    await m.regua.anotarUltimaInboundVista(pool, alvo(turnoDoOi));
+    await envioAceito(turnoDoOi, haSegundos(20));
+    await pool.query(
+      `update messages set media_derived_status = 'ready', media_derived_text = 'quanto custa a limpeza?'
+        where id = $1`,
+      [audio],
+    );
+    expect(await m.regua.ultimaInboundJaRespondida(pool, alvo(crypto.randomUUID()))).toBe(false);
+  });
+
+  it("controle: áudio JÁ transcrito quando o turno leu conta como visto", async () => {
+    await inbound("Oi", haSegundos(30));
+    const audio = await audioPendente(haSegundos(25));
+    await pool.query(`update messages set media_derived_status = 'ready' where id = $1`, [audio]);
+    const turno = await turnoTerminado({ vistoAte: null });
+    await m.regua.anotarUltimaInboundVista(pool, alvo(turno));
+    await envioAceito(turno, haSegundos(20));
+    expect(await m.regua.ultimaInboundJaRespondida(pool, alvo(crypto.randomUUID()))).toBe(true);
+  });
+
+  it("retentativa de um turno que JÁ enviou não troca o que ele viu", async () => {
+    // O job do "Sim" respondeu e o worker morreu antes de concluir. Na volta, o
+    // ledger devolve "já enviado" e nada sai — se a anotação passasse a cobrir
+    // o 365, que chegou nesse meio-tempo, o job do 365 seria pulado e ninguém
+    // responderia a ele.
+    await inbound("Sim", T("02:39"));
+    const turnoDoSim = await turnoTerminado({
+      vistoAte: T("02:39"),
+      envio: { status: "accepted", em: T("03:10") },
+    });
+    await inbound("365,00 2x na semana", T("04:04"));
+    await m.regua.anotarUltimaInboundVista(pool, alvo(turnoDoSim));
+    expect(await m.regua.ultimaInboundJaRespondida(pool, alvo(crypto.randomUUID()))).toBe(false);
+  });
+});
+
 describe("a porta: o handler real de inbound_turn", () => {
   it("não chama o modelo nem envia quando outro turno já respondeu à última mensagem", async () => {
     await inbound("Sim", T("02:39"));
