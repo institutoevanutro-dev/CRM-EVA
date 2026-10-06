@@ -50,6 +50,14 @@ import { flowGraphSchema } from "./graph-schema";
 import { triggerConfigSchema } from "./api-schemas";
 import { resolveAgentForAutomaticTrigger, type FollowupGateDb } from "./agent-followup-gate";
 
+/**
+ * Status que ocupam a vaga do índice único `idx_followup_enrollments_one_live`
+ * — mesma lista usada em `gatilho-retorno.ts`, `gatilho-caso.ts` e
+ * `ceder-turno-ao-retorno.ts` (não há constante exportada compartilhada; cada
+ * consumidor já repete a própria cópia).
+ */
+const STATUS_VIVOS = ["active", "waiting_reply", "paused_handoff", "paused_manual"] as const;
+
 export interface SilencePointer {
   id: string;
   organization_id: string;
@@ -66,6 +74,19 @@ export interface SilenceSweepDb {
   loadSilentContactIds(orgId: string, cutoffIso: string, segments: string[]): Promise<string[]>;
   /** id do nó `trigger` do grafo pinado da version; `null` se version/nó não existir (defensivo — não deveria acontecer, validate-publish garante 1 trigger). */
   loadTriggerNodeId(orgId: string, versionId: string): Promise<string | null>;
+  /**
+   * Dos `contactIds`, os que JÁ têm um enrollment VIVO (qualquer fluxo da org —
+   * o índice único `idx_followup_enrollments_one_live` é por organização e
+   * contato). Lido ANTES do insert para não tentar à toa: a tentativa que bate
+   * no índice ainda passa pela fronteira de atendimento, pela proteção da agenda
+   * e por um INSERT que o banco recusa — e cada recusa é uma tupla morta, uma
+   * linha de erro no log do Postgres e um 409 no gateway. Medido numa instalação
+   * real (02/10/2026): 86 contatos parados na espera longa de um remarketing,
+   * tentados a cada minuto em dois fluxos → ~124 mil recusas por dia, 100.854
+   * erros no log de 24 h, num banco que já estava sem fôlego de CPU. O 23505
+   * continua tratado no insert: ele cobre a corrida, não o caso comum.
+   */
+  loadContatosComInscricaoViva(orgId: string, contactIds: string[]): Promise<Set<string>>;
   /** Insere o enrollment nascendo no nó trigger; `inserted:false` = 23505 (já vivo nesse pointer) → skip. */
   insertEnrollment(input: {
     organization_id: string;
@@ -132,8 +153,15 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     const cutoffIso = new Date(clock().getTime() - pointer.threshold_minutes * 60_000).toISOString();
     const contactIds = await db.loadSilentContactIds(pointer.organization_id, cutoffIso, pointer.segments);
     const nextEvalAt = clock().toISOString();
+    const comInscricaoViva = await db.loadContatosComInscricaoViva(pointer.organization_id, contactIds);
 
     for (const contactId of contactIds) {
+      // O mesmo contador do 23505: quem já está vivo é `skipped_existing`,
+      // só que agora sem a tentativa que o banco recusaria.
+      if (comInscricaoViva.has(contactId)) {
+        summary.skipped_existing++;
+        continue;
+      }
       const { inserted } = await db.insertEnrollment({
         organization_id: pointer.organization_id,
         pointer_id: pointer.id,
@@ -159,6 +187,9 @@ type ContactEmbed =
       phone_number: string | null;
     }
   | null;
+
+/** Lote do `in(contact_id, …)`: a lista vai na URL do PostgREST. */
+const LOTE_DE_CONTATOS = 100;
 
 /** Production adapter: `SilenceSweepDb` sobre o client service-role real. */
 export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSweepDb {
@@ -284,6 +315,21 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         origins.set(`${orgId}:${contactId}`, v.boundary);
       }
       return silentIds;
+    },
+
+    async loadContatosComInscricaoViva(orgId, contactIds) {
+      const vivos = new Set<string>();
+      for (let i = 0; i < contactIds.length; i += LOTE_DE_CONTATOS) {
+        const { data, error } = await admin
+          .from("followup_enrollments")
+          .select("contact_id")
+          .eq("organization_id", orgId)
+          .in("status", [...STATUS_VIVOS])
+          .in("contact_id", contactIds.slice(i, i + LOTE_DE_CONTATOS));
+        if (error) throw new Error(error.message);
+        for (const row of (data ?? []) as Array<{ contact_id: string }>) vivos.add(row.contact_id);
+      }
+      return vivos;
     },
 
     async loadTriggerNodeId(orgId, versionId) {
