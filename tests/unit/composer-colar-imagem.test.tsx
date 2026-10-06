@@ -220,6 +220,46 @@ describe("Composer — texto digitado durante o envio", () => {
     act(() => callbacks.onError());
     expect(campo()).toHaveValue("Primeira resposta\nPróxima resposta");
   });
+
+  // Revisão do PR #134: com o rascunho seguinte preservado, o `onSuccess` do
+  // envio anterior ainda apagava a citação ESCOLHIDA PARA ELE — e a próxima
+  // frase saía sem citar, sem aviso.
+  const citacao = (id: string) => ({ id, body: `mensagem ${id}`, direction: "inbound" });
+
+  function enviarCitando(respondendo: ReturnType<typeof citacao> | null) {
+    const onCancelarResposta = vi.fn();
+    const tela = renderComposer({ respondendo, onCancelarResposta });
+    const rerender = (r: ReturnType<typeof citacao> | null) =>
+      tela.rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          <Composer conversationId="conv-1" respondendo={r} onCancelarResposta={onCancelarResposta} />
+        </QueryClientProvider>,
+      );
+    fireEvent.change(campo(), { target: { value: "Primeira resposta" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    const callbacks = sendMock.mock.calls[0]![1] as { onSuccess: () => void };
+    return { onCancelarResposta, rerender, confirmar: () => act(() => callbacks.onSuccess()) };
+  }
+
+  it("a citação escolhida para o rascunho seguinte sobrevive à confirmação do envio anterior", () => {
+    const { onCancelarResposta, rerender, confirmar } = enviarCitando(citacao("A"));
+    rerender(citacao("X"));
+    confirmar();
+    expect(onCancelarResposta).not.toHaveBeenCalled();
+  });
+
+  it("idem quando o envio anterior não citava nada", () => {
+    const { onCancelarResposta, rerender, confirmar } = enviarCitando(null);
+    rerender(citacao("X"));
+    confirmar();
+    expect(onCancelarResposta).not.toHaveBeenCalled();
+  });
+
+  it("CONTROLE: a citação que foi junto com o envio sai depois que ele confirma", () => {
+    const { onCancelarResposta, confirmar } = enviarCitando(citacao("A"));
+    confirmar();
+    expect(onCancelarResposta).toHaveBeenCalledTimes(1);
+  });
 });
 
 // A fixture exercita um atendente autorizado a consultar modelos de mensagem.
