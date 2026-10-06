@@ -8539,6 +8539,9 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível excluir: o contato ainda tem registros vinculados.": {
     es: "No fue posible eliminar: el contacto todavía tiene registros vinculados.",
   },
+  "Este contato pediu para não receber mensagens. O telefone só pode ser alterado depois que um administrador desbloquear o contato.": {
+    es: "Este contacto pidió no recibir mensajes. El teléfono solo puede cambiarse después de que un administrador desbloquee el contacto.",
+  },
 
   // ─── Fase B: handlers compartidos REST/MCP (leads/_handler.ts) ───
   "Um lead tem um dono: informe owner_user_id OU owner_agent_id.": {

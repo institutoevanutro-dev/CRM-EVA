@@ -1,5 +1,5 @@
 "use client";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import type { ChamadoDaLista } from "@/lib/escalacao/chamados";
 
@@ -77,14 +77,40 @@ export interface CaseDetailData {
   events: CaseEvent[];
 }
 
-/** Lista de casos humanos (spec 15 §9). Polling 60s — casos nascem no worker. */
+interface PaginaDeCasos {
+  data: CaseListData;
+  meta?: { cursor?: string | null; has_more?: boolean };
+}
+
+/**
+ * Lista de casos humanos (spec 15 §9). Polling 60s — casos nascem no worker.
+ *
+ * Os concluídos vêm em páginas (a rota devolve `meta.cursor`); os abertos, numa
+ * só. `data` junta as páginas já carregadas, então quem lê a lista não muda.
+ */
 export function useCases(status: "open" | "resolved" = "open") {
-  return useQuery({
+  const consulta = useInfiniteQuery({
     queryKey: ["ai-cases", status],
     refetchInterval: 60_000,
-    queryFn: () =>
-      apiClient.get<{ data: CaseListData }>(`/api/v1/ai/cases?status=${status}`).then((r) => r.data),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => {
+      const qs = new URLSearchParams({ status });
+      if (pageParam) qs.set("cursor", pageParam);
+      return apiClient.get<PaginaDeCasos>(`/api/v1/ai/cases?${qs.toString()}`);
+    },
+    getNextPageParam: (ultima) => (ultima.meta?.has_more ? (ultima.meta.cursor ?? undefined) : undefined),
   });
+  const paginas = consulta.data?.pages;
+  const data: CaseListData | undefined = paginas
+    ? { cases: paginas.flatMap((p) => p.data.cases), open_count: paginas[0]?.data.open_count ?? 0 }
+    : undefined;
+  return {
+    data,
+    isLoading: consulta.isLoading,
+    hasNextPage: consulta.hasNextPage,
+    fetchNextPage: consulta.fetchNextPage,
+    isFetchingNextPage: consulta.isFetchingNextPage,
+  };
 }
 
 export function useCase(id: string | null) {

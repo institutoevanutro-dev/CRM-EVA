@@ -4,6 +4,11 @@
  *
  * A consulta vive em `lib/escalacao/chamados.ts` — a capacidade "ler um chamado e
  * o que a pessoa decidiu" do agente lê o mesmo detalhe e a mesma linha do tempo.
+ *
+ * Lê com o cliente de SESSÃO (ver o cabeçalho da rota de lista). O 404 cobre
+ * três coisas com a mesma resposta: o caso não existe, é de outra organização,
+ * ou a conversa dele está fora do que a RLS mostra a quem pediu. É de propósito
+ * — um 403 no terceiro confirmaria a existência do caso para quem não pode vê-lo.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
@@ -11,7 +16,7 @@ import { type NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { lerChamado } from "@/lib/escalacao/chamados";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams): Promise<R
 
   let chamado;
   try {
-    chamado = await lerChamado(createAdminClient(), org.orgId, id);
+    chamado = await lerChamado(await createClient(), org.orgId, id);
   } catch {
     return fail("internal_error", t("Falha ao carregar o caso."), 500, { requestId });
   }

@@ -74,6 +74,8 @@ interface ResultadoDaFusao {
   repontado: Record<string, number>;
   nao_repontado: Record<string, number>;
   atividades_emitidas: number;
+  /** O principal estava livre e saiu bloqueado porque um dos juntados pediu para parar (migration 0319). */
+  bloqueio_herdado?: boolean;
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
@@ -144,6 +146,9 @@ export async function POST(req: NextRequest): Promise<Response> {
       // runtime). Auditar só o sucesso descreveria uma fusão completa que não foi.
       not_repointed: resultado.nao_repontado,
       timeline_activities: resultado.atividades_emitidas,
+      // Um contato passar a bloqueado é mutação que precisa de rastro: quem ler a
+      // auditoria tem de achar POR QUE aquela ficha não recebe mais mensagem.
+      ...(resultado.bloqueio_herdado ? { block_inherited: true } : {}),
     },
   });
 
