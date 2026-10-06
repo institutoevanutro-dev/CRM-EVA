@@ -880,3 +880,137 @@ describe("dedup 0062 — >1 enrollment vivo pro mesmo (org,contact) vira 1 vivo 
     }
   });
 });
+
+// ---- 9. vigência do ponteiro (active_since, migration 0324) -------------
+
+/**
+ * `followup_flow_pointers.active_since`: desde quando o ponteiro vale com o
+ * status e o gatilho (kind + segmentos) atuais. O trigger
+ * `trg_followup_ponteiro_marca_vigencia` a avança SÓ quando muda o status, o
+ * `kind` ou os `segments` — publicar versão nova num fluxo já ativo, mexer no
+ * limiar ou no `cancel_on_reply`, salvar rascunho ou renomear não descartam os
+ * episódios em andamento.
+ */
+describe("vigência do ponteiro (active_since)", () => {
+  async function vigencia(pointerId: string): Promise<Date> {
+    const { rows } = await pool.query<{ active_since: Date }>(
+      `select active_since from followup_flow_pointers where id = $1`,
+      [pointerId],
+    );
+    return rows[0]!.active_since;
+  }
+  /** Recua a vigência 1 dia mexendo SÓ nela — o WHEN do trigger não casa. */
+  async function recuar(pointerId: string): Promise<Date> {
+    await pool.query(`update followup_flow_pointers set active_since = now() - interval '1 day' where id = $1`, [
+      pointerId,
+    ]);
+    const v = await vigencia(pointerId);
+    expect(Date.now() - v.getTime()).toBeGreaterThan(23 * 3600_000); // o próprio recuo não disparou o trigger
+    return v;
+  }
+  const avancou = (v: Date) => expect(Date.now() - v.getTime()).toBeLessThan(60_000);
+
+  it("(a) ponteiro novo nasce com active_since ≈ now()", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { rows } = await pool.query<{ active_since: Date }>(
+      `insert into followup_flow_pointers (organization_id, name, status, trigger_config)
+       values ($1, $2, 'active', '{"kind":"silence","params":{"threshold_minutes":30}}') returning active_since`,
+      [org, `vig-${Date.now()}-${Math.random()}`],
+    );
+    avancou(rows[0]!.active_since);
+  });
+
+  it("(b) versão nova num fluxo já ativo NÃO muda a vigência (publicar e rollback só trocam a versão)", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    const antes = await recuar(pointerId);
+    const { rows } = await pool.query<{ id: string }>(
+      `insert into followup_flow_versions (organization_id, graph) select organization_id, graph from followup_flow_versions
+        where id = (select active_version_id from followup_flow_pointers where id = $1) returning id`,
+      [pointerId],
+    );
+    await pool.query(`update followup_flow_pointers set active_version_id = $2 where id = $1`, [pointerId, rows[0]!.id]);
+    expect(await vigencia(pointerId)).toEqual(antes);
+  });
+
+  it("(c) desativar e reativar avança a vigência nas duas vezes", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    await recuar(pointerId);
+    await pool.query(`update followup_flow_pointers set status = 'disabled' where id = $1`, [pointerId]);
+    avancou(await vigencia(pointerId));
+    await recuar(pointerId);
+    await pool.query(`update followup_flow_pointers set status = 'active' where id = $1`, [pointerId]);
+    avancou(await vigencia(pointerId));
+  });
+
+  it("(d) trocar o kind do gatilho, ou os segmentos, avança a vigência", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    await recuar(pointerId);
+    await pool.query(`update followup_flow_pointers set trigger_config = '{"kind":"manual"}' where id = $1`, [pointerId]);
+    avancou(await vigencia(pointerId));
+    await pool.query(
+      `update followup_flow_pointers set trigger_config = '{"kind":"silence","params":{"threshold_minutes":60}}' where id = $1`,
+      [pointerId],
+    );
+    await recuar(pointerId);
+    await pool.query(
+      `update followup_flow_pointers
+          set trigger_config = '{"kind":"silence","params":{"threshold_minutes":60,"segments":["vip"]}}' where id = $1`,
+      [pointerId],
+    );
+    avancou(await vigencia(pointerId));
+  });
+
+  it("(e) rascunho, nome e handoff_policy NÃO mudam a vigência", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    const antes = await recuar(pointerId);
+    await pool.query(
+      `update followup_flow_pointers
+          set draft_graph = '{"nodes":[],"edges":[]}', name = name || ' (editado)', handoff_policy = 'cancel'
+        where id = $1`,
+      [pointerId],
+    );
+    expect(await vigencia(pointerId)).toEqual(antes);
+  });
+
+  it("(f) o mesmo gatilho, o limiar, o cancel_on_reply e segmentos [] ↔ ausentes NÃO mudam a vigência", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org); // threshold 60, segments []
+    const antes = await recuar(pointerId);
+    await pool.query(`update followup_flow_pointers set trigger_config = trigger_config where id = $1`, [pointerId]);
+    await pool.query(
+      `update followup_flow_pointers
+          set trigger_config = '{"kind":"silence","cancel_on_reply":true,"params":{"threshold_minutes":120}}' where id = $1`,
+      [pointerId],
+    );
+    expect(await vigencia(pointerId)).toEqual(antes);
+  });
+
+  it("(g) o índice da consulta de episódio existe, idêntico ao 0411 do original", async () => {
+    const { rows } = await pool.query<{ indexdef: string }>(
+      `select indexdef from pg_indexes
+        where schemaname = 'public' and indexname = 'idx_followup_enrollments_pointer_contact_cooldown'`,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.indexdef).toMatch(/\(organization_id, pointer_id, contact_id, updated_at\)/);
+  });
+
+  it("(h) a função do trigger não é executável por anon nem por PUBLIC", async () => {
+    const { rows } = await pool.query<{ anon: boolean; publico: boolean }>(
+      `select has_function_privilege('anon', 'public.fn_followup_ponteiro_marca_vigencia()', 'execute') as anon,
+              exists (select 1 from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                       where p.oid = 'public.fn_followup_ponteiro_marca_vigencia()'::regprocedure
+                         and a.grantee = 0 and a.privilege_type = 'EXECUTE') as publico`,
+    );
+    expect(rows[0]).toEqual({ anon: false, publico: false });
+  });
+});
