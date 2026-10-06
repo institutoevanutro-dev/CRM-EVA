@@ -10,6 +10,11 @@ import pg from "pg";
  * `fn_lgpd_cascade_redact_contact` roda de verdade, no Postgres de verdade, e as
  * asserções são sobre o estado que ela deixa.
  *
+ * Desde a migration 0317 a RPC também enfileira o avatar e apaga o ponteiro
+ * (é o que cobre o botão da ficha, que não passa pelo app do pedido formal). O
+ * app continua enfileirando ANTES de chamá-la — a fila é idempotente, e os
+ * casos abaixo seguem valendo para a sequência dele.
+ *
  * A divisão de responsabilidade com `tests/unit/lgpd-redact-avatar.test.ts` é
  * deliberada: aqui provamos o que é do BANCO (o que a RPC faz e o que não faz, a
  * constraint que sustenta a idempotência, o escopo que o cron enxerga); lá
@@ -113,11 +118,13 @@ afterAll(async () => {
 });
 
 describe("foto de perfil sob anonimização LGPD", () => {
-  it("a RPC de cascata NÃO apaga o caminho do avatar — é o que permite enfileirar antes dela", async () => {
-    // Se alguém acrescentar `avatar_storage_path = null` ao UPDATE da RPC sem
-    // enfileirar o arquivo junto, este teste fica vermelho. Esse é exatamente o
-    // cenário do arquivo órfão: o contato vira anônimo e o rosto fica no bucket
-    // sem ninguém sabendo o caminho para removê-lo.
+  it("a RPC de cascata enfileira o arquivo ANTES de apagar o caminho do avatar", async () => {
+    // Até a migration 0317 a RPC não tocava no avatar: quem enfileirava e zerava
+    // o ponteiro era só o app do pedido formal — e o botão da ficha, que não
+    // passa por ele, deixava o rosto no bucket. Agora a própria RPC faz as duas
+    // coisas, nesta ordem. Se alguém tirar o `insert` da fila e deixar o
+    // `avatar_storage_path = null`, este teste fica vermelho: é o cenário do
+    // arquivo órfão, contato anônimo e o rosto guardado sem ninguém saber onde.
     const id = "afa00000-0000-4000-8000-00000000000a";
     const caminho = await criarContatoComFoto(id, "+5511900000001");
 
@@ -128,7 +135,14 @@ describe("foto de perfil sob anonimização LGPD", () => {
       [id],
     );
     expect(rows[0]?.is_anonymized).toBe(true);
-    expect(rows[0]?.avatar_storage_path).toBe(caminho);
+    expect(rows[0]?.avatar_storage_path).toBeNull();
+
+    const { rows: fila } = await pool.query<{ status: string; request_id: string | null }>(
+      `select status, request_id from storage_redaction_queue
+        where bucket = 'whatsapp-media' and object_path = $1`,
+      [caminho],
+    );
+    expect(fila).toEqual([{ status: "pending", request_id: REQ }]);
   });
 
   it("depois de anonimizado o contato sai do escopo do cron — o rosto não é rebaixado", async () => {
