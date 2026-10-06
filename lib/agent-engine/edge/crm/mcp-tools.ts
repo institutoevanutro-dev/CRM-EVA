@@ -47,7 +47,8 @@ export interface McpTurnTools {
 
 export async function buildMcpTurnTools(
   cfg: CrmEdgeConfig,
-  ids: { organizationId: string; jobId: string },
+  /** `contactId`: o contato do turno — ver `contatoDoTurno` em `lib/ai/runtime/tools.ts`. */
+  ids: { organizationId: string; jobId: string; contactId?: string },
   agentConfig: PublishedAgentConfig,
   log: Logger,
   options?: { readOnly: boolean },
@@ -119,6 +120,9 @@ export async function buildMcpTurnTools(
     // por isso TODA escrita de lead era recusada — com a capacidade ligada na
     // tela e o card parado. Quem passava era só o dispatcher antigo.
     pipelineIds: agentConfig.pipelineIds,
+    // O contato da conversa: é ele que escopa leituras e escritas do turno ao
+    // paciente com quem o agente está falando (ver `contatoDoTurno`).
+    ...(ids.contactId ? { contatoDoTurno: ids.contactId } : {}),
   });
 
   return {

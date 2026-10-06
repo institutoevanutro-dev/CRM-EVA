@@ -49,6 +49,112 @@ export interface PickToolsInput {
   pipelineIds?: readonly string[];
   /** Mutable signal — runtime checks after each step. */
   handoffSignal: RuntimeHandoffSignal;
+  /**
+   * O CONTATO que este turno atende, quando o turno é de uma conversa.
+   *
+   * No motor do agente, "lead" é o CONTATO (`job.contact_id`), e é esse id que o
+   * modelo vê rotulado como lead. As ferramentas do catálogo chamam de
+   * `lead_id` o NEGÓCIO (`crm_leads.id`). Medido em produção (no projeto
+   * original): o assistente fechou um pedido e chamou `crm_update_lead` duas
+   * vezes com o id do contato — as duas recusadas. Com o contato do turno à
+   * mão, esse id é traduzido para o negócio aberto dele, e toda escrita por
+   * `lead_id` é conferida contra os negócios DESTE contato.
+   *
+   * Contexto de CONFIANÇA: nasce de quem monta o turno (`job.contact_id`),
+   * nunca dos argumentos da tool. Ausente fora de uma conversa (rota HTTP, MCP
+   * externo, automação) — e a ausência é o que mantém esses caminhos intactos.
+   */
+  contatoDoTurno?: string;
+}
+
+/**
+ * `lead_id` que é o id do CONTATO do turno → o negócio ABERTO desse contato.
+ *
+ * Só o contato do turno, e só quando o negócio aberto é um só: com dois
+ * abertos a escolha não é do runtime e o id segue como veio, para a recusa de
+ * sempre. Quem recusa é o guarda abaixo, não `resolveActiveLeadForContact` —
+ * ela só chama de ambíguo o EMPATE de atividade; fora dele, escolhe o mais
+ * recente, e uma escrita (valor, ganho/perdido) cairia num cartão por palpite.
+ * Falha de leitura também devolve o id intacto.
+ */
+export async function leadIdDoContatoDoTurno(
+  supabase: SupabaseClient,
+  organizationId: string,
+  contatoDoTurno: string | undefined,
+  leadId: unknown,
+): Promise<string | null> {
+  if (!contatoDoTurno || leadId !== contatoDoTurno) return null;
+  const { data, error } = await supabase
+    .from("crm_leads")
+    .select("id, organization_id, pipeline_id, status, last_activity_at, created_at")
+    .eq("organization_id", organizationId)
+    .eq("contact_id", contatoDoTurno);
+  if (error) return null;
+  const candidatos = (data ?? []) as LeadCandidate[];
+  if (candidatos.filter((l) => l.status === "open").length !== 1) return null;
+  const r = resolveActiveLeadForContact(candidatos);
+  return r.routed ? r.leadId : null;
+}
+
+/**
+ * Uma ESCRITA do agente numa conversa só mira um negócio DO CONTATO desta
+ * conversa.
+ *
+ * `leadIdDoContatoDoTurno`, logo acima, conserta a confusão contato × negócio.
+ * Ficavam dois casos de fora, e o segundo é o que faz dano calado:
+ *
+ *  1. o id INVENTADO: o escopo de funil recusa, e a resposta do cliente se
+ *     perde;
+ *  2. o id REAL de OUTRO paciente, no mesmo funil. O escopo aprova (o funil é
+ *     do agente), a escrita acontece, a auditoria grava sucesso — e o dado de
+ *     um paciente vai para a ficha de outro, sem erro para ninguém investigar.
+ *
+ * A regra segue a de `leadIdDoContatoDoTurno`: o runtime não escolhe por
+ * palpite. Um negócio deste contato segue como veio; fora dele, só se troca
+ * quando o contato tem UM negócio aberto; com nenhum ou vários, recusa com o
+ * motivo, em texto, para o modelo seguir a conversa.
+ */
+export async function negocioDaEscritaDoTurno(
+  supabase: SupabaseClient,
+  organizationId: string,
+  contatoDoTurno: string,
+  leadId: string,
+): Promise<
+  | { ok: true; leadId: string; trocado: boolean }
+  | { ok: false; motivo: "indisponivel" | "sem_negocio" | "negocio_ambiguo"; mensagem: string }
+> {
+  const { data, error } = await supabase
+    .from("crm_leads")
+    .select("id, status")
+    .eq("organization_id", organizationId)
+    .eq("contact_id", contatoDoTurno);
+  if (error) {
+    // Falha de leitura nunca vira "não é seu negócio": o modelo leria como
+    // veredito e pararia de tentar. Mesma disciplina do escopo de funil.
+    return {
+      ok: false,
+      motivo: "indisponivel",
+      mensagem: "não consegui conferir o negócio desta conversa agora; tente de novo.",
+    };
+  }
+  const negocios = (data ?? []) as Array<{ id: string; status: string }>;
+  if (negocios.some((n) => n.id === leadId)) return { ok: true, leadId, trocado: false };
+  const abertos = negocios.filter((n) => n.status === "open");
+  if (abertos.length === 1) return { ok: true, leadId: abertos[0]!.id, trocado: true };
+  if (abertos.length === 0) {
+    return {
+      ok: false,
+      motivo: "sem_negocio",
+      mensagem: "esta pessoa ainda não tem um negócio aberto — siga a conversa normalmente.",
+    };
+  }
+  return {
+    ok: false,
+    motivo: "negocio_ambiguo",
+    mensagem:
+      "esta pessoa tem mais de um negócio aberto e o id enviado não é de nenhum deles — " +
+      "siga a conversa e deixe que alguém da equipe registre.",
+  };
 }
 
 const HANDOFF_TOOL_NAME = "crm_request_human_handoff";
@@ -86,6 +192,20 @@ function wrapMcpTool(
         (args ?? {}) as Record<string, unknown>,
       );
       const argsRecord = higiene.limpos;
+      if ("lead_id" in argsRecord) {
+        const traduzido = await leadIdDoContatoDoTurno(
+          input.supabase,
+          input.ctx.organizationId,
+          input.contatoDoTurno,
+          argsRecord.lead_id,
+        );
+        if (traduzido) {
+          logger.info("lead_id era o contato do turno — traduzido para o negócio aberto", {
+            tool: def.name,
+          });
+          argsRecord.lead_id = traduzido;
+        }
+      }
       if (higiene.descartados.length > 0) {
         // Não é cosmético: sem esta linha o defeito passa a se curar em
         // silêncio e ninguém descobre que um modelo faz isso o tempo todo.
@@ -97,6 +217,47 @@ function wrapMcpTool(
       try {
         ensureScope(input.auth.scopes, def.requiresScope);
         ensureRole(input.auth.role, def.requiresRole);
+
+        // ── DE QUE NEGÓCIO É ESTA ESCRITA — do contato da conversa ──────────
+        //
+        // Só ESCRITA: `crm_list_followups`, `crm_list_appointments` e irmãs têm
+        // `lead_id` e são leituras; trocar ali faria o modelo perguntar por um
+        // negócio e receber outro. Só com contato do turno — que o turno de
+        // atendimento E o do Operador recebem (`operator-turn.ts` passa
+        // `contactId`); a rota HTTP e as automações seguem com o `lead_id` de
+        // quem chamou. Antes do escopo, para o escopo julgar o negócio que de
+        // fato vai ser escrito.
+        if (
+          input.contatoDoTurno &&
+          def.category === "write" &&
+          typeof argsRecord.lead_id === "string"
+        ) {
+          const alvo = await negocioDaEscritaDoTurno(
+            input.supabase,
+            input.ctx.organizationId,
+            input.contatoDoTurno,
+            argsRecord.lead_id,
+          );
+          if (!alvo.ok) {
+            void auditMcpToolCall({
+              ctx: input.ctx,
+              toolName: def.name,
+              args: argsRecord,
+              durationMs: Date.now() - startedAt,
+              success: false,
+              errorMessage: `negocio_da_conversa:${alvo.motivo}`,
+            });
+            return { permitido: false, motivo: alvo.motivo, mensagem: alvo.mensagem };
+          }
+          if (alvo.trocado) {
+            // Não é cosmético: é a única forma de saber que o modelo chuta, e
+            // com que frequência.
+            logger.info("lead_id fora do contato do turno — trocado pelo negócio aberto dele", {
+              tool: def.name,
+            });
+            argsRecord.lead_id = alvo.leadId;
+          }
+        }
 
         // ── ESCOPO DE FUNIL (spec 17 passo 3) ────────────────────────────────
         //
