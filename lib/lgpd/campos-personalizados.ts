@@ -76,17 +76,38 @@ function chaveDeCpf(chave: string): boolean {
   return /cpf/i.test(chave);
 }
 
+/** Palavras que, INTEIRAS, fazem de uma chave um campo de telefone. */
+const PALAVRA_DE_TELEFONE = /^(tel|telefones?|fones?|phones?|celular(es)?|cel|whats|whatsapp|zap|wpp)$/i;
+
 /**
  * O campo é de TELEFONE (pela chave ou pelo tipo declarado no funil)? Celular
  * com DDD tem onze dígitos, e um em cada cem fecha os dígitos verificadores de
  * um CPF — `27999990000` fecha. Num campo que se diz telefone, é telefone.
+ *
+ * Pela PALAVRA da chave, não por pedaço dela: `obs_teleconsulta`, `hotel` e
+ * `telemedicina` contêm "tel" e não são telefone (revisão do PR #129).
  */
 function campoDeTelefone(chave: string, definicao: Definicao | undefined): boolean {
-  return definicao?.type === "phone" || /tel|fone|phone|celular|whats|zap/i.test(chave);
+  if (definicao?.type === "phone") return true;
+  return chave.split(/[^A-Za-z]+|(?<=[a-z])(?=[A-Z])/).some((palavra) => PALAVRA_DE_TELEFONE.test(palavra));
 }
 
-/** Onze dígitos, com ou sem a pontuação de costume, sem dígito colado antes ou depois. */
-const TRECHO_COM_CARA_DE_CPF = /(?<!\d)\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s/.]?\d{2}(?!\d)/g;
+/**
+ * O VALOR tem forma de telefone: só dígitos e a pontuação de telefone, e não a
+ * pontuação de CPF. Texto livre num campo de telefone ("não tem; anotar CPF…")
+ * passa pelo filtro como qualquer outro.
+ */
+function valorDeTelefone(valor: unknown): boolean {
+  if (typeof valor === "number") return true;
+  if (typeof valor !== "string") return false;
+  return /^[\d\s()+\-.]+$/.test(valor) && !/^\s*\d{3}\.\d{3}\.\d{3}-\d{2}\s*$/.test(valor);
+}
+
+/**
+ * Onze dígitos, com ou sem a pontuação de costume (ponto, espaço ou hífen entre
+ * os grupos), sem dígito colado antes ou depois.
+ */
+const TRECHO_COM_CARA_DE_CPF = /(?<!\d)\d{3}[.\s-]?\d{3}[.\s-]?\d{3}[-\s/.]?\d{2}(?!\d)/g;
 
 /**
  * Tira o CPF de um texto. Só some o que tem dígito verificador de CPF: telefone
@@ -177,7 +198,7 @@ export function camposDoTitular(
       if (valor !== null && valor !== undefined && valor !== "") marcar();
       continue;
     }
-    if (campoDeTelefone(chave, definicoes.get(chave))) {
+    if (campoDeTelefone(chave, definicoes.get(chave)) && valorDeTelefone(valor)) {
       limpo[chave] = valor;
       continue;
     }
@@ -196,4 +217,17 @@ export function camposDoTitular(
     });
   }
   return { semCpf: limpo, campos, cpfInformado };
+}
+
+/**
+ * Qualquer jsonb sem CPF, para o arquivo de dados: objeto pelas mesmas regras
+ * dos campos personalizados (chave de CPF sai, campo de telefone fica), texto
+ * e lista pelo filtro de valor. O que era SÓ um CPF vira `null`.
+ */
+export function semCpfNoJson(valor: unknown): unknown {
+  if (valor && typeof valor === "object" && !Array.isArray(valor)) {
+    return camposDoTitular(valor as Record<string, unknown>, new Map()).semCpf;
+  }
+  const tratado = semCpf(valor, () => {});
+  return tratado === REMOVER ? null : tratado;
 }

@@ -71,13 +71,29 @@ describe("CPF em campo personalizado nunca sai em claro", () => {
     ["sem pontuação, grudado em rótulo", { observacao: `cpf:${CPF}` }],
     ["dentro de objeto aninhado", { responsavel: { nome: "Ana", cpf: CPF } }],
     ["dentro de lista", { documentos: [CPF_PONTUADO, "RG 1234567"] }],
+    // Revisão do PR: a chave que só CONTÉM "tel" não é campo de telefone, e
+    // texto livre num campo de telefone também passa pelo filtro.
+    ["numa chave que só parece telefone (teleconsulta)", { obs_teleconsulta: `Paciente CPF ${CPF_PONTUADO}, retorno em 10/11` }],
+    ["numa chave que só parece telefone (hotel), só os dígitos", { hotel: CPF }],
+    ["em texto livre dentro de um campo de telefone", { telefone: `não tem; anotar CPF ${CPF_PONTUADO}` }],
+    ["pontuado como CPF dentro de um campo de telefone", { celular: CPF_PONTUADO }],
+    // Revisão do PR: hífen entre os três primeiros grupos.
+    ["escrito com hífens no meio de um texto", { observacao: "Paciente CPF 529-982-247-25, convênio X" }],
   ])("%s", (_como, customFields) => {
     const r = camposDoTitular(customFields as Record<string, unknown>, new Map());
     const tudo = JSON.stringify(r);
     expect(tudo).not.toContain(CPF);
     expect(tudo).not.toContain(CPF_PONTUADO);
     expect(tudo).not.toContain("529.982");
+    expect(tudo).not.toContain("529-982");
     expect(r.cpfInformado).toBe(true);
+  });
+
+  it("o mesmo CPF com hífens, no texto solto (o `trecho` das propostas passa por aqui)", () => {
+    expect(semCpfNoTexto("Paciente CPF 529-982-247-25, convênio X")).toEqual({
+      texto: `Paciente CPF ${CPF_OMITIDO}, convênio X`,
+      achou: true,
+    });
   });
 
   it("o campo de CPF some inteiro — não vira uma segunda linha de CPF no relatório", () => {
