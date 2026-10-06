@@ -135,7 +135,13 @@ function dublarAdmin(
         const pedePresos = registro.filtros.some(
           ([tipo, col, val]) => tipo === "eq" && col === "status" && val === "processing",
         );
-        resolve({ data: pedePresos ? presos : linhas, error: null });
+        // O `.in("event_type", …)` vale como no banco: sem ele, o dreno vê
+        // também o preso que é de outro dono.
+        const tipos = registro.filtros.find(([tipo, col]) => tipo === "in" && col === "event_type")?.[2] as
+          | unknown[]
+          | undefined;
+        const presosVistos = tipos ? presos.filter((p) => tipos.includes(p.event_type)) : presos;
+        resolve({ data: pedePresos ? presosVistos : linhas, error: null });
       },
     };
     return self;
@@ -273,6 +279,23 @@ describe("drainEventLog — evento preso volta para a fila, e a volta conta", ()
     );
     expect(iReclama).toBeGreaterThanOrEqual(0);
     expect(iSeleciona).toBeGreaterThan(iReclama);
+  });
+
+  it("preso de tipo SEM handler aqui (o despacho da IA) não é deste dreno — fica intocado", async () => {
+    // `ai_agent.dispatch_requested` é do dreno do agent-engine
+    // (`lib/agent-engine/edge/crm/drain.ts`), que já soma 1 em `attempts` no
+    // claim e tem reaper próprio. Varrido também aqui, uma interrupção contava
+    // DUAS tentativas, a primeira volta nunca era "de graça" (`attempts` já é
+    // 1) e a quinta morria com o aviso genérico, sem a última chance do dono.
+    dispatch.mockResolvedValue([{ consumer_key: "k", status: "ok" }]);
+    const despachoDaIa = { id: "ia1", organization_id: "org-1", event_type: "ai_agent.dispatch_requested", attempts: 1 };
+    const { admin, chamadas } = dublarAdmin([], null, [despachoDaIa, PRESO]);
+
+    await drainEventLog(admin as never);
+
+    const tocados = reclamacoes(chamadas).map((c) => c.filtros.find(([, col]) => col === "id")?.[2]);
+    expect(tocados, "o dreno genérico reclamou o despacho da IA, que tem dono").not.toContain("ia1");
+    expect(tocados, "e o preso que É deste dreno continua voltando").toContain("p1");
   });
 
   it("sem evento preso, nada é reclamado (controle)", async () => {

@@ -173,7 +173,12 @@ export async function drainEventLog(
     .from("event_log")
     .select("id, organization_id, event_type, attempts")
     .eq("status", "processing")
-    .lt("updated_at", limiteDePresos);
+    .lt("updated_at", limiteDePresos)
+    // Só os tipos que ESTE dreno processa, como na seleção de baixo. O
+    // `ai_agent.dispatch_requested` é do dreno do agent-engine, que já soma 1 em
+    // `attempts` no claim e tem reaper próprio: varrido aqui também, uma
+    // interrupção contaria duas tentativas e morreria com o aviso errado.
+    .in("event_type", handledTypes);
 
   // ─── E A VOLTA CONTA COMO TENTATIVA ────────────────────────────────────────
   //
