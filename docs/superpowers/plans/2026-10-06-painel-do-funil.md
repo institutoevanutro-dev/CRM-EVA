@@ -34,7 +34,7 @@ Arquivos novos, no total:
 - `janelaDoPeriodo({ de: "2026-09-01", ate: "2026-09-30", fuso: "America/Sao_Paulo" })`
   → `{ inicio: "2026-09-01T03:00:00.000Z", fimExclusivo: "2026-10-01T03:00:00.000Z", dias: 30 }`.
 - Padrão: `periodoPadrao(new Date("2026-10-06T02:00:00Z"), "America/Sao_Paulo")`
-  → `{ de: "2026-09-06", ate: "2026-10-05" }` (às 23h de 05/10 em Brasília, "hoje" é 05/10; 30 dias inclusivos).
+  → `{ de: "2026-09-05", ate: "2026-10-04" }` (às 23h de 05/10 em Brasília, "hoje" é 05/10; termina ONTEM, como a tela Meta Ads; 30 dias inclusivos).
 - `ate < de` → lança `RangeError("periodo_invertido")`; 91 dias → `RangeError("periodo_longo")`.
 
 **Mudança mínima:** criar `lib/metrics/painel-do-funil.ts` com `periodoPadrao`,
@@ -52,6 +52,9 @@ Arquivos novos, no total:
 - Card hoje em `perdido`, movimento `{ de: "interagiu", para: "perdido" }` → 20 (perdido não conta como avanço).
 - Etapa de outro funil no payload → ignorada.
 - Payload sem nenhuma das chaves / não-objeto → ignorado sem lançar.
+- Etapa ARQUIVADA não conta pela posição: `{de: novo, para: velha}` seguido de
+  `{de: velha, para: interagiu}` → 20; card em `novo` com `{de: novo, para: velha}`
+  e `{de: velha, para: novo}` → 10 (nunca 25).
 
 **Mudança mínima:** `posicaoAlcancada(card, movimentos, etapasPorId)` e o leitor
 interno `etapasDoMovimento(payload)` → `[from ?? de, to ?? para]` filtrando string.
@@ -65,7 +68,9 @@ interno `etapasDoMovimento(payload)` → `[from ?? de, to ?? para]` filtrando st
   `perdidos: 1`.
 - Funil sem etapa `contacted` → `interagiram: null`, `taxa_interacao: null`, `aviso: "sem_etapa_de_interacao"`.
 - 0 cards → `leads: 0`, `taxa_interacao: null` (nunca `0` inventado).
-- Duas etapas com hint `contacted` → usa a de MENOR posição (documentar no teste).
+- Etapa ARQUIVADA com hint `contacted` é ignorada; vale a ativa. Só a arquivada
+  tem o hint → `interagiram: null` com o aviso (duas ATIVAS com o hint são
+  impossíveis: `uniq_crm_stages_pipeline_hint`).
 
 **Mudança mínima:** `agregarCoorte` em `lib/metrics/painel-do-funil.ts`.
 
@@ -98,8 +103,10 @@ interno `etapasDoMovimento(payload)` → `[from ?? de, to ?? para]` filtrando st
 **Teste:** `valoresDaDimensao(dimensao, { card, contato, campanha })` devolve chaves de balde:
 - `campo_contato` `origem` com opções `[{value:"instagram"},{value:"indicacao"}]`: contato com `custom_fields.origem = "indicacao"` → `["indicacao"]`; ausente → `["__sem_valor"]`; `"tiktok"` → `["__fora_da_lista"]`; contato `null` → `["__sem_valor"]`.
 - `campo_card` lê `card.custom_fields`, mesma regra.
-- `etiqueta` prefixo `"Criativo-"`: tags `["criativo-a","criativo-b","vip"]` → `["criativo-a","criativo-b"]`; nenhuma → `["__sem_etiqueta"]` (prefixo normalizado com `normalizarTag` de `lib/contacts/tag-normalizada.ts`).
-- `campanha`: `campanhaDoContato` devolve `"123"` → `["123"]`; `null` → `["__sem_campanha"]`.
+- `etiqueta` prefixo `"Criativo-"`: tags `["criativo-a","criativo-b","vip"]` → `["criativo-a","criativo-b"]`; `["Criativo-A","criativo-a"]` → `["criativo-a"]` (uma vez); nenhuma → `["__sem_valor"]` (prefixo E cada etiqueta normalizados com `normalizarTag` de `lib/contacts/tag-normalizada.ts`).
+- `campanha`: campanha `"123"` → `["123"]`; `null` → `["__sem_valor"]`.
+- Contato anonimizado → `["__sem_valor"]` em `campo_contato`, `etiqueta` e `campanha`.
+- Um só balde de ausência (`__sem_valor`); a tela escolhe a frase pela dimensão.
 
 ## Passo 8 — tabela por dimensão
 
@@ -107,6 +114,8 @@ interno `etapasDoMovimento(payload)` → `[from ?? de, to ?? para]` filtrando st
 - Linhas incluem TODAS as opções do campo (zeradas) + baldes especiais que tiverem contagem.
 - Cada linha: `leads, interagiram, ganhos, receita[], agendados, realizados` (e `investimento_cents` em `campanha`).
 - Compromisso sem vínculo herda o valor do card mais recente do contato (campo do card).
+- Compromisso com DOIS vínculos a cards deste funil conta uma vez, pelo vínculo
+  mais recente (`created_at`); vínculo a card de outro funil é ignorado.
 - Rótulos vêm das opções (`label`), nunca do valor cru; balde `__fora_da_lista` não carrega o texto digitado.
 - **Asserção de privacidade:** `JSON.stringify(resultado)` não contém nenhum id de card/contato nem o valor fora da lista usado na fixture.
 
@@ -118,14 +127,19 @@ interno `etapasDoMovimento(payload)` → `[from ?? de, to ?? para]` filtrando st
 **Teste** `tests/unit/painel-do-funil-investimento.test.ts`, com `vi.mock` de
 `@/lib/plataformas-de-anuncio/credenciais-de-leitura` e `@/lib/plataformas-de-anuncio/meta/insights`:
 - Sem credencial → `{ estado: "nao_conectado" }`; `cifra_indisponivel` → `{ estado: "indisponivel", motivo: "cifra_indisponivel" }`.
-- Credencial sem `contaPadrao` → `{ estado: "sem_conta_padrao" }` e **nenhuma** chamada a `lerInsights`.
+- Conta escolhida pela regra de `MetaAdsClient.tsx:119-124`: padrão; sem padrão, a
+  primeira com `status === 1`; senão a primeira da lista.
+- `listarContas` vazia → `{ estado: "sem_conta" }` e **nenhuma** chamada a `lerInsights`.
+- Padrão gravada que NÃO aparece em `listarContas` → `{ estado: "indisponivel",
+  motivo: "conta_fora_do_alcance" }`, sem `lerInsights` e sem moeda presumida.
 - `lerInsights` ok com `spend: "120.50"` e `"79.50"`, `listarContas` com moeda `BRL`, `lerAnunciosDaConta` ok
-  → `{ estado:"ok", moeda:"BRL", cents: 20000, porCampanha: Map, campanhaPorAnuncio: Map }`.
+  → `{ estado:"ok", conta:{id,nome}, moeda:"BRL", cents: 20000, porCampanha: Map<id,{nome,cents}>, campanhaPorAnuncio: Map }`.
 - `lerInsights` falha `token_invalido` → `{ estado: "indisponivel", motivo: "token_invalido" }` (sem lançar).
 - `spend` ausente numa linha → conta 0 nessa linha; `spend` não numérico → ignora.
 
 **Mudança mínima:** `lib/plataformas-de-anuncio/meta/investimento.ts` exportando
-`investimentoDoPeriodo(admin, orgId, de, ate)`; as três leituras em `Promise.all`.
+`investimentoDoPeriodo(admin, orgId, de, ate)`; contas primeiro (escolhem a
+conta), depois insights + anúncios em `Promise.all`.
 `ponytail:` reais→centavos por `Math.round(x*100)` — vale para as moedas servidas
 (BRL/MXN/USD, `lib/money.ts:223`); moeda sem centavos exige tabela de expoente.
 
@@ -143,20 +157,24 @@ interno `etapasDoMovimento(payload)` → `[from ?? de, to ?? para]` filtrando st
 2. `requireRole` chamado com `"manager"`.
 3. 422: `de=2026-99-99`; `de > ate`; 91 dias; `dimensao=campo_contato` sem `campo`; `campo` que não é `select` do funil padrão; `dimensao=etiqueta` sem `prefixo`; `pipeline_id=nao-uuid`.
 4. `pipeline_id` que não volta na leitura com `.eq("organization_id", org)` → 404 `not_found`.
-5. **Toda** leitura de `crm_leads`, `crm_lead_activities`, `crm_stages`, `crm_pipelines`, `calendar_appointments`, `crm_lead_links`, `contacts`, `organizations` recebeu `.eq("organization_id", ORG)` (ou `.eq("id", ORG)` em `organizations`) com o org do `requireRole` — mesmo com `?organization_id=outra` na query.
+5. **Toda** leitura de `crm_leads`, `crm_lead_activities`, `crm_stages`, `crm_pipelines`, `calendar_appointments`, `crm_lead_links`, `contacts` recebeu `.eq("organization_id", ORG)` com o org do `requireRole` — mesmo com `?organization_id=outra` na query. Nenhuma leitura de `organizations` (o fuso vem de `authz.org.timezone`).
 6. Leitura com `error` → 500, nunca números zerados.
-7. Página cheia em todas as 10 → `truncado: true`.
+7. Página cheia em todas as 10 → `truncado: true`; lote de movimentos com mais
+   linhas do que cabe → `truncado: true`.
+7b. Sem dimensão e com investimento `ok`: `ganhos_de_anuncio` é calculado (os
+   contatos dos ganhos são lidos sempre que o investimento está `ok`).
+7c. Cada mensagem de erro nova da rota tem entrada `es` no dicionário.
 8. Resposta não tem chaves `name`, `phone_number`, `email`, `contact_id`, `lead_id`.
-9. Feliz: payload tem `periodo {de, ate, fuso}`, `funil`, `numeros`, `por_etapa`, `dimensao`, `investimento`, `opcoes {funis, campos_contato, campos_card}`, `truncado`.
+9. Feliz (sem leitura de `organizations`): payload tem `periodo {de, ate, fuso}`, `funil`, `numeros`, `por_etapa`, `dimensao`, `investimento`, `opcoes {funis, campos_contato, campos_card}`, `truncado`.
 
 **Mudança mínima:** `app/api/v1/metrics/funil/route.ts`:
-- fuso: `organizations.timezone` (`.eq("id", org)`) → `fusoUtilizavel`;
+- fuso: `fusoUtilizavel(authz.org.timezone)` (já vem do `requireRole`);
 - funil: `pipeline_id` ou `is_default`; etapas do funil;
 - coorte: `crm_leads` `pipeline_id`, `created_at` na janela (paginado `range` + `count: "exact"`, ordem `created_at,id`, 10×1000);
-- movimentos: `crm_lead_activities` `type = 'stage_changed'`, `.in("lead_id", lote)` em lotes de 100, só colunas `lead_id, payload`;
+- movimentos: `crm_lead_activities` `type = 'stage_changed'`, `.in("lead_id", lote)` em lotes de 100, só colunas `lead_id, payload`, CADA lote paginado com `range` + `count: "exact"` na ordem `lead_id, performed_at, id`;
 - ganhos: `crm_leads` `status='won'`, `closed_at` na janela;
 - agenda: `calendar_appointments` `starts_at` na janela; `crm_lead_links` `target_kind='appointment'` dos ids; cards dos contatos sem vínculo;
-- contatos (só se a dimensão/campanha precisar): `id, custom_fields, tags, source_metadata` em lotes de 100;
+- contatos: `id, custom_fields, tags, source_metadata, is_anonymized` em lotes de 100 — dos cards da coorte/agenda quando a dimensão é do contato ou campanha, e dos GANHOS sempre que o investimento está `ok` (Ganhos de anúncio, Custo por venda e ROAS dependem deles);
 - investimento: `investimentoDoPeriodo` (sempre; a atribuição de "ganhos de anúncio" precisa do mapa);
 - monta com as puras e responde `ok(...)`. Sem audit.
 
@@ -177,8 +195,11 @@ Meta Ads deixam cada uma pela metade).
 ## Passo 12 — tela
 
 **Teste (vermelho):** `tests/unit/i18n-espanhol-cobre-a-tela.test.ts` passa a varrer
-a página nova; todo texto novo sem entrada `es` no `lib/i18n/dicionario.ts`
-reprova. Também cobre `label`/`description`/`section` do catálogo.
+a página nova (ele varre `app` e `components`, ignora `api`); todo texto novo sem
+entrada `es` no `lib/i18n/dicionario.ts` reprova. Ele NÃO cobre o catálogo, e
+`idioma-da-interface.test.ts` só olha itens com `sidebar` — por isso
+`painel-do-funil-navegacao.test.ts` cobra `label` e `description` da entrada nova
+no `DICIONARIO`, e o teste da rota cobra as mensagens de erro.
 
 **Mudança mínima:**
 - `hooks/metrics/usePainelDoFunil.ts`: `useQuery` com `queryKey ["metrics","funil",params]`, `staleTime: 300_000`, `refetchOnWindowFocus: false`, `retry: false`.
@@ -192,8 +213,12 @@ reprova. Também cobre `label`/`description`/`section` do catálogo.
 
 ## Passo 13 — prova de tela (Playwright)
 
-**Spec** `tests/e2e/painel-do-funil.spec.ts`: login com conta de teste do seed,
-criar via API de teste/seed um funil com etapa ligada a `contacted`, 3 cards (um
+**Spec** `tests/e2e/painel-do-funil.spec.ts`: login com conta de teste do seed.
+Não existe API de seed de funil, e o handler da agenda recusa `completed`/`no_show`
+em compromisso que ainda não começou (`_handler.ts:366-389`): os compromissos
+nascem com `starts_at` no PASSADO (admin client do ambiente de teste) e só depois
+são marcados realizado/faltou. O resto do setup sai pela API real (funis, leads,
+move). Criar um funil com etapa ligada a `contacted`, 3 cards (um
 movido para "Interagiu", um ganho com valor), um compromisso `completed` e um
 `no_show`; abrir `/app/analise`, clicar "Painel do funil", conferir por
 `getByText`/`getBoundingClientRect`: Leads 3, Interagiram 2 (67%), Ganhos 1,
@@ -223,8 +248,7 @@ Registrar a spec em uma `SPECS_PARTE_*` de `.github/workflows/e2e.yml`
 ## Passo 15 — suíte inteira
 
 ```bash
-cd /Users/andreluislopescosta/crm-f2-painel && pnpm typecheck && pnpm lint && pnpm lint:channels
-pnpm test:unit > /tmp/vt.log 2>&1; echo "exit=$?"
+cd /Users/andreluislopescosta/crm-f2-painel && pnpm gov:verify > /tmp/vt.log 2>&1; echo "exit=$?"
 grep -aE "Test Files|Tests |Errors " /tmp/vt.log
 grep -aE "^ *FAIL " /tmp/vt.log | sed 's/ > .*//' | sort | uniq -c
 ```
@@ -240,6 +264,12 @@ rota só lê). Rodar mesmo assim se sobrar tempo, para registrar verde.
 
 ## Riscos conhecidos
 
+- Card que vai de perdido direto para ganho mantém o `closed_at` da perda
+  (trigger `fn_crm_lead_close_on_stage`, `coalesce`): o ganho cai no período da
+  perda. Declarado na régua; conserto no trigger, em issue separada, sem migration
+  neste PR.
+- Investimento é da conta inteira: com mais de um funil, custo por venda e ROAS
+  de cada funil saem inflados. Declarado na régua.
 - Volume acima de 10×1000 linhas por leitura → `truncado: true` na tela (nunca
   número falso). Conserto futuro: RPC `security invoker` com tripla de migration.
 - Gasto fecha o dia no fuso da conta de anúncios; o CRM no da organização. Diferença
