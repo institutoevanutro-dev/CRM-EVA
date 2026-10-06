@@ -83,7 +83,7 @@ async function handle(req: NextRequest): Promise<Response> {
   // avisaria de novo sobre um caso que a equipe está tratando naquele instante.
   const { data, error } = await admin
     .from("agent_cases")
-    .select("id, organization_id, title, opened_at, updated_at, followup_attempts")
+    .select("id, organization_id, opened_at, updated_at, followup_attempts")
     .eq("status", "awaiting_human")
     .lt("updated_at", corte)
     .lt("followup_attempts", TETO_DE_COBRANCAS)
@@ -127,8 +127,13 @@ async function handle(req: NextRequest): Promise<Response> {
       // vermelho é para o que está fora do ar — usá-lo aqui o desvaloriza.
       severity: "warn",
       title: `Um atendimento espera decisão ${comoFaz(horas)}`,
+      // SEM o título do caso, de propósito. `agent_inbox_items` é lido pela
+      // organização inteira (Central e PostgREST), e o caso só por quem vê a
+      // conversa dele (RLS de `agent_cases`, migration 0319): copiar o título
+      // para cá mostrava a todo atendente o texto que a RLS esconde. O aviso
+      // aponta para o caso (`ref_id`); quem pode abrir lê o título lá.
       body:
-        `"${caso.title as string}" está aguardando alguém da equipe desde que foi aberto, ` +
+        `Um caso está aguardando alguém da equipe desde que foi aberto, ` +
         `e o cliente continua do outro lado. Abra o caso e diga o que fazer — concluir, ` +
         `pedir informação ao cliente ou passar para uma pessoa.` +
         (tentativa >= TETO_DE_COBRANCAS

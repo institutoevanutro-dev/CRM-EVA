@@ -250,7 +250,7 @@ Reusa o shell `app/app/ai/inbox/` (assistente), **seção/tab própria "Casos"**
   - `[ Não consigo → escalar ]` → `human_action=escalate`
   - `[ Enviar p/ IA ]` → POST cria event `human_replied` + enfileira `case_reply_turn` (ou dispara handoff se `escalate`).
 - **Clareza (requisito):** o estado do caso é sempre visível (esperando você / esperando cliente / resolvido / escalado). A UI não deixa ambíguo de quem é a bola.
-- Rota API: `POST /api/v1/ai/cases/[id]/reply` — molde `app/api/v1/leads/[id]/win/route.ts`: `requireRole("agent", {requestId, resource})` (valida JWT via `getUser()`, org do cookie validado — nunca do body), Zod no body, `audit(...)`, `ok()`/`fail()`, `X-Request-Id`. **Sem rate-limit** (rota autenticada de staff, não pública — doutrina: rate-limit só em rota pública). `GET /api/v1/ai/cases` e `GET /api/v1/ai/cases/[id]` (detalhe + timeline) seguem o molde de `app/api/v1/ai/inbox/route.ts`.
+- Rota API: `POST /api/v1/ai/cases/[id]/reply` — molde `app/api/v1/leads/[id]/win/route.ts`: `requireRole("agent", {requestId, resource})` (valida JWT via `getUser()`, org do cookie validado — nunca do body), Zod no body, `audit(...)`, `ok()`/`fail()`, `X-Request-Id`. **Sem rate-limit** (rota autenticada de staff, não pública — doutrina: rate-limit só em rota pública). `GET /api/v1/ai/cases` e `GET /api/v1/ai/cases/[id]` (detalhe + timeline) seguem o molde de `app/api/v1/ai/inbox/route.ts`. Desde a migration 0319 as duas leem com a sessão (a RLS do caso herda a visibilidade da conversa), e `?status=resolved` vem em páginas de 200: `meta.has_more` e `meta.cursor` (opaco, `opened_at` + `id`), próxima página com `?status=resolved&cursor=…`; os abertos vêm numa página só.
 
 ---
 

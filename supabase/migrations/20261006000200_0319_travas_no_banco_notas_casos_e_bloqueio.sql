@@ -1,11 +1,17 @@
 -- 20261006000200_0319_travas_no_banco_notas_casos_e_bloqueio.sql
 -- 0319 — travas no banco: nota interna, casos da IA e bloqueio de contato.
 --
--- Três regras que já valiam nas telas e nas rotas, mas não no banco. O PostgREST
--- fala com a tabela direto pelo JWT da sessão, então "a rota barra" não protege
--- de quem chama o banco por fora. Idempotente: `drop policy if exists` +
--- `create policy`, `create or replace function`, `drop trigger if exists`,
--- `revoke` (repetir não muda nada). Nenhum dado é tocado.
+-- Três regras que já valiam nas telas e nas rotas, mas não no banco (seções 1 a
+-- 3). O PostgREST fala com a tabela direto pelo JWT da sessão, então "a rota
+-- barra" não protege de quem chama o banco por fora. As seções 4 a 8 fecham o que
+-- a revisão do PR 128 achou em volta delas: caminhos que desfaziam as três regras
+-- sem tocar no que elas guardam.
+--
+-- Idempotente: `drop policy if exists` + `create policy`, `create or replace
+-- function`, `drop trigger if exists`, `create index if not exists`, `revoke`
+-- (repetir não muda nada). Dois dados são tocados, os dois na seção 8 e os dois
+-- CÓPIAS do título de um caso: o corpo dos avisos "caso parado" e
+-- `demandas.assunto`. O título continua onde sempre esteve, em `agent_cases`.
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 1 · NOTA INTERNA: editar e apagar só o autor ou o gestor
@@ -123,29 +129,106 @@ create policy "conversation_notes_delete" on public.conversation_notes
 --   · Supervisão, Central, Instagram e campanhas não tocam nas três tabelas.
 -- Refaça: rg -n "agent_cases|agent_case_events|conversation_assignment_events" app lib hooks components workers scripts
 --
--- LEITURA. O caso herda a visibilidade da CONVERSA dele (molde de `cae_select`,
--- 0173): o `exists` sobre `conversations` já aplica a RLS de lá, então a regra
--- é uma só. Antes era só organização, e o atendente restrito às próprias
--- conversas lia título, resumo e bloqueio de casos que não eram dele. A linha
--- do tempo herda do caso pelo mesmo mecanismo. A restritiva `mfa_provada`
--- (0301) fica como está nas três. As rotas da tela (app/api/v1/ai/cases) leem
--- com o cliente de SESSÃO para que esta regra valha nelas; o agente de IA (MCP)
--- segue com o service role e vê a fila inteira.
+-- LEITURA. O caso herda a visibilidade da CONVERSA dele: a regra é a da tela
+-- (`fn_can_view_conversation`), perguntada por organização e não por linha (ver
+-- `fn_alcance_das_conversas` abaixo, e por quê). Antes era só organização, e o
+-- atendente restrito às próprias conversas lia título, resumo e bloqueio de
+-- casos que não eram dele. A linha do tempo herda do caso (`exists` sobre
+-- `agent_cases`, que aplica a RLS de lá). A restritiva `mfa_provada` (0301) fica
+-- como está nas três. As rotas da tela (app/api/v1/ai/cases) leem com o cliente
+-- de SESSÃO para que esta regra valha nelas; o agente de IA (MCP) segue com o
+-- service role e vê a fila inteira.
 
 -- ── agent_cases ─────────────────────────────────────────────────────────────
 revoke insert, update, delete, truncate on public.agent_cases from authenticated, anon;
 drop policy if exists tenant_isolation_agent_cases_all on public.agent_cases;
 drop policy if exists tenant_isolation_agent_cases_select on public.agent_cases;
+
+-- A REGRA PERGUNTADA POR ORGANIZAÇÃO, NÃO POR CASO (revisão do PR 128, medido).
+-- A visibilidade da conversa é `fn_can_view_conversation` (`security definer`,
+-- não dá para embutir), que custa décimos de milissegundo por chamada. Pendurar
+-- a policy do caso numa leitura de `conversations` chama a função uma vez por
+-- caso VISITADO, e quem vê pouco faz o Postgres visitar a organização inteira.
+-- (A forma anterior, `exists`, era pior ainda para todo mundo: 16,8 s medidos.)
+-- Medido em Postgres 15 com 20.000 casos concluídos, página de 201, no mesmo
+-- banco e na mesma máquina (carregada por outras suítes):
+--                                      pergunta por caso   por organização
+--   atendente novo em "Só os seus" ...... 27,1 s              0,14 s
+--   atendente no modo padrão ............ 1,0 s               0,74 s
+--   administrador ....................... 0,66 s              0,50 s
+-- Acima do teto de 8 s do papel `authenticated` a aba respondia "Falha ao
+-- carregar os casos". O que sobra para quem vê muito é a leitura da conversa
+-- de cada caso DEVOLVIDO (o contato embutido, que a RLS de `conversations`
+-- confere): por isso a lista de concluídos vem em páginas.
+--
+-- A regra só olha do dono da conversa três coisas: não tem dono, é a própria
+-- sessão, é outra pessoa. Então três perguntas à MESMA função, por organização,
+-- descrevem a regra inteira para aquela sessão — e a regra continua tendo uma
+-- fonte só. Se um dia `fn_can_view_conversation` passar a olhar QUEM é o dono
+-- (equipe, por exemplo), estas três perguntas deixam de bastar, e quem avisa é
+-- o oráculo de tests/invariants/casos-concluidos-leitura-limitada.test.ts, que
+-- compara a RLS com a função chamada conversa a conversa, papel por papel.
+create or replace function public.fn_alcance_das_conversas()
+returns table (organization_id uuid, sem_dono boolean, suas boolean, de_outros boolean)
+language sql
+stable
+set search_path = public
+as $$
+  select o.id,
+         coalesce(public.fn_can_view_conversation(o.id, null), false),
+         coalesce(public.fn_can_view_conversation(o.id, auth.uid()), false),
+         -- Um dono qualquer que não é a sessão: nenhum usuário tem o uuid nulo.
+         coalesce(public.fn_can_view_conversation(o.id, '00000000-0000-0000-0000-000000000000'::uuid), false)
+    from (select distinct u.id from public.fn_user_org_ids() as u(id)) as o
+$$;
+revoke execute on function public.fn_alcance_das_conversas() from public, anon;
+grant execute on function public.fn_alcance_das_conversas() to authenticated;
+
+-- As conversas que a sessão vê nas organizações em que ela NÃO vê todas. Lê
+-- `conversations` como dono (`security definer`) para não pagar a RLS de lá por
+-- conversa; quem decide o que entra é o alcance acima, isto é, a mesma função.
+-- O índice `(organization_id, assigned_to_user_id, assigned_at)` responde às
+-- duas perguntas que importam ("as minhas", "as sem dono").
+create or replace function public.fn_conversas_ao_alcance()
+returns setof uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select c.id
+    from public.fn_alcance_das_conversas() as a
+    join public.conversations c on c.organization_id = a.organization_id
+   where not (a.sem_dono and a.suas and a.de_outros)
+     and (   (a.suas and c.assigned_to_user_id = auth.uid())
+          or (a.sem_dono and c.assigned_to_user_id is null)
+          or (a.de_outros and c.assigned_to_user_id <> auth.uid()))
+$$;
+revoke execute on function public.fn_conversas_ao_alcance() from public, anon;
+grant execute on function public.fn_conversas_ao_alcance() to authenticated;
+
+-- As duas subconsultas não dependem da linha: o Postgres monta cada uma UMA vez
+-- por consulta e confere o caso contra ela. Quem vê todas as conversas da
+-- organização (gestor, administrador, somente leitura, ou o modo "Todos veem
+-- tudo") resolve na primeira e a segunda nem é montada.
 create policy tenant_isolation_agent_cases_select on public.agent_cases
   for select to authenticated
   using (
     organization_id in (select public.fn_user_org_ids())
-    and exists (
-      select 1 from public.conversations c
-       where c.organization_id = agent_cases.organization_id
-         and c.id = agent_cases.conversation_id
+    and (
+      organization_id in (
+        select a.organization_id from public.fn_alcance_das_conversas() as a
+         where a.sem_dono and a.suas and a.de_outros
+      )
+      or conversation_id in (select public.fn_conversas_ao_alcance())
     )
   );
+
+-- A lista de concluídos é lida do mais recente para trás, com limite
+-- (app/api/v1/ai/cases/route.ts). Sem este índice o Postgres confere a
+-- visibilidade de todos os casos da organização antes de ordenar.
+create index if not exists agent_cases_org_abertura_idx
+  on public.agent_cases (organization_id, opened_at desc);
 
 -- ── agent_case_events ───────────────────────────────────────────────────────
 revoke insert, update, delete, truncate on public.agent_case_events from authenticated, anon;
@@ -413,6 +496,109 @@ create policy "conversations_delete" on public.conversations
       and public.fn_role_at_least(organization_id, 'manager')
     )
   );
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- 5 · ATRIBUIR A CONVERSA: só quem a vê
+-- ════════════════════════════════════════════════════════════════════════════
+-- Revisão do PR 128. `fn_conversation_assign` é `security definer`, executável
+-- por `authenticated`, e só conferia o papel. A seção 2 pendurou a leitura do
+-- caso, da linha do tempo e da nota na visibilidade da conversa; a função era a
+-- porta dos fundos: o atendente chamava o RPC com a conversa de um colega,
+-- virava o dono e passava a ler tudo.
+--
+-- O corpo é o VIGENTE do fork (a última definição do baseline, bloco do
+-- roteamento por canal), copiado por inteiro; a única mudança é o bloco marcado
+-- (0319). Assumir, transferir, soltar e pausar a IA pela tela agem sobre
+-- conversa que quem clica está vendo, então nada muda para elas; a transferência
+-- continua imediata e sem aceite (G1-06d), e quem fez fica em `changed_by`.
+CREATE OR REPLACE FUNCTION public.fn_conversation_assign(p_organization_id uuid, p_conversation_id uuid, p_to_user_id uuid, p_reason text, p_expected_assignee uuid DEFAULT NULL::uuid, p_enforce_expected boolean DEFAULT false)
+ RETURNS SETOF conversations
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_from uuid;
+  v_conv public.conversations%rowtype;
+begin
+  if not public.fn_support_write_allowed(p_organization_id) then raise exception 'support_readonly' using errcode='42501'; end if;
+  if auth.uid() is not null
+     and not public.fn_role_at_least(p_organization_id, 'agent') then
+    raise exception 'caller_not_authorized_for_org'
+      using hint = 'caller must be an active agent+ member of the organization';
+  end if;
+
+  if p_to_user_id is not null then
+    if coalesce(public.fn_member_role_in_org(p_to_user_id, p_organization_id), 'none')
+         not in ('agent','manager','admin') then
+      raise exception 'assignee_not_eligible_member'
+        using hint = 'target must be an active agent+ member of the organization';
+    end if;
+  end if;
+
+  select assigned_to_user_id into v_from
+    from public.conversations
+   where id = p_conversation_id
+     and organization_id = p_organization_id
+   for no key update;
+
+  if not found then
+    return;
+  end if;
+
+  -- (0319) QUEM CHAMA PELA SESSÃO TEM DE VER A CONVERSA COMO ELA ESTÁ. A regra é
+  -- a mesma da tela (`conversations_select`): o dono atual é o que decide. Zero
+  -- linhas, igual a "conversa não encontrada": a função não confirma a
+  -- existência dela para quem não a enxerga. O servidor (roteador, MCP, motor),
+  -- sem `auth.uid()`, não passa por esta pergunta.
+  if auth.uid() is not null
+     and not public.fn_can_view_conversation(p_organization_id, v_from) then
+    return;
+  end if;
+
+  if p_enforce_expected and v_from is distinct from p_expected_assignee then
+    return;
+  end if;
+
+  update public.conversations
+     set assigned_to_user_id = p_to_user_id,
+         -- Desnormalizado JUNTO com o dono, na mesma transação: nunca existe
+         -- uma janela em que id e nome discordam. NULL junto com o id quando
+         -- a atribuição é removida (release) — nunca sobra um nome órfão de
+         -- dono nenhum. Lido de auth.users porque quem chama esta função
+         -- (RPC) não necessariamente tem acesso ao Admin API — a definer
+         -- resolve por dentro.
+         assigned_to_user_name = case
+           when p_to_user_id is null then null
+           else (select raw_user_meta_data ->> 'full_name' from auth.users where id = p_to_user_id)
+         end,
+         assigned_at = case when p_to_user_id is null then null else now() end,
+         assignee_kind = case when p_to_user_id is null then null else 'user' end,
+         status = case when p_to_user_id is null then 'open' else 'claimed' end,
+         status_changed_at = now(),
+         unread_count_for_assignee = 0,
+         bot_silenced_until = case
+           when p_reason = 'routing'  then bot_silenced_until
+           when p_to_user_id is null  then (case when last_handoff_at is null
+                                                 then null
+                                                 else bot_silenced_until end)
+           else 'infinity'::timestamptz
+         end,
+         updated_at = now()
+   where id = p_conversation_id
+   returning * into v_conv;
+
+  insert into public.conversation_assignment_events
+    (organization_id, conversation_id, from_user_id, to_user_id, changed_by, reason)
+  values
+    (p_organization_id, p_conversation_id, v_from, p_to_user_id, auth.uid(), p_reason);
+
+  return next v_conv;
+end;
+$function$;
+revoke execute on function public.fn_conversation_assign(uuid, uuid, uuid, text, uuid, boolean) from public, anon;
+grant execute on function public.fn_conversation_assign(uuid, uuid, uuid, text, uuid, boolean)
+  to authenticated, service_role;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 6 · O BLOQUEIO ACOMPANHA A PESSOA: identidade e junção de contatos
@@ -889,5 +1075,46 @@ create trigger trg_nota_interna_autoria
   before insert or update on public.conversation_notes
   for each row
   execute function public.fn_nota_interna_autoria_e_do_banco();
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- 8 · O TEXTO DO CASO NÃO FICA LEGÍVEL POR UMA CÓPIA DELE
+-- ════════════════════════════════════════════════════════════════════════════
+-- Revisão do PR 128. A seção 2 pendurou a leitura do caso na visibilidade da
+-- conversa, mas o texto dele era copiado para três tabelas com leitura
+-- só-organização. Quem não vê a conversa lia a cópia.
+
+-- (a) O aviso "caso parado" gravava o título do caso no corpo. A rota deixou de
+-- gravar (app/api/v1/cron/case-stale-watcher/route.ts); isto cura os avisos que
+-- já existem. Todos os estados, não só os abertos: a tabela é lida inteira pelo
+-- PostgREST. O `.*` é guloso de propósito (título pode ter aspas), e depois da
+-- troca a linha não casa mais: repetir não muda nada.
+update public.agent_inbox_items
+   set body = regexp_replace(body, '^".*" está aguardando alguém da equipe',
+                             'Um caso está aguardando alguém da equipe')
+ where kind = 'case_stale'
+   and body ~ '^".*" está aguardando alguém da equipe';
+
+-- (b) `demandas.assunto` recebia `agent_cases.title` do backfill R1 (0136) a cada
+-- aplicação do baseline. Nenhuma tela lê a coluna e nenhum outro código a
+-- escreve (rg -n "assunto" app lib components hooks workers); quem quer o título
+-- vai ao caso por `agent_case_id`, que é referência e passa pela RLS do caso. O
+-- R1 do baseline deixou de copiar; isto apaga as cópias já feitas. Só as de
+-- origem `handoff`, que é a origem que o R1 grava.
+update public.demandas
+   set assunto = null
+ where origem = 'handoff'
+   and assunto is not null;
+
+-- (c) `job_queue.payload` leva o texto que o humano respondeu ao caso (job
+-- `case_reply_turn`) e a carga de todos os outros jobs. A sessão só precisa do
+-- ESTADO do job: o único leitor com sessão é a agenda, que lê `status`
+-- (app/api/v1/agenda/agendamentos/[id]/route.ts). Sai o SELECT da tabela inteira
+-- (0298) e entra o das colunas de envelope; `payload` e `last_error` ficam com o
+-- servidor. O bloco da 0298 no baseline foi ajustado para não devolver o SELECT
+-- inteiro a cada `update.sh`. Coluna nova da fila nasce não legível pela sessão,
+-- que é o lado certo para uma fila interna errar.
+revoke select on public.job_queue from authenticated, anon;
+grant select (id, organization_id, contact_id, kind, status, priority, run_after, attempts, max_attempts, created_at)
+  on public.job_queue to authenticated;
 
 notify pgrst, 'reload schema';

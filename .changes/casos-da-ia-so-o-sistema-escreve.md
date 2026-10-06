@@ -27,4 +27,16 @@ O que cada atendente passa a ver em IA › Casos depende dessa escolha:
 - "Só os seus": ele vê apenas os casos das conversas dele. Os casos das
   conversas que a IA atende sozinha aparecem só para gestor e administrador.
 
+Junto com isso:
+
+- Assumir, transferir ou soltar uma conversa só é aceito de quem enxerga essa
+  conversa. Antes, por fora das telas, um atendente conseguia assumir a conversa
+  de um colega e, com isso, passar a ler o caso e as notas dela.
+- O aviso "um atendimento espera decisão", que aparece na Central para toda a
+  equipe, deixa de trazer o título do caso. Quem pode abrir o caso lê o título
+  nele; quem não pode vê só o aviso.
+- A aba Concluídos de IA › Casos abre com os 200 casos mais recentes e tem o
+  botão "Carregar mais" para ver os anteriores. Assim ela abre rápido mesmo em
+  clínicas com muito histórico, e nenhum caso antigo fica de fora.
+
 Portado do projeto original (DeskcommCRM).
