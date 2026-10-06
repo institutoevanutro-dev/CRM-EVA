@@ -11,6 +11,7 @@ import { logger } from "@/lib/logger";
 import {
   camposDoTitular,
   definicoesDoFunil,
+  semCpfNoJson,
   semCpfNoTexto,
   type CampoLegivel,
 } from "@/lib/lgpd/campos-personalizados";
@@ -98,6 +99,14 @@ export interface LeadRow {
   value_cents: number | null;
   currency: string | null;
   created_at: string;
+  /**
+   * Descrição e campos do NEGÓCIO — o passo 5 da cascata os apaga, e o que se
+   * apaga a pedido do titular é o que se entrega a pedido dele. Sem CPF, como
+   * os campos do contato; o rótulo vem do funil DO negócio.
+   */
+  description: string | null;
+  custom_fields: Record<string, unknown>;
+  campos_legiveis: CampoLegivel[];
 }
 
 export interface OrderRow {
@@ -116,6 +125,26 @@ export interface ActivityRow {
   type: string;
   source_module: string | null;
   performed_at: string;
+  /** O conteúdo que o passo 4 da cascata apaga (sem CPF). Só no arquivo de dados. */
+  payload: unknown;
+  metadata: unknown;
+  reason: string | null;
+}
+
+/**
+ * Um cadastro antigo UNIDO ao do titular (lápide de `fn_mesclar_contatos`). A
+ * fusão deixa nele o nome, o e-mail e o telefone de quando era um cadastro
+ * separado, e a anonimização os apaga (passo 0c da 0317).
+ */
+export interface MergedContactRow {
+  id: string;
+  name: string | null;
+  display_name: string | null;
+  email: string | null;
+  phone_number: string | null;
+  birthdate: string | null;
+  created_at: string;
+  merged_at: string | null;
 }
 
 /**
@@ -409,6 +438,8 @@ export interface ExportPayload {
   generated_at: string;
   no_local_footprint: boolean;
   contact: ContactSnapshot | null;
+  /** Cadastros unidos ao do titular. Opcional como `reply_drafts`. */
+  contatos_unidos?: MergedContactRow[];
   consents: ConsentRow[];
   conversations: ConversationRow[];
   messages_count_total: number;
@@ -636,6 +667,15 @@ export function toolCallsParaOTitular(toolCalls: unknown): unknown[] {
   });
 }
 
+/**
+ * Texto livre sem CPF — o mesmo filtro do `trecho` das propostas. Vale para
+ * todo bloco escrito sobre a pessoa (caso, demanda, aviso, comentário,
+ * atividade): "paciente informou CPF …" cabe em qualquer um deles.
+ */
+function textoSemCpf<T extends string | null | undefined>(texto: T): T {
+  return typeof texto === "string" ? (semCpfNoTexto(texto).texto as T) : texto;
+}
+
 export async function collectExportData(args: CollectArgs): Promise<ExportPayload> {
   const admin = createAdminClient();
   const { organizationId, requestId, externalCustomerId } = args;
@@ -732,6 +772,29 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // Cadastros UNIDOS ao do titular (lápides de fusão). Além do que a lápide
+  // guarda, a conversa que colidiu com a do principal na fusão FICA nela — por
+  // isso as conversas abaixo são lidas dos dois.
+  let contatos_unidos: MergedContactRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("contacts")
+      .select("id, name, display_name, email, phone_number, birthdate, created_at, merged_at")
+      .eq("organization_id", organizationId)
+      .eq("is_merged_into", contactId)
+      .order("created_at", { ascending: true })
+      .limit(100);
+    if (error) {
+      logger.warn("[lgpd-export-worker] merged contacts load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      contatos_unidos = data as MergedContactRow[];
+    }
+  }
+  const cadastrosDoTitular = contactId ? [contactId, ...contatos_unidos.map((c) => c.id)] : [];
+
   // No `consents` table in current schema; legal basis is in contacts.consent JSONB.
   const consents: ConsentRow[] = [];
   if (contact?.consent && typeof contact.consent === "object") {
@@ -761,7 +824,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       .from("conversations")
       .select("id, status, channel, last_inbound_at, last_message_at, is_group, created_at")
       .eq("organization_id", organizationId)
-      .eq("contact_id", contactId)
+      .in("contact_id", cadastrosDoTitular)
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(500);
     if (error) {
@@ -830,10 +893,11 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
 
   // Leads (direct contact_id FK on crm_leads).
   let leads: LeadRow[] = [];
+  let cpfEmCampoDeNegocio = false;
   if (contactId) {
     const { data, error } = await admin
       .from("crm_leads")
-      .select("id, pipeline_id, stage_id, title, status, value_cents, currency, created_at")
+      .select("id, pipeline_id, stage_id, title, status, value_cents, currency, created_at, description, custom_fields")
       .eq("organization_id", organizationId)
       .eq("contact_id", contactId)
       .order("created_at", { ascending: false })
@@ -844,7 +908,42 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         error: error.message,
       });
     } else if (data) {
-      leads = data;
+      // O rótulo de cada campo vem do funil DO negócio.
+      const funis = [...new Set(data.map((l) => l.pipeline_id))];
+      const { data: definicoes, error: funisErr } = funis.length
+        ? await admin.from("crm_pipelines").select("id, settings").eq("organization_id", organizationId).in("id", funis)
+        : { data: [], error: null };
+      if (funisErr) {
+        logger.warn("[lgpd-export-worker] lead pipelines load failed", {
+          request_id: requestId,
+          error: funisErr.message,
+        });
+      }
+      const porFunil = new Map(
+        ((definicoes ?? []) as { id: string; settings: unknown }[]).map((f) => [f.id, definicoesDoFunil(f.settings)]),
+      );
+      leads = data.map((l) => {
+        const campos = camposDoTitular(
+          l.custom_fields && typeof l.custom_fields === "object" && !Array.isArray(l.custom_fields)
+            ? (l.custom_fields as Record<string, unknown>)
+            : {},
+          porFunil.get(l.pipeline_id) ?? new Map(),
+        );
+        if (campos.cpfInformado) cpfEmCampoDeNegocio = true;
+        return {
+          id: l.id,
+          pipeline_id: l.pipeline_id,
+          stage_id: l.stage_id,
+          title: textoSemCpf(l.title),
+          status: l.status,
+          value_cents: l.value_cents,
+          currency: l.currency,
+          created_at: l.created_at,
+          description: textoSemCpf(l.description ?? null),
+          custom_fields: campos.semCpf,
+          campos_legiveis: campos.campos,
+        };
+      });
     }
   }
 
@@ -888,7 +987,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   if (contactId) {
     const { data, error } = await admin
       .from("crm_lead_activities")
-      .select("id, lead_id, type, source_module, performed_at")
+      .select("id, lead_id, type, source_module, performed_at, payload, metadata, reason")
       .eq("organization_id", organizationId)
       .eq("contact_id", contactId)
       .order("performed_at", { ascending: false })
@@ -899,7 +998,16 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         error: error.message,
       });
     } else if (data) {
-      activities = data;
+      activities = data.map((a) => ({
+        id: a.id,
+        lead_id: a.lead_id,
+        type: a.type,
+        source_module: a.source_module,
+        performed_at: a.performed_at,
+        payload: semCpfNoJson(a.payload),
+        metadata: semCpfNoJson(a.metadata),
+        reason: textoSemCpf(a.reason ?? null),
+      }));
     }
   }
 
@@ -1086,7 +1194,9 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
         error: error.message,
       });
     } else if (data) {
-      webhook_captures = data;
+      // `fields` é o formulário como chegou — e o formulário de captação pede
+      // CPF. Sai pelo mesmo filtro dos campos personalizados.
+      webhook_captures = data.map((c) => ({ ...c, fields: semCpfNoJson(c.fields) }));
     }
   }
 
@@ -1233,8 +1343,8 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
       contact_field_proposals.push({
         ...p,
         valor_proposto: semCpfNoTexto(p.valor_proposto ?? "").texto,
-        valor_anterior: p.valor_anterior === null ? null : semCpfNoTexto(p.valor_anterior).texto,
-        trecho: p.trecho === null ? null : semCpfNoTexto(p.trecho).texto,
+        valor_anterior: textoSemCpf(p.valor_anterior),
+        trecho: textoSemCpf(p.trecho),
       });
     }
 
@@ -1272,7 +1382,12 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     for (const c of comentarios) {
       if (vistos.has(c.id)) continue;
       vistos.add(c.id);
-      instagram_comments.push(c);
+      instagram_comments.push({
+        ...c,
+        texto: textoSemCpf(c.texto),
+        sugestao_de_resposta: textoSemCpf(c.sugestao_de_resposta),
+        motivo_do_toque: textoSemCpf(c.motivo_do_toque),
+      });
     }
 
     // Casos, linha do tempo, demandas e avisos — o que a 0317 pôs na cascata.
@@ -1283,42 +1398,53 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     for (let lote = 0; lote < conversationIds.length; lote += EM_LOTE) {
       const ids = conversationIds.slice(lote, lote + EM_LOTE);
       cases.push(
-        ...(await paginar<CaseRow>((de, ate) =>
-          admin
-            .from("agent_cases")
-            .select("id, conversation_id, status, title, summary, blocker, source, opened_at, closed_at, created_at")
-            .eq("organization_id", organizationId)
-            .in("conversation_id", ids)
-            .order("id")
-            .range(de, ate),
-        )),
+        ...(
+          await paginar<CaseRow>((de, ate) =>
+            admin
+              .from("agent_cases")
+              .select("id, conversation_id, status, title, summary, blocker, source, opened_at, closed_at, created_at")
+              .eq("organization_id", organizationId)
+              .in("conversation_id", ids)
+              .order("id")
+              .range(de, ate),
+          )
+        ).map((caso) => ({
+          ...caso,
+          title: textoSemCpf(caso.title),
+          summary: textoSemCpf(caso.summary),
+          blocker: textoSemCpf(caso.blocker),
+        })),
       );
     }
     const caseIds = cases.map((caso) => caso.id);
     for (let lote = 0; lote < caseIds.length; lote += EM_LOTE) {
       const ids = caseIds.slice(lote, lote + EM_LOTE);
       case_events.push(
-        ...(await paginar<CaseEventRow>((de, ate) =>
-          admin
-            .from("agent_case_events")
-            .select("id, case_id, kind, actor_kind, human_action, body, metadata, created_at")
-            .eq("organization_id", organizationId)
-            .in("case_id", ids)
-            .order("id")
-            .range(de, ate),
-        )),
+        ...(
+          await paginar<CaseEventRow>((de, ate) =>
+            admin
+              .from("agent_case_events")
+              .select("id, case_id, kind, actor_kind, human_action, body, metadata, created_at")
+              .eq("organization_id", organizationId)
+              .in("case_id", ids)
+              .order("id")
+              .range(de, ate),
+          )
+        ).map((evento) => ({ ...evento, body: textoSemCpf(evento.body), metadata: semCpfNoJson(evento.metadata) })),
       );
     }
     demandas.push(
-      ...(await paginar<DemandaRow>((de, ate) =>
-        admin
-          .from("demandas")
-          .select("id, agent_case_id, origem, assunto, estado, dono_kind, proximo_passo, desfecho, aberta_em, fechada_em")
-          .eq("organization_id", organizationId)
-          .eq("contact_id", titular)
-          .order("id")
-          .range(de, ate),
-      )),
+      ...(
+        await paginar<DemandaRow>((de, ate) =>
+          admin
+            .from("demandas")
+            .select("id, agent_case_id, origem, assunto, estado, dono_kind, proximo_passo, desfecho, aberta_em, fechada_em")
+            .eq("organization_id", organizationId)
+            .eq("contact_id", titular)
+            .order("id")
+            .range(de, ate),
+        )
+      ).map((d) => ({ ...d, assunto: textoSemCpf(d.assunto), proximo_passo: textoSemCpf(d.proximo_passo) })),
     );
     // Avisos: a referência é polimórfica (sem FK), então o escopo são os ids
     // que comprovadamente são do titular — ele, as conversas e os casos dele.
@@ -1327,15 +1453,17 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     for (let lote = 0; lote < referencias.length; lote += EM_LOTE) {
       const ids = referencias.slice(lote, lote + EM_LOTE);
       avisos_da_central.push(
-        ...(await paginar<CentralNoticeRow>((de, ate) =>
-          admin
-            .from("agent_inbox_items")
-            .select("id, kind, title, body, status, created_at, resolved_at")
-            .eq("organization_id", organizationId)
-            .in("ref_id", ids)
-            .order("id")
-            .range(de, ate),
-        )),
+        ...(
+          await paginar<CentralNoticeRow>((de, ate) =>
+            admin
+              .from("agent_inbox_items")
+              .select("id, kind, title, body, status, created_at, resolved_at")
+              .eq("organization_id", organizationId)
+              .in("ref_id", ids)
+              .order("id")
+              .range(de, ate),
+          )
+        ).map((a) => ({ ...a, title: textoSemCpf(a.title), body: textoSemCpf(a.body) })),
       );
     }
   }
@@ -1423,6 +1551,9 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // CPF em campo do NEGÓCIO acende a mesma linha do PDF que o do contato.
+  if (contact && cpfEmCampoDeNegocio) contact.cpf_em_campo_personalizado = true;
+
   return {
     request_id: requestId,
     organization_id: organizationId,
@@ -1432,6 +1563,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     generated_at: new Date().toISOString(),
     no_local_footprint: !contact && conversations.length === 0 && orders.length === 0,
     contact,
+    contatos_unidos,
     consents,
     conversations,
     messages_count_total,

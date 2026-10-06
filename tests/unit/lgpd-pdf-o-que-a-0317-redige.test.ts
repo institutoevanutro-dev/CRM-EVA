@@ -128,3 +128,47 @@ it("sem nada disso, o PDF não ganha seção vazia — e segue nomeando o contro
   expect(pdf).toContain("Bem Viver Servicos Medicos LTDA");
   expect(pdf).not.toContain("MARCA_DO_REVENDEDOR_NAO_USAR");
 });
+
+it("o PDF mostra a descrição e os campos do negócio, e os cadastros antigos unidos ao do titular (revisão do PR)", async () => {
+  const data = payload();
+  data.leads = [
+    {
+      id: "negocio-1",
+      pipeline_id: "funil-1",
+      stage_id: "etapa-1",
+      title: "Implante",
+      status: "open",
+      value_cents: null,
+      currency: null,
+      created_at: "2030-01-02T13:05:00Z",
+      description: "DESCRICAO-DO-NEGOCIO",
+      custom_fields: { convenio: "UNIMED-0012345" },
+      campos_legiveis: [{ rotulo: "Convênio", valor: "UNIMED-0012345" }],
+    },
+  ];
+  data.contatos_unidos = [
+    {
+      id: "lapide-1",
+      name: "NOME-DO-CADASTRO-ANTIGO",
+      display_name: null,
+      email: "antigo@exemplo.test",
+      phone_number: "+5527988880000",
+      birthdate: null,
+      created_at: "2030-01-01T13:05:00Z",
+      merged_at: "2030-01-02T13:05:00Z",
+    },
+  ];
+
+  const pdf = await texto(data);
+
+  for (const trecho of [
+    "DESCRICAO-DO-NEGOCIO",
+    "Convênio: UNIMED-0012345",
+    "Cadastros antigos unidos a este",
+    "NOME-DO-CADASTRO-ANTIGO",
+    "antigo@exemplo.test",
+    "+5527988880000",
+  ]) {
+    expect(pdf).toContain(trecho);
+  }
+});

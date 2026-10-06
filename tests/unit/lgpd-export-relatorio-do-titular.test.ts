@@ -341,3 +341,160 @@ describe("LGPD export: endereço, campos personalizados e propostas da IA", () =
   });
 });
 
+
+describe("LGPD export: CPF fora do arquivo de dados também nos blocos de texto livre (revisão do PR)", () => {
+  const CPF = "52998224725";
+  const PONTUADO = "529.982.247-25";
+  const CONVERSA = "conversa-da-joana";
+
+  beforeEach(() => {
+    rows.conversations = [{ id: CONVERSA, organization_id: ORG, contact_id: TITULAR, status: "open", channel: "whatsapp" }];
+    rows.webhook_lead_captures = [
+      {
+        id: "captacao-1",
+        organization_id: ORG,
+        contact_id: TITULAR,
+        source_name: "Landing page",
+        outcome: "created",
+        captured_name: "Joana Teste",
+        fields: { nome: "Joana Teste", telefone: "27999990000", cpf: PONTUADO, observacao: `meu cpf é ${CPF}` },
+        received_at: "2026-09-01T00:00:00Z",
+      },
+    ];
+    rows.agent_cases = [
+      {
+        id: "caso-dela", organization_id: ORG, conversation_id: CONVERSA, status: "awaiting_human",
+        title: `Convênio da Joana (CPF ${PONTUADO})`, summary: `Paciente informou CPF ${PONTUADO} para o convênio`,
+        blocker: `Conferir o CPF ${CPF}`, source: "agent",
+      },
+    ];
+    rows.agent_case_events = [
+      { id: "evento-dela", organization_id: ORG, case_id: "caso-dela", kind: "human_replied", actor_kind: "human", body: `CPF dela: ${PONTUADO}`, metadata: { trecho: `cpf ${CPF}` } },
+    ];
+    rows.demandas = [
+      { id: "demanda-dela", organization_id: ORG, contact_id: TITULAR, origem: "handoff", assunto: `Guia do convênio, CPF ${PONTUADO}`, estado: "aberta", dono_kind: "humano", proximo_passo: `Mandar o CPF ${CPF} à operadora` },
+    ];
+    rows.agent_inbox_items = [
+      { id: "aviso-dela", organization_id: ORG, kind: "handoff", title: `Assumir (CPF ${PONTUADO})`, body: `Resumo: CPF ${CPF}`, status: "open", ref_kind: "conversation", ref_id: CONVERSA },
+    ];
+    rows.contact_channel_identities = [
+      { id: "ident-1", organization_id: ORG, contact_id: TITULAR, channel: "instagram", external_id: "IGSID-DA-JOANA" },
+    ];
+    rows.instagram_comments = [
+      { id: "comentario-1", organization_id: ORG, contact_id: null, autor_igsid: "IGSID-DA-JOANA", media_id: "post-1", texto: `meu cpf ${PONTUADO}`, sugestao_de_resposta: `Oi, recebemos o CPF ${PONTUADO}`, motivo_do_toque: `informou CPF ${CPF}`, comentado_em: "2026-09-10T00:00:00Z", situacao: "novo" },
+    ];
+  });
+
+  it("⭐ nenhum bloco do arquivo de dados leva o CPF — captação, caso, linha do tempo, demanda, aviso, comentário", async () => {
+    const payload = await collectExportData(pedido);
+
+    const tudo = JSON.stringify(payload);
+    expect(tudo).not.toContain(CPF);
+    expect(tudo).not.toContain(PONTUADO);
+    expect(tudo).not.toContain("529.982");
+    // Controle: os blocos vieram, com o texto em volta do CPF.
+    expect(payload.webhook_captures[0]?.fields).toMatchObject({ nome: "Joana Teste", telefone: "27999990000" });
+    expect(payload.webhook_captures[0]?.fields).not.toHaveProperty("cpf");
+    expect(payload.cases?.[0]?.summary).toBe("Paciente informou CPF [CPF omitido] para o convênio");
+    expect(payload.case_events?.[0]?.body).toBe("CPF dela: [CPF omitido]");
+    expect(payload.demandas?.[0]?.proximo_passo).toBe("Mandar o CPF [CPF omitido] à operadora");
+    expect(payload.avisos_da_central?.[0]?.title).toBe("Assumir (CPF [CPF omitido])");
+    expect(payload.instagram_comments?.[0]?.texto).toBe("meu cpf [CPF omitido]");
+  });
+});
+
+describe("LGPD export: a descrição e os campos do NEGÓCIO, e o texto das atividades (revisão do PR)", () => {
+  const CPF = "52998224725";
+
+  beforeEach(() => {
+    rows.crm_pipelines = [
+      {
+        id: "funil-implante",
+        organization_id: ORG,
+        is_default: false,
+        is_archived: false,
+        settings: { fields: [{ key: "convenio", label: "Convênio", type: "text" }] },
+      },
+    ];
+    rows.crm_leads = [
+      {
+        id: "negocio-dela", organization_id: ORG, contact_id: TITULAR, pipeline_id: "funil-implante", stage_id: "etapa-1",
+        title: "Implante da Joana", status: "open", value_cents: 500000, currency: "BRL", created_at: "2026-09-02T00:00:00Z",
+        description: `Quer implante; CPF ${CPF} para o orçamento`,
+        custom_fields: { convenio: "Unimed 0012345", procedimento: "implante", cpf: CPF },
+      },
+      {
+        id: "negocio-do-pedro", organization_id: ORG, contact_id: "contato-b", pipeline_id: "funil-implante", stage_id: "etapa-1",
+        title: "Pedro", status: "open", description: "do Pedro", custom_fields: { convenio: "Pedro" },
+      },
+    ];
+    rows.crm_lead_activities = [
+      {
+        id: "atividade-dela", organization_id: ORG, contact_id: TITULAR, lead_id: "negocio-dela", type: "note", source_module: "crm",
+        performed_at: "2026-09-03T00:00:00Z", payload: { texto: "Ligou pedindo retorno" }, metadata: { quem: "recepção" },
+        reason: `Pediu retorno sobre o implante; CPF ${CPF}`,
+      },
+    ];
+  });
+
+  it("⭐ o que a anonimização apaga do negócio sai no relatório: descrição e campos, com o nome do campo", async () => {
+    const payload = await collectExportData(pedido);
+
+    expect(payload.leads.map((l) => l.id)).toEqual(["negocio-dela"]);
+    expect(payload.leads[0]).toMatchObject({
+      description: "Quer implante; CPF [CPF omitido] para o orçamento",
+      custom_fields: { convenio: "Unimed 0012345", procedimento: "implante" },
+      campos_legiveis: [
+        { rotulo: "Convênio", valor: "Unimed 0012345" },
+        { rotulo: "Procedimento", valor: "implante" },
+      ],
+    });
+  });
+
+  it("⭐ a atividade leva o texto que a anonimização apaga (conteúdo, metadados, motivo)", async () => {
+    const payload = await collectExportData(pedido);
+
+    expect(payload.activities[0]).toMatchObject({
+      payload: { texto: "Ligou pedindo retorno" },
+      metadata: { quem: "recepção" },
+      reason: "Pediu retorno sobre o implante; CPF [CPF omitido]",
+    });
+    expect(JSON.stringify(payload)).not.toContain(CPF);
+    // O CPF de campo de negócio também acende a linha do PDF.
+    expect(payload.contact?.cpf_em_campo_personalizado).toBe(true);
+  });
+});
+
+describe("LGPD export: o cadastro antigo UNIDO ao do titular (revisão do PR)", () => {
+  beforeEach(() => {
+    rows.contacts = [
+      { id: TITULAR, organization_id: ORG, name: "Joana Teste", created_at: "2026-09-01T00:00:00Z" },
+      {
+        id: "lapide-da-joana", organization_id: ORG, is_merged_into: TITULAR, merged_at: "2026-09-05T00:00:00Z",
+        name: "Joana T.", display_name: "joana.insta", email: "joana@antigo.test", phone_number: "+5527988880000",
+        birthdate: "1990-01-01", created_at: "2026-08-01T00:00:00Z",
+      },
+      { id: "lapide-do-pedro", organization_id: ORG, is_merged_into: "contato-b", name: "Pedro", created_at: "2026-08-01T00:00:00Z" },
+    ];
+    rows.conversations = [
+      // A conversa que colidiu na fusão e FICOU na lápide.
+      { id: "conversa-na-lapide", organization_id: ORG, contact_id: "lapide-da-joana", status: "closed", channel: "instagram" },
+    ];
+    rows.agent_cases = [
+      { id: "caso-na-lapide", organization_id: ORG, conversation_id: "conversa-na-lapide", status: "resolved", title: "Caso antigo", summary: "s", blocker: "b", source: "agent" },
+    ];
+  });
+
+  it("⭐ o cadastro unido sai no relatório — e a conversa que ficou nele também", async () => {
+    const payload = await collectExportData(pedido);
+
+    expect(payload.contatos_unidos).toEqual([
+      expect.objectContaining({
+        id: "lapide-da-joana", name: "Joana T.", email: "joana@antigo.test", phone_number: "+5527988880000",
+      }),
+    ]);
+    expect(payload.conversations.map((c) => c.id)).toEqual(["conversa-na-lapide"]);
+    expect(payload.cases?.map((c) => c.id)).toEqual(["caso-na-lapide"]);
+    expect(JSON.stringify(payload)).not.toContain("Pedro");
+  });
+});

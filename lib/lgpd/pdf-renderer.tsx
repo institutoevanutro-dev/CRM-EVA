@@ -241,6 +241,23 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
           </View>
         ) : null}
 
+        {/* Cadastros que foram unidos ao do titular (fusão de duplicados): o
+            nome, o e-mail e o telefone de quando eram cadastros separados. */}
+        {data.contatos_unidos?.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Cadastros antigos unidos a este</Text>
+            {data.contatos_unidos.map((c) => (
+              <View key={c.id} style={styles.itemBlock}>
+                <Text>{c.name ?? c.display_name ?? "—"}</Text>
+                <Text style={styles.small}>
+                  E-mail: {c.email ?? "—"} · Telefone: {c.phone_number ?? "—"}
+                </Text>
+                <Text style={styles.small}>Unido em {fmtDate(c.merged_at)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         {/* Endereço e campos personalizados. O nome do campo em linha própria:
             rótulo de campo é frase ("Como conheceu a clínica?"), e na coluna de
             110pt dos dados fixos ele quebraria no meio da palavra. */}
@@ -346,6 +363,12 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
                   {l.title ?? "(sem título)"} · {l.status} ·{" "}
                   {fmtMoney(l.value_cents, l.currency)}
                 </Text>
+                {l.description ? <Text style={styles.small}>Descrição: {l.description}</Text> : null}
+                {(l.campos_legiveis ?? []).map((campo, i) => (
+                  <Text key={i} style={styles.small}>
+                    {campo.rotulo}: {campo.valor}
+                  </Text>
+                ))}
                 <Text style={styles.small}>Criado em {fmtDate(l.created_at)}</Text>
               </View>
             ))}
