@@ -255,3 +255,30 @@ porque os contadores novos ficam fora da condição de auditoria só por não es
 | **Rastro** | `followup.silence_sweep_run`, quando há efeito. Os contadores `skipped_same_episode` e `skipped_before_activation` vão no `metadata` desse evento. |
 | **Tela** | A fila de follow-up (`/app/ai/followups`) mostra a inscrição, que agora aparece **uma** vez por silêncio. |
 | **Laço de retorno: o que muda no sistema quando erra** | Erro para o lado de **não** inscrever (vigência zerada, por exemplo) deixa o contato calado sem toque. Ele é corrigido pela próxima resposta do contato, que abre episódio novo. Erro para o lado de inscrever é barrado pelo índice único e pelos bloqueios de envio, que continuam iguais. |
+
+---
+
+## 8. Segunda revisão (2026-10-06): o que entrou e a sabotagem
+
+| Achado | Decisão |
+|---|---|
+| Episódio ancorado no `started_at`: resposta durante a inscrição, com `cancel_on_reply` desligado, reabria episódio na conclusão e encostava outra sequência | **Consertado** pelo porte do cooldown pela conclusão (`2240b215e`), §3 |
+| Armar o fluxo num agente não avançava a vigência (disparo em massa por outro caminho) | **Consertado** pelo trigger de armar, §4.2 |
+| Leitura sem teto, crescendo com toda conversa aberta | **Consertado** com o piso `last_inbound_at > active_since` no servidor, §4.4. Memoização por organização entre ponteiros: não feita (anotada no código) |
+| Nenhum teste prendia qual relógio alimenta cada regra no adaptador | **Consertado** com teste da consulta de produção (mensagem atrasada) |
+| Invariante de anonimizado provava o espelho, não a produção | **Retirado**; a prova é unitária, §4.3 |
+| Caso "laço real ponta a ponta" não roda o motor | **Renomeado** para o que faz (a conclusão é um `UPDATE`) |
+| Três afirmações de estado citando `loadSilentContactIds` | **Corrigidas** |
+| `skipped_existing` do pré-filtro audita por minuto | **Não aplicado**: é a dívida do §6.4, anterior a esta branch (na `main` a tentativa batia no 23505 e auditava igual) e mantida pelo original; muda o que a trilha registra para uma condição que não é deste item |
+| Sabotagem de outra sessão de revisão no worktree durante a leitura | Não é defeito; conferido `git status` limpo antes de cada execução |
+
+**Sabotagem** (só a linha do conserto revertida, depois `git checkout` e árvore limpa):
+
+| Linha revertida | Previsto | Medido |
+|---|---|---|
+| `runSilenceSweep` ignora o cooldown | 1 de 31 (unit) e 1 de 41 (invariante) | 1 de 31 e 1 de 41 |
+| Cooldown por `started_at` em vez de `updated_at` | 1 de 39 | 1 de 39 |
+| Relógios trocados no adaptador | 1 de 39 | 1 de 39 |
+| Sem o piso `last_inbound_at` na consulta | 1 de 39 | 1 de 39 |
+| Trigger de armar não grava `active_since` | 2 de 41 | 2 de 41 |
+| Trigger de armar sem a cláusula da versão substituída | 1 de 41 | 1 de 41 |
