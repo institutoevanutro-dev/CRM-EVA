@@ -130,6 +130,18 @@ describe("completeTurnForEnrollment — 'sent' (action)", () => {
     );
   });
 
+  it("'sent' pelo modelo de reserva grava o 'via' no evento; sem ele, o payload segue vazio", async () => {
+    const reserva = fakeDb({ enrollment: enrollment(), graph: ACTION_GRAPH });
+    await completeTurnForEnrollment(reserva.db, "org-1", "enr-1", "a1", { kind: "sent", via: "modelo_de_reserva" }, clock);
+    expect(reserva.insertEnrollmentEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ event_type: "action_sent", payload: { via: "modelo_de_reserva" } }),
+    );
+
+    const ia = fakeDb({ enrollment: enrollment(), graph: ACTION_GRAPH });
+    await completeTurnForEnrollment(ia.db, "org-1", "enr-1", "a1", { kind: "sent" }, clock);
+    expect(ia.insertEnrollmentEvent).toHaveBeenCalledWith(expect.objectContaining({ event_type: "action_sent", payload: {} }));
+  });
+
   it("double completion (same steps_taken) is idempotent — 2nd call is a no-op", async () => {
     const { db, updateEnrollment } = fakeDb({
       enrollment: enrollment(),

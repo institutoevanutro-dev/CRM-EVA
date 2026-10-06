@@ -38,7 +38,8 @@ export interface TurnBridgeAdminClient extends AdminClient {
 
 /** Resultado de um turno `followup_turn` dirigido por fluxo, por `purpose`. */
 export type TurnResult =
-  | { kind: "sent" }
+  /** `via`: saiu pelo modelo de reserva do passo `ai_message` (a IA não conseguiu enviar). */
+  | { kind: "sent"; via?: "modelo_de_reserva" }
   /** Encerra a inscrição. `outcome` (ex.: humano ativo → `handoff`) vai à coluna quando presente. */
   | { kind: "skipped"; reason: string; outcome?: EnrollmentOutcome }
   /** O passo não enviou e o fluxo SEGUE (ex.: fora das 24h do Instagram). `skipped` encerra. */
@@ -165,7 +166,7 @@ export async function completeTurnForEnrollment(
     if (!edge) throw new Error(`action node "${node.id}" sem aresta 'always' de saída`);
     await applyStep(
       "action_sent",
-      {},
+      result.via ? { via: result.via } : {},
       { current_node_id: edge.target, status: "active", next_eval_at: now.toISOString() },
     );
     return;

@@ -79,6 +79,13 @@ export interface FollowupJobRequest {
     purpose: "send_message" | "classify" | "plan_timing";
     /** action (mode 'ai_message') — Task 5.1: repassado ao turno pra virar o bloco de orientação. */
     prompt_hint?: string;
+    /**
+     * action (mode 'ai_message') — o modelo de reserva (`message_templates.id`): sai,
+     * pelas mesmas travas, quando a IA não consegue enviar (veto da cadeia ou erro na
+     * última tentativa). Porte do encanamento de b94446a5c; lá o id é um modelo
+     * aprovado da Meta e sai com a janela de 24 h fechada.
+     */
+    fallback_template_id?: string;
     /** action (mode 'text') — corpo pronto; o turno envia sem chamar o modelo. */
     fixed_body?: string;
     /** action (mode 'template') — id em `message_templates`; o turno carrega o corpo e envia sem modelo. */
@@ -243,7 +250,10 @@ function turnPayloadExtras(
   events: EnrollmentEventRef[] = [],
 ): Partial<FollowupJobRequest["payload"]> {
   if (node.type === "action" && node.config.mode === "ai_message") {
-    return { prompt_hint: interpolarVolta(node.config.prompt_hint, events) };
+    return {
+      prompt_hint: interpolarVolta(node.config.prompt_hint, events),
+      ...(node.config.fallback_template_id ? { fallback_template_id: node.config.fallback_template_id } : {}),
+    };
   }
   if (node.type === "action" && node.config.mode === "text") {
     return { fixed_body: interpolarVolta(node.config.body, events) };
