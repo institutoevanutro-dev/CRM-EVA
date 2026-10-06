@@ -59,6 +59,26 @@
  * (mataria degrau ARMADO) e `revision_started_at` vira também com status e
  * conversa (confirmar um compromisso já dentro de 24h mataria a véspera armada).
  *
+ * **REMARCAÇÃO PARA MAIS LONGE REARMA O DEGRAU DA DATA NOVA (issue #2243).**
+ * `reminder_sent_offsets_minutes` responde "quais degraus já saíram", e a
+ * resposta não tem data: a véspera que saiu para a reunião ANTIGA continuava
+ * suprimida depois que a reunião era movida para a semana seguinte — a data
+ * nova ficava sem lembrete nenhum, em silêncio, e a lista seguia "correta".
+ * A limpeza mora AQUI, na leitura, e não na escrita da remarcação: a regra vira
+ * exercitável sem banco. A régua é o ÚLTIMO CARIMBO — `reminder_sent_at`,
+ * gravado ANTES do envio (#2226) — e não o instante da remarcação: uma ocasião
+ * já disparada tem alvo <= carimbo (o carimbo é da mesma rodada do envio, com
+ * `agora >= alvo`), logo `alvo > carimbo` só é verdadeiro para ocasião que
+ * ainda não saiu, e o alvo de um degrau carimbado só ultrapassa o carimbo
+ * quando o horário andou para além do último envio. Rearmar pelo instante da
+ * remarcação reenviaria ocasião já disparada; pelo carimbo não consegue. Duas
+ * guardas da triagem (#2249) estreitam o rearme: só linha com
+ * `starts_at_marked_at` (remarcada depois da 0323), e só quando o alvo novo
+ * fica a meio intervalo do degrau ou mais depois do último envio — ver
+ * `degrausPendentes`. `reminder_sent_at` NÃO volta a ser filtro de quem recebe
+ * (a 0254 proíbe, e o teste do cron prende): ele só dá o instante de
+ * comparação para uma lista que guarda "quais" sem "quando".
+ *
  * **O carimbo vai ANTES do envio.** O caso medido mandou o lembrete às
  * 18:35:01 e a MESMA mensagem saiu de novo às 18:40:01 — para o mesmo
  * compromisso, o mesmo degrau. O carimbo não chegava à linha por nenhum dos
@@ -92,13 +112,11 @@
  * produto NO DIA em que o disparador nascer". Este é o disparador; a decisão
  * segue sendo dele, e nada aqui a toma por ele.
  *
- * Medido na main 58dcb811: `reminder_enabled` não aparece no `criarSchema` nem
- * no `alterarSchema` de `app/api/v1/agenda/tipos/route.ts`, não é projetado no
- * GET dessa rota, e não existe em `app/app/settings/tenant/agenda/`. Ou seja:
- * hoje ninguém consegue LIGAR o lembrete pela tela nem pela API. Enquanto isso
- * for verdade, a consulta abaixo devolve zero linhas em toda instalação — a
- * varredura é barata e o envio é nenhum. A superfície de configuração é o outro
- * meio do par, e falta escrevê-la (invariante 6 do Sistema Vivo).
+ * A superfície de configuração, que faltava quando esta rota nasceu, existe:
+ * Configurações › Agenda (`app/app/settings/tenant/agenda/_client.tsx`) liga o
+ * aviso por tipo, escolhe os degraus e, desde a 0323, o texto. O PATCH de
+ * `app/api/v1/agenda/tipos/route.ts` valida. Quem não ligou não recebe nada:
+ * o padrão continua desligado.
  */
 import { randomUUID } from "node:crypto";
 
@@ -151,7 +169,13 @@ interface CompromissoAVencer {
   starts_at_marked_at: string | null;
   location_details: string | null;
   reminder_sent_offsets_minutes: number[] | null;
-  /** Instante do último carimbo — a condição do carimbo da rodada (spec 3.9). */
+  /**
+   * `reminder_sent_at` — instante do ÚLTIMO carimbo de envio (#2243): a
+   * referência contra a qual um degrau já carimbado volta a ser candidato
+   * quando a remarcação leva o horário para além do último envio, e a condição
+   * do carimbo da rodada (spec 3.9). Não é filtro de quem recebe — a 0254
+   * proíbe. `null` = a limpeza fica de fora.
+   */
   reminder_sent_at: string | null;
   calendar_event_types: TipoDoCompromisso | TipoDoCompromisso[] | null;
 }
@@ -319,8 +343,71 @@ export function degrausPendentes(input: {
    * comportamento de antes, sem mudança para dado legado.
    */
   remarcadoEm?: Date | null;
+  /**
+   * `reminder_sent_at` da linha — o instante do ÚLTIMO CARIMBO DE ENVIO
+   * (issue #2243).
+   *
+   * A lista `jaEnviados` diz QUAIS degraus saíram, mas não QUANDO — e sem o
+   * quando não há como distinguir "a véspera da data antiga já saiu" de "a da
+   * data nova já saiu" depois que a remarcação move o horário. É o que a
+   * #2243 reporta: remarcada para mais longe, a véspera que já tinha saído
+   * seguia suprimida e a data nova ficava sem lembrete algum.
+   *
+   * A comparação é contra o carimbo, e não contra a remarcação: o carimbo é
+   * gravado ANTES do envio (#2226), na mesma rodada, com `agora >= alvo` —
+   * logo toda ocasião já disparada tem `alvo <= enviadoEm`, e `alvo >
+   * enviadoEm` só é verdadeiro para ocasião que ainda não saiu. Rearmar pelo
+   * instante da remarcação reenviaria ocasião disparada; pelo carimbo, não.
+   *
+   * `null`/ausente = a linha não diz quando saiu o último lembrete: a
+   * limpeza fica de fora e vale o comportamento antigo (falha fechada na
+   * direção de nunca reenviar).
+   */
+  enviadoEm?: Date | null;
 }): number[] {
   const enviados = new Set(input.jaEnviados ?? []);
+  // ─── REMARCAÇÃO PARA MAIS LONGE REARMA O DEGRAU DA DATA NOVA (#2243) ──────
+  //
+  // Um degrau carimbado só volta a ser candidato quando o horário NOVO dele
+  // ficou DEPOIS do último carimbo: a remarcação andou para além do último
+  // envio, então a ocasião que a lista suprimia é a da data antiga, e a da
+  // data nova ainda não saiu. Sem isto a lista é eterna e a data nova nunca
+  // ganha lembrete — o defeito da issue.
+  //
+  // A referência é o carimbo: "o alvo deste degrau já tinha passado quando o
+  // último lembrete saiu?" — sim = saiu, mantém suprimido. A guarda 2 abaixo
+  // aperta esse "depois" para "meio intervalo do degrau depois".
+  // `enviados` é cópia em memória: a lista gravada continua sendo a
+  // autoridade do que saiu, e o carimbo da rodada a regrava como sempre.
+  //
+  // Duas guardas da triagem (#2249):
+  //
+  // 1. Só rearma linha com `remarcadoEm`. A 0323 (0536 no original) nasceu sem
+  //    backfill: linha remarcada antes dela tem `starts_at_marked_at` NULL, a
+  //    régua do #2239 cai em `created_at` e não vê a remarcação — rearmar ali
+  //    soltaria, na primeira rodada depois do update, uma véspera cuja hora já
+  //    tinha passado. E a lista que o backfill da 0254 escreveu (`[principal
+  //    ATUAL]`) não é envio do cron, então o carimbo não a data. Sem a
+  //    coluna, vale o comportamento de antes: não rearma.
+  // 2. Só rearma se o alvo novo ficou a pelo menos METADE DO INTERVALO do
+  //    degrau depois do último envio. Empurrar a reunião 30 min depois de a
+  //    véspera sair não pode gerar uma segunda véspera 30 min depois da
+  //    primeira — mandar dois textos em sequência é o que faz a pessoa
+  //    bloquear o número (a regra do cabeçalho desta função). A régua é o
+  //    intervalo do próprio degrau: "há pouco" para a véspera é horas, para
+  //    o aviso de 1h são minutos. Metade, e não o intervalo cheio: o envio
+  //    sai minutos DEPOIS do alvo (o cron roda a cada 5 min), então
+  //    "mesmo horário, no dia seguinte" — a remarcação mais comum — deixa o
+  //    alvo novo a 24h MENOS esses minutos do último envio, e a régua cheia
+  //    o recusaria, devolvendo a data nova ao silêncio da #2243.
+  if (input.enviadoEm && input.remarcadoEm) {
+    for (const degrau of [...enviados]) {
+      const alvo = input.comeca.getTime() - degrau * 60_000;
+      if (alvo - input.enviadoEm.getTime() >= (degrau * 60_000) / 2) {
+        enviados.delete(degrau);
+      }
+    }
+  }
   const todos = new Set([input.principal, ...(input.extras ?? [])]);
   // A régua de `vencidoNaMarcacao` é UM instante: o da última marcação DESTA
   // data. `remarcadoEm` vem antes de propósito — é ele que sabe do movimento.
@@ -405,6 +492,9 @@ async function handle(req: NextRequest): Promise<Response> {
       // A régua da remarcação (#2230): nulo = nunca remarcada, e aí vale
       // `created_at` — a rota não decide nada, só repassa os dois instantes.
       remarcadoEm: linha.starts_at_marked_at ? new Date(linha.starts_at_marked_at) : null,
+      // O instante do último carimbo (#2243): sem ele a limpeza dos degraus
+      // da data antiga fica de fora e a remarcação para mais longe não rearma.
+      enviadoEm: linha.reminder_sent_at ? new Date(linha.reminder_sent_at) : null,
     });
     if (pendentes.length === 0) {
       pular("ainda_nao");

@@ -253,3 +253,24 @@ describe("a rota lê a régua da remarcação (#2230)", () => {
     expect(fonte).toContain("input.remarcadoEm ?? input.criadoEm");
   });
 });
+
+describe("a rota repassa o instante do último carimbo (#2243)", () => {
+  const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+
+  it("seleciona reminder_sent_at — a lista diz QUAIS degraus saíram, mas não QUANDO", () => {
+    // Estrutural, como as acima: sem a coluna na consulta `linha.reminder_sent_at`
+    // seria `undefined`, a limpeza ficaria fora do caminho em toda instalação e
+    // o rearma nasceria calado — o defeito da #2243 voltaria sem erro nenhum.
+    const consulta = fonte.slice(fonte.indexOf(".select("), fonte.indexOf('.eq("status"'));
+    expect(consulta).toContain("reminder_sent_at");
+  });
+
+  it("repassa enviadoEm e deixa a limpeza morar na regra, não na rota", () => {
+    expect(fonte).toContain("enviadoEm: linha.reminder_sent_at");
+    expect(fonte).toContain("input.enviadoEm");
+    // E o filtro de recebimento continua sendo a LISTA — `reminder_sent_at`
+    // não volta a ser critério de quem recebe (a 0254 proíbe, prende o teste
+    // "o cron NÃO pode filtrar por reminder_sent_at").
+    expect(fonte).not.toMatch(/\.is\(\s*["']reminder_sent_at["']/);
+  });
+});
