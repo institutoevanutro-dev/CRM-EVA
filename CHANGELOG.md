@@ -8,6 +8,19 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.5.0] — 2026-10-06
+
+### Adicionado
+
+- **Importar clínicas de uma planilha, por comando** `pnpm tsx scripts/importar-clinicas.ts planilha.xlsx --destino <host>` lê uma
+  planilha com as abas Clínicas, Perguntas frequentes e Atendentes e mostra o que
+  faria. Com `--aplicar --ator <e-mail>`, cria ou atualiza cada clínica: empresa,
+  funil de clínica, perguntas frequentes (a função continua desligada), agente
+  "Recepção" em rascunho, regras da casa na memória e acesso dos atendentes, sem
+  enviar e-mail. `--convidar` envia o convite aos atendentes novos. Rodar a mesma
+  planilha de novo não duplica nada, e o comando recusa empresa que não criou.
+  `--gerar-modelo modelo.xlsx` gera a planilha em branco com uma linha de exemplo.
+
 ## [3.4.0] — 2026-10-05
 
 ### Adicionado
@@ -5868,7 +5881,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.4.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.5.0...HEAD
+[3.5.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.1.1...v3.2.0

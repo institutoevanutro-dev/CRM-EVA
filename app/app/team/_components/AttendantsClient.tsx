@@ -111,6 +111,15 @@ function summarizeSchedule(windows: ScheduleWindow[], t: (texto: string) => stri
 function StatusBadge({ attendant, now }: { attendant: Attendant; now: Date }) {
   const t = useT();
   const a = attendant.availability;
+  // Prestador de serviço atende pela agenda e não recebe conversa: o selo de
+  // plantão não se aplica a ele.
+  if (a?.role === "provider") {
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        {t("Só agenda")}
+      </Badge>
+    );
+  }
   const ligado = !!a?.is_available;
   if (estaDePlantao({ isAvailable: ligado, schedule: a?.schedule }, now)) {
     return <Badge variant="default">{t("De plantão")}</Badge>;
@@ -480,6 +489,9 @@ export function AttendantsClient({ canManage }: Props) {
                 const capacity = a.availability?.capacity ?? 5;
                 const load = a.availability?.current_load ?? 0;
                 const windows = a.availability?.schedule?.windows ?? [];
+                // Prestador publica jornada (a Agenda lê) mas fica fora do
+                // roteamento: carga, capacidade e a chave de plantão não valem.
+                const soAgenda = a.availability?.role === "provider";
                 return (
                   <TableRow key={a.userId}>
                     <TableCell>
@@ -492,12 +504,18 @@ export function AttendantsClient({ canManage }: Props) {
                       <StatusBadge attendant={a} now={now} />
                     </TableCell>
                     <TableCell>
-                      <span className={load >= capacity ? "font-medium text-destructive" : ""}>
-                        {load}
-                      </span>
+                      {soAgenda ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <span className={load >= capacity ? "font-medium text-destructive" : ""}>
+                          {load}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
-                      {canManage ? (
+                      {soAgenda ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : canManage ? (
                         <Input
                           type="number"
                           min={1}
@@ -534,13 +552,22 @@ export function AttendantsClient({ canManage }: Props) {
                     </TableCell>
                     {canManage ? (
                       <TableCell>
-                        <Switch
-                          checked={!!a.availability?.is_available}
-                          aria-label={`Disponibilidade de ${a.name}`}
-                          onCheckedChange={(v) =>
-                            patch.mutate({ userId: a.userId, patch: { is_available: v } })
-                          }
-                        />
+                        {soAgenda ? (
+                          <span
+                            className="whitespace-nowrap text-xs text-muted-foreground"
+                            title={t("Prestador de serviço não entra no roteamento de conversas.")}
+                          >
+                            {t("Fora do roteamento")}
+                          </span>
+                        ) : (
+                          <Switch
+                            checked={!!a.availability?.is_available}
+                            aria-label={`Disponibilidade de ${a.name}`}
+                            onCheckedChange={(v) =>
+                              patch.mutate({ userId: a.userId, patch: { is_available: v } })
+                            }
+                          />
+                        )}
                       </TableCell>
                     ) : null}
                   </TableRow>
