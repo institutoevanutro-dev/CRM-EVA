@@ -20,7 +20,12 @@ function fakeDb(opts: { vivos: Set<string>; insert: SilenceSweepDb["insertEnroll
     loadActiveSilencePointers: async () => [
       { id: "p-1", organization_id: "org-1", active_version_id: "v-1", threshold_minutes: 60, segments: [] },
     ],
-    loadSilentContactIds: async () => ["vivo", "livre"],
+    loadSilentContacts: async () =>
+      ["vivo", "livre"].map((contact_id) => ({
+        contact_id,
+        ultima_entrada_em: "2026-10-02T10:00:00.000Z",
+        ultima_entrada_gravada_em: "2026-10-02T10:00:00.000Z",
+      })),
     loadContatosComInscricaoViva: async () => opts.vivos,
     loadTriggerNodeId: async () => "t-1",
     insertEnrollment: opts.insert,

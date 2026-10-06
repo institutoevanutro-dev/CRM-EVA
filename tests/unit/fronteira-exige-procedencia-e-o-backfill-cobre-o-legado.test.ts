@@ -72,6 +72,7 @@ function conversaLegada(contactId: string, comCarimbo: boolean) {
             demanda_id: null,
             demanda_revision: null,
             sent_at: "2026-09-01T10:00:00.000Z",
+            created_at: "2026-09-01T10:00:01.000Z",
           },
         ]
       : [],
@@ -90,13 +91,13 @@ describe("fronteira exige procedência; o legado é do backfill", () => {
     const db = createSupabaseSilenceSweepDb(
       supabaseComConversas([conversaLegada("c-sem-carimbo", false)]),
     );
-    const ids = await db.loadSilentContactIds("org", "2026-09-02T10:00:00.000Z", []);
+    const ids = (await db.loadSilentContacts("org", "2026-09-02T10:00:00.000Z", [])).map((c) => c.contact_id);
     expect(ids).toEqual([]);
   });
 
   it("varredura de silêncio continua enxergando a conversa COM carimbo", async () => {
     const db = createSupabaseSilenceSweepDb(supabaseComConversas([conversaLegada("c-novo", true)]));
-    const ids = await db.loadSilentContactIds("org", "2026-09-02T10:00:00.000Z", []);
+    const ids = (await db.loadSilentContacts("org", "2026-09-02T10:00:00.000Z", [])).map((c) => c.contact_id);
     expect(ids).toEqual(["c-novo"]);
   });
 

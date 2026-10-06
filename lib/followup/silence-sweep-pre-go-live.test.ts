@@ -42,6 +42,7 @@ function conversa(contactId: string, phoneNumber: string) {
       demanda_id: null,
       demanda_revision: null,
       sent_at: "2026-09-01T10:00:00.000Z",
+      created_at: "2026-09-01T10:00:01.000Z",
     }],
     contacts: {
       tags: [],
@@ -63,8 +64,7 @@ describe("sweep de silêncio no pré-go-live", () => {
       ]),
     );
 
-    await expect(
-      db.loadSilentContactIds("org", "2026-09-02T10:00:00.000Z", []),
-    ).resolves.toEqual(["tester"]);
+    const contatos = await db.loadSilentContacts("org", "2026-09-02T10:00:00.000Z", []);
+    expect(contatos.map((c) => c.contact_id)).toEqual(["tester"]);
   });
 });

@@ -58,6 +58,18 @@ import { resolveAgentForAutomaticTrigger, type FollowupGateDb } from "./agent-fo
  */
 const STATUS_VIVOS = ["active", "waiting_reply", "paused_handoff", "paused_manual"] as const;
 
+/**
+ * Um contato calado e os fatos da mensagem recebida que define o silêncio
+ * dele (a mais nova por `sent_at`, entre as carimbadas de conversas abertas).
+ * `ultima_entrada_em` é o `sent_at` (relógio do WhatsApp — mede o limiar);
+ * `ultima_entrada_gravada_em` é o `created_at` (relógio do banco, na ingestão).
+ */
+export interface ContatoEmSilencio {
+  contact_id: string;
+  ultima_entrada_em: string;
+  ultima_entrada_gravada_em: string;
+}
+
 export interface SilencePointer {
   id: string;
   organization_id: string;
@@ -70,8 +82,8 @@ export interface SilencePointer {
 export interface SilenceSweepDb {
   /** Pointers ativos com trigger_config.kind='silence', de TODAS as orgs. */
   loadActiveSilencePointers(): Promise<SilencePointer[]>;
-  /** Contact ids da org sem inbound desde `cutoffIso` (inclusive); `segments` vazio = todos. */
-  loadSilentContactIds(orgId: string, cutoffIso: string, segments: string[]): Promise<string[]>;
+  /** Contatos da org sem inbound desde `cutoffIso` (inclusive); `segments` vazio = todos. */
+  loadSilentContacts(orgId: string, cutoffIso: string, segments: string[]): Promise<ContatoEmSilencio[]>;
   /** id do nó `trigger` do grafo pinado da version; `null` se version/nó não existir (defensivo — não deveria acontecer, validate-publish garante 1 trigger). */
   loadTriggerNodeId(orgId: string, versionId: string): Promise<string | null>;
   /**
@@ -151,7 +163,8 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     if (!triggerNodeId) continue;
 
     const cutoffIso = new Date(clock().getTime() - pointer.threshold_minutes * 60_000).toISOString();
-    const contactIds = await db.loadSilentContactIds(pointer.organization_id, cutoffIso, pointer.segments);
+    const contatos = await db.loadSilentContacts(pointer.organization_id, cutoffIso, pointer.segments);
+    const contactIds = contatos.map((c) => c.contact_id);
     const nextEvalAt = clock().toISOString();
     const comInscricaoViva = await db.loadContatosComInscricaoViva(pointer.organization_id, contactIds);
 
@@ -224,7 +237,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       return pointers;
     },
 
-    async loadSilentContactIds(orgId, cutoffIso, segments) {
+    async loadSilentContacts(orgId, cutoffIso, segments) {
       // last_inbound_at é POR CONVERSA; o enrollment é POR CONTATO — reduz
       // client-side pro MAIS RECENTE `last_inbound_at` entre as conversas do
       // contato (um contato com 2+ channel_sessions não pode ser marcado
@@ -239,7 +252,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       const { data, error } = await admin
         .from("conversations")
         .select(
-          "id, service_revision, current_demanda_id, demandas!conversations_current_demanda_id_fkey(revision,fechada_em), status, messages!messages_conversation_id_fkey(organization_id,contact_id,conversation_id,service_revision,demanda_id,demanda_revision,sent_at), contact_id, last_inbound_at, contacts:contact_id(tags, is_blocked, ai_authorized_at, phone_number), sessao:channel_session_id(metadata)",
+          "id, service_revision, current_demanda_id, demandas!conversations_current_demanda_id_fkey(revision,fechada_em), status, messages!messages_conversation_id_fkey(organization_id,contact_id,conversation_id,service_revision,demanda_id,demanda_revision,sent_at,created_at), contact_id, last_inbound_at, contacts:contact_id(tags, is_blocked, ai_authorized_at, phone_number), sessao:channel_session_id(metadata)",
         )
         .eq("organization_id", orgId).eq("demandas.organization_id", orgId)
         .eq("contacts.organization_id", orgId).eq("sessao.organization_id", orgId)
@@ -253,7 +266,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
 
       type Row = {
         id: string; service_revision: number; current_demanda_id: string | null; demandas: { revision: number; fechada_em: string | null } | null;
-        status: string; messages: Array<ServiceBoundary & { sent_at: string }>;
+        status: string; messages: Array<ServiceBoundary & { sent_at: string; created_at: string }>;
         contact_id: string;
         last_inbound_at: string;
         contacts: ContactEmbed;
@@ -264,7 +277,10 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       const ttlMs = ttlDaAutorizacaoMs(process.env);
       const latest = new Map<
         string,
-        { boundary: ServiceBoundary; at: number; tags: string[]; blocked: boolean; permitidoPeloGate: boolean }
+        {
+          boundary: ServiceBoundary; at: number; sentAt: string; createdAt: string;
+          tags: string[]; blocked: boolean; permitidoPeloGate: boolean;
+        }
       >();
       for (const row of (data ?? []) as unknown as Row[]) {
         const source = row.messages?.[0];
@@ -294,7 +310,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
             }),
           );
           latest.set(row.contact_id, {
-            boundary, at,
+            boundary, at, sentAt: source.sent_at, createdAt: source.created_at,
             tags: row.contacts?.tags ?? [],
             blocked: row.contacts?.is_blocked ?? false,
             permitidoPeloGate: acesso.permite,
@@ -302,7 +318,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         }
       }
 
-      const silentIds: string[] = [];
+      const silentes: ContatoEmSilencio[] = [];
       for (const [contactId, v] of latest) {
         if (v.blocked) continue;
         // A mesma regra do atendimento de entrada vale antes de criar o
@@ -311,10 +327,10 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         if (!v.permitidoPeloGate) continue;
         if (v.at > cutoff) continue; // conversou depois do corte — não é silêncio
         if (segments.length > 0 && !segments.some((s) => v.tags.includes(s))) continue;
-        silentIds.push(contactId);
+        silentes.push({ contact_id: contactId, ultima_entrada_em: v.sentAt, ultima_entrada_gravada_em: v.createdAt });
         origins.set(`${orgId}:${contactId}`, v.boundary);
       }
-      return silentIds;
+      return silentes;
     },
 
     async loadContatosComInscricaoViva(orgId, contactIds) {

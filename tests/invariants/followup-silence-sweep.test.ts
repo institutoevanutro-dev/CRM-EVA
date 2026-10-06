@@ -119,9 +119,12 @@ function silenceSweepDb(): SilenceSweepDb {
       }
       return pointers;
     },
-    async loadSilentContactIds(orgId, cutoffIso, segments) {
+    // O seed deste arquivo não cria mensagens: a última entrada é o
+    // `last_inbound_at` da conversa, e por isso `sent_at` e `created_at` da
+    // mensagem qualificante saem iguais aqui (na produção são duas colunas).
+    async loadSilentContacts(orgId, cutoffIso, segments) {
       const { rows } = await pool.query<{ contact_id: string; last_inbound_at: string; tags: string[]; is_blocked: boolean }>(
-        `select conv.contact_id, max(conv.last_inbound_at) as last_inbound_at,
+        `select conv.contact_id, max(conv.last_inbound_at)::text as last_inbound_at,
                 c.tags as tags, c.is_blocked as is_blocked
          from conversations conv
          join contacts c on c.id = conv.contact_id
@@ -135,7 +138,11 @@ function silenceSweepDb(): SilenceSweepDb {
         .filter((r) => !r.is_blocked)
         .filter((r) => new Date(r.last_inbound_at).getTime() <= cutoff)
         .filter((r) => segments.length === 0 || segments.some((s) => r.tags.includes(s)))
-        .map((r) => r.contact_id);
+        .map((r) => ({
+          contact_id: r.contact_id,
+          ultima_entrada_em: r.last_inbound_at,
+          ultima_entrada_gravada_em: r.last_inbound_at,
+        }));
     },
     // Mesma pergunta do adaptador de produção: vivo em QUALQUER fluxo da org.
     async loadContatosComInscricaoViva(orgId, contactIds) {
