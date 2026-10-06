@@ -225,7 +225,7 @@ Como nenhuma coluna existente serve (§2.3), decidi criar uma.
 | `tests/invariants/followup-silence-sweep.test.ts` | O espelho SQL ganha os métodos novos. `seedSilenceFlow` passa a semear `active_since` 30 dias atrás por padrão. Casos novos. Ajuste do RED→GREEN. |
 | Testes que chamam `loadSilentContactIds` (os três unitários e `tests/e2e/encerramento-atendimento.spec.ts`) | Renome e `.map((c) => c.contact_id)`. |
 | `scripts/e2e-followup-journey-helpers.ts`, `scripts/e2e-elegibilidade-helpers.ts` | Subcomando `recuar-vigencia <pointerId> <minutos>`; a organização vem de `creds.org_id`, como nos outros subcomandos, sem argumento novo. As specs `followup-journey` e `j20-elegibilidade-followup` semeiam silêncio **anterior** à publicação e, sem isso, passariam a ser recusadas pela regra nova. As duas estão no CI. |
-| `.changes/silencio-nao-recomeca.md` | `impacto: nada_mudou`, `secao: corrigido`. |
+| `.changes/followup-nao-recomeca.md` | `impacto: nada_mudou`, `secao: corrigido`. |
 | `HANDOFF.md:186-187` | A frase "pode re-enrollar … aceitável no MVP" ganha nota de que deixou de valer. |
 | `tests/invariants/followup-reenrollment-apos-conclusao.test.ts` | O cabeçalho cita o cabeçalho antigo do `silence-sweep.ts`; ganha nota de que o silêncio passou a deduplicar por episódio e o gatilho de etapa segue sem carência. |
 

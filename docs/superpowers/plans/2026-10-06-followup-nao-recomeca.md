@@ -447,7 +447,7 @@ O `test:db` aplica o baseline em modo install (`ON_ERROR_STOP=1`) e reaplica (up
 
 ## Passo 9: fragmento, mapa e DoD
 
-- **`.changes/silencio-nao-recomeca.md`:**
+- **`.changes/followup-nao-recomeca.md`:**
   - `impacto: nada_mudou`, `secao: corrigido`;
   - título: "A sequência de retomada não recomeça sozinha";
   - corpo para leigo: uma vez por silêncio, recomeça só depois de uma resposta, contato antigo não recebe nada ao ligar o fluxo, anonimizado fica fora;
