@@ -27,7 +27,10 @@ import { StaleServiceBoundaryError, parseServiceBoundary, assertCurrentServiceBo
  * vivo por lead), 23505 vira skip silencioso (`insertEnrollment` devolve
  * `inserted:false`), nunca erro. Um contato que COMPLETOU ou foi cancelado
  * pode ser re-enrollado na varredura seguinte se continuar silencioso —
- * aceitável no MVP, sem cooldown table.
+ * aceitável no MVP, sem cooldown table. Exceção: a inscrição encerrada por
+ * atendimento humano depois da última mensagem do contato barra a próxima
+ * (`encerradaPorHumanoNesteSilencio`) — senão o encerramento no 1º envio
+ * viraria um laço por tick.
  *
  * agent_id: cada pointer é gateado por `resolveAgentForAutomaticTrigger`, que
  * devolve o agente publicado que ARMA o pointer (menor uuid se >1) — esse
@@ -159,6 +162,44 @@ type ContactEmbed =
       phone_number: string | null;
     }
   | null;
+
+/**
+ * A inscrição deste ponteiro foi encerrada por atendimento humano (`outcome`
+ * `handoff`, ver `bloqueios-obrigatorios.ts`) DEPOIS da última mensagem do
+ * contato? Então o silêncio é o mesmo, e reinscrever recomeçaria o laço
+ * inscreve → planeja → encerra a cada tick. Só uma mensagem nova do contato
+ * abre a próxima. É o recorte mínimo da deduplicação por episódio do item
+ * silêncio (migration 0324), que o cobre por inteiro.
+ */
+export async function encerradaPorHumanoNesteSilencio(
+  admin: SupabaseClient,
+  input: { organization_id: string; pointer_id: string; contact_id: string },
+): Promise<boolean> {
+  const { data: encerrada, error } = await admin
+    .from("followup_enrollments")
+    .select("started_at")
+    .eq("organization_id", input.organization_id)
+    .eq("pointer_id", input.pointer_id)
+    .eq("contact_id", input.contact_id)
+    .eq("outcome", "handoff")
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!encerrada) return false;
+  const { data: ultima, error: ultimaErr } = await admin
+    .from("messages")
+    .select("sent_at")
+    .eq("organization_id", input.organization_id)
+    .eq("contact_id", input.contact_id)
+    .eq("direction", "inbound")
+    .order("sent_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (ultimaErr) throw new Error(ultimaErr.message);
+  if (!ultima) return true;
+  return Date.parse(encerrada.started_at) >= Date.parse(ultima.sent_at);
+}
 
 /** Production adapter: `SilenceSweepDb` sobre o client service-role real. */
 export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSweepDb {
@@ -305,6 +346,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       // 8.6: 1 follow-up vivo por lead). Vira skip silencioso, nunca erro.
       const boundary = origins.get(`${input.organization_id}:${input.contact_id}`);
       if (!boundary) return { inserted: false };
+      if (await encerradaPorHumanoNesteSilencio(admin, input)) return { inserted: false };
       try { await assertServiceBoundarySupabase(admin, boundary); } catch (error) {
         if (error instanceof StaleServiceBoundaryError) return { inserted: false }; throw error;
       }
