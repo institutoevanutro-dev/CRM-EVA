@@ -178,11 +178,14 @@ describe("modelo de reserva — quando a IA não conseguiu enviar", () => {
     expect(resultado(d.complete)).toEqual({ kind: "skipped", reason: RECUSADA });
   });
 
-  it("6. a reserva adiada pela janela anti-ban → o passo não fecha", async () => {
-    runBeforeSend.mockResolvedValue({ status: "vetoed", code: "outside_window", nextAllowedAt: new Date(Date.now() + 3_600_000), trace: [] });
+  it("6. a reserva adiada pela janela anti-ban → o passo não fecha: fica ESTACIONADO e o enrollment é avisado", async () => {
+    // Antes o adiamento era silencioso, e o dead-man do motor matava o
+    // enrollment em ~11h com o envio ainda por sair (porte do upstream a1c6c4d1e).
+    const abre = new Date(Date.now() + 3_600_000);
+    runBeforeSend.mockResolvedValue({ status: "vetoed", code: "outside_window", nextAllowedAt: abre, trace: [] });
     const d = deps();
     await criarHandler(d.deps)(job(), fakePool({ ledger: [{ status: "vetoed" }] }), ctx);
-    expect(d.complete).not.toHaveBeenCalled();
+    expect(resultado(d.complete)).toEqual({ kind: "deferred", until: abre, reason: "outside_window" });
   });
 
   describe("7. a IA lançou", () => {

@@ -226,11 +226,21 @@ describe("enviarTextoFixoPendente · a mesma decisão de envio do worker", () =>
     fechou({ kind: "skipped", reason: TEXTO_DO_BLOQUEIO.etapa_bloqueia_followup });
   });
 
-  it("fora da janela da organização → adia para a abertura, sem gastar tentativa", async () => {
+  // O adiamento VOLTA para o enrollment, e ANTES do settle: o settle solta o
+  // job, e a ponte confere que o job ainda é deste worker. Sem o aviso, o motor
+  // lia a espera como worker morto e marcava `dead` em ~11h.
+  const settlesAoFechar: number[] = [];
+  const contaSettlesAoFechar = () =>
+    completeTurnForEnrollment.mockImplementation(async () => void settlesAoFechar.push(settles.length));
+
+  it("fora da janela da organização → adia para a abertura, sem gastar tentativa, e avisa o enrollment", async () => {
+    contaSettlesAoFechar();
+    settlesAoFechar.length = 0;
     conferir.mockResolvedValue({ envia: false, motivo: "fora_da_janela", adiarPara: new Date(ABRE) });
     expect(await enviarTextoFixoPendente(admin())).toBe(0);
     expect(sendMessageHandler).not.toHaveBeenCalled();
-    expect(completeTurnForEnrollment).not.toHaveBeenCalled();
+    fechou({ kind: "deferred", until: new Date(ABRE), reason: "fora_da_janela" });
+    expect(settlesAoFechar).toEqual([0]);
     expect(settles.at(-1)).toMatchObject({ p_done: false, p_hold: true, p_retry_at: ABRE });
   });
 
@@ -256,11 +266,15 @@ describe("enviarTextoFixoPendente · a mesma decisão de envio do worker", () =>
     fechou({ kind: "pulado", reason: TEXTO_DO_BLOQUEIO.fora_das_24h_do_instagram });
   });
 
-  it("janela anti-ban do canal fechada → adia para a abertura do canal", async () => {
+  it("janela anti-ban do canal fechada → adia para a abertura do canal e avisa o enrollment", async () => {
+    contaSettlesAoFechar();
+    settlesAoFechar.length = 0;
     adiarAteAJanelaAbrir.mockResolvedValue(ABRE);
     expect(await enviarTextoFixoPendente(admin())).toBe(0);
     expect(adiarAteAJanelaAbrir).toHaveBeenCalledWith(expect.anything(), "org-1", "sess-1");
     expect(sendMessageHandler).not.toHaveBeenCalled();
+    fechou({ kind: "deferred", until: new Date(ABRE), reason: "outside_window" });
+    expect(settlesAoFechar).toEqual([0]);
     expect(settles.at(-1)).toMatchObject({ p_done: false, p_hold: true, p_retry_at: ABRE });
   });
 
