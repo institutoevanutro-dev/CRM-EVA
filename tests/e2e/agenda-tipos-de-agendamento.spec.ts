@@ -397,5 +397,35 @@ test("ligo o aviso do compromisso pela tela, e ele fica ligado", async ({ page }
   ).toBeVisible({ timeout: 20_000 });
   await expect(depois).toContainText("60 min");
 
+  // ── O TEXTO PRÓPRIO (porte de 6146539da), com a prévia deste fork. A prévia
+  //    usa a mesma função do cron: o que aparece é o que o paciente recebe.
+  await depois.getByRole("button", { name: "Editar" }).click();
+  const texto = depois.getByTestId(/^editar-lembrete-texto-/).first();
+  await expect(texto).toBeEnabled();
+  await texto.fill("Oi {{primeiro_nome}}, te espero {{quando}} às {{hora}}.");
+  await expect(depois.getByTestId(/^previa-lembrete-/).first()).toContainText("Oi Maria, te espero amanhã às 14:30.");
+  await depois.getByTestId(/^salvar-/).first().click();
+
+  await expect(depois).toContainText("texto próprio", { timeout: 20_000 });
+  await page.reload();
+  const gravado = page.getByTestId("lista-de-tipos").getByRole("listitem").filter({ hasText: nome });
+  await expect(gravado).toContainText("texto próprio", { timeout: 20_000 });
+  await gravado.getByRole("button", { name: "Editar" }).click();
+  await expect(gravado.getByTestId(/^editar-lembrete-texto-/).first()).toHaveValue(
+    "Oi {{primeiro_nome}}, te espero {{quando}} às {{hora}}.",
+  );
+
+  // ── A VARREDURA DO CRON PASSA PELO POSTGREST DE VERDADE. Os testes da rota
+  //    usam dublê; só aqui o embed `calendar_units!calendar_appointments_unit_fk`
+  //    e as colunas da 0323 são resolvidos pelo schema cache. Se um deles não
+  //    resolver, a consulta inteira falha e a rota dá 500 em toda rodada —
+  //    nenhum lembrete sai em instalação nenhuma.
+  const segredo = process.env.INTERNAL_CRON_SECRET || process.env.INTERNAL_SECRET;
+  if (!segredo) throw new Error("O e2e precisa da credencial local do cron.");
+  const cron = await page.request.post("/api/v1/cron/agenda-reminder", {
+    headers: { authorization: `Bearer ${segredo}` },
+  });
+  expect(cron.status(), "a varredura do lembrete não passou pelo PostgREST").toBe(200);
+
   await page.screenshot({ path: "evidence/calendario/lembrete-ligado.png", fullPage: true });
 });

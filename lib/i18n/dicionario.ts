@@ -6791,6 +6791,19 @@ export const DICIONARIO: Traducoes = {
   "avisa o cliente": { es: "avisa al cliente" },
   "antes": { es: "antes" },
   "O lembrete precisa sair pelo menos 15 minutos antes do compromisso.": { es: "El recordatorio debe salir al menos 15 minutos antes de la cita." },
+  "A mensagem do lembrete cabe em 1000 caracteres.": { es: "El mensaje del recordatorio admite hasta 1000 caracteres." },
+  "Prévia": { es: "Vista previa" },
+  "Mensagem do lembrete": { es: "Mensaje del recordatorio" },
+  "Oi {{primeiro_nome}}! Passando pra lembrar da sua consulta {{quando}} às {{hora}}.": {
+    es: "¡Hola {{primeiro_nome}}! Te recuerdo tu cita {{quando}} a las {{hora}}.",
+  },
+  "Deixe em branco para o texto padrão. Variáveis:": { es: "Déjalo en blanco para el texto predeterminado. Variables:" },
+  "{{quando}} vira hoje, amanhã ou o dia da semana com a data. {{unidade}} fica vazia quando o compromisso não tem unidade.": {
+    es: "{{quando}} se convierte en hoy, mañana o el día de la semana con la fecha. {{unidade}} queda vacía cuando la cita no tiene unidad.",
+  },
+  "Variável que não existe: use só as da lista.": { es: "Variable inexistente: use solo las de la lista." },
+  "texto próprio": { es: "texto propio" },
+  "A mensagem do lembrete usa uma variável que não existe. Use só as da lista.": { es: "El mensaje del recordatorio usa una variable que no existe. Use solo las de la lista." },
   "O lembrete não pode sair mais de 7 dias (10080 minutos) antes.": { es: "El recordatorio no puede salir más de 7 días (10080 minutos) antes." },
   "Ação contém": { es: "La acción contiene" },
   "Ator": { es: "Actor" },
@@ -9126,6 +9139,7 @@ export const DICIONARIO: Traducoes = {
   // só que irreversível, porque a mensagem já saiu. `às` já existia acima.
   "Oi,": { es: "¡Hola," },
   "Oi!": { es: "¡Hola!" },
+  "amanhã": { es: "mañana" },
   "Passando pra lembrar do seu compromisso:": { es: "Te recuerdo tu cita:" },
   "Endereço": { es: "Dirección" },
   "Data de nascimento": { es: "Fecha de nacimiento" },

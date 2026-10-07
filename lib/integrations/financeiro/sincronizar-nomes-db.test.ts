@@ -36,3 +36,18 @@ it("repete organização, anonimização e nome vazio no UPDATE após a consulta
   expect(filtros).toContain("update:or:name.is.null,name.eq.");
   expect(audit).not.toHaveBeenCalled();
 });
+
+it("só pergunta de novo por quem nunca foi consultado ou foi há mais de 7 dias", async () => {
+  const filtros: string[] = [];
+  const select = {
+    eq() { return this; },
+    or(valor: string) { filtros.push(valor); return this; },
+    order() { return this; },
+    async limit() { return { data: [], error: null }; },
+  };
+  const admin = { from: () => ({ select: () => select, update: () => ({}) }) };
+  const agora = new Date("2026-10-07T12:00:00.000Z");
+  const resultado = await sincronizarNomesFinanceiro(admin as never, "org-1", { url: "https://f.example.test", token: "t" }, agora);
+  expect(resultado).toEqual({ consultados: 0, atualizados: 0, falhas: 0 });
+  expect(filtros).toContain("financeiro_name_lookup_at.is.null,financeiro_name_lookup_at.lt.2026-09-30T12:00:00.000Z");
+});

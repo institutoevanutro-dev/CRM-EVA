@@ -236,6 +236,28 @@ function chavesDaConstante(arquivo: ts.SourceFile, nome: string): string[] {
 }
 
 /**
+ * As chaves que `const <nome> = ….extend({ … })` acrescenta. O `alterarSchema`
+ * aceita, além dos `camposDoTipo`, o que o `.extend` declara (`id`, e campos só
+ * de PATCH como `reminder_body`) — fixar `"id"` à mão deixava o leitor cego a eles.
+ */
+function chavesDoExtend(arquivo: ts.SourceFile, nome: string): string[] {
+  let achadas: string[] | null = null;
+  percorre(arquivo, (no) => {
+    if (!ts.isVariableDeclaration(no) || !ts.isIdentifier(no.name) || no.name.text !== nome) return;
+    const ini = no.initializer;
+    if (!ini || !ts.isCallExpression(ini) || !ts.isPropertyAccessExpression(ini.expression)) return;
+    if (ini.expression.name.text !== "extend") return;
+    const obj = ini.arguments[0];
+    if (!obj || !ts.isObjectLiteralExpression(obj)) return;
+    achadas = obj.properties.flatMap((p) =>
+      p.name && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) ? [p.name.text] : [],
+    );
+  });
+  if (achadas === null) throw new Error(`não achei \`const ${nome} = ….extend({ … })\` — a rota mudou de forma`);
+  return achadas;
+}
+
+/**
  * Tira as cascas que não mudam o valor em runtime: `as T`, `<T>x`, `satisfies T`
  * e parênteses.
  *
@@ -326,8 +348,10 @@ describe("travessia tela → rota: a tela não manda campo que a rota descarta",
   });
 
   it("PATCH: toda chave enviada é aceita pelo `alterarSchema`", () => {
-    // `alterarSchema` é `criarSchema.partial().extend({ id })`.
-    const aceitas = new Set([...camposDoTipo, "id"]);
+    // `alterarSchema` é `criarSchema.partial().extend({ id, … })`.
+    const doExtend = chavesDoExtend(rota, "alterarSchema");
+    expect(doExtend, "o leitor do `.extend` cegou").toContain("id");
+    const aceitas = new Set([...camposDoTipo, ...doExtend]);
     const enviadas = chavesEnviadas(tela, "patch", "/api/v1/agenda/tipos");
     expect(enviadas.length).toBeGreaterThan(1);
     expect(
