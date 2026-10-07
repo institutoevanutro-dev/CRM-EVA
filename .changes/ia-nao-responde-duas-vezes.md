@@ -14,6 +14,12 @@ resposta, essa resposta desatualizada não é enviada: a IA lê a conversa
 inteira e responde a tudo de uma vez. E se uma resposta já cobriu a última
 mensagem do paciente, a IA não responde a ela uma segunda vez.
 
+A resposta desatualizada só fica para trás quando o sistema confere que a
+mensagem nova já tem uma resposta a caminho. Se algo falhou no recebimento
+dela, a resposta preparada sai mesmo assim, para o paciente nunca ficar sem
+nenhuma. E quem conversa com a clínica por dois números recebe resposta em
+cada um deles.
+
 Para quem escreve sem parar não ficar sem resposta, essa espera vale só
 enquanto a mensagem mais antiga sem resposta tiver menos de 2 minutos. Depois
 disso a resposta sai mesmo assim. E nos últimos minutos antes de fechar o

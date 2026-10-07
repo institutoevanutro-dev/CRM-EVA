@@ -89,7 +89,7 @@ async function inbound(texto: string, em: string, sentAt = em): Promise<string> 
  * `turno-nao-responde-duas-vezes.test.ts`, e é o drain — não o agente — que
  * está sob teste aqui.
  */
-async function despacharPeloDrain(msgId: string): Promise<void> {
+async function despacharPeloDrain(msgId: string, debounceMs = 0): Promise<void> {
   const agente = crypto.randomUUID();
   const versao = crypto.randomUUID();
   await pool.query(
@@ -116,7 +116,7 @@ async function despacharPeloDrain(msgId: string): Promise<void> {
   try {
     await m.drainTick(
       pool,
-      { batchSize: 20, intervalMs: 100, idleIntervalMs: 100, debounceMs: 0, reapTimeoutMs: 300_000 },
+      { batchSize: 20, intervalMs: 100, idleIntervalMs: 100, debounceMs, reapTimeoutMs: 300_000 },
       m.createLogger(),
     );
   } finally {
@@ -134,14 +134,24 @@ const USO = {
  * a pergunta do cliente CHEGA nessa 1ª chamada — durante os 10–40 s do modelo,
  * como no caso medido — e é despachada pelo drain.
  */
-function modelo(chegada: { sentAt?: string } | null) {
+/** Como a pergunta chega durante o turno. */
+type Chegada = {
+  sentAt?: string;
+  /** A ingestão gravou a mensagem e caiu antes de pedir o despacho (ver `lib/waha/ingest.ts`). */
+  semDespacho?: true;
+  /** Janela de coalescência do drain (produção usa 8 s). */
+  debounceMs?: number;
+};
+
+function modelo(chegada: Chegada | null) {
   let chamadas = 0;
   return async () => {
     chamadas += 1;
     if (chamadas === 1) {
       if (chegada !== null) {
         const agora = new Date().toISOString();
-        await despacharPeloDrain(await inbound(PERGUNTA, agora, chegada.sentAt ?? agora));
+        const msg = await inbound(PERGUNTA, agora, chegada.sentAt ?? agora);
+        if (chegada.semDespacho !== true) await despacharPeloDrain(msg, chegada.debounceMs);
       }
       return {
         content: [
@@ -221,7 +231,7 @@ async function rodarJob(
 
 /** O turno de "Tudo bem?", durante o qual a pergunta chega. */
 async function turnoDuranteOQualAPerguntaChega(
-  chegada: { sentAt?: string },
+  chegada: Chegada,
   agora?: Date,
 ): Promise<void> {
   await inbound("Oi", haSegundos(20));
@@ -364,5 +374,73 @@ describe("a resposta descartada tem quem responda depois", () => {
 
     expect(await jobsDaPergunta()).toEqual([]);
     expect(enviados).toBe(1);
+  });
+
+  it("a mensagem nova sem pedido de turno não descarta a resposta: ninguém responderia depois", async () => {
+    // A ingestão gravou a pergunta e caiu antes de pedir o despacho (timeout no
+    // meio do webhook; a reentrega bate no 23505 e não despacha), ou o pedido
+    // falhou e virou só um aviso no log. Nenhum turno vai existir para ela.
+    await turnoDuranteOQualAPerguntaChega({ semDespacho: true });
+
+    expect(await jobsDaPergunta()).toEqual([]);
+    expect(enviados).toBe(1);
+  });
+
+  it("job pendente do contato em OUTRO número não leva a pergunta de carona", async () => {
+    // O mesmo contato fala com a clínica por dois números. Há um turno pendente
+    // (na janela de coalescência) na OUTRA conversa: ele só lê aquela conversa.
+    await pool.query(
+      `insert into job_queue (organization_id, contact_id, kind, payload, status, run_after)
+       values ($1,$2,'inbound_turn',$3,'pending', now() + interval '1 minute')`,
+      [ORG, CONTACT, { conversation_id: crypto.randomUUID(), contact_id: CONTACT }],
+    );
+
+    await turnoDuranteOQualAPerguntaChega({ debounceMs: 8_000 });
+
+    // A pergunta ganhou o PRÓPRIO turno, nesta conversa — e por isso a resposta
+    // desatualizada pôde ficar para trás.
+    expect(await jobsDaPergunta()).toEqual([{ id: expect.any(String), status: "pending" }]);
+    expect(enviados).toBe(0);
+  });
+});
+
+/**
+ * A espera da mídia olha a CONVERSA (o texto depois da foto espera a foto
+ * virar texto). Mas só vale esperar pela mídia que VAI virar texto: o vídeo
+ * com a leitura desligada (o padrão) e a mídia importada do histórico do
+ * número oficial nunca serão lidos, e segurar o texto por elas só atrasa a
+ * resposta até o teto de 120 s.
+ */
+describe("a espera da mídia só segura o turno pela mídia que vai ser lida", () => {
+  async function midia(tipo: string, metadata: Record<string, unknown> = {}): Promise<void> {
+    await pool.query(
+      `insert into messages (organization_id, conversation_id, channel_session_id, contact_id,
+         type, direction, status, media_url, metadata, sent_via, sent_at, created_at)
+       values ($1,$2,$3,$4,$5,'inbound','delivered','meta-media:1',$6,'external_device',now(),now() - interval '2 seconds')`,
+      [ORG, CONV, SESSION, CONTACT, tipo, metadata],
+    );
+  }
+
+  async function perguntaDepois(): Promise<void> {
+    const agora = new Date().toISOString();
+    await despacharPeloDrain(await inbound(PERGUNTA, agora));
+  }
+
+  it("controle: foto recém-chegada ainda sem leitura segura a pergunta", async () => {
+    await midia("image");
+    await perguntaDepois();
+    expect(await jobsDaPergunta()).toEqual([]);
+  });
+
+  it("vídeo com a leitura desligada não segura a pergunta", async () => {
+    await midia("video");
+    await perguntaDepois();
+    expect(await jobsDaPergunta()).toEqual([{ id: expect.any(String), status: "pending" }]);
+  });
+
+  it("foto importada do histórico do número oficial não segura a pergunta", async () => {
+    await midia("image", { importada_do_historico: true });
+    await perguntaDepois();
+    expect(await jobsDaPergunta()).toEqual([{ id: expect.any(String), status: "pending" }]);
   });
 });

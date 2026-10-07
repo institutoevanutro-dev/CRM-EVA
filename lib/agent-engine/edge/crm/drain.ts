@@ -7,7 +7,7 @@
  *   - organization_id vem da LINHA do evento (fonte confiável), nunca do payload;
  *   - at-least-once + dedup: claim CAS (pending→processing) + unique
  *     (organization_id, source_event_id) em job_queue com captura de 23505;
- *   - coalescência de rajada: mensagens do MESMO contato dentro da janela de
+ *   - coalescência de rajada: mensagens do MESMO contato, na MESMA conversa, na janela de
  *     debounce viram UM job (o turno lê o histórico completo e responde a todas);
  *   - grupos @g.us: skip (regra dura nº 12) — evento marcado done sem job;
  *   - eventos 'processing' órfãos (crash do worker) voltam a 'pending' por timeout.
@@ -23,6 +23,7 @@ import {
   TIPOS_DERIVAVEIS,
   DERIVACAO_TERMINADA,
   TETO_ESPERA_DERIVACAO_MS,
+  sqlMidiaVaiSerLida,
 } from '@/lib/messaging/media/derivable';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 
@@ -429,18 +430,23 @@ async function processEvent(
   // `media_url is not null` é a pré-condição de TODA a esteira: sem ela o
   // `media.persist_requested` nem é emitido, a derivação nunca é pedida e o
   // status fica null para sempre — esperar por ela só atrasaria a resposta.
+  //
+  // E só a mídia que VAI ser lida (`sqlMidiaVaiSerLida`): o vídeo com a leitura
+  // desligada e a mídia importada do histórico só ganham estado final depois de
+  // baixadas, e segurar o texto por elas atrasava a resposta até o teto.
   const { rows: midias } = await pool.query<{
     type: string;
     media_derived_status: string | null;
     quando: string;
   }>(
     `select type, media_derived_status, created_at as quando
-       from messages
+       from messages m
       where organization_id = $1
         and conversation_id = $2
         and direction = 'inbound'
         and type = any($3::text[])
         and media_url is not null
+        and ${sqlMidiaVaiSerLida('m')}
       order by created_at desc
       limit 20`,
     [event.organization_id, p.conversation_id, [...TIPOS_DERIVAVEIS]],
@@ -478,14 +484,20 @@ async function processEvent(
   // rodava. Medido em produção (2026-09-14): 6 mensagens ao longo de 7h,
   // zero resposta, zero job novo — só o coalescing silencioso repetido no
   // mesmo job com `held_run_after` no payload.
+  //
+  // E só job da MESMA conversa: o turno lê a conversa do seu payload. O contato
+  // que fala por dois números tinha a mensagem de um engolida pelo job pendente
+  // do outro, e nenhum turno lia a conversa dela. (A régua de resposta obsoleta,
+  // `respostaFicouObsoleta`, conta com isto para saber que alguém responde.)
   if (knobs.debounceMs > 0) {
     const { rows: pendingRows } = await pool.query<{ id: string }>(
       `select id from job_queue
        where organization_id = $1 and contact_id = $2
          and kind = 'inbound_turn' and status = 'pending' and run_after > now()
          and not (payload ? 'held_run_after')
+         and payload->>'conversation_id' = $3
        limit 1`,
-      [event.organization_id, p.contact_id],
+      [event.organization_id, p.contact_id, p.conversation_id],
     );
     if (pendingRows[0]) {
       log.info('drain: rajada coalescida em job pendente', {

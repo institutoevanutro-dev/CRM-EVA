@@ -11,7 +11,8 @@ aparece na foto?" sobre um arquivo que o sistema terminava de ler segundos
 depois.
 
 A espera tem limite: se a leitura travar, a IA responde mesmo assim depois de
-dois minutos. Vídeo que o sistema não lê (o padrão) não segura mais a resposta.
+dois minutos. Vídeo que o sistema não lê (o padrão) e as fotos e áudios antigos trazidos
+quando se conecta o número oficial não seguram a resposta.
 
 E quando a leitura falha de vez, a IA fica sabendo que houve um arquivo que não
 deu para ler e avisa o paciente, em vez de comentar um documento que nunca

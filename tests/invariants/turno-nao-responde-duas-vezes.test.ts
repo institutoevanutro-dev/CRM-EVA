@@ -72,6 +72,21 @@ async function inbound(texto: string, em: string, conv = CONV): Promise<string> 
 }
 
 /**
+ * O pedido de turno que a ingestão emite para a mensagem (`pedirDespachoDoAgente`,
+ * lib/channels/pos-entrada.ts), ainda na fila do drain. A régua de resposta
+ * obsoleta só descarta quando a mensagem nova tem quem a responda.
+ */
+async function pedidoDeTurno(msgId: string): Promise<string> {
+  await pool.query(
+    `insert into event_log (organization_id, event_type, entity_kind, entity_id, payload, status)
+     values ($1::uuid, 'ai_agent.dispatch_requested', 'message', $2::uuid,
+             jsonb_build_object('conversation_id', $3::text, 'inbound_message_id', $2::text), 'pending')`,
+    [ORG, msgId, CONV],
+  );
+  return msgId;
+}
+
+/**
  * Um turno de resposta JÁ TERMINADO: o job, o que ele anotou ter visto
  * (`null` = turno anterior a esta mudança, sem anotação) e — se `envio` vier —
  * a resposta que ele mandou, com a linha do `send_ledger`.
@@ -237,6 +252,7 @@ beforeEach(async () => {
   await pool.query("delete from send_ledger where organization_id = $1", [ORG]);
   await pool.query("delete from messages where organization_id = $1", [ORG]);
   await pool.query("delete from job_queue where organization_id = $1", [ORG]);
+  await pool.query("delete from event_log where organization_id = $1", [ORG]);
   await pool.query("delete from conversations where organization_id = $1", [ORG]);
   await pool.query("delete from contacts where organization_id = $1", [ORG]);
   await pool.query(
@@ -467,8 +483,15 @@ describe("resposta obsoleta: o cliente escreveu de novo enquanto o turno pensava
     await inbound("Oi", haSegundos(40));
     await inbound("Boa tarde", haSegundos(36));
     const job = await turnoEmAndamento(haSegundos(36));
-    await inbound("Eu precisava comprar um pneu para a minha D01", haSegundos(15));
+    await pedidoDeTurno(await inbound("Eu precisava comprar um pneu para a minha D01", haSegundos(15)));
     expect(await m.regua.respostaFicouObsoleta(pool, alvo(job), TETO)).toBe(true);
+  });
+
+  it("a mensagem nova sem pedido de turno nem job pendente: envia (ninguém responderia depois)", async () => {
+    await inbound("Oi", haSegundos(40));
+    const job = await turnoEmAndamento(haSegundos(40));
+    await inbound("Eu precisava comprar um pneu para a minha D01", haSegundos(15));
+    expect(await m.regua.respostaFicouObsoleta(pool, alvo(job), TETO)).toBe(false);
   });
 
   it("nada chegou depois da leitura: envia", async () => {
@@ -489,7 +512,7 @@ describe("resposta obsoleta: o cliente escreveu de novo enquanto o turno pensava
     await turnoTerminado({ vistoAte: haSegundos(86_400), envio: { status: "accepted", em: haSegundos(86_000) } });
     await inbound("Oi de novo", haSegundos(30));
     const job = await turnoEmAndamento(haSegundos(30));
-    await inbound("queria marcar revisão", haSegundos(5));
+    await pedidoDeTurno(await inbound("queria marcar revisão", haSegundos(5)));
     expect(await m.regua.respostaFicouObsoleta(pool, alvo(job), TETO)).toBe(true);
   });
 
@@ -533,7 +556,7 @@ describe("resposta obsoleta — a porta: o handler real não envia o que ficou d
       }
       chamadas += 1;
       if (chamadas === 1) {
-        await inbound("Eu precisava comprar um pneu para a minha D01", new Date().toISOString());
+        await pedidoDeTurno(await inbound("Eu precisava comprar um pneu para a minha D01", new Date().toISOString()));
         return {
           content: [
             {

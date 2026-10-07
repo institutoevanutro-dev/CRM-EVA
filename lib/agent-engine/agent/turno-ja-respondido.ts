@@ -37,6 +37,7 @@ import {
   DERIVACAO_TERMINADA,
   TETO_ESPERA_DERIVACAO_MS,
   TIPOS_DERIVAVEIS,
+  sqlMidiaVaiSerLida,
 } from '@/lib/messaging/media/derivable';
 
 type Queryable = Pick<pg.Pool, 'query'>;
@@ -76,7 +77,8 @@ export async function anotarUltimaInboundVista(db: Queryable, alvo: AlvoDoTurno)
               and not (m.type = any($4::text[])
                        and m.media_url is not null
                        and coalesce(m.media_derived_status, '') <> all($5::text[])
-                       and m.created_at > now() - ($6 * interval '1 millisecond'))))
+                       and m.created_at > now() - ($6 * interval '1 millisecond')
+                       and ${sqlMidiaVaiSerLida('m')})))
       where organization_id = $1 and id = $3
         and not exists (
           select 1 from send_ledger s
@@ -147,6 +149,12 @@ export async function ultimaInboundJaRespondida(
  * escrita sem ela, e a mensagem nova tem job próprio, que lê a conversa inteira
  * e responde a tudo de uma vez. Este turno não envia.
  *
+ * "Tem job próprio" é CONFERIDO, não suposto: há turno pendente desta conversa
+ * (o drain só coalesce na mesma conversa) ou pedido de despacho ainda na fila do
+ * drain. Sem nenhum dos dois — a ingestão gravou a mensagem e caiu antes de
+ * pedir o despacho, o pedido falhou, o evento morreu —, ninguém responderia
+ * depois, e a resposta sai mesmo desatualizada.
+ *
  * "Mais nova" é pela MESMA ordem do anti-backlog do drain
  * (`coalesce(sent_at, created_at)`, o relógio do aparelho): é o drain quem
  * decide qual mensagem ganha turno. Uma mensagem reentregue com atraso (webhook
@@ -190,6 +198,18 @@ export async function respostaFicouObsoleta(
      )
      select coalesce((select m.em > v.em from mais_nova m cross join vista v), false)
             and coalesce((select em from pendente) > now() - ($4 * interval '1 millisecond'), false)
+            and (exists (
+                   select 1 from job_queue j
+                    where j.organization_id = $1 and j.id <> $3
+                      and j.kind = 'inbound_turn' and j.status = 'pending'
+                      and not (j.payload ? 'held_run_after')
+                      and j.payload->>'conversation_id' = $2::uuid::text)
+                 or exists (
+                   select 1 from event_log e
+                    where e.organization_id = $1
+                      and e.event_type = 'ai_agent.dispatch_requested'
+                      and e.status in ('pending', 'processing')
+                      and e.payload->>'conversation_id' = $2::uuid::text))
             as obsoleta`,
     [alvo.organizationId, alvo.conversationId, alvo.jobId, tetoMs],
   );
