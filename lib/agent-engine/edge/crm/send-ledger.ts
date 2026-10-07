@@ -208,6 +208,8 @@ export function supabaseSendLedger(db: SupabaseClient): LedgerStore {
 }
 /** `messages.error_code` da recusa do servidor fora das 24h do Instagram (`_handler.ts`). */
 export const ERRO_FORA_DAS_24H = "fora_das_24h_do_instagram";
+/** Todo envio do turno vetado pela cadeia — o que dispara o modelo de reserva do passo. */
+export const MOTIVO_ENVIO_VETADO = "O envio foi recusado pelas regras do atendimento.";
 /** Resultado do turno sem importar runtime/env; ausência de envio é terminal explícito. */
 export async function resultadoDoEnvioDoFollowup(
   db: Queryable,
@@ -230,7 +232,7 @@ export async function resultadoDoEnvioDoFollowup(
       reason: "O assistente concluiu este passo sem enviar uma mensagem. Revise o próximo passo.",
     };
   if (rows.every((row) => row.status === "vetoed"))
-    return { kind: "skipped", reason: "O envio foi recusado pelas regras do atendimento." };
+    return { kind: "skipped", reason: MOTIVO_ENVIO_VETADO };
   if (rows.some((row) => row.status !== "accepted")) throw new Error("followup_message_not_sent");
   return { kind: "sent" };
 }

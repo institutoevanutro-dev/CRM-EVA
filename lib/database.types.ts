@@ -2209,6 +2209,7 @@ export type Database = {
           rescheduled_from_id: string | null
           source: string
           starts_at: string
+          starts_at_marked_at: string | null
           status: string
           time_zone: string
           title: string
@@ -2279,6 +2280,7 @@ export type Database = {
           rescheduled_from_id?: string | null
           source?: string
           starts_at: string
+          starts_at_marked_at?: string | null
           status?: string
           time_zone?: string
           title: string
@@ -2349,6 +2351,7 @@ export type Database = {
           rescheduled_from_id?: string | null
           source?: string
           starts_at?: string
+          starts_at_marked_at?: string | null
           status?: string
           time_zone?: string
           title?: string
@@ -2651,6 +2654,7 @@ export type Database = {
           name: string
           organization_id: string
           position: number
+          reminder_body: string | null
           reminder_enabled: boolean
           reminder_minutes_before: number
           reminder_extra_offsets_minutes: number[]
@@ -2680,6 +2684,7 @@ export type Database = {
           name: string
           organization_id: string
           position?: number
+          reminder_body?: string | null
           reminder_enabled?: boolean
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
@@ -2709,6 +2714,7 @@ export type Database = {
           name?: string
           organization_id?: string
           position?: number
+          reminder_body?: string | null
           reminder_enabled?: boolean
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]

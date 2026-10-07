@@ -24,6 +24,7 @@ import * as path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+import { abrirJanelaDeEnvio } from "./utils/janela-de-envio";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const ARTIFACTS_DIR = path.join(process.cwd(), "evidence", "followup-dossie");
@@ -76,6 +77,7 @@ function loadCreds(): Creds {
 }
 
 const creds = loadCreds();
+test.beforeAll(() => abrirJanelaDeEnvio());
 const INTERNAL_SECRET = (carregarEnvLocal().INTERNAL_SECRET ?? "").trim();
 
 async function login(page: Page, email: string): Promise<void> {

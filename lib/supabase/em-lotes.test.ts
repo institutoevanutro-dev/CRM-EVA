@@ -27,8 +27,13 @@ describe("buscaEmLotes", () => {
     expect(r.error).toBeNull();
   });
 
+  it("o lote cabe no teto de 16 KB de header do Node, com folga", () => {
+    // 36 do uuid + 3 da vírgula codificada (%2C). 404 uuids (~16 KB) é o teto medido.
+    expect(IDS_POR_LOTE * 39).toBeLessThanOrEqual(12 * 1024);
+  });
+
   it("erro em qualquer lote vira erro do todo, não resultado parcial", async () => {
-    const r = await buscaEmLotes(ids(250), async (lote) =>
+    const r = await buscaEmLotes(ids(IDS_POR_LOTE * 2 + 50), async (lote) =>
       lote[0] === `id-${IDS_POR_LOTE}`
         ? { data: null, error: { message: "fetch failed" } }
         : { data: lote, error: null },

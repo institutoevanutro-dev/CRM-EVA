@@ -611,7 +611,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
               limiteDeTexto={caps?.limiteDeTexto ?? null}
               soFoto={caps?.midiaDeEnvio === "so_foto"}
               disabled={selectedConversation.status === "closed"}
-              contactName={selectedConversation.contacts?.name ?? null}
+              contact={selectedConversation.contacts}
               respondendo={respondendo}
               onCancelarResposta={() => setRespondendo(null)}
               currentContactId={selectedConversation.contact_id}

@@ -322,7 +322,9 @@ const CAMINHOS_COM_GATE: Array<[string, string]> = [
   ["lib/agent-engine/edge/crm/drain.ts", "decidirElegibilidadeDaConversa"],
   ["lib/agent-engine/agent/inbound-turn.ts", "decidirElegibilidadeDaConversa"],
   ["workers/ai-response-worker.ts", "decidirElegibilidadeDaConversaViaSupabase"],
-  ["lib/followup/enviar-texto-fixo.ts", "decidirElegibilidadeDaConversaViaSupabase"],
+  // Texto fixo do follow-up (atalho e worker): o gate do canal mora na decisão
+  // compartilhada de envio, sobre a regra pura — não mais num gate só do atalho.
+  ["lib/followup/bloqueios-obrigatorios.ts", "decidirElegibilidade("],
   ["lib/ai/runtime/agent.ts", "decidirElegibilidadeDaConversaViaSupabase"],
   ["lib/ai/handoff/orchestrator.ts", "decidirElegibilidadeDaConversaViaSupabase"],
   ["workers/ai-sentiment-worker.ts", "decidirElegibilidadeDaConversaViaSupabase"],
