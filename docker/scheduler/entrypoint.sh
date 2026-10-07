@@ -119,8 +119,17 @@ HEADER_ARG="$(printf '%s' "$HEADER_FILE" | sed "s/'/'\\\\''/g")"
 : > "$DESTINO"
 echo "$CRONS" | while IFS='|' read -r quando timeout rota; do
   [ -n "$rota" ] || continue
-  printf '%s curl -fsS -m%s -H '"'"'@%s'"'"' "%s/%s" >/dev/null 2>&1\n' \
-    "$quando" "$timeout" "$HEADER_ARG" "$APP_ORIGIN" "$rota" >> "$DESTINO"
+  # `>/dev/null` só no STDOUT: o corpo da resposta não interessa. O STDERR era o
+  # que o `>/dev/null 2>&1` antigo engolia junto, e foi assim que, no original,
+  # o sync-model-catalog tomou 401 todo dia por seis versões sem ninguém ver
+  # (upstream #1109). Agora o status sai no STDERR do `curl -fsS` (é o `-S`) e,
+  # quando o comando falha, o `||` diz qual rota falhou e o que conferir — os
+  # dois no STDERR, que o `crond -f` entrega ao `docker logs` do scheduler.
+  # Rodada saudável não ganha linha nenhuma.
+  # Na frase: nada de % (o crond o trata como início de stdin), nem $, crase ou
+  # aspa simples (o sh do crond reavaliaria).
+  printf '%s curl -fsS -m%s -H '"'"'@%s'"'"' "%s/%s" >/dev/null || echo "deskcomm-cron: FALHOU %s — veja o erro do curl logo acima; se for 401 ou 403, o segredo que este scheduler manda não é o que o app enxerga: confira INTERNAL_SECRET e INTERNAL_CRON_SECRET no .env e recrie os contêineres app e scheduler (docs/runbooks/deploy.md)" >&2\n' \
+    "$quando" "$timeout" "$HEADER_ARG" "$APP_ORIGIN" "$rota" "$rota" >> "$DESTINO"
 done
 
 exec crond -f -l 2
