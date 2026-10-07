@@ -52,6 +52,7 @@ export function supabaseGravador(responder: (op: OperacaoGravada) => Resposta = 
         return b;
       },
       gte: filtro("gte"),
+      gt: filtro("gt"),
       order: () => b,
       limit: () => b,
       single: resultado,

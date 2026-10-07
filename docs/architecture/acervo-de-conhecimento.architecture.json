@@ -177,6 +177,38 @@
       "type": "table",
       "label": "last_index_status",
       "sublabel": "indexando | sem_credencial | success | failed — a tela deixa de mentir"
+    },
+    {
+      "id": "midiasTela",
+      "lane": "humano",
+      "col": 4,
+      "type": "frontend",
+      "label": "/app/ai/midias",
+      "sublabel": "biblioteca de mídias: sobe imagem/vídeo, registra o termo de uso de imagem, vê o selo Pronta/Sem termo/Revogada"
+    },
+    {
+      "id": "midiasApi",
+      "lane": "borda",
+      "col": 4,
+      "type": "api",
+      "label": "/api/v1/ai/midias/**",
+      "sublabel": "cria o item, sobe/tira arquivo por variante, grava ou revoga o termo; organization_id vem da sessão"
+    },
+    {
+      "id": "midiasTabela",
+      "lane": "dados",
+      "col": 4,
+      "type": "table",
+      "label": "media_library_items",
+      "sublabel": "item por organização (RLS): variantes A/B, termo de consentimento, etiquetas"
+    },
+    {
+      "id": "midiasBucket",
+      "lane": "dados",
+      "col": 2,
+      "type": "storage",
+      "label": "bucket media-library",
+      "sublabel": "privado; caminho org/item/variante-uuid.ext, URL assinada só para a tela"
     }
   ],
   "edges": [
@@ -205,7 +237,31 @@
     { "id": "e23", "from": "busca", "to": "resposta", "label": "os trechos entram no turno" },
     { "id": "e24", "from": "resposta", "to": "telemetria", "label": "registra acertos e melhor nota" },
     { "id": "e25", "from": "chunks", "to": "trechos", "label": "a pessoa audita o que ele leu" },
-    { "id": "e26", "from": "fonte", "to": "escolha", "label": "o acervo alimenta o seletor" }
+    { "id": "e26", "from": "fonte", "to": "escolha", "label": "o acervo alimenta o seletor" },
+    {
+      "id": "e27",
+      "from": "midiasTela",
+      "to": "midiasApi",
+      "label": "o gestor cadastra, sobe e revoga"
+    },
+    {
+      "id": "e28",
+      "from": "midiasApi",
+      "to": "midiasTabela",
+      "label": "grava item e termo; devolve a situação calculada"
+    },
+    {
+      "id": "e29",
+      "from": "midiasApi",
+      "to": "midiasBucket",
+      "label": "sobe e remove o arquivo da variante"
+    },
+    {
+      "id": "e30",
+      "from": "midiasTabela",
+      "to": "midiasTela",
+      "label": "a lista mostra o selo de cada mídia"
+    }
   ],
   "cards": [
     {

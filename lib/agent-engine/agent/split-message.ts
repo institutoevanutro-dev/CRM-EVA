@@ -1,44 +1,69 @@
 /**
- * Quebra o texto da resposta em "bolhas" curtas (Onda 4) — parágrafo → sentença
- * → palavra, juntando pedaços adjacentes que caibam em maxChars. Puro. Usado no
- * send do agente quando split_messages está on; o pacing anti-ban espaça cada
- * bolha. Nunca devolve bolha vazia nem (salvo palavra atômica gigante) > maxChars.
+ * Quebra o texto da resposta em "bolhas" curtas (Onda 4). Puro. Usado no send
+ * do agente quando split_messages está on; o pacing anti-ban espaça cada bolha.
+ * Nunca devolve bolha vazia nem (salvo palavra atômica gigante) > maxChars.
+ *
+ * O PARÁGRAFO É A FRONTEIRA DA BOLHA. Quem escreve em bolhas no WhatsApp decide
+ * onde uma termina e a outra começa, e o modelo diz isso com a linha em branco
+ * (é o que `instrucaoDeBolhas` pede). Cada parágrafo sai como bolha própria, na
+ * ordem do texto; `maxChars` só entra para partir o parágrafo que sozinho
+ * estoura — por sentença, depois por palavra —, juntando dentro DELE os
+ * pedaços que caibam.
+ *
+ * Antes, parágrafos vizinhos eram juntados enquanto coubessem em maxChars, e o
+ * texto inteiro abaixo do teto saía numa bolha só: as "bolhas" que o cliente
+ * via eram o modelo chamando send_message várias vezes, em paralelo e fora de
+ * ordem (medido no original, 26/09/2026).
  */
 export function splitIntoBubbles(text: string, maxChars: number): string[] {
   const trimmed = (text ?? "").trim();
   if (trimmed === "") return [];
-  if (trimmed.length <= maxChars) return [trimmed];
 
-  // Unidades atômicas: parágrafos → sentenças. Cada unidade que ainda estoura é
-  // quebrada por palavra.
-  const units: string[] = [];
+  const bubbles: string[] = [];
   for (const para of trimmed.split(/\n{2,}/)) {
     const p = para.trim();
     if (p === "") continue;
     if (p.length <= maxChars) {
-      units.push(p);
+      bubbles.push(p);
       continue;
     }
+    // Parágrafo que estoura: sentenças (palavra como último recurso), juntando
+    // as vizinhas DESTE parágrafo enquanto couberem.
+    const units: string[] = [];
     for (const sentence of splitSentences(p)) {
       if (sentence.length <= maxChars) units.push(sentence);
       else units.push(...splitWords(sentence, maxChars));
     }
-  }
-
-  // Junta unidades adjacentes enquanto couberem (com espaço).
-  const bubbles: string[] = [];
-  let cur = "";
-  for (const u of units) {
-    const joined = cur === "" ? u : `${cur} ${u}`;
-    if (joined.length <= maxChars) {
-      cur = joined;
-    } else {
-      if (cur !== "") bubbles.push(cur);
-      cur = u;
+    let cur = "";
+    for (const u of units) {
+      const joined = cur === "" ? u : `${cur} ${u}`;
+      if (joined.length <= maxChars) {
+        cur = joined;
+      } else {
+        if (cur !== "") bubbles.push(cur);
+        cur = u;
+      }
     }
+    if (cur !== "") bubbles.push(cur);
   }
-  if (cur !== "") bubbles.push(cur);
   return bubbles;
+}
+
+/**
+ * O QUE O TURNO DIZ AO MODELO quando `split_messages` está ligado.
+ *
+ * A instrução antiga — "Prefira várias mensagens curtas a um texto único e
+ * longo" — fazia o modelo chamar `send_message` VÁRIAS vezes no mesmo passo.
+ * Essas chamadas rodam em paralelo e disputam o envio, e o cliente recebia as
+ * mensagens fora de ordem. Quem parte em bolhas, EM ORDEM e no ritmo de quem
+ * digita, é `sendInBubbles`; o modelo só precisa escrever UM envio em
+ * parágrafos curtos — e só quando a resposta tem mais de uma ideia (pedir
+ * parágrafos sempre partia até a resposta de uma frase).
+ */
+export function instrucaoDeBolhas(ligado: boolean): string {
+  return ligado
+    ? "Escreva cada resposta numa ÚNICA chamada de send_message. Resposta curta vai num parágrafo só; quando ela tiver mais de uma ideia (apresentar uma opção, pedir dados, resumir o que foi combinado), use parágrafos curtos separados por uma linha em branco — o sistema entrega cada parágrafo como uma mensagem, em ordem e com a pausa de quem digita, como uma pessoa no WhatsApp. Nunca chame send_message mais de uma vez no mesmo turno: mensagens enviadas juntas podem chegar fora de ordem."
+    : "";
 }
 
 /**
@@ -134,6 +159,13 @@ export interface SendInBubblesOpts<T extends BubbleOutcome = BubbleOutcome> {
    * e um follow-up não responde a nada que ele acabou de mandar.
    */
   antesDaPrimeira?: (primeiraBolha: string) => Promise<void>;
+  /**
+   * Quantas bolhas ainda cabem no teto de mensagens do turno (MAX_SENDS_PER_TURN).
+   * Um parágrafo = uma bolha, então sem isto um único send_message de 7 parágrafos
+   * sairia em 7 mensagens físicas, passando do teto que existe para barrar isso.
+   * Ausente = sem teto.
+   */
+  maxBubbles?: number;
 }
 
 /**
@@ -153,7 +185,9 @@ export async function sendInBubbles<T extends BubbleOutcome>(
   body: string,
   opts: SendInBubblesOpts<T>,
 ): Promise<T> {
-  const bubbles = opts.enabled ? splitIntoBubbles(body, opts.maxChars) : [body];
+  const bubbles = opts.enabled
+    ? limitarBolhas(splitIntoBubbles(body, opts.maxChars), opts.maxBubbles)
+    : [body];
   if (bubbles.length === 0) return opts.send(body); // corpo vazio: deixa o canal decidir
   let last: T | undefined;
   for (let i = 0; i < bubbles.length; i++) {
@@ -165,4 +199,29 @@ export async function sendInBubbles<T extends BubbleOutcome>(
     if (!OK_KINDS.has(last.kind)) return last; // veto/bloqueio/falha: para aqui
   }
   return last!;
+}
+
+/**
+ * Teto de mensagens FÍSICAS do turno ("bolhas incluídas"): o que passa dele segue
+ * junto na última bolha, na ordem — nada do texto se perde.
+ * ponytail: a última bolha pode passar de maxChars; é o preço de não picotar além do teto.
+ */
+function limitarBolhas(bubbles: string[], maxBubbles = Number.POSITIVE_INFINITY): string[] {
+  if (bubbles.length <= maxBubbles || maxBubbles < 1) return bubbles;
+  return [...bubbles.slice(0, maxBubbles - 1), bubbles.slice(maxBubbles - 1).join("\n\n")];
+}
+
+/**
+ * Quantas bolhas UM send_message pode usar do teto do turno (MAX_SENDS_PER_TURN).
+ *
+ * Bug medido de cabeça (sem isto): com o parágrafo como bolha, um "Oi!" + "Vou
+ * ver a agenda." + "Um instante." gastava as 3 vagas do teto padrão, e o envio
+ * seguinte do mesmo turno — a confirmação depois de chamar a Agenda — era
+ * recusado. Enquanto sobra mais de uma vaga, uma fica reservada para o próximo
+ * envio; o excedente vai junto na última bolha (`limitarBolhas`), nada se perde.
+ * Nunca menos de 1: quem chega aqui já passou pela checagem do teto.
+ */
+export function bolhasQueCabemNoEnvio(maxSendsPerTurn: number, seq: number): number {
+  const restantes = maxSendsPerTurn - seq;
+  return restantes > 1 ? restantes - 1 : 1;
 }

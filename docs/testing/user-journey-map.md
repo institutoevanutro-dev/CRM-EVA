@@ -1087,6 +1087,17 @@ Desenho: `docs/superpowers/specs/2026-10-06-painel-do-funil-design.md`. Tela `/a
 - [x] Componente montado (hook dublado, jsdom): texto de "não conectado" e "—" em custo/ROAS, réguas com os dois fusos, formulário que guarda as opções depois de um 422, campos do card do funil escolhido no formulário, Aplicar desligado sem campo/prefixo — `tests/unit/painel-do-funil-tela.test.tsx`. Não substitui a prova de tela abaixo: não passa pelo navegador nem pelo banco
 - [ ] Prova de tela (Leads, Interagiram, Ganhos, Realizados, Faltas, comparecimento, "não conectado", recorte por campo do card) — `tests/e2e/painel-do-funil.spec.ts` — spec escrita e registrada em `SPECS_PARTE_4`, **NÃO MEDIDA localmente** (máquina sem o Supabase do CRM de pé e com carga alta); roda no CI do PR
 
+## J30 — Biblioteca de mídias: subir, registrar o termo, revogar `[P1]`
+
+Desenho: `docs/superpowers/specs/2026-10-06-biblioteca-de-midias-design.md`. Tela `/app/ai/midias`
+(Agente de IA › Ensinar o agente, `manager`). Fatia 1: só cadastro; o envio vem nas fatias seguintes.
+
+- [x] Gestor chega pela navegação (Ver tudo em IA › Biblioteca de mídias), cria vídeo sem pessoa, sobe o MP4 e o selo vira "Pronta" — `tests/e2e/biblioteca-de-midias.spec.ts`
+- [x] Foto com pessoa fica "Sem termo"; preencher e salvar o termo a deixa "Pronta" — idem
+- [x] Trocar o arquivo da variante A mantém "Pronta" e não cria cartão novo — idem
+- [x] Revogar o termo (com confirmação) vira "Revogada"; apagar tira o cartão da lista — idem
+- Status: as quatro linhas passaram localmente (Playwright, banco fresco do `baseline.sql`, `next build` + `next start`, 3 testes em 12 s); evidência em `.superpowers/evidence/biblioteca-de-midias/`. Falta só o CI do PR
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

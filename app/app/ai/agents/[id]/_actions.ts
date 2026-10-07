@@ -533,6 +533,7 @@ export async function revertToVersionAction(
     knowledge_source_ids: string[];
     split_messages: boolean;
     split_max_chars: number;
+    followup: unknown;
   };
   const src = source as unknown as SourceRow;
 
@@ -581,6 +582,9 @@ export async function revertToVersionAction(
         knowledge_source_ids: src.knowledge_source_ids ?? [],
         split_messages: src.split_messages,
         split_max_chars: src.split_max_chars,
+        // Voltar para uma versão e o follow-up dela voltar ao padrão do banco é
+        // publicar uma configuração que nunca existiu.
+        followup: src.followup,
         status: "draft",
         created_by: authUser.id,
       })
@@ -733,6 +737,7 @@ export async function createMcpAgentAction(
     cases_enabled: v.cases_enabled,
     split_messages: v.split_messages,
     split_max_chars: v.split_max_chars,
+    followup: v.followup,
     // O corpo ACEITAVA estes cinco e o INSERT os descartava: criar o assistente
     // pela tela com papel Operador, escopo de funil ou material marcado produzia
     // uma versão com tudo no default do banco — desligado e vazio.

@@ -69,6 +69,54 @@ describe("mensagem atual do cliente", () => {
   });
 });
 
+describe("mensagens anteriores ainda sem resposta", () => {
+  const contexto = (mensagens: LeadContext["messages"]): LeadContext => ({
+    lead_id: "11111111-1111-4111-8111-111111111111",
+    contact: { name: "Cristiano", phone: null, email: null, tags: [], is_blocked: false },
+    conversation_id: "22222222-2222-4222-8222-222222222222",
+    last_human_decision: null,
+    messages: mensagens,
+  });
+
+  it("o turno pinado na mensagem mais nova também vê a pergunta anterior que ficou sem resposta", () => {
+    // A resposta do turno anterior (com o preço) foi descartada por ter ficado
+    // desatualizada; este turno é o do "E aceitam cartão?". Sem a lista, o
+    // "responda a ESTA mensagem" deixava o preço para trás.
+    const abertura = buildOpeningMessage(
+      null,
+      null,
+      contexto([
+        { direction: "outbound", body: "Como posso ajudar?", sent_at: "2026-09-06T09:01:00-04:00" },
+        { direction: "inbound", body: "Qual o valor da limpeza?", sent_at: "2026-09-06T09:03:00-04:00" },
+        { direction: "inbound", body: "E aceitam cartão?", sent_at: "2026-09-06T09:03:20-04:00" },
+      ]),
+      "sem notas",
+      false,
+      [],
+      "",
+      "E aceitam cartão?",
+    );
+
+    expect(abertura).toContain(
+      JSON.stringify({ mensagens_sem_resposta: ["Qual o valor da limpeza?", "E aceitam cartão?"] }),
+    );
+  });
+
+  it("controle: uma mensagem só sem resposta não ganha a lista", () => {
+    const abertura = buildOpeningMessage(
+      null,
+      null,
+      contexto([
+        { direction: "outbound", body: "Como posso ajudar?", sent_at: "2026-09-06T09:01:00-04:00" },
+        { direction: "inbound", body: "Qual o valor da limpeza?", sent_at: "2026-09-06T09:03:00-04:00" },
+      ]),
+      "sem notas",
+    );
+
+    expect(abertura).not.toContain("mensagens_sem_resposta");
+  });
+});
+
 describe("barreira contra falso aviso de mensagem vazia", () => {
   const inbound = "Eu quero agendar uma consulta com a Drª Mara, já tinha dito antes.";
 

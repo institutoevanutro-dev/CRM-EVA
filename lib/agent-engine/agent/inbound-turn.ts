@@ -1,3 +1,4 @@
+import { extrairObjetoJsonDoTexto } from '@/lib/agent-engine/texto/extrair-json-do-texto';
 import { setExecutionAgentOperation } from '@/lib/atendimento/fronteira-server';
 import { TIPOS_DE_CASO, TIPOS_DE_CASO_PARA_A_IA } from "@/lib/ai/case-copy";
 import { DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabilities';
@@ -155,7 +156,7 @@ import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
 import { esperarComoHumano } from './atraso-humano';
-import { sendInBubbles } from './split-message';
+import { bolhasQueCabemNoEnvio, instrucaoDeBolhas, sendInBubbles } from './split-message';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
 import { decidePromise } from '../guardrails/promise/engine';
 import { loadPromiseTable } from '../guardrails/promise/table';
@@ -176,6 +177,11 @@ import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import { renderAgora } from '@/lib/tempo/agora';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
+import {
+  anotarUltimaInboundVista,
+  respostaFicouObsoleta,
+  ultimaInboundJaRespondida,
+} from './turno-ja-respondido';
 import { acionarSupervisao } from '@/lib/supervisao/acionamento';
 
 /**
@@ -1120,6 +1126,11 @@ export interface InboundTurnKnobs {
   maxSendsPerTurn?: number;
   /** atraso do reagendamento em veto/queued herdado da F2-06 (SEND_QUEUED_RETRY_MS) */
   queuedRetryDelayMs: number;
+  /**
+   * Teto da régua de resposta obsoleta (RESPOSTA_OBSOLETA_TETO_MS) — ver
+   * `respostaFicouObsoleta`. Ausente = desligada (testes que não a exercitam).
+   */
+  respostaObsoletaTetoMs?: number;
   /** circuit breaker de tools por run (F2-15) — env TOOL_BREAKER_* */
   breaker: ToolBreakerThresholds;
   /**
@@ -1340,23 +1351,15 @@ async function insertCheckpoint(
 }
 
 /**
- * Extrai e valida o JSON do fechamento. Tolerante a cerca de código e prosa em
- * volta (pega do primeiro '{' ao último '}'); inválido → erro SEM o texto do
- * modelo na mensagem (pode carregar PII da conversa) — o job re-tenta.
+ * Extrai e valida o JSON do fechamento. Tolerante a cerca de código, prosa em
+ * volta, objeto REPETIDO e resposta dentro de array (primeiro objeto
+ * parseável); sem objeto → erro SEM o texto do modelo na mensagem (pode
+ * carregar PII da conversa) — o job re-tenta.
  */
 export function parseCheckpointText(text: string): CheckpointContent {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end <= start) {
+  const raw = extrairObjetoJsonDoTexto(text);
+  if (raw === null) {
     throw new Error('fechamento do turno sem JSON de checkpoint — run re-tentado pela fila');
-  }
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text.slice(start, end + 1));
-  } catch {
-    throw new Error(
-      'JSON de checkpoint inválido no fechamento do turno — run re-tentado pela fila',
-    );
   }
   const parsed = checkpointContentSchema.safeParse(raw);
   if (!parsed.success) {
@@ -1518,12 +1521,27 @@ export function buildOpeningMessage(
           '## Mensagem atual do cliente',
           'Não há texto utilizável na mensagem mais recente. Consulte o histórico antes de responder.',
         ];
+  // O job aponta UMA mensagem, mas o cliente pode ter mandado outras antes dela
+  // que ninguém respondeu — a rajada que o drain coalesce, ou a pergunta cuja
+  // resposta foi descartada por ter ficado desatualizada (`respostaFicouObsoleta`
+  // devolve a vez a este turno, pinado na mensagem MAIS NOVA). Sem a lista, o
+  // "responda a ESTA mensagem" acima deixava a pergunta anterior para trás.
+  const pendentes = inboundsNaoRespondidos(context.messages);
+  const pendentesBlock =
+    pendentes.length > 1
+      ? [
+          'Desde a última resposta nossa o cliente mandou mais de uma mensagem, e nenhuma foi respondida ainda.',
+          'Responda a todas juntas, numa resposta só, sem deixar pergunta para trás:',
+          JSON.stringify({ mensagens_sem_resposta: pendentes }),
+        ]
+      : [];
   return [
     'Novo turno de atendimento: o lead enviou uma mensagem (a última inbound do histórico abaixo).',
     '',
     ...ritualBlocks(previous, leadState, context, notesIndexBlock, projeta, compromissosBlock),
     '',
     ...mensagemAtualBlock,
+    ...pendentesBlock,
     '',
     'Responda ao lead usando a tool send_message — NUNCA escreva a resposta como texto direto',
     '(texto fora de tool é descartado pelo runtime). Use get_lead_context se precisar reler o contexto.',
@@ -1931,8 +1949,12 @@ async function executarTurnoDoAgente(
   // Só a JANELA adia. Cap diário e warm-up continuam com o gate de envio: eles
   // dependem de quanto já saiu hoje, e antecipá-los aqui adiaria turno que, na
   // hora do envio, teria passado.
+  // Guardados para a régua de resposta obsoleta (`send_message`), que precisa
+  // saber se a janela ainda estará aberta quando o turno seguinte rodar.
+  let knobsDaJanela: Awaited<ReturnType<typeof loadChannelKnobs>>['knobs'] | null = null;
   if (!preview && turnoVaiFalarComOLead(liveJob())) {
     const { knobs } = await loadChannelKnobs(pool, tenantId, input.channelSessionId, runLog);
+    knobsDaJanela = knobs;
     const agora = clock();
     if (!janelaDeEnvioAberta(agora, knobs)) {
       const abertura = proximaAberturaDaJanela(agora, knobs);
@@ -2839,6 +2861,19 @@ async function executarTurnoDoAgente(
     send_message: tool({
       ...AGENT_TOOL_DEFS.send_message,
       execute: async ({ body }) => {
+        // CORPO VAZIO NÃO SAI. O schema garante min(1) no argumento, mas um `\n`
+        // ou espaço passa e chegava ao canal como bolha em branco (medido no
+        // original, 2026-09-19). Recusar aqui devolve ao modelo para reescrever.
+        if (body.trim() === '') {
+          return {
+            ok: false,
+            error: {
+              code: 'corpo_vazio',
+              message:
+                'O texto da mensagem ficou vazio. Escreva a resposta de verdade e chame send_message de novo.',
+            },
+          };
+        }
         if (claimsCurrentInboundIsEmpty(body, mensagemDoJob)) {
           falseEmptyInboundVetoCount += 1;
           if (falseEmptyInboundVetoCount < MAX_VETOS_DE_FALSO_VAZIO) {
@@ -2869,6 +2904,43 @@ async function executarTurnoDoAgente(
               message:
                 `você já enviou ${seq} mensagens neste turno (teto: ${maxSendsPerTurn}). ` +
                 'NÃO envie mais nada agora — encerre o turno e espere a resposta do lead.',
+            },
+          };
+        }
+        // RESPOSTA OBSOLETA: o cliente escreveu de novo enquanto este turno pensava.
+        // Só antes do PRIMEIRO envio — cortar a meio uma resposta já começada é pior
+        // que a duplicata. A mensagem nova tem job próprio, que lê a conversa inteira
+        // e responde a tudo de uma vez. Ver `respostaFicouObsoleta`.
+        //
+        // E só se esse job ainda puder ENVIAR: ele roda depois deste e passa de
+        // novo pela janela anti-ban e pelo horário do agente. Descartar às 21:59
+        // com a janela fechando às 22h deixava o cliente sem nada até as 7h. A
+        // folga é o próprio teto, que cobre o turno seguinte inteiro.
+        const tetoObsoleta = deps.knobs.respostaObsoletaTetoMs ?? 0;
+        const quandoOProximoEnvia = new Date(clock().getTime() + tetoObsoleta);
+        if (
+          !preview &&
+          seq === 0 &&
+          (knobsDaJanela === null || janelaDeEnvioAberta(quandoOProximoEnvia, knobsDaJanela)) &&
+          (agentConfig?.janelaDeAtendimento == null ||
+            msAteAJanelaAbrir(agentConfig.janelaDeAtendimento, quandoOProximoEnvia) === null) &&
+          (await respostaFicouObsoleta(
+            pool,
+            { organizationId: tenantId, conversationId: input.conversationId, jobId: liveJob().id },
+            tetoObsoleta,
+          ))
+        ) {
+          runLog.info('resposta descartada — o cliente escreveu de novo durante o turno', {
+            job_id: liveJob().id,
+            conversation_id: input.conversationId,
+          });
+          return {
+            ok: false,
+            error: {
+              code: 'resposta_obsoleta',
+              message:
+                'O cliente mandou mensagem nova enquanto você escrevia; esta resposta ficou desatualizada e NÃO foi enviada. ' +
+                'NÃO chame send_message de novo neste turno — encerre agora. O próximo turno lê a conversa inteira e responde a tudo de uma vez.',
             },
           };
         }
@@ -2957,6 +3029,9 @@ async function executarTurnoDoAgente(
               sendInBubbles(finalBody, {
                 enabled: agentConfig?.splitMessages ?? false,
                 maxChars: agentConfig?.splitMaxChars ?? 600,
+                // O teto do turno vale para as bolhas: o que passa dele vai junto na
+                // última, e uma vaga fica para o envio seguinte (ver a função).
+                maxBubbles: bolhasQueCabemNoEnvio(maxSendsPerTurn, seq),
                 sleep: deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
                 jitter: () => 1200 + Math.floor(Math.random() * 800), // piso no throttle anti-ban (1.2s) — bolhas são mensagens físicas
                 // ANTES da 1ª bolha: "digitando…" + espera proporcional ao texto.
@@ -3788,10 +3863,7 @@ async function executarTurnoDoAgente(
     // Sufixos por-lead (situacionais, voláteis — depois do prefixo cacheável F2-17): corpos de
     // skill casadas (F3-09) + hint do classificador (F3-11) + instrução de split (F4-xx, quando
     // split_messages está on — Onda 4). Vazios são omitidos.
-    const splitHint =
-      (agentConfig?.splitMessages ?? false)
-        ? 'Responda em mensagens curtas e naturais, uma ideia por mensagem — como uma pessoa digitando no WhatsApp. Prefira várias mensagens curtas a um texto único e longo.'
-        : '';
+    const splitHint = instrucaoDeBolhas(agentConfig?.splitMessages ?? false);
     // Spec 15: o `case_id` real do caso 'awaiting_lead' desta conversa, se houver — sem
     // isso o modelo nunca consegue chamar provide_case_update quando o lead simplesmente
     // responde (o caminho comum; case_reply_turn só cobre a AÇÃO do humano). Sufixo
@@ -4437,6 +4509,26 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       return;
     }
     if (operationAgent?.pausedAt) return;
+    // UMA RESPOSTA POR MENSAGEM: um turno que rodou antes deste pode ter lido a
+    // mensagem que acordou este job e já respondido a ela — ver o cabeçalho de
+    // `turno-ja-respondido.ts`, com o caso medido. A anotação vem DEPOIS da
+    // pergunta e ANTES de `runAgentTurn` ler a conversa: é ela que deixa o
+    // próximo turno fazer a mesma pergunta a respeito deste.
+    const alvo = {
+      organizationId: job.organization_id,
+      contactId: job.contact_id,
+      conversationId: payload.conversation_id,
+      jobId: job.id,
+    };
+    if (await ultimaInboundJaRespondida(pool, alvo)) {
+      deps.log.info('turno pulado — outro turno já viu e respondeu a última mensagem do cliente', {
+        job_id: job.id,
+        conversation_id: payload.conversation_id,
+        inbound_message_id: payload.inbound_message_id,
+      });
+      return;
+    }
+    await anotarUltimaInboundVista(pool, alvo);
     await runAgentTurn(deps, job, pool, ctx, {
       resolvedAgent,
       channelSessionId: payload.channel_session_id,
