@@ -62,4 +62,12 @@ describe("abas da área", () => {
     render(<AbasDaArea />);
     expect(screen.getByRole("link", { name: "Ver tudo" })).toHaveAttribute("href", "/app/crm");
   });
+
+  it("publica a própria altura para telas que ocupam a janela inteira (Inbox)", () => {
+    rota.atual = "/app/contacts";
+    const { unmount } = render(<AbasDaArea />);
+    expect(document.documentElement.style.getPropertyValue("--altura-das-abas")).toMatch(/px$/);
+    unmount();
+    expect(document.documentElement.style.getPropertyValue("--altura-das-abas")).toBe("0px");
+  });
 });

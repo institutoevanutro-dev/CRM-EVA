@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { CaretDown } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
 import { useAuth } from "@/hooks/auth/AuthProvider";
@@ -33,6 +33,22 @@ export function AbasDaArea() {
     if (area && abaHref) gravarUltimaAba(area, abaHref);
   }, [area, abaHref]);
 
+  // Telas que ocupam a janela inteira (o Inbox) descontam a altura destas abas com
+  // `var(--altura-das-abas)`; sem isso a página passa a rolar e listas abertas fecham.
+  const raiz = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const html = document.documentElement;
+    const publicar = () => html.style.setProperty("--altura-das-abas", `${raiz.current?.offsetHeight ?? 0}px`);
+    publicar();
+    const el = raiz.current;
+    const obs = el && typeof ResizeObserver !== "undefined" ? new ResizeObserver(publicar) : null;
+    if (el) obs?.observe(el);
+    return () => {
+      obs?.disconnect();
+      html.style.setProperty("--altura-das-abas", "0px");
+    };
+  }, [area]);
+
   if (!area) return null;
   const grupo = NAV_GROUPS.find((g) => g.id === area);
   if (!grupo) return null;
@@ -52,7 +68,7 @@ export function AbasDaArea() {
     );
 
   return (
-    <div className="border-b bg-surface px-3 md:px-6">
+    <div ref={raiz} className="border-b bg-surface px-3 md:px-6">
       <nav aria-label={`${t("Telas de")} ${t(grupo.label)}`} className="-mb-px flex gap-1 overflow-x-auto">
         {principais.map((d) => (
           <Link

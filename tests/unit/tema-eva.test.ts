@@ -46,3 +46,12 @@ describe("cores iguais às do Financeiro", () => {
     expect(css).not.toMatch(/--font-atkinson/);
   });
 });
+
+describe("o Inbox desconta as abas da área", () => {
+  it("a altura da grade usa --altura-das-abas", () => {
+    const inbox = readFileSync("components/inbox/InboxLayout.tsx", "utf8");
+    const alturas = inbox.match(/h-\[calc\(100dvh[^\]]*\)\]/g) ?? [];
+    expect(alturas.length).toBeGreaterThan(0);
+    for (const a of alturas) expect(a).toContain("var(--altura-das-abas,0px)");
+  });
+});
