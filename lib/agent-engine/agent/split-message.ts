@@ -210,3 +210,18 @@ function limitarBolhas(bubbles: string[], maxBubbles = Number.POSITIVE_INFINITY)
   if (bubbles.length <= maxBubbles || maxBubbles < 1) return bubbles;
   return [...bubbles.slice(0, maxBubbles - 1), bubbles.slice(maxBubbles - 1).join("\n\n")];
 }
+
+/**
+ * Quantas bolhas UM send_message pode usar do teto do turno (MAX_SENDS_PER_TURN).
+ *
+ * Bug medido de cabeça (sem isto): com o parágrafo como bolha, um "Oi!" + "Vou
+ * ver a agenda." + "Um instante." gastava as 3 vagas do teto padrão, e o envio
+ * seguinte do mesmo turno — a confirmação depois de chamar a Agenda — era
+ * recusado. Enquanto sobra mais de uma vaga, uma fica reservada para o próximo
+ * envio; o excedente vai junto na última bolha (`limitarBolhas`), nada se perde.
+ * Nunca menos de 1: quem chega aqui já passou pela checagem do teto.
+ */
+export function bolhasQueCabemNoEnvio(maxSendsPerTurn: number, seq: number): number {
+  const restantes = maxSendsPerTurn - seq;
+  return restantes > 1 ? restantes - 1 : 1;
+}

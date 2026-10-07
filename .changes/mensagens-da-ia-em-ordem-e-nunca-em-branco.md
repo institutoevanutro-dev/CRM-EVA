@@ -12,7 +12,9 @@ escrever uma resposta só e disparava várias mensagens ao mesmo tempo, que às
 vezes chegavam fora de ordem no WhatsApp. Agora ela escreve uma resposta só,
 em parágrafos curtos, e o sistema envia cada parágrafo como uma mensagem, na
 ordem e com a pausa de quem digita. O limite de mensagens por resposta continua
-valendo: o que passar dele vai junto na última mensagem.
+valendo: o que passar dele vai junto na última mensagem, e sempre sobra espaço
+para a IA mandar mais uma mensagem na mesma resposta (por exemplo, confirmar um
+horário depois de olhar a agenda).
 
 Quem usa essa opção vai notar que a divisão agora segue os parágrafos da
 resposta, e não mais o tamanho.

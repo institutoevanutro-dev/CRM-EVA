@@ -156,7 +156,7 @@ import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
 import { esperarComoHumano } from './atraso-humano';
-import { instrucaoDeBolhas, sendInBubbles } from './split-message';
+import { bolhasQueCabemNoEnvio, instrucaoDeBolhas, sendInBubbles } from './split-message';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
 import { decidePromise } from '../guardrails/promise/engine';
 import { loadPromiseTable } from '../guardrails/promise/table';
@@ -2919,8 +2919,9 @@ async function executarTurnoDoAgente(
               sendInBubbles(finalBody, {
                 enabled: agentConfig?.splitMessages ?? false,
                 maxChars: agentConfig?.splitMaxChars ?? 600,
-                // O teto do turno vale para as bolhas: o que passa dele vai junto na última.
-                maxBubbles: Math.max(1, maxSendsPerTurn - seq),
+                // O teto do turno vale para as bolhas: o que passa dele vai junto na
+                // última, e uma vaga fica para o envio seguinte (ver a função).
+                maxBubbles: bolhasQueCabemNoEnvio(maxSendsPerTurn, seq),
                 sleep: deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
                 jitter: () => 1200 + Math.floor(Math.random() * 800), // piso no throttle anti-ban (1.2s) — bolhas são mensagens físicas
                 // ANTES da 1ª bolha: "digitando…" + espera proporcional ao texto.

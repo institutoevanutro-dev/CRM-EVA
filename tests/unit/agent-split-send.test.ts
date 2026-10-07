@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { sendInBubbles } from "@/lib/agent-engine/agent/split-message";
+import { bolhasQueCabemNoEnvio, sendInBubbles } from "@/lib/agent-engine/agent/split-message";
 
 describe("sendInBubbles", () => {
   it("split off → 1 envio com o corpo inteiro", async () => {
@@ -114,9 +114,47 @@ describe("sendInBubbles — o teto do turno vale para as bolhas", () => {
     expect(send.mock.calls.map((c) => c[0])).toEqual([seteParagrafos.join("\n\n")]);
   });
 
-  it("o turno passa às bolhas o que resta do teto", () => {
+  it("o turno passa às bolhas o que resta do teto, pela mesma conta testada abaixo", () => {
     const turno = readFileSync("lib/agent-engine/agent/inbound-turn.ts", "utf8");
-    expect(turno).toMatch(/maxBubbles: Math\.max\(1, maxSendsPerTurn - seq\)/);
+    expect(turno).toMatch(/maxBubbles: bolhasQueCabemNoEnvio\(maxSendsPerTurn, seq\)/);
+  });
+
+  // Um parágrafo = uma bolha. Antes, "Oi!\n\nVou ver a agenda.\n\nUm instante."
+  // cabia em split_max_chars e saía numa bolha só; agora são três, e com o teto
+  // padrão (3) elas gastavam o turno inteiro: a confirmação do agendamento, no
+  // send_message seguinte, era recusada com max_sends_per_turn.
+  it("um envio em parágrafos deixa vaga para o envio seguinte do turno", async () => {
+    const teto = 3;
+    let seq = 0;
+    const enviadas: string[] = [];
+    const enviar = (corpo: string) =>
+      sendInBubbles(corpo, {
+        enabled: true,
+        maxChars: 600,
+        maxBubbles: bolhasQueCabemNoEnvio(teto, seq),
+        send: async (b: string) => {
+          seq += 1;
+          enviadas.push(b);
+          return { kind: "sent", messageId: "m" };
+        },
+        sleep: async () => undefined,
+        jitter: () => 0,
+      });
+
+    await enviar("Oi!\n\nVou ver a agenda.\n\nUm instante.");
+    expect(seq).toBeLessThan(teto);
+    await enviar("Marquei para terça às 10h.");
+    expect(enviadas.at(-1)).toBe("Marquei para terça às 10h.");
+    expect(seq).toBeLessThanOrEqual(teto);
+    // Nada do texto se perdeu: o excedente foi junto na última bolha.
+    expect(enviadas.join("\n\n")).toBe("Oi!\n\nVou ver a agenda.\n\nUm instante.\n\nMarquei para terça às 10h.");
+  });
+
+  it("bolhasQueCabemNoEnvio: reserva uma vaga enquanto houver mais de uma, nunca menos de 1", () => {
+    expect(bolhasQueCabemNoEnvio(3, 0)).toBe(2);
+    expect(bolhasQueCabemNoEnvio(3, 2)).toBe(1);
+    expect(bolhasQueCabemNoEnvio(1, 0)).toBe(1);
+    expect(bolhasQueCabemNoEnvio(5, 1)).toBe(3);
   });
 });
 
