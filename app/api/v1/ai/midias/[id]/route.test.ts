@@ -73,7 +73,7 @@ describe("PATCH /api/v1/ai/midias/:id", () => {
     banco(() => ({ data: { id: ID, variants: [], contains_person: true, consent_signed_at: "2026-10-01", consent_expires_at: null, consent_revoked_at: null }, error: null }));
     const r = await PATCH(patch({ consent: { subject: "Maria", scope: "WhatsApp", signed_at: "2026-10-01", expires_at: null } }), ctx);
     expect(r.status).toBe(200);
-    expect(ops[0]!.dados).toEqual({
+    expect(ops.find((o) => o.acao === "update")!.dados).toEqual({
       consent_subject: "Maria",
       consent_scope: "WhatsApp",
       consent_signed_at: "2026-10-01",
@@ -84,12 +84,65 @@ describe("PATCH /api/v1/ai/midias/:id", () => {
   });
 
   it("revogar grava consent_revoked_at e audita consent_revoked", async () => {
-    banco(() => ({ data: { id: ID, variants: [{ key: "A", storage_path: `${ORG}/${ID}/A-1.png`, mime: "image/png", size_bytes: 1 }], contains_person: true, consent_signed_at: "2026-10-01", consent_expires_at: null, consent_revoked_at: "2026-10-07T00:00:00Z" }, error: null }));
+    const naoRevogada = { id: ID, variants: [], contains_person: true, consent_signed_at: "2026-10-01", consent_expires_at: null, consent_revoked_at: null };
+    banco((op) => ({ data: op.acao === "select" ? naoRevogada : { id: ID, variants: [{ key: "A", storage_path: `${ORG}/${ID}/A-1.png`, mime: "image/png", size_bytes: 1 }], contains_person: true, consent_signed_at: "2026-10-01", consent_expires_at: null, consent_revoked_at: "2026-10-07T00:00:00Z" }, error: null }));
     const r = await PATCH(patch({ revogar: true }), ctx);
     expect(r.status).toBe(200);
     expect((await r.json()).data.situacao).toBe("revogada");
-    expect(typeof (ops[0]!.dados as Record<string, unknown>).consent_revoked_at).toBe("string");
+    expect(typeof (ops.find((o) => o.acao === "update")!.dados as Record<string, unknown>).consent_revoked_at).toBe("string");
     expect(acoes()).toEqual(["media_library.consent_revoked"]);
+  });
+
+  it("sessão de suporte: devolve a negativa e não toca banco nem audit", async () => {
+    banco();
+    h.apoio.mockResolvedValue(new Response(null, { status: 403 }));
+    expect((await PATCH(patch({ title: "Novo" }), ctx)).status).toBe(403);
+    expect(ops).toHaveLength(0);
+    expect(h.audit).not.toHaveBeenCalled();
+  });
+
+  const termo = (signed_at: string) => ({ consent: { subject: "Maria", scope: "WhatsApp", signed_at, expires_at: null } });
+  const revogadaEm = { id: ID, variants: [{ key: "A", storage_path: `${ORG}/${ID}/A-1.png`, mime: "image/png", size_bytes: 1 }], contains_person: true, consent_signed_at: "2026-10-01", consent_expires_at: null, consent_revoked_at: "2026-10-05T15:00:00Z" };
+
+  it("item revogado: reenviar o termo antigo (assinado até a revogação) é 422 e nada grava", async () => {
+    banco(() => ({ data: revogadaEm, error: null }));
+    for (const d of ["2026-10-01", "2026-10-05"]) {
+      const r = await PATCH(patch(termo(d)), ctx);
+      expect(r.status).toBe(422);
+      expect((await r.json()).error.message).toContain("termo novo");
+    }
+    expect(ops.every((o) => o.acao === "select")).toBe(true);
+    expect(h.audit).not.toHaveBeenCalled();
+  });
+
+  it("item revogado: termo assinado DEPOIS da revogação é aceito", async () => {
+    banco((op) => ({ data: op.acao === "select" ? revogadaEm : { ...revogadaEm, consent_signed_at: "2026-10-06", consent_revoked_at: null }, error: null }));
+    expect((await PATCH(patch(termo("2026-10-06")), ctx)).status).toBe(200);
+    expect(acoes()).toEqual(["media_library.consent_recorded"]);
+  });
+
+  it("consent e revogar no mesmo pedido: 422", async () => {
+    banco();
+    expect((await PATCH(patch({ ...termo("2026-10-01"), revogar: true }), ctx)).status).toBe(422);
+    expect(ops).toHaveLength(0);
+  });
+
+  it("revogar de novo mantém a data original: não regrava o campo nem audita outra vez", async () => {
+    banco(() => ({ data: revogadaEm, error: null }));
+    const r = await PATCH(patch({ revogar: true }), ctx);
+    expect(r.status).toBe(200);
+    expect((await r.json()).data.situacao).toBe("revogada");
+    expect(ops.every((o) => o.acao === "select")).toBe(true);
+    expect(h.audit).not.toHaveBeenCalled();
+  });
+
+  it("item_updated audita os campos mudados e o novo contains_person", async () => {
+    banco(() => ({ data: { id: ID, variants: [], contains_person: false, consent_signed_at: null, consent_expires_at: null, consent_revoked_at: null }, error: null }));
+    await PATCH(patch({ title: "Novo", contains_person: false }), ctx);
+    expect(h.audit.mock.calls[0]![0]).toMatchObject({
+      action: "media_library.item_updated",
+      metadata: { fields: ["title", "contains_person"], contains_person: false },
+    });
   });
 });
 
@@ -120,6 +173,14 @@ describe("DELETE /api/v1/ai/midias/:id", () => {
     h.remover.mockResolvedValue({ error: { message: "boom" } });
     expect((await DELETE(del(), ctx)).status).toBe(200);
     expect(h.aviso).toHaveBeenCalled();
+  });
+
+  it("sessão de suporte: devolve a negativa e não toca banco nem bucket", async () => {
+    banco();
+    h.apoio.mockResolvedValue(new Response(null, { status: 403 }));
+    expect((await DELETE(del(), ctx)).status).toBe(403);
+    expect(ops).toHaveLength(0);
+    expect(h.remover).not.toHaveBeenCalled();
   });
 
   it("id de outra org: 404 e nada removido do bucket", async () => {

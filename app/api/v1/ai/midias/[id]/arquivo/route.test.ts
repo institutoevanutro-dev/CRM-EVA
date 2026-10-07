@@ -87,6 +87,14 @@ beforeEach(() => {
 });
 
 describe("POST /api/v1/ai/midias/:id/arquivo", () => {
+  it("sessão de suporte: devolve a negativa e não toca banco nem storage", async () => {
+    banco(item());
+    h.apoio.mockResolvedValue(new Response(null, { status: 403 }));
+    expect((await POST(envio({ variante: "A", bytes: PNG }), ctx)).status).toBe(403);
+    expect(ops).toHaveLength(0);
+    expect(h.subir).not.toHaveBeenCalled();
+  });
+
   it("content-length acima do teto: 413 sem ler o corpo nem tocar o storage", async () => {
     banco(item());
     const req = envio({ variante: "A", bytes: PNG }, { "content-length": String(50 * 1024 * 1024 + 64 * 1024 + 1) });
@@ -195,6 +203,14 @@ describe("concorrência e caminhos alheios", () => {
 });
 
 describe("DELETE /api/v1/ai/midias/:id/arquivo", () => {
+  it("sessão de suporte: devolve a negativa e não toca banco nem storage", async () => {
+    banco(item([antiga]));
+    h.apoio.mockResolvedValue(new Response(null, { status: 403 }));
+    expect((await DELETE(del("?variante=A"), ctx)).status).toBe(403);
+    expect(ops).toHaveLength(0);
+    expect(h.remover).not.toHaveBeenCalled();
+  });
+
   const b = { key: "B", storage_path: `${ORG}/${ID}/B-1.png`, mime: "image/png", size_bytes: 1 };
 
   it("tira a variante de variants, remove o arquivo e audita file_removed", async () => {

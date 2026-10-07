@@ -9,7 +9,9 @@
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
+import { z } from "zod";
 
+import { chaveDaRequisicao, comIdempotencia } from "@/lib/api/idempotency";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
@@ -21,6 +23,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+const ENDPOINT = "/api/v1/ai/midias";
 
 const COLUNAS_DA_MIDIA =
   "id, title, when_to_use, tags, variants, contains_person, consent_subject, consent_scope, consent_signed_at, consent_expires_at, consent_revoked_at";
@@ -74,22 +77,48 @@ export async function POST(req: NextRequest): Promise<Response> {
       details: parsed.error.flatten().fieldErrors as Record<string, unknown>,
     });
   }
+  const dados = parsed.data;
+  const chave = chaveDaRequisicao(req);
+  if (chave !== null && !z.string().uuid().safeParse(chave).success) {
+    return fail("validation_error", "Idempotency-Key deve ser UUID", 400, { requestId });
+  }
   const supabase = await createClient();
-  const { data: item, error } = await supabase
-    .from("media_library_items")
-    .insert({ organization_id: org.orgId, created_by_user_id: user.id, ...parsed.data })
-    .select("id")
-    .single();
-  if (error || !item) return fail("internal_error", t("Erro ao salvar a mídia."), 500, { requestId });
 
-  void audit({
-    action: "media_library.item_created",
-    actorUserId: user.id,
-    organizationId: org.orgId,
-    resourceType: "media_library_item",
-    resourceId: item.id,
-    requestId,
-    metadata: { title: parsed.data.title, contains_person: parsed.data.contains_person ?? true },
-  });
-  return ok({ id: item.id }, { requestId, status: 201 });
+  /** Lança em falha: o helper de idempotência não grava recibo de operação que falhou. */
+  async function criar() {
+    const { data: item, error } = await supabase
+      .from("media_library_items")
+      .insert({ organization_id: org.orgId, created_by_user_id: user.id, ...dados })
+      .select("id")
+      .single();
+    if (error || !item) throw new Error("item");
+    void audit({
+      action: "media_library.item_created",
+      actorUserId: user.id,
+      organizationId: org.orgId,
+      resourceType: "media_library_item",
+      resourceId: item.id,
+      requestId,
+      metadata: { title: dados.title, contains_person: dados.contains_person ?? true },
+    });
+    return { id: item.id };
+  }
+
+  try {
+    if (chave === null) return ok(await criar(), { requestId, status: 201 });
+    const desfecho = await comIdempotencia({
+      db: supabase,
+      organizationId: org.orgId,
+      endpoint: ENDPOINT,
+      chave,
+      corpo: dados,
+      executar: async () => ({ resposta: await criar(), status: 201 }),
+    });
+    if (desfecho.tipo === "conflito") {
+      return fail("idempotency_conflict", t("Esta chave de idempotência já foi usada com outro conteúdo."), 409, { requestId });
+    }
+    return ok(desfecho.resposta, { requestId, status: 201 });
+  } catch {
+    return fail("internal_error", t("Erro ao salvar a mídia."), 500, { requestId });
+  }
 }

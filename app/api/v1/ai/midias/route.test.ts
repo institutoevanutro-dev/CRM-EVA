@@ -19,15 +19,16 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({ storage: { from: () => ({ createSignedUrl: h.assinar }) } }),
 }));
 
+import { hashDoCorpo } from "@/lib/api/idempotency";
 import { GET, POST } from "@/app/api/v1/ai/midias/route";
 
 const ORG = "0326ffff-0000-4000-8000-000000000001";
 const USER = "0326ffff-0000-4000-8000-000000000002";
 
-const post = (corpo: unknown) =>
+const post = (corpo: unknown, chave?: string) =>
   new NextRequest("http://localhost/api/v1/ai/midias", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(chave ? { "Idempotency-Key": chave } : {}) },
     body: JSON.stringify(corpo),
   });
 
@@ -71,6 +72,52 @@ describe("/api/v1/ai/midias", () => {
     expect(h.audit.mock.calls[0]![0]).toMatchObject({ action: "media_library.item_created", organizationId: ORG, resourceId: "m1" });
     // organization_id no body é recusado pelo schema estrito
     expect((await POST(post({ title: "x", organization_id: "outra" }))).status).toBe(422);
+  });
+
+  it("POST em sessão de suporte: devolve a negativa e não toca banco nem audit", async () => {
+    banco();
+    h.apoio.mockResolvedValue(new Response(null, { status: 403 }));
+    expect((await POST(post({ title: "x" }))).status).toBe(403);
+    expect(ops).toHaveLength(0);
+    expect(h.audit).not.toHaveBeenCalled();
+  });
+
+  describe("Idempotency-Key", () => {
+    const CHAVE = "0326ffff-0000-4000-8000-0000000000c1";
+    it("chave que não é UUID: 400 e nada gravado", async () => {
+      banco();
+      const r = await POST(post({ title: "x" }, "nao-e-uuid"));
+      expect(r.status).toBe(400);
+      expect(ops).toHaveLength(0);
+    });
+    it("mesma chave + mesmo corpo: devolve o mesmo id sem segundo insert", async () => {
+      banco((op) =>
+        op.tabela === "idempotency_keys"
+          ? { data: { request_hash: hashDoCorpo({ title: "Vídeo" }), status_code: 201, response_body: { id: "m1" } }, error: null }
+          : { data: { id: "novo" }, error: null },
+      );
+      const r = await POST(post({ title: "Vídeo" }, CHAVE));
+      expect(r.status).toBe(201);
+      expect((await r.json()).data).toEqual({ id: "m1" });
+      expect(ops.some((o) => o.tabela === "media_library_items")).toBe(false);
+    });
+    it("mesma chave + corpo diferente: 409 idempotency_conflict", async () => {
+      banco((op) =>
+        op.tabela === "idempotency_keys"
+          ? { data: { request_hash: hashDoCorpo({ title: "Outro" }), status_code: 201, response_body: { id: "m1" } }, error: null }
+          : { data: { id: "novo" }, error: null },
+      );
+      const r = await POST(post({ title: "Vídeo" }, CHAVE));
+      expect(r.status).toBe(409);
+      expect((await r.json()).error.code).toBe("idempotency_conflict");
+      expect(ops.some((o) => o.tabela === "media_library_items")).toBe(false);
+    });
+    it("chave nova: insere e grava o recibo", async () => {
+      banco((op) => (op.tabela === "idempotency_keys" ? { data: null, error: null } : { data: { id: "m2" }, error: null }));
+      const r = await POST(post({ title: "Vídeo" }, CHAVE));
+      expect(r.status).toBe(201);
+      expect(ops.filter((o) => o.acao === "insert").map((o) => o.tabela)).toEqual(["media_library_items", "idempotency_keys"]);
+    });
   });
 
   it("GET calcula a situação: pessoa sem termo = sem_termo; sem pessoa com variante = pronta", async () => {

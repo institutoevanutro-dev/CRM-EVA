@@ -161,7 +161,7 @@ export async function DELETE(req: NextRequest, ctx: Ctx): Promise<Response> {
   const novas = lido.item.variants.filter((v) => v.key !== variante);
   if (alvo) {
     const gravou = await gravarVariantes(orgId, id, novas, lido.item.updated_at);
-    if (gravou === "conflito") return fail("state_conflict", t("A mídia mudou enquanto você enviava. Tente de novo."), 409, { requestId });
+    if (gravou === "conflito") return fail("state_conflict", t("A mídia mudou enquanto você removia. Tente de novo."), 409, { requestId });
     if (gravou === "erro") return fail("internal_error", t("Erro ao remover o arquivo."), 500, { requestId });
     const { error: erroRemove } = await createAdminClient().storage.from(BUCKET_DA_BIBLIOTECA).remove([alvo.storage_path]);
     if (erroRemove) logger.warn("[midias] arquivo ficou no bucket após remover a variante", { id, requestId, detail: erroRemove.message });

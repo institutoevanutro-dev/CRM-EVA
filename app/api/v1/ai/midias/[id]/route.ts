@@ -23,17 +23,22 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+const COLUNAS_DA_RESPOSTA = "id, variants, contains_person, consent_signed_at, consent_expires_at, consent_revoked_at";
+type ItemDaResposta = {
+  id: string;
+  variants: unknown;
+  contains_person: boolean;
+  consent_signed_at: string | null;
+  consent_expires_at: string | null;
+  consent_revoked_at: string | null;
+};
 type Ctx = { params: Promise<{ id: string }> };
 
-async function guarda(requestId: string) {
-  const supportDenied = await requireSupportWrite();
-  if (supportDenied) return { ok: false as const, response: supportDenied };
-  return requireRole("manager", { requestId, resource: "media_library" });
-}
-
 export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
   const requestId = randomUUID();
-  const authz = await guarda(requestId);
+  const authz = await requireRole("manager", { requestId, resource: "media_library" });
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { id } = await ctx.params;
@@ -47,6 +52,25 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
     });
   }
   const { consent, revogar, ...campos } = parsed.data;
+  const supabase = await createClient();
+
+  // Revogar é definitivo para o termo que a causou: reabrir exige um termo NOVO.
+  let atual: ItemDaResposta | null = null;
+  if (consent || revogar) {
+    const { data, error: erroLeitura } = await supabase
+      .from("media_library_items")
+      .select(COLUNAS_DA_RESPOSTA)
+      .eq("organization_id", authz.org.orgId)
+      .eq("id", id)
+      .maybeSingle();
+    if (erroLeitura) return fail("internal_error", t("Erro ao salvar a mídia."), 500, { requestId });
+    if (!data) return fail("not_found", t("Mídia não encontrada."), 404, { requestId });
+    atual = data;
+    if (consent && data.consent_revoked_at && consent.signed_at <= hojeNaClinica(new Date(data.consent_revoked_at))) {
+      return fail("validation_failed", t("Para voltar a usar, registre um termo novo, assinado depois da revogação."), 422, { requestId });
+    }
+  }
+
   const mudanca: Record<string, unknown> = { ...campos };
   const acoes: AuditAction[] = [];
   if (Object.keys(campos).length > 0) acoes.push("media_library.item_updated");
@@ -60,20 +84,24 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
     });
     acoes.push("media_library.consent_recorded");
   }
-  if (revogar) {
+  // Já revogada: mantém a data original (idempotente), sem segunda gravação nem segunda auditoria.
+  if (revogar && !atual?.consent_revoked_at) {
     mudanca.consent_revoked_at = new Date().toISOString();
     acoes.push("media_library.consent_revoked");
   }
 
-  const supabase = await createClient();
-  const { data: item, error } = await supabase
-    .from("media_library_items")
-    .update(mudanca)
-    .eq("organization_id", authz.org.orgId)
-    .eq("id", id)
-    .select("id, variants, contains_person, consent_signed_at, consent_expires_at, consent_revoked_at")
-    .maybeSingle();
-  if (error) return fail("internal_error", t("Erro ao salvar a mídia."), 500, { requestId });
+  let item = atual;
+  if (Object.keys(mudanca).length > 0) {
+    const { data, error } = await supabase
+      .from("media_library_items")
+      .update(mudanca)
+      .eq("organization_id", authz.org.orgId)
+      .eq("id", id)
+      .select(COLUNAS_DA_RESPOSTA)
+      .maybeSingle();
+    if (error) return fail("internal_error", t("Erro ao salvar a mídia."), 500, { requestId });
+    item = data;
+  }
   if (!item) return fail("not_found", t("Mídia não encontrada."), 404, { requestId });
 
   for (const action of acoes) {
@@ -84,7 +112,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       resourceType: "media_library_item",
       resourceId: id,
       requestId,
-      metadata: action === "media_library.consent_recorded" ? { expires_at: consent?.expires_at ?? null } : {},
+      metadata:
+        action === "media_library.consent_recorded"
+          ? { expires_at: consent?.expires_at ?? null }
+          : action === "media_library.item_updated"
+            ? { fields: Object.keys(campos), ...(campos.contains_person !== undefined ? { contains_person: campos.contains_person } : {}) }
+            : {},
     });
   }
   const situacao = situacaoDaMidia({ ...item, variants: variantesDoItem(item.variants, authz.org.orgId, id) }, hojeNaClinica());
@@ -92,8 +125,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
 }
 
 export async function DELETE(_req: NextRequest, ctx: Ctx): Promise<Response> {
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
   const requestId = randomUUID();
-  const authz = await guarda(requestId);
+  const authz = await requireRole("manager", { requestId, resource: "media_library" });
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { id } = await ctx.params;

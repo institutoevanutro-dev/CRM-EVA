@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { Variante } from "@/lib/midias/termo";
+import { hojeNaClinica, type Variante } from "@/lib/midias/termo";
 
 const data = z
   .string()
@@ -63,12 +63,14 @@ export const editarMidiaSchema = z
         expires_at: data.nullable(),
       })
       .strict()
+      .refine((c) => c.signed_at <= hojeNaClinica(), "A data de assinatura não pode ser no futuro.")
       .refine((c) => c.expires_at === null || c.expires_at >= c.signed_at, "A validade não pode ser antes da assinatura.")
       .optional(),
     revogar: z.literal(true).optional(),
   })
   .strict()
-  .refine((v) => Object.keys(v).length > 0, "Nada para alterar.");
+  .refine((v) => Object.keys(v).length > 0, "Nada para alterar.")
+  .refine((v) => !(v.consent && v.revogar), "Registrar termo e revogar são pedidos separados.");
 
 export type CriarMidia = z.infer<typeof criarMidiaSchema>;
 export type EditarMidia = z.infer<typeof editarMidiaSchema>;

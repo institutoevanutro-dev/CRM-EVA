@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { hojeNaClinica } from "./termo";
 import { criarMidiaSchema, editarMidiaSchema, variantesDoItem, variantesSchema } from "./esquemas";
 
 describe("esquemas da biblioteca", () => {
@@ -24,6 +25,15 @@ describe("esquemas da biblioteca", () => {
   });
   it("validade antes da assinatura é recusada", () => {
     expect(editarMidiaSchema.safeParse({ consent: { subject: "Maria", scope: "x", signed_at: "2026-10-01", expires_at: "2026-09-01" } }).success).toBe(false);
+  });
+  it("assinatura no futuro é recusada; hoje vale", () => {
+    const termo = (signed_at: string) => ({ consent: { subject: "Maria", scope: "x", signed_at, expires_at: null } });
+    expect(editarMidiaSchema.safeParse(termo("2999-01-01")).success).toBe(false);
+    expect(editarMidiaSchema.safeParse(termo(hojeNaClinica())).success).toBe(true);
+  });
+  it("consent e revogar juntos são recusados", () => {
+    const consent = { subject: "Maria", scope: "x", signed_at: "2026-10-01", expires_at: null };
+    expect(editarMidiaSchema.safeParse({ consent, revogar: true }).success).toBe(false);
   });
   it("variantes: no máximo 2 e sem chave repetida", () => {
     const v = (key: "A" | "B") => ({ key, storage_path: "o/i/A-1.png", mime: "image/png", size_bytes: 1 });
