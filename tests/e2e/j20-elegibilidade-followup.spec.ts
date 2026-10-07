@@ -4,7 +4,7 @@
  * Num canal com o gate LIGADO (`channel_sessions.metadata.ai_gate='allowlist'`),
  * a varredura de silêncio (`lib/followup/silence-sweep.ts`, dentro do cron
  * `followup-flow-worker`) só inscreve um contato silencioso se ele estiver
- * AUTORIZADO — `loadSilentContactIds` pula `gateAllowlist && !autorizado`. Um
+ * AUTORIZADO — `loadSilentContacts` pula `gateAllowlist && !autorizado`. Um
  * cliente atual que nunca passou por origem elegível NÃO é enrolado: a IA não
  * "enrola" quem ela não deveria atender.
  *
@@ -156,6 +156,10 @@ test.describe("J20.12 — o follow-up automático respeita o gate", () => {
       // `admin`/MFA; o que está sob teste é a varredura, não a criação do agente).
       pointerId = await publicarFluxoDeSilencio(page);
       agentId = helper<{ agentId: string }>("publish-agent", pointerId).agentId;
+      // Recua a vigência DEPOIS de armar o agente (armar também a avança,
+      // migration 0324): os contatos semeados abaixo calaram antes disso, e a
+      // regra "sem passado" os recusaria.
+      helper("recuar-vigencia", pointerId, String(THRESHOLD_MIN + 60));
 
       // (2) Dois contatos silenciosos no MESMO canal com gate — um de cada lado.
       const a = helper<{ contactId: string }>("seed-silent-contact", "1", String(THRESHOLD_MIN));
