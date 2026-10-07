@@ -537,6 +537,8 @@ export const DICIONARIO: Traducoes = {
   "Ver tudo em Vendas": { es: "Ver todo en Ventas" },
   "Mais": { es: "Más" },
   "Ver tudo": { es: "Ver todo" },
+  "Cadastrar ou trocar credencial": { es: "Registrar o cambiar credencial" },
+  "Gerenciar números em Conexões": { es: "Gestionar números en Conexiones" },
   "Telas de": { es: "Pantallas de" },
   "Ver tudo em CRM": { es: "Ver todo en CRM" },
   "Ver tudo em Análise": { es: "Ver todo en Análisis" },
