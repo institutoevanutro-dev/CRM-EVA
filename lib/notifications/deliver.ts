@@ -25,7 +25,18 @@ export function entregarAviso(input: EntregarAvisoInput): void {
   const body = traduzir(input.body, idioma);
 
   if (canalLigado(input.category, "in_app")) {
-    toast(title, { description: body });
+    // O aviso já carrega o destino (`href`); com a ação, o toast leva direto
+    // para a conversa. Sem destino, não inventa botão: botão morto é pior que
+    // nenhum. (Porte do DeskcommCRM aea803e1c.) Só para destino de CONVERSA:
+    // o aviso de lead também tem `href` (o funil), e um "Abrir conversa" que
+    // abre o funil seria rótulo mentiroso.
+    const href = input.href?.startsWith("/app/inbox") ? input.href : undefined;
+    toast(title, {
+      description: body,
+      action: href
+        ? { label: traduzir("Abrir conversa", idioma), onClick: () => window.location.assign(href) }
+        : undefined,
+    });
   }
   if (canalLigado(input.category, "push")) {
     emitNotification({

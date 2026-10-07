@@ -14,7 +14,7 @@ import {
   resolvePhoneJidDigitsForCall,
   resolveWhatsappIdForContactCard,
 } from "@/lib/waha/resolve-contact-whatsapp-id";
-import { parseWahaMessageId, wahaEchoExternalIds } from "@/lib/waha/message-id";
+import { bareWaMessageId, parseWahaMessageId, wahaEchoExternalIds } from "@/lib/waha/message-id";
 import { resolveWahaChatId } from "@/lib/waha/send";
 import type { FetchedMedia } from "@/lib/messaging/media/types";
 import { DETALHE_CREDENCIAL_RECUSADA } from "../health";
@@ -37,6 +37,17 @@ import type { ChannelAdapter, ChannelHealth, OutboundEnvelope, RecipientInput } 
 export function statusHttpDoErroWaha(msg: string): number | null {
   const m = /^waha_(?:[a-z]+_)?(\d{3})\b/.exec(msg);
   return m ? Number(m[1]) : null;
+}
+
+/**
+ * O id que a API do WAHA pede para citar é o COMPLETO. Só o que é nosso fica
+ * gravado bare — o envio do CRM e o eco do que a clínica digitou no celular
+ * (`lib/waha/ingest.ts`) —, e o que é nosso é sempre `fromMe`, daí o `true_`.
+ * O inbound chega composto e passa intacto, assim como as linhas do celular
+ * gravadas com o composto antes dessa mudança. (Porte do DeskcommCRM 6f50ad508.)
+ */
+function idCompletoDaMensagem(externalId: string, chatId: string): string {
+  return externalId.includes("_") ? externalId : `true_${chatId}_${bareWaMessageId(externalId)}`;
 }
 
 export const wahaAdapter: ChannelAdapter = {
@@ -231,7 +242,7 @@ export const wahaAdapter: ChannelAdapter = {
         envelope.body ?? "",
         // A citação é enfeite da conversa, nunca condição de envio: quando não
         // há, o envio segue igual. Ver `OutboundEnvelope.replyToExternalId`.
-        envelope.replyToExternalId,
+        envelope.replyToExternalId ? idCompletoDaMensagem(envelope.replyToExternalId, to) : null,
       );
     }
 

@@ -100,6 +100,29 @@ function makeSupabase(preexistentes: Row[] = []) {
     if (table !== 'messages') throw new Error(`fake: tabela inesperada '${table}'`);
 
     return {
+      // A leitura da mensagem CITADA (id + organização + conversa).
+      select: () => {
+        const filtros: Array<(r: Row) => boolean> = [];
+        const q = {
+          eq(col: string, val: unknown) {
+            filtros.push((r) => r[col] === val);
+            return q;
+          },
+          neq(col: string, val: unknown) {
+            filtros.push((r) => r[col] !== val);
+            return q;
+          },
+          in(col: string, vals: unknown[]) {
+            filtros.push((r) => vals.includes(r[col]));
+            return q;
+          },
+          maybeSingle: async () => ({ data: filtrar(filtros)[0] ?? null, error: null }),
+          then(resolve: (v: { data: Row[]; error: null }) => unknown) {
+            return Promise.resolve({ data: filtrar(filtros).map((r) => ({ ...r })), error: null }).then(resolve);
+          },
+        };
+        return q;
+      },
       insert: (row: Row) => {
         const nova: Row = { id: `msg-${messages.length + 1}`, external_id: null, ack: null, error_code: null, error_message: null, ...row };
         messages.push(nova);
@@ -111,6 +134,9 @@ function makeSupabase(preexistentes: Row[] = []) {
           eq(col: string, val: unknown) {
             filtros.push((r) => r[col] === val);
             return q;
+          },
+          then(resolve: (v: unknown) => unknown) {
+            return q.select().maybeSingle().then(resolve);
           },
           select: () => ({
             maybeSingle: async () => {
@@ -285,5 +311,147 @@ describe('o que a correção NÃO pode apagar', () => {
     await sendMessageHandler(supabase, ctx, input);
 
     expect(messages.find((m) => m.id === 'crm-1'), 'apagou uma linha que não era eco de dispositivo').toBeDefined();
+  });
+});
+
+describe('o eco que entra ENTRE a limpeza e o carimbo do id (DeskcommCRM #1855)', () => {
+  /**
+   * Porte do DeskcommCRM 098aef895 (autor original: melgarafael).
+   *
+   * Com o eco gravando o id curto (bare) — o mesmo que o envio grava —, a
+   * colisão no unique `(organization_id, external_id)` passou a poder cair do
+   * lado do ENVIO: a limpeza do eco e o UPDATE que carimba o id são duas
+   * chamadas, e o eco que o webhook insere entre elas ocupa o id primeiro. O
+   * UPDATE volta `23505`, e ignorar esse erro deixava a linha do envio em
+   * `queued`, sem id — sem ack e à mercê de um reenvio.
+   *
+   * O dublê não tem relógio: o eco é injetado logo depois do DELETE, que é
+   * exatamente a ordem que a corrida produz.
+   */
+  function ecoEntraDepoisDaLimpeza(
+    supabase: ReturnType<typeof makeSupabase>['supabase'],
+    messages: Row[],
+    eco: Row,
+  ) {
+    const from = supabase.from.bind(supabase);
+    let injetado = false;
+    (supabase as unknown as { from: (t: string) => unknown }).from = (tabela: string) => {
+      const q = from(tabela) as unknown as { delete?: () => { then: PromiseLike<unknown>['then'] } };
+      if (tabela !== 'messages' || !q.delete) return q;
+      const del = q.delete.bind(q);
+      q.delete = () => {
+        const cadeia = del();
+        const then = cadeia.then.bind(cadeia);
+        cadeia.then = (ok, falha) =>
+          then((v) => {
+            if (!injetado) {
+              injetado = true;
+              messages.push(eco);
+            }
+            return ok ? ok(v) : v;
+          }, falha) as never;
+        return cadeia;
+      };
+      return q;
+    };
+  }
+
+  it('o envio fica `sent` com o id, e a frase aparece uma vez só', async () => {
+    wahaRespondendo(BARE);
+    const { supabase, messages } = makeSupabase();
+    ecoEntraDepoisDaLimpeza(supabase, messages, ecoDoWebhook({ external_id: BARE }));
+
+    await sendMessageHandler(supabase, ctx, input);
+
+    const daMensagem = messages.filter((m) => m.external_id === BARE);
+    expect(daMensagem, 'a mesma frase ficou duas vezes, ou nenhuma linha ficou com o id').toHaveLength(1);
+    expect(daMensagem[0]!.sent_via, 'sobrou o eco do webhook, não a linha do envio').toBe('user');
+    expect(daMensagem[0]!.status).toBe('sent');
+  });
+
+  it('se o id segue ocupado por linha que não é eco, o envio fica `sent` sem id — nunca preso em `queued`', async () => {
+    // Uma linha de OUTRA conversa com o mesmo id não é apagada (o escopo da
+    // limpeza é a conversa). O unique recusa de novo; a mensagem já saiu, então
+    // o desfecho é o do watchdog: `sent`, sem o id.
+    wahaRespondendo(BARE);
+    const { supabase, messages } = makeSupabase([
+      ecoDoWebhook({ id: 'outro-1', conversation_id: OUTRA_CONV, external_id: BARE }),
+    ]);
+
+    await sendMessageHandler(supabase, ctx, input);
+
+    const doEnvio = messages.find((m) => m.sent_via === 'user')!;
+    expect(doEnvio.status, 'a mensagem que saiu ficou presa em queued').toBe('sent');
+    expect(doEnvio.external_id).toBeNull();
+    expect(messages.find((m) => m.id === 'outro-1')).toBeDefined();
+  });
+
+  it('o eco do celular preso em OUTRA conversa devolve o id: a linha do envio fica com ele e recebe os tiques', async () => {
+    // Revisão do PR #134. A mesma paciente cadastrada duas vezes (telefone e
+    // @lid): o eco do envio cai na conversa do @lid, gravado com o id curto, e
+    // a limpeza — que é só da conversa do envio, de propósito — não o alcança.
+    // Antes do PR o eco guardava o composto que o WAHA entregou, não havia
+    // colisão, e a linha do CRM ficava com o id (e com os tiques do ack). O
+    // composto segue guardado em `metadata.external_id_original`: devolvê-lo ao
+    // eco é voltar exatamente ao estado de antes, sem apagar nada.
+    wahaRespondendo(BARE);
+    const ORIGINAL = `true_250302204792918@lid_${BARE}`;
+    const { supabase, messages } = makeSupabase([
+      ecoDoWebhook({
+        id: 'eco-lid',
+        conversation_id: OUTRA_CONV,
+        external_id: BARE,
+        metadata: { fromMe: true, external_id_original: ORIGINAL },
+      }),
+    ]);
+
+    await sendMessageHandler(supabase, ctx, input);
+
+    const doEnvio = messages.find((m) => m.sent_via === 'user')!;
+    expect(doEnvio.status).toBe('sent');
+    expect(doEnvio.external_id, 'a linha do envio ficou sem o id — nunca recebe entregue/lida').toBe(BARE);
+    const eco = messages.find((m) => m.id === 'eco-lid');
+    expect(eco, 'apagou linha de outra conversa').toBeDefined();
+    expect(eco!.external_id).toBe(ORIGINAL);
+  });
+});
+
+describe('citar a mensagem que a clínica digitou no celular (revisão do PR #134)', () => {
+  /**
+   * O eco do celular grava o id CURTO, e a citação de uma linha bare remonta o
+   * composto com o chat do envio de HOJE (`true_<to>_<bare>`). Quando o chat do
+   * eco foi outro — PN de um lado, @lid do outro —, o `reply_to` saía com um id
+   * que nunca existiu. Antes do PR a linha guardava o composto que o WAHA
+   * entregou, e ele ia como estava. A ingestão agora guarda esse composto em
+   * `metadata.external_id_original`, e a citação usa ele.
+   */
+  const ORIGINAL = `true_250302204792918@lid_${BARE}`;
+
+  function corpoDoEnvio(): Record<string, unknown> {
+    const chamadas = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const init = chamadas.at(-1)![1] as { body: string };
+    return JSON.parse(init.body) as Record<string, unknown>;
+  }
+
+  it('o `reply_to` sai com o id que o WAHA entregou, não com um remontado no chat de hoje', async () => {
+    wahaRespondendo('3EB0RESPOSTA');
+    const { supabase } = makeSupabase([
+      ecoDoWebhook({ id: 'cel-1', external_id: BARE, metadata: { fromMe: true, external_id_original: ORIGINAL } }),
+    ]);
+
+    await sendMessageHandler(supabase, ctx, { ...input, reply_to_message_id: 'cel-1' } as SendMessageInput);
+
+    expect(corpoDoEnvio().reply_to).toBe(ORIGINAL);
+  });
+
+  it('CONTROLE: linha bare sem o original (o envio do CRM) segue remontada com o chat do envio', async () => {
+    wahaRespondendo('3EB0RESPOSTA');
+    const { supabase } = makeSupabase([
+      ecoDoWebhook({ id: 'crm-1', external_id: BARE, sent_via: 'user', metadata: {} }),
+    ]);
+
+    await sendMessageHandler(supabase, ctx, { ...input, reply_to_message_id: 'crm-1' } as SendMessageInput);
+
+    expect(corpoDoEnvio().reply_to).toBe(COMPOSTO);
   });
 });

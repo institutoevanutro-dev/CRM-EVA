@@ -57,3 +57,155 @@ it.each(["returned", "rejected"])(
     expect(store.rotate).not.toHaveBeenCalled();
   },
 );
+
+/**
+ * O ECO QUE ENTRA ENTRE O DELETE E O UPDATE DE `fn_reply_record_receipt`.
+ *
+ * Desde que o eco do WhatsApp por QR grava o id na forma curta (bare), a mesma
+ * do envio (porte do DeskcommCRM 53f3b1b70), o eco que o webhook commita entre
+ * o `delete` e o `update` da função ocupa o id primeiro, e o unique
+ * `(organization_id, external_id)` recusa o carimbo com 23505. A função inteira
+ * volta (uma transação só), a linha fica `queued` e o ledger `requested` — e a
+ * próxima rodada REENVIARIA a resposta ao paciente. Chamar de novo é seguro (o
+ * que falhou foi desfeito) e a segunda chamada já enxerga o eco para apagar. É
+ * o espelho, neste caminho, do que o handler faz no envio comum (DeskcommCRM
+ * 098aef895) e do `markRedriveSent` do watchdog.
+ */
+it("23505 no carimbo da resposta aprovada: tenta de novo uma vez e grava o recibo", async () => {
+  const rpc = vi
+    .fn()
+    .mockResolvedValueOnce({ data: null, error: { code: "23505", message: "duplicate key" } })
+    .mockResolvedValueOnce({ data: { id: "message", status: "sent" }, error: null });
+  const db = { rpc } as unknown as SupabaseClient;
+  const ctx = {
+    organizationId: "org",
+    jobId: "job",
+    jobClaim: { worker_id: "worker", acquired_at: "2026-09-06T12:00:00Z" },
+  };
+
+  await expect(
+    recordApprovedReplyReceiptSupabase(db, ctx, "message", "3EB0BARE", ["3EB0BARE"]),
+  ).resolves.toMatchObject({ id: "message", status: "sent" });
+  expect(rpc).toHaveBeenCalledTimes(2);
+});
+
+/**
+ * O 23505 QUE NÃO SAI COM A LIMPEZA (revisão do PR #134).
+ *
+ * A função só apaga o eco na conversa da resposta. Quando o eco cai em OUTRA
+ * conversa — a mesma paciente cadastrada duas vezes, uma pelo @lid e outra pelo
+ * telefone —, ele segura o id curto e a segunda chamada colide de novo. Lançar
+ * aqui deixava a linha `queued` e o ledger `requested`: o watchdog
+ * (`redriveQueued`) e a nova tentativa do job (`sendWithLedger`) mandavam a
+ * MESMA resposta outra vez à paciente. A mensagem JÁ SAIU: o recibo é gravado
+ * sem o id — `sent`, ledger `accepted` —, o mesmo desfecho do envio comum
+ * (`marcarEnviada(false)` no handler) e do `markRedriveSent` do watchdog. A
+ * linha de outra conversa não é tocada (`tests/invariants/agent-watchdog.test.ts`).
+ */
+it("23505 repetido: o recibo é gravado sem o id, nunca deixa a resposta para reenvio", async () => {
+  const rpc = vi
+    .fn()
+    .mockResolvedValueOnce({ data: null, error: { code: "23505", message: "duplicate key" } })
+    .mockResolvedValueOnce({ data: null, error: { code: "23505", message: "duplicate key" } })
+    .mockResolvedValueOnce({ data: { id: "message", status: "sent", external_id: null }, error: null });
+  const db = { rpc } as unknown as SupabaseClient;
+  const ctx = {
+    organizationId: "org",
+    jobId: "job",
+    jobClaim: { worker_id: "worker", acquired_at: "2026-09-06T12:00:00Z" },
+  };
+
+  await expect(
+    recordApprovedReplyReceiptSupabase(db, ctx, "message", "3EB0BARE", ["3EB0BARE"]),
+  ).resolves.toMatchObject({ id: "message", status: "sent" });
+  expect(rpc).toHaveBeenCalledTimes(3);
+  expect(rpc.mock.calls[2]![1]).toMatchObject({ p_message: "message", p_external: null });
+});
+
+it("se nem sem o id o recibo grava, é erro de persistência — nada de laço", async () => {
+  const rpc = vi.fn().mockResolvedValue({ data: null, error: { code: "23505", message: "duplicate key" } });
+  const db = { rpc } as unknown as SupabaseClient;
+  const ctx = {
+    organizationId: "org",
+    jobId: "job",
+    jobClaim: { worker_id: "worker", acquired_at: "2026-09-06T12:00:00Z" },
+  };
+
+  await expect(
+    recordApprovedReplyReceiptSupabase(db, ctx, "message", "3EB0BARE", ["3EB0BARE"]),
+  ).rejects.toBeInstanceOf(ApprovedReplyReceiptPersistenceError);
+  expect(rpc).toHaveBeenCalledTimes(3);
+});
+
+/**
+ * O ECO PRESO EM OUTRA CONVERSA DEVOLVE O ID (revisão do PR #134).
+ *
+ * Antes de gravar o recibo sem o id, o eco de outra conversa que guardou o
+ * composto do WAHA (`metadata.external_id_original`) volta a ele — o estado de
+ * antes do PR — e a resposta aprovada fica com o id curto e com os tiques.
+ */
+it("23505 repetido com o eco em outra conversa: o eco volta ao composto e o recibo grava COM o id", async () => {
+  const rpc = vi
+    .fn()
+    .mockResolvedValueOnce({ data: null, error: { code: "23505", message: "duplicate key" } })
+    .mockResolvedValueOnce({ data: null, error: { code: "23505", message: "duplicate key" } })
+    .mockResolvedValueOnce({ data: { id: "message", status: "sent", external_id: "3EB0BARE" }, error: null });
+  const updates: Array<{ patch: Record<string, unknown>; filtros: Record<string, unknown> }> = [];
+  const linhas: Record<string, Record<string, unknown>> = {
+    message: { id: "message", organization_id: "org", conversation_id: "conv-pn" },
+  };
+  const eco = {
+    id: "eco-lid",
+    organization_id: "org",
+    conversation_id: "conv-lid",
+    sent_via: "external_device",
+    external_id: "3EB0BARE",
+    metadata: { fromMe: true, external_id_original: "true_123@lid_3EB0BARE" },
+  };
+  const from = () => ({
+    select: () => {
+      const f: Record<string, unknown> = {};
+      const q = {
+        eq: (c: string, v: unknown) => ((f[c] = v), q),
+        in: (c: string, v: unknown[]) => ((f[`in:${c}`] = v), q),
+        neq: (c: string, v: unknown) => ((f[`neq:${c}`] = v), q),
+        maybeSingle: async () => ({ data: linhas[f.id as string] ?? null, error: null }),
+        then: (ok: (v: unknown) => unknown) =>
+          Promise.resolve({
+            data: f["neq:conversation_id"] !== eco.conversation_id ? [eco] : [],
+            error: null,
+          }).then(ok),
+      };
+      return q;
+    },
+    update: (patch: Record<string, unknown>) => {
+      const filtros: Record<string, unknown> = {};
+      const q = {
+        eq: (c: string, v: unknown) => ((filtros[c] = v), q),
+        then: (ok: (v: unknown) => unknown) => {
+          updates.push({ patch, filtros });
+          return Promise.resolve({ error: null }).then(ok);
+        },
+      };
+      return q;
+    },
+  });
+  const db = { rpc, from } as unknown as SupabaseClient;
+  const ctx = {
+    organizationId: "org",
+    jobId: "job",
+    jobClaim: { worker_id: "worker", acquired_at: "2026-09-06T12:00:00Z" },
+  };
+
+  await expect(
+    recordApprovedReplyReceiptSupabase(db, ctx, "message", "3EB0BARE", ["3EB0BARE"]),
+  ).resolves.toMatchObject({ id: "message", external_id: "3EB0BARE" });
+  expect(updates).toEqual([
+    {
+      patch: { external_id: "true_123@lid_3EB0BARE" },
+      filtros: { organization_id: "org", id: "eco-lid", external_id: "3EB0BARE" },
+    },
+  ]);
+  expect(rpc).toHaveBeenCalledTimes(3);
+  expect(rpc.mock.calls[2]![1]).toMatchObject({ p_external: "3EB0BARE" });
+});
