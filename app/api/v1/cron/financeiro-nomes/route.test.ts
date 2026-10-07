@@ -24,7 +24,7 @@ import { GET } from "./route";
 
 /** Roda `fn` com as variáveis do Financeiro trocadas, e devolve o env como estava. */
 async function comEnv(troca: Record<string, string>, fn: () => Promise<void>) {
-  const e = env as Record<string, string | undefined>;
+  const e = env as unknown as Record<string, string | undefined>;
   const antes = { ...e };
   Object.assign(e, troca);
   try {
