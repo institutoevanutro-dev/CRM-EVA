@@ -2145,6 +2145,7 @@ export type Database = {
       }
       calendar_appointments: {
         Row: {
+          history_import_key: string | null
           unit_id: string | null
           room_id: string | null
           duration_minutes_snapshot: number
@@ -2214,6 +2215,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          history_import_key?: string | null
           unit_id?: string | null
           room_id?: string | null
           duration_minutes_snapshot?: number | null
@@ -2283,6 +2285,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          history_import_key?: string | null
           unit_id?: string | null
           room_id?: string | null
           duration_minutes_snapshot?: number | null
