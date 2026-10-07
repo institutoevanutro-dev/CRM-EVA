@@ -12,8 +12,12 @@ const ULTIMA_ENTRADA = "2026-09-01T10:00:00.000Z";
 
 function supabaseFalso(tabelas: Record<string, unknown[]>) {
   const inserts: string[] = [];
+  // A leitura de conversas pagina por keyset até a página vazia (0324): a
+  // segunda leitura de cada tabela devolve vazio.
+  const lidas = new Set<string>();
   const from = (tabela: string) => {
-    const linhas = tabelas[tabela] ?? [];
+    const linhas = tabela === "conversations" && lidas.has(tabela) ? [] : (tabelas[tabela] ?? []);
+    lidas.add(tabela);
     const chain: Record<string, unknown> = new Proxy(
       {},
       {
@@ -72,7 +76,7 @@ describe("silêncio — inscrição encerrada por atendimento humano", () => {
       messages: [{ sent_at: ULTIMA_ENTRADA }],
     });
     const db = createSupabaseSilenceSweepDb(admin);
-    await db.loadSilentContactIds("org", "2026-09-02T10:00:00.000Z", []);
+    await db.loadSilentContacts("org", "2026-09-02T10:00:00.000Z", []);
 
     const r = await db.insertEnrollment({
       ...entrada,
