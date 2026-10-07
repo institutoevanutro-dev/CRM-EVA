@@ -728,6 +728,14 @@ export const AUDIT_ACTIONS = [
   // planilha da agência, sem convite. O convite, quando pedido com --convidar,
   // audita `member.invited` pelo caminho de sempre.
   "member.added_by_import",
+  // Biblioteca de mídias (migration 0326). Envio é auditado pelo handler de mensagens.
+  "media_library.item_created",
+  "media_library.item_updated",
+  "media_library.file_replaced",
+  "media_library.file_removed",
+  "media_library.consent_recorded",
+  "media_library.consent_revoked",
+  "media_library.item_deleted",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

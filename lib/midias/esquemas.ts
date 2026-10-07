@@ -1,6 +1,13 @@
 import { z } from "zod";
 
-const data = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data no formato AAAA-MM-DD.");
+const data = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Data no formato AAAA-MM-DD.")
+  // "2026-13-45" passa no formato e o Postgres a recusaria (500): exige data de calendário real.
+  .refine((s) => {
+    const d = new Date(`${s}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  }, "Data inexistente.");
 const etiquetas = z.array(z.string().trim().min(1).max(40)).max(20);
 
 export const variantesSchema = z

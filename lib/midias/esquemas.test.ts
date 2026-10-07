@@ -17,6 +17,11 @@ describe("esquemas da biblioteca", () => {
     expect(editarMidiaSchema.safeParse({ consent: { subject: "", scope: "x", signed_at: "2026-10-01", expires_at: null } }).success).toBe(false);
     expect(editarMidiaSchema.safeParse({ consent: { subject: "Maria", scope: "x", signed_at: "01/10/2026", expires_at: null } }).success).toBe(false);
   });
+  it("data impossível (2026-13-45, 2026-02-30) é recusada", () => {
+    for (const d of ["2026-13-45", "2026-02-30"]) {
+      expect(editarMidiaSchema.safeParse({ consent: { subject: "Maria", scope: "x", signed_at: d, expires_at: null } }).success).toBe(false);
+    }
+  });
   it("validade antes da assinatura é recusada", () => {
     expect(editarMidiaSchema.safeParse({ consent: { subject: "Maria", scope: "x", signed_at: "2026-10-01", expires_at: "2026-09-01" } }).success).toBe(false);
   });
