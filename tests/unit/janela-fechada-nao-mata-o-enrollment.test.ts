@@ -254,6 +254,37 @@ describe("o turno de envio devolve o ADIAMENTO ao enrollment", () => {
     expect(entrada.result.until?.toISOString()).toBe(SEGUNDA_09H.toISOString());
   });
 
+  it("⭐ passo escrito pela IA: a janela do CANAL fechada no turno do agente também avisa o enrollment", async () => {
+    // O caminho principal do follow-up: passo sem texto fixo, só orientação. É o
+    // `runAgentTurn` que encontra a janela anti-ban do número fechada, re-agenda
+    // o job e encerra com o erro de job resolvido. Sem reconhecer ESSE erro, o
+    // turno nunca fechava e o dead-man matava a inscrição antes da abertura.
+    const { TurnoAdiadoPelaJanelaError } = await import("@/lib/agent-engine/agent/inbound-turn");
+    runAgentTurn.mockImplementationOnce(async () => {
+      throw new TurnoAdiadoPelaJanelaError(SEGUNDA_09H);
+    });
+    const { deps, completeFollowupTurn } = depsComCallback();
+    const payload = {
+      followup_enrollment_id: PAYLOAD_DE_FLUXO.followup_enrollment_id,
+      node_id: "a1",
+      purpose: "send_message",
+      prompt_hint: "retome",
+    };
+
+    // O job já foi re-agendado pelo turno: o erro segue para o worker, que
+    // no-opa como antes. O que muda é o enrollment saber da espera.
+    await expect(criarHandler(deps)(job(payload), fakePool(), { workerId: "w1" })).rejects.toBeInstanceOf(
+      TurnoAdiadoPelaJanelaError,
+    );
+
+    expect(completeFollowupTurn, "o adiamento do turno da IA não voltou para o enrollment").toHaveBeenCalledTimes(1);
+    const entrada = (completeFollowupTurn.mock.calls[0] as unknown[])[1] as {
+      result: { kind: string; until?: Date };
+    };
+    expect(entrada.result.kind).toBe("deferred");
+    expect(entrada.result.until?.toISOString()).toBe(SEGUNDA_09H.toISOString());
+  });
+
   it("controle positivo: com a janela ABERTA o mesmo caminho reporta 'sent'", async () => {
     // Sem isto, um handler que parasse de chamar o callback deixaria o caso
     // acima vermelho por morte do instrumento, e não por regressão do conserto.

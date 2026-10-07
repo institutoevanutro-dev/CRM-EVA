@@ -436,6 +436,18 @@ export class JobSettledError extends Error {
   override readonly name = 'job_settled';
 }
 
+/**
+ * O turno encontrou a janela anti-ban do canal fechada e re-agendou o job para
+ * `abertura`. É um `JobSettledError` (o worker no-opa igual), mas carrega o
+ * instante: o follow-up precisa dizê-lo ao enrollment, senão o dead-man lê a
+ * espera como worker morto.
+ */
+export class TurnoAdiadoPelaJanelaError extends JobSettledError {
+  constructor(readonly abertura: Date) {
+    super('fora da janela anti-ban — job reagendado para a abertura da janela');
+  }
+}
+
 // Shape que o drain (F2-05) grava no payload do job — organization/lead vêm da
 // ROW do job (fonte confiável), nunca daqui; o payload só carrega ponteiros do CRM.
 const inboundTurnPayloadSchema = z
@@ -1867,9 +1879,7 @@ async function executarTurnoDoAgente(
           error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
         });
       }
-      throw new JobSettledError(
-        'fora da janela anti-ban — job reagendado para a abertura da janela',
-      );
+      throw new TurnoAdiadoPelaJanelaError(abertura);
     }
     // A janela está ABERTA: se havia aviso de silêncio pendurado, ele morre
     // AQUI — no mesmo ponto que o abriu. Um aviso que só o humano fecha vira

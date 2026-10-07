@@ -34,6 +34,7 @@ import { classifyPromise } from '../guardrails/promise/semantic';
 import { scheduleCronJob } from '../cron/scheduler';
 import {
   JobSettledError,
+  TurnoAdiadoPelaJanelaError,
   ritualBlocks,
   runAgentTurn,
   type InboundTurnDeps,
@@ -501,6 +502,13 @@ async function runFlowDrivenTurn(
       });
       result = await resultadoDoEnvioDoFollowup(pool, job.organization_id, job.id);
     } catch (err) {
+      // A janela anti-ban do canal fechou no turno da IA: o job já foi
+      // re-agendado para a abertura. O enrollment precisa saber, senão o
+      // dead-man lê a espera como worker morto. O erro segue para o worker.
+      if (err instanceof TurnoAdiadoPelaJanelaError) {
+        await fechar({ kind: 'deferred', until: err.abertura, reason: 'fora_da_janela' });
+        throw err;
+      }
       // Erro na ÚLTIMA tentativa, sem nada da IA aceito nem esperando o canal:
       // a reserva sai. Se ela também não sair, o erro original segue para o
       // `job_dead` e o aviso na Central, como sempre.
