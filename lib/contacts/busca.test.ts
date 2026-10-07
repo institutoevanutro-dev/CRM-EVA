@@ -13,10 +13,10 @@ import { condicoesDaBuscaDeContato } from "./busca";
 describe("condicoesDaBuscaDeContato", () => {
   it("busca no nome do WhatsApp (display_name), não só em name", () => {
     const c = condicoesDaBuscaDeContato("André Teste");
-    expect(c).toContain("display_name.ilike.%André Teste%");
-    expect(c).toContain("name.ilike.%André Teste%");
-    expect(c).toContain("email.ilike.%André Teste%");
-    expect(c).toContain("phone_number.ilike.%André Teste%");
+    expect(c).toContain("display_name.ilike.%André*Teste%");
+    expect(c).toContain("name.ilike.%André*Teste%");
+    expect(c).toContain("email.ilike.%André*Teste%");
+    expect(c).toContain("phone_number.ilike.%André*Teste%");
   });
 
   it("termo vazio ou só espaço não vira 'todo mundo'", () => {

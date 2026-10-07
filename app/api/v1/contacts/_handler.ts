@@ -30,6 +30,7 @@ import type {
   ContactListQueryParams,
 } from "@/lib/schemas";
 import { contactListQuerySchema } from "@/lib/schemas";
+import { buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
 import { arrayDeUmValorParaOr } from "@/lib/inbox/marcador-da-conversa";
 
 type SB = SupabaseClient;
@@ -108,6 +109,17 @@ export async function listContactsHandler(
   raw: ContactListQueryParams,
 ): Promise<ListContactsResult> {
   const q: ContactListQuery = contactListQuerySchema.parse(raw);
+
+  // O PISO DA BUSCA: `?search=a` montava `name.ilike.%a%` e devolvia a lista
+  // inteira — ruído que parece resposta. Abaixo do piso a busca não vai ao
+  // banco. A régua mora em `lib/inbox/termo-de-busca.ts` e é consultada aqui,
+  // e não no schema, porque a tela de contatos manda cada letra digitada e o
+  // MCP chama este handler direto: um 422 viraria erro na cara de quem digita.
+  // Portado do original (6624b098f e 5d39315f0, de webtecnica).
+  if (q.search && !buscaValeConsulta(q.search)) {
+    return { contacts: [], cursor: null, has_more: false };
+  }
+
   const sortCol = q.order_by;
   const asc = q.order_dir === "asc";
 
