@@ -136,3 +136,76 @@ it("se nem sem o id o recibo grava, é erro de persistência — nada de laço",
   ).rejects.toBeInstanceOf(ApprovedReplyReceiptPersistenceError);
   expect(rpc).toHaveBeenCalledTimes(3);
 });
+
+/**
+ * O ECO PRESO EM OUTRA CONVERSA DEVOLVE O ID (revisão do PR #134).
+ *
+ * Antes de gravar o recibo sem o id, o eco de outra conversa que guardou o
+ * composto do WAHA (`metadata.external_id_original`) volta a ele — o estado de
+ * antes do PR — e a resposta aprovada fica com o id curto e com os tiques.
+ */
+it("23505 repetido com o eco em outra conversa: o eco volta ao composto e o recibo grava COM o id", async () => {
+  const rpc = vi
+    .fn()
+    .mockResolvedValueOnce({ data: null, error: { code: "23505", message: "duplicate key" } })
+    .mockResolvedValueOnce({ data: null, error: { code: "23505", message: "duplicate key" } })
+    .mockResolvedValueOnce({ data: { id: "message", status: "sent", external_id: "3EB0BARE" }, error: null });
+  const updates: Array<{ patch: Record<string, unknown>; filtros: Record<string, unknown> }> = [];
+  const linhas: Record<string, Record<string, unknown>> = {
+    message: { id: "message", organization_id: "org", conversation_id: "conv-pn" },
+  };
+  const eco = {
+    id: "eco-lid",
+    organization_id: "org",
+    conversation_id: "conv-lid",
+    sent_via: "external_device",
+    external_id: "3EB0BARE",
+    metadata: { fromMe: true, external_id_original: "true_123@lid_3EB0BARE" },
+  };
+  const from = () => ({
+    select: () => {
+      const f: Record<string, unknown> = {};
+      const q = {
+        eq: (c: string, v: unknown) => ((f[c] = v), q),
+        in: (c: string, v: unknown[]) => ((f[`in:${c}`] = v), q),
+        neq: (c: string, v: unknown) => ((f[`neq:${c}`] = v), q),
+        maybeSingle: async () => ({ data: linhas[f.id as string] ?? null, error: null }),
+        then: (ok: (v: unknown) => unknown) =>
+          Promise.resolve({
+            data: f["neq:conversation_id"] !== eco.conversation_id ? [eco] : [],
+            error: null,
+          }).then(ok),
+      };
+      return q;
+    },
+    update: (patch: Record<string, unknown>) => {
+      const filtros: Record<string, unknown> = {};
+      const q = {
+        eq: (c: string, v: unknown) => ((filtros[c] = v), q),
+        then: (ok: (v: unknown) => unknown) => {
+          updates.push({ patch, filtros });
+          return Promise.resolve({ error: null }).then(ok);
+        },
+      };
+      return q;
+    },
+  });
+  const db = { rpc, from } as unknown as SupabaseClient;
+  const ctx = {
+    organizationId: "org",
+    jobId: "job",
+    jobClaim: { worker_id: "worker", acquired_at: "2026-09-06T12:00:00Z" },
+  };
+
+  await expect(
+    recordApprovedReplyReceiptSupabase(db, ctx, "message", "3EB0BARE", ["3EB0BARE"]),
+  ).resolves.toMatchObject({ id: "message", external_id: "3EB0BARE" });
+  expect(updates).toEqual([
+    {
+      patch: { external_id: "true_123@lid_3EB0BARE" },
+      filtros: { organization_id: "org", id: "eco-lid", external_id: "3EB0BARE" },
+    },
+  ]);
+  expect(rpc).toHaveBeenCalledTimes(3);
+  expect(rpc.mock.calls[2]![1]).toMatchObject({ p_external: "3EB0BARE" });
+});

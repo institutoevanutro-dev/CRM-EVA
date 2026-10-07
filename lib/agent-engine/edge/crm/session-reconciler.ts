@@ -284,6 +284,23 @@ async function stampExternalIdAfterEcho(
   log: Logger,
 ): Promise<void> {
   try {
+    // O eco preso em OUTRA conversa (a mesma pessoa cadastrada pelo telefone e
+    // pelo @lid) a limpeza não alcança, e não deve. Ele devolve o id curto e
+    // volta ao composto que o WAHA entregou (`metadata.external_id_original`),
+    // o estado de antes; aí o carimbo passa e o ack acha esta linha. Mesma regra
+    // de `devolverIdOriginalAoEcoDeOutraConversa` (lib/messaging).
+    await pool.query(
+      `update messages e set external_id = e.metadata->>'external_id_original'
+       from messages m
+       where m.id = $1 and m.organization_id = $3
+         and e.organization_id = $3
+         and e.conversation_id <> m.conversation_id
+         and e.sent_via = 'external_device'
+         and e.external_id = $2
+         and e.metadata->>'external_id_original' is not null
+         and e.metadata->>'external_id_original' <> e.external_id`,
+      [m.id, externalId, m.organization_id],
+    );
     await pool.query(
       `update messages set external_id = $2
        where id = $1 and organization_id = $3 and external_id is null`,

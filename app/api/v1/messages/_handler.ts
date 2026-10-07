@@ -48,6 +48,7 @@ import {
 import type { ListMessagesQuery, SendMessageInput } from "@/lib/schemas";
 import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { devolverIdOriginalAoEcoDeOutraConversa } from "@/lib/messaging/eco-em-outra-conversa";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Message } from "@/lib/types/messaging";
 
@@ -943,6 +944,15 @@ export async function sendMessageHandler(
       if (erroAoMarcar?.code === "23505") {
         await limparEco();
         ({ data: updated, error: erroAoMarcar } = await marcarEnviada(true));
+        // Colidir de novo é o eco preso em OUTRA conversa (a mesma pessoa
+        // cadastrada pelo telefone e pelo @lid), que a limpeza não alcança — e
+        // não deve. Ele devolve o id curto e volta ao composto que o canal
+        // entregou, o estado de antes; aí o carimbo passa e o ack acha a linha.
+        if (
+          erroAoMarcar?.code === "23505" &&
+          (await devolverIdOriginalAoEcoDeOutraConversa(supabase, ctx.organization_id, message.id, candidatosDoEco))
+        )
+          ({ data: updated, error: erroAoMarcar } = await marcarEnviada(true));
         if (erroAoMarcar?.code === "23505") ({ data: updated } = await marcarEnviada(false));
       }
       if (updated) message = updated as unknown as Message;

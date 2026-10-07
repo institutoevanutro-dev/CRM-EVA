@@ -3,6 +3,7 @@ import type { Queryable } from "@/lib/agent-engine/queue/queue";
 import type { JobClaim } from "@/lib/agent-engine/queue/claim";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { StaleServiceBoundaryError } from "@/lib/atendimento/fronteira";
+import { devolverIdOriginalAoEcoDeOutraConversa } from "@/lib/messaging/eco-em-outra-conversa";
 /** Internal capability reference; never accepted by public message schemas. */
 export interface ApprovedReplyContext {
   organizationId: string;
@@ -117,6 +118,15 @@ export async function recordApprovedReplyReceiptSupabase(
     // JÁ SAIU: lançar aqui deixava a linha `queued` e o ledger `requested`, e o
     // watchdog e a nova tentativa do job a mandavam de novo ao paciente. O
     // recibo é gravado sem o id, como o handler e o watchdog já fazem.
+    // Antes disso, o eco de outra conversa que guardou o composto do canal
+    // devolve o id curto (`devolverIdOriginalAoEcoDeOutraConversa`) — e o
+    // recibo grava COM o id, com entregue/lida.
+    if (
+      result.error?.code === "23505" &&
+      externalId &&
+      (await devolverIdOriginalAoEcoDeOutraConversa(db, c.organizationId, messageId, echoIds))
+    )
+      result = await gravar();
     if (result.error?.code === "23505") result = await gravar(false);
   } catch (error) {
     throw new ApprovedReplyReceiptPersistenceError(error);

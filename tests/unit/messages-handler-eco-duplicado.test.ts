@@ -108,7 +108,18 @@ function makeSupabase(preexistentes: Row[] = []) {
             filtros.push((r) => r[col] === val);
             return q;
           },
+          neq(col: string, val: unknown) {
+            filtros.push((r) => r[col] !== val);
+            return q;
+          },
+          in(col: string, vals: unknown[]) {
+            filtros.push((r) => vals.includes(r[col]));
+            return q;
+          },
           maybeSingle: async () => ({ data: filtrar(filtros)[0] ?? null, error: null }),
+          then(resolve: (v: { data: Row[]; error: null }) => unknown) {
+            return Promise.resolve({ data: filtrar(filtros).map((r) => ({ ...r })), error: null }).then(resolve);
+          },
         };
         return q;
       },
@@ -123,6 +134,9 @@ function makeSupabase(preexistentes: Row[] = []) {
           eq(col: string, val: unknown) {
             filtros.push((r) => r[col] === val);
             return q;
+          },
+          then(resolve: (v: unknown) => unknown) {
+            return q.select().maybeSingle().then(resolve);
           },
           select: () => ({
             maybeSingle: async () => {
@@ -370,6 +384,35 @@ describe('o eco que entra ENTRE a limpeza e o carimbo do id (DeskcommCRM #1855)'
     expect(doEnvio.status, 'a mensagem que saiu ficou presa em queued').toBe('sent');
     expect(doEnvio.external_id).toBeNull();
     expect(messages.find((m) => m.id === 'outro-1')).toBeDefined();
+  });
+
+  it('o eco do celular preso em OUTRA conversa devolve o id: a linha do envio fica com ele e recebe os tiques', async () => {
+    // Revisão do PR #134. A mesma paciente cadastrada duas vezes (telefone e
+    // @lid): o eco do envio cai na conversa do @lid, gravado com o id curto, e
+    // a limpeza — que é só da conversa do envio, de propósito — não o alcança.
+    // Antes do PR o eco guardava o composto que o WAHA entregou, não havia
+    // colisão, e a linha do CRM ficava com o id (e com os tiques do ack). O
+    // composto segue guardado em `metadata.external_id_original`: devolvê-lo ao
+    // eco é voltar exatamente ao estado de antes, sem apagar nada.
+    wahaRespondendo(BARE);
+    const ORIGINAL = `true_250302204792918@lid_${BARE}`;
+    const { supabase, messages } = makeSupabase([
+      ecoDoWebhook({
+        id: 'eco-lid',
+        conversation_id: OUTRA_CONV,
+        external_id: BARE,
+        metadata: { fromMe: true, external_id_original: ORIGINAL },
+      }),
+    ]);
+
+    await sendMessageHandler(supabase, ctx, input);
+
+    const doEnvio = messages.find((m) => m.sent_via === 'user')!;
+    expect(doEnvio.status).toBe('sent');
+    expect(doEnvio.external_id, 'a linha do envio ficou sem o id — nunca recebe entregue/lida').toBe(BARE);
+    const eco = messages.find((m) => m.id === 'eco-lid');
+    expect(eco, 'apagou linha de outra conversa').toBeDefined();
+    expect(eco!.external_id).toBe(ORIGINAL);
   });
 });
 
