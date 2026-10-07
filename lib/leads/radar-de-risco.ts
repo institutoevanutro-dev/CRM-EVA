@@ -98,6 +98,12 @@ export interface OpcoesDoRadar {
   now?: Date;
   /** Apenas a rota humana passa o papel efetivo; as consultas usam seu client RLS. */
   humanRole?: Role;
+  /**
+   * Só este contato — o escopo do turno do agente. Vai no WHERE de cada
+   * consulta que carrega dado de paciente (negócios, demandas), antes do
+   * `SCAN_CAP`.
+   */
+  contactId?: string;
 }
 
 export async function carregaRadarDeRisco(
@@ -140,6 +146,7 @@ export async function carregaRadarDeRisco(
   if (funisArquivados.length > 0) {
     consultaDeLeads = consultaDeLeads.not("pipeline_id", "in", `(${funisArquivados.join(",")})`);
   }
+  if (opts.contactId) consultaDeLeads = consultaDeLeads.eq("contact_id", opts.contactId);
   const { data: leads, error: leadsErr } = await consultaDeLeads
     .order("last_activity_at", { ascending: true, nullsFirst: true })
     .limit(SCAN_CAP);
@@ -284,12 +291,14 @@ export async function carregaRadarDeRisco(
   // IA usa (lib/mcp/tools/retencao.ts), e a tela e o agente têm de dizer a
   // mesma coisa sobre o mesmo negócio. Reescrevê-la agora arriscaria essa
   // paridade sem necessidade; acrescentar não arrisca nada.
-  const { data: semPasso, error: demandaError } = await admin
+  let consultaDeDemandas = admin
     .from("demandas")
     .select("id, lead_id, contact_id, aberta_em, origem, contacts(name, display_name)")
     .eq("organization_id", organizationId)
     .is("fechada_em", null)
-    .is("proximo_passo", null)
+    .is("proximo_passo", null);
+  if (opts.contactId) consultaDeDemandas = consultaDeDemandas.eq("contact_id", opts.contactId);
+  const { data: semPasso, error: demandaError } = await consultaDeDemandas
     .order("aberta_em", { ascending: true })
     .limit(SCAN_CAP);
   if (demandaError) throw new Error(`radar_demandas_failed: ${demandaError.message}`);

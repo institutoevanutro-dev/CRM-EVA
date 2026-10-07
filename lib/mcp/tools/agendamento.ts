@@ -37,6 +37,7 @@ import {
 import { ApiError } from "@/lib/api/types";
 import { SITUACOES_DO_AGENDAMENTO } from "@/lib/agenda/tipos";
 import type { McpContext, McpToolDefinition } from "@/lib/mcp/types";
+import { foraDaConversa, foraDoContatoDoTurno } from "@/lib/mcp/fora-da-conversa";
 
 /** Teto do horizonte pedido — espelha o da rota, e o excesso é erro de chamada. */
 const DIAS_PADRAO = 14;
@@ -405,15 +406,28 @@ export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
     "decidimos voltar a falar, sem nada combinado com o cliente. Aqui é o que foi combinado " +
     "COM ele e ocupa o tempo de um atendente. O mesmo cliente pode ter os dois. " +
     "USE ANTES DE MARCAR e antes de cobrar: cliente que já tem consulta marcada não deve " +
-    "receber oferta de horário como se não tivesse, nem ser cobrado como se estivesse parado.",
+    "receber oferta de horário como se não tivesse, nem ser cobrado como se estivesse parado." +
+    " Em conversa de atendimento, lista apenas os compromissos do contato desta conversa.",
   inputSchema: listarShape,
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
+    // ── A AGENDA, DURANTE UM TURNO, É A DO PACIENTE DESTA CONVERSA ──────────
+    //
+    // Com `ctx.contatoDoTurno`, o contato é forçado na consulta — `dia` e
+    // `owner_user_id` seguem valendo, mas só dentro dele. `contact_id` de outro
+    // e `lead_id` cujo dono não é o do turno (inexistente inclusive) caem na
+    // MESMA recusa. `lead_id` igual ao contato do turno é a confusão contato ×
+    // negócio: o contato já cobre a pergunta. Sem contato do turno, nada muda.
+    const doTurno = ctx.contatoDoTurno;
+    const leadId = doTurno && input.lead_id === doTurno ? undefined : input.lead_id;
+    if (doTurno && (await foraDoContatoDoTurno(ctx, doTurno, input.contact_id, leadId))) {
+      return foraDaConversa("os compromissos de quem não é o paciente desta conversa não são seus para ver");
+    }
     const r = await listaAgendamentos(ctx.supabase, ctx.organizationId, {
-      contactId: input.contact_id ?? null,
-      leadId: input.lead_id ?? null,
+      contactId: doTurno ?? input.contact_id ?? null,
+      leadId: leadId ?? null,
       dia: input.dia ?? null,
       ownerUserId: input.owner_user_id ?? null,
       situacao: input.situacao ?? null,

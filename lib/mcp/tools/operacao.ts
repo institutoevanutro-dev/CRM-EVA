@@ -46,6 +46,7 @@ import {
   listarModelosDeMensagem,
   preencherModeloDeMensagem,
 } from "@/lib/operacao/modelos-de-mensagem";
+import { foraDaConversa, foraDoContatoDoTurno } from "../fora-da-conversa";
 import {
   definirRegraAtiva,
   execucoesDasRegras,
@@ -240,16 +241,33 @@ export const crmRenderMessageTemplate: McpToolDefinition<typeof renderTemplateSh
   description:
     "Preenche uma resposta pronta com os dados do contato/lead informados e devolve o TEXTO — não envia nada. " +
     "Devolve também `lacunas`: as marcações que ficaram sem valor. Se vier lacuna, NÃO mande o texto como está: " +
-    "'Olá , tudo bem?' chega assim no cliente.",
+    "'Olá , tudo bem?' chega assim no cliente." +
+    " Em conversa de atendimento, preenche apenas com os dados do contato desta conversa (sem " +
+    "contact_id nem lead_id, usa ele).",
   inputSchema: renderTemplateShape,
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
+    // ── O TEXTO MONTADO É DO PACIENTE DESTA CONVERSA ────────────────────────
+    //
+    // Com `ctx.contatoDoTurno`, `contact_id` de outro contato e `lead_id` cujo
+    // dono não é o do turno caem no MESMO `fora_da_conversa` — negócio
+    // inexistente e negócio sem contato inclusive. `lead_id` igual ao contato
+    // do turno é a confusão contato × negócio: o contato já cobre o pedido.
+    // Sem nenhum dos dois, o contato do turno preenche. Sem contato do turno
+    // (integrador, pessoa), nada muda.
+    const doTurno = ctx.contatoDoTurno;
+    const leadId = doTurno && input.lead_id === doTurno ? undefined : input.lead_id;
+    if (doTurno && (await foraDoContatoDoTurno(ctx, doTurno, input.contact_id, leadId))) {
+      return foraDaConversa(
+        "preencher uma resposta pronta com os dados de quem não é o paciente desta conversa não é seu para fazer",
+      );
+    }
     return preencherModeloDeMensagem(deps(ctx), {
       templateId: input.template_id,
-      contactId: input.contact_id,
-      leadId: input.lead_id,
+      contactId: input.contact_id ?? doTurno,
+      leadId,
     });
   },
 };

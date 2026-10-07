@@ -478,6 +478,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
       // `?? []` — o clone sem a coluna 0125 nasce FECHADO.
       pipelineIds: (version as { pipeline_ids?: string[] }).pipeline_ids ?? [],
       handoffSignal,
+      ...(run.contact_id ? { contatoDoTurno: run.contact_id } : {}),
     });
 
     // 8) Load history with budget.
