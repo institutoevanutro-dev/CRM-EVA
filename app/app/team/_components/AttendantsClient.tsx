@@ -168,7 +168,7 @@ function ScheduleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t("Horário de")} {attendant.name}</DialogTitle>
           <DialogDescription>
@@ -206,7 +206,7 @@ function ScheduleDialog({
               </p>
             ) : null}
             {windows.map((w, i) => (
-              <div key={i} className="grid items-center gap-2 sm:grid-cols-[90px_1fr_1fr_1.3fr_auto]">
+              <div key={i} className="grid items-center gap-2 sm:grid-cols-[90px_minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,1.3fr)_auto]">
                 <Select
                   value={String(w.dow)}
                   onValueChange={(v) =>
@@ -236,6 +236,17 @@ function ScheduleDialog({
                     )
                   }
                 />
+                <span className="text-muted-foreground">–</span>
+                <Input
+                  type="time"
+                  value={w.end}
+                  aria-label="Fim"
+                  onChange={(e) =>
+                    setWindows((ws) =>
+                      ws.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)),
+                    )
+                  }
+                />
                 <Select
                   value={w.unit_id ?? "sem-unidade"}
                   onValueChange={(v) =>
@@ -254,17 +265,6 @@ function ScheduleDialog({
                     ))}
                   </SelectContent>
                 </Select>
-                <span className="text-muted-foreground">–</span>
-                <Input
-                  type="time"
-                  value={w.end}
-                  aria-label="Fim"
-                  onChange={(e) =>
-                    setWindows((ws) =>
-                      ws.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)),
-                    )
-                  }
-                />
                 <Button
                   variant="ghost"
                   size="icon"

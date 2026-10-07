@@ -8,6 +8,204 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.8.0] — 2026-10-07
+
+### Adicionado
+
+- **O texto do lembrete da agenda pode ser escrito por tipo de agendamento** Em Configurações › Agenda, cada tipo de agendamento com o lembrete ligado ganha
+  um campo para o texto da mensagem, com a lista de variáveis e uma prévia que
+  mostra exatamente o que o paciente vai receber.
+
+  As variáveis são `{{primeiro_nome}}`, `{{nome}}`, `{{quando}}` (que vira "hoje",
+  "amanhã" ou o dia da semana com a data), `{{data}}`, `{{hora}}`,
+  `{{dia_semana}}`, `{{unidade}}`, `{{endereco}}`, `{{profissional}}` e `{{tipo}}`.
+  Variável sem valor some do texto sem deixar chaves. Uma variável escrita errado,
+  como `{nome}` ou `{{primeiro nome}}`, é recusada ao salvar.
+
+  Em branco, o lembrete continua com a frase de sempre. Quem não mexer no campo
+  não percebe diferença nenhuma.
+
+  Portado e estendido do projeto original (DeskcommCRM, de Ian Couto).
+
+- **Painel do funil — os números do período de um funil, juntos e com a régua de cada um** Em Análise › Ver tudo em Análise há uma tela nova, o Painel do funil, para quem
+  é gestor ou administrador. Ela mostra, para o funil e o período escolhidos:
+  quantos leads entraram, quantos interagiram (chegaram à etapa ligada ao passo
+  "Primeiro contato" do agente), até onde cada um chegou no funil, os ganhos e a
+  receita, os agendamentos com realizados, faltas e taxa de comparecimento, e —
+  com a conta de anúncios da Meta conectada — o investimento, o custo por venda e
+  o ROAS.
+
+  Embaixo de cada número está o que ele conta. Quando um número não pode ser
+  medido, a tela diz por quê e onde consertar, em vez de mostrar zero.
+
+  Dá para recortar tudo por um campo de lista da ficha do contato (por exemplo,
+  Origem), por um campo de lista do card, por etiquetas do contato que começam com
+  um prefixo (por exemplo, `criativo-`) ou pela campanha de anúncio.
+
+  Nenhuma ação é necessária. O investimento é o gasto da conta de anúncios
+  inteira, não só do funil escolhido — a tela avisa isso ao lado do custo por
+  venda e do ROAS.
+
+### Alterado
+
+- **Consulta marcada em cima da hora não recebe mais o lembrete que já tinha passado** Quando um compromisso era marcado (ou remarcado) para menos tempo do que a
+  antecedência do lembrete, por exemplo às 18h30 para as 16h do dia seguinte com
+  o aviso de 24 horas antes, o lembrete saía poucos minutos depois da marcação.
+  Agora esse aviso não sai: a hora dele já tinha passado quando o compromisso foi
+  marcado.
+
+  Quem contava com esse aviso imediato deixa de recebê-lo. Para avisar também quem
+  marca em cima da hora, dá para acrescentar um segundo aviso mais curto no tipo de
+  agendamento (Configurações › Agenda, "E de novo, quantos minutos antes"). Isso
+  vale para todos os compromissos do tipo: quem marca com antecedência passa a
+  receber os dois avisos.
+
+  Portado do projeto original (DeskcommCRM, de webtecnica).
+
+### Corrigido
+
+- **Quando a leitura da agenda falha, o registro diz o motivo** Quando o CRM não consegue ler a agenda antes de mandar um follow-up ou uma automação, ele adia o envio. Esse adiamento passa a registrar o motivo da falha, e um aviso só por falha, em vez de um por contato. Assim dá para achar e corrigir a causa em vez de os envios ficarem adiados sem explicação.
+
+- **O editor de horário da equipe volta a caber na janela** Em Equipe › Atendimento › "Editar horário", cada janela da jornada voltou a ficar numa linha só: dia, início, "–", fim, unidade e lixeira, nessa ordem. Desde que o seletor de unidade entrou, a lixeira descia para baixo e o campo de fim e o botão Salvar ficavam cortados na borda direita.
+
+- **A busca de nomes no financeiro espera 7 dias antes de perguntar de novo pelo mesmo contato** O CRM pergunta ao financeiro o nome dos contatos que chegam sem nome. Ele refazia a mesma pergunta pelos mesmos contatos o dia inteiro, regravando centenas de cadastros por hora. Agora só volta a perguntar por um contato depois de 7 dias, o que tira peso do banco.
+
+- **O follow-up não dispara o fluxo inteiro numa só resposta** Num menu de follow-up (1/2/3), uma resposta que não casava o ramo fazia o
+  fluxo reenviar o menu e, no mesmo instante, as mensagens seguintes e o
+  aviso de “não respondeu”. Agora só avança o passo daquela resposta; a
+  próxima pergunta espera o cliente de novo.
+
+- **A sequência de retomada por silêncio não recomeça sozinha** O gatilho "contato em silêncio" manda uma sequência de mensagens para quem parou
+  de responder. Antes, quando a sequência terminava sem resposta (ou era encerrada
+  porque uma pessoa da equipe assumiu, a etapa do funil bloqueia ou o contato foi
+  anonimizado), o contato continuava calado e, um minuto depois, a mesma sequência
+  começava de novo, do primeiro toque, sem fim.
+
+  Agora:
+
+  - **Uma sequência por silêncio.** Depois que ela termina, o contato só recebe
+    outra se responder e ficar calado de novo pelo tempo configurado, contado a
+    partir da última mensagem dele ou do fim da sequência anterior, o que vier
+    depois. Uma sequência nunca começa colada na anterior.
+  - **Contato antigo não recebe nada ao ligar o fluxo.** Só conta quem mandou
+    mensagem depois que o fluxo foi ativado. Antes, ativar um fluxo de silêncio
+    mandava a sequência de uma vez para toda conversa aberta calada, inclusive de
+    meses atrás. Isso vale também na atualização: quem já estava calado na hora de
+    atualizar não recebe a sequência daquele silêncio.
+  - **Contato anonimizado fica de fora.**
+  - **Mais de mil conversas abertas** passam a ser todas consideradas, e não só um
+    pedaço escolhido pelo banco.
+
+  Para que **qualquer resposta encerre a sequência**, ligue "cancelar ao responder"
+  no gatilho do fluxo. Essa opção vem desligada: sem ela, a resposta do contato
+  segue para o próximo passo do fluxo.
+
+  Armar o fluxo num agente também conta como ligar: quem ficou calado entre
+  ativar o fluxo e publicar o agente que o arma não recebe a sequência de uma vez.
+  Publicar de novo um agente que já armava o fluxo, publicar uma versão nova de um
+  fluxo que já está ativo, mudar o tempo de silêncio ou o "cancelar ao responder"
+  não mexem nisso.
+
+  Nenhuma ação é necessária.
+
+- **A resposta do follow-up sai depois que o lead responde** Num fluxo de follow-up que espera a resposta do cliente (menu 1/2/3), a
+  primeira mensagem saía e a seguinte ficava parada depois do "1". O
+  acompanhamento volta a avançar e enviar a mensagem do ramo escolhido.
+
+- **O follow-up respeita as mesmas regras por qualquer caminho, não fala por cima da equipe e sai com o nome do contato** Um passo de texto fixo do follow-up podia sair por um atalho que não conferia
+  as regras de envio. Agora ele passa pelas mesmas conferências da mensagem
+  escrita pela IA:
+
+  - respeita a janela de envio configurada para a organização e o horário de
+    envio do número (por padrão, das 7h às 22h). Fora dela, o passo espera a
+    abertura;
+  - se o fluxo encerra quando o contato responde, a resposta encerra antes de o
+    passo sair, também quando ela chega no meio de uma espera;
+  - etapa do funil que interrompe follow-ups e contato anonimizado encerram a
+    sequência;
+  - número em modo de teste (ou contato sem autorização) encerra a sequência com
+    o motivo escrito, em vez de deixá-la parada até expirar.
+
+  O que continua só no envio feito pelo processo de segundo plano (worker), e
+  não no atalho do texto fixo: o teto diário e o aquecimento do número, a trava
+  de texto repetido em massa, a base legal da LGPD e a trava de promessas. Numa
+  instalação com o worker ligado, ele pega quase todos os passos em segundos.
+
+  O follow-up não fala mais por cima de quem está atendendo. A sequência é
+  encerrada, com o motivo "uma pessoa da equipe está atendendo esta conversa",
+  quando alguém da equipe respondeu ao contato depois da última mensagem dele
+  (pela caixa de entrada ou pelo celular), quando a conversa está atribuída a uma
+  pessoa ou quando o atendimento humano foi pedido. Nos fluxos marcados como
+  "Permitir durante handoff", atribuição e resposta da equipe não encerram. Em
+  fluxos disparados por etapa ou por inscrição manual, a mensagem da equipe só
+  conta quando responde a algo da sequência: o contato falou depois que ela
+  começou, ou o follow-up já tinha mandado um passo. Mover o negócio para
+  "Proposta enviada" e depois mandar a proposta não encerra a cobrança. A
+  saudação e a mensagem de ausência automáticas do WhatsApp Business (até 10
+  segundos depois da mensagem do contato) não contam como resposta da equipe.
+  O gatilho de silêncio não reinscreve, no mesmo silêncio, quem foi encerrado
+  porque uma pessoa da equipe está atendendo.
+
+  `{{nome}}` e `{{primeiro_nome}}` saem preenchidos nos passos de texto e de
+  modelo. Quando o contato não tem nome cadastrado, vale o nome do perfil do
+  WhatsApp. Sem nenhum dos dois, a variável sai do texto: "Ei, {{primeiro_nome}},
+  tá por aí?" vira "Ei, tá por aí?". Se o texto era só a variável, o passo é
+  pulado com o motivo escrito no histórico. Na caixa de entrada, os modelos
+  também passam a usar o nome do perfil.
+
+  Num menu de follow-up, um áudio ou uma imagem em resposta conta como resposta,
+  como antes, e a espera não recomeça a contar quando nada chega.
+
+  O "modelo de reserva" de uma mensagem escrita pela IA agora funciona. Ele sai,
+  com as mesmas regras, quando a IA tentou enviar e foi barrada pelas regras do
+  atendimento, ou quando falhou na última tentativa. Ele não sai quando a IA
+  decidiu não escrever, nem com o agente pausado ou em modo assistido. O
+  histórico do acompanhamento mostra quando a mensagem saiu pelo modelo de
+  reserva. Nenhuma ação é necessária.
+
+- **O lembrete da agenda sai pelo WhatsApp do paciente, na hora certa, e acompanha a remarcação** O lembrete do compromisso podia sair por qualquer conexão ativa da organização,
+  inclusive o Instagram. Agora ele sai sempre por um número de WhatsApp, de
+  preferência o da conversa em que o paciente já fala.
+
+  A hora escrita no lembrete passa a ser a do fuso do compromisso (o da unidade em
+  que ele foi marcado), e não a da organização. Para quem atende num fuso só, nada
+  muda.
+
+  Remarcar um compromisso para outra data passa a refazer o lembrete da data nova.
+  Antes, o aviso que já tinha saído para a data antiga impedia o da data nova, e o
+  paciente ficava sem lembrete.
+
+  O mesmo lembrete também não sai mais duas vezes seguidas quando algo falha no
+  meio do envio, nem quando o compromisso é cancelado ou remarcado enquanto a
+  rodada de envio está em andamento.
+
+  Portado do projeto original (DeskcommCRM, de webtecnica e melgarafael).
+
+- **O quadro do funil abre fazendo menos consultas ao banco** Abrir o quadro do funil ficou mais leve para o banco. Num funil com cerca de 800
+  negócios, cada abertura fazia uns 44 pedidos ao banco; agora faz uns 17. Como o
+  quadro é recarregado toda vez que um negócio muda, a economia se repete o dia
+  inteiro.
+
+  O que mudou por dentro:
+
+  - Os pedidos que buscam dados de muitos contatos de uma vez agora levam até 300
+    contatos por vez, e não 100.
+  - A próxima ação sugerida pela IA só procura os negócios abertos dos contatos que
+    realmente têm uma sugestão, em vez de reler o funil inteiro.
+
+  Nada muda na tela: os cartões, as colunas (inclusive as de ganho e perda), a
+  nota da IA, a conversa e os marcadores aparecem como antes.
+
+- **O Radar volta a abrir com centenas de negócios abertos** Com algumas centenas de contatos com negócio aberto, o Radar falhava sempre e a tela mostrava "Erro interno" a cada poucos segundos. A leitura da agenda que ele faz agora sai em lotes de 100 contatos.
+
+- **Abrir o Inbox, as conversas e o quadro volta a ser rápido** Toda leitura de quem está logado ficou lenta — o Inbox chegava a dar erro ao abrir, e a lista de conversas e o quadro demoravam vários segundos. A regra que decide o que cada pessoa pode ver refazia, em cada linha, a checagem de "esta pessoa está em atendimento de suporte?", mesmo sem suporte nenhum em andamento. Agora essa checagem só roda quando existe uma sessão de suporte aberta. Ninguém passa a ver ou a fazer nada diferente do que via e fazia antes.
+
+## [3.7.0] — 2026-10-07
+
+### Adicionado
+
+- **Importação administrativa de histórico de agenda** Comando com prévia e aplicação transacional para agendamentos passados com contatos conferidos. Preserva existentes, recusa conflitos e não dispara convites ou automações. Exige migração e ambiente administrativo da instalação.
+
 ## [3.6.1] — 2026-10-06
 
 ### Corrigido
@@ -6057,7 +6255,9 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.6.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.8.0...HEAD
+[3.8.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.7.0...v3.8.0
+[3.7.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.6.1...v3.7.0
 [3.6.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.6.0...v3.6.1
 [3.6.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.5.0...v3.6.0
 [3.5.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.4.0...v3.5.0

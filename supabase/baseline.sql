@@ -34295,6 +34295,516 @@ notify pgrst, 'reload schema';
 
 -- ---- fim: travas no banco (migration 0319) ----
 
+-- ---- agenda histórica (migration 0320) ----
+-- 0320: histórico é registro, sem convites, lembretes ou automações.
+alter table public.calendar_appointments add column if not exists history_import_key text;
+alter table public.calendar_appointments drop constraint if exists calendar_appointments_source_check;
+alter table public.calendar_appointments add constraint calendar_appointments_source_check
+ check(source in ('ui','mcp','google_sync','public_page','historical_import'));
+alter table public.calendar_appointments drop constraint if exists calendar_appointments_history_key_check;
+alter table public.calendar_appointments add constraint calendar_appointments_history_key_check
+ check ((source='historical_import' and history_import_key is not null and history_import_key ~ '^[a-f0-9]{64}$')
+     or (source<>'historical_import' and history_import_key is null));
+create unique index if not exists calendar_appointments_history_key
+ on public.calendar_appointments(organization_id,history_import_key) where history_import_key is not null;
+
+-- Só o importador administrativo escreve o histórico; a API normal não o transforma
+-- em compromisso vivo. Redações LGPD e repontamento de contato continuam possíveis.
+create or replace function public.fn_appointment_history_guard()
+returns trigger language plpgsql set search_path=public,pg_temp as $$
+begin
+ if tg_op='UPDATE' and (new.source is distinct from old.source or new.history_import_key is distinct from old.history_import_key)
+   and (old.source='historical_import' or new.source='historical_import') then
+  raise exception 'history_origin_immutable' using errcode='42501';
+ end if;
+ if new.source<>'historical_import' then return new;end if;
+ if tg_op='INSERT' and current_user in ('anon','authenticated') then
+  raise exception 'history_import_admin_only' using errcode='42501';
+ end if;
+ if new.ends_at>now() or new.event_type_id is not null or new.conversation_id is not null
+  or new.guest_email is not null or new.google_event_id is not null or new.google_connection_id is not null
+  or new.google_calendar_id is not null or new.location_kind<>'in_person' or new.meeting_url is not null
+  or new.google_conflict is not null or new.google_pending_write is not null or new.google_claim_token is not null
+  or new.meeting_state<>'not_requested' or new.meeting_request_id is not null or new.meeting_delivery_job_id is not null
+  or new.meeting_delivery->>'state' not in ('none','blocked') then
+  raise exception 'history_import_invalid' using errcode='22023';
+ end if;
+ if tg_op='UPDATE' and row(new.organization_id,new.starts_at,new.ends_at,new.status,new.time_zone)
+  is distinct from row(old.organization_id,old.starts_at,old.ends_at,old.status,old.time_zone) then
+  raise exception 'history_import_read_only' using errcode='42501';
+ end if;
+ if tg_op='UPDATE' and new.owner_user_id is distinct from old.owner_user_id
+  and not (new.owner_user_id is null and not exists(select 1 from auth.users where id=old.owner_user_id)) then
+  raise exception 'history_import_read_only' using errcode='42501';
+ end if;
+ return new;
+end;$$;
+revoke all on function public.fn_appointment_history_guard() from public,anon,authenticated;
+drop trigger if exists trg_aaa_appointment_history_guard on public.calendar_appointments;
+create trigger trg_aaa_appointment_history_guard before insert or update on public.calendar_appointments
+ for each row execute function public.fn_appointment_history_guard();
+
+create or replace function public.fn_google_projection_stamp()
+returns trigger language plpgsql security definer set search_path=public as $$
+declare changed boolean; inbound boolean; decision boolean; redacted boolean;
+begin
+ -- Histórico nunca pertence à fila de sincronização nem recebe convite.
+ if new.source='historical_import' then
+  new.google_local_revision:=case when tg_op='INSERT' then 1 else old.google_local_revision end;
+  new.google_synced_local_revision:=new.google_local_revision;
+  return new;
+ end if;
+ redacted:=new.contact_id is not null and exists(select 1 from public.contacts where organization_id=new.organization_id and id=new.contact_id and is_anonymized);
+ if redacted then
+  new.google_base_projection:=null;new.google_conflict:=null;new.google_pending_write:=null;new.google_claim_token:=null;new.google_claim_until:=null;new.google_etag:=null;new.guest_email:=null;
+  if tg_op='UPDATE' then new.google_claim_epoch:=old.google_claim_epoch+1;new.google_local_revision:=old.google_local_revision;new.google_synced_local_revision:=old.google_local_revision;end if;
+  return new;
+ end if;
+ if tg_op='INSERT' then
+  new.google_local_revision:=1;new.google_synced_local_revision:=0;
+  if auth.uid() is not null then
+   new.google_base_projection:=null;new.google_etag:=null;new.google_pending_write:=null;new.google_conflict:=null;
+   new.google_claim_token:=null;new.google_claim_epoch:=0;new.google_claim_until:=null;
+   new.google_connection_id:=null;new.google_calendar_id:=null;new.google_event_id:=null;
+  end if;
+  return new;
+ end if;
+ decision:=auth.uid()=old.owner_user_id and public.fn_role_at_least(new.organization_id,'agent') and public.fn_support_write_allowed(new.organization_id)
+  and old.google_conflict is not null and new.google_conflict-'resolution'=old.google_conflict-'resolution'
+  and new.google_conflict->'resolution'->>'actor_id'=auth.uid()::text
+  and new.google_conflict->'resolution'->>'choice' in ('google','local','preserve_remote')
+  and old.google_conflict->>'revision'=old.revision::text and old.google_conflict->>'local_revision'=old.google_local_revision::text
+  and old.google_conflict->>'etag' is not distinct from old.google_etag;
+ if auth.uid() is not null and (row(new.google_synced_at,new.google_sync_error) is distinct from row(old.google_synced_at,old.google_sync_error)
+  or (new.google_next_attempt_at is distinct from old.google_next_attempt_at and not coalesce(auth.uid()=old.owner_user_id and public.fn_role_at_least(new.organization_id,'agent') and public.fn_support_write_allowed(new.organization_id)
+    and new.google_next_attempt_at<=clock_timestamp() and (old.google_conflict is null or decision),false))) then
+  raise exception 'google_metadata_private' using errcode='42501';end if;
+ if auth.uid() is not null and ((new.google_conflict is distinct from old.google_conflict and not coalesce(decision,false)) or row(new.google_base_projection,new.google_pending_write,new.google_claim_token,new.google_claim_epoch,new.google_claim_until,new.google_synced_local_revision,new.google_etag,new.google_connection_id,new.google_calendar_id,new.google_event_id)
+  is distinct from row(old.google_base_projection,old.google_pending_write,old.google_claim_token,old.google_claim_epoch,old.google_claim_until,old.google_synced_local_revision,old.google_etag,old.google_connection_id,old.google_calendar_id,old.google_event_id)) then
+  raise exception 'google_metadata_private' using errcode='42501';
+ end if;
+ changed:=row(new.starts_at,new.ends_at,new.time_zone,new.status='cancelled',new.title,new.description,new.location_kind,new.location_details,new.guest_email)
+  is distinct from row(old.starts_at,old.ends_at,old.time_zone,old.status='cancelled',old.title,old.description,old.location_kind,old.location_details,old.guest_email);
+ -- Única entrada que modifica base e domínio juntos é o núcleo service-only.
+ -- Não há GUC ou flag no body público que suprima revisão.
+ inbound:=row(new.title,new.description,new.location_kind,new.location_details,new.guest_email) is not distinct from row(old.title,old.description,old.location_kind,old.location_details,old.guest_email) and auth.uid() is null and new.google_base_projection is distinct from old.google_base_projection
+  and (new.google_base_projection->'shared'->>'starts_at')::timestamptz=new.starts_at
+  and (new.google_base_projection->'shared'->>'ends_at')::timestamptz=new.ends_at
+  and new.google_base_projection->'shared'->>'time_zone'=new.time_zone
+  and (new.google_base_projection->'shared'->>'cancelled')::boolean=(new.status='cancelled');
+ new.google_local_revision:=old.google_local_revision+case when changed and not coalesce(inbound,false) then 1 else 0 end;
+ if changed then new.google_next_attempt_at:=now(); end if;
+ return new;
+end;$$;
+revoke all on function public.fn_google_projection_stamp() from public,anon,authenticated;
+
+create or replace function public.fn_marcar_contato_como_cliente()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_org uuid;
+  v_ligado boolean;
+begin
+  if tg_op = 'DELETE' then
+    v_org := old.organization_id;
+  else
+    v_org := new.organization_id;
+  end if;
+
+  -- Espera a ligação em voo commitar. O SELECT abaixo é outro comando, então
+  -- em READ COMMITTED tira snapshot novo e enxerga a chave já gravada.
+  perform pg_advisory_xact_lock_shared(hashtextextended(v_org::text, 262));
+
+  -- Comparar com 'true'::jsonb nunca lança erro. Um `::boolean` abortaria a
+  -- marcação do horário se alguém gravasse lixo na chave.
+  select (o.settings -> 'crm' -> 'cliente_pela_agenda') = 'true'::jsonb
+    into v_ligado
+    from public.organizations o
+   where o.id = v_org;
+
+  if v_ligado is not true then
+    return null;
+  end if;
+
+  if tg_op = 'INSERT' then
+    perform public.fn_recalcular_cliente_do_contato(v_org, new.contact_id, new.source <> 'historical_import');
+  elsif tg_op = 'UPDATE' then
+    if new.contact_id is not null then
+      -- O CONTATO DO HORÁRIO MUDOU — e a condição `is distinct from` tem DUAS
+      -- causas, não uma. A primeira é o repontamento de `fn_mesclar_contatos`
+      -- (X → Y): o horário só trocou de cadastro, e a escrita no vencedor não é
+      -- a virada que as automações devem ver. A segunda é o PRIMEIRO vínculo de
+      -- um horário que nasceu sem contato (null → Y), e esse é reconhecimento
+      -- de verdade: é a primeira vez que este contato tem horário, e emite como
+      -- um INSERT emitiria. Medido antes desta linha: no caminho null → Y o
+      -- contato virava cliente, ganhava a etiqueta, ficava com
+      -- `client_recognized_at` carimbado — e NENHUM `contact.tag_added` saía,
+      -- nem ali nem nunca mais, porque o carimbo não volta a null.
+      perform public.fn_recalcular_cliente_do_contato(
+        v_org, new.contact_id,
+        new.source <> 'historical_import' and (old.contact_id is not distinct from new.contact_id or old.contact_id is null));
+    end if;
+    if old.contact_id is not null and old.contact_id is distinct from new.contact_id then
+      perform public.fn_recalcular_cliente_do_contato(v_org, old.contact_id, false);
+    end if;
+  else
+    perform public.fn_recalcular_cliente_do_contato(v_org, old.contact_id, false);
+  end if;
+
+  return null;
+end $$;
+revoke all on function public.fn_marcar_contato_como_cliente() from public,anon,authenticated;
+
+create or replace function public.fn_appointment_confirmation_sweep(p_limit int default 100,p_now timestamptz default now())
+returns int language plpgsql security definer set search_path=public as $$
+declare a record; candidate record; n int:=0; expired boolean;
+begin
+ -- Escolhe o mesmo lote vencido e obtém mutexes em ordem, sem row lock prévio.
+ for candidate in select * from (
+  select c.id,c.organization_id,c.contact_id,c.ends_at
+  from public.calendar_appointments c join public.organizations o on o.id=c.organization_id
+  where c.status in ('pending','confirmed') and c.source <> 'historical_import'
+   and c.ends_at+make_interval(mins=>public.fn_agenda_minutes(o.settings,'confirmation_delay_minutes',10))<=p_now
+   and (c.confirmation_next_at is null or c.confirmation_next_at<=p_now)
+   and not exists(select 1 from public.contacts ct where ct.organization_id=c.organization_id and ct.id=c.contact_id and ct.is_anonymized)
+  order by c.ends_at,c.id limit greatest(1,least(p_limit,500))
+ ) due order by organization_id,contact_id,id
+ loop
+  if candidate.contact_id is not null and not pg_try_advisory_xact_lock(hashtextextended(candidate.organization_id::text||':'||candidate.contact_id::text,222)) then continue;end if;
+  select c.*,o.settings into a from public.calendar_appointments c join public.organizations o on o.id=c.organization_id
+   where c.id=candidate.id and c.organization_id=candidate.organization_id and c.contact_id is not distinct from candidate.contact_id
+    and c.status in ('pending','confirmed') and c.source <> 'historical_import'
+    and c.ends_at+make_interval(mins=>public.fn_agenda_minutes(o.settings,'confirmation_delay_minutes',10))<=p_now
+    and (c.confirmation_next_at is null or c.confirmation_next_at<=p_now)
+    and not exists(select 1 from public.contacts ct where ct.organization_id=c.organization_id and ct.id=c.contact_id and ct.is_anonymized)
+   for update of c skip locked;
+  if not found then continue;end if;
+  expired:=a.ends_at+make_interval(mins=>public.fn_agenda_minutes(a.settings,'unknown_protection_minutes',1440))<=p_now;
+  insert into public.agent_inbox_items(organization_id,kind,severity,title,body,ref_kind,ref_id,appointment_revision)
+   values(a.organization_id,'appointment_outcome_required',case when expired then 'critical' else 'warn' end,
+    case when expired then 'Presença sem confirmação há mais tempo' else 'Confirme a presença no compromisso' end,
+    'Compromisso: '||a.title||'. Abra e registre se a pessoa compareceu, faltou ou cancelou. O horário sozinho não confirma falta.',
+    'appointment',a.id,a.revision)
+   on conflict(organization_id,ref_id,appointment_revision,kind) where ref_kind='appointment' and appointment_revision is not null
+   do update set status='open',resolved_at=null,severity=excluded.severity,title=excluded.title;
+  update public.calendar_appointments set confirmation_next_at=case when expired then p_now+interval '24 hours' else least(p_now+interval '24 hours',a.ends_at+make_interval(mins=>public.fn_agenda_minutes(a.settings,'unknown_protection_minutes',1440))) end where id=a.id and organization_id=a.organization_id;
+  n:=n+1;
+ end loop;
+ return n;
+end; $$;
+revoke all on function public.fn_appointment_confirmation_sweep(int,timestamptz) from public,anon,authenticated;
+grant execute on function public.fn_appointment_confirmation_sweep(int,timestamptz) to service_role;
+notify pgrst,'reload schema';
+
+-- ---- o gatilho de silêncio não recomeça (migration 0324) ----
+--
+-- (1) Índice da consulta de episódio (lib/followup/silence-sweep.ts,
+--     loadUltimaInscricaoNoPonteiro): porte IDÊNTICO do 0411 do DeskcommCRM
+--     original (2240b215e) — mesmo nome e colunas, para que um merge futuro do
+--     0411 seja no-op. A consulta usa o prefixo (organization_id, pointer_id,
+--     contact_id).
+create index if not exists idx_followup_enrollments_pointer_contact_cooldown
+  on public.followup_enrollments (organization_id, pointer_id, contact_id, updated_at);
+
+-- (2) Vigência: desde quando o ponteiro vale com o status e o gatilho atuais.
+--     A varredura de silêncio só conta silêncio cuja mensagem qualificante é
+--     POSTERIOR a ela — ligar o fluxo não cobra quem calou antes.
+--
+--     Sem backfill, de propósito: a coluna nasce `not null default now()` num
+--     comando só. Um backfill (versão ativa, updated_at) abria uma janela no
+--     update.sh — que aplica o banco antes de trocar a imagem, sem
+--     ON_ERROR_STOP — em que o app antigo grava ponteiro com NULL e o
+--     `set not null` falha calado; e reabria o passado para fluxo publicado há
+--     meses e só armado agora. O custo: na atualização, episódios em andamento
+--     (silêncio menor que o limiar) não recebem a sequência. Erra para o lado
+--     de não mandar.
+alter table public.followup_flow_pointers
+  add column if not exists active_since timestamptz not null default now();
+comment on column public.followup_flow_pointers.active_since is
+  'Desde quando o ponteiro vale com o status, o kind e os segments atuais do gatilho (trigger trg_followup_ponteiro_marca_vigencia). A varredura de silêncio ignora silêncio cuja última mensagem recebida é anterior. Trocar versão, limiar ou cancel_on_reply não mexe: só desativar e ativar de novo, mudar o kind ou os segmentos, ou armá-lo num agente quando nenhum o armava (trigger trg_followup_ponteiro_armado_marca_vigencia). Episódios em andamento nesse instante não recebem a sequência (erra para o lado de não mandar).';
+
+create or replace function public.fn_followup_ponteiro_marca_vigencia()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  new.active_since := now();
+  return new;
+end
+$$;
+revoke execute on function public.fn_followup_ponteiro_marca_vigencia() from public, anon, authenticated;
+
+drop trigger if exists trg_followup_ponteiro_marca_vigencia on public.followup_flow_pointers;
+create trigger trg_followup_ponteiro_marca_vigencia
+  before update on public.followup_flow_pointers
+  for each row
+  when (
+    old.status is distinct from new.status
+    or old.trigger_config ->> 'kind' is distinct from new.trigger_config ->> 'kind'
+    or coalesce(old.trigger_config -> 'params' -> 'segments', '[]'::jsonb)
+       is distinct from coalesce(new.trigger_config -> 'params' -> 'segments', '[]'::jsonb)
+  )
+  execute function public.fn_followup_ponteiro_marca_vigencia();
+
+-- (3) Armar o ponteiro num agente também é passar a valer. O gate da varredura
+--     (lib/followup/agent-followup-gate.ts) só libera o ponteiro que um agente
+--     PUBLICADO arma (followup.enabled e flow_pointer_ids). Um fluxo ativo há
+--     semanas e armado só agora inscreveria de uma vez todo silêncio desde a
+--     vigência — o disparo em massa por outro caminho. Ao publicar uma versão
+--     que arma o ponteiro, a vigência avança SE ninguém o armava até ali:
+--     nem outro agente publicado, nem a versão que esta acabou de substituir
+--     (fn_publish_ai_agent_version grava superseded_at = published_at da
+--     nova, na mesma transação). Republicar o agente com o ponteiro ainda
+--     armado não mexe — ajuste de prompt não descarta episódio em andamento.
+--     Desarmar e armar de novo avança. Só UPDATE de status: publicar é UPDATE
+--     (fn_publish_ai_agent_version); nenhum caminho insere versão já
+--     publicada. `followup` é imutável fora do rascunho
+--     (fn_ai_agent_version_content_immutable), então só a publicação arma.
+create or replace function public.fn_followup_ponteiro_armado_marca_vigencia()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if new.followup -> 'enabled' is distinct from 'true'::jsonb
+     or jsonb_typeof(new.followup -> 'flow_pointer_ids') is distinct from 'array' then
+    return null;
+  end if;
+  update public.followup_flow_pointers p
+     set active_since = now()
+   where p.organization_id = new.organization_id
+     and new.followup -> 'flow_pointer_ids' ? p.id::text
+     and not exists (
+       select 1 from public.ai_agent_versions v
+        where v.organization_id = new.organization_id
+          and v.id <> new.id
+          and v.followup -> 'enabled' = 'true'::jsonb
+          and v.followup -> 'flow_pointer_ids' ? p.id::text
+          and (v.status = 'published'
+               or (v.agent_id = new.agent_id and v.status = 'superseded'
+                   and v.superseded_at = new.published_at)));
+  return null;
+end
+$$;
+revoke execute on function public.fn_followup_ponteiro_armado_marca_vigencia() from public, anon, authenticated;
+
+drop trigger if exists trg_followup_ponteiro_armado_marca_vigencia on public.ai_agent_versions;
+create trigger trg_followup_ponteiro_armado_marca_vigencia
+  after update of status on public.ai_agent_versions
+  for each row
+  when (new.status = 'published' and old.status is distinct from 'published')
+  execute function public.fn_followup_ponteiro_armado_marca_vigencia();
+
+-- ---- fim: o gatilho de silêncio não recomeça (migration 0324) ----
+
+-- ---- lembrete editável e régua da remarcação (migration 0323) ----
+-- (1) Porte da 0536 do original (9e5027f1f, #2230): `starts_at_marked_at`,
+-- gravado por gatilho a cada mudança REAL de `starts_at` (`is distinct from`,
+-- porque o RPC de alteração sempre nomeia a coluna no SET), é a régua do degrau
+-- vencido na remarcação. Sem backfill: linha nunca remarcada cai em
+-- `created_at` no leitor (`app/api/v1/cron/agenda-reminder/route.ts`).
+-- (2) O comentário de `reminder_sent_at` deixa de dizer "informativo": ele é a
+-- régua do rearme e é gravado antes do envio.
+-- (3) Porte da 0265 do original (6146539da): `calendar_event_types.reminder_body`,
+-- o texto próprio do lembrete. NULL = a frase padrão do cron.
+-- A função entra ANTES da varredura anon de propósito. Razões completas no
+-- cabeçalho de supabase/migrations/20261006120323_0323_lembrete_editavel.sql.
+alter table public.calendar_appointments
+  add column if not exists starts_at_marked_at timestamptz;
+
+comment on column public.calendar_appointments.starts_at_marked_at is
+  'Instante em que o starts_at ATUAL foi gravado — a régua do degrau de lembrete vencido na marcação (#2223) depois de uma remarcação (#2230). NULL = a linha nunca foi remarcada; quem lê (a rota agenda-reminder) cai em created_at.';
+
+create or replace function public.fn_starts_at_marked_at() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if new.starts_at is distinct from old.starts_at then
+    new.starts_at_marked_at := clock_timestamp();
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function public.fn_starts_at_marked_at() from public, anon, authenticated;
+grant execute on function public.fn_starts_at_marked_at() to service_role;
+
+drop trigger if exists trg_starts_at_marked_at on public.calendar_appointments;
+create trigger trg_starts_at_marked_at
+  before update of starts_at on public.calendar_appointments
+  for each row execute function public.fn_starts_at_marked_at();
+
+comment on column public.calendar_appointments.reminder_sent_at is
+  'Instante do último carimbo de lembrete, gravado ANTES do envio. Depois de uma remarcação é a régua do rearme: um degrau já carimbado volta a ser candidato quando o alvo novo dele fica meio intervalo ou mais depois deste instante. NÃO é filtro de quem recebe; o que já saiu é reminder_sent_offsets_minutes.';
+
+alter table public.calendar_event_types
+  add column if not exists reminder_body text;
+
+comment on column public.calendar_event_types.reminder_body is
+  'Texto do lembrete no WhatsApp. NULL = a frase padrão do cron. Variáveis {{primeiro_nome}}, {{nome}}, {{quando}}, {{data}}, {{hora}}, {{dia_semana}}, {{unidade}}, {{endereco}}, {{profissional}}, {{tipo}}, {{titulo}}, {{dia}}; a lista mora em lib/agenda/texto-do-lembrete.ts. Distinto de reminder_template_name, o modelo legado, que sai cru.';
+
+-- ---- fim: lembrete editável (migration 0323) ----
+
+-- ---- RLS sem custo por linha: atalho do suporte + plano guardado (migration 0325) ----
+--
+-- Incidente de 07/10/2026: com o JWT de um usuário, `select count(*) from
+-- conversations` (780 linhas) levava 10 s; `/conversations/counts` estourava o
+-- statement timeout. A RLS chama `fn_user_role_in_org(organization_id)` POR
+-- LINHA (via fn_can_view_conversation, fn_can_view_lead, fn_role_at_least,
+-- contacts_select…), e desde a 0220 essa função chama `fn_support_context()` em
+-- toda chamada — quatro joins, um exists em auth.mfa_factors e o parse do JWT.
+--
+-- Duas causas, dois consertos, NENHUMA mudança de quem vê ou faz o quê:
+--
+-- 1. Atalho barato. Sem sessão de suporte ABERTA do próprio auth.uid() (consulta
+--    indexada pelo índice parcial abaixo), `fn_support_context()` devolve null
+--    — o filtro dela exige a mesma linha (`actor_user_id = auth.uid() and
+--    ended_at is null`) e mais. Então o atalho só pula o caminho que daria
+--    null de qualquer jeito. Com sessão aberta, roda o caminho de antes, igual.
+--
+-- 2. Plano guardado. Função `language sql` que não é inlinada (toda SECURITY
+--    DEFINER) é REPLANEJADA a cada chamada no Postgres ≤ 17; em PL/pgSQL o
+--    plano fica guardado na sessão. As funções quentes da RLS passam a PL/pgSQL
+--    com o MESMO corpo, devolvido por `return (...)` — mesma volatilidade
+--    (stable), mesmo search_path, mesmos grants.
+--
+-- Medido no Postgres do test:db (pg15, 1000 conversas, membro `manager`):
+-- antes 361 ms e 2010 chamadas de fn_support_context; depois 21 ms e nenhuma.
+-- Ver tests/invariants/rls-sem-custo-por-linha.test.ts.
+
+create index if not exists platform_support_sessions_open_by_actor
+  on public.platform_support_sessions(actor_user_id) where ended_at is null;
+
+create or replace function public.fn_support_context()
+returns jsonb language plpgsql stable security definer set search_path = public as $f$
+begin
+ return (select jsonb_build_object('id', s.id, 'organization_id', s.organization_id,
+ 'actor_user_id', s.actor_user_id, 'auth_session_id', s.auth_session_id,
+ 'previous_organization_id', s.previous_organization_id, 'expires_at', s.expires_at,
+ 'name', o.display_name, 'locale', o.locale,
+ 'access_mode', case when s.access_mode = 'support_readonly' or p.scope <> 'full'
+ then 'support_readonly' else 'full' end,
+ 'status', case when s.expires_at <= now() then 'expired'
+ when p.user_id is null or a.id is null or (a.not_after is not null and a.not_after <= now())
+ or o.status <> 'active' then 'revoked'
+ when (p.mfa_required or exists(select 1 from auth.mfa_factors f where f.user_id=s.actor_user_id and f.status='verified'))
+ and coalesce(auth.jwt()->>'aal','aal1') <> 'aal2' then 'revoked'
+ else 'active' end)
+ from public.platform_support_sessions s
+ join public.organizations o on o.id=s.organization_id
+ left join public.platform_admins p on p.user_id=s.actor_user_id and p.revoked_at is null
+ left join auth.sessions a on a.id=s.auth_session_id and a.user_id=s.actor_user_id
+ where s.actor_user_id=auth.uid()
+ and s.auth_session_id=nullif(auth.jwt()->>'session_id','')::uuid and s.ended_at is null
+ limit 1);
+end $f$;
+revoke all on function public.fn_support_context() from public, anon;
+grant execute on function public.fn_support_context() to authenticated, service_role;
+
+create or replace function public.fn_user_role_in_org(p_org uuid)
+returns text language plpgsql stable security definer set search_path = public as $f$
+declare v_s jsonb;
+begin
+ if exists (select 1 from public.platform_support_sessions
+             where actor_user_id = auth.uid() and ended_at is null) then
+   v_s := public.fn_support_context();
+   if v_s->>'status' = 'active' and (v_s->>'organization_id')::uuid = p_org then
+     return case when v_s->>'access_mode' = 'full' then 'admin' else 'viewer' end;
+   end if;
+ end if;
+ return (select role from public.user_organizations
+          where user_id = auth.uid() and organization_id = p_org and revoked_at is null limit 1);
+end $f$;
+revoke all on function public.fn_user_role_in_org(uuid) from public, anon;
+grant execute on function public.fn_user_role_in_org(uuid) to authenticated, service_role;
+
+create or replace function public.fn_support_write_allowed(p_org uuid)
+returns boolean language plpgsql stable security definer set search_path = public as $f$
+begin
+ if not exists (select 1 from public.platform_support_sessions
+                 where actor_user_id = auth.uid() and ended_at is null) then
+   return true;
+ end if;
+ return coalesce((select case when (s->>'organization_id')::uuid is distinct from p_org then true
+ else s->>'status'='active' and s->>'access_mode'='full' end
+ from (select public.fn_support_context() s) c where s is not null),true);
+end $f$;
+revoke all on function public.fn_support_write_allowed(uuid) from public, anon;
+grant execute on function public.fn_support_write_allowed(uuid) to authenticated, service_role;
+
+create or replace function public.fn_is_platform_admin()
+returns boolean language plpgsql stable security definer set search_path = public as $f$
+begin
+ return exists (select 1 from public.platform_admins
+                 where user_id = auth.uid() and revoked_at is null);
+end $f$;
+revoke all on function public.fn_is_platform_admin() from public, anon;
+grant execute on function public.fn_is_platform_admin() to authenticated, service_role;
+
+create or replace function public.fn_role_at_least(p_org uuid, p_min text)
+returns boolean language plpgsql stable security definer set search_path = public as $f$
+begin
+ return (with levels(role, lvl) as (
+    values ('viewer',1),('provider',2),('agent',3),('manager',4),('admin',5)
+  )
+  select coalesce(
+    (select user_lvl.lvl >= min_lvl.lvl
+       from levels user_lvl
+       join levels min_lvl on min_lvl.role = p_min
+      where user_lvl.role = public.fn_user_role_in_org(p_org)),
+    false
+  ));
+end $f$;
+revoke all on function public.fn_role_at_least(uuid, text) from public, anon;
+grant execute on function public.fn_role_at_least(uuid, text) to authenticated, service_role;
+
+create or replace function public.fn_can_view_conversation(p_org uuid, p_assigned_to_user_id uuid)
+returns boolean language plpgsql stable security definer set search_path = public as $f$
+begin
+ return (select case
+    when public.fn_is_platform_admin() then true
+    when r.papel is null then false
+    when r.papel = 'provider' then p_assigned_to_user_id = auth.uid()
+    when r.papel in ('viewer','manager','admin') then true
+    when p_assigned_to_user_id = auth.uid() then true
+    else case coalesce(
+           (select settings->>'visibility_mode' from public.organizations where id = p_org),
+           'own_and_unassigned')
+         when 'all' then true
+         when 'own_and_unassigned' then p_assigned_to_user_id is null
+         else false
+       end
+  end
+  from (select public.fn_user_role_in_org(p_org) as papel offset 0) r);
+end $f$;
+revoke all on function public.fn_can_view_conversation(uuid, uuid) from public, anon;
+grant execute on function public.fn_can_view_conversation(uuid, uuid) to authenticated, service_role;
+
+create or replace function public.fn_can_view_lead(p_org uuid, p_owner_user_id uuid)
+returns boolean language plpgsql stable security definer set search_path = public as $f$
+begin
+ return (select case
+    when public.fn_is_platform_admin() then true
+    when r.papel is null then false
+    when r.papel = 'provider' then p_owner_user_id = auth.uid()
+    when r.papel in ('viewer','manager','admin') then true
+    when p_owner_user_id = auth.uid() then true
+    else case coalesce(
+           (select settings->>'visibility_mode' from public.organizations where id = p_org),
+           'own_and_unassigned')
+         when 'all' then true
+         when 'own_and_unassigned' then p_owner_user_id is null
+         else false
+       end
+  end
+  from (select public.fn_user_role_in_org(p_org) as papel offset 0) r);
+end $f$;
+revoke all on function public.fn_can_view_lead(uuid, uuid) from public, anon;
+grant execute on function public.fn_can_view_lead(uuid, uuid) to authenticated, service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

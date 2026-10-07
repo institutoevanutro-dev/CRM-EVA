@@ -2145,6 +2145,7 @@ export type Database = {
       }
       calendar_appointments: {
         Row: {
+          history_import_key: string | null
           unit_id: string | null
           room_id: string | null
           duration_minutes_snapshot: number
@@ -2208,12 +2209,14 @@ export type Database = {
           rescheduled_from_id: string | null
           source: string
           starts_at: string
+          starts_at_marked_at: string | null
           status: string
           time_zone: string
           title: string
           updated_at: string
         }
         Insert: {
+          history_import_key?: string | null
           unit_id?: string | null
           room_id?: string | null
           duration_minutes_snapshot?: number | null
@@ -2277,12 +2280,14 @@ export type Database = {
           rescheduled_from_id?: string | null
           source?: string
           starts_at: string
+          starts_at_marked_at?: string | null
           status?: string
           time_zone?: string
           title: string
           updated_at?: string
         }
         Update: {
+          history_import_key?: string | null
           unit_id?: string | null
           room_id?: string | null
           duration_minutes_snapshot?: number | null
@@ -2346,6 +2351,7 @@ export type Database = {
           rescheduled_from_id?: string | null
           source?: string
           starts_at?: string
+          starts_at_marked_at?: string | null
           status?: string
           time_zone?: string
           title?: string
@@ -2648,6 +2654,7 @@ export type Database = {
           name: string
           organization_id: string
           position: number
+          reminder_body: string | null
           reminder_enabled: boolean
           reminder_minutes_before: number
           reminder_extra_offsets_minutes: number[]
@@ -2677,6 +2684,7 @@ export type Database = {
           name: string
           organization_id: string
           position?: number
+          reminder_body?: string | null
           reminder_enabled?: boolean
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
@@ -2706,6 +2714,7 @@ export type Database = {
           name?: string
           organization_id?: string
           position?: number
+          reminder_body?: string | null
           reminder_enabled?: boolean
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
@@ -4827,6 +4836,7 @@ export type Database = {
       }
       followup_flow_pointers: {
         Row: {
+          active_since: string
           active_version_id: string | null
           created_at: string
           draft_graph: Json | null
@@ -4840,6 +4850,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          active_since?: string
           active_version_id?: string | null
           created_at?: string
           draft_graph?: Json | null
@@ -4853,6 +4864,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          active_since?: string
           active_version_id?: string | null
           created_at?: string
           draft_graph?: Json | null

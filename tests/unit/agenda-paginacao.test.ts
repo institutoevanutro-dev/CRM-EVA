@@ -2,6 +2,7 @@ import { expect, it, vi } from "vitest";
 import { protecaoAgendaPg, protecaoAgendaSupabase } from "@/lib/agenda/protecao-followup";
 import { assertAgendaEffectSupabase } from "@/lib/agenda/efeito";
 import { logger } from "@/lib/logger";
+import { IDS_POR_LOTE } from "@/lib/supabase/em-lotes";
 const now = new Date("2026-09-06T12:00:00Z");
 it("páginas truncadas abaixo do limit são lidas até vazio; protetor após 1000 coincide com PG e barra efeito", async () => {
   const rows = Array.from({ length: 1101 }, (_, n) => ({
@@ -78,5 +79,50 @@ it("falha de página posterior não transforma leitura parcial em ausência", as
     (await protecaoAgendaSupabase({ from: () => q } as never, "org", ["c"], now)).get("c"),
   ).toMatchObject({ adiar: true, motivo: "leitura_indisponivel" });
   expect(warn).toHaveBeenCalledOnce();
+  warn.mockRestore();
+});
+it("centenas de contatos são lidos em lotes, sem um .in() gigante", async () => {
+  const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+  const contatos = Array.from({ length: 517 }, (_, n) => `c${n}`);
+  const lotes: number[] = [];
+  const db = {
+    from: (table: string) => {
+      const q = {
+        select: () => q,
+        eq: () => q,
+        in: (col: string, vals: unknown[]) => {
+          if (col === "contact_id") lotes.push(vals.length);
+          return q;
+        },
+        order: () => q,
+        limit: () => q,
+        gt: () => q,
+        single: async () => ({ data: { settings: {} }, error: null }),
+        then: (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({ data: table === "calendar_appointments" ? [] : [], error: null }).then(resolve),
+      };
+      return q;
+    },
+  };
+  const mapa = await protecaoAgendaSupabase(db as never, "org", contatos, now);
+  expect(mapa.size).toBe(517);
+  expect(Math.max(...lotes)).toBeLessThanOrEqual(IDS_POR_LOTE);
+  expect(lotes.length).toBeGreaterThan(1);
+  expect(lotes.reduce((a, b) => a + b, 0)).toBe(517);
+  expect([...mapa.values()].every((p) => p.motivo === "sem_compromisso")).toBe(true);
+
+  const falho = {
+    from: () => {
+      const q = {
+        select: () => q, eq: () => q, in: () => q, order: () => q, limit: () => q, gt: () => q,
+        then: (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({ data: null, error: { message: "fetch failed" } }).then(resolve),
+      };
+      return q;
+    },
+  };
+  warn.mockClear();
+  const ruim = await protecaoAgendaSupabase(falho as never, "org", contatos, now);
+  expect([...ruim.values()].every((p) => p.motivo === "leitura_indisponivel")).toBe(true);
   warn.mockRestore();
 });

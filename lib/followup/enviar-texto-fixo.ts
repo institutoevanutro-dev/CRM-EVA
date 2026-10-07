@@ -8,15 +8,24 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { ApiError } from "@/lib/api/types";
-import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
-import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 import { createSupabaseAdminClient, type FollowupJobRequest } from "@/lib/followup/engine";
 import type { EnrollmentRow } from "@/lib/followup/node-handlers";
 import { completeTurnForEnrollment, type TurnBridgeAdminClient } from "@/lib/followup/turn-bridge";
 import { logger } from "@/lib/logger";
 import { automaticoPodeEnviar } from "@/lib/channels/janela";
 import { ERRO_FORA_DAS_24H } from "@/lib/agent-engine/edge/crm/send-ledger";
-import { TEXTO_DO_BLOQUEIO } from "@/lib/followup/bloqueios-obrigatorios";
+import {
+  MOTIVO_TEXTO_VAZIO_SEM_NOME,
+  OUTCOME_DO_BLOQUEIO,
+  TEXTO_DO_BLOQUEIO,
+  conferirAntesDoEnvio,
+} from "@/lib/followup/bloqueios-obrigatorios";
+import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
+import { adiarAteAJanelaAbrir } from "@/lib/automation/janela-do-canal";
+import { espacarEnvio } from "@/lib/automation/throttle";
+import { interpolateTemplate } from "@/lib/inbox/template-vars";
+
+const TEM_VARIAVEL_DO_NOME = /\{\{\s*(nome|primeiro_nome)\s*\}\}/i;
 
 function ponteSupabase(admin: SupabaseClient): TurnBridgeAdminClient {
   const base = createSupabaseAdminClient(admin);
@@ -44,7 +53,16 @@ function ponteSupabase(admin: SupabaseClient): TurnBridgeAdminClient {
   };
 }
 
-/** Envia o texto fixo do fluxo neste request — sem cron e sem agent-worker. */
+/**
+ * Envia o texto fixo do fluxo neste request — sem cron e sem agent-worker.
+ *
+ * Disputa o mesmo job com o worker, então decide o envio com a MESMA função
+ * (`conferirAntesDoEnvio`: janela da organização, resposta com cancel_on_reply,
+ * humano ativo, liberação do número (gate do canal), etapa que bloqueia,
+ * anonimizado…) e respeita a janela anti-ban
+ * do canal e o ritmo da automação. O resto da cadeia `runBeforeSend` (caps,
+ * repetição, LGPD, promessas) continua só no worker.
+ */
 export async function enviarTextoFixoPendente(
   admin: SupabaseClient,
   somenteContactIds?: string[],
@@ -60,8 +78,9 @@ export async function enviarTextoFixoPendente(
   if (error) throw new Error(error.message);
 
   const workerId=`inline-followup:${randomUUID()}`;
-  async function settle(org:string,id:string,acquiredAt:string,done:boolean,error?:string,deferred?:AgendaDeferredError){
-    const {data:held,error:failure}=await admin.rpc("fn_followup_inline_settle",{p_org:org,p_id:id,p_worker:workerId,p_acquired_at:acquiredAt,p_done:done,p_error:error??null,p_retry_at:deferred?.protection.reavaliar_em??null,p_hold:!!deferred&&deferred.protection.motivo!=="leitura_indisponivel"});
+  // `adiarPara`: o job volta a `pending` na abertura da janela, sem gastar tentativa.
+  async function settle(org:string,id:string,acquiredAt:string,done:boolean,error?:string,deferred?:AgendaDeferredError,adiarPara?:string){
+    const {data:held,error:failure}=await admin.rpc("fn_followup_inline_settle",{p_org:org,p_id:id,p_worker:workerId,p_acquired_at:acquiredAt,p_done:done,p_error:error??null,p_retry_at:adiarPara??deferred?.protection.reavaliar_em??null,p_hold:!!adiarPara||(!!deferred&&deferred.protection.motivo!=="leitura_indisponivel")});
     if(failure) throw failure;
     if(!held) throw new StaleServiceBoundaryError();
   }
@@ -103,29 +122,45 @@ export async function enviarTextoFixoPendente(
       const boundary = parseServiceBoundary((job.payload as Record<string, unknown>).service_boundary);
       await assertServiceBoundarySupabase(admin, boundary);
       const conversationId = boundary!.conversation_id;
-      // GATE DE ELEGIBILIDADE — este envio inline BYPASSA `executarTurnoDoAgente`
-      // (é o atalho "sem cron e sem agent-worker"), então precisa da checagem
-      // por conta própria. Mesma regra pura do drain/turno. Canal 'open' → passa.
-      // Bloqueio definitivo → o follow-up NÃO sai e o job vira `done`. Erro de
-      // leitura → job volta pra `pending` (pode ser transitório) — fail-closed:
-      // não envia sem confirmar.
-      const elegib = await decidirElegibilidadeDaConversaViaSupabase(admin, {
-        organizationId: job.organization_id as string,
-        conversationId,
-        agora: new Date(),
-        ttlMs: ttlDaAutorizacaoMs(process.env),
-        followup: true,
-      });
-      if (elegib !== null && !elegib.permite) {
-        logger.info("[followup] texto fixo não enviado — conversa não elegível para IA", {
-          organization_id: job.organization_id,
-          conversation_id: conversationId,
-          motivo: elegib.motivo,
-        });
-        await settle(job.organization_id,job.id,jobClaim.acquired_at,true);
-        continue;
-      }
 
+      // A MESMA decisão do worker (`runFlowDrivenTurn`), com a mesma tradução.
+      const decisao = await conferirAntesDoEnvio(
+        getRequestPool(),
+        { organizationId: job.organization_id as string, contactId, conversationId, enrollmentId },
+        new Date(),
+      );
+      if (!decisao.envia) {
+        logger.info("[followup] texto fixo barrado por bloqueio obrigatório", {
+          organization_id: job.organization_id,
+          enrollment_id: enrollmentId,
+          motivo: decisao.motivo,
+        });
+        if (decisao.motivo === "fora_das_24h_do_instagram") {
+          await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {
+            kind: "pulado", reason: TEXTO_DO_BLOQUEIO.fora_das_24h_do_instagram,
+          },undefined,job.id,jobClaim);
+          await settle(job.organization_id,job.id,jobClaim.acquired_at,true);
+          continue;
+        }
+        if (decisao.motivo === "fora_da_janela") {
+          await settle(job.organization_id,job.id,jobClaim.acquired_at,false,TEXTO_DO_BLOQUEIO.fora_da_janela,undefined,decisao.adiarPara.toISOString());
+          continue;
+        }
+        if (decisao.invalida) {
+          const outcome = OUTCOME_DO_BLOQUEIO[decisao.motivo];
+          await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {
+            kind: "skipped", reason: TEXTO_DO_BLOQUEIO[decisao.motivo], ...(outcome ? { outcome } : {}),
+          },undefined,job.id,jobClaim);
+          await settle(job.organization_id,job.id,jobClaim.acquired_at,true);
+          continue;
+        }
+        if (decisao.motivo === "inscricao_encerrada") {
+          await settle(job.organization_id,job.id,jobClaim.acquired_at,true);
+          continue;
+        }
+        // Não verificável / configuração inválida: falha fechada, como o throw do worker.
+        throw new Error(TEXTO_DO_BLOQUEIO[decisao.motivo]);
+      }
       // Fora das 24h do Instagram o passo é PULADO e o fluxo segue: nem
       // cancela, nem reagenda, nem reenvia. Mesma porta da recusa do servidor.
       const pular = async () => {
@@ -136,25 +171,53 @@ export async function enviarTextoFixoPendente(
       };
       const { data: canal, error: canalErr } = await admin
         .from("conversations")
-        .select("last_inbound_at, channel_sessions:channel_session_id(provider)")
+        .select("last_inbound_at, channel_session_id, channel_sessions:channel_session_id(provider)")
         .eq("organization_id", job.organization_id as string)
         .eq("id", conversationId)
         .maybeSingle();
       if (canalErr) throw new Error(canalErr.message);
-      const linha = canal as { last_inbound_at: string | null; channel_sessions: { provider: string | null } | null } | null;
-      if (!automaticoPodeEnviar(linha?.channel_sessions?.provider, linha?.last_inbound_at ?? null, new Date())) {
+      const linha = canal as { last_inbound_at: string | null; channel_session_id: string | null; channel_sessions: { provider: string | null } | null } | null;
+      if (!linha?.channel_session_id) throw new Error("followup_conversa_sem_canal");
+      if (!automaticoPodeEnviar(linha.channel_sessions?.provider, linha.last_inbound_at ?? null, new Date())) {
         await pular();
+        continue;
+      }
+      // Janela anti-ban DO NÚMERO (Conexões → `channel_knobs`; 7h–22h por padrão).
+      const abreEm = await adiarAteAJanelaAbrir(admin, job.organization_id as string, linha.channel_session_id);
+      if (abreEm !== null) {
+        await settle(job.organization_id,job.id,jobClaim.acquired_at,false,"Envio adiado: fora da janela de envio do número.",undefined,abreEm);
         continue;
       }
 
       const proactiveContext={organizationId:job.organization_id as string,contactId,enrollmentId,nodeId,jobId:job.id,jobClaim};
       await assertAgendaEffectSupabase(admin,proactiveContext);
+      await espacarEnvio(linha.channel_session_id);
+      // {{nome}}/{{primeiro_nome}} com o contato de AGORA, a mesma regra do
+      // worker (`resolveFlowSendBody`). O ledger guarda o texto que saiu.
+      let texto = body;
+      if (TEM_VARIAVEL_DO_NOME.test(body)) {
+        const { data: pessoa, error: pessoaErr } = await admin
+          .from("contacts")
+          .select("name, display_name")
+          .eq("organization_id", job.organization_id as string)
+          .eq("id", contactId)
+          .maybeSingle();
+        if (pessoaErr) throw new Error(pessoaErr.message);
+        texto = interpolateTemplate(body, pessoa ?? {}, { semValor: "remover" });
+      }
+      if (texto === "") {
+        await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {
+          kind: "pulado", reason: MOTIVO_TEXTO_VAZIO_SEM_NOME,
+        },undefined,job.id,jobClaim);
+        await settle(job.organization_id,job.id,jobClaim.acquired_at,true);
+        continue;
+      }
       let erroDoServidor: string | null = null;
-      const resultado=await sendWithLedger(supabaseSendLedger(admin),{tenantId:job.organization_id,leadId:contactId,jobId:job.id,seq:1,body},async(key,messageId)=>{
+      const resultado=await sendWithLedger(supabaseSendLedger(admin),{tenantId:job.organization_id,leadId:contactId,jobId:job.id,seq:1,body:texto},async(key,messageId)=>{
         const m=await sendMessageHandler(
           admin,
           {organization_id:job.organization_id,actor:{type:"webhook_source",id:enrollmentId},serviceBoundary:boundary,proactiveContext,origemDoEnvio:"followup",internalMessageId:messageId,requestId:key},
-          {conversation_id:conversationId,type:"text",body,metadata:{idempotency_key:key}},
+          {conversation_id:conversationId,type:"text",body:texto,metadata:{idempotency_key:key}},
         );
         erroDoServidor=(m as { error_code?: string | null }).error_code ?? null;
         return m;

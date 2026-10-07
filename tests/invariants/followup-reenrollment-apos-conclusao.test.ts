@@ -32,6 +32,13 @@ import type { FlowGraph } from "@/lib/followup/graph-schema";
  * re-entrada para o mesmo motor seriam duas verdades sobre quando um contato
  * pode voltar à fila.
  *
+ * ⚠️ DESDE 2026-10-06 (migration 0324) A FRASE CITADA ACIMA NÃO VALE MAIS PARA
+ * O SILÊNCIO: a varredura passou a inscrever no máximo uma vez por episódio de
+ * silêncio (spec docs/superpowers/specs/2026-10-06-followup-nao-recomeca-design.md).
+ * Este arquivo continua congelando o gatilho de ETAPA, que é outro caso: ele
+ * só re-entra com um novo `lead.stage_changed`, um evento, e não com a mera
+ * passagem do tempo — não há laço por tick a fechar.
+ *
  * ⚠️ O QUE O CONSERTO DO EMISSOR MUDOU AQUI FOI A PROBABILIDADE, NÃO A REGRA.
  * Antes de `agent-stage-sync` passar a emitir `lead.stage_changed`, só movimento
  * humano (ou de MCP/automação) armava este gatilho. Agora movimento do

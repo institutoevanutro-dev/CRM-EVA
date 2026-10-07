@@ -130,6 +130,18 @@ describe("completeTurnForEnrollment — 'sent' (action)", () => {
     );
   });
 
+  it("'sent' pelo modelo de reserva grava o 'via' no evento; sem ele, o payload segue vazio", async () => {
+    const reserva = fakeDb({ enrollment: enrollment(), graph: ACTION_GRAPH });
+    await completeTurnForEnrollment(reserva.db, "org-1", "enr-1", "a1", { kind: "sent", via: "modelo_de_reserva" }, clock);
+    expect(reserva.insertEnrollmentEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ event_type: "action_sent", payload: { via: "modelo_de_reserva" } }),
+    );
+
+    const ia = fakeDb({ enrollment: enrollment(), graph: ACTION_GRAPH });
+    await completeTurnForEnrollment(ia.db, "org-1", "enr-1", "a1", { kind: "sent" }, clock);
+    expect(ia.insertEnrollmentEvent).toHaveBeenCalledWith(expect.objectContaining({ event_type: "action_sent", payload: {} }));
+  });
+
   it("double completion (same steps_taken) is idempotent — 2nd call is a no-op", async () => {
     const { db, updateEnrollment } = fakeDb({
       enrollment: enrollment(),
@@ -427,5 +439,15 @@ describe("completeTurnForEnrollment — 'pulado' (passo sem envio, o fluxo segue
     const { db, updateEnrollment } = fakeDb({ enrollment: enrollment(), graph: ACTION_GRAPH });
     await completeTurnForEnrollment(db, "org-1", "enr-1", "a1", { kind: "skipped", reason: "x" }, clock);
     expect(updateEnrollment.mock.calls[0]?.[2]).toMatchObject({ status: "cancelled", cancel_reason: "x" });
+  });
+
+  it("'skipped' com desfecho grava o outcome (humano ativo → handoff); sem desfecho, a chave nem aparece", async () => {
+    const com = fakeDb({ enrollment: enrollment(), graph: ACTION_GRAPH });
+    await completeTurnForEnrollment(com.db, "org-1", "enr-1", "a1", { kind: "skipped", reason: "x", outcome: "handoff" }, clock);
+    expect(com.updateEnrollment.mock.calls[0]?.[2]).toMatchObject({ status: "cancelled", outcome: "handoff", cancel_reason: "x" });
+
+    const sem = fakeDb({ enrollment: enrollment(), graph: ACTION_GRAPH });
+    await completeTurnForEnrollment(sem.db, "org-1", "enr-1", "a1", { kind: "skipped", reason: "x" }, clock);
+    expect(sem.updateEnrollment.mock.calls[0]?.[2]).not.toHaveProperty("outcome");
   });
 });
