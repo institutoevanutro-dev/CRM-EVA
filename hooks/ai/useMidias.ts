@@ -9,7 +9,7 @@ export interface VarianteDaMidia {
   key: "A" | "B";
   mime: string;
   size_bytes: number;
-  url: string;
+  url: string | null;
 }
 export interface MidiaItem {
   id: string;

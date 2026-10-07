@@ -1073,8 +1073,8 @@ git commit -m "feat(midias): tela da biblioteca com termo de uso de imagem"
 
 Roteiro, como um gestor leigo, pela tela:
 1. Login como gestor (`.e2e-creds.json`), abrir `/app/ai/midias` pela navegação (menu "Agente de IA" › "Biblioteca de mídias"), conferir `h1`.
-2. Criar "E2E vídeo da unidade" com "Mostra pessoa identificável?" desmarcado; subir `midia-teste.mp4` na variante A; selo vira `Pronta`.
-3. Criar "E2E antes e depois" com pessoa; subir `midia-teste.png`; selo `Sem termo`; preencher termo (titular, escopo, assinatura de hoje, sem validade) e salvar; selo `Pronta`.
+2. Criar "E2E vídeo da unidade" com "Mostra pessoa identificável?" desmarcado; subir `tests/e2e/fixtures/midia-teste.mp4` na variante A; selo vira `Pronta`.
+3. Criar "E2E antes e depois" com pessoa; subir `tests/e2e/fixtures/midia-teste.png`; selo `Sem termo`; preencher termo (titular, escopo, assinatura de hoje, sem validade) e salvar; selo `Pronta`.
 4. Trocar o arquivo da variante A do item 3; selo continua `Pronta` e a contagem de cartões não muda.
 5. Revogar; confirmar; selo `Revogada`.
 6. Apagar os dois itens; lista sem eles.

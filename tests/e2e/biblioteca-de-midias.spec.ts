@@ -3,7 +3,7 @@
  *
  * Roteiro: abre pela navegação, sobe um vídeo sem pessoa (fica Pronta), sobe uma
  * foto com pessoa (Sem termo), registra o termo (Pronta), troca o arquivo (segue
- * Pronta, sem cartão novo), revoga (Revogada) e apaga os dois.
+ * Pronta, sem cartão novo), edita o título, revoga (Revogada) e apaga os dois.
  *
  * Pré-requisitos (banco local, app buildada):
  *   pnpm exec tsx scripts/seed-e2e-credentials.ts
@@ -145,6 +145,13 @@ test.describe("Biblioteca de mídias — o gestor cadastra, sobe, registra o ter
     await login(page, creds.users.manager!.email, creds.password);
     await page.goto("/app/ai/midias");
     await expect(cartao(page, ANTES_DEPOIS)).toBeVisible({ timeout: 60_000 });
+
+    // Editar depois de criada: o título novo aparece no cartão (o prefixo "E2E" mantém a limpeza).
+    await cartao(page, ANTES_DEPOIS).getByTestId("midia-editar").click();
+    await expect(page.getByTestId("midia-titulo")).toHaveValue(ANTES_DEPOIS);
+    await page.getByTestId("midia-titulo").fill(`${ANTES_DEPOIS} (editado)`);
+    await page.getByTestId("midia-editar-salvar").click();
+    await expect(cartao(page, `${ANTES_DEPOIS} (editado)`)).toBeVisible({ timeout: 30_000 });
 
     await cartao(page, ANTES_DEPOIS).getByTestId("midia-revogar").click();
     await expect(selo(page, ANTES_DEPOIS)).toHaveText("Revogada", { timeout: 30_000 });
