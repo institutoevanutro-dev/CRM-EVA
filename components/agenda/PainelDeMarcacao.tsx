@@ -11,6 +11,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { instanteDe } from "@/lib/agenda/fuso";
+import { ROTULO_VOCE, rotuloDoResponsavel } from "@/lib/agenda/responsavel-do-painel";
 import { ApiError } from "@/lib/api/types";
 import { CaretLeft, CaretRight, CheckCircle, Clock, MapPin, Warning } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
@@ -455,7 +456,7 @@ export function PainelDeMarcacao({
             {format(new Date(marcado.instante), t("EEEE, d 'de' MMMM 'às' HH:mm"), { locale: localeDaData })}
           </p>
           <p className="mt-0.5 text-xs text-text-subtle">
-            {t(tipo)} · {duracaoMin} {t("min · com")} {responsavel.nome}
+            {t(tipo)} · {duracaoMin} {t("min · com")} {rotuloDoResponsavel(responsavel.nome, t)}
           </p>
           {quemSeraAtendido && !quemSeraAtendido.aceitaMensagem && (
             // Repetido aqui de propósito: o aviso do passo anterior sumiu da
@@ -552,8 +553,11 @@ export function PainelDeMarcacao({
         className="shrink-0 border-b border-border bg-surface-elevated/50 p-4 lg:w-[280px] lg:border-b-0 lg:border-r"
       >
         <div className="flex items-center gap-2">
-          <AvatarDaPessoa pessoa={responsavel} tamanho="sm" />
-          <span className="truncate text-sm font-semibold">{responsavel.nome}</span>
+          <AvatarDaPessoa
+            pessoa={{ ...responsavel, nome: rotuloDoResponsavel(responsavel.nome, t) }}
+            tamanho="sm"
+          />
+          <span className="truncate text-sm font-semibold">{rotuloDoResponsavel(responsavel.nome, t)}</span>
         </div>
         <h3 className="mt-3 text-base font-semibold leading-tight">{tipo}</h3>
         <dl className="mt-3 space-y-2 text-xs text-text-muted">
@@ -638,12 +642,12 @@ export function PainelDeMarcacao({
                 rótulo vem de `lib/agenda/responsavel-do-painel.ts` (porte do
                 commit 83f52dd61 do projeto original, #896). */}
             <p className="text-sm font-semibold text-text">
-              {responsavel.nome === "Você"
+              {responsavel.nome === ROTULO_VOCE
                 ? t("Você ainda não publicou seus horários de atendimento")
                 : t("A jornada de atendimento ainda não foi publicada")}
             </p>
             <p className="mt-1 text-xs leading-4 text-text-muted">
-              {responsavel.nome === "Você"
+              {responsavel.nome === ROTULO_VOCE
                 ? t("Sem eles ninguém consegue marcar — nem você, nem o agente.")
                 : t("Sem eles ninguém consegue marcar — nem quem atende, nem o agente.")}
             </p>

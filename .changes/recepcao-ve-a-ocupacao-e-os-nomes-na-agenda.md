@@ -19,5 +19,11 @@ os nomes, e o painel só diz "Você" quando a agenda é mesmo de quem está usan
 Quem tem o papel Somente leitura continua sem os nomes, mas o aviso agora
 explica o motivo.
 
-O Prestador de serviço continua vendo só a própria agenda, como antes. Nada
-para configurar.
+O Prestador de serviço continua vendo só a própria agenda, como antes. Quando
+ele abre um tipo de atendimento que é de outra pessoa, o painel também não diz
+mais "com Você" sobre a agenda dela.
+
+Quem entrou pelo login EvaLink e ainda não preencheu o nome completo aparece
+para o gerente pelo começo do e-mail (por exemplo "dra.ana"), como antes, e não
+como "Sem nome". Em espanhol, o painel mostra "Tú" e "Sin nombre" no lugar das
+palavras em português. Nada para configurar.

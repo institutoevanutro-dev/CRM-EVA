@@ -34,6 +34,7 @@ const duble = vi.hoisted(() => ({
   getUrl: [] as string[],
   getResposta: null as unknown,
   avisos: [] as string[],
+  semNomeCompleto: false,
 }));
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
@@ -63,7 +64,13 @@ vi.mock("@/lib/supabase/admin", () => ({
         admin: {
           getUserById: (id: string) =>
             Promise.resolve({
-              data: { user: { id, email: `${id}@x.com`, user_metadata: { full_name: `Nome ${id}` } } },
+              data: {
+                user: {
+                  id,
+                  email: `${id}@x.com`,
+                  user_metadata: duble.semNomeCompleto ? {} : { full_name: `Nome ${id}` },
+                },
+              },
             }),
         },
       },
@@ -87,6 +94,7 @@ vi.mock("@/components/feedback/ApiErrorToast", () => ({
 }));
 
 import { PainelDeMarcacao } from "@/components/agenda/PainelDeMarcacao";
+import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 import type { Pessoa } from "@/components/agenda/tipos";
 import { usePessoasDaAgenda } from "@/hooks/agenda/usePessoasDaAgenda";
 import { requireRole } from "@/lib/auth/require-role";
@@ -161,6 +169,60 @@ describe("(a) 'Você' é de quem está logado, não de quem não deu para listar
 
     expect(aviso).toContain("Você ainda não publicou seus horários de atendimento");
   });
+
+  // Revisão do PR #142: o Prestador recebe da lista só a si mesmo, e o tipo
+  // aberto pode ser de outra pessoa (a médica). O dono fora da lista NÃO pode
+  // cair em quem está logado — senão o painel diz "com Você" sobre a jornada dela.
+  it("Prestador num tipo de outra pessoa: o dono fora da lista não vira 'Você'", () => {
+    const pessoa = resolverResponsavelDoPainel({
+      pessoas: [{ id: "prestador", nome: "Carla", trilha: 2 }],
+      donoId: DONA.id,
+      usuarioId: "prestador",
+    });
+
+    expect(pessoa.id).toBe(DONA.id);
+    expect(pessoa.nome).not.toBe("Você");
+    expect(pessoa.nome).not.toBe("Carla");
+  });
+
+  it("em espanhol, 'Você' e 'Sem nome' do painel saem traduzidos", () => {
+    const voce = resolverResponsavelDoPainel({ pessoas: [], donoId: RECEPCAO, usuarioId: RECEPCAO });
+    const semNome = resolverResponsavelDoPainel({ pessoas: [], donoId: DONA.id, usuarioId: RECEPCAO });
+    for (const responsavel of [voce, semNome]) {
+      render(
+        <IdiomaProvider locale="es">
+          <PainelDeMarcacao
+            ancora={AGORA}
+            agora={AGORA}
+            responsavel={responsavel}
+            fuso="America/Sao_Paulo"
+            horariosPorDia={{}}
+            publicouHorarios={false}
+            onConfirmar={vi.fn(async () => undefined)}
+          />
+        </IdiomaProvider>,
+      );
+      const texto = screen.getByTestId("contexto-da-marcacao").textContent ?? "";
+      expect(texto).not.toContain("Você");
+      expect(texto).not.toContain("Sem nome");
+      cleanup();
+    }
+    // E o aviso da própria agenda continua sendo o da segunda pessoa.
+    render(
+      <IdiomaProvider locale="es">
+        <PainelDeMarcacao
+          ancora={AGORA}
+          agora={AGORA}
+          responsavel={voce}
+          fuso="America/Sao_Paulo"
+          horariosPorDia={{}}
+          publicouHorarios={false}
+          onConfirmar={vi.fn(async () => undefined)}
+        />
+      </IdiomaProvider>,
+    );
+    expect(screen.getByTestId("sem-jornada-publicada").textContent).toContain("Todavía no publicaste");
+  });
 });
 
 function sessao(papel: Role, id: string) {
@@ -212,6 +274,26 @@ describe("(b) GET /api/v1/agenda/pessoas — a lista mínima da Agenda", () => {
 
     expect(status).toBe(200);
     expect(corpo.data?.map((p) => p.user_id)).toEqual(["u-dona"]);
+  });
+
+  // Revisão do PR #142: quem entra pelo EvaLink nasce sem `full_name`. O
+  // gerente via essas pessoas pela parte do e-mail antes do @ (era o que
+  // `/api/v1/team`, que ele já lê inteira, dava); com a lista nova virou
+  // "Sem nome" em todas. A recepção continua sem e-mail nenhum.
+  it("sem nome completo, o gerente vê a parte do e-mail antes do @ — a recepção não", async () => {
+    duble.semNomeCompleto = true;
+    try {
+      sessao("manager", "u-gerente");
+      const gerente = await pedirLista();
+      expect(gerente.corpo.data?.[0]?.full_name).toBe("u-dona");
+
+      duble.filtros = [];
+      sessao("agent", "u-recepcao");
+      const recepcao = await pedirLista();
+      expect(recepcao.corpo.data?.[0]?.full_name).toBeNull();
+    } finally {
+      duble.semNomeCompleto = false;
+    }
   });
 
   it("quem só lê continua sem a lista", async () => {

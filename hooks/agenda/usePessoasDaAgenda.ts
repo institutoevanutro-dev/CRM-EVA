@@ -51,8 +51,9 @@ export function usePessoasDaAgenda() {
           .map((m) => ({
             id: m.user_id,
             // `full_name` pode vir null quando o service role não está
-            // configurado — a rota degrada assim de propósito. A lista mínima
-            // não traz e-mail, então o rótulo neutro é o que sobra.
+            // configurado — a rota degrada assim de propósito — ou abaixo de
+            // gerente para quem não tem nome cadastrado: a rota só dá a parte do
+            // e-mail antes do @ ao gerente. O rótulo neutro é o que sobra.
             nome: m.full_name ?? "Sem nome",
             trilha: trilhas.get(m.user_id) ?? 1,
           }));
