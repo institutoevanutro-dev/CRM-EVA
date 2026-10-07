@@ -119,6 +119,8 @@ export type FollowupFlowTurnResult =
   | { kind: 'skipped'; reason: string; outcome?: 'converted' | 'replied' | 'exhausted' | 'opted_out' | 'handoff' }
   | { kind: 'pulado'; reason: string }
   | { kind: 'classified'; class: string }
+  /** O envio ficou estacionado até `until` (janela fechada) — nem saiu, nem foi recusado. */
+  | { kind: 'deferred'; until: Date; reason: string }
   | { kind: 'planned'; propostas: PropostaDeEsperaBruta[]; modelo: string };
 
 /**
@@ -408,6 +410,16 @@ async function runFlowDrivenTurn(
           at: b.adiarPara,
           payload: job.payload,
         });
+        // O adiamento VOLTA para o enrollment. Sem isto o motor lia a espera
+        // como worker morto e marcava `dead` em ~11h (porte do upstream 092081b61).
+        await complete(pool, {
+          jobId: job.id,
+          jobClaim: claimOfJob(job),
+          organizationId: target.tenantId,
+          enrollmentId,
+          nodeId,
+          result: { kind: 'deferred', until: b.adiarPara, reason: 'fora_da_janela' },
+        });
         return;
       }
       if (b.invalida) {
@@ -443,7 +455,11 @@ async function runFlowDrivenTurn(
     if (body !== null) {
       // Texto do operador: sem camada semântica (ver o cabeçalho de sendFixedOutbound).
       const sent = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body, false);
-      if (sent === 'sent') {
+      // Os QUATRO desfechos voltam para o enrollment. O adiado era o que não
+      // voltava, e o silêncio custava o enrollment inteiro (dead-man de ~11h).
+      if (typeof sent === 'object') {
+        await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: sent });
+      } else if (sent === 'sent') {
         await complete(pool, { jobId:job.id,jobClaim:claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'sent' } });
       } else if (sent === 'pulado') {
         await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'pulado', reason: TEXTO_DO_BLOQUEIO.fora_das_24h_do_instagram } });
@@ -496,7 +512,7 @@ async function runFlowDrivenTurn(
         throw err;
       }
       if (saida === 'tratado') return;
-      if (saida.kind !== 'sent') throw err;
+      if (saida.kind !== 'sent' && saida.kind !== 'deferred') throw err;
       await fechar(saida);
       return;
     }
@@ -690,7 +706,7 @@ async function sendFixedOutbound(
   comCamadaSemantica: boolean,
   /** Seq no `send_ledger` do job. A reserva usa `SEQ_DO_MODELO_DE_RESERVA`. */
   seq = 1,
-): Promise<"sent" | "deferred" | "skipped" | "pulado"> {
+): Promise<"sent" | "skipped" | "pulado" | { kind: "deferred"; until: Date; reason: string }> {
   const { tenantId, leadId, channelSessionId, conversationId } = target;
   const runLog = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, lead_id: leadId });
 
@@ -763,7 +779,7 @@ async function sendFixedOutbound(
         code: chain.code,
         next_run_at: chain.nextAllowedAt.toISOString(),
       });
-      return "deferred";
+      return { kind: "deferred", until: chain.nextAllowedAt, reason: chain.code };
     }
     runLog.info('envio fixo vetado pela cadeia — não re-agendado', { code: chain.code });
     return "skipped";
@@ -841,8 +857,8 @@ async function iaNaoEnviouDeVez(pool: pg.Pool, job: JobRow, err: unknown): Promi
  * `is_blocked`) — a liberação do número entra nelas —, e o envio pela MESMA
  * porta guardada do texto fixo, com a seq da reserva.
  *
- * `'tratado'`: um bloqueio foi aplicado ou o envio foi adiado — o passo já tem
- * dono.
+ * `'tratado'`: um bloqueio foi aplicado — o passo já tem dono. O envio adiado
+ * pela janela volta como `deferred`, para quem chama avisar o enrollment.
  */
 async function tentarModeloDeReserva(
   deps: InboundTurnDeps,
@@ -873,7 +889,7 @@ async function tentarModeloDeReserva(
   // Texto do operador: sem camada semântica, como o texto fixo do fluxo.
   const saiu = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body!, false, SEQ_DO_MODELO_DE_RESERVA);
   if (saiu === 'sent') return { kind: 'sent', via: 'modelo_de_reserva' };
-  if (saiu === 'deferred') return 'tratado';
+  if (typeof saiu === 'object') return saiu;
   if (saiu === 'pulado') return { kind: 'pulado', reason: TEXTO_DO_BLOQUEIO.fora_das_24h_do_instagram };
   return { kind: 'skipped', reason: MOTIVO_RESERVA_RECUSADA };
 }

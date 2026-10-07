@@ -10,6 +10,7 @@ import {
   type NoDoDossie,
 } from "./eventos-legiveis";
 import type { FlowNode } from "./graph-schema";
+import { EVENTO_ACAO_ADIADA } from "./node-handlers";
 
 const espera: FlowNode = {
   id: "wait-1",
@@ -138,6 +139,23 @@ describe("descreveEvento", () => {
   it("intervenção humana é marcada como humana — é o que separa decisão de automatismo", () => {
     expect(descreveEvento(evento({ event_type: "paused_manual" }), nos, "pt-BR").autor).toBe("pessoa");
     expect(descreveEvento(evento({ event_type: "reactivity_replied" }), nos, "pt-BR").autor).toBe("cliente");
+  });
+
+  it("adiar por janela fechada é lido como ESPERA, não como defeito — e com a data", () => {
+    // Porte do upstream a1c6c4d1e. Sem esta linha o passo mais longo do dossiê
+    // cai no `default` e o operador lê defeito onde houve obediência ao horário.
+    const r = descreveEvento(
+      evento({
+        node_id: "action-1",
+        event_type: EVENTO_ACAO_ADIADA,
+        payload: { until: "2026-08-11T12:00:00.000Z", reason: "outside_window" },
+      }),
+      nos,
+      "pt-BR",
+    );
+    expect(r.titulo).toBe("Segurou o envio até o horário permitido");
+    expect(r.detalhe).toContain("envia em");
+    expect(r.autor).toBe("motor");
   });
 
   it("tipo desconhecido não vira jargão disfarçado de frase, mas também não some", () => {

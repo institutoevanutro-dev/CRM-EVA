@@ -123,8 +123,40 @@ export const ACTION_RECHECK_MAX_MS = 60 * 60_000;
  * maior noite fechada — e ainda custa poucos ticks. O dead-man continua
  * existindo: worker realmente morto termina em `dead`, só que depois de uma
  * espera que não confunde noite com defeito.
+ *
+ * ⚠️ E SUBIR O NÚMERO NÃO É A DEFESA — a defesa é `EVENTO_ACAO_ADIADA`. A
+ * espera mais longa é do operador (janela anti-ban por canal com domingo
+ * fechado já dá 33h; a janela da organização pode ser ainda mais estreita), e
+ * contra uma espera sem teto nenhum orçamento fixo ganha. O que resolve é o
+ * turno DIZER que está estacionado, e o contador medir só a ociosidade depois
+ * disso — ver `rechecksOciososDaAcao`. (Porte do upstream a1c6c4d1e.)
  */
 export const MAX_ACTION_RECHECKS = 14;
+
+/**
+ * O evento que o turno grava quando o envio foi ADIADO para um instante
+ * CONHECIDO — janela fechada (anti-ban do número ou a janela da organização),
+ * e não defeito. É PROVA DE VIDA: sem ele o dead-man não distingue "o worker
+ * morreu" de "o worker está vivo e o envio espera a janela abrir", e matava o
+ * enrollment com um motivo falso (`action_turn_never_completed`).
+ */
+export const EVENTO_ACAO_ADIADA = "action_deferred";
+
+/**
+ * Rechecks ociosos da ação NESTA estadia — o número que o dead-man mede.
+ * Idêntico a `occupancyEventCount` enquanto não houver adiamento (worker morto
+ * morre como antes); a diferença é que ele PARA no último `action_deferred`.
+ */
+export function rechecksOciososDaAcao(events: EnrollmentEventRef[], nodeId: string): number {
+  let n = 0;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const evento = events[i]!;
+    if (evento.node_id !== nodeId) break;
+    if (evento.event_type === EVENTO_ACAO_ADIADA) return n;
+    n++;
+  }
+  return n;
+}
 
 /**
  * Quanto esperar até o próximo recheck da ação: 5min dobrando até 1h.
