@@ -27,6 +27,8 @@ import {
   type FlowEdge,
   type FlowNode,
 } from "./graph-schema";
+import { traduzir } from "@/lib/i18n/dicionario";
+import type { Idioma } from "@/lib/i18n/idiomas";
 import {
   RAMOS_RESERVADOS_EM_FRASE,
   fraseDaClasse,
@@ -366,7 +368,11 @@ export function descreveEvento(
       const ate = quandoLegivel(p.until, idioma);
       return {
         titulo: "Segurou o envio até o horário permitido",
-        detalhe: ate ? `a janela estava fechada; envia em ${ate}` : "a janela estava fechada",
+        // Traduzida AQUI: a tela chama t() com a frase já montada, e uma frase com
+        // data nunca bate numa chave do dicionário.
+        detalhe: ate
+          ? traduzir("a janela estava fechada; envia em {ate}", idioma as Idioma).replace("{ate}", ate)
+          : "a janela estava fechada",
         ...motor,
       };
     }

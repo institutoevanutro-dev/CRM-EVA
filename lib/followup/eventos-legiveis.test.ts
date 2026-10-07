@@ -158,6 +158,22 @@ describe("descreveEvento", () => {
     expect(r.autor).toBe("motor");
   });
 
+  it("o adiamento com data sai traduzido em espanhol (a frase interpolada não acha o dicionário na tela)", () => {
+    // O dossiê chama t(lido.detalhe) com a frase JÁ montada; uma frase com data
+    // nunca bate numa chave do dicionário. A tradução tem de acontecer aqui.
+    const r = descreveEvento(
+      evento({
+        node_id: "action-1",
+        event_type: EVENTO_ACAO_ADIADA,
+        payload: { until: "2026-08-11T12:00:00.000Z", reason: "outside_window" },
+      }),
+      nos,
+      "es",
+    );
+    expect(r.detalhe).toMatch(/^la ventana estaba cerrada; envía el /);
+    expect(r.detalhe).not.toContain("{ate}");
+  });
+
   it("tipo desconhecido não vira jargão disfarçado de frase, mas também não some", () => {
     const r = descreveEvento(evento({ event_type: "passo_que_ainda_nao_existe" }), nos, "pt-BR");
     expect(r.titulo).toBe("Passo registrado pelo motor");

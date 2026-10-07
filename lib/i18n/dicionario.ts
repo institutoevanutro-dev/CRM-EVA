@@ -5746,6 +5746,7 @@ export const DICIONARIO: Traducoes = {
   "Mensagem enviada": { es: "Mensaje enviado" },
   "Segurou o envio até o horário permitido": { es: "Retuvo el envío hasta el horario permitido" },
   "a janela estava fechada": { es: "la ventana estaba cerrada" },
+  "a janela estava fechada; envia em {ate}": { es: "la ventana estaba cerrada; envía el {ate}" },
   "Passo pulado, o fluxo seguiu": { es: "Paso omitido, el flujo siguió" },
   "Passo pulado: fora das 24h do Instagram.": { es: "Paso omitido: fuera de las 24 h de Instagram." },
   "O agente interpretou a resposta": { es: "El agente interpretó la respuesta" },
