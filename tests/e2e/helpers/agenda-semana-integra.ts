@@ -176,27 +176,22 @@ export async function diasDesenhados(page: Page): Promise<string[]> {
  * para fechar.
  */
 /**
- * Espera a consulta de horários do painel RESPONDER — sem exigir que o mês em
- * tela tenha dia para acender.
+ * Espera a consulta de horários do painel RESPONDER com algum dia aceso.
  *
- * O sinal é um dia disponível OU o botão "Próximo mês" habilitado: o
- * `PainelDeMarcacao` só o liga quando a consulta cobriu algum dia DEPOIS do mês
- * visível (`temDiaConsultadoDepois` deriva das chaves de `horariosPorDia`, que é
- * o que a consulta de fato devolveu). No último dia do mês, à tarde, o primeiro
- * nunca acende e o segundo é o que diz "a consulta voltou; o que há é no mês que
- * vem" — e aí quem decide é o salto de mês de quem chamou. Só quando NENHUM dos
- * dois aparece a espera reprova, e aí a frase está certa: não há jornada.
+ * No último dia do mês, à tarde, o mês de hoje não tem mais vaga — e o painel
+ * passa SOZINHO ao mês seguinte quando os horários do mês de abertura chegam
+ * (`agenda-painel-abre-no-mes-com-vaga.test.tsx`, porte de
+ * melgarafael/DeskcommCRM b44fcf19c). Por isso basta esperar um dia aceso.
  *
- * (Uma versão anterior esperava o dia e engolia o prazo. O sinal do botão veio
- * do PR #65, que o encontrou em paralelo e cobria só `escolherDiaDesenhado`.)
+ * ⚠️ O sinal antigo — "ou o botão Próximo mês habilitado" — não vale mais: o
+ * botão agora está SEMPRE habilitado (a consulta acompanha o mês visível, porte
+ * de d5efd698a), e esperar por ele passaria antes de a consulta responder.
  */
 async function esperarAlgumDiaAceso(page: Page): Promise<void> {
   await expect(
-    page
-      .locator('[data-testid^="dia-"][data-disponivel="true"]')
-      .or(page.locator('[data-testid="mes-seguinte"]:enabled'))
-      .first(),
-    "nenhum dia disponível no painel — o seed da agenda não deixou jornada publicada",
+    page.locator('[data-testid^="dia-"][data-disponivel="true"]').first(),
+    "nenhum dia disponível no painel — o seed da agenda não deixou jornada publicada, ou o " +
+      "painel abriu num mês sem vaga (ver `agenda-painel-abre-no-mes-com-vaga.test.tsx`)",
   ).toBeVisible({ timeout: 20_000 });
 }
 
@@ -211,15 +206,10 @@ export async function escolherDiaDesenhado(page: Page, dias: readonly string[]):
   // Até a consulta de horários responder, TODO dia nasce indisponível — uma
   // varredura feita antes disso leria "nenhum dia da semana desenhada" onde há.
   //
-  // ⚠️ E NO ÚLTIMO DIA DO MÊS PODE NÃO HAVER DIA NENHUM ACESO NESTE MÊS. Medido em
-  // 30/09/2026, ~17h de São Paulo: a jornada de hoje já passou do aviso mínimo,
-  // o próximo dia com horário é 1º de outubro, e o mini-calendário só acende o
-  // que é do mês em tela. A espera antiga exigia "algum dia aceso" ANTES de
-  // pular o mês, e reprovava a `main` inteira — a mesma classe de vermelho-
-  // por-calendário que o salto de mês abaixo existe para fechar, só que um
-  // degrau antes dele. Por isso a espera é tolerante: esgotado o prazo sem dia
-  // aceso no mês em tela, o sinal é o botão de mês seguinte habilitado, e o
-  // salto de mês abaixo é quem decide.
+  // ⚠️ No último dia do mês pode não haver dia aceso no mês de hoje (medido em
+  // 30/09/2026, ~17h de São Paulo): o painel passa sozinho ao mês seguinte
+  // quando os horários do mês de abertura chegam sem vaga — ver
+  // `esperarAlgumDiaAceso`.
   await esperarAlgumDiaAceso(page);
 
   let candidatos = await disponiveis();
@@ -301,8 +291,9 @@ async function diasCheios(page: Page): Promise<string[]> {
     return chaves.filter((k) => k > hoje).sort();
   };
 
-  // Tolerante no último dia do mês, pela mesma razão de `escolherDiaDesenhado`:
-  // sem dia aceso neste mês, quem decide é o salto de mês logo abaixo.
+  // No último dia do mês o painel já abre no mês seguinte (ver
+  // `esperarAlgumDiaAceso`); o salto de mês abaixo cobre o dia aceso que não é
+  // futuro.
   await esperarAlgumDiaAceso(page);
 
   const cheios = await varrer();
@@ -313,10 +304,14 @@ async function diasCheios(page: Page): Promise<string[]> {
   // mês em tela. Sem este passo as specs reprovariam nos dias 30/31 — a mesma
   // classe de vermelho-por-calendário que este módulo existe para fechar.
   await page.getByTestId("mes-seguinte").click();
-  await expect(
-    page.locator('[data-testid^="dia-"][data-disponivel="true"]').first(),
-    "nem o mês seguinte oferece dia — a janela de busca da tela é de 30 dias",
-  ).toBeVisible({ timeout: 20_000 });
+  // Espera pelo PRÓPRIO critério, não por "algum dia aceso": logo depois do
+  // clique há um quadro com o mês novo na tela e a consulta ainda a caminho.
+  await expect
+    .poll(varrer, {
+      message: "nem o mês seguinte oferece dia futuro — a consulta deveria ter pedido o mês visível",
+      timeout: 20_000,
+    })
+    .not.toEqual([]);
   return varrer();
 }
 

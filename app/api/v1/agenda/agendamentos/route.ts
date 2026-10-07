@@ -17,6 +17,7 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { listaAgendamentos, type AgendamentoListado } from "@/lib/agenda/consulta";
+import { donosDaAgenda } from "@/lib/agenda/donos-da-agenda";
 import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
 import { fail, ok } from "@/lib/api/wrappers";
 import { logger } from "@/lib/logger";
@@ -227,11 +228,26 @@ export async function GET(req: NextRequest): Promise<Response> {
     // semente do servidor faz a MESMA pergunta e recebe a MESMA resposta. A
     // regra — recorte por INTERSEÇÃO de intervalos, como no motor de
     // disponibilidade — mora num lugar só (#525).
-    const { blocos, erro } = await lerOcupacaoExterna(supabase, {
-      organizationId: activeOrg.orgId,
-      de: parsed.data.de,
-      ate: parsed.data.ate,
+    //
+    // POR DONO (`p_owner`), e não pela sessão: a recepção só recebia a própria
+    // ocupação e a grade desenhava livre o horário que o Google da médica já
+    // ocupa (porte de melgarafael/DeskcommCRM 42c558397, #896 item 3). A lista
+    // de donos é a mesma da semente da página — as duas mostram a mesma coisa.
+    const { donos, erro: erroDosDonos } = await donosDaAgenda(activeOrg.orgId, {
+      id: authz.user.id,
+      papel: activeOrg.role,
     });
+    if (erroDosDonos) {
+      logger.warn("[agenda.agendamentos] donos da agenda não vieram", {
+        erro: erroDosDonos,
+        requestId,
+      });
+    }
+    const { blocos, erro } = await lerOcupacaoExterna(
+      supabase,
+      { organizationId: activeOrg.orgId, de: parsed.data.de, ate: parsed.data.ate },
+      donos,
+    );
 
     if (erro) {
       logger.warn("[agenda.agendamentos] ocupação do Google não veio", {

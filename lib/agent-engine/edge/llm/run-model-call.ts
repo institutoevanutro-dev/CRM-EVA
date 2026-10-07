@@ -473,7 +473,10 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     cacheReadTokens: result.usage.inputTokenDetails.cacheReadTokens ?? 0,
     cacheWriteTokens: result.usage.inputTokenDetails.cacheWriteTokens ?? 0,
   };
-  const cost = costCents(model, usage);
+  // O TTL é o MESMO que gravou o prefixo estável acima: a gravação de cache custa
+  // 1.25× a entrada em 5m e 2× em 1h, e supor a doutrina superfaturaria 60% da
+  // parcela de cache write em quem usa o knob.
+  const cost = costCents(model, usage, cfg.cacheTtl ?? '1h');
 
   const { rows } = await db.query<{ id: string }>(
     `insert into llm_calls
@@ -579,7 +582,9 @@ export function normalizarErro(err: unknown): {
     codigo = 'credencial_recusada';
   } else if (status === 404 || /model.*not.*found|does not exist/i.test(bruto)) {
     codigo = 'modelo_inexistente';
-  } else if (status === 429 || /rate.?limit|quota|insufficient.*credit/i.test(bruto)) {
+  } else if (status === 429 || /rate.?limit|quota|insufficient.*credit|no credits remaining/i.test(bruto)) {
+    // "You have no credits remaining" é como a OpenAI diz "sem saldo" — sem a
+    // frase o erro caía em `erro_desconhecido` e a tela não dizia o que fazer.
     codigo = 'limite_ou_saldo';
   } else if ((status !== null && status >= 500) || /timeout|ECONNREFUSED|fetch failed|network/i.test(bruto)) {
     codigo = 'provedor_indisponivel';

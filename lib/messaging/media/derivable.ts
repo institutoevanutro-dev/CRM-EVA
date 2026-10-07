@@ -53,3 +53,19 @@ export function sqlMidiaVaiSerLida(m: string): string {
                  where vv.organization_id = ${m}.organization_id
                    and vv.status = 'published' and vv.video_frames_enabled)))`;
 }
+
+/**
+ * O texto que substitui a string vazia quando a mídia não pôde ser lida.
+ *
+ * Não é cosmético: o agente recebe este texto como derivado da mensagem, então
+ * ele passa a SABER que chegou algo que não conseguiu interpretar, em vez de
+ * concluir que a mensagem veio vazia. A diferença aparece na resposta ao
+ * cliente — "não consegui abrir sua foto, pode me dizer o que é?" no lugar de
+ * um silêncio que parece descaso.
+ *
+ * O worker grava este texto também com status `ready`, então o balão da inbox
+ * o compara para não mostrá-lo como se fosse a transcrição. Por isso ele mora
+ * aqui, num módulo sem import que pode ir para o cliente, e não no worker.
+ * (Porte do DeskcommCRM 4d85120b8.)
+ */
+export const MARCADOR_NAO_LIDA = "[o cliente enviou uma mídia que não consegui interpretar]";

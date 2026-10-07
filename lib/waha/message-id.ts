@@ -7,16 +7,23 @@
  *   - NOWEB: { id: { id: "..." } } ou { key: { id: "..." } }
  * Sem casar o shape, `messages.external_id` fica null e o ack do webhook nunca
  * encontra a linha — insere duplicata em vez de atualizar (bug real da Fase 1).
+ *
+ * Quando o WAMessageKey traz o `id` interno ao lado do `_serialized` (o WEBJS
+ * devolve `{ fromMe, remote, id, _serialized }`), vale o INTERNO: é a forma
+ * canônica (bare), a mesma que o eco do celular grava (`lib/waha/ingest.ts`).
+ * Preferindo o `_serialized`, o WEBJS carimbava o composto, o unique deixava
+ * de pegar o eco na corrida e a frase saía em dobro (revisão do PR #134).
+ * Só `_serialized`, sem o interno, segue como veio.
  */
 export function parseWahaMessageId(raw: unknown): string | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as { id?: unknown; key?: { id?: unknown } };
   if (typeof r.id === 'string') return r.id;
   if (typeof r.id === 'object' && r.id !== null) {
-    const serialized = (r.id as { _serialized?: unknown })._serialized;
-    if (typeof serialized === 'string') return serialized;
     const innerId = (r.id as { id?: unknown }).id;
     if (typeof innerId === 'string') return innerId;
+    const serialized = (r.id as { _serialized?: unknown })._serialized;
+    if (typeof serialized === 'string') return serialized;
   }
   if (typeof r.key === 'object' && r.key !== null && typeof r.key.id === 'string') return r.key.id;
   return null;
@@ -47,6 +54,9 @@ export function bareWaMessageId(id: string): string {
  *   NOWEB — o envio devolve o id cru (`3EB0…`) e o webhook grava o composto
  *           `true_<chatId>_3EB0…`
  *   WEBJS — os dois lados usam o `_serialized` completo
+ * (Hoje o eco do celular grava o bare, e o envio também, nos dois engines —
+ * ver `parseWahaMessageId`. As formas compostas seguem na lista pelas linhas
+ * gravadas antes disso e por resposta de envio que só traga o `_serialized`.)
  *
  * Reduzir ao bare cobre o segundo caso; para o primeiro é preciso CONSTRUIR o
  * composto a partir do destinatário, porque sem ele a lista nunca contém a forma

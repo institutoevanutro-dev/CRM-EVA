@@ -17,6 +17,7 @@
 import { z } from "zod";
 
 import type { McpToolDefinition } from "../types";
+import { foraDaConversa } from "../fora-da-conversa";
 
 const inputShape = {
   contact_id: z
@@ -32,12 +33,20 @@ export const crmListPrivacyRequests: McpToolDefinition<typeof inputShape> = {
   description:
     "Lista pedidos de privacidade (LGPD) da organização — exportação ou exclusão de dados — com " +
     "tipo, situação, quando chegou e o prazo. NÃO executa nada: é leitura. Use para não insistir " +
-    "com quem pediu exclusão e para explicar o prazo a quem perguntar pelo próprio pedido.",
+    "com quem pediu exclusão e para explicar o prazo a quem perguntar pelo próprio pedido." +
+    " Em conversa de atendimento, devolve apenas os pedidos do contato desta conversa.",
   inputSchema: inputShape,
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
+    // Lista, então o escopo do turno é FILTRO: sem `contact_id`, a consulta
+    // pergunta só pelo contato do turno; o pedido EXPLÍCITO de outro paciente
+    // é recusado. Sem contato do turno, nada muda.
+    const doTurno = ctx.contatoDoTurno;
+    if (doTurno && input.contact_id && input.contact_id !== doTurno) {
+      return foraDaConversa("o pedido de privacidade de quem não é o paciente desta conversa não é seu para ver");
+    }
     let q = ctx.supabase
       .from("lgpd_requests")
       .select("id, request_type, source, contact_id, status, received_at, due_at, completed_at, emergency, scope")
@@ -45,7 +54,10 @@ export const crmListPrivacyRequests: McpToolDefinition<typeof inputShape> = {
       .order("received_at", { ascending: false })
       .limit(input.limite);
 
-    if (input.contact_id) q = q.eq("contact_id", input.contact_id);
+    // O contato efetivo vai NO `WHERE`, antes do `.limit`: filtrar depois
+    // truncaria o conjunto do contato.
+    const contatoEfetivo = doTurno ?? input.contact_id;
+    if (contatoEfetivo) q = q.eq("contact_id", contatoEfetivo);
 
     const { data, error } = await q;
     if (error) throw new Error(`listar_pedidos_de_privacidade_falhou: ${error.message}`);

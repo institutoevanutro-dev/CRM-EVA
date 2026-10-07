@@ -10,7 +10,8 @@ import type { AtribuicaoDeAnuncio, Bruto } from "@/lib/leads/atribuicao-de-anunc
 import { obj, str } from "@/lib/leads/atribuicao-de-anuncio";
 
 /**
- * `contextInfo.externalAdReplyInfo` do Baileys — o mesmo dado do anúncio,
+ * `contextInfo.externalAdReply` (observado em mensagens reais do WAHA NOWEB)
+ * ou `contextInfo.externalAdReplyInfo` (forma legada do Baileys) — o dado do anúncio,
  * embutido na PRÓPRIA mensagem que o app do cliente manda ao clicar num
  * anúncio "Clique para o WhatsApp". `messageRaw` é `_data.message` do payload
  * do WAHA (NOWEB) — a forma bruta do Baileys, sem normalização.
@@ -30,8 +31,12 @@ export function extrairAtribuicaoWaha(messageRaw: unknown): AtribuicaoDeAnuncio 
     obj(m.videoMessage)?.contextInfo,
     obj(m.conversation) ? null : m.contextInfo,
   ];
-  const contextInfo = candidatos.map(obj).find((c): c is Bruto => c !== null);
-  const ad = obj(contextInfo?.externalAdReplyInfo);
+  // Porte do DeskcommCRM bc49ea81f: aceita as duas formas, e procura em todos
+  // os candidatos (não só no primeiro `contextInfo` que existir).
+  const ad = candidatos
+    .map(obj)
+    .map((contextInfo) => obj(contextInfo?.externalAdReply) ?? obj(contextInfo?.externalAdReplyInfo))
+    .find((candidate): candidate is Bruto => candidate !== null);
   if (!ad) return null;
 
   // O mesmo filtro que o irmão da API oficial aplica, e que aqui faltava: post

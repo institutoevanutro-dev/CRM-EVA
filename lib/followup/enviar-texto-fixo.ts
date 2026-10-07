@@ -143,6 +143,11 @@ export async function enviarTextoFixoPendente(
           continue;
         }
         if (decisao.motivo === "fora_da_janela") {
+          // O adiamento volta para o enrollment ANTES do settle (que solta o
+          // job): sem isto o motor lia a espera como worker morto e marcava `dead`.
+          await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {
+            kind: "deferred", until: decisao.adiarPara, reason: "fora_da_janela",
+          },undefined,job.id,jobClaim);
           await settle(job.organization_id,job.id,jobClaim.acquired_at,false,TEXTO_DO_BLOQUEIO.fora_da_janela,undefined,decisao.adiarPara.toISOString());
           continue;
         }
@@ -185,6 +190,9 @@ export async function enviarTextoFixoPendente(
       // Janela anti-ban DO NÚMERO (Conexões → `channel_knobs`; 7h–22h por padrão).
       const abreEm = await adiarAteAJanelaAbrir(admin, job.organization_id as string, linha.channel_session_id);
       if (abreEm !== null) {
+        await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {
+          kind: "deferred", until: new Date(abreEm), reason: "outside_window",
+        },undefined,job.id,jobClaim);
         await settle(job.organization_id,job.id,jobClaim.acquired_at,false,"Envio adiado: fora da janela de envio do número.",undefined,abreEm);
         continue;
       }

@@ -48,6 +48,7 @@ import {
 import type { ListMessagesQuery, SendMessageInput } from "@/lib/schemas";
 import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { devolverIdOriginalAoEcoDeOutraConversa } from "@/lib/messaging/eco-em-outra-conversa";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Message } from "@/lib/types/messaging";
 
@@ -134,7 +135,7 @@ async function removerEcoDoProprioEnvio(
 }
 
 const MSG_COLS =
-  "id, organization_id, conversation_id, channel_session_id, contact_id, external_id, type, direction, status, ack, error_code, error_message, body, media_url, media_mime, media_size_bytes, media_storage_path, sent_via, sent_by_user_id, sent_at, delivered_at, read_at, metadata, edited_at, revoked_at, reply_to_message_id, created_at";
+  "id, organization_id, conversation_id, channel_session_id, contact_id, external_id, type, direction, status, ack, error_code, error_message, body, media_url, media_mime, media_size_bytes, media_storage_path, media_derived_text, media_derived_status, sent_via, sent_by_user_id, sent_at, delivered_at, read_at, metadata, edited_at, revoked_at, reply_to_message_id, created_at";
 
 function actorAuditPayload(actor: Actor): {
   actorUserId: string | null;
@@ -512,10 +513,15 @@ export async function sendMessageHandler(
   // Recusar em silêncio (citar nada) seria pior que recusar alto: quem clicou
   // "responder" veria a mensagem sair sem o fio e não saberia por quê.
   let citada: { id: string; external_id: string | null } | null = null;
+  // O id que a citação manda ao CANAL. É o `external_id`, exceto quando a
+  // ingestão gravou a forma canônica e guardou ao lado a que o canal entregou
+  // (`metadata.external_id_original`): remontar a partir da canônica pode errar
+  // o chat, e aí a citação aponta para uma mensagem que não existe.
+  let idDaCitadaNoCanal: string | null = null;
   if (input.reply_to_message_id) {
     const { data: alvo } = await supabase
       .from("messages")
-      .select("id, external_id")
+      .select("id, external_id, metadata")
       .eq("id", input.reply_to_message_id)
       .eq("organization_id", ctx.organization_id)
       .eq("conversation_id", c.id)
@@ -531,6 +537,8 @@ export async function sendMessageHandler(
       );
     }
     citada = alvo as { id: string; external_id: string | null };
+    const original = (alvo as { metadata?: Record<string, unknown> | null }).metadata?.external_id_original;
+    idDaCitadaNoCanal = typeof original === "string" ? original : citada.external_id;
   }
 
   const insertRow = {
@@ -847,7 +855,7 @@ export async function sendMessageHandler(
           },
           // O id que a PLATAFORMA conhece, lido da linha citada agora — não uma
           // cópia guardada no envio, que poderia divergir da linha.
-          replyToExternalId: citada?.external_id ?? null,
+          replyToExternalId: idDaCitadaNoCanal,
         }));
       } else if (input.type === "contact") {
         const sc = outboundMetadata.shared_contact as
@@ -890,7 +898,7 @@ export async function sendMessageHandler(
           etiquetaHumana,
           kind: input.type,
           body: input.body ?? "",
-          replyToExternalId: citada?.external_id ?? null,
+          replyToExternalId: idDaCitadaNoCanal,
         }));
       }
 
@@ -904,31 +912,49 @@ export async function sendMessageHandler(
         message=await recordApprovedReplyReceiptSupabase(supabase,ctx.approvedReply,message.id,externalId,
           externalId?(adapter.echoExternalIds?.({externalId,recipient:chatId})??[externalId]):[]) as unknown as Message;
       } else {
-      await removerEcoDoProprioEnvio(
-        supabase,
-        ctx.organization_id,
-        c.id,
-        message.id,
-        externalId,
-        externalId
-          ? (adapter.echoExternalIds?.({ externalId, recipient: chatId }) ?? [externalId])
-          : [],
-      );
-      const { data: updated } = await supabase
-        .from("messages")
-        .update({
-          status: "sent",
-          external_id: externalId,
-          ack: 0,
-          // Colunas só do template — é o que responde custo e conformidade de
-          // janela depois, sem varrer jsonb.
-          ...(input.type === "template"
-            ? { template_name: input.template_name, template_language: input.template_language }
-            : {}),
-        })
-        .eq("id", message.id)
-        .select(MSG_COLS)
-        .maybeSingle();
+      const candidatosDoEco = externalId
+        ? (adapter.echoExternalIds?.({ externalId, recipient: chatId }) ?? [externalId])
+        : [];
+      const limparEco = () =>
+        removerEcoDoProprioEnvio(supabase, ctx.organization_id, c.id, message.id, externalId, candidatosDoEco);
+      const marcarEnviada = (comId: boolean) =>
+        supabase
+          .from("messages")
+          .update({
+            status: "sent",
+            ...(comId ? { external_id: externalId } : {}),
+            ack: 0,
+            // Colunas só do template — é o que responde custo e conformidade de
+            // janela depois, sem varrer jsonb.
+            ...(input.type === "template"
+              ? { template_name: input.template_name, template_language: input.template_language }
+              : {}),
+          })
+          .eq("id", message.id)
+          .select(MSG_COLS)
+          .maybeSingle();
+      await limparEco();
+      let { data: updated, error: erroAoMarcar } = await marcarEnviada(true);
+      // O eco que o webhook inseriu ENTRE a limpeza e este UPDATE já ocupa o id
+      // (o eco grava a mesma forma bare que o envio — DeskcommCRM #1855), e o
+      // unique recusa. Mesma recusa que o watchdog trata em `markRedriveSent`:
+      // limpar de novo e carimbar outra vez; se ainda colidir, a mensagem SAIU e
+      // fica `sent` sem o id — nunca `queued`, que é pedir para ser reenviada.
+      // (Porte do DeskcommCRM 098aef895.)
+      if (erroAoMarcar?.code === "23505") {
+        await limparEco();
+        ({ data: updated, error: erroAoMarcar } = await marcarEnviada(true));
+        // Colidir de novo é o eco preso em OUTRA conversa (a mesma pessoa
+        // cadastrada pelo telefone e pelo @lid), que a limpeza não alcança — e
+        // não deve. Ele devolve o id curto e volta ao composto que o canal
+        // entregou, o estado de antes; aí o carimbo passa e o ack acha a linha.
+        if (
+          erroAoMarcar?.code === "23505" &&
+          (await devolverIdOriginalAoEcoDeOutraConversa(supabase, ctx.organization_id, message.id, candidatosDoEco))
+        )
+          ({ data: updated, error: erroAoMarcar } = await marcarEnviada(true));
+        if (erroAoMarcar?.code === "23505") ({ data: updated } = await marcarEnviada(false));
+      }
       if (updated) message = updated as unknown as Message;
       }
     } catch (err) {

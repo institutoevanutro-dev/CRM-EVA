@@ -55,7 +55,50 @@ describe("extrairAtribuicaoMeta — referral do webhook oficial", () => {
   });
 });
 
-describe("extrairAtribuicaoWaha — externalAdReplyInfo do Baileys", () => {
+describe("extrairAtribuicaoWaha — externalAdReply do WAHA e forma legada", () => {
+  // Porte do DeskcommCRM bc49ea81f (autor original: ozzure): o WAHA NOWEB
+  // entrega `externalAdReply` (confirmado em mensagens reais no original); o
+  // fork só lia `externalAdReplyInfo` e o paciente do anúncio ficava sem origem.
+  it("extrai externalAdReply na forma recebida pelo WAHA NOWEB", () => {
+    const r = extrairAtribuicaoWaha({
+      extendedTextMessage: {
+        text: "Quero agendar uma avaliação",
+        contextInfo: {
+          ctwaPayload: "dados-do-clique",
+          externalAdReply: {
+            sourceType: "ad",
+            sourceId: "ad-9274",
+            ctwaClid: "clid-9274",
+            title: "Avaliação gratuita",
+            body: "Saiba mais",
+            sourceUrl: "https://fb.me/anuncio",
+          },
+        },
+      },
+      messageContextInfo: { deviceListMetadataVersion: 2 },
+    });
+    expect(r).toEqual({
+      plataforma: "meta_ads",
+      sourceId: "clid-9274",
+      titulo: "Avaliação gratuita",
+      corpo: "Saiba mais",
+      sourceUrl: "https://fb.me/anuncio",
+      bruto: expect.objectContaining({ sourceType: "ad" }),
+    });
+  });
+
+  it("post ORGÂNICO na forma externalAdReply também fica fora", () => {
+    expect(
+      extrairAtribuicaoWaha({
+        extendedTextMessage: {
+          contextInfo: {
+            externalAdReply: { sourceType: "post", title: "Publicação", ctwaClid: "x" },
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("extrai de extendedTextMessage.contextInfo.externalAdReplyInfo", () => {
     const r = extrairAtribuicaoWaha({
       extendedTextMessage: {

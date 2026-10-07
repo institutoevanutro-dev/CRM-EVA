@@ -13,6 +13,7 @@ import { useEditLead } from "@/hooks/kanban/useUpdateLead";
 import type { Lead } from "@/lib/types/leads";
 import { updateLeadSchema, type UpdateLeadInput } from "@/lib/schemas/leads";
 import { parseReaisToCents } from "@/lib/money";
+import { soChavesAlteradas } from "@/lib/leads/custom-fields-so-diff";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 import { EcoDoValor } from "./EcoDoValor";
 
@@ -52,6 +53,13 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
   const t = useT();
   const edit = useEditLead(pipelineId);
   const [customFields, setCustomFields] = useState<Record<string, unknown>>(lead.custom_fields ?? {});
+  // A régua do diff: o valor carregado ao abrir. Só o que a pessoa mudar daqui
+  // viaja — reenviar o objeto inteiro desfazia o que a IA (MCP
+  // `crm_update_lead`) ou um colega gravou com a ficha aberta. O servidor
+  // continua mesclando (`fn_lead_anotar_campos`, PR 114). Porte de 4bf4202ca.
+  const [camposCarregados, setCamposCarregados] = useState<Record<string, unknown>>(
+    lead.custom_fields ?? {},
+  );
 
   const form = useForm<FormShape>({
     defaultValues: {
@@ -72,6 +80,7 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
       expected_close_date: lead.expected_close_date ?? "",
     });
     setCustomFields(lead.custom_fields ?? {});
+    setCamposCarregados(lead.custom_fields ?? {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
 
@@ -91,13 +100,16 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
       }
     }
 
+    const camposAlterados = soChavesAlteradas(camposCarregados, customFields);
     const patch: Record<string, unknown> = {
       title: values.title.trim(),
       description: values.description.trim() ? values.description.trim() : null,
       value_cents: valueCents,
       tags,
       expected_close_date: values.expected_close_date || null,
-      ...(fieldDefs.length > 0 ? { custom_fields: customFields } : {}),
+      ...(fieldDefs.length > 0 && Object.keys(camposAlterados).length > 0
+        ? { custom_fields: camposAlterados }
+        : {}),
     };
 
     const parsed = updateLeadSchema.safeParse(patch);
@@ -112,6 +124,8 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
         leadId: lead.id,
         patch: parsed.data as UpdateLeadInput,
       });
+      // O que acabou de gravar vira a nova régua do próximo salvamento.
+      setCamposCarregados({ ...customFields });
       toast.success(t("Lead atualizado"));
       onSaved?.();
     } catch {

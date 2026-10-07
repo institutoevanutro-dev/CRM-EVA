@@ -27,6 +27,7 @@ import {
   ehConfirmacao,
   latestRepeatIndex,
   occupancyEventCount,
+  rechecksOciososDaAcao,
   pisoDoInboundDaEspera,
   actionTurnCompleted,
   processNode,
@@ -639,7 +640,9 @@ async function processEnrollment(
     }
     if (node.type === "action") {
       actionEnqueued = waitElapsed;
-      actionRecheckCount = occupancyEventCount(events, node.id);
+      // Ociosidade DESDE a última prova de vida: um adiamento de janela não
+      // gasta o orçamento do dead-man (ver `rechecksOciososDaAcao`).
+      actionRecheckCount = rechecksOciososDaAcao(events, node.id);
       actionCompleted = actionTurnCompleted(events, node.id);
     }
   }

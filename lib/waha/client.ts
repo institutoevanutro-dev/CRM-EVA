@@ -489,8 +489,10 @@ export class WahaClient {
    * completo, que é o formato certo. E citar o que o cliente disse é o caso que
    * importa — quem responde "em cima" está respondendo a ele.
    *
-   * Por isso o id vai como está, sem reconstrução: inventar o prefixo a partir
-   * da direção acertaria o caso que já funciona e chutaria no resto.
+   * Por isso o id vai como está, sem reconstrução AQUI. Quem completa o bare é
+   * o adapter (`idCompletoDaMensagem`, `lib/channels/adapters/waha.ts`): o que
+   * fica gravado bare é só o que é nosso (`fromMe`) — o envio e o eco do que a
+   * clínica digitou no celular.
    */
   async sendMessage(
     session: string,

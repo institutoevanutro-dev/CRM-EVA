@@ -8,6 +8,7 @@ import {
   BEFORE_SEND_GATES,
   type GateContext,
 } from "@/lib/agent-engine/guardrails/before-send";
+import { confirmouPresenca, execucaoChecaAgenda } from "@/lib/agent-engine/agent/inbound-turn";
 import { PACING_DEFAULTS } from "@/lib/agent-engine/pacing/defaults";
 import { SPINNING_DEFAULTS } from "@/lib/agent-engine/spinning/defaults";
 
@@ -118,6 +119,69 @@ describe("agendaStallGate — veta a promessa vazia, nunca a checagem de verdade
       }),
     );
     expect(v.pass).toBe(true);
+  });
+
+  const FRASE_CHAMAR_VER =
+    "Vou chamar a responsável pra ver os horários.";
+
+  it("veta 'vou chamar a responsável pra ver os horários' sem ferramenta (#970)", () => {
+    const v = agendaStallGate.evaluate(
+      baseCtx({
+        agenda: { active: true, ferramentas: TODAS, toolCalledThisTurn: false },
+        body: FRASE_CHAMAR_VER,
+      }),
+    );
+    expect(v.pass).toBe(false);
+    if (v.pass) throw new Error("inalcançável");
+    expect(v.code).toBe("agenda_stall_sem_ferramenta");
+  });
+
+  it("a mesma frase passa depois de crm_find_free_slots neste turno", () => {
+    const v = agendaStallGate.evaluate(
+      baseCtx({
+        agenda: { active: true, ferramentas: TODAS, toolCalledThisTurn: true },
+        body: FRASE_CHAMAR_VER,
+      }),
+    );
+    expect(v.pass).toBe(true);
+  });
+
+  // O padrão de "ver" é o mais largo do gate, e o gate não tem fail-safe: um falso
+  // positivo se repete até o modelo chamar a ferramenta sem precisar ou trocar a frase.
+  // Uma frase por corte — tirar qualquer um dos três do padrão reprova a linha dele.
+  const armado = { active: true, ferramentas: TODAS, toolCalledThisTurn: false } as const;
+
+  it.each([
+    ["quem vê é o cliente (antes do ver)", "Vou te mandar o link pra você ver a agenda do evento."],
+    ["quem vê é o cliente (depois do ver)", "Estou aqui para ver o que você precisa: agendamento, orçamento ou dúvida?"],
+    ["'a ver' não é checagem", "Vou explicar: isso não tem nada a ver com o seu agendamento."],
+    ["'a ver' não é checagem (ajudar a ver)", "Estou aqui pra te ajudar a ver horários, valores e tratamentos."],
+    ["'ver:' é marcador de fala", "Vamos ver: horário de funcionamento é das 8h às 18h."],
+    ["o substantivo está uma oração adiante", "Vou te explicar como funciona pra ver se faz sentido marcar um horário."],
+  ])("não veta quando %s", (_corte, body) => {
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(true);
+  });
+
+  it.each([
+    "Vou ver os horários disponíveis e já te falo.",
+    "Estou falando com a recepção pra ver as vagas de amanhã.",
+    "Vou dar uma olhada aqui no sistema pra ver se tem vaga amanhã cedo.",
+    "Vou conversar com o pessoal da recepção para ver a agenda de sexta.",
+  ])("veta a promessa de olhar a agenda: %s", (body) => {
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(false);
+  });
+
+  // Limites conhecidos, presos para que mexer no corte seja decisão visível e não efeito
+  // colateral. Medidos num corpus escrito (não tráfego): 10/12 promessas vetadas, 1/12 e
+  // 1/10 frases que não prometem agenda vetadas.
+  it("limite conhecido: substantivo além de 25 caracteres depois do ver escapa", () => {
+    const body = "Vou ver aqui no sistema quais são os horários livres.";
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(true);
+  });
+
+  it("limite conhecido: pedir um dado antes de consultar ainda veta", () => {
+    const body = "Vou precisar do seu nome completo para ver a disponibilidade.";
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(false);
   });
 
   // Frase EXATA do incidente original (2026-08-29, tenant YADEA) que deu origem a este
@@ -261,6 +325,7 @@ describe("fiação do gate — a EXECUÇÃO da ferramenta de agenda arma o sinal
       /ferramentas:\s*agentConfig === null \? \[\] : ferramentasDeAgendaDoAgente\(agentConfig\.toolIds\)/,
     );
     expect(corpo).toMatch(/toolCalledThisTurn:\s*agendaToolCalledThisTurn/);
+    expect(corpo).toMatch(/presencaConfirmadaNoTurno:\s*presencaConfirmadaNoTurno/);
   });
 
   it("as três tools de agenda são marcadas na montagem — não só crm_book_appointment", () => {
@@ -270,5 +335,228 @@ describe("fiação do gate — a EXECUÇÃO da ferramenta de agenda arma o sinal
     expect(FONTE_INBOUND).toContain("'crm_reschedule_appointment'");
     expect(FONTE_INBOUND).toContain("'crm_find_and_book_appointment'");
     expect(FONTE_INBOUND).toMatch(/agendaToolCalledThisTurn = true/);
+  });
+});
+
+/**
+ * ─── #1019: o substantivo do SERVIÇO também é substantivo de agenda ──────────
+ *
+ * Medido no relato: um agente com as três capacidades de agenda ligadas chamou
+ * `crm_list_event_types` 7× (todas com sucesso no `api_audit_log`) e ZERO vezes
+ * `crm_find_free_slots` — e o que saiu para o lead foi "vou verificar/organizar
+ * seu atendimento". O gate estava armado e não vetou: o VERBO casava
+ * ("verificar"), mas o substantivo não — "atendimento" não estava na lista, e é
+ * justamente a palavra que este produto usa para o serviço que se agenda (o
+ * rótulo da própria capacidade é "Marcar consulta ou sessão").
+ *
+ * Dois buracos, um por frase: o substantivo ("atendimento", "consulta",
+ * "sessão") e o verbo ("organizar" — o modelo pediu para organizar, não para
+ * verificar).
+ */
+describe("#1019 — a promessa de agenda que o padrão deixava passar", () => {
+  const armado = { active: true, ferramentas: TODAS, toolCalledThisTurn: false };
+
+  it("⭐ veta 'vou verificar seu atendimento' (a promessa do relato)", () => {
+    const v = agendaStallGate.evaluate(
+      baseCtx({ agenda: armado, body: "Vou verificar seu atendimento e já te retorno." }),
+    );
+    expect(v.pass).toBe(false);
+    if (v.pass) throw new Error("inalcançável");
+    expect(v.code).toBe("agenda_stall_sem_ferramenta");
+  });
+
+  it("⭐ veta 'vou organizar seu atendimento' (o VERBO do relato)", () => {
+    const v = agendaStallGate.evaluate(
+      baseCtx({
+        agenda: armado,
+        body: "Deixa comigo, vou organizar seu atendimento e já te aviso.",
+      }),
+    );
+    expect(v.pass).toBe(false);
+  });
+
+  it("veta a promessa com o substantivo que a própria tela usa ('consulta', 'sessão')", () => {
+    for (const body of [
+      "Estou verificando sua consulta e já confirmo.",
+      "Vou consultar os horários para a sua sessão.",
+    ]) {
+      expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(false);
+    }
+  });
+
+  it("a MESMA frase do relato passa quando a ferramenta rodou neste turno", () => {
+    const v = agendaStallGate.evaluate(
+      baseCtx({
+        agenda: { active: true, ferramentas: TODAS, toolCalledThisTurn: true },
+        body: "Vou organizar seu atendimento e já te aviso.",
+      }),
+    );
+    expect(v.pass).toBe(true);
+  });
+
+  it("continua sem falso positivo em conversa que não promete checar nada", () => {
+    for (const body of [
+      "O atendimento de vocês é excelente, obrigado!",
+      "Vou verificar o seu endereço de entrega e já te retorno.",
+    ]) {
+      expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(true);
+    }
+  });
+});
+
+/**
+ * ─── #1038 (item A): o recorte ESTREITADO — a tabela medida ──────────────────
+ *
+ * O recorte da #1019 (substantivo do serviço com a MESMA folga de 80 chars dos
+ * substantivos de agenda) vetava DEMAIS. Medido extraindo o literal do regex e
+ * rodando contra nove frases: SEIS casavam e não deviam, e o que elas têm em
+ * comum é o substantivo do serviço como ASSUNTO (plano, valor, resultado,
+ * histórico, status, informações) — longe do verbo, sem ser seu objeto.
+ *
+ * As SEIS entram aqui como CONTROLE NEGATIVO: com a agenda armada e sem ferramenta
+ * chamada no turno, elas têm de PASSAR. A primeira delas é o caso de clínica mais
+ * comum de todos — "o plano cobre a consulta".
+ *
+ * Os controles que NÃO podem mudar ficam na mesma tabela, para o estreitamento não
+ * passar do ponto: os dois CONTROLE+ continuam VETANDO (a promessa vazia segue
+ * pega) e o CONTROLE- continua PASSANDO ("verificar" fora de contexto de agenda).
+ */
+describe("#1038 — serviço colado ao verbo, nunca o assunto da frase", () => {
+  const armado = { active: true, ferramentas: TODAS, toolCalledThisTurn: false };
+
+  /** As SEIS frases medidas — uma por caso, para o nome do teste dizer QUAL frase regrediu. */
+  const CONTROLE_NEGATIVO = [
+    "Vou confirmar se o plano cobre a consulta",
+    "Vou verificar o valor da sessão de fisioterapia",
+    "Vou consultar o resultado da sua consulta com o médico",
+    "Estou verificando o histórico do seu atendimento anterior",
+    "Vou verificar o status do seu pedido e já retorno sobre o atendimento",
+    "Vou organizar as informações do seu atendimento",
+  ] as const;
+
+  it.each(CONTROLE_NEGATIVO)("CONTROLE- passa — o serviço é assunto, não objeto: %s", (body) => {
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(true);
+  });
+
+  it("CONTROLE+ continua VETANDO — a promessa vazia do relato #1019, com substantivo de agenda e de serviço", () => {
+    for (const body of [
+      "Vou verificar as opções de horário e te passo assim que tiver",
+      "Vou verificar seu atendimento e já te retorno",
+    ]) {
+      const v = agendaStallGate.evaluate(baseCtx({ agenda: armado, body }));
+      expect(v.pass).toBe(false);
+      if (v.pass) throw new Error("inalcançável");
+      expect(v.code).toBe("agenda_stall_sem_ferramenta");
+    }
+  });
+
+  it("CONTROLE- continua passando — 'verificar' fora de contexto de agenda", () => {
+    const v = agendaStallGate.evaluate(
+      baseCtx({ agenda: armado, body: "Vou verificar o seu endereço de entrega" }),
+    );
+    expect(v.pass).toBe(true);
+  });
+
+  it("o 'colado' admite artigo e possessivo — 'o seu atendimento' casa como 'seu atendimento'", () => {
+    // Fronteira do recorte: quem mexer no padrão não pode apertá-lo a ponto de exigir
+    // o substantivo SEM determinante. A promessa do relato ("vou verificar/organizar
+    // seu atendimento") é a mesma com ou sem artigo, e é ela que continua vetada.
+    for (const body of [
+      "Vou verificar o seu atendimento e já te retorno.",
+      "Vou organizar o atendimento dela e já te aviso.",
+      "Vou verificar a consulta marcada para amanhã.",
+    ]) {
+      expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(false);
+    }
+  });
+});
+
+/**
+ * ─── Revisão do PR #140: o ramo do serviço colado vetava o que não é promessa ──
+ *
+ * O ramo novo ("verbo de checagem + serviço colado") pegou duas famílias que
+ * passavam antes dele e não prometem consultar horário nenhum:
+ *
+ *   - CONFIRMAR A CONSULTA é o fluxo de confirmação de presença, que tem
+ *     ferramenta própria (`crm_confirm_appointment`) e não é checagem de
+ *     disponibilidade. O lembrete de clínica ("Estou confirmando sua consulta de
+ *     amanhã às 9h… Podemos contar com você?") era vetado e o veto mandava
+ *     chamar `crm_find_free_slots`/`crm_book_appointment` — marcar de novo um
+ *     horário que já é do paciente.
+ *   - O serviço é objeto, mas a checagem é de CONVÊNIO ("vou verificar o
+ *     atendimento pelo seu convênio"): a mesma família que a #1038 quis tirar.
+ *
+ * E o turno que FEZ o certo — chamou `crm_confirm_appointment` — não contava
+ * como checagem: "Seu horário está confirmado" depois de confirmar era vetado.
+ */
+describe("revisão #140 — confirmação de presença e convênio não são promessa de agenda", () => {
+  const armado = { active: true, ferramentas: TODAS, toolCalledThisTurn: false };
+
+  it.each([
+    "Oi Maria! Estou confirmando sua consulta de amanhã às 9h com a Dra. Ana. Podemos contar com você?",
+    "Perfeito! Estou confirmando sua consulta de quinta às 14h.",
+    "Vamos confirmar sua consulta de amanhã às 9h?",
+    "Vou confirmar a consulta com o convênio",
+    "Vou verificar o atendimento pelo seu convênio",
+    "Vou consultar a sessão no seu plano de saúde e já te falo",
+  ])("passa: %s", (body) => {
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(true);
+  });
+
+  it.each([
+    // "confirmar" continua sendo checagem quando o objeto é a AGENDA.
+    "Vou confirmar o horário da sua consulta e te aviso.",
+    // Convênio na frase não salva quem também promete olhar horário.
+    "Vou verificar a consulta pelo convênio e os horários livres.",
+    // O relato da #1019 segue vetado.
+    "Vou verificar sua consulta e já te retorno.",
+  ])("continua vetando: %s", (body) => {
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(false);
+  });
+
+  it("só as ferramentas que armam o gate contam como checagem — confirmar presença não", () => {
+    for (const t of TODAS) expect(execucaoChecaAgenda(t)).toBe(true);
+    // Revisão #140: contar `crm_confirm_appointment` aqui desligava o gate INTEIRO,
+    // inclusive o "seu horário de sexta está agendado" sem `crm_book_appointment`.
+    expect(execucaoChecaAgenda("crm_confirm_appointment")).toBe(false);
+    // Ferramentas VIZINHAS de leitura não contam: o relato da #1019 é o modelo
+    // chamando a lista e parando ali. Contá-las reabriria o defeito.
+    expect(execucaoChecaAgenda("crm_list_appointments")).toBe(false);
+    expect(execucaoChecaAgenda("crm_list_event_types")).toBe(false);
+  });
+
+  it("só uma confirmação que deu certo conta como presença confirmada", () => {
+    expect(confirmouPresenca({ confirmado: true, compromisso: {} })).toBe(true);
+    expect(confirmouPresenca({ confirmado: false, motivo: "x", mensagem: "y" })).toBe(false);
+    expect(confirmouPresenca(undefined)).toBe(false);
+    expect(confirmouPresenca("ok")).toBe(false);
+  });
+
+  const presenca = { ...armado, presencaConfirmadaNoTurno: true };
+
+  it.each([
+    "Pronto! Seu horário está confirmado. Até quinta!",
+    "Perfeito, seu horário de quinta está confirmado.",
+  ])("passa depois de confirmar a presença: %s", (body) => {
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: presenca, body })).pass).toBe(true);
+  });
+
+  it.each([
+    // O cenário da revisão: confirmou a de quinta, e afirma ter MARCADO a de sexta.
+    "Pronto! Quinta confirmada e seu horário de sexta às 10h está agendado.",
+    "Seu horário está confirmado. E o horário de sexta ficou marcado também!",
+    // Confirmar presença não é consultar disponibilidade.
+    "Confirmei sua consulta! Vou verificar os horários de sexta e te aviso.",
+  ])("continua vetando depois de confirmar a presença: %s", (body) => {
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: presenca, body })).pass).toBe(false);
+  });
+
+  it("fiação: a marcação de execução usa a mesma régua", () => {
+    expect(FONTE_INBOUND).toMatch(
+      /if \(execucaoChecaAgenda\(name\) && typeof mcpTool\.execute === 'function'\)/,
+    );
+    // A confirmação de presença liga a SUA flag, e só com o retorno de sucesso.
+    expect(FONTE_INBOUND).toMatch(/name === 'crm_confirm_appointment'/);
+    expect(FONTE_INBOUND).toMatch(/if \(confirmouPresenca\(resultado\)\) presencaConfirmadaNoTurno = true/);
   });
 });

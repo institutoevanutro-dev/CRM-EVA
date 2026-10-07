@@ -12,6 +12,7 @@
 import { z } from "zod";
 
 import type { McpToolDefinition } from "../types";
+import { foraDaConversa } from "../fora-da-conversa";
 import { buscarComRelaxamento } from "@/lib/catalogo/busca";
 import { formatCents } from "@/lib/money";
 
@@ -29,12 +30,18 @@ export const crmListContactOrders: McpToolDefinition<typeof pedidosInputShape> =
   description:
     "Lista os pedidos de um contato, do mais recente para o mais antigo, com status, valor, " +
     "forma de pagamento, situação de entrega e código de rastreio. Use antes de prometer prazo " +
-    "ou repetir oferta: o cliente pode já ter comprado.",
+    "ou repetir oferta: o cliente pode já ter comprado." +
+    " Em conversa de atendimento, devolve apenas os pedidos do contato desta conversa.",
   inputSchema: pedidosInputShape,
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
+    // Pedidos de quem não é o paciente da conversa: recusa ANTES da consulta,
+    // e a linha nunca sai do banco. Sem contato do turno, nada muda.
+    if (ctx.contatoDoTurno && input.contact_id !== ctx.contatoDoTurno) {
+      return foraDaConversa("os pedidos de quem não é o paciente desta conversa não são seus para ver");
+    }
     const { data, error } = await ctx.supabase
       .from("orders")
       .select(
