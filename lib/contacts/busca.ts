@@ -29,6 +29,7 @@
  */
 
 import { escaparTermoDoOr } from "@/lib/api/filtro-postgrest";
+import { normalizarTermoDeBusca } from "@/lib/inbox/termo-de-busca";
 import { phoneLookupVariants } from "@/lib/channels/phone-variants";
 
 /**
@@ -44,7 +45,10 @@ export function condicoesDaBuscaDeContato(termo: string): string[] {
   // ⚠️ `%` e `_` são curingas do LIKE, e `,`/`(`/`)` são delimitadores do DSL
   // do `.or()` — um nome com vírgula ("Silva, Maria") injetaria uma condição
   // extra na string do filtro. Mesmo escape de conversations/_handler.ts.
-  const s = escaparTermoDoOr(bruto);
+  // Depois do escape, a régua da busca do Inbox colapsa espaço, vírgula e ponto
+  // e vírgula num curinga só: "Paulo  Lima", "Paulo Jr" e "Silva Maria" acham
+  // "Paulo Lima Jr" e "Silva, Maria". Portado do original (6624b098f, webtecnica).
+  const s = normalizarTermoDeBusca(escaparTermoDoOr(bruto));
   const digits = bruto.replace(/\D/g, "");
 
   const condicoes = [

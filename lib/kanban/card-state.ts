@@ -20,6 +20,8 @@ export interface CardInput {
   stageName: string;
   /** Horas paradas no estágio (board calcula; null = sem sinal). */
   hoursInStage: number | null;
+  /** Horas desde a última atividade — o "Sem resposta há N" do slot de esfriando. */
+  hoursSinceActivity?: number | null;
   /**
    * Esfriou pela janela DO ESTÁGIO. Quem classifica é o board, via
    * `resolveStageWindow` (lib/leads/risk-radar.ts) — o card não classifica nada:
@@ -75,6 +77,7 @@ export function buildCardInput(
     | "currency"
     | "tags"
     | "last_activity_at"
+    | "stage_changed_at"
     | "created_at"
     | "owner_kind"
     | "owner_user_id"
@@ -95,14 +98,20 @@ export function buildCardInput(
     now?: Date;
   },
 ): CardInput {
-  const reference = lead.last_activity_at ?? lead.created_at;
   const now = opts.now ?? new Date();
-  // ponytail: "tempo no estágio" é medido pela última ATIVIDADE, não pela
-  // entrada no estágio — crm_leads não tem stage_entered_at. Vira exato quando
-  // a Wave 3 registrar a mudança de estágio como atividade.
-  const hoursInStage = reference
-    ? Math.max(0, (now.getTime() - new Date(reference).getTime()) / 3_600_000)
-    : null;
+  const horasDesde = (iso: string | null | undefined) =>
+    iso ? Math.max(0, (now.getTime() - new Date(iso).getTime()) / 3_600_000) : null;
+  // DOIS relógios, duas perguntas. "Tempo na etapa" (rodapé) mede a ENTRADA na
+  // etapa — `crm_leads.stage_changed_at`, carimbada por trigger na 0071. Antes
+  // media `last_activity_at`, e qualquer nota ou mensagem zerava o rodapé de um
+  // negócio parado há dias na mesma etapa. `created_at` é a reserva para lead
+  // sem carimbo (dado legado). Porte do original 40be948b8 (webtecnica).
+  //
+  // "Sem resposta há N dias" (slot de esfriando) continua sendo tempo SEM
+  // RESPOSTA, e por isso lê `last_activity_at` — o original passou os dois para
+  // a etapa; aqui o slot não muda de significado.
+  const hoursInStage = horasDesde(lead.stage_changed_at ?? lead.created_at);
+  const hoursSinceActivity = horasDesde(lead.last_activity_at ?? lead.created_at);
 
   return {
     id: lead.id,
@@ -112,6 +121,7 @@ export function buildCardInput(
     owner: resolveLeadOwner(lead, opts.ownerNames),
     stageName: opts.stageName,
     hoursInStage,
+    hoursSinceActivity,
     isCooling: opts.coolingIds?.has(lead.id) ?? false,
     // Proposta viva do negócio, se houver. `undefined` e não `null` porque a
     // ausência aqui é "não há proposta", não "há uma proposta vazia".
@@ -154,10 +164,11 @@ export interface CardState {
   /**
    * O rodapé mostra o número de horas/dias, ou só o nome do estágio.
    *
-   * UM relógio por card: hoje "sem resposta há 6 dias" e "6d em Proposta
-   * enviada" saem os dois de `last_activity_at`, então mostrar os dois é o
-   * mesmo número duas vezes — ruído com cara de informação. Quando o slot já
-   * conta o tempo, o rodapé fica só com o lugar ("em Proposta enviada").
+   * UM relógio por card: "sem resposta há 6 dias" (slot) e "9d em Proposta
+   * enviada" (rodapé) são números diferentes — o primeiro lê a última
+   * atividade, o segundo a entrada na etapa —, e dois tempos lado a lado no
+   * mesmo card confundem mais do que informam. Quando o slot já conta o tempo,
+   * o rodapé fica só com o lugar ("em Proposta enviada").
    */
   showStageAge: boolean;
 }
@@ -214,7 +225,10 @@ export function resolveCardState(
     return {
       kind: "cooling",
       border: "warning",
-      slot: { type: "cooling", label: coolingLabel(input.hoursInStage, t) },
+      slot: {
+        type: "cooling",
+        label: coolingLabel(input.hoursSinceActivity ?? input.hoursInStage, t),
+      },
       // O slot já contou o tempo; repetir no rodapé é o mesmo dado duas vezes.
       showStageAge: false,
     };

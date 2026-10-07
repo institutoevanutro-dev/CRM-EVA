@@ -26,6 +26,7 @@ import { audit } from "@/lib/audit";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
+import { recusaDeMotivoDaPerdaPeloBanco } from "@/lib/leads/motivo-da-perda";
 
 /** Como a demanda terminou. Não há terceira: encerrar é ganhar ou perder. */
 export type DesfechoDaDemanda = "won" | "lost";
@@ -182,6 +183,15 @@ export async function encerraDemanda(
     .eq("organization_id", ctx.organization_id);
 
   if (updErr) {
+    // Rede de segurança (#917) — mesma dos outros três caminhos (arrasto, lote,
+    // agente): a recusa do banco por motivo da perda (fora do vocabulário do
+    // funil) vira recusa de negócio (422 lost_reason_invalid), nunca 500. Sem
+    // isto, `/lose` e `/win` — as duas rotas humanas — eram o único caminho que
+    // devolvia o erro cru do Postgres para quem clicou "Marcar como perdido".
+    const recusa = recusaDeMotivoDaPerdaPeloBanco(updErr, ctx.idioma);
+    if (recusa) {
+      throw new ApiError(422, recusa.codigo, undefined, ctx.requestId, recusa.mensagem);
+    }
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, updErr.message);
   }
 
