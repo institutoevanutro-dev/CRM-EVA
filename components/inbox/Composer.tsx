@@ -2,6 +2,7 @@
 import { useT } from "@/hooks/i18n/useT";
 import {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useRef,
   useState,
@@ -108,6 +109,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [menuDismissed, setMenuDismissed] = useState(false);
   const [mode, setMode] = useState<"reply" | "note">("reply");
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  // A citação ATUAL, para o `onSuccess` de um envio que já saiu comparar com a
+  // que foi junto com ele (ver `handleSubmit`).
+  const respondendoAgora = useRef(respondendo?.id ?? null);
+  useEffect(() => {
+    respondendoAgora.current = respondendo?.id ?? null;
+  }, [respondendo?.id]);
   const send = useSendMessage();
   const upload = useUploadMedia();
   const createNote = useCreateNote();
@@ -155,7 +162,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     requestAnimationFrame(() => autoresize());
 
     const restoreOnError = () => {
-      setText(body);
+      // Se a pessoa já começou a próxima resposta, preserve os dois textos.
+      setText((current) => (current ? `${body}\n${current}` : body));
       requestAnimationFrame(() => autoresize());
     };
 
@@ -163,6 +171,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       createNote.mutate({ conversation_id: conversationId, body }, { onError: restoreOnError });
       return;
     }
+    const citadaNoEnvio = respondendo?.id ?? null;
     send.mutate(
       {
         conversation_id: conversationId,
@@ -172,10 +181,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       },
       {
         onSuccess: () => {
-          setText("");
+          // O campo já foi limpo no envio. Limpar de novo aqui apagava o que a
+          // atendente começou a digitar enquanto esta saía (DeskcommCRM f82545d00).
           // A citação vale para UMA mensagem. Mantê-la depois do envio faria a
-          // próxima frase sair citando algo que o atendente já respondeu.
-          onCancelarResposta?.();
+          // próxima frase sair citando algo que o atendente já respondeu. Mas
+          // só sai a que foi JUNTO: a escolhida para o rascunho seguinte,
+          // enquanto este envio estava no ar, é do rascunho (revisão do #134).
+          if (citadaNoEnvio && respondendoAgora.current === citadaNoEnvio) onCancelarResposta?.();
           requestAnimationFrame(() => autoresize());
         },
         // Do upstream, e fica: sem isto o texto some quando o envio falha, e

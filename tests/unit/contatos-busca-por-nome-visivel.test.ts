@@ -81,7 +81,7 @@ async function colunasComIsNull(): Promise<string[]> {
 describe("busca de contatos", () => {
   it("procura no display_name — o nome que a tela mostra e o WhatsApp preenche", async () => {
     const filtro = await filtroDaBusca("Cliente Retorno");
-    expect(filtro).toContain("display_name.ilike.%Cliente Retorno%");
+    expect(filtro).toContain("display_name.ilike.%Cliente*Retorno%");
   });
 
   it("continua procurando nas colunas que já procurava", async () => {
@@ -98,7 +98,7 @@ describe("busca de contatos", () => {
     // duas condições e a busca devolve gente que ninguém pediu.
     const filtro = await filtroDaBusca("Silva, Maria");
     expect(filtro).not.toContain("Silva,");
-    expect(filtro).toContain("Silva  Maria");
+    expect(filtro).toContain("Silva*Maria");
   });
 
   it("curinga do LIKE digitado pelo usuário é literal, não coringa", async () => {

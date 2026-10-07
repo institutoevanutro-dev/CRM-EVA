@@ -1,6 +1,7 @@
 "use client";
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
+import { randomId } from "@/lib/random-id";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Message } from "@/lib/types/messaging";
 
@@ -42,7 +43,7 @@ export function useSendMessage() {
       const queryKey = ["messages", args.conversation_id];
       await qc.cancelQueries({ queryKey });
 
-      const tempId = `temp-${Date.now()}`;
+      const tempId = `temp-${randomId()}`;
       const tempMsg: Message = {
         id: tempId,
         organization_id: "",
@@ -80,11 +81,14 @@ export function useSendMessage() {
         if (!old) return old;
         const pages = [...old.pages];
         if (pages.length > 0) {
-          const lastIdx = pages.length - 1;
-          const lastPage = pages[lastIdx]!;
-          pages[lastIdx] = {
-            ...lastPage,
-            data: [...lastPage.data, tempMsg],
+          // A primeira página contém as mensagens mais recentes; as seguintes
+          // são o histórico carregado para trás. Pôr o provisório na última
+          // (a mais antiga) o fazia sumir quando a atendente tinha rolado para
+          // cima. (Porte do DeskcommCRM f82545d00.)
+          const newest = pages[0]!;
+          pages[0] = {
+            ...newest,
+            data: [...newest.data, tempMsg],
           };
         }
         return { ...old, pages };
@@ -92,8 +96,36 @@ export function useSendMessage() {
 
       return { tempId };
     },
-    onError: (err, args) => {
-      qc.invalidateQueries({ queryKey: ["messages", args.conversation_id] });
+    onSuccess: (result, args, context) => {
+      const real = result?.data;
+      if (!real?.id) return;
+      qc.setQueryData<InfiniteData<MessagesPage>>(["messages", args.conversation_id], (old) => {
+        if (!old || old.pages.length === 0) return old;
+        // O tempo real pode ter trazido a mensagem real antes da resposta do
+        // POST. Tirar as duas cópias antes de inseri-la evita duplicar.
+        const pages = old.pages.map((page) => ({
+          ...page,
+          data: page.data.filter((m) => m.id !== context?.tempId && m.id !== real.id),
+        }));
+        pages[0] = { ...pages[0]!, data: [...pages[0]!.data, real] };
+        return { ...old, pages };
+      });
+    },
+    onError: (err, args, context) => {
+      // Tira só o provisório; o histórico fica como estava.
+      if (context?.tempId) {
+        qc.setQueryData<InfiniteData<MessagesPage>>(["messages", args.conversation_id], (old) =>
+          old
+            ? {
+                ...old,
+                pages: old.pages.map((page) => ({
+                  ...page,
+                  data: page.data.filter((m) => m.id !== context.tempId),
+                })),
+              }
+            : old,
+        );
+      }
       showApiError(err);
     },
     onSettled: (_data, _err, args) => {

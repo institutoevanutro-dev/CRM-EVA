@@ -53,7 +53,7 @@ function groupLeadsByStage(stages: Stage[], leads: Lead[]): Map<string, Lead[]> 
 
 function BoardSkeleton() {
   return (
-    <div className="flex gap-3 overflow-x-auto p-4">
+    <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
       {[0, 1, 2].map((c) => (
         <div
           key={c}
@@ -245,7 +245,17 @@ export function KanbanBoard({
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="flex h-full gap-3 overflow-x-auto p-4">
+      {/* UM contêiner de rolagem só, nos dois eixos: o @hello-pangea/dnd não
+          suporta Droppable rolável dentro de outro contêiner rolável, então
+          coluna rolável por conta própria quebraria a rolagem do arraste. O
+          cabeçalho de cada etapa fica preso em cima (`sticky` em StageColumn).
+          Sem padding no ALTO de propósito: o sticky prende na borda do
+          conteúdo, e um `pt-4` deixava uma faixa de 16px por onde os cards
+          apareciam rolando. Porte do original b0ade1e44 (jmpo). */}
+      <div
+        className="flex min-h-0 flex-1 items-start gap-3 overflow-auto px-4 pb-4"
+        data-quadro-do-funil
+      >
         {data.stages.map((stage) => (
           <StageColumn
             key={stage.id}

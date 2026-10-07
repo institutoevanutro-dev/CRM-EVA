@@ -20,7 +20,7 @@ import type pg from "pg";
 
 import type { AdminClient, EnrollmentPatch } from "./engine";
 import { flowGraphSchema } from "./graph-schema";
-import { classEdgeMatch, selectEdge, type EnrollmentOutcome, type EnrollmentRow } from "./node-handlers";
+import { EVENTO_ACAO_ADIADA, classEdgeMatch, selectEdge, type EnrollmentOutcome, type EnrollmentRow } from "./node-handlers";
 import { coletarEsperasAdaptativas, montarTimingPlan, type PropostaDeEspera } from "./timing-plan";
 import { persistirRespostaFollowupPg } from "./persistir-resposta";
 
@@ -45,6 +45,12 @@ export type TurnResult =
   /** O passo não enviou e o fluxo SEGUE (ex.: fora das 24h do Instagram). `skipped` encerra. */
   | { kind: "pulado"; reason: string }
   | { kind: "classified"; class: string }
+  /**
+   * O envio NÃO saiu e NÃO foi recusado: está estacionado até `until` porque a
+   * janela está fechada. O turno já re-agendou o job para esse instante — o que
+   * falta é o enrollment saber disso. Ver `EVENTO_ACAO_ADIADA`.
+   */
+  | { kind: "deferred"; until: Date; reason: string }
   /** Plano de tempo do fluxo inteiro, proposto no acionamento — cru, antes do clamp. */
   | { kind: "planned"; propostas: PropostaDeEspera[]; modelo: string };
 
@@ -131,6 +137,35 @@ export async function completeTurnForEnrollment(
       updated_at: now.toISOString(),
     });
   };
+
+  if (result.kind === "deferred") {
+    // ESTACIONAR, sem avançar nem completar (porte do upstream a1c6c4d1e):
+    // 1. `steps_taken` não sobe e a chave NÃO é a do passo — ela continua
+    //    devendo a conclusão do envio (`action_sent`/`turn_skipped`).
+    // 2. A chave carrega o JOB: o mesmo job retentado grava o mesmo adiamento
+    //    (no-op); o job re-agendado que adia de novo é prova de vida nova.
+    // 3. `next_eval_at` vai para a abertura, para o motor não gastar rechecks
+    //    na espera. No `match_reply` soma-se a carência: a pergunta só sai em
+    //    `until`, e acordar ali leria silêncio como "não respondeu".
+    const carencia = node.type === "match_reply" ? node.config.grace_timeout_ms : 0;
+    const voltaEm = new Date(result.until.getTime() + carencia);
+    const patch: EnrollmentPatch = { next_eval_at: voltaEm.toISOString(), claimed_until: null, updated_at: now.toISOString() };
+    const evento = {
+      node_id: node.id,
+      event_type: EVENTO_ACAO_ADIADA,
+      payload: { until: result.until.toISOString(), next_eval_at: voltaEm.toISOString(), reason: result.reason },
+      idempotency_key: `${node.id}:${enrollment.steps_taken}:adiado:${jobId ?? result.until.toISOString()}`,
+    };
+    await db.assertServiceBoundary?.(enrollment);
+    if (db.applyEnrollmentStep) {
+      await db.applyEnrollmentStep(enrollmentId, orgId, patch, { ...(jobId ? { job_id: jobId, job_claim: jobClaim } : {}), ...evento });
+      return;
+    }
+    const { inserted } = await db.insertEnrollmentEvent({ organization_id: orgId, enrollment_id: enrollmentId, ...evento });
+    if (!inserted) return; // replay — este adiamento já foi registrado
+    await db.updateEnrollment(enrollmentId, orgId, patch);
+    return;
+  }
 
   if(result.kind === "skipped"){
     await applyStep("turn_skipped",{reason:result.reason},{status:"cancelled",...(result.outcome?{outcome:result.outcome}:{}),cancel_reason:result.reason,completed_at:now.toISOString(),next_eval_at:null});

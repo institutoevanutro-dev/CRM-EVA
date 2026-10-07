@@ -5030,6 +5030,9 @@ export const DICIONARIO: Traducoes = {
   "Velocidade de reprodução": { es: "Velocidad de reproducción" },
   "Ampliar imagem": { es: "Ampliar imagen" },
   "Imagem recebida": { es: "Imagen recibida" },
+  // Transcrição do áudio no balão: rótulo e estado de carregamento.
+  Transcrição: { es: "Transcripción" },
+  "Transcrevendo…": { es: "Transcribiendo…" },
   // Anexo da nota interna — "recebida" mentiria: quem anexou é o time.
   "Imagem da nota interna": { es: "Imagen de la nota interna" },
   Baixar: { es: "Descargar" },
@@ -5751,6 +5754,9 @@ export const DICIONARIO: Traducoes = {
   "Pediu ao agente para interpretar a resposta": { es: "Le pidió al agente que interpretara la respuesta" },
   "Conferiu se a mensagem já tinha saído": { es: "Verificó si el mensaje ya había salido" },
   "Mensagem enviada": { es: "Mensaje enviado" },
+  "Segurou o envio até o horário permitido": { es: "Retuvo el envío hasta el horario permitido" },
+  "a janela estava fechada": { es: "la ventana estaba cerrada" },
+  "a janela estava fechada; envia em {ate}": { es: "la ventana estaba cerrada; envía el {ate}" },
   "Passo pulado, o fluxo seguiu": { es: "Paso omitido, el flujo siguió" },
   "Passo pulado: fora das 24h do Instagram.": { es: "Paso omitido: fuera de las 24 h de Instagram." },
   "O agente interpretou a resposta": { es: "El agente interpretó la respuesta" },
@@ -7103,7 +7109,7 @@ export const DICIONARIO: Traducoes = {
   "Não consegui carregar os horários": { es: "No pude cargar los horarios" },
   "Os dias ficam bloqueados até eu conseguir — é mais seguro que oferecer um horário que talvez não exista. Numa instalação nova, isso costuma ser a jornada de atendimento que ainda não foi publicada.": { es: "Los días quedan bloqueados hasta que lo logre — es más seguro que ofrecer un horario que quizá no exista. En una instalación nueva, esto suele ser la jornada de atención que todavía no se publicó." },
   "Nenhum horário livre em": { es: "Ningún horario libre en" },
-  "Os próximos 30 dias são o que está publicado hoje — meses adiante aparecem conforme a data se aproxima.": { es: "Los próximos 30 días son lo que está publicado hoy — los meses siguientes aparecen conforme la fecha se acerca." },
+  "Não há horário livre publicado neste mês.": { es: "No hay horario libre publicado en este mes." },
   "Conferindo a chave com a OpenAI — leva alguns segundos.": { es: "Verificando la clave con OpenAI — toma unos segundos." },
   "Pronto para preparar material.": { es: "Listo para preparar material." },
   "Falta uma chave da OpenAI para o agente aprender o seu material": { es: "Falta una clave de OpenAI para que el agente aprenda tu material" },
@@ -7146,6 +7152,12 @@ export const DICIONARIO: Traducoes = {
     es: "Tipo de atención de los horarios libres",
   },
   "Você ainda não publicou seus horários de atendimento.": { es: "Todavía no publicaste tus horarios de atención." },
+  // Porte de melgarafael/DeskcommCRM 83f52dd61 e 297e7ff5a (#896): a jornada de
+  // quem a agenda mostra, sem acusar quem está logado, e o porquê da barra vazia.
+  "A jornada de atendimento ainda não foi publicada.": { es: "La jornada de atención todavía no fue publicada." },
+  "A jornada de atendimento ainda não foi publicada": { es: "La jornada de atención todavía no fue publicada" },
+  "Sem eles ninguém consegue marcar — nem quem atende, nem o agente.": { es: "Sin ellos nadie puede agendar — ni quien atiende, ni el agente." },
+  "Os nomes da equipe na agenda pedem um papel acima de Somente leitura. A grade continua funcionando.": { es: "Los nombres del equipo en la agenda requieren un rol superior a Solo lectura. La grilla sigue funcionando." },
   "Sem eles ninguém consegue marcar clicando na grade — nem você, nem o agente.": { es: "Sin ellos nadie puede agendar haciendo clic en la grilla — ni tú, ni el agente." },
   "Não consegui carregar os horários.": { es: "No pude cargar los horarios." },
   "Os blocos ficam bloqueados até eu conseguir — é mais seguro que oferecer um horário que talvez não exista.": { es: "Los bloques quedan bloqueados hasta que lo logre — es más seguro que ofrecer un horario que quizá no exista." },

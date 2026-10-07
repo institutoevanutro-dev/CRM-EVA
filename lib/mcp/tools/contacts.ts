@@ -14,6 +14,7 @@ import {
   getContactHandler,
 } from "@/app/api/v1/contacts/_handler";
 import type { McpToolDefinition } from "../types";
+import { foraDaConversa } from "../fora-da-conversa";
 import { CAMPOS_PROPONIVEIS, proporDadoDoContato } from "@/lib/contacts/proposta-de-dado";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { audit } from "@/lib/audit";
@@ -27,12 +28,28 @@ const searchInputShape = {
 export const crmSearchContacts: McpToolDefinition<typeof searchInputShape> = {
   name: "crm_search_contacts",
   description:
-    "Busca contatos do CRM por nome, email ou telefone. Retorna ate 50 matches com id, nome, telefone, email, tags e timestamps. Sempre escopado a organization do token.",
+    "Busca contatos do CRM por nome, email ou telefone. Retorna ate 50 matches com id, nome, telefone, email, tags e timestamps. Sempre escopado a organization do token." +
+    " Em conversa de atendimento, devolve apenas o contato desta conversa.",
   inputSchema: searchInputShape,
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
+    // ── A CONVERSA É COM ALGUÉM ─────────────────────────────────────────────
+    //
+    // Num atendimento com o paciente A, o modelo buscava "Maria" e recebia a
+    // ficha da paciente B — telefone e e-mail numa resposta só, `success: true`
+    // no audit, e o dado saindo no WhatsApp do outro lado, encaminhável, sem
+    // volta. ESCOPO, e não tradução: o termo continua sendo o que o modelo
+    // digitou; muda só QUEM a resposta alcança. O escopo vai NA CONSULTA, antes
+    // do limite (filtrar a página depois devolvia vazio quando o contato do
+    // turno não estava entre os primeiros), e de novo na resposta, como cinto.
+    //
+    // `ctx.contatoDoTurno` é contexto de CONFIANÇA, injetado pelo runtime. Sem
+    // ele (rota HTTP, MCP externo, token de integração), a busca segue
+    // alcançando a base da organização, exatamente como antes. A paginação
+    // morre junto: `cursor`/`has_more` descrevem a varredura da organização.
+    const doTurno = ctx.contatoDoTurno;
     const result = await listContactsHandler(
       ctx.supabase,
       {
@@ -45,9 +62,11 @@ export const crmSearchContacts: McpToolDefinition<typeof searchInputShape> = {
         limit: input.limit,
         cursor: input.cursor,
       },
+      doTurno,
     );
+    const visiveis = doTurno ? result.contacts.filter((c) => c.id === doTurno) : result.contacts;
     return {
-      contacts: result.contacts.map((c) => ({
+      contacts: visiveis.map((c) => ({
         id: c.id,
         name: nomeDoContato(c),
         phone: c.phone_number,
@@ -58,8 +77,8 @@ export const crmSearchContacts: McpToolDefinition<typeof searchInputShape> = {
         created_at: c.created_at,
         last_activity_at: c.last_activity_at,
       })),
-      cursor: result.cursor,
-      has_more: result.has_more,
+      cursor: doTurno ? null : result.cursor,
+      has_more: doTurno ? false : result.has_more,
     };
   },
 };
@@ -71,12 +90,23 @@ const getInputShape = {
 export const crmGetContact: McpToolDefinition<typeof getInputShape> = {
   name: "crm_get_contact",
   description:
-    "Retorna detalhes de um contato pelo UUID. Inclui tags, consent, source. CPF nunca retornado em plaintext via MCP (sempre mascarado).",
+    "Retorna detalhes de um contato pelo UUID. Inclui tags, consent, source. CPF nunca retornado em plaintext via MCP (sempre mascarado)." +
+    " Em conversa de atendimento, devolve a ficha do contato desta conversa.",
   inputSchema: getInputShape,
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
+    // ── A FICHA DE QUEM NÃO É DESTA CONVERSA NÃO ABRE AQUI ──────────────────
+    //
+    // RECUSA, e não tradução: trocar o uuid pedido pelo do contato do turno
+    // faria o modelo perguntar por um paciente e receber outro. O motivo vem em
+    // TEXTO, na mesma forma da recusa de escrita, e a ponte o audita como
+    // recusa (`contato_da_conversa:fora_da_conversa`). Sem contato do turno,
+    // a ficha de qualquer contato da organização segue abrindo como antes.
+    if (ctx.contatoDoTurno && input.contact_id !== ctx.contatoDoTurno) {
+      return foraDaConversa("a ficha de quem não é o paciente desta conversa não é sua para abrir");
+    }
     const contact = await getContactHandler(
       ctx.supabase,
       {

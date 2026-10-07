@@ -581,7 +581,11 @@ test.describe("kit visual da Agenda", () => {
 
     const aviso = painel.getByTestId("sem-jornada-publicada");
     await expect(aviso).toBeVisible({ timeout: ESPERA });
-    await expect(aviso).toContainText("ainda não publicou");
+    // O texto depende de QUEM lê: "Você ainda não publicou…" só vale para o
+    // dono, e a vitrine mostra a agenda de OUTRA pessoa (`PESSOAS[3]`) — o que
+    // aparece é a constatação sobre a jornada. Porte de
+    // melgarafael/DeskcommCRM 49f70edad.
+    await expect(aviso).toContainText("A jornada de atendimento ainda não foi publicada");
     // Diz o PRÓXIMO PASSO, não só a ausência — e o próximo passo é CLICÁVEL.
     //
     // Esta asserção era `toContainText(/configure|disponibilidade/i)`, e o texto

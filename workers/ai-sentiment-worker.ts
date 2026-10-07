@@ -17,6 +17,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 
 import { resolverAgenteDaConversa } from "@/lib/ai/agents/agente-da-conversa";
+import { agenteAtende, precisaRecuperarLegado } from "@/lib/ai/agents/no-ar";
 import { computeCost } from "@/lib/ai/cost";
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
@@ -184,6 +185,17 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       )
       .eq("organization_id", event.organization_id)
       .is("archived_at", null);
+
+    // ── Guard: há automático no ar? ───────────────────────────────────────
+    // Sem nenhum agente atendendo (todos pausados/despublicados), não há o que
+    // passar de bot para humano: o handoff por sentimento mandava ao cliente
+    // "não há atendente disponível… sua conversa entrou na fila" enquanto a
+    // equipe já respondia pelo celular. Medido numa VPS em set/2026: 3 avisos
+    // assim com os três agentes pausados, e o classificador seguia cobrando
+    // cada mensagem recebida. Mesma régua de `resolverAgenteDaConversa`.
+    if (!(candidatos ?? []).some((c) => agenteAtende(c) || precisaRecuperarLegado(c))) {
+      return { skipped: true, reason: "nenhum_agente_no_ar" };
+    }
 
     const { agente: agent, motivo: motivoDoAgente } = resolverAgenteDaConversa(
       candidatos ?? [],

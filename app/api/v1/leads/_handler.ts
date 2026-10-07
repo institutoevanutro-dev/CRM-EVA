@@ -156,6 +156,8 @@ export interface ListLeadsQuery {
   stage_id?: string;
   status?: "open" | "won" | "lost";
   owner_user_id?: string;
+  /** Só os negócios deste contato — o escopo do turno do agente, no WHERE, antes do limite. */
+  contact_id?: string;
   limit?: number;
   cursor?: string | null;
 }
@@ -203,6 +205,7 @@ export async function listLeadsHandler(
   if (q.stage_id) query = query.eq("stage_id", q.stage_id);
   if (q.status) query = query.eq("status", q.status);
   if (q.owner_user_id) query = query.eq("owner_user_id", q.owner_user_id);
+  if (q.contact_id) query = query.eq("contact_id", q.contact_id);
 
   if (q.cursor) {
     const c = decLeadCursor(q.cursor);

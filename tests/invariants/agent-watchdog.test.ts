@@ -366,6 +366,44 @@ describe("o reenvio não deixa o eco da própria mensagem duplicado", () => {
     expect(await linhasCom(CONV_2, frase), "o reenvio apagou linha de outra conversa").toHaveLength(1);
   });
 
+  it("eco do celular preso em OUTRA conversa devolve o id curto: o reenvio fica com ele (revisão do PR #134)", async () => {
+    // A mesma pessoa cadastrada pelo telefone e pelo @lid: o eco caiu na
+    // conversa do @lid gravado com o id curto e guardou o composto que o WAHA
+    // entregou. A limpeza é só da conversa do reenvio; o carimbo colidia e a
+    // linha ficava `sent` sem id — sem entregue/lida para sempre.
+    const frase = "confirmado para quinta";
+    const id = "3EB0ECONOLID";
+    const original = `true_250302204792918@lid_${id}`;
+    const presa = "bbbbbbbb-0000-4000-8000-000000000010";
+    const ecoLid = "bbbbbbbb-0000-4000-8000-000000000011";
+    await pool.query(
+      `insert into contacts (id, organization_id, name, phone_number)
+       values ($1, $2, 'Outra Pessoa', '+5511900000003') on conflict (id) do nothing`,
+      [CONTACT_2, ORG],
+    );
+    await pool.query(
+      `insert into conversations (id, organization_id, contact_id, channel_session_id, status, is_group)
+       values ($1, $2, $3, $4, 'open', false) on conflict (id) do nothing`,
+      [CONV_2, ORG, CONTACT_2, SESSION],
+    );
+    await inserirPresa(presa, frase);
+    await inserirDoCelular(ecoLid, CONV_2, CONTACT_2, id, frase);
+    await pool.query(
+      `update messages set metadata = metadata || jsonb_build_object('external_id_original', $2::text) where id = $1`,
+      [ecoLid, original],
+    );
+    proximasRespostasDoSendText.push({ id: { id } });
+
+    expect(await redriveQueued(pool, watchdogCfg(), log)).toBe(1);
+
+    expect(await linhasCom(CONV, frase)).toEqual([
+      expect.objectContaining({ id: presa, status: "sent", external_id: id }),
+    ]);
+    expect(await linhasCom(CONV_2, frase), "apagou ou não devolveu o eco de outra conversa").toEqual([
+      expect.objectContaining({ id: ecoLid, external_id: original }),
+    ]);
+  });
+
   it("WEBJS: eco com o MESMO id não prende a mensagem em queued — e o tick seguinte não reenvia", async () => {
     const frase = "pode passar para retirar amanhã";
     const serializado = `true_${CHAT_DO_CONTATO}_3EB0WEBJSMESMOID`;

@@ -115,4 +115,42 @@ describe("o adapter repassa o que o envelope traz", () => {
     vi.doUnmock("@/lib/waha/client");
     vi.resetModules();
   });
+
+  /**
+   * O que fica gravado BARE é só o que é nosso (`fromMe`): o envio do CRM e,
+   * desde o porte do DeskcommCRM 53f3b1b70, o eco do que a clínica digitou no
+   * celular. O WAHA quer o id completo; mandar o bare citaria nada. O adapter
+   * completa com `true_<chat>_<bare>`. Linha antiga gravada com o composto
+   * passa intacta. Porte do DeskcommCRM 6f50ad508 (autor original: melgarafael).
+   * Efeito contra um WAHA real NÃO medido.
+   */
+  it.each([
+    ["composto passa intacto", CITADA, CITADA],
+    ["composto antigo do celular (fromMe) passa intacto", "true_595@c.us_3EB0ANTIGO", "true_595@c.us_3EB0ANTIGO"],
+    ["bare vira o id completo do nosso lado", "3EB0NOSSO", "true_595@c.us_3EB0NOSSO"],
+  ])("%s", async (_nome, gravado, esperado) => {
+    const chamadas: unknown[][] = [];
+    vi.doMock("@/lib/waha/client", async (orig) => ({
+      ...(await orig<Record<string, unknown>>()),
+      getWahaClient: () => ({
+        sendMessage: (...a: unknown[]) => {
+          chamadas.push(a);
+          return Promise.resolve({ id: "3EB0ABC" });
+        },
+      }),
+    }));
+    vi.resetModules();
+    const { wahaAdapter } = await import("@/lib/channels/adapters/waha");
+    await wahaAdapter.send({
+      organizationId: "org-1",
+      sessionRef: "s1",
+      to: "595@c.us",
+      kind: "text",
+      body: "respondendo em cima",
+      replyToExternalId: gravado,
+    });
+    expect(chamadas[0]?.[3]).toBe(esperado);
+    vi.doUnmock("@/lib/waha/client");
+    vi.resetModules();
+  });
 });

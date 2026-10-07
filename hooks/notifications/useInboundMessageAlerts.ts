@@ -5,12 +5,12 @@ import { useCallback, useEffect } from "react";
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
 import { getOpenConversationId } from "@/hooks/notifications/OpenConversationContext";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
-import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
+import { marcarReleitura } from "@/lib/audit/releitura";
 import { avatarUrlServivel } from "@/lib/notifications/avatar_url";
 import { entregarAviso } from "@/lib/notifications/deliver";
 import { shouldNotifyInbound } from "@/lib/notifications/policy";
 import { syncPushSubscription } from "@/lib/notifications/push_client";
-import { createClient } from "@/lib/supabase/browser";
 
 function tabFocused(): boolean {
   if (typeof document === "undefined") return false;
@@ -38,15 +38,38 @@ function previewFromMessage(row: { type?: unknown; body?: unknown }): string {
   return body || "Nova mensagem";
 }
 
+/**
+ * ⚠️ POR QUE ESTA LEITURA PASSA PELA ROTA, E NÃO PELO SUPABASE DO BROWSER.
+ *
+ * Isto já foi um `createClient().from("contacts").select(...)`: o client do
+ * browser não enxerga a sessão (cookie httpOnly — ver `lib/supabase/browser.ts`),
+ * o select saía como `anon` e a RLS respondia ZERO LINHAS, sem erro. O título
+ * caía sempre em "Nova mensagem". A rota autentica no servidor, como a busca do
+ * avatar logo abaixo. (Porte do DeskcommCRM aea803e1c.)
+ *
+ * `?atualizacao=1`: o aviso não é a pessoa ABRINDO a ficha do contato. Sem a
+ * marca, cada mensagem que chega gravaria um `contact.viewed` falso na trilha
+ * de leitura (`lib/audit/releitura.ts`).
+ */
+async function contatoDaRota(contactId: string): Promise<Record<string, unknown> | null> {
+  try {
+    const qs = marcarReleitura(new URLSearchParams(), true);
+    const r = await fetch(`/api/v1/contacts/${contactId}?${qs.toString()}`, { credentials: "include" });
+    if (!r.ok) return null;
+    const dado = ((await r.json()) as { data?: unknown }).data;
+    if (!dado || typeof dado !== "object" || Array.isArray(dado)) return null;
+    return dado as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 async function contactNotifyBits(contactId: string): Promise<{ title: string; icon?: string }> {
-  const supabase = createClient();
-  const { data } = await supabase
-    .from("contacts")
-    .select("display_name, name")
-    .eq("id", contactId)
-    .maybeSingle();
-  const row = data as { display_name?: string | null; name?: string | null } | null;
-  const title = nomeDoContato(row) ?? "Nova mensagem";
+  const row = await contatoDaRota(contactId);
+  // A mesma regra do push do servidor (`push.handler.ts`): nome, senão o
+  // telefone; identificador técnico nunca. Sem nenhum dos dois, o literal.
+  const rotulo = row ? rotuloDoContato(row as Parameters<typeof rotuloDoContato>[0]) : SEM_NOME;
+  const title = rotulo === SEM_NOME ? "Nova mensagem" : rotulo;
   let icon: string | undefined;
   try {
     const r = await fetch(`/api/v1/contacts/${contactId}/avatar`, {
@@ -66,14 +89,16 @@ async function contactIdFromRow(
 ): Promise<string | null> {
   if (typeof row.contact_id === "string") return row.contact_id;
   if (!conversationId) return null;
-  const supabase = createClient();
-  const { data } = await supabase
-    .from("conversations")
-    .select("contact_id")
-    .eq("id", conversationId)
-    .maybeSingle();
-  const c = data as { contact_id?: string | null } | null;
-  return typeof c?.contact_id === "string" ? c.contact_id : null;
+  // Mesmo motivo de `contatoDaRota`: pelo client do browser este select voltava
+  // vazio SEM erro. A rota autentica no servidor.
+  try {
+    const r = await fetch(`/api/v1/conversations/${conversationId}`, { credentials: "include" });
+    if (!r.ok) return null;
+    const c = ((await r.json()) as { data?: { contact_id?: string | null } | null }).data;
+    return typeof c?.contact_id === "string" ? c.contact_id : null;
+  } catch {
+    return null;
+  }
 }
 
 export function useInboundMessageAlerts(): void {

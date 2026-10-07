@@ -212,9 +212,12 @@ const GESTOR_NA_ORG = `
 const COMO_GESTOR = como(GESTOR);
 
 /**
- * A leitura que a tela da Agenda do dono faz (`app/app/agenda/page.tsx`), com o
+ * A leitura que a tela da Agenda do dono fazia (`app/app/agenda/page.tsx`), com o
  * embed `calendar_connections!inner(user_id)` escrito como a junção que o
  * PostgREST monta. É o que "o dono continua vendo a própria agenda" quer dizer.
+ * (Desde o porte de melgarafael/DeskcommCRM 42c558397 a tela lê pela função da
+ * 0260, por dono — `lib/agenda/ocupacao-externa.ts`; esta sonda segue medindo o
+ * caminho da sessão sobre a view.)
  */
 const LEITURA_DA_TELA = `
   select e.id, e.starts_at, e.ends_at, e.status, e.transparency, c.user_id
@@ -423,15 +426,15 @@ describe("migration 0261 — o título do evento pessoal fora do alcance do memb
   it("sobre a v1.26.0, o bloco da 0261 deixa de pé quem mostra a ocupação: a leitura da tela para o dono e o gestor, e a função da 0260 para o colega — cuja tela já não trazia a ocupação do dono", () => {
     // A versão anterior deste caso exigia que o colega Somente leitura seguisse
     // lendo a ocupação do dono DIRETO na tabela e na view, "senão a grade da
-    // equipe esvaziaria". A grade não lê assim. `app/app/agenda/page.tsx` e
-    // `app/api/v1/agenda/agendamentos/route.ts` pedem a view com a sessão do
-    // usuário e o embed `calendar_connections!inner(user_id)` — a
-    // `LEITURA_DA_TELA` —, e a RLS de `calendar_connections` (dono OU gestor)
-    // tira da resposta a linha cuja conexão o leitor não vê. Para quem não é
-    // gestor, a tela JÁ não mostrava a ocupação do Google do colega antes da 0261
-    // (issue #879). Quem a entrega a todo membro é
-    // `fn_agenda_ocupacao_google_do_dono` (0260), `security definer`, que o
-    // encaixe de horários chama (`lib/agenda/consulta.ts`).
+    // equipe esvaziaria". A grade não lê assim. Quando este caso foi escrito,
+    // `app/app/agenda/page.tsx` e `app/api/v1/agenda/agendamentos/route.ts`
+    // pediam a view com a sessão do usuário — a `LEITURA_DA_TELA` —, e a RLS de
+    // `calendar_connections` (dono OU gestor) tirava da resposta a linha cuja
+    // conexão o leitor não vê. Desde o porte de melgarafael/DeskcommCRM 42c558397
+    // as duas leem pela `fn_agenda_ocupacao_google_do_dono` (0260), `security
+    // definer`, por dono (`lib/agenda/ocupacao-externa.ts`) — a mesma que o
+    // encaixe de horários chama (`lib/agenda/consulta.ts`) e a que este caso
+    // prende de pé para o colega.
     //
     // Prender a leitura direta do colega protegia um uso que o produto não tem, e
     // ficaria vermelho justamente com o fechamento mais barato do resto do
