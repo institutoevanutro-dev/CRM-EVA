@@ -60,9 +60,6 @@ export function protecaoDaAgenda(
 }
 function indisponivel(agora: Date): ProtecaoAgenda {
   logger.warn("[agenda] proteção indisponível; cobrança adiada");
-  return semLeitura(agora);
-}
-function semLeitura(agora: Date): ProtecaoAgenda {
   return {
     adiar: true,
     motivo: "leitura_indisponivel",
@@ -121,10 +118,7 @@ export async function protecaoAgendaSupabase(
       ]),
     );
   } catch {
-    // Um aviso por leitura que falhou, não um por contato: com centenas de
-    // contatos o registro recebia mais de mil linhas iguais a cada chamada.
-    logger.warn("[agenda] proteção indisponível; cobrança adiada");
-    return new Map(contatos.map((id) => [id, semLeitura(agora)]));
+    return new Map(contatos.map((id) => [id, indisponivel(agora)]));
   }
 }
 export async function protecaoAgendaPg(

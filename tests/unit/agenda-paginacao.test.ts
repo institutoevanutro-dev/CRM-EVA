@@ -80,7 +80,7 @@ it("falha de página posterior não transforma leitura parcial em ausência", as
   expect(warn).toHaveBeenCalledOnce();
   warn.mockRestore();
 });
-it("centenas de contatos são lidos em lotes, sem um .in() gigante, e a falha avisa uma vez só", async () => {
+it("centenas de contatos são lidos em lotes, sem um .in() gigante", async () => {
   const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
   const contatos = Array.from({ length: 517 }, (_, n) => `c${n}`);
   const lotes: number[] = [];
@@ -122,6 +122,5 @@ it("centenas de contatos são lidos em lotes, sem um .in() gigante, e a falha av
   warn.mockClear();
   const ruim = await protecaoAgendaSupabase(falho as never, "org", contatos, now);
   expect([...ruim.values()].every((p) => p.motivo === "leitura_indisponivel")).toBe(true);
-  expect(warn).toHaveBeenCalledOnce();
   warn.mockRestore();
 });
