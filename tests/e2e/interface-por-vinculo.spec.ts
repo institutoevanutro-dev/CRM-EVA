@@ -95,13 +95,22 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await member.goto("/app/settings/profile");
     await member.getByLabel("Nome completo").fill("Rascunho não salvo");
     await login(other, emails[2]!);
-    await expect(nav(member).getByRole("link", { name: "Radar", exact: true })).toBeVisible();
+    // Menu por área (07/10/2026): Radar virou aba de Atendimento; a prova "ao vivo" passa a ser a busca ⌘K,
+    // que também respeita a interface e não navega (o formulário continua preservado).
+    const temRadarNaBusca = async (p: Page) => {
+      await p.keyboard.press("ControlOrMeta+k");
+      await p.getByRole("combobox").fill("Radar");
+      const n = await p.getByRole("option").filter({ hasText: "Radar" }).count();
+      await p.keyboard.press("Escape");
+      return n > 0;
+    };
+    expect(await temRadarNaBusca(member)).toBe(true);
     const framesBefore = realtime.length;
     await customize(page, emails[1]!);
     // Evento real precisa chegar; polling não pode aprovar a observação em tempo real.
     await expect.poll(() => realtime.length, { timeout: 15_000 }).toBeGreaterThan(framesBefore);
-    await expect(nav(member).getByRole("link", { name: "Radar", exact: true })).toHaveCount(0);
-    await expect(nav(other).getByRole("link", { name: "Radar", exact: true })).toBeVisible();
+    await expect.poll(() => temRadarNaBusca(member), { timeout: 15_000 }).toBe(false);
+    expect(await temRadarNaBusca(other)).toBe(true);
     await expect(member.getByLabel("Nome completo")).toHaveValue("Rascunho não salvo");
     expect(member.url()).toContain("/app/settings/profile");
     await expect(member.getByTestId("alerts-bell")).toHaveCount(0);
@@ -118,12 +127,15 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await expect(member.getByRole("heading", { name: /Radar/ }).first()).toBeVisible();
     await member.goto("/app/settings/profile");
     await customize(page, emails[1]!, "Produtos");
-    await expect(nav(member).getByRole("link", { name: "Inbox", exact: true })).toHaveCount(0);
+    await expect(nav(member).getByRole("link", { name: "Atendimento", exact: true })).toHaveCount(0);
     await member.goto("/app");
     await member.waitForURL("**/app/products");
-    await nav(member).getByRole("link", { name: "Ver tudo em CRM" }).click();
-    await expect(member.getByRole("link", { name: /Produtos/ }).last()).toBeVisible();
-    await expect(member.getByRole("link", { name: /Contatos/ })).toHaveCount(0);
+    // Menu por área (07/10/2026): a única área com tela visível é Vendas, e ela abre em Produtos.
+    await nav(member).getByRole("link", { name: "Vendas" }).click();
+    await member.waitForURL("**/app/products");
+    const abasDeVendas = member.getByRole("navigation", { name: "Telas de Vendas" });
+    await expect(abasDeVendas.getByRole("link", { name: "Produtos" })).toBeVisible();
+    await expect(abasDeVendas.getByRole("link", { name: "Contatos" })).toHaveCount(0);
     await member.keyboard.press("ControlOrMeta+k");
     await expect(member.getByRole("option").filter({ hasText: "Produtos" })).toBeVisible();
     await expect(member.getByRole("option").filter({ hasText: "Inbox" })).toHaveCount(0);
@@ -132,7 +144,7 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await member.screenshot({ path: `${evidence}/interface-hub-only.png` });
     await member.setViewportSize({ width: 390, height: 844 });
     await member.getByRole("button", { name: "Abrir navegação" }).click();
-    await expect(member.getByRole("link", { name: "Ver tudo em CRM" }).last()).toBeVisible();
+    await expect(member.getByRole("link", { name: "Vendas" }).last()).toBeVisible();
     expect(
       await member.evaluate(
         () => document.body.scrollWidth <= document.documentElement.clientWidth + 1,
@@ -154,8 +166,11 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await guest.goto(link);
     await guest.getByRole("button", { name: /aceitar/i }).click();
     await guest.waitForURL("**/app/tasks");
-    await expect(nav(guest).getByRole("link", { name: "Inbox", exact: true })).toHaveCount(0);
-    await expect(nav(guest).getByRole("link", { name: "Tarefas", exact: true })).toBeVisible();
+    await expect(nav(guest).getByRole("link", { name: "Atendimento", exact: true })).toHaveCount(0);
+    await expect(nav(guest).getByRole("link", { name: "Vendas", exact: true })).toBeVisible();
+    await expect(
+      guest.getByRole("navigation", { name: "Telas de Vendas" }).getByRole("link", { name: "Tarefas", exact: true }),
+    ).toBeVisible();
     await expect(guest.getByRole("heading", { name: "Tarefas", exact: true })).toBeVisible();
     await expect(guest.getByText("Nenhuma tarefa por aqui", { exact: true })).toBeVisible();
     await expect(guest.locator("[aria-busy=true]")).toHaveCount(0);

@@ -111,9 +111,12 @@ test.describe("Relatório por etiqueta — pela tela", () => {
 
     // A PORTA: pelo menu, nunca pela URL.
     const sidebar = page.getByRole("navigation", { name: "Navegação principal" });
-    await sidebar.getByRole("link", { name: "Ver tudo em Análise" }).click();
-    await page.waitForURL(/\/app\/analise/, { timeout: 30_000 });
-    await page.getByRole("link", { name: /^Por etiqueta/ }).click();
+    // Menu por área (07/10/2026): Análise → aba Por etiqueta.
+    await sidebar.getByRole("link", { name: "Análise" }).click();
+    await page
+      .getByRole("navigation", { name: "Telas de Análise" })
+      .getByRole("link", { name: "Por etiqueta" })
+      .click();
     await page.waitForURL(/\/app\/tag-report/, { timeout: 30_000 });
     await expect(page.getByRole("heading", { name: "Por etiqueta", level: 1 })).toBeVisible();
 

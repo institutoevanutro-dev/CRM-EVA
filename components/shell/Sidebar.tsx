@@ -35,6 +35,8 @@ interface SidebarContentProps {
  * itens e sete `usePermission()` viviam aqui — e divergiam do hub de
  * Configurações e das abas de IA, que mantinham suas próprias listas.
  */
+const ROTULO_DO_RODAPE = "Configurações";
+
 export function SidebarContent({
   collapsed,
   showCollapseControl = true,
@@ -53,7 +55,9 @@ export function SidebarContent({
   );
   const atual = areaDaRota(pathname)?.area ?? null;
   const doMeio = areas.filter((a) => a.id !== GRUPO_NO_RODAPE);
-  const rodape = areas.find((a) => a.id === GRUPO_NO_RODAPE);
+  // No rodapé a área Organização aparece como "Configurações", o nome que todo mundo procura.
+  const organizacao = areas.find((a) => a.id === GRUPO_NO_RODAPE);
+  const rodape = organizacao && { ...organizacao, label: ROTULO_DO_RODAPE };
 
   // A área abre na última aba usada nela (gravada por `AbasDaArea`).
   const ultimaAba = useUltimaAba();
@@ -63,14 +67,15 @@ export function SidebarContent({
   const logo = activeOrg?.marca?.logoUrl || brand.logoUrl;
   const marcaDoProduto = marcaEhADoProduto({ name: nome, logoUrl: logo ?? null });
 
-  const linkDaArea = (a: (typeof areas)[number], rotulo: string, Icone: typeof a.icon) => {
-    const ativa = atual === a.id;
-    const temSaude = NAV_DESTINATIONS.some((d) => d.group === a.id && d.healthDot);
+  // `item` = a área; o rótulo do rodapé é o de Configurações, não o do grupo ("Organização").
+  const linkDaArea = (item: (typeof areas)[number], Icone: typeof item.icon) => {
+    const ativa = atual === item.id;
+    const temSaude = NAV_DESTINATIONS.some((d) => d.group === item.id && d.healthDot);
     return (
       <Link
-        key={a.id}
-        href={ultimaAba[a.id] ?? a.href}
-        title={collapsed ? t(rotulo) : undefined}
+        key={item.id}
+        href={ultimaAba[item.id] ?? item.href}
+        title={collapsed ? t(item.label) : undefined}
         aria-current={ativa ? "page" : undefined}
         onClick={onNavigate}
         className={cn(
@@ -82,7 +87,7 @@ export function SidebarContent({
         )}
       >
         <Icone size={20} weight={ativa ? "fill" : "regular"} aria-hidden />
-        {!collapsed && <span className="truncate">{t(rotulo)}</span>}
+        {!collapsed && <span className="truncate">{t(item.label)}</span>}
         {temSaude && (
           <ConnectionHealthDot className={cn(collapsed ? "absolute top-1.5 right-1.5" : "ml-auto")} />
         )}
@@ -116,10 +121,10 @@ export function SidebarContent({
       </div>
       <div aria-hidden className="mx-4 mb-2 h-px bg-gradient-to-r from-transparent via-gold/70 to-transparent" />
       <nav className="flex-1 space-y-1 overflow-y-auto p-2" aria-label={t("Navegação principal")}>
-        {doMeio.map((a) => linkDaArea(a, a.label, a.icon))}
+        {doMeio.map((a) => linkDaArea(a, a.icon))}
       </nav>
       <div className="border-t border-white/10 p-2">
-        {rodape && <div className="mb-1">{linkDaArea(rodape, "Configurações", Gear)}</div>}
+        {rodape && <div className="mb-1">{linkDaArea(rodape, Gear)}</div>}
         <VersionFooter collapsed={collapsed} onNavigate={onNavigate} />
         {showCollapseControl && (
           <button
