@@ -128,6 +128,12 @@ describe("persistMessageMedia", () => {
     expect(result.status).toBe("ok");
     expect(uploadMock).toHaveBeenCalled();
     expect(rpcMock).not.toHaveBeenCalled();
+    // Ninguém vai derivar esta mídia: sem o estado final a coluna ficava nula
+    // para sempre, e o drain — que espera a mídia da CONVERSA — segurava o
+    // turno até o teto e acusava "derivação não concluiu" em todo turno.
+    expect(updateEqMock).toHaveBeenCalledWith(
+      expect.objectContaining({ media_derived_status: "skipped" }),
+    );
   });
 
   it("pula mensagem já persistida (idempotência)", async () => {
@@ -149,7 +155,11 @@ describe("persistMessageMedia", () => {
     const result = await persistMessageMedia(eventRow(4));
     expect(result.status).toBe("error");
     expect(updateEqMock).toHaveBeenCalledWith(
-      expect.objectContaining({ metadata: expect.objectContaining({ media_status: "failed" }) }),
+      expect.objectContaining({
+        metadata: expect.objectContaining({ media_status: "failed" }),
+        // Sem bytes não há derivação: o estado final libera o drain.
+        media_derived_status: "failed",
+      }),
     );
   });
 
@@ -158,7 +168,11 @@ describe("persistMessageMedia", () => {
     const result = await persistMessageMedia(eventRow(4));
     expect(result.status).toBe("error");
     expect(updateEqMock).toHaveBeenCalledWith(
-      expect.objectContaining({ metadata: expect.objectContaining({ media_status: "failed" }) }),
+      expect.objectContaining({
+        metadata: expect.objectContaining({ media_status: "failed" }),
+        // Sem bytes não há derivação: o estado final libera o drain.
+        media_derived_status: "failed",
+      }),
     );
   });
 });

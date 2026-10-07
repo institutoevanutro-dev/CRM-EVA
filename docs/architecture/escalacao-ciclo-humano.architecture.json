@@ -344,7 +344,7 @@
       "col": 3,
       "type": "lib",
       "label": "lib/ai/handoff/aviso-ao-lead.ts",
-      "sublabel": "o mesmo texto pelo sendMessageHandler (mundo supabase-js)"
+      "sublabel": "o mesmo texto pelo sendMessageHandler (mundo supabase-js), no sentimento só se a IA falou na conversa, um por 24 h ou por volta da IA"
     },
     {
       "id": "orquestrador",

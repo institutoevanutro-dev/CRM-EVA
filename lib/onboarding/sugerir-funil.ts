@@ -18,6 +18,7 @@
  * e-commerce que o gatilho semeou, que é exatamente o defeito que este passo
  * existe para consertar.
  */
+import { extrairObjetoJsonDoTexto } from "@/lib/agent-engine/texto/extrair-json-do-texto";
 import {
   normalizarProposta,
   validarProposta,
@@ -120,14 +121,9 @@ export function pedidoDeSugestao(
  * suportes diferentes.
  */
 export function extrairJson(texto: string): unknown {
-  const inicio = texto.indexOf("{");
-  const fim = texto.lastIndexOf("}");
-  if (inicio === -1 || fim <= inicio) return null;
-  try {
-    return JSON.parse(texto.slice(inicio, fim + 1));
-  } catch {
-    return null;
-  }
+  // Primeiro OBJETO parseável: o recorte do primeiro `{` ao último `}` quebrava
+  // quando o modelo repetia o objeto (o span pegava as duas cópias).
+  return extrairObjetoJsonDoTexto(texto);
 }
 
 /** De onde veio o quadro que a tela vai mostrar. A tela DIZ isto à pessoa. */

@@ -218,6 +218,11 @@ describe("send_ai_message — quem PODE receber continua recebendo", () => {
     expect(r.status).toBe("success");
     expect(gerarAbordagemDeFormulario).toHaveBeenCalledTimes(1);
     expect(sendMessageHandler).toHaveBeenCalledTimes(1);
+    // O ator é a regra; a marca diz que o TEXTO é da IA — é ela que o aviso de
+    // passagem lê para não confundir esta mensagem com lembrete ou campanha.
+    expect(sendMessageHandler.mock.calls[0]?.[2]).toMatchObject({
+      metadata: { texto_escrito_pela_ia: true },
+    });
   });
 
   it("canal aberto ao público não é barrado", async () => {
