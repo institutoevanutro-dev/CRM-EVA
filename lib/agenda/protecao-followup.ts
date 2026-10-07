@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Queryable } from "@/lib/agent-engine/queue/queue";
 import { agendaSettingsSchema } from "@/lib/schemas/settings";
 import { logger } from "@/lib/logger";
+import { IDS_POR_LOTE } from "@/lib/supabase/em-lotes";
 
 export interface CompromissoProtetor {
   id: string;
@@ -81,26 +82,34 @@ export async function protecaoAgendaSupabase(
   if (!contatos.length) return new Map();
   try {
     const appointments: CompromissoProtetor[] = [];
-    let after: string | undefined;
-    // Keyset estável: uma resposta bem-sucedida pode ter sido truncada pelo
-    // max_rows do PostgREST. Só página VAZIA prova que a leitura terminou.
-    for (;;) {
-      let query = db
-        .from("calendar_appointments")
-        .select("id,contact_id,revision,starts_at,ends_at,status")
-        .eq("organization_id", org)
-        .in("contact_id", contatos)
-        .in("status", ["pending", "confirmed"])
-        .order("id", { ascending: true })
-        .limit(500);
-      if (after) query = query.gt("id", after);
-      const page = await query;
-      if (page.error) throw page.error;
-      if (!page.data?.length) break;
-      const last = page.data[page.data.length - 1]!.id;
-      if (after && last <= after) throw new Error("agenda_page_did_not_advance");
-      appointments.push(...page.data);
-      after = last;
+    // Em LOTES de contatos: o Radar passa todos os contatos com negócio aberto
+    // (517 no Instituto Eva em 07/10/2026), e um `.in()` com centenas de uuids
+    // estoura o header `Content-Location` do PostgREST (16 KB no Node) — a
+    // leitura falhava sempre e o Radar respondia 500. Mesmo defeito e mesma
+    // régua do quadro do funil (`lib/supabase/em-lotes.ts`).
+    for (let i = 0; i < contatos.length; i += IDS_POR_LOTE) {
+      const lote = contatos.slice(i, i + IDS_POR_LOTE);
+      let after: string | undefined;
+      // Keyset estável: uma resposta bem-sucedida pode ter sido truncada pelo
+      // max_rows do PostgREST. Só página VAZIA prova que a leitura terminou.
+      for (;;) {
+        let query = db
+          .from("calendar_appointments")
+          .select("id,contact_id,revision,starts_at,ends_at,status")
+          .eq("organization_id", org)
+          .in("contact_id", lote)
+          .in("status", ["pending", "confirmed"])
+          .order("id", { ascending: true })
+          .limit(500);
+        if (after) query = query.gt("id", after);
+        const page = await query;
+        if (page.error) throw page.error;
+        if (!page.data?.length) break;
+        const last = page.data[page.data.length - 1]!.id;
+        if (after && last <= after) throw new Error("agenda_page_did_not_advance");
+        appointments.push(...page.data);
+        after = last;
+      }
     }
     const organization = await db.from("organizations").select("settings").eq("id", org).single();
     if (organization.error) throw organization.error;
