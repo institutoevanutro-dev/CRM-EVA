@@ -392,6 +392,30 @@ pelo critério que já estava escrito lá: decisão humana não colapsa.
 
 ---
 
+## J9c — A sequência por silêncio não recomeça sozinha `[P1]` (2026-10-06)
+
+Contexto do código: `lib/followup/silence-sweep.ts` (varredura a cada minuto) e a
+migration 0324 (`followup_flow_pointers.active_since`). Spec:
+`docs/superpowers/specs/2026-10-06-followup-nao-recomeca-design.md`. Achado ao
+desenhar o funil do Dr. André: depois que a sequência terminava sem resposta, o
+contato calado era inscrito de novo no minuto seguinte, para sempre.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J9c.1 | Sequência termina (End), contato segue calado | nenhuma reinscrição nas varreduras seguintes | PASS (invariante, laço real) |
+| J9c.2 | Inscrição `completed`/`dead`/`cancelled` no mesmo silêncio | não reinscreve | PASS (invariante) |
+| J9c.3 | Contato responde e cala de novo | sequência nova do primeiro toque | PASS (invariante) |
+| J9c.4 | Ativar o fluxo com conversas caladas há meses | ninguém que calou antes da ativação entra | PASS (invariante + unit) |
+| J9c.5 | Desativar e publicar de novo | vigência zera; republicar versão num fluxo ativo não zera | PASS (invariante) |
+| J9c.6 | Contato anonimizado calado | não entra | PASS (unit da consulta de produção) |
+| J9c.7 | Mais de 1000 conversas abertas | todas consideradas (keyset até a página vazia) | PASS (unit) |
+| J9c.8 | Pela tela, ponta a ponta | `followup-journey` e `j20-elegibilidade-followup` recuam a vigência que semeiam | NÃO RODADO localmente — prova no `e2e` do CI |
+
+**Limite declarado:** "qualquer resposta encerra a sequência" só vale com
+"cancelar ao responder" ligado no gatilho (vem desligado).
+
+---
+
 ## J9b — Limitar o horário em que os follow-ups mandam mensagem `[P1]`
 
 Contexto do código: `settings.followups.bloqueios.janela` é respeitada pelo executor
@@ -555,6 +579,7 @@ uma, para a asserção poder ser sobre o CONJUNTO DE NOMES e não sobre a contag
 | J13.2 | O aviso "você ainda não publicou seus horários" LEVA até onde se publica, e a aba de Atendimento se anuncia como o lugar dos horários | **PASS** — `agenda-caminho-ate-os-horarios.spec.ts`. Evidência: `evidence/calendario/d1-aba-atendimento.png` |
 | J13.3 | O gerente publica a jornada de um **Prestador de serviço** (papel `provider`) em Equipe › Atendimento, com unidade — e o prestador fica "Só agenda", sem chave de plantão nem entrada no roteamento | **PASS** — `prestador-publica-jornada.spec.ts` (sabotada: sem o conserto, falha em "o prestador não aparece"). Evidência: `evidence/equipe/prestador-editor-jornada.png`, `evidence/equipe/prestador-jornada-publicada.png` |
 | J13.3 | Endereço de aba desconhecido cai na aba padrão, não numa tela sem conteúdo | **PASS** — mesma spec |
+| J13.3b | O editor de horário ("Editar horário de X") cabe no diálogo em 1280px: a janela fica numa linha só, e Fim, lixeira e Salvar inteiros dentro dele | **PASS** — mesma spec, por `getBoundingClientRect`. Antes: o seletor de Unidade fazia 6 controles num grid de 5, a lixeira descia e o Fim e o Salvar ficavam cortados. Evidência: `evidence/equipe/editor-de-jornada-cabe-1280.png` |
 | J13.4 | O tipo de agendamento NASCE com responsável; quem escolhe "Definir depois" é avisado e o aviso ABRE o seletor | **PASS** — `agenda-tipos-de-agendamento.spec.ts`. Evidência: `evidence/calendario/d6-tipo-com-responsavel.png` |
 | J13.5 | O dia apagado diz POR QUÊ, e o rótulo genérico antigo não volta | **PASS** — `agenda-kit-visual.spec.ts` |
 | J13.6 | O teto de capacidades recusa a passagem explicando quantas vagas faltam | **PASS** — `capacidades-do-agente.spec.ts`, com o teto em 25 |
@@ -565,6 +590,7 @@ uma, para a asserção poder ser sobre o CONJUNTO DE NOMES e não sobre a contag
 | J13.11 | Compromisso do Google que começa antes do período desenhado aparece na grade, fatiado na borda | **NÃO COBERTO** — medido só por unidade sobre dublê do cliente Supabase (`tests/unit/agenda-recorte-do-google-atravessa-o-limite.test.ts`); falta prova pela tela num ambiente com Google conectado. ⚠️ O conserto morde na BORDA do período que a tela desenha (virada da semana na visão Semana, do mês na visão Mês, meia-noite na visão Dia). Dentro do período desenhado a grade continua atribuindo o bloco só à coluna do dia em que ele COMEÇA (`components/agenda/GradeDaAgenda.tsx`, `isSameDay(comeca, dia)`) — essa metade é item próprio |
 | J13.12 | Agendamento INTERNO que atravessa a meia-noite aparece na janela do dia seguinte | **NÃO COBERTO, e o defeito é conhecido** — `listaAgendamentos` recorta por começo e não por interseção (`lib/agenda/consulta.ts`, `.gte("starts_at", de).lt("starts_at", ate)`), enquanto `coletaOQueOcupa` no mesmo arquivo já usa interseção: mesma discordância tela↔motor da #525, do lado interno. Não consertado junto porque `listaAgendamentos` também alimenta a ferramenta MCP do agente (`lib/mcp/tools/agendamento.ts`) — mudar o recorte muda o que o agente enxerga, e isso é decisão de contrato
 | J13.13 | ⚠️ **`viewer`/`agent` continuam sem ver a ocupação do Google do COLEGA na grade** | **NÃO COBERTO, e o defeito é conhecido** — a leitura da tela é pela SESSÃO, com o embed `calendar_connections!inner` (`lib/agenda/ocupacao-externa.ts`), e a RLS `calendar_connections_dono_ou_manager_read` (`supabase/baseline.sql`) só libera `user_id = auth.uid()` ou `fn_role_at_least(org,'manager')`. O motor (`fn_agenda_ocupacao_google_do_dono`, migration 0260) é `security definer` e entrega a ocupação a TODO membro: para esses dois papéis a tela desenha livre todo compromisso do colega enquanto a marcação recusa. É a metade da #525 que o #915 **não** fecha — ele fecha a FRONTEIRA do recorte, não o PAPEL de quem olha (resíduo da #879). O dublê de `tests/unit/agenda-recorte-do-google-atravessa-o-limite.test.ts` não modela papel nem RLS, então a suíte não pode enxergar isto. Fechar é decisão de produto sobre QUEM vê |
+| J13.14 | O gestor escreve o texto do lembrete de um tipo em Configurações › Agenda, vê a prévia ("Oi Maria, te espero amanhã às 14:30."), salva, recarrega e o texto continua lá, com "· texto próprio" na lista | **NÃO MEDIDO** — o caso está em `agenda-tipos-de-agendamento.spec.ts` ("ligo o aviso do compromisso pela tela"), mas não rodou em ambiente fresco nesta sessão (branch `feat/lembrete-editavel`). O DOM do campo, da ajuda, da prévia e do aviso de variável errada está medido em `tests/unit/lembrete-texto-da-tela.test.tsx`; o envio (canal WhatsApp, fuso do compromisso, remarcação) só por unidade, em `app/api/v1/cron/agenda-reminder/route.test.ts` e `lib/agenda/aviso-do-compromisso-lembrete.test.ts`, sem receiver real |
 
 **Registro honesto do que NÃO foi exercitado:** `pnpm test:db` não rodou nesta
 máquina — o daemon do Docker travou depois de o disco encher, e o harness de
@@ -973,14 +999,17 @@ ação `send_ai_message`, retomada manual (`lib/escalacao/retomada.ts`).
 | J20.9 | Nova mensagem genérica "oi" | IA NÃO responde | **UNIT** — `campanha.test.ts` "teste 9" + `gate.test.ts` |
 | J20.10 | Conversa marcada human_only (`force_human`) | IA nunca responde até reativação explícita | **UNIT** — `gate.test.ts` "teste 10", `drain.test.ts` "force_human" |
 | J20.11 | Follow-up em lead Respondi elegível | funciona | **CÓDIGO** — silence-sweep só barra quem o gate barra |
-| J20.12 | Follow-up em cliente atual (não autorizado, gate allowlist) | NÃO enrola | **CÓDIGO** — `silence-sweep.ts` `loadSilentContactIds` consulta a regra compartilhada e pula `!permitidoPeloGate`; **E2E** — `tests/e2e/j20-elegibilidade-followup.spec.ts` (fluxo de silêncio publicado pela API + cron real: silencioso autorizado → nasce `followup_enrollments`; silencioso NÃO autorizado, mesmo canal → nenhum enrollment) |
+| J20.12 | Follow-up em cliente atual (não autorizado, gate allowlist) | NÃO enrola | **CÓDIGO** — `silence-sweep.ts` `loadSilentContacts` consulta a regra compartilhada e pula `!permitidoPeloGate`; **E2E** — `tests/e2e/j20-elegibilidade-followup.spec.ts` (fluxo de silêncio publicado pela API + cron real: silencioso autorizado → nasce `followup_enrollments`; silencioso NÃO autorizado, mesmo canal → nenhum enrollment) |
 | J20.13 | Reinício do worker com backlog de eventos pending | zero disparos: cada evento cujo inbound já foi superado vira `done` sem job | **UNIT** — `drain.test.ts` "evento superado por inbound mais recente" |
 | J20.14 | Submissão antiga (fora do TTL) | NÃO reativa a IA sozinha | **UNIT** — `gate.test.ts` "submissão antiga (fora da janela)", `drain.test.ts` "autorização EXPIRADA" |
 | J20.15 | Org SEM versão de agente publicada (caminho legado `ai-response-worker`), gate allowlist, contato não autorizado | IA NÃO responde por este caminho tampouco | **UNIT** — `ai-response-worker-elegibilidade.test.ts` (skip `nao_elegivel_para_ia` antes de ler mensagem/agente; fail-closed em erro de leitura) |
-| J20.16 | Follow-up de TEXTO FIXO drenado inline (`enviarTextoFixoPendente`, sem worker), contato não autorizado | NÃO envia; job vira `done` | **UNIT** — `enviar-texto-fixo.test.ts` "conversa NÃO elegível" (+ fail-closed volta pra `pending`) |
+| J20.16 | Follow-up de TEXTO FIXO drenado inline (`enviarTextoFixoPendente`, sem worker), contato não autorizado | NÃO envia; a inscrição encerra com "este número não está liberado…" e o job vira `done` — a MESMA decisão do worker (o gate do canal mora em `decidirEnvio`) | **UNIT** — `enviar-texto-fixo.test.ts` "canal não liberado" (+ fail-closed volta pra `pending`), `bloqueios-obrigatorios.test.ts` "liberação do número"; **INVARIANTE** — `followup-humano-ativo.test.ts` (allowlist via `conferirAntesDoEnvio`) |
 | J20.17 | Cliente antigo irritado (gate allowlist, não autorizado) → worker de sentimento dispara `low_sentiment` | `triggerHandoff` NÃO dispara: sem "um humano vai te atender", sem mexer no estado da conversa | **UNIT** — `handoff-orchestrator-elegibilidade.test.ts` (`bloqueioPorAllowlist` e `conversa_silenciada` barram; fail-closed em erro) |
 | J20.18 | Eu respondo o cliente à mão pelo meu WhatsApp numa conversa autorizada | IA para naquela conversa por um PRAZO (`PRAZO_DO_SILENCIO_MS`, 5 min) renovado a cada nova fala humana, SEM apagar `ai_authorized_at`; volta sozinha quando o prazo vence, ou antes por "devolver ao automático" | **UNIT** — `atendimento-manual.test.ts` (as duas pontas do prazo medidas pelo motor real `decidirElegibilidade`, renovação, e o que NUNCA encurta: `'infinity'` do handoff formal e janela mais longa) + `waha-ingest-atendimento-manual.test.ts` (via `dispatchWahaEvent` real; eco do próprio envio NÃO pausa) + guarda de fonte no Zernio + fiação em `handoff-fernando-fiacao.test.ts`; **E2E** — `tests/e2e/j20-elegibilidade-atendimento-manual.spec.ts` (webhook `fromMe` genuíno → `bot_silenced_until` finito e futuro, nunca `'infinity'`, + rastro; `ai_authorized_at` intacto; 2ª mensagem RENOVA o prazo; tela mostra o selo; "devolver ao automático" solta a trava e a autorização continua) |
 | J20.19 | Worker parado acorda com backlog; dois inbound antigos com o MESMO `sent_at` | a "última inbound" é a mais RECENTE (por `created_at`), nunca a de maior uuid — o evento antigo é pulado | **INVARIANTE** — `tests/invariants/drain-recencia-inbound.test.ts` (Postgres real) + `drain.test.ts` guarda a cláusula `coalesce(sent_at, created_at)` |
+| J20.20 | Eu respondo pelo celular ou pela caixa de entrada e há um follow-up vivo na conversa | o próximo passo NÃO sai, por nenhum caminho (texto, modelo, IA, atalho do texto fixo); a sequência encerra com `outcome='handoff'` e o motivo legível no dossiê. Conversa atribuída a pessoa faz o mesmo; `handoff_policy='allow'` ignora atribuição e resposta humana; em gatilho que não é silêncio, só conta a resposta a algo da inscrição (contato falou depois do início, ou um passo já saiu); a resposta automática do WhatsApp Business (celular até 10 s depois do inbound) e o eco não removido do nosso envio não contam; o silêncio não reinscreve em laço quem foi encerrado por humano | **UNIT** — `bloqueios-obrigatorios.test.ts`, `followup-humano-ativo-no-turno.test.ts`, `enviar-texto-fixo.test.ts`, `silence-sweep-handoff.test.ts`; **INVARIANTE** — `tests/invariants/followup-humano-ativo.test.ts` (consulta real: celular/composer/IA, marco do inbound, da retomada e do início, etapa → proposta → passo, resposta automática, eco, outra conversa, outra organização; `allow` + atribuída e allowlist via `conferirAntesDoEnvio`); **E2E — pendente** (sem prova pela tela ainda) |
+| J20.21 | Passo de texto fixo vence fora da janela, ou o contato respondeu num fluxo com "encerrar quando responder" | o atalho do texto fixo aplica a MESMA decisão do worker: adia para a abertura (janela da organização ou do número), encerra com `replied` | **UNIT** — `enviar-texto-fixo.test.ts` "a mesma decisão de envio do worker"; ordem do webhook em `kick-local-pipeline.test.ts` (reatividade real: cancel_on_reply já cancelado quando o texto roda; o "1" do menu continua dentro do piso); áudio/imagem como resposta em `engine-match-reply-inbound.test.ts`; **E2E — pendente** |
+| J20.22 | Passo de IA com modelo de reserva; a IA foi barrada pelas regras ou falhou na última tentativa | o modelo sai pelas mesmas travas (seq 1000) e o dossiê diz "pelo modelo de reserva"; a IA que decidiu não escrever (ou agente pausado/assistido) NÃO dispara a reserva | **UNIT** — `followup-modelo-de-reserva.test.ts`; **INVARIANTE** — `followup-engine.test.ts` (o payload leva `fallback_template_id`); **E2E — pendente** |
 
 **Sabotagem que confirma:** removendo o veto `sem_autorizacao` de
 `decidirElegibilidade`, `gate.test.ts` e `drain.test.ts` reprovam; restaurado,
@@ -1045,6 +1074,18 @@ Spec: `evalink-conta/docs/superpowers/specs/2026-10-03-respostas-prontas-antes-d
 - [x] Turno real contra Postgres: responde sem modelo; humano/opt-out vêm antes; embedding fora do ar → IA; anti-ban vetando → IA — `tests/invariants/resposta-pronta-no-turno.test.ts`
 - [ ] Mensagem real pelo WhatsApp numa VPS com WAHA pareado: medido à mão no piloto (parte 4)
 - [ ] Corpus com modelo real (Tarefa 3): ainda não feito, aguarda chave de API
+
+## J29 — Painel do funil: os números do período, cada um com a sua régua `[P1]`
+
+Desenho: `docs/superpowers/specs/2026-10-06-painel-do-funil-design.md`. Tela `/app/painel-do-funil`
+(Análise, `manager`, porta no hub e no ⌘K).
+
+- [x] Contas puras: coorte, as duas gramáticas de `stage_changed`, etapa arquivada fora, ganhos por moeda, agenda, custo/ROAS, recorte por dimensão — `tests/unit/painel-do-funil-agregacao.test.ts`
+- [x] Investimento: conta pela regra da tela Meta Ads, estados sem zero falso — `tests/unit/painel-do-funil-investimento.test.ts`
+- [x] Rota: papel, Zod, `organization_id` pelo efeito, truncado dentro do lote, sem PII, espanhol das mensagens — `tests/unit/painel-do-funil-rota.test.ts`
+- [x] Porta no catálogo, com espanhol do rótulo — `tests/unit/painel-do-funil-navegacao.test.ts`
+- [x] Componente montado (hook dublado, jsdom): texto de "não conectado" e "—" em custo/ROAS, réguas com os dois fusos, formulário que guarda as opções depois de um 422, campos do card do funil escolhido no formulário, Aplicar desligado sem campo/prefixo — `tests/unit/painel-do-funil-tela.test.tsx`. Não substitui a prova de tela abaixo: não passa pelo navegador nem pelo banco
+- [ ] Prova de tela (Leads, Interagiram, Ganhos, Realizados, Faltas, comparecimento, "não conectado", recorte por campo do card) — `tests/e2e/painel-do-funil.spec.ts` — spec escrita e registrada em `SPECS_PARTE_4`, **NÃO MEDIDA localmente** (máquina sem o Supabase do CRM de pé e com carga alta); roda no CI do PR
 
 ## J7 — Exploração completa `[P2]`
 

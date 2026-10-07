@@ -695,7 +695,7 @@ jobs:
       # Para remedir: o roteiro no topo desta seção (`gh run view --job ... --log`)
       # e, por spec, o delta de timestamp entre linhas `✓ N [chromium] › ...`.
       SPECS_PARTE_4: >-
-        navegacao.spec.ts prova-painel-provedores.spec.ts
+        navegacao.spec.ts painel-do-funil.spec.ts prova-painel-provedores.spec.ts
         organizacoes-criacao-convite-e-cache.spec.ts
         pipelines-gestao.spec.ts qa-agente-usa-as-maos.spec.ts qa-equipe-pinta-na-hora.spec.ts
         qa-l12-agenda-contatos.spec.ts qa-l12-tags-radar.spec.ts qa-selo-no-funil-usado.spec.ts

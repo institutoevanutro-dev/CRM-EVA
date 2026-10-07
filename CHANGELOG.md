@@ -8,6 +8,374 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.8.0] — 2026-10-07
+
+### Adicionado
+
+- **O texto do lembrete da agenda pode ser escrito por tipo de agendamento** Em Configurações › Agenda, cada tipo de agendamento com o lembrete ligado ganha
+  um campo para o texto da mensagem, com a lista de variáveis e uma prévia que
+  mostra exatamente o que o paciente vai receber.
+
+  As variáveis são `{{primeiro_nome}}`, `{{nome}}`, `{{quando}}` (que vira "hoje",
+  "amanhã" ou o dia da semana com a data), `{{data}}`, `{{hora}}`,
+  `{{dia_semana}}`, `{{unidade}}`, `{{endereco}}`, `{{profissional}}` e `{{tipo}}`.
+  Variável sem valor some do texto sem deixar chaves. Uma variável escrita errado,
+  como `{nome}` ou `{{primeiro nome}}`, é recusada ao salvar.
+
+  Em branco, o lembrete continua com a frase de sempre. Quem não mexer no campo
+  não percebe diferença nenhuma.
+
+  Portado e estendido do projeto original (DeskcommCRM, de Ian Couto).
+
+- **Painel do funil — os números do período de um funil, juntos e com a régua de cada um** Em Análise › Ver tudo em Análise há uma tela nova, o Painel do funil, para quem
+  é gestor ou administrador. Ela mostra, para o funil e o período escolhidos:
+  quantos leads entraram, quantos interagiram (chegaram à etapa ligada ao passo
+  "Primeiro contato" do agente), até onde cada um chegou no funil, os ganhos e a
+  receita, os agendamentos com realizados, faltas e taxa de comparecimento, e —
+  com a conta de anúncios da Meta conectada — o investimento, o custo por venda e
+  o ROAS.
+
+  Embaixo de cada número está o que ele conta. Quando um número não pode ser
+  medido, a tela diz por quê e onde consertar, em vez de mostrar zero.
+
+  Dá para recortar tudo por um campo de lista da ficha do contato (por exemplo,
+  Origem), por um campo de lista do card, por etiquetas do contato que começam com
+  um prefixo (por exemplo, `criativo-`) ou pela campanha de anúncio.
+
+  Nenhuma ação é necessária. O investimento é o gasto da conta de anúncios
+  inteira, não só do funil escolhido — a tela avisa isso ao lado do custo por
+  venda e do ROAS.
+
+### Alterado
+
+- **Consulta marcada em cima da hora não recebe mais o lembrete que já tinha passado** Quando um compromisso era marcado (ou remarcado) para menos tempo do que a
+  antecedência do lembrete, por exemplo às 18h30 para as 16h do dia seguinte com
+  o aviso de 24 horas antes, o lembrete saía poucos minutos depois da marcação.
+  Agora esse aviso não sai: a hora dele já tinha passado quando o compromisso foi
+  marcado.
+
+  Quem contava com esse aviso imediato deixa de recebê-lo. Para avisar também quem
+  marca em cima da hora, dá para acrescentar um segundo aviso mais curto no tipo de
+  agendamento (Configurações › Agenda, "E de novo, quantos minutos antes"). Isso
+  vale para todos os compromissos do tipo: quem marca com antecedência passa a
+  receber os dois avisos.
+
+  Portado do projeto original (DeskcommCRM, de webtecnica).
+
+### Corrigido
+
+- **Quando a leitura da agenda falha, o registro diz o motivo** Quando o CRM não consegue ler a agenda antes de mandar um follow-up ou uma automação, ele adia o envio. Esse adiamento passa a registrar o motivo da falha, e um aviso só por falha, em vez de um por contato. Assim dá para achar e corrigir a causa em vez de os envios ficarem adiados sem explicação.
+
+- **O editor de horário da equipe volta a caber na janela** Em Equipe › Atendimento › "Editar horário", cada janela da jornada voltou a ficar numa linha só: dia, início, "–", fim, unidade e lixeira, nessa ordem. Desde que o seletor de unidade entrou, a lixeira descia para baixo e o campo de fim e o botão Salvar ficavam cortados na borda direita.
+
+- **A busca de nomes no financeiro espera 7 dias antes de perguntar de novo pelo mesmo contato** O CRM pergunta ao financeiro o nome dos contatos que chegam sem nome. Ele refazia a mesma pergunta pelos mesmos contatos o dia inteiro, regravando centenas de cadastros por hora. Agora só volta a perguntar por um contato depois de 7 dias, o que tira peso do banco.
+
+- **O follow-up não dispara o fluxo inteiro numa só resposta** Num menu de follow-up (1/2/3), uma resposta que não casava o ramo fazia o
+  fluxo reenviar o menu e, no mesmo instante, as mensagens seguintes e o
+  aviso de “não respondeu”. Agora só avança o passo daquela resposta; a
+  próxima pergunta espera o cliente de novo.
+
+- **A sequência de retomada por silêncio não recomeça sozinha** O gatilho "contato em silêncio" manda uma sequência de mensagens para quem parou
+  de responder. Antes, quando a sequência terminava sem resposta (ou era encerrada
+  porque uma pessoa da equipe assumiu, a etapa do funil bloqueia ou o contato foi
+  anonimizado), o contato continuava calado e, um minuto depois, a mesma sequência
+  começava de novo, do primeiro toque, sem fim.
+
+  Agora:
+
+  - **Uma sequência por silêncio.** Depois que ela termina, o contato só recebe
+    outra se responder e ficar calado de novo pelo tempo configurado, contado a
+    partir da última mensagem dele ou do fim da sequência anterior, o que vier
+    depois. Uma sequência nunca começa colada na anterior.
+  - **Contato antigo não recebe nada ao ligar o fluxo.** Só conta quem mandou
+    mensagem depois que o fluxo foi ativado. Antes, ativar um fluxo de silêncio
+    mandava a sequência de uma vez para toda conversa aberta calada, inclusive de
+    meses atrás. Isso vale também na atualização: quem já estava calado na hora de
+    atualizar não recebe a sequência daquele silêncio.
+  - **Contato anonimizado fica de fora.**
+  - **Mais de mil conversas abertas** passam a ser todas consideradas, e não só um
+    pedaço escolhido pelo banco.
+
+  Para que **qualquer resposta encerre a sequência**, ligue "cancelar ao responder"
+  no gatilho do fluxo. Essa opção vem desligada: sem ela, a resposta do contato
+  segue para o próximo passo do fluxo.
+
+  Armar o fluxo num agente também conta como ligar: quem ficou calado entre
+  ativar o fluxo e publicar o agente que o arma não recebe a sequência de uma vez.
+  Publicar de novo um agente que já armava o fluxo, publicar uma versão nova de um
+  fluxo que já está ativo, mudar o tempo de silêncio ou o "cancelar ao responder"
+  não mexem nisso.
+
+  Nenhuma ação é necessária.
+
+- **A resposta do follow-up sai depois que o lead responde** Num fluxo de follow-up que espera a resposta do cliente (menu 1/2/3), a
+  primeira mensagem saía e a seguinte ficava parada depois do "1". O
+  acompanhamento volta a avançar e enviar a mensagem do ramo escolhido.
+
+- **O follow-up respeita as mesmas regras por qualquer caminho, não fala por cima da equipe e sai com o nome do contato** Um passo de texto fixo do follow-up podia sair por um atalho que não conferia
+  as regras de envio. Agora ele passa pelas mesmas conferências da mensagem
+  escrita pela IA:
+
+  - respeita a janela de envio configurada para a organização e o horário de
+    envio do número (por padrão, das 7h às 22h). Fora dela, o passo espera a
+    abertura;
+  - se o fluxo encerra quando o contato responde, a resposta encerra antes de o
+    passo sair, também quando ela chega no meio de uma espera;
+  - etapa do funil que interrompe follow-ups e contato anonimizado encerram a
+    sequência;
+  - número em modo de teste (ou contato sem autorização) encerra a sequência com
+    o motivo escrito, em vez de deixá-la parada até expirar.
+
+  O que continua só no envio feito pelo processo de segundo plano (worker), e
+  não no atalho do texto fixo: o teto diário e o aquecimento do número, a trava
+  de texto repetido em massa, a base legal da LGPD e a trava de promessas. Numa
+  instalação com o worker ligado, ele pega quase todos os passos em segundos.
+
+  O follow-up não fala mais por cima de quem está atendendo. A sequência é
+  encerrada, com o motivo "uma pessoa da equipe está atendendo esta conversa",
+  quando alguém da equipe respondeu ao contato depois da última mensagem dele
+  (pela caixa de entrada ou pelo celular), quando a conversa está atribuída a uma
+  pessoa ou quando o atendimento humano foi pedido. Nos fluxos marcados como
+  "Permitir durante handoff", atribuição e resposta da equipe não encerram. Em
+  fluxos disparados por etapa ou por inscrição manual, a mensagem da equipe só
+  conta quando responde a algo da sequência: o contato falou depois que ela
+  começou, ou o follow-up já tinha mandado um passo. Mover o negócio para
+  "Proposta enviada" e depois mandar a proposta não encerra a cobrança. A
+  saudação e a mensagem de ausência automáticas do WhatsApp Business (até 10
+  segundos depois da mensagem do contato) não contam como resposta da equipe.
+  O gatilho de silêncio não reinscreve, no mesmo silêncio, quem foi encerrado
+  porque uma pessoa da equipe está atendendo.
+
+  `{{nome}}` e `{{primeiro_nome}}` saem preenchidos nos passos de texto e de
+  modelo. Quando o contato não tem nome cadastrado, vale o nome do perfil do
+  WhatsApp. Sem nenhum dos dois, a variável sai do texto: "Ei, {{primeiro_nome}},
+  tá por aí?" vira "Ei, tá por aí?". Se o texto era só a variável, o passo é
+  pulado com o motivo escrito no histórico. Na caixa de entrada, os modelos
+  também passam a usar o nome do perfil.
+
+  Num menu de follow-up, um áudio ou uma imagem em resposta conta como resposta,
+  como antes, e a espera não recomeça a contar quando nada chega.
+
+  O "modelo de reserva" de uma mensagem escrita pela IA agora funciona. Ele sai,
+  com as mesmas regras, quando a IA tentou enviar e foi barrada pelas regras do
+  atendimento, ou quando falhou na última tentativa. Ele não sai quando a IA
+  decidiu não escrever, nem com o agente pausado ou em modo assistido. O
+  histórico do acompanhamento mostra quando a mensagem saiu pelo modelo de
+  reserva. Nenhuma ação é necessária.
+
+- **O lembrete da agenda sai pelo WhatsApp do paciente, na hora certa, e acompanha a remarcação** O lembrete do compromisso podia sair por qualquer conexão ativa da organização,
+  inclusive o Instagram. Agora ele sai sempre por um número de WhatsApp, de
+  preferência o da conversa em que o paciente já fala.
+
+  A hora escrita no lembrete passa a ser a do fuso do compromisso (o da unidade em
+  que ele foi marcado), e não a da organização. Para quem atende num fuso só, nada
+  muda.
+
+  Remarcar um compromisso para outra data passa a refazer o lembrete da data nova.
+  Antes, o aviso que já tinha saído para a data antiga impedia o da data nova, e o
+  paciente ficava sem lembrete.
+
+  O mesmo lembrete também não sai mais duas vezes seguidas quando algo falha no
+  meio do envio, nem quando o compromisso é cancelado ou remarcado enquanto a
+  rodada de envio está em andamento.
+
+  Portado do projeto original (DeskcommCRM, de webtecnica e melgarafael).
+
+- **O quadro do funil abre fazendo menos consultas ao banco** Abrir o quadro do funil ficou mais leve para o banco. Num funil com cerca de 800
+  negócios, cada abertura fazia uns 44 pedidos ao banco; agora faz uns 17. Como o
+  quadro é recarregado toda vez que um negócio muda, a economia se repete o dia
+  inteiro.
+
+  O que mudou por dentro:
+
+  - Os pedidos que buscam dados de muitos contatos de uma vez agora levam até 300
+    contatos por vez, e não 100.
+  - A próxima ação sugerida pela IA só procura os negócios abertos dos contatos que
+    realmente têm uma sugestão, em vez de reler o funil inteiro.
+
+  Nada muda na tela: os cartões, as colunas (inclusive as de ganho e perda), a
+  nota da IA, a conversa e os marcadores aparecem como antes.
+
+- **O Radar volta a abrir com centenas de negócios abertos** Com algumas centenas de contatos com negócio aberto, o Radar falhava sempre e a tela mostrava "Erro interno" a cada poucos segundos. A leitura da agenda que ele faz agora sai em lotes de 100 contatos.
+
+- **Abrir o Inbox, as conversas e o quadro volta a ser rápido** Toda leitura de quem está logado ficou lenta — o Inbox chegava a dar erro ao abrir, e a lista de conversas e o quadro demoravam vários segundos. A regra que decide o que cada pessoa pode ver refazia, em cada linha, a checagem de "esta pessoa está em atendimento de suporte?", mesmo sem suporte nenhum em andamento. Agora essa checagem só roda quando existe uma sessão de suporte aberta. Ninguém passa a ver ou a fazer nada diferente do que via e fazia antes.
+
+## [3.7.0] — 2026-10-07
+
+### Adicionado
+
+- **Importação administrativa de histórico de agenda** Comando com prévia e aplicação transacional para agendamentos passados com contatos conferidos. Preserva existentes, recusa conflitos e não dispara convites ou automações. Exige migração e ambiente administrativo da instalação.
+
+## [3.6.1] — 2026-10-06
+
+### Corrigido
+
+- **Anonimizar um paciente passa a apagar também o que a IA e a equipe escreveram sobre ele quando o atendimento travou** Quando a IA não consegue resolver um atendimento, ela abre um "caso" para a equipe: escreve um
+  título, um resumo do problema, o que está faltando e guarda um trecho das últimas mensagens do
+  paciente. A equipe responde nesse caso, o pedido ganha um assunto e um próximo passo, e a Central
+  recebe avisos — alguns com o resumo da conversa, e o de chamada perdida com o telefone no título.
+
+  Nada disso era apagado ao anonimizar. O paciente aparecia como "Cliente Anonimizado", mas o relato
+  sobre ele continuava legível nessas telas, com nome e tudo, e o sistema dizia que a anonimização
+  tinha sido feita.
+
+  Agora, ao anonimizar (pelo pedido formal ou pelo botão da ficha):
+
+  - o caso fica sem título, resumo e trecho de conversa, e as respostas da equipe dentro dele somem;
+  - o pedido fica sem assunto e sem o texto do próximo passo;
+  - os avisos da Central sobre aquela pessoa são encerrados e ficam sem texto.
+
+  O que é registro do trabalho da clínica continua: que houve um caso, quando foi aberto, em que
+  situação estava, quem atendeu e quando. Assim as contagens de atendimento não mudam.
+
+  O relatório de dados do titular (o que a clínica entrega quando o paciente pede os dados dele)
+  passa a trazer esses mesmos registros.
+
+  Quem já tinha sido anonimizado antes desta atualização é corrigido sozinho na hora de atualizar —
+  inclusive os avisos de "atendimento parado" que o sistema continuou abrindo depois da
+  anonimização, que repetiam o título antigo do caso.
+
+- **O bloqueio de um contato só muda pelo pedido do paciente ou pelo botão do administrador** Quando um paciente pede para não receber mais mensagens, o contato fica
+  bloqueado. Só o administrador pode desbloquear, pelo botão na ficha do contato,
+  e isso fica registrado na auditoria.
+
+  Essa regra valia na tela, mas não no banco: um atendente com algum conhecimento
+  técnico conseguia desbloquear (ou bloquear) um contato por fora do sistema, sem
+  ser administrador e sem deixar registro.
+
+  Agora o próprio banco recusa. O bloqueio só é gravado quando o paciente pede
+  para parar, e só é desfeito pelo botão Desbloquear. Editar os outros dados da
+  ficha continua igual para todos. Nenhuma ação é necessária.
+
+  Dois atalhos que desfaziam o bloqueio sem desbloquear também foram fechados:
+
+  - O telefone de um contato bloqueado não pode mais ser trocado nem apagado pela
+    ficha. Trocar o número fazia a próxima mensagem do paciente abrir um contato
+    novo, sem bloqueio. Quem tentar vê o aviso "Este contato pediu para não
+    receber mensagens" e precisa pedir ao administrador para desbloquear antes.
+    Nome, e-mail e os outros campos continuam editáveis.
+  - Ao juntar dois contatos da mesma pessoa, se um deles estava bloqueado, o
+    contato que sobra fica bloqueado também. Antes, juntar um contato bloqueado a
+    uma duplicata livre fazia o bloqueio sumir.
+
+- **O botão "Anonimizar" da ficha passa a apagar tudo o que o pedido formal de LGPD apaga** Existem dois jeitos de anonimizar um paciente: pelo pedido formal (tela de pedidos de LGPD) e
+  pelo botão "Anonimizar contato" na ficha. O botão apagava menos coisa. Depois de clicar, ainda
+  ficavam guardados:
+
+  - as etiquetas, os consentimentos e os "dados de origem" do contato — onde ficam o @ do
+    Instagram, o telefone anotado como "em conflito" e o identificador do WhatsApp da pessoa;
+  - a foto de perfil;
+  - o @, o nome e a foto do perfil do Instagram ligado ao contato;
+  - a descrição, os campos e as etiquetas do negócio, além das primeiras letras do título;
+  - o telefone nas chamadas de voz e os dados pessoais dentro de pedidos de loja.
+
+  Agora o botão usa a mesma rotina do pedido formal, e os dois apagam a mesma coisa. Essa rotina
+  também passou a apagar, nos dois caminhos:
+
+  - o identificador do Instagram da pessoa (o número interno que a Meta usa para ela). Antes ele
+    ficava guardado mesmo depois de anonimizar. Com isso, se a pessoa voltar a escrever pelo
+    Instagram, ela entra como um contato novo — como já acontece no WhatsApp;
+  - os comentários que ela fez em posts da clínica: o texto, o @ e a sugestão de resposta somem; fica
+    só o registro de que houve um comentário naquele post;
+  - os cadastros antigos da mesma pessoa que tinham sido juntados ao dela (pela tela "Juntar
+    duplicados" ou pela junção automática do Instagram). Ao juntar, o cadastro antigo ficava
+    guardado por trás, com nome, e-mail, telefone e foto; agora ele é anonimizado junto.
+
+  Quem já tinha sido anonimizado antes desta atualização é corrigido sozinho na hora de atualizar,
+  sem precisar clicar de novo. Isso inclui um caso raro: se a pessoa, depois de anonimizada pelo
+  botão antigo, voltou a escrever pelo WhatsApp, o telefone dela tinha voltado para o cadastro
+  anonimizado e as mensagens novas continuavam caindo ali. A correção tira esse telefone, e a
+  próxima mensagem dela abre um contato novo.
+
+  O nome que aparece no lugar passa a ser "Cliente Anonimizado #…" nos dois caminhos (o botão
+  gravava "Contato Anonimizado #…").
+
+- **Casos da IA — só o sistema escreve, e cada atendente vê só os casos das conversas que pode ver** Quando a IA pede ajuda da equipe, ela abre um Caso com um resumo do atendimento.
+  Dois problemas foram fechados:
+
+  - Um usuário com algum conhecimento técnico conseguia, falando direto com o
+    banco, reescrever o que a IA anotou num caso, incluir um registro falso na
+    linha do tempo e até fazer o histórico dizer que alguém assumiu uma conversa
+    que ninguém assumiu. Agora só o próprio sistema grava essas informações.
+    Responder a um caso pela tela continua igual.
+  - Na tela IA › Casos, o atendente via título, resumo, nome e telefone de casos
+    de conversas que ele não pode abrir. Agora a lista, o detalhe e a resposta ao
+    caso seguem a mesma regra das conversas, escolhida em Configurações ›
+    Atendimento: quem não vê a conversa não vê nem responde o caso dela. Gestor e
+    administrador continuam vendo todos.
+
+  O que cada atendente passa a ver em IA › Casos depende dessa escolha:
+
+  - "Todos veem tudo": nada muda.
+  - "Os seus, mais os que ainda não têm dono" (o padrão): ele vê os casos das
+    conversas dele e das que estão sem dono, como as que a IA atende sozinha.
+    Deixa de ver os casos de conversas que já são de um colega.
+  - "Só os seus": ele vê apenas os casos das conversas dele. Os casos das
+    conversas que a IA atende sozinha aparecem só para gestor e administrador.
+
+  Junto com isso:
+
+  - Assumir, transferir ou soltar uma conversa só é aceito de quem enxerga essa
+    conversa. Antes, por fora das telas, um atendente conseguia assumir a conversa
+    de um colega e, com isso, passar a ler o caso e as notas dela.
+  - O aviso "um atendimento espera decisão", que aparece na Central para toda a
+    equipe, deixa de trazer o título do caso. Quem pode abrir o caso lê o título
+    nele; quem não pode vê só o aviso.
+  - A aba Concluídos de IA › Casos abre com os 200 casos mais recentes e tem o
+    botão "Carregar mais" para ver os anteriores. Assim ela abre rápido mesmo em
+    clínicas com muito histórico, e nenhum caso antigo fica de fora.
+
+  Portado do projeto original (DeskcommCRM).
+
+- **Nota interna só pode ser editada ou apagada por quem escreveu ou por um gestor** A tela já escondia o botão de apagar a nota de um colega, mas a regra só valia
+  na tela. Um atendente com algum conhecimento técnico conseguia, falando direto
+  com o banco, alterar ou apagar a nota interna que outra pessoa escreveu numa
+  conversa, e até criar uma nota em nome de um colega.
+
+  Agora o próprio banco recusa. Cada atendente cria as suas notas e só mexe nas
+  suas; gestor e administrador continuam podendo editar e apagar qualquer nota das
+  conversas que enxergam. O arquivo anexado a uma nota segue a mesma regra: não dá
+  para trocar o anexo da nota de outra pessoa.
+
+  O nome que aparece assinando a nota e a data dela também passam a ser gravados
+  pelo próprio sistema, a partir do cadastro de quem escreveu. Antes dava para, por
+  fora das telas, assinar uma nota com o nome de outra pessoa ou com uma data
+  antiga, e um gestor conseguia passar a nota de um atendente para o nome de outro.
+
+  O anexo de uma nota passa a ser sempre um arquivo da própria conversa. Antes,
+  por fora das telas, dava para apontar uma nota para o arquivo que um colega
+  anexou na conversa de outro paciente; quando o paciente da primeira nota pedia
+  a remoção dos dados, o arquivo do colega era apagado junto.
+
+  Apagar uma conversa inteira por fora das telas (o que levava junto as notas dos
+  colegas) agora só é aceito de gestor ou administrador, a mesma regra de apagar um
+  contato.
+
+  Nada muda no uso do dia a dia e nenhuma ação é necessária.
+
+  Portado do projeto original (DeskcommCRM, de webtecnica e melgarafael).
+
+- **O relatório de dados do paciente passa a trazer o endereço, os campos personalizados e o que a IA sugeriu para o cadastro** Quando um paciente pede "quais dados vocês têm de mim", a clínica gera um relatório (um PDF, com
+  um arquivo de dados guardado junto). Esse relatório deixava de fora duas coisas que o sistema
+  guarda:
+
+  - o endereço e os campos personalizados da ficha (convênio, como conheceu a clínica e o que mais
+    a clínica tiver criado). O sistema lia esses campos e não colocava no relatório;
+  - as sugestões de cadastro feitas pela IA: quando ela percebe na conversa um nome, e-mail ou
+    telefone diferente do cadastrado, ela propõe a troca e guarda o trecho da conversa.
+
+  Agora os dois aparecem no PDF e no arquivo de dados. Também passam a aparecer a descrição e os
+  campos de cada negócio do paciente, o texto das atividades (só no arquivo de dados) e os
+  cadastros antigos dele que foram juntados ao atual. Os campos saem com o nome que a clínica deu a
+  eles (por exemplo "Convênio: Unimed"), e não com o código interno.
+
+  Um cuidado com o CPF: se alguém digitou o CPF do paciente num campo personalizado ou numa
+  observação, o número **não** sai no relatório. A linha do CPF só diz "Informado em campo
+  personalizado (valor não exibido)", uma vez, do mesmo jeito que o CPF do cadastro já aparecia só
+  como "Armazenado (criptografado)". Isso vale para o PDF e para o arquivo de dados, e também para
+  os outros textos do relatório: o formulário de captação, o caso que a IA abriu, os pedidos, os
+  avisos e os comentários do Instagram. O CPF é reconhecido com ou sem pontos, espaços e hífens.
+
 ## [3.6.0] — 2026-10-06
 
 ### Corrigido
@@ -5887,7 +6255,10 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.6.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.8.0...HEAD
+[3.8.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.7.0...v3.8.0
+[3.7.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.6.1...v3.7.0
+[3.6.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.6.0...v3.6.1
 [3.6.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.5.0...v3.6.0
 [3.5.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.3.0...v3.4.0

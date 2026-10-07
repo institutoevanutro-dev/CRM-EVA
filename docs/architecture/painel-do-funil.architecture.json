@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Painel do funil — os números do período, cada um com a sua régua",
+    "subtitle": "de onde cada número vem, quem conta e onde ele aparece",
+    "output": "painel-do-funil.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "fonte", "label": "De onde vem (só leitura)" },
+    { "id": "conta", "label": "Quem conta" },
+    { "id": "tela", "label": "Onde aparece" }
+  ],
+  "mainPath": ["leads", "rota", "puras", "tela"],
+  "nodes": [
+    {
+      "id": "leads",
+      "lane": "fonte",
+      "col": 0,
+      "type": "table",
+      "label": "crm_leads + crm_stages",
+      "sublabel": "coorte criada no período; ganhos pelo closed_at"
+    },
+    {
+      "id": "atividades",
+      "lane": "fonte",
+      "col": 0,
+      "type": "table",
+      "label": "crm_lead_activities (stage_changed)",
+      "sublabel": "as duas gramáticas: from/to e de/para"
+    },
+    {
+      "id": "agenda",
+      "lane": "fonte",
+      "col": 0,
+      "type": "table",
+      "label": "calendar_appointments + crm_lead_links",
+      "sublabel": "compromisso → card pelo vínculo mais recente, ou pelo contato"
+    },
+    {
+      "id": "contatos",
+      "lane": "fonte",
+      "col": 0,
+      "type": "table",
+      "label": "contacts",
+      "sublabel": "campo da ficha, etiquetas, origem do anúncio; anonimizado fica sem valor"
+    },
+    {
+      "id": "meta",
+      "lane": "fonte",
+      "col": 0,
+      "type": "service",
+      "label": "Plataforma de anúncios (leitura)",
+      "sublabel": "investimento.ts: contas, insights e anúncios — 3 chamadas"
+    },
+    {
+      "id": "rota",
+      "lane": "conta",
+      "col": 1,
+      "type": "service",
+      "label": "GET /api/v1/metrics/funil",
+      "sublabel": "manager · organization_id explícito · paginado com count exato · truncado"
+    },
+    {
+      "id": "puras",
+      "lane": "conta",
+      "col": 2,
+      "type": "service",
+      "label": "lib/metrics/painel-do-funil.ts",
+      "sublabel": "coorte, ganhos, agenda, custo/ROAS, recorte por dimensão"
+    },
+    {
+      "id": "tela",
+      "lane": "tela",
+      "col": 3,
+      "type": "ui",
+      "label": "/app/painel-do-funil",
+      "sublabel": "porta no hub de Análise e no ⌘K; régua embaixo de cada número"
+    },
+    {
+      "id": "configuracao",
+      "lane": "tela",
+      "col": 3,
+      "type": "ui",
+      "label": "CRM › Etapas do funil / Configurações › Meta Ads",
+      "sublabel": "para onde os avisos mandam quando um número não pode ser medido"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "leads", "to": "rota", "label": "cards do funil, coorte e ganhos" },
+    {
+      "id": "e2",
+      "from": "atividades",
+      "to": "rota",
+      "label": "movimentos dos cards da coorte, em lotes paginados"
+    },
+    { "id": "e3", "from": "agenda", "to": "rota", "label": "compromissos com início no período" },
+    {
+      "id": "e4",
+      "from": "contatos",
+      "to": "rota",
+      "label": "só quando o recorte ou a atribuição precisa"
+    },
+    {
+      "id": "e5",
+      "from": "meta",
+      "to": "rota",
+      "label": "estado: ok / não conectado / sem conta / indisponível"
+    },
+    { "id": "e6", "from": "rota", "to": "puras", "label": "linhas lidas" },
+    { "id": "e7", "from": "puras", "to": "tela", "label": "contagens, somas e rótulos — sem PII" },
+    {
+      "id": "e8",
+      "from": "tela",
+      "to": "configuracao",
+      "label": "aviso quando falta a etapa de interação ou a conta de anúncios"
+    },
+    {
+      "id": "e9",
+      "from": "configuracao",
+      "to": "leads",
+      "label": "agent_stage_hint da etapa muda quem conta como Interagiu"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "O laço de retorno (invariante 7): o que muda quando isto erra",
+      "items": [
+        "funil sem etapa ligada ao passo Primeiro contato: Interagiram vira — com o caminho CRM › Etapas do funil, nunca zero",
+        "investimento sem conexão, sem conta ou com falha de leitura: frase com o motivo e o caminho certo para o papel de quem lê",
+        "leitura maior que o teto: truncado na tela, e é o sinal para trocar a agregação por RPC com migration",
+        "erro de leitura do banco: 500, nunca números zerados"
+      ]
+    },
+    {
+      "dot": "red",
+      "title": "Limites declarados na régua",
+      "items": [
+        "o gasto é da conta de anúncios inteira; com dois funis, custo por venda e ROAS de cada um saem inflados",
+        "card que vai de perdido direto para ganho mantém o closed_at da perda (trigger fn_crm_lead_close_on_stage)",
+        "recorte por anúncio/criativo com gasto exigiria insights level=ad, uma 4ª chamada: fica de fora"
+      ]
+    }
+  ]
+}

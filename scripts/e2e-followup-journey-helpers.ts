@@ -89,6 +89,41 @@ async function main(): Promise<void> {
         break;
       }
 
+      // ---- abrir-janela-de-envio [orgId] — janela anti-ban 0h-24h (domingo
+      // ---- liberado) em todos os números da org (padrão: a do rig). Ver
+      // ---- tests/e2e/utils/janela-de-envio.ts.
+      case "abrir-janela-de-envio": {
+        const org = args[0] ?? loadCreds().org_id;
+        const { rowCount } = await pool.query(
+          `insert into channel_knobs (organization_id, channel_session_id, window_start_hour, window_end_hour, allow_sunday)
+           select organization_id, id, 0, 24, true from channel_sessions where organization_id = $1
+           on conflict (organization_id, channel_session_id)
+           do update set window_start_hour = 0, window_end_hour = 24, allow_sunday = true`,
+          [org],
+        );
+        out({ ok: true, canais: rowCount });
+        break;
+      }
+
+      // ---- recuar-vigencia <pointerId> <minutos> — recua o active_since do
+      // ---- ponteiro (migration 0324). O contato semeado calou ANTES da
+      // ---- publicação, e a regra "sem passado" da varredura o recusaria. Só
+      // ---- active_since muda, então o trigger de vigência não dispara.
+      case "recuar-vigencia": {
+        const pointerId = args[0];
+        const minutos = Number(args[1]);
+        if (!pointerId || !Number.isFinite(minutos)) throw new Error("uso: recuar-vigencia <pointerId> <minutos>");
+        const creds = loadCreds();
+        const { rowCount } = await pool.query(
+          `update followup_flow_pointers set active_since = now() - ($2 || ' minutes')::interval
+            where id = $1 and organization_id = $3`,
+          [pointerId, String(minutos), creds.org_id],
+        );
+        if (rowCount !== 1) throw new Error(`recuar-vigencia: ponteiro ${pointerId} não encontrado na org`);
+        out({ ok: true });
+        break;
+      }
+
       // ---- seed-silent-contact <thresholdMinutes> <tag> — contato novo +
       // ---- conversa cujo last_inbound_at já é mais velho que o threshold do
       // ---- gatilho de silêncio (reusa o channel_session dos fixtures do
