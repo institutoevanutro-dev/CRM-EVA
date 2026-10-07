@@ -24,7 +24,7 @@ import { X } from "lucide-react";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
 import { useUploadMedia, type DestinoDoUpload } from "@/hooks/inbox/useUploadMedia";
 import { imagemDoClipboard } from "@/lib/inbox/clipboard-image";
-import { interpolateTemplate } from "@/lib/inbox/template-vars";
+import { interpolateTemplate, type TemplateContact } from "@/lib/inbox/template-vars";
 import { cn } from "@/lib/utils";
 
 export interface ComposerHandle {
@@ -72,8 +72,9 @@ interface Props {
   respondendo?: { id: string; body: string | null; direction: string } | null;
   /** Desfaz a escolha — o `x` da faixa de citação. */
   onCancelarResposta?: () => void;
-  /** Nome do contato da conversa, para interpolar {{nome}}/{{primeiro_nome}} do template escolhido. */
-  contactName?: string | null;
+  /** Contato da conversa (name + display_name), para interpolar {{nome}}/{{primeiro_nome}}
+   *  do template escolhido. O helper resolve o nome — não resolva aqui. */
+  contact?: TemplateContact | null;
   /** Contato da conversa — excluído do seletor de cartão compartilhado. */
   currentContactId?: string | null;
 }
@@ -87,7 +88,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     semEnvio,
     limiteDeTexto,
     soFoto,
-    contactName,
+    contact,
     currentContactId,
     respondendo,
     onCancelarResposta,
@@ -197,7 +198,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   }
 
   function applyTemplate(t: MessageTemplate) {
-    const filled = interpolateTemplate(t.body, { name: contactName ?? null });
+    const filled = interpolateTemplate(t.body, contact ?? {});
     setText(filled);
     setMenuDismissed(true);
     const ta = taRef.current;

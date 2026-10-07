@@ -20,7 +20,7 @@ import type pg from "pg";
 
 import type { AdminClient, EnrollmentPatch } from "./engine";
 import { flowGraphSchema } from "./graph-schema";
-import { classEdgeMatch, selectEdge, type EnrollmentRow } from "./node-handlers";
+import { classEdgeMatch, selectEdge, type EnrollmentOutcome, type EnrollmentRow } from "./node-handlers";
 import { coletarEsperasAdaptativas, montarTimingPlan, type PropostaDeEspera } from "./timing-plan";
 import { persistirRespostaFollowupPg } from "./persistir-resposta";
 
@@ -38,8 +38,10 @@ export interface TurnBridgeAdminClient extends AdminClient {
 
 /** Resultado de um turno `followup_turn` dirigido por fluxo, por `purpose`. */
 export type TurnResult =
-  | { kind: "sent" }
-  | { kind: "skipped"; reason: string }
+  /** `via`: saiu pelo modelo de reserva do passo `ai_message` (a IA não conseguiu enviar). */
+  | { kind: "sent"; via?: "modelo_de_reserva" }
+  /** Encerra a inscrição. `outcome` (ex.: humano ativo → `handoff`) vai à coluna quando presente. */
+  | { kind: "skipped"; reason: string; outcome?: EnrollmentOutcome }
   /** O passo não enviou e o fluxo SEGUE (ex.: fora das 24h do Instagram). `skipped` encerra. */
   | { kind: "pulado"; reason: string }
   | { kind: "classified"; class: string }
@@ -131,7 +133,7 @@ export async function completeTurnForEnrollment(
   };
 
   if(result.kind === "skipped"){
-    await applyStep("turn_skipped",{reason:result.reason},{status:"cancelled",cancel_reason:result.reason,completed_at:now.toISOString(),next_eval_at:null});
+    await applyStep("turn_skipped",{reason:result.reason},{status:"cancelled",...(result.outcome?{outcome:result.outcome}:{}),cancel_reason:result.reason,completed_at:now.toISOString(),next_eval_at:null});
     return;
   }
 
@@ -164,7 +166,7 @@ export async function completeTurnForEnrollment(
     if (!edge) throw new Error(`action node "${node.id}" sem aresta 'always' de saída`);
     await applyStep(
       "action_sent",
-      {},
+      result.via ? { via: result.via } : {},
       { current_node_id: edge.target, status: "active", next_eval_at: now.toISOString() },
     );
     return;
@@ -334,8 +336,9 @@ export function createPgAdminClient(pool: pg.Pool): TurnBridgeAdminClient {
          order by sent_at desc limit 1`,
         params,
       );
-      const body = rows[0]?.body;
-      return typeof body === "string" ? body : null;
+      if (rows.length === 0) return null;
+      const body = rows[0]!.body;
+      return typeof body === "string" ? body : "";
     },
     async loadEnrollmentEvents(enrollmentId) {
       const { rows } = await pool.query(

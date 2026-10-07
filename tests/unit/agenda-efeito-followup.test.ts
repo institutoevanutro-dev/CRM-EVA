@@ -72,7 +72,7 @@ describe("última borda de efeito do follow-up", () => {
     await expect(
       withAgendaEffect({ query } as never, { organizationId: "org", contactId: "c" }, vi.fn()),
     ).rejects.toMatchObject({ protection: { motivo: "leitura_indisponivel", adiar: true } });
-    expect(warning).toHaveBeenCalledWith("[agenda] proteção indisponível; cobrança adiada");
+    expect(warning).toHaveBeenCalledWith("[agenda] proteção indisponível; cobrança adiada", expect.objectContaining({ origem: "pg" }));
     warning.mockRestore();
   });
   it.each([{ rows: [] }, { rows: [{ status: "vetoed" }] }])(

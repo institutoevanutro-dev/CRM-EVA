@@ -48,7 +48,7 @@ export default async function TiposDeAgendamentoPage() {
     supabase
       .from("calendar_event_types")
       .select(
-        "id, name, slug, description, category, duration_minutes, catalog_product_id, required_room_kind, concurrency_key, location_kind, location_details, default_owner_user_id, requires_confirmation, is_active, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes",
+        "id, name, slug, description, category, duration_minutes, catalog_product_id, required_room_kind, concurrency_key, location_kind, location_details, default_owner_user_id, requires_confirmation, is_active, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body",
       )
       .eq("organization_id", activeOrg.orgId)
       .order("is_active", { ascending: false })

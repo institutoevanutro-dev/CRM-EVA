@@ -370,41 +370,54 @@ async function withNextActions(
   supabase: Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
   leads: Lead[],
-  defaultPipelineId: string | null,
 ): Promise<{ leads: Lead[]; error: string | null }> {
   const contactIds = [
     ...new Set(leads.map((l) => l.contact_id).filter((c): c is string => !!c)),
   ];
   if (contactIds.length === 0) return { leads, error: null };
 
-  const [{ data: estados, error: estadosErr }, { data: candidatos, error: candErr }] =
-    await Promise.all([
-      buscaEmLotes(contactIds, (lote) =>
-        supabase
-          .from("lead_state")
-          .select("contact_id, next_action, next_action_seq, updated_at")
-          .eq("organization_id", organizationId)
-          .in("contact_id", lote)
-          .not("next_action", "is", null),
-      ),
-      buscaEmLotes(contactIds, (lote) =>
-        supabase
-          .from("crm_leads")
-          .select(
-            "id, organization_id, pipeline_id, status, last_activity_at, created_at, contact_id",
-          )
-          .eq("organization_id", organizationId)
-          .eq("status", "open")
-          .in("contact_id", lote),
-      ),
-    ]);
+  // Primeiro as propostas, DEPOIS os candidatos — e só dos contatos que têm
+  // proposta. `roteiaProximasAcoes` ignora candidato de contato sem proposta,
+  // então buscar os negócios abertos de todos os contatos do quadro era ler o
+  // funil inteiro outra vez para descartar quase tudo (incidente de 07/10/2026).
+  const { data: estados, error: estadosErr } = await buscaEmLotes(contactIds, (lote) =>
+    supabase
+      .from("lead_state")
+      .select("contact_id, next_action, next_action_seq, updated_at")
+      .eq("organization_id", organizationId)
+      .in("contact_id", lote)
+      .not("next_action", "is", null),
+  );
   if (estadosErr) return { leads, error: estadosErr.message };
+  if (estados.length === 0) return { leads, error: null };
+
+  const comProposta = [
+    ...new Set((estados as EstadoDoContato[]).map((e) => e.contact_id)),
+  ];
+  const [{ data: candidatos, error: candErr }, { data: pipelinePadrao }] = await Promise.all([
+    buscaEmLotes(comProposta, (lote) =>
+      supabase
+        .from("crm_leads")
+        .select(
+          "id, organization_id, pipeline_id, status, last_activity_at, created_at, contact_id",
+        )
+        .eq("organization_id", organizationId)
+        .eq("status", "open")
+        .in("contact_id", lote),
+    ),
+    supabase
+      .from("crm_pipelines")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("is_default", true)
+      .maybeSingle(),
+  ]);
   if (candErr) return { leads, error: candErr.message };
-  if (!estados || estados.length === 0) return { leads, error: null };
+  const defaultPipelineId = (pipelinePadrao as { id: string } | null)?.id ?? null;
 
   const { porLead, ambiguas } = roteiaProximasAcoes(
     estados as EstadoDoContato[],
-    (candidatos ?? []) as Array<LeadCandidate & { contact_id: string | null }>,
+    candidatos as Array<LeadCandidate & { contact_id: string | null }>,
     { defaultPipelineId },
   );
 
@@ -476,18 +489,10 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
     return fail("internal_error", leadsWithOwner.error, 500, { requestId });
   }
 
-  const { data: pipelinePadrao } = await supabase
-    .from("crm_pipelines")
-    .select("id")
-    .eq("organization_id", (pipeline as Pipeline).organization_id)
-    .eq("is_default", true)
-    .maybeSingle();
-
   const leadsComAcao = await withNextActions(
     supabase,
     (pipeline as Pipeline).organization_id,
     leadsWithOwner.leads,
-    (pipelinePadrao as { id: string } | null)?.id ?? null,
   );
   if (leadsComAcao.error) {
     return fail("internal_error", leadsComAcao.error, 500, { requestId });

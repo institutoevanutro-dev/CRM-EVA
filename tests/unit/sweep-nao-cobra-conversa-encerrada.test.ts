@@ -72,7 +72,7 @@ describe("createSupabaseSilenceSweepDb — a consulta de PRODUÇÃO", () => {
     // asserção abaixo passaria por vacuidade — o modo de falha que este arquivo
     // inteiro existe para não repetir.
     const { client, chamadas } = fakeSupabase();
-    await createSupabaseSilenceSweepDb(client).loadSilentContactIds(
+    await createSupabaseSilenceSweepDb(client).loadSilentContacts(
       "org-1",
       new Date("2026-08-30T12:00:00Z").toISOString(),
       [],
@@ -83,7 +83,7 @@ describe("createSupabaseSilenceSweepDb — a consulta de PRODUÇÃO", () => {
 
   it("exclui conversa CLOSED/ARCHIVED no BANCO — quem um humano encerrou não é cobrado", async () => {
     const { client, chamadas } = fakeSupabase();
-    await createSupabaseSilenceSweepDb(client).loadSilentContactIds(
+    await createSupabaseSilenceSweepDb(client).loadSilentContacts(
       "org-1",
       new Date("2026-08-30T12:00:00Z").toISOString(),
       [],
