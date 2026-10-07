@@ -213,7 +213,12 @@ export function areaDaRota(pathname: string): { area: AreaId; abaHref: string | 
   }
   if (melhor) return { area: melhor.group, abaHref: melhor.href };
   const hub = NAV_GROUPS.find((g) => g.hub && pathname === g.hub.href);
-  return hub ? { area: hub.id, abaHref: null } : null;
+  if (hub) return { area: hub.id, abaHref: null };
+  // Telas de configuração sem entrada no catálogo (canal oficial, atualização,
+  // modelos). Depois do catálogo de propósito: /app/settings/tenant/pipelines é Vendas.
+  if (pathname === "/app/settings/canal-oficial") return { area: "organizacao", abaHref: "/app/connections" };
+  if (pathname.startsWith("/app/settings/")) return { area: "organizacao", abaHref: null };
+  return null;
 }
 
 /** Abas da área: até 5 principais (`sidebar: true`), o resto no "Mais". Só o que o papel vê. */
@@ -227,7 +232,10 @@ export function abasDaArea(
   const todas = NAV_DESTINATIONS.filter(
     (d) => d.group === area && d.href !== "/app/inicio" && visivel.has(d.href),
   );
-  const principais = todas.filter((d) => d.sidebar).slice(0, MAX_ABAS_PRINCIPAIS);
+  const marcadas = todas.filter((d) => d.sidebar);
+  // Papel que não vê nenhuma aba principal (ex.: agent na IA) recebe as primeiras telas
+  // que vê como abas, em vez de uma barra só com "Mais".
+  const principais = (marcadas.length ? marcadas : todas).slice(0, MAX_ABAS_PRINCIPAIS);
   return { principais, mais: todas.filter((d) => !principais.includes(d)) };
 }
 

@@ -536,6 +536,7 @@ export const DICIONARIO: Traducoes = {
   "Vendas": { es: "Ventas" },
   "Ver tudo em Vendas": { es: "Ver todo en Ventas" },
   "Mais": { es: "Más" },
+  "Ver tudo": { es: "Ver todo" },
   "Telas de": { es: "Pantallas de" },
   "Ver tudo em CRM": { es: "Ver todo en CRM" },
   "Ver tudo em Análise": { es: "Ver todo en Análisis" },

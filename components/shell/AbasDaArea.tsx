@@ -81,6 +81,16 @@ export function AbasDaArea() {
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+        {grupo.hub && (
+          // A página com todas as telas da área, organizadas por jornada (o antigo "Ver tudo em…").
+          <Link
+            href={grupo.hub.href}
+            aria-current={pathname === grupo.hub.href ? "page" : undefined}
+            className={cn(estiloDaAba(pathname === grupo.hub.href), "ml-auto text-xs")}
+          >
+            {t("Ver tudo")}
+          </Link>
+        )}
       </nav>
       {atual && <p className="py-2 text-xs text-text-muted">{t(atual.description)}</p>}
     </div>

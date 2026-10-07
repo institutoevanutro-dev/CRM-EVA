@@ -30,7 +30,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => rota.atual,
 }));
 vi.mock("@/components/connections/ConnectionHealthDot", () => ({
-  ConnectionHealthDot: () => null,
+  ConnectionHealthDot: () => <span data-testid="saude-da-conexao" />,
 }));
 vi.mock("@/app/actions/shell/toggleSidebar", () => ({
   toggleSidebar: vi.fn(),
@@ -97,5 +97,22 @@ describe("Sidebar por área", () => {
     render(<Sidebar collapsed={false} />);
     for (const r of rotulos()) expect(r).not.toBe(undefined);
     expect(rotulos()).toContain("Atendimento");
+  });
+
+  it("aba guardada que o papel não vê mais é ignorada (troca de empresa, interface)", () => {
+    comoPapel("viewer");
+    window.localStorage.setItem("menu-ultima-aba", JSON.stringify({ organizacao: "/app/settings/api-tokens" }));
+    render(<Sidebar collapsed={false} />);
+    expect(screen.getByRole("link", { name: "Configurações" })).not.toHaveAttribute("href", "/app/settings/api-tokens");
+  });
+
+  it("o aviso de conexão só aparece para quem pode abrir Conexões", () => {
+    comoPapel("viewer");
+    render(<Sidebar collapsed={false} />);
+    expect(screen.queryByTestId("saude-da-conexao")).toBeNull();
+    cleanup();
+    comoPapel("admin");
+    render(<Sidebar collapsed={false} />);
+    expect(screen.getByTestId("saude-da-conexao")).toBeInTheDocument();
   });
 });

@@ -56,4 +56,10 @@ describe("abas da área", () => {
     render(<AbasDaArea />);
     expect(screen.getByRole("button", { name: /Mais/ })).toBeInTheDocument();
   });
+
+  it("a área tem porta para a página com todas as telas dela", () => {
+    rota.atual = "/app/contacts";
+    render(<AbasDaArea />);
+    expect(screen.getByRole("link", { name: "Ver tudo" })).toHaveAttribute("href", "/app/crm");
+  });
 });

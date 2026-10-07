@@ -15,6 +15,7 @@ import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
 import {
   GRUPO_NO_RODAPE,
   NAV_DESTINATIONS,
+  abasDaArea,
   areaDaRota,
   areasDoMenu,
 } from "@/lib/navigation/registry";
@@ -48,11 +49,12 @@ export function SidebarContent({
   const { user, activeOrg } = useAuth();
   // Menu por ÁREA (spec 2026-10-07-cores-e-menu): as telas de cada área viram abas no
   // topo (`AbasDaArea`). Com 6 linhas, a régua de 900px do navegacao.spec.ts sobra.
-  const areas = areasDoMenu(
+  const quem = [
     user.is_platform_admin && !user.support,
     activeOrg?.role ?? null,
     activeOrg?.interface_settings,
-  );
+  ] as const;
+  const areas = areasDoMenu(...quem);
   const atual = areaDaRota(pathname)?.area ?? null;
   const doMeio = areas.filter((a) => a.id !== GRUPO_NO_RODAPE);
   // No rodapé a área Organização aparece como "Configurações", o nome que todo mundo procura.
@@ -70,11 +72,22 @@ export function SidebarContent({
   // `item` = a área; o rótulo do rodapé é o de Configurações, não o do grupo ("Organização").
   const linkDaArea = (item: (typeof areas)[number], Icone: typeof item.icon) => {
     const ativa = atual === item.id;
-    const temSaude = NAV_DESTINATIONS.some((d) => d.group === item.id && d.healthDot);
+    // Só o que este papel vê AGORA: a aba guardada pode ser de outra empresa, de outro
+    // usuário na mesma máquina, ou de uma tela que a interface passou a esconder.
+    const vistas =
+      item.id === "inicio"
+        ? []
+        : (({ principais, mais }) => [...principais, ...mais])(abasDaArea(item.id, ...quem)).map((d) => d.href);
+    const guardada = ultimaAba[item.id];
+    const destino = guardada && vistas.includes(guardada) ? guardada : item.href;
+    // O aviso de conexão caída só para quem pode abrir Conexões e agir.
+    const temSaude = NAV_DESTINATIONS.some(
+      (d) => d.group === item.id && d.healthDot && vistas.includes(d.href),
+    );
     return (
       <Link
         key={item.id}
-        href={ultimaAba[item.id] ?? item.href}
+        href={destino}
         title={collapsed ? t(item.label) : undefined}
         aria-current={ativa ? "page" : undefined}
         onClick={onNavigate}

@@ -39,3 +39,16 @@ describe("menu por área", () => {
     }
   });
 });
+
+describe("menu por área — revisão final", () => {
+  it("telas de configuração fora do catálogo ficam em Configurações", () => {
+    expect(areaDaRota("/app/settings/canal-oficial")).toEqual({ area: "organizacao", abaHref: "/app/connections" });
+    expect(areaDaRota("/app/settings/atualizacao")).toEqual({ area: "organizacao", abaHref: null });
+    // Etapas do funil continua em Vendas (está no catálogo, grupo crm).
+    expect(areaDaRota("/app/settings/tenant/pipelines")?.area).toBe("crm");
+  });
+  it("quem não tem aba principal numa área recebe as primeiras telas como abas", () => {
+    const { principais } = abasDaArea("ia", false, "agent");
+    expect(principais.length).toBeGreaterThan(0);
+  });
+});
