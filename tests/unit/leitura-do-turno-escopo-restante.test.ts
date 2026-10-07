@@ -266,3 +266,28 @@ describe("crm_get_conversation_history: o 404 não abre dois estados distintos",
     expect(listMessagesHandler).toHaveBeenCalledTimes(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// achado da revisão do PR #135 — propostas do ciclo de aprendizado
+// ---------------------------------------------------------------------------
+
+describe("crm_list_improvement_proposals: no atendimento, as propostas não abrem", () => {
+  // O `content` de uma proposta é destilado dos `missing_facts` do turno de
+  // OUTRO paciente (`lib/agent-engine/flywheel/live.ts`), e a tabela não tem
+  // coluna de contato por onde filtrar. No turno, a leitura é recusada.
+  const PROPOSTA = { id: "p1", type: "playbook_bullet", content: "fato da conversa de B" };
+
+  it("⭐ com contato do turno, recusa e a consulta não roda", async () => {
+    supabase = supabaseFalso({ flywheel_distiller_proposals: [PROPOSTA] });
+    const r = await executar(["crm_list_improvement_proposals"], { limite: 20 }, DA_CONVERSA);
+    expect(recusa(r)).toMatchObject({ permitido: false, motivo: "fora_da_conversa" });
+    expect(JSON.stringify(r)).not.toContain("fato da conversa de B");
+    expect(supabase.consultas.some((c) => c.tabela === "flywheel_distiller_proposals")).toBe(false);
+  });
+
+  it("CONTROLE: sem contato do turno, lista como antes", async () => {
+    supabase = supabaseFalso({ flywheel_distiller_proposals: [PROPOSTA] });
+    const r = await executar(["crm_list_improvement_proposals"], { limite: 20 });
+    expect((r as { propostas?: unknown[] }).propostas).toEqual([PROPOSTA]);
+  });
+});
