@@ -260,6 +260,89 @@ describe("PATCH /api/v1/agenda/tipos — ligar e desligar depois", () => {
   });
 });
 
+describe("PATCH /api/v1/agenda/tipos — o texto próprio do lembrete (porte de 6146539da)", () => {
+  it("grava o texto próprio, aparado, e string em branco VOLTA ao padrão", async () => {
+    authOk();
+    const linhas = [linha({ id: TIPO_DA_ORG, organization_id: ORG })];
+    const db = makeAdmin(linhas);
+    const { PATCH } = await import("./route");
+
+    const gravou = await PATCH(
+      req("PATCH", { id: TIPO_DA_ORG, reminder_body: "  Oi {{primeiro_nome}}, até {{quando}} às {{hora}}.  " }),
+    );
+    expect(gravou.status).toBe(200);
+    expect(linhas[0]?.reminder_body).toBe("Oi {{primeiro_nome}}, até {{quando}} às {{hora}}.");
+
+    const limpou = await PATCH(req("PATCH", { id: TIPO_DA_ORG, reminder_body: "   " }));
+    expect(limpou.status).toBe(200);
+    expect(linhas[0]?.reminder_body).toBeNull();
+    expect(db.escritas.at(-1)?.campos).toMatchObject({ reminder_body: null });
+  });
+
+  it("aceita texto de várias linhas e todas as variáveis da lista, sem diferenciar maiúsculas", async () => {
+    authOk();
+    const linhas = [linha({ id: TIPO_DA_ORG, organization_id: ORG })];
+    makeAdmin(linhas);
+    const { PATCH } = await import("./route");
+    const texto =
+      "Oi {{ Primeiro_Nome }}! {{nome}}\n{{quando}}, {{data}} ({{dia_semana}}) às {{hora}}\n" +
+      "{{unidade}} {{endereco}} {{profissional}} {{tipo}} {{titulo}} {{dia}}";
+
+    const res = await PATCH(req("PATCH", { id: TIPO_DA_ORG, reminder_body: texto }));
+
+    expect(res.status).toBe(200);
+    expect(linhas[0]?.reminder_body).toBe(texto);
+  });
+
+  it("recusa texto maior que 1000 caracteres sem escrever", async () => {
+    authOk();
+    const linhas = [linha({ id: TIPO_DA_ORG, organization_id: ORG })];
+    const db = makeAdmin(linhas);
+    const { PATCH } = await import("./route");
+
+    const res = await PATCH(req("PATCH", { id: TIPO_DA_ORG, reminder_body: "x".repeat(1001) }));
+
+    expect(res.status).toBe(422);
+    const corpo = await corpoDeErro(res);
+    expect(corpo.error.message).toBe("A mensagem do lembrete cabe em 1000 caracteres.");
+    expect(db.escritas).toEqual([]);
+  });
+
+  it.each([
+    ["variável que não existe", "Oi {{foo}}"],
+    ["chave simples, a forma do documento de negócio", "Oi, {nome}! Até {hora}."],
+    ["nome com espaço", "Oi {{primeiro nome}}"],
+    ["nome com hífen", "Oi {{primeiro-nome}}"],
+    ["chave solta", "Oi {{nome}}, até amanhã }"],
+  ])("recusa %s com 422 e SEM escrita — chegaria cru ao WhatsApp do paciente", async (_nome, texto) => {
+    authOk();
+    const linhas = [linha({ id: TIPO_DA_ORG, organization_id: ORG })];
+    const db = makeAdmin(linhas);
+    const { PATCH } = await import("./route");
+
+    const res = await PATCH(req("PATCH", { id: TIPO_DA_ORG, reminder_body: texto }));
+
+    expect(res.status).toBe(422);
+    const corpo = await corpoDeErro(res);
+    expect(corpo.error.message).toBe(
+      "A mensagem do lembrete usa uma variável que não existe. Use só as da lista.",
+    );
+    expect(db.escritas).toEqual([]);
+  });
+
+  it("a organização A não grava texto em tipo da B", async () => {
+    authOk();
+    const daOutra = linha({ id: TIPO_DA_OUTRA, organization_id: OUTRA_ORG, reminder_body: null });
+    makeAdmin([daOutra]);
+    const { PATCH } = await import("./route");
+
+    const res = await PATCH(req("PATCH", { id: TIPO_DA_OUTRA, reminder_body: "Oi {{nome}}" }));
+
+    expect(res.status).toBe(404);
+    expect(daOutra.reminder_body, "a organização A escreveu o lembrete da B").toBeNull();
+  });
+});
+
 describe("a faixa aceita — mais estreita que o CHECK do banco, de propósito", () => {
   /**
    * `0` e `43200` são as bordas do CHECK (`between 0 and 43200`) e as duas
@@ -383,6 +466,7 @@ describe("GET /api/v1/agenda/tipos", () => {
           lembreteLigado: true,
           lembreteAntecedenciaMin: 180,
           lembreteDegrausExtras: [],
+          lembreteMensagem: "Oi {{primeiro_nome}}, até {{quando}} às {{hora}}.",
         },
       ],
     });
@@ -392,9 +476,10 @@ describe("GET /api/v1/agenda/tipos", () => {
 
     expect(res.status).toBe(200);
     const corpo = (await res.json()) as {
-      data: Array<{ reminder_enabled: boolean; reminder_minutes_before: number }>;
+      data: Array<{ reminder_enabled: boolean; reminder_minutes_before: number; reminder_body: string | null }>;
     };
     expect(corpo.data[0]?.reminder_enabled).toBe(true);
     expect(corpo.data[0]?.reminder_minutes_before).toBe(180);
+    expect(corpo.data[0]?.reminder_body).toBe("Oi {{primeiro_nome}}, até {{quando}} às {{hora}}.");
   });
 });

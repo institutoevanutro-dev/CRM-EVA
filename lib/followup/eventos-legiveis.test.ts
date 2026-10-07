@@ -120,6 +120,12 @@ describe("descreveEvento", () => {
     expect(r.autor).toBe("motor");
   });
 
+  it("envio pelo modelo de reserva é dito no detalhe; envio da IA não tem detalhe", () => {
+    const reserva = descreveEvento(evento({ event_type: "action_sent", payload: { via: "modelo_de_reserva" } }), nos, "pt-BR");
+    expect(reserva.detalhe).toBe("pelo modelo de reserva: a IA não escreveu a mensagem");
+    expect(descreveEvento(evento({ event_type: "action_sent", payload: {} }), nos, "pt-BR").detalhe).toBeNull();
+  });
+
   it("a falha carrega a mensagem E o passo — nunca uma sem a outra", () => {
     const r = descreveEvento(
       evento({ event_type: "node_failed", payload: { error: "flow_version_not_found" } }),

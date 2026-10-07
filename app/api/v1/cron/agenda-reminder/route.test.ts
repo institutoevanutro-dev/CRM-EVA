@@ -23,7 +23,10 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { degrausPendentes, estaNaHora, montarLembrete } from "./route";
+import { providersDeEnvioAutomatico } from "@/lib/channels";
+import { CHANNEL_PROVIDER_INSTAGRAM } from "@/lib/channels/capabilities";
+
+import { degrausPendentes, escolherCanalDoLembrete, estaNaHora, montarLembrete } from "./route";
 
 const MIN = 60_000;
 
@@ -206,5 +209,205 @@ describe("o cron NÃO pode filtrar por reminder_sent_at", () => {
     const fonte = readFileSync(join(__dirname, "route.ts"), "utf8").replace(/--[^\n]*|\/\/[^\n]*/g, "");
     expect(fonte).not.toMatch(/\.is\(\s*["']reminder_sent_at["']/);
     expect(fonte).toMatch(/reminder_sent_offsets_minutes/);
+  });
+});
+
+describe("o carimbo vem ANTES do envio e é condicional (#2223, spec 3.9)", () => {
+  const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+  const carimbo = fonte.slice(fonte.indexOf("reminder_sent_at: new Date()"));
+
+  it("carimba antes de chamar o envio, e o erro do carimbo impede o envio", () => {
+    expect(fonte.indexOf("reminder_sent_at: new Date()")).toBeGreaterThan(0);
+    expect(fonte.indexOf("reminder_sent_at: new Date()")).toBeLessThan(fonte.indexOf("sendMessageHandler("));
+    expect(fonte).toContain('pular("carimbo_falhou")');
+  });
+
+  it("só carimba a linha como foi LIDA — cancelada, remarcada ou carimbada por outra rodada não envia", () => {
+    // Sem a condição, uma linha cancelada no meio da rodada (até 200 linhas,
+    // 1,2 s + jitter cada) ou carimbada por uma rodada sobreposta seria
+    // carimbada de novo e enviada: em dobro, ou com a data antiga.
+    const update = carimbo.slice(0, 1600);
+    expect(update).toContain('.eq("status", "confirmed")');
+    expect(update).toContain('.eq("starts_at", linha.starts_at)');
+    expect(update).toContain('.filter("reminder_sent_offsets_minutes", "eq"');
+    expect(update).toContain('.eq("reminder_sent_at", linha.reminder_sent_at)');
+    expect(update).toContain('.select("id")');
+    expect(fonte).toContain('pular("mudou_na_rodada")');
+  });
+});
+
+describe("a rota lê a régua da remarcação (#2230)", () => {
+  const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+
+  it("seleciona starts_at_marked_at — sem a coluna na consulta não há por onde saber que a data mudou", () => {
+    // Estrutural, como as de cima: o que a rota PEDE ao banco é propriedade do
+    // texto, e um dublê de Supabase provaria o dublê. Sem a coluna no SELECT,
+    // `linha.starts_at_marked_at` seria `undefined` e a régua voltaria a ser
+    // `created_at` sem erro nenhum — o defeito nasceria calado.
+    const consulta = fonte.slice(fonte.indexOf(".select("), fonte.indexOf('.eq("status"'));
+    expect(consulta).toContain("starts_at_marked_at");
+  });
+
+  it("repassa os dois instantes para degrausPendentes e deixa a função decidir", () => {
+    expect(fonte).toContain("remarcadoEm: linha.starts_at_marked_at");
+    expect(fonte).toContain("criadoEm: linha.created_at");
+    // A precedência mora na função, não na rota: `remarcadoEm` sabe do
+    // movimento e `criadoEm` é o fallback da linha nunca remarcada.
+    expect(fonte).toContain("input.remarcadoEm ?? input.criadoEm");
+  });
+});
+
+describe("a rota repassa o instante do último carimbo (#2243)", () => {
+  const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+
+  it("seleciona reminder_sent_at — a lista diz QUAIS degraus saíram, mas não QUANDO", () => {
+    // Estrutural, como as acima: sem a coluna na consulta `linha.reminder_sent_at`
+    // seria `undefined`, a limpeza ficaria fora do caminho em toda instalação e
+    // o rearma nasceria calado — o defeito da #2243 voltaria sem erro nenhum.
+    const consulta = fonte.slice(fonte.indexOf(".select("), fonte.indexOf('.eq("status"'));
+    expect(consulta).toContain("reminder_sent_at");
+  });
+
+  it("repassa enviadoEm e deixa a limpeza morar na regra, não na rota", () => {
+    expect(fonte).toContain("enviadoEm: linha.reminder_sent_at");
+    expect(fonte).toContain("input.enviadoEm");
+    // E o filtro de recebimento continua sendo a LISTA — `reminder_sent_at`
+    // não volta a ser critério de quem recebe (a 0254 proíbe, prende o teste
+    // "o cron NÃO pode filtrar por reminder_sent_at").
+    expect(fonte).not.toMatch(/\.is\(\s*["']reminder_sent_at["']/);
+  });
+});
+
+describe("a ferramenta de remarcar descreve o lembrete como esta rota o manda", () => {
+  // A descrição é o que a IA repete ao cliente. Ela prometia "o lembrete é
+  // refeito sozinho" quando nada refazia; depois da régua da remarcação a data
+  // nova ganha o lembrete dela, MAS não o degrau que já venceu na remarcação.
+  const ferramenta = readFileSync(join(process.cwd(), "lib/mcp/tools/agendamento.ts"), "utf8");
+  const descricao = ferramenta.slice(ferramenta.indexOf('name: "crm_reschedule_appointment"'), ferramenta.indexOf("inputSchema: remarcarShape"));
+
+  it("não promete mais do que o cron cumpre", () => {
+    expect(descricao.length).toBeGreaterThan(0);
+    expect(descricao).not.toContain("o lembrete é refeito sozinho");
+    expect(descricao).toContain("lembrete da data nova");
+  });
+
+  it("diz as DUAS exceções do rearme — e o que fazer nelas", () => {
+    // A guarda de meio intervalo (`degrausPendentes`, porte de e174c8484) segura
+    // o aviso da data nova que cairia pouco depois de um lembrete já enviado —
+    // de qualquer degrau. A descrição prometia o envio nesse caso, e a IA
+    // dizia ao paciente que ele receberia um aviso que não sai.
+    expect(descricao).toContain("dentro da antecedência do aviso");
+    expect(descricao).toContain("pouco depois de um lembrete que já saiu");
+    expect(descricao).toContain("na própria conversa");
+  });
+});
+
+describe("o lembrete usa o texto do tipo, o fuso, a unidade e o profissional DO COMPROMISSO", () => {
+  const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+  const consulta = fonte.slice(fonte.indexOf(".select("), fonte.indexOf('.eq("status"'));
+
+  it("a varredura traz o fuso, o dono, a unidade embutida e o texto do tipo", () => {
+    expect(consulta).toContain("time_zone");
+    expect(consulta).toContain("owner_user_id");
+    expect(consulta).toContain("reminder_body");
+    // A unidade vem pela FK composta (organization_id, unit_id): ela só casa
+    // unidade da MESMA organização, e o embed tira a consulta por linha.
+    expect(consulta).toContain("calendar_units!calendar_appointments_unit_fk(name)");
+    expect(fonte).not.toContain('.from("calendar_units")');
+  });
+
+  it("o fuso é o do compromisso, não o da organização", () => {
+    expect(fonte).toContain("timezone: linha.time_zone,");
+    expect(fonte).not.toMatch(/timezone: organizacao\?\.timezone/);
+  });
+
+  it("o GoTrue só é consultado quando o molde usa {{profissional}}, pela mesma extração da validação", () => {
+    // `molde.includes("profissional")` cru deixaria `{{Profissional}}` passar
+    // no PATCH e sair vazio em silêncio.
+    const chamada = fonte.indexOf("nomesDosAtendentes(");
+    expect(chamada).toBeGreaterThan(0);
+    expect(fonte.slice(Math.max(0, chamada - 300), chamada)).toContain(
+      'variaveisDoMolde(molde).includes("profissional")',
+    );
+  });
+
+  it("o modelo legado continua saindo cru — o molde só vale para reminder_body", () => {
+    const legado = fonte.slice(fonte.indexOf('.from("message_templates")'));
+    expect(legado.slice(0, 600)).toContain("corpo = modelo.body");
+    expect(fonte).toContain("if (!molde && tipo.reminder_template_name)");
+  });
+});
+
+describe("escolherCanalDoLembrete — sempre um canal de envio automático, de preferência o da conversa", () => {
+  const ZAP = providersDeEnvioAutomatico()[0] as string;
+  // O Instagram não é de envio automático (a IA não responde por ele): é o
+  // provider que o lembrete NUNCA pode escolher.
+  const INSTA = CHANNEL_PROVIDER_INSTAGRAM as string;
+
+  it("o controle do teste: o Instagram não está entre os de envio automático", () => {
+    expect(ZAP).toBeTruthy();
+    expect(providersDeEnvioAutomatico() as readonly string[]).not.toContain(INSTA);
+  });
+
+  it("prefere o número da conversa mais recente, mesmo que não seja o mais antigo", () => {
+    const sessoes = [
+      { id: "zap-antigo", provider: ZAP },
+      { id: "zap-novo", provider: ZAP },
+    ];
+    expect(escolherCanalDoLembrete(sessoes, [{ channel_session_id: "zap-novo" }])).toBe("zap-novo");
+  });
+
+  it("conversa mais recente no Instagram: vale o WhatsApp da conversa mais antiga", () => {
+    const sessoes = [
+      { id: "zap-1", provider: ZAP },
+      { id: "zap-2", provider: ZAP },
+      { id: "insta", provider: INSTA },
+    ];
+    const conversas = [{ channel_session_id: "insta" }, { channel_session_id: "zap-2" }];
+    expect(escolherCanalDoLembrete(sessoes, conversas)).toBe("zap-2");
+  });
+
+  it("sem conversa, o primeiro da lista — a ordem é de quem consulta", () => {
+    expect(
+      escolherCanalDoLembrete(
+        [
+          { id: "zap-1", provider: ZAP },
+          { id: "zap-2", provider: ZAP },
+        ],
+        [],
+      ),
+    ).toBe("zap-1");
+  });
+
+  it("só Instagram conectado: nenhum canal — o lembrete pula, não sai pelo Instagram", () => {
+    expect(escolherCanalDoLembrete([{ id: "insta", provider: INSTA }], [{ channel_session_id: "insta" }])).toBeNull();
+  });
+
+  it("conversa num número fora da lista (desconectado): cai no primeiro da lista", () => {
+    expect(
+      escolherCanalDoLembrete([{ id: "zap-1", provider: ZAP }], [{ channel_session_id: "zap-desconectado" }]),
+    ).toBe("zap-1");
+  });
+});
+
+describe("as consultas do canal (estrutural)", () => {
+  const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+
+  it("sessões: da organização, WORKING, de envio automático, não arquivadas, em ordem fixa", () => {
+    const sessoes = fonte.slice(fonte.indexOf('.from("channel_sessions")')).slice(0, 500);
+    expect(sessoes).toContain('.eq("organization_id", org)');
+    expect(sessoes).toContain('.eq("status", "WORKING")');
+    expect(sessoes).toContain('.in("provider", [...providersDeEnvioAutomatico()])');
+    expect(sessoes).toContain('.is("archived_at", null)');
+    expect(sessoes).toContain('.order("created_at"');
+    expect(sessoes).not.toContain(".limit(1)");
+  });
+
+  it("conversas: do contato, na organização, da mais recente para a mais antiga", () => {
+    const conversas = fonte.slice(fonte.indexOf('.from("conversations")')).slice(0, 500);
+    expect(fonte).toContain('.from("conversations")');
+    expect(conversas).toContain('.eq("organization_id", org)');
+    expect(conversas).toContain('.eq("contact_id", contato.id)');
+    expect(conversas).toContain('.order("last_message_at"');
   });
 });

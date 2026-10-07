@@ -361,7 +361,11 @@ export function descreveEvento(
       };
     }
     case "action_sent":
-      return { titulo: "Mensagem enviada", detalhe: null, ...motor };
+      return {
+        titulo: "Mensagem enviada",
+        detalhe: texto(p.via) === "modelo_de_reserva" ? "pelo modelo de reserva: a IA não escreveu a mensagem" : null,
+        ...motor,
+      };
     case "action_pulado":
       return { titulo: "Passo pulado, o fluxo seguiu", detalhe: texto(p.reason), ...motor };
     case "ai_classified":

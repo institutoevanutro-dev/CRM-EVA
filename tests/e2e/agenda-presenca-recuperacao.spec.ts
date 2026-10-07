@@ -57,6 +57,15 @@ async function fixture() {
     status: "WORKING",
     webhook_secret_encrypted: "\\x00",
   });
+  // Janela anti-ban 0h–24h: o texto fixo do follow-up respeita a janela do
+  // número, e a hora do CI não pode decidir a spec (ver utils/janela-de-envio.ts).
+  const janela = await db
+    .from("channel_knobs")
+    .upsert(
+      { organization_id: org, channel_session_id: session, window_start_hour: 0, window_end_hour: 24, allow_sunday: true },
+      { onConflict: "organization_id,channel_session_id" },
+    );
+  if (janela.error) throw janela.error;
   const type = await insert("calendar_event_types", {
     organization_id: org,
     name: "Consulta de presença",

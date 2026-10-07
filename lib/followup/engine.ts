@@ -27,6 +27,7 @@ import {
   ehConfirmacao,
   latestRepeatIndex,
   occupancyEventCount,
+  pisoDoInboundDaEspera,
   actionTurnCompleted,
   processNode,
   repeatTakenFromEvents,
@@ -79,6 +80,13 @@ export interface FollowupJobRequest {
     purpose: "send_message" | "classify" | "plan_timing";
     /** action (mode 'ai_message') — Task 5.1: repassado ao turno pra virar o bloco de orientação. */
     prompt_hint?: string;
+    /**
+     * action (mode 'ai_message') — o modelo de reserva (`message_templates.id`): sai,
+     * pelas mesmas travas, quando a IA não consegue enviar (veto da cadeia ou erro na
+     * última tentativa). Porte do encanamento de b94446a5c; lá o id é um modelo
+     * aprovado da Meta e sai com a janela de 24 h fechada.
+     */
+    fallback_template_id?: string;
     /** action (mode 'text') — corpo pronto; o turno envia sem chamar o modelo. */
     fixed_body?: string;
     /** action (mode 'template') — id em `message_templates`; o turno carrega o corpo e envia sem modelo. */
@@ -110,7 +118,8 @@ export interface AdminClient {
     custom_fields?: Record<string, unknown>;
   }>;
   loadEnrollmentEvents(enrollmentId: string): Promise<EnrollmentEventRef[]>;
-  /** Latest inbound `messages.body` for the contact (optionally scoped to the enrollment conversation). */
+  /** Latest inbound `messages.body` for the contact (optionally scoped to the enrollment conversation).
+   *  `null` = nenhuma mensagem; `""` = a mensagem existe mas não tem texto (áudio, imagem). */
   loadLastInboundBody(
     orgId: string,
     contactId: string,
@@ -243,7 +252,10 @@ function turnPayloadExtras(
   events: EnrollmentEventRef[] = [],
 ): Partial<FollowupJobRequest["payload"]> {
   if (node.type === "action" && node.config.mode === "ai_message") {
-    return { prompt_hint: interpolarVolta(node.config.prompt_hint, events) };
+    return {
+      prompt_hint: interpolarVolta(node.config.prompt_hint, events),
+      ...(node.config.fallback_template_id ? { fallback_template_id: node.config.fallback_template_id } : {}),
+    };
   }
   if (node.type === "action" && node.config.mode === "text") {
     return { fixed_body: interpolarVolta(node.config.body, events) };
@@ -383,9 +395,17 @@ async function applyResult(
     const frescos = await db.loadEnrollmentEvents(enrollment.id);
     const prior = frescos.find((e) => e.idempotency_key === idemKey);
     if (prior?.event_type && prior.event_type !== wantedType) {
-      if (result.kind === "advance" && (prior.event_type === "action_sent" || prior.event_type === "action_pulado")) {
-        // action_sent gravado; o update do completeTurn pode ter se perdido —
-        // aplica só o avanço sem inventar outro evento.
+      // Evento do passo gravado; o update da inscrição pode ter se perdido.
+      // `wait_started` é o irmão do `action_sent`: o insert ocupa `${nó}:${passo}`
+      // e o tick seguinte (resposta do lead) tenta `node_advanced` com a MESMA
+      // chave. Sem este resgate o match_reply fica preso para sempre — a
+      // mensagem de resposta nunca é enfileirada.
+      if (
+        result.kind === "advance" &&
+        (prior.event_type === "action_sent" ||
+          prior.event_type === "action_pulado" ||
+          prior.event_type === "wait_started")
+      ) {
         await db.updateEnrollment(enrollment.id, enrollment.organization_id, {
           current_node_id: result.next_node_id,
           status: "active",
@@ -578,6 +598,9 @@ async function processEnrollment(
   let planRecheckCount: number | undefined;
   let repeatTaken: number | undefined;
   let repeatTotal: number | null | undefined;
+  let matchReplyOcupado = false;
+  let respondeuSemTexto = false;
+  let prazoDaEspera: Date | undefined;
   let events: EnrollmentEventRef[] = [];
 
   const smartWaits = node.type === "trigger" ? coletarEsperasAdaptativas(graph.nodes) : [];
@@ -603,10 +626,12 @@ async function processEnrollment(
     waitElapsed = resolveWaitPhase(events, node.id, enrollment.steps_taken);
     // match_reply de captação: a confirmação já enfileirou um evento neste nó.
     // O claim seguinte às vezes chega com steps_taken desalinhado da chave
-    // `${node}:${steps-1}` — sem isto o motor trata como 1ª visita e MANDA A
-    // PERGUNTA DE NOVO em vez de ler o SIM.
+    // `${node}:${steps-1}` — sem o sufixo de ocupação o motor não lê o SIM.
+    // Occupancy NÃO implica timeout: wait_started recém-gravado no mesmo
+    // request (ALWAYS → menu → espera de novo) faria no_reply/ALWAYS em
+    // cadeia e dispararia o fluxo inteiro de uma vez.
     if (node.type === "match_reply") {
-      waitElapsed = waitElapsed || occupancyEventCount(events, node.id) > 0;
+      matchReplyOcupado = occupancyEventCount(events, node.id) > 0;
     }
     if (node.type === "ai_classify" || node.type === "match_reply" || node.type === "wait") {
       const wakeKey = `${node.id}:${enrollment.steps_taken}:wake`;
@@ -632,20 +657,27 @@ async function processEnrollment(
   if (textoInbound && node.type === "match_reply") {
     lastInboundBody = textoInbound;
   } else if (
-    (node.type === "match_reply" && (wokeEarly || waitElapsed)) ||
+    (node.type === "match_reply" && (wokeEarly || waitElapsed || matchReplyOcupado)) ||
     (node.type === "repeat" && repeatTotal == null)
   ) {
     // Sempre no contato inteiro: a captação e o WhatsApp podem ser conversas
     // diferentes, e filtrar pela conversation_id do enrollment esconde o SIM.
-    lastInboundBody =
-      (await db.loadLastInboundBody(
-        enrollment.organization_id,
-        enrollment.contact_id,
-        null,
-        enrollment.updated_at,
-      )) ?? "";
-    if (node.type === "match_reply" && lastInboundBody.trim()) {
-      wokeEarly = true;
+    const piso =
+      node.type === "match_reply"
+        ? pisoDoInboundDaEspera(node, events, enrollment.updated_at)
+        : enrollment.updated_at;
+    const corpo = await db.loadLastInboundBody(
+      enrollment.organization_id,
+      enrollment.contact_id,
+      null,
+      piso,
+    );
+    lastInboundBody = corpo ?? "";
+    if (node.type === "match_reply") {
+      respondeuSemTexto = corpo !== null && !corpo.trim();
+      const prazo = Date.parse(piso) + node.config.grace_timeout_ms;
+      if (Number.isFinite(prazo)) prazoDaEspera = new Date(prazo);
+      if (lastInboundBody.trim() || respondeuSemTexto) wokeEarly = true;
     }
   }
 
@@ -668,6 +700,8 @@ async function processEnrollment(
     appointmentCreatedAt,
     wokeEarly,
     lastInboundBody,
+    respondeuSemTexto,
+    prazoDaEspera,
     actionEnqueued,
     actionRecheckCount,
     actionCompleted,
@@ -804,7 +838,8 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
       if (naoAntesDe) q = q.gte("sent_at", naoAntesDe);
       const { data, error } = await q.order("sent_at", { ascending: false }).limit(1).maybeSingle();
       if (error) throw new Error(error.message);
-      return typeof data?.body === "string" ? data.body : null;
+      if (!data) return null;
+      return typeof data.body === "string" ? data.body : "";
     },
     async loadEnrollmentEvents(enrollmentId) {
       const { data, error } = await admin

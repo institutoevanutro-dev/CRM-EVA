@@ -89,6 +89,22 @@ async function main(): Promise<void> {
         break;
       }
 
+      // ---- abrir-janela-de-envio [orgId] — janela anti-ban 0h-24h (domingo
+      // ---- liberado) em todos os números da org (padrão: a do rig). Ver
+      // ---- tests/e2e/utils/janela-de-envio.ts.
+      case "abrir-janela-de-envio": {
+        const org = args[0] ?? loadCreds().org_id;
+        const { rowCount } = await pool.query(
+          `insert into channel_knobs (organization_id, channel_session_id, window_start_hour, window_end_hour, allow_sunday)
+           select organization_id, id, 0, 24, true from channel_sessions where organization_id = $1
+           on conflict (organization_id, channel_session_id)
+           do update set window_start_hour = 0, window_end_hour = 24, allow_sunday = true`,
+          [org],
+        );
+        out({ ok: true, canais: rowCount });
+        break;
+      }
+
       // ---- recuar-vigencia <pointerId> <minutos> — recua o active_since do
       // ---- ponteiro (migration 0324). O contato semeado calou ANTES da
       // ---- publicação, e a regra "sem passado" da varredura o recusaria. Só
