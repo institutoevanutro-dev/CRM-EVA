@@ -2,6 +2,7 @@ import { expect, it, vi } from "vitest";
 import { protecaoAgendaPg, protecaoAgendaSupabase } from "@/lib/agenda/protecao-followup";
 import { assertAgendaEffectSupabase } from "@/lib/agenda/efeito";
 import { logger } from "@/lib/logger";
+import { IDS_POR_LOTE } from "@/lib/supabase/em-lotes";
 const now = new Date("2026-09-06T12:00:00Z");
 it("páginas truncadas abaixo do limit são lidas até vazio; protetor após 1000 coincide com PG e barra efeito", async () => {
   const rows = Array.from({ length: 1101 }, (_, n) => ({
@@ -105,7 +106,8 @@ it("centenas de contatos são lidos em lotes, sem um .in() gigante", async () =>
   };
   const mapa = await protecaoAgendaSupabase(db as never, "org", contatos, now);
   expect(mapa.size).toBe(517);
-  expect(Math.max(...lotes)).toBeLessThanOrEqual(100);
+  expect(Math.max(...lotes)).toBeLessThanOrEqual(IDS_POR_LOTE);
+  expect(lotes.length).toBeGreaterThan(1);
   expect(lotes.reduce((a, b) => a + b, 0)).toBe(517);
   expect([...mapa.values()].every((p) => p.motivo === "sem_compromisso")).toBe(true);
 
