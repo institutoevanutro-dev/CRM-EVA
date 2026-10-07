@@ -58,8 +58,14 @@ export function protecaoDaAgenda(
     reavaliar_em: null,
   };
 }
-function indisponivel(agora: Date): ProtecaoAgenda {
-  logger.warn("[agenda] proteção indisponível; cobrança adiada");
+function indisponivel(agora: Date, causa?: unknown, origem?: string): ProtecaoAgenda {
+  // A causa vai junto: sem ela, "indisponível" não diz se foi rede, banco,
+  // permissão ou dado — e a cobrança fica adiada em silêncio para sempre.
+  logger.warn("[agenda] proteção indisponível; cobrança adiada", {
+    origem: origem ?? null,
+    erro: causa instanceof Error ? causa.message : causa && typeof causa === "object" && "message" in causa ? String((causa as { message: unknown }).message) : causa == null ? null : String(causa),
+    codigo: causa && typeof causa === "object" && "code" in causa ? String((causa as { code: unknown }).code) : null,
+  });
   return {
     adiar: true,
     motivo: "leitura_indisponivel",
@@ -117,8 +123,9 @@ export async function protecaoAgendaSupabase(
         ),
       ]),
     );
-  } catch {
-    return new Map(contatos.map((id) => [id, indisponivel(agora)]));
+  } catch (causa) {
+    const protecao = indisponivel(agora, causa, "supabase");
+    return new Map(contatos.map((id) => [id, protecao]));
   }
 }
 export async function protecaoAgendaPg(
@@ -140,8 +147,8 @@ export async function protecaoAgendaPg(
     ]);
     if (!organization.rows[0]) throw new Error("agenda_org_missing");
     return protecaoDaAgenda(appointments.rows, organization.rows[0].settings?.agenda, agora);
-  } catch {
-    return indisponivel(agora);
+  } catch (causa) {
+    return indisponivel(agora, causa, "pg");
   }
 }
 export class AgendaDeferredError extends Error {
