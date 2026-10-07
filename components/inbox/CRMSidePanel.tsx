@@ -20,6 +20,7 @@ import { marcarReleitura } from "@/lib/audit/releitura";
 import { toast } from "sonner";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { activityLabel, actorLabel, actorShape } from "@/lib/leads/activity-vocabulary";
+import { soChavesAlteradas } from "@/lib/leads/custom-fields-so-diff";
 import { ConversationTagsEditor } from "./ConversationTagsEditor";
 import { ContactTagsEditor } from "./ContactTagsEditor";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
@@ -472,6 +473,10 @@ function CamposDoFunil({
   const t = useT();
   const edit = useEditLead(pipelineId);
   const [customFields, setCustomFields] = useState(valores);
+  // A régua do diff: o valor carregado quando o painel abriu. Só o que a pessoa
+  // mudar daqui viaja — reenviar o objeto inteiro desfazia o que a IA ou um
+  // colega gravou com o painel aberto (porte do original 4bf4202ca).
+  const [camposCarregados, setCamposCarregados] = useState(valores);
 
   if (fieldDefs.length === 0) {
     return <p className="text-xs text-muted-foreground">{t("Este funil não tem campos extras.")}</p>;
@@ -479,7 +484,12 @@ function CamposDoFunil({
 
   async function salvar() {
     try {
-      await edit.mutateAsync({ leadId, patch: { custom_fields: customFields } });
+      await edit.mutateAsync({
+        leadId,
+        patch: { custom_fields: soChavesAlteradas(camposCarregados, customFields) },
+      });
+      // O que acabou de gravar vira a nova régua do próximo salvamento.
+      setCamposCarregados({ ...customFields });
       toast.success(t("Campos atualizados"));
       onSalvo();
     } catch {
