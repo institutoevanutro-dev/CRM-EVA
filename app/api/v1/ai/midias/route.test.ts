@@ -74,12 +74,12 @@ describe("/api/v1/ai/midias", () => {
   });
 
   it("GET calcula a situação: pessoa sem termo = sem_termo; sem pessoa com variante = pronta", async () => {
-    const variante = { key: "A", storage_path: "o/i/A-1.png", mime: "image/png", size_bytes: 10 };
+    const variante = (id: string) => ({ key: "A", storage_path: `${ORG}/${id}/A-1.png`, mime: "image/png", size_bytes: 10 });
     const base = { when_to_use: null, tags: [], consent_subject: null, consent_scope: null, consent_signed_at: null, consent_expires_at: null, consent_revoked_at: null };
     banco(() => ({
       data: [
-        { ...base, id: "a", title: "Com pessoa", contains_person: true, variants: [variante] },
-        { ...base, id: "b", title: "Sem pessoa", contains_person: false, variants: [variante] },
+        { ...base, id: "a", title: "Com pessoa", contains_person: true, variants: [variante("a")] },
+        { ...base, id: "b", title: "Sem pessoa", contains_person: false, variants: [variante("b")] },
       ],
       error: null,
     }));
@@ -88,5 +88,13 @@ describe("/api/v1/ai/midias", () => {
     expect(data.itens[1].variantes).toEqual([{ key: "A", mime: "image/png", size_bytes: 10, url: "https://x/assinada" }]);
     expect(data.itens[0]).not.toHaveProperty("variants");
     expect(ops[0]!.filtros).toContainEqual(["eq", "organization_id", ORG]);
+  });
+
+  it("GET nunca assina caminho de outra org gravado na linha", async () => {
+    const alheia = { key: "A", storage_path: `outra/a/A-1.png`, mime: "image/png", size_bytes: 10 };
+    banco(() => ({ data: [{ id: "a", title: "x", when_to_use: null, tags: [], contains_person: false, consent_subject: null, consent_scope: null, consent_signed_at: null, consent_expires_at: null, consent_revoked_at: null, variants: [alheia] }], error: null }));
+    const { data } = await (await GET()).json();
+    expect(h.assinar).not.toHaveBeenCalled();
+    expect(data.itens[0].variantes).toEqual([]);
   });
 });

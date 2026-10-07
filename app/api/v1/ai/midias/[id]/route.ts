@@ -17,7 +17,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
-import { editarMidiaSchema, variantesSchema } from "@/lib/midias/esquemas";
+import { editarMidiaSchema, variantesDoItem } from "@/lib/midias/esquemas";
 import { BUCKET_DA_BIBLIOTECA, hojeNaClinica, situacaoDaMidia } from "@/lib/midias/termo";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -87,8 +87,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       metadata: action === "media_library.consent_recorded" ? { expires_at: consent?.expires_at ?? null } : {},
     });
   }
-  const parsedVariants = variantesSchema.safeParse(item.variants);
-  const situacao = situacaoDaMidia({ ...item, variants: parsedVariants.success ? parsedVariants.data : [] }, hojeNaClinica());
+  const situacao = situacaoDaMidia({ ...item, variants: variantesDoItem(item.variants, authz.org.orgId, id) }, hojeNaClinica());
   return ok({ id, situacao }, { requestId });
 }
 
@@ -112,8 +111,7 @@ export async function DELETE(_req: NextRequest, ctx: Ctx): Promise<Response> {
   if (!item) return fail("not_found", t("Mídia não encontrada."), 404, { requestId });
 
   // A linha sai primeiro: arquivo órfão é só espaço; linha sem arquivo seria item quebrado.
-  const v = variantesSchema.safeParse(item.variants);
-  const caminhos = v.success ? v.data.map((x) => x.storage_path) : [];
+  const caminhos = variantesDoItem(item.variants, authz.org.orgId, id).map((x) => x.storage_path);
   if (caminhos.length > 0) {
     const { error: erroRemove } = await createAdminClient().storage.from(BUCKET_DA_BIBLIOTECA).remove(caminhos);
     if (erroRemove) logger.warn("[midias] arquivos ficaram no bucket após apagar o item", { id, requestId, detail: erroRemove.message });

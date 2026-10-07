@@ -15,7 +15,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
-import { criarMidiaSchema, variantesSchema } from "@/lib/midias/esquemas";
+import { criarMidiaSchema, variantesDoItem } from "@/lib/midias/esquemas";
 import { BUCKET_DA_BIBLIOTECA, hojeNaClinica, situacaoDaMidia } from "@/lib/midias/termo";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -42,8 +42,7 @@ export async function GET(): Promise<Response> {
   const storage = createAdminClient().storage.from(BUCKET_DA_BIBLIOTECA);
   const itens = await Promise.all(
     (data ?? []).map(async (linha) => {
-      const r = variantesSchema.safeParse(linha.variants);
-      const variants = r.success ? r.data : [];
+      const variants = variantesDoItem(linha.variants, authz.org.orgId, linha.id);
       const variantes = await Promise.all(
         variants.map(async (v) => ({
           key: v.key,

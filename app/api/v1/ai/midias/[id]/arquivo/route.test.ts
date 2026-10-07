@@ -43,6 +43,7 @@ const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0
 
 const item = (variants: unknown[] = []) => ({
   id: ID,
+  updated_at: "2026-10-07T10:00:00Z",
   variants,
   contains_person: false,
   consent_signed_at: null,
@@ -60,11 +61,11 @@ function envio(campos: { variante?: string; bytes?: Uint8Array; tipo?: string },
 const del = (q = "?variante=B") => new NextRequest(`http://localhost/api/v1/ai/midias/${ID}/arquivo${q}`, { method: "DELETE" });
 
 let ops: OperacaoGravada[];
-function banco(lido: unknown, updateComErro = false) {
+function banco(lido: unknown, updateComErro = false, linhasAfetadas = 1) {
   const g = supabaseGravador((op) => {
     if (op.acao === "update") {
       h.ordem.push("update");
-      return { data: null, error: updateComErro ? { message: "boom" } : null };
+      return { data: linhasAfetadas ? [{ id: ID }] : [], error: updateComErro ? { message: "boom" } : null };
     }
     return { data: lido, error: null };
   });
@@ -159,6 +160,37 @@ describe("POST /api/v1/ai/midias/:id/arquivo", () => {
     expect(h.remover).toHaveBeenCalledTimes(1);
     expect(h.remover).toHaveBeenCalledWith([novo]);
     expect(h.audit).not.toHaveBeenCalled();
+  });
+});
+
+describe("concorrência e caminhos alheios", () => {
+  it("update com zero linhas (alguém mexeu antes): 409, remove o novo, o antigo fica", async () => {
+    banco(item([antiga]), false, 0);
+    const r = await POST(envio({ variante: "A", bytes: PNG }), ctx);
+    expect(r.status).toBe(409);
+    expect((await r.json()).error.code).toBe("state_conflict");
+    const up = ops.find((o) => o.acao === "update")!;
+    expect(up.filtros).toContainEqual(["eq", "updated_at", "2026-10-07T10:00:00Z"]);
+    expect(h.remover).toHaveBeenCalledTimes(1);
+    expect(h.remover).toHaveBeenCalledWith([h.subir.mock.calls[0]![0]]);
+    expect(h.audit).not.toHaveBeenCalled();
+  });
+
+  it("DELETE com zero linhas: 409 e nada removido", async () => {
+    const b = { key: "B", storage_path: `${ORG}/${ID}/B-1.png`, mime: "image/png", size_bytes: 1 };
+    banco(item([b]), false, 0);
+    expect((await DELETE(del(), ctx)).status).toBe(409);
+    expect(h.remover).not.toHaveBeenCalled();
+  });
+
+  it("caminho de outra org na linha é ignorado: DELETE não remove nada e troca não remove o alheio", async () => {
+    const alheia = { key: "A", storage_path: `outra/${ID}/A-1.png`, mime: "image/png", size_bytes: 1 };
+    banco(item([alheia]));
+    expect((await DELETE(del("?variante=A"), ctx)).status).toBe(200);
+    expect(h.remover).not.toHaveBeenCalled();
+    banco(item([alheia]));
+    expect((await POST(envio({ variante: "A", bytes: PNG }), ctx)).status).toBe(201);
+    expect(h.remover).not.toHaveBeenCalled();
   });
 });
 

@@ -84,7 +84,7 @@ describe("PATCH /api/v1/ai/midias/:id", () => {
   });
 
   it("revogar grava consent_revoked_at e audita consent_revoked", async () => {
-    banco(() => ({ data: { id: ID, variants: [{ key: "A", storage_path: "o/i/A-1.png", mime: "image/png", size_bytes: 1 }], contains_person: true, consent_signed_at: "2026-10-01", consent_expires_at: null, consent_revoked_at: "2026-10-07T00:00:00Z" }, error: null }));
+    banco(() => ({ data: { id: ID, variants: [{ key: "A", storage_path: `${ORG}/${ID}/A-1.png`, mime: "image/png", size_bytes: 1 }], contains_person: true, consent_signed_at: "2026-10-01", consent_expires_at: null, consent_revoked_at: "2026-10-07T00:00:00Z" }, error: null }));
     const r = await PATCH(patch({ revogar: true }), ctx);
     expect(r.status).toBe(200);
     expect((await r.json()).data.situacao).toBe("revogada");
@@ -94,7 +94,7 @@ describe("PATCH /api/v1/ai/midias/:id", () => {
 });
 
 describe("DELETE /api/v1/ai/midias/:id", () => {
-  const variantes = [{ key: "A", storage_path: "o/i/A-1.png", mime: "image/png", size_bytes: 1 }];
+  const variantes = [{ key: "A", storage_path: `${ORG}/${ID}/A-1.png`, mime: "image/png", size_bytes: 1 }];
 
   it("apaga a linha filtrando org e id, depois remove os arquivos do bucket, e audita", async () => {
     banco(() => ({ data: { id: ID, title: "Vídeo", variants: variantes }, error: null }));
@@ -103,8 +103,16 @@ describe("DELETE /api/v1/ai/midias/:id", () => {
     expect(ops[0]).toMatchObject({ tabela: "media_library_items", acao: "delete" });
     expect(ops[0]!.filtros).toEqual(expect.arrayContaining([["eq", "organization_id", ORG], ["eq", "id", ID]]));
     expect(h.bucket).toHaveBeenCalledWith("media-library");
-    expect(h.remover).toHaveBeenCalledWith(["o/i/A-1.png"]);
+    expect(h.remover).toHaveBeenCalledWith([`${ORG}/${ID}/A-1.png`]);
     expect(acoes()).toEqual(["media_library.item_deleted"]);
+  });
+
+  it("caminho de OUTRA org gravado na linha nunca vai para o remove", async () => {
+    const alheia = { key: "B", storage_path: `outra/${ID}/B-1.png`, mime: "image/png", size_bytes: 1 };
+    banco(() => ({ data: { id: ID, title: "Vídeo", variants: [...variantes, alheia] }, error: null }));
+    expect((await DELETE(del(), ctx)).status).toBe(200);
+    expect(h.remover).toHaveBeenCalledTimes(1);
+    expect(h.remover).toHaveBeenCalledWith([`${ORG}/${ID}/A-1.png`]);
   });
 
   it("falha ao remover do bucket não muda o 200: só loga", async () => {

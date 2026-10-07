@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { Variante } from "@/lib/midias/termo";
+
 const data = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data no formato AAAA-MM-DD.")
@@ -21,6 +23,22 @@ export const variantesSchema = z
   )
   .max(2)
   .refine((vs) => new Set(vs.map((v) => v.key)).size === vs.length, "Variante repetida.");
+
+/**
+ * Variantes de uma linha, já FILTRADAS: a RLS deixa um manager gravar `variants`
+ * direto pela REST, e as rotas usam o client admin sobre o caminho. Só vale
+ * caminho `<org>/<item>/<arquivo>` — nunca o arquivo de outra organização.
+ */
+export function variantesDoItem(bruto: unknown, orgId: string, itemId: string): Variante[] {
+  const r = variantesSchema.safeParse(bruto);
+  if (!r.success) return [];
+  const prefixo = `${orgId}/${itemId}/`;
+  return r.data.filter((v) => {
+    if (!v.storage_path.startsWith(prefixo)) return false;
+    const resto = v.storage_path.slice(prefixo.length);
+    return /^[A-Za-z0-9._-]+$/.test(resto) && resto !== "." && resto !== "..";
+  });
+}
 
 export const criarMidiaSchema = z
   .object({

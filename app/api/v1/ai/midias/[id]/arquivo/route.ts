@@ -17,7 +17,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
 import { MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
 import { validateOutboundMedia } from "@/lib/messaging/media/upload-validation";
-import { variantesSchema } from "@/lib/midias/esquemas";
+import { variantesDoItem } from "@/lib/midias/esquemas";
 import {
   BUCKET_DA_BIBLIOTECA,
   TIPOS_ACEITOS_NA_BIBLIOTECA,
@@ -44,24 +44,27 @@ async function lerItem(orgId: string, id: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("media_library_items")
-    .select("id, variants, contains_person, consent_signed_at, consent_expires_at, consent_revoked_at")
+    .select("id, updated_at, variants, contains_person, consent_signed_at, consent_expires_at, consent_revoked_at")
     .eq("organization_id", orgId)
     .eq("id", id)
     .maybeSingle();
   if (error) return { erro: true as const };
   if (!data) return { item: null };
-  const v = variantesSchema.safeParse(data.variants);
-  return { item: { ...data, variants: v.success ? v.data : [] }, supabase };
+  return { item: { ...data, variants: variantesDoItem(data.variants, orgId, id) } };
 }
 
-async function gravarVariantes(orgId: string, id: string, variants: Variante[]) {
+async function gravarVariantes(orgId: string, id: string, variants: Variante[], lidoEm: string) {
   const supabase = await createClient();
-  const { error } = await supabase
+  // Concorrência otimista: só grava se ninguém mexeu na linha desde a leitura.
+  const { data, error } = await supabase
     .from("media_library_items")
     .update({ variants })
     .eq("organization_id", orgId)
-    .eq("id", id);
-  return !error;
+    .eq("id", id)
+    .eq("updated_at", lidoEm)
+    .select("id");
+  if (error) return "erro" as const;
+  return (data ?? []).length > 0 ? ("ok" as const) : ("conflito" as const);
 }
 
 export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
@@ -114,12 +117,17 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     ...lido.item.variants.filter((v) => v.key !== variante),
     { key: variante, storage_path: caminho, mime, size_bytes: arquivo.size },
   ].sort((a, b) => a.key.localeCompare(b.key));
-  if (!(await gravarVariantes(orgId, id, novas))) {
+  const gravou = await gravarVariantes(orgId, id, novas, lido.item.updated_at);
+  if (gravou !== "ok") {
     await storage.remove([caminho]);
+    if (gravou === "conflito") return fail("state_conflict", t("A mídia mudou enquanto você enviava. Tente de novo."), 409, { requestId });
     return fail("internal_error", t("Erro ao salvar o arquivo."), 500, { requestId });
   }
   // O antigo sai DEPOIS do novo gravado: falhar aqui deixa órfão, nunca item sem arquivo.
-  if (anterior) await storage.remove([anterior.storage_path]);
+  if (anterior) {
+    const { error: erroRemove } = await storage.remove([anterior.storage_path]);
+    if (erroRemove) logger.warn("[midias] arquivo antigo ficou no bucket após a troca", { id, requestId, detail: erroRemove.message });
+  }
 
   void audit({
     action: "media_library.file_replaced",
@@ -152,10 +160,11 @@ export async function DELETE(req: NextRequest, ctx: Ctx): Promise<Response> {
   const alvo = lido.item.variants.find((v) => v.key === variante);
   const novas = lido.item.variants.filter((v) => v.key !== variante);
   if (alvo) {
-    if (!(await gravarVariantes(orgId, id, novas))) {
-      return fail("internal_error", t("Erro ao remover o arquivo."), 500, { requestId });
-    }
-    await createAdminClient().storage.from(BUCKET_DA_BIBLIOTECA).remove([alvo.storage_path]);
+    const gravou = await gravarVariantes(orgId, id, novas, lido.item.updated_at);
+    if (gravou === "conflito") return fail("state_conflict", t("A mídia mudou enquanto você enviava. Tente de novo."), 409, { requestId });
+    if (gravou === "erro") return fail("internal_error", t("Erro ao remover o arquivo."), 500, { requestId });
+    const { error: erroRemove } = await createAdminClient().storage.from(BUCKET_DA_BIBLIOTECA).remove([alvo.storage_path]);
+    if (erroRemove) logger.warn("[midias] arquivo ficou no bucket após remover a variante", { id, requestId, detail: erroRemove.message });
     void audit({
       action: "media_library.file_removed",
       actorUserId: authz.user.id,

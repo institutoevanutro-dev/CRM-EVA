@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { criarMidiaSchema, editarMidiaSchema, variantesSchema } from "./esquemas";
+import { criarMidiaSchema, editarMidiaSchema, variantesDoItem, variantesSchema } from "./esquemas";
 
 describe("esquemas da biblioteca", () => {
   it("cria com título; recusa título vazio e campo desconhecido", () => {
@@ -29,5 +29,22 @@ describe("esquemas da biblioteca", () => {
     const v = (key: "A" | "B") => ({ key, storage_path: "o/i/A-1.png", mime: "image/png", size_bytes: 1 });
     expect(variantesSchema.safeParse([v("A"), v("B")]).success).toBe(true);
     expect(variantesSchema.safeParse([v("A"), v("A")]).success).toBe(false);
+  });
+});
+
+describe("variantesDoItem", () => {
+  const v = (storage_path: string) => ({ key: "A", storage_path, mime: "image/png", size_bytes: 1 });
+  it("mantém o caminho da própria org e item", () => {
+    expect(variantesDoItem([v("o1/i1/A-x.png")], "o1", "i1")).toHaveLength(1);
+  });
+  it("descarta caminho de outra org, de outro item e com ..", () => {
+    expect(variantesDoItem([v("o2/i1/A-x.png")], "o1", "i1")).toEqual([]);
+    expect(variantesDoItem([v("o1/i2/A-x.png")], "o1", "i1")).toEqual([]);
+    expect(variantesDoItem([v("o1/i1/../../o2/i1/A.png")], "o1", "i1")).toEqual([]);
+    expect(variantesDoItem([v("o1/i1/..")], "o1", "i1")).toEqual([]);
+  });
+  it("lixo vira []", () => {
+    expect(variantesDoItem("x", "o1", "i1")).toEqual([]);
+    expect(variantesDoItem(null, "o1", "i1")).toEqual([]);
   });
 });
