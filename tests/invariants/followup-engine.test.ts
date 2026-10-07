@@ -708,3 +708,43 @@ describe("runFollowupTick — action happy path (turno conclui rápido)", () => 
     expect(jobs).toHaveLength(1); // sem reenvio
   });
 });
+
+// ---- modelo de reserva do passo ai_message (porte de b94446a5c) ------------
+
+describe("runFollowupTick — o passo ai_message leva o modelo de reserva no payload", () => {
+  const RESERVA = "c0ffee00-0000-4000-8000-000000000001";
+  const grafo = (fallback?: string): FlowGraph => ({
+    ...ACTION_GRAPH,
+    nodes: ACTION_GRAPH.nodes.map((n) =>
+      n.id === "a1"
+        ? {
+            ...n,
+            config: {
+              mode: "ai_message",
+              prompt_hint: "lembre o lead da proposta",
+              ...(fallback ? { fallback_template_id: fallback } : {}),
+            },
+          }
+        : n,
+    ) as FlowGraph["nodes"],
+  });
+
+  it("com fallback_template_id no nó, o job enfileirado o carrega; sem ele, a chave nem existe", async () => {
+    for (const [org, fallback] of [
+      ["aaaaaab1-0000-4000-8000-000000000001", RESERVA],
+      ["aaaaaab2-0000-4000-8000-000000000001", undefined],
+    ] as const) {
+      await seedOrg(org);
+      const contactId = await seedContact(org);
+      const { pointerId, versionId } = await seedFlow(org, flowGraphSchema.parse(grafo(fallback)));
+      await seedEnrollment({ org, pointerId, versionId, contactId, currentNodeId: "a1" });
+
+      const jobs: FollowupJobRequest[] = [];
+      await runFollowupTick(makeDeps(jobs), { limit: 5 });
+      const doPasso = jobs.find((j) => j.organization_id === org && j.payload.node_id === "a1");
+      expect(doPasso).toBeDefined();
+      if (fallback) expect(doPasso!.payload.fallback_template_id).toBe(fallback);
+      else expect(doPasso!.payload).not.toHaveProperty("fallback_template_id");
+    }
+  });
+});

@@ -211,6 +211,25 @@ async function main(): Promise<void> {
         break;
       }
 
+      // ---- recuar-vigencia <pointerId> <minutos> — recua o active_since do
+      // ---- ponteiro (migration 0324). O contato semeado calou ANTES da
+      // ---- publicação, e a regra "sem passado" da varredura o recusaria. Só
+      // ---- active_since muda, então o trigger de vigência não dispara.
+      case "recuar-vigencia": {
+        const pointerId = args[0];
+        const minutos = Number(args[1]);
+        if (!pointerId || !Number.isFinite(minutos)) throw new Error("uso: recuar-vigencia <pointerId> <minutos>");
+        const creds = loadCreds();
+        const { rowCount } = await pool.query(
+          `update followup_flow_pointers set active_since = now() - ($2 || ' minutes')::interval
+            where id = $1 and organization_id = $3`,
+          [pointerId, String(minutos), creds.org_id],
+        );
+        if (rowCount !== 1) throw new Error(`recuar-vigencia: ponteiro ${pointerId} não encontrado na org`);
+        out({ ok: true });
+        break;
+      }
+
       // ── seed-silent-contact <autorizado:0|1> <thresholdMinutes> ───────────
       // Igual a seed-conversa mas com `last_inbound_at` mais VELHO que o
       // threshold do gatilho de silêncio — o estado que a varredura de

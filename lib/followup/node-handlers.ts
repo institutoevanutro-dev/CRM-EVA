@@ -287,6 +287,33 @@ export function resolveWaitPhase(events: EnrollmentEventRef[], nodeId: string, s
   return events.some((e) => e.node_id === nodeId && e.idempotency_key === priorKey);
 }
 
+/**
+ * Piso do inbound que casa neste `match_reply`: o instante em que a espera
+ * começou, não o `updated_at` da inscrição.
+ *
+ * O `inbound_woke` (e qualquer tick depois) regrava `updated_at`. Usar essa
+ * coluna como piso esconde a mensagem que ACORDOU a espera — ela chegou
+ * segundos antes do wake. `wait_started.payload.next_eval_at` é park+graça,
+ * então park = next_eval_at − grace_timeout_ms.
+ */
+export function pisoDoInboundDaEspera(
+  node: Extract<FlowNode, { type: "match_reply" }>,
+  events: EnrollmentEventRef[],
+  fallback: string,
+): string {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.node_id !== node.id) continue;
+    if (e.event_type !== "wait_started") continue;
+    const next = e.payload?.next_eval_at;
+    if (typeof next !== "string") break;
+    const start = Date.parse(next) - node.config.grace_timeout_ms;
+    if (Number.isFinite(start)) return new Date(start).toISOString();
+    break;
+  }
+  return fallback;
+}
+
 function evaluateCheck(
   check: { field: "lead_stage" | "tag" | "steps_taken" | "last_outcome"; op: "eq" | "neq" | "gte" | "lte" | "contains"; value: string | number },
   lead: LeadFacts,
@@ -352,6 +379,12 @@ export function processNode(input: {
   wokeEarly?: boolean;
   /** Last inbound `messages.body` for this contact/conversation — engine loads on `match_reply` + wokeEarly. */
   lastInboundBody?: string;
+  /** `match_reply`: chegou mensagem do contato depois da pergunta, mas sem texto (áudio, imagem,
+   *  figurinha). É resposta — só não casa ramo nenhum. */
+  respondeuSemTexto?: boolean;
+  /** `match_reply`: o prazo da espera em curso (`wait_started`). Acordar sem resposta desta
+   *  pergunta não reinicia a contagem. */
+  prazoDaEspera?: Date;
   /** action occupancy guard: a `turn_enqueued` event for THIS stay on the action node already
    *  exists (an entry/recheck happened before). Resolved by the engine via `resolveWaitPhase`
    *  — same prior-step-event check as `wait`. When true, the send turn is in flight: DON'T
@@ -387,6 +420,8 @@ export function processNode(input: {
     waitElapsed,
     wokeEarly,
     lastInboundBody,
+    respondeuSemTexto,
+    prazoDaEspera,
     actionEnqueued,
     actionRecheckCount,
     actionCompleted,
@@ -544,28 +579,44 @@ export function processNode(input: {
       }
       if (wokeEarly) {
         const body = (lastInboundBody ?? "").trim().toLowerCase();
-        const hit =
-          node.config.save_to !== undefined
-            ? undefined
-            : node.config.branches.find((b) => {
-                const needle = b.pattern.trim().toLowerCase();
-                if (needle.length === 0) return false;
-                return b.op === "eq" ? body === needle : body.includes(needle);
-              });
-        const edge = hit
-          ? selectEdge(edges, node.id, { type: "branch", branch_id: hit.id })
-          : selectEdge(edges, node.id, { type: "always" }) ??
-            (() => {
-              const ramo = node.config.branches.find((b) => b.id !== NO_REPLY_BRANCH_ID);
-              return ramo ? selectEdge(edges, node.id, { type: "branch", branch_id: ramo.id }) : null;
-            })();
-        if (!edge) {
-          return {
-            kind: "fail",
-            error: `match_reply node "${node.id}" has no edge for branch "${hit?.id ?? "else"}" (fallback also missing)`,
-          };
+        // inbound_woke sem mensagem desta pergunta (piso excluiu o "." que
+        // enfileirou o menu) NÃO é ALWAYS nem no_reply — senão o fluxo
+        // dispara o cardápio inteiro no mesmo request. Continua esperando até
+        // o prazo que já corria. Mensagem SEM TEXTO desta pergunta (áudio,
+        // imagem) é resposta: segue como "respondeu algo", como antes.
+        if (!body && !respondeuSemTexto) {
+          if (!waitElapsed) {
+            return {
+              kind: "wait",
+              next_eval_at:
+                prazoDaEspera ?? new Date(clock().getTime() + node.config.grace_timeout_ms),
+              wake_status: "waiting_reply",
+            };
+          }
+        } else {
+          const hit =
+            node.config.save_to !== undefined
+              ? undefined
+              : node.config.branches.find((b) => {
+                  const needle = b.pattern.trim().toLowerCase();
+                  if (needle.length === 0) return false;
+                  return b.op === "eq" ? body === needle : body.includes(needle);
+                });
+          const edge = hit
+            ? selectEdge(edges, node.id, { type: "branch", branch_id: hit.id })
+            : selectEdge(edges, node.id, { type: "always" }) ??
+              (() => {
+                const ramo = node.config.branches.find((b) => b.id !== NO_REPLY_BRANCH_ID);
+                return ramo ? selectEdge(edges, node.id, { type: "branch", branch_id: ramo.id }) : null;
+              })();
+          if (!edge) {
+            return {
+              kind: "fail",
+              error: `match_reply node "${node.id}" has no edge for branch "${hit?.id ?? "else"}" (fallback also missing)`,
+            };
+          }
+          return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
         }
-        return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
       }
       const edge = selectEdge(edges, node.id, classEdgeMatch(node, NO_REPLY_BRANCH_ID));
       if (!edge) {

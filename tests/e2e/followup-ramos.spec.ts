@@ -25,6 +25,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
+import { abrirJanelaDeEnvio } from "./utils/janela-de-envio";
 
 const CREDS_PATH = ".e2e-creds.json";
 const ARTIFACTS_DIR = "evidence/followup-vivo";
@@ -51,6 +52,7 @@ function loadCreds(): Creds {
 }
 
 const creds = loadCreds();
+test.beforeAll(() => abrirJanelaDeEnvio());
 
 async function login(page: Page, email: string): Promise<void> {
   await page.goto("/login");

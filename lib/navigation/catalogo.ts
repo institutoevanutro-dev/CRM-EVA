@@ -550,6 +550,22 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
+    // Fecha a conta que as duas de cima deixam cada uma pela metade: Desempenho
+    // mostra onde os cards estão AGORA, Meta Ads quanto custou trazer gente; aqui
+    // os dois lados no mesmo período e no mesmo funil — quem chegou, quem
+    // interagiu, quem compareceu, quanto custou cada venda. `manager` pela mesma
+    // razão de Meta Ads (investimento e receita são da empresa inteira). Fora da
+    // barra lateral: ela está medida no limite (`app/app/analise/page.tsx`).
+    href: "/app/painel-do-funil",
+    label: "Painel do funil",
+    description:
+      "Leads, interação, etapas, comparecimento, custo por venda e ROAS do período, com recorte por origem.",
+    icon: "Funnel",
+    group: "analise",
+    section: "Os números do período",
+    minRole: "manager",
+  },
+  {
     // Irmã de "Desempenho", não a mesma coisa: lá é DESFECHO (funil agora,
     // ganho/perdido por atendente); aqui é o TRABALHO que aconteceu no
     // período, com quem fez cada coisa. Um mês inteiro atendido pela IA e um

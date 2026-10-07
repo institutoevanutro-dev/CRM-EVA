@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Importação histórica de agenda",
+    "output": "agenda-historica.html"
+  },
+  "lanes": [
+    {
+      "id": "fluxo",
+      "label": "Conferência e registro"
+    }
+  ],
+  "mainPath": [
+    "arquivo",
+    "cli",
+    "regra",
+    "agenda",
+    "audit"
+  ],
+  "nodes": [
+    {
+      "id": "arquivo",
+      "lane": "fluxo",
+      "col": 1,
+      "type": "service",
+      "label": "Arquivo privado conferido"
+    },
+    {
+      "id": "cli",
+      "lane": "fluxo",
+      "col": 2,
+      "type": "service",
+      "label": "scripts/importar-agenda-historica.ts"
+    },
+    {
+      "id": "regra",
+      "lane": "fluxo",
+      "col": 3,
+      "type": "service",
+      "label": "lib/agenda/importar-historico.ts"
+    },
+    {
+      "id": "agenda",
+      "lane": "fluxo",
+      "col": 4,
+      "type": "service",
+      "label": "calendar_appointments / Agenda / MCP"
+    },
+    {
+      "id": "audit",
+      "lane": "fluxo",
+      "col": 5,
+      "type": "service",
+      "label": "api_audit_log / Auditoria"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "from": "arquivo",
+      "to": "cli",
+      "label": "JSON validado"
+    },
+    {
+      "id": "e1",
+      "from": "cli",
+      "to": "regra",
+      "label": "prévia ou hash confirmado"
+    },
+    {
+      "id": "e2",
+      "from": "regra",
+      "to": "agenda",
+      "label": "inclusões idempotentes"
+    },
+    {
+      "id": "e3",
+      "from": "regra",
+      "to": "audit",
+      "label": "mesma transação"
+    },
+    {
+      "id": "e4",
+      "from": "regra",
+      "to": "arquivo",
+      "label": "conflitos voltam para conferência"
+    }
+  ]
+}

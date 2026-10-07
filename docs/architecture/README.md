@@ -34,6 +34,7 @@ ser fonte sem ninguém decidir isso.
 | `respostas-prontas.architecture.json` | respostas prontas antes da IA (migration das respostas prontas): 13 peças e 18 arestas. As três travas puras, o atalho em `runAgentTurn` que nunca bloqueia, o envio pela mesma cadeia com `seq` -1 e o laço de retorno (balão "Resposta pronta" → gestor desativa ou sobe o rigor) |
 | `retencao-de-historico.architecture.json` | poda do histórico (issue #261) — 16 peças, 18 arestas, 6 faixas; o que sai (`done`/`failed`/`dead` velho), o que tem dono e **não** sai (`pending`/`running`, e `dead` com aviso ainda aberto), e por que o expurgo do audit é uma `security definer` sem seletor de linha em vez de uma porta |
 | `login-evalink.architecture.json` | entrar com o EvaLink (migration 0287), 13 peças, 14 arestas: da Conta até a sessão Supabase por `/evalink/volta`, e do aviso de saída até `auth.sessions` e o banimento, com a exceção do último admin |
+| `gatilho-de-silencio.architecture.json` | gatilho de silêncio (migration 0324) — 9 peças, 9 arestas; a vigência do ponteiro (`active_since`, gravada por trigger só em status/kind/segments) e o episódio (maior `started_at` deste ponteiro contra o `created_at` da última entrada) que impedem a sequência de recomeçar sozinha |
 
 > **Esta tabela já apodreceu uma vez:** ela listava 8 mapas quando o disco tinha 9 — faltava
 > `indice-de-atrito`. Nenhum teste lê este README (o gate lê os `.json`), então mapa novo que
