@@ -82,8 +82,8 @@ caixa alta com tracking; o resto do texto, Inter.
 - Grupo `crm` muda o rótulo para "Vendas" (o id interno continua `crm` para não quebrar testes
   e preferências salvas).
 - Itens do grupo `canais` passam para o grupo `organizacao` (Configurações).
-- Campo novo opcional `aba: true` marca quais telas aparecem como aba principal (as outras vão
-  para "Mais"); `sidebar: true` deixa de ser usado pelo menu, que passa a listar áreas.
+- `sidebar: true` passa a significar "aba principal" (até 5 por área; as outras vão para
+  "Mais"); o menu lateral lista áreas, não telas. O grupo `ia` passa a se chamar "IA".
 - As páginas hub (`/app/crm`, `/app/ai`, `/app/analise`) continuam existindo (o
   `navegacao-completude.test.ts` exige que toda rota tenha porta), mas saem do menu; ficam
   alcançáveis pela busca ⌘K e pelo "Mais".
