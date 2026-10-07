@@ -127,7 +127,7 @@ test.describe("Biblioteca de mídias — o gestor cadastra, sobe, registra o ter
     const c = cartao(page, ANTES_DEPOIS);
     await c.getByTestId("midia-termo-titular").fill("Maria da Silva");
     await c.getByTestId("midia-termo-escopo").fill("Divulgação no WhatsApp e redes sociais");
-    await c.getByTestId("midia-termo-assinado").fill(new Date().toISOString().slice(0, 10));
+    await c.getByTestId("midia-termo-assinado").fill(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date()));
     await c.getByTestId("midia-termo-salvar").click();
     await expect(selo(page, ANTES_DEPOIS)).toHaveText("Pronta", { timeout: 30_000 });
     await captura(page, "3-pronta-com-termo");
