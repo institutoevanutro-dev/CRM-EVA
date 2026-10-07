@@ -152,13 +152,16 @@ describe("turno de fluxo — texto fixo", () => {
     expect(d.complete).not.toHaveBeenCalled();
   });
 
-  it("WhatsApp silenciado: o bloqueio de atendimento humano segue valendo (sem pulo, sem 24h)", async () => {
-    isLeadInHandoff.mockResolvedValueOnce(true);
+  it("WhatsApp silenciado: o bloqueio de atendimento humano segue valendo (sem pulo, sem 24h) e encerra com handoff", async () => {
     const { pool } = fakePool({ horas: 30, provider: DEFAULT_CHANNEL_PROVIDER });
     const d = deps();
     await criarHandler(d.deps)(job({ fixed_body: "oi" }), pool, ctx);
     expect(runBeforeSend).not.toHaveBeenCalled();
-    expect(resultado(d.complete)).toEqual({ kind: "skipped", reason: "O envio foi recusado pelas regras do atendimento." });
+    expect(resultado(d.complete)).toEqual({
+      kind: "skipped",
+      reason: "Sequência encerrada: uma pessoa da equipe está atendendo esta conversa.",
+      outcome: "handoff",
+    });
   });
 });
 

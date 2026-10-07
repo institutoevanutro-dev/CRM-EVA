@@ -160,6 +160,9 @@ export function ActionForm({
           <p className="text-xs text-text-muted">
             {t("Sai exatamente assim, sem IA. No laço,")} {t("{{volta}}")} e {t("{{voltas}}")} {t("viram o número da volta.")}
           </p>
+          <p className="text-xs text-text-muted">
+            {t("{{nome}} e {{primeiro_nome}} viram o nome do contato; sem nome, a variável sai do texto.")}
+          </p>
         </div>
       ) : mode === "ai_message" ? (
         <>

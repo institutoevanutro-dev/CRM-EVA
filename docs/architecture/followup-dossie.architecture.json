@@ -236,6 +236,30 @@
       "type": "service",
       "label": "followup-gatilho-presenca.v1 + fn_appointment_recover",
       "sublabel": "falta confirmada → inscrição ou impedimento terminal visível"
+    },
+    {
+      "id": "decisao-envio",
+      "lane": "regra",
+      "col": 7,
+      "type": "logic",
+      "label": "bloqueios-obrigatorios.conferirAntesDoEnvio",
+      "sublabel": "UMA decisão para o worker e o atalho · humano ativo encerra com handoff · janela adia"
+    },
+    {
+      "id": "atalho-texto",
+      "lane": "motor",
+      "col": 7,
+      "type": "logic",
+      "label": "enviarTextoFixoPendente (atalho do texto fixo)",
+      "sublabel": "cron · relógio · chegada de mensagem · janela do número + ritmo da automação"
+    },
+    {
+      "id": "turno-fluxo",
+      "lane": "motor",
+      "col": 8,
+      "type": "logic",
+      "label": "followup-turn.runFlowDrivenTurn",
+      "sublabel": "texto, modelo e IA · modelo de reserva (seq 1000) quando a IA não consegue enviar"
     }
   ],
   "edges": [
@@ -484,6 +508,42 @@
       "from": "agenda-guarda",
       "to": "agenda-presenca",
       "label": "Radar/Central abrem o compromisso que explica a proteção"
+    },
+    {
+      "id": "e42",
+      "from": "atalho-texto",
+      "to": "decisao-envio",
+      "label": "conferirAntesDoEnvio antes de enviar — o MESMO veredito do worker"
+    },
+    {
+      "id": "e43",
+      "from": "turno-fluxo",
+      "to": "decisao-envio",
+      "label": "conferirAntesDoEnvio antes do passo e de novo antes da reserva"
+    },
+    {
+      "id": "e44",
+      "from": "decisao-envio",
+      "to": "eventos",
+      "label": "lê o último handoff_resumed da inscrição (marco do humano ativo)"
+    },
+    {
+      "id": "e45",
+      "from": "atalho-texto",
+      "to": "bridge",
+      "label": "skipped com outcome (handoff/replied) · pulado · sent"
+    },
+    {
+      "id": "e46",
+      "from": "turno-fluxo",
+      "to": "bridge",
+      "label": "sent {via: modelo_de_reserva} → action_sent.payload.via"
+    },
+    {
+      "id": "e47",
+      "from": "bridge",
+      "to": "eventos",
+      "label": "action_sent.via e turn_skipped.reason que o dossiê traduz (eventos-legiveis)"
     }
   ],
   "cards": [
