@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import { createSupabaseSilenceSweepDb } from "./silence-sweep";
 
 function supabaseComConversas(data: unknown[]) {
+  // A leitura pagina por keyset e só para na página VAZIA: a 1ª chamada
+  // devolve as linhas, as seguintes devolvem [].
+  let chamadas = 0;
   const chain: Record<string, unknown> = new Proxy(
     {},
     {
       get(_target, prop) {
         if (prop === "then") {
-          return (resolve: (value: unknown) => unknown) => resolve({ data, error: null });
+          return (resolve: (value: unknown) => unknown) => resolve({ data: chamadas++ === 0 ? data : [], error: null });
         }
         return () => chain;
       },
@@ -42,6 +45,7 @@ function conversa(contactId: string, phoneNumber: string) {
       demanda_id: null,
       demanda_revision: null,
       sent_at: "2026-09-01T10:00:00.000Z",
+      created_at: "2026-09-01T10:00:01.000Z",
     }],
     contacts: {
       tags: [],
@@ -63,8 +67,7 @@ describe("sweep de silêncio no pré-go-live", () => {
       ]),
     );
 
-    await expect(
-      db.loadSilentContactIds("org", "2026-09-02T10:00:00.000Z", []),
-    ).resolves.toEqual(["tester"]);
+    const contatos = await db.loadSilentContacts("org", "2026-09-02T10:00:00.000Z", []);
+    expect(contatos.map((c) => c.contact_id)).toEqual(["tester"]);
   });
 });
