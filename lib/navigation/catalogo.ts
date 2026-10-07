@@ -386,6 +386,15 @@ export const NAV_CATALOG = [
     minRole: "manager",
   },
   {
+    href: "/app/ai/midias",
+    label: "Biblioteca de mídias",
+    description: "Imagens e vídeos que o agente e os follow-ups podem enviar, com o termo de uso de imagem.",
+    icon: "ImageSquare",
+    group: "ia",
+    section: "Ensinar o agente",
+    minRole: "manager",
+  },
+  {
     href: "/app/ai/memory",
     label: "Memória",
     description: "O que o agente já aprendeu sobre a sua operação e reaproveita.",
