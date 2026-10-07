@@ -101,8 +101,9 @@ function silenceSweepDb(): SilenceSweepDb {
         organization_id: string;
         active_version_id: string | null;
         trigger_config: { kind: string; params?: { threshold_minutes: number; segments?: string[] } };
+        active_since: Date;
       }>(
-        `select id, organization_id, active_version_id, trigger_config
+        `select id, organization_id, active_version_id, trigger_config, active_since
          from followup_flow_pointers
          where status = 'active' and active_version_id is not null`,
       );
@@ -115,27 +116,72 @@ function silenceSweepDb(): SilenceSweepDb {
           active_version_id: row.active_version_id,
           threshold_minutes: row.trigger_config.params!.threshold_minutes,
           segments: row.trigger_config.params!.segments ?? [],
+          active_since: row.active_since.toISOString(),
         });
       }
       return pointers;
     },
-    async loadSilentContactIds(orgId, cutoffIso, segments) {
-      const { rows } = await pool.query<{ contact_id: string; last_inbound_at: string; tags: string[]; is_blocked: boolean }>(
+    // O seed deste arquivo não cria mensagens: a última entrada é o
+    // `last_inbound_at` da conversa, e por isso `sent_at` e `created_at` da
+    // mensagem qualificante saem iguais aqui (na produção são duas colunas).
+    async loadSilentContacts(orgId, cutoffIso, segments, desdeIso) {
+      const { rows } = await pool.query<{
+        contact_id: string; last_inbound_at: Date; tags: string[]; is_blocked: boolean; is_anonymized: boolean;
+      }>(
         `select conv.contact_id, max(conv.last_inbound_at) as last_inbound_at,
-                c.tags as tags, c.is_blocked as is_blocked
+                c.tags as tags, c.is_blocked as is_blocked, c.is_anonymized as is_anonymized
          from conversations conv
          join contacts c on c.id = conv.contact_id
          where conv.organization_id = $1 and conv.last_inbound_at is not null
            and conv.status <> all($2::text[])
-         group by conv.contact_id, c.tags, c.is_blocked`,
-        [orgId, CONVERSATION_TERMINAL_STATUSES],
+           and ($3::timestamptz is null or conv.last_inbound_at > $3)
+         group by conv.contact_id, c.tags, c.is_blocked, c.is_anonymized`,
+        [orgId, CONVERSATION_TERMINAL_STATUSES, desdeIso ?? null],
       );
       const cutoff = new Date(cutoffIso).getTime();
       return rows
-        .filter((r) => !r.is_blocked)
-        .filter((r) => new Date(r.last_inbound_at).getTime() <= cutoff)
+        .filter((r) => !r.is_blocked && !r.is_anonymized)
+        .filter((r) => r.last_inbound_at.getTime() <= cutoff)
         .filter((r) => segments.length === 0 || segments.some((s) => r.tags.includes(s)))
-        .map((r) => r.contact_id);
+        .map((r) => ({
+          contact_id: r.contact_id,
+          ultima_entrada_em: r.last_inbound_at.toISOString(),
+          ultima_entrada_gravada_em: r.last_inbound_at.toISOString(),
+        }));
+    },
+    // Mesma pergunta do adaptador de produção: maior started_at deste ponteiro,
+    // qualquer status, a partir de `desde`.
+    async loadUltimaInscricaoNoPonteiro(orgId, pointerId, contactIds, desdeIso) {
+      const { rows } = await pool.query<{ contact_id: string; ultima: Date }>(
+        `select contact_id, max(started_at) as ultima from followup_enrollments
+          where organization_id = $1 and pointer_id = $2 and contact_id = any($3::uuid[])
+            and started_at >= $4
+          group by contact_id`,
+        [orgId, pointerId, contactIds, desdeIso],
+      );
+      return new Map(rows.map((r) => [r.contact_id, r.ultima.toISOString()]));
+    },
+    // Mesma pergunta do adaptador de produção: inscrição TERMINAL deste
+    // ponteiro com updated_at >= corte (cooldown pela conclusão, 2240b215e).
+    async loadContactIdsEmCooldown(orgId, pointerId, contactIds, cutoffIso) {
+      const { rows } = await pool.query<{ contact_id: string }>(
+        `select distinct contact_id from followup_enrollments
+          where organization_id = $1 and pointer_id = $2 and contact_id = any($3::uuid[])
+            and status not in ('active','waiting_reply','paused_handoff','paused_manual')
+            and updated_at >= $4`,
+        [orgId, pointerId, contactIds, cutoffIso],
+      );
+      return new Set(rows.map((r) => r.contact_id));
+    },
+    // Mesma pergunta do adaptador de produção: vivo em QUALQUER fluxo da org.
+    async loadContatosComInscricaoViva(orgId, contactIds) {
+      const { rows } = await pool.query<{ contact_id: string }>(
+        `select distinct contact_id from followup_enrollments
+          where organization_id = $1 and contact_id = any($2::uuid[])
+            and status in ('active','waiting_reply','paused_handoff','paused_manual')`,
+        [orgId, contactIds],
+      );
+      return new Set(rows.map((r) => r.contact_id));
     },
     async loadTriggerNodeId(orgId, versionId) {
       const { rows } = await pool.query<{ graph: FlowGraph }>(
@@ -208,10 +254,15 @@ async function seedOrg(org: string): Promise<void> {
   );
 }
 
-async function seedContact(org: string, opts?: { tags?: string[]; isBlocked?: boolean }): Promise<string> {
+async function seedContact(
+  org: string,
+  opts?: { tags?: string[]; isBlocked?: boolean; isAnonymized?: boolean },
+): Promise<string> {
+  // `anonymized_at` acompanha por causa do CHECK `contacts_anonymized_locked`.
   const { rows } = await pool.query<{ id: string }>(
-    `insert into contacts (organization_id, display_name, tags, is_blocked) values ($1, 'Silence Contact', $2, $3) returning id`,
-    [org, opts?.tags ?? [], opts?.isBlocked ?? false],
+    `insert into contacts (organization_id, display_name, tags, is_blocked, is_anonymized, anonymized_at)
+     values ($1, 'Silence Contact', $2, $3, $4, case when $4 then now() end) returning id`,
+    [org, opts?.tags ?? [], opts?.isBlocked ?? false, opts?.isAnonymized ?? false],
   );
   return rows[0]!.id;
 }
@@ -267,9 +318,14 @@ async function seedConversationAt(org: string, contactId: string, atIso: string)
   return rows[0]!.id;
 }
 
+/**
+ * `activeSince` é a vigência do ponteiro (migration 0324). O padrão é 30 dias
+ * atrás, porque os casos deste arquivo semeiam silêncio NO PASSADO e a regra
+ * "sem passado" recusaria silêncio anterior a ela. `"now"` = vigência agora.
+ */
 async function seedSilenceFlow(
   org: string,
-  opts?: { thresholdMinutes?: number; segments?: string[] },
+  opts?: { thresholdMinutes?: number; segments?: string[]; activeSince?: "now" },
 ): Promise<{ pointerId: string; versionId: string }> {
   const graph: FlowGraph = {
     nodes: [
@@ -288,9 +344,9 @@ async function seedSilenceFlow(
     params: { threshold_minutes: opts?.thresholdMinutes ?? 60, segments: opts?.segments ?? [] },
   };
   const { rows: pointerRows } = await pool.query<{ id: string }>(
-    `insert into followup_flow_pointers (organization_id, name, status, active_version_id, trigger_config)
-     values ($1, $2, 'active', $3, $4) returning id`,
-    [org, `Silence Flow ${Date.now()}-${Math.random()}`, versionId, JSON.stringify(triggerConfig)],
+    `insert into followup_flow_pointers (organization_id, name, status, active_version_id, trigger_config, active_since)
+     values ($1, $2, 'active', $3, $4, case when $5 then now() else now() - interval '30 days' end) returning id`,
+    [org, `Silence Flow ${Date.now()}-${Math.random()}`, versionId, JSON.stringify(triggerConfig), opts?.activeSince === "now"],
   );
   return { pointerId: pointerRows[0]!.id, versionId };
 }
@@ -355,10 +411,12 @@ describe("runSilenceSweep — enrolla contato silencioso gateado, sem duplicar",
     expect(enrollment.rows[0]!.current_node_id).toBe("t1");
     expect(enrollment.rows[0]!.status).toBe("active");
 
-    // 2ª varredura: unique-live index barra duplicata — vira skipped_existing, não erro.
+    // 2ª varredura: mesmo episódio — nem tenta o insert, nem conta como
+    // skipped_existing (que audita). Vivo DESTE ponteiro não gera auditoria.
     const summary2 = await runSilenceSweep(deps);
     expect(summary2.enrolled).toBe(0);
-    expect(summary2.skipped_existing).toBeGreaterThanOrEqual(1);
+    expect(summary2.skipped_same_episode).toBeGreaterThanOrEqual(1);
+    expect(summary2.skipped_existing).toBe(0);
     expect(await countEnrollments(pointerId, contactId)).toBe(1);
 
     expect(versionId).toBeTruthy(); // sanity — version foi realmente usada (current_node_id veio do grafo pinado nela)
@@ -503,6 +561,155 @@ describe("runSilenceSweep — redução anti-spam (multi-conversa + never-inboun
     const summary = await runSilenceSweep({ db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK });
     expect(summary.enrolled).toBe(0);
     expect(await countEnrollments(pointerId, contactId)).toBe(0);
+  });
+});
+
+// ---- 3c. anonimizado fica fora ----------------------------------------
+// Sem caso aqui de propósito: o filtro mora no adaptador, e o adaptador deste
+// arquivo é dublê — um caso aqui provaria o espelho, não a produção. A prova é
+// `lib/followup/silence-sweep-consultas.test.ts` ("anonimizado fica fora"); a
+// defesa que roda em `runSilenceSweep` (inscrição cancelada no mesmo silêncio
+// não volta) é o caso `cancelled` do bloco de episódio abaixo.
+
+// ---- 3d. sem passado: silêncio anterior à vigência do ponteiro -----------
+
+describe("runSilenceSweep — sem passado (active_since)", () => {
+  it("fluxo que passou a valer AGORA não cobra quem calou antes → 0 inscrições", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org, { thresholdMinutes: 30, activeSince: "now" });
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [pointerId] });
+    const contactId = await seedContact(org);
+    await seedConversation(org, contactId, 90);
+
+    const summary = await runSilenceSweep({ db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK });
+    expect(summary.pointers_gated_out).toBe(0);
+    // Sem `skipped_before_activation` aqui: o piso da vigência vai à consulta
+    // (last_inbound_at > active_since) e a conversa nem volta. O contador é
+    // da regra em `runSilenceSweep`, vigiada em silence-sweep-episodio.test.ts.
+    expect(await countEnrollments(pointerId, contactId)).toBe(0);
+  });
+
+  it("desativar e publicar de novo zera a vigência: quem calou antes deixa de entrar", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org, { thresholdMinutes: 30 }); // vigência há 30 dias
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [pointerId] });
+    const a = await seedContact(org);
+    await seedConversation(org, a, 90);
+    const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
+    expect((await runSilenceSweep(deps)).enrolled).toBe(1);
+
+    // desativar → publicar (fn_publish_followup_flow_version põe status='active')
+    await pool.query(`update followup_flow_pointers set status = 'disabled' where id = $1`, [pointerId]);
+    await pool.query(`update followup_flow_pointers set status = 'active' where id = $1`, [pointerId]);
+    const b = await seedContact(org);
+    await seedConversation(org, b, 90);
+    await runSilenceSweep(deps);
+    expect(await countEnrollments(pointerId, b)).toBe(0);
+  });
+});
+
+// ---- 3e. episódio: a sequência não recomeça sozinha --------------------
+
+async function seedInscricao(
+  org: string,
+  flow: { pointerId: string; versionId: string },
+  contactId: string,
+  status: "completed" | "dead" | "cancelled",
+  startedAgoMinutes: number,
+  /** Há quanto tempo TERMINOU (completed_at e updated_at, como o motor grava). Padrão: agora. */
+  endedAgoMinutes = 0,
+): Promise<void> {
+  await pool.query(
+    `insert into followup_enrollments
+       (organization_id, pointer_id, version_id, contact_id, current_node_id, status, next_eval_at, started_at,
+        cancel_reason, completed_at, updated_at)
+     values ($1, $2, $3, $4, 't1', $5, null, now() - ($6 || ' minutes')::interval,
+             case when $5 = 'cancelled' then 'atendimento_humano' end,
+             case when $5 <> 'cancelled' then now() - ($7 || ' minutes')::interval end,
+             now() - ($7 || ' minutes')::interval)`,
+    [org, flow.pointerId, flow.versionId, contactId, status, String(startedAgoMinutes), String(endedAgoMinutes)],
+  );
+}
+
+describe("runSilenceSweep — episódio de silêncio: a sequência não recomeça", () => {
+  for (const status of ["completed", "dead", "cancelled"] as const) {
+    it(`inscrição ${status} no mesmo silêncio → não reinscreve em 3 varreduras`, async () => {
+      const org = nextOrgId();
+      await seedOrg(org);
+      const flow = await seedSilenceFlow(org, { thresholdMinutes: 30 });
+      await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [flow.pointerId] });
+      const contactId = await seedContact(org);
+      await seedConversation(org, contactId, 90); // calado há 90 min
+      await seedInscricao(org, flow, contactId, status, 60); // começou depois da última entrada
+
+      const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
+      for (let i = 0; i < 3; i++) {
+        const s = await runSilenceSweep(deps);
+        expect(s.enrolled).toBe(0);
+        expect(s.skipped_same_episode).toBeGreaterThanOrEqual(1);
+      }
+      expect(await countEnrollments(flow.pointerId, contactId)).toBe(1);
+    });
+  }
+
+  it("resposta depois da inscrição + novo silêncio → episódio novo, reinscreve", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const flow = await seedSilenceFlow(org, { thresholdMinutes: 30 });
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [flow.pointerId] });
+    const contactId = await seedContact(org);
+    await seedConversation(org, contactId, 40); // respondeu há 40 min (calado > 30)
+    await seedInscricao(org, flow, contactId, "completed", 60, 45); // começou e terminou antes da resposta
+
+    const s = await runSilenceSweep({ db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK });
+    expect(s.enrolled).toBe(1);
+    expect(await countEnrollments(flow.pointerId, contactId)).toBe(2);
+  });
+
+  it("resposta DURANTE a inscrição, que termina agora → não encosta outra sequência; só depois do limiar contado do fim", async () => {
+    // cancel_on_reply desligado (o padrão): a resposta acorda a inscrição e o
+    // fluxo segue até o End. A resposta é posterior ao started_at (episódio
+    // novo), e sem o cooldown pela conclusão a mensagem 1 saía no tick seguinte.
+    const org = nextOrgId();
+    await seedOrg(org);
+    const flow = await seedSilenceFlow(org, { thresholdMinutes: 30 });
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [flow.pointerId] });
+    const contactId = await seedContact(org);
+    await seedConversation(org, contactId, 50); // respondeu há 50 min
+    await seedInscricao(org, flow, contactId, "completed", 60, 0); // começou há 60, terminou agora
+
+    const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
+    for (let i = 0; i < 3; i++) {
+      const s = await runSilenceSweep(deps);
+      expect(s.enrolled).toBe(0);
+      expect(s.skipped_cooldown).toBeGreaterThanOrEqual(1);
+    }
+    expect(await countEnrollments(flow.pointerId, contactId)).toBe(1);
+
+    const depoisDoLimiar = () => new Date(Date.now() + 31 * 60_000);
+    expect((await runSilenceSweep({ ...deps, clock: depoisDoLimiar })).enrolled).toBe(1);
+  });
+
+  it("conclusão gravada como o motor grava (UPDATE, não o motor rodando): as varreduras seguintes não recomeçam", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const flow = await seedSilenceFlow(org, { thresholdMinutes: 30 });
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [flow.pointerId] });
+    const contactId = await seedContact(org);
+    await seedConversation(org, contactId, 90);
+
+    const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
+    expect((await runSilenceSweep(deps)).enrolled).toBe(1);
+    await pool.query(
+      `update followup_enrollments set status = 'completed', completed_at = now(), next_eval_at = null, updated_at = now()
+        where pointer_id = $1 and contact_id = $2`,
+      [flow.pointerId, contactId],
+    );
+    await runSilenceSweep(deps);
+    await runSilenceSweep(deps);
+    expect(await countEnrollments(flow.pointerId, contactId)).toBe(1);
   });
 });
 
@@ -668,7 +875,15 @@ describe("runSilenceSweep — 1 follow-up vivo por lead ORG-WIDE (Task 8.6, furo
     const contactId = await seedContact(org);
     await seedConversation(org, contactId, 90); // silencioso p/ os dois
 
-    const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
+    // Este caso mede o ÍNDICE: o pré-filtro de inscrição viva da varredura fica
+    // desligado aqui, senão ele mesmo pularia o 2º fluxo e o RED (o spam do
+    // índice antigo) nunca apareceria. O índice é a garantia; o pré-filtro é
+    // economia — e tem caso próprio logo abaixo.
+    const deps = {
+      db: { ...silenceSweepDb(), loadContatosComInscricaoViva: async () => new Set<string>() },
+      gateDb: pgGateDb(),
+      clock: CLOCK,
+    };
 
     try {
       // RED — índice como era ANTES da 0062: (pointer_id, contact_id)
@@ -692,6 +907,39 @@ describe("runSilenceSweep — 1 follow-up vivo por lead ORG-WIDE (Task 8.6, furo
       await pool.query(`delete from followup_enrollments where contact_id = $1`, [contactId]);
       await setOneLiveIndex("organization_id, contact_id");
     }
+  });
+
+  it("com o pré-filtro, o 2º fluxo nem TENTA inscrever quem já está vivo (sem 23505 a cada minuto)", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const flowA = await seedSilenceFlow(org, { thresholdMinutes: 30 });
+    const flowB = await seedSilenceFlow(org, { thresholdMinutes: 30 });
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [flowA.pointerId, flowB.pointerId] });
+    const contactId = await seedContact(org);
+    await seedConversation(org, contactId, 90);
+
+    const base = silenceSweepDb();
+    const tentativas: string[] = [];
+    const db: SilenceSweepDb = {
+      ...base,
+      insertEnrollment: async (input) => {
+        if (input.contact_id === contactId) tentativas.push(input.pointer_id);
+        return base.insertEnrollment(input);
+      },
+    };
+    const deps = { db, gateDb: pgGateDb(), clock: CLOCK };
+
+    const primeira = await runSilenceSweep(deps);
+    expect(primeira.enrolled).toBe(1);
+    expect(tentativas).toHaveLength(1); // o 2º fluxo leu "já vivo" e pulou sem tentar
+    expect(primeira.skipped_existing).toBeGreaterThanOrEqual(1);
+
+    // os ticks seguintes (1×/min em produção) também não tentam: era aqui que
+    // nasciam os ~124 mil 23505 por dia
+    await runSilenceSweep(deps);
+    await runSilenceSweep(deps);
+    expect(tentativas).toHaveLength(1);
+    expect(await countLiveForContact(org, contactId)).toBe(1);
   });
 
   it("contato JÁ vivo no fluxo A → sweep do fluxo B NÃO enrolla (índice do baseline)", async () => {
@@ -792,5 +1040,216 @@ describe("dedup 0062 — >1 enrollment vivo pro mesmo (org,contact) vira 1 vivo 
       await pool.query(`delete from followup_enrollments where contact_id = $1`, [contactId]);
       await setOneLiveIndex("organization_id, contact_id");
     }
+  });
+});
+
+// ---- 9. vigência do ponteiro (active_since, migration 0324) -------------
+
+/**
+ * `followup_flow_pointers.active_since`: desde quando o ponteiro vale com o
+ * status e o gatilho (kind + segmentos) atuais. O trigger
+ * `trg_followup_ponteiro_marca_vigencia` a avança SÓ quando muda o status, o
+ * `kind` ou os `segments` — publicar versão nova num fluxo já ativo, mexer no
+ * limiar ou no `cancel_on_reply`, salvar rascunho ou renomear não descartam os
+ * episódios em andamento.
+ */
+describe("vigência do ponteiro (active_since)", () => {
+  async function vigencia(pointerId: string): Promise<Date> {
+    const { rows } = await pool.query<{ active_since: Date }>(
+      `select active_since from followup_flow_pointers where id = $1`,
+      [pointerId],
+    );
+    return rows[0]!.active_since;
+  }
+  /** Recua a vigência 1 dia mexendo SÓ nela — o WHEN do trigger não casa. */
+  async function recuar(pointerId: string): Promise<Date> {
+    await pool.query(`update followup_flow_pointers set active_since = now() - interval '1 day' where id = $1`, [
+      pointerId,
+    ]);
+    const v = await vigencia(pointerId);
+    expect(Date.now() - v.getTime()).toBeGreaterThan(23 * 3600_000); // o próprio recuo não disparou o trigger
+    return v;
+  }
+  const avancou = (v: Date) => expect(Date.now() - v.getTime()).toBeLessThan(60_000);
+
+  it("(a) ponteiro novo nasce com active_since ≈ now()", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { rows } = await pool.query<{ active_since: Date }>(
+      `insert into followup_flow_pointers (organization_id, name, status, trigger_config)
+       values ($1, $2, 'active', '{"kind":"silence","params":{"threshold_minutes":30}}') returning active_since`,
+      [org, `vig-${Date.now()}-${Math.random()}`],
+    );
+    avancou(rows[0]!.active_since);
+  });
+
+  it("(b) versão nova num fluxo já ativo NÃO muda a vigência (publicar e rollback só trocam a versão)", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    const antes = await recuar(pointerId);
+    const { rows } = await pool.query<{ id: string }>(
+      `insert into followup_flow_versions (organization_id, graph) select organization_id, graph from followup_flow_versions
+        where id = (select active_version_id from followup_flow_pointers where id = $1) returning id`,
+      [pointerId],
+    );
+    await pool.query(`update followup_flow_pointers set active_version_id = $2 where id = $1`, [pointerId, rows[0]!.id]);
+    expect(await vigencia(pointerId)).toEqual(antes);
+  });
+
+  it("(c) desativar e reativar avança a vigência nas duas vezes", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    await recuar(pointerId);
+    await pool.query(`update followup_flow_pointers set status = 'disabled' where id = $1`, [pointerId]);
+    avancou(await vigencia(pointerId));
+    await recuar(pointerId);
+    await pool.query(`update followup_flow_pointers set status = 'active' where id = $1`, [pointerId]);
+    avancou(await vigencia(pointerId));
+  });
+
+  it("(d) trocar o kind do gatilho, ou os segmentos, avança a vigência", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    await recuar(pointerId);
+    await pool.query(`update followup_flow_pointers set trigger_config = '{"kind":"manual"}' where id = $1`, [pointerId]);
+    avancou(await vigencia(pointerId));
+    await pool.query(
+      `update followup_flow_pointers set trigger_config = '{"kind":"silence","params":{"threshold_minutes":60}}' where id = $1`,
+      [pointerId],
+    );
+    await recuar(pointerId);
+    await pool.query(
+      `update followup_flow_pointers
+          set trigger_config = '{"kind":"silence","params":{"threshold_minutes":60,"segments":["vip"]}}' where id = $1`,
+      [pointerId],
+    );
+    avancou(await vigencia(pointerId));
+  });
+
+  it("(e) rascunho, nome e handoff_policy NÃO mudam a vigência", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    const antes = await recuar(pointerId);
+    await pool.query(
+      `update followup_flow_pointers
+          set draft_graph = '{"nodes":[],"edges":[]}', name = name || ' (editado)', handoff_policy = 'cancel'
+        where id = $1`,
+      [pointerId],
+    );
+    expect(await vigencia(pointerId)).toEqual(antes);
+  });
+
+  it("(f) o mesmo gatilho, o limiar, o cancel_on_reply e segmentos [] ↔ ausentes NÃO mudam a vigência", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org); // threshold 60, segments []
+    const antes = await recuar(pointerId);
+    await pool.query(`update followup_flow_pointers set trigger_config = trigger_config where id = $1`, [pointerId]);
+    await pool.query(
+      `update followup_flow_pointers
+          set trigger_config = '{"kind":"silence","cancel_on_reply":true,"params":{"threshold_minutes":120}}' where id = $1`,
+      [pointerId],
+    );
+    expect(await vigencia(pointerId)).toEqual(antes);
+  });
+
+  it("(g) o índice da consulta de episódio existe, idêntico ao 0411 do original", async () => {
+    const { rows } = await pool.query<{ indexdef: string }>(
+      `select indexdef from pg_indexes
+        where schemaname = 'public' and indexname = 'idx_followup_enrollments_pointer_contact_cooldown'`,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.indexdef).toMatch(/\(organization_id, pointer_id, contact_id, updated_at\)/);
+  });
+
+  /** Publica pelo caminho real (fn_publish_ai_agent_version): rascunho novo → publicado. */
+  async function publicarAgente(org: string, agentId: string | null, pointerIds: string[]): Promise<string> {
+    const id =
+      agentId ??
+      (
+        await pool.query<{ id: string }>(
+          `insert into ai_agents (organization_id, name, system_prompt) values ($1, $2, 'prompt') returning id`,
+          [org, `Arma ${Date.now()}-${Math.random()}`],
+        )
+      ).rows[0]!.id;
+    const sessionId = await seedChannelSession(org);
+    const { rows } = await pool.query<{ id: string }>(
+      `insert into ai_agent_versions
+         (organization_id, agent_id, version_number, system_prompt, provider, model, channel_session_id, status, followup)
+       values ($1, $2, (select coalesce(max(version_number), 0) + 1 from ai_agent_versions where agent_id = $2),
+               'prompt', 'anthropic', 'claude-sonnet-4-6', $3, 'draft', $4)
+       returning id`,
+      [org, id, sessionId, JSON.stringify({ enabled: true, flow_pointer_ids: pointerIds })],
+    );
+    await pool.query(`select * from fn_publish_ai_agent_version($1, $2, $3, true, null)`, [org, id, rows[0]!.id]);
+    return id;
+  }
+
+  it("(i) armar num agente um ponteiro ativo há 30 dias avança a vigência; quem calou antes não entra", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org, { thresholdMinutes: 30 }); // vigência há 30 dias
+    const contactId = await seedContact(org);
+    await seedConversation(org, contactId, 90);
+    await publicarAgente(org, null, [pointerId]);
+    avancou(await vigencia(pointerId));
+    expect((await runSilenceSweep({ db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK })).enrolled).toBe(0);
+    expect(await countEnrollments(pointerId, contactId)).toBe(0);
+  });
+
+  it("(j) republicar o agente com o ponteiro ainda armado NÃO muda a vigência", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    const agentId = await publicarAgente(org, null, [pointerId]);
+    const antes = await recuar(pointerId);
+    await publicarAgente(org, agentId, [pointerId]);
+    expect(await vigencia(pointerId)).toEqual(antes);
+  });
+
+  it("(k) desarmar e armar de novo avança a vigência", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    const agentId = await publicarAgente(org, null, [pointerId]);
+    const antes = await recuar(pointerId);
+    await publicarAgente(org, agentId, []); // desarma
+    expect(await vigencia(pointerId)).toEqual(antes);
+    await publicarAgente(org, agentId, [pointerId]); // arma de novo
+    avancou(await vigencia(pointerId));
+  });
+
+  it("(l) um segundo agente armando o que outro já arma NÃO muda a vigência", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org);
+    await publicarAgente(org, null, [pointerId]);
+    const antes = await recuar(pointerId);
+    await publicarAgente(org, null, [pointerId]);
+    expect(await vigencia(pointerId)).toEqual(antes);
+  });
+
+  it("(m) a função do trigger de armar não é executável por anon nem por PUBLIC", async () => {
+    const { rows } = await pool.query<{ anon: boolean; publico: boolean }>(
+      `select has_function_privilege('anon', 'public.fn_followup_ponteiro_armado_marca_vigencia()', 'execute') as anon,
+              exists (select 1 from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                       where p.oid = 'public.fn_followup_ponteiro_armado_marca_vigencia()'::regprocedure
+                         and a.grantee = 0 and a.privilege_type = 'EXECUTE') as publico`,
+    );
+    expect(rows[0]).toEqual({ anon: false, publico: false });
+  });
+
+  it("(h) a função do trigger não é executável por anon nem por PUBLIC", async () => {
+    const { rows } = await pool.query<{ anon: boolean; publico: boolean }>(
+      `select has_function_privilege('anon', 'public.fn_followup_ponteiro_marca_vigencia()', 'execute') as anon,
+              exists (select 1 from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                       where p.oid = 'public.fn_followup_ponteiro_marca_vigencia()'::regprocedure
+                         and a.grantee = 0 and a.privilege_type = 'EXECUTE') as publico`,
+    );
+    expect(rows[0]).toEqual({ anon: false, publico: false });
   });
 });

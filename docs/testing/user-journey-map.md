@@ -392,6 +392,30 @@ pelo critério que já estava escrito lá: decisão humana não colapsa.
 
 ---
 
+## J9c — A sequência por silêncio não recomeça sozinha `[P1]` (2026-10-06)
+
+Contexto do código: `lib/followup/silence-sweep.ts` (varredura a cada minuto) e a
+migration 0324 (`followup_flow_pointers.active_since`). Spec:
+`docs/superpowers/specs/2026-10-06-followup-nao-recomeca-design.md`. Achado ao
+desenhar o funil do Dr. André: depois que a sequência terminava sem resposta, o
+contato calado era inscrito de novo no minuto seguinte, para sempre.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J9c.1 | Sequência termina (End), contato segue calado | nenhuma reinscrição nas varreduras seguintes | PASS (invariante, laço real) |
+| J9c.2 | Inscrição `completed`/`dead`/`cancelled` no mesmo silêncio | não reinscreve | PASS (invariante) |
+| J9c.3 | Contato responde e cala de novo | sequência nova do primeiro toque | PASS (invariante) |
+| J9c.4 | Ativar o fluxo com conversas caladas há meses | ninguém que calou antes da ativação entra | PASS (invariante + unit) |
+| J9c.5 | Desativar e publicar de novo | vigência zera; republicar versão num fluxo ativo não zera | PASS (invariante) |
+| J9c.6 | Contato anonimizado calado | não entra | PASS (unit da consulta de produção) |
+| J9c.7 | Mais de 1000 conversas abertas | todas consideradas (keyset até a página vazia) | PASS (unit) |
+| J9c.8 | Pela tela, ponta a ponta | `followup-journey` e `j20-elegibilidade-followup` recuam a vigência que semeiam | NÃO RODADO localmente — prova no `e2e` do CI |
+
+**Limite declarado:** "qualquer resposta encerra a sequência" só vale com
+"cancelar ao responder" ligado no gatilho (vem desligado).
+
+---
+
 ## J9b — Limitar o horário em que os follow-ups mandam mensagem `[P1]`
 
 Contexto do código: `settings.followups.bloqueios.janela` é respeitada pelo executor
@@ -974,7 +998,7 @@ ação `send_ai_message`, retomada manual (`lib/escalacao/retomada.ts`).
 | J20.9 | Nova mensagem genérica "oi" | IA NÃO responde | **UNIT** — `campanha.test.ts` "teste 9" + `gate.test.ts` |
 | J20.10 | Conversa marcada human_only (`force_human`) | IA nunca responde até reativação explícita | **UNIT** — `gate.test.ts` "teste 10", `drain.test.ts` "force_human" |
 | J20.11 | Follow-up em lead Respondi elegível | funciona | **CÓDIGO** — silence-sweep só barra quem o gate barra |
-| J20.12 | Follow-up em cliente atual (não autorizado, gate allowlist) | NÃO enrola | **CÓDIGO** — `silence-sweep.ts` `loadSilentContactIds` consulta a regra compartilhada e pula `!permitidoPeloGate`; **E2E** — `tests/e2e/j20-elegibilidade-followup.spec.ts` (fluxo de silêncio publicado pela API + cron real: silencioso autorizado → nasce `followup_enrollments`; silencioso NÃO autorizado, mesmo canal → nenhum enrollment) |
+| J20.12 | Follow-up em cliente atual (não autorizado, gate allowlist) | NÃO enrola | **CÓDIGO** — `silence-sweep.ts` `loadSilentContacts` consulta a regra compartilhada e pula `!permitidoPeloGate`; **E2E** — `tests/e2e/j20-elegibilidade-followup.spec.ts` (fluxo de silêncio publicado pela API + cron real: silencioso autorizado → nasce `followup_enrollments`; silencioso NÃO autorizado, mesmo canal → nenhum enrollment) |
 | J20.13 | Reinício do worker com backlog de eventos pending | zero disparos: cada evento cujo inbound já foi superado vira `done` sem job | **UNIT** — `drain.test.ts` "evento superado por inbound mais recente" |
 | J20.14 | Submissão antiga (fora do TTL) | NÃO reativa a IA sozinha | **UNIT** — `gate.test.ts` "submissão antiga (fora da janela)", `drain.test.ts` "autorização EXPIRADA" |
 | J20.15 | Org SEM versão de agente publicada (caminho legado `ai-response-worker`), gate allowlist, contato não autorizado | IA NÃO responde por este caminho tampouco | **UNIT** — `ai-response-worker-elegibilidade.test.ts` (skip `nao_elegivel_para_ia` antes de ler mensagem/agente; fail-closed em erro de leitura) |
