@@ -703,6 +703,11 @@ function VisaoDeMes({
                     <div
                       key={c.id}
                       data-testid={`chip-mes-${c.id}`}
+                      // A mesma origem que o card da semana carrega: a ocupação
+                      // do Google não tem id de compromisso (o `c.id` dela é
+                      // derivado de dono + fatia), e é pela origem que se aponta
+                      // para ela. Porte de melgarafael/DeskcommCRM 0d1486806.
+                      data-origem={c.origem}
                       className="flex items-center gap-1 rounded-sm px-1 py-0.5"
                       style={{ background: fundoDaTrilha(trilha, 14) }}
                     >

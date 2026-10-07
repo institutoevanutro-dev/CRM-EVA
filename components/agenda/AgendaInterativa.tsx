@@ -34,10 +34,10 @@ import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
  *
  * `useHorariosLivres` é o mesmo hook que o painel de marcação usa, batendo na
  * mesma rota que o agente usa. A diferença é só o recorte: o painel pergunta
- * pelos próximos 30 dias, a grade pergunta pela janela que ela desenha. Duas
- * perguntas, uma regra — então tela e agente nunca discordam sobre o que está
- * livre. Reimplementar jornada aqui seria mais rápido e criaria exatamente essa
- * discordância, que aparece como 422 na cara de quem clicou.
+ * pelo mês que ele está mostrando, a grade pergunta pela janela que ela desenha.
+ * Duas perguntas, uma regra — então tela e agente nunca discordam sobre o que
+ * está livre. Reimplementar jornada aqui seria mais rápido e criaria exatamente
+ * essa discordância, que aparece como 422 na cara de quem clicou.
  */
 /**
  * Quantos tipos ainda cabem como fileira de botões antes de virar lista.
@@ -289,7 +289,9 @@ export function AgendaInterativa({
           {motivo === "sem-jornada" ? (
             <>
               <span className="font-semibold text-text">
-                {t("Você ainda não publicou seus horários de atendimento.")}
+                {/* Sem "Você": a grade é a de quem atende o tipo, que pode não
+                    ser quem está logado (a recepção abre a agenda da médica). */}
+                {t("A jornada de atendimento ainda não foi publicada.")}
               </span>{" "}
               {t("Sem eles ninguém consegue marcar clicando na grade — nem você, nem o agente.")}
             </>
