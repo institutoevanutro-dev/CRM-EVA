@@ -43,6 +43,7 @@ import {
 } from "@/lib/ui/icons";
 
 import {
+  GRUPO_NO_RODAPE,
   NAV_CATALOG,
   NAV_GROUPS,
   type NavMetadata,
@@ -166,4 +167,87 @@ export function searchable(
     destinosDaInterface(settings, isPlatformAdmin, role).map((d) => d.href),
   );
   return NAV_DESTINATIONS.filter((d) => visible.has(d.href));
+}
+
+/* ── Menu por área (spec docs/superpowers/specs/2026-10-07-cores-e-menu-design.md) ──
+ * O menu lateral mostra ÁREAS (Início + um item por grupo) e cada área mostra suas telas
+ * como abas no topo (`components/shell/AbasDaArea.tsx`). `sidebar: true` no catálogo passa
+ * a significar "aba principal"; as demais telas do grupo vão para o "Mais". */
+
+export type AreaId = "inicio" | NavGroupId;
+export interface AreaDoMenu {
+  id: AreaId;
+  label: string;
+  icon: PhosphorIcon;
+  /** Primeira aba visível da área (Configurações abre o próprio hub). */
+  href: string;
+}
+
+const MAX_ABAS_PRINCIPAIS = 5;
+
+// Telas que não estão no catálogo mas pertencem a uma área.
+// ponytail: mapa à mão; vira campo do catálogo se passar de meia dúzia.
+const ROTAS_FILHAS: Array<{ prefixo: string; area: NavGroupId; abaHref: string | null }> = [
+  { prefixo: "/app/pipelines/", area: "crm", abaHref: "/app/kanban" },
+  { prefixo: "/app/leads/", area: "crm", abaHref: null },
+];
+
+const ICONE_DA_AREA: Record<NavGroupId, PhosphorIcon> = {
+  atendimento: ICONS.Inbox,
+  crm: ICONS.Kanban,
+  ia: ICONS.Robot,
+  analise: ICONS.ChartLineUp,
+  organizacao: ICONS.Buildings,
+};
+
+/** Em que área (e em que aba) está a rota. `null` = rota fora do menu. */
+export function areaDaRota(pathname: string): { area: AreaId; abaHref: string | null } | null {
+  if (pathname === "/app/inicio") return { area: "inicio", abaHref: null };
+  const filha = ROTAS_FILHAS.find((r) => pathname.startsWith(r.prefixo));
+  if (filha) return { area: filha.area, abaHref: filha.abaHref };
+  let melhor: NavDestination | undefined;
+  for (const d of NAV_DESTINATIONS) {
+    if (d.href === "/app/inicio") continue;
+    const casa = pathname === d.href || pathname.startsWith(d.href + "/");
+    if (casa && (!melhor || d.href.length > melhor.href.length)) melhor = d;
+  }
+  if (melhor) return { area: melhor.group, abaHref: melhor.href };
+  const hub = NAV_GROUPS.find((g) => g.hub && pathname === g.hub.href);
+  return hub ? { area: hub.id, abaHref: null } : null;
+}
+
+/** Abas da área: até 5 principais (`sidebar: true`), o resto no "Mais". Só o que o papel vê. */
+export function abasDaArea(
+  area: NavGroupId,
+  isPlatformAdmin: boolean,
+  role: Role | null,
+  settings?: InterfaceSettings,
+): { principais: NavDestination[]; mais: NavDestination[] } {
+  const visivel = new Set(destinosDaInterface(settings, isPlatformAdmin, role).map((d) => d.href));
+  const todas = NAV_DESTINATIONS.filter(
+    (d) => d.group === area && d.href !== "/app/inicio" && visivel.has(d.href),
+  );
+  const principais = todas.filter((d) => d.sidebar).slice(0, MAX_ABAS_PRINCIPAIS);
+  return { principais, mais: todas.filter((d) => !principais.includes(d)) };
+}
+
+/** As áreas do menu lateral, na ordem dos grupos; área sem tela visível não aparece. */
+export function areasDoMenu(
+  isPlatformAdmin: boolean,
+  role: Role | null,
+  settings?: InterfaceSettings,
+): AreaDoMenu[] {
+  const visivel = new Set(destinosDaInterface(settings, isPlatformAdmin, role).map((d) => d.href));
+  const areas: AreaDoMenu[] = [];
+  if (visivel.has("/app/inicio")) {
+    areas.push({ id: "inicio", label: "Início", icon: ICONS.House, href: "/app/inicio" });
+  }
+  for (const g of NAV_GROUPS) {
+    const { principais, mais } = abasDaArea(g.id, isPlatformAdmin, role, settings);
+    const primeira = principais[0] ?? mais[0];
+    if (!primeira) continue;
+    const href = g.id === GRUPO_NO_RODAPE && g.hub ? g.hub.href : primeira.href;
+    areas.push({ id: g.id, label: g.label, icon: ICONE_DA_AREA[g.id], href });
+  }
+  return areas;
 }
