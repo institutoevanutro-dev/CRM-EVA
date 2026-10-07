@@ -6,6 +6,14 @@ type Admin = ReturnType<typeof createAdminClient>;
 type Contato = { id: string; name: string | null };
 export type ResultadoNomes = { consultados: number; atualizados: number; falhas: number };
 
+/**
+ * Quanto esperar antes de perguntar de novo ao financeiro pelo mesmo contato.
+ * Sem prazo, a fila dava a volta em poucas horas e regravava os mesmos ~500
+ * contatos sem nome o dia inteiro (medido em produção em 07/10/2026, com o
+ * banco já lento). O nome que o financeiro não tinha ontem raramente aparece hoje.
+ */
+export const DIAS_ENTRE_CONSULTAS_DE_NOME = 7;
+
 /** A consulta remota é isolada para testar a regra sem dados reais de pacientes. */
 export async function reconciliarNomes(
   contatos: Contato[],
@@ -37,13 +45,16 @@ export async function sincronizarNomesFinanceiro(
   admin: Admin,
   org: string,
   config: ConfigFinanceiro,
+  agora: Date = new Date(),
 ): Promise<ResultadoNomes> {
+  const corte = new Date(agora.getTime() - DIAS_ENTRE_CONSULTAS_DE_NOME * 86_400_000).toISOString();
   const { data, error } = await admin
     .from("contacts")
     .select("id,name")
     .eq("organization_id", org)
     .eq("is_anonymized", false)
     .or("name.is.null,name.eq.")
+    .or(`financeiro_name_lookup_at.is.null,financeiro_name_lookup_at.lt.${corte}`)
     .order("financeiro_name_lookup_at", { ascending: true, nullsFirst: true })
     .limit(40);
   if (error) throw new Error("Não foi possível selecionar contatos sem nome.");
