@@ -8,7 +8,7 @@ import {
   BEFORE_SEND_GATES,
   type GateContext,
 } from "@/lib/agent-engine/guardrails/before-send";
-import { execucaoChecaAgenda } from "@/lib/agent-engine/agent/inbound-turn";
+import { confirmouPresenca, execucaoChecaAgenda } from "@/lib/agent-engine/agent/inbound-turn";
 import { PACING_DEFAULTS } from "@/lib/agent-engine/pacing/defaults";
 import { SPINNING_DEFAULTS } from "@/lib/agent-engine/spinning/defaults";
 
@@ -325,6 +325,7 @@ describe("fiação do gate — a EXECUÇÃO da ferramenta de agenda arma o sinal
       /ferramentas:\s*agentConfig === null \? \[\] : ferramentasDeAgendaDoAgente\(agentConfig\.toolIds\)/,
     );
     expect(corpo).toMatch(/toolCalledThisTurn:\s*agendaToolCalledThisTurn/);
+    expect(corpo).toMatch(/presencaConfirmadaNoTurno:\s*presencaConfirmadaNoTurno/);
   });
 
   it("as três tools de agenda são marcadas na montagem — não só crm_book_appointment", () => {
@@ -513,18 +514,49 @@ describe("revisão #140 — confirmação de presença e convênio não são pro
     expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(false);
   });
 
-  it("confirmar o horário com crm_confirm_appointment conta como ter checado a agenda", () => {
-    expect(execucaoChecaAgenda("crm_confirm_appointment")).toBe(true);
+  it("só as ferramentas que armam o gate contam como checagem — confirmar presença não", () => {
     for (const t of TODAS) expect(execucaoChecaAgenda(t)).toBe(true);
+    // Revisão #140: contar `crm_confirm_appointment` aqui desligava o gate INTEIRO,
+    // inclusive o "seu horário de sexta está agendado" sem `crm_book_appointment`.
+    expect(execucaoChecaAgenda("crm_confirm_appointment")).toBe(false);
     // Ferramentas VIZINHAS de leitura não contam: o relato da #1019 é o modelo
     // chamando a lista e parando ali. Contá-las reabriria o defeito.
     expect(execucaoChecaAgenda("crm_list_appointments")).toBe(false);
     expect(execucaoChecaAgenda("crm_list_event_types")).toBe(false);
   });
 
+  it("só uma confirmação que deu certo conta como presença confirmada", () => {
+    expect(confirmouPresenca({ confirmado: true, compromisso: {} })).toBe(true);
+    expect(confirmouPresenca({ confirmado: false, motivo: "x", mensagem: "y" })).toBe(false);
+    expect(confirmouPresenca(undefined)).toBe(false);
+    expect(confirmouPresenca("ok")).toBe(false);
+  });
+
+  const presenca = { ...armado, presencaConfirmadaNoTurno: true };
+
+  it.each([
+    "Pronto! Seu horário está confirmado. Até quinta!",
+    "Perfeito, seu horário de quinta está confirmado.",
+  ])("passa depois de confirmar a presença: %s", (body) => {
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: presenca, body })).pass).toBe(true);
+  });
+
+  it.each([
+    // O cenário da revisão: confirmou a de quinta, e afirma ter MARCADO a de sexta.
+    "Pronto! Quinta confirmada e seu horário de sexta às 10h está agendado.",
+    "Seu horário está confirmado. E o horário de sexta ficou marcado também!",
+    // Confirmar presença não é consultar disponibilidade.
+    "Confirmei sua consulta! Vou verificar os horários de sexta e te aviso.",
+  ])("continua vetando depois de confirmar a presença: %s", (body) => {
+    expect(agendaStallGate.evaluate(baseCtx({ agenda: presenca, body })).pass).toBe(false);
+  });
+
   it("fiação: a marcação de execução usa a mesma régua", () => {
     expect(FONTE_INBOUND).toMatch(
       /if \(execucaoChecaAgenda\(name\) && typeof mcpTool\.execute === 'function'\)/,
     );
+    // A confirmação de presença liga a SUA flag, e só com o retorno de sucesso.
+    expect(FONTE_INBOUND).toMatch(/name === 'crm_confirm_appointment'/);
+    expect(FONTE_INBOUND).toMatch(/if \(confirmouPresenca\(resultado\)\) presencaConfirmadaNoTurno = true/);
   });
 });

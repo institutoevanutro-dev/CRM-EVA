@@ -253,8 +253,17 @@ export interface GateContext {
    *
    * `toolCalledThisTurn` é se alguma delas já foi chamada neste turno (rastreado no call
    * site, que é quem monta as tools).
+   *
+   * `presencaConfirmadaNoTurno` é `crm_confirm_appointment` ter dado certo neste turno.
+   * Solta SÓ o "seu horário está confirmado/certinho": "agendado/marcado" e a promessa de
+   * verificar continuam exigindo a ferramenta de agenda (revisão do PR #140).
    */
-  agenda?: { active: boolean; ferramentas: readonly string[]; toolCalledThisTurn: boolean };
+  agenda?: {
+    active: boolean;
+    ferramentas: readonly string[];
+    toolCalledThisTurn: boolean;
+    presencaConfirmadaNoTurno?: boolean;
+  };
 }
 
 /**
@@ -577,6 +586,7 @@ const AGENDA_STALL_VER_PATTERN = new RegExp(
  */
 const AGENDA_CONFIRMED_PATTERN =
   /\b(agendamento|hor[aá]rio|encaixe|vaga|visita)\b[^.!?\n]{0,30}\b(esta|está|ficou|fica|segue)\b[^.!?\n]{0,20}\b(confirmad[oa]|agendad[oa]|marcad[oa]|certinh[oa])\b/i;
+const AGENDA_CONFIRMED_GLOBAL = new RegExp(AGENDA_CONFIRMED_PATTERN.source, 'gi');
 
 /**
  * `\b` do JS é ASCII-only ("word char" = `[A-Za-z0-9_]`): `á` não conta como letra
@@ -631,7 +641,12 @@ export const agendaStallGate: Gate = {
     const bodySemAcento = semAcento(ctx.body);
     const stall =
       AGENDA_STALL_PATTERN.test(bodySemAcento) || AGENDA_STALL_VER_PATTERN.test(bodySemAcento);
-    const confirmedSemChecar = AGENDA_CONFIRMED_PATTERN.test(bodySemAcento);
+    // Cada afirmação conta: "quinta confirmada e o horário de sexta está agendado" tem
+    // duas, e a confirmação de presença só cobre a de "confirmado".
+    const presenca = ctx.agenda.presencaConfirmadaNoTurno === true;
+    const confirmedSemChecar = [...bodySemAcento.matchAll(AGENDA_CONFIRMED_GLOBAL)].some(
+      (m) => !(presenca && /^(confirmad|certinh)/i.test(m[3] ?? '')),
+    );
     if (!stall && !confirmedSemChecar) return { pass: true };
     return {
       pass: false,

@@ -992,18 +992,29 @@ const AGENDA_TOOL_NAMES = new Set([
 
 /**
  * A EXECUÇÃO desta ferramenta conta como "checou a agenda neste turno" para o
- * `agendaStallGate`? As que armam o gate, mais `crm_confirm_appointment`: o
- * turno que confirmou a presença e responde "seu horário está confirmado" fez o
- * certo, e o veto o mandava procurar horário livre ou marcar de novo.
- *
- * `crm_confirm_appointment` fica FORA de `AGENDA_TOOL_NAMES` de propósito: lá
- * ela armaria o gate e seria nomeada no veto de "vou verificar os horários" —
- * uma ferramenta de escrita como cura de promessa de disponibilidade. E as
- * vizinhas de LEITURA (`crm_list_appointments`, `crm_list_event_types`) não
- * contam: o relato da #1019 é o modelo chamando a lista e parando ali.
+ * `agendaStallGate`? Só as que armam o gate. `crm_confirm_appointment` NÃO conta:
+ * contá-la desligava o gate inteiro, e "confirmo a de quinta e quero marcar outra
+ * na sexta" saía como "seu horário de sexta está agendado" sem nada gravado
+ * (revisão do PR #140). Ela liga a SUA flag (`confirmouPresenca`), que só solta a
+ * afirmação de "confirmado". As vizinhas de LEITURA (`crm_list_appointments`,
+ * `crm_list_event_types`) não contam: o relato da #1019 é o modelo chamando a
+ * lista e parando ali.
  */
 export function execucaoChecaAgenda(toolName: string): boolean {
-  return AGENDA_TOOL_NAMES.has(toolName) || toolName === 'crm_confirm_appointment';
+  return AGENDA_TOOL_NAMES.has(toolName);
+}
+
+/**
+ * O retorno de `crm_confirm_appointment` diz que a presença foi confirmada?
+ * Recusa de negócio volta como `{ confirmado: false, motivo, mensagem }`
+ * (`semDerrubarOTurno`); só o `true` explícito conta.
+ */
+export function confirmouPresenca(resultado: unknown): boolean {
+  return (
+    typeof resultado === 'object' &&
+    resultado !== null &&
+    (resultado as { confirmado?: unknown }).confirmado === true
+  );
 }
 
 /**
@@ -2529,6 +2540,9 @@ async function executarTurnoDoAgente(
   // as tools do modelo rodam em passos anteriores do mesmo loop, o valor já está certo
   // quando o modelo decide mandar a resposta.
   let agendaToolCalledThisTurn = false;
+  // `crm_confirm_appointment` deu certo neste turno: solta só o "seu horário está
+  // confirmado" do gate, nunca o "agendado/marcado" nem a promessa de verificar.
+  let presencaConfirmadaNoTurno = false;
   const outcomes: ChannelSendResult[] = [];
   // Citações acumuladas por buscas de conhecimento DESTE turno — anexadas à
   // próxima outbound enviada (shape de lib/ai/citations/types, que a UI já lê).
@@ -2917,6 +2931,7 @@ async function executarTurnoDoAgente(
               active: agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds),
               ferramentas: agentConfig === null ? [] : ferramentasDeAgendaDoAgente(agentConfig.toolIds),
               toolCalledThisTurn: agendaToolCalledThisTurn,
+              presencaConfirmadaNoTurno: presencaConfirmadaNoTurno,
             },
             ...(deps.knobs.disclosureMode !== undefined
               ? { disclosureMode: deps.knobs.disclosureMode }
@@ -3586,6 +3601,16 @@ async function executarTurnoDoAgente(
                   return executeOriginal(...args);
                 }) as typeof mcpTool.execute,
               };
+            } else if (name === 'crm_confirm_appointment' && typeof mcpTool.execute === 'function') {
+              const executeOriginal = mcpTool.execute.bind(mcpTool);
+              rawTools[name] = {
+                ...mcpTool,
+                execute: (async (...args: Parameters<typeof executeOriginal>) => {
+                  const resultado = await executeOriginal(...args);
+                  if (confirmouPresenca(resultado)) presencaConfirmadaNoTurno = true;
+                  return resultado;
+                }) as typeof mcpTool.execute,
+              };
             } else {
               rawTools[name] = mcpTool;
             }
@@ -3664,6 +3689,7 @@ async function executarTurnoDoAgente(
                 active: previewContext.agenda?.active ?? false,
                 ferramentas: previewContext.agenda?.ferramentas ?? [],
                 toolCalledThisTurn: agendaToolCalledThisTurn,
+                presencaConfirmadaNoTurno: presencaConfirmadaNoTurno,
               },
             }),
           )

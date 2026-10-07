@@ -18,8 +18,9 @@ Frases normais continuam passando, como "vou confirmar se o plano cobre a
 consulta", "vou verificar o valor da sessão", "vou verificar o atendimento pelo
 seu convênio" e o lembrete "estou confirmando sua consulta de amanhã às 9h,
 podemos contar com você?". E quando a IA confirma a presença do paciente na
-agenda, ela pode dizer "seu horário está confirmado" sem ser barrada. Nada muda
-na tela.
+agenda, ela pode dizer "seu horário está confirmado" sem ser barrada. Mas confirmar a
+presença não libera dizer que outro horário "está agendado" ou "está marcado":
+para isso a IA continua tendo de marcar de verdade. Nada muda na tela.
 
 Portado do projeto original (DeskcommCRM, contribuições de webtecnica, Gyanu
 Mayank e Rafael Melgaço).
