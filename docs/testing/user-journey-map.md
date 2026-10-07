@@ -1070,6 +1070,18 @@ Spec: `evalink-conta/docs/superpowers/specs/2026-10-03-respostas-prontas-antes-d
 - [ ] Mensagem real pelo WhatsApp numa VPS com WAHA pareado: medido à mão no piloto (parte 4)
 - [ ] Corpus com modelo real (Tarefa 3): ainda não feito, aguarda chave de API
 
+## J29 — Painel do funil: os números do período, cada um com a sua régua `[P1]`
+
+Desenho: `docs/superpowers/specs/2026-10-06-painel-do-funil-design.md`. Tela `/app/painel-do-funil`
+(Análise, `manager`, porta no hub e no ⌘K).
+
+- [x] Contas puras: coorte, as duas gramáticas de `stage_changed`, etapa arquivada fora, ganhos por moeda, agenda, custo/ROAS, recorte por dimensão — `tests/unit/painel-do-funil-agregacao.test.ts`
+- [x] Investimento: conta pela regra da tela Meta Ads, estados sem zero falso — `tests/unit/painel-do-funil-investimento.test.ts`
+- [x] Rota: papel, Zod, `organization_id` pelo efeito, truncado dentro do lote, sem PII, espanhol das mensagens — `tests/unit/painel-do-funil-rota.test.ts`
+- [x] Porta no catálogo, com espanhol do rótulo — `tests/unit/painel-do-funil-navegacao.test.ts`
+- [x] Componente montado (hook dublado, jsdom): texto de "não conectado" e "—" em custo/ROAS, réguas com os dois fusos, formulário que guarda as opções depois de um 422, campos do card do funil escolhido no formulário, Aplicar desligado sem campo/prefixo — `tests/unit/painel-do-funil-tela.test.tsx`. Não substitui a prova de tela abaixo: não passa pelo navegador nem pelo banco
+- [ ] Prova de tela (Leads, Interagiram, Ganhos, Realizados, Faltas, comparecimento, "não conectado", recorte por campo do card) — `tests/e2e/painel-do-funil.spec.ts` — spec escrita e registrada em `SPECS_PARTE_4`, **NÃO MEDIDA localmente** (máquina sem o Supabase do CRM de pé e com carga alta); roda no CI do PR
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,
