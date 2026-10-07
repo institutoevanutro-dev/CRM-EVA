@@ -73,7 +73,7 @@ export function PipelinePageClient({
       // página rolava inteira e era preciso descer até o fim da etapa mais
       // comprida para andar para o lado. Piso de 28rem para tela baixa demais.
       // Porte do original b0ade1e44 (jmpo).
-      className="flex h-[calc(100dvh-3.5rem-3rem)] min-h-[28rem] flex-col gap-4"
+      className="flex h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-3rem)] min-h-[28rem] flex-col gap-4"
       // OBSERVÁVEL de propósito, e é a razão de existir desta linha: "a
       // assinatura morreu" e "nada aconteceu" produzem o MESMO silêncio na
       // tela, e sem este valor nem o produto nem o teste conseguem separar as

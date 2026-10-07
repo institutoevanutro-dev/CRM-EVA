@@ -47,11 +47,12 @@ describe("cores iguais às do Financeiro", () => {
   });
 });
 
-describe("o Inbox desconta as abas da área", () => {
-  it("a altura da grade usa --altura-das-abas", () => {
-    const inbox = readFileSync("components/inbox/InboxLayout.tsx", "utf8");
-    const alturas = inbox.match(/h-\[calc\(100dvh[^\]]*\)\]/g) ?? [];
-    expect(alturas.length).toBeGreaterThan(0);
-    for (const a of alturas) expect(a).toContain("var(--altura-das-abas,0px)");
+describe("telas do tamanho da janela descontam as abas da área", () => {
+  it("toda tela do tamanho da janela desconta --altura-das-abas", () => {
+    for (const arquivo of ["components/inbox/InboxLayout.tsx", "app/app/pipelines/[id]/_client.tsx"]) {
+      const alturas = readFileSync(arquivo, "utf8").match(/h-\[calc\(100dvh[^\]]*\)\]/g) ?? [];
+      expect(alturas.length, arquivo).toBeGreaterThan(0);
+      for (const a of alturas) expect(a, arquivo).toContain("var(--altura-das-abas,0px)");
+    }
   });
 });
