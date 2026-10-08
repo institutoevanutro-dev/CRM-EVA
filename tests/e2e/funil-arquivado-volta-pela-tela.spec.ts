@@ -337,6 +337,7 @@ test("arquivar pela tela cai na gaveta na mesma hora, e de lá o funil se exclui
   await expect(linhaViva(page, DESCARTAVEL)).toBeVisible();
 
   // ── 1. ARQUIVAR ────────────────────────────────────────────────────────────
+  await page.getByTestId(`acoes-${alvo}`).click();
   await page.getByTestId(`arquivar-${alvo}`).click();
   await expect(page.getByTestId(`arquivar-painel-${alvo}`)).toBeVisible();
   await page.getByTestId(`arquivar-confirmar-${alvo}`).click();

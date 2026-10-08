@@ -6445,6 +6445,7 @@ export const DICIONARIO: Traducoes = {
   "Subir": { es: "Subir" },
   "na lista": { es: "en la lista" },
   "Descer": { es: "Bajar" },
+  "Ações de": { es: "Acciones de" },
   "Novo nome de": { es: "Nuevo nombre de" },
   "Padrão": { es: "Predeterminado" },
   "Tornar padrão": { es: "Hacer predeterminado" },
