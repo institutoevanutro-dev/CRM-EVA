@@ -152,7 +152,7 @@ export function TemplatesClient({ canShare, currentUserId }: Props) {
                               p.tipo === "variavel" ? (
                                 <span
                                   key={i}
-                                  className="mx-0.5 rounded bg-accent-soft px-1 py-px text-xs font-medium text-accent-hover"
+                                  className="mx-0.5 rounded-sm bg-accent-soft px-1 py-px text-xs font-medium text-accent-hover"
                                 >
                                   {t(p.valor)}
                                 </span>
