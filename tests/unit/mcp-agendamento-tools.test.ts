@@ -204,6 +204,18 @@ describe("crm_find_free_slots", () => {
 describe("crm_list_appointments", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("preserva o nome do contato na resposta consumida pelo prontuário", async () => {
+    vi.mocked(listaAgendamentos).mockResolvedValue({ ok: true, agendamentos: [
+      { id: "com-contato", contatoId: "contato", contatoNome: "Paciente de teste", titulo: "Consulta" },
+      { id: "sem-contato", contatoId: null, contatoNome: null, titulo: "Bloqueio" },
+    ] } as never);
+    const result = await crmListAppointments.handler({ dia: "2026-10-07" }, ctx);
+    expect(result).toMatchObject({ compromissos: [
+      { id: "com-contato", contato_id: "contato", contato_nome: "Paciente de teste", titulo: "Consulta" },
+      { id: "sem-contato", contato_id: null, contato_nome: null, titulo: "Bloqueio" },
+    ] });
+  });
+
   it("⚠️ 'não sei de quem' NÃO vira lista vazia — vira pergunta", async () => {
     // O caso mais importante deste bloco. Lista vazia faria o modelo concluir e dizer
     // ao cliente que ele não tem nada marcado, quando a verdade é que a chamada não
