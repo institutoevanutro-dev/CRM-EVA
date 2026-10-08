@@ -2,7 +2,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useT } from "@/hooks/i18n/useT";
-import { useBoard } from "@/hooks/kanban/useBoard";
+import { useBoard, useFechadosAntigos } from "@/hooks/kanban/useBoard";
 
 function formatError(err: unknown, t: (texto: string) => string): string {
   if (err instanceof Error) return err.message;
@@ -51,8 +51,19 @@ export function PipelinePageClient({
   );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [newOpen, setNewOpen] = useState(false);
+  const [verAntigos, setVerAntigos] = useState(false);
+  const antigos = useFechadosAntigos(pipelineId, verAntigos);
+  const fechadosAntigos = data?.fechadosAntigos ?? 0;
 
-  const filteredLeads = data ? applyFilters(data.leads, filters) : [];
+  // Memorizado: sem isto cada render (seleção, pulso, relógio) refiltrava e
+  // entregava ao quadro uma lista nova, e o quadro inteiro se redesenhava.
+  const filteredLeads = useMemo(() => {
+    if (!data) return [];
+    const extras = verAntigos ? (antigos.data?.leads ?? []) : [];
+    const vistos = new Set(data.leads.map((l) => l.id));
+    const todos = extras.length ? [...data.leads, ...extras.filter((l) => !vistos.has(l.id))] : data.leads;
+    return applyFilters(todos, filters);
+  }, [data, verAntigos, antigos.data, filters]);
   // NÃO é a conta do FilterBar: o seletor de filtro lista as três caixas
   // (`marcadoresDoCard`: negócio, contato e conversa), e esta lista, a da tag em
   // lote, só `lead.tags` — é lá que a ação em lote grava (#852). O `useMemo` é o
@@ -105,7 +116,7 @@ export function PipelinePageClient({
           <Plus size={16} className="mr-2" /> {t("Novo Lead")}
         </Button>
       </header>
-      {data && (
+      {data && newOpen && (
         <NewLeadDialog
           open={newOpen}
           onOpenChange={setNewOpen}
@@ -114,6 +125,25 @@ export function PipelinePageClient({
         />
       )}
       <FilterBar filters={filters} onChange={setFilters} leads={data?.leads ?? []} />
+      {fechadosAntigos > 0 && (
+        <p className="-mt-2 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+          {verAntigos
+            ? t("Mostrando também os ganhos e perdidos antigos.")
+            : t("Ganhos e perdidos: só os dos últimos 30 dias.")}
+          <button
+            type="button"
+            onClick={() => setVerAntigos((v) => !v)}
+            disabled={verAntigos && antigos.isLoading}
+            className="font-medium text-accent-strong underline-offset-2 hover:underline disabled:opacity-60"
+          >
+            {verAntigos
+              ? antigos.isLoading
+                ? t("Carregando…")
+                : t("Esconder antigos")
+              : `${t("Ver mais")} (${fechadosAntigos})`}
+          </button>
+        </p>
+      )}
       {error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm">
           {t("Não consegui carregar este funil:")} {formatError(error, t)}
