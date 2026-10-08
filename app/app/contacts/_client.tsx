@@ -26,7 +26,7 @@ import { TAG_DE_CLIENTE } from "@/lib/contacts/cliente";
 import { type ModoDeEtiqueta } from "@/lib/inbox/marcador-da-conversa";
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
 import { MergeDialog } from "@/components/contacts/MergeDialog";
-import { EmptyContacts } from "@/components/empty";
+import { EmptyContacts, EmptyFilterResults } from "@/components/empty";
 import type { ContactOrderBy } from "@/lib/schemas/contacts";
 
 const SOURCE_OPTIONS = [
@@ -45,7 +45,6 @@ const SOURCE_OPTIONS = [
   { value: "google_ads", label: "Anúncio do Google" },
 ];
 
-const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
 export function ContactsListClient() {
   const t = useT();
@@ -60,7 +59,8 @@ export function ContactsListClient() {
   const [source, setSource] = useState<string | undefined>(undefined);
   const [orderBy, setOrderBy] = useState<ContactOrderBy>("last_activity_at");
   const [orderDir, setOrderDir] = useState<"asc" | "desc">("desc");
-  const [limit, setLimit] = useState<number>(25);
+  // Fixo: o "N por página" era controle de desenvolvedor ao lado do "Carregar mais".
+  const limit = 25;
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [duplicadosOpen, setDuplicadosOpen] = useState(false);
@@ -121,7 +121,7 @@ export function ContactsListClient() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">{t("Contatos")}</h1>
           <p className="text-sm text-muted-foreground">
-            {t("Customer 360 — busque, filtre e gerencie contatos.")}
+            {t("Todos os pacientes e contatos da clínica, num lugar só.")}
           </p>
         </div>
         {/*
@@ -142,7 +142,7 @@ export function ContactsListClient() {
           </Button>
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <UploadSimple size={16} weight="bold" aria-hidden />
-            <span>{t("Importar CSV")}</span>
+            <span>{t("Importar planilha")}</span>
           </Button>
           <Button onClick={() => setCreateOpen(true)}>
             <Plus size={16} weight="bold" aria-hidden />
@@ -175,14 +175,14 @@ export function ContactsListClient() {
                   origem ao lado. Uma etiqueta mostra o nome; duas mostram a
                   primeira e o resto em contagem. */}
               {tags.length === 0
-                ? `${t("Tag")}: ${t("todas")}`
+                ? t("Todas as etiquetas")
                 : tags.length === 1
-                  ? `${t("Tag")}: ${tags[0]}`
-                  : `${t("Tag")}: ${tags[0]} +${tags.length - 1}`}
+                  ? `${t("Etiqueta")}: ${tags[0]}`
+                  : `${t("Etiqueta")}: ${tags[0]} +${tags.length - 1}`}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuLabel>{t("Tag")}</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("Etiqueta")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => {
@@ -250,22 +250,6 @@ export function ContactsListClient() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              {limit} {t("por página")}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuLabel>{t("Itens por página")}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {PAGE_SIZE_OPTIONS.map((n) => (
-              <DropdownMenuItem key={n} onClick={() => setLimit(n)}>
-                {n}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
 
         {(search || tags.length > 0 || source) && (
           <Button
@@ -304,7 +288,9 @@ export function ContactsListClient() {
         </Card>
       ) : allContacts.length === 0 ? (
         <Card className="p-2">
-          <EmptyContacts />
+          {/* Com filtro ligado, vazio é "nada bate com o filtro", não "não há
+              contatos": a primeira frase fazia a equipe achar que a base sumiu. */}
+          {search || tags.length > 0 || source ? <EmptyFilterResults /> : <EmptyContacts />}
         </Card>
       ) : (
         <>

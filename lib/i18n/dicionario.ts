@@ -9939,6 +9939,16 @@ export const DICIONARIO: Traducoes = {
   "Nenhuma resposta rápida ainda": { es: "Ninguna respuesta rápida todavía" },
   "Salve aqui os textos que a equipe manda todo dia. No Inbox, digite / para usar.": { es: "Guarde aquí los textos que el equipo envía todos los días. En el Inbox, escriba / para usarlos." },
   "Primeiro nome": { es: "Primer nombre" },
+  "Todos os pacientes e contatos da clínica, num lugar só.": { es: "Todos los pacientes y contactos de la clínica, en un solo lugar." },
+  "Todas as etiquetas": { es: "Todas las etiquetas" },
+  "Etiquetas": { es: "Etiquetas" },
+  "Assistente de IA:": { es: "Asistente de IA:" },
+  "com retorno agendado": { es: "con regreso agendado" },
+  "críticos": { es: "críticos" },
+  "Ver todas": { es: "Ver todas" },
+  "Mostrar menos": { es: "Mostrar menos" },
+  "Não foi possível carregar o radar.": { es: "No se pudo cargar el radar." },
+  "Conversas abertas que esfriaram e precisam de você. Se o assistente já marcou um retorno, ela aparece como “retorno agendado”; sem próximo passo, há risco de perder o paciente.": { es: "Conversaciones abiertas que se enfriaron y necesitan de usted. Si el asistente ya agendó un regreso, aparece como “regreso agendado”; sin próximo paso, hay riesgo de perder al paciente." },
 };
 
 /**
