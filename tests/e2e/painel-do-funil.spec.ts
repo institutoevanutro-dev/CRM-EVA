@@ -256,8 +256,8 @@ test("o gestor lê o funil do período com a régua de cada número", async ({ p
   expect(caixa.altura).toBeGreaterThan(0);
 
   // ---- recorte por campo do card: as opções cadastradas aparecem ----
-  await page.getByRole("combobox", { name: "Recorte" }).click();
-  await page.getByRole("option", { name: "Campo do card" }).click();
+  await page.getByRole("combobox", { name: "Separar por" }).click();
+  await page.getByRole("option", { name: "Campo do negócio" }).click();
   await page.getByRole("combobox", { name: "Campo" }).click();
   await page.getByRole("option", { name: "Modalidade" }).click();
   await page.getByRole("button", { name: "Aplicar" }).click();

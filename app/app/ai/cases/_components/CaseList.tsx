@@ -28,7 +28,7 @@ export function CaseList() {
   // quebra com "Cannot read properties of null".
   const idDaUrl = useSearchParams()?.get("caso") ?? null;
   const [selectedId, setSelectedId] = useState<string | null>(idDaUrl);
-  const { data, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } = useCases(tab);
+  const { data, isLoading, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useCases(tab);
 
   return (
     <div className="flex min-h-0 flex-1 gap-6">
@@ -44,6 +44,14 @@ export function CaseList() {
           <div className="space-y-2">
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-16 w-full" />
+          </div>
+        ) : isError ? (
+          // Falha não é "nenhum caso aberto": a equipe pararia de olhar.
+          <div className="flex flex-col items-center gap-2 py-16 text-center" role="alert">
+            <p className="text-sm font-medium">{t("Não foi possível carregar os casos.")}</p>
+            <button type="button" onClick={() => void refetch()} className="text-sm text-accent-strong underline">
+              {t("Tentar de novo")}
+            </button>
           </div>
         ) : !data || data.cases.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-center">

@@ -90,7 +90,7 @@ export function CalendarioDeTarefas({
         >
           <CaretLeft size={16} aria-hidden />
         </Button>
-        <h2 className="text-base font-semibold capitalize">{nomeDoMes}</h2>
+        <h2 className="text-base font-semibold first-letter:uppercase">{nomeDoMes}</h2>
         <Button
           variant="ghost"
           size="icon"

@@ -1098,7 +1098,8 @@ test("Radar recorta demandas pela RLS real, além do pool frio, e preserva gest�
   expect(unassigned.total_sem_proximo_passo).toBe(3);
   await login(page, members.manager!.email);
   await page.goto("/app/radar");
-  await expect(page.getByTestId("radar-sem-proximo-passo")).toContainText("Órfã de gestão");
+  // O bloco mostra as 5 primeiras e um "Ver todas": abre antes de procurar.
+  await esperarPendencia(page, "Órfã de gestão");
   expect((await read()).total_sem_proximo_passo).toBe(6);
   await login(page, members.viewer!.email);
   expect((await page.request.get("/api/v1/leads/at-risk")).status()).toBe(403);
@@ -1118,7 +1119,8 @@ test("Radar recorta demandas pela RLS real, além do pool frio, e preserva gest�
   await page.getByRole("button", { name: "Confirmar e entrar" }).click();
   await page.waitForURL("**/app/inbox");
   await page.goto("/app/radar");
-  await expect(page.getByTestId("radar-sem-proximo-passo")).toContainText("Órfã de gestão");
+  // O bloco mostra as 5 primeiras e um "Ver todas": abre antes de procurar.
+  await esperarPendencia(page, "Órfã de gestão");
   expect((await read()).total_sem_proximo_passo).toBe(6);
   await page.getByRole("button", { name: "Sair do acompanhamento" }).click();
   await page.waitForURL("**/app/inbox");
@@ -1193,3 +1195,18 @@ test("duas sessões: remarcação não reautoriza cancelamento em rascunho", asy
     await other.close();
   }
 });
+
+/**
+ * Espera uma pendência aparecer no bloco "sem próximo passo" do Radar, que
+ * mostra só as 5 primeiras. Abre o "Ver todas" DENTRO da repetição: checado uma
+ * vez só, o botão podia ainda não existir (lista carregando) e a busca seguia
+ * com a lista fechada.
+ */
+async function esperarPendencia(page: import("@playwright/test").Page, texto: string): Promise<void> {
+  const bloco = page.getByTestId("radar-sem-proximo-passo");
+  await expect(async () => {
+    const ver = bloco.getByRole("button", { name: /^Ver todas/ });
+    if (await ver.count()) await ver.click();
+    await expect(bloco).toContainText(texto, { timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
+}

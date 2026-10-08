@@ -86,7 +86,7 @@ test.describe("Lote 12 — #955 o vocabulário de etiquetas", () => {
     await link.click();
     await page.waitForURL(/\/app\/settings\/tags/);
 
-    await expect(page.getByRole("heading", { name: "Tags", level: 1 })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Etiquetas", level: 1 })).toBeVisible({ timeout: 30_000 });
     const linha = page.getByRole("row", { name: new RegExp(TAG_A) });
     await expect(linha).toBeVisible({ timeout: 30_000 });
     const celulas = await linha.locator("td").allInnerTexts();

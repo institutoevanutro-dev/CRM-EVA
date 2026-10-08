@@ -107,6 +107,8 @@ export function useCases(status: "open" | "resolved" = "open") {
   return {
     data,
     isLoading: consulta.isLoading,
+    isError: consulta.isError,
+    refetch: consulta.refetch,
     hasNextPage: consulta.hasNextPage,
     fetchNextPage: consulta.fetchNextPage,
     isFetchingNextPage: consulta.isFetchingNextPage,

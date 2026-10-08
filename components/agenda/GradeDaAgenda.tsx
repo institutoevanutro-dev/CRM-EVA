@@ -418,7 +418,14 @@ function BlocoDeAgendamento({
         className="absolute inset-y-0 left-0 w-[3px] rounded-l-sm"
         style={{ backgroundColor: doGoogle ? "var(--color-border-strong)" : corDaTrilha(trilha) }}
       />
-      <span className="ml-1 truncate text-[11px] font-semibold leading-4 text-text">
+      {/* Com espaço (1h ou mais), o nome do compromisso quebra em duas linhas
+          em vez de virar "Consulta de acomp…" (print de 08/10/2026). */}
+      <span
+        className={cn(
+          "ml-1 text-[11px] font-semibold leading-4 text-text",
+          duracao >= 60 ? "line-clamp-2 break-words" : "truncate",
+        )}
+      >
         {agendamento.titulo}
       </span>
       {duracao >= 45 && (

@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useState } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
 import { Badge } from "@/components/ui/badge";
@@ -24,13 +25,23 @@ const RISK_META: Record<
 > = {
   critico: { label: "Crítico", variant: "error" },
   em_risco: { label: "Em risco", variant: "warning" },
-  em_voo: { label: "Em voo", variant: "info" },
+  // "Em voo" era jargão interno: para a equipe, é um retorno já marcado.
+  em_voo: { label: "Retorno agendado", variant: "info" },
 };
 
 function coldFor(hours: number, t: (texto: string) => string): string {
   if (hours < 48) return `${t("parado há")} ${hours}h`;
   return `${t("parado há")} ${Math.round(hours / 24)}d`;
 }
+
+/** Tempo em aberto como a equipe lê: horas só no primeiro par de dias, depois dias. */
+function abertaHa(hours: number, t: (texto: string) => string): string {
+  if (hours < 48) return `${t("aberta há")} ${hours}h`;
+  return `${t("aberta há")} ${Math.round(hours / 24)} ${t("dias")}`;
+}
+
+/** Quantas pendências o bloco mostra antes do "ver todas". */
+const PRIMEIRAS_PENDENCIAS = 5;
 
 function followupWhen(iso: string, t: (texto: string) => string): string {
   const diffMs = new Date(iso).getTime() - Date.now();
@@ -42,7 +53,8 @@ function followupWhen(iso: string, t: (texto: string) => string): string {
 
 export function RiskRadarList() {
   const t = useT();
-  const { data, isLoading } = useAtRiskLeads();
+  const { data, isLoading, isError, refetch } = useAtRiskLeads();
+  const [verTodas, setVerTodas] = useState(false);
 
   if (isLoading) {
     return (
@@ -50,6 +62,20 @@ export function RiskRadarList() {
         <Skeleton className="h-16 w-full" />
         <Skeleton className="h-16 w-full" />
         <Skeleton className="h-16 w-full" />
+      </div>
+    );
+  }
+
+  // Falha não é vazio: o aviso verde de "nenhum risco" numa carga que falhou
+  // dizia à equipe que estava tudo bem justo quando ela não sabia de nada.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-16 text-center" data-testid="radar-erro">
+        <Warning size={28} className="text-warning-fg" aria-hidden />
+        <p className="text-sm font-medium">{t("Não foi possível carregar o radar.")}</p>
+        <Button size="sm" variant="outline" onClick={() => void refetch()}>
+          {t("Tentar de novo")}
+        </Button>
       </div>
     );
   }
@@ -96,27 +122,36 @@ export function RiskRadarList() {
             )}
           </p>
           <ul className="flex flex-col gap-1">
-            {semPasso.slice(0, 8).map((d) => (
+            {(verTodas ? semPasso : semPasso.slice(0, PRIMEIRAS_PENDENCIAS)).map((d) => (
               <li key={d.id} className="flex items-baseline justify-between gap-3 text-xs">
                 <span className="truncate">{d.contact_name ?? t("Contato sem nome")}</span>
                 <span className="shrink-0 tabular-nums text-muted-foreground">
-                  {t("aberta há")} {d.horas_aberta}h
+                  {abertaHa(d.horas_aberta, t)}
                 </span>
               </li>
             ))}
           </ul>
+          {semPasso.length > PRIMEIRAS_PENDENCIAS ? (
+            <button
+              type="button"
+              onClick={() => setVerTodas((v) => !v)}
+              className="mt-2 text-xs font-medium text-accent-strong underline-offset-2 hover:underline"
+            >
+              {verTodas ? t("Mostrar menos") : `${t("Ver todas")} (${semPasso.length})`}
+            </button>
+          ) : null}
         </section>
       ) : null}
 
       <div className="flex flex-wrap gap-2" data-testid="radar-counts">
         <Badge variant="error">
-          {data.counts.critico} {t("crítico")}
+          {data.counts.critico} {data.counts.critico === 1 ? t("crítico") : t("críticos")}
         </Badge>
         <Badge variant="warning">
           {data.counts.em_risco} {t("em risco")}
         </Badge>
         <Badge variant="info">
-          {data.counts.em_voo} {t("em voo")}
+          {data.counts.em_voo} {t("com retorno agendado")}
         </Badge>
       </div>
 
@@ -146,7 +181,7 @@ function RadarRow({ lead }: { lead: AtRiskLead }) {
   // uma fonte de verdade para "quem é o dono", em todas as telas.
   const dono =
     lead.owner_kind === "ai"
-      ? `${t("Agente:")} ${lead.owner_agent_name ?? t("sem nome")}`
+      ? `${t("Assistente de IA:")} ${lead.owner_agent_name ?? t("sem nome")}`
       : lead.owner_user_id || lead.assignee_kind === "user"
         ? t("Com atendente")
         : lead.assignee_kind === "ai"

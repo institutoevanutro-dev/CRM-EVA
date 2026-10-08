@@ -405,13 +405,6 @@ export function AgendaClient({
         <EntradaDaAgenda onContext={onContext} />
       </React.Suspense>
 
-      <CartaoDaConexaoGoogle
-        configurado={googleConfigurado}
-        falta={faltaNoGoogle}
-        linkDeConfiguracao={linkDeConfiguracaoDoGoogle}
-        contaConectada={contaConectada}
-        enderecoDeRetorno={enderecoDeRetorno}
-      />
 
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0">
@@ -474,6 +467,16 @@ export function AgendaClient({
           </Button>
         </div>
       </header>
+
+      {/* O cartão do Google vem DEPOIS do título: a tela começava por uma caixa
+          de integração, antes até de dizer que era a Agenda (print de 08/10). */}
+      <CartaoDaConexaoGoogle
+        configurado={googleConfigurado}
+        falta={faltaNoGoogle}
+        linkDeConfiguracao={linkDeConfiguracaoDoGoogle}
+        contaConectada={contaConectada}
+        enderecoDeRetorno={enderecoDeRetorno}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
@@ -961,57 +964,6 @@ export function AgendaClient({
         não informa nada que a grade — que O DESENHA no horário — já não diga
         melhor. A ocupação continua inteira onde ela serve.
       */}
-      <HistoricoDaAgenda
-        agendamentos={agendamentosAcionaveis}
-        pessoas={pessoas}
-        agora={new Date()}
-        className="max-h-[320px]"
-        // ⚠️ ESTAS DUAS PROPS FALTAVAM, e a ausência tinha cara de permissão.
-        // `HistoricoDaAgenda` usa `disabled={!onRemarcar}`; sem elas os botões
-        // nasciam cinzas em toda linha, de toda organização — e o `title` dizia
-        // "Disponível quando a agenda estiver conectada", que é falso: PATCH e
-        // DELETE não tocam o Google. Só a IA conseguia remarcar ou cancelar.
-        onRemarcar={(id) => {
-          setRemarcandoId(id);
-          setMarcando(true);
-        }}
-        onCancelar={(id) => {
-          setMotivo("");
-          setCancelandoId(id);
-        }}
-        // E ESTAS DUAS TAMBÉM FALTAVAM — o conserto acima alcançou 2 dos 4
-        // botões do MESMO componente, e "Realizado"/"Faltou" ficaram cinzas,
-        // com a mesma frase falsa, por mais tempo ainda. Conserto por instância
-        // custa a segunda passada; a varredura custaria um `grep`.
-        //
-        // Sem cerimônia de confirmação, ao contrário de cancelar: registrar
-        // desfecho não avisa ninguém e se desfaz voltando o status. Cancelar
-        // exige motivo porque é o que a equipe lê ao ver o horário vago.
-        // CONFIRMAR usa o mesmo `desfecho` que realizado/faltou: os três são o
-        // mesmo PATCH com outro `status`. Criar um hook próprio duplicaria a
-        // invalidação de cache e o tratamento de erro por nada.
-        onConfirmar={(id) =>
-          desfecho.mutate({
-            id,
-            revision: agendamentos.find((a) => a.id === id)?.revision,
-            status: "confirmed",
-          })
-        }
-        onRealizado={(id) =>
-          desfecho.mutate({
-            id,
-            revision: agendamentos.find((a) => a.id === id)?.revision,
-            status: "completed",
-          })
-        }
-        onFaltou={(id) =>
-          desfecho.mutate({
-            id,
-            revision: agendamentos.find((a) => a.id === id)?.revision,
-            status: "no_show",
-          })
-        }
-      />
 
       {/* ⚠️ O VAZIO NÃO ESCONDE MAIS A GRADE, e o achado veio do CI.
           Isto era um ternário: com zero agendamentos, `EmptyAgenda` entrava NO
@@ -1062,6 +1014,60 @@ export function AgendaClient({
            o botão voltar do celular fechar o detalhe. */
         onAbrirAgendamento={(id) => router.push(`/app/agenda?compromisso=${id}`)}
         className="min-h-0 flex-1"
+      />
+
+      {/* O histórico vem DEPOIS da grade: com ele em cima, o calendário — que é
+          o que se abre a Agenda para ver — ficava abaixo da dobra. */}
+      <HistoricoDaAgenda
+        agendamentos={agendamentosAcionaveis}
+        pessoas={pessoas}
+        agora={new Date()}
+        className="max-h-[320px]"
+        // ⚠️ ESTAS DUAS PROPS FALTAVAM, e a ausência tinha cara de permissão.
+        // `HistoricoDaAgenda` usa `disabled={!onRemarcar}`; sem elas os botões
+        // nasciam cinzas em toda linha, de toda organização — e o `title` dizia
+        // "Disponível quando a agenda estiver conectada", que é falso: PATCH e
+        // DELETE não tocam o Google. Só a IA conseguia remarcar ou cancelar.
+        onRemarcar={(id) => {
+          setRemarcandoId(id);
+          setMarcando(true);
+        }}
+        onCancelar={(id) => {
+          setMotivo("");
+          setCancelandoId(id);
+        }}
+        // E ESTAS DUAS TAMBÉM FALTAVAM — o conserto acima alcançou 2 dos 4
+        // botões do MESMO componente, e "Realizado"/"Faltou" ficaram cinzas,
+        // com a mesma frase falsa, por mais tempo ainda. Conserto por instância
+        // custa a segunda passada; a varredura custaria um `grep`.
+        //
+        // Sem cerimônia de confirmação, ao contrário de cancelar: registrar
+        // desfecho não avisa ninguém e se desfaz voltando o status. Cancelar
+        // exige motivo porque é o que a equipe lê ao ver o horário vago.
+        // CONFIRMAR usa o mesmo `desfecho` que realizado/faltou: os três são o
+        // mesmo PATCH com outro `status`. Criar um hook próprio duplicaria a
+        // invalidação de cache e o tratamento de erro por nada.
+        onConfirmar={(id) =>
+          desfecho.mutate({
+            id,
+            revision: agendamentos.find((a) => a.id === id)?.revision,
+            status: "confirmed",
+          })
+        }
+        onRealizado={(id) =>
+          desfecho.mutate({
+            id,
+            revision: agendamentos.find((a) => a.id === id)?.revision,
+            status: "completed",
+          })
+        }
+        onFaltou={(id) =>
+          desfecho.mutate({
+            id,
+            revision: agendamentos.find((a) => a.id === id)?.revision,
+            status: "no_show",
+          })
+        }
       />
     </div>
   );

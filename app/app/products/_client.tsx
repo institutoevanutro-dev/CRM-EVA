@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { useT } from "@/hooks/i18n/useT";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { apiClient } from "@/lib/api/client";
 import { formatCents } from "@/lib/money";
 import { precoParaCentavos, type Produto } from "@/lib/schemas/produtos";
@@ -73,10 +75,13 @@ export function ProdutosClient({
   inicial,
   podeEditar,
   textos,
+  erroDeLeitura = false,
 }: {
   inicial: Produto[];
   podeEditar: boolean;
   textos: Textos;
+  /** A leitura do catálogo falhou no servidor — não é a mesma coisa que vazio. */
+  erroDeLeitura?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -155,60 +160,60 @@ export function ProdutosClient({
 
   return (
     <div className="mx-auto w-full max-w-5xl p-6" data-testid="tela-produtos">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold">{textos.titulo}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{textos.subtitulo}</p>
-      </header>
+      <CabecalhoDaPagina
+        className="mb-6"
+        titulo={textos.titulo}
+        descricao={textos.subtitulo}
+        acoes={
+          podeEditar ? (
+            <>
+              <input
+                ref={arquivoRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                data-testid="arquivo-planilha"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void importar(f);
+                }}
+              />
+              {/* O modelo mora AO LADO de importar: é o primeiro passo dela, e
+                  solto numa linha própria parecia um link perdido. */}
+              <a
+                href="/api/v1/products/import"
+                download="modelo-catalogo.csv"
+                className="text-xs text-text-muted underline"
+                data-testid="modelo-planilha"
+              >
+                {t("Baixar planilha modelo")}
+              </a>
+              <Button
+                variant="outline"
+                disabled={importando}
+                onClick={() => arquivoRef.current?.click()}
+                data-testid="importar-planilha"
+              >
+                {t(importando ? "Importando…" : "Importar planilha (.csv)")}
+              </Button>
+              <Button onClick={() => setCriando((v) => !v)} data-testid="novo-produto">
+                {t(criando ? "Cancelar" : "Novo produto")}
+              </Button>
+            </>
+          ) : null
+        }
+      />
 
-      <div className="mb-4 flex items-center gap-3">
-        <input
+      <div className="mb-4">
+        <Input
+          type="search"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder={t("Buscar por nome, código ou marca")}
-          className="h-9 w-full max-w-sm rounded-md border px-3 text-sm"
+          className="max-w-sm"
           data-testid="busca-produto"
         />
-        {podeEditar ? (
-          <>
-            <Button onClick={() => setCriando((v) => !v)} data-testid="novo-produto">
-              {t(criando ? "Cancelar" : "Novo produto")}
-            </Button>
-            <input
-              ref={arquivoRef}
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              data-testid="arquivo-planilha"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void importar(f);
-              }}
-            />
-            <Button
-              variant="outline"
-              disabled={importando}
-              onClick={() => arquivoRef.current?.click()}
-              data-testid="importar-planilha"
-            >
-              {t(importando ? "Importando…" : "Importar planilha")}
-            </Button>
-          </>
-        ) : null}
       </div>
-
-      {podeEditar ? (
-        // Rota de API que devolve o arquivo com `content-disposition:
-        // attachment` — é download, não navegação de página, e `<Link>` do Next
-        // faria navegação de cliente para algo que não é tela.
-        <a
-          href="/api/v1/products/import"
-          download="modelo-catalogo.csv"
-          className="mb-4 inline-block text-xs text-muted-foreground underline"
-          data-testid="modelo-planilha"
-        >
-          {t("Baixar planilha modelo")}
-        </a>
-      ) : null}
 
       {resumo ? (
         <div className="mb-6 rounded-lg border p-4 text-sm" data-testid="resumo-importacao">
@@ -339,7 +344,16 @@ export function ProdutosClient({
         </div>
       ) : null}
 
-      {filtrados.length === 0 ? (
+      {erroDeLeitura ? (
+        <div className="rounded-lg border border-border bg-surface p-8 text-center text-sm text-text-muted" data-testid="produtos-erro">
+          {t("Não foi possível carregar os produtos. Recarregue a página.")}
+        </div>
+      ) : filtrados.length === 0 && busca.trim() ? (
+        // Busca sem resultado não é catálogo vazio.
+        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-text-muted" data-testid="produtos-sem-resultado">
+          {t("Nenhum produto com essa busca.")}
+        </div>
+      ) : filtrados.length === 0 ? (
         <div className="rounded-lg border border-dashed p-8 text-center" data-testid="produtos-vazio">
           <p className="font-medium">{textos.vazio}</p>
           <p className="mt-1 text-sm text-muted-foreground">{textos.vazioDica}</p>
@@ -367,7 +381,12 @@ export function ProdutosClient({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => void alternarAtivo(p)}
+                  onClick={() => {
+                    // Desativar tira o item do que o assistente de IA oferece:
+                    // pede confirmação. Reativar é seguro e vai direto.
+                    if (p.ativo && !window.confirm(t("Desativar este produto? O assistente de IA deixa de oferecê-lo."))) return;
+                    void alternarAtivo(p);
+                  }}
                   data-testid={`alternar-${p.codigo}`}
                 >
                   {t(p.ativo ? "Desativar" : "Reativar")}

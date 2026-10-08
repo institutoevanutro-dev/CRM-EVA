@@ -224,9 +224,8 @@ export function KanbanBoard({
 
   if (isError) {
     return (
-      <Card className="m-4 p-6 text-sm text-text-muted">
-        {t("Falha ao carregar o board.")}
-        {error instanceof Error ? ` ${error.message}` : null}
+      <Card className="m-4 p-6 text-sm text-text-muted" title={error instanceof Error ? error.message : undefined}>
+        {t("Não foi possível carregar o quadro.")}
       </Card>
     );
   }
@@ -238,7 +237,12 @@ export function KanbanBoard({
   if (data.stages.length === 0) {
     return (
       <Card className="m-4 p-6 text-sm text-text-muted">
-        {t("Nenhum lead nesta pipeline ainda.")}
+        {/* Este estado é "o funil não tem etapas" (`stages.length === 0`), não
+            "não tem negócio": a frase antiga mandava esperar por algo que nunca viria. */}
+        {t("Este funil ainda não tem etapas.")}{" "}
+        <a href="/app/settings/tenant/pipelines" className="font-medium text-accent-strong underline">
+          {t("Criar etapas")}
+        </a>
       </Card>
     );
   }

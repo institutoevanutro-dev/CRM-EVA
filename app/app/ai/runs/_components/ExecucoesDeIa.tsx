@@ -224,8 +224,9 @@ export function ExecucoesDeIa() {
                 </div>
               ) : (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  {e.input_tokens + e.output_tokens} tokens
-                  {e.latency_ms !== null ? ` · ${e.latency_ms} ms` : ""}
+                  {/* Tempo em segundos; o "1234 tokens · 2310 ms" de antes
+                      era leitura de quem programa. */}
+                  {e.latency_ms !== null ? `${t("Respondeu em")} ${(e.latency_ms / 1000).toLocaleString(tagDoIdioma, { maximumFractionDigits: 1 })} s` : ""}
                   {/* `cost_cents` está em CENTAVOS: dividir por 100 dá REAIS, e o
                       rótulo dizia "centavos" — uma execução de 25 centavos
                       aparecia como "0.2500 centavos", 100× menor que o mesmo
@@ -236,7 +237,7 @@ export function ExecucoesDeIa() {
               )}
 
               <p className="mt-2 text-xs text-muted-foreground">
-                {new Date(e.created_at).toLocaleString(tagDoIdioma)}
+                {new Date(e.created_at).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" })}
                 {e.porQueEsteModelo ? ` · ${t(e.porQueEsteModelo)}` : ""}
               </p>
             </Card>
