@@ -8045,6 +8045,8 @@ export const DICIONARIO: Traducoes = {
   "Importar planilha": { es: "Importar planilla" },
   "Baixar planilha modelo": { es: "Descargar planilla modelo" },
   "Produto cadastrado": { es: "Producto cargado" },
+  "Produto atualizado": { es: "Producto actualizado" },
+  Editando: { es: "Editando" },
   "Produto desativado": { es: "Producto desactivado" },
   "Produto reativado": { es: "Producto reactivado" },
   "Não consegui ler essa planilha.": { es: "No pude leer esa planilla." },
