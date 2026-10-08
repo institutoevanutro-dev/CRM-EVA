@@ -14,6 +14,7 @@ import { useMessagesRealtime } from "@/hooks/inbox/useMessagesRealtime";
 import { useConversationNotes } from "@/hooks/inbox/useConversationNotes";
 import { useDeleteNote } from "@/hooks/inbox/useDeleteNote";
 import { useDebugToggle } from "@/hooks/ai/useDebugToggle";
+import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
 import { ROLE_RANK } from "@/lib/auth/types";
 import type { Message, Note } from "@/lib/types/messaging";
@@ -59,6 +60,11 @@ export function ChatThread({ conversationId, onResponder, searchTerm = "" }: Pro
   const paginasVistas = useRef(0);
   const activeOrg = useActiveOrg();
   const currentUser = useUser();
+  const equipe = useAssignableMembers(true).data;
+  const nomePorUsuario = useMemo(
+    () => new Map((equipe ?? []).map((m) => [m.user_id, m.full_name ?? null])),
+    [equipe],
+  );
   const deleteNote = useDeleteNote(conversationId ?? "");
   const canManage = activeOrg != null && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
   const { enabled: debugCitations } = useDebugToggle(activeOrg?.role ?? null);
@@ -240,7 +246,7 @@ export function ChatThread({ conversationId, onResponder, searchTerm = "" }: Pro
           {t("Resultados nas mensagens carregadas")}: {resultados.size}
         </div>
       )}
-      <div data-testid="message-thread" ref={scrollerRef} className="min-w-0 flex-1 overflow-y-auto py-2">
+      <div data-testid="message-thread" ref={scrollerRef} className="min-w-0 flex-1 overflow-y-auto bg-bg py-2">
         {q.hasNextPage && (
           <div className="flex justify-center py-2">
             <Button
@@ -257,7 +263,10 @@ export function ChatThread({ conversationId, onResponder, searchTerm = "" }: Pro
         {groups.map((g) => (
           <div key={g.key} className="space-y-1">
             <div className="sticky top-0 z-10 flex justify-center py-1">
-              <span className="rounded-full bg-background/80 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground backdrop-blur">
+              {/* Pílula OPACA: ela fica presa no alto enquanto a conversa rola, e
+                  a versão translúcida (fundo 80% + blur) deixava a data em cima
+                  do texto da mensagem que passava por baixo (print de 07/10/2026). */}
+              <span className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-[11px] font-medium text-text-muted">
                 {dayLabel(g.date, t, localeDaData)}
               </span>
             </div>
@@ -290,6 +299,7 @@ export function ChatThread({ conversationId, onResponder, searchTerm = "" }: Pro
                   // CRM — inclusive nas do colega, porque `sent_via='user'` só
                   // registra que um humano digitou, nunca qual.
                   viewerUserId={currentUser.id}
+                  nomeDoAutor={item.data.sent_by_user_id ? (nomePorUsuario.get(item.data.sent_by_user_id) ?? null) : null}
                 />
               ),
             )}
