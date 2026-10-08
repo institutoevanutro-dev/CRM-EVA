@@ -932,7 +932,7 @@ export function CRMSidePanel({ conversation }: Props) {
 
       <Separator />
 
-      <details className="group">
+      <details className="group" open>
         <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold text-text [&::-webkit-details-marker]:hidden">
           {t("Atividade")}
           <CaretDown size={12} className="text-text-muted transition-transform group-open:rotate-180" aria-hidden />

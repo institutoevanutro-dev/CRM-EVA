@@ -178,7 +178,8 @@ export function ConversationListItem({
     automaticoDaOrg,
   });
   const isAi = comando.quem === "automatico";
-  const selo = mostrarComando ? SELO_DO_COMANDO[comando.quem] : undefined;
+  // Na Fila a linha já diz "Aguardando há…" no alto: o selo repetiria a palavra.
+  const selo = mostrarComando && !naFila ? SELO_DO_COMANDO[comando.quem] : undefined;
   // Quem atende ganha NOME quando a lista tem mais de um dono — "Equipe" em toda
   // linha não diria de quem é.
   const rotuloDoSelo =

@@ -60,7 +60,10 @@ export function ChatThread({ conversationId, onResponder, searchTerm = "" }: Pro
   const paginasVistas = useRef(0);
   const activeOrg = useActiveOrg();
   const currentUser = useUser();
-  const equipe = useAssignableMembers(true).data;
+  // Suporte em modo leitura não lê a equipe da organização (a rota responde 403);
+  // sem a lista, o balão diz só "Atendente", como antes.
+  const podeLerEquipe = currentUser.support?.access_mode !== "support_readonly";
+  const equipe = useAssignableMembers(podeLerEquipe).data;
   const nomePorUsuario = useMemo(
     () => new Map((equipe ?? []).map((m) => [m.user_id, m.full_name ?? null])),
     [equipe],
