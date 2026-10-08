@@ -9964,6 +9964,12 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível carregar o quadro.": { es: "No se pudo cargar el tablero." },
   "Este funil ainda não tem etapas.": { es: "Este embudo todavía no tiene etapas." },
   "Criar etapas": { es: "Crear etapas" },
+  "Importar planilha (.csv)": { es: "Importar planilla (.csv)" },
+  "Não foi possível carregar os produtos. Recarregue a página.": { es: "No se pudieron cargar los productos. Recargue la página." },
+  "Nenhum produto com essa busca.": { es: "Ningún producto con esa búsqueda." },
+  "Desativar este produto? O assistente de IA deixa de oferecê-lo.": { es: "¿Desactivar este producto? El asistente de IA dejará de ofrecerlo." },
+  "Procedimentos, produtos e preços da clínica. É daqui que o assistente de IA tira o preço quando alguém pergunta.": { es: "Procedimientos, productos y precios de la clínica. De aquí saca el asistente de IA el precio cuando alguien pregunta." },
+  "Enquanto o catálogo estiver vazio, o assistente responde que não encontrou o item — mesmo que a clínica tenha.": { es: "Mientras el catálogo esté vacío, el asistente responde que no encontró el ítem, aunque la clínica lo tenga." },
 };
 
 /**
