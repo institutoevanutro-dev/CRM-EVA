@@ -209,6 +209,14 @@
       "type": "storage",
       "label": "bucket media-library",
       "sublabel": "privado; caminho org/item/variante-uuid.ext, URL assinada só para a tela"
+    },
+    {
+      "id": "midiasEnvio",
+      "lane": "borda",
+      "col": 5,
+      "type": "api",
+      "label": "POST /api/v1/messages",
+      "sublabel": "media_library_item_id: confere o termo de uso de imagem na hora e envia a variante pelo canal; organization_id vem da sessão"
     }
   ],
   "edges": [
@@ -261,6 +269,18 @@
       "from": "midiasTabela",
       "to": "midiasTela",
       "label": "a lista mostra o selo de cada mídia"
+    },
+    {
+      "id": "e31",
+      "from": "midiasTabela",
+      "to": "midiasEnvio",
+      "label": "o envio lê o item e recalcula o termo antes de mandar"
+    },
+    {
+      "id": "e32",
+      "from": "midiasBucket",
+      "to": "midiasEnvio",
+      "label": "o envio assina a URL do arquivo da variante"
     }
   ],
   "cards": [
