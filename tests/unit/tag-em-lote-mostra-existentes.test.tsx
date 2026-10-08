@@ -80,7 +80,7 @@ beforeEach(() => mutate.mockReset());
 describe("BulkActionBar — tag em lote", () => {
   it("o menu mostra as tags existentes e clicar aplica a escolhida aos selecionados", async () => {
     renderBarra();
-    await userEvent.click(screen.getByRole("button", { name: /tag/i }));
+    await userEvent.click(screen.getByRole("button", { name: /etiqueta…/i }));
 
     const google = await screen.findByRole("menuitem", { name: "google" });
     expect(screen.getByRole("menuitem", { name: "vip" })).toBeTruthy();
@@ -95,10 +95,10 @@ describe("BulkActionBar — tag em lote", () => {
 
   it("digitar filtra as tags existentes", async () => {
     renderBarra();
-    await userEvent.click(screen.getByRole("button", { name: /tag/i }));
+    await userEvent.click(screen.getByRole("button", { name: /etiqueta…/i }));
     await screen.findByRole("menuitem", { name: "vip" });
 
-    const campo = screen.getByPlaceholderText("nova tag") as HTMLInputElement;
+    const campo = screen.getByPlaceholderText("nova etiqueta") as HTMLInputElement;
     await userEvent.type(campo, "goo");
 
     // O QUE FOI DIGITADO, e não só o que sobrou na lista. Com ["google",
@@ -117,10 +117,10 @@ describe("BulkActionBar — tag em lote", () => {
     // todos os cards selecionados. Medido em jsdom antes do conserto: o campo
     // recebia "v" ao digitar "verão".
     renderBarra();
-    await userEvent.click(screen.getByRole("button", { name: /tag/i }));
+    await userEvent.click(screen.getByRole("button", { name: /etiqueta…/i }));
     await screen.findByRole("menuitem", { name: "vip" });
 
-    const campo = screen.getByPlaceholderText("nova tag") as HTMLInputElement;
+    const campo = screen.getByPlaceholderText("nova etiqueta") as HTMLInputElement;
     await userEvent.type(campo, "verão");
     expect(campo.value).toBe("verão");
 
@@ -150,7 +150,7 @@ describe("a página do funil ENTREGA as tags do quadro à barra", () => {
     const { PipelinePageClient } = await import("@/app/app/pipelines/[id]/_client");
     render(<PipelinePageClient pipelineId="p-1" initialName="Funil" />);
 
-    await userEvent.click(await screen.findByRole("button", { name: /tag/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /etiqueta…/i }));
     expect(await screen.findByRole("menuitem", { name: "google" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "vip" })).toBeTruthy();
   });
