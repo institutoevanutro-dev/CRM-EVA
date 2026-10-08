@@ -114,12 +114,29 @@ describe("selo de canal no avatar", () => {
     expect(screen.getByLabelText("WhatsApp")).toBeInTheDocument();
   });
 
-  it("a bolinha de comando continua no canto inferior DIREITO do avatar", () => {
+  it("quem atende é dito por ESCRITO, não por uma bolinha de cor sem legenda", () => {
+    // A bolinha (azul/roxa/laranja) no canto do avatar não tinha legenda em
+    // lugar nenhum da tela: a equipe não sabia o que cada cor queria dizer
+    // (print de 07/10/2026). O selo escrito ocupa o lugar dela.
     const { container } = render(
-      <ConversationListItem conversation={base} isSelected={false} onSelect={() => {}} />,
+      <ConversationListItem conversation={base} isSelected={false} onSelect={() => {}} automaticoDaOrg />,
     );
-    const dot = container.querySelector('[aria-hidden][class*="-right-0.5"]');
-    expect(dot).not.toBeNull();
+    expect(container.querySelector('[aria-hidden][class*="-right-0.5"][class*="rounded-full"]')).toBeNull();
+    expect(container.querySelector("[data-selo-do-comando]")?.textContent).toMatch(/IA|Aguardando|Equipe|Encerrada/);
+  });
+
+  it("o selo some quando a lista pede para não repetir", () => {
+    const { container } = render(
+      <ConversationListItem conversation={base} isSelected={false} onSelect={() => {}} automaticoDaOrg mostrarComando={false} />,
+    );
+    expect(container.querySelector("[data-selo-do-comando]")).toBeNull();
+  });
+
+  it("a etapa do funil aparece quando o servidor a manda", () => {
+    render(
+      <ConversationListItem conversation={{ ...base, etapa_atual: "Avaliação" }} isSelected={false} onSelect={() => {}} />,
+    );
+    expect(screen.getByText("Avaliação")).toBeInTheDocument();
   });
 });
 

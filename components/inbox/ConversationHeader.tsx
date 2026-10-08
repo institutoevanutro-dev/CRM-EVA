@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { JanelaSelo } from "@/components/inbox/JanelaSelo";
 import { capabilitiesOf } from "@/lib/channels/capabilities";
 import type { ChannelProvider } from "@/lib/channels/types";
-import { InstagramLogo, Phone, ArrowRight, MagnifyingGlass } from "@/lib/ui/icons";
+import { InstagramLogo, Phone, ArrowRight, MagnifyingGlass, IdentificationCard } from "@/lib/ui/icons";
+import { AvatarDoContato } from "@/components/inbox/AvatarDoContato";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useReleaseConversation } from "@/hooks/inbox/useReleaseConversation";
@@ -37,6 +38,12 @@ interface Props {
   onBuscar?: () => void;
   buscaAberta?: boolean;
   botaoBuscaRef?: RefObject<HTMLButtonElement | null>;
+  /**
+   * Abre a ficha do contato em painel lateral. Abaixo de `xl` a ficha não cabe
+   * ao lado da conversa, e até aqui o único jeito de vê-la era no celular — em
+   * notebook ela simplesmente não existia (print de 07/10/2026).
+   */
+  onAbrirFicha?: () => void;
 }
 
 /**
@@ -65,7 +72,7 @@ const STATUS_LABEL: Record<string, string> = {
   archived: "Arquivada",
 };
 
-export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoBuscaRef }: Props) {
+export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoBuscaRef, onAbrirFicha }: Props) {
   const t = useT();
   const { user } = useAuth();
   const claim = useClaimConversation();
@@ -168,14 +175,18 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
     // de antes (uma linha), e quando aperta a barra desce para a linha de baixo.
     // Nenhuma ação some — um menu "mais" esconderia o "Lembrar" que a spec
     // `canais-baseline` clica, e, pior, esconderia ação de quem atende.
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-4 py-3">
-      <div className="min-w-0">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-4 py-2.5">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="relative shrink-0">
+          <AvatarDoContato contato={c} nome={displayName} reserva={phone ?? displayName} className="h-9 w-9" />
+        </div>
+        <div className="min-w-0">
         <div className="flex items-center gap-2">
           <SeloDoCanal
             canal={conversation.channel === "instagram" ? "instagram" : "whatsapp"}
             tamanho="grande"
           />
-          <h2 className="truncate text-sm font-semibold">{displayName}</h2>
+          <h2 className="truncate text-[15px] font-semibold">{displayName}</h2>
           <Badge variant="outline" className="h-4 px-1.5 text-[10px]">
             {t(STATUS_LABEL[status] ?? status)}
           </Badge>
@@ -211,7 +222,8 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
             funil e do dossiê: um terceiro jeito de dizer "quem manda", por cor ou
             por texto, faria a mesma pergunta ter três respostas diferentes na
             mesma tela. Cor não sobrevive ao daltonismo nem ao teste do metro. */}
-        <div className="mt-1 flex items-center gap-2" data-testid="comando-da-conversa">
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+        <div className="flex items-center gap-2" data-testid="comando-da-conversa">
           {comando.quem === "humano" ? (
             <OwnerBadge ownerKind="user" ownerName={comando.nome ?? t("Atendente")} />
           ) : comando.quem === "automatico" ? (
@@ -223,18 +235,20 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
           )}
         </div>
         {phone && (
-          <p className="mt-0.5 flex items-center gap-1 text-xs text-canal-whatsapp">
+          <p className="flex items-center gap-1 text-xs text-text-muted">
             <Phone size={11} weight="regular" aria-hidden /> {phone}
           </p>
         )}
         {conversation.channel === "instagram" && (
-          <p className="mt-0.5 flex items-center gap-1 text-xs text-canal-instagram">
+          <p className="flex items-center gap-1 text-xs text-canal-instagram">
             <InstagramLogo size={11} weight="regular" aria-hidden />
             {conversation.channel_sessions?.display_name
               ? `${t("via")} ${conversation.channel_sessions.display_name}`
               : t("Instagram")}
           </p>
         )}
+        </div>
+        </div>
       </div>
 
       {/* `shrink-0` saiu daqui: era ele que impunha o piso de largura. Agora a
@@ -419,6 +433,12 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
             Abaixo de 1280 o painel não existe, e aí esta é a única porta para o
             contato — por isso a condição é a mesma do painel, e não um valor
             escolhido à parte. Não é esconder ação; é não repeti-la. */}
+        {onAbrirFicha && (
+          <Button size="sm" variant="outline" className="gap-1 xl:hidden" onClick={onAbrirFicha}>
+            <IdentificationCard size={14} aria-hidden />
+            {t("Ficha")}
+          </Button>
+        )}
         {c?.id && (
           <Button asChild size="sm" variant="ghost" className="xl:hidden">
             <Link href={`/app/contacts/${c.id}`} className="flex items-center gap-1">

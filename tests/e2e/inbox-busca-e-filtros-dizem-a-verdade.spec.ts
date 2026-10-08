@@ -173,5 +173,7 @@ test('a aba "Fechadas" mostra número', async ({ page }) => {
   expect(fechada.ok(), await fechada.text()).toBe(true);
 
   await page.reload();
-  await expect(page.getByRole("tab", { name: /Fechadas/i })).toHaveText(/\d/);
+  // "Fechadas" mora no menu "Mais" desde o redesenho do Inbox; o contador vai junto.
+  await page.getByRole("button", { name: "Mais abas" }).click();
+  await expect(page.getByRole("menuitem", { name: /Fechadas/i })).toHaveText(/\d/);
 });

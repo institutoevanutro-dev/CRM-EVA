@@ -211,9 +211,9 @@ test.describe("Lote 12 — painel do contato no Inbox", () => {
 
     // ── #944: Funil · Etapa e o desfecho pelas PALAVRAS FIXAS ─────────────
     const secao = page.locator('[data-testid="inbox-campos-lead"]');
-    await expect(secao.getByText("Leads recentes")).toBeVisible();
+    await expect(secao.getByText("Negócio", { exact: true })).toBeVisible();
     const texto = await secao.innerText();
-    registra(`#944 · seção "Leads recentes" = ${JSON.stringify(texto)}`);
+    registra(`#944 · seção "Negócio" = ${JSON.stringify(texto)}`);
 
     expect(texto, "o lead do funil ARQUIVADO não pode aparecer").not.toContain(`Fantasma ${SUFIXO}`);
     expect(texto).toContain(`Funil de Vendas Consultivas B2B Enterprise ${SUFIXO} · Proposta enviada ao comitê`);
