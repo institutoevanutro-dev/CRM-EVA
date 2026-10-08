@@ -231,7 +231,7 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
   // do aria-hidden que o Radix põe no resto da página.
   await page.getByRole("menuitemcheckbox", { name: "cliente", exact: true }).click();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Tag: cliente" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Etiqueta: cliente" })).toBeVisible();
   await expect(linhaDoContato(page)).toBeVisible({ timeout: 30_000 });
   await evidencia(page, info, "5-contatos-filtro-cliente");
 

@@ -115,9 +115,31 @@ export function PipelinePageClient({
         />
       )}
       <FilterBar filters={filters} onChange={setFilters} leads={data?.leads ?? []} />
+      {data && filteredLeads.length === 0 && data.leads.length > 0 ? (
+        // Com o filtro escondendo tudo, as colunas só diziam "vazio" — e o
+        // funil parecia sem negócio nenhum.
+        <p className="-mt-2 flex flex-wrap items-center gap-2 text-sm text-text-muted" data-testid="filtro-sem-resultado">
+          {t("Nenhum negócio com esses filtros.")}
+          <button
+            type="button"
+            onClick={() => setFilters({})}
+            className="font-medium text-accent-strong underline-offset-2 hover:underline"
+          >
+            {t("Limpar filtros")}
+          </button>
+        </p>
+      ) : null}
       {error ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm">
-          {t("Não consegui carregar este funil:")} {formatError(error, t)}
+        // O detalhe técnico fica no `title`, para quem for reportar; na tela, a
+        // frase e o que fazer.
+        <div
+          className="flex flex-wrap items-center gap-3 rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm"
+          title={formatError(error, t)}
+        >
+          {t("Não consegui carregar este funil.")}
+          <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+            {t("Tentar de novo")}
+          </Button>
         </div>
       ) : isLoading || !data ? (
         <div className="flex flex-1 animate-pulse items-center justify-center text-muted-foreground">

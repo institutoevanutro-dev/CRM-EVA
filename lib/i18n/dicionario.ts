@@ -9955,6 +9955,15 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível carregar os funis. Recarregue a página.": { es: "No se pudieron cargar los embudos. Recargue la página." },
   "Escolher a planilha (.csv)": { es: "Elegir la planilla (.csv)" },
   "Uma planilha salva como .csv (no Excel ou Google Planilhas: Salvar como → CSV), com uma linha por pessoa. Cada uma entra na primeira etapa aberta do funil escolhido.": { es: "Una planilla guardada como .csv (en Excel o Google Sheets: Guardar como → CSV), con una fila por persona. Cada una entra en la primera etapa abierta del embudo elegido." },
+  "Com todas": { es: "Con todas" },
+  "Com qualquer uma": { es: "Con cualquiera" },
+  "Etiqueta…": { es: "Etiqueta…" },
+  "nova etiqueta": { es: "nueva etiqueta" },
+  "Nenhum negócio com esses filtros.": { es: "Ningún negocio con esos filtros." },
+  "Não consegui carregar este funil.": { es: "No pude cargar este embudo." },
+  "Não foi possível carregar o quadro.": { es: "No se pudo cargar el tablero." },
+  "Este funil ainda não tem etapas.": { es: "Este embudo todavía no tiene etapas." },
+  "Criar etapas": { es: "Crear etapas" },
 };
 
 /**
