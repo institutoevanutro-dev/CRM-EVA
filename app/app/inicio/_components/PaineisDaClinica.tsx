@@ -248,7 +248,7 @@ function PainelFunil({ p, onTrocar }: { p: Funil; onTrocar: (id: string) => void
           {p.etapas.map((e) => (
             <li key={e.id} className="grid grid-cols-[minmax(0,9rem)_1fr_2rem] items-center gap-2 text-sm">
               <span className="truncate text-text-muted">{e.nome}</span>
-              <span className="h-2.5 overflow-hidden rounded-full bg-neutral-200">
+              <span className="h-2.5 overflow-hidden rounded-full bg-border">
                 <span className="block h-full rounded-full bg-accent" style={{ width: `${(e.abertos / maior) * 100}%` }} />
               </span>
               <span className="text-right font-medium tabular-nums">{e.abertos}</span>
@@ -275,7 +275,7 @@ function PainelOrigem({ p }: { p: OrigemPainel }) {
             <span>{t(i.rotulo)}</span>
             <span className="font-medium tabular-nums">{i.total}</span>
           </div>
-          <span className="block h-2.5 overflow-hidden rounded-full bg-neutral-200">
+          <span className="block h-2.5 overflow-hidden rounded-full bg-border">
             <span className="block h-full rounded-full bg-accent" style={{ width: `${(i.total / maior) * 100}%` }} />
           </span>
           {i.detalhes.length ? (
