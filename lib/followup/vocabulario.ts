@@ -471,11 +471,18 @@ export const SITUACOES_DO_ACOMPANHAMENTO: Record<EnrollmentStatus, string> = {
   dead: "Parou por falha",
 };
 
-/** Como o acompanhamento terminou. Sem tradução em lugar nenhum do produto até aqui. */
+/**
+ * Como o acompanhamento terminou, na voz de quem opera o dossiê. O rótulo de
+ * `exhausted` diverge de `RESULTADOS_DO_FIM` de propósito: lá é a opção do nó
+ * final no construtor ("Esgotado"); aqui é como o operador lê o fim. `exhausted`
+ * não prova que o contato ficou calado (o nó Fim nasce com ele), por isso "sem
+ * conversão", e não "sem resposta".
+ * Porte de melgarafael/DeskcommCRM #2081 (568f201179).
+ */
 export const DESFECHOS: Record<EnrollmentOutcome, string> = {
   converted: "Convertido",
   replied: "O contato respondeu",
-  exhausted: "Esgotado",
+  exhausted: "Encerrado sem conversão",
   opted_out: "Pediu para parar",
   handoff: "Passou para um humano",
 };

@@ -480,7 +480,13 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
     await adminPage.goto("/app/team");
     const row = adminPage.getByRole("row", { name: new RegExp(FRESH_EMAIL, "i") });
     await row.getByRole("button", { name: /Ações/i }).click();
-    await adminPage.getByRole("menuitem", { name: /Revogar/i }).click();
+    // Pelo TECLADO, e não pelo clique: o conteúdo do menu é `position: fixed`
+    // ancorado no gatilho, e se a página se move depois de abrir ele pode ficar
+    // fora da tela — o clique então espera "element is outside of the viewport"
+    // até o timeout (run 37774453932). Foco + Enter não depende de viewport.
+    const revogar = adminPage.getByRole("menuitem", { name: /Revogar/i });
+    await revogar.focus();
+    await revogar.press("Enter");
     await adminPage.getByRole("button", { name: /^Revogar$/ }).click();
     await expect(adminPage.getByText(/Convite revogado/i)).toBeVisible();
 

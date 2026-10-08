@@ -31,3 +31,37 @@ it("registry ignora endpoint arbitrário e constrói o cliente no endpoint padr�
   const model = createDefaultRegistry().openrouter!("platform-secret", "x/y", "https://attacker.example/v1");
   expect(JSON.stringify(model)).not.toContain("attacker.example");
 });
+
+/**
+ * OpenRouter fala Chat Completions em todo caminho (porte de
+ * melgarafael/DeskcommCRM #1483). `createOpenAI()(id)` usa /responses por
+ * padrão, e a OpenRouter não o serve para todo modelo (Gemini devolvia
+ * "Invalid JSON response"). São quatro fábricas: consertar uma só deixava o
+ * ensaio, os pontos de IA e o gateway legado no endpoint que falha.
+ */
+describe("OpenRouter fala chat/completions em todo caminho", () => {
+  it("registry do worker devolve um modelo openai.chat", () => {
+    vi.stubEnv("OPENROUTER_BASE_URL", "");
+    const modelo = createDefaultRegistry().openrouter!("k", "google/gemini-2.5-flash-lite") as { provider?: string };
+    expect(modelo.provider).toBe("openai.chat");
+  });
+
+  it("ensaio no app (buildModel) devolve um modelo openai.chat", async () => {
+    const { buildModel } = await import("@/lib/ai/runtime/agent");
+    const modelo = buildModel("openrouter", "k", "google/gemini-2.5-flash-lite") as { provider?: string };
+    expect(modelo.provider).toBe("openai.chat");
+  });
+
+  it.each(["lib/ai/gateway.ts", "lib/ai/gateway-binding.ts"])(
+    "%s: toda fábrica OpenRouter termina em .chat()",
+    async (arquivo) => {
+      const { readFileSync } = await import("node:fs");
+      const fonte = readFileSync(arquivo, "utf8");
+      const chamadas = [...fonte.matchAll(/createOpenAI\(\{[^]*?\}\)(\.chat)?\(/g)].filter((m) =>
+        m[0].includes("OPENROUTER"),
+      );
+      expect(chamadas.length).toBeGreaterThan(0);
+      for (const c of chamadas) expect(c[1], c[0]).toBe(".chat");
+    },
+  );
+});
