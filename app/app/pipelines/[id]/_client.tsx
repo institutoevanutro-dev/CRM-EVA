@@ -71,9 +71,10 @@ export function PipelinePageClient({
       // barra do topo, h-14, e o p-6 do <main>), quem rola é o quadro — a barra
       // horizontal fica no pé da tela e o nome da etapa preso em cima. Antes a
       // página rolava inteira e era preciso descer até o fim da etapa mais
-      // comprida para andar para o lado. Piso de 28rem para tela baixa demais.
+      // comprida para andar para o lado. Piso de 20rem para tela baixa demais (era 28rem;
+      // com as abas da área no topo, 28rem passava da janela de 600px — e2e lote-no-quadro).
       // Porte do original b0ade1e44 (jmpo).
-      className="flex h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-3rem)] min-h-[28rem] flex-col gap-4"
+      className="flex h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-3rem)] min-h-[20rem] flex-col gap-4"
       // OBSERVÁVEL de propósito, e é a razão de existir desta linha: "a
       // assinatura morreu" e "nada aconteceu" produzem o MESMO silêncio na
       // tela, e sem este valor nem o produto nem o teste conseguem separar as
