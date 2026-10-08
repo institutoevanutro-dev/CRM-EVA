@@ -11575,11 +11575,17 @@ create table if not exists public.contact_field_proposals (
 comment on table public.contact_field_proposals is
   'Dado do contato que a IA ouviu na conversa e propôs — aguardando confirmação humana (spec 17 §4b). SEMPRE com prazo: proposta que ninguém decide vira badge permanente, que simula atenção e adia a decisão. No vencimento sai da tela e vira item de caixa.';
 
+-- 0334 (porte de melgarafael/DeskcommCRM #1650): `birthdate` entra AQUI, no
+-- bloco ÚNICO desta constraint. Uma constraint, um bloco
+-- (`tests/unit/baseline-constraint-reconstruida.test.ts`): um segundo `add` no
+-- apêndice faria este bloco falhar no `update.sh` de um clone cuja fila já
+-- tenha uma proposta de nascimento. Quem já instalou recebe a mudança porque o
+-- `update.sh` reaplica o baseline inteiro, este bloco incluído.
 alter table public.contact_field_proposals
   drop constraint if exists contact_field_proposals_campo_check;
 alter table public.contact_field_proposals
   add constraint contact_field_proposals_campo_check check (
-    campo = any (array['email', 'name', 'phone_number']::text[])
+    campo = any (array['email', 'name', 'phone_number', 'birthdate']::text[])
   );
 
 alter table public.contact_field_proposals
@@ -35124,6 +35130,16 @@ where o.id = r.organization_id
         'anthropic') <> 'anthropic';
 
 -- ---- fim: classificador do roteador nasce "Automático" (migration 0333) ----
+
+-- ---- birthdate na fila de proposta (migration 0334) ----
+-- NADA DE DDL AQUI, por causa da cerca `baseline-constraint-reconstruida`:
+-- `contact_field_proposals_campo_check` já tem o seu bloco ÚNICO, e foi ele que
+-- a 0334 editou, acrescentando `birthdate` ao conjunto. Um segundo `add`
+-- constraint neste apêndice faria o bloco antigo falhar no `update.sh` de um
+-- clone cuja fila já tenha uma proposta de nascimento, e deixaria a tabela sem
+-- constraint entre o `drop` e o `add` que funciona. Esta linha é só o marcador
+-- de que a mudança existe e onde ela foi parar.
+-- ---- fim: birthdate na fila de proposta (migration 0334) ----
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
