@@ -220,7 +220,8 @@ test("o gestor lê o funil do período com a régua de cada número", async ({ p
 
   // ---- a tela: Análise → Painel do funil ----
   await page.goto("/app/analise");
-  await page.getByRole("link", { name: /Painel do funil/ }).click();
+  // Menu por área (07/10/2026): o Painel do funil é aba de Análise (o card do hub também existe).
+  await page.getByRole("navigation", { name: "Telas de Análise" }).getByRole("link", { name: "Painel do funil" }).click();
   await page.waitForURL(/\/app\/painel-do-funil/);
   await expect(page.getByTestId("painel-do-funil")).toBeVisible({ timeout: ESPERA });
 

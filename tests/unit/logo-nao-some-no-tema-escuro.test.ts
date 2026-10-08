@@ -72,17 +72,14 @@ function imgDoLogoEstaDentroDoChip(fonte: string, classeDoChip: RegExp): boolean
 }
 
 describe("o logo do operador não some no tema escuro", () => {
-  it("a BARRA LATERAL desenha o logo sobre um chip claro quando o tema é escuro", () => {
+  it("a BARRA LATERAL é verde nos dois temas e desenha o logo SEM chip", () => {
+    // Mudou em 07/10/2026 (spec 2026-10-07-cores-e-menu, decisão do dono): o menu passou a
+    // ser verde-escuro nos DOIS temas, então o chip claro deixaria de proteger contraste e
+    // viraria a moldura branca que o dono pediu para tirar. Logo de arte escura precisa de
+    // versão clara/transparente em Configurações › Marca.
     const fonte = semComentario(leia("components/shell/Sidebar.tsx"));
-
-    // O chip existe...
-    expect(fonte, "sumiu o chip `dark:bg-white` da barra lateral").toMatch(/dark:bg-white/);
-    // ...e o `<img>` do logo está DENTRO dele. Sem esta segunda asserção, mover
-    // a classe para um irmão deixaria a cerca verde com o logo cru de novo.
-    expect(
-      imgDoLogoEstaDentroDoChip(fonte, /dark:bg-white/),
-      "o `<img>` do logo saiu de dentro do chip `dark:bg-white`",
-    ).toBe(true);
+    expect(fonte, "a barra lateral voltou a pôr chip claro no logo").not.toMatch(/dark:bg-white/);
+    expect(fonte, "a barra lateral deixou de ser verde nos dois temas").toMatch(/\bbg-sidebar\b/);
   });
 
   it("a TELA DE ENTRADA desenha o logo sobre o mesmo chip", () => {

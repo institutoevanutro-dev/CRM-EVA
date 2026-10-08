@@ -32,19 +32,19 @@
 
 :root {
   /* Surfaces (light) */
-  --color-bg: #faf9f6;
+  --color-bg: #f7f4ec;
   --color-surface: #ffffff;
-  --color-surface-elevated: #f5f3ee;
+  --color-surface-elevated: #f3efe4;
   --color-overlay: rgba(28, 26, 22, 0.42);
 
   /* Text (light) */
-  --color-text: #1c1a16;
-  --color-text-muted: #5d594f;
-  --color-text-subtle: #7d786c;
+  --color-text: #171717;
+  --color-text-muted: #525252;
+  --color-text-subtle: #6b6b6b;
 
   /* Borders (light) */
-  --color-border: #e7e3da;
-  --color-border-strong: #d2cdbf;
+  --color-border: #e6e1d3;
+  --color-border-strong: #d6cfbd;
 
   /* Accent — Sage (11 stops) */
   --color-accent-50:  #f3f6f1;
@@ -220,6 +220,16 @@
   --agenda-pessoa-6: #608bda;   /* índigo */
   --agenda-pessoa-7: #7b5bad;   /* violeta */
   --agenda-pessoa-8: #cc77b1;   /* framboesa */
+
+  /* Menu lateral e tabelas no padrão do Eva Financeiro (spec 2026-10-07-cores-e-menu).
+     O menu é verde nos DOIS temas; o dourado só aparece sobre ele ou como traço. */
+  --color-sidebar-bg: #1d352c;
+  --color-sidebar-fg: #e9e2c8;
+  --color-sidebar-muted: #b9b39c;
+  --color-sidebar-active-bg: rgba(255, 255, 255, 0.1);
+  --color-gold: #d9b24c;
+  --color-table-head: #efece3;
+  --color-row-hover: #fbf9f4;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -256,15 +266,15 @@
    (lib/branding/css.ts), que só ganha consumidor com a tela de marca.
    ───────────────────────────────────────────────────────────────────────── */
 [data-theme="light"] {
-  --color-bg: #faf9f6;
+  --color-bg: #f7f4ec;
   --color-surface: #ffffff;
-  --color-surface-elevated: #f5f3ee;
+  --color-surface-elevated: #f3efe4;
   --color-overlay: rgba(28, 26, 22, 0.42);
-  --color-text: #1c1a16;
-  --color-text-muted: #5d594f;
-  --color-text-subtle: #7d786c;
-  --color-border: #e7e3da;
-  --color-border-strong: #d2cdbf;
+  --color-text: #171717;
+  --color-text-muted: #525252;
+  --color-text-subtle: #6b6b6b;
+  --color-border: #e6e1d3;
+  --color-border-strong: #d6cfbd;
   --color-accent: var(--color-accent-600);
   --color-accent-fg: #ffffff;
   --color-accent-soft: var(--color-accent-100);
@@ -332,23 +342,26 @@
   --agenda-pessoa-6: #608bda;   /* índigo */
   --agenda-pessoa-7: #7b5bad;   /* violeta */
   --agenda-pessoa-8: #cc77b1;   /* framboesa */
+  --color-table-head: #efece3;
+  --color-row-hover: #fbf9f4;
+  --color-sidebar-bg: #1d352c;
 }
 
 [data-theme="dark"] {
   /* Surfaces (dark — drawn) */
-  --color-bg: #161510;
-  --color-surface: #1d1c17;
-  --color-surface-elevated: #272620;
+  --color-bg: #0f1d18;
+  --color-surface: #152820;
+  --color-surface-elevated: #1b3129;
   --color-overlay: rgba(0, 0, 0, 0.55);
 
   /* Text (dark) */
-  --color-text: #f5f4ef;
-  --color-text-muted: #8e8b7f;
-  --color-text-subtle: #605e54;
+  --color-text: #f1ede0;
+  --color-text-muted: #b5b09f;
+  --color-text-subtle: #8f8a7a;
 
   /* Borders (dark) */
-  --color-border: #33312a;
-  --color-border-strong: #444239;
+  --color-border: #24392f;
+  --color-border-strong: #2f4a3e;
 
   /* Accent stays same hex stops; default shifts up for dark contrast */
   --color-accent-50:  #f3f6f1;
@@ -368,17 +381,17 @@
   --color-accent-hover: var(--color-accent-300);
 
   /* Neutrals — greige (11 stops, dark) */
-  --color-neutral-50:  #f5f4ef;
-  --color-neutral-100: #e6e4dc;
-  --color-neutral-200: #bbb8ac;
-  --color-neutral-300: #8e8b7f;
-  --color-neutral-400: #605e54;
-  --color-neutral-500: #444239;
-  --color-neutral-600: #33312a;
-  --color-neutral-700: #272620;
-  --color-neutral-800: #1d1c17;
-  --color-neutral-900: #161510;
-  --color-neutral-950: #0c0b08;
+  --color-neutral-50:  #f1ede0;
+  --color-neutral-100: #ddd8c8;
+  --color-neutral-200: #b5b09f;
+  --color-neutral-300: #8f8a7a;
+  --color-neutral-400: #5e6b63;
+  --color-neutral-500: #2f4a3e;
+  --color-neutral-600: #24392f;
+  --color-neutral-700: #1b3129;
+  --color-neutral-800: #152820;
+  --color-neutral-900: #0f1d18;
+  --color-neutral-950: #08110d;
 
   /* States (dark) */
   --color-success: #82a077;
@@ -434,6 +447,11 @@
   --agenda-pessoa-6: #6c97e7;
   --agenda-pessoa-7: #be9ef6;
   --agenda-pessoa-8: #cc77b1;
+
+  /* Escuro em verde fechado, desenhado à parte (não invertido). */
+  --color-table-head: #1b3129;
+  --color-row-hover: #182c24;
+  --color-sidebar-bg: #0b1612;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -463,6 +481,14 @@
    embrulhar o `:root` num `@layer`, o teste reprova e a explicação está aqui.
    ───────────────────────────────────────────────────────────────────────── */
 @theme inline {
+  /* Menu lateral (padrão do Eva Financeiro) */
+  --color-sidebar: var(--color-sidebar-bg);
+  --color-sidebar-fg: var(--color-sidebar-fg);
+  --color-sidebar-muted: var(--color-sidebar-muted);
+  --color-sidebar-active: var(--color-sidebar-active-bg);
+  --color-gold: var(--color-gold);
+  --color-table-head: var(--color-table-head);
+  --color-row-hover: var(--color-row-hover);
   /* Foundation */
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);
@@ -544,7 +570,8 @@
   --color-card-foreground: var(--color-text);
 
   /* Tipografia */
-  --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, -apple-system,
+  --font-titulo: var(--font-josefin), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, monospace;
@@ -710,12 +737,19 @@
     overflow-x: clip;
     background-color: var(--color-bg);
     color: var(--color-text);
-    font-family: var(--font-atkinson), ui-sans-serif, system-ui, -apple-system,
+    font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
       "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+  }
+
+  /* Títulos de página no padrão do Eva Financeiro: Josefin Sans, caixa alta e espaçado. */
+  h1 {
+    font-family: var(--font-titulo);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
   }
 
   code, kbd, pre, samp {
