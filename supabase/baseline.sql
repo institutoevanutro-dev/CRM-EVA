@@ -34884,8 +34884,8 @@ on conflict (id) do update
 create index if not exists conversations_org_created_idx on public.conversations (organization_id, created_at);
 create index if not exists contacts_org_created_idx on public.contacts (organization_id, created_at);
 
--- Conversas novas por dia no fuso da org. "IA sozinha" = houve saída e nenhuma
--- mensagem humana; "com a equipe" = houve mensagem humana; "sem resposta" = sem saída.
+-- Conversas novas por dia no fuso da org. "IA sozinha" = a IA falou e ninguém da
+-- equipe; "com a equipe" = alguém da equipe falou; "sem resposta" = nenhum dos dois.
 create or replace function public.fn_inicio_conversas_por_dia(p_org uuid, p_inicio timestamptz, p_fim timestamptz, p_fuso text)
 returns table(dia date, ia_sozinha int, com_equipe int, sem_resposta int, soma_primeira_resposta_s float8, respondidas int)
 language sql stable
@@ -34896,24 +34896,43 @@ as $$
       from public.conversations c
      where c.organization_id = p_org and not c.is_group
        and c.created_at >= p_inicio and c.created_at < p_fim
+  ), msg as (
+    -- sent_via='ai' cobre QUALQUER ator não humano (lembrete, campanha, automação);
+    -- fala da IA é a marca de autoria, a mesma régua de ehFalaDaIa
+    -- (lib/ai/handoff/aviso-ao-lead.ts). Envio que falhou não é resposta.
+    select m.conversation_id, m.direction, m.sent_at,
+           (m.direction = 'outbound' and m.status <> 'failed'
+             and coalesce(m.metadata->>'aviso_de_escalacao', '') <> 'true'
+             and (jsonb_typeof(m.metadata->'ai_actor_id') = 'string'
+                  or m.metadata->>'ai_generated' = 'true'
+                  or m.metadata->>'texto_escrito_pela_ia' = 'true')) as da_ia,
+           (m.direction = 'outbound' and m.status <> 'failed'
+             and (m.sent_by_user_id is not null or m.sent_via in ('user', 'external_device'))) as da_equipe
+      from public.messages m
+      join conv on conv.id = m.conversation_id
+     where m.organization_id = p_org
   ), por_conv as (
     select conv.id, conv.dia,
-           coalesce(bool_or(m.direction = 'outbound'), false) as saiu,
-           coalesce(bool_or(m.direction = 'outbound' and (m.sent_by_user_id is not null
-                    or m.sent_via in ('crm', 'user', 'external_device'))), false) as humano,
-           min(m.sent_at) filter (where m.direction = 'inbound') as pri_in,
-           min(m.sent_at) filter (where m.direction = 'outbound') as pri_out
+           coalesce(bool_or(m.da_ia), false) as ia,
+           coalesce(bool_or(m.da_equipe), false) as humano,
+           min(m.sent_at) filter (where m.direction = 'inbound') as pri_in
       from conv
-      left join public.messages m on m.conversation_id = conv.id and m.organization_id = p_org
+      left join msg m on m.conversation_id = conv.id
      group by conv.id, conv.dia
+  ), com_resposta as (
+    select p.*,
+           (select min(m.sent_at) from msg m
+             where m.conversation_id = p.id and (m.da_ia or m.da_equipe)
+               and m.sent_at > p.pri_in) as pri_out
+      from por_conv p
   )
   select p.dia,
-         (count(*) filter (where p.saiu and not p.humano))::int,
+         (count(*) filter (where p.ia and not p.humano))::int,
          (count(*) filter (where p.humano))::int,
-         (count(*) filter (where not p.saiu))::int,
+         (count(*) filter (where not p.ia and not p.humano))::int,
          coalesce(sum(extract(epoch from p.pri_out - p.pri_in)) filter (where p.pri_out > p.pri_in), 0)::float8,
          (count(*) filter (where p.pri_out > p.pri_in))::int
-    from por_conv p
+    from com_resposta p
    group by p.dia
    order by p.dia;
 $$;

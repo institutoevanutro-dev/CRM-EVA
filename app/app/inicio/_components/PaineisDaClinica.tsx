@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { apiClient } from "@/lib/api/client";
@@ -299,6 +299,9 @@ export function PaineisDaClinica() {
         )
       ).data,
     refetchOnWindowFocus: true,
+    // Agregados de 30 dias não mudam a cada foco; trocar de funil mantém os cards na tela.
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
 
   return (

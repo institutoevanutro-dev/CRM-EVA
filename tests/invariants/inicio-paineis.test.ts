@@ -52,6 +52,7 @@ beforeAll(() => {
       ('${C(2)}', '${GOV_ORG}', 'Pac Equipe',  'whatsapp', '{}'::jsonb,                    '2026-03-10T13:00:00Z'),
       ('${C(3)}', '${GOV_ORG}', 'Pac Mudo',    'webhook',  '{"utm_source":"site"}'::jsonb, '2026-03-10T13:00:00Z'),
       ('${C(4)}', '${GOV_ORG}', 'Pac Noite',   'whatsapp', '{}'::jsonb,                    '2026-02-15T13:00:00Z'),
+      ('${C(5)}', '${GOV_ORG}', 'Pac Lembrete', 'manual',  '{}'::jsonb,                    '2026-02-15T13:00:00Z'),
       ('${C(9)}', '${VIZINHA}', 'Pac Vizinho', 'meta_ads', '{}'::jsonb,                    '2026-03-10T13:00:00Z');
 
     -- Conversas: 10/03 (IA sozinha, com a equipe, sem resposta) e 31/03 22h local = 01/04 01h UTC.
@@ -60,15 +61,21 @@ beforeAll(() => {
       ('${CONV(2)}', '${GOV_ORG}', '${C(2)}', '${GOV_SESSION}', 'open', '2026-03-10T14:00:00Z'),
       ('${CONV(3)}', '${GOV_ORG}', '${C(3)}', '${GOV_SESSION}', 'open', '2026-03-10T15:00:00Z'),
       ('${CONV(4)}', '${GOV_ORG}', '${C(4)}', '${GOV_SESSION}', 'open', '2026-04-01T01:00:00Z'),
+      ('${CONV(5)}', '${GOV_ORG}', '${C(5)}', '${GOV_SESSION}', 'open', '2026-03-10T16:00:00Z'),
       ('${CONV(9)}', '${VIZINHA}', '${C(9)}', '${SESSION_VIZ}', 'open', '2026-03-10T13:00:00Z');
     insert into public.messages
-      (organization_id, conversation_id, channel_session_id, contact_id, type, direction, status, sent_via, sent_by_user_id, sent_at)
+      (organization_id, conversation_id, channel_session_id, contact_id, type, direction, status, sent_via, sent_by_user_id, sent_at, metadata)
     values
-      ('${GOV_ORG}', '${CONV(1)}', '${GOV_SESSION}', '${C(1)}', 'text', 'inbound',  'received', 'ai',  null, '2026-03-10T13:00:00Z'),
-      ('${GOV_ORG}', '${CONV(1)}', '${GOV_SESSION}', '${C(1)}', 'text', 'outbound', 'sent',     'ai',  null, '2026-03-10T13:01:00Z'),
-      ('${GOV_ORG}', '${CONV(2)}', '${GOV_SESSION}', '${C(2)}', 'text', 'inbound',  'received', 'ai',  null, '2026-03-10T14:00:00Z'),
-      ('${GOV_ORG}', '${CONV(2)}', '${GOV_SESSION}', '${C(2)}', 'text', 'outbound', 'sent',     'crm', '${GOV_MANAGER}', '2026-03-10T14:03:00Z'),
-      ('${GOV_ORG}', '${CONV(3)}', '${GOV_SESSION}', '${C(3)}', 'text', 'inbound',  'received', 'ai',  null, '2026-03-10T15:00:00Z');
+      ('${GOV_ORG}', '${CONV(1)}', '${GOV_SESSION}', '${C(1)}', 'text', 'inbound',  'received', 'ai',  null, '2026-03-10T13:00:00Z', '{}'::jsonb),
+      -- Fala da IA: marcada por ai_actor_id (a mesma régua de ehFalaDaIa em lib/ai/handoff/aviso-ao-lead.ts).
+      ('${GOV_ORG}', '${CONV(1)}', '${GOV_SESSION}', '${C(1)}', 'text', 'outbound', 'sent',     'ai',  null, '2026-03-10T13:01:00Z', '{"ai_actor_id":"agente-1"}'::jsonb),
+      ('${GOV_ORG}', '${CONV(2)}', '${GOV_SESSION}', '${C(2)}', 'text', 'inbound',  'received', 'ai',  null, '2026-03-10T14:00:00Z', '{}'::jsonb),
+      ('${GOV_ORG}', '${CONV(2)}', '${GOV_SESSION}', '${C(2)}', 'text', 'outbound', 'sent',     'crm', '${GOV_MANAGER}', '2026-03-10T14:03:00Z', '{}'::jsonb),
+      ('${GOV_ORG}', '${CONV(3)}', '${GOV_SESSION}', '${C(3)}', 'text', 'inbound',  'received', 'ai',  null, '2026-03-10T15:00:00Z', '{}'::jsonb),
+      -- Saída que FALHOU não é resposta.
+      ('${GOV_ORG}', '${CONV(3)}', '${GOV_SESSION}', '${C(3)}', 'text', 'outbound', 'failed',   'crm', '${GOV_MANAGER}', '2026-03-10T15:05:00Z', '{}'::jsonb),
+      -- Lembrete da Agenda: sent_via='ai' SEM marca de autoria da IA — não é a IA atendendo.
+      ('${GOV_ORG}', '${CONV(5)}', '${GOV_SESSION}', '${C(5)}', 'text', 'outbound', 'sent',     'ai',  null, '2026-03-10T16:00:00Z', '{}'::jsonb);
 
     -- Agenda: Vitória com 2 realizadas e 1 falta; 1 confirmada sem unidade; 1 cancelada.
     insert into public.calendar_units (id, organization_id, name) values ('${UNIDADE}', '${GOV_ORG}', 'Vitória');
@@ -99,9 +106,9 @@ describe("fn_inicio_conversas_por_dia", () => {
   const conversas = (org: string) =>
     linhas(`select * from public.fn_inicio_conversas_por_dia('${org}', '${DE}', '${ATE}', '${FUSO}')`);
 
-  it("separa IA sozinha, com a equipe e sem resposta", () => {
+  it("separa IA sozinha, com a equipe e sem resposta; lembrete e envio que falhou não contam", () => {
     const dia10 = conversas(GOV_ORG).find((l: { dia: string }) => l.dia === "2026-03-10");
-    expect(dia10).toMatchObject({ ia_sozinha: 1, com_equipe: 1, sem_resposta: 1, respondidas: 2 });
+    expect(dia10).toMatchObject({ ia_sozinha: 1, com_equipe: 1, sem_resposta: 2, respondidas: 2 });
     // primeira resposta: 60 s (IA) + 180 s (equipe)
     expect(dia10.soma_primeira_resposta_s).toBe(240);
   });
