@@ -32,7 +32,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export const dynamic = "force-dynamic";
 
 /** Contatos por invocação. Baixar imagem é I/O: cap baixo evita segurar o cron. */
-const SCAN_LIMIT = 25;
+const SCAN_LIMIT = 60;
 /** Revisita a foto a cada 7 dias — gente troca de foto, mas não toda hora. */
 const REFRESH_AFTER_DAYS = 7;
 /** Foto de perfil do WhatsApp é pequena; acima disto é resposta errada. */
@@ -66,6 +66,93 @@ function chatIdDoContato(c: ContactRow): string | null {
   }
   if (c.phone_number) return `${c.phone_number.replace(/\D/g, "")}@c.us`;
   return null;
+}
+
+type Admin = ReturnType<typeof createAdminClient>;
+type AlvoDaFoto = { id: string; organization_id: string };
+
+/**
+ * Grava o ponteiro da foto (ou só o carimbo de "tentado").
+ *
+ * `is_anonymized = false` no UPDATE fecha uma corrida: entre a seleção do lote e
+ * esta gravação há I/O de rede por contato, e a anonimização em escopo de tenant
+ * percorre centenas de contatos enquanto isto roda. Sem a cláusula, o cron
+ * gravaria o rosto de volta num contato JÁ anonimizado. Devolve se a gravação
+ * valeu.
+ */
+async function carimbarFoto(admin: Admin, c: AlvoDaFoto, path: string | null): Promise<boolean> {
+  const { data: afetadas } = await admin
+    .from("contacts")
+    .update({
+      ...(path !== null ? { avatar_storage_path: path } : {}),
+      avatar_updated_at: new Date().toISOString(),
+    })
+    .eq("id", c.id)
+    .eq("organization_id", c.organization_id)
+    .eq("is_anonymized", false)
+    .select("id");
+  return (afetadas ?? []).length > 0;
+}
+
+/** Baixa a imagem da URL e a guarda como a foto do contato. */
+async function salvarFoto(
+  admin: Admin,
+  c: AlvoDaFoto,
+  url: string | null,
+  requestId: string,
+): Promise<"ok" | "sem_foto" | "falha"> {
+  if (!url) {
+    await carimbarFoto(admin, c, null);
+    return "sem_foto";
+  }
+  const img = await fetch(url);
+  if (!img.ok) {
+    await carimbarFoto(admin, c, null);
+    return "falha";
+  }
+  const buf = Buffer.from(await img.arrayBuffer());
+  if (buf.byteLength === 0 || buf.byteLength > MAX_BYTES) {
+    await carimbarFoto(admin, c, null);
+    return "falha";
+  }
+
+  // Caminho estável por contato: `upsert` sobrescreve a foto antiga em vez
+  // de acumular um arquivo órfão por refresh (7 dias × N contatos viraria
+  // lixo pago no bucket).
+  const path = `${c.organization_id}/avatars/${c.id}.jpg`;
+  const { error: upErr } = await admin.storage
+    .from("whatsapp-media")
+    .upload(path, buf, { contentType: "image/jpeg", upsert: true });
+  if (upErr) {
+    await carimbarFoto(admin, c, null);
+    return "falha";
+  }
+
+  if (!(await carimbarFoto(admin, c, path))) {
+    // O contato foi anonimizado enquanto baixávamos a foto dele. O arquivo já
+    // subiu, então bloquear a gravação não basta: sem isto o objeto ficaria no
+    // bucket sem ponteiro nenhum. Devolvemos à fila de redação, o mesmo caminho
+    // que a cascata usa, e o worker de limpeza remove.
+    await admin.from("storage_redaction_queue").upsert(
+      {
+        organization_id: c.organization_id,
+        bucket: "whatsapp-media",
+        object_path: path,
+        status: "pending",
+        attempts: 0,
+        processed_at: null,
+        error_message: null,
+      },
+      { onConflict: "bucket,object_path" },
+    );
+    logger.warn("[contact-avatars] anonimizado durante a busca; foto devolvida à fila", {
+      contact_id: c.id,
+      organization_id: c.organization_id,
+      requestId,
+    });
+    return "sem_foto";
+  }
+  return "ok";
 }
 
 async function handle(req: NextRequest): Promise<Response> {
@@ -111,31 +198,8 @@ async function handle(req: NextRequest): Promise<Response> {
     const chatId = chatIdDoContato(c);
     // Carimba mesmo sem conseguir resolver o chatId: sem isso o contato voltaria
     // em TODA rodada do cron, para sempre, batendo no canal à toa.
-    //
-    // `is_anonymized = false` no UPDATE não repete o filtro do SELECT — fecha uma
-    // corrida. Entre a seleção do lote e esta gravação há I/O de rede por contato
-    // (canal, download, upload), e a anonimização em escopo de tenant percorre
-    // centenas de contatos enquanto isto roda. Se o pedido LGPD alcançar este
-    // contato no meio do caminho, sem esta cláusula o cron gravaria o rosto de
-    // volta num contato JÁ anonimizado — e o filtro do SELECT nunca mais o
-    // escolheria para corrigir. Devolve as linhas afetadas para que quem chamou
-    // saiba se a gravação valeu.
-    const carimbar = async (path: string | null): Promise<boolean> => {
-      const { data: afetadas } = await admin
-        .from("contacts")
-        .update({
-          ...(path !== null ? { avatar_storage_path: path } : {}),
-          avatar_updated_at: new Date().toISOString(),
-        })
-        .eq("id", c.id)
-        .eq("organization_id", c.organization_id)
-        .eq("is_anonymized", false)
-        .select("id");
-      return (afetadas ?? []).length > 0;
-    };
-
     if (!chatId) {
-      await carimbar(null);
+      await carimbarFoto(admin, c, null);
       semFoto++;
       continue;
     }
@@ -149,33 +213,32 @@ async function handle(req: NextRequest): Promise<Response> {
         // Sem o filtro, a linha de chamada de voz (spec 18) — que nasce
         // `WORKING` ao parear — podia ganhar este `limit(1)` sem ordenação e
         // devolver `waha_session_name` nulo: a foto de todo mundo parava de
-        // atualizar em silêncio, com o `carimbar(null)` logo abaixo parecendo
-        // "este contato não tem foto".
+        // atualizar em silêncio, com o carimbo "sem foto" parecendo "este
+        // contato não tem foto".
         //
         // E só canal que BUSCA foto de contato de telefone: a conta do Instagram
-        // é canal de mensagem, mas não tem `fetchProfilePictureUrl`, e ganhar
-        // este `limit(1)` carimbava "sem foto" no contato de WhatsApp.
+        // é canal de mensagem, mas não tem `fetchProfilePictureUrl` — a foto
+        // dela vem do perfil gravado na identidade (passo do Instagram abaixo).
         .in("provider", [...providersComFotoDePerfil()])
         .limit(1)
         .maybeSingle();
       const ref = (sessao as { waha_session_name?: string | null } | null)?.waha_session_name;
       if (!ref) {
-        await carimbar(null);
+        await carimbarFoto(admin, c, null);
         semFoto++;
         continue;
       }
 
       // Pelo adapter, nunca falando com o canal direto: a doutrina
       // `restricao-de-canal` proíbe nomear provider fora de lib/channels/, e o
-      // `pnpm lint:channels` reprova o build se acontecer (foi o que pegou a
-      // primeira versão desta rota). Testar a PRESENÇA do método é como se
-      // pergunta "este canal sabe fazer isso?" sem perguntar qual canal é.
+      // `pnpm lint:channels` reprova o build se acontecer. Testar a PRESENÇA do
+      // método é como se pergunta "este canal sabe fazer isso?".
       const adapter = getAdapter(
         (sessao as { provider?: ChannelProvider | null } | null)?.provider ??
           DEFAULT_CHANNEL_PROVIDER,
       );
       if (!adapter.fetchProfilePictureUrl) {
-        await carimbar(null);
+        await carimbarFoto(admin, c, null);
         semFoto++;
         continue;
       }
@@ -184,75 +247,49 @@ async function handle(req: NextRequest): Promise<Response> {
         sessionRef: ref,
         recipient: chatId,
       });
-      if (!profilePictureURL) {
-        // Contato sem foto ou com privacidade fechada: estado normal, não erro.
-        await carimbar(null);
-        semFoto++;
-        continue;
-      }
-
-      const img = await fetch(profilePictureURL);
-      if (!img.ok) {
-        await carimbar(null);
-        falhas++;
-        continue;
-      }
-      const buf = Buffer.from(await img.arrayBuffer());
-      if (buf.byteLength === 0 || buf.byteLength > MAX_BYTES) {
-        await carimbar(null);
-        falhas++;
-        continue;
-      }
-
-      // Caminho estável por contato: `upsert` sobrescreve a foto antiga em vez
-      // de acumular um arquivo órfão por refresh (7 dias × N contatos viraria
-      // lixo pago no bucket).
-      const path = `${c.organization_id}/avatars/${c.id}.jpg`;
-      const { error: upErr } = await admin.storage
-        .from("whatsapp-media")
-        .upload(path, buf, { contentType: "image/jpeg", upsert: true });
-      if (upErr) {
-        await carimbar(null);
-        falhas++;
-        continue;
-      }
-
-      const gravou = await carimbar(path);
-      if (!gravou) {
-        // O contato foi anonimizado enquanto baixávamos a foto dele. O arquivo
-        // já subiu, então bloquear a gravação não basta: sem isto o objeto ficaria
-        // no bucket sem ponteiro nenhum — pior que o defeito original, porque
-        // invisível. Devolvemos à fila de redação, o mesmo caminho que a cascata
-        // usa, e o worker de limpeza remove.
-        await admin.from("storage_redaction_queue").upsert(
-          {
-            organization_id: c.organization_id,
-            bucket: "whatsapp-media",
-            object_path: path,
-            status: "pending",
-            attempts: 0,
-            processed_at: null,
-            error_message: null,
-          },
-          { onConflict: "bucket,object_path" },
-        );
-        logger.warn("[contact-avatars] anonimizado durante a busca; foto devolvida à fila", {
-          contact_id: c.id,
-          organization_id: c.organization_id,
-          requestId,
-        });
-        semFoto++;
-        continue;
-      }
-      atualizados++;
+      // Sem URL = contato sem foto ou com privacidade fechada: estado normal.
+      const r = await salvarFoto(admin, c, profilePictureURL, requestId);
+      if (r === "ok") atualizados++;
+      else if (r === "sem_foto") semFoto++;
+      else falhas++;
     } catch (err) {
-      await carimbar(null);
+      await carimbarFoto(admin, c, null);
       falhas++;
       logger.warn("[contact-avatars] contato falhou", {
         contact_id: c.id,
         detail: err instanceof Error ? err.message : String(err),
         requestId,
       });
+    }
+  }
+
+  // Instagram: a foto vem do perfil que a ingestão grava em
+  // `contact_channel_identities.avatar_url`. Essa URL é do CDN da Meta e
+  // EXPIRA, então ela também vira arquivo no bucket — quanto antes, melhor:
+  // um contato novo é pego na rodada seguinte à primeira mensagem dele.
+  const { data: perfis } = await admin
+    .from("contact_channel_identities")
+    .select(
+      "avatar_url, contacts!inner(id, organization_id, avatar_storage_path, is_anonymized, avatar_updated_at)",
+    )
+    .eq("channel", "instagram")
+    .not("avatar_url", "is", null)
+    .eq("contacts.is_anonymized", false)
+    .is("contacts.avatar_storage_path", null)
+    .or(`avatar_updated_at.is.null,avatar_updated_at.lt.${cutoff}`, { referencedTable: "contacts" })
+    .limit(SCAN_LIMIT);
+  for (const p of (Array.isArray(perfis) ? perfis : []) as unknown as Array<{
+    avatar_url: string;
+    contacts: { id: string; organization_id: string };
+  }>) {
+    try {
+      const r = await salvarFoto(admin, p.contacts, p.avatar_url, requestId);
+      if (r === "ok") atualizados++;
+      else if (r === "sem_foto") semFoto++;
+      else falhas++;
+    } catch {
+      await carimbarFoto(admin, p.contacts, null);
+      falhas++;
     }
   }
 

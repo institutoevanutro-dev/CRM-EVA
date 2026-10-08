@@ -63,10 +63,12 @@ async function atualizarIdentidade(
   const patch: Record<string, string> = {};
   // O handle acompanha o VIVO (sobrescreve): um @ trocado ou reciclado por
   // outra pessoa não pode ficar gravado, porque `juntar-por-arroba.ts`
-  // compara handles. Nome e foto seguem "só preenche vazio".
+  // compara handles. O nome segue "só preenche vazio". A foto também
+  // acompanha o vivo: a URL é do CDN da Meta e expira, e uma guardada velha
+  // impedia o cron de fotos de baixar a atual.
   if (perfil.handle && perfil.handle !== atual.handle) patch.handle = perfil.handle;
   if (!atual.display_name && perfil.nome) patch.display_name = perfil.nome;
-  if (!atual.avatar_url && perfil.foto) patch.avatar_url = perfil.foto;
+  if (perfil.foto && perfil.foto !== atual.avatar_url) patch.avatar_url = perfil.foto;
   if (Object.keys(patch).length === 0) return;
   await admin
     .from("contact_channel_identities")
