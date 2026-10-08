@@ -173,7 +173,13 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
                 {canManage ? (
                   <TableCell>
                     {m.user_id !== currentUserId ? (
-                      <DropdownMenu>
+                      <DropdownMenu
+                        // `modal={false}`: o menu modal trava a rolagem da página ao abrir, e
+                        // nesta tela — com as abas da área empurrando a lista para baixo da dobra —
+                        // a página voltava ao topo no mesmo instante, deixando o menu FORA da tela
+                        // e sem como rolar até ele (e2e invite-lifecycle #15, run 37774453932).
+                        modal={false}
+                      >
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" aria-label={t("Ações")}>
                             <DotsThree size={20} />
