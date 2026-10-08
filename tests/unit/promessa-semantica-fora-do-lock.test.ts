@@ -76,6 +76,8 @@ function args(pool: pg.Pool, extras: Partial<RunBeforeSendArgs> = {}): RunBefore
 const NAO_E_PROMESSA: PromiseClassification = {
   isPromise: false,
   suspectPhrase: null,
+  prometeuRetornoHumano: false,
+  retornoSoDoAssistente: false,
 };
 
 describe('a conferência semântica roda fora da posse do lock do número', () => {
@@ -127,6 +129,8 @@ describe('a conferência semântica roda fora da posse do lock do número', () =
       async (_corpo: string): Promise<PromiseClassification> => ({
         isPromise: true,
         suspectPhrase: '50% de desconto',
+        prometeuRetornoHumano: false,
+        retornoSoDoAssistente: false,
       }),
     );
     const vistos: unknown[] = [];
@@ -147,7 +151,7 @@ describe('a conferência semântica roda fora da posse do lock do número', () =
     expect(r.status).toBe('sent');
     expect(classificar).toHaveBeenCalledWith('Consigo te dar 50% de desconto hoje.');
     expect(vistos).toEqual([
-      { isPromise: true, suspectPhrase: '50% de desconto' },
+      { isPromise: true, suspectPhrase: '50% de desconto', prometeuRetornoHumano: false, retornoSoDoAssistente: false },
     ]);
   });
 
