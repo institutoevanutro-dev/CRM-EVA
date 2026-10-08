@@ -451,6 +451,7 @@ export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
         meet_state: a.meetingState,
         meeting_url: a.meetingState === "ready" ? a.meetingUrl : null,
         contato_id: a.contatoId,
+        contato_nome: a.contatoNome,
         atendente_id: a.donoId,
       })),
     };
