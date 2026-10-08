@@ -118,25 +118,15 @@ describe("o elo que some sem barulho", () => {
     const fonte = readFileSync("app/api/v1/pipelines/[id]/board/route.ts", "utf8");
     expect(fonte, "falta withConversas").toContain("withConversas");
     expect(fonte, "withConversas não foi chamada").toMatch(
-      /leadsComConversa\s*=\s*await withConversas/,
+      /partes\s*=\s*await Promise\.all\(\[[^\]]*withConversas\(/,
     );
     // Chamar e não USAR o resultado é o defeito de verdade: a função roda, o
-    // custo se paga, e a resposta sai sem a conversa. A primeira versão deste
-    // caso só olhava a chamada e o sabote passou.
-    //
-    // A resposta não sai mais direto de `withConversas`: a cadeia é
-    // withConversas → withMarcadoresDoContato → resposta. Exigir o texto
-    // `leads: leadsComConversa.leads` reprovava quem acrescentava uma etapa
-    // CERTA depois dela; o que importa é o resultado dela alimentar a próxima,
-    // e a resposta sair da última.
-    expect(
-      fonte,
-      "o resultado de withConversas não alimenta withMarcadoresDoContato (cadeia: withConversas → withMarcadoresDoContato → resposta)",
-    ).toMatch(/withMarcadoresDoContato\(\s*supabase,[\s\S]*?leadsComConversa\.leads/);
-    expect(
-      fonte,
-      "a resposta não sai da última etapa (cadeia: withConversas → withMarcadoresDoContato → resposta)",
-    ).toMatch(/leads:\s*leadsComMarcadores\.leads/);
+    // custo se paga, e a resposta sai sem a conversa. Os enriquecimentos correm
+    // em paralelo; o que importa é a resposta fundir o resultado de TODOS.
+    expect(fonte, "a resposta não funde os resultados dos enriquecimentos").toMatch(
+      /enriquecidos\s*=\s*base\.map\([^;]*partes\.map\(\(p\)\s*=>\s*p\.leads\[i\]\)/,
+    );
+    expect(fonte, "a resposta não sai da fusão").toMatch(/leads:\s*enriquecidos/);
   });
 
   it("a mais RECENTE por contato — não a primeira que o banco devolver", () => {

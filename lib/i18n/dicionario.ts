@@ -681,6 +681,10 @@ export const DICIONARIO: Traducoes = {
 
   // ─── Estados e avisos que aparecem em várias telas ───
   "Carregando…": { es: "Cargando…" },
+  "Ver mais": { es: "Ver más" },
+  "Esconder antigos": { es: "Ocultar antiguos" },
+  "Mostrando também os ganhos e perdidos antigos.": { es: "Mostrando también los ganados y perdidos antiguos." },
+  "Ganhos e perdidos: só os dos últimos 30 dias.": { es: "Ganados y perdidos: solo los de los últimos 30 días." },
   "Nenhum resultado": { es: "Ningún resultado" },
   Erro: { es: "Error" },
   Excluir: { es: "Eliminar" },

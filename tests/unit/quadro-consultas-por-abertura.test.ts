@@ -107,6 +107,9 @@ describe("quadro do funil — consultas por abertura", () => {
     // Antes: 44 (3 iniciais + funil padrão + 5 tabelas × 8 lotes de 100).
     // Agora: 3 iniciais + 3 tabelas × 3 lotes de 300 + lead_state (3) + 1 lote
     // de candidatos (só quem tem proposta) + funil padrão = 17.
-    expect(consultas.length, JSON.stringify(consultas.map((c) => c.tabela))).toBeLessThanOrEqual(17);
+    // +1 desde a janela de fechados: a contagem dos antigos que ficam de fora
+    // (o que alimenta o "Ver mais"). Os enriquecimentos passaram a correr em
+    // paralelo, então mais uma consulta não soma tempo à espera.
+    expect(consultas.length, JSON.stringify(consultas.map((c) => c.tabela))).toBeLessThanOrEqual(18);
   });
 });

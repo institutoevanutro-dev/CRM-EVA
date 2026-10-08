@@ -1,6 +1,7 @@
 "use client";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
+import { useInvalidacaoAgrupada } from "@/hooks/realtime/useInvalidacaoAgrupada";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
 import { useRefetchDeSeguranca } from "@/hooks/realtime/useRefetchDeSeguranca";
 import { apiClient } from "@/lib/api/client";
@@ -58,10 +59,13 @@ export function useMessagesRealtime(conversationId: string | null) {
     refetchOnWindowFocus: true,
   });
 
+  // A conversa aberta reage rápido; a lista ao lado agrupa com o canal dela.
+  const invalidar = useInvalidacaoAgrupada(150, 600);
+  const invalidarLista = useInvalidacaoAgrupada(600);
   const onChange = useCallback(() => {
-    if (conversationId) qc.invalidateQueries({ queryKey: ["messages", conversationId] });
-    qc.invalidateQueries({ queryKey: ["conversations"] });
-  }, [qc, conversationId]);
+    if (conversationId) invalidar(["messages", conversationId]);
+    invalidarLista(["conversations"]);
+  }, [invalidar, invalidarLista, conversationId]);
 
   const { status: realtimeStatus, ultimaEntrega } = useRealtimeChannel({
     name: conversationId ? `messages-${conversationId}` : "messages-disabled",
