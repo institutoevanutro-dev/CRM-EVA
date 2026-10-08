@@ -65,7 +65,9 @@ test.describe("follow-ups — horário de envio", () => {
     await login(page, creds.users.manager!.email);
 
     // A porta: pelo menu, não pela URL digitada.
-    await page.getByRole("link", { name: "Follow-ups" }).first().click();
+    // Menu por área (07/10/2026): IA → aba Follow-ups.
+    await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("link", { name: "IA" }).click();
+    await page.getByRole("navigation", { name: "Telas de IA" }).getByRole("link", { name: "Follow-ups" }).click();
     await page.waitForURL(/\/app\/ai\/followups/);
 
     const quadro = page.getByTestId("horario-de-envio");

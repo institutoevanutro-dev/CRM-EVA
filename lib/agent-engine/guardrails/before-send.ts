@@ -539,7 +539,7 @@ export const internalVocabularyGate: Gate = {
  * antes do PR #140; "plano de tratamento" adiante também solta o ramo do serviço.
  */
 const AGENDA_STALL_PATTERN =
-  /\b(vou|estou|iremos|vamos)\b[^.!?\n]{0,10}\b(verificando|verificar|confirmando|confirmar|consultando|consultar|organizando|organizar)\b(?:[^.!?\n]{0,80}\b(?:hor[aá]rios?|agenda|disponibilidade|agendamento|marca[çc][aã]o|encaixe|vagas?)\b|(?<!confirm(?:ando|ar))\s+(?:[oa]s?\s+)?(?:meu\s+|minha\s+|seu\s+|sua\s+|nosso\s+|nossa\s+|teu\s+|tua\s+)?(?:atendimento|consulta|sess[aã]?o)\b(?![^.!?\n]*\b(?:convenios?|planos?|cobertura|cobre|reembolso)\b))/i;
+  /\b(vou|estou|iremos|vamos)\b[^.!?\n]{0,10}\b(verificando|verificar|confirmando|confirmar|consultando|consultar|organizando|organizar|conferindo|conferir|checando|checar|olhando|olhar)\b(?:[^.!?\n]{0,80}\b(?:hor[aá]rios?|agenda|disponibilidade|agendamento|marca[çc][aã]o|encaixe|vagas?)\b|(?<!confirm(?:ando|ar))\s+(?:[oa]s?\s+)?(?:meu\s+|minha\s+|seu\s+|sua\s+|nosso\s+|nossa\s+|teu\s+|tua\s+)?(?:atendimento|consulta|sess[aã]?o)\b(?![^.!?\n]*\b(?:convenios?|planos?|cobertura|cobre|reembolso)\b))/i;
 
 /**
  * A janela de 10 chars entre "vou" e o verbo de checagem não alcança a construção medida
@@ -566,7 +566,7 @@ const AGENDA_STALL_PATTERN =
 const PRONOME_DO_CLIENTE = String.raw`\b(?:voce|vc|ce|tu)\b`;
 const AGENDA_STALL_VER_PATTERN = new RegExp(
   String.raw`\b(vou|estou|iremos|vamos)\b(?:(?!${PRONOME_DO_CLIENTE})[^.!?\n]){0,50}` +
-    String.raw`(?<!\ba )\bver\b(?!\s*[:;,])(?:(?!${PRONOME_DO_CLIENTE})[^.!?\n]){0,25}` +
+    String.raw`(?<!\ba )\b(?:ver|vendo)\b(?!\s*[:;,])(?:(?!${PRONOME_DO_CLIENTE})[^.!?\n]){0,25}` +
     String.raw`\b(hor[aá]rios?|agenda|disponibilidade|agendamento|marca[çc][aã]o|encaixe|vagas?)\b`,
   'i',
 );
