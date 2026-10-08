@@ -38,4 +38,6 @@ export interface BoardData {
   pipeline: Pipeline;
   stages: Stage[];
   leads: Lead[];
+  /** Ganhos/perdidos fechados há mais de 30 dias, fora do quadro até "Ver mais". */
+  fechadosAntigos?: number;
 }

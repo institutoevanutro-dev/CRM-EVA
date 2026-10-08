@@ -1,7 +1,8 @@
 "use client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ehEcoLocal } from "@/lib/kanban/local-echo";
+import { useInvalidacaoAgrupada } from "@/hooks/realtime/useInvalidacaoAgrupada";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
 import { useRefetchDeSeguranca } from "@/hooks/realtime/useRefetchDeSeguranca";
 import { apiClient } from "@/lib/api/client";
@@ -15,9 +16,9 @@ import type { BoardData } from "@/lib/kanban/types";
  * and PostgREST returns PGRST116. Routing through /api/v1/pipelines/[id]/board
  * uses the server-side cookie reader, identical to every other authed query.
  */
-async function fetchBoard(pipelineId: string): Promise<BoardData> {
+async function fetchBoard(pipelineId: string, antigos = false): Promise<BoardData> {
   const res = await apiClient.get<{ data: BoardData }>(
-    `/api/v1/pipelines/${pipelineId}/board`,
+    `/api/v1/pipelines/${pipelineId}/board${antigos ? "?fechados=antigos" : ""}`,
   );
   // apiClient unwraps { data, meta } envelope already in some helpers;
   // ours returns the parsed JSON literally. Handle both shapes safely.
@@ -61,8 +62,8 @@ export function chaveDoQuadro(pipelineId: string | null) {
 }
 
 export function useBoard(pipelineId: string | null) {
-  const qc = useQueryClient();
-  const queryKey = chaveDoQuadro(pipelineId);
+  const queryKey = useMemo(() => chaveDoQuadro(pipelineId), [pipelineId]);
+  const invalidar = useInvalidacaoAgrupada();
 
   /**
    * Cards que acabaram de mudar POR EVENTO REMOTO — o pulso da Wave 3.
@@ -86,7 +87,8 @@ export function useBoard(pipelineId: string | null) {
       // Conservative: invalidate the board on any change. Optimistic patches
       // arrive faster via useMoveCard's onMutate; this just reconciles
       // cross-user changes within ~250ms.
-      qc.invalidateQueries({ queryKey });
+      // Por prefixo: alcança também os fechados antigos, se abertos.
+      invalidar(queryKey);
 
       const leadId = idDoEvento(payload);
       // Janela, não marca gasta por evento: uma ação minha chega aqui em DUAS
@@ -121,7 +123,7 @@ export function useBoard(pipelineId: string | null) {
         }, PULSE_MS),
       );
     },
-    [qc, queryKey],
+    [invalidar, queryKey],
   );
 
   // O STATUS DO CANAL NÃO PODE SER DESCARTADO. `useRealtimeChannel` calcula
@@ -178,4 +180,17 @@ export function useBoard(pipelineId: string | null) {
   });
 
   return { ...query, pulses, realtimeStatus, seguranca };
+}
+
+/**
+ * Ganhos e perdidos fechados há mais de 30 dias — só quando a pessoa pede
+ * ("Ver mais"). A chave fica sob a do quadro, então a invalidação por prefixo do
+ * realtime também a alcança.
+ */
+export function useFechadosAntigos(pipelineId: string, ligado: boolean) {
+  return useQuery({
+    queryKey: [...chaveDoQuadro(pipelineId), "antigos"],
+    queryFn: () => fetchBoard(pipelineId, true),
+    enabled: ligado,
+  });
 }

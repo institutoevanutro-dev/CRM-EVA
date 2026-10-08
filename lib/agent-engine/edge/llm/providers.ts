@@ -100,12 +100,16 @@ export function createDefaultRegistry(opts?: { allowedHosts?: string[] }): Provi
     // O tenant só escolhe entre o endpoint oficial e o autorizado pelo operador.
     openrouter: (apiKey, modelId, baseUrl) => {
       const endpoint = trustedAiBaseUrlOrDefault("openrouter", baseUrl) ?? OPENROUTER_ENDPOINT;
+      // Chat Completions, NÃO Responses: o `createOpenAI()(modelId)` desta versão
+      // do SDK usa /responses por padrão, e a OpenRouter não o serve para todo
+      // modelo (no original, `google/gemini-2.5-flash-lite` devolvia "Invalid
+      // JSON response"). `.chat()` fixa o formato que a OpenRouter implementa.
       return createOpenAI({
         apiKey,
         baseURL: endpoint,
         headers: cabecalhosDeAtribuicaoOpenRouter(),
         fetch: contain(endpoint),
-      })(modelId);
+      }).chat(modelId);
     },
   };
 }

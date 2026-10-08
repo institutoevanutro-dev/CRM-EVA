@@ -210,9 +210,11 @@ describe("guardrail de promessa — parsePromiseClassification", () => {
       "Repetindo o veredito:",
       '{"isPromise": false, "suspectPhrase": null}',
     ].join("\n");
-    expect(parsePromiseClassification(texto, logCom(warn))).toEqual({
+    expect(parsePromiseClassification(texto, "", logCom(warn))).toEqual({
       isPromise: true,
       suspectPhrase: "te dou de graça",
+      prometeuRetornoHumano: false,
+      retornoSoDoAssistente: false,
     });
     expect(warn).not.toHaveBeenCalled();
   });
@@ -222,17 +224,20 @@ describe("guardrail de promessa — parsePromiseClassification", () => {
     expect(
       parsePromiseClassification(
         RESPOSTA_EM_ARRAY('{"isPromise":true,"suspectPhrase":"x"}'),
+        "",
         logCom(warn),
       ),
-    ).toEqual({ isPromise: true, suspectPhrase: "x" });
+    ).toEqual({ isPromise: true, suspectPhrase: "x", prometeuRetornoHumano: false, retornoSoDoAssistente: false });
     expect(warn).not.toHaveBeenCalled();
   });
 
   it("saída sem JSON continua no fail-open de hoje, com o mesmo warn", () => {
     const semJson = vi.fn();
-    expect(parsePromiseClassification("sem veredito nenhum", logCom(semJson))).toEqual({
+    expect(parsePromiseClassification("sem veredito nenhum", "", logCom(semJson))).toEqual({
       isPromise: false,
       suspectPhrase: null,
+      prometeuRetornoHumano: false,
+      retornoSoDoAssistente: false,
     });
     expect(semJson).toHaveBeenCalledWith(expect.stringContaining('fail-open p/ "sem promessa"'), {
       event: "promise_semantic_parse_fail",
@@ -241,8 +246,8 @@ describe("guardrail de promessa — parsePromiseClassification", () => {
 
     const invalido = vi.fn();
     expect(
-      parsePromiseClassification("isto aqui não fecha: {quebrado}", logCom(invalido)),
-    ).toEqual({ isPromise: false, suspectPhrase: null });
+      parsePromiseClassification("isto aqui não fecha: {quebrado}", "", logCom(invalido)),
+    ).toEqual({ isPromise: false, suspectPhrase: null, prometeuRetornoHumano: false, retornoSoDoAssistente: false });
     expect(invalido).toHaveBeenCalledWith(expect.stringContaining('fail-open p/ "sem promessa"'), {
       event: "promise_semantic_parse_fail",
       reason: "invalid_json",
@@ -251,9 +256,11 @@ describe("guardrail de promessa — parsePromiseClassification", () => {
 
   it("array sem objeto é fail-open COM o warn", () => {
     const warn = vi.fn();
-    expect(parsePromiseClassification("[1,2]", logCom(warn))).toEqual({
+    expect(parsePromiseClassification("[1,2]", "", logCom(warn))).toEqual({
       isPromise: false,
       suspectPhrase: null,
+      prometeuRetornoHumano: false,
+      retornoSoDoAssistente: false,
     });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('fail-open p/ "sem promessa"'), {
       event: "promise_semantic_parse_fail",

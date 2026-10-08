@@ -1098,6 +1098,8 @@ test("Radar recorta demandas pela RLS real, além do pool frio, e preserva gest�
   expect(unassigned.total_sem_proximo_passo).toBe(3);
   await login(page, members.manager!.email);
   await page.goto("/app/radar");
+  // O bloco mostra as 5 primeiras e um "Ver todas": abre antes de procurar.
+  await abrirTodasAsPendencias(page);
   await expect(page.getByTestId("radar-sem-proximo-passo")).toContainText("Órfã de gestão");
   expect((await read()).total_sem_proximo_passo).toBe(6);
   await login(page, members.viewer!.email);
@@ -1118,6 +1120,8 @@ test("Radar recorta demandas pela RLS real, além do pool frio, e preserva gest�
   await page.getByRole("button", { name: "Confirmar e entrar" }).click();
   await page.waitForURL("**/app/inbox");
   await page.goto("/app/radar");
+  // O bloco mostra as 5 primeiras e um "Ver todas": abre antes de procurar.
+  await abrirTodasAsPendencias(page);
   await expect(page.getByTestId("radar-sem-proximo-passo")).toContainText("Órfã de gestão");
   expect((await read()).total_sem_proximo_passo).toBe(6);
   await page.getByRole("button", { name: "Sair do acompanhamento" }).click();
@@ -1193,3 +1197,9 @@ test("duas sessões: remarcação não reautoriza cancelamento em rascunho", asy
     await other.close();
   }
 });
+
+/** Expande a lista "sem próximo passo" do Radar, que mostra só as 5 primeiras. */
+async function abrirTodasAsPendencias(page: import("@playwright/test").Page): Promise<void> {
+  const ver = page.getByTestId("radar-sem-proximo-passo").getByRole("button", { name: /^Ver todas/ });
+  if (await ver.count()) await ver.click();
+}

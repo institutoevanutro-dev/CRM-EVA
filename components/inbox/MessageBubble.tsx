@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
@@ -51,7 +51,13 @@ function AckIndicator({ status, t }: { status: string; t: (texto: string) => str
   return null;
 }
 
-export function MessageBubble({
+/**
+ * Memorizado: o inbox redesenha a cada 30s (relógio da janela de 24h) e a cada
+ * releitura da conversa. Sem `memo`, toda bolha da conversa se redesenhava junto.
+ * As props chegam estáveis — o react-query preserva a identidade das mensagens
+ * que não mudaram — e a bolha tem o próprio relógio para o que depende de hora.
+ */
+export const MessageBubble = memo(function MessageBubble({
   message,
   searchMatch = false,
   debugCitations,
@@ -319,4 +325,4 @@ export function MessageBubble({
       )}
     </div>
   );
-}
+});
