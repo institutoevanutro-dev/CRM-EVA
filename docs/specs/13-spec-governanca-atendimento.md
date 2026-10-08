@@ -83,7 +83,16 @@ create table if not exists conversation_assignment_events (
 create index if not exists idx_cae_conversation
   on conversation_assignment_events (conversation_id, created_at desc);
 
--- RLS: tenant org via fn_user_org_ids() (SELECT + INSERT).
+-- RLS de SELECT: escopo da conversa (cae_select, migration 0173).
+-- INSERT: NÃO existe policy nem GRANT para authenticated desde a 0319 — a linha
+--   é escrita por dentro de fn_conversation_assign, que é security definer. Um
+--   INSERT forjado pelo PostgREST fazia o histórico dizer que alguém assumiu o
+--   atendimento que ninguém assumiu.
+--   A própria fn_conversation_assign, chamada com a sessão de um usuário, só age
+--   sobre conversa que ele VÊ como ela está (fn_can_view_conversation com o dono
+--   atual); quem não vê recebe zero linhas. Sem isso o RPC era o atalho para
+--   assumir a conversa de um colega e ler o que a visibilidade esconde.
+--   Vigiado por tests/invariants/atribuir-conversa-exige-ver-a-conversa.test.ts.
 -- Append-only: sem policy de UPDATE/DELETE (mesma família de api_audit_log).
 ```
 

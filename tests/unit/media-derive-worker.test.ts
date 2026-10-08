@@ -7,7 +7,7 @@ const messageRow = {
   organization_id: "org1",
   type: "audio" as string,
   media_mime: "audio/ogg",
-  media_storage_path: "org1/conv1/msg1.ogg",
+  media_storage_path: "org1/conv1/msg1.ogg" as string | null,
   media_derived_status: null as string | null,
 };
 
@@ -34,6 +34,9 @@ const bindingDeVisao: { provider: string; model_id: string; credential_id: strin
  * teste passando por não ter exercitado nada.
  */
 const avisoAbertoNaCentral: Record<string, unknown> | null = null;
+
+/** Versão publicada com `video_frames_enabled` — null = leitura de vídeo desligada (o padrão). */
+let agenteComVideo: Record<string, unknown> | null = { id: "v1" };
 const inboxInsertMock = vi.fn();
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -44,7 +47,9 @@ vi.mock("@/lib/supabase/admin", () => ({
           ? bindingDeVisao
           : tabela === "agent_inbox_items"
             ? avisoAbertoNaCentral
-            : messageRow;
+            : tabela === "ai_agent_versions"
+              ? agenteComVideo
+              : messageRow;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const terminais: any = {
         maybeSingle: async () => ({ data: linha, error: null }),
@@ -102,7 +107,7 @@ vi.mock("@/lib/agent-engine/edge/llm/credentials", () => ({
   })),
 }));
 
-import { deriveMessageMedia } from "@/workers/media-derive-worker";
+import { deriveMessageMedia, MARCADOR_NAO_LIDA } from "@/workers/media-derive-worker";
 import { deriveMediaText } from "@/lib/messaging/media/derive";
 import { DETALHE_TECNICO } from "@/lib/event-log/aviso-de-evento-morto";
 
@@ -127,6 +132,8 @@ describe("deriveMessageMedia", () => {
     inboxInsertMock.mockReset();
     messageRow.media_derived_status = null;
     messageRow.type = "audio";
+    messageRow.media_storage_path = "org1/conv1/msg1.ogg";
+    agenteComVideo = { id: "v1" };
     vi.mocked(deriveMediaText).mockReset().mockResolvedValue("transcrição do áudio real");
   });
 
@@ -152,12 +159,57 @@ describe("deriveMessageMedia", () => {
     expect(downloadMock).not.toHaveBeenCalled();
   });
 
+  /**
+   * Mídia que o worker PULA de propósito grava `skipped`. Sem a marca o status
+   * ficava null para sempre, e o drain — que espera a mídia da CONVERSA —
+   * atrasava em até 120s a resposta do texto que o cliente mandou depois.
+   */
+  it("vídeo com leitura desligada (padrão) → grava skipped, sem baixar", async () => {
+    messageRow.type = "video";
+    agenteComVideo = null;
+    const r = await deriveMessageMedia(eventRow());
+    expect(r.status).toBe("skipped");
+    expect(downloadMock).not.toHaveBeenCalled();
+    expect(updateEqMock).toHaveBeenCalledWith({ media_derived_status: "skipped" });
+  });
+
+  it("mensagem sem arquivo no storage → grava skipped", async () => {
+    messageRow.media_storage_path = null;
+    const r = await deriveMessageMedia(eventRow());
+    expect(r.status).toBe("skipped");
+    expect(updateEqMock).toHaveBeenCalledWith({ media_derived_status: "skipped" });
+  });
+
   it("erro na derivação marca failed no último attempt", async () => {
     vi.mocked(deriveMediaText).mockRejectedValue(new Error("transcription_503"));
     const r = await deriveMessageMedia(eventRow(4));
     expect(r.status).toBe("error");
     expect(updateEqMock).toHaveBeenCalledWith(
       expect.objectContaining({ media_derived_status: "failed" }),
+    );
+  });
+
+  /**
+   * O `failed` sem marcador deixava o agente ver `[documento]` — "veio um
+   * arquivo", sem dizer que a leitura falhou — e responder sobre um conteúdo
+   * que ele nunca leu. Medido numa VPS em produção (17/09): PDF de catálogo sem
+   * camada de texto, extrator falhou, e o agente disse ao cliente que o material
+   * "parece ser de distribuidora/promocional".
+   */
+  it("a falha permanente entrega ao agente o marcador de mídia não lida", async () => {
+    messageRow.type = "document";
+    messageRow.media_mime = "application/pdf";
+    vi.mocked(deriveMediaText).mockRejectedValue(
+      new Error("pdfjs-dist extracted no text (possibly image-only PDF)"),
+    );
+
+    await deriveMessageMedia(eventRow(4));
+
+    expect(updateEqMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        media_derived_text: MARCADOR_NAO_LIDA,
+        media_derived_status: "failed",
+      }),
     );
   });
 
@@ -198,11 +250,11 @@ describe("deriveMessageMedia", () => {
       expect(String(aviso.body)).toContain("claude-sonnet-5");
       // E o tipo tem que ser o que o operador chama de "isto", não `msg.type`.
       expect(String(aviso.title)).toContain("imagem");
-      // Nesta falha o agente NÃO recebeu o marcador de "não consegui
-      // interpretar" — a frase das recusas ("responde avisando que não conseguiu
-      // abrir o arquivo") seria mentira aqui.
+      // O turno que já correu seguiu sem o texto — isso o aviso continua
+      // dizendo. O que mudou é o DEPOIS: `markFailed` grava o marcador, então
+      // do próximo turno em diante o agente sabe que houve arquivo ilegível.
       expect(String(aviso.body)).toContain("O conteúdo do arquivo não chegou ao agente.");
-      expect(String(aviso.body)).not.toContain("responde avisando");
+      expect(String(aviso.body)).toContain("responde avisando");
       // E a frase do provedor vem no FIM, rotulada: é inglês de API, e quem lê
       // a Central não programa.
       const corpo = String(aviso.body);

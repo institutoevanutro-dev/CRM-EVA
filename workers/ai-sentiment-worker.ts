@@ -17,19 +17,19 @@ import { generateObject } from "ai";
 import { z } from "zod";
 
 import { resolverAgenteDaConversa } from "@/lib/ai/agents/agente-da-conversa";
+import { agenteAtende, precisaRecuperarLegado } from "@/lib/ai/agents/no-ar";
 import { computeCost } from "@/lib/ai/cost";
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 import { DEFAULT_CLASSIFIER_MODEL, isAiGatewayConfigured } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { logInvocation } from "@/lib/ai/log-invocation";
-import { SENTIMENT_SYSTEM_PROMPT } from "@/lib/ai/prompts/sentiment";
+import { DEFAULT_SENTIMENT_THRESHOLD, SENTIMENT_SYSTEM_PROMPT } from "@/lib/ai/prompts/sentiment";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { MENSAGEM_REDIGIDA } from "@/lib/lgpd/cascata";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const SENTIMENT_MODEL = DEFAULT_CLASSIFIER_MODEL; // "anthropic/claude-haiku-4-5"
-const DEFAULT_SENTIMENT_THRESHOLD = 0.3;
 const CLASSIFY_TIMEOUT_MS = 5_000;
 
 // As descrições NÃO são decoração: viram o JSON Schema da ferramenta que o
@@ -65,30 +65,6 @@ export interface SentimentResult {
 
 export async function processSentiment(event: EventRow): Promise<SentimentResult> {
   try {
-    // ── Guard: AI Gateway configured ────────────────────────────────────────
-    if (!isAiGatewayConfigured()) {
-      return { skipped: true, reason: "ai_gateway_key_missing" };
-    }
-
-    // Passar SENTIMENT_MODEL como string cai no gateway da Vercel mesmo sem
-    // chave (plano anônimo) e devolve "Unauthenticated ... Configure
-    // AI_GATEWAY_API_KEY" — o que quebrava este worker em toda instalação que
-    // só tem ANTHROPIC_API_KEY, ou seja, o padrão do install.sh. O resolver
-    // devolve o provider certo para a chave que existir.
-    // O painel de provedores manda AQUI também. Sem esta linha, a tela
-    // oferecia "Medir o clima da conversa", aceitava a escolha e dizia
-    // "salvo" — e este worker seguia usando o modelo padrão. Botão que não
-    // controla nada é pior que botão ausente: gasta a confiança de quem clicou.
-    const resolvido = await resolverModeloDoPonto(
-      "sentiment_classify",
-      event.organization_id,
-      SENTIMENT_MODEL,
-    );
-    if (!resolvido) {
-      return { skipped: true, reason: "ai_gateway_key_missing" };
-    }
-    const sentimentModel = resolvido.model;
-
     const messageId =
       (event.payload?.["message_id"] as string | undefined) ?? event.entity_id ?? null;
     const conversationId = (event.payload?.["conversation_id"] as string | undefined) ?? null;
@@ -123,9 +99,11 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
 
     // ── Guard: elegibilidade da IA ────────────────────────────────────────
     // O único efeito deste worker é alimentar o handoff por sentimento
-    // (`ai.sentiment_alert` → `triggerHandoff`). Numa conversa que o gate
-    // `allowlist` barra, `triggerHandoff` já se recusa — então classificar aqui
-    // seria só queimar um Haiku à toa. Pula cedo. `open` (o default) segue.
+    // (`ai.sentiment_alert` → `triggerHandoff`), e o handoff recusa pela MESMA
+    // régua (orchestrator.ts, "GATE DE ELEGIBILIDADE") toda conversa em que a
+    // IA não pode atender. Só pular a trava da lista mandava ao modelo a
+    // mensagem de quem uma PESSOA já assumiu, de conversa silenciada ou de
+    // contato passado a humano, por um alerta que ninguém consome.
     // Fail-closed: erro de leitura → pula (sem custo, sem efeito).
     const convIdParaGate = conversationId ?? (message.conversation_id as string | null);
     if (convIdParaGate) {
@@ -136,8 +114,8 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
           agora: new Date(),
           ttlMs: ttlDaAutorizacaoMs(process.env),
         });
-        if (elegib !== null && elegib.bloqueioPorAllowlist) {
-          return { skipped: true, reason: "nao_elegivel_para_ia" };
+        if (elegib !== null && !elegib.permite) {
+          return { skipped: true, reason: `nao_elegivel_para_ia:${elegib.motivo}` };
         }
       } catch {
         return { skipped: true, reason: "elegibilidade_indeterminada" };
@@ -184,6 +162,43 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       )
       .eq("organization_id", event.organization_id)
       .is("archived_at", null);
+
+    // ── Guard: há automático no ar? ───────────────────────────────────────
+    // Sem nenhum agente atendendo (todos pausados/despublicados), não há o que
+    // passar de bot para humano: o handoff por sentimento mandava ao cliente
+    // "não há atendente disponível… sua conversa entrou na fila" enquanto a
+    // equipe já respondia pelo celular. Medido numa VPS em set/2026: 3 avisos
+    // assim com os três agentes pausados, e o classificador seguia cobrando
+    // cada mensagem recebida. Mesma régua de `resolverAgenteDaConversa`.
+    if (!(candidatos ?? []).some((c) => agenteAtende(c) || precisaRecuperarLegado(c))) {
+      return { skipped: true, reason: "nenhum_agente_no_ar" };
+    }
+
+    // ── O modelo do clima, depois das guardas baratas ─────────────────────
+    // Três leituras e uma decifragem: fica atrás de tudo que pula sem ele.
+    // ── Guard: AI Gateway configured ────────────────────────────────────────
+    if (!isAiGatewayConfigured()) {
+      return { skipped: true, reason: "ai_gateway_key_missing" };
+    }
+
+    // Passar SENTIMENT_MODEL como string cai no gateway da Vercel mesmo sem
+    // chave (plano anônimo) e devolve "Unauthenticated ... Configure
+    // AI_GATEWAY_API_KEY" — o que quebrava este worker em toda instalação que
+    // só tem ANTHROPIC_API_KEY, ou seja, o padrão do install.sh. O resolver
+    // devolve o provider certo para a chave que existir.
+    // O painel de provedores manda AQUI também. Sem esta linha, a tela
+    // oferecia "Medir o clima da conversa", aceitava a escolha e dizia
+    // "salvo" — e este worker seguia usando o modelo padrão. Botão que não
+    // controla nada é pior que botão ausente: gasta a confiança de quem clicou.
+    const resolvido = await resolverModeloDoPonto(
+      "sentiment_classify",
+      event.organization_id,
+      SENTIMENT_MODEL,
+    );
+    if (!resolvido) {
+      return { skipped: true, reason: "ai_gateway_key_missing" };
+    }
+    const sentimentModel = resolvido.model;
 
     const { agente: agent, motivo: motivoDoAgente } = resolverAgenteDaConversa(
       candidatos ?? [],

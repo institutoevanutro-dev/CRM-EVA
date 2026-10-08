@@ -8,6 +8,729 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.9.1] — 2026-10-08
+
+### Corrigido
+
+- **Agenda informa o nome do paciente às integrações** A listagem MCP da agenda preserva o nome do contato já resolvido pela consulta,
+  permitindo que o Prontuário identifique o paciente em vez de exibir apenas o procedimento.
+
+## [3.9.0] — 2026-10-08
+
+### Adicionado
+
+- **Biblioteca de mídias — imagens e vídeos com o termo de uso de imagem** Em Agente de IA › Biblioteca de mídias, o gestor sobe imagens e vídeos, diz quando usar, marca etiquetas e registra o termo de uso de imagem de quem aparece. A tela mostra se cada mídia está pronta para envio. O envio pelo agente e pelos follow-ups chega nas próximas versões.
+
+- **Dá para marcar retorno daqui a 60 ou 90 dias pelo calendário de "Novo agendamento"** O calendário de "Novo agendamento" só mostrava horários dos próximos 30 dias, e
+  o botão de próximo mês travava quando esses dias acabavam. Para marcar um
+  retorno em 60 ou 90 dias, a recepção precisava procurar a data pela grade da
+  Agenda.
+
+  Agora o calendário busca os horários do mês que está na tela: é só avançar os
+  meses pela seta e escolher o dia. O limite de quantos dias à frente cada tipo de
+  consulta aceita (a janela de agendamento do tipo) continua valendo.
+
+  E no fim do mês, quando o mês atual não tem mais nenhum horário livre, o
+  calendário já abre no mês seguinte, em vez de mostrar um mês inteiro apagado.
+  Quem precisar marcar um encaixe hoje ainda pode voltar ao mês atual pela seta.
+  Nada para configurar.
+
+- **Menu com seis áreas, abas no topo e as cores do Eva Financeiro** O menu lateral passa a mostrar só seis áreas (Início, Atendimento, Vendas, IA, Análise e Configurações). As telas de cada área aparecem como abas no topo, com uma frase dizendo para que serve cada uma, e "Ver tudo" leva à página com todas elas. O tema claro, em creme e verde, é o padrão; quem já tinha escolhido o escuro continua nele, agora em verde fechado. Nenhum endereço de tela mudou.
+
+- **O texto do áudio do paciente aparece embaixo do áudio na conversa** Quando o paciente manda um áudio, a conversa passa a mostrar embaixo do áudio o texto do que ele falou, com o rótulo "Transcrição". É a mesma transcrição que a IA já usava para responder. Enquanto o texto fica pronto aparece "Transcrevendo…" por alguns minutos. A recepção pode ler a mensagem sem precisar ouvir. Se o áudio não pôde ser transcrito, nada aparece além do próprio áudio. Contatos anonimizados continuam sem o texto.
+
+### Corrigido
+
+- **Paciente que chega por anúncio do Facebook/Instagram no WhatsApp por QR ganha a origem do anúncio** Quando alguém clica num anúncio "Clique para o WhatsApp" e escreve para a clínica, a mensagem traz os dados do anúncio. No WhatsApp conectado por QR Code, o sistema procurava esses dados com um nome que não é o que chega, e o contato ficava sem a origem do anúncio. Agora o sistema reconhece os dois formatos. Vale para contatos novos: quem já estava cadastrado continua com a origem que tinha. Publicação comum compartilhada (que não é anúncio pago) continua sem marcar origem de anúncio.
+
+- **Aplicar uma melhoria ou voltar uma versão não apaga mais a configuração do agente** Ao aplicar uma melhoria sugerida no texto do agente, o sistema publicava uma
+  versão nova copiando só parte das configurações. Os materiais que o agente
+  consulta, os follow-ups, os funis em que ele pode mexer, o papel de organizador
+  e a divisão das respostas em mensagens curtas voltavam ao padrão, sem aviso.
+
+  Do mesmo jeito, voltar o agente para uma versão antiga (ou criar um agente novo
+  pela tela) não levava a configuração de follow-up.
+
+  Agora a versão nova leva tudo o que a anterior tinha. Só muda o que a melhoria
+  acrescenta ao texto.
+
+  Portado do projeto original (DeskcommCRM, trabalho de webtecnica).
+
+- **Automação "atribuir responsável" deixa de falhar em negócio que estava com a IA** Uma automação que passa o negócio para uma pessoa da equipe falhava quando o negócio estava com um agente de IA, e o negócio continuava com a IA. Agora a automação passa o negócio para a pessoa escolhida e tira a IA de dono, como acontece quando alguém faz isso pela tela.
+
+- **O aviso de mensagem nova diz quem escreveu e abre a conversa** O aviso que aparece no canto da tela quando chega uma mensagem dizia sempre "Nova mensagem", sem dizer de quem era. Agora ele mostra o nome do paciente (ou o telefone, quando não há nome) e ganha o botão "Abrir conversa", que leva direto para a conversa. O mesmo nome aparece no aviso do sistema do computador, como já acontecia no aviso enviado ao celular.
+
+- **A frase "já acionei o time" só sai quando faz sentido, e uma vez por dia** Quando o atendimento automático passa a conversa para uma pessoa, o paciente
+  recebe um aviso como "Já acionei o time". Esse aviso saía em casos errados:
+
+  - para quem nunca tinha recebido nenhuma mensagem automática naquela conversa
+    (o detector de clima da conversa roda em toda mensagem, mesmo sem IA ligada);
+  - repetido várias vezes seguidas quando o envio travava e era tentado de novo.
+
+  Agora, quando é o detector de clima que passa a conversa, o aviso só sai se a
+  IA já tinha conversado com o paciente ali. Lembrete da Agenda e campanha não
+  contam como conversa com a IA. Quando é a própria IA (ou o agente conectado)
+  que pede a passagem, o aviso sai mesmo que ela ainda não tenha respondido nada,
+  para o paciente não ficar sem resposta.
+
+  E o aviso sai no máximo uma vez a cada 24 horas por conversa. Se uma pessoa
+  devolveu a conversa para a IA e a IA voltou a conversar, uma nova passagem avisa
+  de novo. Um aviso que falhou e nunca chegou não conta, e o próximo sai
+  normalmente.
+
+  E quem responde começando com "parar" (por exemplo "Parar não é daqui") e cai
+  nessa passagem recebe a confirmação de que as mensagens automáticas vão parar,
+  e não a promessa de que um atendente vai responder. Perguntas como "tem como
+  parar a dor?" ou "parar de tomar o remédio faz mal?", e frases como "pare de
+  mandar o pedido nesse endereço", não mudam nada.
+
+  As frases do aviso também perderam o travessão.
+
+  Portado do projeto original (DeskcommCRM, trabalho de jmpo, melgarafael, Paulo
+  Lima Jr e webtecnica).
+
+- **A busca de contatos acha o paciente por nome e sobrenome** Em Contatos, digitar "Paulo Jr", "Paulo  Lima" (com dois espaços) ou "Silva Maria" passou a achar o cadastro "Paulo Lima Jr" ou "Silva, Maria". Antes, a busca só achava se as palavras estivessem juntas e na mesma ordem do cadastro. Digitar uma letra só, ou só sinais (parênteses, asteriscos), não traz mais a lista inteira como se fosse resultado: a lista fica vazia até haver pelo menos duas letras. A busca por nome e sobrenome vale também para procurar o paciente ao marcar na Agenda, e a regra das duas letras vale também para a busca de conversas.
+
+- **Cartão do funil: o tempo na etapa só zera quando o negócio muda de etapa** No quadro do funil, o rodapé do cartão ("9d em Avaliação") mostrava, na verdade, o tempo desde a última conversa ou anotação. Bastava alguém escrever uma nota para o cartão voltar a "agora", mesmo com o paciente parado na mesma etapa há dias. Agora esse número conta desde que o negócio entrou na etapa e só zera quando ele muda de etapa. O aviso "Sem resposta há N dias" continua contando desde a última conversa.
+
+- **A atualização diária da lista e dos preços dos modelos de IA voltou a rodar** Todo dia, de madrugada, o sistema deveria buscar a lista atualizada de modelos de inteligência
+  artificial disponíveis pela OpenRouter, com os preços de cada um. Essa tarefa era recusada pelo
+  próprio sistema e não fazia nada: o instalador cria dois segredos diferentes para as tarefas
+  agendadas, e só essa tarefa aceitava um deles, enquanto o agendador manda o outro. Como a
+  resposta dessas chamadas não era guardada, a recusa não aparecia em lugar nenhum.
+
+  Agora ela aceita os mesmos segredos que as demais tarefas. Você não precisa fazer nada: nenhuma
+  configuração muda e nenhum segredo precisa ser trocado.
+
+- **Uma falha nos ajudantes da IA não deixa mais o paciente sem resposta** Antes de responder, a IA consulta dois ajudantes baratos: um dá um palpite de
+  em que etapa do funil a conversa está, e o outro olha se a mensagem é uma
+  tentativa de manipular o assistente. Os dois só aconselham, quem decide é a IA.
+
+  Mesmo assim, se um deles falhasse (modelo que saiu do ar, chave de IA revogada,
+  instabilidade do provedor), o atendimento inteiro parava e o paciente ficava
+  sem resposta.
+
+  Agora a IA responde do mesmo jeito, só sem o palpite daquele turno. A falha
+  continua registrada em Uso de IA. O teto de gasto do mês segue interrompendo o
+  atendimento de propósito: quando ele estoura, a conversa passa para uma pessoa,
+  como já acontecia.
+
+  Portado do projeto original (DeskcommCRM, trabalho de betoarts).
+
+- **O gasto com a IA passa a ser contado também quando a clínica usa OpenAI ou OpenRouter** A tabela de preços que o sistema usa para calcular quanto custou cada resposta da IA só conhecia
+  três modelos antigos da Anthropic. Quem usa OpenAI ou OpenRouter tinha o custo de cada resposta
+  gravado como "desconhecido": a tela de Uso mostrava gasto zero e o limite de gasto mensal com IA
+  nunca era alcançado, mesmo com o dinheiro saindo.
+
+  Agora a tabela conhece os modelos atuais da OpenAI (linha GPT-4o e GPT-5.x) e da Anthropic
+  (Claude 4.5 em diante e Claude 5), e reconhece o nome do modelo do jeito que a OpenRouter o
+  escreve (por exemplo `openai/gpt-5.6-terra` ou `anthropic/claude-haiku-4.5`). Modelo que a tabela
+  não conhece continua aparecendo como custo desconhecido, em vez de "de graça".
+
+  Também deixou de ser arredondada para cima a conta de cada classificação de humor da mensagem:
+  uma classificação que custa uma pequena fração de centavo era gravada como 1 centavo inteiro, e
+  isso inflava o gasto que o limite mensal enxerga. A classificação de humor deixa de rodar quando
+  nenhum agente de IA está no ar, e a mensagem "no credits remaining" da OpenAI passa a ser
+  mostrada como falta de saldo, e não como erro desconhecido.
+
+  As respostas antigas continuam sem custo; só as novas passam a ter.
+
+  Vale uma olhada em "Uso e orçamento" depois de atualizar: se você definiu um limite mensal com a
+  opção "Parar a IA", esse limite agora passa a ser alcançado de verdade e, quando for, a IA para de
+  responder. Confira se o valor ainda faz sentido com o gasto real.
+
+- **Tarefa da fila que derruba o robô deixa de ser repetida para sempre** O sistema guarda numa fila as tarefas que faz por trás da tela: preparar um material que você
+  cadastrou, ler um áudio ou uma imagem, avisar outro sistema. Se uma dessas tarefas derrubava o
+  robô no meio (por falta de memória, por exemplo), ela voltava para a fila sem contar como
+  tentativa e derrubava o robô de novo, a cada 10 minutos, sem fim. Enquanto isso o robô podia
+  deixar de responder os pacientes.
+
+  Agora essa volta conta como tentativa. A primeira volta é imediata, porque quase sempre é só uma
+  atualização do sistema que reiniciou o robô no meio de uma tarefa normal. Da segunda em diante
+  ela espera cada vez mais antes de tentar de novo e, na quinta, o sistema desiste da tarefa e
+  abre um aviso na Central dizendo qual tarefa parou.
+
+- **O follow-up espera o horário de envio abrir sem desistir do paciente** Quando uma mensagem de follow-up caía fora do horário de envio — de noite, no fim de semana, ou fora do horário que a clínica escolheu —, o sistema já guardava a mensagem para a próxima abertura. O problema era que o fluxo não ficava sabendo disso: ficava perguntando "essa mensagem já saiu?" e, depois de umas onze horas, desistia do paciente e mostrava o aviso "Um fluxo de follow-up parou de tentar". Uma sexta à noite até a segunda de manhã já passava desse limite.
+
+  Agora o fluxo sabe que está esperando o horário e até quando — tanto nos passos com texto pronto quanto nos passos em que a IA escreve a mensagem. Ele fica parado no mesmo passo até a abertura, manda a mensagem e segue normalmente. No histórico do follow-up aparece a linha "Segurou o envio até o horário permitido", com a data. Se o envio travar de verdade, sem sinal nenhum, o sistema continua desistindo e avisando como antes.
+
+  Não é preciso fazer nada. Pacientes cujo fluxo já tinha parado por esse motivo não voltam sozinhos; a correção vale daqui para frente.
+
+- **A IA lista os tipos de atendimento e já consulta os horários, na mesma resposta** Para oferecer um horário de verdade, a IA precisa fazer duas coisas: descobrir
+  qual tipo de atendimento o paciente quer e, com isso, olhar os horários livres
+  desse tipo. As instruções que a IA recebe só falavam do segundo passo. Na
+  prática ela listava os tipos de atendimento, parava ali e respondia "vou
+  verificar", sem nunca consultar a agenda.
+
+  Agora, quando a IA tem as duas capacidades ligadas ("Ver o que a empresa
+  atende" e "Ver horários livres na agenda"), ela recebe a instrução de fazer os
+  dois passos na mesma resposta: escolher o tipo pelo que o paciente descreveu e
+  consultar os horários desse tipo antes de responder. Se o tipo pedido não
+  existe, ela diz isso e nomeia os que existem.
+
+  Vale também no botão Testar do agente. Quem não tem as duas capacidades
+  ligadas não percebe diferença.
+
+  Portado do projeto original (DeskcommCRM, contribuição de webtecnica).
+
+- **A IA espera a foto ou o PDF ser lido antes de responder, e sabe quando não conseguiu ler** Quando o paciente manda uma foto, um PDF ou um áudio e logo em seguida escreve
+  a pergunta em outra mensagem, a IA agora espera a leitura do arquivo antes de
+  responder. Antes ela respondia pela mensagem de texto e pedia "me conta o que
+  aparece na foto?" sobre um arquivo que o sistema terminava de ler segundos
+  depois.
+
+  A espera tem limite: se a leitura travar, a IA responde mesmo assim depois de
+  dois minutos. Vídeo que o sistema não lê (o padrão) e as fotos e áudios antigos trazidos
+  quando se conecta o número oficial não seguram a resposta.
+
+  E quando a leitura falha de vez, a IA fica sabendo que houve um arquivo que não
+  deu para ler e avisa o paciente, em vez de comentar um documento que nunca
+  abriu. Mensagens de quem pediu para ser anonimizado continuam sem nenhum texto
+  regravado.
+
+  Portado do projeto original (DeskcommCRM, trabalho de Opp4System, melgarafael
+  e Felipe Oliveira).
+
+- **A IA não ouve mais "não há vaga" quando pede um dia e um período ao mesmo tempo** Quando a IA procurava horários livres dizendo ao mesmo tempo o dia que o
+  paciente pediu e quantos dias olhar para a frente, a busca era recusada e
+  voltava vazia. A IA podia então dizer ao paciente que não havia vaga, mesmo
+  com a agenda livre.
+
+  Agora o dia pedido pelo paciente vale e a busca segue normalmente. Nada muda
+  na tela nem na configuração da agenda.
+
+  Portado do projeto original (DeskcommCRM, contribuição de webtecnica).
+
+- **A IA não diz mais que está vendo os horários sem consultar a agenda, e a passagem para a equipe não soa como resposta a um pedido** A IA podia escrever "Estou vendo os horários" ou "Estou conferindo os horários" e terminar com "Me dá só um instante?" sem ter consultado a agenda. Como nada voltava sozinho, o paciente ficava esperando. Agora essas frases são barradas antes de sair: a IA precisa consultar a agenda e responder com os horários reais, ou dizer o que pode fazer agora.
+
+  Quando a própria IA decide passar a conversa para alguém da equipe sem ter escrito nada antes, o aviso automático deixa de começar com "Sem problema", que soava como resposta a um pedido que o paciente não fez.
+
+- **A IA para de responder duas vezes ou de mandar resposta atrasada** Quando o paciente escreve em várias mensagens seguidas ("Oi", "Boa tarde" e
+  depois a pergunta), a IA às vezes mandava "Como posso ajudar?" com a pergunta
+  já na conversa, e logo depois respondia de novo. Outras vezes a mesma
+  mensagem do paciente recebia duas respostas quase iguais.
+
+  Agora, se o paciente escreve de novo enquanto a IA ainda está preparando a
+  resposta, essa resposta desatualizada não é enviada: a IA lê a conversa
+  inteira e responde a tudo de uma vez. E se uma resposta já cobriu a última
+  mensagem do paciente, a IA não responde a ela uma segunda vez.
+
+  A resposta desatualizada só fica para trás quando o sistema confere que a
+  mensagem nova já tem uma resposta a caminho. Se algo falhou no recebimento
+  dela, a resposta preparada sai mesmo assim, para o paciente nunca ficar sem
+  nenhuma. E quem conversa com a clínica por dois números recebe resposta em
+  cada um deles.
+
+  Para quem escreve sem parar não ficar sem resposta, essa espera vale só
+  enquanto a mensagem mais antiga sem resposta tiver menos de 2 minutos. Depois
+  disso a resposta sai mesmo assim. E nos últimos minutos antes de fechar o
+  horário de envio (ou o horário de atendimento do agente), a resposta também sai
+  mesmo assim, para o paciente não esperar até o dia seguinte. Nenhuma
+  configuração é necessária.
+
+  Portado do projeto original (DeskcommCRM, trabalho de Elias Gervanno,
+  automatikpg-ux e melgarafael).
+
+- **A IA só enxerga e mexe nos dados do paciente com quem está conversando** No meio de uma conversa, a IA conseguia buscar a ficha, o telefone, as conversas, o histórico de mensagens, os negócios, a agenda e os retornos de **outro** paciente da clínica, se alguém pedisse com jeito. E, quando anotava algo (um valor, uma etiqueta, uma marcação ou remarcação de consulta), podia gravar na ficha de outro paciente sem que ninguém percebesse.
+
+  Agora, durante o atendimento, a IA só lê e altera o que é do paciente daquela conversa. Qualquer pedido sobre outra pessoa volta para ela como recusa, com o motivo, e a recusa fica registrada na auditoria. Pelo mesmo motivo, no atendimento a IA não lê mais as sugestões de melhoria do aprendizado automático, que nascem de conversas com outros pacientes. Se a IA informa o negócio errado ao anotar algo e o paciente tem um único negócio aberto, a anotação vai para esse negócio; com nenhum ou com vários, ela recusa em vez de escolher por palpite.
+
+  O que a equipe faz pela tela, as automações e as integrações por chave continuam como antes. A marcação de consulta pela IA segue funcionando normalmente para o paciente da conversa.
+
+  Porte do projeto original (DeskcommCRM), trabalho de Rafael Melgaço, webtecnica, Paulo Lima Jr e jmpo.
+
+- **A IA não promete mais "vou ver os horários" sem olhar a agenda** Já existia uma trava que impede a IA de dizer "vou verificar os horários" e
+  encerrar a conversa sem consultar a agenda. Ela só reconhecia algumas formas de
+  falar. Frases como "vou chamar a responsável pra ver os horários", "vou
+  organizar seu atendimento" ou "vou verificar sua consulta" passavam, e o
+  paciente ficava esperando uma resposta que não vinha.
+
+  Agora a trava reconhece essas formas também. Quando a IA promete olhar a agenda,
+  ela é obrigada a consultar os horários de verdade na mesma conversa e responder
+  com o que encontrou.
+
+  Frases normais continuam passando, como "vou confirmar se o plano cobre a
+  consulta", "vou verificar o valor da sessão", "vou verificar o atendimento pelo
+  seu convênio" e o lembrete "estou confirmando sua consulta de amanhã às 9h,
+  podemos contar com você?". E quando a IA confirma a presença do paciente na
+  agenda, ela pode dizer "seu horário está confirmado" sem ser barrada. Mas confirmar a
+  presença não libera dizer que outro horário "está agendado" ou "está marcado":
+  para isso a IA continua tendo de marcar de verdade. Nada muda na tela.
+
+  Portado do projeto original (DeskcommCRM, contribuições de webtecnica, Gyanu
+  Mayank e Rafael Melgaço).
+
+- **Na conversa, a resposta enviada não some e o texto que você começa a digitar não é apagado** Duas correções no campo de resposta das conversas. A mensagem que a recepção acabou de enviar passa a aparecer sempre no fim da conversa, mesmo quando a pessoa tinha rolado o histórico para cima. E o texto que a pessoa começa a digitar enquanto a mensagem anterior ainda está saindo não é mais apagado quando o envio termina, e a mensagem que ela escolheu citar nessa próxima resposta continua marcada; se o envio falhar, o texto que não saiu volta para o campo junto com o que já estava escrito.
+
+- **A IA entende as respostas repetidas ou em lista dos seus ajudantes em todos os pontos** Alguns modelos de IA devolvem a resposta pedida duas vezes seguidas, ou dentro
+  de uma lista. Em parte do sistema isso já era tratado; nos pontos que faltavam
+  a resposta era lida como erro.
+
+  Faltavam o resumo que a IA grava no fim de cada atendimento, a escolha do
+  caminho do follow-up, o detector de tentativa de manipular a IA, o detector de
+  promessa fora da tabela e a sugestão de funil do primeiro acesso. Neles, uma
+  resposta perfeita, só que repetida, fazia o resumo ser refeito, o follow-up
+  perder a classificação ou o detector deixar passar um aviso.
+
+  Agora todos leem a primeira resposta válida. Quando não há resposta legível,
+  o comportamento é o mesmo de antes.
+
+  Portado do projeto original (DeskcommCRM, trabalho de webtecnica e melgarafael).
+
+- **Mensagens da IA chegam em ordem e nunca em branco** A IA não manda mais mensagem em branco para o paciente. Quando a resposta que
+  ela escreveu fica vazia, o sistema devolve para ela reescrever antes de enviar.
+
+  Para quem liga a opção "responder em várias mensagens curtas": a IA parava de
+  escrever uma resposta só e disparava várias mensagens ao mesmo tempo, que às
+  vezes chegavam fora de ordem no WhatsApp. Agora ela escreve uma resposta só,
+  em parágrafos curtos, e o sistema envia cada parágrafo como uma mensagem, na
+  ordem e com a pausa de quem digita. O limite de mensagens por resposta continua
+  valendo: o que passar dele vai junto na última mensagem, e sempre sobra espaço
+  para a IA mandar mais uma mensagem na mesma resposta (por exemplo, confirmar um
+  horário depois de olhar a agenda).
+
+  Quem usa essa opção vai notar que a divisão agora segue os parágrafos da
+  resposta, e não mais o tamanho.
+
+  Portado do projeto original (DeskcommCRM, trabalho de jmpo, VANDER GUSTAVO
+  ALVES e melgarafael).
+
+- **O radar de negócios esfriando deixa de parar por causa de um negócio com consulta** O radar que marca os negócios "esfriando" no funil parava de funcionar para a clínica inteira quando encontrava um negócio com consulta adiada ou com presença vencida na Agenda: esse negócio travava a gravação e os outros nem chegavam a ser olhados. Agora um negócio problemático não atrapalha os demais, e, se alguma gravação falhar, isso fica contado no registro da tarefa.
+
+- **Campos do funil: a lista de opções aceita vírgula e nomes com duas palavras** Em Configurações › Funis, ao criar um campo de lista (por exemplo "Procedimento"), a vírgula sumia logo depois de digitada e a palavra seguinte grudava na anterior. Também não dava para escrever uma opção de duas palavras, como "Limpeza de pele": o espaço sumia. Agora a lista aceita "Botox, Limpeza de pele, Peeling" digitada normalmente, e ao salvar os espaços sobrando nas pontas e as opções vazias são descartados.
+
+- **"Marcar como perdido" com motivo "Outro" deixa de dar erro** Num funil sem motivos de perda cadastrados, escrever um motivo próprio em "Outro" (por exemplo, "Paciente escolheu outra clínica") parecia aceito, mas ao confirmar aparecia um erro técnico e o negócio não era fechado. Agora a janela avisa na hora que esse motivo não está na lista e mostra onde cadastrá-lo (Configurações › Funis). Deixar o detalhe em branco continua valendo e grava "Outro". Se mesmo assim o motivo chegar recusado, a mensagem passa a ser a explicação em português, e não o erro técnico.
+
+- **O quadro do funil cabe na tela, com o nome da etapa sempre visível** No quadro do funil, quando uma etapa tinha muitos pacientes, a página inteira descia e a barra para andar para o lado só aparecia lá no fim da etapa mais comprida. No caminho, o nome da etapa sumia do alto. Agora o quadro ocupa a altura da tela: a barra para andar para o lado fica sempre embaixo, visível, e o nome e o total de cada etapa ficam presos no alto enquanto você desce pelos cartões.
+
+- **A recepção vê na Agenda os horários ocupados no Google da médica e o nome de quem atende** Quem trabalha na recepção (papel Colaborador ou Somente leitura) abria a Agenda
+  e não via os compromissos que a médica marcou no Google Agenda dela. O horário
+  parecia livre, e quando a recepção clicava para marcar, a Agenda recusava com o
+  aviso "fora dos horários que você publicou", que apontava para o motivo errado.
+  Agora esses horários aparecem na grade como "Ocupado" para toda a equipe, do
+  mesmo jeito que já apareciam para a própria médica e para o gerente. O nome do
+  compromisso pessoal continua escondido: aparece só "Ocupado".
+
+  Para o Colaborador, a barra com os nomes da equipe vinha vazia, com um aviso de
+  "sem permissão" ao abrir a Agenda, e o painel de marcar escrevia "Você" e "Você
+  ainda não publicou seus horários" sobre a agenda da médica. Agora a barra mostra
+  os nomes, e o painel só diz "Você" quando a agenda é mesmo de quem está usando.
+  Quem tem o papel Somente leitura continua sem os nomes, mas o aviso agora
+  explica o motivo.
+
+  O Prestador de serviço continua vendo só a própria agenda, como antes. Quando
+  ele abre um tipo de atendimento que é de outra pessoa, o painel também não diz
+  mais "com Você" sobre a agenda dela.
+
+  Quem entrou pelo login EvaLink e ainda não preencheu o nome completo aparece
+  para o gerente pelo começo do e-mail (por exemplo "dra.ana"), como antes, e não
+  como "Sem nome". Em espanhol, o painel mostra "Tú" e "Sin nombre" no lugar das
+  palavras em português. Nada para configurar.
+
+- **Salvar o negócio não desfaz mais o que a IA ou um colega acabou de gravar** Quando a ficha de um negócio ficava aberta e, nesse meio tempo, a IA ou outra pessoa preenchia um campo do funil (por exemplo, o convênio ou a queixa do paciente), salvar a ficha devolvia esse campo ao valor antigo, sem aviso. Agora a ficha do negócio e o painel do funil na conversa enviam só os campos que você mudou. O que os outros gravaram continua lá.
+
+- **Tarefa agendada que falha passa a aparecer no registro do agendador** O sistema tem um agendador que, minuto a minuto, dispara as tarefas automáticas: lembretes da
+  agenda, campanhas, sincronização com o Google, limpeza de dados antigos e outras. Quando uma
+  dessas tarefas falhava, o erro era jogado fora e ninguém ficava sabendo — foi assim que a
+  atualização diária dos modelos de IA ficou recusada sem que ninguém visse.
+
+  Agora, quando uma tarefa falha, o registro do agendador mostra qual tarefa falhou, o motivo que o
+  servidor deu e o que conferir. Quando tudo dá certo, nada muda no registro. Não é preciso mudar
+  nenhuma configuração: a mudança chega com a atualização normal do sistema.
+
+- **Mensagem enviada pelo CRM não aparece mais em dobro na conversa do WhatsApp** Às vezes a mensagem que a recepção ou a IA enviava pelo CRM aparecia duas vezes na conversa, porque o WhatsApp (conexão por QR Code) devolve uma cópia da mensagem antes de o sistema terminar de registrar o envio. Agora as duas cópias recebem a mesma identificação e o sistema guarda só uma. Junto veio um acerto no "responder citando": citar uma mensagem que a própria clínica enviou (pelo CRM ou digitada no celular) volta a aparecer como citação no WhatsApp do paciente.
+
+  E quando o mesmo paciente está cadastrado duas vezes (uma pelo número de telefone e outra pelo código interno do WhatsApp), a mensagem enviada pelo CRM continua mostrando os tiques de entregue e lida, e continua podendo ser citada.
+
+- **Mensagem do WhatsApp com horário em formato diferente não se perde mais** Quando o WhatsApp (conexão por QR Code) enviava o horário da mensagem num formato diferente do esperado, o sistema dava erro e a mensagem do paciente não entrava na conversa. Agora o sistema reconhece o formato do horário e, se não conseguir entender, usa a hora em que a mensagem chegou. A mensagem sempre entra.
+
+## [3.8.0] — 2026-10-07
+
+### Adicionado
+
+- **O texto do lembrete da agenda pode ser escrito por tipo de agendamento** Em Configurações › Agenda, cada tipo de agendamento com o lembrete ligado ganha
+  um campo para o texto da mensagem, com a lista de variáveis e uma prévia que
+  mostra exatamente o que o paciente vai receber.
+
+  As variáveis são `{{primeiro_nome}}`, `{{nome}}`, `{{quando}}` (que vira "hoje",
+  "amanhã" ou o dia da semana com a data), `{{data}}`, `{{hora}}`,
+  `{{dia_semana}}`, `{{unidade}}`, `{{endereco}}`, `{{profissional}}` e `{{tipo}}`.
+  Variável sem valor some do texto sem deixar chaves. Uma variável escrita errado,
+  como `{nome}` ou `{{primeiro nome}}`, é recusada ao salvar.
+
+  Em branco, o lembrete continua com a frase de sempre. Quem não mexer no campo
+  não percebe diferença nenhuma.
+
+  Portado e estendido do projeto original (DeskcommCRM, de Ian Couto).
+
+- **Painel do funil — os números do período de um funil, juntos e com a régua de cada um** Em Análise › Ver tudo em Análise há uma tela nova, o Painel do funil, para quem
+  é gestor ou administrador. Ela mostra, para o funil e o período escolhidos:
+  quantos leads entraram, quantos interagiram (chegaram à etapa ligada ao passo
+  "Primeiro contato" do agente), até onde cada um chegou no funil, os ganhos e a
+  receita, os agendamentos com realizados, faltas e taxa de comparecimento, e —
+  com a conta de anúncios da Meta conectada — o investimento, o custo por venda e
+  o ROAS.
+
+  Embaixo de cada número está o que ele conta. Quando um número não pode ser
+  medido, a tela diz por quê e onde consertar, em vez de mostrar zero.
+
+  Dá para recortar tudo por um campo de lista da ficha do contato (por exemplo,
+  Origem), por um campo de lista do card, por etiquetas do contato que começam com
+  um prefixo (por exemplo, `criativo-`) ou pela campanha de anúncio.
+
+  Nenhuma ação é necessária. O investimento é o gasto da conta de anúncios
+  inteira, não só do funil escolhido — a tela avisa isso ao lado do custo por
+  venda e do ROAS.
+
+### Alterado
+
+- **Consulta marcada em cima da hora não recebe mais o lembrete que já tinha passado** Quando um compromisso era marcado (ou remarcado) para menos tempo do que a
+  antecedência do lembrete, por exemplo às 18h30 para as 16h do dia seguinte com
+  o aviso de 24 horas antes, o lembrete saía poucos minutos depois da marcação.
+  Agora esse aviso não sai: a hora dele já tinha passado quando o compromisso foi
+  marcado.
+
+  Quem contava com esse aviso imediato deixa de recebê-lo. Para avisar também quem
+  marca em cima da hora, dá para acrescentar um segundo aviso mais curto no tipo de
+  agendamento (Configurações › Agenda, "E de novo, quantos minutos antes"). Isso
+  vale para todos os compromissos do tipo: quem marca com antecedência passa a
+  receber os dois avisos.
+
+  Portado do projeto original (DeskcommCRM, de webtecnica).
+
+### Corrigido
+
+- **Quando a leitura da agenda falha, o registro diz o motivo** Quando o CRM não consegue ler a agenda antes de mandar um follow-up ou uma automação, ele adia o envio. Esse adiamento passa a registrar o motivo da falha, e um aviso só por falha, em vez de um por contato. Assim dá para achar e corrigir a causa em vez de os envios ficarem adiados sem explicação.
+
+- **O editor de horário da equipe volta a caber na janela** Em Equipe › Atendimento › "Editar horário", cada janela da jornada voltou a ficar numa linha só: dia, início, "–", fim, unidade e lixeira, nessa ordem. Desde que o seletor de unidade entrou, a lixeira descia para baixo e o campo de fim e o botão Salvar ficavam cortados na borda direita.
+
+- **A busca de nomes no financeiro espera 7 dias antes de perguntar de novo pelo mesmo contato** O CRM pergunta ao financeiro o nome dos contatos que chegam sem nome. Ele refazia a mesma pergunta pelos mesmos contatos o dia inteiro, regravando centenas de cadastros por hora. Agora só volta a perguntar por um contato depois de 7 dias, o que tira peso do banco.
+
+- **O follow-up não dispara o fluxo inteiro numa só resposta** Num menu de follow-up (1/2/3), uma resposta que não casava o ramo fazia o
+  fluxo reenviar o menu e, no mesmo instante, as mensagens seguintes e o
+  aviso de “não respondeu”. Agora só avança o passo daquela resposta; a
+  próxima pergunta espera o cliente de novo.
+
+- **A sequência de retomada por silêncio não recomeça sozinha** O gatilho "contato em silêncio" manda uma sequência de mensagens para quem parou
+  de responder. Antes, quando a sequência terminava sem resposta (ou era encerrada
+  porque uma pessoa da equipe assumiu, a etapa do funil bloqueia ou o contato foi
+  anonimizado), o contato continuava calado e, um minuto depois, a mesma sequência
+  começava de novo, do primeiro toque, sem fim.
+
+  Agora:
+
+  - **Uma sequência por silêncio.** Depois que ela termina, o contato só recebe
+    outra se responder e ficar calado de novo pelo tempo configurado, contado a
+    partir da última mensagem dele ou do fim da sequência anterior, o que vier
+    depois. Uma sequência nunca começa colada na anterior.
+  - **Contato antigo não recebe nada ao ligar o fluxo.** Só conta quem mandou
+    mensagem depois que o fluxo foi ativado. Antes, ativar um fluxo de silêncio
+    mandava a sequência de uma vez para toda conversa aberta calada, inclusive de
+    meses atrás. Isso vale também na atualização: quem já estava calado na hora de
+    atualizar não recebe a sequência daquele silêncio.
+  - **Contato anonimizado fica de fora.**
+  - **Mais de mil conversas abertas** passam a ser todas consideradas, e não só um
+    pedaço escolhido pelo banco.
+
+  Para que **qualquer resposta encerre a sequência**, ligue "cancelar ao responder"
+  no gatilho do fluxo. Essa opção vem desligada: sem ela, a resposta do contato
+  segue para o próximo passo do fluxo.
+
+  Armar o fluxo num agente também conta como ligar: quem ficou calado entre
+  ativar o fluxo e publicar o agente que o arma não recebe a sequência de uma vez.
+  Publicar de novo um agente que já armava o fluxo, publicar uma versão nova de um
+  fluxo que já está ativo, mudar o tempo de silêncio ou o "cancelar ao responder"
+  não mexem nisso.
+
+  Nenhuma ação é necessária.
+
+- **A resposta do follow-up sai depois que o lead responde** Num fluxo de follow-up que espera a resposta do cliente (menu 1/2/3), a
+  primeira mensagem saía e a seguinte ficava parada depois do "1". O
+  acompanhamento volta a avançar e enviar a mensagem do ramo escolhido.
+
+- **O follow-up respeita as mesmas regras por qualquer caminho, não fala por cima da equipe e sai com o nome do contato** Um passo de texto fixo do follow-up podia sair por um atalho que não conferia
+  as regras de envio. Agora ele passa pelas mesmas conferências da mensagem
+  escrita pela IA:
+
+  - respeita a janela de envio configurada para a organização e o horário de
+    envio do número (por padrão, das 7h às 22h). Fora dela, o passo espera a
+    abertura;
+  - se o fluxo encerra quando o contato responde, a resposta encerra antes de o
+    passo sair, também quando ela chega no meio de uma espera;
+  - etapa do funil que interrompe follow-ups e contato anonimizado encerram a
+    sequência;
+  - número em modo de teste (ou contato sem autorização) encerra a sequência com
+    o motivo escrito, em vez de deixá-la parada até expirar.
+
+  O que continua só no envio feito pelo processo de segundo plano (worker), e
+  não no atalho do texto fixo: o teto diário e o aquecimento do número, a trava
+  de texto repetido em massa, a base legal da LGPD e a trava de promessas. Numa
+  instalação com o worker ligado, ele pega quase todos os passos em segundos.
+
+  O follow-up não fala mais por cima de quem está atendendo. A sequência é
+  encerrada, com o motivo "uma pessoa da equipe está atendendo esta conversa",
+  quando alguém da equipe respondeu ao contato depois da última mensagem dele
+  (pela caixa de entrada ou pelo celular), quando a conversa está atribuída a uma
+  pessoa ou quando o atendimento humano foi pedido. Nos fluxos marcados como
+  "Permitir durante handoff", atribuição e resposta da equipe não encerram. Em
+  fluxos disparados por etapa ou por inscrição manual, a mensagem da equipe só
+  conta quando responde a algo da sequência: o contato falou depois que ela
+  começou, ou o follow-up já tinha mandado um passo. Mover o negócio para
+  "Proposta enviada" e depois mandar a proposta não encerra a cobrança. A
+  saudação e a mensagem de ausência automáticas do WhatsApp Business (até 10
+  segundos depois da mensagem do contato) não contam como resposta da equipe.
+  O gatilho de silêncio não reinscreve, no mesmo silêncio, quem foi encerrado
+  porque uma pessoa da equipe está atendendo.
+
+  `{{nome}}` e `{{primeiro_nome}}` saem preenchidos nos passos de texto e de
+  modelo. Quando o contato não tem nome cadastrado, vale o nome do perfil do
+  WhatsApp. Sem nenhum dos dois, a variável sai do texto: "Ei, {{primeiro_nome}},
+  tá por aí?" vira "Ei, tá por aí?". Se o texto era só a variável, o passo é
+  pulado com o motivo escrito no histórico. Na caixa de entrada, os modelos
+  também passam a usar o nome do perfil.
+
+  Num menu de follow-up, um áudio ou uma imagem em resposta conta como resposta,
+  como antes, e a espera não recomeça a contar quando nada chega.
+
+  O "modelo de reserva" de uma mensagem escrita pela IA agora funciona. Ele sai,
+  com as mesmas regras, quando a IA tentou enviar e foi barrada pelas regras do
+  atendimento, ou quando falhou na última tentativa. Ele não sai quando a IA
+  decidiu não escrever, nem com o agente pausado ou em modo assistido. O
+  histórico do acompanhamento mostra quando a mensagem saiu pelo modelo de
+  reserva. Nenhuma ação é necessária.
+
+- **O lembrete da agenda sai pelo WhatsApp do paciente, na hora certa, e acompanha a remarcação** O lembrete do compromisso podia sair por qualquer conexão ativa da organização,
+  inclusive o Instagram. Agora ele sai sempre por um número de WhatsApp, de
+  preferência o da conversa em que o paciente já fala.
+
+  A hora escrita no lembrete passa a ser a do fuso do compromisso (o da unidade em
+  que ele foi marcado), e não a da organização. Para quem atende num fuso só, nada
+  muda.
+
+  Remarcar um compromisso para outra data passa a refazer o lembrete da data nova.
+  Antes, o aviso que já tinha saído para a data antiga impedia o da data nova, e o
+  paciente ficava sem lembrete.
+
+  O mesmo lembrete também não sai mais duas vezes seguidas quando algo falha no
+  meio do envio, nem quando o compromisso é cancelado ou remarcado enquanto a
+  rodada de envio está em andamento.
+
+  Portado do projeto original (DeskcommCRM, de webtecnica e melgarafael).
+
+- **O quadro do funil abre fazendo menos consultas ao banco** Abrir o quadro do funil ficou mais leve para o banco. Num funil com cerca de 800
+  negócios, cada abertura fazia uns 44 pedidos ao banco; agora faz uns 17. Como o
+  quadro é recarregado toda vez que um negócio muda, a economia se repete o dia
+  inteiro.
+
+  O que mudou por dentro:
+
+  - Os pedidos que buscam dados de muitos contatos de uma vez agora levam até 300
+    contatos por vez, e não 100.
+  - A próxima ação sugerida pela IA só procura os negócios abertos dos contatos que
+    realmente têm uma sugestão, em vez de reler o funil inteiro.
+
+  Nada muda na tela: os cartões, as colunas (inclusive as de ganho e perda), a
+  nota da IA, a conversa e os marcadores aparecem como antes.
+
+- **O Radar volta a abrir com centenas de negócios abertos** Com algumas centenas de contatos com negócio aberto, o Radar falhava sempre e a tela mostrava "Erro interno" a cada poucos segundos. A leitura da agenda que ele faz agora sai em lotes de 100 contatos.
+
+- **Abrir o Inbox, as conversas e o quadro volta a ser rápido** Toda leitura de quem está logado ficou lenta — o Inbox chegava a dar erro ao abrir, e a lista de conversas e o quadro demoravam vários segundos. A regra que decide o que cada pessoa pode ver refazia, em cada linha, a checagem de "esta pessoa está em atendimento de suporte?", mesmo sem suporte nenhum em andamento. Agora essa checagem só roda quando existe uma sessão de suporte aberta. Ninguém passa a ver ou a fazer nada diferente do que via e fazia antes.
+
+## [3.7.0] — 2026-10-07
+
+### Adicionado
+
+- **Importação administrativa de histórico de agenda** Comando com prévia e aplicação transacional para agendamentos passados com contatos conferidos. Preserva existentes, recusa conflitos e não dispara convites ou automações. Exige migração e ambiente administrativo da instalação.
+
+## [3.6.1] — 2026-10-06
+
+### Corrigido
+
+- **Anonimizar um paciente passa a apagar também o que a IA e a equipe escreveram sobre ele quando o atendimento travou** Quando a IA não consegue resolver um atendimento, ela abre um "caso" para a equipe: escreve um
+  título, um resumo do problema, o que está faltando e guarda um trecho das últimas mensagens do
+  paciente. A equipe responde nesse caso, o pedido ganha um assunto e um próximo passo, e a Central
+  recebe avisos — alguns com o resumo da conversa, e o de chamada perdida com o telefone no título.
+
+  Nada disso era apagado ao anonimizar. O paciente aparecia como "Cliente Anonimizado", mas o relato
+  sobre ele continuava legível nessas telas, com nome e tudo, e o sistema dizia que a anonimização
+  tinha sido feita.
+
+  Agora, ao anonimizar (pelo pedido formal ou pelo botão da ficha):
+
+  - o caso fica sem título, resumo e trecho de conversa, e as respostas da equipe dentro dele somem;
+  - o pedido fica sem assunto e sem o texto do próximo passo;
+  - os avisos da Central sobre aquela pessoa são encerrados e ficam sem texto.
+
+  O que é registro do trabalho da clínica continua: que houve um caso, quando foi aberto, em que
+  situação estava, quem atendeu e quando. Assim as contagens de atendimento não mudam.
+
+  O relatório de dados do titular (o que a clínica entrega quando o paciente pede os dados dele)
+  passa a trazer esses mesmos registros.
+
+  Quem já tinha sido anonimizado antes desta atualização é corrigido sozinho na hora de atualizar —
+  inclusive os avisos de "atendimento parado" que o sistema continuou abrindo depois da
+  anonimização, que repetiam o título antigo do caso.
+
+- **O bloqueio de um contato só muda pelo pedido do paciente ou pelo botão do administrador** Quando um paciente pede para não receber mais mensagens, o contato fica
+  bloqueado. Só o administrador pode desbloquear, pelo botão na ficha do contato,
+  e isso fica registrado na auditoria.
+
+  Essa regra valia na tela, mas não no banco: um atendente com algum conhecimento
+  técnico conseguia desbloquear (ou bloquear) um contato por fora do sistema, sem
+  ser administrador e sem deixar registro.
+
+  Agora o próprio banco recusa. O bloqueio só é gravado quando o paciente pede
+  para parar, e só é desfeito pelo botão Desbloquear. Editar os outros dados da
+  ficha continua igual para todos. Nenhuma ação é necessária.
+
+  Dois atalhos que desfaziam o bloqueio sem desbloquear também foram fechados:
+
+  - O telefone de um contato bloqueado não pode mais ser trocado nem apagado pela
+    ficha. Trocar o número fazia a próxima mensagem do paciente abrir um contato
+    novo, sem bloqueio. Quem tentar vê o aviso "Este contato pediu para não
+    receber mensagens" e precisa pedir ao administrador para desbloquear antes.
+    Nome, e-mail e os outros campos continuam editáveis.
+  - Ao juntar dois contatos da mesma pessoa, se um deles estava bloqueado, o
+    contato que sobra fica bloqueado também. Antes, juntar um contato bloqueado a
+    uma duplicata livre fazia o bloqueio sumir.
+
+- **O botão "Anonimizar" da ficha passa a apagar tudo o que o pedido formal de LGPD apaga** Existem dois jeitos de anonimizar um paciente: pelo pedido formal (tela de pedidos de LGPD) e
+  pelo botão "Anonimizar contato" na ficha. O botão apagava menos coisa. Depois de clicar, ainda
+  ficavam guardados:
+
+  - as etiquetas, os consentimentos e os "dados de origem" do contato — onde ficam o @ do
+    Instagram, o telefone anotado como "em conflito" e o identificador do WhatsApp da pessoa;
+  - a foto de perfil;
+  - o @, o nome e a foto do perfil do Instagram ligado ao contato;
+  - a descrição, os campos e as etiquetas do negócio, além das primeiras letras do título;
+  - o telefone nas chamadas de voz e os dados pessoais dentro de pedidos de loja.
+
+  Agora o botão usa a mesma rotina do pedido formal, e os dois apagam a mesma coisa. Essa rotina
+  também passou a apagar, nos dois caminhos:
+
+  - o identificador do Instagram da pessoa (o número interno que a Meta usa para ela). Antes ele
+    ficava guardado mesmo depois de anonimizar. Com isso, se a pessoa voltar a escrever pelo
+    Instagram, ela entra como um contato novo — como já acontece no WhatsApp;
+  - os comentários que ela fez em posts da clínica: o texto, o @ e a sugestão de resposta somem; fica
+    só o registro de que houve um comentário naquele post;
+  - os cadastros antigos da mesma pessoa que tinham sido juntados ao dela (pela tela "Juntar
+    duplicados" ou pela junção automática do Instagram). Ao juntar, o cadastro antigo ficava
+    guardado por trás, com nome, e-mail, telefone e foto; agora ele é anonimizado junto.
+
+  Quem já tinha sido anonimizado antes desta atualização é corrigido sozinho na hora de atualizar,
+  sem precisar clicar de novo. Isso inclui um caso raro: se a pessoa, depois de anonimizada pelo
+  botão antigo, voltou a escrever pelo WhatsApp, o telefone dela tinha voltado para o cadastro
+  anonimizado e as mensagens novas continuavam caindo ali. A correção tira esse telefone, e a
+  próxima mensagem dela abre um contato novo.
+
+  O nome que aparece no lugar passa a ser "Cliente Anonimizado #…" nos dois caminhos (o botão
+  gravava "Contato Anonimizado #…").
+
+- **Casos da IA — só o sistema escreve, e cada atendente vê só os casos das conversas que pode ver** Quando a IA pede ajuda da equipe, ela abre um Caso com um resumo do atendimento.
+  Dois problemas foram fechados:
+
+  - Um usuário com algum conhecimento técnico conseguia, falando direto com o
+    banco, reescrever o que a IA anotou num caso, incluir um registro falso na
+    linha do tempo e até fazer o histórico dizer que alguém assumiu uma conversa
+    que ninguém assumiu. Agora só o próprio sistema grava essas informações.
+    Responder a um caso pela tela continua igual.
+  - Na tela IA › Casos, o atendente via título, resumo, nome e telefone de casos
+    de conversas que ele não pode abrir. Agora a lista, o detalhe e a resposta ao
+    caso seguem a mesma regra das conversas, escolhida em Configurações ›
+    Atendimento: quem não vê a conversa não vê nem responde o caso dela. Gestor e
+    administrador continuam vendo todos.
+
+  O que cada atendente passa a ver em IA › Casos depende dessa escolha:
+
+  - "Todos veem tudo": nada muda.
+  - "Os seus, mais os que ainda não têm dono" (o padrão): ele vê os casos das
+    conversas dele e das que estão sem dono, como as que a IA atende sozinha.
+    Deixa de ver os casos de conversas que já são de um colega.
+  - "Só os seus": ele vê apenas os casos das conversas dele. Os casos das
+    conversas que a IA atende sozinha aparecem só para gestor e administrador.
+
+  Junto com isso:
+
+  - Assumir, transferir ou soltar uma conversa só é aceito de quem enxerga essa
+    conversa. Antes, por fora das telas, um atendente conseguia assumir a conversa
+    de um colega e, com isso, passar a ler o caso e as notas dela.
+  - O aviso "um atendimento espera decisão", que aparece na Central para toda a
+    equipe, deixa de trazer o título do caso. Quem pode abrir o caso lê o título
+    nele; quem não pode vê só o aviso.
+  - A aba Concluídos de IA › Casos abre com os 200 casos mais recentes e tem o
+    botão "Carregar mais" para ver os anteriores. Assim ela abre rápido mesmo em
+    clínicas com muito histórico, e nenhum caso antigo fica de fora.
+
+  Portado do projeto original (DeskcommCRM).
+
+- **Nota interna só pode ser editada ou apagada por quem escreveu ou por um gestor** A tela já escondia o botão de apagar a nota de um colega, mas a regra só valia
+  na tela. Um atendente com algum conhecimento técnico conseguia, falando direto
+  com o banco, alterar ou apagar a nota interna que outra pessoa escreveu numa
+  conversa, e até criar uma nota em nome de um colega.
+
+  Agora o próprio banco recusa. Cada atendente cria as suas notas e só mexe nas
+  suas; gestor e administrador continuam podendo editar e apagar qualquer nota das
+  conversas que enxergam. O arquivo anexado a uma nota segue a mesma regra: não dá
+  para trocar o anexo da nota de outra pessoa.
+
+  O nome que aparece assinando a nota e a data dela também passam a ser gravados
+  pelo próprio sistema, a partir do cadastro de quem escreveu. Antes dava para, por
+  fora das telas, assinar uma nota com o nome de outra pessoa ou com uma data
+  antiga, e um gestor conseguia passar a nota de um atendente para o nome de outro.
+
+  O anexo de uma nota passa a ser sempre um arquivo da própria conversa. Antes,
+  por fora das telas, dava para apontar uma nota para o arquivo que um colega
+  anexou na conversa de outro paciente; quando o paciente da primeira nota pedia
+  a remoção dos dados, o arquivo do colega era apagado junto.
+
+  Apagar uma conversa inteira por fora das telas (o que levava junto as notas dos
+  colegas) agora só é aceito de gestor ou administrador, a mesma regra de apagar um
+  contato.
+
+  Nada muda no uso do dia a dia e nenhuma ação é necessária.
+
+  Portado do projeto original (DeskcommCRM, de webtecnica e melgarafael).
+
+- **O relatório de dados do paciente passa a trazer o endereço, os campos personalizados e o que a IA sugeriu para o cadastro** Quando um paciente pede "quais dados vocês têm de mim", a clínica gera um relatório (um PDF, com
+  um arquivo de dados guardado junto). Esse relatório deixava de fora duas coisas que o sistema
+  guarda:
+
+  - o endereço e os campos personalizados da ficha (convênio, como conheceu a clínica e o que mais
+    a clínica tiver criado). O sistema lia esses campos e não colocava no relatório;
+  - as sugestões de cadastro feitas pela IA: quando ela percebe na conversa um nome, e-mail ou
+    telefone diferente do cadastrado, ela propõe a troca e guarda o trecho da conversa.
+
+  Agora os dois aparecem no PDF e no arquivo de dados. Também passam a aparecer a descrição e os
+  campos de cada negócio do paciente, o texto das atividades (só no arquivo de dados) e os
+  cadastros antigos dele que foram juntados ao atual. Os campos saem com o nome que a clínica deu a
+  eles (por exemplo "Convênio: Unimed"), e não com o código interno.
+
+  Um cuidado com o CPF: se alguém digitou o CPF do paciente num campo personalizado ou numa
+  observação, o número **não** sai no relatório. A linha do CPF só diz "Informado em campo
+  personalizado (valor não exibido)", uma vez, do mesmo jeito que o CPF do cadastro já aparecia só
+  como "Armazenado (criptografado)". Isso vale para o PDF e para o arquivo de dados, e também para
+  os outros textos do relatório: o formulário de captação, o caso que a IA abriu, os pedidos, os
+  avisos e os comentários do Instagram. O CPF é reconhecido com ou sem pontos, espaços e hífens.
+
+## [3.6.0] — 2026-10-06
+
+### Corrigido
+
+- **Prestador de serviço aparece em Equipe › Atendimento para publicar a jornada da agenda** Quem tem o papel "Prestador de serviço" (fisioterapeuta, nutricionista, massoterapeuta) não aparecia na lista de Equipe › Atendimento, a única tela onde se publica a jornada semanal que a Agenda usa para oferecer horários. Agora ele aparece marcado como "Só agenda": o gerente edita os horários e as unidades dele normalmente, e ele continua fora da distribuição de conversas — a chave de plantão não se aplica e a API recusa ligá-la.
+
+## [3.5.0] — 2026-10-06
+
+### Adicionado
+
+- **Importar clínicas de uma planilha, por comando** `pnpm tsx scripts/importar-clinicas.ts planilha.xlsx --destino <host>` lê uma
+  planilha com as abas Clínicas, Perguntas frequentes e Atendentes e mostra o que
+  faria. Com `--aplicar --ator <e-mail>`, cria ou atualiza cada clínica: empresa,
+  funil de clínica, perguntas frequentes (a função continua desligada), agente
+  "Recepção" em rascunho, regras da casa na memória e acesso dos atendentes, sem
+  enviar e-mail. `--convidar` envia o convite aos atendentes novos. Rodar a mesma
+  planilha de novo não duplica nada, e o comando recusa empresa que não criou.
+  `--gerar-modelo modelo.xlsx` gera a planilha em branco com uma linha de exemplo.
+
 ## [3.4.0] — 2026-10-05
 
 ### Adicionado
@@ -5868,7 +6591,14 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.4.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.9.1...HEAD
+[3.9.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.9.0...v3.9.1
+[3.9.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.8.0...v3.9.0
+[3.8.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.7.0...v3.8.0
+[3.7.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.6.1...v3.7.0
+[3.6.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.6.0...v3.6.1
+[3.6.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.5.0...v3.6.0
+[3.5.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.1.1...v3.2.0

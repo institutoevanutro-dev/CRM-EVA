@@ -217,6 +217,14 @@ describe("o gate de orçamento lê ai_budgets e executa o veredito", () => {
       expect(normalizarErro(new LlmBudgetExceededError()).error_code).toBe("orcamento_esgotado");
     });
 
+    it("a frase 'no credits remaining' da OpenAI é falta de saldo, embrulhada no RetryError do SDK", () => {
+      // Porte do upstream 479274846: texto gravado em llm_calls numa VPS (set/2026).
+      const retry = new Error(
+        "Failed after 3 attempts. Last error: AI_APICallError: You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.",
+      );
+      expect(normalizarErro(retry).error_code).toBe("limite_ou_saldo");
+    });
+
     it("é marcado como terminal — a fila precisa distinguir veto de incidente", () => {
       expect(new LlmBudgetExceededError().terminal).toBe(true);
     });

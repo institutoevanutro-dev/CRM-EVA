@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
  * é dono do servidor E tem versão nova — quem não pode atualizar não é
  * alertado sobre algo que não pode resolver.
  */
+// Mora só no menu lateral, que é verde nos dois temas: cores do menu, não da página.
 export function VersionFooter({
   collapsed,
   onNavigate,
@@ -35,7 +36,7 @@ export function VersionFooter({
     return (
       <p
         className={cn(
-          "px-3 py-1 text-[11px] text-muted-foreground",
+          "px-3 py-1 text-[11px] text-sidebar-muted",
           collapsed && "px-0 text-center",
         )}
         title={`${t("Versão")} ${label}`}
@@ -52,13 +53,13 @@ export function VersionFooter({
       onClick={onNavigate}
       title={`${t("Nova versão")} ${novo} ${t("disponível")}`}
       className={cn(
-        "flex items-center gap-2 rounded-md px-3 py-2 text-xs text-foreground hover:bg-accent/50",
+        "flex items-center gap-2 rounded-md px-3 py-2 text-xs text-sidebar-fg hover:bg-sidebar-active",
         collapsed && "justify-center px-2",
       )}
     >
       <span className="relative flex h-2 w-2 shrink-0">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gold/60" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-gold" />
       </span>
       {!collapsed && (
         <span className="truncate">

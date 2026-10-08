@@ -16,6 +16,7 @@ import { NextRequest } from "next/server";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { audit } from "@/lib/audit";
 import { fail } from "@/lib/api/wrappers";
@@ -23,6 +24,11 @@ import { ROLE_RANK, type AuthUser, type Role } from "@/lib/auth/types";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+// O cliente de SESSÃO é quem lê os casos: a RLS de `agent_cases` (migration 0319)
+// herda a visibilidade da conversa, então é o banco que decide o que cada
+// atendente vê. O padrão deste dublê é "a sessão enxerga o caso" — é o que a
+// rota de responder pergunta antes de agir; os testes de leitura o sobrescrevem.
+vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/agent-engine/db/request-pool", () => ({ getRequestPool: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 // As transições devolvem `true` quando realmente mudaram o caso e `false` quando
@@ -76,8 +82,37 @@ function session(effectiveRole: Role) {
   });
 }
 
+/**
+ * Dublê do cliente de sessão para a pergunta "esta sessão enxerga o caso?".
+ * `falha` é a leitura que não respondeu (timeout, PostgREST fora, schema sendo
+ * recarregado): `data` vem nulo COM `error` — igual a "não enxerga" para quem
+ * olha só o `data`.
+ */
+function sessaoQueEnxerga(enxerga: boolean, falha?: string) {
+  const chain = {
+    select: () => chain,
+    eq: () => chain,
+    maybeSingle: () =>
+      Promise.resolve(
+        falha
+          ? { data: null, error: { message: falha } }
+          : { data: enxerga ? { id: CASE_ID } : null, error: null },
+      ),
+  };
+  return { from: () => chain } as unknown as Awaited<ReturnType<typeof createClient>>;
+}
+
+/** O admin não pode ser o leitor dos casos: com ele a RLS não se aplica. */
+function adminProibido() {
+  vi.mocked(createAdminClient).mockImplementation(() => {
+    throw new Error("a leitura de casos não pode usar o cliente admin");
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(createAdminClient).mockReset();
+  vi.mocked(createClient).mockResolvedValue(sessaoQueEnxerga(true));
 });
 
 // ---------------------------------------------------------------------------
@@ -86,9 +121,16 @@ beforeEach(() => {
 
 describe("GET /api/v1/ai/cases", () => {
   function makeAdminStub(rows: Array<Record<string, unknown>>) {
-    const calls: { eqCalls: Array<[string, unknown]>; inCalls: Array<[string, unknown]> } = {
+    const calls: {
+      eqCalls: Array<[string, unknown]>;
+      inCalls: Array<[string, unknown]>;
+      limites: number[];
+      ors: string[];
+    } = {
       eqCalls: [],
       inCalls: [],
+      limites: [],
+      ors: [],
     };
     const chain = {
       select: () => chain,
@@ -100,7 +142,15 @@ describe("GET /api/v1/ai/cases", () => {
         calls.inCalls.push([col, val]);
         return chain;
       },
-      order: () => Promise.resolve({ data: rows, error: null }),
+      order: () => chain,
+      or: (filtro: string) => {
+        calls.ors.push(filtro);
+        return chain;
+      },
+      limit: (n: number) => {
+        calls.limites.push(n);
+        return chain;
+      },
       then: (onF: (v: unknown) => unknown) =>
         Promise.resolve({ data: rows, error: null }).then(onF),
     };
@@ -110,8 +160,8 @@ describe("GET /api/v1/ai/cases", () => {
   it("viewer é barrado (403 forbidden_role), sem chegar a consultar o banco", async () => {
     session("viewer");
     const admin = makeAdminStub([]);
-    vi.mocked(createAdminClient).mockReturnValue(
-      admin as unknown as ReturnType<typeof createAdminClient>,
+    vi.mocked(createClient).mockResolvedValue(
+      admin as unknown as Awaited<ReturnType<typeof createClient>>,
     );
     const { GET } = await import("@/app/api/v1/ai/cases/route");
     const res = await GET(new NextRequest("http://localhost/api/v1/ai/cases?status=open"));
@@ -120,7 +170,7 @@ describe("GET /api/v1/ai/cases", () => {
     expect(body.error.code).toBe("forbidden_role");
   });
 
-  it("status=open filtra por organization_id + status abertos", async () => {
+  it("status=open filtra por organization_id + status abertos, lendo com o cliente de SESSÃO", async () => {
     session("agent");
     const rows = [
       {
@@ -136,9 +186,12 @@ describe("GET /api/v1/ai/cases", () => {
       },
     ];
     const admin = makeAdminStub(rows);
-    vi.mocked(createAdminClient).mockReturnValue(
-      admin as unknown as ReturnType<typeof createAdminClient>,
+    // O leitor é a sessão: é a RLS que tira da lista o caso de conversa que o
+    // atendente não pode ver. Com o admin a lista voltaria a mostrar todos.
+    vi.mocked(createClient).mockResolvedValue(
+      admin as unknown as Awaited<ReturnType<typeof createClient>>,
     );
+    adminProibido();
     const { GET } = await import("@/app/api/v1/ai/cases/route");
     const res = await GET(new NextRequest("http://localhost/api/v1/ai/cases?status=open"));
     expect(res.status).toBe(200);
@@ -155,6 +208,113 @@ describe("GET /api/v1/ai/cases", () => {
         ([col, val]) => col === "status" && Array.isArray(val) && val.includes("awaiting_human"),
       ),
     ).toBe(true);
+  });
+
+  /** `n` casos concluídos, do mais recente para trás, como o banco os ordena. */
+  function concluidos(n: number) {
+    return Array.from({ length: n }, (_, i) => ({
+      id: `33333333-3333-4333-8333-${String(i).padStart(12, "0")}`,
+      title: `Caso ${i}`,
+      summary: "Resumo",
+      blocker: "Bloqueio",
+      status: "resolved",
+      opened_at: new Date(Date.UTC(2026, 8, 1) - i * 60_000).toISOString(),
+      conversation_id: CONV_ID,
+      conversations: { contacts: { name: null, phone_number: null } },
+    }));
+  }
+
+  type CorpoDaLista = {
+    data: { cases: Array<{ id: string; opened_at: string }> };
+    meta?: { cursor: string | null; has_more: boolean };
+  };
+
+  it("status=resolved vem em PÁGINAS de 200; os abertos vêm todos, sem limite", async () => {
+    // A lista de concluídos cresce para sempre, e cada caso devolvido custa uma
+    // leitura da conversa dele pela sessão. Os abertos são poucos por natureza e
+    // a fila precisa de todos.
+    session("agent");
+    adminProibido();
+    const { GET } = await import("@/app/api/v1/ai/cases/route");
+
+    const fechados = makeAdminStub([]);
+    vi.mocked(createClient).mockResolvedValue(
+      fechados as unknown as Awaited<ReturnType<typeof createClient>>,
+    );
+    const res = await GET(new NextRequest("http://localhost/api/v1/ai/cases?status=resolved"));
+    expect(res.status).toBe(200);
+    // Um a mais que a página: é ele que diz se existe a próxima.
+    expect(fechados.__calls.limites).toEqual([201]);
+    expect(((await res.json()) as CorpoDaLista).meta).toEqual({ cursor: null, has_more: false });
+
+    const abertos = makeAdminStub([]);
+    vi.mocked(createClient).mockResolvedValue(
+      abertos as unknown as Awaited<ReturnType<typeof createClient>>,
+    );
+    expect(
+      (await GET(new NextRequest("http://localhost/api/v1/ai/cases?status=open"))).status,
+    ).toBe(200);
+    expect(abertos.__calls.limites).toEqual([]);
+  });
+
+  it("com mais de 200 concluídos, devolve os 200 primeiros e o cursor do último (antes → o 201º sumia)", async () => {
+    session("manager");
+    adminProibido();
+    const { GET } = await import("@/app/api/v1/ai/cases/route");
+    const linhas = concluidos(201);
+    vi.mocked(createClient).mockResolvedValue(
+      makeAdminStub(linhas) as unknown as Awaited<ReturnType<typeof createClient>>,
+    );
+
+    const corpo = (await (
+      await GET(new NextRequest("http://localhost/api/v1/ai/cases?status=resolved"))
+    ).json()) as CorpoDaLista;
+
+    expect(corpo.data.cases).toHaveLength(200);
+    expect(corpo.meta?.has_more).toBe(true);
+    const ultimo = linhas[199]!;
+    expect(JSON.parse(Buffer.from(corpo.meta!.cursor!, "base64url").toString("utf8"))).toEqual({
+      opened_at: ultimo.opened_at,
+      id: ultimo.id,
+    });
+  });
+
+  it("o cursor leva à página seguinte: só os casos depois do último, com desempate por id", async () => {
+    session("manager");
+    adminProibido();
+    const { GET } = await import("@/app/api/v1/ai/cases/route");
+    const ponto = { opened_at: "2026-08-31T21:00:00.000Z", id: "33333333-3333-4333-8333-000000000199" };
+    const cursor = Buffer.from(JSON.stringify(ponto), "utf8").toString("base64url");
+    const stub = makeAdminStub(concluidos(3));
+    vi.mocked(createClient).mockResolvedValue(stub as unknown as Awaited<ReturnType<typeof createClient>>);
+
+    const res = await GET(
+      new NextRequest(`http://localhost/api/v1/ai/cases?status=resolved&cursor=${cursor}`),
+    );
+
+    expect(res.status).toBe(200);
+    expect(stub.__calls.ors).toEqual([
+      `opened_at.lt.${ponto.opened_at},and(opened_at.eq.${ponto.opened_at},id.lt.${ponto.id})`,
+    ]);
+    expect(((await res.json()) as CorpoDaLista).meta).toEqual({ cursor: null, has_more: false });
+  });
+
+  it.each([
+    ["que não é base64 de JSON", "nao-e-cursor"],
+    ["com DSL do PostgREST no lugar do instante", Buffer.from(JSON.stringify({ opened_at: "x,id.gt.0", id: CASE_ID })).toString("base64url")],
+  ])("cursor %s → 400, sem consultar o banco", async (_nome, cursor) => {
+    session("agent");
+    const stub = makeAdminStub([]);
+    vi.mocked(createClient).mockResolvedValue(stub as unknown as Awaited<ReturnType<typeof createClient>>);
+    const { GET } = await import("@/app/api/v1/ai/cases/route");
+
+    const res = await GET(
+      new NextRequest(`http://localhost/api/v1/ai/cases?status=resolved&cursor=${cursor}`),
+    );
+
+    expect(res.status).toBe(400);
+    expect(stub.__calls.ors).toEqual([]);
+    expect(stub.__calls.limites).toEqual([]);
   });
 });
 
@@ -208,9 +368,10 @@ describe("GET /api/v1/ai/cases/:id", () => {
         },
       ],
     );
-    vi.mocked(createAdminClient).mockReturnValue(
-      admin as unknown as ReturnType<typeof createAdminClient>,
+    vi.mocked(createClient).mockResolvedValue(
+      admin as unknown as Awaited<ReturnType<typeof createClient>>,
     );
+    adminProibido();
 
     const { GET } = await import("@/app/api/v1/ai/cases/[id]/route");
     const res = await GET(new NextRequest(`http://localhost/api/v1/ai/cases/${CASE_ID}`), {
@@ -231,12 +392,15 @@ describe("GET /api/v1/ai/cases/:id", () => {
     expect(admin.__eqCalls).toContainEqual(["agent_case_events.organization_id", ORG_ID]);
   });
 
-  it("caso de outra org → 404 not_found", async () => {
+  it("caso de outra org, ou de conversa que a sessão não vê → 404 not_found", async () => {
+    // Os dois chegam aqui do mesmo jeito: a RLS não devolve a linha. Um 403 no
+    // segundo confirmaria a existência do caso para quem não pode vê-lo.
     session("agent");
     const admin = makeDetailStub(null, []);
-    vi.mocked(createAdminClient).mockReturnValue(
-      admin as unknown as ReturnType<typeof createAdminClient>,
+    vi.mocked(createClient).mockResolvedValue(
+      admin as unknown as Awaited<ReturnType<typeof createClient>>,
     );
+    adminProibido();
 
     const { GET } = await import("@/app/api/v1/ai/cases/[id]/route");
     const res = await GET(new NextRequest(`http://localhost/api/v1/ai/cases/${CASE_ID}`), {
@@ -306,6 +470,50 @@ describe("POST /api/v1/ai/cases/:id/reply", () => {
       body: JSON.stringify(body),
     });
   }
+
+  it("caso de conversa que a sessão NÃO enxerga → 404, sem ler nem mexer em nada", async () => {
+    // A rota escreve pelo pool do motor, que não passa por RLS. Sem esta
+    // pergunta, o atendente restrito às próprias conversas responderia — e a IA
+    // escreveria ao cliente — num caso que a lista e o detalhe escondem dele.
+    session("agent");
+    vi.mocked(createClient).mockResolvedValue(sessaoQueEnxerga(false));
+    const pool = makePoolStub(caseRowFixture());
+    vi.mocked(getRequestPool).mockReturnValue(pool as unknown as ReturnType<typeof getRequestPool>);
+
+    const { POST } = await import("@/app/api/v1/ai/cases/[id]/reply/route");
+    const res = await POST(replyReq({ action: "resolved", body: "Pode confirmar" }), {
+      params: Promise.resolve({ id: CASE_ID }),
+    });
+
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("not_found");
+    expect(pool.query).not.toHaveBeenCalled();
+    expect(pool.connect).not.toHaveBeenCalled();
+    expect(vi.mocked(audit)).not.toHaveBeenCalled();
+  });
+
+  it("a leitura de visibilidade FALHA → 500, não 'caso não encontrado'", async () => {
+    // Achado da revisão do PR 128: a rota olhava só o `data`. Uma falha de
+    // leitura (timeout, PostgREST recarregando o schema durante o update.sh)
+    // virava 404, e a tela dizia a quem enxerga o caso que ele não existe. O
+    // detalhe (`lerChamado`) já tratava o mesmo erro como 500.
+    session("agent");
+    vi.mocked(createClient).mockResolvedValue(sessaoQueEnxerga(false, "upstream request timeout"));
+    const pool = makePoolStub(caseRowFixture());
+    vi.mocked(getRequestPool).mockReturnValue(pool as unknown as ReturnType<typeof getRequestPool>);
+
+    const { POST } = await import("@/app/api/v1/ai/cases/[id]/reply/route");
+    const res = await POST(replyReq({ action: "resolved", body: "Pode confirmar" }), {
+      params: Promise.resolve({ id: CASE_ID }),
+    });
+
+    expect(res.status).toBe(500);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("internal_error");
+    // Falhou antes de saber se pode: nada é lido nem escrito pelo pool do motor.
+    expect(pool.query).not.toHaveBeenCalled();
+    expect(pool.connect).not.toHaveBeenCalled();
+    expect(vi.mocked(audit)).not.toHaveBeenCalled();
+  });
 
   it("need_lead_info: transiciona awaiting_human->awaiting_lead, enfileira case_reply_turn, audita", async () => {
     session("agent");

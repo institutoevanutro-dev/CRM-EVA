@@ -20,7 +20,7 @@ import type pg from "pg";
 
 import type { AdminClient, EnrollmentPatch } from "./engine";
 import { flowGraphSchema } from "./graph-schema";
-import { classEdgeMatch, selectEdge, type EnrollmentRow } from "./node-handlers";
+import { EVENTO_ACAO_ADIADA, EVENTO_CLASSIFICACAO_ESPERANDO, classEdgeMatch, selectEdge, type EnrollmentOutcome, type EnrollmentRow } from "./node-handlers";
 import { coletarEsperasAdaptativas, montarTimingPlan, type PropostaDeEspera } from "./timing-plan";
 import { persistirRespostaFollowupPg } from "./persistir-resposta";
 
@@ -38,11 +38,24 @@ export interface TurnBridgeAdminClient extends AdminClient {
 
 /** Resultado de um turno `followup_turn` dirigido por fluxo, por `purpose`. */
 export type TurnResult =
-  | { kind: "sent" }
-  | { kind: "skipped"; reason: string }
+  /** `via`: saiu pelo modelo de reserva do passo `ai_message` (a IA não conseguiu enviar). */
+  | { kind: "sent"; via?: "modelo_de_reserva" }
+  /** Encerra a inscrição. `outcome` (ex.: humano ativo → `handoff`) vai à coluna quando presente. */
+  | { kind: "skipped"; reason: string; outcome?: EnrollmentOutcome }
   /** O passo não enviou e o fluxo SEGUE (ex.: fora das 24h do Instagram). `skipped` encerra. */
   | { kind: "pulado"; reason: string }
   | { kind: "classified"; class: string }
+  /**
+   * O turno de classificar não achou resposta ao envio do fluxo. Não é passo:
+   * o enrollment segue esperando no nó. Ver `EVENTO_CLASSIFICACAO_ESPERANDO`.
+   */
+  | { kind: "awaiting_reply" }
+  /**
+   * O envio NÃO saiu e NÃO foi recusado: está estacionado até `until` porque a
+   * janela está fechada. O turno já re-agendou o job para esse instante — o que
+   * falta é o enrollment saber disso. Ver `EVENTO_ACAO_ADIADA`.
+   */
+  | { kind: "deferred"; until: Date; reason: string }
   /** Plano de tempo do fluxo inteiro, proposto no acionamento — cru, antes do clamp. */
   | { kind: "planned"; propostas: PropostaDeEspera[]; modelo: string };
 
@@ -130,8 +143,56 @@ export async function completeTurnForEnrollment(
     });
   };
 
+  if (result.kind === "deferred") {
+    // ESTACIONAR, sem avançar nem completar (porte do upstream a1c6c4d1e):
+    // 1. `steps_taken` não sobe e a chave NÃO é a do passo — ela continua
+    //    devendo a conclusão do envio (`action_sent`/`turn_skipped`).
+    // 2. A chave carrega o JOB: o mesmo job retentado grava o mesmo adiamento
+    //    (no-op); o job re-agendado que adia de novo é prova de vida nova.
+    // 3. `next_eval_at` vai para a abertura, para o motor não gastar rechecks
+    //    na espera. No `match_reply` soma-se a carência: a pergunta só sai em
+    //    `until`, e acordar ali leria silêncio como "não respondeu".
+    const carencia = node.type === "match_reply" ? node.config.grace_timeout_ms : 0;
+    const voltaEm = new Date(result.until.getTime() + carencia);
+    const patch: EnrollmentPatch = { next_eval_at: voltaEm.toISOString(), claimed_until: null, updated_at: now.toISOString() };
+    const evento = {
+      node_id: node.id,
+      event_type: EVENTO_ACAO_ADIADA,
+      payload: { until: result.until.toISOString(), next_eval_at: voltaEm.toISOString(), reason: result.reason },
+      idempotency_key: `${node.id}:${enrollment.steps_taken}:adiado:${jobId ?? result.until.toISOString()}`,
+    };
+    await db.assertServiceBoundary?.(enrollment);
+    if (db.applyEnrollmentStep) {
+      await db.applyEnrollmentStep(enrollmentId, orgId, patch, { ...(jobId ? { job_id: jobId, job_claim: jobClaim } : {}), ...evento });
+      return;
+    }
+    const { inserted } = await db.insertEnrollmentEvent({ organization_id: orgId, enrollment_id: enrollmentId, ...evento });
+    if (!inserted) return; // replay — este adiamento já foi registrado
+    await db.updateEnrollment(enrollmentId, orgId, patch);
+    return;
+  }
+
+  if (result.kind === "awaiting_reply") {
+    // Só o RASTRO da espera: `steps_taken` não sobe, `next_eval_at` não muda (a
+    // carência já corre desde que o nó enfileirou o turno) e a chave não é a do
+    // passo: `${nó}:${passo}` ocupada aqui faria o motor ler a espera como
+    // "o turno já concluiu". Uma linha por job: o retry do mesmo job é no-op.
+    if (node.type !== "ai_classify") {
+      throw new Error(`completeTurnForEnrollment: resultado 'awaiting_reply' mas o nó "${node.id}" não é 'ai_classify'`);
+    }
+    await db.insertEnrollmentEvent({
+      organization_id: orgId,
+      enrollment_id: enrollmentId,
+      node_id: node.id,
+      event_type: EVENTO_CLASSIFICACAO_ESPERANDO,
+      payload: { until: enrollment.next_eval_at },
+      idempotency_key: `${node.id}:${enrollment.steps_taken}:espera:${jobId ?? now.toISOString()}`,
+    });
+    return;
+  }
+
   if(result.kind === "skipped"){
-    await applyStep("turn_skipped",{reason:result.reason},{status:"cancelled",cancel_reason:result.reason,completed_at:now.toISOString(),next_eval_at:null});
+    await applyStep("turn_skipped",{reason:result.reason},{status:"cancelled",...(result.outcome?{outcome:result.outcome}:{}),cancel_reason:result.reason,completed_at:now.toISOString(),next_eval_at:null});
     return;
   }
 
@@ -164,7 +225,7 @@ export async function completeTurnForEnrollment(
     if (!edge) throw new Error(`action node "${node.id}" sem aresta 'always' de saída`);
     await applyStep(
       "action_sent",
-      {},
+      result.via ? { via: result.via } : {},
       { current_node_id: edge.target, status: "active", next_eval_at: now.toISOString() },
     );
     return;
@@ -334,8 +395,9 @@ export function createPgAdminClient(pool: pg.Pool): TurnBridgeAdminClient {
          order by sent_at desc limit 1`,
         params,
       );
-      const body = rows[0]?.body;
-      return typeof body === "string" ? body : null;
+      if (rows.length === 0) return null;
+      const body = rows[0]!.body;
+      return typeof body === "string" ? body : "";
     },
     async loadEnrollmentEvents(enrollmentId) {
       const { rows } = await pool.query(

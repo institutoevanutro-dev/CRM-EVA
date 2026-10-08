@@ -90,6 +90,11 @@ export interface Lead {
   } | null;
   assigned_at: string | null;
   last_activity_at: string | null;
+  /**
+   * 0071: quando o lead ENTROU na etapa atual (carimbado por trigger). É o
+   * relógio de "tempo na etapa" do card; `last_activity_at` é tempo sem resposta.
+   */
+  stage_changed_at: string | null;
   expected_close_date: string | null;
   closed_at: string | null;
   source: string;

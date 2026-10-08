@@ -43,6 +43,7 @@ const base: Lead = {
   owner_agent_id: null,
   assigned_at: null,
   last_activity_at: null,
+  stage_changed_at: "2026-07-20T10:00:00Z",
   expected_close_date: null,
   closed_at: null,
   source: "manual",
@@ -121,12 +122,14 @@ describe("os pontos de chamada — a regra só vale se quem a usa a chama", () =
   // reprovar exatamente o dele.
   it("a rota do quadro anexa os marcadores do contato e os devolve", () => {
     const fonte = readFileSync("app/api/v1/pipelines/[id]/board/route.ts", "utf8");
+    // Os enriquecimentos correm em paralelo e a resposta funde TODOS os resultados.
     expect(fonte, "withMarcadoresDoContato não é chamada na rota").toMatch(
-      /leadsComMarcadores\s*=\s*await withMarcadoresDoContato\(/,
+      /partes\s*=\s*await Promise\.all\(\[[^\]]*withMarcadoresDoContato\(/,
     );
     expect(fonte, "o resultado de withMarcadoresDoContato não chega à resposta").toMatch(
-      /leads:\s*leadsComMarcadores\.leads/,
+      /enriquecidos\s*=\s*base\.map\([^;]*partes\.map\(\(p\)\s*=>\s*p\.leads\[i\]\)/,
     );
+    expect(fonte).toMatch(/leads:\s*enriquecidos/);
   });
 
   it("a consulta de conversas do quadro traz as `tags` e as devolve no card", () => {

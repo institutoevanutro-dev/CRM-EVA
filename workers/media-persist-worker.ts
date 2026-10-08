@@ -33,6 +33,12 @@ export const MEDIA_PERSIST_CONSUMER_KEY = "media_persist_v1";
 // `row.attempts === DRAIN_MAX_ATTEMPTS - 1`.
 const DRAIN_MAX_ATTEMPTS = 5;
 
+/**
+ * Persistência que desistiu: sem bytes, ninguém vai derivar. O estado final
+ * (`DERIVACAO_TERMINADA`) é o que libera o drain, que espera a mídia da conversa.
+ */
+const SEM_DERIVACAO = { media_derived_status: "failed" } as const;
+
 interface MessageMediaRow {
   channel_session_id: string;
   id: string;
@@ -129,7 +135,7 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
     const detail = err instanceof Error ? err.message : String(err);
     if (isLastAttempt) {
       logger.error("[media-persist] download failed permanently", { message_id: msg.id, detail });
-      await markStatus("failed");
+      await markStatus("failed", SEM_DERIVACAO);
     }
     return { consumer_key, status: "error", detail };
   }
@@ -146,15 +152,21 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
         message_id: msg.id,
         detail: uploadErr.message,
       });
-      await markStatus("failed");
+      await markStatus("failed", SEM_DERIVACAO);
     }
     return { consumer_key, status: "error", detail: uploadErr.message };
   }
 
+  // Histórico importado (coexistência) guarda a mídia, mas não gasta IA em
+  // transcrição/visão: a derivação nasce `skipped`, senão a coluna ficava nula
+  // para sempre e o drain (que espera a mídia da CONVERSA) segurava o turno.
+  const importada =
+    (msg.metadata as { importada_do_historico?: boolean } | null)?.importada_do_historico === true;
   const gravada = await markStatus("stored", {
     media_storage_path: path,
     media_size_bytes: media.buffer.byteLength,
     media_mime: media.mime,
+    ...(importada ? { media_derived_status: "skipped" } : {}),
   });
   if (!gravada) {
     // A mensagem foi anonimizada enquanto a mídia descia. A cascata já enfileirou
@@ -172,8 +184,7 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
     return { consumer_key, status: "skipped", detail: "message_redacted" };
   }
 
-  // Histórico importado (coexistência) guarda a mídia, mas não gasta IA em transcrição/visão.
-  if ((msg.metadata as { importada_do_historico?: boolean } | null)?.importada_do_historico) {
+  if (importada) {
     return { consumer_key, status: "ok" };
   }
 

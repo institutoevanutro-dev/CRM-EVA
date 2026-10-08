@@ -17,6 +17,12 @@ const MIGRADOS: ReadonlyArray<{ caminho: string; helper: string }> = [
   { caminho: "lib/agent-engine/agent/compaction.ts", helper: "@/lib/agent-engine/texto/extrair-json-do-texto" },
   { caminho: "lib/agent-engine/flywheel/live.ts", helper: "@/lib/agent-engine/texto/extrair-json-do-texto" },
   { caminho: "lib/agent-engine/agent/intent-classifier.ts", helper: "@/lib/agent-engine/texto/extrair-json-do-texto" },
+  // Os leitores que o PR 110 deixou de fora (porte de dc3d83787/5af05d591 do original).
+  { caminho: "lib/agent-engine/agent/inbound-turn.ts", helper: "@/lib/agent-engine/texto/extrair-json-do-texto" },
+  { caminho: "lib/onboarding/sugerir-funil.ts", helper: "@/lib/agent-engine/texto/extrair-json-do-texto" },
+  { caminho: "lib/agent-engine/agent/followup-flow-classify.ts", helper: "@/lib/agent-engine/texto/extrair-json-do-texto" },
+  { caminho: "lib/agent-engine/guardrails/jailbreak/classifier.ts", helper: "@/lib/agent-engine/texto/extrair-json-do-texto" },
+  { caminho: "lib/agent-engine/guardrails/promise/semantic.ts", helper: "@/lib/agent-engine/texto/extrair-json-do-texto" },
 ];
 
 describe("extrair-json-do-texto — a cerca do dono (nenhum parser frágil re-germina)", () => {

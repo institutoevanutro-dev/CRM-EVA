@@ -1,3 +1,4 @@
+import { extrairObjetoJsonDoTexto } from '@/lib/agent-engine/texto/extrair-json-do-texto';
 import { setExecutionAgentOperation } from '@/lib/atendimento/fronteira-server';
 import { TIPOS_DE_CASO, TIPOS_DE_CASO_PARA_A_IA } from "@/lib/ai/case-copy";
 import { DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabilities';
@@ -78,10 +79,13 @@ import {
 } from './lead-state';
 import { applySaveLeadNote, buildNotesIndexBlock, getLeadNoteBody } from './lead-notes';
 import { buildCompromissosBlock } from './compromissos-do-contato';
+import { agendaNoFechamento } from './agenda-no-fechamento';
 import { applyScheduleFollowup, type FollowupWindowKnobs } from './schedule-followup';
 import {
   avisarLeadDaEscalacao,
   avisarLeadLendoOContato,
+  type AvisoDeEscalacaoIds,
+  type AvisoDeEscalacaoOpts,
   type DesfechoDoAviso,
 } from './aviso-de-escalacao';
 import { tentarRespostaPronta } from './resposta-pronta';
@@ -99,7 +103,7 @@ import {
   trimTranscriptToBudget,
   type CompactionKnobs,
 } from './compaction';
-import { pruneToolResults, type PruneToolResultsKnobs } from './prune-tool-results';
+import { pruneToolResults, toolPartsAsText, type PruneToolResultsKnobs } from './prune-tool-results';
 import {
   classifyStage,
   recordStageDivergenceCandidate,
@@ -124,7 +128,7 @@ import {
   catalogoEntregueAoOperador,
 } from './entrega-de-capacidade';
 import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memory';
-import { matchesHandoffKeyword } from './agent-config';
+import { matchesHandoffKeyword, type PublishedAgentConfig } from './agent-config';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
@@ -155,11 +159,12 @@ import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
 import { esperarComoHumano } from './atraso-humano';
-import { sendInBubbles } from './split-message';
+import { bolhasQueCabemNoEnvio, instrucaoDeBolhas, sendInBubbles, splitForSend } from './split-message';
+import { formatarParaWhatsApp } from './formato-whatsapp';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
 import { decidePromise } from '../guardrails/promise/engine';
 import { loadPromiseTable } from '../guardrails/promise/table';
-import { classifyPromise } from '../guardrails/promise/semantic';
+import { classifyPromise, memoizarPorCandidata } from '../guardrails/promise/semantic';
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { diffCheckpoint } from '@/lib/leads/checkpoint-diff';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
@@ -176,6 +181,11 @@ import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import { renderAgora } from '@/lib/tempo/agora';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
+import {
+  anotarUltimaInboundVista,
+  respostaFicouObsoleta,
+  ultimaInboundJaRespondida,
+} from './turno-ja-respondido';
 import { acionarSupervisao } from '@/lib/supervisao/acionamento';
 
 /**
@@ -436,6 +446,18 @@ export class JobSettledError extends Error {
   override readonly name = 'job_settled';
 }
 
+/**
+ * O turno encontrou a janela anti-ban do canal fechada e re-agendou o job para
+ * `abertura`. É um `JobSettledError` (o worker no-opa igual), mas carrega o
+ * instante: o follow-up precisa dizê-lo ao enrollment, senão o dead-man lê a
+ * espera como worker morto.
+ */
+export class TurnoAdiadoPelaJanelaError extends JobSettledError {
+  constructor(readonly abertura: Date) {
+    super('fora da janela anti-ban — job reagendado para a abertura da janela');
+  }
+}
+
 // Shape que o drain (F2-05) grava no payload do job — organization/lead vêm da
 // ROW do job (fonte confiável), nunca daqui; o payload só carrega ponteiros do CRM.
 const inboundTurnPayloadSchema = z
@@ -540,7 +562,7 @@ export const CHECKPOINT_INSTRUCTION =
   'Feche o turno AGORA. Responda SOMENTE com um JSON válido no formato ' +
   '{"commitments": string[], "objections": string[], "next_action": string|null, "rolling_summary": string} ' +
   '— compromissos assumidos, objeções do lead, próxima ação e o resumo acumulado ' +
-  'da conversa até aqui (inclua o que o resumo anterior já dizia). ' +
+  'da conversa até aqui (preserve o que continua válido do resumo anterior; substitua fatos superados pelos resultados das ações concluídas neste turno). ' +
   // ⚠️ O REFERENCIAL DE `next_action`, e ele não é zelo de redação.
   //
   // Este JSON é escrito no FECHO do turno: a pergunta já saiu, a resposta ainda
@@ -910,6 +932,72 @@ const AGENDA_CONSULTA_SYSTEM_BLOCK =
   'primeiro, e aí diga a quem passa.';
 
 /**
+ * O PRIMEIRO PASSO da cadeia de agenda, residente (#1019).
+ *
+ * ─── O que faltava, medido ──────────────────────────────────────────────────
+ *
+ * Os dois blocos acima nomeiam `crm_find_free_slots` em toda frase e
+ * `crm_list_event_types` em NENHUMA. A cadeia de dois passos — listar os tipos,
+ * pegar o `slug`, consultar os horários COM esse slug — existia só na
+ * `description` da própria ferramenta, que é onde o modelo a lê por último e
+ * sem o peso de uma instrução. Um agente com as três capacidades ligadas
+ * chamava a lista e parava ali; o relato da issue mede 4 chamadas de lista com
+ * o slug disponível e zero de `crm_find_free_slots` na sequência.
+ *
+ * ─── Por que este bloco é CONDICIONAL, e não texto fixo ─────────────────────
+ *
+ * Nomear `crm_list_event_types` para quem não a tem seria exatamente o erro que
+ * a divisão dos outros dois blocos já evita (`AGENDA_CONSULTA_SYSTEM_BLOCK`:
+ * "dar a ele o bloco inteiro seria pior — ensinaria uma ferramenta que ele não
+ * tem, e o modelo tentaria chamá-la"). Por isso o bloco entra só quando o
+ * agente tem as DUAS pontas: a lista e quem consome o slug.
+ *
+ * Ensino, não garantia: a garantia determinística é o `agendaStallGate`
+ * (`before-send.ts`), que agora reconhece a promessa feita com o nome do
+ * serviço. Os dois juntos é que fecham o caso — um ensina o caminho, o outro
+ * impede que a resposta saia por fora dele.
+ */
+const AGENDA_CADEIA_SYSTEM_BLOCK =
+  '## Agenda — os dois passos, no mesmo turno\n' +
+  'Para falar de um horário REAL você precisa de duas coisas: o TIPO de atendimento (o `slug`) e os ' +
+  'horários daquele tipo. Você tem `crm_list_event_types` para a primeira e `crm_find_free_slots` para ' +
+  'a segunda — e o segundo passo PRECISA do `slug` que o primeiro devolve.\n' +
+  'Se o lead pediu horário e você ainda não tem o `slug` do tipo (ou não sabe a qual tipo ele se ' +
+  'refere), chame `crm_list_event_types` NESTE turno, escolha o tipo pelo que o lead descreveu e chame ' +
+  '`crm_find_free_slots` com esse `slug` NO MESMO TURNO, antes de responder. Parar depois da lista e ' +
+  'responder "vou verificar/organizar" é o defeito: a lista é o começo da conversa com a agenda, não a ' +
+  'resposta. Se o tipo que o lead pediu não estiver na lista, diga isso a ele nomeando o que existe — ' +
+  'não prometa verificar o que você já sabe que não tem.\n' +
+  'Nunca invente um `slug`: ele vem da lista, escrito igualzinho.';
+
+/**
+ * Os blocos de agenda que ESTE agente recebe — a decisão num lugar só, testável.
+ *
+ * A régua é o que o agente TEM: os dois blocos de ensino nomeiam ferramentas, e
+ * nomear uma ferramenta ausente faz o modelo tentar chamá-la.
+ */
+export function blocosDeAgendaResidentes(toolIds: readonly string[]): string[] {
+  const blocos: string[] = [];
+  // A régua de "quem marca" é a da #831: `temFerramentaDeMarcacao` conta
+  // também `crm_find_and_book_appointment`, e o texto do bloco nomeia só as
+  // ferramentas que ESTE agente tem — usar um texto fixo aqui desfaria a #831 no
+  // caminho do turno.
+  if (temFerramentaDeMarcacao(toolIds)) {
+    blocos.push(agendaSystemBlock(toolIds));
+  } else if (toolIds.includes('crm_find_free_slots')) {
+    // Só consulta: o bloco de cima nomeia uma ferramenta que ele não tem.
+    blocos.push(AGENDA_CONSULTA_SYSTEM_BLOCK);
+  }
+  if (
+    toolIds.includes('crm_list_event_types') &&
+    toolIds.includes('crm_find_free_slots')
+  ) {
+    blocos.push(AGENDA_CADEIA_SYSTEM_BLOCK);
+  }
+  return blocos;
+}
+
+/**
  * Tools de agenda cuja EXECUÇÃO neste turno arma o `agendaStallGate` (before-send.ts) —
  * ver o wrap no loop de montagem das tools MCP, mais abaixo.
  */
@@ -923,6 +1011,33 @@ const AGENDA_TOOL_NAMES = new Set([
   // detectar "falou de agenda e nada foi gravado".
   'crm_find_and_book_appointment',
 ]);
+
+/**
+ * A EXECUÇÃO desta ferramenta conta como "checou a agenda neste turno" para o
+ * `agendaStallGate`? Só as que armam o gate. `crm_confirm_appointment` NÃO conta:
+ * contá-la desligava o gate inteiro, e "confirmo a de quinta e quero marcar outra
+ * na sexta" saía como "seu horário de sexta está agendado" sem nada gravado
+ * (revisão do PR #140). Ela liga a SUA flag (`confirmouPresenca`), que só solta a
+ * afirmação de "confirmado". As vizinhas de LEITURA (`crm_list_appointments`,
+ * `crm_list_event_types`) não contam: o relato da #1019 é o modelo chamando a
+ * lista e parando ali.
+ */
+export function execucaoChecaAgenda(toolName: string): boolean {
+  return AGENDA_TOOL_NAMES.has(toolName);
+}
+
+/**
+ * O retorno de `crm_confirm_appointment` diz que a presença foi confirmada?
+ * Recusa de negócio volta como `{ confirmado: false, motivo, mensagem }`
+ * (`semDerrubarOTurno`); só o `true` explícito conta.
+ */
+export function confirmouPresenca(resultado: unknown): boolean {
+  return (
+    typeof resultado === 'object' &&
+    resultado !== null &&
+    (resultado as { confirmado?: unknown }).confirmado === true
+  );
+}
 
 /**
  * O agente consegue GRAVAR um horário sozinho (marcar ou remarcar)?
@@ -990,10 +1105,11 @@ export function ferramentasDeAgendaDoAgente(toolIds: readonly string[]): string[
  * exatamente onde o texto ensina, ou não, uma ferramenta que o agente não tem.
  */
 export function blocoResidenteDaAgenda(toolIds: readonly string[]): string | null {
-  if (temFerramentaDeMarcacao(toolIds)) return agendaSystemBlock(toolIds);
-  // Só consulta: o bloco de cima nomeia ferramentas de marcar que ele não tem.
-  if (toolIds.includes('crm_find_free_slots')) return AGENDA_CONSULTA_SYSTEM_BLOCK;
-  return null;
+  // Uma lei só: quem decide os blocos residentes da Agenda é
+  // `blocosDeAgendaResidentes` — a #1019 acrescentou a CADEIA de dois passos como
+  // segundo bloco. Aqui fica o PRIMEIRO deles (o de marcar ou o de só consultar),
+  // que é o par que o teste da #831 prende.
+  return blocosDeAgendaResidentes(toolIds)[0] ?? null;
 }
 
 export interface InboundTurnKnobs {
@@ -1014,6 +1130,11 @@ export interface InboundTurnKnobs {
   maxSendsPerTurn?: number;
   /** atraso do reagendamento em veto/queued herdado da F2-06 (SEND_QUEUED_RETRY_MS) */
   queuedRetryDelayMs: number;
+  /**
+   * Teto da régua de resposta obsoleta (RESPOSTA_OBSOLETA_TETO_MS) — ver
+   * `respostaFicouObsoleta`. Ausente = desligada (testes que não a exercitam).
+   */
+  respostaObsoletaTetoMs?: number;
   /** circuit breaker de tools por run (F2-15) — env TOOL_BREAKER_* */
   breaker: ToolBreakerThresholds;
   /**
@@ -1234,23 +1355,15 @@ async function insertCheckpoint(
 }
 
 /**
- * Extrai e valida o JSON do fechamento. Tolerante a cerca de código e prosa em
- * volta (pega do primeiro '{' ao último '}'); inválido → erro SEM o texto do
- * modelo na mensagem (pode carregar PII da conversa) — o job re-tenta.
+ * Extrai e valida o JSON do fechamento. Tolerante a cerca de código, prosa em
+ * volta, objeto REPETIDO e resposta dentro de array (primeiro objeto
+ * parseável); sem objeto → erro SEM o texto do modelo na mensagem (pode
+ * carregar PII da conversa) — o job re-tenta.
  */
 export function parseCheckpointText(text: string): CheckpointContent {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end <= start) {
+  const raw = extrairObjetoJsonDoTexto(text);
+  if (raw === null) {
     throw new Error('fechamento do turno sem JSON de checkpoint — run re-tentado pela fila');
-  }
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text.slice(start, end + 1));
-  } catch {
-    throw new Error(
-      'JSON de checkpoint inválido no fechamento do turno — run re-tentado pela fila',
-    );
   }
   const parsed = checkpointContentSchema.safeParse(raw);
   if (!parsed.success) {
@@ -1345,7 +1458,12 @@ export function ritualBlocks(
     // tokens em toda conversa para informar uma ausência que o modelo não
     // precisa saber.
     ...(compromissosBlock.trim() !== ''
-      ? ['## Compromissos já marcados deste contato', compromissosBlock, '']
+      ? [
+          '## Compromissos já marcados deste contato',
+          'Estado atual da agenda: para horário e situação de reserva, esta leitura prevalece sobre o resumo anterior. Uma reserva deste contato não é uma vaga livre para outra pessoa.',
+          compromissosBlock,
+          '',
+        ]
       : []),
     '## Contexto do lead (contato + últimas mensagens)',
     // Campo de cadastro VAZIO não é prova de que a informação não existe.
@@ -1412,12 +1530,27 @@ export function buildOpeningMessage(
           '## Mensagem atual do cliente',
           'Não há texto utilizável na mensagem mais recente. Consulte o histórico antes de responder.',
         ];
+  // O job aponta UMA mensagem, mas o cliente pode ter mandado outras antes dela
+  // que ninguém respondeu — a rajada que o drain coalesce, ou a pergunta cuja
+  // resposta foi descartada por ter ficado desatualizada (`respostaFicouObsoleta`
+  // devolve a vez a este turno, pinado na mensagem MAIS NOVA). Sem a lista, o
+  // "responda a ESTA mensagem" acima deixava a pergunta anterior para trás.
+  const pendentes = inboundsNaoRespondidos(context.messages);
+  const pendentesBlock =
+    pendentes.length > 1
+      ? [
+          'Desde a última resposta nossa o cliente mandou mais de uma mensagem, e nenhuma foi respondida ainda.',
+          'Responda a todas juntas, numa resposta só, sem deixar pergunta para trás:',
+          JSON.stringify({ mensagens_sem_resposta: pendentes }),
+        ]
+      : [];
   return [
     'Novo turno de atendimento: o lead enviou uma mensagem (a última inbound do histórico abaixo).',
     '',
     ...ritualBlocks(previous, leadState, context, notesIndexBlock, projeta, compromissosBlock),
     '',
     ...mensagemAtualBlock,
+    ...pendentesBlock,
     '',
     'Responda ao lead usando a tool send_message — NUNCA escreva a resposta como texto direto',
     '(texto fora de tool é descartado pelo runtime). Use get_lead_context se precisar reler o contexto.',
@@ -1602,6 +1735,214 @@ export async function avisarCapacidadesAusentes(
     });
   }
 }
+
+/**
+ * AS DETERMINÍSTICAS DO INBOUND, TAMBÉM ANTES DO RASCUNHO DO ASSISTIDO.
+ *
+ * O ramo assistido devolvia ANTES das detecções de STOP/opt-out e de pedido de
+ * humano. O contato escrevia "pare de me mandar mensagem" e o bot seguia
+ * elegível: sem silêncio durável (`force_human` + `bot_silenced_until`), sem
+ * cancelamento dos follow-ups agendados e sem item na Central, só um rascunho
+ * na fila de aprovação que alguém podia nunca aprovar. Risco de LGPD: o pedido
+ * de parar ficava dependendo de uma autorização humana.
+ *
+ * As detecções são as MESMAS do caminho automático (`detectHumanHandoffRequest`,
+ * `matchesHandoffKeyword` e `detectAmbiguousOptOut`, que lê a regra única de
+ * `lib/opt-out/deteccao.ts`), sobre o que o cliente ainda NÃO teve resposta. Não
+ * gastam token e não dependem do modo de operação, e usam o mesmo mecanismo
+ * durável:
+ *
+ *   1. `avisarLeadDaEscalacao` PRIMEIRO: o aviso tem de sair antes de
+ *      `force_human` armar o gate que o vetaria;
+ *   2. `performHumanHandoff`: silencia para sempre, cancela os crons pendentes e
+ *      abre (ou adenda) o item na Central.
+ *
+ * Idempotente. Devolve `true` quando o turno foi silenciado (não há rascunho).
+ *
+ * Porte de melgarafael/DeskcommCRM #1667 (8411a5805e), adaptado: o fork não tem o
+ * briefing estruturado da passagem, e o resumo usa `buildHandoffSummary` do
+ * último checkpoint, como o caminho automático daqui.
+ */
+export async function deteccoesDeterministicasDoAssistido(
+  pool: pg.Pool,
+  deps: InboundTurnDeps,
+  args: {
+    job: JobRow;
+    tenantId: string;
+    conversationId: string;
+    channelSessionId: string;
+    leadId: string;
+    agent: PublishedAgentConfig;
+    log: Logger;
+    /**
+     * Mensagem fixada no job: plano B quando a leitura do contexto do lead
+     * falha. Um pedido de parar não pode virar "sem detecção" só porque o CRM
+     * está fora do ar.
+     */
+    inboundMessageId?: string;
+  },
+): Promise<boolean> {
+  const { job, tenantId, conversationId, channelSessionId, leadId, agent, log } = args;
+  const clock = deps.clock ?? ((): Date => new Date());
+
+  // O QUE O CLIENTE DISSE e ainda não foi respondido: a MESMA fonte do caminho
+  // automático, para um pedido de parar na 2ª mensagem de uma rajada não sumir.
+  let inboundsPendentes: string[] = [];
+  let optedOutThisTurn = false;
+  let lgpd: AvisoDeEscalacaoOpts['lgpd'];
+  let contextoLido = false;
+  try {
+    const abertura = await getLeadContext(
+      pool,
+      deps.crmCfg,
+      {
+        tenantId,
+        leadId,
+        conversationId,
+        fuso: await fusoDaOrganizacao(pool, tenantId, log),
+      },
+      { historyLimit: agent.historyMessageWindow, maxTokens: agent.historyTokenWindow },
+    );
+    if (abertura.ok) {
+      contextoLido = true;
+      inboundsPendentes = inboundsNaoRespondidos(abertura.context.messages);
+      optedOutThisTurn = abertura.context.contact.is_blocked;
+      lgpd = abertura.lgpd;
+    } else {
+      log.warn('modo assistido: contexto do lead não lido — detecção cai na mensagem fixada', {
+        code: abertura.error.code,
+      });
+    }
+  } catch (err) {
+    log.warn('modo assistido: contexto do lead falhou — detecção cai na mensagem fixada', {
+      error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+    });
+  }
+  // O plano B NUNCA sobrescreve o contexto lido: só existe quando a leitura falhou.
+  if (!contextoLido && args.inboundMessageId !== undefined) {
+    try {
+      const fixada = await loadInboundBodyForJob(pool, {
+        tenantId,
+        conversationId,
+        inboundMessageId: args.inboundMessageId,
+      });
+      if (fixada !== null && fixada.trim() !== '') inboundsPendentes = [fixada];
+    } catch (err) {
+      log.warn('modo assistido: mensagem fixada não lida — sem detecção neste turno', {
+        error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+      });
+    }
+  }
+
+  /** Args do aviso, montados NO MOMENTO do uso: o canal nasce só se algo casar. */
+  const avisoDaEscalacao = (): {
+    ids: AvisoDeEscalacaoIds;
+    base: Omit<AvisoDeEscalacaoOpts, 'motivo'>;
+  } => ({
+    ids: {
+      tenantId,
+      leadId,
+      conversationId,
+      channelSessionId,
+      jobId: job.id,
+      jobClaim: claimOfJob(job),
+    },
+    base: {
+      channel: deps.channel
+        ? deps.channel(pool)
+        : new WahaChannelAdapter(pool, { ...deps.crmCfg, agentActorId: agent.agentId }),
+      optedOutThisTurn,
+      now: clock(),
+      log,
+      ...(lgpd !== undefined ? { lgpd } : {}),
+      agentId: agent.agentId,
+      ...(deps.knobs.disclosureMode !== undefined
+        ? { disclosureMode: deps.knobs.disclosureMode }
+        : {}),
+      ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+    },
+  });
+
+  // PLANO B SEM CONTEXTO = SEM `lgpd`: com ele nulo o gate de LGPD passa direto,
+  // e um contato anonimizado receberia o aviso. Nesse ramo o aviso sai por
+  // `avisarLeadLendoOContato`, que lê o contato do banco.
+  const semInsumosDoContexto = ({
+    optedOutThisTurn: _bloqueado,
+    lgpd: _lgpd,
+    ...resto
+  }: Omit<AvisoDeEscalacaoOpts, 'motivo'>): Omit<
+    AvisoDeEscalacaoOpts,
+    'motivo' | 'optedOutThisTurn' | 'lgpd'
+  > => resto;
+
+  const avisar = async (
+    motivo: AvisoDeEscalacaoOpts['motivo'],
+  ): Promise<DesfechoDoAviso> => {
+    const aviso = avisoDaEscalacao();
+    return contextoLido
+      ? avisarLeadDaEscalacao(pool, aviso.ids, { ...aviso.base, motivo })
+      : avisarLeadLendoOContato(pool, aviso.ids, { ...semInsumosDoContexto(aviso.base), motivo });
+  };
+
+  if (
+    inboundsPendentes.some(
+      (texto) =>
+        detectHumanHandoffRequest(texto) || matchesHandoffKeyword(texto, agent.handoffKeywords),
+    )
+  ) {
+    const desfecho = await avisar('pediu_humano');
+    await performHumanHandoff(
+      pool,
+      { tenantId, leadId, conversationId },
+      {
+        reason: 'requested_human',
+        conversationSummary: buildHandoffSummary(await latestCheckpoint(pool, tenantId, leadId)),
+        avisoAoLead: desfecho,
+        log,
+      },
+    );
+    log.info(
+      'handoff humano acionado por pedido explícito do lead (modo assistido, detecção determinística)',
+      { kind: job.kind, lead_avisado: desfecho.avisado },
+    );
+    return true;
+  }
+
+  // STOP AMBÍGUO: o rascunho pendente NÃO segura este ramo. O pedido de parar
+  // vale por si, e é ele que cancela os follow-ups agendados (LGPD).
+  if (inboundsPendentes.some((texto) => detectAmbiguousOptOut(texto))) {
+    const desfecho = await avisar('suspeita_de_opt_out');
+    await performHumanHandoff(
+      pool,
+      { tenantId, leadId, conversationId },
+      {
+        reason: 'suspected_optout',
+        conversationSummary: buildHandoffSummary(await latestCheckpoint(pool, tenantId, leadId)),
+        inboxTitle: 'Suspeita de opt-out — confirmar bloqueio do contato no CRM',
+        avisoAoLead: desfecho,
+        log,
+      },
+    );
+    log.info(
+      'possível opt-out detectado no modo assistido — bot silenciado, follow-ups cancelados e escalado ao humano',
+      { kind: job.kind, lead_avisado: desfecho.avisado },
+    );
+    return true;
+  }
+
+  // Opt-out JÁ registrado na fonte (CRM): os crons podem ter nascido depois do
+  // bloqueio. Idempotente: o mesmo cancel que o handoff compartilha (F4-07).
+  if (optedOutThisTurn) {
+    const canceled = await cancelPendingCronsForLead(pool, tenantId, leadId);
+    if (canceled > 0) {
+      log.info('opt-out já registrado — follow-ups agendados cancelados (modo assistido)', {
+        canceled,
+      });
+    }
+  }
+  return false;
+}
+
 
 /**
  * O NÚCLEO DO TURNO, SEMPRE SOB A ESCOLTA DO ORÇAMENTO.
@@ -1825,8 +2166,12 @@ async function executarTurnoDoAgente(
   // Só a JANELA adia. Cap diário e warm-up continuam com o gate de envio: eles
   // dependem de quanto já saiu hoje, e antecipá-los aqui adiaria turno que, na
   // hora do envio, teria passado.
+  // Guardados para a régua de resposta obsoleta (`send_message`), que precisa
+  // saber se a janela ainda estará aberta quando o turno seguinte rodar.
+  let knobsDaJanela: Awaited<ReturnType<typeof loadChannelKnobs>>['knobs'] | null = null;
   if (!preview && turnoVaiFalarComOLead(liveJob())) {
     const { knobs } = await loadChannelKnobs(pool, tenantId, input.channelSessionId, runLog);
+    knobsDaJanela = knobs;
     const agora = clock();
     if (!janelaDeEnvioAberta(agora, knobs)) {
       const abertura = proximaAberturaDaJanela(agora, knobs);
@@ -1867,9 +2212,7 @@ async function executarTurnoDoAgente(
           error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
         });
       }
-      throw new JobSettledError(
-        'fora da janela anti-ban — job reagendado para a abertura da janela',
-      );
+      throw new TurnoAdiadoPelaJanelaError(abertura);
     }
     // A janela está ABERTA: se havia aviso de silêncio pendurado, ele morre
     // AQUI — no mesmo ponto que o abriu. Um aviso que só o humano fecha vira
@@ -1896,7 +2239,31 @@ async function executarTurnoDoAgente(
         inbound: liveJob().kind === 'inbound_turn',
       }, { log: runLog });
   const agentConfig = routed.config;
-  if (!preview && agentConfig?.operationMode === 'assisted' && job?.kind === 'inbound_turn') {
+  if (
+    !preview &&
+    agentConfig?.operationMode === 'assisted' &&
+    job !== null &&
+    (job.kind === 'inbound_turn' || job.kind === 'followup_turn')
+  ) {
+    // As detecções DETERMINÍSTICAS (STOP/opt-out e pedido de humano) rodam ANTES
+    // do desvio para o rascunho: o pedido de parar não pode esperar aprovação
+    // humana para ser registrado (LGPD). `true` = turno silenciado.
+    if (
+      await deteccoesDeterministicasDoAssistido(pool, deps, {
+        job,
+        tenantId,
+        conversationId: input.conversationId,
+        channelSessionId: input.channelSessionId,
+        leadId,
+        agent: agentConfig,
+        log: runLog,
+        ...(input.inboundMessageId !== undefined
+          ? { inboundMessageId: input.inboundMessageId }
+          : {}),
+      })
+    ) {
+      return;
+    }
     const { generateReplyDraft } = await import('./reply-drafts');
     await generateReplyDraft(pool, deps, {
       organizationId: tenantId,
@@ -1906,6 +2273,13 @@ async function executarTurnoDoAgente(
       boundary: currentExecutionBoundary() ?? undefined,
       agent: agentConfig,
     });
+    if (job.kind === 'followup_turn') {
+      // O follow-up do assistido caía no `return` genérico de baixo e sumia: sem
+      // envio, sem rascunho e sem aviso. Vira rascunho, como o inbound.
+      runLog.info('follow-up de agente assistido virou rascunho — nada sai sem aprovação', {
+        conversation_id: input.conversationId,
+      });
+    }
     return;
   }
   if (!preview && agentConfig && (agentConfig.pausedAt || agentConfig.operationMode === 'assisted'))
@@ -2062,8 +2436,10 @@ async function executarTurnoDoAgente(
   // não depende de nenhuma feature — todo agente publicado o recebe.
   const blocosResidentes = [systemWithMemory, TRANSPARENCIA_SYSTEM_BLOCK];
   if (agentConfig !== null && agentConfig.casesEnabled) blocosResidentes.push(CASES_SYSTEM_BLOCK);
-  const blocoDaAgenda = agentConfig === null ? null : blocoResidenteDaAgenda(agentConfig.toolIds);
-  if (blocoDaAgenda !== null) blocosResidentes.push(blocoDaAgenda);
+  // A régua é o que o agente TEM — ver `blocosDeAgendaResidentes`, que decide isto
+  // num lugar só para poder ser testada (o bloco da cadeia nomeia
+  // `crm_list_event_types`, e nomear ferramenta ausente faz o modelo tentar chamá-la).
+  if (agentConfig !== null) blocosResidentes.push(...blocosDeAgendaResidentes(agentConfig.toolIds));
   if (preview)
     blocosResidentes.push(
       'MODO PRÉVIA: proponha a resposta com send_message. Operações são propostas separadas; nunca diga que executou uma proposta. Nenhum envio real acontece.',
@@ -2378,7 +2754,9 @@ async function executarTurnoDoAgente(
     camadas.promessa_semantica,
     deps.knobs.promiseSemantic?.enabled === true,
   )
-    ? (candidate: string) =>
+    ? // Memo POR CORPO, por turno: os fail-safes de vocabulário e de promessa
+      // re-rodam a cadeia com o MESMO texto.
+      memoizarPorCandidata((candidate: string) =>
         classifyPromise(
           pool,
           deps.llmCfg,
@@ -2388,7 +2766,8 @@ async function executarTurnoDoAgente(
             ...argsAux(deps.knobs.promiseSemantic?.model),
           },
           { ...(deps.registry !== undefined ? { registry: deps.registry } : {}), log: runLog },
-        )
+        ),
+      )
     : undefined;
   let outOfTablePromiseAttempted = false;
   // Spec 15 (Wave 4 lê este flag): true quando open_human_case abriu um caso NESTE
@@ -2444,6 +2823,12 @@ async function executarTurnoDoAgente(
   // as tools do modelo rodam em passos anteriores do mesmo loop, o valor já está certo
   // quando o modelo decide mandar a resposta.
   let agendaToolCalledThisTurn = false;
+  // Lido pelo `casePromiseGate`: true só depois de `schedule_followup` AGENDAR com
+  // sucesso neste turno. Libera apenas a promessa de retorno do próprio assistente.
+  let followupAgendadoNesteTurno = false;
+  // `crm_confirm_appointment` deu certo neste turno: solta só o "seu horário está
+  // confirmado" do gate, nunca o "agendado/marcado" nem a promessa de verificar.
+  let presencaConfirmadaNoTurno = false;
   const outcomes: ChannelSendResult[] = [];
   // Citações acumuladas por buscas de conhecimento DESTE turno — anexadas à
   // próxima outbound enviada (shape de lib/ai/citations/types, que a UI já lê).
@@ -2729,7 +3114,25 @@ async function executarTurnoDoAgente(
     }),
     send_message: tool({
       ...AGENT_TOOL_DEFS.send_message,
-      execute: async ({ body }) => {
+      execute: async ({ body: corpoDoModelo }) => {
+        // O texto sai no formato do WhatsApp — sem `\n` literal nem
+        // `**negrito**` de Markdown na tela do cliente. Antes de qualquer gate,
+        // para que o corpo vazio, as bolhas e a pausa humana meçam o que sai.
+        // Ver `formato-whatsapp.ts`.
+        const body = formatarParaWhatsApp(corpoDoModelo);
+        // CORPO VAZIO NÃO SAI. O schema garante min(1) no argumento, mas um `\n`
+        // ou espaço passa e chegava ao canal como bolha em branco (medido no
+        // original, 2026-09-19). Recusar aqui devolve ao modelo para reescrever.
+        if (body.trim() === '') {
+          return {
+            ok: false,
+            error: {
+              code: 'corpo_vazio',
+              message:
+                'O texto da mensagem ficou vazio. Escreva a resposta de verdade e chame send_message de novo.',
+            },
+          };
+        }
         if (claimsCurrentInboundIsEmpty(body, mensagemDoJob)) {
           falseEmptyInboundVetoCount += 1;
           if (falseEmptyInboundVetoCount < MAX_VETOS_DE_FALSO_VAZIO) {
@@ -2760,6 +3163,43 @@ async function executarTurnoDoAgente(
               message:
                 `você já enviou ${seq} mensagens neste turno (teto: ${maxSendsPerTurn}). ` +
                 'NÃO envie mais nada agora — encerre o turno e espere a resposta do lead.',
+            },
+          };
+        }
+        // RESPOSTA OBSOLETA: o cliente escreveu de novo enquanto este turno pensava.
+        // Só antes do PRIMEIRO envio — cortar a meio uma resposta já começada é pior
+        // que a duplicata. A mensagem nova tem job próprio, que lê a conversa inteira
+        // e responde a tudo de uma vez. Ver `respostaFicouObsoleta`.
+        //
+        // E só se esse job ainda puder ENVIAR: ele roda depois deste e passa de
+        // novo pela janela anti-ban e pelo horário do agente. Descartar às 21:59
+        // com a janela fechando às 22h deixava o cliente sem nada até as 7h. A
+        // folga é o próprio teto, que cobre o turno seguinte inteiro.
+        const tetoObsoleta = deps.knobs.respostaObsoletaTetoMs ?? 0;
+        const quandoOProximoEnvia = new Date(clock().getTime() + tetoObsoleta);
+        if (
+          !preview &&
+          seq === 0 &&
+          (knobsDaJanela === null || janelaDeEnvioAberta(quandoOProximoEnvia, knobsDaJanela)) &&
+          (agentConfig?.janelaDeAtendimento == null ||
+            msAteAJanelaAbrir(agentConfig.janelaDeAtendimento, quandoOProximoEnvia) === null) &&
+          (await respostaFicouObsoleta(
+            pool,
+            { organizationId: tenantId, conversationId: input.conversationId, jobId: liveJob().id },
+            tetoObsoleta,
+          ))
+        ) {
+          runLog.info('resposta descartada — o cliente escreveu de novo durante o turno', {
+            job_id: liveJob().id,
+            conversation_id: input.conversationId,
+          });
+          return {
+            ok: false,
+            error: {
+              code: 'resposta_obsoleta',
+              message:
+                'O cliente mandou mensagem nova enquanto você escrevia; esta resposta ficou desatualizada e NÃO foi enviada. ' +
+                'NÃO chame send_message de novo neste turno — encerre agora. O próximo turno lê a conversa inteira e responde a tudo de uma vez.',
             },
           };
         }
@@ -2832,6 +3272,11 @@ async function executarTurnoDoAgente(
               active: agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds),
               ferramentas: agentConfig === null ? [] : ferramentasDeAgendaDoAgente(agentConfig.toolIds),
               toolCalledThisTurn: agendaToolCalledThisTurn,
+              presencaConfirmadaNoTurno: presencaConfirmadaNoTurno,
+            },
+            followup: {
+              disponivel: rawTools.schedule_followup !== undefined,
+              agendadoNesteTurno: followupAgendadoNesteTurno,
             },
             ...(deps.knobs.disclosureMode !== undefined
               ? { disclosureMode: deps.knobs.disclosureMode }
@@ -2841,42 +3286,56 @@ async function executarTurnoDoAgente(
             ...(semanticClassifier !== undefined
               ? { classifyPromiseSemantic: semanticClassifier }
               : {}),
+            // Pausa humana do turno ("digitando…" + espera proporcional ao texto), paga
+            // FORA do lock do número. Antes ela era paga dentro do `send` logo abaixo, e o
+            // `send` só acontece com o `pg_advisory_xact_lock` do canal na mão: cada turno
+            // segurava a fila do NÚMERO por 1,2s a 7,5s além do necessário.
+            //
+            // O texto que dimensiona a pausa é a 1ª bolha do MESMO fatiamento que o
+            // `sendInBubbles` usa (`splitForSend` é a fonte única da decisão, com o mesmo
+            // `maxBubbles` do teto do turno). Diferença declarada: aqui o texto é o `body`
+            // PRÉ-cadeia; um disclosure prependado pelo gate F4-05 não entra na conta.
+            esperaForaDoLock: async (): Promise<void> => {
+              // Uma vez por TURNO: o flag impede que um re-run do fail-safe (veto de
+              // promessa/vocabulário) cobre a espera de novo do mesmo cliente.
+              if (jaEsperouComoHumano) return;
+              jaEsperouComoHumano = true;
+              // `liveChannel()`, não `channel`: o transporte é anulável (preview não tem
+              // canal) e este é o MESMO acessor que o `send` logo abaixo usa.
+              const canal = liveChannel();
+              const ms = await esperarComoHumano({
+                texto:
+                  splitForSend(
+                    body,
+                    agentConfig?.splitMessages ?? false,
+                    agentConfig?.splitMaxChars ?? 600,
+                    bolhasQueCabemNoEnvio(maxSendsPerTurn, seq),
+                  )[0] ?? body,
+                sleep: deps.sleep ?? ((s) => new Promise((resolve) => setTimeout(resolve, s))),
+                log: runLog,
+                ...(canal.signalTyping
+                  ? {
+                      sinalizarDigitando: (): Promise<void> =>
+                        canal.signalTyping!({ tenantId, conversationId: input.conversationId }),
+                    }
+                  : {}),
+              });
+              runLog.info('atraso humano antes da 1ª bolha', { atraso_ms: ms, fora_do_lock: true });
+            },
             // `finalBody` = corpo após a cadeia (o disclosureGate F4-05 pode prependar o
             // disclosure via inject); é ELE que vai ao canal, não o `body` capturado da tool.
             send: (finalBody: string) =>
               sendInBubbles(finalBody, {
                 enabled: agentConfig?.splitMessages ?? false,
                 maxChars: agentConfig?.splitMaxChars ?? 600,
+                // O teto do turno vale para as bolhas: o que passa dele vai junto na
+                // última, e uma vaga fica para o envio seguinte (ver a função).
+                maxBubbles: bolhasQueCabemNoEnvio(maxSendsPerTurn, seq),
                 sleep: deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
                 jitter: () => 1200 + Math.floor(Math.random() * 800), // piso no throttle anti-ban (1.2s) — bolhas são mensagens físicas
-                // ANTES da 1ª bolha: "digitando…" + espera proporcional ao texto.
-                // É o conserto do "responde rápido demais" (ver atraso-humano.ts).
-                // NÃO substitui o jitter acima: aquele é throttle anti-ban entre
-                // mensagens físicas, este é a pausa humana do turno. Só uma vez
-                // por TURNO — o flag impede que um re-run do fail-safe (veto de
-                // promessa/vocabulário) cobre a espera de novo do mesmo cliente.
-                antesDaPrimeira: async (primeiraBolha: string): Promise<void> => {
-                  if (jaEsperouComoHumano) return;
-                  jaEsperouComoHumano = true;
-                  // `liveChannel()`, não `channel`: o transporte é anulável (preview
-                  // não tem canal) e este é o MESMO acessor que o `send` logo abaixo
-                  // usa. Resolver aqui, antes da espera, mantém o desfecho de preview
-                  // idêntico ao de antes deste recurso — `preview_transport_forbidden`
-                  // na hora, e não depois de segurar o turno por vários segundos.
-                  const canal = liveChannel();
-                  const ms = await esperarComoHumano({
-                    texto: primeiraBolha,
-                    sleep: deps.sleep ?? ((s) => new Promise((resolve) => setTimeout(resolve, s))),
-                    log: runLog,
-                    ...(canal.signalTyping
-                      ? {
-                          sinalizarDigitando: (): Promise<void> =>
-                            canal.signalTyping!({ tenantId, conversationId: input.conversationId }),
-                        }
-                      : {}),
-                  });
-                  runLog.info('atraso humano antes da 1ª bolha', { atraso_ms: ms });
-                },
+                // A pausa humana do turno NÃO mora mais aqui: ela subiu para
+                // `esperaForaDoLock` (paga antes de o guardrail tomar o lock do número).
+                // Neste ponto fica só o jitter anti-ban entre bolhas.
                 send: (bubble): Promise<ChannelSendResult> => {
                   seq += 1;
                   return liveChannel().send({
@@ -3088,6 +3547,7 @@ async function executarTurnoDoAgente(
               tenantId,
               leadId,
               toStage: update.transition.to,
+              ...(agentConfig !== null ? { pipelineIds: agentConfig.pipelineIds } : {}),
               ...(update.transition.reason !== undefined
                 ? { reason: update.transition.reason }
                 : {}),
@@ -3222,11 +3682,16 @@ async function executarTurnoDoAgente(
           // em cima seria o robô dizendo duas vezes a mesma coisa, com palavras
           // diferentes. Confiamos na fala dele e registramos que o piso não foi
           // preciso.
+          //
+          // O motivo é `outro`, nunca `pediu_humano`: quem decidiu sair foi o
+          // MODELO, não o cliente. Com `pediu_humano` a frase respondia a um
+          // pedido que ninguém fez ("Sem problema. Acabei de acionar…" em
+          // resposta a um "Boa noite!", medido em produção em 07/10/2026).
           const aviso =
             seq === 0
               ? await avisarLeadDaEscalacao(pool, avisoDaEscalacao().ids, {
                   ...avisoDaEscalacao().base,
-                  motivo: 'pediu_humano',
+                  motivo: 'outro',
                 })
               : ({ avisado: true } as const);
           const res = await applyRequestHumanHandoff(
@@ -3273,6 +3738,7 @@ async function executarTurnoDoAgente(
           if (!res.ok) {
             return res; // erro de ensino (payload / data no passado / fora da janela)
           }
+          followupAgendadoNesteTurno = true;
           return {
             ok: true,
             status: 'agendado',
@@ -3481,7 +3947,11 @@ async function executarTurnoDoAgente(
         }
         const mcp = await buildMcpTurnTools(
           deps.crmCfg,
-          { organizationId: tenantId, jobId: preview?.runId ?? liveJob().id },
+          {
+            organizationId: tenantId,
+            jobId: preview?.runId ?? liveJob().id,
+            ...(leadId ? { contactId: leadId } : {}),
+          },
           configDoTurno,
           runLog,
           preview ? { readOnly: true } : undefined,
@@ -3492,13 +3962,23 @@ async function executarTurnoDoAgente(
             if (name in rawTools) continue;
             // Marca a EXECUÇÃO (não só a decisão de chamar) — é isso que o agendaStallGate
             // precisa saber para não vetar um turno que já checou a agenda de verdade.
-            if (AGENDA_TOOL_NAMES.has(name) && typeof mcpTool.execute === 'function') {
+            if (execucaoChecaAgenda(name) && typeof mcpTool.execute === 'function') {
               const executeOriginal = mcpTool.execute.bind(mcpTool);
               rawTools[name] = {
                 ...mcpTool,
                 execute: (async (...args: Parameters<typeof executeOriginal>) => {
                   agendaToolCalledThisTurn = true;
                   return executeOriginal(...args);
+                }) as typeof mcpTool.execute,
+              };
+            } else if (name === 'crm_confirm_appointment' && typeof mcpTool.execute === 'function') {
+              const executeOriginal = mcpTool.execute.bind(mcpTool);
+              rawTools[name] = {
+                ...mcpTool,
+                execute: (async (...args: Parameters<typeof executeOriginal>) => {
+                  const resultado = await executeOriginal(...args);
+                  if (confirmouPresenca(resultado)) presencaConfirmadaNoTurno = true;
+                  return resultado;
                 }) as typeof mcpTool.execute,
               };
             } else {
@@ -3579,6 +4059,7 @@ async function executarTurnoDoAgente(
                 active: previewContext.agenda?.active ?? false,
                 ferramentas: previewContext.agenda?.ferramentas ?? [],
                 toolCalledThisTurn: agendaToolCalledThisTurn,
+                presencaConfirmadaNoTurno: presencaConfirmadaNoTurno,
               },
             }),
           )
@@ -3663,10 +4144,7 @@ async function executarTurnoDoAgente(
     // Sufixos por-lead (situacionais, voláteis — depois do prefixo cacheável F2-17): corpos de
     // skill casadas (F3-09) + hint do classificador (F3-11) + instrução de split (F4-xx, quando
     // split_messages está on — Onda 4). Vazios são omitidos.
-    const splitHint =
-      (agentConfig?.splitMessages ?? false)
-        ? 'Responda em mensagens curtas e naturais, uma ideia por mensagem — como uma pessoa digitando no WhatsApp. Prefira várias mensagens curtas a um texto único e longo.'
-        : '';
+    const splitHint = instrucaoDeBolhas(agentConfig?.splitMessages ?? false);
     // Spec 15: o `case_id` real do caso 'awaiting_lead' desta conversa, se houver — sem
     // isso o modelo nunca consegue chamar provide_case_update quando o lead simplesmente
     // responde (o caminho comum; case_reply_turn só cobre a AÇÃO do humano). Sufixo
@@ -3800,10 +4278,41 @@ async function executarTurnoDoAgente(
     // (é onde a fita inteira é re-serializada num prompt) — o conteúdo durável já foi para
     // lead_notes pelo flush (F3-07), então o stub não perde nada recuperável. Opera SÓ no
     // sufixo por-lead, nunca no prefixo estável (regra de cache 15).
-    const responseMessages =
+    // No SDK atual, response.messages contém só a ÚLTIMA etapa. O fechamento
+    // precisa da fita inteira, incluindo as ações concluídas em etapas anteriores.
+    // O fechamento vai SEM `tools`: as partes de ferramenta viram texto (a Anthropic recusa
+    // tool_use/tool_result sem tools), com teto por resultado no knob do pruning.
+    const responseMessages = toolPartsAsText(
       deps.knobs.prune !== undefined
-        ? pruneToolResults(turn.result.response.messages, deps.knobs.prune)
-        : turn.result.response.messages;
+        ? pruneToolResults(turn.result.responseMessages, deps.knobs.prune)
+        : turn.result.responseMessages,
+      deps.knobs.prune?.minResultTokens,
+    );
+
+    // A abertura precede as tools: depois de criar/remarcar/cancelar, o fechamento
+    // relê a agenda para o resumo do PRÓXIMO turno não herdar o horário antigo.
+    // A prévia propõe escritas: não pode tratá-las como reservas executadas.
+    let agendaAtual = '';
+    if (!preview) {
+      try {
+        agendaAtual = await agendaNoFechamento({
+          db: pool,
+          organizationId: tenantId,
+          contactId: leadId,
+          agora: clock(),
+          blocoDaAbertura: compromissosBlock,
+          mensagens: turn.result.responseMessages,
+        });
+      } catch (err) {
+        // A resposta já saiu: falhar o job por esta leitura repetiria o turno.
+        // Falha de leitura não equivale a agenda vazia nem a ação desfeita.
+        runLog.warn('agenda não pôde ser relida no fechamento', {
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+        });
+        agendaAtual =
+          'A agenda não pôde ser relida depois das ações deste turno. Isso não prova ausência de reserva nem desfaz uma ação concluída. Registre somente o que os resultados das ferramentas comprovaram.';
+      }
+    }
 
     // Fechamento imposto pelo runtime: 2ª chamada, mesma conversa, só o checkpoint.
     //
@@ -3835,6 +4344,7 @@ async function executarTurnoDoAgente(
           // fez seu trabalho na 1ª chamada e não precisa ir de novo.
           ...openingTextOnly,
           ...responseMessages,
+          ...(agendaAtual ? [{ role: 'user' as const, content: agendaAtual }] : []),
           { role: 'user', content: CHECKPOINT_INSTRUCTION },
         ],
       },
@@ -4299,6 +4809,23 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
           error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
         });
       }
+      // AS DETERMINÍSTICAS ANTES DO RASCUNHO: o contato escrevia "SAIR" e nada
+      // era registrado, os follow-ups seguiam vivos e "quero falar com uma
+      // pessoa" virava só um rascunho. `true` = turno silenciado, sem rascunho.
+      if (
+        await deteccoesDeterministicasDoAssistido(pool, deps, {
+          job,
+          tenantId: job.organization_id,
+          conversationId: payload.conversation_id,
+          channelSessionId: payload.channel_session_id,
+          leadId: job.contact_id,
+          agent: operationAgent,
+          log: deps.log,
+          inboundMessageId: payload.inbound_message_id,
+        })
+      ) {
+        return;
+      }
       const { generateReplyDraft } = await import('./reply-drafts');
       if (!job.contact_id) throw new Error('reply_without_contact');
       await generateReplyDraft(pool, deps, {
@@ -4312,6 +4839,26 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       return;
     }
     if (operationAgent?.pausedAt) return;
+    // UMA RESPOSTA POR MENSAGEM: um turno que rodou antes deste pode ter lido a
+    // mensagem que acordou este job e já respondido a ela — ver o cabeçalho de
+    // `turno-ja-respondido.ts`, com o caso medido. A anotação vem DEPOIS da
+    // pergunta e ANTES de `runAgentTurn` ler a conversa: é ela que deixa o
+    // próximo turno fazer a mesma pergunta a respeito deste.
+    const alvo = {
+      organizationId: job.organization_id,
+      contactId: job.contact_id,
+      conversationId: payload.conversation_id,
+      jobId: job.id,
+    };
+    if (await ultimaInboundJaRespondida(pool, alvo)) {
+      deps.log.info('turno pulado — outro turno já viu e respondeu a última mensagem do cliente', {
+        job_id: job.id,
+        conversation_id: payload.conversation_id,
+        inbound_message_id: payload.inbound_message_id,
+      });
+      return;
+    }
+    await anotarUltimaInboundVista(pool, alvo);
     await runAgentTurn(deps, job, pool, ctx, {
       resolvedAgent,
       channelSessionId: payload.channel_session_id,

@@ -10,6 +10,8 @@ import {
   type NoDoDossie,
 } from "./eventos-legiveis";
 import type { FlowNode } from "./graph-schema";
+import { EVENTO_ACAO_ADIADA, EVENTO_CLASSIFICACAO_ESPERANDO, EVENTO_TURNO_DESCARTADO } from "./node-handlers";
+import { DICIONARIO } from "@/lib/i18n/dicionario";
 
 const espera: FlowNode = {
   id: "wait-1",
@@ -120,6 +122,12 @@ describe("descreveEvento", () => {
     expect(r.autor).toBe("motor");
   });
 
+  it("envio pelo modelo de reserva é dito no detalhe; envio da IA não tem detalhe", () => {
+    const reserva = descreveEvento(evento({ event_type: "action_sent", payload: { via: "modelo_de_reserva" } }), nos, "pt-BR");
+    expect(reserva.detalhe).toBe("pelo modelo de reserva: a IA não escreveu a mensagem");
+    expect(descreveEvento(evento({ event_type: "action_sent", payload: {} }), nos, "pt-BR").detalhe).toBeNull();
+  });
+
   it("a falha carrega a mensagem E o passo — nunca uma sem a outra", () => {
     const r = descreveEvento(
       evento({ event_type: "node_failed", payload: { error: "flow_version_not_found" } }),
@@ -132,6 +140,71 @@ describe("descreveEvento", () => {
   it("intervenção humana é marcada como humana — é o que separa decisão de automatismo", () => {
     expect(descreveEvento(evento({ event_type: "paused_manual" }), nos, "pt-BR").autor).toBe("pessoa");
     expect(descreveEvento(evento({ event_type: "reactivity_replied" }), nos, "pt-BR").autor).toBe("cliente");
+  });
+
+  it("adiar por janela fechada é lido como ESPERA, não como defeito — e com a data", () => {
+    // Porte do upstream a1c6c4d1e. Sem esta linha o passo mais longo do dossiê
+    // cai no `default` e o operador lê defeito onde houve obediência ao horário.
+    const r = descreveEvento(
+      evento({
+        node_id: "action-1",
+        event_type: EVENTO_ACAO_ADIADA,
+        payload: { until: "2026-08-11T12:00:00.000Z", reason: "outside_window" },
+      }),
+      nos,
+      "pt-BR",
+    );
+    expect(r.titulo).toBe("Segurou o envio até o horário permitido");
+    expect(r.detalhe).toContain("envia em");
+    expect(r.autor).toBe("motor");
+  });
+
+  it("o adiamento com data sai traduzido em espanhol (a frase interpolada não acha o dicionário na tela)", () => {
+    // O dossiê chama t(lido.detalhe) com a frase JÁ montada; uma frase com data
+    // nunca bate numa chave do dicionário. A tradução tem de acontecer aqui.
+    const r = descreveEvento(
+      evento({
+        node_id: "action-1",
+        event_type: EVENTO_ACAO_ADIADA,
+        payload: { until: "2026-08-11T12:00:00.000Z", reason: "outside_window" },
+      }),
+      nos,
+      "es",
+    );
+    expect(r.detalhe).toMatch(/^la ventana estaba cerrada; envía el /);
+    expect(r.detalhe).not.toContain("{ate}");
+  });
+
+  it("o turno descartado pela PAUSA da inscrição aponta a pausa (#2262), com espanhol", () => {
+    const r = descreveEvento(
+      evento({ node_id: "action-1", event_type: EVENTO_TURNO_DESCARTADO, payload: { motivo: "inscricao_pausada" } }),
+      nos,
+      "pt-BR",
+    );
+    expect(r.titulo).toBe("O envio deste passo foi descartado porque a inscrição está pausada");
+    expect(r.detalhe).toBe("sai num envio novo quando a inscrição for retomada");
+    for (const frase of [r.titulo, r.detalhe ?? ""]) expect(DICIONARIO[frase]?.es, `sem espanhol: ${frase}`).toBeTruthy();
+  });
+
+  it("o classificar que espera a resposta diz que ESPERA, e até quando: não parece travado", () => {
+    const r = descreveEvento(
+      evento({ node_id: "action-1", event_type: EVENTO_CLASSIFICACAO_ESPERANDO, payload: { until: "2026-08-11T12:00:00.000Z" } }),
+      nos,
+      "pt-BR",
+    );
+    expect(r.titulo).toBe("Esperando a resposta do cliente");
+    expect(r.detalhe).toMatch(/^se ele não responder até .+, o fluxo segue sem a resposta$/);
+    expect(r.autor).toBe("motor");
+  });
+
+  it("a carência vencida sem resposta diz POR QUE seguiu, não só que seguiu", () => {
+    const r = descreveEvento(
+      evento({ event_type: "node_advanced", payload: { next_node_id: "action-1", class: "no_reply" } }),
+      nos,
+      "pt-BR",
+    );
+    expect(r.titulo).toBe("O cliente não respondeu dentro do prazo");
+    expect(r.detalhe).toBe("foi para Primeira cutucada");
   });
 
   it("tipo desconhecido não vira jargão disfarçado de frase, mas também não some", () => {

@@ -17,6 +17,7 @@ import {
   buscarConhecimento,
   resolverAcervoDoAgente,
 } from "@/lib/ai/knowledge/busca";
+import { foraDaConversa } from "../fora-da-conversa";
 import type { McpToolDefinition } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -148,6 +149,12 @@ export const crmListImprovementProposals: McpToolDefinition<typeof propostasInpu
   requiresRole: "agent",
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
+    // No atendimento, RECUSA: o `content` é destilado dos fatos que faltaram
+    // no turno de OUTRO paciente (`lib/agent-engine/flywheel/live.ts`), e a
+    // tabela não tem contato por onde filtrar. Fora de conversa, lista como antes.
+    if (ctx.contatoDoTurno) {
+      return foraDaConversa("as propostas de melhoria vêm de conversas de outros pacientes");
+    }
     const { data, error } = await ctx.supabase
       .from("flywheel_distiller_proposals")
       .select("id, run_id, dataset, type, target, content, evidence, proposed_at")

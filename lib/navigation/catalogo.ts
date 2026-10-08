@@ -15,7 +15,7 @@ import type { Role } from "@/lib/auth/types";
  * Doutrina: docs/doctrine/sistema-vivo.md — "por qual porta se chega até mim?"
  */
 
-export type NavGroupId = "atendimento" | "crm" | "ia" | "canais" | "analise" | "organizacao";
+export type NavGroupId = "atendimento" | "crm" | "ia" | "analise" | "organizacao";
 
 export interface NavGroup {
   id: NavGroupId;
@@ -67,9 +67,8 @@ export interface NavMetadata {
  */
 export const NAV_GROUPS: NavGroup[] = [
   { id: "atendimento", label: "Atendimento" },
-  { id: "crm", label: "CRM", hub: { href: "/app/crm", label: "Ver tudo em CRM" } },
-  { id: "ia", label: "Agente de IA", hub: { href: "/app/ai", label: "Ver tudo em IA" } },
-  { id: "canais", label: "Canais" },
+  { id: "crm", label: "Vendas", hub: { href: "/app/crm", label: "Ver tudo em Vendas" } },
+  { id: "ia", label: "IA", hub: { href: "/app/ai", label: "Ver tudo em IA" } },
   { id: "analise", label: "Análise", hub: { href: "/app/analise", label: "Ver tudo em Análise" } },
   {
     id: "organizacao",
@@ -199,6 +198,7 @@ export const NAV_CATALOG = [
     description: "Fale com uma lista de contatos que você escolhe, no ritmo do número.",
     icon: "Megaphone",
     group: "crm",
+    sidebar: true,
     section: "O dia a dia da venda",
     // SÓ NO HUB, como as demais telas de preparação: o quinto item do sidebar do
     // CRM já fez o menu rolar 13px em 900px (e2e `navegacao.spec.ts`), e a
@@ -247,7 +247,11 @@ export const NAV_CATALOG = [
     icon: "Storefront",
     group: "crm",
     section: "Preparar a venda",
-    // SEM `sidebar`: mora atrás de "Ver tudo em CRM".
+    // Aba principal de Vendas desde 07/10/2026 (aprovado pelo dono; spec
+    // 2026-10-07-cores-e-menu). O raciocínio abaixo era sobre a LINHA no menu
+    // lateral, que deixou de existir: agora é uma aba entre cinco.
+    sidebar: true,
+    // Histórico — antes: SEM `sidebar`, morava atrás de "Ver tudo em CRM".
     //
     // O critério é QUEM CONSOME a tela, e a descrição acima já o entrega: o
     // preço quem responde é o atendente de IA, dentro da conversa. Esta tela é
@@ -369,6 +373,7 @@ export const NAV_CATALOG = [
     description: "Os materiais que o agente consulta antes de responder sobre o seu negócio.",
     icon: "BookOpen",
     group: "ia",
+    sidebar: true,
     section: "Ensinar o agente",
     minRole: "manager",
   },
@@ -381,6 +386,18 @@ export const NAV_CATALOG = [
     label: "Perguntas frequentes",
     description: "Respostas prontas que saem sem chamar a IA quando a pergunta é clara.",
     icon: "FileText",
+    group: "ia",
+    section: "Ensinar o agente",
+    // Aba principal da área IA desde 07/10/2026 (spec 2026-10-07-cores-e-menu): o menu
+    // lateral passou a listar áreas, então a dobra de 900px deixou de ser o limite.
+    sidebar: true,
+    minRole: "manager",
+  },
+  {
+    href: "/app/ai/midias",
+    label: "Biblioteca de mídias",
+    description: "Imagens e vídeos que o agente e os follow-ups podem enviar, com o termo de uso de imagem.",
+    icon: "ImageSquare",
     group: "ia",
     section: "Ensinar o agente",
     minRole: "manager",
@@ -466,7 +483,8 @@ export const NAV_CATALOG = [
     description:
       "Seus números de WhatsApp: por QR ou canal oficial da Meta, com saúde, reconexão e templates.",
     icon: "PlugsConnected",
-    group: "canais",
+    group: "organizacao",
+    section: "Canais",
     minRole: "admin",
     sidebar: true,
     healthDot: true,
@@ -477,7 +495,8 @@ export const NAV_CATALOG = [
     label: "Nuvemshop",
     description: "Conecte a loja para trazer pedidos e clientes para dentro do CRM.",
     icon: "Storefront",
-    group: "canais",
+    group: "organizacao",
+    section: "Canais",
     // A página não filtra por papel, mas as Server Actions de conectar e
     // desconectar exigem admin — mostrar a um viewer seria oferecer botão morto.
     minRole: "admin",
@@ -500,9 +519,9 @@ export const NAV_CATALOG = [
     label: "Webhooks",
     description: "Avise outros sistemas quando algo acontecer aqui dentro.",
     icon: "WebhooksLogo",
-    group: "canais",
+    group: "organizacao",
+    section: "Canais",
     minRole: "manager",
-    sidebar: true,
   },
 
   // ---- Análise — olhar o sistema funcionando ----
@@ -550,6 +569,23 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
+    // Fecha a conta que as duas de cima deixam cada uma pela metade: Desempenho
+    // mostra onde os cards estão AGORA, Meta Ads quanto custou trazer gente; aqui
+    // os dois lados no mesmo período e no mesmo funil — quem chegou, quem
+    // interagiu, quem compareceu, quanto custou cada venda. `manager` pela mesma
+    // razão de Meta Ads (investimento e receita são da empresa inteira). Fora da
+    // barra lateral: ela está medida no limite (`app/app/analise/page.tsx`).
+    href: "/app/painel-do-funil",
+    label: "Painel do funil",
+    description:
+      "Leads, interação, etapas, comparecimento, custo por venda e ROAS do período, com recorte por origem.",
+    icon: "Funnel",
+    group: "analise",
+    sidebar: true,
+    section: "Os números do período",
+    minRole: "manager",
+  },
+  {
     // Irmã de "Desempenho", não a mesma coisa: lá é DESFECHO (funil agora,
     // ganho/perdido por atendente); aqui é o TRABALHO que aconteceu no
     // período, com quem fez cada coisa. Um mês inteiro atendido pela IA e um
@@ -574,6 +610,7 @@ export const NAV_CATALOG = [
     description: "Qual assunto ocupou a operação no período — e quanto tempo ele esperou.",
     icon: "Tag",
     group: "analise",
+    sidebar: true,
     section: "Os números do período",
   },
   {
@@ -611,6 +648,7 @@ export const NAV_CATALOG = [
     description: "Verificação em duas etapas, códigos de recuperação e sessões.",
     icon: "ShieldCheck",
     group: "organizacao",
+    sidebar: true,
     section: "Sua conta",
   },
   {
@@ -627,6 +665,7 @@ export const NAV_CATALOG = [
     description: "Quem trabalha aqui, com qual papel e quanta conversa cada um aguenta.",
     icon: "UsersThree",
     group: "organizacao",
+    sidebar: true,
     section: "Sua empresa",
   },
   {
@@ -714,6 +753,7 @@ export const NAV_CATALOG = [
     description: "O nome e a cor que sua empresa mostra dentro do sistema.",
     icon: "Palette",
     group: "organizacao",
+    sidebar: true,
     section: "Sua empresa",
     // `admin` pelo mesmo motivo da linha de cima: o que se edita ali é
     // identidade da empresa, e dá-lo a `manager` o colocaria abaixo de billing e

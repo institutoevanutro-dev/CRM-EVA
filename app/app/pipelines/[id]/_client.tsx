@@ -2,7 +2,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useT } from "@/hooks/i18n/useT";
-import { useBoard } from "@/hooks/kanban/useBoard";
+import { useBoard, useFechadosAntigos } from "@/hooks/kanban/useBoard";
 
 function formatError(err: unknown, t: (texto: string) => string): string {
   if (err instanceof Error) return err.message;
@@ -51,8 +51,19 @@ export function PipelinePageClient({
   );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [newOpen, setNewOpen] = useState(false);
+  const [verAntigos, setVerAntigos] = useState(false);
+  const antigos = useFechadosAntigos(pipelineId, verAntigos);
+  const fechadosAntigos = data?.fechadosAntigos ?? 0;
 
-  const filteredLeads = data ? applyFilters(data.leads, filters) : [];
+  // Memorizado: sem isto cada render (seleção, pulso, relógio) refiltrava e
+  // entregava ao quadro uma lista nova, e o quadro inteiro se redesenhava.
+  const filteredLeads = useMemo(() => {
+    if (!data) return [];
+    const extras = verAntigos ? (antigos.data?.leads ?? []) : [];
+    const vistos = new Set(data.leads.map((l) => l.id));
+    const todos = extras.length ? [...data.leads, ...extras.filter((l) => !vistos.has(l.id))] : data.leads;
+    return applyFilters(todos, filters);
+  }, [data, verAntigos, antigos.data, filters]);
   // NÃO é a conta do FilterBar: o seletor de filtro lista as três caixas
   // (`marcadoresDoCard`: negócio, contato e conversa), e esta lista, a da tag em
   // lote, só `lead.tags` — é lá que a ação em lote grava (#852). O `useMemo` é o
@@ -67,7 +78,14 @@ export function PipelinePageClient({
 
   return (
     <div
-      className="flex h-full flex-col gap-4"
+      // O QUADRO CABE NA TELA: com a altura da área visível (100dvh menos a
+      // barra do topo, h-14, e o p-6 do <main>), quem rola é o quadro — a barra
+      // horizontal fica no pé da tela e o nome da etapa preso em cima. Antes a
+      // página rolava inteira e era preciso descer até o fim da etapa mais
+      // comprida para andar para o lado. Piso de 20rem para tela baixa demais (era 28rem;
+      // com as abas da área no topo, 28rem passava da janela de 600px — e2e lote-no-quadro).
+      // Porte do original b0ade1e44 (jmpo).
+      className="flex h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-3rem)] min-h-[20rem] flex-col gap-4"
       // OBSERVÁVEL de propósito, e é a razão de existir desta linha: "a
       // assinatura morreu" e "nada aconteceu" produzem o MESMO silêncio na
       // tela, e sem este valor nem o produto nem o teste conseguem separar as
@@ -99,7 +117,7 @@ export function PipelinePageClient({
           <Plus size={16} className="mr-2" /> {t("Novo Lead")}
         </Button>
       </header>
-      {data && (
+      {data && newOpen && (
         <NewLeadDialog
           open={newOpen}
           onOpenChange={setNewOpen}
@@ -108,6 +126,25 @@ export function PipelinePageClient({
         />
       )}
       <FilterBar filters={filters} onChange={setFilters} leads={data?.leads ?? []} />
+      {fechadosAntigos > 0 && (
+        <p className="-mt-2 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+          {verAntigos
+            ? t("Mostrando também os ganhos e perdidos antigos.")
+            : t("Ganhos e perdidos: só os dos últimos 30 dias.")}
+          <button
+            type="button"
+            onClick={() => setVerAntigos((v) => !v)}
+            disabled={verAntigos && antigos.isLoading}
+            className="font-medium text-accent-strong underline-offset-2 hover:underline disabled:opacity-60"
+          >
+            {verAntigos
+              ? antigos.isLoading
+                ? t("Carregando…")
+                : t("Esconder antigos")
+              : `${t("Ver mais")} (${fechadosAntigos})`}
+          </button>
+        </p>
+      )}
       {error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm">
           {t("Não consegui carregar este funil:")} {formatError(error, t)}

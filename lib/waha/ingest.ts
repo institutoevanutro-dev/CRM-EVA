@@ -283,6 +283,35 @@ export function mediaMimeOf(p: WahaPayload): string | null {
 }
 
 /**
+ * `payload.timestamp` em ISO-8601, robusto à UNIDADE. O WAHA manda segundos
+ * (epoch s), mas um proxy/integrador pode mandar milissegundos ou
+ * nanossegundos — e `new Date(ns * 1000).toISOString()` LANÇA `RangeError:
+ * Invalid time value`, derrubando o webhook inteiro e perdendo a mensagem.
+ * A unidade é inferida pela ordem de grandeza; valor ausente/inválido cai no
+ * `agora`. Nunca lança. (Porte do DeskcommCRM 85bacc79d.)
+ *
+ * Data mais de um dia à frente do `agora` também cai no `agora`: não existe
+ * mensagem do futuro, e uma data dessas ou é recusada pelo Postgres (o ano
+ * 58684 sai como `+058684-…`, e a mensagem se perde) ou prende a conversa no
+ * topo da lista para sempre — a lista ordena por data, decrescente.
+ */
+export function dataDoTimestamp(timestamp: number | null | undefined, agora: string): string {
+  if (typeof timestamp !== "number" || !Number.isFinite(timestamp) || timestamp <= 0) {
+    return agora;
+  }
+  // Segundos (~1.7e9) ×1000; ms (~1.7e12) direto; µs (~1.7e15) ÷1e3; ns
+  // (~1.7e18) ÷1e6. Faixas separadas por ordem de grandeza.
+  const ms =
+    timestamp >= 1e17 ? timestamp / 1e6
+    : timestamp >= 1e14 ? timestamp / 1e3
+    : timestamp >= 1e11 ? timestamp
+    : timestamp * 1000;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime()) || d.getTime() > Date.parse(agora) + 86_400_000) return agora;
+  return d.toISOString();
+}
+
+/**
  * Mapeia o `type` cru do WAHA NOWEB para o vocabulário de messages.type do CRM
  * (check constraint messages_type_check). WAHA usa `chat` p/ texto, `ptt` p/
  * áudio de voz, `vcard` p/ contato, etc. Sem esse mapa o INSERT viola a
@@ -579,10 +608,11 @@ async function handleInbound(
 
   // Best-effort: o dado do anúncio (se houver) vai embutido na PRÓPRIA
   // mensagem que o app do cliente manda ao clicar num anúncio "Clique para o
-  // WhatsApp" — não é exclusivo da API oficial. NUNCA verificado contra um
-  // clique real nesta instalação (ver cabeçalho de `atribuicao-de-anuncio.ts`);
-  // por isso é silencioso quando não reconhece a forma, nunca derruba o
-  // inbound. `estamparAtribuicaoDoContato` só grava na primeira vez — se o
+  // WhatsApp" — não é exclusivo da API oficial. O formato `externalAdReply`
+  // foi confirmado em eventos reais do WAHA NOWEB no projeto original
+  // (DeskcommCRM bc49ea81f); NÃO medido nesta instalação. Formas não
+  // reconhecidas seguem silenciosas e nunca derrubam o inbound.
+  // `estamparAtribuicaoDoContato` só grava na primeira vez — se o
   // contato já tem atribuição, o UPDATE casa zero linhas.
   const atribuicao = extrairAtribuicaoWaha(p._data?.message);
   if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
@@ -607,7 +637,7 @@ async function handleInbound(
       media_url: mediaUrlOf(p),
       media_mime: mediaMimeOf(p),
       sent_via: "external_device",
-      sent_at: p.timestamp ? new Date(p.timestamp * 1000).toISOString() : now,
+      sent_at: dataDoTimestamp(p.timestamp, now),
       delivered_at: now,
       metadata: { raw_type: p.type, ack_name: p.ackName },
     })
@@ -657,7 +687,7 @@ async function handleInbound(
     return;
   }
 
-  await markConversation(admin, session.organization_id, conversationId, "inbound", previewFromMessage(p), p.timestamp ? new Date(p.timestamp * 1000).toISOString() : now);
+  await markConversation(admin, session.organization_id, conversationId, "inbound", previewFromMessage(p), dataDoTimestamp(p.timestamp, now));
 
   await audit({
     action: "message.received",
@@ -774,18 +804,27 @@ async function handleOutboundFromUserPhone(
   // ECO DO PRÓPRIO ENVIO — não duplicar.
   //
   // Toda mensagem que o CRM manda (composer ou IA) volta pelo webhook como
-  // `fromMe=true`. O dedup por `external_id` NÃO pega esse caso, porque os dois
-  // lados gravam formas diferentes do mesmo id: o envio grava o id "bare"
-  // (`3EB0…`) e o webhook chega com o composto (`true_<chat>_3EB0…`). São
-  // strings distintas, então o unique não dispara e nasce uma segunda linha —
-  // a mesma frase aparecendo duas vezes na conversa.
+  // `fromMe=true`. O SELECT abaixo é CHECK-THEN-ACT — leitura e depois
+  // escrita, sem transação —, então ele só enxerga o mundo de ANTES: se o
+  // envio carimbar o `external_id` nesse intervalo, o SELECT não vê e o INSERT
+  // roda solto. Fechar a janela é trabalho do `unique (organization_id,
+  // external_id)` + da captura do `23505` que este mesmo handler já faz.
+  //
+  // Mas o unique só age se os DOIS lados gravarem a MESMA string. O envio
+  // grava o id "bare" (`3EB0…`) e este eco chegava com o composto
+  // (`true_<chat>_3EB0…`): strings distintas, nenhuma colisão, e nascia a
+  // segunda linha com a mesma frase. Por isso o INSERT lá embaixo grava
+  // `bare`, não `p.id` (DeskcommCRM #196, porte do 53f3b1b70). Catraca:
+  // `tests/unit/dedup-external-id-waha.test.ts`.
   //
   // Antes isto não aparecia por acidente: sem `to`, esta função voltava cedo e
   // o eco era descartado junto com as mensagens legítimas do celular. Ao
   // consertar aquele caminho, a duplicação ficou exposta.
   //
-  // Mesmo par de candidatos que o `handleAck` usa — cobre NOWEB (bare) e WEBJS
-  // (full) sem depender do engine.
+  // O SELECT segue com as DUAS formas: cobre NOWEB (bare) e WEBJS (full) sem
+  // depender do engine, e cobre as linhas digitadas no celular ANTES desta
+  // mudança, que ficaram gravadas com o composto — um reenvio do webhook para
+  // elas continua caindo aqui, sem migration.
   const bare = bareWaMessageId(p.id);
   const idCandidates = bare === p.id ? [p.id] : [p.id, bare];
   const { data: jaRegistrada } = await admin
@@ -826,7 +865,9 @@ async function handleOutboundFromUserPhone(
       conversation_id: conversationId,
       channel_session_id: session.id,
       contact_id: contactId,
-      external_id: p.id,
+      // A forma CANÔNICA (bare), a mesma que o envio grava — ver o comentário
+      // do eco acima. `p.id` é só o que o webhook entregou.
+      external_id: bare,
       type: resolveMessageType(p),
       direction: "outbound",
       status: "sent",
@@ -835,8 +876,11 @@ async function handleOutboundFromUserPhone(
       media_url: mediaUrlOf(p),
       media_mime: mediaMimeOf(p),
       sent_via: "external_device",
-      sent_at: p.timestamp ? new Date(p.timestamp * 1000).toISOString() : now,
-      metadata: { raw_type: p.type, fromMe: true },
+      sent_at: dataDoTimestamp(p.timestamp, now),
+      // O composto que o WAHA entregou fica guardado para CITAR esta mensagem:
+      // remontá-lo do bare usa o chat do envio de hoje, que pode não ser o do
+      // eco (PN de um lado, @lid do outro). Ver `idDaCitadaNoCanal` no handler.
+      metadata: { raw_type: p.type, fromMe: true, ...(bare !== p.id ? { external_id_original: p.id } : {}) },
     })
     .select("id")
     .maybeSingle();
@@ -848,7 +892,8 @@ async function handleOutboundFromUserPhone(
     // Mesma razão do inbound: dedup é esperado, invisível não.
     logger.info("waha.ingest: outbound ja ingerido, dedup por external_id", {
       organization_id: session.organization_id,
-      external_id: p.id,
+      // A forma GRAVADA — é ela que o grep por `external_id` tem de achar.
+      external_id: bare,
       direcao: "outbound",
     });
     return;

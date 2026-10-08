@@ -86,6 +86,14 @@ export interface Message {
   media_mime: string | null;
   media_size_bytes: number | null;
   media_storage_path: string | null;
+  /**
+   * Transcrição da mídia (áudio → texto), a mesma que a IA já lê; gravada pelo
+   * `workers/media-derive-worker.ts`. Só vale quando `media_derived_status ===
+   * "ready"`. A anonimização (LGPD) apaga o texto. Opcionais porque nem toda
+   * leitura de mensagem seleciona as colunas.
+   */
+  media_derived_text?: string | null;
+  media_derived_status?: string | null;
   // Espelha o CHECK do banco (messages_sent_via_check): 'crm', 'external_device',
   // 'automation', 'ai', 'user', 'system'. O tipo listava só três e o TypeScript
   // aceitava os demais só porque o dado vem do Supabase sem cast — a tela então

@@ -8,7 +8,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import { useT } from "@/hooks/i18n/useT";
 
-import { addDays, format, startOfDay, startOfWeek } from "date-fns";
+import { addDays, format, startOfDay, startOfMonth, startOfWeek } from "date-fns";
 import * as React from "react";
 
 import { AvisoDaConexaoGoogle } from "./_components/AvisoDaConexaoGoogle";
@@ -22,6 +22,8 @@ import type { Agendamento, HorarioLivre, VisaoDaAgenda } from "@/components/agen
 import { EmptyAgenda } from "@/components/empty";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
 import { ancoraAoFecharPainel } from "@/lib/agenda/ancora-depois-de-marcar";
+import { janelaDoMesVisivel } from "@/lib/agenda/janela-do-mes-visivel";
+import { resolverResponsavelDoPainel } from "@/lib/agenda/responsavel-do-painel";
 import { ancoraLocalDoDia } from "@/lib/agenda/semana-semente";
 import { useVinculoDaMarcacao } from "@/lib/agenda/vinculo-da-marcacao";
 import { Button } from "@/components/ui/button";
@@ -76,6 +78,7 @@ const VISOES: Array<{ id: VisaoDaAgenda; rotulo: string }> = [
 export function AgendaClient({
   fusoDeApresentacao,
   hojeNaOrganizacao,
+  usuarioId,
   googleConfigurado,
   contaConectada,
   enderecoDeRetorno,
@@ -91,6 +94,8 @@ export function AgendaClient({
    * (`yyyy-MM-dd`). É a mesma que gerou a semente de compromissos.
    */
   hojeNaOrganizacao: string;
+  /** Id de quem está logado — a única fonte para o rótulo "Você". */
+  usuarioId: string;
   googleConfigurado: boolean;
   contaConectada?: string | null;
   enderecoDeRetorno?: string;
@@ -238,33 +243,41 @@ export function AgendaClient({
    */
   const [ancora, setAncora] = React.useState(() => ancoraLocalDoDia(hojeNaOrganizacao));
 
-  // AS PESSOAS SÃO REAIS: vêm de `/api/v1/team`, com a trilha de cor derivada do
+  // AS PESSOAS SÃO REAIS: vêm de `/api/v1/agenda/pessoas`, com a trilha de cor derivada do
   // `user_id`. Até esta linha o filtro por pessoa era invisível na tela do
   // produto — `FiltroDePessoas` devolve `null` com menos de duas pessoas, e a
   // lista estava vazia. Ele existia, estava provado na vitrine, e ninguém o via
   // aqui.
   const { data: pessoas = [] } = usePessoasDaAgenda();
 
-  // A JANELA DE BUSCA PRECISA SER ESTÁVEL, e não era.
+  // A JANELA ACOMPANHA O MÊS QUE O PAINEL MOSTRA — e continua ESTÁVEL.
   //
-  // ⚠️ Isto era `de: new Date().toISOString()` calculado no CORPO do render. A
-  // chave do React Query inclui o recorte, e `new Date()` devolve milissegundos
-  // diferentes a cada passagem — então cada resposta causava re-render, que
-  // gerava chave nova, que disparava outra busca. O painel nunca estabilizava:
-  // `horarios` ficava `undefined` entre as idas, `horariosPorDia` nascia vazio e
-  // TODO dia aparecia "sem horário" — com a rota respondendo 200 e slots reais.
+  // ⚠️ Isto era `hoje + 30 dias`, fixo na abertura: "Próximo mês" desligava
+  // assim que acabavam os dias já pedidos, e retorno em 60 ou 90 dias não se
+  // marcava pelo calendário, mesmo com a janela de agendamento do tipo valendo
+  // (porte de melgarafael/DeskcommCRM d5efd698a).
   //
-  // Medido pela spec de marcar, que capturou as respostas: cinco 200 seguidos
-  // com vagas, e a tela mostrando 42 dias apagados. Em produção isto é um laço
-  // de requisições por usuário com o painel aberto.
-  //
-  // `useMemo` sem dependência de tempo: a janela é fixada quando o painel abre.
-  const janelaDeBusca = React.useMemo(
-    () => ({ de: new Date().toISOString(), ate: addDays(new Date(), 30).toISOString() }),
-    // A janela só precisa mudar quando o painel REABRE ou o tipo muda — nunca a
-    // cada render. `marcando` na lista é o que a renova entre duas aberturas.
+  // A estabilidade é a mesma de antes: a chave do React Query inclui o
+  // recorte, e `new Date()` no corpo do render gerava chave nova a cada passagem
+  // — um laço de requisições com o painel nunca estabilizando. Aqui o relógio
+  // só é lido quando o painel REABRE ou o tipo muda, e o mês só muda pelo
+  // `onMesVisivel` do painel.
+  const [mesDoPainel, setMesDoPainel] = React.useState(() =>
+    startOfMonth(ancoraLocalDoDia(hojeNaOrganizacao)),
+  );
+  const onMesVisivel = React.useCallback((mes: Date) => {
+    const proximo = startOfMonth(mes);
+    setMesDoPainel((atual) => (atual.getTime() === proximo.getTime() ? atual : proximo));
+  }, []);
+  const agoraDaAbertura = React.useMemo(
+    () => new Date(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `new Date()` é o ponto: o valor só pode mudar quando a abertura ou o tipo mudam.
     [marcando, tipo?.id],
   );
+  const janelaDeBusca = React.useMemo(() => {
+    const { de, ate } = janelaDoMesVisivel(mesDoPainel, agoraDaAbertura);
+    return { de: de.toISOString(), ate: ate.toISOString() };
+  }, [mesDoPainel, agoraDaAbertura]);
 
   // Os horários vêm da rota real — a mesma que a IA usa, então tela e agente
   // oferecem exatamente os mesmos horários. Só consulta quando o painel abre.
@@ -727,8 +740,11 @@ export function AgendaClient({
                   // O DONO DO TIPO, não o primeiro da lista. A tela dizia "com
                   // <primeira pessoa>" enquanto oferecia a jornada de outra —
                   // e marcava na agenda da primeira, que não tinha jornada.
-                  pessoas.find((p) => p.id === tipo.donoId) ??
-                  pessoas[0] ?? { id: "", nome: "Você", trilha: 1 }
+                  //
+                  // "Você" só quando o dono da agenda É quem está logado: com a
+                  // lista vazia, o fallback fixo dizia "Você" para a jornada da
+                  // médica (porte de melgarafael/DeskcommCRM d7d18345b, #896).
+                  resolverResponsavelDoPainel({ pessoas, donoId: tipo.donoId, usuarioId })
                 }
                 tipo={tipo.nome}
                 duracaoMin={tipo.duracaoMin}
@@ -752,6 +768,11 @@ export function AgendaClient({
                 fusoSuposto={horarios?.fuso_suposto ?? false}
                 fontesDefasadas={horarios?.fontes_defasadas}
                 googleCoberturaParcial={horarios?.google_cobertura_parcial}
+                onMesVisivel={onMesVisivel}
+                // `data` do React Query é da chave ATUAL (sem `placeholderData`),
+                // então chegou = é do `mesDoPainel`: é o que deixa o painel saber
+                // "este mês acabou" em vez de "ainda carregando".
+                mesCarregado={horarios ? mesDoPainel : null}
                 horarioInicial={horarioEscolhido ?? undefined}
                 // O ENCAIXE é desta tela, e só dela: aqui quem marca é uma
                 // pessoa da equipe com sessão, que é exatamente o ator a quem a

@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useEffect, useState } from "react";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
@@ -50,7 +51,13 @@ function AckIndicator({ status, t }: { status: string; t: (texto: string) => str
   return null;
 }
 
-export function MessageBubble({
+/**
+ * Memorizado: o inbox redesenha a cada 30s (relógio da janela de 24h) e a cada
+ * releitura da conversa. Sem `memo`, toda bolha da conversa se redesenhava junto.
+ * As props chegam estáveis — o react-query preserva a identidade das mensagens
+ * que não mudaram — e a bolha tem o próprio relógio para o que depende de hora.
+ */
+export const MessageBubble = memo(function MessageBubble({
   message,
   searchMatch = false,
   debugCitations,
@@ -58,6 +65,13 @@ export function MessageBubble({
   citada,
   viewerUserId,
 }: Props) {
+  // Relógio de 60s: tira da tela o "Transcrevendo…" vencido sem chamar
+  // `Date.now()` no render (DeskcommCRM e5216e26a).
+  const [agora, setAgora] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setAgora(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
   const localeDaData = useLocaleDeData();
   const t = useT();
   const isOutbound = message.direction === "outbound";
@@ -231,7 +245,7 @@ export function MessageBubble({
           <>
             {hasMedia && (
               <div className={cn(message.body && "mb-1")}>
-                <MediaRenderer message={message} />
+                <MediaRenderer message={message} agora={agora} />
               </div>
             )}
 
@@ -311,4 +325,4 @@ export function MessageBubble({
       )}
     </div>
   );
-}
+});

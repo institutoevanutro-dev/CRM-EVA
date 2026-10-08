@@ -31,6 +31,14 @@ import type { Lead } from "@/lib/types/leads";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Ganhos e perdidos fechados há mais que isto ficam FORA do quadro por padrão.
+ * O quadro relê a cada mudança em `crm_leads`, e o histórico fechado só cresce:
+ * era ele que pesava a abertura (incidente de 07/10/2026). A tela oferece
+ * "Ver mais" com `?fechados=antigos`, que devolve só os que ficaram de fora.
+ */
+export const DIAS_DE_FECHADOS_NO_QUADRO = 30;
+
 interface RouteCtx {
   params: Promise<{ id: string }>;
 }
@@ -370,41 +378,54 @@ async function withNextActions(
   supabase: Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
   leads: Lead[],
-  defaultPipelineId: string | null,
 ): Promise<{ leads: Lead[]; error: string | null }> {
   const contactIds = [
     ...new Set(leads.map((l) => l.contact_id).filter((c): c is string => !!c)),
   ];
   if (contactIds.length === 0) return { leads, error: null };
 
-  const [{ data: estados, error: estadosErr }, { data: candidatos, error: candErr }] =
-    await Promise.all([
-      buscaEmLotes(contactIds, (lote) =>
-        supabase
-          .from("lead_state")
-          .select("contact_id, next_action, next_action_seq, updated_at")
-          .eq("organization_id", organizationId)
-          .in("contact_id", lote)
-          .not("next_action", "is", null),
-      ),
-      buscaEmLotes(contactIds, (lote) =>
-        supabase
-          .from("crm_leads")
-          .select(
-            "id, organization_id, pipeline_id, status, last_activity_at, created_at, contact_id",
-          )
-          .eq("organization_id", organizationId)
-          .eq("status", "open")
-          .in("contact_id", lote),
-      ),
-    ]);
+  // Primeiro as propostas, DEPOIS os candidatos — e só dos contatos que têm
+  // proposta. `roteiaProximasAcoes` ignora candidato de contato sem proposta,
+  // então buscar os negócios abertos de todos os contatos do quadro era ler o
+  // funil inteiro outra vez para descartar quase tudo (incidente de 07/10/2026).
+  const { data: estados, error: estadosErr } = await buscaEmLotes(contactIds, (lote) =>
+    supabase
+      .from("lead_state")
+      .select("contact_id, next_action, next_action_seq, updated_at")
+      .eq("organization_id", organizationId)
+      .in("contact_id", lote)
+      .not("next_action", "is", null),
+  );
   if (estadosErr) return { leads, error: estadosErr.message };
+  if (estados.length === 0) return { leads, error: null };
+
+  const comProposta = [
+    ...new Set((estados as EstadoDoContato[]).map((e) => e.contact_id)),
+  ];
+  const [{ data: candidatos, error: candErr }, { data: pipelinePadrao }] = await Promise.all([
+    buscaEmLotes(comProposta, (lote) =>
+      supabase
+        .from("crm_leads")
+        .select(
+          "id, organization_id, pipeline_id, status, last_activity_at, created_at, contact_id",
+        )
+        .eq("organization_id", organizationId)
+        .eq("status", "open")
+        .in("contact_id", lote),
+    ),
+    supabase
+      .from("crm_pipelines")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("is_default", true)
+      .maybeSingle(),
+  ]);
   if (candErr) return { leads, error: candErr.message };
-  if (!estados || estados.length === 0) return { leads, error: null };
+  const defaultPipelineId = (pipelinePadrao as { id: string } | null)?.id ?? null;
 
   const { porLead, ambiguas } = roteiaProximasAcoes(
     estados as EstadoDoContato[],
-    (candidatos ?? []) as Array<LeadCandidate & { contact_id: string | null }>,
+    candidatos as Array<LeadCandidate & { contact_id: string | null }>,
     { defaultPipelineId },
   );
 
@@ -427,7 +448,7 @@ async function withNextActions(
   };
 }
 
-export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
+export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const requestId = randomUUID();
   const { id: pipelineId } = await ctx.params;
 
@@ -442,10 +463,18 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const authUser = await loadAuthUser();
   const t = (texto: string) => traduzir(texto, authUser?.idioma ?? "pt-BR");
 
+  const corte = new Date(Date.now() - DIAS_DE_FECHADOS_NO_QUADRO * 86_400_000).toISOString();
+  const soAntigos = req.nextUrl.searchParams.get("fechados") === "antigos";
+  // `closed_at` nulo num fechado é legado: fica visível em vez de sumir.
+  const recorte = soAntigos
+    ? `and(status.in.(won,lost),closed_at.lt.${corte})`
+    : `status.eq.open,closed_at.gte.${corte},closed_at.is.null`;
+
   const [
     { data: pipeline, error: pipelineErr },
     { data: stages, error: stagesErr },
     { data: leads, error: leadsErr },
+    { count: fechadosAntigos },
   ] = await Promise.all([
     supabase.from("crm_pipelines").select("*").eq("id", pipelineId).maybeSingle(),
     supabase
@@ -459,7 +488,14 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
       .select("*")
       .eq("pipeline_id", pipelineId)
       .neq("status", "archived")
+      .or(recorte)
       .order("position_in_stage"),
+    supabase
+      .from("crm_leads")
+      .select("id", { count: "exact", head: true })
+      .eq("pipeline_id", pipelineId)
+      .in("status", ["won", "lost"])
+      .lt("closed_at", corte),
   ]);
 
   if (pipelineErr) return fail("internal_error", pipelineErr.message, 500, { requestId });
@@ -467,63 +503,27 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (leadsErr) return fail("internal_error", leadsErr.message, 500, { requestId });
   if (!pipeline) return fail("resource_not_found", t("Pipeline não encontrado."), 404, { requestId });
 
-  const leadsWithOwner = await withOwnerAgents(
-    supabase,
-    (pipeline as Pipeline).organization_id,
-    (leads ?? []) as Lead[],
-  );
-  if (leadsWithOwner.error) {
-    return fail("internal_error", leadsWithOwner.error, 500, { requestId });
-  }
-
-  const { data: pipelinePadrao } = await supabase
-    .from("crm_pipelines")
-    .select("id")
-    .eq("organization_id", (pipeline as Pipeline).organization_id)
-    .eq("is_default", true)
-    .maybeSingle();
-
-  const leadsComAcao = await withNextActions(
-    supabase,
-    (pipeline as Pipeline).organization_id,
-    leadsWithOwner.leads,
-    (pipelinePadrao as { id: string } | null)?.id ?? null,
-  );
-  if (leadsComAcao.error) {
-    return fail("internal_error", leadsComAcao.error, 500, { requestId });
-  }
-
-  const leadsComScore = await withScores(
-    supabase,
-    (pipeline as Pipeline).organization_id,
-    leadsComAcao.leads,
-  );
-  if (leadsComScore.error) {
-    return fail("internal_error", leadsComScore.error, 500, { requestId });
-  }
-
-  const leadsComConversa = await withConversas(
-    supabase,
-    (pipeline as Pipeline).organization_id,
-    leadsComScore.leads,
-  );
-  if (leadsComConversa.error) {
-    return fail("internal_error", leadsComConversa.error, 500, { requestId });
-  }
-
-  const leadsComMarcadores = await withMarcadoresDoContato(
-    supabase,
-    (pipeline as Pipeline).organization_id,
-    leadsComConversa.leads,
-  );
-  if (leadsComMarcadores.error) {
-    return fail("internal_error", leadsComMarcadores.error, 500, { requestId });
-  }
+  // Os enriquecimentos são independentes entre si: cada um devolve a MESMA lista,
+  // na mesma ordem, com os seus campos a mais. Em paralelo, a abertura espera o
+  // mais lento deles em vez da soma dos cinco.
+  const orgId = (pipeline as Pipeline).organization_id;
+  const base = (leads ?? []) as Lead[];
+  const partes = await Promise.all([
+    withOwnerAgents(supabase, orgId, base),
+    withNextActions(supabase, orgId, base),
+    withScores(supabase, orgId, base),
+    withConversas(supabase, orgId, base),
+    withMarcadoresDoContato(supabase, orgId, base),
+  ]);
+  const falha = partes.find((p) => p.error);
+  if (falha) return fail("internal_error", falha.error as string, 500, { requestId });
+  const enriquecidos = base.map((_, i) => Object.assign({}, ...partes.map((p) => p.leads[i])) as Lead);
 
   const board: BoardData = {
     pipeline: pipeline as Pipeline,
     stages: (stages ?? []) as Stage[],
-    leads: leadsComMarcadores.leads,
+    leads: enriquecidos,
+    fechadosAntigos: soAntigos ? 0 : (fechadosAntigos ?? 0),
   };
 
   return ok(board, { requestId });

@@ -72,7 +72,7 @@ export interface RunAgentResult {
   tool_calls?: ReturnType<typeof serializeSteps>;
   tokens_in?: number;
   tokens_out?: number;
-  cost_cents?: number;
+  cost_cents?: number | null;
   latency_ms?: number;
   steps_count?: number;
   abort_reason?: string;
@@ -181,7 +181,7 @@ export function buildModel(provider: string, apiKey: string, modelId: string): L
         apiKey,
         baseURL: OPENROUTER_ENDPOINT,
         headers: cabecalhosDeAtribuicaoOpenRouter(),
-      })(modelId);
+      }).chat(modelId); // chat/completions: a OpenRouter não serve /responses para todo modelo
     default:
       throw new Error(`unsupported_provider: ${provider}`);
   }
@@ -478,6 +478,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
       // `?? []` — o clone sem a coluna 0125 nasce FECHADO.
       pipelineIds: (version as { pipeline_ids?: string[] }).pipeline_ids ?? [],
       handoffSignal,
+      ...(run.contact_id ? { contatoDoTurno: run.contact_id } : {}),
     });
 
     // 8) Load history with budget.
@@ -513,7 +514,11 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
       });
-      if (cost > version.cost_budget_cents) {
+      // Preço desconhecido (`null`) não estoura o limite por chamada: sem
+      // número não se compara contra o teto — e também não é contado como 0
+      // (grátis), o custo segue `null` para quem reporta. Semântica do seam
+      // `pricing.ts`: coalesce(null, 0) no somatório.
+      if (cost !== null && cost > version.cost_budget_cents) {
         abortReason = "cost_budget_exceeded";
         return true;
       }

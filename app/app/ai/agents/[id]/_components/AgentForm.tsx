@@ -795,6 +795,13 @@ export function AgentForm(props: Props) {
             {validation.credential_id ? (
               <p className="text-xs text-destructive">{validation.credential_id}</p>
             ) : null}
+            {/* Sempre visível: a tela exige credencial, então diz onde se consegue uma. */}
+            <Link
+              href="/app/ai/credentials"
+              className="text-xs font-medium text-text-muted underline underline-offset-4 hover:text-text"
+            >
+              {t("Cadastrar ou trocar credencial")}
+            </Link>
             {cred && credSt && credSt !== "validated" ? (
               <p className="text-xs text-amber-600 dark:text-amber-400">
                 {t("Credencial selecionada está com status")} {t(STATUS_LABEL[credSt])}
@@ -859,6 +866,13 @@ export function AgentForm(props: Props) {
                 travava o botão de salvar — o dono de uma instalação nova escrevia
                 o prompt inteiro e não conseguia guardar nada.
               */}
+              {/* Sempre visível: o número é exigido para publicar; aqui se diz onde conectar. */}
+              <Link
+                href="/app/connections"
+                className="text-xs font-medium text-text-muted underline underline-offset-4 hover:text-text"
+              >
+                {t("Gerenciar números em Conexões")}
+              </Link>
               {!form.channel_session_id ? (
                 <p className="text-xs text-muted-foreground">
                   {props.channelSessions.length === 0 ? (

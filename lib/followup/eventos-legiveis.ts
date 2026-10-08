@@ -27,6 +27,8 @@ import {
   type FlowEdge,
   type FlowNode,
 } from "./graph-schema";
+import { traduzir } from "@/lib/i18n/dicionario";
+import type { Idioma } from "@/lib/i18n/idiomas";
 import {
   RAMOS_RESERVADOS_EM_FRASE,
   fraseDaClasse,
@@ -336,6 +338,15 @@ export function descreveEvento(
 
   switch (evento.event_type) {
     case "node_advanced":
+      // Com `class`, o avanço É a classificação que o motor decidiu: a carência
+      // do classificar venceu sem resposta. "Seguiu em frente" esconderia o porquê.
+      if (texto(p.class) === NO_REPLY_BRANCH_ID) {
+        return {
+          titulo: "O cliente não respondeu dentro do prazo",
+          detalhe: `foi para ${refDoNo(texto(p.next_node_id), nos)}`,
+          ...motor,
+        };
+      }
       return { titulo: "Seguiu em frente", detalhe: `foi para ${refDoNo(texto(p.next_node_id), nos)}`, ...motor };
     case "wait_started": {
       const ate = quandoLegivel(p.next_eval_at, idioma);
@@ -352,6 +363,23 @@ export function descreveEvento(
         : { titulo: "Pediu ao agente para escrever a mensagem", detalhe: null, ...motor };
     case "classify_enqueued":
       return { titulo: "Pediu ao agente para interpretar a resposta", detalhe: null, ...motor };
+    case "turn_discarded":
+      // O worker descartou o turno porque a inscrição estava PAUSADA (#2277).
+      return {
+        titulo: "O envio deste passo foi descartado porque a inscrição está pausada",
+        detalhe: "sai num envio novo quando a inscrição for retomada",
+        ...motor,
+      };
+    case "classify_waiting": {
+      // Esperar NÃO é travar: o agente olhou, o cliente ainda não respondeu, e o
+      // passo segue aberto até o prazo configurado no nó.
+      const ate = quandoLegivel(p.until, idioma);
+      return {
+        titulo: "Esperando a resposta do cliente",
+        detalhe: ate ? `se ele não responder até ${ate}, o fluxo segue sem a resposta` : null,
+        ...motor,
+      };
+    }
     case "action_recheck": {
       const ate = quandoLegivel(p.next_eval_at, idioma);
       return {
@@ -360,8 +388,26 @@ export function descreveEvento(
         ...motor,
       };
     }
+    case "action_deferred": {
+      // Adiar NÃO é falhar: sem esta linha o operador vê o passo parado por
+      // horas e lê defeito onde há obediência à janela que ele configurou.
+      const ate = quandoLegivel(p.until, idioma);
+      return {
+        titulo: "Segurou o envio até o horário permitido",
+        // Traduzida AQUI: a tela chama t() com a frase já montada, e uma frase com
+        // data nunca bate numa chave do dicionário.
+        detalhe: ate
+          ? traduzir("a janela estava fechada; envia em {ate}", idioma as Idioma).replace("{ate}", ate)
+          : "a janela estava fechada",
+        ...motor,
+      };
+    }
     case "action_sent":
-      return { titulo: "Mensagem enviada", detalhe: null, ...motor };
+      return {
+        titulo: "Mensagem enviada",
+        detalhe: texto(p.via) === "modelo_de_reserva" ? "pelo modelo de reserva: a IA não escreveu a mensagem" : null,
+        ...motor,
+      };
     case "action_pulado":
       return { titulo: "Passo pulado, o fluxo seguiu", detalhe: texto(p.reason), ...motor };
     case "ai_classified":

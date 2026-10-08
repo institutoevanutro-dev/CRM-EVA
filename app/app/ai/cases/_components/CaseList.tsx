@@ -28,7 +28,7 @@ export function CaseList() {
   // quebra com "Cannot read properties of null".
   const idDaUrl = useSearchParams()?.get("caso") ?? null;
   const [selectedId, setSelectedId] = useState<string | null>(idDaUrl);
-  const { data, isLoading } = useCases(tab);
+  const { data, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } = useCases(tab);
 
   return (
     <div className="flex min-h-0 flex-1 gap-6">
@@ -58,16 +58,33 @@ export function CaseList() {
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {data.cases.map((c) => (
-              <CaseRow
-                key={c.id}
-                item={c}
-                selected={c.id === selectedId}
-                onSelect={() => setSelectedId(c.id)}
-              />
-            ))}
-          </ul>
+          <>
+            <ul className="divide-y divide-border rounded-lg border border-border">
+              {data.cases.map((c) => (
+                <CaseRow
+                  key={c.id}
+                  item={c}
+                  selected={c.id === selectedId}
+                  onSelect={() => setSelectedId(c.id)}
+                />
+              ))}
+            </ul>
+            {/* Os concluídos vêm em páginas: sem isto, caso mais antigo que a
+                primeira página só abriria por link direto. */}
+            {hasNextPage && (
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => void fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  data-testid="cases-load-more"
+                  className="text-xs text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+                >
+                  {isFetchingNextPage ? t("Carregando…") : t("Carregar mais")}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 

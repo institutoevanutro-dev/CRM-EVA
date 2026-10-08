@@ -12,9 +12,11 @@ import {
   getConversationHandler,
 } from "@/app/api/v1/conversations/_handler";
 import { listMessagesHandler } from "@/app/api/v1/messages/_handler";
+import { ApiError } from "@/lib/api/types";
 import { getQueuePositions } from "@/lib/routing/queue";
 import { resolveUserNames } from "./_users";
-import type { McpToolDefinition } from "../types";
+import type { McpContext, McpToolDefinition } from "../types";
+import { foraDaConversa } from "../fora-da-conversa";
 
 /**
  * Conversa está na fila = sem dono ∧ status de espera.
@@ -35,6 +37,32 @@ function isInQueue(c: { comando_da_conversa?: string | null }): boolean {
   return q === "aguardando" || q === "automatico";
 }
 
+const FORA = Symbol("fora_da_conversa");
+
+/**
+ * A conversa pedida, conferida contra o contato do turno.
+ *
+ * Sem `ctx.contatoDoTurno`, é o `getConversationHandler` de sempre (o `404`
+ * sobe). Com ele, conversa de outro paciente, inexistente ou de outra
+ * organização viram o MESMO `FORA`; erro que não é `404` sobe sempre — infra
+ * não é limite de negócio.
+ */
+async function conversaDoTurno(ctx: McpContext, conversationId: string) {
+  const handlerCtx = {
+    organization_id: ctx.organizationId,
+    actor: ctx.actor,
+    requestId: ctx.requestId,
+  };
+  if (!ctx.contatoDoTurno) return getConversationHandler(ctx.supabase, handlerCtx, conversationId);
+  try {
+    const conv = await getConversationHandler(ctx.supabase, handlerCtx, conversationId);
+    return conv.contact_id === ctx.contatoDoTurno ? conv : FORA;
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return FORA;
+    throw e;
+  }
+}
+
 const listInputShape = {
   contact_id: z.string().uuid().optional(),
   // `pending` entra: é o estado da conversa que o próprio agente escalou, e sem
@@ -50,12 +78,27 @@ export const crmListConversations: McpToolDefinition<typeof listInputShape> = {
   name: "crm_list_conversations",
   description:
     "Lista conversas do CRM com filtros opcionais por contato e status. Retorna preview da ultima mensagem. " +
-    "Campos de governança por conversa: assignee_kind ('user'|'ai'|null), assigned_to_user_id + assigned_to_user_name (só o nome do atendente, sem email/telefone), tags[], e queue_position (posição 1-based na fila do inbox — só quando na fila, senão null).",
+    "Campos de governança por conversa: assignee_kind ('user'|'ai'|null), assigned_to_user_id + assigned_to_user_name (só o nome do atendente, sem email/telefone), tags[], e queue_position (posição 1-based na fila do inbox — só quando na fila, senão null). " +
+    "Em conversa de atendimento, devolve apenas as conversas do contato desta conversa.",
   inputSchema: listInputShape,
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
+    // ── QUEM ESTÁ NA OUTRA PONTA ────────────────────────────────────────────
+    //
+    // A listagem filtra `organization_id`, mas alcançava os outros pacientes
+    // da MESMA clínica — com `last_message_preview` junto, texto do lado de lá
+    // indo para o WhatsApp de quem está do lado de cá. Com `ctx.contatoDoTurno`
+    // (contexto de confiança do runtime), o contato vai NO `WHERE` do handler,
+    // antes do `.limit`: a página é dele, e cursor/`has_more` seguem honestos.
+    // Pedir explicitamente OUTRO paciente é interseção vazia. Sem contato do
+    // turno, `contatoEfetivo` é o `contact_id` pedido, ou nada.
+    const doTurno = ctx.contatoDoTurno;
+    if (doTurno && input.contact_id && input.contact_id !== doTurno) {
+      return { conversations: [], cursor: null, has_more: false };
+    }
+    const contatoEfetivo = doTurno ?? input.contact_id;
     const result = await listConversationsHandler(
       ctx.supabase,
       {
@@ -78,14 +121,15 @@ export const crmListConversations: McpToolDefinition<typeof listInputShape> = {
         // omitir a chave seria erro de tipo — não omissão silenciosa.
         tag: undefined,
         modo: undefined,
+        // O contato vai NA CONSULTA, não num recorte da página já truncada:
+        // filtrar depois escondia a conversa mais antiga do mesmo paciente e
+        // deixava o cursor descrevendo a varredura da organização.
+        contact_id: contatoEfetivo,
         limit: input.limit,
         cursor: input.cursor,
       },
     );
-    let conversations = result.conversations;
-    if (input.contact_id) {
-      conversations = conversations.filter((c) => c.contact_id === input.contact_id);
-    }
+    const conversations = result.conversations;
     // Nomes (dedupe) e posições de fila (1 query cada) — sem N+1 na listagem.
     const names = await resolveUserNames(
       ctx.supabase,
@@ -126,21 +170,24 @@ export const crmGetConversation: McpToolDefinition<typeof getInputShape> = {
   name: "crm_get_conversation",
   description:
     "Retorna detalhes de uma conversa pelo UUID. Inclui status, atribuicao, contato, ultima atividade. " +
-    "Governança: assignee_kind ('user'|'ai'|null), assigned_to_user_id + assigned_to_user_name (só o nome, sem email/telefone), tags[], e queue_position (1-based na fila do inbox — null quando não está na fila).",
+    "Governança: assignee_kind ('user'|'ai'|null), assigned_to_user_id + assigned_to_user_name (só o nome, sem email/telefone), tags[], e queue_position (1-based na fila do inbox — null quando não está na fila). " +
+    "Em conversa de atendimento, devolve apenas conversas do contato desta conversa.",
   inputSchema: getInputShape,
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
-    const conv = await getConversationHandler(
-      ctx.supabase,
-      {
-        organization_id: ctx.organizationId,
-        actor: ctx.actor,
-        requestId: ctx.requestId,
-      },
-      input.conversation_id,
-    );
+    // ── A CONVERSA DE QUEM NÃO É DESTA CONVERSA NÃO ABRE AQUI ───────────────
+    //
+    // RECUSA, e não tradução. A ida ao handler acontece porque é ela que diz
+    // de quem é a conversa; o que não sai daqui é a RESPOSTA. Com turno, o
+    // `404` (não existe, ou é de outra organização) vira a MESMA recusa da
+    // conversa de outro paciente — um uuid não ganha veredito sobre
+    // existência. Sem turno, tudo como antes.
+    const conv = await conversaDoTurno(ctx, input.conversation_id);
+    if (conv === FORA) {
+      return foraDaConversa("a conversa de quem não é o paciente desta conversa não é sua para ler");
+    }
     const names = await resolveUserNames(ctx.supabase, [conv.assigned_to_user_id]);
     const queue_position = isInQueue(conv)
       ? ((await getQueuePositions(ctx.supabase, ctx.organizationId)).get(conv.id) ?? null)
@@ -179,12 +226,20 @@ const historyInputShape = {
 export const crmGetConversationHistory: McpToolDefinition<typeof historyInputShape> = {
   name: "crm_get_conversation_history",
   description:
-    "Carrega historico de mensagens de uma conversa. Use para dar contexto ao agente sem inflar o system prompt.",
+    "Carrega historico de mensagens de uma conversa. Use para dar contexto ao agente sem inflar o system prompt." +
+    " Em conversa de atendimento, devolve apenas o histórico da conversa do contato desta conversa.",
   inputSchema: historyInputShape,
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
+    // A mesma recusa de `crm_get_conversation`, e ANTES de ler as mensagens:
+    // o histórico é a leitura que mais sai do prédio, e carregar a página de
+    // outro paciente só para jogá-la fora seria deixar o dado dele entrar na
+    // memória do turno. Sem contato do turno, o caminho é idêntico ao de antes.
+    if (ctx.contatoDoTurno && (await conversaDoTurno(ctx, input.conversation_id)) === FORA) {
+      return foraDaConversa("o histórico de quem não é o paciente desta conversa não é seu para ler");
+    }
     const result = await listMessagesHandler(
       ctx.supabase,
       {

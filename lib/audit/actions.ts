@@ -29,6 +29,7 @@
  * `tests/unit/audit-lista-do-painel-e-derivada.test.tsx` reprova quem tentar.
  */
 export const AUDIT_ACTIONS = [
+  "agenda.historico_importado",
   "auth.login_success",
   "auth.login_failed",
   /** Teto de tentativas barrou antes de chegar ao provedor (issue #64). */
@@ -293,6 +294,7 @@ export const AUDIT_ACTIONS = [
   "followup_flow.published",
   "followup_flow.disabled",
   "followup_flow.deleted",
+  "followup_flow.duplicated",
   "followup_flow.rolled_back",
   "followup.worker_run",
   "followup.silence_sweep_run",
@@ -727,6 +729,14 @@ export const AUDIT_ACTIONS = [
   // planilha da agência, sem convite. O convite, quando pedido com --convidar,
   // audita `member.invited` pelo caminho de sempre.
   "member.added_by_import",
+  // Biblioteca de mídias (migration 0326). Envio é auditado pelo handler de mensagens.
+  "media_library.item_created",
+  "media_library.item_updated",
+  "media_library.file_replaced",
+  "media_library.file_removed",
+  "media_library.consent_recorded",
+  "media_library.consent_revoked",
+  "media_library.item_deleted",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

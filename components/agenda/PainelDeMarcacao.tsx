@@ -11,6 +11,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { instanteDe } from "@/lib/agenda/fuso";
+import { ROTULO_VOCE, rotuloDoResponsavel } from "@/lib/agenda/responsavel-do-painel";
 import { ApiError } from "@/lib/api/types";
 import { CaretLeft, CaretRight, CheckCircle, Clock, MapPin, Warning } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
@@ -47,6 +48,8 @@ export function PainelDeMarcacao({
   fusoSuposto = false,
   fontesDefasadas,
   googleCoberturaParcial,
+  onMesVisivel,
+  mesCarregado,
   quemSeraAtendido,
   horarioInicial,
   permiteEncaixe = false,
@@ -108,6 +111,25 @@ export function PainelDeMarcacao({
   fusoSuposto?: boolean;
   /** Agenda conectada que parou de atualizar: o horário fica bloqueado, e a tela diz desde quando. */
   googleCoberturaParcial?: boolean;
+  /**
+   * O mês que o calendário está mostrando. Quem consulta os horários livres
+   * precisa disto: a busca acompanha o mês visível, senão "Próximo mês" ou
+   * entrega dias mortos ou desliga para não produzir esse estado (porte de
+   * melgarafael/DeskcommCRM d5efd698a).
+   */
+  onMesVisivel?: (mes: Date) => void;
+  /**
+   * De que mês são os `horariosPorDia` que chegaram — `null` enquanto a
+   * consulta não respondeu. Ausente (a vitrine, com dado fixo), o painel confia
+   * nos horários como sempre.
+   *
+   * O mês em tela mora aqui e o da consulta mora em quem chama, e os dois trocam
+   * em momentos diferentes. Sem saber de que mês são os dados, o painel acendia
+   * o dia 1º do mês novo com a sobra da janela do velho (`janelaDoMesVisivel`
+   * vai até `endOfMonth + 1 dia`) e não distinguia "carregando" de "este mês
+   * acabou" (porte de melgarafael/DeskcommCRM b44fcf19c).
+   */
+  mesCarregado?: Date | null;
   fontesDefasadas?: Array<{ nome?: string; desde?: string }>;
   /**
    * Quem vai ser atendido, e se ele aceita receber mensagem.
@@ -177,6 +199,9 @@ export function PainelDeMarcacao({
   const [mes, setMes] = React.useState(() =>
     startOfMonth(horarioInicial ? new Date(horarioInicial.instante) : ancora),
   );
+  React.useEffect(() => {
+    onMesVisivel?.(mes);
+  }, [mes, onMesVisivel]);
   const [encaixeAberto, setEncaixeAberto] = React.useState(false);
   // O que a pessoa DIGITOU sobrevive a "Voltar", à troca de dia e à recusa do
   // servidor: quem ouviu "ocupado" quer corrigir dez minutos, não redigitar.
@@ -252,26 +277,11 @@ export function PainelDeMarcacao({
    *
    *   - instalação fresca: ninguém em `attendant_availability` ⇒ a rota devolve
    *     422 ⇒ o hook joga o erro num toast e `data` fica `undefined` ⇒ o
-   *     `?? true` do chamador diz "publicou" ⇒ 42 dias mortos, zero aviso;
-   *   - navegar para frente: a consulta pede 30 dias e o mês visível é estado
-   *     LOCAL deste painel. Dois cliques em "Próximo mês", numa organização
-   *     perfeitamente configurada, e a grade some — sem toast e sem aviso.
+   *     `?? true` do chamador diz "publicou" ⇒ 42 dias mortos, zero aviso.
    *
    * `nenhumDiaClicavel` é LITERALMENTE a expressão do `disponivel` de cada dia,
    * negada e universal. Por construção os dois não voltam a divergir.
    */
-  /**
-   * Existe algum dia CONSULTADO depois do mês visível?
-   *
-   * Deriva das chaves de `horariosPorDia`, que é o recorte que a consulta de
-   * fato cobriu — e não de uma constante de 30 dias copiada para cá, que
-   * envelheceria no dia em que a janela mudasse.
-   */
-  const temDiaConsultadoDepois = React.useMemo(() => {
-    const fimDoMes = startOfMonth(addDays(startOfMonth(mes), 32));
-    return Object.keys(horariosPorDia).some((chave) => new Date(`${chave}T12:00:00`) >= fimDoMes);
-  }, [horariosPorDia, mes]);
-
   const encaixeLigado = permiteEncaixe && Boolean(fuso) && publicouHorarios && !erroAoCarregar;
   const inicioDeHoje = startOfDay(agora).getTime();
 
@@ -282,10 +292,37 @@ export function PainelDeMarcacao({
    * É a ÚNICA expressão de clicável: o botão do dia e `nenhumDiaClicavel` leem
    * esta função, para os dois não voltarem a divergir (ver o bloco acima).
    */
-  const diaClicavel = (d: Date): boolean =>
+  const dadosDoMesEmTela =
+    mesCarregado === undefined || (mesCarregado !== null && isSameMonth(mesCarregado, mes));
+  /** Tem horário publicado — a única fonte de `data-disponivel` e da abertura. */
+  const temHorario = (d: Date): boolean =>
+    dadosDoMesEmTela &&
     isSameMonth(d, mes) &&
-    ((horariosPorDia[format(d, "yyyy-MM-dd")]?.length ?? 0) > 0 ||
-      (encaixeLigado && d.getTime() >= inicioDeHoje));
+    (horariosPorDia[format(d, "yyyy-MM-dd")]?.length ?? 0) > 0;
+  const diaClicavel = (d: Date): boolean =>
+    temHorario(d) || (isSameMonth(d, mes) && encaixeLigado && d.getTime() >= inicioDeHoje);
+
+  /**
+   * A ABERTURA NÃO CAI NUM MÊS QUE ACABOU.
+   *
+   * No último dia útil do mês, depois do último horário, o painel abria no mês
+   * de hoje com todo dia apagado e "Nenhum horário livre", e o próximo horário
+   * (amanhã) ficava atrás da seta. A decisão é tomada UMA vez, quando os
+   * horários do mês de abertura chegam: sem nenhum horário publicado nele, o
+   * painel passa ao mês seguinte. Quem volta à mão (para um encaixe hoje) fica
+   * onde voltou; sem jornada publicada não há o que procurar no mês seguinte.
+   * Porte de melgarafael/DeskcommCRM b44fcf19c.
+   */
+  const aberturaDecidida = React.useRef(false);
+  const aberturaCarregada = mesCarregado != null && dadosDoMesEmTela && isSameMonth(mes, ancora);
+  const aberturaSemVaga = aberturaCarregada && !semanas.flat().some(temHorario);
+  React.useEffect(() => {
+    if (aberturaDecidida.current || !aberturaCarregada || instanteInicial) return;
+    aberturaDecidida.current = true;
+    if (aberturaSemVaga && publicouHorarios && !erroAoCarregar) {
+      setMes((m) => startOfMonth(addDays(startOfMonth(m), 32)));
+    }
+  }, [aberturaCarregada, aberturaSemVaga, publicouHorarios, erroAoCarregar, instanteInicial]);
 
   const nenhumDiaClicavel = semanas.flat().every((d) => !diaClicavel(d));
 
@@ -419,7 +456,7 @@ export function PainelDeMarcacao({
             {format(new Date(marcado.instante), t("EEEE, d 'de' MMMM 'às' HH:mm"), { locale: localeDaData })}
           </p>
           <p className="mt-0.5 text-xs text-text-subtle">
-            {t(tipo)} · {duracaoMin} {t("min · com")} {responsavel.nome}
+            {t(tipo)} · {duracaoMin} {t("min · com")} {rotuloDoResponsavel(responsavel.nome, t)}
           </p>
           {quemSeraAtendido && !quemSeraAtendido.aceitaMensagem && (
             // Repetido aqui de propósito: o aviso do passo anterior sumiu da
@@ -516,8 +553,11 @@ export function PainelDeMarcacao({
         className="shrink-0 border-b border-border bg-surface-elevated/50 p-4 lg:w-[280px] lg:border-b-0 lg:border-r"
       >
         <div className="flex items-center gap-2">
-          <AvatarDaPessoa pessoa={responsavel} tamanho="sm" />
-          <span className="truncate text-sm font-semibold">{responsavel.nome}</span>
+          <AvatarDaPessoa
+            pessoa={{ ...responsavel, nome: rotuloDoResponsavel(responsavel.nome, t) }}
+            tamanho="sm"
+          />
+          <span className="truncate text-sm font-semibold">{rotuloDoResponsavel(responsavel.nome, t)}</span>
         </div>
         <h3 className="mt-3 text-base font-semibold leading-tight">{tipo}</h3>
         <dl className="mt-3 space-y-2 text-xs text-text-muted">
@@ -580,15 +620,9 @@ export function PainelDeMarcacao({
               size="icon"
               aria-label={t("Próximo mês")}
               data-testid="mes-seguinte"
-              // NÃO leva a um mês que a consulta nunca cobriu.
-              //
-              // O mês visível é estado LOCAL deste painel e navegar não
-              // reconsulta nada: a busca pede 30 dias a partir de hoje. Dois
-              // cliques aqui, numa organização perfeitamente configurada,
-              // entregavam 42 dias mortos sem toast e sem aviso. O bloco de
-              // motivo acima já explica quando acontece; desabilitar evita
-              // PRODUZIR o estado, que é melhor que explicá-lo.
-              disabled={!temDiaConsultadoDepois}
+              // Sempre clicável: quem chama reconsulta o mês que a tela mostra
+              // (`onMesVisivel`). Antes a busca era de 30 dias fixos e este
+              // botão desligava quando eles acabavam.
               onClick={() => setMes((m) => startOfMonth(addDays(startOfMonth(m), 32)))}
             >
               <CaretRight size={16} weight="bold" aria-hidden />
@@ -603,11 +637,19 @@ export function PainelDeMarcacao({
             data-testid="sem-jornada-publicada"
             className="mb-3 rounded-sm border border-warning/40 bg-warning-bg p-3"
           >
+            {/* "Você" só quando a jornada é de quem está logado: a recepção abre
+                a agenda da médica, e ali a frase acusava a pessoa errada. O
+                rótulo vem de `lib/agenda/responsavel-do-painel.ts` (porte do
+                commit 83f52dd61 do projeto original, #896). */}
             <p className="text-sm font-semibold text-text">
-              {t("Você ainda não publicou seus horários de atendimento")}
+              {responsavel.nome === ROTULO_VOCE
+                ? t("Você ainda não publicou seus horários de atendimento")
+                : t("A jornada de atendimento ainda não foi publicada")}
             </p>
             <p className="mt-1 text-xs leading-4 text-text-muted">
-              {t("Sem eles ninguém consegue marcar — nem você, nem o agente.")}
+              {responsavel.nome === ROTULO_VOCE
+                ? t("Sem eles ninguém consegue marcar — nem você, nem o agente.")
+                : t("Sem eles ninguém consegue marcar — nem quem atende, nem o agente.")}
             </p>
             {/*
               O AVISO VIRA PORTA.
@@ -668,9 +710,7 @@ export function PainelDeMarcacao({
               {t("Nenhum horário livre em")} {format(mes, "MMMM", { locale: localeDaData })}
             </p>
             <p className="mt-1 text-xs leading-4 text-text-muted">
-              {t(
-                "Os próximos 30 dias são o que está publicado hoje — meses adiante aparecem conforme a data se aproxima.",
-              )}
+              {t("Não há horário livre publicado neste mês.")}
             </p>
           </div>
         )}
@@ -709,7 +749,7 @@ export function PainelDeMarcacao({
             // A exceção é o ENCAIXE: ali o clique entrega outra coisa — o campo
             // de hora —, e o dia sem grade fica clicável mas SEM a cor de vaga.
             // `data-disponivel` segue dizendo "tem horário publicado".
-            const disponivel = livres.length > 0 && isSameMonth(d, mes);
+            const disponivel = temHorario(d);
             const clicavel = diaClicavel(d);
             const soEncaixe = clicavel && !disponivel;
             const escolhido = dia !== null && isSameDay(d, dia);

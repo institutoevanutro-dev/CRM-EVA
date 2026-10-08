@@ -253,6 +253,46 @@ describe("completeTurnForEnrollment — nó action, ciclo completo", () => {
   });
 });
 
+// ---- 1b. adiamento pela janela: estaciona sem gastar o passo (porte a1c6c4d1e) ----
+
+describe("completeTurnForEnrollment — envio adiado pela janela, no Postgres de verdade", () => {
+  it("'deferred' estaciona em `until` pelo fn_followup_apply_step, sem subir o passo; o 'sent' depois ainda avança", async () => {
+    const org = "bbbbbbb3-0000-4000-8000-000000000001";
+    await seedOrg(org);
+    const contactId = await seedContact(org);
+    const { pointerId, versionId } = await seedFlow(org, ACTION_GRAPH);
+    const enrollmentId = await seedEnrollment({ org, pointerId, versionId, contactId, currentNodeId: "a1" });
+
+    const jobs: FollowupJobRequest[] = [];
+    await runFollowupTick(makeTickDeps(jobs), { limit: 5 }); // enqueue: steps_taken 0→1
+    const until = new Date(Date.now() + 63 * 3_600_000); // sexta 18h → segunda 9h
+
+    await completeTurnForEnrollment(db, org, enrollmentId, "a1", { kind: "deferred", until, reason: "outside_window" });
+
+    const parked = await getEnrollment(enrollmentId);
+    expect(parked.current_node_id).toBe("a1");
+    expect(parked.status).toBe("active");
+    expect(parked.steps_taken).toBe(1);
+    expect((parked.next_eval_at as Date).toISOString()).toBe(until.toISOString());
+
+    // Durante a espera o motor não acorda este enrollment — nada de recheck gasto.
+    const tick = await runFollowupTick(makeTickDeps(jobs), { limit: 5 });
+    expect(tick.scheduled).toBe(0);
+    expect(jobs).toHaveLength(1);
+
+    // A chave do passo ficou livre: a conclusão do envio, quando sair, avança.
+    await completeTurnForEnrollment(db, org, enrollmentId, "a1", { kind: "sent" });
+    const after = await getEnrollment(enrollmentId);
+    expect(after.current_node_id).toBe("e1");
+
+    const { rows: events } = await pool.query(
+      `select event_type from followup_enrollment_events where enrollment_id = $1 order by created_at`,
+      [enrollmentId],
+    );
+    expect(events.map((e: { event_type: string }) => e.event_type)).toEqual(["turn_enqueued", "action_deferred", "action_sent"]);
+  });
+});
+
 // ---- 2. ai_classify: classe exata + fallback ----
 
 describe("completeTurnForEnrollment — nó ai_classify, classe → aresta", () => {

@@ -70,6 +70,8 @@ function fakePool(conversa: { horas: number; provider?: string; errorCode?: stri
     if (sql.includes("d.fechada_em::text")) return { rows: [{ ...boundary, status: "open", demanda_fechada_em: null }] };
     if (/from send_ledger l/.test(sql)) return { rows: conversa.ledger ?? [{ status: "accepted", error_code: null }] };
     if (/select error_code from messages/.test(sql)) return { rows: [{ error_code: conversa.errorCode ?? null }] };
+    // A inscrição viva no mesmo nó (guarda da #2261 no início do turno).
+    if (sql.includes("select current_node_id, status from followup_enrollments")) return { rows: [{ current_node_id: "node-1", status: "active" }], rowCount: 1 };
     if (/from conversations/.test(sql)) {
       return { rows: [{
         id: CONVERSA, channel_session_id: CANAL, archived_at: null, bot_silenciado: true,
@@ -152,13 +154,16 @@ describe("turno de fluxo — texto fixo", () => {
     expect(d.complete).not.toHaveBeenCalled();
   });
 
-  it("WhatsApp silenciado: o bloqueio de atendimento humano segue valendo (sem pulo, sem 24h)", async () => {
-    isLeadInHandoff.mockResolvedValueOnce(true);
+  it("WhatsApp silenciado: o bloqueio de atendimento humano segue valendo (sem pulo, sem 24h) e encerra com handoff", async () => {
     const { pool } = fakePool({ horas: 30, provider: DEFAULT_CHANNEL_PROVIDER });
     const d = deps();
     await criarHandler(d.deps)(job({ fixed_body: "oi" }), pool, ctx);
     expect(runBeforeSend).not.toHaveBeenCalled();
-    expect(resultado(d.complete)).toEqual({ kind: "skipped", reason: "O envio foi recusado pelas regras do atendimento." });
+    expect(resultado(d.complete)).toEqual({
+      kind: "skipped",
+      reason: "Sequência encerrada: uma pessoa da equipe está atendendo esta conversa.",
+      outcome: "handoff",
+    });
   });
 });
 

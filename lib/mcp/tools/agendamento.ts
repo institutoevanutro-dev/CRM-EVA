@@ -37,6 +37,7 @@ import {
 import { ApiError } from "@/lib/api/types";
 import { SITUACOES_DO_AGENDAMENTO } from "@/lib/agenda/tipos";
 import type { McpContext, McpToolDefinition } from "@/lib/mcp/types";
+import { foraDaConversa, foraDoContatoDoTurno } from "@/lib/mcp/fora-da-conversa";
 
 /** Teto do horizonte pedido — espelha o da rota, e o excesso é erro de chamada. */
 const DIAS_PADRAO = 14;
@@ -157,7 +158,10 @@ const horariosLivresShape = {
     .min(1)
     .max(MAXIMO_DE_DIAS)
     .optional()
-    .describe(`quantos dias olhar a partir de agora (padrão ${DIAS_PADRAO}). Use ESTE campo se você não sabe a data de hoje.`),
+    .describe(
+      `quantos dias olhar a partir de agora (padrão ${DIAS_PADRAO}). Use ESTE campo se você não sabe a data de hoje. ` +
+        `Se 'dia' também for informado, 'dia' tem precedência.`,
+    ),
   /**
    * A data civil é deliberadamente diferente de um ISO com offset. O modelo sabe
    * que o cliente pediu "dia 13", mas não sabe onde começa esse dia no fuso da
@@ -168,7 +172,10 @@ const horariosLivresShape = {
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "dia deve estar em YYYY-MM-DD")
     .optional()
-    .describe("dia civil pedido pelo cliente, em YYYY-MM-DD. Use para uma data específica; o servidor aplica o fuso da agenda."),
+    .describe(
+      "dia civil pedido pelo cliente, em YYYY-MM-DD. Use para uma data específica; o servidor aplica o fuso da agenda " +
+        "(tem precedência sobre dias_a_frente).",
+    ),
   owner_user_id: z.string().uuid().optional(),
   limite: z
     .number()
@@ -300,13 +307,8 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
     const agora = new Date();
-    if (input.dia !== undefined && input.dias_a_frente !== undefined) {
-      return {
-        horarios: [],
-        motivo: "periodo_ambiguo",
-        mensagem: "informe um dia específico ou quantos dias olhar, não os dois.",
-      };
-    }
+    // Se o modelo enviar `dia` e `dias_a_frente` juntos, toleramos e priorizamos
+    // o mais específico (`dia`), evitando recusa silenciosa em produção (#1436).
 
     // A faixa larga contém o dia civil em QUALQUER fuso. Depois de a coleta
     // revelar o fuso da regra, filtramos pelo mesmo dia local. Assim a IA não
@@ -405,15 +407,28 @@ export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
     "decidimos voltar a falar, sem nada combinado com o cliente. Aqui é o que foi combinado " +
     "COM ele e ocupa o tempo de um atendente. O mesmo cliente pode ter os dois. " +
     "USE ANTES DE MARCAR e antes de cobrar: cliente que já tem consulta marcada não deve " +
-    "receber oferta de horário como se não tivesse, nem ser cobrado como se estivesse parado.",
+    "receber oferta de horário como se não tivesse, nem ser cobrado como se estivesse parado." +
+    " Em conversa de atendimento, lista apenas os compromissos do contato desta conversa.",
   inputSchema: listarShape,
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
+    // ── A AGENDA, DURANTE UM TURNO, É A DO PACIENTE DESTA CONVERSA ──────────
+    //
+    // Com `ctx.contatoDoTurno`, o contato é forçado na consulta — `dia` e
+    // `owner_user_id` seguem valendo, mas só dentro dele. `contact_id` de outro
+    // e `lead_id` cujo dono não é o do turno (inexistente inclusive) caem na
+    // MESMA recusa. `lead_id` igual ao contato do turno é a confusão contato ×
+    // negócio: o contato já cobre a pergunta. Sem contato do turno, nada muda.
+    const doTurno = ctx.contatoDoTurno;
+    const leadId = doTurno && input.lead_id === doTurno ? undefined : input.lead_id;
+    if (doTurno && (await foraDoContatoDoTurno(ctx, doTurno, input.contact_id, leadId))) {
+      return foraDaConversa("os compromissos de quem não é o paciente desta conversa não são seus para ver");
+    }
     const r = await listaAgendamentos(ctx.supabase, ctx.organizationId, {
-      contactId: input.contact_id ?? null,
-      leadId: input.lead_id ?? null,
+      contactId: doTurno ?? input.contact_id ?? null,
+      leadId: leadId ?? null,
       dia: input.dia ?? null,
       ownerUserId: input.owner_user_id ?? null,
       situacao: input.situacao ?? null,
@@ -432,10 +447,13 @@ export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
         inicio: a.iniciaEm,
         fim: a.terminaEm,
         fuso: a.fuso,
+        quando: rotuloLocal(new Date(a.iniciaEm), a.fuso),
+        fim_quando: rotuloLocal(new Date(a.terminaEm), a.fuso),
         situacao: a.situacao,
         meet_state: a.meetingState,
         meeting_url: a.meetingState === "ready" ? a.meetingUrl : null,
         contato_id: a.contatoId,
+        contato_nome: a.contatoNome,
         atendente_id: a.donoId,
       })),
     };
@@ -494,6 +512,18 @@ async function semDerrubarOTurno<T>(
         "não consegui completar agora. Avise que alguém da equipe confirma o horário.",
     };
   }
+}
+
+/** A escrita conserva seus instantes; a IA recebe também a hora de parede. */
+function compromissoComHorarioLocal(r: Record<string, unknown>): Record<string, unknown> {
+  if (typeof r.starts_at !== "string" || typeof r.time_zone !== "string") return r;
+  return {
+    ...r,
+    quando: rotuloLocal(new Date(r.starts_at), r.time_zone),
+    ...(typeof r.ends_at === "string"
+      ? { fim_quando: rotuloLocal(new Date(r.ends_at), r.time_zone) }
+      : {}),
+  };
 }
 
 const marcarShape = {
@@ -581,7 +611,7 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
 
       return {
         marcado: true,
-        compromisso: r,
+        compromisso: compromissoComHorarioLocal(r),
         // Campo próprio, além da mensagem: um booleano no topo é o que o modelo
         // enxerga sem precisar interpretar prosa.
         aguarda_confirmacao: aguardaConfirmacao,
@@ -823,7 +853,10 @@ export const crmRescheduleAppointment: McpToolDefinition<typeof remarcarShape> =
     "Move um compromisso já marcado para outro horário, mantendo o mesmo cliente e o mesmo tipo. " +
     "Use quando o cliente pediu para mudar o dia ou a hora. " +
     "REMARCAR NÃO É CANCELAR E MARCAR DE NOVO: é o MESMO compromisso mudando de hora, o histórico " +
-    "continua um só e o lembrete é refeito sozinho. Se você cancelar e marcar, o cliente recebe " +
+    "continua um só e o lembrete da data nova sai sozinho na hora configurada, com duas exceções em " +
+    "que ele NÃO sai: a data nova já está dentro da antecedência do aviso, ou o aviso da data nova " +
+    "cairia pouco depois de um lembrete que já saiu (a menos de metade da antecedência daquele aviso). " +
+    "Nesses casos, confirme o novo horário ao cliente na própria conversa. Se você cancelar e marcar, o cliente recebe " +
     "dois avisos contraditórios e a linha do tempo dele passa a contar que ele desistiu e voltou — " +
     "o que não aconteceu. " +
     "Confirme o horário novo com `crm_find_free_slots` antes: horário indisponível é recusado.",
@@ -842,7 +875,7 @@ export const crmRescheduleAppointment: McpToolDefinition<typeof remarcarShape> =
           ...(input.notes ? { notes: input.notes } : {}),
         },
       );
-      return { remarcado: true, compromisso: r };
+      return { remarcado: true, compromisso: compromissoComHorarioLocal(r) };
     }),
 };
 
@@ -877,7 +910,7 @@ export const crmCancelAppointment: McpToolDefinition<typeof cancelarShape> = {
         { organization_id: ctx.organizationId, actor: ctx.actor, requestId: ctx.requestId },
         { id: input.appointment_id, reason: input.reason },
       );
-      return { cancelado: true, compromisso: r };
+      return { cancelado: true, compromisso: compromissoComHorarioLocal(r) };
     }),
 };
 
@@ -911,7 +944,7 @@ export const crmConfirmAppointment: McpToolDefinition<typeof confirmarShape> = {
           ...(input.notes ? { notes: input.notes } : {}),
         },
       );
-      return { confirmado: true, compromisso: r };
+      return { confirmado: true, compromisso: compromissoComHorarioLocal(r) };
     }),
 };
 
@@ -947,6 +980,6 @@ export const crmSetAppointmentOutcome: McpToolDefinition<typeof desfechoShape> =
           ...(input.notes ? { notes: input.notes } : {}),
         },
       );
-      return { registrado: true, compromisso: r };
+      return { registrado: true, compromisso: compromissoComHorarioLocal(r) };
     }),
 };

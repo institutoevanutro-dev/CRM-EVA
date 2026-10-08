@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { enderecoDeRetorno, faltaParaConectarOGoogle, googleEstaConfigurado } from "@/lib/agenda/google/config";
+import { donosDaAgenda } from "@/lib/agenda/donos-da-agenda";
 import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
 import { PROVEDOR_GOOGLE } from "@/lib/agenda/tipos";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -8,6 +9,7 @@ import { diaDeHojeNoFuso, semanaSemente } from "@/lib/agenda/semana-semente";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
 import { ROLE_RANK } from "@/lib/auth/types";
+import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 
 import type { Agendamento as AgendamentoDaTela } from "@/components/agenda/tipos";
@@ -186,18 +188,30 @@ export default async function AgendaPage() {
    * ⚠️ Isto tem GUARDA, não só comentário:
    * `tests/unit/ocupacao-do-google-nao-expoe-titulo.test.ts`.
    *
-   * O dono vem por `connection_id → calendar_connections.user_id`, porque esta
-   * tabela não tem `user_id` — é a mesma junção que `ocupados.ts` já faz.
+   * O dono é o `p_owner` da pergunta: `fn_agenda_ocupacao_google_do_dono` faz
+   * a junção `connection_id → calendar_connections.user_id` do lado do banco.
    */
   // Leitura ÚNICA da ocupação da tela (`lib/agenda/ocupacao-externa`) — a mesma
   // que a rota faz. O recorte é INTERSEÇÃO de intervalos, como no motor de
   // disponibilidade: o compromisso que atravessa a virada do dia aparece no dia
   // em que ele OCUPA, não só no dia em que ele começa (#525).
-  const { blocos: externos } = await lerOcupacaoExterna(supabase, {
-    organizationId: activeOrg.orgId,
-    de: inicio.toISOString(),
-    ate: fim.toISOString(),
+  //
+  // A ocupação é perguntada POR DONO (`p_owner`): a leitura pela sessão escondia
+  // da recepção a conexão da médica, e a grade desenhava livre o que o motor
+  // recusa (porte de melgarafael/DeskcommCRM 42c558397, #896 item 3). O
+  // Prestador continua só com a própria agenda — `donosDaAgenda` decide.
+  const { donos, erro: erroDosDonos } = await donosDaAgenda(activeOrg.orgId, {
+    id: user.id,
+    papel: activeOrg.role,
   });
+  if (erroDosDonos) {
+    logger.warn("[agenda.page] donos da agenda não vieram", { erro: erroDosDonos });
+  }
+  const { blocos: externos } = await lerOcupacaoExterna(
+    supabase,
+    { organizationId: activeOrg.orgId, de: inicio.toISOString(), ate: fim.toISOString() },
+    donos,
+  );
 
   // QUAL conta está conectada — o prop existia no cartão e NUNCA era passado,
   // então o ramo "Agenda conectada" era código morto e o botão "Conectar Google"
@@ -231,6 +245,9 @@ export default async function AgendaPage() {
       // `new Date()` do navegador e a divergência volta INTEIRA — não só na
       // janela de sábado, mas para todo usuário fora do fuso da organização.
       hojeNaOrganizacao={hojeNaOrganizacao}
+      // QUEM ESTÁ LOGADO, do servidor: é o único jeito de a tela saber se o dono
+      // da agenda é ela mesma, sem depender da lista da equipe.
+      usuarioId={user.id}
       googleConfigurado={googleConfigurado}
       contaConectada={conexoes?.map(c => c.account_email).join(", ") || null}
       enderecoDeRetorno={enderecoDeRetorno()}

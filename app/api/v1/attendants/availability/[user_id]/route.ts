@@ -77,16 +77,27 @@ export async function PATCH(
 
   // Manager alterando outro: alvo tem que ser membro da org (evita linha órfã;
   // a RLS permite manager inserir qualquer user_id da própria org).
+  // (O próprio nunca é `provider`: requireRole("agent") já o barrou.)
   if (!isSelf) {
     const { data: member, error: memberErr } = await supabase
       .from("user_organizations")
-      .select("user_id")
+      .select("user_id, role")
       .eq("organization_id", activeOrg.orgId)
       .eq("user_id", targetUserId)
       .is("revoked_at", null)
       .maybeSingle();
     if (memberErr) return fail("internal_error", memberErr.message, 500, { requestId });
     if (!member) return fail("not_found", t("Atendente não encontrado na organização."), 404, { requestId });
+    // Prestador publica jornada de agenda, mas não recebe conversa: ligar a
+    // chave de plantão dele seria uma promessa que o roteamento não cumpre.
+    if ((member as { role?: string }).role === "provider" && input.is_available === true) {
+      return fail(
+        "invalid_request",
+        t("Prestador de serviço não entra no roteamento de conversas."),
+        422,
+        { requestId },
+      );
+    }
   }
 
   const now = new Date().toISOString();

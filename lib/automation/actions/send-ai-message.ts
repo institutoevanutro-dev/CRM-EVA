@@ -100,7 +100,7 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
     return { type: TIPO, status: "failed", error: "ia_indisponivel", detail: { reason: "ia_indisponivel" } };
   }
 
-  const { dados, origem, veioDeFormulario } = await dadosDoFormularioDoContexto(ctx);
+  const { dados, origem, origemDaAbordagem } = await dadosDoFormularioDoContexto(ctx);
 
   let boundary: ServiceBoundary;
   try { boundary = await serviceForAutomation(ctx, contact.id, sessionId); }
@@ -115,7 +115,7 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
       instrucao,
       origem,
       dados,
-      veioDeFormulario,
+      origemDaAbordagem,
     });
     if (!gerado.ok) {
       return { type: TIPO, status: "failed", error: gerado.reason, detail: { reason: gerado.reason } };
@@ -158,7 +158,10 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
         actor: { type: "webhook_source", id: ctx.ruleId },
         requestId: `rule:${ctx.ruleId}`,
       },
-      { conversation_id: conversationId, type: "text", body: texto } as Parameters<
+      // A autoria é da IA, mas o ator é a regra (`webhook_source`): a marca é o
+      // que deixa o aviso de passagem (`lib/ai/handoff/aviso-ao-lead.ts`)
+      // contar esta linha como fala da IA, e não como lembrete ou campanha.
+      { conversation_id: conversationId, type: "text", body: texto, metadata: { texto_escrito_pela_ia: true } } as Parameters<
         typeof sendMessageHandler
       >[2],
     );

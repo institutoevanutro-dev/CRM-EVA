@@ -140,14 +140,18 @@ describe("crm_find_free_slots", () => {
     expect(params.ate.toISOString()).toBe("2026-09-14T14:00:00.000Z");
   });
 
-  it("não aceita dia específico e período relativo juntos", async () => {
+  it("prioriza dia específico quando dia e dias_a_frente forem informados juntos (#1436)", async () => {
+    respondeCom(SUCESSO);
     const r = (await crmFindFreeSlots.handler(
-      { event_type_slug: "c", dia: "2026-09-13", dias_a_frente: 7 },
+      { event_type_slug: "c", dia: "2026-09-01", dias_a_frente: 7 },
       ctx,
-    )) as { motivo: string; mensagem: string };
-    expect(r.motivo).toBe("periodo_ambiguo");
-    expect(r.mensagem).toMatch(/não os dois/);
-    expect(horariosLivresDaOrg).not.toHaveBeenCalled();
+    )) as { horarios: unknown[]; total_de_horarios: number };
+    expect(r.total_de_horarios).toBe(1);
+    expect(horariosLivresDaOrg).toHaveBeenCalled();
+    const params = vi.mocked(horariosLivresDaOrg).mock.calls[0]![2];
+    // A janela consultada é a ampla do dia 2026-09-01 (-14h/+38h), ignorando o dias_a_frente: 7
+    expect(params.de.toISOString()).toBe("2026-08-31T10:00:00.000Z");
+    expect(params.ate.toISOString()).toBe("2026-09-02T14:00:00.000Z");
   });
 
   it("⚠️ a recusa que sai é a do CLIENTE, nunca a do OPERADOR", async () => {
@@ -199,6 +203,18 @@ describe("crm_find_free_slots", () => {
 
 describe("crm_list_appointments", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("preserva o nome do contato na resposta consumida pelo prontuário", async () => {
+    vi.mocked(listaAgendamentos).mockResolvedValue({ ok: true, agendamentos: [
+      { id: "com-contato", contatoId: "contato", contatoNome: "Paciente de teste", titulo: "Consulta" },
+      { id: "sem-contato", contatoId: null, contatoNome: null, titulo: "Bloqueio" },
+    ] } as never);
+    const result = await crmListAppointments.handler({ dia: "2026-10-07" }, ctx);
+    expect(result).toMatchObject({ compromissos: [
+      { id: "com-contato", contato_id: "contato", contato_nome: "Paciente de teste", titulo: "Consulta" },
+      { id: "sem-contato", contato_id: null, contato_nome: null, titulo: "Bloqueio" },
+    ] });
+  });
 
   it("⚠️ 'não sei de quem' NÃO vira lista vazia — vira pergunta", async () => {
     // O caso mais importante deste bloco. Lista vazia faria o modelo concluir e dizer
@@ -354,7 +370,7 @@ describe('Meet no contrato do atendimento',()=>{
   expect(crmBookAppointment.inputSchema).not.toHaveProperty('meetingBooking');expect(crmBookAppointment.inputSchema).not.toHaveProperty('authorized');
  });
  it('lista retorna URL pronta utilizável, mas não URL quando pendente',async()=>{
-  vi.mocked(listaAgendamentos).mockResolvedValue({ok:true,agendamentos:[{id:'ready',meetingState:'ready',meetingUrl:'https://meet.google.com/abc-defg-hij'},{id:'pending',meetingState:'pending',meetingUrl:'https://meet.google.com/old-link'}]} as never);
+  vi.mocked(listaAgendamentos).mockResolvedValue({ok:true,agendamentos:[{id:'ready',iniciaEm:'2030-01-01T12:00:00Z',terminaEm:'2030-01-01T13:00:00Z',fuso:'UTC',meetingState:'ready',meetingUrl:'https://meet.google.com/abc-defg-hij'},{id:'pending',iniciaEm:'2030-01-01T12:00:00Z',terminaEm:'2030-01-01T13:00:00Z',fuso:'UTC',meetingState:'pending',meetingUrl:'https://meet.google.com/old-link'}]} as never);
   const result=await crmListAppointments.handler({contact_id:'contact'},ctx);
   expect(JSON.stringify(result)).toContain('https://meet.google.com/abc-defg-hij');expect(JSON.stringify(result)).not.toContain('old-link');
  });

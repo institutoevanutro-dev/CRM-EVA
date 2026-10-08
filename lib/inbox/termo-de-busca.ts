@@ -58,7 +58,14 @@ export function normalizarTermoDeBusca(bruto: string): string {
  * piso veio consertar, reintroduzido por outra porta.
  *
  * O piso em caracteres crus não pega esse caso: `", ,"` tem 3 caracteres.
+ *
+ * O PARÊNTESE e o ASTERISCO saem antes de medir, pela mesma porta: nenhum dos
+ * dois é separador, então `"()"` e `"**"` passavam o piso com 2 caracteres — e
+ * no `or=` do PostgREST viram `%%`, a lista inteira de volta. O `replace` daqui
+ * só decide se vale consultar; o termo que vai ao banco não muda (um telefone
+ * `(15) 99259-4261` segue funcionando). Portado do original (8ef98c206 e
+ * 7f23ab825, de webtecnica).
  */
 export function buscaValeConsulta(bruto: string): boolean {
-  return normalizarTermoDeBusca(bruto).length >= PISO_DA_BUSCA;
+  return normalizarTermoDeBusca(bruto.replace(/[()*]/g, " ")).length >= PISO_DA_BUSCA;
 }
