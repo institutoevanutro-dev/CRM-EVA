@@ -40,7 +40,9 @@ test.describe("a Agenda como o dono do produto a usa", () => {
     await page.goto("/app");
     // O item vive no grupo "Atendimento", junto do Inbox — decisão registrada
     // no `registry.ts`: a Agenda é onde o dia acontece, não onde se configura.
-    const item = page.getByRole("link", { name: "Agenda", exact: true }).first();
+    // Menu por área (07/10/2026): Atendimento → aba Agenda.
+    await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("link", { name: "Atendimento" }).click();
+    const item = page.getByRole("navigation", { name: "Telas de Atendimento" }).getByRole("link", { name: "Agenda", exact: true });
     await expect(item).toBeVisible({ timeout: ESPERA });
     await item.click();
 

@@ -84,7 +84,8 @@ describe("sidebarGroups", () => {
   it("só inclui destino marcado como sidebar", () => {
     const hrefs = sidebarGroups(true, null).flatMap((g) => g.items.map((i) => i.href));
     // Conhecimento existe no registro, mas é do hub — não do sidebar.
-    expect(hrefs).not.toContain("/app/ai/knowledge/sources");
+    // Memória existe no registro, mas mora no "Mais" da área IA.
+    expect(hrefs).not.toContain("/app/ai/memory");
     expect(hrefs).toContain("/app/ai/agents");
   });
 
@@ -111,19 +112,24 @@ describe("sidebarGroups", () => {
     //
     // A lista é EXATA de propósito. `toContain` deixaria um sexto item entrar
     // calado no sidebar e reabrir a mesma corrida por pixel.
+    // Desde 07/10/2026 `sidebar: true` = ABA PRINCIPAL da área (spec 2026-10-07-cores-e-menu):
+    // o menu lateral lista áreas, e cada área mostra até 5 abas no topo.
     const crm = sidebarGroups(true, null).find((g) => g.group.id === "crm");
     expect(crm?.items.map((i) => i.href)).toEqual([
       "/app/kanban",
+      "/app/campaigns",
       "/app/contacts",
       "/app/tasks",
+      "/app/products",
     ]);
     expect(NAV_GROUPS.find((g) => g.id === "crm")?.hub?.href).toBe("/app/crm");
   });
 
-  it("omite o grupo inteiro quando o papel não vê nenhum item dele", () => {
-    // CANAIS é todo manager+/admin: um agent não deve ver o título órfão.
+  it("o agent continua vendo Configurações (perfil, notificações) e Atendimento", () => {
+    // Canais virou seção de Configurações em 07/10/2026; "área sem tela visível some"
+    // é coberto em tests/unit/menu-por-area.test.ts.
     const ids = sidebarGroups(AGENT.platform, AGENT.role).map((g) => g.group.id);
-    expect(ids).not.toContain("canais");
+    expect(ids).toContain("organizacao");
     expect(ids).toContain("atendimento");
   });
 
@@ -132,11 +138,15 @@ describe("sidebarGroups", () => {
     // sidebar estourou a dobra em 900px (e2e `navegacao.spec.ts`). Elas seguem
     // o padrão das outras nove telas do grupo — alcançáveis pelo hub "Ver tudo
     // em IA", que é o desenho existente para tela de configuração.
+    // Desde 07/10/2026 `sidebar: true` = ABA PRINCIPAL da área (spec 2026-10-07-cores-e-menu):
+    // o menu lateral lista áreas, e cada área mostra até 5 abas no topo.
     const ia = sidebarGroups(true, null).find((g) => g.group.id === "ia");
     expect(ia?.items.map((i) => i.href)).toEqual([
       "/app/ai/agents",
       "/app/ai/followups",
       "/app/ai/routers",
+      "/app/ai/knowledge/sources",
+      "/app/ai/perguntas-frequentes",
     ]);
   });
 });
