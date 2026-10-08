@@ -206,8 +206,12 @@ describe("crm_list_appointments", () => {
 
   it("preserva o nome do contato na resposta consumida pelo prontuário", async () => {
     vi.mocked(listaAgendamentos).mockResolvedValue({ ok: true, agendamentos: [
-      { id: "com-contato", contatoId: "contato", contatoNome: "Paciente de teste", titulo: "Consulta" },
-      { id: "sem-contato", contatoId: null, contatoNome: null, titulo: "Bloqueio" },
+      // Datas e fuso são obrigatórios desde o porte do #2523: a resposta carrega
+      // também o horário local (`quando`, `fim_quando`).
+      { id: "com-contato", contatoId: "contato", contatoNome: "Paciente de teste", titulo: "Consulta",
+        iniciaEm: "2026-10-07T17:00:00Z", terminaEm: "2026-10-07T18:00:00Z", fuso: "America/Sao_Paulo" },
+      { id: "sem-contato", contatoId: null, contatoNome: null, titulo: "Bloqueio",
+        iniciaEm: "2026-10-07T19:00:00Z", terminaEm: "2026-10-07T20:00:00Z", fuso: "America/Sao_Paulo" },
     ] } as never);
     const result = await crmListAppointments.handler({ dia: "2026-10-07" }, ctx);
     expect(result).toMatchObject({ compromissos: [
