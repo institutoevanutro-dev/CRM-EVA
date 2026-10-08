@@ -1060,12 +1060,34 @@ const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTim
  * só é chamado com o `pg_advisory_xact_lock` do NÚMERO na mão: cada turno segurava a
  * fila do número por 1,2s a 7,5s além do necessário, e dois atendimentos no MESMO
  * WhatsApp entravam numa fila mais longa. A cadeia continua julgando sob o lock, e o
- * `send` continua acontecendo sob o lock; só a espera sai da janela da transação.
+ * `send` continua acontecendo sob o lock. Saem da janela da transação a espera e o
+ * classificador semântico de promessa (F4-02); o porquê está no ponto da chamada.
  */
 export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSendResult> {
   const gates = args.gates ?? BEFORE_SEND_GATES;
-  // Fora do lock (nem conexão tomada): aqui não existe transação aberta para segurar.
-  if (args.esperaForaDoLock) await args.esperaForaDoLock();
+  // ═══ A CONFERÊNCIA SEMÂNTICA DE PROMESSA RODA FORA DO LOCK ═══
+  //
+  // Camada semântica (F4-02): uma ida e volta ao modelo por envio. Ela rodava
+  // DENTRO da transação, com o `pg_advisory_xact_lock` do número na mão: todo
+  // outro envio do MESMO WhatsApp esperava a IA responder, e a conexão do pool
+  // ficava presa o tempo inteiro.
+  //
+  // E não era só latência: era TRAVAMENTO. Lá dentro, a transação já segurava a
+  // trava de leitura de `contacts` (readStopFlags) enquanto o `runModelCall`
+  // gravava `llm_calls` (FK para `contacts`) por OUTRA conexão do pool. Com um
+  // DDL na fila de `contacts`, o insert esperava o DDL, o DDL esperava esta
+  // transação e esta transação esperava o insert: um ciclo que o Postgres não
+  // detecta, porque uma das arestas mora no processo Node. Medido no original
+  // (#2363): 8m47s `idle in transaction` e o worker inteiro parado.
+  //
+  // O veredito não depende de nada lido sob o lock, só do corpo; ele é
+  // calculado antes e entra no contexto dos gates no mesmo lugar de sempre.
+  // Começa junto com a pausa humana: o cliente espera o maior dos dois, não a soma.
+  const [, semanticPromise] = await Promise.all([
+    // Fora do lock (nem conexão tomada): aqui não existe transação aberta para segurar.
+    args.esperaForaDoLock ? args.esperaForaDoLock() : undefined,
+    args.classifyPromiseSemantic ? args.classifyPromiseSemantic(args.body) : null,
+  ]);
   const client = await args.pool.connect();
   try {
     await client.query('begin');
@@ -1136,11 +1158,6 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
     );
     // org de fonte confiável (RunBeforeSendArgs.tenantId = organization_id do row do job) — regra dura nº 1.
     const promise = await loadPromiseTable(client, args.tenantId);
-    // Camada semântica (F4-02): a chamada de modelo (async) roda AQUI, sob o lock, e o
-    // veredito entra no ctx para o `semanticPromiseGate` (sync) ler. Ausente = camada off.
-    const semanticPromise = args.classifyPromiseSemantic
-      ? await args.classifyPromiseSemantic(args.body)
-      : null;
     // Disclosure (F4-05): template por ponteiro da org + detecção de 1º outbound via
     // send_ledger (só conta se há template — sem template o gate é no-op de qualquer forma).
     const disclosure = await loadDisclosureTemplate(client, args.tenantId);

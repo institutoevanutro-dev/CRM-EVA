@@ -162,7 +162,7 @@ import { formatarParaWhatsApp } from './formato-whatsapp';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
 import { decidePromise } from '../guardrails/promise/engine';
 import { loadPromiseTable } from '../guardrails/promise/table';
-import { classifyPromise } from '../guardrails/promise/semantic';
+import { classifyPromise, memoizarPorCandidata } from '../guardrails/promise/semantic';
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { diffCheckpoint } from '@/lib/leads/checkpoint-diff';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
@@ -2513,7 +2513,9 @@ async function executarTurnoDoAgente(
     camadas.promessa_semantica,
     deps.knobs.promiseSemantic?.enabled === true,
   )
-    ? (candidate: string) =>
+    ? // Memo POR CORPO, por turno: os fail-safes de vocabulário e de promessa
+      // re-rodam a cadeia com o MESMO texto.
+      memoizarPorCandidata((candidate: string) =>
         classifyPromise(
           pool,
           deps.llmCfg,
@@ -2523,7 +2525,8 @@ async function executarTurnoDoAgente(
             ...argsAux(deps.knobs.promiseSemantic?.model),
           },
           { ...(deps.registry !== undefined ? { registry: deps.registry } : {}), log: runLog },
-        )
+        ),
+      )
     : undefined;
   let outOfTablePromiseAttempted = false;
   // Spec 15 (Wave 4 lê este flag): true quando open_human_case abriu um caso NESTE
