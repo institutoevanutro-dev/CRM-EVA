@@ -21,15 +21,15 @@ type ThemeContextValue = {
 
 const ThemeContext = React.createContext<ThemeContextValue | null>(null);
 
-function readStoredTheme(): Theme {
-  if (typeof window === "undefined") return "system";
+export function readStoredTheme(): Theme {
+  if (typeof window === "undefined") return "light";
   try {
     const v = window.localStorage.getItem(STORAGE_KEY);
     if (v === "light" || v === "dark" || v === "system") return v;
   } catch {
     // localStorage indisponível (modo privado, sandbox) — segue com default.
   }
-  return "system";
+  return "light";
 }
 
 function getSystemTheme(): ResolvedTheme {
@@ -78,7 +78,7 @@ function getTemaSnapshot(): Theme {
   return temaEmCache;
 }
 function getTemaSnapshotDoServidor(): Theme {
-  return "system";
+  return "light";
 }
 function inscreverEmTema(ouvinte: Ouvinte): () => void {
   ouvintesDeTema.add(ouvinte);

@@ -346,21 +346,22 @@ describe("controle positivo — o produto sem marca não pode se mexer", () => {
     expect(cor.derivada?.escuro.deslocamento).toBe(0);
 
     const p = pintadosDaSemente("#506d48");
+    // Re-medidos em 07/10/2026 na paleta do Eva Financeiro (spec 2026-10-07-cores-e-menu); os pisos não mudaram.
     // Claro: os dois números que `contraste.ts` documenta como medidos à mão.
-    expect(foco(p.claro, "--color-bg")).toBeCloseTo(3.79, 2);
-    expect(foco(p.claro, "--color-surface-elevated")).toBeCloseTo(3.6, 2);
+    expect(foco(p.claro, "--color-bg")).toBeCloseTo(3.63, 2);
+    expect(foco(p.claro, "--color-surface-elevated")).toBeCloseTo(3.48, 2);
     // Escuro: 6,30 e 5,22 na rampa DERIVADA da semente; os literais do
     // `globals.css` (`#82a077`) dão 6,31 e 5,23 — a rampa reproduz a Sage com
     // Δ ≤ 2/255 por canal, e a diferença de 0,01 é esse arredondamento.
-    expect(foco(p.escuro, "--color-bg")).toBeCloseTo(6.3, 2);
-    expect(foco(p.escuro, "--color-surface-elevated")).toBeCloseTo(5.22, 2);
+    expect(foco(p.escuro, "--color-bg")).toBeCloseTo(5.98, 2);
+    expect(foco(p.escuro, "--color-surface-elevated")).toBeCloseTo(4.76, 2);
     // No escuro o anel NÃO fica apertado contra as bases: quem aperta é o
     // `-soft` COMPOSTO. 4,58 aqui — é este o par que a prova em tela reportou
     // como "4,58 no escuro", e não `foco × --color-bg` (6,30). Nos literais do
     // `globals.css` o mesmo par dá 4,59, e `superficiesDoTema` documenta o trio
     // 4,99 · 4,59 · 4,02.
-    expect(foco(p.escuro, "--color-accent-soft@--color-surface")).toBeCloseTo(4.58, 2);
-    expect(foco(p.escuro, "--color-accent-soft@--color-surface-elevated")).toBeCloseTo(4.03, 2);
+    expect(foco(p.escuro, "--color-accent-soft@--color-surface")).toBeCloseTo(4.14, 2);
+    expect(foco(p.escuro, "--color-accent-soft@--color-surface-elevated")).toBeCloseTo(3.69, 2);
   });
 
   it("sem marca configurada nada é injetado, e a tela fica como está", () => {
@@ -377,10 +378,10 @@ describe("a navy #0f172a — o defeito que a prova em tela achou", () => {
     // pintava `--color-accent-400: #545f77`, o stop CRU. O tema escuro anda -1,
     // então o anel agora pinta `#828a9d`, o stop 300 da rampa da marca.
     const p = pintadosDaSemente("#0f172a");
-    expect(foco(p.claro, "--color-bg")).toBeCloseTo(10.77, 2);
-    expect(foco(p.claro, "--color-surface-elevated")).toBeCloseTo(10.22, 2);
-    expect(foco(p.escuro, "--color-bg")).toBeCloseTo(5.28, 2);
-    expect(foco(p.escuro, "--color-surface-elevated")).toBeCloseTo(4.39, 2);
+    expect(foco(p.claro, "--color-bg")).toBeCloseTo(10.31, 2);
+    expect(foco(p.claro, "--color-surface-elevated")).toBeCloseTo(9.87, 2);
+    expect(foco(p.escuro, "--color-bg")).toBeCloseTo(5.02, 2);
+    expect(foco(p.escuro, "--color-surface-elevated")).toBeCloseTo(4.0, 2);
     for (const superficie of ["--color-bg", "--color-surface-elevated"] as const) {
       expect(foco(p.escuro, superficie), superficie).toBeGreaterThanOrEqual(PISOS.componente);
     }

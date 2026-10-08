@@ -110,7 +110,9 @@ const sidebar = (page: Page) => page.getByRole("navigation", { name: "Navegaçã
  * mesmo gesto, e não só por quem já sabe o endereço.
  */
 async function irParaFunis(page: Page): Promise<void> {
-  await sidebar(page).getByRole("link", { name: "Funis", exact: true }).click();
+  // Menu por área (07/10/2026): Vendas abre na aba Funis.
+  await sidebar(page).getByRole("link", { name: "Vendas" }).click();
+  await page.getByRole("navigation", { name: "Telas de Vendas" }).getByRole("link", { name: "Funis" }).click();
   await page.waitForURL(/\/app\/kanban/);
   await expect(page.getByRole("heading", { name: "Funis", level: 1 })).toBeVisible();
 }
