@@ -264,6 +264,19 @@ export interface GateContext {
     toolCalledThisTurn: boolean;
     presencaConfirmadaNoTurno?: boolean;
   };
+  /**
+   * Retorno marcado pelo próprio assistente, para o `casePromiseGate`. Ausente = nenhum
+   * alívio: o gate exige caso como sempre, e o veto não cita follow-up.
+   *
+   * `disponivel` é o agente ter a tool `schedule_followup` neste turno (o veto só a ensina
+   * quando ela existe). `agendadoNesteTurno` é ela ter EXECUTADO com sucesso neste turno.
+   *
+   * O alívio só vale para promessa em que quem volta é o próprio assistente
+   * (`semanticPromise.retornoSoDoAssistente`). Promessa de que uma pessoa, setor ou análise
+   * interna vai agir continua exigindo caso: um lembrete para o assistente voltar a falar
+   * não põe ninguém da empresa para trabalhar.
+   */
+  followup?: { disponivel: boolean; agendadoNesteTurno: boolean };
 }
 
 /**
@@ -396,29 +409,52 @@ export const semanticPromiseGate: Gate = {
  * Com casos explicitamente desligados, o código próprio pede reformulação e
  * NÃO entra nesse fail-safe. Callers sem configuração preservam o envio
  * determinístico existente; o agente e a prévia passam o valor da versão.
+ *
+ * A promessa é acusada por ALGUMA das duas camadas: o detector léxico
+ * (`detectHumanPromise`) ou o sinal semântico (`semanticPromise.prometeuRetornoHumano`,
+ * que só existe quando a camada semântica da organização está ligada). Promessa só do
+ * próprio assistente passa quando `schedule_followup` agendou o retorno neste turno.
  */
 export const casePromiseGate: Gate = {
   name: 'case_promise',
   evaluate: (ctx) => {
     if (ctx.casesEnabled === undefined) return { pass: true };
     if (ctx.hasOpenCase || ctx.openedCaseThisTurn) return { pass: true };
-    if (!detectHumanPromise(ctx.body, ctx.humanPromiseExtraTargets)) return { pass: true };
+    // Lê os DOIS sinais, em OU. O léxico é o filtro BARATO e continua valendo sozinho
+    // (roda sem chamada de modelo); o semântico pega o resto: "vou encaminhar as
+    // informações para análise e te retorno" escapava do léxico (no original, 5 de 7
+    // frases medidas). O `?.` é obrigatório: há callers com `semanticPromise: null`.
+    const lexico = detectHumanPromise(ctx.body, ctx.humanPromiseExtraTargets);
+    const semantico = ctx.semanticPromise?.prometeuRetornoHumano === true;
+    if (!lexico && !semantico) return { pass: true };
+    // O follow-up agendado é destino SÓ para a promessa do próprio assistente ("te
+    // retorno amanhã de manhã"). O léxico só casa alvo humano explícito, então o que ele
+    // acusa exige caso sempre. `=== true` fechado: falha do parser nunca libera.
+    const promessaDoAssistente = !lexico && ctx.semanticPromise?.retornoSoDoAssistente === true;
+    if (promessaDoAssistente && ctx.followup?.agendadoNesteTurno === true) return { pass: true };
+    const ensinaFollowup = promessaDoAssistente && ctx.followup?.disponivel === true;
     if (!ctx.casesEnabled) {
       return {
         pass: false,
         code: 'human_promise_cases_disabled',
-        reason:
-          'Não há encaminhamento humano comprovado para esta resposta. Reformule sem ' +
-          'prometer encaminhamento, conferência ou ação da equipe. Informe somente o que ' +
-          'já foi confirmado, sem executar nenhuma ação adicional.',
+        reason: ensinaFollowup
+          ? 'Você prometeu voltar a falar com o cliente, mas não deixou o retorno marcado. ' +
+            'Chame a tool schedule_followup (agendando o retorno) OU reformule a mensagem sem ' +
+            'prometer retorno. Informe somente o que já foi confirmado.'
+          : 'Não há encaminhamento humano comprovado para esta resposta. Reformule sem ' +
+            'prometer encaminhamento, conferência ou ação da equipe. Informe somente o que ' +
+            'já foi confirmado, sem executar nenhuma ação adicional.',
       };
     }
     return {
       pass: false,
       code: 'case_promise_without_case',
-      reason:
-        'Você prometeu envolver um humano mas não abriu um caso. Chame a tool ' +
-        'open_human_case (descrevendo o que precisa) OU reformule a mensagem sem prometer humano.',
+      reason: ensinaFollowup
+        ? 'Você prometeu voltar a falar com o cliente, mas não deixou o retorno marcado. ' +
+          'Chame a tool schedule_followup (agendando o retorno) OU open_human_case ' +
+          '(descrevendo o que precisa) OU reformule a mensagem sem prometer retorno.'
+        : 'Você prometeu envolver um humano mas não abriu um caso. Chame a tool ' +
+          'open_human_case (descrevendo o que precisa) OU reformule a mensagem sem prometer humano.',
     };
   },
 };
@@ -986,6 +1022,15 @@ export interface RunBeforeSendArgs {
    * no-op (retrocompatível com todo caller que não conhece agenda, ex.: `followup-turn.ts`).
    */
   agenda?: GateContext['agenda'];
+  /** Ver `GateContext.followup`. Ausente = o `casePromiseGate` não alivia nada. */
+  followup?: GateContext['followup'];
+  /**
+   * Pausa humana do turno, paga ANTES de o guardrail tomar conexão/transação
+   * (o porquê está no corpo de `runBeforeSend`). Ausente (default) = nenhuma
+   * pausa: todo caller que não é o turno de ENTRADA (`followup-turn.ts`, drain,
+   * testes) segue bit a bit como antes.
+   */
+  esperaForaDoLock?: () => Promise<void>;
   /**
    * Enviado SÓ se TODOS os gates passarem — ChannelAdapter (própria tx/idempotência). Recebe o
    * corpo FINAL (o disclosureGate F4-05 pode emendá-lo via `amendBody`): quem monta o send DEVE
@@ -1047,9 +1092,40 @@ const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTim
  * Roda a cadeia before_send para UMA tentativa de envio. Curto-circuita no 1º veto
  * (o resto da cadeia é registrado como 'skipped'); só chama `send()` se todos passam.
  * Serializa o read-then-act por número via advisory xact lock (ver cabeçalho).
+ *
+ * A pausa humana do turno é paga AQUI, ANTES de qualquer contato com o banco. Antes
+ * ela era paga dentro do `send` (via `antesDaPrimeira` do `sendInBubbles`), e o `send`
+ * só é chamado com o `pg_advisory_xact_lock` do NÚMERO na mão: cada turno segurava a
+ * fila do número por 1,2s a 7,5s além do necessário, e dois atendimentos no MESMO
+ * WhatsApp entravam numa fila mais longa. A cadeia continua julgando sob o lock, e o
+ * `send` continua acontecendo sob o lock. Saem da janela da transação a espera e o
+ * classificador semântico de promessa (F4-02); o porquê está no ponto da chamada.
  */
 export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSendResult> {
   const gates = args.gates ?? BEFORE_SEND_GATES;
+  // ═══ A CONFERÊNCIA SEMÂNTICA DE PROMESSA RODA FORA DO LOCK ═══
+  //
+  // Camada semântica (F4-02): uma ida e volta ao modelo por envio. Ela rodava
+  // DENTRO da transação, com o `pg_advisory_xact_lock` do número na mão: todo
+  // outro envio do MESMO WhatsApp esperava a IA responder, e a conexão do pool
+  // ficava presa o tempo inteiro.
+  //
+  // E não era só latência: era TRAVAMENTO. Lá dentro, a transação já segurava a
+  // trava de leitura de `contacts` (readStopFlags) enquanto o `runModelCall`
+  // gravava `llm_calls` (FK para `contacts`) por OUTRA conexão do pool. Com um
+  // DDL na fila de `contacts`, o insert esperava o DDL, o DDL esperava esta
+  // transação e esta transação esperava o insert: um ciclo que o Postgres não
+  // detecta, porque uma das arestas mora no processo Node. Medido no original
+  // (#2363): 8m47s `idle in transaction` e o worker inteiro parado.
+  //
+  // O veredito não depende de nada lido sob o lock, só do corpo; ele é
+  // calculado antes e entra no contexto dos gates no mesmo lugar de sempre.
+  // Começa junto com a pausa humana: o cliente espera o maior dos dois, não a soma.
+  const [, semanticPromise] = await Promise.all([
+    // Fora do lock (nem conexão tomada): aqui não existe transação aberta para segurar.
+    args.esperaForaDoLock ? args.esperaForaDoLock() : undefined,
+    args.classifyPromiseSemantic ? args.classifyPromiseSemantic(args.body) : null,
+  ]);
   const client = await args.pool.connect();
   try {
     await client.query('begin');
@@ -1120,11 +1196,6 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
     );
     // org de fonte confiável (RunBeforeSendArgs.tenantId = organization_id do row do job) — regra dura nº 1.
     const promise = await loadPromiseTable(client, args.tenantId);
-    // Camada semântica (F4-02): a chamada de modelo (async) roda AQUI, sob o lock, e o
-    // veredito entra no ctx para o `semanticPromiseGate` (sync) ler. Ausente = camada off.
-    const semanticPromise = args.classifyPromiseSemantic
-      ? await args.classifyPromiseSemantic(args.body)
-      : null;
     // Disclosure (F4-05): template por ponteiro da org + detecção de 1º outbound via
     // send_ledger (só conta se há template — sem template o gate é no-op de qualquer forma).
     const disclosure = await loadDisclosureTemplate(client, args.tenantId);
@@ -1177,6 +1248,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       unscheduledFollowUpEnforced: args.enforceUnscheduledFollowUp ?? false,
       internalVocabularyEnforced: args.enforceInternalVocabulary ?? false,
       ...(args.agenda !== undefined ? { agenda: args.agenda } : {}),
+      ...(args.followup !== undefined ? { followup: args.followup } : {}),
     };
 
     const { body: evaluatedBody, trace, veto, throttleWaitMs } = evaluateBeforeSend(ctx, gates);
