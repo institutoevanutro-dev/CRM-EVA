@@ -121,8 +121,9 @@ function linhaDoContato(page: Page) {
  */
 async function celulaDeTags(page: Page) {
   const cabecalhos = (await page.getByRole("columnheader").allInnerTexts()).map((c) => c.trim());
-  const indice = cabecalhos.indexOf("Tags");
-  expect(indice, `a lista de Contatos perdeu a coluna Tags: ${JSON.stringify(cabecalhos)}`).toBeGreaterThan(-1);
+  // A coluna se chama "Etiquetas" desde a revisão das telas do dia a dia.
+  const indice = cabecalhos.indexOf("Etiquetas");
+  expect(indice, `a lista de Contatos perdeu a coluna Etiquetas: ${JSON.stringify(cabecalhos)}`).toBeGreaterThan(-1);
   return linhaDoContato(page).getByRole("cell").nth(indice);
 }
 
