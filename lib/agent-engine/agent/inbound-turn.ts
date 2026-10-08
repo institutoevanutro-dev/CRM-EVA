@@ -79,6 +79,7 @@ import {
 } from './lead-state';
 import { applySaveLeadNote, buildNotesIndexBlock, getLeadNoteBody } from './lead-notes';
 import { buildCompromissosBlock } from './compromissos-do-contato';
+import { agendaNoFechamento } from './agenda-no-fechamento';
 import { applyScheduleFollowup, type FollowupWindowKnobs } from './schedule-followup';
 import {
   avisarLeadDaEscalacao,
@@ -100,7 +101,7 @@ import {
   trimTranscriptToBudget,
   type CompactionKnobs,
 } from './compaction';
-import { pruneToolResults, type PruneToolResultsKnobs } from './prune-tool-results';
+import { pruneToolResults, toolPartsAsText, type PruneToolResultsKnobs } from './prune-tool-results';
 import {
   classifyStage,
   recordStageDivergenceCandidate,
@@ -559,7 +560,7 @@ export const CHECKPOINT_INSTRUCTION =
   'Feche o turno AGORA. Responda SOMENTE com um JSON válido no formato ' +
   '{"commitments": string[], "objections": string[], "next_action": string|null, "rolling_summary": string} ' +
   '— compromissos assumidos, objeções do lead, próxima ação e o resumo acumulado ' +
-  'da conversa até aqui (inclua o que o resumo anterior já dizia). ' +
+  'da conversa até aqui (preserve o que continua válido do resumo anterior; substitua fatos superados pelos resultados das ações concluídas neste turno). ' +
   // ⚠️ O REFERENCIAL DE `next_action`, e ele não é zelo de redação.
   //
   // Este JSON é escrito no FECHO do turno: a pergunta já saiu, a resposta ainda
@@ -1455,7 +1456,12 @@ export function ritualBlocks(
     // tokens em toda conversa para informar uma ausência que o modelo não
     // precisa saber.
     ...(compromissosBlock.trim() !== ''
-      ? ['## Compromissos já marcados deste contato', compromissosBlock, '']
+      ? [
+          '## Compromissos já marcados deste contato',
+          'Estado atual da agenda: para horário e situação de reserva, esta leitura prevalece sobre o resumo anterior. Uma reserva deste contato não é uma vaga livre para outra pessoa.',
+          compromissosBlock,
+          '',
+        ]
       : []),
     '## Contexto do lead (contato + últimas mensagens)',
     // Campo de cadastro VAZIO não é prova de que a informação não existe.
@@ -4008,10 +4014,41 @@ async function executarTurnoDoAgente(
     // (é onde a fita inteira é re-serializada num prompt) — o conteúdo durável já foi para
     // lead_notes pelo flush (F3-07), então o stub não perde nada recuperável. Opera SÓ no
     // sufixo por-lead, nunca no prefixo estável (regra de cache 15).
-    const responseMessages =
+    // No SDK atual, response.messages contém só a ÚLTIMA etapa. O fechamento
+    // precisa da fita inteira, incluindo as ações concluídas em etapas anteriores.
+    // O fechamento vai SEM `tools`: as partes de ferramenta viram texto (a Anthropic recusa
+    // tool_use/tool_result sem tools), com teto por resultado no knob do pruning.
+    const responseMessages = toolPartsAsText(
       deps.knobs.prune !== undefined
-        ? pruneToolResults(turn.result.response.messages, deps.knobs.prune)
-        : turn.result.response.messages;
+        ? pruneToolResults(turn.result.responseMessages, deps.knobs.prune)
+        : turn.result.responseMessages,
+      deps.knobs.prune?.minResultTokens,
+    );
+
+    // A abertura precede as tools: depois de criar/remarcar/cancelar, o fechamento
+    // relê a agenda para o resumo do PRÓXIMO turno não herdar o horário antigo.
+    // A prévia propõe escritas: não pode tratá-las como reservas executadas.
+    let agendaAtual = '';
+    if (!preview) {
+      try {
+        agendaAtual = await agendaNoFechamento({
+          db: pool,
+          organizationId: tenantId,
+          contactId: leadId,
+          agora: clock(),
+          blocoDaAbertura: compromissosBlock,
+          mensagens: turn.result.responseMessages,
+        });
+      } catch (err) {
+        // A resposta já saiu: falhar o job por esta leitura repetiria o turno.
+        // Falha de leitura não equivale a agenda vazia nem a ação desfeita.
+        runLog.warn('agenda não pôde ser relida no fechamento', {
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+        });
+        agendaAtual =
+          'A agenda não pôde ser relida depois das ações deste turno. Isso não prova ausência de reserva nem desfaz uma ação concluída. Registre somente o que os resultados das ferramentas comprovaram.';
+      }
+    }
 
     // Fechamento imposto pelo runtime: 2ª chamada, mesma conversa, só o checkpoint.
     //
@@ -4043,6 +4080,7 @@ async function executarTurnoDoAgente(
           // fez seu trabalho na 1ª chamada e não precisa ir de novo.
           ...openingTextOnly,
           ...responseMessages,
+          ...(agendaAtual ? [{ role: 'user' as const, content: agendaAtual }] : []),
           { role: 'user', content: CHECKPOINT_INSTRUCTION },
         ],
       },
