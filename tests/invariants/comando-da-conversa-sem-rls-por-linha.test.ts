@@ -39,7 +39,7 @@ async function como<T>(sub: string, fn: (q: (t: string, v?: unknown[]) => Promis
     await c.query("begin");
     await c.query("set local role authenticated");
     await c.query("select set_config('request.jwt.claims',$1,true)", [JSON.stringify({ sub, aal: "aal1", role: "authenticated" })]);
-    await fn((t, v) => c.query(t, v as unknown[]) as Promise<{ rows: T[] }>);
+    await fn(async (t, v) => (await c.query(t, v as unknown[])) as unknown as { rows: T[] });
   } finally {
     await c.query("rollback");
     c.release();
