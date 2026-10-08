@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
+import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { RiskRadarList } from "./_components/RiskRadarList";
 
@@ -20,14 +21,12 @@ export default async function RadarPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Radar de risco")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t(
-            "Demandas abertas que esfriaram e precisam de você. Se o assistente já agendou um retorno, aparece como “em voo”; sem próximo passo, é risco de perder o cliente.",
-          )}
-        </p>
-      </header>
+      <CabecalhoDaPagina
+        titulo={t("Radar de risco")}
+        descricao={t(
+          "Conversas abertas que esfriaram e precisam de você. Se o assistente já marcou um retorno, ela aparece como “retorno agendado”; sem próximo passo, há risco de perder o paciente.",
+        )}
+      />
       <RiskRadarList />
     </div>
   );
