@@ -932,6 +932,9 @@ export const DICIONARIO: Traducoes = {
   "Agent arquivado.": { es: "Agente archivado." },
   Falha: { es: "Error" },
   "Erro ao executar ação.": { es: "Error al ejecutar la acción." },
+  "O agent padrão da organização não pode ser arquivado.": {
+    es: "El agente predeterminado de la organización no se puede archivar.",
+  },
   "O agent deixa de responder gatilhos e some das listas ativas. Versões publicadas são preservadas para auditoria. Não é possível desarquivar pela UI nesta versão.": {
     es: "El agente deja de responder disparadores y desaparece de las listas activas. Las versiones publicadas se conservan para auditoría. No es posible desarchivar desde la interfaz en esta versión.",
   },
