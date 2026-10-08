@@ -10,7 +10,8 @@ import {
   type NoDoDossie,
 } from "./eventos-legiveis";
 import type { FlowNode } from "./graph-schema";
-import { EVENTO_ACAO_ADIADA, EVENTO_CLASSIFICACAO_ESPERANDO } from "./node-handlers";
+import { EVENTO_ACAO_ADIADA, EVENTO_CLASSIFICACAO_ESPERANDO, EVENTO_TURNO_DESCARTADO } from "./node-handlers";
+import { DICIONARIO } from "@/lib/i18n/dicionario";
 
 const espera: FlowNode = {
   id: "wait-1",
@@ -172,6 +173,17 @@ describe("descreveEvento", () => {
     );
     expect(r.detalhe).toMatch(/^la ventana estaba cerrada; envía el /);
     expect(r.detalhe).not.toContain("{ate}");
+  });
+
+  it("o turno descartado pela PAUSA da inscrição aponta a pausa (#2262), com espanhol", () => {
+    const r = descreveEvento(
+      evento({ node_id: "action-1", event_type: EVENTO_TURNO_DESCARTADO, payload: { motivo: "inscricao_pausada" } }),
+      nos,
+      "pt-BR",
+    );
+    expect(r.titulo).toBe("O envio deste passo foi descartado porque a inscrição está pausada");
+    expect(r.detalhe).toBe("sai num envio novo quando a inscrição for retomada");
+    for (const frase of [r.titulo, r.detalhe ?? ""]) expect(DICIONARIO[frase]?.es, `sem espanhol: ${frase}`).toBeTruthy();
   });
 
   it("o classificar que espera a resposta diz que ESPERA, e até quando: não parece travado", () => {

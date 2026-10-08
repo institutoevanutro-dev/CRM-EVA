@@ -28,6 +28,7 @@ import {
   latestRepeatIndex,
   occupancyEventCount,
   rechecksOciososDaAcao,
+  turnoDaAcaoDescartado,
   pisoDoInboundDaEspera,
   actionTurnCompleted,
   processNode,
@@ -649,7 +650,8 @@ async function processEnrollment(
       wokeEarly = events.some((e) => e.node_id === node.id && e.idempotency_key === wakeKey);
     }
     if (node.type === "action") {
-      actionEnqueued = waitElapsed;
+      // Turno descartado durante a pausa: a estadia RETOMA com um turno novo.
+      actionEnqueued = waitElapsed && !turnoDaAcaoDescartado(events, node.id);
       // Ociosidade DESDE a última prova de vida: um adiamento de janela não
       // gasta o orçamento do dead-man (ver `rechecksOciososDaAcao`).
       actionRecheckCount = rechecksOciososDaAcao(events, node.id);

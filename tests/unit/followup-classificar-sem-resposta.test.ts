@@ -66,6 +66,8 @@ const pool = {
   query: vi.fn(async (sql: string) => {
     if (sql.includes("d.fechada_em::text")) return { rows: [{ ...boundary, status: "open", demanda_fechada_em: null }] };
     if (sql.includes("'action_sent'")) return { rows: [{ fechado_em: envioFechadoEm }] };
+    // A inscrição viva no mesmo nó (guarda da #2261 no início do turno).
+    if (sql.includes("select current_node_id, status from followup_enrollments")) return { rows: [{ current_node_id: "c1", status: "active" }], rowCount: 1 };
     if (/from conversations c/.test(sql)) return { rows: [{ channel_session_id: "canal-1", archived_at: null }] };
     return { rows: [] };
   }),

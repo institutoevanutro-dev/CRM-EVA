@@ -140,6 +140,8 @@ function fakePool() {
     if (sql.includes("d.fechada_em::text")) return { rows: [{ ...boundary, status: "open", demanda_fechada_em: null }] };
     if (/from send_ledger l/.test(sql)) return { rows: [{ status: "vetoed", error_code: null }] };
     if (/from message_templates/.test(sql)) return { rows: [{ body: "Olá do modelo" }] };
+    // A inscrição viva no mesmo nó (guarda da #2261 no início do turno).
+    if (sql.includes("select current_node_id, status from followup_enrollments")) return { rows: [{ current_node_id: "a1", status: "active" }], rowCount: 1 };
     if (/from conversations/.test(sql)) {
       return { rows: [{ id: CONVERSA, channel_session_id: CANAL, archived_at: null, provider: DEFAULT_CHANNEL_PROVIDER }] };
     }

@@ -317,6 +317,73 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
     if (targetRows[0].archived_at) throw new Error('canal arquivado');
     const target: ReentrySendTarget = { tenantId, leadId, conversationId: boundary!.conversation_id, channelSessionId: targetRows[0]!.channel_session_id };
 
+    // A INSCRIÇÃO PRECISA ESTAR VIVA ANTES DE QUALQUER EFEITO: existente, no
+    // MESMO nó, e em estado que anda (`active`/`waiting_reply`). O turno
+    // enfileirado sobrevive ao fluxo (apagar o fluxo, o passo andar antes de um
+    // turno reagendado rodar); `conferirAntesDoEnvio` olha o status mas não o
+    // nó, e a ponte só confere DEPOIS do envio. Fora disso o turno termina sem
+    // tocar a cadeia; o worker fecha o job como `done`.
+    // Porte de melgarafael/DeskcommCRM #2261 (7b34733fee).
+    if (payload.followup_enrollment_id !== undefined && payload.node_id !== undefined) {
+      const { rows: inscricaoRows } = await pool.query<{ current_node_id: string; status: string }>(
+        `select current_node_id, status from followup_enrollments where organization_id = $1 and id = $2 limit 1`,
+        [tenantId, payload.followup_enrollment_id],
+      );
+      const inscricao = inscricaoRows[0];
+      const viva =
+        inscricao !== undefined &&
+        inscricao.current_node_id === payload.node_id &&
+        (inscricao.status === 'active' || inscricao.status === 'waiting_reply');
+      if (!viva) {
+        withFields(deps.log, {
+          job_id: job.id,
+          tenant_id: tenantId,
+          lead_id: leadId,
+          enrollment_id: payload.followup_enrollment_id,
+        }).info('turno de fluxo descartado: a inscrição não está mais viva', {
+          motivo: inscricao === undefined ? 'inscricao_ausente' : 'fora_do_no_ou_encerrada',
+          status: inscricao?.status ?? null,
+          no_do_payload: payload.node_id,
+          no_atual: inscricao?.current_node_id ?? null,
+        });
+        // O DESCARTE DURANTE A PAUSA NÃO PODE SER SILÊNCIO. Pausada
+        // (`paused_handoff` do handoff humano, `paused_manual` da intervenção)
+        // a inscrição segue viva no MESMO nó e tem quem a retome. Sem rastro, o
+        // último evento da estadia continua sendo o `turn_enqueued` deste job:
+        // na retomada o motor lê "turno em voo", só recheca, e o dead-man marca
+        // `dead` com `action_turn_never_completed`. `turn_discarded` faz o motor
+        // enfileirar um turno novo (`turnoDaAcaoDescartado`). A chave termina em
+        // `:descartado`, não em `:<n>`: não conta como passo em
+        // `fn_followup_job_current` e não é barrada por `fn_followup_generation_write`.
+        // Porte de melgarafael/DeskcommCRM #2277 (0c13b573e8).
+        if (
+          inscricao !== undefined &&
+          inscricao.current_node_id === payload.node_id &&
+          (inscricao.status === 'paused_handoff' || inscricao.status === 'paused_manual') &&
+          payload.purpose === 'send_message'
+        ) {
+          const chaveDoPasso =
+            typeof job.payload.source_step_key === 'string' && job.payload.source_step_key !== ''
+              ? job.payload.source_step_key
+              : job.id;
+          await pool.query(
+            `insert into followup_enrollment_events
+               (organization_id, enrollment_id, node_id, event_type, payload, idempotency_key)
+             values ($1, $2, $3, 'turn_discarded', $4, $5)
+             on conflict (enrollment_id, idempotency_key) where idempotency_key is not null do nothing`,
+            [
+              tenantId,
+              payload.followup_enrollment_id,
+              payload.node_id,
+              { job_id: job.id, motivo: 'inscricao_pausada' },
+              `${chaveDoPasso}:descartado`,
+            ],
+          );
+        }
+        return;
+      }
+    }
+
     const clock = deps.clock ?? ((): Date => new Date());
 
     // Onda 5 (Task 5.1): turno DIRIGIDO POR FLUXO — guard exclusivo, nunca cai nos

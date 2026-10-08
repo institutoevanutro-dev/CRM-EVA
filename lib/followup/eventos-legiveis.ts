@@ -363,6 +363,13 @@ export function descreveEvento(
         : { titulo: "Pediu ao agente para escrever a mensagem", detalhe: null, ...motor };
     case "classify_enqueued":
       return { titulo: "Pediu ao agente para interpretar a resposta", detalhe: null, ...motor };
+    case "turn_discarded":
+      // O worker descartou o turno porque a inscrição estava PAUSADA (#2277).
+      return {
+        titulo: "O envio deste passo foi descartado porque a inscrição está pausada",
+        detalhe: "sai num envio novo quando a inscrição for retomada",
+        ...motor,
+      };
     case "classify_waiting": {
       // Esperar NÃO é travar: o agente olhou, o cliente ainda não respondeu, e o
       // passo segue aberto até o prazo configurado no nó.
