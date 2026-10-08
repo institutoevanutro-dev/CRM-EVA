@@ -86,7 +86,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
           body,
           shortcut: shortcut.trim() || null,
         });
-        toast.success(t("Template atualizado."));
+        toast.success(t("Resposta atualizada."));
       } else {
         await create.mutateAsync({
           title,
@@ -94,7 +94,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
           shortcut: shortcut.trim() || undefined,
           shared: canShare ? shared : false,
         });
-        toast.success(t("Template criado."));
+        toast.success(t("Resposta criada."));
       }
       onOpenChange(false);
     } catch {
@@ -106,7 +106,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? t("Editar template") : t("Novo template")}</DialogTitle>
+          <DialogTitle>{isEdit ? t("Editar resposta") : t("Nova resposta")}</DialogTitle>
           <DialogDescription>
             {t("Scripts salvos para responder mais rápido no atendimento.")}
           </DialogDescription>
@@ -123,6 +123,9 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
               maxLength={80}
               required
             />
+            <p className="text-xs text-muted-foreground">
+              {t("Para agrupar na lista, comece pelo assunto: ATENDIMENTO · Saudação.")}
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="tpl-body">{t("Mensagem")}</Label>
@@ -149,6 +152,9 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
               placeholder="oi"
               maxLength={40}
             />
+            <p className="text-xs text-muted-foreground">
+              {t("No Inbox, digite / e o atalho para achar esta resposta (ex.: /oi).")}
+            </p>
           </div>
           {canShare && (
             <div className="flex items-center gap-2">
@@ -166,7 +172,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
               {t("Cancelar")}
             </Button>
             <Button type="submit" disabled={pending}>
-              {isEdit ? t("Salvar") : t("Criar template")}
+              {isEdit ? t("Salvar") : t("Criar resposta")}
             </Button>
           </DialogFooter>
         </form>
