@@ -235,7 +235,7 @@ test.describe("filtro por marcador, pela tela", () => {
     await abreQuadro(page, funil, cardMarcado);
     await expect(page.getByRole("group", { name: `Lead: ${cardNeutro}` })).toBeVisible();
 
-    await page.getByRole("button", { name: "Todas as etiquetas" }).click();
+    await page.getByRole("button", { name: "Tag: todas" }).click();
     await expect(page.getByRole("menuitemcheckbox", { name: tagDoContato, exact: true })).toBeVisible({
       timeout: 30_000,
     });
@@ -254,9 +254,9 @@ test.describe("filtro por marcador, pela tela", () => {
 
     // E pelo marcador da conversa: o mesmo card, e o neutro continua fora.
     // Com um marcador escolhido, o botão do seletor passa a se chamar
-    // "Etiqueta: <marcador>". E o segundo marcador SOMA (E na mesma caixa), então
+    // "Tag: <marcador>". E o segundo marcador SOMA (E na mesma caixa), então
     // desmarca-se o do contato antes, para trocar em vez de misturar caixas.
-    await page.getByRole("button", { name: `Etiqueta: ${tagDoContato}`, exact: true }).click();
+    await page.getByRole("button", { name: `Tag: ${tagDoContato}`, exact: true }).click();
     await page.getByRole("menuitemcheckbox", { name: tagDoContato, exact: true }).click();
     await page.getByRole("menuitemcheckbox", { name: soNaConversa, exact: true }).click();
     await page.keyboard.press("Escape");

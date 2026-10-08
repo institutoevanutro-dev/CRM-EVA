@@ -226,12 +226,13 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
   // ── 4 · ligada: selo, filtro, ficha e funil ─────────────────────────────
   await page.goto("/app/contacts");
   await expect(linhaDoContato(page).getByText("Cliente", { exact: true })).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: /^Tag:/ }).click();
+  // Contatos: o gatilho diz "Todas as etiquetas" sem filtro e "Etiqueta: x" com um.
+  await page.getByRole("button", { name: /^(Todas as etiquetas|Etiqueta:)/ }).click();
   // Checkbox (#1274): marca e NÃO fecha o menu; fecha-se para o gatilho sair
   // do aria-hidden que o Radix põe no resto da página.
   await page.getByRole("menuitemcheckbox", { name: "cliente", exact: true }).click();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Tag: cliente" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Etiqueta: cliente" })).toBeVisible();
   await expect(linhaDoContato(page)).toBeVisible({ timeout: 30_000 });
   await evidencia(page, info, "5-contatos-filtro-cliente");
 
