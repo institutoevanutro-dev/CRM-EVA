@@ -84,6 +84,8 @@ import { applyScheduleFollowup, type FollowupWindowKnobs } from './schedule-foll
 import {
   avisarLeadDaEscalacao,
   avisarLeadLendoOContato,
+  type AvisoDeEscalacaoIds,
+  type AvisoDeEscalacaoOpts,
   type DesfechoDoAviso,
 } from './aviso-de-escalacao';
 import { tentarRespostaPronta } from './resposta-pronta';
@@ -126,7 +128,7 @@ import {
   catalogoEntregueAoOperador,
 } from './entrega-de-capacidade';
 import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memory';
-import { matchesHandoffKeyword } from './agent-config';
+import { matchesHandoffKeyword, type PublishedAgentConfig } from './agent-config';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
@@ -1735,6 +1737,214 @@ export async function avisarCapacidadesAusentes(
 }
 
 /**
+ * AS DETERMINÍSTICAS DO INBOUND, TAMBÉM ANTES DO RASCUNHO DO ASSISTIDO.
+ *
+ * O ramo assistido devolvia ANTES das detecções de STOP/opt-out e de pedido de
+ * humano. O contato escrevia "pare de me mandar mensagem" e o bot seguia
+ * elegível: sem silêncio durável (`force_human` + `bot_silenced_until`), sem
+ * cancelamento dos follow-ups agendados e sem item na Central, só um rascunho
+ * na fila de aprovação que alguém podia nunca aprovar. Risco de LGPD: o pedido
+ * de parar ficava dependendo de uma autorização humana.
+ *
+ * As detecções são as MESMAS do caminho automático (`detectHumanHandoffRequest`,
+ * `matchesHandoffKeyword` e `detectAmbiguousOptOut`, que lê a regra única de
+ * `lib/opt-out/deteccao.ts`), sobre o que o cliente ainda NÃO teve resposta. Não
+ * gastam token e não dependem do modo de operação, e usam o mesmo mecanismo
+ * durável:
+ *
+ *   1. `avisarLeadDaEscalacao` PRIMEIRO: o aviso tem de sair antes de
+ *      `force_human` armar o gate que o vetaria;
+ *   2. `performHumanHandoff`: silencia para sempre, cancela os crons pendentes e
+ *      abre (ou adenda) o item na Central.
+ *
+ * Idempotente. Devolve `true` quando o turno foi silenciado (não há rascunho).
+ *
+ * Porte de melgarafael/DeskcommCRM #1667 (8411a5805e), adaptado: o fork não tem o
+ * briefing estruturado da passagem, e o resumo usa `buildHandoffSummary` do
+ * último checkpoint, como o caminho automático daqui.
+ */
+export async function deteccoesDeterministicasDoAssistido(
+  pool: pg.Pool,
+  deps: InboundTurnDeps,
+  args: {
+    job: JobRow;
+    tenantId: string;
+    conversationId: string;
+    channelSessionId: string;
+    leadId: string;
+    agent: PublishedAgentConfig;
+    log: Logger;
+    /**
+     * Mensagem fixada no job: plano B quando a leitura do contexto do lead
+     * falha. Um pedido de parar não pode virar "sem detecção" só porque o CRM
+     * está fora do ar.
+     */
+    inboundMessageId?: string;
+  },
+): Promise<boolean> {
+  const { job, tenantId, conversationId, channelSessionId, leadId, agent, log } = args;
+  const clock = deps.clock ?? ((): Date => new Date());
+
+  // O QUE O CLIENTE DISSE e ainda não foi respondido: a MESMA fonte do caminho
+  // automático, para um pedido de parar na 2ª mensagem de uma rajada não sumir.
+  let inboundsPendentes: string[] = [];
+  let optedOutThisTurn = false;
+  let lgpd: AvisoDeEscalacaoOpts['lgpd'];
+  let contextoLido = false;
+  try {
+    const abertura = await getLeadContext(
+      pool,
+      deps.crmCfg,
+      {
+        tenantId,
+        leadId,
+        conversationId,
+        fuso: await fusoDaOrganizacao(pool, tenantId, log),
+      },
+      { historyLimit: agent.historyMessageWindow, maxTokens: agent.historyTokenWindow },
+    );
+    if (abertura.ok) {
+      contextoLido = true;
+      inboundsPendentes = inboundsNaoRespondidos(abertura.context.messages);
+      optedOutThisTurn = abertura.context.contact.is_blocked;
+      lgpd = abertura.lgpd;
+    } else {
+      log.warn('modo assistido: contexto do lead não lido — detecção cai na mensagem fixada', {
+        code: abertura.error.code,
+      });
+    }
+  } catch (err) {
+    log.warn('modo assistido: contexto do lead falhou — detecção cai na mensagem fixada', {
+      error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+    });
+  }
+  // O plano B NUNCA sobrescreve o contexto lido: só existe quando a leitura falhou.
+  if (!contextoLido && args.inboundMessageId !== undefined) {
+    try {
+      const fixada = await loadInboundBodyForJob(pool, {
+        tenantId,
+        conversationId,
+        inboundMessageId: args.inboundMessageId,
+      });
+      if (fixada !== null && fixada.trim() !== '') inboundsPendentes = [fixada];
+    } catch (err) {
+      log.warn('modo assistido: mensagem fixada não lida — sem detecção neste turno', {
+        error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+      });
+    }
+  }
+
+  /** Args do aviso, montados NO MOMENTO do uso: o canal nasce só se algo casar. */
+  const avisoDaEscalacao = (): {
+    ids: AvisoDeEscalacaoIds;
+    base: Omit<AvisoDeEscalacaoOpts, 'motivo'>;
+  } => ({
+    ids: {
+      tenantId,
+      leadId,
+      conversationId,
+      channelSessionId,
+      jobId: job.id,
+      jobClaim: claimOfJob(job),
+    },
+    base: {
+      channel: deps.channel
+        ? deps.channel(pool)
+        : new WahaChannelAdapter(pool, { ...deps.crmCfg, agentActorId: agent.agentId }),
+      optedOutThisTurn,
+      now: clock(),
+      log,
+      ...(lgpd !== undefined ? { lgpd } : {}),
+      agentId: agent.agentId,
+      ...(deps.knobs.disclosureMode !== undefined
+        ? { disclosureMode: deps.knobs.disclosureMode }
+        : {}),
+      ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+    },
+  });
+
+  // PLANO B SEM CONTEXTO = SEM `lgpd`: com ele nulo o gate de LGPD passa direto,
+  // e um contato anonimizado receberia o aviso. Nesse ramo o aviso sai por
+  // `avisarLeadLendoOContato`, que lê o contato do banco.
+  const semInsumosDoContexto = ({
+    optedOutThisTurn: _bloqueado,
+    lgpd: _lgpd,
+    ...resto
+  }: Omit<AvisoDeEscalacaoOpts, 'motivo'>): Omit<
+    AvisoDeEscalacaoOpts,
+    'motivo' | 'optedOutThisTurn' | 'lgpd'
+  > => resto;
+
+  const avisar = async (
+    motivo: AvisoDeEscalacaoOpts['motivo'],
+  ): Promise<DesfechoDoAviso> => {
+    const aviso = avisoDaEscalacao();
+    return contextoLido
+      ? avisarLeadDaEscalacao(pool, aviso.ids, { ...aviso.base, motivo })
+      : avisarLeadLendoOContato(pool, aviso.ids, { ...semInsumosDoContexto(aviso.base), motivo });
+  };
+
+  if (
+    inboundsPendentes.some(
+      (texto) =>
+        detectHumanHandoffRequest(texto) || matchesHandoffKeyword(texto, agent.handoffKeywords),
+    )
+  ) {
+    const desfecho = await avisar('pediu_humano');
+    await performHumanHandoff(
+      pool,
+      { tenantId, leadId, conversationId },
+      {
+        reason: 'requested_human',
+        conversationSummary: buildHandoffSummary(await latestCheckpoint(pool, tenantId, leadId)),
+        avisoAoLead: desfecho,
+        log,
+      },
+    );
+    log.info(
+      'handoff humano acionado por pedido explícito do lead (modo assistido, detecção determinística)',
+      { kind: job.kind, lead_avisado: desfecho.avisado },
+    );
+    return true;
+  }
+
+  // STOP AMBÍGUO: o rascunho pendente NÃO segura este ramo. O pedido de parar
+  // vale por si, e é ele que cancela os follow-ups agendados (LGPD).
+  if (inboundsPendentes.some((texto) => detectAmbiguousOptOut(texto))) {
+    const desfecho = await avisar('suspeita_de_opt_out');
+    await performHumanHandoff(
+      pool,
+      { tenantId, leadId, conversationId },
+      {
+        reason: 'suspected_optout',
+        conversationSummary: buildHandoffSummary(await latestCheckpoint(pool, tenantId, leadId)),
+        inboxTitle: 'Suspeita de opt-out — confirmar bloqueio do contato no CRM',
+        avisoAoLead: desfecho,
+        log,
+      },
+    );
+    log.info(
+      'possível opt-out detectado no modo assistido — bot silenciado, follow-ups cancelados e escalado ao humano',
+      { kind: job.kind, lead_avisado: desfecho.avisado },
+    );
+    return true;
+  }
+
+  // Opt-out JÁ registrado na fonte (CRM): os crons podem ter nascido depois do
+  // bloqueio. Idempotente: o mesmo cancel que o handoff compartilha (F4-07).
+  if (optedOutThisTurn) {
+    const canceled = await cancelPendingCronsForLead(pool, tenantId, leadId);
+    if (canceled > 0) {
+      log.info('opt-out já registrado — follow-ups agendados cancelados (modo assistido)', {
+        canceled,
+      });
+    }
+  }
+  return false;
+}
+
+
+/**
  * O NÚCLEO DO TURNO, SEMPRE SOB A ESCOLTA DO ORÇAMENTO.
  *
  * Esta função é o único ponto do produto por onde os três kinds de turno de
@@ -2029,7 +2239,31 @@ async function executarTurnoDoAgente(
         inbound: liveJob().kind === 'inbound_turn',
       }, { log: runLog });
   const agentConfig = routed.config;
-  if (!preview && agentConfig?.operationMode === 'assisted' && job?.kind === 'inbound_turn') {
+  if (
+    !preview &&
+    agentConfig?.operationMode === 'assisted' &&
+    job !== null &&
+    (job.kind === 'inbound_turn' || job.kind === 'followup_turn')
+  ) {
+    // As detecções DETERMINÍSTICAS (STOP/opt-out e pedido de humano) rodam ANTES
+    // do desvio para o rascunho: o pedido de parar não pode esperar aprovação
+    // humana para ser registrado (LGPD). `true` = turno silenciado.
+    if (
+      await deteccoesDeterministicasDoAssistido(pool, deps, {
+        job,
+        tenantId,
+        conversationId: input.conversationId,
+        channelSessionId: input.channelSessionId,
+        leadId,
+        agent: agentConfig,
+        log: runLog,
+        ...(input.inboundMessageId !== undefined
+          ? { inboundMessageId: input.inboundMessageId }
+          : {}),
+      })
+    ) {
+      return;
+    }
     const { generateReplyDraft } = await import('./reply-drafts');
     await generateReplyDraft(pool, deps, {
       organizationId: tenantId,
@@ -2039,6 +2273,13 @@ async function executarTurnoDoAgente(
       boundary: currentExecutionBoundary() ?? undefined,
       agent: agentConfig,
     });
+    if (job.kind === 'followup_turn') {
+      // O follow-up do assistido caía no `return` genérico de baixo e sumia: sem
+      // envio, sem rascunho e sem aviso. Vira rascunho, como o inbound.
+      runLog.info('follow-up de agente assistido virou rascunho — nada sai sem aprovação', {
+        conversation_id: input.conversationId,
+      });
+    }
     return;
   }
   if (!preview && agentConfig && (agentConfig.pausedAt || agentConfig.operationMode === 'assisted'))
@@ -4567,6 +4808,23 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
           job_id: job.id,
           error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
         });
+      }
+      // AS DETERMINÍSTICAS ANTES DO RASCUNHO: o contato escrevia "SAIR" e nada
+      // era registrado, os follow-ups seguiam vivos e "quero falar com uma
+      // pessoa" virava só um rascunho. `true` = turno silenciado, sem rascunho.
+      if (
+        await deteccoesDeterministicasDoAssistido(pool, deps, {
+          job,
+          tenantId: job.organization_id,
+          conversationId: payload.conversation_id,
+          channelSessionId: payload.channel_session_id,
+          leadId: job.contact_id,
+          agent: operationAgent,
+          log: deps.log,
+          inboundMessageId: payload.inbound_message_id,
+        })
+      ) {
+        return;
       }
       const { generateReplyDraft } = await import('./reply-drafts');
       if (!job.contact_id) throw new Error('reply_without_contact');
