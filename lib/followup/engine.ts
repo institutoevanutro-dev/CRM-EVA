@@ -28,6 +28,7 @@ import {
   latestRepeatIndex,
   occupancyEventCount,
   rechecksOciososDaAcao,
+  turnoDaAcaoDescartado,
   pisoDoInboundDaEspera,
   actionTurnCompleted,
   processNode,
@@ -35,6 +36,7 @@ import {
   repeatTotalFromEvents,
   resolveWaitPhase,
   selectEdge,
+  ultimoDesfechoDe,
   type EnrollmentEventRef,
   type EnrollmentOutcome,
   type EnrollmentRow,
@@ -216,6 +218,7 @@ function eventPayload(result: NodeResult): Record<string, unknown> {
         ...(result.repeat !== undefined
           ? { repeat_index: result.repeat.index, repeat_total: result.repeat.total }
           : {}),
+        ...(result.class !== undefined ? { class: result.class } : {}),
       };
     case "wait":
       return {
@@ -585,6 +588,7 @@ async function processEnrollment(
     lead_stage: leadRow.lead_stage,
     tags: leadRow.tags,
     steps_taken: enrollment.steps_taken,
+    // Preenchido abaixo, depois que os eventos forem lidos (condition).
     last_outcome: null,
     contact_name: leadRow.contact_name ?? null,
     custom_fields: leadRow.custom_fields,
@@ -612,10 +616,17 @@ async function processEnrollment(
     node.type === "ai_classify" ||
     node.type === "match_reply" ||
     node.type === "action" ||
-    node.type === "repeat";
+    node.type === "repeat" ||
+    // `condition` lê eventos por causa de `last_outcome`: o desfecho do passo
+    // anterior mora no evento `ai_classified`, não na linha do lead.
+    node.type === "condition";
 
   if (precisaEventos) {
     events = await db.loadEnrollmentEvents(enrollment.id);
+  }
+
+  if (node.type === "condition") {
+    lead.last_outcome = ultimoDesfechoDe(events);
   }
 
   if (vaiPlanejar) {
@@ -639,7 +650,8 @@ async function processEnrollment(
       wokeEarly = events.some((e) => e.node_id === node.id && e.idempotency_key === wakeKey);
     }
     if (node.type === "action") {
-      actionEnqueued = waitElapsed;
+      // Turno descartado durante a pausa: a estadia RETOMA com um turno novo.
+      actionEnqueued = waitElapsed && !turnoDaAcaoDescartado(events, node.id);
       // Ociosidade DESDE a última prova de vida: um adiamento de janela não
       // gasta o orçamento do dead-man (ver `rechecksOciososDaAcao`).
       actionRecheckCount = rechecksOciososDaAcao(events, node.id);

@@ -70,6 +70,8 @@ function fakePool(conversa: { horas: number; provider?: string; errorCode?: stri
     if (sql.includes("d.fechada_em::text")) return { rows: [{ ...boundary, status: "open", demanda_fechada_em: null }] };
     if (/from send_ledger l/.test(sql)) return { rows: conversa.ledger ?? [{ status: "accepted", error_code: null }] };
     if (/select error_code from messages/.test(sql)) return { rows: [{ error_code: conversa.errorCode ?? null }] };
+    // A inscrição viva no mesmo nó (guarda da #2261 no início do turno).
+    if (sql.includes("select current_node_id, status from followup_enrollments")) return { rows: [{ current_node_id: "node-1", status: "active" }], rowCount: 1 };
     if (/from conversations/.test(sql)) {
       return { rows: [{
         id: CONVERSA, channel_session_id: CANAL, archived_at: null, bot_silenciado: true,

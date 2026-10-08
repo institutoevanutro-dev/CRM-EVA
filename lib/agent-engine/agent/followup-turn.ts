@@ -120,6 +120,8 @@ export type FollowupFlowTurnResult =
   | { kind: 'skipped'; reason: string; outcome?: 'converted' | 'replied' | 'exhausted' | 'opted_out' | 'handoff' }
   | { kind: 'pulado'; reason: string }
   | { kind: 'classified'; class: string }
+  /** Classificar sem resposta ao envio do fluxo: nada a concluir, só o rastro da espera. */
+  | { kind: 'awaiting_reply' }
   /** O envio ficou estacionado até `until` (janela fechada) — nem saiu, nem foi recusado. */
   | { kind: 'deferred'; until: Date; reason: string }
   | { kind: 'planned'; propostas: PropostaDeEsperaBruta[]; modelo: string };
@@ -251,6 +253,46 @@ function lastInboundSinceLastOutbound(context: LeadContext): string | null {
 }
 
 /**
+ * Quando o fluxo fechou o seu último envio (`action_sent`): o marco a partir do
+ * qual o que o lead escreve é RESPOSTA ao fluxo. `null` quando o fluxo ainda não
+ * mandou nada (classificar logo depois do acionamento).
+ */
+async function envioDoFluxoFechadoEm(pool: pg.Pool, orgId: string, enrollmentId: string): Promise<Date | null> {
+  const { rows } = await pool.query<{ fechado_em: Date | null }>(
+    `select max(created_at) as fechado_em from followup_enrollment_events
+      where organization_id = $1 and enrollment_id = $2 and event_type = 'action_sent'`,
+    [orgId, enrollmentId],
+  );
+  return rows[0]?.fechado_em ?? null;
+}
+
+/**
+ * A resposta do lead ao envio DO FLUXO: a última inbound com texto depois da
+ * mensagem que o fluxo mandou, mesmo que o agente ou uma pessoa tenha
+ * respondido no meio. "Depois do último outbound de qualquer um" perdia o caso
+ * comum numa organização com agente ativo: o lead responde, o agente responde
+ * antes do job de classificar, e o fluxo saía por "sem resposta".
+ *
+ * A mensagem do fluxo é o último outbound até `envioFechadoEm` (o passo de envio
+ * fecha DEPOIS de a mensagem sair). A POSIÇÃO no histórico decide, não o
+ * horário: `sent_at` aqui vem truncado no segundo.
+ *
+ * ponytail: se a mensagem do fluxo saiu da janela do histórico (`historyLimit`),
+ * vale o horário, no segundo.
+ *
+ * Porte de melgarafael/DeskcommCRM #1766 (0d231b5a0a).
+ */
+function respostaAoEnvioDoFluxo(context: LeadContext, envioFechadoEm: Date): string | null {
+  const limite = envioFechadoEm.getTime();
+  const envio = context.messages.findLastIndex((m) => m.direction === 'outbound' && Date.parse(m.sent_at) <= limite);
+  const piso = Math.floor(limite / 1000) * 1000;
+  const resposta = context.messages
+    .slice(envio + 1)
+    .findLast((m) => m.direction === 'inbound' && m.body.trim() !== '' && (envio >= 0 || Date.parse(m.sent_at) >= piso));
+  return resposta?.body ?? null;
+}
+
+/**
  * Handler de `followup_turn` para o registry do daemon (main.ts). Resolve os ids de
  * envio da row do lead (nunca do payload) e injeta o bloco temporal no sufixo antes
  * de delegar ao núcleo compartilhado do run (runAgentTurn).
@@ -274,6 +316,73 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
     if (!targetRows[0]) throw new Error('conversa de origem indisponível');
     if (targetRows[0].archived_at) throw new Error('canal arquivado');
     const target: ReentrySendTarget = { tenantId, leadId, conversationId: boundary!.conversation_id, channelSessionId: targetRows[0]!.channel_session_id };
+
+    // A INSCRIÇÃO PRECISA ESTAR VIVA ANTES DE QUALQUER EFEITO: existente, no
+    // MESMO nó, e em estado que anda (`active`/`waiting_reply`). O turno
+    // enfileirado sobrevive ao fluxo (apagar o fluxo, o passo andar antes de um
+    // turno reagendado rodar); `conferirAntesDoEnvio` olha o status mas não o
+    // nó, e a ponte só confere DEPOIS do envio. Fora disso o turno termina sem
+    // tocar a cadeia; o worker fecha o job como `done`.
+    // Porte de melgarafael/DeskcommCRM #2261 (7b34733fee).
+    if (payload.followup_enrollment_id !== undefined && payload.node_id !== undefined) {
+      const { rows: inscricaoRows } = await pool.query<{ current_node_id: string; status: string }>(
+        `select current_node_id, status from followup_enrollments where organization_id = $1 and id = $2 limit 1`,
+        [tenantId, payload.followup_enrollment_id],
+      );
+      const inscricao = inscricaoRows[0];
+      const viva =
+        inscricao !== undefined &&
+        inscricao.current_node_id === payload.node_id &&
+        (inscricao.status === 'active' || inscricao.status === 'waiting_reply');
+      if (!viva) {
+        withFields(deps.log, {
+          job_id: job.id,
+          tenant_id: tenantId,
+          lead_id: leadId,
+          enrollment_id: payload.followup_enrollment_id,
+        }).info('turno de fluxo descartado: a inscrição não está mais viva', {
+          motivo: inscricao === undefined ? 'inscricao_ausente' : 'fora_do_no_ou_encerrada',
+          status: inscricao?.status ?? null,
+          no_do_payload: payload.node_id,
+          no_atual: inscricao?.current_node_id ?? null,
+        });
+        // O DESCARTE DURANTE A PAUSA NÃO PODE SER SILÊNCIO. Pausada
+        // (`paused_handoff` do handoff humano, `paused_manual` da intervenção)
+        // a inscrição segue viva no MESMO nó e tem quem a retome. Sem rastro, o
+        // último evento da estadia continua sendo o `turn_enqueued` deste job:
+        // na retomada o motor lê "turno em voo", só recheca, e o dead-man marca
+        // `dead` com `action_turn_never_completed`. `turn_discarded` faz o motor
+        // enfileirar um turno novo (`turnoDaAcaoDescartado`). A chave termina em
+        // `:descartado`, não em `:<n>`: não conta como passo em
+        // `fn_followup_job_current` e não é barrada por `fn_followup_generation_write`.
+        // Porte de melgarafael/DeskcommCRM #2277 (0c13b573e8).
+        if (
+          inscricao !== undefined &&
+          inscricao.current_node_id === payload.node_id &&
+          (inscricao.status === 'paused_handoff' || inscricao.status === 'paused_manual') &&
+          payload.purpose === 'send_message'
+        ) {
+          const chaveDoPasso =
+            typeof job.payload.source_step_key === 'string' && job.payload.source_step_key !== ''
+              ? job.payload.source_step_key
+              : job.id;
+          await pool.query(
+            `insert into followup_enrollment_events
+               (organization_id, enrollment_id, node_id, event_type, payload, idempotency_key)
+             values ($1, $2, $3, 'turn_discarded', $4, $5)
+             on conflict (enrollment_id, idempotency_key) where idempotency_key is not null do nothing`,
+            [
+              tenantId,
+              payload.followup_enrollment_id,
+              payload.node_id,
+              { job_id: job.id, motivo: 'inscricao_pausada' },
+              `${chaveDoPasso}:descartado`,
+            ],
+          );
+        }
+        return;
+      }
+    }
 
     const clock = deps.clock ?? ((): Date => new Date());
 
@@ -546,12 +655,31 @@ async function runFlowDrivenTurn(
     if (!context.ok) {
       throw new Error(`turno de classificação do fluxo falhou em get_lead_context (${context.error.code})`);
     }
+    const envioFechadoEm = await envioDoFluxoFechadoEm(pool, target.tenantId, enrollmentId);
+    // Sem envio do fluxo antes deste nó, vale a regra de antes: a última inbound
+    // que ninguém respondeu ainda.
+    const candidateText =
+      envioFechadoEm === null
+        ? lastInboundSinceLastOutbound(context.context)
+        : respostaAoEnvioDoFluxo(context.context, envioFechadoEm);
+    if (candidateText === null) {
+      // O lead ainda não respondeu: isso não é "sem resposta". O turno não
+      // conclui o passo; o enrollment segue em `waiting_reply` com a carência
+      // inteira. A resposta que chegar acorda o nó (reactivity, novo turno) e a
+      // carência vencida roteia `no_reply` sem LLM (`case "ai_classify"` em
+      // lib/followup/node-handlers.ts).
+      runLog.info('classificação adiada: o lead ainda não respondeu; o nó segue esperando a resposta ou a carência', {
+        node_id: nodeId,
+      });
+      await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'awaiting_reply' } });
+      return;
+    }
     const cls = await classifyFollowupReply(
       pool,
       deps.llmCfg,
       { tenantId: target.tenantId, leadId: target.leadId, jobId: job.id },
       {
-        candidateText: lastInboundSinceLastOutbound(context.context),
+        candidateText,
         classes,
         ...(input.hint !== undefined ? { hint: input.hint } : {}),
         ...(deps.knobs.followupAi?.model !== undefined ? { model: deps.knobs.followupAi.model } : {}),

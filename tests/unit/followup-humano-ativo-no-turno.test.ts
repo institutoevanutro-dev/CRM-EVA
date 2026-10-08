@@ -54,6 +54,8 @@ function fakePool(conversa: { humano_respondeu?: boolean; atribuida_a_pessoa?: b
     if (sql.includes("d.fechada_em::text")) return { rows: [{ ...boundary, status: "open", demanda_fechada_em: null }] };
     if (/from send_ledger l/.test(sql)) return { rows: [{ status: "accepted", error_code: null }] };
     if (/from message_templates/.test(sql)) return { rows: [{ body: "Olá do modelo" }] };
+    // A inscrição viva no mesmo nó (guarda da #2261 no início do turno).
+    if (sql.includes("select current_node_id, status from followup_enrollments")) return { rows: [{ current_node_id: "node-1", status: "active" }], rowCount: 1 };
     if (/from conversations/.test(sql)) {
       return { rows: [{
         id: CONVERSA, channel_session_id: "canal-1", archived_at: null, bot_silenciado: false,

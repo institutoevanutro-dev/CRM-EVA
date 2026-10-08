@@ -181,7 +181,7 @@ export function buildModel(provider: string, apiKey: string, modelId: string): L
         apiKey,
         baseURL: OPENROUTER_ENDPOINT,
         headers: cabecalhosDeAtribuicaoOpenRouter(),
-      })(modelId);
+      }).chat(modelId); // chat/completions: a OpenRouter não serve /responses para todo modelo
     default:
       throw new Error(`unsupported_provider: ${provider}`);
   }

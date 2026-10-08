@@ -413,7 +413,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   // `InboxFilters` segue no topo para poder trocar de aba de volta.
   if (filterValue.tab === "comentarios") {
     return (
-      <div className="flex h-[calc(100dvh-3.5rem-2*var(--space-6))] w-full flex-col">
+      <div className="flex h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full flex-col">
         <InboxFilters value={filterValue} onChange={setFilterValue} />
         <div className="min-h-0 flex-1 overflow-hidden">
           <ComentariosPainel />
@@ -443,7 +443,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   return (
     <OpenConversationProvider conversationId={selectedId}>
     <div
-      className="grid h-[calc(100dvh-3.5rem-2*var(--space-6))] w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[272px_1fr_296px] 2xl:grid-cols-[300px_1fr_320px]"
+      className="grid h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[272px_1fr_296px] 2xl:grid-cols-[300px_1fr_320px]"
       /*
        * O ESTADO DO TEMPO REAL, LEGÍVEL DE FORA — mesmo par que o dossiê do lead
        * já publica (`LeadDossier`), e pela mesma razão: quando a entrega morre,
