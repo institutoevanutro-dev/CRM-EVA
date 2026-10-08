@@ -63,6 +63,11 @@ export interface LeadFacts {
   lead_stage: string | null;
   tags: string[];
   steps_taken: number;
+  /**
+   * Desfecho do passo anterior: a classe que o último `ai_classify` escolheu,
+   * lida dos eventos da inscrição (`ultimoDesfechoDe`). `null` quando o fluxo
+   * ainda não classificou nada; e `null` NÃO satisfaz `neq` (ver `evaluateCheck`).
+   */
   last_outcome: string | null;
   contact_name?: string | null;
   custom_fields?: Record<string, unknown>;
@@ -80,7 +85,11 @@ export type NodeResult =
   // `reason` só aparece quando o avanço NÃO é o avanço comum: hoje, o trigger
   // desistindo do plano de tempo (o turno nunca voltou). Vira event_type próprio
   // no engine — seguir sem plano é um fato que o operador precisa poder ler.
-  | { kind: "advance"; next_node_id: string; next_eval_at: Date; reason?: "plan_timeout"; repeat?: { index: number; total: number } }
+  //
+  // `class` só aparece quando o avanço É uma classificação decidida pelo motor:
+  // o `ai_classify` que sai por "sem resposta" porque a carência venceu. Vai para
+  // o payload do evento e é o que `ultimoDesfechoDe` lê.
+  | { kind: "advance"; next_node_id: string; next_eval_at: Date; reason?: "plan_timeout"; repeat?: { index: number; total: number }; class?: string }
   // stays on the node. `wake_status` parks `match_reply` in waiting_reply without a job.
   | { kind: "wait"; next_eval_at: Date; wake_status?: "active" | "waiting_reply" }
   | {
@@ -143,6 +152,14 @@ export const MAX_ACTION_RECHECKS = 14;
 export const EVENTO_ACAO_ADIADA = "action_deferred";
 
 /**
+ * O turno de classificar rodou e o cliente ainda não tinha respondido ao envio
+ * do fluxo: o nó segue esperando até a carência. Não é passo (a chave não é
+ * `${nó}:${passo}`), então nenhum guarda de ocupação do motor a conta.
+ * Porte de melgarafael/DeskcommCRM #1766 (0d231b5a0a).
+ */
+export const EVENTO_CLASSIFICACAO_ESPERANDO = "classify_waiting";
+
+/**
  * Rechecks ociosos da ação NESTA estadia — o número que o dead-man mede.
  * Idêntico a `occupancyEventCount` enquanto não houver adiamento (worker morto
  * morre como antes); a diferença é que ele PARA no último `action_deferred`.
@@ -152,10 +169,30 @@ export function rechecksOciososDaAcao(events: EnrollmentEventRef[], nodeId: stri
   for (let i = events.length - 1; i >= 0; i--) {
     const evento = events[i]!;
     if (evento.node_id !== nodeId) break;
-    if (evento.event_type === EVENTO_ACAO_ADIADA) return n;
+    if (evento.event_type === EVENTO_ACAO_ADIADA || evento.event_type === EVENTO_TURNO_DESCARTADO) return n;
     n++;
   }
   return n;
+}
+
+/**
+ * O turno de envio desta estadia foi DESCARTADO pelo worker porque a inscrição
+ * estava pausada quando ele rodou (`followup-turn.ts`). Não é defeito do
+ * worker: não conta para o dead-man (`rechecksOciososDaAcao`), e o motor
+ * enfileira um turno novo na retomada.
+ * Porte de melgarafael/DeskcommCRM #1987 (bc81c0dbb5), só a parte do motor.
+ */
+export const EVENTO_TURNO_DESCARTADO = "turn_discarded";
+
+/** O último turno desta estadia no `action` foi descartado e nenhum outro o substituiu. */
+export function turnoDaAcaoDescartado(events: EnrollmentEventRef[], nodeId: string): boolean {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const evento = events[i]!;
+    if (evento.node_id !== nodeId) return false;
+    if (evento.event_type === EVENTO_TURNO_DESCARTADO) return true;
+    if (evento.event_type === "turn_enqueued") return false;
+  }
+  return false;
 }
 
 /**
@@ -346,6 +383,49 @@ export function pisoDoInboundDaEspera(
   return fallback;
 }
 
+/**
+ * Passos é número, mas o formulário grava o que se DIGITA (texto). Com `"3"`,
+ * `gte` nunca era verdadeiro e `neq` sempre era: a regra aparecia pronta no
+ * card e decidia sozinha. Lê o número escrito; texto que não é número segue
+ * como está. Porte de melgarafael/DeskcommCRM #1146 (ed42ad1197), só o motor.
+ */
+function valorDePassos(value: string | number): string | number {
+  if (typeof value === "number") return value;
+  const limpo = value.trim();
+  const n = Number(limpo);
+  return limpo !== "" && Number.isFinite(n) ? n : value;
+}
+
+/**
+ * Os eventos que gravam a classe com que o lead SAIU de um `ai_classify`: a
+ * fonte do "Desfecho do passo anterior". Dois escritores, um campo
+ * (`payload.class`): `ai_classified` (a ponte, quando o modelo classificou) e
+ * `node_advanced` com `class` (o motor, quando a carência venceu sem resposta).
+ */
+const EVENTOS_DE_DESFECHO = new Set(["ai_classified", "node_advanced"]);
+
+/**
+ * O desfecho do último passo que DECIDIU algo: a classe escolhida pelo
+ * `ai_classify` mais recente da inscrição. `null` quando ainda não houve
+ * classificação.
+ *
+ * O motor montava `LeadFacts.last_outcome` como `null` FIXO, então a condição
+ * escrita com ele era decorativa (e com `neq` mandava TODO lead pelo ramo da
+ * negativa). `events` chega em `created_at` ascendente: o ÚLTIMO evento de
+ * classificação é o desfecho vigente.
+ *
+ * Porte de melgarafael/DeskcommCRM #1078 (bc3116737b).
+ */
+export function ultimoDesfechoDe(events: EnrollmentEventRef[]): string | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const evento = events[i]!;
+    if (!EVENTOS_DE_DESFECHO.has(evento.event_type ?? "")) continue;
+    const classe = evento.payload?.class;
+    if (typeof classe === "string" && classe.length > 0) return classe;
+  }
+  return null;
+}
+
 function evaluateCheck(
   check: { field: "lead_stage" | "tag" | "steps_taken" | "last_outcome"; op: "eq" | "neq" | "gte" | "lte" | "contains"; value: string | number },
   lead: LeadFacts,
@@ -364,17 +444,23 @@ function evaluateCheck(
     return false;
   }
 
+  // Desconhecido não satisfaz NEGAÇÃO: `null !== "x"` é `true`, e "não foi X"
+  // valia para TODO lead, inclusive o nunca classificado. `eq`/`contains` já
+  // eram falsos com `null`; ausência de dado não prova a negativa.
+  if (actual === null) return false;
+
+  const expected = check.field === "steps_taken" ? valorDePassos(check.value) : check.value;
   switch (check.op) {
     case "eq":
-      return actual === check.value;
+      return actual === expected;
     case "neq":
-      return actual !== check.value;
+      return actual !== expected;
     case "gte":
-      return typeof actual === "number" && typeof check.value === "number" && actual >= check.value;
+      return typeof actual === "number" && typeof expected === "number" && actual >= expected;
     case "lte":
-      return typeof actual === "number" && typeof check.value === "number" && actual <= check.value;
+      return typeof actual === "number" && typeof expected === "number" && actual <= expected;
     case "contains":
-      return typeof actual === "string" && typeof check.value === "string" && actual.includes(check.value);
+      return typeof actual === "string" && typeof expected === "string" && actual.includes(expected);
   }
 }
 
@@ -573,7 +659,7 @@ export function processNode(input: {
       // no fallback 'always' se não houver aresta 'no_reply' explícita.
       const edge = selectEdge(edges, node.id, classEdgeMatch(node, NO_REPLY_BRANCH_ID));
       if (!edge) return { kind: "fail", error: `ai_classify node "${node.id}" has no edge for class "no_reply" (fallback also missing)` };
-      return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
+      return { kind: "advance", next_node_id: edge.target, next_eval_at: clock(), class: NO_REPLY_BRANCH_ID };
     }
 
     case "match_reply": {
