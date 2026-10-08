@@ -4266,6 +4266,12 @@ async function executarTurnoDoAgente(
         messages: openingMessages,
         tools,
         maxSteps,
+        // Rascunho: a resposta é o send_message ACEITO; a etapa seguinte só
+        // "encerrava". Aceito, e não chamado: o envio vetado pela cadeia
+        // before_send volta ao modelo para ele reescrever (o 1º veto ensina).
+        ...(preview?.kind === 'assisted'
+          ? { pararQuando: () => preview.result.candidates.length > 0 }
+          : {}),
         ...(agentConfig !== null
           ? {
               model: agentConfig.model,
@@ -4357,6 +4363,25 @@ async function executarTurnoDoAgente(
     // turno. Aqui o lead já recebeu resposta, mas a conversa ficaria sem
     // checkpoint e sem dono, e o próximo inbound cairia no mesmo bloqueio, agora
     // sem nada tendo mudado no meio.
+    // Prévia sem candidato e sem impedimento: quem opera precisa saber que o agente não propôs nada.
+    const avisarSemCandidato = (p: NonNullable<typeof preview>): void => {
+      if (p.result.candidates.length === 0 && p.result.impediments.length === 0)
+        p.result.impediments.push({
+          code: 'no_candidate',
+          message: 'O agente não propôs uma resposta. Revise o cenário ou a configuração.',
+        });
+    };
+    // ⚠️ RASCUNHO (modo assistido) não fecha o turno com checkpoint. O checkpoint
+    // da prévia não é gravado (a prévia retorna antes do `insertCheckpoint`, logo
+    // abaixo) e o `reply-drafts.ts` não o lê — só a prévia de TESTE (sandbox) o
+    // mostra na tela. Mesmo assim, a chamada de fechamento segurava a entrega do
+    // rascunho: medido em produção (gpt-6-luna, 2026-09-24), resposta pronta às
+    // 12:32:40 e rascunho entregue às 12:32:56 — 16 dos 28 s que o operador
+    // esperava depois de clicar em "Sugerir resposta".
+    if (preview?.kind === 'assisted') {
+      avisarSemCandidato(preview);
+      return;
+    }
     const closing = await runModelCall(
       pool,
       deps.llmCfg,
@@ -4395,11 +4420,7 @@ async function executarTurnoDoAgente(
 
     if (preview) {
       preview.result.checkpoint = content;
-      if (preview.result.candidates.length === 0 && preview.result.impediments.length === 0)
-        preview.result.impediments.push({
-          code: 'no_candidate',
-          message: 'O agente não propôs uma resposta. Revise o cenário ou a configuração.',
-        });
+      avisarSemCandidato(preview);
       return;
     }
 
