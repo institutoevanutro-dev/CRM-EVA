@@ -211,6 +211,7 @@ describe('a posse do número não contém o classificador (bancada do #2363)', (
     const CLASSIFICADOR_MS = 40;
     let posseInicio = 0;
     let posseFim = 0;
+    let classificouEm = 0;
     const original = client.query;
     client.query = vi.fn(async (sql: string) => {
       const s = String(sql).toLowerCase().trim();
@@ -223,6 +224,7 @@ describe('a posse do número não contém o classificador (bancada do #2363)', (
       args(pool, {
         classifyPromiseSemantic: async () => {
           await new Promise((resolve) => setTimeout(resolve, CLASSIFICADOR_MS));
+          classificouEm = performance.now();
           return NAO_E_PROMESSA;
         },
       }),
@@ -230,7 +232,12 @@ describe('a posse do número não contém o classificador (bancada do #2363)', (
 
     expect(r.status).toBe('sent');
     expect(posseInicio).toBeGreaterThan(0);
-    expect(posseFim - posseInicio).toBeLessThan(CLASSIFICADOR_MS);
+    // Ordem, não duração: sob a suíte inteira o relógio de parede oscila e uma
+    // asserção de duração reprovava por carga. O classificador terminou antes de
+    // a posse começar, então a posse não contém o tempo dele.
+    expect(classificouEm).toBeGreaterThan(0);
+    expect(classificouEm).toBeLessThanOrEqual(posseInicio);
+    expect(posseFim).toBeGreaterThanOrEqual(posseInicio);
   });
 
   it('julga o mesmo corpo que vai ao canal', async () => {
