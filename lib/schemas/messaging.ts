@@ -84,6 +84,14 @@ export const sendMessageSchema = z
     media_storage_path: z.string().min(1).max(500).optional(),
     media_mime: z.string().optional(),
     media_size_bytes: z.number().int().positive().optional(),
+    /**
+     * Item da biblioteca de mídias (migration 0326). O handler lê o item pela
+     * org da conversa e confere o termo na hora; o caminho do arquivo nunca
+     * vem do chamador. O `type` é derivado do arquivo; o enviado é ignorado.
+     */
+    media_library_item_id: z.string().uuid().optional(),
+    /** Variante pedida; ausente (ou inexistente no item), sorteio estável por contato. */
+    media_variant: z.enum(["A", "B"]).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
     /** Só em `type: "template"`. Nome exato aprovado na Meta. */
     template_name: z.string().min(1).max(512).optional(),
@@ -105,8 +113,13 @@ export const sendMessageSchema = z
      */
     reply_to_message_id: z.string().uuid().optional(),
   })
+  .refine((d) => !(d.media_library_item_id && d.media_storage_path), {
+    message: "Envie o arquivo da conversa ou o item da biblioteca, não os dois.",
+    path: ["media_library_item_id"],
+  })
   .refine(
     (d) => {
+      if (d.media_library_item_id) return true;
       if (d.type === "contact") {
         const id = d.metadata?.shared_contact_id;
         if (typeof id === "string" && id.length > 0) return true;
