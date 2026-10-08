@@ -412,11 +412,15 @@ describe("a resposta descartada tem quem responda depois", () => {
  * resposta até o teto de 120 s.
  */
 describe("a espera da mídia só segura o turno pela mídia que vai ser lida", () => {
+  // `sent_at` 2 s no passado, como o `created_at`: com `now()` (relógio do BANCO)
+  // e a pergunta carimbada pelo relógio do Node, um container adiantado alguns
+  // milissegundos fazia a MÍDIA parecer a inbound mais nova, e o anti-backlog do
+  // drain pulava a pergunta como superada. Vermelho no CI, verde na máquina local.
   async function midia(tipo: string, metadata: Record<string, unknown> = {}): Promise<void> {
     await pool.query(
       `insert into messages (organization_id, conversation_id, channel_session_id, contact_id,
          type, direction, status, media_url, metadata, sent_via, sent_at, created_at)
-       values ($1,$2,$3,$4,$5,'inbound','delivered','meta-media:1',$6,'external_device',now(),now() - interval '2 seconds')`,
+       values ($1,$2,$3,$4,$5,'inbound','delivered','meta-media:1',$6,'external_device',now() - interval '2 seconds',now() - interval '2 seconds')`,
       [ORG, CONV, SESSION, CONTACT, tipo, metadata],
     );
   }

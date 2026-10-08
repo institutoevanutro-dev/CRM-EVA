@@ -3407,11 +3407,16 @@ async function executarTurnoDoAgente(
           // em cima seria o robô dizendo duas vezes a mesma coisa, com palavras
           // diferentes. Confiamos na fala dele e registramos que o piso não foi
           // preciso.
+          //
+          // O motivo é `outro`, nunca `pediu_humano`: quem decidiu sair foi o
+          // MODELO, não o cliente. Com `pediu_humano` a frase respondia a um
+          // pedido que ninguém fez ("Sem problema. Acabei de acionar…" em
+          // resposta a um "Boa noite!", medido em produção em 07/10/2026).
           const aviso =
             seq === 0
               ? await avisarLeadDaEscalacao(pool, avisoDaEscalacao().ids, {
                   ...avisoDaEscalacao().base,
-                  motivo: 'pediu_humano',
+                  motivo: 'outro',
                 })
               : ({ avisado: true } as const);
           const res = await applyRequestHumanHandoff(
