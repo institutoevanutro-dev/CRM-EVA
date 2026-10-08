@@ -157,6 +157,7 @@ import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
 import { esperarComoHumano } from './atraso-humano';
 import { bolhasQueCabemNoEnvio, instrucaoDeBolhas, sendInBubbles } from './split-message';
+import { formatarParaWhatsApp } from './formato-whatsapp';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
 import { decidePromise } from '../guardrails/promise/engine';
 import { loadPromiseTable } from '../guardrails/promise/table';
@@ -2860,7 +2861,12 @@ async function executarTurnoDoAgente(
     }),
     send_message: tool({
       ...AGENT_TOOL_DEFS.send_message,
-      execute: async ({ body }) => {
+      execute: async ({ body: corpoDoModelo }) => {
+        // O texto sai no formato do WhatsApp — sem `\n` literal nem
+        // `**negrito**` de Markdown na tela do cliente. Antes de qualquer gate,
+        // para que o corpo vazio, as bolhas e a pausa humana meçam o que sai.
+        // Ver `formato-whatsapp.ts`.
+        const body = formatarParaWhatsApp(corpoDoModelo);
         // CORPO VAZIO NÃO SAI. O schema garante min(1) no argumento, mas um `\n`
         // ou espaço passa e chegava ao canal como bolha em branco (medido no
         // original, 2026-09-19). Recusar aqui devolve ao modelo para reescrever.
