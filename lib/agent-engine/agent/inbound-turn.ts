@@ -158,7 +158,7 @@ import { loadChannelProvider, nomesDasFerramentas, runBeforeSend } from '../guar
 import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
-import { esperarComoHumano } from './atraso-humano';
+import { acenderDigitando, esperarComoHumano } from './atraso-humano';
 import { bolhasQueCabemNoEnvio, instrucaoDeBolhas, sendInBubbles, splitForSend } from './split-message';
 import { formatarParaWhatsApp } from './formato-whatsapp';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
@@ -4206,6 +4206,19 @@ async function executarTurnoDoAgente(
       nativeParts.length === 0
         ? openingTextOnly
         : [{ role: 'user', content: [{ type: 'text', text: openingText }, ...nativeParts] }];
+
+    // "digitando…" ENQUANTO o modelo pensa. A pausa humana antes da 1ª bolha
+    // (`esperaForaDoLock`) desconta este tempo e quase sempre zera — e com espera
+    // zero ela não acende presença. Sem esta linha o cliente esperava a chamada
+    // inteira do modelo sem indicador nenhum. Só em turno que fala com o lead:
+    // turno de retaguarda não abre o WhatsApp de ninguém. (Porte de
+    // melgarafael/DeskcommCRM #1543.)
+    if (channel?.signalTyping && turnoVaiFalarComOLead(liveJob())) {
+      acenderDigitando(
+        () => channel.signalTyping!({ tenantId, conversationId: input.conversationId }),
+        runLog,
+      );
+    }
 
     // O modelo decide tools livremente dentro do teto de steps (knob AGENT_MAX_STEPS).
     //
