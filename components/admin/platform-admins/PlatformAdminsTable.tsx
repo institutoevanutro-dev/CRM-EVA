@@ -206,7 +206,7 @@ export function PlatformAdminsTable({ data }: PlatformAdminsTableProps) {
                   ) : (
                     <Badge
                       variant="outline"
-                      className="border-green-500 text-[10px] text-green-700"
+                      className="border-success text-[10px] text-success-fg"
                     >
                       {t("Ativo")}
                     </Badge>

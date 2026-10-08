@@ -86,13 +86,13 @@ export function QuadroClient({
         o primeiro cliente real.
       */}
       {sugestao.origem === "ia" ? (
-        <p className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm">
+        <p className="rounded-md border border-success/30 bg-success/5 p-3 text-sm">
           {t(
             "Seu funcionário montou este quadro olhando o que você me contou sobre o negócio. Ajuste o que quiser.",
           )}
         </p>
       ) : (
-        <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+        <div className="space-y-2 rounded-md border border-warning/30 bg-warning/5 p-3 text-sm">
           <p>
             {t("Não consegui pedir uma sugestão para o seu funcionário agora")}
             {sugestao.porque ? <> — {t(sugestao.porque)}</> : null}. {t("Comecei por um quadro pronto de")}{" "}

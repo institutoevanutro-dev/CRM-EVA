@@ -234,7 +234,7 @@ export function MetaAdsClient({ contaPadrao }: Props) {
       </div>
 
       {erro && (
-        <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 p-4 text-sm">
+        <div role="alert" className="rounded-md border border-error/40 bg-error/10 p-4 text-sm">
           <p className="font-medium">{mensagemDeErro(erro)}</p>
           {erro instanceof ApiError && (
             // O id da requisição vai junto: é o que liga esta tela ao log do
@@ -260,7 +260,7 @@ export function MetaAdsClient({ contaPadrao }: Props) {
                 : t("Ver contatos e vendas por campanha")}
             </Button>
             {resultadoCrm.error && (
-              <p role="alert" className="text-sm text-red-600">
+              <p role="alert" className="text-sm text-error-fg">
                 {t("Não foi possível consultar os resultados do CRM. Tente novamente.")}
               </p>
             )}

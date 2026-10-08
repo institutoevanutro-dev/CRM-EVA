@@ -38,7 +38,7 @@ export function DoneClient({
               aria-hidden
               className={
                 "inline-block h-2 w-2 rounded-full " +
-                (it.feito ? "bg-emerald-500" : "bg-muted-foreground/30")
+                (it.feito ? "bg-success" : "bg-muted-foreground/30")
               }
             />
             <span className={it.feito ? "" : "text-muted-foreground"}>
