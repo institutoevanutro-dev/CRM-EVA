@@ -2,7 +2,7 @@
 
 POST/PATCH de `/api/v1/prontuario/contacts` aceitam, além de nome/nascimento/telefone/e-mail, os campos opcionais `cpf` e `address`. O CPF aceita pontuação e valida dígitos verificadores. `address` aceita somente `cep`, `logradouro`, `numero`, `complemento`, `bairro`, `cidade`, `uf`. Dados clínicos e organization_id do cliente são recusados. Organização e token vêm da autenticação, com os escopos exclusivos existentes.
 
-A migração 0321 adiciona RPCs v2, preservando as assinaturas antigas. POST continua exigindo confirmação de ausência de correspondente; vínculo existente continua exigindo confirmação humana. Nenhum matching por telefone ou CPF e nenhuma fusão automática são feitos.
+A migração 0328 adiciona RPCs v2, preservando as assinaturas antigas. POST continua exigindo confirmação de ausência de correspondente; vínculo existente continua exigindo confirmação humana. Nenhum matching por telefone ou CPF e nenhuma fusão automática são feitos.
 
 CPF usa `encrypt_cpf`/`cpf_indice`, já existentes, como par inseparável. Falha na cifra reverte a transação. CPF diferente de um já cadastrado gera 409 e exige conferência. GET retorna apenas `cpf_available`, nunca o número, cifra ou hash. Audit armazena somente identificadores/revisão; retorno de mutação não contém dados pessoais.
 
