@@ -42,7 +42,7 @@ interface Props {
 
 function AckIndicator({ status, t }: { status: string; t: (texto: string) => string }) {
   if (status === "read") {
-    return <Checks size={12} weight="bold" className="text-blue-400" aria-label={t("Lida")} />;
+    return <Checks size={12} weight="bold" className="text-info" aria-label={t("Lida")} />;
   }
   if (status === "delivered") {
     return <Checks size={12} weight="bold" className="text-current/70" aria-label={t("Entregue")} />;

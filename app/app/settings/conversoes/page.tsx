@@ -77,13 +77,13 @@ export default async function ConversoesPage() {
       </header>
 
       {estado.conectada && !estado.habilitada && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+        <div className="rounded-md border border-warning/40 bg-warning/10 p-4 text-sm">
           {t("O envio está pausado. As vendas continuam sendo registradas aqui, mas não vão para a plataforma enquanto isto estiver desligado.")}
         </div>
       )}
 
       {estado.testEventCode && (
-        <div className="rounded-md border border-sky-500/40 bg-sky-500/10 p-4 text-sm">
+        <div className="rounded-md border border-info/40 bg-info/10 p-4 text-sm">
           {t("Modo de teste ligado: as vendas vão marcadas como teste e não contam para a otimização. Apague o código de teste quando terminar de conferir.")}
         </div>
       )}
