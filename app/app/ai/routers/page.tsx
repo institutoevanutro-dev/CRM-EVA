@@ -1,3 +1,5 @@
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
+import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -22,7 +24,7 @@ export default async function RoutersPage() {
 
   const supabase = await createClient();
 
-  const [{ data: routerRows }, { data: memberRows }, channelSessions] = await Promise.all([
+  const [{ data: routerRows, error }, { data: memberRows }, channelSessions] = await Promise.all([
     supabase
       .from("ai_routers")
       .select("id, name, channel_session_id, is_active, fallback_agent_id, updated_at")
@@ -44,16 +46,18 @@ export default async function RoutersPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Roteadores", idioma)}</h1>
-        <p className="text-sm text-muted-foreground">
-          {traduzir(
+      <CabecalhoDaPagina
+        titulo={traduzir("Roteadores", idioma)}
+        descricao={traduzir(
             "Um roteador entende o que o cliente quer e entrega a conversa para o agente certo — plugado em um número de WhatsApp.",
             idioma,
           )}
-        </p>
-      </header>
-      <RoutersClient initialState={{ routers }} channelSessions={channelSessions} />
+      />
+      {error ? (
+        <ErroDeLeitura texto={traduzir("Não foi possível carregar os roteadores. Recarregue a página.", idioma)} />
+      ) : (
+        <RoutersClient initialState={{ routers }} channelSessions={channelSessions} />
+      )}
     </div>
   );
 }

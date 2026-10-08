@@ -35,7 +35,7 @@ interface Rascunho {
 export function PerguntasFrequentesClient() {
   const t = useT();
   const tagDoIdioma = useTagDeIdioma();
-  const { data, isLoading } = useRespostasProntas();
+  const { data, isLoading, isError, refetch } = useRespostasProntas();
   const salvarConfig = useSalvarConfig();
   const salvarItem = useSalvarRespostaPronta();
   const alterar = useAlterarRespostaPronta();
@@ -48,6 +48,18 @@ export function PerguntasFrequentesClient() {
   const ligado = ligadoEditado ?? data?.config.ligado ?? false;
   const limite = limiteEditado ?? (data ? data.config.limite_similaridade.toFixed(2) : "0.82");
 
+  // Erro tem saída própria: antes `!data` com a consulta falhada deixava
+  // "Carregando…" na tela para sempre.
+  if (isError) {
+    return (
+      <p className="text-sm text-text-muted" role="alert">
+        {t("Não foi possível carregar.")}{" "}
+        <button type="button" onClick={() => void refetch()} className="text-accent-strong underline">
+          {t("Tentar de novo")}
+        </button>
+      </p>
+    );
+  }
   if (isLoading || !data) {
     return <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>;
   }

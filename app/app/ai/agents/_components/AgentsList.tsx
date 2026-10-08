@@ -41,10 +41,10 @@ export function AgentsList({ initialData, canWrite }: Props) {
     return (
       <Card className="flex flex-col items-center gap-3 p-10 text-center">
         <Robot size={36} aria-hidden className="text-muted-foreground" />
-        <h2 className="font-medium">{t("Nenhum agent configurado")}</h2>
+        <h2 className="font-medium">{t("Nenhum agente criado ainda")}</h2>
         <p className="max-w-sm text-sm text-muted-foreground">
           {t(
-            "Crie um agent para responder a conversas no WhatsApp com IA. Você configura prompt, tools, gatilhos e janela de contexto.",
+            "Crie um agente para responder as conversas no WhatsApp com IA. Você define as instruções, o que ele pode fazer e quando ele responde.",
           )}
         </p>
         {canWrite && (
@@ -80,7 +80,7 @@ export function AgentsList({ initialData, canWrite }: Props) {
 
       {filtered.length === 0 ? (
         <Card className="p-8 text-center text-sm text-muted-foreground">
-          {t("Nenhum agent corresponde aos filtros atuais.")}
+          {t("Nenhum agente com esses filtros.")}
         </Card>
       ) : (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
