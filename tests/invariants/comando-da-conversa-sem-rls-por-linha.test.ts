@@ -101,6 +101,46 @@ describe("0331 — comando_da_conversa sem reler o contato sob RLS", () => {
     expect(rows[0].v).toBe(true);
   });
 
+  it("0332: travar e soltar o contato chega às conversas dele, e conversa nova herda a trava", async () => {
+    const LIVRE = "e3310000-3333-4000-8000-000000000002"; // i=2: nem force_human nem bloqueado
+    const flag = async (id: string) =>
+      (await pool.query("select bool_and(contato_segura_robo) v, count(*) n from public.conversations where contact_id = $1", [id])).rows[0];
+    expect((await flag(LIVRE)).v).toBe(false);
+    await pool.query("update public.contacts set force_human = true where id = $1", [LIVRE]);
+    expect((await flag(LIVRE)).v).toBe(true);
+    await pool.query("update public.contacts set force_human = false where id = $1", [LIVRE]);
+    expect((await flag(LIVRE)).v).toBe(false);
+    const NOVO_BLOQ = "e3310000-3333-4000-8000-000000000091";
+    const NOVO_LIVRE = "e3310000-3333-4000-8000-000000000092";
+    await pool.query(
+      `insert into public.contacts(id,organization_id,display_name,is_blocked)
+         values ($1,$3,'novo bloqueado',true), ($2,$3,'novo livre',false)`,
+      [NOVO_BLOQ, NOVO_LIVRE, A],
+    );
+    const { rows } = await pool.query(
+      `insert into public.conversations(organization_id,contact_id,channel_session_id,status)
+         values ($1,$2,$3,'open') returning id, contato_segura_robo v, public.comando_da_conversa(conversations) c`,
+      [A, NOVO_BLOQ, CANAL],
+    );
+    expect({ v: rows[0].v, c: rows[0].c }).toEqual({ v: true, c: "aguardando" });
+    const troca = await pool.query(
+      "update public.conversations set contact_id = $1 where id = $2 returning contato_segura_robo v",
+      [NOVO_LIVRE, rows[0].id],
+    );
+    expect(troca.rows[0].v).toBe(false);
+  });
+
+  it("0332: as funções de gatilho não são alcançáveis pela REST", async () => {
+    const { rows } = await pool.query(
+      `select p.proname, has_function_privilege('authenticated', p.oid, 'execute') a, has_function_privilege('anon', p.oid, 'execute') n
+         from pg_proc p where p.proname in ('fn_conversa_herda_trava_do_contato','fn_contato_propaga_trava') order by 1`,
+    );
+    expect(rows).toEqual([
+      { proname: "fn_contato_propaga_trava", a: false, n: false },
+      { proname: "fn_conversa_herda_trava_do_contato", a: false, n: false },
+    ]);
+  });
+
   it("anon não executa a função", async () => {
     const { rows } = await pool.query(
       "select has_function_privilege('anon','public.fn_contato_segura_o_robo(uuid)','execute') v",
