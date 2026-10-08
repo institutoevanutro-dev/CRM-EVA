@@ -413,7 +413,7 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/ai/skills",
-    label: "Skills",
+    label: "Habilidades",
     description: "As ações que o agente pode executar sozinho durante o atendimento.",
     icon: "PuzzlePiece",
     group: "ia",
@@ -423,7 +423,7 @@ export const NAV_CATALOG = [
   {
     href: "/app/ai/cases",
     label: "Casos",
-    description: "Os atendimentos que o agente conduziu, do início ao desfecho.",
+    description: "Quando a IA trava em algo que só uma pessoa resolve, ela abre um caso aqui.",
     icon: "ClipboardText",
     group: "ia",
     section: "Acompanhar o agente",
@@ -442,7 +442,7 @@ export const NAV_CATALOG = [
     // melhoria do agente e a fila só era vista por quem soubesse a URL.
     href: "/app/ai/proposals",
     label: "Propostas",
-    description: "Melhorias que a IA sugere para si mesma, esperando sua decisão.",
+    description: "Próximos passos que o assistente sugeriu e esperam sua decisão.",
     icon: "Lightbulb",
     group: "ia",
     section: "Acompanhar o agente",

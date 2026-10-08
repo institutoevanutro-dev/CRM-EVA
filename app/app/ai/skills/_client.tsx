@@ -51,7 +51,7 @@ export function SkillsClient({ initialState }: Props) {
     setPendingName(name);
     install.mutate(name, {
       onSuccess: () => {
-        toast.success(`Skill "${name}" ${t("instalada — já vale para os agentes desta organização.")}`);
+        toast.success(`${t("Habilidade")} "${name}" ${t("instalada — já vale para os agentes desta organização.")}`);
         setPendingName(null);
       },
       onError: (err) => {
@@ -65,7 +65,7 @@ export function SkillsClient({ initialState }: Props) {
     setPendingName(name);
     uninstall.mutate(name, {
       onSuccess: () => {
-        toast.success(`Skill "${name}" ${t("desinstalada.")}`);
+        toast.success(`${t("Habilidade")} "${name}" ${t("desinstalada.")}`);
         setPendingName(null);
       },
       onError: (err) => {
@@ -81,7 +81,7 @@ export function SkillsClient({ initialState }: Props) {
     if (!file) return;
     importSkill.mutate(file, {
       onSuccess: (res) => {
-        toast.success(`Skill "${res.data.name}" ${t("enviada e instalada com sucesso.")}`);
+        toast.success(`${t("Habilidade")} "${res.data.name}" ${t("enviada e instalada com sucesso.")}`);
       },
       onError: showApiError,
     });
@@ -93,7 +93,7 @@ export function SkillsClient({ initialState }: Props) {
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle>{t("Skills instaladas")}</CardTitle>
+              <CardTitle>{t("Habilidades instaladas")}</CardTitle>
               <CardDescription>
                 {t(
                   "O que seus agentes já sabem fazer além da conversa comum — cada skill só entra em ação quando o assunto pede.",
@@ -115,7 +115,7 @@ export function SkillsClient({ initialState }: Props) {
                   disabled={importSkill.isPending}
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <UploadSimple /> {importSkill.isPending ? t("Enviando…") : t("Enviar skill (.zip)")}
+                  <UploadSimple /> {importSkill.isPending ? t("Enviando…") : t("Enviar habilidade (.zip)")}
                 </Button>
               </>
             )}
@@ -124,7 +124,7 @@ export function SkillsClient({ initialState }: Props) {
         <CardContent className="flex flex-col gap-4">
           {installed.length === 0 ? (
             <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-              {t('Nenhuma skill instalada ainda. Instale uma pronta do catálogo abaixo ou envie a sua em "Enviar skill (.zip)".')}
+              {t('Nenhuma habilidade instalada ainda. Instale uma pronta do catálogo abaixo ou envie a sua em "Enviar habilidade (.zip)".')}
             </p>
           ) : (
             <ul className="flex flex-col gap-2">
@@ -177,13 +177,13 @@ export function SkillsClient({ initialState }: Props) {
         <CardHeader>
           <CardTitle>{t("Catálogo")}</CardTitle>
           <CardDescription>
-            {t("Skills prontas, mantidas pela plataforma, disponíveis para instalar com um clique.")}
+            {t("Habilidades prontas, mantidas pela plataforma, para instalar com um clique.")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {catalog.length === 0 ? (
             <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-              {t("Nenhuma skill nova no catálogo — você já instalou tudo que a plataforma oferece hoje.")}
+              {t("Nenhuma habilidade nova no catálogo — você já instalou tudo que a plataforma oferece hoje.")}
             </p>
           ) : (
             <ul className="flex flex-col gap-2">

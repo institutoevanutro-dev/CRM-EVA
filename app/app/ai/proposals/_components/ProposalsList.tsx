@@ -28,7 +28,7 @@ function quando(iso: string, locale: Locale): string {
 export function ProposalsList({ canDecide }: { canDecide: boolean }) {
   const t = useT();
   const [tab, setTab] = useState<"pending" | "history">("pending");
-  const { data, isLoading } = useProposals();
+  const { data, isLoading, isError, refetch } = useProposals();
   const decidir = useDecidirProposta();
 
   return (
@@ -46,6 +46,14 @@ export function ProposalsList({ canDecide }: { canDecide: boolean }) {
         <div className="space-y-2">
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
+        </div>
+      ) : isError ? (
+        // Falha não é "nenhuma proposta esperando você".
+        <div className="flex flex-col items-center gap-2 py-16 text-center" role="alert">
+          <p className="text-sm font-medium">{t("Não foi possível carregar as propostas.")}</p>
+          <button type="button" onClick={() => void refetch()} className="text-sm text-accent-strong underline">
+            {t("Tentar de novo")}
+          </button>
         </div>
       ) : tab === "pending" ? (
         <Pendentes

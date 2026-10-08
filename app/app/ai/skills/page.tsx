@@ -1,3 +1,5 @@
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
+import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -20,7 +22,7 @@ export default async function SkillsPage() {
 
   const admin = createAdminClient();
 
-  const [{ data: orgPointers }, { data: platformPointers }] = await Promise.all([
+  const [{ data: orgPointers, error }, { data: platformPointers }] = await Promise.all([
     admin.from("skill_pointers").select("name, version_id, updated_at").eq("organization_id", activeOrg.orgId),
     admin.from("skill_pointers").select("name, version_id").is("organization_id", null),
   ]);
@@ -56,16 +58,18 @@ export default async function SkillsPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Skills da IA", idioma)}</h1>
-        <p className="text-sm text-muted-foreground">
-          {traduzir(
+      <CabecalhoDaPagina
+        titulo={traduzir("Habilidades da IA", idioma)}
+        descricao={traduzir(
             "Habilidades especializadas que seus agentes carregam só quando a conversa pede — instale prontas do catálogo ou envie a sua.",
             idioma,
           )}
-        </p>
-      </header>
-      <SkillsClient initialState={initialState} />
+      />
+      {error ? (
+        <ErroDeLeitura texto={traduzir("Não foi possível carregar as habilidades. Recarregue a página.", idioma)} />
+      ) : (
+        <SkillsClient initialState={initialState} />
+      )}
     </div>
   );
 }
