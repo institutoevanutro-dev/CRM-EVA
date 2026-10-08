@@ -9949,6 +9949,8 @@ export const DICIONARIO: Traducoes = {
   "Mostrar menos": { es: "Mostrar menos" },
   "Não foi possível carregar o radar.": { es: "No se pudo cargar el radar." },
   "Conversas abertas que esfriaram e precisam de você. Se o assistente já marcou um retorno, ela aparece como “retorno agendado”; sem próximo passo, há risco de perder o paciente.": { es: "Conversaciones abiertas que se enfriaron y necesitan de usted. Si el asistente ya agendó un regreso, aparece como “regreso agendado”; sin próximo paso, hay riesgo de perder al paciente." },
+  "Desconectar a agenda do Google? O que for marcado aqui deixa de ir para lá.": { es: "¿Desconectar la agenda de Google? Lo que se agende aquí dejará de ir allá." },
+  "Não foi possível desconectar. Tente de novo.": { es: "No se pudo desconectar. Inténtelo de nuevo." },
 };
 
 /**
