@@ -35,6 +35,7 @@ import {
   repeatTotalFromEvents,
   resolveWaitPhase,
   selectEdge,
+  ultimoDesfechoDe,
   type EnrollmentEventRef,
   type EnrollmentOutcome,
   type EnrollmentRow,
@@ -585,6 +586,7 @@ async function processEnrollment(
     lead_stage: leadRow.lead_stage,
     tags: leadRow.tags,
     steps_taken: enrollment.steps_taken,
+    // Preenchido abaixo, depois que os eventos forem lidos (condition).
     last_outcome: null,
     contact_name: leadRow.contact_name ?? null,
     custom_fields: leadRow.custom_fields,
@@ -612,10 +614,17 @@ async function processEnrollment(
     node.type === "ai_classify" ||
     node.type === "match_reply" ||
     node.type === "action" ||
-    node.type === "repeat";
+    node.type === "repeat" ||
+    // `condition` lê eventos por causa de `last_outcome`: o desfecho do passo
+    // anterior mora no evento `ai_classified`, não na linha do lead.
+    node.type === "condition";
 
   if (precisaEventos) {
     events = await db.loadEnrollmentEvents(enrollment.id);
+  }
+
+  if (node.type === "condition") {
+    lead.last_outcome = ultimoDesfechoDe(events);
   }
 
   if (vaiPlanejar) {

@@ -63,6 +63,11 @@ export interface LeadFacts {
   lead_stage: string | null;
   tags: string[];
   steps_taken: number;
+  /**
+   * Desfecho do passo anterior: a classe que o último `ai_classify` escolheu,
+   * lida dos eventos da inscrição (`ultimoDesfechoDe`). `null` quando o fluxo
+   * ainda não classificou nada; e `null` NÃO satisfaz `neq` (ver `evaluateCheck`).
+   */
   last_outcome: string | null;
   contact_name?: string | null;
   custom_fields?: Record<string, unknown>;
@@ -346,6 +351,34 @@ export function pisoDoInboundDaEspera(
   return fallback;
 }
 
+/**
+ * O evento que registra a classe que o `ai_classify` escolheu: a fonte do
+ * "Desfecho do passo anterior" (o mesmo evento que a tela de histórico lê).
+ */
+const EVENTO_DE_CLASSIFICACAO = "ai_classified";
+
+/**
+ * O desfecho do último passo que DECIDIU algo: a classe escolhida pelo
+ * `ai_classify` mais recente da inscrição. `null` quando ainda não houve
+ * classificação.
+ *
+ * O motor montava `LeadFacts.last_outcome` como `null` FIXO, então a condição
+ * escrita com ele era decorativa (e com `neq` mandava TODO lead pelo ramo da
+ * negativa). `events` chega em `created_at` ascendente: o ÚLTIMO evento de
+ * classificação é o desfecho vigente.
+ *
+ * Porte de melgarafael/DeskcommCRM #1078 (bc3116737b).
+ */
+export function ultimoDesfechoDe(events: EnrollmentEventRef[]): string | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const evento = events[i]!;
+    if (evento.event_type !== EVENTO_DE_CLASSIFICACAO) continue;
+    const classe = evento.payload?.class;
+    if (typeof classe === "string" && classe.length > 0) return classe;
+  }
+  return null;
+}
+
 function evaluateCheck(
   check: { field: "lead_stage" | "tag" | "steps_taken" | "last_outcome"; op: "eq" | "neq" | "gte" | "lte" | "contains"; value: string | number },
   lead: LeadFacts,
@@ -363,6 +396,11 @@ function evaluateCheck(
     if (check.op === "neq") return !included;
     return false;
   }
+
+  // Desconhecido não satisfaz NEGAÇÃO: `null !== "x"` é `true`, e "não foi X"
+  // valia para TODO lead, inclusive o nunca classificado. `eq`/`contains` já
+  // eram falsos com `null`; ausência de dado não prova a negativa.
+  if (actual === null) return false;
 
   switch (check.op) {
     case "eq":
