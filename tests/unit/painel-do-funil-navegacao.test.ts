@@ -14,7 +14,7 @@ import { NAV_DESTINATIONS } from "@/lib/navigation/registry";
 describe("porta do Painel do funil", () => {
   const entrada = NAV_DESTINATIONS.find((d) => d.href === "/app/painel-do-funil");
 
-  it("está no grupo Análise, para manager, fora da barra lateral", () => {
+  it("está no grupo Análise, para manager, como aba principal", () => {
     expect(entrada).toBeDefined();
     expect(entrada).toMatchObject({
       label: "Painel do funil",
@@ -22,7 +22,8 @@ describe("porta do Painel do funil", () => {
       minRole: "manager",
       section: "Os números do período",
     });
-    expect(entrada?.sidebar).toBeUndefined();
+    // Desde 07/10/2026 `sidebar` = aba principal da área (spec 2026-10-07-cores-e-menu).
+    expect(entrada?.sidebar).toBe(true);
   });
 
   it("rótulo e descrição têm espanhol", () => {

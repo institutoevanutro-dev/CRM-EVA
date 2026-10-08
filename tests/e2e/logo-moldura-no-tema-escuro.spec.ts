@@ -375,65 +375,35 @@ test.describe("a moldura do logo no tema escuro", () => {
     return s!;
   };
 
-  test("(1) tema ESCURO + logo ENVIADO: a barra lateral pinta a moldura clara", async ({
-    page,
-  }) => {
-    await loginComTotp(page, creds.users.dono!.email, secret());
+  // (1)+(2) mudaram em 07/10/2026 (spec 2026-10-07-cores-e-menu): a barra lateral é verde
+  // nos dois temas e o logo vai SEM moldura, por decisão do dono. A tela de entrada e a
+  // prévia (casos 3 e 4) continuam com o chip, porque ali o fundo segue o tema.
+  for (const tema of ["dark", "light"] as const) {
+    test(`(1/2) tema ${tema} + logo ENVIADO: a barra é verde e o logo vai sem moldura`, async ({
+      page,
+    }) => {
+      await loginComTotp(page, creds.users.dono!.email, secret());
+      if (tema === "dark") {
+        await page.goto("/admin/marca");
+        await subir(page, "instalacao", {
+          nome: "logo-azul-marinho.png",
+          mime: "image/png",
+          bytes: PNG_AZUL_MARINHO,
+        });
+      }
+      await page.goto("/app/inbox");
+      await escolherTemaPelaTela(page, tema);
+      expect(await temaDaPagina(page)).toBe(tema);
 
-    await page.goto("/admin/marca");
-    await subir(page, "instalacao", {
-      nome: "logo-azul-marinho.png",
-      mime: "image/png",
-      bytes: PNG_AZUL_MARINHO,
+      const m = await medirMoldura(page.locator("aside img").first());
+      anotar(`1-barra-${tema}.json`, m);
+      await page.screenshot({ path: evidencia(`1-barra-${tema}.png`) });
+      expect(fundoETransparente(m.fundo), `o logo ganhou moldura (${m.fundo})`).toBe(true);
+
+      const fundoDaBarra = await page.locator("aside").first().evaluate((el) => getComputedStyle(el).backgroundColor);
+      expect(fundoDaBarra, "a barra lateral deixou de ser verde").not.toMatch(/rgba?\(255, 255, 255/);
     });
-
-    await page.goto("/app/inbox");
-    await escolherTemaPelaTela(page, "dark");
-    expect(await temaDaPagina(page), "o <html> não ficou no tema escuro").toBe("dark");
-
-    const logo = page.locator("aside img").first();
-    const m = await medirMoldura(logo);
-    anotar("1-barra-escuro.json", m);
-    await page.screenshot({ path: evidencia("1-barra-escuro.png") });
-
-    expect(
-      fundoEClaro(m.fundo),
-      `a moldura não foi pintada: o pai do <img> tem background-color=${m.fundo} ` +
-        `(tag=${m.tagDoPai}, classe="${m.classeDoPai}")`,
-    ).toBe(true);
-    expect(m.padding.every((p) => p > 0), `a moldura não tem folga: padding=${m.padding}`).toBe(
-      true,
-    );
-    expect(m.sombra, "a moldura não tem sombra").not.toBe("none");
-
-    // CONTENÇÃO, não proximidade: a moldura tem de ser MAIOR que o logo nos dois
-    // eixos e contê-lo. Uma moldura irmã (a sabotagem que derrubou a primeira
-    // versão da cerca unitária) teria fundo claro e não conteria nada.
-    expect(m.caixaDoPai.largura).toBeGreaterThan(m.caixaDoLogo.largura);
-    expect(m.caixaDoPai.altura).toBeGreaterThan(m.caixaDoLogo.altura);
-    expect(m.caixaDoPai.x).toBeLessThanOrEqual(m.caixaDoLogo.x);
-    expect(m.caixaDoPai.y).toBeLessThanOrEqual(m.caixaDoLogo.y);
-  });
-
-  test("(2) tema CLARO + logo ENVIADO: NÃO há moldura — as classes são `dark:`", async ({
-    page,
-  }) => {
-    await loginComTotp(page, creds.users.dono!.email, secret());
-    await page.goto("/app/inbox");
-    await escolherTemaPelaTela(page, "light");
-    expect(await temaDaPagina(page)).toBe("light");
-
-    const m = await medirMoldura(page.locator("aside img").first());
-    anotar("2-barra-claro.json", m);
-    await page.screenshot({ path: evidencia("2-barra-claro.png") });
-
-    expect(
-      fundoETransparente(m.fundo),
-      `no tema claro o logo ganhou fundo pintado (${m.fundo}) — as classes deveriam ser só \`dark:\``,
-    ).toBe(true);
-    expect(m.padding, "no tema claro a moldura não pode ter folga").toEqual([0, 0, 0, 0]);
-    expect(m.sombra, "no tema claro a moldura não pode ter sombra").toBe("none");
-  });
+  }
 
   test("(3) a TELA DE ENTRADA repete as duas medidas, sem sessão nenhuma", async ({ browser }) => {
     // Contexto novo e deslogado: é o estado de quem só recebeu o endereço. O tema

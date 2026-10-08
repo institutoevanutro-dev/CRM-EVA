@@ -125,10 +125,11 @@ test.describe("webhooks & automações — fluxo completo", () => {
     let pipelineId: string | undefined;
 
     try {
-      // --- Step 1: login como manager; sidebar mostra "Webhooks" ---
+      // --- Step 1: login como manager; Configurações → Mais → Webhooks (menu por área, 07/10/2026) ---
       await login(page, creds.users.manager!.email);
-      await expect(page.getByRole("link", { name: "Webhooks" })).toBeVisible();
-      await page.getByRole("link", { name: "Webhooks" }).click();
+      await page.getByRole("link", { name: "Configurações" }).click();
+      await page.getByRole("navigation", { name: "Telas de Organização" }).getByRole("button", { name: /Mais/ }).click();
+      await page.getByRole("menuitem", { name: "Webhooks" }).click();
       await page.waitForURL(/\/app\/webhooks/);
 
       // --- Step 2: aba "Receber dados" — criar fonte ---

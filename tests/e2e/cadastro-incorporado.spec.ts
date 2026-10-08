@@ -241,7 +241,10 @@ test("[P0] histórico do celular entra encerrado, sem não-lida, e a barra mostr
 
   await page.goto(`/app/inbox/${conversaId}`);
   const conversa = page.getByTestId("message-thread");
-  await expect(conversa.getByText("oi", { exact: true }).first()).toBeVisible();
+  // O deep link redireciona para /app/inbox?id= e o fio carrega depois: no CI a primeira
+  // mensagem passou dos 5 s padrão e aparecia logo depois (captura do PR #155). Mesmo
+  // prazo que os outros passos deste teste já usam.
+  await expect(conversa.getByText("oi", { exact: true }).first()).toBeVisible({ timeout: 20_000 });
   await expect(conversa.getByText("olá", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Celular", { exact: true }).first()).toBeVisible();
   await page.screenshot({ path: path.join(EVIDENCIA, "historico.png"), fullPage: true });

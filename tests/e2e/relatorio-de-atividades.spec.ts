@@ -282,25 +282,17 @@ test.describe("Relatório de atividades — o período, pela tela", () => {
 
     await login(page, creds.users.manager!.email, creds.password);
 
+    // Menu por área (07/10/2026): a porta é a área Análise → aba Atividades. Estar na
+    // aba de Análise (e não de Atendimento) é o "grupo certo" que este teste prendia.
     const sidebar = page.getByRole("navigation", { name: "Navegação principal" });
-    const item = sidebar.getByRole("link", { name: "Atividades", exact: true });
+    await sidebar.getByRole("link", { name: "Análise" }).click();
+    const item = page
+      .getByRole("navigation", { name: "Telas de Análise" })
+      .getByRole("link", { name: "Atividades", exact: true });
     await expect(item, "tela sem porta é tela que só existe para quem digita a URL").toBeVisible({
       timeout: 30_000,
     });
     expect(await item.getAttribute("href")).toBe("/app/activities");
-
-    // O grupo importa: "Atividades" é irmã de Desempenho e Audit Log, não de
-    // Inbox. Ir parar no grupo errado é a diferença entre achar e caçar.
-    const grupo = await item.evaluate((a) => {
-      let el: Element | null = a;
-      while (el && el.previousElementSibling === null) el = el.parentElement;
-      // sobe até achar o cabeçalho de grupo mais próximo acima
-      const titulos = [...document.querySelectorAll('nav[aria-label="Navegação principal"] h2')];
-      const y = a.getBoundingClientRect().top;
-      const acima = titulos.filter((h) => h.getBoundingClientRect().top < y);
-      return (acima[acima.length - 1]?.textContent ?? "").trim();
-    });
-    expect(grupo, "Atividades pertence ao grupo Análise").toMatch(/an[áa]lise/i);
 
     await item.click();
     await page.waitForURL(/\/app\/activities/, { timeout: 30_000 });
@@ -435,9 +427,10 @@ test.describe("Relatório de atividades — o período, pela tela", () => {
     // rota é `viewer` de propósito: um piso mais alto esconderia da pessoa as
     // atividades dela mesma.
     const sidebar = page.getByRole("navigation", { name: "Navegação principal" });
-    await expect(sidebar.getByRole("link", { name: "Atividades", exact: true })).toBeVisible({
-      timeout: 30_000,
-    });
+    await sidebar.getByRole("link", { name: "Análise" }).click();
+    await expect(
+      page.getByRole("navigation", { name: "Telas de Análise" }).getByRole("link", { name: "Atividades", exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
 
     await page.goto("/app/activities");
     await expect(page.getByRole("heading", { name: "Atividades", level: 1 })).toBeVisible({
