@@ -168,5 +168,10 @@ export function detectUnscheduledFollowUpPromise(body: string): boolean {
     /\b(?:vou|vamos|irei|iremos)\b[^.!?\n]{0,18}\b(?:tent|retent)\w*\b[^.!?\n]{0,18}\b(?:de novo|novamente|outra vez)\b[^.!?\n]{0,18}\b(?:em instantes?|daqui a pouco|mais tarde|depois)\b/;
   const laterNotice =
     /\b(?:eu\s+)?(?:te|lhe)\s+(?:aviso|retorno|chamo|falo)\b[^.!?\n]{0,30}\b(?:mais tarde|depois|assim que|quando)\b/;
-  return retry.test(text) || laterNotice.test(text);
+  // "Me dá só um instante?" pede espera e encerra o turno: nada volta sem uma
+  // nova mensagem do cliente. Medido em produção (07/10/2026): a paciente ficou
+  // seis dias esperando os horários que a IA disse estar vendo.
+  const waitAsk =
+    /\bme\s+da\s+(?:so\s+)?(?:um|uns)\s+(?:instante|minutinho|minuto|momento|segundinho|segundo)s?\b/;
+  return retry.test(text) || laterNotice.test(text) || waitAsk.test(text);
 }
