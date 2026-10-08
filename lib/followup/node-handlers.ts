@@ -352,6 +352,19 @@ export function pisoDoInboundDaEspera(
 }
 
 /**
+ * Passos é número, mas o formulário grava o que se DIGITA (texto). Com `"3"`,
+ * `gte` nunca era verdadeiro e `neq` sempre era: a regra aparecia pronta no
+ * card e decidia sozinha. Lê o número escrito; texto que não é número segue
+ * como está. Porte de melgarafael/DeskcommCRM #1146 (ed42ad1197), só o motor.
+ */
+function valorDePassos(value: string | number): string | number {
+  if (typeof value === "number") return value;
+  const limpo = value.trim();
+  const n = Number(limpo);
+  return limpo !== "" && Number.isFinite(n) ? n : value;
+}
+
+/**
  * O evento que registra a classe que o `ai_classify` escolheu: a fonte do
  * "Desfecho do passo anterior" (o mesmo evento que a tela de histórico lê).
  */
@@ -402,17 +415,18 @@ function evaluateCheck(
   // eram falsos com `null`; ausência de dado não prova a negativa.
   if (actual === null) return false;
 
+  const expected = check.field === "steps_taken" ? valorDePassos(check.value) : check.value;
   switch (check.op) {
     case "eq":
-      return actual === check.value;
+      return actual === expected;
     case "neq":
-      return actual !== check.value;
+      return actual !== expected;
     case "gte":
-      return typeof actual === "number" && typeof check.value === "number" && actual >= check.value;
+      return typeof actual === "number" && typeof expected === "number" && actual >= expected;
     case "lte":
-      return typeof actual === "number" && typeof check.value === "number" && actual <= check.value;
+      return typeof actual === "number" && typeof expected === "number" && actual <= expected;
     case "contains":
-      return typeof actual === "string" && typeof check.value === "string" && actual.includes(check.value);
+      return typeof actual === "string" && typeof expected === "string" && actual.includes(expected);
   }
 }
 
