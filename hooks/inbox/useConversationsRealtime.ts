@@ -69,6 +69,12 @@ export type ConversationWithContact = Conversation & {
    * responsável": o dono é o `assigned_to_user_id`, o nome é a cortesia.
    */
   assigned_to_user_name?: string | null;
+  /**
+   * A etapa do funil do negócio ABERTO mais recente do contato, resolvida no
+   * servidor para a lista mostrar quem está perto de fechar. Ausente/nulo = sem
+   * negócio aberto (ou resposta em cache de antes do campo existir).
+   */
+  etapa_atual?: string | null;
 };
 
 /** O vocabulário de LEITURA (7), que inclui os dois estados que só o motor escreve. */

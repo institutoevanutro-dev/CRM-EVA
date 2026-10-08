@@ -1600,6 +1600,8 @@ export const DICIONARIO: Traducoes = {
   "Nome desta saída (opcional)": { es: "Nombre de esta salida (opcional)" },
   Operador: { es: "Operador" },
   "Etapa do funil": { es: "Etapa del embudo" },
+  "Mais abas": { es: "Más pestañas" },
+  Encerrada: { es: "Cerrada" },
   "Etiqueta do contato": { es: "Etiqueta del contacto" },
   "Passos já dados no fluxo": { es: "Pasos ya dados en el flujo" },
   "Desfecho do passo anterior": { es: "Desenlace del paso anterior" },

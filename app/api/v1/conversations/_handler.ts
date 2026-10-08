@@ -407,7 +407,32 @@ export async function listConversationsHandler(
       ? encodeCursor({ sort: (last[sortCol] as string | null) ?? null, id: last.id })
       : null;
 
-  return { conversations: page, cursor, has_more: hasMore };
+  return { conversations: await comEtapaAtual(supabase, ctx.organization_id, page), cursor, has_more: hasMore };
+}
+
+/**
+ * A etapa do funil do negócio ABERTO mais recente de cada contato da página —
+ * a lista mostra quem está perto de fechar sem a equipe sair do Inbox.
+ *
+ * Uma consulta por página (≤ limite da página de contatos), nunca por linha. É
+ * enfeite: se falhar, a lista sai sem a etapa em vez de não sair.
+ */
+async function comEtapaAtual(supabase: SB, organizationId: string, page: Conversation[]): Promise<Conversation[]> {
+  const ids = [...new Set(page.map((c) => c.contact_id).filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return page;
+  const { data, error } = await supabase
+    .from("crm_leads")
+    .select("contact_id, crm_stages(name)")
+    .eq("organization_id", organizationId)
+    .eq("status", "open")
+    .in("contact_id", ids)
+    .order("last_activity_at", { ascending: false, nullsFirst: false });
+  if (error || !Array.isArray(data)) return page;
+  const porContato = new Map<string, string>();
+  for (const l of data as unknown as Array<{ contact_id: string; crm_stages: { name: string } | null }>) {
+    if (!porContato.has(l.contact_id) && l.crm_stages?.name) porContato.set(l.contact_id, l.crm_stages.name);
+  }
+  return page.map((c) => ({ ...c, etapa_atual: (c.contact_id && porContato.get(c.contact_id)) || null }));
 }
 
 // ---------------------------------------------------------------------------

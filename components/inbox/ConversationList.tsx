@@ -51,7 +51,10 @@ export function ConversationList({
   // `?? []` e não `undefined`: enquanto a lista de canais carrega, o certo é
   // NÃO mostrar. Mostrar e sumir depois é pior que aparecer um instante tarde.
   const canais = useChannelSessions().data ?? [];
-  const maisDeUmCanal = canais.length > 1;
+  // Só números de WhatsApp contam: a conta do Instagram já se anuncia no selo
+  // dela, e contá-la punha o número da clínica em TODA linha do WhatsApp de quem
+  // tem um número só — o chip mais repetido da lista (print de 07/10/2026).
+  const maisDeUmCanal = canais.filter((c) => c.can_send !== false).length > 1;
 
   // Fila (G5-03): a lista já vem ordenada por tempo de espera (server), então a
   // posição é o índice na lista visível. Só mostramos posição/espera nessa visão.
@@ -107,6 +110,9 @@ export function ConversationList({
    */
   const mostrarAutomatico =
     !(filters.comando?.length === 1 && filters.comando[0] === "automatico");
+  // O selo de quem atende some quando a aba já filtra por um comando só: em
+  // "Automático" toda linha diria "IA".
+  const mostrarComando = !(filters.comando?.length === 1);
 
   useEffect(() => {
     if (onVisibleChange) onVisibleChange(items.map((i) => i.id));
@@ -169,6 +175,7 @@ export function ConversationList({
             mostrarCanal={maisDeUmCanal}
             mostrarAtendente={mostrarAtendente}
             mostrarAutomatico={mostrarAutomatico}
+            mostrarComando={mostrarComando}
             automaticoDaOrg={automaticoDaOrg.data}
           />
         ))}

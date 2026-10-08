@@ -1,7 +1,7 @@
 "use client";
 import { useT } from "@/hooks/i18n/useT";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MagnifyingGlass } from "@/lib/ui/icons";
+import { CaretDown, MagnifyingGlass } from "@/lib/ui/icons";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -36,6 +36,9 @@ import { useConversationCounts } from "@/hooks/inbox/useConversationCounts";
 import type { Role, VisibilityMode } from "@/lib/auth/types";
 
 export type InboxTab = "unassigned" | "mine" | "all" | "closed" | "archived" | "ai" | "comentarios";
+
+/** As abas da fila de trabalho, sempre à vista. As demais vão para "Mais". */
+const ABAS_PRINCIPAIS: readonly InboxTab[] = ["unassigned", "mine", "all"];
 
 const INBOX_TABS: { value: InboxTab; label: string }[] = [
   { value: "unassigned", label: "Fila" },
@@ -305,6 +308,9 @@ export function InboxFilters({ value, onChange }: Props) {
     return () => clearTimeout(t);
   }, [searchInput]);
 
+  const secundarias = tabs.filter((tab) => !ABAS_PRINCIPAIS.includes(tab));
+  const abaSecundariaAtiva = secundarias.includes(value.tab);
+
   return (
     <div className="border-b border-border bg-background">
       {/* Busca, não-lidos e os seletores de canal/tag são filtros de CONVERSA — a
@@ -509,8 +515,8 @@ export function InboxFilters({ value, onChange }: Props) {
         onValueChange={(v) => onChange({ ...value, tab: v as InboxTab })}
         className="px-3"
       >
-        <TabsList className="h-auto w-full flex-wrap justify-start gap-x-3 gap-y-1 rounded-none bg-transparent p-0">
-          {tabs.map((tab) => {
+        <TabsList className="h-auto w-full justify-start gap-x-3 rounded-none bg-transparent p-0">
+          {tabs.filter((tab) => ABAS_PRINCIPAIS.includes(tab)).map((tab) => {
             const meta = INBOX_TABS.find((t) => t.value === tab)!;
             const count = countFor[tab];
             return (
@@ -526,6 +532,52 @@ export function InboxFilters({ value, onChange }: Props) {
               </TabsTrigger>
             );
           })}
+          {/* As abas de consulta (Automático, Fechadas, Arquivadas, Comentários)
+              moram em "Mais": são lugares que se visita, não a fila de trabalho.
+              Com as sete numa faixa só, ela quebrava em duas linhas na coluna da
+              lista (print de 07/10/2026). Quando a aba ativa é uma delas, o
+              gatilho mostra o NOME dela — senão a pessoa perderia onde está. */}
+          {secundarias.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "-mb-px inline-flex shrink-0 items-center gap-1 border-b-2 border-transparent pb-2 pt-1 text-xs font-medium text-text-muted",
+                    "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+                    abaSecundariaAtiva && "border-accent text-text",
+                  )}
+                  aria-label={t("Mais abas")}
+                >
+                  {abaSecundariaAtiva
+                    ? t(INBOX_TABS.find((x) => x.value === value.tab)!.label)
+                    : t("Mais")}
+                  {abaSecundariaAtiva && typeof countFor[value.tab] === "number" && countFor[value.tab]! > 0 && (
+                    <span className="text-[11px] tabular-nums text-text-subtle">{countFor[value.tab]}</span>
+                  )}
+                  <CaretDown size={11} aria-hidden />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {secundarias.map((tab) => {
+                  const meta = INBOX_TABS.find((x) => x.value === tab)!;
+                  const count = countFor[tab];
+                  return (
+                    <DropdownMenuItem
+                      key={tab}
+                      onSelect={() => onChange({ ...value, tab })}
+                      className="justify-between gap-6 text-xs"
+                    >
+                      {t(meta.label)}
+                      {typeof count === "number" && count > 0 && (
+                        <span className="tabular-nums text-text-subtle">{count}</span>
+                      )}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </TabsList>
       </Tabs>
     </div>

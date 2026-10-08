@@ -5,11 +5,10 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import type { Locale } from "date-fns";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { InstagramLogo, Phone, Robot } from "@/lib/ui/icons";
+import { Clock, Funnel, InstagramLogo, Phone, Robot, UserCircle } from "@/lib/ui/icons";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
-import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { SeloDoCanal } from "@/components/inbox/SeloDoCanal";
 import { comandoDaConversa, esperaDaConversa } from "@/lib/inbox/comando-da-conversa";
 import { cn } from "@/lib/utils";
@@ -50,6 +49,12 @@ interface Props {
    */
   mostrarAutomatico?: boolean;
   /**
+   * Mostrar o selo escrito de quem atende (IA, Equipe, Aguardando, Encerrada).
+   * A lista desliga quando todas as linhas teriam o mesmo selo (aba filtrada
+   * por um comando só). Ausente = mostra.
+   */
+  mostrarComando?: boolean;
+  /**
    * A org tem atendimento automático de pé? Vem por PROP e não por hook: um hook
    * por linha faria 50 assinaturas de query na mesma lista para responder a MESMA
    * pergunta org-wide. `undefined` = "não sei", e a função trata isso como "não
@@ -72,12 +77,11 @@ interface Props {
  * mesma razão que ele mora ali: a cor e a palavra dizem a mesma coisa e não
  * podem ser mantidas em arquivos diferentes.
  */
-const COR_DO_COMANDO: Record<string, string> = {
-  humano: "bg-blue-500",
-  automatico: "bg-purple-500",
-  aguardando: "bg-amber-500",
-  ninguem: "bg-muted-foreground/60",
-  encerrada: "bg-muted-foreground/30",
+const SELO_DO_COMANDO: Record<string, { rotulo: string; classe: string; Icone: typeof Robot } | undefined> = {
+  automatico: { rotulo: "IA", classe: "bg-info-bg text-info-fg", Icone: Robot },
+  aguardando: { rotulo: "Aguardando", classe: "bg-warning-bg text-warning-fg", Icone: Clock },
+  humano: { rotulo: "Equipe", classe: "bg-accent-soft text-accent-hover", Icone: UserCircle },
+  encerrada: { rotulo: "Encerrada", classe: "bg-surface-elevated text-text-muted", Icone: Clock },
 };
 
 function initials(name: string | null | undefined, fallback: string): string {
@@ -128,6 +132,7 @@ export function ConversationListItem({
   mostrarCanal,
   mostrarAtendente,
   mostrarAutomatico = true,
+  mostrarComando = true,
   automaticoDaOrg,
 }: Props) {
   const localeDaData = useLocaleDeData();
@@ -184,7 +189,12 @@ export function ConversationListItem({
     automaticoDaOrg,
   });
   const isAi = comando.quem === "automatico";
-  const dot = COR_DO_COMANDO[comando.quem] ?? COR_DO_COMANDO.ninguem;
+  const selo = mostrarComando ? SELO_DO_COMANDO[comando.quem] : undefined;
+  // Quem atende ganha NOME quando a lista tem mais de um dono — "Equipe" em toda
+  // linha não diria de quem é.
+  const rotuloDoSelo =
+    comando.quem === "humano" && mostrarAtendente ? (comando.nome ?? t("Equipe")) : selo ? t(selo.rotulo) : null;
+  const etapa = conversation.etapa_atual ?? null;
 
   // O número DA EMPRESA por onde esta conversa chegou — não o do cliente. Com
   // dois canais é o que decide o tom da resposta e qual número a pessoa vê
@@ -196,8 +206,9 @@ export function ConversationListItem({
   const viaInstagram = conversation.channel === "instagram";
 
   const temSelos =
+    Boolean(selo) ||
+    Boolean(etapa) ||
     visibleTags.length > 0 ||
-    (mostrarAtendente && comando.quem === "humano") ||
     (mostrarCanal && rotuloCanal != null) ||
     viaInstagram ||
     Boolean(c?.is_blocked) ||
@@ -235,13 +246,6 @@ export function ConversationListItem({
             {initials(displayName, phoneFallback)}
           </AvatarFallback>
         </Avatar>
-        <span
-          className={cn(
-            "absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background",
-            dot,
-          )}
-          aria-hidden
-        />
         <SeloDoCanal
           canal={viaInstagram ? "instagram" : "whatsapp"}
           tamanho="pequeno"
@@ -305,14 +309,33 @@ export function ConversationListItem({
 
         {temSelos && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            {selo && rotuloDoSelo && (
+              <span
+                className={cn(
+                  "inline-flex h-4 items-center gap-1 rounded-full px-1.5 text-[10px] font-medium",
+                  selo.classe,
+                )}
+                data-selo-do-comando={comando.quem}
+              >
+                <selo.Icone size={9} weight="bold" aria-hidden />
+                {rotuloDoSelo}
+              </span>
+            )}
+            {etapa && (
+              <span
+                className="inline-flex h-4 max-w-[9rem] items-center gap-1 truncate rounded-full border border-border px-1.5 text-[10px] text-text-muted"
+                title={t("Etapa do funil")}
+                data-etapa-da-conversa
+              >
+                <Funnel size={9} aria-hidden />
+                <span className="truncate">{etapa}</span>
+              </span>
+            )}
             {visibleTags.map((t) => (
               <ChipDeEtiqueta key={t} tag={t} className="h-4 px-1.5 text-[10px]" />
             ))}
             {overflow > 0 && (
               <span className="text-[10px] text-text-muted">+{overflow}</span>
-            )}
-            {mostrarAtendente && comando.quem === "humano" && (
-              <OwnerBadge ownerKind="user" ownerName={comando.nome ?? t("Atendente")} compacto />
             )}
             {viaInstagram && (
               <Badge
