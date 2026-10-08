@@ -20,6 +20,8 @@ import {
   type ChannelProvider,
   type ChannelSessionRef,
 } from "@/lib/channels";
+import { variantesDoItem } from "@/lib/midias/esquemas";
+import { BUCKET_DA_BIBLIOTECA } from "@/lib/midias/termo";
 import { cabecalhosDeMidia } from "@/lib/messaging/media/servir";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -55,15 +57,44 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   // Filtro explícito de organization_id por doutrina (defense-in-depth).
   const { data: msg, error } = await supabase
     .from("messages")
-    .select("id, media_url, media_mime, media_storage_path, channel_session_id")
+    .select(
+      "id, media_url, media_mime, media_storage_path, channel_session_id, media_library_item_id, metadata",
+    )
     .eq("id", messageId)
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
   if (error) {
     return fail("internal_error", t("Erro ao buscar mensagem."), 500, { requestId });
   }
-  if (!msg || (!msg.media_storage_path && !msg.media_url)) {
+  if (!msg || (!msg.media_storage_path && !msg.media_url && !msg.media_library_item_id)) {
     return fail("not_found", t("Mensagem sem mídia."), 404, { requestId });
+  }
+
+  // Mídia enviada da biblioteca: a mensagem guarda só o item e a variante
+  // sorteada. O caminho vem do item, da MESMA org da mensagem, nunca da mensagem.
+  // Item apagado (FK nulo) não entra aqui e cai no 404 do fim.
+  if (!msg.media_storage_path && msg.media_library_item_id) {
+    const admin = createAdminClient();
+    // media_library_items ainda não está em database.types.ts: tipo local estreito.
+    const { data: item } = (await admin
+      .from("media_library_items" as never)
+      .select("id, variants")
+      .eq("id", msg.media_library_item_id)
+      .eq("organization_id", activeOrg.orgId)
+      .maybeSingle()) as { data: { id: string; variants: unknown } | null };
+    const variantes = item ? variantesDoItem(item.variants, activeOrg.orgId, item.id) : [];
+    const gravada = (msg.metadata as { media_variant?: unknown } | null)?.media_variant;
+    const escolhida = variantes.find((v) => v.key === gravada) ?? variantes[0];
+    if (escolhida) {
+      const { data: signed } = await admin.storage
+        .from(BUCKET_DA_BIBLIOTECA)
+        .createSignedUrl(escolhida.storage_path, SIGNED_URL_TTL_S);
+      if (signed?.signedUrl) {
+        const response = NextResponse.redirect(signed.signedUrl, 302);
+        response.headers.set("X-Request-Id", requestId);
+        return response;
+      }
+    }
   }
 
   if (msg.media_storage_path) {

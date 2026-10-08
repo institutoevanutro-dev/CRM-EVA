@@ -71,7 +71,9 @@ export function MessageBubble({
   const isOutbound = message.direction === "outbound";
   const time = format(new Date(message.sent_at), "HH:mm", { locale: localeDaData });
   const isFailed = message.status === "failed";
-  const hasMedia = Boolean(message.media_url || message.media_storage_path);
+  const hasMedia = Boolean(
+    message.media_url || message.media_storage_path || message.media_library_item_id,
+  );
   const isContact = message.type === "contact";
   // Figurinha sem caption: sem moldura de bolha (padrão WhatsApp).
   const isBareSticker = hasMedia && message.type === "sticker" && !message.body;
