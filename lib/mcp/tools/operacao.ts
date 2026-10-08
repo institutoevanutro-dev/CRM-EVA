@@ -215,19 +215,27 @@ export const crmListTags: McpToolDefinition<typeof listTagsShape> = {
 // respostas prontas
 // ---------------------------------------------------------------------------
 
-const listTemplatesShape = {};
+const listTemplatesShape = {
+  incluir_pessoais: z.boolean().default(false),
+};
 
 export const crmListMessageTemplates: McpToolDefinition<typeof listTemplatesShape> = {
   name: "crm_list_message_templates",
   description:
-    "Lista as respostas prontas da organização: título, corpo com as marcações {{...}}, " +
-    "atalho e se é compartilhada ou pessoal. Use quando a empresa já tiver decidido como diz algo, em vez de escrever do zero.",
+    "Lista as respostas prontas COMPARTILHADAS da organização: título, corpo com as marcações {{...}}, " +
+    "atalho e se é compartilhada ou pessoal. Use quando a empresa já tiver decidido como diz algo, em vez de escrever do zero. " +
+    "Os modelos PESSOAIS de cada atendente NÃO entram na lista: `incluir_pessoais` só mostra os do próprio " +
+    "usuário da chamada, e um token de integração não tem modelo pessoal nenhum.",
   inputSchema: listTemplatesShape,
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
-  handler: async (_input, ctx) => {
-    return { modelos: await listarModelosDeMensagem(deps(ctx)) };
+  handler: async (input, ctx) => {
+    return {
+      modelos: await listarModelosDeMensagem(deps(ctx), {
+        incluirPessoais: input.incluir_pessoais,
+      }),
+    };
   },
 };
 
