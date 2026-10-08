@@ -16,6 +16,7 @@
  * Gate = manager+, que é o que a matriz da spec 13 §4 dá para
  * "atendimento/routing" — a mesma linha cobre as duas chaves.
  */
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -38,7 +39,7 @@ export default async function AtendimentoSettingsPage() {
   }
 
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("organizations")
     .select("settings")
     .eq("id", activeOrg.orgId)
@@ -68,10 +69,18 @@ export default async function AtendimentoSettingsPage() {
         </p>
       </header>
 
-      <AtendimentoForm
-        initial={{ ...routing, visibility_mode: settings.visibility_mode ?? DEFAULT_VISIBILITY_MODE }}
-      />
-      <ChannelRoutingForm initial={channels} />
+      {error ? (
+        // Falha de leitura NÃO pode virar o formulário com o padrão: "Salvar"
+        // ali gravaria o padrão por cima da configuração real.
+        <ErroDeLeitura texto={traduzir("Não foi possível carregar a configuração. Recarregue a página antes de mudar algo.", idioma)} />
+      ) : (
+        <>
+          <AtendimentoForm
+            initial={{ ...routing, visibility_mode: settings.visibility_mode ?? DEFAULT_VISIBILITY_MODE }}
+          />
+          <ChannelRoutingForm initial={channels} />
+        </>
+      )}
     </div>
   );
 }

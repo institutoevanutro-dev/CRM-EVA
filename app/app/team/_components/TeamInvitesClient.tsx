@@ -153,7 +153,7 @@ export function TeamInvitesClient({ canManage }: Props) {
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {new Date(inv.last_sent_at).toLocaleString(tagDoIdioma)}
+                      {new Date(inv.last_sent_at).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" })}
                       {inv.resend_count > 0 ? (
                         <span className="ml-1 text-xs">
                           ({t("reenviado")} {inv.resend_count}×)
@@ -163,7 +163,7 @@ export function TeamInvitesClient({ canManage }: Props) {
                     <TableCell className="text-sm text-muted-foreground">
                       {inv.status === "aceito"
                         ? "—"
-                        : new Date(inv.expires_at).toLocaleString(tagDoIdioma)}
+                        : new Date(inv.expires_at).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" })}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {inv.inviter_name ?? "—"}

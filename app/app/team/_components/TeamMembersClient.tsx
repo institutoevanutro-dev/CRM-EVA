@@ -167,7 +167,7 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {m.last_sign_in_at
-                    ? new Date(m.last_sign_in_at).toLocaleString(tagDoIdioma)
+                    ? new Date(m.last_sign_in_at).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" })
                     : "—"}
                 </TableCell>
                 {canManage ? (
