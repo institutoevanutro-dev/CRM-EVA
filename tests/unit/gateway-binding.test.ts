@@ -361,5 +361,8 @@ it("binding não envia a credencial decifrada para URL arbitrária", async () =>
   const r = await resolverModeloDoPonto("sentiment_classify", ORG, "anthropic/claude-haiku-4-5");
   const json = JSON.stringify(r);
   expect(json).not.toContain("attacker.example");
-  expect(json).toContain("https://openrouter.ai/api/v1");
+  // Modelo de chat/completions (porte do #1483): o baseURL vive na função
+  // `config.url`, que o JSON não serializa — pergunta-se a ela o destino.
+  const config = (r?.model as unknown as { config: { url: (o: { path: string; modelId: string }) => string } }).config;
+  expect(config.url({ path: "/chat/completions", modelId: "x/y" })).toBe("https://openrouter.ai/api/v1/chat/completions");
 });
