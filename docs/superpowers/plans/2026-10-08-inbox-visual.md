@@ -81,3 +81,17 @@ hooks do inbox, e partir dele evita conflito. Este PR entra depois do #161.
 - e2e do inbox verde, com print em claro e escuro.
 - `.changes/` com `capacidade_nova`.
 - Gates: tsc, lint e `pnpm test:unit`.
+
+## O que mudou durante a execução
+
+- **Fonte:** já tinha entrado na Parte 2 (#155). Nada a fazer aqui.
+- **Topo:** as ações NÃO foram para um menu "⋯". `inbox-header-nao-trava.test.tsx`
+  guarda uma decisão anterior: reorganizar não é esconder ação de quem atende.
+  O topo ficou com foto e uma linha só, e os botões continuam visíveis.
+- **Ordem da ficha:** as demandas abertas vêm ANTES do negócio
+  (`inbox-demandas-abertas.test.tsx`, cap. 5: a unidade é a demanda). Sem
+  demanda aberta, a seção ocupa uma linha só e o negócio aparece logo abaixo.
+- **Fotos do Instagram:** a URL do perfil expira, então o cron passou a baixá-la
+  para o bucket (o mesmo caminho do WhatsApp), em vez de a tela usar a URL.
+- **Escuro:** a conversa selecionada usava `bg-accent-50`, que é claro nos dois
+  temas e apagava o nome. Passou a `bg-accent/10`.

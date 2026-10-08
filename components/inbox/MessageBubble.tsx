@@ -276,7 +276,8 @@ export const MessageBubble = memo(function MessageBubble({
         <div
           className={cn(
             "mt-1 flex items-center justify-end gap-1 text-[10px]",
-            isOutbound ? "text-primary-foreground" : "text-muted-foreground",
+            // Só o balão da equipe é escuro; o do automático é claro e pede texto escuro.
+            isOutbound && message.sent_via !== "ai" ? "text-primary-foreground" : "text-muted-foreground",
           )}
         >
           {editada && (
