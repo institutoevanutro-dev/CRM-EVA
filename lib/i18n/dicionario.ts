@@ -1500,6 +1500,16 @@ export const DICIONARIO: Traducoes = {
   "Concluída": { es: "Concluida" },
   Cancelada: { es: "Cancelada" },
   "Fluxo criado.": { es: "Flujo creado." },
+  "Fluxo duplicado.": { es: "Flujo duplicado." },
+  "Fluxo renomeado.": { es: "Flujo renombrado." },
+  "Duplicando…": { es: "Duplicando…" },
+  "Renomear fluxo": { es: "Renombrar flujo" },
+  "Não consegui renomear o fluxo. Tente de novo.": {
+    es: "No pude renombrar el flujo. Intenta de nuevo.",
+  },
+  "Só o nome interno muda. Inscrições e a versão publicada continuam as mesmas.": {
+    es: "Solo cambia el nombre interno. Las inscripciones y la versión publicada siguen iguales.",
+  },
   "Follow-up cancelado.": { es: "Seguimiento cancelado." },
   "Retorno cancelado.": { es: "Retorno cancelado." },
   "Rascunho salvo.": { es: "Borrador guardado." },
