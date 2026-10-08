@@ -6,7 +6,7 @@ import type { Locale } from "date-fns";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
 import { Clock, Funnel, InstagramLogo, Phone, Robot, UserCircle } from "@/lib/ui/icons";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AvatarDoContato } from "@/components/inbox/AvatarDoContato";
 import { Badge } from "@/components/ui/badge";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
 import { SeloDoCanal } from "@/components/inbox/SeloDoCanal";
@@ -83,17 +83,6 @@ const SELO_DO_COMANDO: Record<string, { rotulo: string; classe: string; Icone: t
   humano: { rotulo: "Equipe", classe: "bg-accent-soft text-accent-hover", Icone: UserCircle },
   encerrada: { rotulo: "Encerrada", classe: "bg-surface-elevated text-text-muted", Icone: Clock },
 };
-
-function initials(name: string | null | undefined, fallback: string): string {
-  const v = (name ?? "").trim().replace(/^@/, "");
-  if (!v) return fallback.slice(0, 2).toUpperCase();
-  const parts = v.split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return fallback.slice(0, 2).toUpperCase();
-  if (parts.length === 1) return (parts[0] ?? "").slice(0, 2).toUpperCase();
-  const first = parts[0]?.[0] ?? "";
-  const last = parts[parts.length - 1]?.[0] ?? "";
-  return (first + last).toUpperCase();
-}
 
 function relativeTime(iso: string | null, locale: Locale): string {
   if (!iso) return "";
@@ -230,22 +219,7 @@ export function ConversationListItem({
         <span className="absolute inset-y-0 left-0 w-0.5 bg-accent" aria-hidden />
       )}
       <div className="relative shrink-0">
-        <Avatar className="h-10 w-10">
-          {/* Só monta a <img> quando existe arquivo: sem isso o browser pediria
-              a rota para TODO contato da lista e levaria 404 em cada um sem
-              foto — que é a maioria. O AvatarFallback do Radix já cobre o caso
-              de a imagem não carregar, então as iniciais nunca somem. */}
-          {c?.avatar_storage_path && !c?.is_anonymized ? (
-            <AvatarImage
-              src={`/api/v1/contacts/${c.id}/avatar`}
-              alt=""
-              className="object-cover"
-            />
-          ) : null}
-          <AvatarFallback className="bg-surface-elevated text-xs font-medium text-text-muted">
-            {initials(displayName, phoneFallback)}
-          </AvatarFallback>
-        </Avatar>
+        <AvatarDoContato contato={c} nome={displayName} reserva={phoneFallback} />
         <SeloDoCanal
           canal={viaInstagram ? "instagram" : "whatsapp"}
           tamanho="pequeno"
