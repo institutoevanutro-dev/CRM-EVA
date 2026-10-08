@@ -1,7 +1,7 @@
 import {beforeEach,expect,it,vi} from 'vitest';
-const state=vi.hoisted(()=>({scope:true,queries:[] as {table:string;filters:unknown[][]}[],appointment:true,agendaOrg:"clinic",agendaScope:true}));
+const state=vi.hoisted(()=>({scope:true,queries:[] as {table:string;filters:unknown[][]}[],appointment:true,agendaOrg:"clinic",agendaScope:true,limitedAgenda:false}));
 vi.mock('@/lib/prontuario/contacts',async original=>({...await original<typeof import('@/lib/prontuario/contacts')>(),authorizeProntuario:vi.fn(async()=>state.scope?{ok:true,auth:{organizationId:'clinic',apiTokenId:'token'}}:{ok:false,response:new Response('',{status:403})})}));
-vi.mock('@/lib/mcp/auth',async original=>({...await original<typeof import('@/lib/mcp/auth')>(),validateBearerToken:vi.fn(async()=>({organizationId:state.agendaOrg,role:"agent",scopes:state.agendaScope?['mcp:read']:[]}))}));
+vi.mock('@/lib/mcp/auth',async original=>({...await original<typeof import('@/lib/mcp/auth')>(),validateBearerToken:vi.fn(async()=>({organizationId:state.agendaOrg,role:"agent",scopes:state.agendaScope?[state.limitedAgenda?'agenda:read':'mcp:read']:[]}))}));
 vi.mock('@/lib/audit/leitura',()=>({auditarLeitura:vi.fn()}));
 vi.mock('@/lib/ai/dispatcher/rate-limit',()=>({checkRateLimit:vi.fn(async()=>({allowed:true}))}));
 const id='11111111-1111-4111-8111-111111111111',appointmentId='22222222-2222-4222-8222-222222222222';
@@ -11,7 +11,7 @@ vi.mock('@/lib/supabase/admin',()=>({createAdminClient:()=>({
 })}));
 const {GET}=await import('./route');
 const request=(query='?appointment_id='+appointmentId)=>GET(new Request('https://example.test/api/v1/prontuario/contacts/'+id+query),{params:Promise.resolve({id})});
-beforeEach(()=>{state.scope=true;state.appointment=true;state.agendaOrg="clinic";state.agendaScope=true;state.queries=[];});
+beforeEach(()=>{state.scope=true;state.appointment=true;state.agendaOrg="clinic";state.agendaScope=true;state.limitedAgenda=false;state.queries=[];});
 it('retorna detalhes apenas do compromisso do contato e da organização, sem divulgar email do profissional',async()=>{
  const r=await request();expect(r.status).toBe(200);const b=await r.json();
  expect(b.data.appointment).toEqual({id:appointmentId,title:'Consulta',type:'Retorno',professional:'Dra. Exemplo',notes:'Trazer exames\nChegar antes'});
@@ -25,3 +25,5 @@ it('recusa identificador inválido antes de consultar dados',async()=>{expect((a
 it('mantém a autorização exclusiva da integração',async()=>{state.scope=false;expect((await request()).status).toBe(403);expect(state.queries).toHaveLength(0);});
 
 it("exige autorização da agenda da mesma organização",async()=>{state.agendaOrg="other";expect((await request()).status).toBe(403);state.agendaOrg="clinic";state.agendaScope=false;expect((await request()).status).toBe(403);expect(state.queries).toHaveLength(0);});
+
+it("aceita a credencial restrita à leitura da agenda já usada pelo prontuário",async()=>{state.limitedAgenda=true;expect((await request()).status).toBe(200);});

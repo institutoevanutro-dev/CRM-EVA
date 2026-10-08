@@ -28,7 +28,7 @@
 
 ### Detalhes da agenda (08/10/2026)
 
-`GET /api/v1/prontuario/contacts/[id]?appointment_id=<uuid>` acrescenta `appointment` com `id,title,type,professional,notes`. A consulta sem esse parâmetro preserva o contrato original. Além de `Authorization` com `prontuario:contacts:read`, a leitura exige `X-Agenda-Authorization` com `mcp:read`, da mesma organização; o acesso a cadastro sozinho não concede agenda.
+`GET /api/v1/prontuario/contacts/[id]?appointment_id=<uuid>` acrescenta `appointment` com `id,title,type,professional,notes`. A consulta sem esse parâmetro preserva o contrato original. Além de `Authorization` com `prontuario:contacts:read`, a leitura exige `X-Agenda-Authorization` com `agenda:read` (ou `mcp:read`), da mesma organização, usando a mesma regra da listagem de compromissos; o acesso a cadastro sozinho não concede agenda.
 
 A consulta filtra compromisso por organização, contato e identificador, exclui contatos anonimizados/fundidos e verifica o pertencimento do profissional antes de resolver seu nome. As observações não entram na listagem MCP usada pelo assistente. A auditoria existente registra `appointment_id` sem conteúdo clínico. O consumidor é a janela da agenda do Prontuário; falhas retornam erro e permitem tentar novamente, sem criar vínculos ou alterar compromissos.
 

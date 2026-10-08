@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
-import { validateBearerToken, ensureScope, ensureRole, McpAuthError } from "@/lib/mcp/auth";
+import { validateBearerToken, ensureMcpToolScope, ensureRole, McpAuthError } from "@/lib/mcp/auth";
 import { auditarLeitura } from "@/lib/audit/leitura";
 import { ok, fail } from "@/lib/api/wrappers";
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
@@ -21,7 +21,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
   if (appointmentId.data) {
     try {
       const agenda = await validateBearerToken(req.headers.get("x-agenda-authorization"));
-      ensureScope(agenda.scopes, "mcp:read");
+      ensureMcpToolScope(agenda.scopes, "crm_list_appointments", "mcp:read");
       ensureRole(agenda.role, "agent");
       if (agenda.organizationId !== authorized.auth.organizationId) return fail("forbidden", "Credenciais de organizações diferentes.", 403, {requestId});
     } catch (error) {
