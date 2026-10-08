@@ -34906,6 +34906,10 @@ as $fn_segura$
       from public.contacts ct
      where ct.id = p_contact
        and case
+             -- Sem usuário no JWT é o próprio servidor (worker por `pg`, client de
+             -- service role): ele lê toda organização, como já lia sem a função.
+             -- `anon` não chega aqui — a função é revogada dele.
+             when auth.uid() is null then true
              when exists (select 1 from public.user_organizations uo
                            where uo.user_id = auth.uid()
                              and uo.organization_id = ct.organization_id

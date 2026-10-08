@@ -96,6 +96,11 @@ describe("0331 — comando_da_conversa sem reler o contato sob RLS", () => {
     });
   });
 
+  it("o servidor (sem usuário no JWT) lê a trava de qualquer organização", async () => {
+    const { rows } = await pool.query("select public.fn_contato_segura_o_robo($1) v", [BLOQUEADO]);
+    expect(rows[0].v).toBe(true);
+  });
+
   it("anon não executa a função", async () => {
     const { rows } = await pool.query(
       "select has_function_privilege('anon','public.fn_contato_segura_o_robo(uuid)','execute') v",
