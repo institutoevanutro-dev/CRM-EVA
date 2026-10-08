@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { useT } from "@/hooks/i18n/useT";
 import type { Bloco } from "@/lib/inicio/tipos";
+import { PaineisDaClinica } from "./PaineisDaClinica";
 
 type Numeros =
   | {
@@ -158,6 +159,9 @@ export function PainelInicio() {
           </Cartao>
         </div>
       </div>
+
+      {/* Só para gestor: o servidor manda `gestao` e a rota dos painéis exige manager. */}
+      {gestao ? <PaineisDaClinica /> : null}
 
       {gestao ? (
         <div>

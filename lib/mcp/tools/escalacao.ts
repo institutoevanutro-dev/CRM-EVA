@@ -37,6 +37,7 @@ import { lerContinuidadeHumana } from "@/lib/escalacao/continuidade";
 import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
 import type { McpContext, McpToolDefinition } from "../types";
 import { foraDaConversa } from "../fora-da-conversa";
+import { resolveUserNames } from "./_users";
 
 /** Payload de auditoria a partir do ator do ctx (mesma forma de governance.ts). */
 function actorAudit(ctx: McpContext): {
@@ -64,8 +65,9 @@ export const crmListAvailableAttendants: McpToolDefinition<typeof atendentesInpu
   description:
     "Atendentes da org com is_available, capacity, current_load e can_take_now (disponível ∧ " +
     "com folga ∧ dentro do horário — mesmo predicado do worker de roteamento). Use ANTES de " +
-    "escalar: com zero elegíveis a conversa vai para a fila e pode não ser puxada. Sem e-mail " +
-    "nem telefone.",
+    "escalar: com zero elegíveis a conversa vai para a fila e pode não ser puxada. Cada linha " +
+    "traz `nome` (só o full_name, mínimo LGPD) para a regra de roteamento citar gente e não " +
+    "UUID; sem e-mail nem telefone.",
   inputSchema: atendentesInputShape,
   category: "read",
   requiresRole: "agent",
@@ -73,8 +75,17 @@ export const crmListAvailableAttendants: McpToolDefinition<typeof atendentesInpu
   handler: async (input, ctx) => {
     const agora = new Date();
     const roster = await carregarRosterDeAtendimento(ctx.supabase, ctx.organizationId);
+    // Nome de quem atende (issue #1539): para a IA escrever uma regra de
+    // roteamento no prompt ela precisa de GENTE, não de UUID. O helper expõe
+    // SÓ `full_name` (mínimo LGPD do `team/assignable`) — nunca e-mail,
+    // telefone ou o `user_metadata` inteiro.
+    const nomes = await resolveUserNames(
+      ctx.supabase,
+      roster.map((a) => a.userId),
+    );
     const linhas = roster.map((a) => ({
       user_id: a.userId,
+      nome: nomes.get(a.userId) ?? null,
       role: a.papel,
       is_available: a.disponivel,
       capacity: a.capacidade,

@@ -491,3 +491,10 @@ Sentry breadcrumbs: 1 por tool call, com `tool_name`, `duration_ms`, `error_code
 - Spec 01 — `api_tokens` table reusada para auth bearer
 - Spec 02/03/04 — handlers REST que as tools encapsulam
 - Spec 12 — UI mostra catálogo de tools para tenant escolher por agente
+
+### Nome do contato na agenda
+
+`crm_list_appointments` retorna `contato_nome` (`string | null`) junto de `contato_id`.
+O nome vem de `listaAgendamentos`, que usa o resolvedor de nome do contato já vinculado
+à agenda. O título continua sendo o procedimento; ausência de contato retorna nome nulo.
+A inclusão do campo é aditiva e preserva a autenticação e o recorte por organização.

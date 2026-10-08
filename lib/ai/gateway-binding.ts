@@ -287,7 +287,7 @@ function instanciar(
     case "google":
       return createGoogleGenerativeAI({ apiKey })(modelId);
     case "openrouter":
-      return createOpenAI({ apiKey, baseURL: trustedAiBaseUrlOrDefault(provider, baseUrl) ?? OPENROUTER_BASE_URL, fetch: (input, init) => fetch(input, { ...init, redirect: "error" }) })(modelId);
+      return createOpenAI({ apiKey, baseURL: trustedAiBaseUrlOrDefault(provider, baseUrl) ?? OPENROUTER_BASE_URL, fetch: (input, init) => fetch(input, { ...init, redirect: "error" }) }).chat(modelId); // ver providers.ts
     default:
       return null;
   }
