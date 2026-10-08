@@ -137,7 +137,7 @@ export default async function ConversoesPage() {
                       )}
                     </td>
                     <td className="p-3 whitespace-nowrap text-muted-foreground">
-                      {new Date(p.tentadoEm).toLocaleString(idioma)}
+                      {new Date(p.tentadoEm).toLocaleString(idioma, { dateStyle: "short", timeStyle: "short" })}
                     </td>
                   </tr>
                 ))}

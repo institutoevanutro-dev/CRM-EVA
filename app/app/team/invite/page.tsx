@@ -21,7 +21,7 @@ export default async function TeamInvitePage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">{t("Convidar membros")}</h1>
         <p className="text-sm text-muted-foreground">
-          {t("Cole até 20 emails (um por linha) e escolha a role compartilhada.")}
+          {t("Cole até 20 e-mails (um por linha) e escolha o papel de todos.")}
         </p>
       </header>
       <InviteForm />

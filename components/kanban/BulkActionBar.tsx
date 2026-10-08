@@ -219,7 +219,7 @@ export function BulkActionBar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="outline" disabled={bulk.isPending}>
-              Tag…
+              {t("Etiqueta…")}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
@@ -227,7 +227,7 @@ export function BulkActionBar({
               <Input
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
-                placeholder={t("nova tag")}
+                placeholder={t("nova etiqueta")}
                 className="h-8 w-40"
                 onKeyDown={(e) => {
                   // ⚠️ O MENU DO RADIX FAZ TYPEAHEAD A CADA TECLA DE UM

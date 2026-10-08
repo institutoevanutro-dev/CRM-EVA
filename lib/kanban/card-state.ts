@@ -275,14 +275,20 @@ export function coolingLabel(
   return t("Sem resposta");
 }
 
-/** "3d" / "5h" / "agora" — o tempo parado no estágio, no rodapé do card. */
+/**
+ * "há 3 dias" / "há 5h" / "agora" — o tempo parado no estágio, no rodapé do
+ * card. Era "3d", e "3d em Qualificação" não se lê sem saber a convenção.
+ */
 export function stageAgeLabel(
   hoursInStage: number | null,
   t: (texto: string) => string = (texto) => texto,
 ): string {
   if (hoursInStage == null) return "";
   const hours = Math.floor(hoursInStage);
-  if (hours >= 24) return `${Math.floor(hours / 24)}d`;
-  if (hours >= 1) return `${hours}h`;
+  if (hours >= 24) {
+    const dias = Math.floor(hours / 24);
+    return `${t("há")} ${dias} ${dias === 1 ? t("dia") : t("dias")}`;
+  }
+  if (hours >= 1) return `${t("há")} ${hours}h`;
   return t("agora");
 }

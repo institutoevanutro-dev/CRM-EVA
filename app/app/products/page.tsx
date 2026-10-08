@@ -38,7 +38,7 @@ export default async function ProdutosPage() {
   const podeEditar = (user.is_platform_admin && !user.support) || ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
 
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("catalog_products")
     .select(COLUNAS_DO_PRODUTO)
     .eq("organization_id", activeOrg.orgId)
@@ -50,14 +50,15 @@ export default async function ProdutosPage() {
     <ProdutosClient
       inicial={(data ?? []) as unknown as Produto[]}
       podeEditar={podeEditar}
+      erroDeLeitura={Boolean(error)}
       textos={{
         titulo: t("Produtos"),
         subtitulo: t(
-          "O catálogo da loja. É daqui que o atendente de IA tira o preço quando alguém pergunta.",
+          "Procedimentos, produtos e preços da clínica. É daqui que o assistente de IA tira o preço quando alguém pergunta.",
         ),
         vazio: t("Nenhum produto cadastrado ainda"),
         vazioDica: t(
-          "Enquanto o catálogo estiver vazio, o atendente responde que não encontrou o produto — mesmo que a loja tenha.",
+          "Enquanto o catálogo estiver vazio, o assistente responde que não encontrou o item — mesmo que a clínica tenha.",
         ),
       }}
     />

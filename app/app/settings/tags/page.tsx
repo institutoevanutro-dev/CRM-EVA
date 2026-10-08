@@ -35,7 +35,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import { PainelDeTags } from "./_painel";
 
-export const metadata = { title: "Tags" };
+export const metadata = { title: "Etiquetas" };
 export const dynamic = "force-dynamic";
 
 export default async function TagsPage() {
@@ -71,7 +71,7 @@ export default async function TagsPage() {
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Tags")}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("Etiquetas")}</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
           {t(
             "As etiquetas que os agentes, o Inbox e o funil usam nesta organização. Renomear ou juntar corrige também as regras de agente que escrevem a etiqueta, na mesma operação.",

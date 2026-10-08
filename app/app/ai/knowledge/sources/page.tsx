@@ -1,3 +1,5 @@
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
+import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -46,7 +48,7 @@ export default async function AcervoPage() {
 
   const supabase = await createClient();
 
-  const [{ data: sourcesRaw }, { data: agentesRaw }, chave, { data: credenciais }] =
+  const [{ data: sourcesRaw, error }, { data: agentesRaw }, chave, { data: credenciais }] =
     await Promise.all([
       supabase
         .from("ai_knowledge_sources")
@@ -99,20 +101,22 @@ export default async function AcervoPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("O que o agente sabe")}</h1>
-        <p className="text-sm text-text-muted">
-          {t(
+      <CabecalhoDaPagina
+        titulo={t("O que o agente sabe")}
+        descricao={t(
             "O material do seu negócio que os assistentes consultam antes de responder. Cada assistente escolhe, na tela dele, o que pode ler daqui.",
           )}
-        </p>
-      </header>
+      />
 
-      <AcervoClient
+      {error ? (
+        <ErroDeLeitura texto={t("Não foi possível carregar o material. Recarregue a página.")} />
+      ) : (
+        <AcervoClient
         initialSources={initialSources}
         initialChave={estadoDaChave}
         agentes={agentes}
       />
+      )}
     </div>
   );
 }

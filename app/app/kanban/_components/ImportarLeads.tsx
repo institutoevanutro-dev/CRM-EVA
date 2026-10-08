@@ -103,7 +103,7 @@ export function ImportarLeads({ funis }: { funis: FunilDaLista[] }) {
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               {t(
-                "Um arquivo CSV com uma linha por lead. Os leads entram na primeira etapa aberta do funil escolhido.",
+                "Uma planilha salva como .csv (no Excel ou Google Planilhas: Salvar como → CSV), com uma linha por pessoa. Cada uma entra na primeira etapa aberta do funil escolhido.",
               )}
             </p>
 
@@ -141,7 +141,7 @@ export function ImportarLeads({ funis }: { funis: FunilDaLista[] }) {
               data-testid="escolher-planilha"
             >
               <UploadSimple size={16} aria-hidden />
-              {enviando ? t("Importando…") : t("Escolher o arquivo CSV")}
+              {enviando ? t("Importando…") : t("Escolher a planilha (.csv)")}
             </Button>
 
             {/* Rota de API que devolve o arquivo com `content-disposition:

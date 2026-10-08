@@ -413,7 +413,7 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/ai/skills",
-    label: "Skills",
+    label: "Habilidades",
     description: "As ações que o agente pode executar sozinho durante o atendimento.",
     icon: "PuzzlePiece",
     group: "ia",
@@ -423,7 +423,7 @@ export const NAV_CATALOG = [
   {
     href: "/app/ai/cases",
     label: "Casos",
-    description: "Os atendimentos que o agente conduziu, do início ao desfecho.",
+    description: "Quando a IA trava em algo que só uma pessoa resolve, ela abre um caso aqui.",
     icon: "ClipboardText",
     group: "ia",
     section: "Acompanhar o agente",
@@ -442,7 +442,7 @@ export const NAV_CATALOG = [
     // melhoria do agente e a fila só era vista por quem soubesse a URL.
     href: "/app/ai/proposals",
     label: "Propostas",
-    description: "Melhorias que a IA sugere para si mesma, esperando sua decisão.",
+    description: "Próximos passos que o assistente sugeriu e esperam sua decisão.",
     icon: "Lightbulb",
     group: "ia",
     section: "Acompanhar o agente",
@@ -625,7 +625,7 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/audit",
-    label: "Audit Log",
+    label: "Histórico de alterações",
     description: "Quem fez o quê, quando — o histórico que não se apaga.",
     icon: "ClockCounterClockwise",
     group: "analise",
@@ -693,7 +693,7 @@ export const NAV_CATALOG = [
     // quem monta a regra. Nada aqui apaga conversa ou muda dinheiro — o
     // alcance da operação é ao lado do de "Distribuição de atendimento".
     href: "/app/settings/tags",
-    label: "Tags",
+    label: "Etiquetas",
     description:
       "O vocabulário de etiquetas da empresa: onde cada uma é usada e como renomear, juntar ou excluir.",
     icon: "Tag",
@@ -765,7 +765,7 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/settings/billing",
-    label: "Billing",
+    label: "Plano e cobrança",
     description: "Plano e cobrança.",
     icon: "Receipt",
     group: "organizacao",
@@ -783,7 +783,7 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/settings/api-tokens",
-    label: "API Tokens",
+    label: "Chaves de integração",
     description: "Chaves para outro sistema conversar com o seu CRM.",
     icon: "Lock",
     group: "organizacao",

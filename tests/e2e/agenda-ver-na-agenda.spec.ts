@@ -109,7 +109,13 @@ test("marcar, clicar em 'Ver na agenda', e ENCONTRAR o compromisso na grade", as
   //    que só fechasse o Sheet seria reprovado: o compromisso é de outra semana,
   //    e sem mover a âncora a grade volta vazia.
   await expect(
-    page.getByText(creds.agenda!.tipo_nome, { exact: false }).first(),
+    // O BLOCO da grade (botão com o nome do compromisso no rótulo), e não o
+    // primeiro texto da página: com a grade vindo antes do histórico, o
+    // primeiro "Consulta E2E" passou a ser a <option> escondida do seletor
+    // "Horários livres de".
+    page
+      .getByRole("button", { name: new RegExp(`^${creds.agenda!.tipo_nome.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`) })
+      .first(),
     "a grade não mostra o compromisso recém-marcado — o botão fechou o painel e " +
       "deixou a grade na semana corrente, que é o mesmo 'nada acontece' com um passo a mais",
   ).toBeVisible({ timeout: 20_000 });

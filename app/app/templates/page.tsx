@@ -21,16 +21,10 @@ export default async function TemplatesPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
-        {/* "Respostas rápidas", não "Templates": estes são scripts do atendente,
-            consumidos pelo composer do inbox. O nome "Templates" pertence aos da
-            Meta (HSM), em Canais, onde é o termo técnico correto. Duas telas com
-            o mesmo nome e propósitos opostos confundiam. A URL não muda. */}
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Respostas rápidas")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t("Scripts salvos para responder mais rápido; pessoais ou compartilhados com a equipe.")}
-        </p>
-      </header>
+      {/* "Respostas rápidas", não "Templates": estes são scripts do atendente,
+          consumidos pelo composer do inbox. O nome "Templates" pertence aos da
+          Meta (HSM), em Canais. O cabeçalho mora no cliente porque o botão de
+          criar abre o diálogo dele. A URL não muda. */}
       <TemplatesClient canShare={canShare} currentUserId={user.id} />
     </div>
   );

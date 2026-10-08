@@ -142,7 +142,8 @@ describe("'Cliente desde' na ficha do contato", () => {
 
 describe("opção fixa 'cliente' no filtro de etiquetas", () => {
 
-  const botaoDeTag = () => screen.getByRole("button", { name: /^Tag:/ });
+  // O gatilho diz "Todas as etiquetas" sem filtro e "Etiqueta: x" com um.
+  const botaoDeTag = () => screen.getByRole("button", { name: /^(Todas as etiquetas|Etiqueta:)/ });
 
   it("desligada: sem etiquetas carregadas, o filtro fica sem opção (desabilitado)", () => {
     render(comQuery(<ContactsListClient />));

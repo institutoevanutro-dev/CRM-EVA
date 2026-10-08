@@ -32,7 +32,7 @@ export function ResultadoCrm({
           "Contatos criados no período pelo anúncio identificado; vendas vinculadas no mesmo período e recebimento líquido até agora.",
         )}
       </p>
-      <p className="text-xs text-muted-foreground">{t("Consultado em")} {new Date(dados.consultado_em).toLocaleString(tagDoIdioma)}</p>
+      <p className="text-xs text-muted-foreground">{t("Consultado em")} {new Date(dados.consultado_em).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" })}</p>
       {dados.contatos_vinculados !== null &&
         dados.contatos_vinculados < dados.contatos_atribuidos && (
           <p className="text-sm text-amber-700" role="status">

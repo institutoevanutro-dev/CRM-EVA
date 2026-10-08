@@ -153,6 +153,10 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
     }
   }
 
+  // A coluna de email só existe se alguém da página TEM email: numa clínica que
+  // atende pelo WhatsApp, era uma coluna inteira de "—".
+  const temEmail = contacts.some((c) => Boolean(c.email));
+
   return (
     <>
     <Table>
@@ -165,13 +169,15 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
             orderDir={orderDir}
             onSort={onSort}
           />
-          <SortableHead
-            label={t("Email")}
-            column="email"
-            orderBy={orderBy}
-            orderDir={orderDir}
-            onSort={onSort}
-          />
+          {temEmail && (
+            <SortableHead
+              label={t("Email")}
+              column="email"
+              orderBy={orderBy}
+              orderDir={orderDir}
+              onSort={onSort}
+            />
+          )}
           <SortableHead
             label={t("Telefone")}
             column="phone_number"
@@ -179,7 +185,7 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
             orderDir={orderDir}
             onSort={onSort}
           />
-          <TableHead>{t("Tags")}</TableHead>
+          <TableHead>{t("Etiquetas")}</TableHead>
           <SortableHead
             label={t("Última atividade")}
             column="last_activity_at"
@@ -187,7 +193,7 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
             orderDir={orderDir}
             onSort={onSort}
           />
-          <TableHead>{t("Status")}</TableHead>
+          <TableHead>{t("Situação")}</TableHead>
           <TableHead className="w-[88px]">
             <span className="sr-only">{t("Ações")}</span>
           </TableHead>
@@ -201,10 +207,12 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
                 {displayName(c)}
               </Link>
             </TableCell>
-            <TableCell className="text-muted-foreground">
-              {c.email ?? "—"}
-            </TableCell>
-            <TableCell className="text-muted-foreground">
+            {temEmail && (
+              <TableCell className="text-muted-foreground">
+                {c.email ?? "—"}
+              </TableCell>
+            )}
+            <TableCell className="whitespace-nowrap text-muted-foreground">
               {c.phone_number ? phoneForDisplay(c.phone_number) : "—"}
             </TableCell>
             <TableCell>
@@ -216,7 +224,7 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
                     ))}
               </div>
             </TableCell>
-            <TableCell className="text-muted-foreground text-sm">
+            <TableCell className="whitespace-nowrap text-muted-foreground text-sm">
               {c.last_activity_at
                 ? formatUltimaAtividade(c.last_activity_at, localeDaData)
                 : "—"}
@@ -235,9 +243,8 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
                 {clientesLigado && c.first_service_at && (
                   <Badge variant="secondary">{t("Cliente")}</Badge>
                 )}
-                {!c.is_anonymized && !c.is_blocked && (
-                  <Badge variant="success">{t("Ativo")}</Badge>
-                )}
+                {/* Sem selo "Ativo": era o mesmo selo verde em quase toda linha.
+                    A coluna só fala quando há exceção. */}
               </div>
             </TableCell>
             <TableCell>

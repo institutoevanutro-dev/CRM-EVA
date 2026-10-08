@@ -132,10 +132,10 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
   const marcadoresEscolhidos = marcadoresDoFiltro(filters.tag);
   const tagLabel =
     marcadoresEscolhidos.length === 0
-      ? t("Tag: todas")
+      ? t("Todas as etiquetas")
       : marcadoresEscolhidos.length === 1
-        ? `${t("Tag")}: ${marcadoresEscolhidos[0]}`
-        : `${t("Tag")}: ${marcadoresEscolhidos[0]} +${marcadoresEscolhidos.length - 1}`;
+        ? `${t("Etiqueta")}: ${marcadoresEscolhidos[0]}`
+        : `${t("Etiqueta")}: ${marcadoresEscolhidos[0]} +${marcadoresEscolhidos.length - 1}`;
   const alternaEtiqueta = (tag: string) => {
     const escolhida = marcadoresEscolhidos.includes(tag);
     const proximas = escolhida
@@ -208,7 +208,7 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
-            {t("Status")}: {statusLabel}
+            {t("Situação")}: {statusLabel}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
@@ -250,8 +250,8 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
                   onChange({ ...filters, tagMode: modo === "ou" ? "ou" : undefined })
                 }
               >
-                <DropdownMenuRadioItem value="e">{t("Todas (E)")}</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="ou">{t("Qualquer uma (OU)")}</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="e">{t("Com todas")}</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="ou">{t("Com qualquer uma")}</DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
             </>
           )}
