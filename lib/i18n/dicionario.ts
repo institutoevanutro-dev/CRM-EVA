@@ -9970,6 +9970,16 @@ export const DICIONARIO: Traducoes = {
   "Desativar este produto? O assistente de IA deixa de oferecê-lo.": { es: "¿Desactivar este producto? El asistente de IA dejará de ofrecerlo." },
   "Procedimentos, produtos e preços da clínica. É daqui que o assistente de IA tira o preço quando alguém pergunta.": { es: "Procedimientos, productos y precios de la clínica. De aquí saca el asistente de IA el precio cuando alguien pregunta." },
   "Enquanto o catálogo estiver vazio, o assistente responde que não encontrou o item — mesmo que a clínica tenha.": { es: "Mientras el catálogo esté vacío, el asistente responde que no encontró el ítem, aunque la clínica lo tenga." },
+  "Ritmo de envio": { es: "Ritmo de envío" },
+  "fora da lista": { es: "fuera de la lista" },
+  "Contatos novos": { es: "Contactos nuevos" },
+  "Retorno do anúncio (ROAS)": { es: "Retorno del anuncio (ROAS)" },
+  "sem desfecho marcado": { es: "sin desenlace marcado" },
+  "A conexão do Meta não alcança nenhuma conta de anúncios.": { es: "La conexión de Meta no alcanza ninguna cuenta de anuncios." },
+  "Separar por": { es: "Separar por" },
+  "Não separar": { es: "No separar" },
+  "Campo do negócio": { es: "Campo del negocio" },
+  "Resultado separado": { es: "Resultado separado" },
 };
 
 /**

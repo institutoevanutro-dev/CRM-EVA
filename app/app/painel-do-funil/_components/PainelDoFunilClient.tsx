@@ -111,7 +111,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
           );
     }
     if (inv.estado === "sem_conta")
-      return `${t("O token não alcança nenhuma conta de anúncios.")} ${caminhoDoAnuncio}`;
+      return `${t("A conexão do Meta não alcança nenhuma conta de anúncios.")} ${caminhoDoAnuncio}`;
     if (inv.estado === "indisponivel") {
       return `${t(MOTIVOS[inv.motivo] ?? "Não consegui ler o investimento agora.")} ${caminhoDoAnuncio}`;
     }
@@ -172,18 +172,18 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
         </Select>
       </div>
       <div className="flex flex-col gap-1 text-sm">
-        <span>{t("Recorte")}</span>
+        <span>{t("Separar por")}</span>
         <Select
           value={rascunho.dimensao ?? NENHUM}
           onValueChange={(v) => mudar({ dimensao: v === NENHUM ? undefined : v, campo: undefined })}
         >
-          <SelectTrigger className="w-60" aria-label={t("Recorte")}>
+          <SelectTrigger className="w-60" aria-label={t("Separar por")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={NENHUM}>{t("Sem recorte")}</SelectItem>
+            <SelectItem value={NENHUM}>{t("Não separar")}</SelectItem>
             <SelectItem value="campo_contato">{t("Campo da ficha do contato")}</SelectItem>
-            <SelectItem value="campo_card">{t("Campo do card")}</SelectItem>
+            <SelectItem value="campo_card">{t("Campo do negócio")}</SelectItem>
             <SelectItem value="etiqueta">{t("Etiqueta com prefixo")}</SelectItem>
             <SelectItem value="campanha">{t("Campanha de anúncio")}</SelectItem>
           </SelectContent>
@@ -296,7 +296,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
         />
         <Numero
           id="leads"
-          titulo={t("Leads")}
+          titulo={t("Contatos novos")}
           valor={n.leads}
           regua={t("Cards criados neste funil no período.")}
         />
@@ -351,7 +351,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
         />
         <Numero
           id="roas"
-          titulo={t("ROAS")}
+          titulo={t("Retorno do anúncio (ROAS)")}
           valor={
             n.roas === null
               ? "—"
@@ -386,7 +386,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
           id="comparecimento"
           titulo={t("Comparecimento")}
           valor={pct(n.taxa_comparecimento)}
-          extra={n.sem_baixa ? `${n.sem_baixa} ${t("sem baixa")}` : undefined}
+          extra={n.sem_baixa ? `${n.sem_baixa} ${t("sem desfecho marcado")}` : undefined}
           regua={t(
             "Realizados ÷ (realizados + faltas). Sem baixa: já terminaram e ninguém marcou se a pessoa veio.",
           )}
@@ -424,7 +424,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
       {painel.dimensao ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{t("Recorte")}</CardTitle>
+            <CardTitle className="text-base">{t("Resultado separado")}</CardTitle>
             <p className="text-xs text-muted-foreground">
               {t(reguaDoRecorte[painel.dimensao.tipo] ?? "")}
             </p>
@@ -437,7 +437,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t("Valor")}</TableHead>
-                    <TableHead className="text-right">{t("Leads")}</TableHead>
+                    <TableHead className="text-right">{t("Contatos novos")}</TableHead>
                     <TableHead className="text-right">{t("Interagiram")}</TableHead>
                     <TableHead className="text-right">{t("Ganhos")}</TableHead>
                     <TableHead className="text-right">{t("Receita")}</TableHead>
