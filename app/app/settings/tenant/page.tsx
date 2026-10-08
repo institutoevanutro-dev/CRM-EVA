@@ -1,3 +1,4 @@
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -32,7 +33,7 @@ export default async function TenantSettingsPage() {
   }
 
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("organizations")
     .select(
       "display_name, legal_name, cnpj, timezone, locale, currency, media_retention_days, dpo_email, privacy_policy_url, settings",
@@ -52,10 +53,13 @@ export default async function TenantSettingsPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Organização", idioma)}</h1>
         <p className="text-sm text-muted-foreground">
-          {traduzir("Dados da empresa, retenção de mídia, DPO. Admin only.", idioma)}
+          {traduzir("Dados da clínica, por quanto tempo guardamos arquivos e o responsável pela privacidade (LGPD). Só administradores.", idioma)}
         </p>
       </header>
-      {row && (
+      {error ? (
+        <ErroDeLeitura texto={traduzir("Não foi possível carregar os dados da organização. Recarregue a página.", idioma)} />
+      ) : null}
+      {!error && row && (
         <TenantForm
           initial={{
             display_name: row.display_name,

@@ -66,7 +66,7 @@ const SCOPES: { id: string; label: string }[] = [
 export function ApiTokensClient() {
   const tagDoIdioma = useTagDeIdioma();
   const t = useT();
-  const { data, isLoading } = useApiTokens();
+  const { data, isLoading, isError } = useApiTokens();
   const create = useCreateApiToken();
   const revoke = useRevokeApiToken();
 
@@ -114,6 +114,9 @@ export function ApiTokensClient() {
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>
+      ) : isError ? (
+        // Falha não é "nenhuma chave": quem administra criaria outra à toa.
+        <p className="text-sm text-muted-foreground" role="alert">{t("Não foi possível carregar as chaves. Recarregue a página.")}</p>
       ) : tokens.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("Nenhum token criado ainda.")}</p>
       ) : (
@@ -124,7 +127,7 @@ export function ApiTokensClient() {
                 <TableHead>{t("Nome")}</TableHead>
                 <TableHead>{t("Prefixo")}</TableHead>
                 <TableHead>{t("Escopos")}</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>{t("Situação")}</TableHead>
                 <TableHead>{t("Expira")}</TableHead>
                 <TableHead className="w-[120px]" />
               </TableRow>

@@ -278,7 +278,7 @@ export function MetaAdsClient({ contaPadrao }: Props) {
           */}
           <p className="text-xs text-muted-foreground">
             {t("Período")}: {intervalo.de} {t("a")} {intervalo.ate} · {t("lido em")}{" "}
-            {new Date(campanhas.data.data.lido_em).toLocaleString(tagDoIdioma)}
+            {new Date(campanhas.data.data.lido_em).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" })}
           </p>
         </>
       )}

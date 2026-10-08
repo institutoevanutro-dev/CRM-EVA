@@ -27,6 +27,7 @@
  * tela não é segredo de ninguém — o `manager` sabe que a empresa tem marca, só
  * não é ele quem a troca. Mesma escolha de `settings/tenant/page.tsx`.
  */
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -55,7 +56,7 @@ export default async function MarcaDaOrganizacaoPage() {
   // política para buscar o que a política já entrega. Quem precisa de privilégio
   // é a ESCRITA — e ela mora na função SQL, não nesta tela.
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("organizations")
     .select("settings")
     .eq("id", activeOrg.orgId)
@@ -74,36 +75,42 @@ export default async function MarcaDaOrganizacaoPage() {
         </p>
       </header>
 
-      <FormularioDaMarcaDaOrganizacao
-        gravada={{
-          app_name: gravada?.app_name ?? null,
-          accent_hex: gravada?.accent_hex ?? null,
-          // O CAMINHO no bucket, não a URL: quem converte é `logoDaCamada`, do
-          // lado do navegador, com a base do Storage injetada em runtime. Mandar
-          // a URL pronta do servidor faria a tela ter uma segunda regra de
-          // montagem, e a que divergisse seria a que ninguém abre.
-          logo_path: gravada?.logo_path ?? null,
-        }}
-        // As DUAS camadas de baixo descem para o formulário, e não uma resolução
-        // já pronta: a prévia ao vivo remonta a pilha inteira a cada tecla, pelo
-        // mesmo caminho do servidor. Sem elas, a tela não saberia responder "e se
-        // eu apagar o nome, o que aparece?" — que é a pergunta que o placeholder
-        // e o bloco de origens existem para responder.
-        instalacao={{
-          app_name: linha?.app_name ?? null,
-          logo_url: linha?.logo_url ?? null,
-          logo_path: linha?.logo_path ?? null,
-          accent_hex: linha?.accent_hex ?? null,
-        }}
-        // Só os três campos de marca do ambiente, nunca o objeto `env` inteiro:
-        // isto atravessa a fronteira para o navegador, e o que atravessa é o que
-        // já está visível na interface de qualquer forma.
-        ambiente={{
-          APP_NAME: env.APP_NAME,
-          APP_LOGO_URL: env.APP_LOGO_URL,
-          APP_ACCENT_HEX: env.APP_ACCENT_HEX,
-        }}
-      />
+      {error ? (
+        // Falha de leitura não pode abrir o formulário vazio: salvar ali
+        // apagaria o nome e a cor que a organização já tem.
+        <ErroDeLeitura texto={traduzir("Não foi possível carregar a marca. Recarregue a página antes de mudar algo.", idioma)} />
+      ) : (
+        <FormularioDaMarcaDaOrganizacao
+          gravada={{
+            app_name: gravada?.app_name ?? null,
+            accent_hex: gravada?.accent_hex ?? null,
+            // O CAMINHO no bucket, não a URL: quem converte é `logoDaCamada`, do
+            // lado do navegador, com a base do Storage injetada em runtime. Mandar
+            // a URL pronta do servidor faria a tela ter uma segunda regra de
+            // montagem, e a que divergisse seria a que ninguém abre.
+            logo_path: gravada?.logo_path ?? null,
+          }}
+          // As DUAS camadas de baixo descem para o formulário, e não uma resolução
+          // já pronta: a prévia ao vivo remonta a pilha inteira a cada tecla, pelo
+          // mesmo caminho do servidor. Sem elas, a tela não saberia responder "e se
+          // eu apagar o nome, o que aparece?" — que é a pergunta que o placeholder
+          // e o bloco de origens existem para responder.
+          instalacao={{
+            app_name: linha?.app_name ?? null,
+            logo_url: linha?.logo_url ?? null,
+            logo_path: linha?.logo_path ?? null,
+            accent_hex: linha?.accent_hex ?? null,
+          }}
+          // Só os três campos de marca do ambiente, nunca o objeto `env` inteiro:
+          // isto atravessa a fronteira para o navegador, e o que atravessa é o que
+          // já está visível na interface de qualquer forma.
+          ambiente={{
+            APP_NAME: env.APP_NAME,
+            APP_LOGO_URL: env.APP_LOGO_URL,
+            APP_ACCENT_HEX: env.APP_ACCENT_HEX,
+          }}
+        />
+      )}
     </div>
   );
 }
