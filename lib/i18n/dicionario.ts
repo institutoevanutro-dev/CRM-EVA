@@ -9951,6 +9951,10 @@ export const DICIONARIO: Traducoes = {
   "Conversas abertas que esfriaram e precisam de você. Se o assistente já marcou um retorno, ela aparece como “retorno agendado”; sem próximo passo, há risco de perder o paciente.": { es: "Conversaciones abiertas que se enfriaron y necesitan de usted. Si el asistente ya agendó un regreso, aparece como “regreso agendado”; sin próximo paso, hay riesgo de perder al paciente." },
   "Desconectar a agenda do Google? O que for marcado aqui deixa de ir para lá.": { es: "¿Desconectar la agenda de Google? Lo que se agende aquí dejará de ir allá." },
   "Não foi possível desconectar. Tente de novo.": { es: "No se pudo desconectar. Inténtelo de nuevo." },
+  "As etapas por onde cada paciente passa até fechar. Abra um funil para ver o quadro.": { es: "Las etapas por las que pasa cada paciente hasta cerrar. Abra un embudo para ver el tablero." },
+  "Não foi possível carregar os funis. Recarregue a página.": { es: "No se pudieron cargar los embudos. Recargue la página." },
+  "Escolher a planilha (.csv)": { es: "Elegir la planilla (.csv)" },
+  "Uma planilha salva como .csv (no Excel ou Google Planilhas: Salvar como → CSV), com uma linha por pessoa. Cada uma entra na primeira etapa aberta do funil escolhido.": { es: "Una planilla guardada como .csv (en Excel o Google Sheets: Guardar como → CSV), con una fila por persona. Cada una entra en la primera etapa abierta del embudo elegido." },
 };
 
 /**

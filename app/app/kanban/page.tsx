@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { Kanban } from "@/lib/ui/icons";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
+import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { FunisClient, type FunilDaLista } from "./_client";
 
@@ -36,7 +36,7 @@ export default async function KanbanPickerPage() {
   if (!activeOrg) redirect("/app");
 
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("crm_pipelines")
     // `is_client_pipeline` entra: sem ela o selo "Clientes" não aparecia ao
     // carregar a página e o botão sempre oferecia "Funil de clientes", mesmo no
@@ -66,17 +66,19 @@ export default async function KanbanPickerPage() {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <header className="flex items-center gap-3">
-        <Kanban size={28} className="text-muted-foreground" weight="duotone" />
-        {/* Era "Pipelines" — nome de quem construiu o sistema, não de quem
-            vende. O comentário anterior aqui listava o preço de trocá-lo
-            (`rbac-roles.spec.ts` e `invite-lifecycle.spec.ts`) e dizia que
-            uniformizar era decisão do dono do produto. Ela foi tomada, e o preço
-            era maior do que o comentário contava: são QUATRO assertions em TRÊS
-            specs, e `pipelines-gestao.spec.ts` — a spec da própria feature que
-            gerou o comentário — é uma delas. Todas atualizadas junto. */}
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Funis")}</h1>
-      </header>
+      {/* Era "Pipelines" — nome de quem construiu o sistema, não de quem vende. */}
+      <CabecalhoDaPagina
+        titulo={t("Funis")}
+        descricao={t("As etapas por onde cada paciente passa até fechar. Abra um funil para ver o quadro.")}
+      />
+
+      {error ? (
+        // Falha de leitura não pode cair no "Criar meu primeiro funil": a
+        // equipe concluiria que os funis sumiram.
+        <p className="rounded-lg border border-border bg-surface p-6 text-center text-sm text-text-muted" data-testid="funis-erro">
+          {t("Não foi possível carregar os funis. Recarregue a página.")}
+        </p>
+      ) : (
 
       <FunisClient
         funis={funis}
@@ -84,6 +86,7 @@ export default async function KanbanPickerPage() {
         podeGerenciar={podeGerenciar}
         podeImportar={podeImportar}
       />
+      )}
     </div>
   );
 }

@@ -31,6 +31,7 @@ import {
   PencilSimple,
   Plus,
   Trash,
+  Users,
 } from "@/lib/ui/icons";
 import { useArquivarFunil, useCriarFunil, useEditarFunil } from "@/hooks/pipelines/usePipelines";
 
@@ -311,7 +312,6 @@ export function FunisClient({
                     <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
                       {funil.name}
                     </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">/{funil.slug}</span>
                     <div className="flex shrink-0 flex-wrap gap-1">
                       <Button
                         variant="ghost"
@@ -569,7 +569,6 @@ export function FunisClient({
                   )}
                 </div>
 
-                <span className="shrink-0 text-xs text-muted-foreground">/{funil.slug}</span>
 
                 {podeGerenciar && !renomeandoAqui && (
                   <div className="flex shrink-0 flex-wrap gap-1">
@@ -609,7 +608,9 @@ export function FunisClient({
                         disabled={ocupado}
                         data-testid={`clientes-${funil.id}`}
                       >
-                        <Check size={16} className="mr-1" aria-hidden />{" "}
+                        {/* Ícone de pessoas, não de "marcado": o check aparecia também
+                            com a opção DESLIGADA e lia como "já é funil de clientes". */}
+                        <Users size={16} className="mr-1" aria-hidden />{" "}
                         {funil.is_client_pipeline
                           ? t("Deixar de ser funil de clientes")
                           : t("Funil de clientes")}
