@@ -10032,6 +10032,7 @@ export const DICIONARIO: Traducoes = {
   "Seus dados pessoais. Em breve você poderá trocar o e-mail.": { es: "Sus datos personales. Pronto podrá cambiar el correo." },
   "Pedidos de pacientes sobre os próprios dados (LGPD): cópia, correção ou apagamento. Só administradores.": { es: "Pedidos de pacientes sobre sus propios datos: copia, corrección o borrado. Solo administradores." },
   "dados pessoais mascarados": { es: "datos personales enmascarados" },
+  ", nomes, campos extras e motivos de perda": { es: ", nombres, campos extra y motivos de pérdida" },
 };
 
 /**
