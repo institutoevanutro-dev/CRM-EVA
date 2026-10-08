@@ -124,6 +124,20 @@ describe("ultimoDesfechoDe — o desfecho do passo anterior é lido dos eventos"
     const eventos = [evento("ai_classified", { class: "quente" }), evento("ai_classified", {})];
     expect(ultimoDesfechoDe(eventos)).toBe("quente");
   });
+
+  it("sair por 'sem resposta' com a carência vencida TAMBÉM é desfecho: o motor grava a classe no avanço", () => {
+    const eventos = [
+      evento("ai_classified", { class: "frio" }),
+      evento("classify_enqueued", { purpose: "classify" }),
+      evento("node_advanced", { next_node_id: "k1", class: "no_reply" }),
+    ];
+    expect(ultimoDesfechoDe(eventos)).toBe("no_reply");
+  });
+
+  it("avanço comum (sem classe) não apaga o desfecho", () => {
+    const eventos = [evento("ai_classified", { class: "quente" }), evento("node_advanced", { next_node_id: "w1" })];
+    expect(ultimoDesfechoDe(eventos)).toBe("quente");
+  });
 });
 
 describe("condição por desfecho do passo anterior — negativa não é decorativa (#527)", () => {

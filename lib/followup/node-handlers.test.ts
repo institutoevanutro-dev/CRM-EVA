@@ -691,7 +691,7 @@ describe("processNode — ai_classify / action", () => {
       edge({ source: "ac1", target: "no-reply-node", condition: { type: "class_match", value: "no_reply" } }),
     ];
     const result = processNode({ node, edges, enrollment: enrollment(), lead: lead(), clock, waitElapsed: true });
-    expect(result).toEqual({ kind: "advance", next_node_id: "no-reply-node", next_eval_at: NOW });
+    expect(result).toEqual({ kind: "advance", next_node_id: "no-reply-node", next_eval_at: NOW, class: "no_reply" });
   });
 
   it("ai_classify re-entry without an explicit no_reply edge falls back to the 'always' edge", () => {
@@ -707,7 +707,7 @@ describe("processNode — ai_classify / action", () => {
       edge({ source: "ac1", target: "fallback-node", condition: { type: "always" } }),
     ];
     const result = processNode({ node, edges, enrollment: enrollment(), lead: lead(), clock, waitElapsed: true });
-    expect(result).toEqual({ kind: "advance", next_node_id: "fallback-node", next_eval_at: NOW });
+    expect(result).toEqual({ kind: "advance", next_node_id: "fallback-node", next_eval_at: NOW, class: "no_reply" });
   });
 
   it("ai_classify re-entry with neither a no_reply nor an always edge: fails", () => {

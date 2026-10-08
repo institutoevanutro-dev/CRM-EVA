@@ -85,7 +85,11 @@ export type NodeResult =
   // `reason` só aparece quando o avanço NÃO é o avanço comum: hoje, o trigger
   // desistindo do plano de tempo (o turno nunca voltou). Vira event_type próprio
   // no engine — seguir sem plano é um fato que o operador precisa poder ler.
-  | { kind: "advance"; next_node_id: string; next_eval_at: Date; reason?: "plan_timeout"; repeat?: { index: number; total: number } }
+  //
+  // `class` só aparece quando o avanço É uma classificação decidida pelo motor:
+  // o `ai_classify` que sai por "sem resposta" porque a carência venceu. Vai para
+  // o payload do evento e é o que `ultimoDesfechoDe` lê.
+  | { kind: "advance"; next_node_id: string; next_eval_at: Date; reason?: "plan_timeout"; repeat?: { index: number; total: number }; class?: string }
   // stays on the node. `wake_status` parks `match_reply` in waiting_reply without a job.
   | { kind: "wait"; next_eval_at: Date; wake_status?: "active" | "waiting_reply" }
   | {
@@ -146,6 +150,14 @@ export const MAX_ACTION_RECHECKS = 14;
  * enrollment com um motivo falso (`action_turn_never_completed`).
  */
 export const EVENTO_ACAO_ADIADA = "action_deferred";
+
+/**
+ * O turno de classificar rodou e o cliente ainda não tinha respondido ao envio
+ * do fluxo: o nó segue esperando até a carência. Não é passo (a chave não é
+ * `${nó}:${passo}`), então nenhum guarda de ocupação do motor a conta.
+ * Porte de melgarafael/DeskcommCRM #1766 (0d231b5a0a).
+ */
+export const EVENTO_CLASSIFICACAO_ESPERANDO = "classify_waiting";
 
 /**
  * Rechecks ociosos da ação NESTA estadia — o número que o dead-man mede.
@@ -365,10 +377,12 @@ function valorDePassos(value: string | number): string | number {
 }
 
 /**
- * O evento que registra a classe que o `ai_classify` escolheu: a fonte do
- * "Desfecho do passo anterior" (o mesmo evento que a tela de histórico lê).
+ * Os eventos que gravam a classe com que o lead SAIU de um `ai_classify`: a
+ * fonte do "Desfecho do passo anterior". Dois escritores, um campo
+ * (`payload.class`): `ai_classified` (a ponte, quando o modelo classificou) e
+ * `node_advanced` com `class` (o motor, quando a carência venceu sem resposta).
  */
-const EVENTO_DE_CLASSIFICACAO = "ai_classified";
+const EVENTOS_DE_DESFECHO = new Set(["ai_classified", "node_advanced"]);
 
 /**
  * O desfecho do último passo que DECIDIU algo: a classe escolhida pelo
@@ -385,7 +399,7 @@ const EVENTO_DE_CLASSIFICACAO = "ai_classified";
 export function ultimoDesfechoDe(events: EnrollmentEventRef[]): string | null {
   for (let i = events.length - 1; i >= 0; i--) {
     const evento = events[i]!;
-    if (evento.event_type !== EVENTO_DE_CLASSIFICACAO) continue;
+    if (!EVENTOS_DE_DESFECHO.has(evento.event_type ?? "")) continue;
     const classe = evento.payload?.class;
     if (typeof classe === "string" && classe.length > 0) return classe;
   }
@@ -625,7 +639,7 @@ export function processNode(input: {
       // no fallback 'always' se não houver aresta 'no_reply' explícita.
       const edge = selectEdge(edges, node.id, classEdgeMatch(node, NO_REPLY_BRANCH_ID));
       if (!edge) return { kind: "fail", error: `ai_classify node "${node.id}" has no edge for class "no_reply" (fallback also missing)` };
-      return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
+      return { kind: "advance", next_node_id: edge.target, next_eval_at: clock(), class: NO_REPLY_BRANCH_ID };
     }
 
     case "match_reply": {

@@ -10,7 +10,7 @@ import {
   type NoDoDossie,
 } from "./eventos-legiveis";
 import type { FlowNode } from "./graph-schema";
-import { EVENTO_ACAO_ADIADA } from "./node-handlers";
+import { EVENTO_ACAO_ADIADA, EVENTO_CLASSIFICACAO_ESPERANDO } from "./node-handlers";
 
 const espera: FlowNode = {
   id: "wait-1",
@@ -172,6 +172,27 @@ describe("descreveEvento", () => {
     );
     expect(r.detalhe).toMatch(/^la ventana estaba cerrada; envía el /);
     expect(r.detalhe).not.toContain("{ate}");
+  });
+
+  it("o classificar que espera a resposta diz que ESPERA, e até quando: não parece travado", () => {
+    const r = descreveEvento(
+      evento({ node_id: "action-1", event_type: EVENTO_CLASSIFICACAO_ESPERANDO, payload: { until: "2026-08-11T12:00:00.000Z" } }),
+      nos,
+      "pt-BR",
+    );
+    expect(r.titulo).toBe("Esperando a resposta do cliente");
+    expect(r.detalhe).toMatch(/^se ele não responder até .+, o fluxo segue sem a resposta$/);
+    expect(r.autor).toBe("motor");
+  });
+
+  it("a carência vencida sem resposta diz POR QUE seguiu, não só que seguiu", () => {
+    const r = descreveEvento(
+      evento({ event_type: "node_advanced", payload: { next_node_id: "action-1", class: "no_reply" } }),
+      nos,
+      "pt-BR",
+    );
+    expect(r.titulo).toBe("O cliente não respondeu dentro do prazo");
+    expect(r.detalhe).toBe("foi para Primeira cutucada");
   });
 
   it("tipo desconhecido não vira jargão disfarçado de frase, mas também não some", () => {
