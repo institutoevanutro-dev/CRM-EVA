@@ -36,6 +36,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("@/hooks/kanban/useBoard", () => ({
+  useFechadosAntigos: () => ({ data: undefined, isLoading: false }),
   useBoard: () => ({
     data: {
       pipeline: { id: "p-1", vocabulary: null },

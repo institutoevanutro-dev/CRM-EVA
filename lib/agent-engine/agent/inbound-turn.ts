@@ -79,10 +79,13 @@ import {
 } from './lead-state';
 import { applySaveLeadNote, buildNotesIndexBlock, getLeadNoteBody } from './lead-notes';
 import { buildCompromissosBlock } from './compromissos-do-contato';
+import { agendaNoFechamento } from './agenda-no-fechamento';
 import { applyScheduleFollowup, type FollowupWindowKnobs } from './schedule-followup';
 import {
   avisarLeadDaEscalacao,
   avisarLeadLendoOContato,
+  type AvisoDeEscalacaoIds,
+  type AvisoDeEscalacaoOpts,
   type DesfechoDoAviso,
 } from './aviso-de-escalacao';
 import { tentarRespostaPronta } from './resposta-pronta';
@@ -100,7 +103,7 @@ import {
   trimTranscriptToBudget,
   type CompactionKnobs,
 } from './compaction';
-import { pruneToolResults, type PruneToolResultsKnobs } from './prune-tool-results';
+import { pruneToolResults, toolPartsAsText, type PruneToolResultsKnobs } from './prune-tool-results';
 import {
   classifyStage,
   recordStageDivergenceCandidate,
@@ -125,7 +128,7 @@ import {
   catalogoEntregueAoOperador,
 } from './entrega-de-capacidade';
 import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memory';
-import { matchesHandoffKeyword } from './agent-config';
+import { matchesHandoffKeyword, type PublishedAgentConfig } from './agent-config';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
@@ -156,11 +159,12 @@ import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
 import { esperarComoHumano } from './atraso-humano';
-import { bolhasQueCabemNoEnvio, instrucaoDeBolhas, sendInBubbles } from './split-message';
+import { bolhasQueCabemNoEnvio, instrucaoDeBolhas, sendInBubbles, splitForSend } from './split-message';
+import { formatarParaWhatsApp } from './formato-whatsapp';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
 import { decidePromise } from '../guardrails/promise/engine';
 import { loadPromiseTable } from '../guardrails/promise/table';
-import { classifyPromise } from '../guardrails/promise/semantic';
+import { classifyPromise, memoizarPorCandidata } from '../guardrails/promise/semantic';
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { diffCheckpoint } from '@/lib/leads/checkpoint-diff';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
@@ -558,7 +562,7 @@ export const CHECKPOINT_INSTRUCTION =
   'Feche o turno AGORA. Responda SOMENTE com um JSON válido no formato ' +
   '{"commitments": string[], "objections": string[], "next_action": string|null, "rolling_summary": string} ' +
   '— compromissos assumidos, objeções do lead, próxima ação e o resumo acumulado ' +
-  'da conversa até aqui (inclua o que o resumo anterior já dizia). ' +
+  'da conversa até aqui (preserve o que continua válido do resumo anterior; substitua fatos superados pelos resultados das ações concluídas neste turno). ' +
   // ⚠️ O REFERENCIAL DE `next_action`, e ele não é zelo de redação.
   //
   // Este JSON é escrito no FECHO do turno: a pergunta já saiu, a resposta ainda
@@ -1454,7 +1458,12 @@ export function ritualBlocks(
     // tokens em toda conversa para informar uma ausência que o modelo não
     // precisa saber.
     ...(compromissosBlock.trim() !== ''
-      ? ['## Compromissos já marcados deste contato', compromissosBlock, '']
+      ? [
+          '## Compromissos já marcados deste contato',
+          'Estado atual da agenda: para horário e situação de reserva, esta leitura prevalece sobre o resumo anterior. Uma reserva deste contato não é uma vaga livre para outra pessoa.',
+          compromissosBlock,
+          '',
+        ]
       : []),
     '## Contexto do lead (contato + últimas mensagens)',
     // Campo de cadastro VAZIO não é prova de que a informação não existe.
@@ -1726,6 +1735,214 @@ export async function avisarCapacidadesAusentes(
     });
   }
 }
+
+/**
+ * AS DETERMINÍSTICAS DO INBOUND, TAMBÉM ANTES DO RASCUNHO DO ASSISTIDO.
+ *
+ * O ramo assistido devolvia ANTES das detecções de STOP/opt-out e de pedido de
+ * humano. O contato escrevia "pare de me mandar mensagem" e o bot seguia
+ * elegível: sem silêncio durável (`force_human` + `bot_silenced_until`), sem
+ * cancelamento dos follow-ups agendados e sem item na Central, só um rascunho
+ * na fila de aprovação que alguém podia nunca aprovar. Risco de LGPD: o pedido
+ * de parar ficava dependendo de uma autorização humana.
+ *
+ * As detecções são as MESMAS do caminho automático (`detectHumanHandoffRequest`,
+ * `matchesHandoffKeyword` e `detectAmbiguousOptOut`, que lê a regra única de
+ * `lib/opt-out/deteccao.ts`), sobre o que o cliente ainda NÃO teve resposta. Não
+ * gastam token e não dependem do modo de operação, e usam o mesmo mecanismo
+ * durável:
+ *
+ *   1. `avisarLeadDaEscalacao` PRIMEIRO: o aviso tem de sair antes de
+ *      `force_human` armar o gate que o vetaria;
+ *   2. `performHumanHandoff`: silencia para sempre, cancela os crons pendentes e
+ *      abre (ou adenda) o item na Central.
+ *
+ * Idempotente. Devolve `true` quando o turno foi silenciado (não há rascunho).
+ *
+ * Porte de melgarafael/DeskcommCRM #1667 (8411a5805e), adaptado: o fork não tem o
+ * briefing estruturado da passagem, e o resumo usa `buildHandoffSummary` do
+ * último checkpoint, como o caminho automático daqui.
+ */
+export async function deteccoesDeterministicasDoAssistido(
+  pool: pg.Pool,
+  deps: InboundTurnDeps,
+  args: {
+    job: JobRow;
+    tenantId: string;
+    conversationId: string;
+    channelSessionId: string;
+    leadId: string;
+    agent: PublishedAgentConfig;
+    log: Logger;
+    /**
+     * Mensagem fixada no job: plano B quando a leitura do contexto do lead
+     * falha. Um pedido de parar não pode virar "sem detecção" só porque o CRM
+     * está fora do ar.
+     */
+    inboundMessageId?: string;
+  },
+): Promise<boolean> {
+  const { job, tenantId, conversationId, channelSessionId, leadId, agent, log } = args;
+  const clock = deps.clock ?? ((): Date => new Date());
+
+  // O QUE O CLIENTE DISSE e ainda não foi respondido: a MESMA fonte do caminho
+  // automático, para um pedido de parar na 2ª mensagem de uma rajada não sumir.
+  let inboundsPendentes: string[] = [];
+  let optedOutThisTurn = false;
+  let lgpd: AvisoDeEscalacaoOpts['lgpd'];
+  let contextoLido = false;
+  try {
+    const abertura = await getLeadContext(
+      pool,
+      deps.crmCfg,
+      {
+        tenantId,
+        leadId,
+        conversationId,
+        fuso: await fusoDaOrganizacao(pool, tenantId, log),
+      },
+      { historyLimit: agent.historyMessageWindow, maxTokens: agent.historyTokenWindow },
+    );
+    if (abertura.ok) {
+      contextoLido = true;
+      inboundsPendentes = inboundsNaoRespondidos(abertura.context.messages);
+      optedOutThisTurn = abertura.context.contact.is_blocked;
+      lgpd = abertura.lgpd;
+    } else {
+      log.warn('modo assistido: contexto do lead não lido — detecção cai na mensagem fixada', {
+        code: abertura.error.code,
+      });
+    }
+  } catch (err) {
+    log.warn('modo assistido: contexto do lead falhou — detecção cai na mensagem fixada', {
+      error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+    });
+  }
+  // O plano B NUNCA sobrescreve o contexto lido: só existe quando a leitura falhou.
+  if (!contextoLido && args.inboundMessageId !== undefined) {
+    try {
+      const fixada = await loadInboundBodyForJob(pool, {
+        tenantId,
+        conversationId,
+        inboundMessageId: args.inboundMessageId,
+      });
+      if (fixada !== null && fixada.trim() !== '') inboundsPendentes = [fixada];
+    } catch (err) {
+      log.warn('modo assistido: mensagem fixada não lida — sem detecção neste turno', {
+        error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+      });
+    }
+  }
+
+  /** Args do aviso, montados NO MOMENTO do uso: o canal nasce só se algo casar. */
+  const avisoDaEscalacao = (): {
+    ids: AvisoDeEscalacaoIds;
+    base: Omit<AvisoDeEscalacaoOpts, 'motivo'>;
+  } => ({
+    ids: {
+      tenantId,
+      leadId,
+      conversationId,
+      channelSessionId,
+      jobId: job.id,
+      jobClaim: claimOfJob(job),
+    },
+    base: {
+      channel: deps.channel
+        ? deps.channel(pool)
+        : new WahaChannelAdapter(pool, { ...deps.crmCfg, agentActorId: agent.agentId }),
+      optedOutThisTurn,
+      now: clock(),
+      log,
+      ...(lgpd !== undefined ? { lgpd } : {}),
+      agentId: agent.agentId,
+      ...(deps.knobs.disclosureMode !== undefined
+        ? { disclosureMode: deps.knobs.disclosureMode }
+        : {}),
+      ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+    },
+  });
+
+  // PLANO B SEM CONTEXTO = SEM `lgpd`: com ele nulo o gate de LGPD passa direto,
+  // e um contato anonimizado receberia o aviso. Nesse ramo o aviso sai por
+  // `avisarLeadLendoOContato`, que lê o contato do banco.
+  const semInsumosDoContexto = ({
+    optedOutThisTurn: _bloqueado,
+    lgpd: _lgpd,
+    ...resto
+  }: Omit<AvisoDeEscalacaoOpts, 'motivo'>): Omit<
+    AvisoDeEscalacaoOpts,
+    'motivo' | 'optedOutThisTurn' | 'lgpd'
+  > => resto;
+
+  const avisar = async (
+    motivo: AvisoDeEscalacaoOpts['motivo'],
+  ): Promise<DesfechoDoAviso> => {
+    const aviso = avisoDaEscalacao();
+    return contextoLido
+      ? avisarLeadDaEscalacao(pool, aviso.ids, { ...aviso.base, motivo })
+      : avisarLeadLendoOContato(pool, aviso.ids, { ...semInsumosDoContexto(aviso.base), motivo });
+  };
+
+  if (
+    inboundsPendentes.some(
+      (texto) =>
+        detectHumanHandoffRequest(texto) || matchesHandoffKeyword(texto, agent.handoffKeywords),
+    )
+  ) {
+    const desfecho = await avisar('pediu_humano');
+    await performHumanHandoff(
+      pool,
+      { tenantId, leadId, conversationId },
+      {
+        reason: 'requested_human',
+        conversationSummary: buildHandoffSummary(await latestCheckpoint(pool, tenantId, leadId)),
+        avisoAoLead: desfecho,
+        log,
+      },
+    );
+    log.info(
+      'handoff humano acionado por pedido explícito do lead (modo assistido, detecção determinística)',
+      { kind: job.kind, lead_avisado: desfecho.avisado },
+    );
+    return true;
+  }
+
+  // STOP AMBÍGUO: o rascunho pendente NÃO segura este ramo. O pedido de parar
+  // vale por si, e é ele que cancela os follow-ups agendados (LGPD).
+  if (inboundsPendentes.some((texto) => detectAmbiguousOptOut(texto))) {
+    const desfecho = await avisar('suspeita_de_opt_out');
+    await performHumanHandoff(
+      pool,
+      { tenantId, leadId, conversationId },
+      {
+        reason: 'suspected_optout',
+        conversationSummary: buildHandoffSummary(await latestCheckpoint(pool, tenantId, leadId)),
+        inboxTitle: 'Suspeita de opt-out — confirmar bloqueio do contato no CRM',
+        avisoAoLead: desfecho,
+        log,
+      },
+    );
+    log.info(
+      'possível opt-out detectado no modo assistido — bot silenciado, follow-ups cancelados e escalado ao humano',
+      { kind: job.kind, lead_avisado: desfecho.avisado },
+    );
+    return true;
+  }
+
+  // Opt-out JÁ registrado na fonte (CRM): os crons podem ter nascido depois do
+  // bloqueio. Idempotente: o mesmo cancel que o handoff compartilha (F4-07).
+  if (optedOutThisTurn) {
+    const canceled = await cancelPendingCronsForLead(pool, tenantId, leadId);
+    if (canceled > 0) {
+      log.info('opt-out já registrado — follow-ups agendados cancelados (modo assistido)', {
+        canceled,
+      });
+    }
+  }
+  return false;
+}
+
 
 /**
  * O NÚCLEO DO TURNO, SEMPRE SOB A ESCOLTA DO ORÇAMENTO.
@@ -2022,7 +2239,31 @@ async function executarTurnoDoAgente(
         inbound: liveJob().kind === 'inbound_turn',
       }, { log: runLog });
   const agentConfig = routed.config;
-  if (!preview && agentConfig?.operationMode === 'assisted' && job?.kind === 'inbound_turn') {
+  if (
+    !preview &&
+    agentConfig?.operationMode === 'assisted' &&
+    job !== null &&
+    (job.kind === 'inbound_turn' || job.kind === 'followup_turn')
+  ) {
+    // As detecções DETERMINÍSTICAS (STOP/opt-out e pedido de humano) rodam ANTES
+    // do desvio para o rascunho: o pedido de parar não pode esperar aprovação
+    // humana para ser registrado (LGPD). `true` = turno silenciado.
+    if (
+      await deteccoesDeterministicasDoAssistido(pool, deps, {
+        job,
+        tenantId,
+        conversationId: input.conversationId,
+        channelSessionId: input.channelSessionId,
+        leadId,
+        agent: agentConfig,
+        log: runLog,
+        ...(input.inboundMessageId !== undefined
+          ? { inboundMessageId: input.inboundMessageId }
+          : {}),
+      })
+    ) {
+      return;
+    }
     const { generateReplyDraft } = await import('./reply-drafts');
     await generateReplyDraft(pool, deps, {
       organizationId: tenantId,
@@ -2032,6 +2273,13 @@ async function executarTurnoDoAgente(
       boundary: currentExecutionBoundary() ?? undefined,
       agent: agentConfig,
     });
+    if (job.kind === 'followup_turn') {
+      // O follow-up do assistido caía no `return` genérico de baixo e sumia: sem
+      // envio, sem rascunho e sem aviso. Vira rascunho, como o inbound.
+      runLog.info('follow-up de agente assistido virou rascunho — nada sai sem aprovação', {
+        conversation_id: input.conversationId,
+      });
+    }
     return;
   }
   if (!preview && agentConfig && (agentConfig.pausedAt || agentConfig.operationMode === 'assisted'))
@@ -2506,7 +2754,9 @@ async function executarTurnoDoAgente(
     camadas.promessa_semantica,
     deps.knobs.promiseSemantic?.enabled === true,
   )
-    ? (candidate: string) =>
+    ? // Memo POR CORPO, por turno: os fail-safes de vocabulário e de promessa
+      // re-rodam a cadeia com o MESMO texto.
+      memoizarPorCandidata((candidate: string) =>
         classifyPromise(
           pool,
           deps.llmCfg,
@@ -2516,7 +2766,8 @@ async function executarTurnoDoAgente(
             ...argsAux(deps.knobs.promiseSemantic?.model),
           },
           { ...(deps.registry !== undefined ? { registry: deps.registry } : {}), log: runLog },
-        )
+        ),
+      )
     : undefined;
   let outOfTablePromiseAttempted = false;
   // Spec 15 (Wave 4 lê este flag): true quando open_human_case abriu um caso NESTE
@@ -2572,6 +2823,9 @@ async function executarTurnoDoAgente(
   // as tools do modelo rodam em passos anteriores do mesmo loop, o valor já está certo
   // quando o modelo decide mandar a resposta.
   let agendaToolCalledThisTurn = false;
+  // Lido pelo `casePromiseGate`: true só depois de `schedule_followup` AGENDAR com
+  // sucesso neste turno. Libera apenas a promessa de retorno do próprio assistente.
+  let followupAgendadoNesteTurno = false;
   // `crm_confirm_appointment` deu certo neste turno: solta só o "seu horário está
   // confirmado" do gate, nunca o "agendado/marcado" nem a promessa de verificar.
   let presencaConfirmadaNoTurno = false;
@@ -2860,7 +3114,12 @@ async function executarTurnoDoAgente(
     }),
     send_message: tool({
       ...AGENT_TOOL_DEFS.send_message,
-      execute: async ({ body }) => {
+      execute: async ({ body: corpoDoModelo }) => {
+        // O texto sai no formato do WhatsApp — sem `\n` literal nem
+        // `**negrito**` de Markdown na tela do cliente. Antes de qualquer gate,
+        // para que o corpo vazio, as bolhas e a pausa humana meçam o que sai.
+        // Ver `formato-whatsapp.ts`.
+        const body = formatarParaWhatsApp(corpoDoModelo);
         // CORPO VAZIO NÃO SAI. O schema garante min(1) no argumento, mas um `\n`
         // ou espaço passa e chegava ao canal como bolha em branco (medido no
         // original, 2026-09-19). Recusar aqui devolve ao modelo para reescrever.
@@ -3015,6 +3274,10 @@ async function executarTurnoDoAgente(
               toolCalledThisTurn: agendaToolCalledThisTurn,
               presencaConfirmadaNoTurno: presencaConfirmadaNoTurno,
             },
+            followup: {
+              disponivel: rawTools.schedule_followup !== undefined,
+              agendadoNesteTurno: followupAgendadoNesteTurno,
+            },
             ...(deps.knobs.disclosureMode !== undefined
               ? { disclosureMode: deps.knobs.disclosureMode }
               : {}),
@@ -3023,6 +3286,42 @@ async function executarTurnoDoAgente(
             ...(semanticClassifier !== undefined
               ? { classifyPromiseSemantic: semanticClassifier }
               : {}),
+            // Pausa humana do turno ("digitando…" + espera proporcional ao texto), paga
+            // FORA do lock do número. Antes ela era paga dentro do `send` logo abaixo, e o
+            // `send` só acontece com o `pg_advisory_xact_lock` do canal na mão: cada turno
+            // segurava a fila do NÚMERO por 1,2s a 7,5s além do necessário.
+            //
+            // O texto que dimensiona a pausa é a 1ª bolha do MESMO fatiamento que o
+            // `sendInBubbles` usa (`splitForSend` é a fonte única da decisão, com o mesmo
+            // `maxBubbles` do teto do turno). Diferença declarada: aqui o texto é o `body`
+            // PRÉ-cadeia; um disclosure prependado pelo gate F4-05 não entra na conta.
+            esperaForaDoLock: async (): Promise<void> => {
+              // Uma vez por TURNO: o flag impede que um re-run do fail-safe (veto de
+              // promessa/vocabulário) cobre a espera de novo do mesmo cliente.
+              if (jaEsperouComoHumano) return;
+              jaEsperouComoHumano = true;
+              // `liveChannel()`, não `channel`: o transporte é anulável (preview não tem
+              // canal) e este é o MESMO acessor que o `send` logo abaixo usa.
+              const canal = liveChannel();
+              const ms = await esperarComoHumano({
+                texto:
+                  splitForSend(
+                    body,
+                    agentConfig?.splitMessages ?? false,
+                    agentConfig?.splitMaxChars ?? 600,
+                    bolhasQueCabemNoEnvio(maxSendsPerTurn, seq),
+                  )[0] ?? body,
+                sleep: deps.sleep ?? ((s) => new Promise((resolve) => setTimeout(resolve, s))),
+                log: runLog,
+                ...(canal.signalTyping
+                  ? {
+                      sinalizarDigitando: (): Promise<void> =>
+                        canal.signalTyping!({ tenantId, conversationId: input.conversationId }),
+                    }
+                  : {}),
+              });
+              runLog.info('atraso humano antes da 1ª bolha', { atraso_ms: ms, fora_do_lock: true });
+            },
             // `finalBody` = corpo após a cadeia (o disclosureGate F4-05 pode prependar o
             // disclosure via inject); é ELE que vai ao canal, não o `body` capturado da tool.
             send: (finalBody: string) =>
@@ -3034,34 +3333,9 @@ async function executarTurnoDoAgente(
                 maxBubbles: bolhasQueCabemNoEnvio(maxSendsPerTurn, seq),
                 sleep: deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
                 jitter: () => 1200 + Math.floor(Math.random() * 800), // piso no throttle anti-ban (1.2s) — bolhas são mensagens físicas
-                // ANTES da 1ª bolha: "digitando…" + espera proporcional ao texto.
-                // É o conserto do "responde rápido demais" (ver atraso-humano.ts).
-                // NÃO substitui o jitter acima: aquele é throttle anti-ban entre
-                // mensagens físicas, este é a pausa humana do turno. Só uma vez
-                // por TURNO — o flag impede que um re-run do fail-safe (veto de
-                // promessa/vocabulário) cobre a espera de novo do mesmo cliente.
-                antesDaPrimeira: async (primeiraBolha: string): Promise<void> => {
-                  if (jaEsperouComoHumano) return;
-                  jaEsperouComoHumano = true;
-                  // `liveChannel()`, não `channel`: o transporte é anulável (preview
-                  // não tem canal) e este é o MESMO acessor que o `send` logo abaixo
-                  // usa. Resolver aqui, antes da espera, mantém o desfecho de preview
-                  // idêntico ao de antes deste recurso — `preview_transport_forbidden`
-                  // na hora, e não depois de segurar o turno por vários segundos.
-                  const canal = liveChannel();
-                  const ms = await esperarComoHumano({
-                    texto: primeiraBolha,
-                    sleep: deps.sleep ?? ((s) => new Promise((resolve) => setTimeout(resolve, s))),
-                    log: runLog,
-                    ...(canal.signalTyping
-                      ? {
-                          sinalizarDigitando: (): Promise<void> =>
-                            canal.signalTyping!({ tenantId, conversationId: input.conversationId }),
-                        }
-                      : {}),
-                  });
-                  runLog.info('atraso humano antes da 1ª bolha', { atraso_ms: ms });
-                },
+                // A pausa humana do turno NÃO mora mais aqui: ela subiu para
+                // `esperaForaDoLock` (paga antes de o guardrail tomar o lock do número).
+                // Neste ponto fica só o jitter anti-ban entre bolhas.
                 send: (bubble): Promise<ChannelSendResult> => {
                   seq += 1;
                   return liveChannel().send({
@@ -3273,6 +3547,7 @@ async function executarTurnoDoAgente(
               tenantId,
               leadId,
               toStage: update.transition.to,
+              ...(agentConfig !== null ? { pipelineIds: agentConfig.pipelineIds } : {}),
               ...(update.transition.reason !== undefined
                 ? { reason: update.transition.reason }
                 : {}),
@@ -3463,6 +3738,7 @@ async function executarTurnoDoAgente(
           if (!res.ok) {
             return res; // erro de ensino (payload / data no passado / fora da janela)
           }
+          followupAgendadoNesteTurno = true;
           return {
             ok: true,
             status: 'agendado',
@@ -4002,10 +4278,41 @@ async function executarTurnoDoAgente(
     // (é onde a fita inteira é re-serializada num prompt) — o conteúdo durável já foi para
     // lead_notes pelo flush (F3-07), então o stub não perde nada recuperável. Opera SÓ no
     // sufixo por-lead, nunca no prefixo estável (regra de cache 15).
-    const responseMessages =
+    // No SDK atual, response.messages contém só a ÚLTIMA etapa. O fechamento
+    // precisa da fita inteira, incluindo as ações concluídas em etapas anteriores.
+    // O fechamento vai SEM `tools`: as partes de ferramenta viram texto (a Anthropic recusa
+    // tool_use/tool_result sem tools), com teto por resultado no knob do pruning.
+    const responseMessages = toolPartsAsText(
       deps.knobs.prune !== undefined
-        ? pruneToolResults(turn.result.response.messages, deps.knobs.prune)
-        : turn.result.response.messages;
+        ? pruneToolResults(turn.result.responseMessages, deps.knobs.prune)
+        : turn.result.responseMessages,
+      deps.knobs.prune?.minResultTokens,
+    );
+
+    // A abertura precede as tools: depois de criar/remarcar/cancelar, o fechamento
+    // relê a agenda para o resumo do PRÓXIMO turno não herdar o horário antigo.
+    // A prévia propõe escritas: não pode tratá-las como reservas executadas.
+    let agendaAtual = '';
+    if (!preview) {
+      try {
+        agendaAtual = await agendaNoFechamento({
+          db: pool,
+          organizationId: tenantId,
+          contactId: leadId,
+          agora: clock(),
+          blocoDaAbertura: compromissosBlock,
+          mensagens: turn.result.responseMessages,
+        });
+      } catch (err) {
+        // A resposta já saiu: falhar o job por esta leitura repetiria o turno.
+        // Falha de leitura não equivale a agenda vazia nem a ação desfeita.
+        runLog.warn('agenda não pôde ser relida no fechamento', {
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+        });
+        agendaAtual =
+          'A agenda não pôde ser relida depois das ações deste turno. Isso não prova ausência de reserva nem desfaz uma ação concluída. Registre somente o que os resultados das ferramentas comprovaram.';
+      }
+    }
 
     // Fechamento imposto pelo runtime: 2ª chamada, mesma conversa, só o checkpoint.
     //
@@ -4037,6 +4344,7 @@ async function executarTurnoDoAgente(
           // fez seu trabalho na 1ª chamada e não precisa ir de novo.
           ...openingTextOnly,
           ...responseMessages,
+          ...(agendaAtual ? [{ role: 'user' as const, content: agendaAtual }] : []),
           { role: 'user', content: CHECKPOINT_INSTRUCTION },
         ],
       },
@@ -4500,6 +4808,23 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
           job_id: job.id,
           error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
         });
+      }
+      // AS DETERMINÍSTICAS ANTES DO RASCUNHO: o contato escrevia "SAIR" e nada
+      // era registrado, os follow-ups seguiam vivos e "quero falar com uma
+      // pessoa" virava só um rascunho. `true` = turno silenciado, sem rascunho.
+      if (
+        await deteccoesDeterministicasDoAssistido(pool, deps, {
+          job,
+          tenantId: job.organization_id,
+          conversationId: payload.conversation_id,
+          channelSessionId: payload.channel_session_id,
+          leadId: job.contact_id,
+          agent: operationAgent,
+          log: deps.log,
+          inboundMessageId: payload.inbound_message_id,
+        })
+      ) {
+        return;
       }
       const { generateReplyDraft } = await import('./reply-drafts');
       if (!job.contact_id) throw new Error('reply_without_contact');
