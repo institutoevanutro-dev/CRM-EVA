@@ -28,7 +28,6 @@ import {
   CHANNEL_PROVIDER_INSTAGRAM,
   CHANNEL_PROVIDER_META,
   CHANNEL_PROVIDER_WACALLS,
-  CHANNEL_PROVIDER_WAHA,
 } from "@/lib/channels/capabilities";
 import { canalAceitaTextoLivreAgora } from "@/lib/channels/janela";
 
@@ -474,7 +473,12 @@ describe("escolherCanalDoLembrete — fora da janela de 24 h não vira \"enviado
   const ha3Dias = new Date(agora.getTime() - 3 * 24 * 60 * MIN).toISOString();
   const ha1Hora = new Date(agora.getTime() - 60 * MIN).toISOString();
   const meta = { id: "canal-meta", provider: CHANNEL_PROVIDER_META as string };
-  const waha = { id: "canal-waha", provider: CHANNEL_PROVIDER_WAHA as string };
+  // O canal "sem janela" é perguntado ao módulo de canais, nunca nomeado
+  // (doutrina restricao-de-canal): um provider de envio automático que aceita
+  // texto livre mesmo sem mensagem do cliente.
+  const semJanela = providersDeEnvioAutomatico().find((p) => canalAceitaTextoLivreAgora(p, null, agora));
+  if (!semJanela) throw new Error("fixture: nenhum provider de envio automático sem janela de 24 h");
+  const qr = { id: "canal-qr", provider: semJanela as string };
 
   it("canal com janela, cliente escreveu há 3 dias: não escolhe", () => {
     expect(escolherCanalDoLembrete([meta], [{ channel_session_id: "canal-meta", last_inbound_at: ha3Dias }], agora)).toBeNull();
@@ -492,12 +496,12 @@ describe("escolherCanalDoLembrete — fora da janela de 24 h não vira \"enviado
 
   it("canal com janela fechada cede a vez ao próximo que pode", () => {
     expect(
-      escolherCanalDoLembrete([meta, waha], [{ channel_session_id: "canal-meta", last_inbound_at: ha3Dias }], agora),
-    ).toBe("canal-waha");
+      escolherCanalDoLembrete([meta, qr], [{ channel_session_id: "canal-meta", last_inbound_at: ha3Dias }], agora),
+    ).toBe("canal-qr");
   });
 
-  it("canal sem janela (WAHA) segue como antes, sem inbound registrado", () => {
-    expect(escolherCanalDoLembrete([waha], [], agora)).toBe("canal-waha");
+  it("canal sem janela (QR) segue como antes, sem inbound registrado", () => {
+    expect(escolherCanalDoLembrete([qr], [], agora)).toBe("canal-qr");
   });
 
   it("provider que a matriz não conhece não é barrado", () => {
