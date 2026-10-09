@@ -18,6 +18,7 @@ import { audit } from "@/lib/audit";
 import { sincronizarSaudeDaConexao } from "@/lib/channels/health";
 import { marcarConversaComMensagem } from "@/lib/channels/marcar-conversa";
 import { aplicarEfeitosPosEntrada } from "@/lib/channels/pos-entrada";
+import { garantirLeadDaConversa } from "@/lib/leads/nascimento-do-lead";
 import { pausarIaPorAtendimentoManual } from "@/lib/escalacao/atendimento-manual";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
@@ -541,7 +542,7 @@ async function markConversation(
   preview: string,
   at: string,
 ): Promise<void> {
-  await marcarConversaComMensagem(admin as unknown as SupabaseClient, {
+  await marcarConversaComMensagem(admin, {
     organizationId,
     conversationId: convId,
     direction,
@@ -761,6 +762,74 @@ async function handleInbound(
 }
 
 /**
+ * A conversa que COMEÇA pelo celular também vira lead (porte do DeskcommCRM
+ * #2543, issue #2448 de lá).
+ *
+ * `garantirLeadDaConversa` só era alcançada pela pós-entrada, que roda no
+ * caminho RECEBIDO. A primeira mensagem que a recepção digita no aparelho
+ * conectado gravava a conversa e saía sem funil: ninguém era dona dela.
+ *
+ * Só contato que NUNCA teve lead: aqui quem fala é a equipe, e falar com
+ * cliente de lead fechado (o "chegou certinho?") não é demanda nova.
+ * Idempotente: `garantirLeadDaConversa` recusa lead aberto, e a RPC serializa
+ * por (organização, contato).
+ *
+ * Best-effort: a mensagem JÁ está gravada. Uma exceção daqui subiria para o
+ * webhook e o WAHA reentregaria tudo.
+ */
+async function nascerLeadDaConversaPeloCelular(
+  admin: Admin,
+  session: Session,
+  contactId: string,
+  conversationId: string,
+): Promise<void> {
+  const contexto = {
+    organization_id: session.organization_id,
+    conversation_id: conversationId,
+    contact_id: contactId,
+  };
+  try {
+    const { data: qualquerLead, error: erroDoHistorico } = await admin
+      .from("crm_leads")
+      .select("id")
+      .eq("organization_id", session.organization_id)
+      .eq("contact_id", contactId)
+      .limit(1)
+      .maybeSingle();
+    if (erroDoHistorico) throw new Error(erroDoHistorico.message);
+    if (qualquerLead) {
+      logger.info("waha.ingest: lead nao criado a partir do celular", { ...contexto, motivo: "contato_ja_tem_lead" });
+      return;
+    }
+
+    const nascimento = await garantirLeadDaConversa(admin, {
+      organizationId: session.organization_id,
+      contactId,
+      conversationId,
+      // NÃO o `pushName`: em `fromMe` ele é o do OPERADOR (o nome da clínica).
+      nomeDoContato: null,
+      origem: { source: "whatsapp_operador", motivo: "primeira mensagem enviada pelo celular" },
+    });
+    logger.info(
+      nascimento.criado
+        ? "waha.ingest: lead criado a partir do celular"
+        : "waha.ingest: lead nao criado a partir do celular",
+      {
+        ...contexto,
+        ...(nascimento.criado
+          ? { lead_id: nascimento.leadId, pipeline_id: nascimento.pipelineId, stage_id: nascimento.stageId }
+          : { motivo: nascimento.motivo }),
+      },
+    );
+  } catch (err) {
+    logger.error("waha.ingest: nascimento do lead pelo celular falhou (a mensagem entra assim mesmo)", {
+      ...contexto,
+      error: err instanceof Error ? err.message.slice(0, 120) : "unknown",
+    });
+  }
+}
+
+/**
  * fromMe=true: operador respondeu direto do WhatsApp dele (não pelo composer).
  * Contato = destinatário (`to`). `from` é o próprio número do operador — nunca
  * vira contato. Registrado como outbound p/ o operador ver o histórico completo.
@@ -965,12 +1034,16 @@ async function handleOutboundFromUserPhone(
   //   silenciar o bot -> ESTRITO    (na dúvida NÃO cala; calar a IA por engano é
   //                                  pior que não calar)
   // Quem reaproveitar esta condição para pular o INSERT reabre o #108.
-  if (!(await ehEcoDeEnvioNosso(admin, session.organization_id, conversationId, p))) {
+  const ehEco = await ehEcoDeEnvioNosso(admin, session.organization_id, conversationId, p);
+  if (!ehEco) {
     await pausarIaPorAtendimentoManual(admin, {
       organizationId: session.organization_id,
       conversationId,
       canal: "waha",
     });
+    // A conversa que começa pelo celular nasce no funil (DeskcommCRM #2543).
+    // Só o que não é eco: o eco é o envio do PRÓPRIO CRM.
+    await nascerLeadDaConversaPeloCelular(admin, session, contactId, conversationId);
   }
 
   await audit({
