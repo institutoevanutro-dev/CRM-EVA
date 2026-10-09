@@ -3679,8 +3679,8 @@ export const DICIONARIO: Traducoes = {
   "Gerar segredo": { es: "Generar secreto" },
   "Trocar segredo": { es: "Cambiar secreto" },
   "Remover segredo": { es: "Quitar secreto" },
-  // "Segredo copiado." já existe mais abaixo (tronco SIP) — chave repetida é
-  // erro de compilação, e o texto é o mesmo nos dois lugares.
+  "Segredo copiado.": { es: "Secreto copiado." },
+  "Trocar": { es: "Cambiar" },
   "Guarde agora. Ele não será mostrado de novo.": {
     es: "Guárdalo ahora. No se mostrará de nuevo.",
   },
