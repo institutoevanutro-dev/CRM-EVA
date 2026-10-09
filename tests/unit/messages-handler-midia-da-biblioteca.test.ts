@@ -93,7 +93,7 @@ function conversationRow(): Row {
 }
 
 function makeSupabase() {
-  const state: { message: Row | null; inserts: Row[]; preview: unknown } = { message: null, inserts: [], preview: undefined };
+  const state: { message: Row | null; inserts: Row[]; preview: unknown; updates: Array<{ patch: Row; filtros: Array<[string, unknown]> }> } = { message: null, inserts: [], preview: undefined, updates: [] };
   const client = {
     from(table: string) {
       if (table === "channel_sessions") {
@@ -122,8 +122,13 @@ function makeSupabase() {
           },
           update: (patch: Row) => {
             state.message = { ...state.message, ...patch };
+            const filtros: Array<[string, unknown]> = [];
+            state.updates.push({ patch, filtros });
             const q = {
-              eq: () => q,
+              eq: (col: string, val: unknown) => {
+                filtros.push([col, val]);
+                return q;
+              },
               select: () => q,
               maybeSingle: async () => ({ data: { ...state.message }, error: null }),
               single: async () => ({ data: { ...state.message }, error: null }),
@@ -272,6 +277,27 @@ describe("sendMessageHandler — mídia da biblioteca", () => {
     const { supabase, state } = makeSupabase();
     await sendMessageHandler(supabase, ctx, input());
     expect(state.preview).toBe("[image]");
+  });
+
+  it("replay do agente (internalMessageId) que cai na 422 marca a linha queued como failed", async () => {
+    admin.item = itemPronto({ contains_person: true });
+    const { supabase, state } = makeSupabase();
+    const err = await recusa(sendMessageHandler(supabase, { ...ctx, internalMessageId: "msg-q" }, input()));
+    expect(err.code).toBe("media_not_ready");
+    expect(state.inserts).toHaveLength(0);
+    expect(state.updates).toEqual([
+      {
+        patch: { status: "failed", error_code: "media_not_ready", error_message: err.message },
+        filtros: [["organization_id", ORG], ["id", "msg-q"], ["status", "queued"]],
+      },
+    ]);
+  });
+
+  it("sem internalMessageId a 422 não toca em mensagem nenhuma", async () => {
+    admin.item = null;
+    const { supabase, state } = makeSupabase();
+    expect((await recusa(sendMessageHandler(supabase, ctx, input()))).code).toBe("media_not_found");
+    expect(state.updates).toHaveLength(0);
   });
 
   it("falha ao assinar: failed/storage_sign_failed, nada sai pelo canal", async () => {

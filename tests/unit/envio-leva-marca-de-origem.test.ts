@@ -25,7 +25,8 @@ vi.mock("@/lib/agent-engine/edge/crm/send-ledger", () => ({
   },
 }));
 
-import { sendTurnMessage } from "@/lib/agent-engine/edge/crm/send-message";
+import { MidiaRecusadaError, sendTurnMessage } from "@/lib/agent-engine/edge/crm/send-message";
+import { ApiError } from "@/lib/api/types";
 
 const db = {
   query: vi.fn(async () => ({ rows: [{ kind: "inbound_turn", payload: {} }] })),
@@ -66,5 +67,36 @@ describe("sendTurnMessage — marca de origem", () => {
   it("sem marca, a metadata é a de sempre", async () => {
     await envia();
     expect(metadataGravada()).toEqual({ idempotency_key: "chave-1" });
+  });
+});
+
+describe("sendTurnMessage — mídia da biblioteca", () => {
+  const midia = (body: string) =>
+    sendTurnMessage(db, { supabase: {} as never }, {
+      tenantId: "org-1", leadId: "lead-1", jobId: "job-1", seq: 1, conversationId: "conv-1",
+      body, mediaLibraryItemId: "item-1", mediaVariant: "B",
+    });
+
+  it("leva item e variante ao handler; legenda vazia não vira body", async () => {
+    await midia("");
+    expect(h.handler.mock.calls[0]![2]).toMatchObject({ media_library_item_id: "item-1", media_variant: "B", body: undefined });
+  });
+
+  it("com legenda, o body segue", async () => {
+    await midia("Veja o antes e depois");
+    expect(h.handler.mock.calls[0]![2]).toMatchObject({ media_library_item_id: "item-1", body: "Veja o antes e depois" });
+  });
+
+  it("422 media_not_* vira MidiaRecusadaError com código, mensagem e situação", async () => {
+    h.handler.mockRejectedValueOnce(
+      new ApiError(422, "media_not_ready", { situacao: "termo_vencido" }, "req", "Esta mídia não pode ser enviada agora: termo vencido."),
+    );
+    const err = await midia("").then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(MidiaRecusadaError);
+    expect(err).toMatchObject({
+      code: "media_not_ready",
+      message: "Esta mídia não pode ser enviada agora: termo vencido.",
+      situacao: "termo_vencido",
+    });
   });
 });

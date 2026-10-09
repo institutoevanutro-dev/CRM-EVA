@@ -40,6 +40,9 @@ export interface ChannelSendInput {
     /** Valor por slot, chaveado por `slotKey` — a mesma chave da tela. */
     values: Record<string, string>;
   };
+  /** Item da biblioteca de mídias; o `body` vira a legenda (vazio = sem legenda). */
+  mediaLibraryItemId?: string;
+  mediaVariant?: 'A' | 'B';
   /** `"followup"` só quando quem envia é o turno de follow-up (ver `HandlerCtx.origemDoEnvio`). */
   origemDoEnvio?: 'followup';
   /**

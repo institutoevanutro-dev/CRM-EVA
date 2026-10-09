@@ -480,13 +480,27 @@ export async function sendMessageHandler(
         "Envie o arquivo da conversa ou o item da biblioteca, não os dois.",
       );
     }
-    midiaDaBiblioteca = await resolverMidiaDaBiblioteca(
-      c.organization_id,
-      input.media_library_item_id,
-      c.contact_id,
-      input.media_variant,
-      ctx.requestId,
-    );
+    try {
+      midiaDaBiblioteca = await resolverMidiaDaBiblioteca(
+        c.organization_id,
+        input.media_library_item_id,
+        c.contact_id,
+        input.media_variant,
+        ctx.requestId,
+      );
+    } catch (err) {
+      // Replay do agente: a linha `queued` deste id já existe e nunca mais vai
+      // sair. Sem isto ela ficaria presa em queued para sempre.
+      if (ctx.internalMessageId && err instanceof ApiError && err.status === 422) {
+        await supabase
+          .from("messages")
+          .update({ status: "failed", error_code: err.code, error_message: err.message })
+          .eq("organization_id", c.organization_id)
+          .eq("id", ctx.internalMessageId)
+          .eq("status", "queued");
+      }
+      throw err;
+    }
     // O tipo é o do arquivo: o do chamador é ignorado em todo o resto do envio.
     input = { ...input, type: midiaDaBiblioteca.type };
   }

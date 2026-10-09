@@ -343,6 +343,8 @@ export async function redriveQueued(
        -- conta as que ficaram sem resgate é o bloco logo abaixo — silêncio aqui
        -- é o que fez este defeito durar.
        and s.waha_session_name is not null
+       -- Mídia da biblioteca não sai por sendText: fica com o retry do próprio job.
+       and m.media_library_item_id is null
        and m.created_at < now() - make_interval(secs => $1 / 1000.0)
      order by m.created_at
      limit $2`,
@@ -359,6 +361,7 @@ export async function redriveQueued(
      where m.sent_via = 'ai' and m.status = 'queued'
        and s.status = 'WORKING'
        and s.waha_session_name is null
+       and m.media_library_item_id is null
        and m.created_at < now() - make_interval(secs => $1 / 1000.0)`,
     [cfg.redriveMinAgeMs],
   );

@@ -46,6 +46,22 @@ export class SendToolError extends Error {
   }
 }
 
+/**
+ * O handler recusou o item da biblioteca (422 `media_not_*`). Não é transiente:
+ * virar `CrmTransportError` reagendaria o job e repetiria a mesma 422. Estende
+ * `ApiError` para o ledger fechar a intenção como `failed` pelo mesmo teste que
+ * pega a 422 crua de quem não passa por aqui (`enviar-texto-fixo`).
+ */
+export class MidiaRecusadaError extends ApiError {
+  declare readonly code: 'media_not_found' | 'media_not_ready';
+  readonly situacao?: string;
+  constructor(code: 'media_not_found' | 'media_not_ready', message: string, requestId: string, situacao?: string) {
+    super(422, code, situacao ? { situacao } : undefined, requestId, message);
+    this.name = 'MidiaRecusadaError';
+    this.situacao = situacao;
+  }
+}
+
 export interface SendMessageInput {
   agentOperation?: AgentOperationContext;
   jobClaim?: JobClaim;
@@ -63,6 +79,9 @@ export interface SendMessageInput {
    * colidirem no ledger e o segundo virar `already_sent` sem ter saído.
    */
   template?: { name: string; language: string; values: Record<string, string> };
+  /** Ver `ChannelSendInput.mediaLibraryItemId`. */
+  mediaLibraryItemId?: string;
+  mediaVariant?: 'A' | 'B';
   /** `"followup"` só no turno de follow-up; o atendimento não passa (ver `HandlerCtx`). */
   origemDoEnvio?: 'followup';
   /** Ver `ChannelSendInput.metadata`. A `idempotency_key` do ledger sempre vence. */
@@ -160,7 +179,11 @@ export async function sendTurnMessage(
                 template_values: input.template.values,
               }
             : { type: 'text' as const }),
-          body: input.body,
+          ...(input.mediaLibraryItemId
+            ? { media_library_item_id: input.mediaLibraryItemId, media_variant: input.mediaVariant }
+            : {}),
+          // Legenda vazia não vai: o handler trataria '' como texto.
+          body: input.body || undefined,
           metadata: { ...input.metadata, idempotency_key: idempotencyKey },
         },
       );
@@ -168,6 +191,15 @@ export async function sendTurnMessage(
       if (err instanceof AgendaDeferredError || err instanceof StaleServiceBoundaryError) throw err;
       if (err instanceof ApiError && err.status === 403) {
         throw err;
+      }
+      if (
+        err instanceof ApiError &&
+        err.status === 422 &&
+        (err.code === 'media_not_found' || err.code === 'media_not_ready')
+      ) {
+        // O ledger (sendWithLedger) fecha a intenção como failed ao ver esta 422.
+        const situacao = typeof err.details?.situacao === 'string' ? err.details.situacao : undefined;
+        throw new MidiaRecusadaError(err.code, err.message, err.requestId, situacao);
       }
       if (err instanceof ApiError && err.status === 404) {
         await touchLedgerError(db, input.tenantId, idempotencyKey, 'conversa não encontrada');
