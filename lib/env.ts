@@ -65,6 +65,10 @@ const schema = z.object({
   FINANCEIRO_URL: z.string().optional(),
   FINANCEIRO_TOKEN: z.string().optional(),
   FINANCEIRO_ORGANIZATION_ID: z.string().optional(),
+  // Catálogo lido do PrecificaEva (opcional): endereço completo da função tabela-precos, segredo e organização.
+  PRECIFICAEVA_URL: z.string().optional(),
+  PRECIFICAEVA_TOKEN: z.string().optional(),
+  PRECIFICAEVA_ORGANIZATION_ID: z.string().optional(),
   MARKETING_ORGANIZATION_ID: z.string().optional(),
   MARKETING_REPORT_TOKEN: z.string().optional(),
   // Node

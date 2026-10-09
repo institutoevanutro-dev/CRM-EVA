@@ -8074,6 +8074,8 @@ export const DICIONARIO: Traducoes = {
   "Salvar produto": { es: "Guardar producto" },
   "em estoque": { es: "en stock" },
   "sem controle de estoque": { es: "sin control de stock" },
+  "preço do PrecificaEva": { es: "precio de PrecificaEva" },
+  "Este item vem do PrecificaEva. Nome, categoria, preço, custo e situação são atualizados de lá a cada hora: o que mudar aqui volta ao valor do PrecificaEva. Para mudar o preço, altere no PrecificaEva.": { es: "Este artículo viene de PrecificaEva. Nombre, categoría, precio, costo y estado se actualizan desde allí cada hora: lo que cambie aquí vuelve al valor de PrecificaEva. Para cambiar el precio, modifíquelo en PrecificaEva." },
 
   // Chamada de voz WhatsApp (WaCalls, spec 18)
   // "Chamar", não "Ligar" — a chave já existe com outro sentido (ativar/toggle,
