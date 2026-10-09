@@ -280,6 +280,35 @@ export function vencidoNaMarcacao(
 }
 
 /**
+ * Véspera que cairia no MESMO DIA da marcação, no fuso da organização
+ * (porte do upstream melgarafael/DeskcommCRM#2349).
+ *
+ * `vencidoNaMarcacao` pega quem marca DEPOIS da hora do degrau. Fica de fora
+ * quem marca ANTES dela no mesmo dia: marcou hoje às 9h para amanhã às 14h, o
+ * degrau de 1 dia vence hoje às 14h e o paciente recebe "lembrando do seu
+ * compromisso" cinco horas depois de confirmar. Só degrau de 1 dia ou mais: o
+ * aviso curto (1h antes) no dia da marcação continua útil.
+ *
+ * Sem `marcadoEm` ou sem fuso legível a guarda fica fora do caminho: fuso
+ * inválido faria o `Intl` lançar e derrubar a rodada de todas as organizações.
+ */
+export function vesperaNoDiaDaMarcacao(
+  comeca: Date,
+  degrauMin: number,
+  marcadoEm: Date | null | undefined,
+  timezone: string | null | undefined,
+): boolean {
+  if (!marcadoEm || !timezone || degrauMin < 1440) return false;
+  let dia: Intl.DateTimeFormat;
+  try {
+    dia = new Intl.DateTimeFormat("en-CA", { timeZone: timezone });
+  } catch {
+    return false;
+  }
+  return dia.format(new Date(comeca.getTime() - degrauMin * 60_000)) === dia.format(marcadoEm);
+}
+
+/**
  * Quais degraus de lembrete estão vencidos e ainda não saíram.
  *
  * Um tipo pode pedir mais de um aviso — um dia antes e de novo três horas antes,
@@ -347,6 +376,8 @@ export function degrausPendentes(input: {
    * direção de nunca reenviar).
    */
   enviadoEm?: Date | null;
+  /** Fuso da organização — a régua de "mesmo dia" de `vesperaNoDiaDaMarcacao`. */
+  timezone?: string | null;
 }): number[] {
   const enviados = new Set(input.jaEnviados ?? []);
   // ─── REMARCAÇÃO PARA MAIS LONGE REARMA O DEGRAU DA DATA NOVA (#2243) ──────
@@ -400,7 +431,8 @@ export function degrausPendentes(input: {
       (degrau) =>
         !enviados.has(degrau) &&
         estaNaHora(input.agora, input.comeca, degrau) &&
-        !vencidoNaMarcacao(input.comeca, degrau, marcadoEm),
+        !vencidoNaMarcacao(input.comeca, degrau, marcadoEm) &&
+        !vesperaNoDiaDaMarcacao(input.comeca, degrau, marcadoEm, input.timezone),
     )
     .sort((a, b) => b - a);
 }
@@ -462,6 +494,21 @@ async function handle(req: NextRequest): Promise<Response> {
     motivos[motivo] = (motivos[motivo] ?? 0) + 1;
   };
 
+  // Uma consulta por organização na rodada, não por compromisso: o fuso entra
+  // em `degrausPendentes`, antes de qualquer outra leitura da linha.
+  const organizacoes = new Map<string, { timezone: string | null; locale: string | null } | null>();
+  const organizacaoDe = async (id: string) => {
+    if (!organizacoes.has(id)) {
+      const { data: o } = await admin
+        .from("organizations")
+        .select("timezone, locale")
+        .eq("id", id)
+        .maybeSingle();
+      organizacoes.set(id, (o as { timezone: string | null; locale: string | null } | null) ?? null);
+    }
+    return organizacoes.get(id) ?? null;
+  };
+
   for (const linha of linhas) {
     const tipo = tipoDe(linha);
     if (!tipo) {
@@ -481,6 +528,7 @@ async function handle(req: NextRequest): Promise<Response> {
       // O instante do último carimbo (#2243): sem ele a limpeza dos degraus
       // da data antiga fica de fora e a remarcação para mais longe não rearma.
       enviadoEm: linha.reminder_sent_at ? new Date(linha.reminder_sent_at) : null,
+      timezone: (await organizacaoDe(linha.organization_id))?.timezone ?? "America/Sao_Paulo",
     });
     if (pendentes.length === 0) {
       pular("ainda_nao");
@@ -544,11 +592,7 @@ async function handle(req: NextRequest): Promise<Response> {
       continue;
     }
 
-    const { data: organizacao } = await admin
-      .from("organizations")
-      .select("locale")
-      .eq("id", org)
-      .maybeSingle();
+    const organizacao = await organizacaoDe(org);
 
     // O texto próprio do tipo vence; sem ele, o modelo legado
     // (`reminder_template_name`) sai CRU, como sempre saiu; sem os dois, a
