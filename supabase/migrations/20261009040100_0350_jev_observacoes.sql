@@ -4,8 +4,8 @@
 -- Porte da 0421 de melgarafael/DeskcommCRM (#1696, a845f890). Uma linha por
 -- resposta do Jev ao lado do que o mecanismo de hoje decidiu: só rótulos,
 -- probabilidades e ponteiros — nunca texto de cliente. Diferenças do upstream:
--- policy `tenant_isolation_jev_observacoes_all` (padrão do fork; a escrita
--- continua negada a `authenticated` pelo grant) e a restritiva `mfa_provada`.
+-- a restritiva `mfa_provada` (a policy de tenancy é só de leitura, como no
+-- upstream: ALL só-tenancy é dívida de RBAC proibida para tabela nova).
 --
 -- Idempotente; sem BEGIN/COMMIT. A função de expurgo nasce revogada de
 -- public, anon e authenticated, executável só pelo service_role.
@@ -52,10 +52,12 @@ create unique index if not exists jev_observacoes_uma_por_mensagem_idx
 -- Membro da organização lê; ninguém pela REST escreve (o servidor passa por
 -- cima da RLS com a service key).
 alter table public.jev_observacoes enable row level security;
+-- SÓ select: uma policy ALL só de tenancy é dívida de RBAC proibida para
+-- tabela nova (tests/invariants/rbac-config-ia-canais.test.ts).
 drop policy if exists tenant_isolation_jev_observacoes_all on public.jev_observacoes;
-create policy tenant_isolation_jev_observacoes_all on public.jev_observacoes
-  for all using (organization_id in (select public.fn_user_org_ids()))
-  with check (organization_id in (select public.fn_user_org_ids()));
+drop policy if exists tenant_isolation_jev_observacoes_select on public.jev_observacoes;
+create policy tenant_isolation_jev_observacoes_select on public.jev_observacoes
+  for select using (organization_id in (select public.fn_user_org_ids()));
 drop policy if exists mfa_provada on public.jev_observacoes;
 create policy mfa_provada on public.jev_observacoes as restrictive for all to authenticated
   using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()));
