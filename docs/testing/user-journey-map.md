@@ -1097,6 +1097,7 @@ Desenho: `docs/superpowers/specs/2026-10-06-biblioteca-de-midias-design.md`. Tel
 - [x] Trocar o arquivo da variante A mantém "Pronta" e não cria cartão novo — idem
 - [x] Revogar o termo (com confirmação) vira "Revogada"; apagar tira o cartão da lista — idem
 - [ ] Envio pela API (`media_library_item_id` em `POST /api/v1/messages`, termo conferido na hora) — coberto por unit/invariante; prova com WAHA real e pela tela pendente (fatia 5)
+- [ ] IA manda mídia (ferramenta `send_media` no turno) — coberto por invariante (agent-send-media-turn); prova com WAHA real pendente (fatia 5)
 - Status: as quatro linhas passaram localmente (Playwright, banco fresco do `baseline.sql`, `next build` + `next start`, 3 testes em 12 s); evidência em `.superpowers/evidence/biblioteca-de-midias/`. Falta só o CI do PR
 
 ## J7 — Exploração completa `[P2]`
