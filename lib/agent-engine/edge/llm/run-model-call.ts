@@ -595,7 +595,7 @@ export function normalizarErro(err: unknown): {
     codigo = 'credencial_recusada';
   } else if (status === 404 || /model.*not.*found|does not exist/i.test(bruto)) {
     codigo = 'modelo_inexistente';
-  } else if (status === 429 || /rate.?limit|quota|insufficient.*credit|no credits remaining/i.test(bruto)) {
+  } else if (status === 429 || /rate.?limit|quota|insufficient.*credit|no credits remaining|credit balance is too low/i.test(bruto)) {
     // "You have no credits remaining" é como a OpenAI diz "sem saldo" — sem a
     // frase o erro caía em `erro_desconhecido` e a tela não dizia o que fazer.
     codigo = 'limite_ou_saldo';

@@ -7800,6 +7800,12 @@ export const DICIONARIO: Traducoes = {
     es: "Un material que enviaste no entró en la base de conocimiento",
   },
   "Aviso do assistente": { es: "Aviso del asistente" },
+  // ─── lib/agent-engine/queue/espera-de-saldo.ts ───
+  "A IA está sem saldo no provedor": { es: "La IA se quedó sin saldo en el proveedor" },
+  "As respostas aos clientes estão esperando. Recarregue o saldo na conta do provedor: elas saem sozinhas quando o saldo voltar, durante até 6 horas. Depois disso, a conversa que não foi respondida aparece aqui na Central.": {
+    es: "Las respuestas a los clientes están esperando. Recarga el saldo en la cuenta del proveedor: salen solas cuando vuelva el saldo, durante hasta 6 horas. Después de eso, la conversación que no se respondió aparece aquí en la Central.",
+  },
+  "Revisar credencial": { es: "Revisar credencial" },
   // `informativo` e `crítico` saem iguais nos dois idiomas — sem linha, por isso.
   "atenção": { es: "atención" },
   // ─── lib/ai/agent-inbox-copy.ts (copyDaPromessaSemDono) ───
