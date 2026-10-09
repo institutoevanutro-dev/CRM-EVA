@@ -235,7 +235,6 @@ describe("classifyIntent — o que o roteador em 'Automático' manda ao seam", (
               intentName: 'vendas',
               intentDescription: 'Quer comprar',
               examples: [],
-              flowPointerId: null,
             },
           ],
         },
