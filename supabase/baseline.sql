@@ -4654,15 +4654,21 @@ GRANT ALL ON TABLE "public"."ai_budgets" TO "anon";
 GRANT ALL ON TABLE "public"."ai_budgets" TO "authenticated";
 GRANT ALL ON TABLE "public"."ai_budgets" TO "service_role";
 
+-- I/U/D/T de `anon` e `authenticated` saem junto dos grants (migration 0339,
+-- porte de melgarafael/DeskcommCRM #2257/#2259): morando no bloco da 0160, no
+-- fim do arquivo, a chave anon recuperava a escrita a cada passada até a linha
+-- de lá, e a mantinha se a passada morresse no meio. TRUNCATE não passa pela
+-- RLS e nenhum consumidor o usa (toda escrita de `ai_budgets` é service role,
+-- medido na 0160). A decisão segue comentada no bloco da 0160.
+revoke insert, update, delete, truncate on table public.ai_budgets from authenticated, anon;
 
 
-GRANT ALL ON TABLE "public"."ai_chunks" TO "anon";
+
 GRANT ALL ON TABLE "public"."ai_chunks" TO "authenticated";
 GRANT ALL ON TABLE "public"."ai_chunks" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."ai_faq_items" TO "anon";
 GRANT ALL ON TABLE "public"."ai_faq_items" TO "authenticated";
 GRANT ALL ON TABLE "public"."ai_faq_items" TO "service_role";
 
@@ -4674,13 +4680,11 @@ GRANT ALL ON TABLE "public"."ai_invocations" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."ai_knowledge_sources" TO "anon";
 GRANT ALL ON TABLE "public"."ai_knowledge_sources" TO "authenticated";
 GRANT ALL ON TABLE "public"."ai_knowledge_sources" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."ai_knowledge_versions" TO "anon";
 GRANT ALL ON TABLE "public"."ai_knowledge_versions" TO "authenticated";
 GRANT ALL ON TABLE "public"."ai_knowledge_versions" TO "service_role";
 
@@ -4711,6 +4715,14 @@ GRANT ALL ON TABLE "public"."ai_provider_credentials_safe" TO "service_role";
 GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE ON TABLE "public"."api_audit_log" TO "anon";
 GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE ON TABLE "public"."api_audit_log" TO "authenticated";
 GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE ON TABLE "public"."api_audit_log" TO "service_role";
+
+-- O bloco da 0258 revoga U/D/T destes papéis e continua sendo a fonte do
+-- contrato (o invariante `audit-log-sob-o-default-acl-do-supabase` o extrai por
+-- rótulo), e a 0338 alcança qualquer outro papel. Mas o TRUNCATE que o
+-- snapshot concede, o único destes que a RLS não alcança, sai JÁ AQUI: entre o
+-- grant e o bloco, a chave o recuperava a cada passada, e uma passada
+-- interrompida o deixaria de pé (porte de melgarafael/DeskcommCRM #2257/#2259).
+revoke update, delete, truncate on table public.api_audit_log from public, anon, authenticated, service_role;
 
 
 
@@ -4783,6 +4795,12 @@ GRANT ALL ON TABLE "public"."event_log" TO "service_role";
 GRANT ALL ON TABLE "public"."idempotency_keys" TO "anon";
 GRANT ALL ON TABLE "public"."idempotency_keys" TO "authenticated";
 GRANT ALL ON TABLE "public"."idempotency_keys" TO "service_role";
+
+-- TRUNCATE ignora RLS; nenhum consumidor de idempotência precisa dele. A
+-- revogação acompanha os grants acima de propósito: deixá-la no apêndice
+-- devolvia o privilégio ao `anon` a cada atualização até essa linha (porte de
+-- melgarafael/DeskcommCRM #2253).
+revoke truncate on public.idempotency_keys from public, anon, authenticated;
 
 
 
@@ -10867,10 +10885,9 @@ $$;
 revoke all     on function public.fn_demanda_fecha_com_conversa() from public;
 revoke execute on function public.fn_demanda_fecha_com_conversa() from anon, authenticated;
 
-drop trigger if exists trg_demanda_fecha_com_conversa on public.conversations;
-create trigger trg_demanda_fecha_com_conversa
-  after update of status on public.conversations
-  for each row execute function public.fn_demanda_fecha_com_conversa();
+-- O gatilho desta função saiu daqui: era criado e derrubado adiante SEM
+-- recriação (bloco da 0222), e o `update.sh` reinstalava o gatilho velho a cada
+-- passada (porte de melgarafael/DeskcommCRM #2250).
 
 
 notify pgrst, 'reload schema';
@@ -14710,9 +14727,9 @@ notify pgrst, 'reload schema';
 -- tabela com o JWT do usuário.
 --
 -- SELECT fica: ler o próprio orçamento pelo PostgREST continua escopado pela
--- policy de SELECT da 0150. `revoke` é idempotente por natureza — este bloco
--- pode ser re-aplicado à vontade pelo `update.sh`.
-revoke insert, update, delete on table public.ai_budgets from authenticated, anon;
+-- policy de SELECT da 0150. O `revoke` de I/U/D/T acompanha os grants do
+-- snapshot desde a 0339: aqui ele era reaplicado a cada passada, e a chave anon
+-- recuperava a escrita até esta linha.
 
 -- ---- o arquivo do webhook pode perder o corpo (migration 0163) ----
 --
@@ -16877,6 +16894,9 @@ create policy tenant_isolation_ai_chunks_write on public.ai_chunks
     or public.fn_is_platform_admin()
   );
 
+-- Estas quatro nunca foram para o anon: a concessão que o dump trazia saiu do
+-- texto (porte de melgarafael/DeskcommCRM #2250). O revoke fica para curar
+-- quem a recebeu de um baseline antigo.
 revoke all on table public.ai_knowledge_sources  from anon;
 revoke all on table public.ai_knowledge_versions from anon;
 revoke all on table public.ai_chunks             from anon;
@@ -18403,8 +18423,6 @@ create policy idempotency_platform_creation_server_only on public.idempotency_ke
   as restrictive for all to anon, authenticated
   using (endpoint not like '/api/v1/admin/tenants:%' and not tenant_creation_trusted)
   with check (endpoint not like '/api/v1/admin/tenants:%' and not tenant_creation_trusted);
--- TRUNCATE ignora RLS; nenhum consumidor de idempotência precisa dele.
-revoke truncate on public.idempotency_keys from public, anon, authenticated;
 
 -- Criação administrativa atômica; chave existente com endpoint por ator, sem tokens.
 -- Apenas service_role: identidade/plataforma/MFA são verificadas pelo handler.
