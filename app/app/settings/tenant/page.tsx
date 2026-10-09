@@ -19,6 +19,7 @@ interface OrgRow {
   locale: string;
   currency: string;
   media_retention_days: number;
+  media_retention_enforced: boolean;
   dpo_email: string | null;
   privacy_policy_url: string | null;
   settings: Record<string, unknown> | null;
@@ -36,7 +37,7 @@ export default async function TenantSettingsPage() {
   const { data, error } = await supabase
     .from("organizations")
     .select(
-      "display_name, legal_name, cnpj, timezone, locale, currency, media_retention_days, dpo_email, privacy_policy_url, settings",
+      "display_name, legal_name, cnpj, timezone, locale, currency, media_retention_days, media_retention_enforced, dpo_email, privacy_policy_url, settings",
     )
     .eq("id", activeOrg.orgId)
     .maybeSingle();
@@ -71,6 +72,7 @@ export default async function TenantSettingsPage() {
             locale: row.locale === "es" ? "es" : "pt-BR",
             currency: moedaServidaOu(row.currency),
             media_retention_days: row.media_retention_days,
+            media_retention_enforced: row.media_retention_enforced,
             dpo_email: row.dpo_email,
             privacy_policy_url: row.privacy_policy_url,
             lost_reasons_extra: lostReasonsExtra,

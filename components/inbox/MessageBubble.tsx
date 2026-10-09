@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { Message } from "@/lib/types/messaging";
 import { CitationButton } from "@/components/ai/CitationButton";
 import { MediaRenderer } from "@/components/inbox/media/MediaRenderer";
+import { MediaUnavailable } from "@/components/inbox/media/MediaUnavailable";
 import { ContactCard } from "@/components/inbox/media/ContactCard";
 import {
   extractCitations,
@@ -88,6 +89,23 @@ export const MessageBubble = memo(function MessageBubble({
     !hasMedia &&
     (message.type === "image" || message.type === "video") &&
     Boolean((message.metadata as { media_variant?: unknown } | null)?.media_variant);
+  // A retenção marcou `metadata.media_status = 'expired'` (migration 0341) e a
+  // poda anulou os DOIS campos — a partir daí `hasMedia` é false e esta mensagem
+  // de mídia perde o render. O aviso é o do issue #1534.
+  const mediaExpirada = (message.metadata as Record<string, unknown> | null)?.media_status === "expired";
+  // O texto do aviso carrega os DIAS que a organização configurou — a 0341
+  // guarda `media_retention_days` (já com o piso de 30) junto do marcador,
+  // porque a bolha não tem acesso à configuração da organização e "por política"
+  // sem o número é uma promessa sem medida. Sem o campo (mensagem marcada por
+  // uma versão anterior), o aviso genérico.
+  const diasDaRetencao = (() => {
+    const meta = message.metadata as Record<string, unknown> | null;
+    return typeof meta?.media_retention_days === "number" ? meta.media_retention_days : null;
+  })();
+  const avisoDeExpiracao =
+    diasDaRetencao !== null
+      ? t("Mídia apagada pela política de retenção ({n} dias)").replace("{n}", String(diasDaRetencao))
+      : t("Mídia apagada pela política de retenção.");
   const isContact = message.type === "contact";
   // Figurinha sem caption: sem moldura de bolha (padrão WhatsApp).
   const isBareSticker = hasMedia && message.type === "sticker" && !message.body;
@@ -272,7 +290,13 @@ export const MessageBubble = memo(function MessageBubble({
               <p className="text-xs italic text-muted-foreground">{t("Mídia removida da biblioteca")}</p>
             )}
 
-            {isContact && !hasMedia && (
+            {!hasMedia && mediaExpirada && (
+              <div className={cn(message.body && "mb-1")}>
+                <MediaUnavailable kind={avisoDeExpiracao} />
+              </div>
+            )}
+
+            {isContact && !hasMedia && !mediaExpirada && (
               <div className={cn(message.body && isContact && "mb-1")}>
                 <ContactCard message={message} />
               </div>

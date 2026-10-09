@@ -134,10 +134,13 @@ const schema = z.object({
   // instaláveis (import/install) usam `pg` cru (mesmo pool do agent-engine).
   SUPABASE_DB_URL: required("SUPABASE_DB_URL"),
   /**
-   * A conexão de DDL do KIT (install.sh/update.sh/backup.sh), não do app —
-   * declarada aqui só porque o `docker-compose.prod.yml` entrega o `.env`
-   * inteiro ao app e ao worker (`env_file`), e uma chave que chega ao processo
-   * merece estar no contrato em vez de ser um desconhecido tolerado.
+   * A conexão de DDL do KIT (install.sh/update.sh/backup.sh), não do app.
+   * O `docker-compose.prod.yml` entrega o `.env` inteiro ao app e ao worker
+   * (`env_file`), e desde o porte do #1680 (melgarafael/DeskcommCRM) sobrescreve esta chave com
+   * vazio no `environment:` deles — no processo ela chega vazia. A declaração
+   * fica porque quem roda fora desse compose (dev local, `next start` à mão)
+   * ainda a recebe do `.env`, e uma chave que chega ao processo merece estar no
+   * contrato em vez de ser um desconhecido tolerado.
    *
    * NENHUM código de app pode lê-la: ela é o DONO do banco quando a instalação
    * é num Supabase próprio, e `SUPABASE_DB_URL` é a role menor de propósito

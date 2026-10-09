@@ -94,6 +94,12 @@ export const tenantSchema = z.object({
   locale: z.enum(LOCALES),
   currency: z.enum(MOEDAS),
   media_retention_days: z.coerce.number().int().min(30).max(3650),
+  /**
+   * Interruptor da limpeza automática de mídia antiga (migration 0341; porte de
+   * melgarafael/DeskcommCRM #2180). OPT-IN: o banco nasce com `false`, e quem
+   * liga é a tela. Quem aplica é a função do banco, pelo cron `media-retention`.
+   */
+  media_retention_enforced: z.boolean(),
   dpo_email: z
     .string()
     .email()

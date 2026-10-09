@@ -35,7 +35,13 @@ function tabela(linhas: Linha[]) {
   return q;
 }
 
-function montar(opts: { msgOrg?: string; itemOrg?: string; variante?: string; itemId?: string | null }) {
+function montar(opts: {
+  msgOrg?: string;
+  itemOrg?: string;
+  variante?: string;
+  itemId?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
   const assinados: string[] = [];
   const buckets: string[] = [];
   const itemId = opts.itemId === undefined ? ITEM : opts.itemId;
@@ -47,7 +53,7 @@ function montar(opts: { msgOrg?: string; itemOrg?: string; variante?: string; it
     media_storage_path: null,
     channel_session_id: null,
     media_library_item_id: itemId,
-    metadata: opts.variante ? { media_variant: opts.variante } : {},
+    metadata: opts.metadata ?? (opts.variante ? { media_variant: opts.variante } : {}),
   };
   const item = {
     id: ITEM,
@@ -121,6 +127,26 @@ describe("GET /messages/[id]/media com item da biblioteca", () => {
   });
 
   it("item apagado (FK nulo): 404, não 500", async () => {
+    montar({ itemId: null });
+    expect((await chamar()).status).toBe(404);
+  });
+});
+
+describe("GET /messages/[id]/media com mídia podada pela retenção (migration 0341)", () => {
+  it("marcada expired: 410 media_expired com os dias, e nada assinado", async () => {
+    const { assinados } = montar({
+      itemId: null,
+      metadata: { media_status: "expired", media_retention_days: 90 },
+    });
+    const res = await chamar();
+    expect(res.status).toBe(410);
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("media_expired");
+    expect(body.error.message).toContain("90 dias");
+    expect(assinados).toEqual([]);
+  });
+
+  it("sem o marcador continua 404", async () => {
     montar({ itemId: null });
     expect((await chamar()).status).toBe(404);
   });

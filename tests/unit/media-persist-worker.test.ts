@@ -7,10 +7,10 @@ const messageRow = {
   id: "msg1",
   organization_id: "org1",
   conversation_id: "conv1",
-  media_url: "http://localhost:3030/api/files/abc.jpg",
+  media_url: "http://localhost:3030/api/files/abc.jpg" as string | null,
   media_mime: "image/jpeg",
   media_storage_path: null as string | null,
-  metadata: { raw_type: "image" },
+  metadata: { raw_type: "image" } as Record<string, unknown>,
 };
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -84,11 +84,24 @@ describe("persistMessageMedia", () => {
     updateEqMock.mockReset();
     rpcMock.mockReset().mockResolvedValue({ error: null });
     messageRow.media_storage_path = null;
+    messageRow.media_url = "http://localhost:3030/api/files/abc.jpg";
     messageRow.metadata = { raw_type: "image" };
     vi.mocked(fetchWahaMedia).mockResolvedValue({
       buffer: Buffer.from([1, 2, 3]),
       mime: "image/jpeg",
     });
+  });
+
+  it("mídia apagada pela retenção (0341): pula com o motivo real e não baixa de novo", async () => {
+    // A poda anula `media_url` E `media_storage_path` e marca `expired`. Sem a
+    // guarda ANTES do `!media_url`, o detalhe diria "no media_url".
+    messageRow.media_url = null;
+    messageRow.metadata = { raw_type: "image", media_status: "expired" };
+    vi.mocked(fetchWahaMedia).mockClear();
+    const result = await persistMessageMedia(eventRow());
+    expect(result).toMatchObject({ status: "skipped", detail: "expired by retention" });
+    expect(fetchWahaMedia).not.toHaveBeenCalled();
+    expect(uploadMock).not.toHaveBeenCalled();
   });
 
   it("não guarda tipo executável do remetente como Content-Type (C3)", async () => {

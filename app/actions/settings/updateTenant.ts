@@ -79,6 +79,7 @@ export async function updateTenant(input: TenantInput): Promise<UpdateTenantResu
       locale: parsed.data.locale,
       currency: parsed.data.currency,
       media_retention_days: parsed.data.media_retention_days,
+      media_retention_enforced: parsed.data.media_retention_enforced,
       dpo_email: parsed.data.dpo_email ?? null,
       privacy_policy_url: parsed.data.privacy_policy_url ?? null,
       settings: nextSettings,
@@ -97,6 +98,8 @@ export async function updateTenant(input: TenantInput): Promise<UpdateTenantResu
     userAgent,
     metadata: {
       fields_changed: Object.keys(parsed.data),
+      // Quem ligou ou desligou a limpeza de mídia fica registrado (migration 0341).
+      media_retention_enforced: parsed.data.media_retention_enforced,
     },
   });
 
