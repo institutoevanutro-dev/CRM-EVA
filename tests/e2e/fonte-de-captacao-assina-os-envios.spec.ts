@@ -24,7 +24,7 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { test, expect, type Page, type Locator } from "./helpers/test";
+import { test, expect, type Page, type Locator } from "@playwright/test";
 
 const APP_URL = `http://localhost:${process.env.E2E_PORT ?? "3001"}`;
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
