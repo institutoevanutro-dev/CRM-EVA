@@ -35,6 +35,8 @@ export async function carregarMidiasProntas(
 }
 
 async function consultar(db: Queryable, orgId: string, hoje: string): Promise<MidiaDisponivel[]> {
+  // ponytail: `limit 200` por título — item pronto além dos 200 primeiros fica invisível ao
+  // agente. Se uma biblioteca passar disso, filtre a prontidão no SQL antes do limit.
   // to_char: a coluna `date` não depende do type parser do pg (Date em fuso local vs string).
   const { rows } = await db.query<Linha>(
     `select id, title, when_to_use, tags, variants, contains_person,

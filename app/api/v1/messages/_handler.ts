@@ -489,8 +489,10 @@ export async function sendMessageHandler(
         ctx.requestId,
       );
     } catch (err) {
-      // Replay do agente: a linha `queued` deste id já existe e nunca mais vai
-      // sair. Sem isto ela ficaria presa em queued para sempre.
+      // Envio do agente: `internalMessageId` vem em TODO envio dele, não só no
+      // replay. Na primeira tentativa a linha ainda não existe e o update não
+      // acha nada; no replay a linha `queued` deste id existe e nunca mais vai
+      // sair — sem isto ficaria presa em queued para sempre.
       if (ctx.internalMessageId && err instanceof ApiError && err.status === 422) {
         await supabase
           .from("messages")
@@ -763,6 +765,14 @@ export async function sendMessageHandler(
     if (updated) message = updated as unknown as Message;
   };
 
+  // Mídia da biblioteca nunca fica `queued` fora do follow-up: o reconciliador
+  // não a reenvia (não sai por sendText) e o turno do agente não volta a ela.
+  // `queued` aqui seria um relógio eterno; fecha `failed` e o agente ouve
+  // `envio_falhou`. O follow-up fica na fila porque o retry dele reenvia.
+  const midiaSemReenvio = midiaDaBiblioteca !== null && ctx.origemDoEnvio !== "followup";
+  const falharMidiaComCanalFora = () =>
+    falharAntesDeEnviar("canal_fora", "O canal está fora agora; a mídia não foi enviada.");
+
   // Releitura no sink: o operador pode ter fechado o canal enquanto o modelo
   // gerava a resposta. Envio humano não passa por esta restrição da IA.
   // Canal sem IA não tem modo de teste da IA: a recusa de cima já responde.
@@ -813,6 +823,8 @@ export async function sendMessageHandler(
     );
   } else if (recusa) {
     await falharAntesDeEnviar(recusa.code, recusa.message);
+  } else if (!adapter.isConfigured() && midiaSemReenvio) {
+    await falharMidiaComCanalFora();
   } else if (!adapter.isConfigured()) {
     const { data: updated } = await supabase
       .from("messages")
@@ -842,6 +854,8 @@ export async function sendMessageHandler(
       "instagram_desconectado",
       "A conexão deste perfil do Instagram caiu. Reconecte o Instagram em Conexões e envie de novo.",
     );
+  } else if ((!c.channel_sessions || c.channel_sessions.status !== "WORKING") && midiaSemReenvio) {
+    await falharMidiaComCanalFora();
   } else if (!c.channel_sessions || c.channel_sessions.status !== "WORKING") {
     const { data: updated } = await supabase
       .from("messages")
@@ -1114,7 +1128,8 @@ export async function sendMessageHandler(
       // Motivo PRÓPRIO na fila: "não configurado" mandaria o dono configurar o
       // que já está configurado; o que falta é a chave que decifra.
       const naoDecifra = msg.startsWith("meta_creds_decrypt_failed");
-      if (msg.startsWith(adapter.codes.notConfigured) || naoDecifra) {
+      const semCredencial = msg.startsWith(adapter.codes.notConfigured) || naoDecifra;
+      if (semCredencial && !midiaSemReenvio) {
         const { data: emFila } = await supabase
           .from("messages")
           .update({
@@ -1130,17 +1145,21 @@ export async function sendMessageHandler(
         return message;
       }
 
-      const { data: updated } = await supabase
-        .from("messages")
-        .update({
-          status: "failed",
-          error_code: code,
-          error_message: msg,
-        })
-        .eq("id", message.id)
-        .select(MSG_COLS)
-        .maybeSingle();
-      if (updated) message = updated as unknown as Message;
+      if (semCredencial) {
+        await falharMidiaComCanalFora();
+      } else {
+        const { data: updated } = await supabase
+          .from("messages")
+          .update({
+            status: "failed",
+            error_code: code,
+            error_message: msg,
+          })
+          .eq("id", message.id)
+          .select(MSG_COLS)
+          .maybeSingle();
+        if (updated) message = updated as unknown as Message;
+      }
     }
   }
 

@@ -21,7 +21,7 @@
 - `body` vazio não vai ao handler: `sendTurnMessage` manda `body: undefined` quando a legenda é vazia.
 - Lista no prompt: bloco residente "BIBLIOTECA DE MÍDIAS" com até 30 itens prontos, ordenados por título, formato `- <id> · <title> · quando usar: <when_to_use> · etiquetas: <tags>`; só entra se a lista não for vazia. Texto do bloco em português, sem travessão.
 - Ledger: `Intent` ganha `mediaLibraryItemId?: string` e `mediaVariant?: 'A'|'B'`; o hash vira `sha256(body + '\u0000' + (mediaLibraryItemId ?? '') + '\u0000' + (mediaVariant ?? ''))` só quando há mídia (sem mídia, hash idêntico ao de hoje).
-- Reconciliador: `redriveQueued` NÃO reenvia linhas com `media_library_item_id` (filtro `and m.media_library_item_id is null` no select principal e na contagem); elas ficam com o retry do próprio job.
+- Reconciliador: `redriveQueued` NÃO reenvia linhas com `media_library_item_id` (filtro `and m.media_library_item_id is null` no select principal e na contagem). Mídia do turno de resposta nunca fica `queued` (o handler fecha `failed`/`canal_fora`, a tool diz `envio_falhou`); a do follow-up continua `queued` para o retry do follow-up (fatia 4).
 - Handler: replay (`ctx.internalMessageId` presente) que cai na 422 `media_not_*` marca a linha existente `queued` desse id como `failed` com `error_code` = código, filtrando `organization_id`, e só então lança a 422.
 - Fora desta fatia: passo "Enviar mídia" do follow-up (fatia 4), prova com WAHA real (fatia 5), toggle por agente na tela.
 
@@ -30,7 +30,7 @@
 1. **Item revogado depois que o prompt foi montado** (a lista no prompt diz pronto, o handler recusa): a tool devolve `media_not_ready` com a situação legível, o turno segue, nada é reagendado, o ledger fica `failed`. Teste na Task 3.
 2. **Modelo pede duas mídias no mesmo turno**: a segunda recebe `max_media_per_turn` e nada sai. Teste na Task 3.
 3. **Organização sem nenhum item pronto**: `send_media` não existe no turno e o bloco não entra no prompt (o prefixo cacheável não muda para quem não usa a biblioteca). Teste na Task 2.
-4. **Mídia `queued` (canal fora) e o reconciliador**: não é reenviada como texto; continua `queued` para o retry do job. Teste na Task 1.
+4. **Mídia com o canal fora e o reconciliador**: não é reenviada como texto. A do turno de resposta nunca fica `queued` — falha honesta (`failed`/`canal_fora`, tool `envio_falhou`, job termina); a do follow-up continua `queued` para o retry do follow-up (fatia 4). Testes em `tests/unit/messages-handler-midia-da-biblioteca.test.ts` e `tests/invariants/agent-send-media-turn.test.ts`.
 5. **Replay de mídia cujo termo foi revogado no meio**: a linha `queued` vira `failed` com o código, não fica presa. Teste na Task 1.
 
 ---

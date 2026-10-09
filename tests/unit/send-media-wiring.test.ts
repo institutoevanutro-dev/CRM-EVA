@@ -54,6 +54,18 @@ describe("send_media — execute", () => {
     expect(corpoDoExecute()).toMatch(/pacingCapVeto = \{ code: chain\.code, nextAllowedAt: chain\.nextAllowedAt \}/);
   });
 
+  it("lê a janela de RESPOSTA (0335), como send_message e send_template", () => {
+    expect(corpoDoExecute()).toMatch(/resposta:\s*eTurnoDeResposta\(liveJob\(\)\)/);
+  });
+
+  it("reserva o teto de mídia antes do primeiro await e devolve a vez no finally", () => {
+    const corpo = corpoDoExecute();
+    const reserva = corpo.indexOf("midiaEnviadaNoTurno = true;");
+    expect(reserva).toBeGreaterThan(-1);
+    expect(reserva).toBeLessThan(corpo.indexOf("await "));
+    expect(corpo).toMatch(/finally \{\s*if \(!midiaSaiu\) midiaEnviadaNoTurno = false;/);
+  });
+
   it("a tool some quando não há mídia pronta", () => {
     expect(FONTE).toMatch(/if \(midiasProntas\.length === 0\) delete rawTools\.send_media;/);
   });

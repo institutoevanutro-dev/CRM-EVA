@@ -78,6 +78,8 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => {}) }));
 
+let sessaoStatus = "WORKING";
+
 function conversationRow(): Row {
   return {
     id: CONV,
@@ -88,7 +90,7 @@ function conversationRow(): Row {
     group_chat_id: null,
     last_inbound_at: null,
     contacts: { phone_number: "+5531999998888", wa_identity: null, is_blocked: false },
-    channel_sessions: { provider: "waha", waha_session_name: "default", status: "WORKING", archived_at: null },
+    channel_sessions: { provider: "waha", waha_session_name: "default", status: sessaoStatus, archived_at: null },
   };
 }
 
@@ -172,6 +174,7 @@ beforeEach(() => {
   fetchMock = vi.fn(async (..._a: unknown[]) => Response.json({ id: { _serialized: "MEDIA1" } }));
   vi.stubGlobal("fetch", fetchMock);
   admin.item = itemPronto();
+  sessaoStatus = "WORKING";
   admin.filtros = [];
   admin.buckets = [];
   admin.signedUrl = vi.fn(async () => ({ data: { signedUrl: "https://signed.example/lib.jpg" }, error: null }));
@@ -307,6 +310,43 @@ describe("sendMessageHandler — mídia da biblioteca", () => {
     expect(msg.status).toBe("failed");
     expect(msg.error_code).toBe("storage_sign_failed");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("sendMessageHandler — mídia da biblioteca com o canal fora", () => {
+  // `queued` só é honesto onde algo reenvia: o reconciliador não reenvia mídia
+  // da biblioteca, então fora do follow-up a linha fecha `failed` na hora.
+  it("sessão fora do ar: failed/canal_fora, nada sai e a linha não fica queued", async () => {
+    sessaoStatus = "STOPPED";
+    const { supabase } = makeSupabase();
+    const msg = await sendMessageHandler(supabase, ctx, input());
+    expect(msg).toMatchObject({ status: "failed", error_code: "canal_fora" });
+    expect(msg.error_message).toBe("O canal está fora agora; a mídia não foi enviada.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("canal não configurado: failed/canal_fora, não queued", async () => {
+    vi.stubEnv("WAHA_API_BASE_URL", "");
+    vi.stubEnv("WAHA_API_KEY", "");
+    const { supabase } = makeSupabase();
+    const msg = await sendMessageHandler(supabase, ctx, input());
+    expect(msg).toMatchObject({ status: "failed", error_code: "canal_fora" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("canal que só descobre no envio que falta credencial: failed/canal_fora, não queued", async () => {
+    fetchMock.mockRejectedValue(new Error("waha_not_configured: sem chave"));
+    const { supabase } = makeSupabase();
+    const msg = await sendMessageHandler(supabase, ctx, input());
+    expect(msg).toMatchObject({ status: "failed", error_code: "canal_fora" });
+  });
+
+  it("follow-up segue em queued: o retry do follow-up reenvia", async () => {
+    sessaoStatus = "STOPPED";
+    const { supabase } = makeSupabase();
+    const msg = await sendMessageHandler(supabase, { ...ctx, origemDoEnvio: "followup" }, input());
+    expect(msg.status).toBe("queued");
+    expect((msg.metadata as Row).queued_reason).toBe("channel_session_not_working");
   });
 });
 

@@ -225,7 +225,7 @@
       "col": 8,
       "type": "worker",
       "label": "send_media no turno",
-      "sublabel": "lista as mídias prontas (quando usar), manda uma por resposta pelo mesmo envio; sem mídia pronta a ferramenta some"
+      "sublabel": "lista as mídias prontas (quando usar), manda uma por resposta pelo mesmo envio; canal fora = falha honesta, nunca fila; sem mídia pronta a ferramenta some"
     },
     {
       "id": "mensagens",

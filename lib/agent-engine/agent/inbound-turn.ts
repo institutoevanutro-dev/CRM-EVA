@@ -2818,7 +2818,7 @@ async function executarTurnoDoAgente(
   // Uma recusa deste tipo devolve o texto confirmado ao modelo para que ele
   // reescreva antes de falar com o cliente. Não gasta envio nem toca no canal.
   let falseEmptyInboundVetoCount = 0;
-  // Teto de UMA mídia da biblioteca por turno (send_media). Marca só quando saiu ou ficou na fila.
+  // Teto de UMA mídia da biblioteca por turno (send_media). Reservado antes do envio; fica só se saiu ou ficou na fila.
   let midiaEnviadaNoTurno = false;
   // A pausa humana (atraso-humano.ts) já foi paga NESTE turno? Por turno
   // (closure), como os contadores acima. O turno pode passar pela cadeia
@@ -3026,6 +3026,11 @@ async function executarTurnoDoAgente(
             },
           };
         }
+        // Reserva SÍNCRONA, antes do primeiro await: tool-calls do mesmo passo
+        // rodam em paralelo, e marcar só depois do envio deixava as duas passarem.
+        // Toda saída que não enviou devolve a vez (finally).
+        midiaEnviadaNoTurno = true;
+        let midiaSaiu = false;
         // Mesmo formato do send_message; legenda só de espaços vira corpo vazio.
         const legenda = formatarParaWhatsApp(caption ?? '');
         try {
@@ -3046,6 +3051,7 @@ async function executarTurnoDoAgente(
             // Sem legenda, toda mídia teria o mesmo corpo vazio e colidiria no spinning.
             enforceSpinning: legenda.trim().length > 0,
             optedOutThisTurn,
+            resposta: eTurnoDeResposta(liveJob()),
             crmDailyLimit: null,
             now: clock(),
             sleep: deps.sleep,
@@ -3117,15 +3123,18 @@ async function executarTurnoDoAgente(
             return { ok: false, error: { code: chain.code, message: chain.message } };
           }
           const outcome = chain.outcome;
-          outcomes.push(outcome);
+          // `failed` de mídia é terminal: nada a reenvia (o reconciliador não toca
+          // em mídia da biblioteca) e re-rodar o run só repetiria o LLM. Fica fora
+          // de `outcomes` para não derrubar o job; o modelo ouve `envio_falhou`.
+          if (outcome.kind !== 'failed') outcomes.push(outcome);
           // Mapeamento do send_message (não o do send_template).
           switch (outcome.kind) {
             case 'sent':
             case 'already_sent':
-              midiaEnviadaNoTurno = true;
+              midiaSaiu = true;
               return { ok: true, status: 'enviada', message_id: outcome.messageId };
             case 'queued':
-              midiaEnviadaNoTurno = true;
+              midiaSaiu = true;
               return {
                 ok: true,
                 status: 'aceita_aguardando_canal',
@@ -3147,7 +3156,7 @@ async function executarTurnoDoAgente(
                 error: {
                   code: 'envio_falhou',
                   message:
-                    'o canal falhou ao enviar — não tente de novo neste turno; o sistema fará retry.',
+                    'a mídia não foi enviada (canal fora ou falha do canal) — não tente de novo neste turno; siga em texto.',
                 },
               };
             case 'unavailable':
@@ -3176,6 +3185,8 @@ async function executarTurnoDoAgente(
             ok: false,
             error: { code: 'internal_error', message: 'erro interno no envio — encerre o turno agora.' },
           };
+        } finally {
+          if (!midiaSaiu) midiaEnviadaNoTurno = false;
         }
       },
     }),

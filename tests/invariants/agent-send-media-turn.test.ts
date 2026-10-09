@@ -1,11 +1,14 @@
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import pg from "pg";
+
+import { pgComoSupabase } from "../pg-como-supabase";
 
 import type * as InboundTurn from "@/lib/agent-engine/agent/inbound-turn";
 import type * as Providers from "@/lib/agent-engine/edge/llm/providers";
 import type * as Queue from "@/lib/agent-engine/queue/queue";
 import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
 import type * as SendMessage from "@/lib/agent-engine/edge/crm/send-message";
+import type * as WahaAdapter from "@/lib/agent-engine/edge/channel/waha-adapter";
 
 /**
  * O turno COMPLETO mandando uma mídia da biblioteca (`send_media`). Harness igual a
@@ -30,7 +33,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "placeholder-service";
 const PORT = Number(process.env.TEST_DB_PORT ?? 54329);
 const pool = new pg.Pool({
   connectionString: `postgresql://postgres:postgres@127.0.0.1:${PORT}/postgres`,
-  max: 2,
+  max: 6,
 });
 
 const ORG = "eeeeeeee-0000-4000-8000-000000000001";
@@ -46,12 +49,17 @@ interface EnvioCapturado {
   mediaLibraryItemId?: string;
 }
 
+// O handler lê o item da biblioteca pelo admin client: aqui ele é o mesmo Postgres.
+const adminFake = vi.hoisted(() => ({ client: null as unknown }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => adminFake.client }));
+
 type Modules = {
   createInboundTurnHandler: typeof InboundTurn.createInboundTurnHandler;
   queue: typeof Queue;
   createLogger: typeof ObsLogger.createLogger;
   createFakeRegistry: typeof Providers.createFakeRegistry;
   MidiaRecusadaError: typeof SendMessage.MidiaRecusadaError;
+  WahaChannelAdapter: typeof WahaAdapter.WahaChannelAdapter;
 };
 let m: Modules;
 
@@ -73,8 +81,14 @@ const USO = {
   outputTokens: { total: 1, text: 1, reasoning: 0 },
 };
 
-/** Modelo fake que faz as chamadas de tool em ordem, uma por passo, e então fecha. */
-function modeloQueChama(chamadas: Array<{ tool: string; input: Record<string, unknown> }>) {
+type Chamada = { tool: string; input: Record<string, unknown> };
+
+/**
+ * Modelo fake que faz as chamadas de tool em ordem, um passo por item, e então
+ * fecha. Um item que é LISTA vira várias tool-calls no MESMO passo — o SDK as
+ * executa em paralelo.
+ */
+function modeloQueChama(chamadas: Array<Chamada | Chamada[]>) {
   let i = 0;
   let primeira = true;
   return async (opts: { prompt?: unknown; tools?: Array<{ name: string }> }) => {
@@ -103,15 +117,14 @@ function modeloQueChama(chamadas: Array<{ tool: string; input: Record<string, un
       };
     }
     i += 1;
+    const doPasso = Array.isArray(proxima) ? proxima : [proxima];
     return {
-      content: [
-        {
-          type: "tool-call" as const,
-          toolCallId: `c${i}`,
-          toolName: proxima.tool,
-          input: JSON.stringify(proxima.input),
-        },
-      ],
+      content: doPasso.map((c, k) => ({
+        type: "tool-call" as const,
+        toolCallId: `c${i}-${k}`,
+        toolName: c.tool,
+        input: JSON.stringify(c.input),
+      })),
       finishReason: { unified: "tool-calls" as const, raw: undefined },
       usage: USO,
       warnings: [],
@@ -198,7 +211,9 @@ beforeAll(async () => {
     createLogger: (await import("@/lib/agent-engine/obs/logger")).createLogger,
     createFakeRegistry: (await import("@/lib/agent-engine/edge/llm/providers")).createFakeRegistry,
     MidiaRecusadaError: (await import("@/lib/agent-engine/edge/crm/send-message")).MidiaRecusadaError,
+    WahaChannelAdapter: (await import("@/lib/agent-engine/edge/channel/waha-adapter")).WahaChannelAdapter,
   };
+  adminFake.client = pgComoSupabase(pool);
 
   await pool.query(
     `insert into organizations (id, slug, legal_name, display_name)
@@ -290,6 +305,31 @@ describe("turno completo — send_media com item pronto na biblioteca", () => {
     expect(JSON.stringify(resultadosVistos)).toMatch(/max_media_per_turn/);
   });
 
+  it("duas mídias no MESMO passo (execuções paralelas): só uma sai, a outra é max_media_per_turn", async () => {
+    const { erro } = await rodaTurno(montaHandler(modeloQueChama([[mandaMidia("um"), mandaMidia("dois")]])));
+    expect(erro).toBeNull();
+    expect(enviados).toHaveLength(1);
+    expect(JSON.stringify(resultadosVistos)).toMatch(/max_media_per_turn/);
+  });
+
+  it("mídia que não saiu devolve a vez: depois do erro, a próxima pode sair", async () => {
+    let tentativas = 0;
+    const { erro } = await rodaTurno(
+      montaHandler(modeloQueChama([mandaMidia(), mandaMidia()]), async (i) => {
+        tentativas += 1;
+        if (tentativas === 1) {
+          throw new m.MidiaRecusadaError("media_not_ready", "o termo venceu.", "req-2", "termo_vencido");
+        }
+        enviados.push(i);
+        return { kind: "sent", idempotencyKey: "k", messageId: "m" };
+      }),
+    );
+    expect(erro).toBeNull();
+    expect(tentativas).toBe(2);
+    expect(enviados).toHaveLength(1);
+    expect(JSON.stringify(resultadosVistos)).not.toMatch(/max_media_per_turn/);
+  });
+
   it("id fora da lista é media_not_found e nada sai", async () => {
     const { erro } = await rodaTurno(
       montaHandler(
@@ -332,6 +372,32 @@ describe("turno completo — send_media com item pronto na biblioteca", () => {
     const vistos = JSON.stringify(resultadosVistos);
     expect(vistos).toMatch(/contato_bloqueado/);
     expect(vistos).not.toMatch(/aceita_aguardando_canal/);
+  });
+
+  it("sessão fora do ar: a linha fecha failed, a tool diz envio_falhou e o job termina", async () => {
+    // Canal REAL do motor (ledger + handler); só a sessão está caída. Mídia da
+    // biblioteca não tem quem a reenvie, então `queued` seria um relógio eterno.
+    await pool.query("update channel_sessions set status = 'STOPPED' where id = $1", [SESSION]);
+    try {
+      const canal = new m.WahaChannelAdapter(pool, { supabase: pgComoSupabase(pool) } as never);
+      const { erro, jobId } = await rodaTurno(
+        montaHandler(modeloQueChama([mandaMidia()]), (i) => canal.send(i as never)),
+      );
+      expect(erro).toBeNull();
+      const vistos = JSON.stringify(resultadosVistos);
+      expect(vistos).toMatch(/envio_falhou/);
+      expect(vistos).not.toMatch(/aceita_aguardando_canal/);
+      const { rows: msgs } = await pool.query<{ status: string; error_code: string | null }>(
+        `select status, error_code from messages
+          where conversation_id = $1 and media_library_item_id = $2`,
+        [CONV, ITEM],
+      );
+      expect(msgs).toEqual([{ status: "failed", error_code: "canal_fora" }]);
+      const { rows } = await pool.query<{ status: string }>("select status from job_queue where id = $1", [jobId]);
+      expect(rows[0]!.status).toBe("done");
+    } finally {
+      await pool.query("update channel_sessions set status = 'WORKING' where id = $1", [SESSION]);
+    }
   });
 
   it("legenda só de espaços vira corpo vazio", async () => {
