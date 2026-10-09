@@ -182,7 +182,9 @@ export function resumoDoNo(node: FlowNode): NoDoDossie {
             ? "o agente escreve e envia a mensagem"
             : node.config.mode === "text"
               ? "envia um texto fixo"
-              : "envia uma mensagem de modelo pronto",
+              : node.config.mode === "media"
+                ? "envia uma imagem ou vídeo da biblioteca"
+                : "envia uma mensagem de modelo pronto",
       };
     case "end":
       return { ...base, resumo: `encerra — ${DESFECHO[node.config.outcome] ?? node.config.outcome}` };

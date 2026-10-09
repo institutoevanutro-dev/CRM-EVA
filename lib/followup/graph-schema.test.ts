@@ -266,6 +266,19 @@ describe('graph-schema', () => {
       });
     });
 
+    describe('media mode', () => {
+      const id = '123e4567-e89b-42d3-a456-426614174000';
+      it('accepts id with and without caption', () => {
+        expect(actionConfigSchema.safeParse({ mode: 'media', media_id: id }).success).toBe(true);
+        expect(actionConfigSchema.safeParse({ mode: 'media', media_id: id, caption: 'Oi' }).success).toBe(true);
+      });
+      it('rejects bad uuid, long caption and extra field', () => {
+        expect(actionConfigSchema.safeParse({ mode: 'media', media_id: 'x' }).success).toBe(false);
+        expect(actionConfigSchema.safeParse({ mode: 'media', media_id: id, caption: 'a'.repeat(1025) }).success).toBe(false);
+        expect(actionConfigSchema.safeParse({ mode: 'media', media_id: id, body: 'x' }).success).toBe(false);
+      });
+    });
+
     describe('ai_message mode', () => {
       it('accepts valid ai_message config', () => {
         const result = actionConfigSchema.safeParse({
