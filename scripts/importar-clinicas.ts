@@ -13,6 +13,8 @@
  * inteiro. Copie a planilha para dentro do contêiner e rode lá:
  *   docker compose -f docker-compose.prod.yml cp planilha.xlsx worker:/tmp/planilha.xlsx
  *   docker compose -f docker-compose.prod.yml exec worker pnpm exec tsx scripts/importar-clinicas.ts /tmp/planilha.xlsx --destino <host>
+ *   (o contêiner não recebe SUPABASE_DB_ADMIN_URL; para usar o dono do banco,
+ *   passe `exec -e SUPABASE_DB_ADMIN_URL="$SUPABASE_DB_ADMIN_URL" worker ...`)
  * O modelo sai do mesmo jeito, no sentido inverso:
  *   docker compose -f docker-compose.prod.yml exec worker pnpm exec tsx scripts/importar-clinicas.ts --gerar-modelo /tmp/modelo.xlsx
  *   docker compose -f docker-compose.prod.yml cp worker:/tmp/modelo.xlsx .

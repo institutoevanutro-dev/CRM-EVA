@@ -36,6 +36,11 @@ services:
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: unless-stopped
     env_file: .env
+    # A conexão do DONO do banco fica no .env só para o kit no host
+    # (install/update/backup); nenhum código do app a lê. Porte de
+    # melgarafael/DeskcommCRM #1680.
+    environment:
+      SUPABASE_DB_ADMIN_URL: ""
     depends_on:
       srh:
         condition: service_started
@@ -106,6 +111,9 @@ services:
     environment:
       # dentro da rede do compose, o WAHA é o serviço 'waha' na porta interna 3000
       WAHA_API_BASE_URL: http://waha:3000
+      # Como no app: a conexão do dono não entra no contêiner. Quem roda o
+      # importador aqui dentro e precisa dela passa `-e SUPABASE_DB_ADMIN_URL=...`.
+      SUPABASE_DB_ADMIN_URL: ""
     networks:
       - internal
     healthcheck:
