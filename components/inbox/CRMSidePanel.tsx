@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { Tag, Receipt, Users, ArrowRight } from "@/lib/ui/icons";
+import { Tag, Receipt, Users, ArrowRight, CaretDown } from "@/lib/ui/icons";
 import { apiClient } from "@/lib/api/client";
 import { marcarReleitura } from "@/lib/audit/releitura";
 import { toast } from "sonner";
@@ -25,6 +25,7 @@ import { ConversationTagsEditor } from "./ConversationTagsEditor";
 import { ContactTagsEditor } from "./ContactTagsEditor";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
+import { LoseLeadDialog } from "@/components/kanban/LoseLeadDialog";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 import { useEditLead } from "@/hooks/kanban/useUpdateLead";
 import { useBulkAction } from "@/hooks/kanban/useBulkAction";
@@ -52,6 +53,8 @@ interface LeadRow {
   stage_id?: string;
   /** As etapas ativas do funil, na ordem do quadro (rota crm-summary). */
   etapas_do_funil?: Array<{ id: string; name: string; is_won: boolean; is_lost: boolean }>;
+  /** Motivos de perda cadastrados neste funil (rota crm-summary). */
+  motivos_de_perda?: string[];
 }
 
 interface OrderRow {
@@ -397,6 +400,7 @@ function InboxLeadEditor({
         </div>
       )}
       <EtapaDoNegocio key={`etapa-${ativo.id}`} lead={ativo} onMovido={onSalvo} />
+      <AcoesDoNegocio key={`acoes-${ativo.id}`} lead={ativo} onPronto={onSalvo} />
       <CamposDoFunil
         key={ativo.id}
         leadId={ativo.id}
@@ -453,6 +457,56 @@ function EtapaDoNegocio({ lead, onMovido }: { lead: LeadRow; onMovido: () => voi
           ))}
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+/**
+ * Fechar o negócio SEM sair da conversa: "Ganhou" leva à etapa de ganho do funil
+ * pelo mesmo caminho do "Mover para…" do quadro; "Perdeu" abre o MESMO diálogo
+ * do quadro, que pede o motivo (o banco recusa perda sem motivo). Só para negócio
+ * aberto — fechado se reabre movendo a etapa acima.
+ */
+function AcoesDoNegocio({ lead, onPronto }: { lead: LeadRow; onPronto: () => void }) {
+  const t = useT();
+  const mover = useBulkAction(lead.pipeline_id);
+  const [perdendo, setPerdendo] = useState(false);
+  const etapaDeGanho = (lead.etapas_do_funil ?? []).find((e) => e.is_won);
+  if (lead.status !== "open") return null;
+
+  async function ganhou() {
+    if (!etapaDeGanho) return;
+    try {
+      await mover.mutateAsync({ action: "move", lead_ids: [lead.id], params: { stage_id: etapaDeGanho.id } });
+      toast.success(t("Negócio marcado como ganho."));
+      onPronto();
+    } catch {
+      // o hook já mostrou o erro
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2" data-testid="inbox-acoes-do-negocio">
+      {etapaDeGanho && (
+        <Button size="sm" className="h-8 flex-1" disabled={mover.isPending} onClick={() => void ganhou()}>
+          {t("Ganhou")}
+        </Button>
+      )}
+      <Button size="sm" variant="outline" className="h-8 flex-1" onClick={() => setPerdendo(true)}>
+        {t("Perdeu")}
+      </Button>
+      {perdendo && (
+        <LoseLeadDialog
+          open
+          onOpenChange={(aberto) => {
+            setPerdendo(aberto);
+            if (!aberto) onPronto();
+          }}
+          leadId={lead.id}
+          pipelineId={lead.pipeline_id}
+          motivosDoFunil={lead.motivos_de_perda}
+        />
+      )}
     </div>
   );
 }
@@ -670,6 +724,87 @@ export function CRMSidePanel({ conversation }: Props) {
 
   return (
     <aside className="flex h-full flex-col gap-4 overflow-y-auto border-l border-border bg-background p-4">
+      <section data-testid="inbox-demandas">
+        <h3 className="text-xs font-semibold text-text">
+          {t("Demandas abertas")}
+        </h3>
+        {sectionsLoading ? (
+          <Skeleton className="mt-2 h-14 w-full" />
+        ) : demandas && demandas.length > 0 ? (
+          <ul className="mt-2 space-y-1.5">
+            {demandas.map((d) => {
+              const semPasso = !d.proximo_passo;
+              return (
+                <li
+                  key={d.id}
+                  data-testid={semPasso ? "demanda-sem-proximo-passo" : "demanda-com-proximo-passo"}
+                  className={cn(
+                    "rounded-md border p-2 text-xs",
+                    semPasso ? "border-warning-border bg-warning-bg/40" : "border-border",
+                  )}
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate font-medium">
+                      {t(ESTADO_LEGIVEL[d.estado] ?? d.estado)}
+                    </span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      {t("há")} {horasDesde(d.aberta_em)}h
+                    </span>
+                  </div>
+                  {/* O invariante 4 na frase, não só na cor: quem enxerga mal
+                      cor precisa ler a mesma informação. */}
+                  <div className={cn("mt-0.5", semPasso ? "font-medium" : "text-muted-foreground")}>
+                    {d.proximo_passo ?? t("Sem próximo passo definido")}
+                  </div>
+                  {/* A SAÍDA. Sem ela esta seção só denunciava: o atendente via o
+                      vazamento e tinha de sair da tela para resolver — peça que
+                      só recebe é ilha pelo invariante 1, e foi o gate dos mapas
+                      de arquitetura que apontou isso. */}
+                  {d.id === conversation.current_demanda_id && <Badge variant="outline">{t("Demanda vigente neste canal")}</Badge>}
+                  {!readonly && <EncerrarDemanda
+                    draft={desfechoDraft?.conversationId === conversation.id && desfechoDraft.contactId === contactId && desfechoDraft.demandaId === d.id ? desfechoDraft : null}
+                    onAbrir={() => { if (contactId) setDesfechoDraft({ conversationId: conversation.id, contactId, demandaId: d.id, revision: d.revision, desfecho: "resolvida", salvando: false }); }}
+                    onAlterar={(patch) => setDesfechoDraft((current) => current?.conversationId === conversation.id && current.contactId === contactId && current.demandaId === d.id ? { ...current, ...patch } : current)}
+                    onFechar={() => setDesfechoDraft((current) => current?.conversationId === conversation.id && current.contactId === contactId && current.demandaId === d.id ? null : current)}
+                    onPronto={recarregar}
+                  />}
+                  {semPasso && !readonly ? <MarcarProximoPasso demandaId={d.id} onPronto={recarregar} /> : null}
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <SemLista
+            vazio="Nenhuma demanda aberta."
+            erro={erro}
+            onTentarDeNovo={() => setTentativa((n) => n + 1)}
+          />
+        )}
+      </section>
+
+      {/* O NEGÓCIO LOGO DEPOIS DA DEMANDA. A demanda vem antes (a unidade é ela, cap. 5),
+          e quando não há nenhuma ocupa uma linha só. O CRM é de vendas: quem abre a conversa precisa ver
+          de cara em que etapa o paciente está e fechar o próximo passo (agendar,
+          ganhou, perdeu) sem sair do Inbox. Memória, pedidos e atividade ficam
+          recolhidos — continuam a um clique. */}
+      <section data-testid="inbox-campos-lead" className="rounded-xl border border-border bg-surface p-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-accent-hover">
+          {t("Negócio")}
+        </h3>
+        {sectionsLoading ? (
+          <Skeleton className="mt-2 h-14 w-full" />
+        ) : leads && leads.length > 0 ? (
+          <fieldset disabled={readonly}><InboxLeadEditor
+            leads={leads}
+            selecionadoId={leadAtivoId}
+            onSelecionar={setLeadAtivoId}
+            onSalvo={recarregar}
+          /></fieldset>
+        ) : (
+          <SemLista vazio="Sem leads." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
+        )}
+      </section>
+
       <section>
         <h3 className="text-xs font-semibold text-text">
           {t("Contato")}
@@ -749,99 +884,26 @@ export function CRMSidePanel({ conversation }: Props) {
           conversa é o canal, demanda é o que precisa acabar. Quem abre esta
           conversa está atendendo alguém que pediu alguma coisa — a primeira
           pergunta a responder é o que ainda está pendente, não quanto vale. */}
-      <section data-testid="inbox-demandas">
-        <h3 className="text-xs font-semibold text-text">
-          {t("Demandas abertas")}
-        </h3>
-        {sectionsLoading ? (
-          <Skeleton className="mt-2 h-14 w-full" />
-        ) : demandas && demandas.length > 0 ? (
-          <ul className="mt-2 space-y-1.5">
-            {demandas.map((d) => {
-              const semPasso = !d.proximo_passo;
-              return (
-                <li
-                  key={d.id}
-                  data-testid={semPasso ? "demanda-sem-proximo-passo" : "demanda-com-proximo-passo"}
-                  className={cn(
-                    "rounded-md border p-2 text-xs",
-                    semPasso ? "border-warning-border bg-warning-bg/40" : "border-border",
-                  )}
-                >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="truncate font-medium">
-                      {t(ESTADO_LEGIVEL[d.estado] ?? d.estado)}
-                    </span>
-                    <span className="shrink-0 tabular-nums text-muted-foreground">
-                      {t("há")} {horasDesde(d.aberta_em)}h
-                    </span>
-                  </div>
-                  {/* O invariante 4 na frase, não só na cor: quem enxerga mal
-                      cor precisa ler a mesma informação. */}
-                  <div className={cn("mt-0.5", semPasso ? "font-medium" : "text-muted-foreground")}>
-                    {d.proximo_passo ?? t("Sem próximo passo definido")}
-                  </div>
-                  {/* A SAÍDA. Sem ela esta seção só denunciava: o atendente via o
-                      vazamento e tinha de sair da tela para resolver — peça que
-                      só recebe é ilha pelo invariante 1, e foi o gate dos mapas
-                      de arquitetura que apontou isso. */}
-                  {d.id === conversation.current_demanda_id && <Badge variant="outline">{t("Demanda vigente neste canal")}</Badge>}
-                  {!readonly && <EncerrarDemanda
-                    draft={desfechoDraft?.conversationId === conversation.id && desfechoDraft.contactId === contactId && desfechoDraft.demandaId === d.id ? desfechoDraft : null}
-                    onAbrir={() => { if (contactId) setDesfechoDraft({ conversationId: conversation.id, contactId, demandaId: d.id, revision: d.revision, desfecho: "resolvida", salvando: false }); }}
-                    onAlterar={(patch) => setDesfechoDraft((current) => current?.conversationId === conversation.id && current.contactId === contactId && current.demandaId === d.id ? { ...current, ...patch } : current)}
-                    onFechar={() => setDesfechoDraft((current) => current?.conversationId === conversation.id && current.contactId === contactId && current.demandaId === d.id ? null : current)}
-                    onPronto={recarregar}
-                  />}
-                  {semPasso && !readonly ? <MarcarProximoPasso demandaId={d.id} onPronto={recarregar} /> : null}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <SemLista
-            vazio="Nenhuma demanda aberta."
-            erro={erro}
-            onTentarDeNovo={() => setTentativa((n) => n + 1)}
-          />
-        )}
-      </section>
 
-      <Separator />
 
-      <section data-testid="inbox-memoria">
-        <h3 className="text-xs font-semibold">{t("Memória do contato")}</h3>
+      <details data-testid="inbox-memoria" className="group">
+        <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold text-text [&::-webkit-details-marker]:hidden">
+          {t("Memória do contato")}
+          <CaretDown size={12} className="text-text-muted transition-transform group-open:rotate-180" aria-hidden />
+        </summary>
         <p className="mt-1 text-xs text-muted-foreground">{t("Fatos duráveis registrados nas notas. Pendências pertencem à demanda vigente.")}</p>
         {!sectionsLoading && fatos.map((f) => <details key={f.id} className="mt-2 text-xs"><summary>{f.headline}</summary><p className="mt-1 whitespace-pre-wrap">{f.body}</p></details>)}
         {!sectionsLoading && fatos.length === 0 && <p className="mt-2 text-xs text-muted-foreground">{t("Nenhum fato durável registrado.")}</p>}
         {!sectionsLoading && historico.length > 0 && <div className="mt-3 text-xs"><h4>{t("Histórico encerrado — sem tarefas pendentes")}</h4>{historico.map((h) => <p key={h.id}>{t(DESFECHO_LEGIVEL[h.desfecho] ?? h.desfecho)}{h.fechada_em ? ` · ${shortDate(h.fechada_em, localeDaData)}` : ""}</p>)}</div>}
-      </section>
-      <Separator />
-
-      <section data-testid="inbox-campos-lead">
-        <h3 className="text-xs font-semibold text-text">
-          {t("Leads recentes")}
-        </h3>
-        {sectionsLoading ? (
-          <Skeleton className="mt-2 h-14 w-full" />
-        ) : leads && leads.length > 0 ? (
-          <fieldset disabled={readonly}><InboxLeadEditor
-            leads={leads}
-            selecionadoId={leadAtivoId}
-            onSelecionar={setLeadAtivoId}
-            onSalvo={recarregar}
-          /></fieldset>
-        ) : (
-          <SemLista vazio="Sem leads." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
-        )}
-      </section>
+      </details>
 
       <Separator />
 
-      <section>
-        <h3 className="text-xs font-semibold text-text">
+      <details className="group">
+        <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold text-text [&::-webkit-details-marker]:hidden">
           {t("Pedidos recentes")}
-        </h3>
+          <CaretDown size={12} className="text-text-muted transition-transform group-open:rotate-180" aria-hidden />
+        </summary>
         {sectionsLoading ? (
           <Skeleton className="mt-2 h-14 w-full" />
         ) : orders && orders.length > 0 ? (
@@ -866,14 +928,15 @@ export function CRMSidePanel({ conversation }: Props) {
         ) : (
           <SemLista vazio="Sem pedidos." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
         )}
-      </section>
+      </details>
 
       <Separator />
 
-      <section>
-        <h3 className="text-xs font-semibold text-text">
+      <details className="group" open>
+        <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold text-text [&::-webkit-details-marker]:hidden">
           {t("Atividade")}
-        </h3>
+          <CaretDown size={12} className="text-text-muted transition-transform group-open:rotate-180" aria-hidden />
+        </summary>
         {sectionsLoading ? (
           <Skeleton className="mt-2 h-14 w-full" />
         ) : activities && activities.length > 0 ? (
@@ -907,7 +970,7 @@ export function CRMSidePanel({ conversation }: Props) {
         ) : (
           <SemLista vazio="Sem atividade." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
         )}
-      </section>
+      </details>
     </aside>
   );
 }

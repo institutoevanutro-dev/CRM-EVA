@@ -32,10 +32,10 @@ export function ResultadoCrm({
           "Contatos criados no período pelo anúncio identificado; vendas vinculadas no mesmo período e recebimento líquido até agora.",
         )}
       </p>
-      <p className="text-xs text-muted-foreground">{t("Consultado em")} {new Date(dados.consultado_em).toLocaleString(tagDoIdioma)}</p>
+      <p className="text-xs text-muted-foreground">{t("Consultado em")} {new Date(dados.consultado_em).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" })}</p>
       {dados.contatos_vinculados !== null &&
         dados.contatos_vinculados < dados.contatos_atribuidos && (
-          <p className="text-sm text-amber-700" role="status">
+          <p className="text-sm text-warning-fg" role="status">
             {dados.contatos_vinculados} {t("de")} {dados.contatos_atribuidos}{" "}
             {t(
               "contatos atribuídos estão vinculados ao Financeiro; os totais de vendas são parciais.",
@@ -43,7 +43,7 @@ export function ResultadoCrm({
           </p>
         )}
       {dados.financeiro !== "disponivel" && (
-        <p role="status" className="text-sm text-amber-700">
+        <p role="status" className="text-sm text-warning-fg">
           {dados.financeiro === "nao_configurado"
             ? t("Financeiro não configurado: os valores de venda não estão disponíveis.")
             : t("Financeiro indisponível: os valores de venda não estão disponíveis.")}

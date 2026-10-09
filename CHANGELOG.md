@@ -8,6 +8,54 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.11.0] — 2026-10-09
+
+### Adicionado
+
+- **Produtos agora podem ser editados pela tela** Cada produto ganhou um botão "Editar", que abre o formulário do cadastro já preenchido. Dá para corrigir nome, código, marca, categoria, preço, custo e estoque sem desativar e cadastrar de novo. Apagar a marca ou a categoria no formulário apaga o valor salvo.
+
+### Alterado
+
+- **Na lista de Funis, as ações de cada funil ficam num menu "⋯"** Renomear, Tornar padrão, Funil de clientes e Arquivar saíram da linha e foram para o menu "⋯" à direita de cada funil. A linha mostra só o nome, os selos e as setas de ordem, e o nome continua abrindo o quadro. Nenhuma ação mudou de comportamento.
+
+### Corrigido
+
+- **Os números das abas Automático e Aguardando do Inbox ficam cerca de quatro vezes mais rápidos** Para contar as conversas de cada aba, o sistema ainda consultava a ficha do contato de cada conversa. Agora a própria conversa guarda se o contato está bloqueado ou marcado para atendimento só por pessoa, e isso se atualiza sozinho quando a ficha muda. As abas mostram os mesmos números de antes.
+
+- **Avisos e selos coloridos ficam legíveis no modo escuro** Avisos, faixas e selos de 27 telas usavam cores pensadas só para o fundo claro, como a faixa amarela de "Modo plataforma", o aviso azul de administradores e os pontos de saúde. No modo escuro eles viravam manchas claras com texto apagado. Agora usam as cores de aviso, erro, sucesso e informação do tema, que se ajustam sozinhas. Os QR codes e a prévia do logo continuam em fundo branco, porque o celular precisa dele para ler.
+
+- **A IA pode dizer que volta a falar quando ela mesma agendou o retorno** Quando a IA agendava um retorno para o paciente e dizia "te retorno amanhã", uma das conferências de envio ainda barrava a frase como promessa sem retorno marcado. Agora a frase passa quando o retorno foi agendado na mesma resposta. Sem retorno agendado, continua barrada.
+
+## [3.10.0] — 2026-10-08
+
+### Adicionado
+
+- **Conversas com visual novo, fotos e ações de venda na ficha** A lista diz por escrito quem atende e a etapa do funil; as abas menos usadas estão em "Mais". Paciente, IA e equipe têm balões diferentes, com o nome de quem respondeu. A ficha abre pelo botão "Ficha" em telas menores e traz "Ganhou" e "Perdeu". Fotos do Instagram passam a aparecer.
+
+- **Prontuário consulta os detalhes do compromisso do paciente** A integração pode consultar tipo de atendimento, profissional e observações de um compromisso ao abrir o paciente. Exige as credenciais existentes de cadastro e agenda da mesma organização. Nenhuma migração ou configuração nova.
+
+- **Início ganha a "Visão da clínica" para gestores** Quem é gestor ou administrador passa a ver no Início quatro painéis: conversas dos últimos 30 dias (quantas a IA resolveu sozinha, quantas tiveram a equipe e quantas ficaram sem resposta, com o tempo médio da primeira resposta), a agenda da semana por unidade com a taxa de comparecimento, o funil de vendas com os leads abertos por etapa e os ganhos e perdidos do mês comparados ao anterior, e a origem dos pacientes no mês. Lembretes automáticos e campanhas não contam como atendimento da IA. Atendentes continuam vendo só o "Meu dia".
+
+### Corrigido
+
+- **Os números das abas do Inbox e a lista de conversas voltam a carregar rápido** Para saber se uma conversa está com o robô ou esperando uma pessoa, o sistema consultava o contato duas vezes por conversa, cada vez passando pela regra de acesso. Com algumas centenas de conversas, os números das abas do Inbox chegavam a levar 8 segundos. Agora o contato é lido uma vez só, e cada contagem ficou cerca de duas vezes e meia mais rápida. As abas mostram os mesmos números de antes.
+
+- **Conversas e Funil mais leves** O Funil passa a mostrar, nas etapas de ganho e perda, só os negócios fechados nos últimos 30 dias; os mais antigos aparecem com "Ver mais", logo abaixo dos filtros. Isso diminui o que a tela carrega a cada mudança, e o carregamento do quadro busca as informações complementares ao mesmo tempo em vez de uma depois da outra. Em Conversas, várias mudanças que chegam juntas viram uma atualização só da lista e da conversa aberta, e as mensagens da conversa não se redesenham mais a cada 30 segundos.
+
+- **Follow-up, cada passo faz o que a tela promete** O passo "classificar a resposta" espera o cliente, as condições por resposta e por número de etapas passam a valer, o passo pausado por atendimento humano volta a andar e o histórico fala português claro. Na lista, cada fluxo ganhou Duplicar e Renomear. Confira os fluxos com a condição "não é": alguns contatos podem mudar de caminho.
+
+- **IA no WhatsApp mais confiável: o paciente não fica sem resposta nem recebe resposta errada** A IA volta a responder sozinha depois de uma queda do banco, lê os horários da agenda no fuso certo e escreve sem "\n" nem asteriscos duplos. No modo assistido, o pedido de parar e o de falar com uma pessoa são atendidos na hora. Paciente que descreve o que sente não é tratado como irritado, e a IA não promete retorno sem ninguém responsável. Não é preciso fazer nada na instalação.
+
+- **Menu "Ações" da Equipe não some para fora da tela** Em Configurações › Equipe, abrir o menu de um membro ou convite lá embaixo da lista fazia a página voltar ao topo e o menu ficar fora da tela, sem como alcançar "Revogar". O menu agora não trava a rolagem.
+
+- **Configurações não abrem com valores padrão quando a leitura falha** Distribuição de atendimento e Marca não mostram mais o formulário com valores padrão quando a leitura falha — salvar ali sobrescreveria a configuração real. Nomes em português no menu: Histórico de alterações, Chaves de integração, Plano e cobrança, Etiquetas. Datas sem segundos.
+
+- **Telas de IA dizem quando não conseguiram carregar, e falam português** Credenciais, Agentes, Follow-ups, Roteadores, Conhecimento, Memória, Habilidades, Casos, Propostas, Perguntas frequentes e Mídias passam a avisar quando a leitura falha, em vez de dizer que não há nada. "Skills" vira "Habilidades"; o gráfico de gasto diz a moeda certa (US$).
+
+- **Funis, quadro, Produtos, Campanhas e Painel do funil mais claros** Menos termos técnicos (etiqueta, situação, contatos novos, retorno do anúncio). O card do funil diz "há 3 dias". Erro de leitura não aparece mais como lista vazia em Funis e Produtos, e desativar um produto pede confirmação.
+
+- **Agenda, Contatos, Tarefas, Respostas rápidas e Radar mais claros** Menos jargão e menos ruído nas telas do dia a dia. Respostas rápidas ganham busca e grupos por assunto. O Radar mostra o tempo em dias e não diz "nenhum risco" quando falha. Na Agenda, o calendário vem primeiro e a linha dos dias não passa mais por cima do topo.
+
 ## [3.9.1] — 2026-10-08
 
 ### Corrigido
@@ -6591,7 +6639,9 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.9.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.11.0...HEAD
+[3.11.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.10.0...v3.11.0
+[3.10.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.9.1...v3.10.0
 [3.9.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.9.0...v3.9.1
 [3.9.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.8.0...v3.9.0
 [3.8.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.7.0...v3.8.0

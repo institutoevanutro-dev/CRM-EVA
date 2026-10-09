@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { useT } from "@/hooks/i18n/useT";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { apiClient } from "@/lib/api/client";
 import { formatCents } from "@/lib/money";
 import { precoParaCentavos, type Produto } from "@/lib/schemas/produtos";
@@ -48,9 +50,27 @@ const VAZIO: Rascunho = {
   controla_estoque: true,
 };
 
+function centavosParaTexto(c: number): string {
+  return (c / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function doProduto(p: Produto): Rascunho {
+  return {
+    codigo: p.codigo,
+    nome: p.nome,
+    marca: p.marca ?? "",
+    categoria: p.categoria ?? "",
+    preco: centavosParaTexto(p.preco_cents),
+    custo: p.custo_cents === null ? "" : centavosParaTexto(p.custo_cents),
+    quantidade: String(p.quantidade),
+    controla_estoque: p.controla_estoque,
+  };
+}
+
 function doRascunho(
   r: Rascunho,
   t: (s: string) => string,
+  editando = false,
 ): Record<string, unknown> | { erro: string } {
   const preco_cents = precoParaCentavos(r.preco);
   if (preco_cents === null) return { erro: t("Preço inválido. Escreva assim: 5.499,00") };
@@ -60,8 +80,10 @@ function doRascunho(
   return {
     codigo: r.codigo.trim(),
     nome: r.nome.trim(),
-    ...(r.marca.trim() ? { marca: r.marca.trim() } : {}),
-    ...(r.categoria.trim() ? { categoria: r.categoria.trim() } : {}),
+    // Na edição marca e categoria vão sempre: apagar o campo tem de apagar o
+    // valor, e omitir a chave faria o PATCH manter o antigo.
+    ...(editando || r.marca.trim() ? { marca: r.marca.trim() } : {}),
+    ...(editando || r.categoria.trim() ? { categoria: r.categoria.trim() } : {}),
     preco_cents,
     custo_cents,
     controla_estoque: r.controla_estoque,
@@ -73,15 +95,20 @@ export function ProdutosClient({
   inicial,
   podeEditar,
   textos,
+  erroDeLeitura = false,
 }: {
   inicial: Produto[];
   podeEditar: boolean;
   textos: Textos;
+  /** A leitura do catálogo falhou no servidor — não é a mesma coisa que vazio. */
+  erroDeLeitura?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
   const [criando, setCriando] = React.useState(false);
+  /** O produto em edição; o formulário é o mesmo do cadastro. */
+  const [editando, setEditando] = React.useState<Produto | null>(null);
   const [rascunho, setRascunho] = React.useState<Rascunho>(VAZIO);
   const [salvando, setSalvando] = React.useState(false);
   const [importando, setImportando] = React.useState(false);
@@ -97,23 +124,40 @@ export function ProdutosClient({
   }, [inicial, busca]);
 
   async function salvar() {
-    const corpo = doRascunho(rascunho, t);
+    const corpo = doRascunho(rascunho, t, editando !== null);
     if ("erro" in corpo) {
       toast.error(corpo.erro as string);
       return;
     }
     setSalvando(true);
     try {
-      await apiClient.post("/api/v1/products", corpo);
-      toast.success(t("Produto cadastrado"));
-      setRascunho(VAZIO);
-      setCriando(false);
+      if (editando) {
+        await apiClient.patch(`/api/v1/products/${editando.id}`, corpo);
+        toast.success(t("Produto atualizado"));
+      } else {
+        await apiClient.post("/api/v1/products", corpo);
+        toast.success(t("Produto cadastrado"));
+      }
+      fecharFormulario();
       router.refresh();
     } catch (e) {
       showApiError(e);
     } finally {
       setSalvando(false);
     }
+  }
+
+  function fecharFormulario() {
+    setRascunho(VAZIO);
+    setCriando(false);
+    setEditando(null);
+  }
+
+  function abrirEdicao(p: Produto) {
+    setEditando(p);
+    setCriando(false);
+    setRascunho(doProduto(p));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function importar(arquivo: File) {
@@ -155,60 +199,66 @@ export function ProdutosClient({
 
   return (
     <div className="mx-auto w-full max-w-5xl p-6" data-testid="tela-produtos">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold">{textos.titulo}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{textos.subtitulo}</p>
-      </header>
+      <CabecalhoDaPagina
+        className="mb-6"
+        titulo={textos.titulo}
+        descricao={textos.subtitulo}
+        acoes={
+          podeEditar ? (
+            <>
+              <input
+                ref={arquivoRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                data-testid="arquivo-planilha"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void importar(f);
+                }}
+              />
+              {/* O modelo mora AO LADO de importar: é o primeiro passo dela, e
+                  solto numa linha própria parecia um link perdido. */}
+              <a
+                href="/api/v1/products/import"
+                download="modelo-catalogo.csv"
+                className="text-xs text-text-muted underline"
+                data-testid="modelo-planilha"
+              >
+                {t("Baixar planilha modelo")}
+              </a>
+              <Button
+                variant="outline"
+                disabled={importando}
+                onClick={() => arquivoRef.current?.click()}
+                data-testid="importar-planilha"
+              >
+                {t(importando ? "Importando…" : "Importar planilha (.csv)")}
+              </Button>
+              <Button
+                onClick={() => {
+                  if (criando || editando) fecharFormulario();
+                  else setCriando(true);
+                }}
+                data-testid="novo-produto"
+              >
+                {t(criando || editando ? "Cancelar" : "Novo produto")}
+              </Button>
+            </>
+          ) : null
+        }
+      />
 
-      <div className="mb-4 flex items-center gap-3">
-        <input
+      <div className="mb-4">
+        <Input
+          type="search"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder={t("Buscar por nome, código ou marca")}
-          className="h-9 w-full max-w-sm rounded-md border px-3 text-sm"
+          className="max-w-sm"
           data-testid="busca-produto"
         />
-        {podeEditar ? (
-          <>
-            <Button onClick={() => setCriando((v) => !v)} data-testid="novo-produto">
-              {t(criando ? "Cancelar" : "Novo produto")}
-            </Button>
-            <input
-              ref={arquivoRef}
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              data-testid="arquivo-planilha"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void importar(f);
-              }}
-            />
-            <Button
-              variant="outline"
-              disabled={importando}
-              onClick={() => arquivoRef.current?.click()}
-              data-testid="importar-planilha"
-            >
-              {t(importando ? "Importando…" : "Importar planilha")}
-            </Button>
-          </>
-        ) : null}
       </div>
-
-      {podeEditar ? (
-        // Rota de API que devolve o arquivo com `content-disposition:
-        // attachment` — é download, não navegação de página, e `<Link>` do Next
-        // faria navegação de cliente para algo que não é tela.
-        <a
-          href="/api/v1/products/import"
-          download="modelo-catalogo.csv"
-          className="mb-4 inline-block text-xs text-muted-foreground underline"
-          data-testid="modelo-planilha"
-        >
-          {t("Baixar planilha modelo")}
-        </a>
-      ) : null}
 
       {resumo ? (
         <div className="mb-6 rounded-lg border p-4 text-sm" data-testid="resumo-importacao">
@@ -244,8 +294,18 @@ export function ProdutosClient({
         </div>
       ) : null}
 
-      {criando && podeEditar ? (
+      {(criando || editando) && podeEditar ? (
         <div className="mb-6 rounded-lg border p-4" data-testid="form-produto">
+          {editando ? (
+            <p className="mb-3 text-sm font-medium" data-testid="editando-produto">
+              {t("Editando")} {editando.nome}
+            </p>
+          ) : null}
+          {editando?.origem === "precificaeva" ? (
+            <p className="mb-3 rounded-md border border-warning/40 bg-warning-bg p-2 text-sm text-warning-fg" data-testid="produto-do-precificaeva">
+              {t("Este item vem do PrecificaEva. Nome, categoria, preço, custo e situação são atualizados de lá a cada hora: o que mudar aqui volta ao valor do PrecificaEva. Para mudar o preço, altere no PrecificaEva.")}
+            </p>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
               {t("Código")}
@@ -285,6 +345,7 @@ export function ProdutosClient({
               {t("Preço de venda")}
               <input
                 value={rascunho.preco}
+                disabled={editando?.origem === "precificaeva"}
                 onChange={(e) => setRascunho({ ...rascunho, preco: e.target.value })}
                 placeholder="5.499,00"
                 className="mt-1 h-9 w-full rounded-md border px-3"
@@ -295,6 +356,7 @@ export function ProdutosClient({
               {t("Custo")} <span className="text-muted-foreground">{t("(opcional)")}</span>
               <input
                 value={rascunho.custo}
+                disabled={editando?.origem === "precificaeva"}
                 onChange={(e) => setRascunho({ ...rascunho, custo: e.target.value })}
                 placeholder="4.100,00"
                 className="mt-1 h-9 w-full rounded-md border px-3"
@@ -333,13 +395,22 @@ export function ProdutosClient({
 
           <div className="mt-4">
             <Button onClick={salvar} disabled={salvando} data-testid="salvar-produto">
-              {t(salvando ? "Salvando…" : "Salvar produto")}
+              {t(salvando ? "Salvando…" : editando ? "Salvar alterações" : "Salvar produto")}
             </Button>
           </div>
         </div>
       ) : null}
 
-      {filtrados.length === 0 ? (
+      {erroDeLeitura ? (
+        <div className="rounded-lg border border-border bg-surface p-8 text-center text-sm text-text-muted" data-testid="produtos-erro">
+          {t("Não foi possível carregar os produtos. Recarregue a página.")}
+        </div>
+      ) : filtrados.length === 0 && busca.trim() ? (
+        // Busca sem resultado não é catálogo vazio.
+        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-text-muted" data-testid="produtos-sem-resultado">
+          {t("Nenhum produto com essa busca.")}
+        </div>
+      ) : filtrados.length === 0 ? (
         <div className="rounded-lg border border-dashed p-8 text-center" data-testid="produtos-vazio">
           <p className="font-medium">{textos.vazio}</p>
           <p className="mt-1 text-sm text-muted-foreground">{textos.vazioDica}</p>
@@ -358,6 +429,7 @@ export function ProdutosClient({
                   {p.controla_estoque
                     ? ` · ${p.quantidade} ${t("em estoque")}`
                     : ` · ${t("sem controle de estoque")}`}
+                  {p.origem === "precificaeva" ? ` · ${t("preço do PrecificaEva")}` : ""}
                 </p>
               </div>
               <span className="shrink-0 tabular-nums font-medium">
@@ -367,7 +439,22 @@ export function ProdutosClient({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => void alternarAtivo(p)}
+                  onClick={() => abrirEdicao(p)}
+                  data-testid={`editar-${p.codigo}`}
+                >
+                  {t("Editar")}
+                </Button>
+              ) : null}
+              {podeEditar ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    // Desativar tira o item do que o assistente de IA oferece:
+                    // pede confirmação. Reativar é seguro e vai direto.
+                    if (p.ativo && !window.confirm(t("Desativar este produto? O assistente de IA deixa de oferecê-lo."))) return;
+                    void alternarAtivo(p);
+                  }}
                   data-testid={`alternar-${p.codigo}`}
                 >
                   {t(p.ativo ? "Desativar" : "Reativar")}

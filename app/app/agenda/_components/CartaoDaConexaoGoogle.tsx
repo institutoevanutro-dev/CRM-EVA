@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "sonner";
 
 import { useT } from "@/hooks/i18n/useT";
 
@@ -136,6 +137,9 @@ export function CartaoDaConexaoGoogle({
           data-testid="desconectar-google"
           disabled={desconectando}
           onClick={() => {
+            // Desligar a sincronização da clínica inteira por um clique perdido
+            // não pode acontecer sem uma pergunta antes.
+            if (!window.confirm(t("Desconectar a agenda do Google? O que for marcado aqui deixa de ir para lá."))) return;
             setDesconectando(true);
             void fetch("/api/v1/agenda/google/desconectar", { method: "DELETE" })
               .then(async (r) => {
@@ -145,7 +149,12 @@ export function CartaoDaConexaoGoogle({
                 // que esta mesma entrega acabou de pagar.
                 router.refresh();
               })
-              .catch(() => setDesconectando(false));
+              .catch(() => {
+                setDesconectando(false);
+                // Antes a falha era engolida: o botão voltava e a pessoa achava
+                // que tinha desconectado.
+                toast.error(t("Não foi possível desconectar. Tente de novo."));
+              });
           }}
         >
           {desconectando ? t("Desconectando…") : t("Desconectar")}

@@ -39,11 +39,20 @@ function erroDe(err: unknown): string {
 
 export function BibliotecaDeMidias() {
   const t = useT();
-  const { data, isLoading } = useMidias();
+  const { data, isLoading, isError, refetch } = useMidias();
   const criar = useCriarMidia();
   const [novo, setNovo] = React.useState<CamposEditaveis | null>(null);
   const [erroCriar, setErroCriar] = React.useState<string | null>(null);
 
+  if (isError)
+    return (
+      <p className="text-sm text-text-muted" role="alert">
+        {t("Não foi possível carregar.")}{" "}
+        <button type="button" onClick={() => void refetch()} className="text-accent-strong underline">
+          {t("Tentar de novo")}
+        </button>
+      </p>
+    );
   if (isLoading || !data) return <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>;
 
   async function salvarNovo() {

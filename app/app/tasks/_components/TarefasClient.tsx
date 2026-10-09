@@ -11,7 +11,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
-import { ArrowsClockwise, CalendarBlank, ListChecks, Plus } from "@/lib/ui/icons";
+import { CalendarBlank, ListChecks, Plus } from "@/lib/ui/icons";
+import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { cn } from "@/lib/utils";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useTasks } from "@/hooks/tasks/useTasks";
@@ -78,83 +79,72 @@ export function TarefasClient({ podeEditar, usuarioId }: { podeEditar: boolean; 
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 sm:p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("Tarefas")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t(
-              "O que ficou combinado, com prazo. Tarefa presa a um negócio aparece na linha do tempo dele.",
+      <CabecalhoDaPagina
+        titulo={t("Tarefas")}
+        descricao={t(
+          "O que ficou combinado, com prazo. Tarefa presa a um negócio aparece na linha do tempo dele.",
+        )}
+        acoes={
+          <>
+            <Select
+              value={situacao}
+              onValueChange={(v) => setSituacao(v as FiltroDeSituacao)}
+            >
+              <SelectTrigger className="h-9 w-[150px] text-xs" aria-label={t("Situação")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {/* "Em aberto" já inclui as pendentes: as duas opções lado a lado
+                    eram indistinguíveis para quem usa a tela. */}
+                <SelectItem value="aberto">{t("Em aberto")}</SelectItem>
+                <SelectItem value="in_progress">{t("Em andamento")}</SelectItem>
+                <SelectItem value="done">{t("Concluída")}</SelectItem>
+                <SelectItem value="cancelled">{t("Cancelada")}</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <div className="flex items-center gap-0.5 rounded-md border bg-muted p-0.5">
+              <button
+                type="button"
+                onClick={() => setModo("lista")}
+                aria-pressed={modo === "lista"}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  modo === "lista"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <ListChecks size={14} aria-hidden />
+                {t("Lista")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setModo("calendario")}
+                aria-pressed={modo === "calendario"}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  modo === "calendario"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <CalendarBlank size={14} aria-hidden />
+                {t("Calendário")}
+              </button>
+            </div>
+
+            {/* Sem "Atualizar": a lista relê ao voltar para a aba e depois de
+                cada mudança. O botão sugeria que ela ficava velha sozinha. */}
+            {podeEditar && (
+              <Button size="sm" className="h-9 gap-1.5 text-xs" onClick={() => abrirNova()}>
+                <Plus size={14} aria-hidden />
+                {t("Nova tarefa")}
+              </Button>
             )}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={situacao}
-            onValueChange={(v) => setSituacao(v as FiltroDeSituacao)}
-          >
-            <SelectTrigger className="h-9 w-[168px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="aberto">{t("Em aberto")}</SelectItem>
-              <SelectItem value="pending">{t("Pendente")}</SelectItem>
-              <SelectItem value="in_progress">{t("Em andamento")}</SelectItem>
-              <SelectItem value="done">{t("Concluída")}</SelectItem>
-              <SelectItem value="cancelled">{t("Cancelada")}</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <div className="flex items-center gap-0.5 rounded-md border bg-muted p-0.5">
-            <button
-              type="button"
-              onClick={() => setModo("lista")}
-              aria-pressed={modo === "lista"}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-                modo === "lista"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <ListChecks size={14} aria-hidden />
-              {t("Lista")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setModo("calendario")}
-              aria-pressed={modo === "calendario"}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-                modo === "calendario"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <CalendarBlank size={14} aria-hidden />
-              {t("Calendário")}
-            </button>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 gap-1.5 text-xs"
-            onClick={() => recarregar()}
-            disabled={carregando}
-          >
-            <ArrowsClockwise size={14} className={cn(carregando && "animate-spin")} aria-hidden />
-            {t("Atualizar")}
-          </Button>
-
-          {podeEditar && (
-            <Button size="sm" className="h-9 gap-1.5 text-xs" onClick={() => abrirNova()}>
-              <Plus size={14} aria-hidden />
-              {t("Nova tarefa")}
-            </Button>
-          )}
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {falhou ? (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center">

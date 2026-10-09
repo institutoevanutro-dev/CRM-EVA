@@ -567,6 +567,8 @@ export const AUDIT_ACTIONS = [
   "catalog_product.updated",
   "catalog_product.deleted",
   "catalog_product.imported",
+  // Sincronização com o PrecificaEva (fonte única de preço da clínica): uma linha por rodada com efeito.
+  "catalog_product.synced",
 
   // As tarefas do CRM (migration 0210). Tarefa é combinado de trabalho entre
   // pessoas do time — quem a criou, quem mudou o prazo e quem a apagou é

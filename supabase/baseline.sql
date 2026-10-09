@@ -11575,11 +11575,17 @@ create table if not exists public.contact_field_proposals (
 comment on table public.contact_field_proposals is
   'Dado do contato que a IA ouviu na conversa e propôs — aguardando confirmação humana (spec 17 §4b). SEMPRE com prazo: proposta que ninguém decide vira badge permanente, que simula atenção e adia a decisão. No vencimento sai da tela e vira item de caixa.';
 
+-- 0334 (porte de melgarafael/DeskcommCRM #1650): `birthdate` entra AQUI, no
+-- bloco ÚNICO desta constraint. Uma constraint, um bloco
+-- (`tests/unit/baseline-constraint-reconstruida.test.ts`): um segundo `add` no
+-- apêndice faria este bloco falhar no `update.sh` de um clone cuja fila já
+-- tenha uma proposta de nascimento. Quem já instalou recebe a mudança porque o
+-- `update.sh` reaplica o baseline inteiro, este bloco incluído.
 alter table public.contact_field_proposals
   drop constraint if exists contact_field_proposals_campo_check;
 alter table public.contact_field_proposals
   add constraint contact_field_proposals_campo_check check (
-    campo = any (array['email', 'name', 'phone_number']::text[])
+    campo = any (array['email', 'name', 'phone_number', 'birthdate']::text[])
   );
 
 alter table public.contact_field_proposals
@@ -34876,6 +34882,151 @@ on conflict (id) do update
       allowed_mime_types = excluded.allowed_mime_types;
 -- ---- fim: biblioteca de mídias (migration 0326) ----
 
+-- ---- Painéis do Início (migration 0330) ----
+-- Spec: docs/superpowers/specs/2026-10-07-inicio-paineis-design.md. Quatro funções
+-- SECURITY INVOKER (a RLS de cada tabela continua valendo) que agregam no banco —
+-- o PostgREST corta leituras em 1000 linhas — e dois índices para as janelas.
+-- Idempotente: create index if not exists / create or replace.
+create index if not exists conversations_org_created_idx on public.conversations (organization_id, created_at);
+create index if not exists contacts_org_created_idx on public.contacts (organization_id, created_at);
+
+-- Conversas novas por dia no fuso da org. "IA sozinha" = a IA falou e ninguém da
+-- equipe; "com a equipe" = alguém da equipe falou; "sem resposta" = nenhum dos dois.
+create or replace function public.fn_inicio_conversas_por_dia(p_org uuid, p_inicio timestamptz, p_fim timestamptz, p_fuso text)
+returns table(dia date, ia_sozinha int, com_equipe int, sem_resposta int, soma_primeira_resposta_s float8, respondidas int)
+language sql stable
+set search_path = public
+as $$
+  with conv as (
+    select c.id, (c.created_at at time zone p_fuso)::date as dia
+      from public.conversations c
+     where c.organization_id = p_org and not c.is_group
+       and c.created_at >= p_inicio and c.created_at < p_fim
+  ), msg as (
+    -- sent_via='ai' cobre QUALQUER ator não humano (lembrete, campanha, automação);
+    -- fala da IA é a marca de autoria, a mesma régua de ehFalaDaIa
+    -- (lib/ai/handoff/aviso-ao-lead.ts). Envio que falhou não é resposta.
+    select m.conversation_id, m.direction, m.sent_at,
+           (m.direction = 'outbound' and m.status <> 'failed'
+             and coalesce(m.metadata->>'aviso_de_escalacao', '') <> 'true'
+             and (jsonb_typeof(m.metadata->'ai_actor_id') = 'string'
+                  or m.metadata->>'ai_generated' = 'true'
+                  or m.metadata->>'texto_escrito_pela_ia' = 'true')) as da_ia,
+           (m.direction = 'outbound' and m.status <> 'failed'
+             and (m.sent_by_user_id is not null or m.sent_via in ('user', 'external_device'))) as da_equipe
+      from public.messages m
+      join conv on conv.id = m.conversation_id
+     where m.organization_id = p_org
+  ), por_conv as (
+    select conv.id, conv.dia,
+           coalesce(bool_or(m.da_ia), false) as ia,
+           coalesce(bool_or(m.da_equipe), false) as humano,
+           min(m.sent_at) filter (where m.direction = 'inbound') as pri_in
+      from conv
+      left join msg m on m.conversation_id = conv.id
+     group by conv.id, conv.dia
+  ), com_resposta as (
+    select p.*,
+           (select min(m.sent_at) from msg m
+             where m.conversation_id = p.id and (m.da_ia or m.da_equipe)
+               and m.sent_at > p.pri_in) as pri_out
+      from por_conv p
+  )
+  select p.dia,
+         (count(*) filter (where p.ia and not p.humano))::int,
+         (count(*) filter (where p.humano))::int,
+         (count(*) filter (where not p.ia and not p.humano))::int,
+         coalesce(sum(extract(epoch from p.pri_out - p.pri_in)) filter (where p.pri_out > p.pri_in), 0)::float8,
+         (count(*) filter (where p.pri_out > p.pri_in))::int
+    from com_resposta p
+   group by p.dia
+   order by p.dia;
+$$;
+
+-- Agenda por unidade. Comparecimento é calculado na rota: realizadas ÷ (realizadas + faltas).
+create or replace function public.fn_inicio_agenda(p_org uuid, p_inicio timestamptz, p_fim timestamptz)
+returns table(unit_id uuid, unidade text, marcadas int, confirmadas int, realizadas int, faltas int, canceladas int)
+language sql stable
+set search_path = public
+as $$
+  select a.unit_id, u.name,
+         (count(*) filter (where a.status <> 'cancelled'))::int,
+         (count(*) filter (where a.status = 'confirmed'))::int,
+         (count(*) filter (where a.status = 'completed'))::int,
+         (count(*) filter (where a.status = 'no_show'))::int,
+         (count(*) filter (where a.status = 'cancelled'))::int
+    from public.calendar_appointments a
+    left join public.calendar_units u on u.id = a.unit_id and u.organization_id = p_org
+   where a.organization_id = p_org and a.starts_at >= p_inicio and a.starts_at < p_fim
+   group by a.unit_id, u.name
+   order by u.name nulls last;
+$$;
+
+-- Funil: abertos por etapa (sem as de ganho/perda/arquivadas), e ganhos, perdidos e
+-- valor vendido por moeda no mês e no mês anterior (por closed_at).
+create or replace function public.fn_inicio_funil(p_org uuid, p_pipeline uuid, p_mes_inicio timestamptz, p_mes_fim timestamptz, p_ant_inicio timestamptz)
+returns jsonb
+language sql stable
+set search_path = public
+as $$
+  with janelas(janela, de, ate) as (
+    values ('mes', p_mes_inicio, p_mes_fim), ('anterior', p_ant_inicio, p_mes_inicio)
+  ), fechados as (
+    select j.janela, l.status, coalesce(l.currency, 'BRL') as moeda, l.value_cents
+      from janelas j
+      join public.crm_leads l
+        on l.organization_id = p_org and l.pipeline_id = p_pipeline
+       and l.status in ('won', 'lost') and l.closed_at >= j.de and l.closed_at < j.ate
+  ), resumo as (
+    select j.janela,
+           jsonb_build_object(
+             'ganhos', (select count(*) from fechados f where f.janela = j.janela and f.status = 'won'),
+             'perdidos', (select count(*) from fechados f where f.janela = j.janela and f.status = 'lost'),
+             'valor', coalesce((
+               select jsonb_object_agg(v.moeda, v.total::text)
+                 from (select f.moeda, sum(f.value_cents) as total from fechados f
+                        where f.janela = j.janela and f.status = 'won' and f.value_cents is not null
+                        group by f.moeda) v), '{}'::jsonb)
+           ) as bloco
+      from janelas j
+  )
+  select jsonb_build_object(
+    'etapas', coalesce((
+      select jsonb_agg(jsonb_build_object('id', s.id, 'nome', s.name, 'abertos', (
+               select count(*) from public.crm_leads l
+                where l.organization_id = p_org and l.stage_id = s.id and l.status = 'open'))
+             order by s.position)
+        from public.crm_stages s
+       where s.organization_id = p_org and s.pipeline_id = p_pipeline
+         and not s.is_archived and not s.is_won and not s.is_lost), '[]'::jsonb),
+    'mes', (select r.bloco from resumo r where r.janela = 'mes'),
+    'anterior', (select r.bloco from resumo r where r.janela = 'anterior'));
+$$;
+
+-- Origem dos contatos novos (sem anonimizados nem mesclados), com o utm_source quando houver.
+create or replace function public.fn_inicio_origem(p_org uuid, p_inicio timestamptz, p_fim timestamptz)
+returns table(origem text, utm_source text, total int)
+language sql stable
+set search_path = public
+as $$
+  select coalesce(nullif(c.source, ''), 'manual'), nullif(c.source_metadata ->> 'utm_source', ''), count(*)::int
+    from public.contacts c
+   where c.organization_id = p_org and c.created_at >= p_inicio and c.created_at < p_fim
+     and not c.is_anonymized and c.merged_at is null
+   group by 1, 2
+   order by 3 desc;
+$$;
+
+revoke execute on function public.fn_inicio_conversas_por_dia(uuid, timestamptz, timestamptz, text) from public, anon;
+revoke execute on function public.fn_inicio_agenda(uuid, timestamptz, timestamptz) from public, anon;
+revoke execute on function public.fn_inicio_funil(uuid, uuid, timestamptz, timestamptz, timestamptz) from public, anon;
+revoke execute on function public.fn_inicio_origem(uuid, timestamptz, timestamptz) from public, anon;
+grant execute on function public.fn_inicio_conversas_por_dia(uuid, timestamptz, timestamptz, text) to authenticated;
+grant execute on function public.fn_inicio_agenda(uuid, timestamptz, timestamptz) to authenticated;
+grant execute on function public.fn_inicio_funil(uuid, uuid, timestamptz, timestamptz, timestamptz) to authenticated;
+grant execute on function public.fn_inicio_origem(uuid, timestamptz, timestamptz) to authenticated;
+-- ---- fim: painéis do Início (migration 0330) ----
+
 -- ---- comando da conversa sem RLS de contacts por linha (migration 0331) ----
 -- 0331 — "Quem manda na conversa" sem passar duas vezes pela RLS de contacts por linha.
 --
@@ -34941,6 +35092,151 @@ $comando$;
 revoke execute on function public.comando_da_conversa(public.conversations) from public, anon;
 grant  execute on function public.comando_da_conversa(public.conversations) to authenticated, service_role;
 -- ---- fim: comando da conversa sem RLS de contacts por linha (migration 0331) ----
+
+-- ---- trava do contato guardada na conversa (migration 0332) ----
+-- 0332 — "Quem manda na conversa" sem consultar o contato: a trava fica na própria conversa.
+--
+-- Depois da 0331, cada contagem por `comando_da_conversa` ainda chamava uma função
+-- por conversa para ler `contacts`. Medido em produção na 3.10.0 (08/10/2026): 0,55 s
+-- sozinha, ~3 s sob a carga do Inbox (6 contagens em paralelo, edge logs do Supabase).
+--
+-- Agora `conversations.contato_segura_robo` guarda `force_human or is_blocked` do
+-- contato, mantido por gatilho dos DOIS lados:
+--  - em `contacts`, quando `force_human` ou `is_blocked` mudam, as conversas do
+--    contato são atualizadas;
+--  - em `conversations`, ao inserir ou trocar `contact_id`, o valor é lido do contato.
+-- Com isso `comando_da_conversa(c)` deixa de consultar outra tabela e o planejador
+-- pode inline-la. A regra `fn_comando_da_conversa` não muda.
+--
+-- As funções de gatilho são `security definer`: precisam ler/escrever as linhas do
+-- contato e das conversas dele independentemente da RLS de quem fez a mudança, e
+-- não são expostas (revogadas de todos os papéis do PostgREST).
+
+alter table public.conversations
+  add column if not exists contato_segura_robo boolean not null default false;
+
+-- Backfill: só as linhas que divergem (idempotente e barato na reaplicação).
+update public.conversations c
+   set contato_segura_robo = (ct.force_human is true or ct.is_blocked is true)
+  from public.contacts ct
+ where ct.id = c.contact_id
+   and c.contato_segura_robo is distinct from (ct.force_human is true or ct.is_blocked is true);
+
+create or replace function public.fn_conversa_herda_trava_do_contato()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $fn$
+begin
+  if new.contact_id is null then
+    new.contato_segura_robo := false;
+  else
+    select coalesce(ct.force_human is true or ct.is_blocked is true, false)
+      into new.contato_segura_robo
+      from public.contacts ct where ct.id = new.contact_id;
+    new.contato_segura_robo := coalesce(new.contato_segura_robo, false);
+  end if;
+  return new;
+end;
+$fn$;
+revoke all on function public.fn_conversa_herda_trava_do_contato() from public, anon, authenticated;
+
+drop trigger if exists trg_conversa_herda_trava_do_contato on public.conversations;
+create trigger trg_conversa_herda_trava_do_contato
+  before insert or update of contact_id on public.conversations
+  for each row execute function public.fn_conversa_herda_trava_do_contato();
+
+create or replace function public.fn_contato_propaga_trava()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $fn$
+begin
+  update public.conversations
+     set contato_segura_robo = (new.force_human is true or new.is_blocked is true)
+   where contact_id = new.id
+     and contato_segura_robo is distinct from (new.force_human is true or new.is_blocked is true);
+  return new;
+end;
+$fn$;
+revoke all on function public.fn_contato_propaga_trava() from public, anon, authenticated;
+
+drop trigger if exists trg_contato_propaga_trava on public.contacts;
+create trigger trg_contato_propaga_trava
+  after update of force_human, is_blocked on public.contacts
+  for each row
+  when (old.force_human is distinct from new.force_human or old.is_blocked is distinct from new.is_blocked)
+  execute function public.fn_contato_propaga_trava();
+
+create or replace function public.comando_da_conversa(c public.conversations)
+returns text
+language sql
+stable
+set search_path = public
+as $comando$
+  select public.fn_comando_da_conversa(
+    c.status,
+    c.assigned_to_user_id,
+    c.bot_silenced_until,
+    c.contato_segura_robo,
+    false,
+    now()
+  );
+$comando$;
+
+revoke execute on function public.comando_da_conversa(public.conversations) from public, anon;
+grant  execute on function public.comando_da_conversa(public.conversations) to authenticated, service_role;
+-- ---- fim: trava do contato guardada na conversa (migration 0332) ----
+
+-- ---- classificador do roteador nasce "Automático" (migration 0333) ----
+--
+-- Porte de melgarafael/DeskcommCRM #2134 (upstream 0530). `ai_routers.config`
+-- semeava `'classifier_model', 'claude-haiku-4-5'`: id fixo do Anthropic num
+-- produto multi-provedor. Numa organização configurada na OpenRouter, ele
+-- vencia o padrão da organização (precedência 3 de `decidirBinding`,
+-- `lib/ai/pontos/resolver.ts`) e ia para o endpoint errado (400
+-- `claude-haiku-4-5 is not a valid model ID`), e TODO turno caía no fallback
+-- do roteador.
+--
+-- O default perde só `classifier_model` (`sticky` e `min_confidence` ficam): o
+-- roteador nasce em "Automático" e o seam resolve pelo painel de provedores,
+-- senão pelo padrão da organização. A cura só alcança a linha com a forma exata
+-- do seed E que quebrava: `classifier_model = 'claude-haiku-4-5'`,
+-- `classifier_provider` ausente (a tela grava os dois juntos) e organização fora
+-- do Anthropic (regra de `llmSettingsSchema`: provedor ausente, não-texto ou
+-- vazio vale 'anthropic'; lá o alias resolve, 0104, e o Haiku fica). Texto da
+-- cura idêntico ao da migration; o invariante executa ESTE bloco. Idempotente;
+-- não cria função.
+
+alter table public.ai_routers
+  alter column config set default jsonb_build_object(
+    'sticky', true,
+    'min_confidence', 0.6);
+
+update public.ai_routers r
+set config = r.config - 'classifier_model'
+from public.organizations o
+where o.id = r.organization_id
+  and r.config->>'classifier_model' = 'claude-haiku-4-5'
+  and coalesce(r.config->>'classifier_provider', '') = ''
+  and coalesce(
+        case when jsonb_typeof(o.settings->'llm'->'provider') = 'string'
+             then nullif(o.settings->'llm'->>'provider', '') end,
+        'anthropic') <> 'anthropic';
+
+-- ---- fim: classificador do roteador nasce "Automático" (migration 0333) ----
+
+-- ---- birthdate na fila de proposta (migration 0334) ----
+-- NADA DE DDL AQUI, por causa da cerca `baseline-constraint-reconstruida`:
+-- `contact_field_proposals_campo_check` já tem o seu bloco ÚNICO, e foi ele que
+-- a 0334 editou, acrescentando `birthdate` ao conjunto. Um segundo `add`
+-- constraint neste apêndice faria o bloco antigo falhar no `update.sh` de um
+-- clone cuja fila já tenha uma proposta de nascimento, e deixaria a tabela sem
+-- constraint entre o `drop` e o `add` que funciona. Esta linha é só o marcador
+-- de que a mudança existe e onde ela foi parar.
+-- ---- fim: birthdate na fila de proposta (migration 0334) ----
 
 -- ---- Cadastro do prontuário ampliado (migration 0328) ----
 -- Cadastro administrativo ampliado. As RPCs antigas continuam disponíveis.

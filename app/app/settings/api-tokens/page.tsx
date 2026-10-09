@@ -18,9 +18,9 @@ export default async function ApiTokensPage() {
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">API Tokens</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Chaves de integração", idioma)}</h1>
         <p className="text-sm text-muted-foreground">
-          {traduzir("Tokens server-to-server. Plaintext exibido", idioma)}{" "}
+          {traduzir("Chaves para outros sistemas acessarem o CRM. A chave aparece", idioma)}{" "}
           <strong>{traduzir("uma única vez", idioma)}</strong>{" "}
           {traduzir("na criação.", idioma)}
         </p>

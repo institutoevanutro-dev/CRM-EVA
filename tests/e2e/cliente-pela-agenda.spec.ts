@@ -121,8 +121,9 @@ function linhaDoContato(page: Page) {
  */
 async function celulaDeTags(page: Page) {
   const cabecalhos = (await page.getByRole("columnheader").allInnerTexts()).map((c) => c.trim());
-  const indice = cabecalhos.indexOf("Tags");
-  expect(indice, `a lista de Contatos perdeu a coluna Tags: ${JSON.stringify(cabecalhos)}`).toBeGreaterThan(-1);
+  // A coluna se chama "Etiquetas" desde a revisão das telas do dia a dia.
+  const indice = cabecalhos.indexOf("Etiquetas");
+  expect(indice, `a lista de Contatos perdeu a coluna Etiquetas: ${JSON.stringify(cabecalhos)}`).toBeGreaterThan(-1);
   return linhaDoContato(page).getByRole("cell").nth(indice);
 }
 
@@ -225,12 +226,13 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
   // ── 4 · ligada: selo, filtro, ficha e funil ─────────────────────────────
   await page.goto("/app/contacts");
   await expect(linhaDoContato(page).getByText("Cliente", { exact: true })).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: /^Tag:/ }).click();
+  // Contatos: o gatilho diz "Todas as etiquetas" sem filtro e "Etiqueta: x" com um.
+  await page.getByRole("button", { name: /^(Todas as etiquetas|Etiqueta:)/ }).click();
   // Checkbox (#1274): marca e NÃO fecha o menu; fecha-se para o gatilho sair
   // do aria-hidden que o Radix põe no resto da página.
   await page.getByRole("menuitemcheckbox", { name: "cliente", exact: true }).click();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Tag: cliente" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Etiqueta: cliente" })).toBeVisible();
   await expect(linhaDoContato(page)).toBeVisible({ timeout: 30_000 });
   await evidencia(page, info, "5-contatos-filtro-cliente");
 
@@ -278,8 +280,12 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
   // um `<div hidden>` e só depois substitui o esqueleto. `toContainText` não
   // exige visibilidade, e passou com a tela ainda mostrando o esqueleto (a
   // evidência capturada era o esqueleto, com o botão já no DOM).
-  const botaoDeClientes = page.locator('[data-testid^="clientes-"]').first();
-  await expect(botaoDeClientes).toBeVisible({ timeout: 60_000 });
+  // As ações da linha moram no menu "⋯"; o primeiro gatilho dá o funil.
+  const gatilho = page.locator('[data-testid^="acoes-"]').first();
+  await expect(gatilho).toBeVisible({ timeout: 60_000 });
+  const idDoFunil = (await gatilho.getAttribute("data-testid"))!.replace(/^acoes-/, "");
+  await gatilho.click();
+  const botaoDeClientes = page.getByTestId(`clientes-${idDoFunil}`);
   await expect(botaoDeClientes).toContainText("Funil de clientes");
   await expect(page.getByTestId("funis-rodape-clientes")).toBeVisible();
   await expect(page.getByTestId("funis-rodape-clientes")).toContainText(
@@ -290,18 +296,20 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
   // O selo "Clientes" sumia ao recarregar porque /app/kanban não selecionava
   // `is_client_pipeline`: só o corpo do PATCH trazia a coluna. Sem recarregar,
   // tirar a coluna do select da página continuaria verde.
-  const idDoFunil = (await botaoDeClientes.getAttribute("data-testid"))!.replace(/^clientes-/, "");
   const marcouOFunil = page.waitForResponse(
     (r) => r.url().includes(`/api/v1/pipelines/${idDoFunil}`) && r.request().method() === "PATCH",
   );
   await botaoDeClientes.click();
   expect((await marcouOFunil).ok(), "marcar o funil de clientes foi recusado").toBe(true);
+  await page.getByTestId(`acoes-${idDoFunil}`).click();
   await expect(page.getByTestId(`clientes-${idDoFunil}`)).toContainText("Deixar de ser funil de clientes");
 
   await page.reload();
-  const botaoRecarregado = page.getByTestId(`clientes-${idDoFunil}`);
-  await expect(botaoRecarregado).toBeVisible({ timeout: 60_000 });
-  await expect(botaoRecarregado).toContainText("Deixar de ser funil de clientes");
+  const gatilhoRecarregado = page.getByTestId(`acoes-${idDoFunil}`);
+  await expect(gatilhoRecarregado).toBeVisible({ timeout: 60_000 });
+  await gatilhoRecarregado.click();
+  await expect(page.getByTestId(`clientes-${idDoFunil}`)).toContainText("Deixar de ser funil de clientes");
+  await page.keyboard.press("Escape");
   await expect(page.getByTestId(`abrir-${idDoFunil}`).getByText("Clientes", { exact: true })).toBeVisible();
   await evidencia(page, info, "7-funis-com-funil-de-clientes");
 });

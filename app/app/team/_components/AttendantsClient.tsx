@@ -477,7 +477,7 @@ export function AttendantsClient({ canManage }: Props) {
             <TableHeader>
               <TableRow>
                 <TableHead>{t("Atendente")}</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>{t("Situação")}</TableHead>
                 <TableHead>{t("Carga")}</TableHead>
                 <TableHead>{t("Capacidade")}</TableHead>
                 <TableHead>{t("Horário")}</TableHead>

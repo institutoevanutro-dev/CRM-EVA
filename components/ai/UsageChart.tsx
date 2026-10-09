@@ -87,7 +87,9 @@ export function UsageChart({ payload }: Props) {
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <ChartCard title={t("Quanto gastou por dia (R$)")}>
+      {/* US$, não R$: os valores saem de `formatCentsUSD` — o título dizia uma
+          moeda e o gráfico mostrava outra. */}
+      <ChartCard title={t("Quanto gastou por dia (US$)")}>
         {!hasCost ? (
           <EmptyChart />
         ) : (
@@ -155,7 +157,7 @@ export function UsageChart({ payload }: Props) {
                 width={50}
               />
               <Tooltip
-                formatter={(value) => [formatNumber(Number(value)), t("Tokens")]}
+                formatter={(value) => [formatNumber(Number(value)), t("Volume de texto")]}
                 labelFormatter={(label) => formatDateTick(String(label), tagDoIdioma)}
                 contentStyle={tooltipStyle}
               />
@@ -259,7 +261,7 @@ export function UsageChart({ payload }: Props) {
                 width={45}
               />
               <Tooltip
-                formatter={(value) => [`${Number(value).toFixed(2)}%`, t("Handoff")]}
+                formatter={(value) => [`${Number(value).toFixed(2)}%`, t("Passou para uma pessoa")]}
                 labelFormatter={(label) => formatDateTick(String(label), tagDoIdioma)}
                 contentStyle={tooltipStyle}
               />

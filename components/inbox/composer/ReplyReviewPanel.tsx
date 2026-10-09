@@ -1,4 +1,5 @@
 "use client";
+import { Sparkle } from "@/lib/ui/icons";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
@@ -106,20 +107,25 @@ export function ReplyReviewPanel({
   };
   return (
     <section
-      className="mb-3 space-y-2 rounded-md border bg-muted/30 p-3"
+      // Sem sugestão, é uma linha fina acima do campo — um quadro inteiro para
+      // um botão só empurrava a conversa para cima (print de 07/10/2026). O
+      // quadro volta quando há sugestão para revisar.
+      className={draft ? "mb-3 space-y-2 rounded-xl border border-border bg-surface p-3" : "mb-1.5"}
       aria-label={t("Assistência do agente")}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium">
+        <p className={draft ? "text-sm font-medium" : "text-xs text-text-muted"}>
           {t(draft ? (statuses[draft.status] ?? "Assistência do agente") : "Assistência do agente")}
         </p>
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className={draft ? undefined : "h-7 gap-1 rounded-full px-2.5 text-xs"}
           disabled={disabled || busy}
           onClick={generate}
         >
+          {!draft && <Sparkle size={12} aria-hidden />}
           {t(busy ? "Preparando…" : "Sugerir resposta")}
         </Button>
       </div>

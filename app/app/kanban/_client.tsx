@@ -20,6 +20,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api/types";
 import {
@@ -28,9 +35,11 @@ import {
   CaretDown,
   CaretUp,
   Check,
+  DotsThree,
   PencilSimple,
   Plus,
   Trash,
+  Users,
 } from "@/lib/ui/icons";
 import { useArquivarFunil, useCriarFunil, useEditarFunil } from "@/hooks/pipelines/usePipelines";
 
@@ -311,7 +320,6 @@ export function FunisClient({
                     <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
                       {funil.name}
                     </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">/{funil.slug}</span>
                     <div className="flex shrink-0 flex-wrap gap-1">
                       <Button
                         variant="ghost"
@@ -569,65 +577,73 @@ export function FunisClient({
                   )}
                 </div>
 
-                <span className="shrink-0 text-xs text-muted-foreground">/{funil.slug}</span>
 
                 {podeGerenciar && !renomeandoAqui && (
-                  <div className="flex shrink-0 flex-wrap gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setRenomeando({ id: funil.id, nome: funil.name })}
-                      disabled={ocupado}
-                      data-testid={`renomear-${funil.id}`}
-                    >
-                      <PencilSimple size={16} className="mr-1" aria-hidden /> {t("Renomear")}
-                    </Button>
-                    {!funil.is_default && (
+                  // As ações da linha moram num menu "⋯": quatro botões de texto
+                  // por funil disputavam o olho com o nome, que é o que se clica.
+                  // `modal={false}` pelo mesmo motivo da Equipe: o menu modal trava
+                  // a rolagem e pode deixar o próprio menu fora da tela.
+                  <DropdownMenu modal={false}>
+                    <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
-                        size="sm"
-                        onClick={() => aplicar(funil.id, { is_default: true })}
+                        size="icon"
+                        className="shrink-0 self-end sm:self-auto"
+                        aria-label={`${t("Ações de")} «${funil.name}»`}
+                        data-testid={`acoes-${funil.id}`}
                         disabled={ocupado}
-                        data-testid={`padrao-${funil.id}`}
                       >
-                        <Check size={16} className="mr-1" aria-hidden /> {t("Tornar padrão")}
+                        <DotsThree size={20} aria-hidden />
                       </Button>
-                    )}
-                    {/*
-                      Ligar e desligar no MESMO lugar, ao contrário de "Tornar
-                      padrão", que só liga: toda organização precisa de um funil
-                      padrão, nenhuma precisa de um funil de clientes. Quem
-                      experimentou tem de conseguir desfazer sem pedir ajuda.
-                    */}
-                    {clientesLigado && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          aplicar(funil.id, { is_client_pipeline: !funil.is_client_pipeline })
-                        }
-                        disabled={ocupado}
-                        data-testid={`clientes-${funil.id}`}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onSelect={() => setRenomeando({ id: funil.id, nome: funil.name })}
+                        data-testid={`renomear-${funil.id}`}
                       >
-                        <Check size={16} className="mr-1" aria-hidden />{" "}
-                        {funil.is_client_pipeline
-                          ? t("Deixar de ser funil de clientes")
-                          : t("Funil de clientes")}
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setErro(null);
-                        setArquivando({ id: funil.id, erro: null });
-                      }}
-                      disabled={ocupado}
-                      data-testid={`arquivar-${funil.id}`}
-                    >
-                      <Archive size={16} className="mr-1" aria-hidden /> {t("Arquivar")}
-                    </Button>
-                  </div>
+                        <PencilSimple size={16} aria-hidden /> {t("Renomear")}
+                      </DropdownMenuItem>
+                      {!funil.is_default && (
+                        <DropdownMenuItem
+                          onSelect={() => aplicar(funil.id, { is_default: true })}
+                          data-testid={`padrao-${funil.id}`}
+                        >
+                          <Check size={16} aria-hidden /> {t("Tornar padrão")}
+                        </DropdownMenuItem>
+                      )}
+                      {/*
+                        Ligar e desligar no MESMO lugar, ao contrário de "Tornar
+                        padrão", que só liga: toda organização precisa de um funil
+                        padrão, nenhuma precisa de um funil de clientes. Quem
+                        experimentou tem de conseguir desfazer sem pedir ajuda.
+                      */}
+                      {clientesLigado && (
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            aplicar(funil.id, { is_client_pipeline: !funil.is_client_pipeline })
+                          }
+                          data-testid={`clientes-${funil.id}`}
+                        >
+                          {/* Ícone de pessoas, não de "marcado": o check aparecia também
+                              com a opção DESLIGADA e lia como "já é funil de clientes". */}
+                          <Users size={16} aria-hidden />{" "}
+                          {funil.is_client_pipeline
+                            ? t("Deixar de ser funil de clientes")
+                            : t("Funil de clientes")}
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setErro(null);
+                          setArquivando({ id: funil.id, erro: null });
+                        }}
+                        data-testid={`arquivar-${funil.id}`}
+                      >
+                        <Archive size={16} aria-hidden /> {t("Arquivar")}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
               </div>
 

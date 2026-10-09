@@ -13,6 +13,15 @@
  * seria deixá-lo publicar a própria voz como se fosse a da empresa, e nenhuma
  * tela hoje distingue um do outro. Escrever mensagem o agente já sabe — o que
  * ele ganha aqui é PARAR de inventar quando a empresa já decidiu como diz.
+ *
+ * ⚠️ A LISTA NÃO TRAZ O PESSOAL DE TODO MUNDO, e a régua NÃO foi inventada
+ * aqui: é a policy `message_templates_select` (migration 0060). Um membro lê o
+ * compartilhado (`owner_user_id is null`) **mais o próprio**. A tela e a rota
+ * REST herdam esse predicado da RLS; a tool usa o client **service role**, que
+ * bypassa a policy, e por isso listava os rascunhos pessoais de cada atendente
+ * para qualquer token de integração e para a IA. O `eq("organization_id", …)`
+ * não bastava: o vazamento era dentro da mesma empresa. Porte de
+ * melgarafael/DeskcommCRM #1673 (9f566e7f58), só o núcleo de visibilidade.
  */
 import { ApiError } from "@/lib/api/types";
 import { renderTemplate } from "@/lib/automation/template";
@@ -27,12 +36,27 @@ export interface ModeloVisivel {
   compartilhado: boolean;
 }
 
-export async function listarModelosDeMensagem(deps: DepsDaOperacao): Promise<ModeloVisivel[]> {
-  const { data, error } = await deps.supabase
-    .from("message_templates")
-    .select("id, title, body, shortcut, owner_user_id")
-    .eq("organization_id", deps.organizationId)
-    .order("updated_at", { ascending: false });
+export interface OpcoesDosModelos {
+  /** O pessoal só entra com isto ligado **e** com um dono de verdade (uma pessoa). */
+  incluirPessoais?: boolean;
+}
+
+export async function listarModelosDeMensagem(
+  deps: DepsDaOperacao,
+  opts: OpcoesDosModelos = {},
+): Promise<ModeloVisivel[]> {
+  // `actor.id` de um token é o id do TOKEN (ou o do run do agente) e nunca casa
+  // com um `owner_user_id`: um token não tem rascunho pessoal.
+  const dono = deps.actor.type === "user" ? deps.actor.id : null;
+  const incluirPessoais = opts.incluirPessoais === true && dono !== null;
+
+  const { data, error } = await visivelPara(
+    deps.supabase
+      .from("message_templates")
+      .select("id, title, body, shortcut, owner_user_id")
+      .eq("organization_id", deps.organizationId),
+    incluirPessoais ? dono : null,
+  ).order("updated_at", { ascending: false });
   if (error) throw new ApiError(500, "internal_error", undefined, deps.requestId, error.message);
 
   return ((data ?? []) as unknown as Array<Record<string, unknown>>).map((t) => ({
@@ -42,6 +66,19 @@ export async function listarModelosDeMensagem(deps: DepsDaOperacao): Promise<Mod
     atalho: (t.shortcut as string | null) ?? null,
     compartilhado: t.owner_user_id === null,
   }));
+}
+
+/**
+ * A régua da policy `message_templates_select`, em SQL e não em memória: o
+ * compartilhado sempre, o pessoal só do `dono` (e nenhum quando `dono` é null).
+ */
+function visivelPara<C extends { or(filtro: string): C; is(coluna: string, valor: null): C }>(
+  consulta: C,
+  dono: string | null,
+): C {
+  return dono === null
+    ? consulta.is("owner_user_id", null)
+    : consulta.or(`owner_user_id.is.null,owner_user_id.eq.${dono}`);
 }
 
 export interface ModeloPreenchido {
@@ -65,12 +102,17 @@ export async function preencherModeloDeMensagem(
   deps: DepsDaOperacao,
   input: { templateId: string; contactId?: string; leadId?: string },
 ): Promise<ModeloPreenchido> {
-  const { data: modelo, error } = await deps.supabase
-    .from("message_templates")
-    .select("id, title, body")
-    .eq("id", input.templateId)
-    .eq("organization_id", deps.organizationId)
-    .maybeSingle();
+  // A MESMA régua da lista: sem ela, um id de modelo pessoal alheio abria o
+  // corpo pelo preenchimento. Fora da régua cai no 404 abaixo, que não diz se
+  // o modelo existe.
+  const { data: modelo, error } = await visivelPara(
+    deps.supabase
+      .from("message_templates")
+      .select("id, title, body")
+      .eq("id", input.templateId)
+      .eq("organization_id", deps.organizationId),
+    deps.actor.type === "user" ? deps.actor.id : null,
+  ).maybeSingle();
   if (error) throw new ApiError(500, "internal_error", undefined, deps.requestId, error.message);
   if (!modelo) {
     throw new ApiError(

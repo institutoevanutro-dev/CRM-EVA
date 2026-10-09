@@ -21,7 +21,7 @@ import { agenteAtende, precisaRecuperarLegado } from "@/lib/ai/agents/no-ar";
 import { computeCost } from "@/lib/ai/cost";
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
-import { DEFAULT_CLASSIFIER_MODEL, isAiGatewayConfigured } from "@/lib/ai/gateway";
+import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { logInvocation } from "@/lib/ai/log-invocation";
 import { DEFAULT_SENTIMENT_THRESHOLD, SENTIMENT_SYSTEM_PROMPT } from "@/lib/ai/prompts/sentiment";
@@ -176,11 +176,11 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
 
     // ── O modelo do clima, depois das guardas baratas ─────────────────────
     // Três leituras e uma decifragem: fica atrás de tudo que pula sem ele.
-    // ── Guard: AI Gateway configured ────────────────────────────────────────
-    if (!isAiGatewayConfigured()) {
-      return { skipped: true, reason: "ai_gateway_key_missing" };
-    }
-
+    // Sem portão de `.env` na frente: `isAiGatewayConfigured()` só olhava
+    // variáveis de ambiente e barrava a chave colada pela tela (IA ›
+    // Credenciais). Quem sabe se existe modelo é o resolver abaixo, que devolve
+    // `null` quando nada existe. (Porte de melgarafael/DeskcommCRM #1575.)
+    //
     // Passar SENTIMENT_MODEL como string cai no gateway da Vercel mesmo sem
     // chave (plano anônimo) e devolve "Unauthenticated ... Configure
     // AI_GATEWAY_API_KEY" — o que quebrava este worker em toda instalação que
@@ -190,10 +190,14 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
     // oferecia "Medir o clima da conversa", aceitava a escolha e dizia
     // "salvo" — e este worker seguia usando o modelo padrão. Botão que não
     // controla nada é pior que botão ausente: gasta a confiança de quem clicou.
+    // O id padrão é da Anthropic: numa empresa que atende pela OpenAI sem
+    // modelo escolhido para o clima, ninguém o executa, e o clima ficava mudo.
+    // A queda para o padrão da organização resolve.
     const resolvido = await resolverModeloDoPonto(
       "sentiment_classify",
       event.organization_id,
       SENTIMENT_MODEL,
+      { naFaltaUsarOPadraoDaOrganizacao: true },
     );
     if (!resolvido) {
       return { skipped: true, reason: "ai_gateway_key_missing" };

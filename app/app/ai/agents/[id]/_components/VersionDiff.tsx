@@ -138,7 +138,7 @@ export function VersionDiff({ versionA, versionB }: Props) {
                   <tr key={f.key} className="border-t border-border/40">
                     <td className="whitespace-nowrap py-1 pr-3 font-mono">{t(f.label)}</td>
                     <td className="whitespace-nowrap py-1 pr-3 font-mono text-destructive">{String(f.a)}</td>
-                    <td className="whitespace-nowrap py-1 font-mono text-emerald-600">{String(f.b)}</td>
+                    <td className="whitespace-nowrap py-1 font-mono text-success-fg">{String(f.b)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -171,7 +171,7 @@ export function VersionDiff({ versionA, versionB }: Props) {
               {String(versionA.followup?.enabled ?? false)}
             </span>{" "}
             →{" "}
-            <span className="font-mono text-emerald-600">
+            <span className="font-mono text-success-fg">
               {String(versionB.followup?.enabled ?? false)}
             </span>
           </p>

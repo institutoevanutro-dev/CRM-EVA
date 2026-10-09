@@ -63,8 +63,8 @@ describe("CommandPalette", () => {
     comoPapel("agent");
     const user = userEvent.setup();
     abrir();
-    await user.type(screen.getByRole("combobox"), "audit");
-    expect(screen.queryByRole("option", { name: /Audit Log/ })).toBeNull();
+    await user.type(screen.getByRole("combobox"), "histórico de alterações");
+    expect(screen.queryByRole("option", { name: /Histórico de alterações/ })).toBeNull();
   });
 
   it("Enter navega para o item destacado", async () => {

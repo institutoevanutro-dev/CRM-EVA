@@ -148,6 +148,39 @@ export interface Registro {
   };
 }
 
+/**
+ * Uma cláusula de `.or(...)`, o OU do PostgREST (`owner_user_id.is.null,
+ * owner_user_id.eq.<uuid>`). Cláusula desconhecida LANÇA: um dublê que a
+ * engolisse devolveria a linha que o filtro existia para excluir.
+ */
+interface Clausula {
+  coluna: string;
+  op: "is" | "eq" | "neq";
+  valor: unknown;
+}
+
+function clausulasDoOu(expressao: string): Clausula[] {
+  return expressao.split(",").map((bruta) => {
+    const [coluna, op, ...resto] = bruta.trim().split(".");
+    if (!coluna || !op || resto.length !== 1 || (op !== "is" && op !== "eq" && op !== "neq")) {
+      throw new Error(`dublê: cláusula de .or() não suportada: "${bruta}"`);
+    }
+    const cru = resto[0]!;
+    if (op === "is" && cru !== "null") {
+      throw new Error(`dublê: .is("${coluna}", ...) só é suportado com null (veio "${cru}")`);
+    }
+    return { coluna, op, valor: op === "is" ? null : cru };
+  });
+}
+
+/** A cláusula casa a linha? `is null` inclui o `undefined` (coluna ausente é nula). */
+function casa(linha: Linha, clausula: Clausula): boolean {
+  const valor = linha[clausula.coluna];
+  if (clausula.op === "is") return valor === null || valor === undefined;
+  if (clausula.op === "eq") return valor === clausula.valor;
+  return valor !== null && valor !== undefined && valor !== clausula.valor;
+}
+
 export function makeDb(opts: DbOpts = {}): Registro {
   const registro: Registro = {
     // preenchido no fim, quando `builder` e `rpc` já existem
@@ -173,6 +206,7 @@ export function makeDb(opts: DbOpts = {}): Registro {
   function builder(table: string) {
     const filtros: Array<[string, unknown]> = [];
     const pertinencias: Array<[string, unknown[]]> = [];
+    const disjuncoes: Clausula[][] = [];
     let patch: Record<string, unknown> | null = null;
     let nova: Record<string, unknown> | Record<string, unknown>[] | null = null;
     let colunas: string[] | null = null;
@@ -184,8 +218,11 @@ export function makeDb(opts: DbOpts = {}): Registro {
 
     const casam = () =>
       (tables[table] ?? [])
-        .filter((r) => filtros.every(([c, v]) => r[c] === v))
-        .filter((r) => pertinencias.every(([c, vs]) => vs.includes(r[c])));
+        // `is null` casa coluna ausente também, como no banco.
+        .filter((r) => filtros.every(([c, v]) => r[c] === v || (v === null && r[c] === undefined)))
+        .filter((r) => pertinencias.every(([c, vs]) => vs.includes(r[c])))
+        // `.or()` é OU entre as cláusulas da MESMA chamada e E com o resto.
+        .filter((r) => disjuncoes.every((cl) => cl.some((c) => casa(r, c))));
 
     /**
      * Ordena, corta e projeta como o PostgREST faria.
@@ -298,6 +335,11 @@ export function makeDb(opts: DbOpts = {}): Registro {
       /** `.is(col, null)` — o único uso real no repo é "convite não revogado". */
       is: (c: string, v: unknown) => {
         filtros.push([c, v]);
+        return b;
+      },
+      /** `.or(expr)`: o "compartilhado OU próprio" dos modelos de mensagem. */
+      or: (expressao: string) => {
+        disjuncoes.push(clausulasDoOu(expressao));
         return b;
       },
       /** `.in(col, [...])` vira um filtro de pertinência, não de igualdade. */

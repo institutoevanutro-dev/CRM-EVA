@@ -33,6 +33,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { auditarLeitura } from "@/lib/audit/leitura";
 import { ehAberturaDeLeitura } from "@/lib/audit/releitura";
 import { camposDoFunil, settingsDoEmbed } from "@/lib/leads/campos-do-funil";
+import { motivosDoFunil } from "@/lib/leads/motivos-de-perda-do-funil";
 import { createClient } from "@/lib/supabase/server";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 
@@ -187,6 +188,9 @@ function comCamposDoFunil(row: Record<string, unknown>) {
     funil_nome: nomeDoEmbed(crm_pipelines),
     etapa_nome: nomeDoEmbed(crm_stages),
     etapas_do_funil: etapasDoEmbed(crm_pipelines),
+    // Os motivos de perda DESTE funil: o diálogo de perder no Inbox não tem o
+    // quadro em cache para lê-los, e sem eles mostraria só os do produto.
+    motivos_de_perda: motivosDoFunil(settingsDoEmbed(crm_pipelines)),
   };
 }
 

@@ -300,8 +300,8 @@ test.describe("Lote 12 — quadro do funil", () => {
     await b.hover();
     await page.getByRole("checkbox", { name: `Selecionar: LoteB ${SUFIXO}` }).check();
 
-    await page.getByRole("button", { name: "Tag…" }).click();
-    const campo = page.getByPlaceholder("nova tag");
+    await page.getByRole("button", { name: "Etiqueta…" }).click();
+    const campo = page.getByPlaceholder("nova etiqueta");
     await expect(campo).toBeVisible();
     const oferecidas = await page.getByRole("menuitem").allInnerTexts();
     const distintasNoQuadro = await page.evaluate(() => 0); // marcador: a conta vem do banco

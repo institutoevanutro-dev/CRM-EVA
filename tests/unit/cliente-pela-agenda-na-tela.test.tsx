@@ -10,6 +10,7 @@
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -142,7 +143,8 @@ describe("'Cliente desde' na ficha do contato", () => {
 
 describe("opção fixa 'cliente' no filtro de etiquetas", () => {
 
-  const botaoDeTag = () => screen.getByRole("button", { name: /^Tag:/ });
+  // O gatilho diz "Todas as etiquetas" sem filtro e "Etiqueta: x" com um.
+  const botaoDeTag = () => screen.getByRole("button", { name: /^(Todas as etiquetas|Etiqueta:)/ });
 
   it("desligada: sem etiquetas carregadas, o filtro fica sem opção (desabilitado)", () => {
     render(comQuery(<ContactsListClient />));
@@ -163,10 +165,14 @@ describe("funil de clientes na tela de Funis", () => {
     { id: "f2", name: "Clientes", slug: "clientes", description: null, position: 2, is_default: false, is_client_pipeline: true },
   ];
 
-  it("desligada: sem botão, sem selo 'Clientes', e o rodapé aponta onde ligar", () => {
+  it("desligada: sem opção no menu, sem selo 'Clientes', e o rodapé aponta onde ligar", async () => {
+    const user = userEvent.setup();
     render(comQuery(<FunisClient funis={FUNIS} arquivados={[]} podeGerenciar podeImportar />));
+    // Abre o menu "⋯" antes: com ele fechado, a ausência não provaria nada.
+    await user.click(screen.getByTestId("acoes-f1"));
+    expect(await screen.findByTestId("renomear-f1")).toBeInTheDocument();
     expect(screen.queryByTestId("clientes-f1")).toBeNull();
-    expect(screen.queryByTestId("clientes-f2")).toBeNull();
+    await user.keyboard("{Escape}");
     // "Clientes" é também o NOME do funil f2: o selo é o SEGUNDO texto igual.
     expect(screen.getAllByText("Clientes")).toHaveLength(1);
     expect(screen.getByTestId("funis-rodape-clientes")).toHaveTextContent(
@@ -175,11 +181,16 @@ describe("funil de clientes na tela de Funis", () => {
     expect(screen.getByTestId("funis-rodape-ligar")).toHaveAttribute("href", "/app/settings/tenant/agenda");
   });
 
-  it("ligada: botão em cada funil, selo no marcado, e o rodapé do roteamento", () => {
+  it("ligada: opção no menu de cada funil, selo no marcado, e o rodapé do roteamento", async () => {
     ligada = true;
+    const user = userEvent.setup();
     render(comQuery(<FunisClient funis={FUNIS} arquivados={[]} podeGerenciar podeImportar />));
-    expect(screen.getByTestId("clientes-f1")).toHaveTextContent("Funil de clientes");
-    expect(screen.getByTestId("clientes-f2")).toHaveTextContent("Deixar de ser funil de clientes");
+    await user.click(screen.getByTestId("acoes-f1"));
+    expect(await screen.findByTestId("clientes-f1")).toHaveTextContent("Funil de clientes");
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByTestId("acoes-f2"));
+    expect(await screen.findByTestId("clientes-f2")).toHaveTextContent("Deixar de ser funil de clientes");
+    await user.keyboard("{Escape}");
     expect(screen.getAllByText("Clientes")).toHaveLength(2);
     expect(screen.getByTestId("funis-rodape-clientes")).toHaveTextContent(
       "Quem já tem atendimento marcado entra pelo funil de clientes.",
