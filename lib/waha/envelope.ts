@@ -80,6 +80,13 @@ export const wahaPayloadSchema = z.looseObject({
   mediaUrl: texto,
   mimetype: texto,
   media: wahaMediaSchema.nullish(),
+  /**
+   * A mensagem que esta responde (o "responder em cima"). O NOWEB normaliza em
+   * `replyTo` (id + texto) e repete o id cru em `_data.message.<tipo>.contextInfo`.
+   * `unknown`: quem lê (`citacaoDoPayload`, em `ingest.ts`) confere campo a
+   * campo; exigir shape aqui descartaria a mensagem inteira num formato novo.
+   */
+  replyTo: z.unknown().optional(),
   /** Id da mensagem ORIGINAL nos eventos `message.edited` / `message.revoked`. */
   editedMessageId: texto,
   revokedMessageId: texto,

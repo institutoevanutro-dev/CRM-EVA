@@ -27,7 +27,7 @@ import { extrairAtribuicaoWaha } from "@/lib/waha/atribuicao-de-anuncio";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ackToStatus } from "@/lib/types/messaging";
 import type { WahaEnvelope, WahaPayload } from "@/lib/waha/envelope";
-import { bareWaMessageId, chatIdFromWaMessageId } from "@/lib/waha/message-id";
+import { bareWaMessageId, chatIdFromWaMessageId, wahaEchoExternalIds } from "@/lib/waha/message-id";
 import { logger } from "@/lib/logger";
 
 export type Admin = ReturnType<typeof createAdminClient>;
@@ -574,6 +574,122 @@ async function mensagemIngeridaPorExternalId(
   return data ?? null;
 }
 
+/** Objeto simples (nem array, nem null) — a guarda para dado que vem do fio. */
+function objetoSimples(v: unknown): Record<string, unknown> | null {
+  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+}
+
+/** String não-vazia — a régua do `texto` do envelope (`envelope.ts`), em runtime. */
+function textoNaoVazio(v: unknown): string | null {
+  return typeof v === "string" && v !== "" ? v : null;
+}
+
+/**
+ * O `contextInfo` do Baileys — o id cru da citada e a mensagem citada inteira.
+ *
+ * O formato varia: `extendedTextMessage.contextInfo` é o caso do texto (o
+ * medido em produção), uma resposta com mídia carrega o dela em
+ * `imageMessage.contextInfo`, e alguns formatos trazem direto na mensagem.
+ * Varrer os valores evita acoplar a leitura a uma lista de tipos que o WhatsApp
+ * muda sem avisar.
+ */
+function contextoDaCitacao(p: WahaPayload): Record<string, unknown> | null {
+  const msg = objetoSimples(p._data?.message);
+  if (!msg) return null;
+  const direto = objetoSimples(msg.contextInfo);
+  if (direto) return direto;
+  for (const valor of Object.values(msg)) {
+    const ctx = objetoSimples(objetoSimples(valor)?.contextInfo);
+    if (ctx) return ctx;
+  }
+  return null;
+}
+
+/**
+ * A CITAÇÃO DO "RESPONDER EM CIMA" (issue #2474): o id da mensagem respondida
+ * e, quando vem, o texto citado.
+ *
+ * Duas fontes porque o WAHA entrega as duas: o `replyTo` normalizado (medido em
+ * produção — `payload.replyTo.id` com o texto) e o cru em
+ * `_data.message.<tipo>.contextInfo` (`stanzaId` + `quotedMessage`), que é onde
+ * o texto aparece quando o normalizado não o traz. Sem id não há o que
+ * resolver: devolve `null` e a mensagem entra solta, como sempre entrou.
+ */
+function citacaoDoPayload(p: WahaPayload): { id: string; texto: string | null } | null {
+  const direto = objetoSimples(p.replyTo);
+  const contexto = contextoDaCitacao(p);
+  const id = textoNaoVazio(direto?.id) ?? textoNaoVazio(contexto?.stanzaId);
+  if (!id) return null;
+  const citada = objetoSimples(contexto?.quotedMessage);
+  const texto =
+    textoNaoVazio(direto?.body) ??
+    textoNaoVazio(citada?.conversation) ??
+    textoNaoVazio(objetoSimples(citada?.extendedTextMessage)?.text) ??
+    null;
+  return { id, texto };
+}
+
+/**
+ * Acha a linha da mensagem CITADA, presa à MESMA conversa.
+ *
+ * ─── Por que o filtro de conversa é obrigatório ─────────────────────────────
+ *
+ * A bolha renderiza a citada pelo TEXTO (`ChatThread` → `MessageBubble`), então
+ * apontar para fora da conversa mostraria conteúdo de outro atendimento. A
+ * régua (e o motivo) é a mesma do envio (`app/api/v1/messages/_handler.ts`). O
+ * filtro de organização vai explícito porque service role bypassa RLS.
+ *
+ * ─── Por que DUAS consultas ─────────────────────────────────────────────────
+ *
+ * O id do fio chega em formas diferentes conforme quem escreveu a citada:
+ * recebida do cliente é gravada COMPLETA (`false_<chat>_<bare>`), do nosso lado
+ * é BARE (`<bare>`) — e o `replyTo.id` pode chegar em qualquer uma delas, com o
+ * outro formato de chat (`@lid` × `@c.us`). Os candidatos de
+ * `wahaEchoExternalIds` (completo × bare × `true_<chat>_<bare>`, o composto
+ * legado e o eco de envio nosso) resolvem a maioria; o SUFIXO `_<bare>` fecha
+ * o resto, o mesmo raciocínio de `removerEcoDoProprioEnvio` (`_handler.ts`): o
+ * bare do WhatsApp tem 20+ caracteres aleatórios, então casar pela cauda
+ * alcança qualquer formato sem alcançar outra mensagem.
+ */
+async function resolverMensagemCitada(
+  admin: Admin,
+  organizationId: string,
+  conversationId: string,
+  citacaoId: string,
+  chatId: string,
+): Promise<string | null> {
+  const formas = wahaEchoExternalIds(citacaoId, chatId);
+  const { data, error } = await admin
+    .from("messages")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("conversation_id", conversationId)
+    .in("external_id", formas)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    logger.warn("waha.ingest: não consegui ler a mensagem citada", { detail: error.message });
+  }
+  if (data) return (data as { id: string }).id;
+
+  const bare = bareWaMessageId(citacaoId);
+  // Teto de 16: um id real do WhatsApp tem 20+ caracteres aleatórios; abaixo
+  // disso o LIKE casaria outra mensagem por coincidência em vez de achar esta.
+  if (bare.length < 16) return null;
+  const { data: porSufixo, error: erroSufixo } = await admin
+    .from("messages")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("conversation_id", conversationId)
+    .like("external_id", `%\\_${bare}`)
+    .limit(1)
+    .maybeSingle();
+  if (erroSufixo) {
+    logger.warn("waha.ingest: não consegui ler a mensagem citada por sufixo", { detail: erroSufixo.message });
+  }
+  return (porSufixo as { id: string } | null)?.id ?? null;
+}
+
 async function handleInbound(
   admin: Admin,
   session: Session,
@@ -620,6 +736,13 @@ async function handleInbound(
   const conversationId = await upsertConversation(admin, session.organization_id, contactId, session.id);
   if (!conversationId) return;
 
+  // A citação do "responder em cima" (porte do DeskcommCRM #2485): resolvida
+  // ANTES do insert porque o ponteiro é coluna da linha que está nascendo.
+  const citacao = citacaoDoPayload(p);
+  const citadaId = citacao
+    ? await resolverMensagemCitada(admin, session.organization_id, conversationId, citacao.id, chatId)
+    : null;
+
   const now = new Date().toISOString();
   const { data: insertedMessage, error: insertErr } = await admin
     .from("messages")
@@ -639,7 +762,14 @@ async function handleInbound(
       sent_via: "external_device",
       sent_at: dataDoTimestamp(p.timestamp, now),
       delivered_at: now,
-      metadata: { raw_type: p.type, ack_name: p.ackName },
+      reply_to_message_id: citadaId,
+      metadata: {
+        raw_type: p.type,
+        ack_name: p.ackName,
+        // Texto citado só quando NÃO há ponteiro: com a linha resolvida, a
+        // citada no banco é a fonte da verdade.
+        ...(citacao?.texto && !citadaId ? { reply_to_body: citacao.texto } : {}),
+      },
     })
     .select("id")
     .maybeSingle();
@@ -927,6 +1057,13 @@ async function handleOutboundFromUserPhone(
   const conversationId = await upsertConversation(admin, session.organization_id, contactId, session.id);
   if (!conversationId) return;
 
+  // O operador também responde em cima pelo celular: mesma extração e
+  // resolução do inbound, presas a esta conversa (DeskcommCRM #2485).
+  const citacao = citacaoDoPayload(p);
+  const citadaId = citacao
+    ? await resolverMensagemCitada(admin, session.organization_id, conversationId, citacao.id, chatId)
+    : null;
+
   const now = new Date().toISOString();
   const { data: insertedOutbound, error: insertErr } = await admin
     .from("messages")
@@ -950,7 +1087,13 @@ async function handleOutboundFromUserPhone(
       // O composto que o WAHA entregou fica guardado para CITAR esta mensagem:
       // remontá-lo do bare usa o chat do envio de hoje, que pode não ser o do
       // eco (PN de um lado, @lid do outro). Ver `idDaCitadaNoCanal` no handler.
-      metadata: { raw_type: p.type, fromMe: true, ...(bare !== p.id ? { external_id_original: p.id } : {}) },
+      reply_to_message_id: citadaId,
+      metadata: {
+        raw_type: p.type,
+        fromMe: true,
+        ...(bare !== p.id ? { external_id_original: p.id } : {}),
+        ...(citacao?.texto && !citadaId ? { reply_to_body: citacao.texto } : {}),
+      },
     })
     .select("id")
     .maybeSingle();
