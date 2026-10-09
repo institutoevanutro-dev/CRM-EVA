@@ -1,17 +1,19 @@
 "use client";
 import { useCallback, useMemo, useState } from "react";
 import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
+import { useQueryClient } from "@tanstack/react-query";
 import { useT } from "@/hooks/i18n/useT";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useBoard } from "@/hooks/kanban/useBoard";
+import { chaveDoQuadro, useBoard } from "@/hooks/kanban/useBoard";
 import { useMoveCard } from "@/hooks/kanban/useMoveCard";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAtRiskLeads } from "@/hooks/leads/useAtRiskLeads";
 import { useReactivations } from "@/hooks/leads/useReactivations";
 import { midpoint } from "@/lib/kanban/fractional-indexing";
+import { proximoNaEtapaInteira } from "@/lib/kanban/vizinho-na-etapa";
 import type { Lead } from "@/lib/types/leads";
-import type { Pipeline, Stage } from "@/lib/kanban/types";
+import type { BoardData, Pipeline, Stage } from "@/lib/kanban/types";
 import { StageColumn } from "./StageColumn";
 import { LeadDossier } from "./LeadDossier";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
@@ -82,6 +84,10 @@ export function KanbanBoard({
   const t = useT();
   const useExternal = stagesProp !== undefined && leadsProp !== undefined;
   const queryResult = useBoard(useExternal ? null : pipelineId);
+  // O funil INTEIRO, sem o filtro da página: com `leads` vindo de fora esse
+  // `data.leads` é a lista já filtrada, e é do cache `chaveDoQuadro(pipelineId)`
+  // — preenchido pela página sem filtro — que o `after` do arrasto é lido.
+  const qc = useQueryClient();
   const moveCard = useMoveCard(pipelineId);
   const { data: members } = useAssignableMembers(true);
   const ownerNames = useMemo(
@@ -195,8 +201,20 @@ export function KanbanBoard({
       );
 
       const before = destination.index > 0 ? destList[destination.index - 1] : null;
-      const after =
-        destination.index < destList.length ? destList[destination.index] : null;
+      // `destList` sai do `grouped`, que a página já FILTROU. O de cima é o
+      // vizinho visível; o de baixo tem de ser o próximo card da etapa INTEIRA,
+      // senão a posição empata com um card escondido e o arrasto seguinte é
+      // cancelado em silêncio (upstream #2545).
+      const etapaInteira =
+        qc
+          .getQueryData<BoardData>(chaveDoQuadro(pipelineId))
+          ?.leads.filter((l) => l.stage_id === destStageId) ?? null;
+      const after = proximoNaEtapaInteira(
+        before ?? null,
+        destList[destination.index] ?? null,
+        etapaInteira,
+        draggableId,
+      );
 
       const newPosition = midpoint(
         before?.position_in_stage ?? null,
@@ -215,7 +233,7 @@ export function KanbanBoard({
         expectedUpdatedAt: lead.updated_at,
       });
     },
-    [data, grouped, moveCard],
+    [data, grouped, moveCard, qc, pipelineId],
   );
 
   if (isLoading) {
