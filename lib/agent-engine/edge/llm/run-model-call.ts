@@ -128,6 +128,14 @@ export interface RunModelCallInput {
    */
   maxSteps?: number;
   /**
+   * Encerra o loop quando o predicado for verdadeiro ao fim de uma etapa (além
+   * do teto de `maxSteps`). É predicado, e não nome de tool, de propósito: o
+   * rascunho assistido para quando há resposta ACEITA, não quando o modelo
+   * chamou `send_message`; um envio vetado devolve o erro ao modelo para ele
+   * reescrever na etapa seguinte. (Porte de melgarafael/DeskcommCRM #1605.)
+   */
+  pararQuando?: () => boolean;
+  /**
    * Override de provider/credencial vindo da versão PUBLICADA do agente (Fase
    * 2B) — resolvido no seam, nunca no call site. Sem ele, config da org.
    */
@@ -424,7 +432,12 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       system: prefix.system,
       messages: input.messages,
       tools: guardServiceTools(prefix.tools),
-      stopWhen: input.maxSteps === undefined ? undefined : stepCountIs(input.maxSteps),
+      stopWhen:
+        input.maxSteps === undefined
+          ? undefined
+          : input.pararQuando === undefined
+            ? stepCountIs(input.maxSteps)
+            : [stepCountIs(input.maxSteps), input.pararQuando],
       temperature,
       topP,
       topK,
@@ -582,7 +595,7 @@ export function normalizarErro(err: unknown): {
     codigo = 'credencial_recusada';
   } else if (status === 404 || /model.*not.*found|does not exist/i.test(bruto)) {
     codigo = 'modelo_inexistente';
-  } else if (status === 429 || /rate.?limit|quota|insufficient.*credit|no credits remaining/i.test(bruto)) {
+  } else if (status === 429 || /rate.?limit|quota|insufficient.*credit|no credits remaining|credit balance is too low/i.test(bruto)) {
     // "You have no credits remaining" é como a OpenAI diz "sem saldo" — sem a
     // frase o erro caía em `erro_desconhecido` e a tela não dizia o que fazer.
     codigo = 'limite_ou_saldo';

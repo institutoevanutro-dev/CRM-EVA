@@ -932,6 +932,9 @@ export const DICIONARIO: Traducoes = {
   "Agent arquivado.": { es: "Agente archivado." },
   Falha: { es: "Error" },
   "Erro ao executar ação.": { es: "Error al ejecutar la acción." },
+  "O agent padrão da organização não pode ser arquivado.": {
+    es: "El agente predeterminado de la organización no se puede archivar.",
+  },
   "O agent deixa de responder gatilhos e some das listas ativas. Versões publicadas são preservadas para auditoria. Não é possível desarquivar pela UI nesta versão.": {
     es: "El agente deja de responder disparadores y desaparece de las listas activas. Las versiones publicadas se conservan para auditoría. No es posible desarchivar desde la interfaz en esta versión.",
   },
@@ -1324,14 +1327,19 @@ export const DICIONARIO: Traducoes = {
   "Esta versão se tornará a ativa no atendimento. A versão atual (": {
     es: "Esta versión se convertirá en la activa en la atención. La versión actual (",
   },
-  ") será marcada como superseded.": { es: ") quedará marcada como reemplazada." },
-  nenhuma: { es: "ninguna" },
-  "Provider:": { es: "Proveedor:" },
+  ") continua guardada no histórico, mas deixa de atender.": {
+    es: ") sigue guardada en el historial, pero deja de atender.",
+  },
+  "Esta versão se tornará a ativa no atendimento. É a primeira publicação deste agente.": {
+    es: "Esta versión será la activa en la atención. Es la primera publicación de este agente.",
+  },
+  "Empresa:": { es: "Empresa:" },
   "Modelo:": { es: "Modelo:" },
   "Tools adicionadas:": { es: "Herramientas agregadas:" },
   "Tools removidas:": { es: "Herramientas eliminadas:" },
   "Prompt:": { es: "Prompt:" },
-  chars: { es: "caracteres" },
+  "caracteres a mais": { es: "caracteres a más" },
+  "caracteres a menos": { es: "caracteres a menos" },
   "sem alteração": { es: "sin cambios" },
   // ─── Agentes de IA: execuções e trace ───
   Execução: { es: "Ejecución" },
@@ -5543,6 +5551,13 @@ export const DICIONARIO: Traducoes = {
   "Seu funcionário já está de pé. O que ficou para depois continua te esperando.": {
     es: "Tu empleado ya está en pie. Lo que quedó para después sigue esperándote.",
   },
+  "Quase lá!": { es: "¡Ya casi!" },
+  "O passo da IA ficou para depois: ele ainda não foi treinado nem colocado no ar.": {
+    es: "El paso de la IA quedó para después: todavía no fue entrenado ni puesto en marcha.",
+  },
+  "Ele já foi treinado, mas o atendimento ainda não foi publicado — ele segue em rascunho.": {
+    es: "Ya fue entrenado, pero la atención aún no se publicó: sigue en borrador.",
+  },
   "você pulou": { es: "lo saltaste" },
   "ainda não": { es: "todavía no" },
   "O que mais tem aqui": { es: "Qué más hay aquí" },
@@ -7785,6 +7800,12 @@ export const DICIONARIO: Traducoes = {
     es: "Un material que enviaste no entró en la base de conocimiento",
   },
   "Aviso do assistente": { es: "Aviso del asistente" },
+  // ─── lib/agent-engine/queue/espera-de-saldo.ts ───
+  "A IA está sem saldo no provedor": { es: "La IA se quedó sin saldo en el proveedor" },
+  "As respostas aos clientes estão esperando. Recarregue o saldo na conta do provedor: elas saem sozinhas quando o saldo voltar, durante até 6 horas. Depois disso, a conversa que não foi respondida aparece aqui na Central.": {
+    es: "Las respuestas a los clientes están esperando. Recarga el saldo en la cuenta del proveedor: salen solas cuando vuelva el saldo, durante hasta 6 horas. Después de eso, la conversación que no se respondió aparece aquí en la Central.",
+  },
+  "Revisar credencial": { es: "Revisar credencial" },
   // `informativo` e `crítico` saem iguais nos dois idiomas — sem linha, por isso.
   "atenção": { es: "atención" },
   // ─── lib/ai/agent-inbox-copy.ts (copyDaPromessaSemDono) ───
