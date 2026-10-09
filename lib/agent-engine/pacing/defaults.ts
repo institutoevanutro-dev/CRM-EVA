@@ -21,9 +21,35 @@ export interface PacingKnobs {
   throttleMs: number;
   /** Teto do jitter randômico somado ao throttle e ao next_allowed_at (ms) — intervalo fixo é assinatura de bot. */
   jitterMaxMs: number;
-  /** Janela horária de envio [start, end) na hora local do tenant. */
+  /**
+   * Janela horária de DISPARO [start, end) na hora local do tenant — vale para o
+   * disparo em massa (`lib/prospecting/worker.ts`) e para a retomada de conversa
+   * parada (`lib/automation/janela-do-canal.ts`).
+   */
   windowStartHour: number;
   windowEndHour: number;
+  /**
+   * Janela horária da RESPOSTA do agente [start, end), na mesma hora local.
+   *
+   * ═══ Por que ela é separada ═══
+   *
+   * Responder e disparar são riscos diferentes. Disparar 50 mensagens de madrugada
+   * banina o número; responder UMA pessoa que escreveu às 3h é o serviço, e é o
+   * que o dono comprou. Com um knob só, abrir o atendimento para 24h abria
+   * junto o disparo — e o dono pediu exatamente para que NÃO abrisse.
+   *
+   * Por isso o `PacingInput` do gate tem `resposta_*` em vez de mexer na janela
+   * global: `insideWindow` do disparo continua lendo `window*`, e a RESPOSTA lê
+   * estes dois. Um canal que nunca gravou as colunas novas (`null` no banco)
+   * recebe `PACING_DEFAULTS.resposta*` — que espelham `window*` —, então nenhum
+   * clone muda de comportamento por omissão.
+   *
+   * ⚠️ `allowSunday` NÃO tem par aqui de propósito: domingo liberado é o default
+   * desde a 0010 e vale para as duas janelas. Se um dia domingo virar knob
+   * separado, ele pertence aqui, não em `PacingInput`.
+   */
+  respostaStartHour: number;
+  respostaEndHour: number;
   /**
    * Enviar aos domingos. **Ligado por default** — a janela horária cala à noite,
    * e o domingo inteiro mudo era cortesia demais: num CRM de atendimento, quem
@@ -68,6 +94,12 @@ export const PACING_DEFAULTS: PacingKnobs = {
   jitterMaxMs: 800,
   windowStartHour: 7, // janela 7h-22h
   windowEndHour: 22,
+  // Espelha a janela de disparo: quem nunca gravou as colunas `resposta_*`
+  // continua com o comportamento de sempre (a resposta espera fora da janela).
+  // O dono que QUER 24h grava 0 e 24 no `channel_knobs` — não neste arquivo,
+  // que é default de fallback, não configuração de instalação.
+  respostaStartHour: 7,
+  respostaEndHour: 22,
   allowSunday: true,
   timezone: 'America/Sao_Paulo',
   // Número sem linha em channel_knobs é tratado como idade 0 (o degrau mais

@@ -51,7 +51,7 @@ describe("prontuário: escrita restrita de contatos", () => {
     expect(mocked.rpc).not.toHaveBeenCalled();
     const response = await POST(request(path, "POST", valid));
     expect(response.status).toBe(201);
-    expect(mocked.rpc).toHaveBeenCalledWith("fn_prontuario_create_contact", expect.objectContaining({ p_org: ORG, p_patient: PATIENT, p_token: TOKEN, p_key: KEY }));
+    expect(mocked.rpc).toHaveBeenCalledWith("fn_prontuario_create_contact_v2", expect.objectContaining({ p_org: ORG, p_patient: PATIENT, p_token: TOKEN, p_key: KEY }));
     expect(JSON.stringify(mocked.rpc.mock.calls[0]?.[1])).not.toContain("anamnese");
     expect(mocked.audit).toHaveBeenCalledTimes(1);
   });
@@ -95,7 +95,7 @@ describe("prontuário: escrita restrita de contatos", () => {
     expect((await PATCH(request(path, "PATCH", body), { params: Promise.resolve({ id: CONTACT }) })).status).toBe(409);
     expect(mocked.audit).not.toHaveBeenCalled();
     expect((await PATCH(request(path, "PATCH", body), { params: Promise.resolve({ id: CONTACT }) })).status).toBe(200);
-    expect(mocked.rpc).toHaveBeenCalledWith("fn_prontuario_patch_contact", expect.objectContaining({ p_org: ORG, p_patient: PATIENT, p_contact: CONTACT, p_revision: 1 }));
+    expect(mocked.rpc).toHaveBeenCalledWith("fn_prontuario_patch_contact_v2", expect.objectContaining({ p_org: ORG, p_patient: PATIENT, p_contact: CONTACT, p_revision: 1 }));
     expect(mocked.audit).toHaveBeenCalledTimes(1);
   });
 
@@ -106,7 +106,22 @@ describe("prontuário: escrita restrita de contatos", () => {
     const response = await GET(new Request(`http://localhost/api/v1/prontuario/contacts/${CONTACT}`, { headers: { authorization: "Bearer dsk_test_secret" } }), { params: Promise.resolve({ id: CONTACT }) });
     expect(response.status).toBe(200);
     expect(mocked.eq).toHaveBeenCalledWith("organization_id", ORG);
-    expect(mocked.select).toHaveBeenCalledWith("id,name,display_name,birthdate,phone_number,email,updated_at");
+    expect(mocked.select).toHaveBeenCalledWith("id,name,display_name,birthdate,phone_number,email,updated_at,cpf_encrypted,custom_fields");
     expect((await response.json()).data.name).toBe(profile.name);
   });
+});
+
+it('aceita CPF e endereço administrativo sem devolver CPF nem auditar os valores',async()=>{
+ const {PATCH}=await import('./[id]/route');
+ const address={cep:'29000000',logradouro:'Rua fictícia',numero:'10',bairro:'Centro',cidade:'Vitória',uf:'ES'};
+ const body={...profile,source_patient_id:PATIENT,revision:2,expected_updated_at:UPDATED,cpf:'529.982.247-25',address};
+ const r=await PATCH(request(`/api/v1/prontuario/contacts/${CONTACT}`,'PATCH',body),{params:Promise.resolve({id:CONTACT})});
+ expect(r.status).toBe(200);
+ expect(mocked.rpc).toHaveBeenCalledWith('fn_prontuario_patch_contact_v2',expect.objectContaining({p_cpf:'52998224725',p_address:address}));
+ expect(JSON.stringify(await r.json())).not.toContain('52998224725');expect(JSON.stringify(mocked.audit.mock.calls)).not.toContain('52998224725');
+});
+it('rejeita CPF inválido e campos de endereço fora do contrato',async()=>{
+ const {POST}=await import('./route');const body={...profile,source_patient_id:PATIENT,request_key:KEY,confirmed_no_match:true};
+ for(const extra of [{cpf:'11111111111'},{address:{uf:'XX'}},{address:{cpf:'52998224725'}}])expect((await POST(request('/api/v1/prontuario/contacts','POST',{...body,...extra}))).status).toBe(422);
+ expect(mocked.rpc).not.toHaveBeenCalled();
 });
