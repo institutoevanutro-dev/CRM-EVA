@@ -191,6 +191,9 @@ export const ApiErrorCodes = {
   wacalls_not_connected: "wacalls_not_connected", // 503 + Retry-After: sessão pareada cujo socket com o WhatsApp caiu por um instante (ver `wacallsSemConexao`)
   ai_provider_error: "ai_provider_error",
   nuvemshop_error: "nuvemshop_error",
+  // Jev (System One): ligar sem a chave da instalação, ou sem o aceite do administrador.
+  jev_sem_chave: "jev_sem_chave",
+  jev_aceite_ausente: "jev_aceite_ausente",
 } as const;
 
 export type ApiErrorCode = (typeof ApiErrorCodes)[keyof typeof ApiErrorCodes];
