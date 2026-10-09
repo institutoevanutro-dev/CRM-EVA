@@ -3869,12 +3869,18 @@ export const DICIONARIO: Traducoes = {
   "dia(s) de uso. Enquanto esse número for menor que o teto diário, é ELE que limita, e mexer no teto diário não muda nada.": {
     es: "día(s) de uso. Mientras ese número sea menor que el tope diario, es ÉL quien limita, y cambiar el tope diario no cambia nada.",
   },
-  "Janela de envio (horário local)": { es: "Ventana de envío (horario local)" },
+  "Janela de resposta (horário local)": { es: "Ventana de respuesta (horario local)" },
+  "Janela de disparo (horário local)": { es: "Ventana de envíos proactivos (horario local)" },
+  "Hora de início da janela de resposta": { es: "Hora de inicio de la ventana de respuesta" },
+  "Hora de fim da janela de resposta": { es: "Hora de fin de la ventana de respuesta" },
   "Hora de início da janela": { es: "Hora de inicio de la ventana" },
   "h até": { es: "h hasta" },
   "Hora de fim da janela": { es: "Hora de fin de la ventana" },
-  "O assistente só envia mensagens dentro desta janela. Fora dela, a resposta fica agendada para a próxima abertura — você vê o motivo na conversa.": {
-    es: "El asistente solo envía mensajes dentro de esta ventana. Fuera de ella, la respuesta queda programada para la próxima apertura — ves el motivo en la conversación.",
+  "Quando o cliente escreve, o agente responde nesta janela. Em branco, segue a janela de disparo. Use 0 e 24 para responder a qualquer hora — o teto diário e o intervalo entre envios continuam valendo.": {
+    es: "Cuando el cliente escribe, el agente responde dentro de esta ventana. En blanco, sigue la ventana de envíos proactivos. Usa 0 y 24 para responder a cualquier hora: el tope diario y el intervalo entre envíos siguen valiendo.",
+  },
+  "Disparos em massa, prospecção e mensagens que retomam conversa parada só saem nesta janela. Fora dela, o envio fica agendado para a próxima abertura — você vê o motivo na conversa.": {
+    es: "Los envíos masivos, la prospección y los mensajes que retoman una conversación detenida solo salen dentro de esta ventana. Fuera de ella, el envío queda programado para cuando se abra de nuevo, y el motivo aparece en la conversación.",
   },
   "Enviar aos domingos": { es: "Enviar los domingos" },
   "Ligado por padrão: quem escreve no domingo espera resposta no domingo. Desligue se você faz prospecção ativa e prefere não incomodar no fim de semana.": {

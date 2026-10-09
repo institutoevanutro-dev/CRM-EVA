@@ -35184,6 +35184,37 @@ revoke execute on function public.comando_da_conversa(public.conversations) from
 grant  execute on function public.comando_da_conversa(public.conversations) to authenticated, service_role;
 -- ---- fim: trava do contato guardada na conversa (migration 0332) ----
 
+-- ---- janela de RESPOSTA separada da janela de DISPARO (migration 0335) ----
+-- Porte de melgarafael/DeskcommCRM #1984 (upstream 0495). O agente responde a
+-- quem escreveu fora do horário comercial sem abrir junto o disparo em massa, a
+-- prospecção e a retomada de conversa parada. Sem DEFAULT: NULL = a resposta
+-- herda a janela de disparo, que é o comportamento de antes. O `drop ... if
+-- exists` antes do `add` é o que torna o bloco reaplicável no `update.sh`.
+
+alter table public.channel_knobs
+  add column if not exists resposta_start_hour smallint,
+  add column if not exists resposta_end_hour smallint;
+
+comment on column public.channel_knobs.resposta_start_hour is
+  'Início da janela de RESPOSTA do agente (h, hora local da org). NULL = usa window_start_hour (comportamento anterior).';
+comment on column public.channel_knobs.resposta_end_hour is
+  'Fim da janela de RESPOSTA do agente (h, exclusivo; 24 = meia-noite). NULL = usa window_end_hour.';
+
+-- 0..24. `end` pode ser 24 (meia-noite seguinte) porque `insideWindow` compara
+-- `wall.h < end` e a hora local nunca passa de 23. O `drop ... if exists` antes
+-- do `add` torna a migration reaplicável. Colunas novas e vazias: nenhum dado
+-- viola a constraint, não há o que corrigir antes.
+alter table public.channel_knobs
+  drop constraint if exists channel_knobs_resposta_horas_validas;
+alter table public.channel_knobs
+  add constraint channel_knobs_resposta_horas_validas
+  check (
+    (resposta_start_hour is null or resposta_start_hour between 0 and 23)
+    and (resposta_end_hour is null or resposta_end_hour between 1 and 24)
+  );
+
+-- ---- fim: janela de RESPOSTA separada da janela de DISPARO (migration 0335) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
