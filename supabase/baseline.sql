@@ -35760,12 +35760,16 @@ declare
 begin
   -- message.received nasce somente do INSERT inbound interno. Um chamador
   -- público não pode reapresentar uma mensagem existente como evento novo.
+  -- `ai.case_opened`/`ai.case_closed` entram pela mesma razão (0319): quem os
+  -- emite é o gatilho de `agent_cases`, e um evento de caso forjado por login
+  -- cria ou cancela follow-up em nome de uma decisão que ninguém tomou.
   -- `contact.birthday` entra pela 0345 (0551 no original): só o cron
   -- (`contact-birthdays`, sem sessão) o emite, e a partir desta migration ele
   -- alcança a origem e manda WhatsApp de verdade — forjado por login, seria
   -- envio em nome de um aniversário que ninguém fez.
   if auth.uid() is not null and p_event_type in (
-    'message.received','appointment.outcome_confirmed','contact.birthday'
+    'message.received','appointment.outcome_confirmed',
+    'ai.case_opened','ai.case_closed','contact.birthday'
   ) then
     raise exception 'reserved_message_received' using errcode='42501';
   end if;
