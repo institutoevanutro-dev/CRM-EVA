@@ -1,3 +1,4 @@
+import type { Logger } from "@/lib/agent-engine/obs/logger";
 import type { Queryable } from "@/lib/agent-engine/queue/queue";
 import { variantesDoItem } from "./esquemas";
 import { tipoDaMidia } from "./envio";
@@ -20,7 +21,20 @@ export async function carregarMidiasProntas(
   db: Queryable,
   orgId: string,
   hoje: string = hojeNaClinica(),
+  log?: Logger,
 ): Promise<MidiaDisponivel[]> {
+  try {
+    return await consultar(db, orgId, hoje);
+  } catch (err) {
+    // A biblioteca é opcional: falha de consulta não derruba o turno. Sem mensagem de erro (pode ter dado).
+    log?.warn("biblioteca de mídias indisponível neste turno", {
+      error: err instanceof Error ? err.name : "unknown",
+    });
+    return [];
+  }
+}
+
+async function consultar(db: Queryable, orgId: string, hoje: string): Promise<MidiaDisponivel[]> {
   // to_char: a coluna `date` não depende do type parser do pg (Date em fuso local vs string).
   const { rows } = await db.query<Linha>(
     `select id, title, when_to_use, tags, variants, contains_person,
@@ -45,8 +59,9 @@ export async function carregarMidiasProntas(
 
 export function blocoDaBiblioteca(itens: MidiaDisponivel[]): string | null {
   if (itens.length === 0) return null;
+  const uma = (t: string) => t.replace(/\s+/g, " ").trim();
   const linhas = itens.map(
-    (i) => `- ${i.id} · ${i.title} · quando usar: ${i.when_to_use} · etiquetas: ${i.tags.join(", ")}`,
+    (i) => `- ${i.id} · ${uma(i.title)} · quando usar: ${uma(i.when_to_use)} · etiquetas: ${i.tags.map(uma).join(", ")}`,
   );
   return [
     "BIBLIOTECA DE MÍDIAS",

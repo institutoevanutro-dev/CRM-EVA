@@ -37,7 +37,22 @@ describe("carregarMidiasProntas", () => {
   });
 });
 
+describe("falha na consulta", () => {
+  it("devolve [] e registra aviso estruturado", async () => {
+    const avisos: unknown[][] = [];
+    const log = { warn: (...a: unknown[]) => avisos.push(a) } as never;
+    const db = { query: async () => { throw new TypeError("boom"); } } as never;
+    expect(await carregarMidiasProntas(db, ORG, HOJE, log)).toEqual([]);
+    expect(avisos).toEqual([["biblioteca de mídias indisponível neste turno", { error: "TypeError" }]]);
+  });
+});
+
 describe("blocoDaBiblioteca", () => {
+  it("colapsa espaços e quebras de linha: uma linha por item", () => {
+    const b = blocoDaBiblioteca([{ id: "i", title: "A\n  B", when_to_use: "x\r\n\ny   z", tags: ["t\n1", "u"] }]);
+    expect(b?.split("\n").at(-1)).toBe("- i · A B · quando usar: x y z · etiquetas: t 1, u");
+    expect(b?.split("\n")).toHaveLength(3);
+  });
   it("null para lista vazia", () => expect(blocoDaBiblioteca([])).toBeNull());
   it("formato exato da linha", () => {
     const b = blocoDaBiblioteca([{ id: "abc", title: "Antes e depois", when_to_use: "dúvida de resultado", tags: ["a", "b"] }]);
@@ -50,7 +65,7 @@ describe("blocoDaBiblioteca", () => {
 describe("wiring no turno", () => {
   it("o bloco só entra no system quando não é nulo e a lista fica no turno", () => {
     const src = readFileSync("lib/agent-engine/agent/inbound-turn.ts", "utf8");
-    expect(src).toContain("const midiasProntas: MidiaDisponivel[] = await carregarMidiasProntas(pool, tenantId)");
+    expect(src).toContain("const midiasProntas: MidiaDisponivel[] = await carregarMidiasProntas(pool, tenantId, undefined, runLog)");
     expect(src).toMatch(/const blocoMidias = blocoDaBiblioteca\(midiasProntas\);\s*if \(blocoMidias\) blocosResidentes\.push\(blocoMidias\)/);
   });
 });

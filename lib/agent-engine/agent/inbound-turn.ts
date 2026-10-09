@@ -2443,7 +2443,7 @@ async function executarTurnoDoAgente(
   // `crm_list_event_types`, e nomear ferramenta ausente faz o modelo tentar chamá-la).
   if (agentConfig !== null) blocosResidentes.push(...blocosDeAgendaResidentes(agentConfig.toolIds));
   // Biblioteca de mídias: lista carregada uma vez por turno; a tool send_media só existe se não for vazia.
-  const midiasProntas: MidiaDisponivel[] = await carregarMidiasProntas(pool, tenantId);
+  const midiasProntas: MidiaDisponivel[] = await carregarMidiasProntas(pool, tenantId, undefined, runLog);
   const blocoMidias = blocoDaBiblioteca(midiasProntas);
   if (blocoMidias) blocosResidentes.push(blocoMidias);
   if (preview)
