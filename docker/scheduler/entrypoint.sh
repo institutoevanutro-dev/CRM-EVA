@@ -52,6 +52,7 @@ CRONS="
 * * * * *|45|api/v1/cron/event-log-drain
 * * * * *|25|api/v1/cron/routing-worker
 * * * * *|25|api/v1/cron/recover-stuck-messages
+* * * * *|45|api/v1/cron/webhook-replay
 # O COMENTÁRIO DO INSTAGRAM. A cada minuto, mesma cadência das outras filas de
 # atendimento acima: comentário novo espera uma regra/IA responder, e uma
 # varredura mais lenta deixaria o cliente esperando bem mais do que deveria

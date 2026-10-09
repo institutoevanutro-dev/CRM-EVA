@@ -94,6 +94,12 @@ export interface DadosDoNascimento {
   conversationId: string;
   /** nome do contato, para o título do card. */
   nomeDoContato: string | null;
+  /**
+   * De onde o negócio nasceu, quando NÃO é a mensagem recebida (padrão:
+   * `source` "whatsapp", motivo "primeira mensagem recebida no ..."). Hoje só
+   * a conversa que começa pelo celular conectado usa (DeskcommCRM #2543).
+   */
+  origem?: { source: string; motivo: string };
 }
 
 /**
@@ -384,7 +390,7 @@ export async function garantirLeadDaConversa(
     // A campanha ganha: quem montou a lista sabe de onde o card veio. Sem ela,
     // vale a regra de antes — anúncio mantém a origem do contato, e o resto
     // nasce "whatsapp".
-    p_source: marca ? marca.source : rotuloDeAnuncio ? contato!.source : "whatsapp",
+    p_source: marca ? marca.source : rotuloDeAnuncio ? contato!.source : (dados.origem?.source ?? "whatsapp"),
     p_source_metadata: marca
       ? marca.source_metadata
       : rotuloDeAnuncio
@@ -436,7 +442,7 @@ export async function garantirLeadDaConversa(
     // alguém arrastou.
     reason: ehCliente
       ? "cliente conhecido voltou a escrever"
-      : `primeira mensagem recebida no ${rotuloDoCanal(canal)}`,
+      : (dados.origem?.motivo ?? `primeira mensagem recebida no ${rotuloDoCanal(canal)}`),
     // `canal` viaja no payload para `activityLabel` (activity-vocabulary.ts)
     // poder rotular "Entrou pelo X" na leitura, sem duplicar a busca acima.
     payload: { conversation_id: conversationId, cliente: ehCliente, canal },
