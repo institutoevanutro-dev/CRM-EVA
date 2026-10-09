@@ -17,7 +17,7 @@
  * resposta — nunca a tratar pela janela de disparo fechada.
  */
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 // Um único mock de `runBeforeSend` para os DOIS emissores (escalação e resposta
 // aprovada): guarda os args recebidos num array compartilhado e devolve "sent".
