@@ -113,6 +113,13 @@ export const pacingKnobsUpdateSchema = z
     jitter_max_ms: z.number().int().min(0).max(KNOB_BOUNDS.intervalMaxMs).nullable().optional(),
     window_start_hour: z.number().int().min(0).max(KNOB_BOUNDS.hourLastStart).nullable().optional(),
     window_end_hour: z.number().int().min(1).max(KNOB_BOUNDS.hourEnd).nullable().optional(),
+    /**
+     * Janela da RESPOSTA do agente (0335). `0` e `24` são valores LEGÍTIMOS (é
+     * assim que o dono declara "responde 24h"); quem valida start<end é
+     * `windowIsValid` sobre o par RESULTANTE, depois de mesclar com o gravado.
+     */
+    resposta_start_hour: z.number().int().min(0).max(KNOB_BOUNDS.hourLastStart).nullable().optional(),
+    resposta_end_hour: z.number().int().min(1).max(KNOB_BOUNDS.hourEnd).nullable().optional(),
     allow_sunday: z.boolean().nullable().optional(),
     timezone: z
       .string()
@@ -163,6 +170,9 @@ export interface ChannelKnobsRow {
   jitter_max_ms: number | null;
   window_start_hour: number | null;
   window_end_hour: number | null;
+  /** Janela da RESPOSTA (0335). Ausente/null = herda a janela de disparo. */
+  resposta_start_hour?: number | null;
+  resposta_end_hour?: number | null;
   allow_sunday: boolean | null;
   timezone: string | null;
   warmup_daily_caps: unknown;
@@ -186,6 +196,9 @@ export function effectiveKnobs(row: ChannelKnobsRow | null): PacingKnobs {
     jitterMaxMs: row?.jitter_max_ms ?? PACING_DEFAULTS.jitterMaxMs,
     windowStartHour: row?.window_start_hour ?? PACING_DEFAULTS.windowStartHour,
     windowEndHour: row?.window_end_hour ?? PACING_DEFAULTS.windowEndHour,
+    // Mesma regra do store do engine: coluna vazia herda a janela de DISPARO.
+    respostaStartHour: row?.resposta_start_hour ?? row?.window_start_hour ?? PACING_DEFAULTS.respostaStartHour,
+    respostaEndHour: row?.resposta_end_hour ?? row?.window_end_hour ?? PACING_DEFAULTS.respostaEndHour,
     allowSunday: row?.allow_sunday ?? PACING_DEFAULTS.allowSunday,
     timezone: row?.timezone ?? PACING_DEFAULTS.timezone,
     warmupDailyCaps: parseWarmupCaps(row?.warmup_daily_caps) ?? PACING_DEFAULTS.warmupDailyCaps,

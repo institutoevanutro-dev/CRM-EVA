@@ -16,7 +16,7 @@ const searchSchema = z.object({
   limit: z.coerce.number().int().min(1).max(10).default(10),
 });
 
-const fields = "id,name,display_name,birthdate,phone_number,email,updated_at";
+const fields = "id,name,display_name,birthdate,phone_number,email,updated_at,cpf_encrypted,custom_fields";
 
 export async function GET(req: Request): Promise<Response> {
   const requestId = randomUUID();
@@ -64,13 +64,15 @@ export async function POST(req: Request): Promise<Response> {
   if (!(await checkRateLimit(`prontuario-contacts-write:${auth.organizationId}:${auth.apiTokenId}`, 30, 60)).allowed)
     return fail("rate_limited", "Tente novamente em um minuto.", 429, { requestId });
   const input = parsed.data;
-  const { data, error } = await createAdminClient().rpc("fn_prontuario_create_contact", {
+  const { data, error } = await createAdminClient().rpc("fn_prontuario_create_contact_v2", {
     p_org: auth.organizationId,
     p_patient: input.source_patient_id,
     p_name: input.name,
     p_birth: input.birthdate,
     p_phone: input.phone_number,
     p_email: input.email,
+    p_cpf: input.cpf || null,
+    p_address: input.address ?? {},
     p_key: input.request_key,
     p_token: auth.apiTokenId,
   });

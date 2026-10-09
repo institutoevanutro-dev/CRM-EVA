@@ -2872,6 +2872,8 @@ export type Database = {
           jitter_max_ms: number | null
           number_activated_at: string
           organization_id: string
+          resposta_end_hour: number | null
+          resposta_start_hour: number | null
           spinning_knobs: Json | null
           throttle_ms: number | null
           timezone: string | null
@@ -2888,6 +2890,8 @@ export type Database = {
           jitter_max_ms?: number | null
           number_activated_at?: string
           organization_id: string
+          resposta_end_hour?: number | null
+          resposta_start_hour?: number | null
           spinning_knobs?: Json | null
           throttle_ms?: number | null
           timezone?: string | null
@@ -2904,6 +2908,8 @@ export type Database = {
           jitter_max_ms?: number | null
           number_activated_at?: string
           organization_id?: string
+          resposta_end_hour?: number | null
+          resposta_start_hour?: number | null
           spinning_knobs?: Json | null
           throttle_ms?: number | null
           timezone?: string | null

@@ -155,6 +155,9 @@ async function tentar(
     channelSessionId: ids.channelSessionId,
     body: item.resposta,
     optedOutThisTurn: opts.optedOutThisTurn,
+    // Só roda em `inbound_turn`: responde a quem escreveu, então lê a janela de
+    // RESPOSTA (0335), a mesma que deixou o turno rodar.
+    resposta: true,
     crmDailyLimit: null,
     now: opts.now,
     ...(opts.sleep !== undefined ? { sleep: opts.sleep } : {}),

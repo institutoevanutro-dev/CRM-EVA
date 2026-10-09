@@ -2036,6 +2036,19 @@ export async function runAgentTurn(
  *     planejamento: não abrem o WhatsApp de ninguém.
  *   * `operator_turn` — retaguarda (mexe no funil), nunca fala com o lead.
  */
+/**
+ * ═══ RESPOSTA vs RETOMADA: a distinção que a janela da 0335 faz ═══
+ *
+ * `turnoVaiFalarComOLead` admite `followup_turn`, que RETOMA conversa parada, e
+ * retomar NÃO é responder: abrir `followup_turn` junto faria o número mandar
+ * "e aí, tudo certo?" às 4h para quem dormiu. Só a REAÇÃO a uma mensagem
+ * recebida lê a janela de resposta. `case_reply_turn` entra porque responde a
+ * um caso em aberto. (Porte de melgarafael/DeskcommCRM #1984.)
+ */
+export function eTurnoDeResposta(job: Pick<JobRow, 'kind'>): boolean {
+  return job.kind === 'inbound_turn' || job.kind === 'case_reply_turn';
+}
+
 function turnoVaiFalarComOLead(job: JobRow): boolean {
   if (job.kind === 'inbound_turn' || job.kind === 'case_reply_turn') return true;
   if (job.kind !== 'followup_turn') return false;
@@ -2183,15 +2196,22 @@ async function executarTurnoDoAgente(
     const { knobs } = await loadChannelKnobs(pool, tenantId, input.channelSessionId, runLog);
     knobsDaJanela = knobs;
     const agora = clock();
-    if (!janelaDeEnvioAberta(agora, knobs)) {
-      const abertura = proximaAberturaDaJanela(agora, knobs);
+    // `resposta` separa as janelas: reação a quem escreveu lê `resposta*` (0335,
+    // que herda `window*` quando vazia); retomada e disparo leem `window*`.
+    const resposta = eTurnoDeResposta(liveJob());
+    const janelaDoTurno = resposta
+      ? `${knobs.respostaStartHour}h-${knobs.respostaEndHour}h`
+      : `${knobs.windowStartHour}h-${knobs.windowEndHour}h`;
+    if (!janelaDeEnvioAberta(agora, knobs, resposta)) {
+      const abertura = proximaAberturaDaJanela(agora, knobs, resposta);
       await rescheduleJob(pool, liveJob().id, ctx.workerId, {
         acquiredAt: claimOfJob(liveJob())?.acquired_at,
         delayMs: Math.max(abertura.getTime() - agora.getTime(), 1_000),
         reason: 'fora da janela anti-ban de envio — turno adiado para a abertura',
       });
       runLog.info('turno adiado — fora da janela anti-ban de envio', {
-        janela: `${knobs.windowStartHour}h-${knobs.windowEndHour}h`,
+        janela: janelaDoTurno,
+        tipo: resposta ? 'resposta' : 'retomada',
         timezone: knobs.timezone,
         abertura: abertura.toISOString(),
       });
@@ -2208,7 +2228,7 @@ async function executarTurnoDoAgente(
           tenantId,
           channelSessionId: input.channelSessionId,
           abertura,
-          janela: `${knobs.windowStartHour}h-${knobs.windowEndHour}h`,
+          janela: janelaDoTurno,
           timezone: knobs.timezone,
           domingoDesligado: !knobs.allowSunday,
         });
@@ -3237,6 +3257,8 @@ async function executarTurnoDoAgente(
           // Só ESTE gate muda; stop, LGPD e pacing continuam valendo integralmente.
           isTemplate: true,
           optedOutThisTurn,
+          // Resposta do turno, mesmo sendo template: lê a janela de resposta (0335).
+          resposta: eTurnoDeResposta(liveJob()),
           crmDailyLimit: null,
           now: clock(),
           sleep: deps.sleep,
@@ -3383,7 +3405,8 @@ async function executarTurnoDoAgente(
         if (
           !preview &&
           seq === 0 &&
-          (knobsDaJanela === null || janelaDeEnvioAberta(quandoOProximoEnvia, knobsDaJanela)) &&
+          // O job seguinte é um `inbound_turn`: RESPOSTA, então a janela de resposta (0335).
+          (knobsDaJanela === null || janelaDeEnvioAberta(quandoOProximoEnvia, knobsDaJanela, true)) &&
           (agentConfig?.janelaDeAtendimento == null ||
             msAteAJanelaAbrir(agentConfig.janelaDeAtendimento, quandoOProximoEnvia) === null) &&
           (await respostaFicouObsoleta(
@@ -3441,6 +3464,10 @@ async function executarTurnoDoAgente(
             channelSessionId: input.channelSessionId,
             body,
             optedOutThisTurn,
+            // `inbound_turn`/`case_reply_turn` respondem a quem escreveu e leem a
+            // janela de RESPOSTA (0335). `followup_turn` retoma conversa parada e
+            // continua na janela de DISPARO.
+            resposta: eTurnoDeResposta(liveJob()),
             // ponytail: channel_sessions.daily_message_limit do CRM ainda não é lido
             // no runtime — null cai nos degraus de warm-up (conservadores). Injetar
             // aqui quando o drain expuser o limite da sessão.
