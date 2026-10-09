@@ -86,6 +86,8 @@ const KNOBS: PacingKnobs = {
   jitterMaxMs: 800,
   windowStartHour: 7,
   windowEndHour: 22,
+  respostaStartHour: 7,
+  respostaEndHour: 22,
   allowSunday: true,
   timezone: "America/Sao_Paulo",
   warmupDailyCaps: [

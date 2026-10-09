@@ -37,6 +37,9 @@ interface Props {
 interface FormState {
   window_start_hour: string;
   window_end_hour: string;
+  /** Janela da RESPOSTA do agente (0335). '' = herda a janela de disparo. */
+  resposta_start_hour: string;
+  resposta_end_hour: string;
   throttle_s: string;
   jitter_s: string;
   daily_message_limit: string;
@@ -52,6 +55,8 @@ function fromItem(item: PacingKnobsItem): FormState {
   return {
     window_start_hour: o?.window_start_hour != null ? String(o.window_start_hour) : "",
     window_end_hour: o?.window_end_hour != null ? String(o.window_end_hour) : "",
+    resposta_start_hour: o?.resposta_start_hour != null ? String(o.resposta_start_hour) : "",
+    resposta_end_hour: o?.resposta_end_hour != null ? String(o.resposta_end_hour) : "",
     throttle_s: o?.throttle_ms != null ? String(o.throttle_ms / 1000) : "",
     jitter_s: o?.jitter_max_ms != null ? String(o.jitter_max_ms / 1000) : "",
     daily_message_limit:
@@ -138,6 +143,8 @@ export function AntiBanSheet({ item, canWrite, onClose }: Props) {
         channel_session_id: item.channel_session.id,
         window_start_hour: intOrNull(form.window_start_hour),
         window_end_hour: intOrNull(form.window_end_hour),
+        resposta_start_hour: intOrNull(form.resposta_start_hour),
+        resposta_end_hour: intOrNull(form.resposta_end_hour),
         throttle_ms: msOrNull(form.throttle_s),
         jitter_max_ms: msOrNull(form.jitter_s),
         // `null` quando o Switch está no default: salvar esta ficha por outro
@@ -222,7 +229,44 @@ export function AntiBanSheet({ item, canWrite, onClose }: Props) {
           </fieldset>
 
           <fieldset className="flex flex-col gap-2">
-            <Label>{t("Janela de envio (horário local)")}</Label>
+            <Label>{t("Janela de resposta (horário local)")}</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={0}
+                max={23}
+                inputMode="numeric"
+                placeholder={String(eff.respostaStartHour)}
+                value={form.resposta_start_hour}
+                onChange={(e) => set({ resposta_start_hour: e.target.value })}
+                disabled={!canWrite}
+                aria-label={t("Hora de início da janela de resposta")}
+                className="w-20"
+              />
+              <span className="text-sm text-muted-foreground">{t("h até")}</span>
+              <Input
+                type="number"
+                min={1}
+                max={24}
+                inputMode="numeric"
+                placeholder={String(eff.respostaEndHour)}
+                value={form.resposta_end_hour}
+                onChange={(e) => set({ resposta_end_hour: e.target.value })}
+                disabled={!canWrite}
+                aria-label={t("Hora de fim da janela de resposta")}
+                className="w-20"
+              />
+              <span className="text-sm text-muted-foreground">h</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t(
+                "Quando o cliente escreve, o agente responde nesta janela. Em branco, segue a janela de disparo. Use 0 e 24 para responder a qualquer hora — o teto diário e o intervalo entre envios continuam valendo.",
+              )}
+            </p>
+          </fieldset>
+
+          <fieldset className="flex flex-col gap-2">
+            <Label>{t("Janela de disparo (horário local)")}</Label>
             <div className="flex items-center gap-2">
               <Input
                 type="number"
@@ -253,7 +297,7 @@ export function AntiBanSheet({ item, canWrite, onClose }: Props) {
             </div>
             <p className="text-xs text-muted-foreground">
               {t(
-                "O assistente só envia mensagens dentro desta janela. Fora dela, a resposta fica agendada para a próxima abertura — você vê o motivo na conversa.",
+                "Disparos em massa, prospecção e mensagens que retomam conversa parada só saem nesta janela. Fora dela, o envio fica agendado para a próxima abertura — você vê o motivo na conversa.",
               )}
             </p>
           </fieldset>
