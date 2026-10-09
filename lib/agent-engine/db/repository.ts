@@ -81,6 +81,11 @@ export type InboxKind =
   // mais de 1h — nunca reivindicado, ou reivindicado e sem desfecho. Webhook
   // perdido ou escrita que falhou não pode sumir em silêncio.
   | 'instagram_comment_stuck'
+  // (migration 0349) Pedido do cliente percebido fora do turno: o áudio cuja
+  // transcrição chegou depois de o turno responder (porte do upstream #2246).
+  // Nomes do upstream (0500), para o porte do Jev usar os mesmos kinds.
+  | 'jev_pedido_de_humano'
+  | 'jev_parar_de_receber'
   | 'other';
 
 export interface InboxItemRow {

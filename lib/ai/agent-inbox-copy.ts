@@ -81,6 +81,8 @@ export const KIND_LABEL = {
   // gênero de aviso anti-morte de `message_send_stuck` acima, só que para o
   // Instagram.
   instagram_comment_stuck: "Um comentário do Instagram está parado sem resposta",
+  jev_pedido_de_humano: "Um cliente pediu para falar com uma pessoa",
+  jev_parar_de_receber: "Um cliente pediu para parar de receber mensagens",
   other: "Aviso do assistente",
 } as const satisfies Record<InboxKind, string>;
 

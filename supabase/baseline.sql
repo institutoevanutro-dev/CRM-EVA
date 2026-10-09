@@ -10166,6 +10166,11 @@ alter table public.agent_inbox_items
     -- a `comentado_em`). Webhook perdido ou escrita que falhou some em
     -- silêncio sem este aviso. Entra NESTA lista (bloco único por constraint, #159).
     'instagram_comment_stuck',
+    -- (migration 0349, porte da 0500 do upstream) Pedido do cliente para
+    -- falar com uma pessoa ou para parar de receber, percebido fora do turno
+    -- (áudio transcrito depois da resposta). Só aviso; nunca bloqueia.
+    'jev_pedido_de_humano',
+    'jev_parar_de_receber',
     'other'
   ));
 
@@ -36396,6 +36401,83 @@ $$;
 revoke execute on function public.fn_enfileirar_midia_vencida(integer) from public, anon, authenticated;
 grant execute on function public.fn_enfileirar_midia_vencida(integer) to service_role;
 -- ---- fim: retenção de mídia opt-in (migration 0341) ----
+
+-- ---- avisos de pedido do cliente na Central (migration 0349) ----
+-- begin 0349
+-- Os kinds `jev_pedido_de_humano` e `jev_parar_de_receber` entraram no bloco
+-- ÚNICO de agent_inbox_items_kind_check lá em cima (bloco da migration
+-- 0105/#159), não aqui: um bloco por constraint
+-- (tests/unit/baseline-constraint-reconstruida.test.ts). Aqui ficam o índice
+-- único e os dois gatilhos que fecham o aviso.
+
+-- 2. UM AVISO POR CONVERSA E PEDIDO, NO BANCO. Índice único parcial em
+--    (organização, kind, conversa), sem status: o pedido novo REABRE o aviso
+--    que existe (o gravador trata o 23505) em vez de abrir outro. Antes do
+--    índice, os repetidos saem (fica o aberto e o mais novo), para o
+--    `update.sh` de nenhum clone quebrar aqui.
+delete from public.agent_inbox_items a
+ using (
+   select id, row_number() over (
+            partition by organization_id, kind, ref_id
+            order by (status = 'open') desc, created_at desc, id desc
+          ) as n
+     from public.agent_inbox_items
+    where kind in ('jev_pedido_de_humano','jev_parar_de_receber')
+ ) d
+ where a.id = d.id and d.n > 1;
+create unique index if not exists agent_inbox_jev_pedido_unico
+  on public.agent_inbox_items (organization_id, kind, ref_id)
+  where kind in ('jev_pedido_de_humano','jev_parar_de_receber');
+
+-- 3. O AVISO FECHA QUANDO O PEDIDO FOI ATENDIDO, por qualquer caminho.
+--    Conversa encerrada: os dois. Conversa com uma pessoa (assumida, ou
+--    passada por `performHumanHandoff`, que grava `last_handoff_at` e cala o
+--    robô): só o de falar com uma pessoa. O de parar de receber segue aberto
+--    até o contato ser bloqueado (o STOP do próprio cliente, na entrada da
+--    mensagem), quando fecha em todas as conversas dele. Nenhum gatilho faz
+--    HTTP; os dois filtram a organização da própria linha.
+create or replace function public.fn_fechar_avisos_do_jev_da_conversa()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+ if new.status not in('open','pending','claimed','ai_handling') then
+  update public.agent_inbox_items set status='resolved',resolved_at=now()
+   where organization_id=new.organization_id and ref_kind='conversation' and ref_id=new.id
+     and kind in('jev_pedido_de_humano','jev_parar_de_receber') and status<>'resolved';
+ elsif new.assigned_to_user_id is not null
+    or (new.last_handoff_at is not null and new.last_handoff_at is distinct from old.last_handoff_at)
+    or (new.bot_silenced_until > now() and new.bot_silenced_until is distinct from old.bot_silenced_until) then
+  update public.agent_inbox_items set status='resolved',resolved_at=now()
+   where organization_id=new.organization_id and ref_kind='conversation' and ref_id=new.id
+     and kind='jev_pedido_de_humano' and status<>'resolved';
+ end if;
+ return new;
+end;
+$$;
+revoke all on function public.fn_fechar_avisos_do_jev_da_conversa() from public, anon, authenticated;
+drop trigger if exists trg_fechar_avisos_do_jev_da_conversa on public.conversations;
+create trigger trg_fechar_avisos_do_jev_da_conversa
+ after update of assigned_to_user_id, status, bot_silenced_until, last_handoff_at on public.conversations
+ for each row execute function public.fn_fechar_avisos_do_jev_da_conversa();
+
+create or replace function public.fn_fechar_aviso_do_jev_ao_bloquear()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+ update public.agent_inbox_items set status='resolved',resolved_at=now()
+  where organization_id=new.organization_id and kind='jev_parar_de_receber' and ref_kind='conversation'
+    and status<>'resolved'
+    and ref_id in(select v.id from public.conversations v where v.organization_id=new.organization_id and v.contact_id=new.id);
+ return new;
+end;
+$$;
+revoke all on function public.fn_fechar_aviso_do_jev_ao_bloquear() from public, anon, authenticated;
+drop trigger if exists trg_fechar_aviso_do_jev_ao_bloquear on public.contacts;
+create trigger trg_fechar_aviso_do_jev_ao_bloquear
+ after update of is_blocked on public.contacts
+ for each row when (new.is_blocked and old.is_blocked is distinct from true)
+ execute function public.fn_fechar_aviso_do_jev_ao_bloquear();
+
+notify pgrst, 'reload schema';
+-- end 0349
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

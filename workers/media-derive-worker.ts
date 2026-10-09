@@ -22,6 +22,7 @@ import { apiTranscriptionProvider } from "@/lib/messaging/media/transcription";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MENSAGEM_REDIGIDA } from "@/lib/lgpd/cascata";
+import { avisarPedidosFalados } from "@/workers/media-derive-worker.pedidos";
 import { assertDestinoResolvidoSeguro } from "@/lib/automation/outbound-ip";
 import { assertSafeOutboundUrl } from "@/lib/automation/outbound-url";
 import { DETALHE_TECNICO } from "@/lib/event-log/aviso-de-evento-morto";
@@ -54,7 +55,16 @@ interface MessageRow {
    * "arquivo que ainda vai chegar" de "arquivo que a política já retirou".
    */
   metadata: Record<string, unknown> | null;
+  /** Os quatro abaixo servem só ao pedido falado (`./media-derive-worker.pedidos.ts`). */
+  conversation_id?: string | null;
+  direction?: string | null;
+  /** Áudio do atendente não é pedido: `user` e `external_device` são gente. */
+  sent_via?: string | null;
+  created_at?: string | null;
 }
+
+/** Os `sent_via` de quem é PESSOA: áudio mandado pelo atendente não é pedido de nada. */
+const ENVIADO_POR_PESSOA: ReadonlySet<string> = new Set(["user", "external_device"]);
 
 export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> {
   const consumer_key = MEDIA_DERIVE_CONSUMER_KEY;
@@ -64,7 +74,9 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("messages")
-    .select("id, organization_id, type, media_mime, media_storage_path, media_derived_status, metadata")
+    .select(
+      "id, organization_id, type, media_mime, media_storage_path, media_derived_status, metadata, conversation_id, direction, sent_via, created_at",
+    )
     .eq("id", messageId)
     .eq("organization_id", row.organization_id)
     .maybeSingle();
@@ -287,6 +299,24 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
     if (erroDaGravacao) return { consumer_key, status: "error", detail: erroDaGravacao.message };
     if (!gravados || gravados.length === 0) {
       return { consumer_key, status: "skipped", detail: "message_redacted" };
+    }
+    // O pedido DITO no áudio que chegou tarde demais para o turno (porte do
+    // upstream #2246). Só ÁUDIO, só ENTRADA, nunca do atendente: imagem e
+    // documento derivam descrição, não fala. Só abre aviso; ver o arquivo.
+    if (
+      msg.type === "audio" &&
+      msg.direction === "inbound" &&
+      typeof msg.conversation_id === "string" &&
+      !ENVIADO_POR_PESSOA.has(msg.sent_via ?? "") &&
+      text.trim() !== ""
+    ) {
+      await avisarPedidosFalados(admin, {
+        organizationId: msg.organization_id,
+        messageId: msg.id,
+        conversationId: msg.conversation_id,
+        transcricao: text,
+        recebidaEm: msg.created_at ?? null,
+      });
     }
     return { consumer_key, status: "ok" };
   } catch (err) {
