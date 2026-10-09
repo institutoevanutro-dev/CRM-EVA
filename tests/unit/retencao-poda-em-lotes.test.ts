@@ -260,6 +260,9 @@ describe("houveEfeito — as duas direções", () => {
     retencao_fila_dias: RETENCAO_FILA_DIAS_PADRAO,
     retencao_auditoria_dias: RETENCAO_AUDITORIA_DIAS_PADRAO,
     retencao_espelho_dias: RETENCAO_ESPELHO_AGENDA_DIAS_PADRAO,
+    // Quinta poda (migration 0350): as observações do Jev.
+    observacoes_jev_apagadas: 0,
+    retencao_observacoes_jev_dias: 90,
     avisos: [] as string[],
     falhas: [] as string[],
   };
@@ -289,6 +292,10 @@ describe("houveEfeito — as duas direções", () => {
     // parar de auditar —, e um efeito novo que não entra em `houveEfeito` é
     // exatamente o silêncio que ela proíbe.
     expect(houveEfeito({ ...base, espelho_apagado: 1 })).toBe(true);
+  });
+
+  it("...e apagou observação do Jev → TAMBÉM audita (migration 0350)", () => {
+    expect(houveEfeito({ ...base, observacoes_jev_apagadas: 1 })).toBe(true);
   });
 });
 
@@ -387,6 +394,7 @@ describe("houveEfeito — payloads da sincronização Meta limpos", () => {
       jobs_apagados: 0, auditoria_apagada: 0, lotes_fila: 0, lotes_auditoria: 0, fila_tem_resto: false, auditoria_tem_resto: false,
       nonces_apagados: 0, espelho_apagado: 0, lotes_espelho: 0, espelho_tem_resto: false,
       retencao_fila_dias: 0, retencao_auditoria_dias: 0, retencao_espelho_dias: 0, avisos: [], falhas: [],
+      observacoes_jev_apagadas: 0, retencao_observacoes_jev_dias: 0,
     };
     expect(houveEfeito(vazio)).toBe(false);
     expect(houveEfeito({ ...vazio, payloads_limpos: 3 })).toBe(true);

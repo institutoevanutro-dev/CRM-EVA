@@ -8295,9 +8295,6 @@ export const DICIONARIO: Traducoes = {
   "Clima da conversa": {
     es: "Clima de la conversación",
   },
-  "Desligada": {
-    es: "Apagada",
-  },
   "Desligar tarefa": {
     es: "Apagar tarea",
   },
@@ -8330,9 +8327,6 @@ export const DICIONARIO: Traducoes = {
   },
   "de concordância": {
     es: "de coincidencia",
-  },
-  "dias": {
-    es: "días",
   },
   "observadas": {
     es: "observadas",
