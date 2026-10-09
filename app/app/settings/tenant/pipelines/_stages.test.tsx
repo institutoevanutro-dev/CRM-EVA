@@ -602,3 +602,44 @@ describe("StagesSection — arquivar", () => {
     expect(aviso).toHaveTextContent("Não deu para salvar");
   });
 });
+
+describe("StagesSection — Escape descarta o rascunho do nome e do esfriamento (#2164)", () => {
+  it("no nome: Escape desfaz o rascunho e NÃO manda PATCH", async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiClient.patch).mockResolvedValue({ data: { etapas: [] } });
+    montar();
+    const campo = await screen.findByTestId("nome-e1");
+
+    await user.clear(campo);
+    await user.type(campo, "Carrinho abandonadoX");
+    await user.keyboard("{Escape}");
+    // O blur que o Escape dispara roda ANTES do setState do rascunho: sem a
+    // marca `descartando`, o confirmar grava "Carrinho abandonadoX".
+    expect(apiClient.patch).not.toHaveBeenCalled();
+    expect(screen.getByTestId("nome-e1")).toHaveValue("Carrinho abandonado");
+  });
+
+  it("no esfriamento: Escape desfaz o rascunho e NÃO manda PATCH", async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiClient.patch).mockResolvedValue({ data: { etapas: [] } });
+    montar();
+    const campo = await screen.findByTestId("esfria-e1");
+
+    await user.type(campo, "40");
+    await user.keyboard("{Escape}");
+    expect(apiClient.patch).not.toHaveBeenCalled();
+    expect(screen.getByTestId("esfria-e1")).toHaveValue(null);
+  });
+
+  it("controle: sem Escape, Enter no nome segue gravando", async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiClient.patch).mockResolvedValue({ data: { etapas: [] } });
+    montar();
+    const campo = await screen.findByTestId("nome-e1");
+
+    await user.clear(campo);
+    await user.type(campo, "Primeira consulta{Enter}");
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(apiClient.patch).mock.calls[0]![1]).toEqual({ name: "Primeira consulta" });
+  });
+});

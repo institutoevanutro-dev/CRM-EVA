@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -730,8 +730,16 @@ function NomeDaEtapa({
 }) {
   const t = useT();
   const [rascunho, setRascunho] = useState(etapa.name);
+  // Escape chama `blur()`, e o blur confirma — com o rascunho DESTA renderização,
+  // não com o restaurado (o setState ainda não aplicou). Sem esta marca, Escape
+  // gravava o que devia descartar (#2164).
+  const descartando = useRef(false);
 
   function confirmar() {
+    if (descartando.current) {
+      descartando.current = false;
+      return;
+    }
     const nome = rascunho.trim();
     if (!nome || nome === etapa.name) {
       setRascunho(etapa.name);
@@ -752,6 +760,7 @@ function NomeDaEtapa({
       onKeyDown={(e) => {
         if (e.key === "Enter") e.currentTarget.blur();
         if (e.key === "Escape") {
+          descartando.current = true;
           setRascunho(etapa.name);
           e.currentTarget.blur();
         }
@@ -784,8 +793,16 @@ function EsfriamentoDaEtapa({
   const t = useT();
   const gravado = etapa.esfria_em_horas ?? null;
   const [rascunho, setRascunho] = useState(gravado === null ? "" : String(gravado));
+  // Escape chama `blur()`, e o blur confirma — com o rascunho DESTA renderização,
+  // não com o restaurado (o setState ainda não aplicou). Sem esta marca, Escape
+  // gravava o que devia descartar (#2164).
+  const descartando = useRef(false);
 
   function confirmar() {
+    if (descartando.current) {
+      descartando.current = false;
+      return;
+    }
     const texto = rascunho.trim();
     if (texto === "") {
       if (gravado !== null) aoConfirmar(null);
@@ -814,6 +831,7 @@ function EsfriamentoDaEtapa({
       onKeyDown={(e) => {
         if (e.key === "Enter") e.currentTarget.blur();
         if (e.key === "Escape") {
+          descartando.current = true;
           setRascunho(gravado === null ? "" : String(gravado));
           e.currentTarget.blur();
         }
