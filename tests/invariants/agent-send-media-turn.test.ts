@@ -312,6 +312,34 @@ describe("turno completo — send_media com item pronto na biblioteca", () => {
     const { rows } = await pool.query<{ status: string }>("select status from job_queue where id = $1", [jobId]);
     expect(rows[0]!.status).toBe("done");
   });
+
+  it("canal indisponível vira envio_indisponivel e o job volta à fila, como no send_message", async () => {
+    const { erro, jobId } = await rodaTurno(
+      montaHandler(modeloQueChama([mandaMidia()]), async () => ({ kind: "unavailable", reason: "sessao_caiu" })),
+    );
+    expect(erro).not.toBeNull();
+    expect(JSON.stringify(resultadosVistos)).toMatch(/envio_indisponivel/);
+    const { rows } = await pool.query<{ status: string }>("select status from job_queue where id = $1", [jobId]);
+    expect(rows[0]!.status).toBe("pending");
+  });
+
+  it("contato bloqueado no canal vira contato_bloqueado, não 'aceita'", async () => {
+    const { erro } = await rodaTurno(
+      montaHandler(modeloQueChama([mandaMidia()]), async () => ({ kind: "blocked", idempotencyKey: "k" })),
+    );
+    // Bloqueio encerra o job pelo próprio run (mesmo caminho do send_message).
+    expect(erro?.name).toBe("job_settled");
+    const vistos = JSON.stringify(resultadosVistos);
+    expect(vistos).toMatch(/contato_bloqueado/);
+    expect(vistos).not.toMatch(/aceita_aguardando_canal/);
+  });
+
+  it("legenda só de espaços vira corpo vazio", async () => {
+    const { erro } = await rodaTurno(montaHandler(modeloQueChama([mandaMidia("   \n  ")])));
+    expect(erro).toBeNull();
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0]).toMatchObject({ body: "", mediaLibraryItemId: ITEM });
+  });
 });
 
 describe("turno completo — organização sem item pronto", () => {

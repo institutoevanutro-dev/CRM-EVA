@@ -47,7 +47,11 @@ describe("send_media — execute", () => {
   });
 
   it("legenda vazia não arma o spinning", () => {
-    expect(corpoDoExecute()).toMatch(/enforceSpinning:\s*\(caption \?\? ''\)\.trim\(\)\.length > 0/);
+    expect(corpoDoExecute()).toMatch(/enforceSpinning:\s*legenda\.trim\(\)\.length > 0/);
+  });
+
+  it("cap de pacing reagenda o job, como no send_message", () => {
+    expect(corpoDoExecute()).toMatch(/pacingCapVeto = \{ code: chain\.code, nextAllowedAt: chain\.nextAllowedAt \}/);
   });
 
   it("a tool some quando não há mídia pronta", () => {

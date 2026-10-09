@@ -3006,7 +3006,8 @@ async function executarTurnoDoAgente(
             },
           };
         }
-        const legenda = caption ?? '';
+        // Mesmo formato do send_message; legenda só de espaços vira corpo vazio.
+        const legenda = formatarParaWhatsApp(caption ?? '');
         try {
           const hasOpenCase =
             agentConfig !== null
@@ -3023,7 +3024,7 @@ async function executarTurnoDoAgente(
             channelSessionId: input.channelSessionId,
             body: legenda,
             // Sem legenda, toda mídia teria o mesmo corpo vazio e colidiria no spinning.
-            enforceSpinning: (caption ?? '').trim().length > 0,
+            enforceSpinning: legenda.trim().length > 0,
             optedOutThisTurn,
             crmDailyLimit: null,
             now: clock(),
@@ -3086,17 +3087,64 @@ async function executarTurnoDoAgente(
             },
           });
           if (chain.status === 'vetoed') {
+            // Cap de pacing: reagenda o job no fim do turno, como no send_message.
+            if (
+              (chain.code === 'warmup_cap' || chain.code === 'daily_cap') &&
+              chain.nextAllowedAt !== undefined
+            ) {
+              pacingCapVeto = { code: chain.code, nextAllowedAt: chain.nextAllowedAt };
+            }
             return { ok: false, error: { code: chain.code, message: chain.message } };
           }
           const outcome = chain.outcome;
           outcomes.push(outcome);
-          if (outcome.kind === 'sent' || outcome.kind === 'already_sent' || outcome.kind === 'queued') {
-            midiaEnviadaNoTurno = true;
+          // Mapeamento do send_message (não o do send_template).
+          switch (outcome.kind) {
+            case 'sent':
+            case 'already_sent':
+              midiaEnviadaNoTurno = true;
+              return { ok: true, status: 'enviada', message_id: outcome.messageId };
+            case 'queued':
+              midiaEnviadaNoTurno = true;
+              return {
+                ok: true,
+                status: 'aceita_aguardando_canal',
+                message:
+                  'o canal aceitou a mensagem e vai enviá-la quando a sessão voltar — não reenvie.',
+              };
+            case 'blocked':
+              return {
+                ok: false,
+                error: {
+                  code: 'contato_bloqueado',
+                  message:
+                    'o contato optou por não receber mensagens (bloqueio irrevogável) — não envie mais nada e encerre o turno.',
+                },
+              };
+            case 'failed':
+              return {
+                ok: false,
+                error: {
+                  code: 'envio_falhou',
+                  message:
+                    'o canal falhou ao enviar — não tente de novo neste turno; o sistema fará retry.',
+                },
+              };
+            case 'unavailable':
+              noteRunError(
+                new Error(
+                  `canal indisponível no envio (${outcome.reason}) — job re-tentado pela fila`,
+                ),
+              );
+              return {
+                ok: false,
+                error: {
+                  code: 'envio_indisponivel',
+                  message:
+                    'não consegui enviar agora (canal indisponível) — encerre o turno; o sistema re-tentará.',
+                },
+              };
           }
-          if (outcome.kind === 'sent' || outcome.kind === 'already_sent') {
-            return { ok: true, status: 'enviada', message_id: outcome.messageId };
-          }
-          return { ok: true, status: 'aceita_aguardando_canal' };
         } catch (err) {
           // Recusa do handler (mídia sumiu ou deixou de estar pronta): ensino, não falha
           // do run. Re-tentar o job só repetiria a 422.
