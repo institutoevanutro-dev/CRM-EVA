@@ -8,6 +8,16 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.15.0] — 2026-10-09
+
+### Adicionado
+
+- **Limpeza automática de mídia antiga, desligada até alguém ligar, e a senha do dono do banco fora dos contêineres** Em Configurações, Organização, um interruptor novo liga a limpeza das fotos, áudios, vídeos e anexos de nota mais velhos que o prazo de guarda (mínimo de 30 dias). Ele vem desligado: depois da atualização nada é apagado. Ligado, a mensagem continua na conversa com o aviso "Mídia apagada pela política de retenção", e a limpeza pausa enquanto houver pedido LGPD em andamento. Também: o app e o worker deixam de receber a conexão do dono do banco.
+
+### Corrigido
+
+- **Segurança e dados: auditoria trancada, contato excluído por inteiro e assinatura do formulário pela tela** O registro de auditoria não pode mais ser alterado nem apagado por nenhum papel do banco além do dono, inclusive o do worker. A chave pública perde o TRUNCATE nos orçamentos de IA, e a atualização deixa de reabrir permissões no meio do caminho. Excluir um contato que já recebeu retorno automático apaga a ficha inteira, sem deixar histórico pela metade. Arquivar com a tela desatualizada mostra uma frase clara e não trava o banco. A porta de integração passa a barrar quem fica tentando adivinhar a chave (429). A edição do negócio registra o antes e o depois do valor e do responsável. Na captação por formulário, a assinatura de segurança pode ser ligada, trocada e removida pela tela.
+
 ## [3.14.0] — 2026-10-09
 
 ### Corrigido
@@ -6683,7 +6693,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.14.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.15.0...HEAD
+[3.15.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.14.0...v3.15.0
 [3.14.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.13.0...v3.14.0
 [3.13.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.12.0...v3.13.0
 [3.12.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.11.0...v3.12.0
