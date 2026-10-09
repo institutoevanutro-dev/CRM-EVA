@@ -86,6 +86,10 @@ export async function knobsDoCanal(
     jitterMaxMs: linha.jitter_max_ms ?? PACING_DEFAULTS.jitterMaxMs,
     windowStartHour: linha.window_start_hour ?? PACING_DEFAULTS.windowStartHour,
     windowEndHour: linha.window_end_hour ?? PACING_DEFAULTS.windowEndHour,
+    // Automação é disparo: nunca lê a janela de resposta (0335). O par espelha o
+    // de disparo só para o tipo fechar, sem ir buscar `resposta_*` no banco.
+    respostaStartHour: linha.window_start_hour ?? PACING_DEFAULTS.windowStartHour,
+    respostaEndHour: linha.window_end_hour ?? PACING_DEFAULTS.windowEndHour,
     allowSunday: linha.allow_sunday ?? PACING_DEFAULTS.allowSunday,
     timezone: linha.timezone ?? PACING_DEFAULTS.timezone,
     warmupDailyCaps: caps ?? PACING_DEFAULTS.warmupDailyCaps,

@@ -29,7 +29,9 @@ import {
 export const dynamic = "force-dynamic";
 
 const KNOB_COLUMNS =
-  "throttle_ms, jitter_max_ms, window_start_hour, window_end_hour, allow_sunday, timezone, warmup_daily_caps, number_activated_at";
+  // As duas janelas entram no SELECT: sem `resposta_*` aqui, a ficha Anti-ban
+  // mostraria 7h-22h como se fosse a janela da resposta, e é a de DISPARO.
+  "throttle_ms, jitter_max_ms, window_start_hour, window_end_hour, resposta_start_hour, resposta_end_hour, allow_sunday, timezone, warmup_daily_caps, number_activated_at";
 
 export async function GET(): Promise<Response> {
   const requestId = randomUUID();
@@ -152,6 +154,8 @@ export async function PUT(req: NextRequest): Promise<Response> {
       jitter_max_ms: null,
       window_start_hour: null,
       window_end_hour: null,
+      resposta_start_hour: null,
+      resposta_end_hour: null,
       allow_sunday: null,
       timezone: null,
       warmup_daily_caps: null,
@@ -163,6 +167,17 @@ export async function PUT(req: NextRequest): Promise<Response> {
     return fail(
       "validation_failed",
       `Janela inválida: início (${eff.windowStartHour}h) precisa ser antes do fim (${eff.windowEndHour}h).`,
+      422,
+      { requestId },
+    );
+  }
+  // A janela da RESPOSTA é validada pelo mesmo par-resultante (0335): sem isto a
+  // tela aceitaria início 22 e fim 7, que o motor traduz em "nunca responde".
+  // `0..24` passa (0 < 24): é assim que se declara "responde 24h".
+  if (!windowIsValid(eff.respostaStartHour, eff.respostaEndHour)) {
+    return fail(
+      "validation_failed",
+      `Janela de resposta inválida: início (${eff.respostaStartHour}h) precisa ser antes do fim (${eff.respostaEndHour}h). Use 0 e 24 para responder a qualquer hora.`,
       422,
       { requestId },
     );
