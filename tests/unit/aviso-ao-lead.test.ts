@@ -124,6 +124,21 @@ describe("quem pediu para PARAR não recebe oferta de atendimento", () => {
   });
 });
 
+/**
+ * Medido em produção (08/10/2026): a IA transferiu para concluir o cadastro de
+ * uma consulta já escolhida e a paciente leu "Prefiro não arriscar aqui". O
+ * motivo `outro` cobre exatamente esse caso comum, então a frase não pode
+ * soar como recusa nem como risco.
+ */
+describe("o aviso genérico não soa como recusa", () => {
+  it("nenhuma redação de 'outro' fala em arriscar ou em não poder", () => {
+    const textos = new Set(
+      Array.from({ length: 60 }, () => textoDoAviso("outro", { disponiveis: 1, total: 1 }, randomUUID())),
+    );
+    for (const t of textos) expect(t).not.toMatch(/arrisc|não (posso|consigo)/i);
+  });
+});
+
 describe("o aviso é determinístico por lead e variado entre leads", () => {
   it("mesmo lead, mesma frase — sempre", () => {
     const a = textoDoAviso("pediu_humano", { disponiveis: 1, total: 1 }, LEAD);
