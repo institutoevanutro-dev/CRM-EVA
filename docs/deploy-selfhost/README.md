@@ -94,6 +94,11 @@ grant usage on schema public to agent_worker;
 grant select, insert, update, delete on all tables in schema public to agent_worker;
 grant usage, select on all sequences in schema public to agent_worker;
 grant execute on all functions in schema public to agent_worker;
+
+-- A auditoria é só-inclusão para todo papel: o worker grava e lê
+-- `api_audit_log`, nunca altera nem apaga. O `baseline.sql` reafirma isto a
+-- cada `update.sh` (migration 0338), com o nome que o papel tiver.
+revoke update, delete, truncate on table public.api_audit_log from agent_worker;
 ```
 
 Aponte `SUPABASE_DB_URL` do `.env` para ela — e deixe a conexão do **dono** em

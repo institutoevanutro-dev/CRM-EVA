@@ -1,0 +1,20 @@
+-- Migration 0339 — a chave pública (anon/authenticated) perde TRUNCATE em ai_budgets.
+-- Porte da 0537 de melgarafael/DeskcommCRM #2259 (3c86ca668d).
+--
+-- TRUNCATE não é filtrado pela RLS, e o papel `anon` é a chave que vai ao
+-- browser. A 0160 já tinha medido que TODO escritor de `ai_budgets` usa
+-- service role; o `T` ficou de fora do revoke daquele bloco e sobrevivia no
+-- estado final. Revogar aqui não muda contrato nenhum de leitura: o SELECT é
+-- escopado pela policy da 0150, e INSERT/UPDATE/DELETE já eram negados pela 0160.
+--
+-- No baseline.sql o revoke mora AO LADO dos grants do snapshot (não num bloco
+-- do apêndice): o `update.sh` reaplica o arquivo inteiro, e um revoke no fim
+-- deixava a janela aberta entre o grant e ele a cada passada. Junto, no mesmo
+-- PR, as outras concessões transitórias do baseline (TRUNCATE de api_audit_log
+-- para service_role, de idempotency_keys para anon, ALL ao anon nas quatro
+-- tabelas de conhecimento e o gatilho velho da demanda) deixam de ser
+-- reabertas a cada atualização; nenhuma delas muda o estado final, então não
+-- há o que aplicar por migration além desta linha.
+--
+-- Idempotente: revoke de privilégio que já não existe é no-op.
+revoke truncate on table public.ai_budgets from authenticated, anon;

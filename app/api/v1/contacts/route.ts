@@ -75,7 +75,7 @@ async function resolveContactsAuth(req: NextRequest, requestId: string): Promise
         return {
           ok: false,
           response: fail(
-            err.httpStatus === 401 ? "unauthenticated" : "forbidden",
+            err.httpStatus === 401 ? "unauthenticated" : err.httpStatus === 429 ? "rate_limited" : "forbidden",
             err.message,
             err.httpStatus,
             { requestId },

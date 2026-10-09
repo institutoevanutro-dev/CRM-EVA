@@ -47,7 +47,7 @@ export async function GET(req: Request): Promise<Response> {
     return response;
   } catch (error) {
     if (error instanceof McpAuthError)
-      return fail(error.httpStatus === 401 ? "unauthenticated" : "forbidden", "Credencial sem acesso.", error.httpStatus, { requestId });
+      return fail(error.httpStatus === 401 ? "unauthenticated" : error.httpStatus === 429 ? "rate_limited" : "forbidden", "Credencial sem acesso.", error.httpStatus, { requestId });
     return fail("internal_error", "Consulta indisponível.", 503, { requestId });
   }
 }

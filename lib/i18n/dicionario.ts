@@ -3662,6 +3662,39 @@ export const DICIONARIO: Traducoes = {
   "Últimos recebimentos": { es: "Últimas recepciones" },
   "Ainda não chegou nada por aqui.": { es: "Todavía no llegó nada por aquí." },
   "assinatura inválida": { es: "firma inválida" },
+  // Assinatura HMAC da fonte de captação, na tela de detalhe da fonte.
+  "Assinatura (HMAC)": { es: "Firma (HMAC)" },
+  "Com assinatura ativa, teste a partir do sistema que envia os dados.": {
+    es: "Con la firma activa, prueba desde el sistema que envía los datos.",
+  },
+  // O NOME do cabeçalho não entra na frase: ele é contrato de fio e sai da
+  // constante de lib/webhooks/assinatura.ts, renderizada ao lado deste texto.
+  "Sem assinatura, quem descobrir o endereço consegue criar leads. Com ela, quem envia assina o corpo cru da requisição com HMAC-SHA256 e manda o resultado em hexadecimal — hex puro, sem prefixo — neste cabeçalho:":
+    {
+      es: "Sin firma, quien descubra la dirección puede crear leads. Con ella, quien envía firma el cuerpo crudo de la solicitud con HMAC-SHA256 y manda el resultado en hexadecimal — hex puro, sin prefijo — en esta cabecera:",
+    },
+  "<HMAC-SHA256 do corpo, em hex, com o seu segredo>": {
+    es: "<HMAC-SHA256 del cuerpo, en hex, con tu secreto>",
+  },
+  "Gerar segredo": { es: "Generar secreto" },
+  "Trocar segredo": { es: "Cambiar secreto" },
+  "Remover segredo": { es: "Quitar secreto" },
+  "Segredo copiado.": { es: "Secreto copiado." },
+  "Trocar": { es: "Cambiar" },
+  "Guarde agora. Ele não será mostrado de novo.": {
+    es: "Guárdalo ahora. No se mostrará de nuevo.",
+  },
+  "Assinatura ligada.": { es: "Firma activada." },
+  "Segredo trocado.": { es: "Secreto cambiado." },
+  "Assinatura removida.": { es: "Firma quitada." },
+  "Trocar o segredo desta fonte?": { es: "¿Cambiar el secreto de esta fuente?" },
+  "Integrações que usam o segredo atual vão parar de funcionar até serem atualizadas.": {
+    es: "Las integraciones que usan el secreto actual dejarán de funcionar hasta que se actualicen.",
+  },
+  "Remover a assinatura desta fonte?": { es: "¿Quitar la firma de esta fuente?" },
+  "O endereço volta a aceitar envios sem assinatura — só o endereço secreto passa a protegê-lo.": {
+    es: "La dirección vuelve a aceptar envíos sin firma — solo la dirección secreta pasa a protegerla.",
+  },
   "Fonte ativa": { es: "Fuente activa" },
   "Pausada, ela para de aceitar novos envios.": { es: "Pausada, deja de aceptar nuevos envíos." },
   "Fonte ativada.": { es: "Fuente activada." },

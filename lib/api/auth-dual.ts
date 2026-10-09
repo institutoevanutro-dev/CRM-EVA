@@ -85,7 +85,7 @@ export async function resolveAuthDual(
         return {
           ok: false,
           response: fail(
-            err.httpStatus === 401 ? "unauthenticated" : "forbidden",
+            err.httpStatus === 401 ? "unauthenticated" : err.httpStatus === 429 ? "rate_limited" : "forbidden",
             err.message,
             err.httpStatus,
             { requestId },

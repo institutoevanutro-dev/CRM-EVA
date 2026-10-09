@@ -16,6 +16,7 @@
 import { createHash } from "node:crypto";
 
 import type { Actor } from "@/lib/api/handlers/types";
+import { registrarFalhaDeToken, tokenFailureLimited } from "@/lib/auth/rate-limit";
 import type { Role } from "@/lib/auth/types";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -84,15 +85,44 @@ export function extractBearer(authHeader: string | null): string | null {
   return m[1]!.trim();
 }
 
+/**
+ * Mensagem do teto de falhas. Escrita para quem lê a resposta — quase sempre um
+ * modelo: o texto é o único sinal útil depois do bloqueio. Nada de contador,
+ * nada de "quantas faltam": a resposta não diz se o token existe nem quanto
+ * resta da janela.
+ */
+const TETO_DE_TOKEN_MSG =
+  "Too many failed token attempts. Wait a few minutes before retrying and send a valid `dsk_` API token — if yours was revoked or expired, issue a new one.";
+
+/**
+ * Recusa que conta no teto de falhas (`lib/auth/rate-limit.ts`, porte de
+ * melgarafael/DeskcommCRM #1449). Chute (malformado/desconhecido) debita o
+ * balde por ORIGEM e o do valor; token real e morto (revogado/expirado) debita
+ * só o do valor apresentado.
+ */
+async function recusar(plaintext: string | null, message: string, contaNoIp = true): Promise<never> {
+  await registrarFalhaDeToken(plaintext, { contaNoIp });
+  throw new McpAuthError(-32001, 401, message);
+}
+
 export async function validateBearerToken(
   authHeader: string | null,
 ): Promise<McpAuthResult> {
   const plaintext = extractBearer(authHeader);
   if (!plaintext) {
-    throw new McpAuthError(-32001, 401, "Missing or malformed Authorization header.");
+    // Cabeçalho torto é o primeiro palpite de quem varre: conta antes de sair.
+    return recusar(null, "Missing or malformed Authorization header.");
   }
+
+  // O teto vem ANTES de resolver o token: é esta linha que tira o custo zero da
+  // tentativa — sem ela cada `dsk_` chutado custa um SELECT em `api_tokens` que
+  // ninguém conta, e varrer tokens sai de graça (issue #1447).
+  if (await tokenFailureLimited(plaintext)) {
+    throw new McpAuthError(-32004, 429, TETO_DE_TOKEN_MSG);
+  }
+
   if (!plaintext.startsWith("dsk_")) {
-    throw new McpAuthError(-32001, 401, "Invalid token format.");
+    return recusar(plaintext, "Invalid token format.");
   }
 
   const tokenHash = createHash("sha256").update(plaintext).digest();
@@ -106,16 +136,17 @@ export async function validateBearerToken(
     .maybeSingle();
 
   if (error) {
+    // Falha NOSSA (banco fora): não debita balde nenhum.
     throw new McpAuthError(-32603, 500, `Token lookup failed: ${error.message}`);
   }
   if (!data) {
-    throw new McpAuthError(-32001, 401, "Token not recognized.");
+    return recusar(plaintext, "Token not recognized.");
   }
   if (data.revoked_at) {
-    throw new McpAuthError(-32001, 401, "Token revoked.");
+    return recusar(plaintext, "Token revoked.", false);
   }
   if (data.expires_at && new Date(data.expires_at) < new Date()) {
-    throw new McpAuthError(-32001, 401, "Token expired.");
+    return recusar(plaintext, "Token expired.", false);
   }
 
   const scopes = parseScopes(data.scopes);

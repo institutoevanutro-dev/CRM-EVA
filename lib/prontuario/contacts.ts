@@ -61,7 +61,7 @@ export async function authorizeProntuario(req: Request, scope: "prontuario:conta
     return { ok: true as const, auth };
   } catch (error) {
     if (error instanceof McpAuthError)
-      return { ok: false as const, response: fail(error.httpStatus === 401 ? "unauthenticated" : "forbidden", "Credencial sem acesso.", error.httpStatus, { requestId }) };
+      return { ok: false as const, response: fail(error.httpStatus === 401 ? "unauthenticated" : error.httpStatus === 429 ? "rate_limited" : "forbidden", "Credencial sem acesso.", error.httpStatus, { requestId }) };
     return { ok: false as const, response: fail("internal_error", "Integração indisponível.", 503, { requestId }) };
   }
 }
