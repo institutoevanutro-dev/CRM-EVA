@@ -36,10 +36,10 @@ describe("prontuário: busca limitada de contatos", () => {
     const response = await GET(request());
     expect(response.status).toBe(200);
     expect(db.eq).toHaveBeenCalledWith("organization_id", ORG);
-    expect(db.select.mock.calls[0]?.[0]).toBe("id,name,display_name,birthdate,phone_number,email,updated_at");
+    expect(db.select.mock.calls[0]?.[0]).toBe("id,name,display_name,birthdate,phone_number,email,updated_at,cpf_encrypted,custom_fields");
     expect(db.or.mock.calls[0]?.[0]).toContain("display_name.ilike.%Pessoa%");
     const body = await response.json();
-    expect(body.data[0]).toEqual({ id: row.id, name: row.display_name, birthdate: row.birthdate, phone_number: row.phone_number, email: row.email, updated_at: row.updated_at });
+    expect(body.data[0]).toEqual({ id: row.id, name: row.display_name, birthdate: row.birthdate, phone_number: row.phone_number, email: row.email, updated_at: row.updated_at,cpf_available:true,address:"" });
     expect(JSON.stringify(body)).not.toContain("cpf_encrypted");
   });
 
