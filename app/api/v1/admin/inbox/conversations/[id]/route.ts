@@ -81,6 +81,7 @@ export async function GET(
       body,
       media_url,
       media_mime,
+      media_library_item_id,
       sent_via,
       sent_at,
       read_at,

@@ -39,6 +39,15 @@ import { CHANNEL_PROVIDER_INSTAGRAM } from "@/lib/channels/capabilities";
 import { automaticoPodeEnviar, estadoDaJanela } from "@/lib/channels/janela";
 import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
 import { isMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
+import { escolherVariante, tipoDaMidia } from "@/lib/midias/envio";
+import { variantesDoItem } from "@/lib/midias/esquemas";
+import {
+  BUCKET_DA_BIBLIOTECA,
+  hojeNaClinica,
+  situacaoDaMidia,
+  type SituacaoDaMidia,
+  type Variante,
+} from "@/lib/midias/termo";
 import {
   buildVcard,
   normalizePhoneForDisplay,
@@ -155,7 +164,7 @@ async function removerEcoDoProprioEnvio(
 }
 
 const MSG_COLS =
-  "id, organization_id, conversation_id, channel_session_id, contact_id, external_id, type, direction, status, ack, error_code, error_message, body, media_url, media_mime, media_size_bytes, media_storage_path, media_derived_text, media_derived_status, sent_via, sent_by_user_id, sent_at, delivered_at, read_at, metadata, edited_at, revoked_at, reply_to_message_id, created_at";
+  "id, organization_id, conversation_id, channel_session_id, contact_id, external_id, type, direction, status, ack, error_code, error_message, body, media_url, media_mime, media_size_bytes, media_storage_path, media_library_item_id, media_derived_text, media_derived_status, sent_via, sent_by_user_id, sent_at, delivered_at, read_at, metadata, edited_at, revoked_at, reply_to_message_id, created_at";
 
 function actorAuditPayload(actor: Actor): {
   actorUserId: string | null;
@@ -279,11 +288,64 @@ function previewFrom(input: {
   body?: string;
   media_url?: string;
   media_storage_path?: string;
+  media_library_item_id?: string;
   type?: string;
 }): string {
   if (input.body) return input.body.slice(0, 280);
-  if (input.media_url || input.media_storage_path) return `[${input.type ?? "media"}]`;
+  if (input.media_url || input.media_storage_path || input.media_library_item_id)
+    return `[${input.type ?? "media"}]`;
   return "";
+}
+
+const SITUACAO_LEGIVEL: Record<Exclude<SituacaoDaMidia, "pronta">, string> = {
+  sem_termo: "sem termo de uso de imagem",
+  termo_vencido: "termo vencido",
+  revogada: "termo revogado",
+  arquivo_ausente: "sem arquivo",
+};
+
+/**
+ * Lê o item da biblioteca com o admin client, SEMPRE pela org da conversa, e
+ * confere o termo agora: a tela e o prompt também avisam, mas a trava é aqui.
+ * O caminho que sai é o gravado no item, filtrado por `variantesDoItem`.
+ */
+async function resolverMidiaDaBiblioteca(
+  orgId: string,
+  itemId: string,
+  contactId: string,
+  pedida: "A" | "B" | undefined,
+  requestId: string,
+): Promise<{ variante: Variante; type: "image" | "video" }> {
+  const { data, error } = await createAdminClient()
+    .from("media_library_items")
+    .select("id, contains_person, consent_signed_at, consent_expires_at, consent_revoked_at, variants")
+    .eq("organization_id", orgId)
+    .eq("id", itemId)
+    .maybeSingle();
+  if (error) throw new ApiError(500, "internal_error", undefined, requestId, error.message);
+  if (!data) throw new ApiError(422, "media_not_found", undefined, requestId, "Mídia não encontrada na biblioteca.");
+  const linha = data as {
+    contains_person: boolean;
+    consent_signed_at: string | null;
+    consent_expires_at: string | null;
+    consent_revoked_at: string | null;
+    variants: unknown;
+  };
+  // Só imagem e vídeo saem por aqui; variante de outro tipo conta como sem arquivo.
+  const variants = variantesDoItem(linha.variants, orgId, itemId).filter((v) => tipoDaMidia(v.mime));
+  const situacao = situacaoDaMidia({ ...linha, variants }, hojeNaClinica());
+  const variante = situacao === "pronta" ? escolherVariante(variants, contactId, pedida) : null;
+  if (!variante) {
+    const s = situacao === "pronta" ? "arquivo_ausente" : situacao;
+    throw new ApiError(
+      422,
+      "media_not_ready",
+      { situacao: s },
+      requestId,
+      `Esta mídia não pode ser enviada agora: ${SITUACAO_LEGIVEL[s]}.`,
+    );
+  }
+  return { variante, type: tipoDaMidia(variante.mime)! };
 }
 
 /**
@@ -423,6 +485,30 @@ export async function sendMessageHandler(
       ctx.requestId,
       "media_storage_path fora da conversa.",
     );
+  }
+
+  let midiaDaBiblioteca: { variante: Variante; type: "image" | "video" } | null = null;
+  if (input.media_library_item_id) {
+    // O schema já recusa os dois; a checagem fica aqui para quem chama o
+    // handler sem passar pelo schema (agente, automação).
+    if (input.media_storage_path) {
+      throw new ApiError(
+        422,
+        "validation_error",
+        undefined,
+        ctx.requestId,
+        "Envie o arquivo da conversa ou o item da biblioteca, não os dois.",
+      );
+    }
+    midiaDaBiblioteca = await resolverMidiaDaBiblioteca(
+      c.organization_id,
+      input.media_library_item_id,
+      c.contact_id,
+      input.media_variant,
+      ctx.requestId,
+    );
+    // O tipo é o do arquivo: o do chamador é ignorado em todo o resto do envio.
+    input = { ...input, type: midiaDaBiblioteca.type };
   }
 
   let outboundBody = input.body ?? null;
@@ -575,15 +661,17 @@ export async function sendMessageHandler(
     status: "queued",
     body: input.body ?? null,
     media_url: input.media_url ?? null,
-    media_mime: input.media_mime ?? null,
+    media_mime: midiaDaBiblioteca?.variante.mime ?? input.media_mime ?? null,
     media_storage_path: input.media_storage_path ?? null,
-    media_size_bytes: input.media_size_bytes ?? null,
+    media_size_bytes: midiaDaBiblioteca?.variante.size_bytes ?? input.media_size_bytes ?? null,
+    media_library_item_id: input.media_library_item_id ?? null,
     sent_via: ctx.actor.type !== "user" ? ("ai" as const) : ("user" as const),
     sent_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
     sent_at: now,
     metadata: {
       ...(input.metadata ?? {}),
       ...(ctx.actor.type === "ai_agent" ? { ai_actor_id: ctx.actor.id } : {}),
+      ...(midiaDaBiblioteca ? { media_variant: midiaDaBiblioteca.variante.key } : {}),
     },
   };
 
@@ -877,6 +965,33 @@ export async function sendMessageHandler(
           // cópia guardada no envio, que poderia divergir da linha.
           replyToExternalId: idDaCitadaNoCanal,
         }));
+      } else if (midiaDaBiblioteca) {
+        // Mesmo storage-first do ramo acima, no bucket da biblioteca.
+        const admin = createAdminClient();
+        const { data: signed, error: signErr } = await admin.storage
+          .from(BUCKET_DA_BIBLIOTECA)
+          .createSignedUrl(midiaDaBiblioteca.variante.storage_path, 600);
+        if (signErr || !signed?.signedUrl) {
+          throw new Error(`storage_sign_failed: ${signErr?.message ?? "no_url"}`);
+        }
+        const filename = midiaDaBiblioteca.variante.storage_path.split("/").pop() ?? undefined;
+        await checkBoundary();
+        ({ externalId } = await adapter.send({
+          beforeSend: checkBoundary,
+          organizationId: ctx.organization_id,
+          sessionRef: resolveSessionRef(c.channel_sessions),
+          to: chatId,
+          providerConversationId: c.provider_conversation_id,
+          etiquetaHumana,
+          kind: midiaDaBiblioteca.type,
+          media: {
+            url: signed.signedUrl,
+            mime: midiaDaBiblioteca.variante.mime,
+            filename,
+            caption: input.body ?? null,
+          },
+          replyToExternalId: idDaCitadaNoCanal,
+        }));
       } else if (input.type === "contact") {
         const sc = outboundMetadata.shared_contact as
           { name: string; phone_number: string } | undefined;
@@ -1074,6 +1189,7 @@ export async function sendMessageHandler(
       body: input.body,
       media_url: input.media_url,
       media_storage_path: input.media_storage_path,
+      media_library_item_id: input.media_library_item_id,
       type: input.type,
     }),
     // Resposta humana/CRM zera pendências — espelha fn_mark_conversation_message
@@ -1118,7 +1234,17 @@ export async function sendMessageHandler(
     resourceType: "message",
     resourceId: message.id,
     requestId: ctx.requestId,
-    metadata: { ...a.metadataActor, status: message.status, type: message.type },
+    metadata: {
+      ...a.metadataActor,
+      status: message.status,
+      type: message.type,
+      ...(message.media_library_item_id
+        ? {
+            media_library_item_id: message.media_library_item_id,
+            media_variant: (message.metadata as { media_variant?: string } | null)?.media_variant,
+          }
+        : {}),
+    },
   });
 
   await supabase
