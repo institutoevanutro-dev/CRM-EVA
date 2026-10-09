@@ -158,7 +158,7 @@ import { loadChannelProvider, nomesDasFerramentas, runBeforeSend } from '../guar
 import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
-import { esperarComoHumano } from './atraso-humano';
+import { acenderDigitando, esperarComoHumano } from './atraso-humano';
 import { bolhasQueCabemNoEnvio, instrucaoDeBolhas, sendInBubbles, splitForSend } from './split-message';
 import { formatarParaWhatsApp } from './formato-whatsapp';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
@@ -2074,6 +2074,7 @@ async function executarTurnoDoAgente(
   // suíte de invariantes ficava vermelha das 22h às 7h (fuso do tenant) — nove
   // horas por dia em que um PR reprova por causa do relógio de parede.
   const clock = deps.clock ?? ((): Date => new Date());
+  const inicioDoProcessamento = performance.now();
   const contextKnobs = {
     historyLimit: deps.knobs.historyLimit,
     maxTokens: deps.knobs.maxContextTokens,
@@ -3338,6 +3339,9 @@ async function executarTurnoDoAgente(
                     agentConfig?.splitMaxChars ?? 600,
                     bolhasQueCabemNoEnvio(maxSendsPerTurn, seq),
                   )[0] ?? body,
+                // A pausa humana desconta o tempo que o turno JÁ gastou pensando, em vez
+                // de somar em cima dele (porte de melgarafael/DeskcommCRM #1125, #849).
+                processamentoMs: performance.now() - inicioDoProcessamento,
                 sleep: deps.sleep ?? ((s) => new Promise((resolve) => setTimeout(resolve, s))),
                 log: runLog,
                 ...(canal.signalTyping
@@ -4104,47 +4108,66 @@ async function executarTurnoDoAgente(
     const currentStage: LeadStage = leadState?.stage ?? 'new';
     let stageSuggestion: LeadStage | null = null;
     let stageHintBlock = '';
-    if (deps.knobs.stageClassifier !== undefined) {
-      stageSuggestion = await classifyStage(
-        pool,
-        deps.llmCfg,
-        { tenantId, leadId: leadId || null, jobId: job?.id },
-        {
-          context: effectiveContext,
-          currentStage,
-          ...argsAux(deps.knobs.stageClassifier.model),
-        },
-        { registry: deps.registry, log: runLog },
-      );
-      if (stageSuggestion !== null) {
-        stageHintBlock = renderStageHint(stageSuggestion, currentStage);
-      }
+    let jailbreakLevel: JailbreakLevel = 'none';
+
+    // Os dois classificadores auxiliares rodam EM PARALELO, e não em série.
+    //
+    // Eles são ADVISÓRIOS, leem sinais diferentes (o contexto e o estágio atual
+    // vs. a última mensagem do lead) e nenhum consome o resultado do outro — em
+    // série o turno pagava duas idas-e-voltas de LLM uma atrás da outra, e o
+    // cliente esperava a soma. `Promise.all` paga só a mais lenta das duas.
+    //
+    // O que NÃO muda por rodar junto: o orçamento mensal da organização é
+    // checado dentro de cada `runModelCall` (a mesma checagem que já corre
+    // concorrente entre turnos de leads diferentes), nenhuma decisão de
+    // guardrail depende de ordem entre os dois, e o `jailbreak` segue sem vetar
+    // o inbound — só flagra o turno no trace.
+    const [stageResultado, jailbreakVerdict] = await Promise.all([
+      deps.knobs.stageClassifier !== undefined
+        ? classifyStage(
+            pool,
+            deps.llmCfg,
+            { tenantId, leadId: leadId || null, jobId: job?.id },
+            {
+              context: effectiveContext,
+              currentStage,
+              ...argsAux(deps.knobs.stageClassifier.model),
+            },
+            { registry: deps.registry, log: runLog },
+          )
+        : Promise.resolve(null),
+      // F4-04: classifier ADVISÓRIO anti-jailbreak sobre a mensagem INBOUND do lead (o
+      // skillSignal já é a última inbound). Roda pelo seam agnóstico (modelo BARATO, budget
+      // checado nele). NÃO veta o inbound — só FLAGRA o turno no trace; flag/level não são PII
+      // (a mensagem/reason nunca vão a log). A correlação com promessa fora de tabela escala no fim.
+      camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined)
+        ? classifyJailbreak(
+            pool,
+            deps.llmCfg,
+            { tenantId, leadId: leadId || null, jobId: job?.id },
+            {
+              message: skillSignal,
+              // Knob ausente + organização ligando = roda com o modelo padrão dela,
+              // que é a convenção já usada pelo stageClassifier.
+              ...argsAux(deps.knobs.jailbreak?.model),
+            },
+            { registry: deps.registry, log: runLog },
+          )
+        : Promise.resolve(null),
+    ]);
+
+    stageSuggestion = stageResultado;
+    if (stageSuggestion !== null) {
+      stageHintBlock = renderStageHint(stageSuggestion, currentStage);
     }
 
-    // F4-04: classifier ADVISÓRIO anti-jailbreak sobre a mensagem INBOUND do lead (o
-    // skillSignal já é a última inbound). Roda pelo seam agnóstico (modelo BARATO, budget
-    // checado nele). NÃO veta o inbound — só FLAGRA o turno no trace; flag/level não são PII
-    // (a mensagem/reason nunca vão a log). A correlação com promessa fora de tabela escala no fim.
-    let jailbreakLevel: JailbreakLevel = 'none';
-    if (camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined)) {
-      const verdict = await classifyJailbreak(
-        pool,
-        deps.llmCfg,
-        { tenantId, leadId: leadId || null, jobId: job?.id },
-        {
-          message: skillSignal,
-          // Knob ausente + organização ligando = roda com o modelo padrão dela,
-          // que é a convenção já usada pelo stageClassifier.
-          ...argsAux(deps.knobs.jailbreak?.model),
-        },
-        { registry: deps.registry, log: runLog },
-      );
-      jailbreakLevel = verdict.level;
-      if (verdict.flag) {
+    if (jailbreakVerdict !== null) {
+      jailbreakLevel = jailbreakVerdict.level;
+      if (jailbreakVerdict.flag) {
         // trace do turno: só flag/level (não PII) — a mensagem e o reason nunca são logados.
         runLog.warn('jailbreak: sinal detectado na mensagem do lead', {
           jailbreak_flag: true,
-          jailbreak_level: verdict.level,
+          jailbreak_level: jailbreakVerdict.level,
         });
       }
     }
@@ -4234,6 +4257,19 @@ async function executarTurnoDoAgente(
         ? openingTextOnly
         : [{ role: 'user', content: [{ type: 'text', text: openingText }, ...nativeParts] }];
 
+    // "digitando…" ENQUANTO o modelo pensa. A pausa humana antes da 1ª bolha
+    // (`esperaForaDoLock`) desconta este tempo e quase sempre zera — e com espera
+    // zero ela não acende presença. Sem esta linha o cliente esperava a chamada
+    // inteira do modelo sem indicador nenhum. Só em turno que fala com o lead:
+    // turno de retaguarda não abre o WhatsApp de ninguém. (Porte de
+    // melgarafael/DeskcommCRM #1543.)
+    if (channel?.signalTyping && turnoVaiFalarComOLead(liveJob())) {
+      acenderDigitando(
+        () => channel.signalTyping!({ tenantId, conversationId: input.conversationId }),
+        runLog,
+      );
+    }
+
     // O modelo decide tools livremente dentro do teto de steps (knob AGENT_MAX_STEPS).
     //
     // Sem escolta LOCAL: quem cobre o teto de gasto é `runAgentTurn`, que envolve
@@ -4257,6 +4293,12 @@ async function executarTurnoDoAgente(
         messages: openingMessages,
         tools,
         maxSteps,
+        // Rascunho: a resposta é o send_message ACEITO; a etapa seguinte só
+        // "encerrava". Aceito, e não chamado: o envio vetado pela cadeia
+        // before_send volta ao modelo para ele reescrever (o 1º veto ensina).
+        ...(preview?.kind === 'assisted'
+          ? { pararQuando: () => preview.result.candidates.length > 0 }
+          : {}),
         ...(agentConfig !== null
           ? {
               model: agentConfig.model,
@@ -4348,6 +4390,25 @@ async function executarTurnoDoAgente(
     // turno. Aqui o lead já recebeu resposta, mas a conversa ficaria sem
     // checkpoint e sem dono, e o próximo inbound cairia no mesmo bloqueio, agora
     // sem nada tendo mudado no meio.
+    // Prévia sem candidato e sem impedimento: quem opera precisa saber que o agente não propôs nada.
+    const avisarSemCandidato = (p: NonNullable<typeof preview>): void => {
+      if (p.result.candidates.length === 0 && p.result.impediments.length === 0)
+        p.result.impediments.push({
+          code: 'no_candidate',
+          message: 'O agente não propôs uma resposta. Revise o cenário ou a configuração.',
+        });
+    };
+    // ⚠️ RASCUNHO (modo assistido) não fecha o turno com checkpoint. O checkpoint
+    // da prévia não é gravado (a prévia retorna antes do `insertCheckpoint`, logo
+    // abaixo) e o `reply-drafts.ts` não o lê — só a prévia de TESTE (sandbox) o
+    // mostra na tela. Mesmo assim, a chamada de fechamento segurava a entrega do
+    // rascunho: medido em produção (gpt-6-luna, 2026-09-24), resposta pronta às
+    // 12:32:40 e rascunho entregue às 12:32:56 — 16 dos 28 s que o operador
+    // esperava depois de clicar em "Sugerir resposta".
+    if (preview?.kind === 'assisted') {
+      avisarSemCandidato(preview);
+      return;
+    }
     const closing = await runModelCall(
       pool,
       deps.llmCfg,
@@ -4386,11 +4447,7 @@ async function executarTurnoDoAgente(
 
     if (preview) {
       preview.result.checkpoint = content;
-      if (preview.result.candidates.length === 0 && preview.result.impediments.length === 0)
-        preview.result.impediments.push({
-          code: 'no_candidate',
-          message: 'O agente não propôs uma resposta. Revise o cenário ou a configuração.',
-        });
+      avisarSemCandidato(preview);
       return;
     }
 

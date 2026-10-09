@@ -117,7 +117,7 @@ export const TOOLS_OPERACAO = declararTools([
     category: "read",
     rotulo: "Ver as respostas prontas",
     explicacao:
-      "Lista os textos que a empresa já escreveu para responder as situações de sempre, com o atalho de cada um.",
+      "Lista os textos que a empresa compartilhou com a equipe para responder as situações de sempre, com o atalho de cada um.",
     oQueToca: "Respostas prontas",
     risco: "seguro",
     pacotes: ["atender", "organizar"],

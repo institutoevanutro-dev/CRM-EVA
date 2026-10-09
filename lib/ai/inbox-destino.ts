@@ -23,6 +23,10 @@ export const REFERENCIAS_DE_AVISO = {
   channel_session: { tabela: "channel_sessions", papel: "admin", rotulo: "Revisar conexão", href: () => "/app/connections", ativo: true },
   ai_knowledge_source: { tabela: "ai_knowledge_sources", papel: "manager", rotulo: "Abrir base de conhecimento", href: () => "/app/ai/knowledge/sources" },
   agent_case: { tabela: "agent_cases", papel: "agent", rotulo: "Abrir atendimento", href: (id: string) => `/app/ai/cases?caso=${id}` },
+  // A credencial do provedor que ficou sem saldo (`lib/agent-engine/queue/espera-de-saldo.ts`).
+  // O remédio é recarregar na conta do provedor, fora do CRM; a tela de
+  // credenciais é onde se confere QUAL chave é, e onde se troca por outra.
+  ai_provider_credential: { tabela: "ai_provider_credentials", papel: "admin", rotulo: "Revisar credencial", href: () => "/app/ai/credentials" },
 } satisfies Record<string, Alvo>;
 
 export type InboxRefKind = keyof typeof REFERENCIAS_DE_AVISO | "organization" | "ai_budget" | "job_queue" | "cron_jobs";
@@ -83,7 +87,7 @@ export const POLITICAS_DE_AVISO = {
     orientacao: "Confira a fila de comentários do Instagram — um comentário ficou mais de 1h sem resposta.",
     geral: { papel: "agent", href: "/app/inbox?filter=comentarios", rotulo: "Abrir fila de comentários" },
   },
-  other: { refs: ["lead", "channel_session", "appointment", "ai_agent"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
+  other: { refs: ["lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
 } satisfies Record<InboxKind, Politica>;
 
 /**

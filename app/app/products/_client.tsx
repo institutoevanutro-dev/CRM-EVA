@@ -301,6 +301,11 @@ export function ProdutosClient({
               {t("Editando")} {editando.nome}
             </p>
           ) : null}
+          {editando?.origem === "precificaeva" ? (
+            <p className="mb-3 rounded-md border border-warning/40 bg-warning-bg p-2 text-sm text-warning-fg" data-testid="produto-do-precificaeva">
+              {t("Este item vem do PrecificaEva. Nome, categoria, preço, custo e situação são atualizados de lá a cada hora: o que mudar aqui volta ao valor do PrecificaEva. Para mudar o preço, altere no PrecificaEva.")}
+            </p>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
               {t("Código")}
@@ -340,6 +345,7 @@ export function ProdutosClient({
               {t("Preço de venda")}
               <input
                 value={rascunho.preco}
+                disabled={editando?.origem === "precificaeva"}
                 onChange={(e) => setRascunho({ ...rascunho, preco: e.target.value })}
                 placeholder="5.499,00"
                 className="mt-1 h-9 w-full rounded-md border px-3"
@@ -350,6 +356,7 @@ export function ProdutosClient({
               {t("Custo")} <span className="text-muted-foreground">{t("(opcional)")}</span>
               <input
                 value={rascunho.custo}
+                disabled={editando?.origem === "precificaeva"}
                 onChange={(e) => setRascunho({ ...rascunho, custo: e.target.value })}
                 placeholder="4.100,00"
                 className="mt-1 h-9 w-full rounded-md border px-3"
@@ -422,6 +429,7 @@ export function ProdutosClient({
                   {p.controla_estoque
                     ? ` · ${p.quantidade} ${t("em estoque")}`
                     : ` · ${t("sem controle de estoque")}`}
+                  {p.origem === "precificaeva" ? ` · ${t("preço do PrecificaEva")}` : ""}
                 </p>
               </div>
               <span className="shrink-0 tabular-nums font-medium">
