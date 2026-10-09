@@ -77,6 +77,10 @@ export interface HandlerCtx {
   organization_id: string;
   actor: Actor;
   requestId: string;
+  /** `Idempotency-Key` validada pela borda (REST/MCP), nunca do corpo. */
+  idempotencyKey?: string;
+  /** Job do runtime do agente: com o hash do pedido, deriva a chave de idempotência. */
+  sourceJobId?: string;
   /**
    * Idioma de quem chamou, só quando é um usuário humano de verdade — as
    * rotas REST passam `authz.user.idioma`. MCP e webhook não têm preferência

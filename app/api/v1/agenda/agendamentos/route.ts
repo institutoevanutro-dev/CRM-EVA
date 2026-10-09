@@ -19,6 +19,7 @@ import { z } from "zod";
 import { listaAgendamentos, type AgendamentoListado } from "@/lib/agenda/consulta";
 import { donosDaAgenda } from "@/lib/agenda/donos-da-agenda";
 import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
+import { chaveDaRequisicao } from "@/lib/api/idempotency";
 import { fail, ok } from "@/lib/api/wrappers";
 import { logger } from "@/lib/logger";
 
@@ -285,7 +286,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
 
-  return despachar(req, marcarSchema, marcarAgendamentoHandler, 201);
+  return despachar(req, marcarSchema, marcarAgendamentoHandler, 201, true);
 }
 
 export async function PATCH(req: NextRequest): Promise<Response> {
@@ -314,10 +315,11 @@ async function despachar<T>(
   schema: z.ZodType<T>,
   handler: (
     supabase: Awaited<ReturnType<typeof createClient>>,
-    ctx: { organization_id: string; actor: { type: "user"; id: string }; requestId: string },
+    ctx: { organization_id: string; actor: { type: "user"; id: string }; requestId: string; idempotencyKey?: string },
     input: T,
   ) => Promise<Record<string, unknown>>,
   status: 200 | 201,
+  aceitaIdempotencyKey = false,
 ): Promise<Response> {
   const requestId = randomUUID();
 
@@ -325,6 +327,12 @@ async function despachar<T>(
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { org: activeOrg, user } = authz;
+
+  // `Idempotency-Key` só no POST de criação (upstream #1735), sempre do header.
+  const idempotencyKey = aceitaIdempotencyKey ? chaveDaRequisicao(req) : null;
+  if (idempotencyKey !== null && !z.string().uuid().safeParse(idempotencyKey).success) {
+    return fail("validation_failed", t("Idempotency-Key deve ser UUID"), 400, { requestId });
+  }
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -345,6 +353,7 @@ async function despachar<T>(
         organization_id: activeOrg.orgId,
         actor: { type: "user", id: user.id },
         requestId,
+        ...(idempotencyKey !== null ? { idempotencyKey } : {}),
       },
       parsed.data,
     );

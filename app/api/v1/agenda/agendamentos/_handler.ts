@@ -40,6 +40,7 @@ import {
   VINCULO_DE_AGENDAMENTO,
 } from "@/lib/agenda/tipos";
 import { ApiError } from "@/lib/api/types";
+import { comIdempotencia, hashDoCorpo } from "@/lib/api/idempotency";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
 import { resolveActiveLeadForContact, type LeadCandidate } from "@/lib/leads/active-lead";
@@ -98,7 +99,56 @@ export interface CancelarInput {
   reason: string;
 }
 
+const ENDPOINT_IDEMPOTENCIA_AGENDA = "/api/v1/agenda/agendamentos";
+
+/**
+ * Marcar é idempotente (porte do upstream melgarafael/DeskcommCRM#1735,
+ * contribuição de @lucasa15): a IA que repete a chamada da tool, ou o cliente
+ * que reenvia o POST com a mesma `Idempotency-Key`, recebe o compromisso já
+ * criado em vez de um segundo (ou de um 409 de horário ocupado por ele mesmo).
+ *
+ * A chave vem do header (REST/MCP externo) ou, no runtime do agente, do job de
+ * origem mais o hash do pedido: duas intenções diferentes no mesmo job seguem
+ * criando dois compromissos. Sem nenhuma das duas, nada muda.
+ *
+ * Limite conhecido: o helper do fork grava o recibo DEPOIS do efeito, então
+ * duas chamadas SIMULTÂNEAS com a mesma chave ainda não são barradas (ver
+ * `lib/api/idempotency.ts`). O caso medido, retry em sequência, é coberto.
+ */
 export async function marcarAgendamentoHandler(
+  supabase: SB,
+  ctx: HandlerCtx,
+  input: MarcarInput,
+): Promise<Record<string, unknown>> {
+  const chave =
+    ctx.idempotencyKey ??
+    (ctx.sourceJobId ? `agent-job:${ctx.sourceJobId}:${hashDoCorpo(input)}` : null);
+  if (chave === null) return executarCriacaoDeAgendamento(supabase, ctx, input);
+
+  const desfecho = await comIdempotencia({
+    db: supabase,
+    organizationId: ctx.organization_id,
+    endpoint: ENDPOINT_IDEMPOTENCIA_AGENDA,
+    chave,
+    corpo: input,
+    executar: async () => ({
+      resposta: await executarCriacaoDeAgendamento(supabase, ctx, input),
+      status: 201,
+    }),
+  });
+  if (desfecho.tipo === "conflito") {
+    throw new ApiError(
+      409,
+      "idempotency_conflict",
+      undefined,
+      ctx.requestId,
+      "Esta chave de idempotência já foi usada com outro conteúdo.",
+    );
+  }
+  return desfecho.resposta;
+}
+
+async function executarCriacaoDeAgendamento(
   supabase: SB,
   ctx: HandlerCtx,
   input: MarcarInput,

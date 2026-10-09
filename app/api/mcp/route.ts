@@ -13,6 +13,9 @@ import type { NextRequest } from "next/server";
 
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
+import { z } from "zod";
+
+import { chaveDaRequisicao } from "@/lib/api/idempotency";
 import { createMcpServer } from "@/lib/mcp/server";
 import { McpAuthError, validateBearerToken } from "@/lib/mcp/auth";
 
@@ -47,8 +50,14 @@ async function handle(req: NextRequest): Promise<Response> {
     return jsonRpcError(-32603, msg, 500);
   }
 
+  // Idempotência das criações (upstream #1735): a chave vem do header, nunca do corpo.
+  const idempotencyKey = chaveDaRequisicao(req);
+  if (idempotencyKey !== null && !z.string().uuid().safeParse(idempotencyKey).success) {
+    return jsonRpcError(-32602, "Idempotency-Key deve ser UUID", 400);
+  }
+
   const transport = new WebStandardStreamableHTTPServerTransport({});
-  const server = createMcpServer(auth, requestId);
+  const server = createMcpServer(auth, requestId, idempotencyKey ?? undefined);
 
   try {
     await server.connect(transport);

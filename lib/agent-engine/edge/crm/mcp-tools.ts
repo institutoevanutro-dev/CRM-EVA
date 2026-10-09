@@ -93,6 +93,9 @@ export async function buildMcpTurnTools(
     },
     apiTokenId: ephemeral.id,
     requestId: ids.jobId,
+    // Idempotência da marcação (upstream #1735): o retry da tool no mesmo job
+    // devolve o compromisso já criado.
+    sourceJobId: ids.jobId,
     supabase: cfg.supabase,
   };
   const auth: McpAuthResult = {
