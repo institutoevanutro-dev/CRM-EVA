@@ -19,6 +19,7 @@ import { audit } from "@/lib/audit";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { chegouPelaBorda } from "@/lib/http/ip-do-cliente";
 import { conferirContratoWaha, lerRoteamentoWaha } from "@/lib/waha/envelope";
 import { processarEventoWaha, REENTREGA_EM_SEGUNDOS } from "@/lib/waha/desfecho-do-webhook";
 import { authenticateWahaWebhook, validGlobalWahaBearer } from "@/lib/waha/webhook-auth";
@@ -28,6 +29,16 @@ export const runtime = "nodejs";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const requestId = randomUUID();
+
+  // SÓ A REDE INTERNA. O WAHA da stack chama `http://app:3000` pela rede do
+  // Docker; quem está do outro lado da borda pública usa a rota por token.
+  // Requisição com marca de proxy de borda recebe 404 antes de ler o corpo e de
+  // tocar o banco (`chegouPelaBorda`). Mora na aplicação para valer igual com
+  // Caddy, Traefik ou outro proxy. Porte do DeskcommCRM #2618.
+  if (chegouPelaBorda(req.headers)) {
+    logger.warn("[waha.webhook] rota global recusou requisição vinda da borda", { request_id: requestId });
+    return fail("not_found", "not found", 404, { requestId });
+  }
 
   const sigHeader = req.headers.get("x-webhook-hmac");
   const bearerVerified = validGlobalWahaBearer(req.headers.get("authorization"));
