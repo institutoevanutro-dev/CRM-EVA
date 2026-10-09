@@ -157,7 +157,7 @@ export function FormularioDaMeta({
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("API Oficial da Meta desta instalação")}</h1>
+        <h1 className="text-[2rem] leading-tight">{t("API Oficial da Meta desta instalação")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {t("É com estas duas informações que o sistema confere que cada mensagem recebida pelo número oficial veio mesmo da Meta. Elas valem para a instalação inteira — cada empresa conecta o próprio número depois, em Conexões.")}
         </p>

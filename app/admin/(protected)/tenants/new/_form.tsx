@@ -196,7 +196,7 @@ export function NewTenantForm() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Nova organização")}</h1>
+        <h1 className="text-[2rem] leading-tight">{t("Nova organização")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {t("Você terá acesso como administrador e poderá concluir a configuração inicial.")}
         </p>

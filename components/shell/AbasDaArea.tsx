@@ -18,8 +18,9 @@ import { cn } from "@/lib/utils";
 /**
  * Abas da área da tela atual, logo abaixo da barra do topo (spec
  * docs/superpowers/specs/2026-10-07-cores-e-menu-design.md). O menu lateral mostra só as
- * áreas; aqui o colaborador vê as telas daquela área e, embaixo, a frase do que a tela
- * atual faz (o `description` do catálogo). Nenhuma rota muda: tudo sai do catálogo.
+ * áreas; aqui o colaborador vê as telas daquela área. A frase do que a tela faz fica no
+ * cabeçalho da própria página: repetida aqui, aparecia duas vezes (spec 2026-10-09).
+ * Nenhuma rota muda: tudo sai do catálogo.
  */
 export function AbasDaArea() {
   const t = useT();
@@ -59,12 +60,13 @@ export function AbasDaArea() {
     activeOrg?.interface_settings,
   );
   if (principais.length + mais.length === 0) return null;
-  const atual = [...principais, ...mais].find((d) => d.href === abaHref);
   const ativa = (href: string) => href === abaHref;
   const estiloDaAba = (ligada: boolean) =>
     cn(
-      "flex items-center gap-1 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors",
-      ligada ? "border-gold font-medium text-text" : "border-transparent text-text-muted hover:text-text",
+      "flex items-center gap-1 whitespace-nowrap border-b-2 px-3 py-3 text-sm transition-colors",
+      ligada
+        ? "border-gold font-medium text-accent"
+        : "border-transparent text-text-muted hover:border-border-strong hover:text-text",
     );
 
   return (
@@ -108,7 +110,6 @@ export function AbasDaArea() {
           </Link>
         )}
       </nav>
-      {atual && <p className="py-2 text-xs text-text-muted">{t(atual.description)}</p>}
     </div>
   );
 }

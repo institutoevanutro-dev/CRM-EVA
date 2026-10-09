@@ -20,7 +20,7 @@ export default async function ForbiddenPage() {
   return (
     <main className="flex min-h-screen items-center justify-center p-8">
       <Card className="w-full max-w-md p-8 text-center">
-        <h1 className="text-2xl font-semibold">{traduzir("403 — Sem permissão", idioma)}</h1>
+        <h1 className="text-[2rem] leading-tight">{traduzir("403 — Sem permissão", idioma)}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {traduzir("Você não tem acesso a essa área.", idioma)}
         </p>

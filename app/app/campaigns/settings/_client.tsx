@@ -53,7 +53,7 @@ export function ConfiguracaoDeCampanhas() {
         </Link>
       </div>
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Configuração de campanhas")}</h1>
+        <h1 className="text-[2rem] leading-tight">{t("Configuração de campanhas")}</h1>
         <p className="text-sm text-muted-foreground">
           {t("O que vale para todas as campanhas, e não para uma só.")}
         </p>

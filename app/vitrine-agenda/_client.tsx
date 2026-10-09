@@ -63,7 +63,7 @@ export function VitrineDaAgenda() {
     <div className="mx-auto max-w-6xl space-y-10 p-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">Kit visual da Agenda</h1>
+          <h1 className="text-[2rem] leading-tight">Kit visual da Agenda</h1>
           <p className="text-sm text-muted-foreground">
             Componentes puros, alimentados por dados de mentira. Sem banco, sem rota — o desenho
             decidido antes de haver o que exibir.

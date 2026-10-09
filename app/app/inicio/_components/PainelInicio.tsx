@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api/client";
 import { useT } from "@/hooks/i18n/useT";
-import type { Bloco } from "@/lib/inicio/tipos";
+import type { Bloco, ItemDoBloco } from "@/lib/inicio/tipos";
 import { PaineisDaClinica } from "./PaineisDaClinica";
 
 type Numeros =
@@ -46,11 +46,11 @@ function Cartao({
 }) {
   const t = useT();
   return (
-    <section className="rounded-lg border p-4">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="font-medium">{titulo}</h3>
+    <section className="rounded-2xl border bg-surface p-5 shadow-sm">
+      <div className="mb-3 flex items-baseline justify-between gap-2">
+        <h3 className="font-titulo text-xl font-semibold text-text">{titulo}</h3>
         {verTodos ? (
-          <Link className="text-sm text-accent underline" href={verTodos}>
+          <Link className="text-sm text-accent underline-offset-4 hover:underline" href={verTodos}>
             {t("Ver todos")}
           </Link>
         ) : null}
@@ -84,34 +84,49 @@ function ListaDoBloco({
   bloco,
   comMotivo,
   pendencia,
+  agrupar,
 }: {
   bloco: Bloco | null;
   comMotivo?: boolean;
   /** O total conta coisas que esperam ação humana — o número ganha cor de atenção. */
   pendencia?: boolean;
+  /** Avisos com o mesmo texto viram uma linha só, com a contagem (20 linhas iguais não dizem nada). */
+  agrupar?: boolean;
 }) {
   const t = useT();
   if (!bloco || !bloco.ok) return <FalhaDoBloco />;
   if (bloco.total === 0) return <p className="text-sm text-success">{t("Tudo em dia ✓")}</p>;
+  const texto = (i: ItemDoBloco) =>
+    comMotivo
+      ? `${i.titulo}${i.detalhe ? ` — ${t(MOTIVO[i.detalhe] ?? i.detalhe)}` : ""}`
+      : `${i.detalhe ? `${i.detalhe} · ` : ""}${i.titulo}`;
+  const linhas: Array<{ chave: string; texto: string; href: string; vezes: number }> = [];
+  for (const i of bloco.itens) {
+    const tx = texto(i);
+    const igual = agrupar ? linhas.find((l) => l.texto === tx) : undefined;
+    if (igual) igual.vezes++;
+    else linhas.push({ chave: i.id, texto: tx, href: i.href, vezes: 1 });
+  }
   return (
     <>
-      <p className={`mb-2 text-3xl font-semibold${pendencia ? " text-warning" : ""}`}>
-        {bloco.total}
-      </p>
-      <ul className="space-y-1">
-        {bloco.itens.map((i) => (
-          <li key={i.id}>
+      <p className={`numero mb-3 text-3xl${pendencia ? " text-warning" : " text-text"}`}>{bloco.total}</p>
+      <ul className="divide-y divide-border">
+        {linhas.map((l) => (
+          <li key={l.chave}>
             {/* Alvo de toque generoso: a recepção usa isto no celular. */}
             <Link
-              className="flex min-h-11 items-center justify-between gap-2 rounded-md px-2 hover:bg-muted"
-              href={i.href}
+              className="-mx-2 flex min-h-11 items-center justify-between gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted"
+              href={l.href}
             >
-              <span className="truncate">
-                {comMotivo
-                  ? `${i.titulo}${i.detalhe ? ` — ${t(MOTIVO[i.detalhe] ?? i.detalhe)}` : ""}`
-                  : `${i.detalhe ? `${i.detalhe} · ` : ""}${i.titulo}`}
+              <span className="line-clamp-2 text-text">
+                {l.texto}
+                {l.vezes > 1 ? (
+                  <span className="numero ml-2 rounded-full bg-warning-bg px-2 py-0.5 text-xs text-warning-fg">
+                    {l.vezes}
+                  </span>
+                ) : null}
               </span>
-              <span className="shrink-0 text-sm text-accent underline">{t("Resolver")}</span>
+              <span className="shrink-0 text-xs font-medium text-accent">{t("Resolver")} →</span>
             </Link>
           </li>
         ))}
@@ -143,10 +158,10 @@ export function PainelInicio() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="mb-3 text-lg font-semibold">{t("Meu dia")}</h2>
+        <h2 className="mb-4 font-titulo text-2xl font-semibold">{t("Meu dia")}</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Cartao titulo={t("Avisos da Central")} verTodos="/app/ai/inbox">
-            <ListaDoBloco bloco={meuDia.avisos} pendencia />
+            <ListaDoBloco bloco={meuDia.avisos} pendencia agrupar />
           </Cartao>
           <Cartao titulo={t("Pacientes esperando resposta")} verTodos="/app/inbox">
             <ListaDoBloco bloco={meuDia.esperando} pendencia />
@@ -165,32 +180,35 @@ export function PainelInicio() {
 
       {gestao ? (
         <div>
-          <h2 className="mb-3 text-lg font-semibold">{t("Gestão")}</h2>
+          <h2 className="mb-4 font-titulo text-2xl font-semibold">{t("Gestão")}</h2>
           <div className="grid gap-4 md:grid-cols-2">
             <Cartao titulo={t("Configuração pendente")}>
               <ListaDoBloco bloco={gestao.configuracao} comMotivo pendencia />
             </Cartao>
             <Cartao titulo={t("Números de hoje")} verTodos="/app/metrics">
               {gestao.numeros?.ok ? (
-                <ul className="space-y-1 text-sm">
-                  <li>
-                    {t("Conversas com pacientes")}: <b>{gestao.numeros.numeros.conversasComPaciente}</b>
-                  </li>
-                  <li>
-                    {t("Agendamentos criados")}: <b>{gestao.numeros.numeros.agendamentosCriados}</b>
-                  </li>
-                  <li>
-                    {t("Negócios ganhos")}: <b>{gestao.numeros.numeros.leadsGanhos}</b>
-                  </li>
-                </ul>
+                <dl className="grid grid-cols-3 gap-3">
+                  {(
+                    [
+                      [t("Conversas com pacientes"), gestao.numeros.numeros.conversasComPaciente],
+                      [t("Agendamentos criados"), gestao.numeros.numeros.agendamentosCriados],
+                      [t("Negócios ganhos"), gestao.numeros.numeros.leadsGanhos],
+                    ] as const
+                  ).map(([rotulo, n]) => (
+                    <div key={rotulo} className="flex flex-col-reverse">
+                      <dt className="text-xs text-text-muted">{rotulo}</dt>
+                      <dd className="numero text-3xl">{n}</dd>
+                    </div>
+                  ))}
+                </dl>
               ) : (
                 <FalhaDoBloco />
               )}
             </Cartao>
             <Cartao titulo={t("Gasto com IA no mês")}>
               {gestao.gastoIa?.ok ? (
-                <p className="text-sm">
-                  <b className="text-2xl">{dolares(gestao.gastoIa.consumidoCents)}</b>
+                <p className="text-sm text-text-muted">
+                  <b className="numero text-3xl text-text">{dolares(gestao.gastoIa.consumidoCents)}</b>
                   {gestao.gastoIa.limiteCents != null
                     ? ` / ${dolares(gestao.gastoIa.limiteCents)}`
                     : ` · ${t("sem limite configurado")}`}
@@ -203,13 +221,15 @@ export function PainelInicio() {
               {saude.isLoading ? (
                 <p className="text-sm">{t("Carregando…")}</p>
               ) : saude.data?.status === "healthy" ? (
-                <p className="text-sm">
-                  🟢 {t("Tudo no ar")}
+                <p className="flex items-center gap-2 text-sm">
+                  <span aria-hidden className="size-2.5 rounded-full bg-success" />
+                  {t("Tudo no ar")}
                   {saude.data.version ? ` · ${t("versão")} ${saude.data.version}` : ""}
                 </p>
               ) : (
-                <p role="alert" className="text-sm">
-                  🔴 {t("Algum serviço está fora do ar. Avise o suporte.")}
+                <p role="alert" className="flex items-center gap-2 text-sm">
+                  <span aria-hidden className="size-2.5 rounded-full bg-error" />
+                  {t("Algum serviço está fora do ar. Avise o suporte.")}
                 </p>
               )}
             </Cartao>

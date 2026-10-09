@@ -51,7 +51,7 @@ export function FormularioDoGoogle({
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Google Agenda desta instalação")}</h1>
+        <h1 className="text-[2rem] leading-tight">{t("Google Agenda desta instalação")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {t("Com estas duas informações, quem atende consegue conectar a agenda pessoal do Google e ver os compromissos do CRM lá. Elas valem para a instalação inteira — cada pessoa conecta a conta dela depois, sozinha.")}
         </p>

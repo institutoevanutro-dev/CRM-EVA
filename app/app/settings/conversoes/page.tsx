@@ -68,7 +68,7 @@ export default async function ConversoesPage() {
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Conversões")}</h1>
+        <h1 className="text-[2rem] leading-tight">{t("Conversões")}</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
           {t(
             "Quando um negócio que veio de anúncio é marcado como ganho, o valor da venda volta para a plataforma que trouxe o cliente. É esse retorno que ensina o anúncio a procurar mais gente parecida com quem comprou.",

@@ -46,7 +46,7 @@ export default async function PipelinesSettingsPage() {
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="text-[2rem] leading-tight">
           {traduzir("Etapas do funil", idioma)}
         </h1>
         <p className="text-sm text-muted-foreground">

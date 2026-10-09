@@ -25,7 +25,7 @@ export default async function RecoveryPage({
   return (
     <div className="space-y-6">
       <div className="space-y-1.5 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Recuperar acesso")}</h1>
+        <h1 className="text-[2rem] leading-tight">{t("Recuperar acesso")}</h1>
         <p className="text-sm text-muted-foreground">
           {t("Use um código de recuperação para reconfigurar sua autenticação em duas etapas.")}
         </p>

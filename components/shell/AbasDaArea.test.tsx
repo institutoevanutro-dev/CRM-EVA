@@ -4,8 +4,9 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { AbasDaArea } from "@/components/shell/AbasDaArea";
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
 
-// Spec 2026-10-07-cores-e-menu: as telas de cada área viram abas no topo, com a frase
-// do que a tela faz; nenhuma rota muda.
+// Spec 2026-10-07-cores-e-menu: as telas de cada área viram abas no topo; nenhuma rota
+// muda. A frase do que a tela faz saiu daqui (spec 2026-10-09): o cabeçalho da página
+// já a mostra, e repetida aparecia duas vezes.
 const authRef: { user: Pick<AuthUser, "is_platform_admin">; activeOrg: ActiveOrg | null } = {
   user: { is_platform_admin: false },
   activeOrg: { orgId: "org-1", name: "Org", role: "admin" },
@@ -20,13 +21,13 @@ afterEach(() => {
 });
 
 describe("abas da área", () => {
-  it("mostra as abas da área, marca a atual e explica a tela", () => {
+  it("mostra as abas da área, marca a atual e não repete a frase da tela", () => {
     rota.atual = "/app/contacts";
     render(<AbasDaArea />);
     const abas = screen.getByRole("navigation", { name: "Telas de Vendas" });
     expect(within(abas).getByRole("link", { name: "Contatos" })).toHaveAttribute("aria-current", "page");
     expect(within(abas).getByRole("link", { name: "Funis" })).toHaveAttribute("href", "/app/kanban");
-    expect(screen.getByText(/As pessoas do outro lado da conversa/)).toBeInTheDocument();
+    expect(screen.queryByText(/As pessoas do outro lado da conversa/)).toBeNull();
   });
 
   it("guarda a aba aberta para o menu lateral", () => {

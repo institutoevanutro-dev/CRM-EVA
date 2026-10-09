@@ -41,7 +41,7 @@ export default async function Page() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="text-[2rem] leading-tight">
           {traduzir("Cadastro", usuario.idioma)}
         </h1>
         <p className="text-sm text-muted-foreground">

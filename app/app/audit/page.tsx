@@ -22,7 +22,7 @@ export default async function AuditPage() {
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Histórico de alterações")}</h1>
+        <h1 className="text-[2rem] leading-tight">{t("Histórico de alterações")}</h1>
         <p className="text-sm text-muted-foreground">
           {traduzir("Tudo o que foi criado, alterado ou apagado na clínica, e por quem. Visível para gestores e administradores.", idioma)}
         </p>

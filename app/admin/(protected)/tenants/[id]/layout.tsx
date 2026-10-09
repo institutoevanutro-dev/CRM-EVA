@@ -86,7 +86,7 @@ export default async function TenantDetailLayout({ children, params }: TenantLay
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">{org?.display_name ?? id}</h1>
+          <h1 className="text-[2rem] leading-tight">{org?.display_name ?? id}</h1>
           {org?.slug && (
             <code className="rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
               {org.slug}

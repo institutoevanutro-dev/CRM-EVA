@@ -122,7 +122,7 @@ export function ExecucoesDeIa() {
   return (
     <div className="mx-auto w-full max-w-5xl p-6" data-testid="execucoes-de-ia">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Execuções de IA")}</h1>
+        <h1 className="text-[2rem] leading-tight">{t("Execuções de IA")}</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
           {t(
             "Tudo que a inteligência artificial fez por aqui — e, quando algo falhou, o que aconteceu e o que fazer.",

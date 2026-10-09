@@ -9907,6 +9907,9 @@ export const DICIONARIO: Traducoes = {
   "Nome do contato, como está no cadastro":
     { es: "Nombre del contacto, tal como está en el registro" },
   "Só a primeira palavra do nome": { es: "Solo la primera palabra del nombre" },
+  "Bom dia": { es: "Buenos días" },
+  "Boa tarde": { es: "Buenas tardes" },
+  "Boa noite": { es: "Buenas noches" },
   "Bom dia / Boa tarde / Boa noite, na hora do envio":
     { es: "Buenos días / Buenas tardes / Buenas noches, a la hora del envío" },
   "Tirar da lista": { es: "Quitar de la lista" },

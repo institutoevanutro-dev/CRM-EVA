@@ -570,7 +570,7 @@
   --color-card-foreground: var(--color-text);
 
   /* Tipografia */
-  --font-titulo: var(--font-josefin), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-titulo: var(--font-cormorant), Georgia, ui-serif, serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
@@ -622,6 +622,15 @@
 
 /* `duration-*` não tem espaço de tema no v4 (o `transitionDuration` do v3 não
    tem equivalente em `@theme`), então o apelido vira utilitário explícito. */
+/* Números de painel: Inter com dígitos de mesma largura e traço firme. O título é
+   serifado, mas número em serifa fina fica difícil de ler de relance. */
+@utility numero {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
 @utility duration-fast {
   transition-duration: var(--duration-fast);
 }
@@ -745,11 +754,12 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Títulos de página no padrão do Eva Financeiro: Josefin Sans, caixa alta e espaçado. */
+  /* Títulos de página como no site da clínica e no PrecificaEva: Cormorant
+     Garamond, em caixa normal. A serifa é fina, por isso o peso 600. */
   h1 {
     font-family: var(--font-titulo);
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
 
   code, kbd, pre, samp {

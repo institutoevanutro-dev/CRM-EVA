@@ -16,7 +16,7 @@ export default async function ActivitiesReportPage() {
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Atividades")}</h1>
+        <h1 className="text-[2rem] leading-tight">{t("Atividades")}</h1>
         <p className="text-sm text-muted-foreground">
           {t("O que aconteceu na operação no período — e quanto disso foi a equipe.")}
         </p>

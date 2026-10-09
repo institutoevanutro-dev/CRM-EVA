@@ -58,7 +58,7 @@ export default async function AtendimentoSettingsPage() {
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="text-[2rem] leading-tight">
           {traduzir("Distribuição de atendimento", idioma)}
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
