@@ -77,7 +77,9 @@ export function usePublishFollowupFlow(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const res = await apiClient.post<SingleResponse>(`/api/v1/ai/followup-flows/${id}/publish`, {});
+      const res = await apiClient.post<{
+        data: FollowupFlowDetailRow & { warnings?: Array<{ node_id: string; message: string }> };
+      }>(`/api/v1/ai/followup-flows/${id}/publish`, {});
       return res.data;
     },
     onSuccess: () => {

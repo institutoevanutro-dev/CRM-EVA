@@ -22,6 +22,8 @@ import { validateFlowForPublish } from "@/lib/followup/validate-publish";
 import { publishFollowupFlowVersion } from "@/lib/followup/publish";
 import type { FlowGraph } from "@/lib/followup/graph-schema";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { variantesDoItem } from "@/lib/midias/esquemas";
+import { hojeNaClinica, situacaoDaMidia, SITUACAO_LEGIVEL } from "@/lib/midias/termo";
 
 export const dynamic = "force-dynamic";
 
@@ -181,5 +183,38 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
     metadata: { version_id: result.version_id },
   });
 
-  return ok(updatedPointer, { requestId });
+  // Aviso, não bloqueio: mídia que não sai agora vira passo pulado em runtime
+  // (o fluxo segue), mas quem publica merece saber antes.
+  const mediaNodes = graph.nodes.flatMap((n) =>
+    n.type === "action" && n.config.mode === "media" ? [{ node_id: n.id, media_id: n.config.media_id }] : [],
+  );
+  const warnings: Array<{ node_id: string; message: string }> = [];
+  if (mediaNodes.length > 0) {
+    const { data: itens } = await admin
+      .from("media_library_items")
+      .select("id, contains_person, consent_signed_at, consent_expires_at, consent_revoked_at, variants")
+      .eq("organization_id", activeOrg.orgId)
+      .in("id", [...new Set(mediaNodes.map((m) => m.media_id))]);
+    const porId = new Map((itens ?? []).map((i) => [i.id, i]));
+    const hoje = hojeNaClinica();
+    for (const { node_id, media_id } of mediaNodes) {
+      const item = porId.get(media_id);
+      if (!item) {
+        warnings.push({ node_id, message: t("Mídia não encontrada na biblioteca.") });
+        continue;
+      }
+      const situacao = situacaoDaMidia(
+        { ...item, variants: variantesDoItem(item.variants, activeOrg.orgId, item.id) },
+        hoje,
+      );
+      if (situacao !== "pronta") {
+        warnings.push({
+          node_id,
+          message: `${t("Esta mídia não pode ser enviada agora")}: ${t(SITUACAO_LEGIVEL[situacao])}.`,
+        });
+      }
+    }
+  }
+
+  return ok({ ...updatedPointer, warnings }, { requestId });
 }

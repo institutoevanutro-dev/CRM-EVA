@@ -15,6 +15,8 @@ import { actionConfigSchema } from "@/lib/followup/graph-schema";
 import { MODOS_DA_ACAO, opcoes, type ModoDaAcao } from "@/lib/followup/vocabulario";
 import { useMessageTemplates } from "@/hooks/inbox/useMessageTemplates";
 import { useT } from "@/hooks/i18n/useT";
+import { useMidias } from "@/hooks/ai/useMidias";
+import { SITUACAO_LEGIVEL } from "@/lib/midias/termo";
 
 import type { ConfigOf } from "./shared";
 
@@ -75,6 +77,45 @@ function SeletorDeModelo({
   );
 }
 
+/** Mesmo molde do seletor de modelo; item que não pode sair fica visível, marcado. */
+function SeletorDeMidia({ id, valor, onChange }: { id: string; valor: string; onChange: (mediaId: string) => void }) {
+  const t = useT();
+  const { data: itens, isLoading, isError } = useMidias();
+
+  if (isLoading) return <p className="text-xs text-text-muted">{t("Carregando sua biblioteca de mídias…")}</p>;
+  if (isError) {
+    return (
+      <p className="text-xs text-error-fg">
+        {t("Não consegui carregar sua biblioteca de mídias. Recarregue a página.")}
+      </p>
+    );
+  }
+  if (!itens?.length) {
+    return (
+      <p className="text-xs text-text-muted">
+        {t("Você ainda não tem mídias na biblioteca. Adicione uma e ela aparece aqui.")}
+      </p>
+    );
+  }
+
+  return (
+    <Select value={valor === "" ? undefined : valor} onValueChange={onChange}>
+      <SelectTrigger id={id}>
+        <SelectValue placeholder={t("Escolha uma mídia")} />
+      </SelectTrigger>
+      <SelectContent>
+        {itens.map((m) => (
+          <SelectItem key={m.id} value={m.id}>
+            {m.situacao === "pronta"
+              ? m.title
+              : `${m.title} (${t("não pode ser enviada agora")}: ${t(SITUACAO_LEGIVEL[m.situacao])})`}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 export function ActionForm({
   config,
   onChange,
@@ -90,6 +131,8 @@ export function ActionForm({
     config.mode === "ai_message" ? (config.fallback_template_id ?? "") : "",
   );
   const [templateId, setTemplateId] = useState(config.mode === "template" ? config.template_id : "");
+  const [mediaId, setMediaId] = useState(config.mode === "media" ? config.media_id : "");
+  const [caption, setCaption] = useState(config.mode === "media" ? (config.caption ?? "") : "");
   const [error, setError] = useState<string | null>(null);
 
   const commit = (next: {
@@ -98,6 +141,8 @@ export function ActionForm({
     promptHint: string;
     fallbackTemplateId: string;
     templateId: string;
+    mediaId: string;
+    caption: string;
   }) => {
     const candidate =
       next.mode === "text"
@@ -108,7 +153,13 @@ export function ActionForm({
               prompt_hint: next.promptHint,
               ...(next.fallbackTemplateId.trim() ? { fallback_template_id: next.fallbackTemplateId } : {}),
             }
-          : { mode: "template" as const, template_id: next.templateId };
+          : next.mode === "media"
+            ? {
+                mode: "media" as const,
+                media_id: next.mediaId,
+                ...(next.caption.trim() ? { caption: next.caption } : {}),
+              }
+            : { mode: "template" as const, template_id: next.templateId };
     const parsed = actionConfigSchema.safeParse(candidate);
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? t("Configuração inválida."));
@@ -118,7 +169,7 @@ export function ActionForm({
     onChange(parsed.data);
   };
 
-  const fields = { body, promptHint, fallbackTemplateId, templateId };
+  const fields = { body, promptHint, fallbackTemplateId, templateId, mediaId, caption };
 
   return (
     <div className="space-y-3">
@@ -189,6 +240,35 @@ export function ActionForm({
                 commit({ mode, ...fields, fallbackTemplateId: v });
               }}
             />
+          </div>
+        </>
+      ) : mode === "media" ? (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="action-media-id">{t("Imagem ou vídeo")}</Label>
+            <SeletorDeMidia
+              id="action-media-id"
+              valor={mediaId}
+              onChange={(v) => {
+                setMediaId(v);
+                commit({ mode, ...fields, mediaId: v });
+              }}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="action-caption">{t("Legenda (opcional)")}</Label>
+            <Textarea
+              id="action-caption"
+              maxLength={1024}
+              value={caption}
+              onChange={(e) => {
+                setCaption(e.target.value);
+                commit({ mode, ...fields, caption: e.target.value });
+              }}
+            />
+            <p className="text-xs text-text-muted">
+              {t("{{nome}} e {{primeiro_nome}} viram o nome do contato; sem nome, a variável sai do texto.")}
+            </p>
           </div>
         </>
       ) : (

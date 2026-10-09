@@ -60,7 +60,7 @@ const INVALID_GRAPH: FlowGraph = {
 
 type Row = Record<string, unknown>;
 
-function makeDb(pointers: Row[], versions: Row[], stages: Row[] = []) {
+function makeDb(pointers: Row[], versions: Row[], stages: Row[] = [], midias: Row[] = []) {
   const tables: Record<string, Row[]> = {
     followup_flow_pointers: pointers,
     followup_flow_versions: versions,
@@ -69,16 +69,19 @@ function makeDb(pointers: Row[], versions: Row[], stages: Row[] = []) {
     // apagada/arquivada = fluxo `active` que nunca matricula ninguém). Sem esta
     // tabela no mock, o caso positivo do `stage_change` não teria como existir.
     crm_stages: stages,
+    media_library_items: midias,
   };
 
   function builder(table: string) {
     const filters: Array<[string, unknown]> = [];
+    let inFilter: [string, unknown[]] | null = null;
     let orderCol: string | null = null;
     let orderAsc = true;
     let mode: "select" | "insert" | "update" | "delete" = "select";
     let payload: Row | undefined;
 
     function matches(row: Row): boolean {
+      if (inFilter && !inFilter[1].includes(row[inFilter[0]])) return false;
       return filters.every(([k, v]) => {
         if (k === "surface") return (row.surface ?? "followup") === v;
         return row[k] === v;
@@ -171,6 +174,10 @@ function makeDb(pointers: Row[], versions: Row[], stages: Row[] = []) {
       },
       eq(col: string, val: unknown) {
         filters.push([col, val]);
+        return b;
+      },
+      in(col: string, vals: unknown[]) {
+        inFilter = [col, vals];
         return b;
       },
       order(col: string, opts?: { ascending?: boolean }) {
@@ -484,6 +491,63 @@ describe("PATCH /api/v1/ai/followup-flows/:id", () => {
 // ---------------------------------------------------------------------------
 
 describe("POST /api/v1/ai/followup-flows/:id/publish", () => {
+  describe("passo de mídia", () => {
+    const PID = "33333333-3333-4333-8333-333333333333";
+    const MID = "44444444-4444-4444-8444-444444444444";
+    const grafo = (mediaId: string): FlowGraph => ({
+      nodes: [
+        trigger("t1"),
+        { id: "m1", type: "action", label: "m1", position: pos, config: { mode: "media", media_id: mediaId } },
+        end("e1"),
+      ],
+      edges: [edge("a", "t1", "m1"), edge("b", "m1", "e1")],
+    });
+    const item = (extra: Row = {}): Row => ({
+      id: MID,
+      organization_id: ORG_ID,
+      contains_person: true,
+      consent_signed_at: null,
+      consent_expires_at: null,
+      consent_revoked_at: null,
+      variants: [
+        { key: "A", storage_path: `${ORG_ID}/${MID}/A.jpg`, mime: "image/jpeg", size_bytes: 10 },
+      ],
+      ...extra,
+    });
+    async function publicar(midias: Row[]) {
+      const db = makeDb(
+        [{ id: PID, organization_id: ORG_ID, status: "draft", draft_graph: grafo(MID) }],
+        [],
+        [],
+        midias,
+      );
+      session("manager", db);
+      const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/publish/route");
+      const res = await POST(req("POST"), ctx(PID));
+      return { res, body: (await res.json()) as { data: { warnings: Array<{ node_id: string; message: string }> } } };
+    }
+
+    it("mídia sem termo: publica (200) e avisa pelo node_id", async () => {
+      const { res, body } = await publicar([item()]);
+      expect(res.status).toBe(200);
+      expect(body.data.warnings).toHaveLength(1);
+      expect(body.data.warnings[0]!.node_id).toBe("m1");
+      expect(body.data.warnings[0]!.message).toContain("sem termo de uso de imagem");
+    });
+
+    it("mídia pronta: sem avisos", async () => {
+      const { res, body } = await publicar([item({ contains_person: false })]);
+      expect(res.status).toBe(200);
+      expect(body.data.warnings).toEqual([]);
+    });
+
+    it("item de outra org: avisa que não foi encontrada", async () => {
+      const { res, body } = await publicar([item({ organization_id: OTHER_ORG_ID, contains_person: false })]);
+      expect(res.status).toBe(200);
+      expect(body.data.warnings[0]!.message).toContain("não encontrada");
+    });
+  });
+
   it("draft_graph null → 422 validation_failed com details.errors", async () => {
     const db = makeDb(
       [{ id: "33333333-3333-4333-8333-333333333333", organization_id: ORG_ID, status: "draft", draft_graph: null }],
