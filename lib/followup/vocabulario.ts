@@ -439,6 +439,7 @@ export const MODOS_DA_ACAO: Record<ModoDaAcao, string> = {
   text: "Texto fixo",
   ai_message: "Mensagem escrita pela IA",
   template: "Modelo de mensagem pronto",
+  media: "Imagem ou vídeo da biblioteca",
 };
 
 // ─── nó final ────────────────────────────────────────────────────────────

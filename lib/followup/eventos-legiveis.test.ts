@@ -351,6 +351,13 @@ describe("os eventos que o plano de tempo trouxe", () => {
       nos, "pt-BR",
     );
     expect(mensagem.titulo).toBe("Pediu ao agente para escrever a mensagem");
+
+    // O passo de mídia não pede nada ao agente.
+    const midia = descreveEvento(
+      evento({ event_type: "turn_enqueued", payload: { purpose: "send_message", mode: "media" } }),
+      nos, "pt-BR",
+    );
+    expect(midia.titulo).toBe("Agendou o envio da mídia");
   });
 
   it("o plano decidido vira frase, não `código: timing_plan_decidido`", () => {

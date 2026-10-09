@@ -220,6 +220,14 @@
       "sublabel": "media_library_item_id: confere o termo de uso de imagem na hora e envia a variante pelo canal; organization_id vem da sessão"
     },
     {
+      "id": "followupMidia",
+      "lane": "motor",
+      "col": 8,
+      "type": "worker",
+      "label": "passo de follow-up com mídia",
+      "sublabel": "imagem ou vídeo da Biblioteca no passo de mensagem; sem termo, vencida ou revogada = passo pulado com o motivo no histórico e aviso na Central, e o fluxo segue"
+    },
+    {
       "id": "turnoMidia",
       "lane": "turno",
       "col": 8,
@@ -316,6 +324,24 @@
       "from": "turnoMidia",
       "to": "midiasEnvio",
       "label": "manda a escolhida pelo envio que confere o termo"
+    },
+    {
+      "id": "e36",
+      "from": "midiasTabela",
+      "to": "followupMidia",
+      "label": "o worker lê o item e recalcula o termo na hora de enviar"
+    },
+    {
+      "id": "e37",
+      "from": "followupMidia",
+      "to": "midiasEnvio",
+      "label": "manda pelo envio que confere o termo"
+    },
+    {
+      "id": "e38",
+      "from": "followupMidia",
+      "to": "central",
+      "label": "passo pulado: abre aviso na Central"
     }
   ],
   "cards": [

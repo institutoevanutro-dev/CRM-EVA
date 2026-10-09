@@ -182,7 +182,9 @@ export function resumoDoNo(node: FlowNode): NoDoDossie {
             ? "o agente escreve e envia a mensagem"
             : node.config.mode === "text"
               ? "envia um texto fixo"
-              : "envia uma mensagem de modelo pronto",
+              : node.config.mode === "media"
+                ? "envia uma imagem ou vídeo da biblioteca"
+                : "envia uma mensagem de modelo pronto",
       };
     case "end":
       return { ...base, resumo: `encerra — ${DESFECHO[node.config.outcome] ?? node.config.outcome}` };
@@ -358,6 +360,7 @@ export function descreveEvento(
       // payload é o que os separa. Sem olhar para ele, o passo de PLANEJAMENTO
       // aparecia como "escrever a mensagem" — uma linha que descreve o passo
       // errado é pior que uma linha genérica, porque não parece errada.
+      if (texto(p.mode) === "media") return { titulo: "Agendou o envio da mídia", detalhe: null, ...motor };
       return texto(p.purpose) === "plan_timing"
         ? { titulo: "Pediu ao agente para planejar os tempos de espera", detalhe: null, ...motor }
         : { titulo: "Pediu ao agente para escrever a mensagem", detalhe: null, ...motor };

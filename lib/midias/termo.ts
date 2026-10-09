@@ -30,3 +30,11 @@ export function situacaoDaMidia(item: ItemDeMidia, hoje: string): SituacaoDaMidi
 export function hojeNaClinica(agora: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(agora);
 }
+
+export const SITUACAO_LEGIVEL: Record<SituacaoDaMidia, string> = {
+  pronta: "pronta",
+  sem_termo: "sem termo de uso de imagem",
+  termo_vencido: "termo vencido",
+  revogada: "termo revogado",
+  arquivo_ausente: "sem arquivo",
+};

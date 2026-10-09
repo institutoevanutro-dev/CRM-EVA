@@ -117,6 +117,19 @@ const ACTION_GRAPH: FlowGraph = {
   edges: [{ id: "a1-e1", source: "a1", target: "e1", priority: 0, condition: { type: "always" } }],
 };
 
+/** Passo de mídia → passo de texto: a mídia recusada não pode encerrar a sequência. */
+const MEDIA_GRAPH: FlowGraph = {
+  nodes: [
+    { id: "m1", type: "action", label: "Foto do antes", position: { x: 0, y: 0 }, config: { mode: "media", media_id: "44444444-4444-4444-8444-444444444444", caption: "Oi" } },
+    { id: "a2", type: "action", label: "Texto", position: { x: 0, y: 0 }, config: { mode: "text", body: "e aí?" } },
+    { id: "e1", type: "end", label: "Done", position: { x: 0, y: 0 }, config: { outcome: "converted" } },
+  ],
+  edges: [
+    { id: "m1-a2", source: "m1", target: "a2", priority: 0, condition: { type: "always" } },
+    { id: "a2-e1", source: "a2", target: "e1", priority: 0, condition: { type: "always" } },
+  ],
+};
+
 const CLASSIFY_GRAPH: FlowGraph = {
   nodes: [
     {
@@ -175,6 +188,7 @@ const FIXED_WAIT_GRAPH: FlowGraph = {
 
 beforeAll(() => {
   flowGraphSchema.parse(ACTION_GRAPH);
+  flowGraphSchema.parse(MEDIA_GRAPH);
   flowGraphSchema.parse(CLASSIFY_GRAPH);
   flowGraphSchema.parse(SMART_WAIT_GRAPH);
   flowGraphSchema.parse(FIXED_WAIT_GRAPH);
@@ -250,6 +264,68 @@ describe("completeTurnForEnrollment — nó action, ciclo completo", () => {
       [enrollmentId],
     );
     expect(Number(events[0].n)).toBe(1); // só o evento simulado — completeTurnForEnrollment não duplicou
+  });
+});
+
+describe("completeTurnForEnrollment — passo de mídia recusada, no Postgres de verdade", () => {
+  it("mídia revogada: a sequência para (turn_skipped, cancelled, sem próximo nó) e a Central recebe o aviso", async () => {
+    const org = "b1d1a000-0000-4000-8000-00000000000a";
+    await seedOrg(org);
+    const contactId = await seedContact(org);
+    const { pointerId, versionId } = await seedFlow(org, MEDIA_GRAPH);
+    const enrollmentId = await seedEnrollment({ org, pointerId, versionId, contactId, currentNodeId: "m1" });
+
+    const jobs: FollowupJobRequest[] = [];
+    await runFollowupTick(makeTickDeps(jobs), { limit: 5 });
+    expect(jobs).toHaveLength(1);
+    // As duas metades do contrato casam: o worker lê o que o engine enfileirou.
+    const lido = followupTurnPayloadSchema.parse(jobs[0]!.payload);
+    expect(lido).toMatchObject({ media_id: "44444444-4444-4444-8444-444444444444", media_caption: "Oi" });
+    expect(lido.fixed_body).toBeUndefined();
+
+    // O que o worker devolve quando o envio bate na 422 de mídia recusada.
+    const motivo = "Esta mídia não pode ser enviada agora: consentimento revogado.";
+    await completeTurnForEnrollment(db, org, enrollmentId, "m1", { kind: "skipped", reason: motivo, midiaRecusada: true });
+
+    const depois = await getEnrollment(enrollmentId);
+    expect(depois.current_node_id).toBe("m1"); // não andou para o próximo nó
+    expect(depois.status).toBe("cancelled");
+    const { rows: [canc] } = await pool.query<{ cancel_reason: string }>(`select cancel_reason from followup_enrollments where id = $1`, [enrollmentId]);
+    expect(canc!.cancel_reason).toBe(motivo);
+
+    const { rows: eventos } = await pool.query<{ event_type: string; payload: Record<string, unknown> }>(
+      `select event_type, payload from followup_enrollment_events where enrollment_id = $1 order by created_at`,
+      [enrollmentId],
+    );
+    expect(eventos.map((e) => e.event_type)).toEqual(["turn_enqueued", "turn_skipped"]);
+    expect(eventos[0]!.payload).toMatchObject({ purpose: "send_message", mode: "media" });
+    expect(eventos[1]!.payload).toEqual({ reason: motivo });
+
+    const { rows: avisos } = await pool.query<{ title: string; body: string; ref_kind: string }>(
+      `select title, body, ref_kind from agent_inbox_items where organization_id = $1 and kind = 'followup_dead' and ref_id = $2`,
+      [org, enrollmentId],
+    );
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]!.title).toBe("Um follow-up parou: a mídia não pode ser enviada");
+    expect(avisos[0]!.ref_kind).toBe("followup_enrollment");
+    expect(avisos[0]!.body).toContain(motivo);
+    expect(avisos[0]!.body).toContain('passo "Foto do antes"');
+    expect(avisos[0]!.body).toContain("A sequência foi encerrada para este contato.");
+  });
+
+  it("pulo sem mídia recusada (24h do Instagram) não abre aviso", async () => {
+    const org = "b1d1a001-0000-4000-8000-00000000000b";
+    await seedOrg(org);
+    const contactId = await seedContact(org);
+    const { pointerId, versionId } = await seedFlow(org, MEDIA_GRAPH);
+    const enrollmentId = await seedEnrollment({ org, pointerId, versionId, contactId, currentNodeId: "m1" });
+    await runFollowupTick(makeTickDeps([]), { limit: 5 });
+
+    await completeTurnForEnrollment(db, org, enrollmentId, "m1", { kind: "pulado", reason: "fora das 24h" });
+
+    expect((await getEnrollment(enrollmentId)).current_node_id).toBe("a2");
+    const { rows } = await pool.query(`select 1 from agent_inbox_items where organization_id = $1 and ref_id = $2`, [org, enrollmentId]);
+    expect(rows).toHaveLength(0);
   });
 });
 

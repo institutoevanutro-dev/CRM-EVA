@@ -32,7 +32,7 @@ export const KIND_LABEL = {
   handoff: "O assistente passou um atendimento para um humano",
   promotion_review: "Proposta de melhoria do assistente aguardando sua revisão",
   judge_unaligned: "O avaliador de qualidade precisa de recalibragem",
-  followup_dead: "Um fluxo de follow-up parou de tentar",
+  followup_dead: "Um fluxo de follow-up precisa de atenção",
   snooze_expired: "O lead não respondeu no prazo que você definiu",
   next_action_ambiguous: "Próxima ação sem negócio definido — precisa da sua escolha",
   risk_backlog_seeded: "Negócios que já estavam parados — precisam de uma decisão",

@@ -41,7 +41,8 @@ export type TurnResult =
   /** `via`: saiu pelo modelo de reserva do passo `ai_message` (a IA não conseguiu enviar). */
   | { kind: "sent"; via?: "modelo_de_reserva" }
   /** Encerra a inscrição. `outcome` (ex.: humano ativo → `handoff`) vai à coluna quando presente. */
-  | { kind: "skipped"; reason: string; outcome?: EnrollmentOutcome }
+  /** `midiaRecusada`: a mídia do passo não pôde sair (revogada, sem arquivo…) — a sequência para e abre aviso na Central. */
+  | { kind: "skipped"; reason: string; outcome?: EnrollmentOutcome; midiaRecusada?: true }
   /** O passo não enviou e o fluxo SEGUE (ex.: fora das 24h do Instagram). `skipped` encerra. */
   | { kind: "pulado"; reason: string }
   | { kind: "classified"; class: string }
@@ -192,6 +193,17 @@ export async function completeTurnForEnrollment(
   }
 
   if(result.kind === "skipped"){
+    if (result.midiaRecusada) {
+      // Aviso ANTES do passo, a ordem do `markDead`: o retry depois de uma queda
+      // entre os dois duplica o aviso (visível); a ordem inversa podia perdê-lo.
+      const fluxo = (await db.loadFlowPointerName(orgId, enrollment.pointer_id)) ?? enrollment.pointer_id;
+      await db.insertDeadInboxItem({
+        organization_id: orgId,
+        title: "Um follow-up parou: a mídia não pode ser enviada",
+        body: `${result.reason} Fluxo "${fluxo}", passo "${node.label}". A sequência foi encerrada para este contato.`,
+        ref_id: enrollmentId,
+      });
+    }
     await applyStep("turn_skipped",{reason:result.reason},{status:"cancelled",...(result.outcome?{outcome:result.outcome}:{}),cancel_reason:result.reason,completed_at:now.toISOString(),next_eval_at:null});
     return;
   }

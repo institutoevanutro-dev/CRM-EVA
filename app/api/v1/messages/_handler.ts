@@ -45,6 +45,7 @@ import {
   BUCKET_DA_BIBLIOTECA,
   hojeNaClinica,
   situacaoDaMidia,
+  SITUACAO_LEGIVEL,
   type SituacaoDaMidia,
   type Variante,
 } from "@/lib/midias/termo";
@@ -296,13 +297,6 @@ function previewFrom(input: {
     return `[${input.type ?? "media"}]`;
   return "";
 }
-
-const SITUACAO_LEGIVEL: Record<Exclude<SituacaoDaMidia, "pronta">, string> = {
-  sem_termo: "sem termo de uso de imagem",
-  termo_vencido: "termo vencido",
-  revogada: "termo revogado",
-  arquivo_ausente: "sem arquivo",
-};
 
 /**
  * Lê o item da biblioteca com o admin client, SEMPRE pela org da conversa, e

@@ -13,6 +13,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 
 import type { FollowupFlowDetailRow } from "@/hooks/followup/useFollowupFlow";
 import type { FlowGraph } from "@/lib/followup/graph-schema";
@@ -21,12 +22,20 @@ import { PublishBar } from "./PublishBar";
 
 // As mutações da barra não participam do fluxo testado — excluir a seleção é
 // callback do canvas (estado local), não request. Mutação inerte, sem QueryClient.
+vi.mock("sonner", () => ({ toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn() } }));
+
+const publicacao = vi.hoisted(() => ({ resposta: { warnings: [] as Array<{ node_id: string; message: string }> } }));
+
 vi.mock("@/hooks/followup/useFollowupFlow", () => {
   const mutacao = () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false });
   return {
     useDeleteFollowupFlow: mutacao,
     useDisableFollowupFlow: mutacao,
-    usePublishFollowupFlow: mutacao,
+    usePublishFollowupFlow: () => ({
+      mutate: (_v: unknown, o: { onSuccess?: (d: unknown) => void }) => o.onSuccess?.(publicacao.resposta),
+      mutateAsync: vi.fn(),
+      isPending: false,
+    }),
     useRollbackFollowupFlow: mutacao,
     useSaveFollowupFlowDraft: mutacao,
     useUpdateHandoffPolicy: mutacao,
@@ -55,7 +64,7 @@ const FLUXO: FollowupFlowDetailRow = {
 
 const GRAFO: FlowGraph = { nodes: [], edges: [] };
 
-function montar(selection: "node" | "edge" | null) {
+function montar(selection: "node" | "edge" | null, onPublishSuccess: () => void = () => {}) {
   const onDeleteSelection = vi.fn();
   render(
     <PublishBar
@@ -67,7 +76,7 @@ function montar(selection: "node" | "edge" | null) {
       onDeleteSelection={onDeleteSelection}
       onSaved={() => {}}
       onPublishErrors={() => {}}
-      onPublishSuccess={() => {}}
+      onPublishSuccess={onPublishSuccess}
       canAutoFit={false}
     />,
   );
@@ -133,5 +142,21 @@ describe("PublishBar — excluir a seleção pede confirmação", () => {
 
     expect(screen.queryByTestId("delete-selection")).toBeNull();
     expect(screen.getByTestId("delete-followup-flow")).toBeInTheDocument();
+  });
+});
+
+describe("PublishBar — aviso de mídia ao publicar", () => {
+  it("warning vira toast de aviso e a publicação segue", async () => {
+    publicacao.resposta = { warnings: [{ node_id: "m1", message: "Esta mídia não pode ser enviada agora: sem termo de uso de imagem." }] };
+    const onPublishSuccess = vi.fn();
+    montar(null, onPublishSuccess);
+
+    await usuario().click(screen.getByTestId("publish-button"));
+
+    await waitFor(() => expect(onPublishSuccess).toHaveBeenCalledTimes(1));
+    expect(toast.warning).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ description: expect.stringContaining("sem termo de uso de imagem") }),
+    );
   });
 });

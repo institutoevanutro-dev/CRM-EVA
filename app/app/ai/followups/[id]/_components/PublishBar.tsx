@@ -95,7 +95,15 @@ export function PublishBar({
     }
 
     publish.mutate(undefined, {
-      onSuccess: () => onPublishSuccess(),
+      onSuccess: (publicado) => {
+        const avisos = publicado.warnings ?? [];
+        if (avisos.length > 0) {
+          toast.warning(t("Publicado, mas há mídia que não pode ser enviada agora."), {
+            description: avisos.map((w) => w.message).join(" "),
+          });
+        }
+        onPublishSuccess();
+      },
       onError: (err) => {
         if (err instanceof ApiError && err.code === "validation_failed") {
           const errors = (err.details?.errors as PublishValidationError[] | undefined) ?? [];

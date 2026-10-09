@@ -92,6 +92,9 @@ export interface FollowupJobRequest {
     fallback_template_id?: string;
     /** action (mode 'text') — corpo pronto; o turno envia sem chamar o modelo. */
     fixed_body?: string;
+    /** action (mode 'media') — item da biblioteca de mídias; legenda opcional com {{volta}} já interpolado. */
+    media_id?: string;
+    media_caption?: string;
     /** action (mode 'template') — id em `message_templates`; o turno carrega o corpo e envia sem modelo. */
     template_id?: string;
     volta_index?: number;
@@ -250,7 +253,7 @@ function interpolarVolta(texto: string, events: EnrollmentEventRef[]): string {
   return texto.replaceAll("{{volta}}", String(volta.index)).replaceAll("{{voltas}}", String(volta.total));
 }
 
-function turnPayloadExtras(
+export function turnPayloadExtras(
   node: FlowNode,
   smartWaits: EsperaAdaptativa[],
   events: EnrollmentEventRef[] = [],
@@ -263,6 +266,12 @@ function turnPayloadExtras(
   }
   if (node.type === "action" && node.config.mode === "text") {
     return { fixed_body: interpolarVolta(node.config.body, events) };
+  }
+  if (node.type === "action" && node.config.mode === "media") {
+    return {
+      media_id: node.config.media_id,
+      ...(node.config.caption ? { media_caption: interpolarVolta(node.config.caption, events) } : {}),
+    };
   }
   if (node.type === "action" && node.config.mode === "template") {
     const volta = latestRepeatIndex(events);
@@ -386,7 +395,11 @@ async function applyResult(
     enrollment_id: enrollment.id,
     node_id: node.id,
     event_type: wantedType,
-    payload: eventPayload(result),
+    // O passo de mídia não pede nada ao agente: o `mode` deixa a linha do dossiê dizer isso.
+    payload: {
+      ...eventPayload(result),
+      ...(result.kind === "enqueue_turn" && node.type === "action" && node.config.mode === "media" ? { mode: "media" } : {}),
+    },
     idempotency_key: idemKey,
   });
   const isReplay = !inserted;
