@@ -31,6 +31,10 @@ export interface McpContext {
    * negócios, a agenda e os pedidos de outro paciente não saem do turno.
    */
   contatoDoTurno?: string;
+  /** `Idempotency-Key` do cliente MCP externo, lida do header pela rota. */
+  idempotencyKey?: string;
+  /** Job do runtime do agente: deriva a chave de idempotência das criações. */
+  sourceJobId?: string;
   organizationId: string;
   role: Role;
   actor: Actor;

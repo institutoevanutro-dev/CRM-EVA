@@ -33,7 +33,11 @@ function summarizeResult(result: unknown): string | undefined {
   return undefined;
 }
 
-export function createMcpServer(auth: McpAuthResult, requestId: string): McpServer {
+export function createMcpServer(
+  auth: McpAuthResult,
+  requestId: string,
+  idempotencyKey?: string,
+): McpServer {
   const server = new McpServer({
     name: SERVER_NAME,
     version: SERVER_VERSION,
@@ -68,6 +72,7 @@ export function createMcpServer(auth: McpAuthResult, requestId: string): McpServ
           apiTokenId: auth.apiTokenId,
           requestId,
           supabase,
+          ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
         };
 
         try {

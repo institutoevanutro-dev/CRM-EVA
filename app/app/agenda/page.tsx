@@ -240,6 +240,11 @@ export default async function AgendaPage() {
 
   return (
     <AgendaClient
+      // O fuso RESOLVIDO da organização: a régua da grade inteira. `page.tsx`
+      // é a única que tem `activeOrg.timezone`, e até aqui ele parava em
+      // `hojeNaOrganizacao` — a âncora era da organização, mas os blocos e a
+      // linha do "agora" continuavam no relógio do navegador (issue #1362).
+      fusoDaAgenda={fusoDaAgenda}
       fusoDeApresentacao={fusoDeApresentacao}
       // A MESMA data que a semente acima usou. Sem isto, o cliente recalcula com
       // `new Date()` do navegador e a divergência volta INTEIRA — não só na
@@ -259,7 +264,7 @@ export default async function AgendaPage() {
       // O piso da rota de marcar é `agent`; `viewer` — e o acompanhamento só de
       // leitura, que `resolveActiveOrg` resolve como `viewer` — levaria 403. A
       // tela esconder é cortesia: quem decide segue sendo a rota.
-      podeMarcarEncaixe={ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent}
+      podeMarcar={ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent}
       tiposIniciais={(tipos ?? []).map((t) => ({
         id: t.id,
         nome: t.name,

@@ -127,6 +127,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { ensureConversation } from "@/lib/automation/start-conversation";
 import { adiarAteAJanelaAbrir } from "@/lib/automation/janela-do-canal";
+import { canalAceitaTextoLivreAgora } from "@/lib/channels/janela";
 import { espacarEnvio } from "@/lib/automation/throttle";
 import { providersDeEnvioAutomatico } from "@/lib/channels";
 import { env } from "@/lib/env";
@@ -219,15 +220,40 @@ export { aplicarMoldeDoLembrete, montarLembrete };
  * recente do contato, onde a pessoa já fala; senão, o primeiro da lista, que
  * quem consulta entrega em ordem fixa. Nenhum: `null`, e a rodada pula.
  *
+ * Sem canal elegível e com canal automático conectado, o motivo do pulo é
+ * `canal_fora_da_janela_24h` (a rota registra no log): o degrau NÃO carimba e a
+ * próxima rodada tenta de novo, quando o contato escrever.
+ *
  * A regra repete o filtro de provider de propósito: se a consulta mudar, o
  * Instagram continua sem ganhar. Pura e exportada, como `degrausPendentes`.
  */
 export function escolherCanalDoLembrete(
   sessoes: ReadonlyArray<{ id: string; provider: string }>,
-  conversas: ReadonlyArray<{ channel_session_id: string | null }>,
+  conversas: ReadonlyArray<{ channel_session_id: string | null; last_inbound_at?: string | null }>,
+  agora: Date = new Date(),
 ): string | null {
   const automaticos = new Set<string>(providersDeEnvioAutomatico());
-  const elegiveis = new Set(sessoes.filter((s) => automaticos.has(s.provider)).map((s) => s.id));
+  // Janela de 24 h (porte do upstream #2620): canal que não aceita texto livre
+  // com a janela do contato fechada NÃO é escolhido, senão o carimbo marca como
+  // enviado o que a Meta recusa na entrega. A régua é o `last_inbound_at` mais
+  // recente do contato NAQUELE canal; sem ele, a janela está fechada.
+  const ultimoInbound = new Map<string, string>();
+  for (const c of conversas) {
+    if (!c.channel_session_id || !c.last_inbound_at) continue;
+    const atual = ultimoInbound.get(c.channel_session_id);
+    if (!atual || new Date(c.last_inbound_at) > new Date(atual)) {
+      ultimoInbound.set(c.channel_session_id, c.last_inbound_at);
+    }
+  }
+  const elegiveis = new Set(
+    sessoes
+      .filter(
+        (s) =>
+          automaticos.has(s.provider) &&
+          canalAceitaTextoLivreAgora(s.provider, ultimoInbound.get(s.id) ?? null, agora),
+      )
+      .map((s) => s.id),
+  );
   const daConversa = conversas.find((c) => c.channel_session_id && elegiveis.has(c.channel_session_id));
   return daConversa?.channel_session_id ?? [...elegiveis][0] ?? null;
 }
@@ -277,6 +303,35 @@ export function vencidoNaMarcacao(
 ): boolean {
   if (!marcadoEm) return false;
   return comeca.getTime() - degrauMin * 60_000 <= marcadoEm.getTime();
+}
+
+/**
+ * Véspera que cairia no MESMO DIA da marcação, no fuso da organização
+ * (porte do upstream melgarafael/DeskcommCRM#2349).
+ *
+ * `vencidoNaMarcacao` pega quem marca DEPOIS da hora do degrau. Fica de fora
+ * quem marca ANTES dela no mesmo dia: marcou hoje às 9h para amanhã às 14h, o
+ * degrau de 1 dia vence hoje às 14h e o paciente recebe "lembrando do seu
+ * compromisso" cinco horas depois de confirmar. Só degrau de 1 dia ou mais: o
+ * aviso curto (1h antes) no dia da marcação continua útil.
+ *
+ * Sem `marcadoEm` ou sem fuso legível a guarda fica fora do caminho: fuso
+ * inválido faria o `Intl` lançar e derrubar a rodada de todas as organizações.
+ */
+export function vesperaNoDiaDaMarcacao(
+  comeca: Date,
+  degrauMin: number,
+  marcadoEm: Date | null | undefined,
+  timezone: string | null | undefined,
+): boolean {
+  if (!marcadoEm || !timezone || degrauMin < 1440) return false;
+  let dia: Intl.DateTimeFormat;
+  try {
+    dia = new Intl.DateTimeFormat("en-CA", { timeZone: timezone });
+  } catch {
+    return false;
+  }
+  return dia.format(new Date(comeca.getTime() - degrauMin * 60_000)) === dia.format(marcadoEm);
 }
 
 /**
@@ -347,6 +402,8 @@ export function degrausPendentes(input: {
    * direção de nunca reenviar).
    */
   enviadoEm?: Date | null;
+  /** Fuso da organização — a régua de "mesmo dia" de `vesperaNoDiaDaMarcacao`. */
+  timezone?: string | null;
 }): number[] {
   const enviados = new Set(input.jaEnviados ?? []);
   // ─── REMARCAÇÃO PARA MAIS LONGE REARMA O DEGRAU DA DATA NOVA (#2243) ──────
@@ -400,7 +457,8 @@ export function degrausPendentes(input: {
       (degrau) =>
         !enviados.has(degrau) &&
         estaNaHora(input.agora, input.comeca, degrau) &&
-        !vencidoNaMarcacao(input.comeca, degrau, marcadoEm),
+        !vencidoNaMarcacao(input.comeca, degrau, marcadoEm) &&
+        !vesperaNoDiaDaMarcacao(input.comeca, degrau, marcadoEm, input.timezone),
     )
     .sort((a, b) => b - a);
 }
@@ -462,6 +520,21 @@ async function handle(req: NextRequest): Promise<Response> {
     motivos[motivo] = (motivos[motivo] ?? 0) + 1;
   };
 
+  // Uma consulta por organização na rodada, não por compromisso: o fuso entra
+  // em `degrausPendentes`, antes de qualquer outra leitura da linha.
+  const organizacoes = new Map<string, { timezone: string | null; locale: string | null } | null>();
+  const organizacaoDe = async (id: string) => {
+    if (!organizacoes.has(id)) {
+      const { data: o } = await admin
+        .from("organizations")
+        .select("timezone, locale")
+        .eq("id", id)
+        .maybeSingle();
+      organizacoes.set(id, (o as { timezone: string | null; locale: string | null } | null) ?? null);
+    }
+    return organizacoes.get(id) ?? null;
+  };
+
   for (const linha of linhas) {
     const tipo = tipoDe(linha);
     if (!tipo) {
@@ -481,6 +554,7 @@ async function handle(req: NextRequest): Promise<Response> {
       // O instante do último carimbo (#2243): sem ele a limpeza dos degraus
       // da data antiga fica de fora e a remarcação para mais longe não rearma.
       enviadoEm: linha.reminder_sent_at ? new Date(linha.reminder_sent_at) : null,
+      timezone: (await organizacaoDe(linha.organization_id))?.timezone ?? "America/Sao_Paulo",
     });
     if (pendentes.length === 0) {
       pular("ainda_nao");
@@ -526,15 +600,25 @@ async function handle(req: NextRequest): Promise<Response> {
       .order("id", { ascending: true });
     const { data: conversas } = await admin
       .from("conversations")
-      .select("channel_session_id")
+      .select("channel_session_id, last_inbound_at")
       .eq("organization_id", org)
       .eq("contact_id", contato.id)
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(20);
-    const canalId = escolherCanalDoLembrete(sessoes ?? [], conversas ?? []);
+    const canalId = escolherCanalDoLembrete(sessoes ?? [], conversas ?? [], agora);
 
     if (!canalId) {
-      pular("sem_canal");
+      // Pulo ANTES do carimbo (upstream #2620): o degrau segue pendente.
+      const motivo = (sessoes ?? []).length > 0 ? "canal_fora_da_janela_24h" : "sem_canal";
+      if (motivo === "canal_fora_da_janela_24h") {
+        logger.warn("[agenda-reminder] lembrete pulado: nenhum canal aceita texto livre agora", {
+          appointmentId: linha.id,
+          organizationId: org,
+          motivo,
+          requestId,
+        });
+      }
+      pular(motivo);
       continue;
     }
 
@@ -544,11 +628,7 @@ async function handle(req: NextRequest): Promise<Response> {
       continue;
     }
 
-    const { data: organizacao } = await admin
-      .from("organizations")
-      .select("locale")
-      .eq("id", org)
-      .maybeSingle();
+    const organizacao = await organizacaoDe(org);
 
     // O texto próprio do tipo vence; sem ele, o modelo legado
     // (`reminder_template_name`) sai CRU, como sempre saiu; sem os dois, a

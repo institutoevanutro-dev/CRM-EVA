@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 import { GradeDaAgenda } from "./GradeDaAgenda";
 import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
+import { dataDeParede, diaLocalISO } from "@/lib/agenda/fuso";
 
 /**
  * A AGENDA QUE RESPONDE — o que liga a grade à disponibilidade real e ao
@@ -51,6 +52,7 @@ export function AgendaInterativa({
   visao,
   ancora,
   agora,
+  fuso,
   pessoas,
   agendamentos,
   recorte,
@@ -65,6 +67,11 @@ export function AgendaInterativa({
   ancora: Date;
   /** INJETADO, como na grade: relógio lido aqui dentro daria dois relógios ao teste. */
   agora: Date;
+  /**
+   * O fuso RESOLVIDO da organização — a régua de hora de parede da grade.
+   * Sem ele a grade desenha no relógio do navegador (issue #1362).
+   */
+  fuso: string;
   pessoas: Pessoa[];
   agendamentos: Agendamento[];
   /** A MESMA janela que a grade desenha — vem de quem já a calcula, sem recontá-la. */
@@ -98,7 +105,13 @@ export function AgendaInterativa({
    */
   tipos: Array<{ id: string; nome: string; duracaoMin: number }>;
   onEscolherTipo: (id: string) => void;
-  onMarcarEm: (instante: string) => void;
+  /**
+   * O clique num bloco livre da grade. OPCIONAL de propósito: quem só lê não
+   * recebe esta prop, e a AUSÊNCIA dela é o que desmonta a interação inteira
+   * abaixo — oferecer o gesto a quem não pode executá-lo é oferecer um 403, que
+   * é o defeito que este PR fecha. `undefined` = grade de leitura.
+   */
+  onMarcarEm?: (instante: string) => void;
   onAbrirAgendamento?: (id: string) => void;
   className?: string;
 }) {
@@ -112,10 +125,16 @@ export function AgendaInterativa({
     const mapa: Record<string, Array<{ instante: string; rotulo: string }>> = {};
     for (const s of horarios?.slots ?? []) {
       const d = new Date(s.inicio);
-      (mapa[format(d, "yyyy-MM-dd")] ??= []).push({ instante: s.inicio, rotulo: format(d, "HH:mm") });
+      // Chave E rótulo no fuso da ORGANIZAÇÃO: a grade da ao lado já desenha
+      // nessa régua, e um `format(d, ...)` aqui anuncia "às 09:00" para um
+      // bloco que pinta às 10:00 (issue #1362).
+      (mapa[diaLocalISO(d, fuso)] ??= []).push({
+        instante: s.inicio,
+        rotulo: format(dataDeParede(d, fuso), "HH:mm"),
+      });
     }
     return mapa;
-  }, [horarios]);
+  }, [horarios, fuso]);
 
   /**
    * Por que a grade está travada — a MESMA ordem do painel de marcação, e de
@@ -202,13 +221,13 @@ export function AgendaInterativa({
       setOtimista(null);
       setRecusa(
         `A remarcação não foi aceita — o compromisso voltou para ${format(
-          new Date(antes.comeca),
+          dataDeParede(new Date(antes.comeca), fuso),
           "EEEE, d 'de' MMMM 'às' HH:mm",
           { locale: localeDaData },
         )}.`,
       );
     });
-  }, [agendamentos, pendente, remarcar]);
+  }, [agendamentos, pendente, remarcar, localeDaData, fuso]);
 
   const nomeDoPendente = pendente
     ? (agendamentos.find((a) => a.id === pendente.id)?.titulo ?? "o compromisso")
@@ -319,7 +338,7 @@ export function AgendaInterativa({
           <p className="text-xs leading-4 text-text">
             {t("Remarcar")} <span className="font-semibold">{nomeDoPendente}</span> {t("para")}{" "}
             <span className="font-semibold">
-              {format(new Date(pendente.instante), "EEEE, d 'de' MMMM 'às' HH:mm", { locale: localeDaData })}
+              {format(dataDeParede(new Date(pendente.instante), fuso), "EEEE, d 'de' MMMM 'às' HH:mm", { locale: localeDaData })}
             </span>
             {t("? Quem foi atendido recebe o aviso da mudança.")}
           </p>
@@ -355,12 +374,13 @@ export function AgendaInterativa({
         visao={visao}
         ancora={ancora}
         agora={agora}
+        fuso={fuso}
         pessoas={pessoas}
         agendamentos={desenhados}
         onAbrirAgendamento={onAbrirAgendamento}
         className="min-h-0 flex-1"
         interacao={
-          tipo
+          tipo && onMarcarEm
             ? {
                 horariosPorDia,
                 motivo,

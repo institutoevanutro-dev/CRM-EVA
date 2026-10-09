@@ -116,7 +116,7 @@ describe("a anotação interna do compromisso chega à tela de quem atende", () 
 
   it("a rota do detalhe lê a coluna que o assistente escreve", () => {
     const get = readFileSync("app/api/v1/agenda/agendamentos/[id]/route.ts", "utf8");
-    expect(get).toMatch(/select\(\s*"id,title,notes,location_kind,/);
+    expect(get).toMatch(/select\(\s*"id,title,notes,description,location_kind,location_details,/);
   });
 
   it("a anotação NÃO entra na listagem — ela é interna, e a listagem também serve o assistente", () => {

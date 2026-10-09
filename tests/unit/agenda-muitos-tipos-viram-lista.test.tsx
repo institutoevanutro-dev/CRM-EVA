@@ -45,6 +45,7 @@ function montar(quantos: number) {
       visao="semana"
       ancora={AGORA}
       agora={AGORA}
+      fuso="America/Sao_Paulo"
       pessoas={[]}
       agendamentos={[]}
       recorte={{ de: "2026-09-20", ate: "2026-09-26" }}

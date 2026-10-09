@@ -160,3 +160,25 @@ export function formatarDecorrido(ms: number): string {
 export const LIMIAR_URGENTE_MS = 2 * 60 * 60 * 1000;
 
 export { WINDOW_MS };
+
+/**
+ * Este canal consegue mandar texto livre AGORA, ou o que sair vai ser recusado
+ * na entrega? (porte do upstream melgarafael/DeskcommCRM#2620, issue #2595)
+ *
+ * `estadoDaJanela` é a régua; este predicado é o veredito "não está fechada"
+ * para quem vai ENVIAR. Provider que a matriz não conhece responde `true`:
+ * barrar envio por uma regra que não existe puniria um canal que talvez envie.
+ */
+export function canalAceitaTextoLivreAgora(
+  provider: string | null | undefined,
+  lastInboundAt: string | null,
+  agora: Date,
+): boolean {
+  let estado: EstadoDaJanela;
+  try {
+    estado = estadoDaJanela(provider, lastInboundAt, agora);
+  } catch {
+    return true;
+  }
+  return estado.tipo !== "fechada";
+}

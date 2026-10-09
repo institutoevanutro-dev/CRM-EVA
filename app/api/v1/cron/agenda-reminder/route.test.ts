@@ -24,7 +24,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { providersDeEnvioAutomatico } from "@/lib/channels";
-import { CHANNEL_PROVIDER_INSTAGRAM } from "@/lib/channels/capabilities";
+import {
+  CHANNEL_PROVIDER_INSTAGRAM,
+  CHANNEL_PROVIDER_META,
+  CHANNEL_PROVIDER_WACALLS,
+} from "@/lib/channels/capabilities";
+import { canalAceitaTextoLivreAgora } from "@/lib/channels/janela";
 
 import { degrausPendentes, escolherCanalDoLembrete, estaNaHora, montarLembrete } from "./route";
 
@@ -409,5 +414,116 @@ describe("as consultas do canal (estrutural)", () => {
     expect(conversas).toContain('.eq("organization_id", org)');
     expect(conversas).toContain('.eq("contact_id", contato.id)');
     expect(conversas).toContain('.order("last_message_at"');
+  });
+});
+
+describe("degrausPendentes — a véspera não sai no dia em que a reunião foi marcada", () => {
+  // Amanhã 14h em São Paulo (17h UTC); avisos de 1 dia e de 1 hora.
+  const comeca = new Date("2026-10-06T17:00:00.000Z");
+  const base = { comeca, principal: 1440, extras: [60], jaEnviados: null as number[] | null, timezone: "America/Sao_Paulo" };
+
+  it("marcou hoje às 9h para amanhã às 14h: a véspera de hoje às 14h não sai", () => {
+    const criadoEm = new Date("2026-10-05T12:00:00.000Z");
+    expect(degrausPendentes({ ...base, criadoEm, agora: new Date("2026-10-05T17:00:00.000Z") })).toEqual([]);
+  });
+
+  it("o aviso de 1 hora continua saindo amanhã", () => {
+    const criadoEm = new Date("2026-10-05T12:00:00.000Z");
+    expect(degrausPendentes({ ...base, criadoEm, agora: new Date("2026-10-06T16:00:00.000Z") })).toEqual([60]);
+  });
+
+  it("marcou ontem para amanhã: a véspera sai normalmente hoje", () => {
+    const criadoEm = new Date("2026-10-04T12:00:00.000Z");
+    expect(degrausPendentes({ ...base, criadoEm, agora: new Date("2026-10-05T17:00:00.000Z") })).toEqual([1440]);
+  });
+
+  it("o dia é o do fuso da organização, não o UTC", () => {
+    // 22h de SP já é o dia seguinte em UTC; para SP a véspera (dia 5, 14h) é o mesmo dia.
+    const criadoEm = new Date("2026-10-05T01:00:00.000Z"); // dia 4, 22h em SP
+    expect(degrausPendentes({ ...base, criadoEm, agora: new Date("2026-10-05T17:00:00.000Z") })).toEqual([1440]);
+  });
+
+  it("aviso curto no dia da marcação não é afetado", () => {
+    // Marcou hoje às 10h para hoje às 18h: o aviso das 17h sai.
+    const hoje18 = new Date("2026-10-05T21:00:00.000Z");
+    expect(
+      degrausPendentes({ ...base, comeca: hoje18, criadoEm: new Date("2026-10-05T13:00:00.000Z"), agora: new Date("2026-10-05T20:00:00.000Z") }),
+    ).toEqual([60]);
+  });
+
+  it("sem fuso a guarda fica fora do caminho", () => {
+    const criadoEm = new Date("2026-10-05T12:00:00.000Z");
+    expect(degrausPendentes({ ...base, timezone: null, criadoEm, agora: new Date("2026-10-05T17:00:00.000Z") })).toEqual([1440]);
+  });
+});
+
+describe("vesperaNoDiaDaMarcacao — fuso ilegível não derruba a rodada", () => {
+  it("fuso inválido devolve false em vez de lançar (o cron é de todas as organizações)", async () => {
+    const { vesperaNoDiaDaMarcacao } = await import("./route");
+    const marcadoEm = new Date("2026-10-05T12:00:00Z");
+    const comeca = new Date("2026-10-06T17:00:00Z");
+    expect(() => vesperaNoDiaDaMarcacao(comeca, 1440, marcadoEm, "Brasilia")).not.toThrow();
+    expect(vesperaNoDiaDaMarcacao(comeca, 1440, marcadoEm, "Brasilia")).toBe(false);
+  });
+});
+
+describe("escolherCanalDoLembrete — fora da janela de 24 h não vira \"enviado\" (upstream #2620)", () => {
+  const MIN = 60_000;
+  const agora = new Date("2026-10-05T12:00:00Z");
+  const ha3Dias = new Date(agora.getTime() - 3 * 24 * 60 * MIN).toISOString();
+  const ha1Hora = new Date(agora.getTime() - 60 * MIN).toISOString();
+  const meta = { id: "canal-meta", provider: CHANNEL_PROVIDER_META as string };
+  // O canal "sem janela" é perguntado ao módulo de canais, nunca nomeado
+  // (doutrina restricao-de-canal): um provider de envio automático que aceita
+  // texto livre mesmo sem mensagem do cliente.
+  const semJanela = providersDeEnvioAutomatico().find((p) => canalAceitaTextoLivreAgora(p, null, agora));
+  if (!semJanela) throw new Error("fixture: nenhum provider de envio automático sem janela de 24 h");
+  const qr = { id: "canal-qr", provider: semJanela as string };
+
+  it("canal com janela, cliente escreveu há 3 dias: não escolhe", () => {
+    expect(escolherCanalDoLembrete([meta], [{ channel_session_id: "canal-meta", last_inbound_at: ha3Dias }], agora)).toBeNull();
+  });
+
+  it("cliente que nunca escreveu neste canal também está fora da janela", () => {
+    expect(escolherCanalDoLembrete([meta], [], agora)).toBeNull();
+  });
+
+  it("o mesmo canal com o cliente dentro da janela: envia", () => {
+    expect(
+      escolherCanalDoLembrete([meta], [{ channel_session_id: "canal-meta", last_inbound_at: ha1Hora }], agora),
+    ).toBe("canal-meta");
+  });
+
+  it("canal com janela fechada cede a vez ao próximo que pode", () => {
+    expect(
+      escolherCanalDoLembrete([meta, qr], [{ channel_session_id: "canal-meta", last_inbound_at: ha3Dias }], agora),
+    ).toBe("canal-qr");
+  });
+
+  it("canal sem janela (QR) segue como antes, sem inbound registrado", () => {
+    expect(escolherCanalDoLembrete([qr], [], agora)).toBe("canal-qr");
+  });
+
+  it("provider que a matriz não conhece não é barrado", () => {
+    expect(canalAceitaTextoLivreAgora(CHANNEL_PROVIDER_WACALLS, null, agora)).toBe(true);
+    expect(canalAceitaTextoLivreAgora("provider-novo", null, agora)).toBe(true);
+  });
+});
+
+describe("a rota pula ANTES do carimbo e registra o motivo (upstream #2620)", () => {
+  const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+
+  it("o pulo por janela vem antes de reminder_sent_at e é registrado", () => {
+    const pulo = fonte.indexOf("canal_fora_da_janela_24h");
+    const carimbo = fonte.indexOf("reminder_sent_at: new Date()");
+    expect(pulo).toBeGreaterThan(-1);
+    expect(pulo).toBeLessThan(carimbo);
+    expect(fonte).toContain('logger.warn("[agenda-reminder] lembrete pulado');
+  });
+
+  it("lê last_inbound_at da conversa do contato dentro da organização", () => {
+    const busca = fonte.slice(fonte.indexOf('.from("conversations")'));
+    expect(busca.slice(0, 300)).toContain("last_inbound_at");
+    expect(busca.slice(0, 300)).toContain('.eq("organization_id", org)');
   });
 });
