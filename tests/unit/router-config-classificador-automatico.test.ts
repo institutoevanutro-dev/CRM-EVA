@@ -60,7 +60,7 @@ const ARQUIVOS_DO_DEFAULT = [
     process.cwd(),
     "supabase",
     "migrations",
-    "20261008210000_0333_classificador_do_roteador_automatico.sql",
+    "20261008233000_0333_classificador_do_roteador_automatico.sql",
   ),
 ];
 
