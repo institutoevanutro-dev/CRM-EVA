@@ -16,6 +16,7 @@ import { resolveOwnerPatch, type OwnerPatch, type OwnerPatchInput } from "@/lib/
 import { emitLeadActivity, stageChangeReason } from "@/lib/leads/activity-emitter";
 import { listaLegivel } from "@/lib/leads/activity-vocabulary";
 import { camposAlterados } from "@/lib/leads/campos-alterados";
+import { valoresAntesDepois } from "@/lib/leads/valores-audit";
 import { RECUSA_DE_TROCA_DE_FUNIL } from "@/lib/leads/clonar-para-funil";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import {
@@ -594,9 +595,12 @@ export async function updateLeadHandler(
     // reason é RENDERIZADO NA TELA e vai junto em captura, exportação e ticket
     // de suporte; o §9 proíbe PII nova em log, reason ou evidence.
     //
-    // Quem precisa do valor anterior tem `api_audit_log`, que já registra a
-    // mutação SOB CONTROLE DE ACESSO. Duplicar aqui criaria um segundo lugar
-    // com o mesmo dado e menos proteção.
+    // O antes-e-depois vai para o `api_audit_log`, sob controle de acesso, SÓ
+    // dos campos tipados sem PII (`value_cents`, `currency`, `owner_user_id`,
+    // `owner_agent_id`, `expected_close_date`; lista branca em
+    // lib/leads/valores-audit.ts, issue #1755). Título, descrição, tags e
+    // `custom_fields` não têm o valor guardado em lugar nenhum: o audit é
+    // append-only e a anonimização da LGPD não o reescreve.
     //
     // NÃO confunda com a atividade de autorização vencida (wave 4), que mostra
     // antes-e-depois DE PROPÓSITO: lá o texto é a proposta do PRÓPRIO AGENTE,
@@ -665,6 +669,18 @@ export async function updateLeadHandler(
     .eq("id", leadId)
     .maybeSingle();
 
+  // ANTES E DEPOIS DOS CAMPOS TIPADOS, NÃO DO TEXTO (issue #1755).
+  //
+  // A lista branca mora em lib/leads/valores-audit.ts, junto com a medição de
+  // por que é branca (audit append-only que a cascata da LGPD não reescreve).
+  // Título, descrição, tags e `custom_fields` ficam de fora por construção —
+  // `fields`, com os NOMES, continua dizendo que eles mudaram.
+  const valores = valoresAntesDepois(
+    camposDaAuditoria,
+    existing as Record<string, unknown>,
+    fields,
+  );
+
   await audit({
     action: "lead.updated",
     actorUserId: a.actorUserId,
@@ -672,7 +688,12 @@ export async function updateLeadHandler(
     resourceType: "crm_lead",
     resourceId: leadId,
     requestId: ctx.requestId,
-    metadata: { ...a.metadataActor, fields },
+    metadata: {
+      ...a.metadataActor,
+      fields,
+      // Omitido quando vazio: editar SÓ texto grava a mesma linha de antes.
+      ...(Object.keys(valores).length > 0 ? { valores } : {}),
+    },
   });
 
   return (fresh ?? updated) as Record<string, unknown>;
