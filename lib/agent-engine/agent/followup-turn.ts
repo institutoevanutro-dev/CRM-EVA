@@ -27,7 +27,7 @@ import { withFields } from '../obs/logger';
 import type { JobRow } from '../queue/queue';
 import { getLeadContext, type LeadContext } from '../edge/crm/get-lead-context';
 import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
-import { applySendOutcome } from '../edge/crm/send-message';
+import { applySendOutcome, MidiaRecusadaError } from '../edge/crm/send-message';
 import { runBeforeSend } from '../guardrails/before-send';
 import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
 import { classifyPromise } from '../guardrails/promise/semantic';
@@ -94,6 +94,10 @@ export const followupTurnPayloadSchema = z
     template_id: z.string().uuid().optional(),
     /** action mode `ai_message` — modelo de reserva (`message_templates`), porte de b94446a5c. */
     fallback_template_id: z.string().uuid().optional(),
+    /** action mode `media` — item de `media_library_items`; `mode` acima é outra coisa (agent|template). */
+    media_id: z.string().uuid().optional(),
+    /** Legenda da mídia, já com {{volta}} interpolado pelo engine. */
+    media_caption: z.string().max(1024).optional(),
     volta_index: z.number().int().optional(),
     volta_total: z.number().int().optional(),
     classes: z.array(z.string()).optional(),
@@ -119,7 +123,8 @@ export type FollowupFlowTurnResult =
   /** `via`: o passo saiu pelo modelo de reserva porque a IA não conseguiu enviar. */
   | { kind: 'sent'; via?: 'modelo_de_reserva' }
   | { kind: 'skipped'; reason: string; outcome?: 'converted' | 'replied' | 'exhausted' | 'opted_out' | 'handoff' }
-  | { kind: 'pulado'; reason: string }
+  /** `midiaRecusada`: a mídia do passo não pôde sair; a ponte abre o aviso na Central. */
+  | { kind: 'pulado'; reason: string; midiaRecusada?: true }
   | { kind: 'classified'; class: string }
   /** Classificar sem resposta ao envio do fluxo: nada a concluir, só o rastro da espera. */
   | { kind: 'awaiting_reply' }
@@ -444,6 +449,8 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
         fixedBody: payload.fixed_body,
         templateId: payload.template_id,
         fallbackTemplateId: payload.fallback_template_id,
+        mediaId: payload.media_id,
+        mediaCaption: payload.media_caption,
         voltaIndex: payload.volta_index,
         voltaTotal: payload.volta_total,
         classes: payload.classes,
@@ -512,6 +519,8 @@ async function runFlowDrivenTurn(
     fixedBody: string | undefined;
     templateId: string | undefined;
     fallbackTemplateId: string | undefined;
+    mediaId: string | undefined;
+    mediaCaption: string | undefined;
     voltaIndex: number | undefined;
     voltaTotal: number | undefined;
     classes: string[] | undefined;
@@ -604,14 +613,18 @@ async function runFlowDrivenTurn(
       return;
     }
 
-    const body = await resolveFlowSendBody(pool, target.tenantId, target.leadId, input);
-    if (body === '') {
+    // Passo de mídia: a legenda é o corpo (pode ficar vazia — a mídia sai sozinha).
+    const body =
+      input.mediaId !== undefined
+        ? await interpolarNomeDoContato(pool, target.tenantId, target.leadId, input.mediaCaption ?? '')
+        : await resolveFlowSendBody(pool, target.tenantId, target.leadId, input);
+    if (body === '' && input.mediaId === undefined) {
       await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'pulado', reason: MOTIVO_TEXTO_VAZIO_SEM_NOME } });
       return;
     }
     if (body !== null) {
       // Texto do operador: sem camada semântica (ver o cabeçalho de sendFixedOutbound).
-      const sent = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body, false);
+      const sent = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body, false, 1, input.mediaId);
       // Os QUATRO desfechos voltam para o enrollment. O adiado era o que não
       // voltava, e o silêncio custava o enrollment inteiro (dead-man de ~11h).
       if (typeof sent === 'object') {
@@ -889,7 +902,15 @@ async function sendFixedOutbound(
   comCamadaSemantica: boolean,
   /** Seq no `send_ledger` do job. A reserva usa `SEQ_DO_MODELO_DE_RESERVA`. */
   seq = 1,
-): Promise<"sent" | "skipped" | "pulado" | { kind: "deferred"; until: Date; reason: string }> {
+  /** Passo de mídia: o item da biblioteca; `body` vira a legenda. */
+  mediaLibraryItemId?: string,
+): Promise<
+  | "sent"
+  | "skipped"
+  | "pulado"
+  | { kind: "deferred"; until: Date; reason: string }
+  | { kind: "pulado"; reason: string; midiaRecusada: true }
+> {
   const { tenantId, leadId, channelSessionId, conversationId } = target;
   const runLog = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, lead_id: leadId });
 
@@ -920,34 +941,47 @@ async function sendFixedOutbound(
     camadasDaOrg !== null &&
     camadaLigada(camadasDaOrg.promessa_semantica, deps.knobs.promiseSemantic?.enabled === true);
 
-  const chain = await runBeforeSend({
-    pool,
-    log: runLog,
-    tenantId,
-    leadId,
-    jobId: job.id,
-    channelSessionId,
-    body,
-    optedOutThisTurn,
-    crmDailyLimit: null,
-    now: clock(),
-    sleep: deps.sleep,
-    lgpd: context.lgpd,
-    ...(deps.knobs.disclosureMode !== undefined ? { disclosureMode: deps.knobs.disclosureMode } : {}),
-    ...(camadaSemanticaLigada
-      ? {
-          classifyPromiseSemantic: (candidate: string) =>
-            classifyPromise(
-              pool,
-              deps.llmCfg,
-              { tenantId, leadId, jobId: job.id },
-              { candidate, ...(deps.knobs.promiseSemantic?.model !== undefined ? { model: deps.knobs.promiseSemantic.model } : {}) },
-              { ...(deps.registry !== undefined ? { registry: deps.registry } : {}), log: runLog },
-            ),
-        }
-      : {}),
-    send: (finalBody) => channel.send({ tenantId, leadId, jobId: job.id, jobClaim:claimOfJob(job), seq, conversationId, body: finalBody, origemDoEnvio: 'followup' }),
-  });
+  let chain: Awaited<ReturnType<typeof runBeforeSend>>;
+  try {
+    chain = await runBeforeSend({
+      pool,
+      log: runLog,
+      tenantId,
+      leadId,
+      jobId: job.id,
+      channelSessionId,
+      body,
+      // Sem legenda, toda mídia teria o mesmo corpo vazio e colidiria no spinning.
+      ...(mediaLibraryItemId !== undefined && body.trim() === '' ? { enforceSpinning: false } : {}),
+      optedOutThisTurn,
+      crmDailyLimit: null,
+      now: clock(),
+      sleep: deps.sleep,
+      lgpd: context.lgpd,
+      ...(deps.knobs.disclosureMode !== undefined ? { disclosureMode: deps.knobs.disclosureMode } : {}),
+      ...(camadaSemanticaLigada
+        ? {
+            classifyPromiseSemantic: (candidate: string) =>
+              classifyPromise(
+                pool,
+                deps.llmCfg,
+                { tenantId, leadId, jobId: job.id },
+                { candidate, ...(deps.knobs.promiseSemantic?.model !== undefined ? { model: deps.knobs.promiseSemantic.model } : {}) },
+                { ...(deps.registry !== undefined ? { registry: deps.registry } : {}), log: runLog },
+              ),
+          }
+        : {}),
+      send: (finalBody) => channel.send({ tenantId, leadId, jobId: job.id, jobClaim:claimOfJob(job), seq, conversationId, body: finalBody, ...(mediaLibraryItemId !== undefined ? { mediaLibraryItemId } : {}), origemDoEnvio: 'followup' }),
+    });
+  } catch (err) {
+    // Mídia sumiu ou deixou de estar pronta: pula o passo (o fluxo segue) e avisa.
+    // Deixar a 422 subir faria o job repetir uma recusa que não muda.
+    if (mediaLibraryItemId !== undefined && err instanceof MidiaRecusadaError) {
+      runLog.info('mídia do passo recusada — passo pulado', { code: err.code });
+      return { kind: 'pulado', reason: err.message, midiaRecusada: true };
+    }
+    throw err;
+  }
 
   if (chain.status === 'vetoed') {
     if (chain.code === 'outside_window' && chain.nextAllowedAt !== undefined) {

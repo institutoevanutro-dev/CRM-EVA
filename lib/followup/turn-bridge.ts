@@ -43,7 +43,8 @@ export type TurnResult =
   /** Encerra a inscrição. `outcome` (ex.: humano ativo → `handoff`) vai à coluna quando presente. */
   | { kind: "skipped"; reason: string; outcome?: EnrollmentOutcome }
   /** O passo não enviou e o fluxo SEGUE (ex.: fora das 24h do Instagram). `skipped` encerra. */
-  | { kind: "pulado"; reason: string }
+  /** `midiaRecusada`: a mídia do passo não pôde sair (revogada, sem arquivo…) — abre aviso na Central. */
+  | { kind: "pulado"; reason: string; midiaRecusada?: true }
   | { kind: "classified"; class: string }
   /**
    * O turno de classificar não achou resposta ao envio do fluxo. Não é passo:
@@ -205,6 +206,17 @@ export async function completeTurnForEnrollment(
     }
     const edge = selectEdge(graph.edges, node.id, { type: "always" });
     if (!edge) throw new Error(`action node "${node.id}" sem aresta 'always' de saída`);
+    if (result.midiaRecusada) {
+      // Aviso ANTES do passo, a ordem do `markDead`: o retry depois de uma queda
+      // entre os dois duplica o aviso (visível); a ordem inversa podia perdê-lo.
+      const fluxo = (await db.loadFlowPointerName(orgId, enrollment.pointer_id)) ?? enrollment.pointer_id;
+      await db.insertDeadInboxItem({
+        organization_id: orgId,
+        title: "Um follow-up pulou uma mídia que não pode ser enviada",
+        body: `${result.reason} Fluxo "${fluxo}", passo "${node.label}". O follow-up seguiu para o próximo passo.`,
+        ref_id: enrollmentId,
+      });
+    }
     await applyStep(
       "action_pulado",
       { reason: result.reason },

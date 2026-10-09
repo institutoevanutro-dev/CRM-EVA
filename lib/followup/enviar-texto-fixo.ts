@@ -92,6 +92,9 @@ export async function enviarTextoFixoPendente(
     const enrollmentId = payload.followup_enrollment_id;
     const nodeId = payload.node_id;
     const contactId = job.contact_id as string | null;
+    // ponytail: só texto fixo é drenado aqui; passo de mídia (`media_id`, sem fixed_body)
+    // fica com o agent-worker, presente em toda instalação self-host. Drenar mídia aqui
+    // exige o envio com `media_library_item_id` e o tratamento da 422 de mídia recusada.
     if (typeof body !== "string" || !body || !enrollmentId || !nodeId || !contactId) continue;
     if (somenteContactIds && !somenteContactIds.includes(contactId)) continue;
 

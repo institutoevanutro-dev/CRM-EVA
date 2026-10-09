@@ -142,7 +142,7 @@ async function handle(req: NextRequest): Promise<Response> {
 
   // ponytail: o cron nativo da Vercel não tem agent-worker. Sem este dreno o
   // no_reply avança o grafo e a mensagem seguinte fica pending. Teto: jobs
-  // sem fixed_body (mode ai_message) continuam precisando do worker.
+  // sem fixed_body (mode ai_message e mode media) continuam precisando do worker.
   try {
     await enviarTextoFixoPendente(admin);
   } catch (err) {

@@ -5858,6 +5858,7 @@ export const DICIONARIO: Traducoes = {
     es: "Le pidió al agente que planeara los tiempos de espera",
   },
   "Pediu ao agente para escrever a mensagem": { es: "Le pidió al agente que escribiera el mensaje" },
+  "Agendou o envio da mídia": { es: "Programó el envío del archivo multimedia" },
   "Pediu ao agente para interpretar a resposta": { es: "Le pidió al agente que interpretara la respuesta" },
   "Esperando a resposta do cliente": { es: "Esperando la respuesta del cliente" },
   "O cliente não respondeu dentro do prazo": { es: "El cliente no respondió dentro del plazo" },
@@ -7799,6 +7800,7 @@ export const DICIONARIO: Traducoes = {
     es: "El evaluador de calidad necesita recalibración",
   },
   "Um fluxo de follow-up parou de tentar": { es: "Un flujo de follow-up dejó de intentarlo" },
+  "Um follow-up pulou uma mídia que não pode ser enviada": { es: "Un follow-up omitió un archivo multimedia que no se puede enviar" },
   "O lead não respondeu no prazo que você definiu": {
     es: "El lead no respondió en el plazo que definiste",
   },

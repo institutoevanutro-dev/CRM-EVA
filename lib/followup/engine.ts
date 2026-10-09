@@ -395,7 +395,11 @@ async function applyResult(
     enrollment_id: enrollment.id,
     node_id: node.id,
     event_type: wantedType,
-    payload: eventPayload(result),
+    // O passo de mídia não pede nada ao agente: o `mode` deixa a linha do dossiê dizer isso.
+    payload: {
+      ...eventPayload(result),
+      ...(result.kind === "enqueue_turn" && node.type === "action" && node.config.mode === "media" ? { mode: "media" } : {}),
+    },
     idempotency_key: idemKey,
   });
   const isReplay = !inserted;
