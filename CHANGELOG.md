@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.16.0] — 2026-10-09
+
+### Adicionado
+
+- **O follow-up pode enviar imagem ou vídeo da Biblioteca de mídias** O passo de mensagem do follow-up pode enviar uma imagem ou vídeo da Biblioteca de mídias. Se a mídia não puder sair (sem termo, vencida ou revogada), a sequência é encerrada para aquele contato, com o motivo no histórico e um aviso na Central.
+
 ## [3.15.0] — 2026-10-09
 
 ### Adicionado
@@ -6693,7 +6699,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.15.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.16.0...HEAD
+[3.16.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.15.0...v3.16.0
 [3.15.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.14.0...v3.15.0
 [3.14.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.13.0...v3.14.0
 [3.13.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.12.0...v3.13.0

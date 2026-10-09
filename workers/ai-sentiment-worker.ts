@@ -24,7 +24,11 @@ import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { logInvocation } from "@/lib/ai/log-invocation";
-import { DEFAULT_SENTIMENT_THRESHOLD, SENTIMENT_SYSTEM_PROMPT } from "@/lib/ai/prompts/sentiment";
+import {
+  DEFAULT_SENTIMENT_THRESHOLD,
+  promptDoClima,
+  SENTIMENT_SYSTEM_PROMPT,
+} from "@/lib/ai/prompts/sentiment";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { MENSAGEM_REDIGIDA } from "@/lib/lgpd/cascata";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -78,7 +82,7 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
     // ── Load message (programmatic org filter) ────────────────────────────
     const { data: message, error: msgErr } = await admin
       .from("messages")
-      .select("id, body, direction, conversation_id, organization_id, metadata")
+      .select("id, body, direction, conversation_id, organization_id, metadata, created_at")
       .eq("id", messageId)
       .eq("organization_id", event.organization_id)
       .maybeSingle();
@@ -239,6 +243,24 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
         ? agentConfig["sentiment_threshold"]
         : DEFAULT_SENTIMENT_THRESHOLD;
 
+    // ── A pergunta que esta mensagem responde ─────────────────────────────
+    // Falha de leitura ou conversa sem envio anterior: classifica sem contexto,
+    // como antes. Mensagem anonimizada não entra.
+    const { data: anterior } = await admin
+      .from("messages")
+      .select("body")
+      .eq("organization_id", event.organization_id)
+      .eq("conversation_id", message.conversation_id)
+      .eq("direction", "outbound")
+      .lt("created_at", message.created_at)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const ultimaDoAtendimento =
+      typeof anterior?.body === "string" && anterior.body.trim() && anterior.body !== MENSAGEM_REDIGIDA
+        ? anterior.body.trim()
+        : null;
+
     // ── Call LLM ──────────────────────────────────────────────────────────
     const abortController = new AbortController();
     const timeout = setTimeout(() => abortController.abort(), CLASSIFY_TIMEOUT_MS);
@@ -253,7 +275,7 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
         model: sentimentModel,
         schema: sentimentSchema,
         system: SENTIMENT_SYSTEM_PROMPT,
-        prompt: body,
+        prompt: promptDoClima(body, ultimaDoAtendimento),
         temperature: 0,
         // 80 era pequeno demais e nunca tinha sido exercitado (o worker morria
         // antes, na autenticação). `generateObject` com Anthropic usa modo
