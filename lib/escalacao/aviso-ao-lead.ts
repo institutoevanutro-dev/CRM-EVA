@@ -129,7 +129,7 @@ const ABERTURAS: Record<MotivoDoAviso, readonly string[]> = {
   ],
   outro: [
     "Esse caso é melhor resolvido por uma pessoa. Já acionei o time.",
-    "Prefiro não arriscar aqui: passei seu pedido para um atendente humano.",
+    "Para seguir com o seu pedido, chamei alguém da equipe.",
     "Vou pedir ajuda de alguém da equipe para cuidar disso com você.",
   ],
 };
