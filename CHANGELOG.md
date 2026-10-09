@@ -8,6 +8,24 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.11.0] — 2026-10-09
+
+### Adicionado
+
+- **Produtos agora podem ser editados pela tela** Cada produto ganhou um botão "Editar", que abre o formulário do cadastro já preenchido. Dá para corrigir nome, código, marca, categoria, preço, custo e estoque sem desativar e cadastrar de novo. Apagar a marca ou a categoria no formulário apaga o valor salvo.
+
+### Alterado
+
+- **Na lista de Funis, as ações de cada funil ficam num menu "⋯"** Renomear, Tornar padrão, Funil de clientes e Arquivar saíram da linha e foram para o menu "⋯" à direita de cada funil. A linha mostra só o nome, os selos e as setas de ordem, e o nome continua abrindo o quadro. Nenhuma ação mudou de comportamento.
+
+### Corrigido
+
+- **Os números das abas Automático e Aguardando do Inbox ficam cerca de quatro vezes mais rápidos** Para contar as conversas de cada aba, o sistema ainda consultava a ficha do contato de cada conversa. Agora a própria conversa guarda se o contato está bloqueado ou marcado para atendimento só por pessoa, e isso se atualiza sozinho quando a ficha muda. As abas mostram os mesmos números de antes.
+
+- **Avisos e selos coloridos ficam legíveis no modo escuro** Avisos, faixas e selos de 27 telas usavam cores pensadas só para o fundo claro, como a faixa amarela de "Modo plataforma", o aviso azul de administradores e os pontos de saúde. No modo escuro eles viravam manchas claras com texto apagado. Agora usam as cores de aviso, erro, sucesso e informação do tema, que se ajustam sozinhas. Os QR codes e a prévia do logo continuam em fundo branco, porque o celular precisa dele para ler.
+
+- **A IA pode dizer que volta a falar quando ela mesma agendou o retorno** Quando a IA agendava um retorno para o paciente e dizia "te retorno amanhã", uma das conferências de envio ainda barrava a frase como promessa sem retorno marcado. Agora a frase passa quando o retorno foi agendado na mesma resposta. Sem retorno agendado, continua barrada.
+
 ## [3.10.0] — 2026-10-08
 
 ### Adicionado
@@ -6621,7 +6639,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.10.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.11.0...HEAD
+[3.11.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.10.0...v3.11.0
 [3.10.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.9.1...v3.10.0
 [3.9.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.9.0...v3.9.1
 [3.9.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.8.0...v3.9.0
