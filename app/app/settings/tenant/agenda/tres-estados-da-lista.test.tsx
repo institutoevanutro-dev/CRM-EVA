@@ -51,12 +51,10 @@ const TIPO: TipoRow = {
   reminder_enabled: false,
   reminder_minutes_before: 60,
   reminder_extra_offsets_minutes: [],
-  // Campos que a v1.41.0 acrescentou a `TipoRow`. A fixture os declara porque o
-  // tipo é do OFICIAL: teste privado que constrói literal de tipo oficial
-  // envelhece a cada release que soma campo — é colisão por TIPO, não por linha.
   reminder_body: null,
-  reminder_bodies: null,
-  default_price_cents: null,
+  catalog_product_id: null,
+  required_room_kind: null,
+  concurrency_key: null,
 };
 
 function montar(props: Partial<React.ComponentProps<typeof TiposDeAgendamentoClient>> = {}) {
@@ -68,13 +66,12 @@ function montar(props: Partial<React.ComponentProps<typeof TiposDeAgendamentoCli
     <TiposDeAgendamentoClient
       tiposIniciais={[]}
       pessoas={[]}
+      produtos={[]}
       podeEditar
       usuarioAtualId="22222222-2222-4222-8222-222222222222"
       podeConfigurarGoogle={false}
       clientePelaAgendaLigado={false}
       podeLigarClientePelaAgenda={false}
-      colegasPodemMexerNaAgendaLigado={false}
-      podeMudarAgendaDosColegas={false}
       {...props}
     />
     </QueryClientProvider>,
