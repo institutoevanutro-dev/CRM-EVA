@@ -9,6 +9,7 @@
  */
 import { z } from "zod";
 
+import { normalizarTag, normalizarTags } from "@/lib/contacts/tag-normalizada";
 import {
   MAXIMO_DE_ETIQUETAS_NO_FILTRO,
   MODOS_DE_ETIQUETA,
@@ -63,7 +64,9 @@ export const contactCreateSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
-  tags: z.array(z.string()).optional(),
+  // O marcador nasce em caixa baixa, pela MESMA regra da tag de conversa: o
+  // "VIP" gravado verbatim não casava com o filtro `?tag=vip` (issue #1224).
+  tags: z.array(z.string()).transform(normalizarTags).optional(),
   source: z.string().min(1).default("manual"),
   source_metadata: z.record(z.string(), z.unknown()).optional(),
   consent: z.record(z.string(), z.unknown()).optional(),
@@ -96,7 +99,9 @@ export const contactListQuerySchema = z.object({
     .optional()
     .transform((v) => {
       if (v === undefined) return undefined;
-      const lista = Array.isArray(v) ? v : [v];
+      // O filtro normaliza pelo MESMO caminho da escrita: `?tag=VIP` acha o
+      // que a ficha gravou como "vip" (porte do original #1263).
+      const lista = (Array.isArray(v) ? v : [v]).map(normalizarTag);
       // Lista VAZIA vira `undefined`, e não `[]` — mesma razão do schema do
       // Inbox: `getAll` devolve `[]` sem o parâmetro, e `[]` num `cs` é um filtro
       // que não casa nada, com o filtro desligado.
