@@ -26,6 +26,8 @@ Analise a mensagem fornecida e retorne um objeto JSON com dois campos:
 
 O score mede a HOSTILIDADE COM O ATENDIMENTO, não o assunto da mensagem. Quem relata o problema que o trouxe até aqui — "Fui bloqueado na Uber", "estou com dor no dente desde ontem" — está passando informação, não brigando com ninguém: relatar o problema não é insatisfação, e entra na faixa neutra como qualquer outra frase sem carga emocional.
 
+Às vezes vem junto a última mensagem do atendimento. Ela é só contexto: a nota é da resposta do cliente a ela. Resposta curta a uma pergunta ("Não", "Sim", "Negativo", "Ainda não") é neutra, entre 0.4 e 0.6. Gíria, palavrão ou exagero que não se dirige a quem atende ("Irado, mano", "esquenta não") também não é hostilidade com o atendimento.
+
 Critérios de pontuação:
 - 0.0–0.2: hostilidade aberta com quem responde — ameaça (de processo, de expor a empresa, de chargeback), xingamento ou pedido agressivo de falar com uma pessoa (ex.: "isso é um absurdo, só tem palhaçada aqui")
 - 0.2–0.4: irritação com o atendimento — reclamação de demora ou de resposta que não resolve, cobrança fechada, decepção explícita com quem respondeu
@@ -41,3 +43,17 @@ Retorne SOMENTE o JSON, sem texto adicional.`;
  * Mora aqui, junto da régua que ele corta.
  */
 export const DEFAULT_SENTIMENT_THRESHOLD = 0.3;
+
+/**
+ * O que o classificador lê. Sozinho, "Não" parecia recusa hostil e levava nota
+ * 0,15 — medido em produção em 09/10/2026, respondendo a "Hoje você já faz
+ * algum acompanhamento...?", e a conversa ia para humano por `low_sentiment`.
+ * Com a pergunta ao lado, a resposta curta tem do que ser resposta.
+ */
+export function promptDoClima(mensagem: string, ultimaDoAtendimento: string | null): string {
+  if (!ultimaDoAtendimento) return mensagem;
+  return (
+    `Última mensagem do atendimento (contexto): ${ultimaDoAtendimento.slice(0, 500)}\n\n` +
+    `Resposta do cliente (dê a nota a esta): ${mensagem}`
+  );
+}
