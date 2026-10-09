@@ -126,6 +126,26 @@ async function removerEcoDoProprioEnvio(
       .neq("id", minhaLinhaId);
     if (error)
       console.error("[messages.send] não consegui remover o eco do próprio envio", error.message);
+
+    // O LIMITE CONHECIDO de `wahaEchoExternalIds` (@lid × @c.us): o composto que
+    // construímos usa o chat do ENVIO, e o NOWEB pode ecoar com o outro formato
+    // do mesmo contato — medido em 06/10/2026: envio para `…@lid`, eco
+    // `true_5513…@c.us_3EB0…`. O id bare do WhatsApp é único (20+ caracteres
+    // aleatórios), então casar pelo SUFIXO `_<bare>` alcança qualquer formato
+    // de chat sem alcançar outra mensagem. Só para id composto (`<fromMe>_<chat>_<id>`) do canal.
+    const bare = externalId.slice(externalId.lastIndexOf("_") + 1);
+    if (bare.length >= 16 && candidatos.some((c) => c.startsWith("true_"))) {
+      const { error: erroSufixo } = await supabase
+        .from("messages")
+        .delete()
+        .eq("organization_id", organizationId)
+        .eq("conversation_id", conversationId)
+        .eq("sent_via", "external_device")
+        .like("external_id", `%\\_${bare}`)
+        .neq("id", minhaLinhaId);
+      if (erroSufixo)
+        console.error("[messages.send] não consegui remover o eco por sufixo", erroSufixo.message);
+    }
   } catch (err) {
     console.error(
       "[messages.send] a remoção do eco lançou",
@@ -917,12 +937,36 @@ export async function sendMessageHandler(
         : [];
       const limparEco = () =>
         removerEcoDoProprioEnvio(supabase, ctx.organization_id, c.id, message.id, externalId, candidatosDoEco);
+      // A FORMA GRAVADA É A CANÔNICA DO CANAL (`adapter.canonicalExternalId`),
+      // não o id cru que o adapter devolveu: é a string que o eco do webhook
+      // grava (a cauda na conversa individual, desde o #1855; o id intacto em
+      // grupo), e o `unique (organization_id, external_id)` só
+      // recusa a segunda linha se os DOIS lados gravarem a MESMA string — é
+      // dele que vem a rede de segurança contra a corrida entre a limpeza e
+      // este UPDATE.
+      //
+      // No NOWEB nada muda: a resposta de envio já é a cauda (`3EB0…`) e a
+      // regra canônica a devolve intacta. No WEBJS ela vem como `_serialized`
+      // (`true_<chat>_3EB0…`); gravada aqui, nunca colidia com a cauda do eco,
+      // o `23505` não disparava e o eco que entrava nesse intervalo nascia como
+      // segunda linha com a mesma frase (#196).
+      //
+      // Os leitores continuam achando o id: `handleAck` e `echoExternalIds`
+      // procuram o par `[composto, cauda]`, sem migration e sem backfill para
+      // as linhas antigas, que guardam o id completo. Editar/apagar uma linha
+      // NOVA gravada em cauda reconstrói o id completo a partir do DESTINATÁRIO
+      // do contato (`resolveRecipient`, que prefere o `@lid`), e não mais do chat
+      // do id gravado — se isso acha a mesma mensagem no WEBJS não foi medido.
+      // Canais que não implementam o método (id simétrico) gravam exatamente o
+      // que o envio devolveu.
+      const idCanonico =
+        externalId !== null ? (adapter.canonicalExternalId?.(externalId) ?? externalId) : null;
       const marcarEnviada = (comId: boolean) =>
         supabase
           .from("messages")
           .update({
             status: "sent",
-            ...(comId ? { external_id: externalId } : {}),
+            ...(comId ? { external_id: idCanonico } : {}),
             ack: 0,
             // Colunas só do template — é o que responde custo e conformidade de
             // janela depois, sem varrer jsonb.

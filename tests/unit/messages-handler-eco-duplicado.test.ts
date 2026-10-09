@@ -69,8 +69,9 @@ function conversationRow(): Row {
  * linhas sobraram", então um fake de linha única responderia sempre 1 e o teste
  * passaria sem tocar no defeito.
  */
-function makeSupabase(preexistentes: Row[] = []) {
+function makeSupabase(preexistentes: Row[] = [], ecoDepoisDaPrimeiraLimpeza?: Row) {
   const messages: Row[] = [...preexistentes];
+  let injetado = false;
 
   const filtrar = (filtros: Array<(r: Row) => boolean>) => messages.filter((r) => filtros.every((f) => f(r)));
 
@@ -175,8 +176,26 @@ function makeSupabase(preexistentes: Row[] = []) {
             filtros.push((r) => vals.includes(r[col]));
             return q;
           },
+          // LIKE do Postgres, APLICADO: `%` qualquer sequência, `_` um caractere,
+          // `\_` o sublinhado literal. A remoção do eco por sufixo é o que se mede.
+          like(col: string, padrao: string) {
+            const re = new RegExp(
+              '^' +
+                padrao.replace(/\\_|%|_|[.*+?^${}()|[\]\\]/g, (t) =>
+                  t === '\\_' ? '_' : t === '%' ? '.*' : t === '_' ? '.' : `\\${t}`,
+                ) +
+                '$',
+            );
+            filtros.push((r) => typeof r[col] === 'string' && re.test(r[col] as string));
+            return q;
+          },
           then(resolve: (v: { error: null }) => unknown) {
             for (const alvo of filtrar(filtros)) messages.splice(messages.indexOf(alvo), 1);
+            // A corrida: o eco entra DEPOIS da limpeza e ANTES do carimbo.
+            if (ecoDepoisDaPrimeiraLimpeza && !injetado) {
+              injetado = true;
+              messages.push(ecoDepoisDaPrimeiraLimpeza);
+            }
             return Promise.resolve({ error: null }).then(resolve);
           },
         };
@@ -255,6 +274,72 @@ describe('eco do próprio envio na janela em que a linha ainda não tem external
     // ainda daria 1 linha — por isso ele também confere que a linha é a do envio
     // e que ela recebeu o id.
     wahaRespondendo(BARE);
+    const { supabase, messages } = makeSupabase();
+
+    await sendMessageHandler(supabase, ctx, input);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.external_id).toBe(BARE);
+    expect(messages[0]!.status).toBe('sent');
+  });
+});
+
+describe('eco com OUTRO formato de chat (@lid × @c.us) — medido em 06/10/2026', () => {
+  it('o envio foi pelo número e o eco voltou pelo @lid: a duplicata sai mesmo assim', async () => {
+    // O composto que o envio constrói usa o chat do ENVIO (`…@c.us`); o NOWEB
+    // ecoou pelo outro formato do mesmo contato. Antes, este eco ficava.
+    wahaRespondendo(BARE);
+    const { supabase, messages } = makeSupabase([
+      ecoDoWebhook({ external_id: `true_65721790906556@lid_${BARE}` }),
+    ]);
+
+    await sendMessageHandler(supabase, ctx, input);
+
+    expect(messages, 'o eco pelo @lid sobreviveu e a frase ficou duas vezes').toHaveLength(1);
+    expect(messages[0]!.external_id).toBe(BARE);
+  });
+
+  it('o sufixo é o id INTEIRO: outra mensagem que só termina parecido não é tocada', async () => {
+    wahaRespondendo(BARE);
+    const outra = ecoDoWebhook({ id: 'celular-1', external_id: `true_65721790906556@lid_XX${BARE}`, body: 'outra' });
+    const { supabase, messages } = makeSupabase([outra]);
+
+    await sendMessageHandler(supabase, ctx, input);
+
+    expect(messages.map((m) => m.id)).toContain('celular-1');
+  });
+});
+
+/**
+ * WEBJS sem o id interno: a resposta de envio traz só o `_serialized`
+ * (`true_<chat>_<bare>`) e o eco grava a cauda. Gravar o composto deixava o
+ * unique mudo e o eco que entrava entre a limpeza e o carimbo virava a segunda
+ * linha (porte do DeskcommCRM #2525, issue #196).
+ */
+describe('WEBJS: o envio carimba a mesma forma que o eco grava', () => {
+  function wahaRespondendoSoSerializado() {
+    vi.stubEnv('WAHA_API_BASE_URL', 'http://localhost:3030');
+    vi.stubEnv('WAHA_API_KEY', 'hash123');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ id: { _serialized: COMPOSTO } }), { status: 200 })),
+    );
+  }
+
+  it('o eco que entra entre a limpeza e o carimbo não deixa a frase duas vezes', async () => {
+    wahaRespondendoSoSerializado();
+    const { supabase, messages } = makeSupabase([], ecoDoWebhook({ external_id: BARE }));
+
+    await sendMessageHandler(supabase, ctx, input);
+
+    const daMensagem = messages.filter((m) => m.body === 'oi');
+    expect(daMensagem, 'a mesma frase ficou duas vezes: o unique não pegou').toHaveLength(1);
+    expect(daMensagem[0]!.sent_via).toBe('user');
+    expect(daMensagem[0]!.external_id).toBe(BARE);
+  });
+
+  it('controle: sem eco, grava a forma canônica e segue sent', async () => {
+    wahaRespondendoSoSerializado();
     const { supabase, messages } = makeSupabase();
 
     await sendMessageHandler(supabase, ctx, input);
