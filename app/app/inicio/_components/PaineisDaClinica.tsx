@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { apiClient } from "@/lib/api/client";
 import { useT } from "@/hooks/i18n/useT";
@@ -42,9 +42,10 @@ type OrigemItem = { origem: Origem; rotulo: string; total: number; detalhes: Arr
 type OrigemPainel = { ok: true; itens: OrigemItem[] } | Falha;
 type Resposta = { conversas: Conversas; agenda: Agenda; funil: Funil; origem: OrigemPainel };
 
+// Verde da marca para a IA, dourado para a equipe e neutro para quem ficou sem resposta.
 const CORES = {
   ia: "var(--color-accent-600)",
-  equipe: "var(--color-warning)",
+  equipe: "var(--color-gold)",
   semResposta: "var(--color-neutral-300)",
 };
 
@@ -52,10 +53,10 @@ function Cartao({ titulo, children, href }: { titulo: string; children: ReactNod
   const t = useT();
   return (
     <section className="rounded-2xl border bg-surface p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <h3 className="font-medium text-text">{titulo}</h3>
+      <div className="mb-4 flex items-baseline justify-between gap-2">
+        <h3 className="font-titulo text-xl font-semibold text-text">{titulo}</h3>
         {href ? (
-          <Link className="text-sm text-accent underline" href={href}>
+          <Link className="text-sm text-accent underline-offset-4 hover:underline" href={href}>
             {t("Abrir")}
           </Link>
         ) : null}
@@ -123,21 +124,21 @@ function PainelConversas({ p }: { p: Conversas }) {
   ];
   return (
     <>
-      <div className="mb-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-4">
         <p>
-          <span className="block text-2xl font-semibold">{total}</span>
+          <span className="numero block whitespace-nowrap text-2xl text-text">{total}</span>
           <span className="text-text-muted">{t("conversas novas")}</span>
         </p>
         <p>
-          <span className="block text-2xl font-semibold">{iaSozinha}</span>
+          <span className="numero block whitespace-nowrap text-2xl text-text">{iaSozinha}</span>
           <span className="text-text-muted">{t("a IA resolveu sozinha")}</span>
         </p>
         <p>
-          <span className="block text-2xl font-semibold">{comEquipe}</span>
+          <span className="numero block whitespace-nowrap text-2xl text-text">{comEquipe}</span>
           <span className="text-text-muted">{t("passaram para a equipe")}</span>
         </p>
         <p>
-          <span className="block text-2xl font-semibold">
+          <span className="numero block whitespace-nowrap text-2xl text-text">
             {p.primeiraRespostaMediaS != null ? duracao(p.primeiraRespostaMediaS) : "—"}
           </span>
           <span className="text-text-muted">{t("até a primeira resposta")}</span>
@@ -145,15 +146,28 @@ function PainelConversas({ p }: { p: Conversas }) {
       </div>
       <div className="h-48">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={dados} margin={{ top: 4, right: 4, bottom: 0, left: -24 }}>
-            <XAxis dataKey="rotulo" tick={{ fontSize: 11 }} interval={4} />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-            <Tooltip
-              contentStyle={{ borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-surface)" }}
+          <BarChart data={dados} margin={{ top: 4, right: 0, bottom: 0, left: -28 }} barCategoryGap="28%">
+            <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 3" />
+            <XAxis
+              dataKey="rotulo"
+              tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
+              interval={4}
+              axisLine={false}
+              tickLine={false}
             />
-            <Bar dataKey="ia_sozinha" name={t("IA sozinha")} stackId="c" fill={CORES.ia} />
-            <Bar dataKey="com_equipe" name={t("Com a equipe")} stackId="c" fill={CORES.equipe} />
-            <Bar dataKey="sem_resposta" name={t("Sem resposta")} stackId="c" fill={CORES.semResposta} radius={[3, 3, 0, 0]} />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip
+              cursor={{ fill: "var(--color-row-hover)" }}
+              contentStyle={{ borderRadius: 10, border: "1px solid var(--color-border)", background: "var(--color-surface)", fontSize: 12 }}
+            />
+            <Bar dataKey="ia_sozinha" name={t("IA sozinha")} stackId="c" isAnimationActive={false} fill={CORES.ia} />
+            <Bar dataKey="com_equipe" name={t("Com a equipe")} stackId="c" isAnimationActive={false} fill={CORES.equipe} />
+            <Bar dataKey="sem_resposta" name={t("Sem resposta")} stackId="c" isAnimationActive={false} fill={CORES.semResposta} radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -173,38 +187,48 @@ function PainelAgenda({ p }: { p: Agenda }) {
   const t = useT();
   if (!p.ok) return <Falhou />;
   if (!p.unidades.length) return <Vazio texto="Nenhuma consulta nesta semana." />;
+  const colunas = [
+    ["Marcadas", "marcadas"],
+    ["Confirmadas", "confirmadas"],
+    ["Realizadas", "realizadas"],
+    ["Faltas", "faltas"],
+    ["Canceladas", "canceladas"],
+  ] as const;
   return (
-    <ul className="space-y-3">
-      {p.unidades.map((u) => (
-        <li key={u.unit_id ?? "sem"} className="rounded-xl border p-3">
-          <div className="mb-2 flex items-baseline justify-between gap-2">
-            <span className="font-medium">{u.unidade ?? t("Sem unidade")}</span>
-            <span className="text-sm text-text-muted">
-              {t("comparecimento")}{" "}
-              <b className="text-base text-text">
-                {u.comparecimento != null ? `${Math.round(u.comparecimento * 100)}%` : "—"}
-              </b>
-            </span>
-          </div>
-          <dl className="grid grid-cols-5 gap-2 text-center text-xs text-text-muted">
-            {(
-              [
-                ["Marcadas", u.marcadas],
-                ["Confirmadas", u.confirmadas],
-                ["Realizadas", u.realizadas],
-                ["Faltas", u.faltas],
-                ["Canceladas", u.canceladas],
-              ] as const
-            ).map(([rotulo, n]) => (
-              <div key={rotulo}>
-                <dd className="text-lg font-semibold text-text">{n}</dd>
-                <dt>{t(rotulo)}</dt>
-              </div>
+    <div className="-mx-1 overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-[11px] text-text-muted">
+            <th className="px-1 pb-2 text-left font-normal">{t("Unidade")}</th>
+            {colunas.map(([rotulo]) => (
+              <th key={rotulo} className="px-1 pb-2 text-right font-normal">{t(rotulo)}</th>
             ))}
-          </dl>
-        </li>
-      ))}
-    </ul>
+            <th className="px-1 pb-2 text-left font-normal">{t("Comparecimento")}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {p.unidades.map((u) => {
+            const pct = u.comparecimento != null ? Math.round(u.comparecimento * 100) : null;
+            return (
+              <tr key={u.unit_id ?? "sem"}>
+                <td className="whitespace-nowrap px-1 py-2.5 font-medium">{u.unidade ?? t("Sem unidade")}</td>
+                {colunas.map(([rotulo, campo]) => (
+                  <td key={rotulo} className="numero px-1 py-2.5 text-right">{u[campo]}</td>
+                ))}
+                <td className="px-1 py-2.5">
+                  <span className="flex items-center gap-2">
+                    <span className="h-1.5 w-16 overflow-hidden rounded-full bg-border">
+                      <span className="block h-full rounded-full bg-accent" style={{ width: `${pct ?? 0}%` }} />
+                    </span>
+                    <span className="numero">{pct != null ? `${pct}%` : "—"}</span>
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -231,27 +255,27 @@ function PainelFunil({ p, onTrocar }: { p: Funil; onTrocar: (id: string) => void
       ) : null}
       <div className="mb-4 grid grid-cols-3 gap-3 text-sm">
         <p>
-          <span className="block text-2xl font-semibold">{p.mes.ganhos}</span>
+          <span className="numero block whitespace-nowrap text-2xl text-text">{p.mes.ganhos}</span>
           <span className="text-text-muted">{t("ganhos no mês")}</span> <Variacao atual={p.mes.ganhos} anterior={p.anterior.ganhos} />
         </p>
         <p>
-          <span className="block text-2xl font-semibold">{p.mes.perdidos}</span>
+          <span className="numero block whitespace-nowrap text-2xl text-text">{p.mes.perdidos}</span>
           <span className="text-text-muted">{t("perdidos no mês")}</span>
         </p>
         <p>
-          <span className="block text-lg font-semibold">{dinheiro(p.mes.valor)}</span>
+          <span className="numero block whitespace-nowrap text-xl text-text">{dinheiro(p.mes.valor)}</span>
           <span className="text-text-muted">{t("vendido no mês")}</span>
         </p>
       </div>
       {p.etapas.length ? (
         <ul className="space-y-1.5">
           {p.etapas.map((e) => (
-            <li key={e.id} className="grid grid-cols-[minmax(0,9rem)_1fr_2rem] items-center gap-2 text-sm">
-              <span className="truncate text-text-muted">{e.nome}</span>
-              <span className="h-2.5 overflow-hidden rounded-full bg-border">
+            <li key={e.id} className="grid grid-cols-[minmax(0,13rem)_1fr_2.5rem] items-center gap-3 text-sm">
+              <span className="leading-tight text-text-muted">{e.nome}</span>
+              <span className="h-2 overflow-hidden rounded-full bg-border">
                 <span className="block h-full rounded-full bg-accent" style={{ width: `${(e.abertos / maior) * 100}%` }} />
               </span>
-              <span className="text-right font-medium tabular-nums">{e.abertos}</span>
+              <span className="numero text-right">{e.abertos}</span>
             </li>
           ))}
         </ul>
@@ -273,9 +297,9 @@ function PainelOrigem({ p }: { p: OrigemPainel }) {
         <li key={i.origem} className="text-sm">
           <div className="mb-1 flex justify-between gap-2">
             <span>{t(i.rotulo)}</span>
-            <span className="font-medium tabular-nums">{i.total}</span>
+            <span className="numero">{i.total}</span>
           </div>
-          <span className="block h-2.5 overflow-hidden rounded-full bg-border">
+          <span className="block h-2 overflow-hidden rounded-full bg-border">
             <span className="block h-full rounded-full bg-accent" style={{ width: `${(i.total / maior) * 100}%` }} />
           </span>
           {i.detalhes.length ? (
@@ -306,7 +330,7 @@ export function PaineisDaClinica() {
 
   return (
     <div>
-      <h2 className="mb-3 text-lg font-semibold">{t("Visão da clínica")}</h2>
+      <h2 className="mb-4 font-titulo text-2xl font-semibold">{t("Visão da clínica")}</h2>
       {q.isLoading ? (
         <div role="status" aria-label={t("Carregando")} className="grid gap-4 lg:grid-cols-2">
           {[0, 1, 2, 3].map((i) => (

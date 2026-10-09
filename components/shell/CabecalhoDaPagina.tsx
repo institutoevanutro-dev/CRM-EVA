@@ -24,7 +24,7 @@ export function CabecalhoDaPagina({
   return (
     <header className={cn("flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", className)}>
       <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight">{titulo}</h1>
+        <h1 className="text-[2rem] leading-tight">{titulo}</h1>
         {descricao ? <p className="mt-1 max-w-2xl text-sm text-text-muted">{descricao}</p> : null}
       </div>
       {acoes ? <div className="flex shrink-0 flex-wrap items-center gap-2">{acoes}</div> : null}

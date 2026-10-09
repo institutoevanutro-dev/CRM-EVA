@@ -49,7 +49,7 @@ export function IncidentsClient() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("Incidentes")}</h1>
+          <h1 className="text-[2rem] leading-tight">{t("Incidentes")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {isLoading
               ? t("Carregando...")

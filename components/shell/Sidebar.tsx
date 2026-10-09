@@ -92,14 +92,14 @@ export function SidebarContent({
         aria-current={ativa ? "page" : undefined}
         onClick={onNavigate}
         className={cn(
-          "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+          "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-[15px] transition-colors",
           ativa
-            ? "bg-sidebar-active font-medium text-gold before:absolute before:top-1/2 before:left-0 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-r-full before:bg-gold"
+            ? "bg-sidebar-active font-medium text-gold before:absolute before:top-1/2 before:left-0 before:h-6 before:w-[3px] before:-translate-y-1/2 before:rounded-r-full before:bg-gold"
             : "text-sidebar-fg hover:bg-sidebar-active",
           collapsed && "justify-center px-2",
         )}
       >
-        <Icone size={20} weight={ativa ? "fill" : "regular"} aria-hidden />
+        <Icone size={20} weight={ativa ? "fill" : "light"} aria-hidden />
         {!collapsed && <span className="truncate">{t(item.label)}</span>}
         {temSaude && (
           <ConnectionHealthDot className={cn(collapsed ? "absolute top-1.5 right-1.5" : "ml-auto")} />
@@ -116,7 +116,17 @@ export function SidebarContent({
           // sobre ele (a moldura branca existia para o menu escuro de antes).
           // <img> e não next/image: a URL vem de quem hospeda (banco ou .env).
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={logo} alt={nome} className="h-8 w-auto max-w-[10rem] object-contain" />
+          <span className="flex min-w-0 items-center gap-2.5">
+            <img src={logo} alt={nome} className="h-8 w-auto max-w-[10rem] shrink-0 object-contain" />
+            {/* O nome ao lado do logo só quando a ORGANIZAÇÃO definiu nome próprio: o
+                logo da instalação costuma já trazer o nome escrito, e repetido ocuparia
+                a faixa de 56px duas vezes. Na serifa do site da clínica. */}
+            {activeOrg?.marca?.nome ? (
+              <span aria-hidden className="truncate font-titulo text-xl font-semibold leading-none text-gold">
+                {nome}
+              </span>
+            ) : null}
+          </span>
         ) : marcaDoProduto ? (
           collapsed ? (
             <SimboloDoProduto nome={nome} className="h-8 w-8" />

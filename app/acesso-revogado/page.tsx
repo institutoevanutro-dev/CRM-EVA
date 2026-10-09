@@ -37,7 +37,7 @@ export default async function AcessoRevogadoPage() {
   return (
     <main className="flex min-h-screen items-center justify-center p-8">
       <Card className="w-full max-w-md space-y-4 p-8 text-center">
-        <h1 className="text-2xl font-semibold">{traduzir("Acesso revogado", idioma)}</h1>
+        <h1 className="text-[2rem] leading-tight">{traduzir("Acesso revogado", idioma)}</h1>
         <p className="text-sm text-muted-foreground">
           {traduzir(
             "Seu acesso a esta organização foi retirado. Se você acredita que isso é um engano, fale com quem administra a empresa — só ela pode devolvê-lo.",

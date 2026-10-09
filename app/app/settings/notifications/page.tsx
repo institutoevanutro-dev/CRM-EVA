@@ -52,7 +52,7 @@ export default async function NotificationsPage() {
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Notificações")}</h1>
+        <h1 className="text-[2rem] leading-tight">{t("Notificações")}</h1>
         <p className="text-sm text-muted-foreground">{t("Canais e categorias.")}</p>
       </header>
 

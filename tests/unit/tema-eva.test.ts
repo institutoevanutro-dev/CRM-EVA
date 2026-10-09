@@ -36,13 +36,14 @@ describe("cores iguais às do Financeiro", () => {
     expect(ponte).toMatch(/--color-sidebar:\s*var\(--color-sidebar-bg\)/);
     expect(ponte).toMatch(/--color-gold:\s*var\(--color-gold\)/);
   });
-  it("fontes do Financeiro: Inter no texto, Josefin Sans nos títulos", () => {
+  it("fontes do site da clínica: Inter no texto, Cormorant Garamond nos títulos", () => {
     const layout = readFileSync("app/layout.tsx", "utf8");
     expect(layout).toMatch(/import \{[^}]*\bInter\b[^}]*\} from "next\/font\/google"/);
-    expect(layout).toMatch(/\bJosefin_Sans\b/);
+    expect(layout).toMatch(/\bCormorant_Garamond\b/);
+    expect(layout).not.toMatch(/\bJosefin_Sans\b/);
     expect(layout).not.toMatch(/Atkinson_Hyperlegible/);
     expect(css).toMatch(/--font-sans:\s*var\(--font-inter\)/);
-    expect(css).toMatch(/--font-titulo:\s*var\(--font-josefin\)/);
+    expect(css).toMatch(/--font-titulo:\s*var\(--font-cormorant\)/);
     expect(css).not.toMatch(/--font-atkinson/);
   });
 });

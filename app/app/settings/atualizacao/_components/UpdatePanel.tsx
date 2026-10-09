@@ -582,7 +582,7 @@ function Layout({ titulo, children }: { titulo?: string; children: React.ReactNo
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="text-[2rem] leading-tight">
           {titulo ?? t("Atualização do sistema")}
         </h1>
       </header>

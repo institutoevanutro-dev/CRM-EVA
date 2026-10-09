@@ -14,7 +14,7 @@ export default async function TagReportPage() {
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Por etiqueta")}</h1>
+        <h1 className="text-[2rem] leading-tight">{t("Por etiqueta")}</h1>
         <p className="text-sm text-muted-foreground">
           {t("Qual assunto ocupou a operação no período — e quanto tempo ele esperou.")}
         </p>

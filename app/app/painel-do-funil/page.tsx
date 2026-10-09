@@ -34,7 +34,7 @@ export default async function PainelDoFunilPage() {
       className="-m-6 flex min-h-[calc(100%+3rem)] flex-col gap-6 bg-bg p-6 text-text"
     >
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Painel do funil")}</h1>
+        <h1 className="text-[2rem] leading-tight">{t("Painel do funil")}</h1>
         <p className="max-w-3xl text-sm text-muted-foreground">
           {t(
             "Quem chegou, quem interagiu, quem compareceu e quanto custou cada venda, no mesmo período e no mesmo funil. Embaixo de cada número está o que ele conta.",

@@ -209,7 +209,7 @@ export function DossieDoFollowup({ id, canWrite }: Props) {
           <CaretLeft size={14} aria-hidden /> {t("Fila de follow-ups")}
         </Link>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">{data.contact.name}</h1>
+          <h1 className="text-[2rem] leading-tight">{data.contact.name}</h1>
           <Badge variant={tomDoStatus(data.status)} data-testid="dossie-status">
             {rotuloDoStatus(data.status, t)}
           </Badge>

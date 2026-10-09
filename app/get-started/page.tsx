@@ -50,7 +50,7 @@ export default async function GetStartedPage() {
             <p className="text-xs uppercase tracking-wider text-muted-foreground">
               {branding().name}
             </p>
-            <h1 className="text-2xl font-semibold tracking-tight">
+            <h1 className="text-[2rem] leading-tight">
               {t("Configure sua organização")}
             </h1>
             <p className="text-sm leading-relaxed text-muted-foreground">

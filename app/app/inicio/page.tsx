@@ -18,12 +18,26 @@ export default async function InicioPage() {
   const org = await resolveActiveOrg(user);
   if (!org) redirect("/app/settings/profile");
   const t = (texto: string) => traduzir(texto, user.idioma);
+  // Saudação pela hora de Brasília (o servidor roda em UTC) e só o primeiro nome.
+  const agora = new Date();
+  const hora = Number(agora.toLocaleString("en-US", { hour: "numeric", hourCycle: "h23", timeZone: "America/Sao_Paulo" }));
+  const saudacao = hora < 12 ? t("Bom dia") : hora < 18 ? t("Boa tarde") : t("Boa noite");
+  const primeiroNome = user.full_name?.trim().split(/\s+/)[0];
+  const hoje = agora.toLocaleDateString(user.idioma === "es" ? "es" : "pt-BR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "America/Sao_Paulo",
+  });
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-8 p-6 md:p-8">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Início")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t("O que precisa da sua atenção hoje, num lugar só.")}
+        <p className="text-xs font-medium tracking-[0.18em] text-gold uppercase">{t("Início")}</p>
+        <h1 className="mt-1 text-[2.25rem] leading-tight">
+          {primeiroNome ? `${saudacao}, ${primeiroNome}` : saudacao}
+        </h1>
+        <p className="mt-1 text-sm text-text-muted first-letter:uppercase">
+          {hoje} · {t("O que precisa da sua atenção hoje, num lugar só.")}
         </p>
       </header>
       <PainelInicio />

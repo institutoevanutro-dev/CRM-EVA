@@ -24,7 +24,7 @@ export default async function LgpdRequestsPage() {
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Solicitações LGPD")}</h1>
+        <h1 className="text-[2rem] leading-tight">{t("Solicitações LGPD")}</h1>
         <p className="text-sm text-muted-foreground">
           {t("Pedidos de pacientes sobre os próprios dados (LGPD): cópia, correção ou apagamento. Só administradores.")}
         </p>

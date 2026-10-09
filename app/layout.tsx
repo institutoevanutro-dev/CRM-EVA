@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Mono, Inter, Josefin_Sans } from "next/font/google";
+import { Cormorant_Garamond, IBM_Plex_Mono, Inter } from "next/font/google";
 import { headers } from "next/headers";
 import { Toaster } from "sonner";
 import { coresDaBarraDoNavegador } from "@/lib/branding/barra-do-navegador";
@@ -26,19 +26,19 @@ import { Providers } from "./providers";
 import { PublicEnvScript } from "./public-env-script";
 import "./globals.css";
 
-// Fontes do Eva Financeiro (spec 2026-10-07-cores-e-menu): Inter no texto,
-// Josefin Sans nos títulos.
+// Fontes do site da clínica e do PrecificaEva (spec 2026-10-09-visual-clinica):
+// Inter no texto e nos números, Cormorant Garamond nos títulos.
 const inter = Inter({
   subsets: ["latin", "latin-ext"],
   display: "swap",
   variable: "--font-inter",
 });
 
-const josefin = Josefin_Sans({
+const cormorant = Cormorant_Garamond({
   subsets: ["latin", "latin-ext"],
-  weight: ["300", "400", "600"],
+  weight: ["500", "600", "700"],
   display: "swap",
-  variable: "--font-josefin",
+  variable: "--font-cormorant",
 });
 
 const plexMono = IBM_Plex_Mono({
@@ -290,7 +290,7 @@ export default function RootLayout({
       lang="pt-BR"
       data-theme="light"
       suppressHydrationWarning
-      className={`${inter.variable} ${josefin.variable} ${plexMono.variable}`}
+      className={`${inter.variable} ${cormorant.variable} ${plexMono.variable}`}
     >
       <head>
         {/* Primeiro de tudo: a cor da instalação, antes do CSS e do script de tema. */}
