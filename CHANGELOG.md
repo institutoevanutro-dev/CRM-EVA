@@ -8,6 +8,22 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.12.0] — 2026-10-09
+
+### Adicionado
+
+- **Catálogo de produtos lê os preços do PrecificaEva** Com PRECIFICAEVA_URL, PRECIFICAEVA_TOKEN e PRECIFICAEVA_ORGANIZATION_ID no .env, o CRM copia de hora em hora os preços dos serviços do PrecificaEva para Produtos (medicações não entram). Item da planilha com o mesmo nome é ligado, não duplicado. Sem as três variáveis, nada muda.
+
+- **A IA pode responder quem escreve à noite, sem abrir follow-up e campanha** Em Conexões, na proteção de envio de cada número, há agora duas janelas. A janela de resposta vale quando o paciente escreve: a IA responde dentro dela. A janela de disparo vale para follow-up, campanha e mensagens que retomam conversa parada, que continuam só no horário comercial. Use 0 e 24 na janela de resposta para a IA responder a qualquer hora. Em branco, ela segue a janela de disparo, então nada muda até alguém configurar. O teto diário e o intervalo entre mensagens continuam valendo.
+
+- **Prontuário sincroniza CPF protegido e endereço do paciente** A integração administrativa aceita CPF e endereço, mantendo campos vazios e bloqueando CPF divergente no contato vinculado. O CPF usa a criptografia existente da instalação; o endereço aparece na ficha de contato. Tentativas repetidas não duplicam cadastros, e nenhum conteúdo clínico é aceito.
+
+### Corrigido
+
+- **O aviso de transferência para a equipe não soa mais como recusa** Quando a IA passava a conversa para a equipe por um motivo genérico, um dos avisos ao cliente dizia "Prefiro não arriscar aqui", e isso soava como recusa mesmo quando o motivo era só concluir um cadastro. A frase foi trocada por "Para seguir com o seu pedido, chamei alguém da equipe."
+
+- **IA mais rápida e telas do agente mais claras** O botão Publicar acende depois de salvar, e quando está apagado a tela escreve o motivo. Na lista, Despausar funciona para todo agente e o agente padrão não oferece Arquivar. O agente novo já vem com a empresa de IA da clínica, a lista de modelos só mostra os que conversam, e a confirmação de publicar fala português. A IA mostra "digitando..." enquanto pensa, responde mais rápido e o "Sugerir resposta" entrega o rascunho antes. Sem saldo no provedor, as respostas esperam a recarga e a Central avisa. O medidor de clima passa a usar a chave cadastrada pela tela, o roteador em "Automático" usa o modelo da clínica, a IA pode anotar a data de nascimento para a recepção confirmar, e integrações só leem as respostas prontas compartilhadas. Opcional: quem usa a OpenAI pode pôr OPENAI_REASONING_EFFORT=none no .env para respostas ainda mais rápidas.
+
 ## [3.11.0] — 2026-10-09
 
 ### Adicionado
@@ -6639,7 +6655,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.11.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.12.0...HEAD
+[3.12.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.11.0...v3.12.0
 [3.11.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.10.0...v3.11.0
 [3.10.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.9.1...v3.10.0
 [3.9.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.9.0...v3.9.1
