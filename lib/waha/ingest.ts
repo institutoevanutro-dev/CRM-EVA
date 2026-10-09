@@ -542,7 +542,7 @@ async function markConversation(
   preview: string,
   at: string,
 ): Promise<void> {
-  await marcarConversaComMensagem(admin, {
+  await marcarConversaComMensagem(admin as unknown as SupabaseClient, {
     organizationId,
     conversationId: convId,
     direction,
