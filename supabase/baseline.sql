@@ -22515,12 +22515,42 @@ $$;
 revoke all on function public.fn_set_channel_routing(uuid,uuid,uuid[],boolean) from public,anon;
 grant execute on function public.fn_set_channel_routing(uuid,uuid,uuid[],boolean) to authenticated;
 
--- Revogação é UPDATE, não DELETE: cascade sozinho não remove elegibilidade.
+-- Revogação é UPDATE, não DELETE: cascade sozinho não remove elegibilidade,
+-- nem desatribui conversas abertas (migration 0346, porte do original #1619).
 create or replace function public.fn_routing_member_revoked()
 returns trigger language plpgsql security definer set search_path=public as $$
+declare
+ v_conv record;
 begin
  if new.revoked_at is not null or new.role not in('agent','manager','admin') then
   delete from public.channel_routing_responsibles where organization_id=new.organization_id and user_id=new.user_id;
+
+  for v_conv in
+    select id from public.conversations
+     where organization_id=new.organization_id
+       and assigned_to_user_id=new.user_id
+       and status in('open','pending','claimed','ai_handling')
+     order by id
+  loop
+    update public.conversations
+       set assigned_to_user_id=null,
+           assigned_to_user_name=null,
+           assigned_at=null,
+           assignee_kind=null,
+           status='open',
+           status_changed_at=now(),
+           unread_count_for_assignee=0,
+           -- Mesma regra do release de fn_conversation_assign: a conversa que a IA
+           -- passou a um humano (last_handoff_at) continua com a IA calada.
+           bot_silenced_until=case when last_handoff_at is null then null else bot_silenced_until end,
+           updated_at=now()
+     where id=v_conv.id;
+
+    insert into public.conversation_assignment_events
+      (organization_id,conversation_id,from_user_id,to_user_id,changed_by,reason)
+    values
+      (new.organization_id,v_conv.id,new.user_id,null,auth.uid(),'member_revoked');
+  end loop;
  end if;
  perform public.fn_wake_channel_routing(new.organization_id);
  return new;
@@ -35816,6 +35846,22 @@ end $function$;
 revoke execute on function public.emit_event(text,text,uuid,jsonb,jsonb,uuid) from public, anon;
 grant execute on function public.emit_event(text,text,uuid,jsonb,jsonb,uuid) to authenticated, service_role;
 -- ---- fim: aniversário e compromisso alcançam a origem (migration 0345) ----
+
+-- ---- o motivo 'member_revoked' na auditoria de atribuição (migration 0346) ----
+-- `fn_routing_member_revoked` (editada no lugar, no bloco do roteamento por
+-- canal) grava reason='member_revoked' ao devolver à fila as conversas de quem
+-- foi revogado. O CHECK inline da tabela (batizado
+-- `conversation_assignment_events_reason_check`) não aceitava o valor: toda
+-- revogação com conversa aberta falharia com 23514. Bloco ÚNICO desta
+-- constraint, com o conjunto final; as linhas existentes cabem nele, então
+-- reaplicar no `update.sh` não viola nada. Porte de melgarafael/DeskcommCRM
+-- #1619 (0405 lá).
+alter table public.conversation_assignment_events
+  drop constraint if exists conversation_assignment_events_reason_check;
+alter table public.conversation_assignment_events
+  add constraint conversation_assignment_events_reason_check
+  check (reason in ('claim','transfer','release','routing','handoff','member_revoked'));
+-- ---- fim: o motivo 'member_revoked' (migration 0346) ----
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
