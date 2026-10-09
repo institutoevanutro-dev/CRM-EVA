@@ -210,7 +210,7 @@ describe("podarHistorico — o laço de lotes", () => {
       },
     };
     const r = await podarHistorico(db, {});
-    expect(r.falhas).toHaveLength(4);
+    expect(r.falhas).toHaveLength(5);
     expect(r.falhas[1]).toMatch(/^fn_expurgar_auditoria_vencida: permission denied/);
   });
 
@@ -235,6 +235,7 @@ describe("podarHistorico — o laço de lotes", () => {
         "fn_expurgar_auditoria_vencida",
         "fn_expurgar_espelho_da_agenda",
         "fn_expurgar_nonces_de_oauth",
+        "fn_expurgar_observacoes_do_jev",
       ]);
       expect(r.falhas, falha).toHaveLength(1);
       expect(r.falhas[0], falha).toContain("fn_podar_fila_de_jobs");
@@ -446,6 +447,7 @@ describe("cada rpc() da rodada fala os nomes de parâmetro que o schema declara"
       "fn_expurgar_auditoria_vencida",
       "fn_expurgar_espelho_da_agenda",
       "fn_expurgar_nonces_de_oauth",
+      "fn_expurgar_observacoes_do_jev",
       "fn_podar_fila_de_jobs",
       "fn_verificar_cadeia_auditoria",
     ]);
@@ -482,6 +484,7 @@ describe("o handler HTTP — uma etapa que falha não leva as outras junto", () 
       "fn_expurgar_auditoria_vencida",
       "fn_expurgar_espelho_da_agenda",
       "fn_expurgar_nonces_de_oauth",
+      "fn_expurgar_observacoes_do_jev",
       "fn_verificar_cadeia_auditoria",
     ]);
     expect(limparPayloads).toHaveBeenCalledTimes(1);

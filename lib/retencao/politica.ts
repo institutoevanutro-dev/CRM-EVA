@@ -87,6 +87,15 @@ export const RETENCAO_CAPTACAO_DIAS_PADRAO = 365;
  */
 export const RETENCAO_CAPTACAO_DIAS_PISO = 30;
 
+/**
+ * 90 dias para as observações do Jev (`jev_observacoes`, migration 0350): só
+ * rótulos e probabilidades, sem texto. O piso de 30 é a janela que o cartão do
+ * Jev mostra ("últimos 30 dias"), e mora também NO CORPO de
+ * `fn_expurgar_observacoes_do_jev`.
+ */
+export const RETENCAO_OBSERVACOES_JEV_DIAS_PADRAO = 90;
+export const RETENCAO_OBSERVACOES_JEV_DIAS_PISO = 30;
+
 export interface RetencaoInterpretada {
   /** Dias a pedir ao banco. Nunca abaixo do piso, nunca `NaN`. */
   readonly dias: number;

@@ -69,6 +69,8 @@ import {
   RETENCAO_ESPELHO_AGENDA_DIAS_PISO,
   RETENCAO_FILA_DIAS_PADRAO,
   RETENCAO_FILA_DIAS_PISO,
+  RETENCAO_OBSERVACOES_JEV_DIAS_PADRAO,
+  RETENCAO_OBSERVACOES_JEV_DIAS_PISO,
   interpretarRetencao,
 } from "@/lib/retencao/politica";
 import {
@@ -110,6 +112,9 @@ export interface ResultadoDaRetencao {
   espelho_apagado: number;
   lotes_espelho: number;
   espelho_tem_resto: boolean;
+  /** As observações do Jev (migration 0350): só rótulos, com prazo. */
+  observacoes_jev_apagadas: number;
+  retencao_observacoes_jev_dias: number;
   retencao_fila_dias: number;
   retencao_auditoria_dias: number;
   retencao_espelho_dias: number;
@@ -125,6 +130,7 @@ type Poda =
   | "fn_podar_fila_de_jobs"
   | "fn_expurgar_auditoria_vencida"
   | "fn_expurgar_espelho_da_agenda"
+  | "fn_expurgar_observacoes_do_jev"
   | "fn_expurgar_nonces_de_oauth";
 
 type ArgsDaPoda = { p_retencao_dias: number; p_limite: number } | { p_dias: number; p_lote: number };
@@ -185,6 +191,7 @@ export async function podarHistorico(
     JOB_QUEUE_RETENTION_DAYS?: string;
     AUDIT_LOG_RETENTION_DAYS?: string;
     CALENDAR_MIRROR_RETENTION_DAYS?: string;
+    JEV_OBSERVACOES_RETENTION_DAYS?: string;
   },
 ): Promise<ResultadoDaRetencao> {
   const fila = interpretarRetencao(ambiente.JOB_QUEUE_RETENTION_DAYS, {
@@ -204,6 +211,12 @@ export async function podarHistorico(
     piso: RETENCAO_ESPELHO_AGENDA_DIAS_PISO,
   });
 
+  const observacoesJev = interpretarRetencao(ambiente.JEV_OBSERVACOES_RETENTION_DAYS, {
+    chave: "JEV_OBSERVACOES_RETENTION_DAYS",
+    padrao: RETENCAO_OBSERVACOES_JEV_DIAS_PADRAO,
+    piso: RETENCAO_OBSERVACOES_JEV_DIAS_PISO,
+  });
+
   const jobs = await drenar(db, "fn_podar_fila_de_jobs", fila.dias);
   const linhas = await drenar(db, "fn_expurgar_auditoria_vencida", auditoria.dias);
   const eventos = await drenar(db, "fn_expurgar_espelho_da_agenda", espelho.dias);
@@ -212,12 +225,15 @@ export async function podarHistorico(
   // cresceria para sempre, uma linha por conexão tentada, num produto que se
   // instala e ninguém monitora.
   const nonces = await drenar(db, "fn_expurgar_nonces_de_oauth", 1);
+  const jev = await drenar(db, "fn_expurgar_observacoes_do_jev", observacoesJev.dias);
 
   return {
     jobs_apagados: jobs.apagadas,
     auditoria_apagada: linhas.apagadas,
     espelho_apagado: eventos.apagadas,
     nonces_apagados: nonces.apagadas,
+    observacoes_jev_apagadas: jev.apagadas,
+    retencao_observacoes_jev_dias: observacoesJev.dias,
     lotes_fila: jobs.lotes,
     lotes_auditoria: linhas.lotes,
     lotes_espelho: eventos.lotes,
@@ -227,10 +243,10 @@ export async function podarHistorico(
     retencao_fila_dias: fila.dias,
     retencao_auditoria_dias: auditoria.dias,
     retencao_espelho_dias: espelho.dias,
-    avisos: [fila.aviso, auditoria.aviso, espelho.aviso].filter(
+    avisos: [fila.aviso, auditoria.aviso, espelho.aviso, observacoesJev.aviso].filter(
       (a): a is string => a !== null,
     ),
-    falhas: [jobs.falha, linhas.falha, eventos.falha, nonces.falha].filter(
+    falhas: [jobs.falha, linhas.falha, eventos.falha, nonces.falha, jev.falha].filter(
       (f): f is string => f !== undefined,
     ),
   };
@@ -253,6 +269,7 @@ export function houveEfeito(resultado: ResultadoDaRetencao): boolean {
     // nonces ao laço e ao retorno e esqueci desta linha. O comentário acima
     // descrevia exatamente o defeito que eu estava criando um parágrafo abaixo.
     resultado.nonces_apagados > 0 ||
+    resultado.observacoes_jev_apagadas > 0 ||
     (resultado.payloads_limpos ?? 0) > 0
   );
 }
@@ -338,6 +355,7 @@ async function handle(req: NextRequest): Promise<Response> {
     resultado = await podarHistorico(db, {
       JOB_QUEUE_RETENTION_DAYS: env.JOB_QUEUE_RETENTION_DAYS,
       AUDIT_LOG_RETENTION_DAYS: env.AUDIT_LOG_RETENTION_DAYS,
+      JEV_OBSERVACOES_RETENTION_DAYS: env.JEV_OBSERVACOES_RETENTION_DAYS,
     });
     // Conversa/agenda crua da coexistência que nenhum worker limpou (evento morto).
     // Try próprio, como a varredura abaixo: falhar aqui não suspende a LGPD.
