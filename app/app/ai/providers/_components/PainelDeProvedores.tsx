@@ -186,7 +186,7 @@ export function PainelDeProvedores() {
       </header>
 
       {semChave && (
-        <Card className="mb-6 border-amber-500/40 bg-amber-500/5 p-4" data-testid="aviso-sem-chave">
+        <Card className="mb-6 border-warning/40 bg-warning/5 p-4" data-testid="aviso-sem-chave">
           <p className="text-sm">
             {t(
               "Você ainda não cadastrou nenhuma chave de provedor. Enquanto isso, tudo usa a chave que veio na instalação.",

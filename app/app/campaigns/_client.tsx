@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 
 import { EstadoDaCampanha } from "@/components/campanhas/EstadoDaCampanha";
 import { EmptyState } from "@/components/empty";
+import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,25 +32,25 @@ export function ListaDeCampanhas() {
 
   return (
     <div className="space-y-4 p-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{t("Campanhas")}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t("Escolha o público, escreva a mensagem e acompanhe quem recebeu.")}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-        <Button variant="outline" asChild>
-          <Link href="/app/campaigns/settings">{t("Configuração")}</Link>
-        </Button>
-        <Button asChild>
-          <Link href="/app/campaigns/new">
-            <Plus size={16} weight="bold" aria-hidden />
-            <span>{t("Nova campanha")}</span>
-          </Link>
-        </Button>
-        </div>
-      </header>
+      <CabecalhoDaPagina
+        titulo={t("Campanhas")}
+        descricao={t("Escolha o público, escreva a mensagem e acompanhe quem recebeu.")}
+        acoes={
+          <>
+            {/* "Ritmo de envio", não "Configuração": é a cadência e a janela de
+                envio, e a palavra genérica não dizia o que se acha lá. */}
+            <Button variant="outline" asChild>
+              <Link href="/app/campaigns/settings">{t("Ritmo de envio")}</Link>
+            </Button>
+            <Button asChild>
+              <Link href="/app/campaigns/new">
+                <Plus size={16} weight="bold" aria-hidden />
+                <span>{t("Nova campanha")}</span>
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2">
         <label className="text-sm text-muted-foreground" htmlFor="filtro-status">
@@ -109,7 +110,7 @@ export function ListaDeCampanhas() {
                     {c.snapshot_eligible > 0
                       ? `${c.snapshot_eligible} ${t("contatos na lista")}`
                       : t("lista ainda não preparada")}
-                    {c.snapshot_excluded > 0 ? ` · ${c.snapshot_excluded} ${t("fora")}` : ""}
+                    {c.snapshot_excluded > 0 ? ` · ${c.snapshot_excluded} ${t("fora da lista")}` : ""}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">

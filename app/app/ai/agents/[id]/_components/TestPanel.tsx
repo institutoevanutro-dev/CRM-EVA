@@ -215,7 +215,7 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
           </div>
         </div>
 
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs">
+        <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs">
           <p className="font-medium text-amber-700 dark:text-amber-400">
             {t("⚠ Modo teste consome créditos do provider.")}
           </p>

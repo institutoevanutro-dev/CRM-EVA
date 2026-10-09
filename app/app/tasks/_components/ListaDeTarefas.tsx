@@ -30,7 +30,7 @@ interface Props {
 const COR_DA_PRIORIDADE: Record<PrioridadeDaTarefa, string> = {
   low: "bg-muted text-muted-foreground",
   medium: "bg-primary/10 text-primary",
-  high: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  high: "bg-warning-bg text-warning-fg",
   urgent: "bg-destructive/15 text-destructive",
 };
 

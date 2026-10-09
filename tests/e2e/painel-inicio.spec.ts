@@ -46,6 +46,12 @@ test("gerente cai no Início e vê Meu dia + Gestão", async ({ page }) => {
   await expect(page).toHaveURL(/\/app\/inicio$/, { timeout: 20_000 });
   await expect(page.getByRole("heading", { name: "Meu dia" })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("heading", { name: "Gestão" })).toBeVisible();
+  // Visão da clínica (spec 2026-10-07-inicio-paineis): os quatro painéis, nenhum em falha.
+  await expect(page.getByRole("heading", { name: "Visão da clínica" })).toBeVisible({ timeout: 20_000 });
+  for (const titulo of ["Conversas · últimos 30 dias", "Agenda da semana", "Funil de vendas", "Origem dos pacientes · mês"]) {
+    await expect(page.getByRole("heading", { name: titulo })).toBeVisible({ timeout: 20_000 });
+  }
+  await expect(page.getByText("Não foi possível carregar este painel.")).toHaveCount(0);
   fs.mkdirSync(EVIDENCIA, { recursive: true });
   await page.screenshot({ path: path.join(EVIDENCIA, "painel-inicio-gerente.png"), fullPage: true });
 });
@@ -74,6 +80,9 @@ test("colaborador vê só Meu dia", async ({ page }) => {
   await page.goto("/app/inicio");
   await expect(page.getByRole("heading", { name: "Meu dia" })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("heading", { name: "Gestão" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Visão da clínica" })).toHaveCount(0);
+  // Esconder na tela não é permissão: a rota também recusa.
+  expect((await page.request.get("/api/v1/inicio/paineis")).status()).toBe(403);
   fs.mkdirSync(EVIDENCIA, { recursive: true });
   await page.screenshot({ path: path.join(EVIDENCIA, "painel-inicio-colaborador.png"), fullPage: true });
 });

@@ -56,6 +56,8 @@ function fakePool(contato: { name: string | null; display_name: string | null },
       return { rows: [contato] };
     }
     if (/from message_templates/.test(sql)) return { rows: [{ body: modelo }] };
+    // A inscrição viva no mesmo nó (guarda da #2261 no início do turno).
+    if (sql.includes("select current_node_id, status from followup_enrollments")) return { rows: [{ current_node_id: "node-1", status: "active" }], rowCount: 1 };
     if (/from conversations/.test(sql)) {
       return { rows: [{
         id: CONVERSA, channel_session_id: "canal-1", archived_at: null, bot_silenciado: false,

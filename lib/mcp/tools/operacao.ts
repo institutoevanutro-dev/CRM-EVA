@@ -42,6 +42,7 @@ import {
   type DepsDaOperacao,
 } from "@/lib/operacao/entradas-automaticas";
 import { listarMarcadores, listarTime } from "@/lib/operacao/marcadores-e-time";
+import { resolveUserNames } from "./_users";
 import {
   listarModelosDeMensagem,
   preencherModeloDeMensagem,
@@ -214,19 +215,27 @@ export const crmListTags: McpToolDefinition<typeof listTagsShape> = {
 // respostas prontas
 // ---------------------------------------------------------------------------
 
-const listTemplatesShape = {};
+const listTemplatesShape = {
+  incluir_pessoais: z.boolean().default(false),
+};
 
 export const crmListMessageTemplates: McpToolDefinition<typeof listTemplatesShape> = {
   name: "crm_list_message_templates",
   description:
-    "Lista as respostas prontas da organização: título, corpo com as marcações {{...}}, " +
-    "atalho e se é compartilhada ou pessoal. Use quando a empresa já tiver decidido como diz algo, em vez de escrever do zero.",
+    "Lista as respostas prontas COMPARTILHADAS da organização: título, corpo com as marcações {{...}}, " +
+    "atalho e se é compartilhada ou pessoal. Use quando a empresa já tiver decidido como diz algo, em vez de escrever do zero. " +
+    "Os modelos PESSOAIS de cada atendente NÃO entram na lista: `incluir_pessoais` só mostra os do próprio " +
+    "usuário da chamada, e um token de integração não tem modelo pessoal nenhum.",
   inputSchema: listTemplatesShape,
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
-  handler: async (_input, ctx) => {
-    return { modelos: await listarModelosDeMensagem(deps(ctx)) };
+  handler: async (input, ctx) => {
+    return {
+      modelos: await listarModelosDeMensagem(deps(ctx), {
+        incluirPessoais: input.incluir_pessoais,
+      }),
+    };
   },
 };
 
@@ -463,14 +472,23 @@ const listTeamShape = {};
 export const crmListTeamMembers: McpToolDefinition<typeof listTeamShape> = {
   name: "crm_list_team_members",
   description:
-    "Lista quem trabalha na organização: user_id, papel (viewer|agent|manager|admin) e se o convite ainda está pendente. " +
-    "É o user_id que crm_assign_conversation consome. Não devolve e-mail nem nome — o agente precisa saber a quem " +
-    "direcionar, não a identidade pessoal de cada um. Somente leitura: mudar papel não é possível por aqui.",
+    "Lista quem trabalha na organização: user_id, nome, papel (viewer|agent|manager|admin) e se o convite ainda está pendente. " +
+    "É o user_id que crm_assign_conversation consome; o `nome` existe para a IA escrever uma regra de roteamento citando gente, " +
+    "e não UUID (issue #1539). Segue SEM e-mail: o que sai daqui entra no contexto de um modelo, e a identidade pessoal de cada " +
+    "um não participa de nenhuma decisão de encaminhamento (mínimo LGPD do team/assignable). Somente leitura: mudar papel não é " +
+    "possível por aqui.",
   inputSchema: listTeamShape,
   category: "read",
   requiresRole: "agent",
   requiresScope: "mcp:read",
   handler: async (_input, ctx) => {
-    return { time: await listarTime(deps(ctx)) };
+    const time = await listarTime(deps(ctx));
+    // Nome sem UUID na ponta (issue #1539): a mesma resolução de `nome` da
+    // `crm_list_available_attendants`, pelo helper que expõe SÓ full_name.
+    const nomes = await resolveUserNames(
+      ctx.supabase,
+      time.map((p) => p.user_id),
+    );
+    return { time: time.map((p) => ({ ...p, nome: nomes.get(p.user_id) ?? null })) };
   },
 };

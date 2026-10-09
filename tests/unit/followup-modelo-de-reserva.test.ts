@@ -84,6 +84,8 @@ function fakePool(c: Cenario = {}) {
     if (/from send_ledger/.test(sql)) return { rows: (c.ledger ?? []).map((r) => ({ error_code: null, ...r })) };
     if (/select name, display_name from contacts/.test(sql)) return { rows: [{ name: "Ana Souza", display_name: null }] };
     if (/from message_templates/.test(sql)) return { rows: [{ body: "Oi {{primeiro_nome}}, ainda posso ajudar?" }] };
+    // A inscrição viva no mesmo nó (guarda da #2261 no início do turno).
+    if (sql.includes("select current_node_id, status from followup_enrollments")) return { rows: [{ current_node_id: "node-1", status: "active" }], rowCount: 1 };
     if (/from conversations/.test(sql)) {
       const humano = c.humano?.[leiturasDaConversa] ?? false;
       if (/humano_respondeu/.test(sql)) leiturasDaConversa += 1;

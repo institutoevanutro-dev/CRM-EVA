@@ -65,6 +65,10 @@ const schema = z.object({
   FINANCEIRO_URL: z.string().optional(),
   FINANCEIRO_TOKEN: z.string().optional(),
   FINANCEIRO_ORGANIZATION_ID: z.string().optional(),
+  // Catálogo lido do PrecificaEva (opcional): endereço completo da função tabela-precos, segredo e organização.
+  PRECIFICAEVA_URL: z.string().optional(),
+  PRECIFICAEVA_TOKEN: z.string().optional(),
+  PRECIFICAEVA_ORGANIZATION_ID: z.string().optional(),
   MARKETING_ORGANIZATION_ID: z.string().optional(),
   MARKETING_REPORT_TOKEN: z.string().optional(),
   // Node
@@ -194,6 +198,10 @@ const schema = z.object({
   VERCEL_AI_GATEWAY_URL: z.string().optional().default(""),
   ANTHROPIC_API_KEY: z.string().optional().default(""),
   OPENAI_API_KEY: z.string().optional().default(""),
+  // Esforço de raciocínio dos modelos da OpenAI (o*, gpt-5*, gpt-6*). `z.string()`
+  // e NUNCA `z.enum` (motivo mais abaixo, em AGENT_DISPATCH_CONSUMER): quem valida
+  // a grafia é o boot do worker, em `lib/agent-engine/env.ts`.
+  OPENAI_REASONING_EFFORT: z.string().optional().default(""),
   // Transcrição de áudio num serviço COMPATÍVEL com o da OpenAI (Groq, um
   // Whisper próprio): a chave vale só para `/audio/transcriptions` — a conversa
   // com o cliente e a leitura de imagem continuam no provedor do ponto.

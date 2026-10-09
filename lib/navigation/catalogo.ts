@@ -15,7 +15,7 @@ import type { Role } from "@/lib/auth/types";
  * Doutrina: docs/doctrine/sistema-vivo.md — "por qual porta se chega até mim?"
  */
 
-export type NavGroupId = "atendimento" | "crm" | "ia" | "canais" | "analise" | "organizacao";
+export type NavGroupId = "atendimento" | "crm" | "ia" | "analise" | "organizacao";
 
 export interface NavGroup {
   id: NavGroupId;
@@ -67,9 +67,8 @@ export interface NavMetadata {
  */
 export const NAV_GROUPS: NavGroup[] = [
   { id: "atendimento", label: "Atendimento" },
-  { id: "crm", label: "CRM", hub: { href: "/app/crm", label: "Ver tudo em CRM" } },
-  { id: "ia", label: "Agente de IA", hub: { href: "/app/ai", label: "Ver tudo em IA" } },
-  { id: "canais", label: "Canais" },
+  { id: "crm", label: "Vendas", hub: { href: "/app/crm", label: "Ver tudo em Vendas" } },
+  { id: "ia", label: "IA", hub: { href: "/app/ai", label: "Ver tudo em IA" } },
   { id: "analise", label: "Análise", hub: { href: "/app/analise", label: "Ver tudo em Análise" } },
   {
     id: "organizacao",
@@ -199,6 +198,7 @@ export const NAV_CATALOG = [
     description: "Fale com uma lista de contatos que você escolhe, no ritmo do número.",
     icon: "Megaphone",
     group: "crm",
+    sidebar: true,
     section: "O dia a dia da venda",
     // SÓ NO HUB, como as demais telas de preparação: o quinto item do sidebar do
     // CRM já fez o menu rolar 13px em 900px (e2e `navegacao.spec.ts`), e a
@@ -247,7 +247,11 @@ export const NAV_CATALOG = [
     icon: "Storefront",
     group: "crm",
     section: "Preparar a venda",
-    // SEM `sidebar`: mora atrás de "Ver tudo em CRM".
+    // Aba principal de Vendas desde 07/10/2026 (aprovado pelo dono; spec
+    // 2026-10-07-cores-e-menu). O raciocínio abaixo era sobre a LINHA no menu
+    // lateral, que deixou de existir: agora é uma aba entre cinco.
+    sidebar: true,
+    // Histórico — antes: SEM `sidebar`, morava atrás de "Ver tudo em CRM".
     //
     // O critério é QUEM CONSOME a tela, e a descrição acima já o entrega: o
     // preço quem responde é o atendente de IA, dentro da conversa. Esta tela é
@@ -369,6 +373,7 @@ export const NAV_CATALOG = [
     description: "Os materiais que o agente consulta antes de responder sobre o seu negócio.",
     icon: "BookOpen",
     group: "ia",
+    sidebar: true,
     section: "Ensinar o agente",
     minRole: "manager",
   },
@@ -383,6 +388,9 @@ export const NAV_CATALOG = [
     icon: "FileText",
     group: "ia",
     section: "Ensinar o agente",
+    // Aba principal da área IA desde 07/10/2026 (spec 2026-10-07-cores-e-menu): o menu
+    // lateral passou a listar áreas, então a dobra de 900px deixou de ser o limite.
+    sidebar: true,
     minRole: "manager",
   },
   {
@@ -405,7 +413,7 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/ai/skills",
-    label: "Skills",
+    label: "Habilidades",
     description: "As ações que o agente pode executar sozinho durante o atendimento.",
     icon: "PuzzlePiece",
     group: "ia",
@@ -415,7 +423,7 @@ export const NAV_CATALOG = [
   {
     href: "/app/ai/cases",
     label: "Casos",
-    description: "Os atendimentos que o agente conduziu, do início ao desfecho.",
+    description: "Quando a IA trava em algo que só uma pessoa resolve, ela abre um caso aqui.",
     icon: "ClipboardText",
     group: "ia",
     section: "Acompanhar o agente",
@@ -434,7 +442,7 @@ export const NAV_CATALOG = [
     // melhoria do agente e a fila só era vista por quem soubesse a URL.
     href: "/app/ai/proposals",
     label: "Propostas",
-    description: "Melhorias que a IA sugere para si mesma, esperando sua decisão.",
+    description: "Próximos passos que o assistente sugeriu e esperam sua decisão.",
     icon: "Lightbulb",
     group: "ia",
     section: "Acompanhar o agente",
@@ -475,7 +483,8 @@ export const NAV_CATALOG = [
     description:
       "Seus números de WhatsApp: por QR ou canal oficial da Meta, com saúde, reconexão e templates.",
     icon: "PlugsConnected",
-    group: "canais",
+    group: "organizacao",
+    section: "Canais",
     minRole: "admin",
     sidebar: true,
     healthDot: true,
@@ -486,7 +495,8 @@ export const NAV_CATALOG = [
     label: "Nuvemshop",
     description: "Conecte a loja para trazer pedidos e clientes para dentro do CRM.",
     icon: "Storefront",
-    group: "canais",
+    group: "organizacao",
+    section: "Canais",
     // A página não filtra por papel, mas as Server Actions de conectar e
     // desconectar exigem admin — mostrar a um viewer seria oferecer botão morto.
     minRole: "admin",
@@ -509,9 +519,9 @@ export const NAV_CATALOG = [
     label: "Webhooks",
     description: "Avise outros sistemas quando algo acontecer aqui dentro.",
     icon: "WebhooksLogo",
-    group: "canais",
+    group: "organizacao",
+    section: "Canais",
     minRole: "manager",
-    sidebar: true,
   },
 
   // ---- Análise — olhar o sistema funcionando ----
@@ -571,6 +581,7 @@ export const NAV_CATALOG = [
       "Leads, interação, etapas, comparecimento, custo por venda e ROAS do período, com recorte por origem.",
     icon: "Funnel",
     group: "analise",
+    sidebar: true,
     section: "Os números do período",
     minRole: "manager",
   },
@@ -599,6 +610,7 @@ export const NAV_CATALOG = [
     description: "Qual assunto ocupou a operação no período — e quanto tempo ele esperou.",
     icon: "Tag",
     group: "analise",
+    sidebar: true,
     section: "Os números do período",
   },
   {
@@ -613,7 +625,7 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/audit",
-    label: "Audit Log",
+    label: "Histórico de alterações",
     description: "Quem fez o quê, quando — o histórico que não se apaga.",
     icon: "ClockCounterClockwise",
     group: "analise",
@@ -636,6 +648,7 @@ export const NAV_CATALOG = [
     description: "Verificação em duas etapas, códigos de recuperação e sessões.",
     icon: "ShieldCheck",
     group: "organizacao",
+    sidebar: true,
     section: "Sua conta",
   },
   {
@@ -652,6 +665,7 @@ export const NAV_CATALOG = [
     description: "Quem trabalha aqui, com qual papel e quanta conversa cada um aguenta.",
     icon: "UsersThree",
     group: "organizacao",
+    sidebar: true,
     section: "Sua empresa",
   },
   {
@@ -679,7 +693,7 @@ export const NAV_CATALOG = [
     // quem monta a regra. Nada aqui apaga conversa ou muda dinheiro — o
     // alcance da operação é ao lado do de "Distribuição de atendimento".
     href: "/app/settings/tags",
-    label: "Tags",
+    label: "Etiquetas",
     description:
       "O vocabulário de etiquetas da empresa: onde cada uma é usada e como renomear, juntar ou excluir.",
     icon: "Tag",
@@ -739,6 +753,7 @@ export const NAV_CATALOG = [
     description: "O nome e a cor que sua empresa mostra dentro do sistema.",
     icon: "Palette",
     group: "organizacao",
+    sidebar: true,
     section: "Sua empresa",
     // `admin` pelo mesmo motivo da linha de cima: o que se edita ali é
     // identidade da empresa, e dá-lo a `manager` o colocaria abaixo de billing e
@@ -750,7 +765,7 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/settings/billing",
-    label: "Billing",
+    label: "Plano e cobrança",
     description: "Plano e cobrança.",
     icon: "Receipt",
     group: "organizacao",
@@ -768,7 +783,7 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/settings/api-tokens",
-    label: "API Tokens",
+    label: "Chaves de integração",
     description: "Chaves para outro sistema conversar com o seu CRM.",
     icon: "Lock",
     group: "organizacao",

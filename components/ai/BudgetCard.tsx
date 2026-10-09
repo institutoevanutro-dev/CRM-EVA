@@ -221,7 +221,7 @@ export function BudgetCard({ initialData, isAdmin }: Props) {
               status.pct >= 100
                 ? "bg-destructive"
                 : status.pct >= status.alarm_threshold_pct
-                  ? "bg-amber-500"
+                  ? "bg-warning"
                   : "bg-primary"
             }`}
             style={{ width: `${pct}%` }}
@@ -481,7 +481,7 @@ function EditBudgetDialog({ status }: { status: BudgetStatus }) {
           )}
 
           {armando && (
-            <div className="space-y-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+            <div className="space-y-1.5 rounded-lg border border-warning/40 bg-warning/10 p-3">
               <p className="text-xs">
                 {t("A parada começa a valer")} <strong>72 {t("horas")}</strong> {t("depois de salvar. É o tempo de você ver o aviso chegar antes que alguma conversa pare.")}
               </p>

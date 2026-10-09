@@ -1,3 +1,5 @@
+import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -45,13 +47,13 @@ export default async function OrgMemoryPage() {
     }
   }
 
-  const { data: versionsRaw } = await supabase
+  const { data: versionsRaw, error: erroVersoes } = await supabase
     .from("org_memory_versions")
     .select("id, version_number, created_at")
     .eq("organization_id", activeOrg.orgId)
     .order("version_number", { ascending: false });
 
-  const { data: entriesRaw } = await supabase
+  const { data: entriesRaw, error: erroEntradas } = await supabase
     .from("org_memory_entries")
     .select("id, title, body, source, status, created_at")
     .eq("organization_id", activeOrg.orgId)
@@ -66,16 +68,18 @@ export default async function OrgMemoryPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Memória da IA", idioma)}</h1>
-        <p className="text-sm text-muted-foreground">
-          {traduzir(
+      <CabecalhoDaPagina
+        titulo={traduzir("Memória da IA", idioma)}
+        descricao={traduzir(
             "Regras e aprendizados que TODOS os agentes de IA desta organização seguem em qualquer conversa — não é uma configuração de um agente específico.",
             idioma,
           )}
-        </p>
-      </header>
-      <OrgMemoryClient initialState={initialState} />
+      />
+      {erroVersoes || erroEntradas ? (
+        <ErroDeLeitura texto={traduzir("Não foi possível carregar a memória da IA. Recarregue a página.", idioma)} />
+      ) : (
+        <OrgMemoryClient initialState={initialState} />
+      )}
     </div>
   );
 }

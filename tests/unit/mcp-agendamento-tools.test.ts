@@ -204,6 +204,22 @@ describe("crm_find_free_slots", () => {
 describe("crm_list_appointments", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("preserva o nome do contato na resposta consumida pelo prontuário", async () => {
+    vi.mocked(listaAgendamentos).mockResolvedValue({ ok: true, agendamentos: [
+      // Datas e fuso são obrigatórios desde o porte do #2523: a resposta carrega
+      // também o horário local (`quando`, `fim_quando`).
+      { id: "com-contato", contatoId: "contato", contatoNome: "Paciente de teste", titulo: "Consulta",
+        iniciaEm: "2026-10-07T17:00:00Z", terminaEm: "2026-10-07T18:00:00Z", fuso: "America/Sao_Paulo" },
+      { id: "sem-contato", contatoId: null, contatoNome: null, titulo: "Bloqueio",
+        iniciaEm: "2026-10-07T19:00:00Z", terminaEm: "2026-10-07T20:00:00Z", fuso: "America/Sao_Paulo" },
+    ] } as never);
+    const result = await crmListAppointments.handler({ dia: "2026-10-07" }, ctx);
+    expect(result).toMatchObject({ compromissos: [
+      { id: "com-contato", contato_id: "contato", contato_nome: "Paciente de teste", titulo: "Consulta" },
+      { id: "sem-contato", contato_id: null, contato_nome: null, titulo: "Bloqueio" },
+    ] });
+  });
+
   it("⚠️ 'não sei de quem' NÃO vira lista vazia — vira pergunta", async () => {
     // O caso mais importante deste bloco. Lista vazia faria o modelo concluir e dizer
     // ao cliente que ele não tem nada marcado, quando a verdade é que a chamada não
@@ -358,7 +374,7 @@ describe('Meet no contrato do atendimento',()=>{
   expect(crmBookAppointment.inputSchema).not.toHaveProperty('meetingBooking');expect(crmBookAppointment.inputSchema).not.toHaveProperty('authorized');
  });
  it('lista retorna URL pronta utilizável, mas não URL quando pendente',async()=>{
-  vi.mocked(listaAgendamentos).mockResolvedValue({ok:true,agendamentos:[{id:'ready',meetingState:'ready',meetingUrl:'https://meet.google.com/abc-defg-hij'},{id:'pending',meetingState:'pending',meetingUrl:'https://meet.google.com/old-link'}]} as never);
+  vi.mocked(listaAgendamentos).mockResolvedValue({ok:true,agendamentos:[{id:'ready',iniciaEm:'2030-01-01T12:00:00Z',terminaEm:'2030-01-01T13:00:00Z',fuso:'UTC',meetingState:'ready',meetingUrl:'https://meet.google.com/abc-defg-hij'},{id:'pending',iniciaEm:'2030-01-01T12:00:00Z',terminaEm:'2030-01-01T13:00:00Z',fuso:'UTC',meetingState:'pending',meetingUrl:'https://meet.google.com/old-link'}]} as never);
   const result=await crmListAppointments.handler({contact_id:'contact'},ctx);
   expect(JSON.stringify(result)).toContain('https://meet.google.com/abc-defg-hij');expect(JSON.stringify(result)).not.toContain('old-link');
  });

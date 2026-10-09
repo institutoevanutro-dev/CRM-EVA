@@ -1,3 +1,4 @@
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -32,7 +33,7 @@ export default async function PipelinesSettingsPage() {
     (user.is_platform_admin && !user.support) || ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin;
 
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("crm_pipelines")
     .select("id, name, slug, vocabulary, settings")
     .eq("organization_id", activeOrg.orgId)
@@ -51,12 +52,16 @@ export default async function PipelinesSettingsPage() {
         <p className="text-sm text-muted-foreground">
           {traduzir("Para onde o agente leva o card em cada passo do atendimento", idioma)}
           {podeEditarConfig
-            ? traduzir(", vocabulário, custom fields e motivos de perda", idioma)
+            ? traduzir(", nomes, campos extras e motivos de perda", idioma)
             : ""}
           .
         </p>
       </header>
-      <PipelinesClient pipelines={pipelines} podeEditarConfig={podeEditarConfig} />
+      {error ? (
+        <ErroDeLeitura texto={traduzir("Não foi possível carregar os funis. Recarregue a página.", idioma)} />
+      ) : (
+        <PipelinesClient pipelines={pipelines} podeEditarConfig={podeEditarConfig} />
+      )}
     </div>
   );
 }

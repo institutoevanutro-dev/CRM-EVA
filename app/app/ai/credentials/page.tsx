@@ -1,3 +1,5 @@
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
+import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -23,7 +25,7 @@ export default async function CredentialsPage() {
   }
 
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("ai_provider_credentials_safe")
     .select(SAFE_COLUMNS)
     .eq("organization_id", activeOrg.orgId)
@@ -47,20 +49,22 @@ export default async function CredentialsPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Chaves de acesso à IA", idioma)}</h1>
-        <p className="text-sm text-muted-foreground">
-          {traduzir(
+      <CabecalhoDaPagina
+        titulo={traduzir("Chaves de acesso à IA", idioma)}
+        descricao={traduzir(
             "A conta de inteligência artificial é sua: você contrata direto na Anthropic, OpenAI ou Google e cola a chave aqui. Ela é guardada criptografada e nunca mais aparece na tela depois de salva — nem para você.",
             idioma,
           )}
-        </p>
-      </header>
-      <CredentialsList
+      />
+      {error ? (
+        <ErroDeLeitura texto={traduzir("Não foi possível carregar as chaves agora. Recarregue a página antes de cadastrar outra.", idioma)} />
+      ) : (
+        <CredentialsList
         initialData={credentials}
         canWrite={canWrite}
         usageMap={usageMap}
       />
+      )}
     </div>
   );
 }

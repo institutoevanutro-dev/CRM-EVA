@@ -32,7 +32,7 @@ import { OpenConversationProvider } from "@/hooks/notifications/OpenConversation
 // ADR-05: ícone de feature sai do mapa canônico, nunca do pacote direto.
 import { CaretLeft, ChatCircle, IdentificationCard, MagnifyingGlass, X } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
 import { buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
@@ -413,7 +413,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   // `InboxFilters` segue no topo para poder trocar de aba de volta.
   if (filterValue.tab === "comentarios") {
     return (
-      <div className="flex h-[calc(100dvh-3.5rem-2*var(--space-6))] w-full flex-col">
+      <div className="flex h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full flex-col">
         <InboxFilters value={filterValue} onChange={setFilterValue} />
         <div className="min-h-0 flex-1 overflow-hidden">
           <ComentariosPainel />
@@ -443,7 +443,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   return (
     <OpenConversationProvider conversationId={selectedId}>
     <div
-      className="grid h-[calc(100dvh-3.5rem-2*var(--space-6))] w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[272px_1fr_296px] 2xl:grid-cols-[300px_1fr_320px]"
+      className="grid h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[272px_1fr_296px] 2xl:grid-cols-[300px_1fr_320px]"
       /*
        * O ESTADO DO TEMPO REAL, LEGÍVEL DE FORA — mesmo par que o dossiê do lead
        * já publica (`LeadDossier`), e pela mesma razão: quando a entrega morre,
@@ -536,24 +536,26 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
             </Button>
             <div className="flex-1" />
             {selectedConversation && (
-              <Sheet open={fichaAberta} onOpenChange={setFichaAberta}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-9 gap-1 px-2 xl:hidden">
-                    <IdentificationCard size={16} />
-                    {t("Ficha")}
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="right" className="w-[min(22rem,90vw)] overflow-y-auto p-0">
-                  <SheetTitle className="sr-only">{t("Ficha do contato")}</SheetTitle>
-                  <CRMSidePanel conversation={selectedConversation} />
-                </SheetContent>
-              </Sheet>
+              <Button variant="ghost" size="sm" className="h-9 gap-1 px-2 xl:hidden" onClick={() => setFichaAberta(true)}>
+                <IdentificationCard size={16} />
+                {t("Ficha")}
+              </Button>
             )}
           </div>
         )}
         {selectedConversation ? (
           <>
+            {/* Uma ficha lateral só, aberta pelo botão do topo (notebook) e pelo da
+                barra do celular. Antes ela morava dentro da barra do celular, e
+                abaixo de 1280px fora do celular não havia como abri-la. */}
+            <Sheet open={fichaAberta} onOpenChange={setFichaAberta}>
+              <SheetContent side="right" className="w-[min(24rem,92vw)] overflow-y-auto p-0">
+                <SheetTitle className="sr-only">{t("Ficha do contato")}</SheetTitle>
+                <CRMSidePanel conversation={selectedConversation} />
+              </SheetContent>
+            </Sheet>
             <ConversationHeader
+              onAbrirFicha={() => setFichaAberta(true)}
               conversation={selectedConversation}
               onBuscar={() =>
                 buscaAberta ? fecharBusca() : setBusca({ conversaId: selectedConversation.id, termo: "" })

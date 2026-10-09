@@ -1,6 +1,7 @@
 "use client";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
+import { useInvalidacaoAgrupada } from "@/hooks/realtime/useInvalidacaoAgrupada";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
 import { useRefetchDeSeguranca } from "@/hooks/realtime/useRefetchDeSeguranca";
 import { apiClient } from "@/lib/api/client";
@@ -68,6 +69,12 @@ export type ConversationWithContact = Conversation & {
    * responsável": o dono é o `assigned_to_user_id`, o nome é a cortesia.
    */
   assigned_to_user_name?: string | null;
+  /**
+   * A etapa do funil do negócio ABERTO mais recente do contato, resolvida no
+   * servidor para a lista mostrar quem está perto de fechar. Ausente/nulo = sem
+   * negócio aberto (ou resposta em cache de antes do campo existir).
+   */
+  etapa_atual?: string | null;
 };
 
 /** O vocabulário de LEITURA (7), que inclui os dois estados que só o motor escreve. */
@@ -123,7 +130,6 @@ export function useConversationsRealtime(
   filters: ConversationsFilters,
   orgId: string | null,
 ) {
-  const qc = useQueryClient();
   const queryKey = useMemo(() => ["conversations", filters] as const, [filters]);
 
   const query = useInfiniteQuery({
@@ -175,9 +181,8 @@ export function useConversationsRealtime(
     refetchOnWindowFocus: true,
   });
 
-  const onChange = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ["conversations"] });
-  }, [qc]);
+  const invalidar = useInvalidacaoAgrupada(600);
+  const onChange = useCallback(() => invalidar(["conversations"]), [invalidar]);
 
   // G4-01 (visibility_mode): a subscription postgres_changes HERDA a RLS de
   // SELECT de `conversations` — o Supabase Realtime avalia as policies do usuário

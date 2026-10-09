@@ -153,7 +153,7 @@ export function TeamInvitesClient({ canManage }: Props) {
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {new Date(inv.last_sent_at).toLocaleString(tagDoIdioma)}
+                      {new Date(inv.last_sent_at).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" })}
                       {inv.resend_count > 0 ? (
                         <span className="ml-1 text-xs">
                           ({t("reenviado")} {inv.resend_count}×)
@@ -163,7 +163,7 @@ export function TeamInvitesClient({ canManage }: Props) {
                     <TableCell className="text-sm text-muted-foreground">
                       {inv.status === "aceito"
                         ? "—"
-                        : new Date(inv.expires_at).toLocaleString(tagDoIdioma)}
+                        : new Date(inv.expires_at).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" })}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {inv.inviter_name ?? "—"}
@@ -171,7 +171,13 @@ export function TeamInvitesClient({ canManage }: Props) {
                     {canManage ? (
                       <TableCell>
                         {emAberto ? (
-                          <DropdownMenu>
+                          <DropdownMenu
+                            // `modal={false}`: o menu modal trava a rolagem da página ao abrir, e
+                            // nesta tela — com as abas da área empurrando a lista para baixo da dobra —
+                            // a página voltava ao topo no mesmo instante, deixando o menu FORA da tela
+                            // e sem como rolar até ele (e2e invite-lifecycle #15, run 37774453932).
+                            modal={false}
+                          >
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" aria-label={t("Ações")}>
                                 <DotsThree size={20} />

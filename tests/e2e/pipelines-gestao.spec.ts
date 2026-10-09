@@ -114,6 +114,7 @@ test.describe("gestão de funis", () => {
 
     // ---- renomear ----
     const id = await idDoFunil(page, NOME);
+    await page.getByTestId(`acoes-${id}`).click();
     await page.getByTestId(`renomear-${id}`).click();
     await page.getByTestId(`nome-${id}`).fill(RENOMEADO);
     await page.getByTestId(`salvar-nome-${id}`).click();
@@ -124,11 +125,13 @@ test.describe("gestão de funis", () => {
     await expect(page.locator('li[data-testid^="funil-"]').first()).toContainText(RENOMEADO);
 
     // ---- tornar padrão ----
+    await page.getByTestId(`acoes-${id}`).click();
     await page.getByTestId(`padrao-${id}`).click();
     await expect(linhaDoFunil(page, RENOMEADO).getByText("Padrão")).toBeVisible();
     await page.screenshot({ path: path.join(EVIDENCIA, "funis-03-padrao.png"), fullPage: true });
 
     // ---- recusa: arquivar o funil padrão ----
+    await page.getByTestId(`acoes-${id}`).click();
     await page.getByTestId(`arquivar-${id}`).click();
     await page.getByTestId(`arquivar-confirmar-${id}`).click();
     await expect(page.getByTestId(`arquivar-erro-${id}`)).toContainText(/padrão/i);
@@ -139,14 +142,17 @@ test.describe("gestão de funis", () => {
 
     // ---- devolve o padrão e arquiva de verdade ----
     const idPedidos = await idDoFunil(page, "Pedidos");
+    await page.getByTestId(`acoes-${idPedidos}`).click();
     await page.getByTestId(`padrao-${idPedidos}`).click();
     await expect(linhaDoFunil(page, "Pedidos").getByText("Padrão")).toBeVisible();
 
+    await page.getByTestId(`acoes-${id}`).click();
     await page.getByTestId(`arquivar-${id}`).click();
     await page.getByTestId(`arquivar-confirmar-${id}`).click();
     await expect(linhaDoFunil(page, RENOMEADO)).toHaveCount(0);
 
     // ---- recusa: arquivar o último funil ----
+    await page.getByTestId(`acoes-${idPedidos}`).click();
     await page.getByTestId(`arquivar-${idPedidos}`).click();
     await page.getByTestId(`arquivar-confirmar-${idPedidos}`).click();
     await expect(page.getByTestId(`arquivar-erro-${idPedidos}`)).toContainText(/único/i);
@@ -171,5 +177,5 @@ test("quem não pode gerenciar vê a lista sem os controles de escrita", async (
   await expect(page.getByRole("heading", { name: "Funis" })).toBeVisible();
   await expect(page.getByText("Pedidos", { exact: true })).toHaveCount(1);
   await expect(page.getByTestId("novo-funil")).toHaveCount(0);
-  await expect(page.locator('[data-testid^="arquivar-"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid^="acoes-"]')).toHaveCount(0);
 });

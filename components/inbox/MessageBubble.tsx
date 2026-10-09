@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
@@ -36,11 +36,13 @@ interface Props {
    * "Atendente", que é verdadeiro para todo mundo.
    */
   viewerUserId?: string | null;
+  /** Nome de quem da equipe enviou, quando a lista da equipe o conhece. */
+  nomeDoAutor?: string | null;
 }
 
 function AckIndicator({ status, t }: { status: string; t: (texto: string) => string }) {
   if (status === "read") {
-    return <Checks size={12} weight="bold" className="text-blue-400" aria-label={t("Lida")} />;
+    return <Checks size={12} weight="bold" className="text-info" aria-label={t("Lida")} />;
   }
   if (status === "delivered") {
     return <Checks size={12} weight="bold" className="text-current/70" aria-label={t("Entregue")} />;
@@ -51,13 +53,20 @@ function AckIndicator({ status, t }: { status: string; t: (texto: string) => str
   return null;
 }
 
-export function MessageBubble({
+/**
+ * Memorizado: o inbox redesenha a cada 30s (relógio da janela de 24h) e a cada
+ * releitura da conversa. Sem `memo`, toda bolha da conversa se redesenhava junto.
+ * As props chegam estáveis — o react-query preserva a identidade das mensagens
+ * que não mudaram — e a bolha tem o próprio relógio para o que depende de hora.
+ */
+export const MessageBubble = memo(function MessageBubble({
   message,
   searchMatch = false,
   debugCitations,
   onResponder,
   citada,
   viewerUserId,
+  nomeDoAutor,
 }: Props) {
   // Relógio de 60s: tira da tela o "Transcrevendo…" vencido sem chamar
   // `Date.now()` no render (DeskcommCRM e5216e26a).
@@ -175,10 +184,16 @@ export function MessageBubble({
           isBareSticker
             ? "px-0 py-0"
             : cn(
-                "rounded-2xl px-3 py-2 shadow-sm",
-                isOutbound
-                  ? "rounded-br-sm bg-primary text-primary-foreground"
-                  : "rounded-bl-sm bg-muted text-foreground",
+                "rounded-2xl px-3 py-2",
+                // Três vozes, três tons — quem lê a conversa precisa saber de
+                // relance se foi o paciente, o automático ou alguém da equipe:
+                // paciente em branco sobre o fundo creme; automático em verde
+                // claro; equipe no verde da marca.
+                !isOutbound
+                  ? "rounded-bl-sm border border-border bg-surface text-text"
+                  : message.sent_via === "ai"
+                    ? "rounded-br-sm border border-accent/25 bg-accent-soft text-text"
+                    : "rounded-br-sm bg-primary text-primary-foreground",
               ),
           isFailed && "border border-destructive",
           // A marca da busca é ANEL, não cor de fundo: o fundo já diz de quem é
@@ -227,6 +242,9 @@ export function MessageBubble({
               <Robot size={10} weight="duotone" aria-hidden />
             ) : null}
             {senderLabel && t(senderLabel)}
+            {/* O NOME de quem respondeu, ao lado do papel: "Atendente" sozinho
+                não dizia quem da equipe falou com o paciente. */}
+            {senderLabel === "Atendente" && nomeDoAutor ? ` · ${nomeDoAutor}` : null}
           </div>
         )}
 
@@ -260,7 +278,8 @@ export function MessageBubble({
         <div
           className={cn(
             "mt-1 flex items-center justify-end gap-1 text-[10px]",
-            isOutbound ? "text-primary-foreground" : "text-muted-foreground",
+            // Só o balão da equipe é escuro; o do automático é claro e pede texto escuro.
+            isOutbound && message.sent_via !== "ai" ? "text-primary-foreground" : "text-muted-foreground",
           )}
         >
           {editada && (
@@ -321,4 +340,4 @@ export function MessageBubble({
       )}
     </div>
   );
-}
+});

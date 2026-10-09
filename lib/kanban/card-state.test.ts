@@ -129,9 +129,10 @@ describe("rótulos de tempo", () => {
     expect(coolingLabel(null)).toBe("Sem resposta");
   });
 
-  it("stageAgeLabel: compacto, cabe no rodapé", () => {
-    expect(stageAgeLabel(72)).toBe("3d");
-    expect(stageAgeLabel(5)).toBe("5h");
+  it("stageAgeLabel: legível sem convenção, e ainda cabe no rodapé", () => {
+    expect(stageAgeLabel(72)).toBe("há 3 dias");
+    expect(stageAgeLabel(30)).toBe("há 1 dia");
+    expect(stageAgeLabel(5)).toBe("há 5h");
     expect(stageAgeLabel(0.2)).toBe("agora");
     expect(stageAgeLabel(null)).toBe("");
   });

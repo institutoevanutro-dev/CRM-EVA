@@ -101,7 +101,7 @@ export function InteligenciaDele({ inicial }: { inicial: EstadoDaChave }) {
 
   if (!temChave) {
     return (
-      <section className="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-5">
+      <section className="space-y-3 rounded-lg border border-warning/40 bg-warning/5 p-5">
         <div>
           <h3 className="text-sm font-medium">{t("Ele ainda não tem cérebro")}</h3>
           <p className="mt-1 text-sm text-muted-foreground">

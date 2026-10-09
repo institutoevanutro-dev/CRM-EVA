@@ -158,7 +158,7 @@ describe("formulário depois de um Aplicar com erro", () => {
     const [, ate] = container.querySelectorAll<HTMLInputElement>('input[type="date"]');
     expect(ate!.value).toBe("2026-09-30");
     expect(screen.getByRole("combobox", { name: "Funil" }).textContent).toContain("Comercial");
-    await escolher(user, "Recorte", "Campo do card");
+    await escolher(user, "Separar por", "Campo do negócio");
     expect(screen.queryByText("Nenhum campo de lista neste funil.")).toBeNull();
     await user.click(screen.getByRole("combobox", { name: "Campo" }));
     expect(await screen.findByRole("option", { name: "Modalidade" })).toBeTruthy();
@@ -170,7 +170,7 @@ describe("recorte por campo do card", () => {
     const user = userEvent.setup();
     render(<PainelDoFunilClient podeConectar />);
     await escolher(user, "Funil", "Acompanhamento");
-    await escolher(user, "Recorte", "Campo do card");
+    await escolher(user, "Separar por", "Campo do negócio");
     await user.click(screen.getByRole("combobox", { name: "Campo" }));
     expect(await screen.findByRole("option", { name: "Convênio" })).toBeTruthy();
     expect(screen.queryByRole("option", { name: "Modalidade" })).toBeNull();
@@ -180,12 +180,12 @@ describe("recorte por campo do card", () => {
     const user = userEvent.setup();
     render(<PainelDoFunilClient podeConectar />);
     const aplicar = screen.getByRole("button", { name: "Aplicar" });
-    await escolher(user, "Recorte", "Campo do card");
+    await escolher(user, "Separar por", "Campo do negócio");
     expect(aplicar).toHaveProperty("disabled", true);
     await escolher(user, "Campo", "Modalidade");
     await waitFor(() => expect(aplicar).toHaveProperty("disabled", false));
 
-    await escolher(user, "Recorte", "Etiqueta com prefixo");
+    await escolher(user, "Separar por", "Etiqueta com prefixo");
     expect(aplicar).toHaveProperty("disabled", true);
     await user.type(screen.getByPlaceholderText("criativo-"), "criativo-");
     expect(aplicar).toHaveProperty("disabled", false);
