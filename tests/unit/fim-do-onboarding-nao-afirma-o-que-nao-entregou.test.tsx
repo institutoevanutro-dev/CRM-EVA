@@ -11,7 +11,7 @@
  * no ar. Pular telefone/equipe sem pular a IA não tira ninguém do ar, e é
  * justamente o caso em que a frase antiga continuava certa.
  */
-import { render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DoneClient } from "@/app/onboarding/done/_client";
