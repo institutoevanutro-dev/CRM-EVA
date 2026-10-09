@@ -28,6 +28,7 @@ import { DEFAULT_SENTIMENT_THRESHOLD, SENTIMENT_SYSTEM_PROMPT } from "@/lib/ai/p
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { MENSAGEM_REDIGIDA } from "@/lib/lgpd/cascata";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { observarComOJev, registrarClimaObservado } from "@/workers/ai-sentiment-worker.jev";
 
 const SENTIMENT_MODEL = DEFAULT_CLASSIFIER_MODEL; // "anthropic/claude-haiku-4-5"
 const CLASSIFY_TIMEOUT_MS = 5_000;
@@ -135,7 +136,7 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
     // deles não fazia nada. (issue #486)
     const { data: conversa } = await admin
       .from("conversations")
-      .select("id, channel_session_id, active_ai_agent_id")
+      .select("id, channel_session_id, active_ai_agent_id, is_group")
       .eq("id", message.conversation_id)
       .eq("organization_id", event.organization_id)
       .maybeSingle();
@@ -173,6 +174,21 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
     if (!(candidatos ?? []).some((c) => agenteAtende(c) || precisaRecuperarLegado(c))) {
       return { skipped: true, reason: "nenhum_agente_no_ar" };
     }
+
+    // ── Jev, só observando (fase 1; ver `./ai-sentiment-worker.jev.ts`) ──
+    // Depois das MESMAS guardas que decidem se a IA atende esta conversa, e
+    // antes do modelo de sempre. Sem `JEV_API_KEY` é um `return` sem leitura
+    // nenhuma. Nada do que volta daqui decide o clima nem a passagem.
+    const contextoDoJev = {
+      organizationId: event.organization_id,
+      conversationId: (conversationId ?? message.conversation_id ?? null) as string | null,
+      messageId,
+      agentId: (conversa?.active_ai_agent_id as string | null | undefined) ?? null,
+    };
+    const climaDoJev =
+      conversa?.is_group === true
+        ? null
+        : await observarComOJev(admin, { ...contextoDoJev, mensagem: body });
 
     // ── O modelo do clima, depois das guardas baratas ─────────────────────
     // Três leituras e uma decifragem: fica atrás de tudo que pula sem ele.
@@ -342,6 +358,8 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       }),
       finish_reason: null,
     });
+
+    await registrarClimaObservado(admin, contextoDoJev, climaDoJev, result.sentiment_score, threshold);
 
     // ── Emit alert if below threshold ────────────────────────────────────
     if (result.sentiment_score < threshold) {

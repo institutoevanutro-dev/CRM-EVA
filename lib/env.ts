@@ -317,6 +317,21 @@ const schema = z.object({
   JOB_QUEUE_RETENTION_DAYS: z.string().optional().default(""),
   AUDIT_LOG_RETENTION_DAYS: z.string().optional().default(""),
 
+  /**
+   * Jev (System One, da TypeSafe AI) — decisões rápidas, só OBSERVANDO na fase
+   * 1 (porte de melgarafael/DeskcommCRM #1575/#1696). Todas opcionais.
+   *
+   * Sem `JEV_API_KEY`, o Jev não existe: nenhuma chamada sai para
+   * api.typesafe.ai (`lib/ai/decisao/ponto.ts`). Com ela, ainda nada sai até
+   * um administrador ligar o Jev e aceitar o aviso em IA › Provedores.
+   * `JEV_API_BASE_URL` vazio = https://api.typesafe.ai (existe para o dublê de
+   * teste). A retenção é string pelo mesmo motivo das de cima: lixo resolve
+   * para o padrão (90 dias, piso 30) em `lib/retencao/politica.ts`.
+   */
+  JEV_API_KEY: z.string().optional().default(""),
+  JEV_API_BASE_URL: z.string().optional().default(""),
+  JEV_OBSERVACOES_RETENTION_DAYS: z.string().optional().default(""),
+
   // LGPD export (S-08.04)
   LGPD_SIGNING_KEY: z.string().optional().default(""),
   LGPD_EXPORT_EXPIRES_HOURS: z.string().optional().default("72"),
