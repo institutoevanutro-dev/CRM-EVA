@@ -154,10 +154,11 @@ const schema = z.object({
   // declarava aqui, então nunca teve como verificar nada.
   WAHA_HMAC_SECRET: z.string().optional().default(""),
   // "true" exige assinatura válida em todo webhook do WAHA. Fica desligado por
-  // padrão porque o WAHA Core não assina (medido: 2026.7.2 CORE manda os
-  // eventos sem header mesmo com WHATSAPP_HOOK_HMAC configurado), e exigir
-  // derrubaria a ingestão de mensagens. Ligue se usa WAHA Plus ou um proxy que
-  // assine — aí a verificação passa a ser obrigatória.
+  // padrão porque sem a variável certa o WAHA não assina: o compose entregava
+  // WHATSAPP_HOOK_HMAC, nome que não existe na doc dele (o certo é
+  // WHATSAPP_HOOK_HMAC_KEY), e exigir derrubaria a ingestão de mensagens. Ligue
+  // só depois de conferir que as entregas chegam assinadas
+  // (webhook_events_log.valid_signature = true).
   WAHA_WEBHOOK_REQUIRE_SIGNATURE: z.string().optional().default("false"),
 
   // ─── Chamada de voz WhatsApp (WaCalls, spec 18) ───
