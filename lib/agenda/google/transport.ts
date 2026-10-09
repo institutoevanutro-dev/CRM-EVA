@@ -6,10 +6,41 @@ import type { SyncCursor } from "./sync-model";
 const endpoint = "https://www.googleapis.com/calendar/v3";
 /** Injeção de transporte só por dependência no harness; não existe env/base URL público. */
 export type GoogleFetch = typeof fetch;
+/**
+ * O corpo JSON de uma resposta de erro — lido sem NUNCA lançar.
+ *
+ * O corpo do `fetch` é de uso único: se esta leitura falhar (proxy no meio,
+ * HTML de portal cativo, conexão cortada no meio da resposta), a função devolve
+ * `null` e o `GoogleHttpError` sai só com o status, exatamente como saía antes.
+ * Um espirro de rede na hora de LER o motivo não pode tomar o lugar do erro que
+ * o Google mandou.
+ */
+async function corpoDaRecusa(r: Response): Promise<unknown> {
+  try {
+    const texto = (await r.text()).trim();
+    return texto ? JSON.parse(texto) : null;
+  } catch {
+    return null;
+  }
+}
 export class GoogleHttpError extends Error {
   constructor(
     readonly status: number,
     readonly retryAfter: number | null = null,
+    /**
+     * O corpo que o Google devolveu junto da recusa, quando ele veio em JSON.
+     *
+     * É daqui que sai o MOTIVO (`{"error":{"code":400,"errors":[{"reason":
+     * "invalid"}]}}`). Sem guardá-lo, quem trata a recusa ficava só com o
+     * número: a frase persistida dizia "Google HTTP 400" para uma recusa que o
+     * Google já tinha explicado, e quem operava não tinha o que corrigir.
+     *
+     * Ele NÃO entra no `message` de propósito: o corpo carrega texto livre
+     * (nome e e-mail de convidado, trecho de descrição) e essa frase é
+     * persistida e exibida na tela. Quem monta a frase lê daqui apenas os
+     * identificadores (`errors[].reason`, `error.status`).
+     */
+    readonly corpo: unknown = null,
   ) {
     super(
       status === 412
@@ -43,6 +74,7 @@ export function googleTransport(accessToken: string, transport: GoogleFetch = fe
       throw new GoogleHttpError(
         r.status,
         r.headers.has("retry-after") ? Number(r.headers.get("retry-after")) : null,
+        await corpoDaRecusa(r),
       );
     return r.status === 204 ? null : r.json();
   }
