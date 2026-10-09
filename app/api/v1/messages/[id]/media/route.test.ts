@@ -106,6 +106,13 @@ describe("GET /messages/[id]/media com item da biblioteca", () => {
     expect(assinados).toEqual([`${ORG}/${ITEM}/B.png`]);
   });
 
+  it("variante gravada que não existe mais: 404, não cai na variante A", async () => {
+    const { assinados } = montar({ variante: "Z" });
+    const res = await chamar();
+    expect(res.status).toBe(404);
+    expect(assinados).toEqual([]);
+  });
+
   it("item de outra org: 404 e nada assinado", async () => {
     const { assinados } = montar({ itemOrg: OUTRA });
     const res = await chamar();

@@ -83,6 +83,11 @@ export const MessageBubble = memo(function MessageBubble({
   const hasMedia = Boolean(
     message.media_url || message.media_storage_path || message.media_library_item_id,
   );
+  // Item da biblioteca apagado depois do envio: a FK zera e só a variante resta.
+  const semMidiaDaBiblioteca =
+    !hasMedia &&
+    (message.type === "image" || message.type === "video") &&
+    Boolean((message.metadata as { media_variant?: unknown } | null)?.media_variant);
   const isContact = message.type === "contact";
   // Figurinha sem caption: sem moldura de bolha (padrão WhatsApp).
   const isBareSticker = hasMedia && message.type === "sticker" && !message.body;
@@ -261,6 +266,10 @@ export const MessageBubble = memo(function MessageBubble({
               <div className={cn(message.body && "mb-1")}>
                 <MediaRenderer message={message} agora={agora} />
               </div>
+            )}
+
+            {semMidiaDaBiblioteca && (
+              <p className="text-xs italic text-muted-foreground">{t("Mídia removida da biblioteca")}</p>
             )}
 
             {isContact && !hasMedia && (

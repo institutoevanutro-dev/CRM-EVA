@@ -25,13 +25,23 @@ const PEDIDO = "43840000-0000-4000-8000-00000000000f";
 const ITEM = "43840000-0000-4000-8000-000000000001";
 const MSG = "43840000-0000-4000-8000-000000000002";
 
+const MSG_CONVERSA = "43840000-0000-4000-8000-000000000003";
+const CAMINHO_CONVERSA = `${ORG}/${CONVERSA}/foto.png`;
 const naFila = async (): Promise<number> =>
   (await q("select count(*)::int n from storage_redaction_queue where bucket = 'media-library'")).rows[0].n;
+// o caminho da variante do acervo não pode estar na fila em NENHUM bucket
+const caminhoDoAcervoNaFila = async (): Promise<number> =>
+  (await q("select count(*)::int n from storage_redaction_queue where object_path = $1", [`${ORG}/${ITEM}/A-x.png`]))
+    .rows[0].n;
+// controle positivo: a mídia da conversa É enfileirada
+const midiaDaConversaNaFila = async (): Promise<number> =>
+  (await q("select count(*)::int n from storage_redaction_queue where object_path = $1", [CAMINHO_CONVERSA])).rows[0]
+    .n;
 
 beforeEach(async () => {
   seedGov();
   await q(`delete from storage_redaction_queue where organization_id = $1`, [ORG]);
-  await q(`delete from messages where id = $1`, [MSG]);
+  await q(`delete from messages where id = any($1)`, [[MSG, MSG_CONVERSA]]);
   await q(`delete from media_library_items where id = $1`, [ITEM]);
   await q(
     `insert into lgpd_requests (id, organization_id, request_type, source, scope, due_at)
@@ -48,6 +58,12 @@ beforeEach(async () => {
                            body, media_storage_path, media_library_item_id, sent_at)
      values ($1, $2, $3, $4, $5, 'image', 'outbound', 'sent', 'legenda', null, $6, now())`,
     [MSG, ORG, CONVERSA, GOV_SESSION, CONTATO, ITEM],
+  );
+  await q(
+    `insert into messages (id, organization_id, conversation_id, channel_session_id, contact_id, type, direction, status,
+                           body, media_storage_path, sent_at)
+     values ($1, $2, $3, $4, $5, 'image', 'inbound', 'received', 'foto', $6, now())`,
+    [MSG_CONVERSA, ORG, CONVERSA, GOV_SESSION, CONTATO, CAMINHO_CONVERSA],
   );
   // a cascata é irreversível; o reset é do fixture
   await q("set session_replication_role = replica");
@@ -71,12 +87,16 @@ describe("mensagem com mídia da biblioteca (0327)", () => {
   it("anonimizar pela tela não enfileira o acervo e o item sobrevive", async () => {
     await q(`update contacts set is_anonymized = true, anonymized_at = now() where id = $1`, [CONTATO]);
     expect(await naFila()).toBe(0);
+    expect(await caminhoDoAcervoNaFila()).toBe(0);
+    expect(await midiaDaConversaNaFila()).toBe(1);
     expect((await q("select count(*)::int n from media_library_items where id = $1", [ITEM])).rows[0].n).toBe(1);
   });
 
   it("o pedido formal de redação também não enfileira o acervo", async () => {
     await q("select public.fn_lgpd_cascade_redact_contact($1, $2, $3)", [ORG, CONTATO, PEDIDO]);
     expect(await naFila()).toBe(0);
+    expect(await caminhoDoAcervoNaFila()).toBe(0);
+    expect(await midiaDaConversaNaFila()).toBe(1);
     expect((await q("select count(*)::int n from media_library_items where id = $1", [ITEM])).rows[0].n).toBe(1);
   });
 

@@ -23,6 +23,7 @@ import {
 import { variantesDoItem } from "@/lib/midias/esquemas";
 import { BUCKET_DA_BIBLIOTECA } from "@/lib/midias/termo";
 import { cabecalhosDeMidia } from "@/lib/messaging/media/servir";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -84,7 +85,9 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
       .maybeSingle()) as { data: { id: string; variants: unknown } | null };
     const variantes = item ? variantesDoItem(item.variants, activeOrg.orgId, item.id) : [];
     const gravada = (msg.metadata as { media_variant?: unknown } | null)?.media_variant;
-    const escolhida = variantes.find((v) => v.key === gravada) ?? variantes[0];
+    // Variante gravada que sumiu do item: 404, nunca outra no lugar (a pessoa
+    // veria no histórico uma imagem diferente da que o contato recebeu).
+    const escolhida = gravada ? variantes.find((v) => v.key === gravada) : variantes[0];
     if (escolhida) {
       const { data: signed } = await admin.storage
         .from(BUCKET_DA_BIBLIOTECA)
@@ -94,6 +97,10 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
         response.headers.set("X-Request-Id", requestId);
         return response;
       }
+      logger.warn("[messages.media] assinatura da biblioteca falhou", {
+        message_id: messageId,
+        item_id: msg.media_library_item_id,
+      });
     }
   }
 

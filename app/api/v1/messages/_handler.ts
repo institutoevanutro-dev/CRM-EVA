@@ -1190,7 +1190,17 @@ export async function sendMessageHandler(
     resourceType: "message",
     resourceId: message.id,
     requestId: ctx.requestId,
-    metadata: { ...a.metadataActor, status: message.status, type: message.type },
+    metadata: {
+      ...a.metadataActor,
+      status: message.status,
+      type: message.type,
+      ...(message.media_library_item_id
+        ? {
+            media_library_item_id: message.media_library_item_id,
+            media_variant: (message.metadata as { media_variant?: string } | null)?.media_variant,
+          }
+        : {}),
+    },
   });
 
   await supabase

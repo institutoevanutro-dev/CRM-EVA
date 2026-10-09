@@ -10,6 +10,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { audit } from "@/lib/audit";
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
 import { ApiError } from "@/lib/api/types";
@@ -244,6 +245,13 @@ describe("sendMessageHandler — mídia da biblioteca", () => {
 
     expect(msg).toMatchObject({ status: "sent", external_id: "MEDIA1", media_library_item_id: ITEM });
     expect(state.preview).toBe("Veja o antes e depois");
+  });
+
+  it("a auditoria message.sent leva o item e a variante", async () => {
+    const { supabase } = makeSupabase();
+    await sendMessageHandler(supabase, ctx, input({ media_variant: "B" }));
+    const chamada = vi.mocked(audit).mock.calls.find(([a]) => a.action === "message.sent");
+    expect(chamada?.[0].metadata).toMatchObject({ media_library_item_id: ITEM, media_variant: "B" });
   });
 
   it("vídeo sai como video; sem body, o preview é [video] e não há legenda", async () => {
