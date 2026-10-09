@@ -338,6 +338,7 @@ jobs:
         relatorio-por-etiqueta.spec.ts
         qa-l12-inbox.spec.ts
         filtro-por-marcador-pela-tela.spec.ts
+        fonte-de-captacao-assina-os-envios.spec.ts
         qa-l12-troca-de-funil.spec.ts
         qa-l12-agente-ia.spec.ts
         cadastro-incorporado.spec.ts
