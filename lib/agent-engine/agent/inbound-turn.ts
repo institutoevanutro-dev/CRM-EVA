@@ -128,6 +128,7 @@ import {
   catalogoEntregueAoOperador,
 } from './entrega-de-capacidade';
 import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memory';
+import { blocoDaBiblioteca, carregarMidiasProntas, type MidiaDisponivel } from '@/lib/midias/disponiveis';
 import { matchesHandoffKeyword, type PublishedAgentConfig } from './agent-config';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
@@ -2441,6 +2442,10 @@ async function executarTurnoDoAgente(
   // num lugar só para poder ser testada (o bloco da cadeia nomeia
   // `crm_list_event_types`, e nomear ferramenta ausente faz o modelo tentar chamá-la).
   if (agentConfig !== null) blocosResidentes.push(...blocosDeAgendaResidentes(agentConfig.toolIds));
+  // Biblioteca de mídias: lista carregada uma vez por turno; a tool send_media só existe se não for vazia.
+  const midiasProntas: MidiaDisponivel[] = await carregarMidiasProntas(pool, tenantId);
+  const blocoMidias = blocoDaBiblioteca(midiasProntas);
+  if (blocoMidias) blocosResidentes.push(blocoMidias);
   if (preview)
     blocosResidentes.push(
       'MODO PRÉVIA: proponha a resposta com send_message. Operações são propostas separadas; nunca diga que executou uma proposta. Nenhum envio real acontece.',
