@@ -474,6 +474,47 @@ export async function sendMessageHandler(
     );
   }
 
+  // ─── A janela de 24h, ANTES de qualquer linha nascer ─────────────────────
+  //
+  // Porte de melgarafael/DeskcommCRM #1677 (só a recusa). No canal oficial,
+  // texto livre só sai enquanto o cliente escreveu nas últimas 24h; fora disso
+  // só modelo aprovado, e a plataforma recusa com 131047. Antes a rota
+  // respondia 201, a linha virava `sent` e a recusa chegava DEPOIS, pelo
+  // webhook: quem integra registrava "enviado" e o cliente nunca recebia.
+  //
+  // Só quem chega POR TOKEN (`api_token` e `ai_agent`): a tela já trava o
+  // composer com a mesma régua, e automação/follow-up seguem com o contrato de
+  // antes. `regra === "modelo"` deixa o Instagram (janela de 7 dias, recusa
+  // terminal própria logo abaixo) exatamente como estava.
+  if (
+    (ctx.actor.type === "api_token" || ctx.actor.type === "ai_agent") &&
+    input.type !== "template"
+  ) {
+    const janela = estadoDaJanela(
+      c.channel_sessions?.provider ?? DEFAULT_CHANNEL_PROVIDER,
+      c.last_inbound_at,
+      new Date(),
+    );
+    if (janela.tipo === "fechada" && janela.regra === "modelo") {
+      throw new ApiError(
+        422,
+        "janela_fechada",
+        {
+          codigo: "janela_fechada",
+          // `null` = o cliente nunca escreveu: não houve abertura.
+          ultima_mensagem_do_cliente: c.last_inbound_at,
+          use: "template",
+          codigo_plataforma: "131047",
+        },
+        ctx.requestId,
+        traduzir(
+          "Janela de 24 horas fechada: texto livre é recusado pela plataforma (131047). Envie um modelo aprovado ou aguarde o cliente escrever.",
+          ctx.idioma ?? "pt-BR",
+        ),
+      );
+    }
+  }
+
   if (
     input.media_storage_path &&
     !isMediaPathOwnedBy(input.media_storage_path, c.organization_id, c.id)

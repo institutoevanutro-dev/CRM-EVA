@@ -8657,6 +8657,9 @@ export const DICIONARIO: Traducoes = {
   "Lead foi modificado por outro usuário. Recarregue e tente novamente.": { es: "El lead fue modificado por otro usuario. Recarga e intenta de nuevo." },
   "Liberou a conversa de volta para a fila": { es: "Liberó la conversación de vuelta a la cola" },
   "Atendente revogado da organização": { es: "Asesor revocado de la organización" },
+  "Janela de 24 horas fechada: texto livre é recusado pela plataforma (131047). Envie um modelo aprovado ou aguarde o cliente escrever.": {
+    es: "Ventana de 24 horas cerrada: la plataforma rechaza el texto libre (131047). Envía un modelo aprobado o espera a que el cliente escriba.",
+  },
   "Material não encontrado.": { es: "Material no encontrado." },
   "Move cross-pipeline não é permitido. Use POST /api/v1/leads/[id]/clone para levar o negócio a outro funil.": { es: "Mover entre pipelines no está permitido. Usa POST /api/v1/leads/[id]/clone para llevar el negocio a otro embudo." },
   "Nada para alterar.": { es: "Nada para modificar." },
