@@ -10,6 +10,7 @@
   "lanes": [
     { "id": "humano", "label": "O que a pessoa vê" },
     { "id": "borda", "label": "Borda HTTP (manager+)" },
+    { "id": "bordaAgente", "label": "Borda HTTP (agent+)" },
     { "id": "fila", "label": "Fila de eventos" },
     { "id": "motor", "label": "Indexador" },
     { "id": "dados", "label": "Banco e arquivos" },
@@ -209,6 +210,30 @@
       "type": "storage",
       "label": "bucket media-library",
       "sublabel": "privado; caminho org/item/variante-uuid.ext, URL assinada só para a tela"
+    },
+    {
+      "id": "midiasEnvio",
+      "lane": "bordaAgente",
+      "col": 5,
+      "type": "api",
+      "label": "POST /api/v1/messages",
+      "sublabel": "media_library_item_id: confere o termo de uso de imagem na hora e envia a variante pelo canal; organization_id vem da sessão"
+    },
+    {
+      "id": "turnoMidia",
+      "lane": "turno",
+      "col": 8,
+      "type": "worker",
+      "label": "send_media no turno",
+      "sublabel": "lista as mídias prontas (quando usar), manda uma por resposta pelo mesmo envio; canal fora = falha honesta, nunca fila; sem mídia pronta a ferramenta some"
+    },
+    {
+      "id": "mensagens",
+      "lane": "dados",
+      "col": 6,
+      "type": "table",
+      "label": "messages",
+      "sublabel": "grava media_library_item_id e a variante sorteada; media_storage_path fica nulo (a anonimização não toca o acervo)"
     }
   ],
   "edges": [
@@ -261,6 +286,36 @@
       "from": "midiasTabela",
       "to": "midiasTela",
       "label": "a lista mostra o selo de cada mídia"
+    },
+    {
+      "id": "e31",
+      "from": "midiasTabela",
+      "to": "midiasEnvio",
+      "label": "o envio lê o item e recalcula o termo antes de mandar"
+    },
+    {
+      "id": "e32",
+      "from": "midiasBucket",
+      "to": "midiasEnvio",
+      "label": "o envio assina a URL do arquivo da variante"
+    },
+    {
+      "id": "e33",
+      "from": "midiasEnvio",
+      "to": "mensagens",
+      "label": "grava a mensagem com o item e a variante enviada"
+    },
+    {
+      "id": "e34",
+      "from": "midiasTabela",
+      "to": "turnoMidia",
+      "label": "o turno lê só as mídias prontas e o 'quando usar'"
+    },
+    {
+      "id": "e35",
+      "from": "turnoMidia",
+      "to": "midiasEnvio",
+      "label": "manda a escolhida pelo envio que confere o termo"
     }
   ],
   "cards": [

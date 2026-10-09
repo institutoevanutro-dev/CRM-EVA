@@ -139,14 +139,17 @@ describe("o envelope carrega a thread do provider", () => {
     // CINCO desde o Instagram etapa 2: `resolveRecipient` também recebe a
     // thread, porque lá o destinatário É ela (o IGSID guardado na conversa).
     //
+    // SEIS desde o envio de item da biblioteca de mídias: é um segundo caminho de
+    // mídia (variante A/B do item), e carrega a thread pelo mesmo motivo do primeiro.
+    //
     // A resposta para o cartão de contato é a mesma das outras três: o canal
     // oficial endereça por thread própria, e um cartão enviado sem ela abriria
     // conversa nova em vez de continuar a que está aberta.
     const passagens = [...fonte.matchAll(/providerConversationId:\s*c\.provider_conversation_id/g)];
     expect(
       passagens.length,
-      "todos os call sites (texto, mídia, modelo e contato) precisam passar",
-    ).toBe(5);
+      "todos os call sites (texto, mídia, modelo, contato e mídia da biblioteca) precisam passar",
+    ).toBe(6);
   });
 });
 

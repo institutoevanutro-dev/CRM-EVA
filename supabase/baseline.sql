@@ -35394,6 +35394,22 @@ revoke execute on function public.fn_prontuario_patch_contact_v2(uuid,uuid,uuid,
 grant execute on function public.fn_prontuario_create_contact_v2(uuid,uuid,text,date,text,text,uuid,uuid,text,jsonb) to service_role;
 grant execute on function public.fn_prontuario_patch_contact_v2(uuid,uuid,uuid,integer,timestamptz,text,date,text,text,uuid,text,jsonb) to service_role;
 
+-- ---- mensagem com mídia da biblioteca (migration 0327) ----
+-- Biblioteca de mídias, fatia 2: a mensagem que levou um item da biblioteca.
+-- media_storage_path fica NULO nesses envios de propósito: a anonimização LGPD
+-- recolhe só media_storage_path, então nunca enfileira o arquivo do acervo
+-- (compartilhado por todas as conversas). Apagar o item preserva o histórico.
+alter table public.messages
+  add column if not exists media_library_item_id uuid
+    references public.media_library_items(id) on delete set null;
+
+create index if not exists messages_media_library_item_idx
+  on public.messages (media_library_item_id) where media_library_item_id is not null;
+
+comment on column public.messages.media_library_item_id is
+  'Item da biblioteca de mídias enviado nesta mensagem (migration 0327). A variante sai em metadata.media_variant.';
+-- ---- fim: mensagem com mídia da biblioteca (migration 0327) ----
+
 -- ---- recusa permanente do Meet sai PT409, não 40001 (migration 0336) ----
 create or replace function public.fn_meet_action(p_org uuid,p_id uuid,p_revision text,p_request uuid,p_action text,p_conversation uuid default null)
 returns boolean language plpgsql security definer set search_path=public as $$

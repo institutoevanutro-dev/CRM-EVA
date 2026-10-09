@@ -39,6 +39,15 @@ import { CHANNEL_PROVIDER_INSTAGRAM } from "@/lib/channels/capabilities";
 import { automaticoPodeEnviar, estadoDaJanela } from "@/lib/channels/janela";
 import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
 import { isMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
+import { escolherVariante, tipoDaMidia } from "@/lib/midias/envio";
+import { variantesDoItem } from "@/lib/midias/esquemas";
+import {
+  BUCKET_DA_BIBLIOTECA,
+  hojeNaClinica,
+  situacaoDaMidia,
+  type SituacaoDaMidia,
+  type Variante,
+} from "@/lib/midias/termo";
 import {
   buildVcard,
   normalizePhoneForDisplay,
@@ -126,6 +135,26 @@ async function removerEcoDoProprioEnvio(
       .neq("id", minhaLinhaId);
     if (error)
       console.error("[messages.send] não consegui remover o eco do próprio envio", error.message);
+
+    // O LIMITE CONHECIDO de `wahaEchoExternalIds` (@lid × @c.us): o composto que
+    // construímos usa o chat do ENVIO, e o NOWEB pode ecoar com o outro formato
+    // do mesmo contato — medido em 06/10/2026: envio para `…@lid`, eco
+    // `true_5513…@c.us_3EB0…`. O id bare do WhatsApp é único (20+ caracteres
+    // aleatórios), então casar pelo SUFIXO `_<bare>` alcança qualquer formato
+    // de chat sem alcançar outra mensagem. Só para id composto (`<fromMe>_<chat>_<id>`) do canal.
+    const bare = externalId.slice(externalId.lastIndexOf("_") + 1);
+    if (bare.length >= 16 && candidatos.some((c) => c.startsWith("true_"))) {
+      const { error: erroSufixo } = await supabase
+        .from("messages")
+        .delete()
+        .eq("organization_id", organizationId)
+        .eq("conversation_id", conversationId)
+        .eq("sent_via", "external_device")
+        .like("external_id", `%\\_${bare}`)
+        .neq("id", minhaLinhaId);
+      if (erroSufixo)
+        console.error("[messages.send] não consegui remover o eco por sufixo", erroSufixo.message);
+    }
   } catch (err) {
     console.error(
       "[messages.send] a remoção do eco lançou",
@@ -135,7 +164,7 @@ async function removerEcoDoProprioEnvio(
 }
 
 const MSG_COLS =
-  "id, organization_id, conversation_id, channel_session_id, contact_id, external_id, type, direction, status, ack, error_code, error_message, body, media_url, media_mime, media_size_bytes, media_storage_path, media_derived_text, media_derived_status, sent_via, sent_by_user_id, sent_at, delivered_at, read_at, metadata, edited_at, revoked_at, reply_to_message_id, created_at";
+  "id, organization_id, conversation_id, channel_session_id, contact_id, external_id, type, direction, status, ack, error_code, error_message, body, media_url, media_mime, media_size_bytes, media_storage_path, media_library_item_id, media_derived_text, media_derived_status, sent_via, sent_by_user_id, sent_at, delivered_at, read_at, metadata, edited_at, revoked_at, reply_to_message_id, created_at";
 
 function actorAuditPayload(actor: Actor): {
   actorUserId: string | null;
@@ -259,11 +288,64 @@ function previewFrom(input: {
   body?: string;
   media_url?: string;
   media_storage_path?: string;
+  media_library_item_id?: string;
   type?: string;
 }): string {
   if (input.body) return input.body.slice(0, 280);
-  if (input.media_url || input.media_storage_path) return `[${input.type ?? "media"}]`;
+  if (input.media_url || input.media_storage_path || input.media_library_item_id)
+    return `[${input.type ?? "media"}]`;
   return "";
+}
+
+const SITUACAO_LEGIVEL: Record<Exclude<SituacaoDaMidia, "pronta">, string> = {
+  sem_termo: "sem termo de uso de imagem",
+  termo_vencido: "termo vencido",
+  revogada: "termo revogado",
+  arquivo_ausente: "sem arquivo",
+};
+
+/**
+ * Lê o item da biblioteca com o admin client, SEMPRE pela org da conversa, e
+ * confere o termo agora: a tela e o prompt também avisam, mas a trava é aqui.
+ * O caminho que sai é o gravado no item, filtrado por `variantesDoItem`.
+ */
+async function resolverMidiaDaBiblioteca(
+  orgId: string,
+  itemId: string,
+  contactId: string,
+  pedida: "A" | "B" | undefined,
+  requestId: string,
+): Promise<{ variante: Variante; type: "image" | "video" }> {
+  const { data, error } = await createAdminClient()
+    .from("media_library_items")
+    .select("id, contains_person, consent_signed_at, consent_expires_at, consent_revoked_at, variants")
+    .eq("organization_id", orgId)
+    .eq("id", itemId)
+    .maybeSingle();
+  if (error) throw new ApiError(500, "internal_error", undefined, requestId, error.message);
+  if (!data) throw new ApiError(422, "media_not_found", undefined, requestId, "Mídia não encontrada na biblioteca.");
+  const linha = data as {
+    contains_person: boolean;
+    consent_signed_at: string | null;
+    consent_expires_at: string | null;
+    consent_revoked_at: string | null;
+    variants: unknown;
+  };
+  // Só imagem e vídeo saem por aqui; variante de outro tipo conta como sem arquivo.
+  const variants = variantesDoItem(linha.variants, orgId, itemId).filter((v) => tipoDaMidia(v.mime));
+  const situacao = situacaoDaMidia({ ...linha, variants }, hojeNaClinica());
+  const variante = situacao === "pronta" ? escolherVariante(variants, contactId, pedida) : null;
+  if (!variante) {
+    const s = situacao === "pronta" ? "arquivo_ausente" : situacao;
+    throw new ApiError(
+      422,
+      "media_not_ready",
+      { situacao: s },
+      requestId,
+      `Esta mídia não pode ser enviada agora: ${SITUACAO_LEGIVEL[s]}.`,
+    );
+  }
+  return { variante, type: tipoDaMidia(variante.mime)! };
 }
 
 /**
@@ -403,6 +485,46 @@ export async function sendMessageHandler(
       ctx.requestId,
       "media_storage_path fora da conversa.",
     );
+  }
+
+  let midiaDaBiblioteca: { variante: Variante; type: "image" | "video" } | null = null;
+  if (input.media_library_item_id) {
+    // O schema já recusa os dois; a checagem fica aqui para quem chama o
+    // handler sem passar pelo schema (agente, automação).
+    if (input.media_storage_path) {
+      throw new ApiError(
+        422,
+        "validation_error",
+        undefined,
+        ctx.requestId,
+        "Envie o arquivo da conversa ou o item da biblioteca, não os dois.",
+      );
+    }
+    try {
+      midiaDaBiblioteca = await resolverMidiaDaBiblioteca(
+        c.organization_id,
+        input.media_library_item_id,
+        c.contact_id,
+        input.media_variant,
+        ctx.requestId,
+      );
+    } catch (err) {
+      // Envio do agente: `internalMessageId` vem em TODO envio dele, não só no
+      // replay. Na primeira tentativa a linha ainda não existe e o update não
+      // acha nada; no replay a linha `queued` deste id existe e nunca mais vai
+      // sair — sem isto ficaria presa em queued para sempre.
+      if (ctx.internalMessageId && err instanceof ApiError && err.status === 422) {
+        await supabase
+          .from("messages")
+          .update({ status: "failed", error_code: err.code, error_message: err.message })
+          .eq("organization_id", c.organization_id)
+          .eq("id", ctx.internalMessageId)
+          .eq("status", "queued");
+      }
+      throw err;
+    }
+    // O tipo é o do arquivo: o do chamador é ignorado em todo o resto do envio.
+    input = { ...input, type: midiaDaBiblioteca.type };
   }
 
   let outboundBody = input.body ?? null;
@@ -555,15 +677,17 @@ export async function sendMessageHandler(
     status: "queued",
     body: input.body ?? null,
     media_url: input.media_url ?? null,
-    media_mime: input.media_mime ?? null,
+    media_mime: midiaDaBiblioteca?.variante.mime ?? input.media_mime ?? null,
     media_storage_path: input.media_storage_path ?? null,
-    media_size_bytes: input.media_size_bytes ?? null,
+    media_size_bytes: midiaDaBiblioteca?.variante.size_bytes ?? input.media_size_bytes ?? null,
+    media_library_item_id: input.media_library_item_id ?? null,
     sent_via: ctx.actor.type !== "user" ? ("ai" as const) : ("user" as const),
     sent_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
     sent_at: now,
     metadata: {
       ...(input.metadata ?? {}),
       ...(ctx.actor.type === "ai_agent" ? { ai_actor_id: ctx.actor.id } : {}),
+      ...(midiaDaBiblioteca ? { media_variant: midiaDaBiblioteca.variante.key } : {}),
     },
   };
 
@@ -661,6 +785,14 @@ export async function sendMessageHandler(
     if (updated) message = updated as unknown as Message;
   };
 
+  // Mídia da biblioteca nunca fica `queued` fora do follow-up: o reconciliador
+  // não a reenvia (não sai por sendText) e o turno do agente não volta a ela.
+  // `queued` aqui seria um relógio eterno; fecha `failed` e o agente ouve
+  // `envio_falhou`. O follow-up fica na fila porque o retry dele reenvia.
+  const midiaSemReenvio = midiaDaBiblioteca !== null && ctx.origemDoEnvio !== "followup";
+  const falharMidiaComCanalFora = () =>
+    falharAntesDeEnviar("canal_fora", "O canal está fora agora; a mídia não foi enviada.");
+
   // Releitura no sink: o operador pode ter fechado o canal enquanto o modelo
   // gerava a resposta. Envio humano não passa por esta restrição da IA.
   // Canal sem IA não tem modo de teste da IA: a recusa de cima já responde.
@@ -711,6 +843,8 @@ export async function sendMessageHandler(
     );
   } else if (recusa) {
     await falharAntesDeEnviar(recusa.code, recusa.message);
+  } else if (!adapter.isConfigured() && midiaSemReenvio) {
+    await falharMidiaComCanalFora();
   } else if (!adapter.isConfigured()) {
     const { data: updated } = await supabase
       .from("messages")
@@ -740,6 +874,8 @@ export async function sendMessageHandler(
       "instagram_desconectado",
       "A conexão deste perfil do Instagram caiu. Reconecte o Instagram em Conexões e envie de novo.",
     );
+  } else if ((!c.channel_sessions || c.channel_sessions.status !== "WORKING") && midiaSemReenvio) {
+    await falharMidiaComCanalFora();
   } else if (!c.channel_sessions || c.channel_sessions.status !== "WORKING") {
     const { data: updated } = await supabase
       .from("messages")
@@ -857,6 +993,33 @@ export async function sendMessageHandler(
           // cópia guardada no envio, que poderia divergir da linha.
           replyToExternalId: idDaCitadaNoCanal,
         }));
+      } else if (midiaDaBiblioteca) {
+        // Mesmo storage-first do ramo acima, no bucket da biblioteca.
+        const admin = createAdminClient();
+        const { data: signed, error: signErr } = await admin.storage
+          .from(BUCKET_DA_BIBLIOTECA)
+          .createSignedUrl(midiaDaBiblioteca.variante.storage_path, 600);
+        if (signErr || !signed?.signedUrl) {
+          throw new Error(`storage_sign_failed: ${signErr?.message ?? "no_url"}`);
+        }
+        const filename = midiaDaBiblioteca.variante.storage_path.split("/").pop() ?? undefined;
+        await checkBoundary();
+        ({ externalId } = await adapter.send({
+          beforeSend: checkBoundary,
+          organizationId: ctx.organization_id,
+          sessionRef: resolveSessionRef(c.channel_sessions),
+          to: chatId,
+          providerConversationId: c.provider_conversation_id,
+          etiquetaHumana,
+          kind: midiaDaBiblioteca.type,
+          media: {
+            url: signed.signedUrl,
+            mime: midiaDaBiblioteca.variante.mime,
+            filename,
+            caption: input.body ?? null,
+          },
+          replyToExternalId: idDaCitadaNoCanal,
+        }));
       } else if (input.type === "contact") {
         const sc = outboundMetadata.shared_contact as
           { name: string; phone_number: string } | undefined;
@@ -917,12 +1080,36 @@ export async function sendMessageHandler(
         : [];
       const limparEco = () =>
         removerEcoDoProprioEnvio(supabase, ctx.organization_id, c.id, message.id, externalId, candidatosDoEco);
+      // A FORMA GRAVADA É A CANÔNICA DO CANAL (`adapter.canonicalExternalId`),
+      // não o id cru que o adapter devolveu: é a string que o eco do webhook
+      // grava (a cauda na conversa individual, desde o #1855; o id intacto em
+      // grupo), e o `unique (organization_id, external_id)` só
+      // recusa a segunda linha se os DOIS lados gravarem a MESMA string — é
+      // dele que vem a rede de segurança contra a corrida entre a limpeza e
+      // este UPDATE.
+      //
+      // No NOWEB nada muda: a resposta de envio já é a cauda (`3EB0…`) e a
+      // regra canônica a devolve intacta. No WEBJS ela vem como `_serialized`
+      // (`true_<chat>_3EB0…`); gravada aqui, nunca colidia com a cauda do eco,
+      // o `23505` não disparava e o eco que entrava nesse intervalo nascia como
+      // segunda linha com a mesma frase (#196).
+      //
+      // Os leitores continuam achando o id: `handleAck` e `echoExternalIds`
+      // procuram o par `[composto, cauda]`, sem migration e sem backfill para
+      // as linhas antigas, que guardam o id completo. Editar/apagar uma linha
+      // NOVA gravada em cauda reconstrói o id completo a partir do DESTINATÁRIO
+      // do contato (`resolveRecipient`, que prefere o `@lid`), e não mais do chat
+      // do id gravado — se isso acha a mesma mensagem no WEBJS não foi medido.
+      // Canais que não implementam o método (id simétrico) gravam exatamente o
+      // que o envio devolveu.
+      const idCanonico =
+        externalId !== null ? (adapter.canonicalExternalId?.(externalId) ?? externalId) : null;
       const marcarEnviada = (comId: boolean) =>
         supabase
           .from("messages")
           .update({
             status: "sent",
-            ...(comId ? { external_id: externalId } : {}),
+            ...(comId ? { external_id: idCanonico } : {}),
             ack: 0,
             // Colunas só do template — é o que responde custo e conformidade de
             // janela depois, sem varrer jsonb.
@@ -985,7 +1172,8 @@ export async function sendMessageHandler(
       // Motivo PRÓPRIO na fila: "não configurado" mandaria o dono configurar o
       // que já está configurado; o que falta é a chave que decifra.
       const naoDecifra = msg.startsWith("meta_creds_decrypt_failed");
-      if (msg.startsWith(adapter.codes.notConfigured) || naoDecifra) {
+      const semCredencial = msg.startsWith(adapter.codes.notConfigured) || naoDecifra;
+      if (semCredencial && !midiaSemReenvio) {
         const { data: emFila } = await supabase
           .from("messages")
           .update({
@@ -1001,17 +1189,21 @@ export async function sendMessageHandler(
         return message;
       }
 
-      const { data: updated } = await supabase
-        .from("messages")
-        .update({
-          status: "failed",
-          error_code: code,
-          error_message: msg,
-        })
-        .eq("id", message.id)
-        .select(MSG_COLS)
-        .maybeSingle();
-      if (updated) message = updated as unknown as Message;
+      if (semCredencial) {
+        await falharMidiaComCanalFora();
+      } else {
+        const { data: updated } = await supabase
+          .from("messages")
+          .update({
+            status: "failed",
+            error_code: code,
+            error_message: msg,
+          })
+          .eq("id", message.id)
+          .select(MSG_COLS)
+          .maybeSingle();
+        if (updated) message = updated as unknown as Message;
+      }
     }
   }
 
@@ -1030,6 +1222,7 @@ export async function sendMessageHandler(
       body: input.body,
       media_url: input.media_url,
       media_storage_path: input.media_storage_path,
+      media_library_item_id: input.media_library_item_id,
       type: input.type,
     }),
     // Resposta humana/CRM zera pendências — espelha fn_mark_conversation_message
@@ -1074,7 +1267,17 @@ export async function sendMessageHandler(
     resourceType: "message",
     resourceId: message.id,
     requestId: ctx.requestId,
-    metadata: { ...a.metadataActor, status: message.status, type: message.type },
+    metadata: {
+      ...a.metadataActor,
+      status: message.status,
+      type: message.type,
+      ...(message.media_library_item_id
+        ? {
+            media_library_item_id: message.media_library_item_id,
+            media_variant: (message.metadata as { media_variant?: string } | null)?.media_variant,
+          }
+        : {}),
+    },
   });
 
   await supabase

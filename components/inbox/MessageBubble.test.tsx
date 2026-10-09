@@ -169,3 +169,19 @@ describe("MessageBubble — contenção de layout e quebra de palavras", () => {
     expect(linha.className).toContain("min-w-0");
   });
 });
+
+describe("MessageBubble — mídia da biblioteca removida", () => {
+  it("imagem da biblioteca cujo item foi apagado mostra o aviso, não um balão vazio", () => {
+    render(
+      <MessageBubble
+        message={msg({ type: "image", body: null, metadata: { media_variant: "A" } })}
+      />,
+    );
+    expect(screen.getByText("Mídia removida da biblioteca")).toBeInTheDocument();
+  });
+
+  it("texto comum não leva o aviso", () => {
+    render(<MessageBubble message={msg()} />);
+    expect(screen.queryByText("Mídia removida da biblioteca")).not.toBeInTheDocument();
+  });
+});

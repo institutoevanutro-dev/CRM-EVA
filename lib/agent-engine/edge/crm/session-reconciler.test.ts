@@ -44,4 +44,14 @@ describe("redrive pré-go-live", () => {
     expect(send).not.toHaveBeenCalled();
     expect(query).toHaveBeenLastCalledWith(expect.stringContaining("m.organization_id = $2"), ["message-test", "org-test"]);
   });
+
+  it("não reenvia mídia da biblioteca (a do turno nunca fica queued; a do follow-up é do retry dele)", async () => {
+    const query = vi.fn().mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ n: "0" }] });
+    await redriveQueued({ query } as unknown as pg.Pool, {
+      wahaBaseUrl: "http://127.0.0.1:9999", wahaApiKey: "test-key",
+      intervalMs: 1, redriveMinAgeMs: 0, redriveBatchSize: 10, redriveSpacingMs: 0,
+    }, createLogger());
+    expect(query.mock.calls[0]![0]).toContain("and m.media_library_item_id is null");
+    expect(query.mock.calls[1]![0]).toContain("and m.media_library_item_id is null");
+  });
 });

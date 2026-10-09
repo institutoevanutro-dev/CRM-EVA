@@ -86,6 +86,8 @@ export interface Message {
   media_mime: string | null;
   media_size_bytes: number | null;
   media_storage_path: string | null;
+  /** Item da biblioteca de mídias que esta mensagem levou (migration 0327). Opcional: nem toda leitura seleciona a coluna. */
+  media_library_item_id?: string | null;
   /**
    * Transcrição da mídia (áudio → texto), a mesma que a IA já lê; gravada pelo
    * `workers/media-derive-worker.ts`. Só vale quando `media_derived_status ===

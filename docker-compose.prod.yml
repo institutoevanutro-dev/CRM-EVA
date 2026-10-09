@@ -142,7 +142,11 @@ services:
       # Prefixo sha512: faz o WAHA HASHEAR o X-Api-Key recebido e comparar com este
       # hash. Sem o prefixo ele compara literal → o app (que manda o plaintext) toma 401.
       WAHA_API_KEY: "sha512:${WAHA_API_KEY_SHA512}"
-      WHATSAPP_HOOK_URL: ${WAHA_WEBHOOK_BASE_URL}/api/v1/webhooks/waha
+      # Fixo na rede interna, como o WAHA_API_BASE_URL do worker: o WAHA desta
+      # stack mora ao lado do `app`, e a rota global só atende a rede interna
+      # (app/api/v1/webhooks/waha/route.ts; o Caddyfile também a fecha com 403).
+      # Lido do .env, um endereço público ali faria a entrega parar.
+      WHATSAPP_HOOK_URL: http://app:3000/api/v1/webhooks/waha
       # `message` NÃO entra, e `message.any` sozinho não perde nada — medido.
       #
       # O WAHA emite os DOIS para a mesma mensagem, e `lib/waha/ingest.ts` já
@@ -155,7 +159,9 @@ services:
       # SÓ por `message` foram ZERO, e 1.642 chegaram só por `message.any` (os
       # que saíram de nós, que `message` não cobre). Superconjunto estrito.
       WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,session.status,state.change"
-      WHATSAPP_HOOK_HMAC: ${WAHA_HMAC_SECRET}
+      # Nome EXATO da doc do WAHA (events#hmac-authentication): WHATSAPP_HOOK_HMAC
+      # não existe nele, e sem o _KEY ele ignora e nunca assina.
+      WHATSAPP_HOOK_HMAC_KEY: ${WAHA_HMAC_SECRET}
       WHATSAPP_HOOK_CUSTOM_HEADERS: "Authorization:Bearer ${WAHA_HMAC_SECRET}"
       # WAHA lê WHATSAPP_DEFAULT_ENGINE (NÃO WAHA_DEFAULT_ENGINE — o nome errado
       # fazia cair no default WEBJS, engine com browser que trava/corrompe a sessão

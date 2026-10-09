@@ -14,7 +14,12 @@ import {
   resolvePhoneJidDigitsForCall,
   resolveWhatsappIdForContactCard,
 } from "@/lib/waha/resolve-contact-whatsapp-id";
-import { bareWaMessageId, parseWahaMessageId, wahaEchoExternalIds } from "@/lib/waha/message-id";
+import {
+  bareWaMessageId,
+  canonicalWahaExternalId,
+  parseWahaMessageId,
+  wahaEchoExternalIds,
+} from "@/lib/waha/message-id";
 import { resolveWahaChatId } from "@/lib/waha/send";
 import type { FetchedMedia } from "@/lib/messaging/media/types";
 import { DETALHE_CREDENCIAL_RECUSADA } from "../health";
@@ -65,6 +70,20 @@ export const wahaAdapter: ChannelAdapter = {
    */
   echoExternalIds(input: { externalId: string; recipient: string }): string[] {
     return wahaEchoExternalIds(input.externalId, input.recipient);
+  },
+
+  /**
+   * A forma canônica de `messages.external_id`: a CAUDA do id (`3EB0…`) em
+   * conversa individual, o id INTACTO em grupo — a que o eco grava em cada um
+   * (regra e porquê em `canonicalWahaExternalId`). O envio devolve a cauda no
+   * NOWEB e o `_serialized` completo no WEBJS — gravar o que veio faria os DOIS
+   * lados escreverem strings diferentes do mesmo id, o `unique (organization_id,
+   * external_id)` nunca disparasse e o eco que chegasse perto do carimbo virasse
+   * a segunda linha (#196). Reduzir aqui (não no handler) mantém a regra do id
+   * dentro da fronteira de canal.
+   */
+  canonicalExternalId(externalId: string): string {
+    return canonicalWahaExternalId(externalId);
   },
 
   // Mesmo pre-check que o handler já fazia com `getWahaClient() !== null`,

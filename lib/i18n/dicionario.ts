@@ -4986,6 +4986,7 @@ export const DICIONARIO: Traducoes = {
   Enviada: { es: "Enviado" },
   "Responder a esta mensagem": { es: "Responder a este mensaje" },
   "Esta mensagem foi apagada": { es: "Este mensaje fue eliminado" },
+  "Mídia removida da biblioteca": { es: "Medio eliminado de la biblioteca" },
   editada: { es: "editado" },
   "O autor editou esta mensagem": { es: "El autor editó este mensaje" },
   "Erro desconhecido": { es: "Error desconocido" },

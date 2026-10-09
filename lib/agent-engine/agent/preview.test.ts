@@ -90,6 +90,14 @@ describe('preview policy shares gates and contains side effects', () => {
     expect(read).toHaveBeenCalledOnce();
     expect(p.result.candidates).toHaveLength(1);
   });
+  it('send_media in a test turn is only a proposal, never a real send', async () => {
+    const p = preview(),
+      spy = vi.fn();
+    const tools = applyPreviewPolicy({ send_media: definition(spy) }, p, gate(), () => []);
+    await execute(tools, 'send_media', { media_id: 'x' });
+    expect(spy).not.toHaveBeenCalled();
+    expect(p.result.proposals).toEqual([{ tool: 'send_media', arguments: { media_id: 'x' } }]);
+  });
   it('fails closed for unknown capability and never invokes it', async () => {
     const p = preview(),
       spy = vi.fn();

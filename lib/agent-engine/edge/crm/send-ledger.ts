@@ -12,7 +12,15 @@ export type SendOutcome =
       crmMessageId: string | null;
     }
   | { kind: "blocked"; idempotencyKey: string };
-type Intent = { tenantId: string; leadId: string | null; jobId: string; seq: number; body: string };
+type Intent = {
+  tenantId: string;
+  leadId: string | null;
+  jobId: string;
+  seq: number;
+  body: string;
+  mediaLibraryItemId?: string;
+  mediaVariant?: "A" | "B";
+};
 type Row = { id: string; status: SendLedgerStatus; crm_message_id: string | null };
 interface LedgerStore {
   create(input: Intent, hash: string): Promise<string>;
@@ -35,7 +43,14 @@ export async function sendWithLedger(
   input: Intent,
   send: (key: string, messageId: string) => Promise<{ id: string; status: string }>,
 ): Promise<SendOutcome> {
-  const hash = createHash("sha256").update(input.body).digest("hex");
+  // Sem mídia o hash é o de sempre: linhas antigas do ledger seguem comparáveis.
+  const hash = createHash("sha256")
+    .update(
+      input.mediaLibraryItemId
+        ? `${input.body}\u0000${input.mediaLibraryItemId}\u0000${input.mediaVariant ?? ""}`
+        : input.body,
+    )
+    .digest("hex");
   let key: string;
   try {
     key = await store.create(input, hash);
@@ -59,6 +74,11 @@ export async function sendWithLedger(
       if (error instanceof ApiError && error.status === 403) {
         await store.update(input.tenantId, key, "vetoed", null, "handler 403");
         return { kind: "blocked", idempotencyKey: key };
+      }
+      // Recusa da mídia pelo handler é terminal desta intenção: fechar como
+      // failed (o retry rotaciona) em vez de deixar 'requested' sendo reenviado.
+      if (error instanceof ApiError && error.status === 422 && error.code.startsWith("media_not_")) {
+        await store.update(input.tenantId, key, "failed", null, error.code);
       }
       throw error;
     }

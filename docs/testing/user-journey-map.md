@@ -1097,6 +1097,8 @@ Desenho: `docs/superpowers/specs/2026-10-06-biblioteca-de-midias-design.md`. Tel
 - [x] Foto com pessoa fica "Sem termo"; preencher e salvar o termo a deixa "Pronta" — idem
 - [x] Trocar o arquivo da variante A mantém "Pronta" e não cria cartão novo — idem
 - [x] Revogar o termo (com confirmação) vira "Revogada"; apagar tira o cartão da lista — idem
+- [ ] Envio pela API (`media_library_item_id` em `POST /api/v1/messages`, termo conferido na hora) — coberto por unit/invariante; prova com WAHA real e pela tela pendente (fatia 5)
+- [ ] IA manda mídia (ferramenta `send_media` no turno) — coberto por invariante (agent-send-media-turn); prova com WAHA real pendente (fatia 5)
 - Status: as quatro linhas passaram localmente (Playwright, banco fresco do `baseline.sql`, `next build` + `next start`, 3 testes em 12 s); evidência em `.superpowers/evidence/biblioteca-de-midias/`. Falta só o CI do PR
 
 ## J7 — Exploração completa `[P2]`
@@ -1224,7 +1226,7 @@ espaço e acento, que era o gatilho do defeito #6.
 | 19 | 🟠 **A regra de bloqueio no Caddy não valia**: fora de um bloco `route`, o Caddy reordena e `respond` vem depois de `reverse_proxy` — o catch-all atendia primeiro | após o deploy, o POST sem assinatura ainda respondia 200 | `route { }` para valer a ordem escrita |
 | 20 | 🔴 **Mudança no Caddyfile nunca chegava em quem já instalou.** Bind mount de um arquivo fica preso ao inode; `git pull` cria inode novo e o contêiner segue lendo o antigo | inode 3283869 no host x 3271833 no contêiner, com conteúdo velho, depois de um `update.sh` que disse "concluída" | `update.sh` recria o contêiner do proxy |
 
-**Nota de método:** medi o que o WAHA realmente envia **antes** de escrever o conserto. Os eventos reais chegam **sem assinatura** (2026.7.2 CORE não assina, mesmo com `WHATSAPP_HOOK_HMAC` no contêiner) — o único evento com header no log era a minha própria injeção. Passar a exigir assinatura por padrão derrubaria a ingestão de mensagens de todo mundo: por isso a defesa padrão é de rede, e a exigência de assinatura fica atrás de `WAHA_WEBHOOK_REQUIRE_SIGNATURE` para quem roda WAHA Plus.
+**Nota de método:** medi o que o WAHA realmente envia **antes** de escrever o conserto. Os eventos reais chegavam **sem assinatura** — na época li isso como "2026.7.2 CORE não assina", mas a medição de 2026-10-04 mostrou a causa real: o compose entregava `WHATSAPP_HOOK_HMAC`, nome que não existe na doc do WAHA (o certo é `WHATSAPP_HOOK_HMAC_KEY`), então ele ignorava e nunca assinava. O único evento com header no log era a minha própria injeção. Passar a exigir assinatura por padrão derrubaria a ingestão de mensagens de todo mundo: por isso a defesa padrão é de rede, e a exigência de assinatura fica atrás de `WAHA_WEBHOOK_REQUIRE_SIGNATURE` para quem tem o WAHA assinando.
 
 **Efeito colateral no mundo real, registrado:** ao conectar o WhatsApp **pessoal** do dono, o agente começou a responder contatos reais (4 respostas automáticas para 2 pessoas) assinando "assistente virtual da loja". O agente foi despublicado. Recomendação: testar agente com número descartável, e avaliar um modo "só observa" para primeira conexão.
 

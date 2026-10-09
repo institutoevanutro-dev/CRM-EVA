@@ -5743,6 +5743,7 @@ export type Database = {
           id: string
           media_derived_status: string | null
           media_derived_text: string | null
+          media_library_item_id: string | null
           media_mime: string | null
           media_size_bytes: number | null
           media_storage_path: string | null
@@ -5781,6 +5782,7 @@ export type Database = {
           id?: string
           media_derived_status?: string | null
           media_derived_text?: string | null
+          media_library_item_id?: string | null
           media_mime?: string | null
           media_size_bytes?: number | null
           media_storage_path?: string | null
@@ -5819,6 +5821,7 @@ export type Database = {
           id?: string
           media_derived_status?: string | null
           media_derived_text?: string | null
+          media_library_item_id?: string | null
           media_mime?: string | null
           media_size_bytes?: number | null
           media_storage_path?: string | null
@@ -5872,6 +5875,13 @@ export type Database = {
             columns: ["demanda_id"]
             isOneToOne: false
             referencedRelation: "demandas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_media_library_item_id_fkey"
+            columns: ["media_library_item_id"]
+            isOneToOne: false
+            referencedRelation: "media_library_items"
             referencedColumns: ["id"]
           },
           {

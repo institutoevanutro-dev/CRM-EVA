@@ -53,7 +53,7 @@ import type { CrmEdgeConfig } from '../edge/crm/mcp-client';
 import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
 // applySendOutcome é disposição de FILA (cancel/reschedule + cache de opt-out), não
 // egress de canal — o envio em si vai pelo adapter (ChannelAdapter). Ver F2-25.
-import { applySendOutcome } from '../edge/crm/send-message';
+import { applySendOutcome, MidiaRecusadaError } from '../edge/crm/send-message';
 import {
   LlmBudgetExceededError,
   runModelCall,
@@ -128,6 +128,7 @@ import {
   catalogoEntregueAoOperador,
 } from './entrega-de-capacidade';
 import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memory';
+import { blocoDaBiblioteca, carregarMidiasProntas, type MidiaDisponivel } from '@/lib/midias/disponiveis';
 import { matchesHandoffKeyword, type PublishedAgentConfig } from './agent-config';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
@@ -167,6 +168,7 @@ import { loadPromiseTable } from '../guardrails/promise/table';
 import { classifyPromise, memoizarPorCandidata } from '../guardrails/promise/semantic';
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { diffCheckpoint } from '@/lib/leads/checkpoint-diff';
+import { CORRECAO_DO_TURNO_MUDO, turnoMudoPedeCorrecao } from './turno-mudo';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 import { resolveActiveLeadForContact, type LeadCandidate } from '@/lib/leads/active-lead';
 import { recalculaScoreDoLead } from '@/lib/leads/score-writer';
@@ -398,6 +400,14 @@ export const AGENT_TOOL_DEFS = {
           ),
       })
       .passthrough(),
+  },
+  send_media: {
+    description:
+      'Envia UMA imagem ou vídeo da BIBLIOTECA DE MÍDIAS ao lead desta conversa, com legenda opcional. Use só ids da lista da biblioteca. No máximo uma mídia por resposta.',
+    inputSchema: z.object({
+      media_id: z.string().uuid().describe('id do item, copiado da BIBLIOTECA DE MÍDIAS'),
+      caption: z.string().max(1024).optional().describe('legenda curta em pt-br, opcional'),
+    }),
   },
 } as const;
 
@@ -2461,6 +2471,10 @@ async function executarTurnoDoAgente(
   // num lugar só para poder ser testada (o bloco da cadeia nomeia
   // `crm_list_event_types`, e nomear ferramenta ausente faz o modelo tentar chamá-la).
   if (agentConfig !== null) blocosResidentes.push(...blocosDeAgendaResidentes(agentConfig.toolIds));
+  // Biblioteca de mídias: lista carregada uma vez por turno; a tool send_media só existe se não for vazia.
+  const midiasProntas: MidiaDisponivel[] = await carregarMidiasProntas(pool, tenantId, undefined, runLog);
+  const blocoMidias = blocoDaBiblioteca(midiasProntas);
+  if (blocoMidias) blocosResidentes.push(blocoMidias);
   if (preview)
     blocosResidentes.push(
       'MODO PRÉVIA: proponha a resposta com send_message. Operações são propostas separadas; nunca diga que executou uma proposta. Nenhum envio real acontece.',
@@ -2761,6 +2775,11 @@ async function executarTurnoDoAgente(
   // incluídas), nunca em veto de gate. Checar `seq` antes de tentar o próximo envio
   // barra o modelo sem gastar uma chamada de before-send à toa.
   const maxSendsPerTurn = deps.knobs.maxSendsPerTurn ?? DEFAULT_MAX_SENDS_PER_TURN;
+  // TURNO MUDO: quantas vezes o modelo chamou `send_message` e se passou a conversa à
+  // equipe. Os dois dizem que o silêncio foi decisão — só sem eles o motor pede a
+  // correção do turno que terminou sem falar com o cliente (ver depois da chamada principal).
+  let tentativasDeEnvio = 0;
+  let passouParaAEquipe = false;
   // F3-11: estágio que o MODELO confirmou via update_lead_state neste turno (a máquina
   // F2-10 é a única porta). Comparado com a sugestão do classificador no fim → divergência.
   let confirmedStage: LeadStage | null = null;
@@ -2805,6 +2824,8 @@ async function executarTurnoDoAgente(
   // Uma recusa deste tipo devolve o texto confirmado ao modelo para que ele
   // reescreva antes de falar com o cliente. Não gasta envio nem toca no canal.
   let falseEmptyInboundVetoCount = 0;
+  // Teto de UMA mídia da biblioteca por turno (send_media). Reservado antes do envio; fica só se saiu ou ficou na fila.
+  let midiaEnviadaNoTurno = false;
   // A pausa humana (atraso-humano.ts) já foi paga NESTE turno? Por turno
   // (closure), como os contadores acima. O turno pode passar pela cadeia
   // `before_send` mais de uma vez — o modelo pode chamar `send_message` várias
@@ -2819,6 +2840,9 @@ async function executarTurnoDoAgente(
   // o cap depende de quanto já saiu HOJE, que muda com o turno concorrente — só dá pra
   // saber com certeza no momento do envio, não antes.
   let pacingCapVeto: { code: string; nextAllowedAt: Date } | null = null;
+  // Lido por função: atribuído numa closure, comparar a variável direto estreita o tipo
+  // para `null` e quebra o `if (pacingCapVeto !== null …)` do fim do turno.
+  const capDeEnvioAtingido = (): boolean => pacingCapVeto !== null;
   // Best-effort: move o lead pra etapa `crm_stages.slug='chamar-humano'` do pipeline
   // dele (se o tenant tiver criado essa etapa — opt-in, ver `lib/leads/handoff-stage-move.ts`)
   // sempre que um caso humano abre neste turno, deliberado (open_human_case) ou pelo
@@ -2977,9 +3001,208 @@ async function executarTurnoDoAgente(
         }
       },
     }),
+    send_media: tool({
+      ...AGENT_TOOL_DEFS.send_media,
+      execute: async ({ media_id, caption }) => {
+        if (seq >= maxSendsPerTurn) {
+          return {
+            ok: false,
+            error: {
+              code: 'max_sends_per_turn',
+              message:
+                `você já enviou ${seq} mensagens neste turno (teto: ${maxSendsPerTurn}). ` +
+                'NÃO envie mais nada agora — encerre o turno e espere a resposta do lead.',
+            },
+          };
+        }
+        if (midiaEnviadaNoTurno) {
+          return {
+            ok: false,
+            error: {
+              code: 'max_media_per_turn',
+              message:
+                'você já enviou uma mídia neste turno. Não envie outra agora; continue em texto ou espere a resposta do lead.',
+            },
+          };
+        }
+        // Id fora da lista do prompt: palpite do modelo. Recusa aqui, sem gastar a cadeia.
+        if (!midiasProntas.some((m) => m.id === media_id)) {
+          return {
+            ok: false,
+            error: {
+              code: 'media_not_found',
+              message: 'essa mídia não está na BIBLIOTECA DE MÍDIAS. Use só ids da lista.',
+            },
+          };
+        }
+        // Reserva SÍNCRONA, antes do primeiro await: tool-calls do mesmo passo
+        // rodam em paralelo, e marcar só depois do envio deixava as duas passarem.
+        // Toda saída que não enviou devolve a vez (finally).
+        midiaEnviadaNoTurno = true;
+        let midiaSaiu = false;
+        // Mesmo formato do send_message; legenda só de espaços vira corpo vazio.
+        const legenda = formatarParaWhatsApp(caption ?? '');
+        try {
+          const hasOpenCase =
+            agentConfig !== null
+              ? await hasOpenCaseForContact(pool, tenantId, input.conversationId)
+              : false;
+          // Mesmos argumentos do `send_message`; a legenda é o `body` que os gates avaliam.
+          const chain = await runBeforeSend({
+            pool,
+            log: runLog,
+            agentOperation,
+            tenantId,
+            leadId,
+            jobId: liveJob().id,
+            channelSessionId: input.channelSessionId,
+            body: legenda,
+            // Sem legenda, toda mídia teria o mesmo corpo vazio e colidiria no spinning.
+            enforceSpinning: legenda.trim().length > 0,
+            optedOutThisTurn,
+            resposta: eTurnoDeResposta(liveJob()),
+            crmDailyLimit: null,
+            now: clock(),
+            sleep: deps.sleep,
+            lgpd,
+            casesEnabled: agentConfig?.casesEnabled,
+            hasOpenCase,
+            openedCaseThisTurn,
+            humanPromiseExtraTargets: agentConfig?.handoffKeywords ?? [],
+            enforceUnscheduledFollowUp: true,
+            enforceInternalVocabulary: true,
+            agenda: {
+              active: agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds),
+              ferramentas: agentConfig === null ? [] : ferramentasDeAgendaDoAgente(agentConfig.toolIds),
+              toolCalledThisTurn: agendaToolCalledThisTurn,
+              presencaConfirmadaNoTurno: presencaConfirmadaNoTurno,
+            },
+            followup: {
+              disponivel: rawTools.schedule_followup !== undefined,
+              agendadoNesteTurno: followupAgendadoNesteTurno,
+            },
+            ...(deps.knobs.disclosureMode !== undefined
+              ? { disclosureMode: deps.knobs.disclosureMode }
+              : {}),
+            ...(semanticClassifier !== undefined
+              ? { classifyPromiseSemantic: semanticClassifier }
+              : {}),
+            esperaForaDoLock: async (): Promise<void> => {
+              if (jaEsperouComoHumano) return;
+              jaEsperouComoHumano = true;
+              const canal = liveChannel();
+              const ms = await esperarComoHumano({
+                texto: legenda,
+                processamentoMs: performance.now() - inicioDoProcessamento,
+                sleep: deps.sleep ?? ((s) => new Promise((resolve) => setTimeout(resolve, s))),
+                log: runLog,
+                ...(canal.signalTyping
+                  ? {
+                      sinalizarDigitando: (): Promise<void> =>
+                        canal.signalTyping!({ tenantId, conversationId: input.conversationId }),
+                    }
+                  : {}),
+              });
+              runLog.info('atraso humano antes da mídia', { atraso_ms: ms, fora_do_lock: true });
+            },
+            // A mídia nunca é quebrada em balões: um envio, um `seq`.
+            send: (finalBody: string) => {
+              seq += 1;
+              return liveChannel().send({
+                tenantId,
+                leadId,
+                jobId: liveJob().id,
+                jobClaim: claimOfJob(liveJob()),
+                agentOperation,
+                seq,
+                conversationId: input.conversationId,
+                body: finalBody,
+                mediaLibraryItemId: media_id,
+              });
+            },
+          });
+          if (chain.status === 'vetoed') {
+            // Cap de pacing: reagenda o job no fim do turno, como no send_message.
+            if (
+              (chain.code === 'warmup_cap' || chain.code === 'daily_cap') &&
+              chain.nextAllowedAt !== undefined
+            ) {
+              pacingCapVeto = { code: chain.code, nextAllowedAt: chain.nextAllowedAt };
+            }
+            return { ok: false, error: { code: chain.code, message: chain.message } };
+          }
+          const outcome = chain.outcome;
+          // `failed` de mídia é terminal: nada a reenvia (o reconciliador não toca
+          // em mídia da biblioteca) e re-rodar o run só repetiria o LLM. Fica fora
+          // de `outcomes` para não derrubar o job; o modelo ouve `envio_falhou`.
+          if (outcome.kind !== 'failed') outcomes.push(outcome);
+          // Mapeamento do send_message (não o do send_template).
+          switch (outcome.kind) {
+            case 'sent':
+            case 'already_sent':
+              midiaSaiu = true;
+              return { ok: true, status: 'enviada', message_id: outcome.messageId };
+            case 'queued':
+              midiaSaiu = true;
+              return {
+                ok: true,
+                status: 'aceita_aguardando_canal',
+                message:
+                  'o canal aceitou a mensagem e vai enviá-la quando a sessão voltar — não reenvie.',
+              };
+            case 'blocked':
+              return {
+                ok: false,
+                error: {
+                  code: 'contato_bloqueado',
+                  message:
+                    'o contato optou por não receber mensagens (bloqueio irrevogável) — não envie mais nada e encerre o turno.',
+                },
+              };
+            case 'failed':
+              return {
+                ok: false,
+                error: {
+                  code: 'envio_falhou',
+                  message:
+                    'a mídia não foi enviada (canal fora ou falha do canal) — não tente de novo neste turno; siga em texto.',
+                },
+              };
+            case 'unavailable':
+              noteRunError(
+                new Error(
+                  `canal indisponível no envio (${outcome.reason}) — job re-tentado pela fila`,
+                ),
+              );
+              return {
+                ok: false,
+                error: {
+                  code: 'envio_indisponivel',
+                  message:
+                    'não consegui enviar agora (canal indisponível) — encerre o turno; o sistema re-tentará.',
+                },
+              };
+          }
+        } catch (err) {
+          // Recusa do handler (mídia sumiu ou deixou de estar pronta): ensino, não falha
+          // do run. Re-tentar o job só repetiria a 422.
+          if (err instanceof MidiaRecusadaError) {
+            return { ok: false, error: { code: err.code, message: err.message } };
+          }
+          noteRunError(err instanceof Error ? err : new Error(String(err)));
+          return {
+            ok: false,
+            error: { code: 'internal_error', message: 'erro interno no envio — encerre o turno agora.' },
+          };
+        } finally {
+          if (!midiaSaiu) midiaEnviadaNoTurno = false;
+        }
+      },
+    }),
     send_template: tool({
       ...AGENT_TOOL_DEFS.send_template,
       execute: async ({ template_name, language, values }) => {
+        tentativasDeEnvio += 1;
         if (seq >= maxSendsPerTurn) {
           return {
             ok: false,
@@ -3138,6 +3361,7 @@ async function executarTurnoDoAgente(
     send_message: tool({
       ...AGENT_TOOL_DEFS.send_message,
       execute: async ({ body: corpoDoModelo }) => {
+        tentativasDeEnvio += 1;
         // O texto sai no formato do WhatsApp — sem `\n` literal nem
         // `**negrito**` de Markdown na tela do cliente. Antes de qualquer gate,
         // para que o corpo vazio, as bolhas e a pausa humana meçam o que sai.
@@ -3694,6 +3918,7 @@ async function executarTurnoDoAgente(
     request_human_handoff: tool({
       ...AGENT_TOOL_DEFS.request_human_handoff,
       execute: async (raw) => {
+        passouParaAEquipe = true;
         try {
           // ═══ O PISO: se o modelo não falou, o sistema fala ═══
           //
@@ -3948,6 +4173,9 @@ async function executarTurnoDoAgente(
       delete rawTools.send_template;
     }
   }
+
+  // Sem item pronto na biblioteca, a tool não tem o que mandar: some do turno.
+  if (midiasProntas.length === 0) delete rawTools.send_media;
 
   // 2B-tools: tools do catálogo MCP habilitadas NA TELA entram no run (audit +
   // role/scope da ponte nativa; envio e handoff do catálogo são bloqueados —
@@ -4343,6 +4571,61 @@ async function executarTurnoDoAgente(
       throw new Error('envio marcado como failed pelo CRM — run re-tentado pela fila');
     }
 
+    // TURNO MUDO: o turno de resposta terminou sem mensagem ao cliente e sem
+    // nenhuma razão para o silêncio (`turno-mudo.ts`). UMA correção, com a mesma
+    // conversa e as mesmas ferramentas: o envio passa pela cadeia inteira, como
+    // qualquer outro. O fechamento lê a fita das DUAS chamadas.
+    let mensagensDoTurno: ModelMessage[] = turn.result.responseMessages;
+    if (
+      !preview &&
+      liveJob().kind === 'inbound_turn' &&
+      turnoMudoPedeCorrecao({
+        tentativasDeEnvio,
+        enviadas: outcomes.length,
+        // Sem descarte de turno inteiro no fork: o descarte por resposta obsoleta
+        // acontece DENTRO de send_message e já conta como tentativa de envio.
+        turnoDescartado: false,
+        passouParaAEquipe,
+        capDeEnvio: capDeEnvioAtingido(),
+      })
+    ) {
+      runLog.warn('turno terminou sem mensagem ao cliente — pedindo UMA correção', {
+        job_id: liveJob().id,
+      });
+      const pedidoDeCorrecao: ModelMessage = { role: 'user', content: CORRECAO_DO_TURNO_MUDO };
+      const correcao = await runModelCall(
+        pool,
+        deps.llmCfg,
+        {
+          tenantId,
+          leadId: leadId || null,
+          jobId: job?.id,
+          agentId: agentConfig?.agentId ?? null,
+          purpose: 'agent_turn',
+          system,
+          messages: [...openingMessages, ...turn.result.responseMessages, pedidoDeCorrecao],
+          tools,
+          maxSteps: Math.min(maxSteps, 3),
+          ...(agentConfig !== null
+            ? {
+                model: agentConfig.model,
+                llmOverride: {
+                  provider: agentConfig.provider,
+                  credentialId: agentConfig.credentialId,
+                },
+              }
+            : {}),
+        },
+        { registry: deps.registry, log: runLog },
+      );
+      mensagensDoTurno = [...mensagensDoTurno, pedidoDeCorrecao, ...correcao.result.responseMessages];
+      if (runError !== null) throw runError;
+      if (outcomes.some((o) => o.kind === 'failed')) {
+        throw new Error('envio marcado como failed pelo CRM — run re-tentado pela fila');
+      }
+      runLog.info('correção do turno mudo concluída', { messages_sent: outcomes.length });
+    }
+
     // F3-10: poda os tool results antigos da fita do run ANTES de reenviá-los no fechamento
     // (é onde a fita inteira é re-serializada num prompt) — o conteúdo durável já foi para
     // lead_notes pelo flush (F3-07), então o stub não perde nada recuperável. Opera SÓ no
@@ -4353,8 +4636,8 @@ async function executarTurnoDoAgente(
     // tool_use/tool_result sem tools), com teto por resultado no knob do pruning.
     const responseMessages = toolPartsAsText(
       deps.knobs.prune !== undefined
-        ? pruneToolResults(turn.result.responseMessages, deps.knobs.prune)
-        : turn.result.responseMessages,
+        ? pruneToolResults(mensagensDoTurno, deps.knobs.prune)
+        : mensagensDoTurno,
       deps.knobs.prune?.minResultTokens,
     );
 
@@ -4370,7 +4653,7 @@ async function executarTurnoDoAgente(
           contactId: leadId,
           agora: clock(),
           blocoDaAbertura: compromissosBlock,
-          mensagens: turn.result.responseMessages,
+          mensagens: mensagensDoTurno,
         });
       } catch (err) {
         // A resposta já saiu: falhar o job por esta leitura repetiria o turno.

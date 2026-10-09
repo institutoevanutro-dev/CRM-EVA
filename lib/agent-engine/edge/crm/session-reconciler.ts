@@ -27,7 +27,7 @@
  */
 import type pg from 'pg';
 
-import { parseWahaMessageId, wahaEchoExternalIds } from '@/lib/waha/message-id';
+import { canonicalWahaExternalId, parseWahaMessageId, wahaEchoExternalIds } from '@/lib/waha/message-id';
 import { lerNumerosDeTeste, numeroPodeTestar, preGoLiveAtivo } from '@/lib/ai/elegibilidade/pre-go-live';
 
 import type { Logger } from '../../obs/logger';
@@ -189,6 +189,11 @@ function chatIdOf(m: QueuedRow): string | null {
 /**
  * Marca `sent` a mensagem que o WAHA acabou de aceitar.
  *
+ * O id é gravado na FORMA CANÔNICA (`canonicalWahaExternalId`), a mesma que o
+ * eco grava: só assim o unique enxerga a colisão. Cobre a resposta de envio
+ * que só traz o `_serialized` (sem o id interno), que antes ia composta
+ * (porte do DeskcommCRM #2525).
+ *
  * Devolve `true` quando o id NÃO pôde ser gravado porque o eco dela já o ocupa.
  * O eco grava exatamente a string que o envio devolve (o bare, nos dois engines
  * — `parseWahaMessageId` e `lib/waha/ingest.ts`), e o unique `(organization_id, external_id)` recusa uma segunda linha com o
@@ -205,6 +210,7 @@ async function markRedriveSent(
   m: QueuedRow,
   externalId: string | null,
 ): Promise<boolean> {
+  const canonico = externalId === null ? null : canonicalWahaExternalId(externalId);
   try {
     await pool.query(
       `update messages
@@ -212,7 +218,7 @@ async function markRedriveSent(
            external_id = coalesce($2, external_id),
            metadata = metadata || '{"redrive":"watchdog"}'::jsonb
        where id = $1 and organization_id = $3 and status = 'queued'`,
-      [m.id, externalId, m.organization_id],
+      [m.id, canonico, m.organization_id],
     );
     return false;
   } catch (err) {
@@ -273,6 +279,12 @@ async function removeRedriveEcho(
  * em `sent`: sem entregue, sem lida. `external_id is null` garante que isto nunca
  * sobrescreve um id que outro caminho já gravou.
  *
+ * A FORMA É A CANÔNICA (`canonicalWahaExternalId`) pela mesma razão do carimbo
+ * do envio: é a string que o eco grava, e só gravando a MESMA string é que o
+ * `unique (organization_id, external_id)` recusa uma segunda linha quando outro
+ * eco entra aqui. No NOWEB o id do envio já era a cauda — nada muda; no WEBJS o
+ * `_serialized` gravado aqui nunca colidia com o eco.
+ *
  * BLINDADO pelo mesmo motivo de `removeRedriveEcho`. Se o eco não saiu (a remoção
  * falhou), o unique recusa de novo e a mensagem fica `sent` sem id: sem ack e com
  * a duplicata na tela — mas sem reenvio.
@@ -283,6 +295,7 @@ async function stampExternalIdAfterEcho(
   externalId: string,
   log: Logger,
 ): Promise<void> {
+  const canonico = canonicalWahaExternalId(externalId);
   try {
     // O eco preso em OUTRA conversa (a mesma pessoa cadastrada pelo telefone e
     // pelo @lid) a limpeza não alcança, e não deve. Ele devolve o id curto e
@@ -299,12 +312,12 @@ async function stampExternalIdAfterEcho(
          and e.external_id = $2
          and e.metadata->>'external_id_original' is not null
          and e.metadata->>'external_id_original' <> e.external_id`,
-      [m.id, externalId, m.organization_id],
+      [m.id, canonico, m.organization_id],
     );
     await pool.query(
       `update messages set external_id = $2
        where id = $1 and organization_id = $3 and external_id is null`,
-      [m.id, externalId, m.organization_id],
+      [m.id, canonico, m.organization_id],
     );
   } catch (err) {
     log.warn('watchdog: mensagem reenviada ficou sem id — o eco ainda o ocupa', {
@@ -343,6 +356,10 @@ export async function redriveQueued(
        -- conta as que ficaram sem resgate é o bloco logo abaixo — silêncio aqui
        -- é o que fez este defeito durar.
        and s.waha_session_name is not null
+       -- Mídia da biblioteca não sai por sendText. A do turno de resposta nunca
+       -- fica queued (o handler fecha failed/canal_fora); a do follow-up fica com o
+       -- retry do follow-up (fatia 4).
+       and m.media_library_item_id is null
        and m.created_at < now() - make_interval(secs => $1 / 1000.0)
      order by m.created_at
      limit $2`,
@@ -359,6 +376,7 @@ export async function redriveQueued(
      where m.sent_via = 'ai' and m.status = 'queued'
        and s.status = 'WORKING'
        and s.waha_session_name is null
+       and m.media_library_item_id is null
        and m.created_at < now() - make_interval(secs => $1 / 1000.0)`,
     [cfg.redriveMinAgeMs],
   );
