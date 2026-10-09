@@ -8,6 +8,28 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.13.0] — 2026-10-09
+
+### Adicionado
+
+- **A IA manda mídia da Biblioteca** O agente de IA passa a mandar imagens e vídeos prontos da Biblioteca de mídias, uma por resposta, escolhendo pelo "quando usar". Mídia sem termo válido é recusada na hora.
+
+- **Envio de mensagem aceita item da Biblioteca de mídias** A API de envio de mensagem passa a aceitar `media_library_item_id` e confere o termo de uso de imagem na hora do envio. A IA e os follow-ups passam a usar isso nas próximas versões.
+
+### Alterado
+
+- **Visual da clínica — títulos serifados, menu e abas novos, Início reorganizado** Os títulos de página passam para a letra serifada do site da clínica (Cormorant Garamond), sem caixa alta, e os números dos painéis ficam em Inter com dígitos de mesma largura. O menu lateral ganha mais respiro e ícones finos; as abas mostram a aba aberta em verde com sublinhado dourado e não repetem mais a frase da página. O Início abre com saudação e data, agrupa avisos iguais, mostra o texto inteiro dos itens, troca a agenda da semana por uma tabela e limpa o gráfico de conversas. Nenhum dado ou regra mudou.
+
+### Corrigido
+
+- **Agenda mais confiável: lembrete na hora certa, horário da clínica e marcação sem duplicar** O lembrete de véspera não sai mais no mesmo dia em que a consulta foi marcada, e o lembrete que o canal não pode entregar fica pendente em vez de ser dado como enviado. Repetir a mesma marcação devolve a consulta já criada. A agenda mostra sempre o horário da clínica. Agora dá para abrir um dia extra de atendimento pela tela e escrever observação e endereço ao marcar. Os erros do Google Agenda e do Meet dizem o motivo em português. Quem só pode ler não vê mais o botão de marcar. Nada precisa ser feito ao atualizar.
+
+- **A IA não deixa mais o paciente sem resposta e não fala por cima da recepção** Quando a IA terminava a vez dela sem mandar nenhuma mensagem ao paciente (por exemplo, escrevia a pergunta mas não a enviava), o paciente ficava sem resposta. Agora a IA recebe um aviso e tem uma chance de enviar a resposta. Um passo de follow-up também não sai mais quando alguém da equipe assumiu a conversa: ele espera ou é encerrado, conforme a regra do fluxo. Também foram corrigidos: o pedido de resposta longa demais que o OpenRouter recusava, o gasto com Gemini que aparecia zerado em Uso e orçamento, e uma conexão com o banco que podia travar o atendimento depois de uma falha. Com o teto de gasto de IA ligado no modo que bloqueia, quem usa Gemini passa a ser barrado ao passar do teto, como já acontecia com os outros modelos. Nada precisa ser feito ao atualizar.
+
+- **WhatsApp por QR não perde nem duplica mensagem, e o webhook passa a vir assinado** O eco de uma mensagem enviada pelo CRM não pausa mais a IA nem aparece duas vezes. Mensagem que chega com o banco fora do ar é reentregue e reprocessada a cada minuto; se não entrar, a Central avisa. Conversa iniciada pelo celular da clínica vira lead no funil padrão. Resposta citada pelo cliente fica ligada à mensagem original. A rota do webhook sem token só atende a rede interna.
+
+  O `update.sh` recria o WAHA e o scheduler, e o WAHA passa a assinar as entregas. Quem atualiza só o app roda também `docker compose -f docker-compose.prod.yml --env-file .env up -d waha scheduler`. A exigência de assinatura segue desligada: ligue `WAHA_WEBHOOK_REQUIRE_SIGNATURE=true` só depois de ver `valid_signature = true` em `webhook_events_log`.
+
 ## [3.12.0] — 2026-10-09
 
 ### Adicionado
@@ -6655,7 +6677,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.12.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.13.0...HEAD
+[3.13.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.12.0...v3.13.0
 [3.12.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.11.0...v3.12.0
 [3.11.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.10.0...v3.11.0
 [3.10.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.9.1...v3.10.0
