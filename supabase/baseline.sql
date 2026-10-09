@@ -35575,6 +35575,22 @@ revoke execute on function public.fn_google_appointment(uuid,uuid,text,jsonb) fr
 grant execute on function public.fn_google_appointment(uuid,uuid,text,jsonb) to service_role;
 -- ---- fim: idle convergente limpa erro morto do Google (migration 0337) ----
 
+-- ---- Link da mídia salvo no modelo (migration 0347) ----
+-- Valores que o operador salvou para reaproveitar em todo disparo do modelo,
+-- chaveados como template_values. Só link de mídia. Sobrevive à sincronização,
+-- que não lista esta coluna no upsert. Porte de melgarafael/DeskcommCRM #1433
+-- (0382 lá). Ver o cabeçalho da migration 0347.
+alter table public.meta_templates
+  add column if not exists saved_values jsonb not null default '{}'::jsonb;
+alter table public.meta_templates
+  drop constraint if exists meta_templates_saved_values_objeto;
+alter table public.meta_templates
+  add constraint meta_templates_saved_values_objeto
+  check (jsonb_typeof(saved_values) = 'object');
+comment on column public.meta_templates.saved_values is
+  'Valores que o operador salvou para reaproveitar em todo disparo deste modelo, chaveados como template_values (slotKey: header:1, button0:1). Só link de mídia: a rota de escrita recusa valor de texto, que costuma ser dado de pessoa. Sobrevive à sincronização, que não lista esta coluna no upsert.';
+-- ---- fim: link da mídia salvo no modelo (migration 0347) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
