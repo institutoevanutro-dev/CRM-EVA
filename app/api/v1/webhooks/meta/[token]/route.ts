@@ -36,6 +36,7 @@ import { lerEnvelopeMeta } from "@/lib/channels/meta/envelope";
 import { parseMetaWebhook, verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
 import { ingestMetaEcho, ingestMetaInbound } from "@/lib/channels/meta/ingest";
 import { aplicarEventoDaConta } from "@/lib/channels/meta/saude-da-conta";
+import { statusUpdate } from "@/lib/channels/meta/status-update";
 import { metaSessionByWebhookToken } from "@/lib/channels/meta/session";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -223,9 +224,12 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         .eq("name", e.templateName)
         .eq("language", e.templateLanguage);
     } else if (e.kind === "message_status") {
+      // O evento inteiro vira colunas, não só `status`: quando a Meta ACEITA o
+      // template e reprova a entrega depois, o motivo só existe aqui. Ver
+      // `lib/channels/meta/status-update.ts`.
       await admin
         .from("messages")
-        .update({ status: e.status === "failed" ? "failed" : "sent", updated_at: now })
+        .update(statusUpdate(e, now))
         .eq("organization_id", session.organizationId)
         .eq("external_id", e.externalId);
     } else {

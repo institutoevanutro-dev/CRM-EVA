@@ -76,6 +76,7 @@ export const ApiErrorCodes = {
   // 422 — semântica
   unprocessable_entity: "unprocessable_entity",
   channel_without_session: "channel_without_session", // operação de sessão (reiniciar, parear) pedida a canal que não tem sessão no transporte — o oficial
+  janela_fechada: "janela_fechada", // POST /messages por token/agente com texto livre fora das 24h do canal oficial (131047) — a saída é modelo aprovado (porte do original #1677)
   invalid_state_transition: "invalid_state_transition",
   invalid_owner: "invalid_owner", // novo dono não é membro ativo agent+ da org (bulk assign, G3-04)
   trigger_kind_not_implemented: "trigger_kind_not_implemented", // publish de followup-flow com kind sem motor de enrollment (stage_change/conversation_end)
