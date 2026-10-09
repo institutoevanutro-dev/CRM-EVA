@@ -92,6 +92,11 @@ export default async function PrivacyPage() {
               "o provedor de inteligência artificial contratado pelo operador, que recebe o trecho da conversa necessário para gerar a resposta;",
             )}
           </li>
+          <li>
+            {t(
+              "quando o operador liga o Jev, a TypeSafe AI (EUA), que recebe cada mensagem do cliente sem CPF, telefone e e-mail, só para classificá-la;",
+            )}
+          </li>
           <li>{t("o provedor de infraestrutura onde o servidor está hospedado.")}</li>
         </ul>
         <p>{t("Os dados não são vendidos nem cedidos para publicidade de terceiros.")}</p>
