@@ -24,7 +24,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { providersDeEnvioAutomatico } from "@/lib/channels";
-import { CHANNEL_PROVIDER_INSTAGRAM } from "@/lib/channels/capabilities";
+import {
+  CHANNEL_PROVIDER_INSTAGRAM,
+  CHANNEL_PROVIDER_META,
+  CHANNEL_PROVIDER_WACALLS,
+  CHANNEL_PROVIDER_WAHA,
+} from "@/lib/channels/capabilities";
+import { canalAceitaTextoLivreAgora } from "@/lib/channels/janela";
 
 import { degrausPendentes, escolherCanalDoLembrete, estaNaHora, montarLembrete } from "./route";
 
@@ -459,5 +465,61 @@ describe("vesperaNoDiaDaMarcacao — fuso ilegível não derruba a rodada", () =
     const comeca = new Date("2026-10-06T17:00:00Z");
     expect(() => vesperaNoDiaDaMarcacao(comeca, 1440, marcadoEm, "Brasilia")).not.toThrow();
     expect(vesperaNoDiaDaMarcacao(comeca, 1440, marcadoEm, "Brasilia")).toBe(false);
+  });
+});
+
+describe("escolherCanalDoLembrete — fora da janela de 24 h não vira \"enviado\" (upstream #2620)", () => {
+  const MIN = 60_000;
+  const agora = new Date("2026-10-05T12:00:00Z");
+  const ha3Dias = new Date(agora.getTime() - 3 * 24 * 60 * MIN).toISOString();
+  const ha1Hora = new Date(agora.getTime() - 60 * MIN).toISOString();
+  const meta = { id: "canal-meta", provider: CHANNEL_PROVIDER_META as string };
+  const waha = { id: "canal-waha", provider: CHANNEL_PROVIDER_WAHA as string };
+
+  it("canal com janela, cliente escreveu há 3 dias: não escolhe", () => {
+    expect(escolherCanalDoLembrete([meta], [{ channel_session_id: "canal-meta", last_inbound_at: ha3Dias }], agora)).toBeNull();
+  });
+
+  it("cliente que nunca escreveu neste canal também está fora da janela", () => {
+    expect(escolherCanalDoLembrete([meta], [], agora)).toBeNull();
+  });
+
+  it("o mesmo canal com o cliente dentro da janela: envia", () => {
+    expect(
+      escolherCanalDoLembrete([meta], [{ channel_session_id: "canal-meta", last_inbound_at: ha1Hora }], agora),
+    ).toBe("canal-meta");
+  });
+
+  it("canal com janela fechada cede a vez ao próximo que pode", () => {
+    expect(
+      escolherCanalDoLembrete([meta, waha], [{ channel_session_id: "canal-meta", last_inbound_at: ha3Dias }], agora),
+    ).toBe("canal-waha");
+  });
+
+  it("canal sem janela (WAHA) segue como antes, sem inbound registrado", () => {
+    expect(escolherCanalDoLembrete([waha], [], agora)).toBe("canal-waha");
+  });
+
+  it("provider que a matriz não conhece não é barrado", () => {
+    expect(canalAceitaTextoLivreAgora(CHANNEL_PROVIDER_WACALLS, null, agora)).toBe(true);
+    expect(canalAceitaTextoLivreAgora("provider-novo", null, agora)).toBe(true);
+  });
+});
+
+describe("a rota pula ANTES do carimbo e registra o motivo (upstream #2620)", () => {
+  const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+
+  it("o pulo por janela vem antes de reminder_sent_at e é registrado", () => {
+    const pulo = fonte.indexOf("canal_fora_da_janela_24h");
+    const carimbo = fonte.indexOf("reminder_sent_at: new Date()");
+    expect(pulo).toBeGreaterThan(-1);
+    expect(pulo).toBeLessThan(carimbo);
+    expect(fonte).toContain('logger.warn("[agenda-reminder] lembrete pulado');
+  });
+
+  it("lê last_inbound_at da conversa do contato dentro da organização", () => {
+    const busca = fonte.slice(fonte.indexOf('.from("conversations")'));
+    expect(busca.slice(0, 300)).toContain("last_inbound_at");
+    expect(busca.slice(0, 300)).toContain('.eq("organization_id", org)');
   });
 });

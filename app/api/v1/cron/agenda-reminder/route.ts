@@ -127,6 +127,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { ensureConversation } from "@/lib/automation/start-conversation";
 import { adiarAteAJanelaAbrir } from "@/lib/automation/janela-do-canal";
+import { canalAceitaTextoLivreAgora } from "@/lib/channels/janela";
 import { espacarEnvio } from "@/lib/automation/throttle";
 import { providersDeEnvioAutomatico } from "@/lib/channels";
 import { env } from "@/lib/env";
@@ -219,15 +220,40 @@ export { aplicarMoldeDoLembrete, montarLembrete };
  * recente do contato, onde a pessoa já fala; senão, o primeiro da lista, que
  * quem consulta entrega em ordem fixa. Nenhum: `null`, e a rodada pula.
  *
+ * Sem canal elegível e com canal automático conectado, o motivo do pulo é
+ * `canal_fora_da_janela_24h` (a rota registra no log): o degrau NÃO carimba e a
+ * próxima rodada tenta de novo, quando o contato escrever.
+ *
  * A regra repete o filtro de provider de propósito: se a consulta mudar, o
  * Instagram continua sem ganhar. Pura e exportada, como `degrausPendentes`.
  */
 export function escolherCanalDoLembrete(
   sessoes: ReadonlyArray<{ id: string; provider: string }>,
-  conversas: ReadonlyArray<{ channel_session_id: string | null }>,
+  conversas: ReadonlyArray<{ channel_session_id: string | null; last_inbound_at?: string | null }>,
+  agora: Date = new Date(),
 ): string | null {
   const automaticos = new Set<string>(providersDeEnvioAutomatico());
-  const elegiveis = new Set(sessoes.filter((s) => automaticos.has(s.provider)).map((s) => s.id));
+  // Janela de 24 h (porte do upstream #2620): canal que não aceita texto livre
+  // com a janela do contato fechada NÃO é escolhido, senão o carimbo marca como
+  // enviado o que a Meta recusa na entrega. A régua é o `last_inbound_at` mais
+  // recente do contato NAQUELE canal; sem ele, a janela está fechada.
+  const ultimoInbound = new Map<string, string>();
+  for (const c of conversas) {
+    if (!c.channel_session_id || !c.last_inbound_at) continue;
+    const atual = ultimoInbound.get(c.channel_session_id);
+    if (!atual || new Date(c.last_inbound_at) > new Date(atual)) {
+      ultimoInbound.set(c.channel_session_id, c.last_inbound_at);
+    }
+  }
+  const elegiveis = new Set(
+    sessoes
+      .filter(
+        (s) =>
+          automaticos.has(s.provider) &&
+          canalAceitaTextoLivreAgora(s.provider, ultimoInbound.get(s.id) ?? null, agora),
+      )
+      .map((s) => s.id),
+  );
   const daConversa = conversas.find((c) => c.channel_session_id && elegiveis.has(c.channel_session_id));
   return daConversa?.channel_session_id ?? [...elegiveis][0] ?? null;
 }
@@ -574,15 +600,25 @@ async function handle(req: NextRequest): Promise<Response> {
       .order("id", { ascending: true });
     const { data: conversas } = await admin
       .from("conversations")
-      .select("channel_session_id")
+      .select("channel_session_id, last_inbound_at")
       .eq("organization_id", org)
       .eq("contact_id", contato.id)
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(20);
-    const canalId = escolherCanalDoLembrete(sessoes ?? [], conversas ?? []);
+    const canalId = escolherCanalDoLembrete(sessoes ?? [], conversas ?? [], agora);
 
     if (!canalId) {
-      pular("sem_canal");
+      // Pulo ANTES do carimbo (upstream #2620): o degrau segue pendente.
+      const motivo = (sessoes ?? []).length > 0 ? "canal_fora_da_janela_24h" : "sem_canal";
+      if (motivo === "canal_fora_da_janela_24h") {
+        logger.warn("[agenda-reminder] lembrete pulado: nenhum canal aceita texto livre agora", {
+          appointmentId: linha.id,
+          organizationId: org,
+          motivo,
+          requestId,
+        });
+      }
+      pular(motivo);
       continue;
     }
 
