@@ -1156,6 +1156,10 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
     args.classifyPromiseSemantic ? args.classifyPromiseSemantic(args.body) : null,
   ]);
   const client = await args.pool.connect();
+  // #2506: consulta que estoura o query_timeout rejeita sem destruir o socket
+  // (pg 8.23). Liberado com release() sem erro, este cliente volta ao pool com a
+  // transação antiga aberta e é reemprestado nela. O finally lê desta marcação.
+  let erroNaTransacao: Error | undefined;
   try {
     await client.query('begin');
     // Serialização por número: dois workers no MESMO channel_session esperam a vez.
@@ -1358,10 +1362,11 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
     await client.query('commit');
     return { status: 'sent', outcome, trace };
   } catch (err) {
+    erroNaTransacao = err instanceof Error ? err : new Error(String(err));
     await rollback(client, err);
     throw err;
   } finally {
-    client.release();
+    client.release(erroNaTransacao);
   }
 }
 

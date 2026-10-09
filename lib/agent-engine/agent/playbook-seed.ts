@@ -31,6 +31,10 @@ export async function seedPlatformPlaybook(
   opts?: { filePath?: string },
 ): Promise<'seeded' | 'kept'> {
   const client = await pool.connect();
+  // #2506: consulta que estoura o query_timeout rejeita sem destruir o socket
+  // (pg 8.23). Liberado com release() sem erro, este cliente volta ao pool com a
+  // transação antiga aberta e é reemprestado nela. O finally lê desta marcação.
+  let erroNaTransacao: Error | undefined;
   try {
     await client.query('begin');
     await client.query("select pg_advisory_xact_lock(hashtext('playbook_platform_seed'))");
@@ -63,9 +67,10 @@ export async function seedPlatformPlaybook(
     await client.query('commit');
     return 'seeded';
   } catch (err) {
+    erroNaTransacao = err instanceof Error ? err : new Error(String(err));
     await client.query('rollback').catch(() => undefined);
     throw err;
   } finally {
-    client.release();
+    client.release(erroNaTransacao);
   }
 }

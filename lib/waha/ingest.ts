@@ -10,6 +10,7 @@
  * 0027 para o modelo de identidade canônica.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { lancarFalhaDeIngestao } from "@/lib/waha/falha-transitoria";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -17,6 +18,7 @@ import { audit } from "@/lib/audit";
 import { sincronizarSaudeDaConexao } from "@/lib/channels/health";
 import { marcarConversaComMensagem } from "@/lib/channels/marcar-conversa";
 import { aplicarEfeitosPosEntrada } from "@/lib/channels/pos-entrada";
+import { garantirLeadDaConversa } from "@/lib/leads/nascimento-do-lead";
 import { pausarIaPorAtendimentoManual } from "@/lib/escalacao/atendimento-manual";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
@@ -25,7 +27,7 @@ import { extrairAtribuicaoWaha } from "@/lib/waha/atribuicao-de-anuncio";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ackToStatus } from "@/lib/types/messaging";
 import type { WahaEnvelope, WahaPayload } from "@/lib/waha/envelope";
-import { bareWaMessageId, chatIdFromWaMessageId } from "@/lib/waha/message-id";
+import { bareWaMessageId, chatIdFromWaMessageId, wahaEchoExternalIds } from "@/lib/waha/message-id";
 import { logger } from "@/lib/logger";
 
 export type Admin = ReturnType<typeof createAdminClient>;
@@ -486,8 +488,7 @@ async function upsertContact(
     p_notify: notifyName,
   } as never);
   if (error) {
-    console.error("[waha.ingest] fn_upsert_wa_contact failed", error.message);
-    return null;
+    lancarFalhaDeIngestao("fn_upsert_wa_contact", error);
   }
   return (data as string) ?? null;
 }
@@ -504,8 +505,7 @@ async function upsertConversation(
     p_session: sessionId,
   } as never);
   if (error) {
-    console.error("[waha.ingest] fn_upsert_wa_conversation failed", error.message);
-    return null;
+    lancarFalhaDeIngestao("fn_upsert_wa_conversation", error);
   }
   return (data as string) ?? null;
 }
@@ -574,6 +574,122 @@ async function mensagemIngeridaPorExternalId(
   return data ?? null;
 }
 
+/** Objeto simples (nem array, nem null) — a guarda para dado que vem do fio. */
+function objetoSimples(v: unknown): Record<string, unknown> | null {
+  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+}
+
+/** String não-vazia — a régua do `texto` do envelope (`envelope.ts`), em runtime. */
+function textoNaoVazio(v: unknown): string | null {
+  return typeof v === "string" && v !== "" ? v : null;
+}
+
+/**
+ * O `contextInfo` do Baileys — o id cru da citada e a mensagem citada inteira.
+ *
+ * O formato varia: `extendedTextMessage.contextInfo` é o caso do texto (o
+ * medido em produção), uma resposta com mídia carrega o dela em
+ * `imageMessage.contextInfo`, e alguns formatos trazem direto na mensagem.
+ * Varrer os valores evita acoplar a leitura a uma lista de tipos que o WhatsApp
+ * muda sem avisar.
+ */
+function contextoDaCitacao(p: WahaPayload): Record<string, unknown> | null {
+  const msg = objetoSimples(p._data?.message);
+  if (!msg) return null;
+  const direto = objetoSimples(msg.contextInfo);
+  if (direto) return direto;
+  for (const valor of Object.values(msg)) {
+    const ctx = objetoSimples(objetoSimples(valor)?.contextInfo);
+    if (ctx) return ctx;
+  }
+  return null;
+}
+
+/**
+ * A CITAÇÃO DO "RESPONDER EM CIMA" (issue #2474): o id da mensagem respondida
+ * e, quando vem, o texto citado.
+ *
+ * Duas fontes porque o WAHA entrega as duas: o `replyTo` normalizado (medido em
+ * produção — `payload.replyTo.id` com o texto) e o cru em
+ * `_data.message.<tipo>.contextInfo` (`stanzaId` + `quotedMessage`), que é onde
+ * o texto aparece quando o normalizado não o traz. Sem id não há o que
+ * resolver: devolve `null` e a mensagem entra solta, como sempre entrou.
+ */
+function citacaoDoPayload(p: WahaPayload): { id: string; texto: string | null } | null {
+  const direto = objetoSimples(p.replyTo);
+  const contexto = contextoDaCitacao(p);
+  const id = textoNaoVazio(direto?.id) ?? textoNaoVazio(contexto?.stanzaId);
+  if (!id) return null;
+  const citada = objetoSimples(contexto?.quotedMessage);
+  const texto =
+    textoNaoVazio(direto?.body) ??
+    textoNaoVazio(citada?.conversation) ??
+    textoNaoVazio(objetoSimples(citada?.extendedTextMessage)?.text) ??
+    null;
+  return { id, texto };
+}
+
+/**
+ * Acha a linha da mensagem CITADA, presa à MESMA conversa.
+ *
+ * ─── Por que o filtro de conversa é obrigatório ─────────────────────────────
+ *
+ * A bolha renderiza a citada pelo TEXTO (`ChatThread` → `MessageBubble`), então
+ * apontar para fora da conversa mostraria conteúdo de outro atendimento. A
+ * régua (e o motivo) é a mesma do envio (`app/api/v1/messages/_handler.ts`). O
+ * filtro de organização vai explícito porque service role bypassa RLS.
+ *
+ * ─── Por que DUAS consultas ─────────────────────────────────────────────────
+ *
+ * O id do fio chega em formas diferentes conforme quem escreveu a citada:
+ * recebida do cliente é gravada COMPLETA (`false_<chat>_<bare>`), do nosso lado
+ * é BARE (`<bare>`) — e o `replyTo.id` pode chegar em qualquer uma delas, com o
+ * outro formato de chat (`@lid` × `@c.us`). Os candidatos de
+ * `wahaEchoExternalIds` (completo × bare × `true_<chat>_<bare>`, o composto
+ * legado e o eco de envio nosso) resolvem a maioria; o SUFIXO `_<bare>` fecha
+ * o resto, o mesmo raciocínio de `removerEcoDoProprioEnvio` (`_handler.ts`): o
+ * bare do WhatsApp tem 20+ caracteres aleatórios, então casar pela cauda
+ * alcança qualquer formato sem alcançar outra mensagem.
+ */
+async function resolverMensagemCitada(
+  admin: Admin,
+  organizationId: string,
+  conversationId: string,
+  citacaoId: string,
+  chatId: string,
+): Promise<string | null> {
+  const formas = wahaEchoExternalIds(citacaoId, chatId);
+  const { data, error } = await admin
+    .from("messages")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("conversation_id", conversationId)
+    .in("external_id", formas)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    logger.warn("waha.ingest: não consegui ler a mensagem citada", { detail: error.message });
+  }
+  if (data) return (data as { id: string }).id;
+
+  const bare = bareWaMessageId(citacaoId);
+  // Teto de 16: um id real do WhatsApp tem 20+ caracteres aleatórios; abaixo
+  // disso o LIKE casaria outra mensagem por coincidência em vez de achar esta.
+  if (bare.length < 16) return null;
+  const { data: porSufixo, error: erroSufixo } = await admin
+    .from("messages")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("conversation_id", conversationId)
+    .like("external_id", `%\\_${bare}`)
+    .limit(1)
+    .maybeSingle();
+  if (erroSufixo) {
+    logger.warn("waha.ingest: não consegui ler a mensagem citada por sufixo", { detail: erroSufixo.message });
+  }
+  return (porSufixo as { id: string } | null)?.id ?? null;
+}
+
 async function handleInbound(
   admin: Admin,
   session: Session,
@@ -620,6 +736,13 @@ async function handleInbound(
   const conversationId = await upsertConversation(admin, session.organization_id, contactId, session.id);
   if (!conversationId) return;
 
+  // A citação do "responder em cima" (porte do DeskcommCRM #2485): resolvida
+  // ANTES do insert porque o ponteiro é coluna da linha que está nascendo.
+  const citacao = citacaoDoPayload(p);
+  const citadaId = citacao
+    ? await resolverMensagemCitada(admin, session.organization_id, conversationId, citacao.id, chatId)
+    : null;
+
   const now = new Date().toISOString();
   const { data: insertedMessage, error: insertErr } = await admin
     .from("messages")
@@ -639,15 +762,24 @@ async function handleInbound(
       sent_via: "external_device",
       sent_at: dataDoTimestamp(p.timestamp, now),
       delivered_at: now,
-      metadata: { raw_type: p.type, ack_name: p.ackName },
+      reply_to_message_id: citadaId,
+      metadata: {
+        raw_type: p.type,
+        ack_name: p.ackName,
+        // Texto citado só quando NÃO há ponteiro: com a linha resolvida, a
+        // citada no banco é a fonte da verdade.
+        ...(citacao?.texto && !citadaId ? { reply_to_body: citacao.texto } : {}),
+      },
     })
     .select("id")
     .maybeSingle();
 
   // Idempotência: 23505 = unique (organization_id, external_id) já ingerido.
   if (insertErr && insertErr.code !== "23505") {
-    console.error("[waha.ingest] message insert failed", insertErr.message);
-    return;
+    // Era `console.error` + `return`, e a rota devolvia 200: a mensagem do
+    // cliente sumia. Agora lança — transitória vira 503 (o WAHA reentrega) e
+    // fica marcada para o cron `webhook-replay`. Ver `falha-transitoria.ts`.
+    lancarFalhaDeIngestao("messages.insert inbound", insertErr);
   }
   if (insertErr?.code === "23505") {
     // O `return` está certo — reingerir duplicaria a mensagem do cliente. Mas
@@ -760,6 +892,74 @@ async function handleInbound(
 }
 
 /**
+ * A conversa que COMEÇA pelo celular também vira lead (porte do DeskcommCRM
+ * #2543, issue #2448 de lá).
+ *
+ * `garantirLeadDaConversa` só era alcançada pela pós-entrada, que roda no
+ * caminho RECEBIDO. A primeira mensagem que a recepção digita no aparelho
+ * conectado gravava a conversa e saía sem funil: ninguém era dona dela.
+ *
+ * Só contato que NUNCA teve lead: aqui quem fala é a equipe, e falar com
+ * cliente de lead fechado (o "chegou certinho?") não é demanda nova.
+ * Idempotente: `garantirLeadDaConversa` recusa lead aberto, e a RPC serializa
+ * por (organização, contato).
+ *
+ * Best-effort: a mensagem JÁ está gravada. Uma exceção daqui subiria para o
+ * webhook e o WAHA reentregaria tudo.
+ */
+async function nascerLeadDaConversaPeloCelular(
+  admin: Admin,
+  session: Session,
+  contactId: string,
+  conversationId: string,
+): Promise<void> {
+  const contexto = {
+    organization_id: session.organization_id,
+    conversation_id: conversationId,
+    contact_id: contactId,
+  };
+  try {
+    const { data: qualquerLead, error: erroDoHistorico } = await admin
+      .from("crm_leads")
+      .select("id")
+      .eq("organization_id", session.organization_id)
+      .eq("contact_id", contactId)
+      .limit(1)
+      .maybeSingle();
+    if (erroDoHistorico) throw new Error(erroDoHistorico.message);
+    if (qualquerLead) {
+      logger.info("waha.ingest: lead nao criado a partir do celular", { ...contexto, motivo: "contato_ja_tem_lead" });
+      return;
+    }
+
+    const nascimento = await garantirLeadDaConversa(admin, {
+      organizationId: session.organization_id,
+      contactId,
+      conversationId,
+      // NÃO o `pushName`: em `fromMe` ele é o do OPERADOR (o nome da clínica).
+      nomeDoContato: null,
+      origem: { source: "whatsapp_operador", motivo: "primeira mensagem enviada pelo celular" },
+    });
+    logger.info(
+      nascimento.criado
+        ? "waha.ingest: lead criado a partir do celular"
+        : "waha.ingest: lead nao criado a partir do celular",
+      {
+        ...contexto,
+        ...(nascimento.criado
+          ? { lead_id: nascimento.leadId, pipeline_id: nascimento.pipelineId, stage_id: nascimento.stageId }
+          : { motivo: nascimento.motivo }),
+      },
+    );
+  } catch (err) {
+    logger.error("waha.ingest: nascimento do lead pelo celular falhou (a mensagem entra assim mesmo)", {
+      ...contexto,
+      error: err instanceof Error ? err.message.slice(0, 120) : "unknown",
+    });
+  }
+}
+
+/**
  * fromMe=true: operador respondeu direto do WhatsApp dele (não pelo composer).
  * Contato = destinatário (`to`). `from` é o próprio número do operador — nunca
  * vira contato. Registrado como outbound p/ o operador ver o histórico completo.
@@ -857,6 +1057,13 @@ async function handleOutboundFromUserPhone(
   const conversationId = await upsertConversation(admin, session.organization_id, contactId, session.id);
   if (!conversationId) return;
 
+  // O operador também responde em cima pelo celular: mesma extração e
+  // resolução do inbound, presas a esta conversa (DeskcommCRM #2485).
+  const citacao = citacaoDoPayload(p);
+  const citadaId = citacao
+    ? await resolverMensagemCitada(admin, session.organization_id, conversationId, citacao.id, chatId)
+    : null;
+
   const now = new Date().toISOString();
   const { data: insertedOutbound, error: insertErr } = await admin
     .from("messages")
@@ -880,13 +1087,18 @@ async function handleOutboundFromUserPhone(
       // O composto que o WAHA entregou fica guardado para CITAR esta mensagem:
       // remontá-lo do bare usa o chat do envio de hoje, que pode não ser o do
       // eco (PN de um lado, @lid do outro). Ver `idDaCitadaNoCanal` no handler.
-      metadata: { raw_type: p.type, fromMe: true, ...(bare !== p.id ? { external_id_original: p.id } : {}) },
+      reply_to_message_id: citadaId,
+      metadata: {
+        raw_type: p.type,
+        fromMe: true,
+        ...(bare !== p.id ? { external_id_original: p.id } : {}),
+        ...(citacao?.texto && !citadaId ? { reply_to_body: citacao.texto } : {}),
+      },
     })
     .select("id")
     .maybeSingle();
   if (insertErr && insertErr.code !== "23505") {
-    console.error("[waha.ingest] outbound insert failed", insertErr.message);
-    return;
+    lancarFalhaDeIngestao("messages.insert outbound", insertErr);
   }
   if (insertErr?.code === "23505") {
     // Mesma razão do inbound: dedup é esperado, invisível não.
@@ -897,6 +1109,43 @@ async function handleOutboundFromUserPhone(
       direcao: "outbound",
     });
     return;
+  }
+
+  // ── A CORRIDA COM O ENVIO — re-checar DEPOIS do insert ─────────────────
+  //
+  // `jaRegistrada` lê ANTES do insert, e o envio pode gravar o id do canal no
+  // meio: entre aquela leitura e o insert desta linha. Medido no upstream em
+  // 06/10/2026: o eco chegou 14 s depois do envio, a ingestão levou 4 s, e o
+  // envio confirmou dentro dessa janela. As duas guardas erraram ao mesmo
+  // tempo (`jaRegistrada` viu a linha sem id, `ehEcoDeEnvioNosso` a viu já
+  // `sent`) e a IA foi pausada por 1 h por ter falado.
+  //
+  // Aqui o id já está gravado, se o envio confirmou. Achando uma linha NOSSA
+  // com ele, esta é eco: sai a duplicata e não há pausa. A linha do envio nunca
+  // nasce `external_device`, e o `neq` do id protege a recém-inserida.
+  // (Porte do DeskcommCRM #2468.)
+  if (insertedOutbound?.id) {
+    const { data: nossa } = await admin
+      .from("messages")
+      .select("id")
+      .eq("organization_id", session.organization_id)
+      .in("external_id", idCandidates)
+      .neq("sent_via", "external_device")
+      .neq("id", insertedOutbound.id)
+      .limit(1)
+      .maybeSingle();
+    if (nossa) {
+      await admin
+        .from("messages")
+        .delete()
+        .eq("organization_id", session.organization_id)
+        .eq("id", insertedOutbound.id);
+      logger.info("waha.ingest: eco reconhecido depois do insert (corrida com o envio)", {
+        organization_id: session.organization_id,
+        external_id: p.id,
+      });
+      return;
+    }
   }
 
   await markConversation(admin, session.organization_id, conversationId, "outbound", previewFromMessage(p), now);
@@ -934,6 +1183,9 @@ async function handleOutboundFromUserPhone(
       conversationId,
       canal: "waha",
     });
+    // A conversa que começa pelo celular nasce no funil (DeskcommCRM #2543).
+    // Só o que não é eco: o eco é o envio do PRÓPRIO CRM.
+    await nascerLeadDaConversaPeloCelular(admin, session, contactId, conversationId);
   }
 
   await audit({
