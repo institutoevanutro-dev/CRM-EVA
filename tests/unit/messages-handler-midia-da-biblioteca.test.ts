@@ -78,6 +78,8 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => {}) }));
 
+let sessaoStatus = "WORKING";
+
 function conversationRow(): Row {
   return {
     id: CONV,
@@ -88,12 +90,12 @@ function conversationRow(): Row {
     group_chat_id: null,
     last_inbound_at: null,
     contacts: { phone_number: "+5531999998888", wa_identity: null, is_blocked: false },
-    channel_sessions: { provider: "waha", waha_session_name: "default", status: "WORKING", archived_at: null },
+    channel_sessions: { provider: "waha", waha_session_name: "default", status: sessaoStatus, archived_at: null },
   };
 }
 
 function makeSupabase() {
-  const state: { message: Row | null; inserts: Row[]; preview: unknown } = { message: null, inserts: [], preview: undefined };
+  const state: { message: Row | null; inserts: Row[]; preview: unknown; updates: Array<{ patch: Row; filtros: Array<[string, unknown]> }> } = { message: null, inserts: [], preview: undefined, updates: [] };
   const client = {
     from(table: string) {
       if (table === "channel_sessions") {
@@ -122,8 +124,13 @@ function makeSupabase() {
           },
           update: (patch: Row) => {
             state.message = { ...state.message, ...patch };
+            const filtros: Array<[string, unknown]> = [];
+            state.updates.push({ patch, filtros });
             const q = {
-              eq: () => q,
+              eq: (col: string, val: unknown) => {
+                filtros.push([col, val]);
+                return q;
+              },
               select: () => q,
               maybeSingle: async () => ({ data: { ...state.message }, error: null }),
               single: async () => ({ data: { ...state.message }, error: null }),
@@ -167,6 +174,7 @@ beforeEach(() => {
   fetchMock = vi.fn(async (..._a: unknown[]) => Response.json({ id: { _serialized: "MEDIA1" } }));
   vi.stubGlobal("fetch", fetchMock);
   admin.item = itemPronto();
+  sessaoStatus = "WORKING";
   admin.filtros = [];
   admin.buckets = [];
   admin.signedUrl = vi.fn(async () => ({ data: { signedUrl: "https://signed.example/lib.jpg" }, error: null }));
@@ -274,6 +282,27 @@ describe("sendMessageHandler — mídia da biblioteca", () => {
     expect(state.preview).toBe("[image]");
   });
 
+  it("replay do agente (internalMessageId) que cai na 422 marca a linha queued como failed", async () => {
+    admin.item = itemPronto({ contains_person: true });
+    const { supabase, state } = makeSupabase();
+    const err = await recusa(sendMessageHandler(supabase, { ...ctx, internalMessageId: "msg-q" }, input()));
+    expect(err.code).toBe("media_not_ready");
+    expect(state.inserts).toHaveLength(0);
+    expect(state.updates).toEqual([
+      {
+        patch: { status: "failed", error_code: "media_not_ready", error_message: err.message },
+        filtros: [["organization_id", ORG], ["id", "msg-q"], ["status", "queued"]],
+      },
+    ]);
+  });
+
+  it("sem internalMessageId a 422 não toca em mensagem nenhuma", async () => {
+    admin.item = null;
+    const { supabase, state } = makeSupabase();
+    expect((await recusa(sendMessageHandler(supabase, ctx, input()))).code).toBe("media_not_found");
+    expect(state.updates).toHaveLength(0);
+  });
+
   it("falha ao assinar: failed/storage_sign_failed, nada sai pelo canal", async () => {
     admin.signedUrl = vi.fn(async () => ({ data: null, error: { message: "no_object" } }));
     const { supabase } = makeSupabase();
@@ -281,6 +310,43 @@ describe("sendMessageHandler — mídia da biblioteca", () => {
     expect(msg.status).toBe("failed");
     expect(msg.error_code).toBe("storage_sign_failed");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("sendMessageHandler — mídia da biblioteca com o canal fora", () => {
+  // `queued` só é honesto onde algo reenvia: o reconciliador não reenvia mídia
+  // da biblioteca, então fora do follow-up a linha fecha `failed` na hora.
+  it("sessão fora do ar: failed/canal_fora, nada sai e a linha não fica queued", async () => {
+    sessaoStatus = "STOPPED";
+    const { supabase } = makeSupabase();
+    const msg = await sendMessageHandler(supabase, ctx, input());
+    expect(msg).toMatchObject({ status: "failed", error_code: "canal_fora" });
+    expect(msg.error_message).toBe("O canal está fora agora; a mídia não foi enviada.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("canal não configurado: failed/canal_fora, não queued", async () => {
+    vi.stubEnv("WAHA_API_BASE_URL", "");
+    vi.stubEnv("WAHA_API_KEY", "");
+    const { supabase } = makeSupabase();
+    const msg = await sendMessageHandler(supabase, ctx, input());
+    expect(msg).toMatchObject({ status: "failed", error_code: "canal_fora" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("canal que só descobre no envio que falta credencial: failed/canal_fora, não queued", async () => {
+    fetchMock.mockRejectedValue(new Error("waha_not_configured: sem chave"));
+    const { supabase } = makeSupabase();
+    const msg = await sendMessageHandler(supabase, ctx, input());
+    expect(msg).toMatchObject({ status: "failed", error_code: "canal_fora" });
+  });
+
+  it("follow-up segue em queued: o retry do follow-up reenvia", async () => {
+    sessaoStatus = "STOPPED";
+    const { supabase } = makeSupabase();
+    const msg = await sendMessageHandler(supabase, { ...ctx, origemDoEnvio: "followup" }, input());
+    expect(msg.status).toBe("queued");
+    expect((msg.metadata as Row).queued_reason).toBe("channel_session_not_working");
   });
 });
 

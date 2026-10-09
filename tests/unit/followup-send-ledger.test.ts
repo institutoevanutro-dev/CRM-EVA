@@ -30,3 +30,22 @@ it('mensagem failed/queued nunca confirma sent',async()=>{
   expect((await sendWithLedger(db,intent,send)).kind).toBe(status);expect(db.update).not.toHaveBeenCalledWith('org','ledger-original','accepted',expect.anything(),expect.anything());
  }
 });
+it('hash sem mídia é o de sempre; com mídia inclui item e variante',async()=>{
+ const {createHash}=await import('node:crypto');const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
+ const fresh=()=>({...store(),create:vi.fn(async()=> 'k')});const send=vi.fn(async()=>({id:'m',status:'sent'}));
+ const sem=fresh();await sendWithLedger(sem,intent,send);expect(sem.create).toHaveBeenCalledWith(intent,sha('Retomar consulta'));
+ const com=fresh();const midia={...intent,mediaLibraryItemId:'item-1',mediaVariant:'B' as const};await sendWithLedger(com,midia,send);
+ expect(com.create).toHaveBeenCalledWith(midia,sha('Retomar consulta\u0000item-1\u0000B'));
+ const semVariante=fresh();await sendWithLedger(semVariante,{...intent,mediaLibraryItemId:'item-1'},send);
+ expect(semVariante.create).toHaveBeenCalledWith(expect.anything(),sha('Retomar consulta\u0000item-1\u0000'));
+});
+it('422 media_not_* fecha o ledger como failed com o código e propaga',async()=>{
+ const {ApiError}=await import('@/lib/api/types');
+ for(const code of ['media_not_found','media_not_ready']){
+  const db={...store(),create:vi.fn(async()=> 'k')};const err=new ApiError(422,code,undefined,'req','Mídia recusada.');
+  await expect(sendWithLedger(db,intent,vi.fn(async()=>{throw err;}))).rejects.toBe(err);
+  expect(db.update).toHaveBeenCalledWith('org','k','failed',null,code);
+ }
+ const outra={...store(),create:vi.fn(async()=> 'k')};const val=new ApiError(422,'validation_error',undefined,'req');
+ await expect(sendWithLedger(outra,intent,vi.fn(async()=>{throw val;}))).rejects.toBe(val);expect(outra.update).not.toHaveBeenCalled();
+});

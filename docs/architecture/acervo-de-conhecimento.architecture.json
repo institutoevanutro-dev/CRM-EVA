@@ -220,6 +220,14 @@
       "sublabel": "media_library_item_id: confere o termo de uso de imagem na hora e envia a variante pelo canal; organization_id vem da sessão"
     },
     {
+      "id": "turnoMidia",
+      "lane": "turno",
+      "col": 8,
+      "type": "worker",
+      "label": "send_media no turno",
+      "sublabel": "lista as mídias prontas (quando usar), manda uma por resposta pelo mesmo envio; canal fora = falha honesta, nunca fila; sem mídia pronta a ferramenta some"
+    },
+    {
       "id": "mensagens",
       "lane": "dados",
       "col": 6,
@@ -296,6 +304,18 @@
       "from": "midiasEnvio",
       "to": "mensagens",
       "label": "grava a mensagem com o item e a variante enviada"
+    },
+    {
+      "id": "e34",
+      "from": "midiasTabela",
+      "to": "turnoMidia",
+      "label": "o turno lê só as mídias prontas e o 'quando usar'"
+    },
+    {
+      "id": "e35",
+      "from": "turnoMidia",
+      "to": "midiasEnvio",
+      "label": "manda a escolhida pelo envio que confere o termo"
     }
   ],
   "cards": [

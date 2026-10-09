@@ -92,3 +92,17 @@ describe("WahaChannelAdapter — o template não pode cair no caminho", () => {
     expect(recebido.template).toBeUndefined();
   });
 });
+
+describe("WahaChannelAdapter — mídia da biblioteca", () => {
+  it("repassa item e variante ao sink", async () => {
+    await adapter().send(envio({ body: "", mediaLibraryItemId: "item-1", mediaVariant: "B" }));
+    expect(sendTurnMessage.mock.calls[0]?.[2]).toMatchObject({ mediaLibraryItemId: "item-1", mediaVariant: "B", body: "" });
+  });
+
+  it("MidiaRecusadaError sobe: não vira 'unavailable' (reagendar repetiria a 422)", async () => {
+    const { MidiaRecusadaError } = await import("@/lib/agent-engine/edge/crm/send-message");
+    const err = new MidiaRecusadaError("media_not_ready", "Esta mídia não pode ser enviada agora: termo vencido.", "req", "termo_vencido");
+    sendTurnMessage.mockRejectedValueOnce(err);
+    await expect(adapter().send(envio({ mediaLibraryItemId: "item-1" }))).rejects.toBe(err);
+  });
+});
