@@ -131,6 +131,27 @@ const TELEFONE_GRUDADO = new RegExp(
 const SEP = "(?:\\s?[./-]\\s?|,|\\s)?";
 const CPF = new RegExp(`(?<!\\d)\\d{3}${SEP}\\d{3}${SEP}\\d{3}${SEP}\\d{2}(?!\\d)`, "g");
 
+/**
+ * Documentos e endereços que não são telefone nem CPF (porte de
+ * melgarafael/DeskcommCRM #2416 e #2435). Aqui não há registro de perfil de
+ * país, então os padrões moram aqui, aplicados para toda organização: quem
+ * chama o scrub (Sentry, Jev) não sabe de que país veio o texto.
+ *
+ * O IBAN vem ANTES da cadeia de telefone: os blocos de 4 dígitos dele têm a
+ * forma de um telefone e saíam `PT50 [PHONE] [PHONE] 4`. Os demais vêm DEPOIS,
+ * para o que já saía apagado continuar no mesmo formato de antes. O CEP só com
+ * hífen: oito dígitos corridos seguem sendo contagem (`40000000 tokens`).
+ */
+const IBAN_PT = /\bPT\d{2}(?:\s?\d{4}){5}\s?\d\b/g;
+const DEPOIS_DA_CADEIA: ReadonlyArray<readonly [RegExp, string]> = [
+  // Nove dígitos em três blocos: NIF português e telemóvel. Depois do CPF,
+  // para não partir `123.456.789-09` em `[PHONE]-09`.
+  [/\b\d{3}[.\s-]\d{3}[.\s-]\d{3}\b/g, "[PHONE]"],
+  [/\bPT\s?\d{3}[ .]?\d{3}[ .]?\d{3}\b/g, "[NIF]"],
+  [/\b\d{5}-\d{3}\b/g, "[CEP]"],
+  [/\b\d{4}[-\s]\d{3}\b/g, "[CODIGO_POSTAL]"],
+];
+
 export function scrubMessage(input: string): string {
   return input
     // E-mail antes dos números: senão o telefone comia a parte numérica do
@@ -145,10 +166,12 @@ function apagarCpfETelefone(trecho: string): string {
   // Telefone primeiro: 11 dígitos crus são ambíguos (CPF ou celular) e caem em
   // [PHONE] — redigidos de um jeito ou de outro. O CPF com pontuação não tem
   // quatro dígitos seguidos, então nenhum padrão de telefone o alcança.
-  return trecho
+  const cadeia = trecho
+    .replace(IBAN_PT, "[IBAN]")
     .replace(TELEFONE, "[PHONE]")
     .replace(TELEFONE_GRUDADO, "[PHONE]")
     .replace(CPF, "[CPF]");
+  return DEPOIS_DA_CADEIA.reduce((texto, [padrao, marcador]) => texto.replace(padrao, marcador), cadeia);
 }
 
 /**
