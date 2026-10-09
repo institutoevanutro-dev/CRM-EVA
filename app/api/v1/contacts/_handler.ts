@@ -844,7 +844,7 @@ export async function deleteContactHandler(
   //
   // Só CONTA: quem recusa continua sendo o banco, com o 23503 do RESTRICT. A
   // contagem existe para saber disso antes de apagar o histórico, e é por isso
-  // que ela vem antes do primeiro DELETE — depois não há mais como desfazer.
+  // que ela vem antes da chamada que apaga — depois não há mais como desfazer.
   const vinculos: string[] = [];
   // A contagem crua por tabela é o que a tela traduz e pluraliza; `vinculos`
   // (texto em pt-BR) segue igual ao da auditoria (DeskcommCRM #1925).
@@ -891,42 +891,34 @@ export async function deleteContactHandler(
     );
   }
 
-  // `apagados` é preenchido passo a passo de propósito: se um DELETE do meio
-  // falhar, a linha de auditoria do erro precisa dizer exatamente até onde o
-  // histórico foi, senão o incidente vira arqueologia.
-  const apagados: string[] = [];
-  let deleted: { id: string } | null = null;
+  // UMA função, UMA transação (issue #1862).
+  //
+  // Antes eram três DELETE separados: `messages`, depois `conversations`, depois
+  // `contacts`. Quando a última chamada era recusada (o gatilho de follow-up
+  // devolvia 42501 em quem tem `auth.uid()`), as duas primeiras já estavam
+  // gravadas — a ficha ficava na base SEM histórico, e a auditoria do erro saía
+  // com `apagados: ["messages","conversations"]` como rastro do estrago.
+  //
+  // Agora a rota chama `fn_apagar_contato_com_historico` (migration 0340), que
+  // apaga as três na ordem certa do RESTRICT dentro de uma transação só: ou sai
+  // tudo, ou não sai nada. É `security invoker` — a RLS de quem chama continua
+  // valendo, e o filtro de `organization_id` é do banco (argumento + where), não
+  // do chamador. Nenhum service role entra aqui.
+  let apagou = false;
   try {
-    // Mensagens e conversas RESTRICT no contato: apagar primeiro, senão o
-    // DELETE da ficha falha para qualquer lead que já falou no canal.
-    const { error: msgErr } = await supabase
-      .from("messages")
-      .delete()
-      .eq("contact_id", contactId)
-      .eq("organization_id", ctx.organization_id);
-    throwOnDbError(msgErr, ctx.requestId, ctx.idioma);
-    apagados.push("messages");
-
-    const { error: convErr } = await supabase
-      .from("conversations")
-      .delete()
-      .eq("contact_id", contactId)
-      .eq("organization_id", ctx.organization_id);
-    throwOnDbError(convErr, ctx.requestId, ctx.idioma);
-    apagados.push("conversations");
-
-    const { data, error: delErr } = await supabase
-      .from("contacts")
-      .delete()
-      .eq("id", contactId)
-      .eq("organization_id", ctx.organization_id)
-      .select("id")
-      .maybeSingle();
-    throwOnDbError(delErr, ctx.requestId, ctx.idioma);
-    deleted = data;
+    const { data, error: rpcErr } = await supabase.rpc("fn_apagar_contato_com_historico", {
+      p_contact_id: contactId,
+      p_organization_id: ctx.organization_id,
+    });
+    throwOnDbError(rpcErr, ctx.requestId, ctx.idioma);
+    apagou = data === true;
   } catch (err) {
     // `audit()` é best-effort por doutrina (engole a própria falha e reporta),
     // então registrar aqui não pode trocar o desfecho do erro real.
+    //
+    // `apagados` fica VAZIO de propósito: numa transação só não existe "chegou
+    // até a metade". Ou a ficha saiu com o histórico (aqui seria outro desfecho),
+    // ou a transação desfez tudo — e é isso que a linha de auditoria diz.
     await audit({
       action: "contact.delete_blocked",
       actorUserId: a.actorUserId,
@@ -934,12 +926,14 @@ export async function deleteContactHandler(
       resourceType: "contact",
       resourceId: contactId,
       requestId: ctx.requestId,
-      metadata: { ...a.metadataActor, motivo: "falha_ao_apagar", vinculos: [], apagados },
+      metadata: { ...a.metadataActor, motivo: "falha_ao_apagar", vinculos: [], apagados: [] },
     });
     throw err;
   }
 
-  if (!deleted) {
+  if (!apagou) {
+    // A ficha existia na pré-checagem e sumiu antes da chamada (outra sessão a
+    // apagou, ou a RLS não a deixou ver): o mesmo 404 de sempre.
     throw new ApiError(
       404,
       "not_found",
@@ -972,5 +966,5 @@ export async function deleteContactHandler(
     metadata: a.metadataActor,
   });
 
-  return { id: deleted.id as string };
+  return { id: contactId };
 }
