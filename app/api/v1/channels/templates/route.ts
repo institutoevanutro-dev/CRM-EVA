@@ -96,15 +96,25 @@ type OrgGate =
   | { autorizado: true; orgId: string }
   | { autorizado: false; resposta: NextResponse };
 
-async function orgOrFail(requestId: string): Promise<OrgGate> {
-  const authz = await requireRole("admin", { requestId, resource: "channels_templates" });
+/**
+ * Quem pode ──────────────────────────────────────────────────────────────────
+ *
+ * Ler (`agent`): esta lista alimenta o seletor da janela fechada no inbox, e
+ * quem atende é quem precisa dela. Com `admin` em todos os métodos, o `agent`
+ * levava `403 forbidden_role` e o seletor aparecia VAZIO (upstream #2328).
+ *
+ * Escrever (`admin`): sincronizar modelos e gravar link de mídia mexem na
+ * configuração do canal da empresa (e seguem bloqueados em sessão de suporte).
+ */
+async function orgOrFail(requestId: string, papel: "agent" | "admin"): Promise<OrgGate> {
+  const authz = await requireRole(papel, { requestId, resource: "channels_templates" });
   if (!authz.ok) return { autorizado: false, resposta: authz.response };
   return { autorizado: true, orgId: authz.org.orgId };
 }
 
 export async function GET(): Promise<NextResponse> {
   const requestId = randomUUID();
-  const r = await orgOrFail(requestId);
+  const r = await orgOrFail(requestId, "agent");
   if (!r.autorizado) return r.resposta;
 
   const sessao = await metaSessionForOrg(r.orgId);
@@ -178,7 +188,7 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
   if (supportDenied) return supportDenied;
 
   const requestId = randomUUID();
-  const r = await orgOrFail(requestId);
+  const r = await orgOrFail(requestId, "admin");
   if (!r.autorizado) return r.resposta;
 
   const sessao = await metaSessionForOrg(r.orgId);
@@ -243,7 +253,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   if (supportDenied) return supportDenied;
 
   const requestId = randomUUID();
-  const r = await orgOrFail(requestId);
+  const r = await orgOrFail(requestId, "admin");
   if (!r.autorizado) return r.resposta;
 
   const body = (await req.json().catch(() => null)) as {
