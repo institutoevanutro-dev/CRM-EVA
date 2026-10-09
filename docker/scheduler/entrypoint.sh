@@ -107,6 +107,9 @@ CRONS="
 15 4 * * *|60|api/v1/cron/sync-model-catalog
 17 4 * * *|60|api/v1/cron/instagram-token-refresh
 40 4 * * *|120|api/v1/cron/data-retention
+# A retenção de mídia (migration 0341). Opt-in por organização: quem não ligou
+# a limpeza na tela não é tocado, e a rodada sai vazia e sem auditoria.
+20 5 * * *|120|api/v1/cron/media-retention
 "
 
 # CRONTAB_PATH é ponto de injeção do teste (tests/shell/scheduler-entrypoint.test.sh).
