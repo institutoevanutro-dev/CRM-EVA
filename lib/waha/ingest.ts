@@ -1177,8 +1177,7 @@ async function handleOutboundFromUserPhone(
   //   silenciar o bot -> ESTRITO    (na dúvida NÃO cala; calar a IA por engano é
   //                                  pior que não calar)
   // Quem reaproveitar esta condição para pular o INSERT reabre o #108.
-  const ehEco = await ehEcoDeEnvioNosso(admin, session.organization_id, conversationId, p);
-  if (!ehEco) {
+  if (!(await ehEcoDeEnvioNosso(admin, session.organization_id, conversationId, p))) {
     await pausarIaPorAtendimentoManual(admin, {
       organizationId: session.organization_id,
       conversationId,
