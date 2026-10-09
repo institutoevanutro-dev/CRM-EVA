@@ -73,7 +73,9 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   // contexto pra dizer QUAL janela segurou o envio, não a genérica.
   const { data: knobs } = await supabase
     .from("channel_knobs")
-    .select("window_start_hour, window_end_hour, allow_sunday, timezone")
+    .select(
+      "window_start_hour, window_end_hour, resposta_start_hour, resposta_end_hour, allow_sunday, timezone",
+    )
     .eq("organization_id", activeOrg.orgId)
     .eq("channel_session_id", conv.channel_session_id)
     .maybeSingle();
@@ -82,8 +84,13 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
     {
       retentions: traces ?? [],
       context: {
-        window_start_hour: knobs?.window_start_hour ?? PACING_DEFAULTS.windowStartHour,
-        window_end_hour: knobs?.window_end_hour ?? PACING_DEFAULTS.windowEndHour,
+        // A retenção que esta rota explica é a da RESPOSTA do assistente, então a
+        // janela mostrada é a de RESPOSTA (0335), com a mesma herança coluna a
+        // coluna do motor: `resposta_*` ?? `window_*` ?? padrão.
+        window_start_hour:
+          knobs?.resposta_start_hour ?? knobs?.window_start_hour ?? PACING_DEFAULTS.respostaStartHour,
+        window_end_hour:
+          knobs?.resposta_end_hour ?? knobs?.window_end_hour ?? PACING_DEFAULTS.respostaEndHour,
         allow_sunday: knobs?.allow_sunday ?? PACING_DEFAULTS.allowSunday,
         timezone: knobs?.timezone ?? PACING_DEFAULTS.timezone,
       },
