@@ -51,7 +51,7 @@ export const POLITICAS_DE_AVISO = {
   handoff: { refs: ["contact", "conversation"], orientacao: "Confira o atendimento descrito e combine quem assume o próximo passo." },
   promotion_review: { refs: [], orientacao: "Na evolução do assistente, confira as propostas disponíveis. Este aviso não identifica uma proposta específica.", geral: EVOLUCAO },
   judge_unaligned: { refs: [], orientacao: "Na evolução do assistente, confira a avaliação de qualidade. Este aviso não identifica uma avaliação específica.", geral: EVOLUCAO },
-  followup_dead: { refs: ["followup_enrollment"], orientacao: "Peça ao gestor para revisar o acompanhamento que parou." },
+  followup_dead: { refs: ["followup_enrollment"], orientacao: "Peça ao gestor para revisar o acompanhamento descrito neste aviso." },
   snooze_expired: { refs: ["conversation"], orientacao: "Confira se cabe retomar o atendimento descrito neste aviso." },
   next_action_ambiguous: { refs: ["contact"], orientacao: "Confira os negócios do contato e escolha a qual deles pertence a próxima ação." },
   risk_backlog_seeded: { refs: ["organization"], orientacao: "Revise os negócios parados no Radar e defina o próximo passo." },

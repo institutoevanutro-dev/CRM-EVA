@@ -430,7 +430,7 @@ export const DICIONARIO: Traducoes = {
   "Confira o atendimento descrito e combine quem assume o próximo passo.": { es: "Revisa la atención descrita y acuerda quién asume el siguiente paso." },
   "Na evolução do assistente, confira as propostas disponíveis. Este aviso não identifica uma proposta específica.": { es: "En la evolución del asistente, revisa las propuestas disponibles. Este aviso no identifica una propuesta específica." },
   "Na evolução do assistente, confira a avaliação de qualidade. Este aviso não identifica uma avaliação específica.": { es: "En la evolución del asistente, revisa la evaluación de calidad. Este aviso no identifica una evaluación específica." },
-  "Peça ao gestor para revisar o acompanhamento que parou.": { es: "Pide al responsable que revise el seguimiento que se detuvo." },
+  "Peça ao gestor para revisar o acompanhamento descrito neste aviso.": { es: "Pide al responsable que revise el seguimiento descrito en este aviso." },
   "Confira se cabe retomar o atendimento descrito neste aviso.": { es: "Revisa si corresponde retomar la atención descrita en este aviso." },
   "Confira os negócios do contato e escolha a qual deles pertence a próxima ação.": { es: "Revisa los negocios del contacto y elige a cuál pertenece la siguiente acción." },
   "Revise os negócios parados no Radar e defina o próximo passo.": { es: "Revisa los negocios detenidos en el Radar y define el siguiente paso." },
@@ -7813,6 +7813,7 @@ export const DICIONARIO: Traducoes = {
   "O avaliador de qualidade precisa de recalibragem": {
     es: "El evaluador de calidad necesita recalibración",
   },
+  "Um fluxo de follow-up precisa de atenção": { es: "Un flujo de follow-up necesita atención" },
   "Um fluxo de follow-up parou de tentar": { es: "Un flujo de follow-up dejó de intentarlo" },
   "Um follow-up pulou uma mídia que não pode ser enviada": { es: "Un follow-up omitió un archivo multimedia que no se puede enviar" },
   "O lead não respondeu no prazo que você definiu": {

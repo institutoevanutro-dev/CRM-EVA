@@ -21,6 +21,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { validateFlowForPublish } from "@/lib/followup/validate-publish";
 import { publishFollowupFlowVersion } from "@/lib/followup/publish";
 import type { FlowGraph } from "@/lib/followup/graph-schema";
+import { logger } from "@/lib/logger";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { variantesDoItem } from "@/lib/midias/esquemas";
 import { hojeNaClinica, situacaoDaMidia, SITUACAO_LEGIVEL } from "@/lib/midias/termo";
@@ -186,21 +187,28 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
   // Aviso, não bloqueio: mídia que não sai agora vira passo pulado em runtime
   // (o fluxo segue), mas quem publica merece saber antes.
   const mediaNodes = graph.nodes.flatMap((n) =>
-    n.type === "action" && n.config.mode === "media" ? [{ node_id: n.id, media_id: n.config.media_id }] : [],
+    n.type === "action" && n.config.mode === "media"
+      ? [{ node_id: n.id, media_id: n.config.media_id, nome: n.label.trim() || n.id }]
+      : [],
   );
   const warnings: Array<{ node_id: string; message: string }> = [];
   if (mediaNodes.length > 0) {
-    const { data: itens } = await admin
+    const { data: itens, error: midiaErr } = await admin
       .from("media_library_items")
       .select("id, contains_person, consent_signed_at, consent_expires_at, consent_revoked_at, variants")
       .eq("organization_id", activeOrg.orgId)
       .in("id", [...new Set(mediaNodes.map((m) => m.media_id))]);
+    if (midiaErr) {
+      // Falha de leitura não é "mídia ausente": sem aviso é melhor que aviso falso.
+      logger.warn("[followup.publish] media lookup failed", { error: midiaErr.message, requestId });
+      return ok({ ...updatedPointer, warnings }, { requestId });
+    }
     const porId = new Map((itens ?? []).map((i) => [i.id, i]));
     const hoje = hojeNaClinica();
-    for (const { node_id, media_id } of mediaNodes) {
+    for (const { node_id, media_id, nome } of mediaNodes) {
       const item = porId.get(media_id);
       if (!item) {
-        warnings.push({ node_id, message: t("Mídia não encontrada na biblioteca.") });
+        warnings.push({ node_id, message: `${t("Passo")} "${nome}": ${t("Mídia não encontrada na biblioteca.")}` });
         continue;
       }
       const situacao = situacaoDaMidia(
@@ -210,7 +218,7 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
       if (situacao !== "pronta") {
         warnings.push({
           node_id,
-          message: `${t("Esta mídia não pode ser enviada agora")}: ${t(SITUACAO_LEGIVEL[situacao])}.`,
+          message: `${t("Passo")} "${nome}": ${t("Esta mídia não pode ser enviada agora")}: ${t(SITUACAO_LEGIVEL[situacao])}.`,
         });
       }
     }

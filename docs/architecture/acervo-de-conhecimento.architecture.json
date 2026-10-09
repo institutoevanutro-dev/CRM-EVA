@@ -336,6 +336,12 @@
       "from": "followupMidia",
       "to": "midiasEnvio",
       "label": "manda pelo envio que confere o termo"
+    },
+    {
+      "id": "e38",
+      "from": "followupMidia",
+      "to": "central",
+      "label": "passo pulado: abre aviso na Central"
     }
   ],
   "cards": [

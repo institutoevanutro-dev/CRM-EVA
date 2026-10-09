@@ -59,6 +59,8 @@ const INVALID_GRAPH: FlowGraph = {
 // ---------------------------------------------------------------------------
 
 type Row = Record<string, unknown>;
+// Faz a leitura de media_library_items falhar (null = normal).
+let midiaErro: string | null = null;
 
 function makeDb(pointers: Row[], versions: Row[], stages: Row[] = [], midias: Row[] = []) {
   const tables: Record<string, Row[]> = {
@@ -90,6 +92,7 @@ function makeDb(pointers: Row[], versions: Row[], stages: Row[] = [], midias: Ro
 
     function execute(): { data: Row[] | null; error: { code?: string; message: string } | null } {
       const tableRows = tables[table]!;
+      if (table === "media_library_items" && midiaErro) return { data: null, error: { message: midiaErro } };
       if (mode === "select") {
         let list = tableRows.filter(matches);
         if (orderCol) {
@@ -494,10 +497,10 @@ describe("POST /api/v1/ai/followup-flows/:id/publish", () => {
   describe("passo de mídia", () => {
     const PID = "33333333-3333-4333-8333-333333333333";
     const MID = "44444444-4444-4444-8444-444444444444";
-    const grafo = (mediaId: string): FlowGraph => ({
+    const grafo = (mediaId: string, label = "m1"): FlowGraph => ({
       nodes: [
         trigger("t1"),
-        { id: "m1", type: "action", label: "m1", position: pos, config: { mode: "media", media_id: mediaId } },
+        { id: "m1", type: "action", label, position: pos, config: { mode: "media", media_id: mediaId } },
         end("e1"),
       ],
       edges: [edge("a", "t1", "m1"), edge("b", "m1", "e1")],
@@ -514,9 +517,9 @@ describe("POST /api/v1/ai/followup-flows/:id/publish", () => {
       ],
       ...extra,
     });
-    async function publicar(midias: Row[]) {
+    async function publicar(midias: Row[], label = "m1") {
       const db = makeDb(
-        [{ id: PID, organization_id: ORG_ID, status: "draft", draft_graph: grafo(MID) }],
+        [{ id: PID, organization_id: ORG_ID, status: "draft", draft_graph: grafo(MID, label) }],
         [],
         [],
         midias,
@@ -539,6 +542,27 @@ describe("POST /api/v1/ai/followup-flows/:id/publish", () => {
       const { res, body } = await publicar([item({ contains_person: false })]);
       expect(res.status).toBe(200);
       expect(body.data.warnings).toEqual([]);
+    });
+
+    it("o aviso traz o nome do passo", async () => {
+      const { body } = await publicar([item()], "Foto da cirurgia");
+      expect(body.data.warnings[0]!.message).toContain('Passo "Foto da cirurgia"');
+    });
+
+    it("sem nome no passo, cai para o id do nó", async () => {
+      const { body } = await publicar([item()], "  ");
+      expect(body.data.warnings[0]!.message).toContain('Passo "m1"');
+    });
+
+    it("leitura da biblioteca falhou: publica sem aviso falso de não encontrada", async () => {
+      midiaErro = "boom";
+      try {
+        const { res, body } = await publicar([item()]);
+        expect(res.status).toBe(200);
+        expect(body.data.warnings).toEqual([]);
+      } finally {
+        midiaErro = null;
+      }
     });
 
     it("item de outra org: avisa que não foi encontrada", async () => {
