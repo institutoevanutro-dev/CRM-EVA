@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.14.0] — 2026-10-09
+
+### Corrigido
+
+- **Automações de aniversário e de agenda passam a enviar, e o WhatsApp oficial fica mais seguro** Atenção: automações de aniversário e de agendamento que mandam WhatsApp nunca enviavam e passam a enviar depois da atualização. Antes de atualizar, confira em Automações quais estão ligadas e desligue as que não quer. Também: o {{primeiro_nome}} sai nas automações; quem sai da equipe devolve as conversas abertas para a fila; etapa criada pela tela recebe o paciente no agendamento e no chamar humano; Esc na edição da etapa desiste; arrastar card com filtro ligado não trava mais; a etiqueta fica sempre em minúsculas (VIP = vip); excluir uma conexão fecha o aviso de conexão caída. No WhatsApp oficial, a recepção vê os modelos aprovados fora das 24h, o modelo pede os valores que exige (e guarda o link da imagem), o áudio gravado no Chrome toca e a integração que manda texto fora das 24h recebe a recusa na hora.
+
 ## [3.13.0] — 2026-10-09
 
 ### Adicionado
@@ -6677,7 +6683,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.13.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.14.0...HEAD
+[3.14.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.13.0...v3.14.0
 [3.13.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.12.0...v3.13.0
 [3.12.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.11.0...v3.12.0
 [3.11.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.10.0...v3.11.0
