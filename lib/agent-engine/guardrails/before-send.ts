@@ -465,13 +465,21 @@ export const unscheduledFollowUpGate: Gate = {
   evaluate: (ctx) => {
     if (ctx.unscheduledFollowUpEnforced !== true) return { pass: true };
     if (!detectUnscheduledFollowUpPromise(ctx.body)) return { pass: true };
+    // O detector só acusa promessa do PRÓPRIO assistente ("te retorno", "vou tentar de
+    // novo", "me dá um instante"). Se `schedule_followup` agendou o retorno neste turno, a
+    // promessa tem quem a cumpra — a mesma exceção do `casePromiseGate`. Sem isto este
+    // gate vetava o que o outro acabou de liberar.
+    if (ctx.followup?.agendadoNesteTurno === true) return { pass: true };
     return {
       pass: false,
       code: 'unscheduled_followup_promise',
       reason:
         'Não existe nova tentativa ou retorno programado para sustentar essa promessa. ' +
-        'Reformule sem dizer que tentará de novo, avisará ou retornará mais tarde. Informe ' +
-        'somente o que já aconteceu e a próxima ação realmente disponível agora.',
+        (ctx.followup?.disponivel === true
+          ? 'Chame a tool schedule_followup (agendando o retorno) OU reformule sem dizer que ' +
+            'tentará de novo, avisará ou retornará mais tarde. '
+          : 'Reformule sem dizer que tentará de novo, avisará ou retornará mais tarde. ') +
+        'Informe somente o que já aconteceu e a próxima ação realmente disponível agora.',
     };
   },
 };
