@@ -154,7 +154,7 @@ test("entra pelo EvaLink, o aviso desligado derruba e bane, e entrar de novo rel
     ).toBe(true);
     const cookies = await page.context().cookies();
     expect(cookies.some((k) => k.name.startsWith("sb-deskcomm-auth"))).toBe(true);
-    await expect(page.getByRole("heading", { name: "Início" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible({ timeout: 15_000 });
     await page.screenshot({ path: `${EVIDENCIA}/01-app-depois-do-evalink.png`, fullPage: true });
 
     userId = await vinculadoId();
@@ -199,7 +199,7 @@ test("entra pelo EvaLink, o aviso desligado derruba e bane, e entrar de novo rel
   await test.step("entrar de novo pelo EvaLink levanta o banimento, na mesma organização", async () => {
     const volta = await entrarPeloEvalink(page);
     expect(volta.status()).toBe(200);
-    await expect(page.getByRole("heading", { name: "Início" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible({ timeout: 15_000 });
     await page.screenshot({ path: `${EVIDENCIA}/03-app-na-segunda-entrada.png`, fullPage: true });
 
     const u = await db.auth.admin.getUserById(userId);
