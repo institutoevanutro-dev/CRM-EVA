@@ -214,3 +214,14 @@ it("Idempotency-Key repetida com outro conteúdo devolve conflito sem gravar", a
   expect(banco.inseridos).toHaveLength(1);
   expect(banco.recibos).toHaveLength(1);
 });
+
+it("endereço e observação da marcação: ausente herda o tipo, vazio grava sem local (upstream #1123)", async () => {
+  const banco = bancoDeTeste();
+  const ctx = { organization_id: ORG, requestId: "req", actor: { type: "user", id: DONO } } as unknown as HandlerCtx;
+
+  await marcarAgendamentoHandler(banco.db, ctx, { ...pedidoDe(INICIO), location_details: " Sala 2 ", description: " trazer exames " });
+  await marcarAgendamentoHandler(banco.db, ctx, { ...pedidoDe(OUTRO_INICIO), location_details: "" });
+
+  expect(banco.inseridos[0]).toMatchObject({ location_details: "Sala 2", description: "trazer exames", notes: null });
+  expect(banco.inseridos[1]).toMatchObject({ location_details: null, description: null });
+});

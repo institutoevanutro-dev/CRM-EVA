@@ -72,6 +72,16 @@ export interface MarcarInput {
   title?: string;
   notes?: string;
   /**
+   * Observação do compromisso, o `description` do calendário externo (porte
+   * do upstream #1123). Distinto de `notes`, que é anotação interna.
+   */
+  description?: string;
+  /**
+   * Endereço/local DESTE compromisso. Ausente herda o do tipo; `""` grava
+   * vazio: quem apagou o que o tipo sugeria quis apagar, não herdar de novo.
+   */
+  location_details?: string;
+  /**
    * Convidado externo, digitado na tela. `""` limpa; ausente não mexe.
    *
    * NÃO é `contact_id`, e a distinção é o motivo de a coluna existir: o contato
@@ -279,7 +289,11 @@ async function executarCriacaoDeAgendamento(
       conversation_id: booking?.boundary.conversation_id ?? input.conversation_id ?? null,
       meeting_delivery: delivery as unknown as Json,
       location_kind: tipo.location_kind,
-      location_details: tipo.location_details,
+      location_details:
+        input.location_details !== undefined
+          ? input.location_details.trim() || null
+          : tipo.location_details,
+      description: input.description !== undefined ? input.description.trim() || null : null,
       notes: input.notes ?? null,
       // `|| null` e não `?? null`: a rota deixa passar `""` (o campo limpo na
       // tela), e string vazia gravada seria um convidado sem e-mail — que faz o

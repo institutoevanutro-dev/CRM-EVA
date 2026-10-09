@@ -243,6 +243,13 @@ export function AgendaClient({
     () => busca.get("tipo") ?? tiposIniciais[0]?.id ?? null,
   );
   const tipo = tiposIniciais.find((t) => t.id === tipoId) ?? tiposIniciais[0] ?? null;
+  // Endereço e observação NA HORA de marcar (porte do upstream #1123, só a
+  // fatia dos campos; a lista de endereços salvos ficou de fora). Endereço não
+  // editado herda o do tipo; a observação vai para `description`, que o
+  // calendário publica, e não para `notes`, que é interno.
+  const [enderecoEditado, setEnderecoEditado] = React.useState<string | null>(null);
+  const [observacao, setObservacao] = React.useState("");
+  const endereco = enderecoEditado ?? tipo?.localDetalhes ?? "";
   /**
    * ESCOLHER O TIPO GRAVA NA URL — a outra metade do `useState` acima.
    *
@@ -645,6 +652,8 @@ export function AgendaClient({
             // não usado reapareceria na PRÓXIMA marcação, que é de outro
             // cliente — convite para a pessoa errada, sem ninguém ter pedido.
             setEmailConvidado("");
+            setEnderecoEditado(null);
+            setObservacao("");
             // E o próprio cliente, que é o pior dos quatro a sobrar: medido numa
             // instalação real em 2026-09-12, "Novo agendamento" abriu com um
             // contato JÁ selecionado, herdado de uma abertura anterior feita a
@@ -736,7 +745,12 @@ export function AgendaClient({
                     type="button"
                     data-testid={`tipo-${opcao.id}`}
                     aria-pressed={opcao.id === tipo?.id}
-                    onClick={() => escolherTipo(opcao.id)}
+                    onClick={() => {
+                      escolherTipo(opcao.id);
+                      // Tipo novo, local novo: senão o endereço do tipo anterior
+                      // viaja para outro atendimento.
+                      setEnderecoEditado(null);
+                    }}
                     className={cn(
                       "rounded-full border px-3 py-1 text-xs transition-colors duration-fast",
                       opcao.id === tipo?.id
@@ -813,6 +827,44 @@ export function AgendaClient({
                 : t("Preenchido, o Google envia o convite por e-mail para esta pessoa.")}
             </p>
           </div>
+          {!remarcandoId ? (
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <div>
+                <label className="block text-xs font-medium text-text-muted" htmlFor="endereco-do-compromisso">
+                  {t("Endereço ou local")} <span className="font-normal opacity-70">({t("opcional")})</span>
+                </label>
+                <input
+                  id="endereco-do-compromisso"
+                  data-testid="endereco-do-compromisso"
+                  type="text"
+                  maxLength={300}
+                  value={endereco}
+                  onChange={(e) => setEnderecoEditado(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-border bg-surface p-2 text-sm outline-hidden focus:border-border-strong"
+                  placeholder={t("Sala, unidade ou endereço deste horário")}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-muted" htmlFor="observacao-do-compromisso">
+                  {t("Observação")} <span className="font-normal opacity-70">({t("opcional")})</span>
+                </label>
+                <textarea
+                  id="observacao-do-compromisso"
+                  data-testid="observacao-do-compromisso"
+                  rows={1}
+                  maxLength={2000}
+                  value={observacao}
+                  onChange={(e) => setObservacao(e.target.value)}
+                  className="mt-1 w-full resize-none rounded-md border border-border bg-surface p-2 text-sm outline-hidden focus:border-border-strong"
+                  placeholder={t("O que a equipe precisa lembrar neste horário")}
+                  aria-describedby="ajuda-da-observacao"
+                />
+                <p id="ajuda-da-observacao" className="mt-1 text-xs text-text-muted">
+                  {t("Aparece na descrição do compromisso.")}
+                </p>
+              </div>
+            </div>
+          ) : null}
           {tipo && (
             <div className="mt-4 shrink-0">
               <PainelDeMarcacao
@@ -843,7 +895,7 @@ export function AgendaClient({
                 // `fuso_da_regra` já vinha da rota e já era tipado pelo hook;
                 // ninguém em tela o lia. Chutar São Paulo para quem atende em
                 // Manaus é uma hora de diferença no horário oferecido ao cliente.
-                local={rotuloDoLocal(tipo.localKind, tipo.localDetalhes)}
+                local={rotuloDoLocal(tipo.localKind, endereco.trim() || tipo.localDetalhes)}
                 fuso={horarios?.fuso_da_regra}
                 horariosPorDia={horariosPorDia}
                 publicouHorarios={horarios?.publicou_horarios ?? true}
@@ -901,6 +953,8 @@ export function AgendaClient({
                         setRemarcandoId(null);
                         setMarcando(false);
                         setEmailConvidado("");
+                        setEnderecoEditado(null);
+                        setObservacao("");
                         return r;
                       });
                   }
@@ -912,9 +966,13 @@ export function AgendaClient({
                       conversation_id: conversationId || undefined,
                       starts_at: instante,
                       guest_email: convidado,
+                      location_details: endereco.trim(),
+                      description: observacao.trim() || undefined,
                     })
                     .then((r) => {
                       setEmailConvidado("");
+                      setEnderecoEditado(null);
+                      setObservacao("");
                       // Guardado para o fechamento saber para onde levar a grade.
                       setMarcadoEm(instante);
                       return r;

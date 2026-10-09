@@ -17,6 +17,10 @@ export interface NovoAgendamento {
   conversation_id?: string;
   title?: string;
   notes?: string;
+  /** Observação visível no calendário (`description` do evento). */
+  description?: string;
+  /** Endereço/local deste compromisso. Vazio grava sem local. */
+  location_details?: string;
   /**
    * Convidado externo. Vazio ou ausente cria o evento como sempre foi — sem
    * `attendees` e sem convite nenhum saindo do Google.

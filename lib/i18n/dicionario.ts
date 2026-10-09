@@ -8423,6 +8423,11 @@ export const DICIONARIO: Traducoes = {
   // Convidado do compromisso (agenda)
   "E-mail do convidado": { es: "Correo del invitado" },
   "opcional": { es: "opcional" },
+  "Observação": { es: "Observación" },
+  "Endereço ou local": { es: "Dirección o lugar" },
+  "Sala, unidade ou endereço deste horário": { es: "Sala, unidad o dirección de este horario" },
+  "O que a equipe precisa lembrar neste horário": { es: "Lo que el equipo necesita recordar en este horario" },
+  "Aparece na descrição do compromisso.": { es: "Aparece en la descripción de la cita." },
   "cliente@empresa.com": { es: "cliente@empresa.com" },
   "Endereço inválido — confira antes de marcar.":
     { es: "Dirección inválida — revísala antes de agendar." },
