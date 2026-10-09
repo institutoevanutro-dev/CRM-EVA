@@ -10,6 +10,7 @@
  * 0027 para o modelo de identidade canônica.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { lancarFalhaDeIngestao } from "@/lib/waha/falha-transitoria";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -486,8 +487,7 @@ async function upsertContact(
     p_notify: notifyName,
   } as never);
   if (error) {
-    console.error("[waha.ingest] fn_upsert_wa_contact failed", error.message);
-    return null;
+    lancarFalhaDeIngestao("fn_upsert_wa_contact", error);
   }
   return (data as string) ?? null;
 }
@@ -504,8 +504,7 @@ async function upsertConversation(
     p_session: sessionId,
   } as never);
   if (error) {
-    console.error("[waha.ingest] fn_upsert_wa_conversation failed", error.message);
-    return null;
+    lancarFalhaDeIngestao("fn_upsert_wa_conversation", error);
   }
   return (data as string) ?? null;
 }
@@ -646,8 +645,10 @@ async function handleInbound(
 
   // Idempotência: 23505 = unique (organization_id, external_id) já ingerido.
   if (insertErr && insertErr.code !== "23505") {
-    console.error("[waha.ingest] message insert failed", insertErr.message);
-    return;
+    // Era `console.error` + `return`, e a rota devolvia 200: a mensagem do
+    // cliente sumia. Agora lança — transitória vira 503 (o WAHA reentrega) e
+    // fica marcada para o cron `webhook-replay`. Ver `falha-transitoria.ts`.
+    lancarFalhaDeIngestao("messages.insert inbound", insertErr);
   }
   if (insertErr?.code === "23505") {
     // O `return` está certo — reingerir duplicaria a mensagem do cliente. Mas
@@ -885,8 +886,7 @@ async function handleOutboundFromUserPhone(
     .select("id")
     .maybeSingle();
   if (insertErr && insertErr.code !== "23505") {
-    console.error("[waha.ingest] outbound insert failed", insertErr.message);
-    return;
+    lancarFalhaDeIngestao("messages.insert outbound", insertErr);
   }
   if (insertErr?.code === "23505") {
     // Mesma razão do inbound: dedup é esperado, invisível não.
