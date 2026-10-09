@@ -268,7 +268,7 @@ describe("completeTurnForEnrollment — nó action, ciclo completo", () => {
 });
 
 describe("completeTurnForEnrollment — passo de mídia recusada, no Postgres de verdade", () => {
-  it("mídia revogada: action_pulado com o motivo, o enrollment segue para o próximo passo e a Central recebe o aviso", async () => {
+  it("mídia revogada: a sequência para (turn_skipped, cancelled, sem próximo nó) e a Central recebe o aviso", async () => {
     const org = "b1d1a000-0000-4000-8000-00000000000a";
     await seedOrg(org);
     const contactId = await seedContact(org);
@@ -285,17 +285,19 @@ describe("completeTurnForEnrollment — passo de mídia recusada, no Postgres de
 
     // O que o worker devolve quando o envio bate na 422 de mídia recusada.
     const motivo = "Esta mídia não pode ser enviada agora: consentimento revogado.";
-    await completeTurnForEnrollment(db, org, enrollmentId, "m1", { kind: "pulado", reason: motivo, midiaRecusada: true });
+    await completeTurnForEnrollment(db, org, enrollmentId, "m1", { kind: "skipped", reason: motivo, midiaRecusada: true });
 
     const depois = await getEnrollment(enrollmentId);
-    expect(depois.current_node_id).toBe("a2");
-    expect(depois.status).toBe("active");
+    expect(depois.current_node_id).toBe("m1"); // não andou para o próximo nó
+    expect(depois.status).toBe("cancelled");
+    const { rows: [canc] } = await pool.query<{ cancel_reason: string }>(`select cancel_reason from followup_enrollments where id = $1`, [enrollmentId]);
+    expect(canc!.cancel_reason).toBe(motivo);
 
     const { rows: eventos } = await pool.query<{ event_type: string; payload: Record<string, unknown> }>(
       `select event_type, payload from followup_enrollment_events where enrollment_id = $1 order by created_at`,
       [enrollmentId],
     );
-    expect(eventos.map((e) => e.event_type)).toEqual(["turn_enqueued", "action_pulado"]);
+    expect(eventos.map((e) => e.event_type)).toEqual(["turn_enqueued", "turn_skipped"]);
     expect(eventos[0]!.payload).toMatchObject({ purpose: "send_message", mode: "media" });
     expect(eventos[1]!.payload).toEqual({ reason: motivo });
 
@@ -304,10 +306,11 @@ describe("completeTurnForEnrollment — passo de mídia recusada, no Postgres de
       [org, enrollmentId],
     );
     expect(avisos).toHaveLength(1);
-    expect(avisos[0]!.title).toBe("Um follow-up pulou uma mídia que não pode ser enviada");
+    expect(avisos[0]!.title).toBe("Um follow-up parou: a mídia não pode ser enviada");
     expect(avisos[0]!.ref_kind).toBe("followup_enrollment");
     expect(avisos[0]!.body).toContain(motivo);
     expect(avisos[0]!.body).toContain('passo "Foto do antes"');
+    expect(avisos[0]!.body).toContain("A sequência foi encerrada para este contato.");
   });
 
   it("pulo sem mídia recusada (24h do Instagram) não abre aviso", async () => {

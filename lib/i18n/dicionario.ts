@@ -7815,7 +7815,7 @@ export const DICIONARIO: Traducoes = {
   },
   "Um fluxo de follow-up precisa de atenção": { es: "Un flujo de follow-up necesita atención" },
   "Um fluxo de follow-up parou de tentar": { es: "Un flujo de follow-up dejó de intentarlo" },
-  "Um follow-up pulou uma mídia que não pode ser enviada": { es: "Un follow-up omitió un archivo multimedia que no se puede enviar" },
+  "Um follow-up parou: a mídia não pode ser enviada": { es: "Un follow-up se detuvo: el archivo multimedia no se puede enviar" },
   "O lead não respondeu no prazo que você definiu": {
     es: "El lead no respondió en el plazo que definiste",
   },

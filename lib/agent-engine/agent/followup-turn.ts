@@ -122,9 +122,9 @@ export const followupTurnPayloadSchema = z
 export type FollowupFlowTurnResult =
   /** `via`: o passo saiu pelo modelo de reserva porque a IA não conseguiu enviar. */
   | { kind: 'sent'; via?: 'modelo_de_reserva' }
-  | { kind: 'skipped'; reason: string; outcome?: 'converted' | 'replied' | 'exhausted' | 'opted_out' | 'handoff' }
-  /** `midiaRecusada`: a mídia do passo não pôde sair; a ponte abre o aviso na Central. */
-  | { kind: 'pulado'; reason: string; midiaRecusada?: true }
+  /** `midiaRecusada`: a mídia do passo não pôde sair; a sequência para e a ponte abre o aviso na Central. */
+  | { kind: 'skipped'; reason: string; outcome?: 'converted' | 'replied' | 'exhausted' | 'opted_out' | 'handoff'; midiaRecusada?: true }
+  | { kind: 'pulado'; reason: string }
   | { kind: 'classified'; class: string }
   /** Classificar sem resposta ao envio do fluxo: nada a concluir, só o rastro da espera. */
   | { kind: 'awaiting_reply' }
@@ -909,7 +909,7 @@ async function sendFixedOutbound(
   | "skipped"
   | "pulado"
   | { kind: "deferred"; until: Date; reason: string }
-  | { kind: "pulado"; reason: string; midiaRecusada: true }
+  | { kind: "skipped"; reason: string; midiaRecusada: true }
 > {
   const { tenantId, leadId, channelSessionId, conversationId } = target;
   const runLog = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, lead_id: leadId });
@@ -974,11 +974,11 @@ async function sendFixedOutbound(
       send: (finalBody) => channel.send({ tenantId, leadId, jobId: job.id, jobClaim:claimOfJob(job), seq, conversationId, body: finalBody, ...(mediaLibraryItemId !== undefined ? { mediaLibraryItemId } : {}), origemDoEnvio: 'followup' }),
     });
   } catch (err) {
-    // Mídia sumiu ou deixou de estar pronta: pula o passo (o fluxo segue) e avisa.
+    // Mídia sumiu ou deixou de estar pronta: encerra a sequência (decisão do dono) e avisa.
     // Deixar a 422 subir faria o job repetir uma recusa que não muda.
     if (mediaLibraryItemId !== undefined && err instanceof MidiaRecusadaError) {
-      runLog.info('mídia do passo recusada — passo pulado', { code: err.code });
-      return { kind: 'pulado', reason: err.message, midiaRecusada: true };
+      runLog.info('mídia do passo recusada — sequência encerrada', { code: err.code });
+      return { kind: 'skipped', reason: err.message, midiaRecusada: true };
     }
     throw err;
   }

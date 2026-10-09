@@ -137,13 +137,13 @@ describe("turno de fluxo — passo de mídia", () => {
     expect(runAgentTurn).not.toHaveBeenCalled();
   });
 
-  it("mídia recusada (revogada/sem arquivo): o passo é pulado com o motivo e marcado para o aviso na Central", async () => {
+  it("mídia recusada (revogada/sem arquivo): a sequência é encerrada (skipped) com o motivo e marcada para o aviso na Central", async () => {
     const motivo = "Esta mídia não pode ser enviada agora: consentimento revogado.";
     const d = deps(async () => {
       throw new MidiaRecusadaError("media_not_ready", motivo, "req-1", "consentimento_revogado");
     });
     await expect(criarHandler(d.deps)(job({ media_id: MIDIA }), fakePool(), ctx)).resolves.toBeUndefined();
-    expect(resultado(d.complete)).toEqual({ kind: "pulado", reason: motivo, midiaRecusada: true });
+    expect(resultado(d.complete)).toEqual({ kind: "skipped", reason: motivo, midiaRecusada: true });
     expect(runAgentTurn).not.toHaveBeenCalled();
   });
 

@@ -12,11 +12,11 @@
 
 ## Global Constraints
 
-- Sem migration. Sem kind novo de aviso: o aviso na Central reaproveita `insertDeadInboxItem` (kind `followup_dead`, `ref_kind` `followup_enrollment`) com título próprio "Um follow-up pulou uma mídia que não pode ser enviada" e corpo = motivo legível + nome do fluxo/passo quando disponível.
+- Sem migration. Sem kind novo de aviso: o aviso na Central reaproveita `insertDeadInboxItem` (kind `followup_dead`, `ref_kind` `followup_enrollment`) com título próprio "Um follow-up parou: a mídia não pode ser enviada" e corpo = motivo legível + nome do fluxo/passo quando disponível.
 - Schema: `z.strictObject({ mode: z.literal('media'), media_id: z.string().uuid(), caption: z.string().max(1024).optional() })`.
 - Payload do job: `media_id: string`, `media_caption?: string` (com `{{volta}}` interpolado como o `body` do modo texto). `followupTurnPayloadSchema` ganha os dois campos opcionais.
 - Envio: legenda passa por `{{nome}}`/`{{primeiro_nome}}` como o texto fixo (`interpolarNomeDoContato`); legenda vazia → `enforceSpinning: false` no `runBeforeSend`; `channel.send({..., body: legenda, mediaLibraryItemId: media_id, origemDoEnvio: 'followup' })`.
-- Recusa (`MidiaRecusadaError` 422 `media_not_found`/`media_not_ready`): resultado `{ kind: 'pulado', reason: err.message }` (o fluxo SEGUE para o próximo passo; uma foto faltando não encerra a sequência) + aviso na Central. Nunca deixar a 422 subir (o job repetiria uma recusa que não muda).
+- Recusa (`MidiaRecusadaError` 422 `media_not_found`/`media_not_ready`): resultado `{ kind: 'skipped', reason: err.message, midiaRecusada: true }` (a sequência PARA: turn_skipped, status cancelled) + aviso na Central. Decisão do André em 09/10: a sequência para (antes era `pulado`, o fluxo seguia). Nunca deixar a 422 subir (o job repetiria uma recusa que não muda).
 - `queued` (canal fora): comportamento atual do texto fixo (lança, o job tenta de novo e o ledger reenvia a mesma mensagem). Não mudar.
 - Drenagem inline (`lib/followup/enviar-texto-fixo.ts`): NÃO drena mídia nesta fatia; jobs com `media_id` ficam com o agent-worker (presente em toda instalação self-host). Comentário `ponytail:` no ponto em que a drenagem filtra `fixed_body`.
 - Publicar: a rota `app/api/v1/ai/followup-flows/[id]/publish/route.ts` devolve `warnings: Array<{ node_id, message }>` no sucesso para cada passo de mídia cujo item não existe na org ou não está `pronta` (situação legível); a `PublishBar` mostra um aviso (toast de aviso, não de erro) listando-os. Publicação NÃO é bloqueada.
@@ -26,7 +26,7 @@
 ## Review Focus
 
 1. **Passo de mídia caindo no turno de IA**: job com `media_id` e sem `fixed_body` NUNCA chama o LLM. Teste na Task 2.
-2. **Termo revogado entre a publicação e o envio**: passo pulado com o motivo legível no histórico, o fluxo segue, aviso na Central, job não fica repetindo. Teste/invariante na Task 2.
+2. **Termo revogado entre a publicação e o envio**: sequência encerrada com o motivo legível no histórico, aviso na Central, job não fica repetindo. Teste/invariante na Task 2.
 3. **Canal fora no passo de mídia**: o job tenta de novo e o reenvio é a MESMA mensagem (sem duplicar). Teste na Task 2.
 4. **Publicar fluxo com mídia sem termo**: publica, e a resposta traz o aviso com o `node_id`. Teste na Task 3.
 5. **Mídia sem legenda duas vezes no mesmo contato**: o spinning não veta (legenda vazia não entra no spinning). Teste na Task 2.
@@ -41,7 +41,7 @@
 ### Task 2: O worker envia o passo de mídia
 
 **Files:** `lib/agent-engine/agent/followup-turn.ts` (`followupTurnPayloadSchema` L73-115; `runFlowDrivenTurn` L536-626: ramo de mídia depois de `conferirAntesDoEnvio` e ANTES de `resolveFlowSendBody`; `sendFixedOutbound` L880-990 ganha parâmetro opcional `mediaLibraryItemId?: string` repassado ao `channel.send` e `enforceSpinning: false` quando há mídia e a legenda é vazia; catch de `MidiaRecusadaError` → `'midia_recusada'` com a mensagem), `lib/followup/turn-bridge.ts` ou o ponto que completa o turno (aviso na Central via `insertDeadInboxItem` quando o motivo vem de mídia recusada), `lib/followup/enviar-texto-fixo.ts` (só o comentário `ponytail:`).
-**Tests:** unit no estilo de `tests/unit/followup-instagram-24h.test.ts` ("turno de fluxo — texto fixo"): mídia pronta → `channel.send` com `mediaLibraryItemId` e legenda com nome interpolado, `complete` `sent`, LLM nunca chamado; legenda vazia → `enforceSpinning: false`; `MidiaRecusadaError` → `pulado` com a mensagem + aviso na Central; `queued` → lança (retry). Invariante no estilo de `tests/invariants/followup-turn-bridge.test.ts` ("nó action, ciclo completo"): passo de mídia com item revogado → evento `action_pulado` com o motivo, o enrollment segue para o próximo nó, há um `agent_inbox_items` `followup_dead` para o enrollment.
+**Tests:** unit no estilo de `tests/unit/followup-instagram-24h.test.ts` ("turno de fluxo — texto fixo"): mídia pronta → `channel.send` com `mediaLibraryItemId` e legenda com nome interpolado, `complete` `sent`, LLM nunca chamado; legenda vazia → `enforceSpinning: false`; `MidiaRecusadaError` → `skipped` (midiaRecusada) com a mensagem + aviso na Central; `queued` → lança (retry). Invariante no estilo de `tests/invariants/followup-turn-bridge.test.ts` ("nó action, ciclo completo"): passo de mídia com item revogado → evento `turn_skipped` com o motivo, enrollment `cancelled` com `cancel_reason`, sem próximo nó, há um `agent_inbox_items` `followup_dead` para o enrollment.
 - [ ] RED/GREEN, typecheck, lint, `pnpm test:db`. Commit `feat(midias): o follow-up envia a mídia do passo, e a recusa vira passo pulado com aviso`.
 
 ### Task 3: Editor do passo e aviso ao publicar
