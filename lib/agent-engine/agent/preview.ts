@@ -210,6 +210,7 @@ export function applyPreviewPolicy(
               catalog ||
               [
                 'send_template',
+                'send_media',
                 'update_lead_state',
                 'save_lead_note',
                 'request_human_handoff',

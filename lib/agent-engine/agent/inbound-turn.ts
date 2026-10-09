@@ -53,7 +53,7 @@ import type { CrmEdgeConfig } from '../edge/crm/mcp-client';
 import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
 // applySendOutcome é disposição de FILA (cancel/reschedule + cache de opt-out), não
 // egress de canal — o envio em si vai pelo adapter (ChannelAdapter). Ver F2-25.
-import { applySendOutcome } from '../edge/crm/send-message';
+import { applySendOutcome, MidiaRecusadaError } from '../edge/crm/send-message';
 import {
   LlmBudgetExceededError,
   runModelCall,
@@ -399,6 +399,14 @@ export const AGENT_TOOL_DEFS = {
           ),
       })
       .passthrough(),
+  },
+  send_media: {
+    description:
+      'Envia UMA imagem ou vídeo da BIBLIOTECA DE MÍDIAS ao lead desta conversa, com legenda opcional. Use só ids da lista da biblioteca. No máximo uma mídia por resposta.',
+    inputSchema: z.object({
+      media_id: z.string().uuid().describe('id do item, copiado da BIBLIOTECA DE MÍDIAS'),
+      caption: z.string().max(1024).optional().describe('legenda curta em pt-br, opcional'),
+    }),
   },
 } as const;
 
@@ -2790,6 +2798,8 @@ async function executarTurnoDoAgente(
   // Uma recusa deste tipo devolve o texto confirmado ao modelo para que ele
   // reescreva antes de falar com o cliente. Não gasta envio nem toca no canal.
   let falseEmptyInboundVetoCount = 0;
+  // Teto de UMA mídia da biblioteca por turno (send_media). Marca só quando saiu ou ficou na fila.
+  let midiaEnviadaNoTurno = false;
   // A pausa humana (atraso-humano.ts) já foi paga NESTE turno? Por turno
   // (closure), como os contadores acima. O turno pode passar pela cadeia
   // `before_send` mais de uma vez — o modelo pode chamar `send_message` várias
@@ -2958,6 +2968,145 @@ async function executarTurnoDoAgente(
               code: 'internal_error',
               message: 'erro interno ao ler o contexto — encerre o turno agora.',
             },
+          };
+        }
+      },
+    }),
+    send_media: tool({
+      ...AGENT_TOOL_DEFS.send_media,
+      execute: async ({ media_id, caption }) => {
+        if (seq >= maxSendsPerTurn) {
+          return {
+            ok: false,
+            error: {
+              code: 'max_sends_per_turn',
+              message:
+                `você já enviou ${seq} mensagens neste turno (teto: ${maxSendsPerTurn}). ` +
+                'NÃO envie mais nada agora — encerre o turno e espere a resposta do lead.',
+            },
+          };
+        }
+        if (midiaEnviadaNoTurno) {
+          return {
+            ok: false,
+            error: {
+              code: 'max_media_per_turn',
+              message:
+                'você já enviou uma mídia neste turno. Não envie outra agora; continue em texto ou espere a resposta do lead.',
+            },
+          };
+        }
+        // Id fora da lista do prompt: palpite do modelo. Recusa aqui, sem gastar a cadeia.
+        if (!midiasProntas.some((m) => m.id === media_id)) {
+          return {
+            ok: false,
+            error: {
+              code: 'media_not_found',
+              message: 'essa mídia não está na BIBLIOTECA DE MÍDIAS. Use só ids da lista.',
+            },
+          };
+        }
+        const legenda = caption ?? '';
+        try {
+          const hasOpenCase =
+            agentConfig !== null
+              ? await hasOpenCaseForContact(pool, tenantId, input.conversationId)
+              : false;
+          // Mesmos argumentos do `send_message`; a legenda é o `body` que os gates avaliam.
+          const chain = await runBeforeSend({
+            pool,
+            log: runLog,
+            agentOperation,
+            tenantId,
+            leadId,
+            jobId: liveJob().id,
+            channelSessionId: input.channelSessionId,
+            body: legenda,
+            // Sem legenda, toda mídia teria o mesmo corpo vazio e colidiria no spinning.
+            enforceSpinning: (caption ?? '').trim().length > 0,
+            optedOutThisTurn,
+            crmDailyLimit: null,
+            now: clock(),
+            sleep: deps.sleep,
+            lgpd,
+            casesEnabled: agentConfig?.casesEnabled,
+            hasOpenCase,
+            openedCaseThisTurn,
+            humanPromiseExtraTargets: agentConfig?.handoffKeywords ?? [],
+            enforceUnscheduledFollowUp: true,
+            enforceInternalVocabulary: true,
+            agenda: {
+              active: agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds),
+              ferramentas: agentConfig === null ? [] : ferramentasDeAgendaDoAgente(agentConfig.toolIds),
+              toolCalledThisTurn: agendaToolCalledThisTurn,
+              presencaConfirmadaNoTurno: presencaConfirmadaNoTurno,
+            },
+            followup: {
+              disponivel: rawTools.schedule_followup !== undefined,
+              agendadoNesteTurno: followupAgendadoNesteTurno,
+            },
+            ...(deps.knobs.disclosureMode !== undefined
+              ? { disclosureMode: deps.knobs.disclosureMode }
+              : {}),
+            ...(semanticClassifier !== undefined
+              ? { classifyPromiseSemantic: semanticClassifier }
+              : {}),
+            esperaForaDoLock: async (): Promise<void> => {
+              if (jaEsperouComoHumano) return;
+              jaEsperouComoHumano = true;
+              const canal = liveChannel();
+              const ms = await esperarComoHumano({
+                texto: legenda,
+                processamentoMs: performance.now() - inicioDoProcessamento,
+                sleep: deps.sleep ?? ((s) => new Promise((resolve) => setTimeout(resolve, s))),
+                log: runLog,
+                ...(canal.signalTyping
+                  ? {
+                      sinalizarDigitando: (): Promise<void> =>
+                        canal.signalTyping!({ tenantId, conversationId: input.conversationId }),
+                    }
+                  : {}),
+              });
+              runLog.info('atraso humano antes da mídia', { atraso_ms: ms, fora_do_lock: true });
+            },
+            // A mídia nunca é quebrada em balões: um envio, um `seq`.
+            send: (finalBody: string) => {
+              seq += 1;
+              return liveChannel().send({
+                tenantId,
+                leadId,
+                jobId: liveJob().id,
+                jobClaim: claimOfJob(liveJob()),
+                agentOperation,
+                seq,
+                conversationId: input.conversationId,
+                body: finalBody,
+                mediaLibraryItemId: media_id,
+              });
+            },
+          });
+          if (chain.status === 'vetoed') {
+            return { ok: false, error: { code: chain.code, message: chain.message } };
+          }
+          const outcome = chain.outcome;
+          outcomes.push(outcome);
+          if (outcome.kind === 'sent' || outcome.kind === 'already_sent' || outcome.kind === 'queued') {
+            midiaEnviadaNoTurno = true;
+          }
+          if (outcome.kind === 'sent' || outcome.kind === 'already_sent') {
+            return { ok: true, status: 'enviada', message_id: outcome.messageId };
+          }
+          return { ok: true, status: 'aceita_aguardando_canal' };
+        } catch (err) {
+          // Recusa do handler (mídia sumiu ou deixou de estar pronta): ensino, não falha
+          // do run. Re-tentar o job só repetiria a 422.
+          if (err instanceof MidiaRecusadaError) {
+            return { ok: false, error: { code: err.code, message: err.message } };
+          }
+          noteRunError(err instanceof Error ? err : new Error(String(err)));
+          return {
+            ok: false,
+            error: { code: 'internal_error', message: 'erro interno no envio — encerre o turno agora.' },
           };
         }
       },
@@ -3926,6 +4075,9 @@ async function executarTurnoDoAgente(
       delete rawTools.send_template;
     }
   }
+
+  // Sem item pronto na biblioteca, a tool não tem o que mandar: some do turno.
+  if (midiasProntas.length === 0) delete rawTools.send_media;
 
   // 2B-tools: tools do catálogo MCP habilitadas NA TELA entram no run (audit +
   // role/scope da ponte nativa; envio e handoff do catálogo são bloqueados —
