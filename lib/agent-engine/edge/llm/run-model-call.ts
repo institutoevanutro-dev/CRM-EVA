@@ -23,7 +23,7 @@ import { z } from 'zod';
 import { scrubMessage } from '@/lib/sentry/scrub';
 
 import type { Logger } from '../../obs/logger';
-import { decidirParaOSeam } from './binding-do-ponto';
+import { decidirParaOSeam, marcarEconomicoQueFalhou } from './binding-do-ponto';
 import { resolveOrgLlmConfig, type LlmEdgeConfig, type OrcamentoDaOrg } from './credentials';
 import {
   AVISO_CORPO,
@@ -356,6 +356,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
             model: input.model,
           },
     padraoDaOrganizacao: { provider: padrao.provider, defaultModel: padrao.defaultModel },
+    modelosHabilitados: padrao.enabledModels,
   }, deps.log ? { log: deps.log } : {});
 
   // Só re-resolve a credencial quando a decisão aponta para OUTRA que não a já
@@ -381,13 +382,17 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       })
     : padrao;
 
-  const model = decisao.modelId;
-  if (model === null || model === undefined) {
+  const modeloDecidido = decisao.modelId;
+  if (modeloDecidido === null || modeloDecidido === undefined) {
     throw new Error(
       'modelo LLM não definido — configure o ponto no painel de provedores, ' +
         'organizations.settings.llm.default_model, ou passe input.model',
     );
   }
+  // `model`/`origem` podem mudar UMA vez: quando o modelo econômico do
+  // classificador é recusado, a chamada se repete no modelo de antes (abaixo).
+  let model: string = modeloDecidido;
+  let origem = decisao.origem;
   if (config.enabledModels.length > 0 && !config.enabledModels.includes(model)) {
     throw new LlmModelNotEnabledError(model);
   }
@@ -434,16 +439,18 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     cacheTtl: cfg.cacheTtl ?? '1h',
   });
 
-  const startedAt = Date.now();
+  let startedAt = Date.now();
   let result: Awaited<ReturnType<typeof generateText>>;
-  try {
+  // A MESMA chamada, em qualquer modelo: separar em função é o que permite a
+  // reserva do degrau econômico repeti-la sem duplicar os argumentos.
+  const chamarCom = (modelId: string) =>
     // `system` aceita SystemModelMessage (com providerOptions de cache) — igual
     // em v6 e v7 (smoke prova que o cacheControl continua virando cache_control).
-    result = await generateText({
+    generateText({
       // `decisao.baseUrl` só é preenchido quando o painel apontou um endpoint
       // (gateway OpenAI-compatível, ou modelo local). Providers canônicos
       // ignoram o terceiro argumento e vão ao endpoint intrínseco.
-      model: factory(config.apiKey, model, decisao.baseUrl ?? undefined),
+      model: factory(config.apiKey, modelId, decisao.baseUrl ?? undefined),
       system: prefix.system,
       messages: input.messages,
       tools: guardServiceTools(prefix.tools),
@@ -459,6 +466,8 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       // A chamada ainda não pede teto próprio neste fork; só o da org ou o padrão.
       maxOutputTokens: tetoDeSaida(maxOutputTokens, undefined),
     });
+  try {
+    result = await chamarCom(model);
   } catch (err) {
     // ─── A LINHA QUE FALTAVA ────────────────────────────────────────────────
     //
@@ -472,27 +481,83 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     // Grava e RELANÇA: quem chama continua decidindo o que fazer com a falha
     // (o worker reagenda, o dry-run mostra na tela). Engolir aqui trocaria uma
     // falha invisível por uma silenciosa, que é pior.
+    //
+    // A reserva do MODELO (degrau econômico do classificador, upstream #2118):
+    // recusado o econômico, repete UMA vez no modelo que valia antes dele. Só
+    // para a recusa que é do MODELO: não existe para esta chave (404) ou o
+    // acesso foi negado (403). Instabilidade (5xx, 429) não troca de modelo: o
+    // classificador já degrada sozinho. Orçamento nunca se repete. Resposta
+    // fora do formato não é coberta, e por isso só entram no degrau econômico
+    // pontos que degradam sem repetir o turno. A falha coberta vira linha com
+    // origem própria e em `warn`: o erro de verdade só existe se a reserva
+    // também cair.
+    const reservaDoModelo = decisao.reserva;
+    const { error_code: codigoDaFalha, http_status: statusDaFalha } = normalizarErro(err);
+    const vaiParaAReservaDoModelo =
+      reservaDoModelo !== undefined &&
+      (codigoDaFalha === 'modelo_inexistente' || statusDaFalha === 403) &&
+      !(err instanceof LlmBudgetExceededError) &&
+      (config.enabledModels.length === 0 || config.enabledModels.includes(reservaDoModelo.modelId));
+    const origemDaFalha = vaiParaAReservaDoModelo ? 'economico_coberto_pela_reserva' : origem;
     await registrarFalha(db, {
       input,
       purpose,
       provider: config.provider,
       model,
-      origem: decisao.origem,
+      origem: origemDaFalha,
       latencyMs: Date.now() - startedAt,
       erro: err,
     }).catch(() => {
       // O log da falha não pode causar uma segunda falha. Se o próprio INSERT
       // de erro falhar, o erro ORIGINAL é o que interessa a quem chamou.
     });
-    deps.log?.error('llm: chamada falhou', {
+    const camposDaFalha = {
       organization_id: input.tenantId,
       purpose,
       provider: config.provider,
       model,
-      origem_da_escolha: decisao.origem,
+      origem_da_escolha: origemDaFalha,
       ...normalizarErro(err),
+    };
+    if (!vaiParaAReservaDoModelo || reservaDoModelo === undefined) {
+      deps.log?.error('llm: chamada falhou', camposDaFalha);
+      throw err;
+    }
+    deps.log?.warn('llm: chamada falhou', camposDaFalha);
+    // Os próximos turnos desta organização param de tentar este econômico por
+    // um tempo; senão cada classificação pagaria a recusa antes da reserva.
+    marcarEconomicoQueFalhou(input.tenantId, config.provider, model, Date.now());
+    deps.log?.warn('llm: o modelo econômico falhou — repetindo no modelo de antes', {
+      organization_id: input.tenantId,
+      purpose,
+      modelo_economico: model,
+      modelo_de_reserva: reservaDoModelo.modelId,
     });
-    throw err;
+    model = reservaDoModelo.modelId;
+    origem = reservaDoModelo.origem;
+    startedAt = Date.now();
+    try {
+      result = await chamarCom(model);
+    } catch (errDaReserva) {
+      await registrarFalha(db, {
+        input,
+        purpose,
+        provider: config.provider,
+        model,
+        origem,
+        latencyMs: Date.now() - startedAt,
+        erro: errDaReserva,
+      }).catch(() => {});
+      deps.log?.error('llm: chamada falhou', {
+        organization_id: input.tenantId,
+        purpose,
+        provider: config.provider,
+        model,
+        origem_da_escolha: origem,
+        ...normalizarErro(errDaReserva),
+      });
+      throw errDaReserva;
+    }
   }
   const latencyMs = Date.now() - startedAt;
 
@@ -528,7 +593,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       usage.cacheWriteTokens,
       cost,
       latencyMs,
-      decisao.origem,
+      origem,
       input.agentId ?? null,
     ],
   );
@@ -542,7 +607,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     // POR QUE este modelo, e não só QUAL: é a diferença entre um log que
     // confirma o que aconteceu e um que explica uma configuração que não
     // pegou. Vira coluna em llm_calls na frente de logs.
-    origem_da_escolha: decisao.origem,
+    origem_da_escolha: origem,
     ...usage,
     cost_cents: cost,
     latency_ms: latencyMs,
@@ -564,7 +629,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     costCents: cost,
     latencyMs,
     /** De onde veio a escolha — o painel lê isto para explicar cada ponto. */
-    origem: decisao.origem,
+    origem,
     avisos: decisao.avisos,
   };
 }
