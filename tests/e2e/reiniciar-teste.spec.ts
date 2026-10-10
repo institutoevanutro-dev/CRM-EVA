@@ -102,9 +102,18 @@ async function semearContato(nome: "A" | "B", telefone: string): Promise<void> {
 }
 
 async function limpar(): Promise<void> {
+  // FKs RESTRICT: conversas (e as mensagens, que caem em cascata) antes de contatos e canal.
+  const falha = (etapa: string, error: { message: string } | null) => {
+    if (error) throw new Error(`limpeza (${etapa}): ${error.message}`);
+  };
   const ids = [contato.A, contato.B].filter(Boolean);
-  if (ids.length) await admin.from("contacts").delete().eq("organization_id", creds.org_id).in("id", ids);
-  if (canalId) await admin.from("channel_sessions").delete().eq("organization_id", creds.org_id).eq("id", canalId);
+  if (ids.length) {
+    falha("conversas", (await admin.from("conversations").delete().eq("organization_id", creds.org_id).in("contact_id", ids)).error);
+    falha("contatos", (await admin.from("contacts").delete().eq("organization_id", creds.org_id).in("id", ids)).error);
+  }
+  if (canalId) {
+    falha("canal", (await admin.from("channel_sessions").delete().eq("organization_id", creds.org_id).eq("id", canalId)).error);
+  }
 }
 
 test.describe("Reiniciar teste — o gestor zera o contato de teste pela página dele", () => {

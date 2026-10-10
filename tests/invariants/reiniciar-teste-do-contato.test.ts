@@ -175,7 +175,7 @@ async function foto(contato: string): Promise<Record<string, unknown>> {
        'force_human', (select force_human from contacts where id = $1),
        'conversas', (select jsonb_agg(jsonb_build_object('status', status, 'rev', service_revision,
                        'silenciada', bot_silenced_until is not null, 'handoff_em', last_handoff_at is not null,
-                       'handoff_motivo', last_handoff_reason, 'soneca', snooze_until is not null) order by id)
+                       'handoff_motivo', last_handoff_reason, 'soneca', snooze_until is not null) order by is_group, status)
                      from conversations where contact_id = $1),
        'lead_state', (select count(*) from lead_state where contact_id = $1),
        'transicoes', (select count(*) from lead_state_transitions where contact_id = $1),
@@ -183,16 +183,16 @@ async function foto(contato: string): Promise<Record<string, unknown>> {
        'ledger', (select count(*) from send_ledger where contact_id = $1),
        'crons_ligados', (select count(*) from cron_jobs where contact_id = $1 and enabled),
        'reguas', (select jsonb_agg(jsonb_build_object('status', status, 'motivo', cancel_reason,
-                    'relogio', next_eval_at is not null, 'fim', completed_at is not null) order by id)
+                    'relogio', next_eval_at is not null, 'fim', completed_at is not null) order by status)
                   from followup_enrollments where contact_id = $1),
        'eventos_da_regua', (select count(*) from followup_enrollment_events ev
                              join followup_enrollments e on e.id = ev.enrollment_id where e.contact_id = $1),
-       'casos', (select jsonb_agg(jsonb_build_object('status', ac.status, 'fechado', ac.closed_at is not null) order by ac.id)
+       'casos', (select jsonb_agg(jsonb_build_object('status', ac.status, 'fechado', ac.closed_at is not null) order by ac.status)
                  from agent_cases ac join conversations c on c.id = ac.conversation_id where c.contact_id = $1),
-       'avisos', (select jsonb_agg(status order by id) from agent_inbox_items where ref_kind = 'contact' and ref_id = $1),
+       'avisos', (select jsonb_agg(status order by status) from agent_inbox_items where ref_kind = 'contact' and ref_id = $1),
        'mensagens', (select count(*) from messages where contact_id = $1),
-       'cards', (select jsonb_agg(jsonb_build_object('etapa', stage_id, 'status', status) order by id) from crm_leads where contact_id = $1),
-       'agendamentos', (select jsonb_agg(status order by id) from calendar_appointments where contact_id = $1)
+       'cards', (select jsonb_agg(jsonb_build_object('etapa', stage_id, 'status', status) order by status) from crm_leads where contact_id = $1),
+       'agendamentos', (select jsonb_agg(status order by status) from calendar_appointments where contact_id = $1)
      ) f`,
     [contato],
   );
