@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.17.1] — 2026-10-10
+
+### Corrigido
+
+- **Next.js e bibliotecas internas sobem para versões com correção de segurança** O Next.js sobe de 16.3.4 para 16.3.8, que fecha uma falha grave de requisição forjada pelo servidor no otimizador de imagens e falhas de cache e de vazamento de conteúdo. Sobem também, para as versões corrigidas, as bibliotecas de imagem (`sharp`), de mapa de código (`source-map-js`) e as que atendem a porta MCP do CRM (`@modelcontextprotocol/sdk`, `hono`, `proxy-addr`, `ip-address`), além de `brace-expansion` e `fast-uri`. Com isso a auditoria de dependências de produção fica sem nenhum aviso aberto. Nada muda no uso: a atualização é interna e não pede ação de quem opera o servidor.
+
 ## [3.17.0] — 2026-10-10
 
 ### Adicionado
@@ -6717,7 +6723,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.1...HEAD
+[3.17.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.0...v3.17.1
 [3.17.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.16.1...v3.17.0
 [3.16.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.16.0...v3.16.1
 [3.16.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.15.0...v3.16.0
