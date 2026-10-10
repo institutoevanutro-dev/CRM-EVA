@@ -27,6 +27,8 @@ type Existente = { id: string; history_import_key: string | null; contact_id: st
 export async function importarHistorico(pool: pg.Pool, input: unknown, aplicar = false): Promise<Resultado[]> {
   const dados = historicoSchema.parse(input);
   const db = await pool.connect();
+  // Quem falha dentro da transação sai do pool COM erro e é descartado.
+  let erroNaTransacao: Error | undefined;
   try {
     await db.query("begin");
     await db.query("set local lock_timeout = '5s'");
@@ -98,7 +100,8 @@ export async function importarHistorico(pool: pg.Pool, input: unknown, aplicar =
     await db.query("commit");
     return resultados;
   } catch (error) {
+    erroNaTransacao = error instanceof Error ? error : new Error(String(error));
     await db.query("rollback");
     throw error;
-  } finally { db.release(); }
+  } finally { db.release(erroNaTransacao); }
 }

@@ -261,6 +261,8 @@ export function createPgSupervisaoDb(pool: pg.Pool): SupervisaoDb {
 
     async moverEtapaComTrava(input): Promise<ResultadoDaMovimentacao> {
       const client = await pool.connect();
+      // Quem falha dentro da transação sai do pool COM erro e é descartado.
+      let erroNaTransacao: Error | undefined;
       try {
         await client.query('begin');
         // Idempotência pela chave da ação: a transação de uma tentativa anterior
@@ -400,10 +402,11 @@ export function createPgSupervisaoDb(pool: pg.Pool): SupervisaoDb {
         await client.query('commit');
         return { ok: true, ref: act.rows[0]!.id };
       } catch (err) {
+        erroNaTransacao = err instanceof Error ? err : new Error(String(err));
         await client.query('rollback').catch(() => undefined);
         throw err;
       } finally {
-        client.release();
+        client.release(erroNaTransacao);
       }
     },
 

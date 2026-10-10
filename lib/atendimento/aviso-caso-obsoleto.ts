@@ -37,6 +37,9 @@ export async function registrarRespostaDeCasoObsoleto(
   body: string,
 ): Promise<boolean> {
   const client = await pool.connect();
+  // Mesma marcação do #2621: o finally só libera COM erro quem falhou dentro
+  // da transação (release(err) faz o pg-pool descartar o cliente).
+  let erroNaTransacao: Error | undefined;
   try {
     await client.query("begin");
     const registered = await resolveCaseFromHuman(client, org, caseId, actorId, body);
@@ -48,9 +51,11 @@ export async function registrarRespostaDeCasoObsoleto(
     }
     return registered;
   } catch (failure) {
+    // Marcado ANTES do rollback: se o rollback também falhar, o cliente ainda sai com erro.
+    erroNaTransacao = failure instanceof Error ? failure : new Error(String(failure));
     await client.query("rollback");
     throw failure;
   } finally {
-    client.release();
+    client.release(erroNaTransacao);
   }
 }
