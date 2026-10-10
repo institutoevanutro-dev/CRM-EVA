@@ -86,6 +86,7 @@ async function contexto(
     // — e o `lint:channels` reprovou a primeira versão deste arquivo por isso,
     // que é a catraca funcionando.
     .select(`id, ${CHANNEL_SESSION_REF_COLUMNS}`)
+    .eq("organization_id", org.orgId)
     .eq("id", sessao.id)
     .maybeSingle();
 
