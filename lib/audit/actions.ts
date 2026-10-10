@@ -746,6 +746,8 @@ export const AUDIT_ACTIONS = [
   "media_library.consent_recorded",
   "media_library.consent_revoked",
   "media_library.item_deleted",
+  // migration 0351: reinício do teste de um número da lista de teste do canal.
+  "contact.teste_reiniciado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -46,7 +46,8 @@ export async function POST(
   const { error: updErr } = await supabase
     .from("api_tokens")
     .update({ revoked_at: nowIso, revoked_by: authUser.id, updated_at: nowIso })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("organization_id", activeOrg.orgId);
   if (updErr) return fail("internal_error", updErr.message, 500, { requestId });
 
   await audit({

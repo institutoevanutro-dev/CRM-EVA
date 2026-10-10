@@ -8,6 +8,20 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.18.0] — 2026-10-10
+
+### Alterado
+
+- **As classificações de etapa e de manipulação passam a usar o modelo mais econômico do mesmo provedor** Em todo atendimento, antes de responder, o agente faz duas classificações curtas da mensagem do cliente: em que etapa do funil ele está e se a mensagem tenta manipular a IA. Até aqui, quando ninguém escolhia um modelo para essas duas tarefas, elas usavam o mesmo modelo do agente. Agora, sem escolha explícita, usam o modelo mais econômico do mesmo provedor do agente (Anthropic, OpenAI ou Google), com a mesma chave. Quando o modelo do agente tem preço na tabela do produto, o econômico só é escolhido entre os que também têm, para o teto de gastos contar essas chamadas; se nenhum dos modelos permitidos à organização tiver, as duas tarefas ficam no modelo do agente. A economia depende do modelo do seu agente e do volume de mensagens: só essas duas chamadas ficam mais baratas, e a resposta do agente continua no modelo que você escolheu. Se o provedor recusar o modelo econômico, a mesma chamada se repete sozinha no modelo de antes, e a organização volta ao modelo de antes nessas tarefas por meia hora; em Execuções, essa falha aparece marcada como coberta. A conferência de promessas, a memória do atendimento e a escolha do agente que vai responder continuam no modelo do agente. Em IA › Provedores, as duas tarefas mostram o modelo que está valendo e o motivo, e quem preferir outro modelo pode escolher ali, como antes: a escolha feita na tela ou na variável de ambiente sempre vence a automática. Quem usa OpenRouter ou provedor personalizado não vê mudança. Não é preciso fazer nada na instalação.
+
+### Corrigido
+
+- **Worker de IA parado deixa de responder "saudável" em silêncio** O processamento que transforma as mensagens recebidas em respostas da IA roda num laço dentro do serviço do worker. Se esse laço travasse no meio de uma volta, as mensagens continuavam chegando, nenhuma resposta era enfileirada e o healthz do serviço continuava respondendo "ok". Agora o worker carimba cada volta concluída, o healthz responde não saudável quando esse carimbo passa de cinco minutos, e a Central da equipe abre o aviso "As respostas automáticas da IA estão paradas" (o aviso é gravado no mesmo banco, então depende de ele ainda atender). O aviso se resolve sozinho quando o processamento volta.
+
+  Ficar sem mensagens não conta como parado: com a clínica em silêncio, com o canal pausado ou antes da estreia, o laço continua dando voltas vazias e carimbando.
+
+  Você não precisa fazer nada. Quem acompanha o `docker compose ps` pode ver o worker como `unhealthy` enquanto o laço estiver parado; isso não reinicia o worker nem reverte uma atualização. O `/healthz` do worker ganhou o campo `ia_drain`.
+
 ## [3.17.4] — 2026-10-10
 
 ### Alterado
@@ -6749,7 +6763,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.4...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.18.0...HEAD
+[3.18.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.4...v3.18.0
 [3.17.4]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.3...v3.17.4
 [3.17.3]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.2...v3.17.3
 [3.17.2]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.1...v3.17.2

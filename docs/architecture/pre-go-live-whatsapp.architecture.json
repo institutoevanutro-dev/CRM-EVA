@@ -16,6 +16,9 @@
     { "id": "sink", "lane": "servidor", "col": 5, "type": "service", "label": "sendMessageHandler / redrive watchdog / releitura antes do envio" },
     { "id": "inbox", "lane": "operador", "col": 5, "type": "frontend", "label": "Inbox / conversa real e atendimento humano" },
     { "id": "audit", "lane": "banco", "col": 4, "type": "database", "label": "api_audit_log / channel.ai_access_updated" },
+    { "id": "contato", "lane": "operador", "col": 1, "type": "frontend", "label": "Página do contato / Reiniciar teste" },
+    { "id": "reinicio", "lane": "servidor", "col": 2, "type": "route", "label": "POST contacts/:id/reiniciar-teste" },
+    { "id": "fnReinicio", "lane": "banco", "col": 3, "type": "database", "label": "fn_reiniciar_teste_do_contato" },
     { "id": "auditTela", "lane": "operador", "col": 5, "type": "frontend", "label": "Audit Log / registro da operação" }
   ],
   "edges": [
@@ -28,6 +31,10 @@
     { "id": "e7", "from": "sink", "to": "inbox", "label": "mensagem enviada ou falha visível" },
     { "id": "e8", "from": "inbox", "to": "tela", "label": "operador valida e abre/restringe" },
     { "id": "e9", "from": "api", "to": "audit", "label": "modo e contagem, sem telefone" },
-    { "id": "e10", "from": "audit", "to": "auditTela", "label": "consulta de auditoria existente" }
+    { "id": "e10", "from": "audit", "to": "auditTela", "label": "consulta de auditoria existente" },
+    { "id": "e11", "from": "contato", "to": "reinicio", "label": "gestor reinicia o teste" },
+    { "id": "e12", "from": "reinicio", "to": "fnReinicio", "label": "só número da lista de teste" },
+    { "id": "e13", "from": "fnReinicio", "to": "gate", "label": "próxima mensagem é conversa nova" },
+    { "id": "e14", "from": "reinicio", "to": "audit", "label": "contact.teste_reiniciado, só contagens" }
   ]
 }

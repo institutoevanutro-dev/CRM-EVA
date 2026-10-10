@@ -2666,3 +2666,11 @@ Neste fork só o pedido de pessoa (`handoff`) toca: a etapa que avisa e a IA sem
 Porte do DeskcommCRM original (PR #1815). Migration 0314. **Sem spec de tela, e é declarado:** o que muda é o que chega a um celular com o CRM fechado, e o CI não tem aparelho nem serviço de push de navegador. A regra (só a passagem para pessoa, texto no idioma da organização, sem dado do cliente, destino da Central) está em `tests/unit/push-dos-avisos.test.ts`; o anúncio do aviso no barramento, contra Postgres, em `tests/invariants/aviso-da-central-no-barramento.test.ts`.
 
 **NÃO coberto:** a notificação aparecendo num celular de verdade (Android/iPhone), com o par VAPID configurado.
+
+### Reiniciar teste na página do contato `[P1]` (2026-10-10)
+
+Migration 0351 (`fn_reiniciar_teste_do_contato`), rota `POST /api/v1/contacts/:id/reiniciar-teste`, botão na página do contato. Invariantes: `tests/invariants/reiniciar-teste-do-contato.test.ts`.
+
+| Caso | Esperado |
+|---|---|
+| [ ] RT.1 | O gestor abre um contato que está na lista de teste de um canal em pré-go-live, clica «Reiniciar teste» e a próxima mensagem desse número é tratada pela IA como conversa nova; mensagens, card e agendamentos continuam lá. **PROVA PELA TELA PENDENTE** |
