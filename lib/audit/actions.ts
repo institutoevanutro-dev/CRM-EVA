@@ -216,6 +216,10 @@ export const AUDIT_ACTIONS = [
   // porque muda o que o sistema confere antes de falar com o cliente — e porque
   // custa dinheiro por mensagem.
   "ai.guardrail_layer_changed",
+  // O Jev (System One, TypeSafe AI) ligado, desligado, aceito ou com uma
+  // tarefa mudada. Auditável porque decide se mensagem de cliente sai para um
+  // processador estrangeiro.
+  "ai.jev_settings_updated",
   "ai_agent.run_started",
   "ai_agent.run_completed",
   "ai_agent.run_failed",

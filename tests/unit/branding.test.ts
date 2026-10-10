@@ -827,6 +827,11 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "endpoint da API da OpenAI (embeddings da busca e transcrição de áudio). É o destino do request: trocar pelo domínio do revendedor faria a chamada não chegar a lugar nenhum.",
   },
+  "api.typesafe.ai": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint do System One, da TypeSafe AI (o Jev, `lib/ai/decisao/cliente.ts`). Só é chamado com `JEV_API_KEY` e o Jev ligado e aceito na organização. É o destino do request, não texto de interface.",
+  },
   "api.anthropic.com": {
     categoria: "FORNECEDOR",
     motivo:

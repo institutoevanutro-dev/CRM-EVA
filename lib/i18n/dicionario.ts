@@ -8289,6 +8289,69 @@ export const DICIONARIO: Traducoes = {
   "Um cliente pediu para parar de receber mensagens": {
     es: "Un cliente pidió dejar de recibir mensajes",
   },
+  "Aceito que a última mensagem de cada cliente, limpa de CPF, telefone e e-mail, seja enviada à TypeSafe AI (EUA) para o Jev observar.": {
+    es: "Acepto que el último mensaje de cada cliente, sin documento, teléfono ni correo, se envíe a TypeSafe AI (EE. UU.) para que Jev lo observe.",
+  },
+  "Clima da conversa": {
+    es: "Clima de la conversación",
+  },
+  "Desligar tarefa": {
+    es: "Apagar tarea",
+  },
+  "Jev — decisões rápidas": {
+    es: "Jev — decisiones rápidas",
+  },
+  "Ligar o Jev (só observando)": {
+    es: "Encender Jev (solo observando)",
+  },
+  "Observando": {
+    es: "Observando",
+  },
+  "Pedido para falar com uma pessoa": {
+    es: "Pedido para hablar con una persona",
+  },
+  "Pedido para parar de receber mensagens": {
+    es: "Pedido para dejar de recibir mensajes",
+  },
+  "Salvo.": {
+    es: "Guardado.",
+  },
+  "Sem a chave JEV_API_KEY no servidor, o Jev está desligado e nenhuma mensagem sai para a TypeSafe.": {
+    es: "Sin la clave JEV_API_KEY en el servidor, Jev está apagado y ningún mensaje sale hacia TypeSafe.",
+  },
+  "Um modelo à parte (System One, da TypeSafe AI) que só OBSERVA: ele dá a opinião dele ao lado do que o sistema já decide, e você compara. Ele não bloqueia ninguém, não passa a conversa, não cala o assistente e não responde o cliente.": {
+    es: "Un modelo aparte (System One, de TypeSafe AI) que solo OBSERVA: da su opinión junto a lo que el sistema ya decide, y usted compara. No bloquea a nadie, no transfiere la conversación, no silencia al asistente y no responde al cliente.",
+  },
+  "Voltar a observar": {
+    es: "Volver a observar",
+  },
+  "de concordância": {
+    es: "de coincidencia",
+  },
+  "observadas": {
+    es: "observadas",
+  },
+  "pedidos que a regra não reconheceu": {
+    es: "pedidos que la regla no reconoció",
+  },
+  "vistas como reclamação": {
+    es: "vistas como reclamo",
+  },
+  "Área da saúde: as mensagens podem conter dado de saúde. Com o Jev ligado, cada mensagem do cliente, sem CPF, telefone e e-mail, vai para a TypeSafe AI, nos EUA. Confira se o contrato com a TypeSafe cobre esse tipo de dado antes de ligar.": {
+    es: "Área de la salud: los mensajes pueden contener datos de salud. Con Jev encendido, cada mensaje del cliente, sin documento, teléfono ni correo, va a TypeSafe AI, en EE. UU. Verifique si el contrato con TypeSafe cubre ese tipo de dato antes de encenderlo.",
+  },
+  "últimos": {
+    es: "últimos",
+  },
+  "O Jev precisa da chave JEV_API_KEY no servidor antes de ser ligado.": {
+    es: "Jev necesita la clave JEV_API_KEY en el servidor antes de encenderse.",
+  },
+  "Ligar o Jev exige o aceite do administrador.": {
+    es: "Encender Jev exige la aceptación del administrador.",
+  },
+  "quando o operador liga o Jev, a TypeSafe AI (EUA), que recebe cada mensagem do cliente sem CPF, telefone e e-mail, só para classificá-la;": {
+    es: "cuando el operador enciende Jev, TypeSafe AI (EE. UU.), que recibe cada mensaje del cliente sin documento, teléfono ni correo, solo para clasificarlo;",
+  },
   "Abra a conversa, confira o que a supervisão apontou e decida o próximo passo.": {
     es: "Abra la conversación, revise lo que señaló la supervisión y decida el próximo paso.",
   },
