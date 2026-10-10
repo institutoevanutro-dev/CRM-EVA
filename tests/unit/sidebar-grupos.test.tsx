@@ -69,6 +69,16 @@ describe("Sidebar por área", () => {
     expect(screen.queryByRole("navigation", { name: "Telas de Vendas" })).toBeNull();
   });
 
+  it("o Início fica fora da parte que rola; só os grupos rolam", () => {
+    comoPapel("admin");
+    render(<Sidebar collapsed={false} />);
+    const inicio = screen.getByRole("link", { name: "Início" });
+    const queRola = nav().querySelector(".overflow-y-auto")!;
+    expect(nav().contains(inicio)).toBe(true);
+    expect(queRola.contains(inicio)).toBe(false);
+    expect(queRola.contains(screen.getByRole("link", { name: "Vendas" }))).toBe(true);
+  });
+
   it("o grupo abre e fecha pela seta, sem navegar; Funis fica a um clique em Vendas", () => {
     comoPapel("admin");
     render(<Sidebar collapsed={false} />);

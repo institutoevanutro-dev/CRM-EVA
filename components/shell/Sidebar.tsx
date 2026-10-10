@@ -240,8 +240,13 @@ export function SidebarContent({
       <div className={cn("px-3 pb-2", collapsed && "px-2")}>
         <SearchTrigger naLateral recolhida={collapsed} atalho={showCollapseControl} />
       </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto p-2" aria-label={t("Navegação principal")}>
-        {areas.filter((a) => a.id !== GRUPO_NO_RODAPE).map(grupo)}
+      {/* Só os grupos rolam. O Início fica parado acima deles: com um grupo grande aberto numa
+          janela baixa, a lista rolava e ele aparecia cortado embaixo da busca (print de 10/10/2026). */}
+      <nav className="flex min-h-0 flex-1 flex-col p-2" aria-label={t("Navegação principal")}>
+        <div className="shrink-0 pb-1">{areas.filter((a) => a.id === "inicio").map(grupo)}</div>
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+          {areas.filter((a) => a.id !== "inicio" && a.id !== GRUPO_NO_RODAPE).map(grupo)}
+        </div>
       </nav>
       {/* Configurações fica FORA da área que rola (ver GRUPO_NO_RODAPE): é o que mais se
           procura quando não se acha algo, e não pode depender de scroll. */}
