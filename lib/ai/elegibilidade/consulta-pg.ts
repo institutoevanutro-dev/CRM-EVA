@@ -4,7 +4,8 @@
  * contato, o silêncio da conversa.
  *
  * O drain (decide ENFILEIRAR) e o turno (decide RODAR) chamam isto e passam o
- * resultado para `decidirElegibilidade` — a MESMA regra pura.
+ * resultado para `decidirElegibilidade` — a MESMA regra pura. O sink de envio
+ * (`sendTurnMessage`) chama de novo a cada bolha: é leitura por chave primária.
  */
 import type pg from "pg";
 
@@ -31,7 +32,10 @@ interface LinhaDeElegibilidade {
  * decidir; o drain trata como "sem gate", segue o fluxo antigo).
  */
 export async function decidirElegibilidadeDaConversa(
-  pool: pg.Pool,
+  // Só `query`: o sink de envio (`sendTurnMessage`) chama com o que tiver na mão.
+  pool: {
+    query<R extends pg.QueryResultRow>(text: string, values?: unknown[]): Promise<pg.QueryResult<R>>;
+  },
   input: {
     organizationId: string;
     conversationId: string;

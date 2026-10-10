@@ -165,6 +165,9 @@ export async function avisarLeadDaEscalacao(
         return { avisado: false, porque: 'canal_falhou' };
       case 'unavailable':
         return { avisado: false, porque: 'canal_indisponivel' };
+      case 'human_took_over':
+        // Uma pessoa já está na conversa: o aviso de que ela vem não faz falta.
+        return { avisado: false, porque: 'pessoa_no_comando' };
     }
   } catch (err) {
     opts.log.warn('aviso de escalação falhou — a passagem acontece assim mesmo', {

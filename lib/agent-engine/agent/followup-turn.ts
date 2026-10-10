@@ -1027,6 +1027,13 @@ async function sendFixedOutbound(
     }
     case 'unavailable':
       throw new Error(`envio fixo: canal indisponível (${outcome.reason}) — run re-tentado pela fila`);
+    case 'human_took_over':
+      // Mesmo desfecho do `isLeadInHandoff` lá em cima, só que visto na hora do envio.
+      runLog.info('envio fixo pulado: uma pessoa assumiu a conversa antes do envio', {
+        kind: job.kind,
+        motivo: outcome.motivo,
+      });
+      return "skipped";
   }
 }
 
