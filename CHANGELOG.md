@@ -8,6 +8,16 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.17.2] — 2026-10-10
+
+### Corrigido
+
+- **Conexão com o banco que falha no meio de uma operação deixa de ser reaproveitada** Quando uma consulta estourava o tempo limite no meio de uma operação em várias etapas, a conexão voltava para o grupo de conexões como se estivesse limpa, e a próxima tarefa que a recebesse podia rodar dentro da operação de quem falhou. Isso já estava corrigido em parte do motor; agora vale também para a avaliação de saúde do número, a resposta a um caso que ficou obsoleto, o envio de campanha, a revisão e a movimentação de etapa feitas pela supervisão e a importação da agenda histórica. A conexão que falhou é descartada e uma nova é aberta para a tarefa seguinte. Nada muda para quem usa e nada precisa ser feito ao atualizar.
+
+- **"Sugerir resposta" e "Testar" passam a respeitar o horário de resposta, não o de disparo** Fora do horário de disparo (por padrão, antes das 7h e depois das 22h), o botão "Sugerir resposta" da conversa e o "Testar" do agente falhavam por estarem fora da janela de envio, mesmo com a conexão configurada para responder 24 horas. A sugestão é resposta a uma mensagem que o cliente mandou, então agora vale o horário de resposta da conexão, o mesmo já usado quando a resposta aprovada é enviada. O horário de disparo de campanhas e de retomadas não muda. Nada precisa ser feito ao atualizar.
+
+- **Aba Teste do agente mostra qual ação a IA propôs, em vez de "(sem nome)"** Na aba Teste do agente, cada passo do trace aparecia como "(sem nome)" e com os argumentos vazios, embora a lista "Ações propostas" logo abaixo mostrasse o nome certo. O trace agora mostra o nome real da ferramenta que a IA chamou e os argumentos que ela enviou. Nada muda no que é gravado nem no comportamento do agente, e nada precisa ser feito ao atualizar.
+
 ## [3.17.1] — 2026-10-10
 
 ### Corrigido
@@ -6723,7 +6733,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.2...HEAD
+[3.17.2]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.1...v3.17.2
 [3.17.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.0...v3.17.1
 [3.17.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.16.1...v3.17.0
 [3.16.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.16.0...v3.16.1
