@@ -141,6 +141,8 @@ test.describe("distribuição de atendimento — a tela que liga o rodízio e a 
     page,
   }) => {
     await login(page, creds.users.manager!.email);
+    // Parte sempre do padrão: uma execução anterior interrompida pode ter deixado 120.
+    await page.request.patch("/api/v1/settings/atendimento/pausa-da-ia", { data: { minutos: 5 } });
     const distribuicaoAntes = await (await page.request.get("/api/v1/settings/routing")).json();
     await page.goto("/app/settings/atendimento");
 

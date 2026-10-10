@@ -48,6 +48,19 @@ describe("settingsComPausaPorRespostaHumana", () => {
     });
   });
 
+  it.each([
+    ["settings string", "abc"],
+    ["settings array", [1, 2]],
+    ["atendimento string", { routing: 1, atendimento: "abc" }],
+    ["atendimento array", { routing: 1, atendimento: [1, 2] }],
+  ])("%s não é espalhado: nada de chaves 0, 1, 2 no jsonb", (_nome, torto) => {
+    const novo = settingsComPausaPorRespostaHumana(torto, 60);
+    expect(novo.atendimento).toEqual({ pausa_ia_resposta_humana_min: 60 });
+    expect(Object.keys(novo).sort()).toEqual(
+      typeof torto === "object" && !Array.isArray(torto) ? ["atendimento", "routing"] : ["atendimento"],
+    );
+  });
+
   it("settings nulo vira objeto com a pausa", () => {
     expect(lerPausaPorRespostaHumanaMin(settingsComPausaPorRespostaHumana(null, 30))).toBe(30);
   });
@@ -76,5 +89,14 @@ describe("carregarPausaPorRespostaHumanaMs", () => {
     expect(await carregarPausaPorRespostaHumanaMs(stub(async () => ({ data: null, error: null })).supabase, "o")).toBe(padrao);
     expect(await carregarPausaPorRespostaHumanaMs(stub(async () => { throw new Error("rede"); }).supabase, "o")).toBe(padrao);
     expect(await carregarPausaPorRespostaHumanaMs({ from: () => { throw new Error("sem tabela"); } } as never, "o")).toBe(padrao);
+  });
+
+  it("a falha de leitura avisa quem chamou (erro e exceção); leitura boa não avisa", async () => {
+    const avisos: string[] = [];
+    const avisar = (d: string) => void avisos.push(d);
+    await carregarPausaPorRespostaHumanaMs(stub(async () => ({ data: null, error: { message: "timeout" } })).supabase, "o", avisar);
+    await carregarPausaPorRespostaHumanaMs(stub(async () => { throw new Error("rede"); }).supabase, "o", avisar);
+    await carregarPausaPorRespostaHumanaMs(stub(async () => ({ data: { settings: {} }, error: null })).supabase, "o", avisar);
+    expect(avisos).toEqual(["timeout", "rede"]);
   });
 });

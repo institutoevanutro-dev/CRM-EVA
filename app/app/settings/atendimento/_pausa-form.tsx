@@ -67,7 +67,7 @@ export function PausaDaIaForm({ initial }: { initial: number }) {
           />
           <p id="pausa_ia_min_ajuda" className={`text-xs ${valido ? "text-muted-foreground" : "text-destructive"}`}>
             {t(
-              "De 5 minutos a 24 horas (1440 minutos). Para tirar a IA de vez de uma conversa, use o botão de assumir na conversa.",
+              "De 5 minutos a 24 horas (1440 minutos). Se a equipe responde o dia todo pelo celular, um tempo alto deixa a IA sempre fora dessas conversas. Para tirar a IA de vez de uma conversa, use o botão de assumir na conversa.",
             )}
           </p>
         </div>

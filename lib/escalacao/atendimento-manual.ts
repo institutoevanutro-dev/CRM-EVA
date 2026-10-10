@@ -129,7 +129,12 @@ export async function pausarIaPorAtendimentoManual(
     // As duas leituras em paralelo: o ajuste não acrescenta ida e volta em série
     // ao caminho da ingestão, e a dele nunca falha (cai no padrão).
     const [prazoMs, { data: atual, error: readErr }] = await Promise.all([
-      carregarPausaPorRespostaHumanaMs(admin, input.organizationId),
+      carregarPausaPorRespostaHumanaMs(admin, input.organizationId, (detail) =>
+        logger.warn("[atendimento-manual] ajuste da pausa ilegível — usando o padrão", {
+          organization_id: input.organizationId,
+          detail,
+        }),
+      ),
       admin
         .from("conversations")
         .select("bot_silenced_until")

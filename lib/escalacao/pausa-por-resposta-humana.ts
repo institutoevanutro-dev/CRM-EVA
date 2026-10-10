@@ -34,10 +34,16 @@ export function lerPausaPorRespostaHumanaMin(settings: unknown): number {
   return r.success ? r.data : PAUSA_PADRAO_MIN;
 }
 
+function objetoSimples(v: unknown): Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
 /** Os `settings` com a pausa trocada, e SÓ ela: o resto do jsonb sobrevive. */
 export function settingsComPausaPorRespostaHumana(settings: unknown, minutos: number): Record<string, unknown> {
-  const atual = (settings as Record<string, unknown> | null) ?? {};
-  const atendimento = (atual.atendimento as Record<string, unknown> | undefined) ?? {};
+  // Só objeto simples é espalhado: espalhar uma string ou um array gravaria
+  // chaves "0", "1"... no jsonb.
+  const atual = objetoSimples(settings);
+  const atendimento = objetoSimples(atual.atendimento);
   return { ...atual, atendimento: { ...atendimento, pausa_ia_resposta_humana_min: minutos } };
 }
 
@@ -45,21 +51,27 @@ export function settingsComPausaPorRespostaHumana(settings: unknown, minutos: nu
  * A pausa da organização, em milissegundos. Uma consulta por chave primária;
  * qualquer falha (erro, linha ausente, exceção) devolve o padrão. O chamador já
  * resolveu `organizationId` de fonte confiável.
+ *
+ * `aoFalhar` é como a falha deixa rastro: quem chama do servidor passa o
+ * `logger.warn`. O logger não é importado aqui porque a tela importa este
+ * módulo. Recebe só o detalhe técnico do erro, nunca dado de cliente.
  */
 export async function carregarPausaPorRespostaHumanaMs(
   supabase: SupabaseClient,
   organizationId: string,
+  aoFalhar?: (detalhe: string) => void,
 ): Promise<number> {
   let settings: unknown = null;
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("organizations")
       .select("settings")
       .eq("id", organizationId)
       .maybeSingle();
+    if (error) aoFalhar?.(String(error.message ?? "erro").slice(0, 160));
     settings = (data as { settings?: unknown } | null)?.settings;
-  } catch {
-    // padrão
+  } catch (err) {
+    aoFalhar?.(err instanceof Error ? err.message.slice(0, 160) : "erro");
   }
   return lerPausaPorRespostaHumanaMin(settings) * 60 * 1000;
 }

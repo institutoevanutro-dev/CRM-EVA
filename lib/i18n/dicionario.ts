@@ -4401,8 +4401,8 @@ export const DICIONARIO: Traducoes = {
   "Quanto tempo a IA fica fora da conversa depois que uma pessoa responde (minutos)": {
     es: "Cuánto tiempo la IA queda fuera de la conversación después de que una persona responde (minutos)",
   },
-  "De 5 minutos a 24 horas (1440 minutos). Para tirar a IA de vez de uma conversa, use o botão de assumir na conversa.": {
-    es: "De 5 minutos a 24 horas (1440 minutos). Para sacar a la IA del todo de una conversación, usa el botón de asumir en la conversación.",
+  "De 5 minutos a 24 horas (1440 minutos). Se a equipe responde o dia todo pelo celular, um tempo alto deixa a IA sempre fora dessas conversas. Para tirar a IA de vez de uma conversa, use o botão de assumir na conversa.": {
+    es: "De 5 minutos a 24 horas (1440 minutos). Si el equipo responde todo el día desde el celular, un tiempo alto deja a la IA siempre fuera de esas conversaciones. Para sacar a la IA del todo de una conversación, usa el botón de asumir en la conversación.",
   },
   "Quem recebe o cliente novo": { es: "Quién recibe al cliente nuevo" },
   "Vale para conversa que chega sem dono.": { es: "Vale para conversación que llega sin dueño." },

@@ -58,6 +58,7 @@ import {
 import type { ListMessagesQuery, SendMessageInput } from "@/lib/schemas";
 import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { logger } from "@/lib/logger";
 import { carregarPausaPorRespostaHumanaMs } from "@/lib/escalacao/pausa-por-resposta-humana";
 import { devolverIdOriginalAoEcoDeOutraConversa } from "@/lib/messaging/eco-em-outra-conversa";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -1272,7 +1273,12 @@ export async function sendMessageHandler(
     awaiting_since: c.last_inbound_at,
   };
   if (ctx.actor.type === "user") {
-    const pausaMs = await carregarPausaPorRespostaHumanaMs(supabase, c.organization_id);
+    const pausaMs = await carregarPausaPorRespostaHumanaMs(supabase, c.organization_id, (detail) =>
+      logger.warn("[messages] ajuste da pausa da IA ilegível — usando o padrão", {
+        organization_id: c.organization_id,
+        detail,
+      }),
+    );
     const silenceUntil = extendBotSilence(c.bot_silenced_until, now, pausaMs);
     if (silenceUntil) conversationUpdate.bot_silenced_until = silenceUntil;
   }

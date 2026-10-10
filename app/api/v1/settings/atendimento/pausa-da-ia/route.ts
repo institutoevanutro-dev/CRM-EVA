@@ -65,6 +65,10 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     return fail("internal_error", readErr?.message ?? "organização não encontrada", 500, { requestId });
   }
 
+  // Mesmo valor que já vale: nada mudou, então não grava nem audita.
+  const anterior = lerPausaPorRespostaHumanaMin(orgRow.settings);
+  if (anterior === input.minutos) return ok({ minutos: input.minutos }, { requestId });
+
   const { error: updErr } = await supabase
     .from("organizations")
     .update({ settings: settingsComPausaPorRespostaHumana(orgRow.settings, input.minutos) })
@@ -78,7 +82,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     resourceType: "organization",
     resourceId: activeOrg.orgId,
     requestId,
-    metadata: { de_min: lerPausaPorRespostaHumanaMin(orgRow.settings), para_min: input.minutos },
+    metadata: { de_min: anterior, para_min: input.minutos },
   });
 
   return ok({ minutos: input.minutos }, { requestId });

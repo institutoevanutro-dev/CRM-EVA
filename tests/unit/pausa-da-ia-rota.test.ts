@@ -117,10 +117,22 @@ describe("PATCH /api/v1/settings/atendimento/pausa-da-ia", () => {
     expect(auditSpy).not.toHaveBeenCalled();
   });
 
+  it("mesmo valor que já vale: responde ok, não grava nem audita", async () => {
+    comoGerente();
+    banco.linha = { settings: { atendimento: { pausa_ia_resposta_humana_min: 120 } } };
+    const res = await PATCH(pedido({ minutos: 120 }));
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 120 });
+    expect(updates).toEqual([]);
+    expect(auditSpy).not.toHaveBeenCalled();
+  });
+
   it("aceita as duas pontas da faixa", async () => {
     comoGerente();
+    banco.linha = { settings: { atendimento: { pausa_ia_resposta_humana_min: 60 } } };
     expect((await PATCH(pedido({ minutos: 5 }))).status).toBe(200);
     expect((await PATCH(pedido({ minutos: 1440 }))).status).toBe(200);
+    expect(updates).toHaveLength(2);
   });
 
   it("organização não encontrada: 500, e nada é gravado por cima", async () => {
