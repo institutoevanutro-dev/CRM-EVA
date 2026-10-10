@@ -1037,6 +1037,13 @@ entram pelas rotas REAIS do app (`/api/v1/webhooks/in/:token`,
 `POST /api/v1/ai/agents` exige role `admin`/MFA e o agente não é o que está sob
 teste.
 
+**Ajuste do prazo da J20.18 pela tela (2026-10-10):** gerente muda a pausa para 120 min em
+Configurações › Distribuição de atendimento, salva, recarrega e vê 120; atendente leva 403 na rota.
+Caso em `tests/e2e/distribuicao-atendimento.spec.ts`. **Escrito e ainda NÃO executado**: o Docker
+da máquina caiu antes do build. A regra (padrão, faixa, renovação, nunca encurtar, os dois caminhos)
+está em UNIT: `pausa-por-resposta-humana.test.ts`, `atendimento-manual.test.ts`,
+`messages-handler-silencio-ia-apos-humano.test.ts` e `pausa-da-ia-rota.test.ts`.
+
 **Modo de teste do canal (issue #573):** Conexões › Configurar acesso da IA
 agora expõe pré-go-live por lista de telefones e abertura ao público com
 confirmação. Novos canais nascem em teste com lista vazia; os anteriores

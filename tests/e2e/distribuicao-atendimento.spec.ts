@@ -67,6 +67,7 @@ test.describe("distribuição de atendimento — a tela que liga o rodízio e a 
     await page.request.patch("/api/v1/settings/routing", {
       data: { mode: "manual", max_retries: 5, backoff_seconds: 60, visibility_mode: "own_and_unassigned" },
     });
+    await page.request.patch("/api/v1/settings/atendimento/pausa-da-ia", { data: { minutos: 5 } });
     await page.close();
   });
 
@@ -136,6 +137,40 @@ test.describe("distribuição de atendimento — a tela que liga o rodízio e a 
     await expect(page.getByTestId("aviso-combinacao-morta")).toHaveCount(0);
   });
 
+  test("manager muda a pausa da IA por resposta humana para 120 min, e ela sobrevive ao reload", async ({
+    page,
+  }) => {
+    await login(page, creds.users.manager!.email);
+    const distribuicaoAntes = await (await page.request.get("/api/v1/settings/routing")).json();
+    await page.goto("/app/settings/atendimento");
+
+    // O padrão do produto: quem nunca mexeu vê 5 minutos.
+    const campo = page.getByLabel(/Quanto tempo a IA fica fora da conversa depois que uma pessoa responde/);
+    await expect(campo).toHaveValue("5");
+    const salvar = page.getByRole("button", { name: "Salvar pausa" });
+    await expect(salvar).toBeDisabled();
+
+    // Fora da faixa não salva: o botão nem habilita.
+    await campo.fill("3");
+    await expect(salvar).toBeDisabled();
+
+    await campo.fill("120");
+    await salvar.click();
+    await expect(page.getByText("Pausa da IA salva.")).toBeVisible();
+
+    // O valor tem de voltar do BANCO, não do estado do React.
+    await page.reload();
+    await expect(
+      page.getByLabel(/Quanto tempo a IA fica fora da conversa depois que uma pessoa responde/),
+    ).toHaveValue("120");
+    await page.screenshot({ path: ".superpowers/evidence/pausa-da-ia-120-min.png", fullPage: true });
+
+    // A outra metade da tela não foi tocada pelo salvar da pausa (o teste
+    // anterior deixa o rodízio ligado; o que importa é não ter mudado).
+    const distribuicaoDepois = await (await page.request.get("/api/v1/settings/routing")).json();
+    expect(distribuicaoDepois.data).toEqual(distribuicaoAntes.data);
+  });
+
   test("atendente não abre a tela nem consegue gravar pela API", async ({ page }) => {
     await login(page, creds.users.agent!.email);
 
@@ -148,5 +183,10 @@ test.describe("distribuição de atendimento — a tela que liga o rodízio e a 
       data: { mode: "round_robin", max_retries: 5, backoff_seconds: 60, visibility_mode: "all" },
     });
     expect(res.status()).toBe(403);
+
+    const pausa = await page.request.patch("/api/v1/settings/atendimento/pausa-da-ia", {
+      data: { minutos: 600 },
+    });
+    expect(pausa.status()).toBe(403);
   });
 });
