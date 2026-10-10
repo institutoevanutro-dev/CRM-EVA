@@ -283,13 +283,8 @@ beforeAll(async () => {
      values($1,$2,$3,$4,'open',true,'120363000000000000@g.us')`,
     [GRUPO_EXTRAS, ORG, EXTRAS, CANAL_TESTE],
   );
-  // Régua pausada à mão: também é cancelada.
-  await q(
-    `insert into followup_enrollments(organization_id,pointer_id,version_id,contact_id,conversation_id,current_node_id,status)
-     select organization_id,pointer_id,version_id,contact_id,conversation_id,'inicio','paused_manual'
-       from followup_enrollments where contact_id = $1 limit 1`,
-    [EXTRAS],
-  );
+  // Régua pausada à mão (a semeada nasce ativa; só uma viva por contato): também é cancelada.
+  await q(`update followup_enrollments set status = 'paused_manual' where contact_id = $1`, [EXTRAS]);
 });
 
 describe("reiniciar teste: a guarda recusa sem efeito (0351)", () => {
@@ -460,7 +455,7 @@ describe("reiniciar teste: guardas finas e escopo (0351)", () => {
   it("conversa de grupo do contato não é fechada; régua paused_manual é cancelada", async () => {
     const r = await reiniciar(ORG, EXTRAS);
     expect(r.conversations_closed).toBe(1);
-    expect(r.followup_enrollments).toBe(2);
+    expect(r.followup_enrollments).toBe(1);
     const { rows } = await q("select status, is_group from conversations where contact_id = $1 order by is_group", [EXTRAS]);
     expect(rows).toEqual([
       { status: "closed", is_group: false },
