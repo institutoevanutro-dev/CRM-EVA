@@ -84,11 +84,12 @@ async function expectSemOverflowHorizontal(page: Page, contexto: string): Promis
 test.describe.configure({ timeout: 120_000 });
 
 test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
-  // O menu lateral lista ÁREAS; as telas de cada área são abas no topo.
+  // O menu lateral lista ÁREAS; as telas de cada área abrem dentro do próprio menu.
   const abas = (page: Page, area: string) => page.getByRole("navigation", { name: `Telas de ${area}` });
 
   test("o menu lateral mostra as áreas na ordem de uso", async ({ page }) => {
     await loginAdmin(page);
+    // Desde 10/10/2026 cada área é um grupo que abre e fecha; na tela Início nenhum está aberto.
     await expect(sidebar(page).getByRole("link")).toHaveText(["Início", "Atendimento", "Vendas", "IA", "Análise"]);
     await page.screenshot({ path: path.join(EVIDENCE, "nav-sidebar-areas.png"), fullPage: true });
   });

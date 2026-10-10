@@ -130,9 +130,9 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await expect(nav(member).getByRole("link", { name: "Atendimento", exact: true })).toHaveCount(0);
     await member.goto("/app");
     await member.waitForURL("**/app/products");
-    // Menu por área (07/10/2026): a única área com tela visível é Vendas, e ela abre em Produtos.
-    await nav(member).getByRole("link", { name: "Vendas" }).click();
-    await member.waitForURL("**/app/products");
+    // Menu por área: a única área com tela visível é Vendas, e ela abre em Produtos. O grupo da tela atual
+    // já nasce aberto (10/10/2026); clicar no nome da área em que se está FECHA o grupo, então não se clica.
+    await expect(nav(member).getByRole("link", { name: "Vendas", exact: true })).toHaveAttribute("aria-current", "page");
     const abasDeVendas = member.getByRole("navigation", { name: "Telas de Vendas" });
     await expect(abasDeVendas.getByRole("link", { name: "Produtos" })).toBeVisible();
     await expect(abasDeVendas.getByRole("link", { name: "Contatos" })).toHaveCount(0);
