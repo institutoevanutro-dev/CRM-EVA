@@ -25,6 +25,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useContact } from "@/hooks/contacts/useContact";
 import { useUnblockContact } from "@/hooks/contacts/useUnblockContact";
+import { useReiniciarTeste } from "@/hooks/contacts/useReiniciarTeste";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
@@ -62,6 +63,7 @@ export function ContactDetailClient({ contactId }: Props) {
   // O hook fica ANTES dos early returns: chamá-lo depois mudaria a ordem dos
   // hooks entre renderizações e o React reprova.
   const desbloquear = useUnblockContact(contactId);
+  const reiniciarTeste = useReiniciarTeste(contactId);
 
   if (q.isLoading) {
     return (
@@ -88,6 +90,7 @@ export function ContactDetailClient({ contactId }: Props) {
   // uma das DUAS que ignoravam o telefone: contato com número e sem nome
   // aparecia como "Sem nome" aqui e com o número no inbox.
   const displayName = rotuloDoContato(contact, t);
+  const podeReiniciarTeste = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
 
   return (
     <div className="space-y-4 p-6">
@@ -161,6 +164,29 @@ export function ContactDetailClient({ contactId }: Props) {
                     <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
                     <AlertDialogAction onClick={() => desbloquear.mutate()}>
                       {t("Desbloquear")}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+            {podeReiniciarTeste && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" disabled={reiniciarTeste.isPending} className="shrink-0">
+                    <span>{t("Reiniciar teste")}</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{t("Reiniciar o teste deste contato?")}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {t("A próxima mensagem deste número será tratada pela IA como uma conversa nova. As mensagens antigas, o card do funil e os agendamentos continuam no CRM. Se houver consulta futura marcada, a IA ainda vai saber dela: cancele o agendamento para testar a marcação do zero. Só funciona para números que estão na lista de teste do canal.")}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => reiniciarTeste.mutate()}>
+                      {t("Reiniciar teste")}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

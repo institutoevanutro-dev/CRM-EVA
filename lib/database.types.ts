@@ -7986,6 +7986,10 @@ export type Database = {
         }
         Returns: Json
       }
+      fn_reiniciar_teste_do_contato: {
+        Args: { p_contact: string; p_org: string }
+        Returns: Json
+      }
       fn_request_channel_routing: {
         Args: { p_conversation: string; p_org: string }
         Returns: undefined
