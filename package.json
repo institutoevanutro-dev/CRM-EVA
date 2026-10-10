@@ -79,7 +79,7 @@
     "import-in-the-middle": "^3.5.0",
     "jose": "^6",
     "lucide-react": "^1.43.0",
-    "next": "^16.3.4",
+    "next": "^16.3.8",
     "next-themes": "^0.4.6",
     "pdfjs-dist": "^6.3.289",
     "pg": "^8.23.0",
@@ -130,14 +130,15 @@
     "//overrides": "Pisos de versão para dependência TRANSITIVA com advisory. Não é atalho: `pnpm update <pkg>` só casa o padrão contra o package.json (hono/js-yaml/nanoid não estão lá, e não se movem), e `pnpm update` sem alvo reescreve 29 ranges diretas e arrasta 139 pacotes. Override é a única ferramenta que move transitiva sem arrastar o mundo. Os seletores com `@<major>` são LOAD-BEARING: o lock tem duas árvores de brace-expansion (1.x e 5.x) e duas de path-to-regexp (6.x e 8.x); sem o escopo, o override rebaixa a árvore nova para a antiga — em silêncio, com `pnpm audit` ainda verde.",
     "overrides": {
       "postcss": "^8.5.28",
-      "sharp": "^0.35.0",
+      "sharp": "^0.35.5",
       "hono": "^4.12.34",
       "js-yaml": "^4.3.1",
       "brace-expansion@1": "^1.1.18",
       "path-to-regexp@6": "^6.3.0",
       "fast-uri": "^3.1.7",
       "qs": "^6.16.0",
-      "browserslist": "^4.28.8"
+      "browserslist": "^4.28.8",
+      "source-map-js": "^1.2.2"
     },
     "patchedDependencies": {
       "@react-pdf/hyphenate": "patches/@react-pdf__hyphenate.patch"
