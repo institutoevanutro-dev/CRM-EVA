@@ -87,6 +87,8 @@ export const POLITICAS_DE_AVISO = {
     orientacao: "Confira a fila de comentários do Instagram — um comentário ficou mais de 1h sem resposta.",
     geral: { papel: "agent", href: "/app/inbox?filter=comentarios", rotulo: "Abrir fila de comentários" },
   },
+  jev_pedido_de_humano: { refs: ["conversation"], orientacao: "Abra a conversa e decida se alguém da equipe assume o atendimento." },
+  jev_parar_de_receber: { refs: ["conversation"], orientacao: "Abra a conversa e confira se o cliente quer mesmo parar de receber mensagens." },
   other: { refs: ["lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
 } satisfies Record<InboxKind, Politica>;
 

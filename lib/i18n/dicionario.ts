@@ -8277,6 +8277,18 @@ export const DICIONARIO: Traducoes = {
   "A supervisão deixou um ponto para a equipe decidir": {
     es: "La supervisión dejó un punto para que el equipo decida",
   },
+  "Abra a conversa e decida se alguém da equipe assume o atendimento.": {
+    es: "Abre la conversación y decide si alguien del equipo asume la atención.",
+  },
+  "Abra a conversa e confira se o cliente quer mesmo parar de receber mensagens.": {
+    es: "Abre la conversación y verifica si el cliente de verdad quiere dejar de recibir mensajes.",
+  },
+  "Um cliente pediu para falar com uma pessoa": {
+    es: "Un cliente pidió hablar con una persona",
+  },
+  "Um cliente pediu para parar de receber mensagens": {
+    es: "Un cliente pidió dejar de recibir mensajes",
+  },
   "Abra a conversa, confira o que a supervisão apontou e decida o próximo passo.": {
     es: "Abra la conversación, revise lo que señaló la supervisión y decida el próximo paso.",
   },
