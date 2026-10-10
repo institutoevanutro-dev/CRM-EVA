@@ -8,6 +8,16 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.17.3] — 2026-10-10
+
+### Alterado
+
+- **Menu lateral com grupos que abrem e fecham, busca de telas e a pessoa logada** O menu lateral passa a seguir o mesmo desenho do PrecificaEva e do Eva Financeiro. Cada área (Atendimento, Vendas, IA, Análise e Configurações) é um grupo que abre e fecha mostrando as suas telas, e o grupo da tela atual já nasce aberto. As abas que ficavam no topo de cada área saíram, porque as mesmas telas agora estão no menu. A busca de telas (⌘K), o nome de quem está logado e o "Sair" foram para o menu; na barra do topo ficam o seletor de organização, o sino, o idioma e o tema. O botão de recolher o menu subiu para o topo dele, e o fundo ganhou o degradê verde. Nenhum endereço mudou. Nada precisa ser feito ao atualizar.
+
+### Corrigido
+
+- **A IA deixa de responder por cima de quem acabou de responder o cliente** Quando alguém da equipe respondia o cliente (pelo celular ou pela tela) enquanto a IA ainda estava escrevendo a resposta dela, a IA enviava assim mesmo, poucos segundos depois da pessoa, às vezes em duas ou três mensagens seguidas. A pausa da IA só era conferida no começo da resposta. Agora ela é conferida de novo logo antes de cada mensagem: se uma pessoa assumiu a conversa nesse meio-tempo, a IA não envia aquela mensagem nem as seguintes, e a conversa segue com a pessoa. Vale para as respostas e para as retomadas automáticas. Respostas aprovadas por alguém da equipe e o envio do link de reunião continuam saindo normalmente. Nada precisa ser feito ao atualizar.
+
 ## [3.17.2] — 2026-10-10
 
 ### Corrigido
@@ -6733,7 +6743,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.2...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.3...HEAD
+[3.17.3]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.2...v3.17.3
 [3.17.2]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.1...v3.17.2
 [3.17.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.0...v3.17.1
 [3.17.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.16.1...v3.17.0
