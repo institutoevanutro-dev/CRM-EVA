@@ -35,6 +35,7 @@ import { validarBinding } from "@/lib/ai/pontos/validar-binding";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { temPrecoNoMotor } from "@/lib/agent-engine/edge/llm/pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -170,6 +171,7 @@ export async function GET(): Promise<Response> {
           Array.isArray(llm.enabled_models)
             ? llm.enabled_models.filter((m): m is string => typeof m === "string")
             : [],
+          temPrecoNoMotor,
         ),
     });
     const chave = `${decisao.provider}|${decisao.modelId ?? ""}`;

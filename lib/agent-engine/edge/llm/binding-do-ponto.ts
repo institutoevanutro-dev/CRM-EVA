@@ -27,6 +27,7 @@ import {
   type LinhaDeBinding,
   type ModeloDoCatalogoEconomico,
 } from '../../../ai/pontos/resolver';
+import { temPrecoNoMotor } from './pricing';
 
 /**
  * O catálogo é da INSTALAÇÃO (sem `organization_id`) e só muda por migration
@@ -179,6 +180,7 @@ export async function decidirParaOSeam(
               provider,
               modeloAtual,
               entrada.modelosHabilitados ?? [],
+              temPrecoNoMotor,
             );
             return escolhido !== null &&
               economicoEstaDeCastigo(entrada.organizationId, provider, escolhido, Date.now())
