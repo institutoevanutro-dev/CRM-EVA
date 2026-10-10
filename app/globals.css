@@ -624,6 +624,17 @@
    tem equivalente em `@theme`), então o apelido vira utilitário explícito. */
 /* Números de painel: Inter com dígitos de mesma largura e traço firme. O título é
    serifado, mas número em serifa fina fica difícil de ler de relance. */
+/* Fundo do menu lateral: o mesmo degradê do PrecificaEva e do Eva Financeiro (escuro no topo, verde vivo embaixo). */
+@utility fundo-lateral {
+  background-color: var(--color-sidebar-bg);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-sidebar-bg) 78%, black) 0%,
+    var(--color-sidebar-bg) 42%,
+    color-mix(in srgb, var(--color-sidebar-bg) 62%, var(--color-success)) 100%
+  );
+}
+
 @utility numero {
   font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;

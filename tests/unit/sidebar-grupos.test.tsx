@@ -1,17 +1,18 @@
 /**
- * Desde 07/10/2026 o menu lateral lista ÁREAS (spec 2026-10-07-cores-e-menu); as telas de
- * cada área viram abas no topo (AbasDaArea). Histórico — o Sidebar agrupado protegia:
+ * Desde 10/10/2026 o menu lateral segue o PrecificaEva e o Financeiro: cada ÁREA é um
+ * grupo que abre e fecha mostrando as suas telas (antes, abas no topo). O que protege:
  *
- *  - a hierarquia existe (o usuário reclamou de 17 itens no mesmo peso visual);
- *  - Funis é alcançável sem passar por Configurações — o achado que originou tudo;
- *  - agrupar não criou cabeçalho órfão (grupo cujos filhos a permissão filtrou);
- *  - colapsado não renderiza título nenhum: 6 rótulos em 64px seria ilegível.
+ *  - a hierarquia existe (o usuário reclamou de 17 itens no mesmo peso visual): só o
+ *    grupo da tela atual nasce aberto;
+ *  - Funis é alcançável sem passar por Configurações, o achado que originou tudo;
+ *  - área sem tela visível para o papel não aparece;
+ *  - colapsado não renderiza lista nenhuma: só o ícone da área.
  *
  * A regra de quem-vê-o-quê é do registro e está coberta em
  * `navegacao-registry.test.ts`; aqui é a superfície.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { Sidebar } from "@/components/shell/Sidebar";
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
@@ -57,11 +58,37 @@ describe("Sidebar por área", () => {
   const rotulos = () =>
     Array.from(nav().querySelectorAll("a")).map((a) => a.textContent?.trim());
 
-  it("mostra só as áreas, na ordem de uso, e Configurações no rodapé", () => {
+  it("mostra as áreas na ordem de uso, Configurações por último, e só o grupo da tela atual aberto", () => {
     comoPapel("admin");
     render(<Sidebar collapsed={false} />);
-    expect(rotulos()).toEqual(["Início", "Atendimento", "Vendas", "IA", "Análise"]);
-    expect(screen.getByRole("link", { name: "Configurações" })).toBeInTheDocument();
+    const areas = ["Início", "Atendimento", "Vendas", "IA", "Análise", "Configurações"];
+    expect(rotulos().filter((r) => areas.includes(r ?? ""))).toEqual(areas);
+    expect(screen.getByRole("navigation", { name: "Telas de Atendimento" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Telas de Vendas" })).toBeNull();
+  });
+
+  it("o grupo abre e fecha pela seta, sem navegar; Funis fica a um clique em Vendas", () => {
+    comoPapel("admin");
+    render(<Sidebar collapsed={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Vendas" }));
+    const vendas = screen.getByRole("navigation", { name: "Telas de Vendas" });
+    expect(within(vendas).getByRole("link", { name: "Funis" })).toHaveAttribute("href", "/app/kanban");
+    fireEvent.click(screen.getByRole("button", { name: "Fechar Vendas" }));
+    expect(screen.queryByRole("navigation", { name: "Telas de Vendas" })).toBeNull();
+  });
+
+  it("a tela atual fica marcada dentro do grupo", () => {
+    comoPapel("admin");
+    render(<Sidebar collapsed={false} />);
+    const telas = screen.getByRole("navigation", { name: "Telas de Atendimento" });
+    expect(within(telas).getByRole("link", { current: "page" })).toHaveAttribute("href", "/app/inbox");
+  });
+
+  it("colapsado não mostra lista de telas nem a seta", () => {
+    comoPapel("admin");
+    render(<Sidebar collapsed />);
+    expect(screen.queryByRole("navigation", { name: /Telas de/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Abrir|Fechar/ })).toBeNull();
   });
 
   it("marca a área da tela atual, inclusive em tela de detalhe", () => {
@@ -72,15 +99,7 @@ describe("Sidebar por área", () => {
     expect(screen.getByRole("link", { name: "Atendimento" })).not.toHaveAttribute("aria-current");
   });
 
-  it("a área abre a última aba usada nela", async () => {
-    comoPapel("admin");
-    window.localStorage.setItem("menu-ultima-aba", JSON.stringify({ crm: "/app/tasks" }));
-    rota.atual = "/app/inicio";
-    render(<Sidebar collapsed={false} />);
-    expect(await screen.findByRole("link", { name: "Vendas" })).toHaveAttribute("href", "/app/tasks");
-  });
-
-  it("sem aba guardada, a área abre a primeira aba", () => {
+  it("o nome da área leva à primeira tela dela", () => {
     comoPapel("admin");
     render(<Sidebar collapsed={false} />);
     expect(screen.getByRole("link", { name: "Vendas" })).toHaveAttribute("href", "/app/kanban");
@@ -97,13 +116,6 @@ describe("Sidebar por área", () => {
     render(<Sidebar collapsed={false} />);
     for (const r of rotulos()) expect(r).not.toBe(undefined);
     expect(rotulos()).toContain("Atendimento");
-  });
-
-  it("aba guardada que o papel não vê mais é ignorada (troca de empresa, interface)", () => {
-    comoPapel("viewer");
-    window.localStorage.setItem("menu-ultima-aba", JSON.stringify({ organizacao: "/app/settings/api-tokens" }));
-    render(<Sidebar collapsed={false} />);
-    expect(screen.getByRole("link", { name: "Configurações" })).not.toHaveAttribute("href", "/app/settings/api-tokens");
   });
 
   it("o aviso de conexão só aparece para quem pode abrir Conexões", () => {
