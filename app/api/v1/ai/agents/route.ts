@@ -199,6 +199,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       await admin
         .from("ai_agents")
         .update({ archived_at: new Date().toISOString() })
+        .eq("organization_id", activeOrg.orgId)
         .eq("id", agentRow.id);
       return fail("internal_error", t("Erro ao criar versão inicial."), 500, {
         requestId,
