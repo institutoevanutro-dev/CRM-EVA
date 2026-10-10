@@ -58,6 +58,7 @@ begin
        and s.metadata ->> 'ai_gate' = 'allowlist'
        and s.metadata ->> 'ai_gate_mode' = 'pre_go_live'
        and jsonb_typeof(item.valor) = 'string'
+       and (item.valor #>> '{}') ~ '^\s*\+[1-9][0-9 ()-]*\s*$'
        and (
          t.d = v_tel
          or (

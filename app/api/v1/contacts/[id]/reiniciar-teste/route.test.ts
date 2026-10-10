@@ -75,6 +75,16 @@ describe("reiniciar teste do contato", () => {
     expect(audit).not.toHaveBeenCalled();
   });
 
+  it("MFA em dívida: 403 mfa_required sem tocar o banco", async () => {
+    vi.mocked(mfaEmDivida).mockResolvedValue(true);
+    const r = await POST(req(), ctx());
+    expect(r.status).toBe(403);
+    expect((await r.json()).error.code).toBe("mfa_required");
+    expect(createAdminClient).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+
   it("suporte readonly nega antes do banco", async () => {
     vi.mocked(loadAuthUser).mockResolvedValue({
       id: org,

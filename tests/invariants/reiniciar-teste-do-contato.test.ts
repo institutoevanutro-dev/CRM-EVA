@@ -49,6 +49,9 @@ const TEL_CONTATO_SEM_NONO = "+553188885555";
 /** Mesmos 8 dígitos finais do TEL_OK, outro DDD: outra pessoa. */
 const TEL_OUTRO_DDD = "+5511988887777";
 const TEL_VITIMA = "+5531944443333";
+/** Item da lista SEM o "+": o leitor do TS descarta, e a função tem de descartar igual. */
+const TEL_SEM_MAIS = "+5531933332222";
+const TEL_EXTRAS = "+5531922221111";
 
 const OK = randomUUID();
 const FORA = randomUUID();
@@ -58,6 +61,10 @@ const SEM_NONO = randomUUID();
 const OUTRO_DDD = randomUUID();
 const SEM_TELEFONE = randomUUID();
 const VITIMA = randomUUID();
+const SEM_MAIS = randomUUID();
+const EXTRAS = randomUUID();
+const CANAL_SEM_MAIS = randomUUID();
+const GRUPO_EXTRAS = randomUUID();
 
 const conversaDe = new Map<string, string>();
 
@@ -242,13 +249,18 @@ beforeAll(async () => {
   await canal(CANAL_TESTE, ORG, {
     ai_gate: "allowlist",
     ai_gate_mode: "pre_go_live",
-    ai_test_phone_numbers: [TEL_OK, TEL_LISTA_COM_NONO],
+    ai_test_phone_numbers: [TEL_OK, TEL_LISTA_COM_NONO, TEL_EXTRAS],
   });
   // Aberto ao público: a lista ficou para trás, o modo não é mais de teste.
   await canal(CANAL_ABERTO, ORG, { ai_gate_mode: "open", ai_test_phone_numbers: [TEL_SO_NO_ABERTO] });
   // O estado legado que a migration 0251 descreve: gate limpo, marcador velho.
   // `lerModoDeAcessoDaIa` lê isto como ABERTO, e a função tem de ler igual.
   await canal(CANAL_MARCADOR_VELHO, ORG, { ai_gate_mode: "pre_go_live", ai_test_phone_numbers: [TEL_SO_NO_MARCADOR_VELHO] });
+  await canal(CANAL_SEM_MAIS, ORG, {
+    ai_gate: "allowlist",
+    ai_gate_mode: "pre_go_live",
+    ai_test_phone_numbers: [TEL_SEM_MAIS.slice(1)],
+  });
   await canal(CANAL_INTRUSO, ORG_INTRUSA, {
     ai_gate: "allowlist",
     ai_gate_mode: "pre_go_live",
@@ -263,6 +275,21 @@ beforeAll(async () => {
   await semear(OUTRO_DDD, TEL_OUTRO_DDD);
   await semear(SEM_TELEFONE, null);
   await semear(VITIMA, TEL_VITIMA);
+  await semear(SEM_MAIS, TEL_SEM_MAIS);
+  await semear(EXTRAS, TEL_EXTRAS);
+  // Conversa de GRUPO do mesmo contato: a função não a fecha.
+  await q(
+    `insert into conversations(id,organization_id,contact_id,channel_session_id,status,is_group,group_chat_id)
+     values($1,$2,$3,$4,'open',true,'120363000000000000@g.us')`,
+    [GRUPO_EXTRAS, ORG, EXTRAS, CANAL_TESTE],
+  );
+  // Régua pausada à mão: também é cancelada.
+  await q(
+    `insert into followup_enrollments(organization_id,pointer_id,version_id,contact_id,conversation_id,current_node_id,status)
+     select organization_id,pointer_id,version_id,contact_id,conversation_id,'inicio','paused_manual'
+       from followup_enrollments where contact_id = $1 limit 1`,
+    [EXTRAS],
+  );
 });
 
 describe("reiniciar teste: a guarda recusa sem efeito (0351)", () => {
@@ -422,6 +449,28 @@ describe("reiniciar teste: o contato da lista volta ao zero, e só ele (0351)", 
     const r = await reiniciar(ORG, SEM_NONO);
     expect(r.conversations_closed).toBe(1);
     expect((await foto(SEM_NONO)).lead_state).toBe(0);
+  });
+});
+
+describe("reiniciar teste: guardas finas e escopo (0351)", () => {
+  it("item da lista sem '+' não autoriza o reinício", async () => {
+    await recusaSemEfeito(ORG, SEM_MAIS);
+  });
+
+  it("conversa de grupo do contato não é fechada; régua paused_manual é cancelada", async () => {
+    const r = await reiniciar(ORG, EXTRAS);
+    expect(r.conversations_closed).toBe(1);
+    expect(r.followup_enrollments).toBe(2);
+    const { rows } = await q("select status, is_group from conversations where contact_id = $1 order by is_group", [EXTRAS]);
+    expect(rows).toEqual([
+      { status: "closed", is_group: false },
+      { status: "open", is_group: true },
+    ]);
+    const { rows: reguas } = await q(
+      "select status from followup_enrollments where contact_id = $1 group by status",
+      [EXTRAS],
+    );
+    expect(reguas).toEqual([{ status: "cancelled" }]);
   });
 });
 

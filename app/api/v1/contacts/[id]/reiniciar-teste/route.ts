@@ -99,7 +99,7 @@ export async function POST(_req: NextRequest, ctx: Context): Promise<Response> {
     resourceType: "contact",
     resourceId: id,
     requestId,
-    metadata: { contact_id: id, origem: "tela_do_contato", ...contagens },
+    metadata: { ...contagens, contact_id: id, origem: "tela_do_contato" },
   });
 
   return ok(contagens, { requestId });
