@@ -7541,7 +7541,7 @@ export const DICIONARIO: Traducoes = {
   Desbloquear: { es: "Desbloquear" },
   "Reiniciar teste": { es: "Reiniciar prueba" },
   "Reiniciar o teste deste contato?": { es: "¿Reiniciar la prueba de este contacto?" },
-  "A próxima mensagem deste número será tratada pela IA como uma conversa nova. As mensagens antigas, o card do funil e os agendamentos continuam no CRM. Só funciona para números que estão na lista de teste do canal.": { es: "El próximo mensaje de este número será tratado por la IA como una conversación nueva. Los mensajes antiguos, la tarjeta del embudo y las citas siguen en el CRM. Solo funciona para números que están en la lista de prueba del canal." },
+  "A próxima mensagem deste número será tratada pela IA como uma conversa nova. As mensagens antigas, o card do funil e os agendamentos continuam no CRM. Se houver consulta futura marcada, a IA ainda vai saber dela: cancele o agendamento para testar a marcação do zero. Só funciona para números que estão na lista de teste do canal.": { es: "El próximo mensaje de este número será tratado por la IA como una conversación nueva. Los mensajes antiguos, la tarjeta del embudo y las citas siguen en el CRM. Si hay una cita futura agendada, la IA todavía sabrá de ella: cancela la cita para probar el agendamiento desde cero. Solo funciona para números que están en la lista de prueba del canal." },
   "Teste reiniciado. A próxima mensagem começa do zero.": { es: "Prueba reiniciada. El próximo mensaje empieza de cero." },
   "Só dá para reiniciar o teste de um número que está na lista de teste do canal.": { es: "Solo se puede reiniciar la prueba de un número que está en la lista de prueba del canal." },
   "Não foi possível reiniciar o teste.": { es: "No fue posible reiniciar la prueba." },

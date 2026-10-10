@@ -180,7 +180,7 @@ export function ContactDetailClient({ contactId }: Props) {
                   <AlertDialogHeader>
                     <AlertDialogTitle>{t("Reiniciar o teste deste contato?")}</AlertDialogTitle>
                     <AlertDialogDescription>
-                      {t("A próxima mensagem deste número será tratada pela IA como uma conversa nova. As mensagens antigas, o card do funil e os agendamentos continuam no CRM. Só funciona para números que estão na lista de teste do canal.")}
+                      {t("A próxima mensagem deste número será tratada pela IA como uma conversa nova. As mensagens antigas, o card do funil e os agendamentos continuam no CRM. Se houver consulta futura marcada, a IA ainda vai saber dela: cancele o agendamento para testar a marcação do zero. Só funciona para números que estão na lista de teste do canal.")}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

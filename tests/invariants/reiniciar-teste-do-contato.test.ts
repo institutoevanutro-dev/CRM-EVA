@@ -53,6 +53,7 @@ const TEL_VITIMA = "+5531944443333";
 const TEL_SEM_MAIS = "+5531933332222";
 const TEL_EXTRAS = "+5531922221111";
 
+const ATENDENTE = randomUUID();
 const OK = randomUUID();
 const FORA = randomUUID();
 const SO_NO_ABERTO = randomUUID();
@@ -277,6 +278,17 @@ beforeAll(async () => {
   await semear(VITIMA, TEL_VITIMA);
   await semear(SEM_MAIS, TEL_SEM_MAIS);
   await semear(EXTRAS, TEL_EXTRAS);
+  // O contato do reinício também estava ASSIGNED a uma pessoa e com um caso aguardando o cliente.
+  await q(`insert into auth.users(id,email) values($1,'reinicio-atendente@invariant.test') on conflict do nothing`, [ATENDENTE]);
+  await q(
+    `update conversations set assigned_to_user_id=$1, assigned_at=now(), assignee_kind='user' where id=$2`,
+    [ATENDENTE, conversaDe.get(OK)],
+  );
+  await q(
+    `insert into agent_cases(organization_id,conversation_id,status,title,summary,blocker)
+     values($1,$2,'awaiting_lead','Caso 2','Resumo','Falta resposta do cliente')`,
+    [ORG, conversaDe.get(OK)],
+  );
   // Conversa de GRUPO do mesmo contato: a função não a fecha.
   await q(
     `insert into conversations(id,organization_id,contact_id,channel_session_id,status,is_group,group_chat_id)
@@ -298,12 +310,17 @@ describe("reiniciar teste: a guarda recusa sem efeito (0351)", () => {
       ledger: 1,
       crons_ligados: 1,
       reguas: [{ status: "active", motivo: null, relogio: true, fim: false }],
-      casos: [{ status: "awaiting_human", fechado: false }],
+      casos: [
+        { status: "awaiting_human", fechado: false },
+        { status: "awaiting_lead", fechado: false },
+      ],
       avisos: ["open"],
       mensagens: 2,
       agendamentos: ["confirmed"],
     });
     expect(await historicoQueOAgenteLe(OK)).toEqual(["oi, quero agendar", "claro, qual o melhor dia?"]);
+    const { rows } = await q("select assigned_to_user_id, assignee_kind from conversations where id = $1", [conversaDe.get(OK)]);
+    expect(rows).toEqual([{ assigned_to_user_id: ATENDENTE, assignee_kind: "user" }]);
   });
 
   it("⭐ telefone fora da lista de teste: contato_nao_e_de_teste e nada muda", async () => {
@@ -362,7 +379,7 @@ describe("reiniciar teste: o contato da lista volta ao zero, e só ele (0351)", 
       send_ledger: 1,
       cron_jobs: 1,
       followup_enrollments: 1,
-      agent_cases: 1,
+      agent_cases: 2,
       agent_inbox_items: 1,
     });
   });
@@ -395,7 +412,11 @@ describe("reiniciar teste: o contato da lista volta ao zero, e só ele (0351)", 
 
   it("⭐ caso cancelado e aviso de handoff resolvido", async () => {
     const depois = await foto(OK);
-    expect(depois.casos).toEqual([{ status: "cancelled", fechado: true }]);
+    // O awaiting_lead semeado também é cancelado, não só o awaiting_human.
+    expect(depois.casos).toEqual([
+      { status: "cancelled", fechado: true },
+      { status: "cancelled", fechado: true },
+    ]);
     expect(depois.avisos).toEqual(["resolved"]);
   });
 
@@ -419,6 +440,9 @@ describe("reiniciar teste: o contato da lista volta ao zero, e só ele (0351)", 
     await q("select public.fn_service_inbound($1)", [rows[0].id]);
     const { rows: conv } = await q("select status from conversations where id = $1", [conversaDe.get(OK)]);
     expect(conv[0].status).toBe("open");
+    // A atribuição humana não sobrevive à reabertura: a conversa volta sem dono.
+    const { rows: dono } = await q("select assigned_to_user_id, assignee_kind from conversations where id = $1", [conversaDe.get(OK)]);
+    expect(dono).toEqual([{ assigned_to_user_id: null, assignee_kind: null }]);
     expect(await historicoQueOAgenteLe(OK)).toEqual(["oi de novo"]);
     expect((await foto(OK)).mensagens).toBe(3);
   });

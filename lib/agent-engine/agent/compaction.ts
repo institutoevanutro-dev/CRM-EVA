@@ -36,6 +36,7 @@ import {
   type LeadContext,
   type LeadContextMessage,
 } from '../edge/crm/get-lead-context';
+import { guardServiceEffect } from '@/lib/atendimento/fronteira-server';
 import { applySaveLeadNote } from './lead-notes';
 
 /** Knobs da compaction (env COMPACTION_*; defaults conservadores no .env.example). */
@@ -206,6 +207,8 @@ async function runFlush(
       continue;
     }
     if (!ids.leadId) throw new Error('compaction_note_sink_required');
+    // Mesma fronteira das ferramentas: turno em voo durante um reinício não regrava nota velha.
+    await guardServiceEffect();
     const res = await applySaveLeadNote(
       db,
       { ...ids, leadId: ids.leadId },
