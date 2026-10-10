@@ -100,8 +100,9 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
     await page.waitForURL(/\/app\/kanban/);
     // A frase do catálogo saiu das abas (spec 2026-10-09-visual-clinica): o título da tela prova a chegada.
     await expect(page.getByRole("heading", { name: "Funis", level: 1 })).toBeVisible();
-    await abas(page, "Vendas").getByRole("button", { name: /Mais/ }).click();
-    await page.getByRole("menuitem", { name: "Etapas do funil" }).click();
+    // As telas além das principais ficam na página "Ver tudo" da área (o "Mais" saiu em 10/10/2026).
+    await abas(page, "Vendas").getByRole("link", { name: "Ver tudo" }).click();
+    await page.getByRole("main").getByRole("link", { name: /Etapas do funil/ }).click();
     await page.waitForURL(/settings\/tenant\/pipelines/);
     await expect(page.getByRole("heading", { name: "Etapas do funil", level: 1 })).toBeVisible();
   });
