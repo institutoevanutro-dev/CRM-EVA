@@ -161,6 +161,74 @@ describe("pausarIaPorAtendimentoManual — cada fala humana RENOVA o prazo", () 
  * seguinte do lead voltou a rodar sozinho, alucinando sobre algo que só o humano
  * tinha tratado (PIX). A rede continua armada, agora em cima do helper novo.
  */
+/**
+ * Dublê que distingue as duas tabelas: `organizations` devolve o ajuste (ou
+ * falha), `conversations` devolve o silêncio em vigor e registra o UPDATE.
+ */
+function adminComAjuste(
+  ajuste: { settings?: unknown; falha?: "erro" | "excecao" },
+  silencedUntil: string | null = null,
+) {
+  const updates: Array<Record<string, unknown>> = [];
+  const conv = {
+    select: () => conv,
+    update: (patch: Record<string, unknown>) => (updates.push(patch), conv),
+    eq: () => conv,
+    maybeSingle: () => Promise.resolve({ data: { bot_silenced_until: silencedUntil }, error: null }),
+    then: (r: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(r),
+  };
+  const org = {
+    select: () => org,
+    eq: () => org,
+    maybeSingle: () => {
+      if (ajuste.falha === "excecao") return Promise.reject(new Error("rede caiu"));
+      if (ajuste.falha === "erro") return Promise.resolve({ data: null, error: { message: "timeout" } });
+      return Promise.resolve({ data: { settings: ajuste.settings }, error: null });
+    },
+  };
+  return { admin: { from: (t: string) => (t === "organizations" ? org : conv) } as never, updates };
+}
+
+const DUAS_HORAS = { atendimento: { pausa_ia_resposta_humana_min: 120 } };
+const MIN = 60 * 1000;
+
+describe("pausarIaPorAtendimentoManual — o prazo é o AJUSTE da organização", () => {
+  it("organização com 120 min: grava agora + 120 min", async () => {
+    const { admin, updates } = adminComAjuste({ settings: DUAS_HORAS });
+    expect(await pausarIaPorAtendimentoManual(admin, { organizationId: ORG, conversationId: CONV, agora: T0 })).toBe(true);
+    expect(silenciadaAte(updates[0]!).getTime()).toBe(T0.getTime() + 120 * MIN);
+  });
+
+  it("cada fala humana renova pelo prazo da organização", async () => {
+    const { admin, updates } = adminComAjuste({ settings: DUAS_HORAS }, new Date(T0.getTime() + 120 * MIN).toISOString());
+    const depois = new Date(T0.getTime() + 30 * MIN);
+    expect(await pausarIaPorAtendimentoManual(admin, { organizationId: ORG, conversationId: CONV, agora: depois })).toBe(true);
+    expect(silenciadaAte(updates[0]!).getTime()).toBe(depois.getTime() + 120 * MIN);
+  });
+
+  it("com 24 horas configuradas, ainda assim não encurta o handoff formal nem um silêncio maior", async () => {
+    const dia = { atendimento: { pausa_ia_resposta_humana_min: 1440 } };
+    const formal = adminComAjuste({ settings: dia }, "infinity");
+    expect(await pausarIaPorAtendimentoManual(formal.admin, { organizationId: ORG, conversationId: CONV, agora: T0 })).toBe(false);
+    expect(formal.updates).toEqual([]);
+
+    const maior = adminComAjuste({ settings: DUAS_HORAS }, new Date(T0.getTime() + 180 * MIN).toISOString());
+    expect(await pausarIaPorAtendimentoManual(maior.admin, { organizationId: ORG, conversationId: CONV, agora: T0 })).toBe(false);
+    expect(maior.updates).toEqual([]);
+  });
+
+  it.each([
+    ["sem o ajuste", { settings: {} }],
+    ["ajuste fora da faixa", { settings: { atendimento: { pausa_ia_resposta_humana_min: 99999 } } }],
+    ["leitura do ajuste com erro", { falha: "erro" as const }],
+    ["leitura do ajuste lançando", { falha: "excecao" as const }],
+  ])("%s: a pausa ACONTECE mesmo assim, com o padrão de 5 min", async (_nome, ajuste) => {
+    const { admin, updates } = adminComAjuste(ajuste);
+    expect(await pausarIaPorAtendimentoManual(admin, { organizationId: ORG, conversationId: CONV, agora: T0 })).toBe(true);
+    expect(silenciadaAte(updates[0]!).getTime()).toBe(T0.getTime() + 5 * MIN);
+  });
+});
+
 describe("pausarIaPorAtendimentoManual — nunca ENCURTA um silêncio maior", () => {
   it("'infinity' (handoff formal, alguém clicou em assumir) NUNCA é encurtado", async () => {
     const { admin, updates } = adminStub("infinity");
@@ -255,7 +323,7 @@ describe("pausarIaPorAtendimentoManual — o que NÃO grava, e o que não derrub
    * o agente não pegou nenhuma — o prazo renovava antes de vencer. Quem quiser
    * atender demorado usa o handoff FORMAL, que não vence.
    */
-  it("o prazo é 5 minutos — mudar exige mudar este teste junto", () => {
+  it("o PADRÃO é 5 minutos — mudar exige mudar este teste junto", () => {
     expect(PRAZO_DO_SILENCIO_MS).toBe(5 * 60 * 1000);
   });
 });

@@ -7,7 +7,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  *
  * Existia só a VOLTA (`reactivate-bot`). Não havia caminho nenhum, em rota ou em
  * tela, para desligar o automático numa conversa: ele calava por efeito colateral
- * — o agente escalando sozinho, ou a janela deslizante de 5 minutos que um envio
+ * — o agente escalando sozinho, ou a janela deslizante (ajuste da organização, padrão 5 minutos) que um envio
  * manual abre (`extendBotSilence`). Um par ligar/desligar com só um dos lados é
  * um interruptor que não desliga.
  *

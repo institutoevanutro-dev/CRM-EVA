@@ -332,8 +332,8 @@ export async function ingestMetaInbound(
  * (`lib/waha/ingest.ts`, `handleOutboundFromUserPhone`) e tem o mesmo desfecho:
  * linha outbound `external_device` (a bolha a rotula "Celular"), conversa
  * carimbada como saída (zera não-lidas, não toca `last_inbound_at`), IA pausada
- * por `pausarIaPorAtendimentoManual` — a regra de 5 min que o composer também
- * usa. NÃO passa por `aplicarEfeitosPosEntrada`: ninguém entrou, alguém saiu. E
+ * por `pausarIaPorAtendimentoManual` — a mesma pausa que o composer usa (ajuste da
+ * organização, padrão 5 min). NÃO passa por `aplicarEfeitosPosEntrada`: ninguém entrou, alguém saiu. E
  * o trigger de `messages` só emite `message.received` para inbound
  * (`eco-nao-acorda-a-ia.test.ts`), então nenhum worker de IA/automação acorda.
  *

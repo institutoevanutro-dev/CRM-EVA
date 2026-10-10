@@ -63,7 +63,7 @@ transporte legado só depois da oficial gravada.
 ### D4 — O que o celular faz chega pelo webhook
 
 - Resposta dada pelo celular (`smb_message_echoes`) entra como mensagem de saída `external_device`
-  (a bolha diz Celular) e silencia a IA por `pausarIaPorAtendimentoManual` — a mesma regra de 5 min do
+  (a bolha diz Celular) e silencia a IA por `pausarIaPorAtendimentoManual` — a mesma pausa (ajuste da organização desde 2026-10-10, padrão 5 min) do
   `fromMe` do WAHA.
 - Desconexão pelo celular (`account_update`) passa por `aplicarEventoDaConta`
   (`lib/channels/meta/saude-da-conta.ts`) e abre aviso na Central.

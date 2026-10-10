@@ -4398,6 +4398,18 @@ export const DICIONARIO: Traducoes = {
   // ─── Configurações: Distribuição de atendimento ───
   "Distribuição de atendimento salva.": { es: "Distribución de atención guardada." },
   "Não consegui salvar.": { es: "No pude guardar." },
+  "Pausa da IA salva.": { es: "Pausa de la IA guardada." },
+  "Salvar pausa": { es: "Guardar pausa" },
+  "Quando uma pessoa responde o cliente": { es: "Cuando una persona responde al cliente" },
+  "A IA sai da conversa por um tempo para não responder junto. Vale para resposta pelo celular e pela tela, e cada nova resposta recomeça a contagem.": {
+    es: "La IA sale de la conversación por un tiempo para no responder a la vez. Vale para respuestas desde el celular y desde la pantalla, y cada nueva respuesta reinicia la cuenta.",
+  },
+  "Quanto tempo a IA fica fora da conversa depois que uma pessoa responde (minutos)": {
+    es: "Cuánto tiempo la IA queda fuera de la conversación después de que una persona responde (minutos)",
+  },
+  "De 5 minutos a 24 horas (1440 minutos). Se a equipe responde o dia todo pelo celular, um tempo alto deixa a IA sempre fora dessas conversas. Para tirar a IA de vez de uma conversa, use o botão de assumir na conversa.": {
+    es: "De 5 minutos a 24 horas (1440 minutos). Si el equipo responde todo el día desde el celular, un tiempo alto deja a la IA siempre fuera de esas conversaciones. Para sacar a la IA del todo de una conversación, usa el botón de asumir en la conversación.",
+  },
   "Quem recebe o cliente novo": { es: "Quién recibe al cliente nuevo" },
   "Vale para conversa que chega sem dono.": { es: "Vale para conversación que llega sin dueño." },
   "Tentativas antes de desistir": { es: "Intentos antes de desistir" },
