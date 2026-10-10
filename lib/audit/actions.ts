@@ -620,6 +620,10 @@ export const AUDIT_ACTIONS = [
   "lead.moved_to_pipeline",
   // Horário de envio dos follow-ups (`settings.followups.bloqueios.janela`).
   "followup.horario_de_envio_changed",
+  // Quanto tempo a IA fica fora da conversa depois que uma pessoa responde
+  // (`settings.atendimento.pausa_ia_resposta_humana_min`). Metadata leva o
+  // valor anterior e o novo, em minutos.
+  "atendimento.pausa_da_ia_changed",
   // Conta do Instagram conectada pelo login da Meta, desconectada, e o token de
   // 60 dias renovado. Metadata leva só o username, nunca o token.
   "channel.instagram_connected",
