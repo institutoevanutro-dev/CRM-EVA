@@ -8,6 +8,18 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.17.0] — 2026-10-10
+
+### Adicionado
+
+- **Pedido de parar ou de falar com uma pessoa dito em áudio que chegou tarde abre aviso na Central** Quando a transcrição de um áudio do cliente fica pronta depois de o assistente já ter respondido, um pedido para parar de receber mensagens ou para falar com uma pessoa abre um aviso na Central. Nada é bloqueado nem passado sozinho. O scrub da telemetria passa a apagar NIF, IBAN, código postal e CEP com hífen. Os classificadores de estágio e de manipulação só rodam quando chega mensagem nova do cliente, e o de estágio não recebe mais telefone nem e-mail.
+
+- **Jev pode observar o clima e os pedidos do cliente, desligado por padrão** Novo cartão "Jev — decisões rápidas" em IA › Provedores. O Jev (System One, da TypeSafe AI) só funciona com a chave JEV_API_KEY no servidor e depois que um administrador o liga e aceita o aviso. Ligado, ele só observa: dá uma nota de clima e diz se o cliente pediu para falar com uma pessoa ou parar de receber mensagens onde a regra não reconheceu, e o cartão mostra quanto ele concordou com o sistema. Ele não bloqueia, não passa a conversa, não cala o assistente e não responde. A mensagem vai à TypeSafe, nos EUA, sem CPF, telefone e e-mail. Na área da saúde, confira o contrato antes de ligar.
+
+### Corrigido
+
+- **Vídeo e arquivo acima de 10 MB voltam a ser enviados pela conversa** Enviar pelo "+" da conversa um vídeo ou arquivo maior que 10 MB falhava com "Unable to read upload.", porque o servidor cortava o envio em 10 MB, embora o limite anunciado seja 50 MB. Agora o corte acompanha o limite de 50 MB.
+
 ## [3.16.1] — 2026-10-09
 
 ### Corrigido
@@ -6705,7 +6717,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.16.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.0...HEAD
+[3.17.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.16.1...v3.17.0
 [3.16.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.16.0...v3.16.1
 [3.16.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.15.0...v3.16.0
 [3.15.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.14.0...v3.15.0
