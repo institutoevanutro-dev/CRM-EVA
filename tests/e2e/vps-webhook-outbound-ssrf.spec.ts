@@ -103,10 +103,11 @@ test.describe("J6.8 — anti-SSRF do outbound call_webhook (real, ponta a ponta)
     try {
       // --- fonte inbound (para gerar o lead que dispara a regra) ---
       await login(page, creds.users.manager!.email);
-      // Menu por área (07/10/2026): Configurações → Mais → Webhooks.
+      // Menu por área (07/10/2026): Configurações → Webhooks.
       await page.getByRole("link", { name: "Configurações" }).click();
-      await page.getByRole("navigation", { name: "Telas de Organização" }).getByRole("button", { name: /Mais/ }).click();
-      await page.getByRole("menuitem", { name: "Webhooks" }).click();
+      // Configurações abre a página com todas as telas; o "Mais" do menu saiu em 10/10/2026.
+      await page.waitForURL(/\/app\/settings$/);
+      await page.getByRole("main").getByRole("link", { name: /Webhooks/ }).click();
       await page.waitForURL(/\/app\/webhooks/);
       await page.getByRole("button", { name: /Nova fonte|Criar primeira fonte/ }).click();
       await page.locator("#src-name").fill(SOURCE_NAME);
