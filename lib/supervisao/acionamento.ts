@@ -160,6 +160,8 @@ export async function acionarSupervisao(pool: pg.Pool, fato: FatoConcluido, log?
 
     const chave = chaveDeIdempotencia(valido.data, vinculo.supervisor_agent_id);
     const client = await pool.connect();
+    // Quem falha dentro da transação sai do pool COM erro e é descartado.
+    let erroNaTransacao: Error | undefined;
     try {
       // Revisão e job no MESMO commit: sem isso, uma falha entre os dois deixaria
       // revisão `pendente` sem ninguém para executá-la.
@@ -197,10 +199,11 @@ export async function acionarSupervisao(pool: pg.Pool, fato: FatoConcluido, log?
       await client.query('commit');
       resumo.enfileiradas += 1;
     } catch (err) {
+      erroNaTransacao = err instanceof Error ? err : new Error(String(err));
       await client.query('rollback').catch(() => undefined);
       throw err;
     } finally {
-      client.release();
+      client.release(erroNaTransacao);
     }
   }
   return resumo;

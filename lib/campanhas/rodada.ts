@@ -436,6 +436,8 @@ async function rodarUmaCampanha(
   // ponytail: o lock fica retido durante o envio ao canal, como no agente —
   // aceitável num envio por número por rodada.
   const conexao = await pool.connect();
+  // Quem falha dentro da transação sai do pool COM erro e é descartado.
+  let erroNaTransacao: Error | undefined;
   try {
     await conexao.query("begin");
     await conexao.query("select pg_advisory_xact_lock(hashtext($1))", [sessionEscolhida]);
@@ -455,11 +457,17 @@ async function rodarUmaCampanha(
       return { enviadas: 0, pulados: 0, concluidas: 0, detalhe: "canal:ritmo_do_numero" };
     }
     return await enviarSobOLock(admin, conexao, campanha, alvo, sessionEscolhida, knobs.timezone, escolha.motivo, agora);
+  } catch (err) {
+    erroNaTransacao = err instanceof Error ? err : new Error(String(err));
+    throw err;
   } finally {
     // Sem efeito a registrar, o commit só solta o lock. Se algo falhou dentro
     // da transação, o commit vira rollback e o lock sai do mesmo jeito.
-    await conexao.query("commit").catch(() => undefined);
-    conexao.release();
+    await conexao.query("commit").catch((err: unknown) => {
+      // Commit que falha deixaria o lock do número preso na conexão reaproveitada.
+      erroNaTransacao ??= err instanceof Error ? err : new Error(String(err));
+    });
+    conexao.release(erroNaTransacao);
   }
 }
 
