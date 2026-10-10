@@ -19,7 +19,7 @@
     { "id": "sessao", "lane": "banco", "col": 4, "type": "database", "label": "channel_sessions meta_cloud · metadata.coexistencia" },
     { "id": "aba", "lane": "operador", "col": 5, "type": "frontend", "label": "Aba API Oficial: canal Conectado / aviso do histórico" },
     { "id": "webhook", "lane": "servidor", "col": 5, "type": "route", "label": "Webhook da Meta (smb_message_echoes, account_update)" },
-    { "id": "eco", "lane": "servidor", "col": 6, "type": "lib", "label": "ingestMetaEcho → pausarIaPorAtendimentoManual (5 min)" },
+    { "id": "eco", "lane": "servidor", "col": 6, "type": "lib", "label": "ingestMetaEcho → pausarIaPorAtendimentoManual (pausa da organização, padrão 5 min)" },
     { "id": "conta", "lane": "servidor", "col": 6, "type": "lib", "label": "aplicarEventoDaConta (saude-da-conta.ts)" },
     { "id": "mensagens", "lane": "banco", "col": 6, "type": "database", "label": "messages external_device (Celular)" },
     { "id": "central", "lane": "operador", "col": 7, "type": "frontend", "label": "Central de avisos: número desconectado pelo celular" },
