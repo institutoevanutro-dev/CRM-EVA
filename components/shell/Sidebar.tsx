@@ -219,7 +219,8 @@ export function SidebarContent({
 
   return (
     <>
-      <div className={cn("flex min-h-[4.5rem] items-center gap-2 px-4 py-3", collapsed ? "flex-col justify-center px-2" : "justify-between")}>
+      {/* `h-14` como a barra do topo: logo-moldura-no-tema-escuro.spec.ts mede este retângulo. */}
+      <div className={cn("flex h-14 items-center gap-2 px-4", collapsed ? "justify-center px-2" : "justify-between")}>
         <div className="flex min-w-0 items-center">
         {logo && !collapsed ? (
           // Sem moldura: o menu é verde nos dois temas, então o logo aparece direto
@@ -227,7 +228,7 @@ export function SidebarContent({
           // <img> e não next/image: a URL vem de quem hospeda (banco ou .env).
           // eslint-disable-next-line @next/next/no-img-element
           <span className="flex min-w-0 items-center gap-2.5">
-            <img src={logo} alt={nome} className="h-9 w-auto max-w-[9rem] shrink-0 object-contain" />
+            <img src={logo} alt={nome} className="h-8 w-auto max-w-[9rem] shrink-0 object-contain" />
             {/* O nome ao lado do logo só quando a ORGANIZAÇÃO definiu nome próprio: o
                 logo da instalação costuma já trazer o nome escrito, e repetido ocuparia
                 a faixa duas vezes. Na serifa do site da clínica. */}
@@ -253,15 +254,21 @@ export function SidebarContent({
           </span>
         )}
         </div>
-        {recolher}
+        {!collapsed && recolher}
       </div>
+      {collapsed && <div className="flex justify-center pb-1">{recolher}</div>}
       <div aria-hidden className="mx-4 mb-2 h-px bg-gradient-to-r from-transparent via-gold/70 to-transparent" />
       <div className={cn("px-3 pb-2", collapsed && "px-2")}>
         <SearchTrigger naLateral recolhida={collapsed} atalho={showCollapseControl} />
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-2" aria-label={t("Navegação principal")}>
-        {areas.map(grupo)}
+        {areas.filter((a) => a.id !== GRUPO_NO_RODAPE).map(grupo)}
       </nav>
+      {/* Configurações fica FORA da área que rola (ver GRUPO_NO_RODAPE): é o que mais se
+          procura quando não se acha algo, e não pode depender de scroll. */}
+      <div className="max-h-[50%] shrink-0 overflow-y-auto border-t border-white/10 p-2">
+        {areas.filter((a) => a.id === GRUPO_NO_RODAPE).map(grupo)}
+      </div>
       <div className="border-t border-white/10 p-2">
         <div className={cn("flex items-center gap-3 rounded-lg bg-sidebar-active px-3 py-2", collapsed && "justify-center px-0")}>
           <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gold/50 text-xs font-semibold text-gold">

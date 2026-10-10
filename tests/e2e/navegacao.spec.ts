@@ -90,7 +90,7 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
   test("o menu lateral mostra as áreas na ordem de uso", async ({ page }) => {
     await loginAdmin(page);
     // Desde 10/10/2026 cada área é um grupo que abre e fecha; na tela Início nenhum está aberto.
-    await expect(sidebar(page).getByRole("link")).toHaveText(["Início", "Atendimento", "Vendas", "IA", "Análise", "Configurações"]);
+    await expect(sidebar(page).getByRole("link")).toHaveText(["Início", "Atendimento", "Vendas", "IA", "Análise"]);
     await page.screenshot({ path: path.join(EVIDENCE, "nav-sidebar-areas.png"), fullPage: true });
   });
 

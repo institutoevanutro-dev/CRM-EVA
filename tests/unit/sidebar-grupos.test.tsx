@@ -58,11 +58,13 @@ describe("Sidebar por área", () => {
   const rotulos = () =>
     Array.from(nav().querySelectorAll("a")).map((a) => a.textContent?.trim());
 
-  it("mostra as áreas na ordem de uso, Configurações por último, e só o grupo da tela atual aberto", () => {
+  it("mostra as áreas na ordem de uso, Configurações fora da rolagem, e só o grupo da tela atual aberto", () => {
     comoPapel("admin");
     render(<Sidebar collapsed={false} />);
-    const areas = ["Início", "Atendimento", "Vendas", "IA", "Análise", "Configurações"];
+    const areas = ["Início", "Atendimento", "Vendas", "IA", "Análise"];
     expect(rotulos().filter((r) => areas.includes(r ?? ""))).toEqual(areas);
+    // Configurações fica fora da área que rola.
+    expect(nav().contains(screen.getByRole("link", { name: "Configurações" }))).toBe(false);
     expect(screen.getByRole("navigation", { name: "Telas de Atendimento" })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Telas de Vendas" })).toBeNull();
   });
