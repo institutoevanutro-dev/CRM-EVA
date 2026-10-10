@@ -146,6 +146,11 @@ export function precoDoModelo(model: string): Preco | undefined {
   );
 }
 
+/** O motor sabe cobrar este modelo; sem isso o custo sai null e o teto não o vê. */
+export function temPrecoNoMotor(model: string): boolean {
+  return precoDoModelo(model) !== undefined;
+}
+
 /**
  * Custo em CENTS (fracionário; coluna numeric) ou null se o modelo não tem preço
  * conhecido. `inputTokens` aqui é o TOTAL do usage do SDK — a parcela cacheada é
