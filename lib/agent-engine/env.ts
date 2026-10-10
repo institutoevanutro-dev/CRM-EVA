@@ -190,7 +190,9 @@ const envSchema = z.object({
   // humana; escrita por fs em runtime, gitignored). O arquivo leva rótulo e
   // ponteiros, nunca o texto do lead.
   GOLDEN_CANDIDATES_DIR: z.string().min(1).default('lib/agent-engine/golden-candidates'),
-  // Classificadores auxiliares (modelo BARATO; sem valor = default da org).
+  // Classificadores auxiliares. Sem valor = o modelo econômico do provedor do
+  // agente (`PONTOS_DE_TIER_ECONOMICO` em lib/ai/pontos/resolver.ts), com o do
+  // agente como reserva. Preenchido = esse modelo, no provider default da org.
   STAGE_CLASSIFIER_MODEL: z.string().min(1).optional(),
   JAILBREAK_CLASSIFIER_MODEL: z.string().min(1).optional(),
   // Camada SEMÂNTICA de promessa na cadeia before_send (1 chamada por envio quando on).

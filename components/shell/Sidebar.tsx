@@ -11,12 +11,6 @@ import { ConnectionHealthDot } from "@/components/connections/ConnectionHealthDo
 import { SearchTrigger } from "@/components/shell/SearchTrigger";
 import { VersionFooter } from "@/components/shell/VersionFooter";
 import { LogotipoDoProduto, SimboloDoProduto } from "@/components/branding/MarcaDoProduto";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { marcaEhADoProduto } from "@/lib/branding";
 import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
 import {
@@ -160,7 +154,7 @@ export function SidebarContent({
         </div>
         {expandido && (
           <nav aria-label={rotuloDasTelas} className="mt-0.5 mb-2 space-y-0.5">
-            {principais.map((d) => {
+            {(hub ? principais : [...principais, ...mais]).map((d) => {
               const Ic = d.icon;
               const ligada = d.href === abaAtual;
               return (
@@ -170,25 +164,10 @@ export function SidebarContent({
                 </Link>
               );
             })}
-            {mais.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger className={cn(estiloDoItem(mais.some((d) => d.href === abaAtual)), "w-full text-sidebar-muted")}>
-                  <span className="pl-[30px]">{t("Mais")}</span>
-                  <CaretDown size={12} aria-hidden className="-rotate-90" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent side="right" align="start">
-                  {mais.map((d) => (
-                    <DropdownMenuItem key={d.href} asChild>
-                      <Link href={d.href} aria-current={d.href === abaAtual ? "page" : undefined} onClick={onNavigate}>
-                        {t(d.label)}
-                      </Link>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {hub && item.id !== GRUPO_NO_RODAPE && (
-              // A página com todas as telas da área, organizadas por jornada.
+            {hub && (
+              // A página com TODAS as telas da área, explicadas e organizadas por jornada. É o único
+              // caminho para as telas além das principais: "Mais" e "Ver tudo" juntos repetiam a mesma coisa
+              // (pedido do dono, 10/10/2026). Área sem página dessas mostra todas as telas na lista.
               <Link
                 href={hub.href}
                 aria-current={pathname === hub.href ? "page" : undefined}

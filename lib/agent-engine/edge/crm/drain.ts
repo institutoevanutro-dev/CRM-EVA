@@ -96,6 +96,9 @@ export async function drainTick(pool: pg.Pool, knobs: DrainKnobs, log: Logger): 
   );
 
   for (const event of events) {
+    // Cada evento começado também carimba: um lote lento num banco lento
+    // ainda é o laço andando, e só o evento que TRAVA deixa o carimbo vencer.
+    vigilancia.ultimoTickEm = Date.now();
     try {
       const desfecho = await processEvent(pool, event, knobs, log);
       if (desfecho === 'adiar') {
@@ -526,6 +529,60 @@ async function processEvent(
   return 'processado';
 }
 
+/**
+ * Quantos ciclos OCIOSOS sem uma volta CONCLUÍDA contam como "laço parado"
+ * (porte do upstream melgarafael/DeskcommCRM#2691).
+ *
+ * O default da instalação é `idle = 15s`, então 20 ciclos = **5 minutos**. O
+ * que se mede é o LAÇO girando, nunca trabalho feito: uma clínica sem mensagem
+ * nenhuma dá uma volta vazia a cada 15s e carimba do mesmo jeito, e canal
+ * pausado ou antes da estreia também. Só fica "parado" o laço que travou NO
+ * MEIO de uma volta.
+ */
+export const TICKS_PARA_PARADO = 20;
+
+/**
+ * O carimbo de vida do laço, lido de FORA dele (hoje: o `/healthz` do worker).
+ *
+ * `ultimoTickEm = null` significa "o laço ainda não começou": não é parado, é
+ * um worker que acabou de subir. `limiteMs` nasce do `idleIntervalMs` DA
+ * INSTALAÇÃO quando o laço começa, então um `.env` com intervalo maior ganha o
+ * mesmo número de ciclos de folga, não o mesmo relógio.
+ */
+const vigilancia: { ultimoTickEm: number | null; limiteMs: number | null } = {
+  ultimoTickEm: null,
+  limiteMs: null,
+};
+
+/** Resposta do `/healthz` sobre o laço do drain. Nomes para a máquina. */
+export interface ProntidaoDoDrainDaIa {
+  /** Há quanto tempo a última volta concluiu; `null` = o laço não começou. */
+  ultimo_tick_ha_ms: number | null;
+  /** Limite em vigor (idle da instalação × `TICKS_PARA_PARADO`); `null` antes de começar. */
+  limite_ms: number | null;
+  /** `true` quando o carimbo passou do limite: o laço travou NO MEIO de uma volta. */
+  parado: boolean;
+}
+
+/**
+ * Estado do laço para quem pergunta de fora. Nunca lança: o `/healthz` não pode
+ * ser o motivo de o worker cair. `agoraMs` é injetável para o teste.
+ */
+export function prontidaoDoDrainDaIa(agoraMs: number = Date.now()): ProntidaoDoDrainDaIa {
+  const { ultimoTickEm, limiteMs } = vigilancia;
+  if (ultimoTickEm === null || limiteMs === null) {
+    return { ultimo_tick_ha_ms: null, limite_ms: limiteMs, parado: false };
+  }
+  const ha = Math.max(0, agoraMs - ultimoTickEm);
+  return { ultimo_tick_ha_ms: ha, limite_ms: limiteMs, parado: ha > limiteMs };
+}
+
+/** Só para teste: volta ao estado de "o laço ainda não começou". */
+export function _reiniciarVigilanciaDoDrain(): void {
+  vigilancia.ultimoTickEm = null;
+  vigilancia.limiteMs = null;
+}
+
 /** Loop do drain — polling com backoff adaptativo (ocioso = tick mais lento). */
 export async function runDrainLoop(
   pool: pg.Pool,
@@ -533,6 +590,10 @@ export async function runDrainLoop(
   log: Logger,
   signal: AbortSignal,
 ): Promise<void> {
+  // O carimbo de vida: gravado quando o laço começa e ao FIM de cada volta. Uma
+  // volta que travar deixa o carimbo envelhecer, e é isso que o `/healthz` lê.
+  vigilancia.limiteMs = knobs.idleIntervalMs * TICKS_PARA_PARADO;
+  vigilancia.ultimoTickEm = Date.now();
   while (!signal.aborted) {
     let drained = 0;
     try {
@@ -542,6 +603,8 @@ export async function runDrainLoop(
         error: (err instanceof Error ? err.message : String(err)).slice(0, 300),
       });
     }
+    // O laço DEU A VOLTA: sucesso e erro capturado são a mesma prova de vida.
+    vigilancia.ultimoTickEm = Date.now();
     if (signal.aborted) break;
     // Lote CHEIO é sinal de backlog: há mais evento esperando do que caberia no
     // lote, e pagar o intervalo antes de voltar só empurra a fila para frente.

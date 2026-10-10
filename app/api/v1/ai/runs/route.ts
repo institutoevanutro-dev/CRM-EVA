@@ -113,7 +113,13 @@ export async function GET(req: NextRequest): Promise<Response> {
       pontoRotulo: ponto?.rotulo ?? l.purpose,
       // A consequência daquele ponto falhar, que é o que liga uma linha de log
       // a algo que a pessoa já viu acontecer no negócio dela.
-      consequencia: l.status === "erro" ? (ponto?.sintomaDeFalha ?? null) : null,
+      // Menos quando o modelo econômico foi recusado e a mesma chamada se
+      // repetiu no modelo de antes (`economico_coberto_pela_reserva`): o
+      // atendimento seguiu normal, e anunciar a consequência seria falso.
+      consequencia:
+        l.status === "erro" && l.origem_da_escolha !== "economico_coberto_pela_reserva"
+          ? (ponto?.sintomaDeFalha ?? null)
+          : null,
       oQueFazer: l.status === "erro" ? (O_QUE_FAZER[l.error_code ?? ""] ?? null) : null,
       porQueEsteModelo: l.origem_da_escolha
         ? (EXPLICACAO_DA_ORIGEM[l.origem_da_escolha as OrigemDaEscolha] ?? null)

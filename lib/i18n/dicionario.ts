@@ -2918,6 +2918,12 @@ export const DICIONARIO: Traducoes = {
   "Herdado de quem disparou a chamada — o agente publicado, ou o roteador de intenção.": {
     es: "Heredado de quien disparó la llamada — el agente publicado, o el enrutador de intención.",
   },
+  "Modelo mais econômico do mesmo provedor: esta tarefa é uma classificação curta e não precisa do modelo do agente. Escolha outro no painel se preferir.": {
+    es: "Modelo más económico del mismo proveedor: esta tarea es una clasificación corta y no necesita el modelo del agente. Elige otro en el panel si lo prefieres.",
+  },
+  "O modelo econômico não respondeu; a chamada foi repetida no modelo de antes, e o resultado dessa repetição aparece numa linha própria.": {
+    es: "El modelo económico no respondió; la llamada se repitió con el modelo anterior, y el resultado de esa repetición aparece en una línea propia.",
+  },
   "Usando o padrão da organização.": {
     es: "Usando el valor predeterminado de la organización.",
   },

@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.17.4] — 2026-10-10
+
+### Alterado
+
+- **Menu lateral sem o "Mais": as outras telas de cada área ficam em "Ver tudo"** Cada grupo do menu lateral mostrava as telas principais, um "Mais" com as demais e um "Ver tudo" que levava à página da área, e os dois últimos repetiam a mesma coisa. O "Mais" saiu. "Ver tudo" abre a página da área com todas as telas, cada uma com a sua explicação, e Configurações ganhou o mesmo atalho. A busca de telas (⌘K) continua alcançando qualquer tela direto. Isso também corrige o menu lateral que subia junto com a página quando o "Mais" era aberto com a tela rolada. Nada precisa ser feito ao atualizar.
+
 ## [3.17.3] — 2026-10-10
 
 ### Alterado
@@ -6743,7 +6749,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.3...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.4...HEAD
+[3.17.4]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.3...v3.17.4
 [3.17.3]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.2...v3.17.3
 [3.17.2]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.1...v3.17.2
 [3.17.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.0...v3.17.1
