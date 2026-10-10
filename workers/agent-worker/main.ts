@@ -59,7 +59,6 @@ if (!sentryDsn) {
   console.info("[telemetria] worker: Erros sendo enviados ao Sentry configurado em SENTRY_DSN.");
 }
 
-import http from "node:http";
 import { hostname } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -77,10 +76,14 @@ import { completeTurnForEnrollment, createPgAdminClient } from "@/lib/followup/t
 import { seedPlatformPlaybook } from "@/lib/agent-engine/agent/playbook-seed";
 import { runCronLoop } from "@/lib/agent-engine/cron/scheduler";
 import { createPool } from "@/lib/agent-engine/db/pool";
-import { runDrainLoop } from "@/lib/agent-engine/edge/crm/drain";
-import { runEventLogDrainLoop, prontidaoDoLacoDeEventLog } from "@/lib/event-log/drain-loop";
+import { prontidaoDoDrainDaIa, runDrainLoop } from "@/lib/agent-engine/edge/crm/drain";
+import {
+  sincronizarAvisoDoDrain,
+  type EstadoDoDrain,
+} from "@/lib/agent-engine/edge/crm/vigilancia-do-drain";
+import { runEventLogDrainLoop } from "@/lib/event-log/drain-loop";
 import { crmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/crm/mcp-client";
-import { enforceHolds, sessionHealthMetrics } from "@/lib/agent-engine/edge/crm/session-watchdog";
+import { enforceHolds } from "@/lib/agent-engine/edge/crm/session-watchdog";
 import { runVoiceCallsBridgeLoop } from "@/lib/wacalls/events-bridge";
 import { runSessionWatchdogLoop } from "@/lib/agent-engine/edge/crm/session-reconciler";
 import { runHealthLoop } from "@/lib/agent-engine/health/circuit";
@@ -90,10 +93,10 @@ import { loadEnv, type Env } from "@/lib/agent-engine/env";
 import { createLogger, type Logger } from "@/lib/agent-engine/obs/logger";
 import {
   evaluateCacheHitAlert,
-  metricsSnapshot,
   recordRunMetrics,
   type CacheAlertKnobs,
 } from "@/lib/agent-engine/obs/metrics";
+import { createHealthzServer } from "./healthz";
 import { rodarLoopDaFila } from "@/lib/agent-engine/queue/loop";
 import {
   adiarAteORecarregar,
@@ -185,70 +188,11 @@ async function assertHarnessSchema(pool: pg.Pool): Promise<void> {
   }
 }
 
-/** /healthz + /metrics do worker (bind 0.0.0.0 — o container expõe a porta). */
-export function createHealthzServer(
-  pool: pg.Pool,
-  log: Logger,
-  metricsWindowMs: number,
-): http.Server {
-  const respond = (res: http.ServerResponse, code: number, body: unknown): void => {
-    res.writeHead(code, { "content-type": "application/json" });
-    res.end(JSON.stringify(body));
-  };
-  const handle = async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
-    const route = (req.url ?? "").split("?", 1)[0];
-    if (req.method !== "GET" || (route !== "/healthz" && route !== "/metrics")) {
-      respond(res, 404, { error: "not_found" });
-      return;
-    }
-    if (route === "/metrics") {
-      try {
-        respond(res, 200, await metricsSnapshot(pool, metricsWindowMs));
-      } catch (err) {
-        log.error("metrics: snapshot indisponível", { error: errMsg(err) });
-        respond(res, 503, { status: "degraded", db: "error" });
-      }
-      return;
-    }
-    const uptime_s = Math.round(process.uptime());
-    try {
-      const { rows } = await pool.query<{ status: string; n: number }>(
-        "select status, count(*)::int as n from job_queue group by status",
-      );
-      const queue = { pending: 0, running: 0, dead: 0 };
-      for (const row of rows) {
-        if (row.status in queue) queue[row.status as keyof typeof queue] = row.n;
-      }
-      const sessions = await sessionHealthMetrics(pool);
-      // O laço do event_log é informação de saúde de PRIMEIRA classe (#604): na
-      // #648 este mesmo handler respondia 200 com o laço parado havia dez dias.
-      // `event_log_drain` vai nos DOIS ramos, 200 e 503, de propósito — a
-      // prontidão do laço não depende do banco estar de pé, e é ela que o gate
-      // de publicação exige antes de publicar.
-      respond(res, 200, {
-        status: "ok",
-        db: "ok",
-        queue,
-        sessions,
-        event_log_drain: prontidaoDoLacoDeEventLog(),
-        uptime_s,
-      });
-    } catch (err) {
-      log.error("healthz: banco indisponível", { error: errMsg(err) });
-      respond(res, 503, {
-        status: "degraded",
-        db: "error",
-        queue: null,
-        sessions: null,
-        // Mesmo com o banco fora, a prontidão do laço aparece: é ela que o gate
-        // de publicação (#604) lê antes de deixar as imagens irem para o canal.
-        event_log_drain: prontidaoDoLacoDeEventLog(),
-        uptime_s,
-      });
-    }
-  };
-  return http.createServer((req, res) => void handle(req, res));
-}
+/**
+ * O `/healthz` + `/metrics` do worker moram em `./healthz`: o `main()` no topo
+ * deste módulo impede importá-lo num teste, e a prova do 503 com o laço travado
+ * precisa subir o servidor de verdade.
+ */
 
 export async function startWorker(
   env: Env,
@@ -288,12 +232,24 @@ export async function startWorker(
   let shuttingDown = false;
   const inFlight = new Set<Promise<void>>();
 
+  // Último estado do drain já sincronizado com a Central (ver abaixo).
+  let avisoDoDrain: EstadoDoDrain | null = null;
   const reaperTimer = setInterval(() => {
     reapExpiredJobs(pool, { visibilityTimeoutMs: env.QUEUE_VISIBILITY_TIMEOUT_MS })
       .then((reaped) => {
         if (reaped.revived + reaped.dead > 0) log.warn("reaper devolveu jobs órfãos", reaped);
       })
       .catch((err: unknown) => log.error("reaper falhou", { error: errMsg(err) }));
+    // O AVISO DE LAÇO PARADO sai do relógio do reaper, e não do laço: um laço
+    // travado não pode ser quem avisa de si mesmo. Saudável só vai ao banco na
+    // primeira batida (fecha aviso que um worker anterior deixou aberto) e na
+    // volta de um episódio; parado repete a cada batida, porque o insert tem
+    // dedupe e uma falha da Central precisa de nova tentativa.
+    const estadoDoDrain: EstadoDoDrain = prontidaoDoDrainDaIa().parado ? "parado" : "saudavel";
+    if (estadoDoDrain === "parado" || estadoDoDrain !== avisoDoDrain) {
+      avisoDoDrain = estadoDoDrain;
+      void sincronizarAvisoDoDrain(pool, estadoDoDrain, log);
+    }
   }, env.QUEUE_REAPER_INTERVAL_MS);
 
   // Holds de sessão/saúde: retém jobs de envio de número fora do ar (WORKING é a
