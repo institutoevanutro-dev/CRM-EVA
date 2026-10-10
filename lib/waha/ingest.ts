@@ -1152,7 +1152,8 @@ async function handleOutboundFromUserPhone(
 
   // Uma PESSOA respondeu este cliente pelo celular, fora do composer/IA — a IA
   // para NESTA conversa para não responder junto, por uma janela que expira
-  // sozinha (ver `PRAZO_DO_SILENCIO_MS`). NÃO mexe em `contacts.ai_authorized_at`
+  // sozinha (o prazo é o ajuste da organização, padrão 5 min:
+  // `lib/escalacao/pausa-por-resposta-humana.ts`). NÃO mexe em `contacts.ai_authorized_at`
   // — a origem do lead é outro estado.
   //
   // ⚠️ MAS ANTES: isto é MESMO um humano, ou é o eco do nosso próprio envio?

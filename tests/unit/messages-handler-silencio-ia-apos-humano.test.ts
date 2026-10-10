@@ -62,7 +62,7 @@ function conversationRow(botSilencedUntil: string | null): Row {
 }
 
 /** Captura o patch do UPDATE em `conversations` — é isso que os casos verificam. */
-function makeSupabase(botSilencedUntil: string | null, snapshot?: () => Record<string, unknown>) {
+function makeSupabase(botSilencedUntil: string | null, snapshot?: () => Record<string, unknown>, orgSettings: Record<string, unknown> = {}) {
   const patches: Row[] = [];
   const mensagensInseridas: Row[] = [];
   const client = {
@@ -80,7 +80,7 @@ function makeSupabase(botSilencedUntil: string | null, snapshot?: () => Record<s
         return q;
       }
       if(table==='organizations'){
-        const q={select:()=>q,eq:()=>q,single:async()=>({data:{settings:{}},error:null})};return q;
+        const r=async()=>({data:{settings:orgSettings},error:null});const q={select:()=>q,eq:()=>q,single:r,maybeSingle:r};return q;
       }
 
       if (table === 'conversations') {
@@ -224,6 +224,50 @@ describe('sendMessageHandler — silêncio da IA de 5min após resposta manual h
     expect(convPatch.bot_silenced_until, 'não renovou a janela com a nova mensagem').toBeDefined();
     const silencedUntil = new Date(convPatch.bot_silenced_until as string).getTime();
     expect(silencedUntil).toBeGreaterThanOrEqual(before + 5 * 60 * 1000 - 1000);
+  });
+});
+
+describe('sendMessageHandler — a janela é o ajuste da organização (o mesmo da resposta pelo celular)', () => {
+  const DUAS_HORAS = { atendimento: { pausa_ia_resposta_humana_min: 120 } };
+  const MIN = 60 * 1000;
+  const ctx: HandlerCtx = { organization_id: ORG, actor: { type: 'user', id: USER }, requestId: 'req-pausa' };
+
+  it('organização com 120 min → resposta pela tela silencia por ~agora+120min', async () => {
+    wahaConfigured();
+    const { supabase, patches } = makeSupabase(null, undefined, DUAS_HORAS);
+    const before = Date.now();
+    await sendMessageHandler(supabase, ctx, input);
+    const ate = new Date(patches[patches.length - 1]!.bot_silenced_until as string).getTime();
+    expect(ate).toBeGreaterThanOrEqual(before + 120 * MIN - 1000);
+    expect(ate).toBeLessThanOrEqual(Date.now() + 120 * MIN + 1000);
+  });
+
+  it('120 min configurados e silêncio de 30 min em vigor → renova para 120', async () => {
+    wahaConfigured();
+    const { supabase, patches } = makeSupabase(new Date(Date.now() + 30 * MIN).toISOString(), undefined, DUAS_HORAS);
+    const before = Date.now();
+    await sendMessageHandler(supabase, ctx, input);
+    const ate = new Date(patches[patches.length - 1]!.bot_silenced_until as string).getTime();
+    expect(ate).toBeGreaterThanOrEqual(before + 120 * MIN - 1000);
+  });
+
+  it('120 min configurados não encurtam handoff permanente nem silêncio maior', async () => {
+    wahaConfigured();
+    for (const vigente of ['infinity', new Date(Date.now() + 180 * MIN).toISOString()]) {
+      const { supabase, patches } = makeSupabase(vigente, undefined, DUAS_HORAS);
+      await sendMessageHandler(supabase, ctx, input);
+      expect(patches[patches.length - 1]!.bot_silenced_until, vigente).toBeUndefined();
+    }
+  });
+
+  it('ajuste inválido no banco → padrão de 5 min, e o envio não cai', async () => {
+    wahaConfigured();
+    const { supabase, patches } = makeSupabase(null, undefined, { atendimento: { pausa_ia_resposta_humana_min: 'muito' } });
+    const before = Date.now();
+    await sendMessageHandler(supabase, ctx, input);
+    const ate = new Date(patches[patches.length - 1]!.bot_silenced_until as string).getTime();
+    expect(ate).toBeGreaterThanOrEqual(before + 5 * MIN - 1000);
+    expect(ate).toBeLessThanOrEqual(Date.now() + 5 * MIN + 1000);
   });
 });
 

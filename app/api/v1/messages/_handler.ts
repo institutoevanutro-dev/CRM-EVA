@@ -58,6 +58,7 @@ import {
 import type { ListMessagesQuery, SendMessageInput } from "@/lib/schemas";
 import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { carregarPausaPorRespostaHumanaMs } from "@/lib/escalacao/pausa-por-resposta-humana";
 import { devolverIdOriginalAoEcoDeOutraConversa } from "@/lib/messaging/eco-em-outra-conversa";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Message } from "@/lib/types/messaging";
@@ -343,23 +344,23 @@ async function resolverMidiaDaBiblioteca(
 }
 
 /**
- * Atendente respondeu manualmente → IA fica quieta nesta conversa por uma janela curta,
+ * Atendente respondeu manualmente → IA fica quieta nesta conversa por uma janela,
  * renovada a cada mensagem humana (sliding window). Sem isto, a IA só "parecia" quieta
  * por coincidência de timing (nenhum turno novo disparado) e voltava a responder junto
  * com o humano assim que o cliente mandava a próxima mensagem — `isLeadInHandoff`
  * (lib/agent-engine/agent/human-handoff.ts) só olhava `force_human`/`bot_silenced_until`,
  * e nenhum envio manual tocava nenhum dos dois.
- */
-const HUMAN_REPLY_SILENCE_MS = 5 * 60 * 1000;
-
-/**
+ *
+ * O tamanho da janela é o ajuste da organização (padrão 5 min), o mesmo que a
+ * resposta pelo celular usa: `lib/escalacao/pausa-por-resposta-humana.ts`.
+ *
  * Postgres 'infinity' (handoff permanente — regex/tool/orquestrador) chega do PostgREST
  * como o literal texto "infinity", que `new Date(...)` não parseia. Nunca encurtar isso
- * para uma janela de 5min: se já está travado pra sempre, este helper não mexe.
+ * para uma janela finita: se já está travado pra sempre, este helper não mexe.
  */
-function extendBotSilence(current: string | null, now: string): string | undefined {
+function extendBotSilence(current: string | null, now: string, pausaMs: number): string | undefined {
   if (current === "infinity") return undefined;
-  const candidate = new Date(new Date(now).getTime() + HUMAN_REPLY_SILENCE_MS);
+  const candidate = new Date(new Date(now).getTime() + pausaMs);
   if (current && new Date(current) >= candidate) return undefined;
   return candidate.toISOString();
 }
@@ -1271,7 +1272,8 @@ export async function sendMessageHandler(
     awaiting_since: c.last_inbound_at,
   };
   if (ctx.actor.type === "user") {
-    const silenceUntil = extendBotSilence(c.bot_silenced_until, now);
+    const pausaMs = await carregarPausaPorRespostaHumanaMs(supabase, c.organization_id);
+    const silenceUntil = extendBotSilence(c.bot_silenced_until, now, pausaMs);
     if (silenceUntil) conversationUpdate.bot_silenced_until = silenceUntil;
   }
 

@@ -17,7 +17,7 @@ interface PauseResponse {
  *
  * `useResumeAiAttendance` existia sozinho: a tela sabia LIGAR o automático de
  * volta e não sabia desligá-lo. Ele só calava por efeito colateral (o agente
- * escalando, ou a janela de 5 minutos que um envio manual abre), então a pessoa
+ * escalando, ou a janela, padrão 5 minutos, que um envio manual abre), então a pessoa
  * não tinha como dizer "daqui eu cuido" sem mandar uma mensagem primeiro.
  *
  * Invalida as CONTAGENS junto: pausar move a conversa entre abas (sem dono →

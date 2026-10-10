@@ -18,7 +18,7 @@
  * volta na conversa afirmando que "os dados do PIX estão sendo confirmados" —
  * algo que ela não tem nenhuma ferramenta para saber.
  *
- * ## O prazo, e por que ele é 5 minutos
+ * ## O prazo: um ajuste da organização, padrão 5 minutos
  *
  * O silêncio EXPIRA sozinho. Não é `'infinity'`: `'infinity'` é o handoff
  * FORMAL, aquele em que alguém clicou "assumir" na tela e assumiu junto a
@@ -28,25 +28,28 @@
  * automático daquela conversa para sempre, e ninguém fica sabendo: a conversa
  * some do robô sem aparecer para nenhum humano.
  *
- * 5 minutos, e não 60, porque o prazo longo pressupõe uma operação em que
- * responder pelo celular é a EXCEÇÃO. Onde ele é a REGRA — recepção que atende
- * pelo aparelho o dia inteiro — 60 minutos não é uma rede, é um desligamento:
- * medido numa clínica em 2026-09-24, as 13 conversas do dia estavam TODAS
- * silenciadas, cada uma até exatamente uma hora depois da última fala humana,
- * e o agente não pegou uma única conversa. O prazo renovava antes de vencer.
+ * O prazo já foi constante (60 min, depois 5) e virou AJUSTE em 2026-10-10,
+ * por decisão do dono do produto: cada organização escolhe, de 5 minutos a 24
+ * horas, em Configurações › Distribuição de atendimento. O valor mora em
+ * `organizations.settings.atendimento.pausa_ia_resposta_humana_min` e é lido
+ * por `lib/escalacao/pausa-por-resposta-humana.ts`, o MESMO resolvedor que o
+ * composer (`app/api/v1/messages/_handler.ts`) usa: responder pelo celular e
+ * responder pela tela valem o mesmo tempo, sempre.
  *
- * 5 minutos cobre o que precisa cobrir: o intervalo em que alguém está de fato
- * digitando aquela resposta. É a mesma janela que o composer já usa para quem
- * digita DENTRO do CRM, e não há razão para o mesmo gesto valer 12× mais só
- * porque foi feito no celular.
+ * O PADRÃO segue 5 minutos, e não 60, porque o prazo longo pressupõe uma
+ * operação em que responder pelo celular é a EXCEÇÃO. Onde ele é a REGRA —
+ * recepção que atende pelo aparelho o dia inteiro — 60 minutos não é uma rede,
+ * é um desligamento: medido numa clínica em 2026-09-24, as 13 conversas do dia
+ * estavam TODAS silenciadas, cada uma até exatamente uma hora depois da última
+ * fala humana, e o agente não pegou uma única conversa. O prazo renovava antes
+ * de vencer. Quem aumenta o ajuste escolhe isso sabendo; quem não mexe não
+ * herda.
  *
- * O que 5 minutos NÃO cobre, e é bom dizer: um atendimento humano longo volta
- * a ter a IA por perto depois do quinto minuto. Quem atende demorado deve usar
- * o handoff FORMAL (botão "assumir"), que é `'infinity'` e não vence — e é
- * exatamente para isso que ele existe.
+ * Com o padrão, um atendimento humano longo volta a ter a IA por perto depois
+ * do quinto minuto. Quem atende demorado aumenta o ajuste ou usa o handoff
+ * FORMAL (botão "assumir"), que é `'infinity'` e não vence.
  *
- * ⚠️ Quem quiser outro prazo mexe AQUI, num lugar só: a constante é lida por
- * TODO canal cuja ingestão reconhece saída feita fora do CRM, e pelo teste.
+ * A leitura do ajuste nunca derruba a pausa: falhou, vale o padrão.
  *
  * ## Cada mensagem nova do humano RENOVA o prazo
  *
@@ -65,7 +68,7 @@
  *
  * ## O que grava, e o que NÃO grava
  *
- *   - `bot_silenced_until = agora + PRAZO_DO_SILENCIO_MS`
+ *   - `bot_silenced_until = agora + a pausa da organização`
  *   - `last_handoff_at` / `last_handoff_reason` — rastro visível de que uma
  *     pessoa assumiu por fora.
  *
@@ -87,13 +90,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
 import { normalizarInstante } from "@/lib/ai/elegibilidade/gate";
+import { PAUSA_PADRAO_MIN, carregarPausaPorRespostaHumanaMs } from "./pausa-por-resposta-humana";
 
 /**
- * Quanto tempo a IA fica calada depois de uma resposta manual pelo canal.
- * Ver "O prazo, e por que ele é 5 minutos" na docstring do módulo — o número
- * tem motivo, e mudá-lo é uma decisão de produto, não de implementação.
+ * O PADRÃO da pausa, para quem não escolheu outro valor na tela. O prazo em
+ * vigor é o da organização (`carregarPausaPorRespostaHumanaMs`).
  */
-export const PRAZO_DO_SILENCIO_MS = 5 * 60 * 1000;
+export const PRAZO_DO_SILENCIO_MS = PAUSA_PADRAO_MIN * 60 * 1000;
 
 const MOTIVO = "Atendimento manual pelo canal (resposta fora do CRM)";
 
@@ -111,8 +114,8 @@ export interface PausaPorAtendimentoManualInput {
 }
 
 /**
- * Pausa a IA numa conversa porque uma pessoa respondeu por fora do CRM, por
- * `PRAZO_DO_SILENCIO_MS` a contar de `agora`. Devolve `true` se gravou (pausa
+ * Pausa a IA numa conversa porque uma pessoa respondeu por fora do CRM, pelo
+ * prazo da organização (padrão `PRAZO_DO_SILENCIO_MS`) a contar de `agora`. Devolve `true` se gravou (pausa
  * nova ou prazo renovado), `false` se havia silêncio mais longo em vigor ou se
  * falhou.
  */
@@ -121,15 +124,20 @@ export async function pausarIaPorAtendimentoManual(
   input: PausaPorAtendimentoManualInput,
 ): Promise<boolean> {
   const agora = input.agora ?? new Date();
-  const proposto = new Date(agora.getTime() + PRAZO_DO_SILENCIO_MS);
 
   try {
-    const { data: atual, error: readErr } = await admin
-      .from("conversations")
-      .select("bot_silenced_until")
-      .eq("organization_id", input.organizationId)
-      .eq("id", input.conversationId)
-      .maybeSingle();
+    // As duas leituras em paralelo: o ajuste não acrescenta ida e volta em série
+    // ao caminho da ingestão, e a dele nunca falha (cai no padrão).
+    const [prazoMs, { data: atual, error: readErr }] = await Promise.all([
+      carregarPausaPorRespostaHumanaMs(admin, input.organizationId),
+      admin
+        .from("conversations")
+        .select("bot_silenced_until")
+        .eq("organization_id", input.organizationId)
+        .eq("id", input.conversationId)
+        .maybeSingle(),
+    ]);
+    const proposto = new Date(agora.getTime() + prazoMs);
 
     if (readErr) {
       logger.warn("[atendimento-manual] leitura da conversa falhou — IA não pausada", {
