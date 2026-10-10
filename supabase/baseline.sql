@@ -4035,11 +4035,6 @@ END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'audit_log_insert_tenant_member' AND polrelid = '"public"."api_audit_log"'::regclass) THEN
-CREATE POLICY "audit_log_insert_tenant_member" ON "public"."api_audit_log" FOR INSERT TO "authenticated" WITH CHECK ((("organization_id" IS NULL) OR ("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
@@ -4054,14 +4049,16 @@ END IF; END $baseline_guard$;
 ALTER TABLE "public"."channel_session_warmup" ENABLE ROW LEVEL SECURITY;
 
 
+-- POLICY QUE O APÊNDICE DERRUBA NÃO NASCE AQUI. O dump trazia 18 policies
+-- antigas (`*_tenant_isolation_all` e parentes: "qualquer membro da organização
+-- vê e altera tudo") que blocos posteriores derrubam sem recriar. A guarda
+-- `IF NOT EXISTS` as recriava a cada passada, e elas valiam, somadas às atuais,
+-- até a linha do `drop`: o limite por papel e por responsável ficava suspenso
+-- dentro da organização durante o deploy. Saíram do texto; o estado final é o
+-- mesmo (tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts).
 ALTER TABLE "public"."channel_sessions" ENABLE ROW LEVEL SECURITY;
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'channel_sessions_tenant_isolation_all' AND polrelid = '"public"."channel_sessions"'::regclass) THEN
-CREATE POLICY "channel_sessions_tenant_isolation_all" ON "public"."channel_sessions" USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"())) WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
@@ -4071,11 +4068,6 @@ ALTER TABLE "public"."contacts" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."conversations" ENABLE ROW LEVEL SECURITY;
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'conversations_tenant_isolation_all' AND polrelid = '"public"."conversations"'::regclass) THEN
-CREATE POLICY "conversations_tenant_isolation_all" ON "public"."conversations" USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"())) WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
@@ -4160,11 +4152,6 @@ END IF; END $baseline_guard$;
 ALTER TABLE "public"."messages" ENABLE ROW LEVEL SECURITY;
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'messages_tenant_isolation_all' AND polrelid = '"public"."messages"'::regclass) THEN
-CREATE POLICY "messages_tenant_isolation_all" ON "public"."messages" USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"())) WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
@@ -4286,35 +4273,15 @@ END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_ai_agents_all' AND polrelid = '"public"."ai_agents"'::regclass) THEN
-CREATE POLICY "tenant_isolation_ai_agents_all" ON "public"."ai_agents" USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"())) WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_ai_budgets_all' AND polrelid = '"public"."ai_budgets"'::regclass) THEN
-CREATE POLICY "tenant_isolation_ai_budgets_all" ON "public"."ai_budgets" USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"())) WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_ai_chunks_all' AND polrelid = '"public"."ai_chunks"'::regclass) THEN
-CREATE POLICY "tenant_isolation_ai_chunks_all" ON "public"."ai_chunks" USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"())) WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_ai_faq_items_all' AND polrelid = '"public"."ai_faq_items"'::regclass) THEN
-CREATE POLICY "tenant_isolation_ai_faq_items_all" ON "public"."ai_faq_items" USING (("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids"))) WITH CHECK (("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")));
-END IF; END $baseline_guard$;
 
 
 
@@ -4326,19 +4293,9 @@ END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_ai_kbv_all' AND polrelid = '"public"."ai_knowledge_versions"'::regclass) THEN
-CREATE POLICY "tenant_isolation_ai_kbv_all" ON "public"."ai_knowledge_versions" USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"())) WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_ai_knowledge_sources_all' AND polrelid = '"public"."ai_knowledge_sources"'::regclass) THEN
-CREATE POLICY "tenant_isolation_ai_knowledge_sources_all" ON "public"."ai_knowledge_sources" USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"())) WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
@@ -4361,59 +4318,24 @@ END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_contacts_all' AND polrelid = '"public"."contacts"'::regclass) THEN
-CREATE POLICY "tenant_isolation_contacts_all" ON "public"."contacts" USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"())) WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_crm_lead_activities_insert' AND polrelid = '"public"."crm_lead_activities"'::regclass) THEN
-CREATE POLICY "tenant_isolation_crm_lead_activities_insert" ON "public"."crm_lead_activities" FOR INSERT WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_crm_lead_activities_select' AND polrelid = '"public"."crm_lead_activities"'::regclass) THEN
-CREATE POLICY "tenant_isolation_crm_lead_activities_select" ON "public"."crm_lead_activities" FOR SELECT USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_crm_lead_links_all' AND polrelid = '"public"."crm_lead_links"'::regclass) THEN
-CREATE POLICY "tenant_isolation_crm_lead_links_all" ON "public"."crm_lead_links" USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"())) WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_crm_leads_all' AND polrelid = '"public"."crm_leads"'::regclass) THEN
-CREATE POLICY "tenant_isolation_crm_leads_all" ON "public"."crm_leads" USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"())) WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_crm_pipelines_all' AND polrelid = '"public"."crm_pipelines"'::regclass) THEN
-CREATE POLICY "tenant_isolation_crm_pipelines_all" ON "public"."crm_pipelines" USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"())) WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_crm_stages_all' AND polrelid = '"public"."crm_stages"'::regclass) THEN
-CREATE POLICY "tenant_isolation_crm_stages_all" ON "public"."crm_stages" USING ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"())) WITH CHECK ((("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")) OR "public"."fn_is_platform_admin"()));
-END IF; END $baseline_guard$;
 
 
 
@@ -4476,11 +4398,6 @@ END IF; END $baseline_guard$;
 ALTER TABLE "public"."webhook_events_log" ENABLE ROW LEVEL SECURITY;
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'webhook_events_log_tenant_read' AND polrelid = '"public"."webhook_events_log"'::regclass) THEN
-CREATE POLICY "webhook_events_log_tenant_read" ON "public"."webhook_events_log" FOR SELECT USING (("public"."fn_is_platform_admin"() OR (("organization_id" IS NOT NULL) AND ("organization_id" IN ( SELECT "public"."fn_user_org_ids"() AS "fn_user_org_ids")))));
-END IF; END $baseline_guard$;
 
 
 
@@ -4491,9 +4408,12 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 REVOKE ALL ON FUNCTION "public"."activate_kb_version"("p_agent_id" "uuid", "p_version_id" "uuid") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."activate_kb_version"("p_agent_id" "uuid", "p_version_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."activate_kb_version"("p_agent_id" "uuid", "p_version_id" "uuid") TO "service_role";
+revoke execute on function public.activate_kb_version(uuid, uuid) from authenticated;
+end $janela$;
 
 
 
@@ -4555,9 +4475,12 @@ GRANT ALL ON FUNCTION "public"."fn_log_event"("p_organization_id" "uuid", "p_eve
 
 
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 GRANT ALL ON FUNCTION "public"."fn_publish_ai_agent_version"("p_org_id" "uuid", "p_agent_id" "uuid", "p_version_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."fn_publish_ai_agent_version"("p_org_id" "uuid", "p_agent_id" "uuid", "p_version_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."fn_publish_ai_agent_version"("p_org_id" "uuid", "p_agent_id" "uuid", "p_version_id" "uuid") TO "service_role";
+revoke execute on function public.fn_publish_ai_agent_version(uuid, uuid, uuid) from public, anon, authenticated;
+end $janela$;
 
 
 
@@ -4616,9 +4539,12 @@ GRANT ALL ON FUNCTION "public"."fn_validate_activity_lead_org"() TO "service_rol
 
 
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 GRANT ALL ON FUNCTION "public"."fn_validate_lost_reason_required"() TO "anon";
 GRANT ALL ON FUNCTION "public"."fn_validate_lost_reason_required"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."fn_validate_lost_reason_required"() TO "service_role";
+revoke execute on function public.fn_validate_lost_reason_required() from public, anon;
+end $janela$;
 
 
 
@@ -4650,6 +4576,7 @@ GRANT ALL ON TABLE "public"."ai_agents" TO "service_role";
 
 
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 GRANT ALL ON TABLE "public"."ai_budgets" TO "anon";
 GRANT ALL ON TABLE "public"."ai_budgets" TO "authenticated";
 GRANT ALL ON TABLE "public"."ai_budgets" TO "service_role";
@@ -4661,6 +4588,7 @@ GRANT ALL ON TABLE "public"."ai_budgets" TO "service_role";
 -- RLS e nenhum consumidor o usa (toda escrita de `ai_budgets` é service role,
 -- medido na 0160). A decisão segue comentada no bloco da 0160.
 revoke insert, update, delete, truncate on table public.ai_budgets from authenticated, anon;
+end $janela$;
 
 
 
@@ -4702,7 +4630,13 @@ GRANT ALL ON TABLE "public"."ai_pricing" TO "service_role";
 
 
 
+-- Só na INSTALAÇÃO, pelo mesmo motivo de `contacts`: reaplicado, devolvia a
+-- leitura da tabela inteira (com a chave cifrada) até o bloco da 0150.
+do $janela$ begin
+if not has_table_privilege('authenticated', 'public.ai_provider_credentials', 'INSERT') then
 GRANT ALL ON TABLE "public"."ai_provider_credentials" TO "authenticated";
+end if;
+end $janela$;
 GRANT ALL ON TABLE "public"."ai_provider_credentials" TO "service_role";
 
 
@@ -4712,6 +4646,7 @@ GRANT ALL ON TABLE "public"."ai_provider_credentials_safe" TO "service_role";
 
 
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE ON TABLE "public"."api_audit_log" TO "anon";
 GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE ON TABLE "public"."api_audit_log" TO "authenticated";
 GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE ON TABLE "public"."api_audit_log" TO "service_role";
@@ -4723,6 +4658,10 @@ GRANT SELECT,INSERT,REFERENCES,TRIGGER,TRUNCATE ON TABLE "public"."api_audit_log
 -- grant e o bloco, a chave o recuperava a cada passada, e uma passada
 -- interrompida o deixaria de pé (porte de melgarafael/DeskcommCRM #2257/#2259).
 revoke update, delete, truncate on table public.api_audit_log from public, anon, authenticated, service_role;
+-- O INSERT de anon/authenticated sai aqui também (o bloco A4 da 0289 o revoga
+-- de novo, lá adiante): sem isto ele voltava a cada passada até aquela linha.
+revoke insert on public.api_audit_log from anon, authenticated;
+end $janela$;
 
 
 
@@ -4744,8 +4683,16 @@ GRANT ALL ON TABLE "public"."channel_sessions" TO "service_role";
 
 
 
+-- Só na INSTALAÇÃO. Reaplicado, este `GRANT ALL` devolvia o SELECT da tabela
+-- inteira (com `cpf_hash`) a cada passada, até o bloco da 0289 revogá-lo; e
+-- revogar aqui apagaria os grants por coluna. Quem já tem a escrita não precisa
+-- dele (reaplicar-o-baseline-nao-abre-janela.test.ts).
+do $janela$ begin
+if not has_table_privilege('authenticated', 'public.contacts', 'INSERT') then
 GRANT ALL ON TABLE "public"."contacts" TO "anon";
 GRANT ALL ON TABLE "public"."contacts" TO "authenticated";
+end if;
+end $janela$;
 GRANT ALL ON TABLE "public"."contacts" TO "service_role";
 
 
@@ -4792,6 +4739,7 @@ GRANT ALL ON TABLE "public"."event_log" TO "service_role";
 
 
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 GRANT ALL ON TABLE "public"."idempotency_keys" TO "anon";
 GRANT ALL ON TABLE "public"."idempotency_keys" TO "authenticated";
 GRANT ALL ON TABLE "public"."idempotency_keys" TO "service_role";
@@ -4801,6 +4749,7 @@ GRANT ALL ON TABLE "public"."idempotency_keys" TO "service_role";
 -- devolvia o privilégio ao `anon` a cada atualização até essa linha (porte de
 -- melgarafael/DeskcommCRM #2253).
 revoke truncate on public.idempotency_keys from public, anon, authenticated;
+end $janela$;
 
 
 
@@ -4852,8 +4801,14 @@ GRANT ALL ON TABLE "public"."platform_admins" TO "service_role";
 
 
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 GRANT ALL ON TABLE "public"."storage_redaction_queue" TO "authenticated";
 GRANT ALL ON TABLE "public"."storage_redaction_queue" TO "service_role";
+-- A sessão só LÊ esta fila (bloco da 0298, no fim do arquivo). Sem repetir a
+-- revogação aqui, a escrita voltava a cada passada até aquele bloco.
+revoke all on public.storage_redaction_queue from public, anon, authenticated;
+grant select on public.storage_redaction_queue to authenticated;
+end $janela$;
 
 
 
@@ -4875,9 +4830,13 @@ GRANT ALL ON TABLE "public"."user_recovery_codes" TO "service_role";
 
 
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE ON TABLE "public"."webhook_events_log" TO "anon";
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE ON TABLE "public"."webhook_events_log" TO "authenticated";
 GRANT ALL ON TABLE "public"."webhook_events_log" TO "service_role";
+-- A leitura pela sessão sai aqui também (o bloco A7 da 0289 a revoga de novo).
+revoke select on public.webhook_events_log from anon, authenticated;
+end $janela$;
 
 
 
@@ -10561,6 +10520,7 @@ comment on table public.demandas is
   'acabar. Dono nunca vazio; próximo passo é campo, não derivação.';
 
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 drop function if exists public.fn_atrito_metrics(uuid, timestamptz, timestamptz, int, float8, int);
 
 create or replace function public.fn_atrito_metrics(
@@ -10781,6 +10741,7 @@ revoke all     on function public.fn_atrito_metrics(uuid, timestamptz, timestamp
 revoke execute on function public.fn_atrito_metrics(uuid, timestamptz, timestamptz, int, float8, int) from anon;
 grant  execute on function public.fn_atrito_metrics(uuid, timestamptz, timestamptz, int, float8, int)
   to authenticated, service_role;
+end $janela$;
 
 
 
@@ -12560,11 +12521,13 @@ create policy tenant_isolation_ai_provider_credentials_write on public.ai_provid
 -- por controle positivo em tests/invariants/rbac-config-ia-canais.test.ts: a
 -- primeira versão desta migration revogava a tabela toda, e foi esse controle
 -- que reprovou.
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke select on public.ai_provider_credentials from authenticated, anon;
 grant select (
   id, organization_id, provider, label, api_key_last4, validated_at,
   validation_error, models_available, is_active, created_by, created_at, updated_at
 ) on public.ai_provider_credentials to authenticated;
+end $janela$;
 grant select on public.ai_provider_credentials_safe to authenticated;
 
 -- O PostgREST guarda o schema em cache; sem isto as policies novas só valem no
@@ -19459,6 +19422,7 @@ grant execute on function public.fn_service_boundary(uuid,uuid) to service_role;
 
 -- Nova iniciativa autorizada (humano/MCP/regra), chamada NA ORIGEM, nunca no
 -- firing. Uma conversa sem demanda é legítima; não inventa assunto do cliente.
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 drop function if exists public.fn_service_begin(uuid,uuid,uuid);
 drop function if exists public.fn_service_begin(uuid,uuid,uuid,jsonb);
 create or replace function public.fn_service_begin(p_org uuid,p_contact uuid,p_session uuid default null,p_observed jsonb default null)
@@ -19502,6 +19466,7 @@ begin
 end; $$;
 revoke execute on function public.fn_service_begin(uuid,uuid,uuid,jsonb) from public,anon,authenticated;
 grant execute on function public.fn_service_begin(uuid,uuid,uuid,jsonb) to service_role;
+end $janela$;
 
 alter table public.followup_enrollments add column if not exists service_boundary jsonb;
 
@@ -20000,8 +19965,10 @@ create table if not exists public.event_service_origins (
  primary key(event_id,channel_session_id)
 );
 alter table public.event_service_origins enable row level security;
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.event_service_origins from public,anon,authenticated,service_role;
 grant select on public.event_service_origins to service_role;
+end $janela$;
 
 CREATE OR REPLACE FUNCTION public.emit_event(p_event_type text, p_entity_kind text, p_entity_id uuid, p_payload jsonb DEFAULT '{}'::jsonb, p_metadata jsonb DEFAULT '{}'::jsonb, p_organization_id uuid DEFAULT NULL::uuid)
  RETURNS uuid
@@ -20207,8 +20174,10 @@ create table if not exists public.appointment_recovery_receipts (
  primary key(organization_id,appointment_id,appointment_revision)
 );
 alter table public.appointment_recovery_receipts enable row level security;
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.appointment_recovery_receipts from public,anon,authenticated,service_role;
 grant select on public.appointment_recovery_receipts to service_role;
+end $janela$;
 
 -- Um aviso por revisão, inclusive depois de resolvido. Identidade não depende
 -- de SELECT seguido de INSERT, nem da duração de um lease do cron.
@@ -20305,8 +20274,10 @@ begin
  end if;
  return to_jsonb(a);
 end; $$;
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on function public.fn_appointment_change(uuid,uuid,bigint,jsonb) from public,anon,authenticated;
 grant execute on function public.fn_appointment_change(uuid,uuid,bigint,jsonb) to authenticated,service_role;
+end $janela$;
 
 -- Certificação ocorre sob o mutex ANTES dos locks de mensagens/FKs (Task4).
 -- A ordem é a do lock, não created_at (now() mede início da transação).
@@ -20496,8 +20467,10 @@ begin
  if not found then raise exception 'organization_not_found' using errcode='P0002'; end if;
  return p_config;
 end; $$;
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on function public.fn_agenda_settings(uuid,jsonb) from public,anon,authenticated;
 grant execute on function public.fn_agenda_settings(uuid,jsonb) to authenticated;
+end $janela$;
 
 create or replace function public.fn_appointment_enrollment_current(p_org uuid,p_id uuid,p_node text default null)
 returns boolean language sql stable security definer set search_path=public as $$
@@ -21254,6 +21227,7 @@ grant execute on function public.fn_google_counts_for_conflicts(uuid,uuid,text) 
 -- `cannot change name of view column "starts_at" to "title"` e derruba o run.
 -- Lista EXPLÍCITA de propósito: `e.*` é como a próxima coluna do espelho nasceria
 -- exposta a quem só precisa saber se o horário está ocupado.
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 drop view if exists public.calendar_selected_external_events;
 
 create view public.calendar_selected_external_events with (security_invoker=true) as
@@ -21264,6 +21238,7 @@ create view public.calendar_selected_external_events with (security_invoker=true
  and public.fn_google_counts_for_conflicts(e.organization_id,e.connection_id,e.external_calendar_id);
 revoke all on public.calendar_selected_external_events from public,anon;
 grant select on public.calendar_selected_external_events to authenticated,service_role;
+end $janela$;
 
 -- Anonimização e commit disputam a MESMA linha de appointment. Quem chegar
 -- depois vê redação ou tem o resultado apagado; não reidrata snapshot tardio.
@@ -21326,11 +21301,13 @@ notify pgrst,'reload schema';
 
 -- Elegibilidade derivada do titular canônico, ANTES do limite do cron.
 -- Preservar a tupla redigida impede eco; não significa autorizar novo GET.
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 create or replace view public.calendar_google_reconcilable_appointments with (security_invoker=true) as
  select a.* from public.calendar_appointments a where not exists(
   select 1 from public.contacts c where c.organization_id=a.organization_id and c.id=a.contact_id and c.is_anonymized);
 revoke all on public.calendar_google_reconcilable_appointments from public,anon,authenticated;
 grant select on public.calendar_google_reconcilable_appointments to service_role;
+end $janela$;
 notify pgrst,'reload schema';
 
 -- ---- fim Google 0225 ----
@@ -21710,7 +21687,19 @@ returns boolean language sql stable security definer set search_path=public as $
  select auth.uid() is not null and (coalesce(auth.jwt()->>'aal','aal1')='aal2' or not exists(
   select 1 from auth.mfa_factors where user_id=auth.uid() and factor_type='totp' and status='verified'));
 $$;
+-- REVOGA E CONCEDE NO MESMO COMANDO. O `update.sh` reaplica este arquivo com
+-- `psql` puro, um comando por vez, com gente usando o sistema; e
+-- `create or replace function` preserva o ACL, então quem tira o EXECUTE de
+-- `authenticated` a cada passada é o `revoke` abaixo. O `grant` de volta morava
+-- só no bloco da 0301, ~7.800 linhas adiante: nesse intervalo a policy
+-- restritiva `mfa_provada` (em toda tabela com `organization_id`) respondia
+-- `permission denied for function fn_session_mfa_proven` e toda rota logada
+-- devolvia 500. Medido em produção em 10/10/2026, no minuto de um deploy.
+-- Um bloco `do` é um comando só: ninguém de fora vê o meio.
+do $janela$ begin
 revoke all on function public.fn_session_mfa_proven() from public,anon,authenticated;
+grant execute on function public.fn_session_mfa_proven() to authenticated;
+end $janela$;
 
 create or replace function public.fn_meet_action(p_org uuid,p_id uuid,p_revision text,p_request uuid,p_action text,p_conversation uuid default null)
 returns boolean language plpgsql security definer set search_path=public as $$
@@ -21867,9 +21856,11 @@ create table if not exists public.ai_reply_drafts(
  unique(organization_id,conversation_id,agent_id,context_revision,operation_revision)
 );
 alter table public.ai_reply_drafts enable row level security;
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.ai_reply_drafts from anon,authenticated;
 grant select on public.ai_reply_drafts to authenticated;
 grant all on public.ai_reply_drafts to service_role;
+end $janela$;
 drop policy if exists tenant_isolation_ai_reply_drafts_all on public.ai_reply_drafts;
 create policy tenant_isolation_ai_reply_drafts_all on public.ai_reply_drafts for select to authenticated
  using(organization_id in(select public.fn_user_org_ids()) and exists(select 1 from public.conversations c where c.organization_id=ai_reply_drafts.organization_id and c.id=conversation_id and public.fn_can_view_conversation(c.organization_id,c.assigned_to_user_id)));
@@ -22456,8 +22447,10 @@ create table if not exists public.channel_routing_responsibles (
 create index if not exists channel_routing_responsibles_org_user on public.channel_routing_responsibles(organization_id,user_id);
 alter table public.channel_routing_policies enable row level security;
 alter table public.channel_routing_responsibles enable row level security;
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.channel_routing_policies,public.channel_routing_responsibles from public,anon,authenticated,service_role;
 grant select on public.channel_routing_policies,public.channel_routing_responsibles to authenticated,service_role;
+end $janela$;
 drop policy if exists tenant_isolation_channel_routing_policies_select on public.channel_routing_policies;
 create policy tenant_isolation_channel_routing_policies_select on public.channel_routing_policies for select to authenticated
  using(organization_id in(select public.fn_user_org_ids()) or public.fn_is_platform_admin());
@@ -22771,8 +22764,10 @@ create table if not exists public.channel_connection_requests (
  foreign key(organization_id,channel_session_id) references public.channel_sessions(organization_id,id) on delete set null(channel_session_id)
 );
 alter table public.channel_connection_requests enable row level security;
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.channel_connection_requests from public,anon,authenticated,service_role;
 grant select on public.channel_connection_requests to service_role;
+end $janela$;
 -- Sem policy authenticated: contém lease de execução, não é uma tabela de UI.
 
 create or replace function public.fn_reserve_channel_connection(p_org uuid,p_key uuid,p_hash text,p_display_name text default null,p_onboarding boolean default false)
@@ -22966,8 +22961,10 @@ end;$$;
 
 -- Assinaturas e concessões das portas existentes não mudam.
 revoke all on function public.fn_appointment_change_core(uuid,uuid,bigint,jsonb,boolean,jsonb) from public,anon,authenticated;
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on function public.fn_agenda_settings(uuid,jsonb) from public,anon,authenticated;
 grant execute on function public.fn_agenda_settings(uuid,jsonb) to authenticated;
+end $janela$;
 revoke all on function public.fn_google_selection(uuid,jsonb,uuid[],uuid) from public,anon;
 grant execute on function public.fn_google_selection(uuid,jsonb,uuid[],uuid) to authenticated;
 revoke all on function public.fn_google_resolve(uuid,uuid,text,text,text,text) from public,anon;
@@ -23345,8 +23342,10 @@ begin
   where organization_id=p_organization_id and id=p_contact_id returning * into c;
  return jsonb_build_object('already_anonymized',false,'anonymized_at',c.anonymized_at);
 end;$$;
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on function public.fn_lgpd_anonymize_contact(uuid,uuid) from public,anon,authenticated,service_role;
 grant execute on function public.fn_lgpd_anonymize_contact(uuid,uuid) to authenticated;
+end $janela$;
 
 -- Cura apenas resíduos deste footprint em clones que já anonimizaram o contato.
 -- Mesma ordem de mutexes; não reescreve o contato nem a data original do direito.
@@ -24672,8 +24671,10 @@ begin
   end if;
   return p_config;
 end; $$;
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on function public.fn_agenda_settings(uuid, jsonb) from public, anon, authenticated;
 grant execute on function public.fn_agenda_settings(uuid, jsonb) to authenticated;
+end $janela$;
 -- ---- guarda contra replay do gateway do Supabase (migration 0250) ----
 -- O gateway entre o Cloudflare e o PostgREST reexecuta resposta 5xx sem limite.
 -- Um `raise ... errcode='40001'` (conflito benigno) vira HTTP 500 no PostgREST;
@@ -24719,8 +24720,10 @@ comment on function public.fn_pgrst_recusar_replay_do_gateway() is
 -- Roda sob o papel da REQUISIÇÃO (anon/authenticated/service_role), então os três
 -- precisam de EXECUTE; sem isso a própria guarda vira "permission denied" → 5xx.
 -- Não é definer e não lê nada além dos GUCs da requisição: expô-la não amplia nada.
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on function public.fn_pgrst_recusar_replay_do_gateway() from public, anon;
 grant execute on function public.fn_pgrst_recusar_replay_do_gateway() to anon, authenticated, service_role;
+end $janela$;
 
 -- O papel `authenticator` só existe onde há PostgREST (Supabase). No Postgres
 -- descartável do `test:db` não existe, e um ALTER ROLE sem guarda derrubaria o
@@ -25154,6 +25157,7 @@ notify pgrst, 'reload schema';
 --   (0260), `language sql` sem `begin atomic`. `fn_google_counts_for_conflicts`
 --   não é leitora — é a view que a chama, e essa direção não trava o `drop`.
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke select on public.calendar_external_events from authenticated;
 
 grant select (
@@ -25178,6 +25182,7 @@ where e.status <> 'cancelled'
 
 revoke all on public.calendar_selected_external_events from public, anon;
 grant select on public.calendar_selected_external_events to authenticated, service_role;
+end $janela$;
 
 notify pgrst, 'reload schema';
 
@@ -26258,6 +26263,12 @@ $$;
 
 -- ─── 3. a operação: tudo numa transação, regra do agente incluída ────────────
 
+-- Esta versão de 4 argumentos é derrubada pelo bloco da 0315, que a troca pela
+-- de 5. Recriá-la a cada passada deixava uma função obsoleta executável pela
+-- sessão até aquele bloco: ela só nasce onde a de 5 argumentos ainda não existe
+-- (reaplicar-o-baseline-nao-abre-janela.test.ts).
+do $janela$ begin
+if to_regprocedure('public.fn_vocabulario_de_tags_operar(uuid,text,text,text,text)') is null then
 create or replace function public.fn_vocabulario_de_tags_operar(
   p_org uuid,
   p_acao text,
@@ -26547,6 +26558,8 @@ begin
   );
 end;
 $$;
+end if;
+end $janela$;
 
 -- Função nova em `public` nasce EXPOSTA — as DUAS origens de EXECUTE (CLAUDE.md):
 -- (A) o `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON FUNCTIONS TO anon` do baseline,
@@ -26566,8 +26579,12 @@ grant  execute on function public.fn_tags_normalizar(text[], text, text, boolean
 -- isso está declarada em AUTHENTICATED_PERMITIDO no gate
 -- tests/invariants/hardening-definer-varredura.test.ts — a exceção nomeia o call
 -- site, não abre a porta.
+do $janela$ begin
+if to_regprocedure('public.fn_vocabulario_de_tags_operar(uuid,text,text,text)') is not null then
 revoke execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) from public, anon;
 grant  execute on function public.fn_vocabulario_de_tags_operar(uuid, text, text, text) to authenticated, service_role;
+end if;
+end $janela$;
 
 -- ---- Criador provisório sai na entrega (migration 0237) ----
 -- As duas funções acima já saíram com a regra; aqui fica só a COLUNA, que é
@@ -27994,9 +28011,11 @@ drop policy if exists tenant_isolation_prontuario_contact_links_select on public
 create policy tenant_isolation_prontuario_contact_links_select on public.prontuario_contact_links
   for select using (organization_id in (select public.fn_user_org_ids()));
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.prontuario_contact_links from public, anon, authenticated;
 grant select on public.prontuario_contact_links to authenticated;
 grant all on public.prontuario_contact_links to service_role;
+end $janela$;
 
 -- Depois de anonimizar ou fundir o contato, o ID do paciente externo não pode
 -- continuar reidentificando o registro no CRM.
@@ -28474,10 +28493,13 @@ end $$;
 -- `authenticated` lê toda coluna de contacts MENOS cpf_hash (grant por coluna).
 -- Um privilégio de coluna não se subtrai de um GRANT de tabela: é preciso
 -- revogar o SELECT da tabela e conceder as colunas uma a uma.
-revoke select on public.contacts from anon, authenticated;
+-- A revogação mora DENTRO do bloco: revogar o SELECT da tabela apaga também os
+-- grants por coluna, e num comando separado a sessão ficava sem ler contato
+-- nenhum até o `grant` de baixo passar (toda reaplicação do baseline).
 do $$
 declare v_cols text;
 begin
+  revoke select on public.contacts from anon, authenticated;
   select string_agg(quote_ident(attname), ', ' order by attnum) into v_cols
     from pg_attribute
    where attrelid = 'public.contacts'::regclass
@@ -29830,9 +29852,11 @@ create policy tenant_isolation_respostas_prontas_usos_select on public.respostas
   for select to authenticated
   using (organization_id in (select public.fn_user_org_ids()));
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.respostas_prontas_usos from public, anon, authenticated;
 grant select on public.respostas_prontas_usos to authenticated;
 grant all on public.respostas_prontas_usos to service_role;
+end $janela$;
 
 -- Medição por clínica e período, agregada NO BANCO: o PostgREST corta em
 -- max_rows=1000, e contar linhas no cliente truncaria em silêncio a clínica
@@ -31626,9 +31650,11 @@ create policy campaigns_write on public.campaigns
         and public.fn_role_at_least(organization_id, 'manager'))
   );
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.campaigns from anon, authenticated;
 grant select on public.campaigns to authenticated;
 grant all on public.campaigns to service_role;
+end $janela$;
 
 alter table public.campaign_recipients enable row level security;
 
@@ -31652,9 +31678,11 @@ create policy campaign_recipients_write on public.campaign_recipients
         and public.fn_role_at_least(organization_id, 'manager'))
   );
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.campaign_recipients from anon, authenticated;
 grant select on public.campaign_recipients to authenticated;
 grant all on public.campaign_recipients to service_role;
+end $janela$;
 
 
 -- ---- templates e lista de exclusão de campanha (migration 0316) ----
@@ -31806,9 +31834,11 @@ create policy campaign_templates_write on public.campaign_templates
         and public.fn_role_at_least(organization_id, 'manager'))
   );
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.campaign_templates from anon, authenticated;
 grant select on public.campaign_templates to authenticated;
 grant all on public.campaign_templates to service_role;
+end $janela$;
 
 alter table public.campaign_suppressions enable row level security;
 
@@ -31831,9 +31861,11 @@ create policy campaign_suppressions_write on public.campaign_suppressions
         and public.fn_role_at_least(organization_id, 'manager'))
   );
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.campaign_suppressions from anon, authenticated;
 grant select on public.campaign_suppressions to authenticated;
 grant all on public.campaign_suppressions to service_role;
+end $janela$;
 
 
 -- ---- rodízio de números na campanha (migration 0316) ----
@@ -31943,9 +31975,11 @@ create policy campaign_channel_sessions_write on public.campaign_channel_session
         and public.fn_role_at_least(organization_id, 'manager'))
   );
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.campaign_channel_sessions from anon, authenticated;
 grant select on public.campaign_channel_sessions to authenticated;
 grant all on public.campaign_channel_sessions to service_role;
+end $janela$;
 
 
 -- ---- campanha declara funil, etapa e agente (migration 0316) ----
@@ -32947,8 +32981,10 @@ begin
    from public.contacts where organization_id=p_organization_id and id=p_contact_id;
  return jsonb_build_object('already_anonymized',false,'anonymized_at',v_quando);
 end;$$;
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on function public.fn_lgpd_anonymize_contact(uuid,uuid) from public,anon,authenticated,service_role;
 grant execute on function public.fn_lgpd_anonymize_contact(uuid,uuid) to authenticated;
+end $janela$;
 
 -- Cura: contatos JÁ anonimizados antes desta migration.
 --
@@ -34357,9 +34393,11 @@ update public.demandas
 -- servidor. O bloco da 0298 no baseline foi ajustado para não devolver o SELECT
 -- inteiro a cada `update.sh`. Coluna nova da fila nasce não legível pela sessão,
 -- que é o lado certo para uma fila interna errar.
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke select on public.job_queue from authenticated, anon;
 grant select (id, organization_id, contact_id, kind, status, priority, run_after, attempts, max_attempts, created_at)
   on public.job_queue to authenticated;
+end $janela$;
 
 notify pgrst, 'reload schema';
 
@@ -36532,9 +36570,11 @@ drop policy if exists mfa_provada on public.jev_observacoes;
 create policy mfa_provada on public.jev_observacoes as restrictive for all to authenticated
   using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()));
 
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.jev_observacoes from public, anon, authenticated;
 grant select on public.jev_observacoes to authenticated;
 grant all on public.jev_observacoes to service_role;
+end $janela$;
 
 -- O prazo: padrão 90 dias (JEV_OBSERVACOES_RETENTION_DAYS), piso 30 NO CORPO,
 -- para valer contra qualquer chamador. Sem seletor de linha além da idade.
@@ -36864,6 +36904,7 @@ alter table public.platform_branding
 -- APÊNDICE 0298_filas_internas_escrita_servico
 -- Filas executadas com service_role não aceitam comandos diretos de membros.
 -- A leitura continua isolada por organização; rotas de escrita usam admin/definer.
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.job_queue, public.storage_redaction_queue from public, anon, authenticated;
 grant select on public.storage_redaction_queue to authenticated;
 -- `job_queue`: a sessão lê o ESTADO do job, não a carga (migration 0319). O
@@ -36875,6 +36916,7 @@ grant select on public.storage_redaction_queue to authenticated;
 grant select (id, organization_id, contact_id, kind, status, priority, run_after, attempts, max_attempts, created_at)
   on public.job_queue to authenticated;
 grant all on public.job_queue, public.storage_redaction_queue to service_role;
+end $janela$;
 
 drop policy if exists tenant_isolation_job_queue_all on public.job_queue;
 drop policy if exists tenant_isolation_job_queue_select on public.job_queue;

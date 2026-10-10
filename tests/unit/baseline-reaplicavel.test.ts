@@ -188,7 +188,12 @@ describe("baseline.sql é re-aplicável", () => {
     // apêndice em 2026-08-13): se o laço parar de achar policies, `problemas` fica
     // vazio e o `toEqual([])` acima passa por omissão. A margem é folgada de
     // propósito — este par existe para pegar regex morto, não para cravar contagem.
-    expect(guardadasNoCorpo, "policies guardadas no corpo").toBeGreaterThan(40);
+    //
+    // O piso do corpo desceu de 40 para 25 em 2026-10-10 (medido: 31). Saíram do
+    // dump 18 policies que o apêndice derrubava sem recriar: a guarda as recriava
+    // a cada passada e elas valiam até a linha do `drop`
+    // (tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts).
+    expect(guardadasNoCorpo, "policies guardadas no corpo").toBeGreaterThan(25);
     expect(guardadasNoApendice, "policies guardadas no apêndice").toBeGreaterThan(70);
   });
 });
