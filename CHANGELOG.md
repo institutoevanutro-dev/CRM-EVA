@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.16.1] — 2026-10-09
+
+### Corrigido
+
+- **Responder "Não" a uma pergunta da IA não passa mais a conversa para a equipe** O medidor de clima da conversa lia cada mensagem do cliente sozinha. Respostas curtas como "Não" ou "Negativo", dadas a uma pergunta da IA, recebiam nota de hostilidade e a conversa ia para a equipe no meio da qualificação. Agora o medidor lê também a última mensagem do atendimento, e resposta curta a uma pergunta conta como neutra.
+
 ## [3.16.0] — 2026-10-09
 
 ### Adicionado
@@ -6699,7 +6705,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.16.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.16.1...HEAD
+[3.16.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.16.0...v3.16.1
 [3.16.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.15.0...v3.16.0
 [3.15.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.14.0...v3.15.0
 [3.14.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.13.0...v3.14.0
