@@ -1,6 +1,8 @@
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
+import { MAX_MEDIA_BYTES } from "./lib/messaging/media/types";
+
 /** Performance budget (EPIC-12 §S-12.05):
  *  - LCP < 2.5s p75
  *  - CLS < 0.1 p75
@@ -62,6 +64,12 @@ const nextConfig: NextConfig = {
   typedRoutes: true,
   experimental: {
     optimizePackageImports: ["@phosphor-icons/react", "lucide-react", "date-fns"],
+    // Com o proxy.ts no caminho, o Next corta o corpo de toda requisição em 10 MB
+    // e entrega o resto truncado à rota. Um vídeo de celular de 12 MB virava
+    // "Unable to read upload." (medido em produção, 09/10/2026), embora o envio
+    // de mídia aceite até 50 MB. O teto acompanha a rota: 50 MB + 1 MB de
+    // overhead do multipart.
+    proxyClientMaxBodySize: MAX_MEDIA_BYTES + 1_048_576,
   },
   images: {
     // O app não usa next/image de fato (só <img> raw); desligar o otimizador
