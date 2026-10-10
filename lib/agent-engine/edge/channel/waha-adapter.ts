@@ -56,6 +56,8 @@ export class WahaChannelAdapter implements ChannelAdapter {
           return { kind: 'blocked', idempotencyKey: outcome.idempotencyKey };
         case 'failed':
           return { kind: 'failed', idempotencyKey: outcome.idempotencyKey, messageId: outcome.crmMessageId };
+        case 'human_took_over':
+          return outcome;
       }
     } catch (err) {
       // Transporte/tool do CRM é transiente por contrato do sink (o ledger fica

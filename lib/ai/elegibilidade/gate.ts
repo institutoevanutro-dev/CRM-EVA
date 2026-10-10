@@ -26,6 +26,11 @@
  * RODAR) — chamam a MESMA função. Regra duplicada nos dois lados divergiria na
  * primeira vez que alguém acrescentasse um motivo.
  *
+ * Há um terceiro consumidor, que decide ENVIAR: o sink do motor
+ * (`pessoaAssumiuAConversa`, lib/agent-engine/edge/crm/send-message.ts) relê o
+ * estado a cada bolha e usa só os três vetos de pessoa, para a IA não falar por
+ * cima de quem assumiu depois que o turno começou.
+ *
  * ─── O que NÃO torna um contato elegível ────────────────────────────────────
  *
  * Mensagem nova sozinha. Conversa aberta. Conversa sem responsável. Conversa

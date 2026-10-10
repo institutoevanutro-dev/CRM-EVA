@@ -70,7 +70,15 @@ export type ChannelSendResult =
   /** o canal registrou a mensagem como falha (retry consome tentativa) */
   | { kind: 'failed'; idempotencyKey: string; messageId: string | null }
   /** transporte/tool indisponível (transiente) — o job re-tenta com a MESMA key */
-  | { kind: 'unavailable'; reason: string };
+  | { kind: 'unavailable'; reason: string }
+  /**
+   * Uma PESSOA assumiu a conversa depois que o turno começou (respondeu pelo
+   * celular, assumiu pela tela, travou o contato): a mensagem NÃO saiu e nada
+   * foi registrado no ledger. Não é falha nem veto do contato: é a IA saindo
+   * da frente. Quem chama para de enviar e encerra sem re-tentar.
+   * `motivo` é o de `decidirElegibilidade`, só para log.
+   */
+  | { kind: 'human_took_over'; motivo: string };
 
 /** Saúde da sessão do número no canal (o "session health" do adapter). */
 export interface ChannelSessionHealth {

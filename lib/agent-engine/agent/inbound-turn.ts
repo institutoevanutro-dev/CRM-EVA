@@ -2876,6 +2876,34 @@ async function executarTurnoDoAgente(
   // confirmado" do gate, nunca o "agendado/marcado" nem a promessa de verificar.
   let presencaConfirmadaNoTurno = false;
   const outcomes: ChannelSendResult[] = [];
+  // UMA PESSOA ASSUMIU A CONVERSA NO MEIO DO TURNO. Quem confere é o sink, a
+  // cada bolha (`pessoaAssumiuAConversa`, edge/crm/send-message.ts): esta bolha
+  // e as seguintes NÃO saíram. Mesmo desenho da resposta obsoleta: erro de
+  // ENSINO ao modelo, o turno fecha com checkpoint (que lê "não foi enviada") e
+  // o job termina `done`, sem nada a re-tentar. Fica fora de `outcomes`, que
+  // conta mensagem enviada. Sem aviso na Central: a pessoa está na conversa.
+  let pessoaAssumiuNoTurno = false;
+  const descartadaPorPessoaNoComando = (outcome: ChannelSendResult) => {
+    if (outcome.kind !== 'human_took_over') return null;
+    pessoaAssumiuNoTurno = true;
+    runLog.info('resposta descartada: uma pessoa assumiu a conversa durante o turno', {
+      job_id: liveJob().id,
+      conversation_id: input.conversationId,
+      motivo: outcome.motivo,
+      // `seq` já conta a bolha barrada: as anteriores a ela saíram.
+      seq_da_mensagem_barrada: seq,
+    });
+    return {
+      ok: false as const,
+      error: {
+        code: 'pessoa_no_comando',
+        message:
+          'Uma pessoa da equipe assumiu esta conversa enquanto você escrevia; esta mensagem NÃO foi enviada ' +
+          '(o que você já tinha enviado antes dela, saiu). NÃO chame send_message, send_media nem send_template ' +
+          'de novo neste turno: encerre agora. A pessoa segue o atendimento.',
+      },
+    };
+  };
   // Citações acumuladas por buscas de conhecimento DESTE turno — anexadas à
   // próxima outbound enviada (shape de lib/ai/citations/types, que a UI já lê).
   let pendingCitations: ReturnType<typeof citationsFromHits> = [];
@@ -3133,6 +3161,8 @@ async function executarTurnoDoAgente(
             return { ok: false, error: { code: chain.code, message: chain.message } };
           }
           const outcome = chain.outcome;
+          const pessoaNoComando = descartadaPorPessoaNoComando(outcome);
+          if (pessoaNoComando !== null) return pessoaNoComando;
           // `failed` de mídia é terminal: nada a reenvia (o reconciliador não toca
           // em mídia da biblioteca) e re-rodar o run só repetiria o LLM. Fica fora
           // de `outcomes` para não derrubar o job; o modelo ouve `envio_falhou`.
@@ -3305,6 +3335,8 @@ async function executarTurnoDoAgente(
           return { ok: false, error: { code: chain.code, message: chain.message } };
         }
         const outcome = chain.outcome;
+        const pessoaNoComando = descartadaPorPessoaNoComando(outcome);
+        if (pessoaNoComando !== null) return pessoaNoComando;
         outcomes.push(outcome);
         if (outcome.kind === 'sent' || outcome.kind === 'already_sent') {
           return {
@@ -3701,6 +3733,8 @@ async function executarTurnoDoAgente(
             return { ok: false, error: { code: chain.code, message: chain.message } };
           }
           const outcome = chain.outcome;
+          const pessoaNoComando = descartadaPorPessoaNoComando(outcome);
+          if (pessoaNoComando !== null) return pessoaNoComando;
           outcomes.push(outcome);
           if (outcome.kind === 'sent' && pendingCitations.length > 0) {
             try {
@@ -4593,9 +4627,11 @@ async function executarTurnoDoAgente(
       turnoMudoPedeCorrecao({
         tentativasDeEnvio,
         enviadas: outcomes.length,
-        // Sem descarte de turno inteiro no fork: o descarte por resposta obsoleta
-        // acontece DENTRO de send_message e já conta como tentativa de envio.
-        turnoDescartado: false,
+        // O descarte por resposta obsoleta acontece DENTRO de send_message e já
+        // conta como tentativa de envio. O de pessoa no comando pode vir do
+        // send_media, que não conta: sem isto a correção pediria ao modelo para
+        // falar por cima de quem assumiu (o sink barraria, mas gastando modelo).
+        turnoDescartado: pessoaAssumiuNoTurno,
         passouParaAEquipe,
         capDeEnvio: capDeEnvioAtingido(),
       })

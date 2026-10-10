@@ -8,6 +8,8 @@ import { AgendaDeferredError } from '@/lib/agenda/protecao-followup';
 import { StaleServiceBoundaryError } from '@/lib/atendimento/fronteira';
 import { requireCurrentServiceBoundary } from '@/lib/atendimento/fronteira-server';
 import { parseServiceBoundary } from '@/lib/atendimento/fronteira';
+import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
+import { ttlDaAutorizacaoMs } from '@/lib/ai/elegibilidade/gate';
 /**
  * Borda de saída pós-fusão: envio de mensagem SEMPRE via `sendMessageHandler` do
  * próprio app (app/api/v1/messages/_handler.ts) — o handler insere a linha
@@ -88,6 +90,75 @@ export interface SendMessageInput {
   metadata?: Record<string, string>;
 }
 
+/**
+ * Desfecho do envio de UMA mensagem do turno: o do ledger, ou "uma pessoa
+ * assumiu a conversa" (ver `pessoaAssumiuAConversa`), que acontece ANTES do
+ * ledger e por isso não tem `idempotencyKey`.
+ */
+export type TurnSendOutcome = SendOutcome | { kind: 'human_took_over'; motivo: string };
+
+/**
+ * Jobs cujo envio é ORDEM de uma pessoa (resposta aprovada, link da reunião):
+ * a conversa ter dono humano é o estado normal deles, não motivo para calar.
+ */
+const ENVIOS_A_MANDO_DE_PESSOA = new Set(['approved_reply', 'transactional_delivery']);
+
+/**
+ * UMA PESSOA ASSUMIU A CONVERSA DEPOIS QUE O TURNO COMEÇOU?
+ *
+ * ## O defeito (medido em produção, 08 e 09/10/2026)
+ *
+ * O cliente escreveu, o turno da IA começou (10 a 40 s de modelo) e, nesse
+ * meio-tempo, alguém da equipe respondeu pelo celular: a ingestão gravou
+ * `bot_silenced_until = agora + 5 min`. A IA enviou assim mesmo, 2 a 4 s DEPOIS
+ * da pessoa (pessoa 16:01:37, IA 16:01:41/43/45; pessoa 17:22:01, IA 17:22:03/05).
+ *
+ * O silêncio só era lido no COMEÇO do turno (`isLeadInHandoff` e
+ * `decidirElegibilidadeDaConversa` em `runAgentTurn`) e no drain. A cadeia
+ * `runBeforeSend` relê `is_blocked`/`force_human` a cada tentativa, mas nunca o
+ * silêncio nem o dono da conversa, e roda UMA vez por `send_message`: as bolhas
+ * 2+ saem de dentro do `send`, sem conferência nenhuma.
+ *
+ * ## O conserto
+ *
+ * Aqui, e só aqui: toda mensagem do motor passa por `sendTurnMessage`, uma
+ * chamada por BOLHA, depois da pausa humana e do throttle. Uma leitura fresca
+ * por chave primária, a MESMA regra do começo do turno (`decidirElegibilidade`).
+ * Só os três vetos de pessoa contam (`force_human`, silêncio em vigor, dono
+ * humano), que são exatamente os `!permite` sem `bloqueioPorAllowlist`: mudança
+ * de allowlist no meio do turno não é uma pessoa na conversa.
+ *
+ * Nada entra no `send_ledger`: sem intenção registrada não há o que re-tentar,
+ * e o job termina `done`. Não abre aviso na Central, igual ao "turno pulado" do
+ * começo do turno: quem assumiu está com a conversa na frente. O registro é o
+ * log estruturado de quem chama.
+ *
+ * Lê `conversations`/`contacts`, nunca `messages`: o eco `fromMe` do nosso
+ * próprio envio só vira silêncio se a ingestão o tomar por pessoa
+ * (`ehEcoDeEnvioNosso`, lib/waha/ingest.ts), e essa decisão não mudou.
+ *
+ * ponytail: entre esta leitura e o POST ao canal ainda cabe a pessoa responder
+ * (dezenas de ms, mais a latência do webhook do celular até a ingestão). Fechar
+ * de vez pede trava compartilhada com a ingestão; a janela caiu de 10 a 40 s
+ * para isso.
+ */
+async function pessoaAssumiuAConversa(
+  db: Queryable,
+  input: Pick<SendMessageInput, 'tenantId' | 'conversationId'>,
+  kind: string | undefined,
+): Promise<string | null> {
+  if (kind !== undefined && ENVIOS_A_MANDO_DE_PESSOA.has(kind)) return null;
+  const elegib = await decidirElegibilidadeDaConversa(db, {
+    organizationId: input.tenantId,
+    conversationId: input.conversationId,
+    agora: new Date(),
+    ttlMs: ttlDaAutorizacaoMs(process.env),
+    // Mesma exceção do começo do turno: silêncio de canal sem IA é roteamento.
+    followup: kind === 'followup_turn',
+  });
+  return elegib !== null && !elegib.permite && !elegib.bloqueioPorAllowlist ? elegib.motivo : null;
+}
+
 /** Fallback do ator ai_agent quando não há agente publicado (cfg.agentActorId). */
 export const AGENT_ACTOR_ID = 'agent-engine';
 
@@ -100,7 +171,7 @@ export async function sendTurnMessage(
   db: Queryable,
   cfg: CrmEdgeConfig,
   input: SendMessageInput,
-): Promise<SendOutcome> {
+): Promise<TurnSendOutcome> {
   if (input.agentOperation) await assertAgentOperationPg(db, input.agentOperation);
   const { rows: sourceJobs } = await db.query<{ kind: string; payload: Record<string, unknown> }>(
     'select payload,kind from job_queue where id=$1 and organization_id=$2 and contact_id=$3',
@@ -110,6 +181,8 @@ export async function sendTurnMessage(
     db,
     parseServiceBoundary(sourceJobs[0]?.payload.service_boundary),
   );
+  const motivo = await pessoaAssumiuAConversa(db, input, sourceJobs[0]?.kind);
+  if (motivo !== null) return { kind: 'human_took_over', motivo };
   const proactiveContext =
     sourceJobs[0]?.kind === 'followup_turn' && input.leadId
       ? {
