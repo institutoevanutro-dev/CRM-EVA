@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.21.0] — 2026-10-11
+
+### Adicionado
+
+- **O Prontuário pode importar o cadastro protegido do CRM com permissão exclusiva** O CRM passa a oferecer nome, nascimento, contato, CPF e endereço para o servidor do Prontuário, mediante uma permissão adicional escolhida em Configurações › Tokens de API. A leitura do CPF fica auditada, e contatos de outra organização ou cadastros alterados durante a consulta não são exportados. As integrações existentes continuam funcionando sem mudanças; a nova importação depende da atualização coordenada do Prontuário e de um token autorizado para essa finalidade.
+
+- **O CRM percebe quando o WhatsApp fica conectado mas para de receber mensagens, e reinicia a conexão sozinho** Às vezes a conexão do WhatsApp cai por um instante, volta sozinha e continua aparecendo como conectada, mas deixa de entregar as mensagens que chegam. Antes ninguém era avisado. Agora o CRM confere isso a cada 5 minutos: se a conexão caiu e voltou há mais de 45 minutos (e há menos de 6 horas) e nenhuma mensagem chegou desde então, ele reinicia a conexão sozinho, sem deslogar o número e sem pedir QR, e abre um aviso na Central dizendo o que fez. Cada queda rende no máximo um reinício automático. Se as mensagens continuarem sem chegar, o aviso orienta a reconectar em Conexões. Nada precisa ser feito ao atualizar.
+
 ## [3.20.0] — 2026-10-11
 
 ### Adicionado
@@ -6797,7 +6805,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.20.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.21.0...HEAD
+[3.21.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.20.0...v3.21.0
 [3.20.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.19.0...v3.20.0
 [3.19.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.18.0...v3.19.0
 [3.18.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.4...v3.18.0
