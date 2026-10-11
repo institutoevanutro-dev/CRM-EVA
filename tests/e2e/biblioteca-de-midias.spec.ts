@@ -100,11 +100,9 @@ test.describe("Biblioteca de mídias — o gestor cadastra, sobe, registra o ter
 
   test("vídeo sem pessoa fica Pronta ao subir o arquivo", async ({ page }) => {
     await login(page, creds.users.manager!.email, creds.password);
-    // Pela navegação, como o gestor chega: área IA › Ver tudo › Biblioteca de mídias (menu por área, 07/10/2026).
-    await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("link", { name: "IA" }).click();
-    await page.getByRole("navigation", { name: "Telas de IA" }).getByRole("link", { name: "Ver tudo" }).click();
-    await page.waitForURL(/\/app\/ai$/);
-    await page.getByRole("link", { name: /Biblioteca de mídias/ }).first().click();
+    // Pela navegação, como o gestor chega: grupo Assistente › Biblioteca de mídias (menu por tarefa, 11/10/2026).
+    await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("link", { name: "Assistente", exact: true }).click();
+    await page.getByRole("navigation", { name: "Telas de Assistente" }).getByRole("link", { name: "Biblioteca de mídias" }).click();
     await page.waitForURL(/\/app\/ai\/midias$/);
     await expect(page.getByRole("heading", { level: 1, name: "Biblioteca de mídias" })).toBeVisible({ timeout: 60_000 });
 

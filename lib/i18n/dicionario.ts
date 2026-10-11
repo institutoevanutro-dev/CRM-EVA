@@ -913,6 +913,10 @@ export const DICIONARIO: Traducoes = {
   // esta feature piorar alguma coisa.
   "Buscar...": { es: "Buscar..." },
   "Buscar tela": { es: "Buscar pantalla" },
+  // Grupos do menu por tarefa (lib/navigation/menu.ts) e o cartão de quem está logado.
+  "Assistente": { es: "Asistente" },
+  "Clínica": { es: "Clínica" },
+  "Minha conta": { es: "Mi cuenta" },
   "Leitura": { es: "Lectura" },
   // Rotulo so-para-leitor-de-tela do X de fechar em Dialog e Sheet. Ele esta
   // em INGLES no produto desde o shadcn, e continua: traduzi-lo mudaria o
