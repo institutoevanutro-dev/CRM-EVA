@@ -173,7 +173,7 @@ export function UsageChart({ payload }: Props) {
         )}
       </ChartCard>
 
-      <ChartCard title={t("Tempo de resposta por dia (segundos)")}>
+      <ChartCard title={t("Tempo de uma chamada à IA por dia (segundos)")}>
         {!hasLatency ? (
           <EmptyChart />
         ) : (
