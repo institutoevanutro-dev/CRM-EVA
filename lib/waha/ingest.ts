@@ -29,6 +29,7 @@ import { ackToStatus } from "@/lib/types/messaging";
 import type { WahaEnvelope, WahaPayload } from "@/lib/waha/envelope";
 import { bareWaMessageId, chatIdFromWaMessageId, wahaEchoExternalIds } from "@/lib/waha/message-id";
 import { logger } from "@/lib/logger";
+import { nomeDeArquivoLimpo } from "@/lib/messaging/media/nome-de-arquivo";
 
 export type Admin = ReturnType<typeof createAdminClient>;
 
@@ -282,6 +283,15 @@ export function mediaUrlOf(p: WahaPayload): string | null {
 /** MIME da mídia: idem (payload.media.mimetype é o campo do NOWEB atual). */
 export function mediaMimeOf(p: WahaPayload): string | null {
   return p.mimetype ?? p.media?.mimetype ?? null;
+}
+
+/**
+ * Nome original do arquivo (`payload.media.filename`), que vira
+ * `metadata.media_filename` e é o que o cartão de documento do Inbox mostra.
+ * Sem nome de verdade devolve null, e a chave não nasce vazia.
+ */
+export function mediaFilenameOf(p: WahaPayload): string | null {
+  return nomeDeArquivoLimpo(p.media?.filename);
 }
 
 /**
@@ -769,6 +779,7 @@ async function handleInbound(
         // Texto citado só quando NÃO há ponteiro: com a linha resolvida, a
         // citada no banco é a fonte da verdade.
         ...(citacao?.texto && !citadaId ? { reply_to_body: citacao.texto } : {}),
+        ...(mediaFilenameOf(p) ? { media_filename: mediaFilenameOf(p) } : {}),
       },
     })
     .select("id")
@@ -1093,6 +1104,7 @@ async function handleOutboundFromUserPhone(
         fromMe: true,
         ...(bare !== p.id ? { external_id_original: p.id } : {}),
         ...(citacao?.texto && !citadaId ? { reply_to_body: citacao.texto } : {}),
+        ...(mediaFilenameOf(p) ? { media_filename: mediaFilenameOf(p) } : {}),
       },
     })
     .select("id")
