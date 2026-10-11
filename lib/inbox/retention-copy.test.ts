@@ -23,6 +23,13 @@ describe("retentionCopy — tradução leiga dos vetos before_send", () => {
     expect(retentionCopy("lgpd_missing_legal_basis", ctx).kind).toBe("compliance");
   });
 
+  it("conversa com a equipe não é chamada de opt-out", () => {
+    const copy = retentionCopy("conversa_com_humano", ctx);
+    expect(copy.kind).not.toBe("compliance");
+    expect(copy.title).toBe("Resposta não enviada: a conversa está com a equipe");
+    expect(copy.description).not.toMatch(/opt-out|pediu para não receber/);
+  });
+
   it("classifica promise/disclosure como qualidade", () => {
     expect(retentionCopy("promise_out_of_table", ctx).kind).toBe("quality");
     expect(retentionCopy("promise_semantic", ctx).kind).toBe("quality");

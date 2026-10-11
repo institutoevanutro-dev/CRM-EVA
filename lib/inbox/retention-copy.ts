@@ -38,9 +38,9 @@ export function retentionCopy(
   t: (texto: string) => string = (texto) => texto,
 ): RetentionCopy {
   const janela = `${ctx.window_start_hour}h–${ctx.window_end_hour}h${ctx.allow_sunday ? "" : `, ${t("sem domingo")}`}`;
-  const make = (kind: RetentionKind, description: string): RetentionCopy => ({
+  const make = (kind: RetentionKind, description: string, title = TITLES[kind]): RetentionCopy => ({
     kind,
-    title: t(TITLES[kind]),
+    title: t(title),
     description,
   });
 
@@ -71,6 +71,13 @@ export function retentionCopy(
       return make(
         "compliance",
         t("O contato pediu para não receber mensagens (opt-out). Nada será enviado a ele."),
+      );
+    case "conversa_com_humano":
+      // Não é opt-out: a conversa foi transferida e o assistente não escreve nela.
+      return make(
+        "quality",
+        t("O assistente não escreve enquanto a conversa está com a equipe. Para ele voltar a responder, use Devolver ao automático."),
+        "Resposta não enviada: a conversa está com a equipe",
       );
     case "lgpd_anonymized":
       return make(

@@ -87,6 +87,11 @@ export interface GateContext {
    */
   optedOut: boolean;
   /**
+   * O STOP veio SÓ de `force_human` (conversa com a equipe), sem bloqueio. O veto é o
+   * mesmo; muda o código do trace, para a tela não chamar transferência de opt-out.
+   */
+  comHumano?: boolean;
+  /**
    * Canal desta tentativa. Nenhum gate pergunta QUEM é o provider (invariante 1
    * de `docs/doctrine/restricao-de-canal.md`) — só o entrega a `capabilitiesOf`
    * para perguntar o que o canal permite.
@@ -324,7 +329,15 @@ export interface Gate {
 const stopGate: Gate = {
   name: 'stop',
   evaluate: (ctx) =>
-    ctx.optedOut
+    ctx.optedOut && ctx.comHumano === true
+      ? {
+          pass: false,
+          code: 'conversa_com_humano',
+          reason:
+            'a conversa está com a equipe humana — não é possível enviar nada por aqui; ' +
+            'encerre o turno sem tentar de novo.',
+        }
+      : ctx.optedOut
       ? {
           pass: false,
           code: 'contato_bloqueado',
@@ -1196,14 +1209,14 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
         replyPolicy?.body !== args.body)
     )
       throw new Error('reply_scope_mismatch');
-    const optedOut =
-      args.optedOutThisTurn ||
-      (await readStopFlags(
-        client,
-        args.tenantId,
-        args.leadId,
-        meetingPolicy?.humanCommand === true || replyPolicy !== null,
-      ));
+    const stop = await readStopFlags(
+      client,
+      args.tenantId,
+      args.leadId,
+      meetingPolicy?.humanCommand === true || replyPolicy !== null,
+    );
+    const bloqueado = args.optedOutThisTurn || stop.bloqueado;
+    const optedOut = bloqueado || stop.comHumano;
     const pacingCfg = await loadChannelKnobs(
       client,
       args.tenantId,
@@ -1250,6 +1263,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       now: args.now,
       body: args.body,
       optedOut,
+      comHumano: !bloqueado && stop.comHumano,
       provider,
       messagingWindow: { lastInboundAt, ...(args.isTemplate === true ? { isTemplate: true } : {}) },
       pacing: {
@@ -1406,14 +1420,16 @@ async function readStopFlags(
   organizationId: string,
   contactId: string,
   humanMeetingCommand = false,
-): Promise<boolean> {
-  const { rows } = await db.query<{ stopped: boolean }>(
-    humanMeetingCommand
-      ? 'select is_blocked as stopped from contacts where organization_id = $1 and id = $2'
-      : 'select (is_blocked or force_human) as stopped from contacts where organization_id = $1 and id = $2',
+): Promise<{ bloqueado: boolean; comHumano: boolean }> {
+  const { rows } = await db.query<{ is_blocked: boolean; force_human: boolean }>(
+    'select is_blocked, force_human from contacts where organization_id = $1 and id = $2',
     [organizationId, contactId],
   );
-  return rows[0]?.stopped === true;
+  return {
+    bloqueado: rows[0]?.is_blocked === true,
+    // Comando humano (reunião, resposta aprovada) passa por cima de `force_human`.
+    comHumano: !humanMeetingCommand && rows[0]?.force_human === true,
+  };
 }
 
 /**

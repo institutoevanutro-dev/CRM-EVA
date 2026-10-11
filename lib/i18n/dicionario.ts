@@ -5275,6 +5275,8 @@ export const DICIONARIO: Traducoes = {
   "Ela não foi enviada ao contato.": { es: "No se le envió al contacto." },
   "Resposta segurada pela proteção do número": { es: "Respuesta retenida por la protección del número" },
   "Resposta bloqueada por conformidade": { es: "Respuesta bloqueada por cumplimiento" },
+  "Resposta não enviada: a conversa está com a equipe": { es: "Respuesta no enviada: la conversación está con el equipo" },
+  "O assistente não escreve enquanto a conversa está com a equipe. Para ele voltar a responder, use Devolver ao automático.": { es: "El asistente no escribe mientras la conversación está con el equipo. Para que vuelva a responder, usa Devolver al automático." },
   "Resposta retida para correção": { es: "Respuesta retenida para corrección" },
 
   // ─── Inbox: gaps achados na varredura completa (ambas as aspas) ───
