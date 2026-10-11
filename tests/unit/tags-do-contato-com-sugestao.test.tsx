@@ -19,6 +19,11 @@ const get = vi.fn();
 vi.mock("@/lib/api/client", () => ({
   apiClient: { get: (...args: unknown[]) => get(...args), post: vi.fn(), patch: vi.fn() },
 }));
+// O editor ganhou o seletor de cor, que pergunta o papel de quem está logado.
+// Aqui é um agente: o seletor não aparece e o editor se comporta como antes.
+vi.mock("@/hooks/auth/AuthProvider", () => ({
+  useAuth: () => ({ activeOrg: { role: "agent" } }),
+}));
 const mutate = vi.fn();
 vi.mock("@/hooks/contacts/useUpdateContact", () => ({
   useUpdateContact: () => ({ mutate, isPending: false }),
