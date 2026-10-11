@@ -32,13 +32,10 @@ const SQL = readFileSync(join(process.cwd(), "supabase/baseline.sql"), "utf8");
  * Pares que já existiam antes deste teste, de outra migration, fora do escopo do
  * conserto que o criou. SÓ ENCOLHE: consertar um é tirá-lo daqui.
  */
-const DIVIDA_ANTERIOR = [
-  // 0181 (o acervo é da organização): índices ÚNICOS do dump que o apêndice
-  // derruba. Além do custo, a recriação no `update.sh` de um clone com dados
-  // posteriores à 0181 pode falhar por duplicata — em silêncio, sem ON_ERROR_STOP.
-  "ai_kbv_one_active_per_agent",
-  "ai_knowledge_sources_unique_per_agent",
-];
+// Zerada: os dois índices únicos da 0181 (`ai_kbv_one_active_per_agent` e
+// `ai_knowledge_sources_unique_per_agent`) saíram do dump; o apêndice segue
+// derrubando-os em clone antigo.
+const DIVIDA_ANTERIOR: string[] = [];
 
 interface Par {
   nome: string;
