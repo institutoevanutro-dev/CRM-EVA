@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "CRM como origem do cadastro do Prontuário", "subtitle": "Leitura protegida sob demanda, sem exportar dados clínicos", "output": "prontuario-cadastro.html", "quality_profile": "standard" },
+  "lanes": [{ "id": "operacao", "label": "Operação" }, { "id": "crm", "label": "CRM" }, { "id": "prontuario", "label": "Prontuário" }],
+  "mainPath": ["ficha", "contato", "leitura", "consumidor"],
+  "nodes": [
+    { "id": "ficha", "lane": "operacao", "col": 1, "type": "frontend", "label": "Agenda e ficha do contato no CRM" },
+    { "id": "tokens", "lane": "operacao", "col": 2, "type": "frontend", "label": "Configurações › Tokens de API: leitura e leitura demográfica exclusiva" },
+    { "id": "contato", "lane": "crm", "col": 1, "type": "database", "label": "contacts: CPF cifrado e endereço autoritativo" },
+    { "id": "leitura", "lane": "crm", "col": 2, "type": "backend", "label": "GET /api/v1/prontuario/contacts/{id}?include=demographics" },
+    { "id": "auditoria", "lane": "crm", "col": 3, "type": "database", "label": "api_audit_log: contact.cpf_viewed e prontuario.contact_read" },
+    { "id": "consumidor", "lane": "prontuario", "col": 3, "type": "external", "label": "Servidor do Prontuário: cifra local e cadastro vinculado (entrega coordenada)" },
+    { "id": "conferencia", "lane": "operacao", "col": 4, "type": "frontend", "label": "Auditoria existente do CRM e status do cadastro no Prontuário" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "ficha", "to": "contato", "label": "cadastro mestre" },
+    { "id": "e2", "from": "contato", "to": "leitura", "label": "organização e contato ativo; decifra e reconfirma revisão" },
+    { "id": "e3", "from": "tokens", "to": "leitura", "label": "dois escopos obrigatórios; Bearer só no servidor" },
+    { "id": "e4", "from": "leitura", "to": "consumidor", "label": "HTTPS no-store; nenhum CPF em erros ou listagens" },
+    { "id": "e5", "from": "leitura", "to": "auditoria", "label": "ator, recurso e sucesso; nenhum valor pessoal" },
+    { "id": "e6", "from": "auditoria", "to": "conferencia", "label": "trilha de leitura" },
+    { "id": "e7", "from": "consumidor", "to": "conferencia", "label": "resultado ou ação necessária" },
+    { "id": "e8", "from": "conferencia", "to": "ficha", "label": "conferir origem quando houver divergência" }
+  ]
+}
