@@ -8,6 +8,16 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.20.0] — 2026-10-11
+
+### Adicionado
+
+- **Você escolhe quanto tempo a IA fica fora da conversa depois que uma pessoa responde** Quando alguém da equipe responde o cliente, pelo celular ou pela tela, a IA sai daquela conversa por um tempo para não responder junto. Esse tempo era fixo em 5 minutos. Agora cada organização escolhe, de 5 minutos a 24 horas, em Configurações, Distribuição de atendimento, no campo "Quanto tempo a IA fica fora da conversa depois que uma pessoa responde". O valor vale para os dois jeitos de responder, cada nova resposta recomeça a contagem, e quem clicou em assumir a conversa continua com ela sem prazo. O padrão segue 5 minutos: quem não mexer não percebe diferença, e nada precisa ser feito ao atualizar.
+
+### Corrigido
+
+- **Atualizar deixa de reinstalar, por alguns instantes, versões antigas de funções e regras de acesso** A cada atualização o banco voltava, por alguns instantes, a versões antigas de 56 funções e de 21 regras de acesso, e só depois recebia as atuais. Nesse intervalo valiam regras mais frouxas: por exemplo, a função que registra eventos não conferia a organização de quem chamava, a busca na base de conhecimento não conferia que quem lia era da organização, e a anonimização de um contato apagava menos dados do que apaga hoje. Agora cada função e cada regra entra uma vez só, já na versão atual. A atualização também para de derrubar e recriar cerca de 700 regras de acesso que já estavam certas, de refazer a coluna da agenda que marca o que falta enviar ao Google (o que reescrevia a tabela de agendamentos toda vez) e de deixar tabelas um instante sem gatilho ou sem validação. O resultado final no banco é o mesmo de antes e nada precisa ser feito ao atualizar.
+
 ## [3.19.0] — 2026-10-10
 
 ### Adicionado
@@ -6787,7 +6797,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.19.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.20.0...HEAD
+[3.20.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.19.0...v3.20.0
 [3.19.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.18.0...v3.19.0
 [3.18.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.4...v3.18.0
 [3.17.4]: https://github.com/melgarafael/DeskcommCRM/compare/v3.17.3...v3.17.4

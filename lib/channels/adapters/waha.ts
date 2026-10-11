@@ -200,6 +200,19 @@ export const wahaAdapter: ChannelAdapter = {
   },
 
   /**
+   * Reinício suave. É a MESMA sequência do modo padrão de
+   * `POST /api/v1/channel-sessions/[id]/reconnect` (stop + start), sem o
+   * `logoutSession` que só o `force` de lá aciona.
+   */
+  async restart(input: { sessionRef: string }): Promise<{ status: string }> {
+    const client = getWahaClient();
+    if (!client) throw new Error("transporte_nao_configurado");
+    await client.stopSession(input.sessionRef);
+    const remoto = await client.startSession(input.sessionRef);
+    return { status: remoto.status ?? "STARTING" };
+  },
+
+  /**
    * Baixa o anexo que o cliente mandou.
    *
    * Delega em `fetchWahaMedia`, que o worker de persistência chamava FIXO — era
