@@ -10353,6 +10353,16 @@ export const DICIONARIO: Traducoes = {
   "Pedidos de pacientes sobre os próprios dados (LGPD): cópia, correção ou apagamento. Só administradores.": { es: "Pedidos de pacientes sobre sus propios datos: copia, corrección o borrado. Solo administradores." },
   "dados pessoais mascarados": { es: "datos personales enmascarados" },
   ", nomes, campos extras e motivos de perda": { es: ", nombres, campos extra y motivos de pérdida" },
+  // Busca dentro do seletor de etiquetas do Inbox (porte do upstream #2701).
+  "Buscar etiqueta": { es: "Buscar etiquetas" },
+  "Nenhuma etiqueta com esse texto": { es: "Ninguna etiqueta con ese texto" },
+  // Destino opcional da ação add_tag, no editor de automações (porte do upstream #2701).
+  "Destino da etiqueta": { es: "Destino de la etiqueta" },
+  "Card (comportamento atual)": { es: "Card (comportamiento actual)" },
+  "Contato do lead": { es: "Contacto del lead" },
+  "Sem contato vinculado, a etiqueta não é aplicada.": {
+    es: "Sin contacto vinculado, la etiqueta no se aplica.",
+  },
 };
 
 /**

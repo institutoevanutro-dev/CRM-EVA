@@ -259,6 +259,20 @@ export function InboxFilters({ value, onChange }: Props) {
     ...vocabularioDoSeletor,
     ...etiquetasForaDoVocabulario,
   ];
+  /**
+   * A busca dentro do seletor, de propósito SEM consulta: o vocabulário inteiro
+   * já está no navegador, então filtrar custa um `filter` em memória. Ela não
+   * mexe em `value` (`tag`/`tagMode` são a chave da contagem e da lista, e cada
+   * tecla viraria uma ida ao servidor) e é zerada ao fechar o menu, para o
+   * seletor não reabrir filtrado sem dizer que há filtro.
+   *
+   * Portado do projeto original (DeskcommCRM, issue #2498, PR #2701).
+   */
+  const [buscaDeEtiqueta, setBuscaDeEtiqueta] = useState("");
+  const termoDaEtiqueta = buscaDeEtiqueta.trim().toLocaleLowerCase();
+  const opcoesVisiveis = termoDaEtiqueta
+    ? opcoesDoSeletor.filter((tag) => tag.toLocaleLowerCase().includes(termoDaEtiqueta))
+    : opcoesDoSeletor;
   const alternaEtiqueta = (tag: string) => {
     const escolhida = etiquetas.includes(tag);
     const proximas = escolhida ? etiquetas.filter((t) => t !== tag) : [...etiquetas, tag];
@@ -406,7 +420,11 @@ export function InboxFilters({ value, onChange }: Props) {
             )}
 
             {mostrarSeletorDeTag && (
-              <DropdownMenu>
+              <DropdownMenu
+                onOpenChange={(aberto) => {
+                  if (!aberto) setBuscaDeEtiqueta("");
+                }}
+              >
                 {/*
                   ⚠️ POR QUE ISTO DEIXOU DE SER UM `Select` (#1274).
                   O `Select` do Radix é de escolha ÚNICA e — o que mata a
@@ -441,8 +459,25 @@ export function InboxFilters({ value, onChange }: Props) {
                         : `${etiquetas[0]} +${etiquetas.length - 1}`}
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
+                <DropdownMenuContent align="start" className="w-64">
                   <DropdownMenuLabel>{t("Todas as tags")}</DropdownMenuLabel>
+                  {/* Acima dos itens: "Todas as tags" (que limpa o filtro) e o
+                      E/OU continuam alcançáveis com a lista toda filtrada. */}
+                  <div className="px-2 pb-1">
+                    <Input
+                      value={buscaDeEtiqueta}
+                      onChange={(e) => setBuscaDeEtiqueta(e.target.value)}
+                      onKeyDown={(e) => {
+                        // O menu lê qualquer tecla imprimível e salta o foco para
+                        // o item que começa com ela, roubando a segunda letra.
+                        // Só as de caractere param aqui: Escape ainda fecha.
+                        if (e.key.length === 1) e.stopPropagation();
+                      }}
+                      placeholder={t("Buscar etiqueta")}
+                      aria-label={t("Buscar etiqueta")}
+                      className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs shadow-none focus-visible:border-border"
+                    />
+                  </div>
                   <DropdownMenuItem
                     onClick={() => onChange({ ...value, tag: undefined, tagMode: undefined })}
                   >
@@ -475,7 +510,7 @@ export function InboxFilters({ value, onChange }: Props) {
                   {/* As órfãs entram na lista: sem elas o gatilho mostraria o
                       resumo de um filtro cujas opções não estão mais lá, e o
                       operador não teria como tirá-las. */}
-                  {opcoesDoSeletor.map((tag) => (
+                  {opcoesVisiveis.map((tag) => (
                     <DropdownMenuCheckboxItem
                       key={tag}
                       checked={etiquetas.includes(tag)}
@@ -488,6 +523,12 @@ export function InboxFilters({ value, onChange }: Props) {
                       </span>
                     </DropdownMenuCheckboxItem>
                   ))}
+                  {/* Dizer que nada casou é diferente de um menu em branco. */}
+                  {termoDaEtiqueta !== "" && opcoesVisiveis.length === 0 && (
+                    <p className="px-2 py-1.5 text-xs text-text-subtle">
+                      {t("Nenhuma etiqueta com esse texto")}
+                    </p>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}

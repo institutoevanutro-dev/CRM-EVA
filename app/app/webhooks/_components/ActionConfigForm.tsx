@@ -30,7 +30,7 @@ export type ActionItem =
       type: "send_ai_message";
       config: { agent_id: string; channel_session_id: string; instruction: string };
     }
-  | { type: "add_tag"; config: { tags: string[] } }
+  | { type: "add_tag"; config: { tags: string[]; destino?: "card" | "contato" } }
   | { type: "assign_owner"; config: { user_id: string } }
   | { type: "call_webhook"; config: { url: string; secret?: string; secret_enc?: string } }
   | { type: "start_message_flow"; config: { flow_pointer_id: string; bind_appointment?: boolean } };
@@ -293,24 +293,54 @@ function SendAiMessageForm({
   );
 }
 
-function AddTagForm({ config, onChange }: FormProps<{ tags: string[] }>) {
+/**
+ * `add_tag`: as tags e o DESTINO delas. Quem nunca mexeu continua sem a chave
+ * no config e gravando no card. Portado do projeto original (DeskcommCRM #2701).
+ */
+function AddTagForm({
+  config,
+  onChange,
+}: FormProps<{ tags: string[]; destino?: "card" | "contato" }>) {
   const t = useT();
   const [text, setText] = React.useState(config.tags.join(", "));
   return (
-    <div className="space-y-1">
-      <Label>{t("Tags (separadas por vírgula)")}</Label>
-      <Input
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          const tags = e.target.value
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean);
-          onChange({ tags });
-        }}
-        placeholder="boas-vindas, novo-lead"
-      />
+    <div className="space-y-2">
+      <div className="space-y-1">
+        <Label>{t("Tags (separadas por vírgula)")}</Label>
+        <Input
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            const tags = e.target.value
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean);
+            // `...config` preserva o destino já escolhido.
+            onChange({ ...config, tags });
+          }}
+          placeholder="boas-vindas, novo-lead"
+        />
+      </div>
+      <div className="space-y-1">
+        <Label>{t("Destino da etiqueta")}</Label>
+        <Select
+          value={config.destino ?? "card"}
+          onValueChange={(v) => onChange({ ...config, destino: v as "card" | "contato" })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="card">{t("Card (comportamento atual)")}</SelectItem>
+            <SelectItem value="contato">{t("Contato do lead")}</SelectItem>
+          </SelectContent>
+        </Select>
+        {config.destino === "contato" && (
+          <p className="text-xs text-muted-foreground">
+            {t("Sem contato vinculado, a etiqueta não é aplicada.")}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
