@@ -89,29 +89,26 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
 
   test("o menu lateral mostra as áreas na ordem de uso", async ({ page }) => {
     await loginAdmin(page);
-    // Desde 10/10/2026 cada área é um grupo que abre e fecha; na tela Início nenhum está aberto.
-    await expect(sidebar(page).getByRole("link")).toHaveText(["Início", "Atendimento", "Vendas", "IA", "Análise"]);
+    // Grupos pelo que a pessoa veio fazer (11/10/2026); na tela Início nenhum está aberto.
+    await expect(sidebar(page).getByRole("link")).toHaveText(["Início", "Atendimento", "Vendas", "Assistente", "Análise", "Clínica", "Integrações"]);
     await page.screenshot({ path: path.join(EVIDENCE, "nav-sidebar-areas.png"), fullPage: true });
   });
 
-  test("chega nas Etapas do funil por Vendas, sem passar por Configurações", async ({ page }) => {
+  test("chega nas Etapas do funil por Clínica, com um clique no grupo e outro na tela", async ({ page }) => {
     await loginAdmin(page);
-    await sidebar(page).getByRole("link", { name: "Vendas" }).click();
-    await page.waitForURL(/\/app\/kanban/);
-    // A frase do catálogo saiu das abas (spec 2026-10-09-visual-clinica): o título da tela prova a chegada.
-    await expect(page.getByRole("heading", { name: "Funis", level: 1 })).toBeVisible();
-    // As telas além das principais ficam na página "Ver tudo" da área (o "Mais" saiu em 10/10/2026).
-    await abas(page, "Vendas").getByRole("link", { name: "Ver tudo" }).click();
-    await page.getByRole("main").getByRole("link", { name: /Etapas do funil/ }).click();
+    await sidebar(page).getByRole("link", { name: "Clínica", exact: true }).click();
+    await page.waitForURL(/\/app\/team/);
+    await abas(page, "Clínica").getByRole("link", { name: "Etapas do funil" }).click();
     await page.waitForURL(/settings\/tenant\/pipelines/);
     await expect(page.getByRole("heading", { name: "Etapas do funil", level: 1 })).toBeVisible();
   });
 
-  test("Produtos é aba de Vendas", async ({ page }) => {
+  test("Produtos é tela de Clínica (o preço vem do PrecificaEva, não se vende por ela)", async ({ page }) => {
     await loginAdmin(page);
-    await sidebar(page).getByRole("link", { name: "Vendas" }).click();
-    await abas(page, "Vendas").getByRole("link", { name: "Produtos" }).click();
+    await sidebar(page).getByRole("link", { name: "Clínica", exact: true }).click();
+    await abas(page, "Clínica").getByRole("link", { name: "Produtos" }).click();
     await page.waitForURL(/\/app\/products/);
+    await expect(abas(page, "Vendas")).toHaveCount(0);
   });
 
   test("a lista de funis é a primeira aba de Vendas", async ({ page }) => {
@@ -122,22 +119,21 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
     await expect(page.getByRole("heading", { name: "Funis", level: 1 })).toBeVisible();
   });
 
-  test("chega em Conhecimento pela aba de IA", async ({ page }) => {
+  test("chega em Conhecimento pelo grupo Assistente", async ({ page }) => {
     await loginAdmin(page);
-    await sidebar(page).getByRole("link", { name: "IA" }).click();
+    await sidebar(page).getByRole("link", { name: "Assistente", exact: true }).click();
     await page.waitForURL(/\/app\/ai\/agents/);
-    await abas(page, "IA").getByRole("link", { name: "Conhecimento" }).click();
+    await abas(page, "Assistente").getByRole("link", { name: "Conhecimento" }).click();
     await page.waitForURL(/knowledge\/sources/);
     await page.screenshot({ path: path.join(EVIDENCE, "nav-abas-ia.png"), fullPage: true });
   });
 
-  /** Canais (Conexões) virou seção de Configurações em 07/10/2026. */
-  test("chega ao canal oficial por Configurações → Conexões", async ({ page }) => {
+  /** Conexões abre o grupo Integrações (11/10/2026). */
+  test("chega ao canal oficial por Integrações → Conexões", async ({ page }) => {
     await loginAdmin(page);
-    await page.getByRole("link", { name: "Configurações" }).click();
-    await page.waitForURL(/\/app\/settings$/);
-    await abas(page, "Organização").getByRole("link", { name: "Conexões" }).click();
+    await sidebar(page).getByRole("link", { name: "Integrações", exact: true }).click();
     await page.waitForURL(/\/app\/connections/);
+    await expect(abas(page, "Integrações").getByRole("link", { name: "Conexões" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("tab", { name: /oficial/i })).toBeVisible();
   });
 
@@ -224,27 +220,21 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
     });
   });
 
-  test("Configurações fica fixo no rodapé, fora da área que rola", async ({ page }) => {
+  test("Minha conta abre pelo cartão de quem está logado, e Nuvemshop e Plano e cobrança não estão no menu", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 768 });
     await loginAdmin(page);
-
-    const config = page.getByRole("link", { name: "Configurações" });
-    await expect(config).toBeVisible();
-
-    const dentroDaNav = await page.evaluate(() => {
-      const nav = document.querySelector('nav[aria-label="Navegação principal"]')!;
-      const link = [...document.querySelectorAll("a")].find(
-        (a) => a.textContent?.trim() === "Configurações",
-      );
-      return nav.contains(link!);
-    });
-    expect(dentroDaNav, "Configurações não pode depender de scroll para aparecer").toBe(false);
+    for (const fora of ["Perfil", "Segurança", "Notificações", "Nuvemshop", "Plano e cobrança"]) {
+      await expect(sidebar(page).getByRole("link", { name: fora, exact: true })).toHaveCount(0);
+    }
+    await page.getByRole("button", { name: "Minha conta" }).click();
+    await page.getByRole("menuitem", { name: "Segurança" }).click();
+    await page.waitForURL(/\/app\/settings\/security/);
   });
 
-  test("um agent não vê aba de tela que a permissão fecha", async ({ page }) => {
+  test("um agent não vê grupo nem tela que a permissão fecha", async ({ page }) => {
     await login(page, creds.users.agent!.email);
-    await page.getByRole("link", { name: "Configurações" }).click();
-    // Conexões é manager+: a aba não pode aparecer para o agent.
+    // Integrações inteiro é manager+ (Conexões é admin): o grupo não aparece para o agent.
+    await expect(sidebar(page).getByRole("link", { name: "Integrações", exact: true })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Conexões" })).toHaveCount(0);
     await expect(sidebar(page).getByRole("link", { name: "Atendimento" })).toBeVisible();
   });

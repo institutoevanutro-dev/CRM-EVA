@@ -58,15 +58,27 @@ describe("Sidebar por área", () => {
   const rotulos = () =>
     Array.from(nav().querySelectorAll("a")).map((a) => a.textContent?.trim());
 
-  it("mostra as áreas na ordem de uso, Configurações fora da rolagem, e só o grupo da tela atual aberto", () => {
+  it("mostra os grupos na ordem de uso, e só o grupo da tela atual aberto, com todas as telas dele", () => {
     comoPapel("admin");
     render(<Sidebar collapsed={false} />);
-    const areas = ["Início", "Atendimento", "Vendas", "IA", "Análise"];
-    expect(rotulos().filter((r) => areas.includes(r ?? ""))).toEqual(areas);
-    // Configurações fica fora da área que rola.
-    expect(nav().contains(screen.getByRole("link", { name: "Configurações" }))).toBe(false);
-    expect(screen.getByRole("navigation", { name: "Telas de Atendimento" })).toBeInTheDocument();
+    const grupos = ["Início", "Atendimento", "Vendas", "Assistente", "Análise", "Clínica", "Integrações"];
+    // "Atendimento" e companhia aparecem uma vez só: são o nome do grupo, nunca o de uma tela.
+    expect(rotulos().filter((r) => grupos.includes(r ?? ""))).toEqual(grupos);
+    const telas = screen.getByRole("navigation", { name: "Telas de Atendimento" });
+    expect(Array.from(telas.querySelectorAll("a")).map((a) => a.textContent?.trim())).toEqual([
+      "Inbox", "Radar", "Agenda", "Respostas rápidas", "Alertas", "Casos", "Propostas",
+    ]);
     expect(screen.queryByRole("navigation", { name: "Telas de Vendas" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Ver tudo" })).toBeNull();
+  });
+
+  it("Minha conta abre pelo cartão de quem está logado, não por um grupo", () => {
+    comoPapel("admin");
+    render(<Sidebar collapsed={false} />);
+    expect(screen.getByRole("button", { name: "Minha conta" })).toBeInTheDocument();
+    for (const tela of ["Perfil", "Segurança", "Notificações", "Nuvemshop", "Plano e cobrança"]) {
+      expect(rotulos(), tela).not.toContain(tela);
+    }
   });
 
   it("o Início fica fora da parte que rola; só os grupos rolam", () => {
