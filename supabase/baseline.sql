@@ -3380,7 +3380,9 @@ CREATE OR REPLACE TRIGGER "trg_crm_stages_updated_at" BEFORE UPDATE ON "public".
 
 
 
-CREATE OR REPLACE TRIGGER "trg_emit_event_on_lead_change" AFTER INSERT OR UPDATE ON "public"."crm_leads" FOR EACH ROW EXECUTE FUNCTION "public"."fn_emit_event_on_lead_change"();
+-- Definição FINAL (migration 0043: só UPDATE). O dump trazia `AFTER INSERT OR UPDATE`, e a
+-- cada reaplicação o gatilho voltava a disparar em INSERT até o bloco da 0043 passar.
+CREATE OR REPLACE TRIGGER "trg_emit_event_on_lead_change" AFTER UPDATE ON "public"."crm_leads" FOR EACH ROW EXECUTE FUNCTION "public"."fn_emit_event_on_lead_change"();
 
 
 
@@ -4640,13 +4642,7 @@ END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_ai_agent_versions_all' AND polrelid = '"public"."ai_agent_versions"'::regclass) THEN
-CREATE POLICY "tenant_isolation_ai_agent_versions_all" ON "public"."ai_agent_versions" USING (("organization_id" IN ( SELECT "fn_user_org_ids"."fn_user_org_ids"
-   FROM "public"."fn_user_org_ids"() "fn_user_org_ids"("fn_user_org_ids")))) WITH CHECK (("organization_id" IN ( SELECT "fn_user_org_ids"."fn_user_org_ids"
-   FROM "public"."fn_user_org_ids"() "fn_user_org_ids"("fn_user_org_ids"))));
-END IF; END $baseline_guard$;
+-- [policy obsoleta tenant_isolation_ai_agent_versions_all: o arquivo não a cria mais; o drop que a tira de clone antigo continua adiante]
 
 
 
@@ -4676,13 +4672,7 @@ END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_ai_provider_credentials_modify' AND polrelid = '"public"."ai_provider_credentials"'::regclass) THEN
-CREATE POLICY "tenant_isolation_ai_provider_credentials_modify" ON "public"."ai_provider_credentials" USING (("organization_id" IN ( SELECT "fn_user_org_ids"."fn_user_org_ids"
-   FROM "public"."fn_user_org_ids"() "fn_user_org_ids"("fn_user_org_ids")))) WITH CHECK (("organization_id" IN ( SELECT "fn_user_org_ids"."fn_user_org_ids"
-   FROM "public"."fn_user_org_ids"() "fn_user_org_ids"("fn_user_org_ids"))));
-END IF; END $baseline_guard$;
+-- [policy obsoleta tenant_isolation_ai_provider_credentials_modify: o arquivo não a cria mais; o drop que a tira de clone antigo continua adiante]
 
 
 
@@ -4716,13 +4706,7 @@ END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_policy
-                WHERE polname = 'tenant_isolation_storage_redaction_queue_all' AND polrelid = '"public"."storage_redaction_queue"'::regclass) THEN
-CREATE POLICY "tenant_isolation_storage_redaction_queue_all" ON "public"."storage_redaction_queue" USING (("organization_id" IN ( SELECT "fn_user_org_ids"."fn_user_org_ids"
-   FROM "public"."fn_user_org_ids"() "fn_user_org_ids"("fn_user_org_ids")))) WITH CHECK (("organization_id" IN ( SELECT "fn_user_org_ids"."fn_user_org_ids"
-   FROM "public"."fn_user_org_ids"() "fn_user_org_ids"("fn_user_org_ids"))));
-END IF; END $baseline_guard$;
+-- [policy obsoleta tenant_isolation_storage_redaction_queue_all: o arquivo não a cria mais; o drop que a tira de clone antigo continua adiante]
 
 
 
@@ -5279,29 +5263,9 @@ create policy "tenant_read_ai_policy" on storage.objects for select
     )
   );
 
-drop policy if exists "tenant_write_ai_policy" on storage.objects;
-create policy "tenant_write_ai_policy" on storage.objects for insert
-  with check (
-    bucket_id = 'ai-policy'
-    and exists (
-      select 1 from public.user_organizations uo
-      where uo.user_id = auth.uid()
-        and uo.revoked_at is null
-        and uo.organization_id = (split_part(name, '/', 1))::uuid
-    )
-  );
+-- [policy tenant_write_ai_policy: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
 
-drop policy if exists "tenant_delete_ai_policy" on storage.objects;
-create policy "tenant_delete_ai_policy" on storage.objects for delete
-  using (
-    bucket_id = 'ai-policy'
-    and exists (
-      select 1 from public.user_organizations uo
-      where uo.user_id = auth.uid()
-        and uo.revoked_at is null
-        and uo.organization_id = (split_part(name, '/', 1))::uuid
-    )
-  );
+-- [policy tenant_delete_ai_policy: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
 
 -- ---- storage: bucket lgpd-exports + policy (migration 0017) ----
 
@@ -5315,17 +5279,7 @@ values (
 )
 on conflict (id) do nothing;
 
-drop policy if exists "tenant_read_lgpd_exports" on storage.objects;
-create policy "tenant_read_lgpd_exports" on storage.objects for select
-  using (
-    bucket_id = 'lgpd-exports'
-    and exists (
-      select 1 from public.user_organizations uo
-      where uo.user_id = auth.uid()
-        and uo.revoked_at is null
-        and uo.organization_id = (split_part(name, '/', 1))::uuid
-    )
-  );
+-- [policy tenant_read_lgpd_exports: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
 
 -- ---- bucket de assets de skills (migration 0068) ----
 insert into storage.buckets (id, name, public, file_size_limit)
@@ -5676,26 +5630,11 @@ create policy "crm_stages_manager_write" on public.crm_stages
   );
 
 drop policy if exists "conversations_tenant_isolation_all" on public.conversations;
-drop policy if exists "conversations_select" on public.conversations;
 drop policy if exists "conversations_agent_write" on public.conversations;
 
-create policy "conversations_select" on public.conversations
-  for select using (
-    (organization_id in (select public.fn_user_org_ids()))
-    or public.fn_is_platform_admin()
-  );
+-- [policy conversations_select: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
 
-create policy "conversations_agent_write" on public.conversations
-  using (
-    public.fn_is_platform_admin()
-    or ((organization_id in (select public.fn_user_org_ids()))
-        and public.fn_role_at_least(organization_id, 'agent'))
-  )
-  with check (
-    public.fn_is_platform_admin()
-    or ((organization_id in (select public.fn_user_org_ids()))
-        and public.fn_role_at_least(organization_id, 'agent'))
-  );
+-- [policy obsoleta conversations_agent_write: o arquivo não a cria mais; o drop que a tira de clone antigo continua adiante]
 
 -- ---- Auditoria de atribuição de conversas + fn_conversation_assign (migration 0031) ----
 -- G3-01 (gov-loop): toda mudança de dono de conversa vira evento estruturado
@@ -5721,12 +5660,7 @@ create index if not exists idx_cae_conversation
 
 alter table public.conversation_assignment_events enable row level security;
 
-drop policy if exists cae_select on public.conversation_assignment_events;
-create policy cae_select on public.conversation_assignment_events
-  for select using (
-    (organization_id in (select public.fn_user_org_ids()))
-    or public.fn_is_platform_admin()
-  );
+-- [policy cae_select: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
 
 -- `cae_insert` não é mais criada aqui: era um `for insert` aberto a qualquer
 -- membro (até o somente leitura forjava "fulano assumiu a conversa"). Quem grava
@@ -6721,10 +6655,8 @@ end$$;
 -- corpo final na primeira definição do arquivo e o último bloco o repete]
 
 -- INSERT não emite mais nada — dispara só em UPDATE.
-drop trigger if exists trg_emit_event_on_lead_change on public.crm_leads;
-create trigger trg_emit_event_on_lead_change
-  after update on public.crm_leads
-  for each row execute function public.fn_emit_event_on_lead_change();
+-- O gatilho já nasce só em UPDATE na definição do dump (`CREATE OR REPLACE
+-- TRIGGER`, que também converte o clone antigo sem deixá-lo um instante sem gatilho).
 
 -- Backlog morto: duplicatas antigas do trigger nunca terão consumer.
 update public.event_log
@@ -7822,10 +7754,8 @@ from ranked
 where e.id = ranked.id
   and ranked.rn > 1;
 
-drop index if exists idx_followup_enrollments_one_live;
-create unique index if not exists idx_followup_enrollments_one_live
-  on followup_enrollments (organization_id, contact_id)
-  where status in ('active', 'waiting_reply', 'paused_handoff');
+-- [idx_followup_enrollments_one_live: a definição intermediária (sem `paused_manual`) saiu
+-- daqui; o índice é trocado uma vez, pela definição final, no bloco da migration 0145]
 
 alter table followup_enrollments
   add column if not exists agent_id uuid references ai_agents(id) on delete set null;
@@ -7981,22 +7911,12 @@ alter table agent_case_events enable row level security;
 -- antigo. Sem policy de escrita a sessão não escreve; o revoke do privilégio
 -- vem no bloco da 0319.
 drop policy if exists tenant_isolation_agent_cases_all on agent_cases;
-drop policy if exists tenant_isolation_agent_cases_select on agent_cases;
 -- Forma de PASSAGEM: a mesma resposta, mas pergunta a visibilidade caso a caso.
 -- O bloco da 0319 a troca pela forma que pergunta por organização
 -- (`fn_alcance_das_conversas`), porque esta custa uma chamada por caso visitado
 -- — o porquê, medido, está lá. As funções daquela forma só nascem depois deste
 -- ponto, por isso ela não pode ser criada aqui.
-create policy tenant_isolation_agent_cases_select on agent_cases
-  for select to authenticated
-  using (
-    organization_id in (select public.fn_user_org_ids())
-    and (
-      select true from public.conversations c
-       where c.organization_id = agent_cases.organization_id
-         and c.id = agent_cases.conversation_id
-    )
-  );
+-- [policy tenant_isolation_agent_cases_select: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
 drop policy if exists tenant_isolation_agent_case_events_insert on agent_case_events;
 drop policy if exists tenant_isolation_agent_case_events_select on agent_case_events;
 create policy tenant_isolation_agent_case_events_select on agent_case_events
@@ -11331,9 +11251,7 @@ alter table public.ai_purpose_bindings
 alter table public.ai_purpose_bindings enable row level security;
 
 drop policy if exists tenant_isolation_ai_purpose_bindings_all on public.ai_purpose_bindings;
-create policy tenant_isolation_ai_purpose_bindings_all on public.ai_purpose_bindings
-  using (organization_id in (select public.fn_user_org_ids()))
-  with check (organization_id in (select public.fn_user_org_ids()));
+-- [policy obsoleta tenant_isolation_ai_purpose_bindings_all: o arquivo não a cria mais; o drop que a tira de clone antigo continua adiante]
 
 drop trigger if exists ai_purpose_bindings_updated_at on public.ai_purpose_bindings;
 create trigger ai_purpose_bindings_updated_at
@@ -12139,7 +12057,15 @@ exception when duplicate_object then null; end $$;
 -- de copiar a definição EM VIGOR, não a da DDL original — recriar a partir da
 -- linha errada reverte a garantia sem conflito de merge e sem sintoma imediato.
 -- Corrigido na integração; ver a nota no MANIFEST da 0145.
-drop index if exists idx_followup_enrollments_one_live;
+-- Só derruba o índice que NÃO é o final. Derrubar e recriar a cada reaplicação
+-- deixava a tabela um comando sem a unicidade e reconstruía o índice em todo deploy.
+do $indice$ begin
+  if exists (select 1 from pg_indexes
+              where schemaname = 'public' and indexname = 'idx_followup_enrollments_one_live'
+                and indexdef not like '%(organization_id, contact_id)%paused_manual%') then
+    drop index public.idx_followup_enrollments_one_live;
+  end if;
+end $indice$;
 create unique index if not exists idx_followup_enrollments_one_live
   on public.followup_enrollments (organization_id, contact_id)
   where status in ('active','waiting_reply','paused_handoff','paused_manual');
@@ -12558,7 +12484,10 @@ create policy tenant_isolation_ai_purpose_bindings_write on public.ai_purpose_bi
 -- bytes inúteis. O que ele não protege é o resto: `provider`, `label`,
 -- `api_key_last4`, `validation_error`. E, sobretudo, a linha continuava
 -- DELETÁVEL, que é o dano real.)
-drop policy if exists tenant_isolation_ai_provider_credentials_select on public.ai_provider_credentials;
+-- (O `drop policy ..._select` que ficava aqui saiu: a 0207, logo abaixo, devolve a
+-- leitura por tenancy, e derrubá-la a cada reaplicação deixava gestor sem ver
+-- credencial nenhuma por alguns comandos. O bloco da 0207 troca a definição
+-- antiga pela final no mesmo comando.)
 drop policy if exists tenant_isolation_ai_provider_credentials_modify on public.ai_provider_credentials;
 
 drop policy if exists tenant_isolation_ai_provider_credentials_write on public.ai_provider_credentials;
@@ -12609,8 +12538,8 @@ notify pgrst, 'reload schema';
 -- O segredo segue protegido pelo GRANT POR COLUNA logo acima — é ele, e não a
 -- RLS, que esconde `api_key_encrypted/iv/tag`. (issue #292)
 --
--- Este bloco vem DEPOIS do da 0150 de propósito: lá em cima há um
--- `drop policy if exists ..._select`, e inverter a ordem apagaria este conserto.
+-- Este bloco vem DEPOIS do da 0150 de propósito: é ele que troca a `_select`
+-- antiga pela definição que vale.
 drop policy if exists tenant_isolation_ai_provider_credentials_select on public.ai_provider_credentials;
 create policy tenant_isolation_ai_provider_credentials_select on public.ai_provider_credentials
   for select using (organization_id in (select public.fn_user_org_ids()));
@@ -15637,23 +15566,9 @@ revoke all on public.calendar_event_types from anon;
 -- ─── os compromissos: a operação do dia ───────────────────────────────────
 alter table public.calendar_appointments enable row level security;
 drop policy if exists tenant_isolation_calendar_appointments_all on public.calendar_appointments;
-drop policy if exists calendar_appointments_select on public.calendar_appointments;
-create policy calendar_appointments_select on public.calendar_appointments
-  for select using (
-    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
-  );
+-- [policy calendar_appointments_select: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
 drop policy if exists calendar_appointments_write on public.calendar_appointments;
-create policy calendar_appointments_write on public.calendar_appointments
-  using (
-    public.fn_is_platform_admin()
-    or ((organization_id in (select public.fn_user_org_ids()))
-        and public.fn_role_at_least(organization_id, 'agent'))
-  )
-  with check (
-    public.fn_is_platform_admin()
-    or ((organization_id in (select public.fn_user_org_ids()))
-        and public.fn_role_at_least(organization_id, 'agent'))
-  );
+-- [policy obsoleta calendar_appointments_write: o arquivo não a cria mais; o drop que a tira de clone antigo continua adiante]
 revoke all on public.calendar_appointments from anon;
 
 -- ─── as exceções: a agenda é de quem a vive ───────────────────────────────
@@ -19863,16 +19778,40 @@ alter table public.calendar_external_events alter column ends_at drop not null;
 alter table public.calendar_external_events drop constraint if exists calendar_external_events_periodo_valido;
 alter table public.calendar_external_events add constraint calendar_external_events_periodo_valido
  check(status='cancelled' or (starts_at is not null and ends_at is not null and ends_at>starts_at));
-drop index if exists public.calendar_appointments_google_evento_key;
+-- Só derruba o índice que NÃO é o final (o da 0189 não tinha `google_calendar_id`).
+do $indice$ begin
+  if exists (select 1 from pg_indexes
+              where schemaname = 'public' and indexname = 'calendar_appointments_google_evento_key'
+                and indexdef not like '%google_calendar_id%') then
+    drop index public.calendar_appointments_google_evento_key;
+  end if;
+end $indice$;
 create unique index if not exists calendar_appointments_google_evento_key
  on public.calendar_appointments(organization_id,google_connection_id,google_calendar_id,google_event_id) where google_event_id is not null;
 -- Nenhum legado é declarado sincronizado sem GET/base. Tupla ambígua fica
 -- preservada e visível; não se adivinha calendário de outra conta/conexão.
-drop index if exists public.calendar_appointments_pendente_no_google_idx;
-drop view if exists public.calendar_google_reconcilable_appointments;
-alter table public.calendar_appointments drop column if exists needs_google_push;
-alter table public.calendar_appointments add column needs_google_push boolean generated always as
- (google_local_revision>google_synced_local_revision and google_conflict is null) stored;
+-- A coluna gerada só é refeita quando a expressão NÃO é a final. Antes este bloco
+-- fazia `drop column` + `add column` em toda reaplicação: reescrevia a tabela da
+-- agenda a cada deploy, deixava a coluna inexistente por um comando e a view
+-- `calendar_google_reconcilable_appointments` (que depende dela) fora por ~40.
+-- A comparação ignora espaço, parêntese e caixa para não depender de como cada
+-- major do Postgres imprime a expressão; na dúvida ela refaz, que é o de antes.
+do $coluna$ begin
+  if not exists (
+    select 1 from pg_attribute a
+      join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
+     where a.attrelid = 'public.calendar_appointments'::regclass
+       and a.attname = 'needs_google_push' and a.attgenerated = 's' and not a.attisdropped
+       and lower(regexp_replace(pg_get_expr(d.adbin, d.adrelid), '[\s()]', '', 'g'))
+           = 'google_local_revision>google_synced_local_revisionandgoogle_conflictisnull'
+  ) then
+    drop index if exists public.calendar_appointments_pendente_no_google_idx;
+    drop view if exists public.calendar_google_reconcilable_appointments;
+    alter table public.calendar_appointments drop column if exists needs_google_push;
+    alter table public.calendar_appointments add column needs_google_push boolean generated always as
+     (google_local_revision>google_synced_local_revision and google_conflict is null) stored;
+  end if;
+end $coluna$;
 create index if not exists calendar_appointments_pendente_no_google_idx
  on public.calendar_appointments(google_next_attempt_at) where needs_google_push and owner_user_id is not null;
 
@@ -25184,9 +25123,6 @@ create policy calendar_appointments_delete on public.calendar_appointments
 alter table public.contacts enable row level security;
 drop policy if exists tenant_isolation_contacts_all on public.contacts;
 drop policy if exists contacts_select on public.contacts;
-drop policy if exists contacts_insert on public.contacts;
-drop policy if exists contacts_update on public.contacts;
-drop policy if exists contacts_delete on public.contacts;
 
 create policy contacts_select on public.contacts
   for select using (
@@ -25202,47 +25138,11 @@ create policy contacts_select on public.contacts
 
 -- Um prestador nao cria um contato solto: o cadastro nasce pelo fluxo de
 -- agendamento, que ja grava o vinculo. Os demais papeis mantem o comportamento.
-create policy contacts_insert on public.contacts
-  for insert with check (
-    public.fn_is_platform_admin()
-    or (
-      organization_id in (select public.fn_user_org_ids())
-      and public.fn_user_role_in_org(organization_id) <> 'provider'
-    )
-  );
+-- [policy contacts_insert: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
 
-create policy contacts_update on public.contacts
-  for update using (
-    public.fn_is_platform_admin()
-    or (
-      organization_id in (select public.fn_user_org_ids())
-      and (
-        public.fn_user_role_in_org(organization_id) <> 'provider'
-        or public.fn_provider_can_access_contact(organization_id, id)
-      )
-    )
-  ) with check (
-    public.fn_is_platform_admin()
-    or (
-      organization_id in (select public.fn_user_org_ids())
-      and (
-        public.fn_user_role_in_org(organization_id) <> 'provider'
-        or public.fn_provider_can_access_contact(organization_id, id)
-      )
-    )
-  );
+-- [policy contacts_update: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
 
-create policy contacts_delete on public.contacts
-  for delete using (
-    public.fn_is_platform_admin()
-    or (
-      organization_id in (select public.fn_user_org_ids())
-      and (
-        public.fn_user_role_in_org(organization_id) <> 'provider'
-        or public.fn_provider_can_access_contact(organization_id, id)
-      )
-    )
-  );
+-- [policy contacts_delete: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
 
 notify pgrst, 'reload schema';
 
@@ -25686,15 +25586,7 @@ drop policy if exists tenant_isolation_contact_channel_identities_all on public.
 -- webhook via fn_upsert_contato_por_identidade, service_role), mas a RLS
 -- protege o acesso direto de qualquer membro logado; piso 'agent' segue o
 -- mesmo padrão de channel_sessions/voice_calls (doutrina RBAC, migration 0150).
-create policy tenant_isolation_contact_channel_identities_all on public.contact_channel_identities
-  for all using (
-    organization_id in (select public.fn_user_org_ids())
-    and public.fn_role_at_least(organization_id, 'agent')
-  )
-  with check (
-    organization_id in (select public.fn_user_org_ids())
-    and public.fn_role_at_least(organization_id, 'agent')
-  );
+-- [policy obsoleta tenant_isolation_contact_channel_identities_all: o arquivo não a cria mais; o drop que a tira de clone antigo continua adiante]
 
 drop trigger if exists trg_contact_channel_identities_updated_at on public.contact_channel_identities;
 create trigger trg_contact_channel_identities_updated_at
@@ -30585,6 +30477,11 @@ create policy tenant_isolation_agent_cases_select on public.agent_cases
       or conversation_id in (select public.fn_conversas_ao_alcance())
     )
   );
+-- A restritiva do segundo fator nasce aqui também: o laço da 0301 só cobre tabela
+-- que JÁ tem policy permissiva, e numa instalação nova a desta tabela nasce depois dele.
+drop policy if exists mfa_provada on public.agent_cases;
+create policy mfa_provada on public.agent_cases as restrictive for all to authenticated
+  using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()));
 
 -- A lista de concluídos é lida do mais recente para trás, com limite
 -- (app/api/v1/ai/cases/route.ts). Sem este índice o Postgres confere a
@@ -33894,9 +33791,19 @@ drop policy if exists tenant_isolation_job_queue_select on public.job_queue;
 create policy tenant_isolation_job_queue_select on public.job_queue
   for select to authenticated
   using (organization_id in (select public.fn_user_org_ids()));
+-- A restritiva do segundo fator nasce aqui também: o laço da 0301 só cobre tabela
+-- que JÁ tem policy permissiva, e numa instalação nova a desta tabela nasce depois dele.
+drop policy if exists mfa_provada on public.job_queue;
+create policy mfa_provada on public.job_queue as restrictive for all to authenticated
+  using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()));
 
 drop policy if exists tenant_isolation_storage_redaction_queue_all on public.storage_redaction_queue;
 drop policy if exists tenant_isolation_storage_redaction_queue_select on public.storage_redaction_queue;
 create policy tenant_isolation_storage_redaction_queue_select on public.storage_redaction_queue
   for select to authenticated
   using (organization_id in (select public.fn_user_org_ids()));
+-- A restritiva do segundo fator nasce aqui também: o laço da 0301 só cobre tabela
+-- que JÁ tem policy permissiva, e numa instalação nova a desta tabela nasce depois dele.
+drop policy if exists mfa_provada on public.storage_redaction_queue;
+create policy mfa_provada on public.storage_redaction_queue as restrictive for all to authenticated
+  using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()));
