@@ -1421,15 +1421,16 @@ async function readStopFlags(
   contactId: string,
   humanMeetingCommand = false,
 ): Promise<{ bloqueado: boolean; comHumano: boolean }> {
-  const { rows } = await db.query<{ is_blocked: boolean; force_human: boolean }>(
-    'select is_blocked, force_human from contacts where organization_id = $1 and id = $2',
+  // O predicado da parada continua UM só e no SQL (`is_blocked or force_human`);
+  // `is_blocked` vem ao lado só para o trace saber QUAL das duas travas vetou.
+  const { rows } = await db.query<{ is_blocked: boolean; stopped: boolean }>(
+    humanMeetingCommand
+      ? 'select is_blocked, is_blocked as stopped from contacts where organization_id = $1 and id = $2'
+      : 'select is_blocked, (is_blocked or force_human) as stopped from contacts where organization_id = $1 and id = $2',
     [organizationId, contactId],
   );
-  return {
-    bloqueado: rows[0]?.is_blocked === true,
-    // Comando humano (reunião, resposta aprovada) passa por cima de `force_human`.
-    comHumano: !humanMeetingCommand && rows[0]?.force_human === true,
-  };
+  const bloqueado = rows[0]?.is_blocked === true;
+  return { bloqueado, comHumano: !bloqueado && rows[0]?.stopped === true };
 }
 
 /**
