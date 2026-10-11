@@ -9646,6 +9646,7 @@ export const DICIONARIO: Traducoes = {
   "Cor da etiqueta": { es: "Color de la etiqueta" },
   "nas listas e nos filtros:": { es: "en las listas y en los filtros:" },
   "Sem cor": { es: "Sin color" },
+  "Confira a etiqueta e a cor.": { es: "Revise la etiqueta y el color." },
   "Prévia:": { es: "Vista previa:" },
   "Cor da etiqueta atualizada.": { es: "Color de la etiqueta actualizado." },
   Amarelo: { es: "Amarillo" },
