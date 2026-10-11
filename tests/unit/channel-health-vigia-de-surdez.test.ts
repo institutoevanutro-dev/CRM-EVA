@@ -99,14 +99,14 @@ describe("cron channel-health × vigia de surdez", () => {
 
     const metadata = db.sessao.metadata as Record<string, { reiniciado_em?: string }>;
     expect(metadata.ai_gate).toEqual({ ligado: true });
-    expect(metadata.vigia_surdez.reiniciado_em).toMatch(/^\d{4}-/);
+    expect(metadata.vigia_surdez?.reiniciado_em).toMatch(/^\d{4}-/);
 
     // A consulta de mensagens leva a organização explícita (service role).
     expect(db.filtrosDeMensagem).toEqual(
       expect.arrayContaining([["organization_id", ORG], ["channel_session_id", "s1"], ["direction", "inbound"]]),
     );
     expect(audit).toHaveBeenCalledTimes(1);
-    expect(audit.mock.calls[0][0]).toMatchObject({
+    expect(audit.mock.calls[0]?.[0]).toMatchObject({
       action: "channel.reconnected", organizationId: ORG, resourceId: "s1",
       metadata: { origem: "vigia_de_surdez", force: false },
     });
@@ -130,7 +130,7 @@ describe("cron channel-health × vigia de surdez", () => {
       organization_id: ORG, kind: "channel_number_alert", severity: "warn",
       ref_kind: "channel_session", ref_id: "s1",
     });
-    expect(db.avisos[0].title).toContain("Recepção");
+    expect(db.avisos[0]?.title).toContain("Recepção");
 
     await rodar();
     expect(db.avisos).toHaveLength(1);
@@ -159,7 +159,7 @@ describe("cron channel-health × vigia de surdez", () => {
     const { data } = await rodar();
     expect(data.surdez_reinicio_falhou).toBe(1);
     expect(audit).not.toHaveBeenCalled();
-    expect((db.sessao.metadata as Record<string, { falhou?: boolean }>).vigia_surdez.falhou).toBe(true);
+    expect((db.sessao.metadata as Record<string, { falhou?: boolean }>).vigia_surdez?.falhou).toBe(true);
 
     await rodar();
     expect(restart).toHaveBeenCalledTimes(1);
