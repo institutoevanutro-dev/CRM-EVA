@@ -43,6 +43,7 @@ import { useT } from "@/hooks/i18n/useT";
  */
 const SCOPES: { id: string; label: string }[] = [
   { id: "prontuario:contacts:read", label: "Prontuário EVA: pesquisar cadastro de contatos" },
+  { id: "prontuario:contacts:demographics:read", label: "Prontuário: importar CPF e endereço do CRM (requer leitura de contatos)" },
   { id: "prontuario:contacts:write", label: "Prontuário EVA: criar e atualizar cadastro de contatos" },
   { id: "agenda:read", label: "Prontuário: ler compromissos da agenda" },
   { id: "agenda:reschedule", label: "Prontuário: remarcar compromissos da agenda" },
