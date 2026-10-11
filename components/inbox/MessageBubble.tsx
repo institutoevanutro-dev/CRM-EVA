@@ -12,6 +12,7 @@ import { CitationButton } from "@/components/ai/CitationButton";
 import { MediaRenderer } from "@/components/inbox/media/MediaRenderer";
 import { MediaUnavailable } from "@/components/inbox/media/MediaUnavailable";
 import { ContactCard } from "@/components/inbox/media/ContactCard";
+import { resolveSharedContact } from "@/lib/messaging/contact-card";
 import {
   extractCitations,
   isAiGeneratedMessage,
@@ -255,7 +256,9 @@ export const MessageBubble = memo(function MessageBubble({
             <div className={cn("line-clamp-2 wrap-anywhere opacity-70", citada.revoked_at && "italic")}>
               {citada.revoked_at
                 ? t("Esta mensagem foi apagada")
-                : citada.body?.trim() || t("(sem texto)")}
+                : citada.type === "contact"
+                  ? resolveSharedContact(citada)?.name || t("Contato")
+                  : citada.body?.trim() || t("(sem texto)")}
             </div>
           </div>
         )}

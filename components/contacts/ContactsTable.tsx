@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { format, formatRelative, isToday, isYesterday } from "date-fns";
 import { toast } from "sonner";
-import { CaretDown, CaretUp, ChatCircle, Trash } from "@/lib/ui/icons";
+import { CaretDown, CaretUp, ChatCircle, PencilSimple, Trash } from "@/lib/ui/icons";
 import {
   Table,
   TableBody,
@@ -38,6 +38,7 @@ import type { ContactOrderBy } from "@/lib/schemas/contacts";
 import type { Contact } from "@/lib/types/contacts";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import { EditContactDialog } from "@/components/contacts/EditContactDialog";
 
 interface Props {
   contacts: Contact[];
@@ -113,6 +114,9 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
   const clientesLigado = useActiveOrg()?.cliente_pela_agenda === true;
   const del = useDeleteContact();
   const [alvo, setAlvo] = useState<Contact | null>(null);
+  // Editar pela linha, sem abrir a ficha. Sem `customFieldDefs`: os campos do
+  // funil continuam na ficha (porte do upstream #2717).
+  const [contatoEmEdicao, setContatoEmEdicao] = useState<Contact | null>(null);
   const [abrindo, setAbrindo] = useState<string | null>(null);
   const router = useRouter();
   const qc = useQueryClient();
@@ -275,6 +279,20 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
                     <ChatCircle size={16} weight="regular" aria-hidden />
                   </Button>
                 ) : null}
+                {/* O MESMO diálogo da ficha. Anonimizado não ganha lápis, como
+                    na ficha: o servidor recusa a edição. */}
+                {!c.is_anonymized && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title={t("Editar contato")}
+                    aria-label={`${t("Editar contato")} ${displayName(c, t)}`}
+                    onClick={() => setContatoEmEdicao(c)}
+                  >
+                    <PencilSimple size={16} weight="regular" aria-hidden />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -314,6 +332,16 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    {/* Montado só com alvo escolhido: fechar zera o state. */}
+    {contatoEmEdicao && (
+      <EditContactDialog
+        contact={contatoEmEdicao}
+        open
+        onOpenChange={(aberto) => {
+          if (!aberto) setContatoEmEdicao(null);
+        }}
+      />
+    )}
     </>
   );
 }

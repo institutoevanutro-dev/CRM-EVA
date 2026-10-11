@@ -26,6 +26,7 @@ import { useUploadMedia, type DestinoDoUpload } from "@/hooks/inbox/useUploadMed
 import { imagemDoClipboard } from "@/lib/inbox/clipboard-image";
 import { interpolateTemplate, type TemplateContact } from "@/lib/inbox/template-vars";
 import { cn } from "@/lib/utils";
+import { resolveSharedContact } from "@/lib/messaging/contact-card";
 
 export interface ComposerHandle {
   focus: () => void;
@@ -69,7 +70,14 @@ interface Props {
    * Vem de fora e não daqui porque quem escolhe é a lista de mensagens: o
    * composer só precisa mostrar o que foi escolhido e mandá-lo junto.
    */
-  respondendo?: { id: string; body: string | null; direction: string } | null;
+  respondendo?: {
+    id: string;
+    body: string | null;
+    direction: string;
+    /** Com `type: "contact"` a faixa mostra o nome do contato, e não o vCard bruto. */
+    type?: string;
+    metadata?: Record<string, unknown>;
+  } | null;
   /** Desfaz a escolha — o `x` da faixa de citação. */
   onCancelarResposta?: () => void;
   /** Contato da conversa (name + display_name), para interpolar {{nome}}/{{primeiro_nome}}
@@ -317,7 +325,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                 {respondendo.direction === "outbound" ? t("Você") : t("Cliente")}
               </div>
               <div className="line-clamp-2 text-xs text-muted-foreground">
-                {respondendo.body?.trim() || t("(sem texto)")}
+                {respondendo.type === "contact"
+                  ? resolveSharedContact({
+                      type: "contact",
+                      body: respondendo.body,
+                      metadata: respondendo.metadata ?? {},
+                    })?.name || t("Contato")
+                  : respondendo.body?.trim() || t("(sem texto)")}
               </div>
             </div>
             <button

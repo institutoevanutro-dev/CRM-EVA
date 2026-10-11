@@ -122,6 +122,8 @@ export interface InboundMessageEvent {
     mime: string | null;
     /** Nota de voz de verdade (não anexo de áudio). */
     voice: boolean;
+    /** Nome original do arquivo: a Cloud API só manda `filename` em `document`. */
+    filename?: string | null;
   } | null;
   /**
    * `messages[].referral` cru — vem na mensagem que o app do cliente manda ao
@@ -152,7 +154,13 @@ export interface EchoMessageEvent {
   sentAt: Date;
   type: string;
   text: string | null;
-  media: { id: string; url: string | null; mime: string | null; voice: boolean } | null;
+  media: {
+    id: string;
+    url: string | null;
+    mime: string | null;
+    voice: boolean;
+    filename?: string | null;
+  } | null;
 }
 
 /** Um pedaço do histórico importado; `bruto` é o `value` cru, quem interpreta é a ingestão. */
@@ -221,7 +229,13 @@ function str(v: unknown): string | null {
 function midiaDe(raw: Record<string, unknown>, tipo: string) {
   const corpo = raw[tipo] as Record<string, unknown> | undefined;
   return corpo && str(corpo.id)
-    ? { id: str(corpo.id)!, url: str(corpo.url), mime: str(corpo.mime_type), voice: corpo.voice === true }
+    ? {
+        id: str(corpo.id)!,
+        url: str(corpo.url),
+        mime: str(corpo.mime_type),
+        voice: corpo.voice === true,
+        filename: str(corpo.filename),
+      }
     : null;
 }
 

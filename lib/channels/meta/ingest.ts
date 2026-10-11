@@ -26,6 +26,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { pausarIaPorAtendimentoManual } from "@/lib/escalacao/atendimento-manual";
 import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
 import { logger } from "@/lib/logger";
+import { nomeDeArquivoLimpo } from "@/lib/messaging/media/nome-de-arquivo";
 
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "../archived";
 import { extrairAtribuicaoMeta } from "../atribuicao-de-anuncio-oficial";
@@ -273,6 +274,9 @@ export async function ingestMetaInbound(
       metadata: {
         tipo_da_meta: e.type,
         ...(e.media ? { meta_media_id: e.media.id, voice: e.media.voice } : {}),
+        ...(nomeDeArquivoLimpo(e.media?.filename)
+          ? { media_filename: nomeDeArquivoLimpo(e.media?.filename) }
+          : {}),
         ...(e.sharedContact ? { shared_contact: e.sharedContact } : {}),
       },
     })
@@ -389,6 +393,9 @@ export async function ingestMetaEcho(
         fromMe: true,
         tipo_da_meta: e.type,
         ...(e.media ? { meta_media_id: e.media.id, voice: e.media.voice } : {}),
+        ...(nomeDeArquivoLimpo(e.media?.filename)
+          ? { media_filename: nomeDeArquivoLimpo(e.media?.filename) }
+          : {}),
       },
     })
     .select("id")
