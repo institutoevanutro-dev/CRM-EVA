@@ -197,10 +197,7 @@ function eventosInbound(mensagem: unknown): InboundMessageEvent {
 
 async function ingerirMetaInbound(mensagem: unknown): Promise<Linha> {
   const { admin, inseridas } = adminFalso();
-  const outcome = await ingestMetaInbound(admin as never, eventosInbound(mensagem), {
-    organizationId: "org-1",
-    channelSessionId: "sessao-1",
-  });
+  const outcome = await ingestMetaInbound(admin as never, eventosInbound(mensagem), { organizationId: "org-1" });
   expect(outcome.status, `a ingestão não gravou: ${JSON.stringify(outcome)}`).toBe("ingested");
   expect(inseridas).toHaveLength(1);
   return inseridas[0]!;
@@ -212,10 +209,7 @@ async function ingerirMetaEco(eco: unknown): Promise<Linha> {
   ) as EchoMessageEvent;
   expect(evento, "o parser não devolveu o eco").toBeDefined();
   const { admin, inseridas } = adminFalso();
-  const outcome = await ingestMetaEcho(admin as never, evento, {
-    organizationId: "org-1",
-    channelSessionId: "sessao-1",
-  });
+  const outcome = await ingestMetaEcho(admin as never, evento, { organizationId: "org-1" });
   expect(outcome.status, `a ingestão do eco não gravou: ${JSON.stringify(outcome)}`).toBe("ingested");
   expect(inseridas).toHaveLength(1);
   return inseridas[0]!;
