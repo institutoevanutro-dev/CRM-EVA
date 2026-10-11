@@ -161,6 +161,8 @@ interface CompromissoAVencer {
   id: string;
   organization_id: string;
   contact_id: string;
+  /** A conversa em que o horário foi marcado (nula na marcação pela tela). */
+  conversation_id: string | null;
   title: string;
   starts_at: string;
   /**
@@ -224,13 +226,23 @@ export { aplicarMoldeDoLembrete, montarLembrete };
  * `canal_fora_da_janela_24h` (a rota registra no log): o degrau NÃO carimba e a
  * próxima rodada tenta de novo, quando o contato escrever.
  *
+ * A ORIGEM DA RESERVA vem antes da conversa mais recente (porte parcial do
+ * upstream #2669): com dois números de WhatsApp, quem marcou falando com um e
+ * depois escreveu para o outro recebia o lembrete pelo segundo, um número que
+ * não tinha nada a ver com aquela consulta. `conversaDaReserva` é o
+ * `calendar_appointments.conversation_id`; só vale se estiver na lista lida
+ * (do MESMO contato e organização) e num número elegível. Número da reserva
+ * desconectado NÃO segura o lembrete: cai na regra de antes. (O original
+ * prefere não enviar e avisar na Central; aqui paciente sem lembrete é pior.)
+ *
  * A regra repete o filtro de provider de propósito: se a consulta mudar, o
  * Instagram continua sem ganhar. Pura e exportada, como `degrausPendentes`.
  */
 export function escolherCanalDoLembrete(
   sessoes: ReadonlyArray<{ id: string; provider: string }>,
-  conversas: ReadonlyArray<{ channel_session_id: string | null; last_inbound_at?: string | null }>,
+  conversas: ReadonlyArray<{ id?: string; channel_session_id: string | null; last_inbound_at?: string | null }>,
   agora: Date = new Date(),
+  conversaDaReserva: string | null = null,
 ): string | null {
   const automaticos = new Set<string>(providersDeEnvioAutomatico());
   // Janela de 24 h (porte do upstream #2620): canal que não aceita texto livre
@@ -254,6 +266,10 @@ export function escolherCanalDoLembrete(
       )
       .map((s) => s.id),
   );
+  const daReserva = conversaDaReserva
+    ? conversas.find((c) => c.id === conversaDaReserva)?.channel_session_id
+    : null;
+  if (daReserva && elegiveis.has(daReserva)) return daReserva;
   const daConversa = conversas.find((c) => c.channel_session_id && elegiveis.has(c.channel_session_id));
   return daConversa?.channel_session_id ?? [...elegiveis][0] ?? null;
 }
@@ -482,7 +498,7 @@ async function handle(req: NextRequest): Promise<Response> {
   const { data, error } = await admin
     .from("calendar_appointments")
     .select(
-      "id, organization_id, contact_id, title, starts_at, time_zone, owner_user_id, created_at, starts_at_marked_at, location_details, reminder_sent_offsets_minutes, reminder_sent_at, " +
+      "id, organization_id, contact_id, conversation_id, title, starts_at, time_zone, owner_user_id, created_at, starts_at_marked_at, location_details, reminder_sent_offsets_minutes, reminder_sent_at, " +
         "calendar_event_types!inner(name, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_template_name, reminder_body, location_details), " +
         // A unidade pela FK composta `(organization_id, unit_id)`: só casa
         // unidade da MESMA organização, e poupa uma consulta por linha.
@@ -600,12 +616,15 @@ async function handle(req: NextRequest): Promise<Response> {
       .order("id", { ascending: true });
     const { data: conversas } = await admin
       .from("conversations")
-      .select("channel_session_id, last_inbound_at")
+      .select("id, channel_session_id, last_inbound_at")
       .eq("organization_id", org)
       .eq("contact_id", contato.id)
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(20);
-    const canalId = escolherCanalDoLembrete(sessoes ?? [], conversas ?? [], agora);
+    // ponytail: a conversa da reserva é procurada nas 20 mais recentes do
+    // contato (a lista acima); além disso vale a regra de antes. Consulta
+    // própria por id se algum contato chegar a ter tantas conversas.
+    const canalId = escolherCanalDoLembrete(sessoes ?? [], conversas ?? [], agora, linha.conversation_id);
 
     if (!canalId) {
       // Pulo ANTES do carimbo (upstream #2620): o degrau segue pendente.
