@@ -369,6 +369,19 @@ export interface ChannelAdapter {
   checkHealth?(input: ChannelTenantScope & { sessionRef: string }): Promise<ChannelHealth>;
 
   /**
+   * Reinício SUAVE: para e sobe a mesma sessão, com a credencial que já está
+   * no disco. Nunca desloga, nunca pede QR.
+   *
+   * Quem chama é o vigia de surdez (`lib/channels/vigia-de-surdez.ts`), e só
+   * para uma sessão que o transporte acabou de dizer que está de pé. Descartar
+   * a credencial é decisão de gente e mora na rota de reconectar, com `force`.
+   *
+   * OPCIONAL como os demais: canal sem sessão para reiniciar não implementa.
+   * LANÇA quando o transporte recusa.
+   */
+  restart?(input: ChannelTenantScope & { sessionRef: string }): Promise<{ status: string }>;
+
+  /**
    * Envia uma DEFINIÇÃO APROVADA — o único caminho de volta quando a janela de
    * 24h fechou.
    *
