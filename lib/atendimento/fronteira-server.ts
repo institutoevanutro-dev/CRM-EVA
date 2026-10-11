@@ -3,6 +3,8 @@ import { assertApprovedReplyPg } from "@/lib/ai/replies/delivery";
 import { assertMeetingDeliveryPg } from "@/lib/agenda/meet-delivery";
 import { claimOfJob } from "@/lib/agent-engine/queue/claim";
 import { withAgendaEffect, guardAgendaEffect } from "@/lib/agenda/efeito";
+import { pessoaNoComandoDaConversa } from "@/lib/ai/elegibilidade/consulta-pg";
+import { logger } from "@/lib/logger";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Queryable, JobRow } from "@/lib/agent-engine/queue/queue";
 import type { ToolSet } from "@/lib/agent-engine/edge/llm/run-model-call";
@@ -18,6 +20,10 @@ const execution = new AsyncLocalStorage<{
   boundary: ServiceBoundary | null;
   job?: JobRow;
   agentOperation?: AgentOperationContext;
+  /** Ver `guardServiceTools`: a própria IA passou a vez neste turno. */
+  iaPassouAVez?: boolean;
+  /** Ferramentas de escrita deste turno ainda rodando (o modelo pede várias no mesmo passo). */
+  escritasEmCurso?: number;
 }>();
 export const SERVICE_BOUNDARY_SQL = `select c.organization_id, c.contact_id, c.id as conversation_id,
  c.service_revision::float8 as service_revision, c.current_demanda_id as demanda_id,
@@ -134,7 +140,44 @@ export async function withServiceJob<T>(
       : action(),
   );
 }
-/** Guarda no execute real. Tools desconhecidas são mutáveis por default. */
+/** Turnos em que a IA age sozinha. Operador, resposta aprovada e entrega do link são ordem de pessoa. */
+const TURNOS_AUTONOMOS = new Set(["inbound_turn", "followup_turn", "case_reply_turn"]);
+/** A conferência destas é por BOLHA, em `sendTurnMessage`, com o recado próprio ao modelo. */
+const ENVIOS = new Set(["send_message", "send_media", "send_template"]);
+const RECUSA_POR_PESSOA_NO_COMANDO = {
+  ok: false as const,
+  error: {
+    code: "pessoa_no_comando",
+    message:
+      "Uma pessoa da equipe assumiu esta conversa enquanto você trabalhava; esta ação NÃO foi executada e nada foi " +
+      "alterado. NÃO tente de novo nem chame outra ferramenta de escrita neste turno: encerre agora. A pessoa segue o atendimento.",
+  },
+};
+
+/**
+ * Guarda no execute real. Tools desconhecidas são mutáveis por default.
+ *
+ * UMA PESSOA ASSUMIU NO MEIO DO TURNO: A IA TAMBÉM PARA DE ESCREVER NO CRM.
+ * O envio já confere isso a cada bolha (`pessoaAssumiuAConversa`, PR #212 do
+ * fork). Faltava o resto do turno: a recepção respondia pelo celular, a
+ * mensagem da IA era descartada e a ferramenta seguinte ainda marcava o
+ * horário ou movia o negócio, sem ninguém avisar o paciente. É a parte do
+ * upstream #2541 que o #212 não cobria, com a régua do #212 e sem migration:
+ * antes de cada ferramenta de escrita de um turno autônomo, a mesma leitura por
+ * chave primária. Recusa de ENSINO (o turno fecha e o job termina `done`), no
+ * mesmo formato da bolha descartada.
+ *
+ * A exceção é a IA que passou a vez ELA MESMA (`request_human_handoff` grava
+ * `force_human`): o que ela ainda grava depois, no mesmo turno, continua
+ * valendo. Por isso a conferência se repete DEPOIS de cada escrita: se a
+ * conversa mudou de mãos durante uma ferramenta deste turno, foi o turno.
+ *
+ * ponytail: uma pessoa que assuma exatamente enquanto uma ferramenta deste
+ * turno roda (qualquer uma fora das leituras nativas) é contada como "foi o
+ * turno" e as escritas seguintes passam; a mensagem continua barrada pelo
+ * envio. Separar os dois casos pede marcar no banco quem silenciou. A janela
+ * cai do turno inteiro (10 a 40 s de modelo) para a duração das ferramentas.
+ */
 export function guardServiceTools(tools: ToolSet | undefined): ToolSet | undefined {
   if (!tools || !execution.getStore()) return tools;
   const reads = new Set([
@@ -152,8 +195,40 @@ export function guardServiceTools(tools: ToolSet | undefined): ToolSet | undefin
         {
           ...definition,
           execute: async (...args: Parameters<typeof execute>) => {
+            const scope = execution.getStore();
+            const conversa = scope?.boundary;
+            const kind = scope?.job?.kind;
+            if (!scope || !conversa || !kind || !TURNOS_AUTONOMOS.has(kind) || ENVIOS.has(name)) {
+              await guardServiceEffect();
+              return execute(...args);
+            }
+            const pessoaNoComando = () =>
+              pessoaNoComandoDaConversa(
+                scope.db,
+                { organizationId: conversa.organization_id, conversationId: conversa.conversation_id },
+                kind,
+              );
+            const motivo = scope.iaPassouAVez || scope.escritasEmCurso ? null : await pessoaNoComando();
+            if (motivo !== null) {
+              logger.info("ferramenta recusada: uma pessoa assumiu a conversa durante o turno", {
+                job_id: scope.job?.id,
+                organization_id: conversa.organization_id,
+                conversation_id: conversa.conversation_id,
+                ferramenta: name,
+                motivo,
+              });
+              return RECUSA_POR_PESSOA_NO_COMANDO as never;
+            }
             await guardServiceEffect();
-            return execute(...args);
+            scope.escritasEmCurso = (scope.escritasEmCurso ?? 0) + 1;
+            try {
+              return await execute(...args);
+            } finally {
+              if (!scope.iaPassouAVez && (await pessoaNoComando().catch(() => null)) !== null) {
+                scope.iaPassouAVez = true;
+              }
+              scope.escritasEmCurso -= 1;
+            }
           },
         },
       ];
