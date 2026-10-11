@@ -1,31 +1,76 @@
 /**
- * Interpola variáveis de template com o nome do contato (Onda 5).
- * Suporta {{nome}} e {{primeiro_nome}}. Variável desconhecida mantém o literal
- * `{{x}}`.
+ * Interpola variáveis de template com os dados do contato (Onda 5).
+ *
+ * A lista é FECHADA (`VARIAVEIS_DO_TEMPLATE`): nome, primeiro nome, telefone,
+ * e-mail e o título do negócio. Nada de travessia de propriedade: CPF, data de
+ * nascimento, observações e campos personalizados NÃO são variáveis, mesmo que
+ * quem chama passe a linha inteira do banco. `{{contact.name}}`,
+ * `{{contact.phone_number}}` e `{{contact.email}}` são sinônimos, para o texto
+ * escrito no vocabulário das automações valer aqui também.
  *
  * O nome é resolvido AQUI, por `nomeDoContato` (`lib/contacts/rotulo-do-contato.ts`):
  * `name`, depois o `display_name` do perfil, nunca um identificador técnico
  * (telefone, `@lid`). Quem chama passa o contato bruto — a regra fica num
  * lugar só para a caixa de entrada, o atalho e o worker.
  *
- * Sem nome, dois modos:
+ * Sem valor ou desconhecida, dois modos:
  *  - `manter` (padrão, caixa de entrada): o literal fica, e quem vai enviar vê
  *    e corrige;
- *  - `remover` (follow-up, que sai sem ninguém olhar): a variável sai do texto e
- *    só a pontuação em volta dela se ajusta — "Ei, {{primeiro_nome}}, tá por
- *    aí?" vira "Ei, tá por aí?". Se não sobra nada além de pontuação e espaço,
+ *  - `remover` (follow-up, que sai sem ninguém olhar): TODA `{{…}}` que sobrou
+ *    sai do texto (a sem valor e a que não existe, como `{{nomee}}`) e só a
+ *    pontuação em volta dela se ajusta — "Ei, {{primeiro_nome}}, tá por aí?"
+ *    vira "Ei, tá por aí?". Se não sobra nada além de pontuação e espaço,
  *    devolve `""`: quem chama não envia (o passo é pulado).
  */
 import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
 
-export type TemplateContact = Pick<ContatoNomeavel, "name" | "display_name">;
+export type TemplateContact = Pick<ContatoNomeavel, "name" | "display_name"> & {
+  phone_number?: string | null;
+  email?: string | null;
+  /** Título do negócio mais recente do contato (`crm_leads.title`). */
+  lead_title?: string | null;
+};
 
 export interface InterpolacaoOpcoes {
   semValor?: "manter" | "remover";
 }
 
-const VARIAVEL = /\{\{\s*([a-zA-Z_]+)\s*\}\}/g;
-const VARIAVEL_DO_NOME = /\{\{\s*(nome|primeiro_nome)\s*\}\}/i;
+/** As variáveis que existem, na ordem em que a tela as mostra. */
+export const VARIAVEIS_DO_TEMPLATE = ["primeiro_nome", "nome", "telefone", "email", "lead.title"] as const;
+
+type Variavel = (typeof VARIAVEIS_DO_TEMPLATE)[number];
+
+const SINONIMOS: Record<string, Variavel> = {
+  "contact.name": "nome",
+  "contact.phone_number": "telefone",
+  "contact.email": "email",
+};
+
+const VARIAVEL = /\{\{\s*([a-zA-Z_.]+)\s*\}\}/g;
+/** Qualquer `{{…}}`, inclusive a que não é variável (`{{primeiro nome}}`, `{{1}}`). */
+const QUALQUER_VARIAVEL = /\{\{[^{}]*\}\}/;
+
+function variavelDe(bruto: string): Variavel | null {
+  const chave = bruto.trim().toLowerCase();
+  if ((VARIAVEIS_DO_TEMPLATE as readonly string[]).includes(chave)) return chave as Variavel;
+  return Object.hasOwn(SINONIMOS, chave) ? SINONIMOS[chave]! : null;
+}
+
+/**
+ * As `{{…}}` do texto que não são variáveis (erro de digitação, variável de
+ * outra tela). `extras` são as que quem chama resolve por conta própria, como
+ * `volta` e `voltas` do laço do follow-up.
+ */
+export function variaveisDesconhecidas(texto: string, extras: readonly string[] = []): string[] {
+  return [...texto.matchAll(new RegExp(QUALQUER_VARIAVEL, "g"))]
+    .map((m) => m[0])
+    .filter((literal) => {
+      const dentro = literal.slice(2, -2);
+      return variavelDe(dentro) === null && !extras.includes(dentro.trim().toLowerCase());
+    });
+}
+
+const texto = (valor: string | null | undefined) => (typeof valor === "string" ? valor.trim() : "");
 
 export function interpolateTemplate(
   body: string,
@@ -33,19 +78,24 @@ export function interpolateTemplate(
   opcoes: InterpolacaoOpcoes = {},
 ): string {
   const full = nomeDoContato(contact) ?? "";
-  const first = full.split(/\s+/)[0] ?? "";
+  const valores: Record<Variavel, string> = {
+    nome: full,
+    primeiro_nome: full.split(/\s+/)[0] ?? "",
+    telefone: texto(contact.phone_number),
+    email: texto(contact.email),
+    "lead.title": texto(contact.lead_title),
+  };
   const preenchido = body.replace(VARIAVEL, (literal, rawKey: string) => {
-    const key = rawKey.toLowerCase();
-    if (key === "nome") return full !== "" ? full : literal;
-    if (key === "primeiro_nome") return first !== "" ? first : literal;
-    return literal; // desconhecida: mantém
+    const variavel = variavelDe(rawKey);
+    // Desconhecida ou sem valor: mantém; em `remover`, sai logo abaixo.
+    return variavel !== null && valores[variavel] !== "" ? valores[variavel] : literal;
   });
-  if (opcoes.semValor !== "remover" || full !== "") return preenchido;
-  let texto = preenchido;
-  for (let m = VARIAVEL_DO_NOME.exec(texto); m; m = VARIAVEL_DO_NOME.exec(texto)) {
-    texto = semAVariavel(texto, m.index, m[0].length);
+  if (opcoes.semValor !== "remover") return preenchido;
+  let saida = preenchido;
+  for (let m = QUALQUER_VARIAVEL.exec(saida); m; m = QUALQUER_VARIAVEL.exec(saida)) {
+    saida = semAVariavel(saida, m.index, m[0].length);
   }
-  return /[^\s\p{P}]/u.test(texto) ? texto : "";
+  return /[^\s\p{P}]/u.test(saida) ? saida : "";
 }
 
 /**

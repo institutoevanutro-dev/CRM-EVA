@@ -39,6 +39,7 @@ const espacarEnvio = vi.fn(async (..._a: unknown[]) => {});
 vi.mock("@/lib/automation/throttle", () => ({ espacarEnvio: (...a: unknown[]) => espacarEnvio(...a) }));
 
 import { enviarTextoFixoPendente } from "./enviar-texto-fixo";
+import { logger } from "@/lib/logger";
 import { CHANNEL_PROVIDER_INSTAGRAM } from "@/lib/channels/capabilities";
 import { TEXTO_DO_BLOQUEIO } from "@/lib/followup/bloqueios-obrigatorios";
 
@@ -46,6 +47,8 @@ import { TEXTO_DO_BLOQUEIO } from "@/lib/followup/bloqueios-obrigatorios";
 let conversa: Record<string, unknown> | null = null;
 /** O contato do job, como `contacts` o devolve (nome escolhido + nome do perfil). */
 let contato: Record<string, unknown> | null = null;
+/** O negócio mais recente do contato (`crm_leads.title`). */
+let negocio: Record<string, unknown> | null = null;
 
 const boundary = { organization_id: "org-1", contact_id: "contact-1", conversation_id: "conv-1", service_revision: 1, demanda_id: null, demanda_revision: null };
 const JOB = {
@@ -83,6 +86,7 @@ function admin() {
         if (table === "job_queue" && chain._upd) return Promise.resolve({ data: { id: JOB.id, locked_by:chain._upd.locked_by, locked_at:chain._upd.locked_at }, error: null });
         if (table === "conversations") return Promise.resolve({ data: conversa, error: null });
         if (table === "contacts") return Promise.resolve({ data: contato, error: null });
+        if (table === "crm_leads") return Promise.resolve({ data: negocio, error: null });
         if (table === "followup_enrollments")
           return Promise.resolve({ data: { current_node_id: "node-1",status:"active",revision:1 }, error: null });
         return Promise.resolve({ data: null, error: null });
@@ -109,6 +113,7 @@ beforeEach(() => {
   settles.length = 0;
   conversa = { last_inbound_at: null, channel_session_id: "sess-1", channel_sessions: { provider: null } };
   contato = { name: null, display_name: null };
+  negocio = null;
   JOB.payload.fixed_body = "Oi, tudo bem?";
   conferir.mockResolvedValue({ envia: true });
   adiarAteAJanelaAbrir.mockResolvedValue(null);
@@ -310,8 +315,34 @@ describe("enviarTextoFixoPendente · {{nome}} e {{primeiro_nome}}", () => {
     expect(sendMessageHandler).not.toHaveBeenCalled();
     expect(completeTurnForEnrollment.mock.calls[0]?.[4]).toEqual({
       kind: "pulado",
-      reason: "Passo pulado: sem o nome do contato, a mensagem ficaria vazia.",
+      reason: "Passo pulado: as variáveis ficaram sem valor e a mensagem ficaria vazia.",
     });
     expect(statusUpdates).toContain("done");
+  });
+
+  it("telefone, e-mail e o título do negócio saem preenchidos", async () => {
+    JOB.payload.fixed_body = "{{primeiro_nome}}, falo no {{telefone}} ou em {{email}} sobre {{lead.title}}?";
+    contato = { name: "Bia Ramos", display_name: null, phone_number: "+5527999990000", email: "bia@exemplo.com" };
+    negocio = { title: "Avaliação" };
+    expect(await enviarTextoFixoPendente(admin())).toBe(1);
+    expect(corpo()).toBe("Bia, falo no +5527999990000 ou em bia@exemplo.com sobre Avaliação?");
+  });
+
+  it("variável sem valor sai do texto, sem chaves, 'null' nem 'undefined'", async () => {
+    JOB.payload.fixed_body = "Oi {{nome}}, seu e-mail é {{email}}? ({{lead.title}})";
+    contato = { name: "Bia Ramos", display_name: null, phone_number: null, email: null };
+    expect(await enviarTextoFixoPendente(admin())).toBe(1);
+    expect(corpo()).toBe("Oi Bia Ramos, seu e-mail é?");
+  });
+
+  it("variável desconhecida ou sensível sai do texto e vira aviso no log", async () => {
+    JOB.payload.fixed_body = "Oi {{nomee}}, tudo bem? {{contact.birthdate}}";
+    contato = { name: "Bia Ramos", display_name: null, birthdate: "1990-01-02" };
+    expect(await enviarTextoFixoPendente(admin())).toBe(1);
+    expect(corpo()).toBe("Oi, tudo bem?");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("variável desconhecida"),
+      expect.objectContaining({ variaveis: ["{{nomee}}", "{{contact.birthdate}}"] }),
+    );
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { interpolateTemplate } from "@/lib/inbox/template-vars";
+import { interpolateTemplate, variaveisDesconhecidas, VARIAVEIS_DO_TEMPLATE } from "@/lib/inbox/template-vars";
 
 describe("interpolateTemplate", () => {
   it("substitui nome e primeiro_nome", () => {
@@ -55,8 +55,10 @@ describe("interpolateTemplate · sem nome no follow-up (semValor: 'remover')", (
     );
   });
 
-  it("variável desconhecida continua literal em 'remover'", () => {
-    expect(remover("Cupom {{codigo}} para {{nome}}.")).toBe("Cupom {{codigo}} para.");
+  it("variável desconhecida também sai em 'remover': o paciente nunca recebe chaves", () => {
+    expect(remover("Cupom {{codigo}} para {{nome}}.")).toBe("Cupom para.");
+    expect(remover("Oi {{nomee}}, tudo bem?")).toBe("Oi, tudo bem?");
+    expect(remover("Oi {{primeiro nome}}! Faltam {{1}} dias.")).toBe("Oi! Faltam dias.");
   });
 
   it("display_name técnico (telefone/@lid) conta como sem nome e sai do texto", () => {
@@ -73,5 +75,65 @@ describe("interpolateTemplate · sem nome no follow-up (semValor: 'remover')", (
 
   it("controle da caixa de entrada: sem nome, o padrão 'manter' deixa o literal", () => {
     expect(interpolateTemplate("Oi {{primeiro_nome}}", { name: null })).toBe("Oi {{primeiro_nome}}");
+  });
+});
+
+describe("interpolateTemplate · telefone, e-mail e negócio", () => {
+  const pessoa = {
+    name: "Ana Paula Souza",
+    display_name: null,
+    phone_number: "+5527999990000",
+    email: "ana@exemplo.com",
+    lead_title: "Avaliação nutricional",
+  };
+  const enviar = (texto: string, contato: Record<string, unknown> = pessoa) =>
+    interpolateTemplate(texto, contato, { semValor: "remover" });
+
+  it("preenche cada variável da lista, com e sem o prefixo contact.", () => {
+    expect(enviar("{{primeiro_nome}}, seu número é {{telefone}} e o e-mail {{email}}? Sobre: {{lead.title}}.")).toBe(
+      "Ana, seu número é +5527999990000 e o e-mail ana@exemplo.com? Sobre: Avaliação nutricional.",
+    );
+    expect(enviar("{{contact.name}} / {{contact.phone_number}} / {{contact.email}}")).toBe(
+      "Ana Paula Souza / +5527999990000 / ana@exemplo.com",
+    );
+  });
+
+  it("sem valor: a variável sai com a pontuação, nunca 'null' nem 'undefined'", () => {
+    const semDados = { name: "Ana", phone_number: null, email: undefined, lead_title: "  " };
+    const texto = enviar("Oi {{primeiro_nome}}, confirma o e-mail {{email}}, o número {{telefone}} e {{lead.title}}?", semDados);
+    expect(texto).not.toMatch(/[{}]|null|undefined/);
+    expect(texto).toBe("Oi Ana, confirma o e-mail, o número e?");
+    expect(enviar("{{email}}", semDados)).toBe("");
+  });
+
+  it("no Inbox (manter), o que não tem valor continua literal para quem envia ver", () => {
+    expect(interpolateTemplate("Oi {{primeiro_nome}}, {{telefone}}", { name: "Ana" })).toBe("Oi Ana, {{telefone}}");
+  });
+
+  it("a lista é FECHADA: nada de CPF, nascimento, observação ou campo personalizado", () => {
+    expect([...VARIAVEIS_DO_TEMPLATE]).toEqual(["primeiro_nome", "nome", "telefone", "email", "lead.title"]);
+    // Mesmo com a linha inteira do banco na mão, só a lista sai.
+    const linhaInteira = {
+      ...pessoa,
+      birthdate: "1990-01-02",
+      cpf_hash: "abc123",
+      blocked_reason: "motivo interno",
+      description: "observação clínica",
+      lost_reason: "achou caro",
+      custom_fields: { diagnostico: "diabetes" },
+      tags: ["gestante"],
+    };
+    const texto = enviar(
+      "{{contact.birthdate}} {{birthdate}} {{contact.cpf_hash}} {{cpf}} {{contact.blocked_reason}} {{lead.description}} " +
+        "{{lead.lost_reason}} {{lead.custom_fields.diagnostico}} {{diagnostico}} {{contact.tags}} {{constructor}} {{__proto__}} fim",
+      linhaInteira,
+    );
+    expect(texto).toBe("Fim");
+  });
+
+  it("variaveisDesconhecidas: aponta o erro de digitação e aceita as extras de quem chama", () => {
+    expect(variaveisDesconhecidas("Oi {{nome}} {{nomee}} {{ Telefone }} {{volta}}")).toEqual(["{{nomee}}", "{{volta}}"]);
+    expect(variaveisDesconhecidas("Oi {{nomee}} {{volta}}", ["volta", "voltas"])).toEqual(["{{nomee}}"]);
+    expect(variaveisDesconhecidas("Oi {{contact.email}} e {{lead.title}}")).toEqual([]);
   });
 });

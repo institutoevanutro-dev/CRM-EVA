@@ -47,10 +47,10 @@ function job(payload: Record<string, unknown>): JobRow {
   } as JobRow;
 }
 
-function fakePool(contato: { name: string | null; display_name: string | null }, modelo = "Olá {{nome}}") {
+function fakePool(contato: Record<string, string | null>, modelo = "Olá {{nome}}") {
   const query = vi.fn(async (sql: string, params?: unknown[]): Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }> => {
     if (sql.includes("d.fechada_em::text")) return { rows: [{ ...boundary, status: "open", demanda_fechada_em: null }] };
-    if (/select name, display_name from contacts/.test(sql)) {
+    if (/c\.display_name/.test(sql)) {
       // O filtro por organização é obrigatório: service role não tem RLS.
       expect(params).toEqual([ORG, LEAD]);
       return { rows: [contato] };
@@ -77,12 +77,13 @@ function fakePool(contato: { name: string | null; display_name: string | null },
   return { query } as never;
 }
 
+const warn = vi.fn();
 function deps() {
   const complete = vi.fn(async (..._a: unknown[]) => undefined);
   return {
     complete,
     deps: {
-      log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+      log: { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() },
       crmCfg: {}, llmCfg: {}, knobs: {},
       channel: () => ({ send: vi.fn(async () => ({ kind: "sent" })) }),
       completeFollowupTurn: complete,
@@ -98,6 +99,7 @@ beforeAll(async () => {
 beforeEach(() => {
   runBeforeSend.mockClear();
   runAgentTurn.mockClear();
+  warn.mockClear();
 });
 
 const corpoEnviado = () => (runBeforeSend.mock.calls[0]?.[0] as { body?: string } | undefined)?.body;
@@ -137,7 +139,7 @@ describe("worker — variáveis do contato no texto e no modelo do passo", () =>
     expect(d.complete).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        result: { kind: "pulado", reason: "Passo pulado: sem o nome do contato, a mensagem ficaria vazia." },
+        result: { kind: "pulado", reason: "Passo pulado: as variáveis ficaram sem valor e a mensagem ficaria vazia." },
       }),
     );
   });
@@ -149,5 +151,48 @@ describe("worker — variáveis do contato no texto e no modelo do passo", () =>
       ctx,
     );
     expect(corpoEnviado()).toBe("Bia Ramos, tentativa 2 de 3");
+  });
+
+  const PESSOA = { name: "Bia Ramos", display_name: null, phone_number: "+5527999990000", email: "bia@exemplo.com", lead_title: "Avaliação" };
+
+  it("texto: telefone, e-mail e o título do negócio saem preenchidos", async () => {
+    await criarHandler(deps().deps)(
+      job({ fixed_body: "{{primeiro_nome}}, falo no {{telefone}} ou em {{contact.email}} sobre {{lead.title}}?" }),
+      fakePool(PESSOA),
+      ctx,
+    );
+    expect(corpoEnviado()).toBe("Bia, falo no +5527999990000 ou em bia@exemplo.com sobre Avaliação?");
+  });
+
+  it("modelo: variável sem valor sai do texto, sem chaves, 'null' nem 'undefined'", async () => {
+    await criarHandler(deps().deps)(
+      job({ template_id: "33333333-3333-4333-8333-333333333333" }),
+      fakePool({ ...PESSOA, email: null, lead_title: null }, "Oi {{nome}}, seu e-mail é {{email}}? ({{lead.title}})"),
+      ctx,
+    );
+    expect(corpoEnviado()).toBe("Oi Bia Ramos, seu e-mail é?");
+  });
+
+  it("variável desconhecida (erro de digitação) sai do texto e vira aviso no log, sem o dado do paciente", async () => {
+    await criarHandler(deps().deps)(
+      job({ fixed_body: "Oi {{nomee}}, tudo bem? {{contact.birthdate}}" }),
+      fakePool(PESSOA),
+      ctx,
+    );
+    expect(corpoEnviado()).toBe("Oi, tudo bem?");
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("variável desconhecida"),
+      expect.objectContaining({ variaveis: ["{{nomee}}", "{{contact.birthdate}}"] }),
+    );
+  });
+
+  it("texto só com variável desconhecida: pula o passo em vez de mandar chaves", async () => {
+    const d = deps();
+    await criarHandler(d.deps)(job({ fixed_body: "{{nomee}}" }), fakePool(PESSOA), ctx);
+    expect(runBeforeSend).not.toHaveBeenCalled();
+    expect(d.complete).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ result: expect.objectContaining({ kind: "pulado" }) }),
+    );
   });
 });

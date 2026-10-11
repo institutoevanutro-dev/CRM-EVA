@@ -23,7 +23,7 @@ import { requireCurrentServiceBoundary } from "@/lib/atendimento/fronteira-serve
 import { z } from 'zod';
 import type pg from 'pg';
 
-import { withFields } from '../obs/logger';
+import { withFields, type Logger } from '../obs/logger';
 import type { JobRow } from '../queue/queue';
 import { getLeadContext, type LeadContext } from '../edge/crm/get-lead-context';
 import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
@@ -43,7 +43,7 @@ import {
 import { isLeadInHandoff } from './human-handoff';
 import { aplicarPessoaNoComandoAoTurno } from '@/lib/followup/pessoa-no-comando-no-turno';
 import {
-  MOTIVO_TEXTO_VAZIO_SEM_NOME,
+  MOTIVO_TEXTO_VAZIO_SEM_VALOR,
   OUTCOME_DO_BLOQUEIO,
   TEXTO_DO_BLOQUEIO,
   conferirAntesDoEnvio,
@@ -51,7 +51,7 @@ import {
 } from '../../followup/bloqueios-obrigatorios';
 import { ERRO_FORA_DAS_24H } from '../edge/crm/send-ledger';
 import { fusoDaOrganizacao } from './fuso-da-org';
-import { interpolateTemplate } from '@/lib/inbox/template-vars';
+import { interpolateTemplate, variaveisDesconhecidas, type TemplateContact } from '@/lib/inbox/template-vars';
 import type { LeadStateRow } from './lead-state';
 import { loadReentryTemplate, pickReentryVariant } from './reentry-template';
 import {
@@ -616,10 +616,10 @@ async function runFlowDrivenTurn(
     // Passo de mídia: a legenda é o corpo (pode ficar vazia — a mídia sai sozinha).
     const body =
       input.mediaId !== undefined
-        ? await interpolarNomeDoContato(pool, target.tenantId, target.leadId, input.mediaCaption ?? '')
-        : await resolveFlowSendBody(pool, target.tenantId, target.leadId, input);
+        ? await interpolarVariaveisDoContato(pool, target.tenantId, target.leadId, input.mediaCaption ?? '', runLog)
+        : await resolveFlowSendBody(pool, target.tenantId, target.leadId, input, runLog);
     if (body === '' && input.mediaId === undefined) {
-      await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'pulado', reason: MOTIVO_TEXTO_VAZIO_SEM_NOME } });
+      await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'pulado', reason: MOTIVO_TEXTO_VAZIO_SEM_VALOR } });
       return;
     }
     if (body !== null) {
@@ -824,14 +824,24 @@ function interpolarVoltaDoPayload(texto: string, index: number | undefined, tota
 }
 
 /**
- * {{nome}}/{{primeiro_nome}} com o contato lido AGORA (o nome vale como está na
- * hora em que a mensagem sai). Sem nome, a variável sai do texto: o follow-up
- * não tem quem revise antes de enviar.
+ * As variáveis do texto (`VARIAVEIS_DO_TEMPLATE`: nome, telefone, e-mail e o
+ * título do negócio mais recente) com o contato lido AGORA (o dado vale como
+ * está na hora em que a mensagem sai). Sem valor ou desconhecida, a variável
+ * sai do texto: o follow-up não tem quem revise antes de enviar. A desconhecida
+ * vira aviso no log — só o nome da variável, nunca o dado do contato.
  */
-async function interpolarNomeDoContato(pool: pg.Pool, tenantId: string, contactId: string, texto: string): Promise<string> {
-  if (!/\{\{\s*(nome|primeiro_nome)\s*\}\}/i.test(texto)) return texto;
-  const { rows } = await pool.query<{ name: string | null; display_name: string | null }>(
-    'select name, display_name from contacts where organization_id = $1 and id = $2',
+async function interpolarVariaveisDoContato(pool: pg.Pool, tenantId: string, contactId: string, texto: string, log: Logger): Promise<string> {
+  if (!texto.includes('{{')) return texto;
+  const desconhecidas = variaveisDesconhecidas(texto);
+  if (desconhecidas.length > 0) {
+    log.warn('variável desconhecida no texto do follow-up: saiu da mensagem', { variaveis: desconhecidas });
+  }
+  const { rows } = await pool.query<TemplateContact>(
+    `select c.name, c.display_name, c.phone_number, c.email,
+            (select l.title from crm_leads l
+              where l.organization_id = c.organization_id and l.contact_id = c.id
+              order by l.updated_at desc limit 1) as lead_title
+       from contacts c where c.organization_id = $1 and c.id = $2`,
     [tenantId, contactId],
   );
   return interpolateTemplate(texto, rows[0] ?? {}, { semValor: 'remover' });
@@ -847,9 +857,10 @@ async function resolveFlowSendBody(
     voltaIndex: number | undefined;
     voltaTotal: number | undefined;
   },
+  log: Logger,
 ): Promise<string | null> {
   if (input.fixedBody !== undefined) {
-    return interpolarNomeDoContato(pool, tenantId, contactId, interpolarVoltaDoPayload(input.fixedBody, input.voltaIndex, input.voltaTotal));
+    return interpolarVariaveisDoContato(pool, tenantId, contactId, interpolarVoltaDoPayload(input.fixedBody, input.voltaIndex, input.voltaTotal), log);
   }
   if (input.templateId === undefined) return null;
   const { rows } = await pool.query<{ body: string }>(
@@ -860,7 +871,7 @@ async function resolveFlowSendBody(
   if (body === undefined || body.length === 0) {
     throw new Error('followup_turn sem modelo de mensagem — o template_id do passo não existe nesta organização');
   }
-  return interpolarNomeDoContato(pool, tenantId, contactId, interpolarVoltaDoPayload(body, input.voltaIndex, input.voltaTotal));
+  return interpolarVariaveisDoContato(pool, tenantId, contactId, interpolarVoltaDoPayload(body, input.voltaIndex, input.voltaTotal), log);
 }
 
 /**
@@ -1108,8 +1119,8 @@ async function tentarModeloDeReserva(
     templateId: input.fallbackTemplateId,
     voltaIndex: input.voltaIndex,
     voltaTotal: input.voltaTotal,
-  });
-  if (body === '') return { kind: 'pulado', reason: MOTIVO_TEXTO_VAZIO_SEM_NOME };
+  }, deps.log);
+  if (body === '') return { kind: 'pulado', reason: MOTIVO_TEXTO_VAZIO_SEM_VALOR };
   // Texto do operador: sem camada semântica, como o texto fixo do fluxo.
   const saiu = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body!, false, SEQ_DO_MODELO_DE_RESERVA);
   if (saiu === 'sent') return { kind: 'sent', via: 'modelo_de_reserva' };

@@ -15,7 +15,7 @@ import { logger } from "@/lib/logger";
 import { automaticoPodeEnviar } from "@/lib/channels/janela";
 import { ERRO_FORA_DAS_24H } from "@/lib/agent-engine/edge/crm/send-ledger";
 import {
-  MOTIVO_TEXTO_VAZIO_SEM_NOME,
+  MOTIVO_TEXTO_VAZIO_SEM_VALOR,
   OUTCOME_DO_BLOQUEIO,
   TEXTO_DO_BLOQUEIO,
   conferirAntesDoEnvio,
@@ -23,9 +23,7 @@ import {
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { adiarAteAJanelaAbrir } from "@/lib/automation/janela-do-canal";
 import { espacarEnvio } from "@/lib/automation/throttle";
-import { interpolateTemplate } from "@/lib/inbox/template-vars";
-
-const TEM_VARIAVEL_DO_NOME = /\{\{\s*(nome|primeiro_nome)\s*\}\}/i;
+import { interpolateTemplate, variaveisDesconhecidas } from "@/lib/inbox/template-vars";
 
 function ponteSupabase(admin: SupabaseClient): TurnBridgeAdminClient {
   const base = createSupabaseAdminClient(admin);
@@ -203,22 +201,41 @@ export async function enviarTextoFixoPendente(
       const proactiveContext={organizationId:job.organization_id as string,contactId,enrollmentId,nodeId,jobId:job.id,jobClaim};
       await assertAgendaEffectSupabase(admin,proactiveContext);
       await espacarEnvio(linha.channel_session_id);
-      // {{nome}}/{{primeiro_nome}} com o contato de AGORA, a mesma regra do
-      // worker (`resolveFlowSendBody`). O ledger guarda o texto que saiu.
+      // As variáveis do texto com o contato de AGORA, a mesma regra do worker
+      // (`interpolarVariaveisDoContato`). O ledger guarda o texto que saiu.
       let texto = body;
-      if (TEM_VARIAVEL_DO_NOME.test(body)) {
-        const { data: pessoa, error: pessoaErr } = await admin
-          .from("contacts")
-          .select("name, display_name")
-          .eq("organization_id", job.organization_id as string)
-          .eq("id", contactId)
-          .maybeSingle();
-        if (pessoaErr) throw new Error(pessoaErr.message);
-        texto = interpolateTemplate(body, pessoa ?? {}, { semValor: "remover" });
+      if (body.includes("{{")) {
+        const desconhecidas = variaveisDesconhecidas(body);
+        if (desconhecidas.length > 0) {
+          logger.warn("[followup] variável desconhecida no texto do follow-up: saiu da mensagem", {
+            organization_id: job.organization_id,
+            enrollment_id: enrollmentId,
+            variaveis: desconhecidas,
+          });
+        }
+        const [pessoa, negocio] = await Promise.all([
+          admin
+            .from("contacts")
+            .select("name, display_name, phone_number, email")
+            .eq("organization_id", job.organization_id as string)
+            .eq("id", contactId)
+            .maybeSingle(),
+          admin
+            .from("crm_leads")
+            .select("title")
+            .eq("organization_id", job.organization_id as string)
+            .eq("contact_id", contactId)
+            .order("updated_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ]);
+        if (pessoa.error) throw new Error(pessoa.error.message);
+        if (negocio.error) throw new Error(negocio.error.message);
+        texto = interpolateTemplate(body, { ...pessoa.data, lead_title: negocio.data?.title ?? null }, { semValor: "remover" });
       }
       if (texto === "") {
         await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {
-          kind: "pulado", reason: MOTIVO_TEXTO_VAZIO_SEM_NOME,
+          kind: "pulado", reason: MOTIVO_TEXTO_VAZIO_SEM_VALOR,
         },undefined,job.id,jobClaim);
         await settle(job.organization_id,job.id,jobClaim.acquired_at,true);
         continue;
