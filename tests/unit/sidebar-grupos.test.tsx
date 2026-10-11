@@ -70,6 +70,10 @@ describe("Sidebar por área", () => {
     ]);
     expect(screen.queryByRole("navigation", { name: "Telas de Vendas" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Ver tudo" })).toBeNull();
+    // Configurações é porta fixa no rodapé, fora da área que rola.
+    const config = screen.getByRole("link", { name: "Configurações" });
+    expect(config).toHaveAttribute("href", "/app/settings");
+    expect(nav().contains(config)).toBe(false);
   });
 
   it("Minha conta abre pelo cartão de quem está logado, não por um grupo", () => {

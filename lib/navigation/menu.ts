@@ -1,7 +1,7 @@
 import type { Role } from "@/lib/auth/types";
 
 import type { InterfaceSettings } from "./interface";
-import { NAV_DESTINATIONS, areaDaRota, searchable, type NavDestination, type NavGroupId } from "./registry";
+import { NAV_DESTINATIONS, NAV_GROUPS, areaDaRota, searchable, type NavDestination, type NavGroupId } from "./registry";
 
 /**
  * O menu lateral agrupado pelo que a pessoa veio FAZER (pedido do dono, 11/10/2026):
@@ -125,8 +125,19 @@ export function telasDaConta(isPlatformAdmin: boolean, role: Role | null, settin
   return MINHA_CONTA.filter((h) => visivel.has(h)).map((h) => porHref.get(h)!);
 }
 
+/**
+ * A página de Configurações é a porta para o que NÃO tem tela no menu: atualização do sistema, canal
+ * oficial, modelos, voz, além de Nuvemshop e Plano e cobrança. Por isso ela continua com link próprio no
+ * rodapé do menu (`tests/e2e/voz-desligada-por-padrao.spec.ts` cobra essa porta pelo endereço).
+ */
+export const CONFIGURACOES = "/app/settings";
+
 /** Em que grupo do menu (e em que tela) está a rota. `inicio` é o item solto do topo. */
 export function ondeNoMenu(pathname: string): { grupo: string | null; href: string | null } {
+  if (pathname === CONFIGURACOES) return { grupo: "configuracoes", href: null };
+  // Nas páginas de área (os antigos "Ver tudo") nenhum grupo abre: elas listam telas de vários grupos,
+  // e o mesmo link apareceria duas vezes na página, no menu e no cartão.
+  if (NAV_GROUPS.some((g) => g.hub?.href === pathname)) return { grupo: null, href: null };
   const onde = areaDaRota(pathname);
   if (!onde) return { grupo: null, href: null };
   if (onde.area === "inicio") return { grupo: "inicio", href: "/app/inicio" };

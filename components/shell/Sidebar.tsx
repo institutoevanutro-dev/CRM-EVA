@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useT } from "@/hooks/i18n/useT";
 import { usePathname } from "next/navigation";
 import { useState, useTransition } from "react";
-import { CaretDown, CaretDoubleLeft, CaretDoubleRight, House, SignOut } from "@/lib/ui/icons";
+import { CaretDown, CaretDoubleLeft, CaretDoubleRight, Gear, House, SignOut } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { toggleSidebar } from "@/app/actions/shell/toggleSidebar";
 import { useAuth } from "@/hooks/auth/AuthProvider";
@@ -13,7 +13,7 @@ import { VersionFooter } from "@/components/shell/VersionFooter";
 import { LogotipoDoProduto, SimboloDoProduto } from "@/components/branding/MarcaDoProduto";
 import { marcaEhADoProduto } from "@/lib/branding";
 import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
-import { gruposDoMenu, ondeNoMenu, telasDaConta, veInicio } from "@/lib/navigation/menu";
+import { CONFIGURACOES, gruposDoMenu, ondeNoMenu, telasDaConta, veInicio } from "@/lib/navigation/menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -223,6 +223,18 @@ export function SidebarContent({
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">{grupos.map(grupo)}</div>
       </nav>
       <div className="border-t border-white/10 p-2">
+        {/* A página de Configurações lista também o que não tem tela no menu (atualização, canal oficial, modelos,
+            voz). Fica fixa aqui, fora da área que rola: é o que se procura quando não se acha algo. */}
+        <Link
+          href={CONFIGURACOES}
+          title={collapsed ? t("Configurações") : undefined}
+          aria-current={atual === "configuracoes" ? "page" : undefined}
+          onClick={onNavigate}
+          className={cn(estiloDoItem(atual === "configuracoes"), "mb-1 text-sm", collapsed && "justify-center px-2")}
+        >
+          <Gear size={18} weight={atual === "configuracoes" ? "fill" : "light"} aria-hidden />
+          {!collapsed && <span className="truncate">{t("Configurações")}</span>}
+        </Link>
         {/* "Minha conta" (Perfil, Segurança, Notificações) saiu dos grupos: abre pelo cartão de quem está logado.
             `modal={false}`: o menu modal trava a rolagem da página e a lateral `sticky` saía do lugar. */}
         <DropdownMenu modal={false}>

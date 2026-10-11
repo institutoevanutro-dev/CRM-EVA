@@ -131,7 +131,7 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
   /** Conexões abre o grupo Integrações (11/10/2026). */
   test("chega ao canal oficial por Integrações → Conexões", async ({ page }) => {
     await loginAdmin(page);
-    await sidebar(page).getByRole("link", { name: "Integrações", exact: true }).click();
+    await sidebar(page).getByRole("link", { name: /^Integrações/ }).click();
     await page.waitForURL(/\/app\/connections/);
     await expect(abas(page, "Integrações").getByRole("link", { name: "Conexões" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("tab", { name: /oficial/i })).toBeVisible();
@@ -226,6 +226,10 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
     for (const fora of ["Perfil", "Segurança", "Notificações", "Nuvemshop", "Plano e cobrança"]) {
       await expect(sidebar(page).getByRole("link", { name: fora, exact: true })).toHaveCount(0);
     }
+    // Configurações continua com porta fixa, fora da área que rola: lista o que não tem tela no menu.
+    const config = page.getByRole("link", { name: "Configurações", exact: true });
+    await expect(config).toBeVisible();
+    expect(await config.evaluate((a) => !!a.closest('nav[aria-label="Navegação principal"]'))).toBe(false);
     await page.getByRole("button", { name: "Minha conta" }).click();
     await page.getByRole("menuitem", { name: "Segurança" }).click();
     await page.waitForURL(/\/app\/settings\/security/);
@@ -234,7 +238,7 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
   test("um agent não vê grupo nem tela que a permissão fecha", async ({ page }) => {
     await login(page, creds.users.agent!.email);
     // Integrações inteiro é manager+ (Conexões é admin): o grupo não aparece para o agent.
-    await expect(sidebar(page).getByRole("link", { name: "Integrações", exact: true })).toHaveCount(0);
+    await expect(sidebar(page).getByRole("link", { name: /^Integrações/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Conexões" })).toHaveCount(0);
     await expect(sidebar(page).getByRole("link", { name: "Atendimento" })).toBeVisible();
   });

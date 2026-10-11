@@ -55,5 +55,8 @@ describe("menu por tarefa", () => {
     expect(ondeNoMenu("/app/pipelines/abc")).toEqual({ grupo: "vendas", href: "/app/kanban" });
     expect(ondeNoMenu("/app/leads/abc").grupo).toBe("vendas");
     expect(ondeNoMenu("/app/settings/atualizacao").grupo).toBe("clinica");
+    // Configurações tem porta própria no rodapé; nas páginas de área nenhum grupo abre.
+    expect(ondeNoMenu("/app/settings")).toEqual({ grupo: "configuracoes", href: null });
+    expect(ondeNoMenu("/app/ai")).toEqual({ grupo: null, href: null });
   });
 });
