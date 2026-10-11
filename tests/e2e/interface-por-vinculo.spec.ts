@@ -130,10 +130,11 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await expect(nav(member).getByRole("link", { name: "Atendimento", exact: true })).toHaveCount(0);
     await member.goto("/app");
     await member.waitForURL("**/app/products");
-    // Menu por área: a única área com tela visível é Vendas, e ela abre em Produtos. O grupo da tela atual
-    // já nasce aberto (10/10/2026); clicar no nome da área em que se está FECHA o grupo, então não se clica.
-    await expect(nav(member).getByRole("link", { name: "Vendas", exact: true })).toHaveAttribute("aria-current", "page");
-    const abasDeVendas = member.getByRole("navigation", { name: "Telas de Vendas" });
+    // Menu por tarefa (11/10/2026): o único grupo com tela visível é Clínica, onde Produtos mora. O grupo da tela
+    // atual já nasce aberto; clicar no nome do grupo em que se está FECHA o grupo, então não se clica.
+    await expect(nav(member).getByRole("link", { name: "Clínica", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(nav(member).getByRole("link", { name: "Vendas", exact: true })).toHaveCount(0);
+    const abasDeVendas = member.getByRole("navigation", { name: "Telas de Clínica" });
     await expect(abasDeVendas.getByRole("link", { name: "Produtos" })).toBeVisible();
     await expect(abasDeVendas.getByRole("link", { name: "Contatos" })).toHaveCount(0);
     await member.keyboard.press("ControlOrMeta+k");
@@ -144,7 +145,7 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await member.screenshot({ path: `${evidence}/interface-hub-only.png` });
     await member.setViewportSize({ width: 390, height: 844 });
     await member.getByRole("button", { name: "Abrir navegação" }).click();
-    await expect(member.getByRole("link", { name: "Vendas" }).last()).toBeVisible();
+    await expect(member.getByRole("link", { name: "Clínica", exact: true }).last()).toBeVisible();
     expect(
       await member.evaluate(
         () => document.body.scrollWidth <= document.documentElement.clientWidth + 1,
