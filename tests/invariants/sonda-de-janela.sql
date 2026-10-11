@@ -12,6 +12,9 @@
 -- (gatilho de evento em `ddl_command_end`), grava a diferença para a foto. O
 -- `txid` separa os comandos de topo: o que acontece DENTRO de um bloco `do` é
 -- uma transação só e ninguém de fora enxerga; vale a última linha de cada txid.
+--
+-- A foto cobre PRIVILÉGIO (o que cada papel do PostgREST pode) e OBJETO (policy,
+-- gatilho, coluna, constraint, índice, view e definição de função).
 
 create schema if not exists _janela;
 
@@ -55,8 +58,7 @@ set search_path = '' as $privilegios$
 $privilegios$;
 
 -- O RESTO do que protege ou sustenta uma requisição: policy, gatilho, coluna,
--- constraint, índice, view e corpo de função. O teste não cobra (ver o
--- cabeçalho dele); serve para listar a dívida com `JANELA_COMPLETA=1`.
+-- constraint, índice, view e corpo de função. O teste cobra tudo isto também.
 create or replace function _janela.objetos()
 returns table (classe text, fato text)
 language sql stable
@@ -92,27 +94,32 @@ set search_path = '' as $objetos$
   union all
   -- Corpo e atributos da função: `create or replace` com corpo ANTIGO mais acima
   -- no arquivo devolve a versão antiga até a definição nova passar.
-  select 'funcao', format('%s definer=%s config=%s corpo=%s', p.oid::regprocedure, p.prosecdef,
-                          coalesce(p.proconfig::text, '{}'), md5(p.prosrc))
+  -- A definição inteira (linguagem, volatilidade, `security definer`, `set`,
+  -- retorno e corpo), como o `pg_get_functiondef` a imprime.
+  select 'funcao', format('%s %s', p.oid::regprocedure, md5(pg_get_functiondef(p.oid)))
     from pg_proc p
     left join pg_depend d on d.objid = p.oid and d.deptype = 'e'
-   where p.pronamespace = 'public'::regnamespace and d.objid is null
+   where p.pronamespace = 'public'::regnamespace and d.objid is null and p.prokind in ('f', 'p')
 $objetos$;
 
--- `janela.completa` = 'on' inclui os objetos; sem ela, só privilégios.
+-- Tudo: privilégios e objetos.
 create or replace function _janela.fatos()
 returns table (classe text, fato text)
 language sql stable as $fatos$
   select * from _janela.privilegios()
   union all
-  select * from _janela.objetos() where coalesce(current_setting('janela.completa', true), '') = 'on'
+  select * from _janela.objetos()
 $fatos$;
 
 create table if not exists _janela.estavel (classe text not null, fato text not null);
+-- Uma linha por comando de DDL. `classes` diz QUAIS classes aquela linha
+-- refotografou; as que ficaram de fora valem pela linha anterior delas.
 create table if not exists _janela.registro (
   seq bigserial primary key,
   txid bigint not null default txid_current(),
+  tag text not null,
   comando text not null,
+  classes text[] not null,
   faltando text[] not null,
   sobrando text[] not null
 );
@@ -120,36 +127,61 @@ create table if not exists _janela.registro (
 create or replace function _janela.ao_fim_do_ddl() returns event_trigger
 language plpgsql set search_path = '' as $ao_fim$
 declare
+  de_privilegio constant text[] := array['executar','tabela','coluna','sequencia','schema'];
+  de_objeto constant text[] := array['policy','rls','gatilho','atributo','constraint','indice','view','funcao'];
+  alvo text[];
   falta text[];
   sobra text[];
 begin
-  -- Comando que não muda nada do que a foto guarda não paga a foto: o dump tem
-  -- centenas de COMMENT, e policy, gatilho e índice não mexem em privilégio.
-  if tg_tag = 'COMMENT' then return; end if;
-  if coalesce(current_setting('janela.completa', true), '') <> 'on' and tg_tag in (
-    'CREATE POLICY', 'DROP POLICY', 'ALTER POLICY', 'CREATE TRIGGER', 'DROP TRIGGER', 'CREATE INDEX', 'DROP INDEX'
-  ) then return; end if;
-  with agora as materialized (select classe || ': ' || fato as f from _janela.fatos()),
-       antes as materialized (select classe || ': ' || fato as f from _janela.estavel)
+  -- A foto inteira custa caro e o arquivo tem milhares de comandos: cada comando
+  -- refotografa só as classes que o tipo dele consegue mexer. O que não está
+  -- nesta lista refotografa TUDO (alter table, drop com cascade, create view...).
+  alvo := case
+    when tg_tag = 'COMMENT' then null
+    when tg_tag in ('GRANT', 'REVOKE') then de_privilegio
+    when tg_tag in ('CREATE FUNCTION', 'ALTER FUNCTION') then array['funcao', 'executar']
+    when tg_tag in ('CREATE POLICY', 'ALTER POLICY', 'DROP POLICY') then array['policy']
+    when tg_tag in ('CREATE TRIGGER', 'DROP TRIGGER') then array['gatilho', 'constraint']
+    when tg_tag in ('CREATE INDEX', 'DROP INDEX') then array['indice', 'constraint']
+    else de_privilegio || de_objeto
+  end;
+  if alvo is null then return; end if;
+  -- `create ... if not exists` sobre o que já existe não mexe em nada.
+  if tg_tag in ('CREATE TABLE', 'CREATE INDEX', 'CREATE SEQUENCE', 'CREATE SCHEMA', 'CREATE EXTENSION')
+     and not exists (select 1 from pg_event_trigger_ddl_commands()) then
+    return;
+  end if;
+  with agora as materialized (
+         select classe || ': ' || fato as f from _janela.privilegios() where alvo && de_privilegio and classe = any (alvo)
+         union all
+         select classe || ': ' || fato from _janela.objetos() where alvo && de_objeto and classe = any (alvo)),
+       antes as materialized (select classe || ': ' || fato as f from _janela.estavel where classe = any (alvo))
   select coalesce((select array_agg(f order by f) from (select f from antes except select f from agora) x), '{}'),
          coalesce((select array_agg(f order by f) from (select f from agora except select f from antes) x), '{}')
     into falta, sobra;
-  insert into _janela.registro (comando, faltando, sobrando)
-  values (left(regexp_replace(current_query(), '\s+', ' ', 'g'), 300), falta, sobra);
+  insert into _janela.registro (tag, comando, classes, faltando, sobrando)
+  values (tg_tag, left(regexp_replace(current_query(), '\s+', ' ', 'g'), 300), alvo, falta, sobra);
 end
 $ao_fim$;
 
 -- Uma janela = um fato fora do lugar ao FIM de um comando de topo, do primeiro
--- comando que o tira do lugar até o que o devolve.
+-- comando que o tira do lugar até o que o devolve. Para cada classe vale a
+-- última linha de cada txid que a refotografou, e ela vale até a próxima.
 create or replace view _janela.janelas as
-with fim as (
-  select distinct on (txid) seq, txid, comando, faltando, sobrando
-    from _janela.registro order by txid, seq desc
+with num as (
+  select txid, dense_rank() over (order by txid) as n from (select distinct txid from _janela.registro) t
+), fim as (
+  select distinct on (r.txid, c.classe) r.seq, r.txid, r.comando, c.classe, r.faltando, r.sobrando
+    from _janela.registro r, unnest(r.classes) as c(classe)
+   order by r.txid, c.classe, r.seq desc
+), ponto as (
+  select f.*, n.n, coalesce(lead(n.n) over (partition by f.classe order by n.n), n.n + 1) - n.n as dura
+    from fim f join num n using (txid)
 ), solto as (
-  select seq, comando, 'falta' as sentido, f as fato from fim, unnest(faltando) f
+  select seq, comando, dura, 'falta' as sentido, f as fato from ponto, unnest(faltando) f where f like classe || ': %'
   union all
-  select seq, comando, 'sobra', f from fim, unnest(sobrando) f
+  select seq, comando, dura, 'sobra', f from ponto, unnest(sobrando) f where f like classe || ': %'
 )
-select sentido, fato, min(seq) as abre_seq, max(seq) as ultimo_seq, count(*) as comandos_de_ddl,
+select sentido, fato, min(seq) as abre_seq, max(seq) as ultimo_seq, sum(dura) as comandos_de_ddl,
        (array_agg(comando order by seq))[1] as abre_em
   from solto group by sentido, fato;
