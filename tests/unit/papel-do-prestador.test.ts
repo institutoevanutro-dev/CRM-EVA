@@ -29,7 +29,10 @@ describe("papel humano prestador", () => {
   });
 
   it("é aceito pela função persistida de convite", () => {
-    const fn = baseline.match(/fn_accept_team_invite[\s\S]*?\$\$;/)?.[0];
+    // A versão de 7 argumentos é a que valida o papel; a de 6 só delega a ela, e
+    // desde que o baseline define cada função uma vez, com o corpo final, é a
+    // de 6 que aparece primeiro no arquivo.
+    const fn = baseline.match(/fn_accept_team_invite\([^)]*p_interface_settings jsonb\s*\)[\s\S]*?\$\$;/)?.[0];
     expect(fn).toContain("provider");
   });
 });

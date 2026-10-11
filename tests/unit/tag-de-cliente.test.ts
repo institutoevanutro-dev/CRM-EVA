@@ -69,7 +69,7 @@ describe("a etiqueta de cliente", () => {
     // entra em `migrations/` não chega a quem instalou pelo kit — e aqui a
     // ausência não dá erro nenhum, só devolve o comportamento antigo.
     expect(baseline).toContain("create or replace function public.fn_colunas_de_cliente_sao_do_sistema()");
-    expect(baseline).toContain("create trigger trg_contato_colunas_de_cliente");
+    expect(baseline).toContain("create or replace trigger trg_contato_colunas_de_cliente");
     expect(baseline).toContain("colunas_de_cliente_sao_do_sistema' using errcode = '42501'");
     // O anúncio da escrita do sistema. Sem ele a guarda barra o próprio trigger
     // e marcar um horário passa a dar 42501 — o pior desfecho possível, porque
