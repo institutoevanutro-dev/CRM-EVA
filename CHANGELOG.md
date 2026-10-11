@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.22.1] — 2026-10-11
+
+### Corrigido
+
+- **O aviso de resposta não enviada deixa de chamar de opt-out a conversa que está com a equipe** Quando o assistente tentava escrever numa conversa já transferida para a equipe, o Inbox mostrava o aviso vermelho "Resposta bloqueada por conformidade: o contato pediu para não receber mensagens". O contato não tinha pedido nada: a trava era a da transferência. Agora o aviso diz "Resposta não enviada: a conversa está com a equipe" e lembra do botão Devolver ao automático. O aviso de opt-out continua aparecendo só para quem de fato pediu para sair. Nada precisa ser feito ao atualizar.
+
 ## [3.22.0] — 2026-10-11
 
 ### Adicionado
@@ -6855,7 +6861,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.1...HEAD
+[3.22.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.0...v3.22.1
 [3.22.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.21.0...v3.22.0
 [3.21.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.20.0...v3.21.0
 [3.20.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.19.0...v3.20.0
