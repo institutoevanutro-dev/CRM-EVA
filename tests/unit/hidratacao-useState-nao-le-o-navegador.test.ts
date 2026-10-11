@@ -106,11 +106,6 @@ function resolverModulo(especificador: string, deArquivo: string, fontes: Map<st
   return null;
 }
 
-type Indice = {
-  funcoes: Map<string, Map<string, ts.Node>>;
-  imports: Map<string, Map<string, string>>;
-};
-
 /**
  * O arquivo sob varredura pode não estar no mapa — os controles abaixo passam
  * uma fonte de fixture. Sem esta camada, `useState(() => ler())` com `ler` no
@@ -122,7 +117,11 @@ type Busca = {
   imports: (arquivo: string) => Map<string, string> | undefined;
 };
 
-const cacheDeIndice = new WeakMap<Map<string, string>, Indice>();
+type Analise = {
+  arquivo: ts.SourceFile;
+  funcoes: Map<string, ts.Node>;
+  imports: Map<string, string>;
+};
 
 function funcoesDoArquivo(sf: ts.SourceFile): Map<string, ts.Node> {
   const mapa = new Map<string, ts.Node>();
@@ -159,33 +158,36 @@ function importsDoArquivo(sf: ts.SourceFile, fontes: Map<string, string>): Map<s
   return mapa;
 }
 
-function indice(fontes: Map<string, string>): Indice {
-  const existente = cacheDeIndice.get(fontes);
-  if (existente) return existente;
-  const fns = new Map<string, Map<string, ts.Node>>();
-  const imp = new Map<string, Map<string, string>>();
-  for (const [rel, fonte] of fontes) {
-    // `fileName` é o caminho relativo POSIX de propósito: é a chave de
-    // resolução de `./x` e `@/x`, e mantém a sonda igual em Windows e Linux.
-    const arquivo = ts.createSourceFile(rel, fonte, ts.ScriptTarget.Latest, true);
-    fns.set(rel, funcoesDoArquivo(arquivo));
-    imp.set(rel, importsDoArquivo(arquivo, fontes));
-  }
-  const novo = { funcoes: fns, imports: imp };
-  cacheDeIndice.set(fontes, novo);
-  return novo;
+function analisar(rel: string, fonte: string, fontes: Map<string, string>): Analise {
+  // `fileName` é o caminho relativo POSIX de propósito: é a chave de
+  // resolução de `./x` e `@/x`, e mantém a sonda igual em Windows e Linux.
+  const arquivo = ts.createSourceFile(rel, fonte, ts.ScriptTarget.Latest, true);
+  return { arquivo, funcoes: funcoesDoArquivo(arquivo), imports: importsDoArquivo(arquivo, fontes) };
 }
 
-/** O índice do repositório, com o arquivo sob varredura por cima. */
-function buscaCom(fontes: Map<string, string>, nomeDoArquivo: string, fonte: string): Busca {
-  const idx = indice(fontes);
-  const arquivo = ts.createSourceFile(nomeDoArquivo, fonte, ts.ScriptTarget.Latest, true);
-  const fns = funcoesDoArquivo(arquivo);
-  const imp = importsDoArquivo(arquivo, fontes);
-  return {
-    funcoes: (rel) => (rel === nomeDoArquivo ? fns : idx.funcoes.get(rel)),
-    imports: (rel) => (rel === nomeDoArquivo ? imp : idx.imports.get(rel)),
-  };
+/**
+ * Cada arquivo do repositório é analisado NO MÁXIMO UMA VEZ, e só quando
+ * alguém pergunta por ele.
+ *
+ * Esta sonda já montou o índice inteiro de antemão e ainda reanalisava o
+ * arquivo sob varredura duas vezes: três análises de cada um dos ~2.000
+ * arquivos, onde menos de 300 citam `useState`. Sozinha levava 1,9 s; com a
+ * máquina ocupada pela suíte inteira passava dos 15 s do `testTimeout` e
+ * reprovava sem defeito nenhum no produto. O conserto é não fazer o trabalho,
+ * e não esperar mais por ele.
+ */
+const cacheDeAnalise = new WeakMap<Map<string, string>, Map<string, Analise | null>>();
+
+function analiseDoRepositorio(rel: string, fontes: Map<string, string>): Analise | undefined {
+  let porArquivo = cacheDeAnalise.get(fontes);
+  if (!porArquivo) cacheDeAnalise.set(fontes, (porArquivo = new Map()));
+  let analise = porArquivo.get(rel);
+  if (analise === undefined) {
+    const fonte = fontes.get(rel);
+    analise = fonte === undefined ? null : analisar(rel, fonte, fontes);
+    porArquivo.set(rel, analise);
+  }
+  return analise ?? undefined;
 }
 
 /**
@@ -239,8 +241,18 @@ export function inicializadoresQueLeemONavegador(
   nomeDoArquivo: string,
   fontes: Map<string, string>,
 ): number[] {
-  const busca = buscaCom(fontes, nomeDoArquivo, fonte);
-  const arquivo = ts.createSourceFile(nomeDoArquivo, fonte, ts.ScriptTarget.Latest, true);
+  // Condição NECESSÁRIA, não a sonda: sem o texto `useState` não há chamada a
+  // `useState` no AST. Quem decide continua sendo o AST, logo abaixo.
+  if (!fonte.includes("useState")) return [];
+  const doArquivo =
+    fontes.get(nomeDoArquivo) === fonte
+      ? analiseDoRepositorio(nomeDoArquivo, fontes)!
+      : analisar(nomeDoArquivo, fonte, fontes);
+  const arquivo = doArquivo.arquivo;
+  const busca: Busca = {
+    funcoes: (rel) => (rel === nomeDoArquivo ? doArquivo : analiseDoRepositorio(rel, fontes))?.funcoes,
+    imports: (rel) => (rel === nomeDoArquivo ? doArquivo : analiseDoRepositorio(rel, fontes))?.imports,
+  };
   const infratoras: number[] = [];
 
   const visita = (n: ts.Node): void => {
@@ -268,7 +280,7 @@ describe("o inicializador de useState não lê o navegador", () => {
   it("GUARDA DE VACUIDADE: a varredura alcança o repositório de verdade", () => {
     // Sem este caso, um caminho errado devolveria zero arquivos e a suíte
     // inteira passaria por não ter olhado nada.
-    expect(arquivosVigiados().length).toBeGreaterThan(1000);
+    expect(fontes.size).toBeGreaterThan(1000);
     expect(fontes.has("app/app/settings/notifications/_client.tsx")).toBe(true);
     expect(fontes.has("lib/notifications/prefs.ts")).toBe(true);
   });
