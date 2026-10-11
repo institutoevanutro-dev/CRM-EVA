@@ -56,7 +56,9 @@ function semComentarios(sql: string): string {
 const COLUNA = "add column if not exists starts_at_marked_at timestamptz";
 const GUARD = "if new.starts_at is distinct from old.starts_at then";
 const CARIMBO = "new.starts_at_marked_at := clock_timestamp();";
-const GATILHO = "create trigger trg_starts_at_marked_at";
+// No baseline o gatilho é `create or replace trigger` (sem `drop` antes): reaplicar
+// não deixa a tabela um comando sem ele. Na migration segue `create trigger`.
+const GATILHO = /create (?:or replace )?trigger trg_starts_at_marked_at/;
 const BLOCO = "-- ---- lembrete editável e régua da remarcação (migration 0323) ----";
 
 describe("a remarcação carimba quando o horário foi marcado (#2230)", () => {
@@ -68,7 +70,7 @@ describe("a remarcação carimba quando o horário foi marcado (#2230)", () => {
     expect(MIGRATION.split("\n")[0]).toMatch(/^-- 20261006120323_0323_/);
     expect(VARREDURA.test(BASELINE), "bloco da varredura anon não encontrado").toBe(true);
     expect(BASELINE.indexOf(BLOCO)).toBeGreaterThan(0);
-    expect(BASELINE.indexOf(GATILHO)).toBeGreaterThan(0);
+    expect(BASELINE.search(GATILHO)).toBeGreaterThan(0);
   });
 
   it.each([
@@ -78,7 +80,7 @@ describe("a remarcação carimba quando o horário foi marcado (#2230)", () => {
     const sql = semComentarios(artefato);
     expect(sql).toContain(COLUNA);
     expect(sql).toContain("create or replace function public.fn_starts_at_marked_at()");
-    expect(sql).toContain(GATILHO);
+    expect(sql).toMatch(GATILHO);
     // `before update of starts_at` — o carimbo só anda quando a coluna do
     // horário entra no SET; nota, link do Meet e status não disparam.
     expect(sql).toMatch(/before update of starts_at on public\.calendar_appointments/);
@@ -102,7 +104,7 @@ describe("a remarcação carimba quando o horário foi marcado (#2230)", () => {
     expect(varredura).toBeGreaterThan(0);
     expect(BASELINE.indexOf(BLOCO)).toBeLessThan(varredura);
     // E o gatilho também: ele precisa existir depois de quem cria a função.
-    expect(BASELINE.indexOf(GATILHO)).toBeLessThan(varredura);
+    expect(BASELINE.search(GATILHO)).toBeLessThan(varredura);
   });
 
   it("a coluna não tem backfill — a linha nunca remarcada segue sob `created_at`", () => {

@@ -2370,13 +2370,7 @@ END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                WHERE conname = 'ai_kbv_version_unique' AND conrelid = '"public"."ai_knowledge_versions"'::regclass)
-   AND to_regclass('"public"."ai_kbv_version_unique"') IS NULL THEN
-ALTER TABLE ONLY "public"."ai_knowledge_versions"
-    ADD CONSTRAINT "ai_kbv_version_unique" UNIQUE ("agent_id", "version_number");
-END IF; END $baseline_guard$;
+-- [constraint ai_kbv_version_unique: o arquivo não cria mais; o apêndice só existia para derrubar, e o drop continua adiante para clone antigo]
 
 
 
@@ -2928,7 +2922,7 @@ CREATE INDEX IF NOT EXISTS "ai_invocations_org_created_idx" ON "public"."ai_invo
 
 
 
-CREATE UNIQUE INDEX IF NOT EXISTS "ai_kbv_one_active_per_agent" ON "public"."ai_knowledge_versions" USING "btree" ("agent_id") WHERE "is_active";
+-- [índice ai_kbv_one_active_per_agent: o arquivo não cria mais; o apêndice só existia para derrubar, e o drop continua adiante para clone antigo]
 
 
 
@@ -2936,7 +2930,7 @@ CREATE INDEX IF NOT EXISTS "ai_knowledge_sources_agent_idx" ON "public"."ai_know
 
 
 
-CREATE UNIQUE INDEX IF NOT EXISTS "ai_knowledge_sources_unique_per_agent" ON "public"."ai_knowledge_sources" USING "btree" ("agent_id", "source_type") WHERE "is_active";
+-- [índice ai_knowledge_sources_unique_per_agent: o arquivo não cria mais; o apêndice só existia para derrubar, e o drop continua adiante para clone antigo]
 
 
 
@@ -3768,13 +3762,7 @@ END IF; END $baseline_guard$;
 
 
 
-DO $baseline_guard$ BEGIN
-IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                WHERE conname = 'api_audit_log_actor_user_id_fkey' AND conrelid = '"public"."api_audit_log"'::regclass)
-   AND to_regclass('"public"."api_audit_log_actor_user_id_fkey"') IS NULL THEN
-ALTER TABLE ONLY "public"."api_audit_log"
-    ADD CONSTRAINT "api_audit_log_actor_user_id_fkey" FOREIGN KEY ("actor_user_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
-END IF; END $baseline_guard$;
+-- [constraint api_audit_log_actor_user_id_fkey: o arquivo não cria mais; o apêndice só existia para derrubar, e o drop continua adiante para clone antigo]
 
 
 
@@ -5251,6 +5239,9 @@ values (
 )
 on conflict (id) do nothing;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'tenant_read_ai_policy'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '258a3c20a89d6563bc73da96734f68e7') then
 drop policy if exists "tenant_read_ai_policy" on storage.objects;
 create policy "tenant_read_ai_policy" on storage.objects for select
   using (
@@ -5262,6 +5253,8 @@ create policy "tenant_read_ai_policy" on storage.objects for select
         and uo.organization_id = (split_part(name, '/', 1))::uuid
     )
   );
+end if;
+end $politica$;
 
 -- [policy tenant_write_ai_policy: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
 
@@ -5288,6 +5281,9 @@ on conflict (id) do nothing;
 
 -- Leitura por org (path {org_id}/...) OU plataforma (path platform/...) por qualquer
 -- usuário autenticado (assets de plataforma são públicos p/ tenants; conteúdo é curado).
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'skill_assets_read'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'f9b9fe69dc7bb260b7bcbe2b2989858d') then
 drop policy if exists "skill_assets_read" on storage.objects;
 create policy "skill_assets_read" on storage.objects for select to authenticated
   using (
@@ -5301,6 +5297,8 @@ create policy "skill_assets_read" on storage.objects for select to authenticated
       )
     )
   );
+end if;
+end $politica$;
 -- Escrita/DELETE de assets é sempre via service role (rota de import) — sem policy de write.
 
 -- ---- realtime: inbox (messages/conversations), kanban (crm_leads) e IA ----
@@ -5585,16 +5583,26 @@ grant execute on function public.fn_mark_conversation_message(uuid, text, text, 
 -- write agent+ (viewer read-only). SELECT permanece org-flat (escopo own é G4).
 -- Idempotente: drop if exists + create (auto-curativo no update.sh de clones).
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_pipelines' and policyname = 'tenant_isolation_crm_pipelines_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "tenant_isolation_crm_pipelines_all" on public.crm_pipelines;
-drop policy if exists "crm_pipelines_select" on public.crm_pipelines;
-drop policy if exists "crm_pipelines_manager_write" on public.crm_pipelines;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_pipelines' and policyname = 'crm_pipelines_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '653895d5820a951b59c6b156f47d8f29') then
+drop policy if exists "crm_pipelines_select" on public.crm_pipelines;
 create policy "crm_pipelines_select" on public.crm_pipelines
   for select using (
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_pipelines' and policyname = 'crm_pipelines_manager_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'e663b6eb93434244f92f7f5b50ca6bd2') then
+drop policy if exists "crm_pipelines_manager_write" on public.crm_pipelines;
 create policy "crm_pipelines_manager_write" on public.crm_pipelines
   using (
     public.fn_is_platform_admin()
@@ -5606,17 +5614,29 @@ create policy "crm_pipelines_manager_write" on public.crm_pipelines
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_stages' and policyname = 'tenant_isolation_crm_stages_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "tenant_isolation_crm_stages_all" on public.crm_stages;
-drop policy if exists "crm_stages_select" on public.crm_stages;
-drop policy if exists "crm_stages_manager_write" on public.crm_stages;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_stages' and policyname = 'crm_stages_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '653895d5820a951b59c6b156f47d8f29') then
+drop policy if exists "crm_stages_select" on public.crm_stages;
 create policy "crm_stages_select" on public.crm_stages
   for select using (
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_stages' and policyname = 'crm_stages_manager_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'e663b6eb93434244f92f7f5b50ca6bd2') then
+drop policy if exists "crm_stages_manager_write" on public.crm_stages;
 create policy "crm_stages_manager_write" on public.crm_stages
   using (
     public.fn_is_platform_admin()
@@ -5628,9 +5648,15 @@ create policy "crm_stages_manager_write" on public.crm_stages
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversations' and policyname = 'conversations_tenant_isolation_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "conversations_tenant_isolation_all" on public.conversations;
+end if; end $politica$;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversations' and policyname = 'conversations_agent_write') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "conversations_agent_write" on public.conversations;
+end if; end $politica$;
 
 -- [policy conversations_select: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
 
@@ -5667,7 +5693,9 @@ alter table public.conversation_assignment_events enable row level security;
 -- o histórico é `fn_conversation_assign`, que é `security definer`. O revoke de
 -- escrita está no bloco da migration 0319, no fim do arquivo; aqui fica só o
 -- `drop`, que limpa o clone antigo sem recriar a brecha a cada `update.sh`.
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversation_assignment_events' and policyname = 'cae_insert') then -- sem a policy, nem pega lock na tabela
 drop policy if exists cae_insert on public.conversation_assignment_events;
+end if; end $politica$;
 
 revoke all on public.conversation_assignment_events from anon;
 
@@ -5797,8 +5825,7 @@ update public.conversations
    and assignee_kind is distinct from 'ai';
 
 alter table public.conversations
-  drop constraint if exists conversations_assignee_kind_coherence;
-alter table public.conversations
+  drop constraint if exists conversations_assignee_kind_coherence,
   add constraint conversations_assignee_kind_coherence check (
     (assignee_kind = 'user' and assigned_to_user_id is not null) or
     (assignee_kind = 'ai'   and assigned_to_user_id is null)     or
@@ -5934,23 +5961,40 @@ revoke execute on function public.fn_can_view_conversation(uuid, uuid) from anon
 grant execute on function public.fn_can_view_conversation(uuid, uuid)
   to authenticated, service_role;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversations' and policyname = 'conversations_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '8919c5626faea1466ea141b427dc48ec') then
 drop policy if exists "conversations_select" on public.conversations;
 create policy "conversations_select" on public.conversations
   for select using (
     public.fn_can_view_conversation(organization_id, assigned_to_user_id)
   );
+end if;
+end $politica$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversations' and policyname = 'conversations_agent_write') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "conversations_agent_write" on public.conversations;
-drop policy if exists "conversations_agent_insert" on public.conversations;
-drop policy if exists "conversations_agent_update" on public.conversations;
+end if; end $politica$;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversations' and policyname = 'conversations_agent_delete') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "conversations_agent_delete" on public.conversations;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversations' and policyname = 'conversations_agent_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '55f4633c68b22fcac892dcf1b0b008df') then
+drop policy if exists "conversations_agent_insert" on public.conversations;
 create policy "conversations_agent_insert" on public.conversations
   for insert with check (
     public.fn_is_platform_admin()
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'agent'))
   );
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversations' and policyname = 'conversations_agent_update'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '9864f61247e936ee9e91a5fddbb84abd') then
+drop policy if exists "conversations_agent_update" on public.conversations;
 create policy "conversations_agent_update" on public.conversations
   for update using (
     public.fn_is_platform_admin()
@@ -5961,6 +6005,8 @@ create policy "conversations_agent_update" on public.conversations
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'agent'))
   );
+end if;
+end $politica$;
 -- `conversations_agent_delete` não é mais criada aqui (migration 0319): ela
 -- liberava o DELETE da conversa a qualquer atendente, e a cascata levava a nota
 -- do colega, o caso da IA e o histórico de atribuição. A regra de apagar (piso
@@ -5970,12 +6016,14 @@ create policy "conversations_agent_update" on public.conversations
 -- sessão não apaga, então entre este ponto e o bloco da 0319 a tabela está MAIS
 -- fechada, nunca menos.
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'messages' and policyname = 'messages_tenant_isolation_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "messages_tenant_isolation_all" on public.messages;
-drop policy if exists "messages_select" on public.messages;
-drop policy if exists "messages_insert" on public.messages;
-drop policy if exists "messages_update" on public.messages;
-drop policy if exists "messages_delete" on public.messages;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'messages' and policyname = 'messages_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'a279ee399aed063678416b3863e8ed56') then
+drop policy if exists "messages_select" on public.messages;
 create policy "messages_select" on public.messages
   for select using (
     public.fn_is_platform_admin()
@@ -5984,12 +6032,24 @@ create policy "messages_select" on public.messages
       where c.id = messages.conversation_id
     )
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'messages' and policyname = 'messages_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '28813c66a29ca9893fdb1dd68b143086') then
+drop policy if exists "messages_insert" on public.messages;
 create policy "messages_insert" on public.messages
   for insert with check (
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'messages' and policyname = 'messages_update'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '28c451fefc8b5c81b3dcf153c9218e82') then
+drop policy if exists "messages_update" on public.messages;
 create policy "messages_update" on public.messages
   for update using (
     (organization_id in (select public.fn_user_org_ids()))
@@ -5998,11 +6058,19 @@ create policy "messages_update" on public.messages
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'messages' and policyname = 'messages_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '343057efbb2f342fa9b6d6c717473c45') then
+drop policy if exists "messages_delete" on public.messages;
 create policy "messages_delete" on public.messages
   for delete using (
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
 -- Forward-fix do G4-01: fn_conversation_assign (0031/0032) passa a SECURITY
 -- DEFINER. Com o SELECT de conversations visibility-aware, o `update ... returning
@@ -6064,17 +6132,25 @@ revoke execute on function public.fn_can_view_lead(uuid, uuid) from anon;
 grant execute on function public.fn_can_view_lead(uuid, uuid)
   to authenticated, service_role;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_leads' and policyname = 'tenant_isolation_crm_leads_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "tenant_isolation_crm_leads_all" on public.crm_leads;
-drop policy if exists "crm_leads_select" on public.crm_leads;
-drop policy if exists "crm_leads_insert" on public.crm_leads;
-drop policy if exists "crm_leads_update" on public.crm_leads;
-drop policy if exists "crm_leads_delete" on public.crm_leads;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_leads' and policyname = 'crm_leads_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '7325563dc67af47d9962ed45c2a3e194') then
+drop policy if exists "crm_leads_select" on public.crm_leads;
 create policy "crm_leads_select" on public.crm_leads
   for select using (
     public.fn_can_view_lead(organization_id, owner_user_id)
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_leads' and policyname = 'crm_leads_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '2129d314618d2e127f5d78994d494881') then
+drop policy if exists "crm_leads_insert" on public.crm_leads;
 create policy "crm_leads_insert" on public.crm_leads
   for insert with check (
     public.fn_is_platform_admin()
@@ -6083,6 +6159,12 @@ create policy "crm_leads_insert" on public.crm_leads
         and (public.fn_role_at_least(organization_id, 'manager')
              or public.fn_can_view_lead(organization_id, owner_user_id)))
   );
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_leads' and policyname = 'crm_leads_update'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'a386636158b2cd874d5c5a265955a4db') then
+drop policy if exists "crm_leads_update" on public.crm_leads;
 create policy "crm_leads_update" on public.crm_leads
   for update using (
     public.fn_is_platform_admin()
@@ -6097,6 +6179,12 @@ create policy "crm_leads_update" on public.crm_leads
         and (public.fn_role_at_least(organization_id, 'manager')
              or public.fn_can_view_lead(organization_id, owner_user_id)))
   );
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_leads' and policyname = 'crm_leads_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '004c786c57db73290617e8a4aafb7836') then
+drop policy if exists "crm_leads_delete" on public.crm_leads;
 create policy "crm_leads_delete" on public.crm_leads
   for delete using (
     public.fn_is_platform_admin()
@@ -6105,6 +6193,8 @@ create policy "crm_leads_delete" on public.crm_leads
         and (public.fn_role_at_least(organization_id, 'manager')
              or public.fn_can_view_lead(organization_id, owner_user_id)))
   );
+end if;
+end $politica$;
 
 
 -- ---- métricas por responsável: índices + fn_attendant_metrics (migration 0037) ----
@@ -6317,15 +6407,23 @@ alter table public.webhook_sources enable row level security;
 alter table public.automation_rules enable row level security;
 alter table public.automation_rule_runs enable row level security;
 
-drop policy if exists "webhook_sources_select" on public.webhook_sources;
-drop policy if exists "webhook_sources_manager_write" on public.webhook_sources;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'webhook_sources' and policyname = 'webhook_sources_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '653895d5820a951b59c6b156f47d8f29') then
+drop policy if exists "webhook_sources_select" on public.webhook_sources;
 create policy "webhook_sources_select" on public.webhook_sources
   for select using (
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'webhook_sources' and policyname = 'webhook_sources_manager_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'e663b6eb93434244f92f7f5b50ca6bd2') then
+drop policy if exists "webhook_sources_manager_write" on public.webhook_sources;
 create policy "webhook_sources_manager_write" on public.webhook_sources
   using (
     public.fn_is_platform_admin()
@@ -6337,16 +6435,26 @@ create policy "webhook_sources_manager_write" on public.webhook_sources
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 
+
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'automation_rules' and policyname = 'automation_rules_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '653895d5820a951b59c6b156f47d8f29') then
 drop policy if exists "automation_rules_select" on public.automation_rules;
-drop policy if exists "automation_rules_manager_write" on public.automation_rules;
-
 create policy "automation_rules_select" on public.automation_rules
   for select using (
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'automation_rules' and policyname = 'automation_rules_manager_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'e663b6eb93434244f92f7f5b50ca6bd2') then
+drop policy if exists "automation_rules_manager_write" on public.automation_rules;
 create policy "automation_rules_manager_write" on public.automation_rules
   using (
     public.fn_is_platform_admin()
@@ -6358,14 +6466,21 @@ create policy "automation_rules_manager_write" on public.automation_rules
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 
+
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'automation_rule_runs' and policyname = 'automation_rule_runs_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '653895d5820a951b59c6b156f47d8f29') then
 drop policy if exists "automation_rule_runs_select" on public.automation_rule_runs;
-
 create policy "automation_rule_runs_select" on public.automation_rule_runs
   for select using (
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
 -- ---- disponibilidade/horário por atendente: attendant_availability (migration 0039) ----
 -- spec 13 §3.4/§5. Persiste o <AttendantStatusToggle> (spec 04 §8): is_available,
@@ -6391,13 +6506,21 @@ create index if not exists idx_attendant_availability_available
 
 alter table public.attendant_availability enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'attendant_availability' and policyname = 'attendant_availability_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '040919e83554fffe7cd272a3065f6e37') then
 drop policy if exists "attendant_availability_select" on public.attendant_availability;
 create policy "attendant_availability_select" on public.attendant_availability
   for select using (
     public.fn_is_platform_admin()
     or organization_id in (select public.fn_user_org_ids())
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'attendant_availability' and policyname = 'attendant_availability_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '4e76d38fb661027836189c3f450fb168') then
 drop policy if exists "attendant_availability_insert" on public.attendant_availability;
 create policy "attendant_availability_insert" on public.attendant_availability
   for insert with check (
@@ -6406,7 +6529,12 @@ create policy "attendant_availability_insert" on public.attendant_availability
         and (user_id = auth.uid()
              or public.fn_role_at_least(organization_id, 'manager')))
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'attendant_availability' and policyname = 'attendant_availability_update'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'cbb30fd946fbc57b1e98bbe29e30bac0') then
 drop policy if exists "attendant_availability_update" on public.attendant_availability;
 create policy "attendant_availability_update" on public.attendant_availability
   for update using (
@@ -6420,7 +6548,12 @@ create policy "attendant_availability_update" on public.attendant_availability
         and (user_id = auth.uid()
              or public.fn_role_at_least(organization_id, 'manager')))
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'attendant_availability' and policyname = 'attendant_availability_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'd08163346781b9dc69290910bcece5ee') then
 drop policy if exists "attendant_availability_delete" on public.attendant_availability;
 create policy "attendant_availability_delete" on public.attendant_availability
   for delete using (
@@ -6429,6 +6562,8 @@ create policy "attendant_availability_delete" on public.attendant_availability
         and (user_id = auth.uid()
              or public.fn_role_at_least(organization_id, 'manager')))
   );
+end if;
+end $politica$;
 
 -- ---- roteamento: disponibilidade/horário por atendente (migration 0039) ----
 -- spec 13 §3.4/§5. attendant_availability (1 linha por org×user): toggle
@@ -6455,13 +6590,21 @@ create index if not exists idx_attendant_availability_available
 
 alter table public.attendant_availability enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'attendant_availability' and policyname = 'attendant_availability_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '040919e83554fffe7cd272a3065f6e37') then
 drop policy if exists "attendant_availability_select" on public.attendant_availability;
 create policy "attendant_availability_select" on public.attendant_availability
   for select using (
     public.fn_is_platform_admin()
     or organization_id in (select public.fn_user_org_ids())
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'attendant_availability' and policyname = 'attendant_availability_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '4e76d38fb661027836189c3f450fb168') then
 drop policy if exists "attendant_availability_insert" on public.attendant_availability;
 create policy "attendant_availability_insert" on public.attendant_availability
   for insert with check (
@@ -6470,7 +6613,12 @@ create policy "attendant_availability_insert" on public.attendant_availability
         and (user_id = auth.uid()
              or public.fn_role_at_least(organization_id, 'manager')))
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'attendant_availability' and policyname = 'attendant_availability_update'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'cbb30fd946fbc57b1e98bbe29e30bac0') then
 drop policy if exists "attendant_availability_update" on public.attendant_availability;
 create policy "attendant_availability_update" on public.attendant_availability
   for update using (
@@ -6484,7 +6632,12 @@ create policy "attendant_availability_update" on public.attendant_availability
         and (user_id = auth.uid()
              or public.fn_role_at_least(organization_id, 'manager')))
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'attendant_availability' and policyname = 'attendant_availability_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'd08163346781b9dc69290910bcece5ee') then
 drop policy if exists "attendant_availability_delete" on public.attendant_availability;
 create policy "attendant_availability_delete" on public.attendant_availability
   for delete using (
@@ -6493,6 +6646,8 @@ create policy "attendant_availability_delete" on public.attendant_availability
         and (user_id = auth.uid()
              or public.fn_role_at_least(organization_id, 'manager')))
   );
+end if;
+end $politica$;
 
 
 -- ---- roteamento: emissão de conversation.routing_requested (migration 0040) ----
@@ -6517,8 +6672,7 @@ $$;
 
 alter function public.fn_emit_conversation_routing() owner to postgres;
 
-drop trigger if exists trg_conversation_routing_requested on public.conversations;
-create trigger trg_conversation_routing_requested
+create or replace trigger trg_conversation_routing_requested
   after insert on public.conversations
   for each row
   when (new.assigned_to_user_id is null and new.status in ('open', 'pending'))
@@ -6676,11 +6830,17 @@ update public.event_log
 -- activities é append-only). crm_lead_links era FOR ALL (USING governa SELECT via OR,
 -- a armadilha G4-01) — dropada e re-expressa POR-COMANDO. Idempotente, auto-curativo.
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_lead_activities' and policyname = 'tenant_isolation_crm_lead_activities_select') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "tenant_isolation_crm_lead_activities_select" on public.crm_lead_activities;
+end if; end $politica$;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_lead_activities' and policyname = 'tenant_isolation_crm_lead_activities_insert') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "tenant_isolation_crm_lead_activities_insert" on public.crm_lead_activities;
-drop policy if exists "crm_lead_activities_select" on public.crm_lead_activities;
-drop policy if exists "crm_lead_activities_insert" on public.crm_lead_activities;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_lead_activities' and policyname = 'crm_lead_activities_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '3983535ff34b15bbc11b803b72c75485') then
+drop policy if exists "crm_lead_activities_select" on public.crm_lead_activities;
 create policy "crm_lead_activities_select" on public.crm_lead_activities
   for select using (
     exists (
@@ -6689,19 +6849,29 @@ create policy "crm_lead_activities_select" on public.crm_lead_activities
         and public.fn_can_view_lead(l.organization_id, l.owner_user_id)
     )
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_lead_activities' and policyname = 'crm_lead_activities_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '28813c66a29ca9893fdb1dd68b143086') then
+drop policy if exists "crm_lead_activities_insert" on public.crm_lead_activities;
 create policy "crm_lead_activities_insert" on public.crm_lead_activities
   for insert with check (
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_lead_links' and policyname = 'tenant_isolation_crm_lead_links_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "tenant_isolation_crm_lead_links_all" on public.crm_lead_links;
-drop policy if exists "crm_lead_links_select" on public.crm_lead_links;
-drop policy if exists "crm_lead_links_insert" on public.crm_lead_links;
-drop policy if exists "crm_lead_links_update" on public.crm_lead_links;
-drop policy if exists "crm_lead_links_delete" on public.crm_lead_links;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_lead_links' and policyname = 'crm_lead_links_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'b2360d021453f29bbe474b4a5b0c585b') then
+drop policy if exists "crm_lead_links_select" on public.crm_lead_links;
 create policy "crm_lead_links_select" on public.crm_lead_links
   for select using (
     exists (
@@ -6710,12 +6880,24 @@ create policy "crm_lead_links_select" on public.crm_lead_links
         and public.fn_can_view_lead(l.organization_id, l.owner_user_id)
     )
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_lead_links' and policyname = 'crm_lead_links_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '28813c66a29ca9893fdb1dd68b143086') then
+drop policy if exists "crm_lead_links_insert" on public.crm_lead_links;
 create policy "crm_lead_links_insert" on public.crm_lead_links
   for insert with check (
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_lead_links' and policyname = 'crm_lead_links_update'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '28c451fefc8b5c81b3dcf153c9218e82') then
+drop policy if exists "crm_lead_links_update" on public.crm_lead_links;
 create policy "crm_lead_links_update" on public.crm_lead_links
   for update using (
     (organization_id in (select public.fn_user_org_ids()))
@@ -6724,11 +6906,19 @@ create policy "crm_lead_links_update" on public.crm_lead_links
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_lead_links' and policyname = 'crm_lead_links_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '343057efbb2f342fa9b6d6c717473c45') then
+drop policy if exists "crm_lead_links_delete" on public.crm_lead_links;
 create policy "crm_lead_links_delete" on public.crm_lead_links
   for delete using (
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
 
 -- ---- user_organizations SELECT org-wide para manager+ (migration 0044) ----
@@ -6736,6 +6926,9 @@ create policy "crm_lead_links_delete" on public.crm_lead_links
 -- team=org:read a manager). Antes: só admin org-wide, manager caía no self-read
 -- e GET /api/v1/team devolvia 1 linha. Self-read preservado p/ todos; WRITE
 -- inalterado (insert/update/delete = admin). Idempotente e auto-curativo.
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'user_organizations' and policyname = 'user_orgs_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'cf450ea29435461a7b208180b332676a') then
 drop policy if exists "user_orgs_select" on public.user_organizations;
 create policy "user_orgs_select" on public.user_organizations
   for select using (
@@ -6743,6 +6936,8 @@ create policy "user_orgs_select" on public.user_organizations
     or public.fn_role_at_least(organization_id, 'manager')
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
 -- ============================================================================
 -- Dumps do Supabase zeram o search_path (set_config('search_path','',false));
@@ -6882,8 +7077,7 @@ create table if not exists playbook_versions (
   check ((layer = 'platform') = (organization_id is null))
 );
 
-drop trigger if exists trg_playbook_versions_immutable on playbook_versions;
-create trigger trg_playbook_versions_immutable
+create or replace trigger trg_playbook_versions_immutable
   before update on playbook_versions
   for each row execute function fn_agent_versions_immutable();
 
@@ -7142,8 +7336,7 @@ create table if not exists reentry_template_versions (
   created_at timestamptz not null default now()
 );
 
-drop trigger if exists trg_reentry_template_versions_immutable on reentry_template_versions;
-create trigger trg_reentry_template_versions_immutable
+create or replace trigger trg_reentry_template_versions_immutable
   before update on reentry_template_versions
   for each row execute function fn_agent_versions_immutable();
 
@@ -7194,8 +7387,7 @@ create table if not exists skill_versions (
   created_at timestamptz not null default now()
 );
 
-drop trigger if exists trg_skill_versions_immutable on skill_versions;
-create trigger trg_skill_versions_immutable
+create or replace trigger trg_skill_versions_immutable
   before update on skill_versions
   for each row execute function fn_agent_versions_immutable();
 
@@ -7223,8 +7415,7 @@ create table if not exists promise_table_versions (
   created_at timestamptz not null default now()
 );
 
-drop trigger if exists trg_promise_table_versions_immutable on promise_table_versions;
-create trigger trg_promise_table_versions_immutable
+create or replace trigger trg_promise_table_versions_immutable
   before update on promise_table_versions
   for each row execute function fn_agent_versions_immutable();
 
@@ -7248,8 +7439,7 @@ create table if not exists disclosure_template_versions (
   created_at timestamptz not null default now()
 );
 
-drop trigger if exists trg_disclosure_template_versions_immutable on disclosure_template_versions;
-create trigger trg_disclosure_template_versions_immutable
+create or replace trigger trg_disclosure_template_versions_immutable
   before update on disclosure_template_versions
   for each row execute function fn_agent_versions_immutable();
 
@@ -7363,8 +7553,7 @@ create table if not exists reentry_knob_versions (
   created_at timestamptz not null default now()
 );
 
-drop trigger if exists trg_reentry_knob_versions_immutable on reentry_knob_versions;
-create trigger trg_reentry_knob_versions_immutable
+create or replace trigger trg_reentry_knob_versions_immutable
   before update on reentry_knob_versions
   for each row execute function fn_agent_versions_immutable();
 
@@ -7402,14 +7591,26 @@ begin
     'reentry_knob_versions', 'reentry_knob_pointers'
   ]
   loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
-    execute format(
-      'create policy tenant_isolation_%s_all on public.%I for all
-         using (organization_id in (select * from public.fn_user_org_ids()))
-         with check (organization_id in (select * from public.fn_user_org_ids()))',
-      t, t
-    );
+    if not (select c.relrowsecurity from pg_class c where c.oid = format('public.%I', t)::regclass) then
+      execute format('alter table public.%I enable row level security', t);
+    end if;
+    -- Só derruba e recria a policy que NÃO está com a definição final. As tabelas
+    -- da lista de fora trocaram esta policy genérica por outras, em blocos
+    -- adiante que ainda a derrubam em clone antigo: aqui ela não nasce mais.
+    if t not in ('job_queue', 'lead_state', 'ai_routers', 'ai_router_members')
+       and not exists (select 1 from pg_policies p
+           where p.schemaname = 'public' and p.tablename = t and p.policyname = format('tenant_isolation_%s_all', t)
+             and p.permissive = 'PERMISSIVE' and p.cmd = 'ALL' and p.roles = '{public}'
+             and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = '(organization_id IN ( SELECT fn_user_org_ids.fn_user_org_ids FROM fn_user_org_ids() fn_user_org_ids(fn_user_org_ids)))'
+             and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = '(organization_id IN ( SELECT fn_user_org_ids.fn_user_org_ids FROM fn_user_org_ids() fn_user_org_ids(fn_user_org_ids)))') then
+      execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
+      execute format(
+        'create policy tenant_isolation_%s_all on public.%I for all
+           using (organization_id in (select * from public.fn_user_org_ids()))
+           with check (organization_id in (select * from public.fn_user_org_ids()))',
+        t, t
+      );
+    end if;
     execute format('revoke all on public.%I from anon', t);
   end loop;
 end
@@ -7477,8 +7678,7 @@ begin
 end;
 $fn$;
 
-drop trigger if exists trg_ai_agent_versions_content_immutable on public.ai_agent_versions;
-create trigger trg_ai_agent_versions_content_immutable
+create or replace trigger trg_ai_agent_versions_content_immutable
   before update on public.ai_agent_versions
   for each row execute function fn_ai_agent_version_content_immutable();
 
@@ -7728,8 +7928,7 @@ alter table ai_agent_versions
 -- [redefinição intermediária de public.fn_ai_agent_version_content_immutable() retirada: a função nasce com o
 -- corpo final na primeira definição do arquivo e o último bloco o repete]
 
-drop trigger if exists trg_ai_agent_versions_content_immutable on public.ai_agent_versions;
-create trigger trg_ai_agent_versions_content_immutable
+create or replace trigger trg_ai_agent_versions_content_immutable
   before update on public.ai_agent_versions
   for each row execute function fn_ai_agent_version_content_immutable();
 
@@ -7795,6 +7994,9 @@ create index if not exists idx_message_templates_org on message_templates (organ
 
 alter table message_templates enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'message_templates' and policyname = 'message_templates_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'c3c227275185f4dfb7a47c4f8d492d42') then
 drop policy if exists "message_templates_select" on message_templates;
 create policy "message_templates_select" on message_templates
   for select using (
@@ -7804,7 +8006,12 @@ create policy "message_templates_select" on message_templates
     )
     or fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'message_templates' and policyname = 'message_templates_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '61f92e59501f065671a807f7cad2da60') then
 drop policy if exists "message_templates_write" on message_templates;
 create policy "message_templates_write" on message_templates
   for all using (
@@ -7821,6 +8028,8 @@ create policy "message_templates_write" on message_templates
       or (owner_user_id is null and fn_role_at_least(organization_id, 'manager'))
     )
   );
+end if;
+end $politica$;
 
 -- ---- snooze por conversa (migration 0062) ----
 alter table conversations
@@ -7910,14 +8119,21 @@ alter table agent_case_events enable row level security;
 -- permissiva, e a 0301 roda antes do bloco da 0319. Os `drop` limpam o clone
 -- antigo. Sem policy de escrita a sessão não escreve; o revoke do privilégio
 -- vem no bloco da 0319.
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'agent_cases' and policyname = 'tenant_isolation_agent_cases_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_agent_cases_all on agent_cases;
+end if; end $politica$;
 -- Forma de PASSAGEM: a mesma resposta, mas pergunta a visibilidade caso a caso.
 -- O bloco da 0319 a troca pela forma que pergunta por organização
 -- (`fn_alcance_das_conversas`), porque esta custa uma chamada por caso visitado
 -- — o porquê, medido, está lá. As funções daquela forma só nascem depois deste
 -- ponto, por isso ela não pode ser criada aqui.
 -- [policy tenant_isolation_agent_cases_select: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'agent_case_events' and policyname = 'tenant_isolation_agent_case_events_insert') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_agent_case_events_insert on agent_case_events;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'agent_case_events' and policyname = 'tenant_isolation_agent_case_events_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '2dd5fb9eaac4b279c78f1130556d62e8') then
 drop policy if exists tenant_isolation_agent_case_events_select on agent_case_events;
 create policy tenant_isolation_agent_case_events_select on agent_case_events
   for select to authenticated
@@ -7929,12 +8145,15 @@ create policy tenant_isolation_agent_case_events_select on agent_case_events
          and ac.id = agent_case_events.case_id
     )
   );
+end if;
+end $politica$;
 
 -- estender CHECKs de job_queue (kind + coerência kind⇔contato) p/ case_reply_turn
 -- nomes reais conferidos no banco linkado: job_queue_kind_check (named) e
 -- job_queue_check (anônimo, gerado pelo Postgres) para o CHECK de coerência.
-alter table job_queue drop constraint if exists job_queue_kind_check;
-alter table job_queue add constraint job_queue_kind_check
+alter table job_queue
+  drop constraint if exists job_queue_kind_check,
+  add constraint job_queue_kind_check
   -- 'operator_turn' (migration 0111, spec 16 §3.2) entra NESTE bloco, não num
   -- novo no fim: reconstruir a mesma constraint em N blocos quebra o update.sh
   -- de todo clone que já tenha uma linha de vocabulário posterior — os blocos
@@ -7955,8 +8174,9 @@ end $$;
 alter table job_queue add constraint job_queue_turn_needs_contact
   check ((kind in ('inbound_turn','followup_turn','case_reply_turn','operator_turn','transactional_delivery','approved_reply','supervisor_review')) = (contact_id is not null));
 
-alter table cron_jobs drop constraint if exists cron_jobs_job_kind_check;
-alter table cron_jobs add constraint cron_jobs_job_kind_check
+alter table cron_jobs
+  drop constraint if exists cron_jobs_job_kind_check,
+  add constraint cron_jobs_job_kind_check
   check (job_kind in ('inbound_turn','followup_turn','watchdog','flywheel','case_reply_turn'));
 
 -- ---- agent_inbox_items: reconcilia kind check followup_dead+snooze_expired (migration 0065) ----
@@ -7979,8 +8199,7 @@ create table if not exists org_memory_versions (
   unique (organization_id, version_number)
 );
 
-drop trigger if exists trg_org_memory_versions_immutable on org_memory_versions;
-create trigger trg_org_memory_versions_immutable
+create or replace trigger trg_org_memory_versions_immutable
   before update on org_memory_versions
   for each row execute function fn_agent_versions_immutable();
 
@@ -8007,8 +8226,9 @@ create index if not exists idx_org_memory_entries_org_status
   on org_memory_entries (organization_id, status, created_at);
 
 -- Flywheel: novo destino de proposta (entry de memória da org).
-alter table flywheel_distiller_proposals drop constraint if exists flywheel_distiller_proposals_type_check;
-alter table flywheel_distiller_proposals add constraint flywheel_distiller_proposals_type_check
+alter table flywheel_distiller_proposals
+  drop constraint if exists flywheel_distiller_proposals_type_check,
+  add constraint flywheel_distiller_proposals_type_check
   check (type in ('playbook_bullet', 'golden_case', 'reentry_trigger', 'org_memory_entry'));
 
 -- RLS (mesmo shape do loop tenant_isolation_* do baseline).
@@ -8016,14 +8236,26 @@ do $$
 declare t text;
 begin
   foreach t in array array['org_memory_versions', 'org_memory_pointers', 'org_memory_entries'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
-    execute format(
-      'create policy tenant_isolation_%s_all on public.%I for all
-         using (organization_id in (select * from public.fn_user_org_ids()))
-         with check (organization_id in (select * from public.fn_user_org_ids()))',
-      t, t
-    );
+    if not (select c.relrowsecurity from pg_class c where c.oid = format('public.%I', t)::regclass) then
+      execute format('alter table public.%I enable row level security', t);
+    end if;
+    -- Só derruba e recria a policy que NÃO está com a definição final. As tabelas
+    -- da lista de fora trocaram esta policy genérica por outras, em blocos
+    -- adiante que ainda a derrubam em clone antigo: aqui ela não nasce mais.
+    if t not in ('job_queue', 'lead_state', 'ai_routers', 'ai_router_members')
+       and not exists (select 1 from pg_policies p
+           where p.schemaname = 'public' and p.tablename = t and p.policyname = format('tenant_isolation_%s_all', t)
+             and p.permissive = 'PERMISSIVE' and p.cmd = 'ALL' and p.roles = '{public}'
+             and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = '(organization_id IN ( SELECT fn_user_org_ids.fn_user_org_ids FROM fn_user_org_ids() fn_user_org_ids(fn_user_org_ids)))'
+             and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = '(organization_id IN ( SELECT fn_user_org_ids.fn_user_org_ids FROM fn_user_org_ids() fn_user_org_ids(fn_user_org_ids)))') then
+      execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
+      execute format(
+        'create policy tenant_isolation_%s_all on public.%I for all
+           using (organization_id in (select * from public.fn_user_org_ids()))
+           with check (organization_id in (select * from public.fn_user_org_ids()))',
+        t, t
+      );
+    end if;
     execute format('revoke all on public.%I from anon', t);
   end loop;
 end $$;
@@ -8056,26 +8288,48 @@ do $$
 declare t text;
 begin
   foreach t in array array['skill_activations'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
-    execute format(
-      'create policy tenant_isolation_%s_all on public.%I for all
-         using (organization_id in (select * from public.fn_user_org_ids()))
-         with check (organization_id in (select * from public.fn_user_org_ids()))',
-      t, t
-    );
+    if not (select c.relrowsecurity from pg_class c where c.oid = format('public.%I', t)::regclass) then
+      execute format('alter table public.%I enable row level security', t);
+    end if;
+    -- Só derruba e recria a policy que NÃO está com a definição final. As tabelas
+    -- da lista de fora trocaram esta policy genérica por outras, em blocos
+    -- adiante que ainda a derrubam em clone antigo: aqui ela não nasce mais.
+    if t not in ('job_queue', 'lead_state', 'ai_routers', 'ai_router_members')
+       and not exists (select 1 from pg_policies p
+           where p.schemaname = 'public' and p.tablename = t and p.policyname = format('tenant_isolation_%s_all', t)
+             and p.permissive = 'PERMISSIVE' and p.cmd = 'ALL' and p.roles = '{public}'
+             and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = '(organization_id IN ( SELECT fn_user_org_ids.fn_user_org_ids FROM fn_user_org_ids() fn_user_org_ids(fn_user_org_ids)))'
+             and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = '(organization_id IN ( SELECT fn_user_org_ids.fn_user_org_ids FROM fn_user_org_ids() fn_user_org_ids(fn_user_org_ids)))') then
+      execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
+      execute format(
+        'create policy tenant_isolation_%s_all on public.%I for all
+           using (organization_id in (select * from public.fn_user_org_ids()))
+           with check (organization_id in (select * from public.fn_user_org_ids()))',
+        t, t
+      );
+    end if;
     execute format('revoke all on public.%I from anon', t);
   end loop;
 end $$;
 
 -- Catálogo do marketplace: qualquer usuário autenticado LÊ as skills de plataforma
 -- (organization_id null). Só SELECT; escrita de plataforma continua service-role.
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'skill_versions' and policyname = 'catalog_read_skill_versions'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'f64d658ed5a222383cf11cf47db2d0ca') then
 drop policy if exists catalog_read_skill_versions on skill_versions;
 create policy catalog_read_skill_versions on skill_versions for select
   to authenticated using (organization_id is null);
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'skill_pointers' and policyname = 'catalog_read_skill_pointers'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'f64d658ed5a222383cf11cf47db2d0ca') then
 drop policy if exists catalog_read_skill_pointers on skill_pointers;
 create policy catalog_read_skill_pointers on skill_pointers for select
   to authenticated using (organization_id is null);
+end if;
+end $politica$;
 
 -- ---- seed de skills de plataforma: catálogo inicial do marketplace (migration 0069) ----
 -- 0069: seed de skills de plataforma (organization_id null) — catálogo inicial do
@@ -8357,8 +8611,7 @@ update public.crm_leads
    and owner_kind is distinct from 'ai';
 
 alter table public.crm_leads
-  drop constraint if exists crm_leads_owner_kind_coherence;
-alter table public.crm_leads
+  drop constraint if exists crm_leads_owner_kind_coherence,
   add constraint crm_leads_owner_kind_coherence check (
     (owner_kind = 'user' and owner_user_id is not null and owner_agent_id is null) or
     (owner_kind = 'ai'   and owner_agent_id is not null and owner_user_id is null) or
@@ -8573,8 +8826,7 @@ begin
   return new;
 end$$;
 
-drop trigger if exists trg_stamp_stage_changed_at on public.crm_leads;
-create trigger trg_stamp_stage_changed_at
+create or replace trigger trg_stamp_stage_changed_at
   before insert or update on public.crm_leads
   for each row execute function public.fn_stamp_stage_changed_at();
 
@@ -8585,10 +8837,9 @@ comment on column public.crm_leads.stage_changed_at is
 -- Só AFROUXA a constraint (acrescenta uma terceira forma de lastro), então
 -- nenhuma linha existente passa a violá-la e o update.sh de clone não quebra.
 -- Idempotente por drop+add.
-alter table public.crm_lead_activities
-  drop constraint if exists crm_lead_activities_ai_needs_evidence;
 
 alter table public.crm_lead_activities
+  drop constraint if exists crm_lead_activities_ai_needs_evidence,
   add constraint crm_lead_activities_ai_needs_evidence check (
     actor_kind <> 'ai'
     or coalesce(jsonb_array_length(evidence->'run_ids'), 0) > 0
@@ -8713,10 +8964,9 @@ update public.crm_lead_scores
      or not (ai_probability_evidence @? '$.factors[*].ancora')
    );
 
-alter table public.crm_lead_scores
-  drop constraint if exists crm_lead_scores_needs_reason;
 
 alter table public.crm_lead_scores
+  drop constraint if exists crm_lead_scores_needs_reason,
   add constraint crm_lead_scores_needs_reason check (
     ai_probability is null
     or (
@@ -8734,27 +8984,24 @@ alter table public.crm_lead_scores
 comment on column public.crm_lead_scores.ai_probability_evidence is
   'O QUE SUSTENTA o score, em FONTE ÚNICA: `factors` — cada parcela com `pontos` (com sinal), `frase` legível e, quando há ponto no tempo, `ancora` {kind,id}. A constraint exige factors não-vazio E pelo menos um fator com âncora: legível sem rastreável é adjetivo, rastreável sem legível é um id que ninguém entende. NÃO unificar com o formato de crm_lead_activities.evidence (arrays de ids por tabela): a diferença é deliberada e está explicada na migration 0077 — atividade cita FATOS de N tabelas, score cita PARCELAS de um cálculo. Unificar reintroduz as duas listas que já divergiram uma vez (0076), com o banco cobrando uma chave e a tela lendo outra.';
 
-alter table public.crm_lead_scores
-  drop constraint if exists crm_lead_scores_range;
 
 alter table public.crm_lead_scores
+  drop constraint if exists crm_lead_scores_range,
   add constraint crm_lead_scores_range check (
     ai_probability is null or (ai_probability >= 0 and ai_probability <= 100)
   );
 
-alter table public.crm_lead_scores
-  drop constraint if exists crm_lead_scores_band_check;
 
 alter table public.crm_lead_scores
+  drop constraint if exists crm_lead_scores_band_check,
   add constraint crm_lead_scores_band_check check (
     ai_probability_band is null
     or ai_probability_band = any (array['frio', 'morno', 'quente']::text[])
   );
 
-alter table public.crm_lead_scores
-  drop constraint if exists crm_lead_scores_band_coherence;
 
 alter table public.crm_lead_scores
+  drop constraint if exists crm_lead_scores_band_coherence,
   add constraint crm_lead_scores_band_coherence check (
     ai_probability_band is null
     or ai_probability is null
@@ -8778,11 +9025,16 @@ comment on column public.crm_lead_scores.ai_probability_band is
 -- ---- tenancy ----
 alter table public.crm_lead_scores enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_lead_scores' and policyname = 'tenant_isolation_crm_lead_scores_all'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '1ab4953b40ab2a13b159649fc1bd23f9') then
 drop policy if exists tenant_isolation_crm_lead_scores_all on public.crm_lead_scores;
 create policy tenant_isolation_crm_lead_scores_all on public.crm_lead_scores
   for all
   using (organization_id in (select fn_user_org_ids()))
   with check (organization_id in (select fn_user_org_ids()));
+end if;
+end $politica$;
 
 create index if not exists idx_crm_lead_scores_org_band
   on public.crm_lead_scores (organization_id, ai_probability_band);
@@ -8861,8 +9113,7 @@ comment on table public.crm_lead_risk_states is
   'Estado de risco por negócio (wave 7 — o ciclo). FORA de crm_leads pelos motivos da 0075 (pulso que mente, 409 fantasma), mas DENTRO da publicação supabase_realtime, ao contrário de crm_lead_scores: risco é mudança de estado, não telemetria. O escritor só grava quando o bucket muda.';
 
 alter table public.crm_lead_risk_states
-  drop constraint if exists crm_lead_risk_states_bucket_check;
-alter table public.crm_lead_risk_states
+  drop constraint if exists crm_lead_risk_states_bucket_check,
   add constraint crm_lead_risk_states_bucket_check check (
     bucket = any (array['em_dia', 'em_voo', 'em_risco', 'critico']::text[])
   );
@@ -8870,22 +9121,25 @@ alter table public.crm_lead_risk_states
 -- Estado não começa no futuro. Trava o erro de gravar `since = now + janela`
 -- (o instante em que VAI esfriar) em vez de `last_activity_at + janela`.
 alter table public.crm_lead_risk_states
-  drop constraint if exists crm_lead_risk_states_since_no_passado;
-alter table public.crm_lead_risk_states
+  drop constraint if exists crm_lead_risk_states_since_no_passado,
   add constraint crm_lead_risk_states_since_no_passado check (since <= detected_at);
 
 alter table public.crm_lead_risk_states
-  drop constraint if exists crm_lead_risk_states_cold_hours_positivo;
-alter table public.crm_lead_risk_states
+  drop constraint if exists crm_lead_risk_states_cold_hours_positivo,
   add constraint crm_lead_risk_states_cold_hours_positivo check (cold_hours > 0);
 
 alter table public.crm_lead_risk_states enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_lead_risk_states' and policyname = 'tenant_isolation_crm_lead_risk_states_all'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '1ab4953b40ab2a13b159649fc1bd23f9') then
 drop policy if exists tenant_isolation_crm_lead_risk_states_all on public.crm_lead_risk_states;
 create policy tenant_isolation_crm_lead_risk_states_all on public.crm_lead_risk_states
   for all
   using (organization_id in (select fn_user_org_ids()))
   with check (organization_id in (select fn_user_org_ids()));
+end if;
+end $politica$;
 
 -- O radar lê "quem está em risco nesta org", nesta ordem.
 create index if not exists idx_crm_lead_risk_states_org_bucket
@@ -9020,8 +9274,7 @@ end$function$;
 comment on function public.fn_carimba_detected_at() is
   'detected_at é quando o BANCO percebeu, nunca quando o processo achou que percebeu. Ver migration 0081: com o valor vindo do cliente, a deriva de relógio violava o CHECK since <= detected_at e derrubava o worker inteiro.';
 
-drop trigger if exists trg_crm_lead_risk_states_detected_at on public.crm_lead_risk_states;
-create trigger trg_crm_lead_risk_states_detected_at
+create or replace trigger trg_crm_lead_risk_states_detected_at
   before insert or update on public.crm_lead_risk_states
   for each row
   execute function public.fn_carimba_detected_at();
@@ -9079,8 +9332,7 @@ comment on table public.crm_lead_reactivations is
   'Proposta de reativação de negócio esfriado (wave 7, cenário 23). SEMPRE com prazo: proposta que ninguém decide vira card parado com botão em cima, que simula atenção e adia a intervenção humana. No vencimento sai do card e vira item de caixa.';
 
 alter table public.crm_lead_reactivations
-  drop constraint if exists crm_lead_reactivations_status_check;
-alter table public.crm_lead_reactivations
+  drop constraint if exists crm_lead_reactivations_status_check,
   add constraint crm_lead_reactivations_status_check check (
     status = any (array['pending', 'accepted', 'dismissed', 'expired']::text[])
   );
@@ -9088,15 +9340,13 @@ alter table public.crm_lead_reactivations
 -- Prazo no futuro em relação à proposta. Trava o erro de nascer vencida — que
 -- criaria um item de caixa no primeiro tick e ninguém entenderia de onde veio.
 alter table public.crm_lead_reactivations
-  drop constraint if exists crm_lead_reactivations_prazo_no_futuro;
-alter table public.crm_lead_reactivations
+  drop constraint if exists crm_lead_reactivations_prazo_no_futuro,
   add constraint crm_lead_reactivations_prazo_no_futuro check (expires_at > proposed_at);
 
 -- Decisão e decisor andam juntos: status decidido SEM `decided_at` é registro
 -- que não sabe dizer quando aconteceu, e a timeline depende dessa resposta.
 alter table public.crm_lead_reactivations
-  drop constraint if exists crm_lead_reactivations_decisao_datada;
-alter table public.crm_lead_reactivations
+  drop constraint if exists crm_lead_reactivations_decisao_datada,
   add constraint crm_lead_reactivations_decisao_datada check (
     (status = 'pending' and decided_at is null)
     or (status <> 'pending' and decided_at is not null)
@@ -9116,11 +9366,16 @@ create index if not exists idx_crm_lead_reactivations_vencendo
 
 alter table public.crm_lead_reactivations enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_lead_reactivations' and policyname = 'tenant_isolation_crm_lead_reactivations_all'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '1ab4953b40ab2a13b159649fc1bd23f9') then
 drop policy if exists tenant_isolation_crm_lead_reactivations_all on public.crm_lead_reactivations;
 create policy tenant_isolation_crm_lead_reactivations_all on public.crm_lead_reactivations
   for all
   using (organization_id in (select fn_user_org_ids()))
   with check (organization_id in (select fn_user_org_ids()));
+end if;
+end $politica$;
 
 -- `proposed_at` e `updated_at` são do banco, como na 0081.
 create or replace function public.fn_carimba_reativacao()
@@ -9136,8 +9391,7 @@ begin
   return new;
 end$function$;
 
-drop trigger if exists trg_crm_lead_reactivations_carimbo on public.crm_lead_reactivations;
-create trigger trg_crm_lead_reactivations_carimbo
+create or replace trigger trg_crm_lead_reactivations_carimbo
   before insert or update on public.crm_lead_reactivations
   for each row
   execute function public.fn_carimba_reativacao();
@@ -9214,8 +9468,7 @@ comment on column public.crm_stages.agent_stage_hint is
   'A que passo do funil do AGENTE este estágio corresponde (lead_state.stage). NULL = não corresponde a nenhum, que é legítimo. Coerente com is_won/is_lost por CHECK — ver migration 0084.';
 
 alter table public.crm_stages
-  drop constraint if exists crm_stages_agent_stage_hint_check;
-alter table public.crm_stages
+  drop constraint if exists crm_stages_agent_stage_hint_check,
   add constraint crm_stages_agent_stage_hint_check check (
     agent_stage_hint is null
     or agent_stage_hint = any (array[
@@ -9232,8 +9485,7 @@ alter table public.crm_stages
 -- e é como todos os clones começam), mas hint='won' num estágio que não é de
 -- ganho seria mentira na direção oposta.
 alter table public.crm_stages
-  drop constraint if exists crm_stages_hint_coerente_com_won_lost;
-alter table public.crm_stages
+  drop constraint if exists crm_stages_hint_coerente_com_won_lost,
   add constraint crm_stages_hint_coerente_com_won_lost check (
     (agent_stage_hint <> 'won' or is_won)
     and (agent_stage_hint <> 'lost' or is_lost)
@@ -9349,21 +9601,17 @@ alter table conversations add column if not exists active_intent text;
 alter table conversations add column if not exists active_agent_set_at timestamptz;
 
 -- Triggers: audit de mutação + updated_at (padrão de ai_agents).
-drop trigger if exists trg_ai_routers_audit on ai_routers;
-create trigger trg_ai_routers_audit
+create or replace trigger trg_ai_routers_audit
   after insert or update or delete on ai_routers
   for each row execute function fn_audit_log_row();
-drop trigger if exists trg_ai_routers_updated_at on ai_routers;
-create trigger trg_ai_routers_updated_at
+create or replace trigger trg_ai_routers_updated_at
   before update on ai_routers
   for each row execute function fn_set_updated_at();
 
-drop trigger if exists trg_ai_router_members_audit on ai_router_members;
-create trigger trg_ai_router_members_audit
+create or replace trigger trg_ai_router_members_audit
   after insert or update or delete on ai_router_members
   for each row execute function fn_audit_log_row();
-drop trigger if exists trg_ai_router_members_updated_at on ai_router_members;
-create trigger trg_ai_router_members_updated_at
+create or replace trigger trg_ai_router_members_updated_at
   before update on ai_router_members
   for each row execute function fn_set_updated_at();
 
@@ -9372,14 +9620,26 @@ do $$
 declare t text;
 begin
   foreach t in array array['ai_routers', 'ai_router_members', 'ai_router_decisions'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
-    execute format(
-      'create policy tenant_isolation_%s_all on public.%I for all
-         using (organization_id in (select * from public.fn_user_org_ids()))
-         with check (organization_id in (select * from public.fn_user_org_ids()))',
-      t, t
-    );
+    if not (select c.relrowsecurity from pg_class c where c.oid = format('public.%I', t)::regclass) then
+      execute format('alter table public.%I enable row level security', t);
+    end if;
+    -- Só derruba e recria a policy que NÃO está com a definição final. As tabelas
+    -- da lista de fora trocaram esta policy genérica por outras, em blocos
+    -- adiante que ainda a derrubam em clone antigo: aqui ela não nasce mais.
+    if t not in ('job_queue', 'lead_state', 'ai_routers', 'ai_router_members')
+       and not exists (select 1 from pg_policies p
+           where p.schemaname = 'public' and p.tablename = t and p.policyname = format('tenant_isolation_%s_all', t)
+             and p.permissive = 'PERMISSIVE' and p.cmd = 'ALL' and p.roles = '{public}'
+             and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = '(organization_id IN ( SELECT fn_user_org_ids.fn_user_org_ids FROM fn_user_org_ids() fn_user_org_ids(fn_user_org_ids)))'
+             and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = '(organization_id IN ( SELECT fn_user_org_ids.fn_user_org_ids FROM fn_user_org_ids() fn_user_org_ids(fn_user_org_ids)))') then
+      execute format('drop policy if exists tenant_isolation_%s_all on public.%I', t, t);
+      execute format(
+        'create policy tenant_isolation_%s_all on public.%I for all
+           using (organization_id in (select * from public.fn_user_org_ids()))
+           with check (organization_id in (select * from public.fn_user_org_ids()))',
+        t, t
+      );
+    end if;
     execute format('revoke all on public.%I from anon', t);
   end loop;
 end $$;
@@ -9420,11 +9680,16 @@ create index if not exists idx_knowledge_searches_org_created
 
 alter table knowledge_searches enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'knowledge_searches' and policyname = 'tenant_isolation_knowledge_searches_all'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '1ab4953b40ab2a13b159649fc1bd23f9') then
 drop policy if exists tenant_isolation_knowledge_searches_all on knowledge_searches;
 create policy tenant_isolation_knowledge_searches_all on knowledge_searches
   for all
   using (organization_id in (select fn_user_org_ids()))
   with check (organization_id in (select fn_user_org_ids()));
+end if;
+end $politica$;
 
 -- Defesa em profundidade, mesmo contrato da 0085: a policy já devolve zero linha
 -- para JWT anônimo (auth.uid() null => fn_user_org_ids() vazio), mas o grant que
@@ -9571,20 +9836,18 @@ alter table public.channel_sessions
   add column if not exists ig_token_encrypted bytea,
   add column if not exists ig_token_expires_at timestamptz;
 
-alter table public.channel_sessions
-  drop constraint if exists channel_sessions_provider_check;
 
 alter table public.channel_sessions
+  drop constraint if exists channel_sessions_provider_check,
   add constraint channel_sessions_provider_check
   -- 'wacalls' (migration 0233, chamada de voz) e 'meta_instagram' (migration
   -- 0277) somados aqui — UM bloco só por constraint, doutrina de baseline
   -- (não duplicar drop+add por migration).
   check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'meta_instagram'::text]));
 
-alter table public.channel_sessions
-  drop constraint if exists channel_sessions_provider_ref_check;
 
 alter table public.channel_sessions
+  drop constraint if exists channel_sessions_provider_ref_check,
   add constraint channel_sessions_provider_ref_check check (
     (provider = 'waha'           and waha_session_name    is not null) or
     (provider = 'meta_cloud'     and meta_phone_number_id is not null) or
@@ -9704,11 +9967,16 @@ create index if not exists meta_templates_org_status_idx
 
 alter table public.meta_templates enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'meta_templates' and policyname = 'tenant_isolation_meta_templates_all'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '1ab4953b40ab2a13b159649fc1bd23f9') then
 drop policy if exists tenant_isolation_meta_templates_all on public.meta_templates;
 create policy tenant_isolation_meta_templates_all on public.meta_templates
   for all
   using (organization_id in (select public.fn_user_org_ids()))
   with check (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
 -- ---- message type: template (migration 0091) ----
 -- Espelho idempotente. Racional completo no arquivo da migration: `template` NAO
@@ -9767,8 +10035,7 @@ comment on column public.system_version.has_known_release is
 -- O gatilho de consumo existia só em ai_invocations (workers legados); o
 -- agent-engine grava em llm_calls, então o contador ficava zerado e o alarme
 -- de 80% / pausa em 100% nunca disparavam. Idempotente.
-drop trigger if exists trg_llm_calls_budget on public.llm_calls;
-create trigger trg_llm_calls_budget
+create or replace trigger trg_llm_calls_budget
   after insert on public.llm_calls
   for each row execute function public.fn_update_budget_consumption();
 
@@ -9842,8 +10109,7 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_seed_org_llm_defaults on public.organizations;
-create trigger trg_seed_org_llm_defaults
+create or replace trigger trg_seed_org_llm_defaults
   before insert on public.organizations
   for each row execute function public.fn_seed_org_llm_defaults();
 
@@ -10072,10 +10338,9 @@ create index if not exists idx_cron_jobs_retorno_vivo
 -- atendente seguinte que abre o chamado começa do zero.
 -- Idempotente e auto-curativo: a lista só CRESCE, então nenhuma linha existente
 -- viola a constraint nova e não há dado a corrigir antes de criá-la.
-alter table public.agent_case_events
-  drop constraint if exists agent_case_events_kind_check;
 
 alter table public.agent_case_events
+  drop constraint if exists agent_case_events_kind_check,
   add constraint agent_case_events_kind_check check (kind in (
     'opened',
     'human_replied',
@@ -10212,10 +10477,9 @@ on conflict (model) do update set
 -- migration que reconstrói a constraint. `kind-check-migration-x-baseline.test.ts`
 -- reprova quando as duas divergem.
 
-alter table public.agent_inbox_items
-  drop constraint if exists agent_inbox_items_kind_check;
 
 alter table public.agent_inbox_items
+  drop constraint if exists agent_inbox_items_kind_check,
   add constraint agent_inbox_items_kind_check check (kind in (
     'appointment_outcome_required',
     'appointment_recovery_review',
@@ -10576,17 +10840,27 @@ create index if not exists idx_demanda_conversas_conv
 alter table public.demandas enable row level security;
 alter table public.demanda_conversas enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'demandas' and policyname = 'tenant_isolation_demandas_all'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '84bb2e8b09085ddf1ee25e7999132a80') then
 drop policy if exists tenant_isolation_demandas_all on public.demandas;
 create policy tenant_isolation_demandas_all on public.demandas
   for all
   using (organization_id in (select * from public.fn_user_org_ids()))
   with check (organization_id in (select * from public.fn_user_org_ids()));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'demanda_conversas' and policyname = 'tenant_isolation_demanda_conversas_all'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '84bb2e8b09085ddf1ee25e7999132a80') then
 drop policy if exists tenant_isolation_demanda_conversas_all on public.demanda_conversas;
 create policy tenant_isolation_demanda_conversas_all on public.demanda_conversas
   for all
   using (organization_id in (select * from public.fn_user_org_ids()))
   with check (organization_id in (select * from public.fn_user_org_ids()));
+end if;
+end $politica$;
 
 -- ---------------------------------------------------------------------------
 -- Passo 2 de 4: derivar o passado por REGRA EXPLÍCITA, nunca por adivinhação.
@@ -10953,8 +11227,7 @@ end; $$;
 revoke all     on function public.fn_demanda_abre_no_inbound() from public;
 revoke execute on function public.fn_demanda_abre_no_inbound() from anon, authenticated;
 
-drop trigger if exists trg_demanda_abre_no_inbound on public.messages;
-create trigger trg_demanda_abre_no_inbound
+create or replace trigger trg_demanda_abre_no_inbound
   after insert on public.messages
   for each row execute function public.fn_demanda_abre_no_inbound();
 
@@ -11172,8 +11445,7 @@ end $$;
 revoke execute on function public.fn_liberar_leads_do_agente() from public, anon, authenticated;
 grant  execute on function public.fn_liberar_leads_do_agente() to service_role;
 
-drop trigger if exists trg_liberar_leads_do_agente on public.ai_agents;
-create trigger trg_liberar_leads_do_agente
+create or replace trigger trg_liberar_leads_do_agente
   before delete on public.ai_agents
   for each row execute function public.fn_liberar_leads_do_agente();
 
@@ -11242,19 +11514,19 @@ create index if not exists ai_purpose_bindings_credential_idx
 -- significa "use a chave da instalação", que é como todo binding nasce.
 -- Reescrita incondicional (drop + add) para o clone que já tem o CASCADE.
 alter table public.ai_purpose_bindings
-  drop constraint if exists ai_purpose_bindings_credential_id_fkey;
-alter table public.ai_purpose_bindings
+  drop constraint if exists ai_purpose_bindings_credential_id_fkey,
   add constraint ai_purpose_bindings_credential_id_fkey
   foreign key (credential_id) references public.ai_provider_credentials(id)
   on delete set null;
 
 alter table public.ai_purpose_bindings enable row level security;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_purpose_bindings' and policyname = 'tenant_isolation_ai_purpose_bindings_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_ai_purpose_bindings_all on public.ai_purpose_bindings;
+end if; end $politica$;
 -- [policy obsoleta tenant_isolation_ai_purpose_bindings_all: o arquivo não a cria mais; o drop que a tira de clone antigo continua adiante]
 
-drop trigger if exists ai_purpose_bindings_updated_at on public.ai_purpose_bindings;
-create trigger ai_purpose_bindings_updated_at
+create or replace trigger ai_purpose_bindings_updated_at
   before update on public.ai_purpose_bindings
   for each row execute function public.fn_set_updated_at();
 
@@ -11624,15 +11896,13 @@ comment on table public.contact_field_proposals is
 -- tenha uma proposta de nascimento. Quem já instalou recebe a mudança porque o
 -- `update.sh` reaplica o baseline inteiro, este bloco incluído.
 alter table public.contact_field_proposals
-  drop constraint if exists contact_field_proposals_campo_check;
-alter table public.contact_field_proposals
+  drop constraint if exists contact_field_proposals_campo_check,
   add constraint contact_field_proposals_campo_check check (
     campo = any (array['email', 'name', 'phone_number', 'birthdate']::text[])
   );
 
 alter table public.contact_field_proposals
-  drop constraint if exists contact_field_proposals_status_check;
-alter table public.contact_field_proposals
+  drop constraint if exists contact_field_proposals_status_check,
   add constraint contact_field_proposals_status_check check (
     status = any (array['pending', 'accepted', 'dismissed', 'expired']::text[])
   );
@@ -11640,15 +11910,13 @@ alter table public.contact_field_proposals
 -- Prazo no futuro: proposta que nasce vencida vira item de caixa no primeiro
 -- tick e ninguém entende de onde veio.
 alter table public.contact_field_proposals
-  drop constraint if exists contact_field_proposals_prazo_no_futuro;
-alter table public.contact_field_proposals
+  drop constraint if exists contact_field_proposals_prazo_no_futuro,
   add constraint contact_field_proposals_prazo_no_futuro check (expires_at > proposed_at);
 
 -- Decisão e decisor andam juntos. Status decidido sem `decided_at` é registro
 -- que não sabe dizer quando aconteceu — e é essa a pergunta que a auditoria faz.
 alter table public.contact_field_proposals
-  drop constraint if exists contact_field_proposals_decisao_datada;
-alter table public.contact_field_proposals
+  drop constraint if exists contact_field_proposals_decisao_datada,
   add constraint contact_field_proposals_decisao_datada check (
     (status = 'pending' and decided_at is null)
     or (status <> 'pending' and decided_at is not null)
@@ -11676,11 +11944,16 @@ create index if not exists idx_contact_field_proposals_vencendo
 
 alter table public.contact_field_proposals enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'contact_field_proposals' and policyname = 'tenant_isolation_contact_field_proposals_all'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '1ab4953b40ab2a13b159649fc1bd23f9') then
 drop policy if exists tenant_isolation_contact_field_proposals_all on public.contact_field_proposals;
 create policy tenant_isolation_contact_field_proposals_all on public.contact_field_proposals
   for all
   using (organization_id in (select public.fn_user_org_ids()))
   with check (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
 revoke all on public.contact_field_proposals from anon;
 
@@ -11700,8 +11973,7 @@ end$$;
 
 revoke all on function public.fn_carimba_proposta_de_dado() from public, anon;
 
-drop trigger if exists trg_contact_field_proposals_carimbo on public.contact_field_proposals;
-create trigger trg_contact_field_proposals_carimbo
+create or replace trigger trg_contact_field_proposals_carimbo
   before insert or update on public.contact_field_proposals
   for each row
   execute function public.fn_carimba_proposta_de_dado();
@@ -11738,8 +12010,7 @@ revoke all on function public.fn_apaga_propostas_de_contato_anonimizado() from p
 revoke execute on function public.fn_apaga_propostas_de_contato_anonimizado() from anon;
 revoke execute on function public.fn_apaga_propostas_de_contato_anonimizado() from authenticated;
 
-drop trigger if exists trg_contacts_anonimizado_limpa_propostas on public.contacts;
-create trigger trg_contacts_anonimizado_limpa_propostas
+create or replace trigger trg_contacts_anonimizado_limpa_propostas
   after update of is_anonymized on public.contacts
   for each row
   when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
@@ -11808,8 +12079,7 @@ update public.ai_agent_versions v
 -- [redefinição intermediária de public.fn_ai_agent_version_content_immutable() retirada: a função nasce com o
 -- corpo final na primeira definição do arquivo e o último bloco o repete]
 
-drop trigger if exists trg_ai_agent_versions_content_immutable on public.ai_agent_versions;
-create trigger trg_ai_agent_versions_content_immutable
+create or replace trigger trg_ai_agent_versions_content_immutable
   before update on public.ai_agent_versions
   for each row execute function fn_ai_agent_version_content_immutable();
 
@@ -11859,16 +12129,26 @@ alter table public.org_guardrail_layers enable row level security;
 --
 -- Auto-curativo: derruba a policy da 0142 por nome antes de criar as duas novas,
 -- então o `update.sh` de um clone que parou na 0142 fica correto sem passo manual.
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'org_guardrail_layers' and policyname = 'tenant_isolation_org_guardrail_layers_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_org_guardrail_layers_all on public.org_guardrail_layers;
-drop policy if exists org_guardrail_layers_select on public.org_guardrail_layers;
-drop policy if exists org_guardrail_layers_admin_write on public.org_guardrail_layers;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'org_guardrail_layers' and policyname = 'org_guardrail_layers_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
+drop policy if exists org_guardrail_layers_select on public.org_guardrail_layers;
 create policy org_guardrail_layers_select on public.org_guardrail_layers
   for select using (
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'org_guardrail_layers' and policyname = 'org_guardrail_layers_admin_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'c92b157d456f6cc0030171150aeda669') then
+drop policy if exists org_guardrail_layers_admin_write on public.org_guardrail_layers;
 create policy org_guardrail_layers_admin_write on public.org_guardrail_layers
   using (
     public.fn_is_platform_admin()
@@ -11880,6 +12160,8 @@ create policy org_guardrail_layers_admin_write on public.org_guardrail_layers
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'admin'))
   );
+end if;
+end $politica$;
 
 revoke all on public.org_guardrail_layers from anon;
 
@@ -12192,8 +12474,7 @@ revoke execute on function public.fn_emit_agent_case_event() from anon, authenti
 
 -- ABERTURA: só os dois status que o código considera aberto
 -- (`OPEN_STATUSES` em lib/agent-engine/agent/human-cases.ts:75).
-drop trigger if exists trg_agent_case_opened on public.agent_cases;
-create trigger trg_agent_case_opened
+create or replace trigger trg_agent_case_opened
   after insert on public.agent_cases
   for each row
   when (new.status in ('awaiting_human','awaiting_lead'))
@@ -12202,8 +12483,7 @@ create trigger trg_agent_case_opened
 -- FECHAMENTO: os três status terminais. `escalated` entra porque o caso deixou
 -- de esperar o cliente — seguir cobrando quem já foi passado adiante é o mesmo
 -- defeito de cobrar quem já foi resolvido.
-drop trigger if exists trg_agent_case_closed on public.agent_cases;
-create trigger trg_agent_case_closed
+create or replace trigger trg_agent_case_closed
   after update of status on public.agent_cases
   for each row
   when (old.status is distinct from new.status
@@ -12343,14 +12623,24 @@ notify pgrst, 'reload schema';
 -- O worker não entra nesta conta: usa `service_role`, que é `bypassrls`.
 
 -- ---- canais ----
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'channel_sessions' and policyname = 'channel_sessions_tenant_isolation_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists channel_sessions_tenant_isolation_all on public.channel_sessions;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'channel_sessions' and policyname = 'channel_sessions_tenant_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists channel_sessions_tenant_select on public.channel_sessions;
 create policy channel_sessions_tenant_select on public.channel_sessions
   for select using (
     organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'channel_sessions' and policyname = 'channel_sessions_tenant_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '1e4e8b62cae21e25a202ac9a7f46a14d') then
 drop policy if exists channel_sessions_tenant_write on public.channel_sessions;
 create policy channel_sessions_tenant_write on public.channel_sessions
   for all using (
@@ -12362,16 +12652,28 @@ create policy channel_sessions_tenant_write on public.channel_sessions
       and public.fn_role_at_least(organization_id, 'admin'))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
 -- ---- agentes de IA ----
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_agents' and policyname = 'tenant_isolation_ai_agents_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_ai_agents_all on public.ai_agents;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_agents' and policyname = 'tenant_isolation_ai_agents_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists tenant_isolation_ai_agents_select on public.ai_agents;
 create policy tenant_isolation_ai_agents_select on public.ai_agents
   for select using (
     organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_agents' and policyname = 'tenant_isolation_ai_agents_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '1e4e8b62cae21e25a202ac9a7f46a14d') then
 drop policy if exists tenant_isolation_ai_agents_write on public.ai_agents;
 create policy tenant_isolation_ai_agents_write on public.ai_agents
   for all using (
@@ -12383,14 +12685,26 @@ create policy tenant_isolation_ai_agents_write on public.ai_agents
       and public.fn_role_at_least(organization_id, 'admin'))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
 -- ---- versões de agente ----
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_agent_versions' and policyname = 'tenant_isolation_ai_agent_versions_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_ai_agent_versions_all on public.ai_agent_versions;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_agent_versions' and policyname = 'tenant_isolation_ai_agent_versions_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists tenant_isolation_ai_agent_versions_select on public.ai_agent_versions;
 create policy tenant_isolation_ai_agent_versions_select on public.ai_agent_versions
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_agent_versions' and policyname = 'tenant_isolation_ai_agent_versions_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '628e5cd808b30ee4637d2081d7c49f32') then
 drop policy if exists tenant_isolation_ai_agent_versions_write on public.ai_agent_versions;
 create policy tenant_isolation_ai_agent_versions_write on public.ai_agent_versions
   for all using (
@@ -12400,16 +12714,28 @@ create policy tenant_isolation_ai_agent_versions_write on public.ai_agent_versio
     organization_id in (select public.fn_user_org_ids())
       and public.fn_role_at_least(organization_id, 'admin')
   );
+end if;
+end $politica$;
 
 -- ---- orçamento de IA ----
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_budgets' and policyname = 'tenant_isolation_ai_budgets_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_ai_budgets_all on public.ai_budgets;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_budgets' and policyname = 'tenant_isolation_ai_budgets_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists tenant_isolation_ai_budgets_select on public.ai_budgets;
 create policy tenant_isolation_ai_budgets_select on public.ai_budgets
   for select using (
     organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_budgets' and policyname = 'tenant_isolation_ai_budgets_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '1e4e8b62cae21e25a202ac9a7f46a14d') then
 drop policy if exists tenant_isolation_ai_budgets_write on public.ai_budgets;
 create policy tenant_isolation_ai_budgets_write on public.ai_budgets
   for all using (
@@ -12421,14 +12747,26 @@ create policy tenant_isolation_ai_budgets_write on public.ai_budgets
       and public.fn_role_at_least(organization_id, 'admin'))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
 -- ---- roteadores de IA ----
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_routers' and policyname = 'tenant_isolation_ai_routers_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_ai_routers_all on public.ai_routers;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_routers' and policyname = 'tenant_isolation_ai_routers_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists tenant_isolation_ai_routers_select on public.ai_routers;
 create policy tenant_isolation_ai_routers_select on public.ai_routers
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_routers' and policyname = 'tenant_isolation_ai_routers_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '628e5cd808b30ee4637d2081d7c49f32') then
 drop policy if exists tenant_isolation_ai_routers_write on public.ai_routers;
 create policy tenant_isolation_ai_routers_write on public.ai_routers
   for all using (
@@ -12438,13 +12776,25 @@ create policy tenant_isolation_ai_routers_write on public.ai_routers
     organization_id in (select public.fn_user_org_ids())
       and public.fn_role_at_least(organization_id, 'admin')
   );
+end if;
+end $politica$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_router_members' and policyname = 'tenant_isolation_ai_router_members_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_ai_router_members_all on public.ai_router_members;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_router_members' and policyname = 'tenant_isolation_ai_router_members_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists tenant_isolation_ai_router_members_select on public.ai_router_members;
 create policy tenant_isolation_ai_router_members_select on public.ai_router_members
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_router_members' and policyname = 'tenant_isolation_ai_router_members_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '628e5cd808b30ee4637d2081d7c49f32') then
 drop policy if exists tenant_isolation_ai_router_members_write on public.ai_router_members;
 create policy tenant_isolation_ai_router_members_write on public.ai_router_members
   for all using (
@@ -12454,13 +12804,25 @@ create policy tenant_isolation_ai_router_members_write on public.ai_router_membe
     organization_id in (select public.fn_user_org_ids())
       and public.fn_role_at_least(organization_id, 'admin')
   );
+end if;
+end $politica$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_purpose_bindings' and policyname = 'tenant_isolation_ai_purpose_bindings_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_ai_purpose_bindings_all on public.ai_purpose_bindings;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_purpose_bindings' and policyname = 'tenant_isolation_ai_purpose_bindings_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists tenant_isolation_ai_purpose_bindings_select on public.ai_purpose_bindings;
 create policy tenant_isolation_ai_purpose_bindings_select on public.ai_purpose_bindings
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_purpose_bindings' and policyname = 'tenant_isolation_ai_purpose_bindings_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '628e5cd808b30ee4637d2081d7c49f32') then
 drop policy if exists tenant_isolation_ai_purpose_bindings_write on public.ai_purpose_bindings;
 create policy tenant_isolation_ai_purpose_bindings_write on public.ai_purpose_bindings
   for all using (
@@ -12470,6 +12832,8 @@ create policy tenant_isolation_ai_purpose_bindings_write on public.ai_purpose_bi
     organization_id in (select public.fn_user_org_ids())
       and public.fn_role_at_least(organization_id, 'admin')
   );
+end if;
+end $politica$;
 
 -- ---- credenciais de provedor de IA: remover a superfície, não negociá-la ----
 --
@@ -12488,8 +12852,13 @@ create policy tenant_isolation_ai_purpose_bindings_write on public.ai_purpose_bi
 -- leitura por tenancy, e derrubá-la a cada reaplicação deixava gestor sem ver
 -- credencial nenhuma por alguns comandos. O bloco da 0207 troca a definição
 -- antiga pela final no mesmo comando.)
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_provider_credentials' and policyname = 'tenant_isolation_ai_provider_credentials_modify') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_ai_provider_credentials_modify on public.ai_provider_credentials;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_provider_credentials' and policyname = 'tenant_isolation_ai_provider_credentials_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '628e5cd808b30ee4637d2081d7c49f32') then
 drop policy if exists tenant_isolation_ai_provider_credentials_write on public.ai_provider_credentials;
 create policy tenant_isolation_ai_provider_credentials_write on public.ai_provider_credentials
   for all using (
@@ -12499,6 +12868,8 @@ create policy tenant_isolation_ai_provider_credentials_write on public.ai_provid
     organization_id in (select public.fn_user_org_ids())
       and public.fn_role_at_least(organization_id, 'admin')
   );
+end if;
+end $politica$;
 
 -- O SELECT sai por COLUNA, não pela tabela inteira, e a razão é a view:
 -- `ai_provider_credentials_safe` é `security_invoker=true` — de propósito, para
@@ -12540,9 +12911,14 @@ notify pgrst, 'reload schema';
 --
 -- Este bloco vem DEPOIS do da 0150 de propósito: é ele que troca a `_select`
 -- antiga pela definição que vale.
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_provider_credentials' and policyname = 'tenant_isolation_ai_provider_credentials_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists tenant_isolation_ai_provider_credentials_select on public.ai_provider_credentials;
 create policy tenant_isolation_ai_provider_credentials_select on public.ai_provider_credentials
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
 notify pgrst, 'reload schema';
 
@@ -13366,6 +13742,9 @@ grant  execute on function public.fn_conversation_assign(uuid, uuid, uuid, text,
 -- Molde do `messages_select`: o `exists` sobre `conversations` já aplica a RLS de
 -- `conversations`, então o escopo é HERDADO em vez de reescrito — duas cópias da
 -- mesma regra divergem na primeira mudança de uma delas.
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversation_assignment_events' and policyname = 'cae_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'e5fb91f1b4865fd3543931e591397ba1') then
 drop policy if exists cae_select on public.conversation_assignment_events;
 create policy cae_select on public.conversation_assignment_events
   for select using (
@@ -13385,6 +13764,8 @@ create policy cae_select on public.conversation_assignment_events
       )
     )
   );
+end if;
+end $politica$;
 
 -- ---- LGPD alcança o histórico de captação: função + trigger (migration 0174) ----
 --
@@ -14220,8 +14601,7 @@ create index if not exists meta_templates_sessao_idx
 -- Alargamento puro: um CHECK que aceita MAIS valores não pode ser violado por
 -- linha que já passava pelo antigo, então não precisa de backfill antes.
 alter table public.webhook_events_log
-  drop constraint if exists webhook_events_log_provider_check;
-alter table public.webhook_events_log
+  drop constraint if exists webhook_events_log_provider_check,
   add constraint webhook_events_log_provider_check check (provider in (
     'waha', 'nuvemshop', 'generic', 'meta_cloud', 'zernio'
   ));
@@ -14316,8 +14696,7 @@ alter table public.platform_branding enable row level security;
 revoke all on public.platform_branding from anon, authenticated;
 grant select, insert, update on public.platform_branding to service_role;
 
-drop trigger if exists trg_platform_branding_touch on public.platform_branding;
-create trigger trg_platform_branding_touch
+create or replace trigger trg_platform_branding_touch
   before update on public.platform_branding
   for each row execute function public.fn_touch_updated_at();
 
@@ -14388,8 +14767,7 @@ update public.platform_branding
 -- `drop if exists` + `add`, e não `add ... if not exists` (que o Postgres não tem
 -- para constraint): é o que torna a REGRA idempotente, e não só a criação.
 alter table public.platform_branding
-  drop constraint if exists platform_branding_logo_path;
-alter table public.platform_branding
+  drop constraint if exists platform_branding_logo_path,
   add constraint platform_branding_logo_path check (
     logo_path is null
     or logo_path ~ '^platform/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg)$'
@@ -14783,10 +15161,9 @@ create unique index if not exists channel_sessions_zernio_account_id_ativo_uniqu
 alter table public.followup_flow_pointers
   add column if not exists surface text not null default 'followup';
 
-alter table public.followup_flow_pointers
-  drop constraint if exists followup_flow_pointers_surface_check;
 
 alter table public.followup_flow_pointers
+  drop constraint if exists followup_flow_pointers_surface_check,
   add constraint followup_flow_pointers_surface_check
   check (surface in ('followup', 'crm_automation'));
 
@@ -14814,6 +15191,9 @@ create index if not exists push_subscriptions_org_idx
 
 alter table public.push_subscriptions enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'push_subscriptions' and policyname = 'push_subscriptions_own'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '81d1ba6c7653436edf0458468a2bbaac') then
 drop policy if exists push_subscriptions_own on public.push_subscriptions;
 create policy push_subscriptions_own on public.push_subscriptions
   for all
@@ -14827,6 +15207,8 @@ create policy push_subscriptions_own on public.push_subscriptions
     and user_id = auth.uid()
     and public.fn_role_at_least(organization_id, 'viewer')
   );
+end if;
+end $politica$;
 
 revoke all on public.push_subscriptions from anon, public;
 grant select, insert, update, delete on public.push_subscriptions to authenticated;
@@ -14926,6 +15308,9 @@ comment on column public.webhook_lead_captures.source_name is
 
 alter table public.webhook_lead_captures enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'webhook_lead_captures' and policyname = 'webhook_lead_captures_manager_read'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'b035083873811584619ae1731f003438') then
 drop policy if exists "webhook_lead_captures_manager_read" on public.webhook_lead_captures;
 create policy "webhook_lead_captures_manager_read" on public.webhook_lead_captures
   for select using (
@@ -14933,11 +15318,12 @@ create policy "webhook_lead_captures_manager_read" on public.webhook_lead_captur
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 
 -- O trigger vive aqui (e não com a função, no bloco de cima) porque só faz
 -- sentido depois que a tabela existe.
-drop trigger if exists trg_redigir_captacoes_ao_anonimizar on public.contacts;
-create trigger trg_redigir_captacoes_ao_anonimizar
+create or replace trigger trg_redigir_captacoes_ao_anonimizar
   after update of is_anonymized on public.contacts
   for each row
   when (new.is_anonymized is true and old.is_anonymized is distinct from true)
@@ -14960,10 +15346,9 @@ create trigger trg_redigir_captacoes_ao_anonimizar
 -- `agent_inbox_items_kind_check`): N blocos quebram o `update.sh` de um clone
 -- com vocabulário posterior. Aditiva — só alarga o conjunto, nada a corrigir
 -- antes.
-alter table public.automation_rule_runs
-  drop constraint if exists automation_rule_runs_status_check;
 
 alter table public.automation_rule_runs
+  drop constraint if exists automation_rule_runs_status_check,
   add constraint automation_rule_runs_status_check check (status in (
     'success',
     'partial',
@@ -15461,20 +15846,11 @@ comment on column public.calendar_external_events.transparency is
 -- A cor é DA PESSOA NAQUELA ORGANIZAÇÃO, e por isso mora em user_organizations
 -- e não em auth.users: quem trabalha em duas organizações pode ser verde numa
 -- e azul na outra, e a cor de uma não vaza para a outra.
-alter table public.user_organizations
-  add column if not exists calendar_color text;
+-- (A coluna `calendar_color` e a constraint dela saíram daqui: a 0186, adiante,
+-- trocou a cor em hex pela trilha e derruba as duas. Criá-las a cada reaplicação
+-- só para derrubá-las ~30 comandos depois era DDL em `user_organizations` à toa.)
 
-alter table public.user_organizations
-  drop constraint if exists user_organizations_calendar_color_format;
-alter table public.user_organizations
-  add constraint user_organizations_calendar_color_format
-  check (calendar_color is null or calendar_color ~ '^#[0-9a-fA-F]{6}$');
-
-comment on column public.user_organizations.calendar_color is
-  'Cor desta pessoa na grade da Agenda, nesta organização. NULL = a tela deriva uma cor estável do user_id, para ninguém nascer sem cor. ⚠️ A policy de SELECT desta tabela é self-OU-manager+: um `agent` NÃO lê a linha dos colegas pelo PostgREST. A tela recebe as cores pela rota que já monta o roster com service role (GET /api/v1/team), não por leitura direta.';
-
-drop trigger if exists trg_limpar_vinculos_do_agendamento on public.calendar_appointments;
-create trigger trg_limpar_vinculos_do_agendamento
+create or replace trigger trg_limpar_vinculos_do_agendamento
   after delete on public.calendar_appointments
   for each row
   execute function public.fn_limpar_vinculos_do_agendamento();
@@ -15543,12 +15919,22 @@ $$;
 
 -- ─── os tipos de agendamento: configuração do negócio ─────────────────────
 alter table public.calendar_event_types enable row level security;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_event_types' and policyname = 'tenant_isolation_calendar_event_types_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_calendar_event_types_all on public.calendar_event_types;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_event_types' and policyname = 'calendar_event_types_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists calendar_event_types_select on public.calendar_event_types;
 create policy calendar_event_types_select on public.calendar_event_types
   for select using (
     (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_event_types' and policyname = 'calendar_event_types_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ae24ec1cda056efe9e4e2c9659eaca70') then
 drop policy if exists calendar_event_types_write on public.calendar_event_types;
 create policy calendar_event_types_write on public.calendar_event_types
   using (
@@ -15561,24 +15947,40 @@ create policy calendar_event_types_write on public.calendar_event_types
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 revoke all on public.calendar_event_types from anon;
 
 -- ─── os compromissos: a operação do dia ───────────────────────────────────
 alter table public.calendar_appointments enable row level security;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_appointments' and policyname = 'tenant_isolation_calendar_appointments_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_calendar_appointments_all on public.calendar_appointments;
+end if; end $politica$;
 -- [policy calendar_appointments_select: definição antiga retirada daqui; ela nasce uma vez, com a definição final, adiante]
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_appointments' and policyname = 'calendar_appointments_write') then -- sem a policy, nem pega lock na tabela
 drop policy if exists calendar_appointments_write on public.calendar_appointments;
+end if; end $politica$;
 -- [policy obsoleta calendar_appointments_write: o arquivo não a cria mais; o drop que a tira de clone antigo continua adiante]
 revoke all on public.calendar_appointments from anon;
 
 -- ─── as exceções: a agenda é de quem a vive ───────────────────────────────
 alter table public.calendar_availability_exceptions enable row level security;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_availability_exceptions' and policyname = 'tenant_isolation_calendar_availability_exceptions_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_calendar_availability_exceptions_all on public.calendar_availability_exceptions;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_availability_exceptions' and policyname = 'calendar_availability_exceptions_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists calendar_availability_exceptions_select on public.calendar_availability_exceptions;
 create policy calendar_availability_exceptions_select on public.calendar_availability_exceptions
   for select using (
     (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_availability_exceptions' and policyname = 'calendar_availability_exceptions_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '8a34f1cab3e53646841b10a5ecd70dfd') then
 drop policy if exists calendar_availability_exceptions_write on public.calendar_availability_exceptions;
 create policy calendar_availability_exceptions_write on public.calendar_availability_exceptions
   using (
@@ -15591,11 +15993,18 @@ create policy calendar_availability_exceptions_write on public.calendar_availabi
     or ((organization_id in (select public.fn_user_org_ids()))
         and (user_id = auth.uid() or public.fn_role_at_least(organization_id, 'manager')))
   );
+end if;
+end $politica$;
 revoke all on public.calendar_availability_exceptions from anon;
 
 -- ─── os calendários da conexão: herdam o escopo do pai ────────────────────
 alter table public.calendar_connection_calendars enable row level security;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_connection_calendars' and policyname = 'tenant_isolation_calendar_connection_calendars_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_calendar_connection_calendars_all on public.calendar_connection_calendars;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_connection_calendars' and policyname = 'calendar_connection_calendars_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'b67134e75138a49895af1c62995395bb') then
 drop policy if exists calendar_connection_calendars_select on public.calendar_connection_calendars;
 create policy calendar_connection_calendars_select on public.calendar_connection_calendars
   for select using (
@@ -15608,21 +16017,35 @@ create policy calendar_connection_calendars_select on public.calendar_connection
                   or public.fn_role_at_least(c.organization_id, 'manager'))
         ))
   );
+end if;
+end $politica$;
 revoke all on public.calendar_connection_calendars from anon;
 
 -- ─── o espelho do Google: leitura de todos, escrita de ninguém ────────────
 alter table public.calendar_external_events enable row level security;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_external_events' and policyname = 'tenant_isolation_calendar_external_events_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_calendar_external_events_all on public.calendar_external_events;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_external_events' and policyname = 'calendar_external_events_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists calendar_external_events_select on public.calendar_external_events;
 create policy calendar_external_events_select on public.calendar_external_events
   for select using (
     (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 revoke all on public.calendar_external_events from anon;
 
 alter table public.calendar_connections enable row level security;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_connections' and policyname = 'tenant_isolation_calendar_connections_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_calendar_connections_all on public.calendar_connections;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_connections' and policyname = 'calendar_connections_dono_ou_manager_read'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '632d7beb6e2ccb39613c038e93d1d616') then
 drop policy if exists calendar_connections_dono_ou_manager_read on public.calendar_connections;
 create policy calendar_connections_dono_ou_manager_read on public.calendar_connections
   for select using (
@@ -15630,6 +16053,8 @@ create policy calendar_connections_dono_ou_manager_read on public.calendar_conne
     or ((organization_id in (select public.fn_user_org_ids()))
         and (user_id = auth.uid() or public.fn_role_at_least(organization_id, 'manager')))
   );
+end if;
+end $politica$;
 
 -- Escrita não tem policy: quem conecta e desconecta é o callback do OAuth e o
 -- worker de renovação, ambos com service role, e ambos filtram organization_id
@@ -15771,8 +16196,7 @@ notify pgrst, 'reload schema';
 -- `contact_id`, e o único vínculo com a pessoa é o `title` copiado do Google.
 -- Alcançá-la exige uma decisão de produto — declarar que é espelho de terceiro,
 -- ou apagar a janela da conexão.
-drop trigger if exists trg_redigir_agenda_ao_anonimizar on public.contacts;
-create trigger trg_redigir_agenda_ao_anonimizar
+create or replace trigger trg_redigir_agenda_ao_anonimizar
   after update of is_anonymized on public.contacts
   for each row
   when (new.is_anonymized is true and old.is_anonymized is distinct from true)
@@ -15796,8 +16220,7 @@ notify pgrst, 'reload schema';
 -- `on conflict do nothing` e nunca `do update`: o `update.sh` re-aplica este
 -- arquivo a cada atualização, e `do update` sobrescreveria em silêncio o tipo
 -- que o dono já editou. É a diferença entre semear e mandar.
-drop trigger if exists trg_semear_tipos_de_agendamento on public.organizations;
-create trigger trg_semear_tipos_de_agendamento
+create or replace trigger trg_semear_tipos_de_agendamento
   after insert on public.organizations
   for each row
   execute function public.fn_semear_tipos_de_agendamento_na_org_nova();
@@ -15848,8 +16271,7 @@ alter table public.user_organizations
   add column if not exists calendar_trilha smallint;
 
 alter table public.user_organizations
-  drop constraint if exists user_organizations_calendar_trilha_valida;
-alter table public.user_organizations
+  drop constraint if exists user_organizations_calendar_trilha_valida,
   add constraint user_organizations_calendar_trilha_valida
   check (calendar_trilha is null or calendar_trilha between 1 and 8);
 
@@ -15944,12 +16366,19 @@ revoke all on public.calendar_oauth_nonces from anon, authenticated;
 -- Negação ESCRITA (migration 0192). RLS ligada sem policy já nega tudo, mas no
 -- catálogo negação deliberada e negação esquecida são indistinguíveis — e é
 -- disso que o invariante de completude reclama, com razão. Não abre nada.
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_oauth_nonces' and policyname = 'tenant_isolation_calendar_oauth_nonces_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_calendar_oauth_nonces_all on public.calendar_oauth_nonces;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_oauth_nonces' and policyname = 'calendar_oauth_nonces_ninguem_le'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '587965adf0d08405edcef83686db9ec3') then
 drop policy if exists calendar_oauth_nonces_ninguem_le on public.calendar_oauth_nonces;
 create policy calendar_oauth_nonces_ninguem_le
   on public.calendar_oauth_nonces
   for select
   using (false);
+end if;
+end $politica$;
 
 -- A quarta poda do `data-retention`. Assinatura idêntica às três irmãs
 -- (`p_dias`, `p_lote`) para o mesmo laço de lotes servir sem caso especial.
@@ -16267,8 +16696,7 @@ $fn$;
 revoke execute on function public.fn_adotar_tipos_de_agendamento_sem_dono() from public, anon, authenticated;
 grant  execute on function public.fn_adotar_tipos_de_agendamento_sem_dono() to service_role;
 
-drop trigger if exists trg_adotar_tipos_de_agendamento_sem_dono on public.user_organizations;
-create trigger trg_adotar_tipos_de_agendamento_sem_dono
+create or replace trigger trg_adotar_tipos_de_agendamento_sem_dono
   after insert on public.user_organizations
   for each row execute function public.fn_adotar_tipos_de_agendamento_sem_dono();
 
@@ -16321,8 +16749,7 @@ alter table public.ai_knowledge_sources
   alter column agent_id drop not null;
 
 alter table public.ai_knowledge_sources
-  drop constraint if exists ai_knowledge_sources_agent_id_fkey;
-alter table public.ai_knowledge_sources
+  drop constraint if exists ai_knowledge_sources_agent_id_fkey,
   add constraint ai_knowledge_sources_agent_id_fkey
   foreign key (agent_id) references public.ai_agents(id) on delete set null;
 
@@ -16344,8 +16771,7 @@ alter table public.ai_knowledge_versions
   alter column agent_id drop not null;
 
 alter table public.ai_knowledge_versions
-  drop constraint if exists ai_knowledge_versions_agent_id_fkey;
-alter table public.ai_knowledge_versions
+  drop constraint if exists ai_knowledge_versions_agent_id_fkey,
   add constraint ai_knowledge_versions_agent_id_fkey
   foreign key (agent_id) references public.ai_agents(id) on delete set null;
 
@@ -16409,16 +16835,14 @@ update public.ai_knowledge_sources
  where status = 'archived' and is_active;
 
 alter table public.ai_knowledge_sources
-  drop constraint if exists ai_knowledge_sources_arquivada_nao_e_ativa;
-alter table public.ai_knowledge_sources
+  drop constraint if exists ai_knowledge_sources_arquivada_nao_e_ativa,
   add constraint ai_knowledge_sources_arquivada_nao_e_ativa
   check (not is_active or status <> 'archived');
 
 -- Os dois estados que o produto JÁ produz e a tela não sabia mostrar.
 -- Reconstruído em UM bloco só (lição do #159). Aditivo.
 alter table public.ai_knowledge_sources
-  drop constraint if exists ai_knowledge_sources_last_index_status_check;
-alter table public.ai_knowledge_sources
+  drop constraint if exists ai_knowledge_sources_last_index_status_check,
   add constraint ai_knowledge_sources_last_index_status_check
   check (last_index_status is null or last_index_status = any (array[
     'success', 'partial', 'failed', 'indexando', 'sem_credencial'
@@ -16450,26 +16874,22 @@ delete from public.ai_chunks c
  where not exists (select 1 from public.ai_knowledge_versions v where v.id = c.kb_version_id);
 
 alter table public.ai_agents
-  drop constraint if exists ai_agents_active_kb_version_id_fkey;
-alter table public.ai_agents
+  drop constraint if exists ai_agents_active_kb_version_id_fkey,
   add constraint ai_agents_active_kb_version_id_fkey
   foreign key (active_kb_version_id) references public.ai_knowledge_versions(id) on delete set null;
 
 alter table public.ai_chunks
-  drop constraint if exists ai_chunks_kb_version_id_fkey;
-alter table public.ai_chunks
+  drop constraint if exists ai_chunks_kb_version_id_fkey,
   add constraint ai_chunks_kb_version_id_fkey
   foreign key (kb_version_id) references public.ai_knowledge_versions(id) on delete cascade;
 
 alter table public.ai_knowledge_sources
-  drop constraint if exists ai_knowledge_sources_active_kb_version_id_fkey;
-alter table public.ai_knowledge_sources
+  drop constraint if exists ai_knowledge_sources_active_kb_version_id_fkey,
   add constraint ai_knowledge_sources_active_kb_version_id_fkey
   foreign key (active_kb_version_id) references public.ai_knowledge_versions(id) on delete set null;
 
 alter table public.ai_knowledge_versions
-  drop constraint if exists ai_knowledge_versions_knowledge_source_id_fkey;
-alter table public.ai_knowledge_versions
+  drop constraint if exists ai_knowledge_versions_knowledge_source_id_fkey,
   add constraint ai_knowledge_versions_knowledge_source_id_fkey
   foreign key (knowledge_source_id) references public.ai_knowledge_sources(id) on delete cascade;
 
@@ -16557,8 +16977,7 @@ begin
 end;
 $fn$;
 
-drop trigger if exists trg_ai_agent_versions_content_immutable on public.ai_agent_versions;
-create trigger trg_ai_agent_versions_content_immutable
+create or replace trigger trg_ai_agent_versions_content_immutable
   before update on public.ai_agent_versions
   for each row execute function fn_ai_agent_version_content_immutable();
 
@@ -16655,14 +17074,24 @@ on conflict (provider, model_id) do update set
 -- policy `ALL` só-tenancy mais `GRANT ALL ... TO anon`. Um membro papel `viewer`
 -- DELETA a base de conhecimento da própria organização falando direto com o
 -- PostgREST, com o JWT dele.
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_knowledge_sources' and policyname = 'tenant_isolation_ai_knowledge_sources_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_ai_knowledge_sources_all on public.ai_knowledge_sources;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_knowledge_sources' and policyname = 'tenant_isolation_ai_knowledge_sources_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists tenant_isolation_ai_knowledge_sources_select on public.ai_knowledge_sources;
 create policy tenant_isolation_ai_knowledge_sources_select on public.ai_knowledge_sources
   for select using (
     organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_knowledge_sources' and policyname = 'tenant_isolation_ai_knowledge_sources_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '92b47881746bd1a611937ab81071d15c') then
 drop policy if exists tenant_isolation_ai_knowledge_sources_write on public.ai_knowledge_sources;
 create policy tenant_isolation_ai_knowledge_sources_write on public.ai_knowledge_sources
   for all using (
@@ -16674,13 +17103,25 @@ create policy tenant_isolation_ai_knowledge_sources_write on public.ai_knowledge
       and public.fn_role_at_least(organization_id, 'manager'))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_faq_items' and policyname = 'tenant_isolation_ai_faq_items_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_ai_faq_items_all on public.ai_faq_items;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_faq_items' and policyname = 'tenant_isolation_ai_faq_items_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists tenant_isolation_ai_faq_items_select on public.ai_faq_items;
 create policy tenant_isolation_ai_faq_items_select on public.ai_faq_items
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_faq_items' and policyname = 'tenant_isolation_ai_faq_items_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '2884369ad0ee58270aada74ba809f854') then
 drop policy if exists tenant_isolation_ai_faq_items_write on public.ai_faq_items;
 create policy tenant_isolation_ai_faq_items_write on public.ai_faq_items
   for all using (
@@ -16690,15 +17131,27 @@ create policy tenant_isolation_ai_faq_items_write on public.ai_faq_items
     organization_id in (select public.fn_user_org_ids())
       and public.fn_role_at_least(organization_id, 'manager')
   );
+end if;
+end $politica$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_knowledge_versions' and policyname = 'tenant_isolation_ai_kbv_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_ai_kbv_all on public.ai_knowledge_versions;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_knowledge_versions' and policyname = 'tenant_isolation_ai_kbv_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists tenant_isolation_ai_kbv_select on public.ai_knowledge_versions;
 create policy tenant_isolation_ai_kbv_select on public.ai_knowledge_versions
   for select using (
     organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_knowledge_versions' and policyname = 'tenant_isolation_ai_kbv_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '1e4e8b62cae21e25a202ac9a7f46a14d') then
 drop policy if exists tenant_isolation_ai_kbv_write on public.ai_knowledge_versions;
 create policy tenant_isolation_ai_kbv_write on public.ai_knowledge_versions
   for all using (
@@ -16710,15 +17163,27 @@ create policy tenant_isolation_ai_kbv_write on public.ai_knowledge_versions
       and public.fn_role_at_least(organization_id, 'admin'))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_chunks' and policyname = 'tenant_isolation_ai_chunks_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_ai_chunks_all on public.ai_chunks;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_chunks' and policyname = 'tenant_isolation_ai_chunks_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists tenant_isolation_ai_chunks_select on public.ai_chunks;
 create policy tenant_isolation_ai_chunks_select on public.ai_chunks
   for select using (
     organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_chunks' and policyname = 'tenant_isolation_ai_chunks_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '1e4e8b62cae21e25a202ac9a7f46a14d') then
 drop policy if exists tenant_isolation_ai_chunks_write on public.ai_chunks;
 create policy tenant_isolation_ai_chunks_write on public.ai_chunks
   for all using (
@@ -16730,6 +17195,8 @@ create policy tenant_isolation_ai_chunks_write on public.ai_chunks
       and public.fn_role_at_least(organization_id, 'admin'))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
 -- Estas quatro nunca foram para o anon: a concessão que o dump trazia saiu do
 -- texto (porte de melgarafael/DeskcommCRM #2250). O revoke fica para curar
@@ -16739,8 +17206,7 @@ revoke all on table public.ai_knowledge_versions from anon;
 revoke all on table public.ai_chunks             from anon;
 revoke all on table public.ai_faq_items          from anon;
 
-drop trigger if exists trg_ai_knowledge_sources_audit on public.ai_knowledge_sources;
-create trigger trg_ai_knowledge_sources_audit
+create or replace trigger trg_ai_knowledge_sources_audit
   after insert or update or delete on public.ai_knowledge_sources
   for each row execute function public.fn_audit_log_row();
 
@@ -16832,8 +17298,7 @@ $fn$;
 revoke execute on function public.fn_carimbar_ida_ao_google() from public, anon, authenticated;
 grant  execute on function public.fn_carimbar_ida_ao_google() to service_role;
 
-drop trigger if exists trg_calendar_appointments_carimbo_do_google on public.calendar_appointments;
-create trigger trg_calendar_appointments_carimbo_do_google
+create or replace trigger trg_calendar_appointments_carimbo_do_google
   before insert or update on public.calendar_appointments
   for each row execute function public.fn_carimbar_ida_ao_google();
 
@@ -16881,8 +17346,7 @@ alter table public.platform_google_oauth enable row level security;
 revoke all on public.platform_google_oauth from anon, authenticated;
 grant select, insert, update on public.platform_google_oauth to service_role;
 
-drop trigger if exists trg_platform_google_oauth_updated_at on public.platform_google_oauth;
-create trigger trg_platform_google_oauth_updated_at
+create or replace trigger trg_platform_google_oauth_updated_at
   before update on public.platform_google_oauth
   for each row execute function public.fn_set_updated_at();
 
@@ -17098,12 +17562,20 @@ alter table public.catalog_products enable row level security;
 -- Leitura para a organização; ESCRITA só de `manager` para cima. É o molde da
 -- 0177 (`calendar_event_types`), e é o que a tabela da Nuvemshop não tem: preço
 -- de venda não se altera com papel de leitura.
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'catalog_products' and policyname = 'catalog_products_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists catalog_products_select on public.catalog_products;
 create policy catalog_products_select on public.catalog_products
   for select using (
     (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'catalog_products' and policyname = 'catalog_products_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ae24ec1cda056efe9e4e2c9659eaca70') then
 drop policy if exists catalog_products_write on public.catalog_products;
 create policy catalog_products_write on public.catalog_products
   using (
@@ -17116,6 +17588,8 @@ create policy catalog_products_write on public.catalog_products
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 
 -- `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON TABLES TO anon` do baseline alcança
 -- TODA tabela criada depois dele — inclusive esta. Sem o revoke, o catálogo
@@ -17124,8 +17598,7 @@ revoke all on public.catalog_products from anon;
 grant select, insert, update, delete on public.catalog_products to authenticated;
 grant all on public.catalog_products to service_role;
 
-drop trigger if exists trg_catalog_products_updated_at on public.catalog_products;
-create trigger trg_catalog_products_updated_at
+create or replace trigger trg_catalog_products_updated_at
   before update on public.catalog_products
   for each row execute function public.fn_set_updated_at();
 
@@ -17835,12 +18308,20 @@ create index if not exists crm_tasks_lead_idx
 
 alter table public.crm_tasks enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_tasks' and policyname = 'crm_tasks_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists crm_tasks_select on public.crm_tasks;
 create policy crm_tasks_select on public.crm_tasks
   for select using (
     (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_tasks' and policyname = 'crm_tasks_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '8e48f878e706662d9c78a5f854ad8a46') then
 drop policy if exists crm_tasks_write on public.crm_tasks;
 create policy crm_tasks_write on public.crm_tasks
   using (
@@ -17853,6 +18334,8 @@ create policy crm_tasks_write on public.crm_tasks
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'agent'))
   );
+end if;
+end $politica$;
 
 -- `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON TABLES TO anon` do baseline alcança
 -- TODA tabela criada depois dele — inclusive esta. Sem o revoke, as tarefas da
@@ -17861,8 +18344,7 @@ revoke all on public.crm_tasks from anon;
 grant select, insert, update, delete on public.crm_tasks to authenticated;
 grant all on public.crm_tasks to service_role;
 
-drop trigger if exists trg_crm_tasks_updated_at on public.crm_tasks;
-create trigger trg_crm_tasks_updated_at
+create or replace trigger trg_crm_tasks_updated_at
   before update on public.crm_tasks
   for each row execute function public.fn_set_updated_at();
 
@@ -17917,8 +18399,7 @@ $$;
 revoke execute on function public.fn_redigir_tarefas_do_contato_anonimizado() from public, anon, authenticated;
 grant  execute on function public.fn_redigir_tarefas_do_contato_anonimizado() to service_role;
 
-drop trigger if exists trg_redigir_tarefas_ao_anonimizar on public.contacts;
-create trigger trg_redigir_tarefas_ao_anonimizar
+create or replace trigger trg_redigir_tarefas_ao_anonimizar
   after update of is_anonymized on public.contacts
   for each row
   when (new.is_anonymized is true and old.is_anonymized is distinct from true)
@@ -18119,10 +18600,9 @@ update public.contacts
  where custom_fields is null
     or jsonb_typeof(custom_fields) <> 'object';
 
-alter table public.contacts
-  drop constraint if exists contacts_custom_fields_object;
 
 alter table public.contacts
+  drop constraint if exists contacts_custom_fields_object,
   add constraint contacts_custom_fields_object
   check (jsonb_typeof(custom_fields) = 'object');
 
@@ -18144,8 +18624,7 @@ revoke all on function public.fn_contato_anonimizado_limpa_campos_personalizados
 revoke execute on function public.fn_contato_anonimizado_limpa_campos_personalizados() from anon;
 revoke execute on function public.fn_contato_anonimizado_limpa_campos_personalizados() from authenticated;
 
-drop trigger if exists trg_contacts_anonimizado_limpa_custom_fields on public.contacts;
-create trigger trg_contacts_anonimizado_limpa_custom_fields
+create or replace trigger trg_contacts_anonimizado_limpa_custom_fields
   before update of is_anonymized on public.contacts
   for each row
   when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
@@ -18230,11 +18709,16 @@ grant execute on function public.fn_accept_team_invite(uuid, uuid, text, uuid, t
 -- Não fazemos backfill nem apagamos recibos: só a RPC abaixo produz confiança.
 -- Os namespaces LGPD/MCP continuam com o contrato de leitura/escrita original.
 alter table public.idempotency_keys add column if not exists tenant_creation_trusted boolean not null default false;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'idempotency_keys' and policyname = 'idempotency_platform_creation_server_only'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'a16f6326d16cc325618816b971dc3ba7') then
 drop policy if exists idempotency_platform_creation_server_only on public.idempotency_keys;
 create policy idempotency_platform_creation_server_only on public.idempotency_keys
   as restrictive for all to anon, authenticated
   using (endpoint not like '/api/v1/admin/tenants:%' and not tenant_creation_trusted)
   with check (endpoint not like '/api/v1/admin/tenants:%' and not tenant_creation_trusted);
+end if;
+end $politica$;
 
 -- Criação administrativa atômica; chave existente com endpoint por ator, sem tokens.
 -- Apenas service_role: identidade/plataforma/MFA são verificadas pelo handler.
@@ -18362,17 +18846,41 @@ begin
  loop
  v_col:=case when r.relname='organizations' then 'id' else 'organization_id' end;
  if not (has_table_privilege('authenticated',r.oid,'insert') or has_table_privilege('authenticated',r.oid,'update') or has_table_privilege('authenticated',r.oid,'delete')) then
-   execute format('drop policy if exists support_write_insert on public.%I',r.relname);
-   execute format('drop policy if exists support_write_update on public.%I',r.relname);
-   execute format('drop policy if exists support_write_delete on public.%I',r.relname);
+   if exists (select 1 from pg_policies p where p.schemaname='public' and p.tablename=r.relname
+               and p.policyname in ('support_write_insert','support_write_update','support_write_delete')) then
+     execute format('drop policy if exists support_write_insert on public.%I',r.relname);
+     execute format('drop policy if exists support_write_update on public.%I',r.relname);
+     execute format('drop policy if exists support_write_delete on public.%I',r.relname);
+   end if;
    continue; -- tabela server-only mantém ZERO policies, contrato mais restritivo
  end if;
- execute format('drop policy if exists support_write_insert on public.%I',r.relname);
- execute format('create policy support_write_insert on public.%I as restrictive for insert to authenticated with check (public.fn_support_write_allowed(%I))',r.relname,v_col);
- execute format('drop policy if exists support_write_update on public.%I',r.relname);
- execute format('create policy support_write_update on public.%I as restrictive for update to authenticated using (public.fn_support_write_allowed(%I)) with check (public.fn_support_write_allowed(%I))',r.relname,v_col,v_col);
- execute format('drop policy if exists support_write_delete on public.%I',r.relname);
- execute format('create policy support_write_delete on public.%I as restrictive for delete to authenticated using (public.fn_support_write_allowed(%I))',r.relname,v_col);
+ -- Só derruba e recria a policy que NÃO está com a definição final: em banco já
+ -- atualizado o laço não toca em nada (antes eram ~320 policies recriadas numa
+ -- transação só, com lock exclusivo em mais de cem tabelas ao mesmo tempo).
+ if not exists (select 1 from pg_policies p
+     where p.schemaname = 'public' and p.tablename = r.relname and p.policyname = 'support_write_insert'
+       and p.permissive = 'RESTRICTIVE' and p.cmd = 'INSERT' and p.roles = '{authenticated}'
+       and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = '~'
+       and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = format('fn_support_write_allowed(%I)', v_col)) then
+   execute format('drop policy if exists support_write_insert on public.%I',r.relname);
+   execute format('create policy support_write_insert on public.%I as restrictive for insert to authenticated with check (public.fn_support_write_allowed(%I))',r.relname,v_col);
+ end if;
+ if not exists (select 1 from pg_policies p
+     where p.schemaname = 'public' and p.tablename = r.relname and p.policyname = 'support_write_update'
+       and p.permissive = 'RESTRICTIVE' and p.cmd = 'UPDATE' and p.roles = '{authenticated}'
+       and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = format('fn_support_write_allowed(%I)', v_col)
+       and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = format('fn_support_write_allowed(%I)', v_col)) then
+   execute format('drop policy if exists support_write_update on public.%I',r.relname);
+   execute format('create policy support_write_update on public.%I as restrictive for update to authenticated using (public.fn_support_write_allowed(%I)) with check (public.fn_support_write_allowed(%I))',r.relname,v_col,v_col);
+ end if;
+ if not exists (select 1 from pg_policies p
+     where p.schemaname = 'public' and p.tablename = r.relname and p.policyname = 'support_write_delete'
+       and p.permissive = 'RESTRICTIVE' and p.cmd = 'DELETE' and p.roles = '{authenticated}'
+       and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = format('fn_support_write_allowed(%I)', v_col)
+       and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = '~') then
+   execute format('drop policy if exists support_write_delete on public.%I',r.relname);
+   execute format('create policy support_write_delete on public.%I as restrictive for delete to authenticated using (public.fn_support_write_allowed(%I))',r.relname,v_col);
+ end if;
  end loop;
 end $f$;
 
@@ -18396,12 +18904,31 @@ revoke all on function public.fn_support_storage_write_allowed(text) from public
 grant execute on function public.fn_support_storage_write_allowed(text) to authenticated,service_role;
 do $f$ begin
  if to_regclass('storage.objects') is not null then
- execute 'drop policy if exists support_write_insert on storage.objects';
- execute 'create policy support_write_insert on storage.objects as restrictive for insert to authenticated with check (public.fn_support_storage_write_allowed(name))';
- execute 'drop policy if exists support_write_update on storage.objects';
- execute 'create policy support_write_update on storage.objects as restrictive for update to authenticated using (public.fn_support_storage_write_allowed(name)) with check (public.fn_support_storage_write_allowed(name))';
- execute 'drop policy if exists support_write_delete on storage.objects';
- execute 'create policy support_write_delete on storage.objects as restrictive for delete to authenticated using (public.fn_support_storage_write_allowed(name))';
+ -- Só derruba e recria a que NÃO está com a definição final.
+ if not exists (select 1 from pg_policies p
+     where p.schemaname = 'storage' and p.tablename = 'objects' and p.policyname = 'support_write_insert'
+       and p.permissive = 'RESTRICTIVE' and p.cmd = 'INSERT' and p.roles = '{authenticated}'
+       and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = '~'
+       and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = 'fn_support_storage_write_allowed(name)') then
+   execute 'drop policy if exists support_write_insert on storage.objects';
+   execute 'create policy support_write_insert on storage.objects as restrictive for insert to authenticated with check (public.fn_support_storage_write_allowed(name))';
+ end if;
+ if not exists (select 1 from pg_policies p
+     where p.schemaname = 'storage' and p.tablename = 'objects' and p.policyname = 'support_write_update'
+       and p.permissive = 'RESTRICTIVE' and p.cmd = 'UPDATE' and p.roles = '{authenticated}'
+       and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = 'fn_support_storage_write_allowed(name)'
+       and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = 'fn_support_storage_write_allowed(name)') then
+   execute 'drop policy if exists support_write_update on storage.objects';
+   execute 'create policy support_write_update on storage.objects as restrictive for update to authenticated using (public.fn_support_storage_write_allowed(name)) with check (public.fn_support_storage_write_allowed(name))';
+ end if;
+ if not exists (select 1 from pg_policies p
+     where p.schemaname = 'storage' and p.tablename = 'objects' and p.policyname = 'support_write_delete'
+       and p.permissive = 'RESTRICTIVE' and p.cmd = 'DELETE' and p.roles = '{authenticated}'
+       and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = 'fn_support_storage_write_allowed(name)'
+       and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = '~') then
+   execute 'drop policy if exists support_write_delete on storage.objects';
+   execute 'create policy support_write_delete on storage.objects as restrictive for delete to authenticated using (public.fn_support_storage_write_allowed(name))';
+ end if;
  end if;
 end $f$;
 notify pgrst, 'reload schema';
@@ -18739,8 +19266,7 @@ begin
  return new;
 end; $$;
 revoke execute on function public.fn_job_service_boundary() from public,anon,authenticated;
-drop trigger if exists trg_job_service_boundary on public.job_queue;
-create trigger trg_job_service_boundary before insert on public.job_queue for each row execute function public.fn_job_service_boundary();
+create or replace trigger trg_job_service_boundary before insert on public.job_queue for each row execute function public.fn_job_service_boundary();
 
 -- Defesa para escritores legados de status: só a linha já bloqueada, nenhum
 -- advisory/lock de demanda adquirido DEPOIS dela. As APIs usam fn_service_status.
@@ -18765,8 +19291,7 @@ begin
  return new;
 end; $$;
 revoke execute on function public.fn_service_stamp_status() from public,anon,authenticated;
-drop trigger if exists trg_service_stamp_status on public.conversations;
-create trigger trg_service_stamp_status before update of status on public.conversations
+create or replace trigger trg_service_stamp_status before update of status on public.conversations
  for each row execute function public.fn_service_stamp_status();
 
 -- Caso guarda sua origem no snapshot já existente. Resposta humana não cria
@@ -18783,8 +19308,7 @@ begin
  return new;
 end; $$;
 revoke execute on function public.fn_case_service_boundary() from public,anon,authenticated;
-drop trigger if exists trg_case_service_boundary on public.agent_cases;
-create trigger trg_case_service_boundary before insert on public.agent_cases for each row execute function public.fn_case_service_boundary();
+create or replace trigger trg_case_service_boundary before insert on public.agent_cases for each row execute function public.fn_case_service_boundary();
 
 -- Agregados não podem tornar mensagem atrasada um sinal operacional recente.
 -- Mesma ordem de mutex da transição, depois conversa e contato.
@@ -18795,8 +19319,7 @@ grant execute on function public.fn_mark_conversation_message(uuid,text,text,tim
 
 -- Reentrada em fila tem consumidor real em lib/routing/worker.ts. Só a
 -- transição terminal->fila emite; atribuições subsequentes não produzem eco.
-drop trigger if exists trg_service_reopened_routing on public.conversations;
-create trigger trg_service_reopened_routing after update of status on public.conversations
+create or replace trigger trg_service_reopened_routing after update of status on public.conversations
  for each row when (old.status in ('closed','resolved','archived') and new.status in ('open','pending')
   and new.assigned_to_user_id is null) execute function public.fn_emit_conversation_routing();
 
@@ -18810,8 +19333,7 @@ begin
  return new;
 end; $$;
 revoke execute on function public.fn_demanda_revision() from public,anon,authenticated;
-drop trigger if exists trg_demanda_revision on public.demandas;
-create trigger trg_demanda_revision before update on public.demandas for each row execute function public.fn_demanda_revision();
+create or replace trigger trg_demanda_revision before update on public.demandas for each row execute function public.fn_demanda_revision();
 
 -- Snapshot atômico usado tanto pela origem quanto pelo sink.
 create or replace function public.fn_service_boundary(p_org uuid,p_conversation uuid)
@@ -18891,8 +19413,7 @@ begin
  return new;
 end; $$;
 revoke execute on function public.fn_message_service_lock() from public,anon,authenticated;
-drop trigger if exists trg_message_service_lock on public.messages;
-create trigger trg_message_service_lock before insert on public.messages for each row execute function public.fn_message_service_lock();
+create or replace trigger trg_message_service_lock before insert on public.messages for each row execute function public.fn_message_service_lock();
 
 -- Mescla preserva autorização/support gate e adota a mesma ordem de mutex.
 -- [redefinição intermediária de public.fn_mesclar_contatos(uuid,uuid,uuid[]) retirada: a função nasce com o
@@ -19317,8 +19838,7 @@ begin
  return new;
 end; $$;
 revoke all on function public.fn_appointment_stamp() from public,anon,authenticated;
-drop trigger if exists trg_appointment_stamp on public.calendar_appointments;
-create trigger trg_appointment_stamp before insert or update on public.calendar_appointments for each row execute function public.fn_appointment_stamp();
+create or replace trigger trg_appointment_stamp before insert or update on public.calendar_appointments for each row execute function public.fn_appointment_stamp();
 
 -- A mudança observada e o evento estão no mesmo commit. Sem janela em que
 -- o desfecho ficou gravado e a recuperação nunca soube dele.
@@ -19358,8 +19878,7 @@ begin
  return new;
 end; $$;
 revoke all on function public.fn_appointment_inbound() from public,anon,authenticated;
-drop trigger if exists trg_appointment_inbound on public.messages;
-create trigger trg_appointment_inbound after update of service_revision on public.messages for each row execute function public.fn_appointment_inbound();
+create or replace trigger trg_appointment_inbound after update of service_revision on public.messages for each row execute function public.fn_appointment_inbound();
 
 create or replace function public.fn_followup_revision()
 returns trigger language plpgsql security definer set search_path=public as $$
@@ -19388,8 +19907,7 @@ begin
  new.revision:=old.revision+1; return new;
 end; $$;
 revoke all on function public.fn_followup_revision() from public,anon,authenticated;
-drop trigger if exists trg_followup_revision on public.followup_enrollments;
-create trigger trg_followup_revision before update on public.followup_enrollments for each row execute function public.fn_followup_revision();
+create or replace trigger trg_followup_revision before update on public.followup_enrollments for each row execute function public.fn_followup_revision();
 
 -- Defaults também são validados no schema TS. Valores corrompidos de clone
 -- degradam para 10min/24h; não passam cast inseguro no sweep de toda instalação.
@@ -19625,10 +20143,8 @@ begin
  return new;
 end; $$;
 revoke all on function public.fn_followup_generation_write() from public,anon,authenticated;
-drop trigger if exists trg_followup_generation_job on public.job_queue;
-create trigger trg_followup_generation_job before insert or update or delete on public.job_queue for each row execute function public.fn_followup_generation_write();
-drop trigger if exists trg_followup_generation_event on public.followup_enrollment_events;
-create trigger trg_followup_generation_event before insert or update or delete on public.followup_enrollment_events for each row execute function public.fn_followup_generation_write();
+create or replace trigger trg_followup_generation_job before insert or update or delete on public.job_queue for each row execute function public.fn_followup_generation_write();
+create or replace trigger trg_followup_generation_event before insert or update or delete on public.followup_enrollment_events for each row execute function public.fn_followup_generation_write();
 
 create or replace function public.fn_followup_job_current(p_org uuid,p_job uuid,p_enrollment uuid,p_node text)
 returns boolean language sql stable security definer set search_path=public as $$
@@ -19775,8 +20291,9 @@ alter table public.calendar_external_events
  add column if not exists original_start_time jsonb;
 alter table public.calendar_external_events alter column starts_at drop not null;
 alter table public.calendar_external_events alter column ends_at drop not null;
-alter table public.calendar_external_events drop constraint if exists calendar_external_events_periodo_valido;
-alter table public.calendar_external_events add constraint calendar_external_events_periodo_valido
+alter table public.calendar_external_events
+  drop constraint if exists calendar_external_events_periodo_valido,
+  add constraint calendar_external_events_periodo_valido
  check(status='cancelled' or (starts_at is not null and ends_at is not null and ends_at>starts_at));
 -- Só derruba o índice que NÃO é o final (o da 0189 não tinha `google_calendar_id`).
 do $indice$ begin
@@ -19870,8 +20387,7 @@ begin
  return new;
 end;$$;
 revoke all on function public.fn_google_projection_stamp() from public,anon,authenticated;
-drop trigger if exists trg_google_projection_stamp on public.calendar_appointments;
-create trigger trg_google_projection_stamp before insert or update on public.calendar_appointments for each row execute function public.fn_google_projection_stamp();
+create or replace trigger trg_google_projection_stamp before insert or update on public.calendar_appointments for each row execute function public.fn_google_projection_stamp();
 
 -- Corpo FINAL, o mesmo do último bloco que redefine esta função: uma
 -- reaplicação do arquivo nunca instala corpo antigo no banco vivo.
@@ -20229,8 +20745,7 @@ begin
  end if;return new;
 end;$$;
 revoke all on function public.fn_google_redact_contact() from public,anon,authenticated;
-drop trigger if exists trg_google_redact_contact on public.contacts;
-create trigger trg_google_redact_contact after update of is_anonymized on public.contacts for each row when(new.is_anonymized is true) execute function public.fn_google_redact_contact();
+create or replace trigger trg_google_redact_contact after update of is_anonymized on public.contacts for each row when(new.is_anonymized is true) execute function public.fn_google_redact_contact();
 -- Backlog sem consumer não era entrega. A revisão durável é a única pendência.
 update public.event_log set status='done',updated_at=now(),last_error='superseded: Google acompanha a revisão atual do compromisso'
  where event_type='agenda.appointment.push_to_google' and status in ('pending','processing');
@@ -20363,8 +20878,7 @@ begin
  return new;
 end;$$;
 revoke all on function public.fn_meet_stamp() from public,anon,authenticated;
-drop trigger if exists trg_zz_meet_stamp on public.calendar_appointments;
-create trigger trg_zz_meet_stamp before insert or update on public.calendar_appointments for each row execute function public.fn_meet_stamp();
+create or replace trigger trg_zz_meet_stamp before insert or update on public.calendar_appointments for each row execute function public.fn_meet_stamp();
 
 create or replace function public.fn_meet_observe(p_org uuid,p_id uuid,p_args jsonb)
 returns void language plpgsql security definer set search_path=public as $$
@@ -20481,8 +20995,7 @@ begin
  return new;
 end;$$;
 revoke all on function public.fn_meet_delivery_enqueue() from public,anon,authenticated;
-drop trigger if exists trg_meet_delivery_enqueue on public.calendar_appointments;
-create trigger trg_meet_delivery_enqueue after insert or update on public.calendar_appointments for each row execute function public.fn_meet_delivery_enqueue();
+create or replace trigger trg_meet_delivery_enqueue after insert or update on public.calendar_appointments for each row execute function public.fn_meet_delivery_enqueue();
 
 create or replace function public.fn_meet_delivery_current(p_org uuid,p_job uuid,p_worker text,p_acquired_at timestamptz)
 returns boolean language sql stable security definer set search_path=public as $$
@@ -20670,8 +21183,7 @@ begin
  return new;
 end;$$;
 revoke all on function public.fn_meet_redact_contact() from public,anon,authenticated;
-drop trigger if exists trg_meet_redact_contact on public.contacts;
-create trigger trg_meet_redact_contact after update of is_anonymized on public.contacts for each row when(new.is_anonymized is true) execute function public.fn_meet_redact_contact();
+create or replace trigger trg_meet_redact_contact after update of is_anonymized on public.contacts for each row when(new.is_anonymized is true) execute function public.fn_meet_redact_contact();
 notify pgrst,'reload schema';
 
 -- ---- autonomia e respostas revisadas (migration 0227) ----
@@ -20682,8 +21194,9 @@ alter table public.ai_agents add column if not exists operation_mode text not nu
 alter table public.ai_agents add column if not exists paused_at timestamptz;
 alter table public.ai_agents add column if not exists operation_revision bigint not null default 1;
 alter table public.conversations add column if not exists reply_context_revision bigint not null default 1;
-alter table public.ai_agents drop constraint if exists ai_agents_operation_mode_check;
-alter table public.ai_agents add constraint ai_agents_operation_mode_check check(operation_mode in ('automatic','assisted'));
+alter table public.ai_agents
+  drop constraint if exists ai_agents_operation_mode_check,
+  add constraint ai_agents_operation_mode_check check(operation_mode in ('automatic','assisted'));
 
 create or replace function public.fn_reply_agent_revision() returns trigger language plpgsql set search_path=public as $$
 begin
@@ -20692,8 +21205,7 @@ begin
  return new;
 end;$$;
 revoke all on function public.fn_reply_agent_revision() from public,anon,authenticated;
-drop trigger if exists trg_reply_agent_revision on public.ai_agents;
-create trigger trg_reply_agent_revision before update on public.ai_agents for each row execute function public.fn_reply_agent_revision();
+create or replace trigger trg_reply_agent_revision before update on public.ai_agents for each row execute function public.fn_reply_agent_revision();
 -- A unique persisted inbound changes the response context, independent of its
 -- provider timestamp. Duplicate deliveries never INSERT, hence never increment.
 -- This observer does not dispatch a turn: historical import is not live inbound.
@@ -20718,10 +21230,8 @@ begin
  return new;
 end;$$;
 revoke all on function public.fn_reply_conversation_revision() from public,anon,authenticated;
-drop trigger if exists trg_reply_conversation_revision on public.conversations;
-create trigger trg_reply_conversation_revision before update on public.conversations for each row execute function public.fn_reply_conversation_revision();
-drop trigger if exists trg_reply_inbound_revision on public.messages;
-create trigger trg_reply_inbound_revision after insert on public.messages for each row execute function public.fn_reply_inbound_revision();
+create or replace trigger trg_reply_conversation_revision before update on public.conversations for each row execute function public.fn_reply_conversation_revision();
+create or replace trigger trg_reply_inbound_revision after insert on public.messages for each row execute function public.fn_reply_inbound_revision();
 
 create or replace function public.fn_reply_channel_revision() returns trigger language plpgsql security definer set search_path=public as $$
 begin
@@ -20730,8 +21240,7 @@ begin
  end if;return new;
 end;$$;
 revoke all on function public.fn_reply_channel_revision() from public,anon,authenticated;
-drop trigger if exists trg_reply_channel_revision on public.channel_sessions;
-create trigger trg_reply_channel_revision after update on public.channel_sessions for each row execute function public.fn_reply_channel_revision();
+create or replace trigger trg_reply_channel_revision after update on public.channel_sessions for each row execute function public.fn_reply_channel_revision();
 
 create table if not exists public.ai_reply_drafts(
  id uuid primary key default gen_random_uuid(),organization_id uuid not null references public.organizations(id) on delete cascade,
@@ -20753,9 +21262,14 @@ revoke all on public.ai_reply_drafts from anon,authenticated;
 grant select on public.ai_reply_drafts to authenticated;
 grant all on public.ai_reply_drafts to service_role;
 end $janela$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_reply_drafts' and policyname = 'tenant_isolation_ai_reply_drafts_all'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '5d7b958d58745420da4ea1b45055bee9') then
 drop policy if exists tenant_isolation_ai_reply_drafts_all on public.ai_reply_drafts;
 create policy tenant_isolation_ai_reply_drafts_all on public.ai_reply_drafts for select to authenticated
  using(organization_id in(select public.fn_user_org_ids()) and exists(select 1 from public.conversations c where c.organization_id=ai_reply_drafts.organization_id and c.id=conversation_id and public.fn_can_view_conversation(c.organization_id,c.assigned_to_user_id)));
+end if;
+end $politica$;
 create index if not exists ai_reply_drafts_conversation on public.ai_reply_drafts(organization_id,conversation_id,created_at desc);
 
 create or replace function public.fn_reply_begin(p_org uuid,p_conversation uuid,p_agent uuid,p_version uuid,p_token uuid)
@@ -20887,8 +21401,7 @@ begin
  return new;
 end;$$;
 revoke all on function public.fn_agent_legacy_published() from public,anon,authenticated;
-drop trigger if exists trg_agent_legacy_published on public.ai_agents;
-create trigger trg_agent_legacy_published after update of published_version_id on public.ai_agents for each row when(new.kind='rag_bot' and new.published_version_id is not null and new.published_version_id is distinct from old.published_version_id) execute function public.fn_agent_legacy_published();
+create or replace trigger trg_agent_legacy_published after update of published_version_id on public.ai_agents for each row when(new.kind='rag_bot' and new.published_version_id is not null and new.published_version_id is distinct from old.published_version_id) execute function public.fn_agent_legacy_published();
 
 -- Reconhecimento é atômico com as escritas locais. Não exige autoridade para
 -- um novo envio, mas mantém identidade, lease e redação até o commit.
@@ -20957,8 +21470,7 @@ begin
  return new;
 end;$$;
 revoke all on function public.fn_reply_redact() from public,anon,authenticated;
-drop trigger if exists trg_reply_redact on public.contacts;
-create trigger trg_reply_redact after update of is_anonymized on public.contacts for each row when(new.is_anonymized and not old.is_anonymized) execute function public.fn_reply_redact();
+create or replace trigger trg_reply_redact after update of is_anonymized on public.contacts for each row when(new.is_anonymized and not old.is_anonymized) execute function public.fn_reply_redact();
 
 -- Last preparation/cut: same locks as snapshots, then atomic sending CAS.
 -- The following network attempt is irreversible; receipt reconciliation is not
@@ -21147,8 +21659,7 @@ begin
  end if;return new;
 end;$$;
 revoke all on function public.fn_agent_provisioning_origin() from public,anon,authenticated;
-drop trigger if exists trg_agent_provisioning_origin on public.ai_agent_versions;
-create trigger trg_agent_provisioning_origin before insert or update on public.ai_agent_versions for each row execute function public.fn_agent_provisioning_origin();
+create or replace trigger trg_agent_provisioning_origin before insert or update on public.ai_agent_versions for each row execute function public.fn_agent_provisioning_origin();
 
 -- ---- conversões de anúncio: conexão + livro-razão (migration 0213) ----
 -- Idempotente e auto-curativo, como o kit exige: `update.sh` re-aplica este
@@ -21176,8 +21687,7 @@ alter table public.ad_platform_connections enable row level security;
 revoke all on public.ad_platform_connections from anon, authenticated;
 grant select, insert, update, delete on public.ad_platform_connections to service_role;
 
-drop trigger if exists trg_ad_platform_connections_updated_at on public.ad_platform_connections;
-create trigger trg_ad_platform_connections_updated_at
+create or replace trigger trg_ad_platform_connections_updated_at
   before update on public.ad_platform_connections
   for each row execute function public.fn_set_updated_at();
 
@@ -21218,8 +21728,7 @@ alter table public.ad_conversion_dispatches enable row level security;
 revoke all on public.ad_conversion_dispatches from anon, authenticated;
 grant select, insert, update, delete on public.ad_conversion_dispatches to service_role;
 
-drop trigger if exists trg_ad_conversion_dispatches_updated_at on public.ad_conversion_dispatches;
-create trigger trg_ad_conversion_dispatches_updated_at
+create or replace trigger trg_ad_conversion_dispatches_updated_at
   before update on public.ad_conversion_dispatches
   for each row execute function public.fn_set_updated_at();
 
@@ -21294,8 +21803,7 @@ alter table public.ad_insights_connections enable row level security;
 revoke all on public.ad_insights_connections from anon, authenticated;
 grant select, insert, update, delete on public.ad_insights_connections to service_role;
 
-drop trigger if exists trg_ad_insights_connections_updated_at on public.ad_insights_connections;
-create trigger trg_ad_insights_connections_updated_at
+create or replace trigger trg_ad_insights_connections_updated_at
   before update on public.ad_insights_connections
   for each row execute function public.fn_set_updated_at();
 
@@ -21343,12 +21851,22 @@ do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-
 revoke all on public.channel_routing_policies,public.channel_routing_responsibles from public,anon,authenticated,service_role;
 grant select on public.channel_routing_policies,public.channel_routing_responsibles to authenticated,service_role;
 end $janela$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'channel_routing_policies' and policyname = 'tenant_isolation_channel_routing_policies_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ee7e7ff06c35a294715a7034954149bb') then
 drop policy if exists tenant_isolation_channel_routing_policies_select on public.channel_routing_policies;
 create policy tenant_isolation_channel_routing_policies_select on public.channel_routing_policies for select to authenticated
  using(organization_id in(select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'channel_routing_responsibles' and policyname = 'tenant_isolation_channel_routing_responsibles_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ee7e7ff06c35a294715a7034954149bb') then
 drop policy if exists tenant_isolation_channel_routing_responsibles_select on public.channel_routing_responsibles;
 create policy tenant_isolation_channel_routing_responsibles_select on public.channel_routing_responsibles for select to authenticated
  using(organization_id in(select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+end if;
+end $politica$;
 
 -- Preserva história: apenas o evento pendente duplicado deixa de disputar consumo.
 with ranked as (
@@ -21476,8 +21994,7 @@ begin
 end;
 $$;
 revoke all on function public.fn_routing_member_revoked() from public,anon,authenticated;
-drop trigger if exists trg_routing_member_revoked on public.user_organizations;
-create trigger trg_routing_member_revoked after update of revoked_at,role on public.user_organizations
+create or replace trigger trg_routing_member_revoked after update of revoked_at,role on public.user_organizations
  for each row when(old.revoked_at is distinct from new.revoked_at or old.role is distinct from new.role) execute function public.fn_routing_member_revoked();
 
 create or replace function public.fn_routing_availability_changed()
@@ -21485,8 +22002,7 @@ returns trigger language plpgsql security definer set search_path=public as $$
 begin perform public.fn_wake_channel_routing(new.organization_id);return new;end;
 $$;
 revoke all on function public.fn_routing_availability_changed() from public,anon,authenticated;
-drop trigger if exists trg_routing_availability_changed on public.attendant_availability;
-create trigger trg_routing_availability_changed after insert or update of is_available,capacity,schedule on public.attendant_availability
+create or replace trigger trg_routing_availability_changed after insert or update of is_available,capacity,schedule on public.attendant_availability
  for each row execute function public.fn_routing_availability_changed();
 
 -- Um aviso por conversa, com histórico preservado entre acknowledge e resolução.
@@ -21523,8 +22039,7 @@ begin
 end;
 $$;
 revoke all on function public.fn_routing_assignment_changed() from public,anon,authenticated;
-drop trigger if exists trg_routing_assignment_changed on public.conversations;
-create trigger trg_routing_assignment_changed after update of assigned_to_user_id,status on public.conversations
+create or replace trigger trg_routing_assignment_changed after update of assigned_to_user_id,status on public.conversations
  for each row execute function public.fn_routing_assignment_changed();
 
 -- Mesma porta pública e contrato; compatível com KEY SHARE das FKs inbound.
@@ -21868,8 +22383,7 @@ begin
  return new;
 end;$$;
 revoke all on function public.fn_contact_redaction_lock() from public,anon,authenticated;
-drop trigger if exists trg_contact_redaction_lock on public.contacts;
-create trigger trg_contact_redaction_lock before update on public.contacts
+create or replace trigger trg_contact_redaction_lock before update on public.contacts
  for each row when(new.is_anonymized is true) execute function public.fn_contact_redaction_lock();
 
 -- Passo 1 legado: mesma autoridade humana, apenas a escrita do contato.
@@ -22068,6 +22582,9 @@ create unique index if not exists team_invites_um_pendente_por_email_idx
 
 alter table public.team_invites enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'team_invites' and policyname = 'team_invites_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'b035083873811584619ae1731f003438') then
 drop policy if exists team_invites_select on public.team_invites;
 create policy team_invites_select on public.team_invites
   for select using (
@@ -22075,7 +22592,12 @@ create policy team_invites_select on public.team_invites
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'team_invites' and policyname = 'team_invites_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'c92b157d456f6cc0030171150aeda669') then
 drop policy if exists team_invites_write on public.team_invites;
 create policy team_invites_write on public.team_invites
   using (
@@ -22088,13 +22610,14 @@ create policy team_invites_write on public.team_invites
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'admin'))
   );
+end if;
+end $politica$;
 
 revoke all on public.team_invites from anon;
 grant select, insert, update, delete on public.team_invites to authenticated;
 grant all on public.team_invites to service_role;
 
-drop trigger if exists trg_team_invites_updated_at on public.team_invites;
-create trigger trg_team_invites_updated_at
+create or replace trigger trg_team_invites_updated_at
   before update on public.team_invites
   for each row execute function public.fn_set_updated_at();
 
@@ -22137,8 +22660,8 @@ create table if not exists public.voice_calls (
 );
 
 alter table public.voice_calls add column if not exists end_reason text;
-alter table public.voice_calls drop constraint if exists voice_calls_status_check;
 alter table public.voice_calls
+  drop constraint if exists voice_calls_status_check,
   add constraint voice_calls_status_check
   check (status in ('starting', 'ringing', 'connected', 'ended'));
 
@@ -22151,13 +22674,23 @@ alter table public.voice_calls enable row level security;
 -- (a 0235, mais abaixo neste arquivo, substitui esta policy pelo par
 -- select/write com papel; aqui ela já nasce com o papel para o caso de o
 -- apêndice ser aplicado parcialmente)
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'voice_calls' and policyname = 'tenant_isolation_voice_calls_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_voice_calls_all on public.voice_calls;
-drop policy if exists voice_calls_select on public.voice_calls;
-drop policy if exists voice_calls_write on public.voice_calls;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'voice_calls' and policyname = 'voice_calls_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
+drop policy if exists voice_calls_select on public.voice_calls;
 create policy voice_calls_select on public.voice_calls for select
   using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'voice_calls' and policyname = 'voice_calls_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'e829dfacbafb3f064269424c1f1fc0a4') then
+drop policy if exists voice_calls_write on public.voice_calls;
 create policy voice_calls_write on public.voice_calls for all
   using (
     organization_id in (select public.fn_user_org_ids())
@@ -22167,9 +22700,10 @@ create policy voice_calls_write on public.voice_calls for all
     organization_id in (select public.fn_user_org_ids())
     and public.fn_role_at_least(organization_id, 'agent')
   );
+end if;
+end $politica$;
 
-drop trigger if exists trg_voice_calls_set_updated_at on public.voice_calls;
-create trigger trg_voice_calls_set_updated_at
+create or replace trigger trg_voice_calls_set_updated_at
   before update on public.voice_calls
   for each row execute function public.fn_set_updated_at();
 
@@ -22220,13 +22754,23 @@ alter table public.voice_calls enable row level security;
 -- inclusive `viewer`. Todo mundo da organização LÊ o histórico de ligações;
 -- quem ESCREVE é quem pode atender (`agent` para cima), o mesmo papel que as
 -- rotas de voz exigem. Vigiado por `tests/invariants/rbac-config-ia-canais.test.ts`.
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'voice_calls' and policyname = 'tenant_isolation_voice_calls_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_voice_calls_all on public.voice_calls;
-drop policy if exists voice_calls_select on public.voice_calls;
-drop policy if exists voice_calls_write on public.voice_calls;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'voice_calls' and policyname = 'voice_calls_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
+drop policy if exists voice_calls_select on public.voice_calls;
 create policy voice_calls_select on public.voice_calls for select
   using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'voice_calls' and policyname = 'voice_calls_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'e829dfacbafb3f064269424c1f1fc0a4') then
+drop policy if exists voice_calls_write on public.voice_calls;
 create policy voice_calls_write on public.voice_calls for all
   using (
     organization_id in (select public.fn_user_org_ids())
@@ -22236,6 +22780,8 @@ create policy voice_calls_write on public.voice_calls for all
     organization_id in (select public.fn_user_org_ids())
     and public.fn_role_at_least(organization_id, 'agent')
   );
+end if;
+end $politica$;
 
 revoke all on public.voice_calls from anon;
 
@@ -22258,8 +22804,7 @@ begin
 end $$;
 
 alter table public.voice_calls
-  drop constraint if exists voice_calls_channel_session_id_fkey;
-alter table public.voice_calls
+  drop constraint if exists voice_calls_channel_session_id_fkey,
   add constraint voice_calls_channel_session_id_fkey
   foreign key (channel_session_id) references public.channel_sessions(id) on delete restrict;
 
@@ -22475,15 +23020,23 @@ create table if not exists public.org_voice_calls (
 
 alter table public.org_voice_calls enable row level security;
 
-drop policy if exists org_voice_calls_select on public.org_voice_calls;
-drop policy if exists org_voice_calls_admin_write on public.org_voice_calls;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'org_voice_calls' and policyname = 'org_voice_calls_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
+drop policy if exists org_voice_calls_select on public.org_voice_calls;
 create policy org_voice_calls_select on public.org_voice_calls
   for select using (
     (organization_id in (select public.fn_user_org_ids()))
     or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'org_voice_calls' and policyname = 'org_voice_calls_admin_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'c92b157d456f6cc0030171150aeda669') then
+drop policy if exists org_voice_calls_admin_write on public.org_voice_calls;
 create policy org_voice_calls_admin_write on public.org_voice_calls
   using (
     public.fn_is_platform_admin()
@@ -22495,11 +23048,12 @@ create policy org_voice_calls_admin_write on public.org_voice_calls
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'admin'))
   );
+end if;
+end $politica$;
 
 revoke all on public.org_voice_calls from anon;
 
-drop trigger if exists trg_org_voice_calls_set_updated_at on public.org_voice_calls;
-create trigger trg_org_voice_calls_set_updated_at
+create or replace trigger trg_org_voice_calls_set_updated_at
   before update on public.org_voice_calls
   for each row execute function public.fn_set_updated_at();
 
@@ -22683,8 +23237,7 @@ $$;
 revoke all on function public.fn_event_log_marca_registro() from public, anon;
 grant execute on function public.fn_event_log_marca_registro() to service_role;
 
-drop trigger if exists trg_event_log_marca_registro on public.event_log;
-create trigger trg_event_log_marca_registro
+create or replace trigger trg_event_log_marca_registro
   before insert on public.event_log
   for each row
   execute function public.fn_event_log_marca_registro();
@@ -23821,8 +24374,7 @@ revoke execute on function public.fn_colunas_de_cliente_sao_do_sistema() from pu
 -- de valor — um `select *` que volta inteiro no UPDATE acordaria a guarda à toa.
 -- A WHEN compara VALORES, e o caso comum (nenhuma das quatro mudou) nem chama a
 -- função.
-drop trigger if exists trg_contato_colunas_de_cliente on public.contacts;
-create trigger trg_contato_colunas_de_cliente
+create or replace trigger trg_contato_colunas_de_cliente
   before update on public.contacts
   for each row
   when (old.first_service_at is distinct from new.first_service_at
@@ -23912,15 +24464,13 @@ end $$;
 -- PRIVILEGES do baseline) não quebra nada.
 revoke execute on function public.fn_marcar_contato_como_cliente() from public, anon, authenticated;
 
-drop trigger if exists trg_agendamento_marca_cliente on public.calendar_appointments;
-create trigger trg_agendamento_marca_cliente
+create or replace trigger trg_agendamento_marca_cliente
   after insert on public.calendar_appointments
   for each row
   when (new.contact_id is not null)
   execute function public.fn_marcar_contato_como_cliente();
 
-drop trigger if exists trg_agendamento_recalcula_cliente on public.calendar_appointments;
-create trigger trg_agendamento_recalcula_cliente
+create or replace trigger trg_agendamento_recalcula_cliente
   after update of status, starts_at, contact_id on public.calendar_appointments
   for each row
   when (old.status is distinct from new.status
@@ -23932,8 +24482,7 @@ create trigger trg_agendamento_recalcula_cliente
 -- `contact_id` é `on delete restrict`, então este trigger nunca vê a cascata de
 -- um contato apagado; a de uma organização apagada chega aqui com a linha da
 -- organização já invisível, e o interruptor lê desligado.
-drop trigger if exists trg_agendamento_apagado_recalcula_cliente on public.calendar_appointments;
-create trigger trg_agendamento_apagado_recalcula_cliente
+create or replace trigger trg_agendamento_apagado_recalcula_cliente
   after delete on public.calendar_appointments
   for each row
   when (old.contact_id is not null)
@@ -24619,8 +25168,7 @@ alter table public.platform_settings enable row level security;
 revoke all on public.platform_settings from anon, authenticated;
 grant select, insert, update on public.platform_settings to service_role;
 
-drop trigger if exists trg_platform_settings_touch on public.platform_settings;
-create trigger trg_platform_settings_touch
+create or replace trigger trg_platform_settings_touch
   before update on public.platform_settings
   for each row execute function public.fn_touch_updated_at();
 
@@ -24666,8 +25214,7 @@ alter table public.platform_meta_app enable row level security;
 revoke all on public.platform_meta_app from anon, authenticated;
 grant select, insert, update on public.platform_meta_app to service_role;
 
-drop trigger if exists trg_platform_meta_app_updated_at on public.platform_meta_app;
-create trigger trg_platform_meta_app_updated_at
+create or replace trigger trg_platform_meta_app_updated_at
   before update on public.platform_meta_app
   for each row execute function public.fn_set_updated_at();
 
@@ -24791,15 +25338,30 @@ alter table public.ai_supervision_bindings enable row level security;
 alter table public.ai_supervision_reviews enable row level security;
 alter table public.ai_supervision_actions enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_supervision_bindings' and policyname = 'tenant_isolation_ai_supervision_bindings_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists tenant_isolation_ai_supervision_bindings_select on public.ai_supervision_bindings;
 create policy tenant_isolation_ai_supervision_bindings_select on public.ai_supervision_bindings
   for select using (organization_id in (select fn_user_org_ids()));
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_supervision_reviews' and policyname = 'tenant_isolation_ai_supervision_reviews_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists tenant_isolation_ai_supervision_reviews_select on public.ai_supervision_reviews;
 create policy tenant_isolation_ai_supervision_reviews_select on public.ai_supervision_reviews
   for select using (organization_id in (select fn_user_org_ids()));
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_supervision_actions' and policyname = 'tenant_isolation_ai_supervision_actions_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists tenant_isolation_ai_supervision_actions_select on public.ai_supervision_actions;
 create policy tenant_isolation_ai_supervision_actions_select on public.ai_supervision_actions
   for select using (organization_id in (select fn_user_org_ids()));
+end if;
+end $politica$;
 
 -- O registro de auditoria não se reescreve pela REST (lição da 0258: o default
 -- ACL do Supabase concede tudo; só `revoke` explícito protege).
@@ -24809,16 +25371,13 @@ revoke insert, update, delete, truncate on public.ai_supervision_actions from pu
 grant select on public.ai_supervision_bindings, public.ai_supervision_reviews, public.ai_supervision_actions to authenticated;
 grant select, insert, update on public.ai_supervision_bindings, public.ai_supervision_reviews, public.ai_supervision_actions to service_role;
 
-drop trigger if exists trg_ai_supervision_bindings_updated_at on public.ai_supervision_bindings;
-create trigger trg_ai_supervision_bindings_updated_at
+create or replace trigger trg_ai_supervision_bindings_updated_at
   before update on public.ai_supervision_bindings
   for each row execute function public.fn_set_updated_at();
-drop trigger if exists trg_ai_supervision_reviews_updated_at on public.ai_supervision_reviews;
-create trigger trg_ai_supervision_reviews_updated_at
+create or replace trigger trg_ai_supervision_reviews_updated_at
   before update on public.ai_supervision_reviews
   for each row execute function public.fn_set_updated_at();
-drop trigger if exists trg_ai_supervision_actions_updated_at on public.ai_supervision_actions;
-create trigger trg_ai_supervision_actions_updated_at
+create or replace trigger trg_ai_supervision_actions_updated_at
   before update on public.ai_supervision_actions
   for each row execute function public.fn_set_updated_at();
 
@@ -24946,20 +25505,21 @@ end;
 $$;
 revoke execute on function public.followup_reserva_desvinculada() from public, anon, authenticated;
 grant execute on function public.followup_reserva_desvinculada() to service_role;
-drop trigger if exists trg_followup_reserva_desvinculada on public.followup_enrollments;
-create trigger trg_followup_reserva_desvinculada before update of appointment_id on public.followup_enrollments
+create or replace trigger trg_followup_reserva_desvinculada before update of appointment_id on public.followup_enrollments
   for each row execute function public.followup_reserva_desvinculada();
 
 -- Prestador e um papel humano abaixo de colaborador. O escopo proprio sera
 -- aplicado pelas policies da migration seguinte; aqui nasce o vocabulario e
 -- a funcao unica que reconhece o vinculo com um paciente.
 
-alter table public.user_organizations drop constraint if exists user_organizations_role_check;
-alter table public.user_organizations add constraint user_organizations_role_check
+alter table public.user_organizations
+  drop constraint if exists user_organizations_role_check,
+  add constraint user_organizations_role_check
   check (role in ('viewer','provider','agent','manager','admin'));
 
-alter table public.team_invites drop constraint if exists team_invites_role_check;
-alter table public.team_invites add constraint team_invites_role_check
+alter table public.team_invites
+  drop constraint if exists team_invites_role_check,
+  add constraint team_invites_role_check
   check (role in ('viewer','provider','agent','manager','admin'));
 
 -- [redefinição intermediária de public.fn_role_at_least(uuid,text) retirada: a função nasce com o
@@ -25056,13 +25616,17 @@ notify pgrst, 'reload schema';
 -- Colaborador, gerente e administrador preservam a visao da organizacao.
 
 alter table public.calendar_appointments enable row level security;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_appointments' and policyname = 'tenant_isolation_calendar_appointments_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_calendar_appointments_all on public.calendar_appointments;
-drop policy if exists calendar_appointments_select on public.calendar_appointments;
+end if; end $politica$;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_appointments' and policyname = 'calendar_appointments_write') then -- sem a policy, nem pega lock na tabela
 drop policy if exists calendar_appointments_write on public.calendar_appointments;
-drop policy if exists calendar_appointments_insert on public.calendar_appointments;
-drop policy if exists calendar_appointments_update on public.calendar_appointments;
-drop policy if exists calendar_appointments_delete on public.calendar_appointments;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_appointments' and policyname = 'calendar_appointments_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '4fa4ccc42118650572fdce9f52289707') then
+drop policy if exists calendar_appointments_select on public.calendar_appointments;
 create policy calendar_appointments_select on public.calendar_appointments
   for select using (
     public.fn_is_platform_admin()
@@ -25074,7 +25638,13 @@ create policy calendar_appointments_select on public.calendar_appointments
       )
     )
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_appointments' and policyname = 'calendar_appointments_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ba3a180ea1b7ea5d5ca595d3ce2ccbc6') then
+drop policy if exists calendar_appointments_insert on public.calendar_appointments;
 create policy calendar_appointments_insert on public.calendar_appointments
   for insert with check (
     public.fn_is_platform_admin()
@@ -25086,7 +25656,13 @@ create policy calendar_appointments_insert on public.calendar_appointments
       )
     )
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_appointments' and policyname = 'calendar_appointments_update'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'f309a7108b953794df046a20c932ff70') then
+drop policy if exists calendar_appointments_update on public.calendar_appointments;
 create policy calendar_appointments_update on public.calendar_appointments
   for update using (
     public.fn_is_platform_admin()
@@ -25107,7 +25683,13 @@ create policy calendar_appointments_update on public.calendar_appointments
       )
     )
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_appointments' and policyname = 'calendar_appointments_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '9c1c7ce119f3622eaf1adbcc3fa7cb7c') then
+drop policy if exists calendar_appointments_delete on public.calendar_appointments;
 create policy calendar_appointments_delete on public.calendar_appointments
   for delete using (
     public.fn_is_platform_admin()
@@ -25119,11 +25701,18 @@ create policy calendar_appointments_delete on public.calendar_appointments
       )
     )
   );
+end if;
+end $politica$;
 
 alter table public.contacts enable row level security;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'contacts' and policyname = 'tenant_isolation_contacts_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_contacts_all on public.contacts;
-drop policy if exists contacts_select on public.contacts;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'contacts' and policyname = 'contacts_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '02be416a24ba378686dc40c1eb97d8e8') then
+drop policy if exists contacts_select on public.contacts;
 create policy contacts_select on public.contacts
   for select using (
     public.fn_is_platform_admin()
@@ -25135,6 +25724,8 @@ create policy contacts_select on public.contacts
       )
     )
   );
+end if;
+end $politica$;
 
 -- Um prestador nao cria um contato solto: o cadastro nasce pelo fluxo de
 -- agendamento, que ja grava o vinculo. Os demais papeis mantem o comportamento.
@@ -25208,16 +25799,19 @@ create table if not exists public.calendar_rooms (
  unique(organization_id,id), unique(organization_id,unit_id,id), unique(organization_id,unit_id,name)
 );
 alter table public.catalog_products add column if not exists appointment_duration_minutes integer;
-alter table public.catalog_products drop constraint if exists catalog_products_appointment_duration_check;
-alter table public.catalog_products add constraint catalog_products_appointment_duration_check check(appointment_duration_minutes is null or appointment_duration_minutes between 5 and 1440);
+alter table public.catalog_products
+  drop constraint if exists catalog_products_appointment_duration_check,
+  add constraint catalog_products_appointment_duration_check check(appointment_duration_minutes is null or appointment_duration_minutes between 5 and 1440);
 create unique index if not exists catalog_products_org_id_key on public.catalog_products(organization_id,id);
 alter table public.calendar_event_types add column if not exists catalog_product_id uuid;
 alter table public.calendar_event_types add column if not exists required_room_kind text;
 alter table public.calendar_event_types add column if not exists concurrency_key text;
-alter table public.calendar_event_types drop constraint if exists calendar_event_types_catalog_product_fk;
-alter table public.calendar_event_types add constraint calendar_event_types_catalog_product_fk foreign key(organization_id,catalog_product_id) references public.catalog_products(organization_id,id) on delete set null (catalog_product_id);
-alter table public.calendar_event_types drop constraint if exists calendar_event_types_required_room_kind_check;
-alter table public.calendar_event_types add constraint calendar_event_types_required_room_kind_check check(required_room_kind is null or required_room_kind in ('consultation','application'));
+alter table public.calendar_event_types
+  drop constraint if exists calendar_event_types_catalog_product_fk,
+  add constraint calendar_event_types_catalog_product_fk foreign key(organization_id,catalog_product_id) references public.catalog_products(organization_id,id) on delete set null (catalog_product_id);
+alter table public.calendar_event_types
+  drop constraint if exists calendar_event_types_required_room_kind_check,
+  add constraint calendar_event_types_required_room_kind_check check(required_room_kind is null or required_room_kind in ('consultation','application'));
 alter table public.calendar_appointments add column if not exists unit_id uuid;
 alter table public.calendar_appointments add column if not exists room_id uuid;
 alter table public.calendar_appointments add column if not exists duration_minutes_snapshot integer;
@@ -25233,34 +25827,55 @@ begin
 end;
 $$;
 revoke all on function public.fn_calendar_appointment_duration_snapshot() from public, anon, authenticated;
-drop trigger if exists trg_calendar_appointment_duration_snapshot on public.calendar_appointments;
-create trigger trg_calendar_appointment_duration_snapshot before insert on public.calendar_appointments for each row execute function public.fn_calendar_appointment_duration_snapshot();
-alter table public.calendar_appointments drop constraint if exists calendar_appointments_unit_fk;
-alter table public.calendar_appointments add constraint calendar_appointments_unit_fk foreign key(organization_id,unit_id) references public.calendar_units(organization_id,id) on delete restrict;
-alter table public.calendar_appointments drop constraint if exists calendar_appointments_room_fk;
-alter table public.calendar_appointments add constraint calendar_appointments_room_fk foreign key(organization_id,unit_id,room_id) references public.calendar_rooms(organization_id,unit_id,id) on delete restrict;
-alter table public.calendar_appointments drop constraint if exists calendar_appointments_duration_snapshot_check;
-alter table public.calendar_appointments add constraint calendar_appointments_duration_snapshot_check check(duration_minutes_snapshot between 5 and 1440);
-alter table public.calendar_appointments drop constraint if exists calendar_appointments_room_requires_unit;
-alter table public.calendar_appointments add constraint calendar_appointments_room_requires_unit check(room_id is null or unit_id is not null);
+create or replace trigger trg_calendar_appointment_duration_snapshot before insert on public.calendar_appointments for each row execute function public.fn_calendar_appointment_duration_snapshot();
+alter table public.calendar_appointments
+  drop constraint if exists calendar_appointments_unit_fk,
+  add constraint calendar_appointments_unit_fk foreign key(organization_id,unit_id) references public.calendar_units(organization_id,id) on delete restrict;
+alter table public.calendar_appointments
+  drop constraint if exists calendar_appointments_room_fk,
+  add constraint calendar_appointments_room_fk foreign key(organization_id,unit_id,room_id) references public.calendar_rooms(organization_id,unit_id,id) on delete restrict;
+alter table public.calendar_appointments
+  drop constraint if exists calendar_appointments_duration_snapshot_check,
+  add constraint calendar_appointments_duration_snapshot_check check(duration_minutes_snapshot between 5 and 1440);
+alter table public.calendar_appointments
+  drop constraint if exists calendar_appointments_room_requires_unit,
+  add constraint calendar_appointments_room_requires_unit check(room_id is null or unit_id is not null);
 create index if not exists calendar_rooms_unit_active_idx on public.calendar_rooms(organization_id,unit_id,active);
 create index if not exists calendar_appointments_room_period_idx on public.calendar_appointments(organization_id,room_id,starts_at) where room_id is not null and status in ('pending','confirmed');
 alter table public.calendar_units enable row level security; alter table public.calendar_rooms enable row level security;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_units' and policyname = 'calendar_units_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists calendar_units_select on public.calendar_units;
 create policy calendar_units_select on public.calendar_units for select using(organization_id in(select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_units' and policyname = 'calendar_units_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ae24ec1cda056efe9e4e2c9659eaca70') then
 drop policy if exists calendar_units_write on public.calendar_units;
 create policy calendar_units_write on public.calendar_units using(public.fn_is_platform_admin() or (organization_id in(select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'manager'))) with check(public.fn_is_platform_admin() or (organization_id in(select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'manager')));
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_rooms' and policyname = 'calendar_rooms_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists calendar_rooms_select on public.calendar_rooms;
 create policy calendar_rooms_select on public.calendar_rooms for select using(organization_id in(select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_rooms' and policyname = 'calendar_rooms_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ae24ec1cda056efe9e4e2c9659eaca70') then
 drop policy if exists calendar_rooms_write on public.calendar_rooms;
 create policy calendar_rooms_write on public.calendar_rooms using(public.fn_is_platform_admin() or (organization_id in(select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'manager'))) with check(public.fn_is_platform_admin() or (organization_id in(select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'manager')));
+end if;
+end $politica$;
 revoke all on public.calendar_units,public.calendar_rooms from anon;
 grant select,insert,update,delete on public.calendar_units,public.calendar_rooms to authenticated;
 grant all on public.calendar_units,public.calendar_rooms to service_role;
-drop trigger if exists trg_calendar_units_updated_at on public.calendar_units;
-create trigger trg_calendar_units_updated_at before update on public.calendar_units for each row execute function public.fn_set_updated_at();
-drop trigger if exists trg_calendar_rooms_updated_at on public.calendar_rooms;
-create trigger trg_calendar_rooms_updated_at before update on public.calendar_rooms for each row execute function public.fn_set_updated_at();
+create or replace trigger trg_calendar_units_updated_at before update on public.calendar_units for each row execute function public.fn_set_updated_at();
+create or replace trigger trg_calendar_rooms_updated_at before update on public.calendar_rooms for each row execute function public.fn_set_updated_at();
 comment on column public.catalog_products.appointment_duration_minutes is 'Duração operacional do serviço em minutos. NULL impede oferta automática pela agenda/IA.';
 comment on column public.calendar_appointments.duration_minutes_snapshot is 'Cópia da duração usada ao marcar; preserva o histórico quando o catálogo muda.';
 
@@ -25459,8 +26074,7 @@ $$;
 
 revoke all on function public.fn_calendar_allocate_and_guard_resources() from public, anon, authenticated;
 grant execute on function public.fn_calendar_allocate_and_guard_resources() to service_role;
-drop trigger if exists trg_calendar_allocate_and_guard_resources on public.calendar_appointments;
-create trigger trg_calendar_allocate_and_guard_resources
+create or replace trigger trg_calendar_allocate_and_guard_resources
 before insert or update of organization_id,event_type_id,owner_user_id,unit_id,room_id,starts_at,ends_at,status
 on public.calendar_appointments for each row
 execute function public.fn_calendar_allocate_and_guard_resources();
@@ -25556,8 +26170,9 @@ create unique index if not exists uniq_channel_sessions_ig_account_ativa
   on public.channel_sessions (ig_account_id)
   where ig_account_id is not null and archived_at is null;
 
-alter table public.conversations drop constraint if exists conversations_channel_check;
-alter table public.conversations add constraint conversations_channel_check
+alter table public.conversations
+  drop constraint if exists conversations_channel_check,
+  add constraint conversations_channel_check
   check (channel = any (array['whatsapp','instagram']));
 
 alter table public.platform_meta_app
@@ -25581,15 +26196,16 @@ create index if not exists idx_contact_channel_identities_contact
   on public.contact_channel_identities (organization_id, contact_id);
 
 alter table public.contact_channel_identities enable row level security;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'contact_channel_identities' and policyname = 'tenant_isolation_contact_channel_identities_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_contact_channel_identities_all on public.contact_channel_identities;
+end if; end $politica$;
 -- Escrita direta pelo PostgREST não é o caminho normal (quem grava é o
 -- webhook via fn_upsert_contato_por_identidade, service_role), mas a RLS
 -- protege o acesso direto de qualquer membro logado; piso 'agent' segue o
 -- mesmo padrão de channel_sessions/voice_calls (doutrina RBAC, migration 0150).
 -- [policy obsoleta tenant_isolation_contact_channel_identities_all: o arquivo não a cria mais; o drop que a tira de clone antigo continua adiante]
 
-drop trigger if exists trg_contact_channel_identities_updated_at on public.contact_channel_identities;
-create trigger trg_contact_channel_identities_updated_at
+create or replace trigger trg_contact_channel_identities_updated_at
   before update on public.contact_channel_identities
   for each row execute function public.fn_set_updated_at();
 
@@ -25688,13 +26304,20 @@ update public.conversations
 -- funde contatos de mesmo handle: um agent disparava um merge irreversível
 -- que só `manager` pode fazer. Quem escreve é só o service role (webhook,
 -- preenchimento de perfil, junção), que ignora RLS. Fica só o SELECT.
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'contact_channel_identities' and policyname = 'tenant_isolation_contact_channel_identities_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_contact_channel_identities_all on public.contact_channel_identities;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'contact_channel_identities' and policyname = 'tenant_isolation_contact_channel_identities_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '6afa1156194600c83e345e426c42be4f') then
 drop policy if exists tenant_isolation_contact_channel_identities_select on public.contact_channel_identities;
 create policy tenant_isolation_contact_channel_identities_select on public.contact_channel_identities
   for select using (
     organization_id in (select public.fn_user_org_ids())
     and public.fn_role_at_least(organization_id, 'agent')
   );
+end if;
+end $politica$;
 
 -- ---- comentários do Instagram (migration 0280) ----
 -- Comentários capturados (fila de moderação) e regras palavra → resposta
@@ -25752,14 +26375,24 @@ alter table public.instagram_comment_rules enable row level security;
 -- do tenant (a fila de comentários e as regras são visíveis para todo mundo);
 -- escrita exige papel, no mesmo formato de `channel_sessions`/`ai_agents`
 -- (SELECT solto + ALL com `fn_role_at_least`).
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'instagram_comments' and policyname = 'tenant_isolation_instagram_comments_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_instagram_comments_all on public.instagram_comments;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'instagram_comments' and policyname = 'instagram_comments_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists instagram_comments_select on public.instagram_comments;
 create policy instagram_comments_select on public.instagram_comments
   for select using (
     organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'instagram_comments' and policyname = 'instagram_comments_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '8e48f878e706662d9c78a5f854ad8a46') then
 drop policy if exists instagram_comments_write on public.instagram_comments;
 create policy instagram_comments_write on public.instagram_comments
   for all using (
@@ -25771,15 +26404,27 @@ create policy instagram_comments_write on public.instagram_comments
     or (organization_id in (select public.fn_user_org_ids())
         and public.fn_role_at_least(organization_id, 'agent'))
   );
+end if;
+end $politica$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'instagram_comment_rules' and policyname = 'tenant_isolation_instagram_comment_rules_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_instagram_comment_rules_all on public.instagram_comment_rules;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'instagram_comment_rules' and policyname = 'instagram_comment_rules_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists instagram_comment_rules_select on public.instagram_comment_rules;
 create policy instagram_comment_rules_select on public.instagram_comment_rules
   for select using (
     organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'instagram_comment_rules' and policyname = 'instagram_comment_rules_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ae24ec1cda056efe9e4e2c9659eaca70') then
 drop policy if exists instagram_comment_rules_write on public.instagram_comment_rules;
 create policy instagram_comment_rules_write on public.instagram_comment_rules
   for all using (
@@ -25791,6 +26436,8 @@ create policy instagram_comment_rules_write on public.instagram_comment_rules
     or (organization_id in (select public.fn_user_org_ids())
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 
 -- ---- reivindicar comentário + aviso de comentário parado (migration 0281) ----
 -- Task 7 de 9: o worker precisa de uma coluna de LEASE para reivindicar a
@@ -25808,10 +26455,9 @@ alter table public.instagram_comments
 -- da IA, editada ou não) precisa de um desfecho TERMINAL que não é nenhum dos
 -- cinco valores da 0280 — `respondido_pela_ia` é o worker sozinho (Task 7);
 -- reaproveitá-lo apagaria a distinção de quem apertou o botão.
-alter table public.instagram_comments
-  drop constraint if exists instagram_comments_situacao_check;
 
 alter table public.instagram_comments
+  drop constraint if exists instagram_comments_situacao_check,
   add constraint instagram_comments_situacao_check
   check (situacao in (
     'novo',
@@ -25854,9 +26500,14 @@ create table if not exists public.prontuario_contact_links (
 );
 
 alter table public.prontuario_contact_links enable row level security;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'prontuario_contact_links' and policyname = 'tenant_isolation_prontuario_contact_links_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists tenant_isolation_prontuario_contact_links_select on public.prontuario_contact_links;
 create policy tenant_isolation_prontuario_contact_links_select on public.prontuario_contact_links
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
 do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.prontuario_contact_links from public, anon, authenticated;
@@ -25878,8 +26529,7 @@ begin
 end; $$;
 revoke execute on function public.fn_prontuario_desvincular_contato_indisponivel() from public, anon, authenticated;
 grant execute on function public.fn_prontuario_desvincular_contato_indisponivel() to service_role;
-drop trigger if exists trg_prontuario_desvincular_contato_indisponivel on public.contacts;
-create trigger trg_prontuario_desvincular_contato_indisponivel
+create or replace trigger trg_prontuario_desvincular_contato_indisponivel
   after update of is_anonymized, is_merged_into on public.contacts
   for each row execute function public.fn_prontuario_desvincular_contato_indisponivel();
 
@@ -26219,6 +26869,9 @@ notify pgrst, 'reload schema';
 -- ---- endurecimento de RLS, índice de CPF e auditoria (migration 0289) ----
 -- Espelho idempotente da 0289. Racional completo no cabeçalho da migration.
 -- ---- A1: contacts ----
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'contacts' and policyname = 'contacts_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'bf114ea96208847028bcfed7150c0030') then
 drop policy if exists contacts_insert on public.contacts;
 create policy contacts_insert on public.contacts
   for insert with check (
@@ -26228,7 +26881,12 @@ create policy contacts_insert on public.contacts
       and public.fn_role_at_least(organization_id, 'agent')
     )
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'contacts' and policyname = 'contacts_update'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'f24bf540cfb771b76c9b576cce34b8c0') then
 drop policy if exists contacts_update on public.contacts;
 create policy contacts_update on public.contacts
   for update using (
@@ -26256,7 +26914,12 @@ create policy contacts_update on public.contacts
       )
     )
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'contacts' and policyname = 'contacts_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '340a13ec3aa898741f9dee455e80ac42') then
 drop policy if exists contacts_delete on public.contacts;
 create policy contacts_delete on public.contacts
   for delete using (
@@ -26266,6 +26929,8 @@ create policy contacts_delete on public.contacts
       and public.fn_role_at_least(organization_id, 'manager')
     )
   );
+end if;
+end $politica$;
 
 create or replace function public.fn_contacts_anonimizacao_irreversivel() returns trigger
 language plpgsql set search_path = public, pg_temp as $$
@@ -26276,17 +26941,26 @@ begin
   return new;
 end $$;
 revoke execute on function public.fn_contacts_anonimizacao_irreversivel() from public, anon, authenticated;
-drop trigger if exists trg_contacts_anonimizacao_irreversivel on public.contacts;
-create trigger trg_contacts_anonimizacao_irreversivel
+create or replace trigger trg_contacts_anonimizacao_irreversivel
   before update of is_anonymized on public.contacts
   for each row execute function public.fn_contacts_anonimizacao_irreversivel();
 
 -- ---- lead_state: leitura de membro, escrita de agent+ ----
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'lead_state' and policyname = 'tenant_isolation_lead_state_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_lead_state_all on public.lead_state;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'lead_state' and policyname = 'lead_state_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists lead_state_select on public.lead_state;
-drop policy if exists lead_state_write on public.lead_state;
 create policy lead_state_select on public.lead_state
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'lead_state' and policyname = 'lead_state_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'e829dfacbafb3f064269424c1f1fc0a4') then
+drop policy if exists lead_state_write on public.lead_state;
 create policy lead_state_write on public.lead_state
   for all using (
     organization_id in (select public.fn_user_org_ids())
@@ -26295,6 +26969,8 @@ create policy lead_state_write on public.lead_state
     organization_id in (select public.fn_user_org_ids())
     and public.fn_role_at_least(organization_id, 'agent')
   );
+end if;
+end $politica$;
 
 -- ---- A2: cpf_indice (HMAC com a chave da instalação) ----
 create schema if not exists extensions;
@@ -26368,13 +27044,17 @@ revoke execute on function public.fn_can_view_lead(uuid, uuid) from anon;
 grant execute on function public.fn_can_view_lead(uuid, uuid) to authenticated, service_role;
 
 -- ---- A4 + M4: api_audit_log ----
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'api_audit_log' and policyname = 'audit_log_insert_tenant_member') then -- sem a policy, nem pega lock na tabela
 drop policy if exists audit_log_insert_tenant_member on public.api_audit_log;
+end if; end $politica$;
 revoke insert on public.api_audit_log from anon, authenticated;
 alter table public.api_audit_log drop constraint if exists api_audit_log_actor_user_id_fkey;
 
 -- ---- A7: webhook_events_log ----
 revoke select on public.webhook_events_log from anon, authenticated;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'webhook_events_log' and policyname = 'webhook_events_log_tenant_read') then -- sem a policy, nem pega lock na tabela
 drop policy if exists webhook_events_log_tenant_read on public.webhook_events_log;
+end if; end $politica$;
 -- Token em claro vira sha256 hex. Um valor que já tem 64 hex é hash e fica.
 update public.webhook_events_log
    set webhook_path_token = encode(extensions.digest(webhook_path_token, 'sha256'), 'hex')
@@ -26382,26 +27062,41 @@ update public.webhook_events_log
    and webhook_path_token !~ '^[0-9a-f]{64}$';
 
 -- ---- M1: lgpd-exports só para admin ----
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'tenant_read_lgpd_exports'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'f202ca7eccdf127466cfafc937ad34f8') then
 drop policy if exists "tenant_read_lgpd_exports" on storage.objects;
 create policy "tenant_read_lgpd_exports" on storage.objects for select
   to authenticated using (
     bucket_id = 'lgpd-exports'
     and public.fn_role_at_least((split_part(name, '/', 1))::uuid, 'admin')
   );
+end if;
+end $politica$;
 
 -- ---- B2: ai-policy escreve e apaga manager+ ----
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'tenant_write_ai_policy'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a7ece558dcabea6bc8f264ef28c6dd6') then
 drop policy if exists "tenant_write_ai_policy" on storage.objects;
 create policy "tenant_write_ai_policy" on storage.objects for insert
   to authenticated with check (
     bucket_id = 'ai-policy'
     and public.fn_role_at_least((split_part(name, '/', 1))::uuid, 'manager')
   );
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'tenant_delete_ai_policy'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '9bfb63926a8ad32f91a00dca9995407e') then
 drop policy if exists "tenant_delete_ai_policy" on storage.objects;
 create policy "tenant_delete_ai_policy" on storage.objects for delete
   to authenticated using (
     bucket_id = 'ai-policy'
     and public.fn_role_at_least((split_part(name, '/', 1))::uuid, 'manager')
   );
+end if;
+end $politica$;
 
 notify pgrst, 'reload schema';
 -- ---- fim: endurecimento de RLS, índice de CPF e auditoria (migration 0289) ----
@@ -26561,12 +27256,20 @@ create unique index if not exists instagram_comment_vocabulario_unica
 
 alter table public.instagram_comment_vocabulario enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'instagram_comment_vocabulario' and policyname = 'instagram_comment_vocabulario_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists instagram_comment_vocabulario_select on public.instagram_comment_vocabulario;
 create policy instagram_comment_vocabulario_select on public.instagram_comment_vocabulario
   for select using (
     organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'instagram_comment_vocabulario' and policyname = 'instagram_comment_vocabulario_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ae24ec1cda056efe9e4e2c9659eaca70') then
 drop policy if exists instagram_comment_vocabulario_write on public.instagram_comment_vocabulario;
 create policy instagram_comment_vocabulario_write on public.instagram_comment_vocabulario
   for all using (
@@ -26578,6 +27281,8 @@ create policy instagram_comment_vocabulario_write on public.instagram_comment_vo
     or (organization_id in (select public.fn_user_org_ids())
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 -- ---- fim: vocabulário de comentário (migration 0292) ----
 
 -- ---- dedupe de event_dead atômico: índice único parcial (migration 0293) ----
@@ -26627,18 +27332,33 @@ create unique index if not exists agent_inbox_event_dead_aberto_unico
 -- e a cascata levava turnos e trilha (DeskcommCRM #1913; o PR #1912 abriria o buraco inteiro).
 -- Escrita = `manager`, como as rotas. Não cria função. Corpo e porquê: a migration 0294.
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_enrollments' and policyname = 'tenant_isolation_followup_enrollments_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_followup_enrollments_all on public.followup_enrollments;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_enrollments' and policyname = 'followup_enrollments_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists followup_enrollments_select on public.followup_enrollments;
 create policy followup_enrollments_select on public.followup_enrollments
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_enrollments' and policyname = 'followup_enrollments_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '8e61ffd6a1912e445dfc62c280441b5e') then
 drop policy if exists followup_enrollments_insert on public.followup_enrollments;
 create policy followup_enrollments_insert on public.followup_enrollments
   for insert
   with check (organization_id in (select public.fn_user_org_ids())
               and public.fn_role_at_least(organization_id, 'manager'));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_enrollments' and policyname = 'followup_enrollments_update'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '58ae6ae268539fe14abbb11ad89b8126') then
 drop policy if exists followup_enrollments_update on public.followup_enrollments;
 create policy followup_enrollments_update on public.followup_enrollments
   for update
@@ -26646,25 +27366,47 @@ create policy followup_enrollments_update on public.followup_enrollments
          and public.fn_role_at_least(organization_id, 'manager'))
   with check (organization_id in (select public.fn_user_org_ids())
               and public.fn_role_at_least(organization_id, 'manager'));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_enrollments' and policyname = 'followup_enrollments_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'e5881468434ae37074b234c5938bf046') then
 drop policy if exists followup_enrollments_delete on public.followup_enrollments;
 create policy followup_enrollments_delete on public.followup_enrollments
   for delete
   using (organization_id in (select public.fn_user_org_ids())
          and public.fn_role_at_least(organization_id, 'manager'));
+end if;
+end $politica$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_flow_pointers' and policyname = 'tenant_isolation_followup_flow_pointers_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_followup_flow_pointers_all on public.followup_flow_pointers;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_flow_pointers' and policyname = 'followup_flow_pointers_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists followup_flow_pointers_select on public.followup_flow_pointers;
 create policy followup_flow_pointers_select on public.followup_flow_pointers
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_flow_pointers' and policyname = 'followup_flow_pointers_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '8e61ffd6a1912e445dfc62c280441b5e') then
 drop policy if exists followup_flow_pointers_insert on public.followup_flow_pointers;
 create policy followup_flow_pointers_insert on public.followup_flow_pointers
   for insert
   with check (organization_id in (select public.fn_user_org_ids())
               and public.fn_role_at_least(organization_id, 'manager'));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_flow_pointers' and policyname = 'followup_flow_pointers_update'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '58ae6ae268539fe14abbb11ad89b8126') then
 drop policy if exists followup_flow_pointers_update on public.followup_flow_pointers;
 create policy followup_flow_pointers_update on public.followup_flow_pointers
   for update
@@ -26672,41 +27414,72 @@ create policy followup_flow_pointers_update on public.followup_flow_pointers
          and public.fn_role_at_least(organization_id, 'manager'))
   with check (organization_id in (select public.fn_user_org_ids())
               and public.fn_role_at_least(organization_id, 'manager'));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_flow_pointers' and policyname = 'followup_flow_pointers_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'e5881468434ae37074b234c5938bf046') then
 drop policy if exists followup_flow_pointers_delete on public.followup_flow_pointers;
 create policy followup_flow_pointers_delete on public.followup_flow_pointers
   for delete
   using (organization_id in (select public.fn_user_org_ids())
          and public.fn_role_at_least(organization_id, 'manager'));
+end if;
+end $politica$;
 
 -- ---- followup_enrollment_events e followup_flow_versions: RLS por operação (migration 0295) ----
 -- A policy `for all` sem papel mínimo deixava `viewer` apagar ou reescrever a trilha de uma
 -- inscrição e as versões de um fluxo pelo PostgREST (DeskcommCRM #1915). Escrita só onde uma rota
 -- escreve pela sessão (`manager`); o resto fica com o motor. Corpo e porquê: a migration 0295.
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_enrollment_events' and policyname = 'tenant_isolation_followup_enrollment_events_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_followup_enrollment_events_all on public.followup_enrollment_events;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_enrollment_events' and policyname = 'followup_enrollment_events_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists followup_enrollment_events_select on public.followup_enrollment_events;
 create policy followup_enrollment_events_select on public.followup_enrollment_events
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_enrollment_events' and policyname = 'followup_enrollment_events_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '8e61ffd6a1912e445dfc62c280441b5e') then
 drop policy if exists followup_enrollment_events_insert on public.followup_enrollment_events;
 create policy followup_enrollment_events_insert on public.followup_enrollment_events
   for insert
   with check (organization_id in (select public.fn_user_org_ids())
               and public.fn_role_at_least(organization_id, 'manager'));
+end if;
+end $politica$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_flow_versions' and policyname = 'tenant_isolation_followup_flow_versions_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_followup_flow_versions_all on public.followup_flow_versions;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_flow_versions' and policyname = 'followup_flow_versions_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists followup_flow_versions_select on public.followup_flow_versions;
 create policy followup_flow_versions_select on public.followup_flow_versions
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'followup_flow_versions' and policyname = 'followup_flow_versions_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'e5881468434ae37074b234c5938bf046') then
 drop policy if exists followup_flow_versions_delete on public.followup_flow_versions;
 create policy followup_flow_versions_delete on public.followup_flow_versions
   for delete
   using (organization_id in (select public.fn_user_org_ids())
          and public.fn_role_at_least(organization_id, 'manager'));
+end if;
+end $politica$;
 
 -- ---- cadastro incorporado: app_id e es_config_id (migration 0296) ----
 alter table public.platform_meta_app
@@ -26813,12 +27586,31 @@ declare t text; minimum_role text;
 begin
   foreach t in array array['messages','agent_cases','agent_inbox_items','channel_knobs'] loop
     minimum_role := case when t='channel_knobs' then 'manager' else 'agent' end;
-    execute format('drop policy if exists security_role_insert on public.%I', t);
-    execute format('drop policy if exists security_role_update on public.%I', t);
-    execute format('drop policy if exists security_role_delete on public.%I', t);
-    execute format('create policy security_role_insert on public.%I as restrictive for insert to authenticated with check (public.fn_role_at_least(organization_id,%L))',t,minimum_role);
-    execute format('create policy security_role_update on public.%I as restrictive for update to authenticated using (public.fn_role_at_least(organization_id,%L)) with check (public.fn_role_at_least(organization_id,%L))',t,minimum_role,minimum_role);
-    execute format('create policy security_role_delete on public.%I as restrictive for delete to authenticated using (public.fn_role_at_least(organization_id,%L))',t,minimum_role);
+    -- Só derruba e recria a que NÃO está com a definição final.
+    if not exists (select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t and p.policyname = 'security_role_insert'
+          and p.permissive = 'RESTRICTIVE' and p.cmd = 'INSERT' and p.roles = '{authenticated}'
+          and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = '~'
+          and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = format('fn_role_at_least(organization_id, %L::text)', minimum_role)) then
+      execute format('drop policy if exists security_role_insert on public.%I', t);
+      execute format('create policy security_role_insert on public.%I as restrictive for insert to authenticated with check (public.fn_role_at_least(organization_id,%L))',t,minimum_role);
+    end if;
+    if not exists (select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t and p.policyname = 'security_role_update'
+          and p.permissive = 'RESTRICTIVE' and p.cmd = 'UPDATE' and p.roles = '{authenticated}'
+          and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = format('fn_role_at_least(organization_id, %L::text)', minimum_role)
+          and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = format('fn_role_at_least(organization_id, %L::text)', minimum_role)) then
+      execute format('drop policy if exists security_role_update on public.%I', t);
+      execute format('create policy security_role_update on public.%I as restrictive for update to authenticated using (public.fn_role_at_least(organization_id,%L)) with check (public.fn_role_at_least(organization_id,%L))',t,minimum_role,minimum_role);
+    end if;
+    if not exists (select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t and p.policyname = 'security_role_delete'
+          and p.permissive = 'RESTRICTIVE' and p.cmd = 'DELETE' and p.roles = '{authenticated}'
+          and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = format('fn_role_at_least(organization_id, %L::text)', minimum_role)
+          and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = '~') then
+      execute format('drop policy if exists security_role_delete on public.%I', t);
+      execute format('create policy security_role_delete on public.%I as restrictive for delete to authenticated using (public.fn_role_at_least(organization_id,%L))',t,minimum_role);
+    end if;
   end loop;
 end $policies$;
 
@@ -26886,8 +27678,7 @@ begin
 end;
 $$;
 revoke all on function public.fn_attach_outbound_media() from public, anon, authenticated;
-drop trigger if exists trg_attach_outbound_media on public.messages;
-create trigger trg_attach_outbound_media before insert or update of media_storage_path on public.messages
+create or replace trigger trg_attach_outbound_media before insert or update of media_storage_path on public.messages
 for each row execute function public.fn_attach_outbound_media();
 
 create or replace function public.fn_claim_expired_outbound_media(p_limit integer default 50)
@@ -26931,6 +27722,9 @@ comment on table public.conversation_notes is
 -- (21 usos) é quem implementa `visibility_mode`. Em `own_and_unassigned`, o
 -- atendente que não abria a conversa lia as notas dela, e quem perdeu a
 -- conversa continuava vendo. Molde: `tenant_isolation_ai_reply_drafts_all`.
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversation_notes' and policyname = 'conversation_notes_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '9d45290c73e900bde897b7e6fba0093a') then
 drop policy if exists "conversation_notes_select" on public.conversation_notes;
 create policy "conversation_notes_select" on public.conversation_notes
   for select using (
@@ -26942,6 +27736,8 @@ create policy "conversation_notes_select" on public.conversation_notes
         and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
     )
   );
+end if;
+end $politica$;
 
 -- A ESCRITA não é mais definida aqui. Até a 0319 este bloco criava
 -- `conversation_notes_write`, uma `for all` que não olhava o autor: qualquer
@@ -26951,13 +27747,20 @@ create policy "conversation_notes_select" on public.conversation_notes
 -- cada `update.sh` reabrir a brecha até aquele bloco rodar; fica só o `drop`,
 -- que limpa o clone antigo. Sem policy de escrita a sessão não escreve, então
 -- entre este ponto e o bloco da 0319 a tabela está MAIS fechada, nunca menos.
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversation_notes' and policyname = 'conversation_notes_write') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "conversation_notes_write" on public.conversation_notes;
+end if; end $politica$;
 
 -- O ramo `or fn_is_platform_admin()` da política antiga vira policy própria:
 -- o admin de plataforma não é membro de organização nenhuma por definição.
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversation_notes' and policyname = 'conversation_notes_select_platform_admin'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'd0be11d455a2ce7d5eb1fd7e2758d26d') then
 drop policy if exists "conversation_notes_select_platform_admin" on public.conversation_notes;
 create policy "conversation_notes_select_platform_admin" on public.conversation_notes
   for select using (public.fn_is_platform_admin());
+end if;
+end $politica$;
 
 -- ---- anexo na nota interna: colunas, bucket internal-media e LGPD (migration 0303) ----
 -- ── 1. colunas de mídia na nota ──────────────────────────────────────────────
@@ -27021,11 +27824,17 @@ begin
        and c.relname <> 'user_organizations'
        and exists (select 1 from pg_policy p where p.polrelid = c.oid and p.polpermissive)
   loop
-    execute format('drop policy if exists mfa_provada on public.%I', t.relname);
-    execute format(
-      'create policy mfa_provada on public.%I as restrictive for all to authenticated '
-      'using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()))',
-      t.relname);
+    if not exists (select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t.relname and p.policyname = 'mfa_provada'
+          and p.permissive = 'RESTRICTIVE' and p.cmd = 'ALL' and p.roles = '{authenticated}'
+          and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = '( SELECT fn_session_mfa_proven() AS fn_session_mfa_proven)'
+          and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = '( SELECT fn_session_mfa_proven() AS fn_session_mfa_proven)') then
+      execute format('drop policy if exists mfa_provada on public.%I', t.relname);
+      execute format(
+        'create policy mfa_provada on public.%I as restrictive for all to authenticated '
+        'using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()))',
+        t.relname);
+    end if;
   end loop;
 end $$;
 
@@ -27118,8 +27927,7 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_auditoria_encadear on public.api_audit_log;
-create trigger trg_auditoria_encadear before insert on public.api_audit_log
+create or replace trigger trg_auditoria_encadear before insert on public.api_audit_log
   for each row execute function public.fn_auditoria_encadear();
 
 -- Refaz a cadeia inteira (é pequena: dezenas de milhares de linhas). A primeira
@@ -27270,28 +28078,62 @@ do $rp$
 declare t text;
 begin
   foreach t in array array['respostas_prontas','respostas_prontas_perguntas','respostas_prontas_config'] loop
-    execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || t || '_all', t);
-    execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || t || '_select', t);
-    execute format(
-      'create policy %I on public.%I for select using (organization_id in (select public.fn_user_org_ids()))',
-      'tenant_isolation_' || t || '_select', t);
-    execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || t || '_write', t);
-    execute format(
-      'create policy %I on public.%I for all using ('
-      'organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id, %L)'
-      ') with check ('
-      'organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id, %L))',
-      'tenant_isolation_' || t || '_write', t, 'manager', 'manager');
-    execute format('drop policy if exists security_role_insert on public.%I', t);
-    execute format('drop policy if exists security_role_update on public.%I', t);
-    execute format('drop policy if exists security_role_delete on public.%I', t);
-    execute format('create policy security_role_insert on public.%I as restrictive for insert to authenticated '
-                   'with check (public.fn_role_at_least(organization_id, %L))', t, 'manager');
-    execute format('create policy security_role_update on public.%I as restrictive for update to authenticated '
-                   'using (public.fn_role_at_least(organization_id, %L)) with check (public.fn_role_at_least(organization_id, %L))',
-                   t, 'manager', 'manager');
-    execute format('create policy security_role_delete on public.%I as restrictive for delete to authenticated '
-                   'using (public.fn_role_at_least(organization_id, %L))', t, 'manager');
+    -- Só derruba e recria a policy que NÃO está com a definição final.
+    if exists (select 1 from pg_policies p where p.schemaname = 'public' and p.tablename = t
+                and p.policyname = 'tenant_isolation_' || t || '_all') then
+      execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || t || '_all', t);
+    end if;
+    if not exists (select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t and p.policyname = 'tenant_isolation_' || t || '_select'
+          and p.permissive = 'PERMISSIVE' and p.cmd = 'SELECT' and p.roles = '{public}'
+          and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = '(organization_id IN ( SELECT fn_user_org_ids() AS fn_user_org_ids))'
+          and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = '~') then
+      execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || t || '_select', t);
+      execute format(
+        'create policy %I on public.%I for select using (organization_id in (select public.fn_user_org_ids()))',
+        'tenant_isolation_' || t || '_select', t);
+    end if;
+    if not exists (select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t and p.policyname = 'tenant_isolation_' || t || '_write'
+          and p.permissive = 'PERMISSIVE' and p.cmd = 'ALL' and p.roles = '{public}'
+          and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = '((organization_id IN ( SELECT fn_user_org_ids() AS fn_user_org_ids)) AND fn_role_at_least(organization_id, ''manager''::text))'
+          and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = '((organization_id IN ( SELECT fn_user_org_ids() AS fn_user_org_ids)) AND fn_role_at_least(organization_id, ''manager''::text))') then
+      execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || t || '_write', t);
+      execute format(
+        'create policy %I on public.%I for all using ('
+        'organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id, %L)'
+        ') with check ('
+        'organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id, %L))',
+        'tenant_isolation_' || t || '_write', t, 'manager', 'manager');
+    end if;
+    if not exists (select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t and p.policyname = 'security_role_insert'
+          and p.permissive = 'RESTRICTIVE' and p.cmd = 'INSERT' and p.roles = '{authenticated}'
+          and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = '~'
+          and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = 'fn_role_at_least(organization_id, ''manager''::text)') then
+      execute format('drop policy if exists security_role_insert on public.%I', t);
+      execute format('create policy security_role_insert on public.%I as restrictive for insert to authenticated '
+                     'with check (public.fn_role_at_least(organization_id, %L))', t, 'manager');
+    end if;
+    if not exists (select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t and p.policyname = 'security_role_update'
+          and p.permissive = 'RESTRICTIVE' and p.cmd = 'UPDATE' and p.roles = '{authenticated}'
+          and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = 'fn_role_at_least(organization_id, ''manager''::text)'
+          and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = 'fn_role_at_least(organization_id, ''manager''::text)') then
+      execute format('drop policy if exists security_role_update on public.%I', t);
+      execute format('create policy security_role_update on public.%I as restrictive for update to authenticated '
+                     'using (public.fn_role_at_least(organization_id, %L)) with check (public.fn_role_at_least(organization_id, %L))',
+                     t, 'manager', 'manager');
+    end if;
+    if not exists (select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t and p.policyname = 'security_role_delete'
+          and p.permissive = 'RESTRICTIVE' and p.cmd = 'DELETE' and p.roles = '{authenticated}'
+          and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = 'fn_role_at_least(organization_id, ''manager''::text)'
+          and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = '~') then
+      execute format('drop policy if exists security_role_delete on public.%I', t);
+      execute format('create policy security_role_delete on public.%I as restrictive for delete to authenticated '
+                     'using (public.fn_role_at_least(organization_id, %L))', t, 'manager');
+    end if;
     execute format('revoke all on public.%I from public, anon', t);
     execute format('revoke truncate, references, trigger on public.%I from authenticated', t);
     execute format('grant select, insert, update, delete on public.%I to authenticated', t);
@@ -27299,18 +28141,29 @@ begin
   end loop;
 
   foreach t in array array['respostas_prontas','respostas_prontas_perguntas','respostas_prontas_config','respostas_prontas_usos'] loop
-    execute format('drop policy if exists mfa_provada on public.%I', t);
-    execute format(
-      'create policy mfa_provada on public.%I as restrictive for all to authenticated '
-      'using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()))',
-      t);
+    if not exists (select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t and p.policyname = 'mfa_provada'
+          and p.permissive = 'RESTRICTIVE' and p.cmd = 'ALL' and p.roles = '{authenticated}'
+          and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = '( SELECT fn_session_mfa_proven() AS fn_session_mfa_proven)'
+          and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = '( SELECT fn_session_mfa_proven() AS fn_session_mfa_proven)') then
+      execute format('drop policy if exists mfa_provada on public.%I', t);
+      execute format(
+        'create policy mfa_provada on public.%I as restrictive for all to authenticated '
+        'using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()))',
+        t);
+    end if;
   end loop;
 end $rp$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'respostas_prontas_usos' and policyname = 'tenant_isolation_respostas_prontas_usos_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '09d682226978b5d533d1ce157ece22a5') then
 drop policy if exists tenant_isolation_respostas_prontas_usos_select on public.respostas_prontas_usos;
 create policy tenant_isolation_respostas_prontas_usos_select on public.respostas_prontas_usos
   for select to authenticated
   using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 
 do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.respostas_prontas_usos from public, anon, authenticated;
@@ -27468,8 +28321,7 @@ revoke all on function public.fn_redigir_conversas_ao_anonimizar() from public;
 revoke execute on function public.fn_redigir_conversas_ao_anonimizar() from anon;
 revoke execute on function public.fn_redigir_conversas_ao_anonimizar() from authenticated;
 
-drop trigger if exists trg_redigir_conversas_ao_anonimizar on public.contacts;
-create trigger trg_redigir_conversas_ao_anonimizar
+create or replace trigger trg_redigir_conversas_ao_anonimizar
   after update of is_anonymized on public.contacts
   for each row
   when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
@@ -27679,8 +28531,7 @@ revoke all on function public.fn_redigir_conversas_ao_anonimizar() from public;
 revoke execute on function public.fn_redigir_conversas_ao_anonimizar() from anon;
 revoke execute on function public.fn_redigir_conversas_ao_anonimizar() from authenticated;
 
-drop trigger if exists trg_redigir_conversas_ao_anonimizar on public.contacts;
-create trigger trg_redigir_conversas_ao_anonimizar
+create or replace trigger trg_redigir_conversas_ao_anonimizar
   after update of is_anonymized on public.contacts
   for each row
   when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
@@ -27923,6 +28774,7 @@ revoke all on function public.fn_redigir_notas_internas_ao_anonimizar() from pub
 revoke execute on function public.fn_redigir_notas_internas_ao_anonimizar() from anon;
 revoke execute on function public.fn_redigir_notas_internas_ao_anonimizar() from authenticated;
 
+do $janela$ begin -- atômico: gatilho de constraint não aceita `or replace`, e reaplicar não pode deixar o contato um comando sem ele
 drop trigger if exists trg_redigir_notas_internas_ao_anonimizar on public.contacts;
 create constraint trigger trg_redigir_notas_internas_ao_anonimizar
   after update of is_anonymized on public.contacts
@@ -27930,6 +28782,7 @@ create constraint trigger trg_redigir_notas_internas_ao_anonimizar
   for each row
   when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
   execute function public.fn_redigir_notas_internas_ao_anonimizar();
+end $janela$;
 
 -- Cura: contatos JÁ anonimizados (por qualquer caminho) antes deste gatilho.
 -- Só alcança nota criada ATÉ `anonymized_at` (mesmo critério da 0308): quem
@@ -28027,8 +28880,7 @@ alter function public.fn_emit_aviso_da_central() owner to postgres;
 -- trigger: ninguém a chama pela REST, então não há `grant` a ninguém.
 revoke execute on function public.fn_emit_aviso_da_central() from public, anon, authenticated;
 
-drop trigger if exists trg_aviso_da_central_criado on public.agent_inbox_items;
-create trigger trg_aviso_da_central_criado
+create or replace trigger trg_aviso_da_central_criado
   after insert on public.agent_inbox_items
   for each row execute function public.fn_emit_aviso_da_central();
 -- ---- cor das etiquetas (migration 0315) ----
@@ -28738,13 +29590,11 @@ create index if not exists idx_campaign_recipients_enviando
   on public.campaign_recipients (sending_at)
   where status = 'sending';
 
-drop trigger if exists trg_campaigns_updated_at on public.campaigns;
-create trigger trg_campaigns_updated_at
+create or replace trigger trg_campaigns_updated_at
   before update on public.campaigns
   for each row execute function public.fn_set_updated_at();
 
-drop trigger if exists trg_campaign_recipients_updated_at on public.campaign_recipients;
-create trigger trg_campaign_recipients_updated_at
+create or replace trigger trg_campaign_recipients_updated_at
   before update on public.campaign_recipients
   for each row execute function public.fn_set_updated_at();
 
@@ -28815,8 +29665,7 @@ comment on function public.fn_campanha_sincroniza_ack() is
 revoke execute on function public.fn_campanha_sincroniza_ack() from public, anon, authenticated;
 grant execute on function public.fn_campanha_sincroniza_ack() to service_role;
 
-drop trigger if exists trg_messages_sincroniza_campanha on public.messages;
-create trigger trg_messages_sincroniza_campanha
+create or replace trigger trg_messages_sincroniza_campanha
   after update of status on public.messages
   for each row
   when (new.direction = 'outbound')
@@ -28864,8 +29713,7 @@ $$;
 revoke execute on function public.fn_redigir_campanhas_do_contato_anonimizado() from public, anon, authenticated;
 grant execute on function public.fn_redigir_campanhas_do_contato_anonimizado() to service_role;
 
-drop trigger if exists trg_redigir_campanhas_anonimizado on public.contacts;
-create trigger trg_redigir_campanhas_anonimizado
+create or replace trigger trg_redigir_campanhas_anonimizado
   after update of is_anonymized on public.contacts
   for each row
   execute function public.fn_redigir_campanhas_do_contato_anonimizado();
@@ -28880,13 +29728,23 @@ create trigger trg_redigir_campanhas_anonimizado
 -- do PRD §5.2 os dois operam campanha igual.
 alter table public.campaigns enable row level security;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'campaigns' and policyname = 'tenant_isolation_campaigns_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_campaigns_all on public.campaigns;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'campaigns' and policyname = 'campaigns_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists campaigns_select on public.campaigns;
 create policy campaigns_select on public.campaigns
   for select using (
     (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'campaigns' and policyname = 'campaigns_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ae24ec1cda056efe9e4e2c9659eaca70') then
 drop policy if exists campaigns_write on public.campaigns;
 create policy campaigns_write on public.campaigns
   using (
@@ -28899,6 +29757,8 @@ create policy campaigns_write on public.campaigns
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 
 do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.campaigns from anon, authenticated;
@@ -28908,13 +29768,23 @@ end $janela$;
 
 alter table public.campaign_recipients enable row level security;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'campaign_recipients' and policyname = 'tenant_isolation_campaign_recipients_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_campaign_recipients_all on public.campaign_recipients;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'campaign_recipients' and policyname = 'campaign_recipients_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists campaign_recipients_select on public.campaign_recipients;
 create policy campaign_recipients_select on public.campaign_recipients
   for select using (
     (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'campaign_recipients' and policyname = 'campaign_recipients_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ae24ec1cda056efe9e4e2c9659eaca70') then
 drop policy if exists campaign_recipients_write on public.campaign_recipients;
 create policy campaign_recipients_write on public.campaign_recipients
   using (
@@ -28927,6 +29797,8 @@ create policy campaign_recipients_write on public.campaign_recipients
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 
 do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.campaign_recipients from anon, authenticated;
@@ -29017,8 +29889,7 @@ comment on column public.campaign_suppressions.recipient_address_hash is
 create index if not exists idx_campaign_suppressions_org
   on public.campaign_suppressions (organization_id, created_at desc);
 
-drop trigger if exists trg_campaign_templates_updated_at on public.campaign_templates;
-create trigger trg_campaign_templates_updated_at
+create or replace trigger trg_campaign_templates_updated_at
   before update on public.campaign_templates
   for each row execute function public.fn_set_updated_at();
 
@@ -29054,8 +29925,7 @@ $$;
 revoke execute on function public.fn_redigir_exclusoes_do_contato_anonimizado() from public, anon, authenticated;
 grant execute on function public.fn_redigir_exclusoes_do_contato_anonimizado() to service_role;
 
-drop trigger if exists trg_redigir_exclusoes_anonimizado on public.contacts;
-create trigger trg_redigir_exclusoes_anonimizado
+create or replace trigger trg_redigir_exclusoes_anonimizado
   after update of is_anonymized on public.contacts
   for each row
   execute function public.fn_redigir_exclusoes_do_contato_anonimizado();
@@ -29065,12 +29935,20 @@ create trigger trg_redigir_exclusoes_anonimizado
 -- em tabela nova é reprovada por `rbac-config-ia-canais.test.ts`.
 alter table public.campaign_templates enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'campaign_templates' and policyname = 'campaign_templates_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists campaign_templates_select on public.campaign_templates;
 create policy campaign_templates_select on public.campaign_templates
   for select using (
     (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'campaign_templates' and policyname = 'campaign_templates_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ae24ec1cda056efe9e4e2c9659eaca70') then
 drop policy if exists campaign_templates_write on public.campaign_templates;
 create policy campaign_templates_write on public.campaign_templates
   using (
@@ -29083,6 +29961,8 @@ create policy campaign_templates_write on public.campaign_templates
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 
 do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.campaign_templates from anon, authenticated;
@@ -29092,12 +29972,20 @@ end $janela$;
 
 alter table public.campaign_suppressions enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'campaign_suppressions' and policyname = 'campaign_suppressions_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists campaign_suppressions_select on public.campaign_suppressions;
 create policy campaign_suppressions_select on public.campaign_suppressions
   for select using (
     (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'campaign_suppressions' and policyname = 'campaign_suppressions_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ae24ec1cda056efe9e4e2c9659eaca70') then
 drop policy if exists campaign_suppressions_write on public.campaign_suppressions;
 create policy campaign_suppressions_write on public.campaign_suppressions
   using (
@@ -29110,6 +29998,8 @@ create policy campaign_suppressions_write on public.campaign_suppressions
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 
 do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.campaign_suppressions from anon, authenticated;
@@ -29206,12 +30096,20 @@ create index if not exists idx_campaign_recipients_por_numero
 -- ═══ RLS — o padrão da 0374/0375 ═══
 alter table public.campaign_channel_sessions enable row level security;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'campaign_channel_sessions' and policyname = 'campaign_channel_sessions_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
 drop policy if exists campaign_channel_sessions_select on public.campaign_channel_sessions;
 create policy campaign_channel_sessions_select on public.campaign_channel_sessions
   for select using (
     (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'campaign_channel_sessions' and policyname = 'campaign_channel_sessions_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ae24ec1cda056efe9e4e2c9659eaca70') then
 drop policy if exists campaign_channel_sessions_write on public.campaign_channel_sessions;
 create policy campaign_channel_sessions_write on public.campaign_channel_sessions
   using (
@@ -29224,6 +30122,8 @@ create policy campaign_channel_sessions_write on public.campaign_channel_session
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'manager'))
   );
+end if;
+end $politica$;
 
 do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.campaign_channel_sessions from anon, authenticated;
@@ -29348,11 +30248,17 @@ declare t text;
 begin
   foreach t in array array['campaigns','campaign_recipients','campaign_templates',
                            'campaign_suppressions','campaign_channel_sessions'] loop
-    execute format('drop policy if exists mfa_provada on public.%I', t);
-    execute format(
-      'create policy mfa_provada on public.%I as restrictive for all to authenticated '
-      'using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()))',
-      t);
+    if not exists (select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = t and p.policyname = 'mfa_provada'
+          and p.permissive = 'RESTRICTIVE' and p.cmd = 'ALL' and p.roles = '{authenticated}'
+          and replace(regexp_replace(coalesce(p.qual, '~'), '\s+', ' ', 'g'), 'public.', '') = '( SELECT fn_session_mfa_proven() AS fn_session_mfa_proven)'
+          and replace(regexp_replace(coalesce(p.with_check, '~'), '\s+', ' ', 'g'), 'public.', '') = '( SELECT fn_session_mfa_proven() AS fn_session_mfa_proven)') then
+      execute format('drop policy if exists mfa_provada on public.%I', t);
+      execute format(
+        'create policy mfa_provada on public.%I as restrictive for all to authenticated '
+        'using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()))',
+        t);
+    end if;
   end loop;
 end $$;
 
@@ -30292,8 +31198,13 @@ notify pgrst, 'reload schema';
 -- tem policy em `storage.objects`, então sessão nenhuma lê, troca ou apaga o
 -- arquivo direto. O único jeito de um colega "trocar o arquivo" era reapontar
 -- `media_storage_path` da nota alheia, e isso é o UPDATE que esta seção fecha.
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversation_notes' and policyname = 'conversation_notes_write') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "conversation_notes_write" on public.conversation_notes;
+end if; end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversation_notes' and policyname = 'conversation_notes_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '381b997c06ccab44e21cc5ad7224ddb3') then
 drop policy if exists "conversation_notes_insert" on public.conversation_notes;
 create policy "conversation_notes_insert" on public.conversation_notes
   for insert
@@ -30308,10 +31219,15 @@ create policy "conversation_notes_insert" on public.conversation_notes
         and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
     )
   );
+end if;
+end $politica$;
 
 -- O `with check` repete o `using`: o autor não passa a nota para outro nome.
 -- Para o GESTOR o `with check` aceita qualquer autor (ele pode editar nota
 -- alheia); quem impede que ele troque o autor é a trava de autoria da seção 7.
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversation_notes' and policyname = 'conversation_notes_update'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'dcce26c0e70a04b5b8dcee3ee1609e5a') then
 drop policy if exists "conversation_notes_update" on public.conversation_notes;
 create policy "conversation_notes_update" on public.conversation_notes
   for update
@@ -30337,7 +31253,12 @@ create policy "conversation_notes_update" on public.conversation_notes
         and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
     )
   );
+end if;
+end $politica$;
 
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversation_notes' and policyname = 'conversation_notes_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '624bbbda4a328836ce333c238a25754f') then
 drop policy if exists "conversation_notes_delete" on public.conversation_notes;
 create policy "conversation_notes_delete" on public.conversation_notes
   for delete
@@ -30352,6 +31273,8 @@ create policy "conversation_notes_delete" on public.conversation_notes
         and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
     )
   );
+end if;
+end $politica$;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 2 · CASOS DA IA: só o servidor escreve, e cada um lê o que pode ver
@@ -30395,8 +31318,9 @@ create policy "conversation_notes_delete" on public.conversation_notes
 
 -- ── agent_cases ─────────────────────────────────────────────────────────────
 revoke insert, update, delete, truncate on public.agent_cases from authenticated, anon;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'agent_cases' and policyname = 'tenant_isolation_agent_cases_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_agent_cases_all on public.agent_cases;
-drop policy if exists tenant_isolation_agent_cases_select on public.agent_cases;
+end if; end $politica$;
 
 -- A REGRA PERGUNTADA POR ORGANIZAÇÃO, NÃO POR CASO (revisão do PR 128, medido).
 -- A visibilidade da conversa é `fn_can_view_conversation` (`security definer`,
@@ -30465,6 +31389,10 @@ grant execute on function public.fn_conversas_ao_alcance() to authenticated;
 -- por consulta e confere o caso contra ela. Quem vê todas as conversas da
 -- organização (gestor, administrador, somente leitura, ou o modo "Todos veem
 -- tudo") resolve na primeira e a segunda nem é montada.
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'agent_cases' and policyname = 'tenant_isolation_agent_cases_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '18d3fb94117fe0707427a17fa8de587a') then
+drop policy if exists tenant_isolation_agent_cases_select on public.agent_cases;
 create policy tenant_isolation_agent_cases_select on public.agent_cases
   for select to authenticated
   using (
@@ -30477,11 +31405,18 @@ create policy tenant_isolation_agent_cases_select on public.agent_cases
       or conversation_id in (select public.fn_conversas_ao_alcance())
     )
   );
+end if;
+end $politica$;
 -- A restritiva do segundo fator nasce aqui também: o laço da 0301 só cobre tabela
 -- que JÁ tem policy permissiva, e numa instalação nova a desta tabela nasce depois dele.
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'agent_cases' and policyname = 'mfa_provada'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ab0fa06ce55c36b1e73a0bcdeb77ed4f') then
 drop policy if exists mfa_provada on public.agent_cases;
 create policy mfa_provada on public.agent_cases as restrictive for all to authenticated
   using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()));
+end if;
+end $politica$;
 
 -- A lista de concluídos é lida do mais recente para trás, com limite
 -- (app/api/v1/ai/cases/route.ts). Sem este índice o Postgres confere a
@@ -30491,7 +31426,12 @@ create index if not exists agent_cases_org_abertura_idx
 
 -- ── agent_case_events ───────────────────────────────────────────────────────
 revoke insert, update, delete, truncate on public.agent_case_events from authenticated, anon;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'agent_case_events' and policyname = 'tenant_isolation_agent_case_events_insert') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_agent_case_events_insert on public.agent_case_events;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'agent_case_events' and policyname = 'tenant_isolation_agent_case_events_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '2dd5fb9eaac4b279c78f1130556d62e8') then
 drop policy if exists tenant_isolation_agent_case_events_select on public.agent_case_events;
 create policy tenant_isolation_agent_case_events_select on public.agent_case_events
   for select to authenticated
@@ -30503,11 +31443,15 @@ create policy tenant_isolation_agent_case_events_select on public.agent_case_eve
          and ac.id = agent_case_events.case_id
     )
   );
+end if;
+end $politica$;
 
 -- ── conversation_assignment_events ──────────────────────────────────────────
 revoke insert, update, delete, truncate on public.conversation_assignment_events
   from authenticated, anon;
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversation_assignment_events' and policyname = 'cae_insert') then -- sem a policy, nem pega lock na tabela
 drop policy if exists cae_insert on public.conversation_assignment_events;
+end if; end $politica$;
 -- `cae_select` (0173, já herda o escopo da conversa) fica como está.
 
 -- ── travas de suporte: tabela só do servidor não carrega nenhuma ────────────
@@ -30518,9 +31462,13 @@ do $$
 declare t text;
 begin
   foreach t in array array['agent_cases','agent_case_events','conversation_assignment_events'] loop
-    execute format('drop policy if exists support_write_insert on public.%I', t);
-    execute format('drop policy if exists support_write_update on public.%I', t);
-    execute format('drop policy if exists support_write_delete on public.%I', t);
+    -- Sem a policy, nem pega lock na tabela.
+    if exists (select 1 from pg_policies p where p.schemaname = 'public' and p.tablename = t
+                and p.policyname in ('support_write_insert','support_write_update','support_write_delete')) then
+      execute format('drop policy if exists support_write_insert on public.%I', t);
+      execute format('drop policy if exists support_write_update on public.%I', t);
+      execute format('drop policy if exists support_write_delete on public.%I', t);
+    end if;
   end loop;
 end $$;
 
@@ -30612,8 +31560,7 @@ revoke execute on function public.fn_bloqueio_do_contato_so_o_servidor() from pu
 -- UPDATE sem lista de colunas, com a WHEN comparando VALORES: `update of`
 -- dispararia quando a coluna é só mencionada (um cliente que devolve a linha
 -- inteira), e o caso comum — nenhuma das três mudou — nem chama a função.
-drop trigger if exists trg_contato_bloqueio_so_o_servidor_update on public.contacts;
-create trigger trg_contato_bloqueio_so_o_servidor_update
+create or replace trigger trg_contato_bloqueio_so_o_servidor_update
   before update on public.contacts
   for each row
   when (old.is_blocked is distinct from new.is_blocked
@@ -30621,8 +31568,7 @@ create trigger trg_contato_bloqueio_so_o_servidor_update
      or old.blocked_at is distinct from new.blocked_at)
   execute function public.fn_bloqueio_do_contato_so_o_servidor();
 
-drop trigger if exists trg_contato_bloqueio_so_o_servidor_insert on public.contacts;
-create trigger trg_contato_bloqueio_so_o_servidor_insert
+create or replace trigger trg_contato_bloqueio_so_o_servidor_insert
   before insert on public.contacts
   for each row
   when (new.is_blocked is true or new.blocked_reason is not null or new.blocked_at is not null)
@@ -30647,7 +31593,12 @@ create trigger trg_contato_bloqueio_so_o_servidor_insert
 --
 -- `messages_delete` fica como está: o envio do atendente apaga o eco do próprio
 -- envio com a sessão (`removerEcoDoProprioEnvio`, app/api/v1/messages/_handler.ts).
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversations' and policyname = 'conversations_agent_delete') then -- sem a policy, nem pega lock na tabela
 drop policy if exists "conversations_agent_delete" on public.conversations;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversations' and policyname = 'conversations_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '340a13ec3aa898741f9dee455e80ac42') then
 drop policy if exists "conversations_delete" on public.conversations;
 create policy "conversations_delete" on public.conversations
   for delete using (
@@ -30657,6 +31608,8 @@ create policy "conversations_delete" on public.conversations
       and public.fn_role_at_least(organization_id, 'manager')
     )
   );
+end if;
+end $politica$;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 5 · ATRIBUIR A CONVERSA: só quem a vê
@@ -30806,8 +31759,7 @@ revoke execute on function public.fn_contato_bloqueado_guarda_a_identidade() fro
 -- livre, ou bloqueado com outro campo mudando) nem chama a função. `wa_lid` é
 -- coluna gerada e ainda não tem o valor novo num gatilho BEFORE, por isso a
 -- comparação é sobre a origem dela.
-drop trigger if exists trg_contato_bloqueado_guarda_a_identidade on public.contacts;
-create trigger trg_contato_bloqueado_guarda_a_identidade
+create or replace trigger trg_contato_bloqueado_guarda_a_identidade
   before update on public.contacts
   for each row
   when (old.is_blocked
@@ -31231,8 +32183,7 @@ comment on function public.fn_nota_interna_autoria_e_do_banco() is
 
 revoke execute on function public.fn_nota_interna_autoria_e_do_banco() from public, anon, authenticated;
 
-drop trigger if exists trg_nota_interna_autoria on public.conversation_notes;
-create trigger trg_nota_interna_autoria
+create or replace trigger trg_nota_interna_autoria
   before insert or update on public.conversation_notes
   for each row
   execute function public.fn_nota_interna_autoria_e_do_banco();
@@ -31287,11 +32238,13 @@ notify pgrst, 'reload schema';
 -- ---- agenda histórica (migration 0320) ----
 -- 0320: histórico é registro, sem convites, lembretes ou automações.
 alter table public.calendar_appointments add column if not exists history_import_key text;
-alter table public.calendar_appointments drop constraint if exists calendar_appointments_source_check;
-alter table public.calendar_appointments add constraint calendar_appointments_source_check
+alter table public.calendar_appointments
+  drop constraint if exists calendar_appointments_source_check,
+  add constraint calendar_appointments_source_check
  check(source in ('ui','mcp','google_sync','public_page','historical_import'));
-alter table public.calendar_appointments drop constraint if exists calendar_appointments_history_key_check;
-alter table public.calendar_appointments add constraint calendar_appointments_history_key_check
+alter table public.calendar_appointments
+  drop constraint if exists calendar_appointments_history_key_check,
+  add constraint calendar_appointments_history_key_check
  check ((source='historical_import' and history_import_key is not null and history_import_key ~ '^[a-f0-9]{64}$')
      or (source<>'historical_import' and history_import_key is null));
 create unique index if not exists calendar_appointments_history_key
@@ -31329,8 +32282,7 @@ begin
  return new;
 end;$$;
 revoke all on function public.fn_appointment_history_guard() from public,anon,authenticated;
-drop trigger if exists trg_aaa_appointment_history_guard on public.calendar_appointments;
-create trigger trg_aaa_appointment_history_guard before insert or update on public.calendar_appointments
+create or replace trigger trg_aaa_appointment_history_guard before insert or update on public.calendar_appointments
  for each row execute function public.fn_appointment_history_guard();
 
 create or replace function public.fn_google_projection_stamp()
@@ -31527,8 +32479,7 @@ end
 $$;
 revoke execute on function public.fn_followup_ponteiro_marca_vigencia() from public, anon, authenticated;
 
-drop trigger if exists trg_followup_ponteiro_marca_vigencia on public.followup_flow_pointers;
-create trigger trg_followup_ponteiro_marca_vigencia
+create or replace trigger trg_followup_ponteiro_marca_vigencia
   before update on public.followup_flow_pointers
   for each row
   when (
@@ -31581,8 +32532,7 @@ end
 $$;
 revoke execute on function public.fn_followup_ponteiro_armado_marca_vigencia() from public, anon, authenticated;
 
-drop trigger if exists trg_followup_ponteiro_armado_marca_vigencia on public.ai_agent_versions;
-create trigger trg_followup_ponteiro_armado_marca_vigencia
+create or replace trigger trg_followup_ponteiro_armado_marca_vigencia
   after update of status on public.ai_agent_versions
   for each row
   when (new.status = 'published' and old.status is distinct from 'published')
@@ -31621,8 +32571,7 @@ $$;
 revoke execute on function public.fn_starts_at_marked_at() from public, anon, authenticated;
 grant execute on function public.fn_starts_at_marked_at() to service_role;
 
-drop trigger if exists trg_starts_at_marked_at on public.calendar_appointments;
-create trigger trg_starts_at_marked_at
+create or replace trigger trg_starts_at_marked_at
   before update of starts_at on public.calendar_appointments
   for each row execute function public.fn_starts_at_marked_at();
 
@@ -31818,17 +32767,26 @@ create table if not exists public.media_library_items (
 create index if not exists media_library_items_org_idx on public.media_library_items (organization_id);
 create index if not exists media_library_items_tags_gin on public.media_library_items using gin (tags);
 
-drop trigger if exists trg_media_library_items_updated_at on public.media_library_items;
-create trigger trg_media_library_items_updated_at
+create or replace trigger trg_media_library_items_updated_at
   before update on public.media_library_items
   for each row execute function public.fn_set_updated_at();
 
 alter table public.media_library_items enable row level security;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'media_library_items' and policyname = 'tenant_isolation_media_library_items_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_media_library_items_all on public.media_library_items;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'media_library_items' and policyname = 'tenant_isolation_media_library_items_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists tenant_isolation_media_library_items_select on public.media_library_items;
 create policy tenant_isolation_media_library_items_select on public.media_library_items
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'media_library_items' and policyname = 'tenant_isolation_media_library_items_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '2884369ad0ee58270aada74ba809f854') then
 drop policy if exists tenant_isolation_media_library_items_write on public.media_library_items;
 create policy tenant_isolation_media_library_items_write on public.media_library_items
   for all using (
@@ -31836,19 +32794,41 @@ create policy tenant_isolation_media_library_items_write on public.media_library
   ) with check (
     organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id, 'manager')
   );
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'media_library_items' and policyname = 'security_role_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '6fc756711dab0fbf401bc88241b960e6') then
 drop policy if exists security_role_insert on public.media_library_items;
 create policy security_role_insert on public.media_library_items as restrictive for insert to authenticated
   with check (public.fn_role_at_least(organization_id, 'manager'));
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'media_library_items' and policyname = 'security_role_update'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'bf76b3bca93aed611b7e36bc2e36d3a3') then
 drop policy if exists security_role_update on public.media_library_items;
 create policy security_role_update on public.media_library_items as restrictive for update to authenticated
   using (public.fn_role_at_least(organization_id, 'manager'))
   with check (public.fn_role_at_least(organization_id, 'manager'));
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'media_library_items' and policyname = 'security_role_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '067973fb882387f34bd0e9ef34fa1665') then
 drop policy if exists security_role_delete on public.media_library_items;
 create policy security_role_delete on public.media_library_items as restrictive for delete to authenticated
   using (public.fn_role_at_least(organization_id, 'manager'));
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'media_library_items' and policyname = 'mfa_provada'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ab0fa06ce55c36b1e73a0bcdeb77ed4f') then
 drop policy if exists mfa_provada on public.media_library_items;
 create policy mfa_provada on public.media_library_items as restrictive for all to authenticated
   using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()));
+end if;
+end $politica$;
 
 revoke all on public.media_library_items from public, anon;
 revoke truncate, references, trigger on public.media_library_items from authenticated;
@@ -32112,8 +33092,7 @@ end;
 $fn$;
 revoke all on function public.fn_conversa_herda_trava_do_contato() from public, anon, authenticated;
 
-drop trigger if exists trg_conversa_herda_trava_do_contato on public.conversations;
-create trigger trg_conversa_herda_trava_do_contato
+create or replace trigger trg_conversa_herda_trava_do_contato
   before insert or update of contact_id on public.conversations
   for each row execute function public.fn_conversa_herda_trava_do_contato();
 
@@ -32133,8 +33112,7 @@ end;
 $fn$;
 revoke all on function public.fn_contato_propaga_trava() from public, anon, authenticated;
 
-drop trigger if exists trg_contato_propaga_trava on public.contacts;
-create trigger trg_contato_propaga_trava
+create or replace trigger trg_contato_propaga_trava
   after update of force_human, is_blocked on public.contacts
   for each row
   when (old.force_human is distinct from new.force_human or old.is_blocked is distinct from new.is_blocked)
@@ -32229,8 +33207,7 @@ comment on column public.channel_knobs.resposta_end_hour is
 -- do `add` torna a migration reaplicável. Colunas novas e vazias: nenhum dado
 -- viola a constraint, não há o que corrigir antes.
 alter table public.channel_knobs
-  drop constraint if exists channel_knobs_resposta_horas_validas;
-alter table public.channel_knobs
+  drop constraint if exists channel_knobs_resposta_horas_validas,
   add constraint channel_knobs_resposta_horas_validas
   check (
     (resposta_start_hour is null or resposta_start_hour between 0 and 23)
@@ -32553,8 +33530,7 @@ grant execute on function public.fn_google_appointment(uuid,uuid,text,jsonb) to 
 alter table public.meta_templates
   add column if not exists saved_values jsonb not null default '{}'::jsonb;
 alter table public.meta_templates
-  drop constraint if exists meta_templates_saved_values_objeto;
-alter table public.meta_templates
+  drop constraint if exists meta_templates_saved_values_objeto,
   add constraint meta_templates_saved_values_objeto
   check (jsonb_typeof(saved_values) = 'object');
 comment on column public.meta_templates.saved_values is
@@ -32801,8 +33777,7 @@ grant execute on function public.emit_event(text,text,uuid,jsonb,jsonb,uuid) to 
 -- reaplicar no `update.sh` não viola nada. Porte de melgarafael/DeskcommCRM
 -- #1619 (0405 lá).
 alter table public.conversation_assignment_events
-  drop constraint if exists conversation_assignment_events_reason_check;
-alter table public.conversation_assignment_events
+  drop constraint if exists conversation_assignment_events_reason_check,
   add constraint conversation_assignment_events_reason_check
   check (reason in ('claim','transfer','release','routing','handoff','member_revoked'));
 -- ---- fim: o motivo 'member_revoked' (migration 0346) ----
@@ -33360,8 +34335,7 @@ begin
 end;
 $$;
 revoke all on function public.fn_fechar_avisos_do_jev_da_conversa() from public, anon, authenticated;
-drop trigger if exists trg_fechar_avisos_do_jev_da_conversa on public.conversations;
-create trigger trg_fechar_avisos_do_jev_da_conversa
+create or replace trigger trg_fechar_avisos_do_jev_da_conversa
  after update of assigned_to_user_id, status, bot_silenced_until, last_handoff_at on public.conversations
  for each row execute function public.fn_fechar_avisos_do_jev_da_conversa();
 
@@ -33376,8 +34350,7 @@ begin
 end;
 $$;
 revoke all on function public.fn_fechar_aviso_do_jev_ao_bloquear() from public, anon, authenticated;
-drop trigger if exists trg_fechar_aviso_do_jev_ao_bloquear on public.contacts;
-create trigger trg_fechar_aviso_do_jev_ao_bloquear
+create or replace trigger trg_fechar_aviso_do_jev_ao_bloquear
  after update of is_blocked on public.contacts
  for each row when (new.is_blocked and old.is_blocked is distinct from true)
  execute function public.fn_fechar_aviso_do_jev_ao_bloquear();
@@ -33430,13 +34403,25 @@ create unique index if not exists jev_observacoes_uma_por_mensagem_idx
 alter table public.jev_observacoes enable row level security;
 -- SÓ select: uma policy ALL só de tenancy é dívida de RBAC proibida para
 -- tabela nova (tests/invariants/rbac-config-ia-canais.test.ts).
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'jev_observacoes' and policyname = 'tenant_isolation_jev_observacoes_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_jev_observacoes_all on public.jev_observacoes;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'jev_observacoes' and policyname = 'tenant_isolation_jev_observacoes_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
 drop policy if exists tenant_isolation_jev_observacoes_select on public.jev_observacoes;
 create policy tenant_isolation_jev_observacoes_select on public.jev_observacoes
   for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'jev_observacoes' and policyname = 'mfa_provada'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ab0fa06ce55c36b1e73a0bcdeb77ed4f') then
 drop policy if exists mfa_provada on public.jev_observacoes;
 create policy mfa_provada on public.jev_observacoes as restrictive for all to authenticated
   using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()));
+end if;
+end $politica$;
 
 do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
 revoke all on public.jev_observacoes from public, anon, authenticated;
@@ -33762,8 +34747,7 @@ update public.platform_branding
    and icone_path !~ '^platform/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$';
 
 alter table public.platform_branding
-  drop constraint if exists platform_branding_icone_path;
-alter table public.platform_branding
+  drop constraint if exists platform_branding_icone_path,
   add constraint platform_branding_icone_path check (
     icone_path is null
     or icone_path ~ '^platform/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$'
@@ -33786,24 +34770,48 @@ grant select (id, organization_id, contact_id, kind, status, priority, run_after
 grant all on public.job_queue, public.storage_redaction_queue to service_role;
 end $janela$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'job_queue' and policyname = 'tenant_isolation_job_queue_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_job_queue_all on public.job_queue;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'job_queue' and policyname = 'tenant_isolation_job_queue_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '09d682226978b5d533d1ce157ece22a5') then
 drop policy if exists tenant_isolation_job_queue_select on public.job_queue;
 create policy tenant_isolation_job_queue_select on public.job_queue
   for select to authenticated
   using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 -- A restritiva do segundo fator nasce aqui também: o laço da 0301 só cobre tabela
 -- que JÁ tem policy permissiva, e numa instalação nova a desta tabela nasce depois dele.
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'job_queue' and policyname = 'mfa_provada'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ab0fa06ce55c36b1e73a0bcdeb77ed4f') then
 drop policy if exists mfa_provada on public.job_queue;
 create policy mfa_provada on public.job_queue as restrictive for all to authenticated
   using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()));
+end if;
+end $politica$;
 
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'storage_redaction_queue' and policyname = 'tenant_isolation_storage_redaction_queue_all') then -- sem a policy, nem pega lock na tabela
 drop policy if exists tenant_isolation_storage_redaction_queue_all on public.storage_redaction_queue;
+end if; end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'storage_redaction_queue' and policyname = 'tenant_isolation_storage_redaction_queue_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '09d682226978b5d533d1ce157ece22a5') then
 drop policy if exists tenant_isolation_storage_redaction_queue_select on public.storage_redaction_queue;
 create policy tenant_isolation_storage_redaction_queue_select on public.storage_redaction_queue
   for select to authenticated
   using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
 -- A restritiva do segundo fator nasce aqui também: o laço da 0301 só cobre tabela
 -- que JÁ tem policy permissiva, e numa instalação nova a desta tabela nasce depois dele.
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'storage_redaction_queue' and policyname = 'mfa_provada'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ab0fa06ce55c36b1e73a0bcdeb77ed4f') then
 drop policy if exists mfa_provada on public.storage_redaction_queue;
 create policy mfa_provada on public.storage_redaction_queue as restrictive for all to authenticated
   using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()));
+end if;
+end $politica$;
