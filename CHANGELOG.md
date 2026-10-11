@@ -8,6 +8,56 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.22.0] — 2026-10-11
+
+### Adicionado
+
+- **Busca dentro do filtro de etiquetas do Inbox, e automação que pode etiquetar o contato** O filtro de etiquetas do Inbox ganhou um campo de busca dentro do próprio menu. Quem tem muitas etiquetas digita um pedaço do nome e a lista encolhe na hora, sem esperar o servidor. As etiquetas já marcadas e a escolha entre "Todas (E)" e "Qualquer uma (OU)" continuam como estavam enquanto se digita, e a busca é limpa ao fechar o menu. Quando nada combina, o menu diz "Nenhuma etiqueta com esse texto".
+
+  Na ação "Adicionar tag" das automações agora dá para escolher o destino: o card, que é o comportamento de sempre e continua sendo o padrão, ou o contato do lead, que é uma das caixas que o filtro do Inbox consulta. Com "Contato do lead", as etiquetas que o contato já tem são preservadas, e se o lead não tiver contato a ação é ignorada em vez de marcar o card no lugar.
+
+  Nada precisa ser feito ao atualizar. As automações que já existem não têm o campo novo e continuam marcando o card.
+
+  Portado do projeto original (DeskcommCRM #2701, de @webtecnica, a partir da issue #2498 de @vagnerrm122). A mudança de ordem das abas do Inbox que vinha no mesmo pacote não foi trazida: aqui as abas já foram reorganizadas em Fila, Minhas, Todas e "Mais".
+
+- **Editar um contato direto da lista, sem abrir a ficha** Na tela de Contatos, cada linha ganhou um ícone de lápis entre o de conversa e o de excluir. Ele abre o mesmo formulário de edição da ficha, já preenchido, para corrigir nome, e-mail, telefone, nascimento e etiquetas sem sair da lista. A lista se atualiza ao salvar. Os campos personalizados do funil continuam na ficha. Contatos anonimizados não mostram o lápis, como já acontecia na ficha. Nada precisa ser feito ao atualizar.
+
+  Portado do projeto original (DeskcommCRM #2717, de @webtecnica, a partir da issue #2715).
+
+- **A etiqueta já pode nascer colorida no painel da conversa** Até aqui a cor de uma etiqueta só se escolhia depois, em Configurações, Etiquetas. Agora, ao criar uma etiqueta no painel da conversa (tanto nas etiquetas do contato quanto nas da conversa), um botão ao lado do campo "Nova tag…" abre a mesma paleta de oito tons de Configurações, com o nome de cada tom, a opção "Sem cor" e uma prévia. O "+" adiciona a etiqueta e grava a cor para a organização inteira.
+
+  O botão aparece só para gerente e administrador, que são os papéis que podem mudar as etiquetas. Quem atende como agente continua criando a etiqueta sem cor, como antes. Escolher uma cor ao adicionar uma etiqueta que já existe troca a cor dela para todos, como em Configurações. Nada precisa ser feito ao atualizar.
+
+  Portado do projeto original (DeskcommCRM #2720, de @webtecnica, a partir da issue #2718).
+
+- **O cartão de documento da conversa mostra o nome original do arquivo** Quando um paciente mandava um PDF ou uma planilha, o cartão do documento na conversa mostrava só o tipo do arquivo ("PDF", "XLSX"), porque o nome que a pessoa deu ao arquivo não era guardado. Agora a entrada das mensagens guarda esse nome, tanto na conexão por QR code quanto na API oficial do WhatsApp, e o cartão mostra "exame.pdf" em vez de "PDF". Nome comprido é encurtado na tela e aparece inteiro ao passar o mouse. O nome é limpo de caracteres invisíveis e tem tamanho máximo.
+
+  Vale para os documentos que chegarem depois da atualização: os que já estão nas conversas continuam mostrando o tipo do arquivo. Documentos enviados pela equipe a partir da tela do CRM também continuam mostrando o tipo. Nada precisa ser feito ao atualizar.
+
+  Portado do projeto original (DeskcommCRM #2619, de @webtecnica, a partir da issue #2613 de @gleisaum).
+
+### Alterado
+
+- **Falha ao gerar o link de uma mídia do WhatsApp passa a sair no log estruturado** Quando o sistema não conseguia gerar o link temporário de uma foto, áudio ou vídeo guardado no armazenamento, o erro saía como uma linha solta no log, sem dizer de qual mensagem era. Agora sai no mesmo formato dos demais erros, com o identificador da mensagem. A tela não muda e nada precisa ser feito ao atualizar. Porte do original (melgarafael/DeskcommCRM#2740, recorte do #1921 de @mrmateussiilva).
+
+### Corrigido
+
+- **A IA deixa de perder uma alteração quando edita e move o mesmo negócio ao mesmo tempo** Quando a IA, na mesma resposta, editava um negócio e o movia de etapa (ou mexia nas etiquetas dele), as duas alterações rodavam juntas e uma podia ser recusada como conflito, deixando o card pela metade. Agora as alterações da IA no mesmo negócio entram em fila, uma depois da outra. Consultas e outros negócios continuam em paralelo, e a edição feita por uma pessoa no meio continua tendo prioridade. Se uma alteração demorar mais de 5 minutos sem resposta, a IA é avisada de que o resultado é incerto e orientada a pedir conferência da equipe, sem repetir. Nada precisa ser feito ao atualizar. Porte do original (melgarafael/DeskcommCRM#2540).
+
+- **A IA deixa de marcar horário ou mover o negócio depois que uma pessoa assume a conversa** Quando alguém da equipe respondia o cliente enquanto a IA preparava a resposta, a mensagem da IA já era descartada, mas as outras ações do mesmo turno ainda aconteciam: a IA podia marcar um horário, mover o negócio de etapa ou trocar uma etiqueta sem que ninguém avisasse o cliente. Agora, antes de cada ação que grava no CRM, a IA confere de novo se uma pessoa está na conversa (pausa em vigor, conversa com dono humano ou contato travado para atendimento humano) e, se estiver, não executa e encerra o turno. Quando é a própria IA que passa a conversa para a equipe, o que ela ainda registra no mesmo turno continua valendo. Nada precisa ser feito ao atualizar. Parte que faltava do original (melgarafael/DeskcommCRM#2541), sem mudança de banco.
+
+- **O lembrete de consulta sai pelo número de WhatsApp em que a consulta foi marcada** Em organização com mais de um número de WhatsApp conectado, o lembrete saía pelo número da conversa mais recente do paciente, que podia não ser o número em que a consulta foi marcada. Agora o lembrete prefere o número da conversa em que o horário foi marcado. Se esse número estiver desconectado, ou se a consulta foi marcada pela tela, vale a regra de antes (a conversa mais recente e, sem conversa, o número mais antigo), para o lembrete não deixar de sair. Com um número só, nada muda. Nada precisa ser feito ao atualizar. Porte parcial do original (melgarafael/DeskcommCRM#2669): a escolha de um número fixo por tipo de agendamento não veio neste pacote.
+
+- **A tela "Uso de IA" passa a somar o período inteiro e separa chamadas de turnos do agente** Em organizações com mais de mil chamadas à IA no período, a tela "Uso de IA" somava só as mil mais antigas e deixava de fora justamente os dias mais recentes: o custo, o volume de texto e o tempo apareciam menores do que eram, e os gráficos acabavam antes do fim do período. A taxa de conversas passadas para uma pessoa também era calculada sobre um recorte de mil mensagens. Agora a conta é feita inteira no banco, para o período todo.
+
+  Os cartões também passaram a dizer o que medem. "Atendimentos com IA" virou "Chamadas de IA", porque contava cada chamada ao modelo, e uma resposta do agente costuma fazer várias; quando alguma chamada falhou, o cartão diz quantas. Há um cartão novo, "Turnos do agente", com o custo médio de cada resposta. Uma tentativa em que a chamada à IA falhou não conta como turno, e ele conta só os turnos que a fila de tarefas ainda guarda. Outro cartão novo, "Taxa de cache", mostra quanto do texto enviado à IA veio do cache, que custa bem menos. "Tempo de resposta" virou "Tempo de uma chamada à IA": é o tempo de uma chamada ao modelo, não o tempo que o cliente esperou pela resposta inteira. O filtro "Tipo de uso" oferecia uma lista fixa de nomes que quase nunca existiam nas chamadas; agora ele lista só os tipos que aparecem no período, com o nome em português.
+
+  O cartão de orçamento do mês não mudou e continua usando a mesma conta que decide o limite de gasto. A atualização traz uma função nova no banco (migration 0352), aplicada pelo `update.sh` de sempre. Não é preciso fazer nada na instalação. Porte de melgarafael/DeskcommCRM #2139.
+
+- **Contato compartilhado pelo WhatsApp aparece certo na conversa e nas respostas** Quando o paciente compartilha um contato da agenda do celular, o WhatsApp às vezes manda o telefone num formato agrupado (`item1.TEL`). O cartão do contato na conversa não achava o telefone nesse formato, e por isso não oferecia abrir a conversa com aquele número. Agora acha. Ao responder a um contato compartilhado, a faixa de citação em cima do campo de texto e a citação dentro do balão mostram o nome da pessoa, e não mais o texto bruto do cartão (`BEGIN:VCARD...`). Nada precisa ser feito ao atualizar.
+
+  Portado do projeto original (DeskcommCRM #2712, de @Natan2121).
+
 ## [3.21.0] — 2026-10-11
 
 ### Adicionado
@@ -6805,7 +6855,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.21.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.0...HEAD
+[3.22.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.21.0...v3.22.0
 [3.21.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.20.0...v3.21.0
 [3.20.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.19.0...v3.20.0
 [3.19.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.18.0...v3.19.0
