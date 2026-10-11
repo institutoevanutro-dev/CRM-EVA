@@ -54,6 +54,20 @@ export function contactForProntuario(contact: { id: string; name: string | null;
   };
 }
 
+export function structuredAddressForProntuario(fields: Record<string, unknown> | null | undefined) {
+  const parsed = addressSchema.safeParse(fields?.endereco_estruturado);
+  if (!parsed.success) return null;
+  const address = {
+    cep: parsed.data.cep ?? "", logradouro: parsed.data.logradouro ?? "",
+    numero: parsed.data.numero ?? "", complemento: parsed.data.complemento ?? "",
+    bairro: parsed.data.bairro ?? "", cidade: parsed.data.cidade ?? "", uf: parsed.data.uf ?? "",
+  };
+  // A ficha do CRM pode ter alterado só o texto, deixando a projeção antiga no JSON.
+  const text = [address.logradouro, address.numero, address.complemento, address.bairro,
+    address.cidade, address.uf, address.cep].filter(Boolean).join(", ");
+  return text === fields?.endereco ? address : null;
+}
+
 export async function authorizeProntuario(req: Request, scope: "prontuario:contacts:read" | "prontuario:contacts:write", requestId: string) {
   try {
     const auth = await validateBearerToken(req.headers.get("authorization"));
