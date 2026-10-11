@@ -197,6 +197,23 @@ describe("Composer — colar imagem", () => {
  * está saindo não pode sumir. Porte do DeskcommCRM f82545d00 (autor original:
  * gustavorodcruz96) com o ajuste do 539ade020 (melgarafael).
  */
+// Portado do projeto original (DeskcommCRM, PR #2712).
+describe("Composer — resposta a contato compartilhado", () => {
+  it("a faixa de citação mostra o nome do contato, e não o vCard bruto", () => {
+    renderComposer({
+      respondendo: {
+        id: "c1",
+        direction: "inbound",
+        type: "contact",
+        metadata: {},
+        body: "BEGIN:VCARD\nFN:Rafa Baldin\nitem1.TEL;waid=5511999999999:+55 11 99999-9999\nEND:VCARD",
+      },
+    });
+    expect(screen.getByText("Rafa Baldin")).toBeInTheDocument();
+    expect(screen.queryByText(/BEGIN:VCARD/)).toBeNull();
+  });
+});
+
 describe("Composer — texto digitado durante o envio", () => {
   beforeEach(() => sendMock.mockClear());
 

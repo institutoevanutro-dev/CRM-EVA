@@ -144,6 +144,21 @@ describe("MessageBubble — rótulo de origem", () => {
   });
 });
 
+// Portado do projeto original (DeskcommCRM, PR #2712).
+describe("MessageBubble — citação de contato compartilhado", () => {
+  it("mostra o nome do contato em vez do vCard bruto", () => {
+    const vcard = "BEGIN:VCARD\nFN:Rafa Baldin\nTEL;type=CELL:+5511999999999\nEND:VCARD";
+    render(
+      <MessageBubble
+        message={msg({ body: "Resposta" })}
+        citada={msg({ id: "c2", type: "contact", body: vcard })}
+      />,
+    );
+    expect(screen.getByText("Rafa Baldin")).toBeInTheDocument();
+    expect(screen.queryByText(/BEGIN:VCARD/)).toBeNull();
+  });
+});
+
 describe("MessageBubble — contenção de layout e quebra de palavras", () => {
   // Portado do projeto original (DeskcommCRM, issue #1802, commits f7b1ef40 e
   // 8e6220a6): link longo ou código Pix sem espaço estufava a bolha para além

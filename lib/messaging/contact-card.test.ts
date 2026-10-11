@@ -17,6 +17,17 @@ describe("contact-card", () => {
     expect(parsed?.phone_number).toBe("+5511999887766");
   });
 
+  // Portado do projeto original (DeskcommCRM, PR #2712).
+  it("parseVcard reconhece telefone agrupado do WhatsApp", () => {
+    const vcard =
+      "BEGIN:VCARD\nVERSION:3.0\nFN:Maria Sant Projetista\nitem1.TEL;waid=5511968914004:+55 11 96891-4004\nEND:VCARD";
+    expect(parseVcard(vcard)).toEqual({ name: "Maria Sant Projetista", phone_number: "+55 11 96891-4004" });
+  });
+
+  it("vCard ilegível não vira nome do contato", () => {
+    expect(resolveSharedContact({ type: "contact", body: "BEGIN:VCARD\nEND:VCARD", metadata: {} })).toBeNull();
+  });
+
   it("sharedContactFromMetadata lê objeto gravado", () => {
     const c = sharedContactFromMetadata({
       shared_contact: { contact_id: "abc", name: "João", phone_number: "+5511888777666" },
