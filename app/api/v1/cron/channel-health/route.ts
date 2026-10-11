@@ -17,22 +17,32 @@
  *
  * ─── O que ele NÃO faz ─────────────────────────────────────────────────────
  *
- * Não reinicia sessão. Religar sozinho uma conexão que caiu por bloqueio da
- * plataforma é a receita para transformar uma suspensão temporária em definitiva
- * — e reconectar exige, com frequência, um humano com o celular na mão. O vigia
- * informa; a decisão é de quem lê.
+ * Não reinicia sessão CAÍDA. Religar sozinho uma conexão que caiu por bloqueio
+ * da plataforma é a receita para transformar uma suspensão temporária em
+ * definitiva — e reconectar exige, com frequência, um humano com o celular na
+ * mão. Sobre `FAILED` e `SCAN_QR_CODE` o vigia informa; a decisão é de quem lê.
  *
- * ─── E o watchdog do worker, que RELIGA? ───────────────────────────────────
+ * ─── Quem religa o quê: três regras, três estados ──────────────────────────
  *
- * `lib/agent-engine/edge/crm/session-reconciler.ts` religa — e as duas regras
- * não se contradizem porque falam de estados diferentes. Ele retoma APENAS
- * `STOPPED`, que é a sessão que o transporte não iniciou (contêiner reiniciado,
- * com a credencial intacta no volume), e NUNCA `FAILED` nem `SCAN_QR_CODE`, que
- * são justamente os estados de sessão derrubada pela plataforma ou deslogada. É
- * sobre esses dois que o parágrafo acima fala, e sobre eles nada religa sozinho.
+ *   1. `FAILED` / `SCAN_QR_CODE` — sessão derrubada pela plataforma ou
+ *      deslogada. NADA religa sozinho. É o parágrafo acima, e ele vale inteiro.
+ *   2. `STOPPED` — sessão que o transporte não iniciou (contêiner reiniciado,
+ *      com a credencial intacta no volume). Quem retoma é o watchdog do worker,
+ *      `lib/agent-engine/edge/crm/session-reconciler.ts`, e APENAS esse estado.
+ *   3. `WORKING` e surda — a sessão caiu, voltou sozinha, diz que está de pé e
+ *      não entrega o que chega (medido em 10/10/2026). Quem reinicia é ESTE
+ *      cron, pela regra de `lib/channels/vigia-de-surdez.ts`: reinício suave
+ *      (stop + start, nunca logout), no máximo UMA vez por queda, e sempre com
+ *      aviso na Central.
  *
- * Se alguém for afrouxar aquele filtro, é este parágrafo que precisa cair
- * primeiro — e a razão dele continua de pé.
+ * A regra 3 não contradiz a 1 porque fala de outro estado: o transporte acabou
+ * de responder `WORKING`, a credencial está intacta e a plataforma não derrubou
+ * ninguém. Reiniciar ali é o que a pessoa faria ao clicar em Reconectar. Uma
+ * sessão que o reinício deixe em `FAILED` ou `SCAN_QR_CODE` cai na regra 1, e
+ * a trava de uma vez por queda impede a segunda tentativa.
+ *
+ * Se alguém for afrouxar qualquer um desses filtros, é o item correspondente
+ * desta lista que precisa cair primeiro — e a razão do item 1 continua de pé.
  *
  * Auth: Bearer INTERNAL_CRON_SECRET|INTERNAL_SECRET (fail-closed), como os demais.
  *
@@ -52,7 +62,20 @@ import {
   type ChannelProvider,
   type ChannelSessionRef,
 } from "@/lib/channels";
-import { STATUS_REASON_DESCONECTADO_NO_APP, sincronizarSaudeDaConexao } from "@/lib/channels/health";
+import { audit } from "@/lib/audit";
+import {
+  REF_KIND_SESSAO,
+  STATUS_REASON_DESCONECTADO_NO_APP,
+  sincronizarSaudeDaConexao,
+} from "@/lib/channels/health";
+import {
+  CHAVE_DO_VIGIA,
+  avisoDeSurdez,
+  avisoPendenteDoVigia,
+  decidirVigiaDeSurdez,
+  lerMarcaDoVigia,
+  type MarcaDoVigia,
+} from "@/lib/channels/vigia-de-surdez";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -70,7 +93,42 @@ type LinhaDeSessao = ChannelSessionRef & {
   display_name: string | null;
   phone_number: string | null;
   archived_at: string | null;
+  last_status_change_at: string | null;
+  metadata: unknown;
 };
+
+/**
+ * Grava `metadata.vigia_surdez` sem pisar nas outras chaves (`ai_gate`,
+ * `ai_test_phone_numbers`...). LANÇA se não conseguir ler ou gravar: a marca é
+ * a trava do laço, e reiniciar sem ela é reiniciar de novo na rodada seguinte.
+ *
+ * ponytail: lê e regrava o jsonb inteiro. Uma edição de `metadata` que caia
+ * entre as duas chamadas (milissegundos) se perde. Se isso um dia doer, vira
+ * `jsonb_set` numa função SQL, que pede migration.
+ */
+async function gravarMarcaDoVigia(
+  admin: ReturnType<typeof createAdminClient>,
+  s: Pick<LinhaDeSessao, "id" | "organization_id">,
+  marca: MarcaDoVigia,
+): Promise<void> {
+  const { data, error: erroDeLeitura } = await admin
+    .from("channel_sessions")
+    .select("metadata")
+    .eq("id", s.id)
+    .eq("organization_id", s.organization_id)
+    .maybeSingle();
+  if (erroDeLeitura || !data) throw new Error("vigia_surdez_metadata_ilegivel");
+  const atual =
+    data.metadata && typeof data.metadata === "object" && !Array.isArray(data.metadata)
+      ? (data.metadata as Record<string, unknown>)
+      : {};
+  const { error } = await admin
+    .from("channel_sessions")
+    .update({ metadata: { ...atual, [CHAVE_DO_VIGIA]: marca } })
+    .eq("id", s.id)
+    .eq("organization_id", s.organization_id);
+  if (error) throw new Error("vigia_surdez_marca_nao_gravada");
+}
 
 async function handle(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
@@ -90,7 +148,7 @@ async function handle(req: NextRequest): Promise<Response> {
   const { data, error } = await admin
     .from("channel_sessions")
     .select(
-      `id, organization_id, status, display_name, phone_number, archived_at, status_reason, ${CHANNEL_SESSION_REF_COLUMNS}`,
+      `id, organization_id, status, display_name, phone_number, archived_at, status_reason, last_status_change_at, metadata, ${CHANNEL_SESSION_REF_COLUMNS}`,
     )
     .is("archived_at", null)
     .limit(LIMITE);
@@ -171,6 +229,102 @@ async function handle(req: NextRequest): Promise<Response> {
         apelido,
       );
       desfechos[desfecho] = (desfechos[desfecho] ?? 0) + 1;
+
+      // ─── Conectada, mas surda ─────────────────────────────────────────────
+      //
+      // Mesma pergunta de cima, feita ao CANAL: quem sabe se reiniciar sem
+      // deslogar expõe `restart`; quem não sabe fica de fora sem ninguém
+      // perguntar qual provider ele é.
+      if (adapter.restart) {
+        const agora = new Date();
+        const marca = lerMarcaDoVigia(s.metadata);
+
+        if (marca && avisoPendenteDoVigia(s.metadata, agora)) {
+          // O aviso do reinício da rodada ANTERIOR. Direto na Central, e não por
+          // `escalated_status`: aquela coluna guarda um episódio de QUEDA por
+          // sessão, e o próprio reinício passa por STOPPED e WORKING, que a
+          // sobrescrevem e fecham. Quem garante o "uma vez" aqui é `avisado_em`.
+          const { error: erroDoAviso } = await admin.from("agent_inbox_items").insert({
+            organization_id: s.organization_id,
+            kind: "channel_number_alert",
+            severity: "warn",
+            ...avisoDeSurdez(apelido, marca.falhou === true),
+            ref_kind: REF_KIND_SESSAO,
+            ref_id: s.id,
+          });
+          if (!erroDoAviso) {
+            await gravarMarcaDoVigia(admin, s, { ...marca, avisado_em: agora.toISOString() });
+            desfechos.surdez_avisada = (desfechos.surdez_avisada ?? 0) + 1;
+          }
+        }
+
+        // Só vale o que o transporte confirmou NESTA rodada e que não mudou
+        // agora: se o status acabou de ser corrigido acima, a data lida no
+        // início do laço já está velha e o silêncio contaria do lugar errado.
+        const mudouEm = s.last_status_change_at;
+        const entrada = {
+          status: saude.reachable && statusFinal === s.status ? saude.status : null,
+          lastStatusChangeAt: mudouEm,
+          metadata: s.metadata,
+          agora,
+        };
+        // Duas voltas na mesma regra pura para só pagar a consulta de mensagens
+        // quando TODO o resto já aponta surdez. Na rodada comum (a cada 5 min,
+        // sessão saudável ou fora da janela) este bloco não toca no banco.
+        if (mudouEm && decidirVigiaDeSurdez({ ...entrada, houveEntradaDesdeAMudanca: false }).acao === "reiniciar") {
+          // Service role ignora RLS: `organization_id` vai explícito. A coluna
+          // `messages.channel_session_id` tem índice próprio.
+          const { data: entrou, error: erroDaBusca } = await admin
+            .from("messages")
+            .select("id")
+            .eq("organization_id", s.organization_id)
+            .eq("channel_session_id", s.id)
+            .eq("direction", "inbound")
+            .gt("created_at", mudouEm)
+            .limit(1);
+          // Não deu para perguntar NÃO é "não entrou nada": na dúvida, não reinicia.
+          const houveEntradaDesdeAMudanca = Boolean(erroDaBusca) || (entrou ?? []).length > 0;
+
+          if (decidirVigiaDeSurdez({ ...entrada, houveEntradaDesdeAMudanca }).acao === "reiniciar") {
+            // A marca vai ANTES do reinício: se o processo morrer no meio, a
+            // trava já existe. Cada queda rende no máximo uma tentativa.
+            const reiniciado_em = agora.toISOString();
+            await gravarMarcaDoVigia(admin, s, { reiniciado_em });
+
+            let reiniciou = false;
+            try {
+              await adapter.restart({ organizationId: s.organization_id, sessionRef });
+              reiniciou = true;
+            } catch (err) {
+              logger.error("[channel-health] reinício da sessão surda falhou", {
+                sessionId: s.id,
+                detail: err instanceof Error ? err.message : "erro",
+                requestId,
+              });
+              // O aviso da próxima rodada precisa dizer a verdade: tentou e não deu.
+              await gravarMarcaDoVigia(admin, s, { reiniciado_em, falhou: true });
+              desfechos.surdez_reinicio_falhou = (desfechos.surdez_reinicio_falhou ?? 0) + 1;
+            }
+
+            // `status` e `last_status_change_at` NÃO são gravados aqui: os
+            // eventos do próprio reinício (STOPPED, STARTING, WORKING) chegam
+            // pelo webhook e são a fonte. Gravar "STARTING" por cima de um
+            // WORKING que já chegou travaria o envio até a próxima rodada.
+            if (reiniciou) {
+              desfechos.surdez_reiniciada = (desfechos.surdez_reiniciada ?? 0) + 1;
+              void audit({
+                action: "channel.reconnected",
+                organizationId: s.organization_id,
+                resourceType: "channel_session",
+                resourceId: s.id,
+                bypassedRls: true,
+                requestId,
+                metadata: { origem: "vigia_de_surdez", force: false, sem_entrada_desde: mudouEm },
+              });
+            }
+          }
+        }
+      }
     } catch (err) {
       // Uma sessão problemática não derruba o lote — as outras ainda precisam
       // ser vigiadas, e é justamente numa rodada assim que alguma pode ter caído.
