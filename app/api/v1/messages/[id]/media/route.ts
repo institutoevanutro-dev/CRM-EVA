@@ -136,7 +136,10 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
       return response;
     }
     if (signErr) {
-      console.error("[messages.media] createSignedUrl failed", signErr.message);
+      logger.error("messages.media.sign_failed", {
+        message_id: messageId,
+        erro: signErr.message,
+      });
     }
   }
 

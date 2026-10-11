@@ -8,8 +8,7 @@ import { AgendaDeferredError } from '@/lib/agenda/protecao-followup';
 import { StaleServiceBoundaryError } from '@/lib/atendimento/fronteira';
 import { requireCurrentServiceBoundary } from '@/lib/atendimento/fronteira-server';
 import { parseServiceBoundary } from '@/lib/atendimento/fronteira';
-import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
-import { ttlDaAutorizacaoMs } from '@/lib/ai/elegibilidade/gate';
+import { pessoaNoComandoDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 /**
  * Borda de saída pós-fusão: envio de mensagem SEMPRE via `sendMessageHandler` do
  * próprio app (app/api/v1/messages/_handler.ts) — o handler insere a linha
@@ -98,12 +97,6 @@ export interface SendMessageInput {
 export type TurnSendOutcome = SendOutcome | { kind: 'human_took_over'; motivo: string };
 
 /**
- * Jobs cujo envio é ORDEM de uma pessoa (resposta aprovada, link da reunião):
- * a conversa ter dono humano é o estado normal deles, não motivo para calar.
- */
-const ENVIOS_A_MANDO_DE_PESSOA = new Set(['approved_reply', 'transactional_delivery']);
-
-/**
  * UMA PESSOA ASSUMIU A CONVERSA DEPOIS QUE O TURNO COMEÇOU?
  *
  * ## O defeito (medido em produção, 08 e 09/10/2026)
@@ -147,16 +140,13 @@ async function pessoaAssumiuAConversa(
   input: Pick<SendMessageInput, 'tenantId' | 'conversationId'>,
   kind: string | undefined,
 ): Promise<string | null> {
-  if (kind !== undefined && ENVIOS_A_MANDO_DE_PESSOA.has(kind)) return null;
-  const elegib = await decidirElegibilidadeDaConversa(db, {
-    organizationId: input.tenantId,
-    conversationId: input.conversationId,
-    agora: new Date(),
-    ttlMs: ttlDaAutorizacaoMs(process.env),
-    // Mesma exceção do começo do turno: silêncio de canal sem IA é roteamento.
-    followup: kind === 'followup_turn',
-  });
-  return elegib !== null && !elegib.permite && !elegib.bloqueioPorAllowlist ? elegib.motivo : null;
+  // A regra mora em `pessoaNoComandoDaConversa`: as ferramentas de escrita do
+  // turno (`guardServiceTools`) perguntam a mesma coisa.
+  return pessoaNoComandoDaConversa(
+    db,
+    { organizationId: input.tenantId, conversationId: input.conversationId },
+    kind,
+  );
 }
 
 /** Fallback do ator ai_agent quando não há agente publicado (cfg.agentActorId). */

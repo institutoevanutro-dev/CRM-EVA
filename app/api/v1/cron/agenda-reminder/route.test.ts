@@ -395,8 +395,47 @@ describe("escolherCanalDoLembrete — sempre um canal de envio automático, de p
   });
 });
 
+// Porte parcial do upstream melgarafael/DeskcommCRM#2669: a conversa em que o
+// horário foi MARCADO manda no número do lembrete, antes da conversa mais recente.
+describe("escolherCanalDoLembrete — a origem da reserva vem antes da conversa mais recente", () => {
+  const ZAP = providersDeEnvioAutomatico()[0] as string;
+  const sessoes = [
+    { id: "zap-recepcao", provider: ZAP },
+    { id: "zap-comercial", provider: ZAP },
+  ];
+  // O paciente marcou falando com a recepção e, depois, escreveu para o comercial.
+  const conversas = [
+    { id: "conv-comercial", channel_session_id: "zap-comercial" },
+    { id: "conv-recepcao", channel_session_id: "zap-recepcao" },
+  ];
+
+  it("o lembrete sai pelo número em que a consulta foi marcada", () => {
+    expect(escolherCanalDoLembrete(sessoes, conversas, new Date(), "conv-recepcao")).toBe("zap-recepcao");
+  });
+
+  it("controle: compromisso sem conversa de origem segue a conversa mais recente", () => {
+    expect(escolherCanalDoLembrete(sessoes, conversas, new Date(), null)).toBe("zap-comercial");
+  });
+
+  it("número da reserva desconectado: cai na regra de antes, o lembrete não deixa de sair", () => {
+    expect(
+      escolherCanalDoLembrete([{ id: "zap-comercial", provider: ZAP }], conversas, new Date(), "conv-recepcao"),
+    ).toBe("zap-comercial");
+  });
+
+  it("conversa de origem que não é deste contato (fora da lista lida) não escolhe nada", () => {
+    expect(escolherCanalDoLembrete(sessoes, conversas, new Date(), "conv-de-outro-contato")).toBe("zap-comercial");
+  });
+});
+
 describe("as consultas do canal (estrutural)", () => {
   const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+
+  it("a varredura traz a conversa da reserva e a escolha do canal a recebe", () => {
+    const varredura = fonte.slice(fonte.indexOf('.from("calendar_appointments")')).slice(0, 400);
+    expect(varredura).toContain("conversation_id");
+    expect(fonte).toContain("escolherCanalDoLembrete(sessoes ?? [], conversas ?? [], agora, linha.conversation_id)");
+  });
 
   it("sessões: da organização, WORKING, de envio automático, não arquivadas, em ordem fixa", () => {
     const sessoes = fonte.slice(fonte.indexOf('.from("channel_sessions")')).slice(0, 500);

@@ -8,6 +8,7 @@ import { NextRequest } from "next/server";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
 
 vi.mock("@/lib/auth/server", () => ({ loadAuthUser: vi.fn(), resolveActiveOrg: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
@@ -41,6 +42,8 @@ function montar(opts: {
   variante?: string;
   itemId?: string | null;
   metadata?: Record<string, unknown>;
+  caminhoGravado?: string;
+  falhaAoAssinar?: string;
 }) {
   const assinados: string[] = [];
   const buckets: string[] = [];
@@ -50,7 +53,7 @@ function montar(opts: {
     organization_id: opts.msgOrg ?? ORG,
     media_url: null,
     media_mime: "image/png",
-    media_storage_path: null,
+    media_storage_path: opts.caminhoGravado ?? null,
     channel_session_id: null,
     media_library_item_id: itemId,
     metadata: opts.metadata ?? (opts.variante ? { media_variant: opts.variante } : {}),
@@ -77,7 +80,9 @@ function montar(opts: {
         {
           createSignedUrl: async (p: string) => (
             assinados.push(p),
-            { data: { signedUrl: `https://sb.test/${b}/${p}?t=1` }, error: null }
+            opts.falhaAoAssinar
+              ? { data: null, error: { message: opts.falhaAoAssinar } }
+              : { data: { signedUrl: `https://sb.test/${b}/${p}?t=1` }, error: null }
           ),
         }
       ),
@@ -149,5 +154,21 @@ describe("GET /messages/[id]/media com mídia podada pela retenção (migration 
   it("sem o marcador continua 404", async () => {
     montar({ itemId: null });
     expect((await chamar()).status).toBe(404);
+  });
+});
+
+// Porte do upstream melgarafael/DeskcommCRM#2740 (recorte do #1921, de @mrmateussiilva).
+describe("GET /messages/[id]/media quando o armazenamento não assina o link", () => {
+  it("o erro sai no log estruturado, com a mensagem de quem é, e não em console.error", async () => {
+    const solto = vi.spyOn(console, "error").mockImplementation(() => {});
+    const estruturado = vi.spyOn(logger, "error").mockImplementation(() => {});
+    montar({ itemId: null, caminhoGravado: `${ORG}/a.ogg`, falhaAoAssinar: "bucket fora do ar" });
+
+    expect((await chamar()).status).toBe(404);
+    expect(estruturado).toHaveBeenCalledWith("messages.media.sign_failed", {
+      message_id: MSG,
+      erro: "bucket fora do ar",
+    });
+    expect(solto).not.toHaveBeenCalled();
   });
 });

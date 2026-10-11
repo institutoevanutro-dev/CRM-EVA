@@ -14,6 +14,7 @@ import { silencioDoBotEhRoteamento } from "@/lib/channels/capabilities";
 import {
   decidirElegibilidade,
   montarEstadoDeElegibilidade,
+  ttlDaAutorizacaoMs,
   type DecisaoDeElegibilidade,
 } from "./gate";
 
@@ -80,4 +81,34 @@ export async function decidirElegibilidadeDaConversa(
       silencioEhRoteamento: input.followup === true && silencioDoBotEhRoteamento(r.provider),
     }),
   );
+}
+
+/**
+ * Jobs cujo efeito é ORDEM de uma pessoa (resposta aprovada, link da reunião):
+ * a conversa ter dono humano é o estado normal deles, não motivo para calar.
+ */
+const A_MANDO_DE_PESSOA = new Set(["approved_reply", "transactional_delivery"]);
+
+/**
+ * Uma pessoa está no comando desta conversa AGORA? Devolve o motivo, ou `null`.
+ *
+ * Só os três vetos de pessoa contam (`force_human`, silêncio em vigor, dono
+ * humano): são os `!permite` sem `bloqueioPorAllowlist`. A mesma leitura serve
+ * ao envio, bolha a bolha (`sendTurnMessage`, onde está a história do defeito),
+ * e às ferramentas de escrita do turno (`guardServiceTools`).
+ */
+export async function pessoaNoComandoDaConversa(
+  pool: Parameters<typeof decidirElegibilidadeDaConversa>[0],
+  alvo: { organizationId: string; conversationId: string },
+  kind: string | undefined,
+): Promise<string | null> {
+  if (kind !== undefined && A_MANDO_DE_PESSOA.has(kind)) return null;
+  const elegib = await decidirElegibilidadeDaConversa(pool, {
+    ...alvo,
+    agora: new Date(),
+    ttlMs: ttlDaAutorizacaoMs(process.env),
+    // Mesma exceção do começo do turno: silêncio de canal sem IA é roteamento.
+    followup: kind === "followup_turn",
+  });
+  return elegib !== null && !elegib.permite && !elegib.bloqueioPorAllowlist ? elegib.motivo : null;
 }
