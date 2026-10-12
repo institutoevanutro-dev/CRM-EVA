@@ -17,7 +17,7 @@ import type pg from "pg";
 import { prontidaoDoDrainDaIa } from "@/lib/agent-engine/edge/crm/drain";
 import { sessionHealthMetrics } from "@/lib/agent-engine/edge/crm/session-watchdog";
 import { prontidaoDoLacoDeEventLog } from "@/lib/event-log/drain-loop";
-import { metricsSnapshot } from "@/lib/agent-engine/obs/metrics";
+import { metricsSnapshot, profundidadeDaFilaViva } from "@/lib/agent-engine/obs/metrics";
 import type { Logger } from "@/lib/agent-engine/obs/logger";
 
 /** Mesma disciplina da fila: 1ª linha truncada, PII fora. */
@@ -56,13 +56,7 @@ export function createHealthzServer(
     // e é justamente quando ele não responde que o carimbo envelhece.
     const ia_drain = prontidaoDoDrainDaIa();
     try {
-      const { rows } = await pool.query<{ status: string; n: number }>(
-        "select status, count(*)::int as n from job_queue group by status",
-      );
-      const queue = { pending: 0, running: 0, dead: 0 };
-      for (const row of rows) {
-        if (row.status in queue) queue[row.status as keyof typeof queue] = row.n;
-      }
+      const queue = await profundidadeDaFilaViva(pool);
       const sessions = await sessionHealthMetrics(pool);
       // O laço do event_log é informação de saúde de PRIMEIRA classe (#604): na
       // #648 este mesmo handler respondia 200 com o laço parado havia dez dias.

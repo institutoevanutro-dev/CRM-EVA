@@ -23,6 +23,7 @@ import type pg from "pg";
 
 vi.mock("@/lib/agent-engine/obs/metrics", () => ({
   metricsSnapshot: async () => ({}),
+  profundidadeDaFilaViva: async () => ({ pending: 0, running: 0 }),
 }));
 vi.mock("@/lib/agent-engine/edge/crm/session-watchdog", () => ({
   sessionHealthMetrics: async () => [],
