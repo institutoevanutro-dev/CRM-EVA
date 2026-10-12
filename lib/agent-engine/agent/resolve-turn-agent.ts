@@ -71,6 +71,14 @@ import { classifyIntent } from './intent-classifier';
 import { buildFatosDoContato } from './fatos-do-contato';
 import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-context';
 
+/**
+ * Teto de tempo da leitura dos fatos. Mesmo motivo e mesmo valor do `TETO_MS` de
+ * `agente-da-campanha.ts`: um `await` sem limite no caminho quente seguraria o
+ * turno inteiro por causa de um enfeite de roteamento. O teto mora aqui e não em
+ * `buildFatosDoContato`, que a tela de teste do roteador pode esperar.
+ */
+const TETO_DOS_FATOS_MS = 500;
+
 export interface TurnAgentResolution {
   config: PublishedAgentConfig | null; // null ⇒ turno segue no genérico (comportamento atual)
   routerId: string | null;
@@ -233,11 +241,17 @@ export async function resolveTurnAgent(
 
     // Fatos do CRM para o classificador (agenda do contato). No motor, `leadId` É o
     // contact_id. Falha aqui nunca derruba o turno: classifica só com a mensagem.
+    const avisoDosFatos = 'resolve-turn-agent: fatos do contato indisponíveis — classificando só com a mensagem';
     let fatos: string | null = null;
     try {
-      fatos = await _buildFatos(db, input.tenantId, input.leadId, (deps.agora ?? (() => new Date()))());
+      // `Promise.race`, como no degrau 0: o teto vale também com o pool esgotado.
+      fatos = await Promise.race([
+        _buildFatos(db, input.tenantId, input.leadId, (deps.agora ?? (() => new Date()))()),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), TETO_DOS_FATOS_MS)),
+      ]);
+      if (fatos === null) deps.log.warn(avisoDosFatos, { routerId: router.id, error: 'timeout' });
     } catch (err) {
-      deps.log.warn('resolve-turn-agent: fatos do contato indisponíveis — classificando só com a mensagem', {
+      deps.log.warn(avisoDosFatos, {
         routerId: router.id,
         error: err instanceof Error ? err.message : String(err),
       });

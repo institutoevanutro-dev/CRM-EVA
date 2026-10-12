@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveConversationTurn, resolveTurnAgent } from './resolve-turn-agent';
 import type { PublishedAgentConfig } from './agent-config';
@@ -364,6 +364,47 @@ describe('resolveTurnAgent — fatos do contato para o classificador', () => {
     expect(semFatos.outcome).toBe('classified');
     expect(semFatos.config?.agentId).toBe('agent-suporte');
     expect(semFatos.routerId).toBe('router-1');
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it('leitura dos fatos que não volta: estoura o teto, avisa e classifica só com a mensagem', async () => {
+    const input = { ...baseInput, signal: 'deu erro aqui', stickyAgentId: null, stickyIntent: null };
+    const montar = (buildFatosDoContato: ReturnType<typeof vi.fn>, warn: ReturnType<typeof vi.fn>) => {
+      const classifyIntent = vi.fn().mockResolvedValue({ intentName: 'suporte', confidence: 0.8 });
+      return {
+        classifyIntent,
+        deps: makeDeps({
+          loadActiveRouter: vi.fn().mockResolvedValue(router({ sticky: false })),
+          loadPublishedAgentConfigById: idAwareLoader(),
+          // Sem isto o degrau 0 real arma o próprio timer de 500 ms num `{}`.
+          agenteDaCampanha: vi.fn().mockResolvedValue(null),
+          classifyIntent, buildFatosDoContato, warn,
+        }),
+      };
+    };
+    const semFatosRef = montar(vi.fn().mockRejectedValue(new Error('x')), vi.fn());
+    const referencia = await resolveTurnAgent({} as never, {} as never, input, semFatosRef.deps);
+
+    vi.useFakeTimers();
+    const warn = vi.fn();
+    const preso = montar(vi.fn(() => new Promise<string>(() => {})), warn);
+    const pendente = resolveTurnAgent({} as never, {} as never, input, preso.deps);
+    await vi.advanceTimersByTimeAsync(499);
+    expect(preso.classifyIntent).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    const out = await pendente;
+
+    expect(preso.classifyIntent).toHaveBeenCalledTimes(1);
+    expect(preso.classifyIntent.mock.calls[0]![2].fatos).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      'resolve-turn-agent: fatos do contato indisponíveis — classificando só com a mensagem',
+      { routerId: 'router-1', error: 'timeout' },
+    );
+    expect(out).toEqual(referencia);
+    expect(out.outcome).toBe('classified');
+    expect(out.config?.agentId).toBe('agent-suporte');
   });
 
   it('sem mensagem (follow-up): não lê fatos nem classifica', async () => {
