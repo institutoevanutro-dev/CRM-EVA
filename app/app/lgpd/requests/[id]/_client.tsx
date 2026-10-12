@@ -17,6 +17,7 @@ import { ApproveButton } from "./ApproveButton";
 import { FORMA_DE_ENTREGA_LABELS, MarcarEntregueButton } from "./MarcarEntregueButton";
 import { AuditTrail } from "./AuditTrail";
 import type { LgpdRequestStatus, LgpdRequestType } from "@/hooks/useLgpdRequests";
+import { prazoEmBr } from "@/lib/lgpd/sla";
 import { LGPD_CANAL_LABELS, type LgpdCanalDeChegada, type LgpdFormaDeEntrega } from "@/lib/lgpd/types";
 
 interface Props {
@@ -121,7 +122,9 @@ export function LgpdRequestDetail({ id }: Props) {
             <>
               {" · "}
               {t("Vence em")}{" "}
-              {format(new Date(request.due_at), "dd/MM/yyyy", { locale: localeDaData })}
+              {/* O DIA que a coluna guarda, não o instante no fuso do navegador: no
+                  Brasil o `format(new Date(due_at))` mostrava a véspera do prazo. */}
+              {prazoEmBr(request.due_at)}
             </>
           )}
         </p>

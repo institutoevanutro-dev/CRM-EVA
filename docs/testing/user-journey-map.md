@@ -2712,6 +2712,27 @@ Ambiente fresco estilo VPS: Supabase local próprio (pg15), `baseline.sql`, `nex
 
 **O que esta jornada NÃO tem, e é achado, não cobertura:**
 
-- **Não existe botão para CRIAR um pedido.** A única porta que cria `lgpd_requests` é o webhook da Nuvemshop. Numa clínica sem loja, o pedido de um paciente não tem por onde entrar no sistema; nas specs ele nasce por insert, com o que o webhook gravaria.
-- **Não existe ação para ENCERRAR um "Revisão pendente"** depois que o operador entrega o PDF à mão. O pedido fica nesse estado, e o alarme de prazo (`lgpd-sla-watcher`) segue avisando.
+- ~~Não existe botão para CRIAR um pedido.~~ **Fechado na J33:** "Registrar pedido", em LGPD › Solicitações.
+- ~~Não existe ação para ENCERRAR um "Revisão pendente".~~ **Fechado na J33:** "Marcar como entregue", na página do pedido.
 - **Pedido "Falhou" não avisa ninguém pelo prazo:** o `lgpd-sla-watcher` ignora `failed`. O que avisa é o evento morto na Central (`event_dead`), depois de 5 tentativas do dreno.
+
+## J33 — A equipe registra o pedido do titular pela tela e fecha a entrega em mãos `[P1]` (2026-10-12)
+
+Ambiente fresco estilo VPS: Supabase local próprio (pg15), `baseline.sql`, `next build` + `next start`, **sem** `RESEND_API_KEY`. Evidência em `.superpowers/evidence/lgpd-registrar/`. Spec: `tests/e2e/lgpd-registrar-pedido-pela-tela.spec.ts` (no CI, parte 3).
+
+| Caso | O que o administrador faz | Resultado |
+|---|---|---|
+| J33.1 | LGPD › Solicitações › "Registrar pedido": procura o contato, escolhe "Cópia dos dados", "Pessoalmente", a data de três dias atrás, escreve a observação e registra | RESULTADO_J33_1 |
+| J33.2 | Abre o pedido pela lista | RESULTADO_J33_2 |
+| J33.3 | Tenta registrar de novo o mesmo pedido para o mesmo contato | RESULTADO_J33_3 |
+| J33.4 | Aprova ("Aprovar export"), o dreno roda | RESULTADO_J33_4 |
+| J33.5 | "Marcar como entregue": escolhe como entregou, escreve a observação, confirma | RESULTADO_J33_5 |
+| J33.6 | Registra um pedido de APAGAMENTO e o dreno roda | RESULTADO_J33_6 |
+
+**O que esta jornada NÃO tem, e é achado, não cobertura:**
+
+- **A lista mostra o titular como `ctt:` + o começo do id do contato**, não pelo nome. Para achar o pedido de um paciente é preciso abri-lo (a página mostra o id inteiro) ou reconhecer pela data. Não foi mexido aqui.
+- **A coluna "Vence" da lista e a linha do tempo da página do pedido seguem contando em milissegundos e dias corridos** (dívida declarada em `tests/unit/lgpd-prazo-e-dia-civil.test.ts`). O que passou a estar certo é o "Vence em DD/MM/AAAA" do cabeçalho da página do pedido e o aviso de "Pedido registrado. Prazo:".
+- **Pedido sobre quem não é contato não tem campo próprio.** O formulário deixa criar o contato ali mesmo ("Criar contato"); esse caminho não foi dirigido pela spec.
+- **A anonimização aprovada de um pedido registrado pela tela não foi executada nesta prova.** A spec para na confirmação de aprovação e cancela; o que a anonimização faz depois de aprovada é o caminho antigo, coberto pelos invariantes de LGPD.
+- **Dois registros no mesmo instante** (duas pessoas, mesmo contato, mesmo tipo) podem passar os dois: a regra de duplicata é conferida na aplicação, sem trava no banco.
