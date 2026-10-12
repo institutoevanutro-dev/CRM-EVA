@@ -57,25 +57,27 @@ Hoje o classificador recebe só o texto da mensagem. "Quero agendar consulta com
 
 Mudança: junto com a mensagem, o classificador recebe um resumo curto lido do CRM no momento do turno:
 
-- até 5 atendimentos concluídos mais recentes do contato: tipo do atendimento, nome do profissional responsável, data;
-- compromissos futuros do contato: tipo, profissional, data;
+- até 5 atendimentos anteriores mais recentes do contato (já terminados, sem cancelados nem faltas): nome do tipo de atendimento ou título, situação e data;
+- até 3 compromissos futuros do contato (pendentes ou confirmados): nome do tipo de atendimento ou título, situação e data;
 - quando não houver nenhum: "sem atendimentos registrados".
 
 As descrições dos assuntos passam a usar esses fatos: "para quem não tem atendimento concluído com o Dr. André" e "para quem já tem".
 
 Regras da mudança:
 
-- Só sai tipo, profissional e data. Nada de CPF, telefone, notas ou conteúdo clínico. O provedor do modelo já recebe a conversa inteira; esse resumo não acrescenta dado mais sensível.
+- Só sai nome do tipo de atendimento ou título, situação e data. Nada de CPF, telefone, notas ou conteúdo clínico. O provedor do modelo já recebe a conversa inteira; esse resumo não acrescenta dado mais sensível.
+- O título do compromisso só é usado quando ele veio da importação de histórico, que guarda ali o nome do procedimento. Nos demais, sem tipo cadastrado, o fato sai como "atendimento": título é texto livre e pode trazer o nome do contato (decisão de privacidade tomada na revisão).
+- A leitura tem teto de 500 ms. Passou disso, vale a regra da falha abaixo.
 - Leitura filtrada pela organização e pelo contato, sem depender de dados do corpo da requisição.
 - Se a leitura falhar, o classificador roda só com a mensagem, como hoje, e o registro do turno anota que rodou sem fatos.
-- A tela de teste do roteador ganha a opção de escolher um contato, para a bateria exercitar os fatos.
+- A tela de teste do roteador ganha a opção de escolher um contato, para a bateria exercitar os fatos, e funciona com o roteador ainda inativo.
 - Vale para qualquer organização: o resumo é genérico, quem dá sentido a ele é a descrição de cada assunto.
 - Sem mudança de banco. Entra com testes, fragmento de versão e mapa de arquitetura, pelo fluxo normal (PR, revisão, versão nova).
 
 Limites conhecidos:
 
 - Paciente cuja última consulta seja anterior ao que está na agenda do CRM (conferido de julho de 2026 em diante) aparece como novo e cai no agente 1. O agente 1 terá uma saída: se a pessoa disser que já é paciente, ele responde que vai seguir pelo retorno e a mensagem seguinte é reclassificada.
-- Os registros antigos não trazem o nome do profissional no título; a identificação é pelo responsável do compromisso. No plano confiro se isso separa bem o Dr. André dos demais.
+- Não há coluna de profissional no fato: o nome do profissional mora fora do alcance simples do motor. Quem identifica o profissional é o nome do tipo de atendimento, que nesta clínica já o traz ("Primeira consulta — Dr. André"). Registro sem tipo e sem título importado não diz de quem foi o atendimento.
 - A decisão continua sendo de um modelo. Se a bateria mostrar erro na separação novo/paciente, o passo seguinte é uma regra fixa por assunto (condição exata conferida pelo sistema), que fica fora deste desenho.
 
 ## 6. Bateria de teste do roteador
@@ -124,4 +126,3 @@ Desativar o roteador do canal. A conversa volta a ser atendida pelo agente publi
 ## 11. Pontos a confirmar no plano
 
 - Se o bloco comum cabe na Memória da organização.
-- Se o responsável do compromisso identifica bem o Dr. André nos registros antigos.
