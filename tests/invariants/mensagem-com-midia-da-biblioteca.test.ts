@@ -2,6 +2,7 @@ import pg from "pg";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { GOV_CONTACT_1, GOV_CONV_UNASSIGNED, GOV_ORG, GOV_SESSION, seedGov } from "./gov-helpers";
+import { sqlPedidoAprovado } from "./lgpd-pedido-aprovado";
 
 /**
  * MENSAGEM COM MÍDIA DA BIBLIOTECA (migration 0327).
@@ -48,6 +49,8 @@ beforeEach(async () => {
      values ($1, $2, 'redact', 'manual', 'contact', now() + interval '15 days') on conflict (id) do nothing`,
     [PEDIDO, ORG],
   );
+  // Desde a 0357 a cascata recusa pedido sem aprovação provada.
+  await q(sqlPedidoAprovado(PEDIDO, ORG));
   await q(
     `insert into media_library_items (id, organization_id, title, variants)
      values ($1, $2, 'Antes e depois', $3::jsonb)`,

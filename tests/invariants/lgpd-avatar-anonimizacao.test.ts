@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
+import { sqlPedidoAprovado } from "./lgpd-pedido-aprovado";
 
 /**
  * Invariantes da foto de perfil sob anonimização LGPD (migration 0099).
@@ -103,6 +104,8 @@ beforeAll(async () => {
      on conflict (id) do nothing`,
     [REQ, ORG],
   );
+  // Desde a 0357 a cascata recusa pedido sem aprovação provada.
+  await pool.query(sqlPedidoAprovado(REQ, ORG));
 });
 
 afterAll(async () => {

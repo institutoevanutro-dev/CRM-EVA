@@ -5,6 +5,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { GOV_ORG, GOV_SESSION, seedGov } from "./gov-helpers";
+import { sqlPedidoAprovado } from "./lgpd-pedido-aprovado";
 
 /**
  * ANONIMIZAR PELA TELA REDIGE TAMBÉM A NOTA INTERNA DA CONVERSA (migration 0312).
@@ -127,6 +128,8 @@ beforeAll(async () => {
      values($1,$2,'redact','manual','contact',now() + interval '15 days')`,
     [PEDIDO, ORG],
   );
+  // Desde a 0357 a cascata recusa pedido sem aprovação provada.
+  await q(sqlPedidoAprovado(PEDIDO, ORG));
   for (const c of [VIA_TELA, VIA_PEDIDO, VIZINHO]) await contatoComNota(c, ORG, GOV_SESSION);
   await contatoComNota(DA_OUTRA_ORG, ORG_OUTRA, SESSAO_OUTRA);
   // Anonimizado há uma hora, antes do gatilho existir, com a nota de duas horas.

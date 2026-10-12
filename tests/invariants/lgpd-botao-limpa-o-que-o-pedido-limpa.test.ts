@@ -5,6 +5,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { GOV_ADMIN, GOV_ORG, GOV_PIPELINE, GOV_SESSION, GOV_STAGE, seedGov } from "./gov-helpers";
+import { sqlPedidoAprovado } from "./lgpd-pedido-aprovado";
 
 /**
  * O BOTÃO "ANONIMIZAR" DA FICHA LIMPA O MESMO QUE O PEDIDO FORMAL (migration 0317).
@@ -268,6 +269,8 @@ beforeAll(async () => {
      values($1,$2,'redact','manual','contact',now() + interval '15 days')`,
     [PEDIDO, ORG],
   );
+  // Desde a 0357 a cascata recusa pedido sem aprovação provada.
+  await q(sqlPedidoAprovado(PEDIDO, ORG));
   for (const p of [PELO_BOTAO, PELO_PEDIDO, VIZINHO, PRINCIPAL, LAPIDE]) await semear(p);
   for (const p of [BOTAO_ANTIGO, PEDIDO_ANTIGO, BOTAO_ANTIGO_LID, PRINCIPAL_ANTIGO, LAPIDE_ANTIGA]) {
     await semear(p, "now() - interval '2 hours'");
