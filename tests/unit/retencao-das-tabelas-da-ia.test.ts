@@ -183,7 +183,7 @@ describe("as guardas moram no corpo das funções do baseline", () => {
   const RAIZ = join(__dirname, "..", "..");
   const BASELINE = readFileSync(join(RAIZ, "supabase", "baseline.sql"), "utf8");
   const MIGRATION = readFileSync(
-    join(RAIZ, "supabase", "migrations", "20261011130000_0354_retencao_do_historico_da_ia.sql"),
+    join(RAIZ, "supabase", "migrations", "20261011140000_0354_retencao_do_historico_da_ia.sql"),
     "utf8",
   );
 
