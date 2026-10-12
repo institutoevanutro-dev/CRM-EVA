@@ -284,6 +284,41 @@ const PARES: Array<{
     arquivo: "components/inbox/comentarios/ListaDeComentarios.tsx",
     simbolo: "SituacaoDoComentario",
   },
+  // ── lgpd_requests: os quatro vocabulários, nascidos de defeito REAL ──────────
+  //
+  // `LgpdRequestStatus` teve `pending_review` desde o EPIC-08 e o CHECK nunca
+  // teve: o worker de exportação gravava o estado, o banco respondia 23514, o
+  // erro não era lido, e o pedido do titular ficava em "Processando" para
+  // sempre (migration 0356). `source` divergia no outro sentido: o tipo
+  // oferecia `admin_panel`, que o CHECK recusa.
+  //
+  // Este invariante NÃO pegou porque a tabela de pares é feita à mão e
+  // `lgpd_requests` nunca entrou nela. Quem fecha essa porta é o último teste
+  // deste arquivo (coluna com CHECK de conjunto sem par reprova).
+  {
+    tabela: "lgpd_requests",
+    coluna: "status",
+    arquivo: "lib/lgpd/types.ts",
+    simbolo: "LGPD_REQUEST_STATUSES",
+  },
+  {
+    tabela: "lgpd_requests",
+    coluna: "source",
+    arquivo: "lib/lgpd/types.ts",
+    simbolo: "LgpdRequestSource",
+  },
+  {
+    tabela: "lgpd_requests",
+    coluna: "request_type",
+    arquivo: "lib/lgpd/types.ts",
+    simbolo: "LgpdRequestType",
+  },
+  {
+    tabela: "lgpd_requests",
+    coluna: "scope",
+    arquivo: "lib/lgpd/types.ts",
+    simbolo: "LgpdScope",
+  },
 ];
 
 /** Tira um nível de parênteses externos, se ele envolver a expressão inteira. */
@@ -492,4 +527,54 @@ describe("vocabulário: banco × TypeScript", () => {
       ).toEqual(noTs);
     });
   }
+
+  /**
+   * COLUNA COM CHECK DE CONJUNTO E SEM PAR É COLUNA QUE NINGUÉM VIGIA.
+   *
+   * A tabela de pares é feita à mão, e foi por aí que `lgpd_requests.status`
+   * passou: o CHECK existia, o tipo existia, os dois discordavam, e ninguém
+   * tinha escrito a linha que os compararia. Aqui o banco é quem lista: toda
+   * coluna de `public` cujo CHECK DEFINE um conjunto de textos tem de estar em
+   * `PARES` ou na dívida declarada em `vocabulario-sem-par.json`.
+   *
+   * A dívida SÓ ENCOLHE: coluna nova com CHECK nasce com o par. E entrada da
+   * dívida que já ganhou par, ou cuja coluna sumiu, reprova também, para a
+   * lista não virar um lugar onde se esconde coluna.
+   */
+  it("toda coluna com CHECK de conjunto tem par, ou está na dívida declarada", () => {
+    const bruto = sql(
+      `select c.relname || '.' || a.attname || '|' || pg_get_constraintdef(k.oid)
+         from pg_constraint k
+         join pg_class c on c.oid = k.conrelid
+         join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'public'
+         join pg_attribute a on a.attrelid = c.oid and a.attnum = k.conkey[1]
+        where k.contype = 'c' and cardinality(k.conkey) = 1 and c.relkind in ('r', 'p')
+        order by 1`,
+    );
+    const comCheck = new Set<string>();
+    for (const linha of bruto.split("\n").filter(Boolean)) {
+      const corte = linha.indexOf("|");
+      const alvo = linha.slice(0, corte);
+      if (literaisSeDefine(linha.slice(corte + 1), alvo.split(".")[1]!)?.length) comCheck.add(alvo);
+    }
+    expect(comCheck.size, "o extrator não achou CHECK de conjunto nenhum: falha do instrumento").toBeGreaterThan(20);
+
+    const comPar = new Set(PARES.map((p) => `${p.tabela}.${p.coluna}`));
+    const divida = new Set<string>(
+      JSON.parse(readFileSync("tests/invariants/vocabulario-sem-par.json", "utf8")) as string[],
+    );
+
+    const semDono = [...comCheck].filter((c) => !comPar.has(c) && !divida.has(c)).sort();
+    expect(
+      semDono,
+      `coluna com CHECK de conjunto sem par em PARES: aponte o tipo do TypeScript que a espelha.\n` +
+        `Se ainda não existe tipo, crie; a dívida em vocabulario-sem-par.json só encolhe.`,
+    ).toEqual([]);
+
+    const sobrando = [...divida].filter((c) => comPar.has(c) || !comCheck.has(c)).sort();
+    expect(
+      sobrando,
+      `entrada da dívida que já tem par ou não tem mais CHECK: tire de vocabulario-sem-par.json`,
+    ).toEqual([]);
+  });
 });

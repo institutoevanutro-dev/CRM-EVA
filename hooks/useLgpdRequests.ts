@@ -3,16 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 
-export type LgpdRequestStatus =
-  | "received"
-  | "processing"
-  | "completed"
-  | "failed"
-  | "pending_review";
-
 // Fonte única do vocabulário: lib/lgpd/types.ts (espelha o CHECK do banco).
-export type { LgpdRequestType } from "@/lib/lgpd/types";
-import type { LgpdRequestType } from "@/lib/lgpd/types";
+export type { LgpdRequestStatus, LgpdRequestType } from "@/lib/lgpd/types";
+import type { LgpdRequestStatus, LgpdRequestType } from "@/lib/lgpd/types";
 
 export type SlaBucket = "overdue" | "critical" | "warning" | "ok";
 

@@ -13,14 +13,13 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { LGPD_REQUEST_STATUSES } from "@/lib/lgpd/types";
 import { computeSlaBucket } from "@/lib/lgpd/balde-de-sla";
 
 export const dynamic = "force-dynamic";
 
 const querySchema = z.object({
-  status: z
-    .enum(["received", "processing", "completed", "failed", "pending_review"])
-    .optional(),
+  status: z.enum(LGPD_REQUEST_STATUSES).optional(),
   type: z
     .enum(["redact", "data_request", "store_redact"])
     .optional(),

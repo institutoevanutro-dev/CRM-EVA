@@ -12,6 +12,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
+import { LGPD_REQUEST_STATUSES } from "@/lib/lgpd/types";
 import { ID, INSTANTE, lerCursorJson } from "@/lib/api/filtro-postgrest";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +22,7 @@ export const dynamic = "force-dynamic";
 // ---------------------------------------------------------------------------
 
 const querySchema = z.object({
-  status: z
-    .enum(["received", "processing", "completed", "failed", "pending_review"])
-    .optional(),
+  status: z.enum(LGPD_REQUEST_STATUSES).optional(),
   request_type: z
     .enum(["redact", "data_request", "store_redact"])
     .optional(),
