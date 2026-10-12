@@ -7,6 +7,6 @@ A regra que decide quem pediu para parar de receber mensagens bloqueava a pacien
 
 Agora só bloqueia quando o que a pessoa recusa é a mensagem da clínica ("não quero receber mensagens", "não quero receber propaganda", "não quero mais receber nada de vocês") ou quando ela não diz o quê mas diz que é para parar ("não quero mais receber", "quero parar de receber"). Esses pedidos seguem sendo respeitados na hora, como antes.
 
-O que fica no meio do caminho ("não quero receber" sem dizer o quê, "não quero receber lembrete", "não quero receber isso") não bloqueia mais sozinho: o agente para de responder, a paciente é avisada e a conversa vai para a Central para uma pessoa decidir.
+O que fica no meio do caminho ("não quero receber" sem dizer o quê, "não quero receber lembrete", "não quero receber isso") não bloqueia mais sozinho. Quando há um agente de IA atendendo a conversa, ele para de responder, avisa a paciente de que os envios automáticos pararam e abre um aviso na Central ("Suspeita de opt-out") para uma pessoa decidir. Sem agente, a mensagem fica na conversa para quem atende.
 
 Nenhuma ação é necessária. Não havia contato bloqueado por esse engano quando a correção foi feita.
