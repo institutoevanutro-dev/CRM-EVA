@@ -19,6 +19,10 @@
  * telefone, notas ou link de reunião: o classificador escolhe um agente, não
  * atende ninguém. Cancelado e falta ficam fora dos anteriores, senão quem só
  * desmarcou viraria "já é paciente".
+ *
+ * O título é texto livre e pode trazer o nome do contato (evento vindo do
+ * Google, por exemplo). Ele só serve de tipo no compromisso importado do
+ * histórico, que guarda ali o nome do procedimento; nos demais, "atendimento".
  */
 import type { Queryable } from "../queue/queue";
 import { FUSO_PADRAO, fusoValido } from "@/lib/tempo/fusos";
@@ -44,11 +48,16 @@ export interface FatosDoContato {
   futuros: FatoDeAgenda[];
 }
 
-// O join repete `organization_id`: um `event_type_id` apontando para tipo de
-// outra organização não pode emprestar o nome dele.
-const PROJECAO = `select coalesce(nullif(btrim(t.name), ''), nullif(btrim(a.title), ''), 'atendimento') as tipo,
+// `to_jsonb(a)->>'history_import_key'` e não a coluna direta: mesma leitura de
+// lib/agenda/importar-historico.ts, que não quebra num banco sem a coluna.
+const PROJECAO = `select coalesce(
+              nullif(btrim(t.name), ''),
+              case when to_jsonb(a)->>'history_import_key' is not null then nullif(btrim(a.title), '') end,
+              'atendimento'
+            ) as tipo,
             a.starts_at, a.time_zone, a.status
        from calendar_appointments a
+       -- o filtro de organização do tipo é defesa em profundidade
        left join calendar_event_types t
          on t.id = a.event_type_id and t.organization_id = a.organization_id
       where a.organization_id = $1
@@ -66,7 +75,7 @@ export async function fatosDoContato(
       `${PROJECAO}
         and a.ends_at < $3
         and a.status not in ('cancelled', 'no_show')
-      order by a.starts_at desc
+      order by a.starts_at desc, a.id
       limit $4`,
       [organizationId, contactId, instante, MAXIMO_DE_ANTERIORES + 1],
     ),
@@ -74,7 +83,7 @@ export async function fatosDoContato(
       `${PROJECAO}
         and a.ends_at >= $3
         and a.status in ('pending', 'confirmed')
-      order by a.starts_at asc
+      order by a.starts_at asc, a.id
       limit $4`,
       [organizationId, contactId, instante, MAXIMO_DE_FUTUROS + 1],
     ),
@@ -96,7 +105,7 @@ function linha(fatos: readonly FatoDeAgenda[], maximo: number): string {
     }).format(new Date(f.starts_at));
     // Quebra de linha no título abriria uma "linha nova" dentro do prompt do
     // classificador. Uma linha só, cortada.
-    const tipo = f.tipo.replace(/\s+/g, " ").trim().slice(0, MAXIMO_DO_TIPO);
+    const tipo = f.tipo.replace(/\s+/g, " ").trim().slice(0, MAXIMO_DO_TIPO) || "atendimento";
     return `${data} ${tipo} (${f.status})`;
   });
   // Cortar em silêncio faria o classificador tomar a lista por completa.
