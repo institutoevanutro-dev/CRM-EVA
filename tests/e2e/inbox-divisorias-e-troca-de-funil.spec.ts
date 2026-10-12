@@ -160,33 +160,34 @@ test.describe("Inbox: divisórias arrastáveis", () => {
     await foto(page, "01-inbox-padrao.png");
 
     // ── Arrasta as duas divisórias ────────────────────────────────────────
-    await arrastarAte(page, "lista", antes.esquerda + 400);
-    await arrastarAte(page, "ficha", antes.direita - 360);
+    // 340 + 340 cabe com folga sobre o piso de 420 px da conversa nesta tela.
+    await arrastarAte(page, "lista", antes.esquerda + 340);
+    await arrastarAte(page, "ficha", antes.direita - 340);
     const depois = await medirGrade(page);
-    expect(depois.lista).toBe(400);
-    expect(depois.ficha).toBe(360);
-    expect(depois.conversa).toBe(antes.grade - 400 - 360);
+    expect(depois.lista).toBe(340);
+    expect(depois.ficha).toBe(340);
+    expect(depois.conversa).toBe(antes.grade - 340 - 340);
     expect(depois.estourou).toBe(false);
     expect(
       await page.evaluate((chave) => window.localStorage.getItem(chave), CHAVE_XL),
-    ).toBe(JSON.stringify({ lista: 400, ficha: 360 }));
+    ).toBe(JSON.stringify({ lista: 340, ficha: 340 }));
     await foto(page, "02-inbox-divisorias-arrastadas.png");
 
     // ── A largura sobrevive a recarregar ──────────────────────────────────
     await page.reload();
-    await expect(alcaLista).toHaveAttribute("aria-valuenow", "400", { timeout: 30_000 });
+    await expect(alcaLista).toHaveAttribute("aria-valuenow", "340", { timeout: 30_000 });
     const recarregado = await medirGrade(page);
-    expect(recarregado.lista).toBe(400);
-    expect(recarregado.ficha).toBe(360);
+    expect(recarregado.lista).toBe(340);
+    expect(recarregado.ficha).toBe(340);
     await foto(page, "03-inbox-depois-de-recarregar.png");
 
     // ── Teclado: foco na divisória, seta ajusta em passos de 16 px ────────
     await alcaLista.focus();
     await expect(alcaLista).toBeFocused();
     await page.keyboard.press("ArrowLeft");
-    expect((await medirGrade(page)).lista).toBe(384);
+    expect((await medirGrade(page)).lista).toBe(324);
     await page.keyboard.press("ArrowRight");
-    expect((await medirGrade(page)).lista).toBe(400);
+    expect((await medirGrade(page)).lista).toBe(340);
 
     // ── No limite mínimo (240 px) as abas ainda cabem na lista ────────────
     await arrastarAte(page, "lista", antes.esquerda + 10);
@@ -254,17 +255,22 @@ test.describe("Inbox: divisória no toque", () => {
     const y = Math.round(caixa.y + caixa.height / 2);
     const x0 = Math.round(caixa.x + caixa.width / 2);
     const cdp = await page.context().newCDPSession(page);
+    // Em tela de toque a área de pegar é de 24 px, não os 8 px do mouse.
+    expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
+    expect(Math.round(caixa.width)).toBe(24);
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: x0, y }] });
-    for (const passo of [20, 40, 60, 80]) {
+    // Para a ESQUERDA: nesta largura a conversa já está no piso de 420 px com
+    // a lista em 300, então a lista só tem para onde encolher.
+    for (const passo of [10, 20, 30, 40]) {
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchMove",
-        touchPoints: [{ x: x0 + passo, y }],
+        touchPoints: [{ x: x0 - passo, y }],
       });
     }
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 
-    await expect(alca).toHaveAttribute("aria-valuenow", "380");
-    expect((await medirGrade(page)).lista).toBe(380);
+    await expect(alca).toHaveAttribute("aria-valuenow", "260");
+    expect((await medirGrade(page)).lista).toBe(260);
     await foto(page, "05-inbox-tablet-toque.png");
     await page.evaluate(() => window.localStorage.removeItem("inbox:divisorias:md"));
   });
@@ -301,7 +307,13 @@ test.describe("Quadro: troca rápida de funil", () => {
     const { data: novos, error: eNovos } = await admin
       .from("crm_pipelines")
       .insert([
-        { organization_id: orgId, name: FUNIL_B, slug: `e2e-troca-b-${sufixo}`, position: 900_000 },
+        {
+          organization_id: orgId,
+          name: FUNIL_B,
+          slug: `e2e-troca-b-${sufixo}`,
+          position: 900_000,
+          is_archived: false,
+        },
         {
           organization_id: orgId,
           name: FUNIL_ARQUIVADO,
