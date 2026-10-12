@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.22.2] — 2026-10-11
+
+### Alterado
+
+- **Menu lateral reorganizado pelo que a pessoa veio fazer, com todas as telas de cada grupo à vista** Os grupos do menu lateral tinham tamanhos muito diferentes: IA com 15 telas, Configurações com 17 e Atendimento com 4. Agora são seis grupos, nenhum com mais de 9 telas: Atendimento (que ganhou Alertas, Casos e Propostas, o trabalho do dia que vinha da IA), Vendas, Assistente (montar e ensinar o agente), Análise (que ganhou Execuções e Uso e orçamento), Clínica (as regras do negócio: equipe, etiquetas, tipos de agendamento, etapas do funil, marca, produtos, LGPD) e Integrações (conexões, chaves, webhooks, Meta Ads, conversões, credenciais e provedores). Como os grupos ficaram pequenos, cada um mostra todas as suas telas e o "Ver tudo" saiu do menu. Perfil, Segurança e Notificações abrem clicando no nome de quem está logado, no rodapé do menu. Nuvemshop e Plano e cobrança saíram do menu, mas continuam na busca de telas (⌘K) e na página de Configurações, que segue com link fixo no rodapé do menu, porque é a porta para o que não tem tela própria (atualização do sistema, canal oficial, modelos e voz). Nenhum endereço e nenhuma permissão mudou: cada pessoa continua vendo só as telas do seu papel. Nada precisa ser feito ao atualizar.
+
 ## [3.22.1] — 2026-10-11
 
 ### Corrigido
@@ -6861,7 +6867,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.2...HEAD
+[3.22.2]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.1...v3.22.2
 [3.22.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.0...v3.22.1
 [3.22.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.21.0...v3.22.0
 [3.21.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.20.0...v3.21.0
