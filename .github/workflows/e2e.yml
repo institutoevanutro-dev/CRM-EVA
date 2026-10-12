@@ -127,6 +127,21 @@ jobs:
     # do gate sem razão declarada é a dívida voltando pela porta de serviço.
     # ─────────────────────────────────────────────────────────────────────────
     #
+    # ═══ `lgpd-pedido-entregue-por-email`: A PRECONDIÇÃO É DO SERVIDOR SOB TESTE ═══
+    #
+    # Ela mede o pedido de dados do titular indo até "Concluído", com o e-mail
+    # chegando a um receptor HTTP local no lugar da Resend. Para isso o
+    # `next start` tem de subir com `RESEND_API_KEY`, `RESEND_FROM_EMAIL` e
+    # `RESEND_BASE_URL` definidos, e o ambiente desta suíte roda SEM envio de
+    # e-mail de propósito: é o estado de um primeiro deploy, e é o que a irmã
+    # `lgpd-pedido-sem-email-vira-revisao-pendente` (PARTE_3) mede todo dia. Ligar
+    # o envio por causa desta spec trocaria o ambiente de TODAS as outras.
+    #
+    # O gate de todo dia do caminho com e-mail é `workers/lgpd-export-worker.test.ts`
+    # e `tests/unit/lgpd-pedido-nao-falha-calado.test.ts`, que rodam no `verify`.
+    # A spec confere a própria precondição em `beforeAll` e falha alto em vez de
+    # se pular; o comando para rodá-la está no cabeçalho dela.
+    #
     # ═══ `cadastro-sem-confirmacao-de-email`: A PRECONDIÇÃO É DO PROVEDOR ═══
     #
     # Ela mede o cadastro com "Confirm email" DESLIGADO no provedor de auth — o
@@ -658,6 +673,8 @@ jobs:
         inbox-busca-e-filtros-dizem-a-verdade.spec.ts
         entrar-com-evalink.spec.ts
         funil-arquivado-volta-pela-tela.spec.ts
+        lgpd-pedido-sem-email-vira-revisao-pendente.spec.ts
+        lgpd-registrar-pedido-pela-tela.spec.ts
 
       # ─── PARTE 4 — nasceu em 2026-10-01, pelo mesmo motivo que a 3 ─────────
       #
@@ -713,6 +730,7 @@ jobs:
         vps-fresh-onboarding.spec.ts
         inbox-tempo-real.spec.ts
         cadastro-sem-confirmacao-de-email.spec.ts
+        lgpd-pedido-entregue-por-email.spec.ts
     steps:
       - uses: actions/checkout@v7
 

@@ -2,7 +2,9 @@
  * GET /api/v1/lgpd/requests/[id]
  *
  * Detail of a single lgpd_request + audit trail entries for that request.
- * If completed and result.pdf_path exists, generates a 72h signed URL.
+ * If completed or pending_review and result.pdf_path exists, generates a 72h
+ * signed URL — pending_review is the export the worker could not deliver (no
+ * e-mail configured, or no titular address), and the operator delivers it by hand.
  *
  * Auth: cookie session, role >= admin.
  * organization_id resolved from session — never from body or path.
@@ -71,10 +73,11 @@ export async function GET(
 
   const audit_trail = auditRows ?? [];
 
-  // Generate signed URL if completed and pdf_path present
+  // Signed URL when the PDF exists: delivered (completed) or waiting for the
+  // operator to deliver it by hand (pending_review).
   let signed_pdf_url: string | null = null;
 
-  if (request.status === "completed" && request.result) {
+  if ((request.status === "completed" || request.status === "pending_review") && request.result) {
     const result = request.result as Record<string, unknown>;
     const pdfPath = typeof result.pdf_path === "string" ? result.pdf_path : null;
 
