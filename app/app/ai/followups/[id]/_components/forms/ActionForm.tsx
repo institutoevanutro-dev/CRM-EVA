@@ -34,7 +34,7 @@ function AjudaDasVariaveis({ texto }: { texto: string }) {
       <p className="text-xs text-text-muted" data-testid="variaveis-do-followup">
         {t("Variáveis do contato:")} {VARIAVEIS_DO_TEMPLATE.map((v) => `{{${v}}}`).join(" ")}
         {". "}
-        {t("{{lead.title}} é o título do negócio. Variável sem valor sai do texto.")}
+        {t("Variável sem valor sai do texto.")}
       </p>
       {desconhecidas.length > 0 ? (
         <p className="text-xs text-warning" data-testid="aviso-variavel-do-followup">

@@ -49,6 +49,8 @@ let conversa: Record<string, unknown> | null = null;
 let contato: Record<string, unknown> | null = null;
 /** O negócio mais recente do contato (`crm_leads.title`). */
 let negocio: Record<string, unknown> | null = null;
+/** As tabelas que o envio leu, para provar que o negócio não é mais consultado. */
+const tabelasLidas: string[] = [];
 
 const boundary = { organization_id: "org-1", contact_id: "contact-1", conversation_id: "conv-1", service_revision: 1, demanda_id: null, demanda_revision: null };
 const JOB = {
@@ -100,7 +102,7 @@ function admin() {
     };
     return chain;
   };
-  return { from: (t: string) => make(t), rpc: async (name:string,args:Record<string,unknown>) => {
+  return { from: (t: string) => { tabelasLidas.push(t); return make(t); }, rpc: async (name:string,args:Record<string,unknown>) => {
     if(name==="fn_followup_inline_settle") {statusUpdates.push(args.p_done?"done":"pending");settles.push(args);return {data:true,error:null};}
     if(name==="fn_appointment_enrollment_current" || name==="fn_followup_job_current") return {data:true,error:null};
     return {data:{...boundary,status:"open",demanda_fechada_em:null},error:null};
@@ -114,6 +116,7 @@ beforeEach(() => {
   conversa = { last_inbound_at: null, channel_session_id: "sess-1", channel_sessions: { provider: null } };
   contato = { name: null, display_name: null };
   negocio = null;
+  tabelasLidas.length = 0;
   JOB.payload.fixed_body = "Oi, tudo bem?";
   conferir.mockResolvedValue({ envia: true });
   adiarAteAJanelaAbrir.mockResolvedValue(null);
@@ -320,16 +323,17 @@ describe("enviarTextoFixoPendente · {{nome}} e {{primeiro_nome}}", () => {
     expect(statusUpdates).toContain("done");
   });
 
-  it("telefone, e-mail e o título do negócio saem preenchidos", async () => {
+  it("telefone e e-mail saem preenchidos; o título do negócio NÃO sai, mesmo existindo", async () => {
     JOB.payload.fixed_body = "{{primeiro_nome}}, falo no {{telefone}} ou em {{email}} sobre {{lead.title}}?";
     contato = { name: "Bia Ramos", display_name: null, phone_number: "+5527999990000", email: "bia@exemplo.com" };
     negocio = { title: "Avaliação" };
     expect(await enviarTextoFixoPendente(admin())).toBe(1);
-    expect(corpo()).toBe("Bia, falo no +5527999990000 ou em bia@exemplo.com sobre Avaliação?");
+    expect(corpo()).toBe("Bia, falo no +5527999990000 ou em bia@exemplo.com sobre?");
+    expect(tabelasLidas).not.toContain("crm_leads");
   });
 
   it("variável sem valor sai do texto, sem chaves, 'null' nem 'undefined'", async () => {
-    JOB.payload.fixed_body = "Oi {{nome}}, seu e-mail é {{email}}? ({{lead.title}})";
+    JOB.payload.fixed_body = "Oi {{nome}}, seu e-mail é {{email}}?";
     contato = { name: "Bia Ramos", display_name: null, phone_number: null, email: null };
     expect(await enviarTextoFixoPendente(admin())).toBe(1);
     expect(corpo()).toBe("Oi Bia Ramos, seu e-mail é?");

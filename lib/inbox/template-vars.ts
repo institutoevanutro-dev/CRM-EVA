@@ -1,9 +1,10 @@
 /**
  * Interpola variáveis de template com os dados do contato (Onda 5).
  *
- * A lista é FECHADA (`VARIAVEIS_DO_TEMPLATE`): nome, primeiro nome, telefone,
- * e-mail e o título do negócio. Nada de travessia de propriedade: CPF, data de
- * nascimento, observações e campos personalizados NÃO são variáveis, mesmo que
+ * A lista é FECHADA (`VARIAVEIS_DO_TEMPLATE`): nome, primeiro nome, telefone e
+ * e-mail. Nada de travessia de propriedade: CPF, data de nascimento,
+ * observações, campos personalizados e dados do negócio (o título é texto
+ * livre da equipe e pode carregar anotação interna) NÃO são variáveis, mesmo que
  * quem chama passe a linha inteira do banco. `{{contact.name}}`,
  * `{{contact.phone_number}}` e `{{contact.email}}` são sinônimos, para o texto
  * escrito no vocabulário das automações valer aqui também.
@@ -27,8 +28,6 @@ import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-co
 export type TemplateContact = Pick<ContatoNomeavel, "name" | "display_name"> & {
   phone_number?: string | null;
   email?: string | null;
-  /** Título do negócio mais recente do contato (`crm_leads.title`). */
-  lead_title?: string | null;
 };
 
 export interface InterpolacaoOpcoes {
@@ -36,7 +35,7 @@ export interface InterpolacaoOpcoes {
 }
 
 /** As variáveis que existem, na ordem em que a tela as mostra. */
-export const VARIAVEIS_DO_TEMPLATE = ["primeiro_nome", "nome", "telefone", "email", "lead.title"] as const;
+export const VARIAVEIS_DO_TEMPLATE = ["primeiro_nome", "nome", "telefone", "email"] as const;
 
 type Variavel = (typeof VARIAVEIS_DO_TEMPLATE)[number];
 
@@ -83,7 +82,6 @@ export function interpolateTemplate(
     primeiro_nome: full.split(/\s+/)[0] ?? "",
     telefone: texto(contact.phone_number),
     email: texto(contact.email),
-    "lead.title": texto(contact.lead_title),
   };
   const preenchido = body.replace(VARIAVEL, (literal, rawKey: string) => {
     const variavel = variavelDe(rawKey);

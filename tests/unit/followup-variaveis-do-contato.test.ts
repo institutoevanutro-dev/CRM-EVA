@@ -50,7 +50,7 @@ function job(payload: Record<string, unknown>): JobRow {
 function fakePool(contato: Record<string, string | null>, modelo = "Olá {{nome}}") {
   const query = vi.fn(async (sql: string, params?: unknown[]): Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }> => {
     if (sql.includes("d.fechada_em::text")) return { rows: [{ ...boundary, status: "open", demanda_fechada_em: null }] };
-    if (/c\.display_name/.test(sql)) {
+    if (/select name, display_name, phone_number, email from contacts/.test(sql)) {
       // O filtro por organização é obrigatório: service role não tem RLS.
       expect(params).toEqual([ORG, LEAD]);
       return { rows: [contato] };
@@ -155,19 +155,19 @@ describe("worker — variáveis do contato no texto e no modelo do passo", () =>
 
   const PESSOA = { name: "Bia Ramos", display_name: null, phone_number: "+5527999990000", email: "bia@exemplo.com", lead_title: "Avaliação" };
 
-  it("texto: telefone, e-mail e o título do negócio saem preenchidos", async () => {
+  it("texto: telefone e e-mail saem preenchidos; o título do negócio NÃO sai, mesmo existindo", async () => {
     await criarHandler(deps().deps)(
       job({ fixed_body: "{{primeiro_nome}}, falo no {{telefone}} ou em {{contact.email}} sobre {{lead.title}}?" }),
       fakePool(PESSOA),
       ctx,
     );
-    expect(corpoEnviado()).toBe("Bia, falo no +5527999990000 ou em bia@exemplo.com sobre Avaliação?");
+    expect(corpoEnviado()).toBe("Bia, falo no +5527999990000 ou em bia@exemplo.com sobre?");
   });
 
   it("modelo: variável sem valor sai do texto, sem chaves, 'null' nem 'undefined'", async () => {
     await criarHandler(deps().deps)(
       job({ template_id: "33333333-3333-4333-8333-333333333333" }),
-      fakePool({ ...PESSOA, email: null, lead_title: null }, "Oi {{nome}}, seu e-mail é {{email}}? ({{lead.title}})"),
+      fakePool({ ...PESSOA, email: null }, "Oi {{nome}}, seu e-mail é {{email}}?"),
       ctx,
     );
     expect(corpoEnviado()).toBe("Oi Bia Ramos, seu e-mail é?");

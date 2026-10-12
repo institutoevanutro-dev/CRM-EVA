@@ -824,8 +824,8 @@ function interpolarVoltaDoPayload(texto: string, index: number | undefined, tota
 }
 
 /**
- * As variáveis do texto (`VARIAVEIS_DO_TEMPLATE`: nome, telefone, e-mail e o
- * título do negócio mais recente) com o contato lido AGORA (o dado vale como
+ * As variáveis do texto (`VARIAVEIS_DO_TEMPLATE`: nome, telefone e e-mail)
+ * com o contato lido AGORA (o dado vale como
  * está na hora em que a mensagem sai). Sem valor ou desconhecida, a variável
  * sai do texto: o follow-up não tem quem revise antes de enviar. A desconhecida
  * vira aviso no log — só o nome da variável, nunca o dado do contato.
@@ -837,11 +837,7 @@ async function interpolarVariaveisDoContato(pool: pg.Pool, tenantId: string, con
     log.warn('variável desconhecida no texto do follow-up: saiu da mensagem', { variaveis: desconhecidas });
   }
   const { rows } = await pool.query<TemplateContact>(
-    `select c.name, c.display_name, c.phone_number, c.email,
-            (select l.title from crm_leads l
-              where l.organization_id = c.organization_id and l.contact_id = c.id
-              order by l.updated_at desc limit 1) as lead_title
-       from contacts c where c.organization_id = $1 and c.id = $2`,
+    'select name, display_name, phone_number, email from contacts where organization_id = $1 and id = $2',
     [tenantId, contactId],
   );
   return interpolateTemplate(texto, rows[0] ?? {}, { semValor: 'remover' });

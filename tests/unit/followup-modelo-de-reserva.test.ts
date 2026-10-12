@@ -82,7 +82,7 @@ function fakePool(c: Cenario = {}) {
       return { rows: params?.[2] === 1000 && c.reservaAceita ? [{ id: "l-1000", status: "accepted", crm_message_id: "m-1" }] : [] };
     }
     if (/from send_ledger/.test(sql)) return { rows: (c.ledger ?? []).map((r) => ({ error_code: null, ...r })) };
-    if (/c\.display_name/.test(sql)) return { rows: [{ name: "Ana Souza", display_name: null }] };
+    if (/select name, display_name, phone_number, email from contacts/.test(sql)) return { rows: [{ name: "Ana Souza", display_name: null }] };
     if (/from message_templates/.test(sql)) return { rows: [{ body: "Oi {{primeiro_nome}}, ainda posso ajudar?" }] };
     // A inscrição viva no mesmo nó (guarda da #2261 no início do turno).
     if (sql.includes("select current_node_id, status from followup_enrollments")) return { rows: [{ current_node_id: "node-1", status: "active" }], rowCount: 1 };

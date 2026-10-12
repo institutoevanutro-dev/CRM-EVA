@@ -78,7 +78,7 @@ describe("interpolateTemplate · sem nome no follow-up (semValor: 'remover')", (
   });
 });
 
-describe("interpolateTemplate · telefone, e-mail e negócio", () => {
+describe("interpolateTemplate · telefone e e-mail", () => {
   const pessoa = {
     name: "Ana Paula Souza",
     display_name: null,
@@ -90,8 +90,8 @@ describe("interpolateTemplate · telefone, e-mail e negócio", () => {
     interpolateTemplate(texto, contato, { semValor: "remover" });
 
   it("preenche cada variável da lista, com e sem o prefixo contact.", () => {
-    expect(enviar("{{primeiro_nome}}, seu número é {{telefone}} e o e-mail {{email}}? Sobre: {{lead.title}}.")).toBe(
-      "Ana, seu número é +5527999990000 e o e-mail ana@exemplo.com? Sobre: Avaliação nutricional.",
+    expect(enviar("{{primeiro_nome}}, seu número é {{telefone}} e o e-mail {{email}}?")).toBe(
+      "Ana, seu número é +5527999990000 e o e-mail ana@exemplo.com?",
     );
     expect(enviar("{{contact.name}} / {{contact.phone_number}} / {{contact.email}}")).toBe(
       "Ana Paula Souza / +5527999990000 / ana@exemplo.com",
@@ -99,10 +99,10 @@ describe("interpolateTemplate · telefone, e-mail e negócio", () => {
   });
 
   it("sem valor: a variável sai com a pontuação, nunca 'null' nem 'undefined'", () => {
-    const semDados = { name: "Ana", phone_number: null, email: undefined, lead_title: "  " };
-    const texto = enviar("Oi {{primeiro_nome}}, confirma o e-mail {{email}}, o número {{telefone}} e {{lead.title}}?", semDados);
+    const semDados = { name: "Ana", phone_number: null, email: "  " };
+    const texto = enviar("Oi {{primeiro_nome}}, confirma o e-mail {{email}} e o número {{telefone}}?", semDados);
     expect(texto).not.toMatch(/[{}]|null|undefined/);
-    expect(texto).toBe("Oi Ana, confirma o e-mail, o número e?");
+    expect(texto).toBe("Oi Ana, confirma o e-mail e o número?");
     expect(enviar("{{email}}", semDados)).toBe("");
   });
 
@@ -110,8 +110,13 @@ describe("interpolateTemplate · telefone, e-mail e negócio", () => {
     expect(interpolateTemplate("Oi {{primeiro_nome}}, {{telefone}}", { name: "Ana" })).toBe("Oi Ana, {{telefone}}");
   });
 
+  it("{{lead.title}} NÃO é variável: o título do negócio não sai mesmo quando existe", () => {
+    expect(enviar("Oi {{primeiro_nome}}, sobre {{lead.title}}: tudo certo?")).toBe("Oi Ana, sobre: tudo certo?");
+    expect(variaveisDesconhecidas("{{lead.title}}")).toEqual(["{{lead.title}}"]);
+  });
+
   it("a lista é FECHADA: nada de CPF, nascimento, observação ou campo personalizado", () => {
-    expect([...VARIAVEIS_DO_TEMPLATE]).toEqual(["primeiro_nome", "nome", "telefone", "email", "lead.title"]);
+    expect([...VARIAVEIS_DO_TEMPLATE]).toEqual(["primeiro_nome", "nome", "telefone", "email"]);
     // Mesmo com a linha inteira do banco na mão, só a lista sai.
     const linhaInteira = {
       ...pessoa,
@@ -124,7 +129,7 @@ describe("interpolateTemplate · telefone, e-mail e negócio", () => {
       tags: ["gestante"],
     };
     const texto = enviar(
-      "{{contact.birthdate}} {{birthdate}} {{contact.cpf_hash}} {{cpf}} {{contact.blocked_reason}} {{lead.description}} " +
+      "{{contact.birthdate}} {{birthdate}} {{contact.cpf_hash}} {{cpf}} {{contact.blocked_reason}} {{lead.description}} {{lead.title}} " +
         "{{lead.lost_reason}} {{lead.custom_fields.diagnostico}} {{diagnostico}} {{contact.tags}} {{constructor}} {{__proto__}} fim",
       linhaInteira,
     );
@@ -134,6 +139,6 @@ describe("interpolateTemplate · telefone, e-mail e negócio", () => {
   it("variaveisDesconhecidas: aponta o erro de digitação e aceita as extras de quem chama", () => {
     expect(variaveisDesconhecidas("Oi {{nome}} {{nomee}} {{ Telefone }} {{volta}}")).toEqual(["{{nomee}}", "{{volta}}"]);
     expect(variaveisDesconhecidas("Oi {{nomee}} {{volta}}", ["volta", "voltas"])).toEqual(["{{nomee}}"]);
-    expect(variaveisDesconhecidas("Oi {{contact.email}} e {{lead.title}}")).toEqual([]);
+    expect(variaveisDesconhecidas("Oi {{contact.email}} e {{contact.name}}")).toEqual([]);
   });
 });

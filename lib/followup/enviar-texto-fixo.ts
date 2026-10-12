@@ -213,25 +213,14 @@ export async function enviarTextoFixoPendente(
             variaveis: desconhecidas,
           });
         }
-        const [pessoa, negocio] = await Promise.all([
-          admin
-            .from("contacts")
-            .select("name, display_name, phone_number, email")
-            .eq("organization_id", job.organization_id as string)
-            .eq("id", contactId)
-            .maybeSingle(),
-          admin
-            .from("crm_leads")
-            .select("title")
-            .eq("organization_id", job.organization_id as string)
-            .eq("contact_id", contactId)
-            .order("updated_at", { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-        ]);
-        if (pessoa.error) throw new Error(pessoa.error.message);
-        if (negocio.error) throw new Error(negocio.error.message);
-        texto = interpolateTemplate(body, { ...pessoa.data, lead_title: negocio.data?.title ?? null }, { semValor: "remover" });
+        const { data: pessoa, error: pessoaErr } = await admin
+          .from("contacts")
+          .select("name, display_name, phone_number, email")
+          .eq("organization_id", job.organization_id as string)
+          .eq("id", contactId)
+          .maybeSingle();
+        if (pessoaErr) throw new Error(pessoaErr.message);
+        texto = interpolateTemplate(body, pessoa ?? {}, { semValor: "remover" });
       }
       if (texto === "") {
         await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {
