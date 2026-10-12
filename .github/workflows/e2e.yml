@@ -651,6 +651,7 @@ jobs:
         moeda-da-organizacao.spec.ts
         limpeza-de-midia-opt-in.spec.ts
         sons-dos-avisos.spec.ts
+        aviso-de-credito-do-provedor.spec.ts
         busca-na-conversa.spec.ts
         etapa-pela-conversa.spec.ts
         central-avisos-resolver-em-lote.spec.ts

@@ -9947,8 +9947,8 @@ export const DICIONARIO: Traducoes = {
     es: "Suenan con el sitio abierto cuando el aviso llega a la Central. MP3, OGG o WAV de hasta 1 MB.",
   },
   "Precisa de uma pessoa": { es: "Necesita una persona" },
-  "Quando o assistente passa a conversa para alguém da equipe.": {
-    es: "Cuando el asistente pasa la conversación a alguien del equipo.",
+  "Quando o assistente passa a conversa para alguém da equipe, ou quando a IA fica sem crédito ou com a chave recusada no provedor.": {
+    es: "Cuando el asistente pasa la conversación a alguien del equipo, o cuando la IA se queda sin crédito o con la clave rechazada en el proveedor.",
   },
   "Som personalizado": { es: "Sonido personalizado" },
   "Som do sistema": { es: "Sonido del sistema" },
