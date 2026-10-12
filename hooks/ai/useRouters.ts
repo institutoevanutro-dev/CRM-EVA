@@ -48,6 +48,8 @@ export interface RouterTestResult {
   min_confidence: number;
   agent_id: string | null;
   agent_name: string | null;
+  /** O texto de agenda que o classificador viu; `null` sem contato no teste. */
+  fatos: string | null;
 }
 
 export interface CreateRouterInput {
@@ -135,9 +137,12 @@ export function useSaveMembers(id: string) {
 
 export function useTestRouter(id: string) {
   return useMutation({
-    mutationFn: (message: string) =>
+    mutationFn: ({ message, contactId }: { message: string; contactId?: string | null }) =>
       apiClient
-        .post<{ data: RouterTestResult }>(`/api/v1/ai/routers/${encodeURIComponent(id)}/test`, { message })
+        .post<{ data: RouterTestResult }>(`/api/v1/ai/routers/${encodeURIComponent(id)}/test`, {
+          message,
+          ...(contactId ? { contact_id: contactId } : {}),
+        })
         .then((r) => r.data),
   });
 }

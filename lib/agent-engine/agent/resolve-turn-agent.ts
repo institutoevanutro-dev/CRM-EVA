@@ -68,7 +68,16 @@ import {
   type PublishedAgentConfig,
 } from './agent-config';
 import { classifyIntent } from './intent-classifier';
+import { buildFatosDoContato } from './fatos-do-contato';
 import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-context';
+
+/**
+ * Teto de tempo da leitura dos fatos. Mesmo motivo e mesmo valor do `TETO_MS` de
+ * `agente-da-campanha.ts`: um `await` sem limite no caminho quente seguraria o
+ * turno inteiro por causa de um enfeite de roteamento. O teto mora aqui e não em
+ * `buildFatosDoContato`, que a tela de teste do roteador pode esperar.
+ */
+const TETO_DOS_FATOS_MS = 500;
 
 export interface TurnAgentResolution {
   config: PublishedAgentConfig | null; // null ⇒ turno segue no genérico (comportamento atual)
@@ -95,6 +104,9 @@ export interface ResolveTurnAgentDeps {
   loadPublishedAgentConfigById?: typeof loadPublishedAgentConfigById;
   loadPublishedAgentConfig?: typeof loadPublishedAgentConfig;
   classifyIntent?: typeof classifyIntent;
+  buildFatosDoContato?: typeof buildFatosDoContato;
+  /** Relógio injetável: é o que separa atendimento anterior de compromisso futuro. */
+  agora?: () => Date;
 }
 
 export async function resolveTurnAgent(
@@ -116,6 +128,7 @@ export async function resolveTurnAgent(
   const _loadAgentById = deps.loadPublishedAgentConfigById ?? loadPublishedAgentConfigById;
   const _loadAgentBySession = deps.loadPublishedAgentConfig ?? loadPublishedAgentConfig;
   const _classifyIntent = deps.classifyIntent ?? classifyIntent;
+  const _buildFatos = deps.buildFatosDoContato ?? buildFatosDoContato;
 
   try {
     // ─── Degrau 0: a campanha que criou esta conversa ───
@@ -226,11 +239,29 @@ export async function resolveTurnAgent(
       return resolveFallback('no_match', null);
     }
 
+    // Fatos do CRM para o classificador (agenda do contato). No motor, `leadId` É o
+    // contact_id. Falha aqui nunca derruba o turno: classifica só com a mensagem.
+    const avisoDosFatos = 'resolve-turn-agent: fatos do contato indisponíveis — classificando só com a mensagem';
+    let fatos: string | null = null;
+    try {
+      // `Promise.race`, como no degrau 0: o teto vale também com o pool esgotado.
+      fatos = await Promise.race([
+        _buildFatos(db, input.tenantId, input.leadId, (deps.agora ?? (() => new Date()))()),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), TETO_DOS_FATOS_MS)),
+      ]);
+      if (fatos === null) deps.log.warn(avisoDosFatos, { routerId: router.id, error: 'timeout' });
+    } catch (err) {
+      deps.log.warn(avisoDosFatos, {
+        routerId: router.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     // classifica — inclusive com sticky ativo, pra detectar troca de assunto (regra 2).
     const verdict = await _classifyIntent(
       db,
       llmCfg,
-      { tenantId: input.tenantId, leadId: input.leadId, jobId: input.jobId, router, signal: input.signal },
+      { tenantId: input.tenantId, leadId: input.leadId, jobId: input.jobId, router, signal: input.signal, fatos },
       { log: deps.log },
     );
 

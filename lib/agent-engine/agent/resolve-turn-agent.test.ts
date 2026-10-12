@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveConversationTurn, resolveTurnAgent } from './resolve-turn-agent';
 import type { PublishedAgentConfig } from './agent-config';
@@ -69,14 +69,24 @@ const baseInput = {
   conversationId: 'conv-1',
 };
 
+const FATOS = 'Fatos do CRM sobre este contato (agenda):\n- Sem atendimentos registrados na agenda.';
+
 function makeDeps(overrides: {
   loadActiveRouter?: ReturnType<typeof vi.fn>;
   loadPublishedAgentConfigById?: ReturnType<typeof vi.fn>;
   loadPublishedAgentConfig?: ReturnType<typeof vi.fn>;
   classifyIntent?: ReturnType<typeof vi.fn>;
+  buildFatosDoContato?: ReturnType<typeof vi.fn>;
+  agenteDaCampanha?: ReturnType<typeof vi.fn>;
+  agora?: () => Date;
+  warn?: ReturnType<typeof vi.fn>;
 }) {
   return {
-    log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    log: { info: vi.fn(), warn: overrides.warn ?? vi.fn(), error: vi.fn() },
+    // Sem banco: o padrão real leria a agenda num `{}` e cairia no aviso.
+    buildFatosDoContato: overrides.buildFatosDoContato ?? vi.fn().mockResolvedValue(FATOS),
+    ...(overrides.agenteDaCampanha ? { agenteDaCampanha: overrides.agenteDaCampanha } : {}),
+    ...(overrides.agora ? { agora: overrides.agora } : {}),
     loadActiveRouter: overrides.loadActiveRouter ?? vi.fn(),
     loadPublishedAgentConfigById: overrides.loadPublishedAgentConfigById ?? vi.fn(),
     loadPublishedAgentConfig: overrides.loadPublishedAgentConfig ?? vi.fn(),
@@ -248,7 +258,7 @@ describe('resolveTurnAgent', () => {
     const warn = vi.fn();
     const out = await resolveTurnAgent({} as never, {} as never,
       { ...baseInput, signal: 'quanto custa?', stickyAgentId: null, stickyIntent: null },
-      { log: { info: vi.fn(), warn, error: vi.fn() }, loadActiveRouter, classifyIntent, loadPublishedAgentConfigById } as never);
+      makeDeps({ warn, loadActiveRouter, classifyIntent, loadPublishedAgentConfigById }));
     // NUNCA outcome 'classified' com config null — telemetria não pode mentir.
     expect(out.outcome).toBe('fallback');
     expect(out.config?.agentId).toBe('agent-fallback');
@@ -292,10 +302,155 @@ describe('resolveTurnAgent', () => {
     const warn = vi.fn();
     const out = await resolveTurnAgent({} as never, {} as never,
       { ...baseInput, signal: 'blablabla', stickyAgentId: null, stickyIntent: null },
-      { log: { info: vi.fn(), warn, error: vi.fn() }, loadActiveRouter, classifyIntent, loadPublishedAgentConfig } as never);
+      makeDeps({ warn, loadActiveRouter, classifyIntent, loadPublishedAgentConfig }));
     expect(out.config).toBeNull();
     expect(out.outcome).toBe('no_match');
     expect(warn).toHaveBeenCalled();
+  });
+});
+
+describe('resolveTurnAgent — fatos do contato para o classificador', () => {
+  const AGORA = new Date('2026-10-12T15:00:00.000Z');
+
+  it('roteador ativo e mensagem: lê os fatos do contato e entrega ao classificador', async () => {
+    const db = { marca: 'db' };
+    const buildFatosDoContato = vi.fn().mockResolvedValue(FATOS);
+    const classifyIntent = vi.fn().mockResolvedValue({ intentName: 'vendas', confidence: 0.9 });
+    const out = await resolveTurnAgent(db as never, {} as never,
+      { ...baseInput, signal: 'quero consulta', stickyAgentId: null, stickyIntent: null },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(router({ sticky: false })),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        classifyIntent, buildFatosDoContato, agora: () => AGORA,
+      }));
+    expect(buildFatosDoContato).toHaveBeenCalledTimes(1);
+    expect(buildFatosDoContato).toHaveBeenCalledWith(db, 'org-1', 'lead-1', AGORA);
+    expect(classifyIntent.mock.calls[0]![2].fatos).toBe(FATOS);
+    expect(out.outcome).toBe('classified');
+  });
+
+  it('leitura dos fatos falha: classifica só com a mensagem, avisa, e o agente é o mesmo', async () => {
+    const montar = (buildFatosDoContato: ReturnType<typeof vi.fn>, warn: ReturnType<typeof vi.fn>) => {
+      const classifyIntent = vi.fn().mockResolvedValue({ intentName: 'suporte', confidence: 0.8 });
+      return {
+        classifyIntent,
+        deps: makeDeps({
+          loadActiveRouter: vi.fn().mockResolvedValue(router({ sticky: false })),
+          loadPublishedAgentConfigById: idAwareLoader(),
+          classifyIntent, buildFatosDoContato, warn,
+        }),
+      };
+    };
+    const input = { ...baseInput, signal: 'deu erro aqui', stickyAgentId: null, stickyIntent: null };
+
+    const warnOk = vi.fn();
+    const ok = montar(vi.fn().mockResolvedValue(FATOS), warnOk);
+    const comFatos = await resolveTurnAgent({} as never, {} as never, input, ok.deps);
+
+    const warn = vi.fn();
+    const falha = montar(vi.fn().mockRejectedValue(new Error('agenda fora do ar')), warn);
+    const semFatos = await resolveTurnAgent({} as never, {} as never, input, falha.deps);
+
+    expect(falha.classifyIntent).toHaveBeenCalledTimes(1);
+    expect(falha.classifyIntent.mock.calls[0]![2].fatos).toBeNull();
+    expect(falha.classifyIntent.mock.calls[0]![2].signal).toBe('deu erro aqui');
+    expect(warn).toHaveBeenCalledWith(
+      'resolve-turn-agent: fatos do contato indisponíveis — classificando só com a mensagem',
+      { routerId: 'router-1', error: 'agenda fora do ar' },
+    );
+    expect(warnOk).not.toHaveBeenCalled();
+    // Não caiu no catch de fora (que devolveria classifier_failed sem roteador).
+    expect(semFatos).toEqual(comFatos);
+    expect(semFatos.outcome).toBe('classified');
+    expect(semFatos.config?.agentId).toBe('agent-suporte');
+    expect(semFatos.routerId).toBe('router-1');
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it('leitura dos fatos que não volta: estoura o teto, avisa e classifica só com a mensagem', async () => {
+    const input = { ...baseInput, signal: 'deu erro aqui', stickyAgentId: null, stickyIntent: null };
+    const montar = (buildFatosDoContato: ReturnType<typeof vi.fn>, warn: ReturnType<typeof vi.fn>) => {
+      const classifyIntent = vi.fn().mockResolvedValue({ intentName: 'suporte', confidence: 0.8 });
+      return {
+        classifyIntent,
+        deps: makeDeps({
+          loadActiveRouter: vi.fn().mockResolvedValue(router({ sticky: false })),
+          loadPublishedAgentConfigById: idAwareLoader(),
+          // Sem isto o degrau 0 real arma o próprio timer de 500 ms num `{}`.
+          agenteDaCampanha: vi.fn().mockResolvedValue(null),
+          classifyIntent, buildFatosDoContato, warn,
+        }),
+      };
+    };
+    const semFatosRef = montar(vi.fn().mockRejectedValue(new Error('x')), vi.fn());
+    const referencia = await resolveTurnAgent({} as never, {} as never, input, semFatosRef.deps);
+
+    vi.useFakeTimers();
+    const warn = vi.fn();
+    const preso = montar(vi.fn(() => new Promise<string>(() => {})), warn);
+    const pendente = resolveTurnAgent({} as never, {} as never, input, preso.deps);
+    await vi.advanceTimersByTimeAsync(499);
+    expect(preso.classifyIntent).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    const out = await pendente;
+
+    expect(preso.classifyIntent).toHaveBeenCalledTimes(1);
+    expect(preso.classifyIntent.mock.calls[0]![2].fatos).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      'resolve-turn-agent: fatos do contato indisponíveis — classificando só com a mensagem',
+      { routerId: 'router-1', error: 'timeout' },
+    );
+    expect(out).toEqual(referencia);
+    expect(out.outcome).toBe('classified');
+    expect(out.config?.agentId).toBe('agent-suporte');
+  });
+
+  it('sem mensagem (follow-up): não lê fatos nem classifica', async () => {
+    const buildFatosDoContato = vi.fn();
+    const classifyIntent = vi.fn();
+    await resolveTurnAgent({} as never, {} as never,
+      { ...baseInput, signal: null, stickyAgentId: 'agent-vendas', stickyIntent: 'vendas' },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(router()),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        classifyIntent, buildFatosDoContato,
+      }));
+    expect(buildFatosDoContato).not.toHaveBeenCalled();
+    expect(classifyIntent).not.toHaveBeenCalled();
+  });
+
+  it('sem roteador ativo: não lê fatos', async () => {
+    const buildFatosDoContato = vi.fn();
+    const out = await resolveTurnAgent({} as never, {} as never,
+      { ...baseInput, signal: 'oi', stickyAgentId: null, stickyIntent: null },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(null),
+        loadPublishedAgentConfig: vi.fn().mockResolvedValue(fakeConfig('agent-sessao')),
+        buildFatosDoContato,
+      }));
+    expect(out.outcome).toBe('no_router');
+    expect(buildFatosDoContato).not.toHaveBeenCalled();
+  });
+
+  it('conversa de campanha (degrau 0): não lê fatos nem chega ao roteador', async () => {
+    const buildFatosDoContato = vi.fn();
+    const loadActiveRouter = vi.fn().mockResolvedValue(router());
+    const classifyIntent = vi.fn();
+    const out = await resolveTurnAgent({} as never, {} as never,
+      { ...baseInput, signal: 'oi, recebi a mensagem de vocês', stickyAgentId: null, stickyIntent: null },
+      makeDeps({
+        agenteDaCampanha: vi.fn().mockResolvedValue('agent-campanha'),
+        loadActiveRouter,
+        loadPublishedAgentConfigById: idAwareLoader(),
+        classifyIntent, buildFatosDoContato,
+      }));
+    expect(out.outcome).toBe('campanha');
+    expect(out.config?.agentId).toBe('agent-campanha');
+    expect(buildFatosDoContato).not.toHaveBeenCalled();
+    expect(loadActiveRouter).not.toHaveBeenCalled();
+    expect(classifyIntent).not.toHaveBeenCalled();
   });
 });
 

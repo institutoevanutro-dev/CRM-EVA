@@ -1,9 +1,20 @@
 import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
  * POST /api/v1/ai/routers/:id/test — classifica uma mensagem de TESTE contra o
- * router (manager+). Reusa loadActiveRouter/classifyIntent (Tasks 2-3, mesmo
- * seam de runtime) — NUNCA grava em ai_router_decisions (telemetria de
- * decisões reais de produção, não de teste) nem em conversations.
+ * router (manager+). Reusa classifyIntent (mesmo seam de runtime) — NUNCA
+ * grava em ai_router_decisions (telemetria de decisões reais de produção, não
+ * de teste) nem em conversations.
+ *
+ * O roteador é carregado por id, ATIVO OU NÃO (`loadRouterById`): quem monta um
+ * roteador precisa ver a classificação antes de ligá-lo no canal. Testar não
+ * altera `is_active`.
+ *
+ * `contact_id` (opcional) faz o classificador receber os fatos da agenda desse
+ * contato, como no turno real. Ele vem do CORPO, então a posse é conferida com
+ * a organização da SESSÃO antes de qualquer leitura: contato de outra
+ * organização é 404, e nenhum fato é lido. Contato anonimizado (LGPD) ou
+ * mesclado em outro também é 404: a agenda dele não é mais de ninguém que a
+ * tela deixe escolher.
  *
  * leadId/jobId vão null pro classificador: não existe contact/job real por
  * trás de um clique de teste na UI, e llm_calls.contact_id/job_id são FKs —
@@ -11,7 +22,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * lib/agent-engine/agent/intent-classifier.ts).
  *
  * O match só conta se confidence >= min_confidence do router (mesma regra do
- * runtime, resolve-turn-agent.ts:193) — devolve min_confidence no payload pra
+ * runtime, a do mínimo de confiança em resolve-turn-agent) — devolve min_confidence no payload pra
  * a tela explicar quando o resultado cairia no fallback/genérico em produção.
  */
 import { randomUUID } from "node:crypto";
@@ -25,7 +36,8 @@ import { getSkillsPool } from "@/lib/ai/skills/db";
 import { env } from "@/lib/env";
 import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/credentials";
 import { createLogger } from "@/lib/agent-engine/obs/logger";
-import { loadActiveRouter } from "@/lib/agent-engine/agent/router-config";
+import { loadRouterById } from "@/lib/agent-engine/agent/router-config";
+import { buildFatosDoContato } from "@/lib/agent-engine/agent/fatos-do-contato";
 import { classifyIntent } from "@/lib/agent-engine/agent/intent-classifier";
 import { traduzir } from "@/lib/i18n/dicionario";
 
@@ -37,6 +49,7 @@ const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 const testSchema = z.object({
   message: z.string().min(1).max(4000),
+  contact_id: z.string().uuid().optional(),
 });
 
 export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
@@ -69,42 +82,56 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     });
   }
 
-  const admin = createAdminClient();
-  const { data: router, error: routerErr } = await admin
-    .from("ai_routers")
-    .select("id, channel_session_id")
-    .eq("id", id)
-    .eq("organization_id", org.orgId)
-    .maybeSingle();
-  if (routerErr) {
+  const pool = getSkillsPool();
+  let loaded: Awaited<ReturnType<typeof loadRouterById>>;
+  try {
+    loaded = await loadRouterById(pool, org.orgId, id);
+  } catch {
     return fail("internal_error", "Erro ao carregar router.", 500, { requestId });
   }
-  if (!router) {
+  if (!loaded) {
     return fail("not_found", t("Router não encontrado."), 404, { requestId });
   }
 
-  const pool = getSkillsPool();
-  const loaded = await loadActiveRouter(pool, org.orgId, router.channel_session_id);
-  if (!loaded || loaded.id !== id) {
-    return fail(
-      "state_conflict",
-      t("O router precisa estar ativo (is_active=true) para ser testado."),
-      409,
-      { requestId },
-    );
+  const admin = createAdminClient();
+  const log = createLogger();
+
+  let fatos: string | null = null;
+  const contactId = parsed.data.contact_id;
+  if (contactId !== undefined) {
+    const { data: contato, error: contatoErr } = await admin
+      .from("contacts")
+      .select("id, is_anonymized, is_merged_into")
+      .eq("id", contactId)
+      .eq("organization_id", org.orgId)
+      .maybeSingle();
+    if (contatoErr) {
+      return fail("internal_error", "Erro ao carregar contato.", 500, { requestId });
+    }
+    if (!contato || contato.is_anonymized || contato.is_merged_into !== null) {
+      return fail("not_found", t("Contato não encontrado."), 404, { requestId });
+    }
+    try {
+      fatos = await buildFatosDoContato(pool, org.orgId, contactId, new Date());
+    } catch (err) {
+      // Mesma regra do turno real: sem fatos, classifica só com a mensagem.
+      log.warn("router-test: fatos do contato indisponíveis — classificando só com a mensagem", {
+        routerId: id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   const llmCfg = llmEdgeConfigFromEnv(env);
-  const log = createLogger();
 
   const verdict = await classifyIntent(
     pool,
     llmCfg,
-    { tenantId: org.orgId, leadId: null, jobId: null, router: loaded, signal: parsed.data.message },
+    { tenantId: org.orgId, leadId: null, jobId: null, router: loaded, signal: parsed.data.message, fatos },
     { log },
   );
 
-  // espelha resolve-turn-agent.ts:193 — só casa a intenção se a confiança
+  // espelha a regra do mínimo de confiança de resolve-turn-agent — só casa a intenção se a confiança
   // bateu o mínimo do router; abaixo disso, produção cai no fallback/genérico,
   // e o painel de teste não pode fingir que casou (review whole-branch item 3).
   const matchedMember =
@@ -131,6 +158,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
       min_confidence: loaded.minConfidence,
       agent_id: agentId,
       agent_name: agentName,
+      fatos,
     },
     { requestId },
   );

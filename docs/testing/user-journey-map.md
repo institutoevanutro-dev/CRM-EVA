@@ -2681,3 +2681,9 @@ Migration 0351 (`fn_reiniciar_teste_do_contato`), rota `POST /api/v1/contacts/:i
 | Caso | Esperado |
 |---|---|
 | [ ] RT.1 | O gestor abre um contato que está na lista de teste de um canal em pré-go-live, clica «Reiniciar teste» e a próxima mensagem desse número é tratada pela IA como conversa nova; mensagens, card e agendamentos continuam lá. **PROVA PELA TELA PENDENTE** |
+
+### O roteador escolhe o agente pela agenda do contato `[P1]` (2026-10-12)
+
+Sem migration. Leitura em `lib/agent-engine/agent/fatos-do-contato.ts`, entregue ao classificador por `resolve-turn-agent.ts`; teste de classificação com contato em `/app/ai/routers/[id]`. Unit: `lib/agent-engine/agent/{fatos-do-contato,intent-classifier,resolve-turn-agent,router-config}.test.ts` e `app/app/ai/routers/[id]/_client.test.tsx`. Invariante: `tests/invariants/roteador-fatos-do-contato.test.ts`.
+
+- [ ] Roteador escolhe o agente pela agenda do contato (compromissos passados não cancelados e compromissos futuros; teste de classificação com contato e com o roteador inativo) — coberto por unit e invariante; prova pela tela pendente até a versão ser instalada

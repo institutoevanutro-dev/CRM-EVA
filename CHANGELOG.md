@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.24.0] — 2026-10-12
+
+### Adicionado
+
+- **O roteador de agentes passa a considerar a agenda do contato** Ao escolher qual agente atende uma mensagem, o roteador agora também vê um resumo da agenda do contato: os compromissos passados que não foram cancelados e os compromissos futuros, só com tipo, situação e data. Com isso dá para descrever um assunto como "para quem já teve atendimento realizado" e outro como "para quem nunca consultou". Na tela do roteador, o teste de classificação aceita escolher um contato, mostra o que o roteador viu sobre ele e funciona com o roteador ainda inativo. Roteadores que já existem continuam funcionando e nada precisa ser feito ao atualizar, mas dois efeitos valem para todos: a escolha do agente pode mudar em alguns casos, porque o classificador agora vê a agenda do contato, e o tipo, a situação e a data dos compromissos passam a ser enviados ao provedor de IA configurado para o roteador.
+
 ## [3.23.0] — 2026-10-12
 
 ### Corrigido
@@ -6881,7 +6887,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.23.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.24.0...HEAD
+[3.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.23.0...v3.24.0
 [3.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.2...v3.23.0
 [3.22.2]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.1...v3.22.2
 [3.22.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.0...v3.22.1

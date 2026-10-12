@@ -185,8 +185,28 @@ export type VersionInput = z.infer<typeof versionShapeSchema>;
 
 export const versionCreateSchema = versionShapeSchema;
 
-/** Edits permitted only on draft versions. All fields optional. */
-export const versionPatchSchema = versionShapeSchema.partial();
+const versionPartialSchema = versionShapeSchema.partial();
+
+/**
+ * Edição de rascunho: todos os campos opcionais, e SÓ as chaves presentes no
+ * corpo saem do parse.
+ *
+ * Era `versionShapeSchema.partial()` exportado direto, e no Zod `.partial()`
+ * preserva `.default(...)`: campo OMITIDO saía com o default e quem gravava o
+ * resultado zerava o rascunho. Medido em produção em 2026-10-11: um PATCH só
+ * com `system_prompt` esvaziou `tool_ids`, desligou `cases_enabled`,
+ * `split_messages` e `followup`, o rascunho foi publicado e o agente ficou sem
+ * ferramenta. O schema parcial fica privado de propósito: quem precisa de PATCH
+ * passa por aqui.
+ */
+export function parseVersionPatch(raw: unknown): ReturnType<typeof versionPartialSchema.safeParse> {
+  const parsed = versionPartialSchema.safeParse(raw);
+  if (!parsed.success) return parsed;
+  // O parse passou, então `raw` é objeto (o schema é `z.object().strict()`).
+  const presentes = new Set(Object.keys(raw as object));
+  const data = Object.fromEntries(Object.entries(parsed.data).filter(([k]) => presentes.has(k)));
+  return { ...parsed, data };
+}
 
 export const agentMcpCreateSchema = z
   .object({

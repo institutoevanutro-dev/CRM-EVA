@@ -7,6 +7,10 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/agent-engine/agent/router-config', () => ({ loadActiveRouter: mocks.router }));
 vi.mock('@/lib/agent-engine/agent/intent-classifier', () => ({ classifyIntent: mocks.classify }));
+// Os fatos da agenda ficam fora da seleção medida aqui. Sem este mock a leitura
+// real passaria pelo `query` falso, o `expect(values)` dele lançaria e o
+// `try/catch` dos fatos engoliria: verde violando a própria guarda.
+vi.mock('@/lib/agent-engine/agent/fatos-do-contato', () => ({ buildFatosDoContato: vi.fn(async () => '') }));
 vi.mock('@/lib/agent-engine/agent/agent-config', () => ({
   loadPublishedAgentConfigById: mocks.byId, loadPublishedAgentConfig: mocks.bySession,
   loadConversationAgentConfig: mocks.conversationAgent,

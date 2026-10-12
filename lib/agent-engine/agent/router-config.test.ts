@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type pg from 'pg';
 
-import { loadActiveRouter } from './router-config';
+import { loadActiveRouter, loadRouterById } from './router-config';
 
 function poolSeq(responses: Array<{ rows: unknown[] }>): pg.Pool {
   const query = vi.fn();
@@ -74,5 +74,40 @@ describe('loadActiveRouter — provedor do classificador', () => {
       const router = await loadActiveRouter(pool, 'org1', 'cs1');
       expect(router?.classifierProvider).toBeNull();
     }
+  });
+});
+
+describe('loadRouterById', () => {
+  const inativo = { id: 'r1', name: 'Rascunho', config: {}, fallback_agent_id: 'a-fb' };
+  const membros = [{ agent_id: 'a1', intent_name: 'vendas', intent_description: 'Quer comprar', examples: null }];
+
+  it('devolve o roteador INATIVO, que loadActiveRouter continua não devolvendo', async () => {
+    const pool = poolSeq([{ rows: [inativo] }, { rows: membros }]);
+    const router = await loadRouterById(pool, 'org1', 'r1');
+    expect(router?.id).toBe('r1');
+    expect(router?.fallbackAgentId).toBe('a-fb');
+    expect(router?.members).toEqual([
+      { agentId: 'a1', intentName: 'vendas', intentDescription: 'Quer comprar', examples: [] },
+    ]);
+
+    // A consulta por id filtra organização e id, e NÃO filtra is_active.
+    const [sqlPorId, paramsPorId] = vi.mocked(pool.query).mock.calls[0] as unknown as [string, unknown[]];
+    expect(sqlPorId).toMatch(/organization_id = \$1/);
+    expect(sqlPorId).toMatch(/\bid = \$2/);
+    expect(sqlPorId).not.toMatch(/is_active/);
+    expect(paramsPorId).toEqual(['org1', 'r1']);
+
+    // loadActiveRouter segue exigindo is_active: o banco não devolve o inativo.
+    const poolAtivo = poolSeq([{ rows: [] }]);
+    expect(await loadActiveRouter(poolAtivo, 'org1', 'cs1')).toBeNull();
+    const [sqlAtivo] = vi.mocked(poolAtivo.query).mock.calls[0] as unknown as [string];
+    expect(sqlAtivo).toMatch(/and is_active/);
+  });
+
+  it('id de outra organização devolve null e não lê membros', async () => {
+    const pool = poolSeq([{ rows: [] }]);
+    expect(await loadRouterById(pool, 'org-alheia', 'r1')).toBeNull();
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(pool.query).mock.calls[0]?.[1]).toEqual(['org-alheia', 'r1']);
   });
 });
