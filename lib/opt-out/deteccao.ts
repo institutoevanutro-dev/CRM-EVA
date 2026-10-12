@@ -157,6 +157,17 @@ const ORDENS_DE_COMUNICACAO = VERBOS_DE_COMUNICACAO.split("|")
 const INFINITIVOS_DE_COMUNICACAO = VERBOS_DE_COMUNICACAO.split("|").filter(ehInfinitivo).join("|");
 
 /**
+ * Os verbos de quem ENVIA: a constante menos `receber`/`recibir`. É o que cabe
+ * em "pare de <verbo>", onde a ordem é dada à clínica. "Receber" é o único
+ * verbo da lista cujo sujeito é quem ESCREVE, e por isso o que a pessoa não
+ * quer receber pode ser qualquer coisa do mundo dela (visita, anestesia, alta).
+ * Tem regra própria, com o objeto exigido: ver `RECUSA_DE_RECEBER`.
+ */
+const VERBOS_DE_ENVIO = VERBOS_DE_COMUNICACAO.split("|")
+  .filter((forma) => !/^rec[ei]b/u.test(forma))
+  .join("|");
+
+/**
  * Objetos que aparecem depois de um verbo de comunicação mas NÃO são a
  * comunicação em si — pedido, fatura, orçamento, campanha publicitária.
  * Compartilhada entre português e espanhol: sem este lookahead, "parar de
@@ -169,7 +180,13 @@ const OBJETOS_NAO_COMUNICATIVOS =
   "pedido|pedidos|encomenda|encomendas|pacote|pacotes|entrega|entregas|" +
   "fatura|faturas|boleto|boletos|cobranca|cobrancas|produto|produtos|" +
   "paquete|paquetes|envio|envios|factura|facturas|boleta|boletas|" +
-  "cobro|cobros|producto|productos|pauta|pautas|presupuesto|presupuestos";
+  "cobro|cobros|producto|productos|pauta|pautas|presupuesto|presupuestos|" +
+  // CRM EvaLink (12/10/2026): documento de clínica. "para de me mandar o
+  // resultado por e-mail" bloqueava a paciente que só não quer o exame por
+  // e-mail. O que se manda parar é o DOCUMENTO, e ela segue em atendimento.
+  "resultado|resultados|exame|exames|laudo|laudos|receita|receitas|atestado|atestados|" +
+  "recibo|recibos|comprovante|comprovantes|contrato|contratos|orcamento|orcamentos|" +
+  "examen|examenes|receta|recetas|comprobante|comprobantes";
 
 /**
  * Determinantes que podem vir entre o verbo e o objeto não comunicativo —
@@ -351,9 +368,11 @@ const QUEM_O_PACIENTE_RELATA =
  * nenhum" NÃO são restrição, e os controles disso estão no teste.
  */
 const OUTROS_CANAIS =
-  "e-?mail|telefone|telefonema|ligac(?:ao|oes)|chamadas?|sms|carta|voz|fixo|instagram|facebook|telegram";
+  "e-?mail|telefone|telefonema|ligac(?:ao|oes)|chamadas?|sms|carta|voz|fixo|instagram|facebook|telegram|" +
+  // o correio, e o espanhol de e-mail e de ligação ("por correo", "llamadas")
+  "correios?|correo|llamadas?|telefono";
 const TURNOS = "manha|tarde|noite|madrugada";
-const RESTRICOES_DE_HORA_E_DE_CANAL =
+const RESTRICOES_DE_HORA_E_DE_OUTRO_CANAL =
   // QUANDO
   "hoje|amanha|agora|antes|depois|apos|ate|durante|enquanto|por\\s+enquanto|" +
   `(?:tao\\s+|muito\\s+)?(?:cedo|tarde)|de\\s+(?:${TURNOS}|dia)|a\\s+(?:tarde|noite)|` +
@@ -361,7 +380,16 @@ const RESTRICOES_DE_HORA_E_DE_CANAL =
   "(?:n?ess[ea]s?|n?est[ea]s?|n[oa]s?|em|aos|fora\\s+d[eo])\\s+(?:horarios?|hora|semana|mes|periodo|" +
   "turno|domingos?|sabados?|feriados?|fi(?:m|ns|nais)\\s+de\\s+semana)|" +
   // POR ONDE — outro canal, nunca este: "por aqui" e "por whatsapp" são o pedido
-  `(?:por|pelo|pela|via|no|na|em)\\s+(?:${OUTROS_CANAIS})|` +
+  `(?:por|pelo|pela|via|no|na|em)\\s+(?:${OUTROS_CANAIS})`;
+/**
+ * A lista inteira soma o "só <canal ou turno>". Fica à parte porque em "não
+ * quero mais receber mensagens, só ligação" ele NÃO é restrição: quem escreve
+ * recusa a mensagem deste canal, e a regra de receber segue bloqueando (ver
+ * `CAUDA_DE_RECEBER`). Nos imperativos ("não me liguem mais, prefiro whatsapp")
+ * ele vale, como sempre valeu.
+ */
+const RESTRICOES_DE_HORA_E_DE_CANAL =
+  `${RESTRICOES_DE_HORA_E_DE_OUTRO_CANAL}|` +
   "(?:so|somente|apenas|prefiro)\\s+(?:(?:por|pelo|pela|no|na|via|a|de)\\s+)?" +
   `(?:whatsapp|whats|zap|wpp|mensage(?:m|ns)|msgs?|texto|audio|${OUTROS_CANAIS}|${TURNOS})`;
 
@@ -380,9 +408,9 @@ const ESTE_NUMERO_E_EXISTE_OUTRO =
  * mudar nada: o objeto ("não me mande mais MENSAGEM de madrugada") ou o
  * destinatário ("não entre em contato COMIGO antes das 9h").
  */
-const freioDeRestricao = (pulaveis: string): string =>
+const freioDeRestricao = (pulaveis: string, restricoes = RESTRICOES_DE_HORA_E_DE_CANAL): string =>
   `(?!(?:\\s+(?:${pulaveis}))?\\s*,?\\s*` +
-  `(?:(?:${RESTRICOES_DE_HORA_E_DE_CANAL})\\b|${ESTE_NUMERO_E_EXISTE_OUTRO}))`;
+  `(?:(?:${restricoes})\\b|${ESTE_NUMERO_E_EXISTE_OUTRO}))`;
 
 /** "não me chamem mais DE dona": tratamento, não contato. "de jeito nenhum" é ênfase. */
 const CHAMAR_DE = "cham[a-z]*\\s+mais\\s+de\\s+(?!(?:jeito|forma|maneira|modo|novo)\\b)";
@@ -435,6 +463,120 @@ const CAUDA_DE_EM_CONTATO =
   freioDeRestricao("comigo|conosco");
 
 /**
+ * ═══ "NÃO QUERO RECEBER": o objeto é EXIGIDO, não excluído (CRM EvaLink, 12/10/2026) ═══
+ *
+ * A regra era `não quero (mais) receber` + uma lista de EXCEÇÃO com um item só
+ * ("ligação"). Todo o resto bloqueava:
+ *
+ *   "não quero receber o resultado por e-mail, prefiro buscar aí" → BLOQUEADA
+ *   "não quero receber anestesia geral"                           → BLOQUEADA
+ *
+ * É o defeito de "pare de mandar o pedido" e de "não me mande mais boletos"
+ * pela terceira vez, e desta vez a lista de exceção não tem conserto: o que
+ * uma paciente pode não querer RECEBER é um mundo aberto (visita, alta,
+ * anestesia, sedação, o boleto pelo correio). O que é a mensagem da clínica é
+ * um mundo fechado. Por isso a lista virou do avesso: só bloqueia quando o
+ * objeto é a comunicação, ou quando não há objeto e a cessação está escrita.
+ *
+ * Os casos difíceis, decididos aqui:
+ *
+ *   "não quero receber mensagens"          bloqueia: o objeto é a mensagem.
+ *   "não quero mais receber nada de vocês" bloqueia: "nada" de quem escreve.
+ *   "não quero mais receber" / "parar de receber"
+ *                                          bloqueia: sem objeto, mas com a
+ *                                          cessação escrita ("mais", "parar").
+ *   "não quero receber propaganda/promoção" bloqueia. O produto só tem
+ *                                          `is_blocked` para o contato inteiro,
+ *                                          sem "só marketing", e a doutrina já
+ *                                          bloqueava "me tira da lista de
+ *                                          marketing" e "no quiero mas
+ *                                          publicidad". Na dúvida entre mandar
+ *                                          propaganda a quem recusou e calar
+ *                                          lembrete, a LGPD decide.
+ *   "não quero receber e-mail" (sozinha)   NÃO bloqueia e NÃO escala: o contato
+ *                                          bloqueado seria o do WhatsApp, e ela
+ *                                          recusou outro canal. É o precedente
+ *                                          de "não quero receber ligação". O
+ *                                          agente segue e lê a frase; a regra
+ *                                          não grava preferência de canal.
+ *   "não quero receber" (sem "mais")       NÃO bloqueia, ESCALA: pode ser a
+ *                                          resposta a "quer receber o resultado
+ *                                          por e-mail?". Uma pessoa decide.
+ *   "não quero receber lembrete/aviso/áudio/isso"
+ *                                          NÃO bloqueia, ESCALA: recusa UM tipo
+ *                                          de mensagem, e o produto não tem
+ *                                          bloqueio por tipo.
+ *   "para de me mandar o resultado por e-mail"
+ *                                          NÃO bloqueia e NÃO escala: o que se
+ *                                          manda parar é o documento (ver
+ *                                          `OBJETOS_NAO_COMUNICATIVOS`).
+ *
+ * Português e espanhol têm cabeças SEPARADAS de propósito: sem acento, o "más"
+ * espanhol e o "mas" português são a mesma palavra, e "não quero receber mas
+ * obrigada" não pode valer como "não quero receber mais".
+ */
+const NAO_QUERO_PT = "nao\\s+(?:quero|desejo|gostaria)\\s+(?:de\\s+)?";
+const NAO_QUERO_ES = "no\\s+(?:quiero|deseo)\\s+";
+const PARAR_DE_PT = "par(?:ar|a|e|em)\\s+de\\s+";
+const PARAR_DE_ES = "(?:dej(?:ar|a|e|en)|par(?:ar|a|e|en))\\s+de\\s+";
+
+/** Qualquer recusa de receber, com ou sem "mais". Sozinha não decide nada. */
+const RECUSA_DE_RECEBER =
+  `\\b(?:(?:${NAO_QUERO_PT}(?:mais\\s+)?|${PARAR_DE_PT})receber(?:\\s+mais)?|` +
+  `(?:${NAO_QUERO_ES}(?:mas\\s+)?|${PARAR_DE_ES})recibir(?:\\s+mas)?)\\b`;
+
+/** A recusa com a CESSAÇÃO escrita: "mais", "parar de", "ya no". */
+const RECUSA_DE_CONTINUAR_RECEBENDO =
+  `\\b(?:${NAO_QUERO_PT}(?:mais\\s+receber(?:\\s+mais)?|receber\\s+mais)|${PARAR_DE_PT}receber(?:\\s+mais)?|` +
+  `${NAO_QUERO_ES}(?:mas\\s+recibir(?:\\s+mas)?|recibir\\s+mas)|ya\\s+${NAO_QUERO_ES}recibir|` +
+  `${PARAR_DE_ES}recibir(?:\\s+mas)?)\\b`;
+
+/**
+ * A frase ACABOU ali: fim, pontuação, emoji, ou só cortesia e reforço. É o que
+ * separa "não quero mais receber" de "não quero mais receber visita".
+ */
+const FIM_DO_PEDIDO =
+  "(?=(?:\\s+(?:nao|mesmo|viu|ta|ok|blz|k{2,}|rs+|pfv?|por\\s+favor|por\\s+gentileza|obrigad[oa]|obg|" +
+  "grat[oa]|gracias|valeu|vlw)\\b)*\\s*(?:$|[^a-z0-9\\s]))";
+
+/** O que é a MENSAGEM da clínica, nos dois idiomas. Lista fechada. */
+const MENSAGENS_DA_CLINICA =
+  "mensage(?:m|ns)|mensajes?|msgs?|msjs?|contatos?|contactos?|noticias?|whatsapp|whats|zap|wpp|" +
+  "propagandas?|publicidade|publicidad|promoc(?:ao|oes)|promocion(?:es)?|ofertas?|marketing|spam|" +
+  "anuncios?|divulgac(?:ao|oes)|disparos?|novidades|novedades";
+
+/**
+ * UM tipo de mensagem, ou um "isso" que só a conversa explica. Recusar lembrete
+ * não é recusar a clínica, e o produto não bloqueia por tipo: escala.
+ */
+const TIPOS_DE_MENSAGEM =
+  "lembretes?|recordatorios?|avisos?|notificac(?:ao|oes)|notificacion(?:es)?|comunicados?|" +
+  "informativos?|informac(?:ao|oes)|informacion(?:es)?|newsletter|audios?|videos?|fotos?|links?|" +
+  "coisas?|cosas?|isso|isto|eso|esto";
+
+/** O que pode vir entre "receber" e o objeto: "mais nenhuma", "essas", "as suas". */
+const QUALIFICADORES_DO_OBJETO =
+  "(?:(?:mais|mas|nenhuma?|ningun[ao]?|qualquer|cualquier|ess[ea]s?|est[ea]s?|es[ao]s?|est[ao]s?|" +
+  "suas?|seus?|sus?|as|os|a|o|las?|los|el|tantas?|tantos?)\\s+){0,3}";
+
+/**
+ * "nada" vale como objeto, MENOS "nada de <outra coisa>": "não quero receber
+ * nada de anestesia" não é sobre mensagem. Mesmo desenho do freio de lista.
+ */
+const NADA_DE_VOCES =
+  `nada\\b(?!\\s+de\\s+(?!(?:${MENSAGENS_DA_CLINICA}|voces|vcs|ustedes|ninguem|nadie)\\b))`;
+
+/**
+ * Depois do objeto: "…de vocês" passa; outro HORÁRIO ("mensagem de madrugada")
+ * e a mensagem POR outro canal ("mensagens por e-mail") freiam, e a frase segue
+ * com o agente. "…, só ligação" NÃO freia: ali a mensagem daqui foi recusada.
+ */
+const CAUDA_DE_RECEBER = freioDeRestricao(
+  "de\\s+(?:voces|vcs|ustedes)",
+  RESTRICOES_DE_HORA_E_DE_OUTRO_CANAL,
+);
+
+/**
  * Pedidos INEQUÍVOCOS de descadastro escritos por extenso. Todos exigem o objeto
  * de comunicação; nenhum casa a palavra solta.
  *
@@ -454,14 +596,21 @@ const FRASES_DE_OPT_OUT: readonly RegExp[] = [
   // lookahead (OBJETOS_NAO_COMUNICATIVOS) é o mesmo que já protege o
   // padrão de cessação espanhol, abaixo.
   new RegExp(
-    `\\bpar(?:ar|a|e|em)\\s+de\\s+(?:me\\s+)?(?:${VERBOS_DE_COMUNICACAO})\\b` +
+    `\\bpar(?:ar|a|e|em)\\s+de\\s+(?:me\\s+)?(?:${VERBOS_DE_ENVIO})\\b` +
       `(?!\\s+(?:${DETERMINANTES_DE_OBJETO})?\\s*(?:${OBJETOS_NAO_COMUNICATIVOS})\\b)`,
     "u",
   ),
-  // "não quero (mais) receber" — mas "não quero receber ligação, só whatsapp" é
-  // troca de canal, não descadastro: quem diz isso QUER continuar no WhatsApp.
-  /\bnao\s+(?:quero|desejo|gostaria)\s+(?:de\s+)?(?:mais\s+)?receber\b(?!\s+(?:ligacao|ligacoes|chamada|chamadas|telefonema|telefonemas|telefone)\b)/u,
-  /\bnao\s+quero\s+receber\s+mais\b/u,
+  // "não quero (mais) receber", "parar de receber", e o espanhol das duas: só
+  // com o OBJETO de comunicação, ou sem objeto e com a cessação escrita. As
+  // peças e os casos difíceis estão em `RECUSA_DE_RECEBER`, acima. "não quero
+  // receber ligação, só whatsapp" segue fora, agora sem lista de exceção:
+  // ligação não é a mensagem.
+  new RegExp(RECUSA_DE_CONTINUAR_RECEBENDO + FIM_DO_PEDIDO, "u"),
+  new RegExp(
+    `${RECUSA_DE_RECEBER}\\s+${QUALIFICADORES_DO_OBJETO}(?:(?:${MENSAGENS_DA_CLINICA})\\b|${NADA_DE_VOCES})` +
+      CAUDA_DE_RECEBER,
+    "u",
+  ),
   /\bnao\s+quero\s+mais\s+(?:mensagem|mensagens|contato|nada\s+de\s+voces)\b/u,
   // "não me mande mais" — mas NÃO "não me mande mais boletos": esta regra
   // ancorava só no VERBO, e mandar é verbo de comunicação mesmo quando o
@@ -543,20 +692,11 @@ const FRASES_DE_OPT_OUT: readonly RegExp[] = [
   /\bdescadastro\b/u,
   // ── espanhol ──────────────────────────────────────────────────────────────
   //
-  // Mesma regra das de cima: TODAS exigem o objeto de comunicação. Sem isso
-  // "no quiero recibir la factura por aqui, manda por email" bloquearia um
-  // cliente que está pedindo justamente para CONTINUAR sendo atendido.
-  // O `(?!…)` é o mesmo recurso que a regra portuguesa usa para "ligação": o
-  // verbo sozinho não basta, porque o OBJETO pode ser outro. Medido — sem ele,
-  // "no quiero recibir la factura por aqui, manda por email" bloqueava um
-  // cliente que está pedindo justamente para CONTINUAR sendo atendido.
-  new RegExp(
-    `\\bno\\s+(?:quiero|deseo)\\s+(?:mas\\s+)?(?:${VERBOS_DE_COMUNICACAO})\\b` +
-      "(?!\\s+(?:la|el|los|las|mi|mis)?\\s*(?:factura|facturas|boleta|boletas|presupuesto|" +
-      "presupuestos|recibo|recibos|comprobante|comprobantes|llamada|llamadas|contrato|contratos)\\b)",
-    "u",
-  ),
-  /\bno\s+quiero\s+recibir\s+mas\b/u,
+  // "no quiero recibir …" mora com o português, em `RECUSA_DE_RECEBER`: mesma
+  // regra, objeto EXIGIDO. O padrão que estava aqui aceitava QUALQUER verbo de
+  // comunicação depois de "no quiero" e excluía uma lista de objetos. Medido em
+  // 12/10/2026: "no quiero molestar, pero tengo una duda" e "no quiero llamar
+  // tan tarde" bloqueavam. Quem não quer molestar é quem escreve.
   // "no quiero más mensajes/publicidad/promociones" — o objeto é um
   // SUBSTANTIVO, não um verbo, e por isso não casava no padrão de cima
   // (que exige verbo de comunicação depois de "no quiero"). Espelho direto
@@ -594,7 +734,7 @@ const FRASES_DE_OPT_OUT: readonly RegExp[] = [
   // dois idiomas.
   new RegExp(
     `\\b(?:dej(?:ar|a|e|en)|par(?:ar|a|e|en))\\s+de\\s+` +
-      `(?:${VERBOS_DE_COMUNICACAO})(?:me|nos|le|les)?\\b` +
+      `(?:${VERBOS_DE_ENVIO})(?:me|nos|le|les)?\\b` +
       `(?!\\s+(?:${DETERMINANTES_DE_OBJETO})?\\s*(?:${OBJETOS_NAO_COMUNICATIVOS})\\b)`,
     "u",
   ),
@@ -641,6 +781,14 @@ const FRASES_AMBIGUAS_DE_OPT_OUT: readonly RegExp[] = [
   // main, "me tira da lista de <qualquer coisa>" bloqueava.
   new RegExp(
     `(?:${ME_TIRA_DA_LISTA}|${SAIR_DA_LISTA})\\s+de\\s+(?!(?:${LISTAS_QUE_NAO_SAO_ENVIO})\\b)`,
+    "u",
+  ),
+  // "não quero receber" sem objeto e sem "mais", e "não quero receber
+  // lembrete/aviso/isso" (12/10/2026): a regra antiga bloqueava todas. O
+  // bloqueio saiu, o sinal não pode cair no vazio. Ver `RECUSA_DE_RECEBER`.
+  new RegExp(RECUSA_DE_RECEBER + FIM_DO_PEDIDO, "u"),
+  new RegExp(
+    `${RECUSA_DE_RECEBER}\\s+${QUALIFICADORES_DO_OBJETO}(?:${TIPOS_DE_MENSAGEM})\\b${CAUDA_DE_RECEBER}`,
     "u",
   ),
   // ── espanhol ──────────────────────────────────────────────────────────────
