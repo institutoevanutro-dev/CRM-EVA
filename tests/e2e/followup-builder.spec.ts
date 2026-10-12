@@ -173,6 +173,21 @@ async function connectHandles(
   await page.mouse.down();
   await page.mouse.move(sBox.x + sBox.width / 2 + 5, sBox.y + sBox.height / 2 + 5, { steps: 3 });
   await page.mouse.move(tBox.x + tBox.width / 2, tBox.y + tBox.height / 2, { steps: 12 });
+  // A bolinha de destino pode não estar mais onde `tBox` a mediu. A menos de
+  // 40px da borda do canvas o React Flow rola a tela sozinho enquanto se
+  // arrasta (`autoPanOnConnect`), até 15px por quadro, e só conecta a até 20px
+  // da bolinha. O "Fim" da fileira da paleta nasce a ~6px da borda direita:
+  // com a máquina ocupada o arrasto dura mais quadros, a bolinha anda mais de
+  // 20px e soltar na coordenada antiga não cria aresta nenhuma (visto no CI em
+  // 10 e 11/10/2026, sempre na ligação ação→fim). Uma pessoa segue a bolinha
+  // com o mouse; aqui também, até o próprio React Flow marcar o destino como
+  // `valid`, que é o que ele consulta ao soltar.
+  await expect(async () => {
+    const box = await target.boundingBox();
+    if (!box) throw new Error(`handle de destino sumiu: ${targetNodeId}`);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 2 });
+    await expect(target).toHaveClass(/(^| )valid( |$)/, { timeout: 250 });
+  }).toPass({ timeout: 5_000 });
   await page.mouse.up();
   await page.waitForTimeout(200);
 }
