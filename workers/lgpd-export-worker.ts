@@ -60,6 +60,14 @@ import { marcaDaSaida } from "@/lib/branding/saida";
 const MAX_ATTEMPTS = 3;
 const BUCKET = "lgpd-exports";
 
+/**
+ * Depois disto, uma reivindicação de exportação é considerada ÓRFÃ e o próximo
+ * evento pode retomá-la: a mesma janela do reaper do `event_log`
+ * (`PROCESSING_STALE_MS`, `lib/event-log/drain.ts`). Processo derrubado no meio
+ * do export não pode deixar o pedido preso para sempre.
+ */
+const EXPORT_CLAIM_STALE_MS = 10 * 60 * 1000;
+
 function expiresHours(): number {
   const raw = process.env.LGPD_EXPORT_EXPIRES_HOURS ?? env.LGPD_EXPORT_EXPIRES_HOURS;
   const n = Number.parseInt(String(raw ?? "72"), 10);
@@ -151,11 +159,58 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
     };
   }
 
-  await admin
+  // ─── REIVINDICAÇÃO ATÔMICA ─────────────────────────────────────────────────
+  // Portado do projeto original (DeskcommCRM PR 2752 de @Tong-bit-art, issue 2751 lá).
+  //
+  // Dois eventos do MESMO pedido (o webhook e a aprovação emitem
+  // `lgpd.data_request_received` cada um, e o reaper devolve à fila um evento
+  // preso) podem rodar em paralelo nos dois drenos. Os dois leem o pedido fora
+  // de `completed` e, antes desta reivindicação, os dois exportavam
+  // (`attempts=2`, dois `lgpd.export_generated`, e-mail em dobro). Quem exporta
+  // é quem CONSEGUE gravar `export_claimed_at`: o UPDATE é a trava, e o
+  // predicado é reavaliado contra a linha já comitada por quem chegou primeiro.
+  //
+  // O marcador é do WORKER, não do fluxo: a aprovação também grava `processing`
+  // (é o estado que a tela mostra), e `status` sozinho não distingue "aprovado,
+  // ainda na fila" de "exportando agora". Reivindicação vencida é órfã (processo
+  // derrubado) e o próximo evento retoma.
+  const limiteDaReivindicacao = new Date(Date.now() - EXPORT_CLAIM_STALE_MS).toISOString();
+  const { data: reivindicado, error: erroDaReivindicacao } = await admin
     .from("lgpd_requests")
-    .update({ status: "processing", attempts: nextAttempts })
+    .update({
+      status: "processing",
+      attempts: nextAttempts,
+      export_claimed_at: new Date().toISOString(),
+    })
     .eq("organization_id", orgId)
-    .eq("id", requestId);
+    .eq("id", requestId)
+    .neq("status", "completed")
+    .or(`export_claimed_at.is.null,export_claimed_at.lt.${limiteDaReivindicacao}`)
+    .select("id");
+
+  if (erroDaReivindicacao) {
+    // O banco não respondeu à trava: não sabemos se reivindicou. Lido como
+    // "outro está exportando", o dreno consumiria o evento e o pedido ficaria
+    // sem exportação nem nova tentativa. `error` faz o dreno contar a tentativa
+    // e reagendar. Só o código: a mensagem do Postgres pode trazer a linha.
+    return {
+      consumer_key: "lgpd-export-worker.v1",
+      status: "error",
+      detail: `claim_failed: ${erroDaReivindicacao.code}`,
+    };
+  }
+
+  if (!reivindicado?.length) {
+    // Não reivindicou: outro evento está exportando agora, ou concluiu entre a
+    // leitura e a reivindicação. O motivo fica no `detail` (o dreno o grava em
+    // `last_error`) e o evento é consumido como sucesso: o trabalho não é dele.
+    const atual = await findLgpdRequest(orgId, requestId).catch(() => null);
+    return {
+      consumer_key: "lgpd-export-worker.v1",
+      status: "skipped",
+      detail: atual?.status === "completed" ? "already_completed" : "already_in_flight",
+    };
+  }
 
   try {
     // 3. Collect data.
@@ -322,6 +377,9 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
         .update({
           status: "received",
           error_message: "email_send_failed",
+          // A falha devolve o pedido à fila: limpa a reivindicação para o retry
+          // imediato não esperar a janela de órfã.
+          export_claimed_at: null,
         })
         .eq("organization_id", orgId)
         .eq("id", requestId);
@@ -441,6 +499,9 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
       .update({
         status: nextAttempts >= MAX_ATTEMPTS ? "failed" : "received",
         error_message: detail.slice(0, 500),
+        // Sem reivindicação pendurada: o retry (received) reclama na hora, e o
+        // desistido (failed) não deixa marcador para trás.
+        export_claimed_at: null,
       })
       .eq("organization_id", orgId)
       .eq("id", requestId);
