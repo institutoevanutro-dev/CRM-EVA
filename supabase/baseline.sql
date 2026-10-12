@@ -34751,6 +34751,41 @@ grant  execute on function public.fn_uso_de_ia(uuid, timestamptz, timestamptz, u
 notify pgrst, 'reload schema';
 -- end 0352
 
+-- ---- índices do caminho quente e da poda (migration 0353) ----
+-- Porte da 0585 de melgarafael/DeskcommCRM #2128. O porquê de cada índice está
+-- no cabeçalho da migration: `send_ledger` por contato (1º outbound e turno já
+-- respondido), `job_id` em `llm_calls`, `lead_checkpoints` e
+-- `lead_state_transitions` (métrica do run e o `on delete set null` da poda da
+-- fila) e `event_log` em `processing` (os dois reapers de evento preso).
+--
+-- Sem CONCURRENTLY, como no resto deste arquivo: um build concorrente que falha
+-- deixa o índice INVÁLIDO de pé, e o `if not exists` da reaplicação seguinte o
+-- pula para sempre. Na PRIMEIRA aplicação cada comando pega SHARE lock na sua
+-- tabela (leitura segue, escrita espera) pelo tempo de construir o índice; nas
+-- seguintes o `if not exists` não constrói nada.
+-- Sem função nova (nada a revogar de anon).
+
+create index if not exists idx_send_ledger_contato_entregue
+  on public.send_ledger (organization_id, contact_id)
+  where status in ('accepted', 'queued');
+
+create index if not exists idx_llm_calls_job_id
+  on public.llm_calls (job_id)
+  where job_id is not null;
+
+create index if not exists idx_lead_checkpoints_job_id
+  on public.lead_checkpoints (job_id)
+  where job_id is not null;
+
+create index if not exists idx_lead_state_transitions_job_id
+  on public.lead_state_transitions (job_id)
+  where job_id is not null;
+
+create index if not exists event_log_processing_por_tipo_idx
+  on public.event_log (event_type)
+  where status = 'processing';
+-- end 0353
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
