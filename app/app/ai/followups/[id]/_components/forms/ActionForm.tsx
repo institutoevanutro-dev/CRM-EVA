@@ -17,8 +17,33 @@ import { useMessageTemplates } from "@/hooks/inbox/useMessageTemplates";
 import { useT } from "@/hooks/i18n/useT";
 import { useMidias } from "@/hooks/ai/useMidias";
 import { SITUACAO_LEGIVEL } from "@/lib/midias/termo";
+import { VARIAVEIS_DO_TEMPLATE, variaveisDesconhecidas } from "@/lib/inbox/template-vars";
 
 import type { ConfigOf } from "./shared";
+
+/**
+ * As variáveis que o envio preenche (a MESMA lista de `lib/inbox/template-vars.ts`)
+ * e o aviso da que não existe: no envio ela sai do texto, e descobrir pela
+ * mensagem que chegou torta é descobrir tarde. `volta` e `voltas` são do laço.
+ */
+function AjudaDasVariaveis({ texto }: { texto: string }) {
+  const t = useT();
+  const desconhecidas = variaveisDesconhecidas(texto, ["volta", "voltas"]);
+  return (
+    <>
+      <p className="text-xs text-text-muted" data-testid="variaveis-do-followup">
+        {t("Variáveis do contato:")} {VARIAVEIS_DO_TEMPLATE.map((v) => `{{${v}}}`).join(" ")}
+        {". "}
+        {t("Variável sem valor sai do texto.")}
+      </p>
+      {desconhecidas.length > 0 ? (
+        <p className="text-xs text-warning" data-testid="aviso-variavel-do-followup">
+          {t("Variável que não existe: use só as da lista.")} {desconhecidas.join(" ")}
+        </p>
+      ) : null}
+    </>
+  );
+}
 
 /**
  * O seletor de modelo, no lugar dos dois `<Input>` que pediam um UUID colado à
@@ -211,9 +236,7 @@ export function ActionForm({
           <p className="text-xs text-text-muted">
             {t("Sai exatamente assim, sem IA. No laço,")} {t("{{volta}}")} e {t("{{voltas}}")} {t("viram o número da volta.")}
           </p>
-          <p className="text-xs text-text-muted">
-            {t("{{nome}} e {{primeiro_nome}} viram o nome do contato; sem nome, a variável sai do texto.")}
-          </p>
+          <AjudaDasVariaveis texto={body} />
         </div>
       ) : mode === "ai_message" ? (
         <>
@@ -266,9 +289,7 @@ export function ActionForm({
                 commit({ mode, ...fields, caption: e.target.value });
               }}
             />
-            <p className="text-xs text-text-muted">
-              {t("{{nome}} e {{primeiro_nome}} viram o nome do contato; sem nome, a variável sai do texto.")}
-            </p>
+            <AjudaDasVariaveis texto={caption} />
           </div>
         </>
       ) : (
