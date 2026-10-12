@@ -2712,6 +2712,27 @@ Ambiente fresco estilo VPS: Supabase local próprio (pg15), `baseline.sql`, `nex
 
 **O que esta jornada NÃO tem, e é achado, não cobertura:**
 
-- **Não existe botão para CRIAR um pedido.** A única porta que cria `lgpd_requests` é o webhook da Nuvemshop. Numa clínica sem loja, o pedido de um paciente não tem por onde entrar no sistema; nas specs ele nasce por insert, com o que o webhook gravaria.
-- **Não existe ação para ENCERRAR um "Revisão pendente"** depois que o operador entrega o PDF à mão. O pedido fica nesse estado, e o alarme de prazo (`lgpd-sla-watcher`) segue avisando.
+- ~~Não existe botão para CRIAR um pedido.~~ **Fechado na J33:** "Registrar pedido", em LGPD › Solicitações.
+- ~~Não existe ação para ENCERRAR um "Revisão pendente".~~ **Fechado na J33:** "Marcar como entregue", na página do pedido.
 - **Pedido "Falhou" não avisa ninguém pelo prazo:** o `lgpd-sla-watcher` ignora `failed`. O que avisa é o evento morto na Central (`event_dead`), depois de 5 tentativas do dreno.
+
+## J33 — A equipe registra o pedido do titular pela tela e fecha a entrega em mãos `[P1]` (2026-10-12)
+
+Ambiente fresco estilo VPS: Supabase local próprio (pg15), `baseline.sql`, `next build` + `next start`, **sem** `RESEND_API_KEY`. Evidência em `.superpowers/evidence/lgpd-registrar/`. Spec: `tests/e2e/lgpd-registrar-pedido-pela-tela.spec.ts` (no CI, parte 3).
+
+| Caso | O que o administrador faz | Resultado |
+|---|---|---|
+| J33.1 | LGPD › Solicitações › "Registrar pedido": procura o contato, escolhe "Cópia dos dados", "Pessoalmente", a data de três dias atrás, escreve a observação e registra | **PROVADO NA TELA.** Aviso "Pedido registrado. Prazo: DD/MM/AAAA", com o prazo de 7 dias úteis contado do dia informado (não de hoje). No banco: `source = manual`, `received_at` no dia informado, canal e observação em `request_payload`. Nenhum evento emitido: nada começa a ser processado |
+| J33.2 | Abre o pedido pela lista | **PROVADO NA TELA.** "Recebido" na lista; a página mostra "Vence em" com o mesmo dia do aviso, "Chegou por: Pessoalmente", a observação, e `lgpd.data_request_received` na trilha, com quem registrou |
+| J33.3 | Tenta registrar de novo o mesmo pedido para o mesmo contato | **PROVADO NA TELA.** Recusado com "Este contato já tem um pedido igual em aberto." e a ligação "Abrir o pedido em aberto", que leva ao pedido existente |
+| J33.4 | Aprova ("Aprovar export"), o dreno roda | **PROVADO NA TELA.** Processando, depois "Revisão pendente" com "Baixar PDF" (contato sem e-mail, instalação sem envio de e-mail). O PDF baixa |
+| J33.5 | "Marcar como entregue": escolhe como entregou, escreve a observação, confirma | **PROVADO NA TELA.** O pedido vai a "Concluído"; a página mostra "Entregue: Em mãos, pessoalmente" e a observação, a trilha ganha `lgpd.export_delivered` com quem marcou, e o botão some. No banco: `completed_at` preenchido e `result.manual_delivery` com quem, quando e como. O vigia de prazo ignora `completed`, então o alarme para |
+| J33.6 | Registra um pedido de APAGAMENTO e o dreno roda | **PROVADO NA TELA.** O formulário avisa "Registrar não apaga nada". Depois do dreno o pedido segue "Recebido" com 0 tentativas, o contato continua com o nome e sem anonimizar, e não há evento no `event_log`. A página do pedido oferece "Aprovar anonimização", com o aviso de irreversível |
+
+**O que esta jornada NÃO tem, e é achado, não cobertura:**
+
+- **A lista mostra o titular como `ctt:` + o começo do id do contato**, não pelo nome. Para achar o pedido de um paciente é preciso abri-lo (a página mostra o id inteiro) ou reconhecer pela data. Não foi mexido aqui.
+- **A coluna "Vence" da lista e a linha do tempo da página do pedido seguem contando em milissegundos e dias corridos** (dívida declarada em `tests/unit/lgpd-prazo-e-dia-civil.test.ts`). O que passou a estar certo é o "Vence em DD/MM/AAAA" do cabeçalho da página do pedido e o aviso de "Pedido registrado. Prazo:".
+- **Pedido sobre quem não é contato não tem campo próprio.** O formulário deixa criar o contato ali mesmo ("Criar contato"); esse caminho não foi dirigido pela spec.
+- **A anonimização aprovada de um pedido registrado pela tela não foi executada nesta prova.** A spec para na confirmação de aprovação e cancela; o que a anonimização faz depois de aprovada é o caminho antigo, coberto pelos invariantes de LGPD.
+- **Dois registros no mesmo instante** (duas pessoas, mesmo contato, mesmo tipo) podem passar os dois: a regra de duplicata é conferida na aplicação, sem trava no banco.

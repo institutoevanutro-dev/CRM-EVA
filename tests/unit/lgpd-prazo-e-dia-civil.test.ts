@@ -291,6 +291,9 @@ const LEEM_PELO_HELPER: readonly string[] = [
   "lib/lgpd/balde-de-sla.ts",
   "lib/lgpd/repository.ts",
   "app/api/v1/lgpd/requests/route.ts",
+  "app/app/lgpd/requests/RegistrarPedidoDialog.tsx",
+  // Saiu da dívida: o "Vence em" da página do pedido lê o dia pelo `prazoEmBr`.
+  "app/app/lgpd/requests/[id]/_client.tsx",
 ];
 
 /**
@@ -308,6 +311,7 @@ const REPASSA_O_VALOR: readonly string[] = [
   "app/api/v1/webhooks/nuvemshop/customer-data-request/route.ts",
   "hooks/useLgpdRequests.ts",
   "hooks/useAdminLGPDRequests.ts",
+  "hooks/useLgpdPedidoManual.ts",
   "app/api/v1/admin/lgpd/requests/[id]/route.ts",
   "app/api/v1/cron/lgpd-sla-watcher/route.ts",
 ];
@@ -320,13 +324,9 @@ const REPASSA_O_VALOR: readonly string[] = [
  */
 const DIVIDA_CONGELADA: ReadonlyArray<{ arquivo: string; motivo: string }> = [
   {
-    arquivo: "app/app/lgpd/requests/[id]/_client.tsx",
-    motivo:
-      "Tela: `format(new Date(due_at), 'dd/MM/yyyy')` no fuso do navegador. Recorte seguinte, e é UI — DoD 12 pede prova pela tela.",
-  },
-  {
     arquivo: "app/admin/(protected)/lgpd/requests/[id]/_client.tsx",
-    motivo: "Tela: a linha da anterior, no painel da plataforma. Vai junto com ela.",
+    motivo:
+      "Tela do painel da plataforma: `new Date(due_at)` no fuso do navegador (`SlaTimelineInline`). A página da organização já mostra o prazo pelo helper; esta é UI e pede prova pela tela.",
   },
   {
     arquivo: "app/app/lgpd/requests/RequestsTable.tsx",
