@@ -37,6 +37,19 @@ import { cn } from "@/lib/utils";
 import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
 import { buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
+import {
+  LIMITES_FICHA,
+  LIMITES_LISTA,
+  faixaDaLargura,
+  gravarLarguras,
+  largurasPadrao,
+  lerLarguras,
+  moverPorSeta,
+  resolverLarguras,
+  type Faixa,
+  type LargurasDoInbox,
+} from "@/lib/inbox/larguras-do-inbox";
 
 /**
  * QUAL COLUNA APARECE NO CELULAR — as duas saem da MESMA pergunta.
@@ -121,6 +134,29 @@ const FILTER_TABS: InboxTab[] = ["unassigned", "mine", "all", "closed", "archive
 function parseFilterParam(v: string | null): InboxTab {
   return v && FILTER_TABS.includes(v as InboxTab) ? (v as InboxTab) : "unassigned";
 }
+
+/**
+ * O getter de `window.localStorage` LANÇA (`SecurityError`) quando o navegador
+ * bloqueia o armazenamento do site. O `try` de `lerLarguras`/`gravarLarguras`
+ * só protege `getItem`/`setItem`; o getter tem de ser lido aqui dentro.
+ */
+function armazenamentoDoNavegador(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A alça tem 8px no mouse e 24px no toque (`pointer-coarse`): com o dedo, 8px
+ * não se acerta. `touch-none` entrega o gesto ao arraste em vez de rolar a
+ * página. O fio de 1px é o que se vê; o resto é área de pegar.
+ */
+const CLASSE_DA_DIVISORIA =
+  "group absolute inset-y-0 z-10 flex w-2 cursor-col-resize touch-none select-none items-stretch justify-center focus-visible:outline-hidden pointer-coarse:w-6";
+const CLASSE_DO_FIO =
+  "w-px bg-border transition-colors group-hover:bg-primary group-focus-visible:w-0.5 group-focus-visible:bg-primary";
 
 interface InboxLayoutProps {
   initialSelectedId?: string | null;
@@ -382,6 +418,139 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       ? t("Contato anonimizado — não é possível enviar mensagens.")
       : null;
 
+  /* ─── DIVISÓRIAS ARRASTÁVEIS (porte do original #2604, de @webtecnica) ─
+   *
+   * A largura das colunas nasceu fixa no CSS (linha do `grid-cols` abaixo): em
+   * monitor grande sobrava conversa e a lista e a ficha cortavam texto, sem
+   * como ajustar. Aqui o CSS continua sendo o PADRÃO (quem nunca arrastou vê
+   * exatamente a mesma grade de antes, pintada pelo servidor, sem esperar
+   * JavaScript) e a largura ajustada entra por cima como `gridTemplateColumns`
+   * inline, só depois da montagem.
+   *
+   * A regra (limites 240 a 520 / 260 a 560, piso de conversa de 420, memória
+   * por faixa, teclado) mora em `lib/inbox/larguras-do-inbox.ts`, não aqui:
+   * este arquivo posiciona a alça e chama a função; aquilo é o que o teste
+   * prende.
+   *
+   * `faixa` é `null` até o efeito rodar (e sempre, no servidor e abaixo do
+   * `md`): é o que garante primeiro render idêntico ao do servidor, sem
+   * divisória nenhuma e sem estilo nenhum na grade. No celular nada muda.
+   */
+  const gradeRef = useRef<HTMLDivElement | null>(null);
+  const [faixa, setFaixa] = useState<Faixa | null>(null);
+  const [larguras, setLarguras] = useState<LargurasDoInbox | null>(null);
+  // Espelho do estado para o fim do arraste (pointerup) persistir o valor mais
+  // recente sem depender de um render que ainda não aconteceu.
+  const largurasRef = useRef<LargurasDoInbox | null>(null);
+
+  const aplicarLarguras = useCallback((proximas: LargurasDoInbox | null) => {
+    largurasRef.current = proximas;
+    setLarguras(proximas);
+  }, []);
+
+  const larguraDaGrade = (): number => {
+    const grade = gradeRef.current;
+    return grade ? grade.getBoundingClientRect().width : 0;
+  };
+
+  // Ao montar e a cada redimensionamento da janela: descobre a faixa e retoma a
+  // largura SALVA DAQUELA faixa, já resolvida contra a largura real da grade.
+  // A mesma chave `xl` cobre 1280 a 1535, e o piso da conversa tem de caber nos
+  // dois extremos; por isso a releitura acontece também DENTRO da faixa (o
+  // original só relia ao trocar de faixa, e encolher a janela deixava a
+  // conversa abaixo do piso). Sem nada salvo, `null` = padrão do CSS.
+  useEffect(() => {
+    const medir = () => {
+      const atual = faixaDaLargura(window.innerWidth);
+      setFaixa(atual);
+      const salvas = atual ? lerLarguras(armazenamentoDoNavegador(), atual.id) : null;
+      aplicarLarguras(
+        atual && salvas
+          ? resolverLarguras({
+              ...salvas,
+              larguraContainer: gradeRef.current?.getBoundingClientRect().width ?? 0,
+              temFicha: atual.temFicha,
+            })
+          : null,
+      );
+    };
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, [aplicarLarguras]);
+
+  /** O que vale AGORA na tela: o ajuste salvo, ou o padrão da faixa. */
+  const efetivas: LargurasDoInbox | null = larguras ?? (faixa ? largurasPadrao(faixa) : null);
+
+  const estiloDaGrade: CSSProperties | undefined =
+    faixa && larguras
+      ? {
+          gridTemplateColumns: faixa.temFicha
+            ? `${larguras.lista}px minmax(0,1fr) ${larguras.ficha}px`
+            : `${larguras.lista}px minmax(0,1fr)`,
+        }
+      : undefined;
+
+  const arrastar = (coluna: "lista" | "ficha", evento: ReactPointerEvent<HTMLSpanElement>) => {
+    if (evento.button !== 0 || !faixa || !efetivas) return;
+    const grade = gradeRef.current;
+    if (!grade) return;
+    // A medida é uma SÓ, lida no início do arraste: a grade não muda de
+    // tamanho enquanto o ponteiro anda, e medi-la de novo a cada movimento
+    // faria o alvo tremer contra o próprio valor que a pessoa está arrastando.
+    const retangulo = grade.getBoundingClientRect();
+    evento.preventDefault();
+    evento.stopPropagation();
+    evento.currentTarget.setPointerCapture?.(evento.pointerId);
+    const base = largurasRef.current ?? efetivas;
+    const temFicha = faixa.temFicha;
+    const faixaAtual = faixa;
+
+    const aoMover = (movimento: PointerEvent) => {
+      const pedido =
+        coluna === "lista"
+          ? { ...base, lista: movimento.clientX - retangulo.left }
+          : { ...base, ficha: retangulo.right - movimento.clientX };
+      aplicarLarguras(
+        resolverLarguras({ ...pedido, larguraContainer: retangulo.width, temFicha }),
+      );
+    };
+    // `pointercancel` também encerra: no toque o navegador pode cancelar o
+    // gesto (ligação, gesto do sistema) sem nunca mandar `pointerup`, e os
+    // ouvintes ficariam pendurados na janela.
+    const aoSoltar = () => {
+      window.removeEventListener("pointermove", aoMover);
+      window.removeEventListener("pointerup", aoSoltar);
+      window.removeEventListener("pointercancel", aoSoltar);
+      gravarLarguras(armazenamentoDoNavegador(), faixaAtual.id, largurasRef.current);
+    };
+    window.addEventListener("pointermove", aoMover);
+    window.addEventListener("pointerup", aoSoltar);
+    window.addEventListener("pointercancel", aoSoltar);
+  };
+
+  const teclarNaDivisoria = (
+    coluna: "lista" | "ficha",
+    evento: ReactKeyboardEvent<HTMLSpanElement>,
+  ) => {
+    if (!faixa || !efetivas) return;
+    const proximo = moverPorSeta(coluna, (largurasRef.current ?? efetivas)[coluna], evento.key);
+    if (proximo === null) return;
+    evento.preventDefault();
+    const base = { ...(largurasRef.current ?? efetivas), [coluna]: proximo };
+    aplicarLarguras(
+      resolverLarguras({ ...base, larguraContainer: larguraDaGrade(), temFicha: faixa.temFicha }),
+    );
+    gravarLarguras(armazenamentoDoNavegador(), faixa.id, largurasRef.current);
+  };
+
+  /** Duplo clique na divisória: apaga a memória da faixa e volta ao CSS. */
+  const restaurarPadrao = useCallback(() => {
+    if (!faixa) return;
+    gravarLarguras(armazenamentoDoNavegador(), faixa.id, null);
+    aplicarLarguras(null);
+  }, [faixa, aplicarLarguras]);
+
   // Altura da grade: a conta desconta TUDO que fica acima e abaixo dela.
   //   3.5rem            TopBar (`h-14`, em components/shell/TopBar.tsx)
   //   2 * --space-6     padding do <main> do AppShell (`p-6`, em cima e embaixo)
@@ -443,7 +612,9 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   return (
     <OpenConversationProvider conversationId={selectedId}>
     <div
-      className="grid h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[272px_1fr_296px] 2xl:grid-cols-[300px_1fr_320px]"
+      ref={gradeRef}
+      style={estiloDaGrade}
+      className="relative grid h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[272px_1fr_296px] 2xl:grid-cols-[300px_1fr_320px]"
       /*
        * O ESTADO DO TEMPO REAL, LEGÍVEL DE FORA — mesmo par que o dossiê do lead
        * já publica (`LeadDossier`), e pela mesma razão: quando a entrega morre,
@@ -635,6 +806,60 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       <div className="hidden h-full min-h-0 xl:block">
         <CRMSidePanel conversation={selectedConversation} />
       </div>
+
+      {/*
+        AS DUAS DIVISÓRIAS: só a partir do `md`, quando as colunas convivem;
+        abaixo disso `efetivas` é `null` e nenhuma nasce.
+
+        `absolute` de propósito: a alça não é um item da grade (não ocupa
+        trilha), ela se apoia em cima da borda entre as duas, e por isso a
+        grade precisa do `relative`. A da lista anda pela ESQUERDA (o valor é
+        a largura da lista); a da ficha pela DIREITA (o valor é a largura da
+        ficha), o que evita medir a conversa para saber onde a terceira trilha
+        começa.
+      */}
+      {efetivas && (
+        <>
+          <span
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t("Ajustar largura da lista de conversas")}
+            title={t("Arraste para ajustar a largura")}
+            aria-valuenow={efetivas.lista}
+            aria-valuemin={LIMITES_LISTA.min}
+            aria-valuemax={LIMITES_LISTA.max}
+            data-divisoria="lista"
+            tabIndex={0}
+            onPointerDown={(evento) => arrastar("lista", evento)}
+            onDoubleClick={restaurarPadrao}
+            onKeyDown={(evento) => teclarNaDivisoria("lista", evento)}
+            className={CLASSE_DA_DIVISORIA + " -translate-x-1/2"}
+            style={{ left: `${efetivas.lista}px` }}
+          >
+            <span aria-hidden className={CLASSE_DO_FIO} />
+          </span>
+          {faixa?.temFicha && (
+            <span
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t("Ajustar largura da ficha do contato")}
+              title={t("Arraste para ajustar a largura")}
+              aria-valuenow={efetivas.ficha}
+              aria-valuemin={LIMITES_FICHA.min}
+              aria-valuemax={LIMITES_FICHA.max}
+              data-divisoria="ficha"
+              tabIndex={0}
+              onPointerDown={(evento) => arrastar("ficha", evento)}
+              onDoubleClick={restaurarPadrao}
+              onKeyDown={(evento) => teclarNaDivisoria("ficha", evento)}
+              className={CLASSE_DA_DIVISORIA + " translate-x-1/2"}
+              style={{ right: `${efetivas.ficha}px` }}
+            >
+              <span aria-hidden className={CLASSE_DO_FIO} />
+            </span>
+          )}
+        </>
+      )}
 
       <InboxKeyboardShortcuts
         visibleIds={visibleIds}
