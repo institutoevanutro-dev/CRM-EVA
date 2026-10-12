@@ -2205,6 +2205,7 @@ export const DICIONARIO: Traducoes = {
     {
       es: "Escribe una frase como la escribiría un cliente y mira qué intención y qué agente elegiría el enrutador — sin afectar ninguna conversación real.",
     },
+  "Mensagem de teste": { es: "Mensaje de prueba" },
   "Testar como um contato (opcional)": { es: "Probar como un contacto (opcional)" },
   "Com um contato, o roteador também considera a agenda dele: atendimentos anteriores e compromissos futuros.":
     {

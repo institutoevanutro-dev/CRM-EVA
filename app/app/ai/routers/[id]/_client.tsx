@@ -625,8 +625,17 @@ export function TestPanel({ routerId, canTest }: { routerId: string; canTest: bo
       <CardContent className="space-y-3 p-0">
         {canTest && (
           <div className="space-y-2">
-            <p className="text-sm font-medium">{t("Testar como um contato (opcional)")}</p>
-            <SeletorDeContato escolhido={contato} onEscolher={setContato} />
+            <SeletorDeContato
+              escolhido={contato}
+              // Resultado de outro contato na tela seria lido como se fosse deste.
+              onEscolher={(c) => {
+                setContato(c);
+                testRouter.reset();
+              }}
+              rotulo={t("Testar como um contato (opcional)")}
+              semCriar
+              soComBusca
+            />
             <p className="text-xs text-muted-foreground">
               {t(
                 "Com um contato, o roteador também considera a agenda dele: atendimentos anteriores e compromissos futuros.",
@@ -637,6 +646,7 @@ export function TestPanel({ routerId, canTest }: { routerId: string; canTest: bo
         <Textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
+          aria-label={t("Mensagem de teste")}
           placeholder={t("Ex.: oi, quero saber o preço do plano premium")}
           rows={2}
           maxLength={4000}
@@ -651,34 +661,36 @@ export function TestPanel({ routerId, canTest }: { routerId: string; canTest: bo
           {pending ? t("Testando…") : t("Testar classificação")}
           {!pending && <ArrowRight />}
         </Button>
-        {result && (
-          <div className="rounded-md border border-border/60 p-3 text-sm">
-            <p>
-              {t("Intenção")}: <span className="font-medium">{result.intent_name ?? t("nenhuma casou")}</span>
-              {result.intent_name && (
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {t("confiança")} {(result.confidence * 100).toFixed(0)}%
-                </span>
-              )}
-            </p>
-            {belowThreshold && (
-              <p className="text-xs text-warning-fg">
-                {t("Confiança")} {(result.confidence * 100).toFixed(0)}% — {t("abaixo do mínimo de")}{" "}
-                {(result.min_confidence * 100).toFixed(0)}%, {t("cairia no atendimento padrão em produção.")}
+        <div aria-live="polite" className="space-y-3">
+          {result && (
+            <div className="rounded-md border border-border/60 p-3 text-sm">
+              <p>
+                {t("Intenção")}: <span className="font-medium">{result.intent_name ?? t("nenhuma casou")}</span>
+                {result.intent_name && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {t("confiança")} {(result.confidence * 100).toFixed(0)}%
+                  </span>
+                )}
               </p>
-            )}
-            <p>
-              {t("Agente que atenderia")}:{" "}
-              <span className="font-medium">{result.agent_name ?? t("nenhum (sem fallback)")}</span>
-            </p>
-          </div>
-        )}
-        {result?.fatos && (
-          <div className="space-y-1">
-            <p className="text-xs font-medium">{t("O que o roteador viu sobre o contato")}</p>
-            <p className="whitespace-pre-wrap text-xs text-muted-foreground">{result.fatos}</p>
-          </div>
-        )}
+              {belowThreshold && (
+                <p className="text-xs text-warning-fg">
+                  {t("Confiança")} {(result.confidence * 100).toFixed(0)}% — {t("abaixo do mínimo de")}{" "}
+                  {(result.min_confidence * 100).toFixed(0)}%, {t("cairia no atendimento padrão em produção.")}
+                </p>
+              )}
+              <p>
+                {t("Agente que atenderia")}:{" "}
+                <span className="font-medium">{result.agent_name ?? t("nenhum (sem fallback)")}</span>
+              </p>
+            </div>
+          )}
+          {result?.fatos && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium">{t("O que o roteador viu sobre o contato")}</p>
+              <p className="whitespace-pre-wrap text-xs text-muted-foreground">{result.fatos}</p>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

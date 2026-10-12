@@ -12,7 +12,9 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * `contact_id` (opcional) faz o classificador receber os fatos da agenda desse
  * contato, como no turno real. Ele vem do CORPO, então a posse é conferida com
  * a organização da SESSÃO antes de qualquer leitura: contato de outra
- * organização é 404, e nenhum fato é lido.
+ * organização é 404, e nenhum fato é lido. Contato anonimizado (LGPD) ou
+ * mesclado em outro também é 404: a agenda dele não é mais de ninguém que a
+ * tela deixe escolher.
  *
  * leadId/jobId vão null pro classificador: não existe contact/job real por
  * trás de um clique de teste na UI, e llm_calls.contact_id/job_id são FKs —
@@ -20,7 +22,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * lib/agent-engine/agent/intent-classifier.ts).
  *
  * O match só conta se confidence >= min_confidence do router (mesma regra do
- * runtime, resolve-turn-agent.ts:193) — devolve min_confidence no payload pra
+ * runtime, a do mínimo de confiança em resolve-turn-agent) — devolve min_confidence no payload pra
  * a tela explicar quando o resultado cairia no fallback/genérico em produção.
  */
 import { randomUUID } from "node:crypto";
@@ -81,7 +83,12 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   }
 
   const pool = getSkillsPool();
-  const loaded = await loadRouterById(pool, org.orgId, id);
+  let loaded: Awaited<ReturnType<typeof loadRouterById>>;
+  try {
+    loaded = await loadRouterById(pool, org.orgId, id);
+  } catch {
+    return fail("internal_error", "Erro ao carregar router.", 500, { requestId });
+  }
   if (!loaded) {
     return fail("not_found", t("Router não encontrado."), 404, { requestId });
   }
@@ -94,14 +101,14 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (contactId !== undefined) {
     const { data: contato, error: contatoErr } = await admin
       .from("contacts")
-      .select("id")
+      .select("id, is_anonymized, is_merged_into")
       .eq("id", contactId)
       .eq("organization_id", org.orgId)
       .maybeSingle();
     if (contatoErr) {
       return fail("internal_error", "Erro ao carregar contato.", 500, { requestId });
     }
-    if (!contato) {
+    if (!contato || contato.is_anonymized || contato.is_merged_into !== null) {
       return fail("not_found", t("Contato não encontrado."), 404, { requestId });
     }
     try {
@@ -124,7 +131,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     { log },
   );
 
-  // espelha resolve-turn-agent.ts:193 — só casa a intenção se a confiança
+  // espelha a regra do mínimo de confiança de resolve-turn-agent — só casa a intenção se a confiança
   // bateu o mínimo do router; abaixo disso, produção cai no fallback/genérico,
   // e o painel de teste não pode fingir que casou (review whole-branch item 3).
   const matchedMember =

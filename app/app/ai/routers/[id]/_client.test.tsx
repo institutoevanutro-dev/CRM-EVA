@@ -18,23 +18,28 @@ vi.mock("@/hooks/ai/useRouters", () => ({
 }));
 // O seletor real busca contatos na API; aqui basta a porta que ele expõe.
 vi.mock("@/components/kanban/SeletorDeContato", () => ({
-  SeletorDeContato: ({
-    escolhido,
-    onEscolher,
-  }: {
+  SeletorDeContato: (props: {
     escolhido: { id: string } | null;
     onEscolher: (c: { id: string } | null) => void;
-  }) => (
-    <button type="button" onClick={() => onEscolher(escolhido ? null : { id: "contato-1" })}>
-      {escolhido ? "trocar contato" : "escolher contato"}
-    </button>
-  ),
+    rotulo?: string;
+    semCriar?: boolean;
+    soComBusca?: boolean;
+  }) => {
+    propsDoSeletor(props);
+    return (
+      <button type="button" onClick={() => props.onEscolher(props.escolhido ? null : { id: "contato-1" })}>
+        {props.escolhido ? "limpar contato" : "escolher contato"}
+      </button>
+    );
+  },
 }));
 
+const propsDoSeletor = vi.fn();
 const mutate = vi.fn();
+const reset = vi.fn();
 
 function comResultado(data: RouterTestResult | undefined) {
-  vi.mocked(useTestRouter).mockReturnValue({ mutate, data, isPending: false } as never);
+  vi.mocked(useTestRouter).mockReturnValue({ mutate, reset, data, isPending: false } as never);
 }
 
 const RESULTADO: RouterTestResult = {
@@ -55,8 +60,12 @@ describe("TestPanel do roteador", () => {
   it("não pede para ativar o roteador: o teste funciona com ele inativo", () => {
     render(<TestPanel routerId="r1" canTest />);
     expect(screen.queryByText(/Ative o roteador/)).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox")).toBeEnabled();
-    expect(screen.getByText("Testar como um contato (opcional)")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Mensagem de teste" })).toBeEnabled();
+    // Um rótulo só, entregue ao seletor; sem criar contato e sem lista aberta.
+    expect(screen.queryByText("Testar como um contato (opcional)")).not.toBeInTheDocument();
+    expect(propsDoSeletor).toHaveBeenLastCalledWith(
+      expect.objectContaining({ rotulo: "Testar como um contato (opcional)", semCriar: true, soComBusca: true }),
+    );
     expect(
       screen.getByText(
         "Com um contato, o roteador também considera a agenda dele: atendimentos anteriores e compromissos futuros.",
@@ -77,6 +86,21 @@ describe("TestPanel do roteador", () => {
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "quero remarcar" } });
     fireEvent.click(screen.getByRole("button", { name: /Testar classificação/ }));
     expect(mutate).toHaveBeenCalledWith({ message: "quero remarcar", contactId: "contato-1" }, expect.anything());
+  });
+
+  it("escolher e limpar o contato apagam o resultado anterior", () => {
+    comResultado({ ...RESULTADO, fatos: "Atendimentos anteriores:\n- 02/09/2026: Primeira consulta" });
+    render(<TestPanel routerId="r1" canTest />);
+    fireEvent.click(screen.getByRole("button", { name: "escolher contato" }));
+    expect(reset).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "limpar contato" }));
+    expect(reset).toHaveBeenCalledTimes(2);
+  });
+
+  it("o resultado é anunciado a leitor de tela", () => {
+    comResultado(RESULTADO);
+    render(<TestPanel routerId="r1" canTest />);
+    expect(screen.getByText("Agente Vendas").closest("[aria-live]")).toHaveAttribute("aria-live", "polite");
   });
 
   it("mostra o que o roteador viu sobre o contato quando há fatos", () => {

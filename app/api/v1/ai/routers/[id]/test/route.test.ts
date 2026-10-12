@@ -56,7 +56,14 @@ function mockAuthzOk() {
  * tabela LANÇA. É o que prova que a rota não toca `ai_routers`, `conversations`
  * nem `ai_router_decisions` pelo admin client.
  */
-function makeAdminStub(opts: { contactFound?: boolean; agentName?: string | null } = {}) {
+function makeAdminStub(
+  opts: {
+    contactFound?: boolean;
+    contactRow?: { id: string; is_anonymized: boolean; is_merged_into: string | null };
+    contactError?: boolean;
+    agentName?: string | null;
+  } = {},
+) {
   const tabelas: string[] = [];
   const filtrosDoContato: Array<[string, unknown]> = [];
   return {
@@ -74,8 +81,12 @@ function makeAdminStub(opts: { contactFound?: boolean; agentName?: string | null
             return this;
           },
           maybeSingle() {
+            if (opts.contactError) return Promise.resolve({ data: null, error: { message: "boom" } });
             return Promise.resolve({
-              data: opts.contactFound === false ? null : { id: CONTACT_ID },
+              data:
+                opts.contactFound === false
+                  ? null
+                  : (opts.contactRow ?? { id: CONTACT_ID, is_anonymized: false, is_merged_into: null }),
               error: null,
             });
           },
@@ -114,7 +125,7 @@ const ROTEADOR: LoadedRouter = {
 };
 
 /** Roteador carregado + classificador casando "vendas"; devolve o stub do admin. */
-function cenarioQueClassifica(opts: { contactFound?: boolean } = {}) {
+function cenarioQueClassifica(opts: Parameters<typeof makeAdminStub>[0] = {}) {
   mockAuthzOk();
   const admin = makeAdminStub(opts);
   vi.mocked(createAdminClient).mockReturnValue(admin as never);
@@ -205,7 +216,7 @@ describe("POST /api/v1/ai/routers/:id/test", () => {
     };
     // intent_name reporta o que o classificador viu, mas agent_id NÃO é o
     // membro "vendas" — confidence 0.4 < min_confidence 0.6 cai no fallback,
-    // igual à produção (resolve-turn-agent.ts:193).
+    // igual à produção (regra do mínimo de confiança em resolve-turn-agent).
     expect(body.data).toEqual({
       intent_name: "vendas",
       confidence: 0.4,
@@ -293,6 +304,47 @@ describe("POST /api/v1/ai/routers/:id/test", () => {
     expect(res.status).toBe(404);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("not_found");
     expect(buildFatosDoContato).not.toHaveBeenCalled();
+    expect(classifyIntent).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["anonimizado", { id: CONTACT_ID, is_anonymized: true, is_merged_into: null }],
+    ["mesclado em outro", { id: CONTACT_ID, is_anonymized: false, is_merged_into: "88888888-8888-4888-8888-888888888888" }],
+  ])("contato %s → 404 not_found, sem ler fato nem classificar", async (_nome, contactRow) => {
+    cenarioQueClassifica({ contactRow });
+
+    const { POST } = await import("./route");
+    const res = await POST(req({ message: "oi", contact_id: CONTACT_ID }), ctx());
+
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("not_found");
+    expect(buildFatosDoContato).not.toHaveBeenCalled();
+    expect(classifyIntent).not.toHaveBeenCalled();
+  });
+
+  it("erro de banco na consulta do contato → 500, sem ler fato nem classificar", async () => {
+    cenarioQueClassifica({ contactError: true });
+
+    const { POST } = await import("./route");
+    const res = await POST(req({ message: "oi", contact_id: CONTACT_ID }), ctx());
+
+    expect(res.status).toBe(500);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("internal_error");
+    expect(buildFatosDoContato).not.toHaveBeenCalled();
+    expect(classifyIntent).not.toHaveBeenCalled();
+  });
+
+  it("loadRouterById lança → 500 internal_error com X-Request-Id, sem classificar", async () => {
+    mockAuthzOk();
+    vi.mocked(createAdminClient).mockReturnValue(makeAdminStub() as never);
+    vi.mocked(loadRouterById).mockRejectedValue(new Error("connection terminated"));
+
+    const { POST } = await import("./route");
+    const res = await POST(req({ message: "oi" }), ctx());
+
+    expect(res.status).toBe(500);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("internal_error");
+    expect(res.headers.get("X-Request-Id")).toBeTruthy();
     expect(classifyIntent).not.toHaveBeenCalled();
   });
 
