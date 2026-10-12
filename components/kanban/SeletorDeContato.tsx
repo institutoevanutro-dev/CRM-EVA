@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
 import { Button } from "@/components/ui/button";
@@ -28,10 +28,18 @@ const RESULTADOS_NA_TELA = 8;
 interface Props {
   escolhido: Contact | null;
   onEscolher: (contato: Contact | null) => void;
+  /** Rótulo do campo, já traduzido. Sem ele, "Contato". */
+  rotulo?: string;
+  /** Esconde o "Criar contato": para onde escolher é só consulta. */
+  semCriar?: boolean;
+  /** Sem termo digitado, não lista os recentes nem consulta a API. */
+  soComBusca?: boolean;
 }
 
-export function SeletorDeContato({ escolhido, onEscolher }: Props) {
+export function SeletorDeContato({ escolhido, onEscolher, rotulo, semCriar = false, soComBusca = false }: Props) {
   const t = useT();
+  // Dois seletores na mesma página não podem dividir o id do campo.
+  const idDoCampo = useId();
   const [termo, setTermo] = useState("");
   const [busca, setBusca] = useState("");
   const [criando, setCriando] = useState(false);
@@ -42,8 +50,11 @@ export function SeletorDeContato({ escolhido, onEscolher }: Props) {
     return () => clearTimeout(id);
   }, [termo]);
 
-  const lista = useContactList(busca ? { search: busca } : { limit: RESULTADOS_NA_TELA });
-  const achados = (lista.data?.pages.flatMap((p) => p.data) ?? [])
+  const buscar = !soComBusca || busca !== "";
+  const lista = useContactList(busca ? { search: busca } : { limit: RESULTADOS_NA_TELA }, {
+    enabled: buscar,
+  });
+  const achados = (buscar ? (lista.data?.pages.flatMap((p) => p.data) ?? []) : [])
     .filter((c) => !c.is_anonymized)
     .slice(0, RESULTADOS_NA_TELA);
 
@@ -56,7 +67,7 @@ export function SeletorDeContato({ escolhido, onEscolher }: Props) {
   if (escolhido) {
     return (
       <div className="space-y-2">
-        <Label>{t("Contato")}</Label>
+        <Label>{rotulo ?? t("Contato")}</Label>
         <div className="flex items-center justify-between rounded-md border px-3 py-2">
           <div className="min-w-0">
             <p className="truncate text-sm">{rotuloDoContato(escolhido, t)}</p>
@@ -82,9 +93,9 @@ export function SeletorDeContato({ escolhido, onEscolher }: Props) {
 
   return (
     <div className="space-y-2">
-      <Label htmlFor="contato-do-lead">{t("Contato")}</Label>
+      <Label htmlFor={idDoCampo}>{rotulo ?? t("Contato")}</Label>
       <Input
-        id="contato-do-lead"
+        id={idDoCampo}
         placeholder={t("Procure pelo nome ou telefone")}
         value={termo}
         onChange={(e) => setTermo(e.target.value)}
@@ -112,9 +123,11 @@ export function SeletorDeContato({ escolhido, onEscolher }: Props) {
       {busca !== "" && achados.length === 0 && !lista.isLoading && (
         <p className="text-xs text-muted-foreground">{t("Nenhum contato com esse nome ou telefone.")}</p>
       )}
-      <Button type="button" variant="outline" size="sm" onClick={() => setCriando(true)}>
-        {t("Criar contato")}
-      </Button>
+      {!semCriar && (
+        <Button type="button" variant="outline" size="sm" onClick={() => setCriando(true)}>
+          {t("Criar contato")}
+        </Button>
+      )}
       {criando && (
         <NewContactDialog
           // `nomeInicial` é defaultValue, então só vale na montagem: a chave
