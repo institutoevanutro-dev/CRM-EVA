@@ -458,11 +458,25 @@ describe("transfer_to_subject: o agente passa a conversa e o destino responde a 
   });
 
   it("caso 3: A envia e passa no mesmo passo: sem reexecução, uma mensagem (a de A), dono novo é B", async () => {
+    const saida = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const { erro, jobId } = await rodaTurno({
       A: [[envia("Vou te passar para quem cuida de drenagem."), passa("b")]],
       B: [envia("B não deveria falar neste turno.")],
     });
+    const aviso = saida.mock.calls.map((c) => String(c[0])).find((l) => l.includes("passagem com envio no mesmo turno"));
+    saida.mockRestore();
     expect(erro).toBeNull();
+
+    // Quem lê o log sabe por que B não respondeu esta mensagem. Só ids e o
+    // assunto: nada do que a pessoa escreveu.
+    expect(JSON.parse(aviso!)).toMatchObject({
+      level: "warn",
+      conversation_id: CONV,
+      de_agent_id: A,
+      para_agent_id: B,
+      para_assunto: "b",
+    });
+    expect(aviso).not.toContain("drenagem, vocês fazem");
 
     expect(comTools("B")).toHaveLength(0);
     expect(await mensagensQueSairam()).toEqual(["Vou te passar para quem cuida de drenagem."]);
@@ -556,6 +570,74 @@ describe("transfer_to_subject: retry do job depois da passagem", () => {
     expect(await enviosAceitos(jobId)).toBe(1);
     expect(chamadas.filter((c) => c.quem === "B")).toHaveLength(0);
     expect(chamadas).toHaveLength(antesDoRetry);
+  });
+
+  it("mensagem nova durante a espera do retry de um job que já passou e enviou ganha job próprio, e B responde", async () => {
+    const deA = "Vou te passar para quem cuida de drenagem.";
+    const jobId = await enfileira();
+    const quebra = m.createInboundTurnHandler(
+      deps(modelo({ A: [[envia(deA), passa("b")]] }, { fechamentosQueFalham: 1 })),
+    );
+    expect((await tenta(jobId, quebra))?.message).toMatch(/modelo caiu no fechamento/);
+    // O job voltou à fila esperando o retry: é o intervalo em que a pessoa escreve de novo.
+    await pool.query("update job_queue set run_after = now() + interval '30 seconds' where id = $1", [jobId]);
+
+    const m2 = await novaInbound("E quanto custa a drenagem?");
+    await pool.query(
+      `insert into event_log (organization_id, event_type, entity_kind, entity_id, payload, status)
+       values ($1::uuid, 'ai_agent.dispatch_requested', 'message', $2::uuid, $3::jsonb, 'pending')`,
+      [ORG, m2, JSON.stringify({ conversation_id: CONV, contact_id: CONTACT, channel_session_id: SESSION, inbound_message_id: m2 })],
+    );
+    const { drainTick } = await import("@/lib/agent-engine/edge/crm/drain");
+    await drainTick(
+      pool,
+      { batchSize: 10, intervalMs: 0, idleIntervalMs: 0, debounceMs: 3000, reapTimeoutMs: 300_000 },
+      m.createLogger(),
+    );
+
+    // Sem carona: o retry do job antigo encerra sem ler a conversa, e M2 sumiria com ele.
+    const { rows: novos } = await pool.query<{ id: string }>(
+      `select id from job_queue
+        where organization_id = $1 and kind = 'inbound_turn' and id <> $2
+          and payload->>'inbound_message_id' = $3`,
+      [ORG, jobId, m2],
+    );
+    expect(novos).toHaveLength(1);
+
+    // O retry do job antigo fecha sem modelo; o job de M2 roda com o dono atual (B).
+    chamadas = [];
+    expect(await tenta(jobId, quebra)).toBeNull();
+    expect(chamadas).toHaveLength(0);
+    const responde = m.createInboundTurnHandler(deps(modelo({ B: [envia("A drenagem custa 200.")] })));
+    expect(await tenta(novos[0]!.id, responde)).toBeNull();
+    expect(chamadas.filter((c) => c.quem !== "B")).toHaveLength(0);
+    expect(await mensagensQueSairam()).toEqual([deA, "A drenagem custa 200."]);
+    await pool.query("delete from event_log where organization_id = $1", [ORG]);
+  });
+
+  it("job pendente COMUM continua dando carona à mensagem seguinte (a exclusão é só de quem já passou)", async () => {
+    const jobId = await enfileira();
+    await pool.query("update job_queue set run_after = now() + interval '30 seconds' where id = $1", [jobId]);
+    const m2 = await novaInbound("Oi, tem alguém?");
+    await pool.query(
+      `insert into event_log (organization_id, event_type, entity_kind, entity_id, payload, status)
+       values ($1::uuid, 'ai_agent.dispatch_requested', 'message', $2::uuid, $3::jsonb, 'pending')`,
+      [ORG, m2, JSON.stringify({ conversation_id: CONV, contact_id: CONTACT, channel_session_id: SESSION, inbound_message_id: m2 })],
+    );
+    const { drainTick } = await import("@/lib/agent-engine/edge/crm/drain");
+    await drainTick(
+      pool,
+      { batchSize: 10, intervalMs: 0, idleIntervalMs: 0, debounceMs: 3000, reapTimeoutMs: 300_000 },
+      m.createLogger(),
+    );
+    const { rows } = await pool.query<{ n: number; feitos: number }>(
+      `select (select count(*)::int from job_queue where organization_id = $1 and kind = 'inbound_turn') as n,
+              (select count(*)::int from event_log where organization_id = $1 and status = 'done'
+                 and event_type = 'ai_agent.dispatch_requested' and entity_id = $2) as feitos`,
+      [ORG, m2],
+    );
+    expect(rows[0]).toEqual({ n: 1, feitos: 1 });
+    await pool.query("delete from event_log where organization_id = $1", [ORG]);
   });
 
   it("modo novo com `sticky: false` na config: depois da passagem a mensagem seguinte continua com B", async () => {

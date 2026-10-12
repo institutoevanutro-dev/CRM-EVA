@@ -58,16 +58,6 @@ export interface RouterTestResult {
   classified: boolean;
 }
 
-/** Corpo do teste pela API. A tela hoje só envia `message` e `contact_id`. */
-export interface RouterTestInput {
-  message: string;
-  contact_id?: string;
-  /** Conversa simulada: no máximo 6 mensagens, da mais antiga para a mais nova. */
-  history?: Array<{ direction: "inbound" | "outbound"; body: string }>;
-  /** O assunto que está atendendo; tem de ser um assunto do roteador. */
-  current_intent?: string;
-}
-
 export interface CreateRouterInput {
   name: string;
   channel_session_id: string;

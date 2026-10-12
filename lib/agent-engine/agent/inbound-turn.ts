@@ -4844,6 +4844,17 @@ async function executarTurnoDoAgente(
       });
       return passagem;
     }
+    if (passagem !== null && seq > 0) {
+      // Sem isto o log conta uma passagem e nenhuma resposta do destino, e não
+      // diz por quê. Só ids e o assunto: nada do que a pessoa escreveu.
+      runLog.warn('passagem com envio no mesmo turno: o destino assume na próxima mensagem', {
+        job_id: liveJob().id,
+        conversation_id: input.conversationId,
+        de_agent_id: passagem.de.deAgentId,
+        para_agent_id: passagem.destino.config?.agentId ?? null,
+        para_assunto: passagem.destino.intentName,
+      });
+    }
 
     // TURNO MUDO: o turno de resposta terminou sem mensagem ao cliente e sem
     // nenhuma razão para o silêncio (`turno-mudo.ts`). UMA correção, com a mesma

@@ -10,7 +10,7 @@ Conversa de teste (número da lista, 12/10, 11h12 a 11h19):
 
 | Mensagem da paciente | Quem atendeu | Problema |
 |---|---|---|
-| "Gostaria de agendar uma consulta com o Dr. André" | Agente 2 (Paciente) | A agenda dela tem um implante hormonal realizado. O roteador leu "já é paciente". O agente perguntou se era primeira consulta. |
+| "Gostaria de agendar uma consulta com o Dr. André" | Agente 2 (Paciente) | A agenda dela tem um procedimento realizado. O roteador leu "já é paciente". O agente perguntou se era primeira consulta. |
 | "Primeira consulta" | Agente 2 | O roteador não trocou para o agente 1. |
 | "Preciso emagrecer", "Presencial", "Jardim Camburi" | Agente 2 | Improvisou a primeira consulta sem o roteiro: sem abertura, sem a opção de R$490, sem cobrar o sinal. |
 | "Quarta" em diante | Agente 5 (Recepção) | Resposta curta trocou o agente no meio. A Recepção abriu caso "para a recepção confirmar" em vez de marcar. |
@@ -157,6 +157,9 @@ Regras: só mensagens do atendimento atual (a fronteira de atendimento que o CRM
 - **A passagem é gravada antes de o destino provar que roda.** Destino quebrado (sem credencial, modelo fora do ar) faz o job tentar com o destino até esgotar as tentativas. O passo seguinte seria desfazer a passagem quando a reexecução falha.
 - **Um turno com passagem custa dois turnos.** São duas execuções completas de agente.
 - **A mensagem em que há passagem pode levar o dobro do tempo** para ser respondida.
+- **Assunto que interrompe chegando durante o turno da passagem.** Mensagem de assunto marcado em `interrompe` (queixa clínica) que chega DURANTE o turno em que há passagem é respondida pelo agente de destino, sem passar pelo roteador.
+- **Resposta do destino em várias bolhas.** Se ela falha depois da primeira bolha, o retry não completa as que faltaram.
+- **Pendência de caso aberto pela origem.** O destino só a enxerga se também tiver casos habilitados. É configuração do agente.
 - **A decisão ainda não aparece em tela.** Continua valendo a seção 9: as decisões ficam em `ai_router_decisions` e falta mostrá-las por conversa.
 
 ### 11.5 O que não foi medido

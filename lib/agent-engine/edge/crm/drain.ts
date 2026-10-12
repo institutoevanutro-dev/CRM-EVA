@@ -494,12 +494,19 @@ async function processEvent(
   // que fala por dois números tinha a mensagem de um engolida pelo job pendente
   // do outro, e nenhum turno lia a conversa dela. (A régua de resposta obsoleta,
   // `respostaFicouObsoleta`, conta com isto para saber que alguém responde.)
+  //
+  // E nunca em job que já PASSOU a conversa (`passagem_feita`, a marca de
+  // `transfer_to_subject`). Esse job, quando volta do retry com envio aceito,
+  // encerra sem rodar o modelo e sem ler a conversa (inbound-turn.ts): a carona
+  // nele some sem resposta. A mensagem nova ganha job próprio, que roda com o
+  // dono atual da conversa. Job comum não tem a marca e segue dando carona.
   if (knobs.debounceMs > 0) {
     const { rows: pendingRows } = await pool.query<{ id: string }>(
       `select id from job_queue
        where organization_id = $1 and contact_id = $2
          and kind = 'inbound_turn' and status = 'pending' and run_after > now()
          and not (payload ? 'held_run_after')
+         and not (payload ? 'passagem_feita')
          and payload->>'conversation_id' = $3
        limit 1`,
       [event.organization_id, p.contact_id, p.conversation_id],
