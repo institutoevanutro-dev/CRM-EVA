@@ -7,7 +7,7 @@ const members = [
   { agentId: 'a2', intentName: 'suporte', intentDescription: 'Problema técnico', examples: [] },
 ];
 const router = { id: 'r1', name: 'R', classifierModel: 'claude-haiku-4-5',
-    classifierProvider: null, sticky: true, minConfidence: 0.6, fallbackAgentId: null, members };
+    classifierProvider: null, sticky: true, minConfidence: 0.6, permanencia: 'roteador' as const, interrompe: [], fallbackAgentId: null, members };
 
 describe('buildClassifierPrompt', () => {
   it('lista as intenções com descrição e a opção none', () => {

@@ -10,6 +10,12 @@
  *      classifica MESMO ASSIM (barato, é o que detecta troca de assunto) —
  *      só troca se a intenção vier DIFERENTE da sticky E confiança >= min;
  *      senão mantém o agente sticky.
+ *      2b. roteador com `permanencia: 'agente'` (`ai_routers.config`): além
+ *      disso, só troca se a intenção nova estiver em `interrompe`. Fora dessa
+ *      lista a conversa fica com quem está atendendo, por mais confiante que
+ *      o classificador esteja: uma resposta curta ("Quarta") não tem assunto
+ *      próprio, e trocar de agente por causa dela é perder o fio. A regra é
+ *      `mudouDeAssunto`; sem agente atual (regra 3) nada muda.
  *   3. sem sticky: classifica; intenção não-nula + confiança >= min ⇒ agente
  *      do membro.
  *   4. classificador falhou (null) COM sticky elegível ⇒ mantém o sticky
@@ -61,13 +67,13 @@ import type pg from 'pg';
 import type { Logger } from '../obs/logger';
 import type { LlmEdgeConfig } from '../edge/llm/run-model-call';
 import { agenteDaCampanhaDaConversa } from './agente-da-campanha';
-import { loadActiveRouter } from './router-config';
+import { loadActiveRouter, type LoadedRouter } from './router-config';
 import {
   loadPublishedAgentConfig,
   loadPublishedAgentConfigById,
   type PublishedAgentConfig,
 } from './agent-config';
-import { classifyIntent } from './intent-classifier';
+import { classifyIntent, type IntentVerdict } from './intent-classifier';
 import { buildFatosDoContato } from './fatos-do-contato';
 import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-context';
 
@@ -107,6 +113,22 @@ export interface ResolveTurnAgentDeps {
   buildFatosDoContato?: typeof buildFatosDoContato;
   /** Relógio injetável: é o que separa atendimento anterior de compromisso futuro. */
   agora?: () => Date;
+}
+
+/** Regra única de troca com conversa em andamento. A rota de teste usa a mesma. */
+export function mudouDeAssunto(
+  router: Pick<LoadedRouter, 'permanencia' | 'interrompe' | 'minConfidence'>,
+  assuntoAtual: string | null,
+  verdict: IntentVerdict,
+): boolean {
+  return (
+    verdict.intentName !== null &&
+    verdict.intentName !== assuntoAtual &&
+    verdict.confidence >= router.minConfidence &&
+    // `!== 'agente'` e não `=== 'roteador'`: só o valor exato liga o modo novo,
+    // a mesma leitura de `router-config.ts`.
+    (router.permanencia !== 'agente' || router.interrompe.includes(verdict.intentName))
+  );
 }
 
 export async function resolveTurnAgent(
@@ -275,9 +297,7 @@ export async function resolveTurnAgent(
     }
 
     if (stickyMember !== undefined) {
-      const changedSubject =
-        verdict.intentName !== null && verdict.intentName !== input.stickyIntent && verdict.confidence >= router.minConfidence;
-      if (!changedSubject) {
+      if (!mudouDeAssunto(router, input.stickyIntent, verdict)) {
         return loadMatchedOrFallback('sticky', stickyMember.agentId, input.stickyIntent, verdict.confidence);
       }
       const newMember = router.members.find((m) => m.intentName === verdict.intentName);

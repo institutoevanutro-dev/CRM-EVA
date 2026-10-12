@@ -120,6 +120,8 @@ const ROTEADOR: LoadedRouter = {
   classifierProvider: null,
   sticky: true,
   minConfidence: 0.6,
+  permanencia: "roteador",
+  interrompe: [],
   fallbackAgentId: null,
   members: [{ agentId: AGENT_ID, intentName: "vendas", intentDescription: "Quer comprar", examples: [] }],
 };

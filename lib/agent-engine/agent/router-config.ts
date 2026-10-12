@@ -44,6 +44,19 @@ export interface LoadedRouter {
   classifierProvider: string | null;
   sticky: boolean;
   minConfidence: number;
+  /**
+   * Quem decide a troca de agente com a conversa em andamento.
+   * `'roteador'` (padrão, o comportamento de sempre): o roteador, a cada mensagem.
+   * `'agente'`: o roteador escolhe quem começa e só interrompe para os assuntos
+   * de `interrompe`; fora disso a conversa fica com quem está atendendo.
+   */
+  permanencia: 'roteador' | 'agente';
+  /**
+   * Nomes de assunto que tiram a conversa de quem está atendendo no modo
+   * `'agente'`. Nome que não é membro do roteador fica na lista e nunca casa: o
+   * classificador só devolve nome de membro.
+   */
+  interrompe: string[];
   fallbackAgentId: string | null;
   members: RouterMember[];
 }
@@ -122,6 +135,8 @@ async function montar(
     classifier_provider?: unknown;
     sticky?: unknown;
     min_confidence?: unknown;
+    permanencia?: unknown;
+    interrompe?: unknown;
   };
   const classifierModel =
     typeof cfg.classifier_model === 'string' && cfg.classifier_model.trim() !== ''
@@ -136,6 +151,11 @@ async function montar(
     typeof cfg.min_confidence === 'number' && cfg.min_confidence >= 0 && cfg.min_confidence <= 1
       ? cfg.min_confidence
       : 0.6;
+  // Só o valor exato liga o modo novo: qualquer outra coisa é o roteador de sempre.
+  const permanencia = cfg.permanencia === 'agente' ? 'agente' : 'roteador';
+  const interrompe = Array.isArray(cfg.interrompe)
+    ? cfg.interrompe.filter((i): i is string => typeof i === 'string' && i !== '')
+    : [];
 
   return {
     id: router.id,
@@ -144,6 +164,8 @@ async function montar(
     classifierProvider,
     sticky,
     minConfidence,
+    permanencia,
+    interrompe,
     fallbackAgentId: router.fallback_agent_id,
     members: memberRows.map((m) => ({
       agentId: m.agent_id,

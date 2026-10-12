@@ -77,6 +77,48 @@ describe('loadActiveRouter — provedor do classificador', () => {
   });
 });
 
+describe('loadActiveRouter — modo de permanência', () => {
+  async function comConfig(config: unknown) {
+    const pool = poolSeq([
+      { rows: [{ id: 'r1', name: 'X', config, fallback_agent_id: null }] },
+      { rows: [{ agent_id: 'a1', intent_name: 'vendas', intent_description: 'Quer comprar', examples: [] }] },
+    ]);
+    return loadActiveRouter(pool, 'org1', 'cs1');
+  }
+
+  it('sem nada na config: o roteador decide a cada mensagem, como sempre, e nada interrompe', async () => {
+    for (const config of [{}, null]) {
+      const router = await comConfig(config);
+      expect(router?.permanencia).toBe('roteador');
+      expect(router?.interrompe).toEqual([]);
+    }
+  });
+
+  it("permanencia 'agente' liga o modo novo; interrompe guarda só strings não vazias", async () => {
+    const router = await comConfig({ permanencia: 'agente', interrompe: ['queixa_clinica', 7, ''] });
+    expect(router?.permanencia).toBe('agente');
+    expect(router?.interrompe).toEqual(['queixa_clinica']);
+  });
+
+  it("valor desconhecido de permanencia cai em 'roteador'", async () => {
+    for (const valor of ['qualquer', 'AGENTE', true, 1, null, {}]) {
+      expect((await comConfig({ permanencia: valor }))?.permanencia).toBe('roteador');
+    }
+  });
+
+  it('interrompe que não é array vira lista vazia', async () => {
+    for (const valor of ['queixa_clinica', 7, null, { 0: 'queixa_clinica' }]) {
+      expect((await comConfig({ permanencia: 'agente', interrompe: valor }))?.interrompe).toEqual([]);
+    }
+  });
+
+  it('assunto em interrompe que não é membro fica na lista: não quebra, só nunca casa', async () => {
+    const router = await comConfig({ permanencia: 'agente', interrompe: ['nao_e_membro'] });
+    expect(router?.interrompe).toEqual(['nao_e_membro']);
+    expect(router?.members.map((m) => m.intentName)).toEqual(['vendas']);
+  });
+});
+
 describe('loadRouterById', () => {
   const inativo = { id: 'r1', name: 'Rascunho', config: {}, fallback_agent_id: 'a-fb' };
   const membros = [{ agent_id: 'a1', intent_name: 'vendas', intent_description: 'Quer comprar', examples: null }];

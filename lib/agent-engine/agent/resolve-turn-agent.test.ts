@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { resolveConversationTurn, resolveTurnAgent } from './resolve-turn-agent';
+import { mudouDeAssunto, resolveConversationTurn, resolveTurnAgent } from './resolve-turn-agent';
 import type { PublishedAgentConfig } from './agent-config';
 import type { LoadedRouter } from './router-config';
 
@@ -50,6 +50,8 @@ function router(overrides: Partial<LoadedRouter> = {}): LoadedRouter {
     classifierProvider: null,
     sticky: true,
     minConfidence: 0.6,
+    permanencia: 'roteador',
+    interrompe: [],
     fallbackAgentId: null,
     members,
     ...overrides,
@@ -306,6 +308,85 @@ describe('resolveTurnAgent', () => {
     expect(out.config).toBeNull();
     expect(out.outcome).toBe('no_match');
     expect(warn).toHaveBeenCalled();
+  });
+
+  // ─── Modo `permanencia: 'agente'`: só assunto marcado interrompe ───
+  const modoAgente = () => router({ permanencia: 'agente', interrompe: ['suporte'] });
+  const rodar = (r: LoadedRouter, verdict: unknown, sticky: { agentId: string | null; intent: string | null }) => {
+    const classifyIntent = vi.fn().mockResolvedValue(verdict);
+    const loadPublishedAgentConfigById = idAwareLoader();
+    return resolveTurnAgent({} as never, {} as never,
+      { ...baseInput, signal: 'Quarta', stickyAgentId: sticky.agentId, stickyIntent: sticky.intent },
+      makeDeps({ loadActiveRouter: vi.fn().mockResolvedValue(r), classifyIntent, loadPublishedAgentConfigById }));
+  };
+
+  it("17. modo 'agente': outro assunto com 0,95 que NÃO interrompe → sticky, agente atual mantido", async () => {
+    const out = await rodar(modoAgente(), { intentName: 'vendas', confidence: 0.95 }, { agentId: 'agent-suporte', intent: 'suporte' });
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-suporte');
+    expect(out.intentName).toBe('suporte');
+    // Controle: o MESMO veredito, no modo de sempre, troca.
+    const antigo = await rodar(router(), { intentName: 'vendas', confidence: 0.95 }, { agentId: 'agent-suporte', intent: 'suporte' });
+    expect(antigo.outcome).toBe('reclassified');
+    expect(antigo.config?.agentId).toBe('agent-vendas');
+  });
+
+  it("18. modo 'agente': assunto de interrompe com 0,95 → reclassified, agente do assunto que interrompe", async () => {
+    const out = await rodar(modoAgente(), { intentName: 'suporte', confidence: 0.95 }, { agentId: 'agent-vendas', intent: 'vendas' });
+    expect(out.outcome).toBe('reclassified');
+    expect(out.config?.agentId).toBe('agent-suporte');
+    expect(out.intentName).toBe('suporte');
+    expect(out.confidence).toBe(0.95);
+  });
+
+  it("19. modo 'agente': assunto de interrompe com confiança abaixo do mínimo → sticky", async () => {
+    const out = await rodar(modoAgente(), { intentName: 'suporte', confidence: 0.4 }, { agentId: 'agent-vendas', intent: 'vendas' });
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it("20. modo 'agente': o assunto atual já é o de interrompe e o classificador repete → sticky", async () => {
+    const out = await rodar(modoAgente(), { intentName: 'suporte', confidence: 0.95 }, { agentId: 'agent-suporte', intent: 'suporte' });
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-suporte');
+  });
+
+  it("21. modo 'agente', sem agente atual: classifica e escolhe como hoje, marcado ou não", async () => {
+    const out = await rodar(modoAgente(), { intentName: 'vendas', confidence: 0.9 }, { agentId: null, intent: null });
+    expect(out.outcome).toBe('classified');
+    expect(out.config?.agentId).toBe('agent-vendas');
+    const semMatch = await rodar(
+      router({ permanencia: 'agente', interrompe: ['suporte'], fallbackAgentId: 'agent-fallback' }),
+      { intentName: 'vendas', confidence: 0.2 }, { agentId: null, intent: null });
+    expect(semMatch.outcome).toBe('fallback');
+    expect(semMatch.config?.agentId).toBe('agent-fallback');
+  });
+
+  it("22. modo 'agente': classificador falha → sticky (regra 4, sem mudança)", async () => {
+    const out = await rodar(modoAgente(), null, { agentId: 'agent-vendas', intent: 'vendas' });
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-vendas');
+  });
+});
+
+describe('mudouDeAssunto', () => {
+  const antigo = { permanencia: 'roteador' as const, interrompe: [], minConfidence: 0.6 };
+  const novo = { permanencia: 'agente' as const, interrompe: ['suporte'], minConfidence: 0.6 };
+
+  it("modo 'roteador': outro assunto com confiança no mínimo troca; mesmo assunto, none ou abaixo do mínimo não", () => {
+    expect(mudouDeAssunto(antigo, 'vendas', { intentName: 'suporte', confidence: 0.6 })).toBe(true);
+    expect(mudouDeAssunto(antigo, null, { intentName: 'suporte', confidence: 0.9 })).toBe(true);
+    expect(mudouDeAssunto(antigo, 'vendas', { intentName: 'vendas', confidence: 0.99 })).toBe(false);
+    expect(mudouDeAssunto(antigo, 'vendas', { intentName: null, confidence: 0.99 })).toBe(false);
+    expect(mudouDeAssunto(antigo, 'vendas', { intentName: 'suporte', confidence: 0.59 })).toBe(false);
+  });
+
+  it("modo 'agente': só troca para assunto de interrompe", () => {
+    expect(mudouDeAssunto(novo, 'suporte', { intentName: 'vendas', confidence: 0.95 })).toBe(false);
+    expect(mudouDeAssunto(novo, 'vendas', { intentName: 'suporte', confidence: 0.95 })).toBe(true);
+    expect(mudouDeAssunto(novo, 'vendas', { intentName: 'suporte', confidence: 0.59 })).toBe(false);
+    expect(mudouDeAssunto(novo, 'suporte', { intentName: 'suporte', confidence: 0.95 })).toBe(false);
+    expect(mudouDeAssunto({ ...novo, interrompe: [] }, 'vendas', { intentName: 'suporte', confidence: 0.95 })).toBe(false);
   });
 });
 

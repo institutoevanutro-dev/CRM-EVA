@@ -228,6 +228,8 @@ describe("classifyIntent — o que o roteador em 'Automático' manda ao seam", (
           classifierProvider: null,
           sticky: true,
           minConfidence: 0.6,
+          permanencia: 'roteador',
+          interrompe: [],
           fallbackAgentId: null,
           members: [
             {
