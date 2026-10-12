@@ -7805,6 +7805,7 @@ export const DICIONARIO: Traducoes = {
   "Resposta ao caso indisponível (config).": { es: "Respuesta al caso no disponible (config)." },
   "Retorno não encontrado.": { es: "Seguimiento no encontrado." },
   "Router não encontrado.": { es: "Router no encontrado." },
+  "O assunto atual não é um assunto deste roteador.": { es: "El tema actual no es un tema de este enrutador." },
   "Run não encontrado.": { es: "Run no encontrado." },
   "sem organização ativa": { es: "sin organización activa" },
   "Sem organização ativa": { es: "Sin organización activa" },

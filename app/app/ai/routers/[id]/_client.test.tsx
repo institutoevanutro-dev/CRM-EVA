@@ -49,6 +49,9 @@ const RESULTADO: RouterTestResult = {
   agent_id: "a1",
   agent_name: "Agente Vendas",
   fatos: null,
+  mode: "roteador",
+  kept_current: false,
+  classified: true,
 };
 
 beforeEach(() => {

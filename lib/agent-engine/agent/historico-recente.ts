@@ -59,6 +59,14 @@ function fala(m: Linha): string {
     .filter((t) => t !== "")
     .join(" ");
   const texto = dito !== "" ? dito : m.media_storage_path || m.media_url ? `[${m.type}]` : "";
+  return emUmaLinha(texto);
+}
+
+/**
+ * O corte e o achatamento de toda mensagem do histórico. Exportado porque a
+ * conversa SIMULADA do teste do roteador tem de passar pelo mesmo funil da real.
+ */
+export function emUmaLinha(texto: string): string {
   // Quebra de linha abriria uma "linha nova" dentro do prompt do classificador.
   return texto.replace(/\s+/g, " ").trim().slice(0, MAXIMO_POR_MENSAGEM);
 }
