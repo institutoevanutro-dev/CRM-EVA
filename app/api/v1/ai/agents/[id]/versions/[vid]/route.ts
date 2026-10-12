@@ -14,7 +14,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { versionPatchSchema } from "@/lib/ai/agents/validation";
+import { parseVersionPatch } from "@/lib/ai/agents/validation";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -73,7 +73,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
   } catch {
     return fail("invalid_request", t("Body JSON inválido."), 400, { requestId });
   }
-  const parsed = versionPatchSchema.safeParse(raw);
+  const parsed = parseVersionPatch(raw);
   if (!parsed.success) {
     return fail("validation_failed", t("Campos inválidos."), 422, {
       requestId,
@@ -104,6 +104,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
 
   // B4: a FK não olha a organização — chave/número de outra org seriam gravados.
   const escopo = await validarEscopoDaVersao(admin, activeOrg.orgId, {
+    pipeline_ids: patch.pipeline_ids,
+    knowledge_source_ids: patch.knowledge_source_ids,
     credential_id: patch.credential_id,
     channel_session_id: patch.channel_session_id,
   });
@@ -111,28 +113,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
     return fail("validation_failed", mensagemDoEscopo(escopo), 422, { requestId });
   }
 
-  const update: Record<string, unknown> = {};
-  if (patch.system_prompt !== undefined) update.system_prompt = patch.system_prompt;
-  if (patch.provider !== undefined) update.provider = patch.provider;
-  if (patch.model !== undefined) update.model = patch.model;
-  if (patch.credential_id !== undefined) update.credential_id = patch.credential_id;
-  if (patch.tool_ids !== undefined) update.tool_ids = patch.tool_ids;
-  if (patch.trigger_config !== undefined) update.trigger_config = patch.trigger_config;
-  if (patch.channel_session_id !== undefined) update.channel_session_id = patch.channel_session_id;
-  if (patch.max_steps !== undefined) update.max_steps = patch.max_steps;
-  if (patch.token_budget !== undefined) update.token_budget = patch.token_budget;
-  if (patch.cost_budget_cents !== undefined) update.cost_budget_cents = patch.cost_budget_cents;
-  if (patch.history_message_window !== undefined)
-    update.history_message_window = patch.history_message_window;
-  if (patch.history_token_window !== undefined)
-    update.history_token_window = patch.history_token_window;
-  if (patch.handoff_keywords !== undefined) update.handoff_keywords = patch.handoff_keywords;
-  if (patch.handoff_tool_enabled !== undefined)
-    update.handoff_tool_enabled = patch.handoff_tool_enabled;
-  if (patch.cases_enabled !== undefined) update.cases_enabled = patch.cases_enabled;
-  if (patch.split_messages !== undefined) update.split_messages = patch.split_messages;
-  if (patch.split_max_chars !== undefined) update.split_max_chars = patch.split_max_chars;
-  if (patch.followup !== undefined) update.followup = patch.followup;
+  // O schema é `.strict()` e `parseVersionPatch` só devolve o que veio no
+  // corpo, então o patch É o update. A cópia campo a campo que morava aqui
+  // esquecia os campos novos (papel Operador, funis, materiais): 200 sem gravar.
+  const update: Record<string, unknown> = { ...patch };
 
   const { data, error } = await admin
     .from("ai_agent_versions")
