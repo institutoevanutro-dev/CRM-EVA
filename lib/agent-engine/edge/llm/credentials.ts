@@ -136,6 +136,8 @@ export interface OrgLlmConfig {
   provider: string;
   /** plaintext decifrado — existe só em memória, jamais logado/persistido */
   apiKey: string;
+  /** A credencial da organização de onde a chave saiu; ausente ou `null` = a chave da instalação. */
+  credentialId?: string | null;
   defaultModel: string | null;
   params: Record<string, unknown>;
   enabledModels: string[];
@@ -296,11 +298,12 @@ export async function resolveOrgLlmConfig(
   // senão a mais recente ativa/validada do provider. Sempre escopada pela org.
   const { rows: credRows } = override?.credentialId
     ? await db.query<{
+        id?: string;
         api_key_encrypted: unknown;
         api_key_iv: unknown;
         api_key_tag: unknown;
       }>(
-        `select api_key_encrypted, api_key_iv, api_key_tag
+        `select id, api_key_encrypted, api_key_iv, api_key_tag
          from ai_provider_credentials
          where organization_id = $1 and id = $2
            and is_active and validated_at is not null
@@ -308,11 +311,12 @@ export async function resolveOrgLlmConfig(
         [organizationId, override.credentialId],
       )
     : await db.query<{
+        id?: string;
         api_key_encrypted: unknown;
         api_key_iv: unknown;
         api_key_tag: unknown;
       }>(
-        `select api_key_encrypted, api_key_iv, api_key_tag
+        `select id, api_key_encrypted, api_key_iv, api_key_tag
          from ai_provider_credentials
          where organization_id = $1 and provider = $2
            and is_active and validated_at is not null
@@ -342,6 +346,10 @@ export async function resolveOrgLlmConfig(
   return {
     provider,
     apiKey,
+    // Qual credencial da organização saiu daqui; `null` = a chave da instalação.
+    // É o que deixa o aviso de crédito e de chave (`aviso-do-provedor.ts`)
+    // apontar a credencial certa e fechar só quando ELA volta a ser aceita.
+    credentialId: cred?.id ?? null,
     defaultModel: settings.default_model ?? null,
     params: settings.params,
     enabledModels: settings.enabled_models,

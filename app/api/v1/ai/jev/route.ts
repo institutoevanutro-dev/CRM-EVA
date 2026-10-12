@@ -3,7 +3,9 @@
  * PATCH /api/v1/ai/jev — liga, desliga, aceita, muda tarefa (admin).
  *
  * Porte enxuto de melgarafael/DeskcommCRM #1575/#1696 (`app/api/v1/ai/jev`).
- * Fase 1: cada tarefa só pode estar `observando` ou `desligada`; nenhuma decide.
+ * Cada tarefa fica `observando` ou `desligada`; as duas de pedido do cliente
+ * aceitam também `decidindo` ("Avisar a equipe", porte de #1747), e o clima não
+ * (`estadosDasTarefasSchema`).
  *
  * A chave é da instalação (`JEV_API_KEY` no `.env`) e NUNCA sai daqui: a rota
  * só diz se ela existe. Sem chave, ligar é recusado (nada mudaria e a tela
@@ -19,8 +21,9 @@ import { z } from "zod";
 import { MODELO_DO_JEV } from "@/lib/ai/decisao/cliente";
 import {
   aplicarMudanca,
-  ESTADOS_DA_TAREFA,
   estadoEfetivo,
+  estadosDasTarefasSchema,
+  estadosPermitidos,
   lerConfigDoJev,
   TAREFAS_DO_JEV,
   type IdDaTarefa,
@@ -44,14 +47,27 @@ interface ResumoDaTarefa {
   concordou: number;
   /** Pedidos: o Jev disse "sim" onde a regra disse não. Clima: o Jev viu reclamação. */
   percebidas: number;
+  /**
+   * Mensagens em que o Jev percebeu o pedido com a tarefa em "Avisar a equipe".
+   * ponytail: conta a mensagem, não o aviso. Duas mensagens da mesma conversa
+   * reabrem o MESMO aviso, e a conversa que já estava com uma pessoa não abre
+   * nenhum. Contar na Central misturaria os avisos que a regra abre por áudio.
+   */
+  avisos: number;
   latenciaMediaMs: number | null;
 }
 
-type Linha = { tarefa: string; rotulo_jev: string | null; concordou: boolean | null; latencia_ms: number | null };
+type Linha = {
+  tarefa: string;
+  estado?: string | null;
+  rotulo_jev: string | null;
+  concordou: boolean | null;
+  latencia_ms: number | null;
+};
 
 export function resumir(linhas: readonly Linha[]): Record<IdDaTarefa, ResumoDaTarefa> {
   const resumo = Object.fromEntries(
-    TAREFAS_DO_JEV.map((t) => [t, { observadas: 0, comPar: 0, concordou: 0, percebidas: 0, latenciaMediaMs: null }]),
+    TAREFAS_DO_JEV.map((t) => [t, { observadas: 0, comPar: 0, concordou: 0, percebidas: 0, avisos: 0, latenciaMediaMs: null }]),
   ) as Record<IdDaTarefa, ResumoDaTarefa>;
   const latencias = new Map<IdDaTarefa, number[]>();
   for (const l of linhas) {
@@ -62,6 +78,7 @@ export function resumir(linhas: readonly Linha[]): Record<IdDaTarefa, ResumoDaTa
     if (l.concordou !== null) r.comPar += 1;
     if (l.concordou === true) r.concordou += 1;
     if (l.rotulo_jev === "sim" || l.rotulo_jev === "reclamando") r.percebidas += 1;
+    if (l.rotulo_jev === "sim" && l.estado === "decidindo") r.avisos += 1;
     if (typeof l.latencia_ms === "number") latencias.set(t, [...(latencias.get(t) ?? []), l.latencia_ms]);
   }
   for (const [t, ms] of latencias) resumo[t].latenciaMediaMs = Math.round(ms.reduce((a, b) => a + b, 0) / ms.length);
@@ -82,7 +99,7 @@ export async function GET(): Promise<Response> {
   const desde = new Date(Date.now() - JANELA_DIAS * 86_400_000).toISOString();
   const { data: linhas } = await admin
     .from("jev_observacoes")
-    .select("tarefa, rotulo_jev, concordou, latencia_ms")
+    .select("tarefa, estado, rotulo_jev, concordou, latencia_ms")
     .eq("organization_id", orgId)
     .gte("created_at", desde)
     .limit(10_000);
@@ -93,7 +110,11 @@ export async function GET(): Promise<Response> {
       modelo: MODELO_DO_JEV,
       ligado: config.ligado,
       aceite: config.aceite,
-      tarefas: TAREFAS_DO_JEV.map((id) => ({ id, estado: estadoEfetivo(config, id) })),
+      tarefas: TAREFAS_DO_JEV.map((id) => ({
+        id,
+        estado: estadoEfetivo(config, id),
+        estados: estadosPermitidos(id),
+      })),
       resumo: resumir((linhas ?? []) as Linha[]),
       janelaDias: JANELA_DIAS,
       podeEditar: roleAtLeast(authz.org.role, "admin"),
@@ -102,12 +123,11 @@ export async function GET(): Promise<Response> {
   );
 }
 
-const estado = z.enum(ESTADOS_DA_TAREFA);
 const corpoDoPatch = z
   .object({
     ligado: z.boolean().optional(),
     aceitar: z.literal(true).optional(),
-    tarefas: z.object({ clima: estado, humano: estado, opt_out: estado }).partial().strict().optional(),
+    tarefas: estadosDasTarefasSchema.optional(),
   })
   .strict();
 
@@ -164,7 +184,12 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     resourceType: "organization",
     resourceId: authz.org.orgId,
     requestId,
-    metadata: { mudanca, ligado: r.config.ligado },
+    // `mudanca.tarefas` diz a tarefa e o estado novo; `tarefas` é como ficaram todas.
+    metadata: {
+      mudanca,
+      ligado: r.config.ligado,
+      tarefas: Object.fromEntries(TAREFAS_DO_JEV.map((id) => [id, estadoEfetivo(r.config, id)])),
+    },
   });
 
   return ok(

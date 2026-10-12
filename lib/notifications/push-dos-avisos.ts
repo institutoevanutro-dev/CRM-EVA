@@ -4,15 +4,16 @@
  * O som da Central (`sons-da-org.ts`) só toca com o CRM aberto na tela. Quem
  * atende pelo WhatsApp passa o dia com o CRM fechado no bolso, e os avisos que
  * pedem uma pessoa esperavam sem ninguém saber. Vai ao celular o momento em que
- * a IA passou a conversa para uma pessoa (aviso `handoff`).
+ * a IA passou a conversa para uma pessoa (aviso `handoff`) e o momento em que a
+ * IA ficou sem crédito ou com a chave recusada no provedor.
  *
  * É o MESMO que tem som próprio: a regra de quais avisos pedem gente é uma só
  * (`somDoAviso`). Todo aviso chega pelo barramento como `central.aviso_criado`
  * (migration 0314); o resto da Central fica só na tela.
  *
- * Porte do DeskcommCRM original (PR #1815): lá também vão ao celular a IA sem
- * saldo no provedor e o negócio que entrou numa etapa que avisa — avisos que
- * não existem neste fork. Quando chegarem, entram em `somDoAviso` e aqui.
+ * Porte do DeskcommCRM original (PR #1815): lá também vai ao celular o negócio
+ * que entrou numa etapa que avisa, aviso que não existe neste fork. Quando
+ * chegar, entra em `somDoAviso` e aqui.
  *
  * O texto sai no idioma da ORGANIZAÇÃO — ninguém está logado quando o push sai
  * — e não carrega dado do cliente: o push aparece na tela bloqueada, e quem
@@ -21,6 +22,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { ehAvisoDoProvedor } from "@/lib/agent-engine/edge/llm/aviso-do-provedor";
 import { REFERENCIAS_DE_AVISO } from "@/lib/ai/inbox-destino";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas";
@@ -73,6 +75,17 @@ export async function pushDoAvisoDaCentral(
 
   if (somDoAviso(item) !== "pessoa") return null;
   const idioma = await idiomaDaOrganizacao(admin, orgId);
+  // IA sem crédito ou com a chave recusada: o título do aviso já diz o que
+  // houve (gravado no idioma da organização, sem dado de cliente nem chave), e
+  // o que fazer está na Central.
+  if (ehAvisoDoProvedor(item.title)) {
+    return {
+      title: item.title,
+      body: traduzir("Abra a Central de avisos para ver o que fazer.", idioma),
+      tag: `aviso:${item.id}`,
+      href: CENTRAL,
+    };
+  }
   return {
     title: traduzir("A IA passou uma conversa para a equipe", idioma),
     body: traduzir("Abra a conversa para responder o cliente.", idioma),

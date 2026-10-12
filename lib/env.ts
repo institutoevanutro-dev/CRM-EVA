@@ -318,8 +318,9 @@ const schema = z.object({
   AUDIT_LOG_RETENTION_DAYS: z.string().optional().default(""),
 
   /**
-   * Jev (System One, da TypeSafe AI) — decisões rápidas, só OBSERVANDO na fase
-   * 1 (porte de melgarafael/DeskcommCRM #1575/#1696). Todas opcionais.
+   * Jev (System One, da TypeSafe AI) — decisões rápidas: observa e, nos dois
+   * pedidos do cliente, pode avisar a equipe na Central (porte de
+   * melgarafael/DeskcommCRM #1575/#1696/#1747). Todas opcionais.
    *
    * Sem `JEV_API_KEY`, o Jev não existe: nenhuma chamada sai para
    * api.typesafe.ai (`lib/ai/decisao/ponto.ts`). Com ela, ainda nada sai até
@@ -331,6 +332,16 @@ const schema = z.object({
   JEV_API_KEY: z.string().optional().default(""),
   JEV_API_BASE_URL: z.string().optional().default(""),
   JEV_OBSERVACOES_RETENTION_DAYS: z.string().optional().default(""),
+  /**
+   * As tabelas append-only da IA (migration 0354). `z.string()` pela MESMA razão
+   * das irmãs: quem interpreta é `lib/retencao/politica.ts`, onde lixo cai no
+   * padrão em vez de derrubar o app. Padrões/pisos: telemetria 400/100, ritmo de
+   * envio 2/2, cópias enviadas 30/7, checkpoints superados 180/30.
+   */
+  AI_TELEMETRY_RETENTION_DAYS: z.string().optional().default(""),
+  PACING_LEDGER_RETENTION_DAYS: z.string().optional().default(""),
+  OUTBOUND_COPIES_RETENTION_DAYS: z.string().optional().default(""),
+  LEAD_CHECKPOINT_RETENTION_DAYS: z.string().optional().default(""),
 
   // LGPD export (S-08.04)
   LGPD_SIGNING_KEY: z.string().optional().default(""),

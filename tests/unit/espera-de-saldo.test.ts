@@ -19,7 +19,6 @@ import {
   JANELA_DA_ESPERA_MS,
   PREFIXO_DA_ESPERA,
   adiarAteORecarregar,
-  avisarFaltaDeSaldo,
   deveEsperarSaldo,
   encerrarAvisoDeFaltaDeSaldo,
   esperouPorSaldo,
@@ -124,41 +123,7 @@ describe("o que vai para o banco", () => {
     expect(consultas[0]?.params).toEqual(["conv-1", "org-1"]);
   });
 
-  it("o aviso nasce no idioma da organização, aponta a credencial e não se repete", async () => {
-    const { db, consultas } = bancoFalso([
-      [/from organizations/, [{ locale: "es" }]],
-      [/from ai_provider_credentials/, [{ id: "cred-1" }]],
-    ]);
-    await avisarFaltaDeSaldo(db, "org-1", new Error(ANTHROPIC));
-    expect(consultas[1]?.params).toEqual(["org-1", "anthropic"]);
-    const insert = consultas[2]!;
-    expect(insert.sql).toMatch(/where not exists/);
-    expect(insert.params.slice(0, 7)).toEqual([
-      "org-1",
-      "other",
-      "critical",
-      "La IA se quedó sin saldo en el proveedor",
-      expect.stringContaining("Recarga el saldo en la cuenta del proveedor"),
-      "ai_provider_credential",
-      "cred-1",
-    ]);
-    expect(insert.params[4]).toMatch(/Proveedor: anthropic$/);
-    // dedupe por kind + título: um aviso aberto por organização
-    expect(insert.params.slice(7)).toEqual([false, true]);
-  });
-
-  it("com a chave da instalação (sem credencial da organização) o aviso nasce sem destino", async () => {
-    const { db, consultas } = bancoFalso([[/from organizations/, [{ locale: null }]]]);
-    await avisarFaltaDeSaldo(db, "org-1", new Error(ANTHROPIC));
-    expect(consultas[2]?.params.slice(3, 7)).toEqual([
-      "A IA está sem saldo no provedor",
-      expect.stringContaining("Provedor: anthropic"),
-      null,
-      null,
-    ]);
-  });
-
-  it("encerrar fecha o aviso aberto da organização pelo título no idioma dela", async () => {
+  it("encerrar fecha o aviso ANTIGO (o que o worker abria) pelo título no idioma da organização", async () => {
     const { db, consultas } = bancoFalso([[/from organizations/, [{ locale: "es" }]]]);
     await encerrarAvisoDeFaltaDeSaldo(db, "org-1");
     expect(consultas[1]?.sql).toMatch(/set status = 'resolved', resolved_at = now\(\)/);

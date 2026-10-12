@@ -23,6 +23,12 @@ import { z } from 'zod';
 import { scrubMessage } from '@/lib/sentry/scrub';
 
 import type { Logger } from '../../obs/logger';
+import {
+  avisarFalhaDoProvedor,
+  bancoPeloPool,
+  fecharAvisosDoProvedor,
+  motivoQueExigeODono,
+} from './aviso-do-provedor';
 import { decidirParaOSeam, marcarEconomicoQueFalhou } from './binding-do-ponto';
 import { resolveOrgLlmConfig, type LlmEdgeConfig, type OrcamentoDaOrg } from './credentials';
 import {
@@ -466,6 +472,13 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       // A chamada ainda não pede teto próprio neste fork; só o da org ou o padrão.
       maxOutputTokens: tetoDeSaida(maxOutputTokens, undefined),
     });
+  // De quem é a chamada, para o aviso de crédito e de chave na Central: a
+  // organização vem do job (fonte confiável), nunca de entrada de fora.
+  const alvoDoAviso = {
+    organizationId: input.tenantId,
+    provedor: config.provider,
+    credencialId: config.credentialId ?? null,
+  };
   try {
     result = await chamarCom(model);
   } catch (err) {
@@ -521,6 +534,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     };
     if (!vaiParaAReservaDoModelo || reservaDoModelo === undefined) {
       deps.log?.error('llm: chamada falhou', camposDaFalha);
+      avisarSeExigeODono(db, alvoDoAviso, err, deps.log);
       throw err;
     }
     deps.log?.warn('llm: chamada falhou', camposDaFalha);
@@ -556,6 +570,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
         origem_da_escolha: origem,
         ...normalizarErro(errDaReserva),
       });
+      avisarSeExigeODono(db, alvoDoAviso, errDaReserva, deps.log);
       throw errDaReserva;
     }
   }
@@ -612,6 +627,10 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     cost_cents: cost,
     latency_ms: latencyMs,
   });
+  // O provedor aceitou: se havia aviso de crédito ou de chave desta credencial
+  // aberto na Central, ele deixa de ser verdade. Sem `await`, e nunca lança.
+  void fecharAvisosDoProvedor(bancoPeloPool(db), alvoDoAviso, deps.log);
+
   for (const aviso of decisao.avisos) {
     deps.log?.warn('llm: configuração do ponto tem incoerência', {
       organization_id: input.tenantId,
@@ -632,6 +651,22 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     origem,
     avisos: decisao.avisos,
   };
+}
+
+/**
+ * Falta de crédito ou chave recusada não passam sozinhas: abre o aviso na
+ * Central (`aviso-do-provedor.ts`). Sem `await`: o aviso não pode atrasar nem
+ * derrubar quem chamou, e a função de lá nunca lança.
+ */
+function avisarSeExigeODono(
+  db: pg.Pool,
+  alvo: { organizationId: string; provedor: string; credencialId: string | null },
+  err: unknown,
+  log?: Logger,
+): void {
+  const motivo = motivoQueExigeODono(err, normalizarErro(err));
+  if (motivo === null) return;
+  void avisarFalhaDoProvedor(bancoPeloPool(db), { ...alvo, motivo }, log);
 }
 
 /**

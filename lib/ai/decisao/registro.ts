@@ -3,10 +3,17 @@
  * Execuções e no gasto do mês) e cada resposta em `jev_observacoes` (só rótulo
  * e probabilidade — nunca texto do cliente).
  *
- * Escreve só nessas duas tabelas (cerca em
+ * Escreve só nessas duas tabelas; o aviso de "Avisar a equipe" é de
+ * `./aviso-a-equipe.ts` (cerca em
  * `tests/unit/jev-nunca-cala-bloqueia-nem-responde.test.ts`). Nunca lança:
  * observação perdida não pode derrubar o worker de clima.
  */
+import {
+  avisarFalhaDoProvedor,
+  bancoPeloAdmin,
+  fecharAvisosDoProvedor,
+  PROVEDOR_DO_JEV,
+} from "@/lib/agent-engine/edge/llm/aviso-do-provedor";
 import { logger } from "@/lib/logger";
 import type { createAdminClient } from "@/lib/supabase/admin";
 
@@ -33,7 +40,7 @@ export async function registrarChamada(admin: Admin, c: Contexto, r: ResultadoDa
       organization_id: c.organizationId,
       agent_id: c.agentId,
       purpose: "sentiment_classify",
-      provider: "typesafe",
+      provider: PROVEDOR_DO_JEV,
       model: r.ok ? r.modelo : MODELO_DO_JEV,
       input_tokens: tokens,
       output_tokens: r.ok ? r.uso.tokensDeSaida : 0,
@@ -44,6 +51,14 @@ export async function registrarChamada(admin: Admin, c: Contexto, r: ResultadoDa
       http_status: r.ok ? null : r.status,
     });
     if (error) logger.warn("[jev] linha de custo não gravada", { organization_id: c.organizationId, erro: error.code });
+    // Chave recusada e conta sem crédito não passam sozinhas: aviso na Central,
+    // que se fecha quando o Jev volta a responder. As duas funções nunca lançam.
+    const alvo = { organizationId: c.organizationId, provedor: PROVEDOR_DO_JEV };
+    if (r.ok) await fecharAvisosDoProvedor(bancoPeloAdmin(admin), alvo, logger);
+    else if (r.motivo === "credencial_invalida" || r.motivo === "sem_credito") {
+      const motivo = r.motivo === "sem_credito" ? "sem_saldo" : "chave_recusada";
+      await avisarFalhaDoProvedor(bancoPeloAdmin(admin), { ...alvo, motivo }, logger);
+    }
   } catch (erro) {
     logger.warn("[jev] linha de custo falhou", {
       organization_id: c.organizationId,
@@ -54,6 +69,8 @@ export async function registrarChamada(admin: Admin, c: Contexto, r: ResultadoDa
 
 export interface Observacao {
   tarefa: IdDaTarefa;
+  /** O estado da tarefa quando o Jev respondeu. */
+  estado: "observando" | "decidindo";
   rotuloJev: string | null;
   probabilidadeJev: number | null;
   confiancaJev: number | null;
@@ -63,13 +80,18 @@ export interface Observacao {
   latenciaMs: number | null;
 }
 
-/** Uma linha por tarefa e mensagem; o retry do evento cai no índice único e é ignorado. */
-export async function registrarObservacao(admin: Admin, c: Contexto, o: Observacao): Promise<void> {
+/**
+ * Uma linha por tarefa e mensagem; o retry do evento cai no índice único e é
+ * ignorado. Devolve `false` SÓ nesse caso (23505): a primeira execução já
+ * decidiu o aviso, e uma segunda reabriria o que alguém acabou de resolver.
+ * Observação perdida por outro motivo não tem retry, e o Jev disse o que disse.
+ */
+export async function registrarObservacao(admin: Admin, c: Contexto, o: Observacao): Promise<boolean> {
   try {
     const { error } = await admin.from("jev_observacoes").insert({
       organization_id: c.organizationId,
       tarefa: o.tarefa,
-      estado: "observando",
+      estado: o.estado,
       conversation_id: c.conversationId,
       message_id: c.messageId,
       rotulo_jev: o.rotuloJev,
@@ -79,13 +101,13 @@ export async function registrarObservacao(admin: Admin, c: Contexto, o: Observac
       modelo: o.modelo,
       latencia_ms: o.latenciaMs,
     });
-    if (error && error.code !== "23505") {
-      logger.warn("[jev] observação não gravada", { organization_id: c.organizationId, erro: error.code });
-    }
+    if (error?.code === "23505") return false;
+    if (error) logger.warn("[jev] observação não gravada", { organization_id: c.organizationId, erro: error.code });
   } catch (erro) {
     logger.warn("[jev] observação falhou", {
       organization_id: c.organizationId,
       erro: erro instanceof Error ? erro.name : typeof erro,
     });
   }
+  return true;
 }

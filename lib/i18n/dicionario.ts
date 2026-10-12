@@ -7966,10 +7966,36 @@ export const DICIONARIO: Traducoes = {
   "Aviso do assistente": { es: "Aviso del asistente" },
   // ─── lib/agent-engine/queue/espera-de-saldo.ts ───
   "A IA está sem saldo no provedor": { es: "La IA se quedó sin saldo en el proveedor" },
-  "As respostas aos clientes estão esperando. Recarregue o saldo na conta do provedor: elas saem sozinhas quando o saldo voltar, durante até 6 horas. Depois disso, a conversa que não foi respondida aparece aqui na Central.": {
-    es: "Las respuestas a los clientes están esperando. Recarga el saldo en la cuenta del proveedor: salen solas cuando vuelva el saldo, durante hasta 6 horas. Después de eso, la conversación que no se respondió aparece aquí en la Central.",
-  },
   "Revisar credencial": { es: "Revisar credencial" },
+  // ─── lib/agent-engine/edge/llm/aviso-do-provedor.ts ───
+  "A IA está sem crédito no provedor {provedor}": { es: "La IA se quedó sin crédito en el proveedor {provedor}" },
+  "O provedor {provedor} recusou a chave da IA": { es: "El proveedor {provedor} rechazó la clave de la IA" },
+  "Desde {dia} às {hora}, o provedor {provedor} recusa as chamadas porque a conta ficou sem crédito.": {
+    es: "Desde el {dia} a las {hora}, el proveedor {provedor} rechaza las llamadas porque la cuenta se quedó sin crédito.",
+  },
+  "Desde {dia} às {hora}, o provedor {provedor} recusa a chave usada pela IA: ela é inválida, foi revogada ou perdeu a permissão.": {
+    es: "Desde el {dia} a las {hora}, el proveedor {provedor} rechaza la clave que usa la IA: es inválida, fue revocada o perdió el permiso.",
+  },
+  "Tudo o que usa este provedor está parado. Se é ele que responde aos clientes, o assistente não está respondendo.": {
+    es: "Todo lo que usa este proveedor está detenido. Si es el que responde a los clientes, el asistente no está respondiendo.",
+  },
+  "As leituras do Jev (clima da conversa e pedidos do cliente) estão paradas. O assistente continua respondendo normalmente.": {
+    es: "Las lecturas de Jev (clima de la conversación y pedidos del cliente) están detenidas. El asistente sigue respondiendo normalmente.",
+  },
+  "O que fazer: coloque crédito na conta do provedor, no site dele. As respostas que ficaram na fila saem sozinhas quando o crédito voltar, por até 6 horas.": {
+    es: "Qué hacer: carga crédito en la cuenta del proveedor, en su sitio. Las respuestas que quedaron en la fila salen solas cuando vuelva el crédito, durante hasta 6 horas.",
+  },
+  "O que fazer: gere uma chave nova no site do provedor e troque a chave em IA › Credenciais (a tela IA › Provedores mostra qual chave cada parte do sistema usa). Se a IA usa a chave do servidor, peça a quem administra a instalação para trocá-la.": {
+    es: "Qué hacer: genera una clave nueva en el sitio del proveedor y cámbiala en IA › Credenciales (la pantalla IA › Proveedores muestra qué clave usa cada parte del sistema). Si la IA usa la clave del servidor, pide a quien administra la instalación que la cambie.",
+  },
+  "O que fazer: coloque crédito na conta da TypeSafe.": { es: "Qué hacer: carga crédito en la cuenta de TypeSafe." },
+  "O que fazer: a chave do Jev fica na configuração do servidor (JEV_API_KEY). Peça a quem administra a instalação para trocá-la.": {
+    es: "Qué hacer: la clave de Jev está en la configuración del servidor (JEV_API_KEY). Pide a quien administra la instalación que la cambie.",
+  },
+  "Abra a Central de avisos para ver o que fazer.": { es: "Abre la Central de avisos para ver qué hacer." },
+  "Este aviso se fecha sozinho quando o provedor voltar a aceitar uma chamada.": {
+    es: "Este aviso se cierra solo cuando el proveedor vuelva a aceptar una llamada.",
+  },
   // `informativo` e `crítico` saem iguais nos dois idiomas — sem linha, por isso.
   "atenção": { es: "atención" },
   // ─── lib/ai/agent-inbox-copy.ts (copyDaPromessaSemDono) ───
@@ -8345,14 +8371,29 @@ export const DICIONARIO: Traducoes = {
   "Clima da conversa": {
     es: "Clima de la conversación",
   },
-  "Desligar tarefa": {
-    es: "Apagar tarea",
+  "Avisar a equipe": {
+    es: "Avisar al equipo",
+  },
+  "Avisar a equipe?": {
+    es: "¿Avisar al equipo?",
+  },
+  "avisos à equipe": {
+    es: "avisos al equipo",
+  },
+  "Para voltar, clique em Observando nesta mesma linha.": {
+    es: "Para volver, haga clic en Observando en esta misma línea.",
+  },
+  "Quando o Jev perceber um pedido para falar com uma pessoa que a regra não pegou, ele abre um aviso na Central para alguém da equipe decidir. Ele nunca passa a conversa sozinho, não cala o assistente e não responde o cliente.": {
+    es: "Cuando Jev perciba un pedido para hablar con una persona que la regla no detectó, abre un aviso en la Central para que alguien del equipo decida. Nunca transfiere la conversación por su cuenta, no silencia al asistente ni responde al cliente.",
+  },
+  "Quando o Jev perceber um pedido para parar de receber mensagens que a regra não pegou, ele abre um aviso na Central para alguém da equipe conferir. Quem bloqueia o contato é só a regra de hoje, quando o próprio cliente manda PARAR: o Jev nunca bloqueia ninguém.": {
+    es: "Cuando Jev perciba un pedido para dejar de recibir mensajes que la regla no detectó, abre un aviso en la Central para que alguien del equipo lo revise. Quien bloquea el contacto es solo la regla de hoy, cuando el propio cliente envía PARAR: Jev nunca bloquea a nadie.",
   },
   "Jev — decisões rápidas": {
     es: "Jev — decisiones rápidas",
   },
-  "Ligar o Jev (só observando)": {
-    es: "Encender Jev (solo observando)",
+  "Ligar o Jev": {
+    es: "Encender Jev",
   },
   "Observando": {
     es: "Observando",
@@ -8369,11 +8410,8 @@ export const DICIONARIO: Traducoes = {
   "Sem a chave JEV_API_KEY no servidor, o Jev está desligado e nenhuma mensagem sai para a TypeSafe.": {
     es: "Sin la clave JEV_API_KEY en el servidor, Jev está apagado y ningún mensaje sale hacia TypeSafe.",
   },
-  "Um modelo à parte (System One, da TypeSafe AI) que só OBSERVA: ele dá a opinião dele ao lado do que o sistema já decide, e você compara. Ele não bloqueia ninguém, não passa a conversa, não cala o assistente e não responde o cliente.": {
-    es: "Un modelo aparte (System One, de TypeSafe AI) que solo OBSERVA: da su opinión junto a lo que el sistema ya decide, y usted compara. No bloquea a nadie, no transfiere la conversación, no silencia al asistente y no responde al cliente.",
-  },
-  "Voltar a observar": {
-    es: "Volver a observar",
+  "Um modelo à parte (System One, da TypeSafe AI) que observa: ele dá a opinião dele ao lado do que o sistema já decide, e você compara. Nos dois pedidos do cliente, você pode pedir que ele avise a equipe na Central. Em nenhum caso ele bloqueia alguém, passa a conversa, cala o assistente ou responde o cliente.": {
+    es: "Un modelo aparte (System One, de TypeSafe AI) que observa: da su opinión junto a lo que el sistema ya decide, y usted compara. En los dos pedidos del cliente, puede pedirle que avise al equipo en la Central. En ningún caso bloquea a alguien, transfiere la conversación, silencia al asistente ni responde al cliente.",
   },
   "de concordância": {
     es: "de coincidencia",
@@ -9909,8 +9947,8 @@ export const DICIONARIO: Traducoes = {
     es: "Suenan con el sitio abierto cuando el aviso llega a la Central. MP3, OGG o WAV de hasta 1 MB.",
   },
   "Precisa de uma pessoa": { es: "Necesita una persona" },
-  "Quando o assistente passa a conversa para alguém da equipe.": {
-    es: "Cuando el asistente pasa la conversación a alguien del equipo.",
+  "Quando o assistente passa a conversa para alguém da equipe, ou quando a IA fica sem crédito ou com a chave recusada no provedor.": {
+    es: "Cuando el asistente pasa la conversación a alguien del equipo, o cuando la IA se queda sin crédito o con la clave rechazada en el proveedor.",
   },
   "Som personalizado": { es: "Sonido personalizado" },
   "Som do sistema": { es: "Sonido del sistema" },

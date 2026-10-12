@@ -1109,6 +1109,18 @@ Desenho: `docs/superpowers/specs/2026-10-06-biblioteca-de-midias-design.md`. Tel
 - [ ] Follow-up manda mídia (passo de mensagem com imagem ou vídeo; sem termo, vencida ou revogada = a sequência para + aviso na Central) — coberto por unit/invariante; prova com WAHA real pendente (fatia 5)
 - Status: as quatro linhas passaram localmente (Playwright, banco fresco do `baseline.sql`, `next build` + `next start`, 3 testes em 12 s); evidência em `.superpowers/evidence/biblioteca-de-midias/`. Falta só o CI do PR
 
+## J31 — A IA ficou sem crédito, ou a chave foi recusada: alguém fica sabendo `[P0]` (2026-10-12)
+
+O caso de campo: em 11/10/2026 a conta da OpenAI de uma clínica ficou sem crédito às 18:51 e o assistente passou umas 15 horas sem responder, sem que ninguém fosse avisado. A falha só existia na tela IA › Execuções.
+
+- `[P0]` Com o CRM aberto, o provedor passa a recusar por falta de crédito: a campainha do topo toca o som de pedido de pessoa e conta 1; a Central mostra UM aviso crítico que diz o que houve, desde quando, o que parou e o que fazer, e que ele se fecha sozinho.
+- `[P0]` Limite de ritmo (o mesmo HTTP 429) não abre aviso.
+- `[P0]` O crédito volta: a primeira chamada aceita fecha o aviso, que passa para a aba Resolvidos.
+
+Spec: `tests/e2e/aviso-de-credito-do-provedor.spec.ts` (job e2e). O turno passa pelo seam de produção (`runModelCall`) contra o Postgres do Supabase local; o provedor é um servidor HTTP local com os corpos de erro da OpenAI. Executado em 2026-10-12 no build de produção, banco do `baseline.sql`: 1 passou. Evidência em `.superpowers/evidence/aviso-de-credito-do-provedor/`.
+
+Não coberto pela tela: o push no celular (sem par de chaves VAPID no ambiente de teste; a regra é a mesma do som e tem teste em `tests/unit/push-dos-avisos.test.ts`), a chave recusada e o Jev (testes em `tests/unit/aviso-do-provedor.test.ts`).
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

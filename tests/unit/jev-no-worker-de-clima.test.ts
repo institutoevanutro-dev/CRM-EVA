@@ -16,6 +16,7 @@ vi.mock("@/lib/env", () => ({
 }));
 vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
+import { esquecerAvisosDoProvedor } from "@/lib/agent-engine/edge/llm/aviso-do-provedor";
 import { reiniciarDisjuntor } from "@/lib/ai/decisao/disjuntor";
 import { logger } from "@/lib/logger";
 import { observarComOJev, registrarClimaObservado } from "@/workers/ai-sentiment-worker.jev";
@@ -26,7 +27,16 @@ const LIGADO = { jev: { ligado: true, aceite: { em: "2026-10-09T12:00:00.000Z", 
 
 let lidas: string[];
 let escritas: Array<{ tabela: string; linha: Record<string, unknown> }>;
+let reaberturas: Array<Record<string, unknown>>;
+/** O Jev respondeu: fecha o aviso de crédito ou de chave DELE (`aviso-do-provedor.ts`). */
+let fechamentos: Array<Record<string, unknown>>;
 let settings: unknown;
+/** A conversa lida logo antes do aviso. */
+let conversa: Record<string, unknown> | null;
+/** O erro que cada tabela devolve no insert (23505 = já existe). */
+let erroNoInsert: Record<string, { code: string } | undefined>;
+/** Probabilidade que o dublê do Jev devolve por pedido. */
+let noul: Record<string, number>;
 
 function admin() {
   return {
@@ -35,13 +45,26 @@ function admin() {
       const q = {
         select: () => q,
         eq: () => q,
-        maybeSingle: async () => ({ data: { settings }, error: null }),
+        in: () => q,
+        is: () => q,
+        maybeSingle: async () => ({ data: tabela === "conversations" ? conversa : { settings }, error: null }),
         insert: async (linha: Record<string, unknown>) => {
-          escritas.push({ tabela, linha });
-          return { error: null };
+          const error = erroNoInsert[tabela] ?? null;
+          if (error === null) escritas.push({ tabela, linha });
+          return { error };
         },
-        update: () => {
-          throw new Error(`update em ${tabela}`);
+        // As únicas reescritas que o Jev pode fazer: reabrir o próprio aviso e,
+        // quando volta a responder, fechar o aviso de crédito ou de chave dele.
+        update: (patch: Record<string, unknown>) => {
+          if (tabela !== "agent_inbox_items") throw new Error(`update em ${tabela}`);
+          (patch.status === "resolved" ? fechamentos : reaberturas).push(patch);
+          return { ...q, then: (ok: (v: { error: null }) => unknown) => ok({ error: null }) };
+        },
+        delete: () => {
+          throw new Error(`delete em ${tabela}`);
+        },
+        upsert: () => {
+          throw new Error(`upsert em ${tabela}`);
         },
       };
       return q;
@@ -55,6 +78,12 @@ beforeEach(() => {
   settings = LIGADO;
   lidas = [];
   escritas = [];
+  reaberturas = [];
+  fechamentos = [];
+  esquecerAvisosDoProvedor();
+  conversa = { status: "ai_handling", assigned_to_user_id: null, bot_silenced_until: null, contacts: { is_blocked: false } };
+  erroNoInsert = {};
+  noul = { opt_out: 0.85, humano: 0.1 };
   reiniciarDisjuntor();
   vi.mocked(logger.warn).mockClear();
   fetchSpy = vi.fn(async (_url: unknown, init: RequestInit) => {
@@ -64,7 +93,7 @@ beforeEach(() => {
       answers[id] =
         id === "clima"
           ? { type: "score", score: 2, probabilities: {}, confidence: 0.9 }
-          : { type: "noul", noul: id === "opt_out" ? 0.85 : 0.1 };
+          : { type: "noul", noul: noul[id] };
     }
     return new Response(JSON.stringify({ model: "jev-1.13.0", answers, usage: { input_tokens: 500 } }), { status: 200 });
   });
@@ -124,5 +153,114 @@ describe("com chave e o Jev ligado", () => {
     });
     await observarComOJev(admin(), { ...CTX, mensagem: "segredo-do-cliente" });
     expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain("segredo-do-cliente");
+  });
+});
+
+/**
+ * "AVISAR A EQUIPE" (`decidindo`), só nos dois pedidos do cliente: a regra
+ * disse não, o Jev disse sim acima do corte, e abre UM aviso na Central. Nada
+ * além disso: `update`/`delete`/`upsert` em qualquer outra tabela lança no
+ * dublê, e a única saída de rede é a pergunta ao Jev.
+ */
+describe("avisar a equipe", () => {
+  const avisando = (tarefas: Record<string, { estado: string }>) => ({ jev: { ...LIGADO.jev, tarefas } });
+  const NATURAL = "chega dessas mensagens toda semana";
+  const avisos = () => escritas.filter((e) => e.tabela === "agent_inbox_items").map((e) => e.linha);
+
+  beforeEach(() => {
+    H.chave = "apikey_x";
+    settings = avisando({ opt_out: { estado: "decidindo" }, humano: { estado: "decidindo" } });
+  });
+
+  it("regra disse não e o Jev disse sim acima do corte: UM aviso, sem o texto do cliente", async () => {
+    await observarComOJev(admin(), { ...CTX, mensagem: NATURAL });
+    expect(avisos()).toHaveLength(1);
+    expect(avisos()[0]).toMatchObject({
+      organization_id: ORG,
+      kind: "jev_parar_de_receber",
+      ref_kind: "conversation",
+      ref_id: CTX.conversationId,
+    });
+    const texto = `${String(avisos()[0]!.title)} ${String(avisos()[0]!.body)}`;
+    expect(texto).not.toContain(NATURAL);
+    expect(texto).toMatch(/detector automático/);
+    expect(texto).toMatch(/não bloqueia o contato/);
+    expect(escritas.find((e) => e.linha.tarefa === "opt_out")!.linha).toMatchObject({ estado: "decidindo", rotulo_jev: "sim" });
+  });
+
+  it("nunca bloqueia, passa, cala nem responde: só observação, custo e aviso; uma saída de rede", async () => {
+    noul = { opt_out: 0.99, humano: 0.99 };
+    await observarComOJev(admin(), { ...CTX, mensagem: "alguém de verdade pode me tirar daí" });
+    expect(new Set(escritas.map((e) => e.tabela))).toEqual(new Set(["llm_calls", "jev_observacoes", "agent_inbox_items"]));
+    expect(avisos().map((a) => a.kind).sort()).toEqual(["jev_parar_de_receber", "jev_pedido_de_humano"]);
+    expect(reaberturas).toEqual([]);
+    // O Jev respondeu: a única outra escrita é fechar o aviso de crédito ou de chave dele.
+    expect(fechamentos).toEqual([{ status: "resolved", resolved_at: expect.any(String) }]);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0]![0])).toContain("api.typesafe.ai");
+    expect(vi.mocked(logger.warn)).not.toHaveBeenCalled();
+  });
+
+  it("abaixo do corte não avisa (0,79 no parar; 0,89 na pessoa)", async () => {
+    noul = { opt_out: 0.79, humano: 0.89 };
+    await observarComOJev(admin(), { ...CTX, mensagem: NATURAL });
+    expect(avisos()).toEqual([]);
+    expect(escritas.filter((e) => e.tabela === "jev_observacoes")).toHaveLength(2);
+  });
+
+  it("o Jev falhou: nada de aviso, e nada muda", async () => {
+    fetchSpy.mockImplementation(async () => new Response("erro", { status: 500 }));
+    await observarComOJev(admin(), { ...CTX, mensagem: NATURAL });
+    expect(avisos()).toEqual([]);
+  });
+
+  it("a regra já pegou: o Jev nem é perguntado sobre aquele pedido, e não avisa", async () => {
+    noul = { opt_out: 0.99, humano: 0.1 };
+    await observarComOJev(admin(), { ...CTX, mensagem: "parar de me mandar mensagem" });
+    const perguntas = Object.keys(JSON.parse(String((fetchSpy.mock.calls[0]![1] as RequestInit).body)).questions);
+    expect(perguntas).not.toContain("opt_out");
+    expect(avisos()).toEqual([]);
+  });
+
+  it("tarefa em observando não avisa", async () => {
+    settings = LIGADO;
+    await observarComOJev(admin(), { ...CTX, mensagem: NATURAL });
+    expect(avisos()).toEqual([]);
+    expect(escritas.find((e) => e.linha.tarefa === "opt_out")!.linha).toMatchObject({ estado: "observando", rotulo_jev: "sim" });
+  });
+
+  it("o clima nunca avisa: decidindo gravado à mão o desliga, e a pergunta nem sai", async () => {
+    settings = avisando({ clima: { estado: "decidindo" } });
+    noul = { opt_out: 0.1, humano: 0.1 };
+    expect(await observarComOJev(admin(), { ...CTX, mensagem: "que atendimento horrível" })).toBeNull();
+    const perguntas = Object.keys(JSON.parse(String((fetchSpy.mock.calls[0]![1] as RequestInit).body)).questions);
+    expect(perguntas).not.toContain("clima");
+    expect(avisos()).toEqual([]);
+  });
+
+  it("um aviso por conversa: o que já existe é reaberto, não duplicado", async () => {
+    erroNoInsert = { agent_inbox_items: { code: "23505" } };
+    await observarComOJev(admin(), { ...CTX, mensagem: NATURAL });
+    expect(avisos()).toEqual([]);
+    expect(reaberturas).toHaveLength(1);
+    expect(reaberturas[0]).toMatchObject({ status: "open", resolved_at: null });
+  });
+
+  it("retry da mesma mensagem não reabre o que alguém resolveu", async () => {
+    erroNoInsert = { jev_observacoes: { code: "23505" } };
+    await observarComOJev(admin(), { ...CTX, mensagem: NATURAL });
+    expect(avisos()).toEqual([]);
+    expect(reaberturas).toEqual([]);
+  });
+
+  it("pedido que a conversa já atendeu não vira aviso", async () => {
+    noul = { opt_out: 0.99, humano: 0.99 };
+    conversa = { status: "ai_handling", assigned_to_user_id: "u", bot_silenced_until: null, contacts: { is_blocked: true } };
+    await observarComOJev(admin(), { ...CTX, mensagem: "alguém de verdade pode me tirar daí" });
+    expect(avisos()).toEqual([]);
+
+    conversa = { status: "closed", assigned_to_user_id: null, bot_silenced_until: null, contacts: { is_blocked: false } };
+    await observarComOJev(admin(), { ...CTX, messageId: "55555555-5555-4555-8555-555555555555", mensagem: "alguém de verdade pode me tirar daí" });
+    expect(avisos()).toEqual([]);
   });
 });

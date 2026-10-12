@@ -4,9 +4,11 @@
  * Porte enxuto de melgarafael/DeskcommCRM #1575/#1696 (`config.ts`), com as
  * chaves do upstream para um porte futuro não precisar migrar dado.
  *
- * Fase 1 (observando): cada tarefa só pode estar `observando` ou `desligada`.
- * Nenhuma decide nada. O estado `decidindo` do upstream fica fora do schema de
- * propósito: gravado à mão no banco, ele é lido como `desligada`.
+ * Cada tarefa está `observando` ou `desligada`. As duas de pedido do cliente
+ * (`humano`, `opt_out`) aceitam um terceiro estado, `decidindo`, que na tela se
+ * chama "Avisar a equipe" (porte de #1747): o pedido percebido abre um aviso na
+ * Central, e é tudo (`./aviso-a-equipe.ts`). O clima NÃO aceita `decidindo`:
+ * gravado à mão no banco, ele é lido como `desligada`.
  *
  * Regras que valem em qualquer leitura:
  *  - interruptor desligado, ou sem o aceite do administrador → tudo desligado;
@@ -18,24 +20,41 @@ import { z } from "zod";
 export const TAREFAS_DO_JEV = ["clima", "humano", "opt_out"] as const;
 export type IdDaTarefa = (typeof TAREFAS_DO_JEV)[number];
 
-export const ESTADOS_DA_TAREFA = ["observando", "desligada"] as const;
+export const ESTADOS_DA_TAREFA = ["observando", "decidindo", "desligada"] as const;
 export type EstadoDaTarefa = (typeof ESTADOS_DA_TAREFA)[number];
 
-const tarefaGravada = z
-  .object({
-    estado: z.enum(ESTADOS_DA_TAREFA),
-    alterado_em: z.string().optional(),
-    alterado_por: z.string().optional(),
-  })
-  .optional()
-  .catch({ estado: "desligada" as const });
+/** As únicas que podem ficar em `decidindo` ("Avisar a equipe"). O clima, não. */
+export const TAREFAS_QUE_AVISAM: readonly IdDaTarefa[] = ["humano", "opt_out"];
+
+export function estadosPermitidos(tarefa: IdDaTarefa): readonly EstadoDaTarefa[] {
+  return TAREFAS_QUE_AVISAM.includes(tarefa) ? ESTADOS_DA_TAREFA : ["observando", "desligada"];
+}
+
+const estadoDe = (tarefa: IdDaTarefa) =>
+  z.custom<EstadoDaTarefa>((v) => (estadosPermitidos(tarefa) as readonly unknown[]).includes(v));
+
+/** O que a rota aceita gravar por tarefa: `decidindo` no clima é recusado aqui. */
+export const estadosDasTarefasSchema = z
+  .object({ clima: estadoDe("clima"), humano: estadoDe("humano"), opt_out: estadoDe("opt_out") })
+  .partial()
+  .strict();
+
+const tarefaGravada = (tarefa: IdDaTarefa) =>
+  z
+    .object({
+      estado: estadoDe(tarefa),
+      alterado_em: z.string().optional(),
+      alterado_por: z.string().optional(),
+    })
+    .optional()
+    .catch({ estado: "desligada" as const });
 
 export const configDoJevSchema = z.object({
   ligado: z.boolean().default(false),
   /** Quem aceitou mandar a mensagem, limpa, ao fornecedor estrangeiro, e quando. */
   aceite: z.object({ em: z.string(), por: z.string() }).nullable().default(null),
   tarefas: z
-    .object({ clima: tarefaGravada, humano: tarefaGravada, opt_out: tarefaGravada })
+    .object({ clima: tarefaGravada("clima"), humano: tarefaGravada("humano"), opt_out: tarefaGravada("opt_out") })
     .partial()
     .optional(),
   alterado_em: z.string().optional(),

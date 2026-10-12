@@ -4,11 +4,16 @@ import pg from "pg";
 import {
   PREFIXO_DA_ESPERA,
   adiarAteORecarregar,
-  avisarFaltaDeSaldo,
   encerrarAvisoDeFaltaDeSaldo,
   esperouPorSaldo,
   jaNaoHaOQueResponder,
 } from "@/lib/agent-engine/queue/espera-de-saldo";
+import {
+  avisarFalhaDoProvedor,
+  bancoPeloPool,
+  esquecerAvisosDoProvedor,
+  fecharAvisosDoProvedor,
+} from "@/lib/agent-engine/edge/llm/aviso-do-provedor";
 import { claimJobs, enqueueJob } from "@/lib/agent-engine/queue/queue";
 
 /**
@@ -24,7 +29,8 @@ import { claimJobs, enqueueJob } from "@/lib/agent-engine/queue/queue";
  *     `max_attempts = 5` e o job continua `pending` — nunca `dead`;
  *   - que o job volta do claim com a marca (`last_error`) que o worker lê para
  *     saber que ele esperou;
- *   - que o aviso na Central é UM por organização e aponta a credencial;
+ *   - que o aviso de crédito e de chave na Central é UM por organização,
+ *     provedor, motivo e credencial, e fecha só o da credencial que voltou;
  *   - que "já respondida" lê as colunas da conversa com o filtro de organização.
  *
  * Roda contra o Postgres efêmero do `scripts/test-db.sh`.
@@ -142,36 +148,94 @@ describe("a resposta espera a recarga sem gastar tentativa", () => {
   });
 });
 
-describe("o aviso na Central", () => {
-  it("um só por organização, em espanhol, apontando a credencial — e fecha quando o saldo volta", async () => {
-    await avisarFaltaDeSaldo(pool, ORG, SEM_SALDO);
-    await avisarFaltaDeSaldo(pool, ORG, SEM_SALDO);
-    const { rows } = await pool.query(
-      "select kind, severity, title, ref_kind, ref_id, status from agent_inbox_items where organization_id = $1",
-      [ORG],
-    );
-    expect(rows).toEqual([
-      {
-        kind: "other",
-        severity: "critical",
-        title: "La IA se quedó sin saldo en el proveedor",
-        ref_kind: "ai_provider_credential",
-        ref_id: CREDENCIAL,
-        status: "open",
-      },
-    ]);
-
-    await avisarFaltaDeSaldo(pool, OUTRA_ORG, SEM_SALDO);
+describe("o aviso ANTIGO na Central (o que o worker abria)", () => {
+  it("encerrar fecha o da organização e não toca no da outra", async () => {
+    for (const org of [ORG, OUTRA_ORG]) {
+      await pool.query(
+        `insert into agent_inbox_items (organization_id, kind, severity, title)
+         values ($1, 'other', 'critical', 'La IA se quedó sin saldo en el proveedor')`,
+        [org],
+      );
+    }
     expect(await encerrarAvisoDeFaltaDeSaldo(pool, ORG)).toBe(1);
     const { rows: depois } = await pool.query<{ organization_id: string; status: string }>(
       "select organization_id, status from agent_inbox_items where organization_id = any($1) order by organization_id",
       [[ORG, OUTRA_ORG]],
     );
-    // fechar o aviso de uma organização não toca no da outra
     expect(depois).toEqual([
       { organization_id: ORG, status: "resolved" },
       { organization_id: OUTRA_ORG, status: "open" },
     ]);
+  });
+});
+
+/**
+ * O AVISO DE HOJE: crédito e chave, aberto e fechado pelo seam da chamada
+ * (`edge/llm/aviso-do-provedor.ts`). O emissor engole a falha como `warn` de
+ * propósito, então é aqui, contra o `baseline.sql`, que uma constraint de
+ * `agent_inbox_items` (kind, severity, ref) reprovaria o insert sem ninguém ver.
+ */
+describe("o aviso de crédito e de chave, no banco", () => {
+  const banco = bancoPeloPool(pool);
+  const avisos = async (org: string) =>
+    (
+      await pool.query<{ title: string; severity: string; ref_kind: string | null; ref_id: string | null; status: string; resolved_at: Date | null; body: string }>(
+        "select title, severity, ref_kind, ref_id, status, resolved_at, body from agent_inbox_items where organization_id = $1 order by created_at, title",
+        [org],
+      )
+    ).rows;
+  const openai = { organizationId: ORG, provedor: "openai" } as const;
+
+  afterEach(() => esquecerAvisosDoProvedor());
+
+  it("um por organização, provedor, motivo e credencial; nasce crítico, no idioma da organização", async () => {
+    // Três chamadas recusadas por crédito, de dois processos (a memória zerada no meio): um aviso.
+    await avisarFalhaDoProvedor(banco, { ...openai, motivo: "sem_saldo" });
+    await avisarFalhaDoProvedor(banco, { ...openai, motivo: "sem_saldo" });
+    esquecerAvisosDoProvedor();
+    await avisarFalhaDoProvedor(banco, { ...openai, motivo: "sem_saldo" });
+    // Outro motivo e outra credencial são outros avisos.
+    await avisarFalhaDoProvedor(banco, { ...openai, motivo: "chave_recusada" });
+    await avisarFalhaDoProvedor(banco, {
+      organizationId: ORG,
+      provedor: "anthropic",
+      credencialId: CREDENCIAL,
+      motivo: "sem_saldo",
+    });
+
+    const abertos = await avisos(ORG);
+    expect(abertos.map((a) => [a.title, a.ref_kind, a.ref_id, a.severity, a.status])).toEqual([
+      ["La IA se quedó sin crédito en el proveedor OpenAI (GPT)", null, null, "critical", "open"],
+      ["El proveedor OpenAI (GPT) rechazó la clave de la IA", null, null, "critical", "open"],
+      ["La IA se quedó sin crédito en el proveedor Anthropic (Claude)", "ai_provider_credential", CREDENCIAL, "critical", "open"],
+    ]);
+    expect(abertos[0]!.body).toMatch(/^Desde el \d{2}\/\d{2} a las \d{2}:\d{2}, el proveedor OpenAI \(GPT\) rechaza las llamadas/);
+  });
+
+  it("fecha quando a MESMA credencial volta a ser aceita, e só o daquela organização", async () => {
+    await avisarFalhaDoProvedor(banco, { ...openai, motivo: "sem_saldo" });
+    await avisarFalhaDoProvedor(banco, { organizationId: OUTRA_ORG, provedor: "openai", motivo: "sem_saldo" });
+    await avisarFalhaDoProvedor(banco, {
+      organizationId: ORG,
+      provedor: "anthropic",
+      credencialId: CREDENCIAL,
+      motivo: "sem_saldo",
+    });
+
+    // O sucesso é da chave da instalação na OpenAI, na ORG.
+    await fecharAvisosDoProvedor(banco, openai);
+
+    const daOrg = await avisos(ORG);
+    expect(daOrg.map((a) => [a.ref_id, a.status])).toEqual([
+      [null, "resolved"],
+      [CREDENCIAL, "open"],
+    ]);
+    expect(daOrg[0]!.resolved_at).not.toBeNull();
+    expect((await avisos(OUTRA_ORG)).map((a) => a.status)).toEqual(["open"]);
+
+    // Episódio novo abre aviso NOVO: o resolvido não deduplica.
+    await avisarFalhaDoProvedor(banco, { ...openai, motivo: "sem_saldo" });
+    expect((await avisos(ORG)).filter((a) => a.ref_id === null).map((a) => a.status)).toEqual(["resolved", "open"]);
   });
 });
 

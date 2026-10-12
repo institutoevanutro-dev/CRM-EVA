@@ -24,7 +24,7 @@ import { SOM_PADRAO, TIPOS_DE_SOM, type TipoDeSom } from "@/lib/notifications/so
 const ROTULO: Record<TipoDeSom, { titulo: string; quando: string }> = {
   pessoa: {
     titulo: "Precisa de uma pessoa",
-    quando: "Quando o assistente passa a conversa para alguém da equipe.",
+    quando: "Quando o assistente passa a conversa para alguém da equipe, ou quando a IA fica sem crédito ou com a chave recusada no provedor.",
   },
 };
 
