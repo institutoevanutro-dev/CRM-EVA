@@ -2722,12 +2722,12 @@ Ambiente fresco estilo VPS: Supabase local próprio (pg15), `baseline.sql`, `nex
 
 | Caso | O que o administrador faz | Resultado |
 |---|---|---|
-| J33.1 | LGPD › Solicitações › "Registrar pedido": procura o contato, escolhe "Cópia dos dados", "Pessoalmente", a data de três dias atrás, escreve a observação e registra | RESULTADO_J33_1 |
-| J33.2 | Abre o pedido pela lista | RESULTADO_J33_2 |
-| J33.3 | Tenta registrar de novo o mesmo pedido para o mesmo contato | RESULTADO_J33_3 |
-| J33.4 | Aprova ("Aprovar export"), o dreno roda | RESULTADO_J33_4 |
-| J33.5 | "Marcar como entregue": escolhe como entregou, escreve a observação, confirma | RESULTADO_J33_5 |
-| J33.6 | Registra um pedido de APAGAMENTO e o dreno roda | RESULTADO_J33_6 |
+| J33.1 | LGPD › Solicitações › "Registrar pedido": procura o contato, escolhe "Cópia dos dados", "Pessoalmente", a data de três dias atrás, escreve a observação e registra | **PROVADO NA TELA.** Aviso "Pedido registrado. Prazo: DD/MM/AAAA", com o prazo de 7 dias úteis contado do dia informado (não de hoje). No banco: `source = manual`, `received_at` no dia informado, canal e observação em `request_payload`. Nenhum evento emitido: nada começa a ser processado |
+| J33.2 | Abre o pedido pela lista | **PROVADO NA TELA.** "Recebido" na lista; a página mostra "Vence em" com o mesmo dia do aviso, "Chegou por: Pessoalmente", a observação, e `lgpd.data_request_received` na trilha, com quem registrou |
+| J33.3 | Tenta registrar de novo o mesmo pedido para o mesmo contato | **PROVADO NA TELA.** Recusado com "Este contato já tem um pedido igual em aberto." e a ligação "Abrir o pedido em aberto", que leva ao pedido existente |
+| J33.4 | Aprova ("Aprovar export"), o dreno roda | **PROVADO NA TELA.** Processando, depois "Revisão pendente" com "Baixar PDF" (contato sem e-mail, instalação sem envio de e-mail). O PDF baixa |
+| J33.5 | "Marcar como entregue": escolhe como entregou, escreve a observação, confirma | **PROVADO NA TELA.** O pedido vai a "Concluído"; a página mostra "Entregue: Em mãos, pessoalmente" e a observação, a trilha ganha `lgpd.export_delivered` com quem marcou, e o botão some. No banco: `completed_at` preenchido e `result.manual_delivery` com quem, quando e como. O vigia de prazo ignora `completed`, então o alarme para |
+| J33.6 | Registra um pedido de APAGAMENTO e o dreno roda | **PROVADO NA TELA.** O formulário avisa "Registrar não apaga nada". Depois do dreno o pedido segue "Recebido" com 0 tentativas, o contato continua com o nome e sem anonimizar, e não há evento no `event_log`. A página do pedido oferece "Aprovar anonimização", com o aviso de irreversível |
 
 **O que esta jornada NÃO tem, e é achado, não cobertura:**
 
