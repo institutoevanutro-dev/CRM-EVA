@@ -31,7 +31,7 @@ const ORG_ID = "22222222-2222-4222-8222-222222222222";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ROUTER_ID = "55555555-5555-4555-8555-555555555555";
 const CONTACT_ID = "44444444-4444-4444-8444-444444444444";
-const FATOS = "Atendimentos anteriores:\n- 02/09/2026: Primeira consulta (realizado)";
+const FATOS = "Fatos do CRM sobre este contato (agenda):\n- Compromissos passados (não cancelados): 02/09/2026 Primeira consulta (realizado)\n- Compromissos futuros: nenhum";
 const AGENT_ID = "66666666-6666-4666-8666-666666666666";
 
 function mockAuthzOk() {
@@ -361,10 +361,16 @@ describe("POST /api/v1/ai/routers/:id/test", () => {
   it("buildFatosDoContato rejeita → 200, classificação feita com fatos null", async () => {
     cenarioQueClassifica();
     vi.mocked(buildFatosDoContato).mockRejectedValue(new Error("statement timeout"));
+    const saida = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
     const { POST } = await import("./route");
     const res = await POST(req({ message: "quanto custa?", contact_id: CONTACT_ID }), ctx());
+    const aviso = saida.mock.calls.map((c) => String(c[0])).find((l) => l.includes("fatos do contato indisponíveis"));
+    saida.mockRestore();
 
+    // As mesmas chaves do motor (resolve-turn-agent): quem filtra o log por
+    // `routerId`/`error` acha o aviso do teste e o do turno real.
+    expect(JSON.parse(aviso!)).toMatchObject({ level: "warn", routerId: ROUTER_ID, error: "statement timeout" });
     expect(res.status).toBe(200);
     const [, , classifyInput] = vi.mocked(classifyIntent).mock.calls[0]!;
     expect(classifyInput.fatos).toBeNull();

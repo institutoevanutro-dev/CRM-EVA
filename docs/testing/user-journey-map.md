@@ -2686,4 +2686,4 @@ Migration 0351 (`fn_reiniciar_teste_do_contato`), rota `POST /api/v1/contacts/:i
 
 Sem migration. Leitura em `lib/agent-engine/agent/fatos-do-contato.ts`, entregue ao classificador por `resolve-turn-agent.ts`; teste de classificação com contato em `/app/ai/routers/[id]`. Unit: `lib/agent-engine/agent/{fatos-do-contato,intent-classifier,resolve-turn-agent,router-config}.test.ts` e `app/app/ai/routers/[id]/_client.test.tsx`. Invariante: `tests/invariants/roteador-fatos-do-contato.test.ts`.
 
-- [ ] Roteador escolhe o agente pela agenda do contato (atendimentos anteriores e compromissos futuros; teste de classificação com contato e com o roteador inativo) — coberto por unit e invariante; prova pela tela pendente até a versão ser instalada
+- [ ] Roteador escolhe o agente pela agenda do contato (compromissos passados não cancelados e compromissos futuros; teste de classificação com contato e com o roteador inativo) — coberto por unit e invariante; prova pela tela pendente até a versão ser instalada

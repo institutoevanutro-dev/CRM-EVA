@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,8 @@ interface Props {
 
 export function SeletorDeContato({ escolhido, onEscolher, rotulo, semCriar = false, soComBusca = false }: Props) {
   const t = useT();
+  // Dois seletores na mesma página não podem dividir o id do campo.
+  const idDoCampo = useId();
   const [termo, setTermo] = useState("");
   const [busca, setBusca] = useState("");
   const [criando, setCriando] = useState(false);
@@ -91,9 +93,9 @@ export function SeletorDeContato({ escolhido, onEscolher, rotulo, semCriar = fal
 
   return (
     <div className="space-y-2">
-      <Label htmlFor="contato-do-lead">{rotulo ?? t("Contato")}</Label>
+      <Label htmlFor={idDoCampo}>{rotulo ?? t("Contato")}</Label>
       <Input
-        id="contato-do-lead"
+        id={idDoCampo}
         placeholder={t("Procure pelo nome ou telefone")}
         value={termo}
         onChange={(e) => setTermo(e.target.value)}

@@ -89,7 +89,7 @@ describe("TestPanel do roteador", () => {
   });
 
   it("escolher e limpar o contato apagam o resultado anterior", () => {
-    comResultado({ ...RESULTADO, fatos: "Atendimentos anteriores:\n- 02/09/2026: Primeira consulta" });
+    comResultado({ ...RESULTADO, fatos: "Fatos do CRM sobre este contato (agenda):\n- Compromissos passados (não cancelados): 02/09/2026 Primeira consulta (realizado)\n- Compromissos futuros: nenhum" });
     render(<TestPanel routerId="r1" canTest />);
     fireEvent.click(screen.getByRole("button", { name: "escolher contato" }));
     expect(reset).toHaveBeenCalledTimes(1);
@@ -104,10 +104,10 @@ describe("TestPanel do roteador", () => {
   });
 
   it("mostra o que o roteador viu sobre o contato quando há fatos", () => {
-    comResultado({ ...RESULTADO, fatos: "Atendimentos anteriores:\n- 02/09/2026: Primeira consulta" });
+    comResultado({ ...RESULTADO, fatos: "Fatos do CRM sobre este contato (agenda):\n- Compromissos passados (não cancelados): 02/09/2026 Primeira consulta (realizado)\n- Compromissos futuros: nenhum" });
     render(<TestPanel routerId="r1" canTest />);
     expect(screen.getByText("O que o roteador viu sobre o contato")).toBeInTheDocument();
-    expect(screen.getByText(/02\/09\/2026: Primeira consulta/)).toBeInTheDocument();
+    expect(screen.getByText(/02\/09\/2026 Primeira consulta/)).toBeInTheDocument();
   });
 
   it("sem fatos, o bloco do contato não aparece", () => {

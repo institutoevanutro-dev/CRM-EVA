@@ -116,8 +116,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     } catch (err) {
       // Mesma regra do turno real: sem fatos, classifica só com a mensagem.
       log.warn("router-test: fatos do contato indisponíveis — classificando só com a mensagem", {
-        tenant_id: org.orgId,
-        err: err instanceof Error ? err.message : String(err),
+        routerId: id,
+        error: err instanceof Error ? err.message : String(err),
       });
     }
   }

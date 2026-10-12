@@ -131,8 +131,8 @@ describe("roteador: os fatos da agenda do contato", () => {
   it("o texto inteiro, de ponta a ponta, com a data que o driver devolve", async () => {
     expect(await buildFatosDoContato(pool, ORG, MISTO, AGORA)).toBe(
       "Fatos do CRM sobre este contato (agenda):\n" +
-        "- Atendimentos anteriores: 10/06/2030 Primeira consulta — Dr. André (completed)\n" +
-        "- Compromissos futuros: 10/07/2030 Drenagem linfática (confirmed)",
+        "- Compromissos passados (não cancelados): 10/06/2030 Primeira consulta — Dr. André (realizado)\n" +
+        "- Compromissos futuros: 10/07/2030 Drenagem linfática (confirmado)",
     );
   });
 

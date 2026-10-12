@@ -17,8 +17,12 @@
  *
  * Data local, nome do tipo (ou título) e situação. Nada de nome do contato,
  * telefone, notas ou link de reunião: o classificador escolhe um agente, não
- * atende ninguém. Cancelado e falta ficam fora dos anteriores, senão quem só
+ * atende ninguém. Cancelado e falta ficam fora dos passados, senão quem só
  * desmarcou viraria "já é paciente".
+ *
+ * A situação sai por extenso, e passado não é sinônimo de realizado: quem
+ * marcou e nunca veio fica `confirmed` para sempre, e "confirmado, sem desfecho
+ * registrado" não pode ser lido como atendimento que aconteceu.
  *
  * O título é texto livre e pode trazer o nome do contato (evento vindo do
  * Google, por exemplo). Ele só serve de tipo no compromisso importado do
@@ -51,7 +55,7 @@ export interface FatosDoContato {
 
 // `to_jsonb(a)->>'history_import_key'` e não a coluna direta: mesma leitura de
 // lib/agenda/importar-historico.ts, que não quebra num banco sem a coluna.
-const PROJECAO = `select coalesce(
+const PROJECAO = (quando: Quando) => `select '${quando}'::text as quando, a.id, coalesce(
               nullif(btrim(t.name), ''),
               case when to_jsonb(a)->>'history_import_key' is not null then nullif(btrim(a.title), '') end,
               'atendimento'
@@ -64,35 +68,63 @@ const PROJECAO = `select coalesce(
       where a.organization_id = $1
         and a.contact_id = $2`;
 
+type Quando = "passado" | "futuro";
+
+/**
+ * As duas metades numa consulta só: uma conexão do pool por turno, não duas.
+ * Cada metade tem seu teto e sua ordem; o `order by` de fora repete essa ordem,
+ * porque `union all` não promete devolver as linhas na ordem das metades.
+ */
 export async function fatosDoContato(
   db: Queryable,
   organizationId: string,
   contactId: string,
   agora: Date,
 ): Promise<FatosDoContato> {
-  const instante = agora.toISOString();
-  const [anteriores, futuros] = await Promise.all([
-    db.query<FatoDeAgenda>(
-      `${PROJECAO}
-        and a.ends_at < $3
-        and a.status not in ('cancelled', 'no_show')
-      order by a.starts_at desc, a.id
-      limit $4`,
-      [organizationId, contactId, instante, MAXIMO_DE_ANTERIORES + 1],
-    ),
-    db.query<FatoDeAgenda>(
-      `${PROJECAO}
-        and a.ends_at >= $3
-        and a.status in ('pending', 'confirmed')
-      order by a.starts_at asc, a.id
-      limit $4`,
-      [organizationId, contactId, instante, MAXIMO_DE_FUTUROS + 1],
-    ),
-  ]);
-  return { anteriores: anteriores.rows, futuros: futuros.rows };
+  const { rows } = await db.query<FatoDeAgenda & { quando: Quando }>(
+    `select quando, tipo, starts_at, time_zone, status from (
+       (${PROJECAO("passado")}
+          and a.ends_at < $3
+          and a.status not in ('cancelled', 'no_show')
+        order by a.starts_at desc, a.id
+        limit $4)
+       union all
+       (${PROJECAO("futuro")}
+          and a.ends_at >= $3
+          and a.status in ('pending', 'confirmed')
+        order by a.starts_at asc, a.id
+        limit $5)
+     ) f
+     order by quando,
+              case when quando = 'passado' then starts_at end desc,
+              case when quando = 'futuro' then starts_at end asc,
+              id`,
+    [organizationId, contactId, agora.toISOString(), MAXIMO_DE_ANTERIORES + 1, MAXIMO_DE_FUTUROS + 1],
+  );
+  const metade = (q: Quando): FatoDeAgenda[] =>
+    rows
+      .filter((r) => r.quando === q)
+      .map(({ tipo, starts_at, time_zone, status }) => ({ tipo, starts_at, time_zone, status }));
+  return { anteriores: metade("passado"), futuros: metade("futuro") };
 }
 
-function linha(fatos: readonly FatoDeAgenda[], maximo: number): string {
+/**
+ * A situação, dita com o sentido que ela tem em cada metade. Status fora do
+ * mapa sai como veio do banco: não se inventa situação.
+ */
+const SITUACAO: Record<Quando, Record<string, string>> = {
+  passado: {
+    completed: "realizado",
+    confirmed: "confirmado, sem desfecho registrado",
+    pending: "pendente, sem desfecho registrado",
+  },
+  futuro: {
+    confirmed: "confirmado",
+    pending: "aguardando confirmação",
+  },
+};
+
+function linha(fatos: readonly FatoDeAgenda[], maximo: number, quando: Quando): string {
   if (fatos.length === 0) return "nenhum";
   const itens = fatos.slice(0, maximo).map((f) => {
     const fuso = f.time_zone && fusoValido(f.time_zone) ? f.time_zone : FUSO_PADRAO;
@@ -104,7 +136,7 @@ function linha(fatos: readonly FatoDeAgenda[], maximo: number): string {
     // Quebra de linha no título abriria uma "linha nova" dentro do prompt do
     // classificador. Uma linha só, cortada.
     const tipo = f.tipo.replace(/\s+/g, " ").trim().slice(0, MAXIMO_DO_TIPO) || "atendimento";
-    return `${data} ${tipo} (${f.status})`;
+    return `${data} ${tipo} (${SITUACAO[quando][f.status] ?? f.status})`;
   });
   // Cortar em silêncio faria o classificador tomar a lista por completa.
   return itens.join("; ") + (fatos.length > maximo ? " (há mais, não listados)" : "");
@@ -122,8 +154,8 @@ export function renderFatosDoContato(fatos: FatosDoContato): string {
   }
   return [
     cabecalho,
-    `- Atendimentos anteriores: ${linha(fatos.anteriores, MAXIMO_DE_ANTERIORES)}`,
-    `- Compromissos futuros: ${linha(fatos.futuros, MAXIMO_DE_FUTUROS)}`,
+    `- Compromissos passados (não cancelados): ${linha(fatos.anteriores, MAXIMO_DE_ANTERIORES, "passado")}`,
+    `- Compromissos futuros: ${linha(fatos.futuros, MAXIMO_DE_FUTUROS, "futuro")}`,
   ].join("\n");
 }
 
