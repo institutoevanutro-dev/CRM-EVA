@@ -70,6 +70,20 @@ describe("aviso da Central → celular", () => {
     expect(filtros).toContainEqual(["agent_inbox_items", "organization_id", ORG]);
   });
 
+  it("IA sem crédito no provedor: o título do aviso vai ao celular e abre a Central", async () => {
+    vi.mocked(createAdminClient).mockReturnValue(banco({
+      agent_inbox_items: { id: "i9", kind: "other", ref_kind: null, ref_id: null, title: "La IA se quedó sin crédito en el proveedor OpenAI (GPT)", body: "Desde el 11/10 a las 18:51..." },
+      organizations: { locale: "es" },
+    }) as never);
+    await webPushInboundHandler.handle(evento("central.aviso_criado", { item_id: "i9" }));
+    expect(vi.mocked(enviarPushDaOrg).mock.calls[0]![1]).toEqual({
+      title: "La IA se quedó sin crédito en el proveedor OpenAI (GPT)",
+      body: "Abre la Central de avisos para ver qué hacer.",
+      tag: "aviso:i9",
+      href: "/app/ai/inbox",
+    });
+  });
+
   it("passagem de clone antigo (ref no contato) abre o contato", async () => {
     vi.mocked(createAdminClient).mockReturnValue(banco({
       agent_inbox_items: { id: "i3", kind: "handoff", ref_kind: "contact", ref_id: "k1", title: "Handoff", body: null },

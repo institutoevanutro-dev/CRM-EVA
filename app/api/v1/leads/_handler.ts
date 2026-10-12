@@ -371,6 +371,28 @@ export async function createLeadHandler(
     .select(LEAD_COLS)
     .single();
 
+  // ── A PERDA SEM MOTIVO NA PRÓPRIA CRIAÇÃO ───────────────────────────────────
+  // Portado do projeto original (DeskcommCRM PR 2762 de @webtecnica, issue 2743 lá).
+  //
+  // Nascer numa etapa de perda é o ÚNICO caminho de escrita em que este handler
+  // chega ao trigger `fn_validate_lost_reason_required` sem ter perguntado nada:
+  // o move, o bulk e o encerramento decidem `decideMotivoDaPerda` ANTES de
+  // escrever, e aqui não há `lost_reason` no corpo. O trigger levanta `22023`, e
+  // sem esta linha o catch-all logo abaixo entregava 500 `internal_error` com a
+  // mensagem crua do banco. É a MESMA rede de segurança do `moveLeadHandler`: a
+  // recusa do banco vira recusa de NEGÓCIO (422), e um erro de outra classe
+  // segue intocado no 500.
+  const recusaDeMotivoNoInsert = recusaDeMotivoDaPerdaPeloBanco(insErr, ctx.idioma);
+  if (recusaDeMotivoNoInsert) {
+    throw new ApiError(
+      422,
+      recusaDeMotivoNoInsert.codigo,
+      undefined,
+      ctx.requestId,
+      recusaDeMotivoNoInsert.mensagem,
+    );
+  }
+
   if (insErr || !lead) {
     throw new ApiError(
       500,

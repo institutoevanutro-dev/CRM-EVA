@@ -9,9 +9,9 @@
  *
  * Porte do original (DeskcommCRM #1814): lá há também `venda`, o som da etapa
  * que avisa na Central (`lib/leads/aviso-de-etapa.ts`, migration 0436 de lá),
- * e o pedido de pessoa cobre ainda a IA sem saldo no provedor
- * (`espera-de-saldo.ts`). Nenhum dos dois avisos existe neste fork; quando
- * chegarem, entram aqui, em `TIPOS_DE_SOM` e em `somDoAviso`.
+ * que não existe neste fork; quando chegar, entra aqui, em `TIPOS_DE_SOM` e
+ * em `somDoAviso`. O pedido de pessoa cobre também a IA sem crédito ou com a
+ * chave recusada no provedor (`lib/agent-engine/edge/llm/aviso-do-provedor.ts`).
  *
  * O arquivo vive no bucket PRIVADO `org-sounds` (migration 0313), em
  * `<organization_id>/<tipo>-<uuid>.<ext>`; o caminho fica em
@@ -21,6 +21,8 @@
  *
  * Módulo sem banco: roda no navegador (a campainha) e no servidor (a rota).
  */
+import { ehAvisoDoProvedor } from "@/lib/agent-engine/edge/llm/aviso-do-provedor";
+
 import type { SoundId } from "./sounds";
 
 export const BUCKET_DOS_SONS = "org-sounds";
@@ -64,6 +66,11 @@ export function extensaoDoAudio(tipo: TipoDeAudio): string {
  */
 export function somDoAviso(aviso: { kind: string; ref_kind: string | null; title?: string | null }): TipoDeSom | null {
   if (aviso.kind === "handoff") return "pessoa";
+  // A IA ficou sem crédito no provedor, ou a chave foi recusada
+  // (`aviso-do-provedor.ts`): nada volta até alguém agir. Foi o aviso que
+  // ninguém viu em 11/10/2026, por 15 horas, porque só aparecia para quem
+  // abrisse a Central.
+  if (aviso.kind === "other" && ehAvisoDoProvedor(aviso.title)) return "pessoa";
   return null;
 }
 

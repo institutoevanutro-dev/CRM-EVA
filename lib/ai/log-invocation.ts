@@ -6,6 +6,12 @@
  */
 
 import {
+  avisarFalhaDoProvedor,
+  bancoPeloAdmin,
+  fecharAvisosDoProvedor,
+  motivoQueExigeODono,
+} from "@/lib/agent-engine/edge/llm/aviso-do-provedor";
+import {
   normalizarErro,
   redigirMensagemDoProvedor,
 } from "@/lib/agent-engine/edge/llm/run-model-call";
@@ -117,6 +123,21 @@ export function logInvocation(row: LogInvocationInput): void {
             invocation_kind: row.invocation_kind,
           });
         }
+        // Falta de crédito e chave recusada não passam sozinhas: aviso na
+        // Central, e ele se fecha quando o provedor volta a aceitar. Estes
+        // workers usam a chave da instalação, por isso sem credencial. As duas
+        // funções nunca lançam.
+        const provedor = providerDoModelo(row.model);
+        if (provedor !== "desconhecido") {
+          const alvo = { organizationId: row.organization_id, provedor };
+          if (row.error_payload) {
+            const erro = erroDoPayload(row.error_payload);
+            const motivo = motivoQueExigeODono(erro, normalizarErro(erro));
+            if (motivo) await avisarFalhaDoProvedor(bancoPeloAdmin(admin), { ...alvo, motivo }, logger);
+          } else {
+            await fecharAvisosDoProvedor(bancoPeloAdmin(admin), alvo, logger);
+          }
+        }
       } catch (err) {
         logger.warn("[llm-calls] insert threw", {
           error: err instanceof Error ? err.message : String(err),
@@ -139,6 +160,11 @@ export function logInvocation(row: LogInvocationInput): void {
  * é um insert fire-and-forget que nenhum unit alcança.
  */
 export function codigoDoErro(payload: Record<string, unknown>): string {
+  return normalizarErro(erroDoPayload(payload)).error_code;
+}
+
+/** O payload de erro do caminho legado como `Error`, com o status quando o chamador o repassou. */
+function erroDoPayload(payload: Record<string, unknown>): Error {
   const mensagem =
     typeof payload.message === "string" && payload.message.trim() !== ""
       ? payload.message
@@ -147,11 +173,10 @@ export function codigoDoErro(payload: Record<string, unknown>): string {
   // `err instanceof Error ? err.message : String(err)` — um objeto simples
   // viraria a string "[object Object]" e NENHUM padrão casaria, trocando um
   // balde errado (`erro_legado`) por outro (`erro_desconhecido`).
-  const erro = Object.assign(new Error(mensagem), {
+  return Object.assign(new Error(mensagem), {
     ...(typeof payload.status === "number" ? { status: payload.status } : {}),
     ...(typeof payload.statusCode === "number" ? { statusCode: payload.statusCode } : {}),
   });
-  return normalizarErro(erro).error_code;
 }
 
 /**
