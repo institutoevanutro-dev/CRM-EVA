@@ -25,6 +25,13 @@ import { FilterBar } from "@/components/kanban/FilterBar";
 import { BulkActionBar } from "@/components/kanban/BulkActionBar";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Plus } from "@/lib/ui/icons";
 import type { LeadFilters } from "@/lib/kanban/filters";
 import { applyFilters, filtersFromParams, filtersToParams } from "@/lib/kanban/filters";
@@ -32,9 +39,16 @@ import { applyFilters, filtersFromParams, filtersToParams } from "@/lib/kanban/f
 export function PipelinePageClient({
   pipelineId,
   initialName,
+  funis,
 }: {
   pipelineId: string;
   initialName: string;
+  /**
+   * Os funis vivos da organização (`id` + `name`, na ordem da lista): a MESMA
+   * partição da tela de Funis. É o que alimenta o seletor de troca rápida do
+   * cabeçalho; sem ele o quadro não sabe que existem outros funis.
+   */
+  funis: Array<{ id: string; name: string }>;
 }) {
   const t = useT();
   const { data, isLoading, error, pulses, realtimeStatus, seguranca } = useBoard(pipelineId);
@@ -75,6 +89,9 @@ export function PipelinePageClient({
     () => [...new Set((data?.leads ?? []).flatMap((l) => l.tags))].sort(),
     [data?.leads],
   );
+  const nomeAtual = data?.pipeline.name ?? initialName;
+  // Um funil só = nada para trocar: o seletor seria ruído permanente.
+  const podeTrocar = funis.length > 1;
 
   return (
     <div
@@ -110,9 +127,43 @@ export function PipelinePageClient({
           fora da viewport em telas estreitas. De `sm:` pra cima volta a ser
           uma linha só, como sempre foi. */}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="min-w-0 truncate text-[2rem] leading-tight">
-          {data?.pipeline.name ?? initialName}
+        {/*
+          O TÍTULO É O SELETOR (porte de melgarafael/DeskcommCRM#2731). Com um
+          funil só, `h1` puro (nada para trocar); com vários, o gatilho do
+          `Select` veste o título e o `h1` real vai para `sr-only`: botão dentro
+          de `h1` é HTML inválido, e sem o `h1` o leitor de tela perde o título
+          da página. Trocar zera a query string: filtro de um funil aplicado no
+          outro é resultado fantasma. O endereço muda junto (`/app/pipelines/<id>`),
+          então o funil escolhido sobrevive a recarregar e a link colado.
+        */}
+        <h1 className={podeTrocar ? "sr-only" : "min-w-0 truncate text-[2rem] leading-tight"}>
+          {nomeAtual}
         </h1>
+        {podeTrocar && (
+          <Select
+            value={funis.some((f) => f.id === pipelineId) ? pipelineId : undefined}
+            onValueChange={(id) => {
+              if (id !== pipelineId) router.push(`/app/pipelines/${id}`);
+            }}
+          >
+            <SelectTrigger
+              aria-label={`${t("Trocar de funil")}: ${nomeAtual}`}
+              data-testid="trocar-funil"
+              // As classes de fonte repetem o `h1` global (`app/globals.css`):
+              // o gatilho é um botão e não herda a regra do título.
+              className="h-auto w-auto min-w-0 max-w-full gap-1.5 border-0 bg-transparent p-0 font-[family-name:var(--font-titulo)] text-[2rem] font-semibold leading-tight tracking-[-0.01em] shadow-none focus:ring-1 focus:ring-ring sm:max-w-[60%] [&>span]:truncate"
+            >
+              <SelectValue placeholder={nomeAtual} />
+            </SelectTrigger>
+            <SelectContent>
+              {funis.map((f) => (
+                <SelectItem key={f.id} value={f.id} data-testid={`trocar-funil-opcao-${f.id}`}>
+                  {f.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Button onClick={() => setNewOpen(true)} disabled={!data} className="shrink-0">
           <Plus size={16} className="mr-2" /> {t("Novo Lead")}
         </Button>

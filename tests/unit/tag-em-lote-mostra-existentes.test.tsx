@@ -148,7 +148,7 @@ describe("BulkActionBar — tag em lote", () => {
 describe("a página do funil ENTREGA as tags do quadro à barra", () => {
   it("as tags dos leads do quadro chegam ao menu de tag em lote", async () => {
     const { PipelinePageClient } = await import("@/app/app/pipelines/[id]/_client");
-    render(<PipelinePageClient pipelineId="p-1" initialName="Funil" />);
+    render(<PipelinePageClient pipelineId="p-1" initialName="Funil" funis={[]} />);
 
     await userEvent.click(await screen.findByRole("button", { name: /etiqueta…/i }));
     expect(await screen.findByRole("menuitem", { name: "google" })).toBeTruthy();
