@@ -65,12 +65,20 @@ import { logger } from "@/lib/logger";
 import {
   RETENCAO_AUDITORIA_DIAS_PADRAO,
   RETENCAO_AUDITORIA_DIAS_PISO,
+  RETENCAO_CHECKPOINTS_DIAS_PADRAO,
+  RETENCAO_CHECKPOINTS_DIAS_PISO,
+  RETENCAO_COPIAS_ENVIADAS_DIAS_PADRAO,
+  RETENCAO_COPIAS_ENVIADAS_DIAS_PISO,
   RETENCAO_ESPELHO_AGENDA_DIAS_PADRAO,
   RETENCAO_ESPELHO_AGENDA_DIAS_PISO,
   RETENCAO_FILA_DIAS_PADRAO,
   RETENCAO_FILA_DIAS_PISO,
   RETENCAO_OBSERVACOES_JEV_DIAS_PADRAO,
   RETENCAO_OBSERVACOES_JEV_DIAS_PISO,
+  RETENCAO_RITMO_DE_ENVIO_DIAS_PADRAO,
+  RETENCAO_RITMO_DE_ENVIO_DIAS_PISO,
+  RETENCAO_TELEMETRIA_DE_IA_DIAS_PADRAO,
+  RETENCAO_TELEMETRIA_DE_IA_DIAS_PISO,
   interpretarRetencao,
 } from "@/lib/retencao/politica";
 import {
@@ -115,6 +123,26 @@ export interface ResultadoDaRetencao {
   /** As observações do Jev (migration 0350): só rótulos, com prazo. */
   observacoes_jev_apagadas: number;
   retencao_observacoes_jev_dias: number;
+  /** A telemetria da IA vencida: llm_calls, metrics, skill_activations, ai_router_decisions (0354). */
+  telemetria_de_ia_apagada: number;
+  lotes_telemetria_de_ia: number;
+  telemetria_de_ia_tem_resto: boolean;
+  retencao_telemetria_de_ia_dias: number;
+  /** O ritmo de envio vencido: pacing_ledger, menos a última linha de cada número (0354). */
+  ritmo_de_envio_apagado: number;
+  lotes_ritmo_de_envio: number;
+  ritmo_de_envio_tem_resto: boolean;
+  retencao_ritmo_de_envio_dias: number;
+  /** As cópias enviadas vencidas: outbound_copies, menos a janela do anti-repetição (0354). */
+  copias_enviadas_apagadas: number;
+  lotes_copias_enviadas: number;
+  copias_enviadas_tem_resto: boolean;
+  retencao_copias_enviadas_dias: number;
+  /** Os checkpoints superados: nunca o último da fronteira nem o de job vivo (0354). */
+  checkpoints_apagados: number;
+  lotes_checkpoints: number;
+  checkpoints_tem_resto: boolean;
+  retencao_checkpoints_dias: number;
   retencao_fila_dias: number;
   retencao_auditoria_dias: number;
   retencao_espelho_dias: number;
@@ -131,6 +159,10 @@ type Poda =
   | "fn_expurgar_auditoria_vencida"
   | "fn_expurgar_espelho_da_agenda"
   | "fn_expurgar_observacoes_do_jev"
+  | "fn_expurgar_telemetria_de_ia_vencida"
+  | "fn_expurgar_ritmo_de_envio_vencido"
+  | "fn_expurgar_copias_enviadas_vencidas"
+  | "fn_expurgar_checkpoints_superados"
   | "fn_expurgar_nonces_de_oauth";
 
 type ArgsDaPoda = { p_retencao_dias: number; p_limite: number } | { p_dias: number; p_lote: number };
@@ -192,6 +224,10 @@ export async function podarHistorico(
     AUDIT_LOG_RETENTION_DAYS?: string;
     CALENDAR_MIRROR_RETENTION_DAYS?: string;
     JEV_OBSERVACOES_RETENTION_DAYS?: string;
+    AI_TELEMETRY_RETENTION_DAYS?: string;
+    PACING_LEDGER_RETENTION_DAYS?: string;
+    OUTBOUND_COPIES_RETENTION_DAYS?: string;
+    LEAD_CHECKPOINT_RETENTION_DAYS?: string;
   },
 ): Promise<ResultadoDaRetencao> {
   const fila = interpretarRetencao(ambiente.JOB_QUEUE_RETENTION_DAYS, {
@@ -217,6 +253,30 @@ export async function podarHistorico(
     piso: RETENCAO_OBSERVACOES_JEV_DIAS_PISO,
   });
 
+  const telemetriaDeIa = interpretarRetencao(ambiente.AI_TELEMETRY_RETENTION_DAYS, {
+    chave: "AI_TELEMETRY_RETENTION_DAYS",
+    padrao: RETENCAO_TELEMETRIA_DE_IA_DIAS_PADRAO,
+    piso: RETENCAO_TELEMETRIA_DE_IA_DIAS_PISO,
+  });
+
+  const ritmoDeEnvio = interpretarRetencao(ambiente.PACING_LEDGER_RETENTION_DAYS, {
+    chave: "PACING_LEDGER_RETENTION_DAYS",
+    padrao: RETENCAO_RITMO_DE_ENVIO_DIAS_PADRAO,
+    piso: RETENCAO_RITMO_DE_ENVIO_DIAS_PISO,
+  });
+
+  const copiasEnviadas = interpretarRetencao(ambiente.OUTBOUND_COPIES_RETENTION_DAYS, {
+    chave: "OUTBOUND_COPIES_RETENTION_DAYS",
+    padrao: RETENCAO_COPIAS_ENVIADAS_DIAS_PADRAO,
+    piso: RETENCAO_COPIAS_ENVIADAS_DIAS_PISO,
+  });
+
+  const checkpoints = interpretarRetencao(ambiente.LEAD_CHECKPOINT_RETENTION_DAYS, {
+    chave: "LEAD_CHECKPOINT_RETENTION_DAYS",
+    padrao: RETENCAO_CHECKPOINTS_DIAS_PADRAO,
+    piso: RETENCAO_CHECKPOINTS_DIAS_PISO,
+  });
+
   const jobs = await drenar(db, "fn_podar_fila_de_jobs", fila.dias);
   const linhas = await drenar(db, "fn_expurgar_auditoria_vencida", auditoria.dias);
   const eventos = await drenar(db, "fn_expurgar_espelho_da_agenda", espelho.dias);
@@ -226,6 +286,15 @@ export async function podarHistorico(
   // instala e ninguém monitora.
   const nonces = await drenar(db, "fn_expurgar_nonces_de_oauth", 1);
   const jev = await drenar(db, "fn_expurgar_observacoes_do_jev", observacoesJev.dias);
+  // As tabelas append-only da IA (0354). As guardas de cada uma (a última linha
+  // do número no ritmo, a janela do anti-repetição nas cópias, o último
+  // checkpoint da fronteira e o de job vivo) moram no CORPO das funções, como o
+  // piso. `event_log` não entra: é o livro-razão de idempotência dos gatilhos
+  // de tempo, e podá-lo reenviaria WhatsApp.
+  const telemetriaDrenada = await drenar(db, "fn_expurgar_telemetria_de_ia_vencida", telemetriaDeIa.dias);
+  const ritmoDrenado = await drenar(db, "fn_expurgar_ritmo_de_envio_vencido", ritmoDeEnvio.dias);
+  const copiasDrenadas = await drenar(db, "fn_expurgar_copias_enviadas_vencidas", copiasEnviadas.dias);
+  const checkpointsDrenados = await drenar(db, "fn_expurgar_checkpoints_superados", checkpoints.dias);
 
   return {
     jobs_apagados: jobs.apagadas,
@@ -234,6 +303,22 @@ export async function podarHistorico(
     nonces_apagados: nonces.apagadas,
     observacoes_jev_apagadas: jev.apagadas,
     retencao_observacoes_jev_dias: observacoesJev.dias,
+    telemetria_de_ia_apagada: telemetriaDrenada.apagadas,
+    lotes_telemetria_de_ia: telemetriaDrenada.lotes,
+    telemetria_de_ia_tem_resto: telemetriaDrenada.temResto,
+    retencao_telemetria_de_ia_dias: telemetriaDeIa.dias,
+    ritmo_de_envio_apagado: ritmoDrenado.apagadas,
+    lotes_ritmo_de_envio: ritmoDrenado.lotes,
+    ritmo_de_envio_tem_resto: ritmoDrenado.temResto,
+    retencao_ritmo_de_envio_dias: ritmoDeEnvio.dias,
+    copias_enviadas_apagadas: copiasDrenadas.apagadas,
+    lotes_copias_enviadas: copiasDrenadas.lotes,
+    copias_enviadas_tem_resto: copiasDrenadas.temResto,
+    retencao_copias_enviadas_dias: copiasEnviadas.dias,
+    checkpoints_apagados: checkpointsDrenados.apagadas,
+    lotes_checkpoints: checkpointsDrenados.lotes,
+    checkpoints_tem_resto: checkpointsDrenados.temResto,
+    retencao_checkpoints_dias: checkpoints.dias,
     lotes_fila: jobs.lotes,
     lotes_auditoria: linhas.lotes,
     lotes_espelho: eventos.lotes,
@@ -243,12 +328,27 @@ export async function podarHistorico(
     retencao_fila_dias: fila.dias,
     retencao_auditoria_dias: auditoria.dias,
     retencao_espelho_dias: espelho.dias,
-    avisos: [fila.aviso, auditoria.aviso, espelho.aviso, observacoesJev.aviso].filter(
-      (a): a is string => a !== null,
-    ),
-    falhas: [jobs.falha, linhas.falha, eventos.falha, nonces.falha, jev.falha].filter(
-      (f): f is string => f !== undefined,
-    ),
+    avisos: [
+      fila.aviso,
+      auditoria.aviso,
+      espelho.aviso,
+      observacoesJev.aviso,
+      telemetriaDeIa.aviso,
+      ritmoDeEnvio.aviso,
+      copiasEnviadas.aviso,
+      checkpoints.aviso,
+    ].filter((a): a is string => a !== null),
+    falhas: [
+      jobs.falha,
+      linhas.falha,
+      eventos.falha,
+      nonces.falha,
+      jev.falha,
+      telemetriaDrenada.falha,
+      ritmoDrenado.falha,
+      copiasDrenadas.falha,
+      checkpointsDrenados.falha,
+    ].filter((f): f is string => f !== undefined),
   };
 }
 
@@ -270,6 +370,11 @@ export function houveEfeito(resultado: ResultadoDaRetencao): boolean {
     // descrevia exatamente o defeito que eu estava criando um parágrafo abaixo.
     resultado.nonces_apagados > 0 ||
     resultado.observacoes_jev_apagadas > 0 ||
+    // As quatro da 0354, pela mesma razão: o predicado esquecido é mudo.
+    resultado.telemetria_de_ia_apagada > 0 ||
+    resultado.ritmo_de_envio_apagado > 0 ||
+    resultado.copias_enviadas_apagadas > 0 ||
+    resultado.checkpoints_apagados > 0 ||
     (resultado.payloads_limpos ?? 0) > 0
   );
 }
@@ -356,6 +461,10 @@ async function handle(req: NextRequest): Promise<Response> {
       JOB_QUEUE_RETENTION_DAYS: env.JOB_QUEUE_RETENTION_DAYS,
       AUDIT_LOG_RETENTION_DAYS: env.AUDIT_LOG_RETENTION_DAYS,
       JEV_OBSERVACOES_RETENTION_DAYS: env.JEV_OBSERVACOES_RETENTION_DAYS,
+      AI_TELEMETRY_RETENTION_DAYS: env.AI_TELEMETRY_RETENTION_DAYS,
+      PACING_LEDGER_RETENTION_DAYS: env.PACING_LEDGER_RETENTION_DAYS,
+      OUTBOUND_COPIES_RETENTION_DAYS: env.OUTBOUND_COPIES_RETENTION_DAYS,
+      LEAD_CHECKPOINT_RETENTION_DAYS: env.LEAD_CHECKPOINT_RETENTION_DAYS,
     });
     // Conversa/agenda crua da coexistência que nenhum worker limpou (evento morto).
     // Try próprio, como a varredura abaixo: falhar aqui não suspende a LGPD.

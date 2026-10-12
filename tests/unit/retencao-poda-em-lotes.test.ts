@@ -210,7 +210,7 @@ describe("podarHistorico — o laço de lotes", () => {
       },
     };
     const r = await podarHistorico(db, {});
-    expect(r.falhas).toHaveLength(5);
+    expect(r.falhas).toHaveLength(9);
     expect(r.falhas[1]).toMatch(/^fn_expurgar_auditoria_vencida: permission denied/);
   });
 
@@ -236,6 +236,10 @@ describe("podarHistorico — o laço de lotes", () => {
         "fn_expurgar_espelho_da_agenda",
         "fn_expurgar_nonces_de_oauth",
         "fn_expurgar_observacoes_do_jev",
+        "fn_expurgar_telemetria_de_ia_vencida",
+        "fn_expurgar_ritmo_de_envio_vencido",
+        "fn_expurgar_copias_enviadas_vencidas",
+        "fn_expurgar_checkpoints_superados",
       ]);
       expect(r.falhas, falha).toHaveLength(1);
       expect(r.falhas[0], falha).toContain("fn_podar_fila_de_jobs");
@@ -263,6 +267,24 @@ describe("houveEfeito — as duas direções", () => {
     // Quinta poda (migration 0350): as observações do Jev.
     observacoes_jev_apagadas: 0,
     retencao_observacoes_jev_dias: 90,
+    // As quatro da migration 0354: as tabelas da IA. O que elas apagam é medido
+    // em `retencao-das-tabelas-da-ia.test.ts`.
+    telemetria_de_ia_apagada: 0,
+    lotes_telemetria_de_ia: 0,
+    telemetria_de_ia_tem_resto: false,
+    retencao_telemetria_de_ia_dias: 400,
+    ritmo_de_envio_apagado: 0,
+    lotes_ritmo_de_envio: 0,
+    ritmo_de_envio_tem_resto: false,
+    retencao_ritmo_de_envio_dias: 2,
+    copias_enviadas_apagadas: 0,
+    lotes_copias_enviadas: 0,
+    copias_enviadas_tem_resto: false,
+    retencao_copias_enviadas_dias: 30,
+    checkpoints_apagados: 0,
+    lotes_checkpoints: 0,
+    checkpoints_tem_resto: false,
+    retencao_checkpoints_dias: 180,
     avisos: [] as string[],
     falhas: [] as string[],
   };
@@ -395,6 +417,10 @@ describe("houveEfeito — payloads da sincronização Meta limpos", () => {
       nonces_apagados: 0, espelho_apagado: 0, lotes_espelho: 0, espelho_tem_resto: false,
       retencao_fila_dias: 0, retencao_auditoria_dias: 0, retencao_espelho_dias: 0, avisos: [], falhas: [],
       observacoes_jev_apagadas: 0, retencao_observacoes_jev_dias: 0,
+      telemetria_de_ia_apagada: 0, lotes_telemetria_de_ia: 0, telemetria_de_ia_tem_resto: false, retencao_telemetria_de_ia_dias: 0,
+      ritmo_de_envio_apagado: 0, lotes_ritmo_de_envio: 0, ritmo_de_envio_tem_resto: false, retencao_ritmo_de_envio_dias: 0,
+      copias_enviadas_apagadas: 0, lotes_copias_enviadas: 0, copias_enviadas_tem_resto: false, retencao_copias_enviadas_dias: 0,
+      checkpoints_apagados: 0, lotes_checkpoints: 0, checkpoints_tem_resto: false, retencao_checkpoints_dias: 0,
     };
     expect(houveEfeito(vazio)).toBe(false);
     expect(houveEfeito({ ...vazio, payloads_limpos: 3 })).toBe(true);
@@ -453,9 +479,13 @@ describe("cada rpc() da rodada fala os nomes de parâmetro que o schema declara"
     // aparece aqui e passa a ser medida sem ninguém lembrar de listá-la.
     expect([...enviadosPorFuncao.keys()].sort()).toEqual([
       "fn_expurgar_auditoria_vencida",
+      "fn_expurgar_checkpoints_superados",
+      "fn_expurgar_copias_enviadas_vencidas",
       "fn_expurgar_espelho_da_agenda",
       "fn_expurgar_nonces_de_oauth",
       "fn_expurgar_observacoes_do_jev",
+      "fn_expurgar_ritmo_de_envio_vencido",
+      "fn_expurgar_telemetria_de_ia_vencida",
       "fn_podar_fila_de_jobs",
       "fn_verificar_cadeia_auditoria",
     ]);
@@ -493,6 +523,10 @@ describe("o handler HTTP — uma etapa que falha não leva as outras junto", () 
       "fn_expurgar_espelho_da_agenda",
       "fn_expurgar_nonces_de_oauth",
       "fn_expurgar_observacoes_do_jev",
+      "fn_expurgar_telemetria_de_ia_vencida",
+      "fn_expurgar_ritmo_de_envio_vencido",
+      "fn_expurgar_copias_enviadas_vencidas",
+      "fn_expurgar_checkpoints_superados",
       "fn_verificar_cadeia_auditoria",
     ]);
     expect(limparPayloads).toHaveBeenCalledTimes(1);
