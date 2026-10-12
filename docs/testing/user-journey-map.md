@@ -2699,3 +2699,10 @@ Migration 0351 (`fn_reiniciar_teste_do_contato`), rota `POST /api/v1/contacts/:i
 Sem migration. Leitura em `lib/agent-engine/agent/fatos-do-contato.ts`, entregue ao classificador por `resolve-turn-agent.ts`; teste de classificação com contato em `/app/ai/routers/[id]`. Unit: `lib/agent-engine/agent/{fatos-do-contato,intent-classifier,resolve-turn-agent,router-config}.test.ts` e `app/app/ai/routers/[id]/_client.test.tsx`. Invariante: `tests/invariants/roteador-fatos-do-contato.test.ts`.
 
 - [ ] Roteador escolhe o agente pela agenda do contato (compromissos passados não cancelados e compromissos futuros; teste de classificação com contato e com o roteador inativo) — coberto por unit e invariante; prova pela tela pendente até a versão ser instalada
+
+### O agente passa a conversa para outro assunto do roteador `[P1]` (2026-10-12)
+
+Sem migration e sem tela nova: o modo é ligado em `ai_routers.config` (`permanencia: 'agente'`, `interrompe: [...]`). Regra de troca em `lib/agent-engine/agent/resolve-turn-agent.ts` (`mudouDeAssunto`), conversa recente em `historico-recente.ts`, ferramenta `transfer_to_subject` em `passagem-de-assunto.ts` e `inbound-turn.ts`, teste com conversa simulada em `POST /api/v1/ai/routers/:id/test`. Unit: `lib/agent-engine/agent/{router-config,resolve-turn-agent,historico-recente,intent-classifier,passagem-de-assunto}.test.ts` e `app/api/v1/ai/routers/[id]/test/route.test.ts`. Invariantes: `tests/invariants/roteador-historico-recente.test.ts` e `tests/invariants/agent-transfer-to-subject-turn.test.ts`.
+
+- [ ] Com o modo ligado, resposta curta no meio de um atendimento não troca de agente; assunto marcado em `interrompe` troca na mesma mensagem; o agente em atendimento passa a conversa e o agente de destino responde a mesma mensagem, uma vez só. Coberto por unit e invariante; **prova pela tela e em conversa real pendentes** até a versão ser instalada
+- [ ] Teste do roteador com conversa simulada (`history` e `current_intent` pela API) dá a mesma decisão do turno real. Coberto por unit; o campo na tela não existe ainda

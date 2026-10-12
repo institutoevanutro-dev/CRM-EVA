@@ -89,6 +89,11 @@ fala) e **Frases de exemplo**. **Agente de fallback** para quando nenhuma casa; 
 classificador** ("Automático" usa o provedor da organização). Ative. Roteador sem intenções e sem
 fallback não sequestra o número; membro sem versão publicada cai no fallback.
 
+Há um modo opcional, ainda sem campo na tela (liga pela API, em `config`: `permanencia: "agente"` e
+`interrompe: [assuntos urgentes]`): o roteador escolhe quem começa, só interrompe um atendimento em
+andamento para os assuntos de `interrompe`, e a troca no meio passa a ser do agente que está
+atendendo. A mensagem em que há passagem roda dois agentes, então custa e demora mais.
+
 ## 11. IA › Memória
 
 **Documento da organização**: as regras da casa em texto corrido — **Publicar versão** (vale para

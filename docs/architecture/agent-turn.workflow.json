@@ -205,7 +205,7 @@
       "col": 1,
       "type": "backend",
       "label": "ai_routers",
-      "sublabel": "intents + min_confidence + sticky"
+      "sublabel": "intents + min_confidence + sticky · modo opcional permanencia: 'agente' com a lista interrompe"
     },
     {
       "id": "routerfatos",
@@ -214,6 +214,23 @@
       "type": "database",
       "label": "calendar_appointments",
       "sublabel": "fatos do contato: até 5 anteriores + 3 futuros, só tipo, situação e data"
+    },
+    {
+      "id": "routerhistorico",
+      "lane": "router",
+      "col": 3,
+      "type": "database",
+      "label": "messages",
+      "sublabel": "conversa recente: até 6 mensagens do atendimento atual, uma linha e 300 caracteres cada, só no modo 'agente'"
+    },
+    {
+      "id": "passagem",
+      "lane": "router",
+      "col": 4,
+      "type": "backend",
+      "label": "Passagem de assunto",
+      "sublabel": "o agente em atendimento passa a conversa a outro assunto do roteador; uma por mensagem; só inbound_turn no modo 'agente'",
+      "tag": "transfer_to_subject"
     },
     {
       "id": "evolutionscreen",
@@ -481,6 +498,45 @@
       "toSide": "right",
       "route": "outside-right",
       "labelDy": 60
+    },
+    {
+      "id": "routerhistorico-routerconfig",
+      "from": "routerhistorico",
+      "to": "routerconfig",
+      "label": "no modo 'agente' o classificador lê a conversa recente e o assunto atual (mesmo teto de 500 ms; na falha, classifica sem ela)",
+      "variant": "dashed",
+      "labelDy": 90
+    },
+    {
+      "id": "turn-passagem",
+      "from": "turn",
+      "to": "passagem",
+      "label": "transfer_to_subject: recusada se o destino não tem versão publicada, está pausado, fora do horário ou em modo assistido",
+      "variant": "dashed",
+      "route": "drop"
+    },
+    {
+      "id": "passagem-routerconfig",
+      "from": "passagem",
+      "to": "routerconfig",
+      "label": "grava o novo dono da conversa e a decisão em ai_router_decisions (reclassified, confidence nulo)",
+      "route": "drop"
+    },
+    {
+      "id": "passagem-turn",
+      "from": "passagem",
+      "to": "turn",
+      "label": "se nada foi enviado, o turno roda de novo UMA vez com o agente de destino, no mesmo job e no mesmo send_ledger",
+      "variant": "emphasis",
+      "route": "drop"
+    },
+    {
+      "id": "routerscreen-routerhistorico",
+      "from": "routerscreen",
+      "to": "routerhistorico",
+      "label": "o teste pela API aceita uma conversa simulada no lugar da real, com o mesmo corte, e o assunto atual",
+      "variant": "dashed",
+      "labelDy": 110
     },
     {
       "id": "turn-knowledgesearches",

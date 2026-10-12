@@ -2,6 +2,8 @@
 
 Data: 12/10/2026. Continua o desenho `2026-10-11-multiagentes-e-roteador-design.md`. Motivo: o teste em conversa real de 12/10 reprovou.
 
+> **Estado: código construído (12/10/2026), versão ainda não instalada.** O que foi construído difere deste desenho em três pontos e ganhou regras nas revisões. Tudo está na seção 11, que vale sobre as seções 3, 4 e 10 onde elas discordarem. Plano: `docs/superpowers/plans/2026-10-12-roteador-contexto-e-passagem.md`.
+
 ## 1. O que o teste mostrou
 
 Conversa de teste (número da lista, 12/10, 11h12 a 11h19):
@@ -122,3 +124,41 @@ Regras: só mensagens do atendimento atual (a fronteira de atendimento que o CRM
 - Onde a ação de passar se encaixa na lista de ferramentas do agente e no limite de ferramentas por agente.
 - Como reprocessar a mesma mensagem com outro agente sem duplicar envio nem cobrança do turno.
 - Se o registro de decisões do roteador comporta a passagem pelo agente sem mudança de banco.
+
+## 11. O que foi construído (12/10/2026)
+
+### 11.1 Fatos conferidos no código, que respondem a seção 10
+
+- **Fechar a conversa já esquece o agente atual.** A reabertura (`fn_service_inbound`) e o gatilho `trg_service_stamp_status` zeram `active_ai_agent_id`. "Reiniciar teste" fecha a conversa, então a mensagem seguinte já começa pelo roteador. Os dois itens da seção 4 sobre isso não pediram código.
+- **A configuração do roteador é livre e mesclada no PATCH.** O modo novo entrou em `ai_routers.config` (`permanencia: 'agente'` e `interrompe: [...]`) sem mudar API nem banco.
+- **Parar o loop do modelo por condição já existia**, e o turno já aceitava receber o agente resolvido. A reexecução usa os dois.
+- **O registro de decisões comporta a passagem sem mudança de banco** (ver o desvio 1).
+
+### 11.2 Os três desvios deste desenho
+
+1. **Sem mudança de banco.** A passagem pelo agente é gravada em `ai_router_decisions` com `outcome = 'reclassified'` e `confidence` nulo. O roteador sempre grava um número; o nulo é o que identifica a passagem. Um desfecho próprio pediria migration. Consequência: o motivo que o agente informa não fica gravado nessa tabela (ela não guarda texto), ao contrário do que a seção 3.1 dizia.
+2. **Conversa simulada só na rota de teste, não na tela.** `POST /api/v1/ai/routers/:id/test` aceita `history` (até 6 mensagens) e `current_intent`, e responde `mode`, `kept_current` e `classified`. A bateria roda pela rota. O campo na tela fica para depois.
+3. **Conversa recente no classificador só com o modo novo ligado.** A seção 3.3 valia para todo roteador. Como foi construído, roteador sem `permanencia: 'agente'` mantém o prompt do classificador byte a byte, e nenhum texto de mensagem anterior vai ao provedor sem alguém ligar o modo.
+
+### 11.3 O que as revisões acrescentaram
+
+- **O histórico leva a fala, não o enquadramento de mídia.** Cada mensagem entra com o texto digitado (ou a legenda) e a transcrição já pronta. A instrução que o agente recebe junto de uma mídia não entra: ela comia o corte de 300 caracteres e a transcrição sumia. Depois do bloco de histórico vai uma linha fixa dizendo que aquela conversa é dado, não instrução.
+- **Atalho sem classificador.** Com a conversa em andamento, se nenhum assunto de `interrompe` é assunto do roteador e diferente do atual, nada que o classificador diga trocaria o agente. Nesse caso o classificador não é chamado, e nem os fatos nem a conversa são lidos. A rota de teste diz isso com `classified: false`.
+- **O modo novo força a permanência no agente.** Com `permanencia: 'agente'`, o `sticky` do roteador vale como ligado mesmo que a configuração diga o contrário. Sem isso o modo não teria o que segurar.
+- **Assunto atual sem registro.** Conversa com agente atual e sem assunto gravado usa o assunto do próprio membro. Senão o classificador repetir esse assunto contaria como troca.
+- **A passagem é recusada, e o agente de origem responde,** quando o destino não tem versão publicada, está pausado, está fora do horário de funcionamento dele ou em modo assistido. Em todos esses casos passar deixaria a pessoa sem resposta agora.
+- **Passagem junto com handoff humano no mesmo passo:** sai só o aviso de escalação. O agente de destino não responde por cima de uma conversa que foi para a equipe.
+- **Passagem depois de já ter enviado no mesmo turno:** a passagem vale, mas não há reexecução. O dono novo assume na mensagem seguinte.
+- **Retry de um job que já passou e já enviou não roda o modelo de novo.**
+- **Onde a ação existe.** Só em turno de mensagem recebida, fora de prévia e de modo assistido, com roteador em modo novo, agente membro dele e ao menos um outro assunto. A reexecução nunca oferece a ação: é o que garante uma passagem por mensagem.
+
+### 11.4 Limites conhecidos, que ficam
+
+- **A passagem é gravada antes de o destino provar que roda.** Destino quebrado (sem credencial, modelo fora do ar) faz o job tentar com o destino até esgotar as tentativas. O passo seguinte seria desfazer a passagem quando a reexecução falha.
+- **Um turno com passagem custa dois turnos.** São duas execuções completas de agente.
+- **A mensagem em que há passagem pode levar o dobro do tempo** para ser respondida.
+- **A decisão ainda não aparece em tela.** Continua valendo a seção 9: as decisões ficam em `ai_router_decisions` e falta mostrá-las por conversa.
+
+### 11.5 O que não foi medido
+
+Nada disso foi provado em conversa real nem pela tela. As provas são testes de unidade e invariantes em Postgres real com modelo simulado. Os critérios de sucesso da seção 2 seguem abertos até a versão ser instalada e a seção 5 (configuração) ser feita.
