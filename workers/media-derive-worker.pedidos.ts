@@ -34,6 +34,7 @@
  */
 import { detectHumanHandoffRequest } from "@/lib/agent-engine/agent/human-handoff";
 import type { InboxKind } from "@/lib/agent-engine/db/repository";
+import { gravarAvisoNaCentral } from "@/lib/ai/decisao/aviso-a-equipe";
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 import { logger } from "@/lib/logger";
@@ -136,50 +137,12 @@ export async function avisarPedidosFalados(
     });
     if (elegib?.permite !== true) return;
 
-    for (const id of ids) await gravarAviso(admin, p, AVISOS_DO_PEDIDO_FALADO[id]);
+    for (const id of ids) await gravarAvisoNaCentral(admin, p, AVISOS_DO_PEDIDO_FALADO[id]);
   } catch (erro) {
     logger.warn("[media-derive] os pedidos ditos no áudio não foram avaliados", {
       organization_id: p.organizationId,
       message_id: p.messageId,
       erro: erro instanceof Error ? erro.name : typeof erro,
-    });
-  }
-}
-
-/** Um insert; no 23505 (o aviso desta conversa já existe) reabre o que existe. */
-async function gravarAviso(
-  admin: Admin,
-  p: PedidoFalado,
-  aviso: { kind: InboxKind; titulo: string; corpo: string },
-): Promise<void> {
-  const texto = { title: aviso.titulo, body: aviso.corpo };
-  const { error } = await admin.from("agent_inbox_items").insert({
-    organization_id: p.organizationId,
-    kind: aviso.kind,
-    severity: "warn",
-    ...texto,
-    ref_kind: "conversation",
-    ref_id: p.conversationId,
-  });
-  if (error === null) return;
-  if (error.code !== "23505") {
-    logger.warn("[media-derive] aviso do pedido falado não foi gravado", {
-      organization_id: p.organizationId,
-      erro: error.code,
-    });
-    return;
-  }
-  const { error: erroAoReabrir } = await admin
-    .from("agent_inbox_items")
-    .update({ status: "open", resolved_at: null, created_at: new Date().toISOString(), ...texto })
-    .eq("organization_id", p.organizationId)
-    .eq("kind", aviso.kind)
-    .eq("ref_kind", "conversation")
-    .eq("ref_id", p.conversationId);
-  if (erroAoReabrir) {
-    logger.warn("[media-derive] aviso do pedido falado não foi reaberto", {
-      organization_id: p.organizationId,
-      erro: erroAoReabrir.code,
     });
   }
 }

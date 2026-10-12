@@ -10,9 +10,9 @@
  *     organização, cadastrada na tela; aqui é uma chave da INSTALAÇÃO, porque
  *     o fork é self-host de uma clínica só. Numa instalação com várias
  *     organizações, todas usariam a mesma conta da TypeSafe.
- *  2. **Cadastrar a chave não é consentir.** Só pergunta a tarefa `observando`
- *     da organização que ligou o Jev e tem o aceite do administrador
- *     (`./config.ts`). As outras perguntas são descartadas aqui.
+ *  2. **Cadastrar a chave não é consentir.** Só pergunta a tarefa que não está
+ *     `desligada`, da organização que ligou o Jev e tem o aceite do
+ *     administrador (`./config.ts`). As outras perguntas são descartadas aqui.
  *  3. **O destino passa pela allowlist de egress**, derivada da mesma base.
  *  4. **Depois de falhar, o disjuntor segura** (`./disjuntor.ts`).
  *  5. **Nunca lança.**
@@ -54,7 +54,7 @@ export async function perguntarAoJev(e: EntradaDoPonto): Promise<ResultadoDoPont
   const config = lerConfigDoJev(e.settings);
   const perguntas: Record<string, Pergunta> = {};
   for (const [tarefa, pergunta] of Object.entries(e.perguntas) as Array<[IdDaTarefa, Pergunta | undefined]>) {
-    if (pergunta !== undefined && estadoEfetivo(config, tarefa) === "observando") perguntas[tarefa] = pergunta;
+    if (pergunta !== undefined && estadoEfetivo(config, tarefa) !== "desligada") perguntas[tarefa] = pergunta;
   }
   if (Object.keys(perguntas).length === 0) return { ok: false, motivo: "desligado", ...SEM_REDE };
 

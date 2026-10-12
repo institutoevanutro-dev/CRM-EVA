@@ -1,6 +1,7 @@
 /**
  * Porte de melgarafael/DeskcommCRM #1696/#1747 (a845f890, b46e320c), adaptado
- * aos módulos da fase 1 do fork (só observando).
+ * aos módulos do fork: observando e, nos dois pedidos do cliente, "Avisar a
+ * equipe" (o estado `decidindo`), que só abre um aviso na Central.
  *
  * O JEV NUNCA CALA, BLOQUEIA NEM RESPONDE O CLIENTE (R3 do plano da onda 2).
  *
@@ -421,6 +422,26 @@ describe("o Jev nunca cala, bloqueia nem responde o cliente", () => {
     expect(colunasQueCalam(registro.texto)).toEqual([]);
   });
 
+  it("avisar a equipe escreve só o aviso na Central (controle positivo e sabotagem)", () => {
+    const aviso = modulosDoJev.find((m) => m.arquivo === "lib/ai/decisao/aviso-a-equipe.ts")!;
+    expect(aviso.texto).toMatch(/\.from\("agent_inbox_items"\)\.insert\(/);
+    const tabelasEscritas = [...aviso.texto.matchAll(/\.from\("([a-z_]+)"\)\s*\.(insert|update|upsert|delete)\(/g)].map((m) => m[1]);
+    expect(new Set(tabelasEscritas)).toEqual(new Set(["agent_inbox_items"]));
+    expect(escritasNaConversa(aviso.texto)).toEqual([]);
+    expect(escritasEmSqlCru(aviso.texto)).toEqual([]);
+    expect(colunasQueCalam(aviso.texto)).toEqual([]);
+    expect(importsDeQuemEnvia(aviso.arquivo, aviso.texto)).toEqual([]);
+
+    // O aviso que passasse a agir junto: bloquear o contato, calar a conversa,
+    // passar adiante ou mandar a mensagem ao cliente. Cada um reprova.
+    const sabotado = (extra: string) => alcancados([{ arquivo: aviso.arquivo, texto: `${aviso.texto}\n${extra}` }]);
+    expect(violacoesDeEscrita(sabotado(`export const z = (a: any) => a.from("contacts").update({ is_blocked: true });`))).toHaveLength(1);
+    expect(colunasQueCalam(`${aviso.texto}\nexport const z = (a: any) => a.from("contacts").update({ is_blocked: true });`)).toEqual(["is_blocked"]);
+    expect(violacoesDeEscrita(sabotado(`export const z = (a: any) => a.from("conversations").update({ force_human: true });`))).toHaveLength(1);
+    expect(violacoesDeEnvio(sabotado(`import { triggerHandoff } from "@/lib/ai/handoff/orchestrator";`)).length).toBeGreaterThan(0);
+    expect(violacoesDeEnvio(sabotado(`import { x } from "@/lib/waha/send";`)).length).toBeGreaterThan(0);
+  });
+
   it("o import é seguido até quem envia e quem escreve, com a cadeia (sabotagem com código real)", () => {
     const doJev = (texto: string) => alcancados([{ arquivo: "lib/ai/decisao/zz-sabotagem.ts", texto }]);
 
@@ -481,7 +502,12 @@ describe("o Jev nunca cala, bloqueia nem responde o cliente", () => {
     expect(importsDaCola(COLA_DOS_PEDIDOS, textoDaCola).semOsLeitores).not.toContain("agent-engine/agent/");
     const alcance = alcancados([{ arquivo: COLA_DOS_PEDIDOS, texto: importsDaCola(COLA_DOS_PEDIDOS, textoDaCola).semOsLeitores }]);
     expect(alcance.map((m) => m.arquivo)).toEqual(
-      expect.arrayContaining(["lib/ai/decisao/ponto.ts", "lib/ai/decisao/registro.ts", "lib/opt-out/deteccao.ts"]),
+      expect.arrayContaining([
+        "lib/ai/decisao/ponto.ts",
+        "lib/ai/decisao/registro.ts",
+        "lib/ai/decisao/aviso-a-equipe.ts",
+        "lib/opt-out/deteccao.ts",
+      ]),
     );
   });
 
