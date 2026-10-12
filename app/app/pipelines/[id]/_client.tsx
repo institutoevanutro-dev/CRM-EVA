@@ -128,7 +128,7 @@ export function PipelinePageClient({
           uma linha só, como sempre foi. */}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {/*
-          O TÍTULO É O SELETOR (porte de melgarafael/DeskcommCRM#2731). Com um
+          O TÍTULO É O SELETOR (porte do original #2731). Com um
           funil só, `h1` puro (nada para trocar); com vários, o gatilho do
           `Select` veste o título e o `h1` real vai para `sr-only`: botão dentro
           de `h1` é HTML inválido, e sem o `h1` o leitor de tela perde o título

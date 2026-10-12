@@ -418,7 +418,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       ? t("Contato anonimizado — não é possível enviar mensagens.")
       : null;
 
-  /* ─── DIVISÓRIAS ARRASTÁVEIS (porte de melgarafael/DeskcommCRM#2604) ─────
+  /* ─── DIVISÓRIAS ARRASTÁVEIS (porte do original #2604, de @webtecnica) ─
    *
    * A largura das colunas nasceu fixa no CSS (linha do `grid-cols` abaixo): em
    * monitor grande sobrava conversa e a lista e a ficha cortavam texto, sem
