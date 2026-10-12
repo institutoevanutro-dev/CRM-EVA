@@ -8,6 +8,40 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.26.0] — 2026-10-12
+
+### Adicionado
+
+- **A Central avisa quando a IA fica sem crédito ou com a chave recusada no provedor** Quando a conta do provedor de IA (OpenAI, Anthropic e os demais) fica sem crédito, ou quando o provedor recusa a chave, o assistente para de responder e antes ninguém era avisado: a falha ficava só na tela IA › Execuções, para quem fosse olhar. Agora abre um aviso crítico na Central de avisos, que conta na campainha do topo, toca o som de "pedido de pessoa" e chega ao celular de quem ativou as notificações. O aviso diz o que houve, desde quando, o que parou e o que fazer: colocar crédito na conta do provedor, ou trocar a chave em IA › Credenciais. Vale também para o Jev (TypeSafe), com o texto dele.
+
+  É um aviso por provedor e por motivo, e não um por mensagem que falhou. Ele se fecha sozinho quando o provedor volta a aceitar uma chamada. Lentidão passageira do provedor (limite de ritmo, instabilidade, tempo esgotado) não abre aviso.
+
+  O aviso antigo "A IA está sem saldo no provedor", que só aparecia depois de uma resposta cair da fila, dá lugar a este. A espera da recarga não mudou: as respostas na fila continuam saindo sozinhas quando o crédito volta, por até 6 horas.
+
+  Você não precisa fazer nada.
+
+### Corrigido
+
+- **Criar um negócio direto numa etapa de perda sem motivo responde 422, não erro interno** Criar um negócio já numa etapa de perda e sem informar o motivo respondia erro interno (500) com o texto cru do banco. Agora a resposta é 422 `lost_reason_required`, com a mesma frase que a ação "marcar como perdido" devolve. Vale para a criação pela API, pela importação de planilha e pelas fontes de captação que apontam para uma etapa de perda. Outros erros do banco continuam como antes.
+
+  Você não precisa fazer nada.
+
+  Portado do DeskcommCRM (melgarafael/DeskcommCRM#2762, de @webtecnica).
+
+- **Na lista da Inbox, um contato compartilhado aparece com o nome, não como "[contact]"** Quando a última mensagem de uma conversa era um contato compartilhado (cartão do WhatsApp), a lista da Inbox mostrava o texto "[contact]". Agora mostra "Contato:" seguido do nome que está no cartão. Cartão sem nome legível continua como antes, e o texto técnico do cartão nunca aparece na lista. Vale para as mensagens que chegarem daqui em diante; a prévia das conversas antigas muda quando chegar a próxima mensagem.
+
+  Você não precisa fazer nada.
+
+  Portado do DeskcommCRM (melgarafael/DeskcommCRM#2765, de @webtecnica).
+
+- **Um pedido de dados do titular (LGPD) gera uma exportação só** Quando dois avisos internos do mesmo pedido de dados eram processados ao mesmo tempo (por exemplo, a aprovação e uma nova tentativa automática), o sistema podia montar o arquivo e enviar o e-mail ao titular duas vezes, e a trilha de auditoria registrava duas entregas para um pedido só. Agora cada pedido é reservado por quem começou a exportar: o segundo aviso é dispensado sem refazer nada. Se a exportação falhar ou o serviço cair no meio, a reserva é liberada e a próxima tentativa retoma o pedido, então nenhum pedido fica preso.
+
+  A atualização acrescenta uma coluna ao banco (`lgpd_requests.export_claimed_at`), aplicada sozinha pelo deploy.
+
+  Você não precisa fazer nada.
+
+  Portado do DeskcommCRM (melgarafael/DeskcommCRM#2752, de @Tong-bit-art).
+
 ## [3.25.0] — 2026-10-12
 
 ### Adicionado
@@ -6963,7 +6997,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.25.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.26.0...HEAD
+[3.26.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.25.0...v3.26.0
 [3.25.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.24.0...v3.25.0
 [3.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.23.0...v3.24.0
 [3.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.2...v3.23.0
