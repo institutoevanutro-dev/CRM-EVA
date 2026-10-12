@@ -33,11 +33,12 @@ export interface ContactListFilters {
   limit?: number;
 }
 
-export function useContactList(filters: ContactListFilters) {
+export function useContactList(filters: ContactListFilters, opcoes: { enabled?: boolean } = {}) {
   const qc = useQueryClient();
   const queryKey = ["contacts", filters] as const;
   return useInfiniteQuery({
     queryKey,
+    enabled: opcoes.enabled ?? true,
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
       const qs = new URLSearchParams();

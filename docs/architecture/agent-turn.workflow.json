@@ -208,6 +208,14 @@
       "sublabel": "intents + min_confidence + sticky"
     },
     {
+      "id": "routerfatos",
+      "lane": "router",
+      "col": 2,
+      "type": "database",
+      "label": "calendar_appointments",
+      "sublabel": "fatos do contato: até 5 anteriores + 3 futuros, só tipo, situação e data"
+    },
+    {
       "id": "evolutionscreen",
       "lane": "evolucao",
       "col": 0,
@@ -446,6 +454,22 @@
       "to": "routerconfig",
       "label": "cria/edita router · testa classificação",
       "labelDy": 50
+    },
+    {
+      "id": "routerfatos-routerconfig",
+      "from": "routerfatos",
+      "to": "routerconfig",
+      "label": "o classificador lê a agenda do contato junto com a mensagem (teto de 500 ms; na falha, só a mensagem)",
+      "variant": "dashed",
+      "labelDy": 50
+    },
+    {
+      "id": "routerfatos-routerscreen",
+      "from": "routerfatos",
+      "to": "routerscreen",
+      "label": "teste com contato mostra os fatos que o roteador viu",
+      "variant": "dashed",
+      "labelDy": 70
     },
     {
       "id": "routerconfig-turn",

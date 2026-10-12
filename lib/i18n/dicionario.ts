@@ -2205,7 +2205,13 @@ export const DICIONARIO: Traducoes = {
     {
       es: "Escribe una frase como la escribiría un cliente y mira qué intención y qué agente elegiría el enrutador — sin afectar ninguna conversación real.",
     },
-  "Ative o roteador para poder testar a classificação.": { es: "Activa el enrutador para poder probar la clasificación." },
+  "Mensagem de teste": { es: "Mensaje de prueba" },
+  "Testar como um contato (opcional)": { es: "Probar como un contacto (opcional)" },
+  "Com um contato, o roteador também considera a agenda dele: atendimentos anteriores e compromissos futuros.":
+    {
+      es: "Con un contacto, el enrutador también considera su agenda: atenciones anteriores y compromisos futuros.",
+    },
+  "O que o roteador viu sobre o contato": { es: "Lo que el enrutador vio sobre el contacto" },
   "Ex.: oi, quero saber o preço do plano premium": { es: "Ej.: hola, quiero saber el precio del plan premium" },
   "Testando…": { es: "Probando…" },
   "nenhuma casou": { es: "ninguna coincidió" },
@@ -8874,7 +8880,6 @@ export const DICIONARIO: Traducoes = {
   "O funil que você escolheu como vizinho não está mais na lista. Recarregue a página.": { es: "El embudo que elegiste como vecino ya no está en la lista. Recarga la página." },
   "O modelo em uso não sabe usar as ferramentas do CRM — o agente conversa, mas não registra nada no funil.": { es: "El modelo en uso no sabe usar las herramientas del CRM — el agente conversa, pero no registra nada en el embudo." },
   "O próximo passo precisa ter de 3 a 500 caracteres.": { es: "El próximo paso debe tener de 3 a 500 caracteres." },
-  "O router precisa estar ativo (is_active=true) para ser testado.": { es: "El router debe estar activo (is_active=true) para ser probado." },
   "Os funis desta lista estão empatados na ordenação. Recarregue a página e mova o funil para outro lugar.": { es: "Los embudos de esta lista están empatados en el orden. Recarga la página y mueve el embudo a otro lugar." },
   "Payload inválido.": { es: "Payload inválido." },
   "Produto não encontrado.": { es: "Producto no encontrado." },
