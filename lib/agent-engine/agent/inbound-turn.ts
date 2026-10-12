@@ -2070,6 +2070,15 @@ export async function runAgentTurn(
   // recursiva, e não um segundo call site do núcleo, para a reexecução rodar
   // sob a MESMA escolta do orçamento.
   if (passagem !== undefined && input.passagem === undefined) {
+    // A anotação do que o turno viu é de ANTES do turno de origem. O destino lê
+    // a conversa de novo, então ela é refeita: mensagem que chegou enquanto a
+    // origem pensava também vai ser respondida por ele.
+    await anotarUltimaInboundVista(pool, {
+      organizationId: job.organization_id,
+      contactId: leadIdDoJob,
+      conversationId: input.conversationId,
+      jobId: job.id,
+    });
     await runAgentTurn(deps, job, pool, ctx, {
       ...input,
       resolvedAgent: passagem.destino,
@@ -4309,11 +4318,19 @@ async function executarTurnoDoAgente(
         }
         passagemEmCurso = true;
         try {
-          // Sem versão publicada, arquivado ou pausado: passar deixaria a pessoa
-          // sem resposta (o turno de um agente pausado não roda). Quem está
-          // atendendo continua.
+          // Destino que não responderia AGORA: sem versão publicada, arquivado,
+          // pausado, fora do horário de funcionamento dele (a reexecução seria
+          // reagendada para a abertura) ou assistido (a resposta viraria rascunho
+          // esperando aprovação). Passar calaria quem está atendendo e deixaria a
+          // pessoa sem resposta. Quem está atendendo continua.
           const config = await loadPublishedAgentConfigById(pool, tenantId, destino.agentId);
-          if (config === null || config.pausedAt) {
+          if (
+            config === null ||
+            config.pausedAt ||
+            config.operationMode === 'assisted' ||
+            (config.janelaDeAtendimento != null &&
+              msAteAJanelaAbrir(config.janelaDeAtendimento, clock()) !== null)
+          ) {
             return {
               ok: false,
               error: {
@@ -4815,8 +4832,12 @@ async function executarTurnoDoAgente(
     // Se algo JÁ saiu (o modelo enviou e passou no mesmo passo), não há
     // reexecução: seriam duas respostas à mesma mensagem. O turno fecha como
     // qualquer outro e o novo dono assume na mensagem seguinte.
+    //
+    // Passou e chamou a equipe no mesmo passo: também não há reexecução. O
+    // aviso da escalação já saiu, a conversa é de uma pessoa, e este turno
+    // fecha como o handoff que foi.
     const passagem = passagemFeita();
-    if (passagem !== null && seq === 0) {
+    if (passagem !== null && seq === 0 && !passouParaAEquipe) {
       runLog.info('turno encerrado pela passagem de assunto: o destino responde a mesma mensagem', {
         para_agent_id: passagem.destino.config?.agentId ?? null,
         intent: passagem.destino.intentName,
@@ -5011,16 +5032,10 @@ async function executarTurnoDoAgente(
     // Fire-and-forget: falha ao enfileirar NÃO derruba um turno que já respondeu
     // ao cliente. O `sourceEventId` é o job do Conversador, então o retry da fila
     // não gera um segundo Operador para o mesmo turno.
-    // Turno que passou a conversa a outro assunto (depois de já ter enviado) não
-    // entrega nada ao Operador: o atendimento mudou de dono, e o Operador agiria
-    // em nome de um agente que saiu da conversa.
-    const disparo =
-      passagem !== null
-        ? { enfileira: false as const, porque: 'conversa_passada' as const }
-        : decidirSeEnfileiraOperador({
-            temAgentePublicado: agentConfig !== null,
-            papelLigado: agentConfig?.operatorEnabled ?? false,
-          });
+    const disparo = decidirSeEnfileiraOperador({
+      temAgentePublicado: agentConfig !== null,
+      papelLigado: agentConfig?.operatorEnabled ?? false,
+    });
     if (!disparo.enfileira) {
       runLog.info('turno do operador não enfileirado', { porque: disparo.porque });
     } else {
@@ -5383,6 +5398,27 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
   return async (job: JobRow, pool: pg.Pool, ctx: { workerId: string }): Promise<void> => {
     const payload = inboundTurnPayloadSchema.parse(job.payload);
     if (!job.contact_id) throw new Error('reply_without_contact');
+    // RETRY DEPOIS DE PASSAGEM DE ASSUNTO COM ENVIO JÁ FEITO: o job acaba aqui,
+    // sem modelo. A mensagem já tem resposta (da origem, que enviou e passou, ou
+    // do destino), e rodar de novo entregaria o turno ao NOVO dono: outro
+    // agente, outro texto, e a segunda bolha dele sairia com `seq` que o ledger
+    // nunca viu. O ledger segura a mesma resposta repetida, não uma resposta
+    // diferente.
+    if (job.payload[MARCA_DA_PASSAGEM_NO_JOB] === true) {
+      const { rows } = await pool.query(
+        `select 1 from send_ledger
+          where organization_id = $1 and job_id = $2 and status in ('accepted', 'queued')
+          limit 1`,
+        [job.organization_id, job.id],
+      );
+      if (rows.length > 0) {
+        deps.log.info('turno encerrado sem modelo: o job já passou a conversa e já enviou resposta', {
+          job_id: job.id,
+          conversation_id: payload.conversation_id,
+        });
+        return;
+      }
+    }
     const resolvedAgent = await resolveConversationTurn(pool, deps.llmCfg, {
       tenantId: job.organization_id,
       leadId: job.contact_id,

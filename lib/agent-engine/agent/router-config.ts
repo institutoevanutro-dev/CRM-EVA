@@ -146,13 +146,16 @@ async function montar(
     typeof cfg.classifier_provider === 'string' && cfg.classifier_provider.trim() !== ''
       ? cfg.classifier_provider
       : null;
-  const sticky = typeof cfg.sticky === 'boolean' ? cfg.sticky : true;
   const minConfidence =
     typeof cfg.min_confidence === 'number' && cfg.min_confidence >= 0 && cfg.min_confidence <= 1
       ? cfg.min_confidence
       : 0.6;
   // Só o valor exato liga o modo novo: qualquer outra coisa é o roteador de sempre.
   const permanencia = cfg.permanencia === 'agente' ? 'agente' : 'roteador';
+  // No modo novo a permanência não é opção: sem ela o roteador reclassifica do
+  // zero a cada mensagem e desfaz, na mensagem seguinte, a passagem que o agente
+  // acabou de fazer (`transfer_to_subject`).
+  const sticky = permanencia === 'agente' || (typeof cfg.sticky === 'boolean' ? cfg.sticky : true);
   const interrompe = Array.isArray(cfg.interrompe)
     ? cfg.interrompe
         .filter((i): i is string => typeof i === 'string')

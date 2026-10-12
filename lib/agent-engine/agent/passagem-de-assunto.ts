@@ -11,6 +11,23 @@
  * Aqui mora o que dá para testar sem o turno: QUANDO a ferramenta existe, o
  * bloco de sistema, a forma do payload e a gravação. O `execute` e a
  * reexecução ficam em `inbound-turn.ts`.
+ *
+ * Limites conhecidos, que ficam:
+ *
+ * ponytail: a passagem é gravada ANTES de o destino provar que roda. Destino
+ * quebrado (sem credencial, modelo fora) faz o job tentar com o destino até
+ * morrer. Subir de degrau é desfazer a passagem quando a reexecução falha.
+ *
+ * ponytail: `gravarPassagem` não confere o lease do worker nem o dono que o
+ * turno leu. Em produção quem segura a escrita fora de hora é
+ * `guardServiceTools`, que o invariante não exercita. Subir de degrau é levar
+ * o claim do job para dentro do statement.
+ *
+ * ponytail: um turno com passagem roda DOIS turnos completos (custo e
+ * latência). Subir de degrau é a reexecução reaproveitar a leitura da origem.
+ *
+ * ponytail: efeitos de outras ferramentas de escrita que a origem chamou no
+ * mesmo turno não entram no checkpoint do destino: o turno de origem não fecha.
  */
 import type pg from 'pg';
 import { z } from 'zod';

@@ -94,6 +94,14 @@ describe('loadActiveRouter — modo de permanência', () => {
     }
   });
 
+  it("permanencia 'agente' força sticky, diga a config o que disser; o modo de sempre obedece à config", async () => {
+    // Sem isso a passagem pelo agente seria desfeita na mensagem seguinte.
+    expect((await comConfig({ permanencia: 'agente', sticky: false }))?.sticky).toBe(true);
+    expect((await comConfig({ permanencia: 'agente' }))?.sticky).toBe(true);
+    expect((await comConfig({ sticky: false }))?.sticky).toBe(false);
+    expect((await comConfig({ permanencia: 'roteador', sticky: false }))?.sticky).toBe(false);
+  });
+
   it("permanencia 'agente' liga o modo novo; interrompe guarda só strings não vazias", async () => {
     const router = await comConfig({ permanencia: 'agente', interrompe: ['queixa_clinica', 7, ''] });
     expect(router?.permanencia).toBe('agente');
