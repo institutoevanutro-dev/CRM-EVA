@@ -79,6 +79,7 @@ function makeDeps(overrides: {
   loadPublishedAgentConfig?: ReturnType<typeof vi.fn>;
   classifyIntent?: ReturnType<typeof vi.fn>;
   buildFatosDoContato?: ReturnType<typeof vi.fn>;
+  historicoRecente?: ReturnType<typeof vi.fn>;
   agenteDaCampanha?: ReturnType<typeof vi.fn>;
   agora?: () => Date;
   warn?: ReturnType<typeof vi.fn>;
@@ -87,6 +88,8 @@ function makeDeps(overrides: {
     log: { info: vi.fn(), warn: overrides.warn ?? vi.fn(), error: vi.fn() },
     // Sem banco: o padrão real leria a agenda num `{}` e cairia no aviso.
     buildFatosDoContato: overrides.buildFatosDoContato ?? vi.fn().mockResolvedValue(FATOS),
+    // Idem: o padrão real consultaria `messages` num `{}`.
+    historicoRecente: overrides.historicoRecente ?? vi.fn().mockResolvedValue([]),
     ...(overrides.agenteDaCampanha ? { agenteDaCampanha: overrides.agenteDaCampanha } : {}),
     ...(overrides.agora ? { agora: overrides.agora } : {}),
     loadActiveRouter: overrides.loadActiveRouter ?? vi.fn(),
@@ -532,6 +535,123 @@ describe('resolveTurnAgent — fatos do contato para o classificador', () => {
     expect(buildFatosDoContato).not.toHaveBeenCalled();
     expect(loadActiveRouter).not.toHaveBeenCalled();
     expect(classifyIntent).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveTurnAgent — conversa recente e assunto atual para o classificador', () => {
+  const MSGS = [
+    { direction: 'inbound' as const, texto: 'quero marcar consulta' },
+    { direction: 'outbound' as const, texto: 'Qual dia fica melhor?' },
+  ];
+  const HISTORICO =
+    'Conversa recente deste atendimento (da mais antiga para a mais nova):\nLead: quero marcar consulta\nAtendimento: Qual dia fica melhor?';
+  const AVISO_FATOS = 'resolve-turn-agent: fatos do contato indisponíveis — classificando só com a mensagem';
+  const AVISO_HISTORICO = 'resolve-turn-agent: conversa recente indisponível, classificando sem ela';
+  const modoAgente = () => router({ permanencia: 'agente', interrompe: [] });
+  const emAndamento = { ...baseInput, signal: 'Quarta', stickyAgentId: 'agent-vendas', stickyIntent: 'vendas' };
+
+  function montar(r: LoadedRouter, over: { historicoRecente?: ReturnType<typeof vi.fn>; buildFatosDoContato?: ReturnType<typeof vi.fn> } = {}) {
+    const classifyIntent = vi.fn().mockResolvedValue({ intentName: null, confidence: 0.9 });
+    const historicoRecente = over.historicoRecente ?? vi.fn().mockResolvedValue(MSGS);
+    const buildFatosDoContato = over.buildFatosDoContato ?? vi.fn().mockResolvedValue(FATOS);
+    const warn = vi.fn();
+    return {
+      classifyIntent, historicoRecente, buildFatosDoContato, warn,
+      deps: makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(r),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        agenteDaCampanha: vi.fn().mockResolvedValue(null),
+        classifyIntent, historicoRecente, buildFatosDoContato, warn,
+      }),
+    };
+  }
+
+  afterEach(() => vi.useRealTimers());
+
+  it("modo 'roteador': não lê a conversa e o classificador recebe exatamente o de antes", async () => {
+    const m = montar(router());
+    await resolveTurnAgent({} as never, {} as never, emAndamento, m.deps);
+    expect(m.historicoRecente).not.toHaveBeenCalled();
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada).not.toHaveProperty('historico');
+    expect(entrada).not.toHaveProperty('assuntoAtual');
+    expect(Object.keys(entrada).sort()).toEqual(['fatos', 'jobId', 'leadId', 'router', 'signal', 'tenantId']);
+    expect(entrada.fatos).toBe(FATOS);
+    expect(m.warn).not.toHaveBeenCalled();
+  });
+
+  it("modo 'agente': lê a conversa desta organização e entrega histórico, fatos e assunto atual", async () => {
+    const db = { marca: 'db' };
+    const m = montar(modoAgente());
+    await resolveTurnAgent(db as never, {} as never, emAndamento, m.deps);
+    expect(m.historicoRecente).toHaveBeenCalledTimes(1);
+    expect(m.historicoRecente).toHaveBeenCalledWith(db, 'org-1', 'conv-1');
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada.historico).toBe(HISTORICO);
+    expect(entrada.assuntoAtual).toBe('vendas');
+    expect(entrada.fatos).toBe(FATOS);
+    expect(m.warn).not.toHaveBeenCalled();
+  });
+
+  it("modo 'agente', sem agente atual membro: assunto atual nulo; conversa vazia vira histórico nulo", async () => {
+    const m = montar(modoAgente(), { historicoRecente: vi.fn().mockResolvedValue([]) });
+    await resolveTurnAgent({} as never, {} as never,
+      { ...baseInput, signal: 'oi', stickyAgentId: 'agente-que-saiu-do-roteador', stickyIntent: 'antigo' }, m.deps);
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada.assuntoAtual).toBeNull();
+    expect(entrada.historico).toBeNull();
+    expect(m.warn).not.toHaveBeenCalled();
+  });
+
+  it("modo 'agente': histórico falha e fatos resolve → fatos chegam, histórico nulo, com aviso", async () => {
+    const m = montar(modoAgente(), { historicoRecente: vi.fn().mockRejectedValue(new Error('messages fora do ar')) });
+    const out = await resolveTurnAgent({} as never, {} as never, emAndamento, m.deps);
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada.fatos).toBe(FATOS);
+    expect(entrada.historico).toBeNull();
+    expect(entrada.assuntoAtual).toBe('vendas');
+    expect(m.warn).toHaveBeenCalledTimes(1);
+    expect(m.warn).toHaveBeenCalledWith(AVISO_HISTORICO, { routerId: 'router-1', error: 'messages fora do ar' });
+    // Não caiu no catch de fora.
+    expect(out.outcome).toBe('sticky');
+    expect(out.routerId).toBe('router-1');
+  });
+
+  it("modo 'agente': fatos falham e histórico resolve → histórico chega, fatos nulos, com aviso", async () => {
+    const m = montar(modoAgente(), { buildFatosDoContato: vi.fn().mockRejectedValue(new Error('agenda fora do ar')) });
+    await resolveTurnAgent({} as never, {} as never, emAndamento, m.deps);
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada.fatos).toBeNull();
+    expect(entrada.historico).toBe(HISTORICO);
+    expect(m.warn).toHaveBeenCalledTimes(1);
+    expect(m.warn).toHaveBeenCalledWith(AVISO_FATOS, { routerId: 'router-1', error: 'agenda fora do ar' });
+  });
+
+  it("modo 'agente': estouro do teto → os dois nulos, um aviso para cada, e o turno segue", async () => {
+    vi.useFakeTimers();
+    // Os fatos voltariam na hora; quem prende é a conversa. O teto é um só.
+    const m = montar(modoAgente(), { historicoRecente: vi.fn(() => new Promise(() => {})) });
+    const pendente = resolveTurnAgent({} as never, {} as never, emAndamento, m.deps);
+    await vi.advanceTimersByTimeAsync(499);
+    expect(m.classifyIntent).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    const out = await pendente;
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada.fatos).toBeNull();
+    expect(entrada.historico).toBeNull();
+    expect(entrada.assuntoAtual).toBe('vendas');
+    expect(m.warn).toHaveBeenCalledTimes(2);
+    expect(m.warn).toHaveBeenCalledWith(AVISO_FATOS, { routerId: 'router-1', error: 'timeout' });
+    expect(m.warn).toHaveBeenCalledWith(AVISO_HISTORICO, { routerId: 'router-1', error: 'timeout' });
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it("modo 'agente', sem mensagem (follow-up): não lê a conversa", async () => {
+    const m = montar(modoAgente());
+    await resolveTurnAgent({} as never, {} as never, { ...emAndamento, signal: null }, m.deps);
+    expect(m.historicoRecente).not.toHaveBeenCalled();
+    expect(m.classifyIntent).not.toHaveBeenCalled();
   });
 });
 

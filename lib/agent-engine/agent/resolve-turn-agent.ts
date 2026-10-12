@@ -16,6 +16,8 @@
  *      o classificador esteja: uma resposta curta ("Quarta") não tem assunto
  *      próprio, e trocar de agente por causa dela é perder o fio. A regra é
  *      `mudouDeAssunto`; sem agente atual (regra 3) nada muda.
+ *      Nesse modo, e só nele, o classificador recebe também a conversa
+ *      recente do atendimento e o nome do assunto atual.
  *   3. sem sticky: classifica; intenção não-nula + confiança >= min ⇒ agente
  *      do membro.
  *   4. classificador falhou (null) COM sticky elegível ⇒ mantém o sticky
@@ -75,6 +77,7 @@ import {
 } from './agent-config';
 import { classifyIntent, type IntentVerdict } from './intent-classifier';
 import { buildFatosDoContato } from './fatos-do-contato';
+import { historicoRecente, renderHistoricoRecente } from './historico-recente';
 import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-context';
 
 /**
@@ -82,6 +85,9 @@ import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-c
  * `agente-da-campanha.ts`: um `await` sem limite no caminho quente seguraria o
  * turno inteiro por causa de um enfeite de roteamento. O teto mora aqui e não em
  * `buildFatosDoContato`, que a tela de teste do roteador pode esperar.
+ *
+ * No modo `permanencia: 'agente'` a conversa recente é lida JUNTO, sob este
+ * mesmo teto: são 500 ms para as duas leituras, não 500 para cada.
  */
 const TETO_DOS_FATOS_MS = 500;
 
@@ -111,6 +117,7 @@ export interface ResolveTurnAgentDeps {
   loadPublishedAgentConfig?: typeof loadPublishedAgentConfig;
   classifyIntent?: typeof classifyIntent;
   buildFatosDoContato?: typeof buildFatosDoContato;
+  historicoRecente?: typeof historicoRecente;
   /** Relógio injetável: é o que separa atendimento anterior de compromisso futuro. */
   agora?: () => Date;
 }
@@ -151,6 +158,7 @@ export async function resolveTurnAgent(
   const _loadAgentBySession = deps.loadPublishedAgentConfig ?? loadPublishedAgentConfig;
   const _classifyIntent = deps.classifyIntent ?? classifyIntent;
   const _buildFatos = deps.buildFatosDoContato ?? buildFatosDoContato;
+  const _historicoRecente = deps.historicoRecente ?? historicoRecente;
 
   try {
     // ─── Degrau 0: a campanha que criou esta conversa ───
@@ -263,27 +271,51 @@ export async function resolveTurnAgent(
 
     // Fatos do CRM para o classificador (agenda do contato). No motor, `leadId` É o
     // contact_id. Falha aqui nunca derruba o turno: classifica só com a mensagem.
+    //
+    // Regra 2b: só o roteador com `permanencia: 'agente'` lê também a conversa
+    // recente. As duas leituras correm juntas e cada uma falha sozinha.
     const avisoDosFatos = 'resolve-turn-agent: fatos do contato indisponíveis — classificando só com a mensagem';
+    const avisoDoHistorico = 'resolve-turn-agent: conversa recente indisponível, classificando sem ela';
+    const comContexto = router.permanencia === 'agente';
+    const motivo = (err: unknown): string => (err instanceof Error ? err.message : String(err));
     let fatos: string | null = null;
-    try {
-      // `Promise.race`, como no degrau 0: o teto vale também com o pool esgotado.
-      fatos = await Promise.race([
-        _buildFatos(db, input.tenantId, input.leadId, (deps.agora ?? (() => new Date()))()),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), TETO_DOS_FATOS_MS)),
-      ]);
-      if (fatos === null) deps.log.warn(avisoDosFatos, { routerId: router.id, error: 'timeout' });
-    } catch (err) {
-      deps.log.warn(avisoDosFatos, {
-        routerId: router.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
+    let historico: string | null = null;
+    // `async () =>` nas duas: um throw síncrono vira rejeição da própria leitura,
+    // em vez de derrubar a vizinha.
+    const leituras = Promise.allSettled([
+      (async () => _buildFatos(db, input.tenantId, input.leadId, (deps.agora ?? (() => new Date()))()))(),
+      (async () =>
+        comContexto
+          ? renderHistoricoRecente(await _historicoRecente(db, input.tenantId, input.conversationId)) || null
+          : null)(),
+    ]);
+    // `Promise.race`, como no degrau 0: o teto vale também com o pool esgotado.
+    const lidas = await Promise.race([
+      leituras,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), TETO_DOS_FATOS_MS)),
+    ]);
+    if (lidas === null) {
+      deps.log.warn(avisoDosFatos, { routerId: router.id, error: 'timeout' });
+      if (comContexto) deps.log.warn(avisoDoHistorico, { routerId: router.id, error: 'timeout' });
+    } else {
+      const [f, h] = lidas;
+      if (f.status === 'fulfilled') fatos = f.value;
+      else deps.log.warn(avisoDosFatos, { routerId: router.id, error: motivo(f.reason) });
+      if (h.status === 'fulfilled') historico = h.value;
+      else deps.log.warn(avisoDoHistorico, { routerId: router.id, error: motivo(h.reason) });
     }
 
     // classifica — inclusive com sticky ativo, pra detectar troca de assunto (regra 2).
     const verdict = await _classifyIntent(
       db,
       llmCfg,
-      { tenantId: input.tenantId, leadId: input.leadId, jobId: input.jobId, router, signal: input.signal, fatos },
+      {
+        tenantId: input.tenantId, leadId: input.leadId, jobId: input.jobId, router, signal: input.signal, fatos,
+        // Fora do modo novo as chaves nem existem: a entrada é a de antes.
+        ...(comContexto
+          ? { historico, assuntoAtual: stickyMember !== undefined ? input.stickyIntent : null }
+          : {}),
+      },
       { log: deps.log },
     );
 
