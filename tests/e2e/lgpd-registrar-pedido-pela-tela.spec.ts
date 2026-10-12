@@ -218,3 +218,137 @@ test("pedido de apagamento registrado pela tela fica parado até alguém aprovar
   await page.screenshot({ path: `${PASTA}/9-apagamento-espera-aprovacao.png`, fullPage: true });
   await page.getByRole("button", { name: "Cancelar" }).click();
 });
+
+/**
+ * O EVENTO NÃO AUTORIZA: A APROVAÇÃO, GRAVADA NO PEDIDO, AUTORIZA (migration 0357).
+ *
+ * "Ninguém emite o evento antes da hora" era a única proteção do pedido acima.
+ * Aqui o evento É emitido antes da hora, do jeito que qualquer peça do servidor
+ * conseguiria (uma automação, um reprocessamento, o webhook de uma loja), com
+ * uma "aprovação" escrita no payload. O dreno roda e o paciente continua lá.
+ * Depois o administrador aprova pela tela, e só então o contato é anonimizado.
+ */
+test("apagamento: evento emitido sem aprovação não anonimiza; aprovado pela tela, anonimiza", async ({ page }) => {
+  test.setTimeout(300_000);
+  const PASTA_DO_PORTAO = ".superpowers/evidence/lgpd-exclusao-exige-aprovacao";
+  fs.mkdirSync(PASTA_DO_PORTAO, { recursive: true });
+  const creds = lerCreds() as ReturnType<typeof lerCreds> & { org_id: string };
+  const banco = servico();
+  const nome = `Titular Portão ${Date.now().toString().slice(-6)}`;
+  const contato = await banco
+    .from("contacts")
+    .insert({ organization_id: creds.org_id, name: nome, phone_number: `+55117${Date.now().toString().slice(-8)}` })
+    .select("id")
+    .single();
+  if (contato.error) throw contato.error;
+  const contatoId = contato.data.id as string;
+
+  await loginComoAdmin(page, creds);
+  await page.goto("/app/lgpd/requests");
+  await page.getByRole("button", { name: "Registrar pedido" }).click();
+  const dialogo = page.getByRole("dialog");
+  await dialogo.getByLabel("De quem é o pedido").fill(nome);
+  await dialogo.getByRole("button", { name: new RegExp(nome) }).click();
+  await dialogo.getByLabel("O que a pessoa pediu").selectOption("redact");
+  await dialogo.getByRole("button", { name: "Registrar pedido" }).click();
+  await expect(page.getByText(/Pedido registrado\. Prazo:/)).toBeVisible({ timeout: 30_000 });
+
+  const registrado = await banco.from("lgpd_requests").select("id").eq("contact_id", contatoId).single();
+  if (registrado.error) throw registrado.error;
+  const pedidoId = registrado.data.id as string;
+
+  // 1. Alguém emite o evento sem passar pela tela, dizendo que está aprovado.
+  const emitido = await banco.rpc("emit_event", {
+    p_event_type: "lgpd.redact_received",
+    p_entity_kind: "lgpd_request",
+    p_entity_id: pedidoId,
+    p_payload: { request_id: pedidoId, manually_approved: true, approved_by: contatoId, approved_reason: "escrito no evento, sem tela" },
+    p_metadata: { manually_approved: true },
+    p_organization_id: creds.org_id,
+  });
+  if (emitido.error) throw emitido.error;
+
+  const segredo = process.env.INTERNAL_CRON_SECRET || process.env.INTERNAL_SECRET;
+  const drenar = async () => {
+    const r = await page.request.post("/api/v1/cron/event-log-drain", {
+      headers: { authorization: `Bearer ${segredo}` },
+      timeout: 120_000,
+    });
+    expect(r.status()).toBe(200);
+  };
+  // O dreno é global: repete até ESTE evento ter sido consumido.
+  let evento: { status: string; last_error: string | null } | null = null;
+  for (let volta = 0; volta < 5; volta++) {
+    await drenar();
+    const linha = await banco
+      .from("event_log")
+      .select("status, last_error")
+      .eq("entity_id", pedidoId)
+      .eq("event_type", "lgpd.redact_received")
+      .single();
+    if (linha.error) throw linha.error;
+    evento = linha.data as { status: string; last_error: string | null };
+    if (evento.status !== "pending" && evento.status !== "processing") break;
+  }
+  // Consumido (não fica tentando para sempre), e o motivo fica escrito.
+  expect(evento!.status).not.toBe("pending");
+  expect(evento!.last_error ?? "").toContain("not_approved:not_approved");
+
+  const depoisDoEvento = await banco.from("lgpd_requests").select("status, attempts").eq("id", pedidoId).single();
+  expect(depoisDoEvento.data).toMatchObject({ status: "received", attempts: 0 });
+  const intacto = await banco.from("contacts").select("name, is_anonymized").eq("id", contatoId).single();
+  expect(intacto.data).toMatchObject({ name: nome, is_anonymized: false });
+
+  await page.goto("/app/lgpd/requests");
+  const linhaDaLista = page.getByRole("row").filter({ hasText: pedidoId.slice(0, 8) });
+  await expect(linhaDaLista).toContainText("Recebido", { timeout: 30_000 });
+  await page.screenshot({ path: `${PASTA_DO_PORTAO}/1-evento-sem-aprovacao-continua-recebido.png`, fullPage: true });
+
+  // 2. O administrador aprova pela tela, com justificativa.
+  await page.goto(`/app/lgpd/requests/${pedidoId}`);
+  await page.getByRole("button", { name: "Aprovar anonimização" }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("irreversível");
+  await page.locator("#approved_reason").fill("Paciente pediu o apagamento por escrito no balcão.");
+  await page.screenshot({ path: `${PASTA_DO_PORTAO}/2-aprovar-com-justificativa.png`, fullPage: true });
+  await page.getByRole("button", { name: "Confirmar aprovação" }).click();
+  await expect(page.getByText("Processando", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+
+  const aprovado = await banco.from("lgpd_requests").select("request_payload").eq("id", pedidoId).single();
+  const prova = (aprovado.data!.request_payload as { approval: Record<string, string> }).approval;
+  expect(prova).toMatchObject({
+    request_id: pedidoId,
+    organization_id: creds.org_id,
+    contact_id: contatoId,
+    approved_reason: "Paciente pediu o apagamento por escrito no balcão.",
+  });
+  // Quem ficou gravado como aprovador é administrador desta organização.
+  const papel = await banco
+    .from("user_organizations")
+    .select("role")
+    .eq("organization_id", creds.org_id)
+    .eq("user_id", prova.approved_by)
+    .single();
+  expect(papel.data).toMatchObject({ role: "admin" });
+
+  // 3. O dreno roda e agora, sim, o contato é anonimizado e o pedido conclui.
+  expect(await drenarAteSairDeProcessando(page, banco, pedidoId)).toBe("completed");
+  const anonimizado = await banco.from("contacts").select("name, display_name, is_anonymized").eq("id", contatoId).single();
+  expect(anonimizado.data).toMatchObject({
+    name: `Cliente Anonimizado #${contatoId.slice(0, 8)}`,
+    is_anonymized: true,
+  });
+
+  await page.reload();
+  await expect(page.getByText("Concluído", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await page.screenshot({ path: `${PASTA_DO_PORTAO}/3-pedido-concluido.png`, fullPage: true });
+
+  await page.goto("/app/lgpd/requests");
+  await expect(page.getByRole("row").filter({ hasText: pedidoId.slice(0, 8) })).toContainText("Concluído", {
+    timeout: 30_000,
+  });
+  await page.screenshot({ path: `${PASTA_DO_PORTAO}/4-lista-concluido.png`, fullPage: true });
+
+  await page.goto(`/app/contacts/${contatoId}`);
+  await expect(page.getByText(`Cliente Anonimizado #${contatoId.slice(0, 8)}`).first()).toBeVisible({ timeout: 30_000 });
+  await page.screenshot({ path: `${PASTA_DO_PORTAO}/5-contato-anonimizado.png`, fullPage: true });
+});
