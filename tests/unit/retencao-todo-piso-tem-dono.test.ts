@@ -45,6 +45,11 @@ const DONO_NO_SQL: Record<string, string> = {
   AUDITORIA: "fn_expurgar_auditoria_vencida",
   ESPELHO_AGENDA: "fn_expurgar_espelho_da_agenda",
   OBSERVACOES_JEV: "fn_expurgar_observacoes_do_jev",
+  // migration 0354: as tabelas append-only da IA, no MESMO commit da migration.
+  TELEMETRIA_DE_IA: "fn_expurgar_telemetria_de_ia_vencida",
+  RITMO_DE_ENVIO: "fn_expurgar_ritmo_de_envio_vencido",
+  COPIAS_ENVIADAS: "fn_expurgar_copias_enviadas_vencidas",
+  CHECKPOINTS: "fn_expurgar_checkpoints_superados",
 };
 
 /**
