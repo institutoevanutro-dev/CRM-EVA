@@ -25,6 +25,7 @@
  * histórico, que guarda ali o nome do procedimento; nos demais, "atendimento".
  */
 import type { Queryable } from "../queue/queue";
+import { isoLocalComOffset } from "@/lib/tempo/agora";
 import { FUSO_PADRAO, fusoValido } from "@/lib/tempo/fusos";
 
 export const MAXIMO_DE_ANTERIORES = 5;
@@ -96,13 +97,10 @@ function linha(fatos: readonly FatoDeAgenda[], maximo: number): string {
   const itens = fatos.slice(0, maximo).map((f) => {
     const fuso = f.time_zone && fusoValido(f.time_zone) ? f.time_zone : FUSO_PADRAO;
     // O driver pg devolve Date; a data é a de parede no fuso da reserva, não a
-    // do processo (UTC).
-    const data = new Intl.DateTimeFormat("pt-BR", {
-      timeZone: fuso,
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }).format(new Date(f.starts_at));
+    // do processo (UTC). dd/mm/aaaa montado das partes, sem nomear idioma: isto
+    // é texto de prompt, não interface, e o formato não pode variar.
+    const [ano, mes, dia] = isoLocalComOffset(new Date(f.starts_at), fuso).slice(0, 10).split("-");
+    const data = `${dia}/${mes}/${ano}`;
     // Quebra de linha no título abriria uma "linha nova" dentro do prompt do
     // classificador. Uma linha só, cortada.
     const tipo = f.tipo.replace(/\s+/g, " ").trim().slice(0, MAXIMO_DO_TIPO) || "atendimento";
