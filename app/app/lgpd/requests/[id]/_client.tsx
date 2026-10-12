@@ -118,7 +118,7 @@ export function LgpdRequestDetail({ id }: Props) {
         </p>
       </div>
 
-      {/* PDF download if completed */}
+      {/* PDF download: delivered (completed) or for the operator to deliver by hand (pending_review) */}
       {signed_pdf_url && (
         <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm flex flex-wrap items-center justify-between gap-4">
           <span>{t("Relatório de exportação disponível (expira em 72h).")}</span>

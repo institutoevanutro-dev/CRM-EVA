@@ -6879,6 +6879,9 @@ export const DICIONARIO: Traducoes = {
     es: "Configurando autenticación en dos pasos...",
   },
   "Não foi possível iniciar a configuração.": { es: "No se pudo iniciar la configuración." },
+  "Não foi possível iniciar o processamento. Tente aprovar de novo.": {
+    es: "No se pudo iniciar el procesamiento. Intente aprobar de nuevo.",
+  },
   "Falha ao confirmar. Tente novamente.": { es: "Fallo al confirmar. Intenta de nuevo." },
   "Configure a verificação em duas etapas": { es: "Configura la verificación en dos pasos" },
   "Esta empresa exige a verificação em duas etapas de quem administra. ": {
