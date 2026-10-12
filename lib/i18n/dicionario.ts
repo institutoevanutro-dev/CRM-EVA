@@ -8345,14 +8345,29 @@ export const DICIONARIO: Traducoes = {
   "Clima da conversa": {
     es: "Clima de la conversación",
   },
-  "Desligar tarefa": {
-    es: "Apagar tarea",
+  "Avisar a equipe": {
+    es: "Avisar al equipo",
+  },
+  "Avisar a equipe?": {
+    es: "¿Avisar al equipo?",
+  },
+  "avisos à equipe": {
+    es: "avisos al equipo",
+  },
+  "Para voltar, clique em Observando nesta mesma linha.": {
+    es: "Para volver, haga clic en Observando en esta misma línea.",
+  },
+  "Quando o Jev perceber um pedido para falar com uma pessoa que a regra não pegou, ele abre um aviso na Central para alguém da equipe decidir. Ele nunca passa a conversa sozinho, não cala o assistente e não responde o cliente.": {
+    es: "Cuando Jev perciba un pedido para hablar con una persona que la regla no detectó, abre un aviso en la Central para que alguien del equipo decida. Nunca transfiere la conversación por su cuenta, no silencia al asistente ni responde al cliente.",
+  },
+  "Quando o Jev perceber um pedido para parar de receber mensagens que a regra não pegou, ele abre um aviso na Central para alguém da equipe conferir. Quem bloqueia o contato é só a regra de hoje, quando o próprio cliente manda PARAR: o Jev nunca bloqueia ninguém.": {
+    es: "Cuando Jev perciba un pedido para dejar de recibir mensajes que la regla no detectó, abre un aviso en la Central para que alguien del equipo lo revise. Quien bloquea el contacto es solo la regla de hoy, cuando el propio cliente envía PARAR: Jev nunca bloquea a nadie.",
   },
   "Jev — decisões rápidas": {
     es: "Jev — decisiones rápidas",
   },
-  "Ligar o Jev (só observando)": {
-    es: "Encender Jev (solo observando)",
+  "Ligar o Jev": {
+    es: "Encender Jev",
   },
   "Observando": {
     es: "Observando",
@@ -8369,11 +8384,8 @@ export const DICIONARIO: Traducoes = {
   "Sem a chave JEV_API_KEY no servidor, o Jev está desligado e nenhuma mensagem sai para a TypeSafe.": {
     es: "Sin la clave JEV_API_KEY en el servidor, Jev está apagado y ningún mensaje sale hacia TypeSafe.",
   },
-  "Um modelo à parte (System One, da TypeSafe AI) que só OBSERVA: ele dá a opinião dele ao lado do que o sistema já decide, e você compara. Ele não bloqueia ninguém, não passa a conversa, não cala o assistente e não responde o cliente.": {
-    es: "Un modelo aparte (System One, de TypeSafe AI) que solo OBSERVA: da su opinión junto a lo que el sistema ya decide, y usted compara. No bloquea a nadie, no transfiere la conversación, no silencia al asistente y no responde al cliente.",
-  },
-  "Voltar a observar": {
-    es: "Volver a observar",
+  "Um modelo à parte (System One, da TypeSafe AI) que observa: ele dá a opinião dele ao lado do que o sistema já decide, e você compara. Nos dois pedidos do cliente, você pode pedir que ele avise a equipe na Central. Em nenhum caso ele bloqueia alguém, passa a conversa, cala o assistente ou responde o cliente.": {
+    es: "Un modelo aparte (System One, de TypeSafe AI) que observa: da su opinión junto a lo que el sistema ya decide, y usted compara. En los dos pedidos del cliente, puede pedirle que avise al equipo en la Central. En ningún caso bloquea a alguien, transfiere la conversación, silencia al asistente ni responde al cliente.",
   },
   "de concordância": {
     es: "de coincidencia",

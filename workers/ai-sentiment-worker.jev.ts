@@ -1,26 +1,33 @@
 /**
- * O JEV NO WORKER DE CLIMA — fase 1, só OBSERVANDO.
+ * O JEV NO WORKER DE CLIMA — observando e, nos dois pedidos do cliente,
+ * "Avisar a equipe".
  *
- * Porte de melgarafael/DeskcommCRM #1575 (clima), #1747 (pedidos do cliente) e
- * #2248 (escala do clima), sem nenhuma das partes que decidem.
+ * Porte de melgarafael/DeskcommCRM #1575 (clima), #1747 (pedidos do cliente e
+ * o aviso na Central) e #2248 (escala do clima).
  *
  * Uma chamada ao System One por mensagem recebida do cliente, com até três
  * perguntas:
  *  - `clima`: a nota do Jev ao lado da nota da IA de sempre. Quem decide a
- *    passagem por clima continua sendo a IA de sempre;
+ *    passagem por clima continua sendo a IA de sempre, sempre;
  *  - `humano` e `opt_out`: só onde a REGRA DO FORK disse não
  *    (`detectHumanHandoffRequest`, `lib/opt-out/deteccao.ts`). A regra segue
- *    mandando; o Jev só conta o que ela deixou passar.
+ *    mandando; o Jev só conta o que ela deixou passar. Com a tarefa em
+ *    "Avisar a equipe" (`decidindo`), o pedido percebido acima do corte abre UM
+ *    aviso na Central por conversa (`lib/ai/decisao/aviso-a-equipe.ts`).
  *
- * O que NUNCA acontece aqui: bloquear o contato, passar a conversa, calar o
- * assistente, abrir aviso, mandar mensagem. A única escrita é a observação e a
- * linha de custo (`lib/ai/decisao/registro.ts`). Cerca em
+ * O que NUNCA acontece aqui, em estado nenhum: bloquear o contato, passar a
+ * conversa, calar o assistente, mandar mensagem. As escritas são a observação,
+ * a linha de custo e o aviso. Cerca em
  * `tests/unit/jev-nunca-cala-bloqueia-nem-responde.test.ts`.
+ *
+ * Falha do Jev (tempo esgotado, erro, disjuntor aberto) é silenciosa: a regra
+ * já decidiu, então só não há aviso.
  *
  * O texto sai só depois do `scrubMessage` (CPF, telefone, e-mail, documentos),
  * e nunca vai para log. Sem `JEV_API_KEY` esta função não lê nem o banco.
  */
 import { detectHumanHandoffRequest } from "@/lib/agent-engine/agent/human-handoff";
+import { AVISOS_DO_JEV, gravarAvisoNaCentral } from "@/lib/ai/decisao/aviso-a-equipe";
 import { estadoEfetivo, lerConfigDoJev } from "@/lib/ai/decisao/config";
 import { jevTemChave, perguntarAoJev } from "@/lib/ai/decisao/ponto";
 import {
@@ -94,12 +101,15 @@ export async function observarComOJev(admin: Admin, e: EntradaDoJev): Promise<Cl
     if (!r.ok) return null;
 
     for (const id of ["humano", "opt_out"] as const) {
-      if (regra[id] || estadoEfetivo(config, id) !== "observando") continue;
+      const estado = estadoEfetivo(config, id);
+      if (regra[id] || estado === "desligada") continue;
       const prob = probabilidadeDoSim(r.respostas[id]);
       if (prob === null) continue;
-      await registrarObservacao(admin, e, {
+      const rotulo = rotuloDoPedido(id, prob);
+      const nova = await registrarObservacao(admin, e, {
         tarefa: id,
-        rotuloJev: rotuloDoPedido(id, prob),
+        estado,
+        rotuloJev: rotulo,
         probabilidadeJev: prob,
         confiancaJev: null,
         // Por construção a regra disse não: é só onde o Jev é perguntado.
@@ -107,6 +117,8 @@ export async function observarComOJev(admin: Admin, e: EntradaDoJev): Promise<Cl
         modelo: r.modelo,
         latenciaMs: r.latenciaMs,
       });
+      // "Avisar a equipe": só o aviso. `nova` falso = retry da mesma mensagem.
+      if (estado === "decidindo" && rotulo === "sim" && nova) await avisarAEquipe(admin, e, id);
     }
 
     const clima = estadoEfetivo(config, "clima") === "observando" ? notaDoClima(r.respostas.clima) : null;
@@ -118,6 +130,41 @@ export async function observarComOJev(admin: Admin, e: EntradaDoJev): Promise<Cl
     });
     return null;
   }
+}
+
+const ESTADOS_ABERTOS: ReadonlySet<string> = new Set(["open", "pending", "claimed", "ai_handling"]);
+
+/**
+ * Abre o aviso, a não ser que a conversa já tenha atendido o pedido enquanto o
+ * Jev respondia: os gatilhos da 0349 fechariam o aviso, mas dispararam antes de
+ * ele existir. Conversa encerrada: nenhum. Conversa com uma pessoa (assumida ou
+ * com o assistente calado): não o de pessoa. Contato bloqueado: não o de parar
+ * de receber. Sem conseguir ler, o aviso abre: é informação, e pior é perdê-la.
+ * Aqui só se LÊ a conversa e o contato.
+ */
+async function avisarAEquipe(admin: Admin, e: EntradaDoJev, id: IdDoPedido): Promise<void> {
+  if (e.conversationId === null) return;
+  const { data } = await admin
+    .from("conversations")
+    .select("status, assigned_to_user_id, bot_silenced_until, contacts:contact_id(is_blocked)")
+    .eq("organization_id", e.organizationId)
+    .eq("id", e.conversationId)
+    .maybeSingle();
+  const c = data as {
+    status: string | null;
+    assigned_to_user_id: string | null;
+    bot_silenced_until: string | null;
+    contacts: { is_blocked: boolean | null } | null;
+  } | null;
+  if (c !== null) {
+    if (!ESTADOS_ABERTOS.has(c.status ?? "")) return;
+    const calado =
+      c.bot_silenced_until !== null &&
+      (c.bot_silenced_until === "infinity" || Date.parse(c.bot_silenced_until) > Date.now());
+    if (id === "humano" && (c.assigned_to_user_id !== null || calado)) return;
+    if (id === "opt_out" && c.contacts?.is_blocked === true) return;
+  }
+  await gravarAvisoNaCentral(admin, { organizationId: e.organizationId, conversationId: e.conversationId }, AVISOS_DO_JEV[id]);
 }
 
 /**
@@ -135,6 +182,7 @@ export async function registrarClimaObservado(
   if (jev === null) return;
   await registrarObservacao(admin, c, {
     tarefa: "clima",
+    estado: "observando",
     rotuloJev: rotuloDoClima(jev.nota, limiar),
     probabilidadeJev: jev.nota,
     confiancaJev: jev.confianca,

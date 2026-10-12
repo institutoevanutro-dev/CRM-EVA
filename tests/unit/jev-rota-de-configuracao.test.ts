@@ -1,7 +1,8 @@
 // @vitest-environment node
 /**
  * A ROTA DO JEV: ligar exige a chave da instalação e o aceite; toda gravação é
- * auditada; a chave nunca sai na resposta; nenhuma tarefa pode decidir.
+ * auditada; a chave nunca sai na resposta; "Avisar a equipe" (`decidindo`) só
+ * existe nos dois pedidos do cliente, nunca no clima.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -44,7 +45,9 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 
-import { GET, PATCH } from "@/app/api/v1/ai/jev/route";
+import { GET, PATCH, resumir } from "@/app/api/v1/ai/jev/route";
+
+const JEV_LIGADO = { ligado: true, aceite: { em: "2026-10-12T12:00:00.000Z", por: "u" } };
 
 const patch = (corpo: unknown) =>
   PATCH(new Request("http://x/api/v1/ai/jev", { method: "PATCH", body: JSON.stringify(corpo) }) as never);
@@ -82,11 +85,49 @@ describe("PATCH /api/v1/ai/jev", () => {
     expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ action: "ai.jev_settings_updated" }));
   });
 
-  it("nenhuma tarefa pode decidir: `decidindo` é recusado pelo schema", async () => {
+  it("o clima não pode decidir: `decidindo` é recusado pelo schema, sem gravar nem auditar", async () => {
     H.chave = "apikey_x";
-    const r = await patch({ tarefas: { opt_out: "decidindo" } });
+    H.settings = { jev: JEV_LIGADO };
+    const r = await patch({ tarefas: { clima: "decidindo" } });
     expect(r.status).toBe(422);
+    expect(H.gravado).toBeNull();
     expect(auditMock).not.toHaveBeenCalled();
+  });
+
+  it("avisar a equipe no pedido de parar: grava, e a auditoria diz a tarefa e o estado novo", async () => {
+    H.chave = "apikey_x";
+    H.settings = { jev: JEV_LIGADO };
+    const r = await patch({ tarefas: { opt_out: "decidindo" } });
+    expect(r.status).toBe(200);
+    const corpo = (await r.json()) as { data: { tarefas: Array<{ id: string; estado: string }> } };
+    expect(corpo.data.tarefas).toEqual([
+      { id: "clima", estado: "observando" },
+      { id: "humano", estado: "observando" },
+      { id: "opt_out", estado: "decidindo" },
+    ]);
+    expect((H.gravado!.settings as { jev: { tarefas: Record<string, { estado: string; alterado_por: string }> } }).jev.tarefas.opt_out).toMatchObject({
+      estado: "decidindo",
+      alterado_por: "33333333-3333-4333-8333-333333333333",
+    });
+    expect(auditMock).toHaveBeenCalledTimes(1);
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "ai.jev_settings_updated",
+        metadata: expect.objectContaining({
+          mudanca: { tarefas: { opt_out: "decidindo" } },
+          tarefas: { clima: "observando", humano: "observando", opt_out: "decidindo" },
+        }),
+      }),
+    );
+  });
+
+  it("voltar a observar é um pedido só, também auditado", async () => {
+    H.settings = { jev: { ...JEV_LIGADO, tarefas: { opt_out: { estado: "decidindo" } } } };
+    const r = await patch({ tarefas: { opt_out: "observando" } });
+    expect(r.status).toBe(200);
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ mudanca: { tarefas: { opt_out: "observando" } } }) }),
+    );
   });
 
   it("campo desconhecido é recusado", async () => {
@@ -108,5 +149,31 @@ describe("GET /api/v1/ai/jev", () => {
     const texto = await r.text();
     expect(texto).toContain('"chaveConfigurada":true');
     expect(texto).not.toContain("apikey_segredo");
+  });
+});
+
+describe("os contadores do cartão", () => {
+  const linha = (tarefa: string, estado: string, rotulo_jev: string) => ({ tarefa, estado, rotulo_jev, concordou: null, latencia_ms: 300 });
+
+  it("avisos conta só o sim com a tarefa em avisar a equipe; os de observação seguem como eram", () => {
+    const r = resumir([
+      linha("opt_out", "observando", "sim"),
+      linha("opt_out", "decidindo", "sim"),
+      linha("opt_out", "decidindo", "sim"),
+      linha("opt_out", "decidindo", "nao"),
+      linha("humano", "decidindo", "sim"),
+      linha("clima", "observando", "reclamando"),
+    ]);
+    expect(r.opt_out).toMatchObject({ observadas: 4, percebidas: 3, avisos: 2, latenciaMediaMs: 300 });
+    expect(r.humano).toMatchObject({ observadas: 1, percebidas: 1, avisos: 1 });
+    expect(r.clima).toMatchObject({ observadas: 1, percebidas: 1, avisos: 0 });
+  });
+
+  it("o GET diz quais estados cada tarefa aceita: três nos pedidos, dois no clima", async () => {
+    const corpo = (await (await GET()).json()) as { data: { tarefas: Array<{ id: string; estados: string[] }> } };
+    const estados = Object.fromEntries(corpo.data.tarefas.map((t) => [t.id, t.estados]));
+    expect(estados.clima).toEqual(["observando", "desligada"]);
+    expect(estados.opt_out).toEqual(["observando", "decidindo", "desligada"]);
+    expect(estados.humano).toEqual(["observando", "decidindo", "desligada"]);
   });
 });
