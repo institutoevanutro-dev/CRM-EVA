@@ -29,7 +29,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
-import { ArrowRight, CaretLeft, Info, Plus, Trash } from "@/lib/ui/icons";
+import { ArrowRight, CaretLeft, Plus, Trash } from "@/lib/ui/icons";
 import { randomId } from "@/lib/random-id";
 import { usePermission } from "@/hooks/auth/AuthProvider";
 import {
@@ -41,6 +41,8 @@ import {
   type RouterDetailState,
   type RouterMemberInput,
 } from "@/hooks/ai/useRouters";
+import { SeletorDeContato } from "@/components/kanban/SeletorDeContato";
+import type { Contact } from "@/lib/types/contacts";
 import type { ClassifierModelOption } from "@/lib/ai/classifier-models";
 import type { ChannelSessionLite } from "../../agents/[id]/_components/AgentForm";
 import { useT } from "@/hooks/i18n/useT";
@@ -109,12 +111,10 @@ export function RouterEditorClient({
     members.map((m) => ({ ...m, key: m.id })),
   );
   const [deleteOpen, setDeleteOpen] = React.useState(false);
-  const [testMessage, setTestMessage] = React.useState("");
 
   const updateRouter = useUpdateRouter(routerId);
   const deleteRouter = useDeleteRouter();
   const saveMembers = useSaveMembers(routerId);
-  const testRouter = useTestRouter(routerId);
 
   const baseline = React.useMemo(
     () => ({
@@ -228,11 +228,6 @@ export function RouterEditorClient({
       },
       onError: showApiError,
     });
-  }
-
-  function handleTest() {
-    if (!testMessage.trim()) return;
-    testRouter.mutate(testMessage, { onError: showApiError });
   }
 
   return (
@@ -361,15 +356,7 @@ export function RouterEditorClient({
             </div>
           </Card>
 
-          <TestPanel
-            isActive={router.is_active}
-            canTest={canTest}
-            message={testMessage}
-            onMessageChange={setTestMessage}
-            onTest={handleTest}
-            result={testRouter.data}
-            pending={testRouter.isPending}
-          />
+          <TestPanel routerId={routerId} canTest={canTest} />
         </div>
 
         <div className="space-y-4">
@@ -606,31 +593,23 @@ function ExamplesInput({
   );
 }
 
-function TestPanel({
-  isActive,
-  canTest,
-  message,
-  onMessageChange,
-  onTest,
-  result,
-  pending,
-}: {
-  isActive: boolean;
-  canTest: boolean;
-  message: string;
-  onMessageChange: (v: string) => void;
-  onTest: () => void;
-  result:
-    | {
-        intent_name: string | null;
-        confidence: number;
-        min_confidence: number;
-        agent_id: string | null;
-        agent_name: string | null;
-      }
-    | undefined;
-  pending: boolean;
-}) {
+/**
+ * Classifica uma frase de teste. Funciona com o roteador INATIVO (é assim que
+ * se confere a montagem antes de ligar no canal) e, com um contato escolhido,
+ * o classificador recebe a agenda dele, como no turno real.
+ */
+export function TestPanel({ routerId, canTest }: { routerId: string; canTest: boolean }) {
+  const [message, setMessage] = React.useState("");
+  const [contato, setContato] = React.useState<Contact | null>(null);
+  const testRouter = useTestRouter(routerId);
+  const result = testRouter.data;
+  const pending = testRouter.isPending;
+
+  function onTest() {
+    if (!message.trim()) return;
+    testRouter.mutate({ message, contactId: contato?.id ?? null }, { onError: showApiError });
+  }
+
   const t = useT();
   const belowThreshold = result?.intent_name != null && result.confidence < result.min_confidence;
   return (
@@ -644,25 +623,30 @@ function TestPanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 p-0">
-        {!isActive && (
-          <div className="flex items-start gap-2 rounded-md bg-accent-soft p-3 text-xs text-text-muted">
-            <Info className="mt-0.5 shrink-0" aria-hidden />
-            <p>{t("Ative o roteador para poder testar a classificação.")}</p>
+        {canTest && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">{t("Testar como um contato (opcional)")}</p>
+            <SeletorDeContato escolhido={contato} onEscolher={setContato} />
+            <p className="text-xs text-muted-foreground">
+              {t(
+                "Com um contato, o roteador também considera a agenda dele: atendimentos anteriores e compromissos futuros.",
+              )}
+            </p>
           </div>
         )}
         <Textarea
           value={message}
-          onChange={(e) => onMessageChange(e.target.value)}
+          onChange={(e) => setMessage(e.target.value)}
           placeholder={t("Ex.: oi, quero saber o preço do plano premium")}
           rows={2}
           maxLength={4000}
-          disabled={!canTest || !isActive}
+          disabled={!canTest}
         />
         <Button
           variant="outline"
           size="sm"
           onClick={onTest}
-          disabled={!canTest || !isActive || pending || !message.trim()}
+          disabled={!canTest || pending || !message.trim()}
         >
           {pending ? t("Testando…") : t("Testar classificação")}
           {!pending && <ArrowRight />}
@@ -687,6 +671,12 @@ function TestPanel({
               {t("Agente que atenderia")}:{" "}
               <span className="font-medium">{result.agent_name ?? t("nenhum (sem fallback)")}</span>
             </p>
+          </div>
+        )}
+        {result?.fatos && (
+          <div className="space-y-1">
+            <p className="text-xs font-medium">{t("O que o roteador viu sobre o contato")}</p>
+            <p className="whitespace-pre-wrap text-xs text-muted-foreground">{result.fatos}</p>
           </div>
         )}
       </CardContent>

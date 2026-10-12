@@ -77,7 +77,37 @@ export async function loadActiveRouter(
   );
   const router = routerRows[0];
   if (router === undefined) return null;
+  return montar(db, organizationId, router);
+}
 
+/**
+ * O roteador pelo id, ATIVO OU NÃO — para a tela de teste, que precisa
+ * classificar antes de alguém ligar o roteador no canal. O turno de produção
+ * nunca usa esta porta: ele resolve por canal e exige `is_active`
+ * (`loadActiveRouter`). Roteador de outra organização devolve `null`.
+ */
+export async function loadRouterById(
+  db: pg.Pool,
+  organizationId: string,
+  routerId: string,
+): Promise<LoadedRouter | null> {
+  const { rows: routerRows } = await db.query<RouterRow>(
+    `select id, name, config, fallback_agent_id
+     from ai_routers
+     where organization_id = $1
+       and id = $2`,
+    [organizationId, routerId],
+  );
+  const router = routerRows[0];
+  if (router === undefined) return null;
+  return montar(db, organizationId, router);
+}
+
+async function montar(
+  db: pg.Pool,
+  organizationId: string,
+  router: RouterRow,
+): Promise<LoadedRouter> {
   const { rows: memberRows } = await db.query<MemberRow>(
     `select agent_id, intent_name, intent_description, examples
      from ai_router_members

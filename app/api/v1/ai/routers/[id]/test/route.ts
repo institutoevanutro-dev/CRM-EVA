@@ -1,9 +1,18 @@
 import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
  * POST /api/v1/ai/routers/:id/test — classifica uma mensagem de TESTE contra o
- * router (manager+). Reusa loadActiveRouter/classifyIntent (Tasks 2-3, mesmo
- * seam de runtime) — NUNCA grava em ai_router_decisions (telemetria de
- * decisões reais de produção, não de teste) nem em conversations.
+ * router (manager+). Reusa classifyIntent (mesmo seam de runtime) — NUNCA
+ * grava em ai_router_decisions (telemetria de decisões reais de produção, não
+ * de teste) nem em conversations.
+ *
+ * O roteador é carregado por id, ATIVO OU NÃO (`loadRouterById`): quem monta um
+ * roteador precisa ver a classificação antes de ligá-lo no canal. Testar não
+ * altera `is_active`.
+ *
+ * `contact_id` (opcional) faz o classificador receber os fatos da agenda desse
+ * contato, como no turno real. Ele vem do CORPO, então a posse é conferida com
+ * a organização da SESSÃO antes de qualquer leitura: contato de outra
+ * organização é 404, e nenhum fato é lido.
  *
  * leadId/jobId vão null pro classificador: não existe contact/job real por
  * trás de um clique de teste na UI, e llm_calls.contact_id/job_id são FKs —
@@ -25,7 +34,8 @@ import { getSkillsPool } from "@/lib/ai/skills/db";
 import { env } from "@/lib/env";
 import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/credentials";
 import { createLogger } from "@/lib/agent-engine/obs/logger";
-import { loadActiveRouter } from "@/lib/agent-engine/agent/router-config";
+import { loadRouterById } from "@/lib/agent-engine/agent/router-config";
+import { buildFatosDoContato } from "@/lib/agent-engine/agent/fatos-do-contato";
 import { classifyIntent } from "@/lib/agent-engine/agent/intent-classifier";
 import { traduzir } from "@/lib/i18n/dicionario";
 
@@ -37,6 +47,7 @@ const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 const testSchema = z.object({
   message: z.string().min(1).max(4000),
+  contact_id: z.string().uuid().optional(),
 });
 
 export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
@@ -69,38 +80,47 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     });
   }
 
-  const admin = createAdminClient();
-  const { data: router, error: routerErr } = await admin
-    .from("ai_routers")
-    .select("id, channel_session_id")
-    .eq("id", id)
-    .eq("organization_id", org.orgId)
-    .maybeSingle();
-  if (routerErr) {
-    return fail("internal_error", "Erro ao carregar router.", 500, { requestId });
-  }
-  if (!router) {
+  const pool = getSkillsPool();
+  const loaded = await loadRouterById(pool, org.orgId, id);
+  if (!loaded) {
     return fail("not_found", t("Router não encontrado."), 404, { requestId });
   }
 
-  const pool = getSkillsPool();
-  const loaded = await loadActiveRouter(pool, org.orgId, router.channel_session_id);
-  if (!loaded || loaded.id !== id) {
-    return fail(
-      "state_conflict",
-      t("O router precisa estar ativo (is_active=true) para ser testado."),
-      409,
-      { requestId },
-    );
+  const admin = createAdminClient();
+  const log = createLogger();
+
+  let fatos: string | null = null;
+  const contactId = parsed.data.contact_id;
+  if (contactId !== undefined) {
+    const { data: contato, error: contatoErr } = await admin
+      .from("contacts")
+      .select("id")
+      .eq("id", contactId)
+      .eq("organization_id", org.orgId)
+      .maybeSingle();
+    if (contatoErr) {
+      return fail("internal_error", "Erro ao carregar contato.", 500, { requestId });
+    }
+    if (!contato) {
+      return fail("not_found", t("Contato não encontrado."), 404, { requestId });
+    }
+    try {
+      fatos = await buildFatosDoContato(pool, org.orgId, contactId, new Date());
+    } catch (err) {
+      // Mesma regra do turno real: sem fatos, classifica só com a mensagem.
+      log.warn("router-test: fatos do contato indisponíveis — classificando só com a mensagem", {
+        tenant_id: org.orgId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   const llmCfg = llmEdgeConfigFromEnv(env);
-  const log = createLogger();
 
   const verdict = await classifyIntent(
     pool,
     llmCfg,
-    { tenantId: org.orgId, leadId: null, jobId: null, router: loaded, signal: parsed.data.message },
+    { tenantId: org.orgId, leadId: null, jobId: null, router: loaded, signal: parsed.data.message, fatos },
     { log },
   );
 
@@ -131,6 +151,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
       min_confidence: loaded.minConfidence,
       agent_id: agentId,
       agent_name: agentName,
+      fatos,
     },
     { requestId },
   );
