@@ -669,6 +669,165 @@ describe("revisão do porte — na dúvida, quem decide é uma pessoa", () => {
   });
 });
 
+/**
+ * ═══ RECUSAR UMA COISA NÃO É PEDIR PARA SAIR (CRM EvaLink, 12/10/2026) ═══
+ *
+ * Achado lendo e rodando a regra fora do ar: `ehPedidoDeOptOut` devolvia `true`
+ * para "não quero receber o resultado por e-mail, prefiro buscar aí" e para
+ * "não quero receber anestesia geral". Nas duas a paciente recusa UMA coisa (o
+ * canal de entrega de um exame; um procedimento) e a ingestão gravaria
+ * `is_blocked`, fecharia o negócio como perdido e calaria lembrete e resposta.
+ *
+ * A causa é a mesma de "pare de mandar o pedido" e de "não me mande mais
+ * boletos", pela terceira vez: a regra ancorava no VERBO ("receber") e tratava
+ * o objeto por lista de EXCEÇÃO (só "ligação" escapava). O mundo do que uma
+ * paciente pode não querer receber é aberto; o do que é a mensagem da clínica é
+ * fechado. A regra agora exige o objeto de comunicação, e são três listas:
+ *
+ * (1) o objeto é outra coisa, outro canal ou outro horário: segue com o agente.
+ */
+const RECUSA_OUTRA_COISA = [
+  // as duas frases do achado
+  "não quero receber o resultado por e-mail, prefiro buscar aí",
+  "não quero receber anestesia geral",
+  // a mesma família: procedimento, visita, documento, alta
+  "não quero receber visita",
+  "não quero receber visitas no hospital",
+  "não quero receber o boleto por correio",
+  "não quero receber alta ainda",
+  "não quero receber o exame pelo correio",
+  "não gostaria de receber sedação",
+  "não desejo receber transfusão de sangue",
+  // "mais" não muda o objeto: segue sendo a visita e a anestesia
+  "não quero mais receber visita",
+  "não quero receber mais anestesia",
+  "não quero receber nada de anestesia",
+  "quero parar de receber visita",
+  // outro verbo: nunca bloquearam, ficam como controle
+  "não quero mais tomar o remédio",
+  "não quero mais fazer o procedimento",
+  // outro CANAL: o contato bloqueado é o do WhatsApp, e quem recusa e-mail,
+  // SMS ou ligação não pediu para sair dele
+  "não quero receber ligação, pode mandar mensagem",
+  "prefiro não receber por e-mail, manda no WhatsApp",
+  "não quero receber e-mail",
+  "não quero receber e-mail, manda por aqui",
+  "não quero mais receber e-mail de vocês",
+  "não quero receber sms",
+  "não quero receber mensagens por e-mail, só por aqui",
+  "não quero receber nada por e-mail",
+  // outro HORÁRIO
+  "não quero receber mensagem de madrugada",
+  // o irmão com verbo de cessação: o que se manda parar é o documento por e-mail
+  "para de me mandar o resultado por e-mail",
+  "pare de mandar o exame por e-mail, eu busco aí",
+  "pode parar de me mandar o resultado, já peguei",
+  "não me mande mais o resultado por e-mail",
+  // ── espanhol ──
+  "no quiero recibir anestesia general",
+  "no quiero recibir el resultado por correo, prefiero buscarlo",
+  "no quiero recibir visitas",
+  "no quiero recibir el alta todavia",
+  "no quiero recibir mas anestesia",
+  "ya no quiero recibir visitas",
+  "no quiero recibir llamadas, escribime por aca",
+  "no quiero recibir mensajes por correo",
+  "deja de mandarme el resultado por correo",
+  // "no quiero" + o que a PRÓPRIA pessoa faria: o padrão espanhol aceitava
+  // qualquer verbo de comunicação depois de "no quiero", e a frase de cortesia
+  // mais comum do idioma bloqueava
+  "no quiero molestar, pero tengo una duda",
+  "no quiero llamar tan tarde",
+  "no quiero escribir mal su nombre",
+  "no quiero mandar la foto por aqui",
+];
+
+/**
+ * (2) O objeto É a mensagem da clínica, ou não há objeto e a cessação está
+ *     escrita ("mais"): continua bloqueando. É a metade que não pode se perder,
+ *     porque pedido de parar ignorado é descumprimento da LGPD.
+ *
+ *     Propaganda e promoção BLOQUEIAM: o produto só tem `is_blocked` para o
+ *     contato inteiro, e a doutrina já tratava "me tira da lista de marketing"
+ *     e "no quiero mas publicidad" como pedido de sair.
+ */
+const RECUSA_A_MENSAGEM_DA_CLINICA = [
+  "não quero receber mensagens",
+  "não quero receber mensagem",
+  "não quero mais receber nada de vocês",
+  "não quero receber nada",
+  "não quero mais receber",
+  "nao quero receber mais",
+  "não quero receber mais não",
+  "não quero mais receber, obrigado",
+  "não quero receber propaganda",
+  "não quero receber promoção",
+  "não quero mais receber essas promoções",
+  "não quero receber mais nenhuma mensagem de vocês",
+  "não desejo mais receber mensagens",
+  "não gostaria de receber mais mensagens",
+  "não quero receber mensagens no whatsapp",
+  "não quero receber mensagens por aqui",
+  "não quero receber nada desse número",
+  // "só ligação" não é restrição aqui: a mensagem deste canal foi recusada
+  "não quero mais receber mensagens, só ligação",
+  "quero parar de receber mensagens",
+  "para de me mandar mensagem",
+  "pare de mandar essas fotos",
+  // ── espanhol ──
+  "no quiero recibir mensajes",
+  "no quiero recibir mas mensajes",
+  "no quiero recibir mas",
+  "ya no quiero recibir mas",
+  "no quiero recibir nada",
+  "no quiero recibir publicidad",
+  "no quiero recibir mas promociones",
+  "no deseo recibir mas mensajes",
+  "ya no quiero recibir mensajes de ustedes",
+];
+
+/**
+ * (3) Nem uma coisa nem outra: sem objeto e sem "mais" (pode ser a resposta a
+ *     "quer receber o resultado por e-mail?"), "isso", ou UM tipo de mensagem
+ *     (lembrete, aviso, áudio). Não bloqueia; para o agente e chama uma pessoa.
+ */
+const RECUSA_QUE_UMA_PESSOA_DECIDE = [
+  "não quero receber",
+  "não quero receber, obrigada",
+  "não quero receber isso",
+  "não quero receber lembrete",
+  "não quero mais receber lembretes",
+  "não quero receber esses avisos",
+  "não quero receber áudio",
+  // ── espanhol ──
+  "no quiero recibir",
+  "no quiero recibir eso",
+  "no quiero recibir recordatorios",
+];
+
+describe("recusar uma coisa não é pedir para sair", () => {
+  it.each(RECUSA_OUTRA_COISA)("NÃO bloqueia nem escala: %s", (texto) => {
+    expect(ehPedidoDeOptOut(texto), `bloquearia "${texto}"`).toBe(false);
+    expect(ehOptOutProvavel(texto), `escalaria "${texto}"`).toBe(false);
+  });
+
+  it.each(RECUSA_A_MENSAGEM_DA_CLINICA)("bloqueia: %s", (texto) => {
+    expect(ehPedidoDeOptOut(texto), `deveria ter reconhecido "${texto}"`).toBe(true);
+  });
+
+  it.each(RECUSA_QUE_UMA_PESSOA_DECIDE)("não bloqueia, mas escala: %s", (texto) => {
+    expect(ehPedidoDeOptOut(texto), `bloquearia "${texto}"`).toBe(false);
+    expect(ehOptOutProvavel(texto), `deixaria passar "${texto}"`).toBe(true);
+  });
+
+  it("o runtime do agente responde igual à ingestão nas duas frases do achado", async () => {
+    const { detectAmbiguousOptOut } = await import("@/lib/agent-engine/agent/human-handoff");
+    expect(detectAmbiguousOptOut("não quero receber o resultado por e-mail, prefiro buscar aí")).toBe(false);
+    expect(detectAmbiguousOptOut("não quero receber anestesia geral")).toBe(false);
+    expect(detectAmbiguousOptOut("não quero receber mensagens")).toBe(true);
+  });
+});
+
 // Portado de melgarafael/DeskcommCRM ffeca5ba1 (autor: Paulo Lima Jr).
 describe("comecaComPalavraDeSaida — qual frase o cliente lê quando a IA sai de campo", () => {
   it("'Parar não é daqui' começa com a palavra de saída — o caso medido em produção", () => {

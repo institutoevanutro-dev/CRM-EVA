@@ -223,6 +223,42 @@ describe("opt-out", () => {
     });
   });
 
+  it.each([
+    "não quero receber o resultado por e-mail, prefiro buscar aí",
+    "não quero receber anestesia geral",
+    "não quero receber visita",
+    "não quero receber o boleto por correio",
+    "não quero receber e-mail, manda por aqui",
+    "para de me mandar o resultado por e-mail",
+    "no quiero recibir anestesia general",
+    "no quiero molestar, pero tengo una duda",
+    // o nível ambíguo também não grava bloqueio: quem decide é uma pessoa
+    "não quero receber",
+    "não quero receber lembrete",
+  ])("NÃO bloqueia quem recusa UMA coisa que não é a mensagem da clínica: %s", async (texto) => {
+    // Achado em 12/10/2026: a regra ancorava no verbo "receber" e bloqueava a
+    // paciente que recusava um canal de entrega ou um procedimento. Bloqueada,
+    // ela deixa de receber lembrete e resposta, e o negócio fecha como perdido.
+    await rodar({ texto });
+    expect(sequencia, `bloqueou "${texto}", que não é pedido de descadastro`).not.toContain(
+      "update:contacts",
+    );
+    expect(encerraDemanda, `fechou o negócio de "${texto}"`).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "não quero receber mensagens",
+    "não quero mais receber",
+    "não quero receber propaganda",
+    "no quiero recibir mas mensajes",
+  ])("segue bloqueando quando o que se recusa é a mensagem da clínica: %s", async (texto) => {
+    await rodar({ texto });
+    expect(ultimoUpdate, `não bloqueou "${texto}"`).toMatchObject({
+      is_blocked: true,
+      blocked_reason: "stop_keyword",
+    });
+  });
+
   it("mensagem sem texto não bloqueia ninguém", async () => {
     await rodar({ texto: null });
     expect(sequencia).not.toContain("update:contacts");
