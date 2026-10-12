@@ -25,7 +25,7 @@ export type LgpdScope = "contact" | "tenant";
 /**
  * Os SEIS estados que o banco aceita: `lgpd_requests_status_check` (migration 0356).
  *
- * Por anos esta lista teve `pending_review` e o CHECK não: o worker gravava o
+ * Desde o EPIC-08 esta lista teve `pending_review` e o CHECK não: o worker gravava o
  * estado, o banco recusava (23514) e o pedido ficava em "Processando" para
  * sempre. O par está preso em `tests/invariants/vocabulario-banco-x-typescript.test.ts`.
  * Estado novo: migration primeiro, esta lista depois, nunca só aqui.
@@ -43,16 +43,6 @@ export const LGPD_REQUEST_STATUSES = [
 ] as const;
 
 export type LgpdRequestStatus = (typeof LGPD_REQUEST_STATUSES)[number];
-
-/** Rótulo em pt-BR: fonte única para as telas da organização e do admin. */
-export const LGPD_REQUEST_STATUS_LABELS: Record<LgpdRequestStatus, string> = {
-  received: "Recebido",
-  processing: "Processando",
-  completed: "Concluído",
-  failed: "Falhou",
-  expired: "Expirado",
-  pending_review: "Revisão pendente",
-};
 
 /**
  * De onde o pedido veio: `lgpd_requests_source_check`. Este tipo dizia
