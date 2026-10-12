@@ -8,6 +8,20 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.23.0] — 2026-10-12
+
+### Corrigido
+
+- **O follow-up preenche telefone e e-mail e nunca mais envia a variável crua** As mensagens de follow-up (texto fixo, legenda de mídia e modelo de mensagem) já preenchiam `{{nome}}` e `{{primeiro_nome}}`. Agora preenchem também `{{telefone}}` e `{{email}}`, e aceitam `{{contact.name}}`, `{{contact.phone_number}}` e `{{contact.email}}` como sinônimos. Antes, qualquer variável fora do nome chegava ao contato do jeito que foi escrita, com as chaves.
+
+  Variável sem valor sai da frase com a pontuação ajustada, como já acontecia com o nome. Variável que não existe (erro de digitação como `{{nomee}}`, ou um campo que não está na lista) também sai da mensagem em vez de chegar crua, e o editor do fluxo avisa na hora, embaixo do texto. Se a mensagem ficaria vazia, o passo é pulado e o fluxo segue.
+
+  A lista é fechada de propósito: CPF, data de nascimento, observações, campos personalizados e dados do negócio (como o título) não podem ser colocados numa mensagem por variável.
+
+  Você não precisa fazer nada. Vale revisar os textos dos seus fluxos: o editor mostra a lista de variáveis e aponta as que não existem.
+
+  Portado do DeskcommCRM (melgarafael/DeskcommCRM#2695, contribuição de @webtecnica).
+
 ## [3.22.2] — 2026-10-11
 
 ### Alterado
@@ -6867,7 +6881,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.2...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.23.0...HEAD
+[3.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.2...v3.23.0
 [3.22.2]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.1...v3.22.2
 [3.22.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.0...v3.22.1
 [3.22.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.21.0...v3.22.0
