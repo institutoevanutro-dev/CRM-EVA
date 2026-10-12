@@ -318,8 +318,9 @@ const schema = z.object({
   AUDIT_LOG_RETENTION_DAYS: z.string().optional().default(""),
 
   /**
-   * Jev (System One, da TypeSafe AI) — decisões rápidas, só OBSERVANDO na fase
-   * 1 (porte de melgarafael/DeskcommCRM #1575/#1696). Todas opcionais.
+   * Jev (System One, da TypeSafe AI) — decisões rápidas: observa e, nos dois
+   * pedidos do cliente, pode avisar a equipe na Central (porte de
+   * melgarafael/DeskcommCRM #1575/#1696/#1747). Todas opcionais.
    *
    * Sem `JEV_API_KEY`, o Jev não existe: nenhuma chamada sai para
    * api.typesafe.ai (`lib/ai/decisao/ponto.ts`). Com ela, ainda nada sai até

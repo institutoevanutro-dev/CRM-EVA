@@ -179,7 +179,7 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       return { skipped: true, reason: "nenhum_agente_no_ar" };
     }
 
-    // ── Jev, só observando (fase 1; ver `./ai-sentiment-worker.jev.ts`) ──
+    // ── Jev: observa e, se pedido, avisa a equipe (ver `./ai-sentiment-worker.jev.ts`) ──
     // Depois das MESMAS guardas que decidem se a IA atende esta conversa, e
     // antes do modelo de sempre. Sem `JEV_API_KEY` é um `return` sem leitura
     // nenhuma. Nada do que volta daqui decide o clima nem a passagem.

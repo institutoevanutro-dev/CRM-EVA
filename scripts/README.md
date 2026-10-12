@@ -11,6 +11,8 @@ CLI utilities pra operação local e de produção.
 
 - `importar-agenda-historica.ts` — importa JSON privado de agendamentos passados com contatos conferidos. `--destino <host>` obrigatório; só prévia por padrão; `--aplicar <sha256-da-prévia>` aplica o arquivo inteiro em uma transação. Ver `docs/runbooks/agenda-historica.md`.
 
+- `jev-teste-de-frases.ts` — manda ao Jev 80 frases escritas à mão (`lib/jev-frases-de-clinica.ts`, sem dado de paciente) pelo mesmo cliente, perguntas, limpeza e cortes do worker de clima, e imprime o placar por tarefa. Não toca no banco. Exige `JEV_API_KEY` no ambiente (sem ela, sai com código 2). Na VPS roda no contêiner do **worker**, que é o que tem `tsx` e `scripts/`: `docker compose -f docker-compose.prod.yml -f docker-compose.traefik.yml --env-file .env exec worker pnpm exec tsx scripts/jev-teste-de-frases.ts`.
+
 ## Convenções
 
 - Todos em TypeScript (executar via `npx tsx scripts/<nome>.ts`)
