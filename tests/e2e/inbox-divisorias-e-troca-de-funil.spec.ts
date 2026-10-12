@@ -344,6 +344,10 @@ test.describe("Quadro: troca rápida de funil", () => {
 
     const seletor = page.getByTestId("trocar-funil");
     await expect(seletor).toBeVisible({ timeout: 30_000 });
+    // O gatilho aparece antes de o nome do funil ser pintado dentro dele: ler o
+    // texto uma vez só, logo depois de `toBeVisible`, pegava a string vazia no
+    // CI (medido no run 38254033766). Espera o nome chegar e só então o lê.
+    await expect(seletor).toHaveText(/\S/, { timeout: 30_000 });
     const nomeDoPadrao = ((await seletor.textContent()) ?? "").trim();
     expect(nomeDoPadrao).not.toBe("");
     // O título da página continua existindo para leitor de tela.
