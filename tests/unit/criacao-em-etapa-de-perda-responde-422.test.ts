@@ -55,6 +55,7 @@ const payload = {
   pipeline_id: FUNIL,
   stage_id: ETAPA_PERDA,
   title: "Negócio criado na etapa de perda",
+  currency: "BRL",
   tags: [],
   source: "manual",
 };
