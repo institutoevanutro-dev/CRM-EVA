@@ -111,6 +111,13 @@ export interface TurnAgentResolution {
     | 'classifier_failed'
     /** A conversa nasceu de uma campanha que declarou agente (migration 0267). */
     | 'campanha';
+  /**
+   * Todos os membros do roteador e o modo dele, sempre que a decisão veio de um
+   * roteador (`routerId !== null`). É o que o turno precisa para oferecer
+   * `transfer_to_subject` (`passagem-de-assunto.ts`) sem reler o roteador.
+   */
+  assuntos?: Array<{ intentName: string; description: string; agentId: string }>;
+  permanencia?: 'roteador' | 'agente';
 }
 
 export interface ResolveTurnAgentDeps {
@@ -199,6 +206,16 @@ export async function resolveTurnAgent(
       };
     }
 
+    // Vai em toda resolução que sai DESTE roteador (`TurnAgentResolution.assuntos`).
+    const doRoteador = {
+      assuntos: router.members.map((m) => ({
+        intentName: m.intentName,
+        description: m.intentDescription,
+        agentId: m.agentId,
+      })),
+      permanencia: router.permanencia,
+    };
+
     // fallback do router ou genérico — usado pelas regras 4, 5, 6 e 7.
     const resolveFallback = async (
       outcome: 'no_match' | 'classifier_failed',
@@ -215,7 +232,7 @@ export async function resolveTurnAgent(
             outcome,
           });
         }
-        return { config: daSessao, routerId: router.id, intentName: null, confidence, outcome };
+        return { config: daSessao, routerId: router.id, intentName: null, confidence, outcome, ...doRoteador };
       }
       const config = await _loadAgentById(db, input.tenantId, router.fallbackAgentId);
       if (config === null) {
@@ -234,6 +251,7 @@ export async function resolveTurnAgent(
         intentName: null,
         confidence,
         outcome: outcome === 'classifier_failed' ? 'classifier_failed' : config === null ? 'no_match' : 'fallback',
+        ...doRoteador,
       };
     };
 
@@ -256,7 +274,7 @@ export async function resolveTurnAgent(
         });
         return resolveFallback('no_match', confidence);
       }
-      return { config, routerId: router.id, intentName, confidence, outcome };
+      return { config, routerId: router.id, intentName, confidence, outcome, ...doRoteador };
     };
 
     // sticky elegível: config liga sticky E o agente ainda é membro do router
