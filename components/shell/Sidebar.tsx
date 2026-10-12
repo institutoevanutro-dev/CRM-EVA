@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useT } from "@/hooks/i18n/useT";
 import { usePathname } from "next/navigation";
 import { useState, useTransition } from "react";
-import { CaretDown, CaretDoubleLeft, CaretDoubleRight, Gear, SignOut } from "@/lib/ui/icons";
+import { CaretDown, CaretDoubleLeft, CaretDoubleRight, Gear, House, SignOut } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { toggleSidebar } from "@/app/actions/shell/toggleSidebar";
 import { useAuth } from "@/hooks/auth/AuthProvider";
@@ -13,14 +13,13 @@ import { VersionFooter } from "@/components/shell/VersionFooter";
 import { LogotipoDoProduto, SimboloDoProduto } from "@/components/branding/MarcaDoProduto";
 import { marcaEhADoProduto } from "@/lib/branding";
 import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
+import { CONFIGURACOES, gruposDoMenu, ondeNoMenu, telasDaConta, veInicio } from "@/lib/navigation/menu";
 import {
-  GRUPO_NO_RODAPE,
-  NAV_DESTINATIONS,
-  NAV_GROUPS,
-  abasDaArea,
-  areaDaRota,
-  areasDoMenu,
-} from "@/lib/navigation/registry";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 
 interface SidebarContentProps {
@@ -37,7 +36,6 @@ interface SidebarContentProps {
  * Não decide nada: `areasDoMenu()` e `abasDaArea()` (lib/navigation/registry.ts) resolvem
  * o que este papel vê, e este componente desenha.
  */
-const ROTULO_DO_RODAPE = "Configurações";
 
 function iniciais(nome: string | null | undefined, email: string | undefined): string {
   const partes = (nome ?? "").trim().split(/\s+/).filter(Boolean);
@@ -60,13 +58,12 @@ export function SidebarContent({
     activeOrg?.role ?? null,
     activeOrg?.interface_settings,
   ] as const;
-  // No menu a área Organização aparece como "Configurações", o nome que todo mundo procura.
-  const areas = areasDoMenu(...quem).map((a) =>
-    a.id === GRUPO_NO_RODAPE ? { ...a, label: ROTULO_DO_RODAPE, icon: Gear } : a,
-  );
-  const onde = areaDaRota(pathname);
-  const atual = onde?.area ?? null;
-  const abaAtual = onde?.abaHref ?? null;
+  // Grupos pelo que a pessoa veio fazer (lib/navigation/menu.ts); cada um mostra todas as suas telas.
+  const grupos = gruposDoMenu(...quem);
+  const conta = telasDaConta(...quem);
+  const onde = ondeNoMenu(pathname);
+  const atual = onde.grupo;
+  const abaAtual = onde.href;
   // Aberto = o que a pessoa escolheu; sem escolha, só o grupo da tela atual.
   const [escolha, setEscolha] = useState<Record<string, boolean>>({});
   const aberto = (id: string) => escolha[id] ?? atual === id;
@@ -88,39 +85,31 @@ export function SidebarContent({
         : "text-sidebar-fg hover:bg-sidebar-active",
     );
 
-  const grupo = (item: (typeof areas)[number]) => {
+  const inicio = (
+    <Link
+      href="/app/inicio"
+      title={collapsed ? t("Início") : undefined}
+      aria-current={atual === "inicio" ? "page" : undefined}
+      onClick={onNavigate}
+      className={cn(estiloDoItem(atual === "inicio"), "py-2.5", collapsed && "justify-center px-2")}
+    >
+      <House size={20} weight={atual === "inicio" ? "fill" : "light"} aria-hidden />
+      {!collapsed && <span className="truncate">{t("Início")}</span>}
+    </Link>
+  );
+
+  const grupo = (item: (typeof grupos)[number]) => {
     const Icone = item.icon;
     const ativa = atual === item.id;
-    if (item.id === "inicio") {
-      return (
-        <Link
-          key={item.id}
-          href={item.href}
-          title={collapsed ? t(item.label) : undefined}
-          aria-current={ativa ? "page" : undefined}
-          onClick={onNavigate}
-          className={cn(estiloDoItem(ativa), "py-2.5", collapsed && "justify-center px-2")}
-        >
-          <Icone size={20} weight={ativa ? "fill" : "light"} aria-hidden />
-          {!collapsed && <span className="truncate">{t(item.label)}</span>}
-        </Link>
-      );
-    }
-    const { principais, mais } = abasDaArea(item.id, ...quem);
-    const vistas = [...principais, ...mais].map((d) => d.href);
     // O aviso de conexão caída só para quem pode abrir Conexões e agir.
-    const temSaude = NAV_DESTINATIONS.some((d) => d.group === item.id && d.healthDot && vistas.includes(d.href));
-    const hub = NAV_GROUPS.find((g) => g.id === item.id)?.hub;
+    const temSaude = item.itens.some((d) => d.healthDot);
     const expandido = !collapsed && aberto(item.id);
-    // O nome do grupo de origem ("Organização") continua no rótulo das telas: é por ele
-    // que leitor de tela e testes acham a lista.
-    const rotuloDasTelas = `${t("Telas de")} ${t(NAV_GROUPS.find((g) => g.id === item.id)?.label ?? item.label)}`;
     return (
       <div key={item.id}>
         <div className="flex items-center">
-          {/* O nome leva à área (e ela abre); na área em que a pessoa já está, abre e fecha. */}
+          {/* O nome leva à primeira tela do grupo (e ele abre); no grupo em que a pessoa já está, abre e fecha. */}
           <Link
-            href={item.href}
+            href={item.itens[0]!.href}
             title={collapsed ? t(item.label) : undefined}
             aria-current={ativa ? "page" : undefined}
             onClick={(e) => {
@@ -153,8 +142,8 @@ export function SidebarContent({
           )}
         </div>
         {expandido && (
-          <nav aria-label={rotuloDasTelas} className="mt-0.5 mb-2 space-y-0.5">
-            {(hub ? principais : [...principais, ...mais]).map((d) => {
+          <nav aria-label={`${t("Telas de")} ${t(item.label)}`} className="mt-0.5 mb-2 space-y-0.5">
+            {item.itens.map((d) => {
               const Ic = d.icon;
               const ligada = d.href === abaAtual;
               return (
@@ -164,19 +153,6 @@ export function SidebarContent({
                 </Link>
               );
             })}
-            {hub && (
-              // A página com TODAS as telas da área, explicadas e organizadas por jornada. É o único
-              // caminho para as telas além das principais: "Mais" e "Ver tudo" juntos repetiam a mesma coisa
-              // (pedido do dono, 10/10/2026). Área sem página dessas mostra todas as telas na lista.
-              <Link
-                href={hub.href}
-                aria-current={pathname === hub.href ? "page" : undefined}
-                onClick={onNavigate}
-                className={cn(estiloDoItem(pathname === hub.href), "text-sm text-sidebar-muted")}
-              >
-                <span className="pl-[30px]">{t("Ver tudo")}</span>
-              </Link>
-            )}
           </nav>
         )}
       </div>
@@ -243,28 +219,55 @@ export function SidebarContent({
       {/* Só os grupos rolam. O Início fica parado acima deles: com um grupo grande aberto numa
           janela baixa, a lista rolava e ele aparecia cortado embaixo da busca (print de 10/10/2026). */}
       <nav className="flex min-h-0 flex-1 flex-col p-2" aria-label={t("Navegação principal")}>
-        <div className="shrink-0 pb-1">{areas.filter((a) => a.id === "inicio").map(grupo)}</div>
-        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
-          {areas.filter((a) => a.id !== "inicio" && a.id !== GRUPO_NO_RODAPE).map(grupo)}
-        </div>
+        {veInicio(...quem) && <div className="shrink-0 pb-1">{inicio}</div>}
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">{grupos.map(grupo)}</div>
       </nav>
-      {/* Configurações fica FORA da área que rola (ver GRUPO_NO_RODAPE): é o que mais se
-          procura quando não se acha algo, e não pode depender de scroll. */}
-      <div className="max-h-[50%] shrink-0 overflow-y-auto border-t border-white/10 p-2">
-        {areas.filter((a) => a.id === GRUPO_NO_RODAPE).map(grupo)}
-      </div>
       <div className="border-t border-white/10 p-2">
-        <div className={cn("flex items-center gap-3 rounded-lg bg-sidebar-active px-3 py-2", collapsed && "justify-center px-0")}>
-          <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gold/50 text-xs font-semibold text-gold">
-            {iniciais(user.full_name, user.email)}
-          </span>
-          {!collapsed && (
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate text-sm font-medium text-sidebar-fg">{user.full_name ?? user.email}</span>
-              {papel && <span className="truncate text-xs text-gold">{papel}</span>}
+        {/* A página de Configurações lista também o que não tem tela no menu (atualização, canal oficial, modelos,
+            voz). Fica fixa aqui, fora da área que rola: é o que se procura quando não se acha algo. */}
+        <Link
+          href={CONFIGURACOES}
+          title={collapsed ? t("Configurações") : undefined}
+          aria-current={atual === "configuracoes" ? "page" : undefined}
+          onClick={onNavigate}
+          className={cn(estiloDoItem(atual === "configuracoes"), "mb-1 text-sm", collapsed && "justify-center px-2")}
+        >
+          <Gear size={18} weight={atual === "configuracoes" ? "fill" : "light"} aria-hidden />
+          {!collapsed && <span className="truncate">{t("Configurações")}</span>}
+        </Link>
+        {/* "Minha conta" (Perfil, Segurança, Notificações) saiu dos grupos: abre pelo cartão de quem está logado.
+            `modal={false}`: o menu modal trava a rolagem da página e a lateral `sticky` saía do lugar. */}
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger
+            disabled={conta.length === 0}
+            aria-label={t("Minha conta")}
+            title={collapsed ? (user.full_name ?? user.email) : undefined}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-lg bg-sidebar-active px-3 py-2 text-left transition-colors hover:bg-white/15",
+              abaAtual && conta.some((d) => d.href === abaAtual) && "ring-1 ring-gold/60",
+              collapsed && "justify-center px-0",
+            )}
+          >
+            <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gold/50 text-xs font-semibold text-gold">
+              {iniciais(user.full_name, user.email)}
             </span>
-          )}
-        </div>
+            {!collapsed && (
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-sm font-medium text-sidebar-fg">{user.full_name ?? user.email}</span>
+                {papel && <span className="truncate text-xs text-gold">{papel}</span>}
+              </span>
+            )}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" className="min-w-[200px]">
+            {conta.map((d) => (
+              <DropdownMenuItem key={d.href} asChild>
+                <Link href={d.href} aria-current={d.href === abaAtual ? "page" : undefined} onClick={onNavigate}>
+                  {t(d.label)}
+                </Link>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <button
           type="button"
           disabled={saindo}

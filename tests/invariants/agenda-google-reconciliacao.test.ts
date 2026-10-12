@@ -673,7 +673,12 @@ it("suporte full conserva dono efetivo; readonly e expirado não decidem nem sel
       session,
     );
     await pool.query("insert into auth.mfa_factors(id,user_id,status,factor_type) values($1,$2,'verified','totp')", [factor, GOV_AGENT_A]);
-    const protectedState = async () => (await pool.query("select jsonb_build_object('appointment',(select to_jsonb(a) from calendar_appointments a where id=$1),'calendars',(select jsonb_agg(to_jsonb(k)) from calendar_connection_calendars k where organization_id=$2),'connections',(select jsonb_agg(to_jsonb(c)) from calendar_connections c where organization_id=$2)) state", [f.id, GOV_ORG])).rows[0].state;
+    // `order by` dentro do `jsonb_agg` é o que torna as duas fotos comparáveis.
+    // Sem ele a ordem das linhas é a do PLANO: varredura pelo índice antes do
+    // autoanalyze, sequencial depois. Se o autovacuum analisa a tabela entre as
+    // duas fotos, as mesmas linhas voltam em outra ordem e a comparação acusa
+    // uma escrita que não houve (visto no CI em 11/10/2026).
+    const protectedState = async () => (await pool.query("select jsonb_build_object('appointment',(select to_jsonb(a) from calendar_appointments a where id=$1),'calendars',(select jsonb_agg(to_jsonb(k) order by k.id) from calendar_connection_calendars k where organization_id=$2),'connections',(select jsonb_agg(to_jsonb(c) order by c.id) from calendar_connections c where organization_id=$2)) state", [f.id, GOV_ORG])).rows[0].state;
     const beforeMfa = await protectedState();
     for (const [sql, values] of [
       ["select fn_google_selection($1,$2,$3,$4)", [GOV_ORG, JSON.stringify(await revisions()), [], f.cal]],
