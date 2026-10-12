@@ -25,8 +25,10 @@
  *   - a espera tem teto: `JANELA_DA_ESPERA_MS` a partir da criação do job.
  *     Passado o teto, o erro segue o caminho de sempre (`failJob` → `job_dead`),
  *     e a conversa aparece na Central como qualquer outra que falhou;
- *   - UM aviso na Central, por organização, que diz a causa e o remédio — e que
- *     some sozinho quando a primeira resposta que esperava sai (o saldo voltou);
+ *   - UM aviso na Central que diz a causa e o remédio, e que some sozinho
+ *     quando o provedor volta a aceitar uma chamada. Quem abre e fecha é o seam
+ *     da chamada (`edge/llm/aviso-do-provedor.ts`), para toda falha de crédito
+ *     ou de chave, e não só para a que chega a derrubar um job;
  *   - a resposta que esperou não sai se, enquanto isso, alguém do nosso lado já
  *     respondeu o cliente (`jaNaoHaOQueResponder`): uma espera de horas deixa de
  *     ser invisível para a conversa, e a IA não pode repetir quem já atendeu.
@@ -37,13 +39,14 @@
  * da janela de 24 h do WhatsApp oficial (fora dela a resposta livre é recusada
  * pela plataforma). Uma resposta 3 h atrasada é ruim; nenhuma resposta é pior.
  */
-import type pg from 'pg';
-
 import { traduzir } from '@/lib/i18n/dicionario';
 import { normalizarIdioma } from '@/lib/i18n/idiomas';
 
-import { insertInboxItem } from '../db/repository';
+import { mensagensDoErro, provedorSemSaldo } from '../edge/llm/aviso-do-provedor';
 import { rescheduleJob, type JobRow, type Queryable } from './queue';
+
+/** A frase de "sem crédito" de cada provedor mora com o aviso; quem importava daqui segue importando. */
+export { provedorSemSaldo };
 
 /** Teto da espera, contado da criação do job. */
 export const JANELA_DA_ESPERA_MS = 6 * 60 * 60_000;
@@ -51,42 +54,12 @@ export const JANELA_DA_ESPERA_MS = 6 * 60 * 60_000;
 /** Marca no `last_error` do job que está esperando saldo (é o que o distingue na volta). */
 export const PREFIXO_DA_ESPERA = 'aguardando saldo do provedor de IA: ';
 
-/** Título do aviso na Central, em português — a chave do dicionário. */
-export const TITULO_DO_AVISO = 'A IA está sem saldo no provedor';
-
-const CORPO_DO_AVISO =
-  'As respostas aos clientes estão esperando. Recarregue o saldo na conta do provedor: elas saem sozinhas quando o saldo voltar, durante até 6 horas. Depois disso, a conversa que não foi respondida aparece aqui na Central.';
-
 /**
- * As frases com que cada provedor diz "sem crédito". São frases e não o status
- * HTTP porque o status não distingue: a Anthropic devolve 400 (o mesmo de um
- * pedido malformado) e a OpenAI devolve 429 (o mesmo de um limite de ritmo, que
- * passa sozinho e JÁ tem a espera curta da fila).
+ * Título do aviso ANTIGO, de quando quem avisava era o worker. Ninguém mais o
+ * abre; fica aqui para `encerrarAvisoDeFaltaDeSaldo` fechar o que estava aberto
+ * numa instalação que atualizou com ele na tela.
  */
-const FRASES_DE_SEM_SALDO: ReadonlyArray<{ padrao: RegExp; provedor: 'anthropic' | 'openai' }> = [
-  { padrao: /credit balance is too low/i, provedor: 'anthropic' },
-  // "You have no credits remaining" (upstream #1936, já classificado em run-model-call).
-  { padrao: /insufficient_quota|exceeded your current quota|no credits remaining/i, provedor: 'openai' },
-];
-
-/** As mensagens do erro e das causas (o SDK às vezes embrulha o erro do provedor). */
-function mensagens(err: unknown): string[] {
-  const saida: string[] = [];
-  let atual: unknown = err;
-  for (let i = 0; i < 4 && atual !== undefined && atual !== null; i += 1) {
-    saida.push(atual instanceof Error ? atual.message : String(atual));
-    atual = typeof atual === 'object' ? (atual as { cause?: unknown }).cause : undefined;
-  }
-  return saida;
-}
-
-/** De qual provedor é a falta de saldo — `null` quando o erro é outro. */
-export function provedorSemSaldo(err: unknown): 'anthropic' | 'openai' | null {
-  for (const texto of mensagens(err)) {
-    for (const f of FRASES_DE_SEM_SALDO) if (f.padrao.test(texto)) return f.provedor;
-  }
-  return null;
-}
+export const TITULO_DO_AVISO = 'A IA está sem saldo no provedor';
 
 /** O job deve esperar a recarga? Só se o erro é falta de saldo e o teto não venceu. */
 export function deveEsperarSaldo(
@@ -122,7 +95,7 @@ export async function adiarAteORecarregar(
   acquiredAt?: string,
   agora: number = Date.now(),
 ): Promise<JobRow | null> {
-  const motivo = (mensagens(err)[0] ?? '').split('\n', 1)[0] ?? '';
+  const motivo = (mensagensDoErro(err)[0] ?? '').split('\n', 1)[0] ?? '';
   return rescheduleJob(db, job.id, workerId, {
     delayMs: intervaloDaEspera(job, agora),
     reason: PREFIXO_DA_ESPERA + motivo,
@@ -162,43 +135,9 @@ async function idiomaDaOrganizacao(db: Queryable, orgId: string) {
 }
 
 /**
- * Abre o aviso na Central — um por organização enquanto estiver aberto. Aponta
- * para a credencial da organização daquele provedor quando ela existe; com a
- * chave da instalação (sem linha em `ai_provider_credentials`) o aviso fica sem
- * destino e o corpo diz o que fazer.
- */
-export async function avisarFaltaDeSaldo(
-  db: Pick<pg.Pool, 'query'>,
-  orgId: string,
-  err: unknown,
-): Promise<void> {
-  const provedor = provedorSemSaldo(err);
-  const idioma = await idiomaDaOrganizacao(db, orgId);
-  const { rows } = await db.query<{ id: string }>(
-    `select id from ai_provider_credentials
-      where organization_id = $1 and provider = $2 and is_active
-      order by updated_at desc
-      limit 1`,
-    [orgId, provedor],
-  );
-  const credencial = rows[0]?.id;
-  await insertInboxItem(
-    db,
-    orgId,
-    {
-      kind: 'other',
-      severity: 'critical',
-      title: traduzir(TITULO_DO_AVISO, idioma),
-      body: `${traduzir(CORPO_DO_AVISO, idioma)}${provedor ? `\n${traduzir('Provedor', idioma)}: ${provedor}` : ''}`,
-      ...(credencial ? { refKind: 'ai_provider_credential', refId: credencial } : {}),
-    },
-    'kind_e_titulo',
-  );
-}
-
-/**
- * O saldo voltou: a primeira resposta que esperava saiu. O aviso se fecha
- * sozinho — deixá-lo aberto diria ao dono que ainda falta recarregar.
+ * O saldo voltou: a primeira resposta que esperava saiu. Fecha o aviso ANTIGO
+ * (o de título fixo, que o worker abria): o aviso de hoje é fechado pelo seam
+ * da chamada, na primeira que o provedor aceita.
  */
 export async function encerrarAvisoDeFaltaDeSaldo(db: Queryable, orgId: string): Promise<number> {
   const idioma = await idiomaDaOrganizacao(db, orgId);

@@ -8,6 +8,12 @@
  * `tests/unit/jev-nunca-cala-bloqueia-nem-responde.test.ts`). Nunca lança:
  * observação perdida não pode derrubar o worker de clima.
  */
+import {
+  avisarFalhaDoProvedor,
+  bancoPeloAdmin,
+  fecharAvisosDoProvedor,
+  PROVEDOR_DO_JEV,
+} from "@/lib/agent-engine/edge/llm/aviso-do-provedor";
 import { logger } from "@/lib/logger";
 import type { createAdminClient } from "@/lib/supabase/admin";
 
@@ -34,7 +40,7 @@ export async function registrarChamada(admin: Admin, c: Contexto, r: ResultadoDa
       organization_id: c.organizationId,
       agent_id: c.agentId,
       purpose: "sentiment_classify",
-      provider: "typesafe",
+      provider: PROVEDOR_DO_JEV,
       model: r.ok ? r.modelo : MODELO_DO_JEV,
       input_tokens: tokens,
       output_tokens: r.ok ? r.uso.tokensDeSaida : 0,
@@ -45,6 +51,14 @@ export async function registrarChamada(admin: Admin, c: Contexto, r: ResultadoDa
       http_status: r.ok ? null : r.status,
     });
     if (error) logger.warn("[jev] linha de custo não gravada", { organization_id: c.organizationId, erro: error.code });
+    // Chave recusada e conta sem crédito não passam sozinhas: aviso na Central,
+    // que se fecha quando o Jev volta a responder. As duas funções nunca lançam.
+    const alvo = { organizationId: c.organizationId, provedor: PROVEDOR_DO_JEV };
+    if (r.ok) await fecharAvisosDoProvedor(bancoPeloAdmin(admin), alvo, logger);
+    else if (r.motivo === "credencial_invalida" || r.motivo === "sem_credito") {
+      const motivo = r.motivo === "sem_credito" ? "sem_saldo" : "chave_recusada";
+      await avisarFalhaDoProvedor(bancoPeloAdmin(admin), { ...alvo, motivo }, logger);
+    }
   } catch (erro) {
     logger.warn("[jev] linha de custo falhou", {
       organization_id: c.organizationId,

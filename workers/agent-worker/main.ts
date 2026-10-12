@@ -100,7 +100,6 @@ import { createHealthzServer } from "./healthz";
 import { rodarLoopDaFila } from "@/lib/agent-engine/queue/loop";
 import {
   adiarAteORecarregar,
-  avisarFaltaDeSaldo,
   deveEsperarSaldo,
   encerrarAvisoDeFaltaDeSaldo,
   esperouPorSaldo,
@@ -447,7 +446,8 @@ export async function startWorker(
         return;
       }
       // Conta do provedor sem crédito: a resposta espera a recarga, sem gastar
-      // tentativa, até o teto de `espera-de-saldo.ts` — e a Central diz a causa.
+      // tentativa, até o teto de `espera-de-saldo.ts` — e a Central diz a causa
+      // (o aviso é aberto pelo seam da chamada, `aviso-do-provedor.ts`).
       // Passado o teto, segue o caminho comum abaixo (`failJob` → `job_dead`).
       if (deveEsperarSaldo(job, err)) {
         log.warn("provedor de IA sem saldo — resposta esperando a recarga", {
@@ -455,11 +455,6 @@ export async function startWorker(
           kind: job.kind,
           error: errMsg(err),
         });
-        try {
-          await avisarFaltaDeSaldo(pool, job.organization_id, err);
-        } catch (avisoErr) {
-          log.error("aviso de falta de saldo não entrou na Central", { job_id: job.id, error: errMsg(avisoErr) });
-        }
         try {
           await adiarAteORecarregar(pool, job, workerId, err, claimOfJob(job)?.acquired_at);
         } catch (adiarErr) {

@@ -16,6 +16,7 @@ vi.mock("@/lib/env", () => ({
 }));
 vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
+import { esquecerAvisosDoProvedor } from "@/lib/agent-engine/edge/llm/aviso-do-provedor";
 import { reiniciarDisjuntor } from "@/lib/ai/decisao/disjuntor";
 import { logger } from "@/lib/logger";
 import { observarComOJev, registrarClimaObservado } from "@/workers/ai-sentiment-worker.jev";
@@ -27,6 +28,8 @@ const LIGADO = { jev: { ligado: true, aceite: { em: "2026-10-09T12:00:00.000Z", 
 let lidas: string[];
 let escritas: Array<{ tabela: string; linha: Record<string, unknown> }>;
 let reaberturas: Array<Record<string, unknown>>;
+/** O Jev respondeu: fecha o aviso de crédito ou de chave DELE (`aviso-do-provedor.ts`). */
+let fechamentos: Array<Record<string, unknown>>;
 let settings: unknown;
 /** A conversa lida logo antes do aviso. */
 let conversa: Record<string, unknown> | null;
@@ -42,16 +45,19 @@ function admin() {
       const q = {
         select: () => q,
         eq: () => q,
+        in: () => q,
+        is: () => q,
         maybeSingle: async () => ({ data: tabela === "conversations" ? conversa : { settings }, error: null }),
         insert: async (linha: Record<string, unknown>) => {
           const error = erroNoInsert[tabela] ?? null;
           if (error === null) escritas.push({ tabela, linha });
           return { error };
         },
-        // A única reescrita que o Jev pode fazer é reabrir o próprio aviso.
+        // As únicas reescritas que o Jev pode fazer: reabrir o próprio aviso e,
+        // quando volta a responder, fechar o aviso de crédito ou de chave dele.
         update: (patch: Record<string, unknown>) => {
           if (tabela !== "agent_inbox_items") throw new Error(`update em ${tabela}`);
-          reaberturas.push(patch);
+          (patch.status === "resolved" ? fechamentos : reaberturas).push(patch);
           return { ...q, then: (ok: (v: { error: null }) => unknown) => ok({ error: null }) };
         },
         delete: () => {
@@ -73,6 +79,8 @@ beforeEach(() => {
   lidas = [];
   escritas = [];
   reaberturas = [];
+  fechamentos = [];
+  esquecerAvisosDoProvedor();
   conversa = { status: "ai_handling", assigned_to_user_id: null, bot_silenced_until: null, contacts: { is_blocked: false } };
   erroNoInsert = {};
   noul = { opt_out: 0.85, humano: 0.1 };
@@ -186,6 +194,8 @@ describe("avisar a equipe", () => {
     expect(new Set(escritas.map((e) => e.tabela))).toEqual(new Set(["llm_calls", "jev_observacoes", "agent_inbox_items"]));
     expect(avisos().map((a) => a.kind).sort()).toEqual(["jev_parar_de_receber", "jev_pedido_de_humano"]);
     expect(reaberturas).toEqual([]);
+    // O Jev respondeu: a única outra escrita é fechar o aviso de crédito ou de chave dele.
+    expect(fechamentos).toEqual([{ status: "resolved", resolved_at: expect.any(String) }]);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(String(fetchSpy.mock.calls[0]![0])).toContain("api.typesafe.ai");
     expect(vi.mocked(logger.warn)).not.toHaveBeenCalled();

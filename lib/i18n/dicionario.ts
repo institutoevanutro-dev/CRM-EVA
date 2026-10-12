@@ -7966,10 +7966,35 @@ export const DICIONARIO: Traducoes = {
   "Aviso do assistente": { es: "Aviso del asistente" },
   // ─── lib/agent-engine/queue/espera-de-saldo.ts ───
   "A IA está sem saldo no provedor": { es: "La IA se quedó sin saldo en el proveedor" },
-  "As respostas aos clientes estão esperando. Recarregue o saldo na conta do provedor: elas saem sozinhas quando o saldo voltar, durante até 6 horas. Depois disso, a conversa que não foi respondida aparece aqui na Central.": {
-    es: "Las respuestas a los clientes están esperando. Recarga el saldo en la cuenta del proveedor: salen solas cuando vuelva el saldo, durante hasta 6 horas. Después de eso, la conversación que no se respondió aparece aquí en la Central.",
-  },
   "Revisar credencial": { es: "Revisar credencial" },
+  // ─── lib/agent-engine/edge/llm/aviso-do-provedor.ts ───
+  "A IA está sem crédito no provedor {provedor}": { es: "La IA se quedó sin crédito en el proveedor {provedor}" },
+  "O provedor {provedor} recusou a chave da IA": { es: "El proveedor {provedor} rechazó la clave de la IA" },
+  "Desde {quando}, o provedor {provedor} recusa as chamadas porque a conta ficou sem crédito.": {
+    es: "Desde {quando}, el proveedor {provedor} rechaza las llamadas porque la cuenta se quedó sin crédito.",
+  },
+  "Desde {quando}, o provedor {provedor} recusa a chave usada pela IA: ela é inválida, foi revogada ou perdeu a permissão.": {
+    es: "Desde {quando}, el proveedor {provedor} rechaza la clave que usa la IA: es inválida, fue revocada o perdió el permiso.",
+  },
+  "Tudo o que usa este provedor está parado. Se é ele que responde aos clientes, o assistente não está respondendo.": {
+    es: "Todo lo que usa este proveedor está detenido. Si es el que responde a los clientes, el asistente no está respondiendo.",
+  },
+  "As leituras do Jev (clima da conversa e pedidos do cliente) estão paradas. O assistente continua respondendo normalmente.": {
+    es: "Las lecturas de Jev (clima de la conversación y pedidos del cliente) están detenidas. El asistente sigue respondiendo normalmente.",
+  },
+  "O que fazer: coloque crédito na conta do provedor, no site dele. As respostas que ficaram na fila saem sozinhas quando o crédito voltar, por até 6 horas.": {
+    es: "Qué hacer: carga crédito en la cuenta del proveedor, en su sitio. Las respuestas que quedaron en la fila salen solas cuando vuelva el crédito, durante hasta 6 horas.",
+  },
+  "O que fazer: gere uma chave nova no site do provedor e troque a chave em IA › Credenciais (a tela IA › Provedores mostra qual chave cada parte do sistema usa). Se a IA usa a chave do servidor, peça a quem administra a instalação para trocá-la.": {
+    es: "Qué hacer: genera una clave nueva en el sitio del proveedor y cámbiala en IA › Credenciales (la pantalla IA › Proveedores muestra qué clave usa cada parte del sistema). Si la IA usa la clave del servidor, pide a quien administra la instalación que la cambie.",
+  },
+  "O que fazer: coloque crédito na conta da TypeSafe.": { es: "Qué hacer: carga crédito en la cuenta de TypeSafe." },
+  "O que fazer: a chave do Jev fica na configuração do servidor (JEV_API_KEY). Peça a quem administra a instalação para trocá-la.": {
+    es: "Qué hacer: la clave de Jev está en la configuración del servidor (JEV_API_KEY). Pide a quien administra la instalación que la cambie.",
+  },
+  "Este aviso se fecha sozinho quando o provedor voltar a aceitar uma chamada.": {
+    es: "Este aviso se cierra solo cuando el proveedor vuelva a aceptar una llamada.",
+  },
   // `informativo` e `crítico` saem iguais nos dois idiomas — sem linha, por isso.
   "atenção": { es: "atención" },
   // ─── lib/ai/agent-inbox-copy.ts (copyDaPromessaSemDono) ───
