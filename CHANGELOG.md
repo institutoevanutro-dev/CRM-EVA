@@ -8,6 +8,82 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [3.25.0] — 2026-10-12
+
+### Adicionado
+
+- **No Inbox, a largura da lista de conversas e da ficha do contato agora se ajusta arrastando a divisória** A partir de telas de tablet e notebook, arrastar a divisória entre a lista e a conversa, ou entre a conversa e a ficha do contato, ajusta a largura de cada coluna, com limites que não deixam a conversa ficar estreita demais. A escolha fica guardada naquele navegador (não no banco), separada por tamanho de tela, e o duplo clique na divisória volta ao padrão. Dá para ajustar também pelo teclado, com as setas, e no toque a área de pegar é maior. No celular nada muda.
+
+  Você não precisa fazer nada.
+
+  Portado do DeskcommCRM (melgarafael/DeskcommCRM#2604, contribuição de @webtecnica, a partir da issue #2579 de @brunno-soaress).
+
+- **Jev pode avisar a equipe quando percebe um pedido que a regra não viu** No cartão do Jev (IA › Provedores), as tarefas "Pedido para falar com uma pessoa" e "Pedido para parar de receber mensagens" ganharam um terceiro estado, "Avisar a equipe". Com ele, quando a regra do sistema não viu o pedido e o Jev viu com confiança alta, abre um aviso na Central para alguém da equipe conferir, um por conversa. É só isso: o Jev não bloqueia contato, não transfere a conversa, não cala o assistente e não manda mensagem. Quem bloqueia e quem transfere continua sendo a regra de sempre. O clima da conversa segue só observando.
+
+  Nada muda até um administrador trocar o estado de uma tarefa no cartão, e a troca pede confirmação. Para voltar, um clique em "Observando" na mesma linha. Toda troca fica na auditoria. Nada novo é enviado à TypeSafe: é a mesma última mensagem, limpa, que o Jev já recebia para observar.
+
+  Entra também um teste de frases, sem dado de paciente: 80 frases escritas à mão, enviadas ao Jev de dentro do contêiner do worker, com o placar de acertos e erros por tarefa (`scripts/jev-teste-de-frases.ts`).
+
+  Você não precisa fazer nada.
+
+  Portado do DeskcommCRM (melgarafael/DeskcommCRM#1747).
+
+- **Os registros que a IA grava a cada conversa passam a ter prazo de guarda** Sete tabelas que a IA preenche a cada mensagem nunca eram limpas e cresciam para sempre. A limpeza diária que já existia (`data-retention`) passa a cuidar delas também, em lotes pequenos, e cada rodada que apaga alguma coisa deixa uma linha `retention.sweep_run` na auditoria com a contagem de cada tabela.
+
+  O que passa a ser apagado, com os prazos que valem sem você mexer em nada:
+  - custo e tokens de cada chamada à IA, métricas dos turnos, ativações de skills e decisões do roteador: depois de 400 dias (`AI_TELEMETRY_RETENTION_DAYS`, mínimo 100). Não guardam texto de conversa. As telas Uso de IA e Evolução olham no máximo 90 dias e o orçamento olha o mês corrente, então nada some delas. Na tela Execuções, a lista para de voltar no tempo em 400 dias;
+  - registro de horário dos envios, usado no ritmo anti-banimento: depois de 2 dias (`PACING_LEDGER_RETENTION_DAYS`, mínimo 2). O último envio de cada número nunca é apagado. Nenhuma tela mostra esse registro;
+  - cópias do texto das mensagens enviadas, usadas pelo bloqueio de texto repetido: depois de 30 dias (`OUTBOUND_COPIES_RETENTION_DAYS`, mínimo 7). As últimas que o bloqueio compara (20 por número, ou o que estiver configurado) nunca são apagadas. Nenhuma tela mostra essas cópias, e as mensagens da conversa não são tocadas;
+  - resumos de atendimento que o agente escreve ao fim de cada turno: depois de 180 dias (`LEAD_CHECKPOINT_RETENTION_DAYS`, mínimo 30), e só os resumos já substituídos por um mais novo. O resumo em vigor de cada atendimento, que é a memória que o agente lê para manter o contexto com a pessoa, nunca sai, nem o que um trabalho ainda na fila vai ler. Nenhuma tela mostra os resumos antigos; a exportação de dados de LGPD de um contato deixa de trazer os resumos substituídos com mais de 180 dias.
+
+  **Se você quer guardar mais histórico do que o padrão, ponha a variável no `.env` ANTES de atualizar:** a primeira limpeza depois da atualização já apaga pelo prazo em vigor, e o que ela apagou não volta.
+
+  Para mudar um prazo, ponha a variável no `.env` com o número de dias e recrie o app. Um valor abaixo do mínimo vira o mínimo, com aviso no log; um valor que não é número vira o padrão. Os mínimos moram dentro das funções de limpeza do banco, então nem chamando a limpeza à mão dá para apagar menos dias do que o mínimo. O mínimo vale para a limpeza: um `DELETE` digitado direto no banco não passa por ele.
+
+  A primeira rodada depois da atualização pode ter bastante a apagar numa instalação antiga. Ela anda em lotes de 1.000 linhas, com teto de 20 lotes por tabela por noite, e termina ao longo de alguns dias sem travar o sistema. O espaço liberado volta a ser usado pelo banco, mas o tamanho do arquivo no disco só diminui com um `VACUUM FULL`, que o runbook `docs/runbooks/custo-e-cota-do-supabase.md` explica.
+
+  Continuam sem limpeza, de propósito: a fila de gatilhos de tempo (`event_log`), que é o que impede o mesmo WhatsApp de ser enviado duas vezes, e as mensagens, notas e memórias do contato.
+
+  Portado do DeskcommCRM (melgarafael/DeskcommCRM#2140, de @melgarafael).
+
+- **Troca rápida de funil dentro do quadro** O nome do funil no topo do quadro virou um seletor: dá para pular para outro funil sem voltar à lista de Funis. O endereço da página acompanha o funil escolhido, então recarregar ou colar o link abre o mesmo quadro. Com um funil só, nada muda.
+
+  Você não precisa fazer nada.
+
+  Portado do DeskcommCRM (melgarafael/DeskcommCRM#2731, contribuição de @paulolimajr77).
+
+### Alterado
+
+- **O envio de mensagens deixa de reler o histórico inteiro do número a cada mensagem** Antes de cada mensagem sair, o atendimento fazia leituras no banco que ficavam mais lentas conforme o histórico crescia: procurava a mensagem por um campo sem índice mesmo quando ela acabava de ser criada, contava todos os envios do número desde sempre para saber quantos saíram hoje, e contava todos os envios ao contato só para saber se já existia algum. Essas leituras acontecem enquanto o número está reservado para aquele envio, então o tempo delas se somava à espera das próximas mensagens do mesmo número. Agora a busca da mensagem só acontece quando o envio está sendo retomado, a contagem do dia lê só as linhas de hoje pelo índice que o banco já tem, e a do contato para no primeiro envio que encontrar. As regras não mudaram: o espaçamento entre mensagens, o limite diário, a apresentação na primeira mensagem e a proteção contra envio em dobro continuam iguais. A verificação de saúde do worker (`/healthz`), que o Docker consulta a cada 30 segundos, também deixou de percorrer a fila inteira. Ela agora mostra só os trabalhos pendentes e em andamento; a contagem de trabalhos que desistiram (`dead`) continua no `/metrics`. Não é preciso fazer nada na instalação.
+
+  Portado do DeskcommCRM (melgarafael/DeskcommCRM#2127).
+
+- **O banco ganha índices para as consultas que o agente e a limpeza diária repetem** Cinco consultas que rodam o tempo todo procuravam linha por linha em tabelas que crescem com o uso: a que confere se é a primeira mensagem do agente para um contato, a que impede o agente de responder duas vezes à mesma mensagem, a soma do custo de cada atendimento, a limpeza diária da fila de trabalhos e a busca por eventos travados. Agora cada uma tem o seu índice. Nada muda na tela nem no comportamento; essas consultas deixam de ficar mais lentas conforme o banco cresce.
+
+  Na atualização, o banco cria os cinco índices, um por vez. Enquanto cada um é criado, gravar na tabela dele (envios do agente, chamadas de IA, memória do agente, etapas do funil ou eventos) espera; ler continua normal. Medido num banco de teste com 40 mil a 150 mil linhas por tabela: de 21 a 133 milésimos de segundo por índice, menos de meio segundo no total. Quanto mais histórico, mais demora. Nas atualizações seguintes nada é recriado. Não é preciso fazer nada na instalação.
+
+  Portado do DeskcommCRM (melgarafael/DeskcommCRM#2128).
+
+- **O envio pelo WhatsApp para de perguntar ao WAHA, a cada mensagem, se o número existe** Antes de mandar uma mensagem a um celular brasileiro, o sistema pergunta ao WAHA qual grafia do número existe no WhatsApp (com ou sem o nono dígito). Essa pergunta era feita de novo a cada mensagem, até duas vezes por mensagem, mesmo quando o agente respondia em várias mensagens seguidas ao mesmo cliente. Agora a resposta positiva fica guardada por 10 minutos na memória do próprio sistema, separada por conexão de WhatsApp. Se a pergunta falhar, ou se o WAHA responder que o número não existe, nada fica guardado, e a próxima mensagem pergunta de novo. O que sai para o cliente e o ritmo de envio continuam os mesmos. Se o WhatsApp de um cliente trocar de grafia nesse meio-tempo, o sistema pode levar até esses 10 minutos para perceber. Não é preciso fazer nada na instalação.
+
+  Portado do DeskcommCRM (melgarafael/DeskcommCRM#2131).
+
+### Corrigido
+
+- **Paciente que recusa uma coisa específica não é mais bloqueada como se tivesse pedido para sair** A regra que decide quem pediu para parar de receber mensagens bloqueava a paciente que escrevia "não quero receber o resultado por e-mail, prefiro buscar aí" ou "não quero receber anestesia geral". Ela olhava só o verbo ("não quero receber") e não o que vinha depois. Bloqueada, a paciente deixava de receber lembrete e resposta sem ninguém ser avisado, e o negócio aberto dela era fechado como perdido. O mesmo valia para "não quero receber visita", "não quero receber e-mail", "para de me mandar o resultado por e-mail" e, em espanhol, para "no quiero molestar, pero tengo una duda".
+
+  Agora só bloqueia quando o que a pessoa recusa é a mensagem da clínica ("não quero receber mensagens", "não quero receber propaganda", "não quero mais receber nada de vocês") ou quando ela não diz o quê mas diz que é para parar ("não quero mais receber", "quero parar de receber"). Esses pedidos seguem sendo respeitados na hora, como antes.
+
+  O que fica no meio do caminho ("não quero receber" sem dizer o quê, "não quero receber lembrete", "não quero receber isso") não bloqueia mais sozinho. Quando há um agente de IA atendendo a conversa, ele para de responder, avisa a paciente de que os envios automáticos pararam e abre um aviso na Central ("Suspeita de opt-out") para uma pessoa decidir. Sem agente, a mensagem fica na conversa para quem atende.
+
+  Nenhuma ação é necessária. Não havia contato bloqueado por esse engano quando a correção foi feita.
+
+- **Editar um campo do rascunho do agente pela API não zera mais os outros** Uma edição parcial de rascunho pela API (`PATCH /api/v1/ai/agents/{id}/versions/{vid}`) com um campo só, por exemplo o prompt, gravava o valor padrão em tudo o que não foi enviado: a lista de ferramentas ficava vazia, casos, bolhas curtas e follow-up eram desligados e o limite de passos voltava a 10. Publicado assim, o agente atendia sem ferramenta nenhuma e dizia ter marcado consulta sem marcar. Agora só o que vem no corpo é gravado, e o resto do rascunho fica como estava. Um corpo vazio volta a ser recusado.
+
+  A mesma rota aceitava os campos do papel Operador, dos funis e dos materiais, respondia com sucesso e não gravava nenhum. Agora grava, com a mesma conferência de organização que a criação de versão já fazia.
+
+  Quem edita pela tela não foi afetado: o editor sempre envia o agente inteiro. Se você editou um rascunho por integração ou script e publicou, abra o agente e confira as ferramentas e o follow-up.
+
 ## [3.24.0] — 2026-10-12
 
 ### Adicionado
@@ -6887,7 +6963,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.24.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v3.25.0...HEAD
+[3.25.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.24.0...v3.25.0
 [3.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.23.0...v3.24.0
 [3.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.2...v3.23.0
 [3.22.2]: https://github.com/melgarafael/DeskcommCRM/compare/v3.22.1...v3.22.2
