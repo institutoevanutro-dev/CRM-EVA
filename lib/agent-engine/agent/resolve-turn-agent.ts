@@ -68,6 +68,7 @@ import {
   type PublishedAgentConfig,
 } from './agent-config';
 import { classifyIntent } from './intent-classifier';
+import { buildFatosDoContato } from './fatos-do-contato';
 import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-context';
 
 export interface TurnAgentResolution {
@@ -95,6 +96,9 @@ export interface ResolveTurnAgentDeps {
   loadPublishedAgentConfigById?: typeof loadPublishedAgentConfigById;
   loadPublishedAgentConfig?: typeof loadPublishedAgentConfig;
   classifyIntent?: typeof classifyIntent;
+  buildFatosDoContato?: typeof buildFatosDoContato;
+  /** Relógio injetável: é o que separa atendimento anterior de compromisso futuro. */
+  agora?: () => Date;
 }
 
 export async function resolveTurnAgent(
@@ -116,6 +120,7 @@ export async function resolveTurnAgent(
   const _loadAgentById = deps.loadPublishedAgentConfigById ?? loadPublishedAgentConfigById;
   const _loadAgentBySession = deps.loadPublishedAgentConfig ?? loadPublishedAgentConfig;
   const _classifyIntent = deps.classifyIntent ?? classifyIntent;
+  const _buildFatos = deps.buildFatosDoContato ?? buildFatosDoContato;
 
   try {
     // ─── Degrau 0: a campanha que criou esta conversa ───
@@ -226,11 +231,23 @@ export async function resolveTurnAgent(
       return resolveFallback('no_match', null);
     }
 
+    // Fatos do CRM para o classificador (agenda do contato). No motor, `leadId` É o
+    // contact_id. Falha aqui nunca derruba o turno: classifica só com a mensagem.
+    let fatos: string | null = null;
+    try {
+      fatos = await _buildFatos(db, input.tenantId, input.leadId, (deps.agora ?? (() => new Date()))());
+    } catch (err) {
+      deps.log.warn('resolve-turn-agent: fatos do contato indisponíveis — classificando só com a mensagem', {
+        routerId: router.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     // classifica — inclusive com sticky ativo, pra detectar troca de assunto (regra 2).
     const verdict = await _classifyIntent(
       db,
       llmCfg,
-      { tenantId: input.tenantId, leadId: input.leadId, jobId: input.jobId, router, signal: input.signal },
+      { tenantId: input.tenantId, leadId: input.leadId, jobId: input.jobId, router, signal: input.signal, fatos },
       { log: deps.log },
     );
 
