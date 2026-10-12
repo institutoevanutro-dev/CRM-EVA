@@ -37,6 +37,7 @@
  */
 import type pg from 'pg';
 
+import { tagDeIdioma } from '@/lib/i18n/datas';
 import { traduzir } from '@/lib/i18n/dicionario';
 import { IDIOMAS, normalizarIdioma, type Idioma } from '@/lib/i18n/idiomas';
 import { PROVEDORES } from '@/lib/ai/pontos/provedores';
@@ -110,9 +111,9 @@ const TITULO: Record<MotivoDoAviso, string> = {
 };
 
 const O_QUE_HOUVE: Record<MotivoDoAviso, string> = {
-  sem_saldo: 'Desde {quando}, o provedor {provedor} recusa as chamadas porque a conta ficou sem crédito.',
+  sem_saldo: 'Desde {dia} às {hora}, o provedor {provedor} recusa as chamadas porque a conta ficou sem crédito.',
   chave_recusada:
-    'Desde {quando}, o provedor {provedor} recusa a chave usada pela IA: ela é inválida, foi revogada ou perdeu a permissão.',
+    'Desde {dia} às {hora}, o provedor {provedor} recusa a chave usada pela IA: ela é inválida, foi revogada ou perdeu a permissão.',
 };
 
 const O_QUE_PAROU = {
@@ -161,24 +162,34 @@ function titulosDoProvedor(provedor: string): string[] {
   return IDIOMAS.flatMap((i) => MOTIVOS.map((m) => tituloDoAviso(provedor, m, i)));
 }
 
-/** "11/10 às 18:51", no fuso da organização. */
-function quando(agora: Date, fuso: string | null): string {
-  const formatar = (timeZone: string) =>
-    new Intl.DateTimeFormat('pt-BR', {
-      timeZone,
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-      .format(agora)
-      .replace(', ', ' às ');
+/** O dia ("11/10") e a hora ("18:51") no fuso e no idioma da organização. */
+function diaEHora(agora: Date, fuso: string | null, idioma: Idioma): { dia: string; hora: string } {
+  const formatar = (timeZone: string) => ({
+    dia: new Intl.DateTimeFormat(tagDeIdioma(idioma), { timeZone, day: '2-digit', month: '2-digit' }).format(agora),
+    hora: new Intl.DateTimeFormat(tagDeIdioma(idioma), { timeZone, hour: '2-digit', minute: '2-digit', hour12: false }).format(agora),
+  });
   try {
     return formatar(fuso ?? 'America/Sao_Paulo');
   } catch {
     // Fuso que o Intl não conhece não pode custar o aviso.
     return formatar('America/Sao_Paulo');
   }
+}
+
+/**
+ * O título é de um aviso deste arquivo? Em qualquer idioma e para qualquer
+ * provedor. É por ele que a campainha e o celular reconhecem o aviso
+ * (`lib/notifications/sons-da-org.ts`): com a chave da instalação o aviso não
+ * tem referência, e o kind é `other`.
+ */
+export function ehAvisoDoProvedor(titulo: string | null | undefined): boolean {
+  if (!titulo) return false;
+  return IDIOMAS.some((i) =>
+    MOTIVOS.some((m) => {
+      const [antes = '', depois = ''] = traduzir(TITULO[m], i).split('{provedor}');
+      return titulo.length > antes.length + depois.length && titulo.startsWith(antes) && titulo.endsWith(depois);
+    }),
+  );
 }
 
 /** O corpo: o que houve e desde quando, o que parou, o que fazer, como fecha. Sem a chave e sem o texto do provedor. */
@@ -191,8 +202,9 @@ export function corpoDoAviso(
 ): string {
   const quem = provedor === PROVEDOR_DO_JEV ? 'jev' : 'ia';
   const t = (frase: string) => traduzir(frase, idioma);
+  const { dia, hora } = diaEHora(agora, fuso, idioma);
   return [
-    t(O_QUE_HOUVE[motivo]).replace('{quando}', quando(agora, fuso)).replace('{provedor}', nomeDoProvedor(provedor)),
+    t(O_QUE_HOUVE[motivo]).replace('{dia}', dia).replace('{hora}', hora).replace('{provedor}', nomeDoProvedor(provedor)),
     t(O_QUE_PAROU[quem]),
     t(O_QUE_FAZER[quem][motivo]),
     t(COMO_FECHA),

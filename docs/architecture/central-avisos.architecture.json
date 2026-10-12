@@ -112,6 +112,13 @@
       "col": 3,
       "type": "ui",
       "label": "Notificação no celular, com o CRM fechado"
+    },
+    {
+      "id": "provedor_ia",
+      "lane": "app",
+      "col": 4,
+      "type": "service",
+      "label": "aviso-do-provedor: chamada de IA recusada por crédito ou chave abre o aviso; a aceita fecha"
     }
   ],
   "edges": [
@@ -194,6 +201,26 @@
       "from": "celular",
       "to": "contexto",
       "label": "toque abre a conversa"
+    },
+    {
+      "from": "provedor_ia",
+      "to": "central",
+      "label": "aviso crítico por organização, provedor, motivo e credencial (kind other)"
+    },
+    {
+      "from": "provedor_ia",
+      "to": "barramento",
+      "label": "insert anuncia central.aviso_criado"
+    },
+    {
+      "from": "provedor_ia",
+      "to": "campainha",
+      "label": "somDoAviso reconhece pelo título: toca como pedido de pessoa"
+    },
+    {
+      "from": "push",
+      "to": "celular",
+      "label": "IA sem crédito ou chave recusada: título do aviso, abre a Central"
     }
   ]
 }

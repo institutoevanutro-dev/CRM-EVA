@@ -19,6 +19,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => d.admin.valor 
 
 import {
   corpoDoAviso,
+  ehAvisoDoProvedor,
   esquecerAvisosDoProvedor,
   FRASES_DO_AVISO_DO_PROVEDOR,
   motivoQueExigeODono,
@@ -28,6 +29,7 @@ import { LlmBudgetExceededError, normalizarErro, runModelCall } from "@/lib/agen
 import { registrarChamada } from "@/lib/ai/decisao/registro";
 import { DICIONARIO } from "@/lib/i18n/dicionario";
 import { logInvocation } from "@/lib/ai/log-invocation";
+import { somDoAviso } from "@/lib/notifications/sons-da-org";
 
 const ORG = "33333333-3333-4333-8333-333333333333";
 const OUTRA_ORG = "44444444-4444-4444-8444-444444444444";
@@ -116,6 +118,23 @@ describe("o texto", () => {
       expect(DICIONARIO[frase]?.es, frase).toBeTruthy();
       expect(frase).not.toMatch(/[—–]/);
     }
+  });
+
+  it("a campainha e o celular reconhecem o aviso pelo título, em qualquer idioma e provedor", () => {
+    for (const provedor of ["openai", "anthropic", "typesafe", "provedor-novo"]) {
+      for (const motivo of ["sem_saldo", "chave_recusada"] as const) {
+        for (const idioma of ["pt-BR", "es"] as const) {
+          const titulo = tituloDoAviso(provedor, motivo, idioma);
+          expect(ehAvisoDoProvedor(titulo), titulo).toBe(true);
+          expect(somDoAviso({ kind: "other", ref_kind: null, title: titulo })).toBe("pessoa");
+        }
+      }
+    }
+    expect(ehAvisoDoProvedor("A IA está sem saldo no provedor")).toBe(false);
+    expect(ehAvisoDoProvedor("As respostas automáticas da IA estão paradas")).toBe(false);
+    expect(somDoAviso({ kind: "other", ref_kind: null, title: "Outro aviso qualquer" })).toBeNull();
+    // Só o `other`: um kind com dono não vira pedido de pessoa por coincidência de título.
+    expect(somDoAviso({ kind: "job_dead", ref_kind: null, title: tituloDoAviso("openai", "sem_saldo", "pt-BR") })).toBeNull();
   });
 
   it("fuso que o Intl não conhece não custa o aviso", () => {

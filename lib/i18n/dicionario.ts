@@ -7970,11 +7970,11 @@ export const DICIONARIO: Traducoes = {
   // ─── lib/agent-engine/edge/llm/aviso-do-provedor.ts ───
   "A IA está sem crédito no provedor {provedor}": { es: "La IA se quedó sin crédito en el proveedor {provedor}" },
   "O provedor {provedor} recusou a chave da IA": { es: "El proveedor {provedor} rechazó la clave de la IA" },
-  "Desde {quando}, o provedor {provedor} recusa as chamadas porque a conta ficou sem crédito.": {
-    es: "Desde {quando}, el proveedor {provedor} rechaza las llamadas porque la cuenta se quedó sin crédito.",
+  "Desde {dia} às {hora}, o provedor {provedor} recusa as chamadas porque a conta ficou sem crédito.": {
+    es: "Desde el {dia} a las {hora}, el proveedor {provedor} rechaza las llamadas porque la cuenta se quedó sin crédito.",
   },
-  "Desde {quando}, o provedor {provedor} recusa a chave usada pela IA: ela é inválida, foi revogada ou perdeu a permissão.": {
-    es: "Desde {quando}, el proveedor {provedor} rechaza la clave que usa la IA: es inválida, fue revocada o perdió el permiso.",
+  "Desde {dia} às {hora}, o provedor {provedor} recusa a chave usada pela IA: ela é inválida, foi revogada ou perdeu a permissão.": {
+    es: "Desde el {dia} a las {hora}, el proveedor {provedor} rechaza la clave que usa la IA: es inválida, fue revocada o perdió el permiso.",
   },
   "Tudo o que usa este provedor está parado. Se é ele que responde aos clientes, o assistente não está respondendo.": {
     es: "Todo lo que usa este proveedor está detenido. Si es el que responde a los clientes, el asistente no está respondiendo.",
@@ -7992,6 +7992,7 @@ export const DICIONARIO: Traducoes = {
   "O que fazer: a chave do Jev fica na configuração do servidor (JEV_API_KEY). Peça a quem administra a instalação para trocá-la.": {
     es: "Qué hacer: la clave de Jev está en la configuración del servidor (JEV_API_KEY). Pide a quien administra la instalación que la cambie.",
   },
+  "Abra a Central de avisos para ver o que fazer.": { es: "Abre la Central de avisos para ver qué hacer." },
   "Este aviso se fecha sozinho quando o provedor voltar a aceitar uma chamada.": {
     es: "Este aviso se cierra solo cuando el proveedor vuelva a aceptar una llamada.",
   },

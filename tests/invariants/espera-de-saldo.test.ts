@@ -209,7 +209,7 @@ describe("o aviso de crédito e de chave, no banco", () => {
       ["El proveedor OpenAI (GPT) rechazó la clave de la IA", null, null, "critical", "open"],
       ["La IA se quedó sin crédito en el proveedor Anthropic (Claude)", "ai_provider_credential", CREDENCIAL, "critical", "open"],
     ]);
-    expect(abertos[0]!.body).toMatch(/^Desde \d{2}\/\d{2} às \d{2}:\d{2}, el proveedor OpenAI \(GPT\) rechaza las llamadas/);
+    expect(abertos[0]!.body).toMatch(/^Desde el \d{2}\/\d{2} a las \d{2}:\d{2}, el proveedor OpenAI \(GPT\) rechaza las llamadas/);
   });
 
   it("fecha quando a MESMA credencial volta a ser aceita, e só o daquela organização", async () => {
