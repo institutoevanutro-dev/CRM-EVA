@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { RegistrarPedidoDialog } from "./RegistrarPedidoDialog";
 import { RequestsTable } from "./RequestsTable";
 
 export const dynamic = "force-dynamic";
@@ -23,11 +24,14 @@ export default async function LgpdRequestsPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
-        <h1 className="text-[2rem] leading-tight">{t("Solicitações LGPD")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t("Pedidos de pacientes sobre os próprios dados (LGPD): cópia, correção ou apagamento. Só administradores.")}
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[2rem] leading-tight">{t("Solicitações LGPD")}</h1>
+          <p className="text-sm text-muted-foreground">
+            {t("Pedidos de pacientes sobre os próprios dados (LGPD): cópia, correção ou apagamento. Só administradores.")}
+          </p>
+        </div>
+        <RegistrarPedidoDialog />
       </header>
       <RequestsTable />
     </div>

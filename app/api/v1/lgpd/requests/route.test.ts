@@ -14,13 +14,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
+import type * as EmMemoria from "@/tests/helpers/supabase-em-memoria";
 import { supabaseEmMemoria, type Linha } from "@/tests/helpers/supabase-em-memoria";
 
 const h = vi.hoisted(() => ({
   guard: vi.fn(),
   apoio: vi.fn(),
   audit: vi.fn(),
-  banco: null as unknown as ReturnType<typeof import("@/tests/helpers/supabase-em-memoria").supabaseEmMemoria>,
+  banco: null as unknown as ReturnType<typeof EmMemoria.supabaseEmMemoria>,
 }));
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: h.guard }));

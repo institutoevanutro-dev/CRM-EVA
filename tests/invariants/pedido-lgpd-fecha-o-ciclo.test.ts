@@ -48,6 +48,7 @@ const QUEM_GRAVA = [
   "workers/lgpd-export-worker.ts",
   "workers/lgpd-redact-worker.ts",
   "app/api/v1/lgpd/requests/[id]/approve/route.ts",
+  "app/api/v1/lgpd/requests/[id]/deliver/route.ts",
   "lib/lgpd/repository.ts",
 ];
 

@@ -14,8 +14,10 @@ import { useLgpdRequest } from "@/hooks/useLgpdRequest";
 import { SlaTimeline } from "./SlaTimeline";
 import { PreviewPanel } from "./PreviewPanel";
 import { ApproveButton } from "./ApproveButton";
+import { FORMA_DE_ENTREGA_LABELS, MarcarEntregueButton } from "./MarcarEntregueButton";
 import { AuditTrail } from "./AuditTrail";
 import type { LgpdRequestStatus, LgpdRequestType } from "@/hooks/useLgpdRequests";
+import { LGPD_CANAL_LABELS, type LgpdCanalDeChegada, type LgpdFormaDeEntrega } from "@/lib/lgpd/types";
 
 interface Props {
   id: string;
@@ -74,6 +76,13 @@ export function LgpdRequestDetail({ id }: Props) {
   }
 
   const { request, audit_trail, signed_pdf_url } = data.data;
+
+  // Pedido registrado pela equipe: por onde chegou, a observação e a entrega em mãos.
+  const canal = request.request_payload?.channel as LgpdCanalDeChegada | undefined;
+  const nota = request.request_payload?.note;
+  const entrega = request.result?.manual_delivery as
+    | { method?: LgpdFormaDeEntrega; note?: string | null }
+    | undefined;
 
   const shortId = request.id.slice(0, 8);
   const typeLabel = t(TYPE_LABELS[request.request_type] ?? request.request_type);
@@ -138,6 +147,11 @@ export function LgpdRequestDetail({ id }: Props) {
           requestType={request.request_type}
           status={request.status}
         />
+        <MarcarEntregueButton
+          requestId={request.id}
+          requestType={request.request_type}
+          status={request.status}
+        />
       </div>
 
       {/* 2-col grid */}
@@ -170,6 +184,14 @@ export function LgpdRequestDetail({ id }: Props) {
             <Row label={t("Tipo")} value={typeLabel} />
             <Row label={t("Status")} value={statusLabel} />
             <Row label={t("Origem")} value={request.source ?? "—"} />
+            {canal && LGPD_CANAL_LABELS[canal] && (
+              <Row label={t("Chegou por")} value={t(LGPD_CANAL_LABELS[canal])} />
+            )}
+            {typeof nota === "string" && nota && <Row label={t("Observação")} value={nota} />}
+            {entrega?.method && FORMA_DE_ENTREGA_LABELS[entrega.method] && (
+              <Row label={t("Entregue")} value={t(FORMA_DE_ENTREGA_LABELS[entrega.method])} />
+            )}
+            {entrega?.note && <Row label={t("Observação da entrega")} value={entrega.note} />}
             <Row label={t("Escopo")} value={request.scope} />
             <Row label={t("Tentativas")} value={String(request.attempts)} />
             {request.contact_id && (
