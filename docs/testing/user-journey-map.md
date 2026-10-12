@@ -2699,3 +2699,19 @@ Migration 0351 (`fn_reiniciar_teste_do_contato`), rota `POST /api/v1/contacts/:i
 Sem migration. Leitura em `lib/agent-engine/agent/fatos-do-contato.ts`, entregue ao classificador por `resolve-turn-agent.ts`; teste de classificação com contato em `/app/ai/routers/[id]`. Unit: `lib/agent-engine/agent/{fatos-do-contato,intent-classifier,resolve-turn-agent,router-config}.test.ts` e `app/app/ai/routers/[id]/_client.test.tsx`. Invariante: `tests/invariants/roteador-fatos-do-contato.test.ts`.
 
 - [ ] Roteador escolhe o agente pela agenda do contato (compromissos passados não cancelados e compromissos futuros; teste de classificação com contato e com o roteador inativo) — coberto por unit e invariante; prova pela tela pendente até a versão ser instalada
+
+## J28 — Pedido de dados do titular (LGPD): do recebimento à entrega `[P1]` (2026-10-12)
+
+Ambiente fresco estilo VPS: Supabase local próprio (pg15), `baseline.sql`, `next build` + `next start`, **sem** `RESEND_API_KEY`. Evidência em `.superpowers/evidence/lgpd-export/`.
+
+| Caso | O que o operador faz | Resultado |
+|---|---|---|
+| J28.1 | Abre LGPD › Solicitações, vê o pedido "Recebido", abre, clica "Aprovar export", escreve a justificativa e confirma | **PROVADO NA TELA** (`tests/e2e/lgpd-pedido-sem-email-vira-revisao-pendente.spec.ts`, no CI). O pedido vai a "Processando" |
+| J28.2 | Titular sem e-mail, instalação sem envio de e-mail: o dreno roda | **PROVADO NA TELA.** O pedido vai a "Revisão pendente", a página mostra "Baixar PDF" e o link baixa um PDF de verdade; a trilha mostra `lgpd.manually_approved` e `lgpd.export_generated`. Antes da migration 0356 o pedido ficava em "Processando" para sempre (o banco recusava o estado e ninguém lia o erro) |
+| J28.3 | Titular com e-mail e envio configurado: o dreno roda | **PROVADO NA TELA, FORA DO CI** (`tests/e2e/lgpd-pedido-entregue-por-email.spec.ts`, com um receptor HTTP local no lugar da Resend). Um e-mail chega ao titular com o link do relatório, o link baixa o PDF, e o pedido vai a "Concluído" |
+
+**O que esta jornada NÃO tem, e é achado, não cobertura:**
+
+- **Não existe botão para CRIAR um pedido.** A única porta que cria `lgpd_requests` é o webhook da Nuvemshop. Numa clínica sem loja, o pedido de um paciente não tem por onde entrar no sistema; nas specs ele nasce por insert, com o que o webhook gravaria.
+- **Não existe ação para ENCERRAR um "Revisão pendente"** depois que o operador entrega o PDF à mão. O pedido fica nesse estado, e o alarme de prazo (`lgpd-sla-watcher`) segue avisando.
+- **Pedido "Falhou" não avisa ninguém pelo prazo:** o `lgpd-sla-watcher` ignora `failed`. O que avisa é o evento morto na Central (`event_dead`), depois de 5 tentativas do dreno.
