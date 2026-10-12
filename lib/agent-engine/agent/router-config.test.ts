@@ -100,6 +100,11 @@ describe('loadActiveRouter — modo de permanência', () => {
     expect(router?.interrompe).toEqual(['queixa_clinica']);
   });
 
+  it('interrompe é aparado: espaço em volta não impede de casar, e item só de espaço some', async () => {
+    const router = await comConfig({ permanencia: 'agente', interrompe: ['queixa_clinica ', '  urgencia', '   '] });
+    expect(router?.interrompe).toEqual(['queixa_clinica', 'urgencia']);
+  });
+
   it("valor desconhecido de permanencia cai em 'roteador'", async () => {
     for (const valor of ['qualquer', 'AGENTE', true, 1, null, {}]) {
       expect((await comConfig({ permanencia: valor }))?.permanencia).toBe('roteador');

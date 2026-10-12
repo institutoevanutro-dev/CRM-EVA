@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -80,21 +83,71 @@ describe('historicoRecente', () => {
     expect(renderHistoricoRecente(msgs).split('\n')).toHaveLength(3);
   });
 
-  it('mídia sem transcrição vira o marcador do tipo; mensagem sem texto nenhum é descartada', async () => {
+  it('transcrição longa chega inteira: é a fala, sem o enquadramento que o agente recebe', async () => {
+    const fala = 'Oi, eu queria remarcar a minha consulta de quarta para a semana que vem, de preferência na parte da tarde, pode ser?';
+    expect(fala.length).toBeGreaterThan(100);
+    const db = banco([
+      linha('inbound', 'sinal'),
+      linha('inbound', null, { type: 'audio', media_url: 'https://x/a.ogg', media_derived_text: `  ${fala}\n` }),
+    ]);
+    expect(await historicoRecente(db, 'o', 'c')).toEqual([{ direction: 'inbound', texto: fala }]);
+  });
+
+  it('legenda e transcrição: as duas, a legenda primeiro, juntas por um espaço', async () => {
+    const db = banco([
+      linha('inbound', 'sinal'),
+      linha('inbound', ' olha essa mancha ', {
+        type: 'image', media_storage_path: 'org/x.jpg', media_derived_text: 'Foto de um antebraço com mancha avermelhada.',
+      }),
+    ]);
+    expect(await historicoRecente(db, 'o', 'c')).toEqual([
+      { direction: 'inbound', texto: 'olha essa mancha Foto de um antebraço com mancha avermelhada.' },
+    ]);
+  });
+
+  it('só mídia, sem transcrição: o marcador do tipo; sem texto e sem mídia: descartada', async () => {
     const db = banco([
       linha('inbound', 'sinal'),
       linha('inbound', null, { type: 'image', media_storage_path: 'org/x.jpg' }),
       linha('outbound', '   '),
       linha('inbound', null),
-      linha('inbound', null, { type: 'audio', media_url: 'https://x/a.ogg', media_derived_text: 'quero remarcar' }),
+      linha('outbound', null, { type: 'document', media_url: 'https://x/laudo.pdf' }),
     ]);
-    const msgs = await historicoRecente(db, 'o', 'c');
-    expect(msgs).toHaveLength(2);
-    expect(msgs[0]!.direction).toBe('inbound');
-    // A transcrição entra; o caminho e a URL da mídia, nunca.
-    expect(msgs[0]!.texto).toContain('quero remarcar');
-    expect(msgs[1]).toEqual({ direction: 'inbound', texto: '[image]' });
-    expect(JSON.stringify(msgs)).not.toContain('a.ogg');
-    expect(JSON.stringify(msgs)).not.toContain('x.jpg');
+    expect(await historicoRecente(db, 'o', 'c')).toEqual([
+      { direction: 'outbound', texto: '[document]' },
+      { direction: 'inbound', texto: '[image]' },
+    ]);
+  });
+
+  it('nada do enquadramento de mídia do agente entra, nem caminho ou URL', async () => {
+    const db = banco([
+      linha('inbound', 'sinal'),
+      linha('inbound', 'legenda', { type: 'audio', media_url: 'https://x/a.ogg', media_storage_path: 'org/a.ogg', media_derived_text: 'quero remarcar' }),
+    ]);
+    const texto = JSON.stringify(await historicoRecente(db, 'o', 'c'));
+    expect(texto).not.toContain('Mídia do cliente');
+    expect(texto).not.toContain('NUNCA responda');
+    expect(texto).not.toContain('a.ogg');
+  });
+});
+
+describe('fronteira de atendimento: a mesma do histórico do agente', () => {
+  /** O `exists(select 1 from conversations c ...)` de um arquivo, até o parêntese que o fecha. */
+  function fronteira(arquivo: string): string {
+    const fonte = readFileSync(path.join(process.cwd(), arquivo), 'utf8');
+    const inicio = fonte.search(/exists\(select 1 from conversations c\b/);
+    expect(inicio, `${arquivo}: fronteira não encontrada`).toBeGreaterThan(-1);
+    let aberto = 0;
+    for (let i = inicio; i < fonte.length; i++) {
+      if (fonte[i] === '(') aberto++;
+      if (fonte[i] === ')' && --aberto === 0) return fonte.slice(inicio, i + 1).replace(/\s+/g, ' ');
+    }
+    throw new Error(`${arquivo}: fronteira sem fechamento`);
+  }
+
+  it('as duas consultas têm o mesmo predicado: mudou uma, tem de mudar a outra', () => {
+    const doAgente = fronteira('lib/agent-engine/edge/crm/get-lead-context.ts');
+    expect(doAgente).toContain('messages.service_revision=c.service_revision');
+    expect(fronteira('lib/agent-engine/agent/historico-recente.ts')).toBe(doAgente);
   });
 });

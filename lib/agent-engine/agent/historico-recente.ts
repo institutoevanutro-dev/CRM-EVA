@@ -16,17 +16,22 @@
  *
  * ─── O que entra no texto, e o que nunca entra ──────────────────────────────
  *
- * O corpo como o prompt do agente o lê (`corpoDaMensagem`): texto digitado,
- * transcrição já pronta ou o marcador `[tipo]`. Nunca a mídia, nunca o anexo.
- * Cada mensagem numa linha só e cortada: isto vai a um modelo barato e a
- * resposta dele é uma palavra.
+ * A FALA: o texto digitado (ou a legenda) e a transcrição já pronta, juntos.
+ * Sem nenhum dos dois e com mídia, o marcador `[tipo]`. Nunca o caminho, a URL
+ * ou o anexo. Cada mensagem numa linha só e cortada: isto vai a um modelo
+ * barato e a resposta dele é uma palavra.
+ *
+ * ⚠️ NÃO passa por `corpoDaMensagem` (get-lead-context.ts), de propósito. Aquela
+ * composição enquadra a transcrição com uma instrução PARA O AGENTE ("o sistema
+ * já processou o conteúdo, nunca responda que não consegue ver"), de 237
+ * caracteres. Aqui ela comia o corte de 300 e a transcrição sumia; e ordem
+ * escrita para o agente não é assunto do classificador.
  *
  * Só lê quem liga o modo novo do roteador (`permanencia: 'agente'`): é a
  * primeira vez que texto de mensagens anteriores vai ao provedor do
  * classificador, e roteador existente não muda de prompt sem pedir.
  */
 import type { Queryable } from "../queue/queue";
-import { corpoDaMensagem, type CorpoDaMensagemRow } from "../edge/crm/get-lead-context";
 
 export const MAXIMO_DE_MENSAGENS_NO_HISTORICO = 6;
 
@@ -36,6 +41,26 @@ const MAXIMO_POR_MENSAGEM = 300;
 export interface MensagemRecente {
   direction: "inbound" | "outbound";
   texto: string;
+}
+
+interface Linha {
+  direction: "inbound" | "outbound";
+  type: string;
+  body: string | null;
+  media_url: string | null;
+  media_storage_path: string | null;
+  media_derived_text: string | null;
+}
+
+/** A fala de uma mensagem, numa linha. Vazio quando não há o que dizer dela. */
+function fala(m: Linha): string {
+  const dito = [m.body, m.media_derived_text]
+    .map((t) => (t ?? "").trim())
+    .filter((t) => t !== "")
+    .join(" ");
+  const texto = dito !== "" ? dito : m.media_storage_path || m.media_url ? `[${m.type}]` : "";
+  // Quebra de linha abriria uma "linha nova" dentro do prompt do classificador.
+  return texto.replace(/\s+/g, " ").trim().slice(0, MAXIMO_POR_MENSAGEM);
 }
 
 /**
@@ -51,7 +76,7 @@ export async function historicoRecente(
   // lib/agent-engine/edge/crm/get-lead-context.ts (consulta do `history`),
   // copiada. As duas consultas têm de andar juntas: se uma mudar e a outra não,
   // o classificador passa a ver uma conversa diferente da que o agente vê.
-  const { rows } = await db.query<CorpoDaMensagemRow & { direction: "inbound" | "outbound" }>(
+  const { rows } = await db.query<Linha>(
     `select direction, type, body, media_url, media_storage_path, media_derived_text
        from messages
       where organization_id = $1 and conversation_id = $2
@@ -65,15 +90,15 @@ export async function historicoRecente(
     // Uma a mais: a mais nova costuma ser o próprio sinal, e sai.
     [organizationId, conversationId, MAXIMO_DE_MENSAGENS_NO_HISTORICO + 1],
   );
+  // ponytail: o sinal sai por POSIÇÃO (a linha mais nova, se for inbound). Se a
+  // mais nova for outbound (o atendimento falou depois do lead), o sinal fica
+  // também no histórico, repetido. A correção exata pede o id da mensagem do
+  // sinal, que `resolveTurnAgent` hoje não recebe.
   const semOSinal = rows[0]?.direction === "inbound" ? rows.slice(1) : rows;
   return semOSinal
     .slice(0, MAXIMO_DE_MENSAGENS_NO_HISTORICO)
     .reverse()
-    .map((m) => ({
-      direction: m.direction,
-      // Quebra de linha abriria uma "linha nova" dentro do prompt do classificador.
-      texto: corpoDaMensagem(m).replace(/\s+/g, " ").trim().slice(0, MAXIMO_POR_MENSAGEM),
-    }))
+    .map((m) => ({ direction: m.direction, texto: fala(m) }))
     .filter((m) => m.texto !== "");
 }
 

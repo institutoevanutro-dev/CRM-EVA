@@ -154,7 +154,11 @@ async function montar(
   // Só o valor exato liga o modo novo: qualquer outra coisa é o roteador de sempre.
   const permanencia = cfg.permanencia === 'agente' ? 'agente' : 'roteador';
   const interrompe = Array.isArray(cfg.interrompe)
-    ? cfg.interrompe.filter((i): i is string => typeof i === 'string' && i !== '')
+    ? cfg.interrompe
+        .filter((i): i is string => typeof i === 'string')
+        // Aparado: 'queixa_clinica ' digitado com espaço tem de casar com o membro.
+        .map((i) => i.trim())
+        .filter((i) => i !== '')
     : [];
 
   return {
