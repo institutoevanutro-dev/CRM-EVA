@@ -118,6 +118,7 @@ DeskcommCRM é um sistema operacional de vendas open source com agentes de IA na
 - Anonimização preferida sobre delete. Nome do contato vira `Cliente Anonimizado #N`
 - Cascade de redact: contact + conversations + messages (mídia removida do storage) + activities (preserva timestamps)
 - Reversão de anonimização: 403 `lgpd_anonymization_irreversible`
+- **O evento não autoriza anonimização; a linha do pedido autoriza.** Anonimizar por pedido exige `request_payload.approval` gravada pela rota de aprovação (administrador, com justificativa, para aquele pedido e aquele contato). A regra é uma só, `fn_lgpd_recusa_do_redact` (migration 0357), consultada pelo `lgpd-redact-worker` antes de qualquer gravação e pela cascata dentro da transação. Pedido sem aprovação: evento consumido como `skipped`, pedido continua `received`. Webhook de loja NÃO emite `lgpd.redact_received`; só a aprovação emite. Quem emite hoje: `grep -rln 'emit_event' app lib workers | xargs grep -l '"lgpd.redact_received"'`
 - SLA: data_request entregue D+7; redact executado D+15
 - Action audit obrigatória: `lgpd.data_request_received`, `lgpd.export_generated`, `lgpd.redact_executed`, `lgpd.consent_changed`
 
