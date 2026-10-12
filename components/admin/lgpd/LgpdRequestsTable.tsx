@@ -68,6 +68,7 @@ const STATUS_LABELS: Record<AdminLgpdStatus, string> = {
   processing: "Processando",
   completed: "Concluído",
   failed: "Falhou",
+  expired: "Expirado",
   pending_review: "Revisão",
 };
 
@@ -79,6 +80,7 @@ const STATUS_VARIANT: Record<
   processing: "default",
   completed: "outline",
   failed: "destructive",
+  expired: "destructive",
   pending_review: "secondary",
 };
 

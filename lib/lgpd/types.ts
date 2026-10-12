@@ -22,19 +22,41 @@ export const LGPD_REQUEST_TYPE_LABELS: Record<LgpdRequestType, string> = {
 
 export type LgpdScope = "contact" | "tenant";
 
-export type LgpdRequestStatus =
-  | "received"
-  | "processing"
-  | "completed"
-  | "failed"
-  | "pending_review";
+/**
+ * Os SEIS estados que o banco aceita: `lgpd_requests_status_check` (migration 0356).
+ *
+ * Desde o EPIC-08 esta lista teve `pending_review` e o CHECK não: o worker gravava o
+ * estado, o banco recusava (23514) e o pedido ficava em "Processando" para
+ * sempre. O par está preso em `tests/invariants/vocabulario-banco-x-typescript.test.ts`.
+ * Estado novo: migration primeiro, esta lista depois, nunca só aqui.
+ *
+ * `expired` existe no banco desde a origem e hoje ninguém o grava; está aqui
+ * para a tela saber rotular a linha se um dia aparecer.
+ */
+export const LGPD_REQUEST_STATUSES = [
+  "received",
+  "processing",
+  "completed",
+  "failed",
+  "expired",
+  "pending_review",
+] as const;
+
+export type LgpdRequestStatus = (typeof LGPD_REQUEST_STATUSES)[number];
+
+/**
+ * De onde o pedido veio: `lgpd_requests_source_check`. Este tipo dizia
+ * `admin_panel`, que o CHECK recusa; quem criasse um pedido "pelo painel" com
+ * ele estouraria no INSERT.
+ */
+export type LgpdRequestSource = "nuvemshop" | "manual" | "api" | "support";
 
 export interface LgpdRequest {
   id: string;
   organization_id: string;
   request_type: LgpdRequestType;
   /** Origin channel that triggered the request. */
-  source: "nuvemshop" | "admin_panel" | "api";
+  source: LgpdRequestSource;
   /** Internal contact id (may be null if contact not yet in CRM — L-03). */
   contact_id: string | null;
   /** Nuvemshop customer id or other external platform identifier. */

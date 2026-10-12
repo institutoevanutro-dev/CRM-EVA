@@ -30,6 +30,7 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { collectExportData } from "@/lib/lgpd/export-collector";
 import { findLgpdRequest } from "@/lib/lgpd/repository";
+import type { LgpdRequestStatus } from "@/lib/lgpd/types";
 // IMPORT TARDIO, e a razão é o laço rápido do `event_log`.
 //
 // `lib/event-log/register-handlers.ts` — cujo próprio comentário pede "keep it
@@ -80,6 +81,49 @@ function sha256(s: string): string {
 
 function shortId(id: string): string {
   return id.slice(0, 8);
+}
+
+/**
+ * TODA gravação de estado do pedido passa por aqui, e o erro é LIDO.
+ *
+ * Até a migration 0356 o banco recusava `pending_review` (23514) e nenhum dos
+ * updates deste arquivo conferia a resposta: o worker auditava "exportado",
+ * devolvia `ok` ao dreno, e o pedido do titular ficava em "Processando" para
+ * sempre. Pedido de LGPD perdido em silêncio é problema legal, então a recusa
+ * vira log de erro aqui e desfecho `error` em quem chamou.
+ *
+ * Devolve o CÓDIGO do erro, ou `null` quando gravou. Só o código: a mensagem e
+ * o detalhe do Postgres trazem a linha recusada, e a linha traz o e-mail do
+ * titular. `status` tipado por `LgpdRequestStatus` é o que prende este arquivo
+ * ao vocabulário que o banco aceita (o par está no invariante de vocabulário).
+ */
+async function gravarEstado(
+  admin: ReturnType<typeof createAdminClient>,
+  orgId: string,
+  requestId: string,
+  patch: { status: LgpdRequestStatus } & Record<string, unknown>,
+): Promise<string | null> {
+  let codigo: string | null = null;
+  try {
+    const { error } = await admin
+      .from("lgpd_requests")
+      .update(patch)
+      .eq("organization_id", orgId)
+      .eq("id", requestId);
+    if (error) codigo = error.code || "sem_codigo";
+  } catch {
+    // Rede caída ou cliente que lança: também é "não gravou".
+    codigo = "sem_resposta";
+  }
+  if (codigo) {
+    logger.error("[lgpd-export-worker] o banco recusou a gravação de estado do pedido", {
+      request_id: shortId(requestId),
+      organization_id: orgId,
+      status: patch.status,
+      error_code: codigo,
+    });
+  }
+  return codigo;
 }
 
 export async function processLgpdExport(event: EventRow): Promise<HandlerResult> {
@@ -136,26 +180,28 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
   // 2. attempts cap + transition to processing.
   const nextAttempts = req.attempts + 1;
   if (nextAttempts > MAX_ATTEMPTS) {
-    await admin
-      .from("lgpd_requests")
-      .update({
-        status: "failed",
-        error_message: "max_attempts_exceeded",
-      })
-      .eq("organization_id", orgId)
-      .eq("id", requestId);
+    const erroAoDesistir = await gravarEstado(admin, orgId, requestId, {
+      status: "failed",
+      error_message: "max_attempts_exceeded",
+    });
     await audit({
       action: "lgpd.export_failed",
       organizationId: orgId,
       resourceType: "lgpd_request",
       resourceId: requestId,
-      metadata: { reason: "max_attempts_exceeded", attempts: req.attempts },
+      metadata: {
+        reason: "max_attempts_exceeded",
+        attempts: req.attempts,
+        ...(erroAoDesistir ? { status_write_failed: erroAoDesistir } : {}),
+      },
       bypassedRls: true,
     });
     return {
       consumer_key: "lgpd-export-worker.v1",
       status: "error",
-      detail: "max_attempts_exceeded",
+      detail: erroAoDesistir
+        ? `max_attempts_exceeded; status_write_failed: ${erroAoDesistir}`
+        : "max_attempts_exceeded",
     };
   }
 
@@ -277,21 +323,21 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
 
     if (!deliveryEmail) {
       // Mark as pending_review — operator must contact manually.
-      await admin
-        .from("lgpd_requests")
-        .update({
-          status: "pending_review",
-          error_message: "no_delivery_email",
-          result: {
-            pdf_path: pdfPath,
-            json_path: jsonPath,
-            sha256: signResult.sha256,
-            signed_pades: signResult.signed_pades,
-            warning: signResult.warning ?? null,
-          },
-        })
-        .eq("organization_id", orgId)
-        .eq("id", requestId);
+      // Se o banco recusar, lança: cai no catch do handler, que devolve o pedido
+      // à fila (ou a `failed` no teto) com o código em `error_message`, e o
+      // `lgpd.export_generated` abaixo não é escrito para um desfecho que não houve.
+      const erroSemEndereco = await gravarEstado(admin, orgId, requestId, {
+        status: "pending_review",
+        error_message: "no_delivery_email",
+        result: {
+          pdf_path: pdfPath,
+          json_path: jsonPath,
+          sha256: signResult.sha256,
+          signed_pades: signResult.signed_pades,
+          warning: signResult.warning ?? null,
+        },
+      });
+      if (erroSemEndereco) throw new Error(`pending_review_update_failed: ${erroSemEndereco}`);
       await audit({
         action: "lgpd.export_generated",
         organizationId: orgId,
@@ -330,23 +376,20 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
       messageId = sent.messageId;
     } catch (err) {
       if (err instanceof EmailNotConfigured) {
-        // Operator gap — mark pending_review (no retry helps).
-        await admin
-          .from("lgpd_requests")
-          .update({
-            status: "pending_review",
-            error_message: "email_not_configured",
-            result: {
-              pdf_path: pdfPath,
-              json_path: jsonPath,
-              sha256: signResult.sha256,
-              signed_pades: signResult.signed_pades,
-              warning: signResult.warning ?? null,
-              delivered_to_hash: deliveredHash,
-            },
-          })
-          .eq("organization_id", orgId)
-          .eq("id", requestId);
+        // Operator gap — mark pending_review (no retry helps). Erro lido, como acima.
+        const erroSemTransporte = await gravarEstado(admin, orgId, requestId, {
+          status: "pending_review",
+          error_message: "email_not_configured",
+          result: {
+            pdf_path: pdfPath,
+            json_path: jsonPath,
+            sha256: signResult.sha256,
+            signed_pades: signResult.signed_pades,
+            warning: signResult.warning ?? null,
+            delivered_to_hash: deliveredHash,
+          },
+        });
+        if (erroSemTransporte) throw new Error(`pending_review_update_failed: ${erroSemTransporte}`);
         await audit({
           action: "lgpd.export_generated",
           organizationId: orgId,
@@ -372,21 +415,22 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
         request_id: shortId(requestId),
         error_hash: sha256(detail),
       });
-      await admin
-        .from("lgpd_requests")
-        .update({
-          status: "received",
-          error_message: "email_send_failed",
-          // A falha devolve o pedido à fila: limpa a reivindicação para o retry
-          // imediato não esperar a janela de órfã.
-          export_claimed_at: null,
-        })
-        .eq("organization_id", orgId)
-        .eq("id", requestId);
+      // Se nem esta gravação entrar, o pedido fica em `processing` com a
+      // reivindicação de pé: o dreno repete o evento (o desfecho é `error`) e,
+      // vencida a janela de órfã, a próxima tentativa retoma.
+      const erroAoDevolver = await gravarEstado(admin, orgId, requestId, {
+        status: "received",
+        error_message: "email_send_failed",
+        // A falha devolve o pedido à fila: limpa a reivindicação para o retry
+        // imediato não esperar a janela de órfã.
+        export_claimed_at: null,
+      });
       return {
         consumer_key: "lgpd-export-worker.v1",
         status: "error",
-        detail: "email_send_failed",
+        detail: erroAoDevolver
+          ? `email_send_failed; status_write_failed: ${erroAoDevolver}`
+          : "email_send_failed",
       };
     }
 
@@ -402,16 +446,47 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
       expires_at: expiresAt.toISOString(),
     };
 
-    await admin
-      .from("lgpd_requests")
-      .update({
-        status: "completed",
-        completed_at: new Date().toISOString(),
+    // O e-mail JÁ SAIU. Lançar aqui levaria ao catch, que devolve o pedido à
+    // fila e manda o relatório ao titular de novo. Então: tenta gravar duas
+    // vezes; se o banco seguir recusando, marca `failed` com o motivo (para a
+    // tela não mostrar "Processando" num pedido entregue), audita e devolve
+    // `error`, sem reenviar nada.
+    const concluido = {
+      status: "completed" as const,
+      completed_at: new Date().toISOString(),
+      result,
+      error_message: null,
+    };
+    const erroAoConcluir =
+      (await gravarEstado(admin, orgId, requestId, concluido)) &&
+      (await gravarEstado(admin, orgId, requestId, concluido));
+    if (erroAoConcluir) {
+      await gravarEstado(admin, orgId, requestId, {
+        status: "failed",
+        error_message: `entregue_mas_conclusao_nao_gravada: ${erroAoConcluir}`,
         result,
-        error_message: null,
-      })
-      .eq("organization_id", orgId)
-      .eq("id", requestId);
+      });
+      await audit({
+        action: "lgpd.export_failed",
+        organizationId: orgId,
+        resourceType: "lgpd_request",
+        resourceId: requestId,
+        metadata: {
+          reason: "completed_update_failed",
+          status_write_failed: erroAoConcluir,
+          delivered: true,
+          delivered_to_hash: deliveredHash,
+          message_id: messageId,
+          attempts: nextAttempts,
+        },
+        bypassedRls: true,
+      });
+      return {
+        consumer_key: "lgpd-export-worker.v1",
+        status: "error",
+        detail: `completed_update_failed: ${erroAoConcluir}`,
+      };
+    }
 
     // 11. Domain events.
     await admin.rpc("emit_event" as never, {
@@ -494,17 +569,13 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
       attempts: nextAttempts,
     });
 
-    await admin
-      .from("lgpd_requests")
-      .update({
-        status: nextAttempts >= MAX_ATTEMPTS ? "failed" : "received",
-        error_message: detail.slice(0, 500),
-        // Sem reivindicação pendurada: o retry (received) reclama na hora, e o
-        // desistido (failed) não deixa marcador para trás.
-        export_claimed_at: null,
-      })
-      .eq("organization_id", orgId)
-      .eq("id", requestId);
+    const erroAoRegistrarFalha = await gravarEstado(admin, orgId, requestId, {
+      status: nextAttempts >= MAX_ATTEMPTS ? "failed" : "received",
+      error_message: detail.slice(0, 500),
+      // Sem reivindicação pendurada: o retry (received) reclama na hora, e o
+      // desistido (failed) não deixa marcador para trás.
+      export_claimed_at: null,
+    });
 
     await audit({
       action: "lgpd.export_failed",
@@ -514,6 +585,7 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
       metadata: {
         attempts: nextAttempts,
         error_hash: sha256(detail),
+        ...(erroAoRegistrarFalha ? { status_write_failed: erroAoRegistrarFalha } : {}),
       },
       bypassedRls: true,
     });
@@ -521,7 +593,9 @@ export async function processLgpdExport(event: EventRow): Promise<HandlerResult>
     return {
       consumer_key: "lgpd-export-worker.v1",
       status: "error",
-      detail: "export_failed_will_retry",
+      detail: erroAoRegistrarFalha
+        ? `export_failed_will_retry; status_write_failed: ${erroAoRegistrarFalha}`
+        : "export_failed_will_retry",
     };
   }
 }

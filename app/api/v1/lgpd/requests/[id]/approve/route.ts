@@ -15,6 +15,7 @@ import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -158,8 +159,21 @@ export async function POST(
   });
 
   if (emitErr) {
-    console.error("[lgpd-approve] emit_event failed", emitErr.message);
-    // Non-blocking — worker can recover via cron
+    // Sem o evento nenhum worker pega o pedido, e não existe cron que o recupere:
+    // seguir daqui gravaria `processing` num pedido que ninguém vai processar, e
+    // a aprovação só aceita `received`, então ele não sairia mais dali. O pedido
+    // fica como está e quem aprovou pode tentar de novo.
+    logger.error("[lgpd-approve] emit_event falhou, pedido mantido em received", {
+      request_id: id,
+      organization_id: orgId,
+      error_code: emitErr.code,
+    });
+    return fail(
+      "internal_error",
+      t("Não foi possível iniciar o processamento. Tente aprovar de novo."),
+      500,
+      { requestId },
+    );
   }
 
   // Transition status → processing
