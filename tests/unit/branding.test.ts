@@ -915,6 +915,10 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     categoria: "CONSOLE",
     motivo: "Google AI Studio — onde o usuário cria a chave do Gemini.",
   },
+  "developers.google.com": {
+    categoria: "CONSOLE",
+    motivo: "Documentação oficial do fornecedor Google, consultada pelo titular na política pública para ler os requisitos de Uso Limitado dos dados recebidos das APIs. É referência ao fornecedor da integração, não domínio do operador nem destino para envio de dados.",
+  },
   "partners.tiendanube.com": {
     categoria: "CONSOLE",
     motivo:
@@ -1099,6 +1103,9 @@ describe("catraca de host de terceiro no código que embarca", () => {
       "aistudio.google.com",
       "console.anthropic.com",
       "deskcomm.app",
+      // Referência pública à política de dados do fornecedor Google: a página
+      // de privacidade precisa apontar para os requisitos de Uso Limitado.
+      "developers.google.com",
       "meet.google.com",
       "meusistema.com",
       "mi-gateway.ejemplo.com",

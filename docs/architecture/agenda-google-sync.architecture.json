@@ -40,6 +40,27 @@
   ],
   "nodes": [
     {
+      "id": "apresentacao-publica",
+      "lane": "humano",
+      "col": 0,
+      "type": "frontend",
+      "label": "/legal/about: funções do aplicativo e integração opcional"
+    },
+    {
+      "id": "politica-publica",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "/legal/privacy: acesso, uso, armazenamento e revogação"
+    },
+    {
+      "id": "verificacao-oauth",
+      "lane": "externo",
+      "col": 0,
+      "type": "service",
+      "label": "Google Auth Platform: apresentação e política no cadastro OAuth"
+    },
+    {
       "id": "settings",
       "lane": "humano",
       "col": 0,
@@ -188,6 +209,24 @@
     }
   ],
   "edges": [
+    {
+      "id": "oauth-apresentacao",
+      "from": "verificacao-oauth",
+      "to": "apresentacao-publica",
+      "label": "página inicial pública cadastrada"
+    },
+    {
+      "id": "apresentacao-politica",
+      "from": "apresentacao-publica",
+      "to": "politica-publica",
+      "label": "link para as práticas de dados da integração"
+    },
+    {
+      "id": "politica-verificacao",
+      "from": "politica-publica",
+      "to": "verificacao-oauth",
+      "label": "disclosures conferidos pelo titular e pelo revisor OAuth"
+    },
     {
       "id": "e1",
       "from": "settings",
