@@ -84,6 +84,22 @@ describe("bordas humanas de seleção e conflito", () => {
     expect((await resolve(request(payload), context)).status).toBe(409);
     expect(audit).not.toHaveBeenCalled();
   });
+  // Migration 0358: a recusa permanente sai do banco como PT409 (o 40001 acima
+  // segue aceito, porque o banco e a imagem não se atualizam no mesmo instante).
+  it("revisão obsoleta em PT409 também é 409, na decisão e na escolha das agendas", async () => {
+    vi.mocked(googleRpc).mockRejectedValue(
+      Object.assign(new Error("google_stale"), { code: "PT409" }),
+    );
+    expect((await resolve(request(payload), context)).status).toBe(409);
+    expect(
+      (
+        await PATCH(
+          request({ revisions: [{ connection_id: id, revision: "1" }], sources: [id], destination: id }, "PATCH"),
+        )
+      ).status,
+    ).toBe(409);
+    expect(audit).not.toHaveBeenCalled();
+  });
   it("dono diferente recebe403 decidido pela RPC, nunca fallback service", async () => {
     vi.mocked(googleRpc).mockRejectedValue(
       Object.assign(new Error("google_resolution_forbidden"), { code: "42501" }),

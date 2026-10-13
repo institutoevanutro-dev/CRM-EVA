@@ -550,13 +550,21 @@ export function InboxFilters({ value, onChange }: Props) {
 
           Wrap e não `overflow-x-auto` porque rolagem lateral numa faixa de
           seis itens curtos é gesto que ninguém descobre — e a alternativa
-          custa uma segunda linha só quando a primeira não dá conta. */}
+          custa uma segunda linha só quando a primeira não dá conta.
+
+          O `flex-wrap` tinha saído no visual novo (#164) e este comentário
+          ficou prometendo a quebra sozinho. Medido em browser real em
+          13/10/2026, com o CSS compilado e contagens de três dígitos: na coluna
+          de 272px (o padrão em 1280px) com "Automático" aberto no "Mais", a
+          faixa rolava 67px para fora; na de 240px (o mínimo do arraste), 34px
+          já com o "Mais" fechado. Com a quebra de volta: rolagem zero de 240 a
+          380px, e a segunda linha só aparece onde a primeira não dá conta. */}
       <Tabs
         value={value.tab}
         onValueChange={(v) => onChange({ ...value, tab: v as InboxTab })}
         className="px-3"
       >
-        <TabsList className="h-auto w-full justify-start gap-x-3 rounded-none bg-transparent p-0">
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-x-3 gap-y-1 rounded-none bg-transparent p-0">
           {tabs.filter((tab) => ABAS_PRINCIPAIS.includes(tab)).map((tab) => {
             const meta = INBOX_TABS.find((t) => t.value === tab)!;
             const count = countFor[tab];

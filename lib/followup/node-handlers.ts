@@ -14,6 +14,12 @@ export type EnrollmentStatus =
   | "active"
   | "waiting_reply"
   | "paused_handoff"
+  /**
+   * Pausa pedida por uma pessoa (0145, `STATUS_PAUSA_MANUAL` em `intervencao.ts`).
+   * Fora de `LIVE_STATUSES`: a mensagem comum não a acorda. O opt-out a alcança
+   * (`reactivity.ts`). Faltava neste tipo desde a 0145.
+   */
+  | "paused_manual"
   | "completed"
   | "cancelled"
   | "dead";
