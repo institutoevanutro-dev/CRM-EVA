@@ -29,7 +29,9 @@ import { PRIORIDADES_DA_TAREFA, SITUACOES_DA_TAREFA, type Tarefa } from "@/lib/t
 export const dynamic = "force-dynamic";
 
 const COLUNAS =
-  "id, organization_id, title, description, due_date, priority, status, lead_id, contact_id, assigned_to, created_by, created_at, updated_at";
+  // `lead:crm_leads(id, title)` é o negócio embutido para a lista dizer de quem é a
+  // tarefa. Vem pela sessão: negócio que a RLS de `crm_leads` esconde chega `null`.
+  "id, organization_id, title, description, due_date, priority, status, lead_id, contact_id, assigned_to, created_by, created_at, updated_at, lead:crm_leads(id, title)";
 
 const edicaoSchema = z
   .object({

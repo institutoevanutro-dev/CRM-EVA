@@ -93,9 +93,8 @@ export function FormularioDeTarefa({
   const [prioridade, setPrioridade] = useState<PrioridadeDaTarefa>(tarefa?.priority ?? "medium");
   const [situacao, setSituacao] = useState<SituacaoDaTarefa>(tarefa?.status ?? "pending");
   // Tarefa nova nasce de quem a cria; editando, respeita o que está gravado.
-  const [responsavel, setResponsavel] = useState<string>(
-    (editando ? tarefa?.assigned_to : usuarioId) ?? NINGUEM,
-  );
+  const responsavelInicial = (editando ? tarefa?.assigned_to : usuarioId) ?? NINGUEM;
+  const [responsavel, setResponsavel] = useState<string>(responsavelInicial);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -119,7 +118,13 @@ export function FormularioDeTarefa({
         due_date: prazo,
         priority: prioridade,
         status: situacao,
-        assigned_to: responsavel === NINGUEM ? null : responsavel,
+        // Na edição, só vai quando MUDOU (regra do PR #2760 do upstream). Uma
+        // tarefa antiga pode ter como responsável alguém que saiu da equipe:
+        // reenviar o mesmo id faria a rota recusar a edição do título por
+        // causa de um campo em que ninguém mexeu.
+        ...(!editando || responsavel !== responsavelInicial
+          ? { assigned_to: responsavel === NINGUEM ? null : responsavel }
+          : {}),
         lead_id: tarefa?.lead_id ?? leadId ?? null,
         contact_id: tarefa?.contact_id ?? contactId ?? null,
       });

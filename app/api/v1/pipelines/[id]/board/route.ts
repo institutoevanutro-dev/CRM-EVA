@@ -24,6 +24,7 @@ import {
   type PropostaAmbigua,
 } from "@/lib/leads/next-action";
 import type { LeadCandidate } from "@/lib/leads/active-lead";
+import { anexarTarefasAosNegocios, type LinhaDaTarefaNoQuadro } from "@/lib/kanban/tarefas-no-quadro";
 import { buscaEmLotes } from "@/lib/supabase/em-lotes";
 import { createClient } from "@/lib/supabase/server";
 import type { BoardData, Pipeline, Stage } from "@/lib/kanban/types";
@@ -448,6 +449,53 @@ async function withNextActions(
   };
 }
 
+/**
+ * Anexa o resumo das tarefas EM ABERTO de cada negócio: o selo do card.
+ *
+ * Portado do PR #2760 do upstream (melgarafael/DeskcommCRM, de @profpeque).
+ *
+ * Uma leitura de `crm_tasks` por LOTE de ids (300 por lote, como as outras
+ * etapas), nunca uma por card. Só as abertas vêm do banco, e só três colunas:
+ * a régua de "aberta" e "atrasada" é a mesma da seção do dossiê
+ * (`lib/kanban/tarefas-no-quadro.ts`). O índice parcial `crm_tasks_lead_idx`
+ * responde ao `.in("lead_id", lote)`.
+ *
+ * A RLS de `crm_tasks` (migration 0359) já devolve só as tarefas dos negócios
+ * que a sessão enxerga; os ids do lote também vieram de `crm_leads` pela RLS.
+ *
+ * Erro de leitura derruba o quadro com 500, como as outras etapas desta rota:
+ * um quadro que some com o selo em silêncio diria "nenhuma tarefa pendente"
+ * justamente no dia em que não sabe.
+ *
+ * ponytail: o teto de linhas por resposta do PostgREST (1.000 por lote de 300
+ * negócios) contaria a menos acima disso; trocar por contagem agregada no banco
+ * se uma organização chegar perto.
+ */
+async function withTarefas(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  leads: Lead[],
+): Promise<{ leads: Lead[]; error: string | null }> {
+  if (leads.length === 0) return { leads, error: null };
+
+  const { data, error } = await buscaEmLotes(
+    leads.map((l) => l.id),
+    (lote) =>
+      supabase
+        .from("crm_tasks")
+        .select("lead_id, due_date, status")
+        .eq("organization_id", organizationId)
+        .in("lead_id", lote)
+        .in("status", ["pending", "in_progress"]),
+  );
+  if (error) return { leads, error: error.message };
+
+  return {
+    leads: anexarTarefasAosNegocios(leads, (data ?? []) as LinhaDaTarefaNoQuadro[]),
+    error: null,
+  };
+}
+
 export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const requestId = randomUUID();
   const { id: pipelineId } = await ctx.params;
@@ -505,7 +553,7 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
 
   // Os enriquecimentos são independentes entre si: cada um devolve a MESMA lista,
   // na mesma ordem, com os seus campos a mais. Em paralelo, a abertura espera o
-  // mais lento deles em vez da soma dos cinco.
+  // mais lento deles em vez da soma dos seis.
   const orgId = (pipeline as Pipeline).organization_id;
   const base = (leads ?? []) as Lead[];
   const partes = await Promise.all([
@@ -514,6 +562,7 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     withScores(supabase, orgId, base),
     withConversas(supabase, orgId, base),
     withMarcadoresDoContato(supabase, orgId, base),
+    withTarefas(supabase, orgId, base),
   ]);
   const falha = partes.find((p) => p.error);
   if (falha) return fail("internal_error", falha.error as string, 500, { requestId });

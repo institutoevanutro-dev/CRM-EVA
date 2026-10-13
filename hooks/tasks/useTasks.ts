@@ -25,6 +25,11 @@ export interface FiltrosDeTarefa {
   aberto?: boolean;
 }
 
+export interface OpcoesDeTarefas {
+  /** `false` segura a consulta: o dossiê fechado não precisa das tarefas dele. */
+  enabled?: boolean;
+}
+
 async function leJson<T>(res: Response, oQueFalhou: string): Promise<T> {
   if (!res.ok) {
     // A mensagem do servidor quando ela existe: `fail()` nomeia o campo
@@ -37,7 +42,7 @@ async function leJson<T>(res: Response, oQueFalhou: string): Promise<T> {
   return json.data;
 }
 
-export function useTasks(filtros: FiltrosDeTarefa = {}) {
+export function useTasks(filtros: FiltrosDeTarefa = {}, opcoes: OpcoesDeTarefas = {}) {
   const queryClient = useQueryClient();
 
   const params = new URLSearchParams();
@@ -56,9 +61,19 @@ export function useTasks(filtros: FiltrosDeTarefa = {}) {
     },
     staleTime: 10_000,
     refetchOnWindowFocus: true,
+    enabled: opcoes.enabled ?? true,
   });
 
-  const invalidar = () => queryClient.invalidateQueries({ queryKey: CHAVE });
+  // O QUADRO também: o card mostra o selo das tarefas do negócio, e quem cria
+  // ou conclui uma tarefa pelo dossiê precisa ver o selo mudar. O prefixo
+  // `["board"]` (o de `chaveDoQuadro`) alcança todo quadro em cache: a tarefa
+  // não sabe em qual funil o negócio está agora. (A linha do tempo não precisa:
+  // ela assina os INSERTs de `crm_lead_activities` ao vivo.)
+  const invalidar = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: CHAVE }),
+      queryClient.invalidateQueries({ queryKey: ["board"] }),
+    ]);
 
   const criar = useMutation({
     mutationFn: async (entrada: NovaTarefa) => {

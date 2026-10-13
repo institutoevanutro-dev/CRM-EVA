@@ -10,6 +10,7 @@ import { NextActionSlot } from "./NextActionSlot";
 import { ReactivationSlot } from "./ReactivationSlot";
 import { ConversaSlot } from "./ConversaSlot";
 import { ScoreSlot } from "./ScoreSlot";
+import { TarefasNoCard } from "./TarefasNoCard";
 import { OwnerBadge } from "./OwnerBadge";
 
 /** Os dois gestos de seleção que o card sabe relatar. */
@@ -295,13 +296,16 @@ export function KanbanCard({
               e some por inteiro quando não há conversa. */}
           <ConversaSlot conversa={lead.conversa} />
 
-          {/* ④ dono · ⑤ tempo no estágio */}
+          {/* ④ dono (+ selo de tarefas) · ⑤ tempo no estágio */}
           <div className="mt-1 flex h-6 items-center justify-between gap-2">
-            <OwnerBadge
-              ownerKind={card.owner.kind}
-              ownerName={card.owner.name}
-              agentVersion={card.owner.agentVersion}
-            />
+            <div className="flex min-w-0 items-center gap-2">
+              <OwnerBadge
+                ownerKind={card.owner.kind}
+                ownerName={card.owner.name}
+                agentVersion={card.owner.agentVersion}
+              />
+              <TarefasNoCard tarefas={lead.tarefas} />
+            </div>
             <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-text-muted">
               {state.showStageAge && age
                 ? `${age} ${t("em")} ${card.stageName}`
