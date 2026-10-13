@@ -18,8 +18,8 @@ import { countAs, lastLine, sql, writeCountAs } from "./gov-helpers";
  *     quando o negócio é visível, papel por papel (se alguém mudar
  *     `fn_can_view_lead`, as tarefas mudam junto ou este teste fica vermelho);
  *   - escrever é de `agent` para cima e só no que a sessão vê;
- *   - a leitura do selo do quadro (tarefas abertas de 300 negócios) não custa
- *     caro com a RLS ligada.
+ *   - a leitura do selo do quadro (tarefas abertas de um funil de 800 negócios)
+ *     não custa caro com a RLS ligada.
  */
 const A = "e3590000-0000-4000-8000-00000000000a";
 const B = "e3590000-0000-4000-8000-00000000000b";
@@ -230,41 +230,49 @@ describe("0359 — a tarefa segue a visibilidade do negócio", () => {
     expect(lastLine(out)).toBe("f");
   });
 
-  it("custo: o selo do quadro (tarefas abertas de 300 negócios) é uma consulta barata com a RLS ligada", () => {
-    // 2.000 negócios da Bia e 2.000 da Ana, 2 tarefas abertas em cada: a Ana
-    // pede as tarefas de 300 negócios (150 dela, 150 da Bia), como um lote da
-    // rota do quadro. Só as 300 dos negócios dela voltam.
+  it("custo: o selo do quadro é UMA consulta barata com a RLS ligada (funil de 800 negócios)", () => {
+    // Um funil só para a carga: 800 negócios (400 da Ana, 400 da Bia), 2 tarefas
+    // abertas e vencidas em cada. A consulta é a da rota do quadro
+    // (`withTarefas`): tarefas abertas do FUNIL, pela junção com `crm_leads`.
+    const FUNIL = "e3590000-5555-4000-8000-00000000000c";
+    const ETAPA = "e3590000-5555-4000-8000-0000000000c1";
     sql(`
+      insert into public.crm_pipelines (id, organization_id, name, slug) values ('${FUNIL}', '${A}', 'Carga', 'tarefas-carga');
+      insert into public.crm_stages (id, organization_id, pipeline_id, name, slug, position) values ('${ETAPA}', '${A}', '${FUNIL}', 'Novo', 'novo', 1000);
       insert into public.crm_leads (organization_id, pipeline_id, stage_id, title, owner_user_id)
-        select '${A}', '${FUNIL_A}', '${ETAPA_A}', 'carga ' || g, case when g % 2 = 0 then '${ANA}'::uuid else '${BIA}'::uuid end
-          from generate_series(1, 4000) g;
+        select '${A}', '${FUNIL}', '${ETAPA}', 'carga ' || g, case when g % 2 = 0 then '${ANA}'::uuid else '${BIA}'::uuid end
+          from generate_series(1, 800) g;
       insert into public.crm_tasks (organization_id, title, lead_id, due_date)
         select '${A}', 'carga', l.id, now() - interval '1 day'
-          from public.crm_leads l, generate_series(1, 2) where l.title like 'carga %';
+          from public.crm_leads l, generate_series(1, 2) where l.pipeline_id = '${FUNIL}';
       analyze public.crm_leads; analyze public.crm_tasks;
     `);
-    const out = sql(`
-      set role authenticated;
-      select set_config('request.jwt.claims', '{"sub":"${ANA}"}', false);
-      create temp table lote as
-        (select id from public.crm_leads where title like 'carga %' order by title limit 150);
-      reset role;
-      insert into lote select id from public.crm_leads where title like 'carga %' and owner_user_id = '${BIA}' order by title limit 150;
-      set role authenticated;
-      explain (analyze, format json)
-        select lead_id, due_date, status from public.crm_tasks
-         where organization_id = '${A}' and lead_id in (select id from lote) and status in ('pending','in_progress');
-    `);
-    const plano = JSON.parse(out.slice(out.indexOf("[")))[0] as {
-      "Execution Time": number;
-      Plan: { "Actual Rows": number };
+    const medir = (userId: string) => {
+      const out = sql(`
+        set role authenticated;
+        select set_config('request.jwt.claims', '{"sub":"${userId}"}', false);
+        explain (analyze, format json)
+          select t.lead_id, t.due_date, t.status
+            from public.crm_tasks t join public.crm_leads l on l.id = t.lead_id
+           where t.organization_id = '${A}' and l.pipeline_id = '${FUNIL}' and t.status in ('pending','in_progress');
+      `);
+      const plano = JSON.parse(out.slice(out.indexOf("[")))[0] as {
+        "Execution Time": number;
+        Plan: { "Actual Rows": number };
+      };
+      return { linhas: plano.Plan["Actual Rows"], ms: plano["Execution Time"] };
     };
+    const ana = medir(ANA);
+    const gestor = medir(GESTOR);
     process.stdout.write(
-      `[0359] selo do quadro: ${plano.Plan["Actual Rows"]} linhas de 300 negócios em ${plano["Execution Time"].toFixed(1)} ms\n`,
+      `[0359] selo do quadro, funil de 800 negócios e 1.600 tarefas abertas: atendente ${ana.linhas} linhas em ${ana.ms.toFixed(1)} ms; gestor ${gestor.linhas} linhas em ${gestor.ms.toFixed(1)} ms\n`,
     );
-    expect(plano.Plan["Actual Rows"]).toBe(300);
-    // Folga larga de propósito (máquina de CI carregada); o que este teto pega
-    // é a RLS voltar a custar por linha visitada da tabela inteira.
-    expect(plano["Execution Time"]).toBeLessThan(1500);
+    // A Ana recebe só as tarefas dos 400 negócios dela; o gestor, todas.
+    expect(ana.linhas).toBe(800);
+    expect(gestor.linhas).toBe(1600);
+    // Folga larga de propósito (máquina de CI carregada). O que este teto pega
+    // é a RLS voltar a custar caro por linha.
+    expect(ana.ms).toBeLessThan(1500);
+    expect(gestor.ms).toBeLessThan(1500);
   });
 });

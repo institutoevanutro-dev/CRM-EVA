@@ -454,44 +454,44 @@ async function withNextActions(
  *
  * Portado do PR #2760 do upstream (melgarafael/DeskcommCRM, de @profpeque).
  *
- * Uma leitura de `crm_tasks` por LOTE de ids (300 por lote, como as outras
- * etapas), nunca uma por card. Só as abertas vêm do banco, e só três colunas:
- * a régua de "aberta" e "atrasada" é a mesma da seção do dossiê
- * (`lib/kanban/tarefas-no-quadro.ts`). O índice parcial `crm_tasks_lead_idx`
- * responde ao `.in("lead_id", lote)`.
+ * UMA consulta para o quadro inteiro, e não uma por card nem uma por lote de
+ * ids: o upstream lê `crm_tasks` em lotes de 300 ids de negócio, e aqui o
+ * quadro de ~800 negócios já foi incidente por excesso de idas ao banco
+ * (07/10/2026). O filtro é pelo FUNIL, pela junção com `crm_leads`
+ * (`!inner`), então nenhuma lista de ids vai na URL. Só as abertas vêm, e só
+ * três colunas. Tarefa de negócio que não está no recorte do quadro (fechado
+ * antigo) é ignorada por `anexarTarefasAosNegocios`.
  *
- * A RLS de `crm_tasks` (migration 0359) já devolve só as tarefas dos negócios
- * que a sessão enxerga; os ids do lote também vieram de `crm_leads` pela RLS.
+ * A RLS de `crm_tasks` (migration 0359) e a de `crm_leads` já devolvem só as
+ * tarefas dos negócios que a sessão enxerga. Custo medido com a RLS ligada em
+ * `tests/invariants/tarefas-seguem-a-visibilidade-do-negocio.test.ts`.
  *
  * Erro de leitura derruba o quadro com 500, como as outras etapas desta rota:
  * um quadro que some com o selo em silêncio diria "nenhuma tarefa pendente"
  * justamente no dia em que não sabe.
  *
- * ponytail: o teto de linhas por resposta do PostgREST (1.000 por lote de 300
- * negócios) contaria a menos acima disso; trocar por contagem agregada no banco
- * se uma organização chegar perto.
+ * ponytail: o teto de linhas por resposta do PostgREST (1.000) contaria a
+ * menos num funil com mais de mil tarefas abertas; trocar por contagem
+ * agregada no banco se uma organização chegar perto.
  */
 async function withTarefas(
   supabase: Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
+  pipelineId: string,
   leads: Lead[],
 ): Promise<{ leads: Lead[]; error: string | null }> {
   if (leads.length === 0) return { leads, error: null };
 
-  const { data, error } = await buscaEmLotes(
-    leads.map((l) => l.id),
-    (lote) =>
-      supabase
-        .from("crm_tasks")
-        .select("lead_id, due_date, status")
-        .eq("organization_id", organizationId)
-        .in("lead_id", lote)
-        .in("status", ["pending", "in_progress"]),
-  );
+  const { data, error } = await supabase
+    .from("crm_tasks")
+    .select("lead_id, due_date, status, crm_leads!inner(pipeline_id)")
+    .eq("organization_id", organizationId)
+    .eq("crm_leads.pipeline_id", pipelineId)
+    .in("status", ["pending", "in_progress"]);
   if (error) return { leads, error: error.message };
 
   return {
-    leads: anexarTarefasAosNegocios(leads, (data ?? []) as LinhaDaTarefaNoQuadro[]),
+    leads: anexarTarefasAosNegocios(leads, (data ?? []) as unknown as LinhaDaTarefaNoQuadro[]),
     error: null,
   };
 }
@@ -562,7 +562,7 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     withScores(supabase, orgId, base),
     withConversas(supabase, orgId, base),
     withMarcadoresDoContato(supabase, orgId, base),
-    withTarefas(supabase, orgId, base),
+    withTarefas(supabase, orgId, pipelineId, base),
   ]);
   const falha = partes.find((p) => p.error);
   if (falha) return fail("internal_error", falha.error as string, 500, { requestId });
