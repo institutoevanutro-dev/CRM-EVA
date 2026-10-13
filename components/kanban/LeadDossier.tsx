@@ -3,14 +3,17 @@
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useRef } from "react";
 
+import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useLeadTimeline } from "@/hooks/leads/useLeadTimeline";
+import { ROLE_RANK } from "@/lib/auth/types";
 import type { Lead } from "@/lib/types/leads";
 import { ConversaNoDossie } from "./ConversaNoDossie";
 import { LeadFieldsForm } from "./LeadFieldsForm";
 import { ScoreSlot } from "./ScoreSlot";
 import { LeadTimeline } from "./LeadTimeline";
+import { TarefasDoNegocio } from "./TarefasDoNegocio";
 import { OwnerBadge } from "./OwnerBadge";
 import { resolveLeadOwner } from "@/lib/kanban/owner";
 import type { CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
@@ -66,6 +69,13 @@ export function LeadDossier({
   const timeline = useLeadTimeline(open ? lead.id : null, lead.contact_id);
   const owner = resolveLeadOwner(lead, ownerNames);
   const score = lead.score ?? null;
+  // Tarefas são de `agent` para cima, a mesma régua da tela de Tarefas e da
+  // rota. O suporte temporário só lê, como lá (`requireSupportWrite`).
+  const user = useUser();
+  const activeOrg = useActiveOrg();
+  const podeEditarTarefas =
+    (user.is_platform_admin && !user.support) ||
+    (activeOrg ? ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent : false);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -131,6 +141,16 @@ export function LeadDossier({
         )}
 
         <ConversaNoDossie conversa={lead.conversa} />
+
+        {/* As tarefas ANTES da linha do tempo: a timeline conta o que já
+            aconteceu, a tarefa é o que ainda falta fazer. Quem abre o card
+            para agir procura o próximo passo primeiro. */}
+        <TarefasDoNegocio
+          leadId={lead.id}
+          contactId={lead.contact_id}
+          podeEditar={podeEditarTarefas}
+          aberto={open}
+        />
 
         {/* ② timeline */}
         <section className="flex-1 py-3">

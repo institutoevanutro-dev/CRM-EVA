@@ -10472,6 +10472,32 @@ export const DICIONARIO: Traducoes = {
   "Sem contato vinculado, a etiqueta não é aplicada.": {
     es: "Sin contacto vinculado, la etiqueta no se aplica.",
   },
+  // Tarefas no card do negócio e selo no quadro (porte do upstream #2760).
+  "aberta": { es: "abierta" },
+  "abertas": { es: "abiertas" },
+  "atrasada": { es: "atrasada" },
+  "atrasadas": { es: "atrasadas" },
+  "tarefa aberta": { es: "tarea abierta" },
+  "tarefas abertas": { es: "tareas abiertas" },
+  "Nenhuma tarefa neste negócio. Anote o próximo passo combinado, com prazo e responsável.": {
+    es: "Ninguna tarea en este negocio. Anota el próximo paso acordado, con plazo y responsable.",
+  },
+  // Visão Calendário do funil, ao lado do quadro (porte do upstream #2790).
+  "Quadro": { es: "Tablero" },
+  "Semana": { es: "Semana" },
+  "Semana anterior": { es: "Semana anterior" },
+  "Próxima semana": { es: "Próxima semana" },
+  "Campo de data": { es: "Campo de fecha" },
+  "Campo de data final": { es: "Campo de fecha final" },
+  "Sem intervalo": { es: "Sin intervalo" },
+  "Nenhum negócio com este campo de data.": { es: "Ningún negocio con este campo de fecha." },
+  "Nenhum negócio com este campo de data neste período.": { es: "Ningún negocio con este campo de fecha en este período." },
+  "sem data neste campo": { es: "sin fecha en este campo" },
+  "Negócios sem data neste campo": { es: "Negocios sin fecha en este campo" },
+  "negócios em": { es: "negocios el" },
+  "ver todos": { es: "ver todos" },
+  "Mostrando": { es: "Mostrando" },
+  "Use a busca ou os filtros do funil para achar os demais.": { es: "Use la búsqueda o los filtros del embudo para encontrar los demás." },
 };
 
 /**

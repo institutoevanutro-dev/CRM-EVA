@@ -41,7 +41,9 @@ export const dynamic = "force-dynamic";
 
 /** As colunas que a tela lê. Explícitas para o `select *` não vazar coluna nova. */
 const COLUNAS =
-  "id, organization_id, title, description, due_date, priority, status, lead_id, contact_id, assigned_to, created_by, created_at, updated_at";
+  // `lead:crm_leads(id, title)` é o negócio embutido para a lista dizer de quem é a
+  // tarefa. Vem pela sessão: negócio que a RLS de `crm_leads` esconde chega `null`.
+  "id, organization_id, title, description, due_date, priority, status, lead_id, contact_id, assigned_to, created_by, created_at, updated_at, lead:crm_leads(id, title)";
 
 const criacaoSchema = z.object({
   title: z.string().trim().min(1).max(255),
