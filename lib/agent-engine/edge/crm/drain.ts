@@ -505,14 +505,29 @@ async function processEvent(
   //     `seq`). Se a resposta à mensagem nova couber numa bolha, ela é engolida.
   // Nos dois a mensagem nova ganha job próprio, com `seq` do zero, que roda com
   // o dono atual da conversa. Job comum não tem a marca e segue dando carona.
+  //
+  // E nunca em job que JÁ ENVIOU (`send_ledger` aceito, na fila ou em voo): é o
+  // segundo caso acima sem passagem nenhuma. "Pendente com `run_after` no
+  // futuro" também é o job que mandou a 1ª bolha, falhou e espera o retry (10 a
+  // 120 s, `failJob`), ou que o canal reteve (`SEND_QUEUED_RETRY_MS`). O retry
+  // reusa as posições `(job, seq)` e o ledger decide só pela posição: a 1ª bolha
+  // do que ele escrever volta `already_sent`. De carona ali, a resposta à
+  // mensagem nova era engolida, o job fechava `done` e ninguém era avisado.
+  // É a mesma régua de `anotarUltimaInboundVista`, que já não conta a mensagem
+  // nova como vista por esse job. Envio que FALHOU não segura: o ledger roda a
+  // chave e o retry envia naquela posição.
   if (knobs.debounceMs > 0) {
     const { rows: pendingRows } = await pool.query<{ id: string }>(
-      `select id from job_queue
+      `select id from job_queue j
        where organization_id = $1 and contact_id = $2
          and kind = 'inbound_turn' and status = 'pending' and run_after > now()
          and not (payload ? 'held_run_after')
          and not (payload ? 'passagem_feita')
          and payload->>'conversation_id' = $3
+         and not exists (
+           select 1 from send_ledger s
+            where s.organization_id = j.organization_id and s.job_id = j.id
+              and s.status in ('requested', 'accepted', 'queued'))
        limit 1`,
       [event.organization_id, p.contact_id, p.conversation_id],
     );
