@@ -8418,6 +8418,14 @@ export type Database = {
         }
         Returns: Json
       }
+      fn_lgpd_recusa_do_redact: {
+        Args: {
+          p_contact_id: string
+          p_organization_id: string
+          p_request_id: string
+        }
+        Returns: string
+      }
       fn_log_event: {
         Args: {
           p_event_type: string

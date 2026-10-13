@@ -6919,6 +6919,10 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível iniciar o processamento. Tente aprovar de novo.": {
     es: "No se pudo iniciar el procesamiento. Intente aprobar de nuevo.",
   },
+  "Não foi possível registrar a aprovação. Tente aprovar de novo.": {
+    es: "No se pudo registrar la aprobación. Intente aprobar de nuevo.",
+  },
+  "Esta solicitação já foi aprovada.": { es: "Esta solicitud ya fue aprobada." },
   "Falha ao confirmar. Tente novamente.": { es: "Fallo al confirmar. Intenta de nuevo." },
   "Configure a verificação em duas etapas": { es: "Configura la verificación en dos pasos" },
   "Esta empresa exige a verificação em duas etapas de quem administra. ": {

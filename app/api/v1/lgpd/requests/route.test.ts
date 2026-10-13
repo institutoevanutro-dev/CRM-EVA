@@ -7,9 +7,10 @@
  * e o repositório, o esquema e a idempotência são os reais.
  *
  * O caso que mais importa é o último bloco: registrar um pedido de anonimização
- * NÃO emite evento nenhum. Quem emite é a aprovação. O worker de anonimização
- * executa ao receber `lgpd.redact_received` sem olhar o estado do pedido, então
- * um evento emitido aqui apagaria o paciente no minuto seguinte, sem ninguém aprovar.
+ * NÃO emite evento nenhum. Quem emite é a aprovação. Desde a migration 0357 o
+ * worker de anonimização também recusa o pedido sem aprovação provada
+ * (`tests/unit/lgpd-redact-so-com-aprovacao.test.ts`); esta propriedade fica
+ * mesmo assim, como a primeira das duas guardas.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
