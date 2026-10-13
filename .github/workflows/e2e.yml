@@ -434,6 +434,7 @@ jobs:
         agenda-remarcar-e-cancelar.spec.ts
         agenda-tipos-de-agendamento.spec.ts
         cliente-pela-agenda.spec.ts
+        paciente-pelo-cadastro.spec.ts
         agenda-grade-interativa.spec.ts
         agente-novo-e-uso.spec.ts
         agente-organiza-operacao.spec.ts

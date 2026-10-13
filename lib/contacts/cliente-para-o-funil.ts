@@ -58,6 +58,33 @@ export function temCadastroDePaciente(contato: FatosDoContato): boolean {
   return contato.temProntuario === true || contato.temCpf === true;
 }
 
+/** As regras como o layout de `/app` as entrega à tela (`ActiveOrg`). */
+export function regrasDeClienteDe(
+  org: { cliente_pela_agenda?: boolean; paciente_pelo_cadastro?: boolean } | null | undefined,
+): RegrasDeCliente {
+  return {
+    pelaAgenda: org?.cliente_pela_agenda === true,
+    peloCadastro: org?.paciente_pelo_cadastro === true,
+  };
+}
+
+/** Os fatos como a API de contatos os entrega (`lib/types/contacts.ts`). */
+export function fatosDoContatoDaApi(c: {
+  first_service_at?: string | null;
+  cpf_available?: boolean;
+  prontuario_linked?: boolean;
+  is_anonymized?: boolean | null;
+  is_merged_into?: string | null;
+}): FatosDoContato {
+  return {
+    first_service_at: c.first_service_at,
+    temCpf: c.cpf_available === true,
+    temProntuario: c.prontuario_linked === true,
+    is_anonymized: c.is_anonymized,
+    is_merged_into: c.is_merged_into,
+  };
+}
+
 export function ehClienteParaOFunil(
   contato: FatosDoContato | null | undefined,
   regras: RegrasDeCliente,

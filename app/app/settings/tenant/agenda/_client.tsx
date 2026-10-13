@@ -2,6 +2,7 @@
 import { AgendasConectadas } from "@/components/agenda/AgendasConectadas";
 import { PrazosDePresenca } from "@/components/agenda/PrazosDePresenca";
 import { ClientePelaAgenda } from "@/components/agenda/ClientePelaAgenda";
+import { PacientePeloCadastro } from "@/components/agenda/PacientePeloCadastro";
 import { DiasBloqueados } from "@/components/agenda/DiasBloqueados";
 
 import { useT } from "@/hooks/i18n/useT";
@@ -263,6 +264,7 @@ export function TiposDeAgendamentoClient({
   erroDeLeitura = null,
   clientePelaAgendaLigado,
   podeLigarClientePelaAgenda,
+  pacientePeloCadastroLigado = false,
 }: {
   tiposIniciais: TipoRow[];
   pessoas: Array<{ id: string; papel: string; nome: string }>;
@@ -275,6 +277,8 @@ export function TiposDeAgendamentoClient({
   /** `organizations.settings.crm.cliente_pela_agenda`, lido pela página. */
   clientePelaAgendaLigado: boolean;
   podeLigarClientePelaAgenda: boolean;
+  /** `organizations.settings.crm.paciente_pelo_cadastro` (migration 0360), lido pela página. */
+  pacientePeloCadastroLigado?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -326,6 +330,11 @@ export function TiposDeAgendamentoClient({
       <PrazosDePresenca podeEditar={podeEditar}/>
       <ClientePelaAgenda
         ligadoInicial={clientePelaAgendaLigado}
+        podeLigar={podeLigarClientePelaAgenda}
+      />
+      {/* Mesmo papel (`admin`) da regra de cima: as duas decidem o funil de clientes. */}
+      <PacientePeloCadastro
+        ligadoInicial={pacientePeloCadastroLigado}
         podeLigar={podeLigarClientePelaAgenda}
       />
       <DiasBloqueados podeEditar={podeEditar}/>

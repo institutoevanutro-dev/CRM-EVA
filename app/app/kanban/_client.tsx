@@ -3,6 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
+import { regrasDeClienteDe } from "@/lib/contacts/cliente-para-o-funil";
 import { useT } from "@/hooks/i18n/useT";
 
 import { ImportarLeads } from "./_components/ImportarLeads";
@@ -120,7 +121,12 @@ export function FunisClient({
    * Mostrar o controle com a regra desligada seria oferecer o que o motor
    * ignora.
    */
-  const clientesLigado = useActiveOrg()?.cliente_pela_agenda === true;
+  //
+  // "Ligada" passou a ser QUALQUER das duas regras de cliente: a da agenda ou a
+  // do cadastro de paciente (migration 0360). As duas mandam o card para o
+  // mesmo funil marcado aqui.
+  const regrasDeCliente = regrasDeClienteDe(useActiveOrg());
+  const clientesLigado = regrasDeCliente.pelaAgenda || regrasDeCliente.peloCadastro;
   /**
    * ⚠️ A LISTA VEM DO SERVIDOR E É ATUALIZADA PELO CORPO DA RESPOSTA.
    *
@@ -716,9 +722,17 @@ export function FunisClient({
       */}
       {clientesLigado ? (
         <p className="mt-4 text-xs text-muted-foreground" data-testid="funis-rodape-clientes">
-          {t(
-            "Quem já tem atendimento marcado entra pelo funil de clientes. Sem um funil marcado, entra pelo padrão.",
-          )}
+          {regrasDeCliente.pelaAgenda && regrasDeCliente.peloCadastro
+            ? t(
+                "Quem já tem atendimento marcado ou cadastro de paciente entra pelo funil de clientes. Sem um funil marcado, entra pelo padrão.",
+              )
+            : regrasDeCliente.peloCadastro
+              ? t(
+                  "Quem já tem cadastro de paciente entra pelo funil de clientes. Sem um funil marcado, entra pelo padrão.",
+                )
+              : t(
+                  "Quem já tem atendimento marcado entra pelo funil de clientes. Sem um funil marcado, entra pelo padrão.",
+                )}
         </p>
       ) : (
         <p className="mt-4 text-xs text-muted-foreground" data-testid="funis-rodape-clientes">

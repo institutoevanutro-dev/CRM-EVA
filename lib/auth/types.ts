@@ -205,6 +205,13 @@ export interface ActiveOrg {
    */
   cliente_pela_agenda?: boolean;
   /**
+   * A regra "paciente pelo cadastro" está ligada nesta organização
+   * (`organizations.settings.crm.paciente_pelo_cadastro`, migration 0360)?
+   * Opcional e informativa como a de cima: quem decide o funil é o nascimento
+   * do lead, com o mesmo predicado (`lib/contacts/cliente-para-o-funil.ts`).
+   */
+  paciente_pelo_cadastro?: boolean;
+  /**
    * O que ESTA organização definiu para si — CAMPO A CAMPO, e só o que ela
    * mesma definiu.
    *
