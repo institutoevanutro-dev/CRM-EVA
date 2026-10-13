@@ -35,6 +35,17 @@ test.describe("error pages", () => {
  * vazio é o pior defeito de confiança que uma instalação nova pode ter.
  */
 test.describe("documentos legais", () => {
+  test("/legal/about apresenta o aplicativo SEM sessão e liga os documentos legais", async ({ page }) => {
+    const res = await page.goto("/legal/about");
+    expect(res?.status()).toBe(200);
+    expect(new URL(page.url()).pathname).toBe("/legal/about");
+    await expect(page.getByRole("heading", { name: "CRM Eva", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /integração opcional com o google agenda/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /política de privacidade/i })).toHaveAttribute("href", "/legal/privacy");
+    await expect(page.getByRole("link", { name: /termos de uso/i })).toHaveAttribute("href", "/legal/terms");
+    await expect(page.getByRole("link", { name: "Acessar o CRM", exact: true })).toHaveAttribute("href", "/login");
+  });
+
   test("/legal/terms abre SEM sessão — é o que o aceite do onboarding linka", async ({ page }) => {
     const res = await page.goto("/legal/terms");
     expect(res?.status()).toBe(200);

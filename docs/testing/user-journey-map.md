@@ -10,6 +10,13 @@
 
 ## Convenções
 
+A apresentação pública do aplicativo (`/legal/about`) é coberta em
+`tests/e2e/error-pages.spec.ts`: visitante sem sessão recebe a apresentação,
+descrição da integração opcional e links para login, privacidade e termos. A
+liberação exata do caminho e a proteção dos subcaminhos são cobertas em
+`lib/auth/public-paths.test.ts`. A prova de publicação deve conferir esses
+mesmos links no navegador; imagem construída não substitui essa conferência.
+
 - `[P0]` primeira impressão — bug aqui é vergonha pública; prioridade máxima.
 - `[P1]` rotina diária do operador/atendente.
 - `[P2]` exploração/edge.

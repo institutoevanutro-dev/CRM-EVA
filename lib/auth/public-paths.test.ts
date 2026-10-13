@@ -56,7 +56,12 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/legal/privacy")).toBe(true);
   });
 
-  it("e só esses dois: /legal não é um portão aberto", () => {
+  it("libera a apresentação do aplicativo, sem abrir outros caminhos", () => {
+    expect(isPublicPath("/legal/about")).toBe(true);
+    expect(isPublicPath("/legal/about/interno")).toBe(false);
+  });
+
+  it("só libera caminhos explícitos: /legal não é um portão aberto", () => {
     // Entrada larga aqui é furo de auth em toda a aplicação, não só nesta tela.
     expect(isPublicPath("/legal")).toBe(false);
     expect(isPublicPath("/legal/terms/interno")).toBe(false);
