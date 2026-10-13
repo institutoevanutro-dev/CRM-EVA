@@ -8,6 +8,36 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.2.0] — 2026-10-13
+
+### Adicionado
+
+- **O histórico de uma conversa pode ser baixado em PDF pelo cabeçalho da conversa** No cabeçalho de cada conversa, ao lado da lupa, há um botão novo com o ícone de PDF. Um clique baixa o histórico daquela conversa em ordem cronológica: quem falou (o contato, a pessoa da equipe pelo nome, o assistente virtual ou uma mensagem automática), a data e a hora no fuso da organização e o texto. O cabeçalho do documento traz o nome da organização, o contato, o canal, o período, quem exportou e quando, e um aviso de que o arquivo contém dados pessoais.
+
+  Quem pode baixar: Colaborador, Gerente e Administrador, e só de conversas que a pessoa já enxerga na Inbox. "Somente leitura" e "Prestador de serviço" não veem o botão.
+
+  O que entra: mensagens de texto; imagens, áudios, vídeos e documentos citados pelo tipo e pelo nome do arquivo (o arquivo em si não vai dentro do PDF); a transcrição automática de áudio, dita como automática; mensagem apagada aparece como "apagada", sem o texto; envio que falhou aparece como não enviado.
+
+  O que nunca entra: notas internas da equipe, rascunhos e dados internos da IA, CPF e outros campos protegidos do contato. Emojis não aparecem (a fonte do PDF não os desenha).
+
+  Limites: cada arquivo leva as mensagens mais recentes, até 500 mensagens ou cerca de 150 mil caracteres de texto, o que vier primeiro (conversa maior sai com o corte avisado na tela e no documento); 5 exportações por minuto por pessoa e 20 por organização; uma geração por vez. Cada exportação fica registrada na auditoria (`conversation.exported`) com quem exportou, qual conversa e quantas mensagens, sem o texto delas. Nenhuma mudança de banco.
+
+  Porte de melgarafael/DeskcommCRM #2229, contribuição de @webtecnica (refs #1982). O upstream entregou a rota; o botão, a autoria ajustada a este banco e os avisos são deste fork.
+
+### Corrigido
+
+- **O pedido de horário que ninguém confirmou agora expira de verdade e libera o horário** Quando um tipo de atendimento exige confirmação, o pedido fica "aguardando confirmação" e segura o horário. Se ninguém decidir dentro do prazo (24 horas por padrão, ajustável por organização), o sistema deveria cancelar o pedido e devolver o horário à agenda. Isso nunca funcionou: a rotina que roda a cada 15 minutos tentava cancelar de um jeito que o próprio banco recusava, e o pedido abandonado ficava segurando o horário para sempre.
+
+  Agora o cancelamento passa pelo mesmo caminho de um cancelamento feito por uma pessoa da equipe: o horário é liberado, o compromisso some do Google Agenda, o follow-up preso àquele compromisso é encerrado e a linha "Agendamento cancelado" aparece no histórico do negócio, com o motivo "Pedido expirado: ninguém confirmou dentro do prazo."
+
+  O prazo passou a contar do momento em que o compromisso ficou "aguardando confirmação", e não do momento em que foi criado. Com a regra antiga, uma consulta antiga que voltasse a "aguardando confirmação" já seria considerada vencida na mesma hora.
+
+  Travas novas: só são expirados pedidos de horários que ainda vão acontecer (o que já passou e a agenda importada não são tocados); no máximo 20 pedidos por rodada, e o resto espera a rodada seguinte com um alerta no log; se alguém confirmar ou remarcar no meio do caminho, o pedido fica como a pessoa deixou.
+
+  O sistema não manda WhatsApp ao cliente quando o pedido expira, e as automações de "quando um horário for cancelado" não disparam nesse caso. Uma exceção fora do CRM: se o pedido já estava no Google Agenda com o e-mail do cliente como convidado, o Google envia o aviso de cancelamento dele.
+
+  Nada precisa ser feito ao atualizar. Não há mudança de banco.
+
 ## [4.1.0] — 2026-10-13
 
 ### Adicionado
@@ -7082,7 +7112,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.1.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.2.0...HEAD
+[4.2.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.27.0...v4.0.0
