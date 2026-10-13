@@ -136,11 +136,48 @@ export default async function PrivacyPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold">{t("8. Encarregado e contato")}</h2>
+        <h2 className="text-base font-semibold">{t("8. Integração com o Google Agenda")}</h2>
+        <p>
+          {t(
+            "A conexão é opcional e depende da autorização do titular da Conta do Google. O CRM identifica a conta conectada e consulta a lista de agendas, seus identificadores, fuso horário e permissões. O usuário escolhe quais agendas contam como ocupação e qual agenda permite publicar os novos compromissos do CRM.",
+          )}
+        </p>
+        <p>
+          {t(
+            "A integração consulta eventos e horários para evitar conflitos. Para compromissos vinculados ao CRM, consulta e sincroniza os dados necessários para criar, remarcar e cancelar compromissos, como título, data, hora, situação, local, observações, convidados e informações de videoconferência, quando presentes. Os intervalos de ocupação dos eventos externos são guardados no CRM sem o título do evento externo. A permissão de leitura não permite alterar configurações ou compartilhamento das agendas.",
+          )}
+        </p>
+        <p>
+          {t(
+            "Os dados são usados para disponibilizar e manter as funções de agenda solicitadas pelo usuário. O CRM envia os dados do compromisso para a agenda Google de destino escolhida e faz novas consultas para reconciliar alterações e evitar duplicações. A visibilidade e o acesso ao evento no Google também dependem do compartilhamento configurado pelo titular da agenda.",
+          )}
+        </p>
+        <p>
+          {t(
+            "As credenciais de integração são armazenadas cifradas. No CRM, o acesso depende do vínculo com a organização e do papel de acesso. Os dados de agenda não são vendidos nem cedidos para publicidade de terceiros. O uso e a transferência das informações recebidas das APIs do Google seguem a Política de Dados do Usuário dos Serviços de API do Google, incluindo os requisitos de Uso Limitado.",
+          )}{" "}
+          <a
+            className="underline underline-offset-2"
+            href="https://developers.google.com/terms/api-services-user-data-policy"
+          >
+            {t("Consulte a política do Google.")}
+          </a>
+        </p>
+        <p>
+          {t(
+            "O usuário pode desconectar sua agenda pelo CRM ou revogar a autorização nas configurações da Conta do Google. A desconexão no CRM remove as credenciais e os registros locais de agendas conectadas e de ocupação externa associados à conexão. Ela não apaga automaticamente os compromissos nem o histórico de atendimento já registrados no CRM. Pedidos de acesso, correção e eliminação seguem os canais de atendimento e a política de retenção da organização.",
+          )}
+        </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold">{t("9. Encarregado e contato")}</h2>
         <p>
           {op.dpoEmail ? (
             <>
-              {t("Para exercer seus direitos ou tirar dúvidas sobre privacidade, fale com o encarregado de dados:")}{" "}
+              {t(
+                "Para exercer seus direitos ou tirar dúvidas sobre privacidade, fale com o encarregado de dados:",
+              )}{" "}
               <a className="underline underline-offset-2" href={`mailto:${op.dpoEmail}`}>
                 {op.dpoEmail}
               </a>
