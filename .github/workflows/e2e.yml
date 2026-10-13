@@ -719,6 +719,7 @@ jobs:
         reiniciar-teste.spec.ts
         organizacoes-criacao-convite-e-cache.spec.ts
         pipelines-gestao.spec.ts inbox-divisorias-e-troca-de-funil.spec.ts qa-agente-usa-as-maos.spec.ts qa-equipe-pinta-na-hora.spec.ts
+        funil-visao-calendario.spec.ts
         qa-l12-agenda-contatos.spec.ts qa-l12-tags-radar.spec.ts qa-selo-no-funil-usado.spec.ts
         qa-sugestao-rejeitada-e-motivo.spec.ts qa-telas-descobertas-w4.spec.ts qa-titulos-das-telas.spec.ts
         motivo-do-publicar-na-tela.spec.ts
