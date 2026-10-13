@@ -28,25 +28,60 @@
  * `pending_expires_after_minutes` é por organização, com default de 24h — quem
  * confere a fila uma vez por dia não perde nada.
  *
+ * ═══ DESDE QUANDO O PRAZO CONTA ═══
+ *
+ * De quando o compromisso FICOU pendente (`revision_started_at`), e não de
+ * quando foi criado. A história e a regra estão em
+ * `lib/agenda/expiracao-de-pendentes.ts`: com `created_at`, uma consulta antiga
+ * que voltasse a `pending` já nascia vencida.
+ *
+ * ═══ POR ONDE O CANCELAMENTO PASSA ═══
+ *
+ * Pelo MESMO caminho de um cancelamento feito por uma pessoa:
+ * `cancelarAgendamentoHandler`, que chama `fn_appointment_change`. Aqui havia
+ * um UPDATE cru de `status` sem `cancelled_at`, e a constraint
+ * `calendar_appointments_cancelamento_coerente` recusava o lote INTEIRO: esta
+ * rota nunca conseguiu expirar nada, e cada rodada com algo a expirar só
+ * deixava "update falhou" no log.
+ *
+ * O caminho comum grava `cancelled_at`, encerra o follow-up preso àquele
+ * compromisso, resolve os avisos abertos dele na Central, registra a linha na
+ * timeline do negócio e audita na organização. E confere a REVISÃO lida aqui:
+ * se alguém confirmou ou remarcou entre a leitura e a escrita, a revisão mudou
+ * e o banco recusa (40001). É a segunda barreira; a primeira é o filtro.
+ *
+ * Uma linha por vez, de propósito: uma linha que falha não derruba as outras.
+ *
  * ═══ O QUE ESTA ROTA NÃO FAZ ═══
  *
  * **Não fala com o cliente.** Expirar é operação interna: a pessoa pediu, não
- * confirmaram, e o horário voltou para a prateleira. Mandar "seu pedido
- * expirou" é uma decisão de produto diferente, e cara — seria a primeira
- * mensagem automática do sistema a dar má notícia.
+ * confirmaram, e o horário voltou para a prateleira. Por isso o gatilho de
+ * automação `appointment.cancelled` NÃO é emitido aqui (`semGatilho`): uma regra
+ * "avise quem foi desmarcado" mandaria WhatsApp por uma decisão que ninguém
+ * tomou. ⚠️ Uma saída continua existindo e não é desta rota: se o pedido já
+ * estava no Google Agenda com o e-mail do cliente como convidado, o Google
+ * avisa o convidado quando o evento é removido.
  *
  * **Não fecha o caso.** O pedido do cliente vive em `agent_cases`, que é outra
  * coisa: quem confere continua vendo que alguém pediu horário, e pode remarcar.
  * O que expira é a RESERVA, não o pedido.
  *
  * **Não toca no que já foi decidido.** Só `pending`. `confirmed`, `cancelled`,
- * `completed` e `no_show` estão fora do filtro — e o `.eq("status","pending")`
- * do UPDATE é a segunda barreira, para o caso de alguém confirmar entre a
- * leitura e a escrita.
+ * `completed` e `no_show` estão fora do filtro, e o cancelamento repete a guarda
+ * (`apenasSeStatus` + revisão).
+ *
+ * **Não mexe no passado.** Só compromisso que ainda vai acontecer: o que já
+ * passou não segura horário de ninguém, e "cancelar" depois da hora reescreveria
+ * a história (e avisaria o convidado do Google de um evento que já foi). A
+ * agenda importada (`historical_import`) fica de fora duas vezes: pelo filtro e
+ * pelo trigger `trg_aaa_appointment_history_guard`, que recusa mudar o status.
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
+import { cancelarAgendamentoHandler } from "@/app/api/v1/agenda/agendamentos/_handler";
+import { pendentesVencidos, type PendenteExaminado } from "@/lib/agenda/expiracao-de-pendentes";
+import { ApiError } from "@/lib/api/types";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { env } from "@/lib/env";
@@ -56,8 +91,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
-/** Teto por rodada. A varredura roda a cada 15 min; sobra volta na seguinte. */
+/** Teto de LEITURA por rodada. A varredura roda a cada 15 min; sobra volta na seguinte. */
 const LIMITE_DA_VARREDURA = 500;
+
+/**
+ * Teto de CANCELAMENTOS por rodada. Pedido abandonado é raro: uma rodada que
+ * quer cancelar dezenas de uma vez é mais provavelmente um engano (foi assim em
+ * 12/10/2026) do que rotina. O teto não impede o engano, mas o torna lento e
+ * barulhento: o resto espera a rodada seguinte e a rodada grita no log.
+ */
+export const TETO_DE_EXPIRACOES_POR_RODADA = 20;
+
+export const MOTIVO_DA_EXPIRACAO = "Pedido expirado: ninguém confirmou dentro do prazo.";
 
 async function handle(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
@@ -73,14 +118,16 @@ async function handle(req: NextRequest): Promise<Response> {
   const agora = new Date();
 
   // O prazo é POR ORGANIZAÇÃO, então a varredura não pode usar um corte único
-  // de `created_at` no SQL. Busca os pendentes de todas as orgs e aplica o prazo
-  // de cada uma — o volume é pequeno por construção (pendente é estado curto).
+  // no SQL. Busca os pendentes de todas as orgs e aplica o prazo de cada uma:
+  // o volume é pequeno por construção (pendente é estado curto). Os mais
+  // antigos primeiro, para o teto nunca deixar o mesmo pedido para trás.
   const { data, error } = await admin
     .from("calendar_appointments")
-    .select("id, organization_id, created_at, starts_at")
+    .select("id, organization_id, revision, revision_started_at")
     .eq("status", "pending")
     .neq("source", "historical_import")
-    .order("created_at", { ascending: true })
+    .gt("starts_at", agora.toISOString())
+    .order("revision_started_at", { ascending: true })
     .limit(LIMITE_DA_VARREDURA);
 
   if (error) {
@@ -88,10 +135,9 @@ async function handle(req: NextRequest): Promise<Response> {
     return fail("internal_error", "Falha ao buscar pendentes.", 500, { requestId });
   }
 
-  const linhas = data ?? [];
-  if (linhas.length === 0) {
-    return ok({ examinados: 0, expirados: 0, mantidos: 0 }, { requestId });
-  }
+  const linhas = (data ?? []) as PendenteExaminado[];
+  const vazio = { examinados: linhas.length, expirados: 0, mantidos: linhas.length, adiados: 0, mudaram: 0, falhas: 0 };
+  if (linhas.length === 0) return ok(vazio, { requestId });
 
   // Um SELECT por organização presente, não um por linha.
   const orgs = [...new Set(linhas.map((l) => l.organization_id))];
@@ -106,69 +152,91 @@ async function handle(req: NextRequest): Promise<Response> {
     prazoPorOrg.set(o.id, agendaSettingsSchema.parse(s ?? {}).pending_expires_after_minutes);
   }
 
-  const expirados: string[] = [];
-  let mantidos = 0;
-  for (const linha of linhas) {
-    const prazo = prazoPorOrg.get(linha.organization_id);
-    if (prazo === undefined) {
-      // Organização que sumiu entre as duas consultas: não decide nada por ela.
-      mantidos += 1;
-      continue;
+  const vencidos = pendentesVencidos(linhas, prazoPorOrg, agora.getTime());
+  if (vencidos.length === 0) return ok(vazio, { requestId });
+
+  const daVez = vencidos.slice(0, TETO_DE_EXPIRACOES_POR_RODADA);
+  const adiados = vencidos.length - daVez.length;
+
+  let expirados = 0;
+  let falhas = 0;
+  let mudaram = 0;
+  const porOrganizacao: Record<string, number> = {};
+  for (const linha of daVez) {
+    try {
+      // `organization_id` é o da PRÓPRIA linha, e o handler filtra por ele em
+      // toda leitura e escrita (service role ignora RLS).
+      const r = await cancelarAgendamentoHandler(
+        admin,
+        {
+          organization_id: linha.organization_id,
+          // O ator que esta base dá ao que nasce de worker (mesmo de `agenda-reminder`).
+          actor: { type: "webhook_source", id: linha.id },
+          requestId,
+        },
+        { id: linha.id, revision: Number(linha.revision), reason: MOTIVO_DA_EXPIRACAO },
+        { apenasSeStatus: "pending", semGatilho: true },
+      );
+      // `ja_estava`: alguém cancelou no intervalo. Não foi esta rodada.
+      if (r.ja_estava) continue;
+      expirados += 1;
+      porOrganizacao[linha.organization_id] = (porOrganizacao[linha.organization_id] ?? 0) + 1;
+    } catch (err) {
+      // 409 é o caso BOM: alguém confirmou, remarcou ou decidiu entre a leitura
+      // e a escrita, e a guarda (status + revisão) recusou. Não é falha.
+      if (err instanceof ApiError && err.status === 409) {
+        mudaram += 1;
+        continue;
+      }
+      // A linha fica como está e as outras seguem.
+      falhas += 1;
+      logger.warn("[agenda-expira-pendentes] pedido não expirado", {
+        appointment_id: linha.id,
+        organization_id: linha.organization_id,
+        error: err instanceof Error ? err.message : String(err),
+        requestId,
+      });
     }
-    const nasceu = Date.parse(linha.created_at);
-    if (Number.isNaN(nasceu) || nasceu + prazo * 60_000 > agora.getTime()) {
-      mantidos += 1;
-      continue;
-    }
-    expirados.push(linha.id);
   }
 
-  if (expirados.length === 0) {
-    return ok({ examinados: linhas.length, expirados: 0, mantidos }, { requestId });
-  }
+  const resumo = {
+    examinados: linhas.length,
+    expirados,
+    mantidos: linhas.length - vencidos.length,
+    adiados,
+    mudaram,
+    falhas,
+  };
 
-  // `.eq("status","pending")` de novo: se alguém confirmou entre a leitura e
-  // aqui, o UPDATE não alcança a linha — e é isso que se quer. Cancelar um
-  // compromisso que acabou de ser confirmado seria o pior desfecho possível
-  // desta rota.
-  const { data: efetivados, error: erroUpdate } = await admin
-    .from("calendar_appointments")
-    .update({
-      status: "cancelled",
-      cancellation_reason: "Pedido expirado: ninguém confirmou dentro do prazo.",
-    })
-    .in("id", expirados)
-    .eq("status", "pending")
-    .neq("source", "historical_import")
-    .select("id");
-
-  if (erroUpdate) {
-    logger.error("[agenda-expira-pendentes] update falhou", {
-      error: erroUpdate.message,
-      tentados: expirados.length,
+  if (adiados > 0) {
+    logger.error("[agenda-expira-pendentes] teto da rodada atingido: confira se os pedidos vencidos são reais", {
+      ...resumo,
+      teto: TETO_DE_EXPIRACOES_POR_RODADA,
       requestId,
     });
-    return fail("internal_error", "Falha ao expirar pendentes.", 500, { requestId });
   }
 
-  const quantos = efetivados?.length ?? 0;
-
-  // Rodada que não expirou nada NÃO é mutação e não audita — a lei está no
+  // Rodada que não expirou nada NÃO é mutação e não audita: a lei está no
   // CLAUDE.md §Audit log, e `cron-audita-so-quando-ha-efeito.test.ts` varre o
-  // AST desta pasta atrás de `audit` incondicional.
-  if (quantos > 0) {
+  // AST desta pasta atrás de `audit` incondicional. Cada cancelamento também
+  // deixa a própria linha (`agenda.appointment_cancelled`) na organização dele.
+  if (expirados > 0) {
+    logger.info("[agenda-expira-pendentes] pedidos expirados", { ...resumo, por_organizacao: porOrganizacao, requestId });
     await audit({
       action: "agenda.pendente_expirado",
       resourceType: "calendar_appointment",
       requestId,
-      metadata: { expirados: quantos, examinados: linhas.length },
+      metadata: { ...resumo, por_organizacao: porOrganizacao },
     });
   }
 
-  return ok(
-    { examinados: linhas.length, expirados: quantos, mantidos },
-    { requestId },
-  );
+  // Nada saiu e tudo o que tentou falhou: a rodada responde erro, para o
+  // agendador enxergar. Falha parcial responde 200 com a contagem.
+  if (expirados === 0 && falhas > 0) {
+    return fail("internal_error", "Nenhum pedido vencido pôde ser expirado.", 500, { requestId });
+  }
+
+  return ok(resumo, { requestId });
 }
 
 export const GET = handle;
