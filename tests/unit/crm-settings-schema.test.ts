@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clientePelaAgendaLigado } from "@/lib/schemas/settings";
+import { clientePelaAgendaLigado, pacientePeloCadastroLigado } from "@/lib/schemas/settings";
 
 /**
  * A régua TypeScript de "a regra cliente pela agenda está ligada?".
@@ -37,5 +37,31 @@ describe("clientePelaAgendaLigado", () => {
         crm: { cliente_pela_agenda: true, outra: "coisa" },
       }),
     ).toBe(true);
+  });
+});
+
+/** A segunda chave de `settings.crm` (migration 0360): mesma régua, e uma não liga a outra. */
+describe("pacientePeloCadastroLigado", () => {
+  it.each([
+    ["settings ausente", undefined],
+    ["crm array", { crm: [] }],
+    ["chave ausente", { crm: {} }],
+    ["false", { crm: { paciente_pelo_cadastro: false } }],
+    ["string 'true'", { crm: { paciente_pelo_cadastro: "true" } }],
+    ["só a regra da agenda ligada", { crm: { cliente_pela_agenda: true } }],
+  ])("%s → desligado", (_nome, settings) => {
+    expect(pacientePeloCadastroLigado(settings)).toBe(false);
+  });
+
+  it("só o booleano true liga, e não liga a regra da agenda junto", () => {
+    const settings = { crm: { paciente_pelo_cadastro: true } };
+    expect(pacientePeloCadastroLigado(settings)).toBe(true);
+    expect(clientePelaAgendaLigado(settings)).toBe(false);
+  });
+
+  it("lixo numa chave não derruba a outra", () => {
+    const settings = { crm: { cliente_pela_agenda: "lixo", paciente_pelo_cadastro: true } };
+    expect(pacientePeloCadastroLigado(settings)).toBe(true);
+    expect(clientePelaAgendaLigado(settings)).toBe(false);
   });
 });
