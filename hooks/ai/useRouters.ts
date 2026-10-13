@@ -50,6 +50,12 @@ export interface RouterTestResult {
   agent_name: string | null;
   /** O texto de agenda que o classificador viu; `null` sem contato no teste. */
   fatos: string | null;
+  /** O modo do roteador: `'agente'` é o em que só assunto marcado interrompe. */
+  mode: "roteador" | "agente";
+  /** Com `current_intent` no pedido: a conversa ficaria com o assunto atual. */
+  kept_current: boolean;
+  /** `false` quando o turno real nem chamaria o classificador (nada pode interromper). */
+  classified: boolean;
 }
 
 export interface CreateRouterInput {

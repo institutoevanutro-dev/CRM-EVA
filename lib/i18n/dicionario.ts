@@ -6919,6 +6919,10 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível iniciar o processamento. Tente aprovar de novo.": {
     es: "No se pudo iniciar el procesamiento. Intente aprobar de nuevo.",
   },
+  "Não foi possível registrar a aprovação. Tente aprovar de novo.": {
+    es: "No se pudo registrar la aprobación. Intente aprobar de nuevo.",
+  },
+  "Esta solicitação já foi aprovada.": { es: "Esta solicitud ya fue aprobada." },
   "Falha ao confirmar. Tente novamente.": { es: "Fallo al confirmar. Intenta de nuevo." },
   "Configure a verificação em duas etapas": { es: "Configura la verificación en dos pasos" },
   "Esta empresa exige a verificação em duas etapas de quem administra. ": {
@@ -7845,6 +7849,7 @@ export const DICIONARIO: Traducoes = {
   "Resposta ao caso indisponível (config).": { es: "Respuesta al caso no disponible (config)." },
   "Retorno não encontrado.": { es: "Seguimiento no encontrado." },
   "Router não encontrado.": { es: "Router no encontrado." },
+  "O assunto atual não é um assunto deste roteador.": { es: "El tema actual no es un tema de este enrutador." },
   "Run não encontrado.": { es: "Run no encontrado." },
   "sem organização ativa": { es: "sin organización activa" },
   "Sem organização ativa": { es: "Sin organización activa" },
@@ -9027,6 +9032,8 @@ export const DICIONARIO: Traducoes = {
   // novo e as duas razões que não dependem do nome do funil.
   "Veio de outro funil": { es: "Vino de otro embudo" },
   "Levado para outro funil": { es: "Llevado a otro embudo" },
+  // Passagem de assunto pelo agente (`transfer_to_subject`): o rótulo da linha do tempo.
+  "Atendimento passou para outro assunto": { es: "La atención pasó a otro tema" },
   // As recusas da troca de funil (lib/leads/clonar-para-funil.ts e a rota).
   "O negócio já está neste funil. Para trocar de etapa use /api/v1/leads/[id]/move.": {
     es: "El negocio ya está en este embudo. Para cambiar de etapa usa /api/v1/leads/[id]/move.",

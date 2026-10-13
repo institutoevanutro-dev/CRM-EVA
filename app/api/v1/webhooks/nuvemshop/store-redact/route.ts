@@ -15,7 +15,7 @@ import { readWebhookBody } from "@/lib/http/limited-body";
  *  5. Idempotency: insert webhook_events_log; skip if duplicate (23505).
  *  6. Count active (non-anonymized) contacts → expected_contacts_count.
  *  7. Insert lgpd_requests (emergency=true, scope='tenant', SLA=15 BR biz days).
- *  8. Emit lgpd.redact_received with tenant-scope payload.
+ *  8. NO event is emitted: the request waits for an admin approval (migration 0357).
  *  9. Audit log (no PII — store_id + counts only).
  * 10. Return 200 within <5s.
  *
@@ -233,26 +233,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return fail("internal_error", "lgpd_request_create_failed", 500);
   }
 
-  // 8. Emit lgpd.redact_received for async worker (S-08.05)
-  const { error: emitErr } = await admin.rpc("emit_event", {
-    p_event_type: "lgpd.redact_received",
-    p_entity_kind: "lgpd_request",
-    p_entity_id: requestId,
-    p_payload: {
-      request_id: requestId,
-      organization_id: orgId,
-      scope: "tenant",
-      emergency: true,
-      expected_contacts_count: expectedContactsCount,
-    } as unknown as Record<string, unknown>,
-    p_metadata: { store_id: storeId, due_at: dueAt },
-    p_organization_id: orgId,
-  });
-
-  if (emitErr) {
-    console.error(`[lgpd-store-redact] emit_event failed: ${emitErr.message}`);
-    // Non-blocking — worker can be re-triggered via cron recovery
-  }
+  // 8. NÃO emite `lgpd.redact_received`. Até a migration 0357 emitia, e o worker
+  // anonimizava TODOS os contatos da organização na hora, sem nenhum humano.
+  // O pedido nasce `received`, marcado `emergency`, aparece em LGPD ›
+  // Solicitações com o prazo, e só anda quando um administrador aprova
+  // (`[id]/approve`).
 
   // 9. Audit log — no PII; store_id + counts only
   await audit({

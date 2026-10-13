@@ -3,11 +3,29 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * POST /api/v1/lgpd/requests/[id]/approve
  *
  * Manually approves an LGPD request that is in 'received' status.
- * Emits the canonical event to event_log (same as the webhook handler),
- * writes audit lgpd.manually_approved, and transitions status → 'processing'.
+ * Records the approval on the request row, emits the canonical event to
+ * event_log, writes audit lgpd.manually_approved, and transitions
+ * status → 'processing'.
  *
  * Auth: cookie session, role >= admin.
  * Idempotency-Key header is REQUIRED. Returns 202 on success.
+ *
+ * ─── A APROVAÇÃO É A ÚNICA AUTORIZAÇÃO DE UMA ANONIMIZAÇÃO ──────────────────
+ *
+ * O evento não autoriza nada: o `lgpd-redact-worker` e a cascata do banco só
+ * anonimizam se a LINHA do pedido provar a aprovação (`request_payload.approval`,
+ * regra em `fn_lgpd_recusa_do_redact`, migration 0357). Por isso a ordem aqui é:
+ *
+ *   1. grava a prova (quem, quando, por quê, para este pedido e este contato),
+ *      só sobre o pedido ainda `received`; o estado NÃO muda neste passo;
+ *   2. emite o evento;
+ *   3. leva o pedido a `processing`, só se ele ainda estiver `received`.
+ *
+ * A prova vem antes do evento porque o worker pode pegar o evento no mesmo
+ * instante: sem a prova gravada ele recusaria e consumiria o evento. Uma queda
+ * entre os passos deixa o pedido `received` (dá para aprovar de novo) ou com o
+ * evento já na fila (o worker segue sozinho). Dois cliques simultâneos podem
+ * emitir dois eventos: a cascata anonimiza uma vez só.
  */
 import { randomUUID, createHash } from "node:crypto";
 import type { NextRequest } from "next/server";
@@ -93,7 +111,7 @@ export async function POST(
     .maybeSingle();
 
   if (keyLookupErr) {
-    console.error("[lgpd-approve] idempotency lookup error", keyLookupErr.message);
+    logger.error("[lgpd-approve] idempotency lookup error", { error_code: keyLookupErr.code });
   }
 
   if (existingKey) {
@@ -108,7 +126,7 @@ export async function POST(
   // Fetch the lgpd_request
   const { data: request, error: reqErr } = await admin
     .from("lgpd_requests")
-    .select("id, organization_id, request_type, status, contact_id, external_customer_id, due_at")
+    .select("id, organization_id, request_type, status, contact_id, external_customer_id, due_at, request_payload")
     .eq("organization_id", orgId)
     .eq("id", id)
     .maybeSingle();
@@ -136,7 +154,46 @@ export async function POST(
       ? "lgpd.data_request_received"
       : "lgpd.redact_received";
 
-  // Emit event to event_log (triggers async worker)
+  // 1. A prova da aprovação, na linha do pedido. O formato é o que
+  // `fn_lgpd_recusa_do_redact` confere; os três primeiros campos prendem a
+  // aprovação a ESTE pedido, ESTA organização e ao contato que o pedido tem agora.
+  const approval = {
+    request_id: id,
+    organization_id: orgId,
+    contact_id: request.contact_id,
+    approved_by: authUser.id,
+    approved_at: new Date().toISOString(),
+    approved_reason,
+  };
+  const { data: provado, error: provaErr } = await admin
+    .from("lgpd_requests")
+    .update({
+      request_payload: {
+        ...((request.request_payload as Record<string, unknown> | null) ?? {}),
+        approval,
+      },
+    })
+    .eq("organization_id", orgId)
+    .eq("id", id)
+    .eq("status", "received")
+    .select("id");
+
+  if (provaErr) {
+    logger.error("[lgpd-approve] a aprovação não foi gravada, pedido mantido em received", {
+      request_id: id,
+      organization_id: orgId,
+      error_code: provaErr.code,
+    });
+    return fail("internal_error", t("Não foi possível registrar a aprovação. Tente aprovar de novo."), 500, {
+      requestId,
+    });
+  }
+  if (!provado || provado.length === 0) {
+    // Entre a leitura e a gravação o pedido saiu de `received` (outro clique).
+    return fail("conflict", t("Esta solicitação já foi aprovada."), 409, { requestId });
+  }
+
+  // 2. Emit event to event_log (triggers async worker)
   const { error: emitErr } = await admin.rpc("emit_event", {
     p_event_type: eventType,
     p_entity_kind: "lgpd_request",
@@ -176,15 +233,23 @@ export async function POST(
     );
   }
 
-  // Transition status → processing
+  // 3. Transition status → processing. Só sobre o pedido ainda `received`: o
+  // worker pode já tê-lo levado a `processing` ou `completed`, e gravar por cima
+  // desfaria o desfecho dele. Se esta gravação falhar o evento já saiu e o
+  // worker grava `processing` por conta própria: registra e segue.
   const { error: updateErr } = await admin
     .from("lgpd_requests")
     .update({ status: "processing", updated_at: new Date().toISOString() })
     .eq("organization_id", orgId)
-    .eq("id", id);
+    .eq("id", id)
+    .eq("status", "received");
 
   if (updateErr) {
-    return fail("internal_error", updateErr.message, 500, { requestId });
+    logger.error("[lgpd-approve] pedido aprovado e evento emitido, mas 'processing' não gravou", {
+      request_id: id,
+      organization_id: orgId,
+      error_code: updateErr.code,
+    });
   }
 
   // Audit — fire-and-forget

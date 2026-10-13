@@ -4,6 +4,8 @@
  * Pipeline (S-08.05):
  *   1. Load lgpd_requests row (programmatic org filter).
  *   2. Status guard (skip when already completed/failed beyond cap).
+ *   2b. PORTÃO: o pedido tem de provar a aprovação (ver abaixo). Sem ela,
+ *       `skipped`, sem gravar nada e sem anonimizar.
  *   3. attempts++ (cap 3 → status='failed').
  *   4. Branch by scope:
  *      - 'contact': resolve contactId (req.contact_id || external_customer_id);
@@ -20,6 +22,33 @@
  *      inserted by the RPC).
  *
  * Zero PII in logs / Sentry — only ids + sha256 of error messages.
+ *
+ * ─── O EVENTO NÃO É AUTORIZAÇÃO ─────────────────────────────────────────────
+ *
+ * Até a migration 0357 este worker anonimizava ao receber o evento, sem olhar
+ * se alguém tinha aprovado. O webhook da loja emitia ao criar o pedido, e
+ * qualquer outro emissor do servidor faria o mesmo com um pedido registrado à
+ * mão. Anonimização não tem volta.
+ *
+ * Agora quem autoriza é a LINHA DO PEDIDO: `request_payload.approval`, gravada
+ * pela rota de aprovação (administrador, com justificativa). A regra é uma só,
+ * no banco (`fn_lgpd_recusa_do_redact`), consultada aqui antes de qualquer
+ * gravação e de novo pela cascata dentro da transação do irreversível. Nada do
+ * payload do evento entra na decisão.
+ *
+ * Pedido sem aprovação: o evento é consumido como `skipped` (o dreno não tenta
+ * de novo; o motivo fica em `event_log.last_error`), o pedido fica como está,
+ * à espera de aprovação, e o alarme de prazo continua contando para ele.
+ *
+ * ─── ORDEM EM VOLTA DO IRREVERSÍVEL ─────────────────────────────────────────
+ *
+ * Antes da cascata só se grava `processing` (conferido: se o banco recusar, a
+ * cascata não roda). A cascata é uma transação. Depois dela, NADA devolve o
+ * pedido a `received`/`failed`: se o `completed` não gravar, o desfecho é
+ * `error`, o dreno repete o evento, a cascata responde "já anonimizado" e o
+ * pedido conclui. Executar duas vezes é impossível (a cascata confere
+ * `is_anonymized` sob a trava do contato); dizer "não feito" do que foi feito
+ * deixou de ser possível aqui.
  */
 
 import { createHash } from "node:crypto";
@@ -27,6 +56,7 @@ import { createHash } from "node:crypto";
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { audit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
+import type { LgpdRequestStatus } from "@/lib/lgpd/types";
 import { findContactByExternalId, findLgpdRequest } from "@/lib/lgpd/repository";
 import { cascadeRedactContact } from "@/lib/lgpd/redact-cascade";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -57,6 +87,93 @@ function readTenantProgress(payload: Record<string, unknown> | null | undefined)
       ? ((raw["failed_contacts"] as unknown[]).filter((x) => typeof x === "string") as string[])
       : [],
   };
+}
+
+/**
+ * Grava o estado do pedido e CONFERE a resposta do banco. Devolve `null` quando
+ * gravou, ou o código do erro. Só o código: `message`/`details` do Postgres
+ * podem trazer a linha inteira, e a linha tem dado do titular. É o mesmo
+ * contrato do `gravarEstado` do `lgpd-export-worker`.
+ *
+ * `soSe` restringe a gravação ao estado em que o pedido tem de estar (ou não
+ * estar): zero linhas alcançadas não é erro, é "outro já gravou".
+ */
+async function gravarEstado(
+  admin: ReturnType<typeof createAdminClient>,
+  orgId: string,
+  requestId: string,
+  patch: { status: LgpdRequestStatus } & Record<string, unknown>,
+  soSe?: { estado?: LgpdRequestStatus; naoEstado?: LgpdRequestStatus },
+): Promise<string | null> {
+  let codigo: string | null = null;
+  try {
+    let q = admin.from("lgpd_requests").update(patch).eq("organization_id", orgId).eq("id", requestId);
+    if (soSe?.estado) q = q.eq("status", soSe.estado);
+    if (soSe?.naoEstado) q = q.neq("status", soSe.naoEstado);
+    const { error } = await q;
+    if (error) codigo = error.code || "sem_codigo";
+  } catch {
+    // Rede caída ou cliente que lança: também é "não gravou".
+    codigo = "sem_resposta";
+  }
+  if (codigo) {
+    logger.error("[lgpd-redact-worker] o banco recusou a gravação de estado do pedido", {
+      request_id: shortId(requestId),
+      organization_id: orgId,
+      status: patch.status,
+      error_code: codigo,
+    });
+  }
+  return codigo;
+}
+
+/**
+ * Anonimizou e o estado final não gravou. NÃO lança: lançar cairia no `catch`
+ * que devolve o pedido à fila como "não feito". O dreno repete o evento, a
+ * cascata responde "já anonimizado" e o pedido conclui.
+ */
+function feitoSemRegistro(requestId: string, orgId: string, codigo: string): HandlerResult {
+  logger.error("[lgpd-redact-worker] anonimizado, mas o estado final do pedido não gravou", {
+    request_id: shortId(requestId),
+    organization_id: orgId,
+    error_code: codigo,
+  });
+  return {
+    consumer_key: "lgpd-redact-worker.v1",
+    status: "error",
+    detail: `redacted_but_status_write_failed: ${codigo}`,
+  };
+}
+
+/** Evento de domínio depois do irreversível: se não sair, registra e segue. */
+async function emitirAplicado(
+  admin: ReturnType<typeof createAdminClient>,
+  orgId: string,
+  requestId: string,
+  payload: Record<string, unknown>,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  let codigo: string | null = null;
+  try {
+    const { error } = await admin.rpc("emit_event" as never, {
+      p_event_type: "lgpd.redact_applied",
+      p_entity_kind: "lgpd_request",
+      p_entity_id: requestId,
+      p_payload: payload,
+      p_metadata: metadata,
+      p_organization_id: orgId,
+    } as never);
+    if (error) codigo = error.code || "sem_codigo";
+  } catch {
+    codigo = "sem_resposta";
+  }
+  if (codigo) {
+    logger.error("[lgpd-redact-worker] lgpd.redact_applied não foi emitido", {
+      request_id: shortId(requestId),
+      organization_id: orgId,
+      error_code: codigo,
+    });
+  }
 }
 
 async function tryNuvemshopCallback(
@@ -137,36 +254,125 @@ export async function processLgpdRedact(event: EventRow): Promise<HandlerResult>
     };
   }
 
-  // 2. attempts cap + transition to processing.
-  const nextAttempts = req.attempts + 1;
-  if (nextAttempts > MAX_ATTEMPTS) {
-    await admin
-      .from("lgpd_requests")
-      .update({ status: "failed", error_message: "max_attempts_exceeded" })
-      .eq("organization_id", orgId)
-      .eq("id", requestId);
+  // 2b. PORTÃO. A pergunta vai com a organização do evento e o id do pedido; a
+  // resposta sai da linha do pedido. Antes de QUALQUER gravação.
+  let recusa: string | null;
+  {
+    let codigo: string | null = null;
+    let resposta: unknown = null;
+    try {
+      const { data, error } = await admin.rpc("fn_lgpd_recusa_do_redact" as never, {
+        p_organization_id: orgId,
+        p_request_id: requestId,
+        p_contact_id: null,
+      } as never);
+      if (error) codigo = error.code || "sem_codigo";
+      resposta = data;
+    } catch {
+      codigo = "sem_resposta";
+    }
+    if (codigo) {
+      // Sem resposta não se anonimiza e não se descarta: o dreno tenta de novo.
+      logger.error("[lgpd-redact-worker] não foi possível conferir a aprovação do pedido", {
+        request_id: shortId(requestId),
+        organization_id: orgId,
+        error_code: codigo,
+      });
+      return {
+        consumer_key: "lgpd-redact-worker.v1",
+        status: "error",
+        detail: `approval_check_failed: ${codigo}`,
+      };
+    }
+    recusa = typeof resposta === "string" && resposta.length > 0 ? resposta : null;
+  }
 
-    await audit({
-      action: "lgpd.redact_failed",
-      organizationId: orgId,
-      resourceType: "lgpd_request",
-      resourceId: requestId,
-      metadata: { reason: "max_attempts_exceeded", attempts: req.attempts },
-      bypassedRls: true,
+  if (recusa) {
+    logger.warn("[lgpd-redact-worker] pedido sem aprovação provada, nada foi anonimizado", {
+      event_id: event.id,
+      request_id: shortId(requestId),
+      organization_id: orgId,
+      request_status: req.status,
+      reason: recusa,
     });
-
+    // Pedido em `processing` com aprovação que não vale (quem aprovou deixou de
+    // ser administrador, ou a prova foi alterada): volta a `received`, que é o
+    // único estado que a tela deixa aprovar. `received` fica como está.
+    if (req.status === "processing") {
+      await gravarEstado(
+        admin,
+        orgId,
+        requestId,
+        { status: "received", error_message: `approval_not_proven: ${recusa}` },
+        { estado: "processing" },
+      );
+    }
     return {
       consumer_key: "lgpd-redact-worker.v1",
-      status: "error",
-      detail: "max_attempts_exceeded",
+      status: "skipped",
+      detail: `not_approved:${recusa}`,
     };
   }
 
-  await admin
-    .from("lgpd_requests")
-    .update({ status: "processing", attempts: nextAttempts })
-    .eq("organization_id", orgId)
-    .eq("id", requestId);
+  // 2. attempts cap + transition to processing.
+  const nextAttempts = req.attempts + 1;
+  if (nextAttempts > MAX_ATTEMPTS) {
+    // O teto é para quem NÃO conseguiu anonimizar. Contato já anonimizado e
+    // pedido ainda aberto é o caso "feito, mas o estado final não gravou":
+    // marcar `failed` seria dizer que não foi feito. Segue, e a cascata
+    // (que responde "já anonimizado") fecha o pedido.
+    let jaAnonimizado = false;
+    if (req.scope === "contact" && req.contact_id) {
+      const { data } = await admin
+        .from("contacts")
+        .select("is_anonymized")
+        .eq("organization_id", orgId)
+        .eq("id", req.contact_id)
+        .maybeSingle();
+      jaAnonimizado = (data as { is_anonymized?: boolean } | null)?.is_anonymized === true;
+    }
+    if (!jaAnonimizado) {
+      const erroAoDesistir = await gravarEstado(admin, orgId, requestId, {
+        status: "failed",
+        error_message: "max_attempts_exceeded",
+      });
+
+      await audit({
+        action: "lgpd.redact_failed",
+        organizationId: orgId,
+        resourceType: "lgpd_request",
+        resourceId: requestId,
+        metadata: {
+          reason: "max_attempts_exceeded",
+          attempts: req.attempts,
+          ...(erroAoDesistir ? { status_write_failed: erroAoDesistir } : {}),
+        },
+        bypassedRls: true,
+      });
+
+      return {
+        consumer_key: "lgpd-redact-worker.v1",
+        status: "error",
+        detail: erroAoDesistir
+          ? `max_attempts_exceeded; status_write_failed: ${erroAoDesistir}`
+          : "max_attempts_exceeded",
+      };
+    }
+  }
+
+  // Se `processing` não gravar, a cascata não roda: nada irreversível acontece
+  // sem o pedido dizer que está em andamento. O dreno tenta de novo.
+  const erroAoIniciar = await gravarEstado(admin, orgId, requestId, {
+    status: "processing",
+    attempts: nextAttempts,
+  });
+  if (erroAoIniciar) {
+    return {
+      consumer_key: "lgpd-redact-worker.v1",
+      status: "error",
+      detail: `status_write_failed: ${erroAoIniciar}`,
+    };
+  }
 
   const scope = req.scope ?? scopeFromEvent;
 
@@ -184,15 +390,14 @@ export async function processLgpdRedact(event: EventRow): Promise<HandlerResult>
 
       if (!contactId) {
         // L-03: no local footprint — request stays as record but nothing to anonymise.
-        await admin
-          .from("lgpd_requests")
-          .update({
-            status: "pending_review",
-            error_message: "no_local_footprint",
-            result: { reason: "no_local_footprint" },
-          })
-          .eq("organization_id", orgId)
-          .eq("id", requestId);
+        // Nada foi anonimizado até aqui: se o banco recusar, lança e o `catch`
+        // devolve o pedido à fila, sem auditar um desfecho que não houve.
+        const erroSemPegada = await gravarEstado(admin, orgId, requestId, {
+          status: "pending_review",
+          error_message: "no_local_footprint",
+          result: { reason: "no_local_footprint" },
+        });
+        if (erroSemPegada) throw new Error(`pending_review_update_failed: ${erroSemPegada}`);
 
         await audit({
           action: "lgpd.redact_no_local_footprint",
@@ -216,18 +421,26 @@ export async function processLgpdRedact(event: EventRow): Promise<HandlerResult>
         requestId,
       });
 
+      // ─── DAQUI PARA BAIXO O CONTATO JÁ ESTÁ ANONIMIZADO ─────────────────────
+      // Nada abaixo pode lançar para o `catch`, que devolve o pedido a "não feito".
+
       if (cascade.alreadyAnonymized) {
-        await admin
-          .from("lgpd_requests")
-          .update({
+        // `naoEstado`: se outra execução do mesmo pedido já gravou `completed`
+        // com os números da cascata, esta não passa por cima.
+        const erroJaFeito = await gravarEstado(
+          admin,
+          orgId,
+          requestId,
+          {
             status: "completed",
             completed_at: new Date().toISOString(),
             result: { already_anonymized: true, contact_id: contactId },
             error_message: null,
             cascaded_to: {},
-          })
-          .eq("organization_id", orgId)
-          .eq("id", requestId);
+          },
+          { naoEstado: "completed" },
+        );
+        if (erroJaFeito) return feitoSemRegistro(requestId, orgId, erroJaFeito);
 
         await audit({
           action: "lgpd.redact_skipped_already_anonymized",
@@ -248,37 +461,33 @@ export async function processLgpdRedact(event: EventRow): Promise<HandlerResult>
       // Best-effort callback to upstream platform.
       const callback = await tryNuvemshopCallback(orgId, req.request_payload ?? {});
 
-      await admin
-        .from("lgpd_requests")
-        .update({
-          status: "completed",
-          completed_at: new Date().toISOString(),
-          result: {
-            contact_id: contactId,
-            cascaded_to: cascade.counts,
-            media_queued: cascade.mediaPaths.length,
-            callback_status: callback.status,
-          },
+      const erroAoConcluir = await gravarEstado(admin, orgId, requestId, {
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        result: {
+          contact_id: contactId,
           cascaded_to: cascade.counts,
-          error_message: null,
-        })
-        .eq("organization_id", orgId)
-        .eq("id", requestId);
+          media_queued: cascade.mediaPaths.length,
+          callback_status: callback.status,
+        },
+        cascaded_to: cascade.counts,
+        error_message: null,
+      });
+      if (erroAoConcluir) return feitoSemRegistro(requestId, orgId, erroAoConcluir);
 
       // Domain event — applied (consumed by SLA monitor / dashboards).
-      await admin.rpc("emit_event" as never, {
-        p_event_type: "lgpd.redact_applied",
-        p_entity_kind: "lgpd_request",
-        p_entity_id: requestId,
-        p_payload: {
+      await emitirAplicado(
+        admin,
+        orgId,
+        requestId,
+        {
           request_id: requestId,
           contact_id: contactId,
           cascaded_to: cascade.counts,
           media_queued: cascade.mediaPaths.length,
         },
-        p_metadata: { source: "lgpd-redact-worker" },
-        p_organization_id: orgId,
-      } as never);
+        { source: "lgpd-redact-worker" },
+      );
 
       // Request-level audit (cascade RPC already wrote per-contact lgpd.redact_executed).
       await audit({
@@ -363,11 +572,21 @@ export async function processLgpdRedact(event: EventRow): Promise<HandlerResult>
           ...(req.request_payload as Record<string, unknown>),
           progress,
         };
-        await admin
+        // O ponto de retomada é conveniência: se não gravar, a retomada relê os
+        // contatos ainda não anonimizados. Registra e segue, sem lançar (já há
+        // contato anonimizado neste ponto).
+        const { error: erroDoPonto } = await admin
           .from("lgpd_requests")
           .update({ request_payload: updatedPayload })
           .eq("organization_id", orgId)
           .eq("id", requestId);
+        if (erroDoPonto) {
+          logger.error("[lgpd-redact-worker] ponto de retomada não gravou", {
+            request_id: shortId(requestId),
+            organization_id: orgId,
+            error_code: erroDoPonto.code || "sem_codigo",
+          });
+        }
 
         // If the page was short-read we're done.
         if (rows.length < TENANT_BATCH_SIZE) break;
@@ -391,39 +610,36 @@ export async function processLgpdRedact(event: EventRow): Promise<HandlerResult>
       const failedCount = progress.failed_contacts.length;
       const finalStatus = failedCount > 0 ? "pending_review" : "completed";
 
-      await admin
-        .from("lgpd_requests")
-        .update({
-          status: finalStatus,
-          completed_at: new Date().toISOString(),
-          result: {
-            scope: "tenant",
-            processed: progress.processed,
-            failed_contacts_count: failedCount,
-            aggregate_counts: aggregate,
-            callback_status: callback.status,
-            organization_status: "redacted",
-          },
-          cascaded_to: aggregate,
-          error_message: failedCount > 0 ? "partial_failure" : null,
-        })
-        .eq("organization_id", orgId)
-        .eq("id", requestId);
+      const erroAoFechar = await gravarEstado(admin, orgId, requestId, {
+        status: finalStatus,
+        completed_at: new Date().toISOString(),
+        result: {
+          scope: "tenant",
+          processed: progress.processed,
+          failed_contacts_count: failedCount,
+          aggregate_counts: aggregate,
+          callback_status: callback.status,
+          organization_status: "redacted",
+        },
+        cascaded_to: aggregate,
+        error_message: failedCount > 0 ? "partial_failure" : null,
+      });
+      // Contatos já anonimizados: mesmo tratamento do pedido de contato.
+      if (erroAoFechar) return feitoSemRegistro(requestId, orgId, erroAoFechar);
 
-      await admin.rpc("emit_event" as never, {
-        p_event_type: "lgpd.redact_applied",
-        p_entity_kind: "lgpd_request",
-        p_entity_id: requestId,
-        p_payload: {
+      await emitirAplicado(
+        admin,
+        orgId,
+        requestId,
+        {
           request_id: requestId,
           scope: "tenant",
           processed: progress.processed,
           failed_count: failedCount,
           aggregate_counts: aggregate,
         },
-        p_metadata: { source: "lgpd-redact-worker", emergency },
-        p_organization_id: orgId,
-      } as never);
+        { source: "lgpd-redact-worker", emergency },
+      );
 
       await audit({
         action: "lgpd.tenant_redacted",
@@ -470,14 +686,12 @@ export async function processLgpdRedact(event: EventRow): Promise<HandlerResult>
       attempts: nextAttempts,
     });
 
-    await admin
-      .from("lgpd_requests")
-      .update({
-        status: nextAttempts >= MAX_ATTEMPTS ? "failed" : "received",
-        error_message: detail.slice(0, 500),
-      })
-      .eq("organization_id", orgId)
-      .eq("id", requestId);
+    // Só chega aqui o que falhou ANTES de anonimizar (pedido de contato) ou a
+    // leitura do lote (pedido da organização): devolver à fila é verdade.
+    const erroAoDevolver = await gravarEstado(admin, orgId, requestId, {
+      status: nextAttempts >= MAX_ATTEMPTS ? "failed" : "received",
+      error_message: detail.slice(0, 500),
+    });
 
     try {
       await admin.rpc("emit_event" as never, {
@@ -507,14 +721,16 @@ export async function processLgpdRedact(event: EventRow): Promise<HandlerResult>
         error_hash: sha256(detail),
         terminal: nextAttempts >= MAX_ATTEMPTS,
         scope,
+        ...(erroAoDevolver ? { status_write_failed: erroAoDevolver } : {}),
       },
       bypassedRls: true,
     });
 
+    const desfecho = nextAttempts >= MAX_ATTEMPTS ? "redact_failed_terminal" : "redact_failed_will_retry";
     return {
       consumer_key: "lgpd-redact-worker.v1",
       status: "error",
-      detail: nextAttempts >= MAX_ATTEMPTS ? "redact_failed_terminal" : "redact_failed_will_retry",
+      detail: erroAoDevolver ? `${desfecho}; status_write_failed: ${erroAoDevolver}` : desfecho,
     };
   }
 }

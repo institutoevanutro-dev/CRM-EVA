@@ -77,6 +77,70 @@ describe('loadActiveRouter — provedor do classificador', () => {
   });
 });
 
+describe('loadActiveRouter — modo de permanência', () => {
+  async function comConfig(config: unknown) {
+    const pool = poolSeq([
+      { rows: [{ id: 'r1', name: 'X', config, fallback_agent_id: null }] },
+      { rows: [{ agent_id: 'a1', intent_name: 'vendas', intent_description: 'Quer comprar', examples: [] }] },
+    ]);
+    return loadActiveRouter(pool, 'org1', 'cs1');
+  }
+
+  it('sem nada na config: o roteador decide a cada mensagem, como sempre, e nada interrompe', async () => {
+    for (const config of [{}, null]) {
+      const router = await comConfig(config);
+      expect(router?.permanencia).toBe('roteador');
+      expect(router?.interrompe).toEqual([]);
+    }
+  });
+
+  it("permanencia 'agente' força sticky, diga a config o que disser; o modo de sempre obedece à config", async () => {
+    // Sem isso a passagem pelo agente seria desfeita na mensagem seguinte.
+    expect((await comConfig({ permanencia: 'agente', sticky: false }))?.sticky).toBe(true);
+    expect((await comConfig({ permanencia: 'agente' }))?.sticky).toBe(true);
+    expect((await comConfig({ sticky: false }))?.sticky).toBe(false);
+    expect((await comConfig({ permanencia: 'roteador', sticky: false }))?.sticky).toBe(false);
+  });
+
+  it("permanencia 'agente' liga o modo novo; interrompe guarda só strings não vazias", async () => {
+    const router = await comConfig({ permanencia: 'agente', interrompe: ['queixa_clinica', 7, ''] });
+    expect(router?.permanencia).toBe('agente');
+    expect(router?.interrompe).toEqual(['queixa_clinica']);
+  });
+
+  it('interrompe é aparado: espaço em volta não impede de casar, e item só de espaço some', async () => {
+    const router = await comConfig({ permanencia: 'agente', interrompe: ['queixa_clinica ', '  urgencia', '   '] });
+    expect(router?.interrompe).toEqual(['queixa_clinica', 'urgencia']);
+  });
+
+  it("valor desconhecido de permanencia cai em 'roteador'", async () => {
+    for (const valor of ['qualquer', 'AGENTE', true, 1, null, {}]) {
+      expect((await comConfig({ permanencia: valor }))?.permanencia).toBe('roteador');
+    }
+  });
+
+  it('permanencia_expira_horas: número maior que zero vale; qualquer outra coisa cai em 24', async () => {
+    expect((await comConfig({ permanencia: 'agente', permanencia_expira_horas: 6 }))?.permanenciaExpiraHoras).toBe(6);
+    expect((await comConfig({ permanencia: 'agente', permanencia_expira_horas: 0.5 }))?.permanenciaExpiraHoras).toBe(0.5);
+    for (const valor of [undefined, null, 0, -3, '12', Number.NaN, Number.POSITIVE_INFINITY, {}]) {
+      expect((await comConfig({ permanencia: 'agente', permanencia_expira_horas: valor }))?.permanenciaExpiraHoras).toBe(24);
+    }
+    expect((await comConfig({}))?.permanenciaExpiraHoras).toBe(24);
+  });
+
+  it('interrompe que não é array vira lista vazia', async () => {
+    for (const valor of ['queixa_clinica', 7, null, { 0: 'queixa_clinica' }]) {
+      expect((await comConfig({ permanencia: 'agente', interrompe: valor }))?.interrompe).toEqual([]);
+    }
+  });
+
+  it('assunto em interrompe que não é membro fica na lista: não quebra, só nunca casa', async () => {
+    const router = await comConfig({ permanencia: 'agente', interrompe: ['nao_e_membro'] });
+    expect(router?.interrompe).toEqual(['nao_e_membro']);
+    expect(router?.members.map((m) => m.intentName)).toEqual(['vendas']);
+  });
+});
+
 describe('loadRouterById', () => {
   const inativo = { id: 'r1', name: 'Rascunho', config: {}, fallback_agent_id: 'a-fb' };
   const membros = [{ agent_id: 'a1', intent_name: 'vendas', intent_description: 'Quer comprar', examples: null }];

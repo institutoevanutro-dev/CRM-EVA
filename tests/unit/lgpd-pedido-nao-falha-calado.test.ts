@@ -307,7 +307,8 @@ describe("POST /api/v1/lgpd/requests/[id]/approve: sem evento, o pedido não vai
     const resposta = await pedirAprovacao();
 
     expect(resposta.status).toBe(500);
-    expect(estado.updates).toEqual([]);
+    // A única gravação é a da prova da aprovação, que não mexe no estado.
+    expect(estado.updates.map((u) => u.status)).toEqual([undefined]);
     expect(auditou("lgpd.manually_approved")).toBe(false);
     expect(logger.error).toHaveBeenCalled();
   });
@@ -316,6 +317,7 @@ describe("POST /api/v1/lgpd/requests/[id]/approve: sem evento, o pedido não vai
     const resposta = await pedirAprovacao();
 
     expect(resposta.status).toBe(200);
-    expect(estado.updates).toMatchObject([{ status: "processing" }]);
+    // Primeiro a prova da aprovação (sem estado), depois o andamento.
+    expect(estado.updates.map((u) => u.status)).toEqual([undefined, "processing"]);
   });
 });

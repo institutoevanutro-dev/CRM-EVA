@@ -12,7 +12,7 @@ import { readWebhookBody } from "@/lib/http/limited-body";
  *  5. Idempotency: insert webhook_events_log; skip if duplicate (already ack'd).
  *  6. Resolve internal contact by Nuvemshop customer id (may be null — L-03).
  *  7. Insert lgpd_requests (due_at = now + 15 BR business days).
- *  8. Emit lgpd.redact_received on event_log for the async worker (S-08.05).
+ *  8. NO event is emitted: the request waits for an admin approval (migration 0357).
  *  9. Audit log (no raw PII — ids only).
  * 10. Return 200 within <5s.
  */
@@ -233,27 +233,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return fail("internal_error", "lgpd_request_create_failed", 500);
   }
 
-  // 8. Emit lgpd.redact_received on event_log for async worker (S-08.05)
-  const { error: emitErr } = await admin.rpc("emit_event", {
-    p_event_type: "lgpd.redact_received",
-    p_entity_kind: "lgpd_request",
-    p_entity_id: requestId,
-    p_payload: {
-      request_id: requestId,
-      organization_id: orgId,
-      scope: "contact",
-      emergency: false,
-      external_customer_id: customerId,
-      contact_id: contactId,
-    } as unknown as Record<string, unknown>,
-    p_metadata: { store_id: storeId, due_at: dueAt },
-    p_organization_id: orgId,
-  });
-
-  if (emitErr) {
-    console.error(`[lgpd-customer-redact] emit_event failed: ${emitErr.message}`);
-    // Non-blocking — worker can be re-triggered via cron recovery
-  }
+  // 8. NÃO emite `lgpd.redact_received`. Até a migration 0357 emitia, e o worker
+  // anonimizava o cliente na hora, sem nenhum humano. Anonimização não tem
+  // volta: o pedido nasce `received`, aparece em LGPD › Solicitações com o
+  // prazo, e só anda quando um administrador aprova (`[id]/approve`).
 
   // 9. Audit log — ids only, no raw PII
   await audit({

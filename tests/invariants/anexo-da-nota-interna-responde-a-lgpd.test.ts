@@ -23,6 +23,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { GOV_CONTACT_1, GOV_CONV_UNASSIGNED, GOV_ORG, columnExists, lastLine, seedGov, sql } from "./gov-helpers";
+import { sqlPedidoAprovado } from "./lgpd-pedido-aprovado";
 
 // A conversa TEM de ser do CONTATO da cascata: `fn_lgpd_cascade_redact_contact`
 // percorre `conversation_id in (select id from conversations where contact_id = …)`,
@@ -73,6 +74,8 @@ beforeEach(() => {
     insert into lgpd_requests (id, organization_id, request_type, source, scope, due_at)
       values ('${PEDIDO}', '${ORG}', 'redact', 'manual', 'contact', now() + interval '15 days')
       on conflict (id) do nothing;
+    -- Desde a 0357 a cascata recusa pedido sem aprovação provada.
+    ${sqlPedidoAprovado(PEDIDO, ORG)}
     -- a cascata é irreversível em contacts; sem este reset o segundo caso
     -- desta suíte encurtaria em already_anonymized e mediria nada. Neste fork
     -- o gatilho fn_contacts_anonimizacao_irreversivel barra a volta — o reset

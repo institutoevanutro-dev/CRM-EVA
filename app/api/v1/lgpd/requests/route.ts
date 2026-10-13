@@ -138,11 +138,12 @@ const ENDPOINT = "/api/v1/lgpd/requests";
  *
  * - grava o pedido `received` com `source = 'manual'`, e o prazo contado do dia
  *   em que o titular PEDIU (`received_on`), não de quando se digitou;
- * - NÃO emite evento. O webhook da Nuvemshop emite ao criar, e o worker começa
- *   na hora; aqui quem põe o worker para andar é a aprovação
- *   (`[id]/approve`). O worker de anonimização executa ao receber
- *   `lgpd.redact_received` sem olhar o estado do pedido: emitir aqui anonimizaria
- *   o paciente, sem volta, sem ninguém ter aprovado. Preso em `route.test.ts`.
+ * - NÃO emite evento. Quem põe o worker para andar é a aprovação
+ *   (`[id]/approve`), e só ela. Desde a migration 0357 isso não é mais a única
+ *   proteção: o worker de anonimização e a cascata do banco recusam o pedido
+ *   cuja linha não prova a aprovação, venha o evento de onde vier. As duas
+ *   propriedades ficam: aqui não se emite (preso em `route.test.ts`), e lá não
+ *   se anonimiza sem prova (`tests/unit/lgpd-redact-so-com-aprovacao.test.ts`).
  *
  * Duplicata: recusa (409) quando o MESMO contato já tem pedido do MESMO tipo
  * ainda aberto (`LGPD_ESTADOS_ABERTOS`), e devolve o id dele para a tela ligar.
