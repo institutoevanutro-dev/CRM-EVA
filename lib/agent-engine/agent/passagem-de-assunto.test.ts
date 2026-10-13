@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   MARCA_DA_PASSAGEM_NO_JOB,
   blocoDaPassagem,
+  atividadeDaPassagem,
   gravarPassagem,
+  jobTemEnvioDeTentativaAnterior,
+  marcarEnvioDaOrigem,
+  MARCA_DE_ENVIO_DA_ORIGEM_NO_JOB,
   outrosAssuntosDoTurno,
   transferToSubjectInputSchema,
 } from './passagem-de-assunto';
@@ -87,14 +91,83 @@ describe('gravarPassagem', () => {
     await gravarPassagem({ query } as never, args);
     expect(query).toHaveBeenCalledTimes(1);
     const [sql, params] = query.mock.calls[0]! as [string, unknown[]];
-    expect(params).toEqual(['org', 'conv', 'ag-b', 'drenagem', 'r1', 'job', MARCA_DA_PASSAGEM_NO_JOB]);
+    expect(params).toEqual([
+      'org', 'conv', 'ag-b', 'drenagem', 'r1', 'job', MARCA_DA_PASSAGEM_NO_JOB, false, MARCA_DE_ENVIO_DA_ORIGEM_NO_JOB,
+    ]);
     expect(sql).toMatch(/update conversations[\s\S]*where organization_id = \$1 and id = \$2/);
     expect(sql).toMatch(/update job_queue[\s\S]*where organization_id = \$1 and id = \$6/);
     expect(sql).toMatch(/select \$1, \$5, dono\.id, \$4, null, \$3, 'reclassified', \$6 from dono/);
   });
 
+  it('origem que já teve envio aceito: a marca de envio da origem vai no MESMO statement', async () => {
+    const query = vi.fn().mockResolvedValue({ rowCount: 1 });
+    await gravarPassagem({ query } as never, { ...args, origemJaEnviou: true });
+    const [sql, params] = query.mock.calls[0]! as [string, unknown[]];
+    expect(params.slice(6)).toEqual([MARCA_DA_PASSAGEM_NO_JOB, true, MARCA_DE_ENVIO_DA_ORIGEM_NO_JOB]);
+    expect(sql).toMatch(/case when \$8 then jsonb_build_object\(\$9::text, true\)/);
+  });
+
   it('conversa de outra organização (nada gravado) é erro, não sucesso mudo', async () => {
     const query = vi.fn().mockResolvedValue({ rowCount: 0 });
     await expect(gravarPassagem({ query } as never, args)).rejects.toThrow(/conversa não encontrada/);
+  });
+});
+
+describe('marcarEnvioDaOrigem e jobTemEnvioDeTentativaAnterior', () => {
+  it('a marca é gravada no job da organização, sem pisar no resto do payload', async () => {
+    const query = vi.fn().mockResolvedValue({ rowCount: 1 });
+    await marcarEnvioDaOrigem({ query } as never, { tenantId: 'org', jobId: 'job' });
+    const [sql, params] = query.mock.calls[0]! as [string, unknown[]];
+    expect(sql).toMatch(/update job_queue[\s\S]*payload \|\|[\s\S]*where organization_id = \$1 and id = \$2/);
+    expect(params).toEqual(['org', 'job', MARCA_DE_ENVIO_DA_ORIGEM_NO_JOB]);
+  });
+
+  it('envio de tentativa anterior: linha do ledger com seq ACIMA do que esta tentativa já usou, fora as que falharam', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{}] });
+    expect(await jobTemEnvioDeTentativaAnterior({ query } as never, { tenantId: 'org', jobId: 'job', seq: 1 })).toBe(true);
+    const [sql, params] = query.mock.calls[0]! as [string, unknown[]];
+    expect(sql).toMatch(/from send_ledger[\s\S]*organization_id = \$1 and job_id = \$2 and seq > \$3[\s\S]*status <> 'failed'/);
+    expect(params).toEqual(['org', 'job', 1]);
+    expect(await jobTemEnvioDeTentativaAnterior({ query: vi.fn().mockResolvedValue({ rows: [] }) } as never, { tenantId: 'org', jobId: 'job', seq: 0 })).toBe(false);
+  });
+});
+
+describe('atividadeDaPassagem', () => {
+  const base = {
+    conversationId: 'conv',
+    de: { agentId: 'ag-a', agentName: 'Agenda', intentName: 'agendar' },
+    para: { agentId: 'ag-b', agentName: 'Drenagem', intentName: 'drenagem' },
+    motivo: 'a pessoa perguntou de drenagem',
+  };
+
+  it('diz os dois assuntos e os dois agentes, com o motivo', () => {
+    const a = atividadeDaPassagem(base);
+    expect(a.type).toBe('subject_transferred');
+    expect(a.reason).toBe(
+      'Do assunto agendar (Agenda) para o assunto drenagem (Drenagem). Motivo: a pessoa perguntou de drenagem',
+    );
+    expect(a.payload).toEqual({
+      conversation_id: 'conv',
+      de_assunto: 'agendar', de_agent_id: 'ag-a', de_agente: 'Agenda',
+      para_assunto: 'drenagem', para_agent_id: 'ag-b', para_agente: 'Drenagem',
+    });
+  });
+
+  it('o motivo entra em uma linha e cortado em 300 caracteres', () => {
+    const a = atividadeDaPassagem({ ...base, motivo: `linha um\n\nlinha dois\t${'x'.repeat(400)}` });
+    const motivo = a.reason.split('Motivo: ')[1]!;
+    expect(motivo).not.toMatch(/[\n\t]/);
+    expect(motivo.startsWith('linha um linha dois x')).toBe(true);
+    expect(motivo).toHaveLength(300);
+  });
+
+  it('origem sem assunto gravado (conversa que veio do fallback): a frase não inventa um', () => {
+    const a = atividadeDaPassagem({ ...base, de: { ...base.de, intentName: null }, motivo: '   ' });
+    expect(a.reason).toBe('De Agenda para o assunto drenagem (Drenagem).');
+    expect(a.payload.de_assunto).toBeNull();
+  });
+
+  it('sem travessão no texto que a equipe lê', () => {
+    expect(atividadeDaPassagem(base).reason).not.toMatch(/[\u2013\u2014]/);
   });
 });

@@ -122,6 +122,7 @@ const ROTEADOR: LoadedRouter = {
   minConfidence: 0.6,
   permanencia: "roteador",
   interrompe: [],
+  permanenciaExpiraHoras: 24,
   fallbackAgentId: null,
   members: [{ agentId: AGENT_ID, intentName: "vendas", intentDescription: "Quer comprar", examples: [] }],
 };

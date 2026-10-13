@@ -266,6 +266,61 @@ async function enviosAceitos(jobId: string): Promise<number> {
   return rows[0]!.n;
 }
 
+/**
+ * O canal ACEITOU o que este job enviou. Sem WAHA no harness a linha fica
+ * `queued`; em produção ela fica `accepted`, e é esse estado que faz o ledger
+ * devolver `already_sent` no retry em vez de reenviar.
+ */
+async function canalAceita(jobId: string): Promise<void> {
+  await pool.query(
+    `update messages set status = 'sent'
+      where organization_id = $1 and id in (select crm_message_id from send_ledger where job_id = $2)`,
+    [ORG, jobId],
+  );
+  await pool.query(
+    "update send_ledger set status = 'accepted' where organization_id = $1 and job_id = $2 and status = 'queued'",
+    [ORG, jobId],
+  );
+}
+
+async function payloadDoJob(jobId: string): Promise<Record<string, unknown>> {
+  const { rows } = await pool.query<{ payload: Record<string, unknown> }>("select payload from job_queue where id = $1", [jobId]);
+  return rows[0]!.payload;
+}
+
+/** Uma mensagem nova chega e o drain decide: carona no job pendente ou job próprio. Devolve o job próprio, se houver. */
+async function chegaEDrena(texto: string, jobAntigo: string): Promise<string | null> {
+  const m2 = await novaInbound(texto);
+  await pool.query(
+    `insert into event_log (organization_id, event_type, entity_kind, entity_id, payload, status)
+     values ($1::uuid, 'ai_agent.dispatch_requested', 'message', $2::uuid, $3::jsonb, 'pending')`,
+    [ORG, m2, JSON.stringify({ conversation_id: CONV, contact_id: CONTACT, channel_session_id: SESSION, inbound_message_id: m2 })],
+  );
+  const { drainTick } = await import("@/lib/agent-engine/edge/crm/drain");
+  await drainTick(
+    pool,
+    { batchSize: 10, intervalMs: 0, idleIntervalMs: 0, debounceMs: 3000, reapTimeoutMs: 300_000 },
+    m.createLogger(),
+  );
+  const { rows } = await pool.query<{ id: string }>(
+    `select id from job_queue
+      where organization_id = $1 and kind = 'inbound_turn' and id <> $2
+        and payload->>'inbound_message_id' = $3`,
+    [ORG, jobAntigo, m2],
+  );
+  await pool.query("delete from event_log where organization_id = $1 and event_type = 'ai_agent.dispatch_requested'", [ORG]);
+  return rows[0]?.id ?? null;
+}
+
+async function atividadesDaPassagem() {
+  const { rows } = await pool.query<{ reason: string; payload: Record<string, unknown>; actor_agent_id: string | null; source_id: string | null }>(
+    `select reason, payload, actor_agent_id, source_id from crm_lead_activities
+      where organization_id = $1 and type = 'subject_transferred' order by created_at`,
+    [ORG],
+  );
+  return rows;
+}
+
 async function decisoes(jobId: string) {
   const { rows } = await pool.query<{ outcome: string; confidence: string | null; agent_id: string | null; intent_name: string | null }>(
     "select outcome, confidence, agent_id, intent_name from ai_router_decisions where job_id = $1 order by created_at, id",
@@ -404,6 +459,7 @@ beforeEach(async () => {
   for (const t of ["send_ledger", "pacing_ledger", "outbound_copies", "job_queue", "ai_router_decisions"]) {
     await pool.query(`delete from ${t} where organization_id = $1`, [ORG]);
   }
+  await pool.query("delete from event_log where organization_id = $1 and event_type = 'agent.activity_unrouted'", [ORG]);
   await pool.query("delete from messages where organization_id = $1 and id <> $2", [ORG, MSG]);
   await pool.query("update conversations set active_ai_agent_id = $2, active_intent = 'a' where id = $1", [CONV, A]);
   await configDoRoteador(MODO_NOVO);
@@ -442,6 +498,73 @@ describe("transfer_to_subject: o agente passa a conversa e o destino responde a 
     expect(await turnosDoOperador()).toBe(0);
     const { rows } = await pool.query<{ status: string }>("select status from job_queue where id = $1", [jobId]);
     expect(rows[0]!.status).toBe("done");
+
+    // Este contato não tem negócio aberto: a atividade da passagem não adivinha
+    // um card. Fica registrada onde o motor registra atividade sem negócio.
+    expect(await atividadesDaPassagem()).toEqual([]);
+    const { rows: semRota } = await pool.query<{ payload: { activity_type: string; reason: string } }>(
+      "select payload from event_log where organization_id = $1 and event_type = 'agent.activity_unrouted' and entity_id = $2",
+      [ORG, CONTACT],
+    );
+    expect(semRota.map((r) => r.payload.activity_type)).toEqual(["subject_transferred"]);
+  });
+
+  it("a passagem aparece na linha do tempo do negócio: os dois assuntos, os dois agentes e o motivo", async () => {
+    const { rows: funil } = await pool.query<{ id: string }>(
+      "insert into crm_pipelines (organization_id, name, slug, position) values ($1, 'Funil da passagem', 'funil-da-passagem', 100) returning id",
+      [ORG],
+    );
+    const { rows: etapa } = await pool.query<{ id: string }>(
+      `insert into crm_stages (organization_id, pipeline_id, name, slug, position, agent_stage_hint)
+       values ($1, $2, 'Entrada', 'entrada-da-passagem', 1, 'new') returning id`,
+      [ORG, funil[0]!.id],
+    );
+    await pool.query(
+      `insert into crm_leads (organization_id, pipeline_id, stage_id, contact_id, title, status)
+       values ($1, $2, $3, $4, 'Negócio da paciente', 'open')`,
+      [ORG, funil[0]!.id, etapa[0]!.id, CONTACT],
+    );
+    try {
+      const jobId = await enfileira();
+      const handler = m.createInboundTurnHandler(
+        deps(
+          modelo({
+            A: [{ tool: "transfer_to_subject", input: { subject: "b", reason: "ela perguntou\nde drenagem" } }],
+            B: [envia("Fazemos sim.")],
+          }),
+        ),
+      );
+      expect(await tenta(jobId, handler)).toBeNull();
+
+      const atividades = await atividadesDaPassagem();
+      expect(atividades).toHaveLength(1);
+      expect(atividades[0]!.reason).toBe(
+        "Do assunto a (Agente A) para o assunto b (Agente B). Motivo: ela perguntou de drenagem",
+      );
+      expect(atividades[0]!.payload).toMatchObject({
+        conversation_id: CONV,
+        de_assunto: "a",
+        de_agent_id: A,
+        de_agente: "Agente A",
+        para_assunto: "b",
+        para_agent_id: B,
+        para_agente: "Agente B",
+      });
+      expect(atividades[0]!.actor_agent_id).toBe(A);
+      expect(atividades[0]!.source_id).toBe(CONV);
+      // O motivo é texto do modelo sobre a conversa: não vai para a tabela de decisões.
+      const { rows: decisao } = await pool.query<{ linha: string }>(
+        "select row_to_json(d)::text as linha from ai_router_decisions d where job_id = $1",
+        [jobId],
+      );
+      for (const d of decisao) expect(d.linha).not.toContain("drenagem");
+      expect(await mensagensQueSairam()).toEqual(["Fazemos sim."]);
+    } finally {
+      await pool.query("delete from crm_lead_activities where organization_id = $1", [ORG]);
+      await pool.query("delete from crm_leads where organization_id = $1", [ORG]);
+      await pool.query("delete from crm_stages where organization_id = $1", [ORG]);
+      await pool.query("delete from crm_pipelines where organization_id = $1", [ORG]);
+    }
   });
 
   it("caso 2: na reexecução B não tem a ferramenta nem o bloco; A tem os dois", async () => {
@@ -530,23 +653,104 @@ describe("transfer_to_subject: o agente passa a conversa e o destino responde a 
 });
 
 describe("transfer_to_subject: retry do job depois da passagem", () => {
-  it("caso 6: falha DEPOIS do envio aceito: o retry não envia de novo", async () => {
-    const corpo = "Fazemos drenagem, quer agendar?";
+  it("caso 6: B enviou a bolha 1 e falhou antes da 2: o retry completa a resposta sem repetir a bolha 1", async () => {
+    const b1 = "Fazemos drenagem sim.";
+    const b2 = "Quer que eu veja um horário?";
     const handler = m.createInboundTurnHandler(
-      deps(modelo({ A: [passa("b")], B: [envia(corpo), "falha", envia("Segunda tentativa de B, que não pode sair.")] })),
+      deps(modelo({ A: [passa("b")], B: [envia(b1), "falha", envia(b1), envia(b2)] })),
     );
     const jobId = await enfileira();
 
     expect((await tenta(jobId, handler))?.message).toMatch(/modelo caiu/);
-    expect(await enviosAceitos(jobId)).toBe(1);
+    expect(await mensagensQueSairam()).toEqual([b1]);
+    await canalAceita(jobId);
+    // Quem enviou foi o DESTINO: o job passou, mas não leva a marca de envio da origem.
+    expect(await payloadDoJob(jobId)).toMatchObject({ passagem_feita: true });
+    expect(await payloadDoJob(jobId)).not.toHaveProperty("passagem_com_envio_da_origem");
 
-    const antesDoRetry = chamadas.length;
     expect(await tenta(jobId, handler)).toBeNull();
-    expect(await enviosAceitos(jobId)).toBe(1);
-    expect(await mensagensQueSairam()).toEqual([corpo]);
+    expect(await mensagensQueSairam()).toEqual([b1, b2]);
+    expect(await enviosAceitos(jobId)).toBe(2);
     expect(await dono()).toEqual({ agente: B, assunto: "b" });
-    // Já passou e já enviou: o retry fecha o job sem chamar modelo nenhum.
-    expect(chamadas).toHaveLength(antesDoRetry);
+    // O retry é do destino: a origem não roda de novo e ele não pode devolver a conversa.
+    expect(chamadas.filter((c) => c.quem === "A")).toHaveLength(1);
+    for (const c of comTools("B")) expect(c.tools).not.toContain("transfer_to_subject");
+    const { rows } = await pool.query<{ status: string }>("select status from job_queue where id = $1", [jobId]);
+    expect(rows[0]!.status).toBe("done");
+  });
+
+  // O retry roda o modelo de novo e o texto pode vir outro. O ledger é por
+  // posição (job, seq), não por conteúdo: o que cair numa posição já aceita não
+  // sai, o que cair numa posição nova sai. É o comportamento de qualquer job
+  // deste motor; aqui fica medido para a passagem.
+  it.each([
+    ["outra abertura e a mesma continuação", ["Outra abertura de B."], ["Fazemos drenagem sim.", "Quer que eu veja um horário?"]],
+    ["a resposta inteira numa bolha só (limite conhecido: nada novo sai)", [], ["Fazemos drenagem sim."]],
+  ])("caso 6, texto diferente no retry: %s", async (_, abertura, esperado) => {
+    const handler = m.createInboundTurnHandler(
+      deps(
+        modelo({
+          A: [passa("b")],
+          B: [
+            envia("Fazemos drenagem sim."),
+            "falha",
+            ...(abertura.length > 0
+              ? [envia(abertura[0]!), envia("Quer que eu veja um horário?")]
+              : [envia("Fazemos drenagem sim. Quer que eu veja um horário?")]),
+          ],
+        }),
+      ),
+    );
+    const jobId = await enfileira();
+    expect((await tenta(jobId, handler))?.message).toMatch(/modelo caiu/);
+    await canalAceita(jobId);
+
+    expect(await tenta(jobId, handler)).toBeNull();
+    expect(await mensagensQueSairam()).toEqual(esperado);
+  });
+
+  it("mensagem nova durante a espera do retry de um job em que B respondeu pela metade ganha job próprio, e é respondida", async () => {
+    const b1 = "Fazemos drenagem sim.";
+    const b2 = "Quer que eu veja um horário?";
+    const handler = m.createInboundTurnHandler(
+      deps(modelo({ A: [passa("b")], B: [envia(b1), "falha", envia(b1), envia(b2)] })),
+    );
+    const jobId = await enfileira();
+    expect((await tenta(jobId, handler))?.message).toMatch(/modelo caiu/);
+    await canalAceita(jobId);
+    await pool.query("update job_queue set run_after = now() + interval '30 seconds' where id = $1", [jobId]);
+
+    // Sem carona: a resposta à mensagem nova sairia no `seq` 1 deste job, que o
+    // ledger já tem como aceito, e seria engolida.
+    const novo = await chegaEDrena("E quanto custa a drenagem?", jobId);
+    expect(novo).not.toBeNull();
+
+    expect(await tenta(jobId, handler)).toBeNull();
+    expect(await mensagensQueSairam()).toEqual([b1, b2]);
+    // O job novo roda com o dono atual (B) e com `seq` do zero: a resposta sai.
+    const responde = m.createInboundTurnHandler(deps(modelo({ B: [envia("A drenagem custa 200.")] })));
+    expect(await tenta(novo!, responde)).toBeNull();
+    expect(await mensagensQueSairam()).toEqual([b1, b2, "A drenagem custa 200."]);
+    expect(chamadas.filter((c) => c.quem === "A")).toHaveLength(1);
+  });
+
+  it("achado 6: A enviou numa tentativa e, no retry, tenta passar: a passagem é recusada e A termina a resposta", async () => {
+    const a1 = "Posso te ajudar com o agendamento.";
+    const a2 = "Qual dia fica melhor?";
+    const handler = m.createInboundTurnHandler(
+      deps(modelo({ A: [envia(a1), "falha", passa("b"), envia(a1), envia(a2)], B: [envia("B não pode falar aqui.")] })),
+    );
+    const jobId = await enfileira();
+    expect((await tenta(jobId, handler))?.message).toMatch(/modelo caiu/);
+    await canalAceita(jobId);
+
+    expect(await tenta(jobId, handler)).toBeNull();
+    expect(vistos()).toMatch(/ja_respondeu_a_esta_mensagem/);
+    expect(await dono()).toEqual({ agente: A, assunto: "a" });
+    expect((await decisoes(jobId)).filter((d) => d.outcome === "reclassified")).toHaveLength(0);
+    expect(chamadas.filter((c) => c.quem === "B")).toHaveLength(0);
+    expect(await mensagensQueSairam()).toEqual([a1, a2]);
+    expect(await payloadDoJob(jobId)).not.toHaveProperty("passagem_feita");
   });
 
   it("caso 6c: A enviou, passou e o fechamento falhou: o retry não deixa B mandar uma segunda resposta", async () => {
@@ -563,6 +767,8 @@ describe("transfer_to_subject: retry do job depois da passagem", () => {
 
     expect((await tenta(jobId, handler))?.message).toMatch(/modelo caiu no fechamento/);
     expect(await mensagensQueSairam()).toEqual([deA]);
+    // É esta marca, e não `passagem_feita`, que encerra o retry sem modelo.
+    expect(await payloadDoJob(jobId)).toMatchObject({ passagem_feita: true, passagem_com_envio_da_origem: true });
 
     const antesDoRetry = chamadas.length;
     expect(await tenta(jobId, handler)).toBeNull();
@@ -570,6 +776,24 @@ describe("transfer_to_subject: retry do job depois da passagem", () => {
     expect(await enviosAceitos(jobId)).toBe(1);
     expect(chamadas.filter((c) => c.quem === "B")).toHaveLength(0);
     expect(chamadas).toHaveLength(antesDoRetry);
+  });
+
+  it("caso 6d: A enviou num passo, passou no seguinte e o fechamento falhou: o retry não roda modelo nenhum", async () => {
+    const deA = "Vou te passar para quem cuida de drenagem.";
+    const handler = m.createInboundTurnHandler(
+      deps(modelo({ A: [envia(deA), passa("b")], B: [envia("B não deveria falar neste turno.")] }, { fechamentosQueFalham: 1 })),
+    );
+    const jobId = await enfileira();
+
+    expect((await tenta(jobId, handler))?.message).toMatch(/modelo caiu no fechamento/);
+    expect(await payloadDoJob(jobId)).toMatchObject({ passagem_feita: true, passagem_com_envio_da_origem: true });
+    await canalAceita(jobId);
+
+    const antesDoRetry = chamadas.length;
+    expect(await tenta(jobId, handler)).toBeNull();
+    expect(chamadas).toHaveLength(antesDoRetry);
+    expect(await mensagensQueSairam()).toEqual([deA]);
+    expect(await dono()).toEqual({ agente: B, assunto: "b" });
   });
 
   it("mensagem nova durante a espera do retry de um job que já passou e enviou ganha job próprio, e B responde", async () => {

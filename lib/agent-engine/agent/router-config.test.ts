@@ -119,6 +119,15 @@ describe('loadActiveRouter — modo de permanência', () => {
     }
   });
 
+  it('permanencia_expira_horas: número maior que zero vale; qualquer outra coisa cai em 24', async () => {
+    expect((await comConfig({ permanencia: 'agente', permanencia_expira_horas: 6 }))?.permanenciaExpiraHoras).toBe(6);
+    expect((await comConfig({ permanencia: 'agente', permanencia_expira_horas: 0.5 }))?.permanenciaExpiraHoras).toBe(0.5);
+    for (const valor of [undefined, null, 0, -3, '12', Number.NaN, Number.POSITIVE_INFINITY, {}]) {
+      expect((await comConfig({ permanencia: 'agente', permanencia_expira_horas: valor }))?.permanenciaExpiraHoras).toBe(24);
+    }
+    expect((await comConfig({}))?.permanenciaExpiraHoras).toBe(24);
+  });
+
   it('interrompe que não é array vira lista vazia', async () => {
     for (const valor of ['queixa_clinica', 7, null, { 0: 'queixa_clinica' }]) {
       expect((await comConfig({ permanencia: 'agente', interrompe: valor }))?.interrompe).toEqual([]);

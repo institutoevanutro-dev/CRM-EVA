@@ -35,8 +35,13 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * classificador no modo `permanencia: 'agente'`, como no turno real, e passa
  * pelo mesmo corte e achatamento (`emUmaLinha`). Nada disso é gravado.
  *
- * O que a rota NÃO simula: agente sem versão publicada (regra 7 do resolvedor)
- * e o agente de campanha (degrau 0). Ela diz quem o roteador escolheria.
+ * O que a rota NÃO simula: agente sem versão publicada (regra 7 do resolvedor),
+ * o agente de campanha (degrau 0) e o vencimento da permanência (regra 2c: no
+ * modo `'agente'`, conversa sem turno atendido há mais de
+ * `permanencia_expira_horas` é classificada do zero). A conversa simulada não
+ * tem data: `current_intent` vale sempre como atendimento em andamento. Para
+ * ver o que o roteador faria com a permanência vencida, teste sem
+ * `current_intent`. Ela diz quem o roteador escolheria.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";

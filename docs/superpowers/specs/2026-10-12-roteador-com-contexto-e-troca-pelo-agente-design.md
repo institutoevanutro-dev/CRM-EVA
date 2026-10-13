@@ -149,7 +149,7 @@ Regras: só mensagens do atendimento atual (a fronteira de atendimento que o CRM
 - **A passagem é recusada, e o agente de origem responde,** quando o destino não tem versão publicada, está pausado, está fora do horário de funcionamento dele ou em modo assistido. Em todos esses casos passar deixaria a pessoa sem resposta agora.
 - **Passagem junto com handoff humano no mesmo passo:** sai só o aviso de escalação. O agente de destino não responde por cima de uma conversa que foi para a equipe.
 - **Passagem depois de já ter enviado no mesmo turno:** a passagem vale, mas não há reexecução. O dono novo assume na mensagem seguinte.
-- **Retry de um job que já passou e já enviou não roda o modelo de novo.**
+- **Retry de um job em que a ORIGEM enviou e passou não roda o modelo de novo.** Ver 11.5, item A: a regra deixou de valer para o caso em que quem enviou foi o destino.
 - **Onde a ação existe.** Só em turno de mensagem recebida, fora de prévia e de modo assistido, com roteador em modo novo, agente membro dele e ao menos um outro assunto. A reexecução nunca oferece a ação: é o que garante uma passagem por mensagem.
 
 ### 11.4 Limites conhecidos, que ficam
@@ -158,10 +158,21 @@ Regras: só mensagens do atendimento atual (a fronteira de atendimento que o CRM
 - **Um turno com passagem custa dois turnos.** São duas execuções completas de agente.
 - **A mensagem em que há passagem pode levar o dobro do tempo** para ser respondida.
 - **Assunto que interrompe chegando durante o turno da passagem.** Mensagem de assunto marcado em `interrompe` (queixa clínica) que chega DURANTE o turno em que há passagem é respondida pelo agente de destino, sem passar pelo roteador.
-- **Resposta do destino em várias bolhas.** Se ela falha depois da primeira bolha, o retry não completa as que faltaram.
+- **Resposta do destino em várias bolhas, quando o retry escreve outro texto.** O retry agora completa a resposta (11.5, item A), mas roda o modelo de novo e o controle de envio é por posição (job e número da bolha), não por conteúdo. O que o modelo escrever numa posição já entregue não sai; o que cair numa posição nova sai. Se a segunda redação couber numa bolha só, nada novo sai e a pessoa fica com a primeira bolha da tentativa anterior. Se vier dividida em outro ponto, pode repetir ou pular um trecho. É o comportamento de qualquer job do motor, não só da passagem.
 - **Pendência de caso aberto pela origem.** O destino só a enxerga se também tiver casos habilitados. É configuração do agente.
-- **A decisão ainda não aparece em tela.** Continua valendo a seção 9: as decisões ficam em `ai_router_decisions` e falta mostrá-las por conversa.
+- **As decisões do ROTEADOR ainda não aparecem em tela.** Continua valendo a seção 9 para o que o roteador decide: fica em `ai_router_decisions` e falta mostrar por conversa. A passagem feita pelo agente já aparece na linha do tempo (11.5, item C).
 
-### 11.5 O que não foi medido
+### 11.5 Correções da revisão do PR (12/10/2026)
+
+Revisão externa do PR apontou quatro pontos que entraram antes do merge. O que mudou e o que continua limite:
+
+- **A. O retry completa a resposta do destino.** Antes, o retry de um job que tinha passado e tinha qualquer envio aceito encerrava sem rodar o modelo. Isso pegava também o caso em que o DESTINO enviou a primeira bolha e falhou antes da segunda: a pessoa ficava com a resposta pela metade e o job terminava como feito. Agora o job leva uma segunda marca, `passagem_com_envio_da_origem`, gravada só quando a origem teve envio aceito e passou no mesmo turno, e o encerramento sem modelo depende só dela. Quando quem enviou foi o destino, o retry roda com ele: as bolhas já entregues não saem de novo e as que faltam saem. Mensagem nova que chega durante a espera do retry de um job que passou a conversa continua ganhando job próprio, nos dois casos. Continua limite: o retry escreve o texto de novo (ver 11.4); e se o worker morrer entre o envio da origem ser aceito e a marca ser gravada, o retry roda o destino por cima da bolha da origem.
+- **B. Passagem recusada no retry de quem já começou a responder.** Se uma tentativa anterior do mesmo job já enviou, a ação de passar devolve o erro `ja_respondeu_a_esta_mensagem` e o agente de origem termina a resposta. Sem isso a primeira bolha do destino cairia numa posição já entregue e não sairia.
+- **C. A passagem aparece na linha do tempo.** Ao passar, o motor grava uma atividade no negócio do contato ("Atendimento passou para outro assunto") com os dois assuntos, os dois agentes e o motivo que o agente informou, em uma linha e cortado em 300 caracteres. O motivo fica só na atividade: não vai para `ai_router_decisions` nem para log. Continua limite: contato sem negócio aberto, ou com mais de um candidato, não ganha a linha; nesse caso fica o registro `agent.activity_unrouted` no `event_log`, como em toda atividade do motor. Falha ao gravar a atividade não desfaz a passagem.
+- **D. A permanência vence.** No modo `permanencia: 'agente'`, conversa cujo último turno roteado (`conversations.active_agent_set_at`) tem mais de 24 horas é tratada como sem agente atual: o roteador classifica do zero, como em conversa nova. O prazo é `permanencia_expira_horas` na configuração do roteador (número maior que zero; qualquer outra coisa vale 24). Continua limite: a data é renovada por todo turno roteado, inclusive o de follow-up, então a retomada automática de uma conversa parada reinicia o prazo; o turno de follow-up não classifica e segue com o agente da conversa mesmo vencida; conversa sem a data gravada não vence; a rota de teste não simula o prazo. No modo `'roteador'` nada muda.
+
+Ficou de fora, por decisão: aviso quando `permanencia` tem valor desconhecido (erro de digitação cai calado no modo antigo). O carregador do roteador não tem logger, e criar um só para isso seria infraestrutura nova. Depois de ligar o modo, conferir `mode: "agente"` na resposta da rota de teste.
+
+### 11.6 O que não foi medido
 
 Nada disso foi provado em conversa real nem pela tela. As provas são testes de unidade e invariantes em Postgres real com modelo simulado. Os critérios de sucesso da seção 2 seguem abertos até a versão ser instalada e a seção 5 (configuração) ser feita.

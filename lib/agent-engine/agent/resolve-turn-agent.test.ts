@@ -51,6 +51,7 @@ function router(overrides: Partial<LoadedRouter> = {}): LoadedRouter {
     sticky: true,
     minConfidence: 0.6,
     permanencia: 'roteador',
+    permanenciaExpiraHoras: 24,
     interrompe: [],
     fallbackAgentId: null,
     members,
@@ -805,5 +806,95 @@ describe('resolveConversationTurn — áudio transcrito chega ao classificador',
     const { classifyIntent, deps: d } = deps();
     await resolveConversationTurn(db as never, {} as never, { ...baseInput, inbound: true }, d);
     expect(classifyIntent.mock.calls[0]![2].signal).toBe('Quero marcar uma consulta');
+  });
+});
+
+// ─── Modo `permanencia: 'agente'`: a permanência vence com o tempo ───
+describe("resolveTurnAgent: no modo 'agente' a permanência expira", () => {
+  const AGORA = new Date('2026-10-12T15:00:00Z');
+  const haHoras = (h: number) => new Date(AGORA.getTime() - h * 3_600_000);
+  const emAndamento = { ...baseInput, signal: 'estou com dor depois do procedimento', stickyAgentId: 'agent-vendas', stickyIntent: 'vendas' };
+
+  async function rodar(r: LoadedRouter, stickySetAt: Date | null, over: { signal?: string | null; verdict?: unknown } = {}) {
+    const classifyIntent = vi.fn().mockResolvedValue(over.verdict === undefined ? { intentName: 'suporte', confidence: 0.9 } : over.verdict);
+    const out = await resolveTurnAgent({} as never, {} as never,
+      { ...emAndamento, ...(over.signal !== undefined ? { signal: over.signal } : {}), stickySetAt },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(r),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        agenteDaCampanha: vi.fn().mockResolvedValue(null),
+        classifyIntent,
+        agora: () => AGORA,
+      }));
+    return { out, classifyIntent };
+  }
+  // `interrompe` vazio: dentro do prazo o atalho nem chama o classificador.
+  const modoAgente = (over: Partial<LoadedRouter> = {}) => router({ permanencia: 'agente', interrompe: [], ...over });
+
+  it('dentro do prazo (23h): a conversa fica com quem está atendendo, sem classificar', async () => {
+    const { out, classifyIntent } = await rodar(modoAgente(), haHoras(23));
+    expect(classifyIntent).not.toHaveBeenCalled();
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it('vencida (25h): classifica do zero, como conversa nova, e o assunto atual não vai ao classificador', async () => {
+    const { out, classifyIntent } = await rodar(modoAgente(), haHoras(25));
+    expect(classifyIntent).toHaveBeenCalledTimes(1);
+    expect(classifyIntent.mock.calls[0]![2].assuntoAtual).toBeNull();
+    // 'suporte' não está em `interrompe`: só troca porque não há mais agente atual.
+    expect(out.outcome).toBe('classified');
+    expect(out.config?.agentId).toBe('agent-suporte');
+    expect(out.intentName).toBe('suporte');
+  });
+
+  it('vencida e sem assunto que bata: cai no fallback, como conversa nova', async () => {
+    const { out } = await rodar(modoAgente({ fallbackAgentId: 'agent-fallback' }), haHoras(25), { verdict: { intentName: null, confidence: 0.2 } });
+    expect(out.outcome).toBe('fallback');
+    expect(out.config?.agentId).toBe('agent-fallback');
+  });
+
+  it('o prazo vem de permanenciaExpiraHoras', async () => {
+    expect((await rodar(modoAgente({ permanenciaExpiraHoras: 2 }), haHoras(3))).out.outcome).toBe('classified');
+    expect((await rodar(modoAgente({ permanenciaExpiraHoras: 48 }), haHoras(25))).out.outcome).toBe('sticky');
+  });
+
+  it('sem data gravada não vence: não há o que medir', async () => {
+    expect((await rodar(modoAgente(), null)).out.outcome).toBe('sticky');
+  });
+
+  it('follow-up (sem mensagem para classificar) continua com o agente da conversa, mesmo vencida', async () => {
+    const { out, classifyIntent } = await rodar(modoAgente({ fallbackAgentId: 'agent-fallback' }), haHoras(72), { signal: null });
+    expect(classifyIntent).not.toHaveBeenCalled();
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it("modo 'roteador': nada muda, por mais velha que seja a data", async () => {
+    // Mesmo assunto de quem atende: no modo de sempre isso é permanência.
+    const { out } = await rodar(router(), haHoras(24 * 30), { verdict: { intentName: 'vendas', confidence: 0.9 } });
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it('resolveConversationTurn lê active_agent_set_at da conversa', async () => {
+    const db = {
+      query: vi.fn(async (sql: string) =>
+        sql.includes('from conversations')
+          ? { rows: [{ active_ai_agent_id: 'agent-vendas', active_intent: 'vendas', active_agent_set_at: haHoras(25) }] }
+          : { rows: [{ body: 'estou com dor', type: 'text', media_url: null, media_storage_path: null, media_derived_text: null }] }),
+    };
+    const classifyIntent = vi.fn().mockResolvedValue({ intentName: 'suporte', confidence: 0.9 });
+    const out = await resolveConversationTurn(db as never, {} as never, { ...baseInput, inbound: true },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(modoAgente()),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        agenteDaCampanha: vi.fn().mockResolvedValue(null),
+        classifyIntent,
+        agora: () => AGORA,
+      }));
+    expect(db.query.mock.calls[0]![0]).toContain('active_agent_set_at');
+    expect(out.outcome).toBe('classified');
+    expect(out.config?.agentId).toBe('agent-suporte');
   });
 });

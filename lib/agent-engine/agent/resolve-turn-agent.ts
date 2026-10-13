@@ -22,6 +22,14 @@
  *      diferente do assunto atual, nada que o classificador diga troca o
  *      agente. O turno devolve 'sticky' sem ler fatos nem conversa e sem
  *      chamar o modelo.
+ *      2c. ainda no modo `'agente'`, a permanência VENCE: se o último turno
+ *      atendido (`conversations.active_agent_set_at`) é mais velho que
+ *      `permanenciaExpiraHoras` (padrão 24), a conversa é tratada como sem
+ *      agente atual e cai na regra 3. Sem isso, quem marcou consulta em março
+ *      e escreve "estou com dor" em abril caía no agente de agenda sem o
+ *      classificador ser chamado. Só com mensagem para classificar: o
+ *      follow-up (regra 6) continua com o agente da conversa. No modo
+ *      `'roteador'` não existe prazo: lá o classificador roda a cada mensagem.
  *   3. sem sticky: classifica; intenção não-nula + confiança >= min ⇒ agente
  *      do membro.
  *   4. classificador falhou (null) COM sticky elegível ⇒ mantém o sticky
@@ -162,6 +170,8 @@ export async function resolveTurnAgent(
     signal: string | null;
     stickyAgentId: string | null;
     stickyIntent: string | null;
+    /** `conversations.active_agent_set_at`: o último turno atendido. Ver a regra 2c. */
+    stickySetAt?: Date | null;
   },
   deps: ResolveTurnAgentDeps,
 ): Promise<TurnAgentResolution> {
@@ -279,8 +289,15 @@ export async function resolveTurnAgent(
 
     // sticky elegível: config liga sticky E o agente ainda é membro do router
     // (membro removido ⇒ trata como sem sticky, decisão segura — ver report).
+    // Regra 2c. Sem data gravada não há o que medir, e a permanência vale.
+    const venceu =
+      router.permanencia === 'agente' &&
+      input.signal !== null &&
+      input.stickySetAt != null &&
+      (deps.agora ?? (() => new Date()))().getTime() - new Date(input.stickySetAt).getTime() >
+        router.permanenciaExpiraHoras * 3_600_000;
     const stickyMember =
-      router.sticky && input.stickyAgentId !== null
+      router.sticky && input.stickyAgentId !== null && !venceu
         ? router.members.find((m) => m.agentId === input.stickyAgentId)
         : undefined;
 
@@ -409,8 +426,9 @@ export async function resolveConversationTurn(
   const { rows } = await db.query<{
     active_ai_agent_id: string | null;
     active_intent: string | null;
+    active_agent_set_at: Date | null;
   }>(
-    'select active_ai_agent_id,active_intent from conversations where organization_id=$1 and id=$2',
+    'select active_ai_agent_id,active_intent,active_agent_set_at from conversations where organization_id=$1 and id=$2',
     [input.tenantId, input.conversationId],
   );
   const signalRow = input.inbound
@@ -433,5 +451,6 @@ export async function resolveConversationTurn(
     signal,
     stickyAgentId: rows[0]?.active_ai_agent_id ?? null,
     stickyIntent: rows[0]?.active_intent ?? null,
+    stickySetAt: rows[0]?.active_agent_set_at ?? null,
   }, deps);
 }

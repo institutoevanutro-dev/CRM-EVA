@@ -57,9 +57,17 @@ export interface LoadedRouter {
    * classificador só devolve nome de membro.
    */
   interrompe: string[];
+  /**
+   * Só no modo `'agente'`: horas sem turno atendido depois das quais a conversa
+   * deixa de ter agente atual e o roteador classifica do zero. Padrão 24.
+   */
+  permanenciaExpiraHoras: number;
   fallbackAgentId: string | null;
   members: RouterMember[];
 }
+
+/** `config.permanencia_expira_horas` ausente ou fora da forma. */
+export const PERMANENCIA_EXPIRA_HORAS_PADRAO = 24;
 
 interface RouterRow {
   id: string;
@@ -136,6 +144,7 @@ async function montar(
     sticky?: unknown;
     min_confidence?: unknown;
     permanencia?: unknown;
+    permanencia_expira_horas?: unknown;
     interrompe?: unknown;
   };
   const classifierModel =
@@ -156,6 +165,9 @@ async function montar(
   // zero a cada mensagem e desfaz, na mensagem seguinte, a passagem que o agente
   // acabou de fazer (`transfer_to_subject`).
   const sticky = permanencia === 'agente' || (typeof cfg.sticky === 'boolean' ? cfg.sticky : true);
+  const expira = cfg.permanencia_expira_horas;
+  const permanenciaExpiraHoras =
+    typeof expira === 'number' && Number.isFinite(expira) && expira > 0 ? expira : PERMANENCIA_EXPIRA_HORAS_PADRAO;
   const interrompe = Array.isArray(cfg.interrompe)
     ? cfg.interrompe
         .filter((i): i is string => typeof i === 'string')
@@ -173,6 +185,7 @@ async function montar(
     minConfidence,
     permanencia,
     interrompe,
+    permanenciaExpiraHoras,
     fallbackAgentId: router.fallback_agent_id,
     members: memberRows.map((m) => ({
       agentId: m.agent_id,

@@ -142,8 +142,12 @@ import { avisarJanelaFechada, resolverAvisoDeJanela } from '../pacing/aviso-de-j
 import { resolveConversationTurn, type TurnAgentResolution } from './resolve-turn-agent';
 import {
   MARCA_DA_PASSAGEM_NO_JOB,
+  MARCA_DE_ENVIO_DA_ORIGEM_NO_JOB,
+  atividadeDaPassagem,
   blocoDaPassagem,
   gravarPassagem,
+  jobTemEnvioDeTentativaAnterior,
+  marcarEnvioDaOrigem,
   outrosAssuntosDoTurno,
   transferToSubjectInputSchema,
 } from './passagem-de-assunto';
@@ -2061,9 +2065,9 @@ export async function runAgentTurn(
   // conversa sem enviar nada, e o de destino responde a MESMA mensagem, aqui.
   //
   // Mesmo job de propósito: o `send_ledger` é chaveado por (job, seq), então o
-  // retry deste job encontra o envio do destino e não repete. E o retry não
-  // volta para a origem: a conversa já tem o destino como dono, e o roteador o
-  // devolve.
+  // retry deste job encontra as bolhas que o destino já enviou, não as repete e
+  // envia as que faltaram. E o retry não volta para a origem: a conversa já tem
+  // o destino como dono, e o roteador o devolve.
   //
   // UMA vez: o núcleo só devolve passagem quando o turno não é reexecução, e o
   // `input.passagem === undefined` daqui é o cinto do suspensório. A chamada é
@@ -2086,6 +2090,10 @@ export async function runAgentTurn(
     });
   }
 }
+
+/** O canal aceitou (ou enfileirou) o envio: é o que o retry do job não repete. */
+const envioAceito = (o: ChannelSendResult): boolean =>
+  o.kind === 'sent' || o.kind === 'already_sent' || o.kind === 'queued';
 
 /** O que o núcleo devolve quando o turno passou a conversa SEM enviar nada. */
 interface PassagemParaReexecutar {
@@ -4318,6 +4326,20 @@ async function executarTurnoDoAgente(
         }
         passagemEmCurso = true;
         try {
+          // RETRY em que uma tentativa anterior deste job já enviou: passar agora
+          // reexecutaria o destino sobre chaves `(job, seq)` já aceitas, e a
+          // primeira bolha dele seria engolida como `already_sent`. Quem começou
+          // a resposta termina. Uma consulta, só quando a ferramenta é chamada.
+          if (await jobTemEnvioDeTentativaAnterior(pool, { tenantId, jobId: liveJob().id, seq })) {
+            return {
+              ok: false,
+              error: {
+                code: 'ja_respondeu_a_esta_mensagem',
+                message:
+                  'você já começou a responder a esta mensagem numa tentativa anterior. A conversa continua com você: termine de responder à pessoa.',
+              },
+            };
+          }
           // Destino que não responderia AGORA: sem versão publicada, arquivado,
           // pausado, fora do horário de funcionamento dele (a reexecução seria
           // reagendada para a abertura) ou assistido (a resposta viraria rascunho
@@ -4346,6 +4368,9 @@ async function executarTurnoDoAgente(
             routerId: routerDaPassagem,
             jobId: liveJob().id,
             destino: { agentId: destino.agentId, intentName: destino.intentName },
+            // Envio aceito ANTES da passagem: a marca vai no mesmo statement. O
+            // envio que termina depois dela é marcado no fim do loop.
+            origemJaEnviou: outcomes.some(envioAceito),
           });
           passagemPedida = {
             destino: {
@@ -4365,6 +4390,36 @@ async function executarTurnoDoAgente(
             para_agent_id: destino.agentId,
             intent: destino.intentName,
           });
+          // A passagem na linha do tempo do negócio, pelo mesmo caminho do handoff
+          // (`emitAgentActivityForContact`). Conversa sem negócio aberto: o emissor
+          // registra `agent.activity_unrouted` no event_log e não adivinha o card.
+          // A timeline nunca derruba a passagem que ela descreve.
+          try {
+            const atividade = atividadeDaPassagem({
+              conversationId: input.conversationId,
+              de: { agentId: agentConfig.agentId, agentName: agentConfig.agentName, intentName: routed.intentName },
+              para: { agentId: destino.agentId, agentName: config.agentName, intentName: destino.intentName },
+              motivo: parsed.data.reason,
+            });
+            const roteou = await emitAgentActivityForContact({
+              pool,
+              organizationId: tenantId,
+              contactId: leadId,
+              type: atividade.type,
+              sourceModule: 'passagem-de-assunto',
+              sourceId: input.conversationId,
+              agentId: agentConfig.agentId,
+              reason: atividade.reason,
+              payload: atividade.payload,
+            });
+            if (!roteou.routed) {
+              runLog.warn('passagem de assunto: atividade não roteada para um negócio', { reason: roteou.reason });
+            }
+          } catch (err) {
+            runLog.warn('passagem de assunto: atividade não foi gravada', {
+              error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+            });
+          }
           return {
             ok: true,
             status: 'conversa_passada',
@@ -4790,6 +4845,26 @@ async function executarTurnoDoAgente(
       },
       { registry: deps.registry, log: runLog },
     );
+
+    // A ORIGEM ENVIOU E PASSOU no mesmo turno: a marca que faz o retry deste job
+    // encerrar sem modelo (`MARCA_DE_ENVIO_DA_ORIGEM_NO_JOB`). Aqui, antes de
+    // qualquer `throw` abaixo, porque é justamente o turno que falha depois do
+    // envio que volta para a fila. `gravarPassagem` já a grava quando o envio
+    // veio antes; este é o envio que terminou depois dela, no mesmo passo.
+    // Falha ao marcar não derruba o turno: a marca só importa se houver retry.
+    //
+    // ponytail: o worker que morre entre o envio aceito e esta linha deixa o
+    // job sem a marca, e o retry roda o destino por cima da bolha da origem.
+    // Subir de degrau é marcar dentro do próprio envio.
+    if (!preview && passagemFeita() !== null && outcomes.some(envioAceito)) {
+      try {
+        await marcarEnvioDaOrigem(pool, { tenantId, jobId: liveJob().id });
+      } catch (err) {
+        runLog.warn('passagem de assunto: marca de envio da origem não gravada', {
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+        });
+      }
+    }
 
     // F4-04: correlação dos dois sinais do MESMO turno — jailbreak ALTO + tentativa de
     // promessa fora de tabela (F4-01). Ambos estão determinados aqui (o jailbreak rodou na
@@ -5409,26 +5484,23 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
   return async (job: JobRow, pool: pg.Pool, ctx: { workerId: string }): Promise<void> => {
     const payload = inboundTurnPayloadSchema.parse(job.payload);
     if (!job.contact_id) throw new Error('reply_without_contact');
-    // RETRY DEPOIS DE PASSAGEM DE ASSUNTO COM ENVIO JÁ FEITO: o job acaba aqui,
-    // sem modelo. A mensagem já tem resposta (da origem, que enviou e passou, ou
-    // do destino), e rodar de novo entregaria o turno ao NOVO dono: outro
-    // agente, outro texto, e a segunda bolha dele sairia com `seq` que o ledger
-    // nunca viu. O ledger segura a mesma resposta repetida, não uma resposta
-    // diferente.
-    if (job.payload[MARCA_DA_PASSAGEM_NO_JOB] === true) {
-      const { rows } = await pool.query(
-        `select 1 from send_ledger
-          where organization_id = $1 and job_id = $2 and status in ('accepted', 'queued')
-          limit 1`,
-        [job.organization_id, job.id],
-      );
-      if (rows.length > 0) {
-        deps.log.info('turno encerrado sem modelo: o job já passou a conversa e já enviou resposta', {
-          job_id: job.id,
-          conversation_id: payload.conversation_id,
-        });
-        return;
-      }
+    // RETRY DE UM JOB EM QUE A ORIGEM ENVIOU E PASSOU A CONVERSA: o job acaba
+    // aqui, sem modelo. A mensagem já tem a resposta da origem, e rodar de novo
+    // entregaria o turno ao NOVO dono: outro agente, outro texto, e a segunda
+    // bolha dele sairia com `seq` que o ledger nunca viu. O ledger segura a
+    // mesma resposta repetida, não uma resposta diferente.
+    //
+    // Só essa marca, e não `passagem_feita`: quando quem enviou foi o DESTINO e
+    // a resposta falhou no meio, o retry roda com ele (já é o dono, e não
+    // recebe a ferramenta), as bolhas aceitas voltam como `already_sent` e as
+    // que faltam saem. Encerrar ali deixava a resposta pela metade com o job
+    // `done`.
+    if (job.payload[MARCA_DE_ENVIO_DA_ORIGEM_NO_JOB] === true) {
+      deps.log.info('turno encerrado sem modelo: a origem já respondeu e passou a conversa', {
+        job_id: job.id,
+        conversation_id: payload.conversation_id,
+      });
+      return;
     }
     const resolvedAgent = await resolveConversationTurn(pool, deps.llmCfg, {
       tenantId: job.organization_id,

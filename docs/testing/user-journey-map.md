@@ -2743,3 +2743,6 @@ Sem migration e sem tela nova: o modo é ligado em `ai_routers.config` (`permane
 
 - [ ] Com o modo ligado, resposta curta no meio de um atendimento não troca de agente; assunto marcado em `interrompe` troca na mesma mensagem; o agente em atendimento passa a conversa e o agente de destino responde a mesma mensagem, uma vez só. Coberto por unit e invariante; **prova pela tela e em conversa real pendentes** até a versão ser instalada
 - [ ] Teste do roteador com conversa simulada (`history` e `current_intent` pela API) dá a mesma decisão do turno real. Coberto por unit; o campo na tela não existe ainda
+- [ ] A passagem aparece na linha do tempo do negócio ("Atendimento passou para outro assunto", com os dois assuntos, os dois agentes e o motivo). Coberto por invariante; **prova pela tela pendente**
+- [ ] No modo ligado, conversa sem turno há mais de 24 horas (`permanencia_expira_horas`) volta a ser classificada do zero. Coberto por unit; **prova em conversa real pendente**
+- [ ] Resposta do agente de destino que falha depois da primeira bolha é completada no retry, sem repetir a bolha entregue. Coberto por invariante com modelo simulado; **falha real de envio no canal não foi exercitada**

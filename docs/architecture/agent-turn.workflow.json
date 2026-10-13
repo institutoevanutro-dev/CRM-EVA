@@ -229,7 +229,7 @@
       "col": 4,
       "type": "backend",
       "label": "Passagem de assunto",
-      "sublabel": "o agente em atendimento passa a conversa a outro assunto do roteador; uma por mensagem; só inbound_turn no modo 'agente'",
+      "sublabel": "o agente em atendimento passa a conversa a outro assunto do roteador; uma por mensagem; só inbound_turn no modo 'agente'; deixa atividade subject_transferred na linha do tempo do negócio (crm_lead_activities)",
       "tag": "transfer_to_subject"
     },
     {
@@ -526,7 +526,7 @@
       "id": "passagem-turn",
       "from": "passagem",
       "to": "turn",
-      "label": "se nada foi enviado, o turno roda de novo UMA vez com o agente de destino, no mesmo job e no mesmo send_ledger",
+      "label": "se nada foi enviado, o turno roda de novo UMA vez com o agente de destino, no mesmo job e no mesmo send_ledger; o retry completa as bolhas que faltaram",
       "variant": "emphasis",
       "route": "drop"
     },
