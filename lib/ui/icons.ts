@@ -102,6 +102,7 @@ export {
   MusicNote,
   Note,
   FileText,
+  FilePdf,
   Lock,
   LockOpen,
   Receipt,

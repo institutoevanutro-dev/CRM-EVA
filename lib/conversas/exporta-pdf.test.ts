@@ -65,7 +65,7 @@ function db(org: Record<string, unknown> | null): SupabaseClient {
 const ORG = { legal_name: "Clínica Bem Viver LTDA", display_name: "Clínica Bem Viver", timezone: "America/Sao_Paulo" };
 
 describe("linhasDoHistorico: quem falou", () => {
-  const linhaDe = (m: Partial<MensagemParaPdf>) =>
+  const linhaDe = (m: Omit<Partial<MensagemParaPdf>, "id" | "sent_at">) =>
     linhasDoHistorico(conversa, [msg({ id: "m", sent_at: "2026-09-01T12:00:00.000Z", ...m })], { t, nomesDosUsuarios })[0]!;
 
   it("mensagem recebida é do contato, pelo nome", () => {
@@ -147,7 +147,7 @@ describe("linhasDoHistorico: ordem e horário", () => {
 });
 
 describe("linhasDoHistorico: o que cada linha diz", () => {
-  const textoDe = (m: Partial<MensagemParaPdf>) =>
+  const textoDe = (m: Omit<Partial<MensagemParaPdf>, "id" | "sent_at">) =>
     linhasDoHistorico(conversa, [msg({ id: "m", sent_at: "2026-09-01T12:00:00.000Z", ...m })], { t })[0]!;
 
   it("documento é citado pelo nome do arquivo, sem conteúdo", () => {
