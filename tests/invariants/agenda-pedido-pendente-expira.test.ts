@@ -217,7 +217,7 @@ describe("as travas do banco contra cancelar o que não devia", () => {
 
     await pool.query("update calendar_appointments set status='confirmed' where id=$1", [id]);
 
-    await expect(expira(t.org, id, lido.revision)).rejects.toMatchObject({ code: "40001" });
+    await expect(expira(t.org, id, lido.revision)).rejects.toMatchObject({ code: "PT409" });
     const depois = await linha(id);
     expect(depois.status).toBe("confirmed");
     expect(depois.cancelled_at).toBeNull();

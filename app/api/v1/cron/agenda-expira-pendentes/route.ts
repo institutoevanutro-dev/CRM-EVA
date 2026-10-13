@@ -48,7 +48,7 @@
  * compromisso, resolve os avisos abertos dele na Central, registra a linha na
  * timeline do negócio e audita na organização. E confere a REVISÃO lida aqui:
  * se alguém confirmou ou remarcou entre a leitura e a escrita, a revisão mudou
- * e o banco recusa (40001). É a segunda barreira; a primeira é o filtro.
+ * e o banco recusa (PT409, a recusa permanente desde a 0358). É a segunda barreira; a primeira é o filtro.
  *
  * Uma linha por vez, de propósito: uma linha que falha não derruba as outras.
  *
