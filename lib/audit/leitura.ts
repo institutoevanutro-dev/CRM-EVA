@@ -17,6 +17,7 @@ export const ACOES_DE_LEITURA = [
   "contact.viewed",
   "contact.listed",
   "conversation.viewed",
+  "conversation.exported",
   "message.media_viewed",
   "prontuario.contact_read",
   "lgpd.request_previewed",
