@@ -693,6 +693,10 @@ export const AUDIT_ACTIONS = [
   "contact.viewed",
   "contact.listed",
   "conversation.viewed",
+  // O histórico de UMA conversa baixado em PDF (porte do DeskcommCRM #2229).
+  // É saída de dado de paciente: a linha diz quem, qual conversa e QUANTAS
+  // mensagens saíram, nunca o texto delas.
+  "conversation.exported",
   "message.media_viewed",
   "prontuario.contact_read",
   "lgpd.request_previewed",

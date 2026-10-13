@@ -22,6 +22,7 @@ import { usePauseAiAttendance } from "@/hooks/inbox/usePauseAiAttendance";
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { comandoDaConversa, ROTULO_DO_MOTIVO } from "@/lib/inbox/comando-da-conversa";
+import { ExportarConversaEmPdf } from "@/components/inbox/ExportarConversaEmPdf";
 import { ReassignDialog } from "@/components/inbox/ReassignDialog";
 import { SeloDoCanal } from "@/components/inbox/SeloDoCanal";
 import { SnoozeButton } from "@/components/inbox/SnoozeButton";
@@ -271,6 +272,9 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
             <MagnifyingGlass size={16} aria-hidden />
           </Button>
         )}
+        {/* Ao lado da busca pelo mesmo motivo dela: ferramenta de leitura, só
+            ícone, lugar fixo. O componente some sozinho para quem não exporta. */}
+        <ExportarConversaEmPdf conversationId={conversation.id} />
         {isOpen && (
           <Button
             size="sm"

@@ -22,6 +22,7 @@ const LEITURAS: Array<[arquivo: string, metodo: string, acao: string]> = [
   ["app/api/v1/contacts/[id]/crm-summary/route.ts", "GET", "contact.viewed"],
   ["app/api/v1/contacts/[id]/financeiro/route.ts", "GET", "contact.viewed"],
   ["app/api/v1/conversations/[id]/messages/route.ts", "GET", "conversation.viewed"],
+  ["app/api/v1/conversations/[id]/export/route.ts", "GET", "conversation.exported"],
   ["app/api/v1/lgpd/requests/[id]/preview/route.ts", "GET", "lgpd.request_previewed"],
   ["app/api/v1/prontuario/contacts/route.ts", "GET", "prontuario.contact_read"],
   ["app/api/v1/prontuario/contacts/[id]/route.ts", "GET", "prontuario.contact_read"],
