@@ -8,6 +8,18 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.0.1] — 2026-10-13
+
+### Corrigido
+
+- **O agente não parte mais o balão em "Dr." nem no meio de um link** Com a divisão em balões ligada, a resposta "Temos duas formas de começar com o Dr. André: a consulta de R$490..." chegava ao cliente em dois balões, o primeiro terminando em "Dr." e o segundo começando em "André". O divisor tratava o ponto de uma abreviação como fim de frase. Agora o ponto de tratamento e de endereço (Dr., Dra., Sr., Sra., Prof., Profa., Av., R., nº, p. ex., e em espanhol Ud. e Uds.) não fecha balão, nem o ponto seguido de letra minúscula ("etc. no dia"), nem o ponto colado no que vem depois, o que também conserta o link que saía quebrado ("clinica. com. br"). Fim de frase de verdade e tamanho máximo do balão seguem valendo. Nada a fazer na VPS.
+
+- **Paciente que escreve de novo enquanto uma resposta está sendo reenviada não fica mais sem resposta** Quando a IA manda uma resposta em mais de uma mensagem e o envio falha no meio (o WhatsApp recusa uma delas, ou o serviço reinicia), o sistema espera de 10 segundos a 2 minutos e tenta de novo. Se o paciente escrevesse outra mensagem exatamente nessa espera, ela era juntada à tentativa que já estava na fila. Na hora de reenviar, o sistema tratava a primeira mensagem da nova resposta como "já enviada" e não mandava: o paciente recebia só o começo da resposta antiga e nada sobre o que acabou de perguntar. Não aparecia erro nem aviso na Central.
+
+  Agora a mensagem nova ganha o próprio atendimento, que lê a conversa inteira e responde. A tentativa antiga não fala por cima dela: se a resposta antiga ficou desatualizada, ela é descartada, como já acontecia quando o paciente escreve enquanto a IA está pensando.
+
+  Nada muda no resto: mensagens seguidas mandadas antes de a IA responder continuam virando uma resposta só, o ritmo de envio é o mesmo, e conversa assumida por uma pessoa, silenciada ou de quem pediu para não receber continua sem resposta automática.
+
 ## [4.0.0] — 2026-10-13
 
 ### ⚠️ Requer atenção
@@ -7048,7 +7060,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.0.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.0.1...HEAD
+[4.0.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.27.0...v4.0.0
 [3.27.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.26.1...v3.27.0
 [3.26.1]: https://github.com/melgarafael/DeskcommCRM/compare/v3.26.0...v3.26.1
