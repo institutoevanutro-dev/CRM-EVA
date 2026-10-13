@@ -105,7 +105,7 @@ function splitSentences(text: string): string[] {
     const end = m.index + m[0].length;
     const nextChar = text[end];
     if (m[0] === "." && nextChar !== undefined) {
-      if (!/\s/.test(nextChar)) continue; // "10.990", "18.30", "site.com.br"
+      if (!/\s/.test(nextChar)) continue; // "10.990", "18.30", endereço web
       const palavra = /\p{L}+$/u.exec(text.slice(start, m.index))?.[0].toLowerCase();
       if (palavra !== undefined && ABREVIACOES.has(palavra)) continue;
       if (/^\s+\p{Ll}/u.test(text.slice(end))) continue;
