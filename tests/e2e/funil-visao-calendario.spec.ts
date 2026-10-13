@@ -162,7 +162,7 @@ test.describe("visão Calendário do funil", () => {
     const calendario = page.getByTestId("calendario-do-funil");
     await expect(calendario).toBeVisible();
     await expect(calendario).toHaveAttribute("data-fuso", "America/Sao_Paulo");
-    await expect(page.getByRole("combobox", { name: "Campo de data" })).toHaveText("Data da avaliação");
+    await expect(page.getByRole("combobox", { name: "Campo de data", exact: true })).toHaveText("Data da avaliação");
     await expect(page.getByTestId("calendario-periodo")).toHaveText(nomeDoMes(NESTE_MES));
 
     // O negócio está na célula do dia 15, e só nela.
@@ -208,7 +208,7 @@ test.describe("visão Calendário do funil", () => {
     await page.screenshot({ path: path.join(EVIDENCIA, "02-mes-vazio.png") });
 
     // Semana: 7 dias, a partir do domingo.
-    await page.getByRole("button", { name: "Hoje" }).click();
+    await page.getByRole("button", { name: "Hoje", exact: true }).click();
     await page.getByRole("button", { name: "Semana", exact: true }).click();
     await expect(page.locator('[data-testid^="calendario-dia-"]')).toHaveCount(7);
     const primeiro = await page.locator('[data-testid^="calendario-dia-"]').first().getAttribute("data-testid");
@@ -223,10 +223,10 @@ test.describe("visão Calendário do funil", () => {
     await expect(page.getByTestId(`calendario-dia-${NESTE_MES}`).getByRole("button", { name: T_ESTE })).toBeVisible();
 
     // O filtro da barra vale no calendário: buscar por um título tira o outro.
-    await page.getByPlaceholder(/buscar/i).first().fill(T_SEM);
+    await page.getByPlaceholder("Buscar por título…").fill(T_SEM);
     await expect(calendario.getByRole("button", { name: T_ESTE })).toHaveCount(0);
     await expect(page.getByTestId("calendario-sem-data")).toHaveText("1 sem data neste campo");
-    await page.getByPlaceholder(/buscar/i).first().fill("");
+    await page.getByPlaceholder("Buscar por título…").fill("");
     await expect(calendario.getByRole("button", { name: T_ESTE })).toHaveCount(1);
 
     // De volta ao quadro: os cards de sempre, e a escolha fica guardada.

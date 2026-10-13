@@ -373,6 +373,14 @@ describe("dia cheio", () => {
     expect(within(screen.getByTestId("calendario-lista")).getAllByRole("button")).toHaveLength(12);
   });
 
+  it("trocar de período fecha a lista aberta", async () => {
+    render(<Tela leads={doze} />);
+    await userEvent.click(screen.getByTestId("calendario-ver-todos-2026-03-12"));
+    expect(screen.getByTestId("calendario-lista")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("calendario-semana"));
+    expect(screen.queryByTestId("calendario-lista")).not.toBeInTheDocument();
+  });
+
   it("dia com até 3 não tem 'ver todos'", () => {
     render(<Tela leads={doze.slice(0, 3)} />);
     expect(screen.queryByTestId("calendario-ver-todos-2026-03-12")).not.toBeInTheDocument();

@@ -157,6 +157,13 @@ export function CalendarioDoFunil({
     setAncora((atual) => (periodo === "mes" ? primeiroDoMes(atual, delta) : somaDias(atual, 7 * delta)));
   }
 
+  // A lista aberta é de um dia do período que estava na tela: trocar de
+  // período a fecha, para não sobrar a lista de um dia que saiu da grade.
+  function trocarPeriodo(novo: PeriodoDoCalendario) {
+    setAberto(null);
+    aoMudar({ periodo: novo });
+  }
+
   const porDiaVisiveis = periodo === "mes" ? POR_DIA_NO_MES : POR_DIA_NA_SEMANA;
   const listaAberta = aberto === SEM_DATA ? semData : aberto ? (porDia.get(aberto) ?? []) : [];
   const leadDoDossie = dossieId ? (leads.find((l) => l.id === dossieId) ?? null) : null;
@@ -262,7 +269,7 @@ export function CalendarioDoFunil({
               type="button"
               data-testid="calendario-mes"
               aria-pressed={periodo === "mes"}
-              onClick={() => aoMudar({ periodo: "mes" })}
+              onClick={() => trocarPeriodo("mes")}
               className={interruptor(periodo === "mes")}
             >
               {t("Mês")}
@@ -271,7 +278,7 @@ export function CalendarioDoFunil({
               type="button"
               data-testid="calendario-semana"
               aria-pressed={periodo === "semana"}
-              onClick={() => aoMudar({ periodo: "semana" })}
+              onClick={() => trocarPeriodo("semana")}
               className={interruptor(periodo === "semana")}
             >
               {t("Semana")}
