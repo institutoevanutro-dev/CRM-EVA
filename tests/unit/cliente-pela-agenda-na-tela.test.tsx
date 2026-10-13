@@ -21,17 +21,24 @@ import { FunisClient } from "@/app/app/kanban/_client";
 import type { Contact } from "@/lib/types/contacts";
 
 let ligada = false;
+/** A segunda regra, "paciente pelo cadastro" (migration 0360). Independente da primeira. */
+let cadastroLigado = false;
+/** O que a ficha devolve por cima do CONTATO, para os casos sem horário. */
+let naFicha: Partial<Contact> = {};
 const ORG = { orgId: "org-1", name: "Clínica", role: "admin", cliente_pela_agenda: false };
 const USER = { id: "u-1", is_platform_admin: false, support: null };
 
 vi.mock("@/hooks/auth/AuthProvider", () => ({
-  useActiveOrg: () => ({ ...ORG, cliente_pela_agenda: ligada }),
-  useAuth: () => ({ user: USER, activeOrg: { ...ORG, cliente_pela_agenda: ligada } }),
+  useActiveOrg: () => ({ ...ORG, cliente_pela_agenda: ligada, paciente_pelo_cadastro: cadastroLigado }),
+  useAuth: () => ({
+    user: USER,
+    activeOrg: { ...ORG, cliente_pela_agenda: ligada, paciente_pelo_cadastro: cadastroLigado },
+  }),
 }));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/hooks/contacts/useContact", () => ({
-  useContact: () => ({ isLoading: false, isError: false, data: { data: CONTATO }, refetch: vi.fn() }),
+  useContact: () => ({ isLoading: false, isError: false, data: { data: { ...CONTATO, ...naFicha } }, refetch: vi.fn() }),
 }));
 vi.mock("@/hooks/pipelines/useDefaultPipeline", () => ({ useDefaultPipeline: () => ({ data: null }) }));
 vi.mock("@/components/contacts/TimelineView", () => ({ TimelineView: () => null }));
@@ -93,6 +100,8 @@ function comQuery(ui: ReactNode) {
 
 beforeEach(() => {
   ligada = false;
+  cadastroLigado = false;
+  naFicha = {};
 });
 
 describe("selo 'Cliente' na lista de contatos", () => {
@@ -194,6 +203,103 @@ describe("funil de clientes na tela de Funis", () => {
     expect(screen.getAllByText("Clientes")).toHaveLength(2);
     expect(screen.getByTestId("funis-rodape-clientes")).toHaveTextContent(
       "Quem já tem atendimento marcado entra pelo funil de clientes.",
+    );
+  });
+});
+
+/**
+ * A SEGUNDA REGRA NAS MESMAS TELAS (migration 0360).
+ *
+ * O selo, a ficha e a tela de Funis perguntam ao MESMO predicado que escolhe o
+ * funil do card (`ehClienteParaOFunil`). Sem isso, o card de um paciente
+ * nasceria no funil de clientes e a lista de contatos diria que ele não é
+ * cliente.
+ */
+describe("paciente pelo cadastro nas telas", () => {
+  const SEM_HORARIO = { ...CONTATO, first_service_at: null } satisfies Contact;
+  const tabela = (c: Contact) =>
+    render(comQuery(<ContactsTable contacts={[c]} orderBy="last_activity_at" orderDir="desc" onSort={() => {}} />));
+
+  it("desligada: CPF e vínculo com o prontuário NÃO dão selo", () => {
+    tabela({ ...SEM_HORARIO, cpf_available: true, prontuario_linked: true });
+    expect(screen.queryByText("Cliente")).toBeNull();
+  });
+
+  it.each([
+    ["com CPF", { cpf_available: true }],
+    ["ligado ao prontuário", { prontuario_linked: true }],
+  ])("ligada: contato %s e sem horário ganha o selo", (_nome, fatos) => {
+    cadastroLigado = true;
+    tabela({ ...SEM_HORARIO, ...fatos });
+    expect(screen.getByText("Cliente")).toBeInTheDocument();
+  });
+
+  it("ligada: sem cadastro não ganha selo, nem com a data congelada da regra da agenda", () => {
+    cadastroLigado = true;
+    tabela(CONTATO);
+    expect(screen.queryByText("Cliente")).toBeNull();
+  });
+
+  it("ligada: anonimizado com CPF não ganha selo", () => {
+    cadastroLigado = true;
+    tabela({ ...SEM_HORARIO, cpf_available: true, is_anonymized: true, anonymized_at: "2026-01-02T10:00:00.000Z" });
+    expect(screen.queryByText("Cliente")).toBeNull();
+  });
+
+  it("ficha: paciente sem horário mostra de onde vem, e não inventa 'Cliente desde'", () => {
+    cadastroLigado = true;
+    naFicha = { first_service_at: null, cpf_available: true };
+    render(comQuery(<ContactDetailClient contactId="c-1" />));
+    expect(screen.getByTestId("cliente-pelo-cadastro")).toHaveTextContent("Pelo cadastro de paciente");
+    expect(screen.queryByText("Cliente desde")).toBeNull();
+  });
+
+  it("ficha: com as duas regras e horário marcado, vale a data, sem linha repetida", () => {
+    ligada = true;
+    cadastroLigado = true;
+    naFicha = { cpf_available: true };
+    render(comQuery(<ContactDetailClient contactId="c-1" />));
+    expect(screen.getByText("Cliente desde")).toBeInTheDocument();
+    expect(screen.queryByTestId("cliente-pelo-cadastro")).toBeNull();
+  });
+
+  it("ficha: desligada, nada aparece", () => {
+    naFicha = { first_service_at: null, cpf_available: true, prontuario_linked: true };
+    render(comQuery(<ContactDetailClient contactId="c-1" />));
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Joana");
+    expect(screen.queryByTestId("cliente-pelo-cadastro")).toBeNull();
+  });
+
+  it("o filtro fixo de etiqueta 'cliente' NÃO aparece só por esta regra: ela não põe etiqueta", () => {
+    cadastroLigado = true;
+    render(comQuery(<ContactsListClient />));
+    expect(screen.getByRole("button", { name: /^(Todas as etiquetas|Etiqueta:)/ })).toBeDisabled();
+  });
+
+  const FUNIS = [
+    { id: "f1", name: "Entrada", slug: "entrada", description: null, position: 1, is_default: true, is_client_pipeline: false },
+    { id: "f2", name: "Pacientes", slug: "pacientes", description: null, position: 2, is_default: false, is_client_pipeline: true },
+  ];
+
+  it("Funis: só com esta regra ligada, dá para marcar o funil de clientes, e o rodapé fala do cadastro", async () => {
+    cadastroLigado = true;
+    const user = userEvent.setup();
+    render(comQuery(<FunisClient funis={FUNIS} arquivados={[]} podeGerenciar podeImportar />));
+    await user.click(screen.getByTestId("acoes-f1"));
+    expect(await screen.findByTestId("clientes-f1")).toHaveTextContent("Funil de clientes");
+    await user.keyboard("{Escape}");
+    expect(screen.getByText("Clientes")).toBeInTheDocument();
+    expect(screen.getByTestId("funis-rodape-clientes")).toHaveTextContent(
+      "Quem já tem cadastro de paciente entra pelo funil de clientes.",
+    );
+  });
+
+  it("Funis: com as duas ligadas, o rodapé fala das duas", () => {
+    ligada = true;
+    cadastroLigado = true;
+    render(comQuery(<FunisClient funis={FUNIS} arquivados={[]} podeGerenciar podeImportar />));
+    expect(screen.getByTestId("funis-rodape-clientes")).toHaveTextContent(
+      "Quem já tem atendimento marcado ou cadastro de paciente entra pelo funil de clientes.",
     );
   });
 });

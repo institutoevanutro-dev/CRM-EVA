@@ -41,6 +41,7 @@
     { "id": "espelho", "lane": "agente", "col": 5, "type": "service", "label": "mirrorLeadStageToCrm", "sublabel": "propõe quando há conflito" },
     { "id": "promocaocliente", "lane": "negocio", "col": 2, "type": "trigger", "label": "trg_agendamento_marca_cliente", "sublabel": "agendamento inserido/alterado/apagado (regra ligada) → first_service_at + etiqueta com dono" },
     { "id": "interruptorcliente", "lane": "humano", "col": 1, "type": "frontend", "label": "Clientes pela agenda", "sublabel": "Tipos de agendamento › fn_definir_cliente_pela_agenda (admin)" },
+    { "id": "interruptorpaciente", "lane": "humano", "col": 1, "type": "frontend", "label": "Pacientes pelo cadastro", "sublabel": "Tipos de agendamento › fn_definir_paciente_pelo_cadastro (admin) · conta antes de ligar, não reescreve contato" },
 
     { "id": "eventlog", "lane": "fila", "col": 2, "type": "database", "label": "event_log", "sublabel": "marca d'água: só evento novo" },
     { "id": "workerscore", "lane": "fila", "col": 2, "type": "service", "label": "worker do score", "sublabel": "fórmula determinística, nunca modelo" },
@@ -106,7 +107,10 @@
     { "id": "e51", "from": "auditoria", "to": "telaauditoria", "label": "a linha vira texto legível (action + metadata)" },
     { "id": "e52", "from": "telaauditoria", "to": "interruptorcliente", "label": "LAÇO DE RETORNO: quem vê o que a regra fez desliga se estiver errado" },
     { "id": "e53", "from": "chat", "to": "conversapdf", "label": "o botão ao lado da lupa: só mensagens, nunca nota interna" },
-    { "id": "e54", "from": "conversapdf", "to": "auditoria", "label": "conversation.exported: quem, qual conversa, quantas mensagens (sem o texto)" }
+    { "id": "e54", "from": "conversapdf", "to": "auditoria", "label": "conversation.exported: quem, qual conversa, quantas mensagens (sem o texto)" },
+    { "id": "e55", "from": "interruptorpaciente", "to": "leads", "label": "ehClienteParaOFunil: quem tem cadastro de paciente (prontuário ou CPF) nasce no funil de clientes" },
+    { "id": "e56", "from": "interruptorpaciente", "to": "auditoria", "label": "crm.paciente_pelo_cadastro_alterado com quantos contatos a regra alcança" },
+    { "id": "e57", "from": "telaauditoria", "to": "interruptorpaciente", "label": "LAÇO DE RETORNO: card no funil errado → desliga, e nada fica para desfazer" }
   ],
   "cards": [
     {

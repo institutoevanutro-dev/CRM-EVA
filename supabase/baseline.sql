@@ -35405,6 +35405,107 @@ end $janela$;
 notify pgrst, 'reload schema';
 -- end 0357
 
+-- ---- paciente pelo cadastro: quem tem cadastro entra pelo funil de clientes (migration 0360) ----
+-- Derivado de supabase/migrations/20261013120000_0360_paciente_pelo_cadastro.sql
+-- (o porquê inteiro está no cabeçalho de lá). Segunda chave de
+-- `organizations.settings.crm`, independente da 0262 e desligada por padrão:
+-- com `paciente_pelo_cadastro` ligado, o contato ligado a um paciente do
+-- prontuário (`prontuario_contact_links`) ou com CPF guardado entra pelo funil
+-- de clientes. Quem decide é `lib/contacts/cliente-para-o-funil.ts`, na hora.
+--
+-- NENHUM dado é tocado, aqui ou ao ligar: sem coluna, sem etiqueta, sem
+-- `first_service_at`. A função só grava a chave (num comando, mesclando dentro
+-- de `crm`) e devolve a contagem que a tela mostra antes de confirmar.
+--
+-- ⚠️ ANTES do bloco da VARREDURA anon, que é de propósito o último a criar
+-- função (`tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`).
+--
+-- Idempotente: `create or replace`. O `revoke` não tira nada de quem já roda (a
+-- função nasce aqui) e `authenticated` nunca perde o EXECUTE entre os dois
+-- comandos.
+create or replace function public.fn_definir_paciente_pelo_cadastro(
+  p_org uuid,
+  p_ligado boolean,
+  p_so_contar boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_antes boolean;
+  v_agenda boolean;
+  v_pacientes integer;
+  v_ja_clientes integer;
+begin
+  if auth.uid() is null
+     or p_org is null
+     or p_ligado is null
+     or p_so_contar is null
+     or not public.fn_role_at_least(p_org, 'admin')
+     or not public.fn_support_write_allowed(p_org) then
+    raise exception 'paciente_pelo_cadastro_forbidden' using errcode = '42501';
+  end if;
+  if not public.fn_session_mfa_proven() then
+    raise exception 'paciente_pelo_cadastro_mfa_required' using errcode = '42501';
+  end if;
+
+  select (o.settings -> 'crm' -> 'paciente_pelo_cadastro') = 'true'::jsonb,
+         (o.settings -> 'crm' -> 'cliente_pela_agenda') = 'true'::jsonb
+    into v_antes, v_agenda
+    from public.organizations o
+   where o.id = p_org;
+  if not found then
+    raise exception 'organization_not_found' using errcode = 'P0002';
+  end if;
+
+  if not p_so_contar then
+    update public.organizations
+       set settings = jsonb_set(
+             coalesce(settings, '{}'::jsonb),
+             '{crm}',
+             (case when jsonb_typeof(settings -> 'crm') = 'object' then settings -> 'crm' else '{}'::jsonb end)
+               || jsonb_build_object('paciente_pelo_cadastro', p_ligado),
+             true)
+     where id = p_org;
+  end if;
+
+  select count(*),
+         count(*) filter (where v_agenda is true and c.first_service_at is not null)
+    into v_pacientes, v_ja_clientes
+    from public.contacts c
+   where c.organization_id = p_org
+     and c.is_anonymized = false
+     and c.is_merged_into is null
+     and (c.cpf_hash is not null
+          or exists (select 1 from public.prontuario_contact_links l
+                      where l.organization_id = p_org and l.contact_id = c.id));
+
+  return jsonb_build_object(
+    'ligado', case when p_so_contar then coalesce(v_antes, false) else p_ligado end,
+    'mudou', (not p_so_contar) and coalesce(v_antes, false) <> p_ligado,
+    'pacientes', v_pacientes,
+    'ja_clientes_pela_agenda', v_ja_clientes,
+    'tem_funil_de_clientes', exists (
+      select 1 from public.crm_pipelines f
+       where f.organization_id = p_org and f.is_client_pipeline = true and f.is_archived = false)
+  );
+end $$;
+
+comment on function public.fn_definir_paciente_pelo_cadastro(uuid, boolean, boolean) is
+  'Liga, desliga ou só conta (p_so_contar) a regra paciente pelo cadastro de uma organização '
+  '(organizations.settings.crm.paciente_pelo_cadastro, migration 0360). Só admin da própria organização, '
+  'com escrita de suporte permitida e MFA provada. Não escreve em contacts: a regra é lida na hora por '
+  'lib/contacts/cliente-para-o-funil.ts. A contagem é o espelho SQL daquele predicado, comparado em '
+  'tests/invariants/paciente-pelo-cadastro.test.ts.';
+
+revoke execute on function public.fn_definir_paciente_pelo_cadastro(uuid, boolean, boolean) from public, anon;
+grant  execute on function public.fn_definir_paciente_pelo_cadastro(uuid, boolean, boolean) to authenticated;
+
+notify pgrst, 'reload schema';
+-- ---- fim: paciente pelo cadastro (migration 0360) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

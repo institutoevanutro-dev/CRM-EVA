@@ -146,6 +146,15 @@ const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
       "somente leitura/vencido.",
   },
   {
+    fn: "fn_definir_paciente_pelo_cadastro(uuid,boolean,boolean)",
+    razao:
+      "app/actions/settings/definirPacientePeloCadastro.ts chama com createClient da sessão; " +
+      "auth.uid() exige admin da própria organização, suporte de escrita e MFA comprovado " +
+      "antes de gravar settings.crm.paciente_pelo_cadastro ou de contar. Não escreve em contacts. " +
+      "tests/invariants/paciente-pelo-cadastro.test.ts prova admin próprio, negação de " +
+      "manager/agent/viewer, admin de outra organização, sem sessão, service_role e aal1 com fator.",
+  },
+  {
     fn: "emit_event(text,text,uuid,jsonb,jsonb,uuid)",
     razao:
       "Server Actions chamam com a sessão do usuário " +

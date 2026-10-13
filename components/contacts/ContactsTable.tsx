@@ -36,6 +36,11 @@ import { useActiveOrg } from "@/hooks/auth/AuthProvider";
 import { useDeleteContact } from "@/hooks/contacts/useDeleteContact";
 import type { ContactOrderBy } from "@/lib/schemas/contacts";
 import type { Contact } from "@/lib/types/contacts";
+import {
+  ehClienteParaOFunil,
+  fatosDoContatoDaApi,
+  regrasDeClienteDe,
+} from "@/lib/contacts/cliente-para-o-funil";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
 import { EditContactDialog } from "@/components/contacts/EditContactDialog";
@@ -111,7 +116,7 @@ function SortableHead({
 export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
-  const clientesLigado = useActiveOrg()?.cliente_pela_agenda === true;
+  const regrasDeCliente = regrasDeClienteDe(useActiveOrg());
   const del = useDeleteContact();
   const [alvo, setAlvo] = useState<Contact | null>(null);
   // Editar pela linha, sem abrir a ficha. Sem `customFieldDefs`: os campos do
@@ -243,8 +248,12 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
                   por inteiro), e um selo que some porque alguém editou
                   etiquetas mentiria sobre um fato. Desligada, a coluna está
                   congelada e o selo mentiria do outro lado.
+
+                  Quem responde é o MESMO predicado que escolhe o funil do card
+                  (`ehClienteParaOFunil`): com "paciente pelo cadastro" ligado,
+                  o selo aparece também para quem tem cadastro e nenhum horário.
                 */}
-                {clientesLigado && c.first_service_at && (
+                {ehClienteParaOFunil(fatosDoContatoDaApi(c), regrasDeCliente) && (
                   <Badge variant="secondary">{t("Cliente")}</Badge>
                 )}
                 {/* Sem selo "Ativo": era o mesmo selo verde em quase toda linha.

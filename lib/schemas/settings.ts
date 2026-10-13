@@ -263,16 +263,33 @@ export const agendaSettingsSchema = agendaSettingsWriteSchema.catch({confirmatio
  * `fn_marcar_contato_como_cliente`. Ausente, `false`, a string `"true"` ou
  * qualquer lixo é desligado aqui E lá. Se os dois idiomas divergissem, a tela
  * mostraria o selo de uma regra que o trigger não aplica.
+ *
+ * `paciente_pelo_cadastro`: quem tem cadastro de paciente (vínculo com o
+ * prontuário ou CPF) entra pelo funil de clientes (migration 0360). Independente
+ * da primeira, também nasce DESLIGADA, e só `fn_definir_paciente_pelo_cadastro`
+ * a grava. A mesma régua: só o booleano `true` liga.
  */
 export const crmSettingsSchema = z
-  .object({ cliente_pela_agenda: z.boolean().catch(false) })
-  .catch({ cliente_pela_agenda: false });
+  .object({
+    cliente_pela_agenda: z.boolean().catch(false),
+    paciente_pelo_cadastro: z.boolean().catch(false),
+  })
+  .catch({ cliente_pela_agenda: false, paciente_pelo_cadastro: false });
 
-/** A regra "cliente pela agenda" está ligada nesta organização? Nunca lança. */
-export function clientePelaAgendaLigado(settings: unknown): boolean {
+function crmDe(settings: unknown): z.infer<typeof crmSettingsSchema> {
   const crm =
     settings && typeof settings === "object" && !Array.isArray(settings)
       ? (settings as Record<string, unknown>).crm
       : undefined;
-  return crmSettingsSchema.parse(crm ?? {}).cliente_pela_agenda === true;
+  return crmSettingsSchema.parse(crm ?? {});
+}
+
+/** A regra "cliente pela agenda" está ligada nesta organização? Nunca lança. */
+export function clientePelaAgendaLigado(settings: unknown): boolean {
+  return crmDe(settings).cliente_pela_agenda === true;
+}
+
+/** A regra "paciente pelo cadastro" está ligada nesta organização? Nunca lança. */
+export function pacientePeloCadastroLigado(settings: unknown): boolean {
+  return crmDe(settings).paciente_pelo_cadastro === true;
 }

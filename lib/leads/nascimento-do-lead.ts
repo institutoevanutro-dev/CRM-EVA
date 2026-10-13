@@ -53,7 +53,7 @@ import { marcaDaOrigem, origemDeCampanhaDaConversa } from "@/lib/campanhas/orige
 
 import { logger } from "@/lib/logger";
 
-import { lerClientePelaAgenda } from "@/lib/contacts/cliente-pela-agenda";
+import { contatoEClienteParaOFunil } from "@/lib/contacts/cliente-pela-agenda";
 import { ehIdentificadorTecnico, rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
 
 import { emitLeadActivity } from "./activity-emitter";
@@ -270,7 +270,15 @@ export async function garantirLeadDaConversa(
     // `first_service_at` viaja no select que JÁ existe: decidir o funil não custa
     // uma consulta a mais no caminho quente da ingestão. É por isso que o fato
     // mora numa coluna de `contacts`, e não é derivado da agenda a cada inbound.
-    .select("is_blocked,display_name,name,phone_number,source,source_metadata,first_service_at")
+    //
+    // `cpf_encrypted`, `is_anonymized` e `is_merged_into` viajam pelo mesmo
+    // motivo, para a regra do cadastro de paciente (migration 0360). A cifra
+    // vem só para virar um booleano, como na API de contatos (`cpf_available`);
+    // não é `cpf_hash` porque a sessão não lê essa coluna, e uma consulta
+    // recusada aqui deixaria passar o contato bloqueado da linha de baixo.
+    .select(
+      "is_blocked,display_name,name,phone_number,source,source_metadata,first_service_at,cpf_encrypted,is_anonymized,is_merged_into",
+    )
     .eq("organization_id", organizationId)
     .eq("id", contactId)
     .maybeSingle();
@@ -299,12 +307,26 @@ export async function garantirLeadDaConversa(
   //
   // ⚠️ E SÓ COM A REGRA LIGADA NA ORGANIZAÇÃO (migration 0262). Desligada, a
   // coluna fica congelada no que era quando a regra estava ligada, e rotear por
-  // ela seria decidir o funil com um fato vencido. A leitura do interruptor só
-  // acontece quando o contato TEM a data — o caso comum (contato sem data) não
-  // paga consulta a mais — e falha de leitura cai no funil de entrada, que é a
-  // regra que o cabeçalho deste arquivo já declara.
-  const ehCliente =
-    contato?.first_service_at != null && (await lerClientePelaAgenda(db, organizationId));
+  // ela seria decidir o funil com um fato vencido. Falha de leitura cai no funil
+  // de entrada, que é a regra que o cabeçalho deste arquivo já declara.
+  //
+  // A SEGUNDA REGRA (migration 0360) soma: com `paciente_pelo_cadastro` ligado,
+  // quem tem cadastro de paciente (vínculo com o prontuário ou CPF) também é
+  // cliente. Quem decide as duas é `ehClienteParaOFunil`, o mesmo predicado que
+  // as telas usam; aqui só se buscam os fatos. O interruptor passou a ser lido
+  // em todo nascimento (uma consulta por chave primária), porque o contato sem
+  // data pode ser paciente pelo cadastro.
+  const ehCliente = await contatoEClienteParaOFunil(
+    db,
+    organizationId,
+    contactId,
+    contato && {
+      first_service_at: contato.first_service_at,
+      temCpf: contato.cpf_encrypted != null,
+      is_anonymized: contato.is_anonymized,
+      is_merged_into: contato.is_merged_into,
+    },
+  );
   // A CAMPANHA ganha do padrão quando declara funil (migration 0346): é a
   // escolha mais específica, e quem montou a campanha sabe onde quer medir o
   // resultado dela. Campanha sem funil declarado, ou conversa que não nasceu de

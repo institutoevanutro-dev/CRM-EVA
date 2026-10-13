@@ -9,9 +9,11 @@
  * constante com o que a migration grava. Divergir seria um filtro que não acha
  * ninguém, sem erro nenhum para investigar.
  *
- * ⚠️ E ELA NÃO É A FONTE DA VERDADE. Quem responde "é cliente?" é
- * `contacts.first_service_at`, e só com a regra ligada: a tag é removível à mão
- * e pelo PATCH de contatos (que substitui `tags` por inteiro), e ancorar decisão
+ * ⚠️ E ELA NÃO É A FONTE DA VERDADE. Quem responde "é cliente, para fins de
+ * funil?" é `ehClienteParaOFunil` (`lib/contacts/cliente-para-o-funil.ts`), que
+ * lê `contacts.first_service_at` com a regra da agenda ligada e o cadastro de
+ * paciente com a regra da migration 0360 ligada. Nunca a etiqueta: a tag é
+ * removível à mão e pelo PATCH de contatos (que substitui `tags` por inteiro), e ancorar decisão
  * nela faria alguém voltar a ser lead por descuido de quem editou etiquetas. A
  * tag serve para filtrar, para as automações e para o agente de IA ler; a
  * coluna serve para decidir.

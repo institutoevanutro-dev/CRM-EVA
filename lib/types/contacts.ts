@@ -52,6 +52,13 @@ export interface Contact {
    */
   first_service_at: string | null;
   /**
+   * Derivado (não é coluna): o contato está ligado a um paciente do prontuário
+   * (`prontuario_contact_links`, migration 0285). Com `cpf_available`, é o que
+   * a regra "paciente pelo cadastro" lê (`lib/contacts/cliente-para-o-funil.ts`).
+   * Só a leitura (lista e ficha) preenche; ausente é "não".
+   */
+  prontuario_linked?: boolean;
+  /**
    * Derivado (não é coluna): a conversa mais recente deste contato — atalho para o inbox.
    * Ausente é normal: contato criado à mão pode nunca ter conversado.
    */

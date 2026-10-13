@@ -20,6 +20,7 @@ import { roleAtLeast } from "@/lib/auth/types";
 import { canonicalPhoneBR, samePhone } from "@/lib/channels/phone-variants";
 import { condicoesDaBuscaDeContato } from "@/lib/contacts/busca";
 import { encontrarContatoPorTelefone } from "@/lib/channels/contato-por-telefone";
+import { idsComProntuario } from "@/lib/contacts/cliente-pela-agenda";
 import { indiceDoCpf, MSG_CPF_SEM_CIFRA, parDoCpf, type ParDoCpf } from "@/lib/contacts/cpf";
 import type { Contact } from "@/lib/types/contacts";
 import { ensureConversation, sessaoProntaParaEnvio } from "@/lib/automation/start-conversation";
@@ -246,7 +247,29 @@ export async function listContactsHandler(
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, convErr);
   }
 
-  return { contacts, cursor: nextCursor, has_more: hasMore };
+  return {
+    contacts: await comProntuario(supabase, ctx.organization_id, contacts),
+    cursor: nextCursor,
+    has_more: hasMore,
+  };
+}
+
+/**
+ * Anexa `prontuario_linked`: o fato que, com `cpf_available`, a tela usa para o
+ * selo "Cliente" da regra "paciente pelo cadastro" (migration 0360). Sob a RLS
+ * da sessão; falha de leitura vira "não" (ver `idsComProntuario`).
+ */
+async function comProntuario<T extends Contact>(
+  supabase: SB,
+  organizationId: string,
+  contacts: T[],
+): Promise<T[]> {
+  const ligados = await idsComProntuario(
+    supabase,
+    organizationId,
+    contacts.map((c) => c.id),
+  );
+  return contacts.map((c) => ({ ...c, prontuario_linked: ligados.has(c.id) }));
 }
 
 /**
@@ -392,10 +415,12 @@ export async function getContactHandler(
   if (convErr) {
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, convErr);
   }
-  const contactWithConversa = enriched[0] ?? contact;
+  const [contactWithConversa] = await comProntuario(supabase, ctx.organization_id, [
+    enriched[0] ?? contact,
+  ]);
 
   return {
-    ...contactWithConversa,
+    ...contactWithConversa!,
     cpf_decrypted: cpfDecrypted,
     cpf_decrypt_denied: cpfDecryptDenied || undefined,
   };

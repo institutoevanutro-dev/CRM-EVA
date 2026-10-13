@@ -36,6 +36,11 @@ import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
 import { PropostasDeDado } from "@/components/contacts/PropostasDeDado";
 import { ConversaNoDossie } from "@/components/kanban/ConversaNoDossie";
 import { CanaisDoContato } from "@/components/contacts/CanaisDoContato";
+import {
+  ehClienteParaOFunil,
+  fatosDoContatoDaApi,
+  regrasDeClienteDe,
+} from "@/lib/contacts/cliente-para-o-funil";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { CpfDoContato } from "@/components/contacts/CpfDoContato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
@@ -54,6 +59,7 @@ export function ContactDetailClient({ contactId }: Props) {
   const { user, activeOrg } = useAuth();
   const podeVerFinanceiro = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
   const clientesLigado = activeOrg?.cliente_pela_agenda === true;
+  const regrasDeCliente = regrasDeClienteDe(activeOrg);
   // As DEFINIÇÕES continuam no funil (`crm_pipelines.settings.fields[]`) — só o
   // VALOR mora no contato. `camposDoFunil` é o mesmo leitor que o Kanban usa.
   const pipelineQuery = useDefaultPipeline(Boolean(activeOrg));
@@ -300,6 +306,18 @@ export function ContactDetailClient({ contactId }: Props) {
                   </dd>
                 </div>
               )}
+              {/*
+                Cliente pela regra "paciente pelo cadastro" (migration 0360), sem
+                horário que conte: não há data para mostrar, e a linha diz de
+                onde vem o selo. Mesmo predicado do nascimento do lead.
+              */}
+              {!(clientesLigado && contact.first_service_at) &&
+                ehClienteParaOFunil(fatosDoContatoDaApi(contact), regrasDeCliente) && (
+                  <div data-testid="cliente-pelo-cadastro">
+                    <dt className="text-xs uppercase text-muted-foreground">{t("Cliente")}</dt>
+                    <dd className="mt-1">{t("Pelo cadastro de paciente")}</dd>
+                  </div>
+                )}
               <div>
                 <dt className="text-xs uppercase text-muted-foreground">Tags</dt>
                 <dd className="mt-1 flex flex-wrap gap-1">

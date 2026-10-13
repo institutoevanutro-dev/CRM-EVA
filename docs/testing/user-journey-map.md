@@ -2368,6 +2368,38 @@ tela (a frase nova e a das automações) é medida pelo teste de componente. O q
 a rodada 2 provou pela tela continua valendo — a árvore mudou o corpo da RPC,
 não o caminho que a spec percorre.
 
+
+## J23b: Pacientes pelo cadastro, quem já tem cadastro entra pelo funil de clientes `[P1]` (2026-10-13)
+
+Segunda regra de cliente (migration 0360), independente da J23 e também
+**desligada** por padrão: com ela ligada, o contato ligado a um paciente do
+prontuário ou com CPF guardado nasce no funil de clientes ao escrever. A porta é
+a mesma tela (Configurações › Tipos de agendamento), logo abaixo da J23. Não põe
+etiqueta nem data em contato nenhum.
+
+Spec: `tests/e2e/paciente-pelo-cadastro.spec.ts` (organização, admin, canal e
+funil próprios; a mensagem entra pelo webhook do WhatsApp, o caminho de
+produção). Banco: `tests/invariants/paciente-pelo-cadastro.test.ts`. Tela em
+unidade: `components/agenda/PacientePeloCadastro.test.tsx` e
+`tests/unit/cliente-pela-agenda-na-tela.test.tsx`.
+
+| Caso | Prioridade |
+|---|---|
+| J23b.1 Desligada: contato com CPF ou vínculo com o prontuário não tem selo "Cliente" na lista | `[P1]` |
+| J23b.2 Ligar mostra, ANTES de confirmar, quantos contatos têm cadastro, que nenhum é alterado e que não há funil de clientes marcado; a prévia não grava | `[P1]` |
+| J23b.3 Confirmar: "Ligado: …", o aviso de funil ausente fica na tela, `settings.crm` ganha só a chave, nenhuma etiqueta entra e a auditoria registra a contagem | `[P1]` |
+| J23b.4 Ligada: selo "Cliente" para quem tem cadastro, nenhum para quem não tem; a ficha diz "Pelo cadastro de paciente" e não mostra "Cliente desde" | `[P1]` |
+| J23b.5 Funis: com só esta regra ligada dá para marcar o funil de clientes, e o rodapé fala do cadastro | `[P1]` |
+| J23b.6 Mensagem pelo webhook: paciente com CPF e paciente do prontuário nascem no funil de clientes; quem não tem cadastro, no de entrada | `[P1]` |
+| J23b.7 Desligar não pede confirmação; quem escreve depois nasce no funil padrão, e o card que já existia não se move | `[P1]` |
+
+Para saber se a spec passa hoje, rode-a (o resultado de uma data envelhece):
+`pnpm exec playwright test tests/e2e/paciente-pelo-cadastro.spec.ts`.
+
+**Limite conhecido:** paciente que escreve de um número que não está no cadastro
+é um contato novo para o CRM e entra pelo funil padrão. A regra não tenta casar
+identidade.
+
 ## Lote 11 da triagem, em ambiente fresco estilo VPS (2026-09-15)
 
 QA visual da integração `integracao/triagem-15set-l11` no SHA `d82366250`: os PRs
