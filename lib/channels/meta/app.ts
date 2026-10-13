@@ -127,7 +127,17 @@ interface LinhaDoApp {
 /** Nunca lança: devolve `null` quando não há linha utilizável. */
 async function linhaDoBanco(): Promise<LinhaDoApp | null> {
   try {
-    const ler = (colunas: string) => createAdminClient().from("platform_meta_app").select(colunas).eq("id", 1).maybeSingle();
+    // O `abortSignal` tira a leitura da deduplicação de `fetch` do Next dentro de
+    // um render: sem ele, uma 2ª leitura do MESMO render, feita depois de uma
+    // escrita ter invalidado o memo, recebe a resposta de ANTES dela e a memoiza.
+    // O porquê inteiro está em `lerLinha` de `lib/branding/instalacao.ts`. Nunca é abortado.
+    const ler = (colunas: string) =>
+      createAdminClient()
+        .from("platform_meta_app")
+        .select(colunas)
+        .eq("id", 1)
+        .abortSignal(new AbortController().signal)
+        .maybeSingle();
     let { data, error } = await ler("app_secret_encrypted, verify_token_encrypted, app_id, es_config_id");
     // Clone sem a 0296 (imagem nova antes do baseline) devolve 42703: relê sem
     // as colunas novas — o PAR de segredos tem de seguir vindo do banco, senão o
