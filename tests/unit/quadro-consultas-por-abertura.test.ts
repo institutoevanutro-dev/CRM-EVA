@@ -84,7 +84,7 @@ function stub(consultas: Array<{ tabela: string; ids: number }>) {
 beforeEach(() => vi.clearAllMocks());
 
 describe("quadro do funil — consultas por abertura", () => {
-  it("800 negócios abrem com no máximo 17 consultas, nenhum lote acima de 300 ids", async () => {
+  it("800 negócios abrem com no máximo 19 consultas, nenhum lote acima de 300 ids", async () => {
     const consultas: Array<{ tabela: string; ids: number }> = [];
     vi.mocked(loadAuthUser).mockResolvedValue(null);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -110,6 +110,9 @@ describe("quadro do funil — consultas por abertura", () => {
     // +1 desde a janela de fechados: a contagem dos antigos que ficam de fora
     // (o que alimenta o "Ver mais"). Os enriquecimentos passaram a correr em
     // paralelo, então mais uma consulta não soma tempo à espera.
-    expect(consultas.length, JSON.stringify(consultas.map((c) => c.tabela))).toBeLessThanOrEqual(18);
+    // +1 com o selo de tarefas do card: UMA leitura de `crm_tasks` para o
+    // quadro inteiro, filtrada pelo funil na junção, sem lista de ids.
+    expect(consultas.filter((c) => c.tabela === "crm_tasks")).toEqual([{ tabela: "crm_tasks", ids: 2 }]);
+    expect(consultas.length, JSON.stringify(consultas.map((c) => c.tabela))).toBeLessThanOrEqual(19);
   });
 });

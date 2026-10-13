@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import {
   type PrioridadeDaTarefa,
   type Tarefa,
 } from "@/lib/tarefas/tipos";
-import { Check, PencilSimple, Trash } from "@/lib/ui/icons";
+import { Check, Kanban, PencilSimple, Trash } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -24,6 +25,13 @@ interface Props {
   aoApagar: (tarefa: Tarefa) => Promise<unknown>;
   /** Nome de quem faz a tarefa; `null` = sem responsável (ou lista da equipe indisponível). */
   nomeDoResponsavel: (userId: string | null) => string | null;
+  /**
+   * Mostrar de qual negócio é cada tarefa, com o atalho para ele. A tela de
+   * Tarefas mostra; o dossiê não: lá dentro todas são do mesmo negócio.
+   */
+  mostrarNegocio?: boolean;
+  /** Dentro do dossiê do negócio: sem a moldura de cada faixa, que o painel estreito não comporta. */
+  compacta?: boolean;
 }
 
 /** A cor é do TEMA, nunca um hex: ela tem de sobreviver ao claro e ao escuro. */
@@ -41,9 +49,11 @@ function Linha({
   aoEditar,
   aoApagar,
   responsavel,
+  mostrarNegocio,
 }: {
   tarefa: Tarefa;
   responsavel: string | null;
+  mostrarNegocio: boolean;
   podeEditar: boolean;
   aoAlternarConcluida: (t: Tarefa) => Promise<unknown>;
   aoEditar: (t: Tarefa) => void;
@@ -135,11 +145,24 @@ function Linha({
                 })
               : t("Sem prazo")}
           </span>
+          {mostrarNegocio && tarefa.lead ? (
+            <Link
+              href={`/app/leads/${tarefa.lead.id}`}
+              data-testid="negocio-da-tarefa"
+              className="flex min-w-0 max-w-[16rem] items-center gap-1 rounded-md text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+              title={tarefa.lead.title}
+            >
+              <Kanban size={12} aria-hidden className="shrink-0" />
+              <span className="truncate">{tarefa.lead.title}</span>
+            </Link>
+          ) : null}
         </div>
       </div>
 
       {podeEditar ? (
-        <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        // Em tela de toque não existe hover: sem a última classe, editar e
+        // apagar ficavam invisíveis no celular.
+        <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
           <Button
             variant="ghost"
             size="icon"
@@ -190,6 +213,8 @@ export function ListaDeTarefas({
   aoEditar,
   aoApagar,
   nomeDoResponsavel,
+  mostrarNegocio = true,
+  compacta = false,
 }: Props) {
   const t = useT();
   const grupos = agrupaPorPrazo(tarefas);
@@ -215,7 +240,7 @@ export function ListaDeTarefas({
   }
 
   return (
-    <div className="space-y-6">
+    <div className={compacta ? "-mx-3 space-y-3" : "space-y-6"}>
       {grupos.map((grupo) => (
         <section key={grupo.faixa}>
           <h2
@@ -226,7 +251,7 @@ export function ListaDeTarefas({
           >
             {rotuloDaFaixa[grupo.faixa]}
           </h2>
-          <div className="rounded-xl border bg-card py-1">
+          <div className={compacta ? undefined : "rounded-xl border bg-card py-1"}>
             {grupo.tarefas.map((tarefa) => (
               <Linha
                 key={tarefa.id}
@@ -236,6 +261,7 @@ export function ListaDeTarefas({
                 aoEditar={aoEditar}
                 aoApagar={aoApagar}
                 responsavel={nomeDoResponsavel(tarefa.assigned_to)}
+                mostrarNegocio={mostrarNegocio}
               />
             ))}
           </div>

@@ -42,11 +42,20 @@ describe("FormularioDeTarefa — responsável", () => {
   it("tarefa nova nasce de quem cria", async () => {
     expect((await salvar({})).assigned_to).toBe(ANA);
   });
-  it("editando, mantém o responsável gravado (o Erick)", async () => {
-    expect((await salvar({ tarefa: tarefa({ assigned_to: ERICK }) })).assigned_to).toBe(ERICK);
+  // Na edição o responsável só vai quando MUDOU (porte do upstream #2760): sem
+  // o campo no PATCH, o banco mantém o que está gravado. Reenviar o mesmo id
+  // faria a rota recusar a edição do título de uma tarefa cujo responsável
+  // saiu da equipe.
+  it("editando sem mexer no responsável, o campo não vai (o Erick continua gravado)", async () => {
+    expect(await salvar({ tarefa: tarefa({ assigned_to: ERICK }) })).not.toHaveProperty("assigned_to");
+  });
+  it("editando tarefa de quem saiu da equipe, o título salva sem reenviar o responsável", async () => {
+    const enviado = await salvar({ tarefa: tarefa({ assigned_to: "99999999-9999-4999-8999-999999999999" }) });
+    expect(enviado).toMatchObject({ title: "Ligar" });
+    expect(enviado).not.toHaveProperty("assigned_to");
   });
   it("editando tarefa sem responsável, não inventa um", async () => {
-    expect((await salvar({ tarefa: tarefa({ assigned_to: null }) })).assigned_to).toBeNull();
+    expect(await salvar({ tarefa: tarefa({ assigned_to: null }) })).not.toHaveProperty("assigned_to");
   });
   it("mostra o campo Responsável", () => {
     render(<FormularioDeTarefa aberto aoMudarAbertura={() => {}} aoSalvar={vi.fn()} membros={MEMBROS} usuarioId={ANA} />);
