@@ -237,3 +237,31 @@ describe("as travas do banco contra cancelar o que não devia", () => {
     expect((await linha(rows[0].id)).status).toBe("pending");
   });
 });
+
+describe("a primeira rodada depois do deploy, num banco como o de produção", () => {
+  it("sem pendente futuro, com pendentes importados e passados: a leitura da rota não devolve nada", async () => {
+    const t = await organizacao();
+    // O que produção tinha em 12/10/2026: consultas futuras confirmadas (criadas
+    // dias antes) e 8 pendentes da agenda importada, com data passada.
+    await compromisso(t, "confirmed", { created_at: "now()-interval '2 days'" });
+    for (let i = 0; i < 8; i++) {
+      await pool.query(
+        `insert into calendar_appointments(organization_id,title,starts_at,ends_at,status,source,history_import_key)
+         values($1,'Histórico',now()-make_interval(days=>30+$2),now()-make_interval(days=>30+$2)+interval '1 hour','pending','historical_import',$3)`,
+        [t.org, i, String(i).repeat(64)],
+      );
+    }
+    // E um pendente comum cuja hora já passou: não segura horário, não é tocado.
+    await pool.query(
+      "insert into calendar_appointments(organization_id,title,starts_at,ends_at,status) values($1,'Passou',now()-interval '5 days',now()-interval '5 days'+interval '1 hour','pending')",
+      [t.org],
+    );
+
+    // Os MESMOS filtros da rota (presos por valor em `route.test.ts`).
+    const { rows } = await pool.query(
+      "select id from calendar_appointments where organization_id=$1 and status='pending' and source<>'historical_import' and starts_at>now()",
+      [t.org],
+    );
+    expect(rows).toEqual([]);
+  });
+});
