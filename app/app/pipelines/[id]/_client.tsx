@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useT } from "@/hooks/i18n/useT";
 import { useBoard, useFechadosAntigos } from "@/hooks/kanban/useBoard";
@@ -21,6 +21,7 @@ function formatError(err: unknown, t: (texto: string) => string): string {
   return String(err);
 }
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
+import { CalendarioDoFunil } from "@/components/kanban/CalendarioDoFunil";
 import { FilterBar } from "@/components/kanban/FilterBar";
 import { BulkActionBar } from "@/components/kanban/BulkActionBar";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
@@ -35,11 +36,20 @@ import {
 import { Plus } from "@/lib/ui/icons";
 import type { LeadFilters } from "@/lib/kanban/filters";
 import { applyFilters, filtersFromParams, filtersToParams } from "@/lib/kanban/filters";
+import {
+  PREFERENCIA_PADRAO,
+  gravarPreferencia,
+  lerPreferencia,
+  type PreferenciaDoFunil,
+} from "@/lib/kanban/visao-do-funil";
+import { FUSO_PADRAO } from "@/lib/tempo/fusos";
+import { cn } from "@/lib/utils";
 
 export function PipelinePageClient({
   pipelineId,
   initialName,
   funis,
+  fuso = FUSO_PADRAO,
 }: {
   pipelineId: string;
   initialName: string;
@@ -49,6 +59,11 @@ export function PipelinePageClient({
    * cabeçalho; sem ele o quadro não sabe que existem outros funis.
    */
   funis: Array<{ id: string; name: string }>;
+  /**
+   * Fuso RESOLVIDO da organização: a régua de dia da visão Calendário. A página
+   * sempre manda; ausente, vale o padrão do produto (o DEFAULT da coluna).
+   */
+  fuso?: string;
 }) {
   const t = useT();
   const { data, isLoading, error, pulses, realtimeStatus, seguranca } = useBoard(pipelineId);
@@ -65,6 +80,29 @@ export function PipelinePageClient({
   );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [newOpen, setNewOpen] = useState(false);
+  /**
+   * A visão do funil: Quadro (o padrão, e o que o servidor renderiza) ou
+   * Calendário. Porte do upstream #2790, que guardava isto em estado local; aqui
+   * a escolha vem do navegador de quem olha e sobrevive à recarga e à troca de
+   * funil. É lida DEPOIS da montagem: o servidor não conhece o `localStorage`,
+   * e lê-la no primeiro render daria erro de hidratação. O quadro ainda está
+   * carregando nesse instante, então ninguém vê a troca.
+   */
+  const [pref, setPref] = useState<PreferenciaDoFunil>(PREFERENCIA_PADRAO);
+  useEffect(() => {
+    setPref(lerPreferencia(pipelineId));
+  }, [pipelineId]);
+  const mudarPref = useCallback(
+    (parcial: Partial<PreferenciaDoFunil>) => {
+      const proxima = { ...pref, ...parcial };
+      setPref(proxima);
+      gravarPreferencia(pipelineId, proxima);
+      // Seleção em lote é do quadro: não fica uma barra de ação sobre o calendário.
+      if (parcial.visao === "calendario") setSelectedIds([]);
+    },
+    [pref, pipelineId],
+  );
+  const noCalendario = pref.visao === "calendario";
   const [verAntigos, setVerAntigos] = useState(false);
   const antigos = useFechadosAntigos(pipelineId, verAntigos);
   const fechadosAntigos = data?.fechadosAntigos ?? 0;
@@ -164,9 +202,35 @@ export function PipelinePageClient({
             </SelectContent>
           </Select>
         )}
-        <Button onClick={() => setNewOpen(true)} disabled={!data} className="shrink-0">
-          <Plus size={16} className="mr-2" /> {t("Novo Lead")}
-        </Button>
+        {/*
+          QUADRO OU CALENDÁRIO (porte do upstream #2790). No cabeçalho, e não
+          dentro do conteúdo: é COMO se olha o funil, pergunta anterior a
+          qualquer filtro. O mesmo interruptor Lista/Calendário de Tarefas.
+        */}
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+          <div className="flex items-center gap-0.5 rounded-md border bg-muted p-0.5">
+            {(["quadro", "calendario"] as const).map((visao) => (
+              <button
+                key={visao}
+                type="button"
+                data-testid={`visao-${visao}`}
+                aria-pressed={pref.visao === visao}
+                onClick={() => mudarPref({ visao })}
+                className={cn(
+                  "rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  pref.visao === visao
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {visao === "quadro" ? t("Quadro") : t("Calendário")}
+              </button>
+            ))}
+          </div>
+          <Button onClick={() => setNewOpen(true)} disabled={!data} className="shrink-0">
+            <Plus size={16} className="mr-2" /> {t("Novo Lead")}
+          </Button>
+        </div>
       </header>
       {data && newOpen && (
         <NewLeadDialog
@@ -226,6 +290,21 @@ export function PipelinePageClient({
         <div className="flex flex-1 animate-pulse items-center justify-center text-muted-foreground">
           {t("Carregando…")}
         </div>
+      ) : noCalendario ? (
+        // A MESMA lista filtrada do quadro: as duas visões olham o mesmo funil,
+        // e o calendário não tem como mostrar a alguém um negócio que o quadro
+        // (a RLS, o recorte de fechados e os filtros) não mostra.
+        <CalendarioDoFunil
+          pipelineId={pipelineId}
+          pipeline={data.pipeline}
+          stages={data.stages}
+          leads={filteredLeads}
+          fuso={fuso}
+          periodo={pref.periodo}
+          campoEscolhido={pref.campo}
+          campoFimEscolhido={pref.campoFim}
+          aoMudar={mudarPref}
+        />
       ) : (
         <KanbanBoard
           pipelineId={pipelineId}
