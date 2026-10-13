@@ -508,6 +508,17 @@ export async function cancelarAgendamentoHandler(
   supabase: SB,
   ctx: HandlerCtx,
   input: CancelarInput,
+  // ⚠️ Quarto argumento, e não campo de `CancelarInput`, de propósito: o input
+  // vem do corpo da requisição (REST) ou do modelo (MCP), e nenhum dos dois pode
+  // escolher estas opções. Só código de servidor as passa. Hoje o único
+  // chamador é o cron `agenda-expira-pendentes`.
+  opcoes: {
+    /** Recusa (409) se o compromisso não estiver mais neste status. */
+    apenasSeStatus?: "pending";
+    /** Não emite `appointment.cancelled` para o motor de regras: a expiração
+     *  não fala com o cliente, e uma regra de "avise quem foi desmarcado" falaria. */
+    semGatilho?: boolean;
+  } = {},
 ): Promise<Record<string, unknown>> {
   const atual = await exigeAgendamento(supabase, ctx, input.id, [
     "id",
@@ -524,6 +535,9 @@ export async function cancelarAgendamentoHandler(
   if (atual.status === "cancelled") {
     return { id: atual.id, status: "cancelled", ja_estava: true };
   }
+  if (opcoes.apenasSeStatus && atual.status !== opcoes.apenasSeStatus) {
+    throw new ApiError(409, "conflict", undefined, ctx.requestId, "O compromisso mudou de situação.");
+  }
 
   const salvo = await alteraComRevisao(supabase,ctx,input.id,input.revision ?? Number(atual.revision),{
     status:"cancelled",cancellation_reason:input.reason,
@@ -533,7 +547,7 @@ export async function cancelarAgendamentoHandler(
     appointmentId: atual.id as string,
     contactId: (atual.contact_id as string | null) ?? null,
     atividade: atividadeDaTransicao(atual.status as SituacaoAnterior, "cancelled"),
-    gatilho: gatilhoDaTransicao(atual.status as SituacaoAnterior, "cancelled"),
+    gatilho: opcoes.semGatilho ? null : gatilhoDaTransicao(atual.status as SituacaoAnterior, "cancelled"),
     transicao: "cancelled",
     fusoDoCompromisso: atual.time_zone as string,
     nomeDoTipo: await nomeDoTipoDoCompromisso(supabase, ctx, atual.event_type_id as string | null),

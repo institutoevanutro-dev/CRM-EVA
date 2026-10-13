@@ -372,3 +372,44 @@ describe("pela tela, o gatilho chega apesar da RLS de event_log", () => {
     );
   });
 });
+
+/**
+ * A EXPIRAÇÃO DO PEDIDO PENDENTE (cron `agenda-expira-pendentes`) cancela por
+ * este mesmo handler, com duas opções que só código de servidor passa. Elas são
+ * o que separa "o horário voltou para a prateleira" de "o cliente recebeu um
+ * WhatsApp por uma decisão que ninguém tomou".
+ */
+describe("a expiração cancela sem falar com o cliente, e só o que está pendente", () => {
+  it("semGatilho: cancela e NÃO emite appointment.cancelled para o motor de regras", async () => {
+    banco.agendamento!.status = "pending";
+
+    const r = await cancelarAgendamentoHandler(
+      cliente(),
+      ctx,
+      { id: AGENDAMENTO, reason: "Pedido expirado" },
+      { apenasSeStatus: "pending", semGatilho: true },
+    );
+
+    expect(r.status).toBe("cancelled");
+    expect(
+      gatilhos(),
+      "a expiração emitiu gatilho: uma regra de 'avise quem foi desmarcado' manda mensagem ao cliente por um pedido que só venceu",
+    ).toHaveLength(0);
+  });
+
+  it("apenasSeStatus: o que já foi confirmado é recusado com 409 e nada é escrito", async () => {
+    // `status: "confirmed"` é o estado do beforeEach.
+    const sb = cliente();
+    const rpc = vi.spyOn(sb, "rpc");
+
+    await expect(
+      cancelarAgendamentoHandler(
+        sb,
+        ctx,
+        { id: AGENDAMENTO, reason: "Pedido expirado" },
+        { apenasSeStatus: "pending", semGatilho: true },
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(rpc, "o compromisso confirmado chegou a ser alterado").not.toHaveBeenCalled();
+  });
+});
