@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { PipelinePageClient } from "./_client";
 
 export const dynamic = "force-dynamic";
@@ -36,5 +37,14 @@ export default async function PipelinePage({
     .eq("organization_id", activeOrg.orgId)
     .eq("is_archived", false)
     .order("position");
-  return <PipelinePageClient pipelineId={id} initialName={pipeline.name} funis={funis ?? []} />;
+  // `fusoUtilizavel`, como na Agenda: a coluna não é validada por escritor
+  // nenhum, e o `Intl` LANÇA com fuso inválido.
+  return (
+    <PipelinePageClient
+      pipelineId={id}
+      initialName={pipeline.name}
+      funis={funis ?? []}
+      fuso={fusoUtilizavel(activeOrg.timezone)}
+    />
+  );
 }

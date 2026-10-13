@@ -2771,3 +2771,15 @@ Porte do upstream melgarafael/DeskcommCRM#2760. Ambiente fresco estilo VPS: Supa
 - **"Atrasada" no selo é calculada na hora em que o quadro é lido.** Uma tarefa que vence com o quadro aberto e parado só fica vermelha na próxima releitura.
 - **Escolher o negócio ao criar a tarefa pela tela de Tarefas** continua não existindo (lá a tarefa nasce avulsa). O upstream também deixou para depois.
 - **iPhone de verdade não foi testado**, só a largura de 390 px no computador.
+
+## J35 — Visão Calendário do funil `[P1]` (2026-10-13)
+
+Porte do upstream melgarafael/DeskcommCRM#2790. Sem migration, sem rota nova e sem dependência nova: o calendário recebe a mesma lista que o quadro já carregou (`useBoard` + filtros da barra) e a regra de dia mora em `lib/kanban/calendario-do-funil.ts`. A escolha da visão fica no navegador (`lib/kanban/visao-do-funil.ts`).
+
+- [x] No funil, trocar de Quadro para Calendário mostra o negócio na célula do dia do campo de data; mudar de mês mostra o negócio do outro mês; mês sem ninguém diz isso; quem não tem data é contado e listado; a semana tem 7 dias a partir do domingo; recarregar mantém a visão; voltar ao Quadro mostra os cards de sempre (`tests/e2e/funil-visao-calendario.spec.ts`, pela tela, banco do `baseline.sql`)
+- [x] Na largura de um celular (375 px) o dia mostra a contagem, a lista abre embaixo, a semana vira uma coluna e a página não rola para o lado (mesma spec, medido por `getBoundingClientRect`)
+- [x] O dia é o da organização: negócio criado às 23:30 em São Paulo fica no dia de São Paulo com o processo em UTC, São Paulo ou Tóquio (`tests/unit/calendario-do-funil-dias.test.ts`)
+- [x] O calendário recebe exatamente a lista do quadro, com os mesmos filtros; a escolha sobrevive à recarga e um navegador sem `localStorage` não quebra a tela (`tests/unit/visao-do-funil-quadro-ou-calendario.test.tsx`)
+- [ ] Papel "próprio" (`provider`, ou `agent` em modo próprio) vendo só os seus negócios no calendário: vale por construção (a lista é a do quadro, cortada pela RLS `crm_leads_select`), mas **não foi dirigido pela tela com esse papel**
+- [ ] Arrastar o negócio para outro dia: **não existe** (o upstream não tem). A data se muda pela ficha do negócio, como antes
+- [ ] Ganhos e perdidos fechados há mais de 30 dias só entram no calendário depois de "Ver mais", como no quadro: mês antigo pode parecer mais vazio do que foi
