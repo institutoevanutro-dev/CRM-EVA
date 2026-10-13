@@ -46,17 +46,32 @@ import { nomeDeArquivoLimpo } from "@/lib/messaging/media/nome-de-arquivo";
  * acréscimo de RSS: 250 → 21 MB · 500 → 131 MB · 1000 → 411 MB · 2000 → 859 MB.
  * Não é linear, e o tempo também não (500 → 1,9 s; 5000 → 177 s).
  *
- * Passou do teto, o PDF leva as mais recentes e AVISA no cabeçalho: corte
- * declarado ainda orienta; corte achado depois não.
+ * Contagem sozinha não segura mensagem longa: ver
+ * `LIMITE_DE_CARACTERES_DO_ARQUIVO`. Passou de qualquer um dos dois tetos, o
+ * PDF leva as mais recentes e AVISA no cabeçalho: corte declarado ainda
+ * orienta; corte achado depois não.
  */
 export const LIMITE_DE_MENSAGENS = 500;
 
 /**
- * Teto de caracteres por mensagem. Sem ele, o limite de mensagens não limita
- * nada: 500 textos colados de 60 mil caracteres são 30 MB dentro do render.
- * O corte é dito na própria linha.
+ * Teto de caracteres por mensagem: um texto colado de 60 mil caracteres não
+ * ocupa o arquivo sozinho. O corte é dito na própria linha.
  */
 export const LIMITE_DE_CARACTERES_POR_MENSAGEM = 5000;
+
+/**
+ * Teto de TEXTO por arquivo. O que pesa no render é o volume de texto, não a
+ * contagem: medido neste fork (Node 22, macOS arm64, 500 mensagens, acréscimo de
+ * RSS e tempo do render):
+ *   ~75 mil caracteres → 123 MB, 1,7 s · ~105 mil → 179 MB · ~157 mil → 205 MB
+ *   ~315 mil → 408 MB · ~550 mil → 583 MB, 4,7 s · ~2,5 milhões → 1,2 GB, 21 s
+ * Sem este teto, 500 mensagens longas derrubariam o contêiner do app sozinhas.
+ * 150 mil fica perto de 200 MB, com um render por vez (a rota garante).
+ */
+export const LIMITE_DE_CARACTERES_DO_ARQUIVO = 150_000;
+
+/** Custo fixo de uma linha (autor, data, direção) na conta do teto de texto. */
+const PESO_DO_CABECALHO_DA_LINHA = 80;
 
 const FUSO_PADRAO = "America/Sao_Paulo";
 
@@ -271,6 +286,30 @@ function ressalvaDeEnvio(m: MensagemParaPdf, t: Traduz): string | null {
 }
 
 /**
+ * QUAIS MENSAGENS CABEM NUM ARQUIVO. Recebe das MAIS RECENTES para as mais
+ * antigas (é como a rota lê) e para no primeiro dos dois tetos: contagem ou
+ * volume de texto. O corte é sempre nas mais antigas. Uma mensagem sempre
+ * entra, mesmo sozinha acima do teto (ela já é cortada por mensagem).
+ */
+export function mensagensQueCabem(recentesPrimeiro: MensagemParaPdf[]): {
+  mensagens: MensagemParaPdf[];
+  truncada: boolean;
+} {
+  const mensagens: MensagemParaPdf[] = [];
+  let texto = 0;
+  for (const m of recentesPrimeiro.slice(0, LIMITE_DE_MENSAGENS)) {
+    const peso =
+      PESO_DO_CABECALHO_DA_LINHA +
+      Math.min((m.body ?? "").length, LIMITE_DE_CARACTERES_POR_MENSAGEM) +
+      (m.type === "audio" ? Math.min((m.media_derived_text ?? "").length, LIMITE_DE_CARACTERES_POR_MENSAGEM) : 0);
+    if (mensagens.length > 0 && texto + peso > LIMITE_DE_CARACTERES_DO_ARQUIVO) break;
+    texto += peso;
+    mensagens.push(m);
+  }
+  return { mensagens, truncada: mensagens.length < recentesPrimeiro.length };
+}
+
+/**
  * O HISTÓRICO EM ORDEM CRONOLÓGICA. A garantia mora AQUI, não na ordem em que o
  * banco devolveu: a rota lê das mais recentes para as mais antigas (é assim que
  * o limite corta a ponta certa). Em empate, o id desempata.
@@ -449,9 +488,9 @@ export async function montarPdfDaConversa(
       "Este documento contém dados pessoais e pode conter dados de saúde. Guarde e compartilhe só com quem precisa, conforme a LGPD. Emojis e símbolos fora do alfabeto não aparecem; imagens, áudios e arquivos são citados pelo tipo e pelo nome, sem o conteúdo.",
     ),
     alertaDeCorte: opcoes.truncada
-      ? t("Atenção: esta conversa passa do limite de {n} mensagens por arquivo. Só as mais recentes estão neste documento.").replace(
+      ? t("Atenção: esta conversa é maior que o limite de um arquivo. Só as {n} mensagens mais recentes estão neste documento.").replace(
           "{n}",
-          String(LIMITE_DE_MENSAGENS),
+          String(linhas.length),
         )
       : null,
     tituloDasMensagens: t("Mensagens"),
@@ -459,9 +498,8 @@ export async function montarPdfDaConversa(
     linhas: linhas.map((l) => ({
       id: l.id,
       cabecalho: soOQueAFonteDesenha(
-        [l.autor, l.horario, l.direcao === "inbound" ? t("recebida") : t("enviada"), l.ressalva]
-          .filter(Boolean)
-          .join(" · "),
+        // Envio que falhou não é "enviada": a ressalva ocupa o lugar da direção.
+        [l.autor, l.horario, l.ressalva ?? (l.direcao === "inbound" ? t("recebida") : t("enviada"))].join(" · "),
       ),
       texto: l.texto,
     })),

@@ -10491,7 +10491,7 @@ export const DICIONARIO: Traducoes = {
   "Exportado por": { es: "Exportado por" },
   "{quem} em {quando}": { es: "{quem} el {quando}" },
   "Este documento contém dados pessoais e pode conter dados de saúde. Guarde e compartilhe só com quem precisa, conforme a LGPD. Emojis e símbolos fora do alfabeto não aparecem; imagens, áudios e arquivos são citados pelo tipo e pelo nome, sem o conteúdo.": { es: "Este documento contiene datos personales y puede contener datos de salud. Guárdelo y compártalo solo con quien lo necesita, conforme a la LGPD. Los emojis y símbolos fuera del alfabeto no aparecen; las imágenes, audios y archivos se citan por tipo y nombre, sin el contenido." },
-  "Atenção: esta conversa passa do limite de {n} mensagens por arquivo. Só as mais recentes estão neste documento.": { es: "Atención: esta conversación supera el límite de {n} mensajes por archivo. Solo los más recientes están en este documento." },
+  "Atenção: esta conversa é maior que o limite de um arquivo. Só as {n} mensagens mais recentes estão neste documento.": { es: "Atención: esta conversación supera el límite de un archivo. Solo los {n} mensajes más recientes están en este documento." },
   "recebida": { es: "recibida" },
   "enviada": { es: "enviada" },
   "página {atual} de {total}": { es: "página {atual} de {total}" },

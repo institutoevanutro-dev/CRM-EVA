@@ -23,8 +23,11 @@ vi.mock("@/lib/branding/saida", async (original) => ({
 }));
 
 import {
+  LIMITE_DE_CARACTERES_DO_ARQUIVO,
   LIMITE_DE_CARACTERES_POR_MENSAGEM,
+  LIMITE_DE_MENSAGENS,
   linhasDoHistorico,
+  mensagensQueCabem,
   montarPdfDaConversa,
   type ConversaParaPdf,
   type MensagemParaPdf,
@@ -248,6 +251,48 @@ describe("linhasDoHistorico: o que cada linha diz", () => {
   });
 });
 
+describe("mensagensQueCabem: os dois tetos do arquivo", () => {
+  // A rota entrega das mais RECENTES para as mais antigas.
+  const recentesPrimeiro = (n: number, corpo: string) =>
+    Array.from({ length: n }, (_, i) => msg({ id: `r${String(i).padStart(4, "0")}`, sent_at: new Date(2e12 - i * 60_000).toISOString(), body: corpo }));
+
+  it("conversa curta entra inteira, sem corte", () => {
+    const { mensagens, truncada } = mensagensQueCabem(recentesPrimeiro(LIMITE_DE_MENSAGENS, "oi"));
+    expect(mensagens).toHaveLength(LIMITE_DE_MENSAGENS);
+    expect(truncada).toBe(false);
+  });
+
+  it("teto de contagem: uma a mais corta a mais ANTIGA", () => {
+    const todas = recentesPrimeiro(LIMITE_DE_MENSAGENS + 1, "oi");
+    const { mensagens, truncada } = mensagensQueCabem(todas);
+    expect(mensagens).toHaveLength(LIMITE_DE_MENSAGENS);
+    expect(truncada).toBe(true);
+    expect(mensagens[0]!.id).toBe("r0000");
+    expect(mensagens.map((m) => m.id)).not.toContain(todas[LIMITE_DE_MENSAGENS]!.id);
+  });
+
+  it("teto de texto: mensagens longas cortam antes das 500, e o que fica cabe no teto", () => {
+    const { mensagens, truncada } = mensagensQueCabem(recentesPrimeiro(200, "a".repeat(3000)));
+    expect(truncada).toBe(true);
+    expect(mensagens.length).toBeGreaterThan(10);
+    expect(mensagens.length).toBeLessThan(60);
+    expect(mensagens.reduce((soma, m) => soma + (m.body ?? "").length, 0)).toBeLessThanOrEqual(LIMITE_DE_CARACTERES_DO_ARQUIVO);
+    expect(mensagens[0]!.id).toBe("r0000");
+  });
+
+  it("a transcrição do áudio também pesa", () => {
+    const audios = Array.from({ length: 200 }, (_, i) =>
+      msg({ id: `a${i}`, sent_at: new Date(2e12 - i * 60_000).toISOString(), type: "audio", media_derived_status: "ready", media_derived_text: "b".repeat(3000) }),
+    );
+    expect(mensagensQueCabem(audios).truncada).toBe(true);
+  });
+
+  it("uma mensagem sozinha acima do teto ainda entra", () => {
+    const { mensagens } = mensagensQueCabem(recentesPrimeiro(2, "a".repeat(LIMITE_DE_CARACTERES_DO_ARQUIVO * 2)));
+    expect(mensagens.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe("montarPdfDaConversa: o arquivo", () => {
   const mensagens = [
     msg({ id: "m3", sent_at: "2026-09-01T12:05:00.000Z", direction: "outbound", sent_via: "user", sent_by_user_id: ANA, status: "read", body: "Terceira, da equipe" }),
@@ -289,6 +334,15 @@ describe("montarPdfDaConversa: o arquivo", () => {
     expect(texto).not.toMatch(/[–—]/);
   });
 
+  it("envio que falhou não é impresso como enviada", async () => {
+    const falhou = [msg({ id: "f", sent_at: "2026-09-01T12:00:00.000Z", direction: "outbound", sent_via: "user", sent_by_user_id: ANA, status: "failed", body: "Não chegou" })];
+    const pdf = await montarPdfDaConversa(db(ORG), ORG_ID, conversa, falhou, opcoes);
+    if (!pdf.ok) throw new Error(pdf.motivo);
+    const texto = (await extractPdfText(pdf.buffer)).replace(/\s+/g, " ");
+    expect(texto).toContain("Ana Souza (equipe) · 01/09/2026 09:00 · não enviada: o envio falhou");
+    expect(texto).not.toContain("· enviada");
+  });
+
   it("o fuso do documento é o da ORGANIZAÇÃO", async () => {
     const pdf = await montarPdfDaConversa(db({ ...ORG, timezone: "America/Manaus" }), ORG_ID, conversa, mensagens, opcoes);
     if (!pdf.ok) throw new Error(pdf.motivo);
@@ -298,7 +352,7 @@ describe("montarPdfDaConversa: o arquivo", () => {
   });
 
   it("o aviso de corte só aparece quando a rota diz que cortou", async () => {
-    const AVISO = "passa do limite de 500 mensagens";
+    const AVISO = "Só as 3 mensagens mais recentes estão neste documento";
     const inteira = await montarPdfDaConversa(db(ORG), ORG_ID, conversa, mensagens, opcoes);
     const cortada = await montarPdfDaConversa(db(ORG), ORG_ID, conversa, mensagens, { ...opcoes, truncada: true });
     if (!inteira.ok || !cortada.ok) throw new Error("render falhou");

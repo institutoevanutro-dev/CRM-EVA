@@ -312,7 +312,7 @@ describe("GET /api/v1/conversations/[id]/export: limites", () => {
     com(LIMITE_DE_MENSAGENS);
     const inteira = await chamar();
     expect(inteira.headers.get("X-Export-Truncated")).toBe("0");
-    expect(await textoDoPdf(inteira)).not.toContain("passa do limite");
+    expect(await textoDoPdf(inteira)).not.toContain("maior que o limite");
 
     estado.auditadas = [];
     com(LIMITE_DE_MENSAGENS + 1);
@@ -320,10 +320,25 @@ describe("GET /api/v1/conversations/[id]/export: limites", () => {
     expect(cortada.status).toBe(200);
     expect(cortada.headers.get("X-Export-Truncated")).toBe("1");
     const texto = await textoDoPdf(cortada);
-    expect(texto).toContain(`passa do limite de ${LIMITE_DE_MENSAGENS} mensagens`);
+    expect(texto).toContain(`Só as ${LIMITE_DE_MENSAGENS} mensagens mais recentes estão neste documento`);
     expect(texto).toContain(`linha numero ${LIMITE_DE_MENSAGENS} fim`);
     expect(texto).not.toContain("linha numero 0 fim");
     await tick();
     expect(estado.auditadas[0]).toMatchObject({ metadata: { mensagens: LIMITE_DE_MENSAGENS, truncada: true } });
+  }, 120_000);
+
+  it("mensagens longas: o teto de TEXTO corta antes das 500, e a auditoria conta o que saiu", async () => {
+    estado.tabelas.messages = Array.from({ length: 120 }, (_, i) => mensagem(`L${String(i).padStart(3, "0")}`, i, { body: `inicio ${i} ${"palavra ".repeat(400)}` }));
+    const res = await chamar();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-Export-Truncated")).toBe("1");
+    const texto = await textoDoPdf(res);
+    expect(texto).toContain("maior que o limite de um arquivo");
+    expect(texto).toContain("inicio 119 palavra");
+    expect(texto).not.toContain("inicio 0 palavra");
+    await tick();
+    const saiu = (estado.auditadas[0]!.metadata as { mensagens: number }).mensagens;
+    expect(saiu).toBeGreaterThan(10);
+    expect(saiu).toBeLessThan(120);
   }, 120_000);
 });

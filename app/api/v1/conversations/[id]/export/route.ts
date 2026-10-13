@@ -30,6 +30,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import {
   COLUNAS_DA_MENSAGEM,
   LIMITE_DE_MENSAGENS,
+  mensagensQueCabem,
   montarPdfDaConversa,
   type ConversaParaPdf,
   type MensagemParaPdf,
@@ -48,7 +49,7 @@ const TETO_POR_ORGANIZACAO = 20;
 const JANELA_SEGUNDOS = 60;
 
 // Limite por minuto não impede dois renders NO MESMO INSTANTE, e cada um custa
-// na casa de 130 MB (ver `LIMITE_DE_MENSAGENS`). Um de cada vez por processo.
+// até a casa de 200 MB (ver `LIMITE_DE_CARACTERES_DO_ARQUIVO`). Um de cada vez por processo.
 // ponytail: contador em memória, vale por processo; se o app ganhar réplicas,
 // trocar por trava no Redis.
 let rendersEmAndamento = 0;
@@ -136,9 +137,8 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (contato.error) return fail("internal_error", t("Erro ao ler o contato."), 500, { requestId });
   if (mensagensLidas.error) return fail("internal_error", t("Erro ao ler as mensagens."), 500, { requestId });
 
-  const lidas = (mensagensLidas.data ?? []) as unknown as MensagemParaPdf[];
-  const truncada = lidas.length > LIMITE_DE_MENSAGENS;
-  const mensagens = truncada ? lidas.slice(0, LIMITE_DE_MENSAGENS) : lidas;
+  // Dois tetos, contagem e volume de texto: o que estourar primeiro corta.
+  const { mensagens, truncada } = mensagensQueCabem((mensagensLidas.data ?? []) as unknown as MensagemParaPdf[]);
 
   // Nome de quem enviou não fica na linha da mensagem. Se o lookup cair, o
   // rótulo cai para "Equipe", sem falhar o export.

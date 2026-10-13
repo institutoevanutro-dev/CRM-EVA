@@ -12,6 +12,6 @@ O que entra: mensagens de texto; imagens, áudios, vídeos e documentos citados 
 
 O que nunca entra: notas internas da equipe, rascunhos e dados internos da IA, CPF e outros campos protegidos do contato. Emojis não aparecem (a fonte do PDF não os desenha).
 
-Limites: até as 500 mensagens mais recentes por arquivo (conversa maior sai com o corte avisado na tela e no documento), 5 exportações por minuto por pessoa e 20 por organização, uma geração por vez. Cada exportação fica registrada na auditoria (`conversation.exported`) com quem exportou, qual conversa e quantas mensagens, sem o texto delas. Nenhuma mudança de banco.
+Limites: cada arquivo leva as mensagens mais recentes, até 500 mensagens ou cerca de 150 mil caracteres de texto, o que vier primeiro (conversa maior sai com o corte avisado na tela e no documento); 5 exportações por minuto por pessoa e 20 por organização; uma geração por vez. Cada exportação fica registrada na auditoria (`conversation.exported`) com quem exportou, qual conversa e quantas mensagens, sem o texto delas. Nenhuma mudança de banco.
 
 Porte de melgarafael/DeskcommCRM #2229, contribuição de @webtecnica (refs #1982). O upstream entregou a rota; o botão, a autoria ajustada a este banco e os avisos são deste fork.

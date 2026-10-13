@@ -251,7 +251,7 @@ test.describe("Inbox: baixar a conversa em PDF", () => {
       "Equipe (pelo celular) · 01/09/2026 09:03 · enviada",
       "EQUIPE RESPONDE PELO CELULAR",
       "[Documento: exame-de-sangue.pdf]",
-      "enviada · não enviada: o envio falhou",
+      "E2E Agent (equipe) · 01/09/2026 09:05 · não enviada: o envio falhou",
       "ESTA NAO CHEGOU",
     ];
     let cursor = -1;
