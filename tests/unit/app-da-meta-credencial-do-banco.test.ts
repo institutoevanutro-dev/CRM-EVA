@@ -61,14 +61,16 @@ vi.mock("@/lib/supabase/admin", () => ({
     from: () => ({
       select: (colunas: string) => ({
         eq: () => ({
-          maybeSingle: async () => {
-            leituras += 1;
-            if (estoura) throw estoura;
-            if (semColunasDa0296 && colunas.includes("app_id")) {
-              return { data: null, error: { code: "42703", message: 'column platform_meta_app.app_id does not exist' } };
-            }
-            return { data: linhaDoBanco, error: erroDaLeitura };
-          },
+          abortSignal: () => ({
+            maybeSingle: async () => {
+              leituras += 1;
+              if (estoura) throw estoura;
+              if (semColunasDa0296 && colunas.includes("app_id")) {
+                return { data: null, error: { code: "42703", message: 'column platform_meta_app.app_id does not exist' } };
+              }
+              return { data: linhaDoBanco, error: erroDaLeitura };
+            },
+          }),
         }),
       }),
     }),
