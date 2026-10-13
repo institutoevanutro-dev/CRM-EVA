@@ -8,6 +8,16 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.4.0] — 2026-10-13
+
+### Adicionado
+
+- **Apresentação pública do CRM para verificação OAuth do Google** A página `/legal/about` apresenta o aplicativo e a integração opcional com o Google Agenda, sem sessão ou dados de clientes, com links para acesso, privacidade e termos. A liberação pública é restrita a esse endereço. O contato é o encarregado já configurado pelo operador. A política sobre o Google Agenda também recebe suas traduções em espanhol e a referência oficial do Google é declarada no cadastro de fornecedores/documentação do repositório.
+
+### Alterado
+
+- **Política de privacidade explica a integração opcional com o Google Agenda** A política pública em `/legal/privacy` descreve os dados de agenda acessados, sua finalidade, o armazenamento de credenciais cifradas, o compartilhamento com a agenda escolhida e a revogação da conexão. Esclarece que a ocupação externa é armazenada sem título e que desconectar não apaga o histórico do CRM. Inclui a referência aos requisitos de Uso Limitado do Google. Nenhuma permissão, dado de paciente ou comportamento de sincronização é alterado.
+
 ## [4.3.0] — 2026-10-13
 
 ### Adicionado
@@ -7122,7 +7132,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.3.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.4.0...HEAD
+[4.4.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.3.0...v4.4.0
 [4.3.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.0.1...v4.1.0
