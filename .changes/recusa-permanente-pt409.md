@@ -1,6 +1,0 @@
----
-impacto: nada_mudou
-secao: corrigido
-titulo: Recusa definitiva do atendimento e da agenda não é mais repetida sem fim pelo banco
----
-Quando alguém tentava alterar um compromisso, encerrar uma demanda ou decidir um conflito do Google Agenda a partir de uma tela desatualizada, o banco recusava com um código que quer dizer "conflito passageiro, tente de novo". A recusa era definitiva (a tela precisava ser atualizada), mas a camada que fala com o banco acreditava no código e repetia a mesma operação sozinha, sem limite. No projeto original, uma única recusa dessas chegou a deixar o CRM inteiro fora do ar. Este sistema já tinha esse conserto para encerrar, arquivar e reabrir conversas e para o Google Meet; agora ele vale para as outras 16 funções do atendimento, do follow-up e da agenda (34 pontos). A recusa passa a sair como "409, conflito", que ninguém repete, e a tela segue mostrando a mesma mensagem ("Este compromisso mudou. Atualize os dados..."). A recuperação de falta continua registrando o desfecho e abrindo o aviso na Central quando o atendimento mudou no meio. Travas ocupadas de verdade, em que repetir resolve, continuam como estavam. A atualização aplica a migration 0358 sozinha; nada a fazer na VPS. Porte do upstream melgarafael/DeskcommCRM#2805 (diagnóstico de @paulolimajr77).

@@ -8,6 +8,28 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.1.0] — 2026-10-13
+
+### Adicionado
+
+- **O funil ganha a visão Calendário por campo de data, com mês e semana** No funil, ao lado do Quadro, há agora o botão Calendário. Ele mostra os mesmos negócios do quadro, cada um no dia de uma data: um campo de data do próprio funil, o fechamento previsto ou a data de criação. Você escolhe qual data usar e, se quiser, uma segunda data para mostrar o negócio do primeiro ao último dia. Dá para ver o mês ou a semana, e a busca e os filtros do funil valem nas duas visões. Um clique no negócio abre a mesma ficha do quadro. Quem não tem a data preenchida aparece numa lista "sem data neste campo", e o dia com muitos negócios diz quantos mostra de quantos e abre a lista inteira. O dia é sempre o do fuso da organização. A visão escolhida fica guardada no navegador de cada pessoa. O quadro continua sendo a tela padrão. Não dá para arrastar o negócio de um dia para outro: a data se muda pela ficha. Nada a fazer na VPS. Porte do upstream melgarafael/DeskcommCRM#2790 (contribuição de @webtecnica), adaptado a este fork.
+
+- **Tarefas dentro do card do negócio, com responsável, e selo de pendências no quadro** Até aqui a tarefa só nascia na tela de Tarefas, que não pergunta de qual negócio ela é: toda tarefa feita à mão ficava avulsa. Agora o painel que abre ao clicar num card do funil tem a seção **Tarefas**, antes da linha do tempo. O botão **Nova tarefa** cria a tarefa já presa àquele negócio e ao contato dele, com quem criou como responsável (dá para trocar por qualquer pessoa da equipe e pôr prazo). Dali mesmo dá para concluir, reabrir, editar e apagar. No quadro, o card passa a mostrar um selo discreto com o número de tarefas em aberto daquele negócio; ele fica vermelho, com um aviso e o número das vencidas, quando alguma passou do prazo, e some quando não há nada em aberto. O card não cresce. Na tela de Tarefas, que continua igual e mostra as mesmas tarefas, cada linha ganha o nome do negócio, com atalho para ele. Editar uma tarefa não reenvia mais um responsável em que ninguém mexeu, então dá para corrigir o título de uma tarefa cujo responsável saiu da equipe. Em tela de toque, os botões de editar e apagar da linha ficam sempre à vista.
+
+  Quem vê o quê mudou junto: a tarefa presa a um negócio passa a seguir a visibilidade do negócio. Gestor, administrador e somente leitura seguem vendo todas. O atendente vê as tarefas dos negócios que ele enxerga, as avulsas e as que são dele. O prestador de serviço vê só as tarefas dos negócios dele e as que foram dadas a ele (antes via todas). Criar e mexer em tarefa continua sendo de atendente para cima. A atualização aplica a migration 0359 sozinha; nada a fazer na VPS.
+
+  Porte do upstream melgarafael/DeskcommCRM#2760 (contribuição de @profpeque), adaptado ao que este sistema já tinha (responsável na tarefa e tarefa na linha do tempo do negócio).
+
+### Corrigido
+
+- **As abas de Conversas não ficam mais cortadas quando a coluna da lista está estreita** Na tela de Conversas, com a coluna da lista estreita (do mínimo de 240 px até o padrão de 272 px de uma janela de 1280 px), a faixa "Fila, Minhas, Todas, Mais" não cabia quando as contagens cresciam ou quando uma aba do "Mais" estava aberta ("Automático 267"). A faixa rolava para o lado sem nada avisar, e o "Mais" ficava cortado na borda. Agora, quando não cabe numa linha, o último item desce para uma segunda linha e tudo fica à vista. Onde cabia, nada muda. Nada a fazer na VPS. Porte do upstream melgarafael/DeskcommCRM#2766 (contribuição de @webtecnica), adaptado às abas deste fork.
+
+- **Credencial do Google Agenda, app da Meta e modo de cadastro não voltam ao valor antigo logo depois de gravados** Ao gravar a credencial do Google Agenda, o app da Meta ou o modo de cadastro no painel da instalação, a tela dizia "salvo" e, às vezes, o sistema seguia usando o valor antigo por até 30 segundos. Uma tela que estava sendo montada no mesmo instante da gravação reaproveitava a leitura feita antes dela e a guardava como se fosse a nova. A marca já tinha esse conserto neste fork; agora as três leituras irmãs vão sempre ao banco quando a memória está vazia. Nada a fazer na VPS. Porte do upstream melgarafael/DeskcommCRM#2795.
+
+- **Recusa definitiva do atendimento e da agenda não é mais repetida sem fim pelo banco** Quando alguém tentava alterar um compromisso, encerrar uma demanda ou decidir um conflito do Google Agenda a partir de uma tela desatualizada, o banco recusava com um código que quer dizer "conflito passageiro, tente de novo". A recusa era definitiva (a tela precisava ser atualizada), mas a camada que fala com o banco acreditava no código e repetia a mesma operação sozinha, sem limite. No projeto original, uma única recusa dessas chegou a deixar o CRM inteiro fora do ar. Este sistema já tinha esse conserto para encerrar, arquivar e reabrir conversas e para o Google Meet; agora ele vale para as outras 16 funções do atendimento, do follow-up e da agenda (34 pontos). A recusa passa a sair como "409, conflito", que ninguém repete, e a tela segue mostrando a mesma mensagem ("Este compromisso mudou. Atualize os dados..."). A recuperação de falta continua registrando o desfecho e abrindo o aviso na Central quando o atendimento mudou no meio. Travas ocupadas de verdade, em que repetir resolve, continuam como estavam. A atualização aplica a migration 0358 sozinha; nada a fazer na VPS. Porte do upstream melgarafael/DeskcommCRM#2805 (diagnóstico de @paulolimajr77).
+
+- **O pedido para parar de receber mensagens encerra também o follow-up pausado à mão** Quando o paciente pedia para parar de receber mensagens ("pare", "sair da lista"), o follow-up dele era encerrado como descadastro, mas só se estivesse andando, esperando resposta ou pausado por atendimento humano. O follow-up que alguém da equipe tinha pausado à mão ficava vivo. Nenhuma mensagem saía (o envio já confere o descadastro na hora), mas o follow-up continuava ocupando a vaga do contato: todo follow-up novo para essa pessoa falhava sem explicação, e o descadastro não entrava na contagem de resultados. Agora o pedido para parar encerra também o follow-up pausado à mão. Uma mensagem comum, de quem não pediu para parar, continua sem mexer na pausa: quem retoma é quem pausou. Nenhuma mudança de banco. Porte do upstream melgarafael/DeskcommCRM#2782 (contribuição de @FabioMundoDigital).
+
 ## [4.0.1] — 2026-10-13
 
 ### Corrigido
@@ -7060,7 +7082,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.0.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.1.0...HEAD
+[4.1.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.27.0...v4.0.0
 [3.27.0]: https://github.com/melgarafael/DeskcommCRM/compare/v3.26.1...v3.27.0
