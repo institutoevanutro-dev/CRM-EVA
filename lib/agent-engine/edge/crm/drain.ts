@@ -494,12 +494,24 @@ async function processEvent(
   // que fala por dois números tinha a mensagem de um engolida pelo job pendente
   // do outro, e nenhum turno lia a conversa dela. (A régua de resposta obsoleta,
   // `respostaFicouObsoleta`, conta com isto para saber que alguém responde.)
+  //
+  // E nunca em job que já PASSOU a conversa (`passagem_feita`, a marca de
+  // `transfer_to_subject`). A marca larga, e não só a de envio da origem
+  // (`passagem_com_envio_da_origem`), porque a carona se perde nos DOIS retries:
+  //   * a origem enviou e passou: o retry encerra sem modelo e sem ler a
+  //     conversa (inbound-turn.ts). A carona some com ele.
+  //   * o destino enviou parte e falhou: o retry roda, mas a primeira bolha do
+  //     que ele escrever volta do ledger como `already_sent` (mesmo job, mesmo
+  //     `seq`). Se a resposta à mensagem nova couber numa bolha, ela é engolida.
+  // Nos dois a mensagem nova ganha job próprio, com `seq` do zero, que roda com
+  // o dono atual da conversa. Job comum não tem a marca e segue dando carona.
   if (knobs.debounceMs > 0) {
     const { rows: pendingRows } = await pool.query<{ id: string }>(
       `select id from job_queue
        where organization_id = $1 and contact_id = $2
          and kind = 'inbound_turn' and status = 'pending' and run_after > now()
          and not (payload ? 'held_run_after')
+         and not (payload ? 'passagem_feita')
          and payload->>'conversation_id' = $3
        limit 1`,
       [event.organization_id, p.contact_id, p.conversation_id],

@@ -175,7 +175,15 @@ export type ActivityType =
    * quem abre o card no destino precisa ler. O outro lado da troca é a
    * `demand_closed` da origem, com a razão "Levado para o funil X".
    */
-  | "moved_from_pipeline";
+  | "moved_from_pipeline"
+  /**
+   * O AGENTE PASSOU A CONVERSA PARA OUTRO ASSUNTO DO ROTEADOR
+   * (`transfer_to_subject`, `lib/agent-engine/agent/passagem-de-assunto.ts`).
+   * Sem esta linha a recepção via o agente da conversa mudar e mais nada: a
+   * decisão ficava só em `ai_router_decisions`, que tela nenhuma lê. A razão
+   * diz os dois assuntos, os dois agentes e o motivo que o agente informou.
+   */
+  | "subject_transferred";
 
 export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   lead_created: "Entrou pelo WhatsApp",
@@ -277,6 +285,7 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   contacts_merged: "Contatos duplicados juntados",
   supervision_review: "Revisão da supervisão",
   moved_from_pipeline: "Veio de outro funil",
+  subject_transferred: "Atendimento passou para outro assunto",
 };
 
 /** Quando o tipo é legado/desconhecido, a linha ainda é honesta — sem jargão. */

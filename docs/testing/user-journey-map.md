@@ -2738,3 +2738,13 @@ Ambiente fresco estilo VPS: Supabase local próprio (pg15), `baseline.sql`, `nex
 - ~~A anonimização aprovada de um pedido registrado pela tela não foi executada nesta prova.~~ **Fechado na J33.7.**
 - **O pedido de apagamento que chega pelo webhook da loja (Nuvemshop) não foi dirigido pela tela:** não há loja neste ambiente. Que ele espera aprovação está provado no worker e no banco (`tests/unit/lgpd-redact-so-com-aprovacao.test.ts`, `tests/invariants/lgpd-anonimizacao-exige-aprovacao.test.ts`), não com um webhook de verdade.
 - **Dois registros no mesmo instante** (duas pessoas, mesmo contato, mesmo tipo) podem passar os dois: a regra de duplicata é conferida na aplicação, sem trava no banco.
+
+### O agente passa a conversa para outro assunto do roteador `[P1]` (2026-10-12)
+
+Sem migration e sem tela nova: o modo é ligado em `ai_routers.config` (`permanencia: 'agente'`, `interrompe: [...]`). Regra de troca em `lib/agent-engine/agent/resolve-turn-agent.ts` (`mudouDeAssunto`), conversa recente em `historico-recente.ts`, ferramenta `transfer_to_subject` em `passagem-de-assunto.ts` e `inbound-turn.ts`, teste com conversa simulada em `POST /api/v1/ai/routers/:id/test`. Unit: `lib/agent-engine/agent/{router-config,resolve-turn-agent,historico-recente,intent-classifier,passagem-de-assunto}.test.ts` e `app/api/v1/ai/routers/[id]/test/route.test.ts`. Invariantes: `tests/invariants/roteador-historico-recente.test.ts` e `tests/invariants/agent-transfer-to-subject-turn.test.ts`.
+
+- [ ] Com o modo ligado, resposta curta no meio de um atendimento não troca de agente; assunto marcado em `interrompe` troca na mesma mensagem; o agente em atendimento passa a conversa e o agente de destino responde a mesma mensagem, uma vez só. Coberto por unit e invariante; **prova pela tela e em conversa real pendentes** até a versão ser instalada
+- [ ] Teste do roteador com conversa simulada (`history` e `current_intent` pela API) dá a mesma decisão do turno real. Coberto por unit; o campo na tela não existe ainda
+- [ ] A passagem aparece na linha do tempo do negócio ("Atendimento passou para outro assunto", com os dois assuntos, os dois agentes e o motivo). Coberto por invariante; **prova pela tela pendente**
+- [ ] No modo ligado, conversa sem turno há mais de 24 horas (`permanencia_expira_horas`) volta a ser classificada do zero. Coberto por unit; **prova em conversa real pendente**
+- [ ] Resposta do agente de destino que falha depois da primeira bolha é completada no retry, sem repetir a bolha entregue. Coberto por invariante com modelo simulado; **falha real de envio no canal não foi exercitada**

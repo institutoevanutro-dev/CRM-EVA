@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { resolveConversationTurn, resolveTurnAgent } from './resolve-turn-agent';
+import { mudouDeAssunto, resolveConversationTurn, resolveTurnAgent } from './resolve-turn-agent';
 import type { PublishedAgentConfig } from './agent-config';
 import type { LoadedRouter } from './router-config';
 
@@ -50,6 +50,9 @@ function router(overrides: Partial<LoadedRouter> = {}): LoadedRouter {
     classifierProvider: null,
     sticky: true,
     minConfidence: 0.6,
+    permanencia: 'roteador',
+    permanenciaExpiraHoras: 24,
+    interrompe: [],
     fallbackAgentId: null,
     members,
     ...overrides,
@@ -77,6 +80,7 @@ function makeDeps(overrides: {
   loadPublishedAgentConfig?: ReturnType<typeof vi.fn>;
   classifyIntent?: ReturnType<typeof vi.fn>;
   buildFatosDoContato?: ReturnType<typeof vi.fn>;
+  historicoRecente?: ReturnType<typeof vi.fn>;
   agenteDaCampanha?: ReturnType<typeof vi.fn>;
   agora?: () => Date;
   warn?: ReturnType<typeof vi.fn>;
@@ -85,6 +89,8 @@ function makeDeps(overrides: {
     log: { info: vi.fn(), warn: overrides.warn ?? vi.fn(), error: vi.fn() },
     // Sem banco: o padrão real leria a agenda num `{}` e cairia no aviso.
     buildFatosDoContato: overrides.buildFatosDoContato ?? vi.fn().mockResolvedValue(FATOS),
+    // Idem: o padrão real consultaria `messages` num `{}`.
+    historicoRecente: overrides.historicoRecente ?? vi.fn().mockResolvedValue([]),
     ...(overrides.agenteDaCampanha ? { agenteDaCampanha: overrides.agenteDaCampanha } : {}),
     ...(overrides.agora ? { agora: overrides.agora } : {}),
     loadActiveRouter: overrides.loadActiveRouter ?? vi.fn(),
@@ -307,6 +313,151 @@ describe('resolveTurnAgent', () => {
     expect(out.outcome).toBe('no_match');
     expect(warn).toHaveBeenCalled();
   });
+
+  // ─── Modo `permanencia: 'agente'`: só assunto marcado interrompe ───
+  const comUrgencia = [
+    ...members,
+    { agentId: 'agent-urgencia', intentName: 'urgencia', intentDescription: 'está com dor', examples: [] },
+  ];
+  const modoAgente = (interrompe = ['urgencia']) => router({ permanencia: 'agente', interrompe, members: comUrgencia });
+  const rodar = async (r: LoadedRouter, verdict: unknown, sticky: { agentId: string | null; intent: string | null }) => {
+    const classifyIntent = vi.fn().mockResolvedValue(verdict);
+    const loadPublishedAgentConfigById = idAwareLoader();
+    const out = await resolveTurnAgent({} as never, {} as never,
+      { ...baseInput, signal: 'Quarta', stickyAgentId: sticky.agentId, stickyIntent: sticky.intent },
+      makeDeps({ loadActiveRouter: vi.fn().mockResolvedValue(r), classifyIntent, loadPublishedAgentConfigById }));
+    return { out, classifyIntent };
+  };
+
+  it("17. modo 'agente': outro assunto com 0,95 que NÃO interrompe → sticky, agente atual mantido", async () => {
+    const { out, classifyIntent } = await rodar(modoAgente(), { intentName: 'vendas', confidence: 0.95 }, { agentId: 'agent-suporte', intent: 'suporte' });
+    expect(classifyIntent).toHaveBeenCalledTimes(1);
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-suporte');
+    expect(out.intentName).toBe('suporte');
+    // Controle: o MESMO veredito, no modo de sempre, troca.
+    const { out: antigo } = await rodar(router({ members: comUrgencia }), { intentName: 'vendas', confidence: 0.95 }, { agentId: 'agent-suporte', intent: 'suporte' });
+    expect(antigo.outcome).toBe('reclassified');
+    expect(antigo.config?.agentId).toBe('agent-vendas');
+  });
+
+  it("18. modo 'agente': assunto de interrompe com 0,95 → reclassified, agente do assunto que interrompe", async () => {
+    const { out } = await rodar(modoAgente(), { intentName: 'urgencia', confidence: 0.95 }, { agentId: 'agent-vendas', intent: 'vendas' });
+    expect(out.outcome).toBe('reclassified');
+    expect(out.config?.agentId).toBe('agent-urgencia');
+    expect(out.intentName).toBe('urgencia');
+    expect(out.confidence).toBe(0.95);
+  });
+
+  it("19. modo 'agente': assunto de interrompe abaixo do mínimo → sticky; exatamente no mínimo → troca", async () => {
+    const abaixo = await rodar(modoAgente(), { intentName: 'urgencia', confidence: 0.59 }, { agentId: 'agent-vendas', intent: 'vendas' });
+    expect(abaixo.out.outcome).toBe('sticky');
+    expect(abaixo.out.config?.agentId).toBe('agent-vendas');
+    const noMinimo = await rodar(modoAgente(), { intentName: 'urgencia', confidence: 0.6 }, { agentId: 'agent-vendas', intent: 'vendas' });
+    expect(noMinimo.out.outcome).toBe('reclassified');
+    expect(noMinimo.out.config?.agentId).toBe('agent-urgencia');
+  });
+
+  it("20. modo 'agente': o assunto atual já é de interrompe e o classificador repete → sticky", async () => {
+    // Dois assuntos marcados, para o classificador rodar (ver o caso 23).
+    const { out, classifyIntent } = await rodar(modoAgente(['urgencia', 'suporte']),
+      { intentName: 'urgencia', confidence: 0.95 }, { agentId: 'agent-urgencia', intent: 'urgencia' });
+    expect(classifyIntent).toHaveBeenCalledTimes(1);
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-urgencia');
+  });
+
+  it("21. modo 'agente', sem agente atual: classifica e escolhe como hoje, marcado ou não", async () => {
+    const { out } = await rodar(modoAgente(), { intentName: 'vendas', confidence: 0.9 }, { agentId: null, intent: null });
+    expect(out.outcome).toBe('classified');
+    expect(out.config?.agentId).toBe('agent-vendas');
+    const { out: semMatch } = await rodar(
+      router({ permanencia: 'agente', interrompe: ['urgencia'], members: comUrgencia, fallbackAgentId: 'agent-fallback' }),
+      { intentName: 'vendas', confidence: 0.2 }, { agentId: null, intent: null });
+    expect(semMatch.outcome).toBe('fallback');
+    expect(semMatch.config?.agentId).toBe('agent-fallback');
+  });
+
+  it("22. modo 'agente': classificador falha → sticky (regra 4, sem mudança)", async () => {
+    const { out, classifyIntent } = await rodar(modoAgente(), null, { agentId: 'agent-vendas', intent: 'vendas' });
+    expect(classifyIntent).toHaveBeenCalledTimes(1);
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it("23. modo 'agente', nenhum assunto pode interromper: sticky sem ler fatos, conversa nem classificar", async () => {
+    // Cada linha: uma lista em que NADA tira a conversa de quem atende 'vendas'.
+    for (const interrompe of [[], ['nao_e_membro'], ['vendas']]) {
+      const classifyIntent = vi.fn().mockResolvedValue({ intentName: 'suporte', confidence: 0.99 });
+      const buildFatosDoContato = vi.fn().mockResolvedValue(FATOS);
+      const historicoRecente = vi.fn().mockResolvedValue([]);
+      const out = await resolveTurnAgent({} as never, {} as never,
+        { ...baseInput, signal: 'Quarta', stickyAgentId: 'agent-vendas', stickyIntent: 'vendas' },
+        makeDeps({
+          loadActiveRouter: vi.fn().mockResolvedValue(modoAgente(interrompe)),
+          loadPublishedAgentConfigById: idAwareLoader(),
+          classifyIntent, buildFatosDoContato, historicoRecente,
+        }));
+      expect(classifyIntent).not.toHaveBeenCalled();
+      expect(buildFatosDoContato).not.toHaveBeenCalled();
+      expect(historicoRecente).not.toHaveBeenCalled();
+      expect(out).toMatchObject({ outcome: 'sticky', routerId: 'router-1', intentName: 'vendas', confidence: null });
+      expect(out.config?.agentId).toBe('agent-vendas');
+    }
+  });
+
+  it("24. modo 'agente', um membro pode interromper: o classificador roda", async () => {
+    const { classifyIntent } = await rodar(modoAgente(['urgencia']), { intentName: null, confidence: 0.9 }, { agentId: 'agent-vendas', intent: 'vendas' });
+    expect(classifyIntent).toHaveBeenCalledTimes(1);
+  });
+
+  it("25. modo 'agente', sem agente atual: lista vazia NÃO pula o classificador (é ele quem escolhe quem começa)", async () => {
+    const { out, classifyIntent } = await rodar(modoAgente([]), { intentName: 'vendas', confidence: 0.9 }, { agentId: null, intent: null });
+    expect(classifyIntent).toHaveBeenCalledTimes(1);
+    expect(out.outcome).toBe('classified');
+  });
+
+  it("26. modo 'roteador': o atalho não existe, o classificador roda mesmo sem interrompe", async () => {
+    const { classifyIntent } = await rodar(router(), { intentName: 'vendas', confidence: 0.9 }, { agentId: 'agent-vendas', intent: 'vendas' });
+    expect(classifyIntent).toHaveBeenCalledTimes(1);
+  });
+
+  it("27. modo 'agente', conversa com agente e SEM assunto gravado: o assunto atual é o do próprio membro", async () => {
+    // `active_intent` nulo com agente membro: sem isto, o classificador repetir
+    // 'urgencia' para quem já atende urgência contaria como troca.
+    const r = modoAgente(['urgencia', 'suporte']);
+    const { out, classifyIntent } = await rodar(r, { intentName: 'urgencia', confidence: 0.95 }, { agentId: 'agent-urgencia', intent: null });
+    expect(classifyIntent.mock.calls[0]![2].assuntoAtual).toBe('urgencia');
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-urgencia');
+    // E o atalho usa o mesmo assunto: só 'urgencia' marcado, quem atende é urgência.
+    const soEle = await rodar(modoAgente(['urgencia']), { intentName: 'urgencia', confidence: 0.95 }, { agentId: 'agent-urgencia', intent: null });
+    expect(soEle.classifyIntent).not.toHaveBeenCalled();
+    expect(soEle.out.outcome).toBe('sticky');
+  });
+});
+
+describe('mudouDeAssunto', () => {
+  const antigo = { permanencia: 'roteador' as const, interrompe: [], minConfidence: 0.6 };
+  const novo = { permanencia: 'agente' as const, interrompe: ['suporte'], minConfidence: 0.6 };
+
+  it("modo 'roteador': outro assunto com confiança no mínimo troca; mesmo assunto, none ou abaixo do mínimo não", () => {
+    expect(mudouDeAssunto(antigo, 'vendas', { intentName: 'suporte', confidence: 0.6 })).toBe(true);
+    expect(mudouDeAssunto(antigo, null, { intentName: 'suporte', confidence: 0.9 })).toBe(true);
+    expect(mudouDeAssunto(antigo, 'vendas', { intentName: 'vendas', confidence: 0.99 })).toBe(false);
+    expect(mudouDeAssunto(antigo, 'vendas', { intentName: null, confidence: 0.99 })).toBe(false);
+    expect(mudouDeAssunto(antigo, 'vendas', { intentName: 'suporte', confidence: 0.59 })).toBe(false);
+  });
+
+  it("modo 'agente': só troca para assunto de interrompe", () => {
+    expect(mudouDeAssunto(novo, 'suporte', { intentName: 'vendas', confidence: 0.95 })).toBe(false);
+    expect(mudouDeAssunto(novo, 'vendas', { intentName: 'suporte', confidence: 0.95 })).toBe(true);
+    expect(mudouDeAssunto(novo, 'vendas', { intentName: 'suporte', confidence: 0.59 })).toBe(false);
+    // Exatamente no mínimo troca: o corte é `>=`.
+    expect(mudouDeAssunto(novo, 'vendas', { intentName: 'suporte', confidence: 0.6 })).toBe(true);
+    expect(mudouDeAssunto(novo, 'suporte', { intentName: 'suporte', confidence: 0.95 })).toBe(false);
+    expect(mudouDeAssunto({ ...novo, interrompe: [] }, 'vendas', { intentName: 'suporte', confidence: 0.95 })).toBe(false);
+  });
 });
 
 describe('resolveTurnAgent — fatos do contato para o classificador', () => {
@@ -454,6 +605,157 @@ describe('resolveTurnAgent — fatos do contato para o classificador', () => {
   });
 });
 
+describe('resolveTurnAgent — conversa recente e assunto atual para o classificador', () => {
+  const MSGS = [
+    { direction: 'inbound' as const, texto: 'quero marcar consulta' },
+    { direction: 'outbound' as const, texto: 'Qual dia fica melhor?' },
+  ];
+  const HISTORICO =
+    'Conversa recente deste atendimento (da mais antiga para a mais nova):\nLead: quero marcar consulta\nAtendimento: Qual dia fica melhor?';
+  const AVISO_FATOS = 'resolve-turn-agent: fatos do contato indisponíveis — classificando só com a mensagem';
+  const AVISO_HISTORICO = 'resolve-turn-agent: conversa recente indisponível, classificando sem ela';
+  // 'suporte' marcado: com a lista vazia o atalho devolveria sticky sem classificar.
+  const modoAgente = () => router({ permanencia: 'agente', interrompe: ['suporte'] });
+  const emAndamento = { ...baseInput, signal: 'Quarta', stickyAgentId: 'agent-vendas', stickyIntent: 'vendas' };
+
+  function montar(r: LoadedRouter, over: { historicoRecente?: ReturnType<typeof vi.fn>; buildFatosDoContato?: ReturnType<typeof vi.fn> } = {}) {
+    const classifyIntent = vi.fn().mockResolvedValue({ intentName: null, confidence: 0.9 });
+    const historicoRecente = over.historicoRecente ?? vi.fn().mockResolvedValue(MSGS);
+    const buildFatosDoContato = over.buildFatosDoContato ?? vi.fn().mockResolvedValue(FATOS);
+    const warn = vi.fn();
+    return {
+      classifyIntent, historicoRecente, buildFatosDoContato, warn,
+      deps: makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(r),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        agenteDaCampanha: vi.fn().mockResolvedValue(null),
+        classifyIntent, historicoRecente, buildFatosDoContato, warn,
+      }),
+    };
+  }
+
+  afterEach(() => vi.useRealTimers());
+
+  it("modo 'roteador': não lê a conversa e o classificador recebe exatamente o de antes", async () => {
+    const m = montar(router());
+    await resolveTurnAgent({} as never, {} as never, emAndamento, m.deps);
+    expect(m.historicoRecente).not.toHaveBeenCalled();
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada).not.toHaveProperty('historico');
+    expect(entrada).not.toHaveProperty('assuntoAtual');
+    expect(Object.keys(entrada).sort()).toEqual(['fatos', 'jobId', 'leadId', 'router', 'signal', 'tenantId']);
+    expect(entrada.fatos).toBe(FATOS);
+    expect(m.warn).not.toHaveBeenCalled();
+  });
+
+  it("modo 'agente': lê a conversa desta organização e entrega histórico, fatos e assunto atual", async () => {
+    const db = { marca: 'db' };
+    const m = montar(modoAgente());
+    await resolveTurnAgent(db as never, {} as never, emAndamento, m.deps);
+    expect(m.historicoRecente).toHaveBeenCalledTimes(1);
+    expect(m.historicoRecente).toHaveBeenCalledWith(db, 'org-1', 'conv-1');
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada.historico).toBe(HISTORICO);
+    expect(entrada.assuntoAtual).toBe('vendas');
+    expect(entrada.fatos).toBe(FATOS);
+    expect(m.warn).not.toHaveBeenCalled();
+  });
+
+  it("modo 'agente', sem agente atual membro: assunto atual nulo; conversa vazia vira histórico nulo", async () => {
+    const m = montar(modoAgente(), { historicoRecente: vi.fn().mockResolvedValue([]) });
+    await resolveTurnAgent({} as never, {} as never,
+      { ...baseInput, signal: 'oi', stickyAgentId: 'agente-que-saiu-do-roteador', stickyIntent: 'antigo' }, m.deps);
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada.assuntoAtual).toBeNull();
+    expect(entrada.historico).toBeNull();
+    expect(m.warn).not.toHaveBeenCalled();
+  });
+
+  it("modo 'agente': histórico falha e fatos resolve → fatos chegam, histórico nulo, com aviso", async () => {
+    const m = montar(modoAgente(), { historicoRecente: vi.fn().mockRejectedValue(new Error('messages fora do ar')) });
+    const out = await resolveTurnAgent({} as never, {} as never, emAndamento, m.deps);
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada.fatos).toBe(FATOS);
+    expect(entrada.historico).toBeNull();
+    expect(entrada.assuntoAtual).toBe('vendas');
+    expect(m.warn).toHaveBeenCalledTimes(1);
+    expect(m.warn).toHaveBeenCalledWith(AVISO_HISTORICO, { routerId: 'router-1', error: 'messages fora do ar' });
+    // Não caiu no catch de fora.
+    expect(out.outcome).toBe('sticky');
+    expect(out.routerId).toBe('router-1');
+  });
+
+  it("modo 'agente': fatos falham e histórico resolve → histórico chega, fatos nulos, com aviso", async () => {
+    const m = montar(modoAgente(), { buildFatosDoContato: vi.fn().mockRejectedValue(new Error('agenda fora do ar')) });
+    await resolveTurnAgent({} as never, {} as never, emAndamento, m.deps);
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada.fatos).toBeNull();
+    expect(entrada.historico).toBe(HISTORICO);
+    expect(m.warn).toHaveBeenCalledTimes(1);
+    expect(m.warn).toHaveBeenCalledWith(AVISO_FATOS, { routerId: 'router-1', error: 'agenda fora do ar' });
+  });
+
+  it("modo 'agente': as duas leituras presas → os dois nulos, um aviso para cada, e o turno segue", async () => {
+    vi.useFakeTimers();
+    const m = montar(modoAgente(), {
+      historicoRecente: vi.fn(() => new Promise(() => {})),
+      buildFatosDoContato: vi.fn(() => new Promise(() => {})),
+    });
+    const pendente = resolveTurnAgent({} as never, {} as never, emAndamento, m.deps);
+    await vi.advanceTimersByTimeAsync(499);
+    expect(m.classifyIntent).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    const out = await pendente;
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada.fatos).toBeNull();
+    expect(entrada.historico).toBeNull();
+    expect(entrada.assuntoAtual).toBe('vendas');
+    expect(m.warn).toHaveBeenCalledTimes(2);
+    expect(m.warn).toHaveBeenCalledWith(AVISO_FATOS, { routerId: 'router-1', error: 'timeout' });
+    expect(m.warn).toHaveBeenCalledWith(AVISO_HISTORICO, { routerId: 'router-1', error: 'timeout' });
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it("modo 'agente': fatos em 5 ms e conversa presa → os fatos chegam, e o único aviso é o da conversa", async () => {
+    vi.useFakeTimers();
+    const m = montar(modoAgente(), {
+      historicoRecente: vi.fn(() => new Promise(() => {})),
+      buildFatosDoContato: vi.fn(() => new Promise((resolve) => setTimeout(() => resolve(FATOS), 5))),
+    });
+    const pendente = resolveTurnAgent({} as never, {} as never, emAndamento, m.deps);
+    await vi.advanceTimersByTimeAsync(499);
+    expect(m.classifyIntent).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await pendente;
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada.fatos).toBe(FATOS);
+    expect(entrada.historico).toBeNull();
+    expect(m.warn).toHaveBeenCalledTimes(1);
+    expect(m.warn).toHaveBeenCalledWith(AVISO_HISTORICO, { routerId: 'router-1', error: 'timeout' });
+  });
+
+  it("modo 'agente': conversa pronta e fatos presos → a conversa chega, e o único aviso é o dos fatos", async () => {
+    vi.useFakeTimers();
+    const m = montar(modoAgente(), { buildFatosDoContato: vi.fn(() => new Promise(() => {})) });
+    const pendente = resolveTurnAgent({} as never, {} as never, emAndamento, m.deps);
+    await vi.advanceTimersByTimeAsync(500);
+    await pendente;
+    const entrada = m.classifyIntent.mock.calls[0]![2];
+    expect(entrada.fatos).toBeNull();
+    expect(entrada.historico).toBe(HISTORICO);
+    expect(m.warn).toHaveBeenCalledTimes(1);
+    expect(m.warn).toHaveBeenCalledWith(AVISO_FATOS, { routerId: 'router-1', error: 'timeout' });
+  });
+
+  it("modo 'agente', sem mensagem (follow-up): não lê a conversa", async () => {
+    const m = montar(modoAgente());
+    await resolveTurnAgent({} as never, {} as never, { ...emAndamento, signal: null }, m.deps);
+    expect(m.historicoRecente).not.toHaveBeenCalled();
+    expect(m.classifyIntent).not.toHaveBeenCalled();
+  });
+});
+
 describe('resolveConversationTurn — áudio transcrito chega ao classificador', () => {
   type SignalRowMock = {
     body: string | null;
@@ -504,5 +806,95 @@ describe('resolveConversationTurn — áudio transcrito chega ao classificador',
     const { classifyIntent, deps: d } = deps();
     await resolveConversationTurn(db as never, {} as never, { ...baseInput, inbound: true }, d);
     expect(classifyIntent.mock.calls[0]![2].signal).toBe('Quero marcar uma consulta');
+  });
+});
+
+// ─── Modo `permanencia: 'agente'`: a permanência vence com o tempo ───
+describe("resolveTurnAgent: no modo 'agente' a permanência expira", () => {
+  const AGORA = new Date('2026-10-12T15:00:00Z');
+  const haHoras = (h: number) => new Date(AGORA.getTime() - h * 3_600_000);
+  const emAndamento = { ...baseInput, signal: 'estou com dor depois do procedimento', stickyAgentId: 'agent-vendas', stickyIntent: 'vendas' };
+
+  async function rodar(r: LoadedRouter, stickySetAt: Date | null, over: { signal?: string | null; verdict?: unknown } = {}) {
+    const classifyIntent = vi.fn().mockResolvedValue(over.verdict === undefined ? { intentName: 'suporte', confidence: 0.9 } : over.verdict);
+    const out = await resolveTurnAgent({} as never, {} as never,
+      { ...emAndamento, ...(over.signal !== undefined ? { signal: over.signal } : {}), stickySetAt },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(r),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        agenteDaCampanha: vi.fn().mockResolvedValue(null),
+        classifyIntent,
+        agora: () => AGORA,
+      }));
+    return { out, classifyIntent };
+  }
+  // `interrompe` vazio: dentro do prazo o atalho nem chama o classificador.
+  const modoAgente = (over: Partial<LoadedRouter> = {}) => router({ permanencia: 'agente', interrompe: [], ...over });
+
+  it('dentro do prazo (23h): a conversa fica com quem está atendendo, sem classificar', async () => {
+    const { out, classifyIntent } = await rodar(modoAgente(), haHoras(23));
+    expect(classifyIntent).not.toHaveBeenCalled();
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it('vencida (25h): classifica do zero, como conversa nova, e o assunto atual não vai ao classificador', async () => {
+    const { out, classifyIntent } = await rodar(modoAgente(), haHoras(25));
+    expect(classifyIntent).toHaveBeenCalledTimes(1);
+    expect(classifyIntent.mock.calls[0]![2].assuntoAtual).toBeNull();
+    // 'suporte' não está em `interrompe`: só troca porque não há mais agente atual.
+    expect(out.outcome).toBe('classified');
+    expect(out.config?.agentId).toBe('agent-suporte');
+    expect(out.intentName).toBe('suporte');
+  });
+
+  it('vencida e sem assunto que bata: cai no fallback, como conversa nova', async () => {
+    const { out } = await rodar(modoAgente({ fallbackAgentId: 'agent-fallback' }), haHoras(25), { verdict: { intentName: null, confidence: 0.2 } });
+    expect(out.outcome).toBe('fallback');
+    expect(out.config?.agentId).toBe('agent-fallback');
+  });
+
+  it('o prazo vem de permanenciaExpiraHoras', async () => {
+    expect((await rodar(modoAgente({ permanenciaExpiraHoras: 2 }), haHoras(3))).out.outcome).toBe('classified');
+    expect((await rodar(modoAgente({ permanenciaExpiraHoras: 48 }), haHoras(25))).out.outcome).toBe('sticky');
+  });
+
+  it('sem data gravada não vence: não há o que medir', async () => {
+    expect((await rodar(modoAgente(), null)).out.outcome).toBe('sticky');
+  });
+
+  it('follow-up (sem mensagem para classificar) continua com o agente da conversa, mesmo vencida', async () => {
+    const { out, classifyIntent } = await rodar(modoAgente({ fallbackAgentId: 'agent-fallback' }), haHoras(72), { signal: null });
+    expect(classifyIntent).not.toHaveBeenCalled();
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it("modo 'roteador': nada muda, por mais velha que seja a data", async () => {
+    // Mesmo assunto de quem atende: no modo de sempre isso é permanência.
+    const { out } = await rodar(router(), haHoras(24 * 30), { verdict: { intentName: 'vendas', confidence: 0.9 } });
+    expect(out.outcome).toBe('sticky');
+    expect(out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it('resolveConversationTurn lê active_agent_set_at da conversa', async () => {
+    const db = {
+      query: vi.fn(async (sql: string) =>
+        sql.includes('from conversations')
+          ? { rows: [{ active_ai_agent_id: 'agent-vendas', active_intent: 'vendas', active_agent_set_at: haHoras(25) }] }
+          : { rows: [{ body: 'estou com dor', type: 'text', media_url: null, media_storage_path: null, media_derived_text: null }] }),
+    };
+    const classifyIntent = vi.fn().mockResolvedValue({ intentName: 'suporte', confidence: 0.9 });
+    const out = await resolveConversationTurn(db as never, {} as never, { ...baseInput, inbound: true },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(modoAgente()),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        agenteDaCampanha: vi.fn().mockResolvedValue(null),
+        classifyIntent,
+        agora: () => AGORA,
+      }));
+    expect(db.query.mock.calls[0]![0]).toContain('active_agent_set_at');
+    expect(out.outcome).toBe('classified');
+    expect(out.config?.agentId).toBe('agent-suporte');
   });
 });

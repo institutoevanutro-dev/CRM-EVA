@@ -10,6 +10,26 @@
  *      classifica MESMO ASSIM (barato, é o que detecta troca de assunto) —
  *      só troca se a intenção vier DIFERENTE da sticky E confiança >= min;
  *      senão mantém o agente sticky.
+ *      2b. roteador com `permanencia: 'agente'` (`ai_routers.config`): além
+ *      disso, só troca se a intenção nova estiver em `interrompe`. Fora dessa
+ *      lista a conversa fica com quem está atendendo, por mais confiante que
+ *      o classificador esteja: uma resposta curta ("Quarta") não tem assunto
+ *      próprio, e trocar de agente por causa dela é perder o fio. A regra é
+ *      `mudouDeAssunto`; sem agente atual (regra 3) nada muda.
+ *      Nesse modo, e só nele, o classificador recebe também a conversa
+ *      recente do atendimento e o nome do assunto atual.
+ *      Atalho: se nenhum assunto de `interrompe` é membro do roteador e
+ *      diferente do assunto atual, nada que o classificador diga troca o
+ *      agente. O turno devolve 'sticky' sem ler fatos nem conversa e sem
+ *      chamar o modelo.
+ *      2c. ainda no modo `'agente'`, a permanência VENCE: se o último turno
+ *      atendido (`conversations.active_agent_set_at`) é mais velho que
+ *      `permanenciaExpiraHoras` (padrão 24), a conversa é tratada como sem
+ *      agente atual e cai na regra 3. Sem isso, quem marcou consulta em março
+ *      e escreve "estou com dor" em abril caía no agente de agenda sem o
+ *      classificador ser chamado. Só com mensagem para classificar: o
+ *      follow-up (regra 6) continua com o agente da conversa. No modo
+ *      `'roteador'` não existe prazo: lá o classificador roda a cada mensagem.
  *   3. sem sticky: classifica; intenção não-nula + confiança >= min ⇒ agente
  *      do membro.
  *   4. classificador falhou (null) COM sticky elegível ⇒ mantém o sticky
@@ -61,14 +81,15 @@ import type pg from 'pg';
 import type { Logger } from '../obs/logger';
 import type { LlmEdgeConfig } from '../edge/llm/run-model-call';
 import { agenteDaCampanhaDaConversa } from './agente-da-campanha';
-import { loadActiveRouter } from './router-config';
+import { loadActiveRouter, type LoadedRouter } from './router-config';
 import {
   loadPublishedAgentConfig,
   loadPublishedAgentConfigById,
   type PublishedAgentConfig,
 } from './agent-config';
-import { classifyIntent } from './intent-classifier';
+import { classifyIntent, type IntentVerdict } from './intent-classifier';
 import { buildFatosDoContato } from './fatos-do-contato';
+import { historicoRecente, renderHistoricoRecente } from './historico-recente';
 import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-context';
 
 /**
@@ -76,6 +97,10 @@ import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-c
  * `agente-da-campanha.ts`: um `await` sem limite no caminho quente seguraria o
  * turno inteiro por causa de um enfeite de roteamento. O teto mora aqui e não em
  * `buildFatosDoContato`, que a tela de teste do roteador pode esperar.
+ *
+ * No modo `permanencia: 'agente'` a conversa recente é lida JUNTO, contra o
+ * mesmo relógio: são 500 ms no total, e cada leitura é medida sozinha. A que
+ * voltou a tempo vale, mesmo com a vizinha presa.
  */
 const TETO_DOS_FATOS_MS = 500;
 
@@ -94,6 +119,13 @@ export interface TurnAgentResolution {
     | 'classifier_failed'
     /** A conversa nasceu de uma campanha que declarou agente (migration 0267). */
     | 'campanha';
+  /**
+   * Todos os membros do roteador e o modo dele, sempre que a decisão veio de um
+   * roteador (`routerId !== null`). É o que o turno precisa para oferecer
+   * `transfer_to_subject` (`passagem-de-assunto.ts`) sem reler o roteador.
+   */
+  assuntos?: Array<{ intentName: string; description: string; agentId: string }>;
+  permanencia?: 'roteador' | 'agente';
 }
 
 export interface ResolveTurnAgentDeps {
@@ -105,8 +137,25 @@ export interface ResolveTurnAgentDeps {
   loadPublishedAgentConfig?: typeof loadPublishedAgentConfig;
   classifyIntent?: typeof classifyIntent;
   buildFatosDoContato?: typeof buildFatosDoContato;
+  historicoRecente?: typeof historicoRecente;
   /** Relógio injetável: é o que separa atendimento anterior de compromisso futuro. */
   agora?: () => Date;
+}
+
+/** Regra única de troca com conversa em andamento. A rota de teste usa a mesma. */
+export function mudouDeAssunto(
+  router: Pick<LoadedRouter, 'permanencia' | 'interrompe' | 'minConfidence'>,
+  assuntoAtual: string | null,
+  verdict: IntentVerdict,
+): boolean {
+  return (
+    verdict.intentName !== null &&
+    verdict.intentName !== assuntoAtual &&
+    verdict.confidence >= router.minConfidence &&
+    // `!== 'agente'` e não `=== 'roteador'`: só o valor exato liga o modo novo,
+    // a mesma leitura de `router-config.ts`.
+    (router.permanencia !== 'agente' || router.interrompe.includes(verdict.intentName))
+  );
 }
 
 export async function resolveTurnAgent(
@@ -121,6 +170,8 @@ export async function resolveTurnAgent(
     signal: string | null;
     stickyAgentId: string | null;
     stickyIntent: string | null;
+    /** `conversations.active_agent_set_at`: o último turno atendido. Ver a regra 2c. */
+    stickySetAt?: Date | null;
   },
   deps: ResolveTurnAgentDeps,
 ): Promise<TurnAgentResolution> {
@@ -129,6 +180,7 @@ export async function resolveTurnAgent(
   const _loadAgentBySession = deps.loadPublishedAgentConfig ?? loadPublishedAgentConfig;
   const _classifyIntent = deps.classifyIntent ?? classifyIntent;
   const _buildFatos = deps.buildFatosDoContato ?? buildFatosDoContato;
+  const _historicoRecente = deps.historicoRecente ?? historicoRecente;
 
   try {
     // ─── Degrau 0: a campanha que criou esta conversa ───
@@ -164,6 +216,16 @@ export async function resolveTurnAgent(
       };
     }
 
+    // Vai em toda resolução que sai DESTE roteador (`TurnAgentResolution.assuntos`).
+    const doRoteador = {
+      assuntos: router.members.map((m) => ({
+        intentName: m.intentName,
+        description: m.intentDescription,
+        agentId: m.agentId,
+      })),
+      permanencia: router.permanencia,
+    };
+
     // fallback do router ou genérico — usado pelas regras 4, 5, 6 e 7.
     const resolveFallback = async (
       outcome: 'no_match' | 'classifier_failed',
@@ -180,7 +242,7 @@ export async function resolveTurnAgent(
             outcome,
           });
         }
-        return { config: daSessao, routerId: router.id, intentName: null, confidence, outcome };
+        return { config: daSessao, routerId: router.id, intentName: null, confidence, outcome, ...doRoteador };
       }
       const config = await _loadAgentById(db, input.tenantId, router.fallbackAgentId);
       if (config === null) {
@@ -199,6 +261,7 @@ export async function resolveTurnAgent(
         intentName: null,
         confidence,
         outcome: outcome === 'classifier_failed' ? 'classifier_failed' : config === null ? 'no_match' : 'fallback',
+        ...doRoteador,
       };
     };
 
@@ -221,13 +284,20 @@ export async function resolveTurnAgent(
         });
         return resolveFallback('no_match', confidence);
       }
-      return { config, routerId: router.id, intentName, confidence, outcome };
+      return { config, routerId: router.id, intentName, confidence, outcome, ...doRoteador };
     };
 
     // sticky elegível: config liga sticky E o agente ainda é membro do router
     // (membro removido ⇒ trata como sem sticky, decisão segura — ver report).
+    // Regra 2c. Sem data gravada não há o que medir, e a permanência vale.
+    const venceu =
+      router.permanencia === 'agente' &&
+      input.signal !== null &&
+      input.stickySetAt != null &&
+      (deps.agora ?? (() => new Date()))().getTime() - new Date(input.stickySetAt).getTime() >
+        router.permanenciaExpiraHoras * 3_600_000;
     const stickyMember =
-      router.sticky && input.stickyAgentId !== null
+      router.sticky && input.stickyAgentId !== null && !venceu
         ? router.members.find((m) => m.agentId === input.stickyAgentId)
         : undefined;
 
@@ -239,29 +309,62 @@ export async function resolveTurnAgent(
       return resolveFallback('no_match', null);
     }
 
+    const comContexto = router.permanencia === 'agente';
+    // O assunto de quem está atendendo. Conversa com agente e sem assunto
+    // gravado: vale o assunto do próprio membro, senão o classificador repetir
+    // esse assunto contaria como troca.
+    const assuntoAtual = stickyMember !== undefined ? (input.stickyIntent ?? stickyMember.intentName) : null;
+
+    // Regra 2b, atalho: sem assunto que possa interromper, o veredito não muda
+    // nada. Nem lê nem classifica.
+    if (
+      comContexto &&
+      stickyMember !== undefined &&
+      !router.interrompe.some((i) => i !== assuntoAtual && router.members.some((m) => m.intentName === i))
+    ) {
+      return loadMatchedOrFallback('sticky', stickyMember.agentId, input.stickyIntent, null);
+    }
+
     // Fatos do CRM para o classificador (agenda do contato). No motor, `leadId` É o
     // contact_id. Falha aqui nunca derruba o turno: classifica só com a mensagem.
+    //
+    // Regra 2b: só o roteador com `permanencia: 'agente'` lê também a conversa
+    // recente. As duas leituras correm juntas e cada uma falha sozinha.
     const avisoDosFatos = 'resolve-turn-agent: fatos do contato indisponíveis — classificando só com a mensagem';
-    let fatos: string | null = null;
-    try {
-      // `Promise.race`, como no degrau 0: o teto vale também com o pool esgotado.
-      fatos = await Promise.race([
-        _buildFatos(db, input.tenantId, input.leadId, (deps.agora ?? (() => new Date()))()),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), TETO_DOS_FATOS_MS)),
-      ]);
-      if (fatos === null) deps.log.warn(avisoDosFatos, { routerId: router.id, error: 'timeout' });
-    } catch (err) {
-      deps.log.warn(avisoDosFatos, {
-        routerId: router.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+    const avisoDoHistorico = 'resolve-turn-agent: conversa recente indisponível, classificando sem ela';
+    // `Promise.race`, como no degrau 0: o teto vale também com o pool esgotado.
+    // UM relógio, e cada leitura corre contra ele sozinha: a rápida não é
+    // descartada porque a outra travou, e cada aviso diz qual ficou de fora.
+    const ESTOUROU = Symbol('teto');
+    const teto = new Promise<typeof ESTOUROU>((resolve) => setTimeout(() => resolve(ESTOUROU), TETO_DOS_FATOS_MS));
+    // `async () =>`: um throw síncrono vira rejeição da própria leitura.
+    const ler = async (aviso: string, leitura: () => Promise<string | null>): Promise<string | null> => {
+      try {
+        const lido = await Promise.race([(async () => leitura())(), teto]);
+        if (lido !== ESTOUROU) return lido;
+        deps.log.warn(aviso, { routerId: router.id, error: 'timeout' });
+      } catch (err) {
+        deps.log.warn(aviso, { routerId: router.id, error: err instanceof Error ? err.message : String(err) });
+      }
+      return null;
+    };
+    const [fatos, historico] = await Promise.all([
+      ler(avisoDosFatos, () => _buildFatos(db, input.tenantId, input.leadId, (deps.agora ?? (() => new Date()))())),
+      comContexto
+        ? ler(avisoDoHistorico, async () =>
+            renderHistoricoRecente(await _historicoRecente(db, input.tenantId, input.conversationId)) || null)
+        : null,
+    ]);
 
     // classifica — inclusive com sticky ativo, pra detectar troca de assunto (regra 2).
     const verdict = await _classifyIntent(
       db,
       llmCfg,
-      { tenantId: input.tenantId, leadId: input.leadId, jobId: input.jobId, router, signal: input.signal, fatos },
+      {
+        tenantId: input.tenantId, leadId: input.leadId, jobId: input.jobId, router, signal: input.signal, fatos,
+        // Fora do modo novo as chaves nem existem: a entrada é a de antes.
+        ...(comContexto ? { historico, assuntoAtual } : {}),
+      },
       { log: deps.log },
     );
 
@@ -275,9 +378,9 @@ export async function resolveTurnAgent(
     }
 
     if (stickyMember !== undefined) {
-      const changedSubject =
-        verdict.intentName !== null && verdict.intentName !== input.stickyIntent && verdict.confidence >= router.minConfidence;
-      if (!changedSubject) {
+      // No modo de sempre o assunto é o gravado na conversa, nulo inclusive: é a
+      // comparação de antes, intocada.
+      if (!mudouDeAssunto(router, comContexto ? assuntoAtual : input.stickyIntent, verdict)) {
         return loadMatchedOrFallback('sticky', stickyMember.agentId, input.stickyIntent, verdict.confidence);
       }
       const newMember = router.members.find((m) => m.intentName === verdict.intentName);
@@ -323,8 +426,9 @@ export async function resolveConversationTurn(
   const { rows } = await db.query<{
     active_ai_agent_id: string | null;
     active_intent: string | null;
+    active_agent_set_at: Date | null;
   }>(
-    'select active_ai_agent_id,active_intent from conversations where organization_id=$1 and id=$2',
+    'select active_ai_agent_id,active_intent,active_agent_set_at from conversations where organization_id=$1 and id=$2',
     [input.tenantId, input.conversationId],
   );
   const signalRow = input.inbound
@@ -347,5 +451,6 @@ export async function resolveConversationTurn(
     signal,
     stickyAgentId: rows[0]?.active_ai_agent_id ?? null,
     stickyIntent: rows[0]?.active_intent ?? null,
+    stickySetAt: rows[0]?.active_agent_set_at ?? null,
   }, deps);
 }

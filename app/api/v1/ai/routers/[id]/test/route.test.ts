@@ -120,6 +120,9 @@ const ROTEADOR: LoadedRouter = {
   classifierProvider: null,
   sticky: true,
   minConfidence: 0.6,
+  permanencia: "roteador",
+  interrompe: [],
+  permanenciaExpiraHoras: 24,
   fallbackAgentId: null,
   members: [{ agentId: AGENT_ID, intentName: "vendas", intentDescription: "Quer comprar", examples: [] }],
 };
@@ -177,6 +180,9 @@ describe("POST /api/v1/ai/routers/:id/test", () => {
       agent_id: AGENT_ID,
       agent_name: "Agente Vendas",
       fatos: null,
+      mode: "roteador",
+      kept_current: false,
+      classified: true,
     });
 
     // classifyIntent chamado com leadId/jobId null (nunca um uuid inventado —
@@ -224,6 +230,9 @@ describe("POST /api/v1/ai/routers/:id/test", () => {
       agent_id: AGENT_ID,
       agent_name: "Agente Fallback",
       fatos: null,
+      mode: "roteador",
+      kept_current: false,
+      classified: true,
     });
   });
 
@@ -384,6 +393,164 @@ describe("POST /api/v1/ai/routers/:id/test", () => {
     const { POST } = await import("./route");
     const res = await POST(req({ message: "" }), ctx());
     expect(res.status).toBe(422);
+  });
+
+  // ─── Conversa simulada e assunto atual ─────────────────────────────────────
+  //
+  // A rota tem de dar, para a mesma entrada, a decisão de `resolveTurnAgent`.
+  describe("conversa simulada (history) e assunto atual (current_intent)", () => {
+    const AGENTE_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const AGENTE_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const DOIS: LoadedRouter = {
+      ...ROTEADOR,
+      minConfidence: 0.8,
+      members: [
+        { agentId: AGENTE_A, intentName: "a", intentDescription: "Assunto A", examples: [] },
+        { agentId: AGENTE_B, intentName: "b", intentDescription: "Assunto B", examples: [] },
+      ],
+    };
+    type Dados = {
+      intent_name: string | null;
+      confidence: number;
+      agent_id: string | null;
+      mode: string;
+      kept_current: boolean;
+      classified: boolean;
+    };
+
+    function cenario(roteador: LoadedRouter, verdict: { intentName: string | null; confidence: number } | null) {
+      mockAuthzOk();
+      const admin = makeAdminStub();
+      vi.mocked(createAdminClient).mockReturnValue(admin as never);
+      vi.mocked(loadRouterById).mockResolvedValue(roteador);
+      vi.mocked(classifyIntent).mockResolvedValue(verdict);
+      return admin;
+    }
+
+    async function chamar(body: unknown) {
+      const { POST } = await import("./route");
+      const res = await POST(req(body), ctx());
+      return { res, data: ((await res.json()) as { data: Dados }).data };
+    }
+
+    it("current_intent que não é membro do roteador → 422, sem classificar", async () => {
+      cenario(DOIS, { intentName: "b", confidence: 0.95 });
+      const { POST } = await import("./route");
+      const res = await POST(req({ message: "oi", current_intent: "nao_existe" }), ctx());
+      expect(res.status).toBe(422);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe("validation_failed");
+      expect(classifyIntent).not.toHaveBeenCalled();
+    });
+
+    it("history com 7 itens → 422", async () => {
+      cenario(DOIS, { intentName: "b", confidence: 0.95 });
+      const { POST } = await import("./route");
+      const history = Array.from({ length: 7 }, () => ({ direction: "inbound", body: "oi" }));
+      const res = await POST(req({ message: "oi", history }), ctx());
+      expect(res.status).toBe(422);
+      expect(classifyIntent).not.toHaveBeenCalled();
+    });
+
+    it("modo 'agente': outro assunto com 0,95 FORA de interrompe → fica com o agente atual", async () => {
+      cenario({ ...DOIS, permanencia: "agente", interrompe: ["c", "a"] }, { intentName: "b", confidence: 0.95 });
+      const { res, data } = await chamar({ message: "Quarta", current_intent: "a" });
+      expect(res.status).toBe(200);
+      // interrompe = ["c", "a"]: nenhum é membro E diferente do atual, então é o
+      // atalho de resolve-turn-agent, e o classificador nem roda.
+      expect(classifyIntent).not.toHaveBeenCalled();
+      expect(data).toMatchObject({ mode: "agente", kept_current: true, classified: false, agent_id: AGENTE_A, intent_name: null });
+    });
+
+    it("modo 'agente': há assunto que interrompe, mas o veredito é outro → fica, com o classificador chamado", async () => {
+      const TRES: LoadedRouter = {
+        ...DOIS,
+        permanencia: "agente",
+        interrompe: ["urgente"],
+        members: [
+          ...DOIS.members,
+          { agentId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", intentName: "urgente", intentDescription: "Dor", examples: [] },
+        ],
+      };
+      cenario(TRES, { intentName: "b", confidence: 0.95 });
+      const { data } = await chamar({ message: "Quarta", current_intent: "a" });
+      expect(classifyIntent).toHaveBeenCalledTimes(1);
+      expect(data).toMatchObject({ kept_current: true, classified: true, agent_id: AGENTE_A, intent_name: "b", confidence: 0.95 });
+    });
+
+    it("modo 'agente': assunto de interrompe com 0,95 → troca para o agente dele", async () => {
+      cenario({ ...DOIS, permanencia: "agente", interrompe: ["b"] }, { intentName: "b", confidence: 0.95 });
+      const { data } = await chamar({ message: "está doendo", current_intent: "a" });
+      expect(data).toMatchObject({ mode: "agente", kept_current: false, classified: true, agent_id: AGENTE_B });
+    });
+
+    it("modo 'agente': assunto de interrompe abaixo do mínimo → fica", async () => {
+      cenario({ ...DOIS, permanencia: "agente", interrompe: ["b"] }, { intentName: "b", confidence: 0.5 });
+      const { data } = await chamar({ message: "hum", current_intent: "a" });
+      expect(data).toMatchObject({ kept_current: true, agent_id: AGENTE_A });
+    });
+
+    it("modo 'agente': classificador falha com assunto atual → fica (regra 4)", async () => {
+      cenario({ ...DOIS, permanencia: "agente", interrompe: ["b"] }, null);
+      const { data } = await chamar({ message: "hum", current_intent: "a" });
+      expect(data).toMatchObject({ kept_current: true, classified: true, agent_id: AGENTE_A, intent_name: null, confidence: 0 });
+    });
+
+    it("modo 'roteador' com current_intent: regra antiga, troca com 0,95", async () => {
+      cenario(DOIS, { intentName: "b", confidence: 0.95 });
+      const { data } = await chamar({ message: "Quarta", current_intent: "a" });
+      expect(data).toMatchObject({ mode: "roteador", kept_current: false, classified: true, agent_id: AGENTE_B });
+    });
+
+    it("modo 'roteador' com sticky desligado: current_intent não segura nada, nem com confiança baixa", async () => {
+      cenario({ ...DOIS, sticky: false, fallbackAgentId: AGENT_ID }, { intentName: "b", confidence: 0.5 });
+      const { data } = await chamar({ message: "hum", current_intent: "a" });
+      expect(data).toMatchObject({ kept_current: false, agent_id: AGENT_ID });
+    });
+
+    it("modo 'agente': o history vai ao classificador pelo render do turno real, cortado e achatado", async () => {
+      cenario({ ...DOIS, permanencia: "agente", interrompe: ["b"] }, { intentName: null, confidence: 0.9 });
+      await chamar({
+        message: "Quarta",
+        current_intent: "a",
+        history: [
+          { direction: "inbound", body: "Quero marcar\numa   consulta" },
+          { direction: "outbound", body: "x".repeat(400) },
+          { direction: "inbound", body: "   " },
+        ],
+      });
+      const [, , entrada] = vi.mocked(classifyIntent).mock.calls[0]!;
+      expect(entrada.historico).toBe(
+        [
+          "Conversa recente deste atendimento (da mais antiga para a mais nova):",
+          "Lead: Quero marcar uma consulta",
+          `Atendimento: ${"x".repeat(300)}`,
+        ].join("\n"),
+      );
+      expect(entrada.assuntoAtual).toBe("a");
+    });
+
+    it("modo 'agente' sem history nem assunto: historico null e assunto null, decide como hoje", async () => {
+      cenario({ ...DOIS, permanencia: "agente", interrompe: [] }, { intentName: "b", confidence: 0.95 });
+      const { data } = await chamar({ message: "oi" });
+      const [, , entrada] = vi.mocked(classifyIntent).mock.calls[0]!;
+      expect(entrada.historico).toBeNull();
+      expect(entrada.assuntoAtual).toBeNull();
+      expect(data).toMatchObject({ kept_current: false, classified: true, agent_id: AGENTE_B });
+    });
+
+    it("modo 'roteador': history e assunto NÃO chegam ao classificador (a entrada é a de antes)", async () => {
+      cenario(DOIS, { intentName: "b", confidence: 0.95 });
+      await chamar({ message: "oi", current_intent: "a", history: [{ direction: "inbound", body: "antes" }] });
+      const [, , entrada] = vi.mocked(classifyIntent).mock.calls[0]!;
+      expect("historico" in entrada).toBe(false);
+      expect("assuntoAtual" in entrada).toBe(false);
+    });
+
+    it("nada é gravado: só ai_agents (nome) é lido pelo admin client", async () => {
+      const admin = cenario({ ...DOIS, permanencia: "agente", interrompe: ["b"] }, { intentName: "b", confidence: 0.95 });
+      await chamar({ message: "dor", current_intent: "a", history: [{ direction: "outbound", body: "Qual dia?" }] });
+      expect(admin.tabelas).toEqual(["ai_agents"]);
+    });
   });
 });
 

@@ -279,7 +279,10 @@ O passo 6 é o último de propósito: ele só é seguro depois que o 4 estiver c
 - **Não** renomear nenhuma tool — `name` é contrato de wire, agentes publicados em VPS de clientes
   o referenciam.
 - **Não** confundir os dois eixos: o Intent Router escolhe **qual unidade** atende o assunto; os
-  papéis são a divisão **dentro** de uma unidade. Os dois convivem.
+  papéis são a divisão **dentro** de uma unidade. Os dois convivem. (Desde 2026-10-12, num roteador
+  com `permanencia: 'agente'`, a unidade que está atendendo também pode passar a conversa a outra
+  unidade do mesmo roteador, pela ferramenta `transfer_to_subject`. Continua sendo o eixo do
+  roteador, não um papel: ver `lib/agent-engine/agent/passagem-de-assunto.ts`.)
 - **Não** resolver aqui os dois achados adjacentes registrados na medição: o inbound que não ganhou
   turno próprio (5 mensagens, 4 jobs, nenhum `deduped`) e a 2ª camada do fail-safe de vazamento,
   não exercitada. Ficam rastreados, fora do escopo.

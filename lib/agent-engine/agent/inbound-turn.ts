@@ -130,12 +130,27 @@ import {
 } from './entrega-de-capacidade';
 import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memory';
 import { blocoDaBiblioteca, carregarMidiasProntas, type MidiaDisponivel } from '@/lib/midias/disponiveis';
-import { matchesHandoffKeyword, type PublishedAgentConfig } from './agent-config';
+import {
+  loadPublishedAgentConfigById,
+  matchesHandoffKeyword,
+  type PublishedAgentConfig,
+} from './agent-config';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
 import { avisarJanelaFechada, resolverAvisoDeJanela } from '../pacing/aviso-de-janela';
 import { resolveConversationTurn, type TurnAgentResolution } from './resolve-turn-agent';
+import {
+  MARCA_DA_PASSAGEM_NO_JOB,
+  MARCA_DE_ENVIO_DA_ORIGEM_NO_JOB,
+  atividadeDaPassagem,
+  blocoDaPassagem,
+  gravarPassagem,
+  jobTemEnvioDeTentativaAnterior,
+  marcarEnvioDaOrigem,
+  outrosAssuntosDoTurno,
+  transferToSubjectInputSchema,
+} from './passagem-de-assunto';
 import {
   hasOpenCaseForContact,
   getCaseAwaitingLead,
@@ -409,6 +424,19 @@ export const AGENT_TOOL_DEFS = {
       media_id: z.string().uuid().describe('id do item, copiado da BIBLIOTECA DE MÍDIAS'),
       caption: z.string().max(1024).optional().describe('legenda curta em pt-br, opcional'),
     }),
+  },
+  transfer_to_subject: {
+    description:
+      'Passa esta conversa para o atendente de outro assunto. Use quando o que a pessoa quer agora não é o seu assunto. Depois de chamar, não envie nada: o outro atendente responde esta mesma mensagem.',
+    // Schema LARGO para o SDK (o modelo vê os campos); a validação REAL é a whitelist
+    // .strict() transferToSubjectInputSchema (passagem-de-assunto.ts): campo extra/forjado
+    // vira erro de ENSINO ao modelo, nunca exceção do SDK nem strip silencioso.
+    inputSchema: z
+      .object({
+        subject: z.string().describe('nome do assunto de destino, como aparece na lista de outros assuntos'),
+        reason: z.string().describe('por que passar (curto)'),
+      })
+      .passthrough(),
   },
 } as const;
 
@@ -1652,6 +1680,14 @@ export function inboundsNaoRespondidos(messages: readonly LeadContextMessage[]):
  */
 export interface AgentTurnInput {
   resolvedAgent?: TurnAgentResolution;
+  /**
+   * Marca a REEXECUÇÃO de uma passagem de assunto (`transfer_to_subject`): o
+   * agente de origem passou a conversa sem enviar nada e este turno é o do
+   * destino, no mesmo job. Só `runAgentTurn` preenche. Com ela o turno não
+   * oferece a ferramenta (uma passagem por mensagem) nem grava outra decisão do
+   * roteador (a passagem já gravou).
+   */
+  passagem?: { deAgentId: string; deIntent: string | null };
   /** número (channel_sessions.id do CRM) — chave da serialização anti-ban do envio. */
   channelSessionId: string;
   /** conversa do CRM — destino do send_message. */
@@ -1986,7 +2022,7 @@ export async function runAgentTurn(
     tenant_id: job.organization_id,
     lead_id: leadIdDoJob,
   });
-  await comHandoffSeOrcamentoAcabar(
+  const passagem = await comHandoffSeOrcamentoAcabar(
     {
       pool,
       tenantId: job.organization_id,
@@ -2025,6 +2061,45 @@ export async function runAgentTurn(
     },
     () => executarTurnoDoAgente(deps, job, pool, ctx, input),
   );
+  // PASSAGEM DE ASSUNTO (`transfer_to_subject`): o agente de origem passou a
+  // conversa sem enviar nada, e o de destino responde a MESMA mensagem, aqui.
+  //
+  // Mesmo job de propósito: o `send_ledger` é chaveado por (job, seq), então o
+  // retry deste job encontra as bolhas que o destino já enviou, não as repete e
+  // envia as que faltaram. E o retry não volta para a origem: a conversa já tem
+  // o destino como dono, e o roteador o devolve.
+  //
+  // UMA vez: o núcleo só devolve passagem quando o turno não é reexecução, e o
+  // `input.passagem === undefined` daqui é o cinto do suspensório. A chamada é
+  // recursiva, e não um segundo call site do núcleo, para a reexecução rodar
+  // sob a MESMA escolta do orçamento.
+  if (passagem !== undefined && input.passagem === undefined) {
+    // A anotação do que o turno viu é de ANTES do turno de origem. O destino lê
+    // a conversa de novo, então ela é refeita: mensagem que chegou enquanto a
+    // origem pensava também vai ser respondida por ele.
+    await anotarUltimaInboundVista(pool, {
+      organizationId: job.organization_id,
+      contactId: leadIdDoJob,
+      conversationId: input.conversationId,
+      jobId: job.id,
+    });
+    await runAgentTurn(deps, job, pool, ctx, {
+      ...input,
+      resolvedAgent: passagem.destino,
+      passagem: passagem.de,
+    });
+  }
+}
+
+/** O canal aceitou (ou enfileirou) o envio: é o que o retry do job não repete. */
+const envioAceito = (o: ChannelSendResult): boolean =>
+  o.kind === 'sent' || o.kind === 'already_sent' || o.kind === 'queued';
+
+/** O que o núcleo devolve quando o turno passou a conversa SEM enviar nada. */
+interface PassagemParaReexecutar {
+  /** A resolução do destino, pronta: a reexecução não consulta o roteador. */
+  destino: TurnAgentResolution;
+  de: NonNullable<AgentTurnInput['passagem']>;
 }
 
 /**
@@ -2065,7 +2140,7 @@ async function executarTurnoDoAgente(
   ctx: { workerId: string },
   input: AgentTurnInput,
   preview?: TurnPreview,
-): Promise<void> {
+): Promise<PassagemParaReexecutar | undefined> {
   const liveJob = (): JobRow => {
     if (!job) throw new Error('preview_operational_job_forbidden');
     return job;
@@ -2369,7 +2444,11 @@ async function executarTurnoDoAgente(
 
   // Fase 3: grava a decisão de roteamento e a aderência da conversa ao agente.
   // Fire-and-forget — falha de telemetria nunca derruba a resposta ao lead.
-  if (!preview && routed.routerId !== null) {
+  //
+  // Na reexecução de uma passagem de assunto NÃO grava: `gravarPassagem` já
+  // trocou o dono e deixou a linha do destino. Gravar de novo seria uma segunda
+  // decisão para a mesma mensagem.
+  if (!preview && routed.routerId !== null && input.passagem === undefined) {
     try {
       if (agentConfig !== null) {
         await pool.query(
@@ -2476,6 +2555,19 @@ async function executarTurnoDoAgente(
   const midiasProntas: MidiaDisponivel[] = await carregarMidiasProntas(pool, tenantId, undefined, runLog);
   const blocoMidias = blocoDaBiblioteca(midiasProntas);
   if (blocoMidias) blocosResidentes.push(blocoMidias);
+  // Passagem de assunto: para quais assuntos ESTE turno pode passar a conversa.
+  // Lista vazia (todo turno fora do roteador com `permanencia: 'agente'`, a
+  // reexecução, o retry de quem já passou, follow-up, prévia) é "não existe":
+  // nem o bloco aqui, nem a ferramenta lá embaixo, que leem a mesma lista.
+  const doRoteador: Pick<TurnAgentResolution, 'routerId' | 'assuntos' | 'permanencia'> = routed;
+  const outrosAssuntos = outrosAssuntosDoTurno({
+    previa: preview !== undefined,
+    jobKind: job?.kind ?? null,
+    jaPassou: input.passagem !== undefined || job?.payload[MARCA_DA_PASSAGEM_NO_JOB] === true,
+    routed: doRoteador,
+    agentId: agentConfig?.agentId ?? null,
+  });
+  if (outrosAssuntos.length > 0) blocosResidentes.push(blocoDaPassagem(outrosAssuntos));
   if (preview)
     blocosResidentes.push(
       'MODO PRÉVIA: proponha a resposta com send_message. Operações são propostas separadas; nunca diga que executou uma proposta. Nenhum envio real acontece.',
@@ -2781,6 +2873,15 @@ async function executarTurnoDoAgente(
   // correção do turno que terminou sem falar com o cliente (ver depois da chamada principal).
   let tentativasDeEnvio = 0;
   let passouParaAEquipe = false;
+  // PASSAGEM DE ASSUNTO: preenchida quando `transfer_to_subject` gravou o novo
+  // dono. Para o loop do modelo; no fim, sem nada enviado, volta a `runAgentTurn`,
+  // que reexecuta com o destino. Lida por função pelo mesmo motivo de
+  // `capDeEnvioAtingido`: atribuída numa closure, a comparação direta estreita
+  // o tipo para `null`.
+  let passagemPedida: PassagemParaReexecutar | null = null;
+  const passagemFeita = (): PassagemParaReexecutar | null => passagemPedida;
+  // Reserva síncrona: duas chamadas no mesmo passo rodam em paralelo.
+  let passagemEmCurso = false;
   // F3-11: estágio que o MODELO confirmou via update_lead_state neste turno (a máquina
   // F2-10 é a única porta). Comparado com a sugestão do classificador no fim → divergência.
   let confirmedStage: LeadStage | null = null;
@@ -4184,6 +4285,162 @@ async function executarTurnoDoAgente(
     });
   }
 
+  // Passagem de assunto (`passagem-de-assunto.ts`): só existe quando há para quem
+  // passar. MUTANTE (troca o dono da conversa), fora de READ_ONLY_TOOLS. O destino
+  // sai da lista do ROTEADOR pelo nome; o modelo nunca informa id de agente.
+  const routerDaPassagem = doRoteador.routerId;
+  if (outrosAssuntos.length > 0 && agentConfig !== null && routerDaPassagem !== null) {
+    rawTools.transfer_to_subject = tool({
+      ...AGENT_TOOL_DEFS.transfer_to_subject,
+      execute: async (raw) => {
+        const parsed = transferToSubjectInputSchema.safeParse(raw);
+        if (!parsed.success) {
+          return {
+            ok: false,
+            error: {
+              code: 'invalid_payload',
+              message: 'informe subject (um assunto da lista) e reason (texto curto), nada além.',
+            },
+          };
+        }
+        const destino = outrosAssuntos.find((a) => a.intentName === parsed.data.subject.trim());
+        if (destino === undefined) {
+          return {
+            ok: false,
+            error: {
+              code: 'assunto_invalido',
+              message:
+                'esse assunto não existe ou já é o seu. Assuntos para os quais você pode passar: ' +
+                `${outrosAssuntos.map((a) => a.intentName).join(', ')}.`,
+            },
+          };
+        }
+        if (passagemEmCurso) {
+          return {
+            ok: false,
+            error: {
+              code: 'passagem_ja_feita',
+              message: 'a conversa já foi passada neste turno. Encerre o turno AGORA sem enviar nada.',
+            },
+          };
+        }
+        passagemEmCurso = true;
+        try {
+          // RETRY em que uma tentativa anterior deste job já enviou: passar agora
+          // reexecutaria o destino sobre chaves `(job, seq)` já aceitas, e a
+          // primeira bolha dele seria engolida como `already_sent`. Quem começou
+          // a resposta termina. Uma consulta, só quando a ferramenta é chamada.
+          if (await jobTemEnvioDeTentativaAnterior(pool, { tenantId, jobId: liveJob().id, seq })) {
+            return {
+              ok: false,
+              error: {
+                code: 'ja_respondeu_a_esta_mensagem',
+                message:
+                  'você já começou a responder a esta mensagem numa tentativa anterior. A conversa continua com você: termine de responder à pessoa.',
+              },
+            };
+          }
+          // Destino que não responderia AGORA: sem versão publicada, arquivado,
+          // pausado, fora do horário de funcionamento dele (a reexecução seria
+          // reagendada para a abertura) ou assistido (a resposta viraria rascunho
+          // esperando aprovação). Passar calaria quem está atendendo e deixaria a
+          // pessoa sem resposta. Quem está atendendo continua.
+          const config = await loadPublishedAgentConfigById(pool, tenantId, destino.agentId);
+          if (
+            config === null ||
+            config.pausedAt ||
+            config.operationMode === 'assisted' ||
+            (config.janelaDeAtendimento != null &&
+              msAteAJanelaAbrir(config.janelaDeAtendimento, clock()) !== null)
+          ) {
+            return {
+              ok: false,
+              error: {
+                code: 'destino_indisponivel',
+                message:
+                  'o atendente desse assunto não está disponível agora. A conversa continua com você: responda à pessoa.',
+              },
+            };
+          }
+          await gravarPassagem(pool, {
+            tenantId,
+            conversationId: input.conversationId,
+            routerId: routerDaPassagem,
+            jobId: liveJob().id,
+            destino: { agentId: destino.agentId, intentName: destino.intentName },
+            // Envio aceito ANTES da passagem: a marca vai no mesmo statement. O
+            // envio que termina depois dela é marcado no fim do loop.
+            origemJaEnviou: outcomes.some(envioAceito),
+          });
+          passagemPedida = {
+            destino: {
+              config,
+              routerId: routerDaPassagem,
+              intentName: destino.intentName,
+              confidence: null,
+              outcome: 'reclassified',
+              assuntos: doRoteador.assuntos,
+              permanencia: doRoteador.permanencia,
+            },
+            de: { deAgentId: agentConfig.agentId, deIntent: routed.intentName },
+          };
+          // Só ids e o nome do assunto: o `reason` é texto do modelo sobre a conversa.
+          runLog.info('conversa passada para outro assunto do roteador', {
+            de_agent_id: agentConfig.agentId,
+            para_agent_id: destino.agentId,
+            intent: destino.intentName,
+          });
+          // A passagem na linha do tempo do negócio, pelo mesmo caminho do handoff
+          // (`emitAgentActivityForContact`). Conversa sem negócio aberto: o emissor
+          // registra `agent.activity_unrouted` no event_log e não adivinha o card.
+          // A timeline nunca derruba a passagem que ela descreve.
+          try {
+            const atividade = atividadeDaPassagem({
+              conversationId: input.conversationId,
+              de: { agentId: agentConfig.agentId, agentName: agentConfig.agentName, intentName: routed.intentName },
+              para: { agentId: destino.agentId, agentName: config.agentName, intentName: destino.intentName },
+              motivo: parsed.data.reason,
+            });
+            const roteou = await emitAgentActivityForContact({
+              pool,
+              organizationId: tenantId,
+              contactId: leadId,
+              type: atividade.type,
+              sourceModule: 'passagem-de-assunto',
+              sourceId: input.conversationId,
+              agentId: agentConfig.agentId,
+              reason: atividade.reason,
+              payload: atividade.payload,
+            });
+            if (!roteou.routed) {
+              runLog.warn('passagem de assunto: atividade não roteada para um negócio', { reason: roteou.reason });
+            }
+          } catch (err) {
+            runLog.warn('passagem de assunto: atividade não foi gravada', {
+              error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+            });
+          }
+          return {
+            ok: true,
+            status: 'conversa_passada',
+            message: 'Conversa passada. Encerre o turno AGORA sem enviar nada.',
+          };
+        } catch (err) {
+          noteRunError(err instanceof Error ? err : new Error(String(err)));
+          return {
+            ok: false,
+            error: {
+              code: 'internal_error',
+              message: 'erro interno ao passar a conversa. Encerre o turno agora.',
+            },
+          };
+        } finally {
+          if (passagemFeita() === null) passagemEmCurso = false;
+        }
+      },
+    });
+  }
+
   // A tool de conhecimento só entra quando o agente publicado tem material para
   // consultar. Desde a 0181 isso é a lista de materiais escolhida na tela; o
   // ponteiro legado (`activeKbVersionId`) segue valendo para o clone que ainda
@@ -4571,7 +4828,11 @@ async function executarTurnoDoAgente(
         // before_send volta ao modelo para ele reescrever (o 1º veto ensina).
         ...(preview?.kind === 'assisted'
           ? { pararQuando: () => preview.result.candidates.length > 0 }
-          : {}),
+          : // Passagem de assunto: gravado o novo dono, o loop para no fim do passo.
+            // Só com a ferramenta no turno; sem ela a chave nem existe, como antes.
+            rawTools.transfer_to_subject !== undefined
+            ? { pararQuando: () => passagemFeita() !== null }
+            : {}),
         ...(agentConfig !== null
           ? {
               model: agentConfig.model,
@@ -4584,6 +4845,26 @@ async function executarTurnoDoAgente(
       },
       { registry: deps.registry, log: runLog },
     );
+
+    // A ORIGEM ENVIOU E PASSOU no mesmo turno: a marca que faz o retry deste job
+    // encerrar sem modelo (`MARCA_DE_ENVIO_DA_ORIGEM_NO_JOB`). Aqui, antes de
+    // qualquer `throw` abaixo, porque é justamente o turno que falha depois do
+    // envio que volta para a fila. `gravarPassagem` já a grava quando o envio
+    // veio antes; este é o envio que terminou depois dela, no mesmo passo.
+    // Falha ao marcar não derruba o turno: a marca só importa se houver retry.
+    //
+    // ponytail: o worker que morre entre o envio aceito e esta linha deixa o
+    // job sem a marca, e o retry roda o destino por cima da bolha da origem.
+    // Subir de degrau é marcar dentro do próprio envio.
+    if (!preview && passagemFeita() !== null && outcomes.some(envioAceito)) {
+      try {
+        await marcarEnvioDaOrigem(pool, { tenantId, jobId: liveJob().id });
+      } catch (err) {
+        runLog.warn('passagem de assunto: marca de envio da origem não gravada', {
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+        });
+      }
+    }
 
     // F4-04: correlação dos dois sinais do MESMO turno — jailbreak ALTO + tentativa de
     // promessa fora de tabela (F4-01). Ambos estão determinados aqui (o jailbreak rodou na
@@ -4616,6 +4897,40 @@ async function executarTurnoDoAgente(
       throw new Error('envio marcado como failed pelo CRM — run re-tentado pela fila');
     }
 
+    // PASSAGEM DE ASSUNTO sem nada enviado (`seq` só avança quando um envio
+    // chega ao canal): este turno ACABA aqui e o destino responde a mesma
+    // mensagem, em `runAgentTurn`. Nada do que vem abaixo é deste turno: nem a
+    // correção de turno mudo (o silêncio foi decisão), nem o checkpoint, nem o
+    // Operador, nem a supervisão. Quem fecha o atendimento da mensagem é a
+    // reexecução.
+    //
+    // Se algo JÁ saiu (o modelo enviou e passou no mesmo passo), não há
+    // reexecução: seriam duas respostas à mesma mensagem. O turno fecha como
+    // qualquer outro e o novo dono assume na mensagem seguinte.
+    //
+    // Passou e chamou a equipe no mesmo passo: também não há reexecução. O
+    // aviso da escalação já saiu, a conversa é de uma pessoa, e este turno
+    // fecha como o handoff que foi.
+    const passagem = passagemFeita();
+    if (passagem !== null && seq === 0 && !passouParaAEquipe) {
+      runLog.info('turno encerrado pela passagem de assunto: o destino responde a mesma mensagem', {
+        para_agent_id: passagem.destino.config?.agentId ?? null,
+        intent: passagem.destino.intentName,
+      });
+      return passagem;
+    }
+    if (passagem !== null && seq > 0) {
+      // Sem isto o log conta uma passagem e nenhuma resposta do destino, e não
+      // diz por quê. Só ids e o assunto: nada do que a pessoa escreveu.
+      runLog.warn('passagem com envio no mesmo turno: o destino assume na próxima mensagem', {
+        job_id: liveJob().id,
+        conversation_id: input.conversationId,
+        de_agent_id: passagem.de.deAgentId,
+        para_agent_id: passagem.destino.config?.agentId ?? null,
+        para_assunto: passagem.destino.intentName,
+      });
+    }
+
     // TURNO MUDO: o turno de resposta terminou sem mensagem ao cliente e sem
     // nenhuma razão para o silêncio (`turno-mudo.ts`). UMA correção, com a mesma
     // conversa e as mesmas ferramentas: o envio passa pela cadeia inteira, como
@@ -4632,7 +4947,8 @@ async function executarTurnoDoAgente(
         // send_media, que não conta: sem isto a correção pediria ao modelo para
         // falar por cima de quem assumiu (o sink barraria, mas gastando modelo).
         turnoDescartado: pessoaAssumiuNoTurno,
-        passouParaAEquipe,
+        // Passar a conversa a outro assunto também é silêncio por decisão.
+        passouParaAEquipe: passouParaAEquipe || passagem !== null,
         capDeEnvio: capDeEnvioAtingido(),
       })
     ) {
@@ -5168,6 +5484,24 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
   return async (job: JobRow, pool: pg.Pool, ctx: { workerId: string }): Promise<void> => {
     const payload = inboundTurnPayloadSchema.parse(job.payload);
     if (!job.contact_id) throw new Error('reply_without_contact');
+    // RETRY DE UM JOB EM QUE A ORIGEM ENVIOU E PASSOU A CONVERSA: o job acaba
+    // aqui, sem modelo. A mensagem já tem a resposta da origem, e rodar de novo
+    // entregaria o turno ao NOVO dono: outro agente, outro texto, e a segunda
+    // bolha dele sairia com `seq` que o ledger nunca viu. O ledger segura a
+    // mesma resposta repetida, não uma resposta diferente.
+    //
+    // Só essa marca, e não `passagem_feita`: quando quem enviou foi o DESTINO e
+    // a resposta falhou no meio, o retry roda com ele (já é o dono, e não
+    // recebe a ferramenta), as bolhas aceitas voltam como `already_sent` e as
+    // que faltam saem. Encerrar ali deixava a resposta pela metade com o job
+    // `done`.
+    if (job.payload[MARCA_DE_ENVIO_DA_ORIGEM_NO_JOB] === true) {
+      deps.log.info('turno encerrado sem modelo: a origem já respondeu e passou a conversa', {
+        job_id: job.id,
+        conversation_id: payload.conversation_id,
+      });
+      return;
+    }
     const resolvedAgent = await resolveConversationTurn(pool, deps.llmCfg, {
       tenantId: job.organization_id,
       leadId: job.contact_id,
