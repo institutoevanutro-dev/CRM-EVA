@@ -10472,6 +10472,16 @@ export const DICIONARIO: Traducoes = {
   "Sem contato vinculado, a etiqueta não é aplicada.": {
     es: "Sin contacto vinculado, la etiqueta no se aplica.",
   },
+  // Tarefas no card do negócio e selo no quadro (porte do upstream #2760).
+  "aberta": { es: "abierta" },
+  "abertas": { es: "abiertas" },
+  "atrasada": { es: "atrasada" },
+  "atrasadas": { es: "atrasadas" },
+  "tarefa aberta": { es: "tarea abierta" },
+  "tarefas abertas": { es: "tareas abiertas" },
+  "Nenhuma tarefa neste negócio. Anote o próximo passo combinado, com prazo e responsável.": {
+    es: "Ninguna tarea en este negocio. Anota el próximo paso acordado, con plazo y responsable.",
+  },
   // Visão Calendário do funil, ao lado do quadro (porte do upstream #2790).
   "Quadro": { es: "Tablero" },
   "Semana": { es: "Semana" },

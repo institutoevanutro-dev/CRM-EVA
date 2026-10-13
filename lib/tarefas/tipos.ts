@@ -27,6 +27,12 @@ export type PrioridadeDaTarefa = (typeof PRIORIDADES_DA_TAREFA)[number];
 export const SITUACOES_DA_TAREFA = ["pending", "in_progress", "done", "cancelled"] as const;
 export type SituacaoDaTarefa = (typeof SITUACOES_DA_TAREFA)[number];
 
+/** O negócio a que a tarefa está presa, como a lista o mostra. */
+export interface NegocioDaTarefa {
+  id: string;
+  title: string;
+}
+
 /** Uma linha de `crm_tasks`, como a API a devolve. */
 export interface Tarefa {
   id: string;
@@ -43,6 +49,13 @@ export interface Tarefa {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Derivado (não é coluna): o negócio de `lead_id`, embutido pela rota para a
+   * lista de Tarefas dizer DE QUEM é a tarefa sem uma consulta por linha. Nulo
+   * quando a tarefa é avulsa, ou quando quem lê não enxerga o negócio (a tarefa
+   * só chega a essa pessoa por ser a responsável; ver a migration 0359).
+   */
+  lead?: NegocioDaTarefa | null;
 }
 
 export interface NovaTarefa {
@@ -77,6 +90,39 @@ export function estaAtrasada(
   if (!tarefa.due_date) return false;
   if (estaEncerrada(tarefa)) return false;
   return new Date(tarefa.due_date).getTime() < agora.getTime();
+}
+
+/** O que o selo do card conta: o que ainda pede ação, e quanto disso já venceu. */
+export interface ResumoDasTarefas {
+  abertas: number;
+  atrasadas: number;
+}
+
+/**
+ * Conta as tarefas que ainda pedem ação e as que já passaram do prazo.
+ *
+ * A MESMA régua da lista (`estaEncerrada` e `estaAtrasada`), e não uma segunda:
+ * o selo do card e a seção do dossiê olham a mesma tarefa, e se as duas
+ * contassem de jeitos diferentes o card diria "1 atrasada" sobre um negócio
+ * cuja lista não mostra nenhuma.
+ *
+ * ⚠️ FUSO: "atrasada" compara INSTANTES (`due_date` é `timestamptz`, `agora` é
+ * um instante). Não há recorte de dia aqui, então o resultado é o mesmo com o
+ * servidor em UTC e a clínica em Brasília: uma tarefa para 23h30 de hoje não
+ * vira atrasada às 21h só porque em UTC já é amanhã.
+ */
+export function resumoDasTarefas(
+  tarefas: readonly Pick<Tarefa, "due_date" | "status">[],
+  agora: Date = new Date(),
+): ResumoDasTarefas {
+  let abertas = 0;
+  let atrasadas = 0;
+  for (const tarefa of tarefas) {
+    if (estaEncerrada(tarefa)) continue;
+    abertas += 1;
+    if (estaAtrasada(tarefa, agora)) atrasadas += 1;
+  }
+  return { abertas, atrasadas };
 }
 
 /**

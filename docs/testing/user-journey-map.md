@@ -2749,7 +2749,30 @@ Sem migration e sem tela nova: o modo é ligado em `ai_routers.config` (`permane
 - [ ] No modo ligado, conversa sem turno há mais de 24 horas (`permanencia_expira_horas`) volta a ser classificada do zero. Coberto por unit; **prova em conversa real pendente**
 - [ ] Resposta do agente de destino que falha depois da primeira bolha é completada no retry, sem repetir a bolha entregue. Coberto por invariante com modelo simulado; **falha real de envio no canal não foi exercitada**
 
-### Visão Calendário do funil `[P1]` (2026-10-13)
+## J34 — Tarefas dentro do card do negócio e selo de pendências no quadro `[P1]` (2026-10-13)
+
+Porte do upstream melgarafael/DeskcommCRM#2760. Ambiente fresco estilo VPS: Supabase local próprio (pg15), `baseline.sql` (com a migration 0359), `next build` + `next start`, sem chave de IA e sem `RESEND_API_KEY`. Evidência em `.superpowers/evidence/tarefas-no-card/`. Spec: `tests/e2e/tarefas-no-card-do-negocio.spec.ts` (no CI, parte 4).
+
+| Caso | O que a pessoa faz (gestor) | Resultado |
+|---|---|---|
+| J34.1 | No funil, clica no card do negócio; na seção "Tarefas" clica "Nova tarefa", escreve o título e salva | **PROVADO NA TELA** (Chrome e Safari 26). A tarefa aparece na seção, o cabeçalho diz "1 aberta", a linha do tempo ganha "Tarefa combinada". No banco a tarefa tem o negócio, o contato e quem criou como responsável |
+| J34.2 | Fecha o painel | **PROVADO NA TELA.** O card mostra o selo "1 tarefa aberta" em cinza, e a altura do card não muda (medida antes e depois) |
+| J34.3 | Cria outra tarefa só com o teclado (Enter no botão, digita, Enter), com prazo de ontem | **PROVADO NA TELA.** Cabeçalho "2 abertas · 1 atrasada"; no card o selo fica vermelho, com o aviso e o número das vencidas. O selo não cobre o dono nem o tempo na etapa (medido; ver o achado abaixo) |
+| J34.4 | Abre a tela de Tarefas | **PROVADO NA TELA.** As mesmas duas tarefas, cada uma com o nome do negócio e o atalho para ele |
+| J34.5 | Volta ao card, conclui as duas (uma com a barra de espaço) e fecha | **PROVADO NA TELA.** O selo some; a linha do tempo ganha "Tarefa concluída"; a auditoria tem `crm_task.created` e `crm_task.updated` |
+| J34.6 | Mesma jornada em tela de toque de 390 px | **PROVADO NA TELA** (Chrome com toque emulado; no Safari, janela de 390 px). Nada estoura a largura, "Nova tarefa" tem 32 px de altura de toque, editar e apagar ficam à vista sem hover, o formulário cabe |
+
+**Achado desta prova, consertado:** com dono, selo e uma etapa de nome comprido ("Avaliação agendada") na mesma linha do rodapé do card, o selo ficava POR CIMA do tempo na etapa (41 px de sobreposição, medidos no Safari e reproduzidos no Chrome). Agora quem cede espaço é o tempo na etapa, que encurta com reticências (o texto inteiro fica na dica do mouse).
+
+**O que esta jornada NÃO tem, e é achado, não cobertura:**
+
+- **Quem vê o quê (migration 0359) não foi dirigido pela tela.** Está medido no Postgres de verdade, papel por papel e com duas organizações (`tests/invariants/tarefas-seguem-a-visibilidade-do-negocio.test.ts`), mas ninguém entrou como prestador ou como atendente em modo "só os seus" para olhar a tela de Tarefas.
+- **O selo não se atualiza sozinho quando OUTRA pessoa cria ou conclui a tarefa.** Ele muda na hora para quem mexeu e, para os demais, na próxima releitura do quadro (qualquer mudança num negócio, ou voltar à aba). `crm_tasks` não está na assinatura em tempo real do quadro.
+- **"Atrasada" no selo é calculada na hora em que o quadro é lido.** Uma tarefa que vence com o quadro aberto e parado só fica vermelha na próxima releitura.
+- **Escolher o negócio ao criar a tarefa pela tela de Tarefas** continua não existindo (lá a tarefa nasce avulsa). O upstream também deixou para depois.
+- **iPhone de verdade não foi testado**, só a largura de 390 px no computador.
+
+## J35 — Visão Calendário do funil `[P1]` (2026-10-13)
 
 Porte do upstream melgarafael/DeskcommCRM#2790. Sem migration, sem rota nova e sem dependência nova: o calendário recebe a mesma lista que o quadro já carregou (`useBoard` + filtros da barra) e a regra de dia mora em `lib/kanban/calendario-do-funil.ts`. A escolha da visão fica no navegador (`lib/kanban/visao-do-funil.ts`).
 

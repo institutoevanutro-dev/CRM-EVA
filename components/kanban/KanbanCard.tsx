@@ -10,6 +10,7 @@ import { NextActionSlot } from "./NextActionSlot";
 import { ReactivationSlot } from "./ReactivationSlot";
 import { ConversaSlot } from "./ConversaSlot";
 import { ScoreSlot } from "./ScoreSlot";
+import { TarefasNoCard } from "./TarefasNoCard";
 import { OwnerBadge } from "./OwnerBadge";
 
 /** Os dois gestos de seleção que o card sabe relatar. */
@@ -295,14 +296,28 @@ export function KanbanCard({
               e some por inteiro quando não há conversa. */}
           <ConversaSlot conversa={lead.conversa} />
 
-          {/* ④ dono · ⑤ tempo no estágio */}
+          {/* ④ dono (+ selo de tarefas) · ⑤ tempo no estágio */}
           <div className="mt-1 flex h-6 items-center justify-between gap-2">
-            <OwnerBadge
-              ownerKind={card.owner.kind}
-              ownerName={card.owner.name}
-              agentVersion={card.owner.agentVersion}
-            />
-            <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-text-muted">
+            {/* Quem cede espaço é o tempo na etapa (o nome da etapa já está no
+                topo da coluna), nunca o dono nem o selo: com os três na mesma
+                linha e uma etapa de nome comprido, o selo ficava POR CIMA do
+                texto (41 px de sobreposição medidos no Safari). */}
+            <div className="flex shrink-0 items-center gap-2">
+              <OwnerBadge
+                ownerKind={card.owner.kind}
+                ownerName={card.owner.name}
+                agentVersion={card.owner.agentVersion}
+              />
+              <TarefasNoCard tarefas={lead.tarefas} />
+            </div>
+            <span
+              className="min-w-0 truncate text-[11px] tabular-nums text-text-muted"
+              title={
+                state.showStageAge && age
+                  ? `${age} ${t("em")} ${card.stageName}`
+                  : `${t("em")} ${card.stageName}`
+              }
+            >
               {state.showStageAge && age
                 ? `${age} ${t("em")} ${card.stageName}`
                 : `${t("em")} ${card.stageName}`}
