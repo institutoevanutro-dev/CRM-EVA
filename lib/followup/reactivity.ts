@@ -64,6 +64,20 @@ export const RESUME_GRACE_MS = 30 * 60_000;
 
 export const LIVE_STATUSES: readonly EnrollmentStatus[] = ["active", "waiting_reply", "paused_handoff"];
 
+/**
+ * O opt-out alcança também a pausa manual.
+ *
+ * `paused_manual` (0145) fica FORA de `LIVE_STATUSES`: a pausa que uma pessoa
+ * pôs não reage à mensagem comum (quem a retoma é quem pausou), e aquela lista
+ * também é a do handoff, que a transformaria em `paused_handoff` e depois a
+ * retomaria sozinha. Mas o STOP a alcança. Sem isso a inscrição pausada
+ * sobrevivia ao opt-out: a mensagem não vazava (o `stopGate` relê `is_blocked`
+ * no turno), mas a régua não virava `opted_out` e seguia ocupando a vaga única
+ * do contato (`idx_followup_enrollments_one_live`), e todo follow-up futuro
+ * dele morria em 23505 sem explicação.
+ */
+const STATUS_ALCANCADOS_PELO_OPT_OUT: readonly EnrollmentStatus[] = [...LIVE_STATUSES, "paused_manual"];
+
 export interface LiveEnrollmentRef {
   id: string;
   status: EnrollmentStatus;
@@ -84,7 +98,12 @@ export interface LiveEnrollmentRef {
 export interface ReactivityAdminClient {
   loadConversationContactId(orgId: string, conversationId: string): Promise<string | null>;
   loadContactBlocked(orgId: string, contactId: string): Promise<boolean>;
-  loadLiveEnrollmentsForContact(orgId: string, contactId: string): Promise<LiveEnrollmentRef[]>;
+  /** `statuses` default = `LIVE_STATUSES`; só o opt-out pede uma lista maior. */
+  loadLiveEnrollmentsForContact(
+    orgId: string,
+    contactId: string,
+    statuses?: readonly EnrollmentStatus[],
+  ): Promise<LiveEnrollmentRef[]>;
   insertEnrollmentEvent(event: {
     organization_id: string;
     enrollment_id: string;
@@ -202,7 +221,11 @@ async function reactToInbound(
   if (!contactId) return { matched: false, reacted: 0 };
 
   const isBlocked = await db.loadContactBlocked(row.organization_id, contactId);
-  const live = await db.loadLiveEnrollmentsForContact(row.organization_id, contactId);
+  const live = await db.loadLiveEnrollmentsForContact(
+    row.organization_id,
+    contactId,
+    isBlocked ? STATUS_ALCANCADOS_PELO_OPT_OUT : LIVE_STATUSES,
+  );
 
   if (isBlocked) {
     // STOP/opt-out (a regex já rodou em lib/waha/ingest.ts e setou is_blocked
@@ -471,14 +494,14 @@ export function createSupabaseReactivityClient(admin: SupabaseClient): Reactivit
       if (error) throw new Error(error.message);
       return data?.is_blocked ?? false;
     },
-    async loadLiveEnrollmentsForContact(orgId, contactId) {
+    async loadLiveEnrollmentsForContact(orgId, contactId, statuses = LIVE_STATUSES) {
       const ids = await idsDoContatoEGemeos(admin, orgId, contactId);
       const { data: enrollments, error } = await admin
         .from("followup_enrollments")
         .select("id, status, current_node_id, steps_taken, pointer_id, updated_at")
         .eq("organization_id", orgId)
         .in("contact_id", ids)
-        .in("status", LIVE_STATUSES);
+        .in("status", statuses);
       if (error) throw new Error(error.message);
       if (!enrollments?.length) return [];
 
