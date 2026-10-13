@@ -18269,8 +18269,8 @@ notify pgrst, 'reload schema';
 -- ---- tarefas do CRM (migration 0210) ----
 --
 -- Lembrete de trabalho interno com prazo. O racional inteiro — por que a
--- Agenda (0177) não serve, por que `due_date` é nullable e por que são DUAS
--- policies em vez de uma `for all` — está no cabeçalho da migration 0210.
+-- Agenda (0177) não serve, por que `due_date` é nullable e por que a leitura e
+-- a escrita têm policies separadas — está no cabeçalho da migration 0210.
 -- Idempotente: `if not exists` em tabela e índices, `drop ... if exists`
 -- antes de cada policy e do trigger, para o `update.sh` de um clone poder
 -- reaplicar este arquivo inteiro sem erro.
@@ -18321,34 +18321,100 @@ create index if not exists crm_tasks_lead_idx
 
 alter table public.crm_tasks enable row level security;
 
+-- As policies abaixo são as da migration 0359 (a tarefa segue a visibilidade do
+-- negócio), escritas AQUI, no lugar onde nascem, para a reaplicação do arquivo
+-- nunca passar pela definição antiga. A regra e o porquê estão no bloco da 0359,
+-- no fim do arquivo, e no cabeçalho da migration.
 do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
 if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_tasks' and policyname = 'crm_tasks_select'
-    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ec230235bd329482aa604f63c5a323b0') then
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0d6670dc0a1c5c4d3e95b9d05f6ee2ef') then
 drop policy if exists crm_tasks_select on public.crm_tasks;
 create policy crm_tasks_select on public.crm_tasks
   for select using (
-    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and (assigned_to = (select auth.uid())
+             or (lead_id is null and public.fn_user_role_in_org(organization_id) <> 'provider')
+             or exists (select 1 from public.crm_leads l
+                         where l.id = crm_tasks.lead_id
+                           and l.organization_id = crm_tasks.organization_id
+                           and public.fn_can_view_lead(l.organization_id, l.owner_user_id))))
   );
 end if;
 end $politica$;
 
 do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
-if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_tasks' and policyname = 'crm_tasks_write'
-    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '8e48f878e706662d9c78a5f854ad8a46') then
-drop policy if exists crm_tasks_write on public.crm_tasks;
-create policy crm_tasks_write on public.crm_tasks
-  using (
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_tasks' and policyname = 'crm_tasks_insert'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'bd30a3d88a748c3c329fe64f210c25f9') then
+drop policy if exists crm_tasks_insert on public.crm_tasks;
+create policy crm_tasks_insert on public.crm_tasks
+  for insert with check (
     public.fn_is_platform_admin()
     or ((organization_id in (select public.fn_user_org_ids()))
-        and public.fn_role_at_least(organization_id, 'agent'))
-  )
-  with check (
-    public.fn_is_platform_admin()
-    or ((organization_id in (select public.fn_user_org_ids()))
-        and public.fn_role_at_least(organization_id, 'agent'))
+        and public.fn_role_at_least(organization_id, 'agent')
+        and (lead_id is null
+             or exists (select 1 from public.crm_leads l
+                         where l.id = crm_tasks.lead_id
+                           and l.organization_id = crm_tasks.organization_id
+                           and public.fn_can_view_lead(l.organization_id, l.owner_user_id))))
   );
 end if;
 end $politica$;
+
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_tasks' and policyname = 'crm_tasks_update'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '5eb145007d8150364bab835f04e9ca02') then
+drop policy if exists crm_tasks_update on public.crm_tasks;
+create policy crm_tasks_update on public.crm_tasks
+  for update using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent')
+        and (lead_id is null
+             or assigned_to = (select auth.uid())
+             or exists (select 1 from public.crm_leads l
+                         where l.id = crm_tasks.lead_id
+                           and l.organization_id = crm_tasks.organization_id
+                           and public.fn_can_view_lead(l.organization_id, l.owner_user_id))))
+  ) with check (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent')
+        and (lead_id is null
+             or assigned_to = (select auth.uid())
+             or exists (select 1 from public.crm_leads l
+                         where l.id = crm_tasks.lead_id
+                           and l.organization_id = crm_tasks.organization_id
+                           and public.fn_can_view_lead(l.organization_id, l.owner_user_id))))
+  );
+end if;
+end $politica$;
+
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_tasks' and policyname = 'crm_tasks_delete'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '821979290cd229652ad8cc4c17903af7') then
+drop policy if exists crm_tasks_delete on public.crm_tasks;
+create policy crm_tasks_delete on public.crm_tasks
+  for delete using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'agent')
+        and (lead_id is null
+             or assigned_to = (select auth.uid())
+             or exists (select 1 from public.crm_leads l
+                         where l.id = crm_tasks.lead_id
+                           and l.organization_id = crm_tasks.organization_id
+                           and public.fn_can_view_lead(l.organization_id, l.owner_user_id))))
+  );
+end if;
+end $politica$;
+
+-- [policy obsoleta crm_tasks_write (0210): o arquivo não a cria mais. Era `for
+-- all`, e o `using` dela valia para SELECT somado por OU. Sai DEPOIS de as três
+-- de escrita acima existirem, para o clone antigo não ficar sem escrita.]
+do $politica$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'crm_tasks' and policyname = 'crm_tasks_write') then -- sem a policy, nem pega lock na tabela
+drop policy if exists crm_tasks_write on public.crm_tasks;
+end if; end $politica$;
 
 -- `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON TABLES TO anon` do baseline alcança
 -- TODA tabela criada depois dele — inclusive esta. Sem o revoke, as tarefas da
@@ -35537,3 +35603,21 @@ end $politica$;
 -- `service_contact_changed`, `appointment_notice_busy` e
 -- `contact_redaction_busy` continuam `40001`: ali repetir passa.
 -- ---- fim: a recusa permanente do atendimento e da agenda (migration 0358) ----
+
+-- ---- a tarefa segue a visibilidade do negócio a que está presa (migration 0359) ----
+-- Chega com as tarefas dentro do card do negócio (porte do PR #2760 de
+-- melgarafael/DeskcommCRM). `crm_tasks` era legível pela organização inteira
+-- (0210): o prestador (`provider`) e o atendente em modo "só os seus" liam a
+-- tarefa de um negócio que não enxergam. Agora a sessão vê a tarefa quando é a
+-- responsável por ela, quando a tarefa é avulsa e o papel não é `provider`, ou
+-- quando enxerga o negócio (`fn_can_view_lead`, por `exists`, como a 0042 fez
+-- em `crm_lead_activities`). Escrever segue de `agent` para cima, limitado ao
+-- que a sessão vê; a `crm_tasks_write` (`for all`) sai e dá lugar a
+-- `crm_tasks_insert`, `crm_tasks_update` e `crm_tasks_delete`.
+--
+-- NÃO HÁ POLICY AQUI, de propósito: as quatro estão escritas no lugar onde a
+-- tabela nasce, no bloco da 0210 acima. Assim a reaplicação não passa pela
+-- definição antiga de nenhuma delas
+-- (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`).
+-- Quem mede a regra: `tests/invariants/tarefas-seguem-a-visibilidade-do-negocio.test.ts`.
+-- ---- fim: a tarefa segue a visibilidade do negócio (migration 0359) ----

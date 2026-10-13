@@ -20,6 +20,7 @@
     { "id": "client", "lane": "humano", "col": 2, "type": "frontend", "label": "FunisClient", "sublabel": "criar · renomear · ↑↓ · padrão · arquivar" },
     { "id": "hooks", "lane": "humano", "col": 3, "type": "frontend", "label": "usePipelines", "sublabel": "só mutations — a leitura é do servidor" },
     { "id": "board", "lane": "humano", "col": 4, "type": "frontend", "label": "/app/pipelines/[id]", "sublabel": "o quadro do funil escolhido" },
+    { "id": "calendario", "lane": "humano", "col": 5, "type": "frontend", "label": "CalendarioDoFunil", "sublabel": "a visão Calendário do mesmo funil · mês e semana, no fuso da organização" },
 
     { "id": "post", "lane": "borda", "col": 2, "type": "api", "label": "POST /api/v1/pipelines", "sublabel": "funil + 4 etapas · compensa se as etapas falharem" },
     { "id": "patch", "lane": "borda", "col": 3, "type": "api", "label": "PATCH /api/v1/pipelines/[id]", "sublabel": "nome · descrição · ordem · padrão" },
@@ -69,7 +70,9 @@
     { "id": "e27", "from": "delete", "to": "pipelines", "label": "is_archived=true (ou delete no caso limpo)" },
     { "id": "e28", "from": "trigger", "to": "pipelines", "label": "toda org nova nasce com 'Pedidos' — a razão de a clínica precisar desta tela" },
     { "id": "e29", "from": "trigger", "to": "stages", "label": "8 etapas de e-commerce" },
-    { "id": "e30", "from": "board", "to": "stages", "label": "as colunas do quadro" }
+    { "id": "e30", "from": "board", "to": "stages", "label": "as colunas do quadro" },
+    { "id": "e31", "from": "board", "to": "calendario", "label": "a MESMA lista filtrada que o quadro recebe — o calendário não busca nada" },
+    { "id": "e32", "from": "calendario", "to": "leads", "label": "lê custom_fields (tipo date), expected_close_date e created_at; não escreve" }
   ],
   "cards": [
     {
