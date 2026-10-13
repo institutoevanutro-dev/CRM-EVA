@@ -149,7 +149,7 @@ function Linha({
             <Link
               href={`/app/leads/${tarefa.lead.id}`}
               data-testid="negocio-da-tarefa"
-              className="flex min-w-0 max-w-[16rem] items-center gap-1 rounded-md text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-w-0 max-w-[16rem] items-center gap-1 rounded-md text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               title={tarefa.lead.title}
             >
               <Kanban size={12} aria-hidden className="shrink-0" />

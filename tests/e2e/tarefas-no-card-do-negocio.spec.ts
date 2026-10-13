@@ -120,7 +120,7 @@ test.beforeAll(async () => {
   funilId = (funil as { id: string }).id;
   const { data: etapa, error: eErr } = await admin
     .from("crm_stages")
-    .insert({ organization_id: creds.org_id, pipeline_id: funilId, name: "Novo", slug: "novo", position: 1000 })
+    .insert({ organization_id: creds.org_id, pipeline_id: funilId, name: "Avaliação agendada", slug: "novo", position: 1000 })
     .select("id")
     .single();
   if (eErr) throw new Error(`etapa: ${eErr.message}`);
@@ -141,6 +141,10 @@ test.beforeAll(async () => {
       title: NEGOCIO,
       position_in_stage: 1000,
       source: "manual",
+      // Com dono e etapa de nome comprido: é o rodapé do card mais apertado, e
+      // foi nele que o selo ficou POR CIMA do tempo na etapa (medido no Safari).
+      owner_user_id: creds.users.manager!.id,
+      owner_kind: "user",
     } as never)
     .select("id")
     .single();
@@ -223,6 +227,17 @@ test("criar tarefa pelo card, ver o selo no quadro, concluir e ver o selo sumir"
   const corAtrasada = await selo.evaluate((el) => getComputedStyle(el).color);
   expect(corAtrasada).not.toBe(corAberta);
   expect((await card.boundingBox())!.height).toBe(alturaSemSelo);
+  // O selo não encosta no dono nem cobre o tempo na etapa, e fica dentro do card.
+  const medidas = await selo.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const idade = el.parentElement!.nextElementSibling!.getBoundingClientRect();
+    const dono = el.previousElementSibling!.getBoundingClientRect();
+    const cartao = el.closest('[role="group"]')!.getBoundingClientRect();
+    return { doDono: r.left - dono.right, ateAIdade: idade.left - r.right, sobraNoCard: cartao.right - idade.right };
+  });
+  expect(medidas.doDono).toBeGreaterThanOrEqual(4);
+  expect(medidas.ateAIdade).toBeGreaterThanOrEqual(4);
+  expect(medidas.sobraNoCard).toBeGreaterThanOrEqual(0);
   await page.screenshot({ path: path.join(EVIDENCIA, "04-quadro-selo-atrasada.png") });
 
   // ── 5. A tela de Tarefas mostra as MESMAS tarefas, com o atalho do negócio ─
@@ -278,7 +293,17 @@ test("criar tarefa pelo card, ver o selo no quadro, concluir e ver o selo sumir"
   ]);
 });
 
-test("no celular (390 px) a seção de tarefas cabe na tela e os botões da linha ficam à vista", async ({ page }) => {
+test("no celular (390 px) a seção de tarefas cabe na tela e os botões da linha ficam à vista", async ({ browser }) => {
+  // Tela de TOQUE de verdade (`hover: none`), não só uma janela estreita: é a
+  // condição em que editar e apagar ficavam invisíveis.
+  const contexto = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+    baseURL: env.NEXT_PUBLIC_APP_URL,
+  });
+  const page = await contexto.newPage();
+
   // Uma tarefa vencida já no banco, para a tela ter o que mostrar.
   await admin.from("crm_tasks").delete().eq("lead_id", leadId);
   const { error } = await admin.from("crm_tasks").insert({
@@ -291,7 +316,6 @@ test("no celular (390 px) a seção de tarefas cabe na tela e os botões da linh
   } as never);
   if (error) throw new Error(`tarefa: ${error.message}`);
 
-  await page.setViewportSize({ width: 390, height: 844 });
   await entrar(page);
   await abrirQuadro(page);
   const card = cardDoNegocio(page);
@@ -316,6 +340,10 @@ test("no celular (390 px) a seção de tarefas cabe na tela e os botões da linh
   const nova = (await secao.getByRole("button", { name: "Nova tarefa" }).boundingBox())!;
   expect(nova.height).toBeGreaterThanOrEqual(32);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  // Sem hover, editar e apagar têm de estar à vista (opacidade 1), não só no DOM.
+  const editar = linha.getByRole("button", { name: "Editar a tarefa" });
+  await expect(editar).toBeVisible();
+  expect(await editar.evaluate((el) => getComputedStyle(el.parentElement!).opacity)).toBe("1");
   await page.screenshot({ path: path.join(EVIDENCIA, "08-celular-dossie.png") });
 
   // O formulário abre e cabe.
@@ -325,6 +353,7 @@ test("no celular (390 px) a seção de tarefas cabe na tela e os botões da linh
   const caixaDoDialogo = (await dialogo.boundingBox())!;
   expect(caixaDoDialogo.x).toBeGreaterThanOrEqual(0);
   expect(caixaDoDialogo.x + caixaDoDialogo.width).toBeLessThanOrEqual(390);
-  await expect(page.getByLabel("Responsável")).toBeVisible();
+  await expect(dialogo.getByLabel("Responsável", { exact: true })).toBeVisible();
   await page.screenshot({ path: path.join(EVIDENCIA, "09-celular-formulario.png") });
+  await contexto.close();
 });

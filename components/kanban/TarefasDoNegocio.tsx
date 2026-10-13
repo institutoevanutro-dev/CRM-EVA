@@ -95,7 +95,7 @@ export function TarefasDoNegocio({ leadId, contactId, podeEditar, aberto }: Prop
             onClick={() => abrir(null)}
             // Alvo de toque de 32px de altura no celular sem crescer o cabeçalho
             // da seção: a área clicável sangra para fora com a margem negativa.
-            className="-my-1.5 flex min-h-8 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="-my-1.5 flex min-h-8 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-accent hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Plus size={12} aria-hidden />
             {t("Nova tarefa")}
