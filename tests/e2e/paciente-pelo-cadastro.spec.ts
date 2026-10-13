@@ -186,6 +186,13 @@ async function funilDoCard(org: string, contactId: string): Promise<string> {
   return funil;
 }
 
+/**
+ * O elemento VISÍVEL com este `data-testid`. A tela de Funis tem `loading.tsx`:
+ * o conteúdo chega por streaming dentro de um `<div hidden>` antes de substituir
+ * o esqueleto, e por um instante o mesmo `data-testid` existe duas vezes.
+ */
+const visivel = (page: Page, testid: string) => page.locator(`[data-testid="${testid}"]:visible`);
+
 const linha = (page: Page, nome: string) => page.getByRole("row").filter({ hasText: nome });
 
 test.afterAll(async () => {
@@ -293,9 +300,9 @@ test("ligar 'Pacientes pelo cadastro' manda quem tem cadastro para o funil de cl
 
   // ── 4 · Funis: marcar o funil de clientes só com esta regra ─────────────
   await page.goto("/app/kanban");
-  const gatilho = page.getByTestId(`acoes-${f.funilDePacientes}`);
+  const gatilho = visivel(page, `acoes-${f.funilDePacientes}`);
   await expect(gatilho).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByTestId("funis-rodape-clientes")).toContainText(
+  await expect(visivel(page, "funis-rodape-clientes")).toContainText(
     "Quem já tem cadastro de paciente entra pelo funil de clientes.",
   );
   await gatilho.click();
@@ -306,7 +313,7 @@ test("ligar 'Pacientes pelo cadastro' manda quem tem cadastro para o funil de cl
   expect((await marcou).ok(), "marcar o funil de clientes foi recusado").toBe(true);
   await page.reload();
   await expect(
-    page.getByTestId(`abrir-${f.funilDePacientes}`).getByText("Clientes", { exact: true }),
+    visivel(page, `abrir-${f.funilDePacientes}`).getByText("Clientes", { exact: true }),
   ).toBeVisible({ timeout: 60_000 });
   await evidencia(page, info, "6-funil-de-clientes-marcado");
 
