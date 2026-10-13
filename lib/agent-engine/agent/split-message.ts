@@ -77,7 +77,25 @@ export function instrucaoDeBolhas(ligado: boolean): string {
  * primeira lia "R$ 10" como preço fechado de um produto de R$ 10.990.
  * Medido em produção (YADEA, 2026-09-04): a moto DT3 (R$ 10.990) anunciada
  * como "R$ 10" reais.
+ *
+ * A guarda cresceu para o ponto COLADO no que vem depois, dígito ou não: é a
+ * mesma regra, e sem ela "clinica.com.br/agenda" saía "clinica. com. br/agenda"
+ * (link morto). Fim de frase tem espaço, ou o fim do texto, depois do ponto.
+ *
+ * E o ponto de ABREVIAÇÃO também não fecha frase. Medido em produção
+ * (clínica, 2026-10-12, teto 200): "…começar com o Dr. André: a consulta de
+ * R$490…" saiu em dois balões, "…com o Dr." e "André: a consulta…". Duas
+ * regras, as duas só para o "." sozinho:
+ *   - palavra antes do ponto em `ABREVIACOES` (tratamento e endereço, pt + es);
+ *   - minúscula depois do ponto ("etc. no dia", "p. ex. o RG"): frase nova
+ *     começa com maiúscula.
+ * ponytail: lista curta de propósito. "etc." seguido de maiúscula ainda fecha
+ * frase (é ambíguo de verdade), e abreviação fora da lista seguida de nome
+ * próprio ainda parte; acrescente à lista quando uma aparecer medida.
  */
+// tratamento · endereço · "p. ex." · espanhol (Dr./Dra./Sr./Sra. são as mesmas)
+const ABREVIACOES = new Set("dr dra sr sra srta prof profa av r n nº ex ud uds".split(" "));
+
 function splitSentences(text: string): string[] {
   const out: string[] = [];
   let start = 0;
@@ -85,15 +103,13 @@ function splitSentences(text: string): string[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const end = m.index + m[0].length;
-    const prevChar = text[m.index - 1];
     const nextChar = text[end];
-    const isNumeroPartido =
-      m[0] === "." &&
-      prevChar !== undefined &&
-      nextChar !== undefined &&
-      /\d/.test(prevChar) &&
-      /\d/.test(nextChar);
-    if (isNumeroPartido) continue;
+    if (m[0] === "." && nextChar !== undefined) {
+      if (!/\s/.test(nextChar)) continue; // "10.990", "18.30", "site.com.br"
+      const palavra = /\p{L}+$/u.exec(text.slice(start, m.index))?.[0].toLowerCase();
+      if (palavra !== undefined && ABREVIACOES.has(palavra)) continue;
+      if (/^\s+\p{Ll}/u.test(text.slice(end))) continue;
+    }
     out.push(text.slice(start, end).trim());
     start = end;
   }
