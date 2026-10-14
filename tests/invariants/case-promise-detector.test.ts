@@ -35,6 +35,15 @@ const PROMISES: readonly string[] = [
   "sua solicitação sobre garantia está em análise pela equipe responsável",
   "isso está em análise pela nossa equipe",
   "seu caso ficou em análise com o responsável",
+  // achado em produção (Instituto Eva, 14/10/2026): resposta ao comprovante de Pix,
+  // voz passiva com a equipe como agente, sem caso aberto para o comprovante.
+  "Ele precisa ser conferido pela equipe",
+  "o comprovante será verificado pela recepção",
+  "O comprovante vai ser conferido pelo financeiro.",
+  // "Isso será resolvido pela nossa equipe." NÃO entra: "resolvido" ficou fora dos
+  // verbos da regra 2d estreita (conferido, verificado, analisado, validado), e
+  // nenhuma outra regra cobre a passiva. Limite conhecido; quem pega é a camada
+  // semântica, quando ligada.
 ];
 
 // NÃO detectar: ação própria do bot / frase institucional / checar SISTEMA (≠ humano).
@@ -54,6 +63,18 @@ const NON_PROMISES: readonly string[] = [
   // "em análise" sem NOMEAR quem — conservador de propósito, mesmo raciocínio das
   // outras regras (exige TARGET explícito pra reduzir falso positivo).
   "o produto está em análise técnica interna, sem previsão",
+  // passiva no PASSADO afirma algo feito, não promete ação da equipe.
+  "seu pagamento foi conferido pela equipe",
+  "o exame precisa ser feito em jejum",
+  // voz passiva com agente que NÃO é a retaguarda do atendimento, ou verbo que
+  // descreve rotina e não pendência (regra 2d estreita de propósito).
+  "Seu exame será avaliado pelo especialista na consulta.",
+  "O resultado será analisado pelo especialista no retorno.",
+  "Sua consulta será confirmada pela recepção na véspera, por mensagem.",
+  "O laudo será revisado pelo médico responsável antes da entrega.",
+  "A receita será validada pelo responsável técnico da farmácia.",
+  "O horário será confirmado pela agenda.",
+  "O valor será conferido no dia.",
 ];
 
 describe("detectHumanPromise — calibração (spec 15 §10.2)", () => {

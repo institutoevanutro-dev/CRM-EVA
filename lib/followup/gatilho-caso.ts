@@ -120,6 +120,8 @@ export interface GatilhoCasoDb {
     pointerIds: string[],
   ): Promise<Array<{ id: string; current_node_id: string | null }>>;
   cancelaEnrollment(orgId: string, id: string): Promise<boolean>;
+  /** Há caso aberto (`awaiting_human`|`awaiting_lead`) na conversa além de `caseId`? */
+  haOutroCasoAberto(orgId: string, conversationId: string, caseId: string | null): Promise<boolean>;
 }
 
 export interface GatilhoCasoSummary {
@@ -202,6 +204,18 @@ export async function aplicaGatilhoDeCaso(
 
   // ---- FECHOU: cancela o que nasceu deste caso, e só isso ----
   if (fechou) {
+    // A conversa pode ter um caso aberto por assunto (`openCase`). Fechar um deles
+    // não encerra o atendimento: com outro caso ainda aberto, o follow-up nascido
+    // de caso continua, e quem o cancela é o fechamento do último.
+    if (
+      await deps.db.haOutroCasoAberto(
+        row.organization_id,
+        conversationId,
+        textoOuNulo(row.payload.case_id),
+      )
+    ) {
+      return summary;
+    }
     // O teto de idade NÃO vale para o cancelamento. Cancelar tarde é melhor que
     // não cancelar: o efeito de um `case_closed` velho é parar de incomodar
     // alguém, nunca começar.
@@ -395,6 +409,20 @@ export function createSupabaseGatilhoCasoDb(admin: SupabaseClient): GatilhoCasoD
         .in("status", ["active", "waiting_reply", "paused_handoff", "paused_manual"]);
       if (error) throw new Error(error.message);
       return (data ?? []) as Array<{ id: string; current_node_id: string | null }>;
+    },
+
+    async haOutroCasoAberto(orgId, conversationId, caseId) {
+      let consulta = admin
+        .from("agent_cases")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("conversation_id", conversationId)
+        .in("status", ["awaiting_human", "awaiting_lead"])
+        .limit(1);
+      if (caseId) consulta = consulta.neq("id", caseId);
+      const { data, error } = await consulta;
+      if (error) throw new Error(error.message);
+      return (data ?? []).length > 0;
     },
 
     async cancelaEnrollment(orgId, id) {

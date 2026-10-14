@@ -194,6 +194,13 @@ export interface GateContext {
   hasOpenCase: boolean;
   openedCaseThisTurn: boolean;
   /**
+   * `open_human_case` foi recusado neste turno e nada depois registrou a pendência.
+   * Desliga o alívio de `hasOpenCase`: o caso aberto da conversa pode ser de outro
+   * assunto, e a pendência que o agente quis abrir não chegou a ninguém. Ausente =
+   * false (callers sem tool de caso).
+   */
+  caseOpenRefusedThisTurn?: boolean;
+  /**
    * Nome(s) próprio(s) que o PROMPT do tenant usa para a retaguarda humana (ex.:
    * "Fernando"), somados ao vocabulário genérico do `casePromiseGate`
    * (`detectHumanPromise`/`human-promise.ts`). Ausente/vazio = só os cargos
@@ -446,7 +453,13 @@ export const casePromiseGate: Gate = {
   name: 'case_promise',
   evaluate: (ctx) => {
     if (ctx.casesEnabled === undefined) return { pass: true };
-    if (ctx.hasOpenCase || ctx.openedCaseThisTurn) return { pass: true };
+    if (ctx.openedCaseThisTurn) return { pass: true };
+    // Um caso aberto da conversa só sustenta a promessa quando o agente não tentou
+    // abrir outro neste turno. Se tentou e foi recusado, a promessa é sobre a pendência
+    // NOVA, que não chegou à equipe (Instituto Eva, 14/10/2026: comprovante recusado,
+    // "precisa ser conferido pela equipe" passou pelo caso de outro assunto, de ontem).
+    const recusado = ctx.caseOpenRefusedThisTurn === true;
+    if (ctx.hasOpenCase && !recusado) return { pass: true };
     // Lê os DOIS sinais, em OU. O léxico é o filtro BARATO e continua valendo sozinho
     // (roda sem chamada de modelo); o semântico pega o resto: "vou encaminhar as
     // informações para análise e te retorno" escapava do léxico (no original, 5 de 7
@@ -480,8 +493,13 @@ export const casePromiseGate: Gate = {
         ? 'Você prometeu voltar a falar com o cliente, mas não deixou o retorno marcado. ' +
           'Chame a tool schedule_followup (agendando o retorno) OU open_human_case ' +
           '(descrevendo o que precisa) OU reformule a mensagem sem prometer retorno.'
-        : 'Você prometeu envolver um humano mas não abriu um caso. Chame a tool ' +
-          'open_human_case (descrevendo o que precisa) OU reformule a mensagem sem prometer humano.',
+        : recusado
+          ? 'Você prometeu envolver um humano, mas a abertura do caso foi recusada neste turno: ' +
+            'a equipe não recebeu essa pendência. Siga o que a recusa indicou (provide_case_update ' +
+            'no caso que espera o cliente, ou transferência para humano) OU reformule a mensagem sem ' +
+            'prometer verificação da equipe.'
+          : 'Você prometeu envolver um humano mas não abriu um caso. Chame a tool ' +
+            'open_human_case (descrevendo o que precisa) OU reformule a mensagem sem prometer humano.',
     };
   },
 };
@@ -1036,6 +1054,8 @@ export interface RunBeforeSendArgs {
   casesEnabled?: boolean;
   hasOpenCase?: boolean;
   openedCaseThisTurn?: boolean;
+  /** Ver `GateContext.caseOpenRefusedThisTurn`. */
+  caseOpenRefusedThisTurn?: boolean;
   /** Ver `GateContext.humanPromiseExtraTargets`. Ausente = só cargos genéricos. */
   humanPromiseExtraTargets?: readonly string[];
   /** Arma o `unscheduledFollowUpGate`; ausente mantém callers determinísticos intactos. */
@@ -1290,6 +1310,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       casesEnabled: args.casesEnabled,
       hasOpenCase: args.hasOpenCase ?? false,
       openedCaseThisTurn: args.openedCaseThisTurn ?? false,
+      caseOpenRefusedThisTurn: args.caseOpenRefusedThisTurn ?? false,
       ...(args.humanPromiseExtraTargets !== undefined
         ? { humanPromiseExtraTargets: args.humanPromiseExtraTargets }
         : {}),

@@ -49,6 +49,7 @@ function fakeDb(opts: {
   stale?: boolean;
   vivos?: Array<{ id: string; current_node_id: string | null }>;
   cancelaFalha?: boolean;
+  outroCasoAberto?: boolean;
   reg: Registro;
 }): GatilhoCasoDb {
   return {
@@ -77,6 +78,9 @@ function fakeDb(opts: {
     },
     async carregaVivosDoCaso() {
       return opts.vivos ?? [];
+    },
+    async haOutroCasoAberto() {
+      return opts.outroCasoAberto ?? false;
     },
     async cancelaEnrollment(_org, id) {
       if (opts.cancelaFalha) return false;
@@ -263,6 +267,19 @@ describe("gatilho de caso — fechamento", () => {
       evento({ event_type: EVENTO_CASO_FECHADO, payload: { case_id: CASO, conversation_id: CONVERSA } }),
     );
     expect(s.cancelados).toBe(0);
+    expect(reg.eventos).toHaveLength(0);
+  });
+
+  it("outro caso ainda aberto na conversa: o follow-up vivo continua", async () => {
+    // A conversa pode ter um caso por assunto. Fechar um deles não encerra o
+    // atendimento: o follow-up nascido de caso segue enquanto houver outro aberto.
+    const reg = registro();
+    const s = await aplicaGatilhoDeCaso(
+      deps(fakeDb({ reg, vivos: [{ id: ENROLLMENT, current_node_id: "n2" }], outroCasoAberto: true })),
+      evento({ event_type: EVENTO_CASO_FECHADO, payload: { case_id: CASO, conversation_id: CONVERSA, status: "resolved" } }),
+    );
+    expect(s.cancelados).toBe(0);
+    expect(reg.cancelados).toEqual([]);
     expect(reg.eventos).toHaveLength(0);
   });
 

@@ -58,6 +58,8 @@ const ENCAMINHAMENTOS = [
   "Seu pedido está em análise com a recepção.",
   "Assim que a equipe conferir o comprovante, ela retorna para você.",
   "Quando o financeiro confirmar, a equipe avisa por aqui.",
+  "Ele precisa ser conferido pela equipe.",
+  "O comprovante será verificado pela recepção.",
 ];
 
 describe("comprovantes e encaminhamentos — retaguarda nomeada pelo setor", () => {
