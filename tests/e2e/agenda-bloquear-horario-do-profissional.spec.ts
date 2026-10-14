@@ -164,14 +164,14 @@ test("gerente bloqueia 14:00 a 16:00 de um profissional e só a agenda dele perd
 
   // ── pela tela, como o gerente faria ──────────────────────────────────────
   await page.goto("/app/settings/tenant/agenda");
-  const secao = page.getByTestId("dias-bloqueados");
+  const secao = page.getByRole("main").getByTestId("dias-bloqueados");
   await expect(secao).toBeVisible({ timeout: 20_000 });
 
   await secao.getByLabel("De quem").selectOption(profissional);
   await secao.getByLabel("O dia todo").uncheck();
   await secao.getByLabel("Dia", { exact: true }).fill(diaAlvo);
-  await secao.getByLabel("Das").fill("14:00");
-  await secao.getByLabel("Até").fill("16:00");
+  await secao.getByLabel("Das", { exact: true }).fill("14:00");
+  await secao.getByLabel("Até", { exact: true }).fill("16:00");
   await secao.getByLabel("Motivo (opcional)").fill("Reunião E2E");
   fs.mkdirSync(EVIDENCIA, { recursive: true });
   await page.screenshot({ path: path.join(EVIDENCIA, "1-formulario.png"), fullPage: true });
@@ -200,4 +200,41 @@ test("gerente bloqueia 14:00 a 16:00 de um profissional e só a agenda dele perd
   await expect(bloco).toHaveAttribute("aria-label", /Horário bloqueado, 14:00 às 16:00/);
   await bloco.scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(EVIDENCIA, "3-agenda.png"), fullPage: true });
+});
+
+test("atendente não bloqueia a agenda de outra pessoa, nem pela API", async ({ page }) => {
+  const creds = lerCreds();
+  const atendente = creds.users.agent;
+  const gerente = creds.users.manager;
+  if (!atendente || !gerente) throw new Error(".e2e-creds.json sem `agent`/`manager`");
+
+  await page.goto("/login");
+  await page.getByLabel(/e-?mail/i).fill(atendente.email);
+  await page.getByLabel(/senha/i).fill(creds.password);
+  await page.getByRole("button", { name: /entrar/i }).click();
+  await page.waitForURL(/\/app(\/|$)/, { timeout: 20_000 });
+
+  // Na tela, o "De quem" do atendente só tem ele mesmo.
+  await page.goto("/app/settings/tenant/agenda");
+  const seletor = page.getByRole("main").getByTestId("dono-do-bloqueio");
+  await expect(seletor).toBeDisabled({ timeout: 20_000 });
+  await expect(seletor.locator("option")).toHaveCount(1);
+  await expect(seletor).toHaveValue(atendente.id);
+
+  // E a rota recusa quem tenta pelo corpo, sem gravar nada.
+  const r = await page.request.post("/api/v1/agenda/excecoes", {
+    data: {
+      exception_date: "2030-01-08",
+      user_id: gerente.id,
+      start_minute: 840,
+      end_minute: 960,
+    },
+  });
+  expect(r.status(), await r.text()).toBe(403);
+  const { count } = await admin()
+    .from("calendar_availability_exceptions")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", creds.org_id)
+    .eq("exception_date", "2030-01-08");
+  expect(count).toBe(0);
 });
