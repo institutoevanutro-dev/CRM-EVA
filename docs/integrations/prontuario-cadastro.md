@@ -34,6 +34,12 @@ O contato precisa estar ativo e pertencer à organização do token antes de cha
 
 `appointment_id` continua opcional e exige também o Bearer exclusivo da agenda em `X-Agenda-Authorization`, da mesma organização. A inclusão demográfica não relaxa essa autorização. Não há exportação de CPF na listagem, no GET comum nem em mensagens de erro.
 
+Nos detalhes do compromisso, `appointment.description` devolve a observação
+preenchida no formulário da agenda, enquanto `appointment.notes` conserva a
+anotação interna. Ambos podem ser nulos e só são enviados quando o compromisso
+pertence ao contato e à organização autorizados. O consumidor exibe os campos
+separadamente; a listagem MCP não recebe esses textos por esta mudança.
+
 O CPF claro serve somente à comunicação entre servidores por HTTPS: o Prontuário precisa cifrá-lo imediatamente com `PATIENT_DATA_KEY`, sem enviá-lo ao navegador ou registrá-lo em logs. Esse comportamento do consumidor depende da entrega correspondente no repositório Prontuario-EVA.
 
 ## Publicação coordenada
