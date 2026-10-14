@@ -12,109 +12,9 @@ import { TenantBadge } from "@/components/admin/inbox/TenantBadge";
 import { useAdminLgpdRequest } from "@/hooks/useAdminLgpdRequest";
 import type { AdminLgpdStatus, AdminLgpdRequestType } from "@/hooks/useAdminLGPDRequests";
 import { useT } from "@/hooks/i18n/useT";
-
-// ---------------------------------------------------------------------------
-// Inline SLA Timeline (simplified — no approve button, admin observe-only)
-// ---------------------------------------------------------------------------
-
-interface SlaTimelineProps {
-  received_at: string;
-  due_at: string;
-  request_type: string;
-}
-
-function SlaTimelineInline({ received_at, due_at, request_type }: SlaTimelineProps) {
-  const localeDaData = useLocaleDeData();
-  const t = useT();
-  const receivedAt = new Date(received_at);
-  const dueAt = new Date(due_at);
-  const now = new Date();
-
-  const elapsed = now.getTime() - receivedAt.getTime();
-  const total = dueAt.getTime() - receivedAt.getTime();
-  const progress = Math.min(1, Math.max(0, total > 0 ? elapsed / total : 0));
-  const progressPct = Math.round(progress * 100);
-
-  const daysElapsed = Math.floor(elapsed / (1000 * 60 * 60 * 24));
-  const msUntilDue = dueAt.getTime() - now.getTime();
-  const daysRemaining = Math.floor(msUntilDue / (1000 * 60 * 60 * 24));
-
-  const progressColor =
-    progress >= 1 ? "bg-error" : progress >= 0.75 ? "bg-warning" : "bg-success";
-
-  const milestones =
-    request_type === "data_request"
-      ? [
-          { label: t("Recebido"), day: 0 },
-          { label: t("Revisão intermediária"), day: 5 },
-          { label: t("Entrega ao titular"), day: 7 },
-        ]
-      : [
-          { label: t("Recebido"), day: 0 },
-          { label: t("Processamento"), day: 10 },
-          { label: t("Anonimização concluída"), day: 15 },
-        ];
-
-  return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>D+{daysElapsed} ({t("hoje")})</span>
-          <span>
-            {daysRemaining > 0
-              ? `${daysRemaining}d ${t("restantes")}`
-              : daysRemaining === 0
-                ? t("vence hoje")
-                : `${Math.abs(daysRemaining)}d ${t("em atraso")}`}
-          </span>
-        </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-          <div
-            className={`h-full rounded-full transition-all ${progressColor}`}
-            style={{ width: `${progressPct}%` }}
-            role="progressbar"
-            aria-valuenow={progressPct}
-            aria-valuemin={0}
-            aria-valuemax={100}
-          />
-        </div>
-      </div>
-
-      <ol className="relative space-y-0">
-        {milestones.map((m, idx) => {
-          const milestoneDate = new Date(
-            receivedAt.getTime() + m.day * 24 * 60 * 60 * 1000,
-          );
-          const isPast = milestoneDate.getTime() < now.getTime();
-          const isLast = idx === milestones.length - 1;
-          const dotColor = isPast
-            ? "bg-success border-success"
-            : "bg-muted border-border";
-
-          return (
-            <li key={m.day} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <div
-                  className={`mt-0.5 h-3 w-3 rounded-full border-2 ${dotColor}`}
-                  aria-hidden
-                />
-                {!isLast && <div className="mt-1 h-8 w-px bg-border" aria-hidden />}
-              </div>
-              <div className={`pb-1 text-sm ${isLast ? "" : "pb-3"}`}>
-                <p className="leading-tight text-muted-foreground">
-                  D+{m.day} — {m.label}
-                </p>
-                <p className="text-xs text-muted-foreground opacity-70">
-                  {format(milestoneDate, "dd 'de' MMM yyyy", { locale: localeDaData })}
-                </p>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
-  );
-}
+import { prazoEmBr } from "@/lib/lgpd/sla";
+// A mesma linha do tempo da página da organização: uma régua só para o prazo.
+import { SlaTimeline } from "@/app/app/lgpd/requests/[id]/SlaTimeline";
 
 // ---------------------------------------------------------------------------
 // Inline audit trail
@@ -287,7 +187,7 @@ export function LgpdRequestAdminDetail({ id }: Props) {
           {request.due_at && (
             <>
               {" · "}
-              {t("Vence em")} {format(new Date(request.due_at), "dd/MM/yyyy", { locale: localeDaData })}
+              {t("Vence em")} {prazoEmBr(request.due_at)}
             </>
           )}
         </p>
@@ -306,7 +206,7 @@ export function LgpdRequestAdminDetail({ id }: Props) {
           </CardHeader>
           <CardContent>
             {request.due_at ? (
-              <SlaTimelineInline
+              <SlaTimeline
                 received_at={request.received_at}
                 due_at={request.due_at}
                 request_type={request.request_type}

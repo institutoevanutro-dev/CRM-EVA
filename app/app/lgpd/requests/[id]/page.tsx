@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { LgpdRequestDetail } from "./_client";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ export default async function LgpdRequestDetailPage({
 
   return (
     <div className="flex h-full flex-col gap-0 p-6">
-      <LgpdRequestDetail id={id} />
+      <LgpdRequestDetail id={id} fuso={fusoUtilizavel(activeOrg.timezone)} />
     </div>
   );
 }

@@ -13,6 +13,8 @@ import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
 import { LGPD_REQUEST_STATUSES } from "@/lib/lgpd/types";
+import { computeSlaBucket } from "@/lib/lgpd/balde-de-sla";
+import { diasAtePrazo, diasDeAtraso } from "@/lib/lgpd/sla";
 import { ID, INSTANTE, lerCursorJson } from "@/lib/api/filtro-postgrest";
 
 export const dynamic = "force-dynamic";
@@ -38,18 +40,14 @@ const querySchema = z.object({
 
 type RiskLevel = "expired" | "at_risk" | "warning" | "ok";
 
-function computeRiskLevel(dueAt: string | null, receivedAt: string): RiskLevel {
+function computeRiskLevel(dueAt: string | null, receivedAt: string, agora: Date = new Date()): RiskLevel {
   if (!dueAt) return "ok";
-  const now = Date.now();
-  const due = new Date(dueAt).getTime();
-  const received = new Date(receivedAt).getTime();
-  const msUntilDue = due - now;
-
-  if (msUntilDue < 0) return "expired";
-  if (msUntilDue < 24 * 60 * 60 * 1000) return "at_risk";
-  const totalWindow = due - received;
-  if (totalWindow > 0 && msUntilDue < totalWindow * 0.5) return "warning";
-  return "ok";
+  // Dias civis no fuso padrão, a mesma régua da lista da organização
+  // (`lib/lgpd/sla.ts`). A conta em milissegundos dizia "expired" às 21h de
+  // São Paulo da véspera do prazo.
+  if (diasDeAtraso(dueAt, agora) > 0) return "expired";
+  if (diasAtePrazo(dueAt, agora) === 0) return "at_risk";
+  return computeSlaBucket(dueAt, receivedAt, agora) === "ok" ? "ok" : "warning";
 }
 
 // ---------------------------------------------------------------------------

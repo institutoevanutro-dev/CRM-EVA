@@ -361,6 +361,14 @@ const LEEM_PELO_HELPER: readonly string[] = [
   "app/app/lgpd/requests/RegistrarPedidoDialog.tsx",
   // Saiu da dívida: o "Vence em" da página do pedido lê o dia pelo `prazoEmBr`.
   "app/app/lgpd/requests/[id]/_client.tsx",
+  // Saíram da dívida em 14/10/2026, com o titular na lista: a linha do tempo
+  // conta os marcos em dias úteis pela mesma régua do prazo, e o painel da
+  // plataforma, o selo de risco e o alerta do dashboard leem o dia civil.
+  "app/app/lgpd/requests/[id]/SlaTimeline.tsx",
+  "app/admin/(protected)/lgpd/requests/[id]/_client.tsx",
+  "app/api/v1/admin/lgpd/requests/route.ts",
+  "app/api/v1/admin/dashboard/kpis/route.ts",
+  "components/admin/lgpd/LgpdRequestsTable.tsx",
 ];
 
 /**
@@ -389,38 +397,9 @@ const REPASSA_O_VALOR: readonly string[] = [
  * deixa de casar é vermelho pedindo remoção. É a fila dos próximos recortes, e
  * ela é o que impede este PR de parecer um conserto pela metade.
  */
-const DIVIDA_CONGELADA: ReadonlyArray<{ arquivo: string; motivo: string }> = [
-  {
-    arquivo: "app/admin/(protected)/lgpd/requests/[id]/_client.tsx",
-    motivo:
-      "Tela do painel da plataforma: `new Date(due_at)` no fuso do navegador (`SlaTimelineInline`). A página da organização já mostra o prazo pelo helper; esta é UI e pede prova pela tela.",
-  },
-  {
-    arquivo: "app/app/lgpd/requests/RequestsTable.tsx",
-    motivo:
-      "Tela: `fmtDistance(due_at)` em milissegundos — diz 'atrasado hoje' às 21h do dia ANTERIOR ao prazo.",
-  },
-  {
-    arquivo: "app/app/lgpd/requests/[id]/SlaTimeline.tsx",
-    motivo:
-      "Tela: `differenceInDays(dueAt, now)` em dias locais. Defeito IRMÃO e mais fundo: os marcos D+5/D+7/D+10 são dias CORRIDOS desde `received_at`, enquanto o prazo é dias ÚTEIS — duas réguas na mesma tela.",
-  },
-  {
-    arquivo: "app/api/v1/admin/dashboard/kpis/route.ts",
-    motivo:
-      "Filtra `due_at` em SQL contra `now + 5 dias`, então acende 'LGPD em risco' 3h antes do prazo e não tem como usar o helper sem tirar a comparação da query. Recorte de banco/API depois das telas.",
-  },
-  {
-    arquivo: "app/api/v1/admin/lgpd/requests/route.ts",
-    motivo:
-      "API do painel da plataforma: `computeRiskLevel` compara `due_at` em milissegundos e devolve `expired` às 21h de São Paulo da VÉSPERA do prazo — o selo 'Vencido' da tabela e o LgpdRiskBanner leem esse valor. É o mesmo defeito que `computeSlaBucket` consertou na API da organização; vai junto com o recorte das telas.",
-  },
-  {
-    arquivo: "components/admin/lgpd/LgpdRequestsTable.tsx",
-    motivo:
-      "Tela: `countdownLabel` faz `differenceInHours(new Date(due_at), now)` e diz 'Nh em atraso' a partir das 21h de São Paulo da véspera do prazo. Recorte das telas.",
-  },
-];
+// A lista esvaziou em 14/10/2026. A tabela da lista (`RequestsTable.tsx`) não
+// lê mais `due_at`: data e estado vêm prontos da API, no fuso da organização.
+const DIVIDA_CONGELADA: ReadonlyArray<{ arquivo: string; motivo: string }> = [];
 
 describe("nenhum consumidor de due_at nasce fora da lista", () => {
   const conhecidos = new Set([
@@ -457,7 +436,7 @@ describe("nenhum consumidor de due_at nasce fora da lista", () => {
       if (arquivo === "lib/lgpd/sla.ts") continue; // o próprio dono dos helpers
       const fonte = readFileSync(join(RAIZ, arquivo), "utf8");
       const usa =
-        /diasDeAtraso|diasAtePrazo|diaDoPrazo|prazoEmBr|computeDueAt|computeSlaBucket/.test(fonte);
+        /diasDeAtraso|diasAtePrazo|diaDoPrazo|prazoEmBr|rotuloDoPrazo|computeDueAt|computeSlaBucket/.test(fonte);
       expect(
         usa,
         `${arquivo} entrou na lista de quem lê pelo helper e não importa nenhum: ` +
