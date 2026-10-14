@@ -8,6 +8,15 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.5.3] — 2026-10-14
+
+### Corrigido
+
+- **Observações do agendamento chegam à integração do Prontuário** A leitura protegida do compromisso passa a devolver `description`, a observação
+  preenchida no formulário da agenda, separadamente de `notes`, as anotações internas.
+  Os filtros de organização, contato e compromisso e as duas credenciais continuam
+  obrigatórios. Não há migração nem variável nova.
+
 ## [4.5.2] — 2026-10-14
 
 ### Corrigido
@@ -7188,7 +7197,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.2...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.3...HEAD
+[4.5.3]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.2...v4.5.3
 [4.5.2]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.1...v4.5.2
 [4.5.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.0...v4.5.1
 [4.5.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.4.0...v4.5.0
