@@ -47,14 +47,21 @@ vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: vi.fn() })
 
 import { DiasBloqueados } from "./DiasBloqueados";
 
-function montar() {
+function montar(props: Partial<React.ComponentProps<typeof DiasBloqueados>> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <DiasBloqueados podeEditar />
+      <DiasBloqueados podeEditar {...props} />
     </QueryClientProvider>,
   );
 }
+
+const EU = "11111111-1111-4111-8111-111111111111";
+const DRA = "22222222-2222-4222-8222-222222222222";
+const EQUIPE = [
+  { id: EU, nome: "Recepção" },
+  { id: DRA, nome: "Dra. Ana" },
+];
 
 /** O corpo do único POST que saiu. */
 function corpoEnviado(): Record<string, unknown> {
@@ -196,5 +203,92 @@ describe("Dias fora da rotina — fechar e abrir", () => {
       "2026-10-15",
     ]);
     expect(await screen.findByTestId("resultado-do-lote")).toHaveTextContent("1");
+  });
+});
+
+describe("Bloquear um HORÁRIO de uma pessoa", () => {
+  beforeEach(() => {
+    post.mockClear();
+    jaCadastrado = [];
+  });
+
+  it("gerente bloqueia 14:00 a 16:00 da Dra. Ana, e o corpo leva a faixa e o user_id dela", async () => {
+    const u = userEvent.setup();
+    montar({ pessoas: EQUIPE, euId: EU, podeEscolherQuem: true });
+
+    expect(screen.getByLabelText("De quem")).toHaveValue(EU);
+    await u.selectOptions(screen.getByLabelText("De quem"), DRA);
+    await u.click(screen.getByLabelText("O dia todo"));
+    await u.type(screen.getByLabelText("Dia"), "2026-10-20");
+    await u.clear(screen.getByLabelText("Das"));
+    await u.type(screen.getByLabelText("Das"), "14:00");
+    await u.clear(screen.getByLabelText("Até"));
+    await u.type(screen.getByLabelText("Até"), "16:00");
+    await u.click(screen.getByRole("button", { name: "Bloquear este horário" }));
+
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(corpoEnviado()).toMatchObject({
+      exception_date: "2026-10-20",
+      user_id: DRA,
+      is_unavailable: true,
+      start_minute: 840,
+      end_minute: 960,
+    });
+    // O que já estava marcado não é cancelado, e a tela diz isso na hora.
+    expect(await screen.findByTestId("aviso-de-marcados")).toHaveTextContent("continuam marcadas");
+  });
+
+  it("horário invertido no fechar também não sai", async () => {
+    const u = userEvent.setup();
+    montar({ pessoas: EQUIPE, euId: EU, podeEscolherQuem: true });
+
+    await u.click(screen.getByLabelText("O dia todo"));
+    await u.type(screen.getByLabelText("Dia"), "2026-10-20");
+    await u.clear(screen.getByLabelText("Das"));
+    await u.type(screen.getByLabelText("Das"), "16:00");
+    await u.clear(screen.getByLabelText("Até"));
+    await u.type(screen.getByLabelText("Até"), "14:00");
+
+    expect(screen.getByRole("button", { name: "Bloquear este horário" })).toBeDisabled();
+    expect(screen.getByText("A hora final precisa ser maior que a inicial.")).toBeInTheDocument();
+  });
+
+  it("quem não gerencia só vê a si mesmo no De quem", async () => {
+    montar({ pessoas: EQUIPE, euId: EU, podeEscolherQuem: false });
+
+    const seletor = screen.getByLabelText("De quem");
+    expect(seletor).toBeDisabled();
+    expect(Array.from((seletor as HTMLSelectElement).options).map((o) => o.value)).toEqual([EU]);
+  });
+
+  it("a lista diz de quem é, o dia, a faixa e o motivo; e só oferece Reabrir no que é seu", async () => {
+    jaCadastrado = [
+      {
+        id: "b1",
+        user_id: DRA,
+        exception_date: "2026-10-20",
+        is_unavailable: true,
+        start_minute: 840,
+        end_minute: 960,
+        reason: "Congresso",
+      },
+      {
+        id: "b2",
+        user_id: EU,
+        exception_date: "2026-10-21",
+        is_unavailable: true,
+        start_minute: 0,
+        end_minute: 1440,
+        reason: null,
+      },
+    ];
+    montar({ pessoas: EQUIPE, euId: EU, podeEscolherQuem: false });
+
+    const itens = await screen.findAllByRole("listitem");
+    expect(itens[0]).toHaveTextContent(/Dra\. Ana · .*20.* · 14:00–16:00 · Congresso/);
+    expect(itens[1]).toHaveTextContent(/Você · .*21.* · o dia todo/);
+    // A RLS não deixaria apagar o da colega: o botão não promete o que não faz.
+    expect(itens[0]).not.toHaveTextContent("Reabrir");
+    expect(itens[1]).toHaveTextContent("Reabrir");
   });
 });

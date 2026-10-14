@@ -93,6 +93,8 @@ export function useAgendamentos(recorte: RecorteDaGrade | null) {
           // `?? "ui"` mantém o fio tolerante a servidor mais velho que o
           // cliente, como já faz o `quemSeraAtendido` logo abaixo.
           origem: (a as { origem?: Agendamento["origem"] }).origem ?? "ui",
+          // Bloqueio de "Dias fora da rotina": inerte como o Google, outro rótulo.
+          ...((a as { bloqueio?: true }).bloqueio ? { bloqueio: true } : {}),
           situacao: a.situacao as Agendamento["situacao"],
           // Sem esta linha, montar o hook REGREDIRIA o conserto do "com quem":
           // a prop do servidor traz o nome, e o refetch o apagaria da grade.

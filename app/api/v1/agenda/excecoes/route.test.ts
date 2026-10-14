@@ -31,13 +31,42 @@ const ORG = "11111111-1111-4111-8111-111111111111";
 const EU = "22222222-2222-4222-8222-222222222222";
 const COLEGA = "33333333-3333-4333-8333-333333333333";
 
-/** Devolve o client e o que o insert recebeu. */
-function clientQueInsere(resultado: { data?: unknown; error?: { code: string; message: string } }) {
+/**
+ * Devolve o client e o que o insert recebeu.
+ *
+ * `membros` é o que `user_organizations` devolve à SESSÃO de quem pede: a RLS
+ * mostra colegas só a manager+, então para um agent a lista tem só ele mesmo.
+ * O dublê aplica os `.eq()` de verdade, senão o caso "outra organização"
+ * passaria por o filtro nem existir.
+ */
+function clientQueInsere(
+  resultado: { data?: unknown; error?: { code: string; message: string } },
+  membros: Array<{ organization_id: string; user_id: string }> = [],
+) {
   const capturado: { payload?: Record<string, unknown> } = {};
+  const consultaDeMembros = () => {
+    const filtros: Array<[string, unknown]> = [];
+    const api = {
+      select: () => api,
+      is: () => api,
+      eq: (coluna: string, valor: unknown) => {
+        filtros.push([coluna, valor]);
+        return api;
+      },
+      maybeSingle: async () => ({
+        data:
+          membros.find((m) =>
+            filtros.every(([c, v]) => (m as Record<string, unknown>)[c] === v),
+          ) ?? null,
+        error: null,
+      }),
+    };
+    return api;
+  };
   return {
     capturado,
     client: {
-      from: () => ({
+      from: (tabela: string) => tabela === "user_organizations" ? consultaDeMembros() : ({
         insert: (payload: Record<string, unknown>) => {
           capturado.payload = payload;
           return {
@@ -53,6 +82,9 @@ function clientQueInsere(resultado: { data?: unknown; error?: { code: string; me
     },
   };
 }
+
+const OUTRA_ORG = "44444444-4444-4444-8444-444444444444";
+const DE_FORA = "55555555-5555-4555-8555-555555555555";
 
 function req(body: Record<string, unknown>) {
   return new NextRequest("http://localhost/x", {
@@ -104,14 +136,97 @@ describe("POST /api/v1/agenda/excecoes", () => {
     });
   });
 
-  it("com user_id, passa adiante e deixa a RLS decidir", async () => {
+  it("gerente bloqueia um HORÁRIO de um colega da equipe, e a auditoria leva a faixa e o dono", async () => {
+    deps.role.mockResolvedValue({
+      ok: true,
+      user: { id: EU, idioma: "pt-BR" },
+      org: { orgId: ORG, role: "manager" },
+    });
+    const { client, capturado } = clientQueInsere({ data: { id: "e1" } }, [
+      { organization_id: ORG, user_id: COLEGA },
+    ]);
+    deps.criarClientDeSessao.mockResolvedValue(client);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      req({ exception_date: "2026-12-21", user_id: COLEGA, start_minute: 840, end_minute: 960 }),
+    );
+
+    expect(res.status).toBe(201);
+    expect(capturado.payload).toMatchObject({
+      user_id: COLEGA,
+      is_unavailable: true,
+      start_minute: 840,
+      end_minute: 960,
+    });
+    expect(deps.audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "agenda.dia_bloqueado",
+        metadata: expect.objectContaining({
+          dono: COLEGA,
+          dia_inteiro: false,
+          start_minute: 840,
+          end_minute: 960,
+        }),
+      }),
+    );
+  });
+
+  it("gerente NÃO bloqueia a agenda de alguém de outra organização", async () => {
+    // A RLS de escrita confere a org da LINHA e o papel de quem escreve; o
+    // `user_id` só aponta para `auth.users`. Sem a conferência da rota, a linha
+    // entraria na org do gerente com a agenda de um estranho.
+    deps.role.mockResolvedValue({
+      ok: true,
+      user: { id: EU, idioma: "pt-BR" },
+      org: { orgId: ORG, role: "manager" },
+    });
+    const { client, capturado } = clientQueInsere({ data: { id: "e1" } }, [
+      { organization_id: OUTRA_ORG, user_id: DE_FORA },
+    ]);
+    deps.criarClientDeSessao.mockResolvedValue(client);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      req({ exception_date: "2026-12-21", user_id: DE_FORA, start_minute: 840, end_minute: 960 }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(capturado.payload).toBeUndefined();
+    expect(deps.audit).not.toHaveBeenCalled();
+  });
+
+  it("quem não é gerente não bloqueia o horário de um colega", async () => {
+    // Para um agent a RLS de `user_organizations` só mostra a própria linha:
+    // o colega não aparece, e a recusa vem antes de qualquer escrita.
+    const { client, capturado } = clientQueInsere({ data: { id: "e1" } }, [
+      { organization_id: ORG, user_id: EU },
+    ]);
+    deps.criarClientDeSessao.mockResolvedValue(client);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      req({ exception_date: "2026-12-21", user_id: COLEGA, start_minute: 840, end_minute: 960 }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: { message: string } }).error.message).toMatch(
+      /própria agenda/,
+    );
+    expect(capturado.payload).toBeUndefined();
+  });
+
+  it("o próprio user_id no corpo não exige consulta de equipe", async () => {
     const { client, capturado } = clientQueInsere({ data: { id: "e1" } });
     deps.criarClientDeSessao.mockResolvedValue(client);
 
     const { POST } = await import("./route");
-    await POST(req({ exception_date: "2026-12-25", user_id: COLEGA }));
+    const res = await POST(
+      req({ exception_date: "2026-12-21", user_id: EU, start_minute: 840, end_minute: 960 }),
+    );
 
-    expect((capturado.payload as Record<string, unknown>).user_id).toBe(COLEGA);
+    expect(res.status).toBe(201);
+    expect((capturado.payload as Record<string, unknown>).user_id).toBe(EU);
   });
 
   it("a RLS recusando vira 403 com frase de gente, não 500", async () => {
@@ -121,7 +236,7 @@ describe("POST /api/v1/agenda/excecoes", () => {
     deps.criarClientDeSessao.mockResolvedValue(client);
 
     const { POST } = await import("./route");
-    const res = await POST(req({ exception_date: "2026-12-25", user_id: COLEGA }));
+    const res = await POST(req({ exception_date: "2026-12-25" }));
 
     expect(res.status).toBe(403);
     expect(deps.audit).not.toHaveBeenCalled();

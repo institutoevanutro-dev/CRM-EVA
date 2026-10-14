@@ -337,7 +337,15 @@ export function TiposDeAgendamentoClient({
         ligadoInicial={pacientePeloCadastroLigado}
         podeLigar={podeLigarClientePelaAgenda}
       />
-      <DiasBloqueados podeEditar={podeEditar}/>
+      <DiasBloqueados
+        // Fechar a PRÓPRIA agenda é de quem atende (agent+, o piso da rota);
+        // fechar a de outra pessoa é de quem gerencia, a régua da RLS de escrita.
+        podeEditar={podeEditar || podeConfigurarGoogle}
+        podeEscolherQuem={podeEditar}
+        euId={usuarioAtualId}
+        // `viewer` só acompanha e não tem agenda para fechar.
+        pessoas={pessoas.filter((p) => p.papel !== "viewer")}
+      />
       {podeEditar ? (
         <div>
           {criando ? (

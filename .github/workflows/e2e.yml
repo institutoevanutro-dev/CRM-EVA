@@ -432,6 +432,7 @@ jobs:
         painel-inicio.spec.ts
         agenda-marcar-pela-tela.spec.ts
         agenda-remarcar-e-cancelar.spec.ts
+        agenda-bloquear-horario-do-profissional.spec.ts
         agenda-tipos-de-agendamento.spec.ts
         cliente-pela-agenda.spec.ts
         paciente-pelo-cadastro.spec.ts
