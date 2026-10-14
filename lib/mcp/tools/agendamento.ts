@@ -65,19 +65,19 @@ const HORARIOS_MAX = 50;
  * Espalhar pega os primeiros de CADA dia até o teto, o que preserva a forma da
  * janela pedida — a pessoa vê opções ao longo do período que ela citou.
  */
-function espalhaPorDia(
-  slots: readonly { inicio: Date; fim: Date }[],
+function espalhaPorDia<S extends { inicio: Date }>(
+  slots: readonly S[],
   fuso: string,
   teto: number,
-): { inicio: Date; fim: Date }[] {
-  const porDia = new Map<string, { inicio: Date; fim: Date }[]>();
+): S[] {
+  const porDia = new Map<string, S[]>();
   for (const s of slots) {
     const dia = rotuloLocal(s.inicio, fuso).slice(0, 20);
     const lista = porDia.get(dia);
     if (lista) lista.push(s);
     else porDia.set(dia, [s]);
   }
-  const escolhidos: { inicio: Date; fim: Date }[] = [];
+  const escolhidos: S[] = [];
   // Rodadas: um de cada dia por vez, na ordem em que os dias aparecem.
   for (let rodada = 0; escolhidos.length < teto; rodada += 1) {
     let achouAlgum = false;
@@ -242,6 +242,10 @@ function payloadDeHorarios(
       // `quando` é para FALAR com a pessoa. Um só, e do início: o fim não
       // responde pergunta nenhuma (a duração é do tipo) e dobraria o custo.
       quando: rotuloLocal(s.inicio, consulta.fusoDaRegra),
+      // `unit_id` vai a `crm_book_appointment` como veio; `unidade` é o nome
+      // para dizer à pessoa onde é. Tipo que exige sala não marca sem unidade.
+      unit_id: s.unitId ?? null,
+      unidade: s.unitId ? (consulta.nomesDasUnidades?.[s.unitId] ?? null) : null,
     })),
     // Sem estes dois, uma lista cortada é indistinguível de uma agenda que
     // acabou — o mesmo modo de falha que `publicou_horarios` existe para
@@ -290,7 +294,8 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
     "atrás é pior do que demorar um instante a mais para responder. " +
     "Cada horário vem em dois formatos: `inicio` é o instante que você COPIA para `starts_at` de " +
     "`crm_book_appointment`, sem reescrever; `quando` já está na hora local da agenda e é o que você " +
-    "fala com a pessoa. " +
+    "fala com a pessoa. `unit_id` também vai para `crm_book_appointment` como veio, e `unidade` diz " +
+    "à pessoa onde é o atendimento. " +
     "A lista vem cortada no `limite` e espalhada ao longo do período: `total_de_horarios` diz quantos " +
     "existem e `ha_mais` avisa que sobraram — lista cortada NÃO é agenda cheia. " +
     "QUANDO: informe `dias_a_frente` (a partir de agora — ex.: 7 para a próxima semana). " +
@@ -495,6 +500,25 @@ const ENSINO_POR_CODIGO: Record<string, string> = {
   internal_error: "não consegui completar agora. Avise que alguém da equipe confirma, e não repita a tentativa.",
 };
 
+/**
+ * A recusa por falta de unidade traz as unidades possíveis: sem a lista o
+ * modelo não tem o que mandar em `unit_id`, e o caminho de menor esforço é
+ * dizer ao paciente que marcou sem ter marcado.
+ */
+function ensinoDaUnidade(details: Record<string, unknown> | undefined): string {
+  const unidades = Array.isArray(details?.unidades)
+    ? (details.unidades as { id: string; nome: string }[])
+    : [];
+  if (unidades.length === 0) {
+    return "este atendimento precisa de uma unidade e nenhuma está disponível nesse horário. Nada foi marcado. Avise que alguém da equipe confirma.";
+  }
+  const lista = unidades.map((u) => `${u.nome} (unit_id ${u.id})`).join(", ");
+  return (
+    `nada foi marcado: informe a unidade em \`unit_id\`. Unidades possíveis: ${lista}. ` +
+    "Se a pessoa ainda não disse onde prefere ser atendida, pergunte antes de marcar."
+  );
+}
+
 /** Captura o `ApiError` do handler e devolve recusa de NEGÓCIO, nunca exceção. */
 async function semDerrubarOTurno<T>(
   chave: string,
@@ -508,8 +532,10 @@ async function semDerrubarOTurno<T>(
       [chave]: false,
       motivo: e.code,
       mensagem:
-        ENSINO_POR_CODIGO[e.code] ??
-        "não consegui completar agora. Avise que alguém da equipe confirma o horário.",
+        e.code === "agenda_unidade_obrigatoria"
+          ? ensinoDaUnidade(e.details)
+          : (ENSINO_POR_CODIGO[e.code] ??
+            "não consegui completar agora. Avise que alguém da equipe confirma o horário."),
     };
   }
 }
@@ -529,7 +555,11 @@ function compromissoComHorarioLocal(r: Record<string, unknown>): Record<string, 
 const marcarShape = {
   event_type_slug: z.string().min(1).describe("o identificador legível do tipo de atendimento"),
   starts_at: z.string().datetime({ offset: true }).describe("o instante exato do início, vindo de `crm_find_free_slots`"),
-  unit_id: z.string().uuid().optional().describe("unidade retornada junto com o horário livre"),
+  unit_id: z
+    .string()
+    .uuid()
+    .optional()
+    .describe("o `unit_id` que veio junto com o horário em `crm_find_free_slots`; copie sem reescrever"),
   contact_id: z.string().uuid().describe("quem vai ser atendido"),
   owner_user_id: z.string().uuid().optional(),
   title: z.string().min(1).max(200).optional(),
@@ -644,6 +674,7 @@ async function marcarHorario(
     eventTypeSlug: string;
     startsAt: string;
     contactId: string;
+    unitId?: string;
     ownerUserId?: string;
     title?: string;
     notes?: string;
@@ -654,6 +685,7 @@ async function marcarHorario(
       event_type_slug: args.eventTypeSlug,
       starts_at: args.startsAt,
       contact_id: args.contactId,
+      ...(args.unitId !== undefined ? { unit_id: args.unitId } : {}),
       ...(args.ownerUserId !== undefined ? { owner_user_id: args.ownerUserId } : {}),
       ...(args.title !== undefined ? { title: args.title } : {}),
       ...(args.notes !== undefined ? { notes: args.notes } : {}),
@@ -679,6 +711,11 @@ const consultarEMarcarShape = {
         "É a hora que aparece em `quando` na consulta — a mesma do relógio de quem atende.",
     ),
   contact_id: z.string().uuid().describe("quem vai ser atendido"),
+  unit_id: z
+    .string()
+    .uuid()
+    .optional()
+    .describe("a unidade onde a pessoa quer ser atendida, quando o retorno pediu para informar"),
   owner_user_id: z.string().uuid().optional(),
   title: z.string().min(1).max(200).optional(),
   notes: z.string().max(2000).optional(),
@@ -730,6 +767,7 @@ export const crmFindAndBookAppointment: McpToolDefinition<typeof consultarEMarca
     const consulta = await horariosLivresDaOrg(ctx.supabase, ctx.organizationId, {
       eventTypeSlug: input.event_type_slug,
       ownerUserId: input.owner_user_id ?? null,
+      unitId: input.unit_id ?? null,
       de,
       ate,
       agora,
@@ -780,6 +818,9 @@ export const crmFindAndBookAppointment: McpToolDefinition<typeof consultarEMarca
       // agenda confirmou como livre.
       startsAt: achado.inicio.toISOString(),
       contactId: input.contact_id,
+      // Sem unidade pedida, quem decide é a marcação: ela tira a unidade da
+      // janela da jornada, ou devolve a lista para o modelo perguntar.
+      ...(input.unit_id !== undefined ? { unitId: input.unit_id } : {}),
       ...(input.owner_user_id !== undefined ? { ownerUserId: input.owner_user_id } : {}),
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.notes !== undefined ? { notes: input.notes } : {}),

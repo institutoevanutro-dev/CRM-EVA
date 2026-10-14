@@ -410,3 +410,49 @@ describe("idempotência da marcação", () => {
     });
   });
 });
+
+describe("a unidade do horário chega ao modelo, e a falta dela ensina", () => {
+  const VITORIA = "ea730000-0000-4000-8000-000000000001";
+  const SERRA = "ea730000-0000-4000-8000-000000000002";
+
+  it("cada horário livre traz `unit_id` e o nome da unidade, para o modelo copiar e falar", async () => {
+    vi.clearAllMocks();
+    respondeCom({
+      ...SUCESSO,
+      slots: [
+        { inicio: new Date("2026-09-01T14:00:00Z"), fim: new Date("2026-09-01T14:50:00Z"), unitId: VITORIA },
+        { inicio: new Date("2026-09-01T15:00:00Z"), fim: new Date("2026-09-01T15:50:00Z"), unitId: null },
+      ],
+      nomesDasUnidades: { [VITORIA]: "Vitória" },
+    });
+    const r = (await crmFindFreeSlots.handler({ event_type_slug: "c" }, ctx)) as {
+      horarios: { unit_id: string | null; unidade: string | null }[];
+    };
+    expect(r.horarios.map((h) => [h.unit_id, h.unidade])).toEqual([
+      [VITORIA, "Vitória"],
+      [null, null],
+    ]);
+  });
+
+  it("sem unidade possível, a recusa lista as unidades com o id, em vez do 409 cru", async () => {
+    vi.clearAllMocks();
+    vi.mocked(idDoTipoPorSlug).mockResolvedValue({ id: "t-1", nome: "Drenagem" });
+    vi.mocked(handlers.marcarAgendamentoHandler).mockRejectedValue(
+      new ApiError(
+        409,
+        "agenda_unidade_obrigatoria",
+        { unidades: [{ id: VITORIA, nome: "Vitória" }, { id: SERRA, nome: "Serra" }] },
+        "req-1",
+      ),
+    );
+    const r = (await crmBookAppointment.handler(
+      { event_type_slug: "drenagem", starts_at: "2026-09-01T14:00:00Z", contact_id: "c-1" },
+      ctx,
+    )) as { marcado: boolean; motivo: string; mensagem: string };
+    expect(r.marcado).toBe(false);
+    expect(r.motivo).toBe("agenda_unidade_obrigatoria");
+    expect(r.mensagem).toContain(`Vitória (unit_id ${VITORIA})`);
+    expect(r.mensagem).toContain(`Serra (unit_id ${SERRA})`);
+    expect(r.mensagem).not.toContain("—");
+  });
+});

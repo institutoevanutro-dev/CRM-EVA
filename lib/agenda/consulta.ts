@@ -158,6 +158,12 @@ export type ResultadoDaConsulta =
        */
       agendaExternaNuncaLida: boolean;
       googleCoberturaParcial: boolean;
+      /**
+       * `unit_id` → nome, só das unidades que aparecem em `slots`. A IA fala
+       * com o paciente pelo nome ("em Vitória") e marca pelo id; sem o nome
+       * ela teria só um uuid para dizer onde é o atendimento.
+       */
+      nomesDasUnidades?: Record<string, string>;
     }
   | {
       ok: false;
@@ -403,12 +409,26 @@ export async function horariosLivresDaOrg(
     agora: params.agora,
   });
 
+  // Leitura de apoio: sem o nome a IA ainda marca pelo id, então a falha aqui
+  // não derruba a consulta.
+  const idsDeUnidade = [...new Set(slots.flatMap((s) => (s.unitId ? [s.unitId] : [])))];
+  let nomesDasUnidades: Record<string, string> = {};
+  if (idsDeUnidade.length > 0) {
+    const { data: unidades } = await supabase
+      .from("calendar_units")
+      .select("id, name")
+      .eq("organization_id", organizationId)
+      .in("id", idsDeUnidade);
+    nomesDasUnidades = Object.fromEntries((unidades ?? []).map((u) => [String(u.id), String(u.name)]));
+  }
+
   let googleCoberturaParcial = true;
   try { googleCoberturaParcial = Boolean(await googleRpc(supabase, "fn_google_coverage", { p_org: organizationId, p_owner: donoId, p_start: params.de.toISOString(), p_end: params.ate.toISOString() })); } catch { /* leitura incerta não afirma cobertura */ }
   return {
     ok: true,
     googleCoberturaParcial,
     slots,
+    nomesDasUnidades,
     fusoDaRegra: leitura.jornada.timezone,
     publicouHorarios: leitura.publicouHorarios,
     fusoSuposto: leitura.fusoSuposto,
@@ -826,6 +846,8 @@ export interface TipoDeAtendimento {
   bufferDepoisMin: number;
   antecedenciaMinimaMin: number;
   janelaDeAgendamentoDias: number;
+  /** O passo da grade. `null` = a duração do atendimento. */
+  intervaloMin?: number | null;
   /**
    * O LEMBRETE deste tipo — o que o cron `agenda-reminder` lê para decidir se
    * manda mensagem, e quantos minutos antes.
@@ -871,7 +893,7 @@ export async function listaTiposDeAtendimento(
   let q = supabase
     .from("calendar_event_types")
     .select(
-      "id, name, slug, description, category, duration_minutes, catalog_product_id, required_room_kind, concurrency_key, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body",
+      "id, name, slug, description, category, duration_minutes, catalog_product_id, required_room_kind, concurrency_key, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, slot_interval_minutes, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body",
     )
     // Service role bypassa a RLS: este filtro é a única proteção no caminho da
     // ferramenta MCP (ver o cabeçalho do arquivo).
@@ -910,6 +932,7 @@ export async function listaTiposDeAtendimento(
       bufferDepoisMin: Number(t.buffer_after_minutes),
       antecedenciaMinimaMin: Number(t.minimum_notice_minutes),
       janelaDeAgendamentoDias: Number(t.booking_window_days),
+      intervaloMin: t.slot_interval_minutes == null ? null : Number(t.slot_interval_minutes),
       lembreteLigado: Boolean(t.reminder_enabled),
       lembreteAntecedenciaMin: Number(t.reminder_minutes_before),
       lembreteDegrausExtras: Array.isArray(t.reminder_extra_offsets_minutes)

@@ -117,6 +117,15 @@ export interface TipoDeAgendamento {
 export interface Slot {
   inicio: Date;
   fim: Date;
+  /**
+   * A unidade da janela da jornada que gerou este horário; `null` quando a
+   * janela não tem unidade (ou o dia veio de exceção disponível, que não tem).
+   *
+   * É daqui que quem marca tira o `unit_id`: tipo que exige sala é recusado
+   * pelo gatilho do compromisso sem unidade (`agenda_unidade_obrigatoria`).
+   * O motor sempre preenche; opcional só para quem monta `Slot` à mão (dublês).
+   */
+  unitId?: string | null;
 }
 
 export interface EntradaDeHorariosLivres {
@@ -245,17 +254,31 @@ function janelasDoDia(
   jornada: JornadaDaAgenda,
   excecoesDoDia: ExcecaoDeData[],
   dow: number,
-): FaixaEmMinutos[] {
+): Array<FaixaEmMinutos & { unitId: string | null }> {
   const disponiveis = excecoesDoDia.filter((e) => !e.indisponivel);
+  if (disponiveis.length > 0) {
+    return unirFaixas(disponiveis.map((e) => ({ inicio: e.inicioMinuto, fim: e.fimMinuto }))).map(
+      (f) => ({ ...f, unitId: null }),
+    );
+  }
 
-  const base: FaixaEmMinutos[] =
-    disponiveis.length > 0
-      ? disponiveis.map((e) => ({ inicio: e.inicioMinuto, fim: e.fimMinuto }))
-      : jornada.windows
-          .filter((w) => w.dow === dow)
-          .map((w) => ({ inicio: hhmmParaMinutos(w.start), fim: hhmmParaMinutos(w.end) }));
-
-  return unirFaixas(base);
+  // ⚠️ A UNIÃO É POR UNIDADE. Vitória 09:00–12:00 e Serra 12:00–14:00 fundidas
+  // virariam um bloco só, e o horário que atravessa a emenda sairia com uma
+  // unidade que vale para metade dele. Separadas, cada uma ancora a própria
+  // grade e entrega a própria unidade. Sem unidade nenhuma é um grupo só, e a
+  // grade é exatamente a de antes.
+  const porUnidade = new Map<string | null, FaixaEmMinutos[]>();
+  for (const w of jornada.windows) {
+    if (w.dow !== dow) continue;
+    const unitId = w.unit_id ?? null;
+    const faixa = { inicio: hhmmParaMinutos(w.start), fim: hhmmParaMinutos(w.end) };
+    const grupo = porUnidade.get(unitId);
+    if (grupo) grupo.push(faixa);
+    else porUnidade.set(unitId, [faixa]);
+  }
+  return [...porUnidade].flatMap(([unitId, faixas]) =>
+    unirFaixas(faixas).map((f) => ({ ...f, unitId })),
+  );
 }
 
 /**
@@ -395,7 +418,7 @@ export function horariosLivres(entrada: EntradaDeHorariosLivres): Slot[] {
         const comFolga = slotInflado(inicio, fim, tipo);
         if (bloqueiosDoDia.some((b) => colide(comFolga.inicio, comFolga.fim, b))) continue;
 
-        slots.push({ inicio: new Date(inicio), fim: new Date(fim) });
+        slots.push({ inicio: new Date(inicio), fim: new Date(fim), unitId: faixa.unitId });
       }
     }
   }
@@ -408,9 +431,14 @@ export function horariosLivres(entrada: EntradaDeHorariosLivres): Slot[] {
   // escolheriam "o seu" 03:00 e cairiam no mesmo `timestamptz`, sem erro em
   // lugar nenhum. O Brasil não tem mais horário de verão, mas Santiago e
   // Assunção — que o produto oferece — têm.
-  const porInstante = new Map<number, Slot>();
+  //
+  // A chave leva a UNIDADE: o mesmo instante em duas unidades são duas escolhas
+  // diferentes (sala de um lugar ou de outro), e quem marca precisa vê-las para
+  // escolher. Dentro da mesma unidade a regra acima vale igual.
+  const porInstante = new Map<string, Slot>();
   for (const slot of slots) {
-    if (!porInstante.has(slot.inicio.getTime())) porInstante.set(slot.inicio.getTime(), slot);
+    const chave = `${slot.inicio.getTime()}|${slot.unitId ?? ""}`;
+    if (!porInstante.has(chave)) porInstante.set(chave, slot);
   }
 
   return [...porInstante.values()].sort((a, b) => a.inicio.getTime() - b.inicio.getTime());

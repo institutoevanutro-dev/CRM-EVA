@@ -79,6 +79,18 @@ const camposDoTipo = {
   minimum_notice_minutes: z.number().int().min(0).max(43_200).optional(),
   booking_window_days: z.number().int().min(1).max(365).optional(),
   /**
+   * De quanto em quanto tempo a grade oferece horário. `null` volta ao padrão,
+   * que é a duração do atendimento. Faixa do CHECK do banco. Ficou de fora
+   * daqui até 14/10/2026, e o Zod descartava a chave em silêncio: a coluna só
+   * mudava por SQL, e ninguém via o que estava gravado.
+   */
+  slot_interval_minutes: z
+    .number({ message: "O passo da grade vai de 5 a 1440 minutos, em minutos inteiros." })
+    .int({ message: "O passo da grade vai de 5 a 1440 minutos, em minutos inteiros." })
+    .min(5, { message: "O passo da grade vai de 5 a 1440 minutos, em minutos inteiros." })
+    .max(1440, { message: "O passo da grade vai de 5 a 1440 minutos, em minutos inteiros." })
+    .nullish(),
+  /**
    * O LEMBRETE — os dois campos que o cron `agenda-reminder` lê e que ninguém
    * conseguia escrever.
    *
@@ -238,6 +250,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       buffer_after_minutes: t.bufferDepoisMin,
       minimum_notice_minutes: t.antecedenciaMinimaMin,
       booking_window_days: t.janelaDeAgendamentoDias,
+      // `null` = o passo é a duração do atendimento.
+      slot_interval_minutes: t.intervaloMin ?? null,
       // Sem estes dois, quem chama a rota não tem como SABER se o lembrete está
       // ligado — só como pedir que ligue. Um PATCH cego sobre um estado que a
       // leitura não conta é o mesmo controle decorativo, do outro lado.

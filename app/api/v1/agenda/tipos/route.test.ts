@@ -483,3 +483,83 @@ describe("GET /api/v1/agenda/tipos", () => {
     expect(corpo.data[0]?.reminder_body).toBe("Oi {{primeiro_nome}}, até {{quando}} às {{hora}}.");
   });
 });
+
+describe("o passo da grade (`slot_interval_minutes`)", () => {
+  // Medido em produção (14/10/2026): `{ id, slot_interval_minutes: 30 }` voltava
+  // 422 "Nenhum campo para alterar", porque o Zod descartava a chave em silêncio.
+  // A coluna existia e só se mudava por SQL.
+  it("o PATCH grava o passo pedido", async () => {
+    authOk();
+    const linhas = [linha({ id: TIPO_DA_ORG, organization_id: ORG, slot_interval_minutes: 5 })];
+    makeAdmin(linhas);
+    const { PATCH } = await import("./route");
+
+    const res = await PATCH(req("PATCH", { id: TIPO_DA_ORG, slot_interval_minutes: 30 }));
+
+    expect(res.status).toBe(200);
+    expect(linhas[0]?.slot_interval_minutes).toBe(30);
+  });
+
+  it("nulo VOLTA ao padrão (o passo é a duração do atendimento)", async () => {
+    authOk();
+    const linhas = [linha({ id: TIPO_DA_ORG, organization_id: ORG, slot_interval_minutes: 5 })];
+    makeAdmin(linhas);
+    const { PATCH } = await import("./route");
+
+    const res = await PATCH(req("PATCH", { id: TIPO_DA_ORG, slot_interval_minutes: null }));
+
+    expect(res.status).toBe(200);
+    expect(linhas[0]?.slot_interval_minutes).toBeNull();
+  });
+
+  it("fora da faixa do CHECK do banco é recusado sem escrever", async () => {
+    authOk();
+    const linhas = [linha({ id: TIPO_DA_ORG, organization_id: ORG, slot_interval_minutes: 5 })];
+    const db = makeAdmin(linhas);
+    const { PATCH } = await import("./route");
+
+    for (const valor of [4, 1441, 7.5]) {
+      const res = await PATCH(req("PATCH", { id: TIPO_DA_ORG, slot_interval_minutes: valor }));
+      expect(res.status).toBe(422);
+    }
+    expect(db.escritas).toHaveLength(0);
+    expect(linhas[0]?.slot_interval_minutes).toBe(5);
+  });
+
+  it("o GET publica o passo, e nulo sai como nulo", async () => {
+    authOk();
+    makeAdmin([]);
+    const base = {
+      nome: "Drenagem",
+      slug: "drenagem",
+      descricao: null,
+      categoria: "procedimento",
+      duracaoMin: 50,
+      localKind: "in_person",
+      localDetalhes: null,
+      precisaConfirmacao: false,
+      ativo: true,
+      donoPadraoId: USER,
+      bufferAntesMin: 0,
+      bufferDepoisMin: 0,
+      antecedenciaMinimaMin: 120,
+      janelaDeAgendamentoDias: 60,
+      lembreteLigado: false,
+      lembreteAntecedenciaMin: 1440,
+      lembreteDegrausExtras: [],
+      lembreteMensagem: null,
+    };
+    vi.mocked(listaTiposDeAtendimento).mockResolvedValue({
+      ok: true,
+      tipos: [
+        { ...base, id: TIPO_DA_ORG, intervaloMin: 5 },
+        { ...base, id: TIPO_DA_OUTRA, intervaloMin: null },
+      ],
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(new NextRequest("http://localhost/api/v1/agenda/tipos"));
+    const corpo = (await res.json()) as { data: Array<{ slot_interval_minutes: number | null }> };
+    expect(corpo.data.map((t) => t.slot_interval_minutes)).toEqual([5, null]);
+  });
+});
