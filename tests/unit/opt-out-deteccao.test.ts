@@ -17,6 +17,7 @@
 import { describe, expect, it } from "vitest";
 
 import { comecaComPalavraDeSaida, ehOptOutProvavel, ehPedidoDeOptOut } from "@/lib/opt-out/deteccao";
+import { FRASES_DE_CLINICA } from "@/scripts/lib/jev-frases-de-clinica";
 
 /** Pedidos de descadastro que PRECISAM ser respeitados (bloqueiam o contato). */
 const PEDE_PARA_SAIR = [
@@ -825,6 +826,96 @@ describe("recusar uma coisa não é pedir para sair", () => {
     expect(detectAmbiguousOptOut("não quero receber o resultado por e-mail, prefiro buscar aí")).toBe(false);
     expect(detectAmbiguousOptOut("não quero receber anestesia geral")).toBe(false);
     expect(detectAmbiguousOptOut("não quero receber mensagens")).toBe(true);
+  });
+});
+
+/**
+ * ═══ AS QUATRO FRASES DE CLÍNICA QUE PASSAVAM EM BRANCO (CRM EvaLink, 14/10/2026) ═══
+ *
+ * O corpus do Jev (`scripts/lib/jev-frases-de-clinica.ts`) tem 12 pedidos de
+ * sair escritos como uma paciente escreve. A regra pegava 8; estas 4 davam
+ * "nada": nem bloqueavam, nem chamavam uma pessoa. Cada uma ganhou um padrão
+ * estreito, e cada padrão tem ao lado os controles do que ele NÃO pode pegar.
+ */
+const CLINICA_PEDE_PARA_SAIR_E_PASSAVA = [
+  // "chega de/dessas" + a mensagem da clínica, no começo da oração
+  "chega dessas mensagens toda semana",
+  "chega de mensagem",
+  "nossa, chega dessas promoções",
+  // "tirar meu número/contato" + daí, de vocês, do cadastro
+  "pode tirar meu número daí?",
+  "remove meu contato do cadastro de vocês",
+  "tira meu telefone daqui por favor",
+  // "não precisa mais me mandar" + a mensagem
+  "já fiz o procedimento em outro lugar, não precisa mais me mandar mensagem",
+  "não precisa me enviar mais mensagens",
+  // "não quero mais ser avisada/contatada", sem dizer de quê
+  "remove meu contato do cadastro de vocês, não quero mais ser avisada de nada",
+  "não quero mais ser contatada",
+  "não quero mais ser incomodada por vocês",
+];
+
+/** Dividem palavra com os padrões acima e NÃO são pedido de sair. */
+const CLINICA_DIVIDE_PALAVRA_E_NAO_PEDE = [
+  // chega
+  "chega de dor, quero marcar logo a cirurgia",
+  "chega de exame, doutora, quando eu opero?",
+  "o resultado chega de manhã ou à tarde?",
+  "quando chega a mensagem com o endereço?",
+  "a mensagem chega de qual número?",
+  "chega de mensagem de madrugada, pode mandar de dia",
+  // tirar meu número
+  "pode tirar meu número antigo do cadastro? agora uso esse",
+  "remove meu telefone do cadastro e coloca o novo, por favor",
+  "não tira meu número da lista de espera",
+  "pode tirar meu número da lista de espera?",
+  "pode remover meu contato do cadastro da minha filha?",
+  "tem como tirar meu número do grupo da família?",
+  "o dentista vai tirar meu dente daí?",
+  // não precisa me mandar
+  "não precisa me mandar mensagem, já recebi o endereço",
+  "não precisa mais me mandar o resultado, já peguei aí",
+  "não precisa mais me mandar mensagem por e-mail, prefiro aqui",
+  "a doutora disse que não precisa mais tomar o remédio",
+  // ser avisada
+  "não quero mais ser avisada por e-mail, só pelo whatsapp",
+  "não quero mais ser atendida pela doutora Ana",
+  "não quero ser avisada em cima da hora",
+  "não quero mais ser avisada da consulta de sábado, eu desmarquei",
+  "não quero mais ser chamada de dona",
+];
+
+/** Um TIPO de mensagem: não bloqueia, mas uma pessoa decide (como "não quero receber lembrete"). */
+const CLINICA_RECUSA_UM_TIPO = ["chega desses lembretes", "chega de áudio"];
+
+describe("clínica — os pedidos de sair que o corpus do Jev achou em branco", () => {
+  it.each(CLINICA_PEDE_PARA_SAIR_E_PASSAVA)("bloqueia: %s", (texto) => {
+    expect(ehPedidoDeOptOut(texto), `deveria ter reconhecido "${texto}"`).toBe(true);
+  });
+
+  it.each(CLINICA_DIVIDE_PALAVRA_E_NAO_PEDE)("NÃO bloqueia nem escala: %s", (texto) => {
+    expect(ehPedidoDeOptOut(texto), `bloquearia "${texto}"`).toBe(false);
+    expect(ehOptOutProvavel(texto), `escalaria "${texto}"`).toBe(false);
+  });
+
+  it.each(CLINICA_RECUSA_UM_TIPO)("não bloqueia, mas escala: %s", (texto) => {
+    expect(ehPedidoDeOptOut(texto), `bloquearia "${texto}"`).toBe(false);
+    expect(ehOptOutProvavel(texto), `deixaria passar "${texto}"`).toBe(true);
+  });
+
+  it("o corpus inteiro do Jev: todo 'sim' bloqueia, todo 'não' fica quieto", () => {
+    const erros = FRASES_DE_CLINICA.flatMap((f) => {
+      if (f.opt_out === "sim" && !ehPedidoDeOptOut(f.texto)) return [`não bloqueia: ${f.texto}`];
+      if (f.opt_out === "nao" && ehOptOutProvavel(f.texto)) return [`escala: ${f.texto}`];
+      return [];
+    });
+    expect(erros).toEqual([]);
+  });
+
+  it("o runtime do agente lê a mesma regra", async () => {
+    const { detectAmbiguousOptOut } = await import("@/lib/agent-engine/agent/human-handoff");
+    expect(detectAmbiguousOptOut("pode tirar meu número daí?")).toBe(true);
+    expect(detectAmbiguousOptOut("o resultado chega de manhã ou à tarde?")).toBe(false);
   });
 });
 

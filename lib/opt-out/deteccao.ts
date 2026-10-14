@@ -166,6 +166,8 @@ const INFINITIVOS_DE_COMUNICACAO = VERBOS_DE_COMUNICACAO.split("|").filter(ehInf
 const VERBOS_DE_ENVIO = VERBOS_DE_COMUNICACAO.split("|")
   .filter((forma) => !/^rec[ei]b/u.test(forma))
   .join("|");
+/** Os infinitivos de quem envia: "não precisa mais me MANDAR". */
+const INFINITIVOS_DE_ENVIO = VERBOS_DE_ENVIO.split("|").filter(ehInfinitivo).join("|");
 
 /**
  * Objetos que aparecem depois de um verbo de comunicação mas NÃO são a
@@ -577,6 +579,57 @@ const CAUDA_DE_RECEBER = freioDeRestricao(
 );
 
 /**
+ * ═══ QUATRO FORMAS DE CLÍNICA QUE PASSAVAM EM BRANCO (CRM EvaLink, 14/10/2026) ═══
+ *
+ * Medido com o corpus do Jev (`scripts/lib/jev-frases-de-clinica.ts`): de 12
+ * pedidos de sair, 4 não bloqueavam nem escalavam. Cada forma abaixo é
+ * estreita e tem os controles do que NÃO pode pegar ao lado das frases dela, em
+ * `tests/unit/opt-out-deteccao.test.ts`.
+ *
+ * "chega dessas mensagens": `chega de` só no COMEÇO da oração. No meio é o
+ * verbo chegar ("o resultado chega de manhã?"). O objeto é o mesmo de
+ * "não quero receber": a mensagem bloqueia, um tipo de mensagem escala.
+ */
+const CHEGA_DE =
+  "(?:^|[.!?,;:]\\s*|\\b(?:ja|ah|aff|af|nossa|gente|pronto|serio|por\\s+favor)\\s+)" +
+  `chega\\s+d(?:e|a|o|as|os|essas?|esses?|estas?|estes?)\\s+${QUALIFICADORES_DO_OBJETO}`;
+
+/**
+ * "pode tirar meu número daí?": a paciente pede para sair do CADASTRO de quem
+ * manda. O destino é exigido (daí, daqui, de vocês, do cadastro, da lista), e
+ * dois freios: "da lista DE espera" é outra lista, e quem diz na mesma frase
+ * que tem número novo ou antigo está trocando de número, não saindo.
+ */
+const TIRAR_MEU_NUMERO =
+  "(?<!\\bnao\\s+)\\b(?:tira|tire|tirem|tirar|remove|remova|removam|remover|retira|retire|retirem|retirar|" +
+  "exclui|exclua|excluam|excluir|apaga|apague|apaguem|apagar)\\s+" +
+  "(?:o\\s+)?meu\\s+(?:numero|contato|telefone|celular|whatsapp|zap|cadastro)\\s+" +
+  "(?:dai|daqui|de\\s+(?:voces|vcs)|d[oa]s?\\s+(?:cadastros?|sistemas?|base|lista|contatos|agenda)" +
+  "(?:\\s+(?:de\\s+(?:voces|vcs)|da\\s+clinica))?)\\b" +
+  "(?!\\s+d[aeo]s?\\s)" +
+  "(?![^.!?]*\\b(?:mudei|troquei|outr[oa]|nov[oa]|antig[oa]|velh[oa]|coloc\\w*|bot\\w*|atualiz\\w*|troc\\w*|substitu\\w*)\\b)";
+
+/**
+ * "não precisa mais me mandar mensagem": só com "mais" (sem ele, "não precisa
+ * me mandar mensagem, já recebi o endereço" é sobre UMA mensagem) e só com a
+ * mensagem como objeto ("…me mandar o resultado" segue com o agente).
+ */
+const NAO_PRECISA_MAIS_ME_MANDAR =
+  `\\bnao\\s+precisa(?:m)?\\s+(?:mais\\s+me\\s+(?:${INFINITIVOS_DE_ENVIO})|me\\s+(?:${INFINITIVOS_DE_ENVIO})\\s+mais)\\s+` +
+  `${QUALIFICADORES_DO_OBJETO}(?:${MENSAGENS_DA_CLINICA})\\b`;
+
+/**
+ * "não quero mais ser avisada (de nada)": a frase ACABA ali, ou em "de nada" /
+ * "por vocês". Com cauda ("por e-mail", "da consulta de sábado") é sobre uma
+ * coisa só, e segue com o agente.
+ */
+const NAO_QUERO_MAIS_SER_AVISADA =
+  `\\b${NAO_QUERO_PT}(?:mais\\s+ser|ser\\s+mais)\\s+` +
+  "(?:avisad|contatad|contactad|procurad|incomodad|perturbad|chamad)[oa]s?" +
+  "(?:\\s+(?:de\\s+(?:mais\\s+)?nada|por\\s+(?:voces|vcs)))?" +
+  FIM_DO_PEDIDO;
+
+/**
  * Pedidos INEQUÍVOCOS de descadastro escritos por extenso. Todos exigem o objeto
  * de comunicação; nenhum casa a palavra solta.
  *
@@ -612,6 +665,12 @@ const FRASES_DE_OPT_OUT: readonly RegExp[] = [
     "u",
   ),
   /\bnao\s+quero\s+mais\s+(?:mensagem|mensagens|contato|nada\s+de\s+voces)\b/u,
+  // As quatro formas de clínica (14/10/2026). As peças e o porquê de cada
+  // freio estão nas constantes, acima de `FRASES_DE_OPT_OUT`.
+  new RegExp(CHEGA_DE + `(?:${MENSAGENS_DA_CLINICA})\\b` + CAUDA_DE_RECEBER, "u"),
+  new RegExp(TIRAR_MEU_NUMERO, "u"),
+  new RegExp(NAO_PRECISA_MAIS_ME_MANDAR + CAUDA_DE_RECEBER, "u"),
+  new RegExp(NAO_QUERO_MAIS_SER_AVISADA, "u"),
   // "não me mande mais" — mas NÃO "não me mande mais boletos": esta regra
   // ancorava só no VERBO, e mandar é verbo de comunicação mesmo quando o
   // objeto é uma cobrança. Bloqueava um cliente que está RECLAMANDO e quer
@@ -791,6 +850,9 @@ const FRASES_AMBIGUAS_DE_OPT_OUT: readonly RegExp[] = [
     `${RECUSA_DE_RECEBER}\\s+${QUALIFICADORES_DO_OBJETO}(?:${TIPOS_DE_MENSAGEM})\\b${CAUDA_DE_RECEBER}`,
     "u",
   ),
+  // "chega desses lembretes": um TIPO de mensagem, como "não quero receber
+  // lembrete". Não bloqueia; uma pessoa decide.
+  new RegExp(CHEGA_DE + `(?:${TIPOS_DE_MENSAGEM})\\b` + CAUDA_DE_RECEBER, "u"),
   // ── espanhol ──────────────────────────────────────────────────────────────
   //
   // Esta lista tinha ZERO entradas em espanhol. Não por decisão: o ambíguo é
