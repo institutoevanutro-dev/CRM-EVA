@@ -4100,6 +4100,9 @@ async function executarTurnoDoAgente(
             raw,
           );
           if (!res.ok) return res; // erro de ensino (payload fora da whitelist)
+          // A conversa passou para uma pessoa: a pendência que o open_human_case não
+          // conseguiu registrar tem dono agora, e a recusa deixa de valer para o gate.
+          aberturaDeCasoRecusadaNoTurno = false;
           return { ok: true, status: res.status, message: res.message };
         } catch (err) {
           noteRunError(err instanceof Error ? err : new Error(String(err)));

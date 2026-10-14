@@ -182,9 +182,16 @@ export type OpenCaseResult =
  *     equipe com a informação. Uma nota ali ficaria num caso cuja bola está com o
  *     cliente, e ninguém da equipe a leria.
  *
- * Checagem e escrita são a MESMA operação (CTEs de um statement); a garantia
- * entre transações CONCORRENTES vem da serialização per-contact do job_queue
- * (uniq_job_queue_one_running_per_contact), não deste statement sozinho.
+ * EXCEÇÃO, `kind` = `outro`: é o "não se encaixa", e o fail-safe do gate sempre
+ * abre sem `kind`. Deduplicar por ele esconderia, por exemplo, um comprovante
+ * classificado como `outro` dentro de um caso sem relação. Ali só conta como
+ * duplicado um caso aberto `outro` com o MESMO título (o retry da mesma pendência).
+ *
+ * Checagem e escrita são o mesmo statement (CTEs), e jobs do mesmo contato são
+ * serializados pelo job_queue (uniq_job_queue_one_running_per_contact). Isso NÃO
+ * cobre duas chamadas paralelas de open_human_case no MESMO passo do modelo: as
+ * duas leem "nenhum caso" no snapshot delas e podem abrir dois casos iguais.
+ * Fechar essa janela pede índice único parcial em agent_cases (migration).
  */
 export async function openCase(
   db: pg.Pool,
@@ -215,6 +222,9 @@ export async function openCase(
        select id, status from agent_cases
         where organization_id = $1 and conversation_id = $2
           and status = any($9::text[]) and kind = $11
+          -- 'outro' é "não se encaixa": duas pendências 'outro' quase nunca são a
+          -- mesma, então ali só o MESMO título (retry) conta como duplicado.
+          and ($11 <> 'outro' or title = $4)
         order by opened_at desc
         limit 1
      ),
@@ -266,10 +276,12 @@ export async function openCase(
         row?.existing_status === 'awaiting_lead'
           ? `já existe um caso deste assunto (case_id: ${row.existing_id}) esperando uma informação do cliente; ` +
             'nenhum caso novo foi aberto. Se a mensagem do cliente traz essa informação, chame provide_case_update ' +
-            'com este case_id. Não prometa ao cliente que a equipe vai verificar sem isso; se a pendência não pode ' +
-            'ficar sem dono, transfira para um humano (request_human_handoff, se disponível).'
-          : 'o caso não foi aberto. Não prometa ao cliente que a equipe vai verificar; se a pendência não pode ' +
-            'ficar sem dono, transfira para um humano (request_human_handoff, se disponível).',
+            'com este case_id. Não prometa ao cliente que a equipe vai verificar sem isso. Se a pendência não pode ' +
+            'ficar sem dono, chame request_human_handoff (se disponível) ANTES de escrever ao cliente: o sistema ' +
+            'avisa o cliente sozinho.'
+          : 'o caso não foi aberto. Não prometa ao cliente que a equipe vai verificar. Se a pendência não pode ' +
+            'ficar sem dono, chame request_human_handoff (se disponível) ANTES de escrever ao cliente: o sistema ' +
+            'avisa o cliente sozinho.',
     },
   };
 }

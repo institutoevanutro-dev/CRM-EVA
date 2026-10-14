@@ -317,13 +317,56 @@ describe("wave 2 — human-cases repositório", () => {
     expect(notas.rows[0]?.actor_kind).toBe("agent");
     expect(notas.rows[0]?.body).toContain("comprovante do Pix");
 
-    // Sem `kind` os dois caem em `outro` e a mesma regra vale.
-    const conv2 = "cccccccc-0000-4000-8000-000000000096";
-    await seedExtraConversation(conv2, "cccccccc-0000-4000-8000-000000000196", ORG_A, SESSION_A);
-    const a = await openCase(pool, ids(ORG_A, conv2), { title: "A", summary: "a", blocker: "a" });
-    const b = await openCase(pool, ids(ORG_A, conv2), { title: "B", summary: "b", blocker: "b" });
-    if (!a.ok) throw new Error("unreachable");
-    expect(b).toMatchObject({ ok: true, caseId: a.caseId, merged: true });
+  });
+
+  /**
+   * `outro` é "não se encaixa": duas pendências `outro` quase nunca são a mesma, e
+   * o fail-safe do gate sempre abre sem `kind`. Deduplicar por `kind` aqui
+   * esconderia um comprovante classificado como `outro` dentro de um caso sem
+   * relação. Só o MESMO título (retry da mesma pendência) conta como duplicado.
+   */
+  it("kind `outro`: títulos diferentes abrem dois casos; o mesmo título não duplica", async () => {
+    const conv = "cccccccc-0000-4000-8000-000000000096";
+    await seedExtraConversation(conv, "cccccccc-0000-4000-8000-000000000196", ORG_A, SESSION_A);
+    const a = await openCase(pool, ids(ORG_A, conv), {
+      title: "Paciente quer falar sobre estacionamento",
+      summary: "a",
+      blocker: "a",
+    });
+    const b = await openCase(pool, ids(ORG_A, conv), {
+      title: "Conferir comprovante do Pix",
+      summary: "b",
+      blocker: "b",
+      kind: "outro",
+    });
+    if (!a.ok || !b.ok) throw new Error("os dois tinham de abrir");
+    expect(b.caseId).not.toBe(a.caseId);
+    expect(b).not.toHaveProperty("merged");
+
+    const retry = await openCase(pool, ids(ORG_A, conv), {
+      title: "Conferir comprovante do Pix",
+      summary: "b de novo",
+      blocker: "b",
+    });
+    expect(retry).toMatchObject({ ok: true, caseId: b.caseId, merged: true });
+
+    const abertos = await pool.query(
+      `select id from agent_cases where organization_id = $1 and conversation_id = $2
+          and status in ('awaiting_human','awaiting_lead')`,
+      [ORG_A, conv],
+    );
+    expect(abertos.rows).toHaveLength(2);
+
+    // Mesmo título esperando o cliente: recusa com o case_id, como nos outros kinds.
+    expect(await markAwaitingLead(pool, ORG_A, a.caseId, ACTOR_A, "Qual o modelo do carro?")).toBe(true);
+    const repetido = await openCase(pool, ids(ORG_A, conv), {
+      title: "Paciente quer falar sobre estacionamento",
+      summary: "a",
+      blocker: "a",
+    });
+    expect(repetido).toMatchObject({ ok: false, error: { code: "case_already_open" } });
+    if (repetido.ok) throw new Error("unreachable");
+    expect(repetido.error.message).toContain(a.caseId);
   });
 
   it("mesmo assunto esperando o CLIENTE: recusa e ensina provide_case_update com o case_id, sem abrir outro", async () => {
