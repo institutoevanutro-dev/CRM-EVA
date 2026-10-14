@@ -8,6 +8,36 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.5.0] — 2026-10-14
+
+### Adicionado
+
+- **Bloquear um horário de um profissional sem fechar o dia todo** Em Configurações › Agenda, "Dias fora da rotina" agora fecha o dia todo ou só um horário (Das/Até), com repetição semanal. Quem gerencia escolhe de quem é a agenda; os demais bloqueiam só a própria. O horário bloqueado deixa de ser oferecido na tela de marcar e pela IA, só para aquele profissional, e aparece na Agenda como "Horário bloqueado". Consultas já marcadas nesse horário continuam marcadas, e a tela avisa.
+
+  Você não precisa fazer nada.
+
+### Corrigido
+
+- **Assumir a conversa para de vez a resposta da IA que estava em andamento ou na fila** Quando alguém da equipe clica em "Assumir" (ou transfere a conversa para uma pessoa) enquanto a IA ainda está trabalhando, a IA não grava mais nada naquele atendimento: não marca nem cancela horário, não move o negócio, não põe etiqueta e não manda a mensagem que estava preparando. A resposta que esperava na fila também é cancelada, e não volta a sair se a conversa for devolvida ao automático depois. O que a IA já tinha feito antes do clique continua feito, e mensagem que já tinha saído para o WhatsApp não volta. A distribuição automática pelo rodízio e a passagem que a própria IA faz para um humano continuam como antes.
+
+  Você não precisa fazer nada.
+
+  Portado de melgarafael/DeskcommCRM#2541, de @ozzure, com o teste de melgarafael/DeskcommCRM#2741, de @melgarafael.
+
+- **Uma pendência nova chega à equipe mesmo com outro caso aberto na conversa** Quando a conversa já tinha um caso aberto, a IA não conseguia abrir outro, nem de assunto diferente. Medido em produção: a paciente mandou o comprovante do Pix, havia um caso de ontem sobre outro assunto, o caso do comprovante não foi aberto e a IA respondeu que a equipe ia conferir. Ninguém foi avisado.
+
+  Agora a IA abre um caso por assunto. Uma pendência de outro assunto vira um caso novo e aparece em IA › Casos ao lado do que já estava aberto. Uma pendência do mesmo assunto não abre caso repetido: se o caso desse assunto está aguardando a equipe, ela entra nele como registro da IA, visível na linha do tempo do caso; se está aguardando o cliente, a IA é orientada a devolver a informação nesse caso. Casos classificados como "Outro" só são considerados repetidos quando têm o mesmo título. Fechar um dos casos não cancela mais o follow-up da conversa enquanto outro caso continuar aberto.
+
+  Quando a abertura de um caso é recusada, a IA não pode mais dizer ao cliente que a equipe vai verificar só porque existe outro caso aberto na conversa. Frases como "precisa ser conferido pela equipe" passaram a ser reconhecidas como promessa de ação da equipe. Nenhuma mudança de banco.
+
+- **O teste "Veja ele atender" do onboarding deixa de chamar de erro uma resposta que deu certo** No último passo do onboarding, "Veja ele atender", o funcionário de IA respondia normalmente e a tela mostrava "Ele não conseguiu responder", com o motivo `o ensaio terminou como "ok"`. Agora a resposta aparece na tela. Falha de verdade continua aparecendo como erro.
+
+  Você não precisa fazer nada.
+
+  Portado de melgarafael/DeskcommCRM#2692, de @webtecnica (issue #2686, de @Abel-Odorico).
+
+- **A atualização guarda os logs da versão anterior** Atualizar o CRM recria o app, o worker e o scheduler, e os logs da versão anterior eram apagados junto. Um "Erro interno" visto minutos antes da atualização ficava sem explicação. Agora o `update.sh` guarda as últimas 48 horas desses logs em `logs/` antes da troca, legíveis só pelo dono, e mantém as cinco atualizações mais recentes.
+
 ## [4.4.0] — 2026-10-13
 
 ### Adicionado
@@ -7132,7 +7162,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.4.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.0...HEAD
+[4.5.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.4.0...v4.5.0
 [4.4.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.3.0...v4.4.0
 [4.3.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.1.0...v4.2.0
