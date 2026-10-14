@@ -8,6 +8,18 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.5.1] — 2026-10-14
+
+### Corrigido
+
+- **A lista de pedidos LGPD mostra o nome de quem pediu e o prazo certo, e quatro pedidos de sair escritos como paciente passam a bloquear** Em Solicitações LGPD, a coluna que mostrava um código (`ctt:1a2b3c4d`) agora mostra o nome da pessoa. Contato anonimizado aparece só como "Cliente Anonimizado", nunca com o nome antigo. Pedido sem contato no CRM mostra o e-mail ou o telefone que veio no pedido, ou "Sem contato vinculado".
+
+  A coluna Vence mostra a data do prazo e se ele vence hoje, falta quanto, ou está vencido há quantos dias. O dia conta no fuso da clínica: antes, às 21h do dia do prazo o pedido já aparecia como vencido, e às 21h da véspera a lista dizia "atrasado hoje". A linha do tempo do pedido usa a mesma conta, em dias úteis.
+
+  Quatro frases que pedem para parar de receber mensagens não bloqueavam o contato: "chega dessas mensagens", "pode tirar meu número daí?", "não precisa mais me mandar mensagem" e "não quero mais ser avisada de nada". Agora bloqueiam. Frases parecidas que não são pedido de sair, como "chega de dor" ou "o resultado chega de manhã?", continuam sem efeito.
+
+  Você não precisa fazer nada.
+
 ## [4.5.0] — 2026-10-14
 
 ### Adicionado
@@ -7162,7 +7174,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.1...HEAD
+[4.5.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.0...v4.5.1
 [4.5.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.4.0...v4.5.0
 [4.4.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.3.0...v4.4.0
 [4.3.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.2.0...v4.3.0
