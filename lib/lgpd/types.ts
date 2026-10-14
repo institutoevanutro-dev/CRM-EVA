@@ -106,12 +106,15 @@ export type LgpdFormaDeEntrega = (typeof LGPD_FORMAS_DE_ENTREGA)[number];
 export const LGPD_TIPOS_REGISTRAVEIS = ["data_request", "redact"] as const;
 
 /**
- * Dias ÚTEIS de prazo por tipo, os mesmos que os webhooks usam (CLAUDE.md, LGPD:
- * cópia dos dados em D+7, anonimização em D+15).
+ * Dias ÚTEIS de prazo por tipo (CLAUDE.md, LGPD: cópia dos dados em D+7,
+ * anonimização em D+15). A FONTE ÚNICA: quem grava o prazo é
+ * `createLgpdRequest`, e ele lê daqui pelo tipo. Os webhooks passavam o número
+ * à mão (7, 15, 15) e podiam divergir da tela sem ninguém ver.
  */
-export const LGPD_PRAZO_EM_DIAS_UTEIS: Record<(typeof LGPD_TIPOS_REGISTRAVEIS)[number], number> = {
+export const LGPD_PRAZO_EM_DIAS_UTEIS: Record<LgpdRequestType, number> = {
   data_request: 7,
   redact: 15,
+  store_redact: 15,
 };
 
 /** Estados em que o pedido ainda está ABERTO: é o que a regra de duplicata olha. */

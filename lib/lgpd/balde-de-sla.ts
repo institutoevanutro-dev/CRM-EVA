@@ -57,10 +57,11 @@ export function computeSlaBucket(
   dueAt: string | null,
   receivedAt: string,
   agora: Date = new Date(),
+  fuso?: string,
 ): SlaBucket {
   if (!dueAt) return "ok";
-  if (diasDeAtraso(dueAt, agora) > 0) return "overdue";
-  if (diasAtePrazo(dueAt, agora) < JANELA_CRITICA_EM_DIAS) return "critical";
+  if (diasDeAtraso(dueAt, agora, fuso) > 0) return "overdue";
+  if (diasAtePrazo(dueAt, agora, fuso) < JANELA_CRITICA_EM_DIAS) return "critical";
 
   const totalWindow = new Date(dueAt).getTime() - new Date(receivedAt).getTime();
   const ateFimDaJanela = new Date(dueAt).getTime() - agora.getTime();

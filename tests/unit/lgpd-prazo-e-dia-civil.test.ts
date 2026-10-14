@@ -42,7 +42,17 @@ import { readFileSync, readdirSync, statSync, type Dirent } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { computeDueAt, diaDoPrazo, diasAtePrazo, diasDeAtraso, prazoEmBr } from "@/lib/lgpd/sla";
+import {
+  computeDueAt,
+  diaDoPrazo,
+  diaDoRecebimento,
+  diasAtePrazo,
+  diasDeAtraso,
+  prazoEmBr,
+  rotuloDoPrazo,
+} from "@/lib/lgpd/sla";
+import { LGPD_PRAZO_EM_DIAS_UTEIS } from "@/lib/lgpd/types";
+import { FUSO_PADRAO } from "@/lib/tempo/fusos";
 import { computeSlaBucket } from "@/lib/lgpd/balde-de-sla";
 
 const RAIZ = process.cwd();
@@ -89,46 +99,103 @@ describe("a coluna due_at é um dia civil", () => {
   });
 });
 
-describe("o dia do prazo não é atraso", () => {
+describe("o dia do prazo não é atraso — contado no fuso da organização", () => {
   const prazo = computeDueAt(d("2026-09-14"), 15); // 2026-10-05T00:00:00Z
+  /** `hh:mm` de um dia em São Paulo (UTC−3, sem horário de verão em 2026) como instante. */
+  const sp = (dia: string, hora: string) => new Date(`${dia}T${hora}:00.000-03:00`);
 
-  it("não está atrasado em nenhum instante do dia do prazo", () => {
-    // Do primeiro instante do dia civil até o último, em MEIA-NOITE UTC.
-    for (const hora of [0, 3, 6, 9, 12, 15, 18, 21, 23]) {
-      const instante = new Date(prazo.getTime() + hora * 3_600_000);
-      expect(diasDeAtraso(prazo, instante)).toBe(0);
-      expect(diasAtePrazo(prazo, instante)).toBe(0);
+  it("não está atrasado em nenhuma hora do dia do prazo em São Paulo", () => {
+    for (const hora of ["00:00", "03:00", "09:00", "12:00", "18:00", "21:00", "21:30", "23:59"]) {
+      const instante = sp("2026-10-05", hora);
+      expect(emSaoPaulo(instante)).toBe("2026-10-05");
+      expect(diasDeAtraso(prazo, instante), hora).toBe(0);
+      expect(diasAtePrazo(prazo, instante), hora).toBe(0);
     }
   });
 
-  it("em São Paulo continua zero às 09h e às 21h do dia do prazo", () => {
-    // 09:00 de 05/10 em São Paulo = 12:00Z. A conta antiga em milissegundos
-    // arredondava 0.5 para 1 e dizia "1 dia(s) em atraso" — medido.
-    const noveDaManha = new Date("2026-10-05T12:00:00.000Z");
-    expect(emSaoPaulo(noveDaManha)).toBe("2026-10-05");
-    expect(diasDeAtraso(prazo, noveDaManha)).toBe(0);
-    // 21:00 de 04/10 em São Paulo = 00:00Z do dia do prazo. O prazo NUNCA
-    // termina antes de o dia acabar; a etiqueta "atrasado" aparecia aqui.
-    const noiteDeOntem = new Date("2026-10-05T00:00:00.000Z");
-    expect(emSaoPaulo(noiteDeOntem)).toBe("2026-10-04");
-    expect(diasDeAtraso(prazo, noiteDeOntem)).toBe(0);
+  it("às 21h30 do dia do prazo ainda não venceu — a régua em UTC já dizia 'Vencido'", () => {
+    // 05/10 21:30 em São Paulo = 06/10 00:30Z. Contando "hoje" em UTC, o dia
+    // já era 06/10 e o pedido aparecia atrasado durante as três últimas horas
+    // do prazo. A clínica vive em São Paulo, não em Greenwich.
+    const noiteDoPrazo = sp("2026-10-05", "21:30");
+    expect(noiteDoPrazo.toISOString().slice(0, 10)).toBe("2026-10-06");
+    expect(diasDeAtraso(prazo, noiteDoPrazo)).toBe(0);
+  });
+
+  it("às 21h da véspera, em São Paulo, ainda falta um dia", () => {
+    expect(diasAtePrazo(prazo, sp("2026-10-04", "21:00"))).toBe(1);
+    expect(diasDeAtraso(prazo, sp("2026-10-04", "21:00"))).toBe(-1);
   });
 
   it("conta a partir do dia SEGUINTE ao prazo", () => {
-    expect(diasDeAtraso(prazo, new Date("2026-10-06T00:00:00.000Z"))).toBe(1);
-    expect(diasDeAtraso(prazo, new Date("2026-10-06T00:00:00.000Z"))).not.toBe(
-      Math.round((new Date("2026-10-06T12:00:00.000Z").getTime() - prazo.getTime()) / DIA_MS) + 1,
-    );
-    expect(diasDeAtraso(prazo, new Date("2026-10-07T23:00:00.000Z"))).toBe(2);
-    expect(diasDeAtraso(prazo, new Date("2026-09-20T12:00:00.000Z"))).toBe(-15);
+    expect(diasDeAtraso(prazo, sp("2026-10-06", "00:00"))).toBe(1);
+    expect(diasDeAtraso(prazo, sp("2026-10-07", "20:00"))).toBe(2);
+    expect(diasDeAtraso(prazo, sp("2026-09-20", "09:00"))).toBe(-15);
+  });
+
+  it("o fuso é o da organização: em Manaus (UTC−4) o dia acaba uma hora depois", () => {
+    const manausOnzeDaNoite = new Date("2026-10-06T03:30:00.000Z"); // 05/10 23:30 em Manaus
+    expect(diasDeAtraso(prazo, manausOnzeDaNoite, "America/Manaus")).toBe(0);
+    expect(diasDeAtraso(prazo, manausOnzeDaNoite)).toBe(1); // já é 06/10 em São Paulo
+  });
+
+  it("fuso inutilizável não derruba a tela: cai no padrão", () => {
+    expect(diasDeAtraso(prazo, sp("2026-10-05", "21:30"), "America/Asunción")).toBe(0);
   });
 
   it("o eixo é o mesmo em ambos os sentidos: soma de dias civis, não de milissegundos", () => {
     // Uma semana atravessando a virada do mês, para pegar overflow de mês.
     const prazoNoMes = computeDueAt(d("2026-09-28"), 5); // 2026-10-05
     expect(diaDoPrazo(prazoNoMes)).toBe("2026-10-05");
-    expect(diasDeAtraso(prazoNoMes, new Date("2026-10-13T00:00:00.000Z"))).toBe(8);
-    expect(diasAtePrazo(prazoNoMes, new Date("2026-10-13T00:00:00.000Z"))).toBe(-8);
+    expect(diasDeAtraso(prazoNoMes, sp("2026-10-13", "09:00"))).toBe(8);
+    expect(diasAtePrazo(prazoNoMes, sp("2026-10-13", "09:00"))).toBe(-8);
+  });
+});
+
+describe("o prazo conta do dia em que o pedido chegou NA ORGANIZAÇÃO", () => {
+  it("pedido às 22h30 de sexta em São Paulo é de sexta, não do sábado UTC", () => {
+    const chegou = new Date("2026-10-10T01:30:00.000Z"); // sex 09/10 22:30 em São Paulo
+    expect(diaDoRecebimento(chegou).toISOString()).toBe("2026-10-09T00:00:00.000Z");
+    // D+7 úteis de sexta 09/10, pulando 12/10 (feriado): 21/10. Contando do
+    // sábado UTC, a régua antiga dava 22/10, um dia útil a mais que o prazo.
+    expect(diaDoPrazo(computeDueAt(diaDoRecebimento(chegou), 7))).toBe("2026-10-21");
+    expect(diaDoPrazo(computeDueAt(chegou, 7))).toBe("2026-10-22");
+  });
+
+  it("um prazo por tipo, num lugar só: cópia D+7, anonimização D+15", () => {
+    expect(LGPD_PRAZO_EM_DIAS_UTEIS).toEqual({ data_request: 7, redact: 15, store_redact: 15 });
+  });
+});
+
+describe("rotuloDoPrazo: a data e o estado que a lista mostra", () => {
+  const prazo = computeDueAt(d("2026-09-14"), 15).toISOString(); // 05/10
+  const t = (texto: string) => texto;
+
+  it("antes do prazo: a data e quantos dias faltam", () => {
+    expect(rotuloDoPrazo(prazo, new Date("2026-10-02T12:00:00Z"), FUSO_PADRAO, t)).toEqual({
+      data: "05/10/2026",
+      estado: "no_prazo",
+      texto: "faltam 3 dias",
+    });
+    expect(rotuloDoPrazo(prazo, new Date("2026-10-04T12:00:00Z"), FUSO_PADRAO, t).texto).toBe("vence amanhã");
+  });
+
+  it("no dia do prazo, até 23h59 de São Paulo: vence hoje", () => {
+    const r = rotuloDoPrazo(prazo, new Date("2026-10-06T02:59:00Z"), FUSO_PADRAO, t);
+    expect(r).toEqual({ data: "05/10/2026", estado: "vence_hoje", texto: "vence hoje" });
+  });
+
+  it("passou: vencido, com os dias de atraso", () => {
+    expect(rotuloDoPrazo(prazo, new Date("2026-10-06T12:00:00Z"), FUSO_PADRAO, t)).toEqual({
+      data: "05/10/2026",
+      estado: "vencido",
+      texto: "vencido há 1 dia",
+    });
+    expect(rotuloDoPrazo(prazo, new Date("2026-10-09T12:00:00Z"), FUSO_PADRAO, t).texto).toBe("vencido há 4 dias");
+  });
+
+  it("sem prazo legível: sem data e sem alarme", () => {
+    expect(rotuloDoPrazo(null, new Date(), FUSO_PADRAO, t)).toEqual({ data: null, estado: "sem_prazo", texto: "" });
   });
 });
 

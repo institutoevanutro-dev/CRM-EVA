@@ -31,7 +31,7 @@ vi.mock("@/lib/audit", () => ({ audit: h.audit }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => h.banco.cliente }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => h.banco.cliente }));
 
-import { POST } from "@/app/api/v1/lgpd/requests/route";
+import { GET, POST } from "@/app/api/v1/lgpd/requests/route";
 
 const ORG = "a1000000-0000-4000-8000-000000000001";
 const OUTRA_ORG = "a2000000-0000-4000-8000-000000000002";
@@ -260,4 +260,116 @@ describe("registrar não executa nada", () => {
       expect(h.banco.tabelas.event_log ?? []).toHaveLength(0);
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// GET: a lista mostra QUEM pediu e QUANDO vence, sem vazar a outra organização
+// ---------------------------------------------------------------------------
+
+describe("GET: a lista", () => {
+  const ANON = "a1000000-0000-4000-8000-000000000011";
+  const ANON_PELA_METADE = "a1000000-0000-4000-8000-000000000012";
+  const pedido = (id: string, extra: Linha): Linha => ({
+    id,
+    organization_id: ORG,
+    request_type: "data_request",
+    source: "manual",
+    contact_id: null,
+    external_customer_id: null,
+    status: "received",
+    attempts: 0,
+    received_at: "2026-10-01T12:00:00.000Z",
+    due_at: "2026-10-20T00:00:00.000Z",
+    completed_at: null,
+    emergency: false,
+    scope: "contact",
+    error_message: null,
+    request_payload: {},
+    ...extra,
+  });
+
+  beforeEach(() => {
+    h.banco = supabaseEmMemoria({
+      contacts: [
+        { id: CONTATO, organization_id: ORG, name: "Maria Souza", phone_number: "+5511999990000", is_anonymized: false },
+        { id: ANON, organization_id: ORG, name: "Cliente Anonimizado #a1b2c3d4", is_anonymized: true },
+        { id: ANON_PELA_METADE, organization_id: ORG, name: "Joana Resto", is_anonymized: true },
+        { id: CONTATO_DA_OUTRA, organization_id: OUTRA_ORG, name: "Paciente da Outra Clínica", is_anonymized: false },
+      ],
+      lgpd_requests: [
+        // vence hoje (12/10, 15h em São Paulo)
+        pedido("p1", { contact_id: CONTATO, due_at: "2026-10-12T00:00:00.000Z" }),
+        pedido("p2", { contact_id: ANON, request_type: "redact", status: "completed" }),
+        pedido("p3", { request_payload: { customer: { email: "titular@loja.com" } }, due_at: "2026-10-09T00:00:00.000Z" }),
+        // linha torta: aponta para contato de OUTRA organização
+        pedido("p4", { contact_id: CONTATO_DA_OUTRA }),
+        pedido("p5", { organization_id: OUTRA_ORG, contact_id: CONTATO_DA_OUTRA }),
+        pedido("p6", {}),
+        pedido("p7", { contact_id: ANON_PELA_METADE, request_type: "redact" }),
+        pedido("p8", {
+          request_type: "redact",
+          status: "completed",
+          request_payload: { customer: { email: "apagada@loja.com" } },
+        }),
+      ],
+    });
+    h.guard.mockResolvedValue({
+      ok: true,
+      user: { id: USER, idioma: "pt-BR" },
+      org: { orgId: ORG, role: "admin", timezone: "America/Sao_Paulo" },
+    });
+  });
+
+  async function listar() {
+    const r = await GET(new NextRequest("http://localhost/api/v1/lgpd/requests?limit=25"));
+    expect(r.status).toBe(200);
+    return (await r.json()).data as Array<Record<string, unknown> & { id: string }>;
+  }
+
+  it("mostra o nome do titular, e não o id", async () => {
+    const linhas = await listar();
+    const por = Object.fromEntries(linhas.map((l) => [l.id, l.titular]));
+    expect(por.p1).toBe("Maria Souza");
+    expect(por.p3).toBe("titular@loja.com");
+    expect(por.p6).toBe("Sem contato vinculado");
+  });
+
+  it("anonimizado mostra o rótulo da anonimização, nunca um nome", async () => {
+    const por = Object.fromEntries((await listar()).map((l) => [l.id, l.titular]));
+    expect(por.p2).toBe("Cliente Anonimizado #a1b2c3d4");
+    expect(por.p7).toBe("Cliente anonimizado");
+    // anonimização concluída sem contato: o e-mail do pedido também não volta
+    expect(por.p8).toBe("Sem contato vinculado");
+    expect(JSON.stringify(por)).not.toMatch(/Joana|apagada@/);
+  });
+
+  it("não vaza a outra organização: nem o pedido, nem o nome do contato dela", async () => {
+    const linhas = await listar();
+    expect(linhas.map((l) => l.id).sort()).toEqual(["p1", "p2", "p3", "p4", "p6", "p7", "p8"]);
+    expect(JSON.stringify(linhas)).not.toContain("Paciente da Outra Clínica");
+    expect(linhas.find((l) => l.id === "p4")?.titular).toBe("Sem contato vinculado");
+  });
+
+  it("o dado pessoal do pedido não sai na resposta", async () => {
+    for (const l of await listar()) expect(l).not.toHaveProperty("request_payload");
+  });
+
+  it("uma consulta de contatos para a página inteira (sem N+1)", async () => {
+    await listar();
+    const consultas = h.banco.cliente.from.mock.calls.filter(([tabela]) => tabela === "contacts");
+    expect(consultas).toHaveLength(1);
+  });
+
+  it("o prazo é a data e o estado, no fuso da organização", async () => {
+    const por = Object.fromEntries((await listar()).map((l) => [l.id, l.prazo]));
+    expect(por.p1).toEqual({ data: "12/10/2026", estado: "vence_hoje", texto: "vence hoje" });
+    expect(por.p3).toEqual({ data: "09/10/2026", estado: "vencido", texto: "vencido há 3 dias" });
+  });
+
+  it("às 22h do dia do prazo em São Paulo, ainda vence hoje", async () => {
+    vi.setSystemTime(new Date("2026-10-13T01:00:00Z")); // 12/10 22h em São Paulo
+    const p1 = (await listar()).find((l) => l.id === "p1");
+    expect(p1?.prazo).toMatchObject({ estado: "vence_hoje" });
+    expect(p1?.sla_bucket).toBe("critical");
+  });
 });

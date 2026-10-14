@@ -30,6 +30,7 @@
  * torna a convenção verificável em vez de presumida.
  */
 
+import { FUSO_PADRAO, fusoUtilizavel } from "@/lib/tempo/fusos";
 import { HOLIDAYS_BR_ISO } from "./holidays-br";
 
 const _defaultHolidays = new Set(HOLIDAYS_BR_ISO);
@@ -73,6 +74,28 @@ function addOneDay(date: Date): Date {
 /** `Date` → `"YYYY-MM-DD"` no MESMO eixo em que `computeDueAt` conta. */
 function diaCivilDe(instante: Date): string {
   return toISODateStr(instante);
+}
+
+/**
+ * O dia de HOJE na organização — `"YYYY-MM-DD"`.
+ *
+ * O prazo é um dia civil (ver acima), e "hoje" também precisa ser: o dia em que
+ * a clínica está, não o dia em Greenwich. Contado em UTC, às 21h de São Paulo
+ * já era o dia seguinte, e o pedido aparecia "Vencido" nas três últimas horas
+ * do próprio prazo. Fuso inutilizável cai no padrão (`fusoUtilizavel`): este
+ * módulo não lança.
+ */
+function hojeNoFuso(agora: Date, fuso: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: fusoUtilizavel(fuso) }).format(agora);
+}
+
+/**
+ * O dia em que o pedido CHEGOU, no fuso da organização, como a meia-noite UTC
+ * que `computeDueAt` espera. Um webhook às 22h30 de sexta em São Paulo é de
+ * sexta; lido em UTC era de sábado, e o prazo ganhava um dia útil a mais.
+ */
+export function diaDoRecebimento(recebidoEm: Date, fuso: string = FUSO_PADRAO): Date {
+  return new Date(`${hojeNoFuso(recebidoEm, fuso)}T00:00:00.000Z`);
 }
 
 /** `"YYYY-MM-DD"` → milissegundos UTC; `null` quando a data não é uma data. */
@@ -136,11 +159,15 @@ export function diaDoPrazo(dueAt: string | Date | null | undefined): string | nu
  * `0` para valor ausente ou ilegível: prazo que não se lê não pode virar atraso
  * no alarme de compliance.
  */
-export function diasDeAtraso(dueAt: string | Date | null | undefined, agora: Date): number {
+export function diasDeAtraso(
+  dueAt: string | Date | null | undefined,
+  agora: Date,
+  fuso: string = FUSO_PADRAO,
+): number {
   const prazo = diaDoPrazo(dueAt);
   if (prazo === null) return 0;
   const alvo = utcDeDiaCivil(prazo);
-  const hoje = utcDeDiaCivil(diaCivilDe(agora));
+  const hoje = utcDeDiaCivil(hojeNoFuso(agora, fuso));
   if (alvo === null || hoje === null) return 0;
   const dias = Math.round((hoje - alvo) / 86_400_000);
   // `-0` sai quando os dois dias são o mesmo, e `Object.is(-0, 0)` é falso: um
@@ -155,8 +182,12 @@ export function diasDeAtraso(dueAt: string | Date | null | undefined, agora: Dat
  * balde (`critical`, "vence em Nd"). Comparar dias civis em vez de milissegundos
  * é o que impede o balde de acender 26 horas antes do prazo.
  */
-export function diasAtePrazo(dueAt: string | Date | null | undefined, agora: Date): number {
-  const dias = diasDeAtraso(dueAt, agora);
+export function diasAtePrazo(
+  dueAt: string | Date | null | undefined,
+  agora: Date,
+  fuso: string = FUSO_PADRAO,
+): number {
+  const dias = diasDeAtraso(dueAt, agora, fuso);
   return dias === 0 ? 0 : -dias; // sem isto sai `-0` no dia do prazo
 }
 
@@ -174,6 +205,32 @@ export function prazoEmBr(dueAt: string | Date | null | undefined): string | nul
   if (dia === null) return null;
   const [ano, mes, diaDoMes] = dia.split("-");
   return `${diaDoMes}/${mes}/${ano}`;
+}
+
+export type EstadoDoPrazo = "no_prazo" | "vence_hoje" | "vencido" | "sem_prazo";
+
+/**
+ * A data e o estado que a lista de pedidos mostra — a única régua da tela.
+ * O texto passa por `t` (o dicionário), e o número fica fora da chave.
+ */
+export function rotuloDoPrazo(
+  dueAt: string | Date | null | undefined,
+  agora: Date,
+  fuso: string,
+  t: (texto: string) => string,
+): { data: string | null; estado: EstadoDoPrazo; texto: string } {
+  const data = prazoEmBr(dueAt);
+  if (data === null) return { data: null, estado: "sem_prazo", texto: "" };
+  const faltam = diasAtePrazo(dueAt, agora, fuso);
+  if (faltam === 0) return { data, estado: "vence_hoje", texto: t("vence hoje") };
+  if (faltam === 1) return { data, estado: "no_prazo", texto: t("vence amanhã") };
+  if (faltam > 1) return { data, estado: "no_prazo", texto: `${t("faltam")} ${faltam} ${t("dias")}` };
+  const atraso = -faltam;
+  return {
+    data,
+    estado: "vencido",
+    texto: `${t("vencido há")} ${atraso} ${t(atraso === 1 ? "dia" : "dias")}`,
+  };
 }
 
 /**

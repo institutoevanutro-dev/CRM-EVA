@@ -25,8 +25,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { LGPD_ESTADOS_ABERTOS, LGPD_PRAZO_EM_DIAS_UTEIS, LGPD_REQUEST_STATUSES } from "@/lib/lgpd/types";
+import { LGPD_ESTADOS_ABERTOS, LGPD_REQUEST_STATUSES } from "@/lib/lgpd/types";
 import { computeSlaBucket } from "@/lib/lgpd/balde-de-sla";
+import { rotuloDoPrazo } from "@/lib/lgpd/sla";
+import { rotuloDoTitular, type ContatoDoTitular } from "@/lib/lgpd/titular";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +94,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   let dataQuery = supabase
     .from("lgpd_requests")
     .select(
-      "id, organization_id, request_type, source, contact_id, external_customer_id, status, attempts, received_at, due_at, completed_at, emergency, scope, error_message",
+      "id, organization_id, request_type, source, contact_id, external_customer_id, status, attempts, received_at, due_at, completed_at, emergency, scope, error_message, request_payload",
     )
     .eq("organization_id", orgId)
     .order("due_at", { ascending: true, nullsFirst: false })
@@ -110,9 +113,36 @@ export async function GET(req: NextRequest): Promise<Response> {
   // aritmética de DIA CIVIL (`due_at` guarda um dia, não um instante) e
   // aritmética testada precisa ficar onde o teste alcança. A versão que estava
   // neste arquivo comparava milissegundos e marcava "Vencido" 26h antes do prazo.
-  const enriched = (rows ?? []).map((r) => ({
+  //
+  // O titular: UMA consulta para a página inteira (nada de uma por linha), com
+  // o filtro de organização escrito aqui mesmo, além da RLS. Um `contact_id`
+  // de outra organização numa linha torta não traz nome nenhum.
+  const fuso = fusoUtilizavel(activeOrg.timezone);
+  const agora = new Date();
+  const idsDeContato = [...new Set((rows ?? []).map((r) => r.contact_id).filter((id): id is string => !!id))];
+  const contatos = new Map<string, ContatoDoTitular>();
+  if (idsDeContato.length > 0) {
+    const { data: achados, error: erroDosContatos } = await supabase
+      .from("contacts")
+      .select("id, name, display_name, phone_number, is_anonymized, contact_channel_identities (channel, handle, display_name)")
+      .eq("organization_id", orgId)
+      .in("id", idsDeContato);
+    if (erroDosContatos) {
+      return fail("internal_error", erroDosContatos.message, 500, { requestId });
+    }
+    for (const c of (achados ?? []) as ContatoDoTitular[]) contatos.set(c.id, c);
+  }
+
+  // O `request_payload` só serve ao rótulo: tem dado pessoal e não sai daqui.
+  const enriched = (rows ?? []).map(({ request_payload, ...r }) => ({
     ...r,
-    sla_bucket: computeSlaBucket(r.due_at, r.received_at),
+    titular: rotuloDoTitular(
+      { ...r, request_payload },
+      r.contact_id ? contatos.get(r.contact_id) : null,
+      t,
+    ),
+    prazo: rotuloDoPrazo(r.due_at, agora, fuso, t),
+    sla_bucket: computeSlaBucket(r.due_at, r.received_at, agora, fuso),
   }));
 
   const filtered = parsed.data.sla_bucket
@@ -245,7 +275,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       source: "manual",
       contactId: contact_id,
       receivedAt: instanteDoRecebimento(received_on),
-      slaDays: LGPD_PRAZO_EM_DIAS_UTEIS[request_type],
+      fuso: org.timezone,
       // Dado pessoal (e-mail, observação) fica aqui, nunca na auditoria.
       payload: { channel, note, delivery, registered_by: user.id },
     });
