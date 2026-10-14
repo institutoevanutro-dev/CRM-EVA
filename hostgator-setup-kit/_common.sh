@@ -937,3 +937,28 @@ ensure_encryption_key() {
     && c_grn "✓ chave de cifra ativa no banco (segredos de webhook são guardados cifrados)" \
     || c_ylw "⚠ não consegui semear a chave de cifra no banco — segredos de webhook não poderão ser salvos até rodar update.sh de novo."
 }
+
+# ── Os logs da versão que sai ────────────────────────────────────────────────
+# O `up -d` de uma atualização RECRIA app, worker e scheduler, e o log do
+# Docker morre com o contêiner antigo. Medido em 14/10/2026: três "Erro
+# interno" na Agenda, com ID, minutos antes de uma atualização. O `fail()`
+# tinha anotado a causa de cada um, mas a anotação foi apagada no `up -d`, e
+# a pergunta "o que foram esses erros?" ficou sem resposta.
+#
+# Guarda as últimas 48 h dos três serviços antes da troca. Fica em `logs/`,
+# só legível pelo dono (o log tem identificadores de conversa), e só as 5
+# atualizações mais recentes ficam: isto é para investigar a semana, não arquivo.
+# Falhar aqui NUNCA impede a atualização.
+guardar_logs_antes_de_trocar() {
+  local dir="${LOGS_DIR:-$PROJECT_DIR/logs}" arq
+  arq="$dir/antes-da-atualizacao-$(date +%Y%m%d-%H%M%S).log"
+  ( umask 077
+    mkdir -p "$dir" &&
+      dc logs --no-color --timestamps --since 48h app worker scheduler > "$arq" 2>/dev/null ) || true
+  chmod 600 "$arq" 2>/dev/null || true
+  local antigo
+  ls -1t "$dir"/antes-da-atualizacao-*.log 2>/dev/null | tail -n +6 | while IFS= read -r antigo; do
+    rm -f -- "$antigo"
+  done || true
+  return 0
+}
