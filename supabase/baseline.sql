@@ -89,9 +89,13 @@ begin
   -- (`contact-birthdays`, sem sessão) o emite, e a partir desta migration ele
   -- alcança a origem e manda WhatsApp de verdade — forjado por login, seria
   -- envio em nome de um aniversário que ninguém fez.
+  -- `conversation.autonomous_turn_revoked` entra pela 0361 (0594 no original):
+  -- só o gatilho de Assumir/Transferir o grava, e ele tira a autorização de um
+  -- turno da IA. Forjado por login, calaria a IA sem ninguém ter assumido.
   if auth.uid() is not null and p_event_type in (
     'message.received','appointment.outcome_confirmed',
-    'ai.case_opened','ai.case_closed','contact.birthday'
+    'ai.case_opened','ai.case_closed','contact.birthday',
+    'conversation.autonomous_turn_revoked'
   ) then
     raise exception 'reserved_message_received' using errcode='42501';
   end if;
@@ -33289,9 +33293,13 @@ begin
   -- (`contact-birthdays`, sem sessão) o emite, e a partir desta migration ele
   -- alcança a origem e manda WhatsApp de verdade — forjado por login, seria
   -- envio em nome de um aniversário que ninguém fez.
+  -- `conversation.autonomous_turn_revoked` entra pela 0361 (0594 no original):
+  -- só o gatilho de Assumir/Transferir o grava, e ele tira a autorização de um
+  -- turno da IA. Forjado por login, calaria a IA sem ninguém ter assumido.
   if auth.uid() is not null and p_event_type in (
     'message.received','appointment.outcome_confirmed',
-    'ai.case_opened','ai.case_closed','contact.birthday'
+    'ai.case_opened','ai.case_closed','contact.birthday',
+    'conversation.autonomous_turn_revoked'
   ) then
     raise exception 'reserved_message_received' using errcode='42501';
   end if;
@@ -35505,6 +35513,82 @@ grant  execute on function public.fn_definir_paciente_pelo_cadastro(uuid, boolea
 
 notify pgrst, 'reload schema';
 -- ---- fim: paciente pelo cadastro (migration 0360) ----
+
+-- ---- Assumir a conversa interrompe o turno da IA (migration 0361) ----
+-- Derivado de supabase/migrations/20261014120000_0361_assumir_interrompe_turno_da_ia.sql
+-- (o porquê inteiro está no cabeçalho de lá). Porte de melgarafael/DeskcommCRM
+-- #2541 (@ozzure; 0594 e 0615 lá) e #2741. Assumir ou transferir a conversa
+-- (`claim`/`transfer`) encerra, na mesma transação, os turnos `inbound_turn` e
+-- `case_reply_turn` dela que esperavam ou rodavam, e grava no `event_log` o fato
+-- `conversation.autonomous_turn_revoked` de cada job revogado (inclusive o
+-- `followup_turn` em execução, que o worker encerra). O servidor confere esse
+-- fato antes de cada escrita da IA. O gatilho não faz HTTP.
+--
+-- `emit_event` reserva o tipo novo para o servidor: a troca foi feita no lugar,
+-- nas DUAS definições acima neste arquivo (corpo do dump e bloco da 0345), para
+-- a reaplicação não passar pela versão antiga.
+--
+-- ⚠️ ANTES do bloco da VARREDURA anon: cria função.
+-- O predicado ÚNICO de "este turno perdeu o comando". Exige organização, job,
+-- a conversa do próprio job, tipo, entidade e estado concluído (0615 lá).
+create or replace function public.fn_autonomous_turn_revoked(p_org uuid, p_job uuid)
+returns boolean language sql stable security invoker set search_path = '' as $$
+  select exists (
+    select 1 from public.job_queue j
+    join public.event_log r on r.organization_id = j.organization_id and r.entity_id = j.id
+    where j.organization_id = p_org and j.id = p_job
+      and r.event_type = 'conversation.autonomous_turn_revoked'
+      and r.entity_kind = 'job' and r.status = 'done'
+      and r.payload->>'conversation_id' = j.payload->'service_boundary'->>'conversation_id'
+  );
+$$;
+revoke all on function public.fn_autonomous_turn_revoked(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.fn_autonomous_turn_revoked(uuid, uuid) to service_role;
+
+create or replace function public.fn_interromper_turnos_ao_assumir()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_contact uuid;
+begin
+  -- Distribuir pelo rodízio não é assumir; o handoff é decisão do próprio turno.
+  if new.reason not in ('claim', 'transfer') or new.to_user_id is null then return new; end if;
+  -- O evento tem de corresponder ao dono real, na MESMA organização.
+  select c.contact_id into v_contact from public.conversations c
+   where c.organization_id = new.organization_id and c.id = new.conversation_id
+     and c.assigned_to_user_id = new.to_user_id;
+  if v_contact is null then return new; end if;
+
+  -- O fato vem ANTES do update: ele guarda o estado em que o job estava.
+  insert into public.event_log (organization_id, event_type, entity_kind, entity_id, payload, status)
+  select new.organization_id, 'conversation.autonomous_turn_revoked', 'job', j.id,
+         jsonb_build_object('conversation_id', new.conversation_id, 'assignment_event_id', new.id,
+                            'motivo', new.reason, 'kind', j.kind, 'status_anterior', j.status),
+         'done'
+    from public.job_queue j
+   where j.organization_id = new.organization_id and j.contact_id = v_contact
+     and j.payload->'service_boundary'->>'conversation_id' = new.conversation_id::text
+     and j.payload->'service_boundary'->>'organization_id' = new.organization_id::text
+     and ((j.kind in ('inbound_turn', 'case_reply_turn') and j.status in ('pending', 'running'))
+       or (j.kind = 'followup_turn' and j.status = 'running'));
+
+  update public.job_queue j
+     set status = 'failed', locked_by = null, locked_at = null,
+         last_error = 'conversation_command_taken'
+   where j.organization_id = new.organization_id and j.contact_id = v_contact
+     and j.payload->'service_boundary'->>'conversation_id' = new.conversation_id::text
+     and j.payload->'service_boundary'->>'organization_id' = new.organization_id::text
+     and j.kind in ('inbound_turn', 'case_reply_turn')
+     and j.status in ('pending', 'running');
+  return new;
+end;
+$$;
+-- Função de gatilho: ninguém a chama por RPC.
+revoke execute on function public.fn_interromper_turnos_ao_assumir() from public, anon, authenticated, service_role;
+
+create or replace trigger trg_interromper_turnos_ao_assumir
+  after insert on public.conversation_assignment_events
+  for each row execute function public.fn_interromper_turnos_ao_assumir();
+-- ---- fim: Assumir a conversa interrompe o turno da IA (migration 0361) ----
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

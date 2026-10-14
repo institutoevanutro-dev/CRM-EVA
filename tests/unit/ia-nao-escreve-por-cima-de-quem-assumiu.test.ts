@@ -34,8 +34,11 @@ const FRONTEIRA = {
 /** O estado que a ingestão, a tela e o handoff gravam; o dublê só o devolve. */
 function banco() {
   const estado = { force_human: false, bot_silenced_until: null as string | null, assignee_kind: null as string | null };
+  // O que o gatilho da 0361 grava ao Assumir/Transferir: o turno perde o comando.
+  const turno = { vigente: true };
   const db = {
     query: async (sql: string) => {
+      if (sql.includes("fn_autonomous_turn_revoked")) return { rows: [{ current: turno.vigente }] };
       if (sql.includes("left join demandas")) {
         return { rows: [{ ...FRONTEIRA, status: "open", demanda_fechada_em: null }] };
       }
@@ -47,11 +50,19 @@ function banco() {
       return { rows: [] };
     },
   } as unknown as Queryable;
-  return { db, estado };
+  return { db, estado, turno };
 }
 
 const job = (kind: string) =>
-  ({ id: "job-1", organization_id: ORG, contact_id: CONTATO, kind, payload: { service_boundary: FRONTEIRA } }) as unknown as JobRow;
+  ({
+    id: "job-1",
+    organization_id: ORG,
+    contact_id: CONTATO,
+    kind,
+    locked_by: "worker",
+    claim_acquired_at: "2026-10-14T12:00:00.123456Z",
+    payload: { service_boundary: FRONTEIRA },
+  }) as unknown as JobRow;
 
 type Executa = (args: unknown) => Promise<unknown>;
 const rodar = (tools: ToolSet | undefined, nome: string) =>
@@ -135,6 +146,27 @@ describe("ferramenta de escrita da IA depois que uma pessoa assume no meio do tu
       return rodar(tools, "crm_move_lead_stage");
     });
     expect(f.mover).toHaveBeenCalledTimes(1);
+  });
+
+  it("alguém clica em Assumir ENQUANTO uma ferramenta roda: a escrita seguinte do turno NÃO passa (a janela do #231)", async () => {
+    const { db, estado, turno } = banco();
+    const f = ferramentas();
+    // A etiqueta roda; durante ela, a recepção clica em Assumir.
+    const etiquetar = vi.fn(async () => {
+      estado.assignee_kind = "user";
+      estado.bot_silenced_until = "infinity";
+      turno.vigente = false;
+      return { ok: true };
+    });
+    const tools = { ...f.tools, crm_manage_tags: { execute: etiquetar } } as unknown as ToolSet;
+    const resposta = await withServiceJob(db, job("inbound_turn"), async () => {
+      const guardadas = guardServiceTools(tools);
+      await rodar(guardadas, "crm_manage_tags");
+      return rodar(guardadas, "crm_book_appointment");
+    });
+    expect(etiquetar).toHaveBeenCalledTimes(1); // o que já foi feito não é desfeito
+    expect(f.marcar).not.toHaveBeenCalled();
+    expect(resposta).toMatchObject({ ok: false, error: { code: "pessoa_no_comando" } });
   });
 
   it("passar a vez e mover no MESMO passo (o modelo pede as duas juntas): as duas rodam", async () => {

@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({ handler: vi.fn() }));
 vi.mock("@/app/api/v1/messages/_handler", () => ({ sendMessageHandler: h.handler }));
 vi.mock("@/lib/atendimento/fronteira-server", () => ({
   requireCurrentServiceBoundary: vi.fn(async () => undefined),
+  requireCurrentAutonomousTurn: vi.fn(async () => undefined),
   currentExecutionBoundary: vi.fn(() => null),
   setExecutionAgentOperation: vi.fn(),
 }));

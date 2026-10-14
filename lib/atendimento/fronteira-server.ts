@@ -11,6 +11,7 @@ import type { ToolSet } from "@/lib/agent-engine/edge/llm/run-model-call";
 import {
   assertCurrentServiceBoundary,
   parseServiceBoundary,
+  StaleServiceBoundaryError,
   type CurrentServiceBoundary,
   type ServiceBoundary,
 } from "./fronteira";
@@ -62,8 +63,36 @@ export function setExecutionAgentOperation(context: AgentOperationContext): void
   const scope = execution.getStore();
   if (scope) scope.agentOperation = context;
 }
+/** Turnos em que a IA age sozinha. Operador, resposta aprovada e entrega do link são ordem de pessoa. */
+const TURNOS_AUTONOMOS = new Set(["inbound_turn", "followup_turn", "case_reply_turn"]);
+/**
+ * O TURNO DA IA AINDA TEM O COMANDO? Assumir/transferir a conversa revoga o turno
+ * no banco (migration 0361, gatilho `trg_interromper_turnos_ao_assumir`): o
+ * `inbound_turn`/`case_reply_turn` vira `failed` e todo job revogado ganha o fato
+ * `conversation.autonomous_turn_revoked`. Devolver ao automático não traz o turno
+ * antigo de volta. Vale só para turno autônomo: resposta aprovada, link da reunião
+ * e operador são ordem de pessoa e têm a autoridade própria.
+ * Porte de melgarafael/DeskcommCRM #2541 (@ozzure).
+ */
+export async function requireCurrentAutonomousTurn(
+  db: Queryable,
+  job: Pick<JobRow, "id" | "organization_id" | "contact_id" | "kind" | "locked_by" | "claim_acquired_at">,
+): Promise<void> {
+  if (!TURNOS_AUTONOMOS.has(job.kind)) return;
+  const claim = claimOfJob(job);
+  if (!claim) throw new StaleServiceBoundaryError();
+  const { rows } = await db.query<{ current: boolean }>(
+    `select exists(select 1 from job_queue where organization_id=$1 and id=$2
+      and contact_id=$3 and kind=$4 and status='running'
+      and locked_by=$5 and locked_at=$6::timestamptz
+      and not public.fn_autonomous_turn_revoked($1,job_queue.id)) as current`,
+    [job.organization_id, job.id, job.contact_id, job.kind, claim.worker_id, claim.acquired_at],
+  );
+  if (!rows[0]?.current) throw new StaleServiceBoundaryError();
+}
 export async function guardServiceEffect(): Promise<void> {
   const scope = execution.getStore();
+  if (scope?.job) await requireCurrentAutonomousTurn(scope.db, scope.job);
   if (scope?.agentOperation) await assertAgentOperationPg(scope.db, scope.agentOperation);
   if (scope) await requireCurrentServiceBoundary(scope.db, scope.boundary);
   if (scope?.job?.kind === "transactional_delivery") {
@@ -120,6 +149,7 @@ export async function withServiceJob<T>(
     assertCurrentServiceBoundary(null, null);
   }
   await requireCurrentServiceBoundary(db, boundary);
+  await requireCurrentAutonomousTurn(db, job);
   return execution.run({ db, boundary, job }, () =>
     job.kind === "followup_turn" && job.contact_id
       ? withAgendaEffect(
@@ -140,8 +170,6 @@ export async function withServiceJob<T>(
       : action(),
   );
 }
-/** Turnos em que a IA age sozinha. Operador, resposta aprovada e entrega do link são ordem de pessoa. */
-const TURNOS_AUTONOMOS = new Set(["inbound_turn", "followup_turn", "case_reply_turn"]);
 /** A conferência destas é por BOLHA, em `sendTurnMessage`, com o recado próprio ao modelo. */
 const ENVIOS = new Set(["send_message", "send_media", "send_template"]);
 const RECUSA_POR_PESSOA_NO_COMANDO = {
@@ -172,11 +200,15 @@ const RECUSA_POR_PESSOA_NO_COMANDO = {
  * valendo. Por isso a conferência se repete DEPOIS de cada escrita: se a
  * conversa mudou de mãos durante uma ferramenta deste turno, foi o turno.
  *
- * ponytail: uma pessoa que assuma exatamente enquanto uma ferramenta deste
- * turno roda (qualquer uma fora das leituras nativas) é contada como "foi o
- * turno" e as escritas seguintes passam; a mensagem continua barrada pelo
- * envio. Separar os dois casos pede marcar no banco quem silenciou. A janela
- * cai do turno inteiro (10 a 40 s de modelo) para a duração das ferramentas.
+ * QUEM SILENCIOU, O BANCO DIZ (migration 0361). Uma pessoa que assuma
+ * exatamente enquanto uma ferramenta deste turno roda era contada como "foi o
+ * turno" e as escritas seguintes passavam. Agora "Assumir"/"Transferir" revoga o
+ * turno no banco (`requireCurrentAutonomousTurn`), e essa conferência vem
+ * PRIMEIRO, sem exceção para `iaPassouAVez` nem para escritas em curso: a
+ * passagem da própria IA (`handoff`) não revoga nada, a tomada humana revoga.
+ *
+ * ponytail: "Pausar a IA" numa conversa que já tem dono só cala, não revoga;
+ * ali vale ainda a régua do #212/#231 (a janela é a duração das ferramentas).
  */
 export function guardServiceTools(tools: ToolSet | undefined): ToolSet | undefined {
   if (!tools || !execution.getStore()) return tools;
@@ -208,7 +240,18 @@ export function guardServiceTools(tools: ToolSet | undefined): ToolSet | undefin
                 { organizationId: conversa.organization_id, conversationId: conversa.conversation_id },
                 kind,
               );
-            const motivo = scope.iaPassouAVez || scope.escritasEmCurso ? null : await pessoaNoComando();
+            const turnoRevogado = async () => {
+              try {
+                await requireCurrentAutonomousTurn(scope.db, scope.job!);
+                return null;
+              } catch (erro) {
+                if (erro instanceof StaleServiceBoundaryError) return "turno_revogado";
+                throw erro;
+              }
+            };
+            const motivo =
+              (await turnoRevogado()) ??
+              (scope.iaPassouAVez || scope.escritasEmCurso ? null : await pessoaNoComando());
             if (motivo !== null) {
               logger.info("ferramenta recusada: uma pessoa assumiu a conversa durante o turno", {
                 job_id: scope.job?.id,
