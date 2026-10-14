@@ -214,7 +214,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       contactId: null,
       externalCustomerId: null,
       receivedAt: now,
-      slaDays: 15,
       emergency: true,
       scope: "tenant",
       payload: {

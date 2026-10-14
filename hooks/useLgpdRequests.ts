@@ -6,6 +6,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 // Fonte única do vocabulário: lib/lgpd/types.ts (espelha o CHECK do banco).
 export type { LgpdRequestStatus, LgpdRequestType } from "@/lib/lgpd/types";
 import type { LgpdRequestStatus, LgpdRequestType } from "@/lib/lgpd/types";
+import type { EstadoDoPrazo } from "@/lib/lgpd/sla";
 
 export type SlaBucket = "overdue" | "critical" | "warning" | "ok";
 
@@ -25,6 +26,10 @@ export interface LgpdRequest {
   scope: "contact" | "tenant";
   error_message: string | null;
   sla_bucket: SlaBucket;
+  /** Quem pediu, já resolvido no servidor (`lib/lgpd/titular.ts`). */
+  titular: string;
+  /** A data e o estado do prazo, no fuso da organização (`rotuloDoPrazo`). */
+  prazo: { data: string | null; estado: EstadoDoPrazo; texto: string };
 }
 
 export interface LgpdRequestsFilters {

@@ -6,7 +6,8 @@
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { computeDueAt } from "./sla";
+import { computeDueAt, diaDoRecebimento } from "./sla";
+import { LGPD_PRAZO_EM_DIAS_UTEIS } from "./types";
 import type { LgpdRequest, LgpdRequestSource, LgpdRequestType, LgpdScope } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -20,8 +21,12 @@ export interface CreateLgpdRequestInput {
   contactId?: string | null;
   externalCustomerId?: string | null;
   receivedAt: Date;
-  /** Number of BR business days for SLA (e.g. 15 for redact, 7 for data export). */
-  slaDays: number;
+  /**
+   * Fuso da organização: o dia em que o pedido chegou é o dia DELA. Ausente,
+   * vale `FUSO_PADRAO`, que é o default da coluna `organizations.timezone`.
+   * O prazo em dias úteis não entra aqui: sai do tipo (`LGPD_PRAZO_EM_DIAS_UTEIS`).
+   */
+  fuso?: string | null;
   /** Extra context to store in request_payload. */
   payload?: Record<string, unknown>;
   /** Whether this is a high-priority emergency request (drives early SLA alarms). Default false. */
@@ -35,7 +40,10 @@ export async function createLgpdRequest(
 ): Promise<{ id: string; due_at: string }> {
   const admin = createAdminClient();
 
-  const dueAt = computeDueAt(input.receivedAt, input.slaDays);
+  const dueAt = computeDueAt(
+    diaDoRecebimento(input.receivedAt, input.fuso ?? undefined),
+    LGPD_PRAZO_EM_DIAS_UTEIS[input.requestType],
+  );
 
   const { data, error } = await admin
     .from("lgpd_requests")

@@ -215,7 +215,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       contactId,
       externalCustomerId: customerId,
       receivedAt: now,
-      slaDays: 15,
       payload: {
         // Store customer object for worker — PII stays here, not in audit log
         customer: body.customer ?? null,

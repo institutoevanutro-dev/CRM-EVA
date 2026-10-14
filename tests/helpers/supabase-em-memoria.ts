@@ -1,15 +1,18 @@
 /**
  * Um PostgREST de mentira, com estado, para testar rota contra dado que muda.
  *
- * Só o que as rotas de pedido LGPD usam: `select/eq/in/gt/order/limit`,
- * `maybeSingle/single`, `insert`, `update` e `rpc` (espionado). Os filtros são
+ * Só o que as rotas de pedido LGPD usam: `select/eq/in/gt/order/limit/range`,
+ * a contagem `select(…, { count, head })`, `maybeSingle/single`, `insert`,
+ * `update` e `rpc` (espionado). `from` também é espionado: é como o teste conta
+ * quantas consultas uma rota faz por tabela (N+1). Embutidos do `select` são
+ * ignorados. Os filtros são
  * aplicados de verdade: é o que deixa o teste de isolamento entre organizações
  * falhar quando a rota esquece o `organization_id`.
  */
 import { vi } from "vitest";
 
 export type Linha = Record<string, unknown>;
-type Resposta = { data: unknown; error: { code: string; message: string } | null };
+type Resposta = { data: unknown; error: { code: string; message: string } | null; count?: number };
 
 export function supabaseEmMemoria(tabelas: Record<string, Linha[]>) {
   let seq = 0;
@@ -24,6 +27,8 @@ export function supabaseEmMemoria(tabelas: Record<string, Linha[]>) {
       tipo: "select",
     };
     let limite = Infinity;
+    let inicio = 0;
+    let soContar = false;
 
     function executar(): Resposta {
       if (acao.tipo !== "select" && recusar[tabela]) return { data: null, error: recusar[tabela]! };
@@ -32,7 +37,9 @@ export function supabaseEmMemoria(tabelas: Record<string, Linha[]>) {
         linhas.push(criada);
         return { data: [criada], error: null };
       }
-      const achadas = linhas.filter((l) => filtros.every((f) => f(l))).slice(0, limite);
+      const todas = linhas.filter((l) => filtros.every((f) => f(l)));
+      if (soContar) return { data: null, error: null, count: todas.length };
+      const achadas = todas.slice(inicio, inicio + limite);
       if (acao.tipo === "update") for (const l of achadas) Object.assign(l, acao.patch);
       return { data: achadas, error: null };
     }
@@ -45,12 +52,15 @@ export function supabaseEmMemoria(tabelas: Record<string, Linha[]>) {
     };
 
     const q = {
-      select: () => q,
+      select: (_colunas?: string, opcoes?: { count?: string; head?: boolean }) => (
+        (soContar = !!(opcoes?.count && opcoes.head)), q
+      ),
       eq: (c: string, v: unknown) => (filtros.push((l) => l[c] === v), q),
       in: (c: string, vs: unknown[]) => (filtros.push((l) => vs.includes(l[c])), q),
       gt: (c: string, v: unknown) => (filtros.push((l) => String(l[c]) > String(v)), q),
       order: () => q,
       limit: (n: number) => ((limite = n), q),
+      range: (de: number, ate: number) => ((inicio = de), (limite = ate - de + 1), q),
       insert: (linha: Linha) => ((acao = { tipo: "insert", linha }), q),
       update: (patch: Linha) => ((acao = { tipo: "update", patch }), q),
       maybeSingle: uma(false),
@@ -61,5 +71,5 @@ export function supabaseEmMemoria(tabelas: Record<string, Linha[]>) {
     return q;
   }
 
-  return { cliente: { from, rpc }, tabelas, recusar, rpc };
+  return { cliente: { from: vi.fn(from), rpc }, tabelas, recusar, rpc };
 }

@@ -22,6 +22,8 @@ import { LGPD_CANAL_LABELS, type LgpdCanalDeChegada, type LgpdFormaDeEntrega } f
 
 interface Props {
   id: string;
+  /** Fuso da organização, resolvido no servidor (`fusoUtilizavel`). */
+  fuso: string;
 }
 
 const TYPE_LABELS: Record<LgpdRequestType, string> = {
@@ -51,7 +53,7 @@ const STATUS_VARIANT: Record<
   pending_review: "secondary",
 };
 
-export function LgpdRequestDetail({ id }: Props) {
+export function LgpdRequestDetail({ id, fuso }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const { data, isLoading, error } = useLgpdRequest(id);
@@ -170,6 +172,7 @@ export function LgpdRequestDetail({ id }: Props) {
                 received_at={request.received_at}
                 due_at={request.due_at}
                 request_type={request.request_type}
+                fuso={fuso}
               />
             ) : (
               <p className="text-sm text-muted-foreground">{t("SLA não definido.")}</p>

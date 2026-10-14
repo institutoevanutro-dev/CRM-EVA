@@ -1,26 +1,23 @@
 "use client";
 
-import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
-
-import { differenceInDays, format, isBefore } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
+import { computeDueAt, diaDoRecebimento, diasAtePrazo, prazoEmBr, rotuloDoPrazo } from "@/lib/lgpd/sla";
+import { FUSO_PADRAO } from "@/lib/tempo/fusos";
 
 interface SlaTimelineProps {
   received_at: string;
   due_at: string;
   request_type: string;
+  /** Fuso da organização; o painel da plataforma usa o padrão. */
+  fuso?: string;
 }
 
-interface Milestone {
-  label: string;
-  targetDay: number;
-  date: Date;
-}
-
-function getMilestones(
-  receivedAt: Date,
-  requestType: string,
-): { label: string; day: number }[] {
+/**
+ * Os marcos em DIAS ÚTEIS, na mesma régua do prazo (`computeDueAt`). Eram dias
+ * corridos somados em milissegundos, e o "D+7" da tela caía antes do prazo
+ * gravado: duas réguas na mesma tela. O último marco é o próprio `due_at`.
+ */
+function getMilestones(requestType: string): { label: string; day: number }[] {
   if (requestType === "data_request") {
     return [
       { label: "Recebido", day: 0 },
@@ -36,69 +33,40 @@ function getMilestones(
   ];
 }
 
-function milestoneStatus(
-  milestoneDate: Date,
-  now: Date,
-  dueDate: Date,
-  isLast: boolean,
-): "completed" | "current" | "future" {
-  if (isBefore(milestoneDate, now)) return "completed";
-  if (isLast && isBefore(dueDate, now)) return "current";
-  // Is it the "next" milestone?
-  return "future";
-}
-
-export function SlaTimeline({ received_at, due_at, request_type }: SlaTimelineProps) {
-  const localeDaData = useLocaleDeData();
+export function SlaTimeline({ received_at, due_at, request_type, fuso = FUSO_PADRAO }: SlaTimelineProps) {
   const t = useT();
-  const receivedAt = new Date(received_at);
-  const dueAt = new Date(due_at);
   const now = new Date();
+  const recebidoNoDia = diaDoRecebimento(new Date(received_at), fuso);
 
-  const milestoneConfigs = getMilestones(receivedAt, request_type);
-  const milestones: (Milestone & { status: "completed" | "current" | "future" })[] =
-    milestoneConfigs.map((m, idx) => {
-      const date = new Date(
-        receivedAt.getTime() + m.day * 24 * 60 * 60 * 1000,
-      );
-      const isLast = idx === milestoneConfigs.length - 1;
-      return {
-        label: m.label,
-        targetDay: m.day,
-        date,
-        status: milestoneStatus(date, now, dueAt, isLast),
-      };
-    });
+  const milestoneConfigs = getMilestones(request_type);
+  const milestones = milestoneConfigs.map((m, idx) => {
+    const isLast = idx === milestoneConfigs.length - 1;
+    const dia = isLast ? due_at : m.day === 0 ? recebidoNoDia : computeDueAt(recebidoNoDia, m.day);
+    const faltam = diasAtePrazo(dia, now, fuso);
+    const status: "completed" | "current" | "future" =
+      m.day === 0 ? "completed" : faltam < 0 ? (isLast ? "current" : "completed") : "future";
+    return { label: m.label, targetDay: m.day, data: prazoEmBr(dia), status };
+  });
 
-  // Linear progress 0..1
-  const elapsed = now.getTime() - receivedAt.getTime();
-  const total = dueAt.getTime() - receivedAt.getTime();
-  const progress = Math.min(1, Math.max(0, total > 0 ? elapsed / total : 0));
+  // Progresso: razão entre as duas pontas, até o FIM do dia do prazo.
+  const fimDoPrazo = new Date(due_at).getTime() + 86_400_000;
+  const total = fimDoPrazo - recebidoNoDia.getTime();
+  const progress = Math.min(1, Math.max(0, total > 0 ? (now.getTime() - recebidoNoDia.getTime()) / total : 0));
   const progressPct = Math.round(progress * 100);
-
-  const daysElapsed = differenceInDays(now, receivedAt);
-  const daysRemaining = differenceInDays(dueAt, now);
+  const prazo = rotuloDoPrazo(due_at, now, fuso, t);
 
   const progressColor =
-    progress >= 1
-      ? "bg-error"
-      : progress >= 0.75
-        ? "bg-warning"
-        : "bg-success";
+    prazo.estado === "vencido" ? "bg-error" : progress >= 0.75 ? "bg-warning" : "bg-success";
 
   return (
     <div className="space-y-4">
       {/* Progress bar */}
       <div className="space-y-1">
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>D+{daysElapsed} ({t("hoje")})</span>
           <span>
-            {daysRemaining > 0
-              ? `${daysRemaining}${t("d restantes")}`
-              : daysRemaining === 0
-                ? t("vence hoje")
-                : `${Math.abs(daysRemaining)}${t("d em atraso")}`}
+            {t("Prazo")}: {prazo.data}
           </span>
+          <span className={prazo.estado === "vencido" ? "font-medium text-error" : undefined}>{prazo.texto}</span>
         </div>
         <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
           <div
@@ -146,9 +114,7 @@ export function SlaTimeline({ received_at, due_at, request_type }: SlaTimelinePr
                 <p className={`leading-tight ${labelColor}`}>
                   D+{m.targetDay} — {t(m.label)}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  {format(m.date, "dd 'de' MMM yyyy", { locale: localeDaData })}
-                </p>
+                <p className="text-xs text-muted-foreground">{m.data}</p>
               </div>
             </li>
           );

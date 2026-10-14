@@ -3,6 +3,7 @@ import { normalizarModoDeOrcamento } from "@/lib/agent-engine/edge/llm/orcamento
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
+import { diasDeAtraso, prazoEmBr } from "@/lib/lgpd/sla";
 
 export type AlertSeverity = "critical" | "warning" | "info";
 export type AlertKind =
@@ -162,7 +163,6 @@ export async function GET(_req: NextRequest) {
   ]);
 
   const alerts: AlertItem[] = [];
-  const now = Date.now();
 
   // WAHA alerts
   for (const row of wahaAlertsRes.data ?? []) {
@@ -185,7 +185,9 @@ export async function GET(_req: NextRequest) {
   // LGPD alerts
   for (const row of lgpdAlertsRes.data ?? []) {
     const org = (row as { organizations?: { display_name?: string } }).organizations;
-    const isOverdue = new Date(row.due_at).getTime() < now;
+    // Dia civil, como o resto do LGPD (`lib/lgpd/sla.ts`): o prazo vai até o
+    // fim do dia. O filtro de banco acima só escolhe os candidatos.
+    const isOverdue = diasDeAtraso(row.due_at, new Date()) > 0;
     alerts.push({
       id: `lgpd-${row.id}`,
       severity: isOverdue ? "critical" : "warning",
@@ -193,8 +195,8 @@ export async function GET(_req: NextRequest) {
       tenant_id: row.organization_id,
       tenant_name: (org as { display_name?: string })?.display_name ?? row.organization_id,
       message: isOverdue
-        ? `Requisição LGPD vencida em ${new Date(row.due_at).toLocaleDateString("pt-BR")}`
-        : `Prazo LGPD expira em ${new Date(row.due_at).toLocaleDateString("pt-BR")}`,
+        ? `Requisição LGPD vencida em ${prazoEmBr(row.due_at)}`
+        : `Prazo LGPD expira em ${prazoEmBr(row.due_at)}`,
       link: "/admin/lgpd",
       created_at: row.created_at,
     });

@@ -4,7 +4,9 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import type { Locale } from "date-fns";
 import Link from "next/link";
-import { formatDistanceToNow, differenceInHours } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import { rotuloDoPrazo } from "@/lib/lgpd/sla";
+import { FUSO_PADRAO } from "@/lib/tempo/fusos";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,13 +50,9 @@ function countdownLabel(
 ): string {
   const terminal = new Set<AdminLgpdStatus>(["completed", "failed"]);
   if (terminal.has(status) || !dueAt) return "—";
-  const now = new Date();
-  const due = new Date(dueAt);
-  const hours = differenceInHours(due, now);
-  if (hours < 0) return `${Math.abs(hours)}h ${t("em atraso")}`;
-  if (hours < 24) return `${hours}h ${t("restantes")}`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ${t("restantes")}`;
+  // A mesma régua da lista da organização: dia civil, não horas desde a
+  // meia-noite UTC (que dizia "em atraso" às 21h da véspera do prazo).
+  return rotuloDoPrazo(dueAt, new Date(), FUSO_PADRAO, t).texto;
 }
 
 const TYPE_LABELS: Record<AdminLgpdRequestType, string> = {

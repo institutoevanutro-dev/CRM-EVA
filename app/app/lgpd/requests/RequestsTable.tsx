@@ -29,6 +29,7 @@ import {
   type LgpdRequestType,
   type SlaBucket,
 } from "@/hooks/useLgpdRequests";
+import { LGPD_ESTADOS_ABERTOS } from "@/lib/lgpd/types";
 import { SlaBanner } from "./SlaBanner";
 
 // ── Label helpers ─────────────────────────────────────────────────────────────
@@ -96,31 +97,8 @@ function fmtRelative(iso: string, t: (texto: string) => string): string {
   }
 }
 
-function fmtDistance(
-  iso: string | null,
-  t: (texto: string) => string,
-): { label: string; urgent: boolean } {
-  if (!iso) return { label: "—", urgent: false };
-  try {
-    const now = Date.now();
-    const due = new Date(iso).getTime();
-    const diffMs = due - now;
-    const urgent = diffMs < 2 * 24 * 60 * 60 * 1000;
-    if (diffMs < 0) {
-      const overMs = Math.abs(diffMs);
-      const overD = Math.floor(overMs / 86_400_000);
-      return { label: overD > 0 ? `${overD}${t("d atrasado")}` : t("atrasado hoje"), urgent: true };
-    }
-    const diffD = Math.floor(diffMs / 86_400_000);
-    if (diffD < 1) {
-      const diffH = Math.floor(diffMs / 3_600_000);
-      return { label: `${t("em")} ${diffH}h`, urgent };
-    }
-    return { label: `${t("em")} ${diffD}d`, urgent };
-  } catch {
-    return { label: iso, urgent: false };
-  }
-}
+/** Pedido encerrado não está "vencendo": mostra só a data. */
+const ABERTOS = new Set<LgpdRequestStatus>(LGPD_ESTADOS_ABERTOS);
 
 // ── Select options ────────────────────────────────────────────────────────────
 
@@ -232,7 +210,7 @@ export function RequestsTable() {
             <TableRow>
               <TableHead className="w-[90px]">ID</TableHead>
               <TableHead>{t("Tipo")}</TableHead>
-              <TableHead>{t("Sujeito")}</TableHead>
+              <TableHead>{t("Titular")}</TableHead>
               <TableHead>{t("Recebido")}</TableHead>
               <TableHead>{t("Vence")}</TableHead>
               <TableHead>SLA</TableHead>
@@ -277,12 +255,12 @@ export function RequestsTable() {
               </TableRow>
             ) : (
               rows.map((r) => {
-                const due = fmtDistance(r.due_at, t);
-                const subject = r.external_customer_id
-                  ? r.external_customer_id.slice(0, 16)
-                  : r.contact_id
-                    ? `ctt:${r.contact_id.slice(0, 8)}`
-                    : "—";
+                // Data e estado vêm prontos do servidor, no fuso da organização:
+                // a tela não refaz conta de prazo (era aqui que "atrasado hoje"
+                // aparecia às 21h da véspera).
+                const aberto = ABERTOS.has(r.status);
+                const vencido = aberto && r.prazo.estado === "vencido";
+                const urgente = aberto && r.prazo.estado === "vence_hoje";
 
                 return (
                   <TableRow key={r.id}>
@@ -294,16 +272,21 @@ export function RequestsTable() {
                         {t(TYPE_LABELS[r.request_type] ?? r.request_type)}
                       </Badge>
                     </TableCell>
-                    <TableCell className="max-w-[140px] truncate font-mono text-xs">
-                      {subject}
+                    <TableCell className="max-w-[220px] truncate text-sm" title={r.titular}>
+                      {r.titular}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                       {fmtRelative(r.received_at, t)}
                     </TableCell>
-                    <TableCell
-                      className={`whitespace-nowrap text-xs font-medium ${due.urgent ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
-                    >
-                      {due.label}
+                    <TableCell className="whitespace-nowrap text-xs">
+                      <span className="block text-foreground">{r.prazo.data ?? "—"}</span>
+                      {aberto && r.prazo.texto && (
+                        <span
+                          className={`block font-medium ${vencido || urgente ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
+                        >
+                          {r.prazo.texto}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={SLA_VARIANT[r.sla_bucket]} className="text-xs">

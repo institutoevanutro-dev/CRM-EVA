@@ -90,6 +90,12 @@ test("registrar o pedido pela tela, aprovar, e marcar o relatório como entregue
   // 2. Aparece na lista, Recebido; a página do pedido mostra o prazo e por onde chegou.
   const linha = page.getByRole("row").filter({ hasText: pedidoId.slice(0, 8) });
   await expect(linha).toContainText("Recebido", { timeout: 30_000 });
+  // Quem pediu aparece pelo NOME (era `ctt:` + o começo do id), e o prazo como
+  // data mais o estado, contado no fuso da clínica.
+  await expect(linha).toContainText(nome);
+  await expect(linha).not.toContainText("ctt:");
+  await expect(linha).toContainText(prazoEmBr(prazo) ?? "");
+  await expect(linha).toContainText(/faltam \d+ dias|vence amanhã|vence hoje/);
   await page.screenshot({ path: `${PASTA}/2-lista-recebido.png`, fullPage: true });
   await linha.getByRole("link", { name: "Ver" }).click();
   await page.waitForURL(new RegExp(`/app/lgpd/requests/${pedidoId}`));
@@ -164,6 +170,10 @@ test("registrar o pedido pela tela, aprovar, e marcar o relatório como entregue
   await expect(page.getByRole("row").filter({ hasText: pedidoId.slice(0, 8) })).toContainText("Concluído", {
     timeout: 30_000,
   });
+  // Pedido encerrado mostra a data do prazo, sem "faltam" nem "vencido".
+  await expect(page.getByRole("row").filter({ hasText: pedidoId.slice(0, 8) })).not.toContainText(
+    /faltam|vence |vencido/,
+  );
   await page.screenshot({ path: `${PASTA}/7-lista-concluido.png`, fullPage: true });
 });
 
