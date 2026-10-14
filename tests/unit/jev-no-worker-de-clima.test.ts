@@ -135,7 +135,7 @@ describe("com chave e o Jev ligado", () => {
   });
 
   it("só escreve observação e custo; o Jev percebe o que a regra deixou passar", async () => {
-    const clima = await observarComOJev(admin(), { ...CTX, mensagem: "chega dessas mensagens toda semana" });
+    const clima = await observarComOJev(admin(), { ...CTX, mensagem: "não aguento mais essas mensagens toda semana" });
     expect(new Set(escritas.map((e) => e.tabela))).toEqual(new Set(["llm_calls", "jev_observacoes"]));
     const optOut = escritas.find((e) => e.linha.tarefa === "opt_out")!.linha;
     expect(optOut).toMatchObject({ estado: "observando", rotulo_jev: "sim", rotulo_atual: "nao" });
@@ -164,7 +164,7 @@ describe("com chave e o Jev ligado", () => {
  */
 describe("avisar a equipe", () => {
   const avisando = (tarefas: Record<string, { estado: string }>) => ({ jev: { ...LIGADO.jev, tarefas } });
-  const NATURAL = "chega dessas mensagens toda semana";
+  const NATURAL = "não aguento mais essas mensagens toda semana";
   const avisos = () => escritas.filter((e) => e.tabela === "agent_inbox_items").map((e) => e.linha);
 
   beforeEach(() => {
