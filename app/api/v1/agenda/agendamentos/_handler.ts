@@ -25,7 +25,7 @@ import type { Json } from "@/lib/database.types";
  * para o modelo, e nenhum dos dois reimplementa a decisão.
  */
 import { coletaOQueOcupa, horariosLivresDaOrg, resolverDuracaoDoTipo } from "@/lib/agenda/consulta";
-import { colide } from "@/lib/agenda/horarios-livres";
+import { colide, type Slot } from "@/lib/agenda/horarios-livres";
 import { idsForaDaOrg } from "@/lib/tenancy/pertence-a-org";
 import {
   atividadeDaTransicao,
@@ -169,7 +169,7 @@ async function executarCriacaoDeAgendamento(
   const { data: tipo, error: erroTipo } = await supabase
     .from("calendar_event_types")
     .select(
-      "id, name, is_active, duration_minutes, catalog_product_id, default_owner_user_id, requires_confirmation, location_kind, location_details",
+      "id, name, is_active, duration_minutes, catalog_product_id, default_owner_user_id, requires_confirmation, location_kind, location_details, required_room_kind",
     )
     .eq("organization_id", ctx.organization_id)
     .eq("id", input.event_type_id)
@@ -264,6 +264,9 @@ async function executarCriacaoDeAgendamento(
     fim,
     unitId: input.unit_id ?? null,
   });
+  const unitId =
+    input.unit_id ??
+    (tipo.required_room_kind ? await unidadeDaJornada(supabase, ctx, inicio, consulta.slots) : null);
 
   const booking = tipo.location_kind === "google_meet" ? ctx.meetingBooking : undefined;
   if (booking && (booking.boundary.organization_id !== ctx.organization_id || booking.boundary.contact_id !== input.contact_id || ctx.actor.type !== "ai_agent")) {
@@ -282,7 +285,7 @@ async function executarCriacaoDeAgendamento(
       starts_at: inicio.toISOString(),
       ends_at: fim.toISOString(),
       duration_minutes_snapshot: duracaoMin,
-      unit_id: input.unit_id ?? null,
+      unit_id: unitId,
       // O fuso do compromisso é campo de primeira classe: é o da JORNADA, onde
       // o horário foi decidido, e ele viaja até o lembrete (ACHADO 09).
       time_zone: consulta.fusoDaRegra,
@@ -724,7 +727,7 @@ async function exigeHorarioLivre(
      */
     ignorarAgendamentoId?: string;
   },
-): Promise<{ fusoDaRegra: string }> {
+): Promise<{ fusoDaRegra: string; slots: Slot[] }> {
   const consulta = await horariosLivresDaOrg(supabase, ctx.organization_id, {
     eventTypeId: args.eventTypeId,
     ownerUserId: args.donoId,
@@ -761,7 +764,46 @@ async function exigeHorarioLivre(
       "Este horário não está disponível. Consulte os horários livres e escolha outro.",
     );
   }
-  return { fusoDaRegra: consulta.fusoDaRegra };
+  return { fusoDaRegra: consulta.fusoDaRegra, slots: consulta.slots };
+}
+
+/**
+ * Tipo que exige sala e pedido sem `unit_id`: a unidade é a da janela da
+ * jornada que gerou o horário pedido, quando há UMA só.
+ *
+ * O gatilho do compromisso recusa sem unidade (`agenda_unidade_obrigatoria`),
+ * e a IA não sabe a unidade de cabeça: ela marca a partir da grade, e a grade
+ * já sabe de que janela cada horário saiu. Com duas unidades possíveis (ou
+ * nenhuma, no encaixe fora da grade) a escolha não é desta função: a recusa
+ * leva a lista em `details.unidades`, que a ferramenta repassa ao modelo.
+ */
+async function unidadeDaJornada(
+  supabase: SB,
+  ctx: HandlerCtx,
+  inicio: Date,
+  slots: Slot[],
+): Promise<string> {
+  const possiveis = [
+    ...new Set(
+      slots.flatMap((s) => (s.inicio.getTime() === inicio.getTime() && s.unitId ? [s.unitId] : [])),
+    ),
+  ];
+  if (possiveis.length === 1) return possiveis[0]!;
+
+  let q = supabase
+    .from("calendar_units")
+    .select("id, name")
+    .eq("organization_id", ctx.organization_id)
+    .eq("active", true);
+  if (possiveis.length > 1) q = q.in("id", possiveis);
+  const { data } = await q.order("name");
+  throw new ApiError(
+    409,
+    "agenda_unidade_obrigatoria",
+    { unidades: (data ?? []).map((u) => ({ id: String(u.id), nome: String(u.name) })) },
+    ctx.requestId,
+    "Este atendimento precisa de uma unidade. Informe a unidade em que ele acontece.",
+  );
 }
 
 /**

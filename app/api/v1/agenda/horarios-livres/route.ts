@@ -66,6 +66,9 @@ export async function GET(req: NextRequest): Promise<Response> {
   const url = new URL(req.url);
   const parsed = querySchema.safeParse({
     event_type_id: url.searchParams.get("event_type_id") ?? undefined,
+    // Sem esta linha o filtro por unidade era ignorado em silêncio: o schema
+    // declarava o campo e ninguém o lia da query.
+    unit_id: url.searchParams.get("unit_id") ?? undefined,
     owner_user_id: url.searchParams.get("owner_user_id") ?? undefined,
     de: url.searchParams.get("de") ?? undefined,
     ate: url.searchParams.get("ate") ?? undefined,
@@ -126,7 +129,9 @@ export async function GET(req: NextRequest): Promise<Response> {
       slots: consulta.slots.map((s) => ({
         inicio: s.inicio.toISOString(),
         fim: s.fim.toISOString(),
-        unit_id: parsed.data.unit_id ?? null,
+        // A unidade da JANELA que gerou o horário, não a que foi pedida: é ela
+        // que quem marca repassa, e sem ela tipo com sala é recusado.
+        unit_id: s.unitId ?? null,
       })),
       fuso_da_regra: consulta.fusoDaRegra,
       // "Não publiquei meus horários" e "não tenho vaga" chegam como a mesma

@@ -55,7 +55,7 @@ export type DonoDoCampo =
 export const ESCOPO_DAS_ESCRITAS: Readonly<Record<string, Readonly<Record<string, DonoDoCampo>>>> = {
   // ---- agenda ----
   crm_book_appointment: { contact_id: "contato", owner_user_id: "configuracao", unit_id: "configuracao" },
-  crm_find_and_book_appointment: { contact_id: "contato", owner_user_id: "configuracao" },
+  crm_find_and_book_appointment: { contact_id: "contato", owner_user_id: "configuracao", unit_id: "configuracao" },
   crm_reschedule_appointment: { appointment_id: "compromisso" },
   crm_cancel_appointment: { appointment_id: "compromisso" },
   crm_confirm_appointment: { appointment_id: "compromisso" },
