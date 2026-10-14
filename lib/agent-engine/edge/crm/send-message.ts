@@ -6,7 +6,7 @@ import type { JobClaim } from '../../queue/claim';
 import { assertAgendaEffectPg } from '@/lib/agenda/efeito';
 import { AgendaDeferredError } from '@/lib/agenda/protecao-followup';
 import { StaleServiceBoundaryError } from '@/lib/atendimento/fronteira';
-import { requireCurrentServiceBoundary } from '@/lib/atendimento/fronteira-server';
+import { requireCurrentAutonomousTurn, requireCurrentServiceBoundary } from '@/lib/atendimento/fronteira-server';
 import { parseServiceBoundary } from '@/lib/atendimento/fronteira';
 import { pessoaNoComandoDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 /**
@@ -172,6 +172,17 @@ export async function sendTurnMessage(
     db,
     parseServiceBoundary(sourceJobs[0]?.payload.service_boundary),
   );
+  // Assumir/Transferir revogou este turno no banco (migration 0361): a bolha não
+  // sai, e o turno para aqui. Vem antes da régua do #212 porque ela não distingue
+  // a passagem da própria IA da tomada por uma pessoa.
+  if (sourceJobs[0]) await requireCurrentAutonomousTurn(db, {
+    id: input.jobId,
+    organization_id: input.tenantId,
+    contact_id: input.leadId,
+    kind: sourceJobs[0].kind as JobRow['kind'],
+    locked_by: input.jobClaim?.worker_id ?? null,
+    claim_acquired_at: input.jobClaim?.acquired_at,
+  });
   const motivo = await pessoaAssumiuAConversa(db, input, sourceJobs[0]?.kind);
   if (motivo !== null) return { kind: 'human_took_over', motivo };
   const proactiveContext =
