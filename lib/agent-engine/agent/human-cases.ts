@@ -120,18 +120,21 @@ export interface CaseAwaitingLead {
 }
 
 /**
- * O caso 'awaiting_lead' da conversa (humano pediu algo ao lead), se houver.
- * Usado no turno normal (inbound_turn) para dar ao modelo o `case_id` real que
- * `provide_case_update` exige — sem isso o modelo nunca tem como chamar a tool
- * quando o lead simplesmente responde a mensagem (o caminho comum; case_reply_turn
- * só cobre a ação do HUMANO, não a resposta do lead). No máximo 1 por conversa
- * (mesma garantia de `openCase`/dedup).
+ * Os casos 'awaiting_lead' da conversa (humano pediu algo ao lead), do mais
+ * antigo ao mais novo. Usado no turno normal (inbound_turn) para dar ao modelo o
+ * `case_id` real que `provide_case_update` exige; sem isso o modelo nunca tem como
+ * chamar a tool quando o lead simplesmente responde a mensagem (o caminho comum;
+ * case_reply_turn só cobre a ação do HUMANO, não a resposta do lead).
+ *
+ * LISTA, não um: `openCase` deduplica por assunto (`kind`), então uma conversa
+ * pode ter mais de um caso aberto, e dois deles podem estar esperando o cliente.
+ * Com `limit 1` o segundo pedido da equipe nunca chegaria ao modelo.
  */
-export async function getCaseAwaitingLead(
+export async function getCasesAwaitingLead(
   db: Queryable,
   tenantId: string,
   conversationId: string,
-): Promise<CaseAwaitingLead | null> {
+): Promise<CaseAwaitingLead[]> {
   const { rows } = await db.query<CaseAwaitingLead>(
     `select c.id, e.body as ask
        from agent_cases c
@@ -142,24 +145,45 @@ export async function getCaseAwaitingLead(
           limit 1
        ) e on true
       where c.organization_id = $1 and c.conversation_id = $2 and c.status = 'awaiting_lead'
-      limit 1`,
+      order by c.opened_at, c.id`,
     [tenantId, conversationId],
   );
-  return rows[0] ?? null;
+  return rows;
 }
 
 export type OpenCaseResult =
-  | { ok: true; caseId: string }
+  /**
+   * `merged`: já havia um caso do MESMO assunto (`kind`) aguardando a equipe, e a
+   * pendência entrou nele como registro do agente em vez de abrir outro. Para quem
+   * chama é sucesso: a equipe recebeu a informação no caso que já está tratando.
+   */
+  | { ok: true; caseId: string; merged?: true }
   | { ok: false; error: { code: string; message: string } };
 
 /**
  * Abre o caso: INSERT agent_cases(status='awaiting_human') + INSERT
- * agent_case_events(kind='opened') em UM statement atômico. A guarda de dedup
- * (não abrir 2º caso pra mesma conversa) mora no `where not exists` do próprio
- * INSERT — sem essa condição haveria corrida entre a checagem e a escrita;
- * aqui checagem e escrita são a MESMA operação. Essa atomicidade check-and-write
- * vale DENTRO do statement; a garantia de não-duplicação entre transações
- * CONCORRENTES vem da serialização per-contact do job_queue
+ * agent_case_events(kind='opened') em UM statement atômico.
+ *
+ * DUPLICADO = caso aberto da MESMA conversa e do MESMO `kind`. Até 14/10/2026 a
+ * guarda era "qualquer caso aberto na conversa", e o comprovante de Pix de uma
+ * paciente não virou caso porque havia um de ontem, de outro assunto: a pendência
+ * nova não chegou a ninguém (Instituto Eva). O `kind` é o assunto que o próprio
+ * agente declara, então um retry do turno ou o agente insistindo no que já está
+ * aberto cai no mesmo `kind` e não duplica, e uma pendência de outro assunto abre
+ * o seu caso.
+ *
+ * Mesmo `kind` não quer dizer mesma pendência (comprovante e exceção de pagamento
+ * são os dois `financeiro`), por isso o duplicado NÃO é descartado:
+ *   - caso do mesmo `kind` em `awaiting_human`: a pendência entra nele como
+ *     `agent_noted` (título, resumo e bloqueio), e a equipe a lê na linha do tempo
+ *     do caso que já está tratando;
+ *   - caso do mesmo `kind` em `awaiting_lead`: recusa (`case_already_open`) com o
+ *     `case_id` e o caminho certo, `provide_case_update`, que devolve o caso à
+ *     equipe com a informação. Uma nota ali ficaria num caso cuja bola está com o
+ *     cliente, e ninguém da equipe a leria.
+ *
+ * Checagem e escrita são a MESMA operação (CTEs de um statement); a garantia
+ * entre transações CONCORRENTES vem da serialização per-contact do job_queue
  * (uniq_job_queue_one_running_per_contact), não deste statement sozinho.
  */
 export async function openCase(
@@ -177,23 +201,44 @@ export async function openCase(
   await guardServiceEffect();
   const source = input.source ?? 'agent';
   const actorKind = source === 'agent' ? 'agent' : 'system';
+  // O default mora aqui e no banco: se um caminho novo esquecer de passar, a
+  // linha nasce classificada como 'outro' em vez de nula.
+  const kind = input.kind ?? 'outro';
 
-  const { rows } = await db.query<{ case_id: string }>(
-    `with new_case as (
+  const { rows } = await db.query<{
+    opened_id: string | null;
+    existing_id: string | null;
+    existing_status: string | null;
+    noted: boolean;
+  }>(
+    `with existente as (
+       select id, status from agent_cases
+        where organization_id = $1 and conversation_id = $2
+          and status = any($9::text[]) and kind = $11
+        order by opened_at desc
+        limit 1
+     ),
+     new_case as (
        insert into agent_cases
          (organization_id, conversation_id, agent_id, title, summary, blocker, context_snapshot, source, kind)
        select $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $11
-        where not exists (
-          select 1 from agent_cases
-           where organization_id = $1 and conversation_id = $2
-             and status = any($9::text[])
-        )
+        where not exists (select 1 from existente)
        returning id
+     ),
+     aberto as (
+       insert into agent_case_events (organization_id, case_id, kind, actor_kind)
+       select $1, id, 'opened', $10 from new_case
+       returning case_id
+     ),
+     nota as (
+       insert into agent_case_events (organization_id, case_id, kind, actor_kind, body)
+       select $1, id, 'agent_noted', $10, $12 from existente where status = 'awaiting_human'
+       returning case_id
      )
-     insert into agent_case_events (organization_id, case_id, kind, actor_kind)
-     select $1, id, 'opened', $10
-       from new_case
-     returning case_id`,
+     select (select case_id from aberto) as opened_id,
+            (select id from existente) as existing_id,
+            (select status from existente) as existing_status,
+            exists (select 1 from nota) as noted`,
     [
       ids.tenantId,
       ids.conversationId,
@@ -205,23 +250,28 @@ export async function openCase(
       source,
       OPEN_STATUSES,
       actorKind,
-      // O default mora aqui e no banco: se um caminho novo esquecer de passar, a
-      // linha nasce classificada como 'outro' em vez de nula.
-      input.kind ?? 'outro',
+      kind,
+      buildCaseSummary(input),
     ],
   );
 
-  const caseId = rows[0]?.case_id;
-  if (caseId === undefined) {
-    return {
-      ok: false,
-      error: {
-        code: 'case_already_open',
-        message: 'já existe um caso humano aberto para esta conversa; aguarde a resposta do atendente antes de abrir outro.',
-      },
-    };
-  }
-  return { ok: true, caseId };
+  const row = rows[0];
+  if (row?.opened_id) return { ok: true, caseId: row.opened_id };
+  if (row?.noted && row.existing_id) return { ok: true, caseId: row.existing_id, merged: true };
+  return {
+    ok: false,
+    error: {
+      code: 'case_already_open',
+      message:
+        row?.existing_status === 'awaiting_lead'
+          ? `já existe um caso deste assunto (case_id: ${row.existing_id}) esperando uma informação do cliente; ` +
+            'nenhum caso novo foi aberto. Se a mensagem do cliente traz essa informação, chame provide_case_update ' +
+            'com este case_id. Não prometa ao cliente que a equipe vai verificar sem isso; se a pendência não pode ' +
+            'ficar sem dono, transfira para um humano (request_human_handoff, se disponível).'
+          : 'o caso não foi aberto. Não prometa ao cliente que a equipe vai verificar; se a pendência não pode ' +
+            'ficar sem dono, transfira para um humano (request_human_handoff, se disponível).',
+    },
+  };
 }
 
 export type ProvideCaseUpdateResult = { ok: true } | { ok: false; error: { code: string; message: string } };

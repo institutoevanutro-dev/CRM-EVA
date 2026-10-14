@@ -153,7 +153,7 @@ import {
 } from './passagem-de-assunto';
 import {
   hasOpenCaseForContact,
-  getCaseAwaitingLead,
+  getCasesAwaitingLead,
   openCase,
   provideCaseUpdate,
   openHumanCaseInputSchema,
@@ -2915,6 +2915,11 @@ async function executarTurnoDoAgente(
   // Spec 15 (Wave 4 lê este flag): true quando open_human_case abriu um caso NESTE
   // turno — aqui só declara e seta; o consumo (ex.: guardrail de promessa) é da Wave 4.
   let openedCaseThisTurn = false;
+  // true quando open_human_case foi RECUSADO neste turno e nada depois registrou a
+  // pendência (abertura ou provide_case_update). Lido pelo `casePromiseGate`: um caso
+  // aberto de OUTRO assunto não sustenta a promessa sobre a pendência recusada
+  // (Instituto Eva, 14/10/2026: comprovante recusado, promessa passou pelo caso de ontem).
+  let aberturaDeCasoRecusadaNoTurno = false;
   // Wave 4 — contador do fail-safe do guardrail anti-alucinação (case_promise_without_case):
   // 1º veto no turno é erro-de-ensino (o modelo re-tenta); persistir uma 2ª vez aciona o
   // auto-abre-caso (ver send_message.execute). Por turno (closure), nunca cross-turno.
@@ -3198,6 +3203,7 @@ async function executarTurnoDoAgente(
             casesEnabled: agentConfig?.casesEnabled,
             hasOpenCase,
             openedCaseThisTurn,
+            caseOpenRefusedThisTurn: aberturaDeCasoRecusadaNoTurno,
             humanPromiseExtraTargets: agentConfig?.handoffKeywords ?? [],
             enforceUnscheduledFollowUp: true,
             enforceInternalVocabulary: true,
@@ -3634,6 +3640,7 @@ async function executarTurnoDoAgente(
             casesEnabled: agentConfig?.casesEnabled,
             hasOpenCase,
             openedCaseThisTurn,
+            caseOpenRefusedThisTurn: aberturaDeCasoRecusadaNoTurno,
             // Nome(s) próprio(s) que o prompt do tenant usa pra retaguarda humana (ex.:
             // "Fernando") — o mesmo vocabulário que `matchesHandoffKeyword` já usa do lado
             // do CLIENTE, agora somado ao alvo genérico do `casePromiseGate` do lado do
@@ -4223,7 +4230,11 @@ async function executarTurnoDoAgente(
             { tenantId, conversationId: input.conversationId, agentId: agentConfig.agentId },
             { ...parsed.data, contextSnapshot: buildCaseContextSnapshot() },
           );
-          if (!res.ok) return res;
+          if (!res.ok) {
+            aberturaDeCasoRecusadaNoTurno = true;
+            return res;
+          }
+          aberturaDeCasoRecusadaNoTurno = false;
           openedCaseThisTurn = true;
           moverParaHandoffBestEffort('open_human_case');
           // ACH-03: a expectativa vai junto com a confirmação. Medido num turno
@@ -4236,15 +4247,20 @@ async function executarTurnoDoAgente(
           return {
             ok: true,
             case_id: res.caseId,
-            message: `caso aberto; continue a conversa com o lead normalmente. ${frase}`,
+            message: res.merged
+              ? `já havia um caso deste assunto aguardando a equipe; a pendência foi registrada nele ` +
+                `(nenhum caso novo). Continue a conversa com o lead normalmente. ${frase}`
+              : `caso aberto; continue a conversa com o lead normalmente. ${frase}`,
           };
         } catch (err) {
           noteRunError(err instanceof Error ? err : new Error(String(err)));
+          aberturaDeCasoRecusadaNoTurno = true;
           return {
             ok: false,
             error: {
               code: 'internal_error',
-              message: 'erro interno ao abrir o caso — encerre o turno.',
+              message:
+                'erro interno ao abrir o caso; não prometa ao cliente que a equipe vai verificar. Encerre o turno.',
             },
           };
         }
@@ -4267,6 +4283,9 @@ async function executarTurnoDoAgente(
             { caseId: parsed.data.case_id, info: parsed.data.info },
           );
           if (!res.ok) return res;
+          // A pendência chegou à equipe por um caso existente: a recusa anterior do
+          // open_human_case (mesmo assunto esperando o cliente) deixou de valer.
+          aberturaDeCasoRecusadaNoTurno = false;
           return {
             ok: true,
             message: 'informação enviada ao responsável; aguarde o retorno pelo caso.',
@@ -4729,15 +4748,18 @@ async function executarTurnoDoAgente(
     // isso o modelo nunca consegue chamar provide_case_update quando o lead simplesmente
     // responde (o caminho comum; case_reply_turn só cobre a AÇÃO do humano). Sufixo
     // por-lead (volátil) — nunca no prefixo cacheável (o case_id muda a cada caso).
-    const caseAwaitingLead =
+    // Pode haver mais de um: `openCase` deduplica por assunto, não por conversa.
+    const casesAwaitingLead =
       preview?.kind !== 'sandbox' && agentConfig !== null && agentConfig.casesEnabled
-        ? await getCaseAwaitingLead(pool, tenantId, input.conversationId)
-        : null;
+        ? await getCasesAwaitingLead(pool, tenantId, input.conversationId)
+        : [];
     const caseAwaitingLeadBlock =
-      caseAwaitingLead !== null
+      casesAwaitingLead.length > 0
         ? `## Caso aguardando resposta deste cliente\n` +
-          `Há um caso aberto (case_id: ${caseAwaitingLead.id}) esperando uma informação dele: "${caseAwaitingLead.ask}". ` +
-          `Se a mensagem dele responde a isso, chame provide_case_update com este case_id e a informação recebida — ` +
+          casesAwaitingLead
+            .map((c) => `Há um caso aberto (case_id: ${c.id}) esperando uma informação dele: "${c.ask}". `)
+            .join('\n') +
+          `\nSe a mensagem dele responde a um deles, chame provide_case_update com o case_id dele e a informação recebida — ` +
           `NÃO diga que já repassou/avisou o responsável sem chamar a tool.`
         : '';
     // ── O RELÓGIO DO TURNO ────────────────────────────────────────────────────

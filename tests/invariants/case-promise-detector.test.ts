@@ -35,6 +35,10 @@ const PROMISES: readonly string[] = [
   "sua solicitação sobre garantia está em análise pela equipe responsável",
   "isso está em análise pela nossa equipe",
   "seu caso ficou em análise com o responsável",
+  // achado em produção (Instituto Eva, 14/10/2026): resposta ao comprovante de Pix,
+  // voz passiva com a equipe como agente, sem caso aberto para o comprovante.
+  "Ele precisa ser conferido pela equipe",
+  "o comprovante será verificado pela recepção",
 ];
 
 // NÃO detectar: ação própria do bot / frase institucional / checar SISTEMA (≠ humano).
@@ -54,6 +58,9 @@ const NON_PROMISES: readonly string[] = [
   // "em análise" sem NOMEAR quem — conservador de propósito, mesmo raciocínio das
   // outras regras (exige TARGET explícito pra reduzir falso positivo).
   "o produto está em análise técnica interna, sem previsão",
+  // passiva no PASSADO afirma algo feito, não promete ação da equipe.
+  "seu pagamento foi conferido pela equipe",
+  "o exame precisa ser feito em jejum",
 ];
 
 describe("detectHumanPromise — calibração (spec 15 §10.2)", () => {

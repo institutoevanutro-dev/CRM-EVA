@@ -49,7 +49,7 @@ const TARGET = `(?:${TARGET_WORDS.join("|")})`;
 const gap = (n: number): string => `[^.!?\\n]{0,${n}}?`;
 
 /**
- * Monta os 7 padrões de promessa-de-humano em cima de um ALVO (`target`)
+ * Monta os padrões de promessa-de-humano em cima de um ALVO (`target`)
  * substituível — o TARGET genérico por padrão, ou o TARGET estendido com
  * nome(s) próprio(s) do tenant (ver `detectHumanPromise`).
  */
@@ -92,6 +92,17 @@ function buildPatterns(target: string): RegExp[] {
     new RegExp(
       `\\b(?:est[aá]|ficou|fica|segue)\\b${gap(10)}\\bem\\b\\s+an[aá]lise\\b${gap(20)}` +
         `\\b(?:com|pela|pelo|do|da|na|no)\\b${gap(10)}\\b${target}\\b`,
+    ),
+    // (2d) voz PASSIVA com o alvo como agente: "ele precisa ser conferido pela equipe",
+    //      "o comprovante será verificado pela recepção". Achado em produção (Instituto
+    //      Eva, 14/10/2026): a resposta ao comprovante dizia isto e nenhuma regra acima
+    //      casa, porque todas exigem o alvo como sujeito ou depois de "com". Só o futuro
+    //      ou o necessário ("ser/será/serão/seja"): "foi conferido pela equipe" afirma
+    //      algo feito, não promete nada.
+    new RegExp(
+      `\\b(?:ser|sera|serao|seja|sejam)\\b${gap(10)}` +
+        `\\b(?:conferid|verificad|analisad|validad|confirmad|avaliad|revisad|checad|aprovad|liberad|resolvid|encaminhad|repassad)\\w*` +
+        `${gap(25)}\\b(?:pela|pelo|pelas|pelos)\\b${gap(10)}\\b${target}\\b`,
     ),
     // (3) deferir a TERCEIROS via subjuntivo 3ª pessoa do plural: "assim que liberarem eu te aviso".
     //     Não depende de `target` — não repetido no alvo estendido.
