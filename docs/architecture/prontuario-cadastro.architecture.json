@@ -17,7 +17,7 @@
     { "id": "e1", "from": "ficha", "to": "contato", "label": "cadastro mestre" },
     { "id": "e2", "from": "contato", "to": "leitura", "label": "organização e contato ativo; decifra e reconfirma revisão" },
     { "id": "e3", "from": "tokens", "to": "leitura", "label": "dois escopos obrigatórios; Bearer só no servidor" },
-    { "id": "e4", "from": "leitura", "to": "consumidor", "label": "HTTPS no-store; nenhum CPF em erros ou listagens" },
+    { "id": "e4", "from": "leitura", "to": "consumidor", "label": "HTTPS no-store; nenhum CPF em erros/listagens; compromisso autorizado separa description e notes" },
     { "id": "e5", "from": "leitura", "to": "auditoria", "label": "ator, recurso e sucesso; nenhum valor pessoal" },
     { "id": "e6", "from": "auditoria", "to": "conferencia", "label": "trilha de leitura" },
     { "id": "e7", "from": "consumidor", "to": "conferencia", "label": "resultado ou ação necessária" },

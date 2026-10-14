@@ -59,7 +59,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
   let appointment;
   if (appointmentId.data) {
     const org = authorized.auth.organizationId;
-    const result = await db.from("calendar_appointments").select("id,title,notes,event_type_id,owner_user_id")
+    const result = await db.from("calendar_appointments").select("id,title,description,notes,event_type_id,owner_user_id")
       .eq("organization_id", org).eq("contact_id", id.data).eq("id", appointmentId.data).maybeSingle();
     if (result.error) return fail("internal_error", "Consulta indisponível.", 503, responseOptions);
     if (!result.data) return fail("not_found", "Compromisso indisponível.", 404, responseOptions);
@@ -72,7 +72,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     const professional = member.data ? await db.auth.admin.getUserById(member.data.user_id) : null;
     if (professional?.error) return fail("internal_error", "Consulta indisponível.", 503, responseOptions);
     const name = professional?.data.user?.user_metadata?.full_name;
-    appointment = {id:row.id,title:row.title,type:type.data?.name ?? null,professional:typeof name === "string" ? name : null,notes:row.notes};
+    appointment = {id:row.id,title:row.title,type:type.data?.name ?? null,professional:typeof name === "string" ? name : null,description:row.description ?? null,notes:row.notes};
   }
   let demographics;
   if (include.data) {
