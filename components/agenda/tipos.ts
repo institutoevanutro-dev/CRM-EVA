@@ -68,6 +68,12 @@ export type Agendamento = {
   local?: string;
   origem: OrigemDoAgendamento;
   situacao: SituacaoDoAgendamento;
+  /**
+   * Bloqueio de "Dias fora da rotina" (`calendar_availability_exceptions`).
+   * Chega com `origem: "google_sync"` para ser inerte na grade; este campo só
+   * troca o que o leitor de tela ouve.
+   */
+  bloqueio?: boolean;
 };
 
 /** Um horário oferecido pelo painel de marcação. */

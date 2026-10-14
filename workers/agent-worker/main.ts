@@ -4,6 +4,7 @@ import { createMeetDeliveryHandler } from "@/lib/agent-engine/agent/meet-deliver
 import { claimOfJob } from "@/lib/agent-engine/queue/claim";
 import { AgendaDeferredError } from "@/lib/agenda/protecao-followup";
 import { avisarRespostaDeCasoObsoleto } from "@/lib/atendimento/aviso-caso-obsoleto";
+import { encerrarTurnoRevogado } from "@/lib/atendimento/turno-revogado";
 import { withServiceJob } from "@/lib/atendimento/fronteira-server";
 import { StaleServiceBoundaryError } from "@/lib/atendimento/fronteira";
 /**
@@ -465,6 +466,14 @@ export async function startWorker(
           Sentry.captureException(adiarErr);
         }
         return;
+      }
+      // Uma pessoa assumiu a conversa e o banco revogou este turno (migration
+      // 0361). Não é incidente: encerra sob o lease original e sai. Falhar aqui
+      // cai no caminho comum abaixo, que é o de antes.
+      try {
+        if (await encerrarTurnoRevogado(pool, job, workerId, err, log)) return;
+      } catch (revogErr) {
+        log.error("encerramento do turno revogado indisponível", { job_id: job.id, error: errMsg(revogErr) });
       }
       const terminal = err instanceof StaleServiceBoundaryError || ehVetoPermanenteDeNegocio(err);
       // `warn`, não `error`: veto de negócio é o sistema funcionando como

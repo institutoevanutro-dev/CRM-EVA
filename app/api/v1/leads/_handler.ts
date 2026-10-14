@@ -1,3 +1,4 @@
+import { guardServiceEffect } from "@/lib/atendimento/fronteira-server";
 import { observeServiceOrigin } from "@/lib/atendimento/origem";
 import { createAdminClient } from "@/lib/supabase/admin";
 /**
@@ -344,6 +345,8 @@ export async function createLeadHandler(
     ({ owner_user_id: null, owner_agent_id: null, owner_kind: null } satisfies OwnerPatch);
 
   const serviceOrigin = ctx.serviceOrigin ?? await observeServiceOrigin(createAdminClient(), ctx.organization_id, input.contact_id ?? null);
+  // Revalida o turno da IA DEPOIS das leituras e ANTES de gravar (#2541).
+  await guardServiceEffect();
   const { data: lead, error: insErr } = await supabase
     .from("crm_leads")
     .insert({
@@ -528,6 +531,8 @@ export async function updateLeadHandler(
   const tagServiceOrigin = input.tags !== undefined
     ? ctx.serviceOrigin ?? await observeServiceOrigin(createAdminClient(), ctx.organization_id, input.contact_id ?? existing.contact_id)
     : null;
+  // Revalida o turno da IA DEPOIS das leituras e ANTES de gravar (#2541).
+  await guardServiceEffect();
   const { data: updated, error: updErr } = await supabase
     .from("crm_leads")
     .update(patch)
@@ -825,6 +830,8 @@ export async function moveLeadHandler(
 
   const serviceOrigin = ctx.serviceOrigin ?? await observeServiceOrigin(createAdminClient(), ctx.organization_id, lead.contact_id);
   const nowIso = new Date().toISOString();
+  // Revalida o turno da IA DEPOIS das leituras e ANTES de gravar (#2541).
+  await guardServiceEffect();
   const { data: updated, error: updErr } = await supabase
     .from("crm_leads")
     .update({

@@ -20,7 +20,10 @@ vi.mock("@/lib/agent-engine/edge/crm/send-ledger", () => ({
 }));
 // O follow-up confere a agenda antes de enviar; aqui só importa a marca.
 vi.mock("@/lib/agenda/efeito", () => ({ assertAgendaEffectPg: async () => undefined }));
-vi.mock("@/lib/atendimento/fronteira-server", () => ({ requireCurrentServiceBoundary: async () => undefined }));
+vi.mock("@/lib/atendimento/fronteira-server", () => ({
+  requireCurrentServiceBoundary: async () => undefined,
+  requireCurrentAutonomousTurn: async () => undefined,
+}));
 
 const { sendTurnMessage } = await import("@/lib/agent-engine/edge/crm/send-message");
 

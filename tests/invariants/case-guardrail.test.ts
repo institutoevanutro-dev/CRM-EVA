@@ -74,6 +74,41 @@ describe("casePromiseGate — a invariante sagrada (spec 15 §10.2, Wave 4)", ()
     expect(verdict.pass).toBe(true);
   });
 
+  /**
+   * Produção, Instituto Eva, 14/10/2026: a abertura do caso do comprovante foi
+   * recusada, e a promessa "precisa ser conferido pela equipe" passou porque a
+   * conversa tinha OUTRO caso aberto, de ontem. Caso aberto de outro assunto não
+   * sustenta a promessa sobre a pendência que acabou de ser recusada.
+   */
+  it("veta: há caso aberto na conversa, mas a abertura DESTE turno foi recusada", () => {
+    const verdict = casePromiseGate.evaluate(
+      baseCtx({
+        casesEnabled: true,
+        hasOpenCase: true,
+        caseOpenRefusedThisTurn: true,
+        body: "Ele precisa ser conferido pela equipe, já te retorno",
+      }),
+    );
+    expect(verdict.pass).toBe(false);
+    if (!verdict.pass) {
+      expect(verdict.code).toBe("case_promise_without_case");
+      expect(verdict.reason).toMatch(/recusad/);
+    }
+  });
+
+  it("pass: abertura recusada e depois aberta no mesmo turno", () => {
+    const verdict = casePromiseGate.evaluate(
+      baseCtx({
+        casesEnabled: true,
+        hasOpenCase: true,
+        caseOpenRefusedThisTurn: true,
+        openedCaseThisTurn: true,
+        body: "a equipe vai conferir",
+      }),
+    );
+    expect(verdict.pass).toBe(true);
+  });
+
   it("veto: casos explicitamente desligados pedem reformulação, sem abrir caso", () => {
     const verdict = casePromiseGate.evaluate(
       baseCtx({ casesEnabled: false, body: "vou acionar o responsável" }),

@@ -571,3 +571,34 @@ de governança implementado lá além das próprias specs — nada a anotar.
 ### B.3 — Contagem
 
 implementado: **9** · parcial: **5** · ausente: **6** (dos quais 1 sem feature G* → INB-01 na inbox).
+
+## Turno da IA depois de Assumir (migration 0361)
+
+Porte de melgarafael/DeskcommCRM #2541 (@ozzure; 0594 e 0615 lá) e #2741.
+Assumir ou transferir a conversa (`claim`/`transfer` em `fn_conversation_assign`)
+dispara `trg_interromper_turnos_ao_assumir` na MESMA transação:
+
+- `inbound_turn` e `case_reply_turn` daquela conversa e organização, `pending` ou
+  `running`, viram `failed` com `last_error = 'conversation_command_taken'`, sem lease;
+- cada job revogado (inclusive o `followup_turn` em execução, cuja linha a sessão
+  humana não pode tocar) ganha `conversation.autonomous_turn_revoked` no `event_log`,
+  com motivo, tipo e estado anterior. `emit_event` recusa esse tipo para quem tem sessão.
+
+`fn_autonomous_turn_revoked` (só `service_role`) é o predicado único.
+`requireCurrentAutonomousTurn` (lib/atendimento/fronteira-server.ts) o confere ao
+entrar no job, em `guardServiceEffect`, antes de cada ferramenta de escrita (com a
+recusa de ensino ao modelo), antes de cada bolha (`sendTurnMessage`) e logo antes da
+gravação nos handlers de negócio, agenda e mensagem. O worker encerra o turno revogado
+sem tratá-lo como incidente (`encerrarTurnoRevogado`); no follow-up, deixa
+`turn_discarded` para o motor retomar pela política do fluxo.
+
+Fora do alcance: `routing`, `handoff` da própria IA, `release`; `approved_reply`,
+`transactional_delivery` e `operator_turn`; follow-up `pending` (segue a
+`handoff_policy`); o envio inline de texto fixo do follow-up. Mensagem já entregue
+ao WAHA não volta, e uma tomada entre a última conferência e o POST ao canal ainda
+encontra aquele envio em andamento.
+
+Prova: `tests/invariants/assumir-interrompe-turno.test.ts`,
+`tests/unit/ia-nao-escreve-por-cima-de-quem-assumiu.test.ts`,
+`tests/unit/envio-recusado-depois-de-assumir.test.ts`,
+`tests/unit/escritas-do-negocio-no-turno.test.ts` e `tests/e2e/inbox-quem-manda.spec.ts`.

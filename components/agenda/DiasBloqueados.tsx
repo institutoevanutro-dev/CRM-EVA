@@ -23,6 +23,18 @@
  * unidade): a jornada semanal fica vazia de propósito, para todo dia nascer
  * fechado, e cada data de atendimento é uma exceção ABERTA. Essa agenda não
  * tinha como ser montada pela tela — só por SQL.
+ *
+ * ## Fechar UM HORÁRIO, e de QUEM
+ *
+ * Fechar era sempre o dia inteiro e sempre da pessoa logada. A clínica que
+ * precisava tirar duas horas da agenda de uma profissional criava um evento no
+ * Google e esperava a sincronização. O motor sempre soube subtrair uma faixa
+ * (`horariosLivres` trata o bloqueio como um ocupado, só daquele `user_id`), e a
+ * rota sempre aceitou `user_id` e faixa: faltava a tela.
+ *
+ * "De quem" é escolha só de quem gerencia (manager+), que é a mesma régua da RLS
+ * de escrita. Quem está abaixo disso bloqueia só a própria agenda. A rota cobra
+ * de novo, inclusive que a pessoa seja desta equipe.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -34,6 +46,7 @@ import { apiClient } from "@/lib/api/client";
 
 type Excecao = {
   id: string;
+  user_id: string;
   exception_date: string;
   is_unavailable: boolean;
   start_minute: number;
@@ -82,21 +95,49 @@ function emMinutos(hhmm: string): number {
   return Number(h) * 60 + Number(m);
 }
 
-export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
+/** Quem pode ter a agenda fechada por esta tela. */
+export type PessoaDaAgenda = { id: string; nome: string };
+
+export function DiasBloqueados({
+  podeEditar,
+  pessoas = [],
+  euId = null,
+  podeEscolherQuem = false,
+}: {
+  podeEditar: boolean;
+  /** A equipe, já com nome. Vazia = a tela não sabe nomes e fecha só a própria agenda. */
+  pessoas?: PessoaDaAgenda[];
+  /** Quem está logado: o "De quem" começa nele. */
+  euId?: string | null;
+  /** manager+ escolhe qualquer pessoa da equipe; o resto, só a si mesmo. */
+  podeEscolherQuem?: boolean;
+}) {
   const t = useT();
   const qc = useQueryClient();
+  const escolhiveis = podeEscolherQuem ? pessoas : pessoas.filter((p) => p.id === euId);
+  const nomeDe = (id: string) =>
+    id === euId ? t("Você") : (pessoas.find((p) => p.id === id)?.nome ?? t("Outra pessoa"));
+  const [quem, setQuem] = useState(euId ?? "");
+  const [diaInteiro, setDiaInteiro] = useState(true);
   const [data, setData] = useState("");
   const [motivo, setMotivo] = useState("");
   const [modo, setModo] = useState<"fechar" | "abrir">("fechar");
   const [de, setDe] = useState("08:00");
   const [ate, setAte] = useState("12:00");
   const [repetirAte, setRepetirAte] = useState("");
-  const [resultado, setResultado] = useState<{ criados: number; pulados: number } | null>(null);
+  const [resultado, setResultado] = useState<{
+    criados: number;
+    pulados: number;
+    fechou: boolean;
+  } | null>(null);
 
   const abrindo = modo === "abrir";
+  // Abrir é sempre uma faixa; fechar é o dia todo OU uma faixa.
+  const comFaixa = abrindo || !diaInteiro;
   // O CHECK do banco é `end_minute > start_minute`; barrar aqui troca um 422 por
-  // um botão que não deixa errar.
-  const faixaInvalida = abrindo && emMinutos(ate) <= emMinutos(de);
+  // um botão que não deixa errar. `type="time"` já prende os dois no dia
+  // (00:00 a 23:59), então "dentro do dia" sai de graça.
+  const faixaInvalida = comFaixa && emMinutos(ate) <= emMinutos(de);
 
   const query = useQuery({
     queryKey: ["agenda", "excecoes"],
@@ -113,11 +154,12 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
 
   const criar = useMutation({
     mutationFn: async () => {
-      const faixa = abrindo
+      const faixa = comFaixa
         ? { start_minute: emMinutos(de), end_minute: emMinutos(ate) }
-        : // Dia FECHADO é sempre inteiro — fechar meio dia é o caso de quem ABRE
-          // o outro meio, e esse caminho é o de cima.
-          DIA_INTEIRO;
+        : DIA_INTEIRO;
+      // Sem `quem` (tela sem a equipe), o corpo vai sem `user_id` e a rota usa
+      // a própria pessoa, que é o comportamento de antes.
+      const dono = quem || euId || null;
       const alvos = repetirAte ? datasSemanais(data, repetirAte, TETO_DA_REPETICAO) : [data];
 
       // O QUE JÁ EXISTE É PULADO, e não recusado.
@@ -128,7 +170,7 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
       // em silêncio, e o dono só descobriria pela lista crescendo.
       const jaTem = new Set(
         lista
-          .filter((e) => e.is_unavailable === !abrindo)
+          .filter((e) => e.is_unavailable === !abrindo && (!dono || e.user_id === dono))
           .map((e) => `${e.exception_date}|${e.start_minute}|${e.end_minute}`),
       );
       const novos = alvos.filter(
@@ -141,12 +183,17 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
       for (const dia of novos) {
         await apiClient.post("/api/v1/agenda/excecoes", {
           exception_date: dia,
+          ...(dono ? { user_id: dono } : {}),
           is_unavailable: !abrindo,
           ...faixa,
           ...(motivo.trim() ? { reason: motivo.trim() } : {}),
         });
       }
-      return { criados: novos.length, pulados: alvos.length - novos.length };
+      return {
+        criados: novos.length,
+        pulados: alvos.length - novos.length,
+        fechou: !abrindo,
+      };
     },
     onSuccess: (r) => {
       setData("");
@@ -169,12 +216,33 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
       <h2 className="font-semibold">{t("Dias fora da rotina")}</h2>
       <p className="text-sm text-text-muted">
         {t(
-          "Feche um dia (feriado, férias, viagem) ou abra um dia que a sua jornada semanal não cobre. Em dia fechado o sistema deixa de oferecer horários, e o que já estava marcado continua marcado, para você decidir o que fazer com cada um.",
+          "Feche um dia inteiro (feriado, férias, viagem) ou só um horário (uma reunião, um compromisso fora), ou abra um dia que a jornada semanal não cobre. No que estiver fechado o sistema deixa de oferecer horários, e o que já estava marcado continua marcado, para você decidir o que fazer com cada um.",
         )}
       </p>
 
       {podeEditar ? (
         <div className="flex flex-wrap items-end gap-2">
+          {escolhiveis.length > 0 ? (
+            <label className="block">
+              <span className="block text-sm">{t("De quem")}</span>
+              <select
+                aria-label={t("De quem")}
+                className="mt-1 rounded-md border p-2"
+                data-testid="dono-do-bloqueio"
+                // Uma opção só não é escolha: fica visível para dizer DE QUEM é
+                // a agenda, mas não convida a trocar.
+                disabled={escolhiveis.length < 2}
+                value={quem}
+                onChange={(e) => setQuem(e.target.value)}
+              >
+                {escolhiveis.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.id === euId ? `${p.nome} (${t("você")})` : p.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="block">
             <span className="block text-sm">{t("O que fazer")}</span>
             <select
@@ -201,7 +269,17 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
               }}
             />
           </label>
-          {abrindo ? (
+          {!abrindo ? (
+            <label className="flex min-h-11 items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={diaInteiro}
+                onChange={(e) => setDiaInteiro(e.target.checked)}
+              />
+              {t("O dia todo")}
+            </label>
+          ) : null}
+          {comFaixa ? (
             <>
               <label className="block">
                 <span className="block text-sm">{t("Das")}</span>
@@ -253,7 +331,11 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
             disabled={!data || criar.isPending || faixaInvalida}
             onClick={() => criar.mutate()}
           >
-            {abrindo ? t("Abrir este dia") : t("Fechar este dia")}
+            {abrindo
+              ? t("Abrir este dia")
+              : diaInteiro
+                ? t("Fechar este dia")
+                : t("Bloquear este horário")}
           </Button>
           {faixaInvalida ? (
             <p className="w-full text-sm text-destructive">
@@ -266,6 +348,16 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
             <p className="w-full text-sm text-text-muted" data-testid="resultado-do-lote">
               {`${resultado.criados} ${t("dia(s) gravado(s)")}`}
               {resultado.pulados > 0 ? ` · ${resultado.pulados} ${t("já existia(m)")}` : ""}
+            </p>
+          ) : null}
+          {resultado?.fechou && resultado.criados > 0 ? (
+            // O bloqueio não mexe no que já estava marcado: ele só para de
+            // oferecer o horário. Quem bloqueia precisa saber disso na hora, e
+            // não descobrir pelo paciente chegando.
+            <p className="w-full rounded-md bg-warning-bg p-2 text-sm text-warning-fg" data-testid="aviso-de-marcados" role="status">
+              {t(
+                "Consultas já marcadas nesse horário continuam marcadas. Confira a Agenda e remarque ou cancele cada uma, se precisar.",
+              )}
             </p>
           ) : null}
         </div>
@@ -284,11 +376,12 @@ export function DiasBloqueados({ podeEditar }: { podeEditar: boolean }) {
           {lista.map((e) => (
             <li key={e.id} className="flex items-center justify-between gap-2 text-sm">
               <span>
+                {pessoas.length > 0 ? `${nomeDe(e.user_id)} · ` : ""}
                 {new Date(`${e.exception_date}T12:00:00`).toLocaleDateString()} · {faixa(e, t)}
                 {e.is_unavailable ? "" : ` · ${t("aberto excepcionalmente")}`}
                 {e.reason ? ` · ${e.reason}` : ""}
               </span>
-              {podeEditar ? (
+              {podeEditar && (podeEscolherQuem || !euId || e.user_id === euId) ? (
                 <Button
                   variant="ghost"
                   className="min-h-11"

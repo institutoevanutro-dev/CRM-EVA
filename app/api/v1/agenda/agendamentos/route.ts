@@ -18,7 +18,9 @@ import { z } from "zod";
 
 import { listaAgendamentos, type AgendamentoListado } from "@/lib/agenda/consulta";
 import { donosDaAgenda } from "@/lib/agenda/donos-da-agenda";
+import { lerBloqueiosDaGrade } from "@/lib/agenda/bloqueios-da-grade";
 import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { chaveDaRequisicao } from "@/lib/api/idempotency";
 import { fail, ok } from "@/lib/api/wrappers";
 import { logger } from "@/lib/logger";
@@ -31,7 +33,7 @@ import { logger } from "@/lib/logger";
  * A tela precisa distinguir, porque bloco vindo do Google não abre, não arrasta
  * e não se clica.
  */
-type AgendamentoDaResposta = AgendamentoListado & { origem?: "google_sync" };
+type AgendamentoDaResposta = AgendamentoListado & { origem?: "google_sync"; bloqueio?: true };
 import { ApiError } from "@/lib/api/types";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
@@ -277,6 +279,37 @@ export async function GET(req: NextRequest): Promise<Response> {
         contatoId: null,
         contatoNome: null,
         origem: "google_sync",
+      });
+    }
+
+    // Os bloqueios de "Dias fora da rotina" entram como bloco inerte, igual ao
+    // Google: não abrem, não arrastam, e não vão para `listaAgendamentos`
+    // (a IA já os respeita pelo motor; ela não precisa "vê-los" como compromisso).
+    const bloqueios = await lerBloqueiosDaGrade(
+      supabase,
+      { organizationId: activeOrg.orgId, de: parsed.data.de, ate: parsed.data.ate },
+      donos,
+      fusoUtilizavel(activeOrg.timezone),
+    );
+    if (bloqueios.erro) {
+      logger.warn("[agenda.agendamentos] bloqueios da agenda não vieram", {
+        erro: bloqueios.erro,
+        requestId,
+      });
+    }
+    for (const b of bloqueios.blocos) {
+      externos.push({
+        id: b.id,
+        titulo: "Horário bloqueado",
+        donoId: b.donoId,
+        iniciaEm: b.iniciaEm,
+        terminaEm: b.terminaEm,
+        situacao: "confirmed",
+        fuso: "",
+        contatoId: null,
+        contatoNome: null,
+        origem: "google_sync",
+        bloqueio: true,
       });
     }
   }

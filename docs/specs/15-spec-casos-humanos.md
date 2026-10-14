@@ -76,7 +76,12 @@ O loop humano↔IA é o **loop de follow-up de cabeça pra baixo**: em vez do *t
 | `awaiting_human` | humano: **NAO_CONSIGO_ESCALAR** + txt | `escalated` | dispara handoff canônico do engine (§7); event `escalated` |
 | qualquer aberto | lead opt-out / conversa fechada | `cancelled` | `cancelPendingCronsForLead`; event `cancelled` |
 
-**Idempotência / dedup:** não há unique constraint dura (um lead pode ter 2 problemas distintos). Mas o **fail-safe do guardrail (§6) só auto-abre se NÃO existir caso aberto** (`awaiting_human`/`awaiting_lead`) pro lead — evita enxurrada de casos duplicados. A tool `open_human_case` pode abrir múltiplos deliberadamente.
+**Idempotência / dedup (revisto em 14/10/2026):** **um caso aberto por assunto (`kind`) por conversa**, não um por conversa. A guarda antiga ("qualquer caso aberto barra o próximo") deixou um comprovante de Pix sem caso porque havia outro caso, de outro assunto, aberto desde a véspera (Instituto Eva). A regra vive no `where` de `openCase` (`lib/agent-engine/agent/human-cases.ts`):
+- caso aberto do mesmo `kind` em `awaiting_human`: não abre outro; a pendência entra nele como evento `agent_noted` (título, resumo, bloqueio) e a ferramenta devolve sucesso com `merged`;
+- caso aberto do mesmo `kind` em `awaiting_lead`: recusa (`case_already_open`) com o `case_id` e a orientação de usar `provide_case_update` ou transferir para humano;
+- **`kind` = `outro` não deduplica**, salvo caso aberto `outro` com o **mesmo título** (retry da mesma pendência): `outro` é o "não se encaixa", e o fail-safe abre sempre sem `kind`.
+
+O **fail-safe do guardrail (§6)** pode abrir caso novo ou anotar num existente **mesmo com caso aberto na conversa**: um caso aberto só dispensa o caso quando nenhuma abertura foi recusada neste turno (`caseOpenRefusedThisTurn` no `casePromiseGate`). Não há unique constraint: duas chamadas paralelas de `open_human_case` no mesmo passo ainda podem duplicar, e fechar isso pede índice único parcial (migration).
 
 ---
 
@@ -271,8 +276,8 @@ Reusa o shell `app/app/ai/inbox/` (assistente), **seção/tab própria "Casos"**
 
 ### 11.2 Unit / integração
 - Máquina de estados: cada transição de §3 (incl. `provide_case_update` só de `awaiting_lead`; escalate → handoff).
-- Follow-up: armado ao entrar em `awaiting_lead`; cancelado ao `resolved`/`escalated`/`cancelled` (`cancelPendingCronsForLead`).
-- Dedup: guardrail não auto-abre se já há caso aberto pro lead.
+- Follow-up: armado ao entrar em `awaiting_lead`; cancelado ao `resolved`/`escalated`/`cancelled` (`cancelPendingCronsForLead`). O follow-up nascido de caso (`lib/followup/gatilho-caso.ts`) só é cancelado quando não resta outro caso aberto na conversa.
+- Dedup: um caso aberto por assunto (`kind`) por conversa; mesmo `kind` vira nota (`awaiting_human`) ou recusa com `case_id` (`awaiting_lead`); `outro` só deduplica com o mesmo título (`tests/invariants/human-cases.test.ts`). O gate só aceita caso aberto como lastro quando nenhuma abertura foi recusada no turno (`tests/invariants/case-guardrail.test.ts`).
 - Idempotência do `case_reply_turn` (re-entrega não duplica envio).
 - Isolamento RLS: 2 tenants, sem vazamento em `agent_cases`/`agent_case_events` (gate obrigatório do CI).
 

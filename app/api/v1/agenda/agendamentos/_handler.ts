@@ -1,3 +1,4 @@
+import { guardServiceEffect } from "@/lib/atendimento/fronteira-server";
 import { randomUUID } from "node:crypto";
 import type { Json } from "@/lib/database.types";
 /**
@@ -270,6 +271,8 @@ async function executarCriacaoDeAgendamento(
   }
   const delivery = booking ? { state:"waiting_for_link",generation:randomUUID(),service_boundary:booking.boundary,source_operation_id:booking.sourceJobId,
     booking_claim:booking.claim,authorized_by:{kind:ctx.actor.type,id:ctx.actor.id} } : {state:"none"};
+  // A consulta da agenda pode esperar rede: revalida o turno da IA antes de gravar (#2541).
+  await guardServiceEffect();
   const { data: criado, error: erroInsert } = await supabase
     .from("calendar_appointments")
     .insert({
@@ -996,6 +999,7 @@ async function leadAtivoDoContato(
 }
 
 async function alteraComRevisao(supabase:SB,ctx:HandlerCtx,id:string,revision:number,patch:Record<string,unknown>):Promise<Record<string,unknown>> {
+  await guardServiceEffect();
   const {data,error}=await supabase.rpc("fn_appointment_change",{p_org:ctx.organization_id,p_id:id,p_revision:revision,p_patch:patch});
   // PT409: compromisso obsoleto (migration 0358). 40001: banco anterior à 0358.
   const conflito=error?.code === "PT409" || error?.code === "40001";

@@ -728,6 +728,8 @@ export async function sendMessageHandler(
     },
   };
 
+  // A IA não grava a linha de saída depois de perder o turno (#2541).
+  await guardServiceEffect();
   let { data: created, error: insErr } = await supabase
     .from("messages")
     .insert(insertRow)

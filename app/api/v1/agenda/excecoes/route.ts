@@ -40,6 +40,7 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { roleAtLeast } from "@/lib/auth/types";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
@@ -107,11 +108,36 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const supabase = await createClient();
+  const dono = lido.data.user_id ?? authz.user.id;
+
+  // ⚠️ A RLS NÃO SABE SE A PESSOA É DESTA EQUIPE. A policy `..._write` confere
+  // a organização da LINHA e o papel de quem escreve, e `user_id` só referencia
+  // `auth.users`: um gerente que mandasse o id de alguém de OUTRA organização
+  // gravaria um bloqueio na agenda de um estranho dentro da própria org. Então
+  // o dono precisa ser membro ativo daqui, e a pergunta vai pela SESSÃO: a RLS
+  // de `user_organizations` só mostra colegas a manager+, e quem está abaixo
+  // disso não os enxerga, que é a mesma resposta que a escrita lhe daria.
+  if (dono !== authz.user.id) {
+    const { data: membro } = await supabase
+      .from("user_organizations")
+      .select("user_id")
+      .eq("organization_id", authz.org.orgId)
+      .eq("user_id", dono)
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (!membro) {
+      const recusa = roleAtLeast(authz.org.role, "manager")
+        ? "Essa pessoa não faz parte desta equipe."
+        : "Você só pode alterar a sua própria agenda.";
+      return fail("forbidden", t(recusa), 403, { requestId });
+    }
+  }
+
   const { data, error } = await supabase
     .from("calendar_availability_exceptions")
     .insert({
       organization_id: authz.org.orgId,
-      user_id: lido.data.user_id ?? authz.user.id,
+      user_id: dono,
       exception_date: lido.data.exception_date,
       is_unavailable: lido.data.is_unavailable,
       start_minute: lido.data.start_minute,
@@ -145,8 +171,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     requestId,
     metadata: {
       exception_date: lido.data.exception_date,
-      dono: lido.data.user_id ?? authz.user.id,
+      dono,
       dia_inteiro: lido.data.start_minute === 0 && lido.data.end_minute === 1440,
+      start_minute: lido.data.start_minute,
+      end_minute: lido.data.end_minute,
     },
   });
 
@@ -177,7 +205,7 @@ export async function DELETE(req: NextRequest): Promise<Response> {
     .delete()
     .eq("id", lido.data.id)
     .eq("organization_id", authz.org.orgId)
-    .select("id, exception_date")
+    .select("id, user_id, exception_date, start_minute, end_minute")
     .maybeSingle();
 
   if (error) return fail("internal_error", error.message, 500, { requestId });
@@ -192,7 +220,12 @@ export async function DELETE(req: NextRequest): Promise<Response> {
     resourceType: "calendar_availability_exception",
     resourceId: data.id,
     requestId,
-    metadata: { exception_date: data.exception_date },
+    metadata: {
+      exception_date: data.exception_date,
+      dono: data.user_id,
+      start_minute: data.start_minute,
+      end_minute: data.end_minute,
+    },
   });
 
   return ok({ id: data.id }, { requestId });

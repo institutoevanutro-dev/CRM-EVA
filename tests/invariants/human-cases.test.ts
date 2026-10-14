@@ -240,23 +240,170 @@ describe("wave 2 — human-cases repositório", () => {
     expect(events.rows[1]).toMatchObject({ human_action: "escalate" });
   });
 
-  it("openCase recusa 2º caso aberto para a mesma conversa (dedup fail-safe)", async () => {
+  /**
+   * Produção, Instituto Eva, 14/10/2026: a paciente mandou o comprovante do Pix,
+   * o PDF foi lido, e o caso NÃO abriu porque a conversa tinha um caso de
+   * ontem, de outro assunto, ainda em `awaiting_human`. A guarda recusava
+   * QUALQUER segundo caso aberto, e o comprovante não chegou a ninguém.
+   */
+  it("caso aberto de OUTRO assunto não barra a pendência nova: os dois ficam abertos e na lista", async () => {
+    const conv = "cccccccc-0000-4000-8000-000000000097";
+    const contact = "cccccccc-0000-4000-8000-000000000197";
+    await seedExtraConversation(conv, contact, ORG_A, SESSION_A);
+    const deOntem = await openCase(pool, ids(ORG_A, conv), {
+      title: "Paciente quer remarcar a consulta",
+      summary: "Pediu outro horário na semana que vem.",
+      blocker: "Agenda da doutora precisa de confirmação humana.",
+      kind: "agendamento",
+    });
+    expect(deOntem.ok).toBe(true);
+
+    const comprovante = await openCase(pool, ids(ORG_A, conv), {
+      title: "Conferir comprovante do Pix",
+      summary: "A paciente enviou o comprovante do Pix em PDF.",
+      blocker: "A recepção precisa conferir o pagamento.",
+      kind: "financeiro",
+    });
+    expect(comprovante).toMatchObject({ ok: true });
+    if (!comprovante.ok || !deOntem.ok) throw new Error("unreachable");
+    expect(comprovante.caseId).not.toBe(deOntem.caseId);
+
+    // A lista da equipe (IA > Casos) é por organização e estado, sem recorte por
+    // conversa (`listarChamados`, lib/escalacao/chamados.ts): os dois aparecem.
+    const lista = await pool.query<{ id: string }>(
+      `select id from agent_cases
+        where organization_id = $1 and status = any($2::text[]) and conversation_id = $3
+        order by opened_at desc, id desc`,
+      [ORG_A, ["awaiting_human", "awaiting_lead"], conv],
+    );
+    expect(lista.rows.map((r) => r.id).sort()).toEqual([deOntem.caseId, comprovante.caseId].sort());
+  });
+
+  it("a MESMA pendência (mesmo assunto, retry do turno) não abre segundo caso: vira registro no que já está aberto", async () => {
     const conv = "cccccccc-0000-4000-8000-000000000098";
     const contact = "cccccccc-0000-4000-8000-000000000198";
     await seedExtraConversation(conv, contact, ORG_A, SESSION_A);
     const first = await openCase(pool, ids(ORG_A, conv), {
-      title: "Primeiro caso",
-      summary: "Primeiro bloqueio.",
-      blocker: "Primeiro motivo.",
+      title: "Paciente pediu para parcelar",
+      summary: "Quer pagar em 3 vezes, fora da política.",
+      blocker: "Exceção de pagamento exige aprovação.",
+      kind: "financeiro",
     });
     expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error("unreachable");
+
+    // Comprovante e exceção de pagamento caem no MESMO kind (`financeiro`). O
+    // segundo não abre caso novo, mas também não some: entra no caso aberto
+    // como registro do agente, que a equipe lê na linha do tempo.
+    const second = await openCase(pool, ids(ORG_A, conv), {
+      title: "Conferir comprovante do Pix",
+      summary: "A paciente enviou o comprovante do Pix em PDF.",
+      blocker: "A recepção precisa conferir o pagamento.",
+      kind: "financeiro",
+    });
+    expect(second).toMatchObject({ ok: true, caseId: first.caseId, merged: true });
+
+    const abertos = await pool.query(
+      `select id from agent_cases where organization_id = $1 and conversation_id = $2
+          and status in ('awaiting_human','awaiting_lead')`,
+      [ORG_A, conv],
+    );
+    expect(abertos.rows).toHaveLength(1);
+    const notas = await pool.query<{ body: string; actor_kind: string }>(
+      `select body, actor_kind from agent_case_events where case_id = $1 and kind = 'agent_noted'`,
+      [first.caseId],
+    );
+    expect(notas.rows).toHaveLength(1);
+    expect(notas.rows[0]?.actor_kind).toBe("agent");
+    expect(notas.rows[0]?.body).toContain("comprovante do Pix");
+
+  });
+
+  /**
+   * `outro` é "não se encaixa": duas pendências `outro` quase nunca são a mesma, e
+   * o fail-safe do gate sempre abre sem `kind`. Deduplicar por `kind` aqui
+   * esconderia um comprovante classificado como `outro` dentro de um caso sem
+   * relação. Só o MESMO título (retry da mesma pendência) conta como duplicado.
+   */
+  it("kind `outro`: títulos diferentes abrem dois casos; o mesmo título não duplica", async () => {
+    const conv = "cccccccc-0000-4000-8000-000000000096";
+    await seedExtraConversation(conv, "cccccccc-0000-4000-8000-000000000196", ORG_A, SESSION_A);
+    const a = await openCase(pool, ids(ORG_A, conv), {
+      title: "Paciente quer falar sobre estacionamento",
+      summary: "a",
+      blocker: "a",
+    });
+    const b = await openCase(pool, ids(ORG_A, conv), {
+      title: "Conferir comprovante do Pix",
+      summary: "b",
+      blocker: "b",
+      kind: "outro",
+    });
+    if (!a.ok || !b.ok) throw new Error("os dois tinham de abrir");
+    expect(b.caseId).not.toBe(a.caseId);
+    expect(b).not.toHaveProperty("merged");
+
+    const retry = await openCase(pool, ids(ORG_A, conv), {
+      title: "Conferir comprovante do Pix",
+      summary: "b de novo",
+      blocker: "b",
+    });
+    expect(retry).toMatchObject({ ok: true, caseId: b.caseId, merged: true });
+
+    const abertos = await pool.query(
+      `select id from agent_cases where organization_id = $1 and conversation_id = $2
+          and status in ('awaiting_human','awaiting_lead')`,
+      [ORG_A, conv],
+    );
+    expect(abertos.rows).toHaveLength(2);
+
+    // Mesmo título esperando o cliente: recusa com o case_id, como nos outros kinds.
+    expect(await markAwaitingLead(pool, ORG_A, a.caseId, ACTOR_A, "Qual o modelo do carro?")).toBe(true);
+    const repetido = await openCase(pool, ids(ORG_A, conv), {
+      title: "Paciente quer falar sobre estacionamento",
+      summary: "a",
+      blocker: "a",
+    });
+    expect(repetido).toMatchObject({ ok: false, error: { code: "case_already_open" } });
+    if (repetido.ok) throw new Error("unreachable");
+    expect(repetido.error.message).toContain(a.caseId);
+  });
+
+  it("mesmo assunto esperando o CLIENTE: recusa e ensina provide_case_update com o case_id, sem abrir outro", async () => {
+    const conv = "cccccccc-0000-4000-8000-000000000095";
+    await seedExtraConversation(conv, "cccccccc-0000-4000-8000-000000000195", ORG_A, SESSION_A);
+    const first = await openCase(pool, ids(ORG_A, conv), {
+      title: "Valor da consulta",
+      summary: "Paciente pediu desconto.",
+      blocker: "Desconto exige aprovação.",
+      kind: "financeiro",
+    });
+    if (!first.ok) throw new Error("unreachable");
+    expect(await markAwaitingLead(pool, ORG_A, first.caseId, ACTOR_A, "Qual forma de pagamento?")).toBe(true);
 
     const second = await openCase(pool, ids(ORG_A, conv), {
-      title: "Segundo caso",
-      summary: "Segundo bloqueio.",
-      blocker: "Segundo motivo.",
+      title: "Conferir comprovante",
+      summary: "Enviou o comprovante.",
+      blocker: "Conferir.",
+      kind: "financeiro",
     });
     expect(second).toMatchObject({ ok: false, error: { code: "case_already_open" } });
+    if (second.ok) throw new Error("unreachable");
+    expect(second.error.message).toContain(first.caseId);
+    expect(second.error.message).toContain("provide_case_update");
+    expect(second.error.message).toMatch(/não prometa/i);
+
+    const abertos = await pool.query(
+      `select id from agent_cases where organization_id = $1 and conversation_id = $2
+          and status in ('awaiting_human','awaiting_lead')`,
+      [ORG_A, conv],
+    );
+    expect(abertos.rows).toHaveLength(1);
+    const notas = await pool.query(
+      `select 1 from agent_case_events where case_id = $1 and kind = 'agent_noted'`,
+      [first.caseId],
+    );
+    expect(notas.rows).toHaveLength(0);
   });
 
   it("whitelist: openHumanCaseInputSchema rejeita campo extra", () => {

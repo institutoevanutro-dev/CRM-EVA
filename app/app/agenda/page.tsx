@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { enderecoDeRetorno, faltaParaConectarOGoogle, googleEstaConfigurado } from "@/lib/agenda/google/config";
 import { donosDaAgenda } from "@/lib/agenda/donos-da-agenda";
+import { lerBloqueiosDaGrade } from "@/lib/agenda/bloqueios-da-grade";
 import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
 import { PROVEDOR_GOOGLE } from "@/lib/agenda/tipos";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -212,6 +213,13 @@ export default async function AgendaPage() {
     { organizationId: activeOrg.orgId, de: inicio.toISOString(), ate: fim.toISOString() },
     donos,
   );
+  // Os bloqueios de "Dias fora da rotina", pela MESMA leitura que a rota faz.
+  const { blocos: bloqueios } = await lerBloqueiosDaGrade(
+    supabase,
+    { organizationId: activeOrg.orgId, de: inicio.toISOString(), ate: fim.toISOString() },
+    donos,
+    fusoDaAgenda,
+  );
 
   // QUAL conta está conectada — o prop existia no cartão e NUNCA era passado,
   // então o ramo "Agenda conectada" era código morto e o botão "Conectar Google"
@@ -326,6 +334,16 @@ export default async function AgendaPage() {
             situacao: "confirmed" as const,
           };
         }) as AgendamentoDaTela[],
+        bloqueios.map((b) => ({
+          id: b.id,
+          titulo: "Horário bloqueado",
+          responsavelId: b.donoId ?? "",
+          comeca: b.iniciaEm,
+          termina: b.terminaEm,
+          origem: "google_sync" as const,
+          situacao: "confirmed" as const,
+          bloqueio: true,
+        })),
       )}
     />
   );

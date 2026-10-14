@@ -414,7 +414,7 @@ function BlocoDeAgendamento({
       aria-label={`${agendamento.titulo}, ${rotuloHora(comeca, fuso)} ${t("às")} ${rotuloHora(termina, fuso)}${
         agendamento.quemSeraAtendido ? `, ${t("com")} ${agendamento.quemSeraAtendido}` : ""
       }${pessoa ? `, ${t("atendido por")} ${pessoa.nome}` : ""}${
-        doGoogle ? `, ${t("ocupado na agenda do Google")}` : ""
+        doGoogle && !agendamento.bloqueio ? `, ${t("ocupado na agenda do Google")}` : ""
       }`}
       className={cn(
         "absolute flex flex-col items-start overflow-hidden rounded-sm px-1.5 py-0.5 text-left",
