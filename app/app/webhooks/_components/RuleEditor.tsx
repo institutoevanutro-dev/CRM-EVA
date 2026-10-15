@@ -106,6 +106,7 @@ const CURATED_FIELDS: Record<TriggerEvent, CuratedField[]> = {
   "lead.stage_changed": [...LEAD_FIELDS, STAGE_FIELD],
   "message.received": MESSAGE_FIELDS,
   "lead.tag_added": [...LEAD_FIELDS, TAG_ADDED_FIELD],
+  "lead.won": LEAD_FIELDS,
   "contact.tag_added": [TAG_ADDED_FIELD],
   "appointment.created": AGENDAMENTO_FIELDS,
   "appointment.confirmed": AGENDAMENTO_FIELDS,

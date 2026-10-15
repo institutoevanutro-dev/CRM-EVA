@@ -102,6 +102,16 @@ const MOTIVO_DA_PARADA: Record<string, string> = {
   no_target: "O evento que disparou a regra não trouxe um lead nem um contato para etiquetar.",
   no_lead_or_contact: "O evento que disparou a regra não trouxe um lead para criar ou mover.",
   cross_pipeline_move_not_allowed: "Mover um lead para outro funil está desligado nesta organização.",
+  // Negócio ganho → card de pós-venda (porte do upstream PR 2787), emitidos por
+  // lib/automation/actions/create-or-move-lead.ts.
+  continuacao_exige_outro_funil:
+    "O card de pós-venda só nasce em OUTRO funil. Aponte esta ação para o funil de pós-venda; a venda não foi mexida.",
+  pos_venda_ja_aberto_neste_evento:
+    "Outra regra deste mesmo ganho já abriu o card de pós-venda. Vale a primeira regra; esta não abre outro.",
+  negocio_nao_esta_ganho: "O negócio foi reaberto antes de a regra rodar, então o card de pós-venda não foi aberto.",
+  contato_anonimizado: "O contato deste negócio foi anonimizado (LGPD), então o card de pós-venda não foi aberto.",
+  contato_mesclado:
+    "O contato deste negócio foi juntado a outro cadastro, então o card de pós-venda não foi aberto. Confira o negócio no cadastro que ficou.",
   flow_not_active:
     "O funil escolhido não está ativo, então a inscrição não foi feita. Ative o funil ou escolha outro na automação.",
   live_enrollment_exists: "O contato já está em um funil ativo — esta ação não inscreve duas vezes.",

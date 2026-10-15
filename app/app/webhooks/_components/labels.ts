@@ -19,6 +19,10 @@ export const TRIGGER_LABELS: Record<TriggerEvent, string> = {
   "lead.stage_changed": "Quando um lead mudar de etapa",
   "message.received": "Quando chegar mensagem no WhatsApp",
   "lead.tag_added": "Quando um lead ganhar uma tag",
+  // Pensado para o pós-venda: com "Criar/mover lead" apontando para OUTRO funil,
+  // nasce um card novo lá e a venda fica ganha onde está
+  // (lib/automation/actions/create-or-move-lead.ts).
+  "lead.won": "Quando um negócio for ganho",
   "contact.tag_added": "Quando um contato ganhar uma tag",
   // A frase evita "agendamento criado", que não diz ao operador o que ele vê na
   // agenda: um horário marcado pode nascer pendente (o tipo pede confirmação) ou

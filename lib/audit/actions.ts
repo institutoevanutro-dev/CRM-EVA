@@ -760,6 +760,8 @@ export const AUDIT_ACTIONS = [
   "media_library.item_deleted",
   // migration 0351: reinício do teste de um número da lista de teste do canal.
   "contact.teste_reiniciado",
+  // Negócio ganho abriu o card de pós-venda por automação (porte do upstream PR 2787).
+  "lead.post_sale_opened",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
