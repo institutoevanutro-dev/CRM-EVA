@@ -183,7 +183,15 @@ export type ActivityType =
    * decisão ficava só em `ai_router_decisions`, que tela nenhuma lê. A razão
    * diz os dois assuntos, os dois agentes e o motivo que o agente informou.
    */
-  | "subject_transferred";
+  | "subject_transferred"
+  /**
+   * A ETIQUETA DE CIDADE SEGUIU O ENDEREÇO (migration 0362). Emitido por
+   * `fn_contato_etiqueta_de_cidade` quando a cidade do endereço estruturado
+   * muda e as etiquetas "cidade: …" do contato mudam com ela. É a linha que
+   * explica por que a etiqueta posta pela IA ou à mão foi trocada: o endereço
+   * vence. Como `contacts_merged`, o emissor é SQL e grava o literal.
+   */
+  | "contact_city_tag_changed";
 
 export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   lead_created: "Entrou pelo WhatsApp",
@@ -286,6 +294,7 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   supervision_review: "Revisão da supervisão",
   moved_from_pipeline: "Veio de outro funil",
   subject_transferred: "Atendimento passou para outro assunto",
+  contact_city_tag_changed: "Etiqueta de cidade atualizada pelo endereço",
 };
 
 /** Quando o tipo é legado/desconhecido, a linha ainda é honesta — sem jargão. */
