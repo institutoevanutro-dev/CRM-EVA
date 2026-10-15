@@ -68,6 +68,7 @@ import type { DisclosureMode } from './disclosure/template';
 import { escalateLgpdVeto, isLegalBasisValid } from './lgpd/legal-basis';
 import type { LgpdInput } from './lgpd/legal-basis';
 import { detectHumanPromise, detectUnscheduledFollowUpPromise } from './human-promise';
+import { detectarPromessaDeRetornoDoAssistente } from './retorno-do-assistente';
 import { detectarVazamentoInterno, renderVetoDeVazamento } from './vazamento-interno';
 // Módulo PURO de propósito (`capabilities`, não `index`): o seam não arrasta o
 // adapter — e com ele o cliente HTTP do canal — para dentro do worker.
@@ -509,7 +510,12 @@ export const unscheduledFollowUpGate: Gate = {
   name: 'unscheduled_followup',
   evaluate: (ctx) => {
     if (ctx.unscheduledFollowUpEnforced !== true) return { pass: true };
-    if (!detectUnscheduledFollowUpPromise(ctx.body)) return { pass: true };
+    // Dois léxicos em OU: o de nova tentativa/aviso e o de RETOMAR A CONVERSA
+    // ("retomamos daqui a duas horas", porte do upstream #2928), que nenhum dos
+    // outros sinais pegava e saía sem destino.
+    if (!detectUnscheduledFollowUpPromise(ctx.body) && !detectarPromessaDeRetornoDoAssistente(ctx.body)) {
+      return { pass: true };
+    }
     // O detector só acusa promessa do PRÓPRIO assistente ("te retorno", "vou tentar de
     // novo", "me dá um instante"). Se `schedule_followup` agendou o retorno neste turno, a
     // promessa tem quem a cumpra — a mesma exceção do `casePromiseGate`. Sem isto este
