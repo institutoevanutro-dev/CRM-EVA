@@ -28,6 +28,8 @@ import { ApiError } from "@/lib/api/types";
 import { ROTULO_DO_PASSO } from "@/lib/leads/agent-mapping";
 import { Archive, CaretDown, CaretUp, Plus, Warning } from "@/lib/ui/icons";
 import { SeloDeAutoria } from "@/components/operacao/SeloDeAutoria";
+import { SeletorDeCorDaEtiqueta } from "@/components/tags/SeletorDeCorDaEtiqueta";
+import { PALETA_DE_ETAPAS } from "@/lib/kanban/cor-da-etapa";
 import { useT } from "@/hooks/i18n/useT";
 
 import { mensagemDeErro } from "./_mapping";
@@ -183,6 +185,7 @@ type Arquivamento = {
 // fixa espremeria os controles.
 const LARGURA = {
   ordem: "sm:w-[76px]",
+  cor: "sm:w-10",
   papel: "sm:w-56",
   esfria: "sm:w-[108px]",
   arquivar: "sm:w-[104px]",
@@ -198,6 +201,7 @@ const LARGURA = {
 export const ROTULO = {
   nome: "Nome da coluna (clique para renomear)",
   ordem: "Ordem",
+  cor: "Cor",
   papel: "O que acontece nesta coluna",
   esfria: "Esfria em (horas)",
 } as const;
@@ -222,6 +226,7 @@ export function StagesSection({
   const [confirmacao, setConfirmacao] = useState<{ etapaId: string; papel: Papel; texto: string } | null>(null);
   const [arquivamento, setArquivamento] = useState<Arquivamento | null>(null);
   const [nova, setNova] = useState<string | null>(null);
+  const [corDaNova, setCorDaNova] = useState<string | null>(null);
 
   if (consulta.isError) {
     return (
@@ -313,9 +318,10 @@ export function StagesSection({
     const nome = (nova ?? "").trim();
     if (!nome) return;
     setErro(null);
-    criar.mutate(nome, {
+    criar.mutate({ name: nome, color: corDaNova }, {
       onSuccess: () => {
         setNova(null);
+        setCorDaNova(null);
         toast.success(`«${nome}» ${t("entrou no fim do funil.")}`);
       },
       onError: (e) => setErro({ etapaId: null, texto: mensagemDeErro(e, t) }),
@@ -357,6 +363,7 @@ export function StagesSection({
         <span className="w-6 shrink-0" />
         <span className="min-w-0 flex-1">{t(ROTULO.nome)}</span>
         <span className={`${LARGURA.ordem} shrink-0 text-center`}>{t(ROTULO.ordem)}</span>
+        <span className={`${LARGURA.cor} shrink-0 text-center`}>{t(ROTULO.cor)}</span>
         <span className={`${LARGURA.papel} shrink-0`}>{t(ROTULO.papel)}</span>
         <span className={`${LARGURA.esfria} shrink-0`}>{t(ROTULO.esfria)}</span>
         <span className={`${LARGURA.arquivar} shrink-0`} />
@@ -430,6 +437,25 @@ export function StagesSection({
                     <CaretDown size={16} aria-hidden />
                   </Button>
                   </div>
+                </div>
+
+                {/* A cor pinta a coluna inteira no quadro. Mesmo seletor das
+                    etiquetas, com a paleta das etapas; salva ao escolher. */}
+                <div
+                  className={`flex flex-col gap-1 ${LARGURA.cor} shrink-0 sm:items-center`}
+                >
+                  <span className="text-xs font-medium text-text-muted sm:hidden">
+                    {t(ROTULO.cor)}
+                  </span>
+                  <SeletorDeCorDaEtiqueta
+                    cor={etapa.color ?? null}
+                    paleta={PALETA_DE_ETAPAS}
+                    rotulo={`${t("Cor da etapa")} «${etapa.name}»`}
+                    disabled={ocupado}
+                    onChange={(cor) => {
+                      if (cor !== (etapa.color ?? null)) aplicar(etapa.id, { color: cor });
+                    }}
+                  />
                 </div>
 
                 <div className={`w-full shrink-0 space-y-1 ${LARGURA.papel} sm:space-y-0`}>
@@ -682,6 +708,13 @@ export function StagesSection({
             }}
             className="sm:w-72"
           />
+          <SeletorDeCorDaEtiqueta
+            cor={corDaNova}
+            paleta={PALETA_DE_ETAPAS}
+            rotulo={t("Cor da nova etapa")}
+            disabled={ocupado}
+            onChange={setCorDaNova}
+          />
           <Button
             size="sm"
             data-testid="nova-etapa-criar"
@@ -690,7 +723,14 @@ export function StagesSection({
           >
             {t("Criar")}
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setNova(null)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setNova(null);
+              setCorDaNova(null);
+            }}
+          >
             {t("Cancelar")}
           </Button>
         </div>

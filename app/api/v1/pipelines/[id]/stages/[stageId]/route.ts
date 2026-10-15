@@ -22,6 +22,7 @@ import { z } from "zod";
 import { respostaDeRecusa } from "@/lib/api/recusa";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { corDaEtapaSchema } from "@/lib/kanban/cor-da-etapa";
 import { arquivarEtapa, atualizarEtapa } from "@/lib/leads/stage-operations";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -51,6 +52,7 @@ export const bodySchema = z
     is_lost: z.boolean().optional(),
     depois_de: z.string().min(1).nullable().optional(),
     esfria_em_horas: z.number().int().min(1).max(720).nullable().optional(),
+    color: corDaEtapaSchema.optional(),
   })
   .strict()
   .refine((b) => Object.keys(b).length > 0, { message: "Nada para alterar." });

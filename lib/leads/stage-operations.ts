@@ -51,7 +51,7 @@ export interface DepsDeEtapa {
 
 /** As colunas que a tela e as regras usam. `position` entra: a reordenação calcula em cima dela. */
 const COLUNAS =
-  "id, name, slug, position, is_won, is_lost, is_archived, agent_stage_hint, last_change_actor_kind, last_change_at, expected_duration_hours";
+  "id, name, slug, position, is_won, is_lost, is_archived, agent_stage_hint, last_change_actor_kind, last_change_at, expected_duration_hours, color";
 
 /** A etapa como sai para quem lê — inclui a autoria da última mudança de configuração. */
 export interface EtapaVisivel {
@@ -66,6 +66,8 @@ export interface EtapaVisivel {
    * risco. `null` = a etapa nunca configurou e vale o padrão global.
    */
   esfria_em_horas: number | null;
+  /** Faixa no topo da coluna do quadro (`#rrggbb`). `null` = sem cor. */
+  color: string | null;
   /** `user` | `ai` | `system` — `null` nas etapas anteriores a esta coluna. */
   last_change_actor_kind: string | null;
   last_change_at: string | null;
@@ -73,6 +75,7 @@ export interface EtapaVisivel {
 
 type EtapaLida = EtapaEditavel & {
   expected_duration_hours?: number | null;
+  color?: string | null;
   last_change_actor_kind: string | null;
   last_change_at: string | null;
 };
@@ -126,6 +129,7 @@ export function corpo(etapas: EtapaLida[]): { etapas: EtapaVisivel[] } {
         is_won: e.is_won,
         is_lost: e.is_lost,
         esfria_em_horas: e.expected_duration_hours ?? null,
+        color: e.color ?? null,
         last_change_actor_kind: e.last_change_actor_kind ?? null,
         last_change_at: e.last_change_at ?? null,
       })),
@@ -229,7 +233,7 @@ export interface EtapaCriada {
  */
 export async function criarEtapa(
   deps: DepsDeEtapa,
-  input: { pipelineId: string; nome: string },
+  input: { pipelineId: string; nome: string; cor?: string | null },
 ): Promise<EtapaCriada> {
   const name = input.nome.trim();
   const etapas = await funilOuNadaFeito(deps, input.pipelineId);
@@ -250,6 +254,8 @@ export async function criarEtapa(
     // entram na conta: `uniq_crm_stages_pipeline_slug` não é parcial.
     slug: slugDeNome(name, etapas.map((e) => e.slug)),
     position: posicaoEntre(etapas[etapas.length - 1]?.position ?? null, null),
+    // Sem cor pedida, a coluna fica de fora e o banco guarda `null`.
+    ...(input.cor ? { color: input.cor } : {}),
     ...autoria,
   };
 
@@ -269,7 +275,13 @@ export async function criarEtapa(
     resourceType: "crm_stage",
     resourceId: stageId,
     requestId: deps.requestId,
-    metadata: { ...autor.metadata, pipeline_id: input.pipelineId, name, slug: row.slug },
+    metadata: {
+      ...autor.metadata,
+      pipeline_id: input.pipelineId,
+      name,
+      slug: row.slug,
+      color: input.cor ?? null,
+    },
   });
 
   return { stageId, funil: await funilDepois(deps, input.pipelineId) };
@@ -296,6 +308,11 @@ export interface PedidoDeEdicao {
    * é um valor legítimo de escrita, não ausência de pedido.
    */
   esfria_em_horas?: number | null;
+  /**
+   * Faixa no topo da coluna do quadro, `#rrggbb` (a forma é cobrada na borda e
+   * pelo CHECK de `crm_stages.color`). `null` tira a cor.
+   */
+  color?: string | null;
 }
 
 export async function atualizarEtapa(
@@ -350,10 +367,12 @@ export async function atualizarEtapa(
     name?: string;
     position?: number;
     expected_duration_hours?: number | null;
+    color?: string | null;
   } = {};
   if (pedido.name !== undefined) patchDoAlvo.name = pedido.name.trim();
   if (pedido.esfria_em_horas !== undefined)
     patchDoAlvo.expected_duration_hours = pedido.esfria_em_horas;
+  if (pedido.color !== undefined) patchDoAlvo.color = pedido.color;
 
   if (pedido.depois_de !== undefined) {
     // Só as ativas compõem a régua: arquivada não ocupa lugar no quadro.
