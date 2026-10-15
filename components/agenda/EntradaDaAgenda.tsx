@@ -9,6 +9,7 @@ export function EntradaDaAgenda({
   onContext: (contact: string, conversation: string) => void;
 }) {
   const podeEditar = usePermission("inbox.reply");
+  const podeExcluir = usePermission("agenda.appointment.exclude");
   const params = useSearchParams();
   const router = useRouter();
   const contact = params.get("contato");
@@ -29,6 +30,7 @@ export function EntradaDaAgenda({
     <DetalheDoCompromisso
       key={params.get("compromisso")}
       podeEditar={podeEditar}
+      podeExcluir={podeExcluir}
       id={params.get("compromisso")}
       onClose={() => {
         // O `?tipo=` escolhido na grade ATRAVESSA o fecho do detalhe: sem

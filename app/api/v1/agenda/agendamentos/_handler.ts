@@ -572,6 +572,84 @@ export async function cancelarAgendamentoHandler(
   return salvo as Record<string, unknown>;
 }
 
+export interface ExcluirInput {
+  id: string;
+  reason: string;
+}
+
+/**
+ * Exclui o compromisso lançado POR ENGANO ou DE TESTE (migration 0364).
+ *
+ * Não apaga a linha: ela fica para auditoria, com quem excluiu, quando e por
+ * quê, e some de toda tela, relatório e ferramenta da IA. Para compromisso de
+ * verdade o caminho é cancelar, que conta a história ao negócio.
+ *
+ * O banco faz o trabalho numa transação (`fn_appointment_exclude`): cancela pelo
+ * mesmo núcleo do cancelar (o Google tira o evento, o horário fica livre, os
+ * follow-ups do compromisso fecham) e marca. Quem pode é decidido lá também:
+ * gerente ou admin. Aqui sobram o laço da timeline e a auditoria, e o que NÃO se
+ * faz: o gatilho `appointment.cancelled` não sai, porque uma regra "avise quem
+ * foi desmarcado" falaria com o paciente sobre um horário que nunca existiu.
+ */
+export async function excluirAgendamentoHandler(
+  supabase: SB,
+  ctx: HandlerCtx,
+  input: ExcluirInput,
+): Promise<Record<string, unknown>> {
+  const atual = await exigeAgendamento(supabase, ctx, input.id, [
+    "id",
+    "contact_id",
+    "event_type_id",
+    "status",
+    "time_zone",
+    "excluded_at",
+  ]);
+  // Idempotente: excluir o que já foi excluído devolve o estado, sem segunda
+  // linha de timeline nem de auditoria.
+  if (atual.excluded_at) {
+    return { id: atual.id, status: "cancelled", excluded_at: atual.excluded_at, ja_estava: true };
+  }
+
+  const { data, error } = await supabase.rpc("fn_appointment_exclude", {
+    p_org: ctx.organization_id,
+    p_id: input.id,
+    p_reason: input.reason,
+  });
+  if (error) {
+    const recusa =
+      error.code === "42501"
+        ? { status: 403, code: "forbidden", msg: "Só gerente ou admin pode excluir um agendamento." }
+        : error.code === "P0002"
+          ? { status: 404, code: "not_found", msg: "Agendamento não encontrado." }
+          : error.code === "PT409" || error.code === "40001"
+            ? { status: 409, code: "conflict", msg: "O compromisso mudou. Recarregue antes de confirmar." }
+            : { status: 422, code: "validation_failed", msg: "Não foi possível excluir este agendamento." };
+    throw new ApiError(recusa.status, recusa.code, undefined, ctx.requestId, recusa.msg);
+  }
+
+  await fecharOLaco(supabase, ctx, {
+    appointmentId: atual.id as string,
+    contactId: (atual.contact_id as string | null) ?? null,
+    atividade: "appointment_excluded",
+    gatilho: null,
+    transicao: "cancelled",
+    fusoDoCompromisso: atual.time_zone as string,
+    nomeDoTipo: await nomeDoTipoDoCompromisso(supabase, ctx, atual.event_type_id as string | null),
+  });
+
+  void audit({
+    action: "agenda.appointment_excluded",
+    actorUserId: ctx.actor.type === "user" ? ctx.actor.id : null,
+    organizationId: ctx.organization_id,
+    resourceType: "calendar_appointment",
+    resourceId: atual.id as string,
+    requestId: ctx.requestId,
+    metadata: { reason: input.reason, status_anterior: atual.status },
+  });
+
+  return data as Record<string, unknown>;
+}
+
 /** O compromisso, ou 404 — sempre com o filtro de organização. */
 /**
  * O NOME DO TIPO DE ATENDIMENTO — lido da linha, nunca digitado aqui.

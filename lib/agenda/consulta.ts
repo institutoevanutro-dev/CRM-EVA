@@ -705,6 +705,9 @@ export async function listaAgendamentos(
       "id, title, starts_at, ends_at, time_zone, status, revision, meeting_state, meeting_url, owner_user_id, contact_id, contacts(name, display_name)",
     )
     .eq("organization_id", organizationId)
+    // Lançado por engano ou de teste (migration 0364): não é compromisso de
+    // ninguém. Some da grade, das listas, da visão do contato e da IA.
+    .is("excluded_at", null)
     .order("starts_at", { ascending: true })
     .limit(params.limite);
 

@@ -136,6 +136,9 @@ export default async function AgendaPage() {
         "id, revision, title, starts_at, ends_at, status, owner_user_id, contact_id, event_type_id, location_kind, contacts(name, display_name)",
       )
       .eq("organization_id", activeOrg.orgId)
+      // A MESMA régua de `listaAgendamentos`: o excluído (migration 0364) não
+      // aparece nem no primeiro instante, antes de o GET substituir a semente.
+      .is("excluded_at", null)
       .gte("starts_at", inicio.toISOString())
       .lt("starts_at", fim.toISOString())
       .order("starts_at"),

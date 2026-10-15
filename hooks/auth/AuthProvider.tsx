@@ -116,6 +116,8 @@ const ACTION_MIN_ROLE: Record<string, Role> = {
   "contact.create": "agent",
   "contact.update": "agent",
   "contact.delete": "manager",
+  // Excluir agendamento lançado por engano (migration 0364): o banco cobra o mesmo piso.
+  "agenda.appointment.exclude": "manager",
   "pipeline.view": "viewer",
   "pipeline.create": "manager",
   "pipeline.move_card": "agent",

@@ -558,6 +558,9 @@ export const AUDIT_ACTIONS = [
   "agenda.settings_updated",
   "agenda.appointment_rescheduled",
   "agenda.appointment_cancelled",
+  // Lançado por engano ou de teste: a linha fica, some das telas. O motivo vai
+  // no metadata, que é o que se lê quando alguém pergunta onde foi parar.
+  "agenda.appointment_excluded",
   // Relógio HTTP (Hobby / sem contêiner scheduler): uma batida que alguém
   // de fora chama. Só audita quando alguma tarefa mexeu em dado.
   "relogio.tick_run",

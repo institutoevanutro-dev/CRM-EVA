@@ -95,6 +95,7 @@ function agendaCom(contacts: unknown): SupabaseClient {
   const chain = {
     select: () => chain,
     eq: () => chain,
+    is: () => chain,
     order: () => chain,
     limit: () => chain,
     in: () => chain,

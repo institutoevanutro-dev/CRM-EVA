@@ -2178,6 +2178,9 @@ export type Database = {
           outcome_recorded_at: string | null
           confirmation_next_at: string | null
           cancellation_reason: string | null
+          excluded_at: string | null
+          excluded_by_user_id: string | null
+          exclusion_reason: string | null
           cancelled_at: string | null
           contact_id: string | null
           conversation_id: string | null
@@ -2249,6 +2252,9 @@ export type Database = {
           outcome_recorded_at?: string | null
           confirmation_next_at?: string | null
           cancellation_reason?: string | null
+          excluded_at?: string | null
+          excluded_by_user_id?: string | null
+          exclusion_reason?: string | null
           cancelled_at?: string | null
           contact_id?: string | null
           conversation_id?: string | null
@@ -2320,6 +2326,9 @@ export type Database = {
           outcome_recorded_at?: string | null
           confirmation_next_at?: string | null
           cancellation_reason?: string | null
+          excluded_at?: string | null
+          excluded_by_user_id?: string | null
+          exclusion_reason?: string | null
           cancelled_at?: string | null
           contact_id?: string | null
           conversation_id?: string | null
@@ -8053,6 +8062,7 @@ export type Database = {
       fn_agenda_minutes: { Args: { p_settings: Json; p_key: string; p_default: number }; Returns: number }
       fn_followup_claim_current: { Args: { p_org: string; p_job: string; p_worker: string; p_acquired_at: string }; Returns: boolean }
       fn_appointment_change: { Args: { p_org: string; p_id: string; p_revision: number; p_patch: Json }; Returns: Json }
+      fn_appointment_exclude: { Args: { p_org: string; p_id: string; p_reason: string }; Returns: Json }
       fn_appointment_recover: { Args: { p_org: string; p_event: string }; Returns: Json }
       fn_appointment_confirmation_sweep: { Args: { p_limit?: number; p_now?: string }; Returns: number }
       fn_appointment_enrollment_current: { Args: { p_org: string; p_id: string; p_node?: string | null }; Returns: boolean }

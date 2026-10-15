@@ -7974,6 +7974,20 @@ export const DICIONARIO: Traducoes = {
   // ─── app/api/v1/agenda/agendamentos/_handler.ts + lib/agenda/consulta.ts ───
   "O tipo deste agendamento não existe mais.": { es: "El tipo de este agendamiento ya no existe." },
   "Agendamento não encontrado.": { es: "Agendamiento no encontrado." },
+  // ─── excluir agendamento lançado por engano (migration 0364) ───
+  "Só gerente ou admin pode excluir um agendamento.": { es: "Solo gerente o admin puede eliminar un agendamiento." },
+  "Não foi possível excluir este agendamento.": { es: "No fue posible eliminar este agendamiento." },
+  "O compromisso mudou. Recarregue antes de confirmar.": { es: "La cita cambió. Recarga antes de confirmar." },
+  "Informe o motivo da exclusão.": { es: "Informa el motivo de la eliminación." },
+  "Excluir (lançado por engano)": { es: "Eliminar (registrado por error)" },
+  "Excluir este agendamento?": { es: "¿Eliminar este agendamiento?" },
+  "Use só para agendamento de teste ou lançado por engano. Ele sai da agenda, das listas e dos relatórios, e o horário fica livre. Se o paciente desmarcou, use \"Cancelar agendamento\".": {
+    es: "Úsalo solo para un agendamiento de prueba o registrado por error. Sale de la agenda, de las listas y de los informes, y el horario queda libre. Si el paciente canceló, usa \"Cancelar cita\".",
+  },
+  "Motivo da exclusão": { es: "Motivo de la eliminación" },
+  "Ex.: teste do sistema, paciente errado": { es: "Ej.: prueba del sistema, paciente equivocado" },
+  "Excluir agendamento": { es: "Eliminar agendamiento" },
+  "Excluído (lançado por engano)": { es: "Eliminado (registrado por error)" },
   "Este agendamento foi cancelado. Marque um novo em vez de reabrir este.": {
     es: "Este agendamiento fue cancelado. Agenda uno nuevo en vez de reabrir este.",
   },

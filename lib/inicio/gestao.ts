@@ -105,6 +105,8 @@ export async function numerosDeHoje(
       .from("calendar_appointments")
       .select("id", contar)
       .eq("organization_id", ctx.orgId)
+      // Lançado por engano ou de teste não conta (migration 0364).
+      .is("excluded_at", null)
       .gte("created_at", inicio)
       .lt("created_at", fim),
     db
