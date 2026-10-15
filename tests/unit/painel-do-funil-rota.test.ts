@@ -41,6 +41,7 @@ const MAX_ROWS = 1000;
 
 function casa(valor: unknown, op: string, alvo: unknown): boolean {
   if (op === "eq") return valor === alvo;
+  if (op === "is") return (valor ?? null) === alvo;
   if (op === "in") return (alvo as unknown[]).includes(valor);
   const a = Date.parse(String(valor));
   const b = Date.parse(String(alvo));
@@ -77,6 +78,10 @@ function clientFalso() {
         },
         in(c: string, v: unknown[]) {
           filtros.push([c, "in", v]);
+          return cadeia;
+        },
+        is(c: string, v: unknown) {
+          filtros.push([c, "is", v]);
           return cadeia;
         },
         gte(c: string, v: unknown) {
