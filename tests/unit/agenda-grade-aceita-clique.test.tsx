@@ -88,7 +88,7 @@ describe("clicar num bloco vazio", () => {
     montar({ interacao: interacao() });
     expect(screen.getByTestId(`bloco-${DIA}-09:00`)).toHaveAttribute(
       "aria-label",
-      expect.stringContaining("Marcar às 09:20"),
+      expect.stringContaining("às 09:20"),
     );
   });
 

@@ -114,7 +114,7 @@ describe("o mapa dos horários livres nasce no fuso da organização", () => {
     const primeiro = document.querySelector("[data-livre='true']");
     expect(primeiro).not.toBeNull();
     const aria = primeiro?.getAttribute("aria-label") ?? "";
-    expect(aria).toContain(`Marcar às ${PAREDE_ESPERADA}`);
+    expect(aria).toContain(`às ${PAREDE_ESPERADA}`);
 
     // A data também na régua da org: 13:00Z é o dia 16 lá.
     expect(document.querySelector(`[data-testid^="bloco-${"2026-09-16"}-"]`)).not.toBeNull();
@@ -138,7 +138,7 @@ describe("o mapa dos horários livres nasce no fuso da organização", () => {
     const aria = primeiro?.getAttribute("aria-label") ?? "";
 
     // Com o defeito, o rótulo seria o do ambiente — e ele NÃO é este.
-    expect(aria).not.toContain(`Marcar às ${doAmbiente}`);
-    expect(aria).toContain(`Marcar às ${PAREDE_ESPERADA}`);
+    expect(aria).not.toContain(`às ${doAmbiente}`);
+    expect(aria).toContain(`às ${PAREDE_ESPERADA}`);
   });
 });

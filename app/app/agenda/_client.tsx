@@ -297,8 +297,10 @@ export function AgendaClient({
   // como a visão do funil, para o HTML do servidor e o do cliente concordarem.
   const [pedidas, setPedidas] = React.useState<string[]>([]);
   React.useEffect(() => {
+    const guardadas = lerPessoasDaGrade(usuarioId);
+    // Sem nada guardado, nada a renderizar de novo.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- o armazenamento só existe no cliente.
-    setPedidas(lerPessoasDaGrade(usuarioId));
+    if (guardadas.length > 0) setPedidas(guardadas);
   }, [usuarioId]);
   const mudarPessoas = React.useCallback(
     (ids: string[]) => {

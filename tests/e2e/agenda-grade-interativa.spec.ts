@@ -131,11 +131,14 @@ function blocoLivre(page: Page) {
   return page.locator('[data-testid^="bloco-"][data-livre="true"]').first();
 }
 
-/** Um bloco recusado que NÃO é do passado — o que tem de explicar a regra. */
-function blocoBloqueado(page: Page) {
-  return page
-    .locator('[data-testid^="bloco-"][data-livre="false"]:not([aria-label*="já passou"])')
-    .first();
+/** Um bloco vazio, futuro e sem horário publicado — o encaixe pelo clique. */
+function blocoEncaixe(page: Page) {
+  return page.locator('[data-testid^="bloco-"][data-encaixe="true"]').first();
+}
+
+/** Um bloco do passado — o que continua recusado e explica por quê. */
+function blocoDoPassado(page: Page) {
+  return page.locator('[data-testid^="bloco-"][aria-label*="já passou"]').first();
 }
 
 /**
@@ -179,11 +182,11 @@ test("clicar num bloco livre abre a marcação NAQUELE horário", async ({ page 
 
   const bloco = blocoLivre(page);
   // O bloco oferece o horário PUBLICADO que começa dentro dele, e o anuncia no
-  // nome acessível ("Marcar às 09:30 de 28 de agosto"). É esse horário que tem
+  // nome acessível ("Marcar 28/08 às 09:30"). É esse horário que tem
   // de reaparecer no painel — e não a hora do bloco, que pode ser outra quando
   // a organização oferece de 20 em 20 minutos.
   const rotulo = (await bloco.getAttribute("aria-label"))!;
-  const oferecido = /Marcar às (\d{2}:\d{2})/.exec(rotulo)?.[1];
+  const oferecido = /Marcar \d{2}\/\d{2} às (\d{2}:\d{2})/.exec(rotulo)?.[1];
   expect(oferecido, `o bloco livre não anuncia o horário que vai marcar: "${rotulo}"`).toBeTruthy();
 
   await bloco.click();
@@ -203,28 +206,39 @@ test("clicar num bloco livre abre a marcação NAQUELE horário", async ({ page 
   await page.screenshot({ path: "evidence/calendario/grade-clique-abre-no-horario.png" });
 });
 
-test("bloco fora da disponibilidade não marca — e diz por quê", async ({ page }) => {
+test("bloco fora da disponibilidade abre como encaixe; o do passado não marca e diz por quê", async ({ page }) => {
   const creds = lerCreds();
   await entrar(page, creds);
   await escolherOTipoDoSeed(page, creds.agenda!.tipo_nome);
   await irParaASemanaIntegra(page);
 
-  const bloqueado = blocoBloqueado(page);
+  // ── O ENCAIXE: vazio, futuro, sem horário publicado ─────────────────────
+  // Até 15/10 este bloco nascia `disabled` ("fora dos horários que você
+  // publicou"). O dono da clínica pediu para marcar clicando em qualquer
+  // horário, e a rota já aceitava o encaixe de quem é da equipe: o bloco agora
+  // abre o MESMO painel, no começo da meia hora clicada.
+  const encaixe = blocoEncaixe(page);
+  await expect(encaixe).toBeAttached({ timeout: 15_000 });
+  await expect(encaixe).toBeEnabled();
+  const { hora } = horarioDoBloco((await encaixe.getAttribute("data-testid"))!);
+  await expect(encaixe).toHaveAttribute("aria-label", new RegExp(`^Marcar \\d{2}/\\d{2} às ${hora}$`));
+  await encaixe.click();
+  const painel = page.getByTestId("painel-de-marcacao");
+  await expect(painel).toHaveAttribute("data-tempo", "confirmando", { timeout: 10_000 });
+  await expect(page.getByTestId("confirmacao")).toContainText(hora);
+  await page.keyboard.press("Escape");
+  await expect(painel).toHaveCount(0);
+
+  // ── O PASSADO continua recusado, e diz por quê ──────────────────────────
+  await page.getByTestId("periodo-anterior").click();
+  const bloqueado = blocoDoPassado(page);
   await expect(bloqueado).toBeAttached({ timeout: 15_000 });
 
   // Não é clicável, e isto é do elemento — não de um `onClick` que decide não
   // fazer nada. Botão que aceita o clique e não responde é o controle
   // decorativo que esta base já pagou cinco vezes num PR só.
   await expect(bloqueado).toBeDisabled();
-
-  // E DIZ POR QUÊ. A frase sai da mesma conta que apaga o bloco; sem ela o
-  // usuário vê uma área morta e conclui que o produto quebrou.
-  const razao = (await bloqueado.getAttribute("aria-label"))!;
-  expect(
-    razao,
-    `o bloco bloqueado não explica nada: "${razao}"`,
-  ).toMatch(/fora dos horários|não publicou|já há um compromisso|não consegui carregar/);
-  await expect(bloqueado).toHaveAttribute("title", /.+/);
+  await expect(bloqueado).toHaveAttribute("title", /já passou/);
 
   // Clicar não abre marcação nenhuma.
   await bloqueado.click({ force: true });
@@ -296,7 +310,7 @@ test("arrastar um card remarca — e o horário novo sobrevive ao reload", async
   const alvo = page.locator(`[data-testid^="bloco-${dia}-"][data-livre="true"]`).first();
   await expect(alvo).toBeAttached({ timeout: 15_000 });
   const testidAlvo = (await alvo.getAttribute("data-testid"))!;
-  const horarioOferecido = /Marcar às (\d{2}:\d{2})/.exec((await alvo.getAttribute("aria-label"))!)![1]!;
+  const horarioOferecido = /Marcar \d{2}\/\d{2} às (\d{2}:\d{2})/.exec((await alvo.getAttribute("aria-label"))!)![1]!;
   expect(
     testidAlvo,
     "o alvo do arraste é o mesmo bloco de origem — a semana só tem uma vaga e o caso não prova nada",
