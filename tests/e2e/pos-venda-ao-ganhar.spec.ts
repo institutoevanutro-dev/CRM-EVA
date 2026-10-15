@@ -97,10 +97,11 @@ test.describe("negócio ganho abre o card de pós-venda", () => {
     const { data: etapas, error: etapasErr } = await db
       .from("crm_stages")
       .insert([
-        { organization_id: org, pipeline_id: vendasId, name: "Novo", slug: "novo", position: 1000 },
+        { organization_id: org, pipeline_id: vendasId, name: "Novo", slug: "novo", position: 1000, is_won: false },
         { organization_id: org, pipeline_id: vendasId, name: "Pago", slug: "pago", position: 2000, is_won: true },
-        { organization_id: org, pipeline_id: pacientesId, name: "Acompanhamento", slug: "acompanhamento", position: 1000 },
+        { organization_id: org, pipeline_id: pacientesId, name: "Acompanhamento", slug: "acompanhamento", position: 1000, is_won: false },
       ])
+      // Lote com chaves iguais em toda linha: o PostgREST preenche a que falta com NULL.
       .select("id, slug, pipeline_id");
     expect(etapasErr).toBeNull();
     const novo = etapas!.find((e) => e.slug === "novo")!.id as string;
@@ -140,7 +141,7 @@ test.describe("negócio ganho abre o card de pós-venda", () => {
 
       await editor.getByRole("combobox").filter({ hasText: "Adicionar ação" }).click();
       await page.getByRole("option", { name: "Criar/mover lead no funil" }).click();
-      await editor.getByRole("combobox").filter({ hasText: "Escolha o funil" }).click();
+      await editor.getByRole("combobox").filter({ hasText: /^Escolha o funil$/ }).click();
       await page.getByRole("option", { name: FUNIL_PACIENTES }).click();
       await editor.getByRole("combobox").filter({ hasText: /Escolha a etapa/ }).click();
       await page.getByRole("option", { name: "Acompanhamento" }).click();
@@ -181,10 +182,20 @@ test.describe("negócio ganho abre o card de pós-venda", () => {
       await page.screenshot({ path: path.join(EVIDENCIA, "4-venda.png"), fullPage: true });
 
       // ── Reabrir e ganhar de novo: continua UM card ───────────────────────
-      const reabriu = await page.request.post(`${APP_URL}/api/v1/leads/${vendaId}/move`, { data: { to_stage_id: novo } });
+      // O mesmo corpo que o arrasto do kanban manda.
+      const { data: atual } = await db.from("crm_leads").select("updated_at").eq("id", vendaId).single();
+      const reabriu = await page.request.post(`${APP_URL}/api/v1/leads/${vendaId}/move`, {
+        data: { stage_id: novo, position_in_stage: 5000, expected_updated_at: atual!.updated_at },
+      });
       expect(reabriu.ok(), await reabriu.text()).toBeTruthy();
       const ganhouDeNovo = await page.request.post(`${APP_URL}/api/v1/leads/${vendaId}/win`);
       expect(ganhouDeNovo.ok(), await ganhouDeNovo.text()).toBeTruthy();
+      const { count: ganhos } = await db
+        .from("event_log")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "lead.won")
+        .eq("entity_id", vendaId);
+      expect(ganhos, "o segundo ganho tem de existir para a prova valer").toBe(2);
       await drenar(page);
       expect(await cards()).toHaveLength(1);
     } finally {
