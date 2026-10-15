@@ -456,6 +456,7 @@ jobs:
         agenda-ocupacao-do-google-no-historico.spec.ts
         followup-publicado-abre-no-construtor.spec.ts
         automacao-diz-a-verdade.spec.ts
+        pos-venda-ao-ganhar.spec.ts
         acervo-de-conhecimento.spec.ts
         agenda-kit-visual.spec.ts
         agenda-conectar-google.spec.ts
