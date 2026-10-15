@@ -51,12 +51,15 @@ function Secao({
 export function VitrineDaAgenda() {
   const localeDaData = useLocaleDeData();
   const [visao, setVisao] = React.useState<VisaoDaAgenda>("semana");
-  const [isolada, setIsolada] = React.useState<string | null>(null);
+  const [selecionadas, setSelecionadas] = React.useState<string[]>([]);
   const { theme, setTheme } = useTheme();
 
   const visiveis = React.useMemo(
-    () => (isolada === null ? AGENDAMENTOS : AGENDAMENTOS.filter((c) => c.responsavelId === isolada)),
-    [isolada],
+    () =>
+      selecionadas.length === 0
+        ? AGENDAMENTOS
+        : AGENDAMENTOS.filter((c) => selecionadas.includes(c.responsavelId)),
+    [selecionadas],
   );
 
   return (
@@ -136,7 +139,7 @@ export function VitrineDaAgenda() {
               `globals.css` cortava em silêncio: sem barra de rolagem, sem aviso,
               sem como trocar de visão. */}
           <div className="flex flex-wrap items-center gap-3">
-            <FiltroDePessoas pessoas={PESSOAS} isolada={isolada} onIsolar={setIsolada} />
+            <FiltroDePessoas pessoas={PESSOAS} selecionadas={selecionadas} onMudar={setSelecionadas} />
             <div
               data-testid="alternador-de-visao"
               className="flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5"

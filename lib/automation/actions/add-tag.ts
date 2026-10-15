@@ -54,6 +54,15 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
         ? { table: "contacts", row: contact, event: "contact.tag_added", kind: "contact" }
         : null;
     if (!target) return { type: "add_tag", status: "skipped", detail: { reason: "no_target" } };
+    // Adaptado da correção pública do fork público de jmpo (PR 89): regras do mesmo
+    // evento recebem contexto antigo. Ler a linha atual antes do merge,
+    // preservando também o destino explícito de contato já existente aqui.
+    const { data: atual, error: erroDaLeitura } = await ctx.admin
+      .from(target.table).select("tags")
+      .eq("id", target.row.id).eq("organization_id", ctx.organizationId).maybeSingle();
+    if (erroDaLeitura) return { type: "add_tag", status: "failed", error: erroDaLeitura.message };
+    if (!atual) return { type: "add_tag", status: "skipped", detail: { reason: "no_target" } };
+    target.row.tags = (atual as { tags?: string[] | null }).tags ?? [];
   }
 
   const prev = target.row.tags ?? [];
@@ -71,6 +80,7 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
     .eq("id", target.row.id)
     .eq("organization_id", ctx.organizationId);
   if (error) return { type: "add_tag", status: "failed", error: error.message };
+  target.row.tags = merged;
 
   await ctx.admin.rpc("emit_event", {
     p_event_type: target.event,

@@ -8313,8 +8313,10 @@ export const DICIONARIO: Traducoes = {
   "Call": { es: "Call" },
   "Presencial": { es: "Presencial" },
   "Link de vídeo": { es: "Enlace de video" },
-  "Mostrar todos (agora só": { es: "Mostrar todos (ahora solo" },
-  "Ver só a agenda de": { es: "Ver solo la agenda de" },
+  "Profissionais na agenda": { es: "Profesionales en la agenda" },
+  "Tirar da agenda:": { es: "Quitar de la agenda:" },
+  "Mostrar a agenda de": { es: "Mostrar la agenda de" },
+  "Marcar": { es: "Agendar" },
   "com": { es: "con" },
   "ocupado na agenda do Google": { es: "ocupado en la agenda de Google" },
   "Dia": { es: "Día" },
@@ -9830,6 +9832,10 @@ export const DICIONARIO: Traducoes = {
     es: "Revisa la etiqueta, el nombre nuevo y el color.",
   },
   "Cor da etiqueta": { es: "Color de la etiqueta" },
+  // Faixa do compositor quando `{{nome}}` ficaria literal (porte do #2844).
+  "Contato sem nome no CRM: {{nome}}/{{primeiro_nome}} ficaram literais no texto. Edite antes de enviar.": {
+    es: "Contacto sin nombre en el CRM: {{nome}}/{{primeiro_nome}} quedaron literales en el texto. Edítalo antes de enviar.",
+  },
   "nas listas e nos filtros:": { es: "en las listas y en los filtros:" },
   "Sem cor": { es: "Sin color" },
   "Confira a etiqueta e a cor.": { es: "Revise la etiqueta y el color." },

@@ -24874,7 +24874,7 @@ as $$
     select distinct on (lower(s.tag)) s.tag, s.ord
     from (
       select case
-               when p_remover then null
+               when p_remover and lower(btrim(e.valor)) = lower(btrim(coalesce(p_de, ''))) then null
                when lower(btrim(e.valor)) = lower(btrim(coalesce(p_de, ''))) then btrim(p_para)
                else btrim(e.valor)
              end as tag,
@@ -25105,13 +25105,13 @@ begin
         select distinct on (lower(x.chave)) x.valor, x.ord
         from (
           select case
-                   when v_remover then null
+                   when v_remover and lower(btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))) = lower(v_tag) then null
                    when lower(btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))) = lower(v_tag)
                      then v_destino
                    else btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))
                  end as chave,
                  case
-                   when v_remover then null
+                   when v_remover and lower(btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))) = lower(v_tag) then null
                    when lower(btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))) = lower(v_tag)
                      then jsonb_set(
                             case when jsonb_typeof(e.valor) = 'string' then jsonb_build_object('tag', e.valor #>> '{}')
@@ -25145,7 +25145,7 @@ begin
         select distinct on (lower(y.valor)) y.valor, y.ord
         from (
           select case
-                   when v_remover then null
+                   when v_remover and lower(btrim(s.valor #>> '{}')) = lower(v_tag) then null
                    when lower(btrim(s.valor #>> '{}')) = lower(v_tag) then v_destino
                    else btrim(s.valor #>> '{}')
                  end as valor,
@@ -29342,13 +29342,13 @@ begin
         select distinct on (lower(x.chave)) x.valor, x.ord
         from (
           select case
-                   when v_remover then null
+                   when v_remover and lower(btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))) = lower(v_tag) then null
                    when lower(btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))) = lower(v_tag)
                      then v_destino
                    else btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))
                  end as chave,
                  case
-                   when v_remover then null
+                   when v_remover and lower(btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))) = lower(v_tag) then null
                    when lower(btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))) = lower(v_tag)
                      then jsonb_set(
                             case when jsonb_typeof(e.valor) = 'string' then jsonb_build_object('tag', e.valor #>> '{}')
@@ -29382,7 +29382,7 @@ begin
         select distinct on (lower(y.valor)) y.valor, y.ord
         from (
           select case
-                   when v_remover then null
+                   when v_remover and lower(btrim(s.valor #>> '{}')) = lower(v_tag) then null
                    when lower(btrim(s.valor #>> '{}')) = lower(v_tag) then v_destino
                    else btrim(s.valor #>> '{}')
                  end as valor,
@@ -36013,3 +36013,19 @@ end $politica$;
 -- (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`).
 -- Quem mede a regra: `tests/invariants/tarefas-seguem-a-visibilidade-do-negocio.test.ts`.
 -- ---- fim: a tarefa segue a visibilidade do negócio (migration 0359) ----
+
+-- ---- excluir uma etiqueta não apaga as outras (migration 0363) ----
+-- Porte da 0673 de melgarafael/DeskcommCRM #2901 (@melgarafael, issue #2895).
+-- `fn_tags_normalizar` e `fn_vocabulario_de_tags_operar` anulavam com `when
+-- remover then null` SEM conferir o valor: excluir UMA etiqueta apagava todas as
+-- etiquetas dos registros que a tinham e esvaziava o vocabulário com as cores.
+-- Agora só sai o valor cuja chave canônica é a da etiqueta excluída.
+--
+-- NÃO HÁ CORPO DE FUNÇÃO AQUI, de propósito: a troca foi feita no lugar, em
+-- TODAS as definições destas funções acima neste arquivo. Assim a reaplicação
+-- não passa por versão antiga de nenhuma delas
+-- (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`), e a última
+-- definição de cada uma é igual à da migration 0363
+-- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
+-- Quem mede a regra: `tests/invariants/tags-excluir-preserva-as-outras.test.ts`.
+-- ---- fim: excluir uma etiqueta não apaga as outras (migration 0363) ----

@@ -333,7 +333,7 @@ test("fontes e destino entre duas contas, somente leitura e ocupação imediatam
   await block.scrollIntoViewIfNeeded();
   await expect(block).toBeVisible();
   await expect(block).toBeEnabled();
-  await expect(block).toHaveAttribute("aria-label", /Marcar às 10:00/);
+  await expect(block).toHaveAttribute("aria-label", /Marcar \d{2}\/\d{2} às 10:00/);
   await evidence(page, info, "fonte-retirada-grade", "[data-testid='grade-da-agenda']");
   await block.click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible();

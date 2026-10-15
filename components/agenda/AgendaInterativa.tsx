@@ -58,6 +58,7 @@ export function AgendaInterativa({
   recorte,
   tipos,
   tipo,
+  donoId,
   onEscolherTipo,
   onMarcarEm,
   onAbrirAgendamento,
@@ -104,6 +105,12 @@ export function AgendaInterativa({
    * aqui troca lá.
    */
   tipos: Array<{ id: string; nome: string; duracaoMin: number }>;
+  /**
+   * De QUEM são os horários livres. Ausente = o dono padrão do tipo, como
+   * sempre. Preenchido quando o filtro de pessoas tem UMA pessoa só: a dica
+   * "Horários livres de" passa a ser a dela.
+   */
+  donoId?: string;
   onEscolherTipo: (id: string) => void;
   /**
    * O clique num bloco livre da grade. OPCIONAL de propósito: quem só lê não
@@ -118,7 +125,7 @@ export function AgendaInterativa({
   const localeDaData = useLocaleDeData();
   const t = useT();
   const { data: horarios, isError: horariosFalharam } = useHorariosLivres(
-    tipo ? { event_type_id: tipo.id, de: recorte.de, ate: recorte.ate } : null,
+    tipo ? { event_type_id: tipo.id, owner_user_id: donoId, de: recorte.de, ate: recorte.ate } : null,
   );
 
   const horariosPorDia = React.useMemo(() => {
@@ -385,6 +392,9 @@ export function AgendaInterativa({
                 horariosPorDia,
                 motivo,
                 duracaoMin: tipo.duracaoMin,
+                // Quem recebe `onMarcarEm` é alguém da equipe com sessão — o
+                // ator a quem a rota permite marcar fora da grade publicada.
+                encaixe: true,
                 onMarcarEm,
                 onArrastarPara: ({ instante, razao, id }) => {
                   if (!instante) {

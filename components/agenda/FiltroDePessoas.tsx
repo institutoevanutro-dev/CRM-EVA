@@ -10,10 +10,15 @@ import type { Pessoa } from "./tipos";
 /**
  * Quem aparece na grade.
  *
- * Avatares empilhados, e clicar num deles ISOLA a agenda daquela pessoa —
- * pedido explícito do dono do produto. Não é multisseleção: numa equipe de
- * clínica a pergunta real é "o que a Ana tem hoje?", e uma caixinha por pessoa
- * transformaria isso em três cliques.
+ * Avatares empilhados, e cada um LIGA ou DESLIGA a agenda daquela pessoa.
+ * Era isolamento de uma pessoa só ("o que a Ana tem hoje?"); o dono da clínica
+ * pediu em 15/10 para ver duas ou três agendas juntas na hora de marcar, e a
+ * pergunta de uma pessoa continua custando um clique: com nada selecionado, o
+ * primeiro clique mostra só ela. "Todos" zera a seleção.
+ *
+ * O filtro é só VISTA sobre o que o servidor já devolveu a quem olha: quem não
+ * enxerga a agenda de um colega não recebe o colega na lista de pessoas nem os
+ * compromissos dele, e selecionar não busca nada novo.
  *
  * O empilhamento com sobreposição (`-space-x-2`) é o que permite oito pessoas
  * caberem ao lado do título sem virar uma barra de rolagem horizontal — e o
@@ -21,14 +26,14 @@ import type { Pessoa } from "./tipos";
  */
 export function FiltroDePessoas({
   pessoas,
-  isolada,
-  onIsolar,
+  selecionadas,
+  onMudar,
   className,
 }: {
   pessoas: Pessoa[];
-  /** `null` = todos. */
-  isolada: string | null;
-  onIsolar: (id: string | null) => void;
+  /** Vazio = todos. */
+  selecionadas: readonly string[];
+  onMudar: (ids: string[]) => void;
   className?: string;
 }) {
   const t = useT();
@@ -37,46 +42,52 @@ export function FiltroDePessoas({
   // inbox ("só aparece com 2+"), e a regra vale igual aqui.
   if (pessoas.length < 2) return null;
 
+  const todos = selecionadas.length === 0;
+
   return (
     <div
       data-testid="filtro-de-pessoas"
-      data-isolada={isolada ?? "todos"}
+      data-selecionadas={todos ? "todos" : selecionadas.join(",")}
+      role="group"
+      aria-label={t("Profissionais na agenda")}
       className={cn("flex items-center gap-2", className)}
     >
       <div className="flex -space-x-2">
         {pessoas.map((p) => {
-          const ativo = isolada === null || isolada === p.id;
+          const marcada = selecionadas.includes(p.id);
           return (
             <button
               key={p.id}
               type="button"
               data-testid={`botao-pessoa-${p.id}`}
-              aria-pressed={isolada === p.id}
+              aria-pressed={marcada}
               aria-label={
-                isolada === p.id
-                  ? `${t("Mostrar todos (agora só")} ${p.nome})`
-                  : `${t("Ver só a agenda de")} ${p.nome}`
+                marcada
+                  ? `${t("Tirar da agenda:")} ${p.nome}`
+                  : `${t("Mostrar a agenda de")} ${p.nome}`
               }
-              onClick={() => onIsolar(isolada === p.id ? null : p.id)}
+              onClick={() =>
+                onMudar(marcada ? selecionadas.filter((id) => id !== p.id) : [...selecionadas, p.id])
+              }
               className={cn(
                 "rounded-full transition-transform duration-fast ease-out",
                 "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
                 // Sobe 2px em vez de crescer: escala mudaria a sobreposição e
                 // faria os vizinhos parecerem se mexer junto.
-                isolada === p.id ? "-translate-y-0.5" : "hover:-translate-y-0.5",
+                marcada ? "-translate-y-0.5" : "hover:-translate-y-0.5",
               )}
             >
-              <AvatarDaPessoa pessoa={p} ativo={ativo} />
+              <AvatarDaPessoa pessoa={p} ativo={todos || marcada} />
             </button>
           );
         })}
       </div>
 
-      {isolada !== null && (
+      {!todos && (
         <button
           type="button"
           data-testid="botao-todos"
-          onClick={() => onIsolar(null)}
+          onClick={() => onMudar([])}
           className="rounded-sm px-2 py-1 text-xs text-text-muted transition-colors duration-fast hover:bg-surface-elevated hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
         >
           {t("Todos")}
