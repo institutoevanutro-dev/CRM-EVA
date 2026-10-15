@@ -9094,6 +9094,7 @@ export const DICIONARIO: Traducoes = {
   "Levado para outro funil": { es: "Llevado a otro embudo" },
   // Passagem de assunto pelo agente (`transfer_to_subject`): o rótulo da linha do tempo.
   "Atendimento passou para outro assunto": { es: "La atención pasó a otro tema" },
+  "Etiqueta de cidade atualizada pelo endereço": { es: "Etiqueta de ciudad actualizada por la dirección" },
   // As recusas da troca de funil (lib/leads/clonar-para-funil.ts e a rota).
   "O negócio já está neste funil. Para trocar de etapa use /api/v1/leads/[id]/move.": {
     es: "El negocio ya está en este embudo. Para cambiar de etapa usa /api/v1/leads/[id]/move.",
