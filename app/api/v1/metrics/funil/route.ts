@@ -282,6 +282,8 @@ export async function GET(req: NextRequest): Promise<Response> {
         .from("calendar_appointments")
         .select("id, status, ends_at, contact_id", { count: "exact" })
         .eq("organization_id", orgId)
+        // Lançado por engano não é cancelamento de cliente (migration 0364).
+        .is("excluded_at", null)
         .gte("starts_at", janela.inicio)
         .lt("starts_at", janela.fimExclusivo)
         .order("starts_at")

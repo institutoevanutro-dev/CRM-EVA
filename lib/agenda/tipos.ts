@@ -325,6 +325,7 @@ export const ATIVIDADES_DA_AGENDA = [
   "appointment_cancelled",
   "appointment_completed",
   "appointment_no_show",
+  "appointment_excluded",
 ] as const satisfies readonly ActivityType[];
 export type AtividadeDaAgenda = (typeof ATIVIDADES_DA_AGENDA)[number];
 

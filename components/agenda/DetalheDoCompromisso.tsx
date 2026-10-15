@@ -11,6 +11,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
+import { ExcluirCompromisso } from "./ExcluirCompromisso";
 
 type Detalhe = {
   meeting?: MeetingDetail | null;
@@ -31,6 +32,9 @@ type Detalhe = {
   ends_at: string;
   time_zone: string;
   status: string;
+  /** Lançado por engano ou de teste (migration 0364). */
+  excluded_at?: string | null;
+  exclusion_reason?: string | null;
   revision: number;
   contact_id: string | null;
   conversation_id: string | null;
@@ -57,10 +61,13 @@ export function DetalheDoCompromisso({
   id,
   onClose,
   podeEditar = true,
+  podeExcluir = false,
 }: {
   id: string | null;
   onClose: () => void;
   podeEditar?: boolean;
+  /** Gerente ou admin: o piso de `POST .../excluir`. A rota decide; isto é cortesia. */
+  podeExcluir?: boolean;
 }) {
   const t = useT();
   const tagDoIdioma = useTagDeIdioma();
@@ -180,6 +187,12 @@ export function DetalheDoCompromisso({
                 <p className="whitespace-pre-wrap">{a.notes}</p>
               </div>
             ) : null}
+            {a.excluded_at ? (
+              <div role="status" data-testid="compromisso-excluido">
+                <p>{t("Excluído (lançado por engano)")}</p>
+                {a.exclusion_reason ? <p className="text-sm text-text-muted">{a.exclusion_reason}</p> : null}
+              </div>
+            ) : null}
             <p>
               {t(
                 (
@@ -262,7 +275,7 @@ export function DetalheDoCompromisso({
                 </Button>
               </div>
             ) : null}
-            {podeEditar && a.status !== "cancelled" ? (
+            {podeEditar && a.status !== "cancelled" && !a.excluded_at ? (
               <div className="space-y-4">
                 <label className="block">
                   {t("Mensagem do cliente usada como evidência (opcional)")}
@@ -362,6 +375,7 @@ export function DetalheDoCompromisso({
                 </Button>
               </div>
             ) : null}
+            {podeExcluir && !a.excluded_at ? <ExcluirCompromisso id={a.id} onExcluido={onClose} /> : null}
           </div>
         ) : null}
       </SheetContent>

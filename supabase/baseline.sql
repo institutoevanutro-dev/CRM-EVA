@@ -15660,6 +15660,24 @@ comment on column public.calendar_appointments.reminder_sent_at is
 comment on column public.calendar_appointments.google_sequence is
   'O `sequence` do evento no Google. Ele exige que uma atualização venha com sequence >= o que está lá; guardar o nosso evita sobrescrever uma edição feita do lado de lá.';
 
+-- Excluído por engano ou teste (migration 0364). As colunas e a constraint
+-- moram AQUI, onde a tabela nasce, e não no bloco da 0364 no fim do arquivo:
+-- `fn_inicio_agenda`, mais abaixo, já lê `excluded_at`, e função `language sql`
+-- valida as colunas ao ser criada. O resto da 0364 está no bloco dela.
+alter table public.calendar_appointments add column if not exists excluded_at timestamptz;
+alter table public.calendar_appointments add column if not exists excluded_by_user_id uuid references auth.users(id) on delete set null;
+alter table public.calendar_appointments add column if not exists exclusion_reason text;
+
+alter table public.calendar_appointments
+  drop constraint if exists calendar_appointments_exclusao_coerente,
+  add constraint calendar_appointments_exclusao_coerente check (
+    (excluded_at is null and exclusion_reason is null and excluded_by_user_id is null)
+    or (excluded_at is not null and status = 'cancelled' and length(btrim(exclusion_reason)) >= 3)
+  );
+
+comment on column public.calendar_appointments.excluded_at is
+  'Excluído por engano ou teste (migration 0364). A linha fica para auditoria; toda tela, relatório e ferramenta da IA a ignora.';
+
 -- ────────────────────────────────────────────────────────────────────────────
 -- 3 · a exceção por data — a ÚNICA tabela nova de disponibilidade
 -- ────────────────────────────────────────────────────────────────────────────
@@ -32531,6 +32549,7 @@ as $$
     from public.calendar_appointments a
     left join public.calendar_units u on u.id = a.unit_id and u.organization_id = p_org
    where a.organization_id = p_org and a.starts_at >= p_inicio and a.starts_at < p_fim
+     and a.excluded_at is null
    group by a.unit_id, u.name
    order by u.name nulls last;
 $$;
@@ -36029,3 +36048,95 @@ end $politica$;
 -- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
 -- Quem mede a regra: `tests/invariants/tags-excluir-preserva-as-outras.test.ts`.
 -- ---- fim: excluir uma etiqueta não apaga as outras (migration 0363) ----
+
+-- ---- excluir agendamento lançado por engano (migration 0364) ----
+-- Decisão do dono do produto: o compromisso marcado por engano, ou de teste,
+-- some da Agenda, das listas, da IA, dos horários livres e dos relatórios, mas a
+-- linha FICA para auditoria (quem excluiu, quando e por quê). Excluir é
+-- cancelar pelo núcleo do cancelar (`fn_appointment_change_core`: Google,
+-- horário livre, follow-ups e Central iguais ao cancelar) e marcar.
+--
+-- As colunas e a constraint `calendar_appointments_exclusao_coerente` estão no
+-- lugar onde a tabela nasce, e o filtro de `fn_inicio_agenda` foi escrito na
+-- definição dela, acima: assim a reaplicação não passa por versão antiga
+-- (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`).
+-- Quem mede a regra: `tests/invariants/agenda-excluir-agendamento.test.ts`.
+create or replace function public.fn_appointment_exclusion_guard()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if tg_op = 'UPDATE' and old.excluded_at is not null then
+    -- A marca é final. `excluded_by_user_id` pode ir a null sozinho: é o
+    -- `on delete set null` da FK quando a pessoa sai de auth.users.
+    if row(new.excluded_at, new.exclusion_reason) is distinct from row(old.excluded_at, old.exclusion_reason)
+       or (new.excluded_by_user_id is not null and new.excluded_by_user_id is distinct from old.excluded_by_user_id) then
+      raise exception 'appointment_exclusion_final' using errcode = '42501';
+    end if;
+    return new;
+  end if;
+  if new.excluded_at is null then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    raise exception 'appointment_exclusion_on_insert' using errcode = '42501';
+  end if;
+  if auth.uid() is not null and not (
+    public.fn_role_at_least(new.organization_id, 'manager')
+    and public.fn_support_write_allowed(new.organization_id)
+    and public.fn_session_mfa_proven()
+  ) then
+    raise exception 'appointment_exclusion_forbidden' using errcode = '42501';
+  end if;
+  new.excluded_at := now();
+  new.excluded_by_user_id := auth.uid();
+  new.exclusion_reason := btrim(new.exclusion_reason);
+  return new;
+end $$;
+revoke all on function public.fn_appointment_exclusion_guard() from public, anon, authenticated;
+
+create or replace trigger trg_appointment_exclusion_guard
+  before insert or update on public.calendar_appointments
+  for each row execute function public.fn_appointment_exclusion_guard();
+
+create or replace function public.fn_appointment_exclude(p_org uuid, p_id uuid, p_reason text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare a public.calendar_appointments;
+begin
+  -- O papel ANTES de olhar a linha: definer não tem RLS, e devolver a linha
+  -- (ou um "não existe") a quem não é gerente desta organização seria vazar.
+  if auth.uid() is not null and not (
+    public.fn_role_at_least(p_org, 'manager')
+    and public.fn_support_write_allowed(p_org)
+    and public.fn_session_mfa_proven()
+  ) then
+    raise exception 'appointment_exclusion_forbidden' using errcode = '42501';
+  end if;
+  if length(btrim(coalesce(p_reason, ''))) < 3 then
+    raise exception 'appointment_exclusion_reason_required' using errcode = '22023';
+  end if;
+  select * into a from public.calendar_appointments where organization_id = p_org and id = p_id;
+  if not found then
+    raise exception 'appointment_not_found' using errcode = 'P0002';
+  end if;
+  if a.excluded_at is not null then
+    return to_jsonb(a);
+  end if;
+  if a.status <> 'cancelled' then
+    perform public.fn_appointment_change_core(p_org, p_id, a.revision,
+      jsonb_build_object('status', 'cancelled', 'cancellation_reason', btrim(p_reason)), false, null);
+  end if;
+  update public.calendar_appointments
+     set excluded_at = now(), exclusion_reason = p_reason
+   where organization_id = p_org and id = p_id and excluded_at is null
+  returning * into a;
+  if not found then
+    select * into a from public.calendar_appointments where organization_id = p_org and id = p_id;
+  end if;
+  return to_jsonb(a);
+end $$;
+
+do $janela$ begin
+  revoke all on function public.fn_appointment_exclude(uuid, uuid, text) from public, anon;
+  grant execute on function public.fn_appointment_exclude(uuid, uuid, text) to authenticated, service_role;
+end $janela$;
+
+-- ---- fim: excluir agendamento lançado por engano (migration 0364) ----
