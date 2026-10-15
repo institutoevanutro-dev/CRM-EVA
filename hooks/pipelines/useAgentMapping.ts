@@ -26,6 +26,8 @@ export interface EtapaDoFunil {
   is_lost: boolean;
   /** Horas sem atividade que esfriam o negócio nesta etapa. `null` = padrão global (24h). */
   esfria_em_horas?: number | null;
+  /** Faixa no topo da coluna do quadro (`#rrggbb`). `null` = sem cor. */
+  color?: string | null;
   /** Quem mexeu nesta etapa por último (migration 0101). `null` antes dela. */
   last_change_actor_kind?: string | null;
   last_change_at?: string | null;

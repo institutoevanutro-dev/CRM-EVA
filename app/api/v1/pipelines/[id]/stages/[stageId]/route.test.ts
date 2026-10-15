@@ -637,3 +637,90 @@ vi.mock("@/lib/impersonate/support", async (importOriginal) => ({
   requireSupportWrite: vi.fn(async () => null),
   authenticatedSessionId: vi.fn(async () => "f2200000-0000-4000-8000-000000000099"),
 }));
+
+/**
+ * A COR DA ETAPA — a faixa no topo da coluna do quadro (`StageColumn`). A forma
+ * é a mesma do CHECK do banco (`^#[0-9a-fA-F]{6}$`), e `null` é o "sem cor":
+ * valor legítimo de escrita, não ausência de pedido.
+ */
+describe("PATCH /api/v1/pipelines/[id]/stages/[stageId] — cor", () => {
+  it("hex válido → um update com a cor, e a resposta devolve a cor", async () => {
+    authOk();
+    const db = makeDb({ stages: funil() });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(reqPatch({ color: "#378ADD" }), ctx());
+
+    expect(res.status).toBe(200);
+    expect(db.escritas).toHaveLength(1);
+    expect(db.escritas[0]?.patch).toEqual(comAutoria({ color: "#378ADD" }));
+    expect(db.escritas[0]?.filtros).toContainEqual(["organization_id", ORG_ID]);
+
+    const body = (await res.json()) as { data: { etapas: Array<{ id: string; color: string | null }> } };
+    expect(body.data.etapas.find((e) => e.id === "e2")?.color).toBe("#378ADD");
+  });
+
+  it.each(["378ADD", "#378AD", "#378ADDF", "#GGGGGG", "azul", ""])(
+    "hex inválido %j → 422, e nenhuma escrita",
+    async (cor) => {
+      authOk();
+      const db = makeDb({ stages: funil() });
+      const { PATCH } = await import("./route");
+      const res = await PATCH(reqPatch({ color: cor }), ctx());
+
+      expect(res.status).toBe(422);
+      expect(db.escritas).toEqual([]);
+    },
+  );
+
+  it("null limpa a cor", async () => {
+    authOk();
+    const db = makeDb({ stages: funil().map((e) => ({ ...e, color: "#378ADD" })) });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(reqPatch({ color: null }), ctx());
+
+    expect(res.status).toBe(200);
+    expect(db.escritas[0]?.patch).toEqual(comAutoria({ color: null }));
+    const body = (await res.json()) as { data: { etapas: Array<{ id: string; color: string | null }> } };
+    expect(body.data.etapas.find((e) => e.id === "e2")?.color).toBeNull();
+  });
+
+  it("papel abaixo de manager → 403, pedindo manager, sem escrever", async () => {
+    vi.mocked(requireRole).mockResolvedValue({
+      ok: false,
+      response: fail("forbidden_role", "Permissão insuficiente. Requer role >= manager.", 403, {}),
+    });
+    const db = makeDb({ stages: funil() });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(reqPatch({ color: "#378ADD" }), ctx());
+
+    expect(res.status).toBe(403);
+    expect(vi.mocked(requireRole).mock.calls[0]?.[0]).toBe("manager");
+    expect(db.escritas).toEqual([]);
+  });
+
+  it("etapa de outra organização → 404 e NENHUMA escrita", async () => {
+    authOk();
+    const db = makeDb({
+      stages: funil().map((e) => ({ ...e, organization_id: OUTRA_ORG })),
+    });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(reqPatch({ color: "#378ADD" }), ctx());
+
+    expect(res.status).toBe(404);
+    expect(db.escritas).toEqual([]);
+  });
+
+  it("audita a cor no pedido de pipeline.stage_updated", async () => {
+    authOk();
+    makeDb({ stages: funil() });
+    const { PATCH } = await import("./route");
+    await PATCH(reqPatch({ color: "#639922" }), ctx());
+
+    expect(vi.mocked(audit)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "pipeline.stage_updated",
+        metadata: expect.objectContaining({ pedido: { color: "#639922" } }),
+      }),
+    );
+  });
+});

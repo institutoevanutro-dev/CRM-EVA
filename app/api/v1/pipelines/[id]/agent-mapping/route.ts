@@ -99,6 +99,8 @@ type EtapaComAutoria = EtapaDoMapa & {
    * tela volta mostrando "padrão", que lê como "não salvou".
    */
   expected_duration_hours?: number | null;
+  /** Mesma razão: a cor gravada pelo PATCH volta para a tela por esta leitura. */
+  color?: string | null;
 };
 
 async function lerFunil(
@@ -121,7 +123,7 @@ async function lerFunil(
     // consulta só para ela seria um round-trip por render numa tela de
     // configuração — e um caminho a mais para a lista e a autoria divergirem.
     .select(
-      "id, name, is_won, is_lost, agent_stage_hint, last_change_actor_kind, last_change_at, expected_duration_hours",
+      "id, name, is_won, is_lost, agent_stage_hint, last_change_actor_kind, last_change_at, expected_duration_hours, color",
     )
     .eq("organization_id", orgId)
     .eq("pipeline_id", pipelineId)
@@ -155,6 +157,7 @@ function corpo(etapas: EtapaComAutoria[]) {
       is_won: e.is_won,
       is_lost: e.is_lost,
       esfria_em_horas: e.expected_duration_hours ?? null,
+      color: e.color ?? null,
       last_change_actor_kind: e.last_change_actor_kind ?? null,
       last_change_at: e.last_change_at ?? null,
     })),

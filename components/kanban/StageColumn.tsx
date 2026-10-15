@@ -7,6 +7,7 @@ import type { Lead } from "@/lib/types/leads";
 import type { Stage } from "@/lib/kanban/types";
 import { buildCardInput } from "@/lib/kanban/card-state";
 import { intervaloDaColuna } from "@/lib/kanban/selecao";
+import { estiloDaColuna } from "@/lib/kanban/cor-da-etapa";
 import { KanbanCard, type GestoDeSelecao } from "./KanbanCard";
 
 interface StageColumnProps {
@@ -91,10 +92,16 @@ export function StageColumn({
     ? { backgroundColor: stage.color }
     : undefined;
 
+  // A coluna INTEIRA leva a cor da etapa (cabeçalho mais forte, corpo leve),
+  // não só o ponto. Sem cor, `null`: nenhum estilo e o quadro como sempre foi.
+  const tingida = estiloDaColuna(stage.color);
+
   return (
     <div
       className="flex min-h-full w-80 shrink-0 flex-col rounded-lg border border-border bg-surface-muted/40"
+      style={tingida?.coluna}
       data-etapa-do-quadro={stage.id}
+      data-cor-da-etapa={stage.color ?? undefined}
     >
       {/* Cabeçalho e total PRESOS no alto do quadro enquanto os cards rolam: com
           uma etapa comprida, é o que diz em que etapa se está olhando. O fundo
@@ -102,7 +109,11 @@ export function StageColumn({
           dentro, a mesma camada translúcida da coluna, para o tom não mudar.
           Porte do original b0ade1e44 (jmpo). */}
       <div className="sticky top-0 z-10 rounded-t-lg bg-background" data-cabecalho-da-etapa>
-        <div className="rounded-t-lg bg-surface-muted/40">
+        <div
+          className="rounded-t-lg bg-surface-muted/40"
+          style={tingida?.cabecalho}
+          data-fundo-do-cabecalho
+        >
           <div className="group/etapa flex items-center gap-2 border-b border-border px-3 py-2.5">
             {/* "Selecionar a etapa inteira" é o gesto que faz a ação em lote valer a
                 pena: sem ele, mover trinta cards deixa de ser trinta arrastes e vira

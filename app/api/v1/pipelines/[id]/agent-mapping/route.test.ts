@@ -261,12 +261,16 @@ describe("GET /api/v1/pipelines/[id]/agent-mapping", () => {
     // recarregamento. Sem ela aqui, o PATCH gravava e a tela voltava mostrando
     // "padrão" — indistinguível de "não salvou". `null` na fixture é a etapa
     // que nunca configurou, e segue o padrão global.
+    //
+    // `color` entrou pela mesma razão: o seletor de cor da tela de etapas lê o
+    // tom gravado daqui. `null` é a etapa sem cor.
     expect(body.data.etapas[0]).toEqual({
       id: "e1",
       name: "Novo",
       is_won: false,
       is_lost: false,
       esfria_em_horas: null,
+      color: null,
       last_change_actor_kind: null,
       last_change_at: null,
     });

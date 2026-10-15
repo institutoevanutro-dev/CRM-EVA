@@ -13,6 +13,10 @@
  * /api/v1/tags/vocabulario` exige `requireRole("manager")` + MFA, e a régua da
  * própria tela de Settings é "a tela não oferece o que a escrita recusa".
  * Agentes criam a tag sem cor, exatamente como antes — sem erro e sem ruído.
+ *
+ * A COR DA ETAPA do funil usa este MESMO seletor (`paleta` + `rotulo`), com a
+ * paleta de `lib/kanban/cor-da-etapa.ts`: um estilo de seletor só no produto. A
+ * régua de papel serve igual — a rota de etapas também exige manager.
  */
 import { useState } from "react";
 
@@ -33,9 +37,22 @@ interface Props {
   /** Nome digitado, só para a prévia do chip dentro do popover. */
   tag?: string;
   disabled?: boolean;
+  /** Tons oferecidos, com nome. Padrão: a paleta das etiquetas. */
+  paleta?: readonly { cor: string; nome: string }[];
+  /** Título do popover e rótulo do gatilho. Padrão: "Cor da etiqueta". */
+  rotulo?: string;
 }
 
-export function SeletorDeCorDaEtiqueta({ cor, onChange, tag, disabled }: Props) {
+const PALETA_PADRAO = PALETA_DE_ETIQUETAS.map((cor) => ({ cor, nome: NOME_DO_TOM[cor] ?? cor }));
+
+export function SeletorDeCorDaEtiqueta({
+  cor,
+  onChange,
+  tag,
+  disabled,
+  paleta = PALETA_PADRAO,
+  rotulo = "Cor da etiqueta",
+}: Props) {
   const t = useT();
   const { activeOrg } = useAuth();
   const [aberto, setAberto] = useState(false);
@@ -53,8 +70,8 @@ export function SeletorDeCorDaEtiqueta({ cor, onChange, tag, disabled }: Props) 
           variant="outline"
           className="h-7 w-7 shrink-0 p-0"
           disabled={disabled}
-          title={t("Cor da etiqueta")}
-          aria-label={t("Cor da etiqueta")}
+          title={t(rotulo)}
+          aria-label={t(rotulo)}
           aria-expanded={aberto}
         >
           {cor ? (
@@ -68,12 +85,14 @@ export function SeletorDeCorDaEtiqueta({ cor, onChange, tag, disabled }: Props) 
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-auto p-3">
+      {/* No celular a fileira QUEBRA em vez de vazar da tela: oito tons e o
+          "Sem cor" não cabem em 375px numa linha só. */}
+      <PopoverContent align="end" className="w-auto max-w-[calc(100vw-2rem)] p-3">
         <p className="mb-2 text-xs font-semibold text-text">
-          {t("Cor da etiqueta")}
+          {t(rotulo)}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          {PALETA_DE_ETIQUETAS.map((tom) => (
+          {paleta.map(({ cor: tom, nome }) => (
             <button
               key={tom}
               type="button"
@@ -81,14 +100,14 @@ export function SeletorDeCorDaEtiqueta({ cor, onChange, tag, disabled }: Props) 
                 onChange(tom);
                 setAberto(false);
               }}
-              aria-pressed={cor === tom}
+              aria-pressed={mesmaCor(cor, tom)}
               // O nome do tom é o rótulo acessível; a cor é reforço — a mesma
               // redundância não-cromática do painel de Settings.
-              aria-label={t(NOME_DO_TOM[tom] ?? tom)}
+              aria-label={t(nome)}
               title={tom}
               className={cn(
                 "size-7 rounded-full border-2 transition-transform",
-                cor === tom
+                mesmaCor(cor, tom)
                   ? "border-foreground ring-2 ring-ring ring-offset-1 ring-offset-background"
                   : "border-transparent hover:scale-110",
               )}
@@ -117,4 +136,9 @@ export function SeletorDeCorDaEtiqueta({ cor, onChange, tag, disabled }: Props) 
       </PopoverContent>
     </Popover>
   );
+}
+
+/** Hex não diferencia caixa: `#378add` gravado pela API é o tom `#378ADD`. */
+function mesmaCor(a: string | null, b: string): boolean {
+  return a !== null && a.toLowerCase() === b.toLowerCase();
 }

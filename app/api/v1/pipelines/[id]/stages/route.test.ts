@@ -200,3 +200,40 @@ vi.mock("@/lib/impersonate/support", async (importOriginal) => ({
   requireSupportWrite: vi.fn(async () => null),
   authenticatedSessionId: vi.fn(async () => "f2200000-0000-4000-8000-000000000099"),
 }));
+
+describe("POST /api/v1/pipelines/[id]/stages — cor", () => {
+  it("cria já com a cor escolhida, e audita a cor", async () => {
+    authOk();
+    const db = makeDb({ stages: funil() });
+    const { POST } = await import("./route");
+    const res = await POST(reqPost({ name: "Retorno", color: "#1D9E75" }), ctx);
+
+    expect(res.status).toBe(201);
+    expect(db.escritas[0]?.patch).toMatchObject({ name: "Retorno", color: "#1D9E75" });
+    expect(vi.mocked(audit)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "pipeline.stage_created",
+        metadata: expect.objectContaining({ color: "#1D9E75" }),
+      }),
+    );
+  });
+
+  it("hex inválido → 422, e nenhuma escrita", async () => {
+    authOk();
+    const db = makeDb({ stages: funil() });
+    const { POST } = await import("./route");
+    const res = await POST(reqPost({ name: "Retorno", color: "verde" }), ctx);
+
+    expect(res.status).toBe(422);
+    expect(db.escritas).toEqual([]);
+  });
+
+  it("sem cor → a linha nasce sem a coluna (o banco guarda null)", async () => {
+    authOk();
+    const db = makeDb({ stages: funil() });
+    const { POST } = await import("./route");
+    await POST(reqPost({ name: "Retorno" }), ctx);
+
+    expect(db.escritas[0]?.patch).not.toHaveProperty("color");
+  });
+});

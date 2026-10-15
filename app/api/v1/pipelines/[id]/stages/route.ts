@@ -26,6 +26,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { criarEtapa } from "@/lib/leads/stage-operations";
 import { createClient } from "@/lib/supabase/server";
+import { corDaEtapaSchema } from "@/lib/kanban/cor-da-etapa";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,9 @@ interface RouteCtx {
 
 // `.max(80)`: o nome é o topo de uma coluna do quadro, não um parágrafo. O banco
 // não limita, mas a tela quebra muito antes disso.
-const bodySchema = z.object({ name: z.string().min(1).max(80) }).strict();
+const bodySchema = z
+  .object({ name: z.string().min(1).max(80), color: corDaEtapaSchema.optional() })
+  .strict();
 
 /**
  * GET — as etapas vivas do funil, na ordem do quadro.
@@ -105,7 +108,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
         actor: { type: "user", id: authz.user.id, role: authz.org.role },
         requestId,
       },
-      { pipelineId, nome: parsed.data.name },
+      { pipelineId, nome: parsed.data.name, cor: parsed.data.color ?? null },
     );
     return ok(funil, { status: 201, requestId });
   } catch (err) {

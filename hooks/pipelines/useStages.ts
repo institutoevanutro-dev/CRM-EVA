@@ -3,6 +3,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api/client";
 
+import { chaveDoQuadro } from "@/hooks/kanban/useBoard";
+
 import { chaveDoFunil } from "./useAgentMapping";
 
 /**
@@ -39,19 +41,25 @@ export interface PatchDeEtapa {
   depois_de?: string | null;
   /** Horas sem atividade que esfriam o negócio nesta etapa. `null` = padrão global. */
   esfria_em_horas?: number | null;
+  /** Faixa no topo da coluna do quadro (`#rrggbb`). `null` = sem cor. */
+  color?: string | null;
 }
 
 function useReler(pipelineId: string) {
   const qc = useQueryClient();
   return () => {
     void qc.invalidateQueries({ queryKey: chaveDoFunil(pipelineId) });
+    // O quadro lê as MESMAS etapas (nome, ordem, cor da faixa): sem isto, a
+    // coluna mostraria a cor antiga até o próximo evento do Realtime.
+    void qc.invalidateQueries({ queryKey: chaveDoQuadro(pipelineId) });
   };
 }
 
 export function useCriarEtapa(pipelineId: string) {
   const reler = useReler(pipelineId);
   return useMutation({
-    mutationFn: (name: string) => apiClient.post<unknown>(rota(pipelineId), { name }),
+    mutationFn: ({ name, color }: { name: string; color?: string | null }) =>
+      apiClient.post<unknown>(rota(pipelineId), color ? { name, color } : { name }),
     onSettled: reler,
   });
 }

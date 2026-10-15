@@ -10593,6 +10593,18 @@ export const DICIONARIO: Traducoes = {
   "ver todos": { es: "ver todos" },
   "Mostrando": { es: "Mostrando" },
   "Use a busca ou os filtros do funil para achar os demais.": { es: "Use la búsqueda o los filtros del embudo para encontrar los demás." },
+  // A cor da etapa do funil (lib/kanban/cor-da-etapa.ts) — o nome diz o papel
+  // que o tom costuma ter no quadro.
+  "Cor da etapa": { es: "Color de la etapa" },
+  "Cor da nova etapa": { es: "Color de la nueva etapa" },
+  "Azul (entrada)": { es: "Azul (entrada)" },
+  "Roxo (em conversa)": { es: "Morado (en conversación)" },
+  "Âmbar (esperando)": { es: "Ámbar (esperando)" },
+  Rosa: { es: "Rosa" },
+  Laranja: { es: "Naranja" },
+  "Verde (ganho)": { es: "Verde (ganado)" },
+  "Verde-água (acompanhamento)": { es: "Verde agua (seguimiento)" },
+  "Cinza (perdido)": { es: "Gris (perdido)" },
 };
 
 /**
