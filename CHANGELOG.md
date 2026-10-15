@@ -8,6 +8,34 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.7.0] — 2026-10-15
+
+### Adicionado
+
+- **Marcar clicando em qualquer horário vazio da Agenda e filtrar um ou vários profissionais** Na Agenda, clicar num horário vazio do dia ou da semana abre o "Novo agendamento"
+  já com o dia e a meia hora clicados, mesmo fora dos horários publicados (é o mesmo
+  encaixe do "Outro horário"). Horário que já passou ou que tem compromisso em cima
+  continua sem abrir. Os avatares no topo agora ligam e desligam cada profissional,
+  "Todos" volta a mostrar a equipe inteira, e a escolha fica guardada no navegador de
+  cada pessoa. Com um profissional só selecionado, os horários livres e o novo
+  agendamento passam a ser dele.
+
+### Corrigido
+
+- **Etiquetas, automações, agente de IA e caixa de entrada mais confiáveis** Excluir uma etiqueta em Configurações › Etiquetas apagava todas as outras etiquetas dos contatos, negócios e conversas que a tinham, e esvaziava a lista de etiquetas com as cores. Agora sai só a etiqueta excluída. O que já foi apagado antes desta versão não volta sozinho: as etiquetas perdidas precisam ser colocadas de novo.
+
+  Renomear, juntar ou excluir uma etiqueta atualiza a cor e o nome na caixa de entrada, no funil e nos filtros na hora, sem precisar recarregar a página. Nos editores de etiquetas do contato e da conversa, quem é gestor ou administrador encontra a paleta de cor ao lado de cada etiqueta.
+
+  Duas regras de automação no mesmo evento que colocam etiquetas no mesmo negócio não apagam mais a etiqueta uma da outra.
+
+  O "digitando…" do agente de IA fica aceso do começo do trabalho até a primeira resposta sair, em vez de sumir no meio de uma resposta mais demorada. O ritmo de envio e as proteções contra bloqueio do WhatsApp não mudaram.
+
+  A gravação da auditoria do agente saiu de dentro da transação de envio, o que evita um travamento raro do processamento quando o banco está sendo atualizado.
+
+  Na caixa de entrada: no celular, a barra de ações da conversa fica numa fileira só, que rola para o lado; a aba esquecida aberta não recarrega mais as conversas a cada 45 segundos; e uma resposta com {{nome}} ou {{primeiro_nome}} para um contato sem nome é barrada com um aviso, em vez de sair com a variável crua para o paciente.
+
+  Nada a fazer para atualizar.
+
 ## [4.6.0] — 2026-10-15
 
 ### Adicionado
@@ -7217,7 +7245,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.6.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.7.0...HEAD
+[4.7.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.6.0...v4.7.0
 [4.6.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.3...v4.6.0
 [4.5.3]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.2...v4.5.3
 [4.5.2]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.1...v4.5.2
