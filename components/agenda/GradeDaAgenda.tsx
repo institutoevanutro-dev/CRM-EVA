@@ -74,7 +74,19 @@ export interface InteracaoDaGrade {
   motivo: MotivoDaGradeTravada | null;
   /** Duração do tipo escolhido — o tamanho do bloco que se está marcando. */
   duracaoMin: number;
-  /** Clique num bloco livre. Recebe o instante PUBLICADO, nunca um calculado. */
+  /**
+   * O ENCAIXE pelo clique: bloco vazio SEM horário publicado também abre a
+   * marcação, no começo da meia hora clicada. É o mesmo "Outro horário" do
+   * painel de marcação, e vale nas mesmas condições: jornada publicada, consulta
+   * sem erro, horário que não passou e sem compromisso por cima. A rota cobra de
+   * novo (`podeMarcarForaDaGrade`) e recusa sobreposição real.
+   *
+   * Pedido do dono da clínica em 15/10: "clicar na agenda em algum horário e
+   * cadastrar um atendimento". Desligado por padrão: sem ele, só o publicado
+   * é clicável, como sempre foi.
+   */
+  encaixe?: boolean;
+  /** Clique num bloco vazio: o instante PUBLICADO, ou o começo da célula no encaixe. */
   onMarcarEm: (instante: string) => void;
   /**
    * Um card foi solto (ou movido pelo teclado). `instante` nulo quer dizer que
@@ -274,8 +286,13 @@ function CamadaDeMarcacao({
   interacao: InteracaoDaGrade;
 }) {
   const localeDaData = useLocaleDeData();
+  const t = useT();
   const chave = chaveDoDia(dia);
   const publicados = interacao.horariosPorDia[chave] ?? [];
+  // A data da COLUNA, já no calendário da grade: "Marcar 15/10 às 14:30".
+  const diaCurto = format(dia, "dd/MM");
+  const encaixeLigado =
+    interacao.encaixe === true && interacao.motivo !== "sem-jornada" && interacao.motivo !== "erro";
 
   return (
     <>
@@ -292,6 +309,8 @@ function CamadaDeMarcacao({
         const passado = fim.getTime() <= agora.getTime();
         const rotulo = rotuloHora(inicio, fuso);
         const razao = razaoDoBloco({ motivo: interacao.motivo, ocupado, passado });
+        const instante =
+          livre?.instante ?? (encaixeLigado && !ocupado && !passado ? inicio.toISOString() : null);
 
         return (
           <button
@@ -299,18 +318,19 @@ function CamadaDeMarcacao({
             type="button"
             data-testid={`bloco-${chave}-${rotulo}`}
             data-livre={livre !== null}
-            disabled={livre === null}
+            data-encaixe={(livre === null && instante !== null) || undefined}
+            disabled={instante === null}
             aria-label={
-              livre
-                ? `Marcar às ${livre.rotulo} de ${format(dia, "d 'de' MMMM", { locale: localeDaData })}`
+              instante
+                ? `${t("Marcar")} ${diaCurto} ${t("às")} ${livre?.rotulo ?? rotulo}`
                 : `${format(dia, "d 'de' MMMM", { locale: localeDaData })} às ${rotulo} — ${razao}`
             }
-            title={livre ? undefined : razao}
-            onClick={livre ? () => interacao.onMarcarEm(livre.instante) : undefined}
+            title={instante ? undefined : razao}
+            onClick={instante ? () => interacao.onMarcarEm(instante) : undefined}
             className={cn(
               "absolute inset-x-0 z-0 transition-colors duration-fast ease-out",
               "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-500",
-              livre
+              instante
                 ? "cursor-pointer hover:bg-accent-soft"
                 : // Sem cor de bloqueio: pintar o vazio indisponível encheria a
                   // grade de faixas cinzas e faria o que ESTÁ livre desaparecer

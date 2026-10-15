@@ -295,7 +295,7 @@ test.describe("kit visual da Agenda", () => {
     expect(antes).toBeGreaterThan(3);
 
     await page.getByTestId("botao-pessoa-ana").click();
-    await expect(page.getByTestId("filtro-de-pessoas")).toHaveAttribute("data-isolada", "ana", {
+    await expect(page.getByTestId("filtro-de-pessoas")).toHaveAttribute("data-selecionadas", "ana", {
       timeout: ESPERA,
     });
 
