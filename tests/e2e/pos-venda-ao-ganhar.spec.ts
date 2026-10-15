@@ -1,5 +1,5 @@
 /**
- * E2E — NEGÓCIO GANHO ABRE O CARD DE PÓS-VENDA, montado pela TELA.
+ * E2E: NEGÓCIO GANHO ABRE O CARD DE PÓS-VENDA, montado pela TELA.
  *
  * Porte do projeto original (PR 2787 de @webtecnica). Quem usa: a clínica que
  * fecha no funil de vendas e acompanha o paciente noutro funil. O caminho que a
