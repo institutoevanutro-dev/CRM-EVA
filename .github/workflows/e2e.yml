@@ -650,6 +650,7 @@ jobs:
       # eles são justamente o fim da fila.
       SPECS_PARTE_3: >-
         cpf-na-ficha-do-contato.spec.ts
+        etiquetas-e-composer-pela-tela.spec.ts
         autonomia-assistida.spec.ts
         central-avisos-destino.spec.ts
         agenda-presenca-recuperacao.spec.ts
