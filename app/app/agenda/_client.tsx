@@ -27,6 +27,7 @@ import { janelaDoMesVisivel } from "@/lib/agenda/janela-do-mes-visivel";
 import { resolverResponsavelDoPainel } from "@/lib/agenda/responsavel-do-painel";
 import { ancoraLocalDoDia } from "@/lib/agenda/semana-semente";
 import { useVinculoDaMarcacao } from "@/lib/agenda/vinculo-da-marcacao";
+import { gravarPessoasDaGrade, lerPessoasDaGrade, selecaoValida } from "@/lib/agenda/pessoas-da-grade";
 import { Button } from "@/components/ui/button";
 import { PainelDeMarcacao } from "@/components/agenda/PainelDeMarcacao";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -292,7 +293,20 @@ export function AgendaClient({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (window.matchMedia("(max-width: 767px)").matches) setVisao("dia");
   }, []);
-  const [isolada, setIsolada] = React.useState<string | null>(null);
+  // QUEM A GRADE MOSTRA: vazio = todos. Lido do navegador DEPOIS da montagem,
+  // como a visão do funil, para o HTML do servidor e o do cliente concordarem.
+  const [pedidas, setPedidas] = React.useState<string[]>([]);
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- o armazenamento só existe no cliente.
+    setPedidas(lerPessoasDaGrade(usuarioId));
+  }, [usuarioId]);
+  const mudarPessoas = React.useCallback(
+    (ids: string[]) => {
+      setPedidas(ids);
+      gravarPessoasDaGrade(usuarioId, ids);
+    },
+    [usuarioId],
+  );
   /**
    * A ÂNCORA NASCE DO RELÓGIO DA ORGANIZAÇÃO, não do navegador.
    *
@@ -316,6 +330,15 @@ export function AgendaClient({
   // lista estava vazia. Ele existia, estava provado na vitrine, e ninguém o via
   // aqui.
   const { data: pessoas = [] } = usePessoasDaAgenda();
+  // Só vale quem o servidor devolveu a ESTA pessoa: um id guardado de alguém que
+  // ela não enxerga (ou que saiu da equipe) cai fora, e a grade volta a "todos".
+  const selecionadas = React.useMemo(() => selecaoValida(pedidas, pessoas), [pedidas, pessoas]);
+  // Uma pessoa só selecionada é o CONTEXTO da marcação: os horários livres da
+  // grade, o "com quem" do painel e o dono do compromisso passam a ser dela.
+  const profissional = selecionadas.length === 1 ? (pessoas.find((p) => p.id === selecionadas[0]) ?? null) : null;
+  // Remarcar mantém o dono que o compromisso já tem (a rota não o troca), então
+  // o filtro não muda os horários que o painel oferece para remarcar.
+  const donoDaMarcacao = remarcandoId ? undefined : profissional?.id;
 
   // A JANELA ACOMPANHA O MÊS QUE O PAINEL MOSTRA — e continua ESTÁVEL.
   //
@@ -355,7 +378,13 @@ export function AgendaClient({
   // 422 porque ninguém está em `attendant_availability`).
   const { data: horarios, isError: horariosFalharam } = useHorariosLivres(
     marcando && tipo
-      ? { event_type_id: tipo.id, de: janelaDeBusca.de, ate: janelaDeBusca.ate, unit_id: unidadeId || undefined }
+      ? {
+          event_type_id: tipo.id,
+          owner_user_id: donoDaMarcacao,
+          de: janelaDeBusca.de,
+          ate: janelaDeBusca.ate,
+          unit_id: unidadeId || undefined,
+        }
       : null,
   );
 
@@ -421,8 +450,9 @@ export function AgendaClient({
     agendamentosVivos ?? (naJanelaDoServidor ? agendamentosIniciais : []);
 
   const agendamentos = React.useMemo(
-    () => (isolada === null ? todos : todos.filter((a) => a.responsavelId === isolada)),
-    [isolada, todos],
+    () =>
+      selecionadas.length === 0 ? todos : todos.filter((a) => selecionadas.includes(a.responsavelId)),
+    [selecionadas, todos],
   );
 
   // A GRADE não mostra cancelado — ele fica só na aba "Cancelados" do
@@ -605,7 +635,7 @@ export function AgendaClient({
             gente no filtro, ela estoura igual — e o `overflow-x: hidden` corta o
             alternador de visão em silêncio. */}
         <div className="flex flex-wrap items-center gap-3">
-          <FiltroDePessoas pessoas={pessoas} isolada={isolada} onIsolar={setIsolada} />
+          <FiltroDePessoas pessoas={pessoas} selecionadas={selecionadas} onMudar={mudarPessoas} />
           <div
             data-testid="alternador-de-visao"
             className="flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5"
@@ -879,7 +909,11 @@ export function AgendaClient({
                   // "Você" só quando o dono da agenda É quem está logado: com a
                   // lista vazia, o fallback fixo dizia "Você" para a jornada da
                   // médica (porte de melgarafael/DeskcommCRM d7d18345b, #896).
-                  resolverResponsavelDoPainel({ pessoas, donoId: tipo.donoId, usuarioId })
+                  resolverResponsavelDoPainel({
+                    pessoas,
+                    donoId: donoDaMarcacao ?? tipo.donoId,
+                    usuarioId,
+                  })
                 }
                 tipo={tipo.nome}
                 duracaoMin={tipo.duracaoMin}
@@ -961,6 +995,10 @@ export function AgendaClient({
                   return marcar
                     .mutateAsync({
                       event_type_id: tipo.id,
+                      // Com UMA pessoa selecionada no filtro, o compromisso é
+                      // dela — a mesma pessoa cujos horários o painel acabou de
+                      // oferecer. Sem seleção, segue omitido, pelo motivo acima.
+                      owner_user_id: donoDaMarcacao,
                       unit_id: unidadeId || undefined,
                       contact_id: contactId || undefined,
                       conversation_id: conversationId || undefined,
@@ -1141,6 +1179,7 @@ export function AgendaClient({
         recorte={recorteDaGrade}
         tipos={tiposIniciais.map((t) => ({ id: t.id, nome: t.nome, duracaoMin: t.duracaoMin }))}
         tipo={tipo ? { id: tipo.id, duracaoMin: tipo.duracaoMin } : null}
+        donoId={profissional?.id}
         onEscolherTipo={escolherTipo}
         // SEGUNDA PORTA: o clique num bloco livre da grade. Sem `onMarcarEm`, a
         // `AgendaInterativa` não monta a interação, e a grade volta a ser o que
