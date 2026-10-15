@@ -136,6 +136,16 @@ function blocoEncaixe(page: Page) {
   return page.locator('[data-testid^="bloco-"][data-encaixe="true"]').first();
 }
 
+/**
+ * Um bloco SEM horário publicado e que não é do passado: alvo de arraste que a
+ * remarcação recusa (arrastar segue preso ao publicado; o encaixe é só do clique).
+ */
+function blocoBloqueado(page: Page) {
+  return page
+    .locator('[data-testid^="bloco-"][data-livre="false"]:not([aria-label*="já passou"])')
+    .first();
+}
+
 /** Um bloco do passado — o que continua recusado e explica por quê. */
 function blocoDoPassado(page: Page) {
   return page.locator('[data-testid^="bloco-"][aria-label*="já passou"]').first();

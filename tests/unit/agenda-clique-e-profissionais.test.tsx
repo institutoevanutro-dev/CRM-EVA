@@ -80,7 +80,7 @@ const compromissos = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 vi.mock("@/hooks/agenda/useAgendamentos", () => ({
   useAgendamentos: () => ({ data: compromissos, isError: false, isLoading: false }),
 }));
-const marcar = vi.hoisted(() => vi.fn(async () => ({})));
+const marcar = vi.hoisted(() => vi.fn(async (_corpo: Record<string, unknown>) => ({})));
 vi.mock("@/hooks/agenda/useMarcarAgendamento", () => ({
   useMarcarAgendamento: () => ({ mutateAsync: marcar, isPending: false }),
 }));
@@ -90,9 +90,9 @@ vi.mock("@/hooks/agenda/useRemarcarAgendamento", () => ({
   useRegistrarDesfecho: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 const PESSOAS = vi.hoisted(() => [
-  { id: "p-ana", nome: "Ana", trilha: 1 },
-  { id: "p-bruna", nome: "Bruna", trilha: 2 },
-  { id: "p-caio", nome: "Caio", trilha: 3 },
+  { id: "p-ana", nome: "Ana", trilha: 1 as const },
+  { id: "p-bruna", nome: "Bruna", trilha: 2 as const },
+  { id: "p-caio", nome: "Caio", trilha: 3 as const },
 ]);
 vi.mock("@/hooks/agenda/usePessoasDaAgenda", () => ({
   usePessoasDaAgenda: () => ({ data: PESSOAS, isError: false, isLoading: false }),
