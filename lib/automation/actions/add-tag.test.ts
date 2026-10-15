@@ -1,4 +1,4 @@
-// Adaptado do PR https://github.com/jmpo/DeskcommCRM/pull/89 (projeto sob licença MIT).
+// Adaptado do PR PR 89 do fork público de jmpo (projeto sob licença MIT).
 /**
  * `add_tag` junta as etiquetas com as que estão GRAVADAS, não com a foto do
  * contexto.

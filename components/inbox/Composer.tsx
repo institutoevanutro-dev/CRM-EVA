@@ -152,7 +152,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     (mode === "reply" && !!janelaFechada) ||
     (mode === "reply" && !!semEnvio) ||
     acimaDoLimite;
-  // O CURINGA DE NOME LITERAL (porte de melgarafael/DeskcommCRM #2844, issue
+  // O CURINGA DE NOME LITERAL (porte do upstream #2844, issue
   // #2744): contato sem nome + `{{nome}}`/`{{primeiro_nome}}` no texto iria cru
   // para o cliente. É um sinal IRMÃO do `respostaBarrada`, e não um termo a mais
   // nele: aquele desabilita o CAMPO, e aqui a instrução é justamente editar. Só

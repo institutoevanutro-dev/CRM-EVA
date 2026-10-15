@@ -258,7 +258,7 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
           NO CELULAR a quebra vira o problema oposto: com ~390px a barra descia
           em três ou quatro fileiras e comia metade da tela. Abaixo do `md` ela
           é UMA fileira que rola na horizontal, sem esconder ação (porte de
-          melgarafael/DeskcommCRM #2810). */}
+          upstream #2810). */}
       <div className="flex min-w-0 flex-wrap items-center gap-1.5 max-md:w-full max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-1 max-md:[&>*]:shrink-0">
         {/* Primeira da barra e só ícone: é ferramenta de LEITURA, não ação de
             atendimento, e não muda de lugar com o estado da conversa. */}

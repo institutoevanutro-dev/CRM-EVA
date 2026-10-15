@@ -3715,7 +3715,7 @@ async function executarTurnoDoAgente(
                     bolhasQueCabemNoEnvio(maxSendsPerTurn, seq),
                   )[0] ?? body,
                 // A pausa humana desconta o tempo que o turno JÁ gastou pensando, em vez
-                // de somar em cima dele (porte de melgarafael/DeskcommCRM #1125, #849).
+                // de somar em cima dele (porte do upstream #1125, #849).
                 processamentoMs: performance.now() - inicioDoProcessamento,
                 sleep: deps.sleep ?? ((s) => new Promise((resolve) => setTimeout(resolve, s))),
                 log: runLog,

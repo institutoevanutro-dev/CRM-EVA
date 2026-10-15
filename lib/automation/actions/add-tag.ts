@@ -54,7 +54,7 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
         ? { table: "contacts", row: contact, event: "contact.tag_added", kind: "contact" }
         : null;
     if (!target) return { type: "add_tag", status: "skipped", detail: { reason: "no_target" } };
-    // Adaptado da correção pública jmpo/DeskcommCRM#89: regras do mesmo
+    // Adaptado da correção pública do fork público de jmpo (PR 89): regras do mesmo
     // evento recebem contexto antigo. Ler a linha atual antes do merge,
     // preservando também o destino explícito de contato já existente aqui.
     const { data: atual, error: erroDaLeitura } = await ctx.admin

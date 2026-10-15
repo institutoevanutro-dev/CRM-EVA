@@ -71,7 +71,7 @@ export function variaveisDesconhecidas(texto: string, extras: readonly string[] 
 
 /**
  * Motivo FIXO que acompanha o botão quando a RESPOSTA é barrada pelo curinga de
- * nome literal (porte de melgarafael/DeskcommCRM #2844, issue #2744). A trava
+ * nome literal (porte do upstream #2844, issue #2744). A trava
  * de envio e a faixa visível leem daqui: quem vê o motivo vê a razão exata.
  */
 export const MOTIVO_CURINGA_LITERAL =
