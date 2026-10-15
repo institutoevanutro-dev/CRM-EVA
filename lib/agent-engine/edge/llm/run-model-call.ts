@@ -114,6 +114,9 @@ export function tetoDeSaida(daOrganizacao: number | undefined, daChamada: number
   return daChamada === undefined ? base : Math.min(base, daChamada);
 }
 
+/** Provedores em que `reasoning: 'none'` foi conferido contra a API real (porte do upstream #2904). */
+const PROVEDORES_COM_RACIOCINIO_NENHUM_MEDIDO: ReadonlySet<string> = new Set(['anthropic', 'openai']);
+
 export interface RunModelCallInput {
   tenantId: string;
   leadId?: string | null;
@@ -161,6 +164,16 @@ export interface RunModelCallInput {
    * 2B) — resolvido no seam, nunca no call site. Sem ele, config da org.
    */
   llmOverride?: import('./credentials').LlmResolveOverride;
+  /**
+   * Raciocínio pedido NESTA chamada, na opção portátil do AI SDK (`reasoning`).
+   * Cada provedor traduz para o seu campo (a Anthropic desliga o `thinking`, a
+   * OpenAI manda `reasoning.effort`), então quem chama não nomeia provedor.
+   *
+   * `'none'` é de quem devolve uma palavra (as classificações): o modelo que
+   * pensa antes dela cobra a espera do cliente sem ganho. Ausente = o padrão do
+   * modelo, como sempre foi.
+   */
+  reasoning?: 'none';
 }
 
 export interface RunModelCallDeps {
@@ -471,6 +484,12 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       topK,
       // A chamada ainda não pede teto próprio neste fork; só o da org ou o padrão.
       maxOutputTokens: tetoDeSaida(maxOutputTokens, undefined),
+      // Só onde o `'none'` foi aceito pela API real. Nos de Chat Completions
+      // (OpenRouter, personalizado) o SDK mandaria `reasoning_effort` para qualquer
+      // modelo, e uma recusa derrubaria a classificação em todo turno.
+      ...(input.reasoning !== undefined && PROVEDORES_COM_RACIOCINIO_NENHUM_MEDIDO.has(config.provider)
+        ? { reasoning: input.reasoning }
+        : {}),
     });
   // De quem é a chamada, para o aviso de crédito e de chave na Central: a
   // organização vem do job (fonte confiável), nunca de entrada de fora.

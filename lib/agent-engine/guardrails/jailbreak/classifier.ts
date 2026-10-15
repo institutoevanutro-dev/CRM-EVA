@@ -128,6 +128,9 @@ export async function classifyJailbreak(
         ...(ids.leadId != null ? { leadId: ids.leadId } : {}),
         ...(ids.jobId !== undefined ? { jobId: ids.jobId } : {}),
         purpose: 'jailbreak_detect',
+        // Roda junto do classificador de estágio, ANTES da resposta, e devolve um
+        // JSON de uma linha: o mesmo motivo de `reasoning: 'none'` que lá.
+        reasoning: 'none',
         ...(args.model !== undefined ? { model: args.model } : {}),
         ...(args.llmOverride !== undefined ? { llmOverride: args.llmOverride } : {}),
         messages: [{ role: 'user', content: buildJailbreakMessage(args.message) }],

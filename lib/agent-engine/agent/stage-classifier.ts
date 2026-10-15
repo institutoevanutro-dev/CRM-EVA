@@ -157,6 +157,10 @@ export async function classifyStage(
         leadId: ids.leadId,
         ...(ids.jobId !== undefined ? { jobId: ids.jobId } : {}),
         purpose: 'stage_classifier',
+        // Uma palavra não precisa de raciocínio, e o cliente espera por ele: este
+        // classificador roda ANTES da resposta. Medido no upstream (#2904, 60 turnos
+        // reais): espera p50 de 1,7 s para 0,9 s no modelo econômico que pensa.
+        reasoning: 'none',
         ...(args.model !== undefined ? { model: args.model } : {}),
         ...(args.llmOverride !== undefined ? { llmOverride: args.llmOverride } : {}),
         messages: [
