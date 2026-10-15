@@ -176,7 +176,7 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
     // de antes (uma linha), e quando aperta a barra desce para a linha de baixo.
     // Nenhuma ação some — um menu "mais" esconderia o "Lembrar" que a spec
     // `canais-baseline` clica, e, pior, esconderia ação de quem atende.
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-4 py-2.5">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-background px-3 py-2 md:gap-3 md:px-4 md:py-2.5">
       <div className="flex min-w-0 items-center gap-3">
         <div className="relative shrink-0">
           <AvatarDoContato contato={c} nome={displayName} reserva={phone ?? displayName} className="h-9 w-9" />
@@ -254,8 +254,12 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
 
       {/* `shrink-0` saiu daqui: era ele que impunha o piso de largura. Agora a
           barra pode encolher e quebrar internamente, e os botões continuam
-          todos visíveis e clicáveis — só que em duas linhas quando preciso. */}
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          todos visíveis e clicáveis — só que em duas linhas quando preciso.
+          NO CELULAR a quebra vira o problema oposto: com ~390px a barra descia
+          em três ou quatro fileiras e comia metade da tela. Abaixo do `md` ela
+          é UMA fileira que rola na horizontal, sem esconder ação (porte de
+          melgarafael/DeskcommCRM #2810). */}
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5 max-md:w-full max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-1 max-md:[&>*]:shrink-0">
         {/* Primeira da barra e só ícone: é ferramenta de LEITURA, não ação de
             atendimento, e não muda de lugar com o estado da conversa. */}
         {onBuscar && (

@@ -118,6 +118,18 @@ describe("header do inbox — não trava a largura da tela", () => {
     }
   });
 
+  it("no celular a barra é UMA fileira que rola, não três ou quatro que comem a conversa", () => {
+    // Relato de quem atende pelo telefone: com ~390px a barra quebrava em várias
+    // fileiras e sobrava pouca altura para as mensagens. Abaixo do `md` ela não
+    // quebra — rola na horizontal — e nenhum botão encolhe até virar ilegível.
+    const { container } = renderHeader();
+    const header = container.firstElementChild as HTMLElement;
+    const classes = (header.children[1] as HTMLElement).className.split(/\s+/);
+    for (const c of ["max-md:flex-nowrap", "max-md:overflow-x-auto", "max-md:[&>*]:shrink-0"]) {
+      expect(classes, `sem \`${c}\` a barra volta a empilhar fileiras no celular`).toContain(c);
+    }
+  });
+
   it('"Ver contato" existe no DOM e só se cala onde há outra porta', () => {
     renderHeader();
     // Ele NÃO sai do markup: some por CSS a partir de `xl`, exatamente a largura
