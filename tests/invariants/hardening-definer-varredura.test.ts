@@ -128,6 +128,15 @@ const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
       "prova JWT A/B, negação viewer/cross-org e autoria real.",
   },
   {
+    fn: "fn_appointment_exclude(uuid,uuid,text)",
+    razao:
+      "app/api/v1/agenda/agendamentos/[id]/excluir/route.ts passa createClient da " +
+      "sessão ao _handler.ts (excluirAgendamentoHandler): auth.uid() valida papel " +
+      "manager, suporte e MFA ANTES de ler a linha, e assina quem excluiu. " +
+      "tests/invariants/agenda-excluir-agendamento.test.ts prova agent/provider " +
+      "negados, cross-org (P0002/42501) e autoria vinda da sessão.",
+  },
+  {
     fn: "fn_agenda_settings(uuid,jsonb)",
     razao:
       "PATCH app/api/v1/agenda/configuracao/route.ts chama com createClient " +
