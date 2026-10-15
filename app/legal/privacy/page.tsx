@@ -168,6 +168,21 @@ export default async function PrivacyPage() {
             "O usuário pode desconectar sua agenda pelo CRM ou revogar a autorização nas configurações da Conta do Google. A desconexão no CRM remove as credenciais e os registros locais de agendas conectadas e de ocupação externa associados à conexão. Ela não apaga automaticamente os compromissos nem o histórico de atendimento já registrados no CRM. Pedidos de acesso, correção e eliminação seguem os canais de atendimento e a política de retenção da organização.",
           )}
         </p>
+        <p>
+          {t(
+            "Não usamos dados recebidos das APIs do Google Workspace, incluindo dados brutos, agregados, anonimizados ou derivados, para desenvolver, treinar, ajustar ou melhorar modelos generalizados de inteligência artificial ou aprendizado de máquina. Não vendemos nem transferimos esses dados a terceiros para essas finalidades. Essa restrição também se aplica aos provedores de IA utilizados pelo operador.",
+          )}
+        </p>
+        <p>
+          {t(
+            "Quando recursos de IA participam do agendamento solicitado pelo usuário, os provedores contratados pelo operador podem receber o resultado necessário das ferramentas do CRM, como horários disponíveis e informações do compromisso relacionado à conversa. Esse processamento serve à funcionalidade solicitada, sem treinamento de modelos generalizados. Os títulos dos eventos externos não são necessários para calcular a disponibilidade e não são incluídos nesse resultado. As credenciais OAuth do Google não são enviadas aos modelos de IA.",
+          )}
+        </p>
+        <p>
+          {t(
+            "O armazenamento do CRM no servidor do operador não significa que toda a IA seja executada localmente. Os recursos habilitados podem utilizar APIs externas. O operador deve utilizar provedores e configurações compatíveis com o Uso Limitado, sem autorizar treinamento com dados do Google. Os prazos de retenção do provedor seguem o contrato e as configurações aplicáveis; esta política não promete retenção zero nem execução offline quando essas condições não estiverem efetivamente contratadas e configuradas.",
+          )}
+        </p>
       </section>
 
       <section className="space-y-2">
