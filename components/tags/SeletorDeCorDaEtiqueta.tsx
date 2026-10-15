@@ -85,7 +85,9 @@ export function SeletorDeCorDaEtiqueta({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-auto p-3">
+      {/* No celular a fileira QUEBRA em vez de vazar da tela: oito tons e o
+          "Sem cor" não cabem em 375px numa linha só. */}
+      <PopoverContent align="end" className="w-auto max-w-[calc(100vw-2rem)] p-3">
         <p className="mb-2 text-xs font-semibold text-text">
           {t(rotulo)}
         </p>
