@@ -191,7 +191,14 @@ export type ActivityType =
    * explica por que a etiqueta posta pela IA ou à mão foi trocada: o endereço
    * vence. Como `contacts_merged`, o emissor é SQL e grava o literal.
    */
-  | "contact_city_tag_changed";
+  | "contact_city_tag_changed"
+  /**
+   * A VENDA GANHA ABRIU O CARD DE PÓS-VENDA (automação `lead.won` →
+   * `create_or_move_lead` noutro funil, porte do upstream PR 2787). Fica na
+   * linha do tempo da VENDA; o card novo recebe `moved_from_pipeline`. Fora da
+   * lista positiva de `fn_update_last_activity_at`: ninguém falou com o cliente.
+   */
+  | "post_sale_opened";
 
 export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   lead_created: "Entrou pelo WhatsApp",
@@ -295,6 +302,7 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   moved_from_pipeline: "Veio de outro funil",
   subject_transferred: "Atendimento passou para outro assunto",
   contact_city_tag_changed: "Etiqueta de cidade atualizada pelo endereço",
+  post_sale_opened: "Pós-venda aberto",
 };
 
 /** Quando o tipo é legado/desconhecido, a linha ainda é honesta — sem jargão. */

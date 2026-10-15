@@ -29,6 +29,12 @@ export const ENTIDADE_ESPERADA_POR_GATILHO = {
   "lead.stage_changed": "crm_lead",
   "message.received": "message",
   "lead.tag_added": "crm_lead",
+  // O ganho nasce do trigger `fn_emit_event_on_lead_change`, por QUALQUER porta
+  // (botão Ganhar, arrasto no kanban, lote): `fn_log_event` deriva a entidade do
+  // nome do evento, então ela chega como `lead`, e não `crm_lead`. Não há outro
+  // emissor de `lead.won` (`lib/leads/encerramento.ts` não emite de propósito),
+  // então não há linha duplicada para o guard filtrar.
+  "lead.won": "lead",
   "contact.tag_added": "contact",
   // O aniversário nasce do cron `contact-birthdays`, e não de uma ação de
   // alguém: a entidade que ele traz é o próprio contato que faz aniversário.

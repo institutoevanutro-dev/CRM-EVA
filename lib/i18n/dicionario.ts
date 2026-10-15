@@ -3882,6 +3882,21 @@ export const DICIONARIO: Traducoes = {
   "O evento que disparou a regra não trouxe um lead para criar ou mover.": {
     es: "El evento que disparó la regla no trajo un lead para crear o mover.",
   },
+  "O card de pós-venda só nasce em OUTRO funil. Aponte esta ação para o funil de pós-venda; a venda não foi mexida.": {
+    es: "La tarjeta de posventa solo nace en OTRO embudo. Apunte esta acción al embudo de posventa; la venta no fue modificada.",
+  },
+  "Outra regra deste mesmo ganho já abriu o card de pós-venda. Vale a primeira regra; esta não abre outro.": {
+    es: "Otra regla de esta misma venta ya abrió la tarjeta de posventa. Vale la primera regla; esta no abre otra.",
+  },
+  "O negócio foi reaberto antes de a regra rodar, então o card de pós-venda não foi aberto.": {
+    es: "El negocio fue reabierto antes de que la regla corriera, así que no se abrió la tarjeta de posventa.",
+  },
+  "O contato deste negócio foi anonimizado (LGPD), então o card de pós-venda não foi aberto.": {
+    es: "El contacto de este negocio fue anonimizado (LGPD), así que no se abrió la tarjeta de posventa.",
+  },
+  "O contato deste negócio foi juntado a outro cadastro, então o card de pós-venda não foi aberto. Confira o negócio no cadastro que ficou.": {
+    es: "El contacto de este negocio fue unido a otro registro, así que no se abrió la tarjeta de posventa. Revise el negocio en el registro que quedó.",
+  },
   "Mover um lead para outro funil está desligado nesta organização.": {
     es: "Mover un lead a otro embudo está desactivado en esta organización.",
   },
@@ -3932,6 +3947,7 @@ export const DICIONARIO: Traducoes = {
   "Quando chegar mensagem no WhatsApp": { es: "Cuando llegue un mensaje por WhatsApp" },
   "Quando um lead ganhar uma tag": { es: "Cuando un lead reciba una etiqueta" },
   "Quando um contato ganhar uma tag": { es: "Cuando un contacto reciba una etiqueta" },
+  "Quando um negócio for ganho": { es: "Cuando un negocio sea ganado" },
   "alterado pelo assistente": { es: "cambiado por el asistente" },
   "alterado automaticamente pelo sistema": { es: "cambiado automáticamente por el sistema" },
   é: { es: "es" },
@@ -9106,6 +9122,7 @@ export const DICIONARIO: Traducoes = {
   // Passagem de assunto pelo agente (`transfer_to_subject`): o rótulo da linha do tempo.
   "Atendimento passou para outro assunto": { es: "La atención pasó a otro tema" },
   "Etiqueta de cidade atualizada pelo endereço": { es: "Etiqueta de ciudad actualizada por la dirección" },
+  "Pós-venda aberto": { es: "Posventa abierta" },
   // As recusas da troca de funil (lib/leads/clonar-para-funil.ts e a rota).
   "O negócio já está neste funil. Para trocar de etapa use /api/v1/leads/[id]/move.": {
     es: "El negocio ya está en este embudo. Para cambiar de etapa usa /api/v1/leads/[id]/move.",

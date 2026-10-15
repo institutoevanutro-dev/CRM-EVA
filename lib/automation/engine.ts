@@ -40,7 +40,9 @@ export async function buildContext(admin: SupabaseClient, row: EventRow): Promis
   // Admin client bypassa RLS — todo lookup filtra organization_id do evento
   // (doutrina multi-tenant; um FK cross-org corrompido nunca vaza pro contexto).
   const org = row.organization_id;
-  if (row.entity_kind === "crm_lead" && row.entity_id) {
+  // `lead` é a entidade que o trigger do banco grava (`lead.won`); o guard de
+  // `EXPECTED_ENTITY_KIND` já descartou as linhas legadas duplicadas antes daqui.
+  if ((row.entity_kind === "crm_lead" || row.entity_kind === "lead") && row.entity_id) {
     const { data: lead } = await admin
       .from("crm_leads")
       .select("*")
