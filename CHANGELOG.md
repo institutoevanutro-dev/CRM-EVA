@@ -8,6 +8,26 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.6.0] — 2026-10-15
+
+### Adicionado
+
+- **Cada etapa do funil pode ter uma cor, e a coluna inteira do quadro fica dessa cor** Em Configurações, na lista de etapas de cada funil, há agora um botão de cor em cada etapa. Ele abre a paleta com os oito tons que o quadro já usa (azul para entrada, roxo para em conversa, âmbar para esperando, rosa, laranja, verde para ganho, verde-água para acompanhamento e cinza para perdido) e a opção "Sem cor". A escolha é salva na hora. Uma etapa nova também pode nascer com cor.
+
+  No quadro, a coluna da etapa com cor fica tingida: o cabeçalho leva uma faixa e um fundo mais forte, a coluna leva um fundo leve e uma borda no mesmo tom. Os cards continuam na cor normal, para seguir legíveis no tema claro e no escuro. Etapa sem cor fica exatamente como era.
+
+  Só quem é gestor ou administrador vê o botão, a mesma regra que já valia para renomear e reordenar etapas. A mudança fica registrada no histórico de auditoria. Você não precisa fazer nada.
+
+- **A etiqueta de cidade passa a seguir o endereço do contato** Quando a cidade do endereço estruturado de um contato muda (pelo prontuário ou por
+  qualquer outra gravação), o contato passa a ter a etiqueta "cidade: X" que corresponde
+  a ela, tirada do vocabulário de etiquetas da organização e gravada em caixa baixa, a
+  mesma grafia que a IA usa. Etiqueta de cidade diferente da do endereço é trocada, e a
+  troca aparece na linha do tempo dos negócios do contato. Cidade fora do vocabulário
+  não cria etiqueta nova; contato sem cidade no endereço não é tocado. Só age em
+  organizações que têm alguma etiqueta "cidade: ..." no vocabulário. Na atualização, os
+  contatos que já têm cidade no endereço recebem a etiqueta uma vez, sem disparar
+  automação. Migration 0362.
+
 ## [4.5.3] — 2026-10-14
 
 ### Corrigido
@@ -7197,7 +7217,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.3...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.6.0...HEAD
+[4.6.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.3...v4.6.0
 [4.5.3]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.2...v4.5.3
 [4.5.2]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.1...v4.5.2
 [4.5.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.0...v4.5.1
