@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { interpolateTemplate, variaveisDesconhecidas, VARIAVEIS_DO_TEMPLATE } from "@/lib/inbox/template-vars";
+import {
+  interpolateTemplate,
+  MOTIVO_CURINGA_LITERAL,
+  motivoDoCuringaLiteral,
+  variaveisDesconhecidas,
+  VARIAVEIS_DO_TEMPLATE,
+} from "@/lib/inbox/template-vars";
 
 describe("interpolateTemplate", () => {
   it("substitui nome e primeiro_nome", () => {
@@ -140,5 +146,20 @@ describe("interpolateTemplate · telefone e e-mail", () => {
     expect(variaveisDesconhecidas("Oi {{nome}} {{nomee}} {{ Telefone }} {{volta}}")).toEqual(["{{nomee}}", "{{volta}}"]);
     expect(variaveisDesconhecidas("Oi {{nomee}} {{volta}}", ["volta", "voltas"])).toEqual(["{{nomee}}"]);
     expect(variaveisDesconhecidas("Oi {{contact.email}} e {{contact.name}}")).toEqual([]);
+  });
+});
+
+describe("motivoDoCuringaLiteral (porte do #2844)", () => {
+  it("barra quando `{{nome}}`/`{{primeiro_nome}}` sobreviveria por falta de nome", () => {
+    expect(motivoDoCuringaLiteral("Oi {{primeiro_nome}}", { name: null, display_name: null })).toBe(MOTIVO_CURINGA_LITERAL);
+    expect(motivoDoCuringaLiteral("Oi {{ contact.name }}", { name: null, display_name: "5511999998888" })).toBe(
+      MOTIVO_CURINGA_LITERAL,
+    );
+  });
+  it("não barra com nome de gente, com chave desconhecida nem com variável que não é nome", () => {
+    expect(motivoDoCuringaLiteral("Oi {{nome}}", { name: "Ana", display_name: null })).toBeNull();
+    expect(motivoDoCuringaLiteral("Oi {{nome}}", { name: null, display_name: "Ana Paula" })).toBeNull();
+    expect(motivoDoCuringaLiteral("Cupom {{codigo}}", { name: null, display_name: null })).toBeNull();
+    expect(motivoDoCuringaLiteral("Seu e-mail: {{email}}", { name: null, display_name: null })).toBeNull();
   });
 });

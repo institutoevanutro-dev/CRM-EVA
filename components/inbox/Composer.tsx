@@ -24,7 +24,11 @@ import { X } from "lucide-react";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
 import { useUploadMedia, type DestinoDoUpload } from "@/hooks/inbox/useUploadMedia";
 import { imagemDoClipboard } from "@/lib/inbox/clipboard-image";
-import { interpolateTemplate, type TemplateContact } from "@/lib/inbox/template-vars";
+import {
+  interpolateTemplate,
+  motivoDoCuringaLiteral,
+  type TemplateContact,
+} from "@/lib/inbox/template-vars";
 import { cn } from "@/lib/utils";
 import { resolveSharedContact } from "@/lib/messaging/contact-card";
 
@@ -148,6 +152,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     (mode === "reply" && !!janelaFechada) ||
     (mode === "reply" && !!semEnvio) ||
     acimaDoLimite;
+  // O CURINGA DE NOME LITERAL (porte de melgarafael/DeskcommCRM #2844, issue
+  // #2744): contato sem nome + `{{nome}}`/`{{primeiro_nome}}` no texto iria cru
+  // para o cliente. É um sinal IRMÃO do `respostaBarrada`, e não um termo a mais
+  // nele: aquele desabilita o CAMPO, e aqui a instrução é justamente editar. Só
+  // o ENVIO é barrado, só em resposta (a nota interna não sai para o cliente).
+  const motivoCuringa = mode === "reply" ? motivoDoCuringaLiteral(text, contact ?? {}) : null;
+  const envioBarrado = respostaBarrada || !!motivoCuringa;
 
   /** Escolhe o arquivo e MARCA o modo da escolha (ver `pendingEm`). */
   function escolherArquivo(file: File) {
@@ -164,7 +175,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
   function handleSubmit() {
     const body = text.trim();
-    if (!body || (mode === "note" ? isDisabled : respostaBarrada)) return;
+    if (!body || (mode === "note" ? isDisabled : envioBarrado)) return;
 
     setText("");
     requestAnimationFrame(() => autoresize());
@@ -347,6 +358,16 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         {semEnvio && mode === "reply" && (
           <p className="mb-1.5 text-xs text-muted-foreground">{semEnvio}</p>
         )}
+        {/* O aviso do curinga literal: PERSISTENTE, junto do campo, enquanto o
+            literal sobreviver no texto (digitado ou vindo de um modelo). */}
+        {motivoCuringa && (
+          <p
+            data-testid="aviso-curinga-literal"
+            className="mb-1.5 rounded-md border-l-2 border-warning bg-warning-bg px-2 py-1.5 text-xs text-warning-fg"
+          >
+            {t("Contato sem nome no CRM: {{nome}}/{{primeiro_nome}} ficaram literais no texto. Edite antes de enviar.")}
+          </p>
+        )}
         <div className="flex items-end gap-2">
           {/* O "+" existe nos DOIS modos: em "Nota interna" a nota aceita anexo
               (foto/vídeo e documento). Contato some — cartão de contato é uma
@@ -421,7 +442,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               size="icon"
               className="h-10 w-10 shrink-0 rounded-full"
               onClick={handleSubmit}
-              disabled={(mode === "note" ? isDisabled : respostaBarrada) || !text.trim()}
+              disabled={(mode === "note" ? isDisabled : envioBarrado) || !text.trim()}
               aria-label={t("Enviar")}
             >
               <PaperPlaneTilt size={16} weight="fill" aria-hidden />

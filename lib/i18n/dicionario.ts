@@ -9812,6 +9812,10 @@ export const DICIONARIO: Traducoes = {
     es: "Revisa la etiqueta, el nombre nuevo y el color.",
   },
   "Cor da etiqueta": { es: "Color de la etiqueta" },
+  // Faixa do compositor quando `{{nome}}` ficaria literal (porte do #2844).
+  "Contato sem nome no CRM: {{nome}}/{{primeiro_nome}} ficaram literais no texto. Edite antes de enviar.": {
+    es: "Contacto sin nombre en el CRM: {{nome}}/{{primeiro_nome}} quedaron literales en el texto. Edítalo antes de enviar.",
+  },
   "nas listas e nos filtros:": { es: "en las listas y en los filtros:" },
   "Sem cor": { es: "Sin color" },
   "Confira a etiqueta e a cor.": { es: "Revise la etiqueta y el color." },

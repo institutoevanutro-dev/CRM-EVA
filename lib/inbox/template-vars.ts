@@ -69,6 +69,30 @@ export function variaveisDesconhecidas(texto: string, extras: readonly string[] 
     });
 }
 
+/**
+ * Motivo FIXO que acompanha o botão quando a RESPOSTA é barrada pelo curinga de
+ * nome literal (porte de melgarafael/DeskcommCRM #2844, issue #2744). A trava
+ * de envio e a faixa visível leem daqui: quem vê o motivo vê a razão exata.
+ */
+export const MOTIVO_CURINGA_LITERAL =
+  "Contato sem nome no CRM: {{nome}}/{{primeiro_nome}} ficaram literais no texto. Edite antes de enviar.";
+
+/**
+ * O motivo pelo qual a RESPOSTA não pode sair, ou `null` quando pode. O gate é
+ * sobre o literal que SOBREVIVE: contato com nome de gente (`name` ou
+ * `display_name`, pela mesma regra de `nomeDoContato`) resolve `{{nome}}` e não
+ * é barrado; chave desconhecida (`{{codigo}}`) e telefone/e-mail vazios também
+ * não contam, porque não são nome.
+ */
+export function motivoDoCuringaLiteral(body: string, contact: TemplateContact): string | null {
+  if (nomeDoContato(contact)) return null;
+  const sobrouNome = [...body.matchAll(VARIAVEL)].some((m) => {
+    const variavel = variavelDe(m[1]!);
+    return variavel === "nome" || variavel === "primeiro_nome";
+  });
+  return sobrouNome ? MOTIVO_CURINGA_LITERAL : null;
+}
+
 const texto = (valor: string | null | undefined) => (typeof valor === "string" ? valor.trim() : "");
 
 export function interpolateTemplate(
