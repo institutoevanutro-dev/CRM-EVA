@@ -21,6 +21,11 @@ import type { EstadoDoMapeamento, EtapaDoFunil } from "@/hooks/pipelines/useAgen
 vi.mock("@/lib/api/client", () => ({
   apiClient: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
+// O seletor de cor só aparece para manager+ (a rota de etapas exige manager).
+let papel = "manager";
+vi.mock("@/hooks/auth/AuthProvider", () => ({
+  useAuth: () => ({ activeOrg: { role: papel } }),
+}));
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }));
@@ -96,6 +101,7 @@ async function opcoesNaTela(user: ReturnType<typeof userEvent.setup>, testid: st
 
 beforeEach(() => {
   vi.clearAllMocks();
+  papel = "manager";
   vi.mocked(apiClient.get).mockResolvedValue({ data: estado() });
 });
 
@@ -641,5 +647,84 @@ describe("StagesSection — Escape descarta o rascunho do nome e do esfriamento 
     await user.type(campo, "Primeira consulta{Enter}");
     await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1));
     expect(vi.mocked(apiClient.patch).mock.calls[0]![1]).toEqual({ name: "Primeira consulta" });
+  });
+});
+
+describe("cor da etapa — a faixa e o tom da coluna no quadro", () => {
+  it("escolher um tom pelo NOME manda só a cor, no PATCH da etapa", async () => {
+    vi.mocked(apiClient.patch).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    montar();
+
+    await user.click(await screen.findByRole("button", { name: "Cor da etapa «Carrinho abandonado»" }));
+    // A paleta das etapas, na ordem que a clínica já usa, com o "sem cor" junto.
+    const azul = screen.getByRole("button", { name: "Azul (entrada)" });
+    expect(azul).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Cinza (perdido)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sem cor" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(azul);
+
+    await waitFor(() =>
+      expect(apiClient.patch).toHaveBeenCalledWith(`/api/v1/pipelines/${PIPE}/stages/e1`, {
+        color: "#378ADD",
+      }),
+    );
+  });
+
+  it("o tom gravado aparece marcado (sem diferenciar caixa) e “Sem cor” manda null", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: estado({}, ETAPAS.map((e) => (e.id === "e2" ? { ...e, color: "#639922" } : e))),
+    });
+    vi.mocked(apiClient.patch).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    montar();
+
+    await user.click(await screen.findByRole("button", { name: "Cor da etapa «Aguardando pagamento»" }));
+    expect(screen.getByRole("button", { name: "Verde (ganho)" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Sem cor" }));
+
+    await waitFor(() =>
+      expect(apiClient.patch).toHaveBeenCalledWith(`/api/v1/pipelines/${PIPE}/stages/e2`, {
+        color: null,
+      }),
+    );
+  });
+
+  it("escolher o tom que já está gravado não manda nada", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: estado({}, ETAPAS.map((e) => (e.id === "e2" ? { ...e, color: "#639922" } : e))),
+    });
+    const user = userEvent.setup();
+    montar();
+
+    await user.click(await screen.findByRole("button", { name: "Cor da etapa «Aguardando pagamento»" }));
+    await user.click(screen.getByRole("button", { name: "Verde (ganho)" }));
+    expect(apiClient.patch).not.toHaveBeenCalled();
+  });
+
+  it("etapa nova já pode nascer com cor", async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
+    const user = userEvent.setup();
+    montar();
+
+    await user.click(await screen.findByTestId("nova-etapa"));
+    await user.type(screen.getByTestId("nova-etapa-nome"), "Retorno");
+    await user.click(screen.getByRole("button", { name: "Cor da nova etapa" }));
+    await user.click(screen.getByRole("button", { name: "Verde-água (acompanhamento)" }));
+    await user.click(screen.getByTestId("nova-etapa-criar"));
+
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/pipelines/${PIPE}/stages`, {
+        name: "Retorno",
+        color: "#1D9E75",
+      }),
+    );
+  });
+
+  it("abaixo de manager o seletor não aparece (a rota recusaria)", async () => {
+    papel = "agent";
+    montar();
+    await screen.findByTestId("etapa-e1");
+    expect(screen.queryByRole("button", { name: /^Cor da etapa/ })).not.toBeInTheDocument();
   });
 });
