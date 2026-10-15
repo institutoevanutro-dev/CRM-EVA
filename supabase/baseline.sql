@@ -25646,6 +25646,7 @@ language sql stable security definer set search_path = '' as $$
          where a.organization_id = p_org
            and a.contact_id = p_contact
            and a.owner_user_id = p_user
+           and a.excluded_at is null
       )
       or exists (
         select 1 from public.crm_leads l
@@ -36140,3 +36141,20 @@ end $politica$;
 -- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
 -- Quem mede a regra: `tests/invariants/tags-excluir-preserva-as-outras.test.ts`.
 -- ---- fim: excluir uma etiqueta não apaga as outras (migration 0363) ----
+
+-- ---- agendamento excluído não dá acesso ao paciente (migration 0365) ----
+-- Decisão do dono do produto, complemento da 0364. `fn_provider_can_access_contact`
+-- contava QUALQUER agendamento do prestador com o paciente; um agendamento
+-- lançado por engano e depois excluído seguia abrindo o cadastro, as conversas e
+-- o negócio daquele paciente para o prestador. Agora o agendamento excluído
+-- (`excluded_at is not null`) não conta. O cancelado comum continua contando,
+-- como antes: cancelar não muda acesso nenhum.
+--
+-- NÃO HÁ CORPO DE FUNÇÃO AQUI, de propósito: a troca foi feita no lugar, na
+-- única definição da função acima neste arquivo (bloco da 0268). Assim a
+-- reaplicação não passa por versão antiga
+-- (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`), e a
+-- definição é igual à da migration 0365
+-- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
+-- Quem mede a regra: `tests/invariants/agendamento-excluido-nao-da-acesso.test.ts`.
+-- ---- fim: agendamento excluído não dá acesso ao paciente (migration 0365) ----
