@@ -15672,7 +15672,7 @@ alter table public.calendar_appointments
   drop constraint if exists calendar_appointments_exclusao_coerente,
   add constraint calendar_appointments_exclusao_coerente check (
     (excluded_at is null and exclusion_reason is null and excluded_by_user_id is null)
-    or (excluded_at is not null and status = 'cancelled' and length(btrim(exclusion_reason)) >= 3)
+    or (excluded_at is not null and status = 'cancelled' and coalesce(length(btrim(exclusion_reason)), 0) >= 3)
   );
 
 comment on column public.calendar_appointments.excluded_at is
