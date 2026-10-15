@@ -247,9 +247,8 @@ describe("idempotência: um card por venda ganha", () => {
   });
 
   it("a corrida: o banco recusa o segundo insert (chave única) e a ação devolve o card que venceu", async () => {
-    let db: ReturnType<typeof makeDb>;
     const vencedor = { id: "card-do-outro-dreno", organization_id: ORG_ID, pipeline_id: FUNIL_DE_POS_VENDA, stage_id: "acompanhamento", status: "open", external_id: `pos_venda:${VENDA.id}`, source: "whatsapp" };
-    db = banco({
+    const db: ReturnType<typeof makeDb> = banco({
       writeError: (_n, tabela) => {
         if (tabela !== "crm_leads") return null;
         // O outro dreno gravou entre a nossa leitura e o nosso insert.
