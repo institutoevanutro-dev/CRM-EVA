@@ -175,7 +175,7 @@ import { loadChannelProvider, nomesDasFerramentas, runBeforeSend } from '../guar
 import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
-import { acenderDigitando, esperarComoHumano } from './atraso-humano';
+import { esperarComoHumano, manterDigitando } from './atraso-humano';
 import { bolhasQueCabemNoEnvio, instrucaoDeBolhas, sendInBubbles, splitForSend } from './split-message';
 import { formatarParaWhatsApp } from './formato-whatsapp';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
@@ -2618,6 +2618,9 @@ async function executarTurnoDoAgente(
     if (!channel) throw new Error('preview_transport_forbidden');
     return channel;
   };
+  // Apaga a renovação do "digitando…" (ver `manterDigitando`). Começa como no-op:
+  // turno de preview ou de retaguarda nunca acende, e parar o que não acendeu é nada.
+  let pararDigitando: () => void = () => {};
   // STOP lido no turno (fonte: CRM via get_lead_context) — combinado com o cache
   // durável leads.is_opted_out no gate 1 da cadeia (F2-13).
   const optedOutThisTurn = openingContext.context.contact.is_blocked;
@@ -3226,6 +3229,8 @@ async function executarTurnoDoAgente(
             esperaForaDoLock: async (): Promise<void> => {
               if (jaEsperouComoHumano) return;
               jaEsperouComoHumano = true;
+              // A mídia vai sair: a renovação do "digitando…" para aqui, como na 1ª bolha.
+              pararDigitando();
               const canal = liveChannel();
               const ms = await esperarComoHumano({
                 texto: legenda,
@@ -3243,6 +3248,7 @@ async function executarTurnoDoAgente(
             },
             // A mídia nunca é quebrada em balões: um envio, um `seq`.
             send: (finalBody: string) => {
+              pararDigitando(); // a mensagem sai agora; renovar depois dela mentiria
               seq += 1;
               return liveChannel().send({
                 tenantId,
@@ -3423,6 +3429,7 @@ async function executarTurnoDoAgente(
           sleep: deps.sleep,
           lgpd,
           send: (finalBody: string) => {
+            pararDigitando(); // a mensagem sai agora; renovar depois dela mentiria
             seq += 1;
             return liveChannel().send({
               tenantId,
@@ -3693,6 +3700,9 @@ async function executarTurnoDoAgente(
               // promessa/vocabulário) cobre a espera de novo do mesmo cliente.
               if (jaEsperouComoHumano) return;
               jaEsperouComoHumano = true;
+              // A 1ª bolha vai sair: a renovação para aqui. Depois da mensagem, um
+              // "digitando…" novo leria como uma segunda resposta a caminho.
+              pararDigitando();
               // `liveChannel()`, não `channel`: o transporte é anulável (preview não tem
               // canal) e este é o MESMO acessor que o `send` logo abaixo usa.
               const canal = liveChannel();
@@ -3720,8 +3730,9 @@ async function executarTurnoDoAgente(
             },
             // `finalBody` = corpo após a cadeia (o disclosureGate F4-05 pode prependar o
             // disclosure via inject); é ELE que vai ao canal, não o `body` capturado da tool.
-            send: (finalBody: string) =>
-              sendInBubbles(finalBody, {
+            send: (finalBody: string) => {
+              pararDigitando(); // a mensagem sai agora; renovar depois dela mentiria
+              return sendInBubbles(finalBody, {
                 enabled: agentConfig?.splitMessages ?? false,
                 maxChars: agentConfig?.splitMaxChars ?? 600,
                 // O teto do turno vale para as bolhas: o que passa dele vai junto na
@@ -3745,7 +3756,8 @@ async function executarTurnoDoAgente(
                     body: bubble,
                   });
                 },
-              }),
+              });
+            },
           };
           let chain = await runBeforeSend(beforeSendArgs);
           if (chain.status === 'vetoed' && chain.code === 'case_promise_without_case') {
@@ -4062,6 +4074,11 @@ async function executarTurnoDoAgente(
       ...AGENT_TOOL_DEFS.request_human_handoff,
       execute: async (raw) => {
         passouParaAEquipe = true;
+        // A conversa vai para a equipe: o robô não fala mais neste turno. O aviso
+        // do piso logo abaixo sai pelo canal SEM passar pelos `send` que param a
+        // renovação — sem esta linha o "digitando…" reacendia DEPOIS do "vou te
+        // passar para a equipe", até o `finally`.
+        pararDigitando();
         try {
           // ═══ O PISO: se o modelo não falou, o sistema fala ═══
           //
@@ -4496,6 +4513,18 @@ async function executarTurnoDoAgente(
   // ver edge/crm/mcp-tools.ts). As 8 tools do engine têm precedência de nome.
   let mcpCleanup: (() => Promise<void>) | null = null;
   try {
+    // "digitando…" do INÍCIO do trabalho até a 1ª bolha, renovado a cada 10s.
+    // Antes ele acendia uma vez, só na chamada principal ao modelo: os
+    // classificadores auxiliares, a conexão MCP e a conferência de promessa
+    // rodavam sem indicador, e numa resposta de ~1 min o WhatsApp apagava o
+    // único sinal no meio do caminho. Só em turno que fala com o lead: turno
+    // de retaguarda não abre o WhatsApp de ninguém.
+    if (channel?.signalTyping && turnoVaiFalarComOLead(liveJob())) {
+      pararDigitando = manterDigitando(
+        () => channel.signalTyping!({ tenantId, conversationId: input.conversationId }),
+        runLog,
+      );
+    }
     if (agentConfig !== null && agentConfig.toolIds.length > 0) {
       try {
         // As de OPERAÇÃO saem antes de serem montadas, quando o Operador as tem.
@@ -4812,18 +4841,10 @@ async function executarTurnoDoAgente(
         ? openingTextOnly
         : [{ role: 'user', content: [{ type: 'text', text: openingText }, ...nativeParts] }];
 
-    // "digitando…" ENQUANTO o modelo pensa. A pausa humana antes da 1ª bolha
+    // O "digitando…" ENQUANTO o modelo pensa já está aceso e sendo renovado desde
+    // o início do `try` (`manterDigitando`). A pausa humana antes da 1ª bolha
     // (`esperaForaDoLock`) desconta este tempo e quase sempre zera — e com espera
-    // zero ela não acende presença. Sem esta linha o cliente esperava a chamada
-    // inteira do modelo sem indicador nenhum. Só em turno que fala com o lead:
-    // turno de retaguarda não abre o WhatsApp de ninguém. (Porte de
-    // melgarafael/DeskcommCRM #1543.)
-    if (channel?.signalTyping && turnoVaiFalarComOLead(liveJob())) {
-      acenderDigitando(
-        () => channel.signalTyping!({ tenantId, conversationId: input.conversationId }),
-        runLog,
-      );
-    }
+    // zero ela não acende presença; é a renovação que cobre o cliente até lá.
 
     // O modelo decide tools livremente dentro do teto de steps (knob AGENT_MAX_STEPS).
     //
@@ -5460,6 +5481,8 @@ async function executarTurnoDoAgente(
       model: turn.model,
     });
   } finally {
+    // Turno que terminou sem enviar (veto, handoff, erro) também para de renovar.
+    pararDigitando();
     await mcpCleanup?.();
   }
 }
