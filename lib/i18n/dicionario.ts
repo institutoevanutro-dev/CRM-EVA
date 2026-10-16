@@ -37,6 +37,13 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  "Nome interno da conexão": { es: "Nombre interno de la conexión" },
+  "Nome interno": { es: "Nombre interno" },
+  "Nome interno atualizado.": { es: "Nombre interno actualizado." },
+  "Não foi possível salvar o nome.": { es: "No se pudo guardar el nombre." },
+  "Só a sua equipe vê este nome. O nome público no provedor não muda.": { es: "Solo tu equipo ve este nombre. El nombre público en el proveedor no cambia." },
+  "Ex.: WA | Fixo 7906": { es: "Ej.: WA | Fijo 7906" },
+  "Informe um nome interno com até 80 caracteres.": { es: "Indica un nombre interno de hasta 80 caracteres." },
   "Resultados no CRM e Financeiro": { es: "Resultados en CRM y Finanzas" },
   "Contatos e vendas por campanha": { es: "Contactos y ventas por campaña" },
   "Contatos criados no período pelo anúncio identificado; vendas vinculadas no mesmo período e recebimento líquido até agora.": { es: "Contactos creados en el período por el anuncio identificado; ventas vinculadas en el mismo período y cobros netos hasta ahora." },
