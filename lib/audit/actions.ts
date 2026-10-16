@@ -241,6 +241,9 @@ export const AUDIT_ACTIONS = [
   // `lib/channels/reactivate.ts` — o único caminho de volta, e é o que faz a
   // frase acima valer para os DOIS casos em vez de para o que lembraram.
   "channel.reactivated",
+  // Rótulo interno do canal (channel_sessions.display_name); nada vai ao
+  // provedor. Emitida por app/api/v1/channel-sessions/[id]/name.
+  "channel.renamed",
   // Chamada de voz WhatsApp (WaCalls, spec 18) — pareamento do segundo
   // dispositivo vinculado, opt-in por org. Admin only.
   //

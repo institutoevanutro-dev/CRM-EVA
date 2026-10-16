@@ -150,6 +150,22 @@ describe("conectarCanalOficial", () => {
     expect(linhas.find((l) => l.id === "falhou-4458")).toMatchObject({ meta_phone_number_id: "999888777666", status: "FAILED" });
   });
 
+  it("nome interno dado em Renomear sobrevive a salvar a credencial de novo (porte upstream #2802)", async () => {
+    linhas = [
+      { id: "oficial-9879", organization_id: ORG, provider: "meta_cloud", meta_phone_number_id: ENTRADA.phoneNumberId, display_name: "WA | Recepção", status: "WORKING", archived_at: null, webhook_path_token: "tok-9879", metadata: {} },
+    ];
+    await conectarCanalOficial(admin, ENTRADA);
+    expect(linhas[0]).toMatchObject({ display_name: "WA | Recepção" });
+  });
+
+  it("linha reaproveitada de OUTRO número recebe o nome do provedor, não o nome interno antigo", async () => {
+    linhas = [
+      { id: "outro", organization_id: ORG, provider: "meta_cloud", meta_phone_number_id: "999888777666", display_name: "WA | Antigo", status: "WORKING", archived_at: null, webhook_path_token: "tok-x", metadata: {} },
+    ];
+    await conectarCanalOficial(admin, ENTRADA);
+    expect(linhas[0]).toMatchObject({ display_name: "Clínica" });
+  });
+
   it("org sem sessão oficial: insere uma e devolve o id dela", async () => {
     const r = await conectarCanalOficial(admin, ENTRADA);
     expect(r).toMatchObject({ ok: true, sessionId: "nova-1", displayName: "Clínica" });

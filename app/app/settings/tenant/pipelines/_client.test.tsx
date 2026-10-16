@@ -205,3 +205,17 @@ describe("o input de opções de um campo de lista fechada", () => {
     ]);
   });
 });
+
+describe("escreveMostrarQuando: o item 'ainda não escolhi' não vira valor (porte do upstream #2793)", () => {
+  it("escolher o item vazio do seletor de valor deixa a condição meio montada, e ela não grava", async () => {
+    const { escreveMostrarQuando, normalizaMostrarQuando, SEM_VALOR_DA_CONDICAO } = await import(
+      "./_client"
+    );
+    const meio = escreveMostrarQuando(
+      { campo: "tipo", operador: "igual", valor: "Outro" },
+      { valor: SEM_VALOR_DA_CONDICAO },
+    );
+    expect(meio).toEqual({ campo: "tipo", operador: "igual" });
+    expect(normalizaMostrarQuando(meio)).toBeUndefined();
+  });
+});

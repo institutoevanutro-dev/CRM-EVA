@@ -116,6 +116,7 @@ const CURATED_FIELDS: Record<TriggerEvent, CuratedField[]> = {
   // decidir é sobre QUEM faz aniversário, e não sobre a data. Por isso os campos
   // são os do contato — "só quem tem a tag cliente", tipicamente.
   "contact.birthday": CONTACT_FIELDS,
+  "contact.phone_added": CONTACT_FIELDS,
 };
 
 const OP_LABELS: Record<Op, string> = { eq: "é", neq: "não é", contains: "contém" };

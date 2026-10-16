@@ -117,6 +117,22 @@ const MOTIVO_DA_PARADA: Record<string, string> = {
     "O funil escolhido não está ativo, então a inscrição não foi feita. Ative o funil ou escolha outro na automação.",
   live_enrollment_exists: "O contato já está em um funil ativo — esta ação não inscreve duas vezes.",
   consent_declined: "O contato não autorizou o recebimento de mensagens de marketing.",
+  /* A ação `send_email` (porte do upstream #2794): recusas no `detail.reason`
+     (de `resolverDestinatario`) e códigos do provedor no `action.error` (de
+     `codigoDaFalha`), todos em lib/automation/actions/send-email.ts. */
+  no_email: "O contato não tem e-mail cadastrado, então não havia endereço para onde enviar.",
+  dono_sem_email:
+    "O negócio não tem responsável com e-mail cadastrado, então não havia endereço para onde enviar. Escolha outro destinatário na automação.",
+  dono_fora_da_equipe:
+    "O responsável do negócio não faz mais parte da equipe, então o e-mail não foi enviado. Troque o responsável do negócio ou escolha outro destinatário na automação.",
+  email_nao_configurado:
+    "Nenhum serviço de e-mail está configurado nesta instalação, então nada foi enviado. Peça a quem administra o servidor para configurar o envio de e-mail.",
+  email_recusado:
+    "O serviço de e-mail recusou a mensagem. O detalhe técnico abaixo traz o motivo que o provedor devolveu.",
+  email_limite_atingido:
+    "O limite de e-mails por hora desta regra (ou da empresa) foi atingido. Os próximos voltam a sair na hora seguinte.",
+  dominio_nao_verificado:
+    "O domínio do remetente não está verificado na Resend. Verifique o domínio na conta Resend e tente de novo.",
   // Motivo deste clone (regra com vínculo de sinal, `start-message-flow.ts`): a
   // varredura de motivos o achou sem frase ao portar a cerca do projeto original.
   appointment_unavailable:

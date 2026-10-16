@@ -103,6 +103,13 @@ const ORIGENS: DeclaracaoDeOrigem[] = [
       "o texto gerado pelo agente devolve `reason` quando não há versão publicada ou o modelo não devolveu texto; o resultado o usa nos dois canais (detalhe e erro)",
     produtor: { arquivo: "lib/agent-engine/agent/abordagem-de-formulario.ts" },
   },
+  {
+    arquivo: "lib/automation/actions/send-email.ts",
+    expressao: "para.motivo",
+    porque:
+      "o veredito do destinatário (sem contato, bloqueado, opt-out, sem e-mail, responsável sem e-mail) chega à tela pelo `reason` do resultado; os códigos possíveis são escritos nos retornos de `resolverDestinatario`, no próprio produtor",
+    produtor: { arquivo: "lib/automation/actions/send-email.ts" },
+  },
 ];
 
 describe("o mapa de frases e o código que emite os motivos não podem divergir", () => {

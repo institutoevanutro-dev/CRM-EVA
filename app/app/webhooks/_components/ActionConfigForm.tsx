@@ -26,6 +26,9 @@ import type { FollowupFlowPointerRow } from "@/hooks/followup/useFollowupFlows";
 export type ActionItem =
   | { type: "create_or_move_lead"; config: { pipeline_id: string; stage_id: string } }
   | { type: "send_whatsapp_message"; config: { channel_session_id: string; template: string } }
+  // O e-mail de saída (porte do upstream #2794): `email_fixo` só vale quando o
+  // destinatário é o endereço gravado na regra.
+  | { type: "send_email"; config: SendEmailConfig }
   | {
       type: "send_ai_message";
       config: { agent_id: string; channel_session_id: string; instruction: string };
@@ -41,6 +44,11 @@ export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
       return { type, config: { pipeline_id: "", stage_id: "" } };
     case "send_whatsapp_message":
       return { type, config: { channel_session_id: "", template: "" } };
+    case "send_email":
+      return {
+        type,
+        config: { destinatario: "contato", email_fixo: "", assunto: "", corpo: "", formato: "texto" },
+      };
     case "send_ai_message":
       return { type, config: { agent_id: "", channel_session_id: "", instruction: "" } };
     case "add_tag":
@@ -52,6 +60,14 @@ export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
     case "start_message_flow":
       return { type, config: { flow_pointer_id: "" } };
   }
+}
+
+interface SendEmailConfig {
+  destinatario: "contato" | "dono_do_lead" | "fixo";
+  email_fixo: string;
+  assunto: string;
+  corpo: string;
+  formato: string;
 }
 
 interface FormProps<T> {
@@ -216,6 +232,106 @@ function SendWhatsappForm({
  * não são enfeite: eles mostram o NÍVEL de instrução que funciona, que é a
  * dúvida real de quem nunca escreveu prompt.
  */
+/**
+ * "Enviar e-mail" (porte do upstream #2794): quem recebe, o assunto e o corpo,
+ * com as mesmas variáveis da mensagem de WhatsApp. Transporte e remetente não
+ * estão aqui: o envio usa o serviço de e-mail da instalação, e o aviso abaixo
+ * do corpo diz isso.
+ */
+function SendEmailForm({ config, onChange }: FormProps<SendEmailConfig>) {
+  const t = useT();
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  const insertVar = (token: string) => {
+    const el = textareaRef.current;
+    const current = config.corpo;
+    const start = el?.selectionStart ?? current.length;
+    const end = el?.selectionEnd ?? current.length;
+    const next = current.slice(0, start) + token + current.slice(end);
+    onChange({ ...config, corpo: next });
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(start + token.length, start + token.length);
+    });
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label>{t("Destinatário")}</Label>
+          <Select
+            value={config.destinatario}
+            onValueChange={(v) => onChange({ ...config, destinatario: v as SendEmailConfig["destinatario"] })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={t("Escolha quem recebe")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="contato">{t("E-mail do contato")}</SelectItem>
+              <SelectItem value="dono_do_lead">{t("E-mail do responsável do negócio")}</SelectItem>
+              <SelectItem value="fixo">{t("Endereço fixo")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label>{t("Assunto")}</Label>
+          <Input
+            value={config.assunto}
+            onChange={(e) => onChange({ ...config, assunto: e.target.value })}
+            placeholder={t("Seu horário com {{nome}}")}
+          />
+        </div>
+      </div>
+      {config.destinatario === "fixo" ? (
+        <div className="space-y-1">
+          <Label>{t("Endereço de e-mail")}</Label>
+          <Input
+            value={config.email_fixo}
+            onChange={(e) => onChange({ ...config, email_fixo: e.target.value })}
+            placeholder="nome@empresa.com"
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("Um endereço fixo recebe todos os envios desta regra.")}
+          </p>
+        </div>
+      ) : null}
+      <div className="space-y-1">
+        <Label>{t("Corpo do e-mail")}</Label>
+        <div className="flex flex-wrap gap-1">
+          {TEMPLATE_VARS.map((v) => (
+            <Button key={v.token} type="button" variant="secondary" size="sm" onClick={() => insertVar(v.token)}>
+              {t(v.label)}
+            </Button>
+          ))}
+        </div>
+        <Textarea
+          ref={textareaRef}
+          rows={5}
+          value={config.corpo}
+          onChange={(e) => onChange({ ...config, corpo: e.target.value })}
+          placeholder="Oi {{nome}}, tudo bem?"
+        />
+      </div>
+      <div className="space-y-1">
+        <Label>{t("Formato do corpo")}</Label>
+        <Select value={config.formato || "texto"} onValueChange={(v) => onChange({ ...config, formato: v })}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="texto">{t("Texto simples")}</SelectItem>
+            <SelectItem value="html">{t("HTML simples")}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("O envio usa o serviço de e-mail desta instalação (Resend). Sem ele configurado, a regra registra a recusa e nada é enviado. Cada regra envia no máximo 50 e-mails por hora.")}
+      </p>
+    </div>
+  );
+}
+
 function SendAiMessageForm({
   config,
   onChange,
@@ -485,6 +601,13 @@ export function ActionConfigForm({
     case "send_whatsapp_message":
       return (
         <SendWhatsappForm
+          config={action.config}
+          onChange={(config) => onChange({ type: action.type, config })}
+        />
+      );
+    case "send_email":
+      return (
+        <SendEmailForm
           config={action.config}
           onChange={(config) => onChange({ type: action.type, config })}
         />

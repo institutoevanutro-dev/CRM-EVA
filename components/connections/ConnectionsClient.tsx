@@ -43,6 +43,7 @@ import {
 } from "@/lib/ui/icons";
 import { lerEstadoDoCanal } from "@/lib/channels/estado";
 import { useT } from "@/hooks/i18n/useT";
+import { RenomearConexao } from "./RenomearConexao";
 
 type Variant = "success" | "warning" | "error" | "neutral";
 
@@ -365,6 +366,11 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
                 <ChannelAiAccess channelId={c.id} />
                 <p className="text-xs text-muted-foreground">{t(!policy ? "Consulte os responsáveis em Atendimento." : policy.mode === "legacy_unconfigured" ? "Usa todos os atendentes elegíveis da organização." : policy.mode === "restricted_empty" ? "Ninguém configurado — as conversas ficarão na fila." : "Somente as pessoas selecionadas recebem este número.")}</p>
                 <div className="mt-auto flex flex-wrap gap-2">
+                  <RenomearConexao
+                    channelId={c.id}
+                    currentName={c.display_name}
+                    onSaved={() => qc.invalidateQueries({ queryKey: ["channel-sessions"] })}
+                  />
                   {/* Some no canal oficial em vez de aparecer desabilitado: não é
                       indisponibilidade passageira (como o Excluir sem o serviço no
                       ar), é uma ação que não existe para esse canal — e o clique

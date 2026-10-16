@@ -59,6 +59,7 @@ interface LinhaOficial {
   id: string;
   meta_phone_number_id?: string | null;
   archived_at?: string | null;
+  display_name?: string | null;
 }
 
 /**
@@ -116,8 +117,8 @@ export async function conectarCanalOficial(
       // `meta_phone_number_id` numa segunda consulta se alguma org chegar perto.
       .limit(20);
   const { data: existentesRaw } = await queryTolerantToMissingArchived(
-    () => buscarExistentes(`id, meta_phone_number_id, ${ARCHIVED_AT}`),
-    () => buscarExistentes("id, meta_phone_number_id"),
+    () => buscarExistentes(`id, meta_phone_number_id, display_name, ${ARCHIVED_AT}`),
+    () => buscarExistentes("id, meta_phone_number_id, display_name"),
   );
   const existente = escolherExistente((existentesRaw ?? []) as unknown as LinhaOficial[], phoneNumberId);
 
@@ -128,7 +129,12 @@ export async function conectarCanalOficial(
     meta_waba_id: wabaId,
     meta_token_encrypted: cifrado,
     phone_number: validacao.displayPhoneNumber ? `+${validacao.displayPhoneNumber.replace(/\D/g, "")}` : null,
-    display_name: validacao.verifiedName ?? "Canal oficial",
+    // O nome do provedor só batiza a conexão; depois dela o nome é do operador
+    // (Renomear), e salvar a credencial de novo não o apaga. Só vale para o
+    // MESMO número: a linha reaproveitada de outro número recebe o nome novo.
+    display_name:
+      (existente?.meta_phone_number_id === phoneNumberId ? existente.display_name : null) ||
+      (validacao.verifiedName ?? "Canal oficial"),
     status: "WORKING",
   };
 
