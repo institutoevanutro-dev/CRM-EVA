@@ -210,6 +210,8 @@ export const bulkConversationActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("archive"), ids: idsDoLote }),
   z.object({ action: z.literal("mark-read"), ids: idsDoLote }),
   z.object({ action: z.literal("pause-ai"), ids: idsDoLote }),
+  // Ocultar do Inbox (migration 0372): a marca é do CONTATO de cada conversa.
+  z.object({ action: z.literal("hide"), ids: idsDoLote }),
   z.object({
     action: z.literal("transfer"),
     ids: idsDoLote,
@@ -365,6 +367,12 @@ export const listConversationsQuerySchema = z.object({
    * significar "meu trabalho" para virar "tudo que já toquei".
    */
   exclude_finished: z.boolean().optional(),
+  /**
+   * A aba "Ocultos" (migration 0372): SÓ as conversas de contato oculto do Inbox.
+   * Sem ele, a lista nunca mostra conversa de contato oculto. Gerente e
+   * administrador — a rota confere o papel antes de responder.
+   */
+  ocultos: z.boolean().optional(),
   assigned_to: z.union([z.string().uuid(), z.literal("me"), z.literal("unassigned")]).optional(),
   channel_session_id: z.string().uuid().optional(),
   /** Todas as conversas 1:1 de um contato — a ficha do contato usa para listar os canais. */

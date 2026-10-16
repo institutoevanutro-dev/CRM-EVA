@@ -223,6 +223,22 @@
       "type": "worker",
       "label": "tickCron → job_queue",
       "sublabel": "no horário combinado enfileira o followup_turn e se desabilita"
+    },
+    {
+      "id": "rotaRecomeco",
+      "lane": "capacidade",
+      "col": 5,
+      "type": "route",
+      "label": "POST/DELETE /api/v1/leads/at-risk/recomeco",
+      "sublabel": "só admin, com MFA: o radar conta a partir de agora, ou volta a contar tudo"
+    },
+    {
+      "id": "inicioDoRadar",
+      "lane": "banco",
+      "col": 4,
+      "type": "table",
+      "label": "organizations.settings.radar.desde",
+      "sublabel": "migration 0370: fn_definir_inicio_do_radar grava num comando, com o relógio do banco"
     }
   ],
   "edges": [
@@ -261,7 +277,11 @@
     { "id": "r33", "from": "cancelar", "to": "audit", "label": "followup.cancelled" },
     { "id": "r34", "from": "rotaCancel", "to": "audit", "label": "followup.cancelled (via fila)" },
     { "id": "r35", "from": "cronjobs", "to": "listar", "label": "o agente relê antes de reagendar" },
-    { "id": "r36", "from": "leads", "to": "radarLib", "label": "demandas abertas + última atividade" }
+    { "id": "r36", "from": "leads", "to": "radarLib", "label": "demandas abertas + última atividade" },
+    { "id": "r37", "from": "radar", "to": "rotaRecomeco", "label": "\"Recomeçar o radar a partir de agora\" (admin), com confirmação e desfazer" },
+    { "id": "r38", "from": "rotaRecomeco", "to": "inicioDoRadar", "label": "grava ou limpa o instante" },
+    { "id": "r39", "from": "rotaRecomeco", "to": "audit", "label": "radar.recomecado / radar.recomeco_desfeito, com o instante anterior" },
+    { "id": "r40", "from": "inicioDoRadar", "to": "radarLib", "label": "sem atividade desde o instante ⇒ fora do radar; atividade nova traz de volta" }
   ],
   "cards": [
     {

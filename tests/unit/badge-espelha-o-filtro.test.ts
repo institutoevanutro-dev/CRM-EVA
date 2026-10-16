@@ -186,7 +186,7 @@ describe("nenhuma contagem é montada por fora da fábrica", () => {
 
   it("a fábrica aplica os auxiliares E o não-lidas", () => {
     const fabrica = fonte.slice(
-      fonte.indexOf("const countExact = () =>"),
+      fonte.indexOf("const countExact = ("),
       fonte.indexOf("await Promise.all(["),
     );
     expect(fabrica).toContain("organization_id");
@@ -194,12 +194,24 @@ describe("nenhuma contagem é montada por fora da fábrica", () => {
     expect(fabrica, "o filtro de não lidas não entra na fábrica").toContain("soNaoLidas");
   });
 
+  it("a fábrica aplica o contato oculto do Inbox (migration 0372): nenhuma aba conta conversa oculta", () => {
+    // A fábrica ganhou um parâmetro — o badge da aba "Ocultos" é a MESMA
+    // contagem com o predicado invertido. O predicado tem de estar DENTRO dela,
+    // senão alguma aba voltaria a contar a conversa que a lista esconde.
+    const fabrica = fonte.slice(
+      fonte.indexOf("const countExact = ("),
+      fonte.indexOf("await Promise.all(["),
+    );
+    expect(fabrica).toContain("semContatoOculto(");
+    expect(fabrica).toContain("soContatoOculto(");
+  });
+
   it("a fábrica aplica a régua do marcador (#1223)", () => {
     // O defeito morava aqui: a fábrica pedia `.eq("tag", valor)`. Sem esta linha,
     // a contagem ignora o marcador em silêncio — e o badge passa a contar o que a
     // aba não mostra, que é o defeito que este arquivo existe para pegar.
     const fabrica = fonte.slice(
-      fonte.indexOf("const countExact = () =>"),
+      fonte.indexOf("const countExact = ("),
       fonte.indexOf("await Promise.all(["),
     );
     expect(fabrica, "o marcador não entra na fábrica").toContain("aplicarMarcadores(");

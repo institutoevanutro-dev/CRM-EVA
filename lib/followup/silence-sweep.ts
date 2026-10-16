@@ -1,4 +1,5 @@
 import { protecaoAgendaSupabase } from "@/lib/agenda/protecao-followup";
+import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 import { assertServiceBoundarySupabase } from "@/lib/atendimento/origem";
 import { StaleServiceBoundaryError, parseServiceBoundary, assertCurrentServiceBoundary, type ServiceBoundary } from "@/lib/atendimento/fronteira";
 /**
@@ -323,6 +324,8 @@ type ContactEmbed =
       is_anonymized: boolean | null;
       ai_authorized_at: string | null;
       phone_number: string | null;
+      /** Oculto do Inbox (migration 0372): o gate recusa, e ele não é inscrito. */
+      inbox_hidden_at?: string | null;
     }
   | null;
 
@@ -436,7 +439,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         let consulta = admin
           .from("conversations")
           .select(
-            "id, service_revision, current_demanda_id, demandas!conversations_current_demanda_id_fkey(revision,fechada_em), status, messages!messages_conversation_id_fkey(organization_id,contact_id,conversation_id,service_revision,demanda_id,demanda_revision,sent_at,created_at), contact_id, last_inbound_at, contacts:contact_id(tags, is_blocked, is_anonymized, ai_authorized_at, phone_number), sessao:channel_session_id(metadata)",
+            "id, service_revision, current_demanda_id, demandas!conversations_current_demanda_id_fkey(revision,fechada_em), status, messages!messages_conversation_id_fkey(organization_id,contact_id,conversation_id,service_revision,demanda_id,demanda_revision,sent_at,created_at), contact_id, last_inbound_at, contacts:contact_id(tags, is_blocked, is_anonymized, ai_authorized_at, phone_number, inbox_hidden_at), sessao:channel_session_id(metadata)",
           )
           .eq("organization_id", orgId).eq("demandas.organization_id", orgId)
           .eq("contacts.organization_id", orgId).eq("sessao.organization_id", orgId)
@@ -491,6 +494,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
           const metadata = row.sessao?.metadata ?? {};
           const acesso = decidirElegibilidade(
             montarEstadoDeElegibilidade({
+              contatoOculto: contatoEstaOculto(row.contacts),
               aiGate: metadata.ai_gate,
               aiGateMode: metadata.ai_gate_mode,
               aiTestPhoneNumbers: metadata.ai_test_phone_numbers,

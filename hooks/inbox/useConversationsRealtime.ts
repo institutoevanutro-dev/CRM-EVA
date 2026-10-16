@@ -119,6 +119,8 @@ export interface ConversationsFilters {
   tag?: string | readonly string[];
   /** E ou OU entre as etiquetas escolhidas (#1274). `e` é o padrão. */
   tagMode?: ModoDeEtiqueta;
+  /** A aba "Ocultos" (migration 0372): só as conversas de contato oculto do Inbox. */
+  ocultos?: boolean;
 }
 
 interface ListResponse {
@@ -150,6 +152,7 @@ export function useConversationsRealtime(
         qs.set("comando", filters.comando.join(","));
       }
       if (filters.exclude_finished) qs.set("exclude_finished", "true");
+      if (filters.ocultos) qs.set("ocultos", "true");
       if (filters.assigned_to) qs.set("assigned_to", filters.assigned_to);
       if (filters.search) qs.set("search", filters.search);
       if (filters.unread) qs.set("unread", "true");

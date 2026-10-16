@@ -118,6 +118,43 @@ describe("troca rápida de funil", () => {
     expect(push).toHaveBeenCalledWith("/app/pipelines/p-2");
   });
 
+  it("a cor do funil (0371): ponto em cada opção colorida e no título; sem cor, nenhum", async () => {
+    render(
+      <PipelinePageClient
+        pipelineId="p-1"
+        initialName="Vendas"
+        initialColor="#378ADD"
+        funis={[
+          { id: "p-1", name: "Vendas", color: "#378ADD" },
+          { id: "p-2", name: "Suporte", color: "#D4537E" },
+          { id: "p-3", name: "Parcerias", color: null },
+        ]}
+      />,
+    );
+    // O título (o gatilho do seletor) repete o conteúdo da opção escolhida.
+    const seletor = screen.getByRole("combobox", { name: "Trocar de funil: Vendas" });
+    expect(seletor.querySelector('[data-testid="ponto-do-funil"]')).not.toBeNull();
+
+    await userEvent.click(seletor);
+    const suporte = await screen.findByRole("option", { name: "Suporte" });
+    expect(suporte.querySelector<HTMLElement>('[data-testid="ponto-do-funil"]')?.style.backgroundColor).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Parcerias" }).querySelector('[data-testid="ponto-do-funil"]')).toBeNull();
+  });
+
+  it("com um funil só e com cor, o ponto vai no h1", () => {
+    render(
+      <PipelinePageClient
+        pipelineId="p-1"
+        initialName="Vendas"
+        initialColor="#639922"
+        funis={[{ id: "p-1", name: "Vendas", color: "#639922" }]}
+      />,
+    );
+    const titulo = screen.getByRole("heading", { name: "Vendas" });
+    expect(titulo.getAttribute("data-cor-do-funil")).toBe("#639922");
+    expect(titulo.querySelector('[data-testid="ponto-do-funil"]')).not.toBeNull();
+  });
+
   it("escolher o funil atual não navega", async () => {
     render(
       <PipelinePageClient pipelineId="p-1" initialName="Vendas" funis={FUNIS} />,

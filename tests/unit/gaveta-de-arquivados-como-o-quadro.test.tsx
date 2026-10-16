@@ -36,6 +36,8 @@ vi.mock("@/hooks/auth/AuthProvider", () => ({
     role: "admin",
     cliente_pela_agenda: false,
   }),
+  // O seletor da cor do funil (migration 0371) lê o papel por aqui.
+  useAuth: () => ({ activeOrg: { orgId: "org-1", role: "admin" } }),
 }));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));

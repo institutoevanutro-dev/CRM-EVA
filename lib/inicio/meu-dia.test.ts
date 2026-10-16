@@ -40,6 +40,7 @@ describe("esperandoResposta", () => {
     organization_id: ORG,
     assigned_to_user_id: EU,
     is_group: false,
+    contato_oculto: false,
     status: "open",
     last_outbound_at: "2026-09-21T09:00:00Z",
     last_message_preview: "oi",
@@ -54,6 +55,8 @@ describe("esperandoResposta", () => {
         { ...base, id: "c5", last_inbound_at: "2026-09-21T10:00:00Z", assigned_to_user_id: OUTRO },
         { ...base, id: "c6", last_inbound_at: "2026-09-21T10:00:00Z", last_outbound_at: null },
         { ...base, id: "c7", last_inbound_at: "2026-09-21T10:00:00Z", organization_id: OUTRA },
+        // Contato oculto do Inbox (migration 0372): não é paciente esperando.
+        { ...base, id: "c8", last_inbound_at: "2026-09-21T10:00:00Z", contato_oculto: true },
       ],
     });
     const b = ok(await esperandoResposta(db, ctx));

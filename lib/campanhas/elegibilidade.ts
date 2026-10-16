@@ -32,6 +32,8 @@ export interface ContatoParaDecidir {
   telefone: string | null;
   bloqueado: boolean;
   anonimizado: boolean;
+  /** Oculto do Inbox pela equipe (migration 0372): campanha não fala com ele. */
+  oculto?: boolean;
   /** `consent.marketing.declined_at` — recusa REGISTRADA, diferente de ausência. */
   recusouMarketing: boolean;
 }
@@ -50,6 +52,7 @@ const E164 = /^\+\d{8,15}$/;
 export function motivoParaExcluir(c: ContatoParaDecidir): MotivoDeExclusao | null {
   if (c.bloqueado) return "opt_out";
   if (c.anonimizado) return "anonimizado";
+  if (c.oculto) return "contato_oculto";
   if (c.recusouMarketing) return "recusou_marketing";
   const telefone = c.telefone?.trim() ?? "";
   if (telefone === "") return "sem_telefone";

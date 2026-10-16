@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
@@ -8,6 +8,8 @@ import { useT } from "@/hooks/i18n/useT";
 
 import { ImportarLeads } from "./_components/ImportarLeads";
 import { EmptyPipeline } from "@/components/empty";
+import { SeletorDeCorDaEtiqueta } from "@/components/tags/SeletorDeCorDaEtiqueta";
+import { PALETA_DE_FUNIS, estiloDoFunil } from "@/lib/pipelines/cor-do-funil";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +39,7 @@ import {
   CaretUp,
   Check,
   DotsThree,
+  Palette,
   PencilSimple,
   Plus,
   Trash,
@@ -52,6 +55,8 @@ export interface FunilDaLista {
   position: number;
   is_default: boolean;
   is_client_pipeline?: boolean;
+  /** A cor do funil (migration 0371), ou `null` — sem cor, a linha fica como era. */
+  color?: string | null;
 }
 
 /**
@@ -163,6 +168,13 @@ export function FunisClient({
   const [excluindo, setExcluindo] = useState<{ id: string; erro: string | null } | null>(null);
   const [arquivoAberto, setArquivoAberto] = useState(false);
   const [erro, setErro] = useState<{ id: string | null; texto: string } | null>(null);
+  /**
+   * O seletor de cor aberto pelo item "Cor do funil" do menu "⋯". O menu devolve
+   * o foco ao próprio botão quando fecha, e esse foco fecharia o popover recém
+   * aberto: por isso o pedido espera o menu fechar (`onCloseAutoFocus`).
+   */
+  const [corAberta, setCorAberta] = useState<string | null>(null);
+  const corPedida = useRef<string | null>(null);
 
   const ocupado = criar.isPending || editar.isPending || arquivar.isPending;
 
@@ -502,8 +514,16 @@ export function FunisClient({
           const arquivandoAqui = arquivando?.id === funil.id ? arquivando : null;
           const erroDaLinha = erro?.id === funil.id ? erro.texto : null;
 
+          const estilo = estiloDoFunil(funil.color);
+
           return (
-            <li key={funil.id} className="flex flex-col gap-3 p-4" data-testid={`funil-${funil.id}`}>
+            <li
+              key={funil.id}
+              className="flex flex-col gap-3 p-4"
+              style={estilo?.linha}
+              data-testid={`funil-${funil.id}`}
+              data-cor-do-funil={funil.color ?? undefined}
+            >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 {podeGerenciar && (
                   <div className="flex shrink-0 flex-wrap gap-1">
@@ -564,6 +584,14 @@ export function FunisClient({
                       data-testid={`abrir-${funil.id}`}
                     >
                       <span className="flex items-center gap-2">
+                        {estilo ? (
+                          <span
+                            aria-hidden
+                            className="size-2.5 shrink-0 rounded-full"
+                            style={estilo.ponto}
+                            data-testid={`ponto-do-funil-${funil.id}`}
+                          />
+                        ) : null}
                         <span className="text-sm font-medium group-hover:underline">{funil.name}</span>
                         {funil.is_default && (
                           <Badge variant="secondary" className="text-[10px]">
@@ -585,6 +613,21 @@ export function FunisClient({
 
 
                 {podeGerenciar && !renomeandoAqui && (
+                  // O MESMO seletor da cor da etapa e da etiqueta: um estilo de
+                  // seletor só no produto. O gatilho mostra a cor atual; o item
+                  // "Cor do funil" do menu abre este mesmo popover.
+                  <SeletorDeCorDaEtiqueta
+                    cor={funil.color ?? null}
+                    onChange={(cor) => aplicar(funil.id, { color: cor })}
+                    paleta={PALETA_DE_FUNIS}
+                    rotulo="Cor do funil"
+                    disabled={ocupado}
+                    aberto={corAberta === funil.id}
+                    onAbertoChange={(aberto) => setCorAberta(aberto ? funil.id : null)}
+                  />
+                )}
+
+                {podeGerenciar && !renomeandoAqui && (
                   // As ações da linha moram num menu "⋯": quatro botões de texto
                   // por funil disputavam o olho com o nome, que é o que se clica.
                   // `modal={false}` pelo mesmo motivo da Equipe: o menu modal trava
@@ -602,12 +645,28 @@ export function FunisClient({
                         <DotsThree size={20} aria-hidden />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent
+                      align="end"
+                      onCloseAutoFocus={(e) => {
+                        if (corPedida.current === null) return;
+                        e.preventDefault();
+                        setCorAberta(corPedida.current);
+                        corPedida.current = null;
+                      }}
+                    >
                       <DropdownMenuItem
                         onSelect={() => setRenomeando({ id: funil.id, nome: funil.name })}
                         data-testid={`renomear-${funil.id}`}
                       >
                         <PencilSimple size={16} aria-hidden /> {t("Renomear")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          corPedida.current = funil.id;
+                        }}
+                        data-testid={`cor-${funil.id}`}
+                      >
+                        <Palette size={16} aria-hidden /> {t("Cor do funil")}
                       </DropdownMenuItem>
                       {!funil.is_default && (
                         <DropdownMenuItem

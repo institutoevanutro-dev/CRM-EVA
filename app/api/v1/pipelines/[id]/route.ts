@@ -23,6 +23,7 @@ import { z } from "zod";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { corDaEtapaSchema } from "@/lib/kanban/cor-da-etapa";
 import {
   podeExcluirDeVez,
   posicaoEntre,
@@ -74,6 +75,11 @@ const bodySchema = z
      */
     is_archived: z.boolean().optional(),
     depois_de: z.string().min(1).nullable().optional(),
+    /**
+     * A cor do funil (migration 0371): `#rrggbb` ou `null` (sem cor). A forma é a
+     * do CHECK de `crm_stages.color`, e por isso o validador é o mesmo.
+     */
+    color: corDaEtapaSchema.optional(),
   })
   .strict()
   .refine((b) => Object.keys(b).length > 0, { message: "Nada para alterar." });
@@ -85,6 +91,7 @@ type PatchDoFunil = {
   is_default?: boolean;
   is_client_pipeline?: boolean;
   is_archived?: boolean;
+  color?: string | null;
 };
 
 export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> {
@@ -193,6 +200,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (pedido.description !== undefined) {
     patchDoAlvo.description = pedido.description?.trim() || null;
   }
+  if (pedido.color !== undefined) patchDoAlvo.color = pedido.color;
 
   // Tirar do arquivo é update SIMPLES: nenhum índice a disputar (nem o de slug
   // nem o de padrão são parciais em `is_archived`, então o funil já ocupava o

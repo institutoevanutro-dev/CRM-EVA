@@ -33,6 +33,7 @@ function mao() {
     onArquivar: vi.fn(),
     onMarcarComoLida: vi.fn(),
     onPausarIa: vi.fn(),
+    onOcultar: vi.fn(),
     onTransferir: vi.fn(),
     onLimpar: vi.fn(),
   };
@@ -90,6 +91,22 @@ describe("BarraDeAcoesEmLote", () => {
     // muitos pacientes de uma vez.
     await user.click(screen.getByRole("button", { name: "Mais ações" }));
     expect(screen.queryByTestId("lote-devolver-ao-automatico")).toBeNull();
+  });
+
+  it("ocultar do Inbox (migration 0372) pergunta antes, diz o que muda, e só então delega", async () => {
+    const user = userEvent.setup();
+    const h = mao();
+    render(<BarraDeAcoesEmLote quantidade={2} pendente={false} {...h} />);
+
+    await user.click(screen.getByRole("button", { name: "Mais ações" }));
+    await user.click(screen.getByTestId("lote-ocultar"));
+    const dialogo = await screen.findByTestId("lote-ocultar-dialogo");
+    expect(dialogo).toHaveTextContent("2 conversas selecionadas");
+    expect(dialogo).toHaveTextContent("as mensagens continuam guardadas");
+    expect(h.onOcultar).not.toHaveBeenCalled();
+
+    await user.click(screen.getByTestId("lote-ocultar-confirmar"));
+    expect(h.onOcultar).toHaveBeenCalledTimes(1);
   });
 
   it("transferir em lote escolhe o destino e devolve (to_user_id, reason)", async () => {

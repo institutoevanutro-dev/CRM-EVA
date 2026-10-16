@@ -1131,6 +1131,21 @@ Spec: `tests/e2e/aviso-de-credito-do-provedor.spec.ts` (job e2e). O turno passa 
 
 Não coberto pela tela: o push no celular (sem par de chaves VAPID no ambiente de teste; a regra é a mesma do som e tem teste em `tests/unit/push-dos-avisos.test.ts`), a chave recusada e o Jev (testes em `tests/unit/aviso-do-provedor.test.ts`).
 
+## J36 — Recomeçar o radar, ocultar do Inbox, cor do funil e quem consultou o acervo `[P1]` (2026-10-16)
+
+- `[P1]` O administrador recomeça o radar: a demanda que esfriou sai, a tela mostra "Radar recomeçado em dd/mm às hh:mm", a demanda VOLTA quando o paciente escreve de novo (mensagem gravada pelo caminho da ingestão), e Desfazer devolve tudo.
+- `[P1]` O amigo do Instagram pessoal é ocultado pelo cabeçalho da conversa: sai da lista e o número da aba Todas cai em 1; aparece em Mais › Ocultos com o selo "Oculto do Inbox", e "Mostrar no Inbox" o traz de volta, com o número de antes.
+- `[P1]` A cor do funil, escolhida no menu ⋯ da lista de Funis, pinta a linha (barra e fundo, medidos por `getComputedStyle`), o ponto do quadro e o cabeçalho em Configurações › Funis, onde "Sem cor" a tira e a linha volta a ser a de antes.
+- `[P1]` O cartão do acervo diz qual assistente consultou nos últimos 30 dias e quando, lido pelo PostgREST real (a consulta antiga era recusada por ele).
+
+Spec: `tests/e2e/radar-ocultos-cor-acervo.spec.ts` (parte 1 do job e2e). Executado em 2026-10-16 no build de produção, banco do `baseline.sql`: 4 passaram. As mesmas quatro telas rodaram no Safari 26.6 real (safaridriver), tema escuro, com medidas: diálogos com 218 e 294 px de altura, seletor de cor com 81 px, selo com 16 px. Evidência em `.superpowers/evidence/radar-ocultos-cor-acervo/`.
+
+Achados e corrigidos: o selo "Oculto do Inbox" quebrava em três linhas no cabeçalho apertado (66 px no Chrome e no Safari, em 1280 px); agora fica numa linha (16 px), e a spec mede. E `filtro-por-marcador-pela-tela.spec.ts` deixava vivo o funil que cria (`crm_leads.pipeline_id` é RESTRICT e os cards ficavam), na posição 1000 do funil padrão: empatados, a lista de Funis os devolvia em qualquer ordem e `importar-leads-planilha` importava no funil errado.
+
+Aberto, fora desta frente: o selo "Janela 23h 59m" do mesmo cabeçalho quebra em duas ou três linhas e o texto vaza da pílula.
+
+Não coberto pela tela: ocultar pela ficha do contato e pela barra de lote (testes de componente), e a IA, o follow-up e o card do funil que pulam o contato oculto (invariantes em `tests/invariants/ocultar-contato-do-inbox.test.ts` e testes de unidade).
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

@@ -12,6 +12,7 @@
  * a rota traduz para `fail()` sem interpretar exceção, e o motivo chega ao
  * operador com o texto real (Regra nº 1).
  */
+import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 import { randomUUID } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -389,7 +390,7 @@ export async function testarAcao(
 
   const { data: contato } = await admin
     .from("contacts")
-    .select("id, name, display_name, phone_number, is_blocked, is_anonymized, consent")
+    .select("id, name, display_name, phone_number, is_blocked, is_anonymized, inbox_hidden_at, consent")
     .eq("organization_id", c.organization_id)
     .eq("id", contactId)
     .maybeSingle();
@@ -408,6 +409,7 @@ export async function testarAcao(
     phone_number: string | null;
     is_blocked: boolean;
     is_anonymized: boolean;
+    inbox_hidden_at?: string | null;
     consent: unknown;
   };
 
@@ -418,6 +420,7 @@ export async function testarAcao(
     telefone: linha.phone_number,
     bloqueado: linha.is_blocked,
     anonimizado: linha.is_anonymized,
+    oculto: contatoEstaOculto(linha),
     recusouMarketing: recusouMarketing(linha.consent),
   });
   if (motivo) {

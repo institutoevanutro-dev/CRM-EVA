@@ -38,6 +38,8 @@ export interface FunilEditavel {
   is_archived: boolean;
   /** Opcional porque NENHUMA regra daqui a usa — ela só existe para a tela. */
   description?: string | null;
+  /** A cor do funil (migration 0371). Mesma razão do `description`: só a tela usa. */
+  color?: string | null;
 }
 
 /** O que amarra o funil ao resto do sistema, contado ANTES de arquivar ou excluir. */

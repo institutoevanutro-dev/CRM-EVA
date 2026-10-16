@@ -3278,6 +3278,8 @@ export type Database = {
           force_human: boolean
           first_service_at: string | null
           id: string
+          inbox_hidden_at: string | null
+          inbox_hidden_by: string | null
           is_anonymized: boolean
           is_blocked: boolean
           is_merged_into: string | null
@@ -3319,6 +3321,8 @@ export type Database = {
           force_human?: boolean
           first_service_at?: string | null
           id?: string
+          inbox_hidden_at?: string | null
+          inbox_hidden_by?: string | null
           is_anonymized?: boolean
           is_blocked?: boolean
           is_merged_into?: string | null
@@ -3360,6 +3364,8 @@ export type Database = {
           force_human?: boolean
           first_service_at?: string | null
           id?: string
+          inbox_hidden_at?: string | null
+          inbox_hidden_by?: string | null
           is_anonymized?: boolean
           is_blocked?: boolean
           is_merged_into?: string | null
@@ -3498,6 +3504,7 @@ export type Database = {
       }
       conversations: {
         Row: {
+          contato_oculto: boolean
           reply_context_revision: number
           active_agent_set_at: string | null
           active_ai_agent_id: string | null
@@ -3542,6 +3549,7 @@ export type Database = {
           usable_for_rag_marked_by: string | null
         }
         Insert: {
+          contato_oculto?: boolean
           reply_context_revision?: number
           active_agent_set_at?: string | null
           active_ai_agent_id?: string | null
@@ -3586,6 +3594,7 @@ export type Database = {
           usable_for_rag_marked_by?: string | null
         }
         Update: {
+          contato_oculto?: boolean
           reply_context_revision?: number
           active_agent_set_at?: string | null
           active_ai_agent_id?: string | null
@@ -4085,6 +4094,7 @@ export type Database = {
       }
       crm_pipelines: {
         Row: {
+          color: string | null
           created_at: string
           description: string | null
           id: string
@@ -4100,6 +4110,7 @@ export type Database = {
           vocabulary: Json
         }
         Insert: {
+          color?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -4115,6 +4126,7 @@ export type Database = {
           vocabulary?: Json
         }
         Update: {
+          color?: string | null
           created_at?: string
           description?: string | null
           id?: string

@@ -7,6 +7,7 @@ import { vapidPronto } from "./vapid";
 import { pushDoAvisoDaCentral } from "./push-dos-avisos";
 import type { PushPayload } from "./push_payload";
 import { rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
+import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 
 export const WEB_PUSH_INBOUND_KEY = "web-push-inbound.v1";
 
@@ -26,7 +27,7 @@ async function handleInbound(row: EventRow): Promise<HandlerResult> {
     const admin = createAdminClient();
     const { data } = await admin
       .from("contacts")
-      .select("display_name, name, phone_number, avatar_storage_path, is_anonymized")
+      .select("display_name, name, phone_number, avatar_storage_path, is_anonymized, inbox_hidden_at")
       .eq("id", contactId)
       .eq("organization_id", row.organization_id)
       .maybeSingle();
@@ -36,7 +37,13 @@ async function handleInbound(row: EventRow): Promise<HandlerResult> {
       phone_number?: string | null;
       avatar_storage_path?: string | null;
       is_anonymized?: boolean | null;
+      inbox_hidden_at?: string | null;
     } | null;
+    // O contato oculto do Inbox (migration 0372) não toca o celular da equipe: a
+    // mensagem dele está gravada, mas não é trabalho de ninguém.
+    if (contatoEstaOculto(c)) {
+      return { consumer_key: WEB_PUSH_INBOUND_KEY, status: "skipped", detail: "contato_oculto" };
+    }
     // A cadeia CANÔNICA, e não a de dois campos remontada aqui: aquela deixava
     // passar o identificador técnico do WhatsApp — a notificação chegaria à tela
     // de bloqueio do celular escrita "Contato 543134@lid". `rotuloDoContato`

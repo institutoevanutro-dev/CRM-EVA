@@ -4,6 +4,7 @@
  * Avisos da Central são da clínica TODA: `agent_inbox_items` não tem dono no
  * schema (spec, "Suposições"). Os outros três filtram pela pessoa.
  */
+import { COLUNA_DO_OCULTO } from "@/lib/inbox/contato-oculto";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { tagDeIdioma } from "@/lib/i18n/datas";
 import type { createClient } from "@/lib/supabase/server";
@@ -67,6 +68,8 @@ export async function esperandoResposta(db: Db, ctx: ContextoDoInicio): Promise<
     .eq("organization_id", ctx.orgId)
     .eq("assigned_to_user_id", ctx.userId)
     .eq("is_group", false)
+    // Contato oculto do Inbox (migration 0372) não é paciente esperando.
+    .eq(COLUNA_DO_OCULTO, false)
     .not("status", "in", `(${STATUS_DE_CONVERSA_ENCERRADA.join(",")})`)
     .not("last_inbound_at", "is", null)
     .order("last_inbound_at", { ascending: false })

@@ -24,6 +24,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { silencioDoBotEhRoteamento } from "@/lib/channels/capabilities";
+import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 
 import {
   decidirElegibilidade,
@@ -38,6 +39,7 @@ interface ConversaEmbed {
     force_human: boolean | null;
     ai_authorized_at: string | null;
     phone_number: string | null;
+    inbox_hidden_at?: string | null;
   } | null;
   channel_sessions: { metadata: Record<string, unknown> | null; provider?: string | null } | null;
 }
@@ -60,7 +62,7 @@ export async function decidirElegibilidadeDaConversaViaSupabase(
   const { data, error } = await admin
     .from("conversations")
     .select(
-      "bot_silenced_until, assignee_kind, contacts:contact_id(force_human, ai_authorized_at, phone_number), channel_sessions:channel_session_id(metadata, provider)",
+      "bot_silenced_until, assignee_kind, contacts:contact_id(force_human, ai_authorized_at, phone_number, inbox_hidden_at), channel_sessions:channel_session_id(metadata, provider)",
     )
     .eq("organization_id", input.organizationId)
     .eq("id", input.conversationId)
@@ -74,6 +76,7 @@ export async function decidirElegibilidadeDaConversaViaSupabase(
   const row = data as unknown as ConversaEmbed;
   return decidirElegibilidade(
     montarEstadoDeElegibilidade({
+      contatoOculto: contatoEstaOculto(row.contacts),
       aiGate: row.channel_sessions?.metadata?.["ai_gate"] ?? null,
       aiGateMode: row.channel_sessions?.metadata?.["ai_gate_mode"] ?? null,
       aiTestPhoneNumbers: row.channel_sessions?.metadata?.["ai_test_phone_numbers"] ?? null,

@@ -47,6 +47,7 @@ vi.mock("../[id]/close/route", () => ({ POST: dubleDe("close") }));
 vi.mock("../[id]/mark-read/route", () => ({ POST: dubleDe("mark-read") }));
 vi.mock("../[id]/pause-ai/route", () => ({ POST: dubleDe("pause-ai") }));
 vi.mock("../[id]/transfer/route", () => ({ POST: dubleDe("transfer") }));
+vi.mock("../[id]/ocultar/route", () => ({ POST: dubleDe("ocultar") }));
 vi.mock("../[id]/route", () => ({ PATCH: dubleDe("patch") }));
 
 import { POST, TETO_DO_LOTE } from "./route";
@@ -133,6 +134,17 @@ describe("POST /api/v1/conversations/bulk", () => {
       { rota: "mark-read", id: A1, corpo: {} },
       { rota: "pause-ai", id: A1, corpo: {} },
     ]);
+  });
+
+  it("ocultar do Inbox (0372) vai pela rota irmã da conversa, uma por item, e recusa a de outra organização", async () => {
+    const res = await chamar({ action: "hide", ids: [A1, B1], organization_id: "org-b" });
+    const { data } = await res.json();
+    expect(chamadas).toEqual([
+      { rota: "ocultar", id: A1, corpo: {} },
+      { rota: "ocultar", id: B1, corpo: {} },
+    ]);
+    expect(data).toMatchObject({ acao: "hide", feitos: 1, recusados: 1 });
+    expect(data.resultados[1]).toMatchObject({ id: B1, feito: false, codigo: "not_found" });
   });
 
   it("handler que estoura recusa só o item; id repetido roda uma vez", async () => {

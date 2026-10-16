@@ -47,7 +47,8 @@ export default async function KanbanPickerPage() {
     // invisível e indestrutível: quem arquivou não tinha como ver, tirar do
     // arquivo nem excluir o que arquivou. A separação passou para a partição
     // abaixo — a lista de trabalho continua só com os vivos.
-    .select("id, name, slug, description, position, is_default, is_client_pipeline, is_archived")
+    // `color` (migration 0371): o acento de cada funil na lista.
+    .select("id, name, slug, description, position, is_default, is_client_pipeline, is_archived, color")
     .eq("organization_id", activeOrg.orgId)
     .order("position");
 

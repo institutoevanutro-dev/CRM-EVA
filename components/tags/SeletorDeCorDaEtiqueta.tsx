@@ -41,6 +41,13 @@ interface Props {
   paleta?: readonly { cor: string; nome: string }[];
   /** Título do popover e rótulo do gatilho. Padrão: "Cor da etiqueta". */
   rotulo?: string;
+  /**
+   * Abertura controlada por fora — o item "Cor do funil" do menu "⋯" da lista
+   * de Funis abre ESTE popover, ancorado no gatilho da linha. Ausente, o
+   * seletor cuida da própria abertura, como sempre.
+   */
+  aberto?: boolean;
+  onAbertoChange?: (aberto: boolean) => void;
 }
 
 const PALETA_PADRAO = PALETA_DE_ETIQUETAS.map((cor) => ({ cor, nome: NOME_DO_TOM[cor] ?? cor }));
@@ -52,10 +59,17 @@ export function SeletorDeCorDaEtiqueta({
   disabled,
   paleta = PALETA_PADRAO,
   rotulo = "Cor da etiqueta",
+  aberto: abertoDeFora,
+  onAbertoChange,
 }: Props) {
   const t = useT();
   const { activeOrg } = useAuth();
-  const [aberto, setAberto] = useState(false);
+  const [abertoAqui, setAbertoAqui] = useState(false);
+  const aberto = abertoDeFora ?? abertoAqui;
+  const setAberto = (v: boolean) => {
+    setAbertoAqui(v);
+    onAbertoChange?.(v);
+  };
 
   const podeDefinir =
     !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;

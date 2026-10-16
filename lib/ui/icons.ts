@@ -77,6 +77,8 @@ export {
   // lgpd
   Scales as ScalesSimple,
   Eye,
+  // ocultar um contato do Inbox (migration 0372)
+  EyeSlash,
   ChartBar,
   ClockCountdown,
   // painéis de evolução / aprendizado

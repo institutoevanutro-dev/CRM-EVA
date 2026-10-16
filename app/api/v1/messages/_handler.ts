@@ -1,4 +1,5 @@
 import { assertAgentOperationSupabase } from "@/lib/ai/agents/operation";
+import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 import {
   assertApprovedReplySupabase,
   recordApprovedReplyReceiptSupabase,
@@ -391,7 +392,7 @@ export async function sendMessageHandler(
   // envio com 42703. Sem a coluna, nada está arquivado — e a consulta sem ela é a
   // consulta certa (ver lib/channels/archived).
   const convSelect = (comArchived: boolean) =>
-    `id, organization_id, contact_id, channel_session_id, is_group, group_chat_id, bot_silenced_until, provider_conversation_id, last_inbound_at, contacts:contact_id(phone_number, wa_identity, wa_lid, is_blocked), channel_sessions:channel_session_id(${CHANNEL_SESSION_REF_COLUMNS}, status${comArchived ? `, ${ARCHIVED_AT}` : ""})`;
+    `id, organization_id, contact_id, channel_session_id, is_group, group_chat_id, bot_silenced_until, provider_conversation_id, last_inbound_at, contacts:contact_id(phone_number, wa_identity, wa_lid, is_blocked, inbox_hidden_at), channel_sessions:channel_session_id(${CHANNEL_SESSION_REF_COLUMNS}, status${comArchived ? `, ${ARCHIVED_AT}` : ""})`;
   //
   // O filtro por `organization_id` NÃO é redundância com a RLS — é a única
   // proteção que existe na metade dos chamadores. Este handler é a porta de
@@ -455,6 +456,7 @@ export async function sendMessageHandler(
       wa_identity: string | null;
       wa_lid: string | null;
       is_blocked: boolean;
+      inbox_hidden_at?: string | null;
     } | null;
     channel_sessions: (ChannelSessionRef & { status: string; archived_at?: string | null }) | null;
   };
@@ -467,6 +469,20 @@ export async function sendMessageHandler(
       undefined,
       ctx.requestId,
       traduzir("Contato bloqueou o atendimento.", ctx.idioma ?? "pt-BR"),
+    );
+  }
+
+  // CONTATO OCULTO DO INBOX (migration 0372): nenhum envio AUTOMÁTICO sai para
+  // ele — IA, follow-up, automação, campanha, agente por MCP. É a porta de saída
+  // de todos eles, e por isso a última trava. Quem atende em pessoa (`user`)
+  // continua escrevendo: ocultar tira da fila, não proíbe a conversa.
+  if (ctx.actor.type !== "user" && contatoEstaOculto(c.contacts)) {
+    throw new ApiError(
+      403,
+      "forbidden",
+      undefined,
+      ctx.requestId,
+      traduzir("Contato oculto do Inbox: mensagem automática não sai para ele.", ctx.idioma ?? "pt-BR"),
     );
   }
 

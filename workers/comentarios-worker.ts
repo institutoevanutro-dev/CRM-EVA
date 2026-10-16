@@ -67,6 +67,7 @@
  * Supabase e com `lib/channels` de verdade, e é ela quem constrói o
  * `AdminDaAcao` que `aplicarRegra` (Task 5) pedia como trabalho da Task 7.
  */
+import { contatoOcultoDoInbox } from "@/lib/contacts/ocultar-do-inbox";
 import { aplicarRegra, enviarPrivadaDeGatilho, type AdminDaAcao, type Desfecho } from "@/lib/comentarios/acao";
 import { motivoDaRecusaPorEspecialidade } from "@/lib/comentarios/especialidade";
 import { regraQueCasa, type RegraDeComentario } from "@/lib/comentarios/regra";
@@ -142,6 +143,13 @@ export interface AdminDoWorker extends AdminDaAcao, AdminDaVoz {
   frasesDeGatilho(organizationId: string): Promise<FrasesDeGatilho>;
   /** `respondido_pela_ia`. */
   marcarRespondidoPelaIa(comentarioId: string, texto: string, replyId: string | null): Promise<void>;
+  /**
+   * O autor do comentário é um contato que a equipe ocultou do Inbox
+   * (migration 0372)? Opcional: o dublê de teste que não o declara vale "não".
+   */
+  autorOcultoDoInbox?(organizationId: string, autorIgsid: string): Promise<boolean>;
+  /** `ignorado`, com o motivo: o comentário sai da fila sem resposta nenhuma. */
+  marcarIgnorado?(comentarioId: string, motivo: string): Promise<void>;
 }
 
 /** Mesmo prazo do lease que `reivindicar` usa (round real, ver `construirAdminDaAcaoReal`). */
@@ -309,6 +317,16 @@ async function processarUmComentario(
       null,
     );
     return "esperando";
+  }
+
+  // CONTATO OCULTO DO INBOX (migration 0372): o amigo do perfil pessoal que
+  // comenta não recebe resposta automática — nem pública, nem privada. O
+  // comentário sai da fila como ignorado, com o motivo escrito.
+  if (admin.autorOcultoDoInbox && admin.marcarIgnorado) {
+    if (await admin.autorOcultoDoInbox(c.organizationId, c.autorIgsid).catch(() => false)) {
+      await admin.marcarIgnorado(c.id, "o autor é um contato oculto do Inbox pela equipe");
+      return "pulado";
+    }
   }
 
   const regras = await admin.regrasDaMidia(c.organizationId, c.mediaId);
@@ -830,6 +848,25 @@ export function construirAdminDoWorkerReal(admin: AdminSupabase): AdminDoWorker 
       if (error) throw new Error(error.message);
       const settings = (data as { settings?: Record<string, unknown> | null } | null)?.settings ?? {};
       return frasesDeGatilho(settings.comentarios);
+    },
+    async autorOcultoDoInbox(organizationId, autorIgsid) {
+      // A mesma identidade que a ingestão do Direct usa (`contact_channel_identities`).
+      const { data: identidade } = await admin
+        .from("contact_channel_identities")
+        .select("contact_id")
+        .eq("organization_id", organizationId)
+        .eq("channel", "instagram")
+        .eq("external_id", autorIgsid)
+        .maybeSingle();
+      const contactId = (identidade as { contact_id?: string | null } | null)?.contact_id;
+      return contactId ? contatoOcultoDoInbox(admin as never, organizationId, contactId) : false;
+    },
+    async marcarIgnorado(comentarioId, motivo) {
+      const { error } = await admin
+        .from("instagram_comments")
+        .update({ situacao: "ignorado", motivo_do_toque: motivo, updated_at: new Date().toISOString() })
+        .eq("id", comentarioId);
+      if (error) throw new Error(error.message);
     },
     async marcarRespondidoPelaIa(comentarioId, texto, replyId) {
       const { error } = await admin

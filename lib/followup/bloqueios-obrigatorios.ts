@@ -182,7 +182,8 @@ export interface FatosDoEnvio {
   enrollment: { id: string; status: string; started_at: string; pointer_id: string };
   /** `trigger_config` cru do pointer. */
   trigger_config: unknown;
-  contato: { is_blocked: boolean; force_human: boolean; is_anonymized: boolean };
+  /** `oculto`: a equipe tirou o contato do Inbox (migration 0372). Opcional para fatos antigos. */
+  contato: { is_blocked: boolean; force_human: boolean; is_anonymized: boolean; oculto?: boolean };
   /** `handoff_policy` do pointer: com `allow`, atribuição e resposta humana não barram. */
   handoff_policy: 'pause' | 'cancel' | 'allow';
   conversa: {
@@ -243,6 +244,7 @@ export type MotivoDoBloqueio =
   | 'inscricao_encerrada'
   | 'opt_out'
   | 'contato_anonimizado'
+  | 'contato_oculto'
   | 'atendimento_humano'
   | 'conversa_nao_liberada'
   | 'etapa_bloqueia_followup'
@@ -314,6 +316,9 @@ export function decidirEnvio(
   }
   if (fatos.contato.is_anonymized) return { envia: false, motivo: 'contato_anonimizado', invalida: true };
   if (fatos.contato.is_blocked) return { envia: false, motivo: 'opt_out', invalida: true };
+  // O contato oculto do Inbox não recebe mensagem automática: a sequência acaba
+  // aqui, qualquer que seja o fluxo e o jeito como ele começou.
+  if (fatos.contato.oculto === true) return { envia: false, motivo: 'contato_oculto', invalida: true };
   // Humano ativo ENCERRA (outcome `handoff`): seguir adiante acabava cancelado
   // com motivo errado no worker, ou rechecando até morrer no atalho.
   const humanoSemPedido =
@@ -420,6 +425,7 @@ export const TEXTO_DO_BLOQUEIO: Record<MotivoDoBloqueio, string> = {
   inscricao_encerrada: 'Envio não feito: a sequência já tinha sido encerrada.',
   opt_out: 'Sequência encerrada: o contato pediu para não receber mensagens.',
   contato_anonimizado: 'Sequência encerrada: o contato foi anonimizado.',
+  contato_oculto: 'Sequência encerrada: o contato foi ocultado do Inbox pela equipe.',
   atendimento_humano: 'Sequência encerrada: uma pessoa da equipe está atendendo esta conversa.',
   conversa_nao_liberada:
     'Sequência encerrada: este número não está liberado para mensagens automáticas a este contato (modo de teste ou sem autorização).',
@@ -501,10 +507,12 @@ export async function lerFatosDoEnvio(
         is_blocked: boolean;
         force_human: boolean;
         is_anonymized: boolean;
+        oculto: boolean;
         phone_number: string | null;
         ai_authorized_at: Date | null;
       }>(
-        `select is_blocked, force_human, is_anonymized, phone_number, ai_authorized_at
+        `select is_blocked, force_human, is_anonymized, (inbox_hidden_at is not null) as oculto,
+                phone_number, ai_authorized_at
            from contacts where organization_id = $1 and id = $2`,
         [org, contactId],
       ),
@@ -642,7 +650,12 @@ export async function lerFatosDoEnvio(
         enrollment: { id: e.id, status: e.status, started_at: iso(e.started_at)!, pointer_id: e.pointer_id },
         trigger_config: e.trigger_config,
         handoff_policy: e.handoff_policy === 'allow' || e.handoff_policy === 'cancel' ? e.handoff_policy : 'pause',
-        contato: { is_blocked: c.is_blocked, force_human: c.force_human, is_anonymized: c.is_anonymized },
+        contato: {
+          is_blocked: c.is_blocked,
+          force_human: c.force_human,
+          is_anonymized: c.is_anonymized,
+          oculto: c.oculto === true,
+        },
         // Silêncio em canal sem IA é roteamento (a conversa cai na Fila), não
         // uma pessoa que assumiu: lá ele não bloqueia o follow-up.
         conversa: {

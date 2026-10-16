@@ -46,6 +46,7 @@ import { serviceForEvent } from "@/lib/atendimento/origem";
  * A fila lê essa timeline; uma coluna `origem` em `followup_enrollments` seria
  * uma segunda verdade sobre o mesmo fato.
  */
+import { contatoOcultoDoInbox } from "@/lib/contacts/ocultar-do-inbox";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { EventRow } from "@/lib/event-log/dispatcher";
@@ -272,7 +273,11 @@ export function createSupabaseGatilhoEtapaDb(admin: SupabaseClient): GatilhoEtap
         .eq("organization_id", orgId)
         .maybeSingle();
       if (error) throw new Error(error.message);
-      return data?.contact_id ?? null;
+      const contactId = (data?.contact_id as string | null | undefined) ?? null;
+      // O contato oculto do Inbox (migration 0372) conta como "sem contato": a
+      // sequência não nasce para ele.
+      if (contactId && (await contatoOcultoDoInbox(admin, orgId, contactId))) return null;
+      return contactId;
     },
 
     async carregaNoDeGatilho(orgId, versionId) {

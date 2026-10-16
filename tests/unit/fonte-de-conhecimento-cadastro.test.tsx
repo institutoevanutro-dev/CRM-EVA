@@ -198,12 +198,14 @@ describe("NovoMaterialDialog — o tipo escolhido é o tipo enviado", () => {
   });
 });
 
+const SEM_USO = { consultadoPor: [], todos: false, ultimaConsultaEm: null, disponivelPara: [] };
+
 describe("KnowledgeSourceCard — só oferece controle onde existe ação", () => {
   it("FAQ pronta oferece editar conteúdo e ver o que o agente aprendeu", () => {
     render(
       <KnowledgeSourceCard
         source={material()}
-        usadoPor={["Suporte"]}
+        uso={{ ...SEM_USO, consultadoPor: ["Suporte"], disponivelPara: ["Suporte"] }}
         onReindex={() => {}}
         onArquivar={() => {}}
         onMudou={() => {}}
@@ -218,7 +220,7 @@ describe("KnowledgeSourceCard — só oferece controle onde existe ação", () =
       render(
         <KnowledgeSourceCard
           source={material({ source_type: tipo })}
-          usadoPor={[]}
+          uso={SEM_USO}
           onReindex={() => {}}
           onArquivar={() => {}}
           onMudou={() => {}}
@@ -237,7 +239,7 @@ describe("KnowledgeSourceCard — só oferece controle onde existe ação", () =
     render(
       <KnowledgeSourceCard
         source={material({ source_type: "documento", name: "Política de troca" })}
-        usadoPor={[]}
+        uso={SEM_USO}
         onReindex={() => {}}
         onArquivar={() => {}}
         onMudou={() => {}}
@@ -254,7 +256,7 @@ describe("KnowledgeSourceCard — só oferece controle onde existe ação", () =
     render(
       <KnowledgeSourceCard
         source={material({ chunks_count: 0, last_index_status: null })}
-        usadoPor={[]}
+        uso={SEM_USO}
         onReindex={() => {}}
         onArquivar={() => {}}
         onMudou={() => {}}
@@ -268,7 +270,7 @@ describe("KnowledgeSourceCard — só oferece controle onde existe ação", () =
     render(
       <KnowledgeSourceCard
         source={material()}
-        usadoPor={[]}
+        uso={SEM_USO}
         onReindex={() => {}}
         onArquivar={() => {}}
         onMudou={() => {}}
@@ -276,6 +278,69 @@ describe("KnowledgeSourceCard — só oferece controle onde existe ação", () =
     );
     // Acervo que ninguém lê é dinheiro gasto sem efeito, e era invisível.
     expect(screen.getByTestId("material-orfao-ks-1")).toBeInTheDocument();
+  });
+
+  it("quem consultou de verdade aparece, com a última consulta", () => {
+    render(
+      <KnowledgeSourceCard
+        source={material()}
+        uso={{
+          consultadoPor: ["Agendamento", "Dúvidas"],
+          todos: false,
+          ultimaConsultaEm: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+          disponivelPara: ["Agendamento", "Dúvidas", "Pós-venda"],
+        }}
+        onReindex={() => {}}
+        onArquivar={() => {}}
+        onMudou={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("material-consultado-por-ks-1")).toHaveTextContent("Agendamento, Dúvidas");
+    expect(screen.getByTestId("material-ultima-consulta-ks-1")).toHaveTextContent("há 3 h");
+    expect(screen.queryByTestId("material-orfao-ks-1")).toBeNull();
+  });
+
+  it("todos os assistentes consultaram: diz isso em vez de listar", () => {
+    render(
+      <KnowledgeSourceCard
+        source={material()}
+        uso={{ consultadoPor: ["A", "B"], todos: true, ultimaConsultaEm: null, disponivelPara: ["A", "B"] }}
+        onReindex={() => {}}
+        onArquivar={() => {}}
+        onMudou={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("material-consultado-por-ks-1")).toHaveTextContent("todos os assistentes");
+  });
+
+  it("ninguém consultou mas há quem possa: não é órfão, e diz quem pode", () => {
+    render(
+      <KnowledgeSourceCard
+        source={material()}
+        uso={{ ...SEM_USO, disponivelPara: ["Agendamento"] }}
+        onReindex={() => {}}
+        onArquivar={() => {}}
+        onMudou={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("material-consultado-por-ks-1")).toHaveTextContent("ninguém nos últimos 30 dias");
+    expect(screen.getByText(/Disponível para: Agendamento/)).toBeInTheDocument();
+    expect(screen.queryByTestId("material-orfao-ks-1")).toBeNull();
+  });
+
+  it("leitura que falhou não vira 'nenhum assistente'", () => {
+    render(
+      <KnowledgeSourceCard
+        source={material()}
+        uso={null}
+        onReindex={() => {}}
+        onArquivar={() => {}}
+        onMudou={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("material-consultado-por-ks-1")).toHaveTextContent("não deu para ver agora");
+    expect(screen.queryByTestId("material-orfao-ks-1")).toBeNull();
+    expect(screen.queryByTestId("material-ultima-consulta-ks-1")).toBeNull();
   });
 
   it("falta de chave aparece no cartão com o motivo, não como 'não indexado'", () => {
@@ -286,7 +351,7 @@ describe("KnowledgeSourceCard — só oferece controle onde existe ação", () =
           last_index_status: "sem_credencial",
           last_index_error: "Falta uma chave da OpenAI para indexar.",
         })}
-        usadoPor={[]}
+        uso={SEM_USO}
         onReindex={() => {}}
         onArquivar={() => {}}
         onMudou={() => {}}

@@ -23,6 +23,9 @@ export interface Contact {
   is_blocked: boolean;
   /** "Sempre atendimento humano" (migration 0366): a IA nunca atende este contato. */
   ai_opt_out?: boolean;
+  /** Oculto do Inbox pela equipe (migration 0372), e por quem. `null` = visível. */
+  inbox_hidden_at?: string | null;
+  inbox_hidden_by?: string | null;
   blocked_reason: string | null;
   is_anonymized: boolean;
   anonymized_at: string | null;

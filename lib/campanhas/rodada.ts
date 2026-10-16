@@ -32,6 +32,7 @@
  *
  * Nunca lança para o cron: uma campanha quebrada não pode derrubar a rodada.
  */
+import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 import { randomUUID } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -247,7 +248,7 @@ async function rodarUmaCampanha(
     .from("campaign_recipients")
     .select(
       "id, contact_id, recipient_address, rendered_body, " +
-        "contacts(id, name, display_name, phone_number, is_blocked, is_anonymized, consent)",
+        "contacts(id, name, display_name, phone_number, is_blocked, is_anonymized, inbox_hidden_at, consent)",
     )
     .eq("campaign_id", campanha.id)
     .eq("status", "pending")
@@ -291,6 +292,7 @@ async function rodarUmaCampanha(
     telefone: contato?.phone_number ?? alvo.recipient_address,
     bloqueado: !!contato?.is_blocked,
     anonimizado: !!contato?.is_anonymized,
+    oculto: contatoEstaOculto(contato as { inbox_hidden_at?: unknown } | null | undefined),
     recusouMarketing: recusouMarketing(contato?.consent),
   });
   if (motivo) {

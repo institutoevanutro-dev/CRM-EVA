@@ -118,6 +118,10 @@ export function tabToFilter(
       // mesma lista e badges diferentes, que é a mentira de tela que o mapa
       // abaixo existe para impedir.
       return { status: "archived" };
+    case "ocultos":
+      // Só as conversas de contato oculto do Inbox (migration 0372). As outras
+      // abas não precisam pedir nada: o servidor nunca as devolve fora daqui.
+      return { ocultos: true };
     case "ai":
       // `ai_handling` é escrito por UM caminho só em produção (a volta pelo botão
       // "Devolver ao automático"), então a aba vivia mostrando 2 enquanto o robô
@@ -129,7 +133,7 @@ export function tabToFilter(
   }
 }
 
-const FILTER_TABS: InboxTab[] = ["unassigned", "mine", "all", "closed", "archived", "ai", "comentarios"];
+const FILTER_TABS: InboxTab[] = ["unassigned", "mine", "all", "closed", "archived", "ai", "comentarios", "ocultos"];
 
 /**
  * Lê ?filter= (G4-02, deep-link). ?filter=all é HONRADO mesmo para agent — a
@@ -688,6 +692,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
             onArquivar={() => rodarLote("archive")}
             onMarcarComoLida={() => rodarLote("mark-read")}
             onPausarIa={() => rodarLote("pause-ai")}
+            onOcultar={() => rodarLote("hide")}
             onTransferir={(toUserId, reason) => rodarLote("transfer", toUserId, reason)}
             onLimpar={selecao.limpar}
           />

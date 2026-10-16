@@ -32,6 +32,8 @@ export type RoutingOutcome =
   | "requeued_no_eligible"
   | "skipped_invalid_channel"
   | "skipped_conv_missing"
+  /** Contato oculto do Inbox (migration 0372): ninguém é escalado para ele. */
+  | "skipped_contato_oculto"
   | "skipped_invalid_payload"
   | "assign_lost_race"
   | "error";
@@ -60,6 +62,7 @@ const EMPTY_OUTCOMES = (): Record<RoutingOutcome, number> => ({
   requeued_no_eligible: 0,
   skipped_invalid_channel: 0,
   skipped_conv_missing: 0,
+  skipped_contato_oculto: 0,
   skipped_invalid_payload: 0,
   assign_lost_race: 0,
   error: 0,
@@ -143,7 +146,7 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
 
   const { data: conv, error: convError } = await admin
     .from("conversations")
-    .select("id, organization_id, contact_id, channel_session_id, assigned_to_user_id, status")
+    .select("id, organization_id, contact_id, channel_session_id, assigned_to_user_id, status, contato_oculto")
     .eq("id", conversationId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -152,6 +155,12 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
   if (!conv || !["open", "pending", "claimed", "ai_handling"].includes(conv.status)) {
     await markDone(event, "skipped_conv_missing");
     return "skipped_conv_missing";
+  }
+  // Contato oculto do Inbox (migration 0372): não entra no rodízio nem abre o
+  // aviso "uma conversa aguarda um responsável" — ninguém precisa atendê-lo.
+  if ((conv as { contato_oculto?: boolean }).contato_oculto === true) {
+    await markDone(event, "skipped_contato_oculto");
+    return "skipped_contato_oculto";
   }
 
   // organizations.settings.routing → Zod (default manual; knobs = config, não hardcode).

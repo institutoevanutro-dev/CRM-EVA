@@ -57,6 +57,8 @@ export interface Conversation {
    * resposta de uma versão anterior, ainda em cache do react-query, não o tem.
    */
   comando_da_conversa?: string | null;
+  /** O contato está oculto do Inbox pela equipe (migration 0372). */
+  contato_oculto?: boolean;
   /**
    * O id da conversa no provider (IGSID do Instagram) — só selecionado por quem
    * pede (não vem em `select=*`). É a chave para casar a conversa com QUAL

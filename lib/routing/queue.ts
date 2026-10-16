@@ -14,6 +14,7 @@
  * escrever, ou seja, o painel dizia que a fila estava MELHORANDO exatamente no
  * momento em que o cliente mais estava esperando.
  */
+import { semContatoOculto } from "@/lib/inbox/contato-oculto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { orgTemAutomatico } from "@/lib/ai/agents/org-tem-automatico";
@@ -42,11 +43,11 @@ export async function getQueueStatus(
   now: Date,
 ): Promise<QueueStatus> {
   const naFila = comandosDaFila(await orgTemAutomatico(supabase, organizationId));
-  const { data: queueRows } = await supabase
-    .from("conversations")
-    .select("awaiting_since")
-    .eq("organization_id", organizationId)
-    .in("comando_da_conversa", naFila);
+  // A Fila do atendente não mostra conversa de contato oculto do Inbox (0372):
+  // o tamanho da fila que o agente informa tem de ser o que a tela mostra.
+  const { data: queueRows } = await semContatoOculto(
+    supabase.from("conversations").select("awaiting_since").eq("organization_id", organizationId),
+  ).in("comando_da_conversa", naFila);
 
   const rows = (queueRows ?? []) as Array<{ awaiting_since: string | null }>;
   const queueSize = rows.length;
@@ -82,10 +83,9 @@ export async function getQueuePositions(
   organizationId: string,
 ): Promise<Map<string, number>> {
   const naFila = comandosDaFila(await orgTemAutomatico(supabase, organizationId));
-  const { data } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("organization_id", organizationId)
+  const { data } = await semContatoOculto(
+    supabase.from("conversations").select("id").eq("organization_id", organizationId),
+  )
     .in("comando_da_conversa", naFila)
     .order(ORDEM_DA_ESPERA.coluna, ORDEM_DA_ESPERA.opcoes)
     .order("id", { ascending: true });
@@ -115,10 +115,9 @@ export async function getQueuePosition(
 ): Promise<number> {
   const naFila = comandosDaFila(await orgTemAutomatico(supabase, organizationId));
   const ref = awaitingSince ?? now.toISOString();
-  const { count } = await supabase
-    .from("conversations")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", organizationId)
+  const { count } = await semContatoOculto(
+    supabase.from("conversations").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
+  )
     .in("comando_da_conversa", naFila)
     .lte("awaiting_since", ref);
   return count ?? 1;

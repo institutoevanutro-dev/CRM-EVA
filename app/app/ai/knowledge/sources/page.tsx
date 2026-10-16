@@ -12,7 +12,8 @@ import {
 } from "@/lib/ai/embeddings/chave";
 import type { EstadoDaChave } from "@/components/ai/ChaveDeConhecimento";
 import type { SourceRow } from "@/hooks/ai/useKnowledgeSources";
-import { AcervoClient, type AgenteQueUsa } from "./_client";
+import { carregarUsoDoAcervo } from "@/lib/ai/knowledge/uso-do-acervo";
+import { AcervoClient } from "./_client";
 
 export const dynamic = "force-dynamic";
 
@@ -48,21 +49,17 @@ export default async function AcervoPage() {
 
   const supabase = await createClient();
 
-  const [{ data: sourcesRaw, error }, { data: agentesRaw }, chave, { data: credenciais }] =
+  const [{ data: sourcesRaw, error }, uso, chave, { data: credenciais }] =
     await Promise.all([
       supabase
         .from("ai_knowledge_sources")
         .select("*")
         .eq("organization_id", activeOrg.orgId)
         .order("created_at", { ascending: false }),
-      // Quem consulta o quê. A tela precisa disto para responder "se eu arquivar
-      // este material, quem para de saber dele?" — sem essa resposta, arquivar é
-      // um tiro no escuro.
-      supabase
-        .from("ai_agents")
-        .select("id, name, published_version_id, ai_agent_versions!inner(id, knowledge_source_ids)")
-        .eq("organization_id", activeOrg.orgId)
-        .is("archived_at", null),
+      // Quem pode consultar e quem consultou de verdade cada material. A tela
+      // precisa disto para responder "se eu arquivar este material, quem para
+      // de saber dele?" — sem essa resposta, arquivar é um tiro no escuro.
+      carregarUsoDoAcervo(supabase, activeOrg.orgId),
       resolverChaveDeEmbedding(activeOrg.orgId),
       supabase
         .from("ai_provider_credentials_safe")
@@ -73,22 +70,6 @@ export default async function AcervoPage() {
     ]);
 
   const initialSources = (sourcesRaw ?? []) as unknown as SourceRow[];
-
-  const agentes: AgenteQueUsa[] = ((agentesRaw ?? []) as unknown as Array<{
-    id: string;
-    name: string;
-    published_version_id: string | null;
-    ai_agent_versions: Array<{ id: string; knowledge_source_ids: string[] | null }>;
-  }>)
-    .map((a) => {
-      const publicada = a.ai_agent_versions.find((v) => v.id === a.published_version_id);
-      return {
-        id: a.id,
-        nome: a.name,
-        materiais: publicada?.knowledge_source_ids ?? [],
-      };
-    })
-    .filter((a) => a.materiais.length > 0);
 
   const estadoDaChave: EstadoDaChave = {
     pode_indexar: chave !== null,
@@ -114,7 +95,7 @@ export default async function AcervoPage() {
         <AcervoClient
         initialSources={initialSources}
         initialChave={estadoDaChave}
-        agentes={agentes}
+        uso={uso}
       />
       )}
     </div>

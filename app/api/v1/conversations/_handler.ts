@@ -18,6 +18,7 @@ import type {
 import type { Conversation } from "@/lib/types/messaging";
 import { normalizarTermoDeBusca } from "@/lib/inbox/termo-de-busca";
 import { ORDEM_DA_ESPERA, ehAFila } from "@/lib/inbox/comando-da-conversa";
+import { semContatoOculto, soContatoOculto } from "@/lib/inbox/contato-oculto";
 import { aplicarMarcadores } from "@/lib/inbox/marcador-da-conversa";
 
 /**
@@ -90,7 +91,7 @@ const SELECT_COLS = `
   unread_count_for_assignee, is_group, group_chat_id, tags, metadata,
   snooze_until, created_at, updated_at,
   bot_silenced_until, last_handoff_at,
-  comando_da_conversa, provider_conversation_id,
+  comando_da_conversa, provider_conversation_id, contato_oculto,
   contacts:contact_id (id, display_name, name, phone_number, is_anonymized, tags, is_blocked, avatar_storage_path, force_human, contact_channel_identities (channel, external_id, handle, display_name)),
   channel_sessions:channel_session_id (phone_number, display_name, provider)
 `;
@@ -178,6 +179,14 @@ export async function listConversationsHandler(
     .order(sortCol, ordem)
     .order("id", { ascending: asc })
     .limit(q.limit + 1);
+
+  // CONTATO OCULTO DO INBOX (migration 0372), no banco e na mesma consulta, pelo
+  // mesmo motivo dos outros filtros: o cursor continua valendo. O Inbox nunca
+  // mostra conversa de contato oculto; a aba "Ocultos" mostra só elas (a rota
+  // confere o papel). A ficha do contato (`contact_id`) lista todos os canais
+  // DELE, ocultos ou não — quem abriu a ficha está olhando para essa pessoa.
+  if (q.ocultos) query = soContatoOculto(query);
+  else if (!q.contact_id) query = semContatoOculto(query);
 
   // `.in` e não `.eq`: o filtro agora chega como LISTA (um valor vira lista de um,
   // e o SQL resultante é equivalente). É o que deixa a aba Fila pedir os dois

@@ -3902,6 +3902,9 @@ export const DICIONARIO: Traducoes = {
   "O contato pediu para não receber mensagens (opt-out).": {
     es: "El contacto pidió no recibir mensajes (opt-out).",
   },
+  "O contato foi ocultado do Inbox pela equipe: automação não escreve para ele.": {
+    es: "El contacto fue ocultado del Inbox por el equipo: la automatización no le escribe.",
+  },
   "O contato não tem telefone cadastrado.": { es: "El contacto no tiene teléfono registrado." },
   "Falta preencher alguma configuração desta ação — abra a automação e revise.": {
     es: "Falta completar alguna configuración de esta acción — abre la automatización y revísala.",
@@ -6169,6 +6172,7 @@ export const DICIONARIO: Traducoes = {
   // ─── Contacts: lista, ficha, timeline, LGPD ───
   "Erro ao carregar contato.": { es: "Error al cargar el contacto." },
   "Contato anonimizado (LGPD)": { es: "Contacto anonimizado (LGPD)" },
+  "Oculto do Inbox pela equipe": { es: "Ocultado del Inbox por el equipo" },
   "edição bloqueada.": { es: "edición bloqueada." },
   "Visão geral": { es: "Visión general" },
   "Última atividade": { es: "Última actividad" },
@@ -7325,6 +7329,24 @@ export const DICIONARIO: Traducoes = {
   "em risco": { es: "en riesgo" },
   "em voo": { es: "en vuelo" },
   "Radar de risco": { es: "Radar de riesgo" },
+  // Recomeçar o radar (migration 0370): app/app/radar/_components/RecomecoDoRadar.tsx.
+  "Recomeçar o radar a partir de agora": { es: "Reiniciar el radar a partir de ahora" },
+  "Recomeçar o radar a partir de agora?": { es: "¿Reiniciar el radar a partir de ahora?" },
+  "O que não teve atividade até agora sai do radar. Nada é apagado: negócios, conversas e demandas continuam como estão, e o item volta sozinho se tiver atividade nova depois deste momento. Dá para desfazer.": {
+    es: "Lo que no tuvo actividad hasta ahora sale del radar. No se borra nada: negocios, conversaciones y demandas siguen como están, y el ítem vuelve solo si tiene actividad nueva después de este momento. Se puede deshacer.",
+  },
+  "Recomeçar agora": { es: "Reiniciar ahora" },
+  "Radar recomeçado a partir de agora": { es: "Radar reiniciado a partir de ahora" },
+  "Radar recomeçado em": { es: "Radar reiniciado el" },
+  "Desfazer": { es: "Deshacer" },
+  "Voltar a mostrar tudo no radar?": { es: "¿Volver a mostrar todo en el radar?" },
+  "Os negócios e as demandas de antes do recomeço voltam a aparecer no radar. Nada foi apagado enquanto estavam fora.": {
+    es: "Los negocios y las demandas de antes del reinicio vuelven a aparecer en el radar. No se borró nada mientras estuvieron fuera.",
+  },
+  "Mostrar tudo de novo": { es: "Mostrar todo de nuevo" },
+  "O radar voltou a mostrar tudo": { es: "El radar volvió a mostrar todo" },
+  "Só um administrador pode recomeçar o radar.": { es: "Solo un administrador puede reiniciar el radar." },
+  "Não foi possível recomeçar o radar.": { es: "No fue posible reiniciar el radar." },
   "Demandas abertas que esfriaram e precisam de você. Se o assistente já agendou um retorno, aparece como “em voo”; sem próximo passo, é risco de perder o cliente.": { es: "Demandas abiertas que se enfriaron y te necesitan. Si el asistente ya agendó un retorno, aparece como “en vuelo”; sin próximo paso, es riesgo de perder al cliente." },
   "Scripts salvos para responder mais rápido no atendimento.": { es: "Guiones guardados para responder más rápido en la atención." },
   "Saudação inicial": { es: "Saludo inicial" },
@@ -8476,6 +8498,13 @@ export const DICIONARIO: Traducoes = {
   // de AST que apontou as seis, uma a uma; nenhuma apareceria abrindo tela.
   "Preparado": { es: "Preparado" },
   "Consultado por": { es: "Consultado por" },
+  // Quem consultou cada material, das buscas do motor (lib/ai/knowledge/uso-do-acervo.ts).
+  "Última consulta": { es: "Última consulta" },
+  "todos os assistentes": { es: "todos los asistentes" },
+  "ninguém nos últimos 30 dias": { es: "nadie en los últimos 30 días" },
+  "Disponível para": { es: "Disponible para" },
+  "nenhuma nos últimos 30 dias": { es: "ninguna en los últimos 30 días" },
+  "não deu para ver agora": { es: "no se pudo ver ahora" },
   "Preparando…": { es: "Preparando…" },
   "Guardando…": { es: "Guardando…" },
   "tokens": { es: "tokens" },
@@ -10749,6 +10778,43 @@ export const DICIONARIO: Traducoes = {
   "Verde (ganho)": { es: "Verde (ganado)" },
   "Verde-água (acompanhamento)": { es: "Verde agua (seguimiento)" },
   "Cinza (perdido)": { es: "Gris (perdido)" },
+  // A cor do FUNIL (migration 0371, lib/pipelines/cor-do-funil.ts): os mesmos tons
+  // da etapa, com o nome sem o papel. Só "Verde" faltava; os outros já existem.
+  "Cor do funil": { es: "Color del embudo" },
+  "Cor do funil atualizada.": { es: "Color del embudo actualizado." },
+  Verde: { es: "Verde" },
+  // Ocultar um contato do Inbox (migration 0372): components/inbox/OcultarDoInbox.tsx,
+  // a aba "Ocultos", o lote e as rotas app/api/v1/{contacts,conversations}/[id]/ocultar.
+  "Ocultar do Inbox": { es: "Ocultar del Inbox" },
+  "Oculto do Inbox": { es: "Oculto del Inbox" },
+  Ocultos: { es: "Ocultos" },
+  "Mostrar no Inbox": { es: "Mostrar en el Inbox" },
+  "Contato ocultado do Inbox": { es: "Contacto ocultado del Inbox" },
+  "O contato voltou ao Inbox": { es: "El contacto volvió al Inbox" },
+  "ocultadas do Inbox": { es: "ocultadas del Inbox" },
+  "Nenhum contato oculto": { es: "Ningún contacto oculto" },
+  "Quem a equipe tirar do Inbox aparece aqui. As mensagens dessas pessoas continuam guardadas, e um gerente pode trazê-las de volta.": {
+    es: "Quien el equipo saque del Inbox aparece aquí. Los mensajes de esas personas siguen guardados, y un gerente puede traerlas de vuelta.",
+  },
+  "As conversas deste contato saem do Inbox, das contagens, da Fila, do radar e do Início. A IA não responde, follow-ups e automações não mandam mensagem e ele não ganha card novo no funil.": {
+    es: "Las conversaciones de este contacto salen del Inbox, de los conteos, de la Fila, del radar y del Inicio. La IA no responde, los seguimientos y automatizaciones no envían mensajes y no gana una tarjeta nueva en el embudo.",
+  },
+  "Nada é apagado: as mensagens continuam guardadas. Um gerente pode trazê-lo de volta em Inbox › Mais › Ocultos.": {
+    es: "No se borra nada: los mensajes siguen guardados. Un gerente puede traerlo de vuelta en Inbox › Más › Ocultos.",
+  },
+  "Ocultar do Inbox o contato da conversa selecionada?": {
+    es: "¿Ocultar del Inbox el contacto de la conversación seleccionada?",
+  },
+  "Ocultar do Inbox os contatos de": { es: "¿Ocultar del Inbox los contactos de" },
+  "As conversas desses contatos saem do Inbox, das contagens, da Fila, do radar e do Início. A IA não responde, follow-ups e automações não mandam mensagem, e as mensagens continuam guardadas. Um gerente pode trazê-los de volta em Inbox › Mais › Ocultos.": {
+    es: "Las conversaciones de esos contactos salen del Inbox, de los conteos, de la Fila, del radar y del Inicio. La IA no responde, los seguimientos y automatizaciones no envían mensajes, y los mensajes siguen guardados. Un gerente puede traerlos de vuelta en Inbox › Más › Ocultos.",
+  },
+  "Conversa inválida.": { es: "Conversación inválida." },
+  "Não foi possível mudar o contato no Inbox.": { es: "No fue posible cambiar el contacto en el Inbox." },
+  "Conversa de grupo não tem contato para ocultar.": { es: "Una conversación de grupo no tiene contacto para ocultar." },
+  "Contato oculto do Inbox: mensagem automática não sai para ele.": {
+    es: "Contacto oculto del Inbox: no se le envían mensajes automáticos.",
+  },
   // Contato "sempre atendimento humano" (migration 0366).
   "Sempre atendimento humano": { es: "Siempre atención humana" },
   "Tirar sempre humano": { es: "Quitar siempre humano" },

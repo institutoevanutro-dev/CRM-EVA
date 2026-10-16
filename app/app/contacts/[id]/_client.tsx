@@ -1,5 +1,6 @@
 "use client";
 
+import { OcultarDoInbox, SeloDeOculto } from "@/components/inbox/OcultarDoInbox";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import { useT } from "@/hooks/i18n/useT";
@@ -137,6 +138,7 @@ export function ContactDetailClient({ contactId }: Props) {
             ))}
             {contact.is_blocked && <Badge variant="warning">{t("Bloqueado")}</Badge>}
             {marcadoSempreHumano && <Badge variant="warning">{t("Sempre atendimento humano")}</Badge>}
+            {contact.inbox_hidden_at && <SeloDeOculto />}
             {contact.is_anonymized && <Badge variant="destructive">{t("Anonimizado")}</Badge>}
           </div>
         </div>
@@ -237,6 +239,13 @@ export function ContactDetailClient({ contactId }: Props) {
                 </AlertDialogContent>
               </AlertDialog>
             )}
+            {/* Ocultar do Inbox (migration 0372): agent+ oculta; manager+ traz de volta. */}
+            <OcultarDoInbox
+              contactId={contactId}
+              nome={displayName}
+              oculto={Boolean(contact.inbox_hidden_at)}
+              variante="botao"
+            />
             <DialButton contactId={contactId} hasPhone={!!contact.phone_number} />
             <Button variant="outline" onClick={() => setEditOpen(true)} className="shrink-0">
               <PencilSimple size={16} weight="bold" aria-hidden />

@@ -185,6 +185,80 @@ describe("PATCH /api/v1/pipelines/[id]", () => {
   });
 });
 
+describe("PATCH /api/v1/pipelines/[id] — a cor do funil (migration 0371)", () => {
+  it("grava a cor, filtrando pela organização do JWT, e audita", async () => {
+    authOk();
+    const db = makeDb({ pipelines: doisFunis() });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(reqPatch({ color: "#378ADD" }), ctx());
+    expect(res.status).toBe(200);
+    expect(db.escritas).toHaveLength(1);
+    expect(db.escritas[0]?.patch).toEqual({ color: "#378ADD" });
+    expect(db.escritas[0]?.filtros).toContainEqual(["organization_id", ORG_ID]);
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "pipeline.updated",
+        resourceId: OUTRO,
+        metadata: expect.objectContaining({ pedido: { color: "#378ADD" } }),
+      }),
+    );
+  });
+
+  it("null tira a cor; minúscula também é forma válida", async () => {
+    authOk();
+    const db = makeDb({ pipelines: doisFunis() });
+    const { PATCH } = await import("./route");
+    expect((await PATCH(reqPatch({ color: null }), ctx())).status).toBe(200);
+    expect((await PATCH(reqPatch({ color: "#d4537e" }), ctx())).status).toBe(200);
+    expect(db.escritas.map((e) => e.patch)).toEqual([{ color: null }, { color: "#d4537e" }]);
+  });
+
+  it.each(["azul", "378ADD", "#378AD", "#GGGGGG", "#378ADDFF", "", 42])(
+    "cor fora da forma (%s) → 422 e nenhuma escrita",
+    async (ruim) => {
+      authOk();
+      const db = makeDb({ pipelines: doisFunis() });
+      const { PATCH } = await import("./route");
+      expect((await PATCH(reqPatch({ color: ruim }), ctx())).status).toBe(422);
+      expect(db.escritas).toEqual([]);
+      expect(audit).not.toHaveBeenCalled();
+    },
+  );
+
+  it("papel abaixo de manager → a recusa do requireRole, sem escrever", async () => {
+    vi.mocked(requireRole).mockResolvedValue({
+      ok: false,
+      response: fail("forbidden_role", "Precisa ser gerente.", 403, {}),
+    });
+    const db = makeDb({ pipelines: doisFunis() });
+    const { PATCH } = await import("./route");
+    expect((await PATCH(reqPatch({ color: "#378ADD" }), ctx())).status).toBe(403);
+    expect(vi.mocked(requireRole).mock.calls[0]?.[0]).toBe("manager");
+    expect(db.escritas).toEqual([]);
+  });
+
+  it("funil de outra organização → 404, sem pintar nada", async () => {
+    authOk();
+    const db = makeDb({
+      pipelines: doisFunis().map((f) => ({ ...f, organization_id: OUTRA_ORG })),
+    });
+    const { PATCH } = await import("./route");
+    expect((await PATCH(reqPatch({ color: "#378ADD" }), ctx())).status).toBe(404);
+    expect(db.escritas).toEqual([]);
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("a resposta devolve a cor de cada funil para a tela aplicar", async () => {
+    authOk();
+    makeDb({ pipelines: [doisFunis()[0]!, { ...doisFunis()[1]!, color: "#378ADD" } as never] });
+    const { PATCH } = await import("./route");
+    const corpo = await (await PATCH(reqPatch({ color: "#378ADD" }), ctx())).json();
+    const lista = corpo.data.pipelines as Array<{ id: string; color: string | null }>;
+    expect(lista.find((f) => f.id === OUTRO)?.color).toBe("#378ADD");
+    expect(lista.find((f) => f.id === PIPE)?.color).toBeNull();
+  });
+});
+
 describe("DELETE /api/v1/pipelines/[id]", () => {
   it("arquiva: marca is_archived e NÃO apaga", async () => {
     authOk();

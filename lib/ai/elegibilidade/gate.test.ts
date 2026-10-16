@@ -12,6 +12,7 @@ const AGORA = new Date("2026-08-27T12:00:00Z");
 const DIA = 24 * 60 * 60 * 1000;
 
 const base: EstadoDeElegibilidade = {
+  contatoOculto: false,
   modo: "open",
   forceHuman: false,
   botSilencedUntil: null,
@@ -22,6 +23,29 @@ const base: EstadoDeElegibilidade = {
   agora: AGORA,
   ttlMs: 21 * DIA,
 };
+
+describe("decidirElegibilidade — contato oculto do Inbox (migration 0372)", () => {
+  it("cala a IA em qualquer modo, antes de qualquer outra regra, e cala também o envio", () => {
+    for (const estado of [
+      { ...base, modo: "open" as const },
+      { ...base, modo: "allowlist" as const, aiAuthorizedAt: AGORA },
+      { ...base, modo: "allowlist" as const, preGoLiveAtivo: true, numeroDeTesteAutorizado: true },
+      { ...base, forceHuman: true },
+    ]) {
+      expect(decidirElegibilidade({ ...estado, contatoOculto: true })).toEqual({
+        permite: false,
+        motivo: "contato_oculto",
+        // Veto de pessoa, e não de allowlist: o sink de envio (pessoaNoComandoDaConversa)
+        // lê só estes, bolha a bolha.
+        bloqueioPorAllowlist: false,
+      });
+    }
+  });
+
+  it("visível, nada muda", () => {
+    expect(decidirElegibilidade({ ...base, contatoOculto: false }).permite).toBe(true);
+  });
+});
 
 describe("lerModoDoGate", () => {
   it("só 'allowlist' liga o modo; resto (ausente/null/lixo) é 'open'", () => {

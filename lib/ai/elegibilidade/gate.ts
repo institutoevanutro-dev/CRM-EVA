@@ -60,6 +60,11 @@ export function lerModoDoGate(raw: unknown): AiGateMode {
 }
 
 export interface EstadoDeElegibilidade {
+  /**
+   * `contacts.inbox_hidden_at is not null` — o contato que a equipe ocultou do
+   * Inbox (migration 0372). Veto que vale SEMPRE, em qualquer modo do canal.
+   */
+  contatoOculto: boolean;
   /** `channel_sessions.metadata.ai_gate` já normalizado. */
   modo: AiGateMode;
   /** `contacts.force_human` — a trava irrevogável pelo agente (regra dura 2). */
@@ -81,6 +86,7 @@ export interface EstadoDeElegibilidade {
 }
 
 export type MotivoDeElegibilidade =
+  | "contato_oculto"
   | "gate_aberto"
   | "force_human"
   | "conversa_silenciada"
@@ -115,6 +121,13 @@ function silenciadoAgora(until: Date | number | null, agora: Date): boolean {
  * autorização positiva.
  */
 export function decidirElegibilidade(e: EstadoDeElegibilidade): DecisaoDeElegibilidade {
+  // Antes de tudo, e ANTES do `modo === "open"`: o canal aberto (o padrão)
+  // responderia a qualquer um, e o amigo do perfil pessoal que a equipe tirou do
+  // Inbox não pode receber resposta do robô. `bloqueioPorAllowlist: false` faz o
+  // sink de envio (`pessoaNoComandoDaConversa`) também calar, bolha a bolha.
+  if (e.contatoOculto) {
+    return { permite: false, motivo: "contato_oculto", bloqueioPorAllowlist: false };
+  }
   if (e.forceHuman) {
     return { permite: false, motivo: "force_human", bloqueioPorAllowlist: false };
   }
@@ -183,6 +196,12 @@ export function normalizarInstante(v: Date | string | number | null | undefined)
  * outro. Não roda a regra — só normaliza; quem decide é `decidirElegibilidade`.
  */
 export function montarEstadoDeElegibilidade(raw: {
+  /**
+   * O contato está oculto do Inbox (migration 0372)? `true` só com a marca
+   * lida do banco; ausente vale visível — os chamadores que decidem resposta
+   * da IA (as duas consultas, o follow-up) passam o valor.
+   */
+  contatoOculto?: unknown;
   aiGate: unknown;
   aiGateMode?: unknown;
   aiTestPhoneNumbers?: unknown;
@@ -204,6 +223,7 @@ export function montarEstadoDeElegibilidade(raw: {
   const preGoLive = modo === "allowlist" && raw.aiGateMode === AI_GATE_PRE_GO_LIVE;
   const numerosDeTeste = lerNumerosDeTeste({ ai_test_phone_numbers: raw.aiTestPhoneNumbers });
   return {
+    contatoOculto: raw.contatoOculto === true,
     modo,
     forceHuman: raw.forceHuman === true,
     botSilencedUntil: raw.silencioEhRoteamento === true ? null : normalizarInstante(raw.botSilencedUntil),
