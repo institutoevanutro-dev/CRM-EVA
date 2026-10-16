@@ -391,6 +391,18 @@ export function descreveEvento(
         ...motor,
       };
     }
+    case "held_by_return": {
+      // Segurar NÃO é falhar: sem esta linha o operador veria o fluxo parado
+      // sem saber que ele espera o retorno combinado com o cliente.
+      const ate = quandoLegivel(p.next_eval_at, idioma);
+      return {
+        titulo: "Segurou o fluxo por causa de um retorno agendado",
+        detalhe: ate
+          ? traduzir("volta a andar em {ate}, um dia depois do retorno", idioma as Idioma).replace("{ate}", ate)
+          : null,
+        ...motor,
+      };
+    }
     case "action_deferred": {
       // Adiar NÃO é falhar: sem esta linha o operador vê o passo parado por
       // horas e lê defeito onde há obediência à janela que ele configurou.

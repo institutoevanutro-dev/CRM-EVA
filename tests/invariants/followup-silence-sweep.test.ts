@@ -183,6 +183,19 @@ function silenceSweepDb(): SilenceSweepDb {
       );
       return new Set(rows.map((r) => r.contact_id));
     },
+    // Mesma régua de `lib/followup/retorno-segura-o-fluxo.ts`: retorno agendado,
+    // ou saído com sucesso há menos de um dia, que não é turno de passo de fluxo.
+    async loadContatosComRetornoVivo(orgId) {
+      const { rows } = await pool.query<{ contact_id: string }>(
+        `select distinct contact_id from cron_jobs
+          where organization_id = $1 and kind = 'at' and job_kind = 'followup_turn'
+            and cancelled_at is null and contact_id is not null
+            and payload->>'followup_enrollment_id' is null
+            and (enabled or (last_error is null and next_run_at <= now() and next_run_at > now() - interval '1 day'))`,
+        [orgId],
+      );
+      return new Set(rows.map((r) => r.contact_id));
+    },
     async loadTriggerNodeId(orgId, versionId) {
       const { rows } = await pool.query<{ graph: FlowGraph }>(
         `select graph from followup_flow_versions where organization_id = $1 and id = $2`,

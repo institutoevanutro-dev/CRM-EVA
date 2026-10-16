@@ -128,6 +128,16 @@ describe("descreveEvento", () => {
     expect(descreveEvento(evento({ event_type: "action_sent", payload: {} }), nos, "pt-BR").detalhe).toBeNull();
   });
 
+  it("segurar pelo retorno agendado é dito como espera, não como falha", () => {
+    const r = descreveEvento(
+      evento({ event_type: "held_by_return", payload: { next_eval_at: "2026-10-03T12:00:00.000Z" } }),
+      nos,
+      "pt-BR",
+    );
+    expect(r.titulo).toBe("Segurou o fluxo por causa de um retorno agendado");
+    expect(r.detalhe).toMatch(/^volta a andar em .+, um dia depois do retorno$/);
+  });
+
   it("a falha carrega a mensagem E o passo — nunca uma sem a outra", () => {
     const r = descreveEvento(
       evento({ event_type: "node_failed", payload: { error: "flow_version_not_found" } }),
