@@ -77,6 +77,8 @@ export interface LeadFacts {
   last_outcome: string | null;
   contact_name?: string | null;
   custom_fields?: Record<string, unknown>;
+  /** Compromissos futuros (pending/confirmed) do contato; `null` = não lido (condição não satisfeita). */
+  future_appointments?: number | null;
 }
 
 /** Reference to a `followup_enrollment_events` row — only what `resolveWaitPhase` needs. */
@@ -433,13 +435,14 @@ export function ultimoDesfechoDe(events: EnrollmentEventRef[]): string | null {
 }
 
 function evaluateCheck(
-  check: { field: "lead_stage" | "tag" | "steps_taken" | "last_outcome"; op: "eq" | "neq" | "gte" | "lte" | "contains"; value: string | number },
+  check: { field: "lead_stage" | "tag" | "steps_taken" | "last_outcome" | "future_appointments"; op: "eq" | "neq" | "gte" | "lte" | "contains"; value: string | number },
   lead: LeadFacts,
 ): boolean {
   const actual: string | number | null | string[] =
     check.field === "lead_stage" ? lead.lead_stage
     : check.field === "tag" ? lead.tags
     : check.field === "steps_taken" ? lead.steps_taken
+    : check.field === "future_appointments" ? (lead.future_appointments ?? null)
     : lead.last_outcome;
 
   if (Array.isArray(actual)) {
@@ -455,7 +458,8 @@ function evaluateCheck(
   // eram falsos com `null`; ausência de dado não prova a negativa.
   if (actual === null) return false;
 
-  const expected = check.field === "steps_taken" ? valorDePassos(check.value) : check.value;
+  const expected =
+    check.field === "steps_taken" || check.field === "future_appointments" ? valorDePassos(check.value) : check.value;
   switch (check.op) {
     case "eq":
       return actual === expected;
@@ -498,8 +502,8 @@ export function processNode(input: {
   lead: LeadFacts;
   clock: () => Date;
   waitElapsed?: boolean;
-  /** Timestamp real da reserva, lido da agenda somente para espera ancorada. */
-  appointmentCreatedAt?: string | null;
+  /** Instante da âncora (criação da reserva ou início da consulta), lido da agenda somente para espera ancorada. */
+  appointmentAnchorAt?: string | null;
   wokeEarly?: boolean;
   /** Last inbound `messages.body` for this contact/conversation — engine loads on `match_reply` + wokeEarly. */
   lastInboundBody?: string;
@@ -585,6 +589,16 @@ export function processNode(input: {
     }
 
     case "wait": {
+      // Espera ANCORADA é data de calendário ("15 dias depois da consulta"),
+      // não teto de silêncio: nem a resposta do contato (`inbound_woke`) nem um
+      // reprocesso a encurtam. Enquanto o instante não chegou, volta a estacionar
+      // nele. Quem quiser que a resposta encerre o fluxo usa `cancel_on_reply`.
+      if (node.config.mode === "fixed" && node.config.anchor && (wokeEarly || waitElapsed)) {
+        const alvo = input.appointmentAnchorAt ? Date.parse(input.appointmentAnchorAt) + node.config.duration_ms : NaN;
+        if (Number.isFinite(alvo) && clock().getTime() < alvo) {
+          return { kind: "wait", next_eval_at: new Date(alvo) };
+        }
+      }
       // Resposta do lead corta a espera: o timer é teto (ninguém respondeu),
       // não um atraso obrigatório depois de cada envio.
       if (wokeEarly) {
@@ -610,12 +624,12 @@ export function processNode(input: {
             : planejada === null
               ? node.config.max_ms
               : clampEspera(planejada.escolhido_ms, node.config.min_ms, node.config.max_ms).escolhido_ms;
-        if (node.config.mode === "fixed" && node.config.anchor === "appointment_created_at") {
-          const createdAt = input.appointmentCreatedAt ? new Date(input.appointmentCreatedAt) : null;
-          if (!enrollment.appointment_id || !createdAt || !Number.isFinite(createdAt.getTime())) {
-            return { kind: "fail", error: "appointment_created_at unavailable for anchored wait" };
+        if (node.config.mode === "fixed" && node.config.anchor) {
+          const anchorAt = input.appointmentAnchorAt ? new Date(input.appointmentAnchorAt) : null;
+          if (!enrollment.appointment_id || !anchorAt || !Number.isFinite(anchorAt.getTime())) {
+            return { kind: "fail", error: `${node.config.anchor} unavailable for anchored wait` };
           }
-          return { kind: "wait", next_eval_at: new Date(Math.max(clock().getTime(), createdAt.getTime() + durationMs)) };
+          return { kind: "wait", next_eval_at: new Date(Math.max(clock().getTime(), anchorAt.getTime() + durationMs)) };
         }
         return { kind: "wait", next_eval_at: new Date(clock().getTime() + durationMs) };
       }

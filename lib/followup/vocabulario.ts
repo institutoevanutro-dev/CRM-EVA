@@ -54,6 +54,7 @@ import {
   type conditionConfigSchema,
   type endConfigSchema,
   type waitConfigSchema,
+  type AppointmentAnchor,
 } from "./graph-schema";
 import type { EnrollmentOutcome, EnrollmentStatus } from "./node-handlers";
 
@@ -96,6 +97,7 @@ export const CAMPOS_DA_CONDICAO: Record<CampoDaCondicao, CampoDeCondicao> = {
   tag: { rotulo: "Etiqueta do contato", tipoDeValor: "etiqueta" },
   steps_taken: { rotulo: "Passos já dados no fluxo", tipoDeValor: "numero" },
   last_outcome: { rotulo: "Desfecho do passo anterior", tipoDeValor: "texto" },
+  future_appointments: { rotulo: "Consultas futuras marcadas", tipoDeValor: "numero" },
 };
 
 // ─── condição: o par (campo, operador) ───────────────────────────────────
@@ -250,6 +252,36 @@ const COMPARADORES: Record<CampoDaCondicao, Record<OperadorDaCondicao, Comparado
       frase: (v) => `O desfecho do passo anterior é no máximo ${aspas(v)}`,
       oferecido: false,
       aviso: AVISO_SO_NUMERO,
+    },
+  },
+  // Contagem de compromissos futuros (pending/confirmed). O uso de reativação é
+  // "é exatamente 0": só manda para quem não tem nada marcado.
+  future_appointments: {
+    eq: {
+      rotulo: "é exatamente",
+      frase: (v) => `O contato tem exatamente ${v} consulta(s) futura(s) marcada(s)`,
+      oferecido: true,
+    },
+    neq: {
+      rotulo: "não é",
+      frase: (v) => `O contato não tem exatamente ${v} consulta(s) futura(s) marcada(s)`,
+      oferecido: true,
+    },
+    gte: {
+      rotulo: "é pelo menos",
+      frase: (v) => `O contato tem pelo menos ${v} consulta(s) futura(s) marcada(s)`,
+      oferecido: true,
+    },
+    lte: {
+      rotulo: "é no máximo",
+      frase: (v) => `O contato tem no máximo ${v} consulta(s) futura(s) marcada(s)`,
+      oferecido: true,
+    },
+    contains: {
+      rotulo: "contém",
+      frase: (v) => `O número de consultas futuras contém ${aspas(v)}`,
+      oferecido: false,
+      aviso: AVISO_SO_TEXTO,
     },
   },
 };
@@ -435,6 +467,12 @@ export const MODOS_DE_ESPERA: Record<ModoDeEspera, string> = {
   smart: "A IA escolhe a hora",
 };
 
+/** De onde a espera fixa conta. Âncora é absoluta: toda espera com ela conta da mesma data. */
+export const ANCORAS_DA_ESPERA: Record<AppointmentAnchor, string> = {
+  appointment_starts_at: "Da data da consulta (pós-consulta)",
+  appointment_created_at: "Da criação da reserva (fluxo de sinal)",
+};
+
 export const MODOS_DA_ACAO: Record<ModoDaAcao, string> = {
   text: "Texto fixo",
   ai_message: "Mensagem escrita pela IA",
@@ -498,6 +536,7 @@ export const DESFECHOS: Record<EnrollmentOutcome, string> = {
  */
 export const GATILHOS: Record<TipoDeGatilho, string> = {
   appointment_no_show:"Falta confirmada pela equipe",
+  appointment_attended: "Depois que o paciente compareceu",
   manual: "Manual",
   webhook: "Disparado por uma automação em Webhooks",
   silence: "Silêncio",

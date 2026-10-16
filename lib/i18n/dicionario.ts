@@ -429,8 +429,12 @@ export const DICIONARIO: Traducoes = {
   "Conversa vinculada (opcional)": { es: "Conversación vinculada (opcional)" },
   "Sem conversa vinculada": { es: "Sin conversación vinculada" },
   // Fluxo de sinal da reserva (WaitForm.tsx e ActionConfigForm.tsx).
-  "Contar desde a criação da reserva (fluxo de sinal)": {
-    es: "Contar desde la creación de la reserva (flujo de seña)",
+  "Contar a partir de": { es: "Contar a partir de" },
+  "Do passo anterior": { es: "Desde el paso anterior" },
+  "Da data da consulta (pós-consulta)": { es: "Desde la fecha de la cita (posconsulta)" },
+  "Da criação da reserva (fluxo de sinal)": { es: "Desde la creación de la reserva (flujo de seña)" },
+  "Toda espera com esta opção conta da mesma data: numa régua de 7, 15, 30 e 45 dias, escreva 7, 15, 30 e 45 — não a diferença para a espera anterior.": {
+    es: "Toda espera con esta opción cuenta desde la misma fecha: en una secuencia de 7, 15, 30 y 45 días, escriba 7, 15, 30 y 45, no la diferencia con la espera anterior.",
   },
   "Vincular à consulta para acompanhar o sinal": { es: "Vincular a la cita para seguir la seña" },
   "Use com o gatilho 'Quando um horário for marcado' e um fluxo de sinal. O prazo será contado da criação da reserva.": {
@@ -439,6 +443,14 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível carregar os vínculos. Tente novamente.": { es: "No se pudieron cargar los vínculos. Inténtelo de nuevo." },
   "Falta confirmada pela equipe": { es: "Ausencia confirmada por el equipo" },
   "Gatilho: falta confirmada pela equipe": { es: "Disparador: ausencia confirmada por el equipo" },
+  "Depois que o paciente compareceu": { es: "Después de que el paciente asistió" },
+  "Gatilho: depois que o paciente compareceu": { es: "Disparador: después de que el paciente asistió" },
+  "Começa quando a equipe marca que o paciente compareceu. Para contar os dias a partir da consulta, use esperas contadas «Da data da consulta». Se a presença for desfeita, o acompanhamento é cancelado. Outro acompanhamento ativo impede o início.": {
+    es: "Comienza cuando el equipo marca que el paciente asistió. Para contar los días desde la cita, use esperas contadas «Desde la fecha de la cita». Si se deshace la asistencia, el seguimiento se cancela. Otro seguimiento activo impide el inicio.",
+  },
+  "Acompanhamento pós-consulta iniciado": { es: "Seguimiento posconsulta iniciado" },
+  "Acompanhamento pós-consulta encerrado.": { es: "Seguimiento posconsulta finalizado." },
+  "Não iniciado: mais de um fluxo pós-consulta foi configurado.": { es: "No iniciado: se configuró más de un flujo posconsulta." },
   "Presença não confirmada · revise o compromisso": { es: "Asistencia sin confirmar · revise la cita" },
   "Confirme a presença · cobrança aguardando": { es: "Confirme la asistencia · mensaje en espera" },
   "Compromisso agendado · cobrança aguardando": { es: "Cita programada · mensaje en espera" },
@@ -1799,6 +1811,7 @@ export const DICIONARIO: Traducoes = {
   Encerrada: { es: "Cerrada" },
   "Etiqueta do contato": { es: "Etiqueta del contacto" },
   "Passos já dados no fluxo": { es: "Pasos ya dados en el flujo" },
+  "Consultas futuras marcadas": { es: "Citas futuras agendadas" },
   "Desfecho do passo anterior": { es: "Desenlace del paso anterior" },
   "está na etapa": { es: "está en la etapa" },
   "não está na etapa": { es: "no está en la etapa" },

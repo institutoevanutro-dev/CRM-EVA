@@ -1059,6 +1059,11 @@ test.describe("followup flow builder — controle de gatilho na PublishBar (Task
         "Falta confirmada pela equipe",
         "Agente pediu ajuda",
         "Automação (Webhooks)",
+        // `appointment_attended` com motor completo: `fn_appointment_change_core`
+        // (migration 0373) emite `appointment.attended` quando a equipe registra
+        // "compareceu"; `gatilho-presenca.handler.ts` consome e chama
+        // `fn_appointment_recover`, que insere em `followup_enrollments`.
+        "Depois que o paciente compareceu",
       ];
       for (const nome of OFERECIDOS) {
         await expect(page.getByRole("option", { name: nome, exact: true })).toBeVisible();

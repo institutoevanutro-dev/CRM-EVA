@@ -235,7 +235,7 @@
       "col": 6,
       "type": "service",
       "label": "followup-gatilho-presenca.v1 + fn_appointment_recover",
-      "sublabel": "falta confirmada → inscrição ou impedimento terminal visível"
+      "sublabel": "falta (appointment_no_show) ou presença (appointment_attended, 0373) confirmada → inscrição ou impedimento terminal visível"
     },
     {
       "id": "decisao-envio",
@@ -453,7 +453,7 @@
       "id": "e32",
       "from": "agenda-command",
       "to": "agenda-consumer",
-      "label": "appointment.outcome_confirmed interno; relógio nunca emite falta"
+      "label": "appointment.outcome_confirmed (falta) e appointment.attended (presença, 0373) internos; relógio nunca emite desfecho"
     },
     {
       "id": "e33",

@@ -39,7 +39,9 @@ export interface AvisoRecuperacaoEsgotada {
  *    `replied` (cliente voltou, normalmente via `cancel_on_reply`) e o `custom`
  *    do ramo "fora do alvo" (outcome `null`) não avisam;
  *  - o enrollment carrega `appointment_id` — é o que distingue uma régua de
- *    recuperação de falta de qualquer outro fluxo esgotado.
+ *    recuperação de falta de qualquer outro fluxo esgotado. A régua
+ *    pós-consulta (presença, 0373) também carrega; os dois adaptadores só
+ *    gravam o aviso quando o compromisso está em `no_show`.
  */
 export function avisoDeRecuperacaoEsgotada(
   enrollment: EnrollmentRow,

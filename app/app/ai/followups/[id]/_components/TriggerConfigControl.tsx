@@ -54,7 +54,7 @@ import { useEtapasDeGatilho } from "@/hooks/followup/useEtapasDeGatilho";
  * «poucos minutos», não «na hora» — prometer instantâneo seria o controle
  * mentindo sobre a própria função.
  */
-type TriggerKind = "appointment_no_show" | "manual" | "silence" | "stage_change" | "case_opened" | "webhook";
+type TriggerKind = "appointment_no_show" | "appointment_attended" | "manual" | "silence" | "stage_change" | "case_opened" | "webhook";
 
 interface TriggerFormState {
   kind: TriggerKind;
@@ -70,6 +70,7 @@ const MIN_THRESHOLD_MINUTES = 5;
 
 const KIND_LABEL: Record<TriggerKind, string> = {
   appointment_no_show:"Falta confirmada pela equipe",
+  appointment_attended: "Depois que o paciente compareceu",
   manual: "Manual",
   silence: "Silêncio",
   stage_change: "Etapa do funil",
@@ -91,7 +92,7 @@ function parseTriggerConfig(raw: Record<string, unknown>): TriggerFormState {
   // botão de cancelar-na-resposta. Agora só os kinds que este painel sabe EDITAR
   // caem no formulário; o resto é preservado (ver `open` no componente).
   const kind: TriggerKind =
-    raw.kind === "appointment_no_show" ? "appointment_no_show" : raw.kind === "silence"
+    raw.kind === "appointment_no_show" ? "appointment_no_show" : raw.kind === "appointment_attended" ? "appointment_attended" : raw.kind === "silence"
       ? "silence"
       : raw.kind === "stage_change"
         ? "stage_change"
@@ -118,6 +119,7 @@ function parseTriggerConfig(raw: Record<string, unknown>): TriggerFormState {
 function toTriggerConfig(form: TriggerFormState): Record<string, unknown> {
   const cancelOnReply = form.cancelOnReply ? { cancel_on_reply: true } : {};
   if (form.kind === "appointment_no_show") return {kind:"appointment_no_show",params:{event_type_ids:form.eventTypeIds}};
+  if (form.kind === "appointment_attended") return { kind: "appointment_attended", params: { event_type_ids: form.eventTypeIds }, ...cancelOnReply };
   if (form.kind === "manual") return { kind: "manual", ...cancelOnReply };
 
   if (form.kind === "stage_change") {
@@ -146,6 +148,7 @@ function summaryLabel(
   t: (texto: string) => string = (texto) => texto,
 ): string {
   if(cfg.kind === "appointment_no_show") return t("Gatilho: falta confirmada pela equipe");
+  if (cfg.kind === "appointment_attended") return t("Gatilho: depois que o paciente compareceu");
   if (cfg.kind === "silence") {
     const minutes = (cfg.params as { threshold_minutes?: number } | undefined)?.threshold_minutes;
     return `Gatilho: Silêncio${typeof minutes === "number" ? ` (${minutes} min)` : ""}`;
@@ -176,7 +179,7 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState<TriggerFormState>(() => parseTriggerConfig(triggerConfig));
   const [form, setForm] = useState<TriggerFormState>(saved);
-  const eventTypes=useQuery({queryKey:["agenda","tipos"],enabled:open&&form.kind==="appointment_no_show",queryFn:async()=>
+  const eventTypes=useQuery({queryKey:["agenda","tipos"],enabled:open&&(form.kind==="appointment_no_show"||form.kind==="appointment_attended"),queryFn:async()=>
     (await apiClient.get<{data:Array<{id:string;name:string}>}>("/api/v1/agenda/tipos")).data});
   // A leitura das etapas acompanha o botão, não o popover: o rótulo fechado
   // precisa do nome da etapa para não exibir «Etapa do funil» genérico num
@@ -200,7 +203,7 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
   const stageInvalid = form.kind === "stage_change" && form.stageId.trim().length === 0;
   const dirty =
     form.kind !== saved.kind ||
-    (form.kind === "appointment_no_show" && form.eventTypeIds.join() !== saved.eventTypeIds.join()) ||
+    ((form.kind === "appointment_no_show" || form.kind === "appointment_attended") && form.eventTypeIds.join() !== saved.eventTypeIds.join()) ||
     form.cancelOnReply !== saved.cancelOnReply ||
     (form.kind === "silence" && (form.thresholdMinutes !== saved.thresholdMinutes || form.segments !== saved.segments)) ||
     (form.kind === "stage_change" && form.stageId !== saved.stageId);
@@ -248,6 +251,7 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
                 <SelectItem value="silence">{t(KIND_LABEL.silence)}</SelectItem>
                 <SelectItem value="stage_change">{t(KIND_LABEL.stage_change)}</SelectItem>
                 <SelectItem value="appointment_no_show">{t(KIND_LABEL.appointment_no_show)}</SelectItem>
+                <SelectItem value="appointment_attended">{t(KIND_LABEL.appointment_attended)}</SelectItem>
                 <SelectItem value="case_opened">{t(KIND_LABEL.case_opened)}</SelectItem>
                 <SelectItem value="webhook">{t(KIND_LABEL.webhook)}</SelectItem>
               </SelectContent>
@@ -294,8 +298,10 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
             </div>
           )}
 
-          {form.kind === "appointment_no_show" && <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">{t("Só começa após falta confirmada pela equipe. Remarcação, cancelamento ou nova resposta interrompem a recuperação. Outro acompanhamento ativo impede o início.")}</p>
+          {(form.kind === "appointment_no_show" || form.kind === "appointment_attended") && <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">{form.kind === "appointment_no_show"
+              ? t("Só começa após falta confirmada pela equipe. Remarcação, cancelamento ou nova resposta interrompem a recuperação. Outro acompanhamento ativo impede o início.")
+              : t("Começa quando a equipe marca que o paciente compareceu. Para contar os dias a partir da consulta, use esperas contadas «Da data da consulta». Se a presença for desfeita, o acompanhamento é cancelado. Outro acompanhamento ativo impede o início.")}</p>
             <p className="text-xs">{t("Tipos de compromisso (nenhum selecionado = todos)")}</p>
             {eventTypes.data?.map(type=><label key={type.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.eventTypeIds.includes(type.id)} onChange={e=>setForm(f=>({...f,eventTypeIds:e.target.checked?[...f.eventTypeIds,type.id]:f.eventTypeIds.filter(id=>id!==type.id)}))}/>{type.name}</label>)}
             {eventTypes.isError?<p role="alert">{t("Não foi possível carregar os tipos de compromisso.")}</p>:null}

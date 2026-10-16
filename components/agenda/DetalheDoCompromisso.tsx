@@ -57,6 +57,12 @@ const RESULTS: Record<string, string> = {
   stale: "Não iniciada: o atendimento ou a resposta do cliente mudou.",
   no_contact: "Sem contato vinculado. Este compromisso não inicia uma recuperação.",
 };
+/** Presença confirmada (0373): o mesmo recibo, com a palavra da pós-consulta. */
+const RESULTS_POS_CONSULTA: Record<string, string> = {
+  ...RESULTS,
+  started: "Acompanhamento pós-consulta iniciado",
+  ambiguous: "Não iniciado: mais de um fluxo pós-consulta foi configurado.",
+};
 export function DetalheDoCompromisso({
   id,
   onClose,
@@ -233,8 +239,11 @@ export function DetalheDoCompromisso({
                       ? "Recuperação iniciada e interrompida porque o cliente respondeu."
                       : a.recovery.enrollment_status &&
                           ["cancelled", "completed", "dead"].includes(a.recovery.enrollment_status)
-                        ? "Recuperação encerrada. Revise o próximo passo."
-                        : (RESULTS[a.recovery.result] ?? "Revise o próximo passo."),
+                        ? a.status === "completed"
+                          ? "Acompanhamento pós-consulta encerrado."
+                          : "Recuperação encerrada. Revise o próximo passo."
+                        : ((a.status === "completed" ? RESULTS_POS_CONSULTA : RESULTS)[a.recovery.result] ??
+                          "Revise o próximo passo."),
                   )}
                 </p>
                 {a.recovery.cancel_reason ? (
