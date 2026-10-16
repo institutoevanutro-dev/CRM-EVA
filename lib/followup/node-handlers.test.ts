@@ -303,6 +303,25 @@ describe("processNode — wait (fixed)", () => {
     expect(processNode({ ...base, node: espera(15), clock: () => tarde })).toEqual({ kind: "wait", next_eval_at: tarde });
   });
 
+  it("resposta do contato NÃO adianta espera ancorada: volta a estacionar no dia da consulta + N", () => {
+    const DIA = 86_400_000;
+    const consulta = "2026-07-01T12:00:00.000Z";
+    const anchored: FlowNode = { ...node, config: { mode: "fixed", duration_ms: 15 * DIA, anchor: "appointment_starts_at" } };
+    const alvo = new Date(Date.parse(consulta) + 15 * DIA);
+    const base = { node: anchored, edges, enrollment: enrollment({ appointment_id: "appt-1" }), lead: lead(), appointmentAnchorAt: consulta };
+    const dia10 = () => new Date(Date.parse(consulta) + 10 * DIA);
+    // inbound_woke no dia 10 (cancel_on_reply=false): não avança.
+    expect(processNode({ ...base, clock: dia10, waitElapsed: true, wokeEarly: true })).toEqual({ kind: "wait", next_eval_at: alvo });
+    // Reprocesso sem acordar, ainda antes do alvo: também não avança.
+    expect(processNode({ ...base, clock: dia10, waitElapsed: true })).toEqual({ kind: "wait", next_eval_at: alvo });
+    // No dia 15 segue.
+    expect(processNode({ ...base, clock: () => alvo, waitElapsed: true, wokeEarly: true })).toMatchObject({ kind: "advance", next_node_id: "n2" });
+  });
+
+  it("espera SEM âncora continua sendo cortada pela resposta (comportamento de sempre)", () => {
+    expect(processNode({ node, edges, enrollment: enrollment(), lead: lead(), clock, waitElapsed: true, wokeEarly: true })).toMatchObject({ kind: "advance" });
+  });
+
   it("elapsed: advances via the 'always' edge", () => {
     const result = processNode({ node, edges, enrollment: enrollment(), lead: lead(), clock, waitElapsed: true });
     expect(result).toEqual({ kind: "advance", next_node_id: "n2", next_eval_at: NOW });
@@ -459,6 +478,15 @@ describe("processNode — condition", () => {
     const node = conditionNode({ combinator: "and", checks: [{ field: "lead_stage", op: "neq", value: "hot" }] });
     const result = processNode({ node, edges, enrollment: enrollment(), lead: lead({ lead_stage: "hot" }), clock });
     expect(result).toMatchObject({ kind: "advance", next_node_id: "no" });
+  });
+
+  it("future_appointments: reativação só para quem não tem consulta futura; desconhecido não manda", () => {
+    const node = conditionNode({ combinator: "and", checks: [{ field: "future_appointments", op: "eq", value: "0" }] });
+    const run = (n: number | null) =>
+      processNode({ node, edges, enrollment: enrollment(), lead: lead({ future_appointments: n }), clock });
+    expect(run(0)).toMatchObject({ kind: "advance", next_node_id: "yes" });
+    expect(run(1)).toMatchObject({ kind: "advance", next_node_id: "no" });
+    expect(run(null)).toMatchObject({ kind: "advance", next_node_id: "no" });
   });
 
   it("gte on steps_taken", () => {

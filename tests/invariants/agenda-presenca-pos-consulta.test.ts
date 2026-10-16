@@ -107,7 +107,12 @@ const GRAFO = {
 };
 
 /** Fluxo `appointment_attended` armado por um agente publicado. */
-async function flow(org = GOV_ORG, session = GOV_SESSION, params?: Record<string, unknown>) {
+async function flow(
+  org = GOV_ORG,
+  session = GOV_SESSION,
+  params?: Record<string, unknown>,
+  kind = "appointment_attended",
+) {
   const v = (
     await pool.query("insert into followup_flow_versions(organization_id,graph) values($1,$2) returning id", [
       org,
@@ -117,7 +122,7 @@ async function flow(org = GOV_ORG, session = GOV_SESSION, params?: Record<string
   const p = (
     await pool.query(
       "insert into followup_flow_pointers(organization_id,name,status,active_version_id,trigger_config) values($1,'Pós-consulta '||gen_random_uuid(),'active',$2,$3) returning id",
-      [org, v, { kind: "appointment_attended", ...(params ? { params } : {}) }],
+      [org, v, { kind, ...(params ? { params } : {}) }],
     )
   ).rows[0].id;
   const agent = (
@@ -135,7 +140,7 @@ async function flow(org = GOV_ORG, session = GOV_SESSION, params?: Record<string
 
 async function stopFlows() {
   await pool.query(
-    "update followup_flow_pointers set status='disabled' where trigger_config->>'kind'='appointment_attended'",
+    "update followup_flow_pointers set status='disabled' where trigger_config->>'kind' in ('appointment_attended','appointment_no_show')",
   );
 }
 
@@ -204,6 +209,25 @@ describe("presença confirmada inicia o acompanhamento pós-consulta", () => {
     ).rows[0];
     expect(linha).toMatchObject({ current_node_id: "w7", status: "active" });
     expect(new Date(linha.next_eval_at).getTime()).toBe(new Date(linha.starts_at).getTime() + 7 * DIA);
+
+    // Acordar antes da hora (o que `inbound_woke` faz: next_eval_at=agora, com o
+    // marcador de wake) não adianta a mensagem: o motor volta a estacionar no
+    // mesmo instante ancorado, sem sair do nó.
+    const passos = (await pool.query("select steps_taken from followup_enrollments where id=$1", [rec.enrollment_id])).rows[0].steps_taken;
+    await pool.query(
+      "insert into followup_enrollment_events(organization_id,enrollment_id,node_id,event_type,payload,idempotency_key) values($1,$2,'w7','inbound_woke','{}',$3)",
+      [GOV_ORG, rec.enrollment_id, `w7:${passos}:wake`],
+    );
+    await pool.query("update followup_enrollments set next_eval_at = now() - interval '1 second' where id = $1", [rec.enrollment_id]);
+    await runFollowupTick(
+      { db: createPgAdminClient(pool), clock: () => new Date(), enqueueJob: async () => {} },
+      { limit: 10 },
+    );
+    const depois = (
+      await pool.query("select current_node_id, status, next_eval_at from followup_enrollments where id=$1", [rec.enrollment_id])
+    ).rows[0];
+    expect(depois).toMatchObject({ current_node_id: "w7", status: "active" });
+    expect(new Date(depois.next_eval_at).getTime()).toBe(new Date(linha.starts_at).getTime() + 7 * DIA);
   });
 
   it("filtro de tipo de compromisso: fora do filtro não inicia, e presença sem fluxo não vira aviso nem recibo", async () => {
@@ -233,12 +257,16 @@ describe("presença confirmada inicia o acompanhamento pós-consulta", () => {
     ).toBe(0);
   });
 
-  it("contato com outro acompanhamento vivo: não inicia, e a equipe vê o porquê na Central", async () => {
+  it("contato com OUTRO acompanhamento vivo (não pós-consulta): não inicia, e a equipe vê o porquê na Central", async () => {
     await stopFlows();
     await flow();
+    await flow(GOV_ORG, GOV_SESSION, undefined, "appointment_no_show");
     const a = await fixture();
-    await change(a.id, 1, { status: "completed" });
-    expect((await recover(a.id)).result).toBe("started");
+    // Uma falta anterior abriu a recuperação: esse é o "outro acompanhamento".
+    await change(a.id, 1, { status: "no_show" });
+    const [falta] = await eventos(a.id, "appointment.outcome_confirmed");
+    const recuperacao = (await pool.query("select fn_appointment_recover($1,$2) result", [GOV_ORG, falta])).rows[0].result;
+    expect(recuperacao.result).toBe("started");
 
     const segunda = (
       await pool.query(
@@ -250,12 +278,67 @@ describe("presença confirmada inicia o acompanhamento pós-consulta", () => {
     expect((await recover(segunda)).result).toBe("other_flow");
     const aviso = (
       await pool.query(
-        "select title, body, appointment_revision::int rev from agent_inbox_items where organization_id=$1 and ref_id=$2 and kind='appointment_recovery_review'",
+        "select title, appointment_revision::int rev from agent_inbox_items where organization_id=$1 and ref_id=$2 and kind='appointment_recovery_review'",
         [GOV_ORG, segunda],
       )
     ).rows;
     expect(aviso).toHaveLength(1);
     expect(aviso[0]).toMatchObject({ title: "O acompanhamento pós-consulta não foi iniciado", rev: 2 });
+    expect(
+      (await pool.query("select status from followup_enrollments where id=$1", [recuperacao.enrollment_id])).rows[0].status,
+    ).toBe("active");
+  });
+
+  it("NOVA presença recomeça a régua: a inscrição da consulta anterior é cancelada e a nova nasce", async () => {
+    await stopFlows();
+    await flow();
+    const a = await fixture();
+    await change(a.id, 1, { status: "completed" });
+    const antiga = await recover(a.id);
+    expect(antiga.result).toBe("started");
+
+    const segunda = (
+      await pool.query(
+        "insert into calendar_appointments(organization_id,contact_id,conversation_id,title,starts_at,ends_at,status) values($1,$2,$3,'Retorno',now()-interval '2 hours',now()-interval '1 hour','confirmed') returning id",
+        [GOV_ORG, a.contact, a.conversation],
+      )
+    ).rows[0].id;
+    await change(segunda, 1, { status: "completed" });
+    const nova = await recover(segunda);
+    expect(nova.result).toBe("started");
+    expect(nova.enrollment_id).not.toBe(antiga.enrollment_id);
+
+    const linhas = (
+      await pool.query(
+        "select appointment_id, status, cancel_reason from followup_enrollments where organization_id=$1 and contact_id=$2 order by started_at",
+        [GOV_ORG, a.contact],
+      )
+    ).rows;
+    expect(linhas).toEqual([
+      {
+        appointment_id: a.id,
+        status: "cancelled",
+        cancel_reason: "O paciente compareceu a uma nova consulta; o acompanhamento recomeçou por ela.",
+      },
+      { appointment_id: segunda, status: "active", cancel_reason: null },
+    ]);
+    // Nenhum aviso: recomeçar não é pendência.
+    expect(
+      (await pool.query("select count(*)::int n from agent_inbox_items where ref_id in ($1,$2)", [a.id, segunda])).rows[0].n,
+    ).toBe(0);
+  });
+
+  it("consultas futuras (condição de reativação): conta pending/confirmed futuras do contato nesta organização", async () => {
+    const a = await fixture();
+    const db = createPgAdminClient(pool);
+    expect(await db.countFutureAppointments!(GOV_ORG, a.contact)).toBe(0);
+    await pool.query(
+      "insert into calendar_appointments(organization_id,contact_id,title,starts_at,ends_at,status,cancelled_at) values($1,$2,'Retorno',now()+interval '3 days',now()+interval '3 days 1 hour','pending',null),($1,$2,'Cancelada',now()+interval '4 days',now()+interval '4 days 1 hour','cancelled',now())",
+      [GOV_ORG, a.contact],
+    );
+    expect(await db.countFutureAppointments!(GOV_ORG, a.contact)).toBe(1);
+    // Mesmo contato pedido de outra organização: nada.
+    expect(await db.countFutureAppointments!(ORG_B, a.contact)).toBe(0);
   });
 
   it("desfazer a presença cancela a inscrição presa à consulta", async () => {

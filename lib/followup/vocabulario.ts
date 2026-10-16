@@ -97,6 +97,7 @@ export const CAMPOS_DA_CONDICAO: Record<CampoDaCondicao, CampoDeCondicao> = {
   tag: { rotulo: "Etiqueta do contato", tipoDeValor: "etiqueta" },
   steps_taken: { rotulo: "Passos já dados no fluxo", tipoDeValor: "numero" },
   last_outcome: { rotulo: "Desfecho do passo anterior", tipoDeValor: "texto" },
+  future_appointments: { rotulo: "Consultas futuras marcadas", tipoDeValor: "numero" },
 };
 
 // ─── condição: o par (campo, operador) ───────────────────────────────────
@@ -251,6 +252,36 @@ const COMPARADORES: Record<CampoDaCondicao, Record<OperadorDaCondicao, Comparado
       frase: (v) => `O desfecho do passo anterior é no máximo ${aspas(v)}`,
       oferecido: false,
       aviso: AVISO_SO_NUMERO,
+    },
+  },
+  // Contagem de compromissos futuros (pending/confirmed). O uso de reativação é
+  // "é exatamente 0": só manda para quem não tem nada marcado.
+  future_appointments: {
+    eq: {
+      rotulo: "é exatamente",
+      frase: (v) => `O contato tem exatamente ${v} consulta(s) futura(s) marcada(s)`,
+      oferecido: true,
+    },
+    neq: {
+      rotulo: "não é",
+      frase: (v) => `O contato não tem exatamente ${v} consulta(s) futura(s) marcada(s)`,
+      oferecido: true,
+    },
+    gte: {
+      rotulo: "é pelo menos",
+      frase: (v) => `O contato tem pelo menos ${v} consulta(s) futura(s) marcada(s)`,
+      oferecido: true,
+    },
+    lte: {
+      rotulo: "é no máximo",
+      frase: (v) => `O contato tem no máximo ${v} consulta(s) futura(s) marcada(s)`,
+      oferecido: true,
+    },
+    contains: {
+      rotulo: "contém",
+      frase: (v) => `O número de consultas futuras contém ${aspas(v)}`,
+      oferecido: false,
+      aviso: AVISO_SO_TEXTO,
     },
   },
 };

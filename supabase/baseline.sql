@@ -20111,7 +20111,12 @@ begin
      and v.followup->'enabled'='true'::jsonb and v.followup->'flow_pointer_ids' ? p.id::text);
   result:=case when coalesce(cardinality(candidates),0)=0 then 'not_configured' when cardinality(candidates)>1 then 'ambiguous' else null end;
  end if;
- if result is null and exists(select 1 from public.followup_enrollments where organization_id=p_org and contact_id=contact and status in ('active','waiting_reply','paused_handoff','paused_manual')) then result:='other_flow'; end if;
+ -- 0373: presença NOVA recomeça a régua pós-consulta. A inscrição viva de uma
+ -- presença ANTERIOR não é "outro acompanhamento": é cancelada no mesmo bloco
+ -- da inscrição nova, logo abaixo. Qualquer outro fluxo vivo continua impedindo.
+ if result is null and exists(select 1 from public.followup_enrollments x where x.organization_id=p_org and x.contact_id=contact and x.status in ('active','waiting_reply','paused_handoff','paused_manual')
+    and not (attended and x.appointment_id is not null and x.appointment_id<>a.id
+     and exists(select 1 from public.followup_flow_pointers xp where xp.organization_id=p_org and xp.id=x.pointer_id and xp.trigger_config->>'kind'='appointment_attended'))) then result:='other_flow'; end if;
  if result is null then
   pointer:=candidates[1];
   select active_version_id into version from public.followup_flow_pointers where organization_id=p_org and id=pointer and status='active' for share;
@@ -20127,6 +20132,13 @@ begin
   exception when serialization_failure or sqlstate 'PT409' then result:='stale'; end;
   if result is null then
    begin
+    if attended then
+     update public.followup_enrollments x set status='cancelled',cancel_reason='O paciente compareceu a uma nova consulta; o acompanhamento recomeçou por ela.',
+      completed_at=now(),next_eval_at=null,claimed_until=null
+      where x.organization_id=p_org and x.contact_id=contact and x.status in ('active','waiting_reply','paused_handoff','paused_manual')
+       and x.appointment_id is not null and x.appointment_id<>a.id
+     and exists(select 1 from public.followup_flow_pointers xp where xp.organization_id=p_org and xp.id=x.pointer_id and xp.trigger_config->>'kind'='appointment_attended');
+    end if;
     insert into public.followup_enrollments(organization_id,pointer_id,version_id,contact_id,conversation_id,agent_id,current_node_id,service_boundary,
      appointment_id,appointment_revision)
     values(p_org,pointer,version,contact,(boundary->>'conversation_id')::uuid,agent,node,boundary,a.id,a.revision) returning id into enrollment;
@@ -22421,7 +22433,12 @@ begin
      and v.followup->'enabled'='true'::jsonb and v.followup->'flow_pointer_ids' ? p.id::text);
   result:=case when coalesce(cardinality(candidates),0)=0 then 'not_configured' when cardinality(candidates)>1 then 'ambiguous' else null end;
  end if;
- if result is null and exists(select 1 from public.followup_enrollments where organization_id=p_org and contact_id=contact and status in ('active','waiting_reply','paused_handoff','paused_manual')) then result:='other_flow'; end if;
+ -- 0373: presença NOVA recomeça a régua pós-consulta. A inscrição viva de uma
+ -- presença ANTERIOR não é "outro acompanhamento": é cancelada no mesmo bloco
+ -- da inscrição nova, logo abaixo. Qualquer outro fluxo vivo continua impedindo.
+ if result is null and exists(select 1 from public.followup_enrollments x where x.organization_id=p_org and x.contact_id=contact and x.status in ('active','waiting_reply','paused_handoff','paused_manual')
+    and not (attended and x.appointment_id is not null and x.appointment_id<>a.id
+     and exists(select 1 from public.followup_flow_pointers xp where xp.organization_id=p_org and xp.id=x.pointer_id and xp.trigger_config->>'kind'='appointment_attended'))) then result:='other_flow'; end if;
  if result is null then
   pointer:=candidates[1];
   select active_version_id into version from public.followup_flow_pointers where organization_id=p_org and id=pointer and status='active' for share;
@@ -22437,6 +22454,13 @@ begin
   exception when serialization_failure or sqlstate 'PT409' then result:='stale'; end;
   if result is null then
    begin
+    if attended then
+     update public.followup_enrollments x set status='cancelled',cancel_reason='O paciente compareceu a uma nova consulta; o acompanhamento recomeçou por ela.',
+      completed_at=now(),next_eval_at=null,claimed_until=null
+      where x.organization_id=p_org and x.contact_id=contact and x.status in ('active','waiting_reply','paused_handoff','paused_manual')
+       and x.appointment_id is not null and x.appointment_id<>a.id
+     and exists(select 1 from public.followup_flow_pointers xp where xp.organization_id=p_org and xp.id=x.pointer_id and xp.trigger_config->>'kind'='appointment_attended');
+    end if;
     insert into public.followup_enrollments(organization_id,pointer_id,version_id,contact_id,conversation_id,agent_id,current_node_id,service_boundary,
      appointment_id,appointment_revision)
     values(p_org,pointer,version,contact,(boundary->>'conversation_id')::uuid,agent,node,boundary,a.id,a.revision) returning id into enrollment;

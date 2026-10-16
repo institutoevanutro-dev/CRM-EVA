@@ -260,6 +260,9 @@ export const conditionCheckSchema = z.strictObject({
     'tag',
     'steps_taken',
     'last_outcome',
+    // Quantos compromissos FUTUROS (pending/confirmed, começo depois de agora)
+    // o contato tem nesta organização. Lido só quando um nó de condição o usa.
+    'future_appointments',
   ]),
   op: z.enum(['eq', 'neq', 'gte', 'lte', 'contains']),
   value: z.union([z.string(), z.number()]),

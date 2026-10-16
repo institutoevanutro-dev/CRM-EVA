@@ -368,6 +368,15 @@ export function createPgAdminClient(pool: pg.Pool): TurnBridgeAdminClient {
       if (rows.length === 0) return null;
       return flowGraphSchema.parse(rows[0]!.graph);
     },
+    async countFutureAppointments(orgId, contactId) {
+      const { rows } = await pool.query<{ n: number }>(
+        `select count(*)::int as n from calendar_appointments
+          where organization_id=$1 and contact_id=$2 and status in ('pending','confirmed')
+            and starts_at > now() and excluded_at is null`,
+        [orgId, contactId],
+      );
+      return rows[0]?.n ?? 0;
+    },
     async loadAppointmentAnchor(orgId, appointmentId, contactId, anchor) {
       // A coluna vem de um mapa fechado, nunca do grafo: não há texto livre no SQL.
       const { rows } = await pool.query<{ at: Date }>(

@@ -121,6 +121,8 @@ export interface AdminClient {
   retornoQueSeguraOFluxo?(enrollment: EnrollmentRow): Promise<string | null>;
   claimDueEnrollments(limit: number, leaseSeconds: number): Promise<EnrollmentRow[]>;
   loadFlowGraph(orgId: string, versionId: string): Promise<FlowGraph | null>;
+  /** Compromissos futuros (pending/confirmed, starts_at > agora) do contato. Só lido por condição que usa `future_appointments`. */
+  countFutureAppointments?(orgId: string, contactId: string): Promise<number>;
   /** Só exigido por uma espera fixa ancorada no compromisso. */
   loadAppointmentAnchor?(orgId: string, appointmentId: string, contactId: string, anchor: AppointmentAnchor): Promise<string | null>;
   loadLeadFacts(orgId: string, contactId: string): Promise<{
@@ -665,6 +667,11 @@ async function processEnrollment(
 
   if (node.type === "condition") {
     lead.last_outcome = ultimoDesfechoDe(events);
+    if (node.config.checks.some((c) => c.field === "future_appointments")) {
+      lead.future_appointments = db.countFutureAppointments
+        ? await db.countFutureAppointments(enrollment.organization_id, enrollment.contact_id)
+        : null;
+    }
   }
 
   if (vaiPlanejar) {
@@ -856,6 +863,17 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
       if (error) throw new Error(error.message);
       if (!data) return null;
       return flowGraphSchema.parse(data.graph);
+    },
+    async countFutureAppointments(orgId, contactId) {
+      const { count, error } = await admin.from("calendar_appointments")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId)
+        .eq("contact_id", contactId)
+        .in("status", ["pending", "confirmed"])
+        .gt("starts_at", new Date().toISOString())
+        .is("excluded_at", null);
+      if (error) throw new Error(error.message);
+      return count ?? 0;
     },
     async loadAppointmentAnchor(orgId, appointmentId, contactId, anchor) {
       const coluna = COLUNA_DA_ANCORA[anchor];

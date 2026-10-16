@@ -1810,6 +1810,7 @@ export const DICIONARIO: Traducoes = {
   Encerrada: { es: "Cerrada" },
   "Etiqueta do contato": { es: "Etiqueta del contacto" },
   "Passos já dados no fluxo": { es: "Pasos ya dados en el flujo" },
+  "Consultas futuras marcadas": { es: "Citas futuras agendadas" },
   "Desfecho do passo anterior": { es: "Desenlace del paso anterior" },
   "está na etapa": { es: "está en la etapa" },
   "não está na etapa": { es: "no está en la etapa" },
