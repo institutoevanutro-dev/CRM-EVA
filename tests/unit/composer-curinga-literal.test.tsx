@@ -132,3 +132,46 @@ describe("Composer + curinga de nome literal (#2744)", () => {
     expect(sendMock).toHaveBeenCalled();
   });
 });
+
+/**
+ * O curinga DIGITADO interpola no envio, como o template aplicado (porte do
+ * upstream #2920, @webtecnica, issue #2891). Antes, `{{primeiro_nome}}` escrito à
+ * mão num contato COM nome saía cru para o cliente.
+ */
+describe("Composer + curinga digitado interpola no envio (#2891)", () => {
+  beforeEach(() => {
+    sendMock.mockClear();
+    createNoteMock.mockClear();
+  });
+
+  it("resposta: `{{primeiro_nome}}` digitado sai com o nome do contato", () => {
+    renderComposer({ contact: { name: "Rafael Melgaço", display_name: null } });
+    const campo = screen.getByLabelText(/mensagem/i);
+    fireEvent.change(campo, { target: { value: "Oi {{primeiro_nome}}, tudo bem?" } });
+    fireEvent.keyDown(campo, { key: "Enter" });
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ conversation_id: "conv-1", body: "Oi Rafael, tudo bem?" }),
+      expect.anything(),
+    );
+  });
+
+  it("chave desconhecida segue literal no envio", () => {
+    renderComposer({ contact: { name: "Rafael Melgaço", display_name: null } });
+    const campo = screen.getByLabelText(/mensagem/i);
+    fireEvent.change(campo, { target: { value: "Seu cupom é {{codigo}}" } });
+    fireEvent.keyDown(campo, { key: "Enter" });
+    expect(sendMock).toHaveBeenCalledWith(expect.objectContaining({ body: "Seu cupom é {{codigo}}" }), expect.anything());
+  });
+
+  it("nota interna não interpola: vai para o time como escrita", () => {
+    renderComposer({ contact: { name: "Rafael Melgaço", display_name: null } });
+    fireEvent.click(screen.getByRole("button", { name: /nota interna/i }));
+    const campo = screen.getByPlaceholderText(/nota interna/i);
+    fireEvent.change(campo, { target: { value: "Lembrar {{primeiro_nome}}" } });
+    fireEvent.click(screen.getByRole("button", { name: /^enviar$/i }));
+    expect(createNoteMock).toHaveBeenCalledWith(
+      expect.objectContaining({ body: "Lembrar {{primeiro_nome}}" }),
+      expect.anything(),
+    );
+  });
+});

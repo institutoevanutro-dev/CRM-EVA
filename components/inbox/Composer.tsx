@@ -191,10 +191,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       return;
     }
     const citadaNoEnvio = respondendo?.id ?? null;
+    // O curinga DIGITADO interpola como o template aplicado (porte do upstream
+    // #2920, issue #2891): quem escreve `{{primeiro_nome}}` à mão quer o nome do
+    // cliente, não o token cru. Mesma `interpolateTemplate` e mesmo `contact` do
+    // `applyTemplate` e da trava acima. A nota interna (acima) segue como escrita,
+    // e o `restoreOnError` devolve o texto digitado, não o interpolado.
     send.mutate(
       {
         conversation_id: conversationId,
-        body,
+        body: interpolateTemplate(body, contact ?? {}),
         type: "text",
         ...(respondendo ? { reply_to_message_id: respondendo.id } : {}),
       },
