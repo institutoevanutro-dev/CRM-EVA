@@ -24,6 +24,9 @@ import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { adiarAteAJanelaAbrir } from "@/lib/automation/janela-do-canal";
 import { espacarEnvio } from "@/lib/automation/throttle";
 import { interpolateTemplate, variaveisDesconhecidas } from "@/lib/inbox/template-vars";
+import { trocarSaudacao, usaSaudacao } from "@/lib/campanhas/renderizador";
+import { normalizarIdioma } from "@/lib/i18n/idiomas";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 
 function ponteSupabase(admin: SupabaseClient): TurnBridgeAdminClient {
   const base = createSupabaseAdminClient(admin);
@@ -204,8 +207,19 @@ export async function enviarTextoFixoPendente(
       // As variáveis do texto com o contato de AGORA, a mesma regra do worker
       // (`interpolarVariaveisDoContato`). O ledger guarda o texto que saiu.
       let texto = body;
-      if (body.includes("{{")) {
-        const desconhecidas = variaveisDesconhecidas(body);
+      if (usaSaudacao(texto)) {
+        // A MESMA regra do worker: fuso e idioma da organização, no instante do envio.
+        const { data: org, error: orgErr } = await admin
+          .from("organizations")
+          .select("timezone, locale")
+          .eq("id", job.organization_id as string)
+          .maybeSingle();
+        if (orgErr) throw new Error(orgErr.message);
+        const o = org as { timezone?: string | null; locale?: string | null } | null;
+        texto = trocarSaudacao(texto, new Date(), fusoUtilizavel(o?.timezone), normalizarIdioma(o?.locale));
+      }
+      if (texto.includes("{{")) {
+        const desconhecidas = variaveisDesconhecidas(texto);
         if (desconhecidas.length > 0) {
           logger.warn("[followup] variável desconhecida no texto do follow-up: saiu da mensagem", {
             organization_id: job.organization_id,
@@ -220,7 +234,7 @@ export async function enviarTextoFixoPendente(
           .eq("id", contactId)
           .maybeSingle();
         if (pessoaErr) throw new Error(pessoaErr.message);
-        texto = interpolateTemplate(body, pessoa ?? {}, { semValor: "remover" });
+        texto = interpolateTemplate(texto, pessoa ?? {}, { semValor: "remover" });
       }
       if (texto === "") {
         await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {
@@ -243,7 +257,7 @@ export async function enviarTextoFixoPendente(
       if(resultado.kind!=="sent" && resultado.kind!=="already_sent") throw new Error(`message_${resultado.kind}`);
       enviados++;
       await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {
-        kind: "sent",
+        kind: "sent", ...(typeof payload.variante === "number" ? { variante: payload.variante } : {}),
       },undefined,job.id,jobClaim);
       await settle(job.organization_id,job.id,jobClaim.acquired_at,true);
     } catch (err) {

@@ -52,6 +52,9 @@ import {
 import { ERRO_FORA_DAS_24H } from '../edge/crm/send-ledger';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import { interpolateTemplate, variaveisDesconhecidas, type TemplateContact } from '@/lib/inbox/template-vars';
+import { trocarSaudacao, usaSaudacao } from '@/lib/campanhas/renderizador';
+import { normalizarIdioma } from '@/lib/i18n/idiomas';
+import { fusoUtilizavel } from '@/lib/tempo/fusos';
 import type { LeadStateRow } from './lead-state';
 import { loadReentryTemplate, pickReentryVariant } from './reentry-template';
 import {
@@ -90,6 +93,8 @@ export const followupTurnPayloadSchema = z
     prompt_hint: z.string().optional(),
     /** action mode `text` — enviado pela cadeia de guardrails, sem LLM. */
     fixed_body: z.string().min(1).max(4000).optional(),
+    /** Qual redação do passo `text` o engine escolheu (0 = `body`); volta no `sent`. */
+    variante: z.number().int().min(0).optional(),
     /** action mode `template` — corpo em `message_templates`. */
     template_id: z.string().uuid().optional(),
     /** action mode `ai_message` — modelo de reserva (`message_templates`), porte de b94446a5c. */
@@ -121,7 +126,7 @@ export const followupTurnPayloadSchema = z
  *  (agent-engine não importa followup/* — regra dura de dependência numa direção só). */
 export type FollowupFlowTurnResult =
   /** `via`: o passo saiu pelo modelo de reserva porque a IA não conseguiu enviar. */
-  | { kind: 'sent'; via?: 'modelo_de_reserva' }
+  | { kind: 'sent'; via?: 'modelo_de_reserva'; variante?: number }
   /** `midiaRecusada`: a mídia do passo não pôde sair; a sequência para e a ponte abre o aviso na Central. */
   | { kind: 'skipped'; reason: string; outcome?: 'converted' | 'replied' | 'exhausted' | 'opted_out' | 'handoff'; midiaRecusada?: true }
   | { kind: 'pulado'; reason: string }
@@ -447,6 +452,7 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
         purpose: payload.purpose,
         promptHint: payload.prompt_hint,
         fixedBody: payload.fixed_body,
+        variante: payload.variante,
         templateId: payload.template_id,
         fallbackTemplateId: payload.fallback_template_id,
         mediaId: payload.media_id,
@@ -517,6 +523,7 @@ async function runFlowDrivenTurn(
     purpose: 'send_message' | 'classify' | 'plan_timing' | undefined;
     promptHint: string | undefined;
     fixedBody: string | undefined;
+    variante: number | undefined;
     templateId: string | undefined;
     fallbackTemplateId: string | undefined;
     mediaId: string | undefined;
@@ -616,8 +623,8 @@ async function runFlowDrivenTurn(
     // Passo de mídia: a legenda é o corpo (pode ficar vazia — a mídia sai sozinha).
     const body =
       input.mediaId !== undefined
-        ? await interpolarVariaveisDoContato(pool, target.tenantId, target.leadId, input.mediaCaption ?? '', runLog)
-        : await resolveFlowSendBody(pool, target.tenantId, target.leadId, input, runLog);
+        ? await interpolarVariaveisDoContato(pool, target.tenantId, target.leadId, input.mediaCaption ?? '', runLog, clock())
+        : await resolveFlowSendBody(pool, target.tenantId, target.leadId, input, runLog, clock());
     if (body === '' && input.mediaId === undefined) {
       await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'pulado', reason: MOTIVO_TEXTO_VAZIO_SEM_VALOR } });
       return;
@@ -630,7 +637,7 @@ async function runFlowDrivenTurn(
       if (typeof sent === 'object') {
         await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: sent });
       } else if (sent === 'sent') {
-        await complete(pool, { jobId:job.id,jobClaim:claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'sent' } });
+        await complete(pool, { jobId:job.id,jobClaim:claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'sent', ...(input.variante !== undefined ? { variante: input.variante } : {}) } });
       } else if (sent === 'pulado') {
         await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'pulado', reason: TEXTO_DO_BLOQUEIO.fora_das_24h_do_instagram } });
       } else if(sent === 'skipped') {
@@ -830,8 +837,17 @@ function interpolarVoltaDoPayload(texto: string, index: number | undefined, tota
  * sai do texto: o follow-up não tem quem revise antes de enviar. A desconhecida
  * vira aviso no log — só o nome da variável, nunca o dado do contato.
  */
-async function interpolarVariaveisDoContato(pool: pg.Pool, tenantId: string, contactId: string, texto: string, log: Logger): Promise<string> {
+async function interpolarVariaveisDoContato(pool: pg.Pool, tenantId: string, contactId: string, texto: string, log: Logger, agora: Date): Promise<string> {
   if (!texto.includes('{{')) return texto;
+  if (usaSaudacao(texto)) {
+    // `{{saudacao}}` no fuso e no idioma da ORGANIZAÇÃO, no instante deste envio
+    // (um passo adiado pela janela é reavaliado quando de fato sai).
+    const { rows: org } = await pool.query<{ timezone: string | null; locale: string | null }>(
+      'select timezone, locale from organizations where id = $1',
+      [tenantId],
+    );
+    texto = trocarSaudacao(texto, agora, fusoUtilizavel(org[0]?.timezone), normalizarIdioma(org[0]?.locale));
+  }
   const desconhecidas = variaveisDesconhecidas(texto);
   if (desconhecidas.length > 0) {
     log.warn('variável desconhecida no texto do follow-up: saiu da mensagem', { variaveis: desconhecidas });
@@ -854,9 +870,10 @@ async function resolveFlowSendBody(
     voltaTotal: number | undefined;
   },
   log: Logger,
+  agora: Date,
 ): Promise<string | null> {
   if (input.fixedBody !== undefined) {
-    return interpolarVariaveisDoContato(pool, tenantId, contactId, interpolarVoltaDoPayload(input.fixedBody, input.voltaIndex, input.voltaTotal), log);
+    return interpolarVariaveisDoContato(pool, tenantId, contactId, interpolarVoltaDoPayload(input.fixedBody, input.voltaIndex, input.voltaTotal), log, agora);
   }
   if (input.templateId === undefined) return null;
   const { rows } = await pool.query<{ body: string }>(
@@ -867,7 +884,7 @@ async function resolveFlowSendBody(
   if (body === undefined || body.length === 0) {
     throw new Error('followup_turn sem modelo de mensagem — o template_id do passo não existe nesta organização');
   }
-  return interpolarVariaveisDoContato(pool, tenantId, contactId, interpolarVoltaDoPayload(body, input.voltaIndex, input.voltaTotal), log);
+  return interpolarVariaveisDoContato(pool, tenantId, contactId, interpolarVoltaDoPayload(body, input.voltaIndex, input.voltaTotal), log, agora);
 }
 
 /**
@@ -1115,7 +1132,7 @@ async function tentarModeloDeReserva(
     templateId: input.fallbackTemplateId,
     voltaIndex: input.voltaIndex,
     voltaTotal: input.voltaTotal,
-  }, deps.log);
+  }, deps.log, clock());
   if (body === '') return { kind: 'pulado', reason: MOTIVO_TEXTO_VAZIO_SEM_VALOR };
   // Texto do operador: sem camada semântica, como o texto fixo do fluxo.
   const saiu = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body!, false, SEQ_DO_MODELO_DE_RESERVA);

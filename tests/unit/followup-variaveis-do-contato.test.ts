@@ -47,7 +47,7 @@ function job(payload: Record<string, unknown>): JobRow {
   } as JobRow;
 }
 
-function fakePool(contato: Record<string, string | null>, modelo = "Olá {{nome}}") {
+function fakePool(contato: Record<string, string | null>, modelo = "Olá {{nome}}", org: Record<string, string | null> = {}) {
   const query = vi.fn(async (sql: string, params?: unknown[]): Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }> => {
     if (sql.includes("d.fechada_em::text")) return { rows: [{ ...boundary, status: "open", demanda_fechada_em: null }] };
     if (/select name, display_name, phone_number, email from contacts/.test(sql)) {
@@ -71,6 +71,10 @@ function fakePool(contato: Record<string, string | null>, modelo = "Olá {{nome}
       }] };
     }
     if (/from contacts/.test(sql)) return { rows: [{ is_blocked: false, force_human: false, is_anonymized: false }] };
+    if (/select timezone, locale from organizations/.test(sql)) {
+      expect(params).toEqual([ORG]);
+      return { rows: [org] };
+    }
     if (/from organizations/.test(sql)) return { rows: [{ settings: {} }] };
     return { rows: [], rowCount: 0 };
   });
@@ -194,5 +198,43 @@ describe("worker — variáveis do contato no texto e no modelo do passo", () =>
       expect.anything(),
       expect.objectContaining({ result: expect.objectContaining({ kind: "pulado" }) }),
     );
+  });
+
+  it("{{saudacao}} sai no fuso e no idioma da organização, no instante do envio", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-09-18T05:00:00.000Z")); // 02h em SP, 14h em Tóquio
+      await criarHandler(deps().deps)(
+        job({ fixed_body: "{{saudacao}}, {{primeiro_nome}}!" }),
+        fakePool(PESSOA, undefined, { timezone: "Asia/Tokyo", locale: "es" }),
+        ctx,
+      );
+      expect(corpoEnviado()).toBe("Buenas tardes, Bia!");
+      runBeforeSend.mockClear();
+      vi.setSystemTime(new Date("2026-09-18T13:00:00.000Z")); // 10h em SP
+      await criarHandler(deps().deps)(
+        job({ fixed_body: "{{saudacao}}, {{primeiro_nome}}!" }),
+        fakePool(PESSOA, undefined, { timezone: null, locale: null }), // sem fuso: America/Sao_Paulo
+        ctx,
+      );
+      expect(corpoEnviado()).toBe("Bom dia, Bia!");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a variante escolhida volta no 'sent' para o enrollment registrar", async () => {
+    const d = deps();
+    await criarHandler(d.deps)(job({ fixed_body: "Oi, {{primeiro_nome}}", variante: 2 }), fakePool(PESSOA), ctx);
+    expect(d.complete).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ result: { kind: "sent", variante: 2 } }),
+    );
+  });
+
+  it("sem variantes, o 'sent' segue sem o campo", async () => {
+    const d = deps();
+    await criarHandler(d.deps)(job({ fixed_body: "Oi, {{primeiro_nome}}" }), fakePool(PESSOA), ctx);
+    expect(d.complete).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ result: { kind: "sent" } }));
   });
 });

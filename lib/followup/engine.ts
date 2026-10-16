@@ -19,6 +19,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { idsDoContatoEGemeos } from "@/lib/channels/contato-por-telefone";
 import { logger } from "@/lib/logger";
+import { indiceDaVariante } from "@/lib/agent-engine/agent/reentry-template";
 
 import { COLUNA_DA_ANCORA, flowGraphSchema, type AppointmentAnchor, type FlowGraph, type FlowNode, type ReplySaveTo } from "./graph-schema";
 import {
@@ -93,6 +94,8 @@ export interface FollowupJobRequest {
     fallback_template_id?: string;
     /** action (mode 'text') — corpo pronto; o turno envia sem chamar o modelo. */
     fixed_body?: string;
+    /** action (mode 'text') — qual redação saiu (0 = `body`, n = `variants[n-1]`); ausente sem variantes. Vai ao evento `action_sent`. */
+    variante?: number;
     /** action (mode 'media') — item da biblioteca de mídias; legenda opcional com {{volta}} já interpolado. */
     media_id?: string;
     media_caption?: string;
@@ -265,6 +268,7 @@ export function turnPayloadExtras(
   node: FlowNode,
   smartWaits: EsperaAdaptativa[],
   events: EnrollmentEventRef[] = [],
+  contactId?: string,
 ): Partial<FollowupJobRequest["payload"]> {
   if (node.type === "action" && node.config.mode === "ai_message") {
     return {
@@ -273,7 +277,13 @@ export function turnPayloadExtras(
     };
   }
   if (node.type === "action" && node.config.mode === "text") {
-    return { fixed_body: interpolarVolta(node.config.body, events) };
+    const { body, variants } = node.config;
+    if (!variants?.length || !contactId) return { fixed_body: interpolarVolta(body, events) };
+    // `body` é a variante 0. Mesma regra de hash da re-entrada, com a chave
+    // (contato, nó): o mesmo paciente recebe sempre a mesma redação deste passo.
+    const opcoes = [body, ...variants];
+    const variante = indiceDaVariante(`${contactId}:${node.id}`, opcoes.length);
+    return { fixed_body: interpolarVolta(opcoes[variante]!, events), variante };
   }
   if (node.type === "action" && node.config.mode === "media") {
     return {
@@ -490,7 +500,7 @@ async function applyResult(
             node_id: node.id,
             source_step_key: idemKey,
             purpose: result.purpose,
-            ...turnPayloadExtras(node, smartWaits, events),
+            ...turnPayloadExtras(node, smartWaits, events, enrollment.contact_id),
             ...(result.fixed_body ? { fixed_body: result.fixed_body } : {}),
           },
         });
