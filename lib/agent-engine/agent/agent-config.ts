@@ -236,7 +236,12 @@ export async function loadPublishedAgentConfig(
        -- dispatcher nativo do CRM — pausar = despublicar).
        and v.status = 'published'
        and v.channel_session_id = $2
-     order by a.priority desc, a.created_at asc
+     -- Quem está NO AR vem antes de qualquer pausado: sem isto um pausado de
+     -- prioridade maior calava o número inteiro, com outro agente publicado nele
+     -- (porte de upstream #2376). O pausado segue vindo quando é o
+     -- único: null aqui vira o agente genérico, e pausar faria o número voltar a
+     -- responder.
+     order by (a.paused_at is not null) asc, a.priority desc, a.created_at asc
      limit 1`,
     [organizationId, channelSessionId],
   );
