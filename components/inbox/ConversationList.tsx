@@ -11,7 +11,7 @@ import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
 
 import { ConversationListItem } from "./ConversationListItem";
-import { EmptyInbox } from "@/components/empty";
+import { EmptyInbox, EmptyOcultos } from "@/components/empty";
 import { EmptyPorFiltro } from "./EmptyPorFiltro";
 import { filtrosAuxiliaresAtivos } from "@/lib/inbox/filtros-ativos";
 import type {
@@ -163,7 +163,7 @@ export function ConversationList({
   if (items.length === 0 && filtrosAtivos.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <EmptyInbox />
+        {filters.ocultos ? <EmptyOcultos /> : <EmptyInbox />}
       </div>
     );
   }

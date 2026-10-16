@@ -1,4 +1,5 @@
 import type { ServiceBoundary } from "@/lib/atendimento/fronteira";
+import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 import { assertServiceBoundarySupabase } from "@/lib/atendimento/origem";
 import { beginServiceAtOrigin } from "@/lib/atendimento/origem";
 import { sessaoDoFollowup } from "@/lib/followup/conversa-do-followup";
@@ -74,12 +75,23 @@ export async function enrollFollowupFlow(
 
   const { data: contact, error: contactErr } = await supabase
     .from("contacts")
-    .select("id")
+    .select("id, inbox_hidden_at")
     .eq("organization_id", organizationId)
     .eq("id", contactId)
     .maybeSingle();
   if (contactErr) return { ok: false, code: "internal_error", message: contactErr.message, status: 500 };
   if (!contact) return { ok: false, code: "not_found", message: "Contato não encontrado.", status: 404 };
+  // O contato oculto do Inbox (migration 0372) não entra em follow-up — nem
+  // manual, nem por automação. Recusa ANTES de abrir conversa (a origem do
+  // atendimento é resolvida logo abaixo e pode criar uma).
+  if (contatoEstaOculto(contact)) {
+    return {
+      ok: false,
+      code: "contact_hidden",
+      message: "Este contato está oculto do Inbox e não entra em follow-up.",
+      status: 422,
+    };
+  }
 
   // A reserva, quando informada, tem de ser DESTE contato e DESTA organização —
   // nunca confiar em um id que o chamador passou sem conferir o vínculo (a

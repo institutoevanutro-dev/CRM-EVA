@@ -1,4 +1,5 @@
 import { parseServiceBoundary, StaleServiceBoundaryError } from "@/lib/atendimento/fronteira";
+import { contatoOcultoDoInbox } from "@/lib/contacts/ocultar-do-inbox";
 import { assertServiceBoundarySupabase } from "@/lib/atendimento/origem";
 /**
  * Gatilho de CASO ABERTO (`trigger_config.kind='case_opened'`) — o follow-up
@@ -354,7 +355,11 @@ export function createSupabaseGatilhoCasoDb(admin: SupabaseClient): GatilhoCasoD
         .eq("organization_id", orgId)
         .maybeSingle();
       if (error) throw new Error(error.message);
-      return data?.contact_id ?? null;
+      const contactId = (data?.contact_id as string | null | undefined) ?? null;
+      // O contato oculto do Inbox (migration 0372) conta como "sem contato": a
+      // sequência não nasce para ele.
+      if (contactId && (await contatoOcultoDoInbox(admin, orgId, contactId))) return null;
+      return contactId;
     },
 
     async carregaNoDeGatilho(orgId, versionId) {

@@ -775,6 +775,10 @@ export const AUDIT_ACTIONS = [
   // instante (`settings.radar.desde`), ou desfez o recomeço. Metadata: desde e antes.
   "radar.recomecado",
   "radar.recomeco_desfeito",
+  // migration 0372: o contato saiu do Inbox (ou voltou). Metadata: origem
+  // (tela_do_contato | inbox) e, pelo Inbox, a conversa de onde veio o gesto.
+  "contact.inbox_hidden",
+  "contact.inbox_unhidden",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

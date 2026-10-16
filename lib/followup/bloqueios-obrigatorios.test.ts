@@ -93,6 +93,14 @@ describe('decidirEnvio — sempre valem', () => {
     });
   });
 
+  it('contato oculto do Inbox (migration 0372) encerra a sequência, mesmo com a janela fechada e o canal liberado', () => {
+    const f = fatos({ contato: { is_blocked: false, force_human: false, is_anonymized: false, oculto: true } });
+    for (const quando of [QUARTA_MANHA, new Date('2026-09-16T23:00:00.000Z')]) {
+      expect(decidirEnvio(f, TUDO_LIGADO, quando)).toEqual({ envia: false, motivo: 'contato_oculto', invalida: true });
+    }
+    expect(TEXTO_DO_BLOQUEIO.contato_oculto).toContain('ocultado do Inbox');
+  });
+
   describe('humano ativo encerra a sequência, um sinal por vez', () => {
     const HUMANO = { envia: false, motivo: 'atendimento_humano', invalida: true };
     const limpa = { bot_silenciado: false, atribuida_a_pessoa: false, humano_respondeu: false };

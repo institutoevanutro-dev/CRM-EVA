@@ -11,6 +11,7 @@
  * ignora RLS, e é ele que este módulo recebe (a prévia roda numa rota com papel
  * conferido; o snapshot roda no worker, que não tem usuário).
  */
+import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { CAMPANHAS_VIVAS, limiteDeSilencio, usaNegocio, type FiltroDeAudiencia } from "./audiencia";
@@ -27,6 +28,7 @@ interface LinhaDeContato {
   phone_number: string | null;
   is_blocked: boolean;
   is_anonymized: boolean;
+  inbox_hidden_at?: string | null;
   consent: unknown;
 }
 
@@ -64,7 +66,7 @@ export async function buscarCandidatos(
 
   let consulta = admin
     .from("contacts")
-    .select("id, name, display_name, phone_number, is_blocked, is_anonymized, consent")
+    .select("id, name, display_name, phone_number, is_blocked, is_anonymized, inbox_hidden_at, consent")
     .eq("organization_id", organizationId)
     // Cadastro mesclado é fantasma: quem responde é o sobrevivente.
     .is("is_merged_into", null)
@@ -110,7 +112,7 @@ export async function buscarCandidatos(
   if (faltam.length > 0) {
     const { data: extras, error: erroExtras } = await admin
       .from("contacts")
-      .select("id, name, display_name, phone_number, is_blocked, is_anonymized, consent")
+      .select("id, name, display_name, phone_number, is_blocked, is_anonymized, inbox_hidden_at, consent")
       .eq("organization_id", organizationId)
       .in("id", faltam);
     if (erroExtras) throw new Error(`audiência: incluídos — ${erroExtras.message}`);
@@ -123,6 +125,7 @@ export async function buscarCandidatos(
     telefone: l.phone_number,
     bloqueado: l.is_blocked,
     anonimizado: l.is_anonymized,
+    oculto: contatoEstaOculto(l),
     recusouMarketing: recusouMarketing(l.consent),
   }));
 }

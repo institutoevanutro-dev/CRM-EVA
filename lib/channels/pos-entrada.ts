@@ -40,6 +40,7 @@
  */
 import { audit } from "@/lib/audit";
 import { encerraDemanda } from "@/lib/leads/encerramento";
+import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 import { garantirLeadDaConversa } from "@/lib/leads/nascimento-do-lead";
 import type { CanonicalLostReason } from "@/lib/schemas/leads";
 import { logger } from "@/lib/logger";
@@ -118,6 +119,18 @@ export async function aplicarEfeitosPosEntrada(
   entrada: EntradaDeMensagem,
 ): Promise<void> {
   await aplicarOptOut(admin, entrada);
+  // CONTATO OCULTO DO INBOX (migration 0372): a mensagem já foi gravada e fica;
+  // o que não acontece é o resto — card no funil, autorização por campanha e o
+  // despacho do agente. Este é o único freio para a organização em modo
+  // `external`, onde quem responde é um agente de fora que consome o evento.
+  if (await contatoOcultoNaEntrada(admin, entrada)) {
+    logger.info("pos-entrada: contato oculto do Inbox — sem card, campanha nem agente", {
+      organization_id: entrada.organizationId,
+      conversation_id: entrada.conversationId,
+      origem: entrada.origem,
+    });
+    return;
+  }
   await abrirDemanda(admin, entrada);
   await avaliarCampanha(admin, entrada);
   // A resposta do lead avança o follow-up AQUI. O despacho do agente (LLM)
@@ -130,6 +143,25 @@ export async function aplicarEfeitosPosEntrada(
     texto: entrada.texto,
   });
   await pedirDespachoDoAgente(admin, entrada);
+}
+
+/**
+ * O contato está oculto do Inbox? Falha de leitura vale "visível": o efeito que
+ * importa (a IA não responder) é conferido de novo no gate do drain e do turno,
+ * que leem a marca do banco.
+ */
+async function contatoOcultoNaEntrada(admin: Admin, entrada: EntradaDeMensagem): Promise<boolean> {
+  try {
+    const { data } = await admin
+      .from("contacts")
+      .select("inbox_hidden_at")
+      .eq("organization_id", entrada.organizationId)
+      .eq("id", entrada.contactId)
+      .maybeSingle();
+    return contatoEstaOculto(data as { inbox_hidden_at?: unknown } | null);
+  } catch {
+    return false;
+  }
 }
 
 /**

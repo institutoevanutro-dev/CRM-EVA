@@ -1,5 +1,6 @@
 "use client";
 
+import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 import { useCallback, useEffect } from "react";
 
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
@@ -64,8 +65,11 @@ async function contatoDaRota(contactId: string): Promise<Record<string, unknown>
   }
 }
 
-async function contactNotifyBits(contactId: string): Promise<{ title: string; icon?: string }> {
+async function contactNotifyBits(contactId: string): Promise<{ title: string; icon?: string; oculto?: boolean }> {
   const row = await contatoDaRota(contactId);
+  // O contato oculto do Inbox (migration 0372) não toca aviso: mesma régua do
+  // push do servidor.
+  if (contatoEstaOculto(row)) return { title: "Nova mensagem", oculto: true };
   // A mesma regra do push do servidor (`push.handler.ts`): nome, senão o
   // telefone; identificador técnico nunca. Sem nenhum dos dois, o literal.
   const rotulo = row ? rotuloDoContato(row as Parameters<typeof rotuloDoContato>[0]) : SEM_NOME;
@@ -130,6 +134,7 @@ export function useInboundMessageAlerts(): void {
       const bits = contactId
         ? await contactNotifyBits(contactId)
         : { title: "Nova mensagem" as const, icon: undefined };
+      if ("oculto" in bits && bits.oculto) return;
       entregarAviso({
         category: "message",
         kind: "message_inbound",

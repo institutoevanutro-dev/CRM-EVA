@@ -11,4 +11,5 @@ export {
   EmptyMergeQueue,
   EmptyFilterResults,
   EmptyAgenda,
+  EmptyOcultos,
 } from "./variants";

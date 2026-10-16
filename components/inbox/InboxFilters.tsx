@@ -35,7 +35,15 @@ import { useConversationTagVocabulary } from "@/hooks/inbox/useConversationTags"
 import { useConversationCounts } from "@/hooks/inbox/useConversationCounts";
 import type { Role, VisibilityMode } from "@/lib/auth/types";
 
-export type InboxTab = "unassigned" | "mine" | "all" | "closed" | "archived" | "ai" | "comentarios";
+export type InboxTab =
+  | "unassigned"
+  | "mine"
+  | "all"
+  | "closed"
+  | "archived"
+  | "ai"
+  | "comentarios"
+  | "ocultos";
 
 /** As abas da fila de trabalho, sempre à vista. As demais vão para "Mais". */
 const ABAS_PRINCIPAIS: readonly InboxTab[] = ["unassigned", "mine", "all"];
@@ -60,6 +68,9 @@ const INBOX_TABS: { value: InboxTab; label: string }[] = [
   // "comentários no CRM"). Não é conversa — `tabToFilter` (InboxLayout) não
   // ganha um case pra ela; a aba troca o CORPO inteiro pelo painel próprio.
   { value: "comentarios", label: "Comentários" },
+  // O que a equipe tirou do Inbox (migration 0372): o amigo do perfil pessoal,
+  // por exemplo. Só gerente e administrador, os mesmos que trazem de volta.
+  { value: "ocultos", label: "Ocultos" },
 ];
 
 /**
@@ -69,7 +80,12 @@ const INBOX_TABS: { value: InboxTab; label: string }[] = [
  */
 export function visibleInboxTabs(role: Role, mode: VisibilityMode | undefined): InboxTab[] {
   const hideAll = role === "agent" && mode !== "all";
-  return INBOX_TABS.filter((t) => !(t.value === "all" && hideAll)).map((t) => t.value);
+  // "Ocultos" segue a rota (`?ocultos=true` exige manager): esconder aqui é não
+  // oferecer o que o servidor recusa.
+  const veOcultos = role === "manager" || role === "admin";
+  return INBOX_TABS.filter((t) => !(t.value === "all" && hideAll))
+    .filter((t) => t.value !== "ocultos" || veOcultos)
+    .map((t) => t.value);
 }
 
 export interface InboxFiltersValue {
@@ -185,6 +201,7 @@ export function InboxFilters({ value, onChange }: Props) {
     all: counts?.all,
     closed: counts?.closed,
     archived: counts?.archived,
+    ocultos: counts?.ocultos,
   };
   // Filtrar por um número que saiu da lista (o operador acabou de excluir o
   // canal) deixa o inbox mostrando um subconjunto — às vezes vazio — sem nada na

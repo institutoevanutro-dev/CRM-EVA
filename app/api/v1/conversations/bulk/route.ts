@@ -5,7 +5,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * Porte do upstream #2909 (fatia F1 de #2484, de @webtecnica).
  *
  * UMA rota para as ações em lote (`close`, `archive`, `mark-read`, `pause-ai`,
- * `transfer`), discriminada por `action`. Cada id é encaminhado, UM A UM, ao
+ * `transfer`, `hide`), discriminada por `action`. Cada id é encaminhado, UM A UM, ao
  * MESMO handler da conversa individual (`../[id]/...`). Quem decide permissão,
  * organização (da sessão, nunca do corpo) e auditoria continua sendo ele: uma
  * entrada de auditoria por conversa, nenhuma agregada. O fechamento, portanto,
@@ -33,6 +33,7 @@ import type { BulkConversationActionInput } from "@/lib/schemas";
 
 import { POST as fecharUmaConversa } from "../[id]/close/route";
 import { POST as marcarComoLida } from "../[id]/mark-read/route";
+import { POST as ocultarDoInbox } from "../[id]/ocultar/route";
 import { POST as pausarAutomatico } from "../[id]/pause-ai/route";
 import { POST as transferirUmaConversa } from "../[id]/transfer/route";
 import { PATCH as atualizarUmaConversa } from "../[id]/route";
@@ -100,6 +101,10 @@ async function executarNoItem(
       return marcarComoLida(requestDoItem(req, id, "/mark-read", "POST", {}), ctxDoItem(id));
     case "pause-ai":
       return pausarAutomatico(requestDoItem(req, id, "/pause-ai", "POST", {}), ctxDoItem(id));
+    case "hide":
+      // A marca é do CONTATO: duas conversas da mesma pessoa no lote ocultam uma
+      // vez só (a segunda volta "já estava", sem nova linha de auditoria).
+      return ocultarDoInbox(requestDoItem(req, id, "/ocultar", "POST", {}), ctxDoItem(id));
     case "transfer":
       return transferirUmaConversa(
         requestDoItem(req, id, "/transfer", "POST", {

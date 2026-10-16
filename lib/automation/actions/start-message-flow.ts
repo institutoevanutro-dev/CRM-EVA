@@ -73,6 +73,10 @@ export async function executeStartMessageFlow(
     if (result.code === "flow_not_active") {
       return { type: TYPE, status: "skipped", detail: { reason: "flow_not_active" } };
     }
+    // Contato oculto do Inbox (migration 0372): a regra não falhou, ela pulou.
+    if (result.code === "contact_hidden") {
+      return { type: TYPE, status: "skipped", detail: { reason: "contato_oculto" } };
+    }
     return { type: TYPE, status: "failed", error: result.message, detail: { code: result.code } };
   }
 

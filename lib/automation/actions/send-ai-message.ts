@@ -1,4 +1,5 @@
 import { assertAgendaEffectSupabase } from "@/lib/agenda/efeito";
+import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 import { protecaoAgendaSupabase } from "@/lib/agenda/protecao-followup";
 /**
  * Ação `send_ai_message` — "Mensagem escrita pela IA".
@@ -69,9 +70,10 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
   // "Sempre atendimento humano" (migration 0366): a IA nunca escreve para este
   // contato, nem abrindo conversa. Lido do banco (o contexto do evento pode ser
   // anterior à marca); leitura falhando para, como as outras guardas daqui.
+  // O oculto do Inbox (migration 0372) viaja no mesmo select, pelo mesmo motivo.
   const { data: marca, error: marcaErr } = await ctx.admin
     .from("contacts")
-    .select("ai_opt_out")
+    .select("ai_opt_out, inbox_hidden_at")
     .eq("organization_id", ctx.organizationId)
     .eq("id", contact.id)
     .maybeSingle();
@@ -80,6 +82,9 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
   }
   if ((marca as { ai_opt_out?: boolean } | null)?.ai_opt_out === true) {
     return { type: TIPO, status: "skipped", detail: { reason: "ai_opt_out" } };
+  }
+  if (contatoEstaOculto(marca as { inbox_hidden_at?: unknown } | null)) {
+    return { type: TIPO, status: "skipped", detail: { reason: "contato_oculto" } };
   }
 
   // Esta ação abre um primeiro contato e por isso ainda não tem conversa para

@@ -6,6 +6,7 @@ import { type NextRequest } from "next/server";
 
 import { ApiError } from "@/lib/api/types";
 import { fail, ok } from "@/lib/api/wrappers";
+import { requireRole } from "@/lib/auth/require-role";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { listConversationsQuerySchema } from "@/lib/schemas";
@@ -39,6 +40,9 @@ export async function GET(req: NextRequest): Promise<Response> {
   const qsParsed = listConversationsQuerySchema.safeParse({
     status: url.searchParams.get("status") ?? undefined,
     exclude_finished: url.searchParams.get("exclude_finished") === "true" ? true : undefined,
+    // A aba "Ocultos" (migration 0372). Sem o parâmetro a lista nunca traz
+    // conversa de contato oculto; com ele, traz só elas — e só para gerente.
+    ocultos: url.searchParams.get("ocultos") === "true" ? true : undefined,
     assigned_to: url.searchParams.get("assigned_to") ?? undefined,
     // QUEM MANDA na conversa (migration 0203) — o filtro das abas Fila e
     // Automático. Faltar aqui é a MESMA rotura que o `tag` teve logo abaixo: o
@@ -76,6 +80,13 @@ export async function GET(req: NextRequest): Promise<Response> {
       details: qsParsed.error.flatten().fieldErrors as Record<string, unknown>,
       requestId,
     });
+  }
+
+  // Ver o que a equipe tirou do Inbox é de gerente e administrador, os mesmos
+  // que trazem de volta (`DELETE /api/v1/contacts/[id]/ocultar`).
+  if (qsParsed.data.ocultos) {
+    const authz = await requireRole("manager", { requestId, resource: "conversations" });
+    if (!authz.ok) return authz.response;
   }
 
   try {

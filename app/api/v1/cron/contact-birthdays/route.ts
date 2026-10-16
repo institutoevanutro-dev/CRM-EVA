@@ -144,6 +144,8 @@ async function handle(req: NextRequest): Promise<Response> {
       .eq("organization_id", org)
       .in("birthday_md", dias)
       .eq("is_blocked", false)
+      // Oculto do Inbox pela equipe (migration 0372): automação não fala com ele.
+      .is("inbox_hidden_at", null)
       .not("phone_number", "is", null)
       .limit(TETO_POR_ORGANIZACAO);
 

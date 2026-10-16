@@ -251,6 +251,8 @@ function linha(id: string, awaitingSince: string, lastInboundAt: string) {
     id,
     organization_id: "org-1",
     comando_da_conversa: "aguardando",
+    // Migration 0372: o Inbox pede `contato_oculto = false` em toda lista.
+    contato_oculto: false,
     awaiting_since: awaitingSince,
     last_inbound_at: lastInboundAt,
     last_message_at: lastInboundAt,

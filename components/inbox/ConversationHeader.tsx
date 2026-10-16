@@ -23,6 +23,7 @@ import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { comandoDaConversa, ROTULO_DO_MOTIVO } from "@/lib/inbox/comando-da-conversa";
 import { ExportarConversaEmPdf } from "@/components/inbox/ExportarConversaEmPdf";
+import { OcultarDoInbox, SeloDeOculto } from "@/components/inbox/OcultarDoInbox";
 import { ReassignDialog } from "@/components/inbox/ReassignDialog";
 import { SeloDoCanal } from "@/components/inbox/SeloDoCanal";
 import { SnoozeButton } from "@/components/inbox/SnoozeButton";
@@ -216,6 +217,9 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
               {t(ROTULO_DO_MOTIVO[motivo])}
             </Badge>
           )}
+          {/* Aberta pela aba "Ocultos" ou por link: a tela diz que esta conversa
+              está fora do Inbox, e por que a IA não responde. */}
+          {conversation.contato_oculto && <SeloDeOculto />}
         </div>
 
         {/* QUEM ESTÁ NO COMANDO, com nome e por GEOMETRIA — disco cheio para
@@ -279,6 +283,19 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
         {/* Ao lado da busca pelo mesmo motivo dela: ferramenta de leitura, só
             ícone, lugar fixo. O componente some sozinho para quem não exporta. */}
         <ExportarConversaEmPdf conversationId={conversation.id} />
+        {/* Ocultar do Inbox (migration 0372): ícone, como as duas de cima — a
+            barra não ganha botão de texto nem menu "mais". Para um contato já
+            oculto, o mesmo lugar oferece "Mostrar no Inbox" a quem gerencia.
+            Grupo não tem contato e não tem o que ocultar. */}
+        {c?.id && (
+          <OcultarDoInbox
+            contactId={c.id}
+            conversationId={conversation.id}
+            nome={displayName}
+            oculto={conversation.contato_oculto === true}
+            variante="icone"
+          />
+        )}
         {isOpen && (
           <Button
             size="sm"

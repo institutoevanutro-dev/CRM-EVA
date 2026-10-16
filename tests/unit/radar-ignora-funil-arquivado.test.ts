@@ -46,9 +46,14 @@ function bancoFalso(tabelas: Record<string, Linha[]>, registro: ChamadaIn[] = []
         linhas = linhas.filter((l) => vals.includes(l[col]));
         return chain;
       },
-      not: (col: string, op: string, lista: string) => {
+      not: (col: string, op: string, lista: string | null) => {
+        // `not is null`: os contatos ocultos do Inbox (migration 0372).
+        if (op === "is") {
+          linhas = linhas.filter((l) => (l[col] ?? null) !== lista);
+          return chain;
+        }
         if (op !== "in") throw new Error(`operador não suportado no dublê: ${op}`);
-        const vals = lista.replace(/^\(|\)$/g, "").split(",");
+        const vals = String(lista).replace(/^\(|\)$/g, "").split(",");
         linhas = linhas.filter((l) => !vals.includes(String(l[col])));
         return chain;
       },

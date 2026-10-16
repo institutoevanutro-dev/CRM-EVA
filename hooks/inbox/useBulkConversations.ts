@@ -7,7 +7,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 
 /** As ações em lote da Inbox: o mesmo discriminante da rota. */
-export type AcaoEmLote = "close" | "archive" | "mark-read" | "pause-ai" | "transfer";
+export type AcaoEmLote = "close" | "archive" | "mark-read" | "pause-ai" | "transfer" | "hide";
 
 interface ResultadoDoItem {
   id: string;
@@ -54,9 +54,17 @@ export function useBulkConversations() {
       qc.invalidateQueries({ queryKey: ["conversations"] });
       qc.invalidateQueries({ queryKey: ["conversation-counts"] });
       qc.invalidateQueries({ queryKey: ["conversation"] });
+      if (args.action === "hide") {
+        // O contato oculto sai também do radar, do Início e da ficha.
+        qc.invalidateQueries({ queryKey: ["leads-at-risk"] });
+        qc.invalidateQueries({ queryKey: ["inicio"] });
+        qc.invalidateQueries({ queryKey: ["contacts"] });
+        qc.invalidateQueries({ queryKey: ["contact"] });
+      }
 
       const recusados = r.resultados.filter((x) => !x.feito);
-      const verbo = args.action === "close" ? t("fechadas") : t("atualizadas");
+      const verbo =
+        args.action === "close" ? t("fechadas") : args.action === "hide" ? t("ocultadas do Inbox") : t("atualizadas");
       if (recusados.length === 0) {
         toast.success(`${r.feitos} ${t("conversas")} ${verbo}.`);
         return;

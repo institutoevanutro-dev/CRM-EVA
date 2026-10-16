@@ -48,6 +48,7 @@
  * imobiliária e um infoprodutor montam funis diferentes, e nenhum nome de funil
  * aparece neste arquivo.
  */
+import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { marcaDaOrigem, origemDeCampanhaDaConversa } from "@/lib/campanhas/origem-do-lead";
 
@@ -79,6 +80,7 @@ const ROTULO_DE_ANUNCIO: Record<string, string> = {
 export type MotivoSemLead =
   | "ja_existe" // o contato já tem lead aberto: um por demanda, não um por mensagem
   | "contato_bloqueado" // pediu para sair; criar oportunidade seria desrespeito registrado
+  | "contato_oculto" // a equipe tirou do Inbox (migration 0372): não é paciente, não ganha card
   | "sem_funil_de_entrada" // a organização não tem funil padrão — falha de configuração, visível
   | "sem_etapa" // o funil existe e não tem etapa utilizável
   | "erro"; // qualquer falha de escrita
@@ -276,14 +278,18 @@ export async function garantirLeadDaConversa(
     // vem só para virar um booleano, como na API de contatos (`cpf_available`);
     // não é `cpf_hash` porque a sessão não lê essa coluna, e uma consulta
     // recusada aqui deixaria passar o contato bloqueado da linha de baixo.
+    // `inbox_hidden_at` (migration 0372) viaja no mesmo select, e `authenticated`
+    // o lê pelo grant de coluna da migration.
     .select(
-      "is_blocked,display_name,name,phone_number,source,source_metadata,first_service_at,cpf_encrypted,is_anonymized,is_merged_into",
+      "is_blocked,display_name,name,phone_number,source,source_metadata,first_service_at,cpf_encrypted,is_anonymized,is_merged_into,inbox_hidden_at",
     )
     .eq("organization_id", organizationId)
     .eq("id", contactId)
     .maybeSingle();
 
   if (contato?.is_blocked === true) return { criado: false, motivo: "contato_bloqueado" };
+  // O amigo do perfil pessoal que a equipe ocultou do Inbox não vira negócio.
+  if (contatoEstaOculto(contato)) return { criado: false, motivo: "contato_oculto" };
 
   // 2 · já existe demanda aberta?
   const { data: existente } = await db

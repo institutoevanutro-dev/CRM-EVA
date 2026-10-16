@@ -19,6 +19,7 @@ import {
 } from "./gate";
 
 interface LinhaDeElegibilidade {
+  contato_oculto: boolean | null;
   channel_metadata: Record<string, unknown> | null;
   force_human: boolean | null;
   assignee_kind: string | null;
@@ -48,6 +49,7 @@ export async function decidirElegibilidadeDaConversa(
 ): Promise<DecisaoDeElegibilidade | null> {
   const { rows } = await pool.query<LinhaDeElegibilidade>(
     `select
+       (ct.inbox_hidden_at is not null) as contato_oculto,
        cs.metadata                  as channel_metadata,
        ct.force_human               as force_human,
        cv.assignee_kind             as assignee_kind,
@@ -68,6 +70,7 @@ export async function decidirElegibilidadeDaConversa(
 
   return decidirElegibilidade(
     montarEstadoDeElegibilidade({
+      contatoOculto: r.contato_oculto,
       aiGate: r.channel_metadata?.ai_gate,
       aiGateMode: r.channel_metadata?.ai_gate_mode,
       aiTestPhoneNumbers: r.channel_metadata?.ai_test_phone_numbers,

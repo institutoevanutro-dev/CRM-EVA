@@ -135,16 +135,27 @@ export async function carregaRadarDeRisco(
   // forma a investigar é o join embutido — `crm_pipelines!inner(is_archived)` com
   // `.eq("crm_pipelines.is_archived", false)` —, que não carrega ids na URL. Não
   // medida: com ~50 funis arquivados são ~2 KB, dentro de qualquer limite.
-  const [{ data: arquivados, error: arquivadosErr }, { data: organizacao, error: organizacaoErr }] =
-    await Promise.all([
-      admin.from("crm_pipelines").select("id").eq("organization_id", organizationId).eq("is_archived", true),
-      // RECOMEÇO (migration 0370): só a chave `radar`, nunca o `settings` inteiro.
-      admin.from("organizations").select("radar:settings->radar").eq("id", organizationId).maybeSingle(),
-    ]);
+  const [
+    { data: arquivados, error: arquivadosErr },
+    { data: organizacao, error: organizacaoErr },
+    { data: ocultos, error: ocultosErr },
+  ] = await Promise.all([
+    admin.from("crm_pipelines").select("id").eq("organization_id", organizationId).eq("is_archived", true),
+    // RECOMEÇO (migration 0370): só a chave `radar`, nunca o `settings` inteiro.
+    admin.from("organizations").select("radar:settings->radar").eq("id", organizationId).maybeSingle(),
+    // CONTATO OCULTO DO INBOX (migration 0372): o amigo do perfil pessoal não é
+    // paciente em risco. Mesmo corte do funil arquivado, na consulta e antes do
+    // `SCAN_CAP`.
+    // ponytail: ids na querystring, como os funis arquivados; ocultos são poucos
+    // por organização. Passando de ~150, a forma é um `!inner` sobre o contato.
+    admin.from("contacts").select("id").eq("organization_id", organizationId).not("inbox_hidden_at", "is", null),
+  ]);
   if (arquivadosErr) throw new Error(`radar_pipelines_failed: ${arquivadosErr.message}`);
   if (organizacaoErr) throw new Error(`radar_inicio_failed: ${organizacaoErr.message}`);
+  if (ocultosErr) throw new Error(`radar_ocultos_failed: ${ocultosErr.message}`);
   const funisArquivados = (arquivados ?? []).map((p) => p.id as string);
   const desde = lerInicioDoRadar((organizacao as { radar?: unknown } | null)?.radar);
+  const contatosOcultos = (ocultos ?? []).map((c) => c.id as string);
 
   const leadsAbertos = (colunas: string) => {
     let q = admin
@@ -153,6 +164,11 @@ export async function carregaRadarDeRisco(
       .eq("organization_id", organizationId)
       .eq("status", "open");
     if (funisArquivados.length > 0) q = q.not("pipeline_id", "in", `(${funisArquivados.join(",")})`);
+    // `or` com `is.null`: `contact_id` é anulável, e `not in` sozinho descartaria
+    // o negócio SEM contato, que nada tem de oculto.
+    if (contatosOcultos.length > 0) {
+      q = q.or(`contact_id.is.null,contact_id.not.in.(${contatosOcultos.join(",")})`);
+    }
     if (opts.contactId) q = q.eq("contact_id", opts.contactId);
     return q;
   };
@@ -342,6 +358,8 @@ export async function carregaRadarDeRisco(
       .eq("organization_id", organizationId)
       .is("fechada_em", null)
       .is("proximo_passo", null);
+    // Aqui o `not in` basta: `demandas.contact_id` é NOT NULL.
+    if (contatosOcultos.length > 0) q = q.not("contact_id", "in", `(${contatosOcultos.join(",")})`);
     if (opts.contactId) q = q.eq("contact_id", opts.contactId);
     return q;
   };

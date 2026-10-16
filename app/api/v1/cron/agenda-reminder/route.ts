@@ -118,6 +118,7 @@
  * `app/api/v1/agenda/tipos/route.ts` valida. Quem não ligou não recebe nada:
  * o padrão continua desligado.
  */
+import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 import { randomUUID } from "node:crypto";
 
 import type { NextRequest } from "next/server";
@@ -582,7 +583,7 @@ async function handle(req: NextRequest): Promise<Response> {
 
     const { data: contato } = await admin
       .from("contacts")
-      .select("id, name, display_name, phone_number, is_blocked")
+      .select("id, name, display_name, phone_number, is_blocked, inbox_hidden_at")
       .eq("id", linha.contact_id)
       .eq("organization_id", org)
       .maybeSingle();
@@ -593,6 +594,11 @@ async function handle(req: NextRequest): Promise<Response> {
     }
     if (contato.is_blocked) {
       pular("contato_bloqueado");
+      continue;
+    }
+    // Oculto do Inbox pela equipe (migration 0372): lembrete automático não sai.
+    if (contatoEstaOculto(contato)) {
+      pular("contato_oculto");
       continue;
     }
     if (!contato.phone_number) {

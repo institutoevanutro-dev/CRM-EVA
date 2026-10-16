@@ -5,6 +5,7 @@
  * O `detalhe` dos itens de configuração é um CÓDIGO (`sem_responsavel`, …): a
  * tela o traduz. O `titulo` é o nome do objeto, que não se traduz.
  */
+import { COLUNA_DO_OCULTO } from "@/lib/inbox/contato-oculto";
 import type { BudgetStatus } from "@/lib/ai/budget/check";
 import type { createClient } from "@/lib/supabase/server";
 import {
@@ -99,6 +100,8 @@ export async function numerosDeHoje(
       .select("id", contar)
       .eq("organization_id", ctx.orgId)
       .eq("is_group", false)
+      // Contato oculto do Inbox (migration 0372) não é conversa com paciente.
+      .eq(COLUNA_DO_OCULTO, false)
       .gte("last_inbound_at", inicio)
       .lt("last_inbound_at", fim),
     db

@@ -2,6 +2,16 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,7 +40,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useT } from "@/hooks/i18n/useT";
-import { ArrowRight, Archive, Check, Pause, X } from "@/lib/ui/icons";
+import { ArrowRight, Archive, Check, EyeSlash, Pause, X } from "@/lib/ui/icons";
 
 interface Props {
   /** Quantas conversas estão marcadas. Zero = a barra não existe. */
@@ -40,6 +50,8 @@ interface Props {
   onArquivar: () => void;
   onMarcarComoLida: () => void;
   onPausarIa: () => void;
+  /** Ocultar do Inbox os contatos das conversas marcadas (migration 0372). */
+  onOcultar: () => void;
   /** Abre o diálogo de destino e devolve `(to_user_id, reason)`. */
   onTransferir: (toUserId: string, reason?: string) => void;
   onLimpar: () => void;
@@ -67,11 +79,13 @@ export function BarraDeAcoesEmLote({
   onArquivar,
   onMarcarComoLida,
   onPausarIa,
+  onOcultar,
   onTransferir,
   onLimpar,
 }: Props) {
   const t = useT();
   const [transferirAberto, setTransferirAberto] = useState(false);
+  const [ocultarAberto, setOcultarAberto] = useState(false);
   const [destino, setDestino] = useState("");
   const [motivo, setMotivo] = useState("");
   const membros = useAssignableMembers(transferirAberto);
@@ -139,6 +153,10 @@ export function BarraDeAcoesEmLote({
             <Pause size={14} className="mr-2" aria-hidden />
             {t("Pausar IA")}
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setOcultarAberto(true)} data-testid="lote-ocultar">
+            <EyeSlash size={14} className="mr-2" aria-hidden />
+            {t("Ocultar do Inbox")}
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onSelect={() => setTransferirAberto(true)}
@@ -159,6 +177,35 @@ export function BarraDeAcoesEmLote({
       >
         <X size={14} aria-hidden />
       </Button>
+
+      <AlertDialog open={ocultarAberto} onOpenChange={setOcultarAberto}>
+        <AlertDialogContent className="sm:max-w-md" data-testid="lote-ocultar-dialogo">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {quantidade === 1
+                ? t("Ocultar do Inbox o contato da conversa selecionada?")
+                : `${t("Ocultar do Inbox os contatos de")} ${quantidade} ${t("conversas selecionadas")}?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t(
+                "As conversas desses contatos saem do Inbox, das contagens, da Fila, do radar e do Início. A IA não responde, follow-ups e automações não mandam mensagem, e as mensagens continuam guardadas. Um gerente pode trazê-los de volta em Inbox › Mais › Ocultos.",
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="lote-ocultar-confirmar"
+              onClick={() => {
+                onOcultar();
+                setOcultarAberto(false);
+              }}
+            >
+              {t("Ocultar do Inbox")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog
         open={transferirAberto}

@@ -117,6 +117,20 @@
       "col": 5,
       "type": "ui",
       "label": "Frases do Direct: o dono escreve o texto que abre conversa (preço e agendamento), em organizations.settings.comentarios"
+    },
+    {
+      "id": "ocultar_do_inbox",
+      "lane": "humano",
+      "col": 6,
+      "type": "ui",
+      "label": "Ocultar do Inbox (0372): cabeçalho da conversa, ficha do contato e lote; aba Ocultos (gerente) traz de volta"
+    },
+    {
+      "id": "contato_oculto",
+      "lane": "db",
+      "col": 4,
+      "type": "database",
+      "label": "contacts.inbox_hidden_at → conversations.contato_oculto (gatilhos); só o servidor escreve a marca"
     }
   ],
   "edges": [
@@ -221,6 +235,30 @@
       "from": "vocabulario_da_ia",
       "to": "comentario_worker",
       "label": "o worker lê as aprovadas uma vez por rodada"
+    },
+    {
+      "id": "e18",
+      "from": "ocultar_do_inbox",
+      "to": "contato_oculto",
+      "label": "POST/DELETE .../ocultar, auditado (contact.inbox_hidden / contact.inbox_unhidden)"
+    },
+    {
+      "id": "e19",
+      "from": "contato_oculto",
+      "to": "inbox",
+      "label": "lista, contagens, Fila, radar e Início pedem contato_oculto = false"
+    },
+    {
+      "id": "e20",
+      "from": "contato_oculto",
+      "to": "ingest",
+      "label": "a mensagem é gravada; sem card, sem campanha e sem despacho da IA"
+    },
+    {
+      "id": "e21",
+      "from": "contato_oculto",
+      "to": "comentario_worker",
+      "label": "comentário de autor oculto vira ignorado, sem resposta"
     }
   ]
 }

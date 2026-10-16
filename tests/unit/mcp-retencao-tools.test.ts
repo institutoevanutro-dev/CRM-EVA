@@ -93,7 +93,13 @@ function fakeSupabase(resolve: Resolver, cap: Capturas) {
       },
       in: () => chain,
       is: () => chain,
+      // `not`/`or`/`gte`: o radar corta o contato oculto do Inbox (`not is null`,
+      // migration 0372) e o recomeço (`or`/`gte`, migration 0370). Filtros
+      // ignorados como os de cima: aqui se mede o filtro de ORGANIZAÇÃO.
+      not: () => chain,
+      or: () => chain,
       gt: () => chain,
+      gte: () => chain,
       lt: () => chain,
       order: () => chain,
       limit: () => chain,

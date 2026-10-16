@@ -180,6 +180,30 @@ beforeEach(() => {
   };
 });
 
+it("autor oculto do Inbox (migration 0372): nem regra nem IA respondem, e o comentário sai como ignorado", async () => {
+  fake.comentarios = [{ ...comentario, texto: "amei 😍" }];
+  fake.regras = [
+    { id: "regra-1", mediaId: "MEDIA-1", palavra: "amei", textoDoDirect: "d", frasePublica: "p", criadaEm: "2026-09-01T00:00:00Z" },
+  ];
+  const perguntas: string[] = [];
+  const comOculto = {
+    ...fake,
+    async autorOcultoDoInbox(_org: string, igsid: string) {
+      perguntas.push(igsid);
+      return true;
+    },
+    async marcarIgnorado(id: string, motivo: string) {
+      linhas[id] = { situacao: "ignorado", motivo_do_toque: motivo, sugestao_de_resposta: null };
+    },
+  };
+  await processarComentariosNovos(comOculto, agora);
+  expect(perguntas).toEqual(["IGSID-1"]);
+  expect(linha().situacao).toBe("ignorado");
+  expect(linha().motivo_do_toque).toContain("oculto do Inbox");
+  expect(fake.acoesAplicadas).toHaveLength(0);
+  expect(fake.publicacoes).toHaveLength(0);
+});
+
 it("comentário que casa regra vai para a ação", async () => {
   fake.comentarios = [comentario];
   fake.regras = [

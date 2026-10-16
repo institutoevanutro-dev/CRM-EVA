@@ -34,6 +34,23 @@ it('org em ai_dispatch_mode=external: evento vira done SEM enfileirar job', asyn
   expect(calls.some((s) => s.includes("status = 'done'"))).toBe(true);
 });
 
+it('contato oculto do Inbox (migration 0372): evento vira done SEM enfileirar job nem medir capacidade', async () => {
+  const calls: string[] = [];
+  const query = vi.fn().mockImplementation((sql: string) => {
+    calls.push(sql);
+    if (sql.includes('returning e.id')) return { rows: [event] };
+    if (sql.includes('ai_dispatch_mode')) return { rows: [{ mode: null }] };
+    if (sql.includes('is_group')) return { rows: [{ is_group: false, contato_oculto: true }] };
+    if (sql.includes('tem_agente')) return { rows: [{ tem_agente: true, tem_roteador: false }] };
+    return { rows: [] };
+  });
+  await drainTick({ query } as unknown as pg.Pool, knobs, log);
+  expect(calls.some((s) => s.includes('contato_oculto'))).toBe(true);
+  expect(calls.some((s) => s.includes('tem_agente'))).toBe(false);
+  expect(calls.some((s) => s.includes('job_queue'))).toBe(false);
+  expect(calls.some((s) => s.includes("status = 'done'"))).toBe(true);
+});
+
 /**
  * Áudio: o turno não pode ser despachado antes de a transcrição existir.
  *

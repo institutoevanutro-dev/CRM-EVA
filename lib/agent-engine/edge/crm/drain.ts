@@ -236,12 +236,19 @@ async function processEvent(
   }
 
   // Grupos: skip, sem exceção (regra dura nº 12).
-  const { rows: convRows } = await pool.query<{ is_group: boolean }>(
-    'select is_group from conversations where organization_id = $1 and id = $2',
+  const { rows: convRows } = await pool.query<{ is_group: boolean; contato_oculto: boolean | null }>(
+    'select is_group, contato_oculto from conversations where organization_id = $1 and id = $2',
     [event.organization_id, p.conversation_id],
   );
   if (convRows[0]?.is_group !== false) {
     log.info('drain: conversa de grupo ou inexistente — evento pulado', { event_id: event.id });
+    return 'processado';
+  }
+  // Contato oculto do Inbox (migration 0372): a IA não responde, e o turno nem
+  // nasce. Aqui, e não só no gate abaixo, porque o gate é pulado quando há agente
+  // em modo assistido — e cada turno seria um rascunho pago para ninguém ver.
+  if (convRows[0]?.contato_oculto === true) {
+    log.info('drain: contato oculto do Inbox — evento pulado', { event_id: event.id });
     return 'processado';
   }
 

@@ -46,8 +46,12 @@ function bancoFalso(tabelas: Record<string, Linha[]>): SupabaseClient {
       eq: (col: string, val: unknown) => ((linhas = linhas.filter((l) => l[col] === val)), chain),
       is: (col: string, val: unknown) => ((linhas = linhas.filter((l) => (l[col] ?? null) === val)), chain),
       in: (col: string, vals: unknown[]) => ((linhas = linhas.filter((l) => vals.includes(l[col]))), chain),
-      not: (col: string, _op: string, lista: string) => {
-        const vals = lista.replace(/^\(|\)$/g, "").split(",");
+      not: (col: string, op: string, lista: string | null) => {
+        if (op === "is") {
+          linhas = linhas.filter((l) => (l[col] ?? null) !== lista);
+          return chain;
+        }
+        const vals = String(lista).replace(/^\(|\)$/g, "").split(",");
         linhas = linhas.filter((l) => !vals.includes(String(l[col])));
         return chain;
       },
@@ -62,14 +66,31 @@ function bancoFalso(tabelas: Record<string, Linha[]>): SupabaseClient {
         return chain;
       },
       or: (expr: string) => {
-        const termos = expr.split(",").map((t) => {
-          const [col, op, ...resto] = t.split(".");
-          if (op !== "gte") throw new Error(`operador não suportado no dublê: ${op}`);
-          return { col: col!, val: resto.join(".") };
-        });
-        linhas = linhas.filter((l) =>
-          termos.some(({ col, val }) => typeof l[col] === "string" && Date.parse(l[col] as string) >= Date.parse(val)),
-        );
+        // Vírgula de TOPO separa os termos; a de dentro de `in.(a,b)` não.
+        const termos: string[] = [];
+        let atual = "";
+        let fundo = 0;
+        for (const ch of expr) {
+          if (ch === "(") fundo += 1;
+          if (ch === ")") fundo -= 1;
+          if (ch === "," && fundo === 0) {
+            termos.push(atual);
+            atual = "";
+          } else atual += ch;
+        }
+        termos.push(atual);
+        const casa = (l: Linha, termo: string): boolean => {
+          const [col, op, ...resto] = termo.split(".");
+          const val = resto.join(".");
+          const v = l[col!];
+          if (op === "gte") return typeof v === "string" && Date.parse(v) >= Date.parse(val);
+          if (op === "is" && val === "null") return (v ?? null) === null;
+          if (op === "not" && val.startsWith("in.(")) {
+            return !val.slice(4, -1).split(",").includes(String(v));
+          }
+          throw new Error(`operador não suportado no dublê: ${termo}`);
+        };
+        linhas = linhas.filter((l) => termos.some((t) => casa(l, t)));
         return chain;
       },
       order: () => chain,
@@ -111,11 +132,39 @@ function banco(desde: string | null, extra: Partial<Record<string, Linha[]>> = {
       demanda("demanda-velha", ANTES, "c-velho"),
       demanda("demanda-nova", DEPOIS, "c-velho"),
       demanda("demanda-paciente-voltou", ANTES, "c-voltou"),
+      ...(extra.demandas ?? []),
     ],
     conversations: [],
     cron_jobs: [],
   });
 }
+
+describe("contato oculto do Inbox (migration 0372) fora do radar", () => {
+  it("negócio e demanda do contato oculto saem; negócio sem contato fica", async () => {
+    const db = banco(null, {
+      contacts: [{ ...contato("c-amigo", DEPOIS), inbox_hidden_at: DEPOIS }],
+      crm_leads: [lead("lead-do-amigo", ANTES, "c-amigo"), lead("lead-sem-contato", ANTES, null)],
+      demandas: [demanda("demanda-do-amigo", ANTES, "c-amigo")],
+    });
+    const radar = await carregaRadarDeRisco(db, { organizationId: ORG, now: AGORA });
+    const ids = radar.items.map((l) => l.id);
+    expect(ids).not.toContain("lead-do-amigo");
+    expect(ids).toContain("lead-sem-contato");
+    expect(ids).toContain("lead-velho");
+    const demandas = radar.sem_proximo_passo.map((d) => d.id);
+    expect(demandas).not.toContain("demanda-do-amigo");
+    expect(demandas).toContain("demanda-velha");
+  });
+
+  it("vale também com o radar recomeçado", async () => {
+    const db = banco(DESDE, {
+      contacts: [{ ...contato("c-amigo", DEPOIS), inbox_hidden_at: DEPOIS }],
+      crm_leads: [lead("lead-do-amigo", DEPOIS, "c-amigo")],
+    });
+    const radar = await carregaRadarDeRisco(db, { organizationId: ORG, now: AGORA });
+    expect(radar.items.map((l) => l.id)).not.toContain("lead-do-amigo");
+  });
+});
 
 describe("o instante do recomeço (regra pura)", () => {
   it("lê só um instante válido; forma estranha vale ausência", () => {

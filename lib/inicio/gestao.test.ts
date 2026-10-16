@@ -62,8 +62,10 @@ describe("numerosDeHoje", () => {
   it("conta conversas com mensagem do paciente hoje, agendamentos criados hoje e leads ganhos hoje", async () => {
     const { db } = fakeDb({
       conversations: [
-        { id: "c1", organization_id: ORG, is_group: false, last_inbound_at: "2026-09-21T12:00:00Z" },
-        { id: "c2", organization_id: ORG, is_group: false, last_inbound_at: "2026-09-20T12:00:00Z" },
+        { id: "c1", organization_id: ORG, is_group: false, contato_oculto: false, last_inbound_at: "2026-09-21T12:00:00Z" },
+        { id: "c2", organization_id: ORG, is_group: false, contato_oculto: false, last_inbound_at: "2026-09-20T12:00:00Z" },
+        // Contato oculto do Inbox (migration 0372): não conta como conversa com paciente.
+        { id: "c3", organization_id: ORG, is_group: false, contato_oculto: true, last_inbound_at: "2026-09-21T12:30:00Z" },
       ],
       calendar_appointments: [{ id: "a1", organization_id: ORG, created_at: "2026-09-21T11:00:00Z" }],
       crm_leads: [

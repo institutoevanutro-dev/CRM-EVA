@@ -3902,6 +3902,9 @@ export const DICIONARIO: Traducoes = {
   "O contato pediu para não receber mensagens (opt-out).": {
     es: "El contacto pidió no recibir mensajes (opt-out).",
   },
+  "O contato foi ocultado do Inbox pela equipe: automação não escreve para ele.": {
+    es: "El contacto fue ocultado del Inbox por el equipo: la automatización no le escribe.",
+  },
   "O contato não tem telefone cadastrado.": { es: "El contacto no tiene teléfono registrado." },
   "Falta preencher alguma configuração desta ação — abra a automação e revise.": {
     es: "Falta completar alguna configuración de esta acción — abre la automatización y revísala.",
@@ -6169,6 +6172,7 @@ export const DICIONARIO: Traducoes = {
   // ─── Contacts: lista, ficha, timeline, LGPD ───
   "Erro ao carregar contato.": { es: "Error al cargar el contacto." },
   "Contato anonimizado (LGPD)": { es: "Contacto anonimizado (LGPD)" },
+  "Oculto do Inbox pela equipe": { es: "Ocultado del Inbox por el equipo" },
   "edição bloqueada.": { es: "edición bloqueada." },
   "Visão geral": { es: "Visión general" },
   "Última atividade": { es: "Última actividad" },
@@ -10779,6 +10783,38 @@ export const DICIONARIO: Traducoes = {
   "Cor do funil": { es: "Color del embudo" },
   "Cor do funil atualizada.": { es: "Color del embudo actualizado." },
   Verde: { es: "Verde" },
+  // Ocultar um contato do Inbox (migration 0372): components/inbox/OcultarDoInbox.tsx,
+  // a aba "Ocultos", o lote e as rotas app/api/v1/{contacts,conversations}/[id]/ocultar.
+  "Ocultar do Inbox": { es: "Ocultar del Inbox" },
+  "Oculto do Inbox": { es: "Oculto del Inbox" },
+  Ocultos: { es: "Ocultos" },
+  "Mostrar no Inbox": { es: "Mostrar en el Inbox" },
+  "Contato ocultado do Inbox": { es: "Contacto ocultado del Inbox" },
+  "O contato voltou ao Inbox": { es: "El contacto volvió al Inbox" },
+  "ocultadas do Inbox": { es: "ocultadas del Inbox" },
+  "Nenhum contato oculto": { es: "Ningún contacto oculto" },
+  "Quem a equipe tirar do Inbox aparece aqui. As mensagens dessas pessoas continuam guardadas, e um gerente pode trazê-las de volta.": {
+    es: "Quien el equipo saque del Inbox aparece aquí. Los mensajes de esas personas siguen guardados, y un gerente puede traerlas de vuelta.",
+  },
+  "As conversas deste contato saem do Inbox, das contagens, da Fila, do radar e do Início. A IA não responde, follow-ups e automações não mandam mensagem e ele não ganha card novo no funil.": {
+    es: "Las conversaciones de este contacto salen del Inbox, de los conteos, de la Fila, del radar y del Inicio. La IA no responde, los seguimientos y automatizaciones no envían mensajes y no gana una tarjeta nueva en el embudo.",
+  },
+  "Nada é apagado: as mensagens continuam guardadas. Um gerente pode trazê-lo de volta em Inbox › Mais › Ocultos.": {
+    es: "No se borra nada: los mensajes siguen guardados. Un gerente puede traerlo de vuelta en Inbox › Más › Ocultos.",
+  },
+  "Ocultar do Inbox o contato da conversa selecionada?": {
+    es: "¿Ocultar del Inbox el contacto de la conversación seleccionada?",
+  },
+  "Ocultar do Inbox os contatos de": { es: "¿Ocultar del Inbox los contactos de" },
+  "As conversas desses contatos saem do Inbox, das contagens, da Fila, do radar e do Início. A IA não responde, follow-ups e automações não mandam mensagem, e as mensagens continuam guardadas. Um gerente pode trazê-los de volta em Inbox › Mais › Ocultos.": {
+    es: "Las conversaciones de esos contactos salen del Inbox, de los conteos, de la Fila, del radar y del Inicio. La IA no responde, los seguimientos y automatizaciones no envían mensajes, y los mensajes siguen guardados. Un gerente puede traerlos de vuelta en Inbox › Más › Ocultos.",
+  },
+  "Conversa inválida.": { es: "Conversación inválida." },
+  "Não foi possível mudar o contato no Inbox.": { es: "No fue posible cambiar el contacto en el Inbox." },
+  "Conversa de grupo não tem contato para ocultar.": { es: "Una conversación de grupo no tiene contacto para ocultar." },
+  "Contato oculto do Inbox: mensagem automática não sai para ele.": {
+    es: "Contacto oculto del Inbox: no se le envían mensajes automáticos.",
+  },
   // Contato "sempre atendimento humano" (migration 0366).
   "Sempre atendimento humano": { es: "Siempre atención humana" },
   "Tirar sempre humano": { es: "Quitar siempre humano" },

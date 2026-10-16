@@ -16,6 +16,8 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { CONVERSATION_TERMINAL_STATUSES } from "@/lib/schemas";
 import { orgTemAutomatico } from "@/lib/ai/agents/org-tem-automatico";
 import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
+import { semContatoOculto, soContatoOculto } from "@/lib/inbox/contato-oculto";
+import { roleAtLeast } from "@/lib/auth/types";
 import { aplicarMarcadores, modoDeEtiqueta } from "@/lib/inbox/marcador-da-conversa";
 import { createClient } from "@/lib/supabase/server";
 
@@ -107,11 +109,16 @@ export async function GET(req: NextRequest): Promise<Response> {
   // ⚠️ TODA contagem nasce daqui, e daqui já sai com `organization_id` E com os
   // filtros auxiliares. Herdar tira a opção de esquecer: não existe o caminho
   // "montei uma contagem e não pus o filtro".
-  const countExact = () => {
+  //
+  // O CONTATO OCULTO DO INBOX (migration 0372) entra pela mesma fábrica: nenhuma
+  // aba conta conversa de contato oculto, e o badge da aba "Ocultos" é a mesma
+  // contagem com o predicado invertido — nunca uma consulta montada por fora.
+  const countExact = (ocultos = false) => {
     let q = supabase
       .from("conversations")
       .select("id", { count: "exact", head: true })
       .eq("organization_id", org);
+    q = ocultos ? soContatoOculto(q) : semContatoOculto(q);
     for (const [coluna, valor] of auxiliares) q = q.eq(coluna, valor);
     // O marcador entra pela régua da LISTA — a mesma função, não uma segunda.
     q = aplicarMarcadores(q, marcadores, modo);
@@ -130,7 +137,11 @@ export async function GET(req: NextRequest): Promise<Response> {
   // convenção da regra: assume que há automático.
   const automaticoDaOrg = await orgTemAutomatico(supabase, org);
 
-  const [fila, automatico, mine, all, closed, archived] = await Promise.all([
+  // A aba "Ocultos" é de gerente e administrador: para os outros papéis a
+  // contagem nem roda (e o campo não vem na resposta).
+  const veOcultos = roleAtLeast(activeOrg.role, "manager");
+
+  const [fila, automatico, mine, all, closed, archived, ocultos] = await Promise.all([
     // A FILA DEIXOU DE SER "sem dono + status de espera".
     //
     // Aquele par contava como trabalho humano pendente tudo que o robô estava
@@ -165,10 +176,11 @@ export async function GET(req: NextRequest): Promise<Response> {
     // para que arquivar seja reversível e auditável sem se confundir com o
     // encerramento do atendimento.
     countExact().eq("status", "archived"),
+    veOcultos ? countExact(true) : Promise.resolve(null),
   ]);
 
   const firstErr =
-    fila.error ?? automatico.error ?? mine.error ?? all.error ?? closed.error ?? archived.error;
+    fila.error ?? automatico.error ?? mine.error ?? all.error ?? closed.error ?? archived.error ?? ocultos?.error;
   if (firstErr) {
     return fail("internal_error", firstErr.message, 500, { requestId });
   }
@@ -186,6 +198,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       all: all.count ?? 0,
       closed: closed.count ?? 0,
       archived: archived.count ?? 0,
+      ...(ocultos ? { ocultos: ocultos.count ?? 0 } : {}),
     },
     { requestId },
   );
