@@ -8,6 +8,18 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.11.1] — 2026-10-16
+
+### Corrigido
+
+- **O repasse de caso resolvido respeita a janela de disparo e sai numa mensagem só** Quando alguém resolvia um caso na Central de madrugada, o agente avisava o
+  cliente na mesma hora, porque o repasse lia a janela de resposta (a que vale
+  quando o cliente escreve). Agora o repasse segue a janela de disparo do canal,
+  como o follow-up: fora dela, fica agendado para a próxima abertura, sem se
+  perder. E quando dois ou mais casos da mesma conversa são resolvidos em
+  sequência, o cliente recebe uma mensagem só cobrindo todos, em vez de uma por
+  caso.
+
 ## [4.11.0] — 2026-10-16
 
 ### Adicionado
@@ -7379,7 +7391,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.11.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.11.1...HEAD
+[4.11.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.11.0...v4.11.1
 [4.11.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.10.0...v4.11.0
 [4.10.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.9.0...v4.10.0
 [4.9.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.8.1...v4.9.0
