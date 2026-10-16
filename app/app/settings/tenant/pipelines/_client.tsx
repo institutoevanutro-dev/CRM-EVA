@@ -27,6 +27,7 @@ import {
 import { Plus, Trash } from "@/lib/ui/icons";
 import { AgentMappingSection, ancoraDoMapeamento } from "./_mapping";
 import { StagesSection, ancoraDasEtapas } from "./_stages";
+import { CabecalhoDoFunil } from "./_cor";
 
 export interface PipelineRow {
   id: string;
@@ -34,6 +35,8 @@ export interface PipelineRow {
   slug: string;
   vocabulary: Record<string, string> | null;
   settings: Record<string, unknown> | null;
+  /** A cor do funil (migration 0371), ou `null`. */
+  color?: string | null;
 }
 
 /**
@@ -141,10 +144,7 @@ export function PipelinesClient({
     <div className="flex flex-col gap-4">
       {pipelines.map((p) => (
         <Card key={p.id} className="space-y-6 p-6">
-          <header>
-            <h2 className="text-base font-semibold">{p.name}</h2>
-            <p className="text-xs text-muted-foreground">/{p.slug}</p>
-          </header>
+          <CabecalhoDoFunil pipeline={p} />
           {/* As ETAPAS vêm primeiro, e a ordem é a do raciocínio de quem
               configura: primeiro o quadro existe do jeito da sua operação,
               depois se decide o que o assistente faz com ele. Invertido, a

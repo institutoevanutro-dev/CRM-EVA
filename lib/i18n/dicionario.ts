@@ -10774,6 +10774,11 @@ export const DICIONARIO: Traducoes = {
   "Verde (ganho)": { es: "Verde (ganado)" },
   "Verde-água (acompanhamento)": { es: "Verde agua (seguimiento)" },
   "Cinza (perdido)": { es: "Gris (perdido)" },
+  // A cor do FUNIL (migration 0371, lib/pipelines/cor-do-funil.ts): os mesmos tons
+  // da etapa, com o nome sem o papel. Só "Verde" faltava; os outros já existem.
+  "Cor do funil": { es: "Color del embudo" },
+  "Cor do funil atualizada.": { es: "Color del embudo actualizado." },
+  Verde: { es: "Verde" },
   // Contato "sempre atendimento humano" (migration 0366).
   "Sempre atendimento humano": { es: "Siempre atención humana" },
   "Tirar sempre humano": { es: "Quitar siempre humano" },

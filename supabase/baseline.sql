@@ -36494,3 +36494,19 @@ on conflict (model) do update set
 -- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
 -- Quem mede a regra: `tests/invariants/telefone-ganho-alcanca-a-origem.test.ts`.
 -- ---- fim: o contato ganhou telefone alcança a origem (migration 0369) ----
+
+-- ---- a cor do funil (migration 0371) ----
+-- Derivado de supabase/migrations/20261016121000_0371_cor_do_funil.sql (o
+-- porquê inteiro está no cabeçalho de lá). `crm_pipelines.color`, mesma forma
+-- de `crm_stages.color`; NULL = sem cor, e o funil fica como era. O CHECK nasce
+-- no mesmo comando da coluna, então reaplicar não derruba nem recria nada.
+-- Não cria função.
+alter table public.crm_pipelines
+  add column if not exists color text
+  constraint crm_pipelines_color_format check (color is null or color ~ '^#[0-9a-fA-F]{6}$');
+
+comment on column public.crm_pipelines.color is
+  'Cor do funil (migration 0371): #rrggbb ou NULL (sem cor). Mesma forma de crm_stages.color. Mostrada na lista de Funis, no seletor do título do quadro e no cabeçalho do quadro.';
+
+notify pgrst, 'reload schema';
+-- ---- fim: a cor do funil (migration 0371) ----

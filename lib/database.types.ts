@@ -4085,6 +4085,7 @@ export type Database = {
       }
       crm_pipelines: {
         Row: {
+          color: string | null
           created_at: string
           description: string | null
           id: string
@@ -4100,6 +4101,7 @@ export type Database = {
           vocabulary: Json
         }
         Insert: {
+          color?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -4115,6 +4117,7 @@ export type Database = {
           vocabulary?: Json
         }
         Update: {
+          color?: string | null
           created_at?: string
           description?: string | null
           id?: string

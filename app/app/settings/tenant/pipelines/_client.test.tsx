@@ -24,7 +24,8 @@ vi.mock("sonner", () => ({
 vi.mock("@/app/actions/settings/updatePipelineConfig", () => ({
   updatePipelineConfig: vi.fn(async () => ({ ok: true })),
 }));
-// As duas seções irmãs falam com a API; este arquivo é sobre os CAMPOS.
+// As seções irmãs falam com a API; este arquivo é sobre os CAMPOS. A cor do
+// funil tem o próprio teste (app/app/settings/tenant/pipelines/_cor.test.tsx).
 vi.mock("./_stages", () => ({
   StagesSection: () => null,
   ancoraDasEtapas: () => "etapas",
@@ -33,6 +34,7 @@ vi.mock("./_mapping", () => ({
   AgentMappingSection: () => null,
   ancoraDoMapeamento: () => "mapeamento",
 }));
+vi.mock("./_cor", () => ({ CabecalhoDoFunil: () => null }));
 
 // Polyfills que o Radix Select exige e o jsdom não tem.
 window.HTMLElement.prototype.scrollIntoView = vi.fn();

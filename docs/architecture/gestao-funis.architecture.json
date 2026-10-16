@@ -38,7 +38,9 @@
 
     { "id": "leads", "lane": "dependente", "col": 2, "type": "database", "label": "crm_leads", "sublabel": "FK ON DELETE RESTRICT" },
     { "id": "sources", "lane": "dependente", "col": 3, "type": "database", "label": "webhook_sources", "sublabel": "FK ON DELETE **CASCADE** — o perigo" },
-    { "id": "rules", "lane": "dependente", "col": 4, "type": "database", "label": "automation_rules", "sublabel": "pipeline_id dentro de jsonb — SEM FK" }
+    { "id": "rules", "lane": "dependente", "col": 4, "type": "database", "label": "automation_rules", "sublabel": "pipeline_id dentro de jsonb — SEM FK" },
+    { "id": "cor", "lane": "regra", "col": 4, "type": "service", "label": "cor-do-funil.ts", "sublabel": "migration 0371: crm_pipelines.color (#rrggbb ou NULL), paleta da etapa, barra + fundo tingido + ponto" },
+    { "id": "configFunis", "lane": "humano", "col": 5, "type": "frontend", "label": "Configurações › Funis", "sublabel": "o mesmo seletor de cor no cabeçalho de cada funil" }
   ],
   "edges": [
     { "id": "e1", "from": "lista", "to": "pipelines", "label": "select … .eq(organization_id, org ATIVA) — a RLS sozinha misturava as orgs" },
@@ -72,7 +74,11 @@
     { "id": "e29", "from": "trigger", "to": "stages", "label": "8 etapas de e-commerce" },
     { "id": "e30", "from": "board", "to": "stages", "label": "as colunas do quadro" },
     { "id": "e31", "from": "board", "to": "calendario", "label": "a MESMA lista filtrada que o quadro recebe — o calendário não busca nada" },
-    { "id": "e32", "from": "calendario", "to": "leads", "label": "lê custom_fields (tipo date), expected_close_date e created_at; não escreve" }
+    { "id": "e32", "from": "calendario", "to": "leads", "label": "lê custom_fields (tipo date), expected_close_date e created_at; não escreve" },
+    { "id": "e33", "from": "client", "to": "cor", "label": "acento da linha e seletor de cor no menu ⋯ (manager+)" },
+    { "id": "e34", "from": "board", "to": "cor", "label": "ponto no título e em cada opção do seletor rápido" },
+    { "id": "e35", "from": "configFunis", "to": "patch", "label": "PATCH { color } — mesma rota, mesma auditoria pipeline.updated" },
+    { "id": "e36", "from": "patch", "to": "pipelines", "label": "grava color (CHECK crm_pipelines_color_format)" }
   ],
   "cards": [
     {

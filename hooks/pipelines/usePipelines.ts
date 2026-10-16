@@ -43,6 +43,8 @@ export interface PatchDeFunil {
    */
   is_archived?: false;
   depois_de?: string | null;
+  /** A cor do funil (migration 0371): `#rrggbb`, ou `null` para tirar a cor. */
+  color?: string | null;
 }
 
 /** O funil como as rotas o devolvem — a mesma forma que a página entrega por props. */
@@ -54,6 +56,8 @@ export interface FunilDaResposta {
   position: number;
   is_default: boolean;
   is_client_pipeline: boolean;
+  /** Sempre vem na resposta (migration 0371); opcional para quem monta o objeto à mão. */
+  color?: string | null;
 }
 
 /**

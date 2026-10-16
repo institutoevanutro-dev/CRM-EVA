@@ -30,7 +30,7 @@ type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 /** `position` entra: a reordenação calcula em cima dela. */
 const COLUNAS =
-  "id, name, slug, description, position, is_default, is_client_pipeline, is_archived";
+  "id, name, slug, description, position, is_default, is_client_pipeline, is_archived, color";
 
 /**
  * Os funis da organização, na ordem da lista, arquivados inclusive.
@@ -104,6 +104,8 @@ export interface FunilDoCorpo {
   position: number;
   is_default: boolean;
   is_client_pipeline: boolean;
+  /** A cor do funil (migration 0371), ou `null` — sem cor, a tela fica como era. */
+  color: string | null;
 }
 
 function paraATela(f: FunilEditavel): FunilDoCorpo {
@@ -119,6 +121,8 @@ function paraATela(f: FunilEditavel): FunilDoCorpo {
     // mostra o badge. Ausente é "não é o funil de clientes", que é a
     // verdade nesse banco.
     is_client_pipeline: f.is_client_pipeline ?? false,
+    // `?? null` pelo mesmo motivo do de cima: o clone sem a 0371 não tem a coluna.
+    color: f.color ?? null,
   };
 }
 

@@ -22,18 +22,18 @@ export default async function PipelinePage({
   // um lugar e o cabeçalho de outro.
   const { data: pipeline } = await supabase
     .from("crm_pipelines")
-    .select("id, name, vocabulary")
+    .select("id, name, vocabulary, color")
     .eq("organization_id", activeOrg.orgId)
     .eq("id", id)
     .maybeSingle();
   if (!pipeline) notFound();
   // A lista que alimenta o seletor de troca rápida: os mesmos vivos da tela de
-  // Funis (`app/app/kanban/page.tsx`), só `id` + `name`, com o MESMO filtro de
-  // organização do funil acima. Arquivado não entra: trocar para um funil que
-  // não recebe negócio seria destino que não existe.
+  // Funis (`app/app/kanban/page.tsx`), só `id` + `name` + `color`, com o MESMO
+  // filtro de organização do funil acima. Arquivado não entra: trocar para um
+  // funil que não recebe negócio seria destino que não existe.
   const { data: funis } = await supabase
     .from("crm_pipelines")
-    .select("id, name")
+    .select("id, name, color")
     .eq("organization_id", activeOrg.orgId)
     .eq("is_archived", false)
     .order("position");
@@ -43,6 +43,7 @@ export default async function PipelinePage({
     <PipelinePageClient
       pipelineId={id}
       initialName={pipeline.name}
+      initialColor={(pipeline as { color?: string | null }).color ?? null}
       funis={funis ?? []}
       fuso={fusoUtilizavel(activeOrg.timezone)}
     />

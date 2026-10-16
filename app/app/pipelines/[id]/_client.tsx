@@ -43,22 +43,46 @@ import {
   type PreferenciaDoFunil,
 } from "@/lib/kanban/visao-do-funil";
 import { FUSO_PADRAO } from "@/lib/tempo/fusos";
+import { estiloDoFunil } from "@/lib/pipelines/cor-do-funil";
 import { cn } from "@/lib/utils";
+
+/**
+ * O ponto da cor do funil (migration 0371) ao lado do nome — no título do
+ * quadro e em cada opção do seletor rápido. `aria-hidden`: o nome continua
+ * sendo o que identifica o funil; a cor só reforça.
+ */
+function PontoDoFunil({ cor, className }: { cor: string | null | undefined; className?: string }) {
+  const estilo = estiloDoFunil(cor);
+  if (!estilo) return null;
+  return (
+    <span
+      aria-hidden
+      data-testid="ponto-do-funil"
+      // Proporcional à letra (0,4em), com piso de 0,5rem: o mesmo ponto serve à
+      // opção do seletor (texto pequeno) e ao título do quadro (2rem).
+      className={cn("mr-2 inline-block shrink-0 rounded-full align-middle", className ?? "size-[max(0.5rem,0.4em)]")}
+      style={estilo.ponto}
+    />
+  );
+}
 
 export function PipelinePageClient({
   pipelineId,
   initialName,
+  initialColor = null,
   funis,
   fuso = FUSO_PADRAO,
 }: {
   pipelineId: string;
   initialName: string;
+  /** A cor do funil (migration 0371), ou `null`: sem cor, o cabeçalho fica como era. */
+  initialColor?: string | null;
   /**
    * Os funis vivos da organização (`id` + `name`, na ordem da lista): a MESMA
    * partição da tela de Funis. É o que alimenta o seletor de troca rápida do
    * cabeçalho; sem ele o quadro não sabe que existem outros funis.
    */
-  funis: Array<{ id: string; name: string }>;
+  funis: Array<{ id: string; name: string; color?: string | null }>;
   /**
    * Fuso RESOLVIDO da organização: a régua de dia da visão Calendário. A página
    * sempre manda; ausente, vale o padrão do produto (o DEFAULT da coluna).
@@ -128,6 +152,7 @@ export function PipelinePageClient({
     [data?.leads],
   );
   const nomeAtual = data?.pipeline.name ?? initialName;
+  const corAtual = (data?.pipeline as { color?: string | null } | undefined)?.color ?? initialColor;
   // Um funil só = nada para trocar: o seletor seria ruído permanente.
   const podeTrocar = funis.length > 1;
 
@@ -174,7 +199,11 @@ export function PipelinePageClient({
           outro é resultado fantasma. O endereço muda junto (`/app/pipelines/<id>`),
           então o funil escolhido sobrevive a recarregar e a link colado.
         */}
-        <h1 className={podeTrocar ? "sr-only" : "min-w-0 truncate text-[2rem] leading-tight"}>
+        <h1
+          className={podeTrocar ? "sr-only" : "min-w-0 truncate text-[2rem] leading-tight"}
+          data-cor-do-funil={corAtual ?? undefined}
+        >
+          {podeTrocar ? null : <PontoDoFunil cor={corAtual} className="size-3" />}
           {nomeAtual}
         </h1>
         {podeTrocar && (
@@ -195,7 +224,10 @@ export function PipelinePageClient({
             </SelectTrigger>
             <SelectContent>
               {funis.map((f) => (
+                // O ponto vai DENTRO do texto da opção: o Radix repete esse
+                // conteúdo no gatilho, e assim o título também mostra a cor.
                 <SelectItem key={f.id} value={f.id} data-testid={`trocar-funil-opcao-${f.id}`}>
+                  <PontoDoFunil cor={f.id === pipelineId ? corAtual : f.color} />
                   {f.name}
                 </SelectItem>
               ))}
