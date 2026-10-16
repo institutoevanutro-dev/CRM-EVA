@@ -37,6 +37,7 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  "Quando um contato ganhar um telefone": { es: "Cuando un contacto reciba un teléfono" },
   "Nome interno da conexão": { es: "Nombre interno de la conexión" },
   "Nome interno": { es: "Nombre interno" },
   "Nome interno atualizado.": { es: "Nombre interno actualizado." },

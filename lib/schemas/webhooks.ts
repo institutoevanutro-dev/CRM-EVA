@@ -39,6 +39,9 @@ export const ENTIDADE_ESPERADA_POR_GATILHO = {
   // O aniversário nasce do cron `contact-birthdays`, e não de uma ação de
   // alguém: a entidade que ele traz é o próprio contato que faz aniversário.
   "contact.birthday": "contact",
+  // O contato GANHOU telefone (porte do upstream #2861): nasce do PATCH de
+  // contatos, depois de gravar o número, só na transição de vazio para preenchido.
+  "contact.phone_added": "contact",
   "appointment.created": "calendar_appointment",
   "appointment.confirmed": "calendar_appointment",
   "appointment.rescheduled": "calendar_appointment",

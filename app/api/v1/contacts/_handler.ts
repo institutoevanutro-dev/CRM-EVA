@@ -764,6 +764,27 @@ export async function patchContactHandler(
     }
   }
 
+  // O CONTATO GANHOU TELEFONE (porte do upstream #2861). Emitido DEPOIS do
+  // update, para a regra achar o número já na ficha, e só na TRANSIÇÃO de sem
+  // número para com número: trocar ou apagar o número não dispara. Com a chave
+  // de serviço porque o tipo é reservado ao servidor no `emit_event` (0369).
+  const telefoneAntes = ((antes as { phone_number?: string | null }).phone_number ?? "").trim();
+  const telefoneDepois = ((contact as { phone_number?: string | null }).phone_number ?? "").trim();
+  if (!telefoneAntes && telefoneDepois) {
+    await createAdminClient()
+      .rpc("emit_event", {
+        p_event_type: "contact.phone_added",
+        p_entity_kind: "contact",
+        p_entity_id: contact.id,
+        p_payload: { phone_number: telefoneDepois },
+        p_metadata: { request_id: ctx.requestId, ...a.metadataActor },
+        p_organization_id: contact.organization_id,
+      })
+      .then(({ error }) => {
+        if (error) logger.error("[contacts.patch] emit_event contact.phone_added falhou", { error: error.message });
+      });
+  }
+
   await audit({
     action: "contact.updated",
     actorUserId: a.actorUserId,

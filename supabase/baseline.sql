@@ -92,9 +92,12 @@ begin
   -- `conversation.autonomous_turn_revoked` entra pela 0361 (0594 no original):
   -- só o gatilho de Assumir/Transferir o grava, e ele tira a autorização de um
   -- turno da IA. Forjado por login, calaria a IA sem ninguém ter assumido.
+  -- `contact.phone_added` entra pela 0369 (0670 no original): quem o emite é o
+  -- servidor (o PATCH de contatos, com a chave de serviço, depois de gravar o
+  -- número), e ele alcança a origem e manda WhatsApp.
   if auth.uid() is not null and p_event_type in (
     'message.received','appointment.outcome_confirmed',
-    'ai.case_opened','ai.case_closed','contact.birthday',
+    'ai.case_opened','ai.case_closed','contact.birthday','contact.phone_added',
     'conversation.autonomous_turn_revoked'
   ) then
     raise exception 'reserved_message_received' using errcode='42501';
@@ -33246,7 +33249,7 @@ returns table(contact_id uuid,suportado boolean) language plpgsql stable securit
 begin
  if p_event_type in ('lead.created','lead.stage_changed','lead.tag_added') and p_entity_kind='crm_lead' then
    return query select (select l.contact_id from public.crm_leads l where l.organization_id=p_org and l.id=p_entity_id),true;
- elsif p_event_type in ('contact.tag_added','contact.birthday') and p_entity_kind='contact' then
+ elsif p_event_type in ('contact.tag_added','contact.birthday','contact.phone_added') and p_entity_kind='contact' then
    return query select (select c.id from public.contacts c where c.organization_id=p_org and c.id=p_entity_id),true;
  elsif p_event_type in ('appointment.created','appointment.confirmed','appointment.rescheduled','appointment.cancelled','appointment.completed','appointment.no_show') and p_entity_kind='calendar_appointment' then
    return query select (select a.contact_id from public.calendar_appointments a where a.organization_id=p_org and a.id=p_entity_id),true;
@@ -33384,9 +33387,12 @@ begin
   -- `conversation.autonomous_turn_revoked` entra pela 0361 (0594 no original):
   -- só o gatilho de Assumir/Transferir o grava, e ele tira a autorização de um
   -- turno da IA. Forjado por login, calaria a IA sem ninguém ter assumido.
+  -- `contact.phone_added` entra pela 0369 (0670 no original): quem o emite é o
+  -- servidor (o PATCH de contatos, com a chave de serviço, depois de gravar o
+  -- número), e ele alcança a origem e manda WhatsApp.
   if auth.uid() is not null and p_event_type in (
     'message.received','appointment.outcome_confirmed',
-    'ai.case_opened','ai.case_closed','contact.birthday',
+    'ai.case_opened','ai.case_closed','contact.birthday','contact.phone_added',
     'conversation.autonomous_turn_revoked'
   ) then
     raise exception 'reserved_message_received' using errcode='42501';
@@ -36377,3 +36383,17 @@ on conflict (model) do update set
 -- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
 -- Quem mede a regra: `tests/invariants/tags-juntar-guarda-a-cor.test.ts`.
 -- ---- fim: renomear que junta guarda a cor e avisa (migration 0368) ----
+
+-- ---- o contato ganhou telefone alcança a origem (migration 0369) ----
+-- Derivado de supabase/migrations/20261016000000_0369_telefone_ganho_alcanca_a_origem.sql
+-- (o porquê inteiro está no cabeçalho de lá). Porte do upstream #2861.
+-- `fn_service_event_contact` e `emit_event` passam a conhecer
+-- `contact.phone_added`. A troca foi feita no lugar, nas definições acima
+-- neste arquivo (corpo do dump de `emit_event` e bloco da 0345, que é a
+-- primeira e única de `fn_service_event_contact`), para a reaplicação nunca
+-- passar pela versão antiga
+-- (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`), e a última
+-- definição de cada uma é igual à da migration 0369
+-- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
+-- Quem mede a regra: `tests/invariants/telefone-ganho-alcanca-a-origem.test.ts`.
+-- ---- fim: o contato ganhou telefone alcança a origem (migration 0369) ----
