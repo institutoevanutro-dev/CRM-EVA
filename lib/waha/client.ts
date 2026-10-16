@@ -544,6 +544,22 @@ export class WahaClient {
    * recurso que carrega o valor: o "digitando…" é bônus quando o engine
    * coopera, nunca a condição do conserto.
    */
+  /**
+   * O visto azul: marca como lida a conversa (`POST /api/sendSeen` do WAHA).
+   * Sessão no CORPO, como `sendText`; sem `messageIds` — o pedido é "li esta
+   * conversa". LANÇA `waha_<status>` como os vizinhos; a falha macia é de quem
+   * chama (`marcarConversaComoLida`, em `./send`). Porte de
+   * upstream #2987.
+   */
+  async sendSeen(session: string, chatId: string): Promise<void> {
+    const res = await this.fetchComTeto(`${this.baseUrl}/api/sendSeen`, {
+      method: "POST",
+      headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ session, chatId }),
+    });
+    if (!res.ok) throw new Error(`waha_${res.status}`);
+  }
+
   async setPresence(
     session: string,
     chatId: string,
