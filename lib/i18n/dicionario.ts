@@ -695,6 +695,12 @@ export const DICIONARIO: Traducoes = {
   },
   "A conversa neste número está com": { es: "La conversación en este número está con" },
   "outro atendente": { es: "otro agente" },
+
+  // ─── Inbox: tarefas do atendimento (porte do upstream #2842) ───
+  "Tarefas deste contato": { es: "Tareas de este contacto" },
+  "Nenhuma tarefa em aberto. Anote o próximo passo combinado, com prazo e responsável.": {
+    es: "Ninguna tarea abierta. Anota el próximo paso acordado, con plazo y responsable.",
+  },
   Aberta: { es: "Abierta" },
   Fechada: { es: "Cerrada" },
   "Em atendimento": { es: "En atención" },
