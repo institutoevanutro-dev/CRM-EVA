@@ -113,7 +113,7 @@ test.describe("contato ganhou telefone → Enviar e-mail, sem serviço de e-mail
         data: { name: `Paciente Fictícia ${ts}` },
       });
       expect(criado.ok(), await criado.text()).toBeTruthy();
-      contactId = ((await criado.json()) as { data: { id: string } }).data.id;
+      contactId = ((await criado.json()) as { data: { contact: { id: string } } }).data.contact.id;
       const fone = `+5511977${String(ts).slice(-6)}`;
       const ganhou = await page.request.patch(`${APP_URL}/api/v1/contacts/${contactId}`, {
         data: { phone_number: fone },
