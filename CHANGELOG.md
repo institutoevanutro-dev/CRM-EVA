@@ -8,6 +8,48 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.11.0] — 2026-10-16
+
+### Adicionado
+
+- **Conexões com nome interno, gatilho "contato ganhou telefone", ação "Enviar e-mail" e campos condicionais** Portado do projeto original:
+
+  - em Conexões, o botão "Renomear" dá à conexão um nome que só a equipe vê. O
+    nome público do número no provedor não muda, e salvar de novo a credencial
+    do canal oficial ou do parceiro mantém o nome escolhido. Reabrir o diálogo
+    mostra sempre o nome atual;
+  - as regras automáticas ganham o gatilho "Quando um contato ganhar um
+    telefone": dispara só quando a ficha que estava sem número passa a ter um.
+    Nenhuma regra é criada;
+  - as regras automáticas ganham a ação "Enviar e-mail" (para o contato, para o
+    responsável do negócio ou para um endereço fixo). Ela só roda numa regra que
+    a use, sai pelo serviço de e-mail da instalação e, sem ele configurado,
+    registra a recusa na aba Atividade sem enviar nada. Cada regra envia no
+    máximo 50 e-mails por hora, e a empresa no máximo 200;
+  - campos personalizados do funil podem aparecer só quando outro campo tem um
+    valor ("Mostrar só quando"). Esconder não apaga o que já estava gravado.
+
+  Nenhuma regra existente muda e nada é enviado sozinho. Nada a fazer na VPS: a
+  atualização aplica a migration 0369.
+
+### Corrigido
+
+- **O follow-up de silêncio deixa de mandar mensagem por cima do retorno combinado** Quando o paciente pedia para ser procurado mais tarde, a IA agendava o retorno e
+  prometia voltar no horário combinado. O fluxo de silêncio não sabia desse retorno:
+  falava por cima dele enquanto estava agendado e, no minuto seguinte à mensagem do
+  retorno, inscrevia o contato de novo e mandava o primeiro passo logo em seguida.
+  Eram duas mensagens seguidas sem o paciente ter respondido.
+
+  Agora, enquanto há um retorno agendado ou que saiu há menos de um dia, o fluxo de
+  silêncio não inscreve o contato, e quem já estava no fluxo fica segurado até um dia
+  depois do retorno, com a linha "Segurou o fluxo por causa de um retorno agendado"
+  no histórico da inscrição. Se o paciente responder, vale o que o fluxo já fazia.
+  Nada muda para quem não tem retorno agendado, nem para os fluxos por etapa, por
+  caso, por falta ou manuais.
+
+  Porte do DeskcommCRM original: parte de retorno do commit b94446a5c (jmpo) e o
+  PR #2929 de @webtecnica (issue #2907).
+
 ## [4.10.0] — 2026-10-16
 
 ### Adicionado
@@ -7337,7 +7379,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.10.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.11.0...HEAD
+[4.11.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.10.0...v4.11.0
 [4.10.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.9.0...v4.10.0
 [4.9.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.8.1...v4.9.0
 [4.8.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.8.0...v4.8.1
