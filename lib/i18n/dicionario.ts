@@ -697,6 +697,10 @@ export const DICIONARIO: Traducoes = {
   "outro atendente": { es: "otro agente" },
 
   // ─── Inbox: tarefas do atendimento (porte do upstream #2842) ───
+  // ─── Quadro: perdido em lote (porte do upstream #2868) ───
+  "Marcar como perdido…": { es: "Marcar como perdido…" },
+  "marcado como perdido.": { es: "marcado como perdido." },
+  "marcados como perdidos.": { es: "marcados como perdidos." },
   "Tarefas deste contato": { es: "Tareas de este contacto" },
   "Nenhuma tarefa em aberto. Anote o próximo passo combinado, com prazo e responsável.": {
     es: "Ninguna tarea abierta. Anota el próximo paso acordado, con plazo y responsable.",

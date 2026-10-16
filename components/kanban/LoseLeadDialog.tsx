@@ -33,8 +33,16 @@ const REASON_LABELS: Record<(typeof CANONICAL_LOST_REASONS)[number], string> = {
 interface LoseLeadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  leadId: string;
+  /** Modo CARD: a rota individual `/lose`. */
+  leadId?: string;
   pipelineId: string;
+  /**
+   * Modo LOTE (porte do upstream #2868): o motivo escolhido vai para quem
+   * chamou, que escreve pela `leads/bulk`. Com ele, `leadId` é ignorado.
+   */
+  onConfirm?: (lostReason: string) => void | Promise<void>;
+  /** A escrita do chamador em voo (modo lote). */
+  submitting?: boolean;
   /**
    * Os motivos cadastrados no funil, quando quem abre o diálogo os tem à mão
    * (o Inbox, pela ficha). Ausente = lê do quadro em cache, como no funil.
@@ -50,6 +58,8 @@ export function LoseLeadDialog({
   leadId,
   pipelineId,
   motivosDoFunil,
+  onConfirm,
+  submitting = false,
 }: LoseLeadDialogProps) {
   const t = useT();
   const [reasonCode, setReasonCode] = useState<string>("");
@@ -98,17 +108,20 @@ export function LoseLeadDialog({
     !motivoDePerdaAceito(textoOutro, cadastrados);
 
   const finalReason = reasonCode === OUTRO ? textoOutro || OUTRO : reasonCode;
+  const emVoo = mutation.isPending || submitting;
   const disabled =
     !reasonCode ||
     finalReason.length === 0 ||
     finalReason.length > MAX_LEN ||
     outroRecusado ||
-    mutation.isPending;
+    emVoo;
 
   const handleSubmit = async () => {
     if (disabled) return;
     try {
-      await mutation.mutateAsync({ leadId, lostReason: finalReason });
+      if (onConfirm) await onConfirm(finalReason);
+      else if (leadId) await mutation.mutateAsync({ leadId, lostReason: finalReason });
+      else return;
       setReasonCode("");
       setOtherText("");
       onOpenChange(false);
@@ -199,12 +212,12 @@ export function LoseLeadDialog({
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={mutation.isPending}
+            disabled={emVoo}
           >
             {t("Cancelar")}
           </Button>
           <Button onClick={handleSubmit} disabled={disabled}>
-            {mutation.isPending ? t("Salvando...") : t("Confirmar")}
+            {emVoo ? t("Salvando...") : t("Confirmar")}
           </Button>
         </DialogFooter>
       </DialogContent>

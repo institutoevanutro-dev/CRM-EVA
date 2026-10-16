@@ -21,6 +21,8 @@ import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import { bulkLeadActionSchema, validateRequest } from "@/lib/schemas";
 import {
   decideMotivoDaPerda,
+  etapaDePerda,
+  razaoDaPerdaNaTimeline,
   recusaDeMotivoDaPerdaPeloBanco,
 } from "@/lib/leads/motivo-da-perda";
 import { createClient } from "@/lib/supabase/server";
@@ -125,7 +127,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   // sem motivo?" — e perguntar card a card depois custaria N consultas.
   const { data: scoped } = await supabase
     .from("crm_leads")
-    .select("id, organization_id, tags, stage_id, pipeline_id, contact_id, lost_reason")
+    .select("id, organization_id, tags, stage_id, pipeline_id, contact_id, lost_reason, status")
     .eq("organization_id", organizationId)
     .in("id", input.lead_ids);
 
@@ -215,12 +217,42 @@ export async function POST(req: NextRequest): Promise<Response> {
       // motivo tem de entrar na MESMA escrita que muda a etapa, e quem escreve a
       // etapa do lote é esta função. String vazia é `null` — quem não trouxe
       // motivo não sobrescreve o que o card já tem.
-      const { data, error } = await supabase.rpc("fn_mover_leads_em_lote", {
-        p_organization_id: organizationId,
-        p_lead_ids: visibleIds,
-        p_stage_id: input.params.stage_id,
-        p_lost_reason: (motivoDoLote ?? "").trim() || null,
-      });
+      //
+      // QUEM JÁ ESTAVA PERDIDO NÃO TEM O MOTIVO TROCADO (porte do upstream
+      // #2922, issue #2887). A função grava `p_lost_reason` em TODA linha do
+      // lote; um card que já estava perdido tinha o motivo dele trocado em
+      // silêncio (o `status` não muda: sem evento, sem timeline, sem
+      // auditoria). O upstream corrigiu dentro da função (migration 0674). Aqui
+      // o conserto é na rota, sem migration: quem já está `lost` vai numa
+      // chamada SEM motivo (a coluna fica fora da escrita), os demais na
+      // chamada com o motivo do lote. A segunda chamada lê o piso já com a
+      // primeira gravada, então as posições continuam distintas.
+      // ponytail: duas transações em vez de uma; se a segunda falhar, a
+      // primeira (só cards que já estavam perdidos, trocando de etapa) fica.
+      // Upgrade: a 0674 do upstream, quando valer reaplicar o baseline.
+      const motivoGravado = (motivoDoLote ?? "").trim() || null;
+      const jaPerdidos = motivoGravado
+        ? visible.filter((l) => l.status === "lost").map((l) => l.id)
+        : [];
+      const novos = visibleIds.filter((id) => !jaPerdidos.includes(id));
+      const mover = (ids: string[], motivo: string | null) =>
+        supabase.rpc("fn_mover_leads_em_lote", {
+          p_organization_id: organizationId,
+          p_lead_ids: ids,
+          p_stage_id: input.params.stage_id,
+          p_lost_reason: motivo,
+        });
+      let data: unknown[] = [];
+      let error: { code?: string; message: string } | null = null;
+      for (const [ids, motivo] of [
+        [jaPerdidos, null],
+        [novos, motivoGravado],
+      ] as const) {
+        if (ids.length === 0 || error) continue;
+        const r = await mover([...ids], motivo);
+        error = r.error;
+        data = data.concat((r.data ?? []) as unknown[]);
+      }
       if (error) {
         // Rede de segurança (#917): a recusa do banco por motivo da perda (o
         // motivo veio, mas não é do vocabulário deste funil) vira recusa de
@@ -264,8 +296,22 @@ export async function POST(req: NextRequest): Promise<Response> {
         nomesEstagio.set(s.id, s.name);
       }
 
+      // A PERDA DO LOTE É A PERDA DO CARD, POR CARD (portes do upstream #2868 e
+      // #2922): quem fecha AGORA (etapa de perda e card que não estava
+      // perdido) ganha a linha "Perdido — <motivo>" da `/lose` e a auditoria
+      // `lead.lost`. Quem já estava perdido só troca de etapa. O tipo segue
+      // `stage_changed`: é dele que as métricas do funil contam o encerramento.
+      const statusDoCard = new Map(visible.map((l) => [l.id, l.status as string | null]));
+      const motivoDoCard = new Map(visible.map((l) => [l.id, (l.lost_reason as string | null) ?? null]));
+      const ehPerdaNova = (row: LeadMovidoEmLote) =>
+        etapaDePerda(etapaDeDestino) && statusDoCard.get(row.lead_id) !== "lost";
+
       await Promise.all(
         movidos.map(async (row) => {
+          const perdaNova = ehPerdaNova(row);
+          const motivo = perdaNova
+            ? (motivoGravado ?? (motivoDoCard.get(row.lead_id) ?? "").trim())
+            : "";
           const r = await emitLeadActivity(supabase, {
             organizationId,
             leadId: row.lead_id,
@@ -273,11 +319,15 @@ export async function POST(req: NextRequest): Promise<Response> {
             sourceModule: "crm",
             sourceId: row.lead_id,
             actor: { type: "user", id: user.id },
-            reason: stageChangeReason(
-              nomesEstagio.get(row.from_stage_id) ?? null,
-              nomesEstagio.get(input.params.stage_id) ?? null,
-            ),
+            reason:
+              perdaNova && motivo.length > 0
+                ? razaoDaPerdaNaTimeline(motivo)
+                : stageChangeReason(
+                    nomesEstagio.get(row.from_stage_id) ?? null,
+                    nomesEstagio.get(input.params.stage_id) ?? null,
+                  ),
             payload: {
+              ...(perdaNova ? { desfecho: "lost" } : {}),
               from_stage_id: row.from_stage_id,
               to_stage_id: input.params.stage_id,
               pipeline_id: row.pipeline_id,
@@ -295,6 +345,23 @@ export async function POST(req: NextRequest): Promise<Response> {
               origem: "leads/bulk",
               erro: r.error,
               requestId,
+            });
+          }
+          if (perdaNova) {
+            await audit({
+              action: "lead.lost",
+              actorUserId: user.id,
+              organizationId,
+              resourceType: "crm_lead",
+              resourceId: row.lead_id,
+              requestId,
+              metadata: {
+                actor_type: "user",
+                from_stage_id: row.from_stage_id,
+                to_stage_id: input.params.stage_id,
+                lost_reason: motivo,
+                bulk: true,
+              },
             });
           }
         }),
