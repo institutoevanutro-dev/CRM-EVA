@@ -49,7 +49,7 @@ interface Escrita {
  * compromisso não existe mais) e `contato` o que `contacts` devolve.
  */
 function cliente(opcoes: {
-  compromisso?: { contact_id: string | null } | null;
+  compromisso?: { contact_id: string | null; status?: string } | null;
   contato?: { is_anonymized: boolean | null } | null;
   erroNaLeitura?: boolean;
 }) {
@@ -95,7 +95,7 @@ async function abrir(alvo: ReturnType<typeof cliente>): Promise<void> {
 describe("a quarta porta do aviso de recuperação", () => {
   it("⭐ contato anonimizado NÃO gera aviso — o vínculo não ressuscita", async () => {
     const alvo = cliente({
-      compromisso: { contact_id: CONTATO },
+      compromisso: { contact_id: CONTATO, status: "no_show" },
       contato: { is_anonymized: true },
     });
 
@@ -109,7 +109,7 @@ describe("a quarta porta do aviso de recuperação", () => {
 
   it("⭐ contato comum gera o aviso de sempre — a guarda não fecha a porta para quem não exerceu o direito", async () => {
     const alvo = cliente({
-      compromisso: { contact_id: CONTATO },
+      compromisso: { contact_id: CONTATO, status: "no_show" },
       contato: { is_anonymized: false },
     });
 
@@ -127,7 +127,7 @@ describe("a quarta porta do aviso de recuperação", () => {
 
   it("a checagem consulta a anonimização do contato do COMPROMISSO", async () => {
     const alvo = cliente({
-      compromisso: { contact_id: CONTATO },
+      compromisso: { contact_id: CONTATO, status: "no_show" },
       contato: { is_anonymized: false },
     });
 
@@ -138,6 +138,17 @@ describe("a quarta porta do aviso de recuperação", () => {
     // compromisso, e o `ref_id` do aviso é ele).
     expect(alvo.colunasLidas).toContain("calendar_appointments");
     expect(alvo.colunasLidas).toContain("contacts");
+  });
+
+  it("régua pós-consulta (compromisso `completed`, 0373) que chega ao fim não vira «cliente faltou»", async () => {
+    const alvo = cliente({
+      compromisso: { contact_id: CONTATO, status: "completed" },
+      contato: { is_anonymized: false },
+    });
+
+    await abrir(alvo);
+
+    expect(alvo.inseridos).toEqual([]);
   });
 
   it("leitura que falha vira erro — a dúvida não vira aviso", async () => {

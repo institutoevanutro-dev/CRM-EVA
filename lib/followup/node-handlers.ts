@@ -498,8 +498,8 @@ export function processNode(input: {
   lead: LeadFacts;
   clock: () => Date;
   waitElapsed?: boolean;
-  /** Timestamp real da reserva, lido da agenda somente para espera ancorada. */
-  appointmentCreatedAt?: string | null;
+  /** Instante da âncora (criação da reserva ou início da consulta), lido da agenda somente para espera ancorada. */
+  appointmentAnchorAt?: string | null;
   wokeEarly?: boolean;
   /** Last inbound `messages.body` for this contact/conversation — engine loads on `match_reply` + wokeEarly. */
   lastInboundBody?: string;
@@ -610,12 +610,12 @@ export function processNode(input: {
             : planejada === null
               ? node.config.max_ms
               : clampEspera(planejada.escolhido_ms, node.config.min_ms, node.config.max_ms).escolhido_ms;
-        if (node.config.mode === "fixed" && node.config.anchor === "appointment_created_at") {
-          const createdAt = input.appointmentCreatedAt ? new Date(input.appointmentCreatedAt) : null;
-          if (!enrollment.appointment_id || !createdAt || !Number.isFinite(createdAt.getTime())) {
-            return { kind: "fail", error: "appointment_created_at unavailable for anchored wait" };
+        if (node.config.mode === "fixed" && node.config.anchor) {
+          const anchorAt = input.appointmentAnchorAt ? new Date(input.appointmentAnchorAt) : null;
+          if (!enrollment.appointment_id || !anchorAt || !Number.isFinite(anchorAt.getTime())) {
+            return { kind: "fail", error: `${node.config.anchor} unavailable for anchored wait` };
           }
-          return { kind: "wait", next_eval_at: new Date(Math.max(clock().getTime(), createdAt.getTime() + durationMs)) };
+          return { kind: "wait", next_eval_at: new Date(Math.max(clock().getTime(), anchorAt.getTime() + durationMs)) };
         }
         return { kind: "wait", next_eval_at: new Date(clock().getTime() + durationMs) };
       }

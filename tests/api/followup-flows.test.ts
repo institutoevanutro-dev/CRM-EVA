@@ -765,6 +765,14 @@ describe("POST /api/v1/ai/followup-flows/:id/publish", () => {
     expect(data[0]).toMatchObject({status:"active"});expect(data[0]?.active_version_id).toBeTruthy();
   });
 
+  it("appointment_attended (pós-consulta, 0373) tem motor e publica", async () => {
+    const id = "33333333-3333-4333-8333-333333333333";
+    const db = makeDb([{ id, organization_id: ORG_ID, status: "draft", draft_graph: VALID_GRAPH, trigger_config: { kind: "appointment_attended", params: { event_type_ids: [] } } }], []);
+    session("manager", db);
+    const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/publish/route");
+    expect((await POST(req("POST"), ctx(id))).status).toBe(200);
+  });
+
   it("trigger_config.kind='manual' → publica normalmente", async () => {
     const db = makeDb(
       [

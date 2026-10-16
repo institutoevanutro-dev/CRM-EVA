@@ -54,6 +54,7 @@ import {
   type conditionConfigSchema,
   type endConfigSchema,
   type waitConfigSchema,
+  type AppointmentAnchor,
 } from "./graph-schema";
 import type { EnrollmentOutcome, EnrollmentStatus } from "./node-handlers";
 
@@ -435,6 +436,12 @@ export const MODOS_DE_ESPERA: Record<ModoDeEspera, string> = {
   smart: "A IA escolhe a hora",
 };
 
+/** De onde a espera fixa conta. Âncora é absoluta: toda espera com ela conta da mesma data. */
+export const ANCORAS_DA_ESPERA: Record<AppointmentAnchor, string> = {
+  appointment_starts_at: "Da data da consulta (pós-consulta)",
+  appointment_created_at: "Da criação da reserva (fluxo de sinal)",
+};
+
 export const MODOS_DA_ACAO: Record<ModoDaAcao, string> = {
   text: "Texto fixo",
   ai_message: "Mensagem escrita pela IA",
@@ -498,6 +505,7 @@ export const DESFECHOS: Record<EnrollmentOutcome, string> = {
  */
 export const GATILHOS: Record<TipoDeGatilho, string> = {
   appointment_no_show:"Falta confirmada pela equipe",
+  appointment_attended: "Depois que o paciente compareceu",
   manual: "Manual",
   webhook: "Disparado por uma automação em Webhooks",
   silence: "Silêncio",

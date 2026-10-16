@@ -25,6 +25,9 @@ const CANCEL_ON_REPLY = { cancel_on_reply: z.boolean().optional() };
 
 export const triggerConfigSchema = z.discriminatedUnion("kind", [
   z.strictObject({kind:z.literal("appointment_no_show"),params:z.strictObject({event_type_ids:z.array(z.string().uuid()).optional()}).optional(),...CANCEL_ON_REPLY}),
+  // Irmão de `appointment_no_show` (migration 0373): presença (`completed`)
+  // confirmada pela equipe. Mesmo consumidor, mesmo filtro de tipo.
+  z.strictObject({kind:z.literal("appointment_attended"),params:z.strictObject({event_type_ids:z.array(z.string().uuid()).optional()}).optional(),...CANCEL_ON_REPLY}),
   z.strictObject({ kind: z.literal("manual"), ...CANCEL_ON_REPLY }),
   z.strictObject({ kind: z.literal("webhook"), ...CANCEL_ON_REPLY }),
   z.strictObject({

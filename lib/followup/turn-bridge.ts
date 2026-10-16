@@ -19,7 +19,7 @@ import { requireCurrentServiceBoundary } from "@/lib/atendimento/fronteira-serve
 import type pg from "pg";
 
 import type { AdminClient, EnrollmentPatch } from "./engine";
-import { flowGraphSchema } from "./graph-schema";
+import { COLUNA_DA_ANCORA, flowGraphSchema } from "./graph-schema";
 import { EVENTO_ACAO_ADIADA, EVENTO_CLASSIFICACAO_ESPERANDO, classEdgeMatch, selectEdge, type EnrollmentOutcome, type EnrollmentRow } from "./node-handlers";
 import { coletarEsperasAdaptativas, montarTimingPlan, type PropostaDeEspera } from "./timing-plan";
 import { persistirRespostaFollowupPg } from "./persistir-resposta";
@@ -368,12 +368,13 @@ export function createPgAdminClient(pool: pg.Pool): TurnBridgeAdminClient {
       if (rows.length === 0) return null;
       return flowGraphSchema.parse(rows[0]!.graph);
     },
-    async loadAppointmentCreatedAt(orgId, appointmentId, contactId) {
-      const { rows } = await pool.query<{ created_at: Date }>(
-        `select created_at from calendar_appointments where organization_id=$1 and id=$2 and contact_id=$3`,
+    async loadAppointmentAnchor(orgId, appointmentId, contactId, anchor) {
+      // A coluna vem de um mapa fechado, nunca do grafo: não há texto livre no SQL.
+      const { rows } = await pool.query<{ at: Date }>(
+        `select ${COLUNA_DA_ANCORA[anchor]} as at from calendar_appointments where organization_id=$1 and id=$2 and contact_id=$3`,
         [orgId, appointmentId, contactId],
       );
-      return rows[0]?.created_at?.toISOString() ?? null;
+      return rows[0]?.at?.toISOString() ?? null;
     },
     async loadLeadFacts(orgId, contactId) {
       const { rows: leads } = await pool.query<{
@@ -498,6 +499,7 @@ export function createPgAdminClient(pool: pg.Pool): TurnBridgeAdminClient {
             and c.id = a.contact_id
           where a.organization_id = $1
             and a.id = $2
+            and a.status = 'no_show'
             and not c.is_anonymized
          on conflict (organization_id, ref_id, appointment_revision, kind)
            where ref_kind = 'appointment' and appointment_revision is not null

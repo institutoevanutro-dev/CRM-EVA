@@ -20,7 +20,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { idsDoContatoEGemeos } from "@/lib/channels/contato-por-telefone";
 import { logger } from "@/lib/logger";
 
-import { flowGraphSchema, type FlowGraph, type FlowNode, type ReplySaveTo } from "./graph-schema";
+import { COLUNA_DA_ANCORA, flowGraphSchema, type AppointmentAnchor, type FlowGraph, type FlowNode, type ReplySaveTo } from "./graph-schema";
 import {
   ACTION_RECHECK_MS,
   BACKOFF_MS,
@@ -121,8 +121,8 @@ export interface AdminClient {
   retornoQueSeguraOFluxo?(enrollment: EnrollmentRow): Promise<string | null>;
   claimDueEnrollments(limit: number, leaseSeconds: number): Promise<EnrollmentRow[]>;
   loadFlowGraph(orgId: string, versionId: string): Promise<FlowGraph | null>;
-  /** Só exigido por uma espera fixa ancorada na reserva. */
-  loadAppointmentCreatedAt?(orgId: string, appointmentId: string, contactId: string): Promise<string | null>;
+  /** Só exigido por uma espera fixa ancorada no compromisso. */
+  loadAppointmentAnchor?(orgId: string, appointmentId: string, contactId: string, anchor: AppointmentAnchor): Promise<string | null>;
   loadLeadFacts(orgId: string, contactId: string): Promise<{
     lead_stage: string | null;
     tags: string[];
@@ -737,9 +737,9 @@ async function processEnrollment(
   const nextAlways = selectEdge(graph.edges, node.id, { type: "always" });
   const proximo = nextAlways ? (graph.nodes.find((n) => n.id === nextAlways.target) ?? null) : null;
 
-  const appointmentCreatedAt = node.type === "wait" && node.config.mode === "fixed" && node.config.anchor === "appointment_created_at"
-    ? enrollment.appointment_id && db.loadAppointmentCreatedAt
-      ? await db.loadAppointmentCreatedAt(enrollment.organization_id, enrollment.appointment_id, enrollment.contact_id)
+  const appointmentAnchorAt = node.type === "wait" && node.config.mode === "fixed" && node.config.anchor
+    ? enrollment.appointment_id && db.loadAppointmentAnchor
+      ? await db.loadAppointmentAnchor(enrollment.organization_id, enrollment.appointment_id, enrollment.contact_id, node.config.anchor)
       : null
     : undefined;
 
@@ -750,7 +750,7 @@ async function processEnrollment(
     lead,
     clock,
     waitElapsed,
-    appointmentCreatedAt,
+    appointmentAnchorAt,
     wokeEarly,
     lastInboundBody,
     respondeuSemTexto,
@@ -857,15 +857,17 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
       if (!data) return null;
       return flowGraphSchema.parse(data.graph);
     },
-    async loadAppointmentCreatedAt(orgId, appointmentId, contactId) {
+    async loadAppointmentAnchor(orgId, appointmentId, contactId, anchor) {
+      const coluna = COLUNA_DA_ANCORA[anchor];
       const { data, error } = await admin.from("calendar_appointments")
-        .select("created_at")
+        .select(coluna)
         .eq("organization_id", orgId)
         .eq("id", appointmentId)
         .eq("contact_id", contactId)
         .maybeSingle();
       if (error) throw new Error(error.message);
-      return typeof data?.created_at === "string" ? data.created_at : null;
+      const valor = (data as Record<string, unknown> | null)?.[coluna];
+      return typeof valor === "string" ? valor : null;
     },
     async loadLeadFacts(orgId, contactId) {
       const [{ data: lead, error: leadErr }, { data: contact, error: contactErr }] = await Promise.all([
@@ -994,11 +996,14 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
       // o join embutido depende do nome da FK e nenhum teste local o exercita.
       const { data: compromisso, error: compromissoErr } = await admin
         .from("calendar_appointments")
-        .select("contact_id")
+        .select("contact_id, status")
         .eq("organization_id", item.organization_id)
         .eq("id", item.appointment_id)
         .maybeSingle();
       if (compromissoErr) throw new Error(compromissoErr.message);
+      // "Cliente faltou" só é verdade para falta. Uma régua pós-consulta
+      // (presença, 0373) que chega ao fim é o desfecho esperado, não pendência.
+      if ((compromisso as { status?: string } | null)?.status !== "no_show") return;
 
       const contatoId = (compromisso as { contact_id: string | null } | null)?.contact_id ?? null;
       if (contatoId) {

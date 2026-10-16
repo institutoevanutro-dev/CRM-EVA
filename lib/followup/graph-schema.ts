@@ -77,6 +77,14 @@ export const edgeBranchIdSchema = z
     message: `the fallback branch "${FALLBACK_BRANCH_ID}" is spelled { type: 'always' } on an edge`,
   });
 
+/** Âncora de uma espera fixa: o instante do compromisso de onde ela conta. */
+export type AppointmentAnchor = 'appointment_created_at' | 'appointment_starts_at';
+/** Coluna de `calendar_appointments` que cada âncora lê. Mapa fechado: o SQL nunca recebe texto do grafo. */
+export const COLUNA_DA_ANCORA = {
+  appointment_created_at: 'created_at',
+  appointment_starts_at: 'starts_at',
+} as const satisfies Record<AppointmentAnchor, string>;
+
 /**
  * Wait node configuration schema.
  * Supports two modes:
@@ -88,7 +96,13 @@ export const waitConfigSchema = z
     z.strictObject({
       mode: z.literal('fixed'),
       duration_ms: z.number().int().min(300_000).max(7_776_000_000),
-      anchor: z.literal('appointment_created_at').optional(),
+      // Âncora ABSOLUTA: a espera termina em `âncora + duration_ms` (nunca antes
+      // de agora), e não `agora + duration_ms`. Toda espera ancorada conta da
+      // MESMA âncora — numa régua 7/15/30/45 dias depois da consulta, cada nó
+      // diz o seu dia (7, 15, 30, 45), não a diferença para o anterior.
+      //   appointment_created_at — quando a reserva foi feita (fluxo de sinal);
+      //   appointment_starts_at  — a data da consulta (pós-consulta, 0373).
+      anchor: z.enum(['appointment_created_at', 'appointment_starts_at']).optional(),
     }),
     z.strictObject({
       mode: z.literal('smart'),

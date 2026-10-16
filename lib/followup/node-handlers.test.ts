@@ -270,14 +270,37 @@ describe("processNode — wait (fixed)", () => {
 
   it("ancora T+40 na criação da reserva, mesmo com processamento tardio", () => {
     const anchored: FlowNode = { ...node, config: { mode: "fixed", duration_ms: 40 * 60_000, anchor: "appointment_created_at" } };
-    const result = processNode({ node: anchored, edges, enrollment: enrollment({ appointment_id: "appt-1" }), lead: lead(), clock, waitElapsed: false, appointmentCreatedAt: "2026-07-21T11:30:00.000Z" });
+    const result = processNode({ node: anchored, edges, enrollment: enrollment({ appointment_id: "appt-1" }), lead: lead(), clock, waitElapsed: false, appointmentAnchorAt: "2026-07-21T11:30:00.000Z" });
     expect(result).toEqual({ kind: "wait", next_eval_at: new Date("2026-07-21T12:10:00.000Z") });
   });
 
   it("falha fechado se a reserva vinculada não tem data válida", () => {
     const anchored: FlowNode = { ...node, config: { mode: "fixed", duration_ms: 40 * 60_000, anchor: "appointment_created_at" } };
-    const result = processNode({ node: anchored, edges, enrollment: enrollment({ appointment_id: "appt-1" }), lead: lead(), clock, waitElapsed: false, appointmentCreatedAt: null });
+    const result = processNode({ node: anchored, edges, enrollment: enrollment({ appointment_id: "appt-1" }), lead: lead(), clock, waitElapsed: false, appointmentAnchorAt: null });
     expect(result).toMatchObject({ kind: "fail" });
+  });
+
+  it("âncora na data da consulta é absoluta: a 2ª espera (15 dias) conta da consulta, não da 1ª", () => {
+    const DIA = 86_400_000;
+    const consulta = "2026-07-01T12:00:00.000Z";
+    const espera = (dias: number): FlowNode => ({
+      ...node,
+      config: { mode: "fixed", duration_ms: dias * DIA, anchor: "appointment_starts_at" },
+    });
+    const base = { edges, enrollment: enrollment({ appointment_id: "appt-1" }), lead: lead(), waitElapsed: false, appointmentAnchorAt: consulta };
+    // 1ª espera, chegando no dia da consulta: consulta + 7.
+    expect(processNode({ ...base, node: espera(7), clock: () => new Date(consulta) })).toEqual({
+      kind: "wait",
+      next_eval_at: new Date(Date.parse(consulta) + 7 * DIA),
+    });
+    // 2ª espera, chegando no dia 7 (com um dia de atraso de envio): consulta + 15, não dia 8 + 15.
+    expect(processNode({ ...base, node: espera(15), clock: () => new Date(Date.parse(consulta) + 8 * DIA) })).toEqual({
+      kind: "wait",
+      next_eval_at: new Date(Date.parse(consulta) + 15 * DIA),
+    });
+    // Âncora já passada (a equipe marcou a presença tarde): não espera para trás.
+    const tarde = new Date(Date.parse(consulta) + 20 * DIA);
+    expect(processNode({ ...base, node: espera(15), clock: () => tarde })).toEqual({ kind: "wait", next_eval_at: tarde });
   });
 
   it("elapsed: advances via the 'always' edge", () => {
