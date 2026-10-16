@@ -1,7 +1,7 @@
 /**
  * ROBÔ DO OUTRO LADO — o disjuntor determinístico do laço bot-com-bot.
  *
- * ## O incidente (produção, 16/10/2026 08:06–08:13 BRT, canal WAHA)
+ * ## O incidente (produção, 16/10/2026 08:06–08:13 BRT, canal de WhatsApp)
  *
  * O número de um contato era um chatbot de farmacêutica. Ele respondia toda
  * mensagem da IA com o MESMO texto pronto ("não consegui entender a sua
