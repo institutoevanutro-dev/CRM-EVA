@@ -186,7 +186,7 @@ export async function arquivarSessaoLegadaDoNumero(
 ): Promise<SessaoLegadaArquivada | null> {
   // Só o provider legado é candidato: a sessão oficial (que ainda nem existe
   // quando isto roda, ruling P1) nunca entra no filtro.
-  // O número vem da Meta formatado ("+55 27 99904-9879") e a linha WAHA pode
+  // O número vem da Meta formatado ("+55 27 99000-1234") e a linha WAHA pode
   // estar gravada com/sem "+" ou sem o 9 do celular: compara canônico, em JS
   // (uma org tem pouquíssimas sessões WAHA).
   const base = () =>

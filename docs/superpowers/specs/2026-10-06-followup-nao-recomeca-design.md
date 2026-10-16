@@ -1,7 +1,7 @@
 # Gatilho de silêncio: a sequência não recomeça sozinha
 
 **Data:** 2026-10-06 · **Branch:** `fix/followup-nao-recomeca` (criada da `origin/main` @ `5b2e640f3`)
-**Item:** A da Fase 2, item 1 do funil do Dr. André (`CRM-EVA/docs/superpowers/specs/2026-10-05-funil-comercial-dr-andre-design.md`, §5 e §6).
+**Item:** A da Fase 2, item 1 do funil do Dr. Otávio (`CRM-EVA/docs/superpowers/specs/2026-10-05-funil-comercial-dr-andre-design.md`, §5 e §6).
 **Migration reservada:** `0324`. A `0323` é do lembrete; `0320`–`0322` e `0325+` são de outras sessões.
 
 O plano TDD está em `docs/superpowers/plans/2026-10-06-followup-nao-recomeca.md`.
@@ -35,7 +35,7 @@ classificação (`reactivity.ts:214-250`) e a sequência continua. Este trabalho
 isso: a dedup por episódio impede o RECOMEÇO, não encerra inscrição viva. A segunda metade
 da regra ("se sumir de novo, começa do primeiro toque") passa a valer com este trabalho,
 nos dois modos. Fazer a regra 2 valer sem configuração é decisão de produto à parte, fora
-deste item; na implantação do Dr. André, o gatilho de silêncio tem de ser salvo com
+deste item; na implantação do Dr. Otávio, o gatilho de silêncio tem de ser salvo com
 "cancelar ao responder" ligado.
 
 ---

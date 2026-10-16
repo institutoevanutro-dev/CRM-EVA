@@ -4,17 +4,17 @@ import { reconciliarNomes } from "./sincronizar-nomes";
 describe("nomes do Financeiro", () => {
   it("preenche apenas o contato vinculado, sem exigir venda nem comparar telefone", async () => {
     const consultar = vi.fn(async (id: string) => ({
-      resumo: id === "cristiano" ? { paciente_nome: "Cristiano Guaitolini" } : null,
+      resumo: id === "caio" ? { paciente_nome: "Caio Teixeira" } : null,
     }));
     const gravar = vi.fn(async (_id: string, nome: string | null) => !!nome);
     const resultado = await reconciliarNomes(
-      [{ id: "cristiano", name: null }, { id: "beatriz", name: null }],
+      [{ id: "caio", name: null }, { id: "bruno", name: null }],
       consultar,
       gravar,
     );
     expect(resultado).toEqual({ consultados: 2, atualizados: 1, falhas: 0 });
-    expect(gravar).toHaveBeenCalledWith("cristiano", "Cristiano Guaitolini");
-    expect(gravar).toHaveBeenCalledWith("beatriz", null);
+    expect(gravar).toHaveBeenCalledWith("caio", "Caio Teixeira");
+    expect(gravar).toHaveBeenCalledWith("bruno", null);
   });
 
   it("preserva nome preenchido e contabiliza edição concorrente sem sobrescrever", async () => {

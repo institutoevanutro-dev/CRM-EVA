@@ -111,7 +111,7 @@ it("mesmo começo, um token desconhecido no fim reprova o texto inteiro", () => 
 
 describe("marcação de perfil sai da análise", () => {
   it("marcação mais emoji passa: o que decide é o resto da frase", () => {
-    expect(ehObviamenteSeguro("@dr.andreluisc 💪💪💪")).toEqual({ seguro: true });
+    expect(ehObviamenteSeguro("@dr.exemplo 💪💪💪")).toEqual({ seguro: true });
   });
 
   it("marcação mais elogio conhecido passa", () => {
@@ -224,7 +224,7 @@ describe("C-2: @ na frente da palavra não apaga o gatilho", () => {
   // Os quatro da spec §2 não podem ter sido sacrificados pelo conserto: a
   // marcação continua saindo da ANÁLISE DE TOKEN, só não sai dos gatilhos.
   it("marcação comum continua passando: @perfil não é conteúdo", () => {
-    expect(ehObviamenteSeguro("@dr.andreluisc 💪💪💪")).toEqual({ seguro: true });
+    expect(ehObviamenteSeguro("@dr.exemplo 💪💪💪")).toEqual({ seguro: true });
     expect(ehObviamenteSeguro("@fulano @ciclano top demais")).toEqual({ seguro: true });
     expect(ehObviamenteSeguro("@fulano quanto custa?")).toEqual({ seguro: false, gatilho: "preço" });
     expect(ehObviamenteSeguro("@fulano")).toEqual({ seguro: false, gatilho: "vazio" });

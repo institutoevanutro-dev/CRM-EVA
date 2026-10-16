@@ -60,7 +60,7 @@ const conversaInstagram = {
   },
   channel_sessions: {
     phone_number: null,
-    display_name: "@instit.eva",
+    display_name: "@clinica.exemplo",
     provider: "meta_instagram",
   },
 };
@@ -72,7 +72,7 @@ describe("CanaisDoContato", () => {
 
     await waitFor(() => expect(screen.getByLabelText("Instagram")).toBeInTheDocument());
     expect(screen.getByText("@maria.silva")).toBeInTheDocument();
-    expect(screen.getByText(/via @instit\.eva/)).toBeInTheDocument();
+    expect(screen.getByText(/via @clinica\.exemplo/)).toBeInTheDocument();
     expect(screen.getByText("@maria.silva").closest("a")).toHaveAttribute(
       "href",
       "/app/inbox?id=conv-ig-1",

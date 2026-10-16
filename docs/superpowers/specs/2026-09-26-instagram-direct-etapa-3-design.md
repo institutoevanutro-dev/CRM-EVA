@@ -2,7 +2,7 @@
 
 Data: 26/09/2026. Continua `docs/superpowers/specs/2026-09-24-instagram-direct-no-crm-design.md` (§5.6) e `docs/superpowers/specs/2026-09-25-instagram-direct-etapa-2-design.md`. Etapas 1 e 2 estão no ar (PRs #28 e #30).
 
-## 1. O que o André decidiu
+## 1. O que o dono decidiu
 
 1. Follow-up automático no Instagram, só dentro das 24h da última mensagem da pessoa. Passo fora disso é pulado e o fluxo segue. Se na prática quase tudo for pulado, trocar por "lembrete para a equipe" (fora desta etapa).
 2. O follow-up vai pelo WhatsApp sempre que o contato tiver WhatsApp. Instagram só para quem não tem. Motivo: leads chegam quase todos pelo WhatsApp; o Instagram é mais de amigos.
@@ -50,7 +50,7 @@ Sucesso: um lead do Instagram sem WhatsApp recebe o follow-up que cair nas 24h; 
 
 ### 3.3 Ficha do contato mostra os canais
 
-- `app/app/contacts/[id]/_client.tsx` ganha a seção "Canais": uma linha por conversa 1:1 do contato, com o selo do canal (o mesmo `SeloDoCanal` do Inbox), o identificador (telefone ou @) e o perfil/número por onde a pessoa fala ("via @instit.eva"). Cada linha abre aquela conversa no Inbox.
+- `app/app/contacts/[id]/_client.tsx` ganha a seção "Canais": uma linha por conversa 1:1 do contato, com o selo do canal (o mesmo `SeloDoCanal` do Inbox), o identificador (telefone ou @) e o perfil/número por onde a pessoa fala ("via @clinica.exemplo"). Cada linha abre aquela conversa no Inbox.
 
 ## 4. Fora desta etapa
 

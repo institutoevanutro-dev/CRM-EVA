@@ -14,7 +14,7 @@ vi.mock("@/lib/channels/health", async (orig) => ({
 const SESSAO = { id: "sess-1", organizationId: "org-1", wabaId: "222" };
 let escalado: string | null = null;
 let erroDoUpdate: { message: string } | null = null;
-let numeroDaSessao: string | null = "+5527999049879";
+let numeroDaSessao: string | null = "+5527990001234";
 const updates: Array<{ patch: Record<string, unknown>; filtros: Record<string, unknown> }> = [];
 
 const admin = {
@@ -55,7 +55,7 @@ beforeEach(() => {
   updates.length = 0;
   escalado = "PUSH:DESCONECTADO_NO_APP";
   erroDoUpdate = null;
-  numeroDaSessao = "+5527999049879";
+  numeroDaSessao = "+5527990001234";
   sincronizar.mockReset();
 });
 
@@ -68,7 +68,7 @@ describe("aplicarEventoDaConta", () => {
   });
 
   it("o MESMO número em outra grafia (sem +, sem o 9) é da sessão: cai", async () => {
-    const e = { ...ev("PARTNER_REMOVED"), phoneNumber: "552799049879" };
+    const e = { ...ev("PARTNER_REMOVED"), phoneNumber: "552790001234" };
     expect(await aplicarEventoDaConta(admin, SESSAO, e)).toBe("caiu");
     expect(updates[0]?.patch).toMatchObject({ status: "FAILED" });
   });

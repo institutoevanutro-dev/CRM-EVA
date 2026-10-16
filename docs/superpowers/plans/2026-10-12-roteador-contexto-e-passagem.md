@@ -36,7 +36,7 @@
 - `ai_router_decisions` continua sem texto do lead (comentário da tabela: "SEM PII").
 - Textos em português sem travessão. Sem `console.log`. Comentários no tom dos vizinhos.
 - **Suíte inteira em TODA task**, antes do commit: `pnpm typecheck`, `pnpm lint`, `pnpm test:unit` (inteira, saída em arquivo, exit lido). Na Task 1 a 3 que tocam SQL ou o turno, também `pnpm test:db`. (Na entrega anterior um defeito só apareceu na suíte inteira, na última task.)
-- Merge: PR verde + OK do André no chat, e então o PR é entregue à sessão "Memória central", que faz merge, versão e instalação.
+- Merge: PR verde + OK do dono no chat, e então o PR é entregue à sessão "Memória central", que faz merge, versão e instalação.
 
 ## Review Focus
 
@@ -203,4 +203,4 @@ Roteadores ganham um modo opcional em que a troca de agente no meio da conversa 
 
 - [ ] **Step 2: Mapa** (nó ou arestas da passagem, com ≥2 arestas, e `pnpm exec vitest run tests/unit/mapas-de-arquitetura.test.ts`), jornada (linha não marcada, prova pela tela e em conversa real pendentes), desenho e guia.
 - [ ] **Step 3: Suítes inteiras**, uma de cada vez, saída em arquivo e exit lido: `pnpm release:conferir`, `pnpm typecheck`, `pnpm lint`, `pnpm test:unit`, `pnpm test:db`. Antes de `test:db`, `docker ps`: se outra sessão estiver rodando um `test-db`, espere terminar.
-- [ ] **Step 4: Commit** `docs(roteador): fragmento, mapa e desenho da passagem pelo agente`. PR com o que foi medido e o que não foi (conversa real e tela pendentes). O PR não é mergeado por esta sessão: com o OK do André, é entregue à Memória central.
+- [ ] **Step 4: Commit** `docs(roteador): fragmento, mapa e desenho da passagem pelo agente`. PR com o que foi medido e o que não foi (conversa real e tela pendentes). O PR não é mergeado por esta sessão: com o OK do dono, é entregue à Memória central.

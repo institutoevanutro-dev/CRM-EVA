@@ -1,6 +1,6 @@
 # Início com painéis da clínica (parte 3 do redesenho)
 
-Data: 07/10/2026. Aprovado em conversa pelo dono (André): os quatro painéis, a regra de "IA resolveu
+Data: 07/10/2026. Aprovado em conversa pelo dono: os quatro painéis, a regra de "IA resolveu
 sozinha" e a visibilidade só para gestores. Parte 3 de 5 do redesenho do CRM.
 
 ## Objetivo

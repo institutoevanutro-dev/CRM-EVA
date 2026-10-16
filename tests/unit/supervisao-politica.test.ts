@@ -23,19 +23,19 @@ import {
 } from '@/lib/supervisao/politica';
 import { lerPropostaDoSupervisor } from '@/lib/supervisao/proposta';
 
-const ORG = '39bcf401-7767-4f78-b02c-94c0069c3e63';
-const ERICK = '2c68cf79-5557-4bc6-8c27-2803d76e7e85';
-const CINTIA = '1f38936b-1f0f-4e7d-b2ea-ee9cb9631bde';
-const OUTRO_AGENTE = '53a9231a-30a0-4cc0-b874-9992eff04bca';
-const FUNIL = '67621cbb-63a3-4ec4-acf3-f0b97dc60254';
-const OUTRO_FUNIL = '12171867-8d08-42c4-b9c3-be1e0273b668';
+const ORG = 'a1000000-0000-4000-8000-000000000001';
+const SUPERVISOR = 'a1000000-0000-4000-8000-000000000002';
+const ATENDENTE = 'a1000000-0000-4000-8000-000000000003';
+const OUTRO_AGENTE = 'a1000000-0000-4000-8000-000000000004';
+const FUNIL = 'a1000000-0000-4000-8000-000000000005';
+const OUTRO_FUNIL = 'a1000000-0000-4000-8000-000000000006';
 const PESSOA = '88888888-8888-4888-8888-888888888888';
 
 const vinculo: VinculoDeSupervisao = {
   id: '11111111-1111-4111-8111-111111111111',
   organization_id: ORG,
-  supervisor_agent_id: ERICK,
-  supervised_agent_id: CINTIA,
+  supervisor_agent_id: SUPERVISOR,
+  supervised_agent_id: ATENDENTE,
   pipeline_id: FUNIL,
   enabled: true,
   review_human_actions: true,
@@ -53,7 +53,7 @@ function evento(p: Partial<EventoDeRevisao> = {}): EventoDeRevisao {
     lead_id: null,
     pipeline_id: FUNIL,
     actor_type: 'ai_agent',
-    actor_id: CINTIA,
+    actor_id: ATENDENTE,
     occurred_at: '2026-09-16T13:00:00.000Z',
     conversation_revision: '3',
     origin: 'ai_run_completed',
@@ -63,19 +63,19 @@ function evento(p: Partial<EventoDeRevisao> = {}): EventoDeRevisao {
 }
 
 const contexto = {
-  supervisoresDaOrganizacao: new Set([ERICK]),
+  supervisoresDaOrganizacao: new Set([SUPERVISOR]),
   vinculoDoUsuario: null,
   originadoPorSupervisao: false,
 };
 
 describe('decidirAcionamento — filtro', () => {
-  it('aceita a execução da Cintia no funil indicado', () => {
+  it('aceita a execução da atendente no funil indicado', () => {
     expect(decidirAcionamento(evento(), vinculo, contexto)).toEqual({ aciona: true, bloqueada: false });
   });
 
   it('vínculo desligado, outra organização, outro funil e outro agente são filtros SILENCIOSOS', () => {
     expect(decidirAcionamento(evento(), { ...vinculo, enabled: false }, contexto)).toEqual({ aciona: false, porque: 'vinculo_desligado' });
-    expect(decidirAcionamento(evento({ organization_id: '90362167-7980-4de5-aba4-30dcbb0f47cb' }), vinculo, contexto))
+    expect(decidirAcionamento(evento({ organization_id: 'a1000000-0000-4000-8000-000000000007' }), vinculo, contexto))
       .toEqual({ aciona: false, porque: 'outra_organizacao' });
     // O funil de MESMO NOME em outra organização não passa: a regra é pelo id.
     expect(decidirAcionamento(evento({ pipeline_id: OUTRO_FUNIL }), vinculo, contexto)).toEqual({ aciona: false, porque: 'outro_funil' });
@@ -97,7 +97,7 @@ describe('decidirAcionamento — filtro', () => {
 
 describe('decidirAcionamento — ciclo', () => {
   it('a execução do próprio supervisor nunca o aciona', () => {
-    expect(decidirAcionamento(evento({ actor_id: ERICK }), { ...vinculo, supervised_agent_id: ERICK }, contexto))
+    expect(decidirAcionamento(evento({ actor_id: SUPERVISOR }), { ...vinculo, supervised_agent_id: SUPERVISOR }, contexto))
       .toEqual({ aciona: false, porque: 'ciclo_do_supervisor' });
   });
 
@@ -111,26 +111,26 @@ describe('decidirAcionamento — ciclo', () => {
   it('o corte do ciclo vem ANTES do filtro de agente supervisionado', () => {
     // Um vínculo mal configurado apontando o supervisor como supervisionado não
     // pode virar laço: o ciclo decide primeiro.
-    const r = decidirAcionamento(evento({ actor_id: ERICK }), { ...vinculo, supervised_agent_id: ERICK }, contexto);
+    const r = decidirAcionamento(evento({ actor_id: SUPERVISOR }), { ...vinculo, supervised_agent_id: SUPERVISOR }, contexto);
     expect(r.aciona).toBe(false);
   });
 });
 
 describe('chave de idempotência', () => {
   it('é org:conversa:evento:supervisor — sem timestamp nem tentativa', () => {
-    expect(chaveDeIdempotencia(evento(), ERICK)).toBe(
-      `${ORG}:22222222-2222-4222-8222-222222222222:55555555-5555-4555-8555-555555555555:${ERICK}`,
+    expect(chaveDeIdempotencia(evento(), SUPERVISOR)).toBe(
+      `${ORG}:22222222-2222-4222-8222-222222222222:55555555-5555-4555-8555-555555555555:${SUPERVISOR}`,
     );
   });
 
   it('reavaliação deliberada exige NOVO evento: outro event_id, outra chave', () => {
-    expect(chaveDeIdempotencia(evento(), ERICK)).not.toBe(
-      chaveDeIdempotencia(evento({ event_id: '55555555-5555-4555-8555-555555555556' }), ERICK),
+    expect(chaveDeIdempotencia(evento(), SUPERVISOR)).not.toBe(
+      chaveDeIdempotencia(evento({ event_id: '55555555-5555-4555-8555-555555555556' }), SUPERVISOR),
     );
   });
 
   it('o source_event_id do job é determinístico, uuid válido, e difere do evento cru', () => {
-    const chave = chaveDeIdempotencia(evento(), ERICK);
+    const chave = chaveDeIdempotencia(evento(), SUPERVISOR);
     const a = uuidDeterministico(chave);
     expect(a).toBe(uuidDeterministico(chave));
     expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);

@@ -1,14 +1,14 @@
 # Painel do funil — plano TDD
 
 > Desenho: `docs/superpowers/specs/2026-10-06-painel-do-funil-design.md`.
-> Worktree: `/Users/andreluislopescosta/crm-f2-painel`, branch `feat/painel-do-funil`.
+> Worktree: `~/crm-f2-painel`, branch `feat/painel-do-funil`.
 > Sem migration. Cada passo: teste vermelho → mudança mínima → verde → commit
 > (`git add <arquivos pelo nome>`, conferir `git status --short` antes).
 
 Comando de arquivo isolado (usado em todo passo):
 
 ```bash
-cd /Users/andreluislopescosta/crm-f2-painel && pnpm vitest run <arquivo> > /tmp/pf.log 2>&1; echo "exit=$?"; grep -aE "Test Files|Tests |Errors " /tmp/pf.log
+cd ~/crm-f2-painel && pnpm vitest run <arquivo> > /tmp/pf.log 2>&1; echo "exit=$?"; grep -aE "Test Files|Tests |Errors " /tmp/pf.log
 ```
 
 Arquivos novos, no total:
@@ -248,7 +248,7 @@ Registrar a spec em uma `SPECS_PARTE_*` de `.github/workflows/e2e.yml`
 ## Passo 15 — suíte inteira
 
 ```bash
-cd /Users/andreluislopescosta/crm-f2-painel && pnpm gov:verify > /tmp/vt.log 2>&1; echo "exit=$?"
+cd ~/crm-f2-painel && pnpm gov:verify > /tmp/vt.log 2>&1; echo "exit=$?"
 grep -aE "Test Files|Tests |Errors " /tmp/vt.log
 grep -aE "^ *FAIL " /tmp/vt.log | sed 's/ > .*//' | sort | uniq -c
 ```

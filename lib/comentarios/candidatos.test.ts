@@ -46,7 +46,7 @@ describe("candidatosDoHistorico", () => {
   });
 
   it("marcação não vira candidato: ela sai da análise", () => {
-    expect(candidatosDoHistorico(["@dr.andreluisc top"], nada)).toEqual([]);
+    expect(candidatosDoHistorico(["@dr.exemplo top"], nada)).toEqual([]);
   });
 
   it("ordena pelo que mais encolhe a fila, e alfabético no empate", () => {

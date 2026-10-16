@@ -42,7 +42,7 @@ export const APP_SECRET = "segredo-e2e";
 export const IG_ACCOUNT_ID = "17841400000000001";
 export const IG_USERNAME = "clinica_e2e";
 export const ORIGEM_CAMPO = "origem";
-export const ORIGEM_VALOR = "Instagram Dr. André";
+export const ORIGEM_VALOR = "Instagram Dr. Otávio";
 
 // Fixtures de `tests/e2e/instagram-responder.spec.ts`. O prefixo comum é o que
 // a spec digita na busca do Inbox para isolar as três conversas das demais do

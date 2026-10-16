@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Permitir que Cintia IA e Isadora IA agendem, remarquem e cancelem com evidência do pedido do paciente, mantendo Google e equipe informados.
+**Goal:** Permitir que Atendente IA e IA de aplicações agendem, remarquem e cancelem com evidência do pedido do paciente, mantendo Google e equipe informados.
 
 **Architecture:** Reutilizar as ferramentas MCP e os handlers de agenda existentes. Acrescentar evidência obrigatória para mutações por IA, revisão humana abaixo de 24 horas e propagação de unidade/sala; o CRM grava primeiro e o Google continua como espelho assíncrono com pendência visível.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Cintia IA e Isadora IA podem consultar, agendar, remarcar e cancelar.
+- Atendente IA e IA de aplicações podem consultar, agendar, remarcar e cancelar.
 - Cancelamento exige pedido claro do paciente e motivo auditável.
 - Remarcação com 24 horas ou mais preserva o sinal.
 - Remarcação abaixo de 24 horas cria revisão humana e não confirma novo horário automaticamente.
@@ -212,7 +212,7 @@ git add lib/agenda/google app/api/v1/cron/agenda-google-push app/api/v1/cron/age
 git commit -m "feat(agenda): mostra pendencias do Google"
 ```
 
-### Task 5: Validar Cintia e Isadora sem publicar
+### Task 5: Validar as IAs de atendimento e de aplicações sem publicar
 
 **Files:**
 - Create: `tests/e2e/agentes-remarcam-e-cancelam.spec.ts`

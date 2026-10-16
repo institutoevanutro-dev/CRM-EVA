@@ -1,15 +1,15 @@
-# Fase 2, item 2 — Passos da Cintia por card, campos do funil e "Interagiu" automático
+# Fase 2, item 2 — Passos da atendente IA por card, campos do funil e "Interagiu" automático
 
-**Data:** 2026-10-06 · **Estado:** proposta para aprovação do André (nada codado)
+**Data:** 2026-10-06 · **Estado:** proposta para aprovação do dono (nada codado)
 **Base medida:** `origin/main` @ `5b2e640f3`. As linhas citadas valem para esse commit e mudam quando os pacotes 4 e 6 entrarem.
 
 ---
 
-## Resumo para o André (5 linhas)
+## Resumo para o dono (5 linhas)
 
-1. Hoje a Cintia guarda o passo da venda **por pessoa**, e esse passo nunca volta. Por isso, paciente que retorna ou lead que já foi perdido ganha card novo, e esse card **não anda sozinho**.
+1. Hoje a atendente IA guarda o passo da venda **por pessoa**, e esse passo nunca volta. Por isso, paciente que retorna ou lead que já foi perdido ganha card novo, e esse card **não anda sozinho**.
 2. Proposta: o passo passa a valer **para o card da vez**. Card novo começa do zero, e o passo nunca fica atrás de onde o card está.
-3. A Cintia passa a **ver e preencher** os campos do card (Objetivo, Acompanhamento, Modalidade, Forma de reserva), só escolhendo entre as opções da lista. A recepção não precisa mais copiar da Memória.
+3. A atendente IA passa a **ver e preencher** os campos do card (Objetivo, Acompanhamento, Modalidade, Forma de reserva), só escolhendo entre as opções da lista. A recepção não precisa mais copiar da Memória.
 4. O card vai para **Interagiu sozinho** quando o lead responde pela primeira vez depois da nossa primeira mensagem. Isso é regra fixa do sistema, sem depender da IA. Nenhum card volta para trás.
 5. São 3 entregas pequenas, de 1 a 2 sessões cada. Você só precisa decidir as 3 perguntas da seção 4.
 
@@ -27,18 +27,18 @@
 - `resolveDestinoDoAgente` acha a etapa pelo `agent_stage_hint` **sem comparar posição** (`lib/leads/agent-stage-sync.ts:97-105`). Se alguém levou o card à mão para Negociação enquanto o passo ainda era `new`, o próximo `contacted` puxa o card **de volta** para Interagiu.
 - O espelho não passa `escopoDeFunis` (`lib/agent-engine/edge/crm/move-lead-stage.ts:219-223`). Esse buraco já existe e fica fora deste item.
 
-### 1.3 A Cintia não vê o card
+### 1.3 A atendente IA não vê o card
 - O contexto injetado a cada turno tem só o contato. O campo `lead_id` traz o **id do contato** (`lib/agent-engine/edge/crm/get-lead-context.ts:269-286`), com os marcadores do contato. Ficam de fora a etapa real, o funil e os `custom_fields`.
 - O bloco "## Estado do funil" mostra só o passo interno (`inbound-turn.ts:1305-1314`, `1335-1336`).
 
-### 1.4 A Cintia não tem como gravar os campos do funil
+### 1.4 A atendente IA não tem como gravar os campos do funil
 - O único caminho é `crm_update_lead` do catálogo. Ele exige o **id do negócio** (`lib/mcp/tools/leads.ts:215-216`), que ela não tem.
 - `crm_update_lead` também altera título, valor, dono e marcadores, e com `tags` **substitui** a lista inteira.
 - Ele não confere a chave nem a opção contra `pipeline.settings.fields`. O merge em si é atômico, via `fn_lead_anotar_campos` (`app/api/v1/leads/_handler.ts:530-542`).
 - O pacote 4 (`fix/pacote-4-ia-escopo-do-paciente`, ainda fora da main) traduz o id do contato para o negócio aberto, quando há exatamente um. Isso resolve o id, mas não a largura da ferramenta, a validação nem a visibilidade.
 
 ### 1.5 "Interagiu" depende do juízo do modelo
-- `contacted` é marcado quando o modelo quer. Na prática, isso acontece na primeira resposta da Cintia ao texto do anúncio, e não na resposta real do lead. Também pode acontecer num turno de follow-up, sem nenhuma resposta do lead.
+- `contacted` é marcado quando o modelo quer. Na prática, isso acontece na primeira resposta da atendente IA ao texto do anúncio, e não na resposta real do lead. Também pode acontecer num turno de follow-up, sem nenhuma resposta do lead.
 - A regra de automação `message.received → create_or_move_lead` não serve. Ela não filtra por etapa, puxa o card para trás a cada mensagem e cria um card duplicado em outro funil.
 
 ---
@@ -60,7 +60,7 @@
   - O passo de outro card não trava o card atual.
 - **Guarda para não voltar:** em `sincronizaEstagioDoAgente`, se a etapa de destino tem `position` menor que a da etapa atual, o card não se move. A resposta é o motivo novo `ja_passou`, que o espelho trata como `ja_esta_la` (ok, sem aviso). Destino `is_won` ou `is_lost` fica isento, porque perder ou ganhar nunca é "voltar". `EstagioCandidato` ganha `position`.
 
-### 2.2 A Cintia vê o card e preenche os campos (entrega B)
+### 2.2 A atendente IA vê o card e preenche os campos (entrega B)
 - **Contexto:** `getLeadContext` ganha o bloco `negocio`: nome do funil, nome da etapa atual e a lista dos campos que ela pode preencher (`chave`, `rotulo`, `opcoes`, `valor` atual).
   - Só entram campos `select`, `multiselect` e `boolean` (ver D2).
   - O bloco não leva id: a projeção (`lib/agent-engine/agent/projecao.ts`) não precisa esconder nada novo.
@@ -87,9 +87,9 @@
   - Ganha um parâmetro opcional `fonte` (`'primeira-resposta'`), para a atividade e o metadata não dizerem "passo do atendimento" quando quem respondeu foi a recepção.
 - **Sem gravação em `lead_state`:** o piso pelo card (2.1) já faz o passo efetivo virar `contacted`. É uma fonte só.
 - **Tela:** caixa "Mover para «etapa do Primeiro contato» quando o lead responder pela primeira vez" na seção "Para onde o card vai em cada passo" (`app/app/settings/tenant/pipelines/_mapping.tsx:257`). A chave entra em `pipelineConfigPatchSchema` (`lib/schemas/settings.ts:160-171`).
-- **Configuração do André, sem código, depois do deploy:**
+- **Configuração do dono, sem código, depois do deploy:**
   - ligar a caixa no funil Comercial;
-  - tirar do roteiro da Cintia (seção 4.4, passo 2, do design da Fase 1) a instrução de marcar "Primeiro contato";
+  - tirar do roteiro da atendente IA (seção 4.4, passo 2, do design da Fase 1) a instrução de marcar "Primeiro contato";
   - trocar "grava na Memória do contato" por "preenche Objetivo e Acompanhamento no card".
 
 ---
@@ -111,21 +111,21 @@
 
 ---
 
-## 4. Decisões do André (3)
+## 4. Decisões do dono (3)
 
-> **Decidido pelo André em 07/10/2026:** todas as recomendações desta seção foram aceitas.
+> **Decidido pelo dono em 07/10/2026:** todas as recomendações desta seção foram aceitas.
 
-**D1. O "Interagiu" automático vale também quando quem respondeu primeiro foi a recepção, e não a Cintia?**
+**D1. O "Interagiu" automático vale também quando quem respondeu primeiro foi a recepção, e não a atendente IA?**
 - **Recomendo sim.** "Interagiu" mede se o lead respondeu, não quem falou com ele. É por isso que a regra fica na entrada da mensagem.
 - A opção nasce desligada em toda instalação e você liga no funil Comercial. Instalação de outros clientes não muda sozinha.
 
-**D2. Quais campos a Cintia pode preencher?**
+**D2. Quais campos a atendente IA pode preencher?**
 - **Recomendo só campos de lista** (escolha única, múltipla ou sim/não). Ela nunca escreve texto livre na ficha.
 - Isso segue a regra da Fase 1: "só a categoria, nunca relato de saúde". E impede CPF ou sintoma de cair num campo.
 
 **D3. "Forma de reserva" (Sinal de R$100 / Integral): quem preenche?**
-- **Recomendo:** a Cintia registra o que o paciente escolheu quando ela envia a chave, e a recepção corrige na conferência se o pagamento veio diferente.
-- A alternativa é deixar só a recepção. Para isso basta a Cintia não ter instrução de preencher; não muda código.
+- **Recomendo:** a atendente IA registra o que o paciente escolheu quando ela envia a chave, e a recepção corrige na conferência se o pagamento veio diferente.
+- A alternativa é deixar só a recepção. Para isso basta a atendente IA não ter instrução de preencher; não muda código.
 
 ---
 
@@ -143,7 +143,7 @@
    - Pôr o apêndice no fim do baseline depois que o pacote 2 entrar.
 3. **Mudança de comportamento para quem já instalou:** a guarda de 2.1 ("não volta") muda o espelho de toda instalação. Isso é conserto de defeito, mas entra no fragmento `.changes/` como `capacidade_nova`. A entrega C nasce desligada.
 4. **Dois cards abertos do mesmo contato:** continua "ambíguo, não move" (regra que já existe). O passo efetivo cai no comportamento de hoje. É um teto conhecido da opção A.
-5. **Escopo de funil vazio:** se a Cintia não tiver o funil Comercial marcado, `update_deal_fields` recusa. Um passo de configuração conferido no teste.
+5. **Escopo de funil vazio:** se a atendente IA não tiver o funil Comercial marcado, `update_deal_fields` recusa. Um passo de configuração conferido no teste.
 6. **Custo por mensagem da entrega C:** de 2 a 3 consultas a cada entrada. Ela sai cedo quando nenhum funil da organização tem a opção ligada.
 
 ---
@@ -161,8 +161,8 @@
 - **Prova pela tela** (doutrina de QA visual), em banco fresco pelo `baseline.sql`:
   1. Ligar a caixa e mapear os passos.
   2. Mandar mensagem como lead: o card nasce em Novo lead.
-  3. A Cintia responde, o lead responde de novo, e o card aparece em **Interagiu** no Kanban.
-  4. A Cintia preenche Objetivo: o valor aparece na ficha do card.
+  3. A atendente IA responde, o lead responde de novo, e o card aparece em **Interagiu** no Kanban.
+  4. A atendente IA preenche Objetivo: o valor aparece na ficha do card.
   5. Marcar o card como ganho e mandar mensagem nova do mesmo contato: o card novo **anda**.
   - Evidência em `.superpowers/evidence/` e uma spec em `tests/e2e/`.
 

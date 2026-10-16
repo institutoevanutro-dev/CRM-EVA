@@ -241,7 +241,7 @@ describe("wave 2 — human-cases repositório", () => {
   });
 
   /**
-   * Produção, Instituto Eva, 14/10/2026: a paciente mandou o comprovante do Pix,
+   * Produção, 14/10/2026: a paciente mandou o comprovante do Pix,
    * o PDF foi lido, e o caso NÃO abriu porque a conversa tinha um caso de
    * ontem, de outro assunto, ainda em `awaiting_human`. A guarda recusava
    * QUALQUER segundo caso aberto, e o comprovante não chegou a ninguém.

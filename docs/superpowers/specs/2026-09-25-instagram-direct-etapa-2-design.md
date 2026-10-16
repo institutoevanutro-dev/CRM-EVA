@@ -1,8 +1,8 @@
 # Instagram Direct, etapa 2: responder pelo CRM
 
-Data: 25/09/2026. Continua `docs/superpowers/specs/2026-09-24-instagram-direct-no-crm-design.md` (§5.5 e §5.7). A etapa 1 está no ar desde 25/09/2026 (PR #28): os dois perfis (@dr.andreluisc e @instit.eva) recebem no Inbox.
+Data: 25/09/2026. Continua `docs/superpowers/specs/2026-09-24-instagram-direct-no-crm-design.md` (§5.5 e §5.7). A etapa 1 está no ar desde 25/09/2026 (PR #28): os dois perfis (@dr.exemplo e @clinica.exemplo) recebem no Inbox.
 
-## 1. O que o André pediu
+## 1. O que o dono pediu
 
 1. Responder o Direct pelo CRM, só a equipe. A IA continua sem responder no Instagram.
 2. Deixar evidente, na lista e na conversa, o que é Instagram e o que é WhatsApp.

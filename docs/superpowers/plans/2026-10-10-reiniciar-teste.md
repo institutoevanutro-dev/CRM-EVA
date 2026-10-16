@@ -8,7 +8,7 @@
 
 **Tech Stack:** Postgres (plpgsql), Next.js Route Handler, React, Vitest, invariantes `pnpm test:db`.
 
-**Spec:** este plano (decisão do André em 10/10/2026: "Pode fazer o botão"; só números da lista de teste, nunca paciente real).
+**Spec:** este plano (decisão do dono em 10/10/2026: "Pode fazer o botão"; só números da lista de teste, nunca paciente real).
 
 ## Global Constraints
 

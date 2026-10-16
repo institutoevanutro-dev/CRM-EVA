@@ -80,7 +80,7 @@ function adminFalso(opts: {
   return { admin, chamadas, filtrosDoUpdate };
 }
 
-const sessao = { id: "S1", organizationId: "ORG", igAccountId: "IGACC", tokenCifrado: "x", origemPadrao: { campo: "origem", valor: "Instagram Dr. André" } };
+const sessao = { id: "S1", organizationId: "ORG", igAccountId: "IGACC", tokenCifrado: "x", origemPadrao: { campo: "origem", valor: "Instagram Dr. Otávio" } };
 const evento = (over: Partial<EventoDoInstagram> = {}): EventoDoInstagram => ({ igAccountId: "IGACC", remetente: "IGSID9", destinatario: "IGACC", externalId: "m1", eco: false, texto: "Oi", anexos: [], enviadaEm: new Date(1), ...over });
 
 describe("ingestão do Instagram", () => {
@@ -91,7 +91,7 @@ describe("ingestão do Instagram", () => {
     expect(chamadas.rpc).toContainEqual(["fn_upsert_conversa_de_canal", { p_org: "ORG", p_contact: "C1", p_session: "S1", p_canal: "instagram" }]);
     const [, msg] = chamadas.insert.find(([t]) => t === "messages") as [string, Record<string, unknown>];
     expect(msg).toMatchObject({ organization_id: "ORG", direction: "inbound", external_id: "m1", body: "Oi" });
-    expect(chamadas.update).toContainEqual(["contacts", { custom_fields: { origem: "Instagram Dr. André" } }]);
+    expect(chamadas.update).toContainEqual(["contacts", { custom_fields: { origem: "Instagram Dr. Otávio" } }]);
     expect(aplicarEfeitosPosEntrada).toHaveBeenCalled();
   });
 
@@ -250,7 +250,7 @@ describe("ingestão do Instagram", () => {
     const r = await ingerirDoInstagram(
       admin as never,
       evento(),
-      { ...sessao, origemPadrao: { campo: "origem", valor: "Instagram @instit.eva" } },
+      { ...sessao, origemPadrao: { campo: "origem", valor: "Instagram @clinica.exemplo" } },
     );
     expect(r).toMatchObject({ status: "ingerida" });
     const iOrigem = chamadas.update.findIndex(

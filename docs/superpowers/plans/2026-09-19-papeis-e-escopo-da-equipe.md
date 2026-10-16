@@ -18,7 +18,7 @@
 - Prestador acessa e altera somente sua agenda e os pacientes vinculados a ela.
 - Pessoas e agentes de IA permanecem identidades diferentes.
 - Toda migration sai em tripla: migration, `supabase/baseline.sql` e `supabase/migrations/MANIFEST.md`.
-- Nenhum dado do Instituto Eva será hardcoded no produto genérico.
+- Nenhum dado da clínica será hardcoded no produto genérico.
 
 ---
 
@@ -209,7 +209,7 @@ git commit -m "feat(equipe): mostra papeis da clinica"
 
 **Files:**
 - Create: `.changes/papeis-da-equipe.md`
-- Create: `docs/runbooks/configurar-papeis-instituto-eva.md`
+- Create: `docs/runbooks/configurar-papeis-da-equipe.md`
 - Modify: `docs/superpowers/specs/2026-09-19-agenda-equipe-permissoes-design.md`
 
 - [ ] **Step 1: Rodar gates de schema e autorização**
@@ -242,11 +242,11 @@ Prestadores trabalham somente na própria agenda e nos pacientes ligados aos seu
 - [ ] **Step 4: Documentar a atribuição inicial após o deploy**
 
 ```text
-André Luis Lopes Costa → Administrador
-Erick Augusto → Gerente
-Isadora Carvalho de Figueiredo → Colaborador
-Geovana Carvalho → Administrador
-Cintia humana → Colaborador, somente depois de aceitar o convite
+Dono da clínica → Administrador
+Pessoa da gerência → Gerente
+Profissional de aplicações → Colaborador
+Pessoa da administração → Administrador
+Atendente humana → Colaborador, somente depois de aceitar o convite
 ```
 
 O runbook deve exigir conferência do e-mail antes de alterar o papel e proibir confundir pessoas com agentes de IA de mesmo nome.
@@ -254,6 +254,6 @@ O runbook deve exigir conferência do e-mail antes de alterar o papel e proibir 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .changes/papeis-da-equipe.md docs/runbooks/configurar-papeis-instituto-eva.md docs/superpowers/specs/2026-09-19-agenda-equipe-permissoes-design.md
+git add .changes/papeis-da-equipe.md docs/runbooks/configurar-papeis-da-equipe.md docs/superpowers/specs/2026-09-19-agenda-equipe-permissoes-design.md
 git commit -m "docs(equipe): registra novos papeis"
 ```

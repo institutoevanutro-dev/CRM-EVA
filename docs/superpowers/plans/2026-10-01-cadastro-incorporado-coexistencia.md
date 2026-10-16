@@ -223,8 +223,8 @@ import { appDaMetaDoAmbiente, VARIAVEIS_DO_CADASTRO_INCORPORADO } from "@/lib/ch
 
 describe("app da Meta — Cadastro Incorporado", () => {
   it("lê META_APP_ID e META_ES_CONFIG_ID do ambiente, vazio é ausente", () => {
-    expect(appDaMetaDoAmbiente({ META_APP_ID: " 1054112660758768 ", META_ES_CONFIG_ID: "" })).toMatchObject({
-      appId: "1054112660758768",
+    expect(appDaMetaDoAmbiente({ META_APP_ID: " 1000000000000001 ", META_ES_CONFIG_ID: "" })).toMatchObject({
+      appId: "1000000000000001",
       esConfigId: null,
     });
   });
@@ -352,9 +352,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```ts
 it("grava app_id e es_config_id como texto puro e audita só os nomes dos campos", async () => {
   estado.linha = { app_secret_encrypted: "\\x1", verify_token_encrypted: "\\x2", ig_app_secret_encrypted: null };
-  const r = await updateMetaApp({ app_id: "1054112660758768", es_config_id: "9876" });
+  const r = await updateMetaApp({ app_id: "1000000000000001", es_config_id: "9876" });
   expect(r).toEqual({ ok: true });
-  expect(estado.upserts[0]).toMatchObject({ id: 1, app_id: "1054112660758768", es_config_id: "9876" });
+  expect(estado.upserts[0]).toMatchObject({ id: 1, app_id: "1000000000000001", es_config_id: "9876" });
   expect(auditorias[0]?.metadata).toMatchObject({ campos: ["app_id", "es_config_id"] });
 });
 ```
@@ -920,7 +920,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { conferirToken, escolherNumero, ErroDaMeta, gerarPin, pedirSincronizacao, trocarCodigo } from "./cadastro-incorporado";
 
-const APP = { appId: "1054112660758768", appSecret: "s".repeat(32) };
+const APP = { appId: "1000000000000001", appSecret: "s".repeat(32) };
 const chamadas: Array<{ url: string; init?: RequestInit }> = [];
 function graphFalsa(respostas: Record<string, { status?: number; body: unknown }>) {
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
@@ -962,7 +962,7 @@ describe("conferirToken", () => {
 });
 
 describe("escolherNumero", () => {
-  const n = (id: string, biz: boolean) => ({ id, displayPhoneNumber: "+55 27 99904-9879", isOnBizApp: biz });
+  const n = (id: string, biz: boolean) => ({ id, displayPhoneNumber: "+55 27 99000-1234", isOnBizApp: biz });
   it("coexistência exige is_on_biz_app", () => {
     expect(escolherNumero([n("1", false)], { phoneNumberId: null, coexistencia: true })).toMatchObject({ ok: false });
     expect(escolherNumero([n("1", true)], { phoneNumberId: null, coexistencia: true })).toEqual({ ok: true, numero: n("1", true) });
@@ -1273,7 +1273,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({
   trocar: vi.fn(async () => "EAAX"),
   conferir: vi.fn(async () => ({ ok: true }) as { ok: true } | { ok: false; motivo: string }),
-  numeros: vi.fn(async () => [{ id: "111222333", displayPhoneNumber: "+55 27 99904-9879", isOnBizApp: true }]),
+  numeros: vi.fn(async () => [{ id: "111222333", displayPhoneNumber: "+55 27 99000-1234", isOnBizApp: true }]),
   registrar: vi.fn(async () => undefined),
   sincronizar: vi.fn(),
   arquivar: vi.fn(async () => "sessao-waha-antiga"),
@@ -1305,7 +1305,7 @@ import { POST } from "@/app/api/v1/channels/official/cadastro-incorporado/route"
 const CANAL = "aaaaaaaa-0000-4000-8000-000000000001";
 const COEX = { code: "AQBx1234567890", evento: "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", waba_id: "222333444555", phone_number_id: null };
 const NOVO = { ...COEX, evento: "FINISH" };
-const conectado = { ok: true, sessionId: CANAL, displayName: "Clínica", phoneNumber: "+5527999049879", webhook: { assinado: true } };
+const conectado = { ok: true, sessionId: CANAL, displayName: "Clínica", phoneNumber: "+5527990001234", webhook: { assinado: true } };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -1318,7 +1318,7 @@ describe("POST /channels/official/cadastro-incorporado", () => {
     const res = await POST(req(COEX));
     expect(res.status).toBe(200);
     expect(m.registrar).not.toHaveBeenCalled();
-    expect(m.arquivar).toHaveBeenCalledWith(expect.anything(), ORG, "+5527999049879");
+    expect(m.arquivar).toHaveBeenCalledWith(expect.anything(), ORG, "+5527990001234");
     // ordem (ruling P1): o índice (org, phone_number) ativo ainda tem a linha WAHA
     expect(m.arquivar.mock.invocationCallOrder[0]!).toBeLessThan(m.conectar.mock.invocationCallOrder[0]!);
     expect(m.sincronizar.mock.calls.map((c) => c[2])).toEqual(["smb_app_state_sync", "history"]);
@@ -1610,13 +1610,13 @@ export type MetaWebhookEvent = TemplateStatusEvent | MessageStatusEvent | Inboun
 ```json
 [
   { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "smb_message_echoes", "value": {
-      "messaging_product": "whatsapp", "metadata": { "display_phone_number": "5527999049879", "phone_number_id": "111" },
-      "message_echoes": [{ "from": "5527999049879", "to": "5531998966398", "id": "wamid.ECO1", "timestamp": "1760097600", "type": "text", "text": { "body": "respondi pelo celular" } }] } }] }] },
+      "messaging_product": "whatsapp", "metadata": { "display_phone_number": "5527990001234", "phone_number_id": "111" },
+      "message_echoes": [{ "from": "5527990001234", "to": "5531998966398", "id": "wamid.ECO1", "timestamp": "1760097600", "type": "text", "text": { "body": "respondi pelo celular" } }] } }] }] },
   { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "history", "value": {
-      "messaging_product": "whatsapp", "metadata": { "display_phone_number": "5527999049879", "phone_number_id": "111" },
+      "messaging_product": "whatsapp", "metadata": { "display_phone_number": "5527990001234", "phone_number_id": "111" },
       "history": [{ "metadata": { "phase": 0, "chunk_order": 1, "progress": 20 }, "threads": [{ "id": "5531998966398", "messages": [
         { "from": "5531998966398", "id": "wamid.H1", "timestamp": "1759000000", "type": "text", "text": { "body": "oi" }, "history_context": { "status": "DELIVERED" } },
-        { "from": "5527999049879", "to": "5531998966398", "id": "wamid.H2", "timestamp": "1759000100", "type": "text", "text": { "body": "olá" } } ] }] }] } }] }] },
+        { "from": "5527990001234", "to": "5531998966398", "id": "wamid.H2", "timestamp": "1759000100", "type": "text", "text": { "body": "olá" } } ] }] }] } }] }] },
   { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "history", "value": {
       "messaging_product": "whatsapp", "metadata": { "phone_number_id": "111" },
       "history": [{ "metadata": { "phase": 0, "chunk_order": 0, "progress": 0 }, "threads": [] }],
@@ -1625,10 +1625,10 @@ export type MetaWebhookEvent = TemplateStatusEvent | MessageStatusEvent | Inboun
       "messaging_product": "whatsapp", "metadata": { "phone_number_id": "111" },
       "state_sync": [{ "type": "contact", "action": "add", "contact": { "full_name": "Maria Silva", "phone_number": "+55 31 99896-6398" }, "metadata": { "timestamp": "1760097600" } }] } }] }] },
   { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_update", "value": {
-      "phone_number": "+5527999049879", "event": "PARTNER_REMOVED", "disconnection_info": { "reason": "USER_INITIATED_DISCONNECT" } } }] }] },
-  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_update", "value": { "phone_number": "+5527999049879", "event": "ACCOUNT_RECONNECTED" } }] }] },
-  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_offboarded", "value": { "phone_number": "+5527999049879", "disconnection_info": { "reason": "BUSINESS_INITIATED_OFFBOARDING" } } }] }] },
-  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_reconnected", "value": { "phone_number": "+5527999049879" } }] }] }
+      "phone_number": "+5527990001234", "event": "PARTNER_REMOVED", "disconnection_info": { "reason": "USER_INITIATED_DISCONNECT" } } }] }] },
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_update", "value": { "phone_number": "+5527990001234", "event": "ACCOUNT_RECONNECTED" } }] }] },
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_offboarded", "value": { "phone_number": "+5527990001234", "disconnection_info": { "reason": "BUSINESS_INITIATED_OFFBOARDING" } } }] }] },
+  { "object": "whatsapp_business_account", "entry": [{ "id": "222", "changes": [{ "field": "account_reconnected", "value": { "phone_number": "+5527990001234" } }] }] }
 ]
 ```
 
@@ -1659,12 +1659,12 @@ describe("coexistência — parser", () => {
     expect(parseMetaWebhook(F[3]!)[0]).toMatchObject({ kind: "state_sync", contatos: [{ waId: "5531998966398", nome: "Maria Silva" }] });
   });
   it("account_update PARTNER_REMOVED traz o motivo; ACCOUNT_RECONNECTED não", () => {
-    expect(parseMetaWebhook(F[4]!)[0]).toMatchObject({ kind: "account_event", evento: "PARTNER_REMOVED", motivo: "USER_INITIATED_DISCONNECT", phoneNumber: "+5527999049879" });
+    expect(parseMetaWebhook(F[4]!)[0]).toMatchObject({ kind: "account_event", evento: "PARTNER_REMOVED", motivo: "USER_INITIATED_DISCONNECT", phoneNumber: "+5527990001234" });
     expect(parseMetaWebhook(F[5]!)[0]).toMatchObject({ kind: "account_event", evento: "ACCOUNT_RECONNECTED", motivo: null });
   });
   it("account_offboarded e account_reconnected como CAMPOS viram o mesmo account_event", () => {
-    expect(parseMetaWebhook(F[6]!)[0]).toMatchObject({ kind: "account_event", evento: "ACCOUNT_OFFBOARDED", motivo: "BUSINESS_INITIATED_OFFBOARDING", phoneNumber: "+5527999049879" });
-    expect(parseMetaWebhook(F[7]!)[0]).toMatchObject({ kind: "account_event", evento: "ACCOUNT_RECONNECTED", motivo: null, phoneNumber: "+5527999049879" });
+    expect(parseMetaWebhook(F[6]!)[0]).toMatchObject({ kind: "account_event", evento: "ACCOUNT_OFFBOARDED", motivo: "BUSINESS_INITIATED_OFFBOARDING", phoneNumber: "+5527990001234" });
+    expect(parseMetaWebhook(F[7]!)[0]).toMatchObject({ kind: "account_event", evento: "ACCOUNT_RECONNECTED", motivo: null, phoneNumber: "+5527990001234" });
   });
   it("tipo exótico no eco é preservado cru no evento (quem mapeia para o CHECK é tipoDoCrm, no ingest)", () => {
     const eco = structuredClone(F[0]!) as { entry: Array<{ changes: Array<{ value: { message_echoes: Array<{ type: string }> } }> }> };
@@ -1989,7 +1989,7 @@ it("avisoDaConexao com detalhe de desconexão no app: crítico, título diz que 
 E o teste do cron, `tests/unit/channel-health-nao-promove-desconectada-no-app.test.ts` (molde de mocks: o teste existente do cron em `tests/unit/` que mocka `getAdapter`/`createAdminClient`; o `adminFalso` devolve UMA sessão e registra `updates`):
 
 ```ts
-const SESSAO_CAIDA = { id: "s1", organization_id: ORG, status: "FAILED", status_reason: "coexistencia_desconectada", display_name: "Clínica", phone_number: "+5527999049879", archived_at: null, provider: "meta_cloud", meta_phone_number_id: "111222333" };
+const SESSAO_CAIDA = { id: "s1", organization_id: ORG, status: "FAILED", status_reason: "coexistencia_desconectada", display_name: "Clínica", phone_number: "+5527990001234", archived_at: null, provider: "meta_cloud", meta_phone_number_id: "111222333" };
 
 it("sonda WORKING numa sessão FAILED por desconexão no app NÃO promove: só account_reconnected tira dali", async () => {
   db.sessoes = [SESSAO_CAIDA];
@@ -2117,7 +2117,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `docs/adr/0002-cadastro-incorporado.md`, `docs/architecture/cadastro-incorporado.architecture.json`, `.changes/cadastro-incorporado-v4.md`, `scripts/seed-e2e-cadastro-incorporado.ts`, `tests/e2e/cadastro-incorporado.spec.ts`
 - Modify: `docs/doctrine/restricao-de-canal.md` (seção "Embedded Signup não cabe em self-host", linhas 199-230), `docs/index.md` (linha 96, ao lado do ADR-0001), `docs/testing/user-journey-map.md`, `scripts/gerar-env-e2e.sh` (ao lado de `INSTAGRAM_GRAPH_BASE_URL`), `.github/workflows/e2e.yml` (`SPECS_PARTE_4`)
 
-- [ ] **Step 1:** ADR (molde: `docs/adr/0001-packaging-e-distribuicao.md`): Status aceito; Contexto (a doutrina de 2026-07-30 dizia que Embedded Signup não cabe em self-host; no EvaLink a instalação usa o app de Tech Provider do EvaLink, app 1054112660758768; o produto aberto segue BYO por padrão); Decisões (configuração no banco, `es_config_id` vazio = botão ausente, BYO fica; coexistência é metadado; histórico por `event_log`; sem `/register` em coexistência; **`appId`/`esConfigId` caem no `.env` cada um sozinho** enquanto o PAR de segredos é atômico — desvio consciente do "mesmo padrão de par" da spec §1, ruling P15e; `META_ES_CONFIG_ID`/`META_GRAPH_BASE_URL` só em `.env.example` + `process.env`, como `META_APP_SECRET`); Consequências (limite de 10 clientes/7 dias sem verificação; webhook fora do ar perde histórico; WAHA do número cai); Recusados (provider novo `meta_coex`; extrair um segundo helper de silêncio quando `pausarIaPorAtendimentoManual` já é a regra; chamar `/register` "por garantia").
+- [ ] **Step 1:** ADR (molde: `docs/adr/0001-packaging-e-distribuicao.md`): Status aceito; Contexto (a doutrina de 2026-07-30 dizia que Embedded Signup não cabe em self-host; no EvaLink a instalação usa o app de Tech Provider do EvaLink, app 1000000000000001; o produto aberto segue BYO por padrão); Decisões (configuração no banco, `es_config_id` vazio = botão ausente, BYO fica; coexistência é metadado; histórico por `event_log`; sem `/register` em coexistência; **`appId`/`esConfigId` caem no `.env` cada um sozinho** enquanto o PAR de segredos é atômico — desvio consciente do "mesmo padrão de par" da spec §1, ruling P15e; `META_ES_CONFIG_ID`/`META_GRAPH_BASE_URL` só em `.env.example` + `process.env`, como `META_APP_SECRET`); Consequências (limite de 10 clientes/7 dias sem verificação; webhook fora do ar perde histórico; WAHA do número cai); Recusados (provider novo `meta_coex`; extrair um segundo helper de silêncio quando `pausarIaPorAtendimentoManual` já é a regra; chamar `/register` "por garantia").
 
 - [ ] **Step 2:** doutrina — ao fim da seção, um parágrafo: "**Revisão (2026-10-01):** quando a instalação tem um app de Tech Provider à disposição (caso EvaLink), o Cadastro Incorporado passa a existir como caminho opcional, ligado por `platform_meta_app.es_config_id`; o BYO continua sendo o padrão do produto aberto. Decisão e limites em [`docs/adr/0002-cadastro-incorporado.md`](../adr/0002-cadastro-incorporado.md)." Linha em `docs/index.md`. Mapa `.architecture.json` com lanes operador/servidor/banco/externo e ≥2 arestas (botão → rota → `conectarCanalOficial` → `channel_sessions`; webhook → eco → `pausarIaPorAtendimentoManual`; webhook → `aplicarEventoDaConta` → Central). Rodar `pnpm vitest run tests/unit/mapas-de-arquitetura.test.ts tests/unit/documentacao-aponta-para-o-que-existe.test.ts`.
 
@@ -2153,8 +2153,8 @@ test.beforeAll(async () => {
     const responder = (b: unknown) => { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(b)); };
     if (url.includes("/oauth/access_token")) return responder({ access_token: "EAAX-e2e" });
     if (url.includes("/debug_token")) return responder({ data: { app_id: "e2e-app", is_valid: true, scopes: ["whatsapp_business_management", "whatsapp_business_messaging"] } });
-    if (url.includes("/phone_numbers")) return responder({ data: [{ id: "111222333", display_phone_number: "+55 27 99904-9879", verified_name: "Clínica E2E", is_on_biz_app: true }] });
-    if (url.endsWith("/111222333?fields=display_phone_number,verified_name,quality_rating")) return responder({ display_phone_number: "+55 27 99904-9879", verified_name: "Clínica E2E" });
+    if (url.includes("/phone_numbers")) return responder({ data: [{ id: "111222333", display_phone_number: "+55 27 99000-1234", verified_name: "Clínica E2E", is_on_biz_app: true }] });
+    if (url.endsWith("/111222333?fields=display_phone_number,verified_name,quality_rating")) return responder({ display_phone_number: "+55 27 99000-1234", verified_name: "Clínica E2E" });
     if (url.includes("/subscribed_apps")) return responder({ success: true });
     if (url.includes("/smb_app_data")) {
       // `req.read()` sem ouvir `data` devolve null (ruling P6): acumular o corpo.
@@ -2368,8 +2368,8 @@ it("reprocessar o mesmo chunk não duplica (23505 é ok) e devolve ok", async ()
   insertErro = { code: "23505", message: "dup" };
   expect(await processarChunkDeHistorico(LINHA, admin)).toMatchObject({ status: "ok" });
 });
-it("direção com/sem o 9: from '552799049879' (sem o 9) ainda é o número do negócio '+5527999049879'", async () => {
-  const linha = comMensagens([{ from: "552799049879", id: "wamid.H9", timestamp: "1759000200", type: "text", text: { body: "sem o nove" } }]);
+it("direção com/sem o 9: from '552790001234' (sem o 9) ainda é o número do negócio '+5527990001234'", async () => {
+  const linha = comMensagens([{ from: "552790001234", id: "wamid.H9", timestamp: "1759000200", type: "text", text: { body: "sem o nove" } }]);
   await processarChunkDeHistorico(linha, admin);
   expect(inserts[0]).toMatchObject({ external_id: "wamid.H9", direction: "outbound" });
 });

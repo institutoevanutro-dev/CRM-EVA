@@ -1,7 +1,7 @@
 /**
  * O NOME DE QUEM FAZ A TAREFA, como a tela mostra.
  *
- * Nunca o id cru: quem lê a lista quer saber "é do Erick?", não um uuid. Os
+ * Nunca o id cru: quem lê a lista quer saber "é do Rui?", não um uuid. Os
  * textos saem em português e a tela os passa por `t()`.
  */
 import type { AssignableMember } from "@/hooks/inbox/useAssignableMembers";

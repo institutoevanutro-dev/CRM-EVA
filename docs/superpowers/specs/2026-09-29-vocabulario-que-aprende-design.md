@@ -5,7 +5,7 @@
 ## 1. O que se quer, e para quem
 
 O dono de uma instalação abre a aba Comentários e encontra lá coisas que ele
-publicaria sem pensar: "muito bom esse conteúdo", "@dr.andreluisc 💪💪💪".
+publicaria sem pensar: "muito bom esse conteúdo", "@dr.exemplo 💪💪💪".
 Cada uma custa um clique e uma ida ao CRM. A trava de segurança
 (`lib/comentarios/seguranca.ts`) nega por padrão e só libera quando **todo**
 token está num vocabulário fechado escrito à mão, então qualquer palavra que
@@ -48,11 +48,11 @@ Duas fontes de encolhimento, decididas com o dono em 29/09/2026:
 
 ### O problema, medido
 
-Em 30/09/2026 00:41 UTC chegou `@dr.andreluisc 💪💪💪💪💪💪` e foi para
+Em 30/09/2026 00:41 UTC chegou `@dr.exemplo 💪💪💪💪💪💪` e foi para
 `esperando_voce` com motivo `sem padrão seguro reconhecido`.
 
 A causa é o tokenizador: `TOKEN_RE` corta por letras e dígitos, então
-`@dr.andreluisc` vira **dois** tokens, `dr` e `andreluisc`. O primeiro está em
+`@dr.exemplo` vira **dois** tokens, `dr` e `exemplo`. O primeiro está em
 `COMO_CHAMAM_O_DONO`; o segundo não está em lugar nenhum, e um token de fora
 reprova o texto inteiro.
 
@@ -64,7 +64,7 @@ sobra é o que decide.
 
 Consequências, todas queridas:
 
-- `@dr.andreluisc 💪💪💪` vira `💪💪💪` → só emoji → **seguro**.
+- `@dr.exemplo 💪💪💪` vira `💪💪💪` → só emoji → **seguro**.
 - `@fulano quanto custa?` vira `quanto custa?` → **gatilho de preço**, barrado.
 - `@fulano @ciclano top demais` vira `top demais` → **seguro**.
 - `@fulano` sozinho vira texto vazio. `ehObviamenteSeguro` já devolve

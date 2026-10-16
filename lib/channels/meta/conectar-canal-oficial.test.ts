@@ -24,7 +24,7 @@ const assinar = vi.fn();
 vi.mock("@/lib/channels/meta/validate-credentials", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/channels/meta/validate-credentials")>()),
   conferirNumeroDaConta: async () => ({ ok: true }),
-  validateMetaCredentials: async () => ({ ok: true, displayPhoneNumber: "+55 27 99904-9879", verifiedName: "Clínica", qualityRating: null }),
+  validateMetaCredentials: async () => ({ ok: true, displayPhoneNumber: "+55 27 99000-1234", verifiedName: "Clínica", qualityRating: null }),
 }));
 vi.mock("@/lib/webhooks/secrets", () => ({ encryptWebhookSecret: async () => "\\x_cifra" }));
 vi.mock("@/lib/channels/meta/app", () => ({ appDaMeta: async () => ({ verifyToken: "verify" }) }));
@@ -130,7 +130,7 @@ describe("conectarCanalOficial", () => {
     ];
     const r = await conectarCanalOficial(admin, { ...ENTRADA, metadataExtra: { cadastro_incorporado: { evento: "FINISH" } } });
 
-    expect(r).toMatchObject({ ok: true, sessionId: "oficial-23-09", phoneNumber: "+5527999049879", webhook: { assinado: true } });
+    expect(r).toMatchObject({ ok: true, sessionId: "oficial-23-09", phoneNumber: "+5527990001234", webhook: { assinado: true } });
     expect(inserts).toHaveLength(0);
     expect(linhas).toHaveLength(1);
     expect(linhas[0]).toMatchObject({ meta_token_encrypted: "\\x_cifra", status: "WORKING" });

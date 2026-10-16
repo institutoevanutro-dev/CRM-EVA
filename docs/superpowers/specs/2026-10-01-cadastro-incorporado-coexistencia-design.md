@@ -1,10 +1,10 @@
 # Cadastro Incorporado v4 com coexistência — desenho
 
-Data: 2026-10-01 · Dono: André · Prazo duro: **15/10/2026** (a Meta desliga o Embedded Signup v2; a v3 sai no mesmo mês)
+Data: 2026-10-01 · Dono: responsável da clínica · Prazo duro: **15/10/2026** (a Meta desliga o Embedded Signup v2; a v3 sai no mesmo mês)
 
 ## Objetivo
 
-O número da clínica (+55 27 99904-9879, org Instituto) passa a falar pela **WhatsApp Cloud API sem sair do WhatsApp Business do celular** (coexistência), conectado por um botão no CRM. O mesmo botão serve às clínicas clientes do EvaLink a partir da semana seguinte, sem retrabalho: a configuração vive no banco da instalação, não no código.
+O número da clínica (+55 27 99000-1234, org da clínica) passa a falar pela **WhatsApp Cloud API sem sair do WhatsApp Business do celular** (coexistência), conectado por um botão no CRM. O mesmo botão serve às clínicas clientes do EvaLink a partir da semana seguinte, sem retrabalho: a configuração vive no banco da instalação, não no código.
 
 Critérios de sucesso:
 
@@ -14,9 +14,9 @@ Critérios de sucesso:
 4. O histórico de até 180 dias do celular entra no CRM sem acordar IA, sem criar lead, sem automação e sem duplicar.
 5. Desconexão pelo celular aparece na tela e abre aviso na Central.
 
-Fora do escopo: o número profissional do André (99865-9879), onboarding de clientes em escala (limite de 10 por 7 dias da Meta), grupos (a Cloud API não os entrega em coexistência), migração das conversas antigas do WAHA para o canal oficial.
+Fora do escopo: o número profissional do médico (99000-5678), onboarding de clientes em escala (limite de 10 por 7 dias da Meta), grupos (a Cloud API não os entrega em coexistência), migração das conversas antigas do WAHA para o canal oficial.
 
-## Decisões tomadas com o André (01/10/2026)
+## Decisões tomadas com o dono (01/10/2026)
 
 | Pergunta | Decisão |
 |---|---|
@@ -34,7 +34,7 @@ Fonte: documentação de 01/10/2026 (`developers.facebook.com/documentation/busi
 - **Coexistência não chama `/register`** (o número já está registrado no app). Evento de sucesso: `FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`, cujo `data` pode trazer só `waba_id` → o `phone_number_id` vem de `GET /{waba_id}/phone_numbers`; conferir `is_on_biz_app: true`.
 - **Sincronização, uma vez cada, até 24 h após o onboarding**: `POST /{phone_number_id}/smb_app_data` com `sync_type` `smb_app_state_sync` (contatos) e `history`. Passadas 24 h sem pedir, o cliente precisa sair e refazer o fluxo.
 - **Webhooks novos**: `history` (em pedaços: `chunk_order`, `phase`, `progress`; mídia só dos últimos 14 dias; erro 2593109 = negócio recusou compartilhar), `smb_app_state_sync`, `smb_message_echoes`, `account_update` (`PARTNER_REMOVED` + `disconnection_info.reason`), `account_offboarded`, `account_reconnected`.
-- **Teste antes da aprovação do App Review**: possível para quem tem papel admin/developer/tester no app 1054112660758768 (o André é admin).
+- **Teste antes da aprovação do App Review**: possível para quem tem papel admin/developer/tester no app 1000000000000001 (o dono é admin).
 - **Efeitos colaterais**: todos os aparelhos vinculados são desconectados no onboarding (o **WAHA cai sozinho** para esse número); throughput fixo de 20 mps; sem grupos; janela de 24 h só abre com mensagem recebida após o onboarding.
 
 ## Desenho
@@ -91,10 +91,10 @@ ADR `docs/adr/0002-cadastro-incorporado.md` revisa `docs/doctrine/restricao-de-c
 - Unit: troca do código (sucesso, código vencido, token de outro app), escolha `register` × coexistência, pedido `smb_app_data` e prazo de 24 h, parser dos campos novos, echo (outbound, sem IA, silencia a conversa), histórico (idempotente, sem IA/lead/automação, não abre janela), contato que não sobrescreve nome, desconexão → `failed` + aviso, reconexão.
 - Invariante (`test:db`): coluna nova de `platform_meta_app` sem grant a anon/authenticated.
 - E2E: a aba com o botão, `FB` simulado devolvendo `code` + evento de coexistência, rota de troca com Graph simulado → "Conectado" e "Importando histórico".
-- Prova real: conexão do número da clínica com o André (tester do app), conferida no inbox.
+- Prova real: conexão do número da clínica com o dono (tester do app), conferida no inbox.
 
 ## Entrega
 
 1. **PR 1 (até ~08/10)**: configuração (1), botão + troca (2), echoes + desconexão (3, parcial), ADR (5).
 2. **PR 2 (antes da conexão real)**: histórico + contatos (3), barra de progresso.
-3. **Dia da conexão**: backup do banco; conferir/remover o número da WABA "Instituto Eva" (`1042637105315427`, Offline desde 23/09) se der 3441041; André com o celular da clínica e o app aberto até o histórico terminar; configurar no App Dashboard o `config_id` e os campos de webhook novos (passo a passo guiado).
+3. **Dia da conexão**: backup do banco; conferir/remover o número da WABA antiga da clínica (`1000000000000002`, Offline desde 23/09) se der 3441041; o dono com o celular da clínica e o app aberto até o histórico terminar; configurar no App Dashboard o `config_id` e os campos de webhook novos (passo a passo guiado).

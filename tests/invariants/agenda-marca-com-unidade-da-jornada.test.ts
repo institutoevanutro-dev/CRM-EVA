@@ -9,7 +9,7 @@ import { pgComoSupabase } from "../pg-como-supabase";
 /**
  * A IA MARCA ATENDIMENTO PRESENCIAL SEM SABER O `unit_id` — A UNIDADE SAI DA JORNADA.
  *
- * Medido em produção (Instituto Eva, 14/10/2026): todo tipo presencial tem
+ * Medido em produção (produção, 14/10/2026): todo tipo presencial tem
  * `required_room_kind`, o gatilho `fn_calendar_allocate_and_guard_resources`
  * recusa compromisso sem unidade (`agenda_unidade_obrigatoria`), e a IA não
  * tinha de onde tirar a unidade. Marcar pela API sem `unit_id` dava 409; com o

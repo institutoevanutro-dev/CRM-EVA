@@ -23,7 +23,7 @@ describe("apiTranscriptionProvider", () => {
    * O IDIOMA VAI JUNTO COM O ÁUDIO.
    *
    * Sem ele o Whisper adivinha, e adivinha mal em áudio curto: medido em
-   * produção (Instituto Eva, 2026-09-22), "testando 123 testando" virou
+   * produção (produção, 2026-09-22), "testando 123 testando" virou
    * "3102 reis 3101". O idioma sai de `organizations.locale`.
    */
   it("manda o idioma da organização no pedido", async () => {

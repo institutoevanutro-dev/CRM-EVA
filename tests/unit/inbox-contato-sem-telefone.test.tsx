@@ -24,7 +24,7 @@ const conversa = (identidade: { handle: string | null; display_name: string | nu
       id: "ct", display_name: null, name: null, phone_number: null, tags: [], is_blocked: false, is_anonymized: false,
       contact_channel_identities: [{ channel: "instagram", ...identidade }],
     },
-    channel_sessions: { display_name: "@dr.andreluisc", phone_number: null, provider: null },
+    channel_sessions: { display_name: "@dr.exemplo", phone_number: null, provider: null },
   }) as unknown as ConversationWithContact;
 
 const pintar = (c: ConversationWithContact) =>
@@ -35,7 +35,7 @@ describe("contato sem telefone no Inbox", () => {
     pintar(conversa({ handle: "maria", display_name: null }));
     expect(screen.queryByText("??")).toBeNull();
     expect(screen.getByText("@maria")).toBeTruthy();
-    expect(screen.getByText(/via @dr\.andreluisc/)).toBeTruthy();
+    expect(screen.getByText(/via @dr\.exemplo/)).toBeTruthy();
   });
 
   it("o nome do perfil vence o @", () => {

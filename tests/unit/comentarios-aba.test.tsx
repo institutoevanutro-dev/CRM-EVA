@@ -191,7 +191,7 @@ describe("FormularioDeRegra", () => {
     render(
       <FormularioDeRegra
         onCriar={onCriar}
-        canais={[{ id: "sessao-1", username: "institutoeva" }]}
+        canais={[{ id: "sessao-1", username: "clinicaexemplo" }]}
       />,
     );
     fireEvent.change(screen.getByLabelText("Ou cole o id do post"), { target: { value: "17900" } });
@@ -210,7 +210,7 @@ describe("FormularioDeRegra", () => {
     render(
       <FormularioDeRegra
         onCriar={onCriar}
-        canais={[{ id: "sessao-1", username: "institutoeva" }, { id: "sessao-2", username: "dr" }]}
+        canais={[{ id: "sessao-1", username: "clinicaexemplo" }, { id: "sessao-2", username: "dr" }]}
       />,
     );
     // Sem escolha, a lista é do primeiro perfil.

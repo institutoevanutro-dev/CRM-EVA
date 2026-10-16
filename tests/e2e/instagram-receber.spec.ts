@@ -55,7 +55,7 @@ async function login(page: Page, email: string): Promise<void> {
 test("um Direct novo aparece no Inbox com @, canal e origem", async ({ page, request }) => {
   fs.mkdirSync(EVIDENCIA, { recursive: true });
 
-  const texto = `Vim pelo Instagram do Dr. André ${Date.now()}`;
+  const texto = `Vim pelo Instagram do Dr. Otávio ${Date.now()}`;
   const corpo = JSON.stringify({
     object: "instagram",
     entry: [

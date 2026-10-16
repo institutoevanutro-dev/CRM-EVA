@@ -1,6 +1,6 @@
 # Painel "Início" — design
 
-**Data:** 2026-09-21 · **Pedido de:** dono do Instituto Eva · **Estado:** aprovado na conversa, aguardando revisão deste texto
+**Data:** 2026-09-21 · **Pedido de:** dono da clínica · **Estado:** aprovado na conversa, aguardando revisão deste texto
 
 ## Intenção
 
@@ -27,7 +27,7 @@ antes de um paciente ser afetado.
 - "Avisos da Central" é da **clínica toda**: `agent_inbox_items` e `agent_cases` não têm dono no
   schema atual, então todos veem os mesmos avisos abertos. Filtrar por pessoa exigiria coluna nova
   — fora do escopo.
-- "Hoje" é o dia no fuso da organização (America/Sao_Paulo no Instituto Eva).
+- "Hoje" é o dia no fuso da organização (America/Sao_Paulo na clínica).
 
 ## Tela
 

@@ -1,7 +1,7 @@
 /**
  * O HORÁRIO LIVRE SAI COM A UNIDADE DA JANELA QUE O GEROU.
  *
- * Medido em produção (Instituto Eva, 14/10/2026): todo tipo presencial exige
+ * Medido em produção (produção, 14/10/2026): todo tipo presencial exige
  * sala, o gatilho do compromisso recusa sem `unit_id`
  * (`agenda_unidade_obrigatoria`), e os horários livres chegavam com
  * `unit_id: null` embora a jornada tivesse a unidade em todas as janelas. A IA

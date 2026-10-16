@@ -104,13 +104,13 @@ async function buscar(q: string) {
 
 const BASE: Linha[] = [
   // Como a ingestão do WhatsApp grava: só display_name e telefone.
-  contato({ id: "c-whats", display_name: "André Teste Silva", phone_number: "+5527999990001" }),
+  contato({ id: "c-whats", display_name: "Otávio Teste Silva", phone_number: "+5527999990001" }),
   contato({ id: "c-manual", name: "Maria Souza", phone_number: "+5527991112222" }),
-  contato({ id: "c-outra-org", organization_id: OUTRA_ORG, display_name: "André da Outra Clínica" }),
+  contato({ id: "c-outra-org", organization_id: OUTRA_ORG, display_name: "Otávio da Outra Clínica" }),
   // Tem `name` de propósito: assim até a busca antiga (só `name`) o alcançaria,
   // e o caso "Maria" abaixo só fica verde se a rota CORTA o mesclado.
   contato({ id: "c-mesclado", name: "Maria Souza (cadastro antigo)", is_merged_into: "c-manual" }),
-  contato({ id: "c-anonimo", display_name: "André Anônimo", is_anonymized: true }),
+  contato({ id: "c-anonimo", display_name: "Otávio Anônimo", is_anonymized: true }),
 ];
 
 let orsRecebidos: string[];
@@ -125,7 +125,7 @@ beforeEach(() => {
 
 describe("GET /api/v1/agenda/vinculos", () => {
   it("acha contato que só tem o nome do WhatsApp (display_name)", async () => {
-    expect(await buscar("André")).toEqual(["c-whats"]);
+    expect(await buscar("Otávio")).toEqual(["c-whats"]);
   });
 
   it("acha pelo telefone digitado sem o 55", async () => {
@@ -137,17 +137,17 @@ describe("GET /api/v1/agenda/vinculos", () => {
   });
 
   it("não atravessa organização nem oferece anonimizado", async () => {
-    const ids = await buscar("André");
+    const ids = await buscar("Otávio");
     expect(ids).not.toContain("c-outra-org");
     expect(ids).not.toContain("c-anonimo");
   });
 
   it("devolve display_name e telefone para a tela nomear a pessoa", async () => {
-    const res = await GET(new Request("http://localhost/api/v1/agenda/vinculos?q=Andr%C3%A9"));
+    const res = await GET(new Request("http://localhost/api/v1/agenda/vinculos?q=Ot%C3%A1vio"));
     const body = (await res.json()) as { data: { contacts: Array<Record<string, unknown>> } };
     expect(body.data.contacts[0]).toMatchObject({
       id: "c-whats",
-      display_name: "André Teste Silva",
+      display_name: "Otávio Teste Silva",
       phone_number: "+5527999990001",
     });
   });

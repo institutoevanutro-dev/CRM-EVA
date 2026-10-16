@@ -110,20 +110,20 @@ describe("splitIntoBubbles — ponto que não é fim de frase", () => {
   const inteira = (frase: string) =>
     expect(splitIntoBubbles(`Oi. ${frase} Tchau.`, frase.length)).toEqual(["Oi.", frase, "Tchau."]);
 
-  it("a frase medida em produção (2026-10-12) não parte em 'Dr.' | 'André'", () => {
+  it("a frase medida em produção (2026-10-12) não parte em 'Dr.' | 'Otávio'", () => {
     const out = splitIntoBubbles(
-      "Temos duas formas de começar com o Dr. André: a consulta de R$490, que já inclui a avaliação completa e o plano alimentar, ou o acompanhamento de três meses por R$ 2.387,60, com retornos quinzenais e ajuste do plano a cada encontro. Qual das duas faz mais sentido para você agora?",
+      "Temos duas formas de começar com o Dr. Otávio: a consulta de R$490, que já inclui a avaliação completa e o plano alimentar, ou o acompanhamento de três meses por R$ 2.387,60, com retornos quinzenais e ajuste do plano a cada encontro. Qual das duas faz mais sentido para você agora?",
       200,
     );
     expect(out.length).toBeGreaterThan(1);
     expect(out.every((b) => b.length <= 200)).toBe(true);
     expect(out.some((b) => b.endsWith("Dr."))).toBe(false);
-    expect(out.some((b) => b.startsWith("André"))).toBe(false);
-    expect(out[0]).toContain("Dr. André: a consulta de R$490");
+    expect(out.some((b) => b.startsWith("Otávio"))).toBe(false);
+    expect(out[0]).toContain("Dr. Otávio: a consulta de R$490");
   });
 
   it.each([
-    "A consulta com o Dr. André é na terça.",
+    "A consulta com o Dr. Otávio é na terça.",
     "Quem atende é a Dra. Carla Mendes.",
     "O horário do Sr. João ficou para as 15h.",
     "Confirmei com a Sra. Maria Helena.",
@@ -155,8 +155,8 @@ describe("splitIntoBubbles — ponto que não é fim de frase", () => {
   ])("número, horário e endereço web: %s", (frase) => inteira(frase));
 
   it("continua quebrando no fim de frase de verdade, depois do nome", () => {
-    expect(splitIntoBubbles("Falei com o Dr. André. Ele confirma amanhã cedo.", 30)).toEqual([
-      "Falei com o Dr. André.",
+    expect(splitIntoBubbles("Falei com o Dr. Otávio. Ele confirma amanhã cedo.", 30)).toEqual([
+      "Falei com o Dr. Otávio.",
       "Ele confirma amanhã cedo.",
     ]);
   });
