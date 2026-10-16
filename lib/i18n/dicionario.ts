@@ -7554,7 +7554,7 @@ export const DICIONARIO: Traducoes = {
   "Variante": { es: "Variante" },
   "Remover variante": { es: "Quitar variante" },
   "Adicionar variante": { es: "Agregar variante" },
-  "Com variantes, cada contato recebe sempre a mesma redação deste passo, e contatos diferentes recebem redações diferentes. Use pelo menos 2 variantes além do texto principal, até 5.": { es: "Con variantes, cada contacto recibe siempre la misma redacción de este paso, y contactos distintos reciben redacciones distintas. Usa al menos 2 variantes además del texto principal, hasta 5." },
+  "Com variantes, cada contato recebe sempre a mesma redação deste passo, e contatos diferentes recebem redações diferentes. Além do texto principal, adicione até 4 variantes.": { es: "Con variantes, cada contacto recibe siempre la misma redacción de este paso, y contactos distintos reciben redacciones distintas. Además del texto principal, agrega hasta 4 variantes." },
   "Passo pulado: sem o nome do contato, a mensagem ficaria vazia.": { es: "Paso omitido: sin el nombre del contacto, el mensaje quedaría vacío." },
   "Passo pulado: as variáveis ficaram sem valor e a mensagem ficaria vazia.": { es: "Paso omitido: las variables quedaron sin valor y el mensaje quedaría vacío." },
   "Sequência encerrada: este número não está liberado para mensagens automáticas a este contato (modo de teste ou sem autorização).": { es: "Secuencia finalizada: este número no está habilitado para mensajes automáticos a este contacto (modo de prueba o sin autorización)." },

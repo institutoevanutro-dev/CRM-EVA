@@ -26,13 +26,13 @@ describe("schema do passo text com variantes", () => {
   it("sem variantes continua válido (fluxo antigo intocado)", () => {
     expect(actionConfigSchema.safeParse({ mode: "text", body: BODY }).success).toBe(true);
   });
-  it("aceita de 2 a 5 variantes", () => {
-    expect(actionConfigSchema.safeParse({ mode: "text", body: BODY, variants: ["a", "b"] }).success).toBe(true);
-    expect(actionConfigSchema.safeParse({ mode: "text", body: BODY, variants: ["a", "b", "c", "d", "e"] }).success).toBe(true);
+  it("aceita de 1 a 4 variantes (até 5 redações com o texto principal)", () => {
+    expect(actionConfigSchema.safeParse({ mode: "text", body: BODY, variants: ["a"] }).success).toBe(true);
+    expect(actionConfigSchema.safeParse({ mode: "text", body: BODY, variants: ["a", "b", "c", "d"] }).success).toBe(true);
   });
-  it("recusa 1 ou 6 variantes", () => {
-    expect(actionConfigSchema.safeParse({ mode: "text", body: BODY, variants: ["a"] }).success).toBe(false);
-    expect(actionConfigSchema.safeParse({ mode: "text", body: BODY, variants: ["a", "b", "c", "d", "e", "f"] }).success).toBe(false);
+  it("recusa lista vazia ou 5 variantes", () => {
+    expect(actionConfigSchema.safeParse({ mode: "text", body: BODY, variants: [] }).success).toBe(false);
+    expect(actionConfigSchema.safeParse({ mode: "text", body: BODY, variants: ["a", "b", "c", "d", "e"] }).success).toBe(false);
   });
   it("recusa variante vazia depois do trim e acima de 4000", () => {
     expect(actionConfigSchema.safeParse({ mode: "text", body: BODY, variants: ["a", "   \n"] }).success).toBe(false);

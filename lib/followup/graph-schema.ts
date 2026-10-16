@@ -236,8 +236,8 @@ export const actionConfigSchema = z.discriminatedUnion('mode', [
      */
     variants: z
       .array(z.string().max(4000).refine((v) => v.trim().length > 0, 'Variante vazia: escreva o texto ou remova-a.'))
-      .min(2, 'Use pelo menos 2 variantes, ou nenhuma.')
-      .max(5, 'No máximo 5 variantes.')
+      .min(1, 'Variante vazia: escreva o texto ou remova-a.')
+      .max(4, 'No máximo 5 redações: o texto principal e mais 4 variantes.')
       .optional(),
   }),
   z.strictObject({

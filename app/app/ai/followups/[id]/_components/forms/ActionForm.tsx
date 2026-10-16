@@ -23,7 +23,7 @@ import { VARIAVEIS_DO_TEMPLATE, variaveisDesconhecidas } from "@/lib/inbox/templ
 import type { ConfigOf } from "./shared";
 
 /** O teto do schema (`actionConfigSchema`, modo `text`): até 5 variantes além do texto principal. */
-const MAX_VARIANTES = 5;
+const MAX_VARIANTES = 4;
 
 /**
  * As variáveis que o envio preenche (a MESMA lista de `lib/inbox/template-vars.ts`)
@@ -286,7 +286,7 @@ export function ActionForm({
             </Button>
           ) : null}
           <p className="text-xs text-text-muted">
-            {t("Com variantes, cada contato recebe sempre a mesma redação deste passo, e contatos diferentes recebem redações diferentes. Use pelo menos 2 variantes além do texto principal, até 5.")}
+            {t("Com variantes, cada contato recebe sempre a mesma redação deste passo, e contatos diferentes recebem redações diferentes. Além do texto principal, adicione até 4 variantes.")}
           </p>
           <p className="text-xs text-text-muted">
             {t("Sai exatamente assim, sem IA. No laço,")} {t("{{volta}}")} e {t("{{voltas}}")} {t("viram o número da volta.")}
