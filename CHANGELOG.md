@@ -8,6 +8,30 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.15.0] — 2026-10-16
+
+### Adicionado
+
+- **Quem escreve fora do horário de atendimento pode receber um aviso automático — uma vez por contato por período fechado (desligado por padrão)** Quem escrevia fora do horário de funcionamento do agente não recebia nada até a abertura: no sábado à noite, silêncio até segunda de manhã, e a pessoa sem saber se a mensagem chegou. Agora a tela de gatilho do agente (em "Só atender em horário de funcionamento") aceita um texto de aviso, e esse texto é enviado quando a mensagem chega fora do horário. Vale só para quem preencher o texto: o padrão é não enviar nada, e quem não mexer na tela não vê mudança nenhuma.
+
+  O aviso sai no máximo uma vez por contato por período fechado (o período começa quando o horário fecha e só volta a valer quando ele abre e fecha de novo). Não recebem nunca: contato bloqueado ou que pediu para parar (inclusive quando a própria mensagem é um pedido para parar), contato com atendimento só humano, contato oculto do Inbox, titular anonimizado, conversa de grupo e número da própria clínica. O aviso respeita a janela de envio do número, o aquecimento, o teto diário e o espaçamento, e conta como uma mensagem enviada. Quando o horário abre, a IA responde normalmente.
+
+  Porte de melgarafael/DeskcommCRM#2284.
+
+- **Responder no WhatsApp (conexão por QR) marca a conversa como lida — o cliente vê o visto azul** Quando uma resposta sai pela conexão por QR (agente, atendente, campanha, follow-up ou aviso de escalação), o CRM agora marca a conversa como lida logo depois do envio, e a mensagem que o cliente mandou ganha o visto azul no celular dele. Antes, a resposta chegava e a mensagem do cliente ficava só como entregue, o que soava como "me respondeu sem ler". Se marcar como lida falhar, a resposta já saiu e não é afetada; a falha fica registrada no log. Ainda não há opção para desligar o visto por conexão, e a conexão pela API oficial da Meta não muda. Grupo não recebe visto. Nada a fazer na atualização.
+
+  Porte de melgarafael/DeskcommCRM#2987 (contribuição de @webtecnica no upstream, a partir da issue #2981).
+
+### Corrigido
+
+- **Um agente pausado não cala mais o número quando há outro agente no ar nele** Com mais de um agente publicado no mesmo número, o atendimento escolhia o de maior prioridade sem olhar se ele estava pausado. Se o escolhido estivesse pausado, a mensagem do cliente ficava sem resposta, mesmo havendo outro agente ativo publicado no mesmo número. O contorno era mexer na prioridade à mão.
+
+  Agora quem está no ar vem sempre antes de qualquer agente pausado, e a prioridade só desempata entre agentes no mesmo estado. Quando todos os agentes do número estão pausados, o número continua sem resposta automática, como antes. Nada muda na configuração.
+
+- **Mensagem que o contato editou ou apagou para todos passa a aparecer assim na conversa** Quando o contato editava ou apagava para todos uma mensagem que tinha mandado, o CRM seguia mostrando o texto antigo, sem aviso nenhum: o evento chegava e era marcado como processado, mas não encontrava a mensagem, porque a recebida é guardada com o identificador completo e o aviso de edição traz só a parte final dele. Agora a edição atualiza o texto e o apagar marca a mensagem como apagada também nas mensagens recebidas; as enviadas pelo atendente seguem como antes. Nada a fazer na atualização.
+
+  Contribuição de @webtecnica (#2956), a partir da issue #2939 de @el-barreto.
+
 ## [4.14.0] — 2026-10-16
 
 ### Adicionado
@@ -7484,7 +7508,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.14.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.15.0...HEAD
+[4.15.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.14.0...v4.15.0
 [4.14.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.13.0...v4.14.0
 [4.13.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.12.1...v4.13.0
 [4.12.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.12.0...v4.12.1
