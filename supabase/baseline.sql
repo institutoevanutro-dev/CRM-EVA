@@ -36278,7 +36278,7 @@ create or replace trigger trg_contacts_ai_opt_out_segura_humano
 
 -- ---- Claude Haiku, Sonnet e Opus 5.5 no catálogo (migration 0367) ----
 -- Porte da 0675 do upstream (#2749, @rafaelcesardev). Junto vai o
--- @ai-sdk/anthropic 4.0.78, que tira temperature/top_p/top_k do corpo nos ids
+-- @ai-sdk/anthropic 4.0.51, que tira temperature/top_p/top_k do corpo nos ids
 -- que a recusam (Opus 5, Haiku 5.5, Opus 5.5). Nenhum agente troca de modelo:
 -- isto só põe as opções na lista e o preço no orçamento.
 --
