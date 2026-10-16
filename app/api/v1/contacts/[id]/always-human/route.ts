@@ -30,9 +30,6 @@ type Context = { params: Promise<{ id: string }> };
 const COLUNAS = "id, ai_opt_out, force_human";
 
 async function alternar(ctx: Context, marcar: boolean): Promise<Response> {
-  const supportDenied = await requireSupportWrite();
-  if (supportDenied) return supportDenied;
-
   const requestId = randomUUID();
   const { id } = await ctx.params;
 
@@ -88,10 +85,14 @@ async function alternar(ctx: Context, marcar: boolean): Promise<Response> {
   return ok(data, { requestId });
 }
 
-export function POST(_req: NextRequest, ctx: Context): Promise<Response> {
+export async function POST(_req: NextRequest, ctx: Context): Promise<Response> {
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
   return alternar(ctx, true);
 }
 
-export function DELETE(_req: NextRequest, ctx: Context): Promise<Response> {
+export async function DELETE(_req: NextRequest, ctx: Context): Promise<Response> {
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
   return alternar(ctx, false);
 }

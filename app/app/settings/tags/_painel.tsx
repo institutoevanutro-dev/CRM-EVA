@@ -439,7 +439,7 @@ export function PainelDeTags({ tags, idioma }: { tags: LinhaDeVocabulario[]; idi
                 // desfazer — então quem lê este aviso ainda pode escolher
                 // "Juntar" de propósito, ou outro nome. Mesma régua visual do
                 // aviso de `excluir` abaixo: a frase diz o que vai acontecer.
-                <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                <p className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
                   {t(
                     "Este nome já existe no vocabulário. Confirmar vai juntar as duas etiquetas numa só.",
                   )}

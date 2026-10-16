@@ -19,6 +19,7 @@ vi.mock("@/hooks/contacts/useContact", () => ({
 }));
 vi.mock("@/hooks/contacts/useUnblockContact", () => ({ useUnblockContact: () => ({ mutate: vi.fn(), isPending: false }) }));
 vi.mock("@/hooks/contacts/useReiniciarTeste", () => ({ useReiniciarTeste: () => ({ mutate, isPending: false }) }));
+vi.mock("@/hooks/contacts/useAlwaysHumanContact", () => ({ useAlwaysHumanContact: () => ({ mutate: vi.fn(), isPending: false }) }));
 vi.mock("@/hooks/auth/AuthProvider", () => ({
   useAuth: () => ({ user: { is_platform_admin: false }, activeOrg: { role } }),
 }));
