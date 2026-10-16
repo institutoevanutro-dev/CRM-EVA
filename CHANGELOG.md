@@ -8,6 +8,19 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.16.0] — 2026-10-16
+
+### Corrigido
+
+- **Eventos da agenda Google incluem o nome do contato do CRM** A sincronização passa a mostrar «Nome do contato — Título do compromisso» no Google
+  Calendar. O nome segue a mesma regra do cadastro do CRM: nome preenchido pela equipe
+  antes do nome de exibição do perfil. Bloqueios e compromissos sem contato mantêm o
+  título original; nenhum telefone ou dado clínico é acrescentado.
+
+  Eventos já vinculados são atualizados no mesmo identificador durante a reconciliação,
+  sem criar outra reserva. Edições conflitantes feitas no Google continuam exigindo a
+  decisão da equipe, e os checkpoints continuam armazenando apenas hashes dos títulos.
+
 ## [4.15.0] — 2026-10-16
 
 ### Adicionado
@@ -7508,7 +7521,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.15.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.16.0...HEAD
+[4.16.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.15.0...v4.16.0
 [4.15.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.14.0...v4.15.0
 [4.14.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.13.0...v4.14.0
 [4.13.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.12.1...v4.13.0
