@@ -33,9 +33,6 @@ const resultadoSchema = z.object({
 });
 
 async function definir(recomecar: boolean): Promise<Response> {
-  const supportDenied = await requireSupportWrite();
-  if (supportDenied) return supportDenied;
-
   const requestId = randomUUID();
   const authz = await requireRole("admin", { requestId, resource: "radar" });
   if (!authz.ok) return authz.response;
@@ -74,9 +71,13 @@ async function definir(recomecar: boolean): Promise<Response> {
 }
 
 export async function POST(_req: NextRequest): Promise<Response> {
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
   return definir(true);
 }
 
 export async function DELETE(_req: NextRequest): Promise<Response> {
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
   return definir(false);
 }
