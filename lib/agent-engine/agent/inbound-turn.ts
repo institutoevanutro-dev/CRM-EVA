@@ -2107,7 +2107,7 @@ interface PassagemParaReexecutar {
  * anti-ban — adiar os outros seria parar trabalho interno por causa de um
  * horário que não é dele.
  *
- *   * `inbound_turn` / `case_reply_turn` — respondem o cliente, sempre.
+ *   * `inbound_turn` / `case_reply_turn` — falam com o cliente, sempre.
  *   * `followup_turn` — só com `purpose: 'send_message'`. Os outros dois
  *     propósitos do fluxo (`classify`, `plan_timing`) são leitura e
  *     planejamento: não abrem o WhatsApp de ninguém.
@@ -2119,11 +2119,17 @@ interface PassagemParaReexecutar {
  * `turnoVaiFalarComOLead` admite `followup_turn`, que RETOMA conversa parada, e
  * retomar NÃO é responder: abrir `followup_turn` junto faria o número mandar
  * "e aí, tudo certo?" às 4h para quem dormiu. Só a REAÇÃO a uma mensagem
- * recebida lê a janela de resposta. `case_reply_turn` entra porque responde a
- * um caso em aberto. (Porte de melgarafael/DeskcommCRM #1984.)
+ * recebida lê a janela de resposta. (Porte de melgarafael/DeskcommCRM #1984.)
+ *
+ * `case_reply_turn` NÃO é resposta: o paciente não está falando agora — é o
+ * humano que resolveu o caso, e o agente repassa depois, por iniciativa
+ * própria. Ele já foi classificado como resposta, e numa clínica com janela de
+ * resposta 0–24 o gestor resolveu três casos às 05:05 e o agente escreveu aos
+ * pacientes às 05:05 (produção, 16/10/2026). Lê a janela de DISPARO, como o
+ * follow-up, e fora dela é adiado para a abertura.
  */
 export function eTurnoDeResposta(job: Pick<JobRow, 'kind'>): boolean {
-  return job.kind === 'inbound_turn' || job.kind === 'case_reply_turn';
+  return job.kind === 'inbound_turn';
 }
 
 function turnoVaiFalarComOLead(job: JobRow): boolean {
@@ -3633,9 +3639,9 @@ async function executarTurnoDoAgente(
             channelSessionId: input.channelSessionId,
             body,
             optedOutThisTurn,
-            // `inbound_turn`/`case_reply_turn` respondem a quem escreveu e leem a
-            // janela de RESPOSTA (0335). `followup_turn` retoma conversa parada e
-            // continua na janela de DISPARO.
+            // Só o `inbound_turn` responde a quem escreveu e lê a janela de
+            // RESPOSTA (0335). `followup_turn` e `case_reply_turn` falam por
+            // iniciativa própria e ficam na janela de DISPARO.
             resposta: eTurnoDeResposta(liveJob()),
             // ponytail: channel_sessions.daily_message_limit do CRM ainda não é lido
             // no runtime — null cai nos degraus de warm-up (conservadores). Injetar

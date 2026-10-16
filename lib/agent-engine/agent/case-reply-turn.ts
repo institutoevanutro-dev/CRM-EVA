@@ -99,33 +99,48 @@ async function resolveCaseConversation(
   return { conversationId: row.conversation_id, channelSessionId: row.channel_session_id };
 }
 
+/** Um caso cuja resposta do responsável este turno repassa ao lead. */
+export interface CasoDoTurno {
+  caseId: string;
+  action: ReentryAction;
+  body: string | undefined;
+}
+
+function instrucaoDoCaso({ caseId, action, body }: CasoDoTurno): string {
+  const caseIdShort = caseId.slice(0, 8);
+  const note = body?.trim() ?? '';
+  return action === 'resolved'
+    ? `O responsável concluiu o caso #${caseIdShort} com a nota: "${note}". Repasse essa conclusão ao lead de forma natural e encerre o assunto.`
+    : `Para avançar no caso #${caseIdShort}, o responsável interno precisa que você obtenha do cliente: "${note}". ` +
+        `Pergunte ao lead de forma natural. Assim que tiver a resposta, chame a tool provide_case_update com case_id "${caseId}".`;
+}
+
 /**
- * Abertura da re-entrada do caso: instrução determinística do responsável
- * (não interpretação do modelo) no topo do sufixo + o ritual padrão. Exportada
- * PURA para teste — igual a `buildFollowupOpeningMessage`.
+ * Abertura da re-entrada: instrução determinística do responsável (não
+ * interpretação do modelo) no topo do sufixo + o ritual padrão. Com mais de
+ * um caso (ver `casosIrmaosPendentes`), todos entram no MESMO turno e o
+ * agente é instruído a responder numa mensagem só. Exportada PURA para teste
+ * — igual a `buildFollowupOpeningMessage`.
  */
 export function buildCaseReplyOpeningMessage(
-  action: ReentryAction,
-  caseId: string,
-  body: string | undefined,
+  casos: readonly CasoDoTurno[],
   previous: LeadCheckpointRow | null,
   leadState: LeadStateRow | null,
   context: LeadContext,
   notesIndexBlock: string,
   projeta = false,
 ): string {
-  const caseIdShort = caseId.slice(0, 8);
-  const note = body?.trim() ?? '';
-  const instructionBlock =
-    action === 'resolved'
-      ? `O responsável concluiu o caso #${caseIdShort} com a nota: "${note}". Repasse essa conclusão ao lead de forma natural e encerre o assunto.`
-      : `Para avançar no caso #${caseIdShort}, o responsável interno precisa que você obtenha do cliente: "${note}". ` +
-        `Pergunte ao lead de forma natural. Assim que tiver a resposta, chame a tool provide_case_update com case_id "${caseId}".`;
+  const varios = casos.length > 1;
   return [
-    'Resposta do responsável interno sobre um caso que você abriu.',
+    varios
+      ? `Respostas do responsável interno sobre ${casos.length} casos que você abriu nesta conversa.`
+      : 'Resposta do responsável interno sobre um caso que você abriu.',
     '',
-    '## Instrução do responsável sobre o caso',
-    instructionBlock,
+    varios ? '## Instruções do responsável sobre os casos' : '## Instrução do responsável sobre o caso',
+    ...casos.map(instrucaoDoCaso),
+    ...(varios
+      ? ['', 'Cubra TODOS os casos acima numa única resposta ao lead — nunca uma mensagem por caso.']
+      : []),
     '',
     ...ritualBlocks(previous, leadState, context, notesIndexBlock, projeta),
     '',
@@ -134,6 +149,50 @@ export function buildCaseReplyOpeningMessage(
     'Houve avanço REAL no funil neste turno? Marque-o com update_lead_state (só o próximo estágio válido).',
     'Aprendeu algo durável sobre o lead? Salve com save_lead_note (a headline entra no índice de memória).',
   ].join('\n');
+}
+
+/**
+ * Os outros `case_reply_turn` PENDENTES da mesma conversa, para entrarem neste
+ * turno. Medido em produção (16/10/2026): dois casos da mesma conversa
+ * resolvidos com segundos de diferença viraram dois jobs na lane do contato,
+ * e o paciente recebeu dois pares de mensagens quase iguais com 20s entre eles.
+ *
+ * A lane do contato garante que nenhum irmão está `running` enquanto este job
+ * roda (uniq_job_queue_one_running_per_contact), então `pending` é o universo
+ * inteiro. Cada irmão passa pela MESMA validação do job principal (ação de
+ * re-entrada, status esperado do caso, conversa do caso) — irmão de outra
+ * conversa fica para o seu próprio turno.
+ */
+async function casosIrmaosPendentes(
+  pool: pg.Pool,
+  job: JobRow,
+  contactId: string,
+  conversationId: string,
+  jaIncluidos: ReadonlySet<string>,
+): Promise<{ jobIds: string[]; casos: CasoDoTurno[] }> {
+  const { rows } = await pool.query<{ id: string; payload: unknown }>(
+    `select id, payload from job_queue
+      where organization_id = $1 and contact_id = $2 and kind = 'case_reply_turn'
+        and status = 'pending' and id <> $3
+      order by created_at, id`,
+    [job.organization_id, contactId, job.id],
+  );
+  const jobIds: string[] = [];
+  const casos: CasoDoTurno[] = [];
+  const vistos = new Set(jaIncluidos);
+  for (const row of rows) {
+    const parsed = caseReplyTurnPayloadSchema.safeParse(row.payload);
+    if (!parsed.success || !isReentryAction(parsed.data.action)) continue;
+    const action: ReentryAction = parsed.data.action;
+    const conv = await resolveCaseConversation(pool, job.organization_id, parsed.data.case_id, action);
+    if (conv === null || conv.conversationId !== conversationId) continue;
+    jobIds.push(row.id);
+    // O mesmo caso respondido duas vezes: o job é absorvido, a instrução não se repete.
+    if (vistos.has(parsed.data.case_id)) continue;
+    vistos.add(parsed.data.case_id);
+    casos.push({ caseId: parsed.data.case_id, action, body: parsed.data.body });
+  }
+  return { jobIds, casos };
 }
 
 /**
@@ -166,11 +225,37 @@ export function createCaseReplyTurnHandler(deps: InboundTurnDeps) {
       return;
     }
 
+    const irmaos = await casosIrmaosPendentes(
+      pool,
+      job,
+      leadId,
+      caseConversation.conversationId,
+      new Set([payload.case_id]),
+    );
+    const casos: CasoDoTurno[] = [{ caseId: payload.case_id, action, body: payload.body }, ...irmaos.casos];
+
+    // Adiado pela janela ou falhou: lança daqui e os irmãos seguem `pending` —
+    // quem rodar depois os absorve de novo. Nenhum caso se perde.
     await runAgentTurn(deps, job, pool, ctx, {
       channelSessionId: caseConversation.channelSessionId,
       conversationId: caseConversation.conversationId,
       buildOpening: ({ previous, leadState, context, notesIndexBlock, projeta }) =>
-        buildCaseReplyOpeningMessage(action, payload.case_id, payload.body, previous, leadState, context, notesIndexBlock, projeta),
+        buildCaseReplyOpeningMessage(casos, previous, leadState, context, notesIndexBlock, projeta),
     });
+
+    if (irmaos.jobIds.length > 0) {
+      // ponytail: absorvidos fecham fora do commit do job principal; um crash
+      // entre os dois deixa o irmão `pending` e ele repete a conclusão (o
+      // comportamento de antes). Mover para o `inSameCommit` do completeJob se doer.
+      const { rowCount } = await pool.query(
+        `update job_queue set status = 'done', last_error = $3
+          where organization_id = $1 and id = any($2::uuid[]) and status = 'pending'`,
+        [tenantId, irmaos.jobIds, `absorvido pelo case_reply_turn ${job.id}`],
+      );
+      runLog.info('case_reply_turn absorveu os casos pendentes da mesma conversa', {
+        absorvidos: rowCount ?? 0,
+        casos: casos.length,
+      });
+    }
   };
 }
