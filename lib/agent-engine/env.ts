@@ -240,6 +240,15 @@ const envSchema = z.object({
   // está viva. Só tem efeito nos canais com o gate ligado — canal 'open' (o
   // default) nunca consulta autorização.
   AI_ALLOWLIST_TTL_DAYS: z.coerce.number().int().positive().default(21),
+  // Disjuntor do laço bot-com-bot (`agent/robo-do-outro-lado.ts`): a IA para de
+  // responder e abre aviso na Central quando o contato manda a MESMA mensagem
+  // (≥20 caracteres) N vezes na janela, ou quando a IA manda mais de
+  // BOT_LOOP_AI_BURST_MAX mensagens na janela sem nenhuma pessoa da equipe.
+  // Para desligar um sinal, suba o número (ex.: 1000).
+  BOT_LOOP_REPEAT_COUNT: z.coerce.number().int().min(2).default(3),
+  BOT_LOOP_REPEAT_WINDOW_MS: z.coerce.number().int().positive().default(600_000),
+  BOT_LOOP_AI_BURST_MAX: z.coerce.number().int().positive().default(20),
+  BOT_LOOP_AI_BURST_WINDOW_MS: z.coerce.number().int().positive().default(300_000),
 });
 
 export type Env = z.infer<typeof envSchema>;
