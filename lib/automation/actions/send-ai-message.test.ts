@@ -105,7 +105,7 @@ function canalEmTeste(numeros: string[]): Record<string, unknown> {
  * Dublê do cliente admin. Registra toda ida ao banco para o teste poder afirmar
  * o que NÃO foi escrito — que é o que a guarda promete.
  */
-function bancoFalso(canal: { metadata?: unknown; existe?: boolean; erro?: string; origemObsoleta?: boolean }) {
+function bancoFalso(canal: { metadata?: unknown; existe?: boolean; erro?: string; origemObsoleta?: boolean; sempreHumano?: boolean }) {
   const idas: EscritaNoBanco[] = [];
   const from = (tabela: string) => {
     let operacao: "select" | "update" = "select";
@@ -121,6 +121,7 @@ function bancoFalso(canal: { metadata?: unknown; existe?: boolean; erro?: string
       idas.push({ tabela, operacao });
       if (tabela === "conversations") return { data: { channel_session_id: CANAL }, error: null };
       if (tabela === "organizations") return { data: { settings: {} }, error: null };
+      if (tabela === "contacts" && canal.sempreHumano) return { data: { id: "contato-1", ai_opt_out: true }, error: null };
       if (tabela !== "channel_sessions") return { data: { id: "contato-1" }, error: null };
       if (canal.erro) return { data: null, error: { message: canal.erro } };
       return { data: canal.existe === false ? null : { metadata: canal.metadata }, error: null };
@@ -278,6 +279,17 @@ describe("send_ai_message — indeterminado é PARAR, nunca seguir", () => {
     expect(r.status).toBe("skipped");
     expect(r.detail?.reason).toBe("elegibilidade_indeterminada");
     expect(gerarAbordagemDeFormulario).not.toHaveBeenCalled();
+    expect(sendMessageHandler).not.toHaveBeenCalled();
+  });
+});
+
+describe("send_ai_message — contato marcado 'sempre atendimento humano' (migration 0366)", () => {
+  it("não gasta o modelo, não abre conversa e não envia", async () => {
+    const { cliente } = bancoFalso({ metadata: { ai_gate: "open" }, sempreHumano: true });
+    const r = await executar(cliente, NUMERO_DE_TESTE);
+    expect(r).toEqual({ type: "send_ai_message", status: "skipped", detail: { reason: "ai_opt_out" } });
+    expect(gerarAbordagemDeFormulario).not.toHaveBeenCalled();
+    expect(ensureConversation).not.toHaveBeenCalled();
     expect(sendMessageHandler).not.toHaveBeenCalled();
   });
 });

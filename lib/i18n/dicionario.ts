@@ -10652,6 +10652,19 @@ export const DICIONARIO: Traducoes = {
   "Verde (ganho)": { es: "Verde (ganado)" },
   "Verde-água (acompanhamento)": { es: "Verde agua (seguimiento)" },
   "Cinza (perdido)": { es: "Gris (perdido)" },
+  // Contato "sempre atendimento humano" (migration 0366).
+  "Sempre atendimento humano": { es: "Siempre atención humana" },
+  "Tirar sempre humano": { es: "Quitar siempre humano" },
+  "Tirar a marca de sempre atendimento humano?": { es: "¿Quitar la marca de siempre atención humana?" },
+  "Marcar como sempre atendimento humano?": { es: "¿Marcar como siempre atención humana?" },
+  "A IA continua parada neste contato até alguém clicar em Devolver ao automático na conversa. A mudança fica registrada no seu nome.": { es: "La IA sigue detenida en este contacto hasta que alguien haga clic en Devolver al automático en la conversación. El cambio queda registrado a tu nombre." },
+  "A IA para agora e nunca mais responde este contato, nem por follow-up. Só a equipe atende, e os lembretes de consulta continuam saindo. Devolver ao automático não desfaz a marca. A mudança fica registrada no seu nome.": { es: "La IA se detiene ahora y nunca más responde a este contacto, ni por seguimiento. Solo el equipo atiende, y los recordatorios de cita siguen saliendo. Devolver al automático no deshace la marca. El cambio queda registrado a tu nombre." },
+  "Tirar a marca": { es: "Quitar la marca" },
+  "Marcar como sempre humano": { es: "Marcar como siempre humano" },
+  "O contato está marcado como sempre atendimento humano: a IA não escreve para ele.": { es: "El contacto está marcado como siempre atención humana: la IA no le escribe." },
+  "Não foi possível alterar o atendimento do contato.": { es: "No fue posible cambiar la atención del contacto." },
+  "Este contato está marcado como sempre atendimento humano. Tire a marca na ficha do contato antes de devolver ao automático.": { es: "Este contacto está marcado como siempre atención humana. Quita la marca en la ficha del contacto antes de devolver al automático." },
+  "Não foi possível conferir o contato agora. Tente de novo.": { es: "No fue posible verificar el contacto ahora. Intenta de nuevo." },
 };
 
 /**

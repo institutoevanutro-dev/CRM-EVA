@@ -765,6 +765,9 @@ export const AUDIT_ACTIONS = [
   "contact.teste_reiniciado",
   // Negócio ganho abriu o card de pós-venda por automação (porte do upstream PR 2787).
   "lead.post_sale_opened",
+  // migration 0366: a marca "sempre atendimento humano" do contato (porte do upstream PR 2671).
+  "contact.always_human_set",
+  "contact.always_human_cleared",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
