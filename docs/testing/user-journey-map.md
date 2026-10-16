@@ -1131,7 +1131,7 @@ Spec: `tests/e2e/aviso-de-credito-do-provedor.spec.ts` (job e2e). O turno passa 
 
 Não coberto pela tela: o push no celular (sem par de chaves VAPID no ambiente de teste; a regra é a mesma do som e tem teste em `tests/unit/push-dos-avisos.test.ts`), a chave recusada e o Jev (testes em `tests/unit/aviso-do-provedor.test.ts`).
 
-## J32 — Recomeçar o radar, ocultar do Inbox, cor do funil e quem consultou o acervo `[P1]` (2026-10-16)
+## J36 — Recomeçar o radar, ocultar do Inbox, cor do funil e quem consultou o acervo `[P1]` (2026-10-16)
 
 - `[P1]` O administrador recomeça o radar: a demanda que esfriou sai, a tela mostra "Radar recomeçado em dd/mm às hh:mm", a demanda VOLTA quando o paciente escreve de novo (mensagem gravada pelo caminho da ingestão), e Desfazer devolve tudo.
 - `[P1]` O amigo do Instagram pessoal é ocultado pelo cabeçalho da conversa: sai da lista e o número da aba Todas cai em 1; aparece em Mais › Ocultos com o selo "Oculto do Inbox", e "Mostrar no Inbox" o traz de volta, com o número de antes.

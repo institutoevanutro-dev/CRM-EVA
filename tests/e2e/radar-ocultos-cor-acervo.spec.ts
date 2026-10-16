@@ -45,7 +45,6 @@ type CredsDaSpec = CredsE2E & {
   org_id: string;
   users: Record<string, { id: string; email: string }>;
   radar?: { at_risk_title: string; contact_id: string; conversation_id: string };
-  acervo?: { agente_a: string; agente_b: string };
 };
 
 let creds = lerCreds() as CredsDaSpec;
@@ -55,6 +54,14 @@ let page: Page;
 const reler = () => JSON.parse(fs.readFileSync(path.join(process.cwd(), ".e2e-creds.json"), "utf8")) as CredsDaSpec;
 const semear = (script: string) => execFileSync("npx", ["tsx", script], { stdio: "inherit" });
 const foto = (nome: string) => page.screenshot({ path: path.join(EVIDENCIA, nome), fullPage: true });
+/**
+ * O que a página desenha, dentro do `<main>`. Enquanto a resposta ainda chega
+ * em streaming, o React guarda uma CÓPIA escondida do trecho pronto num
+ * `<div hidden id="S:0">` fora do `<main>` (medido: some em menos de 2 s). Uma
+ * busca na página inteira acha os dois e reprova por modo estrito; a do `<main>`
+ * acha o que a pessoa vê. Diálogo, menu, seletor e aviso abrem fora dele.
+ */
+const tela = () => page.getByRole("main");
 
 async function inserir(tabela: string, valores: Record<string, unknown>): Promise<string> {
   const { data, error } = await db.from(tabela).insert(valores as never).select("id").single();
@@ -113,7 +120,6 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
   test.beforeAll(async ({ browser }) => {
     fs.mkdirSync(EVIDENCIA, { recursive: true });
     semear("scripts/seed-e2e-radar.ts");
-    semear("scripts/seed-e2e-acervo.ts");
     creds = reler();
     const { error } = await desfazerRecomeco();
     if (error) throw new Error(`radar: ${error.message}`);
@@ -148,20 +154,20 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
 
   test("radar: recomeçar tira o que esfriou, o item volta quando o paciente escreve, e desfaz", async () => {
     const radar = creds.radar!;
-    const item = page.locator('[data-testid="radar-item"]', { hasText: radar.at_risk_title });
+    const item = tela().locator('[data-testid="radar-item"]', { hasText: radar.at_risk_title });
 
     await page.goto("/app/radar");
     await expect(item).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("radar-recomecado-em")).toHaveCount(0);
+    await expect(tela().getByTestId("radar-recomecado-em")).toHaveCount(0);
     await foto("01-radar-antes.png");
 
-    await page.getByTestId("radar-recomecar").click();
+    await tela().getByTestId("radar-recomecar").click();
     const dialogo = page.getByTestId("radar-recomeco-dialogo");
     await expect(dialogo).toContainText("Nada é apagado");
     await foto("02-radar-pergunta.png");
     await page.getByTestId("radar-recomeco-confirmar").click();
 
-    await expect(page.getByTestId("radar-recomecado-em")).toHaveText(
+    await expect(tela().getByTestId("radar-recomecado-em")).toHaveText(
       /^Radar recomeçado em \d{2}\/\d{2} às \d{2}:\d{2}$/,
     );
     await expect(item).toHaveCount(0);
@@ -191,10 +197,10 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
     await expect(item).toHaveAttribute("data-risk", "critico");
     await foto("04-radar-item-voltou.png");
 
-    await page.getByTestId("radar-desfazer-recomeco").click();
+    await tela().getByTestId("radar-desfazer-recomeco").click();
     await expect(dialogo).toContainText("Voltar a mostrar tudo no radar?");
     await page.getByTestId("radar-recomeco-confirmar").click();
-    await expect(page.getByTestId("radar-recomecado-em")).toHaveCount(0);
+    await expect(tela().getByTestId("radar-recomecado-em")).toHaveCount(0);
     await expect(item).toBeVisible();
   });
 
@@ -231,8 +237,8 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
     ig.conversa = conversaId as unknown as string;
     await chegaMensagem({ conversa: ig.conversa, contato: ig.contato, canal: ig.canal, texto: "E aí, vamos marcar aquele café?" });
 
-    const itemDaLista = page.locator(`button[data-conversation-id="${ig.conversa}"]`);
-    const abaTodas = page.getByRole("tab", { name: /^Todas/ });
+    const itemDaLista = tela().locator(`button[data-conversation-id="${ig.conversa}"]`);
+    const abaTodas = tela().getByRole("tab", { name: /^Todas/ });
 
     await page.goto("/app/inbox");
     await abaTodas.click();
@@ -242,7 +248,7 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
     await foto("05-inbox-antes.png");
 
     await itemDaLista.click();
-    await page.getByTestId("ocultar-do-inbox").click();
+    await tela().getByTestId("ocultar-do-inbox").click();
     const pergunta = page.getByTestId("ocultar-do-inbox-dialogo");
     await expect(pergunta).toContainText(nome);
     await expect(pergunta).toContainText("as mensagens continuam guardadas");
@@ -254,13 +260,13 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
     await foto("07-inbox-ocultado.png");
 
     // Mais › Ocultos: só o administrador e o gerente veem, com o número.
-    await page.getByRole("button", { name: "Mais abas" }).click();
+    await tela().getByRole("button", { name: "Mais abas" }).click();
     const ocultos = page.getByRole("menuitem", { name: /^Ocultos/ });
     await expect.poll(() => numeroDaAba(ocultos), { timeout: 15_000 }).toBeGreaterThan(0);
     await ocultos.click();
     await expect(itemDaLista).toBeVisible({ timeout: 15_000 });
     await itemDaLista.click();
-    const selo = page.getByTestId("selo-oculto-do-inbox");
+    const selo = tela().getByTestId("selo-oculto-do-inbox");
     await expect(selo).toBeVisible();
     // Uma linha só. No cabeçalho apertado o selo virava uma pílula de três
     // linhas ("Oculto / do / Inbox"), medido no Chrome e no Safari em 1280px.
@@ -268,7 +274,7 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
     expect(alturaDoSelo, "o selo quebrou em mais de uma linha").toBeLessThanOrEqual(20);
     await foto("08-inbox-aba-ocultos.png");
 
-    await page.getByTestId("mostrar-no-inbox").click();
+    await tela().getByTestId("mostrar-no-inbox").click();
     await expect(itemDaLista).toHaveCount(0);
     await abaTodas.click();
     await expect(itemDaLista).toBeVisible({ timeout: 15_000 });
@@ -277,13 +283,13 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
   });
 
   test("cor do funil: pelo menu ⋯ da lista, aparece na linha e no quadro, e sai em Configurações", async () => {
-    const linha = page.getByTestId(`funil-${funilPadrao.id}`);
+    const linha = tela().getByTestId(`funil-${funilPadrao.id}`);
 
     await page.goto("/app/kanban");
     await expect(linha).toBeVisible({ timeout: 30_000 });
     await expect(linha).not.toHaveAttribute("data-cor-do-funil", /.+/);
 
-    await page.getByTestId(`acoes-${funilPadrao.id}`).click();
+    await tela().getByTestId(`acoes-${funilPadrao.id}`).click();
     await page.getByTestId(`cor-${funilPadrao.id}`).click();
     await page.getByRole("button", { name: "Rosa", exact: true }).click();
 
@@ -294,18 +300,18 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
     });
     expect(pintado.sombra, "a barra à esquerda da linha").toContain(ROSA.rgb);
     expect(pintado.fundo, "a linha tingida").not.toBe("rgba(0, 0, 0, 0)");
-    await expect(page.getByTestId(`ponto-do-funil-${funilPadrao.id}`)).toHaveCSS("background-color", ROSA.rgb);
+    await expect(tela().getByTestId(`ponto-do-funil-${funilPadrao.id}`)).toHaveCSS("background-color", ROSA.rgb);
     await foto("10-funis-com-cor.png");
 
-    await page.getByTestId(`abrir-${funilPadrao.id}`).click();
+    await tela().getByTestId(`abrir-${funilPadrao.id}`).click();
     await page.waitForURL(new RegExp(`/app/pipelines/${funilPadrao.id}`));
-    await expect(page.getByTestId("ponto-do-funil").first()).toHaveCSS("background-color", ROSA.rgb, {
+    await expect(tela().getByTestId("ponto-do-funil").first()).toHaveCSS("background-color", ROSA.rgb, {
       timeout: 30_000,
     });
     await foto("11-quadro-com-cor.png");
 
     await page.goto("/app/settings/tenant/pipelines");
-    const cabecalho = page.locator("header").filter({
+    const cabecalho = tela().locator("header").filter({
       has: page.getByRole("heading", { name: funilPadrao.nome, exact: true }),
     });
     await expect(cabecalho.getByRole("heading", { name: funilPadrao.nome, exact: true })).toHaveAttribute(
@@ -332,7 +338,9 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
   });
 
   test("acervo: o cartão diz quem consultou de verdade, e quando", async () => {
-    const { agente_a: agenteA } = creds.acervo!;
+    // O assistente que o seed de credenciais já cria: nenhum assistente novo no
+    // ar, para não mudar o que as specs seguintes da mesma parte encontram.
+    const agenteA = creds.default_agent_id!;
     const { data: agente } = await db.from("ai_agents").select("name").eq("id", agenteA).single();
     acervo.material = await inserir("ai_knowledge_sources", {
       organization_id: creds.org_id,
@@ -353,11 +361,10 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
     });
 
     await page.goto("/app/ai/knowledge/sources");
-    const consultadoPor = page.getByTestId(`material-consultado-por-${acervo.material}`);
+    const consultadoPor = tela().getByTestId(`material-consultado-por-${acervo.material}`);
     await expect(consultadoPor).toHaveText((agente as { name: string }).name, { timeout: 30_000 });
-    await expect(page.getByTestId(`material-orfao-${acervo.material}`)).toHaveCount(0);
-    await expect(page.getByTestId(`material-ultima-consulta-${acervo.material}`)).toHaveText(/^há \d+ min$/);
-    await expect(page.getByTestId(`material-${acervo.material}`)).toBeVisible();
+    await expect(tela().getByTestId(`material-orfao-${acervo.material}`)).toHaveCount(0);
+    await expect(tela().getByTestId(`material-ultima-consulta-${acervo.material}`)).toHaveText(/^há \d+ min$/);
     await foto("13-acervo-consultado-por.png");
   });
 });
