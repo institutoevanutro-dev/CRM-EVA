@@ -149,6 +149,6 @@ describe("perdido em lote", () => {
 
     const perdas = vi.mocked(audit).mock.calls.filter(([e]) => e.action === "lead.lost");
     expect(perdas.map(([e]) => e.resourceId)).toEqual([CARD_ABERTO]);
-    expect(perdas[0][0].metadata).toMatchObject({ lost_reason: "no_response" });
+    expect(perdas[0]?.[0].metadata).toMatchObject({ lost_reason: "no_response" });
   });
 });
