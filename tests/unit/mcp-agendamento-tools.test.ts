@@ -347,6 +347,78 @@ describe("crm_list_appointments", () => {
 });
 
 
+describe("crm_list_appointments com período (de/ate)", () => {
+  beforeEach(() => vi.clearAllMocks());
+  const vazio = () => vi.mocked(listaAgendamentos).mockResolvedValue({ ok: true, agendamentos: [] });
+
+  it("período vira instantes da parede de São Paulo, ate inclusivo, sem `dia`", async () => {
+    vazio();
+    await crmListAppointments.handler({ de: "2026-10-12", ate: "2026-10-18" }, ctx);
+    const [, org, params] = vi.mocked(listaAgendamentos).mock.calls[0]!;
+    expect(org).toBe("org-1");
+    expect(params.de).toBe("2026-10-12T03:00:00.000Z");
+    expect(params.ate).toBe("2026-10-19T03:00:00.000Z");
+    expect(params.dia).toBeNull();
+    expect(params.limite).toBe(350); // 7 dias × 50
+  });
+
+  it("limite padrão é 50 por dia, e o pedido acima de 50 é aceito até 350", async () => {
+    vazio();
+    await crmListAppointments.handler({ de: "2026-10-12", ate: "2026-10-13" }, ctx);
+    expect(vi.mocked(listaAgendamentos).mock.calls[0]![2].limite).toBe(100);
+    await crmListAppointments.handler({ de: "2026-10-12", ate: "2026-10-12", limite: 300 }, ctx);
+    expect(vi.mocked(listaAgendamentos).mock.calls[1]![2].limite).toBe(300);
+    expect(crmListAppointments.inputSchema.limite.safeParse(350).success).toBe(true);
+    expect(crmListAppointments.inputSchema.limite.safeParse(351).success).toBe(false);
+  });
+
+  it("devolve os mesmos campos, na ordem de início que a coleta entrega", async () => {
+    vi.mocked(listaAgendamentos).mockResolvedValue({ ok: true, agendamentos: [
+      { id: "seg", titulo: "A", iniciaEm: "2026-10-12T12:00:00Z", terminaEm: "2026-10-12T13:00:00Z",
+        fuso: "America/Sao_Paulo", situacao: "confirmed", contatoId: "c", contatoNome: "X", donoId: "u" },
+      { id: "qua", titulo: "B", iniciaEm: "2026-10-14T12:00:00Z", terminaEm: "2026-10-14T13:00:00Z",
+        fuso: "America/Sao_Paulo", situacao: "pending", contatoId: null, contatoNome: null, donoId: "u" },
+    ] } as never);
+    const r = (await crmListAppointments.handler({ de: "2026-10-12", ate: "2026-10-18" }, ctx)) as {
+      compromissos: Array<Record<string, unknown>>;
+    };
+    expect(r.compromissos.map((c) => c.id)).toEqual(["seg", "qua"]);
+    expect(Object.keys(r.compromissos[0]!).sort()).toEqual([
+      "atendente_id", "contato_id", "contato_nome", "fim", "fim_quando", "fuso", "id", "inicio",
+      "meet_state", "meeting_url", "quando", "situacao", "titulo",
+    ]);
+  });
+
+  it.each([
+    [{ de: "2026-10-12", ate: "2026-10-19" }, /8 dias; o máximo é 7/],
+    [{ de: "2026-10-18", ate: "2026-10-12" }, /antes de `de`/],
+    [{ de: "2026-10-12" }, /juntos/],
+    [{ ate: "2026-10-12" }, /juntos/],
+    [{ dia: "2026-10-12", de: "2026-10-12", ate: "2026-10-12" }, /OU/],
+    [{ de: "2026-02-30", ate: "2026-03-01" }, /datas reais/],
+  ])("período inválido %o é recusado com erro claro, sem consultar", async (input, msg) => {
+    await expect(crmListAppointments.handler(input, ctx)).rejects.toThrow(msg);
+    expect(listaAgendamentos).not.toHaveBeenCalled();
+  });
+
+  it("sem período, nada muda: dia, limite padrão 20 e teto 50", async () => {
+    vazio();
+    await crmListAppointments.handler({ dia: "2026-10-12", limite: 50 }, ctx);
+    const params = vi.mocked(listaAgendamentos).mock.calls[0]![2];
+    expect(params).toEqual({
+      contactId: null, leadId: null, dia: "2026-10-12", ownerUserId: null, situacao: null, limite: 50,
+    });
+    await expect(crmListAppointments.handler({ dia: "2026-10-12", limite: 51 }, ctx)).rejects.toThrow(/máximo é 50/);
+  });
+
+  it("o escopo continua obrigatório: agenda:read alcança, token sem escopo não", async () => {
+    const { hasMcpToolScope } = await import("@/lib/mcp/agenda-scope");
+    expect(crmListAppointments.requiresScope).toBe("mcp:read");
+    expect(hasMcpToolScope(["agenda:read"], crmListAppointments.name, crmListAppointments.requiresScope)).toBe(true);
+    expect(hasMcpToolScope(["outro:read"], crmListAppointments.name, crmListAppointments.requiresScope)).toBe(false);
+  });
+});
+
 describe("as escritas de agenda", () => {
   beforeEach(() => vi.clearAllMocks());
 

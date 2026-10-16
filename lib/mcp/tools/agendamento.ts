@@ -27,7 +27,7 @@ import {
   MAXIMO_DE_DIAS,
 } from "@/lib/agenda/consulta";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
-import { diaLocalISO } from "@/lib/agenda/fuso";
+import { diaLocalISO, instanteDe } from "@/lib/agenda/fuso";
 import { rotuloLocal } from "@/lib/tempo/agora";
 import {
   alterarAgendamentoHandler,
@@ -390,6 +390,13 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
 };
 
 
+// O período de `crm_list_appointments` — ver `periodoDaLista` abaixo.
+const FUSO_DO_PERIODO = "America/Sao_Paulo";
+const PERIODO_MAX_DIAS = 7;
+const LIMITE_POR_DIA = 50;
+const LIMITE_SEM_PERIODO_MAX = 50;
+const LIMITE_COM_PERIODO_MAX = PERIODO_MAX_DIAS * LIMITE_POR_DIA; // 350
+
 const listarShape = {
   // As duas descrições existem porque o modelo escolhia entre os dois campos no
   // escuro — nenhum tinha `.describe()`, e a única pista era o nome do campo no
@@ -416,6 +423,19 @@ const listarShape = {
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
     .describe("um dia específico, no formato AAAA-MM-DD"),
+  de: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .describe(
+      "início de um PERÍODO (AAAA-MM-DD, dia em America/Sao_Paulo, inclusivo). Vai junto com " +
+        "`ate`, no máximo 7 dias, e não se combina com `dia`.",
+    ),
+  ate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .describe("fim do PERÍODO (AAAA-MM-DD, dia em America/Sao_Paulo, inclusivo); igual ou depois de `de`."),
   owner_user_id: z.string().uuid().optional(),
   /**
    * ⚠️ A constante, NUNCA os literais. `SITUACOES_DO_AGENDAMENTO` é a fonte
@@ -424,15 +444,93 @@ const listarShape = {
    * de ler a fonte, e estava errado nos três.
    */
   situacao: z.enum(SITUACOES_DO_AGENDAMENTO).optional(),
-  limite: z.number().int().min(1).max(50).optional(),
+  limite: z
+    .number()
+    .int()
+    .min(1)
+    .max(LIMITE_COM_PERIODO_MAX)
+    .optional()
+    .describe("sem período: até 50 (padrão 20). Com `de`/`ate`: até 350 (padrão 50 por dia do período)."),
 };
+
+/**
+ * O PERÍODO (`de`/`ate`) — uma chamada no lugar de sete.
+ *
+ * O Prontuário desenhava a semana chamando esta ferramenta uma vez por dia, a
+ * cada 30 s por computador aberto. `de`/`ate` são DIAS de parede em
+ * `America/Sao_Paulo`, inclusivos, e viram instantes aqui — a coleta já aceita
+ * instantes (`ParametrosDaLista.de/ate`).
+ *
+ * ⚠️ NÃO É O MESMO CORTE DE `dia`. `dia` corta em UTC (ver o aviso em
+ * `ParametrosDaLista.dia`); o período corta na parede de São Paulo. Com `de`
+ * igual a `ate`, um compromisso das 22h aparece aqui e não em `dia`. `dia`
+ * ficou intacto de propósito: há cliente em produção chamando por dia.
+ *
+ * `dia` junto com `de`/`ate` é RECUSADO: a coleta faria o período vencer em
+ * silêncio, e quem mandou os dois não saberia qual pergunta foi respondida.
+ *
+ * Erro de período LANÇA: os dois ingressos (`lib/mcp/server.ts` e
+ * `lib/ai/runtime/tools.ts`) traduzem a exceção em erro visível a quem chamou.
+ * Devolver `{ compromissos: [] }` seria ler "não há nada marcado".
+ */
+
+function diaUtc(iso: string): number | null {
+  const t = Date.parse(`${iso}T00:00:00Z`);
+  return Number.isNaN(t) || new Date(t).toISOString().slice(0, 10) !== iso ? null : t;
+}
+
+function meiaNoiteEmSaoPaulo(utcMs: number): string {
+  const d = new Date(utcMs);
+  return instanteDe(
+    { ano: d.getUTCFullYear(), mes: d.getUTCMonth() + 1, dia: d.getUTCDate() },
+    FUSO_DO_PERIODO,
+  ).toISOString();
+}
+
+/** `null` = sem período (comportamento antigo). Lança com mensagem clara se o período é inválido. */
+export function periodoDaLista(input: {
+  dia?: string;
+  de?: string;
+  ate?: string;
+  limite?: number;
+}): { de: string; ate: string; limite: number } | null {
+  if (input.de === undefined && input.ate === undefined) {
+    if (input.limite !== undefined && input.limite > LIMITE_SEM_PERIODO_MAX) {
+      throw new Error(`limite_invalido: sem período (de/ate), o limite máximo é ${LIMITE_SEM_PERIODO_MAX}.`);
+    }
+    return null;
+  }
+  if (input.de === undefined || input.ate === undefined) {
+    throw new Error("periodo_invalido: informe `de` e `ate` juntos (AAAA-MM-DD).");
+  }
+  if (input.dia !== undefined) {
+    throw new Error("periodo_invalido: use `dia` OU `de`/`ate`, não os dois.");
+  }
+  const de = diaUtc(input.de);
+  const ate = diaUtc(input.ate);
+  if (de === null || ate === null) {
+    throw new Error("periodo_invalido: `de` e `ate` precisam ser datas reais no formato AAAA-MM-DD.");
+  }
+  if (ate < de) throw new Error("periodo_invalido: `ate` não pode ser antes de `de`.");
+  const dias = (ate - de) / 86_400_000 + 1;
+  if (dias > PERIODO_MAX_DIAS) {
+    throw new Error(`periodo_invalido: o período tem ${dias} dias; o máximo é ${PERIODO_MAX_DIAS}.`);
+  }
+  return {
+    de: meiaNoiteEmSaoPaulo(de),
+    // `ate` é inclusivo: o corte é a meia-noite do dia SEGUINTE (a coleta usa `lt`).
+    ate: meiaNoiteEmSaoPaulo(ate + 86_400_000),
+    limite: Math.min(input.limite ?? dias * LIMITE_POR_DIA, LIMITE_COM_PERIODO_MAX),
+  };
+}
 
 export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
   name: "crm_list_appointments",
   description:
     "Lista os compromissos com HORA MARCADA de um cliente, ou de um dia da equipe, com a " +
     "situação de cada um. Informe pelo menos um recorte: contact_id, lead_id, dia ou " +
-    "owner_user_id — sem recorte a chamada é recusada, porque varrer a agenda inteira não " +
+    "owner_user_id, ou um período de até 7 dias com `de` e `ate` (AAAA-MM-DD, inclusivos, " +
+    "no lugar de `dia`) — sem recorte a chamada é recusada, porque varrer a agenda inteira não " +
     "responde pergunta nenhuma. " +
     "NÃO CONFUNDA COM `crm_list_followups`, que lista os RETORNOS — as vezes em que nós " +
     "decidimos voltar a falar, sem nada combinado com o cliente. Aqui é o que foi combinado " +
@@ -452,6 +550,7 @@ export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
     // e `lead_id` cujo dono não é o do turno (inexistente inclusive) caem na
     // MESMA recusa. `lead_id` igual ao contato do turno é a confusão contato ×
     // negócio: o contato já cobre a pergunta. Sem contato do turno, nada muda.
+    const periodo = periodoDaLista(input);
     const doTurno = ctx.contatoDoTurno;
     const leadId = doTurno && input.lead_id === doTurno ? undefined : input.lead_id;
     if (doTurno && (await foraDoContatoDoTurno(ctx, doTurno, input.contact_id, leadId))) {
@@ -463,7 +562,8 @@ export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
       dia: input.dia ?? null,
       ownerUserId: input.owner_user_id ?? null,
       situacao: input.situacao ?? null,
-      limite: input.limite ?? 20,
+      limite: periodo?.limite ?? input.limite ?? 20,
+      ...(periodo ? { de: periodo.de, ate: periodo.ate } : {}),
     });
 
     // Recusa de negócio é RESPOSTA, e a face que sai é a do CLIENTE (DECISÃO 20).

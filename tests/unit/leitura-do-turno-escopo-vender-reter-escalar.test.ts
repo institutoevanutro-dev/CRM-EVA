@@ -247,7 +247,10 @@ describe("crm_list_appointments: a agenda, no turno, é a do contato da conversa
   const tabelas = () => ({
     crm_leads: [negocio(NEGOCIO_DE_B, DE_OUTRO_CLIENTE), negocio(NEGOCIO_DO_TURNO, DA_CONVERSA)],
   });
-  const PERIODO = { de: "2026-10-01T00:00:00-03:00", ate: "2026-10-08T00:00:00-03:00" };
+  // `de`/`ate` eram ignorados pela ferramenta (o Zod descartava chave
+  // desconhecida) até ela ganhar o período de verdade — dias AAAA-MM-DD,
+  // inclusivos, no máximo 7. Instante ISO agora é recusado pelo schema.
+  const PERIODO = { de: "2026-10-01", ate: "2026-10-07" };
 
   it("⭐ o período da organização inteira vira o período do contato do turno", async () => {
     supabase = bancoFalso(tabelas());
