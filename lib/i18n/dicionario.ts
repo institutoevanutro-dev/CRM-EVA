@@ -8476,6 +8476,13 @@ export const DICIONARIO: Traducoes = {
   // de AST que apontou as seis, uma a uma; nenhuma apareceria abrindo tela.
   "Preparado": { es: "Preparado" },
   "Consultado por": { es: "Consultado por" },
+  // Quem consultou cada material, das buscas do motor (lib/ai/knowledge/uso-do-acervo.ts).
+  "Última consulta": { es: "Última consulta" },
+  "todos os assistentes": { es: "todos los asistentes" },
+  "ninguém nos últimos 30 dias": { es: "nadie en los últimos 30 días" },
+  "Disponível para": { es: "Disponible para" },
+  "nenhuma nos últimos 30 dias": { es: "ninguna en los últimos 30 días" },
+  "não deu para ver agora": { es: "no se pudo ver ahora" },
   "Preparando…": { es: "Preparando…" },
   "Guardando…": { es: "Guardando…" },
   "tokens": { es: "tokens" },

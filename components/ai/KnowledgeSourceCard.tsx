@@ -46,6 +46,7 @@ import {
   ePerguntaEResposta,
 } from "@/lib/ai/rag/tipos-de-fonte";
 import type { SourceRow } from "@/hooks/ai/useKnowledgeSources";
+import type { UsoDoMaterial } from "@/lib/ai/knowledge/uso-do-acervo";
 
 const ICONE_POR_TIPO: Record<string, typeof HelpCircle> = {
   faq: HelpCircle,
@@ -56,8 +57,11 @@ const ICONE_POR_TIPO: Record<string, typeof HelpCircle> = {
 
 interface Props {
   source: SourceRow;
-  /** Nomes dos assistentes que consultam este material. */
-  usadoPor: string[];
+  /**
+   * Quem pode e quem consultou este material (`lib/ai/knowledge/uso-do-acervo.ts`).
+   * `null` = a leitura falhou: o cartão diz isso, e não "ninguém consulta".
+   */
+  uso: UsoDoMaterial | null;
   onReindex: () => void;
   onArquivar: () => void;
   onMudou: () => void;
@@ -84,7 +88,7 @@ function formatRelative(
 
 export function KnowledgeSourceCard({
   source,
-  usadoPor,
+  uso,
   onReindex,
   onArquivar,
   onMudou,
@@ -131,17 +135,39 @@ export function KnowledgeSourceCard({
         </div>
 
         {/* Quem usa este material. Sem isto, arquivar é um tiro no escuro: não dá
-            para saber quantos assistentes param de saber daquilo. */}
+            para saber quantos assistentes param de saber daquilo. Vem do que
+            aconteceu (as buscas do motor), não só do que está configurado. */}
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-text-muted">{t("Consultado por")}</span>
-          <span className="text-right">
-            {usadoPor.length === 0 ? (
+          <span className="shrink-0 text-text-muted">{t("Consultado por")}</span>
+          <span className="text-right" data-testid={`material-consultado-por-${source.id}`}>
+            {uso === null ? (
+              <span className="text-text-muted">{t("não deu para ver agora")}</span>
+            ) : uso.todos ? (
+              t("todos os assistentes")
+            ) : uso.consultadoPor.length > 0 ? (
+              uso.consultadoPor.join(", ")
+            ) : uso.disponivelPara.length > 0 ? (
+              <span className="text-text-muted">{t("ninguém nos últimos 30 dias")}</span>
+            ) : (
               <span className="text-warning-fg" data-testid={`material-orfao-${source.id}`}>
                 {t("nenhum assistente ainda")}
               </span>
-            ) : (
-              usadoPor.join(", ")
             )}
+          </span>
+        </div>
+        {uso && !uso.todos && uso.consultadoPor.length === 0 && uso.disponivelPara.length > 0 ? (
+          <p className="text-right text-xs text-text-muted">
+            {t("Disponível para")}: {uso.disponivelPara.join(", ")}
+          </p>
+        ) : null}
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="shrink-0 text-text-muted">{t("Última consulta")}</span>
+          <span className="text-right" data-testid={`material-ultima-consulta-${source.id}`}>
+            {uso?.ultimaConsultaEm
+              ? formatRelative(uso.ultimaConsultaEm, tagDoIdioma, t)
+              : uso === null
+                ? "—"
+                : t("nenhuma nos últimos 30 dias")}
           </span>
         </div>
 

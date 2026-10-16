@@ -22,20 +22,19 @@ import {
   ChaveDeConhecimento,
   type EstadoDaChave,
 } from "@/components/ai/ChaveDeConhecimento";
-
-export interface AgenteQueUsa {
-  id: string;
-  nome: string;
-  materiais: string[];
-}
+import type { UsoDoMaterial } from "@/lib/ai/knowledge/uso-do-acervo";
 
 interface Props {
   initialSources: SourceRow[];
   initialChave: EstadoDaChave;
-  agentes: AgenteQueUsa[];
+  /** Quem pode e quem consultou cada material. `null` = a leitura falhou. */
+  uso: Record<string, UsoDoMaterial> | null;
 }
 
-export function AcervoClient({ initialSources, initialChave, agentes }: Props) {
+/** Material que nenhum assistente lê nem consultou: o cartão o mostra como órfão. */
+const SEM_USO: UsoDoMaterial = { consultadoPor: [], todos: false, ultimaConsultaEm: null, disponivelPara: [] };
+
+export function AcervoClient({ initialSources, initialChave, uso }: Props) {
   const t = useT();
   const qc = useQueryClient();
   const [novoAberto, setNovoAberto] = useState(false);
@@ -63,10 +62,6 @@ export function AcervoClient({ initialSources, initialChave, agentes }: Props) {
   const lista = (sources ?? []).filter((s) => s.status !== "archived");
   const arquivados = (sources ?? []).filter((s) => s.status === "archived");
   const estado = chave ?? initialChave;
-
-  function usadoPor(sourceId: string): string[] {
-    return agentes.filter((a) => a.materiais.includes(sourceId)).map((a) => a.nome);
-  }
 
   return (
     <div className="space-y-5">
@@ -109,7 +104,7 @@ export function AcervoClient({ initialSources, initialChave, agentes }: Props) {
             <KnowledgeSourceCard
               key={s.id}
               source={s}
-              usadoPor={usadoPor(s.id)}
+              uso={uso === null ? null : (uso[s.id] ?? SEM_USO)}
               isReindexing={reindex.isPending && reindex.variables === s.id}
               onReindex={() => reindex.mutate(s.id)}
               onArquivar={() => arquivar.mutate(s.id)}
