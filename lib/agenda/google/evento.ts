@@ -111,6 +111,8 @@ export interface AgendamentoParaGoogle {
   id: string;
   organization_id: string;
   title: string;
+  /** Nome resolvido do contato da mesma organização; não é um convidado. */
+  contact_name?: string | null;
   description?: string | null;
   /** ISO-8601. É instante, não hora de parede. */
   starts_at: string;
@@ -309,7 +311,7 @@ export function paraEventoDoGoogle(a: AgendamentoParaGoogle): CorpoDeEventoDoGoo
   });
 
   const corpo: CorpoDeEventoDoGoogle = {
-    summary: titulo,
+    summary: a.contact_name?.trim() ? `${a.contact_name.trim()} — ${titulo}` : titulo,
     start: { dateTime: inicio.toISOString(), timeZone: fuso },
     end: { dateTime: fim.toISOString(), timeZone: fuso },
     status: STATUS_PARA_GOOGLE[a.status],

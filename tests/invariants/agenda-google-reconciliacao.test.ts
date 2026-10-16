@@ -375,6 +375,29 @@ it("executor atravessa banco e receiver: unknown insert, título externo, CAS lo
   // Ponte SQL real só para as RPCs internas do executor; token é de teste e o
   // transporte só aponta ao receiver deste caso. Nenhum segredo externo.
   const db = {
+    from: (table: string) => {
+      expect(table).toBe("contacts");
+      const filters: Record<string, string> = {};
+      const query = {
+        select: (columns: string) => {
+          expect(columns).toBe("name,display_name");
+          return query;
+        },
+        eq: (column: string, value: string) => {
+          filters[column] = value;
+          return query;
+        },
+        maybeSingle: async () => {
+          expect(filters.organization_id).toBe(GOV_ORG);
+          const result = await pool.query(
+            "select name,display_name from contacts where organization_id=$1 and id=$2",
+            [filters.organization_id, filters.id],
+          );
+          return { data: result.rows[0] ?? null, error: null };
+        },
+      };
+      return query;
+    },
     rpc: async (name: string, args: Record<string, unknown>) => {
       try {
         expect(name).toBe("fn_google_appointment");

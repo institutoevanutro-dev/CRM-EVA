@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Json } from "@/lib/database.types";
 import { z } from "zod";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { meetingStateSchema } from "./meet";
 import { claimSchema, baseSchema, conflictSchema, cursorSchema, pendingSchema } from "./sync-model";
 
@@ -38,6 +39,24 @@ export const appointmentSnapshotSchema = z.object({
   claim: claimSchema,
 });
 export type AppointmentSnapshot = z.infer<typeof appointmentSnapshotSchema>;
+/** Resolve só o nome publicável, sem copiar dados pessoais para o checkpoint. */
+export async function appointmentForGoogle<
+  A extends {
+    organization_id: string;
+    contact_id: string | null;
+    status: string;
+  },
+>(db: SupabaseClient, a: A): Promise<A & { contact_name: string | null }> {
+  if (!a.contact_id || a.status === "cancelled") return { ...a, contact_name: null };
+  const { data, error } = await db
+    .from("contacts")
+    .select("name,display_name")
+    .eq("organization_id", a.organization_id)
+    .eq("id", a.contact_id)
+    .maybeSingle();
+  if (error) throw new Error("Não foi possível consultar o nome do contato para a agenda.");
+  return { ...a, contact_name: nomeDoContato(data) };
+}
 export const calendarSnapshotSchema = z.object({
   id: z.uuid(),
   organization_id: z.uuid(),

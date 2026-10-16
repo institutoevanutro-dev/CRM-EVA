@@ -11,6 +11,21 @@ import { criarOrigemDeFollowup } from "./followup-service-origin";
 import { appointmentSnapshotSchema, expectedAppointment } from "@/lib/agenda/google/sync-store";
 import { assertMeetingDeliveryPg } from "@/lib/agenda/meet-delivery";
 import { claimOfJob } from "@/lib/agent-engine/queue/claim";
+
+/**
+ * Os clientes simulados só falam RPC; desde que o evento leva o nome do contato
+ * (PR 319), o executor também lê `contacts`. Estes testes cobrem o Meet, não o
+ * nome: a leitura devolve "sem contato" e o título segue como antes.
+ */
+const contatoSemNome = () => {
+  const cadeia = {
+    select: () => cadeia,
+    eq: () => cadeia,
+    maybeSingle: async () => ({ data: null, error: null }),
+  };
+  return cadeia;
+};
+
 const pool = new pg.Pool({
   connectionString: `postgresql://postgres:postgres@127.0.0.1:${process.env.TEST_DB_PORT ?? 54329}/postgres`,
   max: 5,
@@ -380,6 +395,7 @@ it("HTTP controlado: POST pending, polling GET, success/failure/unknown e convit
   const address = receiver.address();
   if (!address || typeof address === "string") throw Error("receiver");
   const db = {
+    from: contatoSemNome,
     rpc: async (_name: string, args: Record<string, unknown>) => {
       try {
         return { data: await app(f, String(args.p_action), args.p_args), error: null };
@@ -532,6 +548,7 @@ it("HTTP aceito com resposta perdida conserva request; recibo não reconhece rem
   const address = receiver.address();
   if (!address || typeof address === "string") throw Error("receiver");
   const db = {
+    from: contatoSemNome,
     rpc: async (_name: string, args: Record<string, unknown>) => {
       try {
         const data = await app(f, String(args.p_action), args.p_args);
