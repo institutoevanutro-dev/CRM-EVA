@@ -58,6 +58,11 @@ ler() { printf '%s\n' "$ENVOUT" | grep "^$1=" | cut -d= -f2- | tr -d '"'; }
 API_URL="$(ler API_URL)"
 ANON="$(ler ANON_KEY)"
 SERVICE="$(ler SERVICE_ROLE_KEY)"
+# A porta do banco vem do stack que está de pé, como as chaves: um `config.toml`
+# com outras portas (dois stacks na mesma máquina) gerava um SUPABASE_DB_URL
+# apontando para o banco de OUTRO projeto.
+DB_URL="$(ler DB_URL)"
+DB_URL="${DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}"
 
 if [ -z "$API_URL" ] || [ -z "$ANON" ] || [ -z "$SERVICE" ]; then
   echo "==> Não consegui ler as chaves do stack local (API_URL/ANON_KEY/SERVICE_ROLE_KEY)." >&2
@@ -96,7 +101,7 @@ cat > .env.e2e <<EOF
 NEXT_PUBLIC_SUPABASE_URL=$API_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON
 SUPABASE_SERVICE_ROLE_KEY=$SERVICE
-SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+SUPABASE_DB_URL=$DB_URL
 
 # Precisa bater com o baseURL real do Playwright (ver comentário acima).
 NEXT_PUBLIC_APP_URL=http://localhost:$E2E_PORT

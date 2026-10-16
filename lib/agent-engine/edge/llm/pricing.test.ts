@@ -52,6 +52,10 @@ describe("costCents — cada tarifa isolada, por modelo", () => {
   // acidental de 5/25 por 25/5 daria os mesmos US$ 30 e passaria verde.
   it.each([
     // modelo,              entrada, saída, leitura de cache, gravação 5m, gravação 1h
+    // Família 5.5 (upstream #2749, conferida em 11/10/2026): leitura de cache a 0.05× no Sonnet e no Opus.
+    ["claude-haiku-5-5", 10, 50, 1, 12.5, 20],
+    ["claude-sonnet-5-5", 200, 1000, 10, 250, 400],
+    ["claude-opus-5-5", 400, 2000, 20, 500, 800],
     ["claude-sonnet-5", 200, 1000, 20, 250, 400],
     ["claude-sonnet-4-6", 300, 1500, 30, 375, 600],
     ["claude-haiku-4-5", 100, 500, 10, 125, 200],
@@ -117,6 +121,11 @@ describe("costCents — id que a tabela não conhece volta NULL", () => {
     ["claude-sonnet-50"],
     ["claude-opus-4-9"],
     ["claude-opus-48"],
+    // Vizinhos da família 5.5: nenhum herda o preço do Haiku 5.5.
+    ["claude-haiku-5"],
+    ["claude-haiku-5-50"],
+    ["claude-haiku-5-5-1"],
+    ["claude-haiku-55"],
     // Mesmo com o recorte do prefixo tolerado, modelo que não casa em NENHUM
     // formato continua NULL — o recorte não inventa preço (armadilha 3).
     ["anthropic/claude-sonnet-50"],
@@ -141,6 +150,7 @@ describe("costCents — id com prefixo provider/ (formato OpenRouter)", () => {
     ["anthropic/claude-sonnet-4-6", 300, 1500, 30, 375, 600],
     ["anthropic/claude-haiku-4-5", 100, 500, 10, 125, 200],
     ["anthropic/claude-opus-5", 500, 2500, 50, 625, 1000],
+    ["anthropic/claude-haiku-5-5", 10, 50, 1, 12.5, 20],
   ])("%s custa como o id sem prefixo", (model, cIn, cOut, cLeitura, cGrav5m, cGrav1h) => {
     expect(entrada(model)).toBeCloseTo(cIn, 6);
     expect(saida(model)).toBeCloseTo(cOut, 6);

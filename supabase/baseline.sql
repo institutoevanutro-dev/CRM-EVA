@@ -29062,6 +29062,8 @@ declare
   v_antes jsonb;
   v_depois jsonb;
   v_definido boolean := false;
+  -- (e0) 'duas entradas do vocabulário viraram uma' — issue #2801.
+  v_juntou boolean := false;
 begin
   -- Portão de papel ANTES de qualquer escrita. Definer com p_org vindo da rota:
   -- é esta linha que separa o tenant de quem chama.
@@ -29123,7 +29125,14 @@ begin
       v_settings := '{}'::jsonb;
     end if;
 
-    v_antes := coalesce(v_settings -> 'tags', '[]'::jsonb);
+    -- (a) tolera `settings.tags` torto (escalar/objeto): a leitura já tolera com
+    -- `jsonb_typeof`, e sem esta guarda o `jsonb_array_elements` levantava
+    -- `cannot extract elements from a scalar` e derrubava a tela inteira numa
+    -- organização com o dado malformado. Lista que não é lista é lista vazia.
+    v_antes := case
+      when jsonb_typeof(v_settings -> 'tags') = 'array' then v_settings -> 'tags'
+      else '[]'::jsonb
+    end;
     v_depois := coalesce(
       (
         select jsonb_agg(entrada.valor order by entrada.ord)
@@ -29347,7 +29356,42 @@ begin
   end if;
 
   -- (e) o vocabulário da organização, nos dois lugares onde ele mora.
-  v_antes := coalesce(v_settings -> 'tags', '[]'::jsonb);
+  -- Mesma guarda do ramo de renomear: `settings.tags` malformado não pode
+  -- derrubar a cor (a leitura tolera; a escrita agora também).
+  v_antes := case
+    when jsonb_typeof(v_settings -> 'tags') = 'array' then v_settings -> 'tags'
+    else '[]'::jsonb
+  end;
+
+  -- ── (e0) O AVISO DE JUNÇÃO — renomear NÃO é renome simples quando o nome
+  -- já existe (issue #2801) ────────────────────────────────────────────────
+  --
+  -- Renomear para um nome que JÁ ESTÁ no vocabulário junta as duas entradas
+  -- numa só, e a operação respondia `alterou: true` idêntico a um renome
+  -- simples: a tela dizia "Etiqueta atualizada" enquanto duas etiquetas
+  -- viravam uma. O marcador é medido AQUI, no vocabulário curado, e não na
+  -- tela — a tela só tem a lista que ela mesma acabou de ler, e o caso
+  -- justamente interessante é o que já vinha como DUAS linhas.
+  --
+  -- O alcance é declarado: `juntou` diz "duas ENTRADAS do vocabulário curado
+  -- colapsaram". `juntar` um nome que só existia em uso (fora do vocabulário)
+  -- não colapsa entrada nenhuma ali, e o marcador fica `false` — o que
+  -- normalizou os nomes nesse caso foi `fn_tags_normalizar`, outro desenho.
+  if not v_remover then
+    select exists (
+      select 1
+      from jsonb_array_elements(v_antes) with ordinality as e(valor, ord)
+      where btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}')) <> ''
+      group by lower(
+                case when lower(btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))) = lower(v_tag)
+                     then v_destino
+                     else btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))
+                end
+              )
+      having count(*) > 1
+    ) into v_juntou;
+  end if;
+
   v_depois := coalesce(
     (
       select jsonb_agg(entrada.valor order by entrada.ord)
@@ -29381,7 +29425,25 @@ begin
           where btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}')) <> ''
         ) x
         where x.valor is not null and coalesce(x.chave, '') <> ''
-        order by lower(x.chave), x.ord
+        -- ⚠️ O DESEMPATE É PELO METADADO, ANTES DA ORDEM (issue #2801).
+        --
+        -- Com `order by lower(x.chave), x.ord` a primeira entrada pela posição
+        -- ficava, COM OU SEM cor/descrição: renomear "a" (que tinha cor) para
+        -- "b" (que existia antes, sem cor) PERDIA a cor que o operador havia
+        -- escolhido — a entrada vazia de metadado vinha primeiro na lista.
+        -- Este é o MESMO desempate da função de leitura
+        -- (`fn_vocabulario_de_tags`) e do ramo `definir_cor`: onde a lista tem
+        -- a mesma etiqueta duas vezes, sobrevive a que carrega metadado.
+        --
+        -- Quando as DUAS já têm metadado, o metadado não decide mais nada e o
+        -- desempate volta a ser a ORDEM: fica a que já ocupava a posição no
+        -- vocabulário — isto é, o destino. Cor contra cor tem de perder uma, e
+        -- a regra escolhida preserva a identidade (nome + posição + cor) de
+        -- quem já estava lá, em vez de deixar a posição da lista decidir
+        -- qualquer coisa depois de virar empate técnico.
+        order by lower(x.chave),
+                 ((x.valor ->> 'cor') is not null or (x.valor ->> 'descricao') is not null) desc,
+                 x.ord
       ) as entrada
       where entrada.valor is not null
     ),
@@ -29437,6 +29499,12 @@ begin
     'leads', v_leads,
     'conversas', v_conversas,
     'regras', v_regras,
+    -- `juntou` é o AVISO de que esta operação juntou duas etiquetas do
+    -- vocabulário numa só (issue #2801). Sem ele a resposta era indistinguível
+    -- de um renome simples, e a tela não tinha o que dizer. `false` no renome
+    -- que não juntou, no excluir e em `juntar` cujo destino não estava no
+    -- vocabulário curado (ver o bloco (e0)).
+    'juntou', v_juntou,
     'alterou', (v_contatos + v_leads + v_conversas + v_regras > 0 or v_definido)
   );
 end;
@@ -35909,6 +35977,55 @@ end $janela$;
 
 -- ---- fim: excluir agendamento lançado por engano (migration 0364) ----
 
+-- ---- contato sempre atendimento humano (migration 0366) ----
+-- Porte da 0624 (#2671, @webtecnica) e da 0676 (#2924, @melgarafael) do
+-- upstream, adaptado. `contacts.force_human` é a trava do HANDOFF: nasce na
+-- escalação e morre quando o atendimento é devolvido ao automático. Faltava uma
+-- marca PERMANENTE, que nenhuma devolução desfaz: "este contato a IA nunca
+-- atende".
+--
+-- `ai_opt_out` é essa marca, e o banco garante a regra que importa: enquanto ela
+-- estiver ligada, `force_human` fica ligado. Toda guarda da IA já lê
+-- `force_human` (turno de entrada, roteador, follow-up, envio da agenda pela IA,
+-- worker nativo, before-send), então a marca cala a IA em todos esses caminhos
+-- sem uma segunda regra para cada um. O gatilho também segura a escrita que
+-- tentar soltar `force_human` por outro lado (a corrida entre marcar e devolver
+-- que a 0676 do upstream fechou em código).
+--
+-- Desligar a marca NÃO devolve o atendimento: `force_human` continua ligado até
+-- alguém clicar em "Devolver ao automático". O envio humano não muda nada.
+
+alter table public.contacts add column if not exists ai_opt_out boolean not null default false;
+
+comment on column public.contacts.ai_opt_out is
+  'Sempre atendimento humano (migration 0366): a IA nunca atende este contato. Enquanto true, o gatilho trg_contacts_ai_opt_out_segura_humano mantém force_human = true. A devolução ao automático é recusada.';
+
+-- `authenticated` lê contacts por grant de COLUNA (0289: tudo menos cpf_hash), e
+-- coluna nova não entra sozinha nesse grant. Sem esta linha a ficha do contato
+-- recusaria a leitura inteira.
+grant select (ai_opt_out) on public.contacts to authenticated;
+
+create or replace function public.fn_contacts_ai_opt_out_segura_humano()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.force_human := true;
+  return new;
+end;
+$$;
+
+revoke execute on function public.fn_contacts_ai_opt_out_segura_humano() from public, anon, authenticated;
+
+create or replace trigger trg_contacts_ai_opt_out_segura_humano
+  before insert or update of ai_opt_out, force_human on public.contacts
+  for each row
+  when (new.ai_opt_out)
+  execute function public.fn_contacts_ai_opt_out_segura_humano();
+-- Quem mede a regra: `tests/invariants/contato-sempre-humano.test.ts`.
+-- ---- fim: contato sempre atendimento humano (migration 0366) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
@@ -36158,3 +36275,105 @@ end $politica$;
 -- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
 -- Quem mede a regra: `tests/invariants/agendamento-excluido-nao-da-acesso.test.ts`.
 -- ---- fim: agendamento excluído não dá acesso ao paciente (migration 0365) ----
+
+
+-- ---- Claude Haiku, Sonnet e Opus 5.5 no catálogo (migration 0367) ----
+-- Porte da 0675 do upstream (#2749, @rafaelcesardev). Junto vai o
+-- @ai-sdk/anthropic 4.0.51, que tira temperature/top_p/top_k do corpo nos ids
+-- que a recusam (Opus 5, Haiku 5.5, Opus 5.5). Nenhum agente troca de modelo:
+-- isto só põe as opções na lista e o preço no orçamento.
+--
+-- O catálogo da Anthropic parou no Opus 5 / Sonnet 5 (migration 0101 deste fork): quem
+-- instala hoje não consegue escolher a geração 5.5, que custa igual ou menos.
+--
+-- Ids, janela de contexto e data de lançamento conferidos na documentação
+-- oficial, NÃO na API (11/10/2026):
+--   platform.claude.com/docs/en/about-claude/models/overview → claude-haiku-5-5,
+--   claude-sonnet-5-5, claude-opus-5-5; 1M tokens nos três.
+--   platform.claude.com/docs/en/models/<modelo>/overview → "Released": Haiku 5.5
+--   em 07/10/2026, Sonnet 5.5 em 28/09/2026, Opus 5.5 em 22/09/2026.
+-- ⚠️ Sem chave Anthropic nesta máquina: os ids NÃO foram conferidos em
+-- GET /v1/models, como a 0101 fez com os dela.
+--
+-- Preços (centavos por milhão de tokens, entrada/saída), fonte:
+-- platform.claude.com/docs/en/about-claude/pricing, consultada em 11/10/2026:
+--   claude-haiku-5-5 .....  10 /   50  ($0,10 / $0,50 com prompt até 100 mil tokens;
+--                                      acima disso $0,50 / $2,50 — a coluna só tem
+--                                      um preço, e vale o da faixa comum)
+--   claude-sonnet-5-5 .... 200 / 1000  ($2 / $10)
+--   claude-opus-5-5 ...... 400 / 2000  ($4 / $20)
+--
+-- Fora: claude-fable-5-1 ($10 / $50). É 2,5× o Opus 5.5, a Anthropic o descreve
+-- como "Slower" e para raciocínio de horizonte longo — turnos de minutos, o
+-- oposto de uma resposta de WhatsApp — e exige retenção de dados de 30 dias
+-- (organização em retenção zero recebe 400). O critério da 0101 é não deixar o
+-- cliente pagar mais caro sem ganho para o atendimento.
+--
+-- NÃO mexe no padrão da Anthropic (segue claude-sonnet-5). Idempotente nas duas
+-- tabelas (on conflict do update). O invariante tests/invariants/catalogo-de-modelos.test.ts
+-- exige preço IGUAL nos dois lados e notes começando com 'catálogo'.
+-- supports_tools = true: senão o modelo não aparece no seletor do agente.
+
+-- ---------------------------------------------------------------------------
+-- 1. catálogo (o que a tela oferece)
+-- ---------------------------------------------------------------------------
+insert into public.ai_models
+  (provider, model_id, display_name, description, context_window, released_at,
+   input_price_per_million_cents, output_price_per_million_cents, supports_tools)
+values
+  ('anthropic', 'claude-haiku-5-5', 'Claude Haiku 5.5',
+   'O mais rápido e barato da Anthropic, para alto volume e classificação. Acima de 100 mil tokens de entrada numa chamada o preço sobe para $0,50/$2,50 por milhão.',
+   1000000, '2026-10-07', 10, 50, true),
+  ('anthropic', 'claude-sonnet-5-5', 'Claude Sonnet 5.5',
+   'Equilíbrio de velocidade e capacidade; sucessor do Sonnet 5, pelo mesmo preço.',
+   1000000, '2026-09-28', 200, 1000, true),
+  ('anthropic', 'claude-opus-5-5', 'Claude Opus 5.5',
+   'O Opus atual, para trabalho agêntico complexo; custa menos que o Opus 5.',
+   1000000, '2026-09-22', 400, 2000, true)
+on conflict (provider, model_id) do update set
+  display_name = excluded.display_name,
+  description = excluded.description,
+  context_window = excluded.context_window,
+  released_at = excluded.released_at,
+  input_price_per_million_cents = excluded.input_price_per_million_cents,
+  output_price_per_million_cents = excluded.output_price_per_million_cents,
+  supports_tools = excluded.supports_tools,
+  deprecated_at = null;
+
+-- O Opus 5 deixou de ser "o mais capaz", e o Sonnet 5 não volta a $3/$15: a
+-- Anthropic tornou $2/$10 o preço padrão e cancelou o aumento de 01/09/2026.
+update public.ai_models set description = 'Geração anterior do Opus.'
+ where provider = 'anthropic' and model_id = 'claude-opus-5';
+update public.ai_models set description = 'Geração anterior do Sonnet.'
+ where provider = 'anthropic' and model_id = 'claude-sonnet-5';
+
+-- ---------------------------------------------------------------------------
+-- 2. contabilidade de custo — a MESMA lista, mesmos números (senão o gasto é
+--    somado com preço de outro modelo, ou não é somado e some do orçamento).
+-- ---------------------------------------------------------------------------
+insert into public.ai_pricing
+  (model, prompt_cents_per_million_tokens, completion_cents_per_million_tokens, notes)
+values
+  ('claude-haiku-5-5',   10,   50, 'catálogo 0367 — acima de 100k tokens de entrada, 50/250'),
+  ('claude-sonnet-5-5', 200, 1000, 'catálogo 0367'),
+  ('claude-opus-5-5',   400, 2000, 'catálogo 0367')
+on conflict (model) do update set
+  prompt_cents_per_million_tokens = excluded.prompt_cents_per_million_tokens,
+  completion_cents_per_million_tokens = excluded.completion_cents_per_million_tokens,
+  notes = excluded.notes,
+  superseded_at = null;
+-- ---- fim: Claude Haiku, Sonnet e Opus 5.5 no catálogo (migration 0367) ----
+
+-- ---- renomear que junta guarda a cor e avisa (migration 0368) ----
+-- Porte da 0677 do upstream (#2817, @webtecnica, issue #2801). No dedupe do
+-- renomear/juntar de `fn_vocabulario_de_tags_operar`, o desempate passa a ser
+-- pelo metadado (cor ou descrição) antes da ordem, e o retorno ganha `juntou`.
+--
+-- NÃO HÁ CORPO DE FUNÇÃO AQUI, de propósito: a troca foi feita no lugar, na
+-- definição de cinco argumentos acima neste arquivo. Assim a reaplicação não
+-- passa por versão antiga
+-- (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`), e a última
+-- definição é igual à da migration 0368
+-- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
+-- Quem mede a regra: `tests/invariants/tags-juntar-guarda-a-cor.test.ts`.
+-- ---- fim: renomear que junta guarda a cor e avisa (migration 0368) ----

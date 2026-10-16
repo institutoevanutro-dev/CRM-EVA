@@ -66,6 +66,22 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
   if (!guarda.ok) return { type: TIPO, status: "skipped", detail: { reason: guarda.reason } };
   const contact = guarda.contact;
 
+  // "Sempre atendimento humano" (migration 0366): a IA nunca escreve para este
+  // contato, nem abrindo conversa. Lido do banco (o contexto do evento pode ser
+  // anterior à marca); leitura falhando para, como as outras guardas daqui.
+  const { data: marca, error: marcaErr } = await ctx.admin
+    .from("contacts")
+    .select("ai_opt_out")
+    .eq("organization_id", ctx.organizationId)
+    .eq("id", contact.id)
+    .maybeSingle();
+  if (marcaErr) {
+    return { type: TIPO, status: "skipped", detail: { reason: "elegibilidade_indeterminada", error: marcaErr.message.slice(0, 160) } };
+  }
+  if ((marca as { ai_opt_out?: boolean } | null)?.ai_opt_out === true) {
+    return { type: TIPO, status: "skipped", detail: { reason: "ai_opt_out" } };
+  }
+
   // Esta ação abre um primeiro contato e por isso ainda não tem conversa para
   // passar pelo gate comum. No pré-go-live ela precisa parar AQUI, antes da
   // chamada paga ao modelo e antes de criar qualquer mensagem.

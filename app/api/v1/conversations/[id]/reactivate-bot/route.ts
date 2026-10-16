@@ -61,6 +61,17 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
     if (resultado.erro === "conversation_not_found") {
       return fail("not_found", t("Conversa não encontrada."), 404, { requestId });
     }
+    if (resultado.erro === "contato_sempre_humano") {
+      return fail(
+        "state_conflict",
+        t("Este contato está marcado como sempre atendimento humano. Tire a marca na ficha do contato antes de devolver ao automático."),
+        409,
+        { requestId },
+      );
+    }
+    if (resultado.erro === "contact_state_unreadable") {
+      return fail("internal_error", t("Não foi possível conferir o contato agora. Tente de novo."), 500, { requestId });
+    }
     if (resultado.erro === "assignment_conflict") {
       return fail(
         "state_conflict",
