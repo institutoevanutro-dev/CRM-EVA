@@ -674,6 +674,27 @@ export const DICIONARIO: Traducoes = {
   fechadas: { es: "cerradas" },
   atualizadas: { es: "actualizadas" },
   "Recusada.": { es: "Rechazada." },
+
+  // ─── Inbox: painel "Iniciar conversa" (porte do upstream #2838) ───
+  "Iniciar conversa": { es: "Iniciar conversación" },
+  "Nova conversa": { es: "Nueva conversación" },
+  "Diga para quem e o que dizer.": { es: "Di para quién y qué decir." },
+  "Telefone ou nome do contato": { es: "Teléfono o nombre del contacto" },
+  "Contato existente": { es: "Contacto existente" },
+  "Como o contato aparece no CRM": { es: "Cómo aparece el contacto en el CRM" },
+  "Primeira mensagem": { es: "Primer mensaje" },
+  "O que dizer ao contato (opcional)": { es: "Qué decirle al contacto (opcional)" },
+  "Usar modelo de mensagem": { es: "Usar plantilla de mensaje" },
+  "A conversa abre atribuída a você: a IA não assume este atendimento.": {
+    es: "La conversación se abre asignada a ti: la IA no asume esta atención.",
+  },
+  "Criar conversa": { es: "Crear conversación" },
+  "Nenhum contato encontrado": { es: "Ningún contacto encontrado" },
+  "A conversa abriu, mas a primeira mensagem não pôde ser enviada.": {
+    es: "La conversación se abrió, pero el primer mensaje no se pudo enviar.",
+  },
+  "A conversa neste número está com": { es: "La conversación en este número está con" },
+  "outro atendente": { es: "otro agente" },
   Aberta: { es: "Abierta" },
   Fechada: { es: "Cerrada" },
   "Em atendimento": { es: "En atención" },
