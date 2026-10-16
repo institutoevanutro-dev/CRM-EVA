@@ -173,7 +173,7 @@ async function casosIrmaosPendentes(
   const { rows } = await pool.query<{ id: string; payload: unknown }>(
     `select id, payload from job_queue
       where organization_id = $1 and contact_id = $2 and kind = 'case_reply_turn'
-        and status = 'pending' and id <> $3
+        and status = 'pending' and id::text <> $3
       order by created_at, id`,
     [job.organization_id, contactId, job.id],
   );
