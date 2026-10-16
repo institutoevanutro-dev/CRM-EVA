@@ -7,11 +7,20 @@ const ALIASES: Record<string, string> = {
   email: "contact.email",
 };
 
-export function renderTemplate(template: string, context: Record<string, unknown>): string {
+/**
+ * `formatarValor` recebe cada VALOR já resolvido, nunca o template: quem
+ * renderiza para HTML escapa o que veio do contato ou do negócio e mantém a
+ * marcação que o operador escreveu (porte do upstream #2794).
+ */
+export function renderTemplate(
+  template: string,
+  context: Record<string, unknown>,
+  formatarValor: (valor: string) => string = (valor) => valor,
+): string {
   return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, path: string) => {
     const resolved = resolveField(context, ALIASES[path] ?? path);
     // `{{primeiro_nome}}` = primeira palavra do nome, como no Inbox e na campanha.
     const texto = String(resolved ?? "");
-    return path === "primeiro_nome" ? (texto.trim().split(/\s+/)[0] ?? "") : texto;
+    return formatarValor(path === "primeiro_nome" ? (texto.trim().split(/\s+/)[0] ?? "") : texto);
   });
 }

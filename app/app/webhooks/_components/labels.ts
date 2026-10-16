@@ -8,6 +8,7 @@ export type TriggerEvent = (typeof TRIGGER_EVENTS)[number];
 export type ActionType =
   | "create_or_move_lead"
   | "send_whatsapp_message"
+  | "send_email"
   | "send_ai_message"
   | "add_tag"
   | "assign_owner"
@@ -38,6 +39,7 @@ export const TRIGGER_LABELS: Record<TriggerEvent, string> = {
 export const ACTION_LABELS: Record<ActionType, string> = {
   create_or_move_lead: "Criar/mover lead no funil",
   send_whatsapp_message: "Enviar mensagem no WhatsApp",
+  send_email: "Enviar e-mail",
   send_ai_message: "Mensagem escrita pela IA",
   add_tag: "Adicionar tag",
   assign_owner: "Atribuir a um atendente",
