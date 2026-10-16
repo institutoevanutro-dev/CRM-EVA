@@ -169,8 +169,22 @@ describe('quem lê a janela de resposta (0335)', () => {
   it('só o turno que reage a quem escreveu é resposta', async () => {
     const { eTurnoDeResposta } = await import('@/lib/agent-engine/agent/inbound-turn');
     expect(eTurnoDeResposta({ kind: 'inbound_turn' })).toBe(true);
-    expect(eTurnoDeResposta({ kind: 'case_reply_turn' })).toBe(true);
     // Retomar conversa parada às 4h é o que a janela de disparo existe para barrar.
     expect(eTurnoDeResposta({ kind: 'followup_turn' })).toBe(false);
+    // Repassar a resolução de um caso também é iniciativa nossa, não resposta.
+    expect(eTurnoDeResposta({ kind: 'case_reply_turn' })).toBe(false);
+  });
+
+  it('caso resolvido às 05:05 numa clínica com resposta 0–24 é adiado para a abertura do disparo', async () => {
+    // Produção, 16/10/2026: o gestor resolveu três casos às 05:05 e o agente
+    // escreveu aos pacientes às 05:05, porque o turno lia a janela de resposta.
+    const { eTurnoDeResposta } = await import('@/lib/agent-engine/agent/inbound-turn');
+    const as0505 = new Date('2026-10-16T05:05:00-03:00');
+    const k = knobs({ respostaStartHour: 0, respostaEndHour: 24 });
+    const resposta = eTurnoDeResposta({ kind: 'case_reply_turn' });
+    expect(janelaDeEnvioAberta(as0505, k, resposta)).toBe(false);
+    expect(horaNoFuso(proximaAberturaDaJanela(as0505, k, resposta, () => 0))).toBe(k.windowStartHour);
+    // O paciente que escreve às 05:05, esse sim, é respondido na hora.
+    expect(janelaDeEnvioAberta(as0505, k, eTurnoDeResposta({ kind: 'inbound_turn' }))).toBe(true);
   });
 });

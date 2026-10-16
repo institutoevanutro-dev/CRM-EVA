@@ -137,8 +137,9 @@ export interface GateContext {
      * direção segura: quem esquece o campo continua preso ao horário comercial
      * em vez de abrir o número às 3h.
      *
-     * O `inbound_turn` (cliente escreveu) e o `case_reply_turn` passam `true` e leem
-     * `resposta*`. O disparo em massa NÃO passa por este gate — ele usa
+     * Só o `inbound_turn` (cliente escreveu) passa `true` e lê `resposta*`. O
+     * `case_reply_turn` NÃO: repassar a resolução de um caso é iniciativa nossa,
+     * não reação a quem escreveu agora (`eTurnoDeResposta`, inbound-turn.ts). O disparo em massa NÃO passa por este gate — ele usa
      * `decidePacing` direto (`lib/prospecting/worker.ts`) — então o valor aqui
      * só distingue resposta de retomada por follow-up.
      */
