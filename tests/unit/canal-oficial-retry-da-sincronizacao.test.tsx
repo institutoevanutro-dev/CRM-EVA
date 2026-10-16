@@ -36,7 +36,7 @@ const horasAtras = (h: number) => new Date(Date.now() - h * 3600_000).toISOStrin
 function estado(historico: { request_id: string } | { erro: string } | null, onboardingEm: string): OfficialChannelState {
   return {
     connected: true, hasToken: true, phoneNumberId: "111222333", wabaId: "222333444555", displayName: "Clínica",
-    phoneNumber: "+5527999049879", status: "WORKING", webhook: null,
+    phoneNumber: "+5527990001234", status: "WORKING", webhook: null,
     cadastroIncorporado: { disponivel: true, appId: "1234567890", configId: "cfg", versao: "v23.0", faltam: [], configurarEm: null },
     coexistencia: { onboarding_em: onboardingEm, pedidos: { contatos: { request_id: "c-1" }, historico }, historico: null },
   };

@@ -26,14 +26,14 @@ import { PATCH } from "@/app/api/v1/tasks/[id]/route";
 const ORG = "22222222-2222-4222-8222-222222222222";
 const OUTRA = "33333333-3333-4333-8333-333333333333";
 const ANA = "11111111-1111-4111-8111-111111111111";
-const ERICK = "44444444-4444-4444-8444-444444444444";
+const RUI = "44444444-4444-4444-8444-444444444444";
 const DE_FORA = "66666666-6666-4666-8666-666666666666";
 const SAIU = "77777777-7777-4777-8777-777777777777";
 const VIEWER = "88888888-8888-4888-8888-888888888888";
 
 const MEMBROS = [
   { organization_id: ORG, user_id: ANA, role: "admin", revoked_at: null },
-  { organization_id: ORG, user_id: ERICK, role: "agent", revoked_at: null },
+  { organization_id: ORG, user_id: RUI, role: "agent", revoked_at: null },
   { organization_id: ORG, user_id: SAIU, role: "agent", revoked_at: "2026-09-01T00:00:00Z" },
   { organization_id: ORG, user_id: VIEWER, role: "viewer", revoked_at: null },
   { organization_id: OUTRA, user_id: DE_FORA, role: "admin", revoked_at: null },
@@ -42,7 +42,7 @@ const MEMBROS = [
 describe("responsavelValido", () => {
   const { db } = fakeDb({ user_organizations: MEMBROS });
   it("aceita membro ativo da organização", async () => {
-    expect(await responsavelValido(db, ORG, ERICK)).toBe(true);
+    expect(await responsavelValido(db, ORG, RUI)).toBe(true);
   });
   it("recusa quem é de outra organização", async () => {
     expect(await responsavelValido(db, ORG, DE_FORA)).toBe(false);

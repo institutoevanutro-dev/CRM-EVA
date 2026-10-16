@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Vercel AI SDK `tool()`, Postgres (pg), Vitest, invariantes `pnpm test:db`.
 
-**Spec:** `docs/superpowers/specs/2026-10-06-biblioteca-de-midias-design.md` §2.2 (decisão do André: a IA escolhe sozinha, teto de 1 mídia por turno, só itens `Pronta`).
+**Spec:** `docs/superpowers/specs/2026-10-06-biblioteca-de-midias-design.md` §2.2 (decisão do dono: a IA escolhe sozinha, teto de 1 mídia por turno, só itens `Pronta`).
 
 ## Global Constraints
 

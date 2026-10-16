@@ -16,7 +16,7 @@
 - Intramuscular: 7 minutos totais; intravenosa: 30 minutos totais.
 - Vitória: três consultórios e duas salas de aplicação.
 - Serra: uma sala de atendimento e uma sala de aplicação.
-- Somente Vitória permite uma intravenosa e uma intramuscular simultâneas com Isadora.
+- Somente Vitória permite uma intravenosa e uma intramuscular simultâneas com a profissional de aplicações.
 - Serra não permite aplicações simultâneas.
 - Demais durações vêm do Catálogo de Produtos.
 - Serviço sem duração não é oferecido automaticamente pela IA.
@@ -184,7 +184,7 @@ git commit -m "feat(agenda): usa duracao e unidade do servico"
 
 - [ ] **Step 1: Escrever os casos de conflito**
 
-Cobrir: mesma sala com horários sobrepostos; profissional normal em dois atendimentos; Isadora em Vitória com IV+IM; Isadora com IV+IV; qualquer simultaneidade na Serra.
+Cobrir: mesma sala com horários sobrepostos; profissional normal em dois atendimentos; a profissional de aplicações em Vitória com IV+IM; a profissional de aplicações com IV+IV; qualquer simultaneidade na Serra.
 
 ```ts
 expect(podeCombinar({ unit: "vitoria", existing: ["iv"], incoming: "im", capacity: 2 })).toBe(true);
@@ -267,7 +267,7 @@ git add app/api/v1/agenda/unidades app/api/v1/agenda/salas app/app/settings/tena
 git commit -m "feat(agenda): configura unidades e salas"
 ```
 
-### Task 5: Validar e preparar configuração do Instituto Eva
+### Task 5: Validar e preparar configuração da clínica
 
 **Files:**
 - Create: `.changes/agenda-recursos-fisicos.md`
@@ -284,12 +284,12 @@ Grade: 5 minutos
 Intramuscular: 7 minutos
 Intravenosa: 30 minutos
 
-Dr. André: segunda e quinta na Serra; terça, quarta e sexta em Vitória
-Dra. Ana: quarta à tarde em Vitória
-Juliana: segunda à tarde em Vitória
-Leonardo: quarta e sexta à tarde em Vitória
-Paulo: terça e quinta à tarde em Vitória
-Isadora: segunda e quinta o dia todo na Serra; terça, quarta e sexta em Vitória
+Dr. Otávio: segunda e quinta na Serra; terça, quarta e sexta em Vitória
+Profissional A: quarta à tarde em Vitória
+Profissional B: segunda à tarde em Vitória
+Profissional C: quarta e sexta à tarde em Vitória
+Profissional D: terça e quinta à tarde em Vitória
+Profissional de aplicações: segunda e quinta o dia todo na Serra; terça, quarta e sexta em Vitória
 
 Expediente das duas unidades: segunda a sexta, 09h–12h e 14h–19h
 ```

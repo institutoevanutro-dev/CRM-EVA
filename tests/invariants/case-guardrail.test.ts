@@ -75,7 +75,7 @@ describe("casePromiseGate — a invariante sagrada (spec 15 §10.2, Wave 4)", ()
   });
 
   /**
-   * Produção, Instituto Eva, 14/10/2026: a abertura do caso do comprovante foi
+   * Produção, 14/10/2026: a abertura do caso do comprovante foi
    * recusada, e a promessa "precisa ser conferido pela equipe" passou porque a
    * conversa tinha OUTRO caso aberto, de ontem. Caso aberto de outro assunto não
    * sustenta a promessa sobre a pendência que acabou de ser recusada.

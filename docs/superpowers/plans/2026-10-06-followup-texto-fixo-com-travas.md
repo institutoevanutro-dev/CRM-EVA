@@ -5,7 +5,7 @@ Os nomes D1–D7 abaixo remetem às decisões da spec.
 
 ## Regras para quem executa
 
-- Trabalhe só no worktree `/Users/andreluislopescosta/crm-f2-followup-envio`, branch `fix/followup-texto-fixo-com-travas`. Use caminhos absolutos ou `git -C`.
+- Trabalhe só no worktree `~/crm-f2-followup-envio`, branch `fix/followup-texto-fixo-com-travas`. Use caminhos absolutos ou `git -C`.
 - Cada passo segue a mesma ordem:
   1. escreva o teste;
   2. rode e veja **vermelho pelo motivo certo**;
@@ -22,7 +22,7 @@ Os nomes D1–D7 abaixo remetem às decisões da spec.
 - Comando de um arquivo, usado em cada passo:
 
   ```bash
-  cd /Users/andreluislopescosta/crm-f2-followup-envio && pnpm vitest run <arquivo>
+  cd ~/crm-f2-followup-envio && pnpm vitest run <arquivo>
   ```
 
   O alias `V <arquivo>` nos passos significa este comando.
@@ -32,19 +32,19 @@ Os nomes D1–D7 abaixo remetem às decisões da spec.
 ## Passo 0: ponto de partida
 
 ```bash
-git -C /Users/andreluislopescosta/crm-f2-followup-envio fetch -q origin main
-git -C /Users/andreluislopescosta/crm-f2-followup-envio merge --ff-only origin/main   # sem commits próprios além dos docs: FF; senão `git merge origin/main`
-cd /Users/andreluislopescosta/crm-f2-followup-envio && pnpm install --frozen-lockfile
+git -C ~/crm-f2-followup-envio fetch -q origin main
+git -C ~/crm-f2-followup-envio merge --ff-only origin/main   # sem commits próprios além dos docs: FF; senão `git merge origin/main`
+cd ~/crm-f2-followup-envio && pnpm install --frozen-lockfile
 ```
 
 Grave a linha de base dos arquivos que o plano vai tocar, para separar vermelho pré-existente:
 
 ```bash
-cd /Users/andreluislopescosta/crm-f2-followup-envio && pnpm vitest run \
+cd ~/crm-f2-followup-envio && pnpm vitest run \
   lib/followup lib/dev/kick-local-pipeline.test.ts tests/unit/template-vars.test.ts \
   tests/unit/followup-instagram-24h.test.ts tests/unit/camada-semantica-no-envio-fixo.test.ts \
   tests/unit/followup-canal-arquivado.test.ts tests/unit/followup-silencio-de-roteamento.test.ts \
-  > /private/tmp/claude-501/-Users-andreluislopescosta-CRM-EVA/593e1a6a-d6d4-440d-bbe0-937b5ad1210e/scratchpad/b-base.log 2>&1; echo "exit=$?"
+  > $SCRATCHPAD/b-base.log 2>&1; echo "exit=$?"
 ```
 
 Qualquer falha aqui é pré-existente: registre nome e motivo no PR.
@@ -71,7 +71,7 @@ Rode `V` em cada um dos quatro. Todos devem falhar.
 **Mudança mínima.**
 
 ```bash
-cd /Users/andreluislopescosta/crm-f2-followup-envio && git show f90f236aa --format= -- \
+cd ~/crm-f2-followup-envio && git show f90f236aa --format= -- \
   lib/dev/kick-local-pipeline.ts lib/followup/engine.ts lib/followup/node-handlers.ts | git apply -3
 ```
 
@@ -146,8 +146,8 @@ cd /Users/andreluislopescosta/crm-f2-followup-envio && git show f90f236aa --form
 **Verificação** (exige Docker):
 
 ```bash
-cd /Users/andreluislopescosta/crm-f2-followup-envio && pnpm test:db > /private/tmp/claude-501/-Users-andreluislopescosta-CRM-EVA/593e1a6a-d6d4-440d-bbe0-937b5ad1210e/scratchpad/b-db-2b.log 2>&1; echo "exit=$?"
-grep -aE "Test Files|Tests |Errors " /private/tmp/claude-501/-Users-andreluislopescosta-CRM-EVA/593e1a6a-d6d4-440d-bbe0-937b5ad1210e/scratchpad/b-db-2b.log
+cd ~/crm-f2-followup-envio && pnpm test:db > $SCRATCHPAD/b-db-2b.log 2>&1; echo "exit=$?"
+grep -aE "Test Files|Tests |Errors " $SCRATCHPAD/b-db-2b.log
 ```
 
 **Sabotagem**, uma por vez, cada uma deixa vermelho o seu caso:
@@ -413,9 +413,9 @@ Este PR **não vai para a `main` antes do item silêncio (0324)**: com os sinais
 3. **Gates.**
 
    ```bash
-   cd /Users/andreluislopescosta/crm-f2-followup-envio
+   cd ~/crm-f2-followup-envio
    pnpm typecheck && pnpm lint
-   S=/private/tmp/claude-501/-Users-andreluislopescosta-CRM-EVA/593e1a6a-d6d4-440d-bbe0-937b5ad1210e/scratchpad
+   S=$SCRATCHPAD
    pnpm test:unit > $S/b-unit.log 2>&1; echo "exit=$?"
    grep -aE "^ *(Test Files|Tests|Errors) " $S/b-unit.log
    grep -aE "^ *FAIL " $S/b-unit.log | sed 's/ > .*//' | sort | uniq -c

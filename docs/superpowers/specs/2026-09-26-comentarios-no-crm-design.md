@@ -2,12 +2,12 @@
 
 ## 1. Objetivo
 
-Que nenhum comentário nos vídeos do Instituto Eva fique sem resposta, e que o comentário certo vire paciente.
+Que nenhum comentário nos vídeos da clínica fique sem resposta, e que o comentário certo vire paciente.
 
 Duas coisas, na mesma tela:
 
 - **Palavra combinada vira lead.** "Comente CARDÁPIO neste vídeo" → o CRM manda a mensagem privada, responde o comentário em público com uma frase curta, e a pessoa vira card no funil **quando responder** o Direct.
-- **Comentário solto ganha resposta.** Quem comenta qualquer outra coisa recebe uma resposta pública escrita no jeito do André, para o vídeo engajar — mas só quando o comentário é obviamente seguro. O resto espera o toque dele.
+- **Comentário solto ganha resposta.** Quem comenta qualquer outra coisa recebe uma resposta pública escrita no jeito do dono, para o vídeo engajar — mas só quando o comentário é obviamente seguro. O resto espera o toque dele.
 
 Sucesso, medido: um vídeo com chamada para comentar produz conversas no Direct sem ninguém digitar, e a aba de comentários fecha o dia vazia.
 
@@ -16,7 +16,7 @@ Sucesso, medido: um vídeo com chamada para comentar produz conversas no Direct 
 1. O card no funil nasce **quando a pessoa responde o Direct**, não quando comenta. Um vídeo que viraliza não pode encher o funil de quem nunca respondeu. Isto não exige código novo: o Direct de entrada já cria o card (`lib/channels/pos-entrada.ts`).
 2. Quando o CRM manda o privado, ele **também responde em público** com uma frase curta ("te mandei no direct 💚"), escrita junto com a regra. Sem isso, parte das pessoas não acha a mensagem, que cai em "Solicitações" para quem não segue.
 3. A IA só publica sozinha no que é **obviamente seguro** (elogio, emoji, "top!"). Qualquer coisa que pareça pergunta clínica, preço, medicação, agendamento ou reclamação vira **sugestão esperando um toque**. É uma IA assinando como médico num perfil público: o erro não é constrangimento, é exposição.
-4. O jeito de escrever é aprendido dos **comentários que o André já respondeu** nos próprios posts, não de exemplos digitados à mão. Ele pode corrigir o perfil de voz depois.
+4. O jeito de escrever é aprendido dos **comentários que o dono já respondeu** nos próprios posts, não de exemplos digitados à mão. Ele pode corrigir o perfil de voz depois.
 5. Os comentários moram numa **aba própria dentro do Inbox**, ao lado de "Conversas".
 6. **A IA nunca chama o dono de nutrólogo, especialista ou qualquer título de especialidade** (26/09/2026). Ele não tem RQE, e anunciar especialidade sem registro é infração do CFM — aqui, publicada em público e no nome dele. O termo é "médico". A trava é na geração (§5.5), não só no prompt: prompt é pedido, trava é garantia.
 
@@ -79,7 +79,7 @@ Um classificador decide entre **obviamente seguro** e **precisa de você**. Ele 
 - **Precisa de você**, sempre: preço, plano, valor, desconto; nome de medicação ou dose; sintoma, efeito colateral, "posso tomar", "serve para mim"; agendamento, consulta, horário; reclamação, ironia, ofensa; qualquer coisa que termine em pergunta e não seja sobre o vídeo em si.
 - **Obviamente seguro**: elogio, emoji, "top", "amei", "parabéns" — e nada mais.
 
-Seguro → a IA escreve e publica no jeito do André (§5.5). O resto → `situacao = 'esperando_voce'` com `motivo_do_toque` dizendo qual gatilho pegou, e a sugestão já escrita, para o toque ser um toque.
+Seguro → a IA escreve e publica no jeito do dono (§5.5). O resto → `situacao = 'esperando_voce'` com `motivo_do_toque` dizendo qual gatilho pegou, e a sugestão já escrita, para o toque ser um toque.
 
 A decisão do classificador é gravada na linha: quando ele errar, dá para medir onde.
 

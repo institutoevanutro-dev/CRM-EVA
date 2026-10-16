@@ -83,8 +83,8 @@ export function instrucaoDeBolhas(ligado: boolean): string {
  * (link morto). Fim de frase tem espaço, ou o fim do texto, depois do ponto.
  *
  * E o ponto de ABREVIAÇÃO também não fecha frase. Medido em produção
- * (clínica, 2026-10-12, teto 200): "…começar com o Dr. André: a consulta de
- * R$490…" saiu em dois balões, "…com o Dr." e "André: a consulta…". Duas
+ * (clínica, 2026-10-12, teto 200): "…começar com o Dr. Otávio: a consulta de
+ * R$490…" saiu em dois balões, "…com o Dr." e "Otávio: a consulta…". Duas
  * regras, as duas só para o "." sozinho:
  *   - palavra antes do ponto em `ABREVIACOES` (tratamento e endereço, pt + es);
  *   - minúscula depois do ponto ("etc. no dia", "p. ex. o RG"): frase nova

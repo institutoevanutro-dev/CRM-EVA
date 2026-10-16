@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-11-multiagentes-e-roteador-design.md` §5 e §7 (passos 1, 3 e 4). Este plano cobre só o código. Agentes, roteador de produção e bateria (spec §3, §4, §6) são configuração e ficam para um segundo plano, depois da versão instalada.
 
-**Desvio do spec, decidido no plano:** o spec fala em "tipo, profissional e data". O nome do profissional mora em `auth.users` (metadados), fora do alcance simples do motor. O fato leva o **nome do tipo de atendimento** (`calendar_event_types.name`, que nesta clínica já traz o profissional: "Primeira consulta — Dr. André") e, na falta dele, o título do compromisso. Sem coluna de profissional.
+**Desvio do spec, decidido no plano:** o spec fala em "tipo, profissional e data". O nome do profissional mora em `auth.users` (metadados), fora do alcance simples do motor. O fato leva o **nome do tipo de atendimento** (`calendar_event_types.name`, que nesta clínica já traz o profissional: "Primeira consulta — Dr. Otávio") e, na falta dele, o título do compromisso. Sem coluna de profissional.
 
 ## Global Constraints
 
@@ -25,7 +25,7 @@
 - Textos de tela em português, sem travessão, com entrada em espanhol em `lib/i18n/dicionario.ts`.
 - Sem `console.log`. Comentários no tom dos arquivos vizinhos.
 - Gates antes do PR, em primeiro plano e sem cortar a saída: `pnpm typecheck`, `pnpm lint`, `pnpm test:unit` (suíte inteira), `pnpm test:db`, `pnpm release:conferir`.
-- Merge só com OK explícito do André no chat. Avisar a sessão "Memória central" depois do merge.
+- Merge só com OK explícito do dono no chat. Avisar a sessão "Memória central" depois do merge.
 
 ## Review Focus
 
@@ -94,10 +94,10 @@ describe('renderFatosDoContato', () => {
 
   it('lista anteriores e futuros em linhas separadas', () => {
     const texto = renderFatosDoContato({
-      anteriores: [f('Consulta de acompanhamento — Dr. André', '2026-10-09')],
+      anteriores: [f('Consulta de acompanhamento — Dr. Otávio', '2026-10-09')],
       futuros: [f('Drenagem linfática', '2026-10-16', 'confirmed')],
     });
-    expect(texto).toContain('- Atendimentos anteriores: 09/10/2026 Consulta de acompanhamento — Dr. André (completed)');
+    expect(texto).toContain('- Atendimentos anteriores: 09/10/2026 Consulta de acompanhamento — Dr. Otávio (completed)');
     expect(texto).toContain('- Compromissos futuros: 16/10/2026 Drenagem linfática (confirmed)');
   });
 
@@ -163,7 +163,7 @@ Cabeçalho do arquivo: um comentário curto dizendo por que existe (o classifica
 Run: o teste do Step 1. Esperado: PASS.
 
 - [ ] **Step 3: Invariante com Postgres real (RED e depois GREEN).** Em `tests/invariants/roteador-fatos-do-contato.test.ts`, com o seed de `tests/invariants/lgpd-anonimizar-pela-tela-redige-conversas.test.ts` (pool pg, `seedGov`, duas organizações). Antes de escrever, confira no `supabase/baseline.sql` as colunas obrigatórias de `calendar_appointments` e `calendar_event_types` e os valores aceitos de `status`. Casos:
-  - contato com 1 `completed` passado ligado a um tipo de nome "Primeira consulta — Dr. André", 1 `cancelled` passado, 1 `no_show` passado, 1 `confirmed` futuro, 1 `cancelled` futuro: `fatosDoContato` devolve exatamente 1 anterior (com o nome do tipo) e 1 futuro;
+  - contato com 1 `completed` passado ligado a um tipo de nome "Primeira consulta — Dr. Otávio", 1 `cancelled` passado, 1 `no_show` passado, 1 `confirmed` futuro, 1 `cancelled` futuro: `fatosDoContato` devolve exatamente 1 anterior (com o nome do tipo) e 1 futuro;
   - contato só com `cancelled` e `no_show`: `buildFatosDoContato` devolve o texto de "Sem atendimentos registrados na agenda.";
   - compromisso sem `event_type_id` e com título: o tipo é o título;
   - isolamento: o mesmo `contactId` consultado com o `organizationId` da outra organização devolve listas vazias;

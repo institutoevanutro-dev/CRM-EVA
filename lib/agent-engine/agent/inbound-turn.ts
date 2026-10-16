@@ -2960,7 +2960,7 @@ async function executarTurnoDoAgente(
   // true quando open_human_case foi RECUSADO neste turno e nada depois registrou a
   // pendência (abertura ou provide_case_update). Lido pelo `casePromiseGate`: um caso
   // aberto de OUTRO assunto não sustenta a promessa sobre a pendência recusada
-  // (Instituto Eva, 14/10/2026: comprovante recusado, promessa passou pelo caso de ontem).
+  // (produção, 14/10/2026: comprovante recusado, promessa passou pelo caso de ontem).
   let aberturaDeCasoRecusadaNoTurno = false;
   // Wave 4 — contador do fail-safe do guardrail anti-alucinação (case_promise_without_case):
   // 1º veto no turno é erro-de-ensino (o modelo re-tenta); persistir uma 2ª vez aciona o

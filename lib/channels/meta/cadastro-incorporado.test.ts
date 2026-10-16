@@ -8,7 +8,7 @@ import { arquivarSessaoLegadaDoNumero, conferirToken, derrubarSessaoLegadaNoTran
 
 vi.mock("@/lib/waha/client", () => ({ getWahaClient: vi.fn(() => null) }));
 
-const APP = { appId: "1054112660758768", appSecret: "s".repeat(32) };
+const APP = { appId: "1000000000000001", appSecret: "s".repeat(32) };
 const chamadas: Array<{ url: string; init?: RequestInit }> = [];
 function graphFalsa(respostas: Record<string, { status?: number; body: unknown }>) {
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
@@ -60,16 +60,16 @@ describe("conferirToken", () => {
 
 describe("numerosDaConta", () => {
   it("lê id, número e is_on_biz_app", async () => {
-    graphFalsa({ "/phone_numbers": { body: { data: [{ id: "1", display_phone_number: "+55 27 99904-9879", is_on_biz_app: true }, { id: "2" }] } } });
+    graphFalsa({ "/phone_numbers": { body: { data: [{ id: "1", display_phone_number: "+55 27 99000-1234", is_on_biz_app: true }, { id: "2" }] } } });
     expect(await numerosDaConta("t", "222")).toEqual([
-      { id: "1", displayPhoneNumber: "+55 27 99904-9879", isOnBizApp: true },
+      { id: "1", displayPhoneNumber: "+55 27 99000-1234", isOnBizApp: true },
       { id: "2", displayPhoneNumber: null, isOnBizApp: false },
     ]);
   });
 });
 
 describe("escolherNumero", () => {
-  const n = (id: string, biz: boolean) => ({ id, displayPhoneNumber: "+55 27 99904-9879", isOnBizApp: biz });
+  const n = (id: string, biz: boolean) => ({ id, displayPhoneNumber: "+55 27 99000-1234", isOnBizApp: biz });
   it("coexistência exige is_on_biz_app", () => {
     expect(escolherNumero([n("1", false)], { phoneNumberId: null, coexistencia: true })).toMatchObject({ ok: false });
     expect(escolherNumero([n("1", true)], { phoneNumberId: null, coexistencia: true })).toEqual({ ok: true, numero: n("1", true) });
@@ -126,13 +126,13 @@ describe("arquivarSessaoLegadaDoNumero", () => {
   }
   it("sem sessão WAHA ativa com o número, devolve null e não escreve", async () => {
     const { admin, updates } = adminFalso([{ id: "s0", waha_session_name: null, phone_number: "+5511900000000" }]);
-    expect(await arquivarSessaoLegadaDoNumero(admin, "org1", "+55 27 99904-9879")).toBeNull();
+    expect(await arquivarSessaoLegadaDoNumero(admin, "org1", "+55 27 99000-1234")).toBeNull();
     expect(updates).toEqual([]);
   });
   it("casa o número formatado da Meta com a linha WAHA gravada em outro formato (com/sem +, com/sem o 9)", async () => {
-    for (const gravado of ["+5527999049879", "5527999049879@c.us", "552799049879", "27 99904-9879".replace(/^/, "55 ")]) {
+    for (const gravado of ["+5527990001234", "5527990001234@c.us", "552790001234", "27 99000-1234".replace(/^/, "55 ")]) {
       const { admin, filtros, updates } = adminFalso([{ id: "s1", waha_session_name: null, phone_number: gravado }]);
-      expect((await arquivarSessaoLegadaDoNumero(admin, "org1", "+55 27 99904-9879"))?.id, gravado).toBe("s1");
+      expect((await arquivarSessaoLegadaDoNumero(admin, "org1", "+55 27 99000-1234"))?.id, gravado).toBe("s1");
       expect(filtros).toContainEqual(["organization_id", "org1"]);
       expect(filtros).toContainEqual(["provider", "waha"]);
       expect(updates[0]).toMatchObject({ status: "STOPPED", status_reason: "substituida_pela_coexistencia" });
@@ -140,20 +140,20 @@ describe("arquivarSessaoLegadaDoNumero", () => {
   });
   it("erro ao ler as sessões lança (não vira 'não havia sessão')", async () => {
     const { admin } = adminFalso([], { select: true });
-    await expect(arquivarSessaoLegadaDoNumero(admin, "org1", "+5527999049879")).rejects.toThrow();
+    await expect(arquivarSessaoLegadaDoNumero(admin, "org1", "+5527990001234")).rejects.toThrow();
   });
   it("erro no UPDATE lança ANTES de tocar o WAHA", async () => {
-    const { admin } = adminFalso([{ id: "s1", waha_session_name: "sess", phone_number: "+5527999049879" }], { update: true });
+    const { admin } = adminFalso([{ id: "s1", waha_session_name: "sess", phone_number: "+5527990001234" }], { update: true });
     const logout = vi.fn();
     vi.mocked(getWahaClient).mockReturnValue({ logoutSession: logout, deleteSession: logout } as never);
-    await expect(arquivarSessaoLegadaDoNumero(admin, "org1", "+5527999049879")).rejects.toThrow();
+    await expect(arquivarSessaoLegadaDoNumero(admin, "org1", "+5527990001234")).rejects.toThrow();
     expect(logout).not.toHaveBeenCalled();
   });
   it("só arquiva NO BANCO e devolve o que desfaz (id, sessão WAHA, status anterior) — o WAHA fica intacto", async () => {
-    const { admin } = adminFalso([{ id: "s1", waha_session_name: "sess", phone_number: "+5527999049879", status: "WORKING", status_reason: null }]);
+    const { admin } = adminFalso([{ id: "s1", waha_session_name: "sess", phone_number: "+5527990001234", status: "WORKING", status_reason: null }]);
     const logout = vi.fn();
     vi.mocked(getWahaClient).mockReturnValue({ logoutSession: logout, deleteSession: logout } as never);
-    expect(await arquivarSessaoLegadaDoNumero(admin, "org1", "+5527999049879")).toEqual({
+    expect(await arquivarSessaoLegadaDoNumero(admin, "org1", "+5527990001234")).toEqual({
       id: "s1", wahaSessionName: "sess", statusAnterior: "WORKING", statusReasonAnterior: null,
     });
     expect(logout).not.toHaveBeenCalled();

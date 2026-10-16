@@ -8,7 +8,7 @@ import { unscheduledFollowUpGate } from "@/lib/agent-engine/guardrails/before-se
 
 describe("pedir espera sem nada que volte é promessa sem retorno", () => {
   it.each([
-    "Estou vendo os horários da Dra. Ana. Me dá só um instante?",
+    "Estou vendo os horários da Dra. Lúcia. Me dá só um instante?",
     "Me dá um minutinho que já confiro.",
     "Me da um momento, por favor.",
   ])("detecta: %s", (body) => {

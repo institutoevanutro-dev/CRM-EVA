@@ -8,7 +8,7 @@
 
 **Tech Stack:** Next.js 16 Route Handlers, Supabase (Postgres + Storage), Zod, React Query, Vitest, invariantes `pnpm test:db`, Playwright.
 
-**Spec:** `docs/superpowers/specs/2026-10-06-biblioteca-de-midias-design.md` (decisões aceitas pelo André em 07/10/2026).
+**Spec:** `docs/superpowers/specs/2026-10-06-biblioteca-de-midias-design.md` (decisões aceitas pelo dono em 07/10/2026).
 
 ## Global Constraints
 

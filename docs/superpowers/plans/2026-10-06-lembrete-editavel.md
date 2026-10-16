@@ -2,8 +2,8 @@
 
 Spec: `docs/superpowers/specs/2026-10-06-lembrete-editavel-design.md`. Leia o spec antes de começar.
 
-Worktree: `/Users/andreluislopescosta/crm-f2-lembrete`, branch `feat/lembrete-editavel`.
-Abreviação usada abaixo: `W=/Users/andreluislopescosta/crm-f2-lembrete`. Use sempre caminhos
+Worktree: `~/crm-f2-lembrete`, branch `feat/lembrete-editavel`.
+Abreviação usada abaixo: `W=~/crm-f2-lembrete`. Use sempre caminhos
 absolutos ou `git -C $W`.
 
 ## Regras de todo passo
@@ -20,7 +20,7 @@ absolutos ou `git -C $W`.
   `ehOperante`/`organizations!inner` e `reminder_bodies`, que o fork não tem.
 - Saída de teste vai para o scratchpad, nunca para `/tmp` e nunca cortada com `tail`:
   `pnpm --dir $W vitest run <arquivo> > $S/vt.log 2>&1; echo "exit=$?"`, com
-  `S=/private/tmp/claude-501/-Users-andreluislopescosta-CRM-EVA/593e1a6a-d6d4-440d-bbe0-937b5ad1210e/scratchpad`.
+  `S=$SCRATCHPAD`.
   Leia o exit code, o rodapé (`Test Files`/`Tests`/`Errors`) e a lista de `FAIL`.
 - Não crie `.env.local`. Não toque em `lib/channels/pos-entrada.ts`.
 

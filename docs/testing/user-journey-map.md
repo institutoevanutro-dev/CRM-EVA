@@ -88,7 +88,7 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 ## J1b — Primeira tela: painel Início `[P0]`
 
 - `[P0]` Depois do login, a primeira tela é o **Início**: gerente vê "Meu dia" + "Gestão"; colaborador só "Meu dia" — `tests/e2e/painel-inicio.spec.ts`.
-- `[P0]` Tipo de atendimento sem responsável aparece em **Configuração pendente** e o botão leva à Agenda (o caso real: "Acupuntura — Dra. Ana Claudia", 2026-09-21) — mesma spec. Evidência em `.superpowers/evidence/painel-inicio-*.png`.
+- `[P0]` Tipo de atendimento sem responsável aparece em **Configuração pendente** e o botão leva à Agenda (o caso real: "Acupuntura — Dra. Lúcia Prado", 2026-09-21) — mesma spec. Evidência em `.superpowers/evidence/painel-inicio-*.png`.
 
 ## J2 — Conectar WhatsApp e Central de Conexões `[P0]`
 
@@ -407,7 +407,7 @@ pelo critério que já estava escrito lá: decisão humana não colapsa.
 Contexto do código: `lib/followup/silence-sweep.ts` (varredura a cada minuto) e a
 migration 0324 (`followup_flow_pointers.active_since`). Spec:
 `docs/superpowers/specs/2026-10-06-followup-nao-recomeca-design.md`. Achado ao
-desenhar o funil do Dr. André: depois que a sequência terminava sem resposta, o
+desenhar o funil do Dr. Otávio: depois que a sequência terminava sem resposta, o
 contato calado era inscrito de novo no minuto seguinte, para sempre.
 
 | # | Caso | Expectativa | Resultado |
@@ -2612,7 +2612,7 @@ para um campo `select` do funil.
 |---|---|---|
 | Um Direct assinado com o segredo real do seed vira mensagem no Inbox, com o texto, "via @clinica_e2e" e sem `"??"` no lugar do nome (perfil da Meta indisponível no e2e → fallback "Contato do Instagram") | `[P1]` | **PASS pela tela.** `tests/e2e/instagram-receber.spec.ts`. Evidência: `evidence/instagram-direct/01-inbox.png` |
 | Uma assinatura errada (`x-hub-signature-256` inválido) é recusada com 401 | `[P1]` | **PASS** — medido na mesma spec, contra o mesmo corpo que a assinatura válida aceitou logo antes |
-| O contato novo ganha a Origem padrão da conexão (`custom_fields.origem = "Instagram Dr. André"`) e vira card no funil padrão | `[P1]` | **PASS.** `GET /api/v1/contacts` confere `custom_fields.origem`; `/app/kanban` mostra o card. Evidência: `evidence/instagram-direct/02-kanban.png` |
+| O contato novo ganha a Origem padrão da conexão (`custom_fields.origem = "Instagram Dr. Otávio"`) e vira card no funil padrão | `[P1]` | **PASS.** `GET /api/v1/contacts` confere `custom_fields.origem`; `/app/kanban` mostra o card. Evidência: `evidence/instagram-direct/02-kanban.png` |
 
 **NÃO MEDIDO nesta etapa (fora de escopo — etapa 2):** responder pelo CRM,
 janela de 24h/7d, follow-up automático em canal `etiqueta_humana_7d`,

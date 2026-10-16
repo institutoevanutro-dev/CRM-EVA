@@ -1,5 +1,5 @@
 /**
- * A trava de RQE (André é médico, CFM, sem título de especialidade) — a
+ * A trava de RQE (o médico da clínica é CFM, sem título de especialidade) — a
  * IA nunca pode fazer o dono da conta parecer que anuncia especialidade
  * que ele não tem (`docs/865993ff`, commit "a IA nunca anuncia
  * especialidade que o dono não tem (CFM)").

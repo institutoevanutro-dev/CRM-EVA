@@ -67,11 +67,11 @@ test.beforeAll(async () => {
     }
     if (url.includes("/phone_numbers")) {
       return responder({
-        data: [{ id: "111222333", display_phone_number: "+55 27 99904-9879", verified_name: "Clínica E2E", is_on_biz_app: true }],
+        data: [{ id: "111222333", display_phone_number: "+55 27 99000-1234", verified_name: "Clínica E2E", is_on_biz_app: true }],
       });
     }
     if (url.endsWith("/111222333?fields=display_phone_number,verified_name,quality_rating")) {
-      return responder({ display_phone_number: "+55 27 99904-9879", verified_name: "Clínica E2E" });
+      return responder({ display_phone_number: "+55 27 99000-1234", verified_name: "Clínica E2E" });
     }
     if (url.includes("/subscribed_apps")) return responder({ success: true });
     if (url.includes("/smb_app_data")) {

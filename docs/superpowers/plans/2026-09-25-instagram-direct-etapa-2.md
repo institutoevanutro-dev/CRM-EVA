@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-25-instagram-direct-etapa-2-design.md` (continua `docs/superpowers/specs/2026-09-24-instagram-direct-no-crm-design.md`).
 
-**Worktree:** `/Users/andreluislopescosta/CRM-EVA/wt-instagram-direct`, branch `feat/instagram-direct-etapa-2`. Todo comando roda nessa pasta.
+**Worktree:** `~/CRM-EVA/wt-instagram-direct`, branch `feat/instagram-direct-etapa-2`. Todo comando roda nessa pasta.
 
 ## Global Constraints
 
@@ -872,7 +872,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-## Depois do merge (fora do plano de código, com o André)
+## Depois do merge (fora do plano de código, com o dono)
 
 1. Deploy na VPS: backup → `git pull --ff-only` → aplicar `supabase/baseline.sql` (tem a 0278) ANTES do `up -d` → `pull` + `up -d app worker scheduler` → conferir 307 e versão no `/api/v1/health`.
 2. Prova real: responder um Direct de teste pelo CRM nos dois perfis, dentro de 24h. Depois, numa conversa entre 24h e 7 dias, conferir se a Meta aceita a tag `HUMAN_AGENT`; se recusar, abrir ajuste para `janelaHumanaMs: null` até a aprovação (spec §7).

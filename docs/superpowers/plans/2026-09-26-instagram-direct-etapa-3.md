@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-26-instagram-direct-etapa-3-design.md`
 
-**Worktree:** `/Users/andreluislopescosta/CRM-EVA/wt-instagram-direct`, branch `feat/instagram-direct-etapa-3`.
+**Worktree:** `~/CRM-EVA/wt-instagram-direct`, branch `feat/instagram-direct-etapa-3`.
 
 ## Global Constraints
 
@@ -426,7 +426,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Teste que falha**
 
-Com a busca de dados mockada no padrão dos testes de componentes vizinhos: contato com uma conversa `whatsapp` (sessão com número) e uma `instagram` (sessão `@instit.eva`, identidade `@maria.silva`) → duas linhas; a do Instagram tem `getByLabelText("Instagram")`, mostra "@maria.silva" e "via @instit.eva", e o link tem `href="/app/inbox?id=<id da conversa>"`; a do WhatsApp tem `getByLabelText("WhatsApp")` e o telefone formatado. Sem conversas → a seção não aparece. Conversas de grupo não entram.
+Com a busca de dados mockada no padrão dos testes de componentes vizinhos: contato com uma conversa `whatsapp` (sessão com número) e uma `instagram` (sessão `@clinica.exemplo`, identidade `@maria.silva`) → duas linhas; a do Instagram tem `getByLabelText("Instagram")`, mostra "@maria.silva" e "via @clinica.exemplo", e o link tem `href="/app/inbox?id=<id da conversa>"`; a do WhatsApp tem `getByLabelText("WhatsApp")` e o telefone formatado. Sem conversas → a seção não aparece. Conversas de grupo não entram.
 
 Run → FAIL.
 
@@ -504,8 +504,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-## Depois do merge (com o André)
+## Depois do merge (com o dono)
 
 1. Deploy como nas etapas 1 e 2 (esta etapa não tem migration; aplicar o baseline mesmo assim é inofensivo).
-2. No dia seguinte: conferir se o contato de teste do André (que escreveu para os dois perfis) virou um só.
+2. No dia seguinte: conferir se o contato de teste do dono (que escreveu para os dois perfis) virou um só.
 3. Acompanhar por uma semana quantos passos de follow-up no Instagram foram pulados; se quase todos, abrir o plano B (lembrete para a equipe).

@@ -167,7 +167,7 @@ export type OpenCaseResult =
  * DUPLICADO = caso aberto da MESMA conversa e do MESMO `kind`. Até 14/10/2026 a
  * guarda era "qualquer caso aberto na conversa", e o comprovante de Pix de uma
  * paciente não virou caso porque havia um de ontem, de outro assunto: a pendência
- * nova não chegou a ninguém (Instituto Eva). O `kind` é o assunto que o próprio
+ * nova não chegou a ninguém (medido em produção). O `kind` é o assunto que o próprio
  * agente declara, então um retry do turno ou o agente insistindo no que já está
  * aberto cai no mesmo `kind` e não duplica, e uma pendência de outro assunto abre
  * o seu caso.

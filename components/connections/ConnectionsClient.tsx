@@ -622,11 +622,11 @@ function ExcluirCanalDialog({
  * `app/api/v1/channel-sessions/[id]/reconnect/route.ts`).
  *
  * **Não pode depender só do estado instantâneo**, e isso foi medido: em
- * 23/09/2026, reconectando os dois números do Instituto Eva, o WAHA entrou em
+ * 23/09/2026, reconectando os dois números de uma clínica em produção, o WAHA entrou em
  * laço `STARTING` → `Error: Connection Failure` → `Session stuck in STARTING
  * status, force stopping the session` → `STARTING`. Num dos números a sondagem
  * de 3s pegou o `FAILED` e o botão apareceu normalmente; no outro
- * (5527998659879) ela nunca pegou, e a tela ficou em "Preparando o código…" por
+ * (5527990005678) ela nunca pegou, e a tela ficou em "Preparando o código…" por
  * mais de um minuto — sem saída, até a chamada com `{force:true}` ser disparada
  * à mão pelo console. O buraco não era código faltando, era CORRIDA: quem decide
  * não pode ser só o estado que a sondagem por acaso observou.

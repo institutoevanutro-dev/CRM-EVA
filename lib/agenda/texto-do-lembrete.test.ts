@@ -16,7 +16,7 @@ const SP = "America/Sao_Paulo";
 function lembrete(molde: string | null, extra: Partial<Parameters<typeof montarLembrete>[0]> = {}) {
   return montarLembrete({
     nomeDoContato: "Maria Silva",
-    titulo: "Consulta — Dr. André",
+    titulo: "Consulta — Dr. Otávio",
     quando: new Date("2026-10-12T17:30:00Z"), // 14:30 em São Paulo
     timezone: SP,
     local: "Rua das Flores, 100",
@@ -110,13 +110,13 @@ describe("variáveis vazias somem sem deixar chave nem espaço sobrando", () => 
 
 describe("as outras variáveis", () => {
   it("profissional e tipo, sem diferenciar maiúsculas", () => {
-    expect(lembrete("com {{Profissional}} ({{ TIPO }})", { profissional: "Dr. André", tipoNome: "Consulta" })).toBe(
-      "com Dr. André (Consulta)",
+    expect(lembrete("com {{Profissional}} ({{ TIPO }})", { profissional: "Dr. Otávio", tipoNome: "Consulta" })).toBe(
+      "com Dr. Otávio (Consulta)",
     );
   });
 
   it("compatibilidade com o original: {{titulo}} e {{dia}}", () => {
-    expect(lembrete("{{titulo}} {{dia}}")).toBe("Consulta — Dr. André segunda-feira, 12/10");
+    expect(lembrete("{{titulo}} {{dia}}")).toBe("Consulta — Dr. Otávio segunda-feira, 12/10");
   });
 
   it("variável desconhecida fica literal no cron — o PATCH é quem recusa", () => {
@@ -127,7 +127,7 @@ describe("as outras variáveis", () => {
 describe("sem molde, a frase padrão de antes, byte a byte", () => {
   it("com nome e endereço", () => {
     expect(lembrete(null)).toBe(
-      "Oi, Maria Silva! Passando pra lembrar do seu compromisso: Consulta — Dr. André, segunda-feira, 12/10 às 14:30. Endereço: Rua das Flores, 100.",
+      "Oi, Maria Silva! Passando pra lembrar do seu compromisso: Consulta — Dr. Otávio, segunda-feira, 12/10 às 14:30. Endereço: Rua das Flores, 100.",
     );
   });
 

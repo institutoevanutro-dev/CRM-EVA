@@ -6,15 +6,15 @@ Data: 2026-09-24 · Pedido: reunião de marketing de 23/09/2026 ("integrar Insta
 
 A equipe atende o Direct do Instagram **de dentro do CRM**, no mesmo Inbox, funil, campos e respostas rápidas do WhatsApp. Nenhum contato que chega pelo Instagram se perde, e a origem dele já nasce registrada para o relatório de conversão.
 
-Critério de sucesso: uma mensagem enviada ao Direct de @dr.andreluisc ou de @instit.eva aparece no Inbox do org "Instituto EVA CRM" em segundos, vira card em "Novo lead – interagir" com a Origem preenchida, e a equipe responde dali sem abrir o Instagram.
+Critério de sucesso: uma mensagem enviada ao Direct de @dr.exemplo ou de @clinica.exemplo aparece no Inbox do org da clínica em segundos, vira card em "Novo lead – interagir" com a Origem preenchida, e a equipe responde dali sem abrir o Instagram.
 
 ## 2. Decisões já tomadas
 
 | Decisão | Escolha | Por quê |
 |---|---|---|
 | Profundidade | Integração completa (ver e responder no CRM) | escolha do dono; o card-só-aviso foi recusado |
-| Ordem | Instagram primeiro; Messenger por último | foco da estratégia nova é o perfil do Dr. André |
-| Contas | @dr.andreluisc **e** @instit.eva, as duas no org "Instituto EVA CRM" | o perfil do Dr. André recebe muito lead, e quem atende é a equipe |
+| Ordem | Instagram primeiro; Messenger por último | foco da estratégia nova é o perfil do Dr. Otávio |
+| Contas | @dr.exemplo **e** @clinica.exemplo, as duas no org da clínica | o perfil do Dr. Otávio recebe muito lead, e quem atende é a equipe |
 | Forma | Novo canal dentro da arquitetura de canais existente | reusa Inbox, funil, follow-up; caixa separada e intermediário pago foram recusados |
 | Acesso Meta | Instagram API with Instagram Login, **Standard Access** | contas próprias não exigem App Review ([Send Messages](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/messaging-api/)) |
 
@@ -65,7 +65,7 @@ Capacidades novas ou ajustadas na matriz (declaradas para **todos** os providers
 
 - Credenciais da instalação: `Instagram App ID` e `Instagram App Secret` (produto "Instagram" do app Meta) em `/admin/meta`, cifradas como as outras. Sem elas, o botão aparece desabilitado com o passo a passo.
 - Conexões › **Conectar Instagram** → Business Login for Instagram (escopos `instagram_business_basic`, `instagram_business_manage_messages`) → callback `/api/v1/channels/instagram/callback` troca o code por token longo, lê `ig_account_id` e `username`, cria a `channel_session` no org ativo (organization_id da sessão do usuário, nunca do corpo) e assina o webhook da conta.
-- **Origem padrão por conexão**: campo opcional na tela da conexão, "preencher o campo X do contato novo com o valor Y" (aqui: Origem = "Instagram Dr. André" / "Instagram Instituto Eva"). Genérico para qualquer instalação.
+- **Origem padrão por conexão**: campo opcional na tela da conexão, "preencher o campo X do contato novo com o valor Y" (aqui: Origem = "Instagram Dr. Otávio" / "Instagram da clínica"). Genérico para qualquer instalação.
 - **Renovação da chave:** cron diário renova tokens com menos de 15 dias. Falha abre aviso na Central (`agent_inbox_items`, kind `channel_token_expiring`) com o botão "Reconectar". Rodada sem efeito não audita.
 
 ### 5.4 Receber (etapa 1)
@@ -118,7 +118,7 @@ Mesmo desenho com provider `meta_messenger`, `object: "page"`, identidade PSID, 
 - Unit: parser do webhook do Instagram (payloads reais da documentação, incluindo eco e mídia), roteamento por conta com filtro de org, regra 24h/7d/humano, matriz de capacidades (todo provider declara as capacidades novas), lint de fronteira.
 - Invariantes (`pnpm test:db`): RLS de `contact_channel_identities` entre 2 orgs, idempotência do upsert, CHECKs novos, `fn_mesclar_contatos` levando identidades, revogação das RPCs.
 - E2E (Playwright, banco fresco do baseline): conectar com o OAuth simulado, webhook assinado simulando um Direct, conversa aparece no Inbox com @ e "via @conta", card no funil com Origem, resposta dentro da janela, bloqueio depois de 7 dias.
-- Prova real no fim de cada etapa: o dono manda um Direct de outra conta para @instit.eva e @dr.andreluisc.
+- Prova real no fim de cada etapa: o dono manda um Direct de outra conta para @clinica.exemplo e @dr.exemplo.
 
 ## 8. Entrega
 

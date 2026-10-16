@@ -1,4 +1,4 @@
-# Campanhas, contatos e vendas do Instituto Eva
+# Campanhas, contatos e vendas da clínica
 
 A tela **Análise › Meta Ads** continua mostrando gasto e métricas da Meta. O botão **Ver contatos e vendas por campanha** acrescenta contatos captados no mesmo período e vendas registradas no Financeiro. O painel Marketing da Vercel ganha a aba **CRM e vendas** e consulta os mesmos agregados no CRM. As consultas são sob demanda e de leitura.
 
@@ -17,7 +17,7 @@ No CRM, além da conexão de leitura Meta Ads e da conexão Financeiro já descr
 
 No servidor Vercel do painel Marketing:
 
-- `CRM_REPORT_URL`: origem HTTPS do CRM, sem caminho, por exemplo `https://crm.institutoevavix.com.br`.
+- `CRM_REPORT_URL`: origem HTTPS do CRM, sem caminho, por exemplo `https://crm.exemplo.com.br`.
 - `CRM_REPORT_TOKEN`: o mesmo valor de `MARKETING_REPORT_TOKEN`.
 
 O navegador só fala com `/api/crm` do painel, protegido pela sessão existente. A função Vercel envia o segredo no cabeçalho ao CRM. O CRM restringe a consulta à organização configurada e devolve somente totais por campanha, sem contato individual, telefone, CPF ou prontuário. Limite de 60 pedidos por minuto por instância. Não colocar segredo no HTML, em `NEXT_PUBLIC_`, no repositório ou no chat.

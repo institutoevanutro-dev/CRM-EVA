@@ -39,7 +39,7 @@ const MUITOS = randomUUID();
 const AGENDA_VIVA = randomUUID();
 const DA_OUTRA = randomUUID();
 
-const TIPO = "Primeira consulta — Dr. André";
+const TIPO = "Primeira consulta — Dr. Otávio";
 let tipoId: string;
 let drenagemId: string;
 
@@ -131,7 +131,7 @@ describe("roteador: os fatos da agenda do contato", () => {
   it("o texto inteiro, de ponta a ponta, com a data que o driver devolve", async () => {
     expect(await buildFatosDoContato(pool, ORG, MISTO, AGORA)).toBe(
       "Fatos do CRM sobre este contato (agenda):\n" +
-        "- Compromissos passados (não cancelados): 10/06/2030 Primeira consulta — Dr. André (realizado)\n" +
+        "- Compromissos passados (não cancelados): 10/06/2030 Primeira consulta — Dr. Otávio (realizado)\n" +
         "- Compromissos futuros: 10/07/2030 Drenagem linfática (confirmado)",
     );
   });

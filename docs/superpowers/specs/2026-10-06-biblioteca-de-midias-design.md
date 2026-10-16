@@ -4,7 +4,7 @@
 > Medida contra a `origin/main` em `5b2e640f3` (2026-10-05). Produto genérico: serve para
 > clínica, imobiliária, loja, curso. "Caso por sexo e objetivo" é só um exemplo de etiqueta.
 
-## Resumo para o André (5 linhas)
+## Resumo para o dono (5 linhas)
 
 1. Hoje a IA **só manda texto** no WhatsApp. Não existe lugar para guardar "o vídeo do médico" ou "o antes e depois de mulher, emagrecimento, 3 meses".
 2. Proposta: uma tela **Biblioteca de mídias**. Você sobe o arquivo uma vez, dá um nome, diz *quando usar* e marca etiquetas (ex.: `mulher`, `emagrecimento`, `etapa: proposta`).
@@ -125,9 +125,9 @@ Também consertar de carona o P2 (MCP repassar `media_storage_path`): 3 linhas, 
 
 ---
 
-## 4. Decisões que o André precisa tomar
+## 4. Decisões que o dono precisa tomar
 
-> **Decidido pelo André em 07/10/2026:** todas as recomendações desta seção foram aceitas.
+> **Decidido pelo dono em 07/10/2026:** todas as recomendações desta seção foram aceitas.
 
 1. **Mídia sem pessoa precisa de termo?** (vídeo da fachada, mapa de localização)
    *Recomendo:* não. Um interruptor "Mostra pessoa identificável" (ligado por padrão). Exigir termo de fachada só gera atrito e itens mortos.

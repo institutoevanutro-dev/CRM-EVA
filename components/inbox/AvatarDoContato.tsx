@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
-/** Iniciais do nome ("Geovana Fonseca" → "GF"), com o telefone de reserva. */
+/** Iniciais do nome ("Laura Mendes" → "LM"), com o telefone de reserva. */
 export function iniciais(nome: string | null | undefined, reserva: string): string {
   const v = (nome ?? "").trim().replace(/^@/, "");
   const partes = v.split(/\s+/).filter(Boolean);

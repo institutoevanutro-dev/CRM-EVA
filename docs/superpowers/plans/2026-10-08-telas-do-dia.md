@@ -1,6 +1,6 @@
 # Parte 5, grupo 1 — telas do dia a dia
 
-O André aprovou este desenho em 08/10/2026, a partir dos prints de produção e
+O dono aprovou este desenho em 08/10/2026, a partir dos prints de produção e
 de uma leitura do código. As telas cobertas são Agenda, Contatos, Tarefas,
 Respostas rápidas e Radar. Este grupo não traz migration nem muda nenhuma API.
 

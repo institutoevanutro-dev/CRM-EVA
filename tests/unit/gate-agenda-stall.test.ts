@@ -562,7 +562,7 @@ describe("revisão #140 — confirmação de presença e convênio não são pro
 });
 
 /**
- * 07/10/2026 — a paciente pediu horário com a Dra. Ana e a IA respondeu "Estou vendo os
+ * 07/10/2026 — a paciente pediu horário com a Dra. Lúcia e a IA respondeu "Estou vendo os
  * horários…", "Estou conferindo os horários reais…" sem chamar a agenda. "Vendo" e
  * "conferindo" não estavam entre os verbos, e o gate passou as duas.
  */
@@ -570,16 +570,16 @@ describe("verbos de checagem medidos em produção (vendo, conferindo, olhando, 
   const armado = { active: true, ferramentas: TODAS, toolCalledThisTurn: false };
 
   it.each([
-    "Perfeito, Geovana.\n\nEstou vendo os horários da Dra. Ana em Vitória para dia 07/10 depois das 16h.\n\nMe dá só um instante?",
+    "Perfeito, Rita.\n\nEstou vendo os horários da Dra. Lúcia em Vitória para dia 07/10 depois das 16h.\n\nMe dá só um instante?",
     "Estou conferindo os horários reais dessa quarta agora. Você prefere mais no começo da tarde ou no fim da tarde?",
-    "Vou olhar a agenda da Dra. Ana e já te digo.",
+    "Vou olhar a agenda da Dra. Lúcia e já te digo.",
     "Estou checando a disponibilidade para quarta.",
   ])("veta sem ferramenta: %s", (body) => {
     expect(agendaStallGate.evaluate(baseCtx({ agenda: armado, body })).pass).toBe(false);
   });
 
   it("a mesma frase passa quando a ferramenta rodou neste turno", () => {
-    const body = "Estou vendo os horários da Dra. Ana em Vitória para dia 07/10 depois das 16h.";
+    const body = "Estou vendo os horários da Dra. Lúcia em Vitória para dia 07/10 depois das 16h.";
     const agenda = { ...armado, toolCalledThisTurn: true };
     expect(agendaStallGate.evaluate(baseCtx({ agenda, body })).pass).toBe(true);
   });

@@ -83,7 +83,7 @@ export async function protecaoAgendaSupabase(
   try {
     const appointments: CompromissoProtetor[] = [];
     // Em LOTES de contatos: o Radar passa todos os contatos com negócio aberto
-    // (517 no Instituto Eva em 07/10/2026), e um `.in()` com centenas de uuids
+    // (517 numa clínica em produção em 07/10/2026), e um `.in()` com centenas de uuids
     // estoura o header `Content-Location` do PostgREST (16 KB no Node) — a
     // leitura falhava sempre e o Radar respondia 500. Mesmo defeito e mesma
     // régua do quadro do funil (`lib/supabase/em-lotes.ts`).

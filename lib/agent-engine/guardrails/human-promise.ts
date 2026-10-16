@@ -97,7 +97,7 @@ function buildPatterns(target: string): RegExp[] {
     ),
     // (2d) voz PASSIVA com a RETAGUARDA como agente: "ele precisa ser conferido pela
     //      equipe", "o comprovante será verificado pela recepção". Achado em produção
-    //      (Instituto Eva, 14/10/2026): a resposta ao comprovante dizia isto e nenhuma
+    //      (produção, 14/10/2026): a resposta ao comprovante dizia isto e nenhuma
     //      regra acima casa, porque todas exigem o alvo como sujeito ou depois de "com".
     //      ESTREITA de propósito, porque a passiva é a fala comum de rotina clínica:
     //      - alvo só da retaguarda do atendimento (PASSIVE_TARGET), sem "especialista"

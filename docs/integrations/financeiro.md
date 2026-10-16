@@ -7,7 +7,7 @@ O dossiê do contato (`/app/contacts/[id]`) ganha a aba **Financeiro** para gere
 
 ## Configuração no servidor
 Variáveis opcionais (o compose já usa `env_file: .env`):
-- `FINANCEIRO_URL`: origem HTTPS do financeiro, sem caminho (por exemplo `https://financeiro.institutoevavix.com.br`).
+- `FINANCEIRO_URL`: origem HTTPS do financeiro, sem caminho (por exemplo `https://financeiro.exemplo.com.br`).
 - `FINANCEIRO_ORGANIZATION_ID`: UUID da organização que será vinculada. Outras organizações não consultam esse financeiro.
 - `FINANCEIRO_TOKEN`: segredo exclusivo de leitura do resumo, igual ao `CRM_RESUMO_TOKEN` no financeiro. Pelo menos 32 caracteres; gerar localmente e transferir fora do chat.
 

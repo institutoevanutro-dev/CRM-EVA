@@ -1,6 +1,6 @@
 /**
- * Prova, contra Postgres real, o cenário "Cintia → revisão do Erick" pedido
- * antes do deploy da Spec 20: Erick (supervisor) revisando Cintia
+ * Prova, contra Postgres real, o cenário "atendente → revisão do supervisor" pedido
+ * antes do deploy da Spec 20: o supervisor revisando a atendente
  * (supervisionada) num funil real, com EVENTO REPETIDO (reentrega do mesmo
  * `event_id`, como uma corrida de consumidor de fila faria de verdade) e SEM
  * ENVIO EXTERNO.
@@ -10,7 +10,7 @@
  *
  * ═══ O QUE ESTE ARQUIVO PROVA, E O QUE NÃO ═══
  *
- * Prova, com dados reais: (1) o vínculo Erick→Cintia enfileira revisão e job
+ * Prova, com dados reais: (1) o vínculo supervisor→atendente enfileira revisão e job
  * na primeira chegada do evento; (2) a MESMA chegada de novo (mesmo
  * `event_id`) é idempotente — não duplica revisão nem job — via
  * `ai_supervision_reviews (organization_id, idempotency_key)` e
@@ -58,7 +58,7 @@ async function seedOrg(org: string): Promise<void> {
 
 async function seedContato(org: string): Promise<string> {
   const { rows } = await pool.query<{ id: string }>(
-    `insert into contacts (organization_id, display_name) values ($1, 'Paciente da Cintia') returning id`,
+    `insert into contacts (organization_id, display_name) values ($1, 'Paciente da Atendente') returning id`,
     [org],
   );
   return rows[0]!.id;
@@ -88,7 +88,7 @@ async function seedAgente(org: string, nome: string): Promise<string> {
 
 async function seedFunil(org: string): Promise<string> {
   const { rows } = await pool.query<{ id: string }>(
-    `insert into crm_pipelines (organization_id, name, slug) values ($1, 'Funil Erick/Cintia', 'funil-' || substr(gen_random_uuid()::text, 1, 8)) returning id`,
+    `insert into crm_pipelines (organization_id, name, slug) values ($1, 'Funil Supervisor/Atendente', 'funil-' || substr(gen_random_uuid()::text, 1, 8)) returning id`,
     [org],
   );
   return rows[0]!.id;
@@ -96,8 +96,8 @@ async function seedFunil(org: string): Promise<string> {
 
 async function seedVinculo(params: {
   org: string;
-  erickId: string;
-  cintiaId: string;
+  supervisorId: string;
+  atendenteId: string;
   pipelineId: string;
 }): Promise<string> {
   const { rows } = await pool.query<{ id: string }>(
@@ -105,18 +105,18 @@ async function seedVinculo(params: {
        (organization_id, supervisor_agent_id, supervised_agent_id, pipeline_id, enabled, mode)
      values ($1, $2, $3, $4, true, 'recomendar')
      returning id`,
-    [params.org, params.erickId, params.cintiaId, params.pipelineId],
+    [params.org, params.supervisorId, params.atendenteId, params.pipelineId],
   );
   return rows[0]!.id;
 }
 
-function fatoDaCintia(params: { org: string; conversationId: string; contactId: string; cintiaId: string; eventId: string }): FatoConcluido {
+function fatoDaAtendente(params: { org: string; conversationId: string; contactId: string; atendenteId: string; eventId: string }): FatoConcluido {
   return {
     organizationId: params.org,
     conversationId: params.conversationId,
     contactId: params.contactId,
     actorType: "ai_agent",
-    actorId: params.cintiaId,
+    actorId: params.atendenteId,
     eventId: params.eventId,
     origin: "ai_run_completed",
     occurredAt: new Date().toISOString(),
@@ -124,19 +124,19 @@ function fatoDaCintia(params: { org: string; conversationId: string; contactId: 
   };
 }
 
-describe("Erick supervisiona Cintia: acionamento real, evento repetido, sem envio externo", () => {
+describe("O supervisor supervisiona a atendente: acionamento real, evento repetido, sem envio externo", () => {
   it("1ª chegada do evento: enfileira revisão + job; reentrega do MESMO event_id não duplica nada", async () => {
     const org = idDeTeste("1234");
     await seedOrg(org);
     const contactId = await seedContato(org);
     const conversationId = await seedConversa(org, contactId);
-    const erickId = await seedAgente(org, "Erick (supervisor)");
-    const cintiaId = await seedAgente(org, "Cintia (supervisionada)");
+    const supervisorId = await seedAgente(org, "Supervisor IA");
+    const atendenteId = await seedAgente(org, "Atendente (supervisionada)");
     const pipelineId = await seedFunil(org);
-    await seedVinculo({ org, erickId, cintiaId, pipelineId });
+    await seedVinculo({ org, supervisorId, atendenteId, pipelineId });
 
     const eventId = idDeTeste("dead");
-    const fato = fatoDaCintia({ org, conversationId, contactId, cintiaId, eventId });
+    const fato = fatoDaAtendente({ org, conversationId, contactId, atendenteId, eventId });
 
     // 1ª chegada: o vínculo enfileira de verdade.
     const resumo1 = await acionarSupervisao(pool, fato);
@@ -147,7 +147,7 @@ describe("Erick supervisiona Cintia: acionamento real, evento repetido, sem envi
       [org],
     );
     expect(reviews1).toHaveLength(1);
-    expect(reviews1[0]).toMatchObject({ status: "pendente", supervisor_agent_id: erickId, event_id: eventId });
+    expect(reviews1[0]).toMatchObject({ status: "pendente", supervisor_agent_id: supervisorId, event_id: eventId });
     expect(reviews1[0]!.job_id).not.toBeNull();
 
     const { rows: jobs1 } = await pool.query(`select id, kind, source_event_id from job_queue where organization_id = $1`, [org]);
@@ -172,18 +172,18 @@ describe("Erick supervisiona Cintia: acionamento real, evento repetido, sem envi
     expect(msgs[0]!.n).toBe("0");
   });
 
-  it("evento de um agente FORA do vínculo (não é a Cintia): filtrado, não gera revisão nenhuma", async () => {
+  it("evento de um agente FORA do vínculo (não é a atendente): filtrado, não gera revisão nenhuma", async () => {
     const org = idDeTeste("5678");
     await seedOrg(org);
     const contactId = await seedContato(org);
     const conversationId = await seedConversa(org, contactId);
-    const erickId = await seedAgente(org, "Erick (supervisor)");
-    const cintiaId = await seedAgente(org, "Cintia (supervisionada)");
+    const supervisorId = await seedAgente(org, "Supervisor IA");
+    const atendenteId = await seedAgente(org, "Atendente (supervisionada)");
     const outroAgenteId = await seedAgente(org, "Outro agente, não supervisionado");
     const pipelineId = await seedFunil(org);
-    await seedVinculo({ org, erickId, cintiaId, pipelineId });
+    await seedVinculo({ org, supervisorId, atendenteId, pipelineId });
 
-    const fato = fatoDaCintia({ org, conversationId, contactId, cintiaId: outroAgenteId, eventId: idDeTeste("beef") });
+    const fato = fatoDaAtendente({ org, conversationId, contactId, atendenteId: outroAgenteId, eventId: idDeTeste("beef") });
     const resumo = await acionarSupervisao(pool, fato);
     expect(resumo).toMatchObject({ vinculos: 1, enfileiradas: 0, duplicadas: 0, filtradas: { agente_nao_supervisionado: 1 } });
 
@@ -191,19 +191,19 @@ describe("Erick supervisiona Cintia: acionamento real, evento repetido, sem envi
     expect(rows[0]!.n).toBe("0");
   });
 
-  it("a EXECUÇÃO DO PRÓPRIO ERICK (o supervisor) nunca aciona revisão sobre si mesmo — corta o ciclo", async () => {
+  it("a EXECUÇÃO DO PRÓPRIO SUPERVISOR (o supervisor) nunca aciona revisão sobre si mesmo — corta o ciclo", async () => {
     const org = idDeTeste("9abc");
     await seedOrg(org);
     const contactId = await seedContato(org);
     const conversationId = await seedConversa(org, contactId);
-    const erickId = await seedAgente(org, "Erick (supervisor)");
-    const cintiaId = await seedAgente(org, "Cintia (supervisionada)");
+    const supervisorId = await seedAgente(org, "Supervisor IA");
+    const atendenteId = await seedAgente(org, "Atendente (supervisionada)");
     const pipelineId = await seedFunil(org);
-    await seedVinculo({ org, erickId, cintiaId, pipelineId });
+    await seedVinculo({ org, supervisorId, atendenteId, pipelineId });
 
-    // O PRÓPRIO Erick concluindo um turno — actor_id = erickId, que é
+    // O PRÓPRIO supervisor concluindo um turno — actor_id = supervisorId, que é
     // supervisor NESTA organização (ai_supervision_bindings.supervisor_agent_id).
-    const fato = fatoDaCintia({ org, conversationId, contactId, cintiaId: erickId, eventId: idDeTeste("c1c1") });
+    const fato = fatoDaAtendente({ org, conversationId, contactId, atendenteId: supervisorId, eventId: idDeTeste("c1c1") });
     const resumo = await acionarSupervisao(pool, fato);
     expect(resumo.enfileiradas).toBe(0);
     expect(resumo.filtradas.ciclo_do_supervisor).toBe(1);
@@ -216,10 +216,10 @@ async function cenarioDeMovimento() {
   await seedOrg(org);
   const contactId = await seedContato(org);
   const conversationId = await seedConversa(org, contactId);
-  const erickId = await seedAgente(org, 'Supervisor');
-  const cintiaId = await seedAgente(org, 'Atendimento');
+  const supervisorId = await seedAgente(org, 'Supervisor');
+  const atendenteId = await seedAgente(org, 'Atendimento');
   const pipelineId = await seedFunil(org);
-  const bindingId = await seedVinculo({ org, erickId, cintiaId, pipelineId });
+  const bindingId = await seedVinculo({ org, supervisorId, atendenteId, pipelineId });
   const { rows: stages } = await pool.query<{ id: string }>(`insert into crm_stages(organization_id,pipeline_id,name,slug,position)
     values ($1,$2,'Antes','antes',1),($1,$2,'Depois','depois',2) returning id`, [org,pipelineId]);
   const from = stages[0]!.id; const to = stages[1]!.id;
@@ -229,7 +229,7 @@ async function cenarioDeMovimento() {
   await pool.query(`update crm_leads set stage_changed_at='2026-09-17 10:00:00.123456+00' where organization_id=$1 and id=$2`, [org,leadId]);
   await pool.query(`update ai_supervision_bindings set mode='executar',allowed_stage_moves=$3::jsonb where organization_id=$1 and id=$2`,
     [org,bindingId,JSON.stringify([{ to_stage_id:to, from_stage_ids:[from] }])]);
-  await acionarSupervisao(pool, fatoDaCintia({ org,conversationId,contactId,cintiaId,eventId:idDeTeste('bbbb') }));
+  await acionarSupervisao(pool, fatoDaAtendente({ org,conversationId,contactId,atendenteId,eventId:idDeTeste('bbbb') }));
   const { rows: reviews } = await pool.query<{ id: string }>('select id from ai_supervision_reviews where organization_id=$1', [org]);
   const db = createPgSupervisaoDb(pool);
   const review = (await db.carregarRevisao(org,reviews[0]!.id))!;
@@ -237,7 +237,7 @@ async function cenarioDeMovimento() {
   const input = { organization_id:org,lead_id:leadId,contact_id:contactId,conversation_id:conversationId,
     de_etapa_id:from,para_etapa_id:to,stage_changed_at_esperado:state.lead!.stage_changed_at,
     service_revision_esperada:state.conversa.service_revision,review_id:review.id,action_key:`${review.id}:move`,
-    supervisor_agent_id:erickId,trace_id:'test',motivo:'Movimento administrativo' };
+    supervisor_agent_id:supervisorId,trace_id:'test',motivo:'Movimento administrativo' };
   return { db,input,bindingId };
 }
 

@@ -13,10 +13,10 @@ describe('renderFatosDoContato', () => {
 
   it('lista anteriores e futuros em linhas separadas', () => {
     const texto = renderFatosDoContato({
-      anteriores: [f('Consulta de acompanhamento — Dr. André', '2026-10-09')],
+      anteriores: [f('Consulta de acompanhamento — Dr. Otávio', '2026-10-09')],
       futuros: [f('Drenagem linfática', '2026-10-16', 'confirmed')],
     });
-    expect(texto).toContain('- Compromissos passados (não cancelados): 09/10/2026 Consulta de acompanhamento — Dr. André (realizado)');
+    expect(texto).toContain('- Compromissos passados (não cancelados): 09/10/2026 Consulta de acompanhamento — Dr. Otávio (realizado)');
     expect(texto).toContain('- Compromissos futuros: 16/10/2026 Drenagem linfática (confirmado)');
   });
 

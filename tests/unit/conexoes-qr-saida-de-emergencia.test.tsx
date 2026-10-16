@@ -1,15 +1,15 @@
 /**
  * Central de Conexões — a saída da tela do QR não pode depender de SORTE.
  *
- * Defeito medido em 23/09/2026 na instalação do Instituto Eva, reconectando dois
+ * Defeito medido em 23/09/2026 numa instalação em produção, reconectando dois
  * canais cuja credencial tinha sido revogada. O WAHA entrou em laço
  * `STARTING` → `Error: Connection Failure` → `Session stuck in STARTING status,
  * force stopping the session` → `STARTING`, e a tela só oferecia "Gerar novo QR"
  * — a única ação que resolve credencial revogada — quando a sondagem de 3s por
  * acaso observava `FAILED`/`STOPPED`:
  *
- *  - 5527999049879: a sondagem pegou o FAILED, o botão apareceu, fim.
- *  - 5527998659879: nunca pegou. Mais de 60s em "Preparando o código…", sem
+ *  - 5527990001234: a sondagem pegou o FAILED, o botão apareceu, fim.
+ *  - 5527990005678: nunca pegou. Mais de 60s em "Preparando o código…", sem
  *    saída, até a chamada com `{force:true}` ser disparada à mão pelo console.
  *
  * É corrida, não código faltando. Estes casos existem para que a saída volte a
@@ -52,7 +52,7 @@ const CANAL: ChannelSession = {
   id: "canal-1",
   waha_session_name: "org_1111_aaa",
   display_name: "Vendas",
-  phone_number: "5527998659879",
+  phone_number: "5527990005678",
   status: "FAILED",
   status_reason: null,
   last_health_check_at: null,
