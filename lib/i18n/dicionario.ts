@@ -425,6 +425,7 @@ export const DICIONARIO: Traducoes = {
   "Buscar cliente": { es: "Buscar cliente" },
   "Quem será atendido": { es: "Quién será atendido" },
   "Compromisso pessoal, sem cliente": { es: "Cita personal, sin cliente" },
+  "Nenhum paciente encontrado": { es: "Ningún paciente encontrado" },
   "Conversa vinculada (opcional)": { es: "Conversación vinculada (opcional)" },
   "Sem conversa vinculada": { es: "Sin conversación vinculada" },
   // Fluxo de sinal da reserva (WaitForm.tsx e ActionConfigForm.tsx).

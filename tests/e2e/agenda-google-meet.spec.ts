@@ -175,7 +175,7 @@ async function book(page: Page, f: Fixture) {
   await page.goto(`/app/inbox/${f.conversation}`);
   await page.getByRole("link", { name: "Marcar compromisso", exact: true }).click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible();
-  await expect(page.getByLabel("Quem será atendido")).toHaveValue(f.contact);
+  await expect(page.getByTestId("paciente-escolhido")).toHaveAttribute("data-contact-id", f.contact);
   await expect(page.getByLabel("Conversa vinculada (opcional)")).toHaveValue(f.conversation);
   await page.keyboard.press("Escape");
   const days = await irParaASemanaSeguinte(page);
