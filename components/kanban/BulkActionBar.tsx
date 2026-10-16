@@ -26,6 +26,7 @@ import { ROLE_RANK } from "@/lib/auth/types";
 import { useBulkAction } from "@/hooks/kanban/useBulkAction";
 import { resolveVocabulary } from "@/lib/kanban/vocabulary";
 import type { PipelineVocabulary, Stage } from "@/lib/kanban/types";
+import { LoseLeadDialog } from "./LoseLeadDialog";
 
 interface BulkActionBarProps {
   selectedIds: string[];
@@ -65,6 +66,7 @@ export function BulkActionBar({
   const bulk = useBulkAction(pipelineId);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tagInput, setTagInput] = useState("");
+  const [loseOpen, setLoseOpen] = useState(false);
 
   // Reatribuir dono em lote é ≥manager NA ROTA (spec 04 §6.5). Sem este gate a
   // barra oferecia "Atribuir a…" para um `agent`, que clicava e recebia 403 —
@@ -108,6 +110,22 @@ export function BulkActionBar({
       },
       { onSuccess: () => onClear() },
     );
+  };
+
+  // "Marcar como perdido" em lote (porte do upstream #2868): mover para a
+  // etapa de PERDA do funil com UM motivo, pela `leads/bulk`, com o MESMO
+  // diálogo do card. Só existe onde o funil tem etapa de perda.
+  const etapaDePerda = stages.find((s) => s.is_lost) ?? null;
+  const runLose = async (motivo: string) => {
+    if (!etapaDePerda) return;
+    const res = await bulk.mutateAsync({
+      action: "move",
+      lead_ids: selectedIds,
+      params: { stage_id: etapaDePerda.id, lost_reason: motivo },
+    });
+    const n = res.data.updated_count;
+    toast.success(`${n} ${t(n > 1 ? "marcados como perdidos." : "marcado como perdido.")}`);
+    onClear();
   };
 
   const runAssign = (ownerId: string | null) => {
@@ -275,6 +293,17 @@ export function BulkActionBar({
           </DropdownMenuContent>
         </DropdownMenu>
 
+        {etapaDePerda && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setLoseOpen(true)}
+            disabled={bulk.isPending}
+          >
+            {t("Marcar como perdido…")}
+          </Button>
+        )}
+
         <Button
           size="sm"
           variant="destructive"
@@ -288,6 +317,16 @@ export function BulkActionBar({
           {t("Cancelar")}
         </Button>
       </div>
+
+      {etapaDePerda && (
+        <LoseLeadDialog
+          open={loseOpen}
+          onOpenChange={setLoseOpen}
+          pipelineId={pipelineId}
+          onConfirm={runLose}
+          submitting={bulk.isPending}
+        />
+      )}
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>
