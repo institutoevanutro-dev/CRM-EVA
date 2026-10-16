@@ -219,7 +219,7 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
           )}
           {/* Aberta pela aba "Ocultos" ou por link: a tela diz que esta conversa
               está fora do Inbox, e por que a IA não responde. */}
-          {conversation.contato_oculto && <SeloDeOculto />}
+          {conversation.contato_oculto && <SeloDeOculto className="h-4 px-1.5 text-[10px]" />}
         </div>
 
         {/* QUEM ESTÁ NO COMANDO, com nome e por GEOMETRIA — disco cheio para

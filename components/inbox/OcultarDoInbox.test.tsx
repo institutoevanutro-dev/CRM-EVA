@@ -14,7 +14,10 @@ const CONTATO = "11111111-1111-4111-8111-111111111111";
 const CONVERSA = "22222222-2222-4222-8222-222222222222";
 
 function dublarFetch() {
-  const spy = vi.fn(async () => new Response(JSON.stringify({ data: {} }), { status: 200, headers: { "content-type": "application/json" } }));
+  const spy = vi.fn(
+    async (_url: string, _init?: RequestInit) =>
+      new Response(JSON.stringify({ data: {} }), { status: 200, headers: { "content-type": "application/json" } }),
+  );
   vi.stubGlobal("fetch", spy);
   return spy;
 }

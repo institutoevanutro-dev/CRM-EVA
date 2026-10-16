@@ -33,6 +33,7 @@ import { useOcultarDoInbox, type PedidoDeOcultacao } from "@/hooks/contacts/useO
 import { useT } from "@/hooks/i18n/useT";
 import { roleAtLeast } from "@/lib/auth/types";
 import { Eye, EyeSlash } from "@/lib/ui/icons";
+import { cn } from "@/lib/utils";
 
 interface Props {
   contactId: string;
@@ -43,11 +44,19 @@ interface Props {
   variante: "icone" | "botao";
 }
 
-/** O selo "Oculto do Inbox", para quem abre a conversa ou a ficha de um oculto. */
-export function SeloDeOculto() {
+/**
+ * O selo "Oculto do Inbox", para quem abre a conversa ou a ficha de um oculto.
+ * Não quebra linha: no cabeçalho da conversa, apertado, ele virava uma pílula de
+ * três linhas no Safari (medido em 1280px); quem encolhe ali é o nome, que trunca.
+ */
+export function SeloDeOculto({ className }: { className?: string }) {
   const t = useT();
   return (
-    <Badge variant="outline" className="gap-1" data-testid="selo-oculto-do-inbox">
+    <Badge
+      variant="outline"
+      className={cn("shrink-0 gap-1 whitespace-nowrap", className)}
+      data-testid="selo-oculto-do-inbox"
+    >
       <EyeSlash size={12} aria-hidden />
       {t("Oculto do Inbox")}
     </Badge>
@@ -116,7 +125,9 @@ export function OcultarDoInbox({ contactId, conversationId, nome, oculto, varian
       <AlertDialog open={perguntando} onOpenChange={setPerguntando}>
         <AlertDialogContent className="sm:max-w-md" data-testid="ocultar-do-inbox-dialogo">
           <AlertDialogHeader>
-            <AlertDialogTitle>
+            {/* `wrap-anywhere`: o nome pode ser um @ do Instagram sem espaço
+                nenhum, e sem isto ele empurraria o diálogo para fora da tela. */}
+            <AlertDialogTitle className="wrap-anywhere">
               {t("Ocultar do Inbox")}: {nome}?
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
