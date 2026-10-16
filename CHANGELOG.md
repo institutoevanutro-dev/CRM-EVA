@@ -8,6 +8,34 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.13.0] — 2026-10-16
+
+### Adicionado
+
+- **A agenda pela integração (MCP) pode ser lida por semana numa chamada só** Quem lê a agenda pela integração — como o Prontuário — pode pedir um período
+  de até 7 dias de uma vez, com `de` e `ate` (datas no horário de Brasília,
+  inclusivas), em vez de uma chamada por dia. A resposta traz os mesmos campos
+  de antes, em ordem de início, com até 350 compromissos. Quem continua pedindo
+  dia a dia não percebe diferença nenhuma.
+
+### Corrigido
+
+- **A IA para de responder quando do outro lado é um robô** Quando o número do contato era um atendimento automático (um chatbot que devolve
+  sempre o mesmo texto pronto), a IA respondia a cada mensagem dele, e os dois ficavam
+  conversando entre si: em produção foram 37 mensagens da IA em 7 minutos. Isso gasta
+  modelo e é risco de bloqueio do número no WhatsApp.
+
+  Agora, antes de chamar o modelo, o atendimento confere a conversa. Se o contato mandou
+  a mesma mensagem longa (20 caracteres ou mais) 3 vezes em 10 minutos, ou se a IA mandou
+  mais de 20 mensagens em 5 minutos sem ninguém da equipe falar, a IA para de responder
+  sem avisar o contato, a conversa vai para a fila humana e abre UM aviso na Central:
+  "Possível robô do outro lado". Se for uma pessoa, devolva a conversa à IA pela tela.
+
+  Quem repete "oi" ou reenvia a mesma pergunta duas vezes não é afetado. Os limites são
+  ajustáveis por `BOT_LOOP_REPEAT_COUNT`, `BOT_LOOP_REPEAT_WINDOW_MS`,
+  `BOT_LOOP_AI_BURST_MAX` e `BOT_LOOP_AI_BURST_WINDOW_MS`; sem nada no `.env`, valem os
+  números acima.
+
 ## [4.12.1] — 2026-10-16
 
 ### Corrigido
@@ -7428,7 +7456,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.12.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.13.0...HEAD
+[4.13.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.12.1...v4.13.0
 [4.12.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.12.0...v4.12.1
 [4.12.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.11.1...v4.12.0
 [4.11.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.11.0...v4.11.1
