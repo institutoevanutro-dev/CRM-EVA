@@ -107,7 +107,7 @@
       "lane": "execucao",
       "col": 1,
       "type": "service",
-      "label": "sync-executor: GET exato, três vias e escrita desconhecida"
+      "label": "sync-executor: nome do contato da mesma org, GET exato e três vias"
     },
     {
       "id": "transport",
