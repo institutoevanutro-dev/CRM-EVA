@@ -37,6 +37,14 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  "Mostrar só quando:": { es: "Mostrar solo cuando:" },
+  "Campo da condição": { es: "Campo de la condición" },
+  "Sempre mostrar": { es: "Mostrar siempre" },
+  "Operador da condição": { es: "Operador de la condición" },
+  "é igual a": { es: "es igual a" },
+  "é maior que": { es: "es mayor que" },
+  "Valor da condição": { es: "Valor de la condición" },
+  "Escondido, o campo não aparece no formulário, e o valor já gravado continua no registro.": { es: "Oculto, el campo no aparece en el formulario y el valor ya guardado se mantiene en el registro." },
   "Destinatário": { es: "Destinatario" },
   "Escolha quem recebe": { es: "Elige quién recibe" },
   "E-mail do contato": { es: "Correo del contacto" },

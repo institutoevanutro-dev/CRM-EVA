@@ -13,6 +13,7 @@ import { IDIOMAS } from "@/lib/i18n/idiomas";
 import { MOEDAS_SERVIDAS } from "@/lib/money";
 
 import { conversationTagSchema } from "./messaging";
+import { mostrarQuandoSchema } from "./mostrar-quando";
 
 /**
  * Os idiomas que a interface REALMENTE serve.
@@ -160,6 +161,13 @@ export const customFieldSchema = z.object({
   options: z
     .array(z.object({ value: z.string().min(1), label: z.string().min(1) }))
     .optional(),
+  /**
+   * QUANDO este campo aparece (porte do upstream #2793): "mostrar só quando
+   * outro campo tem determinado valor". Lida por `lib/schemas/mostrar-quando.ts`
+   * no renderizador único (`CustomFieldsEditor`). Esconder NÃO apaga valor.
+   * Ausente é o caminho de todo funil instalado hoje.
+   */
+  mostrar_quando: mostrarQuandoSchema.optional(),
 });
 export type CustomFieldDef = z.infer<typeof customFieldSchema>;
 

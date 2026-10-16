@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/hooks/i18n/useT";
 import { cn } from "@/lib/utils";
+import { camposVisiveis, type MostrarQuando } from "@/lib/schemas/mostrar-quando";
 
 export type CustomFieldType =
   | "text"
@@ -36,6 +37,13 @@ export interface CustomFieldDef {
   type: CustomFieldType;
   required?: boolean;
   options?: Array<{ value: string; label: string }>;
+  /**
+   * A condição de exibição (porte do upstream #2793). Quem decide se o campo
+   * aparece é ESTE componente, o renderizador único, olhando os valores que ele
+   * mesmo renderiza. Esconder é filtrar a lista: `value` não é mexido, então o
+   * que já estava gravado viaja no save.
+   */
+  mostrar_quando?: MostrarQuando;
 }
 
 interface Props {
@@ -55,7 +63,7 @@ export function CustomFieldsEditor({ fields, value, onChange, disabled, classNam
 
   return (
     <div className={cn("grid grid-cols-1 gap-4 md:grid-cols-2", className)}>
-      {fields.map((f) => {
+      {camposVisiveis(fields, value).map((f) => {
         const v = value[f.key];
         const id = `cf-${f.key}`;
 
