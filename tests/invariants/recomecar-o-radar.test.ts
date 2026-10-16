@@ -73,11 +73,18 @@ async function settingsDe(org: string): Promise<Record<string, unknown>> {
   return rows[0]!.settings;
 }
 
-const SETTINGS_INICIAIS = {
+const SETTINGS_GRAVADOS = {
   visibility_mode: "all",
   llm: { provider: "anthropic", model: "x" },
   radar: { outra_chave: true },
 };
+
+/**
+ * O que o banco guardou de fato ao criar a organização: gatilhos de
+ * `organizations` completam `settings` (o modelo padrão de IA, por exemplo), e
+ * é contra ESTE retrato que "nada mudou" se mede.
+ */
+let SETTINGS_INICIAIS: Record<string, unknown>;
 
 beforeAll(async () => {
   for (const u of [ADMIN_A, MANAGER_A, AGENT_A, VIEWER_A, ADMIN_B, ESTRANHO]) {
@@ -94,7 +101,7 @@ beforeAll(async () => {
       `insert into organizations (id, slug, legal_name, display_name, settings)
        values ($1, $2, 'Clínica LTDA', 'Clínica', $3::jsonb)
        on conflict (id) do update set settings = excluded.settings`,
-      [org, slug, JSON.stringify(SETTINGS_INICIAIS)],
+      [org, slug, JSON.stringify(SETTINGS_GRAVADOS)],
     );
   }
   for (const [u, org, papel] of [
@@ -110,6 +117,9 @@ beforeAll(async () => {
       [u, org, papel],
     );
   }
+  SETTINGS_INICIAIS = await settingsDe(ORG_A);
+  expect(SETTINGS_INICIAIS).toMatchObject(SETTINGS_GRAVADOS);
+  expect(await settingsDe(ORG_B)).toEqual(SETTINGS_INICIAIS);
 });
 
 afterAll(async () => {
