@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { ehVistoAzul } from "../support/waha-visto-azul";
 import { createServer } from "node:http";
 import { mkdirSync, writeFileSync } from "node:fs";
 import pg from "pg";
@@ -188,6 +189,10 @@ async function receiver() {
   const target = new URL(process.env.WAHA_API_BASE_URL!);
   expect(["127.0.0.1", "localhost"]).toContain(target.hostname);
   const server = createServer(async (req, res) => {
+    if (ehVistoAzul(req.url)) {
+      res.end("{}");
+      return;
+    }
     let raw = "";
     for await (const part of req) raw += String(part);
     bodies.push(JSON.parse(raw));

@@ -5,7 +5,12 @@
  * dispatch + outbound message row + ack + retries), so this module is a small
  * convenience for direct callers (tests, smoke checks). Returns null when
  * WAHA env is not configured — callers must treat that as a noop, not error.
+ *
+ * `marcarConversaComoLida` (o visto azul) é a exceção: ela É chamada pela
+ * produção, pelo adapter do canal por QR, logo depois do envio aceito.
  */
+import { logger } from "@/lib/logger";
+
 import { getWahaClient } from "./client";
 
 export interface SendWahaInput {
@@ -65,4 +70,42 @@ export async function sendWAHA(input: SendWahaInput): Promise<unknown | null> {
   const client = getWahaClient();
   if (!client) return null;
   return client.sendMessage(input.sessionName, input.chatId, input.text);
+}
+
+export interface MarcarConversaComoLidaInput {
+  /** Só para o log: `sessionName` e `chatId` carregam telefone e NÃO vão ao log. */
+  organizationId: string;
+  sessionName: string;
+  chatId: string;
+}
+
+/**
+ * O visto azul depois de responder (porte de upstream #2987).
+ *
+ * FALHA MACIA é o contrato: devolve `false` e loga, nunca lança — a resposta já
+ * saiu, e um recibo de leitura nunca custa a mensagem. Sem env do WAHA é NOOP.
+ *
+ * Vem DEPOIS do envio (e não antes, como a doc do WAHA sugere): esta chamada
+ * tem o mesmo teto do `sendText`, e um WAHA pendurado seguraria toda resposta.
+ * Não é mensagem, então não passa pelo pacing anti-banimento nem gasta o
+ * `pacing_ledger` — é o mesmo tipo de sinal que o "digitando…".
+ */
+export async function marcarConversaComoLida(
+  input: MarcarConversaComoLidaInput,
+): Promise<boolean> {
+  // Grupo não leva visto: sem `messageIds` o WAHA marcaria como lidas as
+  // mensagens dos OUTROS participantes, e o recibo aparece para todos.
+  if (input.chatId.endsWith("@g.us")) return false;
+  const client = getWahaClient();
+  if (!client) return false;
+  try {
+    await client.sendSeen(input.sessionName, input.chatId);
+    return true;
+  } catch (erro) {
+    logger.warn("waha: conversa não marcada como lida (a resposta já saiu)", {
+      organization_id: input.organizationId,
+      detail: erro instanceof Error ? erro.message : "erro_desconhecido",
+    });
+    return false;
+  }
 }

@@ -37,6 +37,10 @@ const triggerConfigSchema = z
             start: z.string(),
             end: z.string(),
             weekdays: z.array(z.number().int().min(0).max(6)),
+            // Aviso de fora do horário (porte de upstream #2284).
+            // Sem esta linha o Zod descarta o campo ao salvar. Teto = o de
+            // TAMANHO_MAXIMO_DO_TEXTO em aviso-fora-do-horario.ts.
+            notice: z.string().max(1000).nullable().optional(),
           })
           .nullable()
           .optional()
