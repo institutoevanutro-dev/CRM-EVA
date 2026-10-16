@@ -771,6 +771,10 @@ export const AUDIT_ACTIONS = [
   // migration 0366: a marca "sempre atendimento humano" do contato (porte do upstream PR 2671).
   "contact.always_human_set",
   "contact.always_human_cleared",
+  // migration 0370: o administrador recomeçou o radar de risco a partir de um
+  // instante (`settings.radar.desde`), ou desfez o recomeço. Metadata: desde e antes.
+  "radar.recomecado",
+  "radar.recomeco_desfeito",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

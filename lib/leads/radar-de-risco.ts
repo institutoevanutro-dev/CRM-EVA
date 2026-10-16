@@ -19,6 +19,7 @@ import type { Role } from "@/lib/auth/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
 
+import { ativoDesdeORecomeco, lerInicioDoRadar } from "@/lib/leads/inicio-do-radar";
 import {
   classifyRisk,
   compareRisk,
@@ -89,6 +90,12 @@ export interface RadarDeRisco {
    */
   sem_proximo_passo: DemandaSemProximoPasso[];
   total_sem_proximo_passo: number;
+  /**
+   * O instante em que um administrador recomeçou o radar
+   * (`settings.radar.desde`, migration 0370), ou `null`. Com ele, negócio e
+   * demanda sem atividade desde então ficam de fora — nada é apagado.
+   */
+  recomecado_em: string | null;
 }
 
 export interface OpcoesDoRadar {
@@ -128,31 +135,68 @@ export async function carregaRadarDeRisco(
   // forma a investigar é o join embutido — `crm_pipelines!inner(is_archived)` com
   // `.eq("crm_pipelines.is_archived", false)` —, que não carrega ids na URL. Não
   // medida: com ~50 funis arquivados são ~2 KB, dentro de qualquer limite.
-  const { data: arquivados, error: arquivadosErr } = await admin
-    .from("crm_pipelines")
-    .select("id")
-    .eq("organization_id", organizationId)
-    .eq("is_archived", true);
+  const [{ data: arquivados, error: arquivadosErr }, { data: organizacao, error: organizacaoErr }] =
+    await Promise.all([
+      admin.from("crm_pipelines").select("id").eq("organization_id", organizationId).eq("is_archived", true),
+      // RECOMEÇO (migration 0370): só a chave `radar`, nunca o `settings` inteiro.
+      admin.from("organizations").select("radar:settings->radar").eq("id", organizationId).maybeSingle(),
+    ]);
   if (arquivadosErr) throw new Error(`radar_pipelines_failed: ${arquivadosErr.message}`);
+  if (organizacaoErr) throw new Error(`radar_inicio_failed: ${organizacaoErr.message}`);
   const funisArquivados = (arquivados ?? []).map((p) => p.id as string);
+  const desde = lerInicioDoRadar((organizacao as { radar?: unknown } | null)?.radar);
 
-  let consultaDeLeads = admin
-    .from("crm_leads")
-    .select(
-      "id, title, contact_id, owner_user_id, owner_kind, owner_agent_id, stage_id, last_activity_at, created_at, pipeline_id",
-    )
-    .eq("organization_id", organizationId)
-    .eq("status", "open");
-  if (funisArquivados.length > 0) {
-    consultaDeLeads = consultaDeLeads.not("pipeline_id", "in", `(${funisArquivados.join(",")})`);
+  const leadsAbertos = (colunas: string) => {
+    let q = admin
+      .from("crm_leads")
+      .select(colunas)
+      .eq("organization_id", organizationId)
+      .eq("status", "open");
+    if (funisArquivados.length > 0) q = q.not("pipeline_id", "in", `(${funisArquivados.join(",")})`);
+    if (opts.contactId) q = q.eq("contact_id", opts.contactId);
+    return q;
+  };
+  const COLUNAS_DO_LEAD =
+    "id, title, contact_id, owner_user_id, owner_kind, owner_agent_id, stage_id, last_activity_at, created_at, pipeline_id";
+
+  let rows: LinhaDeLead[];
+  if (desde === null) {
+    const { data: leads, error: leadsErr } = await leadsAbertos(COLUNAS_DO_LEAD)
+      .order("last_activity_at", { ascending: true, nullsFirst: true })
+      .limit(SCAN_CAP);
+    if (leadsErr) throw new Error(`radar_query_failed: ${leadsErr.message}`);
+    rows = (leads ?? []) as unknown as LinhaDeLead[];
+  } else {
+    // O corte entra NA CONSULTA, antes do `SCAN_CAP`: lido depois, os 500 mais
+    // frios (justamente os de antes do recomeço) ocupariam a janela inteira e
+    // nenhum item novo entraria. São duas leituras porque a atividade vive em
+    // dois lugares: no próprio negócio, e na conversa do contato
+    // (`contacts.last_activity_at`, que toda mensagem carimba) — o paciente que
+    // escreveu de novo traz o negócio de volta mesmo sem ninguém mexer no card.
+    const [proprios, pelaConversa] = await Promise.all([
+      leadsAbertos(`${COLUNAS_DO_LEAD}, contacts(last_activity_at)`)
+        .or(`last_activity_at.gte.${desde},created_at.gte.${desde}`)
+        .order("last_activity_at", { ascending: true, nullsFirst: true })
+        .limit(SCAN_CAP),
+      leadsAbertos(`${COLUNAS_DO_LEAD}, contacts!inner(last_activity_at)`)
+        .gte("contacts.last_activity_at", desde)
+        .order("last_activity_at", { ascending: true, nullsFirst: true })
+        .limit(SCAN_CAP),
+    ]);
+    const erro = proprios.error ?? pelaConversa.error;
+    if (erro) throw new Error(`radar_query_failed: ${erro.message}`);
+    rows = unirPorId([
+      ...((proprios.data ?? []) as unknown as LinhaDeLead[]),
+      ...((pelaConversa.data ?? []) as unknown as LinhaDeLead[]),
+    ])
+      // A régua é a mesma das consultas, em TypeScript: é ela que decide, e as
+      // consultas só pré-selecionam para o teto.
+      .filter((l) =>
+        ativoDesdeORecomeco(desde, [l.last_activity_at, l.created_at, umSo(l.contacts)?.last_activity_at]),
+      )
+      .sort(maisFrioPrimeiro)
+      .slice(0, SCAN_CAP);
   }
-  if (opts.contactId) consultaDeLeads = consultaDeLeads.eq("contact_id", opts.contactId);
-  const { data: leads, error: leadsErr } = await consultaDeLeads
-    .order("last_activity_at", { ascending: true, nullsFirst: true })
-    .limit(SCAN_CAP);
-  if (leadsErr) throw new Error(`radar_query_failed: ${leadsErr.message}`);
-
-  const rows = leads ?? [];
 
   // Dono AGENTE (0070). Sem isto, um lead que a IA trabalha há dezenas de turnos
   // aparece no radar como "Sem dono" e um humano vai resgatar o que já está sendo
@@ -291,18 +335,51 @@ export async function carregaRadarDeRisco(
   // IA usa (lib/mcp/tools/retencao.ts), e a tela e o agente têm de dizer a
   // mesma coisa sobre o mesmo negócio. Reescrevê-la agora arriscaria essa
   // paridade sem necessidade; acrescentar não arrisca nada.
-  let consultaDeDemandas = admin
-    .from("demandas")
-    .select("id, lead_id, contact_id, aberta_em, origem, contacts(name, display_name)")
-    .eq("organization_id", organizationId)
-    .is("fechada_em", null)
-    .is("proximo_passo", null);
-  if (opts.contactId) consultaDeDemandas = consultaDeDemandas.eq("contact_id", opts.contactId);
-  const { data: semPasso, error: demandaError } = await consultaDeDemandas
-    .order("aberta_em", { ascending: true })
-    .limit(SCAN_CAP);
-  if (demandaError) throw new Error(`radar_demandas_failed: ${demandaError.message}`);
-  let demandasVisiveis = semPasso ?? [];
+  const demandasSemPasso = (colunas: string) => {
+    let q = admin
+      .from("demandas")
+      .select(colunas)
+      .eq("organization_id", organizationId)
+      .is("fechada_em", null)
+      .is("proximo_passo", null);
+    if (opts.contactId) q = q.eq("contact_id", opts.contactId);
+    return q;
+  };
+  const COLUNAS_DA_DEMANDA = "id, lead_id, contact_id, aberta_em, updated_at, origem";
+  let demandasVisiveis: LinhaDeDemanda[];
+  if (desde === null) {
+    const { data: semPasso, error: demandaError } = await demandasSemPasso(
+      `${COLUNAS_DA_DEMANDA}, contacts(name, display_name)`,
+    )
+      .order("aberta_em", { ascending: true })
+      .limit(SCAN_CAP);
+    if (demandaError) throw new Error(`radar_demandas_failed: ${demandaError.message}`);
+    demandasVisiveis = (semPasso ?? []) as unknown as LinhaDeDemanda[];
+  } else {
+    // Mesmo corte, pelo mesmo motivo dos negócios. A demanda aberta ABSORVE a
+    // mensagem nova do paciente (`fn_service_inbound` liga a mensagem à demanda
+    // corrente sem tocar nela): sem a leitura pela conversa, quem voltou a
+    // escrever ficaria fora do radar para sempre.
+    const [proprias, pelaConversa] = await Promise.all([
+      demandasSemPasso(`${COLUNAS_DA_DEMANDA}, contacts(name, display_name, last_activity_at)`)
+        .or(`aberta_em.gte.${desde},updated_at.gte.${desde}`)
+        .order("aberta_em", { ascending: true })
+        .limit(SCAN_CAP),
+      demandasSemPasso(`${COLUNAS_DA_DEMANDA}, contacts!inner(name, display_name, last_activity_at)`)
+        .gte("contacts.last_activity_at", desde)
+        .order("aberta_em", { ascending: true })
+        .limit(SCAN_CAP),
+    ]);
+    const erro = proprias.error ?? pelaConversa.error;
+    if (erro) throw new Error(`radar_demandas_failed: ${erro.message}`);
+    demandasVisiveis = unirPorId([
+      ...((proprias.data ?? []) as unknown as LinhaDeDemanda[]),
+      ...((pelaConversa.data ?? []) as unknown as LinhaDeDemanda[]),
+    ])
+      .filter((d) => ativoDesdeORecomeco(desde, [d.aberta_em, d.updated_at, umSo(d.contacts)?.last_activity_at]))
+      .sort((a, b) => Date.parse(a.aberta_em) - Date.parse(b.aberta_em))
+      .slice(0, SCAN_CAP);
+  }
   // Mesmo corte dos leads: demanda presa a lead de funil arquivado sai.
   // Demanda sem lead não tem funil e fica.
   //
@@ -367,21 +444,14 @@ export async function carregaRadarDeRisco(
     demandasVisiveis = demandasVisiveis.filter(d => d.lead_id ? visibleLeads.has(d.lead_id) : visibleLeadless.has(d.id));
   }
 
-  const semProximoPasso: DemandaSemProximoPasso[] = demandasVisiveis.map((d) => {
-    // O join do PostgREST vem como ARRAY mesmo em relação um-para-um.
-    const rel = d.contacts as unknown as ContatoNomeavel[] | ContatoNomeavel | null;
-    const contato = Array.isArray(rel) ? (rel[0] ?? null) : rel;
-    return {
-      id: d.id as string,
-      contact_id: d.contact_id as string,
-      contact_name: nomeDoContato(contato),
-      aberta_em: d.aberta_em as string,
-      horas_aberta: Math.floor(
-        (now.getTime() - new Date(d.aberta_em as string).getTime()) / 3_600_000,
-      ),
-      origem: d.origem as string,
-    };
-  });
+  const semProximoPasso: DemandaSemProximoPasso[] = demandasVisiveis.map((d) => ({
+    id: d.id,
+    contact_id: d.contact_id,
+    contact_name: nomeDoContato(umSo(d.contacts)),
+    aberta_em: d.aberta_em,
+    horas_aberta: Math.floor((now.getTime() - new Date(d.aberta_em).getTime()) / 3_600_000),
+    origem: d.origem,
+  }));
 
   return {
     items: radar.slice(0, limit),
@@ -389,5 +459,50 @@ export async function carregaRadarDeRisco(
     total: radar.length,
     sem_proximo_passo: semProximoPasso.slice(0, limit),
     total_sem_proximo_passo: semProximoPasso.length,
+    recomecado_em: desde,
   };
+}
+
+type Embutido<T> = T | T[] | null | undefined;
+
+interface LinhaDeLead {
+  id: string;
+  title: string;
+  contact_id: string | null;
+  owner_user_id: string | null;
+  owner_kind: "user" | "ai" | null;
+  owner_agent_id: string | null;
+  stage_id: string;
+  last_activity_at: string | null;
+  created_at: string;
+  pipeline_id: string;
+  contacts?: Embutido<{ last_activity_at: string | null }>;
+}
+
+interface LinhaDeDemanda {
+  id: string;
+  lead_id: string | null;
+  contact_id: string;
+  aberta_em: string;
+  updated_at: string | null;
+  origem: string;
+  contacts?: Embutido<ContatoNomeavel & { last_activity_at?: string | null }>;
+}
+
+/** O join do PostgREST vem como ARRAY mesmo em relação um-para-um. */
+function umSo<T>(rel: Embutido<T>): T | null {
+  return Array.isArray(rel) ? (rel[0] ?? null) : (rel ?? null);
+}
+
+/** As duas leituras do recomeço se sobrepõem: o mesmo item entra uma vez. */
+function unirPorId<T extends { id: string }>(linhas: T[]): T[] {
+  return [...new Map(linhas.map((l) => [l.id, l])).values()];
+}
+
+/** A ordem da consulta sem recomeço: sem atividade primeiro, depois a mais antiga. */
+function maisFrioPrimeiro(a: LinhaDeLead, b: LinhaDeLead): number {
+  if (a.last_activity_at === b.last_activity_at) return 0;
+  if (a.last_activity_at === null) return -1;
+  if (b.last_activity_at === null) return 1;
+  return Date.parse(a.last_activity_at) - Date.parse(b.last_activity_at);
 }

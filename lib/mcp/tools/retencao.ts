@@ -410,7 +410,9 @@ export const crmListAtRiskLeads: McpToolDefinition<typeof radarShape> = {
     "horas_aberta e origem. Essas NÃO saem sozinhas: resolva cada uma agendando um retorno " +
     "(crm_schedule_followup com contact_id) ou registrando o desfecho (crm_close_demand), " +
     "conforme o caso. `total_sem_proximo_passo` cabe zerar; é o único número aqui cujo alvo é 0." +
-    " Em conversa de atendimento, o radar cobre apenas o contato desta conversa.",
+    " Em conversa de atendimento, o radar cobre apenas o contato desta conversa." +
+    " Com `recomecado_em` preenchido, um administrador recomeçou o radar naquele instante: " +
+    "o que não teve atividade desde então fica de fora (nada foi apagado).",
   inputSchema: radarShape,
   category: "read",
   requiresRole: "agent",

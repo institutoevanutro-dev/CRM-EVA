@@ -36032,6 +36032,103 @@ create or replace trigger trg_contacts_ai_opt_out_segura_humano
 -- Quem mede a regra: `tests/invariants/contato-sempre-humano.test.ts`.
 -- ---- fim: contato sempre atendimento humano (migration 0366) ----
 
+-- ---- recomeçar o radar a partir de um instante (migration 0370) ----
+-- Derivado de supabase/migrations/20261016120000_0370_recomecar_o_radar.sql
+-- (o porquê inteiro está no cabeçalho de lá). `settings.radar.desde` guarda o
+-- instante a partir do qual o radar de risco conta; quem só tem atividade antes
+-- dele sai do radar, nada é apagado. A função grava só essa chave, num comando,
+-- com o relógio do banco; só a chave de serviço executa.
+--
+-- ⚠️ ANTES do bloco da VARREDURA anon, que é de propósito o último a criar
+-- função (`tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`).
+--
+-- Idempotente: `create or replace`, e o par revoke/grant num bloco só.
+create or replace function public.fn_definir_inicio_do_radar(
+  p_org uuid,
+  p_actor uuid,
+  p_recomecar boolean
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_radar jsonb;
+  v_antes text;
+  v_depois text;
+begin
+  if p_org is null or p_actor is null or p_recomecar is null then
+    raise exception 'inicio_do_radar_argumentos' using errcode = '22023';
+  end if;
+
+  if not exists (
+       select 1 from public.user_organizations uo
+        where uo.user_id = p_actor
+          and uo.organization_id = p_org
+          and uo.role = 'admin'
+          and uo.revoked_at is null
+     )
+     and not exists (
+       select 1 from public.platform_admins pa
+        where pa.user_id = p_actor
+          and pa.revoked_at is null
+     )
+  then
+    raise exception 'inicio_do_radar_sem_permissao' using errcode = '42501';
+  end if;
+
+  select case when jsonb_typeof(o.settings -> 'radar') = 'object' then o.settings -> 'radar' else '{}'::jsonb end
+    into v_radar
+    from public.organizations o
+   where o.id = p_org
+   for update;
+  if not found then
+    raise exception 'organization_not_found' using errcode = 'P0002';
+  end if;
+
+  v_antes := case when jsonb_typeof(v_radar -> 'desde') = 'string' then v_radar ->> 'desde' end;
+  v_depois := case
+    when p_recomecar then to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+  end;
+
+  update public.organizations o
+     set settings = jsonb_set(
+           coalesce(o.settings, '{}'::jsonb),
+           '{radar}',
+           case when v_depois is null then v_radar - 'desde'
+                else v_radar || jsonb_build_object('desde', v_depois) end,
+           true)
+   where o.id = p_org;
+
+  return jsonb_build_object(
+    'desde', v_depois,
+    'antes', v_antes,
+    'mudou', v_antes is distinct from v_depois
+  );
+end;
+$$;
+
+comment on function public.fn_definir_inicio_do_radar(uuid, uuid, boolean) is
+  'Recomeça (p_recomecar = true, grava now()) ou desfaz (false, limpa) organizations.settings.radar.desde, '
+  'o instante a partir do qual o radar de risco conta (migration 0370). Merge ATÔMICO dentro de settings.radar. '
+  'Só admin da própria organização (user_organizations, por p_actor) ou super-admin de plataforma. '
+  'Devolve {desde, antes, mudou}. Chamador: app/api/v1/leads/at-risk/recomeco/route.ts, com a chave de serviço.';
+
+-- As DUAS origens de EXECUTE (CLAUDE.md, item 9): o grant a PUBLIC que o
+-- Postgres dá ao criar a função, e o grant direto a anon do ALTER DEFAULT
+-- PRIVILEGES. `authenticated` também sai: definer que escreve, alcançável por
+-- qualquer usuário logado, seria escrita cross-tenant
+-- (tests/invariants/hardening-definer-varredura.test.ts). O único chamador é a
+-- rota, com a chave de serviço.
+do $janela$ begin
+  revoke execute on function public.fn_definir_inicio_do_radar(uuid, uuid, boolean) from public, anon, authenticated;
+  grant execute on function public.fn_definir_inicio_do_radar(uuid, uuid, boolean) to service_role;
+end $janela$;
+
+notify pgrst, 'reload schema';
+-- ---- fim: recomeçar o radar a partir de um instante (migration 0370) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

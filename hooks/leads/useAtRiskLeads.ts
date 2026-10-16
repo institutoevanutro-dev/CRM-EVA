@@ -21,6 +21,8 @@ export interface AtRiskData {
   /** Invariante 4 (passo 4 do cap. 5): demandas abertas sem próximo passo. */
   sem_proximo_passo: DemandaSemProximoPasso[];
   total_sem_proximo_passo: number;
+  /** Desde quando o radar conta (migration 0370), ou `null` se nunca foi recomeçado. */
+  recomecado_em: string | null;
 }
 
 /** Radar de risco (C1). Polling 60s — a atividade dos leads muda no worker/inbox. */

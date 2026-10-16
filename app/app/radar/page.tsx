@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
+import { roleAtLeast } from "@/lib/auth/types";
 import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { RecomecoDoRadar } from "./_components/RecomecoDoRadar";
 import { RiskRadarList } from "./_components/RiskRadarList";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +28,9 @@ export default async function RadarPage() {
         descricao={t(
           "Conversas abertas que esfriaram e precisam de você. Se o assistente já marcou um retorno, ela aparece como “retorno agendado”; sem próximo passo, há risco de perder o paciente.",
         )}
+        // Recomeçar é do ADMINISTRADOR, o mesmo papel que a rota exige; quando
+        // foi recomeçado, todos veem desde quando o radar conta.
+        acoes={<RecomecoDoRadar podeRecomecar={roleAtLeast(activeOrg.role, "admin")} />}
       />
       <RiskRadarList />
     </div>
