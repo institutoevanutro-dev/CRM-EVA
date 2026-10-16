@@ -337,6 +337,7 @@ jobs:
         confirmar-dado-do-contato.spec.ts
         credenciais-de-ia.spec.ts
         risk-radar.spec.ts invite-lifecycle.spec.ts system-update.spec.ts
+        radar-ocultos-cor-acervo.spec.ts
         agente-papeis-operador.spec.ts
         followup-linguagem.spec.ts followup-ramos.spec.ts
         wizard-do-funcionario.spec.ts mfa-opcional.spec.ts inbox-responder-citando.spec.ts
