@@ -107,11 +107,11 @@ function isAllowlisted(normalized: string, knobs: SpinningKnobs): boolean {
 }
 
 /** Conjunto de palavras do normalizado (whitespace já colapsado a espaço único). */
-function tokens(s: string): Set<string> {
+export function tokens(s: string): Set<string> {
   return new Set(s.split(' ').filter((t) => t.length > 0));
 }
 
-function jaccard(a: Set<string>, b: Set<string>): number {
+export function jaccard(a: Set<string>, b: Set<string>): number {
   if (a.size === 0 && b.size === 0) return 1;
   let inter = 0;
   for (const g of a) if (b.has(g)) inter += 1;
