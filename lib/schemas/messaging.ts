@@ -188,6 +188,38 @@ export const patchConversationSchema = z
 
 export type PatchConversationInput = z.infer<typeof patchConversationSchema>;
 
+/**
+ * POST /api/v1/conversations/bulk: ações em lote na Inbox (porte do upstream
+ * #2909, fatia F1 de #2484).
+ *
+ * UMA rota para todas as ações, discriminada por `action`. O lote NÃO tem
+ * permissão, organização nem auditoria próprias: cada id é encaminhado ao MESMO
+ * handler da conversa individual, que resolve role, organização da SESSÃO e
+ * auditoria por item. Por isso não existe campo de organização aqui.
+ *
+ * Diferença deliberada do upstream: NÃO há `reactivate-bot` em lote. Devolver
+ * ao automático retoma IA e acompanhamentos pausados; em lote, isso poria a IA
+ * de volta a falar com dezenas de pacientes de uma vez. Esse gesto continua
+ * sendo um por conversa.
+ *
+ * O teto de ids é política da ROTA (`TETO_DO_LOTE`), não do schema.
+ */
+const idsDoLote = z.array(z.string().uuid()).min(1);
+export const bulkConversationActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("close"), ids: idsDoLote }),
+  z.object({ action: z.literal("archive"), ids: idsDoLote }),
+  z.object({ action: z.literal("mark-read"), ids: idsDoLote }),
+  z.object({ action: z.literal("pause-ai"), ids: idsDoLote }),
+  z.object({
+    action: z.literal("transfer"),
+    ids: idsDoLote,
+    to_user_id: z.string().uuid(),
+    reason: z.string().trim().min(1).max(500).optional(),
+  }),
+]);
+
+export type BulkConversationActionInput = z.infer<typeof bulkConversationActionSchema>;
+
 /** POST /conversations/open-with-contact — abrir inbox a partir de cartão de contato. */
 export const openConversationWithContactSchema = z
   .object({

@@ -5,7 +5,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import type { Locale } from "date-fns";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { Clock, Funnel, InstagramLogo, Phone, Robot, UserCircle } from "@/lib/ui/icons";
+import { Check, Clock, Funnel, InstagramLogo, Phone, Robot, UserCircle } from "@/lib/ui/icons";
 import { AvatarDoContato } from "@/components/inbox/AvatarDoContato";
 import { Badge } from "@/components/ui/badge";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
@@ -61,6 +61,13 @@ interface Props {
    * afirme nada".
    */
   automaticoDaOrg?: boolean;
+  /** Marca esta linha no lote (porte do upstream #2909). */
+  selecionado?: boolean;
+  /**
+   * Liga o modo de seleção: com esta prop a linha ganha a caixa de marcação.
+   * Marcar e abrir são gestos separados: quem marca não abre a conversa.
+   */
+  onAlternarSelecao?: (id: string) => void;
 }
 
 /**
@@ -123,6 +130,8 @@ export function ConversationListItem({
   mostrarAutomatico = true,
   mostrarComando = true,
   automaticoDaOrg,
+  selecionado = false,
+  onAlternarSelecao,
 }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
@@ -204,13 +213,14 @@ export function ConversationListItem({
     Boolean(c?.is_blocked) ||
     Boolean(c?.is_anonymized);
 
-  return (
+  const linha = (
     <button
       type="button"
       data-conversation-id={conversation.id}
       onClick={() => onSelect(conversation.id)}
       className={cn(
-        "group relative flex w-full items-start gap-3 border-b border-border/70 px-3 py-2.5 text-left transition-colors hover:bg-surface-elevated",
+        "group relative flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-elevated",
+        onAlternarSelecao ? "min-w-0 flex-1" : "border-b border-border/70",
         "focus-visible:outline-hidden focus-visible:bg-surface-elevated",
         isSelected && "bg-accent/10 hover:bg-accent/10",
       )}
@@ -345,5 +355,39 @@ export function ConversationListItem({
         )}
       </div>
     </button>
+  );
+
+  // Sem seleção ligada, a linha é exatamente a de antes.
+  if (!onAlternarSelecao) return linha;
+
+  // A caixa fica FORA do botão da linha: controle interativo dentro de
+  // `<button>` é HTML inválido, e marcar não pode abrir a conversa.
+  return (
+    <div
+      className={cn(
+        "relative flex w-full items-start border-b border-border/70",
+        selecionado && "bg-accent-soft",
+      )}
+    >
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={selecionado}
+        aria-label={t("Selecionar conversa")}
+        title={t("Selecionar conversa")}
+        data-testid={`selecao-em-lote-${conversation.id}`}
+        onClick={() => onAlternarSelecao(conversation.id)}
+        className={cn(
+          "mt-3 ml-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors",
+          "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent",
+          selecionado
+            ? "border-accent bg-accent text-accent-foreground"
+            : "border-input bg-background hover:bg-surface-elevated",
+        )}
+      >
+        {selecionado && <Check size={12} weight="bold" aria-hidden />}
+      </button>
+      {linha}
+    </div>
   );
 }
