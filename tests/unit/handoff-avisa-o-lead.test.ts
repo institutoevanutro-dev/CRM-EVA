@@ -78,6 +78,18 @@ const FONTES = [
 ] as const;
 
 /**
+ * Passagens CALADAS DE PROPÓSITO, cada uma com o motivo escrito. Lista que só
+ * encolhe: entrar aqui exige um caso em que avisar o lead é o defeito.
+ */
+const CALADAS_DE_PROPOSITO: Record<string, string> = {
+  // O "lead" é um robô (incidente de 16/10/2026: 37 respostas em 7 minutos a
+  // uma resposta automática). Avisá-lo é mandar mais uma mensagem ao robô, ou
+  // seja, alimentar o próprio loop que a passagem existe para cortar. A equipe
+  // é avisada pelo aviso de inbox que a mesma passagem abre.
+  "lib/agent-engine/agent/robo-do-outro-lado.ts": "o outro lado é um robô; avisar alimenta o loop",
+};
+
+/**
  * Sítios de passagem SEM aviso, no fonte dado.
  *
  * A regra: uma chamada a `performHumanHandoff`/`triggerHandoff` está coberta
@@ -265,7 +277,7 @@ describe("toda passagem para humano avisa o lead antes", () => {
    * — este caso é o que obriga a atualizá-la.
    */
   it("FONTES cobre todo arquivo que executa uma passagem", () => {
-    const cobertos = new Set<string>(FONTES);
+    const cobertos = new Set<string>([...FONTES, ...Object.keys(CALADAS_DE_PROPOSITO)]);
     const naoCobertos = ARQUIVOS_QUE_CHAMAM.filter((f) => !cobertos.has(f));
     expect(naoCobertos).toEqual([]);
   });
