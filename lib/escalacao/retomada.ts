@@ -54,7 +54,11 @@ export type RetomadaFalha =
   /** Alguém assumiu a conversa entre a leitura e a escrita. */
   | "assignment_conflict"
   /** O sinal de retomada do follow-up não foi emitido — ver comentário abaixo. */
-  | "resume_signal_failed";
+  | "resume_signal_failed"
+  /** O contato tem a marca "sempre atendimento humano" (`contacts.ai_opt_out`). */
+  | "contato_sempre_humano"
+  /** Não deu para ler a marca do contato; sem ela não se devolve nada (fail-closed). */
+  | "contact_state_unreadable";
 
 export type RetomadaResultado =
   | {
@@ -93,6 +97,25 @@ export async function devolverAtendimentoAoAgente(
   if (convErr) return { ok: false, erro: "conversation_not_found", detalhe: convErr.message };
   if (!convData) return { ok: false, erro: "conversation_not_found" };
   const conv = convData as unknown as ConversaRow;
+
+  // A marca "sempre atendimento humano" é lida ANTES de qualquer escrita: os dois
+  // caminhos que devolvem (o botão e a tool do agente) passam por aqui, então a
+  // recusa é uma só. O banco segura a mesma regra por trigger (migration 0366:
+  // `ai_opt_out` mantém `force_human`), e esta leitura dá a recusa legível.
+  if (conv.contact_id !== null) {
+    const { data: contato, error: contatoLeituraErr } = await supabase
+      .from("contacts")
+      .select("ai_opt_out")
+      .eq("id", conv.contact_id)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+    if (contatoLeituraErr) {
+      return { ok: false, erro: "contact_state_unreadable", detalhe: contatoLeituraErr.message };
+    }
+    if ((contato as { ai_opt_out?: boolean } | null)?.ai_opt_out === true) {
+      return { ok: false, erro: "contato_sempre_humano" };
+    }
+  }
 
   const jaEstavaComOAgente =
     conv.assigned_to_user_id === null &&

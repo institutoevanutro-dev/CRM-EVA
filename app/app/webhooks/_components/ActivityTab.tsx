@@ -73,6 +73,7 @@ function statusBadgeLabel(status: AutomationRuleRunRow["status"], t: (texto: str
 const MOTIVO_DA_PARADA: Record<string, string> = {
   no_contact: "Esse lead entrou sem contato vinculado, então não havia para quem escrever.",
   contact_blocked: "O contato pediu para não receber mensagens (opt-out).",
+  ai_opt_out: "O contato está marcado como sempre atendimento humano: a IA não escreve para ele.",
   no_phone: "O contato não tem telefone cadastrado.",
   missing_config: "Falta preencher alguma configuração desta ação — abra a automação e revise.",
   fora_da_janela_de_envio:

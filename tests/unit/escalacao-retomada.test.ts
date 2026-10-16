@@ -51,6 +51,9 @@ interface CenarioBanco {
   checkpointAnterior?: Record<string, unknown> | null;
   negocios?: Array<Record<string, unknown>>;
   erroDoEmitEvent?: { message: string } | null;
+  /** A linha do contato lida antes de qualquer escrita (marca "sempre atendimento humano"). */
+  contato?: Record<string, unknown> | null;
+  erroDoContato?: { message: string } | null;
 }
 
 /**
@@ -85,6 +88,9 @@ function fazerSupabase(cenario: CenarioBanco, cap: Captura) {
         }
         if (tabela === "conversations") {
           return Promise.resolve({ data: cenario.conversa, error: null });
+        }
+        if (tabela === "contacts") {
+          return Promise.resolve({ data: cenario.contato ?? { ai_opt_out: false }, error: cenario.erroDoContato ?? null });
         }
         if (tabela === "lead_checkpoints") {
           return Promise.resolve({ data: cenario.checkpointAnterior ?? null, error: null });
@@ -412,5 +418,24 @@ describe("devolver o atendimento ao agente", () => {
     );
     const naConversa = cap.updates.find((u) => u.tabela === "conversations");
     expect(naConversa?.valores.status).toBe("closed");
+  });
+});
+
+describe("a marca 'sempre atendimento humano' (contacts.ai_opt_out) segura a devolução", () => {
+  it("contato marcado: recusa ANTES de qualquer escrita", async () => {
+    const cap = novaCaptura();
+    const res = await retomar(cenarioComAtendimentoHumano({ contato: { ai_opt_out: true } }), cap);
+    expect(res).toMatchObject({ ok: false, erro: "contato_sempre_humano" });
+    expect(cap.updates).toEqual([]);
+    expect(cap.inserts).toEqual([]);
+    expect(cap.rpc).toEqual([]);
+  });
+
+  it("leitura do contato falhando: recusa sem escrever (fail-closed)", async () => {
+    const cap = novaCaptura();
+    const res = await retomar(cenarioComAtendimentoHumano({ erroDoContato: { message: "boom" } }), cap);
+    expect(res).toMatchObject({ ok: false, erro: "contact_state_unreadable" });
+    expect(cap.updates).toEqual([]);
+    expect(cap.rpc).toEqual([]);
   });
 });

@@ -21,6 +21,8 @@ export interface Contact {
   cpf_decrypt_denied?: boolean;
   birthdate: string | null;
   is_blocked: boolean;
+  /** "Sempre atendimento humano" (migration 0366): a IA nunca atende este contato. */
+  ai_opt_out?: boolean;
   blocked_reason: string | null;
   is_anonymized: boolean;
   anonymized_at: string | null;

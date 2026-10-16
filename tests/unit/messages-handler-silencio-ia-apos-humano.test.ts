@@ -137,7 +137,12 @@ function makeSupabase(botSilencedUntil: string | null, snapshot?: () => Record<s
           then: (resolve: (v: { error: null }) => unknown) =>
             Promise.resolve({ error: null }).then(resolve),
         };
-        return { update: () => cadeiaContacts };
+        // A leitura da marca "sempre atendimento humano" (send_ai_message, 0366).
+        const leituraContacts: Record<string, unknown> = {
+          eq: () => leituraContacts,
+          maybeSingle: async () => ({ data: { ai_opt_out: false }, error: null }),
+        };
+        return { update: () => cadeiaContacts, select: () => leituraContacts };
       }
       throw new Error(`fake_supabase: tabela inesperada '${table}'`);
     },

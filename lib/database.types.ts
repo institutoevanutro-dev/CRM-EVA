@@ -3256,6 +3256,7 @@ export type Database = {
         Row: {
           ai_authorized_at: string | null
           ai_authorized_reason: string | null
+          ai_opt_out: boolean
           anonymized_at: string | null
           avatar_storage_path: string | null
           avatar_updated_at: string | null
@@ -3297,6 +3298,7 @@ export type Database = {
         Insert: {
           ai_authorized_at?: string | null
           ai_authorized_reason?: string | null
+          ai_opt_out?: boolean
           anonymized_at?: string | null
           avatar_storage_path?: string | null
           avatar_updated_at?: string | null
@@ -3337,6 +3339,7 @@ export type Database = {
         Update: {
           ai_authorized_at?: string | null
           ai_authorized_reason?: string | null
+          ai_opt_out?: boolean
           anonymized_at?: string | null
           avatar_storage_path?: string | null
           avatar_updated_at?: string | null

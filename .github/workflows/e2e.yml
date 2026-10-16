@@ -333,7 +333,7 @@ jobs:
         rbac-roles.spec.ts inbox-scope.spec.ts reset-password-mfa.spec.ts
         degradacao-silenciosa.spec.ts vps-webhook-outbound-ssrf.spec.ts
         kanban-owner-filter.spec.ts queue-assign.spec.ts
-        conversa-vira-lead.spec.ts contato-salva-email.spec.ts
+        conversa-vira-lead.spec.ts contato-salva-email.spec.ts contato-sempre-atendimento-humano.spec.ts
         confirmar-dado-do-contato.spec.ts
         credenciais-de-ia.spec.ts
         risk-radar.spec.ts invite-lifecycle.spec.ts system-update.spec.ts

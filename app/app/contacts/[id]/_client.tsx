@@ -5,7 +5,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { useState } from "react";
 import { format } from "date-fns";
-import { ShieldCheck, PencilSimple, LockOpen } from "@/lib/ui/icons";
+import { ShieldCheck, PencilSimple, LockOpen, UserCircle } from "@/lib/ui/icons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
@@ -25,6 +25,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useContact } from "@/hooks/contacts/useContact";
 import { useUnblockContact } from "@/hooks/contacts/useUnblockContact";
+import { useAlwaysHumanContact } from "@/hooks/contacts/useAlwaysHumanContact";
 import { useReiniciarTeste } from "@/hooks/contacts/useReiniciarTeste";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
@@ -70,6 +71,7 @@ export function ContactDetailClient({ contactId }: Props) {
   // hooks entre renderizações e o React reprova.
   const desbloquear = useUnblockContact(contactId);
   const reiniciarTeste = useReiniciarTeste(contactId);
+  const sempreHumano = useAlwaysHumanContact(contactId);
 
   if (q.isLoading) {
     return (
@@ -97,6 +99,9 @@ export function ContactDetailClient({ contactId }: Props) {
   // aparecia como "Sem nome" aqui e com o número no inbox.
   const displayName = rotuloDoContato(contact, t);
   const podeReiniciarTeste = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
+  // "Sempre atendimento humano" é edição do contato: agent+, como as outras.
+  const podeMarcarSempreHumano = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent;
+  const marcadoSempreHumano = contact.ai_opt_out === true;
 
   return (
     <div className="space-y-4 p-6">
@@ -131,6 +136,7 @@ export function ContactDetailClient({ contactId }: Props) {
               <ChipDeEtiqueta key={t} tag={t} />
             ))}
             {contact.is_blocked && <Badge variant="warning">{t("Bloqueado")}</Badge>}
+            {marcadoSempreHumano && <Badge variant="warning">{t("Sempre atendimento humano")}</Badge>}
             {contact.is_anonymized && <Badge variant="destructive">{t("Anonimizado")}</Badge>}
           </div>
         </div>
@@ -170,6 +176,39 @@ export function ContactDetailClient({ contactId }: Props) {
                     <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
                     <AlertDialogAction onClick={() => desbloquear.mutate()}>
                       {t("Desbloquear")}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+            {/* A marca permanente: a IA nunca atende este contato, e nenhuma
+                devolução ao automático a desfaz. Tirar a marca não devolve o
+                atendimento; isso continua sendo o "Devolver ao automático". */}
+            {podeMarcarSempreHumano && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" disabled={sempreHumano.isPending} className="shrink-0">
+                    <UserCircle size={16} weight="bold" aria-hidden />
+                    <span>{marcadoSempreHumano ? t("Tirar sempre humano") : t("Sempre atendimento humano")}</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      {marcadoSempreHumano
+                        ? t("Tirar a marca de sempre atendimento humano?")
+                        : t("Marcar como sempre atendimento humano?")}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {marcadoSempreHumano
+                        ? t("A IA continua parada neste contato até alguém clicar em Devolver ao automático na conversa. A mudança fica registrada no seu nome.")
+                        : t("A IA para agora e nunca mais responde este contato, nem por follow-up. Só a equipe atende, e os lembretes de consulta continuam saindo. Devolver ao automático não desfaz a marca. A mudança fica registrada no seu nome.")}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => sempreHumano.mutate(!marcadoSempreHumano)}>
+                      {marcadoSempreHumano ? t("Tirar a marca") : t("Marcar como sempre humano")}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
