@@ -10662,6 +10662,10 @@ export const DICIONARIO: Traducoes = {
   "Tirar a marca": { es: "Quitar la marca" },
   "Marcar como sempre humano": { es: "Marcar como siempre humano" },
   "O contato está marcado como sempre atendimento humano: a IA não escreve para ele.": { es: "El contacto está marcado como siempre atención humana: la IA no le escribe." },
+  // Renomear que junta etiquetas (porte do upstream #2817, issue #2801).
+  "Etiqueta juntada em": { es: "Etiqueta unificada en" },
+  "as duas etiquetas viraram uma só.": { es: "las dos etiquetas se unificaron en una sola." },
+  "Este nome já existe no vocabulário. Confirmar vai juntar as duas etiquetas numa só.": { es: "Este nombre ya existe en el vocabulario. Confirmar unificará las dos etiquetas en una sola." },
   "Não foi possível alterar o atendimento do contato.": { es: "No fue posible cambiar la atención del contacto." },
   "Este contato está marcado como sempre atendimento humano. Tire a marca na ficha do contato antes de devolver ao automático.": { es: "Este contacto está marcado como siempre atención humana. Quita la marca en la ficha del contacto antes de devolver al automático." },
   "Não foi possível conferir o contato agora. Tente de novo.": { es: "No fue posible verificar el contacto ahora. Intenta de nuevo." },

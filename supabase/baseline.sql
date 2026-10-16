@@ -29062,6 +29062,8 @@ declare
   v_antes jsonb;
   v_depois jsonb;
   v_definido boolean := false;
+  -- (e0) 'duas entradas do vocabulário viraram uma' — issue #2801.
+  v_juntou boolean := false;
 begin
   -- Portão de papel ANTES de qualquer escrita. Definer com p_org vindo da rota:
   -- é esta linha que separa o tenant de quem chama.
@@ -29123,7 +29125,14 @@ begin
       v_settings := '{}'::jsonb;
     end if;
 
-    v_antes := coalesce(v_settings -> 'tags', '[]'::jsonb);
+    -- (a) tolera `settings.tags` torto (escalar/objeto): a leitura já tolera com
+    -- `jsonb_typeof`, e sem esta guarda o `jsonb_array_elements` levantava
+    -- `cannot extract elements from a scalar` e derrubava a tela inteira numa
+    -- organização com o dado malformado. Lista que não é lista é lista vazia.
+    v_antes := case
+      when jsonb_typeof(v_settings -> 'tags') = 'array' then v_settings -> 'tags'
+      else '[]'::jsonb
+    end;
     v_depois := coalesce(
       (
         select jsonb_agg(entrada.valor order by entrada.ord)
@@ -29347,7 +29356,42 @@ begin
   end if;
 
   -- (e) o vocabulário da organização, nos dois lugares onde ele mora.
-  v_antes := coalesce(v_settings -> 'tags', '[]'::jsonb);
+  -- Mesma guarda do ramo de renomear: `settings.tags` malformado não pode
+  -- derrubar a cor (a leitura tolera; a escrita agora também).
+  v_antes := case
+    when jsonb_typeof(v_settings -> 'tags') = 'array' then v_settings -> 'tags'
+    else '[]'::jsonb
+  end;
+
+  -- ── (e0) O AVISO DE JUNÇÃO — renomear NÃO é renome simples quando o nome
+  -- já existe (issue #2801) ────────────────────────────────────────────────
+  --
+  -- Renomear para um nome que JÁ ESTÁ no vocabulário junta as duas entradas
+  -- numa só, e a operação respondia `alterou: true` idêntico a um renome
+  -- simples: a tela dizia "Etiqueta atualizada" enquanto duas etiquetas
+  -- viravam uma. O marcador é medido AQUI, no vocabulário curado, e não na
+  -- tela — a tela só tem a lista que ela mesma acabou de ler, e o caso
+  -- justamente interessante é o que já vinha como DUAS linhas.
+  --
+  -- O alcance é declarado: `juntou` diz "duas ENTRADAS do vocabulário curado
+  -- colapsaram". `juntar` um nome que só existia em uso (fora do vocabulário)
+  -- não colapsa entrada nenhuma ali, e o marcador fica `false` — o que
+  -- normalizou os nomes nesse caso foi `fn_tags_normalizar`, outro desenho.
+  if not v_remover then
+    select exists (
+      select 1
+      from jsonb_array_elements(v_antes) with ordinality as e(valor, ord)
+      where btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}')) <> ''
+      group by lower(
+                case when lower(btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))) = lower(v_tag)
+                     then v_destino
+                     else btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}'))
+                end
+              )
+      having count(*) > 1
+    ) into v_juntou;
+  end if;
+
   v_depois := coalesce(
     (
       select jsonb_agg(entrada.valor order by entrada.ord)
@@ -29381,7 +29425,25 @@ begin
           where btrim(coalesce(e.valor ->> 'tag', e.valor #>> '{}')) <> ''
         ) x
         where x.valor is not null and coalesce(x.chave, '') <> ''
-        order by lower(x.chave), x.ord
+        -- ⚠️ O DESEMPATE É PELO METADADO, ANTES DA ORDEM (issue #2801).
+        --
+        -- Com `order by lower(x.chave), x.ord` a primeira entrada pela posição
+        -- ficava, COM OU SEM cor/descrição: renomear "a" (que tinha cor) para
+        -- "b" (que existia antes, sem cor) PERDIA a cor que o operador havia
+        -- escolhido — a entrada vazia de metadado vinha primeiro na lista.
+        -- Este é o MESMO desempate da função de leitura
+        -- (`fn_vocabulario_de_tags`) e do ramo `definir_cor`: onde a lista tem
+        -- a mesma etiqueta duas vezes, sobrevive a que carrega metadado.
+        --
+        -- Quando as DUAS já têm metadado, o metadado não decide mais nada e o
+        -- desempate volta a ser a ORDEM: fica a que já ocupava a posição no
+        -- vocabulário — isto é, o destino. Cor contra cor tem de perder uma, e
+        -- a regra escolhida preserva a identidade (nome + posição + cor) de
+        -- quem já estava lá, em vez de deixar a posição da lista decidir
+        -- qualquer coisa depois de virar empate técnico.
+        order by lower(x.chave),
+                 ((x.valor ->> 'cor') is not null or (x.valor ->> 'descricao') is not null) desc,
+                 x.ord
       ) as entrada
       where entrada.valor is not null
     ),
@@ -29437,6 +29499,12 @@ begin
     'leads', v_leads,
     'conversas', v_conversas,
     'regras', v_regras,
+    -- `juntou` é o AVISO de que esta operação juntou duas etiquetas do
+    -- vocabulário numa só (issue #2801). Sem ele a resposta era indistinguível
+    -- de um renome simples, e a tela não tinha o que dizer. `false` no renome
+    -- que não juntou, no excluir e em `juntar` cujo destino não estava no
+    -- vocabulário curado (ver o bloco (e0)).
+    'juntou', v_juntou,
     'alterou', (v_contatos + v_leads + v_conversas + v_regras > 0 or v_definido)
   );
 end;
@@ -36294,3 +36362,17 @@ on conflict (model) do update set
   notes = excluded.notes,
   superseded_at = null;
 -- ---- fim: Claude Haiku, Sonnet e Opus 5.5 no catálogo (migration 0367) ----
+
+-- ---- renomear que junta guarda a cor e avisa (migration 0368) ----
+-- Porte da 0677 do upstream (#2817, @webtecnica, issue #2801). No dedupe do
+-- renomear/juntar de `fn_vocabulario_de_tags_operar`, o desempate passa a ser
+-- pelo metadado (cor ou descrição) antes da ordem, e o retorno ganha `juntou`.
+--
+-- NÃO HÁ CORPO DE FUNÇÃO AQUI, de propósito: a troca foi feita no lugar, na
+-- definição de cinco argumentos acima neste arquivo. Assim a reaplicação não
+-- passa por versão antiga
+-- (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`), e a última
+-- definição é igual à da migration 0368
+-- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
+-- Quem mede a regra: `tests/invariants/tags-juntar-guarda-a-cor.test.ts`.
+-- ---- fim: renomear que junta guarda a cor e avisa (migration 0368) ----
