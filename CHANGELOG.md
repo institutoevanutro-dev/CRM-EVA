@@ -8,6 +8,16 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.8.1] — 2026-10-15
+
+### Corrigido
+
+- **Agendamento excluído não dá mais acesso do profissional ao paciente** Quando um agendamento lançado por engano é excluído, o profissional (papel
+  prestador) que estava nele deixa de ver o cadastro, as conversas e o negócio
+  daquele paciente, a menos que tenha outro vínculo com ele: outro agendamento, o
+  negócio ou a conversa atribuídos. Um agendamento cancelado do jeito normal
+  continua como antes.
+
 ## [4.8.0] — 2026-10-15
 
 ### Adicionado
@@ -7278,7 +7288,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.8.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.8.1...HEAD
+[4.8.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.8.0...v4.8.1
 [4.8.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.7.0...v4.8.0
 [4.7.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.6.0...v4.7.0
 [4.6.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.5.3...v4.6.0
