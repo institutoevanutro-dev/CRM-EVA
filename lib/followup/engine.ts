@@ -50,6 +50,7 @@ import {
   type AvisoRecuperacaoEsgotada,
 } from "./no-show-recuperacao-esgotada";
 import { interpolarDestino, persistirRespostaFollowupSupabase } from "./persistir-resposta";
+import { quandoDoRetornoQueSegura, reavaliarDepoisDoRetorno } from "./retorno-segura-o-fluxo";
 
 const MAX_STEPS = 80;
 const CLAIM_LEASE_SECONDS = 120;
@@ -113,6 +114,11 @@ export interface FollowupJobRequest {
 export interface AdminClient {
   assertServiceBoundary?(enrollment: EnrollmentRow): Promise<void>;
   assertAgenda?(enrollment:EnrollmentRow):Promise<void>;
+  /**
+   * Até quando um retorno (agendado ou recém-saído) segura esta inscrição (ISO),
+   * ou `null`. Só fluxo de silêncio — ver `retorno-segura-o-fluxo.ts`.
+   */
+  retornoQueSeguraOFluxo?(enrollment: EnrollmentRow): Promise<string | null>;
   claimDueEnrollments(limit: number, leaseSeconds: number): Promise<EnrollmentRow[]>;
   loadFlowGraph(orgId: string, versionId: string): Promise<FlowGraph | null>;
   /** Só exigido por uma espera fixa ancorada na reserva. */
@@ -580,6 +586,25 @@ async function processEnrollment(
     return;
   }
 
+  // O RETORNO FALA PRIMEIRO (porte de b94446a5c + #2929). Com um retorno
+  // agendado, ou que acabou de sair, o fluxo de silêncio não insiste por cima:
+  // fica segurado até um dia depois dele. Resposta do cliente passa: quem reage
+  // ao que ele disse não é insistência.
+  if (inboundBodyOverride === undefined) {
+    const seguraAte = await db.retornoQueSeguraOFluxo?.(enrollment);
+    if (seguraAte) {
+      await db.insertEnrollmentEvent({
+        organization_id: enrollment.organization_id,
+        enrollment_id: enrollment.id,
+        node_id: enrollment.current_node_id,
+        event_type: "held_by_return",
+        payload: { next_eval_at: seguraAte },
+        idempotency_key: `${enrollment.current_node_id}:${enrollment.steps_taken}:retorno:${seguraAte}`,
+      });
+      await db.updateEnrollment(enrollment.id, enrollment.organization_id, { next_eval_at: seguraAte, claimed_until: null });
+      return;
+    }
+  }
 
   if (enrollment.steps_taken > MAX_STEPS) {
     await markDead(db, clock, enrollment, "max_steps");
@@ -798,6 +823,19 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
   const revisions=new Map<string,number>();
   return {
     async assertServiceBoundary(enrollment) { if(!revisions.has(enrollment.id) && enrollment.revision!==undefined) revisions.set(enrollment.id,enrollment.revision); await assertServiceBoundarySupabase(admin, enrollment.service_boundary ?? null); },
+    async retornoQueSeguraOFluxo(enrollment) {
+      const quando = await quandoDoRetornoQueSegura(admin, enrollment.organization_id, enrollment.contact_id);
+      if (quando === null) return null;
+      const { data, error } = await admin
+        .from("followup_flow_pointers")
+        .select("trigger_config")
+        .eq("organization_id", enrollment.organization_id)
+        .eq("id", enrollment.pointer_id)
+        .maybeSingle();
+      if (error) throw new Error(`pointer_query_failed: ${error.message}`);
+      const gatilho = (data as { trigger_config?: { kind?: unknown } } | null)?.trigger_config;
+      return gatilho?.kind === "silence" ? reavaliarDepoisDoRetorno(quando) : null;
+    },
     async assertAgenda(enrollment){await assertAgendaEffectSupabase(admin,{organizationId:enrollment.organization_id,contactId:enrollment.contact_id,enrollmentId:enrollment.id,nodeId:enrollment.current_node_id});},
     async claimDueEnrollments(limit, leaseSeconds) {
       const { data, error } = await admin.rpc("fn_claim_due_followup_enrollments", {

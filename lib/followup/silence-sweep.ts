@@ -66,6 +66,7 @@ import {
 import { flowGraphSchema } from "./graph-schema";
 import { triggerConfigSchema } from "./api-schemas";
 import { resolveAgentForAutomaticTrigger, type FollowupGateDb } from "./agent-followup-gate";
+import { contatosQueORetornoSegura } from "./retorno-segura-o-fluxo";
 
 /**
  * Status que ocupam a vaga do índice único `idx_followup_enrollments_one_live`
@@ -129,6 +130,11 @@ export interface SilenceSweepDb {
    */
   loadContatosComInscricaoViva(orgId: string, contactIds: string[]): Promise<Set<string>>;
   /**
+   * Contatos que um RETORNO segura (agendado, ou saído há menos de um dia): o
+   * fluxo de silêncio não fala por cima. Ver `retorno-segura-o-fluxo.ts`.
+   */
+  loadContatosComRetornoVivo(orgId: string): Promise<Set<string>>;
+  /**
    * Dentre `contactIds`, quais têm um enrollment TERMINAL (completed,
    * cancelled ou dead) deste pointer CONCLUÍDO depois de `cutoffIso` — ainda
    * em cooldown, não podem ser reinscritos agora. Enrollment VIVO fica de fora
@@ -177,6 +183,8 @@ export interface SilenceSweepSummary {
   skipped_same_episode: number;
   /** Episódio novo, mas a inscrição anterior terminou há menos que o limiar — fora da auditoria (2240b215e). */
   skipped_cooldown: number;
+  /** Silenciosos de fora porque um retorno ainda os segura (agendado ou recém-saído, #2907). */
+  skipped_pending_return: number;
 }
 
 export interface SilenceSweepDeps {
@@ -195,6 +203,7 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     skipped_before_activation: 0,
     skipped_same_episode: 0,
     skipped_cooldown: 0,
+    skipped_pending_return: 0,
   };
 
   const pointers = await db.loadActiveSilencePointers();
@@ -277,12 +286,17 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     if (contactIds.length === 0) continue;
     const nextEvalAt = clock().toISOString();
     const comInscricaoViva = await db.loadContatosComInscricaoViva(pointer.organization_id, contactIds);
+    const comRetorno = await db.loadContatosComRetornoVivo(pointer.organization_id);
 
     for (const contactId of contactIds) {
       // O mesmo contador do 23505: quem já está vivo é `skipped_existing`,
       // só que agora sem a tentativa que o banco recusaria.
       if (comInscricaoViva.has(contactId)) {
         summary.skipped_existing++;
+        continue;
+      }
+      if (comRetorno.has(contactId)) {
+        summary.skipped_pending_return++;
         continue;
       }
       const { inserted } = await db.insertEnrollment({
@@ -583,6 +597,10 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         }
       }
       return ultima;
+    },
+
+    loadContatosComRetornoVivo(orgId) {
+      return contatosQueORetornoSegura(admin, orgId);
     },
 
     async loadTriggerNodeId(orgId, versionId) {

@@ -46,6 +46,7 @@ function fakeDb(opts: {
       return opts.ultimaInscricao ?? new Map();
     },
     loadContatosComInscricaoViva: async () => opts.vivos ?? new Set(),
+    loadContatosComRetornoVivo: async () => new Set<string>(),
     loadContactIdsEmCooldown: async (_org, _pointer, contactIds, cutoffIso) => {
       opts.onCooldown?.(contactIds, cutoffIso);
       return opts.emCooldown ?? new Set();
