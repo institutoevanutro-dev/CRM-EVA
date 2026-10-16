@@ -754,6 +754,14 @@ export function AgendaClient({
         <SheetContent
           side="right"
           className="flex w-full flex-col overflow-x-hidden overflow-y-auto sm:max-w-3xl lg:max-w-[1040px] lg:px-3"
+          // Escape com a lista de pacientes aberta fecha só a lista (quem cuida
+          // é o próprio campo). Sem isto o Sheet ouve primeiro, na captura, e
+          // descarta a marcação inteira.
+          onEscapeKeyDown={(e) => {
+            const alvo = e.target as HTMLElement | null;
+            if (alvo?.getAttribute("role") === "combobox" && alvo.getAttribute("aria-expanded") === "true")
+              e.preventDefault();
+          }}
         >
           <SheetHeader>
             <SheetTitle>

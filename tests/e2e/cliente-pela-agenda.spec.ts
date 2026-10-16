@@ -153,9 +153,16 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
   const dias = await irParaASemanaSeguinte(page);
   await page.getByRole("button", { name: /novo agendamento/i }).click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible({ timeout: 15_000 });
-  const quem = page.getByLabel("Quem será atendido");
-  await expect(quem.locator(`option[value="${f.contato}"]`)).toHaveCount(1, { timeout: 15_000 });
-  await quem.selectOption(f.contato);
+  // Como o dono da clínica faz: digita o nome e ESCOLHE na lista que aparece
+  // logo abaixo do campo. Até a 4.12.0 a busca só filtrava um `select`
+  // fechado, a tela não mudava, e parecia impossível marcar paciente.
+  await page.getByRole("combobox", { name: "Buscar cliente" }).fill("Bruna");
+  const lista = page.getByRole("listbox");
+  await expect(lista).toBeVisible({ timeout: 15_000 });
+  await lista.getByRole("option", { name: /Bruna Tatuada/ }).click();
+  await expect(page.getByTestId("paciente-escolhido")).toHaveAttribute("data-contact-id", f.contato);
+  await expect(page.getByTestId("paciente-escolhido")).toContainText("Bruna Tatuada");
+  await evidencia(page, info, "0-paciente-escolhido-pela-busca");
   await page.getByRole("button", { name: /^Sessão de estúdio/ }).click();
   await escolherDiaDesenhado(page, dias);
   await page.locator('[data-testid^="horario-"]').first().click();
