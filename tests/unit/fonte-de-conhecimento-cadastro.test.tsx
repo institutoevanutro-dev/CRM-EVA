@@ -340,6 +340,7 @@ describe("KnowledgeSourceCard — só oferece controle onde existe ação", () =
     );
     expect(screen.getByTestId("material-consultado-por-ks-1")).toHaveTextContent("não deu para ver agora");
     expect(screen.queryByTestId("material-orfao-ks-1")).toBeNull();
+    expect(screen.queryByTestId("material-ultima-consulta-ks-1")).toBeNull();
   });
 
   it("falta de chave aparece no cartão com o motivo, não como 'não indexado'", () => {

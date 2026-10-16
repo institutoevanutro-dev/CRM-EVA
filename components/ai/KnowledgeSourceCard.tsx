@@ -160,16 +160,17 @@ export function KnowledgeSourceCard({
             {t("Disponível para")}: {uso.disponivelPara.join(", ")}
           </p>
         ) : null}
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="shrink-0 text-text-muted">{t("Última consulta")}</span>
-          <span className="text-right" data-testid={`material-ultima-consulta-${source.id}`}>
-            {uso?.ultimaConsultaEm
-              ? formatRelative(uso.ultimaConsultaEm, tagDoIdioma, t)
-              : uso === null
-                ? "—"
+        {/* Sem a leitura, a linha some: a de cima já diz que não deu para ver. */}
+        {uso ? (
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="shrink-0 text-text-muted">{t("Última consulta")}</span>
+            <span className="text-right" data-testid={`material-ultima-consulta-${source.id}`}>
+              {uso.ultimaConsultaEm
+                ? formatRelative(uso.ultimaConsultaEm, tagDoIdioma, t)
                 : t("nenhuma nos últimos 30 dias")}
-          </span>
-        </div>
+            </span>
+          </div>
+        ) : null}
 
         {mostraErro ? (
           <details className="rounded-md border border-error-bg bg-error-bg/30 p-2 text-xs text-error-fg">
