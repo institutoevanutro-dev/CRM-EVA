@@ -123,6 +123,11 @@ test.describe("filtro por marcador, pela tela", () => {
 
   test.afterAll(async () => {
     if (conversas.length) await admin.from("conversations").delete().in("id", conversas);
+    // Os cards antes do funil: `crm_leads.pipeline_id` é ON DELETE RESTRICT, e
+    // sem isto o funil ficava vivo, na posição 1000 do funil padrão. Empatados,
+    // a lista de Funis (`order("position")`) os devolvia em qualquer ordem, e
+    // `importar-leads-planilha` (que importa no primeiro) caía no funil errado.
+    if (funil) await admin.from("crm_leads").delete().eq("pipeline_id", funil);
     if (funil) await admin.from("crm_pipelines").delete().eq("id", funil);
     if (contatos.length) await admin.from("contacts").delete().in("id", contatos);
     if (canal) await admin.from("channel_sessions").delete().eq("id", canal);
