@@ -46,6 +46,8 @@ async function marcaNoBanco(page: Page, id: string): Promise<boolean | undefined
 }
 
 test("o atendente marca e desmarca 'Sempre atendimento humano' na ficha do contato", async ({ page }) => {
+  // A ficha abre devagar no primeiro acesso de um `next start` recém-subido.
+  test.setTimeout(120_000);
   await login(page);
 
   const criado = await page.request.post("/api/v1/contacts", { data: { display_name: NOME, source: "manual" } });
@@ -53,7 +55,7 @@ test("o atendente marca e desmarca 'Sempre atendimento humano' na ficha do conta
   const contatoId = ((await criado.json()) as { data: { contact: { id: string } } }).data.contact.id;
 
   await page.goto(`/app/contacts/${contatoId}`);
-  await expect(page.getByText(NOME).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(NOME).first()).toBeVisible({ timeout: 60_000 });
 
   // Controle: o contato nasce sem a marca.
   await expect(page.getByRole("button", { name: "Tirar sempre humano" })).toHaveCount(0);
