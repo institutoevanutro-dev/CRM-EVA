@@ -2,7 +2,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useAuth } from "@/hooks/auth/AuthProvider";
+import { useAuth, usePermission } from "@/hooks/auth/AuthProvider";
+import { useBulkConversations, type AcaoEmLote } from "@/hooks/inbox/useBulkConversations";
+import { useSelecaoEmLote } from "@/hooks/inbox/useSelecaoEmLote";
 import { estadoDaJanela, formatarDecorrido } from "@/lib/channels/janela";
 import { canalRespondePeloCrm, capabilitiesOf } from "@/lib/channels/capabilities";
 import type { ChannelProvider } from "@/lib/channels/types";
@@ -17,10 +19,12 @@ import {
 } from "@/hooks/inbox/useConversationsRealtime";
 import { useConversation, isNotFound } from "@/hooks/inbox/useConversation";
 import { ConversationList } from "./ConversationList";
+import { BarraDeAcoesEmLote } from "./BarraDeAcoesEmLote";
 import { InboxFilters, type InboxFiltersValue, type InboxTab } from "./InboxFilters";
 import { ChatThread } from "./ChatThread";
 import { Composer, type ComposerHandle } from "./Composer";
 import { ConversationHeader } from "./ConversationHeader";
+import { BotaoIniciarConversa } from "./PainelIniciarConversa";
 import { RetentionNotice } from "./RetentionNotice";
 import { CRMSidePanel } from "./CRMSidePanel";
 import type { Message as ConversationMensagem } from "@/lib/types/messaging";
@@ -316,6 +320,23 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
 
   const claim = useClaimConversation();
   const close = useCloseConversation();
+
+  // LOTE (porte do upstream #2909): seleção múltipla e barra de ações. O
+  // portão de tela é `inbox.reply`; a regra mora na API, que revalida.
+  const podeAgirEmLote = usePermission("inbox.reply");
+  const selecao = useSelecaoEmLote();
+  const lote = useBulkConversations();
+  const rodarLote = useCallback(
+    (action: AcaoEmLote, toUserId?: string, reason?: string) => {
+      const ids = Array.from(selecao.selecionados);
+      if (ids.length === 0) return;
+      lote.mutate(
+        { ids, action, to_user_id: toUserId, reason },
+        { onSuccess: () => selecao.limpar() },
+      );
+    },
+    [lote, selecao],
+  );
 
   // A leitura da conversa aberta é do upstream e fica: sem ela o contador de
   // não-lidas nunca zera para quem abre a conversa.
@@ -657,7 +678,20 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
           colunas.lista,
         )}
       >
+        <BotaoIniciarConversa />
         <InboxFilters value={filterValue} onChange={setFilterValue} />
+        {podeAgirEmLote && (
+          <BarraDeAcoesEmLote
+            quantidade={selecao.quantidade}
+            pendente={lote.isPending}
+            onFechar={() => rodarLote("close")}
+            onArquivar={() => rodarLote("archive")}
+            onMarcarComoLida={() => rodarLote("mark-read")}
+            onPausarIa={() => rodarLote("pause-ai")}
+            onTransferir={(toUserId, reason) => rodarLote("transfer", toUserId, reason)}
+            onLimpar={selecao.limpar}
+          />
+        )}
         <div className="min-h-0 flex-1 overflow-hidden">
           <ConversationList
             listQuery={listQ}
@@ -666,6 +700,16 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
             onSelect={handleSelect}
             onVisibleChange={handleVisibleChange}
             onLimparFiltros={limparFiltrosAuxiliares}
+            selecionados={selecao.selecionados}
+            onAlternarSelecao={podeAgirEmLote ? selecao.alternar : undefined}
+            onSelecionarTodosVisiveis={
+              podeAgirEmLote
+                ? () =>
+                    selecao.selecionarTodos(
+                      (listQ.data?.pages.flatMap((p) => p.data) ?? []).map((c) => c.id),
+                    )
+                : undefined
+            }
           />
         </div>
       </div>

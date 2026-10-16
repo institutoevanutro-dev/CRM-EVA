@@ -23,6 +23,7 @@ import { activityLabel, actorLabel, actorShape } from "@/lib/leads/activity-voca
 import { soChavesAlteradas } from "@/lib/leads/custom-fields-so-diff";
 import { ConversationTagsEditor } from "./ConversationTagsEditor";
 import { ContactTagsEditor } from "./ContactTagsEditor";
+import { TarefasDoAtendimento } from "./TarefasDoAtendimento";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
 import { LoseLeadDialog } from "@/components/kanban/LoseLeadDialog";
@@ -781,6 +782,16 @@ export function CRMSidePanel({ conversation }: Props) {
           />
         )}
       </section>
+
+      {/* O COMBINADO DO ATENDIMENTO (porte do upstream #2842): a tarefa nasce
+          aqui, presa ao contato e ao negócio ativo, sem sair do Inbox. */}
+      {contactId && (
+        <TarefasDoAtendimento
+          contactId={contactId}
+          leadId={leadAtivoId ?? leads?.[0]?.id ?? null}
+          readonly={readonly}
+        />
+      )}
 
       {/* O NEGÓCIO LOGO DEPOIS DA DEMANDA. A demanda vem antes (a unidade é ela, cap. 5),
           e quando não há nenhuma ocupa uma linha só. O CRM é de vendas: quem abre a conversa precisa ver

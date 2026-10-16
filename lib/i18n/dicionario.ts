@@ -649,6 +649,62 @@ export const DICIONARIO: Traducoes = {
   Lembrar: { es: "Recordar" },
   Fechar: { es: "Cerrar" },
   "Devolver ao automático": { es: "Devolver al automático" },
+
+  // ─── Inbox: lote por seleção múltipla (porte do upstream #2909) ───
+  "Ações em lote": { es: "Acciones en lote" },
+  "1 conversa selecionada": { es: "1 conversación seleccionada" },
+  "conversas selecionadas": { es: "conversaciones seleccionadas" },
+  "Marcar como lida": { es: "Marcar como leída" },
+  "Mais ações": { es: "Más acciones" },
+  "Pausar IA": { es: "Pausar IA" },
+  "Transferir para…": { es: "Transferir a…" },
+  "Transferir a conversa selecionada": { es: "Transferir la conversación seleccionada" },
+  "Cada conversa é transferida pelo mesmo caminho de sempre, com evento e auditoria próprios.": {
+    es: "Cada conversación se transfiere por el mismo camino de siempre, con evento y auditoría propios.",
+  },
+  "Para quem": { es: "Para quién" },
+  "Escolha um atendente": { es: "Elige un agente" },
+  "Escolha para quem transferir.": { es: "Elige a quién transferir." },
+  "Nenhum atendente disponível para transferir.": { es: "Ningún agente disponible para transferir." },
+  "Selecionar conversa": { es: "Seleccionar conversación" },
+  "Selecionar todas": { es: "Seleccionar todas" },
+  "Selecionar todas as conversas visíveis": { es: "Seleccionar todas las conversaciones visibles" },
+  Máximo: { es: "Máximo" },
+  "conversas por chamada.": { es: "conversaciones por llamada." },
+  fechadas: { es: "cerradas" },
+  atualizadas: { es: "actualizadas" },
+  "Recusada.": { es: "Rechazada." },
+
+  // ─── Inbox: painel "Iniciar conversa" (porte do upstream #2838) ───
+  "Iniciar conversa": { es: "Iniciar conversación" },
+  "Nova conversa": { es: "Nueva conversación" },
+  "Diga para quem e o que dizer.": { es: "Di para quién y qué decir." },
+  "Telefone ou nome do contato": { es: "Teléfono o nombre del contacto" },
+  "Contato existente": { es: "Contacto existente" },
+  "Como o contato aparece no CRM": { es: "Cómo aparece el contacto en el CRM" },
+  "Primeira mensagem": { es: "Primer mensaje" },
+  "O que dizer ao contato (opcional)": { es: "Qué decirle al contacto (opcional)" },
+  "Usar modelo de mensagem": { es: "Usar plantilla de mensaje" },
+  "A conversa abre atribuída a você: a IA não assume este atendimento.": {
+    es: "La conversación se abre asignada a ti: la IA no asume esta atención.",
+  },
+  "Criar conversa": { es: "Crear conversación" },
+  "Nenhum contato encontrado": { es: "Ningún contacto encontrado" },
+  "A conversa abriu, mas a primeira mensagem não pôde ser enviada.": {
+    es: "La conversación se abrió, pero el primer mensaje no se pudo enviar.",
+  },
+  "A conversa neste número está com": { es: "La conversación en este número está con" },
+  "outro atendente": { es: "otro agente" },
+
+  // ─── Inbox: tarefas do atendimento (porte do upstream #2842) ───
+  // ─── Quadro: perdido em lote (porte do upstream #2868) ───
+  "Marcar como perdido…": { es: "Marcar como perdido…" },
+  "marcado como perdido.": { es: "marcado como perdido." },
+  "marcados como perdidos.": { es: "marcados como perdidos." },
+  "Tarefas deste contato": { es: "Tareas de este contacto" },
+  "Nenhuma tarefa em aberto. Anote o próximo passo combinado, com prazo e responsável.": {
+    es: "Ninguna tarea abierta. Anota el próximo paso acordado, con plazo y responsable.",
+  },
   Aberta: { es: "Abierta" },
   Fechada: { es: "Cerrada" },
   "Em atendimento": { es: "En atención" },

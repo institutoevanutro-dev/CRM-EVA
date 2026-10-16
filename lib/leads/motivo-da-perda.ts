@@ -238,3 +238,12 @@ export function recusaDeMotivoForaDoVocabulario(input: {
     mensagem: traduzir(MOTIVO_DA_PERDA_FORA_DO_VOCABULARIO, input.idioma ?? IDIOMA_PADRAO),
   };
 }
+
+/**
+ * A frase da timeline de um negócio perdido: a MESMA da `/lose`, do
+ * encerramento e do lote (porte do upstream #2868). Uma função só, para os
+ * três caminhos não divergirem.
+ */
+export function razaoDaPerdaNaTimeline(motivo: string): string {
+  return `Perdido — ${motivo}`;
+}
