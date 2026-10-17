@@ -89,6 +89,7 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 
 - `[P0]` Depois do login, a primeira tela é o **Início**: gerente vê "Meu dia" + "Gestão"; colaborador só "Meu dia" — `tests/e2e/painel-inicio.spec.ts`.
 - `[P0]` Tipo de atendimento sem responsável aparece em **Configuração pendente** e o botão leva à Agenda (o caso real: "Acupuntura — Dra. Lúcia Prado", 2026-09-21) — mesma spec. Evidência em `.superpowers/evidence/painel-inicio-*.png`.
+- `[P0]` **Meu dia é por pessoa**: cada atendente vê só a própria conversa esperando, o próprio compromisso de hoje e o aviso da Central ligado à conversa dela — nunca o da colega nem o da clínica; o gerente vê o aviso da clínica e a **Visão da clínica** (indicadores + agenda por profissional), que a atendente não vê nem pela rota (403). Sem estouro horizontal em 1280/1440/390 — `tests/e2e/inicio-por-pessoa.spec.ts`. Evidência em `.superpowers/evidence/inicio/`.
 
 ## J2 — Conectar WhatsApp e Central de Conexões `[P0]`
 

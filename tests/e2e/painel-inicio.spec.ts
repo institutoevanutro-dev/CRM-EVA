@@ -48,7 +48,7 @@ test("gerente cai no Início e vê Meu dia + Gestão", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Gestão" })).toBeVisible();
   // Visão da clínica (spec 2026-10-07-inicio-paineis): os quatro painéis, nenhum em falha.
   await expect(page.getByRole("heading", { name: "Visão da clínica" })).toBeVisible({ timeout: 20_000 });
-  for (const titulo of ["Conversas · últimos 30 dias", "Agenda da semana", "Funil de vendas", "Origem dos pacientes · mês"]) {
+  for (const titulo of ["Conversas · últimos 30 dias", "Agenda por profissional · semana", "Agenda por unidade · semana", "Funil de vendas", "Origem dos pacientes · mês"]) {
     await expect(page.getByRole("heading", { name: titulo })).toBeVisible({ timeout: 20_000 });
   }
   await expect(page.getByText("Não foi possível carregar este painel.")).toHaveCount(0);

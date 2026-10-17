@@ -51,15 +51,15 @@ beforeEach(() => {
 });
 
 describe("GET /api/v1/inicio", () => {
-  it("colaborador recebe só 'meu dia' — gestão é null, nem vazia", async () => {
-    comoPapel("agent");
+  it.each(["viewer", "provider", "agent", "ai_operator"])("%s recebe só 'meu dia' — gestão é null, nem vazia", async (papel) => {
+    comoPapel(papel);
     const d = await chamar();
     expect(d.gestao).toBeNull();
     expect(d.meuDia).toBeDefined();
   });
 
-  it("gerente recebe gestão", async () => {
-    comoPapel("manager");
+  it.each(["manager", "admin"])("%s recebe gestão", async (papel) => {
+    comoPapel(papel);
     const d = (await chamar()) as { gestao: Record<string, { ok: boolean }> | null };
     expect(d.gestao).not.toBeNull();
     expect(d.gestao!.configuracao!.ok).toBe(true);

@@ -1,25 +1,20 @@
 "use client";
 import Link from "next/link";
-import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Bell, CalendarDays, CircleCheck, ListChecks, MessageCircle } from "lucide-react";
 
 import { apiClient } from "@/lib/api/client";
 import { useT } from "@/hooks/i18n/useT";
 import type { Bloco, ItemDoBloco } from "@/lib/inicio/tipos";
-import { PaineisDaClinica } from "./PaineisDaClinica";
+import { PaineisDaClinica, type NumerosDeHoje } from "./PaineisDaClinica";
+import { CabecalhoDaSecao, Cartao, Esqueleto, FOCO } from "./partes";
 
-type Numeros =
-  | {
-      ok: true;
-      numeros: { conversasComPaciente: number; agendamentosCriados: number; leadsGanhos: number };
-    }
-  | { ok: false };
 type Gasto =
   | { ok: true; consumidoCents: number; limiteCents: number | null }
   | { ok: false };
 type Resposta = {
   meuDia: { avisos: Bloco; esperando: Bloco; agenda: Bloco; tarefas: Bloco };
-  gestao: null | { configuracao: Bloco; numeros: Numeros; gastoIa: Gasto };
+  gestao: null | { configuracao: Bloco; numeros: NumerosDeHoje; gastoIa: Gasto };
 };
 
 /** O `detalhe` dos itens de configuração é um código; aqui vira frase. */
@@ -30,41 +25,35 @@ const MOTIVO: Record<string, string> = {
   agente_rascunho: "agente nunca publicado",
 };
 
+/**
+ * Por que o aviso chegou a esta pessoa (`escopoDoAviso`, lib/inicio/meu-dia.ts).
+ * Só gerente e admin recebem estes dois; para os demais todo aviso é "meu".
+ */
+const ESCOPO_DO_AVISO: Record<string, string> = {
+  sem_dono: "ninguém assumiu",
+  organizacao: "da clínica",
+};
+
 /** Centavos de DÓLAR (o custo de IA é calculado em USD — ver BudgetCard). */
 function dolares(cents: number) {
   return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "USD" });
 }
 
-function Cartao({
-  titulo,
-  children,
-  verTodos,
-}: {
-  titulo: string;
-  children: ReactNode;
-  verTodos?: string;
-}) {
-  const t = useT();
-  return (
-    <section className="rounded-2xl border bg-surface p-5 shadow-sm">
-      <div className="mb-3 flex items-baseline justify-between gap-2">
-        <h3 className="font-titulo text-xl font-semibold text-text">{titulo}</h3>
-        {verTodos ? (
-          <Link className="text-sm text-accent underline-offset-4 hover:underline" href={verTodos}>
-            {t("Ver todos")}
-          </Link>
-        ) : null}
-      </div>
-      {children}
-    </section>
-  );
-}
-
 function FalhaDoBloco() {
   const t = useT();
   return (
-    <p role="alert" className="text-sm">
+    <p role="alert" className="text-sm text-error">
       {t("Não consegui carregar este bloco.")}
+    </p>
+  );
+}
+
+/** Vazio com frase própria de cada bloco: "nada aqui" diz menos que "ninguém esperando por você". */
+function Vazio({ texto }: { texto: string }) {
+  return (
+    <p className="flex items-center gap-2 py-2 text-sm text-success">
+      <CircleCheck aria-hidden className="size-4 shrink-0" />
+      {texto}
     </p>
   );
 }
@@ -73,60 +62,77 @@ function FalhaDoBloco() {
  * NEM TODO NÚMERO É PROBLEMA — e é por isso que a cor é escolhida por quem
  * chama, não deduzida do total.
  *
- * "7" em Avisos da Central são sete coisas erradas; "7" em Minha agenda de hoje
- * são sete consultas, que é o dia dando certo. Pintar o total de âmbar sempre
- * que ele for maior que zero faria a primeira tela gritar com quem tem agenda
- * cheia — o oposto do que ela existe para fazer.
- *
- * `pendencia` marca os blocos em que o total conta o que está ESPERANDO alguém.
+ * "7" em avisos são sete coisas erradas; "7" em agenda de hoje são sete
+ * consultas, que é o dia dando certo. `pendencia` marca os blocos em que o
+ * total conta o que está ESPERANDO alguém.
  */
 function ListaDoBloco({
   bloco,
+  vazio,
+  rotulo,
   comMotivo,
+  comEscopo,
   pendencia,
   agrupar,
 }: {
   bloco: Bloco | null;
+  vazio: string;
+  /** O que o número conta: ele nunca fica solto na tela. */
+  rotulo: string;
   comMotivo?: boolean;
-  /** O total conta coisas que esperam ação humana — o número ganha cor de atenção. */
+  /** Avisos: o detalhe é o escopo (meu / da clínica / ninguém assumiu). */
+  comEscopo?: boolean;
   pendencia?: boolean;
-  /** Avisos com o mesmo texto viram uma linha só, com a contagem (20 linhas iguais não dizem nada). */
+  /** Avisos com o mesmo texto viram uma linha só, com a contagem. */
   agrupar?: boolean;
 }) {
   const t = useT();
   if (!bloco || !bloco.ok) return <FalhaDoBloco />;
-  if (bloco.total === 0) return <p className="text-sm text-success">{t("Tudo em dia ✓")}</p>;
+  if (bloco.total === 0) return <Vazio texto={t(vazio)} />;
   const texto = (i: ItemDoBloco) =>
     comMotivo
       ? `${i.titulo}${i.detalhe ? ` — ${t(MOTIVO[i.detalhe] ?? i.detalhe)}` : ""}`
-      : `${i.detalhe ? `${i.detalhe} · ` : ""}${i.titulo}`;
-  const linhas: Array<{ chave: string; texto: string; href: string; vezes: number }> = [];
+      : comEscopo
+        ? i.titulo
+        : `${i.detalhe ? `${i.detalhe} · ` : ""}${i.titulo}`;
+  const linhas: Array<{ chave: string; texto: string; href: string; vezes: number; selo?: string }> = [];
   for (const i of bloco.itens) {
     const tx = texto(i);
-    const igual = agrupar ? linhas.find((l) => l.texto === tx) : undefined;
+    const selo = comEscopo && i.detalhe ? ESCOPO_DO_AVISO[i.detalhe] : undefined;
+    const igual = agrupar ? linhas.find((l) => l.texto === tx && l.selo === selo) : undefined;
     if (igual) igual.vezes++;
-    else linhas.push({ chave: i.id, texto: tx, href: i.href, vezes: 1 });
+    else linhas.push({ chave: i.id, texto: tx, href: i.href, vezes: 1, ...(selo ? { selo } : {}) });
   }
   return (
     <>
-      <p className={`numero mb-3 text-3xl${pendencia ? " text-warning" : " text-text"}`}>{bloco.total}</p>
+      <p className="mb-2 flex items-baseline gap-2">
+        <span className={`numero text-3xl ${pendencia ? "text-warning" : "text-text"}`}>{bloco.total}</span>
+        <span className="text-sm text-text-muted">{t(rotulo)}</span>
+      </p>
       <ul className="divide-y divide-border">
         {linhas.map((l) => (
           <li key={l.chave}>
             {/* Alvo de toque generoso: a recepção usa isto no celular. */}
             <Link
-              className="-mx-2 flex min-h-11 items-center justify-between gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted"
+              className={`-mx-2 flex min-h-11 items-center justify-between gap-3 rounded-md px-2 py-2 text-sm hover:bg-row-hover ${FOCO}`}
               href={l.href}
             >
-              <span className="line-clamp-2 text-text">
-                {l.texto}
-                {l.vezes > 1 ? (
-                  <span className="numero ml-2 rounded-full bg-warning-bg px-2 py-0.5 text-xs text-warning-fg">
-                    {l.vezes}
+              <span className="min-w-0 text-text">
+                <span className="line-clamp-2 break-words">{l.texto}</span>
+                {l.selo || l.vezes > 1 ? (
+                  <span className="mt-1 flex flex-wrap gap-1.5">
+                    {l.selo ? (
+                      <span className="rounded-full bg-info-bg px-2 py-0.5 text-xs text-info-fg">{t(l.selo)}</span>
+                    ) : null}
+                    {l.vezes > 1 ? (
+                      <span className="numero rounded-full bg-warning-bg px-2 py-0.5 text-xs text-warning-fg">
+                        {l.vezes}×
+                      </span>
+                    ) : null}
                   </span>
                 ) : null}
               </span>
-              <span className="shrink-0 text-xs font-medium text-accent">{t("Resolver")} →</span>
+              <span className="shrink-0 text-xs font-medium text-accent">{t("Abrir")} →</span>
             </Link>
           </li>
         ))}
@@ -150,68 +156,80 @@ export function PainelInicio() {
     refetchOnWindowFocus: true,
   });
 
-  if (painel.isLoading) return <p>{t("Carregando…")}</p>;
+  if (painel.isLoading)
+    return (
+      <div className="space-y-4">
+        <div className="h-8 w-40 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
+        <Esqueleto quantos={4} />
+      </div>
+    );
   if (painel.isError || !painel.data)
-    return <p role="alert">{t("Não foi possível carregar o painel. Tente novamente.")}</p>;
+    return (
+      <div role="alert" className="rounded-2xl border bg-surface p-5 text-sm">
+        <p>{t("Não foi possível carregar o painel. Tente novamente.")}</p>
+        <button
+          type="button"
+          onClick={() => void painel.refetch()}
+          className={`mt-3 min-h-10 rounded-lg border px-3 text-sm font-medium hover:bg-row-hover ${FOCO}`}
+        >
+          {t("Tentar de novo")}
+        </button>
+      </div>
+    );
   const { meuDia, gestao } = painel.data;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="mb-4 font-titulo text-2xl font-semibold">{t("Meu dia")}</h2>
+    <div className="space-y-10">
+      <section aria-labelledby="inicio-meu-dia">
+        <CabecalhoDaSecao
+          id="inicio-meu-dia"
+          titulo={t("Meu dia")}
+          descricao={
+            gestao
+              ? t("O que é seu, mais os avisos da clínica que ninguém assumiu.")
+              : t("Só o que é seu: suas conversas, sua agenda, suas tarefas e os seus avisos.")
+          }
+        />
         <div className="grid gap-4 md:grid-cols-2">
-          <Cartao titulo={t("Avisos da Central")} verTodos="/app/ai/inbox">
-            <ListaDoBloco bloco={meuDia.avisos} pendencia agrupar />
+          <Cartao titulo={t("Pacientes esperando resposta")} icone={MessageCircle} verTodos="/app/inbox">
+            <ListaDoBloco bloco={meuDia.esperando} rotulo="esperando por você" vazio="Ninguém esperando resposta sua." pendencia />
           </Cartao>
-          <Cartao titulo={t("Pacientes esperando resposta")} verTodos="/app/inbox">
-            <ListaDoBloco bloco={meuDia.esperando} pendencia />
+          <Cartao titulo={t("Minha agenda de hoje")} icone={CalendarDays} verTodos="/app/agenda">
+            <ListaDoBloco bloco={meuDia.agenda} rotulo="compromissos hoje" vazio="Nenhum compromisso seu hoje." />
           </Cartao>
-          <Cartao titulo={t("Minha agenda de hoje")} verTodos="/app/agenda">
-            <ListaDoBloco bloco={meuDia.agenda} />
+          <Cartao titulo={t("Minhas tarefas")} icone={ListChecks} verTodos="/app/tasks">
+            <ListaDoBloco bloco={meuDia.tarefas} rotulo="para hoje ou atrasadas" vazio="Nenhuma tarefa sua para hoje." />
           </Cartao>
-          <Cartao titulo={t("Minhas tarefas")} verTodos="/app/tasks">
-            <ListaDoBloco bloco={meuDia.tarefas} />
+          <Cartao titulo={t("Meus avisos")} icone={Bell} verTodos="/app/ai/inbox" rotuloVerTodos={t("Central de avisos")}>
+            <ListaDoBloco
+              bloco={meuDia.avisos}
+              rotulo="pedem a sua atenção"
+              vazio="Nenhum aviso para você."
+              comEscopo
+              pendencia
+              agrupar
+            />
           </Cartao>
         </div>
-      </div>
+      </section>
 
       {/* Só para gestor: o servidor manda `gestao` e a rota dos painéis exige manager. */}
-      {gestao ? <PaineisDaClinica /> : null}
+      {gestao ? <PaineisDaClinica numerosDeHoje={gestao.numeros} /> : null}
 
       {gestao ? (
-        <div>
-          <h2 className="mb-4 font-titulo text-2xl font-semibold">{t("Gestão")}</h2>
-          <div className="grid gap-4 md:grid-cols-2">
+        <section aria-labelledby="inicio-gestao">
+          <CabecalhoDaSecao id="inicio-gestao" titulo={t("Gestão")} descricao={t("O que impede o CRM de funcionar direito.")} />
+          <div className="grid gap-4 lg:grid-cols-3">
             <Cartao titulo={t("Configuração pendente")}>
-              <ListaDoBloco bloco={gestao.configuracao} comMotivo pendencia />
+              <ListaDoBloco bloco={gestao.configuracao} rotulo="para resolver" vazio="Tudo configurado." comMotivo pendencia />
             </Cartao>
-            <Cartao titulo={t("Números de hoje")} verTodos="/app/metrics">
-              {gestao.numeros?.ok ? (
-                <dl className="grid grid-cols-3 gap-3">
-                  {(
-                    [
-                      [t("Conversas com pacientes"), gestao.numeros.numeros.conversasComPaciente],
-                      [t("Agendamentos criados"), gestao.numeros.numeros.agendamentosCriados],
-                      [t("Negócios ganhos"), gestao.numeros.numeros.leadsGanhos],
-                    ] as const
-                  ).map(([rotulo, n]) => (
-                    <div key={rotulo} className="flex flex-col-reverse">
-                      <dt className="text-xs text-text-muted">{rotulo}</dt>
-                      <dd className="numero text-3xl">{n}</dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <FalhaDoBloco />
-              )}
-            </Cartao>
-            <Cartao titulo={t("Gasto com IA no mês")}>
+            <Cartao titulo={t("Gasto com IA no mês")} verTodos="/app/ai/usage" rotuloVerTodos={t("Abrir")}>
               {gestao.gastoIa?.ok ? (
                 <p className="text-sm text-text-muted">
-                  <b className="numero text-3xl text-text">{dolares(gestao.gastoIa.consumidoCents)}</b>
+                  <b className="numero block text-3xl font-normal text-text">{dolares(gestao.gastoIa.consumidoCents)}</b>
                   {gestao.gastoIa.limiteCents != null
-                    ? ` / ${dolares(gestao.gastoIa.limiteCents)}`
-                    : ` · ${t("sem limite configurado")}`}
+                    ? `${t("de")} ${dolares(gestao.gastoIa.limiteCents)}`
+                    : t("sem limite configurado")}
                 </p>
               ) : (
                 <FalhaDoBloco />
@@ -219,7 +237,7 @@ export function PainelInicio() {
             </Cartao>
             <Cartao titulo={t("Sistema")}>
               {saude.isLoading ? (
-                <p className="text-sm">{t("Carregando…")}</p>
+                <div role="status" aria-label={t("Carregando")} className="h-5 w-32 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
               ) : saude.data?.status === "healthy" ? (
                 <p className="flex items-center gap-2 text-sm">
                   <span aria-hidden className="size-2.5 rounded-full bg-success" />
@@ -234,7 +252,7 @@ export function PainelInicio() {
               )}
             </Cartao>
           </div>
-        </div>
+        </section>
       ) : null}
     </div>
   );

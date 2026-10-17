@@ -10,8 +10,10 @@ import {
   ROTULO_DA_ORIGEM,
   type Origem,
 } from "@/lib/inicio/paineis";
+import { janelaDeHoje } from "@/lib/inicio/tipos";
 import { createClient } from "@/lib/supabase/server";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
+import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 
 /**
  * GET /api/v1/inicio/paineis — a "Visão da clínica" do Início, só para gestor
@@ -61,6 +63,19 @@ interface BlocoDoFunil {
   perdidos: number;
   valor: Record<string, string>;
 }
+interface Resumo {
+  profissionais: Array<{
+    user_id: string | null;
+    hoje: number;
+    semana: number;
+    realizadas: number;
+    faltas: number;
+    canceladas: number;
+    minutos: number;
+  }>;
+  esperando: { total: number; sem_responsavel: number; desde: string | null };
+  leads: { novos_mes: number; novos_anterior: number; ganhos_mes: number; ganhos_anterior: number };
+}
 interface Funil {
   etapas: Array<{ id: string; nome: string; abertos: number }>;
   mes: BlocoDoFunil;
@@ -76,7 +91,33 @@ export async function GET(req: NextRequest): Promise<Response> {
   const j = janelasDosPaineis(new Date(), fuso);
   const db = await createClient();
 
-  const [conversas, agenda, funil, origem] = await Promise.all([
+  const hoje = janelaDeHoje(new Date(), fuso);
+
+  const [resumo, conversas, agenda, funil, origem] = await Promise.all([
+    // Migration 0376: agenda por profissional, espera agora e leads do mês.
+    isolado(async () => {
+      const r = exigir<Resumo>(
+        await db.rpc("fn_inicio_resumo_da_clinica", {
+          p_org: orgId,
+          p_hoje_inicio: hoje.inicio,
+          p_hoje_fim: hoje.fim,
+          p_semana_inicio: j.semana.inicio,
+          p_semana_fim: j.semana.fim,
+          p_mes_inicio: j.mes.inicio,
+          p_mes_fim: j.mes.fim,
+          p_ant_inicio: j.mesAnterior.inicio,
+        }),
+      );
+      // Uma chamada por profissional distinto (poucos numa clínica); sem service
+      // role o mapa vem vazio e a tela diz "Profissional" — o número continua certo.
+      const nomes = await nomesDosAtendentes(r.profissionais.map((p) => p.user_id));
+      return {
+        ok: true as const,
+        profissionais: r.profissionais.map((p) => ({ ...p, nome: p.user_id ? (nomes.get(p.user_id) ?? null) : null })),
+        esperando: r.esperando,
+        leads: r.leads,
+      };
+    }),
     isolado(async () => {
       const linhas = exigir<LinhaDeConversas[]>(
         await db.rpc("fn_inicio_conversas_por_dia", {
@@ -153,5 +194,5 @@ export async function GET(req: NextRequest): Promise<Response> {
     }),
   ]);
 
-  return ok({ conversas, agenda, funil, origem }, { requestId });
+  return ok({ resumo, conversas, agenda, funil, origem }, { requestId });
 }
