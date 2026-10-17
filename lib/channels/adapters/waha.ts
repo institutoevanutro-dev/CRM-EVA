@@ -200,16 +200,19 @@ export const wahaAdapter: ChannelAdapter = {
   },
 
   /**
-   * Reinício suave. É a MESMA sequência do modo padrão de
-   * `POST /api/v1/channel-sessions/[id]/reconnect` (stop + start), sem o
-   * `logoutSession` que só o `force` de lá aciona.
+   * Reinício suave, pelo reinício NATIVO do transporte (`restartSession`): uma
+   * chamada só, sem logout. Até outubro/2026 era stop + start, a sequência do
+   * modo padrão de `POST /api/v1/channel-sessions/[id]/reconnect`; num número
+   * surdo o reinício automático por ela não resolveu (falhou no meio ou rodou
+   * sem efeito: só o sucesso era auditado), e a chamada nativa, feita à mão,
+   * curou na hora. A rota de reconectar segue com stop + start: lá há gente
+   * olhando e o `force`.
    */
   async restart(input: { sessionRef: string }): Promise<{ status: string }> {
     const client = getWahaClient();
     if (!client) throw new Error("transporte_nao_configurado");
-    await client.stopSession(input.sessionRef);
-    const remoto = await client.startSession(input.sessionRef);
-    return { status: remoto.status ?? "STARTING" };
+    const remoto = await client.restartSession(input.sessionRef);
+    return { status: remoto.status };
   },
 
   /**
