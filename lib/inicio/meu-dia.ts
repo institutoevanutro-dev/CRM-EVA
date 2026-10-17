@@ -1,9 +1,13 @@
 /**
- * "MEU DIA" — o que a pessoa logada precisa fazer hoje.
+ * "MEU DIA" — o que a pessoa logada precisa fazer hoje, e SÓ o que é dela.
  *
- * Avisos da Central são da clínica TODA: `agent_inbox_items` não tem dono no
- * schema (spec, "Suposições"). Os outros três filtram pela pessoa.
+ * Conversas, agenda e tarefas filtram pela pessoa na própria coluna de dono.
+ * Avisos da Central não têm dono no schema (`agent_inbox_items` aponta para uma
+ * referência polimórfica), então o dono é DERIVADO da referência — regra em
+ * `escopoDoAviso` e `avisoChegaAQuem`, abaixo, e em
+ * docs/superpowers/specs/2026-10-17-inicio-por-pessoa.md.
  */
+import { roleAtLeast } from "@/lib/auth/types";
 import { COLUNA_DO_OCULTO } from "@/lib/inbox/contato-oculto";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { tagDeIdioma } from "@/lib/i18n/datas";
@@ -33,22 +37,144 @@ function diaNoFuso(iso: string, ctx: ContextoDoInicio): string {
   }).format(new Date(iso));
 }
 
-export async function avisosAbertos(db: Db, ctx: ContextoDoInicio): Promise<Bloco> {
+/**
+ * DE QUEM É UM AVISO DA CENTRAL.
+ *
+ * - `meu`: a referência (conversa, compromisso, caso, follow-up, contato) tem a
+ *   pessoa como dona — atendente da conversa, profissional do compromisso, dono
+ *   do lead do contato.
+ * - `de_outra_pessoa`: a referência tem dono, e não é ela.
+ * - `sem_dono`: a referência é de uma pessoa (paciente), mas ninguém assumiu —
+ *   ou ela não existe mais.
+ * - `organizacao`: o aviso é da operação (canal fora, orçamento de IA, fila
+ *   morta, escalação de LGPD…), mesmo quando cita uma conversa como exemplo.
+ */
+export type EscopoDoAviso = "meu" | "de_outra_pessoa" | "sem_dono" | "organizacao";
+
+/** Referências que apontam para um paciente e, por ele, para quem o atende. */
+const REFERENCIAS_DE_PESSOA = new Set(["conversation", "appointment", "agent_case", "followup_enrollment", "contact"]);
+/** Tipos que usam a conversa só como EXEMPLO de um defeito da organização (o mesmo corte da anonimização). */
+const TIPOS_DA_ORGANIZACAO = new Set(["message_send_stuck", "capabilities_missing"]);
+
+export function escopoDoAviso(
+  aviso: { kind: string | null; ref_kind: string | null; ref_id: string | null },
+  donosPorReferencia: Map<string, Set<string>>,
+  userId: string,
+): EscopoDoAviso {
+  if (!aviso.ref_id || !aviso.ref_kind || !REFERENCIAS_DE_PESSOA.has(aviso.ref_kind)) return "organizacao";
+  if (aviso.kind && TIPOS_DA_ORGANIZACAO.has(aviso.kind)) return "organizacao";
+  const donos = donosPorReferencia.get(aviso.ref_id);
+  if (!donos || donos.size === 0) return "sem_dono";
+  return donos.has(userId) ? "meu" : "de_outra_pessoa";
+}
+
+/**
+ * Quem recebe o aviso no "Meu dia": o dono, sempre; o que é da organização ou
+ * de ninguém, só gerente e admin. O de outra pessoa não chega a ninguém aqui —
+ * continua na Central, que é a lista da equipe toda.
+ */
+export function avisoChegaAQuem(escopo: EscopoDoAviso, papel: string): boolean {
+  if (escopo === "meu") return true;
+  if (escopo === "de_outra_pessoa") return false;
+  // Leitura de rank que não decide 401/403 (o gate é o requireRole da rota).
+  return roleAtLeast(papel, "manager");
+}
+
+/** `.in()` vai na URL: fatias pequenas mantêm a requisição abaixo do limite do proxy. */
+function fatias(ids: Iterable<string>, tamanho = 100): string[][] {
+  const lista = [...new Set(ids)];
+  const out: string[][] = [];
+  for (let i = 0; i < lista.length; i += tamanho) out.push(lista.slice(i, i + tamanho));
+  return out;
+}
+
+type Linha = Record<string, unknown>;
+async function buscarPorIds(db: Db, tabela: string, colunas: string, coluna: string, ids: Iterable<string>, orgId: string) {
+  const respostas = await Promise.all(
+    fatias(ids).map((lote) =>
+      db.from(tabela as never).select(colunas).eq("organization_id", orgId).in(coluna, lote),
+    ),
+  );
+  const erro = respostas.find((r) => r.error);
+  if (erro) throw new Error(String(erro.error?.message));
+  return respostas.flatMap((r) => (r.data ?? []) as unknown as Linha[]);
+}
+
+/**
+ * Os donos de cada referência, em no máximo duas rodadas de consultas em lote
+ * (nunca uma por aviso). Contato e follow-up resolvem pelo contato: quem atende
+ * alguma conversa dele, ou é dono de um lead aberto dele.
+ */
+async function donosDasReferencias(
+  db: Db,
+  orgId: string,
+  avisos: Array<{ ref_kind: string | null; ref_id: string | null }>,
+): Promise<Map<string, Set<string>>> {
+  const porTipo = (tipo: string) => avisos.filter((a) => a.ref_kind === tipo && a.ref_id).map((a) => a.ref_id!);
+  const donos = new Map<string, Set<string>>();
+  const dar = (ref: string, dono: unknown) => {
+    const s = donos.get(ref) ?? new Set<string>();
+    if (typeof dono === "string" && dono) s.add(dono);
+    donos.set(ref, s);
+  };
+
+  const [conversas, consultas, casos, followups] = await Promise.all([
+    buscarPorIds(db, "conversations", "id,assigned_to_user_id", "id", porTipo("conversation"), orgId),
+    buscarPorIds(db, "calendar_appointments", "id,owner_user_id", "id", porTipo("appointment"), orgId),
+    buscarPorIds(db, "agent_cases", "id,conversation_id", "id", porTipo("agent_case"), orgId),
+    buscarPorIds(db, "followup_enrollments", "id,contact_id", "id", porTipo("followup_enrollment"), orgId),
+  ]);
+  for (const c of conversas) dar(String(c.id), c.assigned_to_user_id);
+  for (const a of consultas) dar(String(a.id), a.owner_user_id);
+
+  // Contato (direto ou pelo follow-up) → o contato de cada referência.
+  const contatoDe = new Map<string, string[]>();
+  for (const id of porTipo("contact")) contatoDe.set(id, [...(contatoDe.get(id) ?? []), id]);
+  for (const f of followups) {
+    const ct = String(f.contact_id);
+    contatoDe.set(ct, [...(contatoDe.get(ct) ?? []), String(f.id)]);
+  }
+  const conversaDoCaso = new Map(casos.map((c) => [String(c.conversation_id), String(c.id)]));
+
+  const [conversasDosCasos, conversasDosContatos, leadsDosContatos] = await Promise.all([
+    buscarPorIds(db, "conversations", "id,assigned_to_user_id", "id", conversaDoCaso.keys(), orgId),
+    buscarPorIds(db, "conversations", "contact_id,assigned_to_user_id", "contact_id", contatoDe.keys(), orgId),
+    buscarPorIds(db, "crm_leads", "contact_id,owner_user_id,status", "contact_id", contatoDe.keys(), orgId),
+  ]);
+  for (const c of conversasDosCasos) dar(conversaDoCaso.get(String(c.id))!, c.assigned_to_user_id);
+  for (const id of casos.map((c) => String(c.id))) dar(id, null);
+  for (const refs of contatoDe.values()) for (const ref of refs) dar(ref, null);
+  for (const c of conversasDosContatos)
+    for (const ref of contatoDe.get(String(c.contact_id)) ?? []) dar(ref, c.assigned_to_user_id);
+  for (const l of leadsDosContatos.filter((l) => l.status === "open"))
+    for (const ref of contatoDe.get(String(l.contact_id)) ?? []) dar(ref, l.owner_user_id);
+  return donos;
+}
+
+export async function avisosAbertos(db: Db, ctx: ContextoDoInicio, limite = LIMITE_DE_ITENS): Promise<Bloco> {
+  // ponytail: lê até 1000 avisos abertos (teto do PostgREST) e filtra aqui. Numa
+  // organização com mais que isso abertos, os mais antigos ficam fora da conta;
+  // se acontecer, o conserto é uma função no banco que faça o mesmo filtro.
   const { data, error } = await db
     .from("agent_inbox_items")
-    .select("id,title,created_at")
+    .select("id,title,kind,ref_kind,ref_id,created_at")
     .eq("organization_id", ctx.orgId)
     .eq("status", "open")
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(1000);
   if (error) return { ok: false };
   const linhas = data ?? [];
+  const donos = await donosDasReferencias(db, ctx.orgId, linhas);
+  const meus = linhas
+    .map((l) => ({ l, escopo: escopoDoAviso(l, donos, ctx.userId) }))
+    .filter(({ escopo }) => avisoChegaAQuem(escopo, ctx.papel));
   return {
     ok: true,
-    total: linhas.length,
-    itens: linhas.slice(0, LIMITE_DE_ITENS).map((l) => ({
+    total: meus.length,
+    itens: meus.slice(0, limite).map(({ l, escopo }) => ({
       id: String(l.id),
       titulo: String(l.title ?? ""),
+      detalhe: escopo,
       href: "/app/ai/inbox",
     })),
   };
@@ -102,6 +228,8 @@ export async function agendaDeHoje(db: Db, ctx: ContextoDoInicio): Promise<Bloco
     .eq("organization_id", ctx.orgId)
     .eq("owner_user_id", ctx.userId)
     .neq("status", "cancelled")
+    // Lançado por engano ou de teste some da agenda (migration 0364).
+    .is("excluded_at", null)
     .gte("starts_at", inicio)
     .lt("starts_at", fim)
     .order("starts_at", { ascending: true })

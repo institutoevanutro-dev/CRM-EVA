@@ -50,12 +50,12 @@ async function montar() {
   await screen.findByText("Meu dia");
 }
 
-/** O `<p>` do total é o irmão que vem logo depois do título do cartão. */
+/** O número do total, dentro do cartão do título. */
 function totalDoCartao(titulo: string): HTMLElement {
   const h = screen.getByText(titulo);
   const cartao = h.closest("section");
   if (!cartao) throw new Error(`cartão «${titulo}» não encontrado`);
-  const p = cartao.querySelector("p.text-3xl");
+  const p = cartao.querySelector(".numero.text-3xl");
   if (!p) throw new Error(`total do cartão «${titulo}» não encontrado`);
   return p as HTMLElement;
 }
@@ -76,7 +76,7 @@ describe("painel Início — só pendência ganha cor", () => {
 
   it("o total de avisos abertos ganha cor de atenção", async () => {
     await montar();
-    expect(totalDoCartao("Avisos da Central").className).toContain("text-warning");
+    expect(totalDoCartao("Meus avisos").className).toContain("text-warning");
   });
 
   it("o total de pacientes esperando resposta ganha cor de atenção", async () => {
@@ -98,12 +98,20 @@ describe("painel Início — só pendência ganha cor", () => {
     expect(totalDoCartao("Minhas tarefas").className).not.toContain("text-warning");
   });
 
-  it("zero continua verde e sem número", async () => {
+  it("zero continua verde e sem número — com a frase de cada bloco", async () => {
     respostas.inicio = {
       meuDia: { avisos: bloco(0), esperando: bloco(0), agenda: bloco(0), tarefas: bloco(0) },
       gestao: null,
     };
     await montar();
-    expect(screen.getAllByText("Tudo em dia ✓").length).toBe(4);
+    for (const frase of [
+      "Ninguém esperando resposta sua.",
+      "Nenhum compromisso seu hoje.",
+      "Nenhuma tarefa sua para hoje.",
+      "Nenhum aviso para você.",
+    ]) {
+      expect(screen.getByText(frase).className).toContain("text-success");
+    }
+    expect(document.querySelector(".numero.text-3xl")).toBeNull();
   });
 });

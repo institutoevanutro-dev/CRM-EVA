@@ -8,6 +8,9 @@ import { createClient } from "@/lib/supabase/server";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+vi.mock("@/lib/users/nome-do-atendente", () => ({
+  nomesDosAtendentes: vi.fn(async () => new Map([["p1", "Dra. Exemplo"]])),
+}));
 
 import { GET } from "./route";
 
@@ -68,6 +71,17 @@ beforeEach(() => {
     data: { etapas: [{ id: "e1", nome: "Avaliação", abertos: 2 }], mes: { ganhos: 1, perdidos: 0, valor: { BRL: "15000" } }, anterior: { ganhos: 0, perdidos: 1, valor: {} } },
     error: null,
   };
+  RPC.fn_inicio_resumo_da_clinica = {
+    data: {
+      profissionais: [
+        { user_id: "p1", hoje: 3, semana: 9, realizadas: 4, faltas: 1, canceladas: 0, minutos: 540 },
+        { user_id: null, hoje: 1, semana: 1, realizadas: 0, faltas: 0, canceladas: 0, minutos: 60 },
+      ],
+      esperando: { total: 5, sem_responsavel: 2, desde: "2026-10-01T10:00:00Z" },
+      leads: { novos_mes: 12, novos_anterior: 8, ganhos_mes: 3, ganhos_anterior: 4 },
+    },
+    error: null,
+  };
   RPC.fn_inicio_origem = {
     data: [
       { origem: "meta_ads", utm_source: null, total: 4 },
@@ -99,6 +113,21 @@ describe("GET /api/v1/inicio/paineis", () => {
     expect(d.origem.itens[0]).toEqual({ origem: "anuncio_meta", rotulo: "Anúncio do Meta", total: 4, detalhes: [] });
     expect(d.origem.itens[1]).toMatchObject({ origem: "formulario", total: 3, detalhes: [{ utm: "site", total: 2 }] });
     expect(chamadas.find((c) => c.fn === "fn_inicio_conversas_por_dia")!.args.p_fuso).toBe("America/Sao_Paulo");
+  });
+
+  it("resumo da clínica: profissionais com nome, espera agora e leads; janelas de hoje, semana e mês", async () => {
+    comoGestor();
+    const d = ((await (await chamar()).json()) as { data: Paineis }).data;
+    expect(d.resumo.ok).toBe(true);
+    expect(d.resumo.profissionais[0]).toMatchObject({ user_id: "p1", nome: "Dra. Exemplo", hoje: 3 });
+    expect(d.resumo.profissionais[1]).toMatchObject({ user_id: null, nome: null });
+    expect(d.resumo.esperando).toEqual({ total: 5, sem_responsavel: 2, desde: "2026-10-01T10:00:00Z" });
+    expect(d.resumo.leads.novos_mes).toBe(12);
+    const args = chamadas.find((c) => c.fn === "fn_inicio_resumo_da_clinica")!.args;
+    expect(args.p_org).toBe("org-1");
+    expect(Object.keys(args).sort()).toEqual(
+      ["p_ant_inicio", "p_hoje_fim", "p_hoje_inicio", "p_mes_fim", "p_mes_inicio", "p_org", "p_semana_fim", "p_semana_inicio"],
+    );
   });
 
   it("um painel com erro vira {ok:false} sem derrubar os outros", async () => {
