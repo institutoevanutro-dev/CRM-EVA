@@ -69,11 +69,23 @@ export interface LoadedRouter {
 /** `config.permanencia_expira_horas` ausente ou fora da forma. */
 export const PERMANENCIA_EXPIRA_HORAS_PADRAO = 24;
 
+/**
+ * O fallback que declarou OUTROS números some do roteador deste número
+ * (migration 0380): vira "sem fallback", e a régua 5 de `resolve-turn-agent`
+ * segue para o agente da sessão. Na mesma leitura do roteador, sem ida a mais.
+ */
+const FALLBACK_QUE_ATENDE_NO_NUMERO = `case
+       when fallback_agent_id is null
+         or public.fn_agente_atende_no_numero(organization_id, fallback_agent_id, channel_session_id)
+       then fallback_agent_id
+     end as fallback_agent_id`;
+
 interface RouterRow {
   id: string;
   name: string;
   config: Record<string, unknown> | null;
   fallback_agent_id: string | null;
+  channel_session_id: string;
 }
 
 interface MemberRow {
@@ -89,7 +101,7 @@ export async function loadActiveRouter(
   channelSessionId: string,
 ): Promise<LoadedRouter | null> {
   const { rows: routerRows } = await db.query<RouterRow>(
-    `select id, name, config, fallback_agent_id
+    `select id, name, config, channel_session_id, ${FALLBACK_QUE_ATENDE_NO_NUMERO}
      from ai_routers
      where organization_id = $1
        and channel_session_id = $2
@@ -113,7 +125,7 @@ export async function loadRouterById(
   routerId: string,
 ): Promise<LoadedRouter | null> {
   const { rows: routerRows } = await db.query<RouterRow>(
-    `select id, name, config, fallback_agent_id
+    `select id, name, config, channel_session_id, ${FALLBACK_QUE_ATENDE_NO_NUMERO}
      from ai_routers
      where organization_id = $1
        and id = $2`,
@@ -129,13 +141,17 @@ async function montar(
   organizationId: string,
   router: RouterRow,
 ): Promise<LoadedRouter> {
+  // O membro que declarou OUTROS números não é oferecido neste roteador
+  // (migration 0380): o classificador nem vê o assunto dele, e a conversa não
+  // gruda nele. O fallback segue a mesma régua (`FALLBACK_QUE_ATENDE_NO_NUMERO`).
   const { rows: memberRows } = await db.query<MemberRow>(
     `select agent_id, intent_name, intent_description, examples
      from ai_router_members
      where router_id = $1
        and organization_id = $2
+       and public.fn_agente_atende_no_numero(organization_id, agent_id, $3)
      order by position asc, intent_name asc`,
-    [router.id, organizationId],
+    [router.id, organizationId, router.channel_session_id],
   );
 
   const cfg = (router.config ?? {}) as {

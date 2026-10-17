@@ -193,6 +193,8 @@ export const AUDIT_ACTIONS = [
   "ai_agent.archived",
   "ai_agent.duplicated",
   "ai_agent.paused",
+  // A declaração de em quais números o agente atende mudou (migration 0380).
+  "ai_agent.numbers_changed",
   "ai_agent.published",
   "ai_agent.version_created",
   "ai_agent.version_updated",

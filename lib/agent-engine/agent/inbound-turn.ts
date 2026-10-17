@@ -2355,6 +2355,15 @@ async function executarTurnoDoAgente(
         conversationId: input.conversationId,
         inbound: liveJob().kind === 'inbound_turn',
       }, { log: runLog });
+  // A declaração de números (migration 0380) tirou deste número todo agente que
+  // o atenderia: o genérico não fala no lugar deles. Ver `resolveConversationTurn`.
+  if (!preview && routed.outcome === 'numero_recusado') {
+    runLog.info('nenhum agente atende neste número (declaração de números) — turno sem resposta', {
+      conversation_id: input.conversationId,
+      channel_session_id: input.channelSessionId,
+    });
+    return;
+  }
   const agentConfig = routed.config;
   if (
     !preview &&
@@ -4423,7 +4432,7 @@ async function executarTurnoDoAgente(
           // reagendada para a abertura) ou assistido (a resposta viraria rascunho
           // esperando aprovação). Passar calaria quem está atendendo e deixaria a
           // pessoa sem resposta. Quem está atendendo continua.
-          const config = await loadPublishedAgentConfigById(pool, tenantId, destino.agentId);
+          const config = await loadPublishedAgentConfigById(pool, tenantId, destino.agentId, input.channelSessionId);
           if (
             config === null ||
             config.pausedAt ||
