@@ -14,8 +14,11 @@ export function TopBar() {
         <MobileSidebar />
         <TenantSwitcher />
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      {/* Avisos | preferências (idioma, tema), separados por um fio: são
+          perguntas diferentes — "o que aconteceu?" e "como quero ver?". */}
+      <div className="flex shrink-0 items-center gap-1">
         <AlertsBell />
+        <span aria-hidden className="mx-1 h-5 w-px bg-border" />
         <UserMenu />
       </div>
     </header>

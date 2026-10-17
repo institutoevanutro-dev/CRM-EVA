@@ -87,10 +87,11 @@ test("CONTROLE: com dois caracteres a busca VAI ao servidor", async ({ page }) =
 });
 
 test("o placeholder promete o que a busca faz — a ÚLTIMA mensagem", async ({ page }) => {
-  await expect(page.getByLabel(CAMPO_DE_BUSCA)).toHaveAttribute(
-    "placeholder",
-    /última mensagem/i,
-  );
+  // O placeholder é curto ("última msg.") para caber na coluna de 272px; a
+  // frase inteira fica no `title`. Os dois têm de prometer a ÚLTIMA mensagem.
+  const campo = page.getByLabel(CAMPO_DE_BUSCA);
+  await expect(campo).toHaveAttribute("placeholder", /última (mensagem|msg\.)/i);
+  await expect(campo).toHaveAttribute("title", /última mensagem/i);
 });
 
 test("lista vazia por filtro NÃO se passa por caixa vazia, e mantém a saída", async ({

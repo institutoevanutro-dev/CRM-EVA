@@ -1,6 +1,6 @@
 "use client";
 import { Sparkle } from "@/lib/ui/icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
@@ -21,9 +21,12 @@ type Draft = {
 export function ReplyReviewPanel({
   conversationId,
   disabled,
+  onTemSugestao,
 }: {
   conversationId: string;
   disabled?: boolean;
+  /** Avisa o composer que há sugestão na tela — ela não pode ficar recolhida. */
+  onTemSugestao?: (tem: boolean) => void;
 }) {
   const t = useT(),
     qc = useQueryClient(),
@@ -48,6 +51,10 @@ export function ReplyReviewPanel({
   // Antes: `drafts[0]`, o mais recente, QUALQUER que fosse o estado dele — então
   // uma sugestão rejeitada ficava na tela para sempre, sem botão de fechar.
   const draft = sugestaoParaMostrar(query.data?.data.drafts);
+  const temSugestao = !!draft;
+  useEffect(() => {
+    onTemSugestao?.(temSugestao);
+  }, [temSugestao, onTemSugestao]);
   const body = draft ? (edits[draft.id] ?? draft.edited_body ?? draft.original_body ?? "") : "";
   async function generate() {
     setNotice(null);

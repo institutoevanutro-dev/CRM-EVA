@@ -213,11 +213,18 @@ export const MessageBubble = memo(function MessageBubble({
                 // relance se foi o paciente, o automático ou alguém da equipe:
                 // paciente em branco sobre o fundo creme; automático em verde
                 // claro; equipe no verde da marca.
+                //
+                // Paciente e equipe aceitam a cor que CADA PESSOA escolheu em
+                // "Aparência da conversa" (variáveis postas pelo ChatThread); o
+                // segundo termo do `var()` é o desenho de sempre, para quem
+                // nunca escolheu e para onde a bolha é usada fora do Inbox. O
+                // automático fica fixo: é a terceira voz, e trocá-lo junto
+                // apagaria a diferença entre robô e gente.
                 !isOutbound
-                  ? "rounded-bl-sm border border-border bg-surface text-text"
+                  ? "rounded-bl-sm border border-border bg-[var(--bolha-recebida-fundo,var(--color-surface))] text-[var(--bolha-recebida-texto,var(--color-text))]"
                   : message.sent_via === "ai"
                     ? "rounded-br-sm border border-accent/25 bg-accent-soft text-text"
-                    : "rounded-br-sm bg-primary text-primary-foreground",
+                    : "rounded-br-sm bg-[var(--bolha-enviada-fundo,var(--primary))] text-[var(--bolha-enviada-texto,var(--primary-foreground))]",
               ),
           isFailed && "border border-destructive",
           // A marca da busca é ANEL, não cor de fundo: o fundo já diz de quem é
@@ -235,8 +242,10 @@ export const MessageBubble = memo(function MessageBubble({
           <div
             className={cn(
               "mb-1 rounded-md border-l-2 px-2 py-1 text-xs",
+              // `current`, e não a cor da marca: o texto da bolha da equipe agora
+              // muda com a aparência escolhida, e a citação acompanha.
               isOutbound
-                ? "border-primary-foreground/50 bg-primary-foreground/10"
+                ? "border-current/50 bg-current/10"
                 : "border-primary bg-background/60",
             )}
           >
@@ -315,7 +324,9 @@ export const MessageBubble = memo(function MessageBubble({
           className={cn(
             "mt-1 flex items-center justify-end gap-1 text-[10px]",
             // Só o balão da equipe é escuro; o do automático é claro e pede texto escuro.
-            isOutbound && message.sent_via !== "ai" ? "text-primary-foreground" : "text-muted-foreground",
+            isOutbound && message.sent_via !== "ai"
+              ? "text-[var(--bolha-enviada-texto,var(--primary-foreground))]"
+              : "text-muted-foreground",
           )}
         >
           {editada && (

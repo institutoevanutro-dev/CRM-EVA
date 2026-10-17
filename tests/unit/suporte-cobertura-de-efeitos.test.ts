@@ -50,7 +50,7 @@ it("todo handler mutante do app declara guarda de suporte ou é infraestrutura i
  expect(uncovered).toEqual([]);
 });
 it("Server Actions que resolvem tenant declaram efeito ou uma exceção pessoal/transição",()=>{
- const exceptions=new Set(["updateProfile.ts","trocarIdioma.ts","recoverOrganization.ts"]); // preferências próprias e recuperação sem org
+ const exceptions=new Set(["updateProfile.ts","trocarIdioma.ts","salvarAparenciaDaConversa.ts","recoverOrganization.ts"]); // preferências próprias e recuperação sem org
  const uncovered=files("app/actions").filter(p=>!p.endsWith(".test.ts")&&!exceptions.has(p.split("/").at(-1)!)).filter(p=>{
   const text=readFileSync(p,"utf8");return /await resolveActiveOrg\(/.test(text)&&!text.includes("supportWriteError(");
  });expect(uncovered).toEqual([]);

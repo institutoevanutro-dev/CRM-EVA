@@ -10,7 +10,10 @@ import { cn } from "@/lib/utils";
  */
 const badgeVariants = cva(
   [
-    "inline-flex items-center gap-1 rounded-full border px-3 py-0.5",
+    // `whitespace-nowrap`: pílula não quebra linha. Sem isto, "Janela 23h 59m"
+    // espremido num cabeçalho estreito quebrava em três linhas DENTRO de uma
+    // caixa de 16px de altura — o texto saía da pílula (print de 16/10/2026).
+    "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-3 py-0.5",
     "text-xs font-medium leading-5",
     "transition-colors duration-fast ease-out",
     "focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2",

@@ -7,7 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { JanelaSelo } from "@/components/inbox/JanelaSelo";
 import { capabilitiesOf } from "@/lib/channels/capabilities";
 import type { ChannelProvider } from "@/lib/channels/types";
-import { InstagramLogo, Phone, ArrowRight, MagnifyingGlass, IdentificationCard } from "@/lib/ui/icons";
+import { InstagramLogo, Phone, ArrowRight, MagnifyingGlass, IdentificationCard, DotsThree } from "@/lib/ui/icons";
+import { cn } from "@/lib/utils";
+import { classeDaFaixa, useRevelacao } from "@/hooks/inbox/useRevelacao";
+import { AparenciaDaConversa } from "@/components/inbox/AparenciaDaConversa";
+import type { AparenciaDaConversa as AparenciaDaConversaValor } from "@/lib/inbox/aparencia-da-conversa";
 import { AvatarDoContato } from "@/components/inbox/AvatarDoContato";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
@@ -46,6 +50,12 @@ interface Props {
    * notebook ela simplesmente não existia (print de 07/10/2026).
    */
   onAbrirFicha?: () => void;
+  /** Fundo e balões desta pessoa — o controle mora na faixa de ações. */
+  aparencia?: AparenciaDaConversaValor;
+  onAparenciaChange?: (proximo: AparenciaDaConversaValor) => void;
+  /** A faixa de ações fixada pelo botão — guardada pelo Inbox, sobrevive à troca de conversa. */
+  acoesFixadas?: boolean;
+  onAcoesFixadasChange?: (fixadas: boolean) => void;
 }
 
 /**
@@ -74,7 +84,17 @@ const STATUS_LABEL: Record<string, string> = {
   archived: "Arquivada",
 };
 
-export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoBuscaRef, onAbrirFicha }: Props) {
+export function ConversationHeader({
+  conversation,
+  onBuscar,
+  buscaAberta,
+  botaoBuscaRef,
+  onAbrirFicha,
+  aparencia,
+  onAparenciaChange,
+  acoesFixadas,
+  onAcoesFixadasChange,
+}: Props) {
   const t = useT();
   const { user } = useAuth();
   const claim = useClaimConversation();
@@ -88,6 +108,12 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
   // atendendo em instalação que nunca configurou agente nenhum.
   const automaticoDaOrg = useAutomaticoAtivo();
   const [reassignOpen, setReassignOpen] = useState(false);
+  // A faixa de ações: escondida até ser pedida, e "em uso" zera ao trocar de conversa.
+  const revelacao = useRevelacao({
+    chave: conversation.id,
+    fixado: acoesFixadas,
+    onFixadoChange: onAcoesFixadasChange,
+  });
 
   const c = conversation.contacts ?? null;
   const displayName = rotuloDoContato(c, t);
@@ -166,104 +192,136 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
     <strong>{displayName}</strong><span className="text-sm text-muted-foreground">{STATUS_LABEL[status] ?? status} · Somente leitura</span>
   </header>;
   return (
-    // `flex-wrap` porque este header travava a LARGURA DA TELA INTEIRA. Ele
-    // media 707px de `min-content` — a identidade do contato encolhia bem
-    // (`min-w-0` + `truncate`), mas a barra de ações era `shrink-0` e não
-    // quebrava. Como a coluna do meio do inbox é `1fr`, que é
-    // `minmax(auto, 1fr)`, ela não podia ficar menor que esses 707px, e o
-    // painel de CRM era empurrado 311px para fora da viewport em 1280px.
+    // DUAS CAMADAS: o que se LÊ fica fixo, o que se FAZ aparece quando se pede.
     //
-    // Reorganizar em vez de esconder: acima de ~1440px o header fica IDÊNTICO ao
-    // de antes (uma linha), e quando aperta a barra desce para a linha de baixo.
-    // Nenhuma ação some — um menu "mais" esconderia o "Lembrar" que a spec
-    // `canais-baseline` clica, e, pior, esconderia ação de quem atende.
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-background px-3 py-2 md:gap-3 md:px-4 md:py-2.5">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="relative shrink-0">
-          <AvatarDoContato contato={c} nome={displayName} reserva={phone ?? displayName} className="h-9 w-9" />
-        </div>
-        <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <SeloDoCanal
-            canal={conversation.channel === "instagram" ? "instagram" : "whatsapp"}
-            tamanho="grande"
-          />
-          <h2 className="truncate text-[15px] font-semibold">{displayName}</h2>
-          <Badge variant="outline" className="h-4 px-1.5 text-[10px]">
-            {t(STATUS_LABEL[status] ?? status)}
-          </Badge>
-          {/* Ao lado do estado, não escondido num painel: a pergunta "dá para
-              escrever agora?" se faz ANTES de digitar, não depois de receber um
-              `failed` com um código de cinco dígitos. */}
-          <JanelaSelo
-            provider={conversation.channel_sessions?.provider ?? null}
-            lastInboundAt={conversation.last_inbound_at}
-          />
-          {/* Sem esta marca, a conversa em que o robô está calado tem exatamente
-              a mesma cara de uma conversa normal — e ninguém entende por que as
-              respostas automáticas pararam.
-              O testid é o MESMO de antes de propósito: `escalacao-ciclo.spec.ts`
-              o clica, e rótulo visível é contrato. O que mudou é o texto DIZER o
-              motivo — "alguém assumiu" e "pausado para este cliente" pediam ações
-              diferentes e tinham a mesma frase. */}
-          {/* Sem IA no canal, o selo falaria de um automático que não existe;
-              o opt-out do cliente continua valendo e continua aparecendo. */}
-          {motivo !== null && (iaResponde || motivo === "contato_descadastrado") && (
-            <Badge
-              variant="outline"
-              className="h-4 px-1.5 text-[10px]"
-              data-testid="badge-atendimento-humano"
-            >
-              {t(ROTULO_DO_MOTIVO[motivo])}
-            </Badge>
-          )}
-          {/* Aberta pela aba "Ocultos" ou por link: a tela diz que esta conversa
-              está fora do Inbox, e por que a IA não responde. */}
-          {conversation.contato_oculto && <SeloDeOculto className="h-4 px-1.5 text-[10px]" />}
+    // Fixo: nome, telefone e quem responde (com o porquê, quando o automático
+    // está parado) — e o relógio da janela, que responde "dá para escrever
+    // agora?" antes de digitar. A barra de ações (Transferir, Lembrar, Fechar,
+    // PDF, busca…) comia duas fileiras do cabeçalho em 1280px (medido: 152px de
+    // altura) e agora fica numa faixa que aparece com o mouse, com o foco, ou
+    // pelo botão "Ações" — esse último é a porta do toque e do teclado, e é o
+    // que FIXA a faixa (`useRevelacao`). Nenhuma ação saiu do cabeçalho.
+    //
+    // `flex-wrap` continua no contêiner e na faixa: o header já travou a largura
+    // da tela inteira (707px de `min-content`, ver `inbox-header-nao-trava`) e a
+    // faixa, quando fixada, entra no fluxo como segunda linha e quebra por dentro.
+    <div
+      {...revelacao.zonaProps}
+      data-cabecalho-da-conversa=""
+      className="@container relative flex flex-wrap items-center gap-2 border-b border-border bg-background px-3 py-2 md:px-4"
+    >
+      <div className="flex w-full min-w-0 items-center gap-3">
+        <AvatarDoContato contato={c} nome={displayName} reserva={phone ?? displayName} className="h-9 w-9 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <SeloDoCanal
+              canal={conversation.channel === "instagram" ? "instagram" : "whatsapp"}
+              tamanho="grande"
+            />
+            <h2 className="min-w-0 truncate text-[15px] font-semibold leading-5">{displayName}</h2>
+            {/* Ao lado do nome, não escondido num painel: a pergunta "dá para
+                escrever agora?" se faz ANTES de digitar, não depois de receber um
+                `failed` com um código de cinco dígitos. */}
+            <JanelaSelo
+              provider={conversation.channel_sessions?.provider ?? null}
+              lastInboundAt={conversation.last_inbound_at}
+            />
+          </div>
+
+          {/* QUEM ESTÁ NO COMANDO, com nome e por GEOMETRIA — disco cheio para
+              pessoa, anel vazado para o automático. É o mesmo componente do card do
+              funil e do dossiê: um terceiro jeito de dizer "quem manda", por cor ou
+              por texto, faria a mesma pergunta ter três respostas diferentes na
+              mesma tela. Cor não sobrevive ao daltonismo nem ao teste do metro. */}
+          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+            <div className="flex items-center gap-2" data-testid="comando-da-conversa">
+              {comando.quem === "humano" ? (
+                <OwnerBadge ownerKind="user" ownerName={comando.nome ?? t("Atendente")} />
+              ) : comando.quem === "automatico" ? (
+                <OwnerBadge ownerKind="ai" ownerName={t("Automático")} />
+              ) : (
+                // `ninguem`, `aguardando` e `encerrada` sem dono caem aqui: o disco
+                // TRACEJADO do OwnerBadge, que é como o funil já desenha "ninguém".
+                <OwnerBadge ownerKind={null} ownerName={null} />
+              )}
+            </div>
+            {/* O PORQUÊ de quem responde, junto dele. Sem esta marca, a conversa
+                em que o robô está calado tem exatamente a mesma cara de uma
+                conversa normal — e ninguém entende por que as respostas
+                automáticas pararam. O testid é contrato: `escalacao-ciclo.spec.ts`
+                o procura. Sem IA no canal, o selo falaria de um automático que
+                não existe; o opt-out do cliente continua valendo e aparecendo. */}
+            {motivo !== null && (iaResponde || motivo === "contato_descadastrado") && (
+              <Badge
+                variant="outline"
+                className="h-4 shrink-0 px-1.5 text-[10px] leading-none"
+                data-testid="badge-atendimento-humano"
+              >
+                {t(ROTULO_DO_MOTIVO[motivo])}
+              </Badge>
+            )}
+            {/* Aberta pela aba "Ocultos" ou por link: a tela diz que esta conversa
+                está fora do Inbox, e por que a IA não responde. */}
+            {conversation.contato_oculto && (
+              <SeloDeOculto className="h-4 shrink-0 px-1.5 text-[10px] leading-none" />
+            )}
+            {phone && (
+              <p className="flex min-w-0 items-center gap-1 text-xs text-text-muted">
+                <Phone size={11} weight="regular" aria-hidden className="shrink-0" />
+                <span className="truncate">{phone}</span>
+              </p>
+            )}
+            {conversation.channel === "instagram" && (
+              <p className="flex items-center gap-1 text-xs text-canal-instagram">
+                <InstagramLogo size={11} weight="regular" aria-hidden />
+                {conversation.channel_sessions?.display_name
+                  ? `${t("via")} ${conversation.channel_sessions.display_name}`
+                  : t("Instagram")}
+              </p>
+            )}
+          </div>
         </div>
 
-        {/* QUEM ESTÁ NO COMANDO, com nome e por GEOMETRIA — disco cheio para
-            pessoa, anel vazado para o automático. É o mesmo componente do card do
-            funil e do dossiê: um terceiro jeito de dizer "quem manda", por cor ou
-            por texto, faria a mesma pergunta ter três respostas diferentes na
-            mesma tela. Cor não sobrevive ao daltonismo nem ao teste do metro. */}
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-        <div className="flex items-center gap-2" data-testid="comando-da-conversa">
-          {comando.quem === "humano" ? (
-            <OwnerBadge ownerKind="user" ownerName={comando.nome ?? t("Atendente")} />
-          ) : comando.quem === "automatico" ? (
-            <OwnerBadge ownerKind="ai" ownerName={t("Automático")} />
-          ) : (
-            // `ninguem`, `aguardando` e `encerrada` sem dono caem aqui: o disco
-            // TRACEJADO do OwnerBadge, que é como o funil já desenha "ninguém".
-            <OwnerBadge ownerKind={null} ownerName={null} />
-          )}
-        </div>
-        {phone && (
-          <p className="flex items-center gap-1 text-xs text-text-muted">
-            <Phone size={11} weight="regular" aria-hidden /> {phone}
-          </p>
-        )}
-        {conversation.channel === "instagram" && (
-          <p className="flex items-center gap-1 text-xs text-canal-instagram">
-            <InstagramLogo size={11} weight="regular" aria-hidden />
-            {conversation.channel_sessions?.display_name
-              ? `${t("via")} ${conversation.channel_sessions.display_name}`
-              : t("Instagram")}
-          </p>
-        )}
-        </div>
-        </div>
+        {/* A PORTA EXPLÍCITA da faixa de ações. Nome estável ("Ações da
+            conversa") e estado em `aria-expanded`: trocar o nome a cada clique
+            faria o leitor de tela anunciar um botão novo. O texto "Ações"
+            aparece quando o CABEÇALHO tem 448px ou mais (container query, não
+            a tela): em 1280px a coluna da conversa tem 408px, e o rótulo
+            empurrava o telefone para uma terceira linha. */}
+        <Button
+          type="button"
+          size="sm"
+          variant={revelacao.visivel ? "secondary" : "ghost"}
+          className="h-9 shrink-0 gap-1 px-2.5"
+          title={t("Ações da conversa")}
+          aria-label={t("Ações da conversa")}
+          {...revelacao.alternadorProps}
+          onClick={revelacao.alternar}
+        >
+          <DotsThree size={18} weight="bold" aria-hidden />
+          <span className="hidden text-xs @md:inline">{t("Ações")}</span>
+        </Button>
       </div>
 
-      {/* `shrink-0` saiu daqui: era ele que impunha o piso de largura. Agora a
-          barra pode encolher e quebrar internamente, e os botões continuam
-          todos visíveis e clicáveis — só que em duas linhas quando preciso.
-          NO CELULAR a quebra vira o problema oposto: com ~390px a barra descia
-          em três ou quatro fileiras e comia metade da tela. Abaixo do `md` ela
-          é UMA fileira que rola na horizontal, sem esconder ação (porte de
-          upstream #2810). */}
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5 max-md:w-full max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-1 max-md:[&>*]:shrink-0">
+      {/* A FAIXA DE AÇÕES. `shrink-0` continua fora dela: era ele que impunha o
+          piso de largura (ver o teste `inbox-header-nao-trava`). Flutuando
+          (aberta por mouse/foco) ela fica POR CIMA do topo da conversa, sem
+          empurrar as mensagens a cada passada do mouse; fixada pelo botão, entra
+          no fluxo como segunda linha. NO CELULAR é UMA fileira que rola na
+          horizontal, sem esconder ação (porte de upstream #2810). */}
+      <div
+        {...revelacao.painelProps}
+        role="group"
+        aria-label={t("Ações da conversa")}
+        className={cn(
+          "flex min-w-0 flex-wrap items-center gap-1.5 bg-background",
+          "max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-1 max-md:[&>*]:shrink-0",
+          revelacao.noFluxo
+            ? "w-full"
+            : "absolute inset-x-0 top-full z-20 border-b border-border px-3 py-2 shadow-md md:px-4",
+          classeDaFaixa(revelacao.visivel),
+        )}
+      >
         {/* Primeira da barra e só ícone: é ferramenta de LEITURA, não ação de
             atendimento, e não muda de lugar com o estado da conversa. */}
         {onBuscar && (
@@ -295,6 +353,11 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
             oculto={conversation.contato_oculto === true}
             variante="icone"
           />
+        )}
+        {/* Ferramenta de LEITURA como as três de cima — muda só a tela de quem
+            escolhe, por isso mora aqui e não num menu de configurações. */}
+        {aparencia && onAparenciaChange && (
+          <AparenciaDaConversa valor={aparencia} onChange={onAparenciaChange} />
         )}
         {isOpen && (
           <Button
@@ -472,6 +535,17 @@ export function ConversationHeader({ conversation, onBuscar, buscaAberta, botaoB
             </Link>
           </Button>
         )}
+        {/* O estado do episódio (aberta, fechada…) é leitura de consulta, não
+            precisa ocupar a linha do nome: fecha a faixa, depois das ações. A
+            lupa continua a PRIMEIRA (contrato de `busca-na-conversa`). */}
+        {/* `self-stretch` no invólucro: a pílula (24px) alinha pelo topo da
+            fileira como os botões (36px). Sem ele, no celular a fileira única
+            media dois "topos" e lia como duas fileiras (`etiquetas-e-composer`). */}
+        <span className="flex shrink-0 items-center self-stretch md:ml-auto">
+          <Badge variant="outline" className="h-6 px-2 text-[11px]">
+            {t(STATUS_LABEL[status] ?? status)}
+          </Badge>
+        </span>
       </div>
       <ReassignDialog
         conversationId={conversation.id}

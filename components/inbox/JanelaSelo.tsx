@@ -35,6 +35,12 @@ import { cn } from "@/lib/utils";
  * urgência que não existe — e a primeira vez que alguém percebesse que o
  * relógio não muda nada, pararia de olhar para ele em TODOS os canais.
  */
+/**
+ * `shrink-0`: o selo divide a linha com o nome do contato, que é quem trunca.
+ * Encolher o selo era o que o fazia quebrar dentro da pílula.
+ */
+const SELO = "h-4 shrink-0 px-1.5 text-[10px] leading-none";
+
 export function JanelaSelo({
   provider,
   lastInboundAt,
@@ -61,7 +67,7 @@ export function JanelaSelo({
     return (
       <Badge
         variant="outline"
-        className="h-4 px-1.5 text-[10px]"
+        className={SELO}
         title={t(
           "Passou de 24h: só a equipe responde, até 7 dias depois da última mensagem da pessoa.",
         )}
@@ -79,7 +85,7 @@ export function JanelaSelo({
       return (
         <Badge
           variant="outline"
-          className="h-4 border-amber-400 px-1.5 text-[10px] text-amber-700 dark:border-amber-700 dark:text-amber-300"
+          className={cn(SELO, "border-amber-400 text-amber-700 dark:border-amber-700 dark:text-amber-300")}
           title={t(
             "A Meta só deixa responder até 7 dias depois da última mensagem dessa pessoa. Responda pelo app do Instagram se ela escrever de novo.",
           )}
@@ -98,7 +104,7 @@ export function JanelaSelo({
     return (
       <Badge
         variant="outline"
-        className="h-4 border-amber-400 px-1.5 text-[10px] text-amber-700 dark:border-amber-700 dark:text-amber-300"
+        className={cn(SELO, "border-amber-400 text-amber-700 dark:border-amber-700 dark:text-amber-300")}
         title={t(
           "Passaram 24h desde a última mensagem do cliente. Só um modelo aprovado sai daqui — texto livre é recusado pela plataforma.",
         )}
@@ -113,7 +119,7 @@ export function JanelaSelo({
     <Badge
       variant="outline"
       className={cn(
-        "h-4 px-1.5 text-[10px]",
+        SELO,
         urgente && "border-amber-400 text-amber-700 dark:border-amber-700 dark:text-amber-300",
       )}
       title={t("Tempo restante para escrever texto livre. Depois disso, só modelo aprovado.")}

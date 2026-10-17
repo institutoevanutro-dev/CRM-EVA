@@ -32,6 +32,7 @@ import * as path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 import { PRAZO_DO_SILENCIO_MS } from "@/lib/escalacao/atendimento-manual";
+import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
 
 const APP_URL = `http://localhost:${process.env.E2E_PORT ?? "3001"}`;
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
@@ -266,6 +267,7 @@ test.describe("J20.18 — resposta manual pelo celular pausa a IA (sem apagar a 
         page.getByTestId("badge-atendimento-humano"),
         "conversa com a IA pausada não pode ter a mesma cara de uma normal",
       ).toBeVisible({ timeout: 30_000 });
+      await abrirAcoesDaConversa(page);
       const devolver = page.getByTestId("devolver-ao-automatico");
       await expect(devolver).toBeVisible();
       await captura(page, "18-ia-pausada-por-resposta-manual");

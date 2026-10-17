@@ -1,3 +1,4 @@
+import type { AparenciaDaConversa } from "@/lib/inbox/aparencia-da-conversa";
 import type { InterfaceSettings } from "@/lib/navigation/interface";
 import type { Idioma } from "@/lib/i18n/idiomas";
 
@@ -177,6 +178,12 @@ export interface AuthUser {
    * o anti-pattern "tela oferece o que o código ignora".
    */
   timezone?: string | null;
+  /**
+   * Fundo e cor dos balões do Inbox, de `user_metadata.aparencia_conversa` —
+   * preferência de quem lê, vale em qualquer computador. Já sai validada por
+   * `lerAparencia` (o metadado é gravável pelo próprio usuário).
+   */
+  aparencia_conversa?: AparenciaDaConversa;
   organizations: UserOrgMembership[];
 }
 

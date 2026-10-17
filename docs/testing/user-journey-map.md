@@ -1143,9 +1143,22 @@ Spec: `tests/e2e/radar-ocultos-cor-acervo.spec.ts` (parte 1 do job e2e). Executa
 
 Achados e corrigidos: o selo "Oculto do Inbox" quebrava em três linhas no cabeçalho apertado (66 px no Chrome e no Safari, em 1280 px); agora fica numa linha (16 px), e a spec mede. E `filtro-por-marcador-pela-tela.spec.ts` deixava vivo o funil que cria (`crm_leads.pipeline_id` é RESTRICT e os cards ficavam), na posição 1000 do funil padrão: empatados, a lista de Funis os devolvia em qualquer ordem e `importar-leads-planilha` importava no funil errado.
 
-Aberto, fora desta frente: o selo "Janela 23h 59m" do mesmo cabeçalho quebra em duas ou três linhas e o texto vaza da pílula.
+O selo "Janela 23h 59m" do mesmo cabeçalho, que quebrava em duas ou três linhas e vazava da pílula, foi consertado em J37.
 
 Não coberto pela tela: ocultar pela ficha do contato e pela barra de lote (testes de componente), e a IA, o follow-up e o card do funil que pulam o contato oculto (invariantes em `tests/invariants/ocultar-contato-do-inbox.test.ts` e testes de unidade).
+
+## J37 — Inbox: aparência por pessoa, ações sob demanda e topo mais limpo `[P1]` (2026-10-17)
+
+- `[P1]` Quem atende escolhe o fundo da conversa e a cor dos balões (os seus e os do cliente) pelo botão "Aparência da conversa"; vale na hora e segue a pessoa para OUTRO computador (outro contexto de browser, tema escuro: o balão azul vira o tom escuro, medido por `getComputedStyle`). Mora em `user_metadata.aparencia_conversa`, sem tabela nova.
+- `[P1]` O cabeçalho da conversa mostra fixos só nome, telefone e quem responde (mais o selo da janela). As ações aparecem com o mouse, com o foco, ou pelo botão "Ações da conversa" (a porta do toque e do teclado, que fixa a faixa); Escape fecha e devolve o foco. Fixada, a faixa continua aberta depois de Assumir/Fechar, quando o cabeçalho remonta.
+- `[P1]` "Assistência do agente" (Sugerir resposta, Responder, Nota interna) recolhida, aberta pelo botão de faísca ao lado do emoji; em Nota interna ou com sugestão para revisar ela fica presa aberta.
+- `[P1]` O selo "Janela 23h 59m" numa linha só (16 px), cabeçalho com no máximo 88 px, nenhum transbordo horizontal, nada vazando da coluna da lista e abas com a mesma altura, em 1280, 1440 e 390 px, claro e escuro. O placeholder do campo de mensagem também numa linha em 390 px (medido pelo `scrollHeight` do campo vazio).
+
+Spec: `tests/e2e/inbox-aparencia-e-acoes-sob-demanda.spec.ts` (parte 4 do job e2e). Executado em 2026-10-17 no build de produção, banco recém-criado do `baseline.sql`: 9 passaram. As mesmas telas rodaram no Safari 26.6 real (safaridriver), 1280/1440/390, claro e escuro: cabeçalho com 63 px, selo com 16 px e uma linha, zero transbordo, abas com 32 px, faixa de ações e faixa do composer abrindo pelo botão. Evidência em `.superpowers/evidence/inbox-visual/` (Safari em `safari-*.png` e `safari-medidas.json`).
+
+Achado e corrigido nesta rodada: com o botão de faísca, em 390 px o campo de mensagem ficou com 142 px e "Escreva uma mensagem…" quebrava em duas linhas cortadas; agora trunca com reticências. E `encerramento-atendimento.spec.ts` procurava o botão de ações só em português depois de trocar o idioma para espanhol.
+
+Não coberto pela tela: o toque de verdade (o celular foi emulado por largura; o botão explícito é o mesmo que o teclado usa) e a falha de gravação da aparência (a tela volta à escolha anterior e avisa; coberto em teste de componente).
 
 ## J7 — Exploração completa `[P2]`
 

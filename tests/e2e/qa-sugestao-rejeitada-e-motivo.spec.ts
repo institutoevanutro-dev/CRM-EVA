@@ -29,6 +29,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { seedPlatformPlaybook } from "../../lib/agent-engine/agent/playbook-seed";
+import { abrirOpcoesDeResposta } from "./helpers/acoes-da-conversa";
 
 const credenciais = credenciaisSupabaseDeTeste();
 const db = createClient(credenciais.url, credenciais.serviceRole, {
@@ -213,6 +214,7 @@ test("rejeitar tira a sugestão da tela e diz que rejeitou; sem agente publicado
     const gerada = page.waitForResponse(
       (r) => r.url().endsWith("/draft-reply") && r.request().method() === "POST",
     );
+    await abrirOpcoesDeResposta(page);
     await painel(page).getByRole("button", { name: "Sugerir resposta", exact: true }).click();
     const resposta = await gerada;
     expect(resposta.status(), await resposta.text()).toBe(200);
@@ -283,6 +285,7 @@ test("rejeitar tira a sugestão da tela e diz que rejeitou; sem agente publicado
     const falhou = page.waitForResponse(
       (r) => r.url().endsWith("/draft-reply") && r.request().method() === "POST",
     );
+    await abrirOpcoesDeResposta(page);
     await painel(page).getByRole("button", { name: "Sugerir resposta", exact: true }).click();
     const recusa = await falhou;
     expect(recusa.status()).toBe(422);

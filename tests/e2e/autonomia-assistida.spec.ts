@@ -8,6 +8,7 @@ import { test, expect, type Page, type TestInfo, type Locator } from "@playwrigh
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { createApprovedReplyHandler } from "../../lib/agent-engine/agent/approved-reply";
 import { seedPlatformPlaybook } from "../../lib/agent-engine/agent/playbook-seed";
+import { abrirOpcoesDeResposta } from "./helpers/acoes-da-conversa";
 
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
@@ -216,6 +217,7 @@ async function generate(page: Page) {
   const response = page.waitForResponse(
     (r) => r.url().endsWith("/draft-reply") && r.request().method() === "POST",
   );
+  await abrirOpcoesDeResposta(page);
   await panel(page).getByRole("button", { name: "Sugerir resposta", exact: true }).click();
   const r = await response;
   expect(r.status(), await r.text()).toBe(200);
