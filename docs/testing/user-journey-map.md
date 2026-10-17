@@ -1147,6 +1147,19 @@ Aberto, fora desta frente: o selo "Janela 23h 59m" do mesmo cabeçalho quebra em
 
 Não coberto pela tela: ocultar pela ficha do contato e pela barra de lote (testes de componente), e a IA, o follow-up e o card do funil que pulam o contato oculto (invariantes em `tests/invariants/ocultar-contato-do-inbox.test.ts` e testes de unidade).
 
+## J37 — O WhatsApp conectado e surdo é reiniciado até voltar, e o dono fica sabendo no celular `[P0]` (2026-10-17)
+
+O caso de campo: em outubro de 2026 o número da clínica oscilou a madrugada inteira e amanheceu `WORKING` sem receber. O vigia reiniciou uma vez, abriu o aviso na Central às 09:45 e parou; ninguém abriu a Central, e o número ficou ~15 h sem receber. Um reinício à mão (`POST /api/sessions/{nome}/restart`) curou na hora, sem QR, e o que os pacientes mandaram no intervalo não voltou.
+
+- `[P0]` Conexão `WORKING`, 45 min sem entrada depois de uma queda: o CRM reinicia pelo reinício nativo, e 2 min depois a Central e o celular dizem "reiniciou às HH:MM".
+- `[P0]` Mais 45 min sem entrada: reinicia de novo (teto padrão 2 a cada 6 h); sem tentativa sobrando, aviso crítico "continua sem receber" com o que fazer primeiro, uma vez.
+- `[P0]` Entrou mensagem: aviso "voltou a receber" com o intervalo a conferir no celular, e os avisos abertos da sessão fecham.
+- `[P0]` Não reinicia com alguém conectando o número, com atualização pela tela em andamento, fora de `WORKING`, nem em dobro com duas rodadas simultâneas.
+
+Coberto por `lib/channels/vigia-de-surdez.test.ts`, `tests/unit/channel-health-vigia-de-surdez.test.ts`, `tests/unit/push-dos-avisos.test.ts` e `lib/waha/client.test.ts`. A trava (`metadata->vigia_surdez->>versao` no filtro do UPDATE) foi exercitada contra um PostgREST v16.4 real: com duas gravações simultâneas, uma pega a linha e a outra recebe vazio.
+
+Não executado: a jornada pela tela e o push num celular de verdade, e o reinício nativo contra um WAHA real (só o caminho manual, em produção, provou que ele cura).
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

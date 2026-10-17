@@ -5,7 +5,8 @@
  * atende pelo WhatsApp passa o dia com o CRM fechado no bolso, e os avisos que
  * pedem uma pessoa esperavam sem ninguém saber. Vai ao celular o momento em que
  * a IA passou a conversa para uma pessoa (aviso `handoff`) e o momento em que a
- * IA ficou sem crédito ou com a chave recusada no provedor.
+ * IA ficou sem crédito ou com a chave recusada no provedor. E os avisos do vigia
+ * de conexão surda, por regra própria logo abaixo (esses sem som).
  *
  * É o MESMO que tem som próprio: a regra de quais avisos pedem gente é uma só
  * (`somDoAviso`). Todo aviso chega pelo barramento como `central.aviso_criado`
@@ -24,10 +25,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ehAvisoDoProvedor } from "@/lib/agent-engine/edge/llm/aviso-do-provedor";
 import { REFERENCIAS_DE_AVISO } from "@/lib/ai/inbox-destino";
+import { ehAvisoDoVigiaDeSurdez } from "@/lib/channels/vigia-de-surdez";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { normalizarIdioma, type Idioma } from "@/lib/i18n/idiomas";
 
-import type { PushPayload } from "./push_payload";
+import { truncar, type PushPayload } from "./push_payload";
 import { somDoAviso } from "./sons-da-org";
 
 /** Sem destino próprio, o push abre a Central — onde o aviso está. */
@@ -72,6 +74,20 @@ export async function pushDoAvisoDaCentral(
     .maybeSingle();
   const item = data as Aviso | null;
   if (!item) return null;
+
+  // O WhatsApp conectado e surdo (`lib/channels/vigia-de-surdez.ts`): o CRM
+  // reiniciou, as mensagens voltaram, ou não voltaram e é preciso reconectar.
+  // Em outubro/2026 este aviso ficou aberto ~15 h na Central sem ninguém ver.
+  // Vai inteiro: título e começo do corpo falam do número da clínica e da hora,
+  // nunca de cliente. Só celular, sem som na Central: o pedido foi o bolso.
+  if (item.kind === "channel_number_alert" && ehAvisoDoVigiaDeSurdez(item.title)) {
+    return {
+      title: item.title,
+      body: truncar(item.body ?? ""),
+      tag: `aviso:${item.id}`,
+      href: REFERENCIAS_DE_AVISO.channel_session.href(),
+    };
+  }
 
   if (somDoAviso(item) !== "pessoa") return null;
   const idioma = await idiomaDaOrganizacao(admin, orgId);
