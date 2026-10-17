@@ -142,6 +142,14 @@ describe("completeTurnForEnrollment — 'sent' (action)", () => {
     expect(ia.insertEnrollmentEvent).toHaveBeenCalledWith(expect.objectContaining({ event_type: "action_sent", payload: {} }));
   });
 
+  it("'sent' de um passo com variantes grava qual redação saiu no evento (para A/B)", async () => {
+    const r = fakeDb({ enrollment: enrollment(), graph: ACTION_GRAPH });
+    await completeTurnForEnrollment(r.db, "org-1", "enr-1", "a1", { kind: "sent", variante: 2 }, clock);
+    expect(r.insertEnrollmentEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ event_type: "action_sent", payload: { variante: 2 } }),
+    );
+  });
+
   it("double completion (same steps_taken) is idempotent — 2nd call is a no-op", async () => {
     const { db, updateEnrollment } = fakeDb({
       enrollment: enrollment(),
