@@ -8,6 +8,28 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.17.0] — 2026-10-17
+
+### Adicionado
+
+- **Passo de texto do follow-up com variantes por contato e a variável {{saudacao}}** No editor de follow-up, o passo «Texto enviado ao contato» ganhou «Adicionar
+  variante»: além do texto principal, dá para escrever de 2 a 5 redações
+  alternativas. Cada contato recebe uma só, e sempre a mesma naquele passo;
+  contatos diferentes se espalham entre as redações, sem IA. Assim um envio para
+  muitos pacientes não sai com a mesma mensagem idêntica para todos. A redação que
+  saiu fica registrada no histórico da inscrição. Fluxos sem variantes continuam
+  iguais.
+
+  O texto (e a legenda de mídia) também aceita `{{saudacao}}`, que vira «Bom dia»
+  das 5h às 11h59, «Boa tarde» das 12h às 17h59 e «Boa noite» no resto do dia, no
+  fuso e no idioma da organização e na hora em que a mensagem de fato sai. A
+  mesma variável das campanhas passou a dizer «Boa noite», e não «Bom dia», de
+  madrugada (antes das 5h).
+
+### Alterado
+
+- **Comentários, testes e documentos internos deixam de citar pessoas e casos reais** Comentários de código, testes, documentos de desenho e exemplos que citavam nomes, números de telefone, identificadores e casos reais de atendimento passaram a usar descrições neutras e dados fictícios. Nada muda no funcionamento do sistema nem na instalação.
+
 ## [4.16.0] — 2026-10-16
 
 ### Corrigido
@@ -7521,7 +7543,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.16.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.17.0...HEAD
+[4.17.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.16.0...v4.17.0
 [4.16.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.15.0...v4.16.0
 [4.15.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.14.0...v4.15.0
 [4.14.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.13.0...v4.14.0
