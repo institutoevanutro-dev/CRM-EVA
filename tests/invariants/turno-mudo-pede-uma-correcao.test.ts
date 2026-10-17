@@ -20,6 +20,10 @@ import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
  * - texto solto → a 2ª chamada leva a correção, o envio sai pela cadeia;
  * - controle: quem já enviou não recebe correção (nenhuma chamada a mais);
  * - quem insiste no silêncio recebe UMA correção, nunca um laço.
+ *
+ * Resposta cortada no teto de tokens (porte do upstream #2938): o `send_message`
+ * pela metade não sai, e o turno que fica mudo por corte vira aviso na Central;
+ * o silêncio deliberado, não.
  */
 
 const container = process.env.TEST_DB_CONTAINER;
@@ -71,9 +75,21 @@ const enviar = (body: string) => ({
   usage: USO,
   warnings: [],
 });
+/** O mesmo envio, mas o modelo bateu no teto de tokens no meio dele. */
+const cortado = (body: string) => ({ ...enviar(body), finishReason: { unified: "length" as const, raw: undefined } });
 const FECHAMENTO = JSON.stringify({ commitments: [], objections: [], next_action: null, rolling_summary: "t" });
 
-type Resposta = ReturnType<typeof texto> | ReturnType<typeof enviar>;
+type Resposta = ReturnType<typeof texto> | ReturnType<typeof enviar> | ReturnType<typeof cortado>;
+
+/** Avisos abertos na Central para a conversa do teste. */
+async function avisosDaConversa(): Promise<Array<{ kind: string; title: string }>> {
+  const { rows } = await pool.query<{ kind: string; title: string }>(
+    `select kind, title from agent_inbox_items
+      where organization_id = $1 and ref_kind = 'conversation' and ref_id = $2 and status = 'open'`,
+    [ORG, CONV],
+  );
+  return rows;
+}
 
 /** Roteiro por chamada; guarda o prompt de cada uma para conferir a correção. */
 function modelo(roteiro: Resposta[]) {
@@ -176,6 +192,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   enviados = [];
   await pool.query("delete from send_ledger where organization_id = $1", [ORG]);
+  await pool.query("delete from agent_inbox_items where organization_id = $1", [ORG]);
   await pool.query("delete from messages where organization_id = $1", [ORG]);
   await pool.query("delete from job_queue where organization_id = $1", [ORG]);
   await pool.query("delete from event_log where organization_id = $1", [ORG]);
@@ -232,5 +249,29 @@ describe("o turno de resposta que terminou sem mensagem ao cliente", () => {
     // turno + UMA correção + fechamento.
     expect(prompts).toHaveLength(3);
     expect(prompts[1]).toContain(MARCA_DA_CORRECAO);
+    // Silêncio deliberado é decisão do modelo: não vira aviso.
+    expect(await avisosDaConversa()).toEqual([]);
+  });
+
+  it("⭐ resposta cortada no teto de tokens não sai, e o cliente sem resposta vira aviso na Central", async () => {
+    const { fake, prompts } = modelo([
+      cortado("Olá, sua consulta est"), // send_message pela metade
+      cortado("Olá, sua consulta está confirm"), // a correção também cortada
+    ]);
+    await turno(fake);
+
+    expect(enviados, "mensagem cortada chegou ao cliente").toEqual([]);
+    expect(prompts[1]).toContain(MARCA_DA_CORRECAO);
+    expect(await avisosDaConversa()).toEqual([
+      { kind: "other", title: "A IA não respondeu um cliente: a resposta passou do tamanho máximo" },
+    ]);
+  });
+
+  it("cortada e recuperada pela correção: a resposta inteira sai e não há aviso", async () => {
+    const { fake } = modelo([cortado("Olá, sua consulta est"), enviar("Olá, sua consulta está confirmada."), texto("ok")]);
+    await turno(fake);
+
+    expect(enviados).toEqual(["Olá, sua consulta está confirmada."]);
+    expect(await avisosDaConversa()).toEqual([]);
   });
 });

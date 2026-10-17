@@ -89,7 +89,8 @@ export const POLITICAS_DE_AVISO = {
   },
   jev_pedido_de_humano: { refs: ["conversation"], orientacao: "Abra a conversa e decida se alguém da equipe assume o atendimento." },
   jev_parar_de_receber: { refs: ["conversation"], orientacao: "Abra a conversa e confira se o cliente quer mesmo parar de receber mensagens." },
-  other: { refs: ["lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
+  // `conversation`: a resposta da IA cortada no teto de tokens (`inbound-turn.ts`).
+  other: { refs: ["lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential", "conversation"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
 } satisfies Record<InboxKind, Politica>;
 
 /**

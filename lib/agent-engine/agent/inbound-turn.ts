@@ -186,7 +186,12 @@ import { loadPromiseTable } from '../guardrails/promise/table';
 import { classifyPromise, memoizarPorCandidata } from '../guardrails/promise/semantic';
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { diffCheckpoint } from '@/lib/leads/checkpoint-diff';
-import { CORRECAO_DO_TURNO_MUDO, turnoMudoPedeCorrecao } from './turno-mudo';
+import {
+  CORRECAO_DO_TURNO_MUDO,
+  semChamadasSemResultado,
+  turnoMudoPedeCorrecao,
+  turnoMudoPorCorte,
+} from './turno-mudo';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 import { resolveActiveLeadForContact, type LeadCandidate } from '@/lib/leads/active-lead';
 import { recalculaScoreDoLead } from '@/lib/leads/score-writer';
@@ -4931,6 +4936,18 @@ async function executarTurnoDoAgente(
       { registry: deps.registry, log: runLog },
     );
 
+    // SAÍDA CORTADA (`finishReason === 'length'`): o modelo bateu no teto de
+    // tokens de saída. O que ele produziu não sai — o SDK não executa ferramenta
+    // de passo cortado —, e se nada mais sair o turno vira aviso na Central lá
+    // embaixo (`turnoMudoPorCorte`, porte do upstream #2938).
+    const saidaCortada = turn.result.finishReason === 'length';
+    if (saidaCortada) {
+      runLog.warn('output_truncated — resposta do modelo cortada no teto de tokens', {
+        job_id: job?.id ?? null,
+        enviadas_ate_aqui: outcomes.length,
+      });
+    }
+
     // A ORIGEM ENVIOU E PASSOU no mesmo turno: a marca que faz o retry deste job
     // encerrar sem modelo (`MARCA_DE_ENVIO_DA_ORIGEM_NO_JOB`). Aqui, antes de
     // qualquer `throw` abaixo, porque é justamente o turno que falha depois do
@@ -5021,22 +5038,22 @@ async function executarTurnoDoAgente(
     // conversa e as mesmas ferramentas: o envio passa pela cadeia inteira, como
     // qualquer outro. O fechamento lê a fita das DUAS chamadas.
     let mensagensDoTurno: ModelMessage[] = turn.result.responseMessages;
-    if (
-      !preview &&
-      liveJob().kind === 'inbound_turn' &&
-      turnoMudoPedeCorrecao({
-        tentativasDeEnvio,
-        enviadas: outcomes.length,
-        // O descarte por resposta obsoleta acontece DENTRO de send_message e já
-        // conta como tentativa de envio. O de pessoa no comando pode vir do
-        // send_media, que não conta: sem isto a correção pediria ao modelo para
-        // falar por cima de quem assumiu (o sink barraria, mas gastando modelo).
-        turnoDescartado: pessoaAssumiuNoTurno,
-        // Passar a conversa a outro assunto também é silêncio por decisão.
-        passouParaAEquipe: passouParaAEquipe || passagem !== null,
-        capDeEnvio: capDeEnvioAtingido(),
-      })
-    ) {
+    // Lido DE NOVO depois da correção (para o aviso de corte): o que ela fez —
+    // enviar, levar veto, passar à equipe — muda a resposta.
+    const silencioDoTurno = () => ({
+      tentativasDeEnvio,
+      enviadas: outcomes.length,
+      // O descarte por resposta obsoleta acontece DENTRO de send_message e já
+      // conta como tentativa de envio. O de pessoa no comando pode vir do
+      // send_media, que não conta: sem isto a correção pediria ao modelo para
+      // falar por cima de quem assumiu (o sink barraria, mas gastando modelo).
+      turnoDescartado: pessoaAssumiuNoTurno,
+      // Passar a conversa a outro assunto também é silêncio por decisão.
+      passouParaAEquipe: passouParaAEquipe || passagem !== null,
+      capDeEnvio: capDeEnvioAtingido(),
+    });
+    let correcaoCortada = false;
+    if (!preview && liveJob().kind === 'inbound_turn' && turnoMudoPedeCorrecao(silencioDoTurno())) {
       runLog.warn('turno terminou sem mensagem ao cliente — pedindo UMA correção', {
         job_id: liveJob().id,
       });
@@ -5051,7 +5068,7 @@ async function executarTurnoDoAgente(
           agentId: agentConfig?.agentId ?? null,
           purpose: 'agent_turn',
           system,
-          messages: [...openingMessages, ...turn.result.responseMessages, pedidoDeCorrecao],
+          messages: [...openingMessages, ...semChamadasSemResultado(turn.result.responseMessages), pedidoDeCorrecao],
           tools,
           maxSteps: Math.min(maxSteps, 3),
           ...(agentConfig !== null
@@ -5066,12 +5083,51 @@ async function executarTurnoDoAgente(
         },
         { registry: deps.registry, log: runLog },
       );
+      correcaoCortada = correcao.result.finishReason === 'length';
       mensagensDoTurno = [...mensagensDoTurno, pedidoDeCorrecao, ...correcao.result.responseMessages];
       if (runError !== null) throw runError;
       if (outcomes.some((o) => o.kind === 'failed')) {
         throw new Error('envio marcado como failed pelo CRM — run re-tentado pela fila');
       }
       runLog.info('correção do turno mudo concluída', { messages_sent: outcomes.length });
+    }
+
+    // CLIENTE SEM RESPOSTA POR CORTE: nada saiu e o modelo foi cortado no teto
+    // de tokens (na resposta ou na correção). Antes o turno acabava mudo com um
+    // `info` no log do worker, que ninguém na clínica lê. Vira aviso na Central,
+    // um por conversa enquanto aberto. Não envia nada: nunca duplica mensagem.
+    if (
+      !preview &&
+      liveJob().kind === 'inbound_turn' &&
+      turnoMudoPorCorte({ ...silencioDoTurno(), saidaCortada, correcaoCortada })
+    ) {
+      runLog.error('output_truncated — cliente sem resposta neste turno', {
+        job_id: liveJob().id,
+        correcao_cortada: correcaoCortada,
+      });
+      try {
+        await insertInboxItem(
+          pool,
+          tenantId,
+          {
+            kind: 'other',
+            severity: 'critical',
+            title: 'A IA não respondeu um cliente: a resposta passou do tamanho máximo',
+            body:
+              'A resposta da IA foi cortada no limite de tamanho e, por isso, não foi enviada. ' +
+              'A nova tentativa automática também não respondeu. Abra a conversa e responda o ' +
+              'cliente. Se isso se repetir, avise quem administra a instalação.',
+            refKind: 'conversation',
+            refId: input.conversationId,
+          },
+          'kind_ref_e_titulo',
+        );
+      } catch (err) {
+        // Best-effort: o aviso que falha não derruba o turno nem esconde a causa.
+        runLog.error('aviso de resposta cortada não foi gravado', {
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+        });
+      }
     }
 
     // F3-10: poda os tool results antigos da fita do run ANTES de reenviá-los no fechamento

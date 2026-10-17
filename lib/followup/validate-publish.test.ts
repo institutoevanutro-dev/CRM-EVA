@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CONTA_NO_TETO, custoDoCaminhoLinear, validateFlowForPublish } from './validate-publish';
+import { CONTA_NO_TETO, custoNoMotorDoFluxo, validateFlowForPublish } from './validate-publish';
 import { CUSTO_NO_MOTOR, TETO_DE_PASSOS_DO_MOTOR } from './custo-no-motor';
 import { NODE_TYPES, type FlowGraph, type FlowNode, type FlowEdge } from './graph-schema';
 
@@ -410,38 +410,120 @@ describe('validateFlowForPublish', () => {
     it('recusa 14 toques: 86 ticks no motor, com só 28 passos sentidos', () => {
       const g = toques(14);
       // 1 gatilho + 14 × (mensagem 2 + condição 1 + condição 1 + espera 2) + 1 fim = 86.
-      expect(custoDoCaminhoLinear(g)).toBe(86);
-      expect(custoDoCaminhoLinear(g)).toBeGreaterThan(TETO_DE_PASSOS_DO_MOTOR);
+      expect(custoNoMotorDoFluxo(g).total).toBe(86);
+      expect(custoNoMotorDoFluxo(g).total).toBeGreaterThan(TETO_DE_PASSOS_DO_MOTOR);
       expect(codigos(validateFlowForPublish(g))).toEqual(['max_engine_steps_exceeded']);
     });
 
     it('publica 13 toques, que cabem no orçamento do motor (80 ticks)', () => {
       const g = toques(13);
-      expect(custoDoCaminhoLinear(g)).toBe(80);
+      expect(custoNoMotorDoFluxo(g).total).toBe(80);
       expect(validateFlowForPublish(g)).toEqual({ ok: true });
     });
 
-    it('não julga o caminho que passa por um ciclo (repeat)', () => {
-      const g = graph(
-        [
+    /**
+     * O ciclo do `repeat` no teto do motor (porte do upstream #3022). A régua
+     * antiga parava na primeira aresta que entra num ciclo: o `repeat` (até 20
+     * voltas) não era multiplicado por nada, e o que só se alcança DEPOIS do
+     * ciclo nunca era somado. O fluxo publicava e morria no motor com `max_steps`.
+     */
+    describe('o ciclo do repeat entra no teto do motor', () => {
+      const corpo = { type: 'branch', branch_id: 'body' } as const;
+      const feito = { type: 'branch', branch_id: 'done' } as const;
+
+      /** `trigger → repeat(max_count) → [mensagem → espera] → repeat → fim`. */
+      function repeatComVoltas(maxCount: number, label = 'r1'): FlowGraph {
+        return graph(
+          [
+            trigger('t1'),
+            { id: 'r1', type: 'repeat', label, position: pos, config: { max_count: maxCount } },
+            actionTemplate('msg1'),
+            wait('w1', { mode: 'fixed', duration_ms: 300_000 }),
+            end('fim'),
+          ],
+          [
+            edge('t1', 'r1', always()),
+            edge('r1', 'msg1', corpo),
+            edge('msg1', 'w1', always()),
+            edge('w1', 'r1', always()),
+            edge('r1', 'fim', feito),
+            edge('r1', 'fim', always()),
+          ],
+        );
+      }
+
+      /** O `repeat` de UMA volta com `n` toques (mensagem → condição → condição → espera) depois do `done`. */
+      function repeatComCauda(n: number): FlowGraph {
+        const nodes: FlowNode[] = [
           trigger('t1'),
-          { id: 'r1', type: 'repeat', label: 'r1', position: pos, config: { max_count: 20 } },
+          { id: 'r1', type: 'repeat', label: 'r1', position: pos, config: { max_count: 1 } },
           actionTemplate('msg1'),
           wait('w1', { mode: 'fixed', duration_ms: 300_000 }),
-          end('fim'),
-        ],
-        [
+        ];
+        const edges: FlowEdge[] = [
           edge('t1', 'r1', always()),
-          edge('r1', 'msg1', { type: 'branch', branch_id: 'body' }),
+          edge('r1', 'msg1', corpo),
           edge('msg1', 'w1', always()),
           edge('w1', 'r1', always()),
-          edge('r1', 'fim', { type: 'branch', branch_id: 'done' }),
           edge('r1', 'fim', always()),
-        ],
-      );
-      // Só o gatilho entra na soma: o repeat e tudo que ele alcança está no ciclo.
-      expect(custoDoCaminhoLinear(g)).toBe(1);
-      expect(validateFlowForPublish(g)).toEqual({ ok: true });
+        ];
+        let anterior = 'r1';
+        for (let i = 1; i <= n; i++) {
+          nodes.push(
+            actionTemplate(`cauda${i}`),
+            condition(`c${i}a`),
+            condition(`c${i}b`),
+            wait(`espera${i}`, { mode: 'fixed', duration_ms: 300_000 }),
+          );
+          edges.push(
+            edge(anterior, `cauda${i}`, i === 1 ? feito : always()),
+            edge(`cauda${i}`, `c${i}a`, always()),
+            edge(`c${i}a`, `c${i}b`, always()),
+            edge(`c${i}b`, `espera${i}`, always()),
+          );
+          anterior = `espera${i}`;
+        }
+        nodes.push(end('fim'));
+        edges.push(edge(anterior, 'fim', always()));
+        return graph(nodes, edges);
+      }
+
+      it('⭐ recusa o repeat de 20 voltas: 103 ticks no motor (antes publicava)', () => {
+        const g = repeatComVoltas(20);
+        // 1 gatilho + 20 × (repeat 1 + mensagem 2 + espera 2) + 1 passada do `done` + 1 fim.
+        expect(custoNoMotorDoFluxo(g)).toEqual({ total: 103, cicloDeRepeat: { node_id: 'r1', voltas: 20, peso: 5 } });
+        expect(codigos(validateFlowForPublish(g))).toEqual(['max_engine_steps_exceeded']);
+      });
+
+      it('a recusa nomeia a caixa pelo rótulo do editor, o custo da volta e as voltas', () => {
+        const r = validateFlowForPublish(repeatComVoltas(20, 'Lembretes semanais'));
+        expect(r.ok).toBe(false);
+        if (r.ok) return;
+        expect(r.errors[0]!.message).toContain('a caixa "Lembretes semanais" repete custa 5 passos por volta');
+        expect(r.errors[0]!.message).toContain('até 20 voltas');
+      });
+
+      it('a fronteira é a volta: 15 voltas publicam (78 ticks), 16 recusam (83)', () => {
+        expect(custoNoMotorDoFluxo(repeatComVoltas(15)).total).toBe(78);
+        expect(validateFlowForPublish(repeatComVoltas(15))).toEqual({ ok: true });
+        expect(custoNoMotorDoFluxo(repeatComVoltas(16)).total).toBe(83);
+        expect(codigos(validateFlowForPublish(repeatComVoltas(16)))).toEqual(['max_engine_steps_exceeded']);
+      });
+
+      it('⭐ a cauda depois do ciclo volta a contar; com 1 volta a culpa é da cadência', () => {
+        const g = repeatComCauda(13);
+        // 1 gatilho + 5 (a volta) + 1 (o `done`) + 13 × 6 (a cauda) + 1 fim = 86.
+        expect(custoNoMotorDoFluxo(g).total).toBe(86);
+        const r = validateFlowForPublish(g);
+        expect(codigos(r)).toEqual(['max_engine_steps_exceeded']);
+        if (r.ok) return;
+        expect(r.errors[0]!.message).not.toContain('reduza as voltas');
+        expect(r.errors[0]!.message).toContain('Encurte a cadência.');
+      });
+
+      it('controle: o repeat de 1 volta com a saída `done` publica', () => {
+        expect(validateFlowForPublish(repeatComVoltas(1))).toEqual({ ok: true });
+      });
     });
   });
 

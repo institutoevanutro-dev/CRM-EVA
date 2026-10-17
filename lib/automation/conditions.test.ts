@@ -74,6 +74,53 @@ describe("evaluateConditions", () => {
         ctx,
       ),
     ).toBe(false));
+  /**
+   * Contém ignora acento e pontuação nos DOIS lados (porte do upstream #3028).
+   * Os controles fecham a porta para "afrouxou demais", inclusive o `eq`, que
+   * continua comparação EXATA.
+   */
+  const comTexto = (texto: string) => ({ event: { body_preview: texto } });
+  const contem = (valor: string, texto: string) =>
+    evaluateConditions([{ field: "event.body_preview", op: "contains", value: valor }], comTexto(texto));
+
+  it("⭐ contém em texto: casa com e sem acento, nos dois sentidos", () => {
+    expect(contem("anúncio", "vi o anuncio de voces")).toBe(true);
+    expect(contem("anuncio", "vi o anúncio de vocês")).toBe(true);
+    for (const escrito of ["Ola", "olá!", "OLÁ", "olá,"]) expect(contem("Olá", `Oi, tudo bem? ${escrito}`), escrito).toBe(true);
+  });
+  it("⭐ contém em texto: a pontuação vira espaço (mensagem pronta do anúncio editada)", () => {
+    for (const recebido of ["ola vi o anuncio", "ola, vi o anuncio", "Olá!! Vi o anúncio."]) {
+      expect(contem("Olá! vi o anúncio", recebido), recebido).toBe(true);
+    }
+    expect(contem("pré-venda", "quero entrar na pre venda")).toBe(true);
+  });
+  it("contém em texto: o que é outra coisa continua não casando", () => {
+    expect(contem("anúncio", "quero uma proposta comercial")).toBe(false);
+    expect(contem("olá", "bom dia, tudo certo?")).toBe(false);
+    expect(contem("10,00", "o plano custa 1.000")).toBe(false);
+    expect(contem("@gmail.com", "meu email é joao gmailcom")).toBe(false);
+  });
+  it("regra feita só de pontuação não passa a casar toda mensagem", () => {
+    expect(contem("?", "bom dia")).toBe(false);
+    expect(contem("?", "tem horário?")).toBe(true);
+  });
+  it("emoji continua casando (o seletor de variação não some)", () =>
+    expect(contem("❤️", "obrigada ❤️")).toBe(true));
+  it("eq continua exato: acento e caixa ainda decidem", () => {
+    const eq = (valor: string, texto: string) =>
+      evaluateConditions([{ field: "event.body_preview", op: "eq", value: valor }], comTexto(texto));
+    expect(eq("anúncio", "anuncio")).toBe(false);
+    expect(eq("anuncio", "Anuncio")).toBe(false);
+    expect(eq("anuncio", "anuncio")).toBe(true);
+  });
+  it("contém em lista: a grafia da tag dobra, a pertinência (tag inteira) não", () => {
+    expect(
+      evaluateConditions([{ field: "event.added_tags", op: "contains", value: "tráfego" }], comTags(["trafego"])),
+    ).toBe(true);
+    expect(
+      evaluateConditions([{ field: "event.added_tags", op: "contains", value: "trafego" }], comTags(["trafego pago"])),
+    ).toBe(false);
+  });
   it("campo ausente → condição falsa, não erro", () =>
     expect(evaluateConditions([{ field: "lead.ghost", op: "eq", value: "x" }], ctx)).toBe(false));
   it("campo ausente com neq → true (ausente ≠ valor)", () =>

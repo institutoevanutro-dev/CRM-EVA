@@ -9,7 +9,11 @@
  * A lista era escrita à mão só para 2026–2030: a partir de 2031 o prazo de um
  * pedido de titular seria contado sem feriado nenhum, sem erro e sem aviso.
  * Agora é calculada por ano, a cobertura é uma constante vigiada por teste, e as
- * datas de 2026–2030 são EXATAMENTE as da lista antiga.
+ * datas de 2026–2030 são as da lista antiga mais o 20 de novembro.
+ *
+ * O 20 de novembro (Dia Nacional de Zumbi e da Consciência Negra) é feriado
+ * nacional desde 2024 (Lei 14.759/2023) e faltava aqui: o prazo de um pedido de
+ * titular aberto na véspera contava a data como dia útil.
  *
  * ⚠️ A lista pode repetir uma data (Páscoa em 23/04 põe a Sexta-feira Santa em
  * 21/04, Tiradentes). Quem consome usa `Set`, então a contagem não muda.
@@ -40,10 +44,14 @@ const FIXED_DATES = [
   "12-25", // Natal
 ];
 
-/** Os doze feriados de um ano: os oito fixos e os quatro móveis. */
+/** Primeiro ano do 20 de novembro como feriado nacional (Lei 14.759/2023). */
+export const PRIMEIRO_ANO_DA_CONSCIENCIA_NEGRA = 2024;
+
+/** Os feriados de um ano: os fixos e os quatro móveis (12; 13 a partir de 2024). */
 export function feriadosDoBrasilDoAno(ano: number): string[] {
   return [
     ...FIXED_DATES.map((md) => `${ano}-${md}`),
+    ...(ano >= PRIMEIRO_ANO_DA_CONSCIENCIA_NEGRA ? [`${ano}-11-20`] : []), // Consciência Negra
     diaEmTornoDaPascoa(ano, -48), // Segunda-feira de Carnaval
     diaEmTornoDaPascoa(ano, -47), // Terça-feira de Carnaval
     diaEmTornoDaPascoa(ano, -2), // Sexta-feira Santa

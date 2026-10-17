@@ -746,7 +746,15 @@ const FRASES_DE_OPT_OUT: readonly RegExp[] = [
   // As duas leem hoje a MESMA constante (`LISTAS_DE_ENVIO`), que é o que torna
   // impossível uma voltar a divergir da outra.
   new RegExp(SAIR_DA_LISTA + FREIO_DE_LISTA_QUALIFICADA, "u"),
-  /\bcancelar?\s+(?:a\s+)?(?:inscricao|assinatura)\b/u,
+  // "cancelar a inscrição" — e NÃO "cancelar a assinatura" (porte do upstream
+  // #2971): `assinatura` serve às duas coisas, sair das mensagens e cancelar o
+  // plano, e bloqueava quem só perguntava "posso cancelar a assinatura e voltar
+  // depois?". Ela foi para as ambíguas (escala para uma pessoa, não bloqueia).
+  /\bcancelar?\s+(?:a\s+)?inscricao\b/u,
+  // ...mas "cancelar a assinatura DAS MENSAGENS" nomeia o objeto de comunicação
+  // e bloqueia na hora — a regra do cabeçalho. "do whatsapp" e "de vocês" ficam
+  // de fora de propósito: também podem ser o plano, e seguem só escalando.
+  /\bcancelar?\s+(?:a\s+)?(?:minha\s+)?assinatura\s+(?:d(?:as|essas|estas)\s+(?:mensagens|notificacoes|promocoes|ofertas|novidades)|d(?:os|esses|estes)\s+(?:avisos|disparos|envios)|d(?:a|essa|esta)\s+newsletter)\b/u,
   /\b(?:me\s+)?descadastr\w*\b/u,
   /\bdescadastro\b/u,
   // ── espanhol ──────────────────────────────────────────────────────────────
@@ -806,7 +814,10 @@ const FRASES_DE_OPT_OUT: readonly RegExp[] = [
   // quer continuar sendo atendido.
   /\b(?:sacame|sacar|quitame|quitar|borrame|borrar|elimina|eliminame)\s+de\s+(?:la\s+)?lista\b(?!\s+de\s+(?:espera|precios|invitados))/u,
   /\bsalir\s+de\s+(?:la\s+)?lista\b(?!\s+de\s+(?:espera|precios|invitados))/u,
-  /\bcancelar\s+(?:la\s+)?(?:suscripcion|inscripcion)\b/u,
+  // Espelho do português: `suscripcion` foi para as ambíguas (é também o plano);
+  // `inscripcion` fica, e a forma COM objeto ("a los mensajes") bloqueia.
+  /\bcancelar\s+(?:la\s+)?inscripcion\b/u,
+  /\bcancelar\s+(?:la\s+|mi\s+)?suscripcion\s+(?:a|de)\s+(?:los|estos|tus|sus)\s+(?:mensajes|promociones|ofertas)\b/u,
 ];
 
 /**
@@ -853,6 +864,10 @@ const FRASES_AMBIGUAS_DE_OPT_OUT: readonly RegExp[] = [
   // "chega desses lembretes": um TIPO de mensagem, como "não quero receber
   // lembrete". Não bloqueia; uma pessoa decide.
   new RegExp(CHEGA_DE + `(?:${TIPOS_DE_MENSAGEM})\\b` + CAUDA_DE_RECEBER, "u"),
+  // "cancelar a assinatura" sem objeto de comunicação (porte do upstream #2971):
+  // pode ser o PLANO ("quero cancelar a assinatura da revista"), e o bloqueio
+  // deixaria o cliente sem resposta. Uma pessoa decide.
+  /\bcancelar?\s+(?:a\s+)?(?:minha\s+)?assinatura\b/u,
   // ── espanhol ──────────────────────────────────────────────────────────────
   //
   // Esta lista tinha ZERO entradas em espanhol. Não por decisão: o ambíguo é
@@ -880,6 +895,9 @@ const FRASES_AMBIGUAS_DE_OPT_OUT: readonly RegExp[] = [
   // `/\bnao\s+(?:me\s+)?interessa\s+mais\b/` — a assimetria era o defeito.
   /\b(?:ya\s+no\s+me\s+interesa|no\s+me\s+interesa\s+mas)\b/u,
   /\b(?:ya\s+basta|basta\s+ya)\b/u,
+  // Espelho de "cancelar a assinatura": "puedo cancelar la suscripcion?" quer
+  // resposta, não `is_blocked`. "dar de baja la suscripcion" segue bloqueando.
+  /\bcancelar\s+(?:la\s+|mi\s+)?suscripcion\b/u,
   /\bno\s+me\s+molest(?:e|en|es)\b/u,
 ];
 

@@ -129,8 +129,10 @@ export function interpolateTemplate(
  *  - vírgula dos dois lados: fica uma; só antes: sai; só depois: fica;
  *  - sem vírgula: sai a variável e o espaço antes dela.
  * Só espaço HORIZONTAL em volta é ajustado: a quebra de linha é do texto.
+ * Exportada para a automação (`lib/automation/template.ts`) tirar o nome que
+ * falta com a MESMA régua do follow-up.
  */
-function semAVariavel(texto: string, inicio: number, tamanho: number): string {
+export function semAVariavel(texto: string, inicio: number, tamanho: number): string {
   const antes = texto.slice(0, inicio).replace(/[ \t]+$/, "");
   const depois = texto.slice(inicio + tamanho);
   if (antes === "") {

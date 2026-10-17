@@ -156,6 +156,13 @@ const NAO_PEDE_PARA_SAIR = [
   "posso cancelar a consulta de amanhã?",
   "vocês vão parar no feriado?",
   "que horas vocês param de atender?",
+  // CONTROLE NEGATIVO de `assinatura` (porte do upstream #2971): aqui ela é o
+  // PLANO ou a FATURA, nunca as mensagens. Nenhuma bloqueia, e nenhuma escala
+  // (o describe do lado negativo cobre o escalar).
+  "quanto custa a assinatura anual?",
+  "o valor da assinatura aumentou este mês",
+  "quando vence a assinatura do meu plano?",
+  "a assinatura renova sozinha ou preciso avisar?",
   // colagem — o defeito da versão com `\b` ASCII, que já tinha sido corrigido
   "amanhã ele sairá do escritório e pararão as obras",
   "a obra pararia se chovesse",
@@ -310,7 +317,10 @@ const ESPANHOL_PEDE_PARA_SAIR = [
   "por favor no me escriban mas",
   "me desuscribo",
   "sacame de la lista",
-  "cancelar la suscripcion",
+  // "cancelar la suscripcion" SAIU daqui (porte do upstream #2971): sem objeto
+  // de comunicação ela pode ser o plano, e agora escala sem bloquear — ver
+  // `SUSCRIPCION_ESCALA_SEM_BLOQUEAR`. A forma com objeto continua aqui:
+  "cancelar la suscripcion a los mensajes",
 ];
 
 const ESPANHOL_NAO_PEDE = [
@@ -355,7 +365,67 @@ const ESPANHOL_NAO_PEDE = [
   "no me interesa el seguro, quiero solo el producto",
   "la verdad no me interesa el precio, me interesa la calidad",
   "no me interesa pagar mas, hay algo mas barato?",
+  // CONTROLE NEGATIVO de `suscripcion` (porte do upstream #2971), espelho do
+  // de `assinatura`: o plano ou a fatura. Não bloqueia e não escala.
+  "cuanto cuesta la suscripcion anual?",
+  "la suscripcion se renueva sola?",
+  "quiero saber el precio de la suscripcion",
 ];
+
+/**
+ * "cancelar a assinatura" é o PLANO, não as mensagens (porte do upstream
+ * #2971). Antes estas frases gravavam `is_blocked`: uma clínica com plano de
+ * tratamento, uma academia ou uma revista perdia o cliente que só perguntava
+ * como pausar. Agora escalam para uma pessoa, que decide. Quem nomeia as
+ * MENSAGENS continua bloqueando na hora.
+ */
+const ASSINATURA_ESCALA_SEM_BLOQUEAR = [
+  "cancelar a assinatura",
+  "quero cancelar a assinatura",
+  "posso cancelar a assinatura e voltar depois?",
+  "quero cancelar a assinatura da revista",
+  "gostaria de cancelar minha assinatura por enquanto",
+];
+
+const SUSCRIPCION_ESCALA_SEM_BLOQUEAR = [
+  "cancelar la suscripcion",
+  "quiero cancelar la suscripcion",
+  "puedo cancelar la suscripcion y volver despues?",
+  "necesito cancelar mi suscripcion, como hago?",
+];
+
+describe("cancelar o PLANO escala sem bloquear — a palavra de duas caras", () => {
+  for (const texto of [...ASSINATURA_ESCALA_SEM_BLOQUEAR, ...SUSCRIPCION_ESCALA_SEM_BLOQUEAR]) {
+    it(`escala sem bloquear: ${texto}`, () => {
+      expect(ehPedidoDeOptOut(texto)).toBe(false);
+      expect(ehOptOutProvavel(texto)).toBe(true);
+    });
+  }
+
+  it.each([
+    "cancelar a assinatura das mensagens",
+    "quero cancelar a assinatura dessas mensagens",
+    "cancelar a assinatura da newsletter",
+    "cancelar a assinatura das notificações",
+    "quero cancelar a assinatura dos avisos",
+    "cancelar minha assinatura das promoções",
+    "parar de me mandar",
+    "sair da lista",
+    "dar de baja la suscripcion",
+    "quiero dar de baja la suscripcion",
+    "quero cancelar a inscrição",
+    "cancelar",
+  ])("com objeto de comunicação (ou a palavra sozinha) continua bloqueando: %s", (texto) => {
+    expect(ehPedidoDeOptOut(texto)).toBe(true);
+  });
+
+  it("'do whatsapp' e 'de vocês' podem ser o plano: escalam, não bloqueiam", () => {
+    for (const texto of ["cancelar a assinatura do whatsapp", "quero cancelar a assinatura de vocês"]) {
+      expect(ehPedidoDeOptOut(texto), texto).toBe(false);
+      expect(ehOptOutProvavel(texto), texto).toBe(true);
+    }
+  });
+});
 
 describe("espanhol — a palavra que a plantilla pede", () => {
   for (const texto of ESPANHOL_PEDE_PARA_SAIR) {
