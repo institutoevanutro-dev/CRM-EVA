@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { z } from "zod";
+import { FORMATO_DO_CLIENT_SECRET } from "@/lib/agenda/google/oauth";
 
 import { invalidarCredencialDoGoogle } from "@/lib/agenda/google/config";
 import { audit } from "@/lib/audit";
@@ -59,7 +60,15 @@ const entradaSchema = z.object({
    * está gravado", NÃO "apague" — apagar é outro botão, e confundir os dois
    * derrubaria a conexão de todo mundo num salvamento distraído.
    */
-  client_secret: z.string().trim().min(10).max(300).optional(),
+  // O `regex` recusa a colagem do secret junto com o resto do arquivo JSON de
+  // credenciais (aspa, vírgula) — ver `FORMATO_DO_CLIENT_SECRET`.
+  client_secret: z
+    .string()
+    .trim()
+    .min(10)
+    .max(300)
+    .regex(FORMATO_DO_CLIENT_SECRET, "client_secret_invalido")
+    .optional(),
 });
 
 export type GoogleOAuthInput = z.infer<typeof entradaSchema>;
@@ -71,6 +80,15 @@ export async function updateGoogleOAuth(input: GoogleOAuthInput): Promise<Update
 
   const parsed = entradaSchema.safeParse(input);
   if (!parsed.success) {
+    // O formato do secret merece frase com AÇÃO, não o genérico `invalid_input`:
+    // o campo some ao salvar, e quem errou a colagem não tem como reler.
+    if (parsed.error.flatten().fieldErrors.client_secret?.includes("client_secret_invalido")) {
+      return {
+        ok: false,
+        error:
+          "A chave secreta tem caracteres que não existem numa chave do Google (como aspas, vírgula ou espaço). Copie só o valor que começa com GOCSPX-, sem nada colado depois.",
+      };
+    }
     return { ok: false, error: "invalid_input", details: parsed.error.flatten() };
   }
 

@@ -20,6 +20,7 @@ import {
   ESCOPOS_OBRIGATORIOS,
   FOLGA_DE_RENOVACAO_MS,
   type TokenDoGoogle,
+  clientSecretTemFormato,
   escoposFaltando,
   fundirTokens,
   lerRespostaDeToken,
@@ -265,5 +266,23 @@ describe("precisaRenovar", () => {
     const vence = new Date("2026-08-26T13:00:00.000Z");
     expect(precisaRenovar(vence, new Date("2026-08-26T12:50:00.000Z"), 15 * 60_000)).toBe(true);
     expect(precisaRenovar(vence, new Date("2026-08-26T12:50:00.000Z"), 60_000)).toBe(false);
+  });
+});
+
+// Portado do projeto original (DeskcommCRM, PR #2493 de @Aleshan-dev).
+describe("clientSecretTemFormato", () => {
+  it("aceita um secret do Google — com e sem o prefixo GOCSPX-", () => {
+    expect(clientSecretTemFormato("GOCSPX-abcdEFGH1234_ijklMNOP5678-qrs")).toBe(true);
+    // Secret antigo (pré-GOCSPX): a cerca é no conjunto de caracteres.
+    expect(clientSecretTemFormato("aB3_xZ9-kL0mN1pQ2rS4tU6v")).toBe(true);
+    // Aparado antes: espaço nas pontas de uma colagem não condena.
+    expect(clientSecretTemFormato("  GOCSPX-limpo_mesmo-123  ")).toBe(true);
+  });
+
+  it("recusa a colagem do JSON de credenciais (aspa, vírgula, espaço)", () => {
+    expect(clientSecretTemFormato('GOCSPX-abcdEFGH1234_ijklMNOP5678-qrs","redirect_uris')).toBe(false);
+    expect(clientSecretTemFormato('GOCSPX-tem"aspa')).toBe(false);
+    expect(clientSecretTemFormato("GOCSPX-tem,virgula")).toBe(false);
+    expect(clientSecretTemFormato("GOCSPX-tem espaco")).toBe(false);
   });
 });
