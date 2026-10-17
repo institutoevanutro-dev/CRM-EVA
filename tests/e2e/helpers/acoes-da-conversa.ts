@@ -9,9 +9,10 @@ import { expect, type Page } from "@playwright/test";
  * quem atende pelo toque ou pelo teclado: o botão "Ações da conversa". Clicar
  * nele FIXA a faixa, então as asserções seguintes não dependem de onde o mouse
  * do Playwright ficou. Idempotente: com a faixa já aberta, não fecha.
+ * Aceita o rótulo em espanhol: há specs que trocam o idioma no meio.
  */
 export async function abrirAcoesDaConversa(page: Page): Promise<void> {
-  const botao = page.getByRole("button", { name: "Ações da conversa" });
+  const botao = page.getByRole("button", { name: /^(Ações da conversa|Acciones de la conversación)$/ });
   await expect(botao).toBeVisible({ timeout: 30_000 });
   // Tira o mouse de cima: aberta só pelo hover, a faixa sumiria no próximo passo.
   await page.mouse.move(0, 0);
@@ -28,7 +29,7 @@ export async function abrirAcoesDaConversa(page: Page): Promise<void> {
  * fazer, e a função só confere.
  */
 export async function abrirOpcoesDeResposta(page: Page): Promise<void> {
-  const botao = page.getByRole("button", { name: "Opções de resposta" });
+  const botao = page.getByRole("button", { name: /^(Opções de resposta|Opciones de respuesta)$/ });
   await expect(botao).toBeVisible({ timeout: 30_000 });
   await page.mouse.move(0, 0);
   if ((await botao.getAttribute("aria-expanded")) !== "true" && (await botao.isEnabled())) {
