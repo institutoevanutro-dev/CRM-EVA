@@ -17,6 +17,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { patchFollowupFlowSchema } from "@/lib/followup/api-schemas";
+import { conferirCanalDoGatilho, leitorDeCanal } from "@/lib/followup/canal-do-gatilho";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -135,6 +136,12 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
       return fail("internal_error", reloadErr?.message ?? "reload_failed", 500, { requestId });
     }
     return ok(unchanged, { requestId });
+  }
+
+  // Canal fixado (0377): só número desta conta, não excluído e de WhatsApp.
+  if (patch.trigger_config) {
+    const recusa = await conferirCanalDoGatilho(leitorDeCanal(supabase), activeOrg.orgId, patch.trigger_config);
+    if (recusa) return fail(recusa.code, t(recusa.message), recusa.status, { requestId });
   }
 
   const update: Record<string, unknown> = { ...patch, updated_at: new Date().toISOString() };

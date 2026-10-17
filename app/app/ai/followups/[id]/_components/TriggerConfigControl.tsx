@@ -22,6 +22,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useUpdateTriggerConfig } from "@/hooks/followup/useFollowupFlow";
 import { useEtapasDeGatilho } from "@/hooks/followup/useEtapasDeGatilho";
+import { canaisQueEnviam, channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 
 /**
  * Controle de `trigger_config` do pointer (Task 8.5) — como o fluxo começa.
@@ -63,7 +64,12 @@ interface TriggerFormState {
   stageId: string;
   cancelOnReply: boolean;
   eventTypeIds: string[];
+  /** "" = canal da conversa da consulta (padrão). Migration 0377. */
+  channelSessionId: string;
 }
+
+/** Valor do Select para "sem canal fixado" — o Radix não aceita item com value vazio. */
+const CANAL_DA_CONSULTA = "__canal_da_consulta__";
 
 const DEFAULT_THRESHOLD_MINUTES = 60;
 const MIN_THRESHOLD_MINUTES = 5;
@@ -102,10 +108,11 @@ function parseTriggerConfig(raw: Record<string, unknown>): TriggerFormState {
             ? "webhook"
             : "manual";
   const params =
-    (raw.params as { threshold_minutes?: number; segments?: string[]; stage_id?: string; event_type_ids?: string[] } | undefined) ?? {};
+    (raw.params as { threshold_minutes?: number; segments?: string[]; stage_id?: string; event_type_ids?: string[]; channel_session_id?: string } | undefined) ?? {};
   return {
     kind,
     eventTypeIds: Array.isArray(params.event_type_ids) ? params.event_type_ids : [],
+    channelSessionId: typeof params.channel_session_id === "string" ? params.channel_session_id : "",
     thresholdMinutes:
       kind === "silence" && typeof params.threshold_minutes === "number"
         ? params.threshold_minutes
@@ -118,8 +125,9 @@ function parseTriggerConfig(raw: Record<string, unknown>): TriggerFormState {
 
 function toTriggerConfig(form: TriggerFormState): Record<string, unknown> {
   const cancelOnReply = form.cancelOnReply ? { cancel_on_reply: true } : {};
-  if (form.kind === "appointment_no_show") return {kind:"appointment_no_show",params:{event_type_ids:form.eventTypeIds}};
-  if (form.kind === "appointment_attended") return { kind: "appointment_attended", params: { event_type_ids: form.eventTypeIds }, ...cancelOnReply };
+  const canal = form.channelSessionId ? { channel_session_id: form.channelSessionId } : {};
+  if (form.kind === "appointment_no_show") return {kind:"appointment_no_show",params:{event_type_ids:form.eventTypeIds,...canal}};
+  if (form.kind === "appointment_attended") return { kind: "appointment_attended", params: { event_type_ids: form.eventTypeIds, ...canal }, ...cancelOnReply };
   if (form.kind === "manual") return { kind: "manual", ...cancelOnReply };
 
   if (form.kind === "stage_change") {
@@ -179,6 +187,11 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState<TriggerFormState>(() => parseTriggerConfig(triggerConfig));
   const [form, setForm] = useState<TriggerFormState>(saved);
+  const ehConsulta = form.kind === "appointment_no_show" || form.kind === "appointment_attended";
+  // Só canal que envia e não foi excluído: a rota já tira os arquivados, e
+  // `canaisQueEnviam` tira o que não é número de WhatsApp.
+  const canais = useChannelSessions({ enabled: open && ehConsulta });
+  const opcoesDeCanal = canaisQueEnviam(canais.data) ?? [];
   const eventTypes=useQuery({queryKey:["agenda","tipos"],enabled:open&&(form.kind==="appointment_no_show"||form.kind==="appointment_attended"),queryFn:async()=>
     (await apiClient.get<{data:Array<{id:string;name:string}>}>("/api/v1/agenda/tipos")).data});
   // A leitura das etapas acompanha o botão, não o popover: o rótulo fechado
@@ -203,7 +216,8 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
   const stageInvalid = form.kind === "stage_change" && form.stageId.trim().length === 0;
   const dirty =
     form.kind !== saved.kind ||
-    ((form.kind === "appointment_no_show" || form.kind === "appointment_attended") && form.eventTypeIds.join() !== saved.eventTypeIds.join()) ||
+    ((form.kind === "appointment_no_show" || form.kind === "appointment_attended") &&
+      (form.eventTypeIds.join() !== saved.eventTypeIds.join() || form.channelSessionId !== saved.channelSessionId)) ||
     form.cancelOnReply !== saved.cancelOnReply ||
     (form.kind === "silence" && (form.thresholdMinutes !== saved.thresholdMinutes || form.segments !== saved.segments)) ||
     (form.kind === "stage_change" && form.stageId !== saved.stageId);
@@ -305,6 +319,28 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
             <p className="text-xs">{t("Tipos de compromisso (nenhum selecionado = todos)")}</p>
             {eventTypes.data?.map(type=><label key={type.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.eventTypeIds.includes(type.id)} onChange={e=>setForm(f=>({...f,eventTypeIds:e.target.checked?[...f.eventTypeIds,type.id]:f.eventTypeIds.filter(id=>id!==type.id)}))}/>{type.name}</label>)}
             {eventTypes.isError?<p role="alert">{t("Não foi possível carregar os tipos de compromisso.")}</p>:null}
+            <Label htmlFor="trigger-channel">{t("Enviar pelo número/canal")}</Label>
+            <Select
+              value={form.channelSessionId || CANAL_DA_CONSULTA}
+              onValueChange={(v) => setForm((f) => ({ ...f, channelSessionId: v === CANAL_DA_CONSULTA ? "" : v }))}
+            >
+              <SelectTrigger id="trigger-channel" data-testid="trigger-channel-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={CANAL_DA_CONSULTA}>{t("Mesmo canal da conversa da consulta (padrão)")}</SelectItem>
+                {opcoesDeCanal.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{channelLabel(c, t)}</SelectItem>
+                ))}
+                {/* Canal salvo que sumiu da lista (excluído): mostrado como tal,
+                    para o Select não ficar em branco nem fingir o padrão. */}
+                {form.channelSessionId && canais.data && !opcoesDeCanal.some((c) => c.id === form.channelSessionId) && (
+                  <SelectItem value={form.channelSessionId} disabled>{t("Número excluído — escolha outro")}</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">{t("Se o paciente ainda não tem conversa neste número, ela é criada no envio. Se o número for excluído, o acompanhamento volta a sair pelo canal da consulta.")}</p>
+            {canais.isError ? <p role="alert">{t("Não foi possível carregar os números.")}</p> : null}
           </div>}
           {form.kind === "case_opened" && (
             <div className="space-y-2">
