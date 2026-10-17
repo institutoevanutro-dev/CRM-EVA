@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { validateFlowForPublish } from './validate-publish';
-import type { FlowGraph, FlowNode, FlowEdge } from './graph-schema';
+import { CONTA_NO_TETO, custoDoCaminhoLinear, validateFlowForPublish } from './validate-publish';
+import { CUSTO_NO_MOTOR, TETO_DE_PASSOS_DO_MOTOR } from './custo-no-motor';
+import { NODE_TYPES, type FlowGraph, type FlowNode, type FlowEdge } from './graph-schema';
 
 const pos = { x: 0, y: 0 };
 const TEMPLATE_ID = '00000000-0000-4000-8000-000000000000';
@@ -250,7 +251,7 @@ describe('validateFlowForPublish', () => {
     }
   });
 
-  it('does not flag max_steps_exceeded for a path of exactly 30 nodes', () => {
+  it('does not flag max_steps_exceeded for 28 waits (30 boxes) — the wait counts, the trigger and the end do not', () => {
     const waitNodes: FlowNode[] = [];
     const edges: FlowEdge[] = [];
     let prev = 't1';
@@ -261,11 +262,13 @@ describe('validateFlowForPublish', () => {
       prev = id;
     }
     edges.push(edge(prev, 'e1', always()));
-    const g = graph([trigger('t1'), ...waitNodes, end('e1')], edges); // 1 + 28 + 1 = 30 nodes
+    const g = graph([trigger('t1'), ...waitNodes, end('e1')], edges); // 30 boxes, 28 counted steps
     expect(validateFlowForPublish(g).ok).toBe(true);
   });
 
-  it('flags max_steps_exceeded for a path of exactly 31 nodes', () => {
+  it('also publishes 29 waits (31 boxes): the trigger and the end are not a step the client feels', () => {
+    // Este fixture ERA o limite: 29 esperas + gatilho + fim davam 31 passos e
+    // reprovavam, embora só as esperas cheguem ao cliente (DeskcommCRM #2965).
     const waitNodes: FlowNode[] = [];
     const edges: FlowEdge[] = [];
     let prev = 't1';
@@ -276,12 +279,170 @@ describe('validateFlowForPublish', () => {
       prev = id;
     }
     edges.push(edge(prev, 'e1', always()));
-    const g = graph([trigger('t1'), ...waitNodes, end('e1')], edges); // 1 + 29 + 1 = 31 nodes
-    const result = validateFlowForPublish(g);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.errors.map((e) => e.code)).toEqual(['max_steps_exceeded']);
+    const g = graph([trigger('t1'), ...waitNodes, end('e1')], edges);
+    expect(validateFlowForPublish(g).ok).toBe(true);
+  });
+
+  /**
+   * O teto de passos conta o que o CLIENTE sente — portado do projeto original
+   * (DeskcommCRM, PR #2965 de @webtecnica). A régua antiga dava o mesmo peso a
+   * todo nó do caminho: gatilho, condição e fim valiam uma mensagem cada.
+   */
+  describe('o teto conta o que o cliente sente', () => {
+    const codigos = (r: ReturnType<typeof validateFlowForPublish>) => (r.ok ? [] : r.errors.map((e) => e.code));
+
+    /** `n` mensagens em linha: o caminho mais longo conta exatamente `n` passos. */
+    function mensagens(n: number): FlowGraph {
+      const nodes: FlowNode[] = [trigger('t1')];
+      const edges: FlowEdge[] = [];
+      let anterior = 't1';
+      for (let i = 1; i <= n; i++) {
+        nodes.push(actionTemplate(`a${i}`));
+        edges.push(edge(anterior, `a${i}`, always()));
+        anterior = `a${i}`;
+      }
+      nodes.push(end('fim'));
+      edges.push(edge(anterior, 'fim', always()));
+      return graph(nodes, edges);
     }
+
+    it('publica com 30 passos contados, e reprova no 31º — o teto continua sendo 30', () => {
+      expect(validateFlowForPublish(mensagens(30))).toEqual({ ok: true });
+
+      const r = validateFlowForPublish(mensagens(31));
+      expect(codigos(r)).toEqual(['max_steps_exceeded']);
+      if (r.ok) return;
+      expect(r.errors[0]!.message).toMatch(/30 passos que o cliente sente/);
+    });
+
+    it('a espera pesa igual à mensagem: 16 toques com espera (32 passos) reprovam', () => {
+      const nodes: FlowNode[] = [trigger('t1')];
+      const edges: FlowEdge[] = [];
+      let anterior = 't1';
+      for (let toque = 1; toque <= 16; toque++) {
+        nodes.push(actionTemplate(`a${toque}`), wait(`w${toque}`, { mode: 'fixed', duration_ms: 300_000 }));
+        edges.push(edge(anterior, `a${toque}`, always()), edge(`a${toque}`, `w${toque}`, always()));
+        anterior = `w${toque}`;
+      }
+      nodes.push(end('fim'));
+      edges.push(edge(anterior, 'fim', always()));
+
+      expect(codigos(validateFlowForPublish(graph(nodes, edges)))).toContain('max_steps_exceeded');
+    });
+
+    it('publica 10 toques com uma condição em cada (32 caixas, 20 passos sentidos)', () => {
+      // Antes: 32 caixas = 32 passos, recusado. A condição decide o caminho e
+      // não chega ao cliente.
+      const nodes: FlowNode[] = [trigger('t1')];
+      const edges: FlowEdge[] = [];
+      let anterior = 't1';
+      for (let toque = 1; toque <= 10; toque++) {
+        nodes.push(
+          actionTemplate(`msg${toque}`),
+          wait(`espera${toque}`, { mode: 'fixed', duration_ms: 300_000 }),
+          condition(`confere${toque}`),
+        );
+        edges.push(
+          edge(anterior, `msg${toque}`, always()),
+          edge(`msg${toque}`, `espera${toque}`, always()),
+          edge(`espera${toque}`, `confere${toque}`, always()),
+        );
+        if (toque < 10) edges.push(edge(`confere${toque}`, 'fim', condResult(true)));
+        anterior = `confere${toque}`;
+      }
+      nodes.push(end('fim'));
+      edges.push(edge(anterior, 'fim', always()));
+
+      expect(nodes.length).toBe(32);
+      expect(validateFlowForPublish(graph(nodes, edges))).toEqual({ ok: true });
+    });
+
+    it('classifica todo tipo de nó: contam a mensagem e o que faz esperar', () => {
+      expect(Object.keys(CONTA_NO_TETO).sort()).toEqual([...NODE_TYPES].sort());
+      expect(NODE_TYPES.filter((tipo) => CONTA_NO_TETO[tipo]).sort()).toEqual(
+        ['action', 'ai_classify', 'match_reply', 'wait'].sort(),
+      );
+    });
+  });
+
+  /**
+   * O SEGUNDO teto: o do MOTOR (DeskcommCRM, PR #2965). O relógio conta TICKS e
+   * mata a inscrição acima de 80. Contando só o que o cliente sente, um caminho
+   * cheio de condições publicaria e morreria no meio.
+   */
+  describe('o motor também tem teto', () => {
+    const codigos = (r: ReturnType<typeof validateFlowForPublish>) => (r.ok ? [] : r.errors.map((e) => e.code));
+
+    /** `n` toques, cada um mensagem → condição → condição → espera. */
+    function toques(n: number): FlowGraph {
+      const nodes: FlowNode[] = [trigger('t1')];
+      const edges: FlowEdge[] = [];
+      let anterior = 't1';
+      for (let i = 1; i <= n; i++) {
+        nodes.push(
+          actionTemplate(`msg${i}`),
+          condition(`c${i}a`),
+          condition(`c${i}b`),
+          wait(`espera${i}`, { mode: 'fixed', duration_ms: 300_000 }),
+        );
+        edges.push(
+          edge(anterior, `msg${i}`, always()),
+          edge(`msg${i}`, `c${i}a`, always()),
+          edge(`c${i}a`, `c${i}b`, always()),
+          edge(`c${i}b`, `espera${i}`, always()),
+        );
+        anterior = `espera${i}`;
+      }
+      nodes.push(end('fim'));
+      edges.push(edge(anterior, 'fim', always()));
+      return graph(nodes, edges);
+    }
+
+    it('diz quanto cada tipo de nó custa em ticks — a régua é completa', () => {
+      expect(Object.keys(CUSTO_NO_MOTOR).sort()).toEqual([...NODE_TYPES].sort());
+      expect(CUSTO_NO_MOTOR.trigger).toBe(1);
+      expect(CUSTO_NO_MOTOR.wait).toBe(2);
+      expect(CUSTO_NO_MOTOR.end).toBe(1);
+      expect(CUSTO_NO_MOTOR.action).toBe(2);
+      expect(CUSTO_NO_MOTOR.condition).toBe(1);
+    });
+
+    it('recusa 14 toques: 86 ticks no motor, com só 28 passos sentidos', () => {
+      const g = toques(14);
+      // 1 gatilho + 14 × (mensagem 2 + condição 1 + condição 1 + espera 2) + 1 fim = 86.
+      expect(custoDoCaminhoLinear(g)).toBe(86);
+      expect(custoDoCaminhoLinear(g)).toBeGreaterThan(TETO_DE_PASSOS_DO_MOTOR);
+      expect(codigos(validateFlowForPublish(g))).toEqual(['max_engine_steps_exceeded']);
+    });
+
+    it('publica 13 toques, que cabem no orçamento do motor (80 ticks)', () => {
+      const g = toques(13);
+      expect(custoDoCaminhoLinear(g)).toBe(80);
+      expect(validateFlowForPublish(g)).toEqual({ ok: true });
+    });
+
+    it('não julga o caminho que passa por um ciclo (repeat)', () => {
+      const g = graph(
+        [
+          trigger('t1'),
+          { id: 'r1', type: 'repeat', label: 'r1', position: pos, config: { max_count: 20 } },
+          actionTemplate('msg1'),
+          wait('w1', { mode: 'fixed', duration_ms: 300_000 }),
+          end('fim'),
+        ],
+        [
+          edge('t1', 'r1', always()),
+          edge('r1', 'msg1', { type: 'branch', branch_id: 'body' }),
+          edge('msg1', 'w1', always()),
+          edge('w1', 'r1', always()),
+          edge('r1', 'fim', { type: 'branch', branch_id: 'done' }),
+          edge('r1', 'fim', always()),
+        ],
+      );
+      // Só o gatilho entra na soma: o repeat e tudo que ele alcança está no ciclo.
+      expect(custoDoCaminhoLinear(g)).toBe(1);
+      expect(validateFlowForPublish(g)).toEqual({ ok: true });
+    });
   });
 
   // Regression for the old per-path DFS: a width-2 "diamond" DAG re-converges
@@ -291,9 +452,9 @@ describe('validateFlowForPublish', () => {
   // violation. The SCC-condensation sweep is O(V+E) regardless of path count,
   // so this must both finish fast and still catch the violator correctly.
   it('flags long_wait_needs_template in a wide reconverging DAG without blowing up', () => {
-    // 27 wait layers + trigger + action + end = 30 steps exactly, so this
-    // exercises long_wait_needs_template in isolation without also crossing
-    // the (separately regression-tested) max_steps_exceeded boundary.
+    // 27 wait layers + the action = 28 counted steps (the trigger and the end
+    // do not count), so this exercises long_wait_needs_template in isolation
+    // without also crossing the max_steps_exceeded boundary.
     const LAYERS = 27;
     const LAYER_WAIT_MS = 3_200_000; // 27 * 3.2M = 86.4M ms == 24h threshold
     const nodes: FlowNode[] = [trigger('t1')];

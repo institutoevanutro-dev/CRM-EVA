@@ -1,6 +1,7 @@
-import type { FlowGraph, FlowEdge, FlowNode } from './graph-schema';
+import type { FlowGraph, FlowEdge, FlowNode, NodeType } from './graph-schema';
 import { actionConfigSchema, branchIdForCondition, nodeBranches } from './graph-schema';
 import { rotuloDoRamo } from './rotulo-do-ramo';
+import { CUSTO_NO_MOTOR, TETO_DE_PASSOS_DO_MOTOR } from './custo-no-motor';
 
 /**
  * Structural publish validator for follow-up flow graphs.
@@ -20,6 +21,9 @@ export const PUBLISH_ERROR_CODES = [
   'long_wait_needs_template',
   'cycle_without_wait',
   'max_steps_exceeded',
+  // O teto do MOTOR (`steps_taken`/`MAX_STEPS`, ver `custo-no-motor.ts`): o
+  // caminho linear que ele não conseguiria terminar.
+  'max_engine_steps_exceeded',
   'invalid_text_variant',
 ] as const;
 export type PublishErrorCode = (typeof PUBLISH_ERROR_CODES)[number];
@@ -39,6 +43,34 @@ export type PublishValidationResult =
 const LONG_WAIT_THRESHOLD_MS = 86_400_000; // 24h
 const MIN_CYCLE_WAIT_MS = 300_000; // 5min
 const MAX_PATH_STEPS = 30;
+/**
+ * O QUE o teto de passos conta: o que o CLIENTE sente, não o que a tela desenha.
+ *
+ * Portado do projeto original (DeskcommCRM, PR #2965 de @webtecnica).
+ *
+ * O teto limita o tamanho da cadência — quantas vezes o cliente é tocado e
+ * quanto ele espera entre os toques. Contar TODO nó com o mesmo peso fazia a
+ * medida mentir: gatilho, condição e fim valiam uma mensagem cada, e uma
+ * cadência que decide algo a cada toque estourava com poucos toques.
+ *
+ * Conta quem fala com o cliente (`action`) ou quem o faz esperar (`wait`, e as
+ * caixas que ficam paradas esperando a resposta com prazo — `ai_classify` e
+ * `match_reply`). Roteamento (`condition`, `repeat`), a entrada e o fim não
+ * contam.
+ *
+ * O `Record` é exaustivo DE PROPÓSITO: um tipo de nó novo quebra o typecheck
+ * até alguém dizer se ele conta.
+ */
+export const CONTA_NO_TETO: Record<NodeType, boolean> = {
+  action: true, // mensagem: texto, IA, modelo ou mídia
+  wait: true,
+  ai_classify: true, // parado esperando a resposta para classificar
+  match_reply: true, // parado esperando a resposta casar o texto
+  trigger: false, // entrada do fluxo
+  condition: false, // decide o caminho
+  repeat: false, // conta as voltas
+  end: false, // desfecho
+};
 
 function waitMs(config: Extract<FlowNode, { type: 'wait' }>['config']): number {
   return config.mode === 'fixed' ? config.duration_ms : config.max_ms;
@@ -178,7 +210,13 @@ function analyzeCondensedPaths(
       return node && node.type === 'wait' ? sum + waitMs(node.config) : sum;
     }, 0)
   );
-  const stepWeight = components.map((comp) => comp.length);
+  // O passo do teto é o que o cliente sente — ver `CONTA_NO_TETO`.
+  const stepWeight = components.map((comp) =>
+    comp.reduce((sum, id) => {
+      const node = nodesById.get(id);
+      return node !== undefined && CONTA_NO_TETO[node.type] ? sum + 1 : sum;
+    }, 0)
+  );
 
   const condOut = new Map<number, Set<number>>();
   for (const edgeList of outEdges.values()) {
@@ -234,6 +272,44 @@ function analyzeCondensedPaths(
 
 function byId(a: { id: string }, b: { id: string }): number {
   return a.id.localeCompare(b.id);
+}
+
+/**
+ * O custo, em ticks do MOTOR (ver `custo-no-motor.ts`), do caminho LINEAR mais
+ * caro a partir do trigger — o que o `steps_taken` gastaria até o fim do fluxo
+ * na hipótese mais custosa sem repetição.
+ *
+ * Nó dentro de ciclo fica de fora: o custo dele depende de quantas voltas o
+ * lead faz e não cabe numa soma. O subgrafo que sobra é ACÍCLICO (todo ciclo é
+ * uma componente de Tarjan e saiu), então a recursão com memo termina.
+ */
+export function custoDoCaminhoLinear(graph: FlowGraph): number {
+  const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
+  const outEdges = buildOutEdges(graph.edges);
+  const trigger = graph.nodes.find((n) => n.type === 'trigger');
+  if (!trigger) return 0;
+
+  const emCiclo = new Set<string>();
+  for (const component of stronglyConnectedComponents(graph.nodes.map((n) => n.id), outEdges)) {
+    if (isCycleComponent(component, outEdges)) component.forEach((id) => emCiclo.add(id));
+  }
+  if (emCiclo.has(trigger.id)) return 0;
+
+  const memo = new Map<string, number>();
+  const custo = (id: string): number => {
+    const cache = memo.get(id);
+    if (cache !== undefined) return cache;
+    const node = nodesById.get(id);
+    let maiorSucessor = 0;
+    for (const edge of outEdges.get(id) ?? []) {
+      if (emCiclo.has(edge.target)) continue;
+      maiorSucessor = Math.max(maiorSucessor, custo(edge.target));
+    }
+    const total = (node ? CUSTO_NO_MOTOR[node.type] : 0) + maiorSucessor;
+    memo.set(id, total);
+    return total;
+  };
+  return custo(trigger.id);
 }
 
 
@@ -336,7 +412,20 @@ export function validateFlowForPublish(graph: FlowGraph): PublishValidationResul
       errors.push({
         node_id: null,
         code: 'max_steps_exceeded',
-        message: `O caminho mais longo a partir do trigger excede ${MAX_PATH_STEPS} passos.`,
+        message: `O caminho mais longo a partir do trigger passa de ${MAX_PATH_STEPS} passos que o cliente sente (mensagem e espera) — tire um toque da cadência.`,
+      });
+    }
+
+    // A SEGUNDA ponta do teto: o do MOTOR. Contando só o que o cliente sente,
+    // um caminho cheio de caixas internas poderia publicar e morrer no meio —
+    // a inscrição fecha com `max_steps` sem chegar ao fim. O ciclo (`repeat`)
+    // fica fora de propósito: o custo dele não é uma soma.
+    const custoNoMotor = custoDoCaminhoLinear(graph);
+    if (custoNoMotor > TETO_DE_PASSOS_DO_MOTOR) {
+      errors.push({
+        node_id: null,
+        code: 'max_engine_steps_exceeded',
+        message: `O caminho mais longo deste fluxo custa ${custoNoMotor} passos no motor (o relógio conta cada caixa: gatilho, condição, mensagem e espera) e ele desiste da inscrição depois de ${TETO_DE_PASSOS_DO_MOTOR} — o acompanhamento morreria no meio, sem chegar ao fim. Encurte a cadência.`,
       });
     }
   }
