@@ -146,6 +146,10 @@ evidence/.sonda-score-residuo.json
 # acima não os alcança porque eles vivem num diretório, com outro prefixo.
 backups/
 
+# Sites extras do Caddy desta instalação (sites/*.caddy, que o Caddyfile
+# importa). São desta VPS, não do produto: ficam fora de commit e de update.
+/sites/
+
 # Dump de banco de QA. A doutrina já estava escrita duas linhas acima e só o
 # PADRÃO faltava: `backups/` não casa com `.qa-backups/`, e um dump de 1,1 MB de
 # um Supabase local chegou a um PR de contribuidor por causa disso (#600). O

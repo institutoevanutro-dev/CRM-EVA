@@ -277,6 +277,9 @@ fi
 # então ninguém está lendo a tela para decifrar isso. Mesma função do install.sh.
 garantir_rede_do_proxy
 guardar_logs_antes_de_trocar   # o `up -d` apaga o log dos contêineres que substitui
+# A pasta dos sites extras do Caddy, que o compose desta versão monta. Quem
+# instalou antes dela não a tem; criada aqui, nasce vazia e não muda nada.
+mkdir -p "$PROJECT_DIR/sites"
 dc up -d
 
 # O Caddyfile entra no container por bind mount de UM ARQUIVO, e bind mount de

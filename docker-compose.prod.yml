@@ -344,6 +344,10 @@ services:
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Sites extras (o import /etc/caddy/sites/*.caddy do Caddyfile). Pasta, e
+      # não arquivo: o que se grava nela aparece no contêiner sem recriá-lo, e
+      # basta um caddy reload. Fica fora do git (.gitignore).
+      - ./sites:/etc/caddy/sites:ro
       - caddy-data:/data           # certificados Let's Encrypt (persistir!)
       - caddy-config:/config
     depends_on:

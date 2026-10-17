@@ -2084,6 +2084,11 @@ if ! dc pull; then
   c_ylw "⚠ Não consegui puxar todas as imagens do registro."
   c_ylw "  Sigo assim mesmo: o que faltar é construído aqui (mais lento, mesmo resultado)."
 fi
+# A pasta dos sites extras do Caddy (o import /etc/caddy/sites/*.caddy do
+# Caddyfile), que o compose monta no contêiner. Criada aqui, antes do up -d,
+# ela nasce com o dono desta instalação; sem isto quem a criaria, vazia, seria
+# o próprio Docker, como root.
+mkdir -p "$PROJECT_DIR/sites"
 dc up -d
 c_grn "✓ containers no ar"
 
