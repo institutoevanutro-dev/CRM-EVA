@@ -62,6 +62,7 @@ import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { logger } from "@/lib/logger";
 import { carregarPausaPorRespostaHumanaMs } from "@/lib/escalacao/pausa-por-resposta-humana";
 import { devolverIdOriginalAoEcoDeOutraConversa } from "@/lib/messaging/eco-em-outra-conversa";
+import { previaDaMensagem } from "@/lib/messaging/previa-da-mensagem";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Message } from "@/lib/types/messaging";
 
@@ -295,9 +296,9 @@ function previewFrom(input: {
   media_library_item_id?: string;
   type?: string;
 }): string {
-  if (input.body) return input.body.slice(0, 280);
+  if (input.body) return previaDaMensagem(input.body, input.type ?? "text");
   if (input.media_url || input.media_storage_path || input.media_library_item_id)
-    return `[${input.type ?? "media"}]`;
+    return previaDaMensagem(null, input.type ?? "media");
   return "";
 }
 

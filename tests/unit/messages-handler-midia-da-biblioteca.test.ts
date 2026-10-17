@@ -262,7 +262,7 @@ describe("sendMessageHandler — mídia da biblioteca", () => {
     expect(chamada?.[0].metadata).toMatchObject({ media_library_item_id: ITEM, media_variant: "B" });
   });
 
-  it("vídeo sai como video; sem body, o preview é [video] e não há legenda", async () => {
+  it("vídeo sai como video; sem body, o preview é Vídeo e não há legenda", async () => {
     admin.item = itemPronto({
       variants: [{ key: "A", storage_path: `${ORG}/${ITEM}/A.mp4`, mime: "video/mp4", size_bytes: 99 }],
     });
@@ -273,13 +273,13 @@ describe("sendMessageHandler — mídia da biblioteca", () => {
     const envio = fetchMock.mock.calls.find(([url]) => String(url) === `${WAHA_BASE}/api/sendVideo`);
     expect(envio).toBeTruthy();
     expect((JSON.parse(String((envio![1] as RequestInit).body)) as Row).caption).toBeUndefined();
-    expect(state.preview).toBe("[video]");
+    expect(state.preview).toBe("Vídeo");
   });
 
-  it("sem body, o preview de imagem é [image]", async () => {
+  it("sem body, o preview de imagem é Imagem, não [image]", async () => {
     const { supabase, state } = makeSupabase();
     await sendMessageHandler(supabase, ctx, input());
-    expect(state.preview).toBe("[image]");
+    expect(state.preview).toBe("Imagem");
   });
 
   it("replay do agente (internalMessageId) que cai na 422 marca a linha queued como failed", async () => {
