@@ -53,6 +53,9 @@ interface Props {
   /** Fundo e balões desta pessoa — o controle mora na faixa de ações. */
   aparencia?: AparenciaDaConversaValor;
   onAparenciaChange?: (proximo: AparenciaDaConversaValor) => void;
+  /** A faixa de ações fixada pelo botão — guardada pelo Inbox, sobrevive à troca de conversa. */
+  acoesFixadas?: boolean;
+  onAcoesFixadasChange?: (fixadas: boolean) => void;
 }
 
 /**
@@ -89,6 +92,8 @@ export function ConversationHeader({
   onAbrirFicha,
   aparencia,
   onAparenciaChange,
+  acoesFixadas,
+  onAcoesFixadasChange,
 }: Props) {
   const t = useT();
   const { user } = useAuth();
@@ -104,7 +109,11 @@ export function ConversationHeader({
   const automaticoDaOrg = useAutomaticoAtivo();
   const [reassignOpen, setReassignOpen] = useState(false);
   // A faixa de ações: escondida até ser pedida, e "em uso" zera ao trocar de conversa.
-  const revelacao = useRevelacao({ chave: conversation.id });
+  const revelacao = useRevelacao({
+    chave: conversation.id,
+    fixado: acoesFixadas,
+    onFixadoChange: onAcoesFixadasChange,
+  });
 
   const c = conversation.contacts ?? null;
   const displayName = rotuloDoContato(c, t);

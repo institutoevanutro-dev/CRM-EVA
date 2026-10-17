@@ -178,6 +178,10 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   // Fundo e balões que ESTA pessoa escolheu. Nasce do perfil (vale em qualquer
   // computador) e muda aqui na hora; o controle grava e, se falhar, devolve.
   const [aparencia, setAparencia] = useState(user.aparencia_conversa ?? APARENCIA_PADRAO);
+  // A faixa de ações do cabeçalho, quando fixada pelo botão "Ações", continua
+  // fixada ao trocar de conversa e quando o cabeçalho remonta (a conversa que
+  // sai da aba atual depois de "Assumir" ou "Fechar").
+  const [acoesFixadas, setAcoesFixadas] = useState(false);
   const orgId = activeOrg?.orgId ?? null;
 
   const router = useRouter();
@@ -794,6 +798,8 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
               botaoBuscaRef={botaoBuscaRef}
               aparencia={aparencia}
               onAparenciaChange={setAparencia}
+              acoesFixadas={acoesFixadas}
+              onAcoesFixadasChange={setAcoesFixadas}
             />
             {buscaAberta && busca && (
               <div className="flex items-center gap-2 border-b border-border px-4 py-1.5">

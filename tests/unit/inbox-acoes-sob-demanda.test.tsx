@@ -163,3 +163,27 @@ describe("cabeçalho da conversa — o clique de quem já vê a faixa", () => {
     expect(escondida(faixa)).toBe(false);
   });
 });
+
+describe("cabeçalho da conversa — fixada sobrevive ao remontar", () => {
+  it("com o valor guardado acima, um cabeçalho novo nasce com a faixa fixada", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const guardado = { valor: false };
+    const montar = () =>
+      render(
+        <QueryClientProvider client={client}>
+          <ConversationHeader
+            conversation={conversation}
+            acoesFixadas={guardado.valor}
+            onAcoesFixadasChange={(v) => (guardado.valor = v)}
+          />
+        </QueryClientProvider>,
+      );
+    const primeiro = montar();
+    fireEvent.click(screen.getByRole("button", { name: "Ações da conversa" }));
+    expect(guardado.valor).toBe(true);
+    primeiro.unmount();
+    const segundo = montar();
+    const faixa = (segundo.container.firstElementChild as HTMLElement).children[1] as HTMLElement;
+    expect(escondida(faixa), "remontar (assumir tira a conversa da Fila) escondeu a faixa").toBe(false);
+  });
+});

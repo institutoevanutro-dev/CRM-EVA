@@ -39,10 +39,31 @@ import {
  * sugestão para revisar); `chave` zera o "em uso" quando muda (ex.: id da
  * conversa) — fixar pelo alternador sobrevive à troca, usar não.
  */
-export function useRevelacao({ forcado = false, chave }: { forcado?: boolean; chave?: string } = {}) {
+export function useRevelacao({
+  forcado = false,
+  chave,
+  fixado: fixadoDeFora,
+  onFixadoChange,
+}: {
+  forcado?: boolean;
+  chave?: string;
+  /**
+   * "Fixada" controlada por quem chama. O cabeçalho da conversa REMONTA quando
+   * a conversa sai da aba atual (assumir tira da Fila, fechar tira de Minhas) e
+   * o estado local se perderia no meio do gesto — medido no e2e: depois de
+   * "Assumir", o "Liberar" nascia escondido. O Inbox guarda o valor acima dele.
+   */
+  fixado?: boolean;
+  onFixadoChange?: (fixado: boolean) => void;
+} = {}) {
   const [hover, setHover] = useState(false);
   const [foco, setFoco] = useState(false);
-  const [fixado, setFixado] = useState(false);
+  const [fixadoLocal, setFixadoLocal] = useState(false);
+  const fixado = fixadoDeFora ?? fixadoLocal;
+  const setFixado = (v: boolean) => {
+    setFixadoLocal(v);
+    onFixadoChange?.(v);
+  };
   const [emUso, setEmUso] = useState(false);
   const [dispensado, setDispensado] = useState(false);
   const [chaveVista, setChaveVista] = useState(chave);
