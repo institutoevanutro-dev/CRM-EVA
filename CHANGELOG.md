@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.21.0] — 2026-10-17
+
+### Adicionado
+
+- **O WhatsApp que fica conectado sem receber é reiniciado de novo até voltar, e o aviso chega ao celular** Quando a conexão do WhatsApp cai, volta sozinha e continua aparecendo como conectada mas sem receber mensagens, o CRM já reiniciava a conexão uma vez e abria um aviso na Central. Agora ele confere se o reinício adiantou: se em 45 minutos nenhuma mensagem chegar, reinicia de novo, até 2 vezes a cada 6 horas por conexão (ajustável em `CHANNEL_DEAF_RESTART_MAX` e `CHANNEL_DEAF_RESTART_WINDOW_HOURS`; `0` desliga o reinício e o CRM só avisa). O reinício passou a usar o reinício nativo do servidor do WhatsApp, a mesma chamada que resolve à mão, sem deslogar e sem QR. Quando as mensagens voltam, um aviso diz o intervalo em que algo pode não ter entrado no CRM, para conferir no celular; quando o CRM desiste, um aviso crítico pede para reconectar. Os três avisos vão também para o celular de quem ativou as notificações (a instalação precisa ter as chaves VAPID configuradas). O CRM não reinicia enquanto alguém está conectando o número nem durante uma atualização disparada pela tela, e cada tentativa fica na auditoria. Nada precisa ser feito ao atualizar.
+
 ## [4.20.0] — 2026-10-17
 
 ### Adicionado
@@ -7565,7 +7571,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.20.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.21.0...HEAD
+[4.21.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.20.0...v4.21.0
 [4.20.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.19.0...v4.20.0
 [4.19.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.18.0...v4.19.0
 [4.18.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.17.0...v4.18.0
