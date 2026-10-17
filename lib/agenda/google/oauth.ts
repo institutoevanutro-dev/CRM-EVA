@@ -64,6 +64,25 @@ export const ESCOPOS_OBRIGATORIOS: readonly string[] = [
   "https://www.googleapis.com/auth/calendar.readonly",
 ];
 
+/**
+ * O conjunto de caracteres de um client secret do Google — e o guarda contra a
+ * colagem errada do arquivo de credenciais (`GOCSPX-xxxx","redirect_uris`, com
+ * aspa e vírgula). O campo é `type="password"` e nunca volta à tela, então
+ * ninguém relê o que ficou gravado; a única pista chegava depois, na troca do
+ * código, como `invalid_client` do Google.
+ *
+ * A cerca é no CONJUNTO de caracteres, não no prefixo `GOCSPX-`: secrets
+ * antigos não o têm. Pura: a server action e o formulário usam a MESMA regra.
+ *
+ * Portado do projeto original (DeskcommCRM, PR #2493 de @Aleshan-dev).
+ */
+export const FORMATO_DO_CLIENT_SECRET = /^[A-Za-z0-9_-]+$/;
+
+/** `true` quando o texto (já aparado) tem o formato de um client secret do Google. */
+export function clientSecretTemFormato(secret: string): boolean {
+  return FORMATO_DO_CLIENT_SECRET.test(secret.trim());
+}
+
 export const ENDERECO_DE_CONSENTIMENTO = "https://accounts.google.com/o/oauth2/v2/auth";
 export const ENDERECO_DE_TOKEN = "https://oauth2.googleapis.com/token";
 

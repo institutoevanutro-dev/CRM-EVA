@@ -130,7 +130,9 @@ export function ConversationList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
 
-  if (q.isLoading) {
+  // O SKELETON É DA PRIMEIRA CARGA — nunca do refetch (porte do original,
+  // DeskcommCRM PR #2414 de @webtecnica).
+  if (q.isLoading && items.length === 0) {
     return (
       <div className="space-y-3 p-3">
         {[1, 2, 3, 4, 5].map((i) => (
@@ -140,7 +142,11 @@ export function ConversationList({
     );
   }
 
-  if (q.isError) {
+  // O erro só fala quando NÃO HÁ O QUE PRESERVAR: um refetch que falha com a
+  // lista na tela deixa a lista onde está (o hook já mostrou o aviso). Trocar
+  // uma tela cheia por "Erro ao carregar" é trocar um problema de rede por uma
+  // caixa de entrada vazia.
+  if (q.isError && q.data === undefined) {
     return (
       <div className="p-4 text-center text-sm text-muted-foreground">
         <p>{t("Erro ao carregar conversas.")}</p>

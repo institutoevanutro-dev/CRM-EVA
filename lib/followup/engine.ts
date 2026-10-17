@@ -52,8 +52,11 @@ import {
 } from "./no-show-recuperacao-esgotada";
 import { interpolarDestino, persistirRespostaFollowupSupabase } from "./persistir-resposta";
 import { quandoDoRetornoQueSegura, reavaliarDepoisDoRetorno } from "./retorno-segura-o-fluxo";
+import { TETO_DE_PASSOS_DO_MOTOR } from "./custo-no-motor";
 
-const MAX_STEPS = 80;
+// O número mora em `custo-no-motor.ts` porque a publicação também precisa dele:
+// o caminho linear é contado pelos mesmos ticks que o motor gasta.
+const MAX_STEPS = TETO_DE_PASSOS_DO_MOTOR;
 const CLAIM_LEASE_SECONDS = 120;
 const DEFAULT_CLAIM_LIMIT = 20;
 const MAX_ERROR_LEN = 300;

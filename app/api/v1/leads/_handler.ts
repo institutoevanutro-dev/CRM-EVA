@@ -174,6 +174,37 @@ interface LeadCursor {
   created_at: string;
   id: string;
 }
+/**
+ * A RECUSA DA RLS DE `crm_leads` (SQLSTATE 42501) é falta de permissão, não
+ * falha do sistema: pela visibilidade da organização ("Só os seus" /
+ * "Os seus e os sem responsável"), quem grava deixaria de enxergar o negócio
+ * (um Atendente criando sem responsável, ou passando o seu a um colega). Era
+ * 500 "tente de novo" — e tentar de novo nunca resolve.
+ *
+ * Só a policy de `crm_leads`: o mesmo 42501 também é GRANT faltando numa
+ * função ou tabela que um gatilho alcança — defeito nosso, que continua 500.
+ * A recusa de RLS nomeia a tabela entre aspas na mensagem (lc_messages en_US
+ * do Supabase); a de GRANT não. Noutro idioma cai no 500, a direção segura.
+ *
+ * Portado do projeto original (DeskcommCRM, PR #2556 de @webtecnica).
+ */
+function recusaDaRlsDosLeads(
+  erro: { code?: string; message?: string } | null,
+  ctx: HandlerCtx,
+): ApiError | null {
+  if (erro?.code !== "42501" || !erro.message?.includes('"crm_leads"')) return null;
+  return new ApiError(
+    403,
+    "forbidden",
+    undefined,
+    ctx.requestId,
+    traduzir(
+      "Sem permissão para salvar este negócio: pela visibilidade definida na organização, ele ficaria fora do que você pode ver.",
+      ctx.idioma ?? "pt-BR",
+    ),
+  );
+}
+
 function encLeadCursor(p: LeadCursor): string {
   return Buffer.from(JSON.stringify(p), "utf8").toString("base64url");
 }
@@ -396,6 +427,9 @@ export async function createLeadHandler(
     );
   }
 
+  const recusaDaRlsNoInsert = recusaDaRlsDosLeads(insErr, ctx);
+  if (recusaDaRlsNoInsert) throw recusaDaRlsNoInsert;
+
   if (insErr || !lead) {
     throw new ApiError(
       500,
@@ -542,7 +576,7 @@ export async function updateLeadHandler(
     .maybeSingle();
 
   if (updErr) {
-    throw new ApiError(500, "internal_error", undefined, ctx.requestId, updErr.message);
+    throw recusaDaRlsDosLeads(updErr, ctx) ?? new ApiError(500, "internal_error", undefined, ctx.requestId, updErr.message);
   }
   if (!updated) {
     throw new ApiError(

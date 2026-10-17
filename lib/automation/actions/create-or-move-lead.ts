@@ -18,6 +18,7 @@ import { audit } from "@/lib/audit";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import { escolheEtapaDeDestino, montaPayloadDoClone, type EtapaDoFunil, type OrigemParaClonar } from "@/lib/leads/clonar-para-funil";
+import { mensagemDeErro } from "@/lib/automation/actions/erro-legivel";
 
 async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise<ActionResultDetail> {
   const pipelineId = typeof config.pipeline_id === "string" ? config.pipeline_id : null;
@@ -83,7 +84,7 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
     return {
       type: "create_or_move_lead",
       status: "failed",
-      error: err instanceof Error ? err.message : String(err),
+      error: mensagemDeErro(err),
     };
   }
 }
