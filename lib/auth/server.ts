@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { empresaExigeMfa, exigeCadastroDeMfa } from "@/lib/auth/politica-mfa";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
+import { lerAparencia } from "@/lib/inbox/aparencia-da-conversa";
 import type { AuthUser, Role, UserOrgMembership, ActiveOrg } from "./types";
 
 const ACTIVE_ORG_COOKIE = "active_org";
@@ -255,6 +256,7 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
     locale ?? support?.locale ?? (await localeDaOrgAtiva(memberships)),
   );
   const timezone = (user.user_metadata?.timezone as string | undefined) ?? null;
+  const aparencia_conversa = lerAparencia(user.user_metadata?.aparencia_conversa);
 
   return {
     id: user.id,
@@ -266,6 +268,7 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
     locale,
     idioma,
     timezone,
+    aparencia_conversa,
     organizations: memberships,
     support,
   };
