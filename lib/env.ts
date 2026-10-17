@@ -163,6 +163,13 @@ const schema = z.object({
   // só depois de conferir que as entregas chegam assinadas
   // (webhook_events_log.valid_signature = true).
   WAHA_WEBHOOK_REQUIRE_SIGNATURE: z.string().optional().default("false"),
+  // Vigia de conexão surda (`lib/channels/vigia-de-surdez.ts`): quantos
+  // reinícios automáticos uma conexão pode levar dentro da janela, em horas.
+  // Vazio = padrão (2 em 6 h). `0` reinícios desliga o reinício e o vigia só
+  // avisa. String, e não número, pelo motivo de `AUDIT_LOG_RETENTION_DAYS`:
+  // quem lê é `tetoDosReinicios`, onde lixo cai no padrão em vez de derrubar o app.
+  CHANNEL_DEAF_RESTART_MAX: z.string().optional().default(""),
+  CHANNEL_DEAF_RESTART_WINDOW_HOURS: z.string().optional().default(""),
 
   // ─── Chamada de voz WhatsApp (WaCalls, spec 18) ───
   //

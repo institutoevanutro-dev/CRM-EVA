@@ -84,6 +84,7 @@ export {
   transportaMensagem,
 } from "./capabilities";
 export { CHANNEL_SESSION_REF_COLUMNS, resolveSessionRef } from "./session-ref";
+export { conexaoEmAndamento } from "./connect-waha";
 export type { ChannelSessionRef } from "./session-ref";
 export type {
   ChannelAdapter,

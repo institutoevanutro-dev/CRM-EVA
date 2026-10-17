@@ -108,6 +108,38 @@ describe("aviso da Central → celular", () => {
     expect(enviarPushDaOrg).not.toHaveBeenCalled();
   });
 
+  // O vigia de surdez: o número ficou ~15 h sem receber em outubro/2026 com o
+  // aviso aberto na Central, porque ninguém abre a Central. Os três avisos dele
+  // vão ao celular; o "fora do ar" de toda oscilação, não.
+  it("vigia de surdez: reinício, volta e 'continua' vão ao celular e abrem Conexões", async () => {
+    for (const title of [
+      'WhatsApp "Recepção" ficou sem receber mensagens depois de uma queda',
+      'WhatsApp "Recepção" voltou a receber mensagens',
+      'WhatsApp "Recepção" continua sem receber mensagens',
+    ]) {
+      vi.mocked(enviarPushDaOrg).mockClear();
+      vi.mocked(createAdminClient).mockReturnValue(banco({
+        agent_inbox_items: { id: "s1", kind: "channel_number_alert", ref_kind: "channel_session", ref_id: "cs1", title, body: "O CRM reiniciou a conexão sozinho às 09:40, sem deslogar o número (tentativa 1 de 2). Nenhuma mensagem tinha chegado desde a queda, às 03:12. Você recebe outro aviso quando as mensagens voltarem." },
+        organizations: { locale: "pt-BR" },
+      }) as never);
+      await webPushInboundHandler.handle(evento("central.aviso_criado", { item_id: "s1" }));
+      const push = vi.mocked(enviarPushDaOrg).mock.calls[0]?.[1];
+      expect(push, title).toMatchObject({ title, tag: "aviso:s1", href: "/app/connections" });
+      expect(push?.body).toMatch(/^O CRM reiniciou a conexão sozinho às 09:40/);
+      expect(push?.body.length).toBeLessThanOrEqual(140);
+    }
+  });
+
+  it("oscilação comum da conexão (fora do ar) segue só na tela", async () => {
+    vi.mocked(createAdminClient).mockReturnValue(banco({
+      agent_inbox_items: { id: "s2", kind: "channel_number_alert", ref_kind: "channel_session", ref_id: "cs1", title: 'WhatsApp "Recepção" fora do ar (STOPPED)', body: "Nenhuma mensagem entra nem sai." },
+      organizations: { locale: "pt-BR" },
+    }) as never);
+    const r = await webPushInboundHandler.handle(evento("central.aviso_criado", { item_id: "s2" }));
+    expect(r.status).toBe("skipped");
+    expect(enviarPushDaOrg).not.toHaveBeenCalled();
+  });
+
   it("aviso que não pede gente fica só na tela", async () => {
     vi.mocked(createAdminClient).mockReturnValue(banco({
       agent_inbox_items: { id: "i5", kind: "channel_template_review", ref_kind: null, ref_id: null, title: "Modelo aprovado", body: null },

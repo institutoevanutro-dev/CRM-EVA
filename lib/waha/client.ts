@@ -136,7 +136,7 @@ const sessionSnapshotSchema = z.object({
 }).passthrough();
 
 export type WahaSessionSnapshot = z.infer<typeof sessionSnapshotSchema>;
-type SessionOperation = "create" | "start" | "stop" | "logout" | "delete";
+type SessionOperation = "create" | "start" | "stop" | "logout" | "delete" | "restart";
 
 /** Mantém o prefixo/status que checkHealth e os callers já classificam. */
 export class WahaSessionError extends Error {
@@ -303,6 +303,31 @@ export class WahaClient {
     // https://waha.devlike.pro/docs/how-to/sessions/#logout-session
     if (operation === "logout" && ["STOPPED", "STARTING", "SCAN_QR_CODE"].includes(session.status) && session.me === null) return;
     throw new WahaSessionError(operation, res.status);
+  }
+
+  /**
+   * Reinício nativo: o WAHA para e sobe a MESMA sessão, com a credencial que
+   * já está no disco. Nunca desloga e não pede QR.
+   *
+   * Existe ao lado de `stopSession` + `startSession` porque aquela sequência
+   * são sete chamadas (stop, GET, create, GET, às vezes PUT, start, GET), e
+   * qualquer uma que falhe no meio deixa a sessão PARADA. Num número conectado
+   * e surdo em outubro/2026, o reinício automático por aquela sequência não
+   * resolveu, e esta chamada, feita à mão, curou na hora. A pós-condição é a
+   * mesma de `startExistingSession`: o GET tem de mostrar a sessão de pé.
+   */
+  async restartSession(name: string): Promise<WahaSessionSnapshot> {
+    const res = await this.fetchComTeto(`${this.baseUrl}/api/sessions/${encodeURIComponent(name)}/restart`, {
+      method: "POST",
+      headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) throw new WahaSessionError("restart", res.status);
+    const session = await this.sessionAfter(name, "restart", res.status);
+    if (!session || !["STARTING", "SCAN_QR_CODE", "WORKING"].includes(session.status)) {
+      throw new WahaSessionError("restart", res.status);
+    }
+    return session;
   }
 
   async stopSession(name: string): Promise<void> {

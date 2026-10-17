@@ -45,7 +45,9 @@ vi.mock("@/lib/env", () => ({
 vi.mock("@/lib/waha/client", () => ({ getWahaClient: () => null }));
 
 const sincronizou = vi.fn();
-vi.mock("@/lib/channels/health", () => ({
+// Parcial: o vigia de surdez lê as constantes reais deste módulo em toda rodada.
+vi.mock("@/lib/channels/health", async (orig) => ({
+  ...(await orig<typeof import("@/lib/channels/health")>()),
   sincronizarSaudeDaConexao: (...args: unknown[]) => {
     sincronizou(...args);
     return Promise.resolve("sem_mudanca");
