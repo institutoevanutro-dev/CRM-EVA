@@ -199,7 +199,7 @@ export function ConversationHeader({
     <div
       {...revelacao.zonaProps}
       data-cabecalho-da-conversa=""
-      className="relative flex flex-wrap items-center gap-2 border-b border-border bg-background px-3 py-2 md:px-4"
+      className="@container relative flex flex-wrap items-center gap-2 border-b border-border bg-background px-3 py-2 md:px-4"
     >
       <div className="flex w-full min-w-0 items-center gap-3">
         <AvatarDoContato contato={c} nome={displayName} reserva={phone ?? displayName} className="h-9 w-9 shrink-0" />
@@ -276,7 +276,9 @@ export function ConversationHeader({
         {/* A PORTA EXPLÍCITA da faixa de ações. Nome estável ("Ações da
             conversa") e estado em `aria-expanded`: trocar o nome a cada clique
             faria o leitor de tela anunciar um botão novo. O texto "Ações"
-            aparece a partir do `sm`; abaixo, só o ícone, com o mesmo nome. */}
+            aparece quando o CABEÇALHO tem 448px ou mais (container query, não
+            a tela): em 1280px a coluna da conversa tem 408px, e o rótulo
+            empurrava o telefone para uma terceira linha. */}
         <Button
           type="button"
           size="sm"
@@ -288,7 +290,7 @@ export function ConversationHeader({
           onClick={revelacao.alternar}
         >
           <DotsThree size={18} weight="bold" aria-hidden />
-          <span className="hidden text-xs sm:inline">{t("Ações")}</span>
+          <span className="hidden text-xs @md:inline">{t("Ações")}</span>
         </Button>
       </div>
 

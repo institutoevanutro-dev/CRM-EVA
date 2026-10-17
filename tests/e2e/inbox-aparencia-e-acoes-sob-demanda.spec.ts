@@ -55,7 +55,9 @@ async function login(page: Page): Promise<void> {
 
 async function abrirConversa(page: Page): Promise<void> {
   await page.goto(`/app/inbox/${conversaId}`);
-  await expect(page.getByText("Quinta às 10h fica ótimo").first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("message-thread").getByText("Quinta às 10h fica ótimo")).toBeVisible({
+    timeout: 60_000,
+  });
 }
 
 async function foto(page: Page, nome: string): Promise<void> {

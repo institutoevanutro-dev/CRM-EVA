@@ -145,3 +145,21 @@ describe("cabeçalho da conversa — ações sob demanda", () => {
     fora.remove();
   });
 });
+
+describe("cabeçalho da conversa — o clique de quem já vê a faixa", () => {
+  it("mouse em cima (faixa já revelada) e clique no botão: FIXA, não fecha", () => {
+    const { header, faixa, alternador } = renderHeader();
+    fireEvent.pointerEnter(header, { pointerType: "mouse" });
+    fireEvent.click(alternador);
+    fireEvent.pointerLeave(header, { pointerType: "mouse" });
+    expect(escondida(faixa), "o clique fechou a faixa que a pessoa pediu para ver").toBe(false);
+  });
+
+  it("Tab no botão (faixa já revelada pelo foco) e Enter: FIXA, não fecha", () => {
+    const { faixa, alternador } = renderHeader();
+    fireEvent.focus(alternador);
+    fireEvent.click(alternador);
+    fireEvent.blur(alternador, { relatedTarget: document.body });
+    expect(escondida(faixa)).toBe(false);
+  });
+});

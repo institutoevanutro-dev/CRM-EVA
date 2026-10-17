@@ -101,9 +101,15 @@ export function useRevelacao({ forcado = false, chave }: { forcado?: boolean; ch
         if (focoNaFaixa) alternadorRef.current?.focus();
       },
     },
-    /** O clique do botão explícito: abre e FIXA, ou fecha. Passado à mão (`onClick=`). */
+    /**
+     * O clique do botão explícito: FIXA, ou, já fixada, fecha. Passado à mão
+     * (`onClick=`). Pergunta por `fixado` e não por `visivel` de propósito: o
+     * mouse que chega ao botão já revelou a faixa pelo hover (e o Tab, pelo
+     * foco), e um clique que lesse "visível → fecha" sumiria com ela justo
+     * quando a pessoa pediu para vê-la — medido no e2e, as duas portas falhavam.
+     */
     alternar: () => {
-      if (visivel) fechar();
+      if (fixado) fechar();
       else {
         setFixado(true);
         setDispensado(false);

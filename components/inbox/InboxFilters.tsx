@@ -52,7 +52,7 @@ export type InboxTab =
  * contagem aparece ou some.
  */
 const CLASSE_DA_ABA =
-  "-mb-px h-8 shrink-0 gap-1.5 rounded-none border-b-2 border-transparent px-0.5 text-xs font-medium text-text-muted transition-colors hover:text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:border-accent data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-text data-[state=active]:shadow-none";
+  "-mb-px h-8 shrink-0 gap-1 rounded-none border-b-2 border-transparent px-0.5 text-xs font-medium text-text-muted transition-colors hover:text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:border-accent data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-text data-[state=active]:shadow-none";
 
 /** A contagem da aba em pílula: número solto ao lado do rótulo parecia parte dele ("Fila6"). */
 function Contagem({ n }: { n: number }) {
@@ -600,7 +600,7 @@ export function InboxFilters({ value, onChange }: Props) {
         onValueChange={(v) => onChange({ ...value, tab: v as InboxTab })}
         className="px-3"
       >
-        <TabsList className="h-auto w-full flex-wrap justify-start gap-x-4 gap-y-1 rounded-none bg-transparent p-0">
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-x-3 gap-y-1 rounded-none bg-transparent p-0">
           {tabs.filter((tab) => ABAS_PRINCIPAIS.includes(tab)).map((tab) => {
             const meta = INBOX_TABS.find((t) => t.value === tab)!;
             const count = countFor[tab];
