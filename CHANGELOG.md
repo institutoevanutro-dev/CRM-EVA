@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.18.0] — 2026-10-17
+
+### Adicionado
+
+- **Início mostra a cada pessoa só o que é dela, e a Visão da clínica vira painel de gestão** No "Meu dia", cada pessoa passa a ver só as próprias pendências: as conversas que ela atende esperando resposta, os compromissos dela de hoje, as tarefas dela e os avisos da Central ligados ao que é dela (conversa, compromisso, caso, follow-up ou contato). Avisos da operação (canal fora do ar, orçamento de IA, fila parada) e os que ninguém assumiu chegam só a gerente e admin. A "Visão da clínica", só para gerente e admin, ganhou indicadores no topo (esperando resposta agora, consultas hoje, comparecimento da semana, IA sozinha, leads novos e negócios ganhos com o mês anterior) e a agenda da semana por profissional. A atualização aplica uma função nova no banco pelo `update.sh`, sem nenhuma ação manual.
+
 ## [4.17.0] — 2026-10-17
 
 ### Adicionado
@@ -7543,7 +7549,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.17.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.18.0...HEAD
+[4.18.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.17.0...v4.18.0
 [4.17.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.16.0...v4.17.0
 [4.16.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.15.0...v4.16.0
 [4.15.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.14.0...v4.15.0
