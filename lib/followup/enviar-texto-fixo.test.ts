@@ -49,6 +49,8 @@ let conversa: Record<string, unknown> | null = null;
 let contato: Record<string, unknown> | null = null;
 /** O negócio mais recente do contato (`crm_leads.title`). */
 let negocio: Record<string, unknown> | null = null;
+/** A organização do job (fuso e idioma da `{{saudacao}}`). */
+let organizacao: Record<string, unknown> | null = null;
 /** As tabelas que o envio leu, para provar que o negócio não é mais consultado. */
 const tabelasLidas: string[] = [];
 
@@ -57,7 +59,7 @@ const JOB = {
   id: "job-1",
   organization_id: "org-1",
   contact_id: "contact-1",
-  payload: { service_boundary: boundary, fixed_body: "Oi, tudo bem?", followup_enrollment_id: "enr-1", node_id: "node-1" },
+  payload: { service_boundary: boundary, fixed_body: "Oi, tudo bem?", followup_enrollment_id: "enr-1", node_id: "node-1" } as Record<string, unknown> & { fixed_body: string },
 };
 
 const statusUpdates: string[] = [];
@@ -89,6 +91,7 @@ function admin() {
         if (table === "conversations") return Promise.resolve({ data: conversa, error: null });
         if (table === "contacts") return Promise.resolve({ data: contato, error: null });
         if (table === "crm_leads") return Promise.resolve({ data: negocio, error: null });
+        if (table === "organizations") return Promise.resolve({ data: organizacao, error: null });
         if (table === "followup_enrollments")
           return Promise.resolve({ data: { current_node_id: "node-1",status:"active",revision:1 }, error: null });
         return Promise.resolve({ data: null, error: null });
@@ -116,6 +119,7 @@ beforeEach(() => {
   conversa = { last_inbound_at: null, channel_session_id: "sess-1", channel_sessions: { provider: null } };
   contato = { name: null, display_name: null };
   negocio = null;
+  organizacao = null;
   tabelasLidas.length = 0;
   JOB.payload.fixed_body = "Oi, tudo bem?";
   conferir.mockResolvedValue({ envia: true });
@@ -348,5 +352,39 @@ describe("enviarTextoFixoPendente · {{nome}} e {{primeiro_nome}}", () => {
       expect.stringContaining("variável desconhecida"),
       expect.objectContaining({ variaveis: ["{{nomee}}", "{{contact.birthdate}}"] }),
     );
+  });
+});
+
+describe("enviarTextoFixoPendente · {{saudacao}} e variante", () => {
+  const corpo = () => (sendMessageHandler.mock.calls[0]?.[2] as { body?: string } | undefined)?.body;
+
+  it("{{saudacao}} no fuso e idioma da organização, no instante do envio", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-09-18T13:00:00.000Z")); // 10h em SP, 22h em Tóquio
+      JOB.payload.fixed_body = "{{saudacao}}, {{primeiro_nome}}!";
+      contato = { name: "Bia Ramos", display_name: null };
+      organizacao = { timezone: "America/Sao_Paulo", locale: "pt-BR" };
+      expect(await enviarTextoFixoPendente(admin())).toBe(1);
+      expect(corpo()).toBe("Bom dia, Bia!");
+      sendMessageHandler.mockClear();
+      organizacao = { timezone: "Asia/Tokyo", locale: "es" };
+      expect(await enviarTextoFixoPendente(admin())).toBe(1);
+      expect(corpo()).toBe("Buenas noches, Bia!");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a variante do payload volta no 'sent'; sem ela, o 'sent' segue sem o campo", async () => {
+    JOB.payload.variante = 3;
+    try {
+      expect(await enviarTextoFixoPendente(admin())).toBe(1);
+      expect(completeTurnForEnrollment.mock.calls.at(-1)?.[4]).toEqual({ kind: "sent", variante: 3 });
+    } finally {
+      delete JOB.payload.variante;
+    }
+    expect(await enviarTextoFixoPendente(admin())).toBe(1);
+    expect(completeTurnForEnrollment.mock.calls.at(-1)?.[4]).toEqual({ kind: "sent" });
   });
 });

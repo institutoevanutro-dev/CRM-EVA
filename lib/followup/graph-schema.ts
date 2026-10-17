@@ -220,7 +220,7 @@ export const aiClassifyConfigSchema = z
 
 /**
  * Action node configuration schema.
- * - text: send this body as-is (no model)
+ * - text: send this body as-is (no model); optional `variants` spin the copy per contact
  * - ai_message: generate a message using AI with a prompt hint
  * - template: send a canned message from Ajustes → Modelos
  * - media: send an image/video from the media library, optional caption
@@ -229,6 +229,16 @@ export const actionConfigSchema = z.discriminatedUnion('mode', [
   z.strictObject({
     mode: z.literal('text'),
     body: z.string().min(1).max(4000),
+    /**
+     * Outras redações do MESMO passo; `body` é a variante 0. Cada contato recebe
+     * uma só, escolhida por hash de (contato, nó) — sempre a mesma para ele, e
+     * espalhada entre contatos para o envio em massa não sair idêntico.
+     */
+    variants: z
+      .array(z.string().max(4000).refine((v) => v.trim().length > 0, 'Variante vazia: escreva o texto ou remova-a.'))
+      .min(1, 'Variante vazia: escreva o texto ou remova-a.')
+      .max(4, 'No máximo 5 redações: o texto principal e mais 4 variantes.')
+      .optional(),
   }),
   z.strictObject({
     mode: z.literal('ai_message'),

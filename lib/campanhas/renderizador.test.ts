@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { renderizar, saudacaoDaHora, variaveisUsadas } from "./renderizador";
+import { renderizar, saudacaoDaHora, trocarSaudacao, usaSaudacao, variaveisUsadas } from "./renderizador";
 
 const FUSO = "America/Sao_Paulo";
 /** 15h em São Paulo (UTC-3). */
@@ -63,6 +63,38 @@ describe("renderizador da campanha", () => {
     // Mesmo instante, outro fuso: a régua é o fuso do canal, não o do servidor.
     expect(saudacaoDaHora(new Date("2026-09-18T15:00:00.000Z"), "UTC")).toBe("Boa tarde");
     expect(saudacaoDaHora(new Date("2026-09-18T11:00:00.000Z"), "UTC")).toBe("Bom dia");
+  });
+
+  it("todas as bordas no fuso (São Paulo = UTC-3): 05h–11h59 bom dia, 12h–17h59 boa tarde, resto boa noite", () => {
+    const sp = (hhmm: string) => new Date(`2026-09-18T${hhmm}:00.000-03:00`);
+    expect(saudacaoDaHora(sp("00:00"), FUSO)).toBe("Boa noite");
+    expect(saudacaoDaHora(sp("04:59"), FUSO)).toBe("Boa noite");
+    expect(saudacaoDaHora(sp("05:00"), FUSO)).toBe("Bom dia");
+    expect(saudacaoDaHora(sp("11:59"), FUSO)).toBe("Bom dia");
+    expect(saudacaoDaHora(sp("12:00"), FUSO)).toBe("Boa tarde");
+    expect(saudacaoDaHora(sp("17:59"), FUSO)).toBe("Boa tarde");
+    expect(saudacaoDaHora(sp("18:00"), FUSO)).toBe("Boa noite");
+    expect(saudacaoDaHora(sp("23:59"), FUSO)).toBe("Boa noite");
+  });
+
+  it("o fuso é o da organização: 09h em São Paulo é 21h em Tóquio", () => {
+    const instante = new Date("2026-09-18T09:00:00.000-03:00");
+    expect(saudacaoDaHora(instante, FUSO)).toBe("Bom dia");
+    expect(saudacaoDaHora(instante, "Asia/Tokyo")).toBe("Boa noite");
+  });
+
+  it("o texto sai no idioma da organização, pelo dicionário", () => {
+    const sp = (hhmm: string) => new Date(`2026-09-18T${hhmm}:00.000-03:00`);
+    expect(saudacaoDaHora(sp("08:00"), FUSO, "es")).toBe("Buenos días");
+    expect(saudacaoDaHora(sp("13:00"), FUSO, "es")).toBe("Buenas tardes");
+    expect(saudacaoDaHora(sp("03:00"), FUSO, "es")).toBe("Buenas noches");
+  });
+
+  it("trocarSaudacao troca toda ocorrência, com espaço e maiúscula", () => {
+    const agora = new Date("2026-09-18T08:00:00.000-03:00");
+    expect(usaSaudacao("{{ Saudacao }}, Bia")).toBe(true);
+    expect(usaSaudacao("Olá, Bia")).toBe(false);
+    expect(trocarSaudacao("{{saudacao}}! … {{ SAUDACAO }}", agora, FUSO, "pt-BR")).toBe("Bom dia! … Bom dia");
   });
 
   it("lista as variáveis que o texto usa, sem repetir e sem inventar", () => {

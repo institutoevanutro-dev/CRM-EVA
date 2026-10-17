@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -21,6 +22,9 @@ import { VARIAVEIS_DO_TEMPLATE, variaveisDesconhecidas } from "@/lib/inbox/templ
 
 import type { ConfigOf } from "./shared";
 
+/** O teto do schema (`actionConfigSchema`, modo `text`): até 5 variantes além do texto principal. */
+const MAX_VARIANTES = 4;
+
 /**
  * As variáveis que o envio preenche (a MESMA lista de `lib/inbox/template-vars.ts`)
  * e o aviso da que não existe: no envio ela sai do texto, e descobrir pela
@@ -28,13 +32,14 @@ import type { ConfigOf } from "./shared";
  */
 function AjudaDasVariaveis({ texto }: { texto: string }) {
   const t = useT();
-  const desconhecidas = variaveisDesconhecidas(texto, ["volta", "voltas"]);
+  const desconhecidas = variaveisDesconhecidas(texto, ["volta", "voltas", "saudacao"]);
   return (
     <>
       <p className="text-xs text-text-muted" data-testid="variaveis-do-followup">
         {t("Variáveis do contato:")} {VARIAVEIS_DO_TEMPLATE.map((v) => `{{${v}}}`).join(" ")}
         {". "}
-        {t("Variável sem valor sai do texto.")}
+        {t("Variável sem valor sai do texto.")}{" "}
+        {"{{saudacao}}"} {t("vira Bom dia, Boa tarde ou Boa noite na hora do envio, no fuso da organização.")}
       </p>
       {desconhecidas.length > 0 ? (
         <p className="text-xs text-warning" data-testid="aviso-variavel-do-followup">
@@ -151,6 +156,7 @@ export function ActionForm({
   const t = useT();
   const [mode, setMode] = useState(config.mode);
   const [body, setBody] = useState(config.mode === "text" ? config.body : "");
+  const [variants, setVariants] = useState<string[]>(config.mode === "text" ? (config.variants ?? []) : []);
   const [promptHint, setPromptHint] = useState(config.mode === "ai_message" ? config.prompt_hint : "");
   const [fallbackTemplateId, setFallbackTemplateId] = useState(
     config.mode === "ai_message" ? (config.fallback_template_id ?? "") : "",
@@ -163,6 +169,7 @@ export function ActionForm({
   const commit = (next: {
     mode: ModoDaAcao;
     body: string;
+    variants: string[];
     promptHint: string;
     fallbackTemplateId: string;
     templateId: string;
@@ -171,7 +178,7 @@ export function ActionForm({
   }) => {
     const candidate =
       next.mode === "text"
-        ? { mode: "text" as const, body: next.body }
+        ? { mode: "text" as const, body: next.body, ...(next.variants.length ? { variants: next.variants } : {}) }
         : next.mode === "ai_message"
           ? {
               mode: "ai_message" as const,
@@ -194,7 +201,7 @@ export function ActionForm({
     onChange(parsed.data);
   };
 
-  const fields = { body, promptHint, fallbackTemplateId, templateId, mediaId, caption };
+  const fields = { body, variants, promptHint, fallbackTemplateId, templateId, mediaId, caption };
 
   return (
     <div className="space-y-3">
@@ -233,6 +240,54 @@ export function ActionForm({
               commit({ mode, ...fields, body: e.target.value });
             }}
           />
+          {variants.map((v, i) => (
+            <div key={i} className="space-y-1" data-testid="variante-do-texto">
+              <div className="flex items-center justify-between">
+                <Label htmlFor={`action-variant-${i}`}>
+                  {t("Variante")} {i + 2}
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const next = variants.filter((_, j) => j !== i);
+                    setVariants(next);
+                    commit({ mode, ...fields, variants: next });
+                  }}
+                >
+                  {t("Remover variante")}
+                </Button>
+              </div>
+              <Textarea
+                id={`action-variant-${i}`}
+                maxLength={4000}
+                value={v}
+                onChange={(e) => {
+                  const next = variants.map((x, j) => (j === i ? e.target.value : x));
+                  setVariants(next);
+                  commit({ mode, ...fields, variants: next });
+                }}
+              />
+            </div>
+          ))}
+          {variants.length < MAX_VARIANTES ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const next = [...variants, ""];
+                setVariants(next);
+                commit({ mode, ...fields, variants: next });
+              }}
+            >
+              {t("Adicionar variante")}
+            </Button>
+          ) : null}
+          <p className="text-xs text-text-muted">
+            {t("Com variantes, cada contato recebe sempre a mesma redação deste passo, e contatos diferentes recebem redações diferentes. Além do texto principal, adicione até 4 variantes.")}
+          </p>
           <p className="text-xs text-text-muted">
             {t("Sai exatamente assim, sem IA. No laço,")} {t("{{volta}}")} e {t("{{voltas}}")} {t("viram o número da volta.")}
           </p>
