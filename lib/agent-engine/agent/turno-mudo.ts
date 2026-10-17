@@ -40,3 +40,25 @@ export function turnoMudoPedeCorrecao(t: {
     !t.capDeEnvio
   );
 }
+
+/**
+ * A FALHA do turno mudo: nada saiu ao cliente E o modelo foi cortado no teto de
+ * tokens de saída (`finishReason === 'length'`), na chamada principal ou na
+ * correção (porte do upstream #2938).
+ *
+ * A resposta cortada nunca sai: o AI SDK não executa ferramenta de um passo que
+ * terminou em `length` (`isToolExecutionAllowedFinishReason`, preso em
+ * `tests/unit/saida-cortada-nao-vai-ao-cliente.test.ts`), e texto fora de
+ * `send_message` não chega a ninguém. O que faltava era alguém saber: o turno
+ * acabava mudo com um log de `info`.
+ *
+ * As razões legítimas de silêncio são as MESMAS de `turnoMudoPedeCorrecao`, lidas
+ * DEPOIS da correção: se nela o modelo tentou enviar (veto), passou à equipe ou
+ * bateu no teto do número, aquilo é a razão e não há aviso. Silêncio sem corte é
+ * decisão — a correção autoriza o modelo a não responder — e também não avisa.
+ */
+export function turnoMudoPorCorte(
+  t: Parameters<typeof turnoMudoPedeCorrecao>[0] & { saidaCortada: boolean; correcaoCortada: boolean },
+): boolean {
+  return (t.saidaCortada || t.correcaoCortada) && turnoMudoPedeCorrecao(t);
+}
