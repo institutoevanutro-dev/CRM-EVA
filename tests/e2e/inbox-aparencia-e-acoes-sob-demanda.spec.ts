@@ -15,7 +15,7 @@
  *   5. Nenhum transbordo horizontal da página nessas três larguras.
  *
  * Medidas por `getBoundingClientRect`, nunca a olho. Evidência em
- * `.superpowers/evidence/inbox-aparencia/` (fora do git).
+ * `.superpowers/evidence/inbox-visual/` (fora do git).
  */
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
@@ -28,7 +28,7 @@ import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
 import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
-const EVIDENCIA = path.join(process.cwd(), ".superpowers/evidence/inbox-aparencia");
+const EVIDENCIA = path.join(process.cwd(), ".superpowers/evidence/inbox-visual");
 
 interface Creds {
   password: string;
@@ -221,6 +221,12 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
         // e nenhuma de botões (um botão tem 36px).
         expect(medida.alturaDoCabecalho, "o cabeçalho voltou a ter fileiras de botões").toBeLessThanOrEqual(88);
         expect(medida.transbordo, "a página rola de lado").toBeLessThanOrEqual(0);
+        // O placeholder do campo vazio numa linha: quebrado, ele empurra o
+        // `scrollHeight` acima da altura do campo (e aparece cortado ao meio).
+        const campo = await page
+          .getByRole("textbox", { name: "Mensagem", exact: true })
+          .evaluate((ta) => ({ rolagem: ta.scrollHeight, altura: ta.clientHeight }));
+        expect(campo.rolagem, "o placeholder do composer quebrou em duas linhas").toBeLessThanOrEqual(campo.altura);
         await foto(page, `${largura}-${tema}-conversa`);
 
         // A lista: busca, filtros e abas sem nada vazando da coluna. No celular
