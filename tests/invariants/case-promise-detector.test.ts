@@ -35,7 +35,7 @@ const PROMISES: readonly string[] = [
   "sua solicitação sobre garantia está em análise pela equipe responsável",
   "isso está em análise pela nossa equipe",
   "seu caso ficou em análise com o responsável",
-  // achado em produção (Instituto Eva, 14/10/2026): resposta ao comprovante de Pix,
+  // achado em produção (produção, 14/10/2026): resposta ao comprovante de Pix,
   // voz passiva com a equipe como agente, sem caso aberto para o comprovante.
   "Ele precisa ser conferido pela equipe",
   "o comprovante será verificado pela recepção",

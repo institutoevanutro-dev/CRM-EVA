@@ -18,6 +18,7 @@ import { googleTransport, GoogleHttpError, type GoogleFetch } from "./transport"
 import {
   googleRpc,
   appointmentSnapshotSchema,
+  appointmentForGoogle,
   expectedAppointment,
   type CalendarFence,
 } from "./sync-store";
@@ -141,7 +142,7 @@ export async function reconcileAppointment(
       a = appointmentSnapshotSchema.parse(await call("meet", { result: { ...observation, etag } }));
       meetingObserved = true;
     };
-    let local = localProjection(a);
+    let local = localProjection(await appointmentForGoogle(db, a));
     let base = a.google_base_projection;
     // Listagem é sinal de mudança, não versão para um PATCH: GET exato revalida.
     const event = await api.get(a.google_calendar_id, a.google_event_id);
@@ -333,7 +334,8 @@ export async function reconcileAppointment(
         await commit({ base: next, conflict: null, clear_pending: true, etag: event.etag });
       }
     }
-    local = localProjection(a);
+    const outbound = await appointmentForGoogle(db, a);
+    local = localProjection(outbound);
     base = a.google_base_projection;
     if (!event) {
       if (wasPublished) {
@@ -348,7 +350,7 @@ export async function reconcileAppointment(
         await send(
           "POST",
           paraEventoDoGoogle({
-            ...a,
+            ...outbound,
             participantes: a.guest_email
               ? [{ email: a.guest_email, aguardandoResposta: true }]
               : [],
@@ -420,7 +422,9 @@ export async function reconcileAppointment(
     }
     await send(
       local.shared.cancelled ? "DELETE" : "PATCH",
-      local.shared.cancelled ? undefined : delta(a, event, base, decision.groups, decision.shared),
+      local.shared.cancelled
+        ? undefined
+        : delta(outbound, event, base, decision.groups, decision.shared),
       event.etag ?? null,
       decision.groups,
       decision.shared,

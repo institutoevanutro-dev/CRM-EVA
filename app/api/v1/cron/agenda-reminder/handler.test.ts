@@ -95,7 +95,7 @@ function linhaDoCompromisso(tipo: Record<string, unknown>): Linha {
     id: "compromisso-1",
     organization_id: ORG,
     contact_id: "contato-1",
-    title: "Consulta — Dr. André",
+    title: "Consulta — Dr. Otávio",
     starts_at: "2026-10-12T15:30:00.000Z", // 11:30 em Manaus
     time_zone: "America/Manaus",
     owner_user_id: null,

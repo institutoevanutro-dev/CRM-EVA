@@ -39,7 +39,7 @@ describe("deriveMediaText", () => {
    * fotografa o comprovante e manda em PDF. A extração de texto não acha nada,
    * e antes disto o derivado morria ali: 5 tentativas, aviso CRÍTICO na Central
    * e a IA sem ver o arquivo. Agora o PDF vai para a visão, o mesmo caminho da
-   * foto (medido em produção no Instituto Eva, 2026-09-22).
+   * foto (medido em produção, 2026-09-22).
    */
   it("pdf sem texto (escaneado) → a visão lê o arquivo", async () => {
     const descrever = vi.fn(async () => "comprovante de Pix de R$ 200 para a clínica");

@@ -50,5 +50,11 @@ export function turnKnobsFromEnv(env: Env): InboundTurnKnobs {
       ...(env.FOLLOWUP_AI_MODEL !== undefined ? { model: env.FOLLOWUP_AI_MODEL } : {}),
     },
     allowlistTtlMs: env.AI_ALLOWLIST_TTL_DAYS * 24 * 60 * 60 * 1000,
+    botLoop: {
+      repeticoes: env.BOT_LOOP_REPEAT_COUNT,
+      janelaRepeticaoMs: env.BOT_LOOP_REPEAT_WINDOW_MS,
+      rajadaIaMax: env.BOT_LOOP_AI_BURST_MAX,
+      janelaRajadaMs: env.BOT_LOOP_AI_BURST_WINDOW_MS,
+    },
   };
 }

@@ -97,6 +97,7 @@ import {
   isLeadInHandoff,
   performHumanHandoff,
 } from './human-handoff';
+import { pararSeForRoboDoOutroLado, type RoboKnobs } from './robo-do-outro-lado';
 import {
   maybeCompact,
   renderCompactedSummary,
@@ -136,6 +137,7 @@ import {
   type PublishedAgentConfig,
 } from './agent-config';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
+import { enviaAvisoForaDoHorario, portasDeProducao } from './aviso-fora-do-horario';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
 import { avisarJanelaFechada, resolverAvisoDeJanela } from '../pacing/aviso-de-janela';
@@ -1242,6 +1244,8 @@ export interface InboundTurnKnobs {
    * de 21 dias é aplicado.
    */
   allowlistTtlMs?: number;
+  /** Disjuntor do laço bot-com-bot (`robo-do-outro-lado.ts`). Ausente = defaults. */
+  botLoop?: RoboKnobs;
 }
 
 /** Default de `allowlistTtlMs` (21 dias) para testes que omitem o knob. */
@@ -2428,6 +2432,35 @@ async function executarTurnoDoAgente(
   if (!preview && liveJob().kind === 'inbound_turn' && agentConfig?.janelaDeAtendimento != null) {
     const esperaMs = msAteAJanelaAbrir(agentConfig.janelaDeAtendimento, clock());
     if (esperaMs !== null) {
+      // O AVISO DE FORA DO HORÁRIO (porte de upstream #2284) —
+      // ANTES do adiamento, para sair na hora em que a mensagem chegou. Só sai
+      // se o agente tiver o texto configurado (desligado por padrão). É resposta
+      // a quem escreveu primeiro: lê a janela `resposta*` do pacing e CONTA no
+      // ledger; opt-out, oculto, grupo, força-humano e LGPD vetam — a ordem mora
+      // em `aviso-fora-do-horario.ts`. Erro aqui só PERDE o aviso: o turno é
+      // adiado de qualquer forma.
+      try {
+        const aviso = await enviaAvisoForaDoHorario(
+          portasDeProducao(pool, deps.crmCfg.supabase, runLog),
+          {
+            organizationId: tenantId,
+            conversationId: input.conversationId,
+            contactId: leadId,
+            channelSessionId: input.channelSessionId,
+            texto: agentConfig.avisoForaDoHorario ?? null,
+            janela: agentConfig.janelaDeAtendimento,
+            agora: clock(),
+          },
+        );
+        runLog.info(
+          aviso.enviar ? 'aviso de fora do horário enviado' : 'aviso de fora do horário não enviado',
+          { motivo: aviso.enviar ? 'enviado' : aviso.motivo },
+        );
+      } catch (err) {
+        runLog.warn('aviso de fora do horário falhou — o turno segue adiado para a abertura', {
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+        });
+      }
       await rescheduleJob(pool, liveJob().id, ctx.workerId, {
         acquiredAt: claimOfJob(liveJob())?.acquired_at,
         delayMs: esperaMs,
@@ -2927,7 +2960,7 @@ async function executarTurnoDoAgente(
   // true quando open_human_case foi RECUSADO neste turno e nada depois registrou a
   // pendência (abertura ou provide_case_update). Lido pelo `casePromiseGate`: um caso
   // aberto de OUTRO assunto não sustenta a promessa sobre a pendência recusada
-  // (Instituto Eva, 14/10/2026: comprovante recusado, promessa passou pelo caso de ontem).
+  // (produção, 14/10/2026: comprovante recusado, promessa passou pelo caso de ontem).
   let aberturaDeCasoRecusadaNoTurno = false;
   // Wave 4 — contador do fail-safe do guardrail anti-alucinação (case_promise_without_case):
   // 1º veto no turno é erro-de-ensino (o modelo re-tenta); persistir uma 2ª vez aciona o
@@ -5551,6 +5584,21 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
     // `done`.
     if (job.payload[MARCA_DE_ENVIO_DA_ORIGEM_NO_JOB] === true) {
       deps.log.info('turno encerrado sem modelo: a origem já respondeu e passou a conversa', {
+        job_id: job.id,
+        conversation_id: payload.conversation_id,
+      });
+      return;
+    }
+    // ROBÔ DO OUTRO LADO: antes do roteador e do modelo — nenhum token, nenhum
+    // envio. Ver o cabeçalho de `robo-do-outro-lado.ts` (incidente de 16/10).
+    if (
+      await pararSeForRoboDoOutroLado(
+        pool,
+        { tenantId: job.organization_id, leadId: job.contact_id, conversationId: payload.conversation_id },
+        { agora: deps.clock?.() ?? new Date(), log: deps.log, ...(deps.knobs.botLoop ? { knobs: deps.knobs.botLoop } : {}) },
+      )
+    ) {
+      deps.log.info('turno pulado — possível robô do outro lado', {
         job_id: job.id,
         conversation_id: payload.conversation_id,
       });

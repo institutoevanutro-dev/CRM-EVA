@@ -4,8 +4,8 @@ import { appDaMetaDoAmbiente, VARIAVEIS_DO_CADASTRO_INCORPORADO } from "@/lib/ch
 
 describe("app da Meta — Cadastro Incorporado", () => {
   it("lê META_APP_ID e META_ES_CONFIG_ID do ambiente, vazio é ausente", () => {
-    expect(appDaMetaDoAmbiente({ META_APP_ID: " 1054112660758768 ", META_ES_CONFIG_ID: "" })).toMatchObject({
-      appId: "1054112660758768",
+    expect(appDaMetaDoAmbiente({ META_APP_ID: " 1000000000000001 ", META_ES_CONFIG_ID: "" })).toMatchObject({
+      appId: "1000000000000001",
       esConfigId: null,
     });
   });
@@ -45,10 +45,10 @@ describe("updateMetaApp — App ID e Configuration ID", () => {
     vi.doMock("@/lib/audit", () => ({ audit: async (e: { metadata?: Record<string, unknown> }) => void auditorias.push(e) }));
 
     const { updateMetaApp } = await import("@/app/actions/settings/updateMetaApp");
-    const r = await updateMetaApp({ app_id: "1054112660758768", es_config_id: "9876" });
+    const r = await updateMetaApp({ app_id: "1000000000000001", es_config_id: "9876" });
 
     expect(r).toEqual({ ok: true });
-    expect(upserts[0]).toMatchObject({ id: 1, app_id: "1054112660758768", es_config_id: "9876" });
+    expect(upserts[0]).toMatchObject({ id: 1, app_id: "1000000000000001", es_config_id: "9876" });
     expect(auditorias[0]?.metadata).toMatchObject({ campos: ["app_id", "es_config_id"] });
   });
 });

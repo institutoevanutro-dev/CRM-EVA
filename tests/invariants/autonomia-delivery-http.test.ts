@@ -1,4 +1,5 @@
 import {claimJobs,reapExpiredJobs} from '@/lib/agent-engine/queue/queue';
+import { ehVistoAzul } from "../support/waha-visto-azul";
 import { meetPgSupabase } from "../support/meet-pg-supabase";
 import { createAdminClient } from "@/lib/supabase/admin";
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
@@ -149,6 +150,10 @@ async function receiverRun(
   let posts = 0,
     receiverError: unknown;
   const receiver = createServer(async (req, res) => {
+    if (ehVistoAzul(req.url)) {
+      res.end("{}");
+      return;
+    }
     try {
       if (req.method === "GET") {
         res.end(JSON.stringify({ numberExists: true, chatId: "5531998765432@c.us" }));

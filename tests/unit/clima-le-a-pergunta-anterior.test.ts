@@ -1,7 +1,7 @@
 /**
  * O CLIMA LÊ A PERGUNTA QUE A MENSAGEM RESPONDE.
  *
- * Medido em produção (09/10/2026): a Cintia perguntou "Hoje você já faz algum
+ * Medido em produção (09/10/2026): a atendente IA perguntou "Hoje você já faz algum
  * acompanhamento com médico, nutricionista ou personal, ou ainda não?", o
  * paciente respondeu "Não", e o classificador — que recebia só a palavra —
  * deu nota 0,15, a faixa de xingamento. A conversa foi para humano por
@@ -102,7 +102,7 @@ describe("o classificador recebe a pergunta junto da resposta", () => {
     } as never);
   });
 
-  it("'Não' chega ao modelo com a pergunta da Cintia ao lado", async () => {
+  it("'Não' chega ao modelo com a pergunta da atendente ao lado", async () => {
     vi.mocked(createAdminClient).mockReturnValue(admin(PERGUNTA) as never);
     await processSentiment(evento);
     const prompt = vi.mocked(generateObject).mock.calls[0]?.[0]?.prompt as string;

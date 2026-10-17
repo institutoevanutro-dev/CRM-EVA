@@ -24,7 +24,7 @@
  *   próprio limite — isolamento de tenant continua visível no handler.
  * - Não busca por CPF. O CPF entra como hash (`cpf_hash`) e só a lista de
  *   contatos o oferece; quem quiser acrescenta a condição por fora.
- * - Não ignora acento. `ilike` no Postgres distingue "Andre" de "André" — o
+ * - Não ignora acento. `ilike` no Postgres distingue "Otavio" de "Otávio" — o
  *   mesmo comportamento da lista de contatos, que continua sendo a referência.
  */
 

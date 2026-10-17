@@ -16,6 +16,7 @@
 import type pg from 'pg';
 
 import { lerJanelaDeAtendimento, type JanelaDeAtendimento } from './janela-de-atendimento';
+import { lerTextoDoAvisoForaDoHorario } from './aviso-fora-do-horario';
 
 export interface PublishedAgentConfig {
   operationMode?: 'automatic' | 'assisted';
@@ -85,6 +86,13 @@ export interface PublishedAgentConfig {
    * conserta (o campo existia na tela e nenhum leitor vivo o consultava).
    */
   janelaDeAtendimento: JanelaDeAtendimento | null;
+  /**
+   * Texto do aviso de fora do horário, lido do mesmo `trigger_config`
+   * (`filters.business_hours.notice`). `null` = sem aviso configurado (o
+   * padrão): quem escreve fora da janela só espera a resposta na abertura.
+   * Opcional porque nasce depois das fixtures que montam esta interface à mão.
+   */
+  avisoForaDoHorario?: string | null;
   /** criadores (p/ mint do token efêmero de audit — padrão do runtime nativo). */
   versionCreatedBy: string | null;
   agentCreatedBy: string | null;
@@ -215,6 +223,7 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     // Leitura DEFENSIVA e que falha ABERTA: jsonb livre com shape estranho vira
     // `null` (sem janela ⇒ atende sempre), nunca uma mordaça acidental.
     janelaDeAtendimento: lerJanelaDeAtendimento(r.trigger_config),
+    avisoForaDoHorario: lerTextoDoAvisoForaDoHorario(r.trigger_config),
     versionCreatedBy: r.version_created_by,
     agentCreatedBy: r.agent_created_by,
   };
@@ -236,7 +245,12 @@ export async function loadPublishedAgentConfig(
        -- dispatcher nativo do CRM — pausar = despublicar).
        and v.status = 'published'
        and v.channel_session_id = $2
-     order by a.priority desc, a.created_at asc
+     -- Quem está NO AR vem antes de qualquer pausado: sem isto um pausado de
+     -- prioridade maior calava o número inteiro, com outro agente publicado nele
+     -- (porte de upstream #2376). O pausado segue vindo quando é o
+     -- único: null aqui vira o agente genérico, e pausar faria o número voltar a
+     -- responder.
+     order by (a.paused_at is not null) asc, a.priority desc, a.created_at asc
      limit 1`,
     [organizationId, channelSessionId],
   );

@@ -10,7 +10,7 @@ Conversa de teste (número da lista, 12/10, 11h12 a 11h19):
 
 | Mensagem da paciente | Quem atendeu | Problema |
 |---|---|---|
-| "Gostaria de agendar uma consulta com o Dr. André" | Agente 2 (Paciente) | A agenda dela tem um procedimento realizado. O roteador leu "já é paciente". O agente perguntou se era primeira consulta. |
+| "Gostaria de agendar uma consulta com o Dr. Otávio" | Agente 2 (Paciente) | A agenda dela tem um procedimento realizado. O roteador leu "já é paciente". O agente perguntou se era primeira consulta. |
 | "Primeira consulta" | Agente 2 | O roteador não trocou para o agente 1. |
 | "Preciso emagrecer", "Presencial", "Jardim Camburi" | Agente 2 | Improvisou a primeira consulta sem o roteiro: sem abertura, sem a opção de R$490, sem cobrar o sinal. |
 | "Quarta" em diante | Agente 5 (Recepção) | Resposta curta trocou o agente no meio. A Recepção abriu caso "para a recepção confirmar" em vez de marcar. |
@@ -81,7 +81,7 @@ Regras: só mensagens do atendimento atual (a fronteira de atendimento que o CRM
 
 ## 5. Mudanças de configuração (sem código, depois da versão instalada)
 
-- **Descrições dos assuntos do Dr. André:** "já é paciente" passa a exigir consulta, retorno, acompanhamento ou teleconsulta realizados, ou consulta futura marcada. Procedimento realizado (implante, aplicação, massagem) não torna a pessoa paciente dele para efeito de roteiro. Foi o que levou a conversa de 12/10 ao agente errado na primeira mensagem.
+- **Descrições dos assuntos do Dr. Otávio:** "já é paciente" passa a exigir consulta, retorno, acompanhamento ou teleconsulta realizados, ou consulta futura marcada. Procedimento realizado (implante, aplicação, massagem) não torna a pessoa paciente dele para efeito de roteiro. Foi o que levou a conversa de 12/10 ao agente errado na primeira mensagem.
 - **Prompts dos cinco agentes:** sai o trecho "responda que vai ajudar e faça uma pergunta" e entra uma seção curta "quando passar para outro assunto", com os casos de cada agente (por exemplo, agente 2: a pessoa diz que é a primeira consulta; agente 5: o assunto ficou claro e é de outro agente).
 - **Roteador do canal:** modo novo de permanência ligado, com queixa clínica como único assunto que interrompe.
 - **Bateria:** ganha conversas, não só mensagens. No mínimo: a conversa de 12/10; resposta curta em cada etapa de uma marcação; queixa clínica no meio de cada um dos outros quatro atendimentos; pedido de humano; mudança explícita de assunto.
@@ -110,12 +110,12 @@ Regras: só mensagens do atendimento atual (a fronteira de atendimento que o CRM
 3. Configuração da seção 5, com o roteador inativo.
 4. Bateria de conversas na tela de teste.
 5. Roteador ativo só para os números de teste; conversa real nos cinco caminhos e na conversa de 12/10.
-6. Liberação para pacientes, com o OK do André.
+6. Liberação para pacientes, com o OK do dono.
 
 ## 9. Fora deste desenho
 
 - Tela para ver, por conversa, qual agente atendeu cada mensagem e por quê. As decisões do roteador já ficam registradas; falta mostrá-las. Vale uma tarefa própria, porque teria encurtado o diagnóstico de 12/10.
-- Agentes Confirmação, Isadora e Erick.
+- Agentes Confirmação, Aplicações e Supervisão.
 - Comparação com o Jev (a Memória central cuida).
 
 ## 10. Pontos a confirmar no plano

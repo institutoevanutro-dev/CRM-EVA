@@ -458,7 +458,7 @@ export const casePromiseGate: Gate = {
     if (ctx.openedCaseThisTurn) return { pass: true };
     // Um caso aberto da conversa só sustenta a promessa quando o agente não tentou
     // abrir outro neste turno. Se tentou e foi recusado, a promessa é sobre a pendência
-    // NOVA, que não chegou à equipe (Instituto Eva, 14/10/2026: comprovante recusado,
+    // NOVA, que não chegou à equipe (produção, 14/10/2026: comprovante recusado,
     // "precisa ser conferido pela equipe" passou pelo caso de outro assunto, de ontem).
     const recusado = ctx.caseOpenRefusedThisTurn === true;
     if (ctx.hasOpenCase && !recusado) return { pass: true };

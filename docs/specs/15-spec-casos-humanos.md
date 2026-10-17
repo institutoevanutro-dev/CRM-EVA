@@ -76,7 +76,7 @@ O loop humano↔IA é o **loop de follow-up de cabeça pra baixo**: em vez do *t
 | `awaiting_human` | humano: **NAO_CONSIGO_ESCALAR** + txt | `escalated` | dispara handoff canônico do engine (§7); event `escalated` |
 | qualquer aberto | lead opt-out / conversa fechada | `cancelled` | `cancelPendingCronsForLead`; event `cancelled` |
 
-**Idempotência / dedup (revisto em 14/10/2026):** **um caso aberto por assunto (`kind`) por conversa**, não um por conversa. A guarda antiga ("qualquer caso aberto barra o próximo") deixou um comprovante de Pix sem caso porque havia outro caso, de outro assunto, aberto desde a véspera (Instituto Eva). A regra vive no `where` de `openCase` (`lib/agent-engine/agent/human-cases.ts`):
+**Idempotência / dedup (revisto em 14/10/2026):** **um caso aberto por assunto (`kind`) por conversa**, não um por conversa. A guarda antiga ("qualquer caso aberto barra o próximo") deixou um comprovante de Pix sem caso porque havia outro caso, de outro assunto, aberto desde a véspera (medido em produção). A regra vive no `where` de `openCase` (`lib/agent-engine/agent/human-cases.ts`):
 - caso aberto do mesmo `kind` em `awaiting_human`: não abre outro; a pendência entra nele como evento `agent_noted` (título, resumo, bloqueio) e a ferramenta devolve sucesso com `merged`;
 - caso aberto do mesmo `kind` em `awaiting_lead`: recusa (`case_already_open`) com o `case_id` e a orientação de usar `provide_case_update` ou transferir para humano;
 - **`kind` = `outro` não deduplica**, salvo caso aberto `outro` com o **mesmo título** (retry da mesma pendência): `outro` é o "não se encaixa", e o fail-safe abre sempre sem `kind`.

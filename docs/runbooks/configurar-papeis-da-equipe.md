@@ -1,4 +1,4 @@
-# Configurar papéis da equipe do Instituto Eva
+# Configurar papéis da equipe da clínica
 
 Use este roteiro somente depois que as migrations `0268` e `0269` estiverem aplicadas.
 
@@ -13,11 +13,11 @@ Use este roteiro somente depois que as migrations `0268` e `0269` estiverem apli
 
 | Pessoa | Papel |
 | --- | --- |
-| André Luis Lopes Costa | Administrador |
-| Erick Augusto | Gerente |
-| Isadora Carvalho de Figueiredo | Colaborador |
-| Geovana Carvalho | Administrador |
-| Cintia humana | Colaborador, somente depois de aceitar o convite |
+| Dono da clínica | Administrador |
+| Pessoa da gerência | Gerente |
+| Profissional de aplicações | Colaborador |
+| Pessoa da administração | Administrador |
+| Atendente humana | Colaborador, somente depois de aceitar o convite |
 
 ## Alcance de cada papel
 

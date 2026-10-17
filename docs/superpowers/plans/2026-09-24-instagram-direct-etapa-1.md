@@ -722,7 +722,7 @@ function adminFalso(opts: { insertErro?: { code: string; message: string } | nul
   return { admin, chamadas };
 }
 
-const sessao = { id: "S1", organizationId: "ORG", igAccountId: "IGACC", tokenCifrado: "x", origemPadrao: { campo: "origem", valor: "Instagram Dr. André" } };
+const sessao = { id: "S1", organizationId: "ORG", igAccountId: "IGACC", tokenCifrado: "x", origemPadrao: { campo: "origem", valor: "Instagram Dr. Otávio" } };
 const evento = (over: Partial<EventoDoInstagram> = {}): EventoDoInstagram => ({ igAccountId: "IGACC", remetente: "IGSID9", destinatario: "IGACC", externalId: "m1", eco: false, texto: "Oi", anexos: [], enviadaEm: new Date(1), ...over });
 
 describe("ingestão do Instagram", () => {
@@ -733,7 +733,7 @@ describe("ingestão do Instagram", () => {
     expect(chamadas.rpc).toContainEqual(["fn_upsert_conversa_de_canal", { p_org: "ORG", p_contact: "C1", p_session: "S1", p_canal: "instagram" }]);
     const [, msg] = chamadas.insert.find(([t]) => t === "messages") as [string, Record<string, unknown>];
     expect(msg).toMatchObject({ organization_id: "ORG", direction: "inbound", external_id: "m1", body: "Oi" });
-    expect(chamadas.update).toContainEqual(["contacts", { custom_fields: { origem: "Instagram Dr. André" } }]);
+    expect(chamadas.update).toContainEqual(["contacts", { custom_fields: { origem: "Instagram Dr. Otávio" } }]);
     expect(aplicarEfeitosPosEntrada).toHaveBeenCalled();
   });
 
@@ -1252,10 +1252,10 @@ import { ConversationListItem } from "@/components/inbox/ConversationListItem";
 
 describe("contato sem telefone no Inbox", () => {
   it("mostra o @ e o canal, nunca ??", () => {
-    render(<ConversationListItem conversation={{ id: "c", channel: "instagram", contact: { display_name: null, phone_number: null, handle: "maria" }, session: { display_name: "@dr.andreluisc" }, last_message_preview: "Oi" } as never} />);
+    render(<ConversationListItem conversation={{ id: "c", channel: "instagram", contact: { display_name: null, phone_number: null, handle: "maria" }, session: { display_name: "@dr.exemplo" }, last_message_preview: "Oi" } as never} />);
     expect(screen.queryByText("??")).toBeNull();
     expect(screen.getByText("@maria")).toBeTruthy();
-    expect(screen.getByText(/via @dr\.andreluisc/)).toBeTruthy();
+    expect(screen.getByText(/via @dr\.exemplo/)).toBeTruthy();
   });
 });
 ```
@@ -1281,7 +1281,7 @@ Antes de escrever, abra `ConversationListItem.tsx` e ajuste os nomes de props do
 - Create: `tests/e2e/instagram-receber.spec.ts`, `scripts/seed-e2e-instagram.ts`, `.changes/instagram-direct-receber.md`
 - Modify: `.github/workflows/e2e.yml` (`SPECS_PARTE_2`), `docs/testing/user-journey-map.md`, `docs/architecture/` (mapa vivo), `docs/current-state.md`
 
-- [ ] **Step 1: Seed** — `scripts/seed-e2e-instagram.ts` grava `platform_meta_app.ig_app_id`/`ig_app_secret_encrypted` (segredo `"segredo-e2e"`) e uma `channel_session` `meta_instagram` (`ig_account_id = "17841400000000001"`, `ig_username = "clinica_e2e"`, `metadata.origem_padrao = { campo: "origem", valor: "Instagram Dr. André" }`) no org do seed de credenciais, e o campo `origem` (select) no funil padrão. Só escreve em `localhost` (mesma guarda dos outros `seed-e2e-*`).
+- [ ] **Step 1: Seed** — `scripts/seed-e2e-instagram.ts` grava `platform_meta_app.ig_app_id`/`ig_app_secret_encrypted` (segredo `"segredo-e2e"`) e uma `channel_session` `meta_instagram` (`ig_account_id = "17841400000000001"`, `ig_username = "clinica_e2e"`, `metadata.origem_padrao = { campo: "origem", valor: "Instagram Dr. Otávio" }`) no org do seed de credenciais, e o campo `origem` (select) no funil padrão. Só escreve em `localhost` (mesma guarda dos outros `seed-e2e-*`).
 
 - [ ] **Step 2: Spec**
 
@@ -1297,7 +1297,7 @@ import { test, expect } from "@playwright/test";
 import { login } from "./helpers/auth";
 
 test("um Direct novo aparece no Inbox com @, canal e origem", async ({ page, request }) => {
-  const corpo = JSON.stringify({ object: "instagram", entry: [{ id: "17841400000000001", time: Date.now(), messaging: [{ sender: { id: `IGSID-${Date.now()}` }, recipient: { id: "17841400000000001" }, timestamp: Date.now(), message: { mid: `mid-${Date.now()}`, text: "Vim pelo Instagram do Dr. André" } }] }] });
+  const corpo = JSON.stringify({ object: "instagram", entry: [{ id: "17841400000000001", time: Date.now(), messaging: [{ sender: { id: `IGSID-${Date.now()}` }, recipient: { id: "17841400000000001" }, timestamp: Date.now(), message: { mid: `mid-${Date.now()}`, text: "Vim pelo Instagram do Dr. Otávio" } }] }] });
   const assinatura = `sha256=${createHmac("sha256", "segredo-e2e").update(corpo).digest("hex")}`;
   const r = await request.post("/api/v1/webhooks/instagram", { data: corpo, headers: { "content-type": "application/json", "x-hub-signature-256": assinatura } });
   expect(r.status()).toBe(200);
@@ -1308,7 +1308,7 @@ test("um Direct novo aparece no Inbox com @, canal e origem", async ({ page, req
 
   await login(page, "manager");
   await page.goto("/app/inbox");
-  const item = page.getByText("Vim pelo Instagram do Dr. André").first();
+  const item = page.getByText("Vim pelo Instagram do Dr. Otávio").first();
   await expect(item).toBeVisible();
   await expect(page.getByText(/via @clinica_e2e/).first()).toBeVisible();
   await expect(page.getByText("??")).toHaveCount(0);
@@ -1318,7 +1318,7 @@ test("um Direct novo aparece no Inbox com @, canal e origem", async ({ page, req
   const contatos = await request.get("/api/v1/contacts?q=Instagram&limit=5");
   expect(contatos.ok()).toBe(true);
   const { data } = (await contatos.json()) as { data: { custom_fields?: Record<string, unknown> }[] };
-  expect(data.some((c) => c.custom_fields?.origem === "Instagram Dr. André")).toBe(true);
+  expect(data.some((c) => c.custom_fields?.origem === "Instagram Dr. Otávio")).toBe(true);
   await page.goto("/app/kanban");
   await expect(page.getByText(/Contato do Instagram|@IGSID|Instagram/).first()).toBeVisible();
 });

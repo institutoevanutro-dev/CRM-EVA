@@ -65,7 +65,7 @@ Acrescente ao fim de `lib/comentarios/seguranca.test.ts`:
 ```ts
 describe("marcação de perfil sai da análise", () => {
   it("marcação mais emoji passa: o que decide é o resto da frase", () => {
-    expect(ehObviamenteSeguro("@dr.andreluisc 💪💪💪")).toEqual({ seguro: true });
+    expect(ehObviamenteSeguro("@dr.exemplo 💪💪💪")).toEqual({ seguro: true });
   });
 
   it("marcação mais elogio conhecido passa", () => {
@@ -539,7 +539,7 @@ describe("candidatosDoHistorico", () => {
   });
 
   it("marcação não vira candidato: ela sai da análise", () => {
-    expect(candidatosDoHistorico(["@dr.andreluisc top"], nada)).toEqual([]);
+    expect(candidatosDoHistorico(["@dr.exemplo top"], nada)).toEqual([]);
   });
 
   it("ordena pelo que mais encolhe a fila, e alfabético no empate", () => {

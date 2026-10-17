@@ -110,7 +110,7 @@ beforeEach(() => {
   insertErro = null;
   insertErroPorExternalId = {};
   db = {
-    sessoes: { [SESSAO]: { id: SESSAO, phone_number: "+5527999049879", metadata: { coexistencia: COEX }, archived_at: null } },
+    sessoes: { [SESSAO]: { id: SESSAO, phone_number: "+5527990001234", metadata: { coexistencia: COEX }, archived_at: null } },
     conversas: {},
   };
   aoResolverContato = null;
@@ -148,9 +148,9 @@ describe("processarChunkDeHistorico", () => {
     expect(inserts).toHaveLength(0);
   });
 
-  it("direção com/sem o 9: from '552799049879' (sem o 9) ainda é o número do negócio '+5527999049879'", async () => {
+  it("direção com/sem o 9: from '552790001234' (sem o 9) ainda é o número do negócio '+5527990001234'", async () => {
     await processarChunkDeHistorico(
-      comMensagens([{ from: "552799049879", id: "wamid.H9", timestamp: "1759000200", type: "text", text: { body: "sem o nove" } }]),
+      comMensagens([{ from: "552790001234", id: "wamid.H9", timestamp: "1759000200", type: "text", text: { body: "sem o nove" } }]),
       admin,
     );
     expect(inserts[0]).toMatchObject({ external_id: "wamid.H9", direction: "outbound" });

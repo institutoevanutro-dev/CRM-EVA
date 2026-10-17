@@ -28,10 +28,10 @@ import type { EstadoLido, EtapaLida, VinculoDeSupervisao } from '@/lib/supervisa
 
 // ─── ids sintéticos ──────────────────────────────────────────────────────────
 
-const ORG = '39bcf401-7767-4f78-b02c-94c0069c3e63';
-const ERICK = '2c68cf79-5557-4bc6-8c27-2803d76e7e85';
-const CINTIA = '1f38936b-1f0f-4e7d-b2ea-ee9cb9631bde';
-const FUNIL = '67621cbb-63a3-4ec4-acf3-f0b97dc60254';
+const ORG = 'a1000000-0000-4000-8000-000000000001';
+const SUPERVISOR = 'a1000000-0000-4000-8000-000000000002';
+const ATENDENTE = 'a1000000-0000-4000-8000-000000000003';
+const FUNIL = 'a1000000-0000-4000-8000-000000000005';
 const VINCULO = '11111111-1111-4111-8111-111111111111';
 const CONVERSA = '22222222-2222-4222-8222-222222222222';
 const CONTATO = '33333333-3333-4333-8333-333333333333';
@@ -73,8 +73,8 @@ function etapa(id: string, name: string): EtapaLida {
 const VINCULO_DA_CLINICA: VinculoDeSupervisao = {
   id: VINCULO,
   organization_id: ORG,
-  supervisor_agent_id: ERICK,
-  supervised_agent_id: CINTIA,
+  supervisor_agent_id: SUPERVISOR,
+  supervised_agent_id: ATENDENTE,
   pipeline_id: FUNIL,
   enabled: true,
   review_human_actions: true,
@@ -131,7 +131,7 @@ class BancoFalso implements SupervisaoDb {
       created_at: new Date(Date.parse(OCORREU) - (10 - i) * 60_000).toISOString(),
       body: m.body,
     }));
-    const ator: { tipo: 'ai_agent' | 'user'; id: string } = c.ator ?? { tipo: 'ai_agent', id: CINTIA };
+    const ator: { tipo: 'ai_agent' | 'user'; id: string } = c.ator ?? { tipo: 'ai_agent', id: ATENDENTE };
     const evento = {
       event_id: EVENTO,
       organization_id: ORG,
@@ -150,8 +150,8 @@ class BancoFalso implements SupervisaoDb {
       ...evento,
       id: REVISAO,
       binding_id: VINCULO,
-      idempotency_key: chaveDeIdempotencia(evento, ERICK),
-      supervisor_agent_id: ERICK,
+      idempotency_key: chaveDeIdempotencia(evento, SUPERVISOR),
+      supervisor_agent_id: SUPERVISOR,
       status: 'pendente',
       outcome_code: null,
       policy_version: 'eva-v1',
@@ -174,7 +174,7 @@ class BancoFalso implements SupervisaoDb {
     return this.vinculo;
   }
   async supervisoresDaOrganizacao(): Promise<Set<string>> {
-    return new Set([ERICK]);
+    return new Set([SUPERVISOR]);
   }
   async vinculoDoUsuario(_org: string, userId: string) {
     return userId === HUMANO ? ('valido' as const) : ('ausente' as const);
@@ -285,7 +285,7 @@ function deps(banco: BancoFalso, proposta: unknown): SupervisaoDeps & { chamadas
   return {
     db: banco,
     async carregarSupervisor() {
-      return { agentId: ERICK, versionId: '99999999-9999-4999-8999-999999999999', politicas: 'Políticas da clínica.' };
+      return { agentId: SUPERVISOR, versionId: '99999999-9999-4999-8999-999999999999', politicas: 'Políticas da clínica.' };
     },
     async proporRevisao() {
       chamadas += 1;

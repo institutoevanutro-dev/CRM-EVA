@@ -1,4 +1,4 @@
-# Configurar recursos da agenda do Instituto Eva
+# Configurar recursos da agenda da clínica
 
 Faça esta configuração em **Configurações → Tipos de agendamento** depois de publicar a versão.
 
@@ -19,12 +19,12 @@ Faça esta configuração em **Configurações → Tipos de agendamento** depois
 
 Expediente das duas unidades: segunda a sexta, das 09h às 12h e das 14h às 19h.
 
-- Dr. André: segunda e quinta na Serra; terça, quarta e sexta em Vitória.
-- Dra. Ana: quarta à tarde em Vitória.
-- Juliana: segunda à tarde em Vitória.
-- Leonardo: quarta e sexta à tarde em Vitória.
-- Paulo: terça e quinta à tarde em Vitória.
-- Isadora: segunda e quinta o dia todo na Serra; terça, quarta e sexta em Vitória.
+- Dr. Otávio: segunda e quinta na Serra; terça, quarta e sexta em Vitória.
+- Profissional A: quarta à tarde em Vitória.
+- Profissional B: segunda à tarde em Vitória.
+- Profissional C: quarta e sexta à tarde em Vitória.
+- Profissional D: terça e quinta à tarde em Vitória.
+- Profissional de aplicações: segunda e quinta o dia todo na Serra; terça, quarta e sexta em Vitória.
 
 ## Conferência
 

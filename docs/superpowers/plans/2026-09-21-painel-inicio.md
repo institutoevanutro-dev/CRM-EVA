@@ -473,7 +473,7 @@ describe("configuracaoPendente", () => {
   it("acha tipo ativo sem responsável, convite vencido, WhatsApp fora e agente nunca publicado — só desta org", async () => {
     const { db } = fakeDb({
       calendar_event_types: [
-        { id: "e1", organization_id: ORG, name: "Acupuntura — Dra. Ana Claudia", is_active: true, default_owner_user_id: null },
+        { id: "e1", organization_id: ORG, name: "Acupuntura — Dra. Lúcia Prado", is_active: true, default_owner_user_id: null },
         { id: "e2", organization_id: ORG, name: "Consulta", is_active: true, default_owner_user_id: "u" },
         { id: "e3", organization_id: ORG, name: "Antigo", is_active: false, default_owner_user_id: null },
         { id: "e4", organization_id: OUTRA, name: "Outra", is_active: true, default_owner_user_id: null },
@@ -488,8 +488,8 @@ describe("configuracaoPendente", () => {
         { id: "s2", organization_id: ORG, display_name: "Outro", status: "WORKING" },
       ],
       ai_agents: [
-        { id: "g1", organization_id: ORG, name: "Isadora", published_version_id: null, archived_at: null },
-        { id: "g2", organization_id: ORG, name: "Cintia", published_version_id: "v2", archived_at: null },
+        { id: "g1", organization_id: ORG, name: "Aplicações", published_version_id: null, archived_at: null },
+        { id: "g2", organization_id: ORG, name: "Atendimento", published_version_id: "v2", archived_at: null },
         { id: "g3", organization_id: ORG, name: "Velho", published_version_id: null, archived_at: "2026-01-01T00:00:00Z" },
       ],
     });

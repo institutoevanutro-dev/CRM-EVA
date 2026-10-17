@@ -8,6 +8,99 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.16.0] — 2026-10-16
+
+### Corrigido
+
+- **Eventos da agenda Google incluem o nome do contato do CRM** A sincronização passa a mostrar «Nome do contato — Título do compromisso» no Google
+  Calendar. O nome segue a mesma regra do cadastro do CRM: nome preenchido pela equipe
+  antes do nome de exibição do perfil. Bloqueios e compromissos sem contato mantêm o
+  título original; nenhum telefone ou dado clínico é acrescentado.
+
+  Eventos já vinculados são atualizados no mesmo identificador durante a reconciliação,
+  sem criar outra reserva. Edições conflitantes feitas no Google continuam exigindo a
+  decisão da equipe, e os checkpoints continuam armazenando apenas hashes dos títulos.
+
+## [4.15.0] — 2026-10-16
+
+### Adicionado
+
+- **Quem escreve fora do horário de atendimento pode receber um aviso automático — uma vez por contato por período fechado (desligado por padrão)** Quem escrevia fora do horário de funcionamento do agente não recebia nada até a abertura: no sábado à noite, silêncio até segunda de manhã, e a pessoa sem saber se a mensagem chegou. Agora a tela de gatilho do agente (em "Só atender em horário de funcionamento") aceita um texto de aviso, e esse texto é enviado quando a mensagem chega fora do horário. Vale só para quem preencher o texto: o padrão é não enviar nada, e quem não mexer na tela não vê mudança nenhuma.
+
+  O aviso sai no máximo uma vez por contato por período fechado (o período começa quando o horário fecha e só volta a valer quando ele abre e fecha de novo). Não recebem nunca: contato bloqueado ou que pediu para parar (inclusive quando a própria mensagem é um pedido para parar), contato com atendimento só humano, contato oculto do Inbox, titular anonimizado, conversa de grupo e número da própria clínica. O aviso respeita a janela de envio do número, o aquecimento, o teto diário e o espaçamento, e conta como uma mensagem enviada. Quando o horário abre, a IA responde normalmente.
+
+  Porte de melgarafael/DeskcommCRM#2284.
+
+- **Responder no WhatsApp (conexão por QR) marca a conversa como lida — o cliente vê o visto azul** Quando uma resposta sai pela conexão por QR (agente, atendente, campanha, follow-up ou aviso de escalação), o CRM agora marca a conversa como lida logo depois do envio, e a mensagem que o cliente mandou ganha o visto azul no celular dele. Antes, a resposta chegava e a mensagem do cliente ficava só como entregue, o que soava como "me respondeu sem ler". Se marcar como lida falhar, a resposta já saiu e não é afetada; a falha fica registrada no log. Ainda não há opção para desligar o visto por conexão, e a conexão pela API oficial da Meta não muda. Grupo não recebe visto. Nada a fazer na atualização.
+
+  Porte de melgarafael/DeskcommCRM#2987 (contribuição de @webtecnica no upstream, a partir da issue #2981).
+
+### Corrigido
+
+- **Um agente pausado não cala mais o número quando há outro agente no ar nele** Com mais de um agente publicado no mesmo número, o atendimento escolhia o de maior prioridade sem olhar se ele estava pausado. Se o escolhido estivesse pausado, a mensagem do cliente ficava sem resposta, mesmo havendo outro agente ativo publicado no mesmo número. O contorno era mexer na prioridade à mão.
+
+  Agora quem está no ar vem sempre antes de qualquer agente pausado, e a prioridade só desempata entre agentes no mesmo estado. Quando todos os agentes do número estão pausados, o número continua sem resposta automática, como antes. Nada muda na configuração.
+
+- **Mensagem que o contato editou ou apagou para todos passa a aparecer assim na conversa** Quando o contato editava ou apagava para todos uma mensagem que tinha mandado, o CRM seguia mostrando o texto antigo, sem aviso nenhum: o evento chegava e era marcado como processado, mas não encontrava a mensagem, porque a recebida é guardada com o identificador completo e o aviso de edição traz só a parte final dele. Agora a edição atualiza o texto e o apagar marca a mensagem como apagada também nas mensagens recebidas; as enviadas pelo atendente seguem como antes. Nada a fazer na atualização.
+
+  Contribuição de @webtecnica (#2956), a partir da issue #2939 de @el-barreto.
+
+## [4.14.0] — 2026-10-16
+
+### Adicionado
+
+- **Fluxo de acompanhamento pós-consulta, que começa quando a equipe marca que o paciente compareceu** Até aqui só a falta confirmada pela equipe iniciava um fluxo de mensagens. Agora
+  o editor de follow-up tem o gatilho «Depois que o paciente compareceu»: quando a
+  equipe marca o compromisso como «compareceu» (pela Agenda ou pela ferramenta da
+  IA), o paciente entra no fluxo publicado e armado em um assistente, preso àquela
+  consulta. Dá para limitar a tipos de compromisso, como no gatilho de falta.
+
+  A espera de tempo fixo ganhou «Contar a partir de: Da data da consulta». Toda
+  espera com essa opção conta da mesma data. Para mandar mensagem 7, 15, 30 e 45
+  dias depois da consulta, use quatro esperas de 7, 15, 30 e 45 dias, sem calcular
+  a diferença entre elas. Se o paciente responder no meio, a próxima mensagem não
+  é antecipada: ela continua saindo no dia marcado (a menos que o gatilho esteja com
+  «Cancelar se o lead responder»).
+
+  Se o paciente comparecer a uma nova consulta enquanto o acompanhamento anterior
+  ainda corre, o anterior é encerrado e a contagem recomeça pela consulta nova. Para
+  uma mensagem de reativação no fim da régua só para quem não marcou retorno, use o
+  novo campo de condição «Consultas futuras marcadas é exatamente 0» antes dela.
+
+  O paciente que já tem outro acompanhamento ativo não entra, e a Central de avisos
+  mostra «O acompanhamento pós-consulta não foi iniciado». Se a equipe desfizer a
+  presença (por exemplo, trocando para falta), o acompanhamento daquela consulta é
+  cancelado. Quem não configurar o gatilho não vê diferença nenhuma: marcar presença
+  sem fluxo armado não gera aviso.
+
+## [4.13.0] — 2026-10-16
+
+### Adicionado
+
+- **A agenda pela integração (MCP) pode ser lida por semana numa chamada só** Quem lê a agenda pela integração — como o Prontuário — pode pedir um período
+  de até 7 dias de uma vez, com `de` e `ate` (datas no horário de Brasília,
+  inclusivas), em vez de uma chamada por dia. A resposta traz os mesmos campos
+  de antes, em ordem de início, com até 350 compromissos. Quem continua pedindo
+  dia a dia não percebe diferença nenhuma.
+
+### Corrigido
+
+- **A IA para de responder quando do outro lado é um robô** Quando o número do contato era um atendimento automático (um chatbot que devolve
+  sempre o mesmo texto pronto), a IA respondia a cada mensagem dele, e os dois ficavam
+  conversando entre si: em produção foram 37 mensagens da IA em 7 minutos. Isso gasta
+  modelo e é risco de bloqueio do número no WhatsApp.
+
+  Agora, antes de chamar o modelo, o atendimento confere a conversa. Se o contato mandou
+  a mesma mensagem longa (20 caracteres ou mais) 3 vezes em 10 minutos, ou se a IA mandou
+  mais de 20 mensagens em 5 minutos sem ninguém da equipe falar, a IA para de responder
+  sem avisar o contato, a conversa vai para a fila humana e abre UM aviso na Central:
+  "Possível robô do outro lado". Se for uma pessoa, devolva a conversa à IA pela tela.
+
+  Quem repete "oi" ou reenvia a mesma pergunta duas vezes não é afetado. Os limites são
+  ajustáveis por `BOT_LOOP_REPEAT_COUNT`, `BOT_LOOP_REPEAT_WINDOW_MS`,
+  `BOT_LOOP_AI_BURST_MAX` e `BOT_LOOP_AI_BURST_WINDOW_MS`; sem nada no `.env`, valem os
+  números acima.
+
 ## [4.12.1] — 2026-10-16
 
 ### Corrigido
@@ -380,7 +473,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ### Corrigido
 
-- **O agente não parte mais o balão em "Dr." nem no meio de um link** Com a divisão em balões ligada, a resposta "Temos duas formas de começar com o Dr. André: a consulta de R$490..." chegava ao cliente em dois balões, o primeiro terminando em "Dr." e o segundo começando em "André". O divisor tratava o ponto de uma abreviação como fim de frase. Agora o ponto de tratamento e de endereço (Dr., Dra., Sr., Sra., Prof., Profa., Av., R., nº, p. ex., e em espanhol Ud. e Uds.) não fecha balão, nem o ponto seguido de letra minúscula ("etc. no dia"), nem o ponto colado no que vem depois, o que também conserta o link que saía quebrado ("clinica. com. br"). Fim de frase de verdade e tamanho máximo do balão seguem valendo. Nada a fazer na VPS.
+- **O agente não parte mais o balão em "Dr." nem no meio de um link** Com a divisão em balões ligada, a resposta "Temos duas formas de começar com o Dr. Otávio: a consulta de R$490..." chegava ao cliente em dois balões, o primeiro terminando em "Dr." e o segundo começando em "Otávio". O divisor tratava o ponto de uma abreviação como fim de frase. Agora o ponto de tratamento e de endereço (Dr., Dra., Sr., Sra., Prof., Profa., Av., R., nº, p. ex., e em espanhol Ud. e Uds.) não fecha balão, nem o ponto seguido de letra minúscula ("etc. no dia"), nem o ponto colado no que vem depois, o que também conserta o link que saía quebrado ("clinica. com. br"). Fim de frase de verdade e tamanho máximo do balão seguem valendo. Nada a fazer na VPS.
 
 - **Paciente que escreve de novo enquanto uma resposta está sendo reenviada não fica mais sem resposta** Quando a IA manda uma resposta em mais de uma mensagem e o envio falha no meio (o WhatsApp recusa uma delas, ou o serviço reinicia), o sistema espera de 10 segundos a 2 minutos e tenta de novo. Se o paciente escrevesse outra mensagem exatamente nessa espera, ela era juntada à tentativa que já estava na fila. Na hora de reenviar, o sistema tratava a primeira mensagem da nova resposta como "já enviada" e não mandava: o paciente recebia só o começo da resposta antiga e nada sobre o que acabou de perguntar. Não aparecia erro nem aviso na Central.
 
@@ -7428,7 +7521,11 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.12.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.16.0...HEAD
+[4.16.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.15.0...v4.16.0
+[4.15.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.14.0...v4.15.0
+[4.14.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.13.0...v4.14.0
+[4.13.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.12.1...v4.13.0
 [4.12.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.12.0...v4.12.1
 [4.12.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.11.1...v4.12.0
 [4.11.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.11.0...v4.11.1

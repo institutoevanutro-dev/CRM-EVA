@@ -1,6 +1,6 @@
 # Parte 4 — Conversas (Inbox): visual, fotos, fonte e foco em vendas
 
-Desenho aprovado por André em 07/10/2026, com a prévia em chat e os acréscimos
+Desenho aprovado pelo dono em 07/10/2026, com a prévia em chat e os acréscimos
 dele: fonte bonita e igual aos outros sistemas, foto das pessoas, UX pensada
 para vendas, e os outros sistemas (site institucional, PrecificaEva) como
 referência.

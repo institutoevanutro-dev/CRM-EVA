@@ -1314,6 +1314,32 @@ async function handleSessionStatus(
 }
 
 /**
+ * As formas em que a linha da mensagem ORIGINAL (a editada ou apagada) pode ter
+ * sido gravada em `messages.external_id` (porte de upstream #2956).
+ *
+ * `editedMessageId`/`revokedMessageId` chegam só com a CAUDA do id do WhatsApp
+ * (o bare), enquanto a mensagem RECEBIDA é gravada COMPLETA —
+ * `false_<chat>_<bare>`, o mesmo `p.id` do webhook de entrada. Casar só pela
+ * cauda achava a mensagem que NÓS mandamos (o envio grava o bare) e nunca a que
+ * o cliente mandou: o evento "sumia" sem erro e o texto velho ficava na tela.
+ *
+ * O `chat` e o `fromMe` do PRÓPRIO evento reconstroem o composto, então o
+ * casamento EXIGE o chat — a mesma cauda em outra conversa não é tocada. A cauda
+ * segue na lista para o caminho da mensagem enviada, que já funcionava.
+ */
+function formasDaMensagemOriginal(
+  idDoEvento: string,
+  chat: string,
+  fromMe: boolean | null | undefined,
+): string[] {
+  const bare = bareWaMessageId(idDoEvento);
+  const composta = chat ? `${fromMe ? "true" : "false"}_${chat}_${bare}` : null;
+  return [
+    ...new Set([idDoEvento, bare, ...(composta ? [composta] : [])].filter((f) => f.length > 0)),
+  ];
+}
+
+/**
  * O autor editou a mensagem no aplicativo.
  *
  * O corpo é SOBRESCRITO, e não versionado: o que o CRM mostra tem que ser o que
@@ -1331,15 +1357,15 @@ async function handleMessageEdited(
   session: Session,
   p: WahaPayload,
 ): Promise<void> {
-  const alvo = bareWaMessageId(p.editedMessageId ?? "");
+  if (!p.editedMessageId) return;
   const corpo = typeof p.body === "string" ? p.body : null;
-  if (!alvo || corpo === null) return;
+  if (corpo === null) return;
 
   await admin
     .from("messages")
     .update({ body: corpo, edited_at: new Date().toISOString() })
     .eq("organization_id", session.organization_id)
-    .eq("external_id", alvo);
+    .in("external_id", formasDaMensagemOriginal(p.editedMessageId, p.from ?? "", p.fromMe));
 }
 
 /**
@@ -1356,14 +1382,29 @@ async function handleMessageRevoked(
   session: Session,
   p: WahaPayload,
 ): Promise<void> {
-  const alvo = bareWaMessageId(p.revokedMessageId ?? "");
-  if (!alvo) return;
+  if (!p.revokedMessageId) return;
+
+  // Forma de WAMessageRevokedBody do WAHA (NOWEB): o chat vem em `after` (a
+  // protocolMessage de quem apagou), não no topo. O topo é lido primeiro para
+  // não regredir num engine que mande flat.
+  const depois =
+    (p as { after?: { from?: unknown; fromMe?: unknown; id?: unknown } | null }).after ?? null;
+  const chat =
+    (typeof p.from === "string" && p.from) ||
+    (typeof depois?.from === "string" ? depois.from : "") ||
+    (typeof depois?.id === "string" ? (chatIdFromWaMessageId(depois.id) ?? "") : "");
+  const fromMe =
+    typeof p.fromMe === "boolean"
+      ? p.fromMe
+      : typeof depois?.fromMe === "boolean"
+        ? depois.fromMe
+        : undefined;
 
   await admin
     .from("messages")
     .update({ revoked_at: new Date().toISOString() })
     .eq("organization_id", session.organization_id)
-    .eq("external_id", alvo);
+    .in("external_id", formasDaMensagemOriginal(p.revokedMessageId, chat, fromMe));
 }
 
 /**

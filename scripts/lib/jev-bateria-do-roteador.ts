@@ -2,7 +2,7 @@
  * BATERIA DO ROTEADOR, 45 CASOS INVENTADOS: nenhuma mensagem veio de paciente.
  *
  * Origem: `docs/superpowers/specs/2026-10-12-bateria-do-roteador.json`, cópia
- * fiel dos casos em 12/10/2026. É um RASCUNHO do dono da clínica (André) e pode
+ * fiel dos casos em 12/10/2026. É um RASCUNHO do dono da clínica e pode
  * mudar; ao mudar lá, copie de novo para cá.
  *
  * Resultado medido do roteador atual (classificador por LLM) nesta bateria, em

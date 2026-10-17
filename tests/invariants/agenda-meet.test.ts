@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { ehVistoAzul } from "../support/waha-visto-azul";
 import { meetPgSupabase } from "../support/meet-pg-supabase";
 import { createAdminClient } from "@/lib/supabase/admin";
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
@@ -10,6 +11,21 @@ import { criarOrigemDeFollowup } from "./followup-service-origin";
 import { appointmentSnapshotSchema, expectedAppointment } from "@/lib/agenda/google/sync-store";
 import { assertMeetingDeliveryPg } from "@/lib/agenda/meet-delivery";
 import { claimOfJob } from "@/lib/agent-engine/queue/claim";
+
+/**
+ * Os clientes simulados só falam RPC; desde que o evento leva o nome do contato
+ * (PR 319), o executor também lê `contacts`. Estes testes cobrem o Meet, não o
+ * nome: a leitura devolve "sem contato" e o título segue como antes.
+ */
+const contatoSemNome = () => {
+  const cadeia = {
+    select: () => cadeia,
+    eq: () => cadeia,
+    maybeSingle: async () => ({ data: null, error: null }),
+  };
+  return cadeia;
+};
+
 const pool = new pg.Pool({
   connectionString: `postgresql://postgres:postgres@127.0.0.1:${process.env.TEST_DB_PORT ?? 54329}/postgres`,
   max: 5,
@@ -379,6 +395,7 @@ it("HTTP controlado: POST pending, polling GET, success/failure/unknown e convit
   const address = receiver.address();
   if (!address || typeof address === "string") throw Error("receiver");
   const db = {
+    from: contatoSemNome,
     rpc: async (_name: string, args: Record<string, unknown>) => {
       try {
         return { data: await app(f, String(args.p_action), args.p_args), error: null };
@@ -531,6 +548,7 @@ it("HTTP aceito com resposta perdida conserva request; recibo não reconhece rem
   const address = receiver.address();
   if (!address || typeof address === "string") throw Error("receiver");
   const db = {
+    from: contatoSemNome,
     rpc: async (_name: string, args: Record<string, unknown>) => {
       try {
         const data = await app(f, String(args.p_action), args.p_args);
@@ -627,6 +645,10 @@ it("entrega real controlada: fila→gates→ledger→handler→HTTP; replay não
     ).rows[0];
   const bodies: Record<string, unknown>[] = [];
   const receiver = createServer(async (req, res) => {
+    if (ehVistoAzul(req.url)) {
+      res.end("{}");
+      return;
+    }
     let raw = "";
     for await (const chunk of req) raw += String(chunk);
     bodies.push(raw ? JSON.parse(raw) : {});
@@ -892,6 +914,10 @@ it.each(["reclaim", "cancel", "redact"] as const)(
         await pool.query("select fn_lgpd_cascade_redact_contact($1,$2,null)", [f.org, f.contact]);
     };
     const receiver = createServer(async (req, res) => {
+      if (ehVistoAzul(req.url)) {
+        res.end("{}");
+        return;
+      }
       try {
         if (req.method === "GET") {
           if (mode !== "redact" && !mutation) await mutate();
@@ -1192,6 +1218,10 @@ async function controlledDelivery(
   let mutation = false,
     receiverError: unknown;
   const receiver = createServer(async (req, res) => {
+    if (ehVistoAzul(req.url)) {
+      res.end("{}");
+      return;
+    }
     try {
       if (req.method === "GET") {
         if (onResolve && !mutation) {

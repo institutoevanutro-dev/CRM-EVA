@@ -91,7 +91,7 @@ vi.mock("@/hooks/agenda/useRemarcarAgendamento", () => ({
 }));
 const PESSOAS = vi.hoisted(() => [
   { id: "p-ana", nome: "Ana", trilha: 1 as const },
-  { id: "p-bruna", nome: "Bruna", trilha: 2 as const },
+  { id: "p-bia", nome: "Bia", trilha: 2 as const },
   { id: "p-caio", nome: "Caio", trilha: 3 as const },
 ]);
 vi.mock("@/hooks/agenda/usePessoasDaAgenda", () => ({
@@ -185,9 +185,9 @@ afterEach(cleanup);
 describe("clicar num horário vazio abre o Novo agendamento já preenchido", () => {
   it("dia e meia hora do bloco, e a pessoa selecionada no filtro vira a dona", async () => {
     montar();
-    fireEvent.click(avatar("p-bruna"));
+    fireEvent.click(avatar("p-bia"));
     // A dica "Horários livres de" segue a seleção de UMA pessoa.
-    expect(ultimoPedidoDaGrade()?.owner_user_id).toBe("p-bruna");
+    expect(ultimoPedidoDaGrade()?.owner_user_id).toBe("p-bia");
 
     const bloco = screen.getByTestId(`bloco-${QUARTA}-14:30`);
     expect(bloco).toBeEnabled();
@@ -199,13 +199,13 @@ describe("clicar num horário vazio abre o Novo agendamento já preenchido", () 
     // 14:30 em São Paulo: o começo da célula, nunca o minuto do ponteiro.
     expect(painel).toHaveAttribute("data-instante", new Date(`${QUARTA}T14:30:00-03:00`).toISOString());
     expect(painel).toHaveAttribute("data-rotulo", "14:30");
-    expect(painel).toHaveAttribute("data-responsavel", "Bruna");
+    expect(painel).toHaveAttribute("data-responsavel", "Bia");
 
     fireEvent.click(screen.getByRole("button", { name: "confirmar" }));
     expect(marcar).toHaveBeenCalledWith(
       expect.objectContaining({
         event_type_id: "tipo-1",
-        owner_user_id: "p-bruna",
+        owner_user_id: "p-bia",
         starts_at: new Date(`${QUARTA}T14:30:00-03:00`).toISOString(),
       }),
     );
@@ -213,7 +213,7 @@ describe("clicar num horário vazio abre o Novo agendamento já preenchido", () 
 
   it("sem pessoa única no filtro, o dono continua o do tipo (nada de owner no POST)", async () => {
     montar();
-    fireEvent.click(avatar("p-bruna"));
+    fireEvent.click(avatar("p-bia"));
     fireEvent.click(avatar("p-caio"));
     expect(ultimoPedidoDaGrade()?.owner_user_id).toBeUndefined();
 
@@ -282,37 +282,37 @@ describe("filtro de um ou vários profissionais", () => {
   it("liga e desliga cada pessoa, e Todos zera", () => {
     compromissos.push(
       compromisso("c-ana", "p-ana", "09:00"),
-      compromisso("c-bruna", "p-bruna", "11:00"),
+      compromisso("c-bia", "p-bia", "11:00"),
       compromisso("c-caio", "p-caio", "13:00"),
     );
     montar();
     const visiveis = () =>
-      ["c-ana", "c-bruna", "c-caio"].filter((id) => screen.queryByTestId(`agendamento-${id}`));
-    expect(visiveis()).toEqual(["c-ana", "c-bruna", "c-caio"]);
+      ["c-ana", "c-bia", "c-caio"].filter((id) => screen.queryByTestId(`agendamento-${id}`));
+    expect(visiveis()).toEqual(["c-ana", "c-bia", "c-caio"]);
 
     fireEvent.click(avatar("p-ana"));
     fireEvent.click(avatar("p-caio"));
     expect(visiveis()).toEqual(["c-ana", "c-caio"]);
     expect(avatar("p-ana")).toHaveAttribute("aria-pressed", "true");
-    expect(avatar("p-bruna")).toHaveAttribute("aria-pressed", "false");
+    expect(avatar("p-bia")).toHaveAttribute("aria-pressed", "false");
 
     fireEvent.click(avatar("p-ana"));
     expect(visiveis()).toEqual(["c-caio"]);
 
     fireEvent.click(screen.getByTestId("botao-todos"));
-    expect(visiveis()).toEqual(["c-ana", "c-bruna", "c-caio"]);
+    expect(visiveis()).toEqual(["c-ana", "c-bia", "c-caio"]);
     expect(screen.queryByTestId("botao-todos")).toBeNull();
   });
 
   it("a escolha volta no próximo acesso, por usuário, e id que a pessoa não enxerga cai fora", () => {
     const primeira = montar();
-    fireEvent.click(avatar("p-bruna"));
+    fireEvent.click(avatar("p-bia"));
     fireEvent.click(avatar("p-caio"));
-    expect(JSON.parse(window.localStorage.getItem(CHAVE)!)).toEqual(["p-bruna", "p-caio"]);
+    expect(JSON.parse(window.localStorage.getItem(CHAVE)!)).toEqual(["p-bia", "p-caio"]);
     primeira.unmount();
 
     montar();
-    expect(screen.getByTestId("filtro-de-pessoas")).toHaveAttribute("data-selecionadas", "p-bruna,p-caio");
+    expect(screen.getByTestId("filtro-de-pessoas")).toHaveAttribute("data-selecionadas", "p-bia,p-caio");
     cleanup();
 
     // Gravado por outra versão ou de um colega que a pessoa não vê mais.

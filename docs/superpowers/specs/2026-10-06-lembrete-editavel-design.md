@@ -93,7 +93,7 @@ Todas as referências `arquivo:linha` abaixo foram lidas neste worktree, na base
    `calendar_units.name`, embutido na consulta da varredura pela FK composta
    `calendar_appointments_unit_fk`, que já garante a mesma organização). **Sem unidade,
    `{{unidade}}` fica vazio** e some pela regra do item 2: cair no endereço repetiria o endereço
-   num molde com as duas variáveis, e é justamente o caso do Dr. André (endereço no tipo, sem
+   num molde com as duas variáveis, e é justamente o caso do Dr. Otávio (endereço no tipo, sem
    unidade). A ajuda da tela diz isso. `{{endereco}}` = `location_details` da linha e, na falta
    dele, o do tipo, porque a unidade não tem endereço.
 6. **Canal**: sempre um canal de envio automático (WhatsApp, nunca Instagram). A ordem:
@@ -189,7 +189,7 @@ envio nesses casos (achado da revisão).
 gatilho (`new.reminder_sent_offsets_minutes := '{}'`), aceitando o segundo aviso em
 sequência; os dois testes acima são os que devem virar. O plano não a escreve.
 
-### 3.4 Efeito colateral do `6ed38c78c` sobre o Dr. André (ATENÇÃO)
+### 3.4 Efeito colateral do `6ed38c78c` sobre o Dr. Otávio (ATENÇÃO)
 
 A seção 4.10 do documento de negócio diz: "Consulta marcada para o dia seguinte, com menos
 de 24h: o lembrete sai minutos depois do resumo." **Depois deste porte, não sai mais**: a
@@ -278,7 +278,7 @@ O instante cobre o caso do rearme, em que a lista regravada fica igual.
 ## 4. O que fica de fora
 
 - Texto por degrau (`reminder_bodies`), teto de extras e catálogo de endereços da org (`22c9a1dbd`).
-- Endereço na unidade (`calendar_units.address`): a tabela não tem a coluna e o Dr. André usa
+- Endereço na unidade (`calendar_units.address`): a tabela não tem a coluna e o Dr. Otávio usa
   um tipo por unidade, com o endereço no tipo (seção 4.7 do documento de negócio). Se for
   preciso, entra numa migration futura e `{{endereco}}` passa a preferir a unidade.
 - Correções de "organização parada" do original (`53302e236`, `8b3cd60ee`, `7b8ac558b`) e

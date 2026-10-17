@@ -15,7 +15,7 @@ const LEGADA = { id: "sessao-waha-antiga", wahaSessionName: "clinica", statusAnt
 const m = vi.hoisted(() => ({
   trocar: vi.fn(async (): Promise<string> => "EAAX"),
   conferir: vi.fn(async () => ({ ok: true }) as { ok: true } | { ok: false; motivo: string }),
-  numeros: vi.fn(async () => [{ id: "111222333", displayPhoneNumber: "+55 27 99904-9879", isOnBizApp: true }]),
+  numeros: vi.fn(async () => [{ id: "111222333", displayPhoneNumber: "+55 27 99000-1234", isOnBizApp: true }]),
   registrar: vi.fn(async (..._a: unknown[]) => undefined),
   sincronizar: vi.fn(),
   arquivar: vi.fn(async (..._a: unknown[]): Promise<{ id: string; wahaSessionName: string | null; statusAnterior: string | null; statusReasonAnterior: string | null } | null> => LEGADA),
@@ -107,7 +107,7 @@ import { POST } from "@/app/api/v1/channels/official/cadastro-incorporado/route"
 
 const COEX = { code: "AQBx1234567890", evento: "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", waba_id: "222333444555", phone_number_id: null };
 const NOVO = { ...COEX, evento: "FINISH" };
-const conectado = { ok: true, sessionId: CANAL, displayName: "Clínica", phoneNumber: "+5527999049879", webhook: { assinado: true }, metadataGravada: true };
+const conectado = { ok: true, sessionId: CANAL, displayName: "Clínica", phoneNumber: "+5527990001234", webhook: { assinado: true }, metadataGravada: true };
 
 const req = (body: unknown) =>
   new NextRequest("http://localhost/api/v1/channels/official/cadastro-incorporado", { method: "POST", body: JSON.stringify(body) });
@@ -130,7 +130,7 @@ describe("POST /channels/official/cadastro-incorporado", () => {
     const res = await POST(req(COEX));
     expect(res.status).toBe(200);
     expect(m.registrar).not.toHaveBeenCalled();
-    expect(m.arquivar).toHaveBeenCalledWith(expect.anything(), ORG, "+5527999049879");
+    expect(m.arquivar).toHaveBeenCalledWith(expect.anything(), ORG, "+5527990001234");
     // ordem (ruling P1): o índice (org, phone_number) ativo ainda tem a linha WAHA
     expect(m.arquivar.mock.invocationCallOrder[0]!).toBeLessThan(m.conectar.mock.invocationCallOrder[0]!);
     expect(m.conectar).toHaveBeenCalledWith(

@@ -17,7 +17,7 @@ foi o BYO: o self-hoster cria o próprio app e cola as credenciais.
 
 O argumento continua valendo para o produto aberto. O que mudou é que existe uma instalação que
 **já é** Tech Provider: no EvaLink, a instalação usa o app de Tech Provider do próprio EvaLink
-(app `1054112660758768`). Para ela, pedir ao cliente que crie app e cole token é atrito sem
+(app `1000000000000001`). Para ela, pedir ao cliente que crie app e cole token é atrito sem
 motivo — e o cliente típico (clínica) quer manter o número no WhatsApp Business do celular, que
 é exatamente o que a coexistência da Meta permite.
 

@@ -6,7 +6,7 @@ import { test, expect, type Page } from "@playwright/test";
 /**
  * PAINEL INÍCIO — a primeira tela, provada como quem usa.
  *
- * O caso que motivou o painel: "Acupuntura — Dra. Ana Claudia" estava sem
+ * O caso que motivou o painel: "Acupuntura — Dra. Lúcia Prado" estava sem
  * responsável, e isso só apareceu quando alguém abriu a agenda. Aqui o tipo sem
  * responsável tem de aparecer em "Configuração pendente" e o botão tem de levar
  * à agenda. Spec: docs/superpowers/specs/2026-09-21-painel-inicio-design.md

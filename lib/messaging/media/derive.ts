@@ -42,7 +42,7 @@ export async function deriveMediaText(
  *
  * A extração de texto não acha nada nele, e até 2026-09-22 isso era o fim da
  * linha: o worker tentava 5 vezes, abria aviso CRÍTICO na Central e a IA nunca
- * via o arquivo (medido em produção, Instituto Eva). O arquivo em si é legível
+ * via o arquivo (medido em produção). O arquivo em si é legível
  * — por visão, o mesmo caminho da foto —, então é para lá que ele vai.
  *
  * SÓ o caso "sem texto" cai aqui. Qualquer outra falha (dependência ausente,

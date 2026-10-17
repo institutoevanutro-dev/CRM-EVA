@@ -1,6 +1,6 @@
 # Cores e menu do CRM da Eva (parte 2 do redesenho)
 
-Data: 07/10/2026. Aprovado em conversa pelo dono (André). Parte 2 de 5 do redesenho do CRM
+Data: 07/10/2026. Aprovado em conversa pelo dono. Parte 2 de 5 do redesenho do CRM
 (1 velocidade, 2 cores e menu, 3 Início, 4 Inbox, 5 revisão das telas).
 
 ## Objetivo

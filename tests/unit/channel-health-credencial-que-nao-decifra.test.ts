@@ -43,7 +43,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 const SESSAO = {
   id: "s1", organization_id: ORG, status: "WORKING", status_reason: null, display_name: "Clínica",
-  phone_number: "+5527999049879", archived_at: null, provider: "meta_cloud", meta_phone_number_id: "111222333",
+  phone_number: "+5527990001234", archived_at: null, provider: "meta_cloud", meta_phone_number_id: "111222333",
 };
 
 beforeEach(() => {

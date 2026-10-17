@@ -6,17 +6,17 @@
 migration sem backfill e trigger só em status/`kind`/`segments` (Passo 5); caso de vigência
 do invariante usa desativar + publicar (Passo 6); ajuste do caso das linhas 334-366 do
 invariante e nota no `HANDOFF.md` (Passo 7); `$3 = creds.org_id` (Passo 8).
-**Worktree:** `/Users/andreluislopescosta/crm-f2-followup-sweep`, branch `fix/followup-nao-recomeca`.
+**Worktree:** `~/crm-f2-followup-sweep`, branch `fix/followup-nao-recomeca`.
 **Migration:** `0324`, e só ela.
 
 Regras para todo o plano:
 
-- Caminhos absolutos ou `git -C /Users/andreluislopescosta/crm-f2-followup-sweep`.
+- Caminhos absolutos ou `git -C ~/crm-f2-followup-sweep`.
 - `git add` só arquivo por nome, depois de `git status --short`.
 - Nunca `.env.local`.
 - Um commit por passo verde, em conventional commits e português, terminando com `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
-`W=/Users/andreluislopescosta/crm-f2-followup-sweep` nos comandos abaixo.
+`W=~/crm-f2-followup-sweep` nos comandos abaixo.
 
 Cada passo tem o mesmo formato:
 

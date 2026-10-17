@@ -3,7 +3,7 @@
 > Especificação para aprovação antes de codar. Medida na `origin/main` em 2026-10-05.
 > Nada foi alterado no repositório.
 
-## Resumo para o André (5 linhas)
+## Resumo para o dono (5 linhas)
 
 1. Hoje o botão "Assumir" só impede que **outra pessoa clique em Assumir**. Ele não impede que ela **escreva** na conversa: qualquer atendente que enxerga a conversa responde ao cliente sem assumir.
 2. Proposta: no sistema, quem não é o dono da conversa **não consegue enviar**. A caixa de texto mostra "Esta conversa é da Fulana" e oferece o caminho certo (assumir, ou pedir transferência).
@@ -138,9 +138,9 @@ Não trava, porque não há como. A mensagem continua aparecendo como "Celular",
 
 ---
 
-## 5. Decisões do André (3)
+## 5. Decisões do dono (3)
 
-> **Decidido pelo André em 07/10/2026:** todas as recomendações desta seção foram aceitas.
+> **Decidido pelo dono em 07/10/2026:** todas as recomendações desta seção foram aceitas.
 
 **D1. Conversa sem dono: o que acontece quando alguém tenta responder?**
 - A) Precisa assumir. A caixa mostra o botão **Assumir e responder**, e um clique faz as duas coisas. *(recomendado)*

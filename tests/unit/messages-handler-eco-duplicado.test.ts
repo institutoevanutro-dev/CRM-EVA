@@ -513,7 +513,10 @@ describe('citar a mensagem que a clínica digitou no celular (revisão do PR #13
   const ORIGINAL = `true_250302204792918@lid_${BARE}`;
 
   function corpoDoEnvio(): Record<string, unknown> {
-    const chamadas = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    // O visto azul (`/api/sendSeen`) sai logo depois do envio e não é o envio.
+    const chamadas = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter(
+      (c) => !String(c[0]).includes("/api/sendSeen"),
+    );
     const init = chamadas.at(-1)![1] as { body: string };
     return JSON.parse(init.body) as Record<string, unknown>;
   }

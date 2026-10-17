@@ -2,11 +2,11 @@
 
 ## Estado da implementação
 
-O primeiro lote está implementado na branch de revisão: papéis humanos, rótulos da equipe e isolamento de agenda/pacientes do prestador. Cadastro de salas, duração por serviço, disponibilidade semanal, exceção simultânea da Isadora e ferramentas das IAs permanecem nos lotes seguintes desta especificação.
+O primeiro lote está implementado na branch de revisão: papéis humanos, rótulos da equipe e isolamento de agenda/pacientes do prestador. Cadastro de salas, duração por serviço, disponibilidade semanal, exceção simultânea da profissional de aplicações e ferramentas das IAs permanecem nos lotes seguintes desta especificação.
 
 ## Objetivo
 
-Usar o CRM como agenda principal do Instituto Eva. Cada profissional terá agenda,
+Usar o CRM como agenda principal da clínica. Cada profissional terá agenda,
 pacientes, serviços, unidade e disponibilidade próprios. O CRM poderá sincronizar os
 agendamentos com um calendário Google individual, sem depender dele para funcionar.
 
@@ -21,20 +21,20 @@ agendamentos com um calendário Google individual, sem depender dele para funcio
 
 Distribuição inicial confirmada:
 
-- André: administrador.
-- Erick Augusto: gerente.
-- Isadora Carvalho de Figueiredo: colaboradora.
-- Geovana Carvalho: administradora.
-- Cintia humana: colaboradora após aceitar o convite.
+- Dono da clínica: administrador.
+- Pessoa da gerência: gerente.
+- Profissional de aplicações: colaboradora.
+- Pessoa da administração: administradora.
+- Atendente humana: colaboradora após aceitar o convite.
 
 Pessoas e agentes de IA são identidades diferentes, mesmo quando têm o mesmo nome.
 Toda ação guarda autor, data, origem e motivo.
 
 ## Permissões dos agentes de IA
 
-- Cintia IA consulta horários, agenda, remarca e cancela quando o paciente pede claramente.
-- Isadora IA organiza aplicações, calorimetria e bioimpedância; também agenda, remarca e cancela.
-- Erick IA supervisiona conversas, leads, funis e pendências.
+- Atendente IA consulta horários, agenda, remarca e cancela quando o paciente pede claramente.
+- IA de aplicações organiza aplicações, calorimetria e bioimpedância; também agenda, remarca e cancela.
+- IA supervisora supervisiona conversas, leads, funis e pendências.
 - Nenhuma IA exclui histórico.
 - Exceções financeiras, clínicas ou operacionais são enviadas para revisão humana.
 
@@ -61,14 +61,14 @@ Capacidade física:
 - Serra: uma sala de atendimento e uma sala de aplicação.
 
 Uma sala não recebe dois pacientes no mesmo período. Um profissional não atende dois
-pacientes simultaneamente, salvo a exceção de aplicações da Isadora descrita abaixo.
+pacientes simultaneamente, salvo a exceção de aplicações da profissional de aplicações descrita abaixo.
 
-## Aplicações da Isadora
+## Aplicações simultâneas
 
 - Intramuscular: sete minutos totais.
 - Intravenosa: trinta minutos totais.
 - Não há intervalo adicional; as durações já incluem o tempo operacional.
-- Em Vitória, Isadora pode acompanhar duas aplicações simultâneas somente quando uma
+- Em Vitória, a profissional de aplicações pode acompanhar duas aplicações simultâneas somente quando uma
   for intravenosa e a outra intramuscular, cada uma em uma sala de aplicação diferente.
 - Na Serra, aplicações intravenosa e intramuscular não podem ocorrer simultaneamente,
   pois existe somente uma sala de aplicação.
@@ -92,12 +92,12 @@ deve solicitar o preenchimento do tempo antes de liberar o agendamento desse ser
 
 As duas unidades funcionam de segunda a sexta, das 09h às 12h e das 14h às 19h.
 
-- Dr. André: segunda e quinta na Serra; terça, quarta e sexta em Vitória.
-- Dra. Ana: quarta à tarde em Vitória.
-- Juliana: segunda à tarde em Vitória.
-- Leonardo: quarta e sexta à tarde em Vitória.
-- Paulo: terça e quinta à tarde em Vitória.
-- Isadora: segunda e quinta o dia todo na Serra; terça, quarta e sexta o dia todo em Vitória.
+- Dr. Otávio: segunda e quinta na Serra; terça, quarta e sexta em Vitória.
+- Profissional A: quarta à tarde em Vitória.
+- Profissional B: segunda à tarde em Vitória.
+- Profissional C: quarta e sexta à tarde em Vitória.
+- Profissional D: terça e quinta à tarde em Vitória.
+- Profissional de aplicações: segunda e quinta o dia todo na Serra; terça, quarta e sexta o dia todo em Vitória.
 
 Todos terão agenda própria no CRM. A disponibilidade real continua sujeita a bloqueios,
 folgas, férias e compromissos já existentes.
@@ -142,10 +142,10 @@ horário automaticamente.
 
 1. Papéis, permissões e separação entre usuário humano e agente de IA.
 2. Cadastro de profissionais, unidades, salas, serviços e disponibilidades.
-3. Motor de disponibilidade e conflitos, incluindo a exceção da Isadora.
+3. Motor de disponibilidade e conflitos, incluindo a exceção da profissional de aplicações.
 4. Criação, remarcação, cancelamento, estados e auditoria.
 5. Sincronização individual com Google Agenda e fila de pendências.
-6. Ferramentas seguras para Cintia IA e Isadora IA.
+6. Ferramentas seguras para Atendente IA e IA de aplicações.
 7. Testes de permissões, concorrência, salas, sinal e sincronização.
 
 ## Critérios de aceite
@@ -153,7 +153,7 @@ horário automaticamente.
 - Prestador não consegue ver agenda ou pacientes de outro profissional.
 - Colaborador, gerente e administrador acessam todas as agendas conforme suas permissões.
 - Não ocorre dupla reserva de profissional ou sala.
-- Em Vitória, a exceção da Isadora aceita apenas uma intravenosa com uma intramuscular simultâneas.
+- Em Vitória, a exceção da profissional de aplicações aceita apenas uma intravenosa com uma intramuscular simultâneas.
 - Na Serra, nenhuma combinação de aplicações simultâneas é aceita.
 - Os demais tempos são lidos do Catálogo de Produtos e preservados no agendamento.
 - IAs cancelam somente após pedido claro e nunca prometem devolução do sinal.
