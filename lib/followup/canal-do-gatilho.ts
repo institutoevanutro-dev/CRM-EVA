@@ -10,8 +10,10 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { PROVIDERS_WHATSAPP_DE_MENSAGEM } from "@/lib/channels/capabilities";
+
 /** Espelho do `s.provider in (...)` de `fn_appointment_recover` (0377). */
-export const PROVIDERS_DO_CANAL_FIXADO = ["waha", "meta_cloud", "zernio"] as const;
+export const PROVIDERS_DO_CANAL_FIXADO = PROVIDERS_WHATSAPP_DE_MENSAGEM;
 
 export function canalFixadoDoGatilho(cfg: unknown): string | null {
   const c = cfg as { kind?: unknown; params?: { channel_session_id?: unknown } } | null | undefined;

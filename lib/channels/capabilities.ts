@@ -258,6 +258,16 @@ export function nomeDoCanal(provider: string | null | undefined): "WhatsApp" | "
   return provider === CHANNEL_PROVIDER_INSTAGRAM ? "Instagram" : "WhatsApp";
 }
 
+/**
+ * Os canais de mensagem de WhatsApp 1:1: os de `PROVIDERS_DE_MENSAGEM` menos o
+ * Instagram. É a lista por onde um acompanhamento pode SAIR quando o gatilho
+ * fixa o número (migration 0377, `fn_appointment_recover`), e o espelho do
+ * `s.provider in (...)` daquela função.
+ */
+export const PROVIDERS_WHATSAPP_DE_MENSAGEM = PROVIDERS_DE_MENSAGEM.filter(
+  (p) => p !== CHANNEL_PROVIDER_INSTAGRAM,
+) as readonly ProviderDeMensagem[];
+
 export function capabilitiesOf(provider: ChannelProvider): ChannelCapabilities {
   const caps = CHANNEL_CAPABILITIES[provider as ProviderDeMensagem];
   // Fail-closed: provider fora da matriz não herda o default do WAHA. O tipo
