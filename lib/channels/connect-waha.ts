@@ -147,3 +147,13 @@ export async function assertWahaConnectionIdle(db: SupabaseClient,
   if (error) throw new ChannelConnectionError("connection_reservation_failed", 503);
   if (data && new Date(data.lease_until).getTime() > Date.now()) throw new ChannelConnectionError("connection_in_progress", 409);
 }
+
+/**
+ * Alguém está conectando esta sessão agora (QR, pareamento, reconectar)? É a
+ * MESMA reserva que a rota de reconectar respeita, com a resposta virada em
+ * booleano para quem não é rota: o vigia de surdez não reinicia por cima de
+ * uma pessoa. Não deu para perguntar conta como "sim": na dúvida, não mexe.
+ */
+export async function conexaoEmAndamento(db: SupabaseClient, organizationId: string, channelSessionId: string): Promise<boolean> {
+  return assertWahaConnectionIdle(db, organizationId, channelSessionId).then(() => false, () => true);
+}

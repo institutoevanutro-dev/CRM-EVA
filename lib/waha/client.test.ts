@@ -227,6 +227,7 @@ describe("o corpo devolvido pelo WAHA nunca entra na exceção", () => {
   const CHAMADAS: Array<[string, (c: WahaClient) => Promise<unknown>]> = [
     ["startSession", (c) => c.startSession("sessao")],
     ["stopSession", (c) => c.stopSession("sessao")],
+    ["restartSession", (c) => c.restartSession("sessao")],
     ["logoutSession", (c) => c.logoutSession("sessao")],
     ["deleteSession", (c) => c.deleteSession("sessao")],
     ["getSessionQr", (c) => c.getSessionQr("sessao")],
@@ -454,6 +455,23 @@ describe("sessões: conflito conhecido só converge com identidade e pós-condi�
   it("envelope de conflito referente a outro nome não concede start", async () => {
     await receive([create(422, { ...duplicate, message: "Session 'outra' already exists. Use PUT to update it." })], async (c) => {
       await expect(c.startSession(name)).rejects.toThrow("waha_create_422");
+    });
+  });
+
+  // O vigia de surdez reinicia por aqui. Foi esta chamada, feita à mão, que
+  // curou um número conectado e surdo em outubro/2026 sem QR: uma chamada só,
+  // sem criar sessão, sem PUT de config e sem logout no meio.
+  it("reinício nativo é UMA chamada, confirmada no GET", async () => {
+    const restart = { method: "POST", path: `${sessionPath}/restart`, status: 201, body: session("STARTING") };
+    await receive([restart, read(session("WORKING"))], async (c) => {
+      await expect(c.restartSession(name)).resolves.toMatchObject({ name, status: "WORKING" });
+    });
+  });
+
+  it.each(["STOPPED", "FAILED"])("reinício que deixa a sessão em %s não é sucesso", async (status) => {
+    const restart = { method: "POST", path: `${sessionPath}/restart`, status: 201, body: session("STARTING") };
+    await receive([restart, read(session(status))], async (c) => {
+      await expect(c.restartSession(name)).rejects.toThrow("waha_restart_201");
     });
   });
 
