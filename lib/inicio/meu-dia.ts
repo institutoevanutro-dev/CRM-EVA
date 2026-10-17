@@ -134,14 +134,20 @@ async function donosDasReferencias(
     const ct = String(f.contact_id);
     contatoDe.set(ct, [...(contatoDe.get(ct) ?? []), String(f.id)]);
   }
-  const conversaDoCaso = new Map(casos.map((c) => [String(c.conversation_id), String(c.id)]));
+  // Uma conversa pode ter mais de um caso aberto: cada um herda o atendente dela.
+  const casosDaConversa = new Map<string, string[]>();
+  for (const c of casos) {
+    const cv = String(c.conversation_id);
+    casosDaConversa.set(cv, [...(casosDaConversa.get(cv) ?? []), String(c.id)]);
+  }
 
   const [conversasDosCasos, conversasDosContatos, leadsDosContatos] = await Promise.all([
-    buscarPorIds(db, "conversations", "id,assigned_to_user_id", "id", conversaDoCaso.keys(), orgId),
+    buscarPorIds(db, "conversations", "id,assigned_to_user_id", "id", casosDaConversa.keys(), orgId),
     buscarPorIds(db, "conversations", "contact_id,assigned_to_user_id", "contact_id", contatoDe.keys(), orgId),
     buscarPorIds(db, "crm_leads", "contact_id,owner_user_id,status", "contact_id", contatoDe.keys(), orgId),
   ]);
-  for (const c of conversasDosCasos) dar(conversaDoCaso.get(String(c.id))!, c.assigned_to_user_id);
+  for (const c of conversasDosCasos)
+    for (const caso of casosDaConversa.get(String(c.id)) ?? []) dar(caso, c.assigned_to_user_id);
   for (const id of casos.map((c) => String(c.id))) dar(id, null);
   for (const refs of contatoDe.values()) for (const ref of refs) dar(ref, null);
   for (const c of conversasDosContatos)

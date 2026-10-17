@@ -47,6 +47,8 @@ describe("avisosAbertos — só o que é da pessoa", () => {
       aviso("consulta-minha", { kind: "appointment_unconfirmed", ref_kind: "appointment", ref_id: "ap-minha" }),
       aviso("consulta-outro", { kind: "appointment_unconfirmed", ref_kind: "appointment", ref_id: "ap-outro" }),
       aviso("caso-meu", { kind: "case_stale", ref_kind: "agent_case", ref_id: "caso-1" }),
+      // Segundo caso aberto na MESMA conversa: herda o mesmo atendente.
+      aviso("caso-meu-2", { kind: "case_stale", ref_kind: "agent_case", ref_id: "caso-2" }),
       aviso("contato-meu", { ref_kind: "contact", ref_id: "ct-lead-meu" }),
       aviso("followup-outro", { kind: "followup_dead", ref_kind: "followup_enrollment", ref_id: "fe-1" }),
       aviso("canal-fora", { kind: "qr_rescan", ref_kind: "channel_session", ref_id: "s-1" }),
@@ -68,7 +70,10 @@ describe("avisosAbertos — só o que é da pessoa", () => {
       { id: "ap-minha", organization_id: ORG, owner_user_id: EU },
       { id: "ap-outro", organization_id: ORG, owner_user_id: OUTRO },
     ],
-    agent_cases: [{ id: "caso-1", organization_id: ORG, conversation_id: "c-do-caso" }],
+    agent_cases: [
+      { id: "caso-1", organization_id: ORG, conversation_id: "c-do-caso" },
+      { id: "caso-2", organization_id: ORG, conversation_id: "c-do-caso" },
+    ],
     followup_enrollments: [{ id: "fe-1", organization_id: ORG, contact_id: "ct-e", conversation_id: "c-do-followup" }],
     crm_leads: [{ id: "l-1", organization_id: ORG, contact_id: "ct-lead-meu", owner_user_id: EU, status: "open" }],
   });
@@ -77,8 +82,8 @@ describe("avisosAbertos — só o que é da pessoa", () => {
   it("atendente vê SÓ os avisos ligados ao que é dele — nunca os de outra pessoa nem os da organização", async () => {
     const { db } = fakeDb(tabelas());
     const b = ok(await avisosAbertos(db, { ...ctx, papel: "agent" }, 99));
-    expect(ids(b)).toEqual(["caso-meu", "consulta-minha", "contato-meu", "conv-minha"]);
-    expect(b.total).toBe(4);
+    expect(ids(b)).toEqual(["caso-meu", "caso-meu-2", "consulta-minha", "contato-meu", "conv-minha"]);
+    expect(b.total).toBe(5);
   });
 
   it("o colega vê os dele, e nenhum dos meus", async () => {
@@ -90,7 +95,7 @@ describe("avisosAbertos — só o que é da pessoa", () => {
   it("profissional (provider) segue a mesma regra do atendente", async () => {
     const { db } = fakeDb(tabelas());
     const b = ok(await avisosAbertos(db, { ...ctx, papel: "provider" }, 99));
-    expect(ids(b)).toEqual(["caso-meu", "consulta-minha", "contato-meu", "conv-minha"]);
+    expect(ids(b)).toEqual(["caso-meu", "caso-meu-2", "consulta-minha", "contato-meu", "conv-minha"]);
   });
 
   it("gerente vê os dele + os da organização + os que ninguém assumiu, e não os de outra pessoa", async () => {
@@ -99,6 +104,7 @@ describe("avisosAbertos — só o que é da pessoa", () => {
     expect(ids(b)).toEqual([
       "canal-fora",
       "caso-meu",
+      "caso-meu-2",
       "consulta-minha",
       "contato-meu",
       "conv-minha",

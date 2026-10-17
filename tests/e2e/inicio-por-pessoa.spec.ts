@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page } from "@playwright/test";
 
+import { janelaDeHoje } from "../../lib/inicio/tipos";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 
 /**
@@ -73,6 +74,8 @@ test.beforeAll(async () => {
     webhook_secret_encrypted: "\\x00",
   });
   const agora = Date.now();
+  // Meio-dia de hoje no fuso padrão: "hoje" não vira amanhã se a suíte rodar às 23h.
+  const meioDia = Date.parse(janelaDeHoje(new Date(agora), "America/Sao_Paulo").inicio) + 12 * 60 * 60_000;
   for (const quem of ["ana", "bia"] as const) {
     const u = fixture.usuarios[quem];
     const contato = await inserir("contacts", { organization_id: fixture.org, display_name: `Paciente da ${quem} ${sufixo}` });
@@ -94,8 +97,8 @@ test.beforeAll(async () => {
     await inserir("calendar_appointments", {
       organization_id: fixture.org,
       title: `Consulta da ${quem} ${sufixo}`,
-      starts_at: new Date(agora + 60 * 60_000).toISOString(),
-      ends_at: new Date(agora + 90 * 60_000).toISOString(),
+      starts_at: new Date(meioDia).toISOString(),
+      ends_at: new Date(meioDia + 30 * 60_000).toISOString(),
       owner_user_id: u.id,
       status: "confirmed",
       contact_id: contato,

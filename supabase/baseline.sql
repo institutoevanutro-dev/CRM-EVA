@@ -36847,4 +36847,3 @@ notify pgrst, 'reload schema';
 -- Nenhuma função nova, tabela, coluna ou constraint.
 -- Quem mede a regra: `tests/invariants/agenda-presenca-pos-consulta.test.ts`.
 -- ---- fim: presença confirmada inicia o acompanhamento pós-consulta (migration 0373) ----
-
