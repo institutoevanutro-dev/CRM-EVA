@@ -529,9 +529,14 @@ export function ConversationHeader({
         {/* O estado do episódio (aberta, fechada…) é leitura de consulta, não
             precisa ocupar a linha do nome: fecha a faixa, depois das ações. A
             lupa continua a PRIMEIRA (contrato de `busca-na-conversa`). */}
-        <Badge variant="outline" className="h-6 shrink-0 px-2 text-[11px] md:ml-auto">
-          {t(STATUS_LABEL[status] ?? status)}
-        </Badge>
+        {/* `self-stretch` no invólucro: a pílula (24px) alinha pelo topo da
+            fileira como os botões (36px). Sem ele, no celular a fileira única
+            media dois "topos" e lia como duas fileiras (`etiquetas-e-composer`). */}
+        <span className="flex shrink-0 items-center self-stretch md:ml-auto">
+          <Badge variant="outline" className="h-6 px-2 text-[11px]">
+            {t(STATUS_LABEL[status] ?? status)}
+          </Badge>
+        </span>
       </div>
       <ReassignDialog
         conversationId={conversation.id}

@@ -215,7 +215,11 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
         expect(medida.selo!.linhas, "o texto do selo quebrou em mais de uma linha").toBe(1);
         expect(medida.selo!.altura).toBeLessThanOrEqual(20);
         expect(medida.selo!.cabe, "o texto saiu da pílula").toBe(true);
-        expect(medida.alturaDoCabecalho, "o cabeçalho voltou a ter fileiras de botões").toBeLessThanOrEqual(80);
+        // Antes desta mudança: 152px em 1280, 114px em 1440, 122px em 390 (duas
+        // fileiras de botões). Depois: 81, 63 e 81 — no celular o telefone desce
+        // para uma terceira linha curta de TEXTO. 88px cabe três linhas de texto
+        // e nenhuma de botões (um botão tem 36px).
+        expect(medida.alturaDoCabecalho, "o cabeçalho voltou a ter fileiras de botões").toBeLessThanOrEqual(88);
         expect(medida.transbordo, "a página rola de lado").toBeLessThanOrEqual(0);
         await foto(page, `${largura}-${tema}-conversa`);
 
