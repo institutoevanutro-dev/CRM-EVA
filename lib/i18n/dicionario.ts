@@ -10853,6 +10853,25 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível alterar o atendimento do contato.": { es: "No fue posible cambiar la atención del contacto." },
   "Este contato está marcado como sempre atendimento humano. Tire a marca na ficha do contato antes de devolver ao automático.": { es: "Este contacto está marcado como siempre atención humana. Quita la marca en la ficha del contacto antes de devolver al automático." },
   "Não foi possível conferir o contato agora. Tente de novo.": { es: "No fue posible verificar el contacto ahora. Intenta de nuevo." },
+  // Inbox — aparência da conversa, faixas de ações recolhíveis e topo da lista
+  "Aparência da conversa": { es: "Apariencia de la conversación" },
+  "Só para você, em qualquer computador em que entrar.": { es: "Solo para ti, en cualquier computadora en la que entres." },
+  Fundo: { es: "Fondo" },
+  "Suas mensagens": { es: "Tus mensajes" },
+  "Mensagens do cliente": { es: "Mensajes del cliente" },
+  "Não foi possível salvar a aparência. Tente de novo.": { es: "No fue posible guardar la apariencia. Intenta de nuevo." },
+  Liso: { es: "Liso" },
+  Pontilhado: { es: "Punteado" },
+  "Tom suave": { es: "Tono suave" },
+  "Verde claro": { es: "Verde claro" },
+  Grafite: { es: "Grafito" },
+  Branco: { es: "Blanco" },
+  Creme: { es: "Crema" },
+  "Ações da conversa": { es: "Acciones de la conversación" },
+  "Assistência do agente e nota interna": { es: "Asistencia del agente y nota interna" },
+  "Opções de resposta": { es: "Opciones de respuesta" },
+  "Nome, telefone ou última msg.": { es: "Nombre, teléfono o último msj." },
+  "Suas organizações": { es: "Tus organizaciones" },
 };
 
 /**

@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
 import { buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
+import { APARENCIA_PADRAO } from "@/lib/inbox/aparencia-da-conversa";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import {
   LIMITES_FICHA,
@@ -174,6 +175,9 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const t = useT();
   const { activeOrg, user } = useAuth();
   const supportReadonly = user.support?.access_mode === "support_readonly";
+  // Fundo e balões que ESTA pessoa escolheu. Nasce do perfil (vale em qualquer
+  // computador) e muda aqui na hora; o controle grava e, se falhar, devolve.
+  const [aparencia, setAparencia] = useState(user.aparencia_conversa ?? APARENCIA_PADRAO);
   const orgId = activeOrg?.orgId ?? null;
 
   const router = useRouter();
@@ -682,7 +686,13 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
           colunas.lista,
         )}
       >
-        <BotaoIniciarConversa />
+        {/* O título da coluna e a ação de criar na MESMA linha: hierarquia
+            (o que é esta coluna → o que se faz nela) sem gastar uma faixa
+            inteira com um botão. */}
+        <div className="flex min-h-11 items-center justify-between gap-2 px-3 pt-2">
+          <h2 className="text-sm font-semibold">{t("Conversas")}</h2>
+          <BotaoIniciarConversa />
+        </div>
         <InboxFilters value={filterValue} onChange={setFilterValue} />
         {podeAgirEmLote && (
           <BarraDeAcoesEmLote
@@ -782,6 +792,8 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
               }
               buscaAberta={buscaAberta}
               botaoBuscaRef={botaoBuscaRef}
+              aparencia={aparencia}
+              onAparenciaChange={setAparencia}
             />
             {buscaAberta && busca && (
               <div className="flex items-center gap-2 border-b border-border px-4 py-1.5">
@@ -814,6 +826,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
                 conversationId={selectedConversation.id}
                 onResponder={setRespondendo}
                 searchTerm={buscaAberta && busca ? busca.termo : ""}
+                aparencia={aparencia}
               />
             </div>
             <RetentionNotice conversationId={selectedConversation.id} />

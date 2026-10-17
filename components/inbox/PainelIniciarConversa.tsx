@@ -379,17 +379,19 @@ export function BotaoIniciarConversa() {
 
   return (
     <>
-      <div className="px-3 pt-3">
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full justify-center gap-2"
-          onClick={() => setAberto(true)}
-        >
-          <ChatCircle size={16} weight="regular" aria-hidden />
-          {t("Iniciar conversa")}
-        </Button>
-      </div>
+      {/* Compacto, ao lado do título da coluna: ocupava uma faixa inteira de
+          40px acima da busca, com altura diferente de tudo em volta. O rótulo
+          continua escrito — é a primeira ação de quem acabou de instalar. */}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs"
+        onClick={() => setAberto(true)}
+      >
+        <ChatCircle size={14} weight="regular" aria-hidden />
+        {t("Iniciar conversa")}
+      </Button>
       <IniciarConversaDialog open={aberto} onOpenChange={setAberto} />
     </>
   );
