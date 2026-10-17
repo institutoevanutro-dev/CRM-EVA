@@ -9311,6 +9311,11 @@ export const DICIONARIO: Traducoes = {
     es: "Un lead tiene un dueño: informa owner_user_id U owner_agent_id.",
   },
   "Falha ao criar lead.": { es: "Falla al crear lead." },
+  // A recusa da policy `crm_leads` (SQLSTATE 42501) traduzida em 403 — ver
+  // `recusaDaRlsDosLeads`.
+  "Sem permissão para salvar este negócio: pela visibilidade definida na organização, ele ficaria fora do que você pode ver.": {
+    es: "Sin permiso para guardar este negocio: por la visibilidad definida en la organización, quedaría fuera de lo que puedes ver.",
+  },
   "Stage não pertence ao pipeline informado.": {
     es: "El stage no pertenece al pipeline informado.",
   },
