@@ -1,5 +1,5 @@
 "use client";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { hashKey, useInfiniteQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { useInvalidacaoAgrupada } from "@/hooks/realtime/useInvalidacaoAgrupada";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
@@ -11,7 +11,7 @@ import {
   marcadoresEscolhidos,
 } from "@/lib/inbox/marcador-da-conversa";
 import type { Conversation } from "@/lib/types/messaging";
-import type { ComandoDoBanco } from "@/lib/inbox/comando-da-conversa";
+import { ehAFila, type ComandoDoBanco } from "@/lib/inbox/comando-da-conversa";
 import type { IdentidadeDeCanal } from "@/lib/contacts/rotulo-do-contato";
 
 export interface ContactSummary {
@@ -128,6 +128,24 @@ interface ListResponse {
   meta?: { cursor?: string | null; has_more?: boolean };
 }
 
+/**
+ * A TROCA DE CHAVE QUE É A MESMA LISTA: os dois lados são a Fila e só o
+ * `comando` mudou — é o `automatico-ativo` respondendo (`comandosDaFila`), não
+ * uma escolha de quem usa a tela. Qualquer outra troca (aba, busca, etiqueta,
+ * canal) é OUTRA lista, e mostrar a anterior enquanto a nova carrega poria na
+ * tela linhas que não são da aba.
+ *
+ * Portado do projeto original (DeskcommCRM, PR #2414 de @webtecnica).
+ */
+export function soMudouOAutomaticoDaFila(
+  anterior: ConversationsFilters,
+  atual: ConversationsFilters,
+): boolean {
+  const { comando: _comandoAnterior, ...restoAnterior } = anterior;
+  const { comando: _comandoAtual, ...restoAtual } = atual;
+  return ehAFila(anterior) && ehAFila(atual) && hashKey([restoAnterior]) === hashKey([restoAtual]);
+}
+
 export function useConversationsRealtime(
   filters: ConversationsFilters,
   orgId: string | null,
@@ -182,6 +200,15 @@ export function useConversationsRealtime(
     // chega de fora enquanto ninguém olha, e voltar para a aba é quando a
     // defasagem aparece. Segunda rede — a primeira é o Realtime.
     refetchOnWindowFocus: true,
+    // A LISTA NÃO VOLTA AO SKELETON NUM REFETCH. Quando `/ai/automatico-ativo`
+    // responde "não há automático", `comandosDaFila` troca a chave e o
+    // react-query abre uma query NOVA, sem dado: a primeira resposta era
+    // descartada e a tela piscava no skeleton. A lista anterior fica na tela
+    // SÓ nessa troca; nas outras o skeleton volta, porque ali ele diz algo.
+    placeholderData: (anterior, queryAnterior) =>
+      queryAnterior && soMudouOAutomaticoDaFila(queryAnterior.queryKey[1], filters)
+        ? anterior
+        : undefined,
   });
 
   const invalidar = useInvalidacaoAgrupada(600);
