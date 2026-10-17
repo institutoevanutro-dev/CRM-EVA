@@ -155,7 +155,7 @@ function Indicador({
     <div className="flex min-w-0 flex-col rounded-2xl border bg-surface p-4 shadow-sm">
       <dt className="text-sm text-text-muted">{rotulo}</dt>
       <dd className={`numero mt-1 text-3xl ${alerta ? "text-warning" : "text-text"}`}>{valor}</dd>
-      <dd className="mt-1 text-xs text-text-subtle">{janela}</dd>
+      <dd className="mt-1 text-xs text-text-muted">{janela}</dd>
       {extra ? <dd className="mt-1">{extra}</dd> : null}
     </div>
   );
@@ -412,7 +412,10 @@ function PainelFunil({ p, onTrocar }: { p: Funil; onTrocar: (id: string) => void
       <div className="mb-4 grid grid-cols-3 gap-3 text-sm">
         <p>
           <span className="numero block whitespace-nowrap text-2xl text-text">{p.mes.ganhos}</span>
-          <span className="text-text-muted">{t("ganhos no mês")}</span> <Variacao atual={p.mes.ganhos} anterior={p.anterior.ganhos} />
+          <span className="text-text-muted">{t("ganhos no mês")}</span>
+          <span className="mt-0.5 block">
+            <Variacao atual={p.mes.ganhos} anterior={p.anterior.ganhos} />
+          </span>
         </p>
         <p>
           <span className="numero block whitespace-nowrap text-2xl text-text">{p.mes.perdidos}</span>

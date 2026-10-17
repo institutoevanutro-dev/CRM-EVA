@@ -26,10 +26,10 @@ export function Cartao({
   const t = useT();
   return (
     <section className={`flex min-w-0 flex-col rounded-2xl border bg-surface p-5 shadow-sm ${className}`}>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="flex min-w-0 items-center gap-2 font-titulo text-lg font-semibold text-text">
-          {Icone ? <Icone aria-hidden className="size-4 shrink-0 text-text-muted" /> : null}
-          <span className="truncate">{titulo}</span>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <h3 className="flex min-w-0 items-start gap-2 font-titulo text-lg leading-snug font-semibold text-text">
+          {Icone ? <Icone aria-hidden className="mt-1 size-4 shrink-0 text-text-muted" /> : null}
+          <span className="min-w-0 break-words">{titulo}</span>
         </h3>
         {verTodos ? (
           <Link className={`shrink-0 rounded-md text-sm text-accent underline-offset-4 hover:underline ${FOCO}`} href={verTodos}>
