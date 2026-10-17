@@ -32,8 +32,8 @@ export const CUSTO_NO_MOTOR: Record<NodeType, number> = {
   action: 2,
   ai_classify: 2,
   match_reply: 2,
-  // `repeat` é CICLO: o custo depende das voltas que o lead fizer, e por isso o
-  // caminho por ele não é linear — `custoDoCaminhoLinear` o deixa de fora.
+  // `repeat` é CICLO: vale 1 tick por passagem, e é este preço que a publicação
+  // multiplica pelas voltas que o `repeat` permite (`custoNoMotorDoFluxo`).
   repeat: 1,
 };
 

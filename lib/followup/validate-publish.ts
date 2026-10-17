@@ -275,41 +275,122 @@ function byId(a: { id: string }, b: { id: string }): number {
 }
 
 /**
- * O custo, em ticks do MOTOR (ver `custo-no-motor.ts`), do caminho LINEAR mais
- * caro a partir do trigger — o que o `steps_taken` gastaria até o fim do fluxo
- * na hipótese mais custosa sem repetição.
- *
- * Nó dentro de ciclo fica de fora: o custo dele depende de quantas voltas o
- * lead faz e não cabe numa soma. O subgrafo que sobra é ACÍCLICO (todo ciclo é
- * uma componente de Tarjan e saiu), então a recursão com memo termina.
+ * Trava da multiplicação das voltas de um ciclo com `repeat`. O número EXATO não
+ * muda veredito nenhum (qualquer coisa acima do teto do motor já recusa), e sem a
+ * trava muitos `repeat` no MESMO ciclo poriam `Infinity` na mensagem da recusa.
  */
-export function custoDoCaminhoLinear(graph: FlowGraph): number {
+const TETO_DAS_VOLTAS = 1_000_000;
+
+export interface CustoNoMotorDoFluxo {
+  /** Ticks que o motor gasta no caminho mais caro a partir do gatilho. */
+  total: number;
+  /** O ciclo com `repeat` que mais pesa no caminho MAIS CARO, o que a recusa nomeia. `null` se esse caminho não passa por `repeat`. */
+  cicloDeRepeat: { node_id: string; voltas: number; peso: number } | null;
+}
+
+/**
+ * O custo, em ticks do MOTOR (ver `custo-no-motor.ts`), do caminho mais caro a
+ * partir do gatilho: o que o `steps_taken` gasta até o fim do fluxo.
+ *
+ * O ciclo entra na soma (porte do upstream #3022), de duas formas:
+ *
+ * - todo ciclo vale no MÍNIMO uma volta completa, e a soma SEGUE pelos
+ *   sucessores dele. Antes a aresta que entrava num ciclo era descartada, e tudo
+ *   o que só se alcançava DEPOIS dele nunca era somado: `repeat` + cauda de 86
+ *   ticks publicava, porque o custo dava 1;
+ * - o ciclo com `repeat` vale as voltas que ele permite. Quem decide quantas é a
+ *   resposta do lead (`node-handlers.ts`, caso `repeat`), limitada por
+ *   `max_count`, e o teto tem de aguentar o PIOR caso: `max_count` voltas vezes o
+ *   peso do ciclo, mais UMA passada pelo próprio `repeat` (a que acha
+ *   `taken >= total` e sai pela saída `done`). Dois `repeat` no mesmo ciclo
+ *   multiplicam as voltas entre si.
+ *
+ * O peso de uma volta é a soma dos nós do componente: upper bound, a mesma
+ * doutrina do `ponytail` de `analyzeCondensedPaths` (nunca aceita grafo que
+ * morre; pode recusar um a mais). Ciclo SEM `repeat` vale só o piso: quantas
+ * voltas ele dá não está declarado em lugar nenhum.
+ */
+export function custoNoMotorDoFluxo(graph: FlowGraph): CustoNoMotorDoFluxo {
+  const semCiclo: CustoNoMotorDoFluxo = { total: 0, cicloDeRepeat: null };
   const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
   const outEdges = buildOutEdges(graph.edges);
   const trigger = graph.nodes.find((n) => n.type === 'trigger');
-  if (!trigger) return 0;
+  if (!trigger) return semCiclo;
 
-  const emCiclo = new Set<string>();
-  for (const component of stronglyConnectedComponents(graph.nodes.map((n) => n.id), outEdges)) {
-    if (isCycleComponent(component, outEdges)) component.forEach((id) => emCiclo.add(id));
-  }
-  if (emCiclo.has(trigger.id)) return 0;
+  const components = stronglyConnectedComponents(graph.nodes.map((n) => n.id), outEdges);
+  const componentIndexById = new Map<string, number>();
+  components.forEach((comp, idx) => comp.forEach((id) => componentIndexById.set(id, idx)));
+  const emCiclo = components.map((comp) => isCycleComponent(comp, outEdges));
 
-  const memo = new Map<string, number>();
-  const custo = (id: string): number => {
-    const cache = memo.get(id);
-    if (cache !== undefined) return cache;
-    const node = nodesById.get(id);
-    let maiorSucessor = 0;
-    for (const edge of outEdges.get(id) ?? []) {
-      if (emCiclo.has(edge.target)) continue;
-      maiorSucessor = Math.max(maiorSucessor, custo(edge.target));
+  const repeatsDe = (comp: string[]) =>
+    comp.flatMap((id) => {
+      const node = nodesById.get(id);
+      return node?.type === 'repeat' ? [node] : [];
+    });
+
+  const custoDoComponente: number[] = [];
+  const detalheDoCiclo: CustoNoMotorDoFluxo['cicloDeRepeat'][] = [];
+  components.forEach((comp, idx) => {
+    const peso = comp.reduce((sum, id) => {
+      const node = nodesById.get(id);
+      return sum + (node ? CUSTO_NO_MOTOR[node.type] : 0);
+    }, 0);
+    const repeats = emCiclo[idx] ? repeatsDe(comp) : [];
+    const voltas = repeats.reduce((v, r) => Math.min(v * r.config.max_count, TETO_DAS_VOLTAS), 1);
+    // A passada EXTRA de cada `repeat`: a que decide `taken >= total` e sai pelo `done`.
+    custoDoComponente.push(peso * voltas + repeats.length * CUSTO_NO_MOTOR.repeat);
+    const repeatId = repeats.map((r) => r.id).sort()[0];
+    detalheDoCiclo.push(repeatId === undefined ? null : { node_id: repeatId, voltas, peso });
+  });
+
+  const condOut = new Map<number, Set<number>>();
+  for (const edgeList of outEdges.values()) {
+    for (const edge of edgeList) {
+      const cu = componentIndexById.get(edge.source);
+      const cv = componentIndexById.get(edge.target);
+      if (cu === undefined || cv === undefined || cu === cv) continue;
+      const succs = condOut.get(cu);
+      if (succs) succs.add(cv);
+      else condOut.set(cu, new Set([cv]));
     }
-    const total = (node ? CUSTO_NO_MOTOR[node.type] : 0) + maiorSucessor;
-    memo.set(id, total);
-    return total;
-  };
-  return custo(trigger.id);
+  }
+
+  const startComp = componentIndexById.get(trigger.id);
+  // Gatilho DENTRO de um ciclo: o editor não produz esse desenho (o gatilho é a entrada).
+  if (startComp === undefined || emCiclo[startComp]) return semCiclo;
+
+  const chegaEm = new Map<number, number>([[startComp, 0]]);
+  // O ciclo com `repeat` que mais pesa no caminho MAIS CARO até cada componente:
+  // a recusa cita o repeat do caminho que estoura, não o de um ramo paralelo.
+  const cicloNoCaminho = new Map<number, CustoNoMotorDoFluxo['cicloDeRepeat']>([[startComp, null]]);
+  let total = 0;
+  let cicloDeRepeat: CustoNoMotorDoFluxo['cicloDeRepeat'] = null;
+
+  // components[] está em ordem topológica reversa (fim do Tarjan): varrer de
+  // trás para frente visita todo componente ANTES dos seus sucessores.
+  for (let idx = components.length - 1; idx >= 0; idx--) {
+    const chegou = chegaEm.get(idx);
+    if (chegou === undefined) continue; // não é alcançável a partir do gatilho
+    const custoAqui = chegou + custoDoComponente[idx]!;
+    const herdado = cicloNoCaminho.get(idx) ?? null;
+    const detalhe = detalheDoCiclo[idx] ?? null;
+    const cicloAqui =
+      detalhe && (herdado === null || detalhe.peso * detalhe.voltas > herdado.peso * herdado.voltas)
+        ? detalhe
+        : herdado;
+    if (custoAqui > total) {
+      total = custoAqui;
+      cicloDeRepeat = cicloAqui;
+    }
+    for (const succ of condOut.get(idx) ?? []) {
+      if (custoAqui > (chegaEm.get(succ) ?? -Infinity)) {
+        chegaEm.set(succ, custoAqui);
+        cicloNoCaminho.set(succ, cicloAqui);
+      }
+    }
+  }
+
+  return { total, cicloDeRepeat };
 }
 
 
@@ -418,14 +499,25 @@ export function validateFlowForPublish(graph: FlowGraph): PublishValidationResul
 
     // A SEGUNDA ponta do teto: o do MOTOR. Contando só o que o cliente sente,
     // um caminho cheio de caixas internas poderia publicar e morrer no meio —
-    // a inscrição fecha com `max_steps` sem chegar ao fim. O ciclo (`repeat`)
-    // fica fora de propósito: o custo dele não é uma soma.
-    const custoNoMotor = custoDoCaminhoLinear(graph);
+    // a inscrição fecha com `max_steps` sem chegar ao fim. O ciclo do `repeat`
+    // entra com as voltas que ele permite (`custoNoMotorDoFluxo`).
+    const { total: custoNoMotor, cicloDeRepeat } = custoNoMotorDoFluxo(graph);
     if (custoNoMotor > TETO_DE_PASSOS_DO_MOTOR) {
+      // A caixa é nomeada pelo RÓTULO que a pessoa vê no editor. E só se cita o
+      // repeat que dá mais de uma volta: com 1 volta, "reduza as voltas" é um
+      // conselho impossível — quem estoura é a cadência.
+      const repeatQuePesa = cicloDeRepeat && cicloDeRepeat.voltas > 1 ? cicloDeRepeat : null;
+      const rotuloDoRepeat = repeatQuePesa
+        ? (graph.nodes.find((n) => n.id === repeatQuePesa.node_id)?.label ?? repeatQuePesa.node_id)
+        : null;
       errors.push({
         node_id: null,
         code: 'max_engine_steps_exceeded',
-        message: `O caminho mais longo deste fluxo custa ${custoNoMotor} passos no motor (o relógio conta cada caixa: gatilho, condição, mensagem e espera) e ele desiste da inscrição depois de ${TETO_DE_PASSOS_DO_MOTOR} — o acompanhamento morreria no meio, sem chegar ao fim. Encurte a cadência.`,
+        message: `O caminho mais longo deste fluxo custa ${custoNoMotor} passos no motor (o relógio conta cada caixa: gatilho, condição, mensagem e espera) e ele desiste da inscrição depois de ${TETO_DE_PASSOS_DO_MOTOR} — o acompanhamento morreria no meio, sem chegar ao fim.${
+          repeatQuePesa
+            ? ` O trecho que a caixa "${rotuloDoRepeat}" repete custa ${repeatQuePesa.peso} passos por volta e ela permite até ${repeatQuePesa.voltas} voltas — reduza as voltas ou tire um toque de dentro do repetir.`
+            : ' Encurte a cadência.'
+        }`,
       });
     }
   }

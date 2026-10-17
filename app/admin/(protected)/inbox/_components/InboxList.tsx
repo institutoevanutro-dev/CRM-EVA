@@ -21,6 +21,7 @@ import { CircleNotch, MagnifyingGlass } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
+import { previaNaTela } from "@/lib/messaging/previa-da-mensagem";
 
 function useDebounced<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState<T>(value);
@@ -169,7 +170,7 @@ export function InboxList() {
           const name = contactName(row, t);
           const org = row.organizations;
           const unread = row.unread_count_for_assignee ?? 0;
-          const preview = row.last_message_preview?.trim() || t("Sem mensagens");
+          const preview = previaNaTela(row.last_message_preview?.trim() ?? "", t) || t("Sem mensagens");
           const time = relativeTime(row.last_message_at, localeDaData);
 
           return (

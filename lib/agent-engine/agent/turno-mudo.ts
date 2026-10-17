@@ -1,3 +1,5 @@
+import type { ModelMessage } from 'ai';
+
 /**
  * TURNO MUDO — o turno de resposta que terminou sem mensagem ao cliente.
  *
@@ -39,4 +41,47 @@ export function turnoMudoPedeCorrecao(t: {
     !t.passouParaAEquipe &&
     !t.capDeEnvio
   );
+}
+
+/**
+ * A FALHA do turno mudo: nada saiu ao cliente E o modelo foi cortado no teto de
+ * tokens de saída (`finishReason === 'length'`), na chamada principal ou na
+ * correção (porte do upstream #2938).
+ *
+ * A resposta cortada nunca sai: o AI SDK não executa ferramenta de um passo que
+ * terminou em `length` (`isToolExecutionAllowedFinishReason`, preso em
+ * `tests/unit/saida-cortada-nao-vai-ao-cliente.test.ts`), e texto fora de
+ * `send_message` não chega a ninguém. O que faltava era alguém saber: o turno
+ * acabava mudo com um log de `info`.
+ *
+ * As razões legítimas de silêncio são as MESMAS de `turnoMudoPedeCorrecao`, lidas
+ * DEPOIS da correção: se nela o modelo tentou enviar (veto), passou à equipe ou
+ * bateu no teto do número, aquilo é a razão e não há aviso. Silêncio sem corte é
+ * decisão — a correção autoriza o modelo a não responder — e também não avisa.
+ */
+export function turnoMudoPorCorte(
+  t: Parameters<typeof turnoMudoPedeCorrecao>[0] & { saidaCortada: boolean; correcaoCortada: boolean },
+): boolean {
+  return (t.saidaCortada || t.correcaoCortada) && turnoMudoPedeCorrecao(t);
+}
+
+/**
+ * A fita da resposta cortada, sem as chamadas de ferramenta que ficaram sem
+ * resultado. O passo cortado no teto de tokens não executa ferramenta, mas a
+ * chamada continua na fita; reenviá-la na correção faz o AI SDK recusar o pedido
+ * (`AI_MissingToolResultsError`) e o turno cair inteiro na fila de novo, com o
+ * cliente ainda sem resposta. O resto (texto e as ferramentas que rodaram nos
+ * passos anteriores) fica: a correção não repete a consulta que já tem.
+ */
+export function semChamadasSemResultado(messages: ModelMessage[]): ModelMessage[] {
+  const respondidas = new Set<string>();
+  for (const m of messages) {
+    if (m.role !== 'tool') continue;
+    for (const part of m.content) if (part.type === 'tool-result') respondidas.add(part.toolCallId);
+  }
+  return messages.flatMap((m) => {
+    if (m.role !== 'assistant' || typeof m.content === 'string') return [m];
+    const content = m.content.filter((part) => part.type !== 'tool-call' || respondidas.has(part.toolCallId));
+    return content.length > 0 ? [{ ...m, content }] : [];
+  });
 }

@@ -14,6 +14,7 @@ import type { UsageTenantRow } from "@/app/api/v1/admin/usage/route";
 import type { UsageRange } from "@/hooks/useAdminUsage";
 import { formatCentsUSD } from "@/lib/money";
 import { useT } from "@/hooks/i18n/useT";
+import { neutralizarFormula } from "@/lib/csv/neutralizar-formula";
 
 // ---------------------------------------------------------------------------
 // Formatters
@@ -45,9 +46,9 @@ function exportCSV(tenants: UsageTenantRow[], range: UsageRange): void {
 
   const rows = tenants.map((t) => [
     t.organization_id,
-    `"${t.tenant_name.replace(/"/g, '""')}"`,
+    `"${neutralizarFormula(t.tenant_name).replace(/"/g, '""')}"`,
     t.tenant_slug,
-    t.agent_name ? `"${t.agent_name.replace(/"/g, '""')}"` : "",
+    t.agent_name ? `"${neutralizarFormula(t.agent_name).replace(/"/g, '""')}"` : "",
     t.messages_count,
     t.conversations_count,
     t.ai_invocations_count,

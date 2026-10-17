@@ -14,6 +14,7 @@ import { comandoDaConversa, esperaDaConversa } from "@/lib/inbox/comando-da-conv
 import { cn } from "@/lib/utils";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { previaNaTela } from "@/lib/messaging/previa-da-mensagem";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
 
 interface Props {
@@ -141,7 +142,7 @@ export function ConversationListItem({
   const tags = c?.tags ?? [];
   const visibleTags = tags.slice(0, 2);
   const overflow = tags.length - visibleTags.length;
-  const preview = conversation.last_message_preview?.trim() || t("Sem mensagens");
+  const preview = previaNaTela(conversation.last_message_preview?.trim() ?? "", t) || t("Sem mensagens");
   const truncated = preview.length > 60 ? `${preview.slice(0, 60)}…` : preview;
   const naFila = queuePosition !== undefined;
   /**

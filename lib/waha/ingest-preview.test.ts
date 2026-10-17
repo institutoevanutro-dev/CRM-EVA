@@ -60,7 +60,7 @@ describe("previewFromMessage — prévia de vCard na lista da Inbox (#2742)", ()
       id: "false_5511968914004_3EB0EEE",
       _data: { message: { contactMessage: { vcard: ilegivel } } },
     });
-    expect(previewFromMessage(p)).toBe("[contact]");
+    expect(previewFromMessage(p)).toBe("Contato");
   });
 
   it("contact sem cartão usa o displayName com o mesmo rótulo", () => {
@@ -85,8 +85,8 @@ describe("previewFromMessage — prévia de vCard na lista da Inbox (#2742)", ()
     expect(previewFromMessage(p)).toBe("olha essa foto");
   });
 
-  it("mídia sem corpo continua com o rótulo de tipo (comportamento anterior)", () => {
+  it("mídia sem corpo sai com o rótulo do tipo em português, não [image]", () => {
     const p = payload({ id: "m3", _data: { message: { imageMessage: {} } } });
-    expect(previewFromMessage(p)).toBe("[image]");
+    expect(previewFromMessage(p)).toBe("Imagem");
   });
 });

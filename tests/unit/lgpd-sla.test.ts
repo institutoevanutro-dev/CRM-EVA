@@ -13,6 +13,7 @@ import {
   PRIMEIRO_ANO_COBERTO,
   ULTIMO_ANO_COBERTO,
   feriadosDoBrasilDoAno,
+  PRIMEIRO_ANO_DA_CONSCIENCIA_NEGRA,
 } from "@/lib/lgpd/holidays-br";
 
 /** Parse a YYYY-MM-DD string as a UTC Date */
@@ -135,9 +136,10 @@ describe("computeDueAt — business day SLA calculator", () => {
   // -------------------------------------------------------------------------
 
   // Portado do projeto original (DeskcommCRM, PR #2420 de @Tong-bit-art).
-  it("HOLIDAYS_BR_ISO cobre 12 feriados por ano, com os fixos presentes", () => {
-    const anosCobertos = ULTIMO_ANO_COBERTO - PRIMEIRO_ANO_COBERTO + 1;
-    expect(HOLIDAYS_BR_ISO).toHaveLength(12 * anosCobertos);
+  it("HOLIDAYS_BR_ISO cobre 12 feriados por ano (13 desde 2024), com os fixos presentes", () => {
+    const anosAntes = PRIMEIRO_ANO_DA_CONSCIENCIA_NEGRA - PRIMEIRO_ANO_COBERTO;
+    const anosDepois = ULTIMO_ANO_COBERTO - PRIMEIRO_ANO_DA_CONSCIENCIA_NEGRA + 1;
+    expect(HOLIDAYS_BR_ISO).toHaveLength(12 * anosAntes + 13 * anosDepois);
     for (const data of ["2026-01-01", "2026-04-21", "2026-09-07", "2026-12-25"]) {
       expect(HOLIDAYS_BR_ISO).toContain(data);
     }
@@ -153,9 +155,18 @@ describe("computeDueAt — business day SLA calculator", () => {
     ];
     for (const [ano, segunda, terca, sextaSanta, corpoDeDeus] of conhecidos) {
       const feriados = feriadosDoBrasilDoAno(ano);
-      expect(feriados).toHaveLength(12);
+      // A lista à mão tinha 12; o 13º é o 20 de novembro, que ela não tinha.
+      expect(feriados).toHaveLength(13);
       for (const dia of [segunda, terca, sextaSanta, corpoDeDeus]) expect(feriados).toContain(dia);
     }
+  });
+
+  it("⭐ 20 de novembro (Consciência Negra) é feriado nacional desde 2024, não antes", () => {
+    expect(HOLIDAYS_BR_ISO).toContain("2024-11-20");
+    expect(HOLIDAYS_BR_ISO).toContain("2026-11-20");
+    expect(HOLIDAYS_BR_ISO).not.toContain("2023-11-20");
+    // 20/11/2026 é sexta: o 1º dia útil depois de quinta 19/11 é segunda 23/11.
+    expect(fmt(computeDueAt(d("2026-11-19"), 1))).toBe("2026-11-23");
   });
 
   it("o prazo aberto no fim de 2030 salta o 1º de janeiro de 2031", () => {
