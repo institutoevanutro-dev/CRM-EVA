@@ -1,4 +1,5 @@
 "use client";
+import { APARENCIA_PADRAO, estiloDaAparencia, type AparenciaDaConversa } from "@/lib/inbox/aparencia-da-conversa";
 
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
@@ -25,6 +26,8 @@ interface Props {
   searchTerm?: string;
   /** Escolher uma mensagem para responder. Sobe até o composer. */
   onResponder?: (m: Message) => void;
+  /** Fundo e balões que a pessoa escolheu (ver `lib/inbox/aparencia-da-conversa.ts`). */
+  aparencia?: AparenciaDaConversa;
 }
 
 /** Onda 5.2: union de item do thread — mensagem real ou nota interna (nunca vai ao cliente). */
@@ -50,7 +53,7 @@ function dayLabel(d: Date, t: (texto: string) => string = (texto) => texto, loca
   return format(d, "dd/MM/yyyy", { locale: locale });
 }
 
-export function ChatThread({ conversationId, onResponder, searchTerm = "" }: Props) {
+export function ChatThread({ conversationId, onResponder, searchTerm = "", aparencia = APARENCIA_PADRAO }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const q = useMessagesRealtime(conversationId);
@@ -243,13 +246,18 @@ export function ChatThread({ conversationId, onResponder, searchTerm = "" }: Pro
   }
 
   return (
-    <div {...sinalDoCanal} className="flex h-full min-w-0 flex-col">
+    <div
+      {...sinalDoCanal}
+      data-aparencia-conversa=""
+      style={estiloDaAparencia(aparencia)}
+      className="flex h-full min-w-0 flex-col"
+    >
       {termo && (
         <div className="px-4 py-1 text-xs text-muted-foreground" role="status">
           {t("Resultados nas mensagens carregadas")}: {resultados.size}
         </div>
       )}
-      <div data-testid="message-thread" ref={scrollerRef} className="min-w-0 flex-1 overflow-y-auto bg-bg py-2">
+      <div data-testid="message-thread" ref={scrollerRef} className="conversa-fundo min-w-0 flex-1 overflow-y-auto py-2">
         {q.hasNextPage && (
           <div className="flex justify-center py-2">
             <Button

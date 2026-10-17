@@ -62,7 +62,7 @@ type Row = Record<string, unknown>;
 // Faz a leitura de media_library_items falhar (null = normal).
 let midiaErro: string | null = null;
 
-function makeDb(pointers: Row[], versions: Row[], stages: Row[] = [], midias: Row[] = []) {
+function makeDb(pointers: Row[], versions: Row[], stages: Row[] = [], midias: Row[] = [], canais: Row[] = []) {
   const tables: Record<string, Row[]> = {
     followup_flow_pointers: pointers,
     followup_flow_versions: versions,
@@ -72,6 +72,8 @@ function makeDb(pointers: Row[], versions: Row[], stages: Row[] = [], midias: Ro
     // tabela no mock, o caso positivo do `stage_change` não teria como existir.
     crm_stages: stages,
     media_library_items: midias,
+    // Canal fixado no gatilho de consulta (0377): PATCH e publish o conferem.
+    channel_sessions: canais,
   };
 
   function builder(table: string) {
@@ -771,6 +773,58 @@ describe("POST /api/v1/ai/followup-flows/:id/publish", () => {
     session("manager", db);
     const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/publish/route");
     expect((await POST(req("POST"), ctx(id))).status).toBe(200);
+  });
+
+  describe("canal fixado no gatilho de consulta (0377)", () => {
+    const id = "33333333-3333-4333-8333-333333333333";
+    const CANAL = "44444444-4444-4444-8444-444444444444";
+    const ponteiro = () => ({ id, organization_id: ORG_ID, status: "draft", draft_graph: VALID_GRAPH,
+      trigger_config: { kind: "appointment_attended", params: { channel_session_id: CANAL } } });
+
+    it("canal da org, não arquivado, WhatsApp → publica", async () => {
+      session("manager", makeDb([ponteiro()], [], [], [], [{ id: CANAL, organization_id: ORG_ID, provider: "waha", archived_at: null }]));
+      const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/publish/route");
+      expect((await POST(req("POST"), ctx(id))).status).toBe(200);
+    });
+
+    it("canal excluído depois de salvo → 422 trigger_channel_archived, nada publica", async () => {
+      const db = makeDb([ponteiro()], [], [], [], [{ id: CANAL, organization_id: ORG_ID, provider: "waha", archived_at: "2026-10-01T00:00:00Z" }]);
+      session("manager", db);
+      const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/publish/route");
+      const res = await POST(req("POST"), ctx(id));
+      expect(res.status).toBe(422);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe("trigger_channel_archived");
+      const { data } = (await db.from("followup_flow_pointers").select().eq("id", id)) as { data: Row[] };
+      expect(data[0]?.status).toBe("draft");
+    });
+
+    it("canal de OUTRA org → 422 trigger_channel_not_found", async () => {
+      session("manager", makeDb([ponteiro()], [], [], [], [{ id: CANAL, organization_id: OTHER_ORG_ID, provider: "waha", archived_at: null }]));
+      const { POST } = await import("@/app/api/v1/ai/followup-flows/[id]/publish/route");
+      const res = await POST(req("POST"), ctx(id));
+      expect(res.status).toBe(422);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe("trigger_channel_not_found");
+    });
+
+    it("PATCH com canal arquivado → 422 e não grava", async () => {
+      const db = makeDb([{ ...ponteiro(), trigger_config: { kind: "appointment_attended" } }], [], [], [],
+        [{ id: CANAL, organization_id: ORG_ID, provider: "waha", archived_at: "2026-10-01T00:00:00Z" }]);
+      session("manager", db);
+      const { PATCH } = await import("@/app/api/v1/ai/followup-flows/[id]/route");
+      const res = await PATCH(req("PATCH", { trigger_config: ponteiro().trigger_config }), ctx(id));
+      expect(res.status).toBe(422);
+      const { data } = (await db.from("followup_flow_pointers").select().eq("id", id)) as { data: Row[] };
+      expect(data[0]?.trigger_config).toEqual({ kind: "appointment_attended" });
+    });
+
+    it("PATCH com canal válido → 200 e grava", async () => {
+      session("manager", makeDb([{ ...ponteiro(), trigger_config: { kind: "appointment_attended" } }], [], [], [],
+        [{ id: CANAL, organization_id: ORG_ID, provider: "meta_cloud", archived_at: null }]));
+      const { PATCH } = await import("@/app/api/v1/ai/followup-flows/[id]/route");
+      const res = await PATCH(req("PATCH", { trigger_config: ponteiro().trigger_config }), ctx(id));
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { data: Row }).data.trigger_config).toEqual(ponteiro().trigger_config);
+    });
   });
 
   it("trigger_config.kind='manual' → publica normalmente", async () => {

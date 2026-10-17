@@ -1021,3 +1021,28 @@
     transform: none;
   }
 }
+
+/* ---- Aparência da conversa (Inbox) -------------------------------------
+   Fundo e balões escolhidos POR PESSOA (`lib/inbox/aparencia-da-conversa.ts`,
+   gravado em `user_metadata`). O componente põe no elemento as duas versões de
+   cada cor (`…-claro` / `…-escuro`) e é AQUI que o tema escolhe uma — decidir em
+   JS pintaria a primeira tela no tema errado até a hidratação.
+   Sem o atributo, os balões caem nos tokens de sempre (fallback no próprio
+   `var()` do MessageBubble), então nada muda para quem nunca escolheu. */
+[data-aparencia-conversa] {
+  --bolha-enviada-fundo: var(--bolha-enviada-fundo-claro);
+  --bolha-enviada-texto: var(--bolha-enviada-texto-claro);
+  --bolha-recebida-fundo: var(--bolha-recebida-fundo-claro);
+  --bolha-recebida-texto: var(--bolha-recebida-texto-claro);
+}
+[data-theme="dark"] [data-aparencia-conversa] {
+  --bolha-enviada-fundo: var(--bolha-enviada-fundo-escuro);
+  --bolha-enviada-texto: var(--bolha-enviada-texto-escuro);
+  --bolha-recebida-fundo: var(--bolha-recebida-fundo-escuro);
+  --bolha-recebida-texto: var(--bolha-recebida-texto-escuro);
+}
+.conversa-fundo {
+  background-color: var(--conversa-fundo-cor, var(--color-bg));
+  background-image: var(--conversa-fundo-imagem, none);
+  background-size: 16px 16px;
+}

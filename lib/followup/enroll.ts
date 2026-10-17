@@ -3,6 +3,7 @@ import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
 import { assertServiceBoundarySupabase } from "@/lib/atendimento/origem";
 import { beginServiceAtOrigin } from "@/lib/atendimento/origem";
 import { sessaoDoFollowup } from "@/lib/followup/conversa-do-followup";
+import { canalFixadoDoGatilho, conferirCanalDoGatilho, leitorDeCanal } from "@/lib/followup/canal-do-gatilho";
 /**
  * Inscrição de um contato num fluxo publicado.
  *
@@ -57,7 +58,7 @@ export async function enrollFollowupFlow(
 
   const { data: pointer, error: pointerErr } = await supabase
     .from("followup_flow_pointers")
-    .select("id, status, active_version_id")
+    .select("id, status, active_version_id, trigger_config")
     .eq("organization_id", organizationId)
     .eq("id", pointerId)
     .maybeSingle();
@@ -166,7 +167,7 @@ export async function enrollFollowupFlow(
         supabase,
         organizationId,
         contactId,
-        await sessaoDoFollowup(supabase, organizationId, contactId),
+        await sessaoDaInscricao(supabase, organizationId, contactId, pointer.trigger_config),
       );
   if (input.resolveServiceBoundary) await assertServiceBoundarySupabase(supabase, boundary);
   const { data: created, error: insErr } = await supabase
@@ -231,4 +232,19 @@ export async function enrollFollowupFlow(
   }
 
   return { ok: true, enrollment: created as Record<string, unknown> };
+}
+
+/**
+ * Canal fixado no gatilho de consulta (0377) quando ainda vale — mesma regra de
+ * `fn_appointment_recover`: senão, o canal de sempre do follow-up.
+ */
+async function sessaoDaInscricao(
+  supabase: SupabaseClient,
+  organizationId: string,
+  contactId: string,
+  triggerConfig: unknown,
+): Promise<string | undefined> {
+  const fixado = canalFixadoDoGatilho(triggerConfig);
+  if (fixado && !(await conferirCanalDoGatilho(leitorDeCanal(supabase), organizationId, triggerConfig))) return fixado;
+  return sessaoDoFollowup(supabase, organizationId, contactId);
 }

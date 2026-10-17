@@ -23,11 +23,20 @@ export const createFollowupFlowSchema = z.strictObject({
 // continuam acordando o classify, comportamento inalterado).
 const CANCEL_ON_REPLY = { cancel_on_reply: z.boolean().optional() };
 
+// `channel_session_id` (migration 0377): por qual número o acompanhamento da
+// consulta sai. Ausente = o canal da conversa da consulta. A existência e o
+// arquivamento são conferidos no servidor (lib/followup/canal-do-gatilho.ts);
+// o banco ainda volta ao canal da consulta se o canal sumir depois.
+const APPOINTMENT_PARAMS = z.strictObject({
+  event_type_ids: z.array(z.string().uuid()).optional(),
+  channel_session_id: z.string().uuid().optional(),
+});
+
 export const triggerConfigSchema = z.discriminatedUnion("kind", [
-  z.strictObject({kind:z.literal("appointment_no_show"),params:z.strictObject({event_type_ids:z.array(z.string().uuid()).optional()}).optional(),...CANCEL_ON_REPLY}),
+  z.strictObject({kind:z.literal("appointment_no_show"),params:APPOINTMENT_PARAMS.optional(),...CANCEL_ON_REPLY}),
   // Irmão de `appointment_no_show` (migration 0373): presença (`completed`)
   // confirmada pela equipe. Mesmo consumidor, mesmo filtro de tipo.
-  z.strictObject({kind:z.literal("appointment_attended"),params:z.strictObject({event_type_ids:z.array(z.string().uuid()).optional()}).optional(),...CANCEL_ON_REPLY}),
+  z.strictObject({kind:z.literal("appointment_attended"),params:APPOINTMENT_PARAMS.optional(),...CANCEL_ON_REPLY}),
   z.strictObject({ kind: z.literal("manual"), ...CANCEL_ON_REPLY }),
   z.strictObject({ kind: z.literal("webhook"), ...CANCEL_ON_REPLY }),
   z.strictObject({

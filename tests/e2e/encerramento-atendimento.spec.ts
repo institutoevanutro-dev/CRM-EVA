@@ -5,6 +5,7 @@ import { mkdirSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page } from "@playwright/test";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
+import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
 
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
@@ -176,6 +177,7 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     // nova custaria mais um login e mais um seed ao relógio do CI.
     await expect(page.getByRole("button", { name: "Novo Lead", exact: true })).toBeVisible();
     page.on("dialog", (dialog) => dialog.accept());
+    await abrirAcoesDaConversa(page);
     await page.getByRole("button", { name: "Fechar", exact: true }).click();
     await expect
       .poll(
@@ -217,6 +219,7 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
       .single();
     expect(current.data?.current_demanda_id).not.toBe(demand);
     expect(current.data?.status).toBe("open");
+    await abrirAcoesDaConversa(page);
     await page.getByRole("button", { name: "Assumir", exact: true }).click();
     await expect(page.getByRole("button", { name: "Liberar", exact: true })).toBeVisible();
     await expect(page.getByText("Sem responsável", { exact: true })).toHaveCount(0);
@@ -231,6 +234,7 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     const box = await page.getByTestId("inbox-demandas").boundingBox();
     expect(box?.width).toBeGreaterThan(150);
     await page.screenshot({ path: `${evidence}/task4-reaberto-respondido.png`, fullPage: true });
+    await abrirAcoesDaConversa(page);
     await page.getByRole("button", { name: "Fechar", exact: true }).click();
     await expect
       .poll(
@@ -261,6 +265,7 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     await expect(page.getByTestId("inbox-memoria")).toContainText("Historial cerrado — sin tareas pendientes");
     await expect(page.getByTestId("inbox-memoria")).toContainText("Resuelta");
     await page.screenshot({ path: `${evidence}/task4-historico-es.png`, fullPage: true });
+    await abrirAcoesDaConversa(page);
     await page.getByRole("button", { name: "Reabrir", exact: true }).click();
     await expect.poll(async () => (await db.from("conversations").select("status").eq("organization_id",org).eq("id",conversation).single()).data?.status).toBe("open");
     await page.getByRole("button", { name: "Cerrar", exact: true }).click();

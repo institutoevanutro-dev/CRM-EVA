@@ -45,6 +45,24 @@ export type InboxTab =
   | "comentarios"
   | "ocultos";
 
+/**
+ * UMA aba, um desenho — as três da fila e o "Mais" usam a mesma classe. A ativa
+ * se distingue por TRÊS sinais, não só pela cor: sublinhado de 2px, peso da
+ * letra e cor do texto. Altura fixa (32px) para a faixa não dançar quando a
+ * contagem aparece ou some.
+ */
+const CLASSE_DA_ABA =
+  "-mb-px h-8 shrink-0 gap-1 rounded-none border-b-2 border-transparent px-0.5 text-xs font-medium text-text-muted transition-colors hover:text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:border-accent data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-text data-[state=active]:shadow-none";
+
+/** A contagem da aba em pílula: número solto ao lado do rótulo parecia parte dele ("Fila6"). */
+function Contagem({ n }: { n: number }) {
+  return (
+    <span className="rounded-full bg-surface-elevated px-1.5 text-[11px] leading-4 font-medium tabular-nums text-text-muted">
+      {n}
+    </span>
+  );
+}
+
 /** As abas da fila de trabalho, sempre à vista. As demais vão para "Mais". */
 const ABAS_PRINCIPAIS: readonly InboxTab[] = ["unassigned", "mine", "all"];
 
@@ -349,38 +367,44 @@ export function InboxFilters({ value, onChange }: Props) {
           conversa, não tem busca nem canal), e mostrar esta linha ali prometeria
           um filtro que não filtra nada. */}
       {value.tab !== "comentarios" && (
-      <div className="space-y-2 px-3 pt-3 pb-2">
-        <div className="flex items-center gap-2">
-          <div className="relative min-w-0 flex-1">
-            <MagnifyingGlass
-              size={15}
-              weight="regular"
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle"
-              aria-hidden
-            />
-            {/* "última mensagem", e não "mensagem": a busca alcança apenas
-                `conversations.last_message_preview` — a ÚLTIMA mensagem, truncada em 200
-                caracteres já na ingestão (`grep -rn 'slice(0, 200)' lib/channels/` mostra onde).
-                Medido numa conversa real de 32 mensagens: buscar o que o cliente pediu na
-                3ª devolve ZERO. Alcançar o histórico é projeto próprio (índice trigram +
-                retenção + LGPD); até lá, a tela não promete o que o backend não faz. */}
-            <Input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder={t("Buscar por nome, telefone ou última mensagem…")}
-              className="h-9 rounded-full border-transparent bg-surface-elevated pl-9 text-sm shadow-none focus-visible:border-border focus-visible:bg-background"
-              aria-label={t("Buscar conversas")}
-            />
-          </div>
-          {/* Botão pressionável em vez de Switch: o filtro vive na mesma linha
-              da busca, e o Switch com rótulo pedia uma linha inteira só para
-              si numa coluna de 280px. */}
+      <div className="space-y-2 px-3 pt-2 pb-2">
+        <div className="relative min-w-0">
+          <MagnifyingGlass
+            size={15}
+            weight="regular"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle"
+            aria-hidden
+          />
+          {/* "última msg.", e não "mensagem": a busca alcança apenas
+              `conversations.last_message_preview` — a ÚLTIMA mensagem, truncada em 200
+              caracteres já na ingestão (`grep -rn 'slice(0, 200)' lib/channels/` mostra onde).
+              Medido numa conversa real de 32 mensagens: buscar o que o cliente pediu na
+              3ª devolve ZERO. Alcançar o histórico é projeto próprio (índice trigram +
+              retenção + LGPD); até lá, a tela não promete o que o backend não faz.
+              Curto de propósito: a frase longa de antes era cortada em "Buscar por nom"
+              na coluna de 272px, e a parte honesta ("última") nunca aparecia. A frase
+              inteira fica no `title`. */}
+          <Input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder={t("Nome, telefone ou última msg.")}
+            title={t("Buscar por nome, telefone ou última mensagem…")}
+            className="h-9 rounded-full border-transparent bg-surface-elevated pl-9 text-[13px] shadow-none focus-visible:border-border focus-visible:bg-background"
+            aria-label={t("Buscar conversas")}
+          />
+        </div>
+
+        {/* OS FILTROS NUMA LINHA SÓ, todos com 32px: "Não lidos" morava ao lado da
+            busca com 36px e os seletores embaixo com 32px — duas alturas e um
+            campo de busca espremido pela metade. Botão pressionável em vez de
+            Switch: o Switch com rótulo pedia uma linha inteira só para si. */}
+        <div className="flex min-w-0 items-center gap-2">
           <button
             type="button"
             aria-pressed={value.onlyUnread}
             onClick={() => onChange({ ...value, onlyUnread: !value.onlyUnread })}
             className={cn(
-              "h-9 shrink-0 rounded-full border px-3 text-xs font-medium transition-colors",
+              "h-8 shrink-0 rounded-full border px-3 text-xs font-medium transition-colors",
               "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
               value.onlyUnread
                 ? "border-accent bg-accent text-accent-foreground"
@@ -389,10 +413,6 @@ export function InboxFilters({ value, onChange }: Props) {
           >
             {t("Não lidos")}
           </button>
-        </div>
-
-        {(showChannelSwitch || mostrarSeletorDeTag) && (
-          <div className="flex gap-2">
             {showChannelSwitch && (
               <Select
                 value={value.canal ? `canal:${value.canal}` : value.channel_session_id ?? "all"}
@@ -549,8 +569,7 @@ export function InboxFilters({ value, onChange }: Props) {
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-          </div>
-        )}
+        </div>
       </div>
       )}
 
@@ -589,12 +608,10 @@ export function InboxFilters({ value, onChange }: Props) {
               <TabsTrigger
                 key={tab}
                 value={tab}
-                className="-mb-px shrink-0 gap-1 rounded-none border-b-2 border-transparent px-0 pb-2 pt-1 text-xs font-medium text-text-muted data-[state=active]:border-accent data-[state=active]:bg-transparent data-[state=active]:text-text data-[state=active]:shadow-none"
+                className={CLASSE_DA_ABA}
               >
                 {t(meta.label)}
-                {typeof count === "number" && count > 0 && (
-                  <span className="text-[11px] tabular-nums text-text-subtle">{count}</span>
-                )}
+                {typeof count === "number" && count > 0 && <Contagem n={count} />}
               </TabsTrigger>
             );
           })}
@@ -609,9 +626,9 @@ export function InboxFilters({ value, onChange }: Props) {
                 <button
                   type="button"
                   className={cn(
-                    "-mb-px inline-flex shrink-0 items-center gap-1 border-b-2 border-transparent pb-2 pt-1 text-xs font-medium text-text-muted",
-                    "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
-                    abaSecundariaAtiva && "border-accent text-text",
+                    CLASSE_DA_ABA,
+                    "inline-flex items-center",
+                    abaSecundariaAtiva && "border-accent font-semibold text-text",
                   )}
                   aria-label={t("Mais abas")}
                 >
@@ -619,7 +636,7 @@ export function InboxFilters({ value, onChange }: Props) {
                     ? t(INBOX_TABS.find((x) => x.value === value.tab)!.label)
                     : t("Mais")}
                   {abaSecundariaAtiva && typeof countFor[value.tab] === "number" && countFor[value.tab]! > 0 && (
-                    <span className="text-[11px] tabular-nums text-text-subtle">{countFor[value.tab]}</span>
+                    <Contagem n={countFor[value.tab]!} />
                   )}
                   <CaretDown size={11} aria-hidden />
                 </button>

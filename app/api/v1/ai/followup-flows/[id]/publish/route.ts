@@ -19,6 +19,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateFlowForPublish } from "@/lib/followup/validate-publish";
+import { conferirCanalDoGatilho, leitorDeCanal } from "@/lib/followup/canal-do-gatilho";
 import { publishFollowupFlowVersion } from "@/lib/followup/publish";
 import type { FlowGraph } from "@/lib/followup/graph-schema";
 import { logger } from "@/lib/logger";
@@ -125,6 +126,11 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
       );
     }
   }
+
+  // O canal fixado pode ter sido excluído DEPOIS de salvo: a recusa é aqui,
+  // com um humano na tela. (O banco ainda voltaria ao canal da consulta.)
+  const recusaDoCanal = await conferirCanalDoGatilho(leitorDeCanal(admin), activeOrg.orgId, pointer.trigger_config);
+  if (recusaDoCanal) return fail(recusaDoCanal.code, t(recusaDoCanal.message), recusaDoCanal.status, { requestId });
 
   if (!pointer.draft_graph) {
     return fail("validation_failed", t("Fluxo não tem rascunho pronto para publicar."), 422, {

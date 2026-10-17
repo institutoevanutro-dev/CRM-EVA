@@ -5,12 +5,14 @@ import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
 import { useOrganizationTransition } from "./OrganizationTransitionProvider";
-import { CaretDown, Storefront } from "@/lib/ui/icons";
+import { CaretDown, Check, Storefront } from "@/lib/ui/icons";
 import { useUser, useActiveOrg } from "@/hooks/auth/AuthProvider";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -37,7 +39,19 @@ export function TenantSwitcher() {
     }
   };
 
-  if (user.organizations.length <= 1 && !user.is_platform_admin) return null;
+  // Uma organização só: não há o que trocar, mas há o que DIZER — o nome de
+  // onde se está é a âncora da barra. Texto, não botão: um gatilho que abre um
+  // menu de um item só é controle morto. Abaixo do `md` some, pelo mesmo
+  // motivo do botão (ver o comentário dele): o cabeçalho do celular não cabe.
+  if (user.organizations.length <= 1 && !user.is_platform_admin) {
+    if (!active?.name) return null;
+    return (
+      <p className="hidden min-w-0 items-center gap-2 px-1 text-sm font-medium text-text md:flex">
+        <Storefront size={16} weight="duotone" aria-hidden className="shrink-0 text-text-muted" />
+        <span className="max-w-[220px] truncate">{active.name}</span>
+      </p>
+    );
+  }
 
   return (
     <DropdownMenu>
@@ -66,33 +80,57 @@ export function TenantSwitcher() {
           variant="ghost"
           size="sm"
           disabled={isPending || !!user.support}
-          className="gap-2"
+          // Pílula com borda, e não texto solto: é o único controle à esquerda
+          // da barra e precisa parecer clicável sem passar o mouse por cima.
+          // Mesma altura (36px) dos botões da direita, para as duas pontas da
+          // barra alinharem pela mesma linha.
+          className="h-11 gap-2 rounded-full border border-border px-3 lg:h-9 md:max-w-[280px]"
           aria-label={`${t("Organização")}: ${active?.name ?? t("Selecionar org")}`}
           title={user.support ? "Saia do acompanhamento para trocar de organização" : undefined}
           data-testid="tenant-switcher"
         >
           <Storefront size={16} weight="duotone" aria-hidden />
-          <span className="hidden max-w-[160px] truncate md:inline">
+          <span className="hidden max-w-[200px] truncate text-sm font-medium md:inline">
             {active?.name ?? "Selecionar org"}
           </span>
-          <CaretDown size={12} aria-hidden className="hidden md:inline" />
+          <CaretDown size={12} aria-hidden className="hidden text-text-muted md:inline" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-[220px]">
-        {user.organizations.map((org) => (
-          <DropdownMenuItem
-            key={org.organization_id}
-            data-testid={`tenant-switcher-item-${org.organization_id}`}
-            onClick={() => { void switchTo(org.organization_id); }}
-            className="flex items-center justify-between"
-          >
-            <span className="truncate">{org.organization_name}</span>
-            {active?.orgId === org.organization_id && <span className="text-xs text-muted-foreground">✓</span>}
-          </DropdownMenuItem>
-        ))}
-        {user.is_platform_admin && <DropdownMenuItem asChild>
-          <Link href="/admin/tenants">{t("Gerenciar organizações")}</Link>
-        </DropdownMenuItem>}
+      <DropdownMenuContent align="start" className="w-[min(18rem,calc(100vw-2rem))]">
+        <DropdownMenuLabel className="text-xs font-medium text-text-muted">
+          {t("Suas organizações")}
+        </DropdownMenuLabel>
+        {user.organizations.map((org) => {
+          const atual = active?.orgId === org.organization_id;
+          return (
+            <DropdownMenuItem
+              key={org.organization_id}
+              data-testid={`tenant-switcher-item-${org.organization_id}`}
+              onClick={() => { void switchTo(org.organization_id); }}
+              aria-current={atual ? "true" : undefined}
+              className="flex items-center gap-2.5 py-2"
+            >
+              {/* Inicial num disco: a lista de organizações se lê pela forma
+                  antes do nome, como na barra lateral do Slack. */}
+              <span
+                aria-hidden
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-elevated text-xs font-semibold text-text"
+              >
+                {org.organization_name.trim().charAt(0).toUpperCase() || "?"}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{org.organization_name}</span>
+              {atual && <Check size={14} weight="bold" aria-hidden className="shrink-0 text-accent" />}
+            </DropdownMenuItem>
+          );
+        })}
+        {user.is_platform_admin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/admin/tenants">{t("Gerenciar organizações")}</Link>
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -5,7 +5,7 @@ import { SeletorDeIdioma } from "@/components/shell/SeletorDeIdioma";
 /** Idioma e tema. A pessoa logada e o "Sair" moram no menu lateral desde 10/10/2026. */
 export function UserMenu() {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1">
       <SeletorDeIdioma />
       <ThemeToggle />
     </div>

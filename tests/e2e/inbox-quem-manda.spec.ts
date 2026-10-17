@@ -26,6 +26,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), ".superpowers/evidence/inbox-quem-manda");
@@ -284,6 +285,7 @@ test.describe("Inbox — quem manda nesta conversa", () => {
       if (error) throw new Error(`conferir comando: ${error.message}`);
       return data;
     }
+    await abrirAcoesDaConversa(page);
     await page.getByRole("button", { name: /^Assumir$/i }).click();
 
     // -----------------------------------------------------------------
@@ -332,6 +334,7 @@ test.describe("Inbox — quem manda nesta conversa", () => {
     // -----------------------------------------------------------------
     // (6) A VOLTA existe e funciona — o interruptor tem os dois lados.
     // -----------------------------------------------------------------
+    await abrirAcoesDaConversa(page);
     const voltar = page.getByTestId("devolver-ao-automatico");
     await expect(voltar).toBeVisible();
     await voltar.click();

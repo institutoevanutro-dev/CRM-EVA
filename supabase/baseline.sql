@@ -20082,7 +20082,7 @@ create or replace function public.fn_appointment_recover(p_org uuid,p_event uuid
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare e public.event_log; a public.calendar_appointments; r public.appointment_recovery_receipts;
  contact uuid; rev bigint; result text; candidates uuid[]; pointer uuid; agent uuid; version uuid; node text; boundary jsonb; enrollment uuid;
- attended boolean; v_status text; v_kind text;
+ attended boolean; v_status text; v_kind text; pinned uuid;
 begin
  select * into e from public.event_log where organization_id=p_org and id=p_event and event_type in ('appointment.outcome_confirmed','appointment.attended') and entity_kind='appointment';
  if not found then raise exception 'appointment_source_event_missing' using errcode='P0002'; end if;
@@ -20126,9 +20126,18 @@ begin
   select n->>'id' into node from public.followup_flow_versions v cross join lateral jsonb_array_elements(v.graph->'nodes') n
    where v.organization_id=p_org and v.id=version and n->>'type'='trigger';
   if version is null or agent is null or node is null then raise exception 'appointment_flow_changed' using errcode='PT409'; end if;
+  -- 0377: o fluxo pode fixar o canal de envio em trigger_config.params.channel_session_id
+  -- (ex.: o número pessoal do médico no pós-consulta). Vale só canal DESTA organização,
+  -- não arquivado e de WhatsApp 1:1 (`fn_service_begin` cria conversa 'whatsapp').
+  -- Fixado mas arquivado, de outra organização ou de outro tipo: volta ao canal da
+  -- conversa da consulta, como antes da 0377 — trocar de número não pode calar o
+  -- acompanhamento. Comparação por texto: trigger_config é jsonb sem CHECK.
+  select s.id into pinned from public.followup_flow_pointers p
+   join public.channel_sessions s on s.organization_id=p_org and s.id::text=p.trigger_config->'params'->>'channel_session_id'
+   where p.organization_id=p_org and p.id=pointer and s.archived_at is null and s.provider in ('waha','meta_cloud','zernio');
   begin
-   boundary:=public.fn_service_event_origin(p_org,p_event,contact,
-    (select channel_session_id from public.conversations where organization_id=p_org and id=a.conversation_id and contact_id=contact));
+   boundary:=public.fn_service_event_origin(p_org,p_event,contact,coalesce(pinned,
+    (select channel_session_id from public.conversations where organization_id=p_org and id=a.conversation_id and contact_id=contact)));
   exception when serialization_failure or sqlstate 'PT409' then result:='stale'; end;
   if result is null then
    begin
@@ -22404,7 +22413,7 @@ create or replace function public.fn_appointment_recover(p_org uuid,p_event uuid
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare e public.event_log; a public.calendar_appointments; r public.appointment_recovery_receipts;
  contact uuid; rev bigint; result text; candidates uuid[]; pointer uuid; agent uuid; version uuid; node text; boundary jsonb; enrollment uuid;
- attended boolean; v_status text; v_kind text;
+ attended boolean; v_status text; v_kind text; pinned uuid;
 begin
  select * into e from public.event_log where organization_id=p_org and id=p_event and event_type in ('appointment.outcome_confirmed','appointment.attended') and entity_kind='appointment';
  if not found then raise exception 'appointment_source_event_missing' using errcode='P0002'; end if;
@@ -22448,9 +22457,18 @@ begin
   select n->>'id' into node from public.followup_flow_versions v cross join lateral jsonb_array_elements(v.graph->'nodes') n
    where v.organization_id=p_org and v.id=version and n->>'type'='trigger';
   if version is null or agent is null or node is null then raise exception 'appointment_flow_changed' using errcode='PT409'; end if;
+  -- 0377: o fluxo pode fixar o canal de envio em trigger_config.params.channel_session_id
+  -- (ex.: o número pessoal do médico no pós-consulta). Vale só canal DESTA organização,
+  -- não arquivado e de WhatsApp 1:1 (`fn_service_begin` cria conversa 'whatsapp').
+  -- Fixado mas arquivado, de outra organização ou de outro tipo: volta ao canal da
+  -- conversa da consulta, como antes da 0377 — trocar de número não pode calar o
+  -- acompanhamento. Comparação por texto: trigger_config é jsonb sem CHECK.
+  select s.id into pinned from public.followup_flow_pointers p
+   join public.channel_sessions s on s.organization_id=p_org and s.id::text=p.trigger_config->'params'->>'channel_session_id'
+   where p.organization_id=p_org and p.id=pointer and s.archived_at is null and s.provider in ('waha','meta_cloud','zernio');
   begin
-   boundary:=public.fn_service_event_origin(p_org,p_event,contact,
-    (select channel_session_id from public.conversations where organization_id=p_org and id=a.conversation_id and contact_id=contact));
+   boundary:=public.fn_service_event_origin(p_org,p_event,contact,coalesce(pinned,
+    (select channel_session_id from public.conversations where organization_id=p_org and id=a.conversation_id and contact_id=contact)));
   exception when serialization_failure or sqlstate 'PT409' then result:='stale'; end;
   if result is null then
    begin
@@ -36847,3 +36865,20 @@ notify pgrst, 'reload schema';
 -- Nenhuma função nova, tabela, coluna ou constraint.
 -- Quem mede a regra: `tests/invariants/agenda-presenca-pos-consulta.test.ts`.
 -- ---- fim: presença confirmada inicia o acompanhamento pós-consulta (migration 0373) ----
+
+-- ---- o acompanhamento de consulta escolhe por qual número sai (migration 0377) ----
+-- Derivado de supabase/migrations/20261017180000_0377_pos_consulta_escolhe_o_canal.sql
+-- (o porquê inteiro está no cabeçalho de lá). `fn_appointment_recover` passa a
+-- usar `trigger_config.params.channel_session_id` do ponteiro como canal da
+-- inscrição, quando é canal desta organização, não arquivado e WhatsApp 1:1;
+-- senão volta ao canal da conversa da consulta, como antes.
+--
+-- NÃO HÁ CORPO DE FUNÇÃO AQUI, de propósito: a troca foi feita no lugar, nas
+-- DUAS definições desta função acima neste arquivo. Assim a reaplicação não
+-- passa por versão antiga dela
+-- (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`), e a última
+-- definição é igual à da migration 0377
+-- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
+-- Nenhuma função nova, tabela, coluna ou constraint.
+-- Quem mede a regra: `tests/invariants/pos-consulta-canal-fixado.test.ts`.
+-- ---- fim: o acompanhamento de consulta escolhe por qual número sai (migration 0377) ----

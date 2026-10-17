@@ -34,6 +34,7 @@ import * as path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), ".superpowers/evidence/ia-360-w3");
@@ -228,6 +229,7 @@ test.describe("IA 360 W3 — o agente para, a pessoa continua, o agente retoma s
       page.getByTestId("badge-atendimento-humano"),
       "conversa com o robô calado não pode ter a mesma cara de uma conversa normal",
     ).toBeVisible({ timeout: 30_000 });
+    await abrirAcoesDaConversa(page);
     const botaoDevolver = page.getByTestId("devolver-ao-automatico");
     await expect(
       botaoDevolver,
