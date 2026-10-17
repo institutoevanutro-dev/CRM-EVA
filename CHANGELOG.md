@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.20.0] — 2026-10-17
+
+### Adicionado
+
+- **O acompanhamento de consulta escolhe por qual número de WhatsApp sai** Nos fluxos disparados por "Depois que o paciente compareceu" e "Falta confirmada pela equipe", o gatilho ganhou o campo "Enviar pelo número/canal". O padrão continua sendo o canal da conversa da consulta; escolhendo outro número da conta (por exemplo, o pessoal do médico), o acompanhamento sai por ele, e a conversa com o paciente é criada nesse número se ainda não existir. A lista só mostra números de WhatsApp não excluídos, e salvar ou publicar com um número excluído ou de outra conta é recusado. Se o número escolhido for excluído depois, o acompanhamento volta a sair pelo canal da consulta. A atualização troca o corpo de uma função no banco pelo `update.sh`, sem nenhuma ação manual.
+
 ## [4.19.0] — 2026-10-17
 
 ### Adicionado
@@ -7559,7 +7565,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.19.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.20.0...HEAD
+[4.20.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.19.0...v4.20.0
 [4.19.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.18.0...v4.19.0
 [4.18.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.17.0...v4.18.0
 [4.17.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.16.0...v4.17.0
