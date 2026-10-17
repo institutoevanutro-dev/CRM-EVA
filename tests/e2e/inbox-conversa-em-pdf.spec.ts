@@ -23,6 +23,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import { extractPdfText } from "../../lib/ai/rag/extractors/pdf";
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), ".superpowers/evidence/conversa-em-pdf");
@@ -213,6 +214,7 @@ test.describe("Inbox: baixar a conversa em PDF", () => {
     await expect(page.getByText(NOTA).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("exame-de-sangue.pdf").first()).toBeVisible();
 
+    await abrirAcoesDaConversa(page);
     const botao = page.getByTestId("exportar-conversa-pdf");
     await expect(botao).toBeVisible();
     await expect(botao).toHaveAttribute("aria-label", "Baixar a conversa em PDF");
@@ -296,6 +298,7 @@ test.describe("Inbox: baixar a conversa em PDF", () => {
     await login(page, creds.users.agent!.email, creds.password);
     await page.goto(`/app/inbox/${conversaId}`);
     await expect(page.getByText("PACIENTE PERGUNTA DO EXAME").first()).toBeVisible({ timeout: 60_000 });
+    await abrirAcoesDaConversa(page);
     const botao = page.getByTestId("exportar-conversa-pdf");
     await expect(botao).toBeVisible();
     const caixa = (await botao.boundingBox())!;

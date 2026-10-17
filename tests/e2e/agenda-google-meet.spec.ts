@@ -9,6 +9,7 @@ import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { reconcileAppointment } from "../../lib/agenda/google/sync-executor";
 import { createMeetDeliveryHandler } from "../../lib/agent-engine/agent/meet-delivery";
 import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
+import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
 
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
@@ -488,6 +489,7 @@ test("marca Meet, copia link, autoriza em atendimento humano e entrega novamente
     expect(oldJob[0]).toMatchObject({ id: firstJob, organization_id: f.org, contact_id: f.contact, kind: "transactional_delivery", status: "done" });
     await page.goto(`/app/inbox/${f.conversation}`);
     page.on("dialog", (dialog) => dialog.accept());
+    await abrirAcoesDaConversa(page);
     await page.getByRole("button", { name: "Fechar", exact: true }).click();
     await expect
       .poll(

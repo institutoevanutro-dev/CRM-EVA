@@ -23,6 +23,7 @@ import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page } from "@playwright/test";
 
 import { lerCreds, loginAdmin } from "./_login";
+import { abrirAcoesDaConversa } from "../e2e/helpers/acoes-da-conversa";
 
 // As demais jornadas herdam a sessão do `auth.setup.ts`. ESTA prova o login pela
 // tela, então precisa começar deslogada — herdar a sessão faria o teste passar
@@ -153,6 +154,7 @@ test.describe("jornada WAHA — baseline do seam de canais", () => {
     await page.getByText(/Cliente Radar E2E/i).first().click();
     await expect(page.getByLabel("Mensagem")).toBeVisible({ timeout: 30_000 });
 
+    await abrirAcoesDaConversa(page);
     const lembrar = page.getByRole("button", { name: /Lembrar|Lembrete ativo/ });
     await expect(lembrar).toBeVisible({ timeout: 30_000 });
     await lembrar.click();

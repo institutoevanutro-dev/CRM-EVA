@@ -31,6 +31,7 @@ import { expect, test, type BrowserContext, type Locator, type Page } from "@pla
 
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { lerCreds, loginComoAdmin, type CredsE2E } from "./helpers/login-admin";
+import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
 
 const credenciais = credenciaisSupabaseDeTeste();
 const db = createClient(credenciais.url, credenciais.serviceRole, {
@@ -248,6 +249,7 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
     await foto("05-inbox-antes.png");
 
     await itemDaLista.click();
+    await abrirAcoesDaConversa(page);
     await tela().getByTestId("ocultar-do-inbox").click();
     const pergunta = page.getByTestId("ocultar-do-inbox-dialogo");
     await expect(pergunta).toContainText(nome);
@@ -274,6 +276,7 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
     expect(alturaDoSelo, "o selo quebrou em mais de uma linha").toBeLessThanOrEqual(20);
     await foto("08-inbox-aba-ocultos.png");
 
+    await abrirAcoesDaConversa(page);
     await tela().getByTestId("mostrar-no-inbox").click();
     await expect(itemDaLista).toHaveCount(0);
     await abaTodas.click();

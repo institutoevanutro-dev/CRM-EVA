@@ -31,6 +31,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), ".superpowers/evidence/etiquetas-e-composer");
@@ -240,6 +241,7 @@ test.describe("Etiquetas e compositor (portes de 15/10)", () => {
     await page.goto(`/app/inbox/${conversaId}`);
     await expect(page.getByText("MENSAGEM DO PACIENTE 1510").first()).toBeVisible({ timeout: 60_000 });
 
+    await abrirAcoesDaConversa(page);
     const transferir = page.getByRole("button", { name: /Transferir/ }).first();
     await expect(transferir).toBeAttached();
     const medida = await transferir.evaluate((botao) => {

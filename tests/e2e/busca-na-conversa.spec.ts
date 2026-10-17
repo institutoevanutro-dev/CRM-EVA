@@ -6,6 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page } from "@playwright/test";
 
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
+import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
 
 /**
  * A BUSCA DENTRO DA CONVERSA (#1795, extraída do #1793) — pela tela, como o
@@ -183,6 +184,7 @@ test.describe("busca dentro da conversa", () => {
     await expect(bolhas(page)).toHaveCount(MENSAGENS_A.length, { timeout: 30_000 });
 
     // ── abrir a busca pela lupa
+    await abrirAcoesDaConversa(page);
     const lupa = page.getByRole("button", { name: "Buscar nesta conversa" });
     await expect(lupa).toHaveAttribute("aria-expanded", "false");
     const barra = await lupa.evaluate((b) => {
@@ -259,6 +261,7 @@ test.describe("busca dentro da conversa", () => {
       page.locator('[data-search-match="true"]'),
       "a conversa B tem o termo e ganhou a marca da busca feita em A",
     ).toHaveCount(0);
+    await abrirAcoesDaConversa(page);
     const lupaB = page.getByRole("button", { name: "Buscar nesta conversa" });
     await expect(lupaB).toHaveAttribute("aria-expanded", "false");
     await page.screenshot({ path: path.join(EVIDENCE, "2-outra-conversa-sem-busca.png") });
