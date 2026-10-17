@@ -10,6 +10,7 @@ const ctx = {
   agora: new Date("2026-09-21T15:00:00Z"),
   fuso: "America/Sao_Paulo",
   idioma: "pt-BR" as const,
+  papel: "manager",
 };
 
 describe("configuracaoPendente", () => {

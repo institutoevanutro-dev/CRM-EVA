@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { fakeDb } from "./fake-db.test-helper";
-import { agendaDeHoje, avisosAbertos, esperandoResposta, minhasTarefas } from "./meu-dia";
+import {
+  agendaDeHoje,
+  avisoChegaAQuem,
+  avisosAbertos,
+  escopoDoAviso,
+  esperandoResposta,
+  minhasTarefas,
+} from "./meu-dia";
 import type { Bloco } from "./tipos";
 
 const ORG = "org-1";
@@ -13,25 +20,133 @@ const ctx = {
   agora: new Date("2026-09-21T15:00:00Z"),
   fuso: "America/Sao_Paulo",
   idioma: "pt-BR" as const,
+  papel: "agent",
 };
 function ok(b: Bloco) {
   if (!b.ok) throw new Error("bloco falhou");
   return b;
 }
 
-describe("avisosAbertos", () => {
-  it("conta só os abertos da organização", async () => {
-    const { db } = fakeDb({
-      agent_inbox_items: [
-        { id: "a1", organization_id: ORG, status: "open", title: "Comprovante", created_at: "2026-09-21T10:00:00Z" },
-        { id: "a2", organization_id: ORG, status: "resolved", title: "x", created_at: "2026-09-21T10:00:00Z" },
-        { id: "a3", organization_id: OUTRA, status: "open", title: "y", created_at: "2026-09-21T10:00:00Z" },
-      ],
-    });
-    const b = ok(await avisosAbertos(db, ctx));
-    expect(b.total).toBe(1);
-    expect(b.itens.map((i) => i.id)).toEqual(["a1"]);
-    expect(b.itens[0]!.href).toBe("/app/ai/inbox");
+describe("avisosAbertos — só o que é da pessoa", () => {
+  const aviso = (id: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    organization_id: ORG,
+    status: "open",
+    kind: "handoff",
+    title: `Aviso ${id}`,
+    ref_kind: null,
+    ref_id: null,
+    created_at: "2026-09-21T10:00:00Z",
+    ...extra,
+  });
+  const tabelas = () => ({
+    agent_inbox_items: [
+      aviso("conv-minha", { ref_kind: "conversation", ref_id: "c-minha" }),
+      aviso("conv-outro", { ref_kind: "conversation", ref_id: "c-outro" }),
+      aviso("conv-sem-dono", { ref_kind: "conversation", ref_id: "c-livre" }),
+      aviso("consulta-minha", { kind: "appointment_unconfirmed", ref_kind: "appointment", ref_id: "ap-minha" }),
+      aviso("consulta-outro", { kind: "appointment_unconfirmed", ref_kind: "appointment", ref_id: "ap-outro" }),
+      aviso("caso-meu", { kind: "case_stale", ref_kind: "agent_case", ref_id: "caso-1" }),
+      // Segundo caso aberto na MESMA conversa: herda o mesmo atendente.
+      aviso("caso-meu-2", { kind: "case_stale", ref_kind: "agent_case", ref_id: "caso-2" }),
+      aviso("contato-meu", { ref_kind: "contact", ref_id: "ct-lead-meu" }),
+      aviso("followup-outro", { kind: "followup_dead", ref_kind: "followup_enrollment", ref_id: "fe-1" }),
+      aviso("canal-fora", { kind: "qr_rescan", ref_kind: "channel_session", ref_id: "s-1" }),
+      // Usa a MINHA conversa só como exemplo de um defeito da organização.
+      aviso("envio-preso", { kind: "message_send_stuck", ref_kind: "conversation", ref_id: "c-minha" }),
+      aviso("lgpd", { kind: "other", ref_kind: "lgpd_escalation", ref_id: "ct-lead-meu" }),
+      aviso("sem-ref", { kind: "budget_exceeded" }),
+      aviso("resolvido", { status: "resolved", ref_kind: "conversation", ref_id: "c-minha" }),
+      aviso("vizinha", { organization_id: OUTRA, ref_kind: "conversation", ref_id: "c-minha" }),
+    ],
+    conversations: [
+      { id: "c-minha", organization_id: ORG, contact_id: "ct-a", assigned_to_user_id: EU },
+      { id: "c-outro", organization_id: ORG, contact_id: "ct-b", assigned_to_user_id: OUTRO },
+      { id: "c-livre", organization_id: ORG, contact_id: "ct-c", assigned_to_user_id: null },
+      { id: "c-do-caso", organization_id: ORG, contact_id: "ct-d", assigned_to_user_id: EU },
+      { id: "c-do-followup", organization_id: ORG, contact_id: "ct-e", assigned_to_user_id: OUTRO },
+    ],
+    calendar_appointments: [
+      { id: "ap-minha", organization_id: ORG, owner_user_id: EU },
+      { id: "ap-outro", organization_id: ORG, owner_user_id: OUTRO },
+    ],
+    agent_cases: [
+      { id: "caso-1", organization_id: ORG, conversation_id: "c-do-caso" },
+      { id: "caso-2", organization_id: ORG, conversation_id: "c-do-caso" },
+    ],
+    followup_enrollments: [{ id: "fe-1", organization_id: ORG, contact_id: "ct-e", conversation_id: "c-do-followup" }],
+    crm_leads: [{ id: "l-1", organization_id: ORG, contact_id: "ct-lead-meu", owner_user_id: EU, status: "open" }],
+  });
+  const ids = (b: Bloco) => (b.ok ? b.itens.map((i) => i.id).sort() : []);
+
+  it("atendente vê SÓ os avisos ligados ao que é dele — nunca os de outra pessoa nem os da organização", async () => {
+    const { db } = fakeDb(tabelas());
+    const b = ok(await avisosAbertos(db, { ...ctx, papel: "agent" }, 99));
+    expect(ids(b)).toEqual(["caso-meu", "caso-meu-2", "consulta-minha", "contato-meu", "conv-minha"]);
+    expect(b.total).toBe(5);
+  });
+
+  it("o colega vê os dele, e nenhum dos meus", async () => {
+    const { db } = fakeDb(tabelas());
+    const b = ok(await avisosAbertos(db, { ...ctx, userId: OUTRO, papel: "agent" }, 99));
+    expect(ids(b)).toEqual(["consulta-outro", "conv-outro", "followup-outro"]);
+  });
+
+  it("profissional (provider) segue a mesma regra do atendente", async () => {
+    const { db } = fakeDb(tabelas());
+    const b = ok(await avisosAbertos(db, { ...ctx, papel: "provider" }, 99));
+    expect(ids(b)).toEqual(["caso-meu", "caso-meu-2", "consulta-minha", "contato-meu", "conv-minha"]);
+  });
+
+  it("gerente vê os dele + os da organização + os que ninguém assumiu, e não os de outra pessoa", async () => {
+    const { db } = fakeDb(tabelas());
+    const b = ok(await avisosAbertos(db, { ...ctx, papel: "manager" }, 99));
+    expect(ids(b)).toEqual([
+      "canal-fora",
+      "caso-meu",
+      "caso-meu-2",
+      "consulta-minha",
+      "contato-meu",
+      "conv-minha",
+      "conv-sem-dono",
+      "envio-preso",
+      "lgpd",
+      "sem-ref",
+    ]);
+  });
+
+  it("o motivo do aviso vai no detalhe: seu ou da clínica", async () => {
+    const { db } = fakeDb(tabelas());
+    const b = ok(await avisosAbertos(db, { ...ctx, papel: "admin" }, 99));
+    const porId = new Map(b.itens.map((i) => [i.id, i.detalhe]));
+    expect(porId.get("conv-minha")).toBe("meu");
+    expect(porId.get("conv-sem-dono")).toBe("sem_dono");
+    expect(porId.get("canal-fora")).toBe("organizacao");
+  });
+});
+
+describe("escopoDoAviso", () => {
+  const donos = new Map([["c1", new Set([EU])], ["c2", new Set<string>()]]);
+  it("classifica pela referência, não pelo tipo", () => {
+    expect(escopoDoAviso({ kind: "handoff", ref_kind: "conversation", ref_id: "c1" }, donos, EU)).toBe("meu");
+    expect(escopoDoAviso({ kind: "handoff", ref_kind: "conversation", ref_id: "c1" }, donos, OUTRO)).toBe("de_outra_pessoa");
+    expect(escopoDoAviso({ kind: "handoff", ref_kind: "conversation", ref_id: "c2" }, donos, EU)).toBe("sem_dono");
+    // Referência que sumiu (apagada) não tem dono: vai para a gestão.
+    expect(escopoDoAviso({ kind: "handoff", ref_kind: "conversation", ref_id: "x" }, donos, EU)).toBe("sem_dono");
+    expect(escopoDoAviso({ kind: "qr_rescan", ref_kind: "channel_session", ref_id: "s" }, donos, EU)).toBe("organizacao");
+    expect(escopoDoAviso({ kind: "message_send_stuck", ref_kind: "conversation", ref_id: "c1" }, donos, EU)).toBe("organizacao");
+  });
+  it("só gerente e admin recebem o que não é de ninguém", () => {
+    expect(avisoChegaAQuem("meu", "viewer")).toBe(true);
+    expect(avisoChegaAQuem("de_outra_pessoa", "admin")).toBe(false);
+    for (const papel of ["viewer", "provider", "agent"]) {
+      expect(avisoChegaAQuem("organizacao", papel)).toBe(false);
+      expect(avisoChegaAQuem("sem_dono", papel)).toBe(false);
+    }
+    for (const papel of ["manager", "admin"]) {
+      expect(avisoChegaAQuem("organizacao", papel)).toBe(true);
+      expect(avisoChegaAQuem("sem_dono", papel)).toBe(true);
+    }
   });
 });
 
@@ -100,6 +215,8 @@ describe("agendaDeHoje", () => {
         { ...base, id: "h3", starts_at: "2026-09-22T13:00:00Z" }, // amanhã
         { ...base, id: "h4", starts_at: "2026-09-21T14:00:00Z", status: "cancelled" },
         { ...base, id: "h5", starts_at: "2026-09-21T14:00:00Z", owner_user_id: OUTRO },
+        // Lançado por engano (migration 0364): some da agenda.
+        { ...base, id: "h6", starts_at: "2026-09-21T14:00:00Z", excluded_at: "2026-09-21T11:00:00Z" },
       ],
     });
     const b = ok(await agendaDeHoje(db, ctx));

@@ -27,6 +27,8 @@ export interface ContextoDoInicio {
   fuso: string;
   /** Idioma de quem lê: datas e horas seguem ele, nunca "pt-BR" fixo. */
   idioma: Idioma;
+  /** Papel na organização: decide os avisos que chegam a ela (`avisoChegaAQuem`). */
+  papel: string;
 }
 
 /** O fuso, ou o padrão se o perfil guardar um nome que o `Intl` não conhece. */

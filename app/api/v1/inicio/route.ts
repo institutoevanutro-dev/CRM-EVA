@@ -36,6 +36,7 @@ export async function GET(_req: Request) {
     agora: new Date(),
     fuso: fusoValido(auth.user.timezone ?? FUSO_PADRAO),
     idioma: auth.user.idioma,
+    papel: auth.org.role,
   };
   // Leitura de rank que NÃO decide 401/403 (o gate é o `requireRole` acima):
   // só escolhe quais blocos calcular — por isso `roleAtLeast` (lint:role-rank).

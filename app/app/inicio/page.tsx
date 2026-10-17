@@ -32,7 +32,7 @@ export default async function InicioPage() {
   return (
     <div className="flex h-full flex-col gap-8 p-6 md:p-8">
       <header>
-        <p className="text-xs font-medium tracking-[0.18em] text-gold uppercase">{t("Início")}</p>
+        <p className="text-xs font-medium tracking-[0.18em] text-text-muted uppercase">{t("Início")}</p>
         <h1 className="mt-1 text-[2.25rem] leading-tight">
           {primeiroNome ? `${saudacao}, ${primeiroNome}` : saudacao}
         </h1>

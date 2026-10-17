@@ -431,6 +431,7 @@ jobs:
       SPECS_PARTE_2: >-
         agente-marca-consulta.spec.ts
         painel-inicio.spec.ts
+        inicio-por-pessoa.spec.ts
         agenda-marcar-pela-tela.spec.ts
         agenda-remarcar-e-cancelar.spec.ts
         agenda-excluir-lancado-por-engano.spec.ts
