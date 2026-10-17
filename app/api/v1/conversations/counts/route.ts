@@ -55,6 +55,13 @@ export function filtrosAuxiliaresDaContagem(
   if (numero) filtros.push(["channel_session_id", numero]);
   const canal = sp.get("canal");
   if (canal === "instagram" || canal === "whatsapp") filtros.push(["channel", canal]);
+  // O atendente escolhido pelo gerente. Só id de usuário (uuid) entra: qualquer
+  // outra coisa seria ignorada em silêncio e a contagem divergiria da lista.
+  // Portado do projeto original (DeskcommCRM, PR #2982 de @wellpelomundo).
+  const atendente = sp.get("assigned_to");
+  if (atendente && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(atendente)) {
+    filtros.push(["assigned_to_user_id", atendente]);
+  }
   // O MARCADOR não entra nesta lista, e não é esquecimento: ele não é
   // IGUALDADE numa coluna, é um `or=` sobre DUAS caixas — `conversations.tags`
   // e o campo calculado do contato. `conversations` não tem coluna `tag` (`tag`
@@ -113,13 +120,13 @@ export async function GET(req: NextRequest): Promise<Response> {
   // O CONTATO OCULTO DO INBOX (migration 0372) entra pela mesma fábrica: nenhuma
   // aba conta conversa de contato oculto, e o badge da aba "Ocultos" é a mesma
   // contagem com o predicado invertido — nunca uma consulta montada por fora.
-  const countExact = (ocultos = false) => {
+  const countExact = (ocultos = false, filtrosDaAba: readonly FiltroDeContagem[] = auxiliares) => {
     let q = supabase
       .from("conversations")
       .select("id", { count: "exact", head: true })
       .eq("organization_id", org);
     q = ocultos ? soContatoOculto(q) : semContatoOculto(q);
-    for (const [coluna, valor] of auxiliares) q = q.eq(coluna, valor);
+    for (const [coluna, valor] of filtrosDaAba) q = q.eq(coluna, valor);
     // O marcador entra pela régua da LISTA — a mesma função, não uma segunda.
     q = aplicarMarcadores(q, marcadores, modo);
     if (soNaoLidas) q = q.gt("unread_count_for_assignee", 0);
@@ -156,7 +163,10 @@ export async function GET(req: NextRequest): Promise<Response> {
     // A aba "Automático". Antes ela pedia `status='ai_handling'`, escrito por UM
     // caminho só em produção — por isso vivia quase vazia.
     countExact().eq("comando_da_conversa", "automatico"),
-    countExact()
+    // Minhas IGNORA o atendente escolhido pelo gerente: a lista da aba pede
+    // `assigned_to=me`, que vence a escolha. Com o atendente aqui, o badge
+    // contava `eu E ele` (zero) enquanto a aba listava as do gerente.
+    countExact(false, auxiliares.filter(([coluna]) => coluna !== "assigned_to_user_id"))
       .eq("assigned_to_user_id", user.id)
       .not("status", "in", `(${CONVERSATION_TERMINAL_STATUSES.join(",")})`),
     countExact(),
