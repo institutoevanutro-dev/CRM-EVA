@@ -2,6 +2,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ConversationsFilters } from "@/hooks/inbox/useConversationsRealtime";
+
 /**
  * A LISTA DO INBOX NÃO VOLTA AO SKELETON NUM REFETCH.
  *
@@ -75,7 +77,6 @@ vi.mock("@/lib/api/client", () => ({
 
 const { ConversationList } = await import("@/components/inbox/ConversationList");
 const { useConversationsRealtime } = await import("@/hooks/inbox/useConversationsRealtime");
-type ConversationsFilters = import("@/hooks/inbox/useConversationsRealtime").ConversationsFilters;
 
 /** Uma linha de resposta — só o que a lista lê. */
 function pagina(ids: string[]) {
