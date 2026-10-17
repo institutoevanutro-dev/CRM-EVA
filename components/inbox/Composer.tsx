@@ -9,7 +9,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
-import { PaperPlaneTilt } from "@/lib/ui/icons";
+import { PaperPlaneTilt, Sparkle } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
 import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentPreviewDialog";
@@ -30,6 +30,7 @@ import {
   type TemplateContact,
 } from "@/lib/inbox/template-vars";
 import { cn } from "@/lib/utils";
+import { classeDaFaixa, useRevelacao } from "@/hooks/inbox/useRevelacao";
 import { resolveSharedContact } from "@/lib/messaging/contact-card";
 
 export interface ComposerHandle {
@@ -120,6 +121,21 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [menuDismissed, setMenuDismissed] = useState(false);
   const [mode, setMode] = useState<"reply" | "note">("reply");
+  /**
+   * A FAIXA DE CIMA DO CAMPO (assistência do agente + Responder/Nota interna)
+   * fica recolhida até ser pedida — pelo mouse, pelo foco ou pelo botão de
+   * faísca ao lado do emoji. Ela comia ~70px da conversa o tempo todo, e no
+   * celular empurrava o campo para baixo da dobra.
+   *
+   * Recolher NUNCA esconde estado: em "Nota interna" ou com sugestão para
+   * revisar ela fica aberta e no fluxo (`forcado`), porque escrever achando que
+   * é nota quando é resposta ao cliente é o erro que não tem volta.
+   */
+  const [temSugestao, setTemSugestao] = useState(false);
+  const ferramentas = useRevelacao({
+    forcado: mode === "note" || temSugestao,
+    chave: conversationId,
+  });
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   // A citação ATUAL, para o `onSuccess` de um envio que já saiu comparar com a
   // que foi junto com ele (ver `handleSubmit`).
@@ -283,14 +299,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   return (
     <>
       <div
+        {...ferramentas.zonaProps}
         className={cn(
           "relative border-t border-border bg-bg px-3 py-2.5",
           mode === "note" && "border-warning/40 bg-warning-bg",
         )}
       >
-        {mode === "reply" && (
-          <ReplyReviewPanel conversationId={conversationId} disabled={isDisabled} />
-        )}
         <TemplateMenu
           open={menuOpen}
           query={slash.query}
@@ -298,7 +312,25 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           onPick={applyTemplate}
           onClose={() => setMenuDismissed(true)}
         />
-        <div className="mb-1.5 flex gap-1">
+        <div
+          {...ferramentas.painelProps}
+          role="group"
+          aria-label={t("Assistência do agente e nota interna")}
+          className={cn(
+            ferramentas.noFluxo
+              ? "mb-1.5"
+              : "absolute inset-x-0 bottom-full z-20 border-t border-border bg-bg px-3 pt-2 pb-1.5 shadow-md",
+            classeDaFaixa(ferramentas.visivel),
+          )}
+        >
+        {mode === "reply" && (
+          <ReplyReviewPanel
+            conversationId={conversationId}
+            disabled={isDisabled}
+            onTemSugestao={setTemSugestao}
+          />
+        )}
+        <div className="flex gap-1">
           <button
             type="button"
             onClick={() => setMode("reply")}
@@ -323,6 +355,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           >
             {t("Nota interna")}
           </button>
+        </div>
         </div>
         {/*
           A FAIXA DA CITAÇÃO — o que o atendente escolheu responder.
@@ -403,6 +436,24 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               });
             }}
           />
+          {/* A porta explícita da faixa de cima (toque e teclado). Faísca
+              porque o que mora lá é sobretudo a assistência do agente; o nome
+              diz as duas coisas. Desabilitada enquanto a faixa está presa
+              aberta por estado (nota, sugestão): ali fechar não é opção, e o
+              botão continua no lugar para o campo não mudar de largura. */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn("h-9 w-9 shrink-0", ferramentas.visivel && "bg-muted")}
+            aria-label={t("Opções de resposta")}
+            title={t("Assistência do agente e nota interna")}
+            disabled={mode === "note" || temSugestao}
+            {...ferramentas.alternadorProps}
+            onClick={ferramentas.alternar}
+          >
+            <Sparkle size={16} aria-hidden />
+          </Button>
           <textarea
             ref={taRef}
             value={text}
