@@ -40,7 +40,12 @@ type Linha = Record<string, unknown>;
  * Um construtor de consulta que aceita qualquer encadeamento e responde pela
  * tabela. `update` marca a consulta como o carimbo.
  */
-function dubleDoAdmin(opts: { linha: Linha; carimbaLinha?: boolean; modeloLegado?: string | null }) {
+function dubleDoAdmin(opts: {
+  linha: Linha;
+  carimbaLinha?: boolean;
+  modeloLegado?: string | null;
+  contato?: Record<string, unknown>;
+}) {
   const carimbos: Array<Record<string, unknown>> = [];
   const responder = (tabela: string, update: Record<string, unknown> | undefined) => {
     switch (tabela) {
@@ -52,7 +57,7 @@ function dubleDoAdmin(opts: { linha: Linha; carimbaLinha?: boolean; modeloLegado
         return { data: [opts.linha], error: null };
       case "contacts":
         return {
-          data: { id: "contato-1", name: "Maria Silva", display_name: null, phone_number: "+5592999990000", is_blocked: false },
+          data: { id: "contato-1", name: "Maria Silva", display_name: null, phone_number: "+5592999990000", is_blocked: false, ...opts.contato },
           error: null,
         };
       case "channel_sessions":
@@ -187,5 +192,25 @@ describe("a linha mudou entre a leitura e o carimbo (mudou_na_rodada)", () => {
       expect.stringContaining("mudou_na_rodada"),
       expect.objectContaining({ appointmentId: "compromisso-1" }),
     );
+  });
+});
+
+describe("contato marcado \"sempre atendimento humano\" (ai_opt_out)", () => {
+  it("não recebe lembrete, não carimba, não audita", async () => {
+    const { resposta, carimbos } = rodar({ linha: linhaDoCompromisso({}), contato: { ai_opt_out: true } });
+    const corpo = (await (await resposta).json()) as { data: { enviados: number; motivos: Record<string, number> } };
+
+    expect(corpo.data.enviados).toBe(0);
+    expect(corpo.data.motivos).toEqual({ contato_sempre_humano: 1 });
+    expect(carimbos).toEqual([]);
+    expect(sendMessageHandler).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("controle: sem a marca, o lembrete sai", async () => {
+    const { resposta } = rodar({ linha: linhaDoCompromisso({}), contato: { ai_opt_out: false } });
+    const corpo = (await (await resposta).json()) as { data: { enviados: number } };
+
+    expect(corpo.data.enviados).toBe(1);
   });
 });

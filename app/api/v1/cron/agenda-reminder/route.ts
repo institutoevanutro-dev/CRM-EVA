@@ -21,6 +21,18 @@
  * recusa, é perder a entrega. Bloqueio de contato (`is_blocked`) e ausência de
  * telefone barram, porque aí não há para onde mandar.
  *
+ * **Contato "sempre atendimento humano" não recebe lembrete** (decisão do dono
+ * do produto, 17/10). A marca é `contacts.ai_opt_out` (migration 0366, ligada
+ * pela rota `contacts/[id]/always-human`), e na prática quem a tem é gente da
+ * equipe que aparece na agenda — um aviso automático de "lembrando do seu
+ * compromisso" para a própria funcionária é ruído. A régua é `ai_opt_out`, e
+ * NÃO `force_human`: a trava da conversa liga também quando um paciente comum
+ * é escalado para humano, e esse paciente continua precisando do lembrete.
+ * O pulo NÃO carimba, como o de bloqueado e o de oculto: se a marca sair antes
+ * da hora, o degrau ainda vence e sai. A volta a cada 5 min não é eterna — a
+ * linha sai da varredura quando o compromisso começa — e custa uma leitura do
+ * contato por rodada, sem envio nem audit.
+ *
  * **A janela de envio vale.** Um lembrete que chega às 6h da manhã é o tipo de
  * mensagem que faz o número ser denunciado. Fora da janela do canal a rodada
  * simplesmente não marca `reminder_sent_at`, e a próxima tenta de novo — o
@@ -583,7 +595,7 @@ async function handle(req: NextRequest): Promise<Response> {
 
     const { data: contato } = await admin
       .from("contacts")
-      .select("id, name, display_name, phone_number, is_blocked, inbox_hidden_at")
+      .select("id, name, display_name, phone_number, is_blocked, inbox_hidden_at, ai_opt_out")
       .eq("id", linha.contact_id)
       .eq("organization_id", org)
       .maybeSingle();
@@ -599,6 +611,12 @@ async function handle(req: NextRequest): Promise<Response> {
     // Oculto do Inbox pela equipe (migration 0372): lembrete automático não sai.
     if (contatoEstaOculto(contato)) {
       pular("contato_oculto");
+      continue;
+    }
+    // "Sempre atendimento humano" (migration 0366): sem lembrete automático,
+    // e sem carimbo — ver o cabeçalho.
+    if (contato.ai_opt_out) {
+      pular("contato_sempre_humano");
       continue;
     }
     if (!contato.phone_number) {
