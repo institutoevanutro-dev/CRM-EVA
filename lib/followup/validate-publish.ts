@@ -1,5 +1,5 @@
 import type { FlowGraph, FlowEdge, FlowNode } from './graph-schema';
-import { branchIdForCondition, nodeBranches } from './graph-schema';
+import { actionConfigSchema, branchIdForCondition, nodeBranches } from './graph-schema';
 import { rotuloDoRamo } from './rotulo-do-ramo';
 
 /**
@@ -20,6 +20,7 @@ export const PUBLISH_ERROR_CODES = [
   'long_wait_needs_template',
   'cycle_without_wait',
   'max_steps_exceeded',
+  'invalid_text_variant',
 ] as const;
 export type PublishErrorCode = (typeof PUBLISH_ERROR_CODES)[number];
 
@@ -430,6 +431,20 @@ export function validateFlowForPublish(graph: FlowGraph): PublishValidationResul
       node_id: nodeId,
       code: 'cycle_without_wait',
       message: `Ciclo sem espera mínima de 5min detectado (contém "${nodeId}").`,
+    });
+  }
+
+  // invalid_text_variant — o publish lê o rascunho sem re-parsear; as variantes
+  // de um passo `text` passam pela MESMA régua do schema (vazia após trim, teto
+  // de 4000, de 2 a 5) antes de virar versão que envia.
+  for (const node of nodes) {
+    if (node.type !== 'action' || node.config.mode !== 'text' || node.config.variants === undefined) continue;
+    const parsed = actionConfigSchema.safeParse(node.config);
+    if (parsed.success) continue;
+    errors.push({
+      node_id: node.id,
+      code: 'invalid_text_variant',
+      message: `Nó "${node.id}": ${parsed.error.issues[0]?.message ?? 'variante inválida'}`,
     });
   }
 

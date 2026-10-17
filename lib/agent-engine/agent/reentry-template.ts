@@ -109,7 +109,11 @@ export function pickReentryVariant(leadId: string, variants: string[]): string {
   if (variants.length === 0) {
     throw new Error('sem variantes para escolher — template de re-entrada vazio');
   }
-  const digest = createHash('sha256').update(leadId).digest();
-  const index = digest.readUInt32BE(0) % variants.length;
-  return variants[index]!;
+  return variants[indiceDaVariante(leadId, variants.length)]!;
+}
+
+/** O índice que `pickReentryVariant` usa — exposto para quem precisa REGISTRAR qual saiu. */
+export function indiceDaVariante(chave: string, total: number): number {
+  const digest = createHash('sha256').update(chave).digest();
+  return digest.readUInt32BE(0) % total;
 }

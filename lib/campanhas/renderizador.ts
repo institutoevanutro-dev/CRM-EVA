@@ -27,6 +27,9 @@
  * fechado de resolvedores.
  */
 
+import { traduzir } from "@/lib/i18n/dicionario";
+import { IDIOMA_PADRAO, type Idioma } from "@/lib/i18n/idiomas";
+
 import { horaNoFuso } from "./relogio";
 
 /** As variáveis que existem. Oferecer uma que não resolve é prometer dado que não há. */
@@ -115,14 +118,26 @@ export function variaveisUsadas(template: string): VariavelDaCampanha[] {
 }
 
 /**
- * "Bom dia" / "Boa tarde" / "Boa noite" — no fuso do canal, nunca no do servidor.
+ * "Bom dia" / "Boa tarde" / "Boa noite" — no fuso de quem envia, nunca no do servidor.
  *
- * Os cortes são os do português falado, não os do relógio: tarde começa ao
- * meio-dia e noite às 18h.
+ * Os cortes são os do português falado, não os do relógio: o dia começa às 5h,
+ * a tarde ao meio-dia e a noite às 18h — madrugada é "boa noite", não "bom dia".
+ * O texto sai no idioma da organização (`organizations.locale`), pelo dicionário.
  */
-export function saudacaoDaHora(agora: Date, fuso: string): string {
+export function saudacaoDaHora(agora: Date, fuso: string, idioma: Idioma = IDIOMA_PADRAO): string {
   const hora = horaNoFuso(agora, fuso);
-  if (hora < 12) return "Bom dia";
-  if (hora < 18) return "Boa tarde";
-  return "Boa noite";
+  if (hora >= 5 && hora < 12) return traduzir("Bom dia", idioma);
+  if (hora >= 12 && hora < 18) return traduzir("Boa tarde", idioma);
+  return traduzir("Boa noite", idioma);
+}
+
+const SAUDACAO = /\{\{\s*saudacao\s*\}\}/gi;
+
+export function usaSaudacao(texto: string): boolean {
+  return new RegExp(SAUDACAO.source, "i").test(texto);
+}
+
+/** Troca toda `{{saudacao}}` pela saudação do instante do ENVIO (follow-up). */
+export function trocarSaudacao(texto: string, agora: Date, fuso: string, idioma: Idioma): string {
+  return texto.replace(SAUDACAO, () => saudacaoDaHora(agora, fuso, idioma));
 }
