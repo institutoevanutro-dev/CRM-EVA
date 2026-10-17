@@ -378,14 +378,31 @@ describe("preencher resposta pronta", () => {
   });
 
   it("⭐ sem o dado, denuncia a lacuna em vez de entregar a frase quebrada", async () => {
-    // `renderTemplate` troca marcação sem valor por string vazia — o texto SAI
-    // parecendo pronto ("Olá , tudo bem?"). Sem a lista de lacunas, quem chama
-    // não tem como saber que aquilo não pode ser mandado ao cliente.
+    // Sem nome, o texto sai sem a marcação e sem "Olá , " (régua do follow-up),
+    // mas ainda é outra frase: sem a lista de lacunas, quem chama não teria
+    // como saber que faltou o nome.
     const db = comModelo("Olá {{nome}}, tudo bem?");
     const r = await preencherModeloDeMensagem(deps(db), { templateId: "t1" });
 
-    expect(r.texto).toBe("Olá , tudo bem?");
+    expect(r.texto).toBe("Olá, tudo bem?");
     expect(r.lacunas).toEqual(["nome"]);
+  });
+
+  it("contato do WhatsApp sem nome cadastrado: {{nome}} usa o nome do perfil", async () => {
+    // A ingestão grava o nome do perfil em `display_name` e deixa `name` nulo.
+    // O select do contato não trazia `display_name` (porte do upstream #3017).
+    const db = comModelo("Olá {{nome}}, tudo bem?", {
+      id: "c1",
+      organization_id: ORG_ID,
+      name: null,
+      display_name: "Paciente Exemplo",
+      phone_number: "+5511999998888",
+      email: null,
+    });
+    const r = await preencherModeloDeMensagem(deps(db), { templateId: "t1", contactId: "c1" });
+
+    expect(r.texto).toBe("Olá Paciente Exemplo, tudo bem?");
+    expect(r.lacunas).toEqual([]);
   });
 
   it("modelo de outra organização → 404", async () => {

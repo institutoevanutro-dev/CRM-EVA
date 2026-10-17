@@ -92,9 +92,9 @@ export interface ModeloPreenchido {
 /**
  * O modelo com os dados do cliente no lugar das marcações.
  *
- * ⚠️ AS LACUNAS SÃO DEVOLVIDAS, NÃO ESCONDIDAS. `renderTemplate` troca marcação
- * sem valor por string vazia, o que produz "Olá , tudo bem?" — uma frase que
- * parece pronta e sai errada. Dizer QUAIS ficaram vazias é o que permite a quem
+ * ⚠️ AS LACUNAS SÃO DEVOLVIDAS, NÃO ESCONDIDAS. `renderTemplate` tira a
+ * marcação sem valor do texto ("Olá {{nome}}, tudo bem?" vira "Olá, tudo
+ * bem?") — uma frase que parece pronta e não é a que o modelo pedia. Dizer QUAIS ficaram vazias é o que permite a quem
  * lê decidir entre completar, escolher outro modelo, ou escrever à mão. Uma
  * função que só devolvesse o texto empurraria esse defeito para o cliente final.
  */
@@ -166,7 +166,9 @@ async function montarContexto(
   if (contactId) {
     const { data: contato } = await deps.supabase
       .from("contacts")
-      .select("id, name, phone_number, email")
+      // `display_name` é o nome do perfil do WhatsApp: sem ele, o contato que
+      // chegou pelo WhatsApp (sem nome cadastrado) deixava `{{nome}}` vazio.
+      .select("id, name, display_name, phone_number, email")
       .eq("id", contactId)
       .eq("organization_id", deps.organizationId)
       .maybeSingle();
