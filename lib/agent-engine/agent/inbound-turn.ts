@@ -186,7 +186,12 @@ import { loadPromiseTable } from '../guardrails/promise/table';
 import { classifyPromise, memoizarPorCandidata } from '../guardrails/promise/semantic';
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { diffCheckpoint } from '@/lib/leads/checkpoint-diff';
-import { CORRECAO_DO_TURNO_MUDO, turnoMudoPedeCorrecao, turnoMudoPorCorte } from './turno-mudo';
+import {
+  CORRECAO_DO_TURNO_MUDO,
+  semChamadasSemResultado,
+  turnoMudoPedeCorrecao,
+  turnoMudoPorCorte,
+} from './turno-mudo';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 import { resolveActiveLeadForContact, type LeadCandidate } from '@/lib/leads/active-lead';
 import { recalculaScoreDoLead } from '@/lib/leads/score-writer';
@@ -5063,7 +5068,7 @@ async function executarTurnoDoAgente(
           agentId: agentConfig?.agentId ?? null,
           purpose: 'agent_turn',
           system,
-          messages: [...openingMessages, ...turn.result.responseMessages, pedidoDeCorrecao],
+          messages: [...openingMessages, ...semChamadasSemResultado(turn.result.responseMessages), pedidoDeCorrecao],
           tools,
           maxSteps: Math.min(maxSteps, 3),
           ...(agentConfig !== null

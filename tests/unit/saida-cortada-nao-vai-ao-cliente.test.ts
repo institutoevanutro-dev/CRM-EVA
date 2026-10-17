@@ -18,7 +18,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { turnoMudoPorCorte } from "@/lib/agent-engine/agent/turno-mudo";
+import { semChamadasSemResultado, turnoMudoPorCorte } from "@/lib/agent-engine/agent/turno-mudo";
 
 async function enviadosCom(finish: "length" | "tool-calls"): Promise<string[]> {
   const enviados: string[] = [];
@@ -92,5 +92,33 @@ describe("o turno mudo por corte vira aviso; o silêncio deliberado, não", () =
     ["o teto de envio do número barrou", { capDeEnvio: true }],
   ])("cortado, mas com razão para o silêncio — %s: não avisa", (_razao, mudanca) => {
     expect(turnoMudoPorCorte({ ...MUDO, saidaCortada: true, ...mudanca })).toBe(false);
+  });
+});
+
+describe("a correção do turno cortado não reenvia a chamada sem resultado", () => {
+  it("⭐ tira a chamada que o passo cortado não executou e mantém o resto da fita", () => {
+    const fita = [
+      { role: "assistant" as const, content: [{ type: "tool-call" as const, toolCallId: "a", toolName: "check_agenda", input: {} }] },
+      { role: "tool" as const, content: [{ type: "tool-result" as const, toolCallId: "a", toolName: "check_agenda", output: { type: "text" as const, value: "livre às 10h" } }] },
+      {
+        role: "assistant" as const,
+        content: [
+          { type: "text" as const, text: "Vou confirmar" },
+          { type: "tool-call" as const, toolCallId: "b", toolName: "send_message", input: { body: "Olá, sua consulta est" } },
+        ],
+      },
+    ];
+    expect(semChamadasSemResultado(fita)).toEqual([
+      fita[0],
+      fita[1],
+      { role: "assistant", content: [{ type: "text", text: "Vou confirmar" }] },
+    ]);
+  });
+
+  it("a mensagem do assistente que só tinha a chamada cortada sai inteira", () => {
+    const fita = [
+      { role: "assistant" as const, content: [{ type: "tool-call" as const, toolCallId: "b", toolName: "send_message", input: {} }] },
+    ];
+    expect(semChamadasSemResultado(fita)).toEqual([]);
   });
 });

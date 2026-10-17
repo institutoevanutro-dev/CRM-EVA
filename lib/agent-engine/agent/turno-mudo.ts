@@ -1,3 +1,5 @@
+import type { ModelMessage } from 'ai';
+
 /**
  * TURNO MUDO — o turno de resposta que terminou sem mensagem ao cliente.
  *
@@ -61,4 +63,25 @@ export function turnoMudoPorCorte(
   t: Parameters<typeof turnoMudoPedeCorrecao>[0] & { saidaCortada: boolean; correcaoCortada: boolean },
 ): boolean {
   return (t.saidaCortada || t.correcaoCortada) && turnoMudoPedeCorrecao(t);
+}
+
+/**
+ * A fita da resposta cortada, sem as chamadas de ferramenta que ficaram sem
+ * resultado. O passo cortado no teto de tokens não executa ferramenta, mas a
+ * chamada continua na fita; reenviá-la na correção faz o AI SDK recusar o pedido
+ * (`AI_MissingToolResultsError`) e o turno cair inteiro na fila de novo, com o
+ * cliente ainda sem resposta. O resto (texto e as ferramentas que rodaram nos
+ * passos anteriores) fica: a correção não repete a consulta que já tem.
+ */
+export function semChamadasSemResultado(messages: ModelMessage[]): ModelMessage[] {
+  const respondidas = new Set<string>();
+  for (const m of messages) {
+    if (m.role !== 'tool') continue;
+    for (const part of m.content) if (part.type === 'tool-result') respondidas.add(part.toolCallId);
+  }
+  return messages.flatMap((m) => {
+    if (m.role !== 'assistant' || typeof m.content === 'string') return [m];
+    const content = m.content.filter((part) => part.type !== 'tool-call' || respondidas.has(part.toolCallId));
+    return content.length > 0 ? [{ ...m, content }] : [];
+  });
 }
