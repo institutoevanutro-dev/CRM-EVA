@@ -480,6 +480,12 @@ export const MODOS_DA_ACAO: Record<ModoDaAcao, string> = {
   media: "Imagem ou vídeo da biblioteca",
 };
 
+/** O que a caixa de etiqueta faz (`edit_lead_tag.config.operacao`). */
+export const OPERACOES_DA_ETIQUETA: Record<"adicionar" | "remover", string> = {
+  adicionar: "Pôr etiqueta",
+  remover: "Tirar etiqueta",
+};
+
 // ─── nó final ────────────────────────────────────────────────────────────
 
 /**

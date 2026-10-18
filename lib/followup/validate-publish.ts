@@ -25,6 +25,10 @@ export const PUBLISH_ERROR_CODES = [
   // caminho linear que ele não conseguiria terminar.
   'max_engine_steps_exceeded',
   'invalid_text_variant',
+  // Ações sem mensagem (portado do projeto original, DeskcommCRM PR #2181).
+  'etapa_destino_ausente',
+  'etapa_destino_arquivada',
+  'tag_ausente',
 ] as const;
 export type PublishErrorCode = (typeof PUBLISH_ERROR_CODES)[number];
 
@@ -70,6 +74,8 @@ export const CONTA_NO_TETO: Record<NodeType, boolean> = {
   condition: false, // decide o caminho
   repeat: false, // conta as voltas
   end: false, // desfecho
+  move_lead: false, // mexe no card, o cliente não sente
+  edit_lead_tag: false, // mexe na etiqueta, o cliente não sente
 };
 
 function waitMs(config: Extract<FlowNode, { type: 'wait' }>['config']): number {
@@ -426,9 +432,76 @@ function cobrirRamos(
   }
 }
 
-export function validateFlowForPublish(graph: FlowGraph): PublishValidationResult {
+/**
+ * O que só o banco sabe, injetado por quem publica (a rota) — nunca adivinhado.
+ * `etapas`: as etapas citadas por nós `move_lead`, da organização, por id.
+ * Ausente, a conferência de etapa existente/ativa não roda (recusa o visível,
+ * não o incerto).
+ */
+export interface ContextoDoPublish {
+  etapas?: ReadonlyMap<string, { nome: string; arquivada: boolean }>;
+}
+
+/** Os `stage_id` que nós `move_lead` citam — o que a rota precisa ler do banco. */
+export function idsDeEtapaCitados(nodes: readonly FlowNode[]): string[] {
+  const ids = new Set<string>();
+  for (const n of nodes) if (n.type === 'move_lead' && n.config.stage_id.trim() !== '') ids.add(n.config.stage_id.trim());
+  return [...ids];
+}
+
+function conferirEtapaDestino(
+  node: Extract<FlowNode, { type: 'move_lead' }>,
+  contexto: ContextoDoPublish,
+  errors: PublishValidationError[],
+): void {
+  const destino = node.config.stage_id.trim();
+  if (destino === '') {
+    errors.push({
+      node_id: node.id,
+      code: 'etapa_destino_ausente',
+      message: `A caixa "${node.label}" não tem etapa de destino — escolha para onde o card vai.`,
+    });
+    return;
+  }
+  if (contexto.etapas === undefined) return;
+  const etapa = contexto.etapas.get(destino);
+  if (etapa === undefined) {
+    errors.push({
+      node_id: node.id,
+      code: 'etapa_destino_ausente',
+      message: `A caixa "${node.label}" aponta para uma etapa que não existe mais — escolha a etapa na lista.`,
+    });
+    return;
+  }
+  if (etapa.arquivada) {
+    errors.push({
+      node_id: node.id,
+      code: 'etapa_destino_arquivada',
+      message: `A caixa "${node.label}" move para a etapa arquivada "${etapa.nome}" — escolha uma etapa ativa.`,
+    });
+  }
+}
+
+function conferirTags(node: Extract<FlowNode, { type: 'edit_lead_tag' }>, errors: PublishValidationError[]): void {
+  const tags = node.config.tags.map((t) => t.trim());
+  if (tags.length === 0 || tags.some((t) => t === '')) {
+    errors.push({
+      node_id: node.id,
+      code: 'tag_ausente',
+      message: `A caixa "${node.label}" não tem etiqueta — escreva ao menos uma.`,
+    });
+  }
+}
+
+export function validateFlowForPublish(graph: FlowGraph, contexto: ContextoDoPublish = {}): PublishValidationResult {
   const { nodes, edges } = graph;
   const errors: PublishValidationError[] = [];
+  // Ações sem mensagem nascem sem destino (o rascunho valida só a forma); é aqui
+  // que a escolha passa a ser obrigatória.
+  for (const node of [...nodes].sort(byId)) {
+    if (node.type === 'move_lead') conferirEtapaDestino(node, contexto, errors);
+    if (node.type === 'edit_lead_tag') conferirTags(node, errors);
+  }
   const nodesById = new Map(nodes.map((n) => [n.id, n]));
   const outEdges = buildOutEdges(edges);
   const inEdges = buildOutEdges(edges.map((e) => ({ ...e, source: e.target, target: e.source })));

@@ -18,7 +18,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { validateFlowForPublish } from "@/lib/followup/validate-publish";
+import { idsDeEtapaCitados, validateFlowForPublish } from "@/lib/followup/validate-publish";
 import { conferirCanalDoGatilho, leitorDeCanal } from "@/lib/followup/canal-do-gatilho";
 import { publishFollowupFlowVersion } from "@/lib/followup/publish";
 import type { FlowGraph } from "@/lib/followup/graph-schema";
@@ -148,7 +148,23 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
   }
 
   const graph = pointer.draft_graph as unknown as FlowGraph;
-  const validation = validateFlowForPublish(graph);
+  // As etapas que caixas "mover no funil" citam — da organização, nunca de outra.
+  // Só ids com forma de uuid vão ao banco (outro texto viraria 500); o resto
+  // fica fora do mapa e o publish recusa como etapa inexistente.
+  const idsDeEtapa = idsDeEtapaCitados(graph.nodes ?? []).filter((id) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id),
+  );
+  const etapasCitadas = new Map<string, { nome: string; arquivada: boolean }>();
+  if (idsDeEtapa.length > 0) {
+    const { data: linhas, error: etapasErr } = await admin
+      .from("crm_stages")
+      .select("id, name, is_archived")
+      .eq("organization_id", activeOrg.orgId)
+      .in("id", idsDeEtapa);
+    if (etapasErr) return fail("internal_error", etapasErr.message, 500, { requestId });
+    for (const l of linhas ?? []) etapasCitadas.set(l.id, { nome: l.name, arquivada: l.is_archived === true });
+  }
+  const validation = validateFlowForPublish(graph, { etapas: etapasCitadas });
   if (!validation.ok) {
     return fail("validation_failed", t("Fluxo reprovado na validação de publish."), 422, {
       requestId,

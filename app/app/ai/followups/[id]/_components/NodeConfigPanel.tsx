@@ -11,6 +11,8 @@ import { Trash } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
 
 import { ActionForm } from "./forms/ActionForm";
+import { EditLeadTagForm } from "./forms/EditLeadTagForm";
+import { MoveLeadForm } from "./forms/MoveLeadForm";
 import { ClassifyForm } from "./forms/ClassifyForm";
 import { ConditionForm } from "./forms/ConditionForm";
 import { EndForm } from "./forms/EndForm";
@@ -118,6 +120,15 @@ export function NodeConfigPanel({ node, onChange, onDelete, ramosLigados }: Prop
         )}
         {type === "action" && (
           <ActionForm config={node.data.config as ConfigOf<"action">} onChange={(config) => onChange({ config })} />
+        )}
+        {type === "move_lead" && (
+          <MoveLeadForm config={node.data.config as ConfigOf<"move_lead">} onChange={(config) => onChange({ config })} />
+        )}
+        {type === "edit_lead_tag" && (
+          <EditLeadTagForm
+            config={node.data.config as ConfigOf<"edit_lead_tag">}
+            onChange={(config) => onChange({ config })}
+          />
         )}
         {type === "end" && (
           <EndForm config={node.data.config as ConfigOf<"end">} onChange={(config) => onChange({ config })} />

@@ -35,6 +35,10 @@ export const CUSTO_NO_MOTOR: Record<NodeType, number> = {
   // `repeat` é CICLO: vale 1 tick por passagem, e é este preço que a publicação
   // multiplica pelas voltas que o `repeat` permite (`custoNoMotorDoFluxo`).
   repeat: 1,
+  // Ações sem mensagem (mover no funil, etiqueta): avançam no mesmo tick, como
+  // `condition` — a escrita sai junto do `advance`, guardada pelo evento do passo.
+  move_lead: 1,
+  edit_lead_tag: 1,
 };
 
 /**

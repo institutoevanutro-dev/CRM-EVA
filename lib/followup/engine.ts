@@ -18,6 +18,7 @@ import { assertServiceBoundarySupabase } from "@/lib/atendimento/origem";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { idsDoContatoEGemeos } from "@/lib/channels/contato-por-telefone";
+import { audit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { indiceDaVariante } from "@/lib/agent-engine/agent/reentry-template";
 
@@ -167,6 +168,25 @@ export interface AdminClient {
    * `no-show-recuperacao-esgotada.ts`.
    */
   abrirAvisoRecuperacaoEsgotada?(item: AvisoRecuperacaoEsgotada): Promise<void>;
+  /**
+   * Nó `move_lead`: move o card para outra etapa. Opcional — omitida, o nó
+   * AVANÇA sem mover (é o que um teste de motor puro observa); a produção grava
+   * pelo `moveLeadHandler` da casa. Portado do projeto original (DeskcommCRM,
+   * PR #2181 de @webtecnica).
+   */
+  moverLeadNoFunil?(item: {
+    organization_id: string;
+    contact_id: string;
+    enrollment_id: string;
+    config: Extract<FlowNode, { type: "move_lead" }>["config"];
+  }): Promise<void>;
+  /** Nó `edit_lead_tag`: põe (a MESMA `add_tag` das automações) ou tira etiqueta. Opcional, idem. */
+  editarTagDoLead?(item: {
+    organization_id: string;
+    contact_id: string;
+    enrollment_id: string;
+    config: Extract<FlowNode, { type: "edit_lead_tag" }>["config"];
+  }): Promise<void>;
   persistirRespostaFollowup(input: {
     organization_id: string;
     contact_id: string;
@@ -455,6 +475,29 @@ async function applyResult(
         tallyOutcome(result, summary);
       }
       return;
+    }
+  }
+
+  // Ações sem mensagem: a escrita nasce DEPOIS do evento do passo, porque o
+  // `idempotency_key` (`${nó}:${passo}`) é a trava — replay do tick não move o
+  // card nem mexe na etiqueta duas vezes. Falha de gravação não reverte o
+  // avanço: o warn é o que o suporte lê.
+  if (result.kind === "advance" && !isReplay && (node.type === "move_lead" || node.type === "edit_lead_tag")) {
+    try {
+      const item = {
+        organization_id: enrollment.organization_id,
+        contact_id: enrollment.contact_id,
+        enrollment_id: enrollment.id,
+      };
+      if (node.type === "move_lead") await db.moverLeadNoFunil?.({ ...item, config: node.config });
+      else await db.editarTagDoLead?.({ ...item, config: node.config });
+    } catch (err) {
+      logger.warn(node.type === "move_lead" ? "followup_move_lead_failed" : "followup_edit_lead_tag_failed", {
+        organization_id: enrollment.organization_id,
+        enrollment_id: enrollment.id,
+        node_id: node.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -1001,6 +1044,138 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
         ref_id: item.ref_id,
       });
       if (error) throw new Error(error.message);
+    },
+    /**
+     * Nó `move_lead`: REUSA o escritor de etapa da casa (`moveLeadHandler`, o
+     * mesmo do quadro, das automações e da tool MCP) — ele valida etapa da
+     * organização, recusa troca de funil e grava atividade + evento. Aqui só se
+     * resolve QUAL negócio: o mais recente do contato NO FUNIL da etapa de
+     * destino (o de outro funil seria recusado e o card nunca andaria).
+     */
+    async moverLeadNoFunil(item) {
+      const { data: etapa, error: etapaErr } = await admin
+        .from("crm_stages")
+        .select("pipeline_id")
+        .eq("organization_id", item.organization_id)
+        .eq("id", item.config.stage_id)
+        .maybeSingle();
+      if (etapaErr) throw new Error(etapaErr.message);
+      if (!etapa) throw new Error("etapa_destino_inexistente");
+
+      const { data: lead, error } = await admin
+        .from("crm_leads")
+        .select("id")
+        .eq("organization_id", item.organization_id)
+        .eq("contact_id", item.contact_id)
+        .eq("pipeline_id", (etapa as { pipeline_id: string }).pipeline_id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!lead) {
+        logger.warn("followup_move_lead_skipped", {
+          organization_id: item.organization_id,
+          enrollment_id: item.enrollment_id,
+          motivo: "sem_negocio_no_funil",
+        });
+        return;
+      }
+      const { moveLeadHandler } = await import("@/app/api/v1/leads/_handler");
+      const ator = `followup:${item.enrollment_id}`;
+      await moveLeadHandler(
+        admin,
+        { organization_id: item.organization_id, actor: { type: "webhook_source", id: ator }, requestId: ator },
+        (lead as { id: string }).id,
+        { to_stage_id: item.config.stage_id },
+      );
+      void audit({
+        action: "followup.flow_lead_moved",
+        organizationId: item.organization_id,
+        resourceType: "crm_lead",
+        resourceId: (lead as { id: string }).id,
+        requestId: ator,
+        metadata: { enrollment_id: item.enrollment_id, to_stage_id: item.config.stage_id },
+      });
+    },
+    /**
+     * Nó `edit_lead_tag`. Pôr etiqueta é a MESMA ação `add_tag` do motor de
+     * automação (merge idempotente, evento `lead.tag_added` e anti-loop saem de
+     * lá). Tirar etiqueta é novo neste fork: lê a linha atual e regrava sem as
+     * etiquetas pedidas. O alvo é o negócio mais recente do contato; sem
+     * negócio, o contato.
+     */
+    async editarTagDoLead(item) {
+      const tags = item.config.tags.map((t) => t.trim()).filter((t) => t !== "");
+      if (tags.length === 0) return;
+      const { data: lead, error } = await admin
+        .from("crm_leads")
+        .select("*")
+        .eq("organization_id", item.organization_id)
+        .eq("contact_id", item.contact_id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      let alvo: { tabela: "crm_leads" | "contacts"; linha: Record<string, unknown> } | null = lead
+        ? { tabela: "crm_leads", linha: lead as Record<string, unknown> }
+        : null;
+      if (!alvo) {
+        const { data: contato, error: contatoErr } = await admin
+          .from("contacts")
+          .select("*")
+          .eq("organization_id", item.organization_id)
+          .eq("id", item.contact_id)
+          .maybeSingle();
+        if (contatoErr) throw new Error(contatoErr.message);
+        if (contato) alvo = { tabela: "contacts", linha: contato as Record<string, unknown> };
+      }
+      if (!alvo) return;
+      const alvoId = String(alvo.linha.id);
+      const ator = `followup:${item.enrollment_id}`;
+
+      let mudou: string[] = [];
+      if (item.config.operacao === "remover") {
+        const atuais = Array.isArray(alvo.linha.tags) ? (alvo.linha.tags as string[]) : [];
+        mudou = atuais.filter((t) => tags.includes(t));
+        if (mudou.length === 0) return;
+        // ponytail: ler-e-regravar; uma regra que ponha etiqueta no MESMO
+        // instante pode perder a dela. A versão atômica é a do `add_tag` (0386).
+        const { error: updErr } = await admin
+          .from(alvo.tabela)
+          .update({ tags: atuais.filter((t) => !tags.includes(t)), updated_at: new Date().toISOString() })
+          .eq("id", alvoId)
+          .eq("organization_id", item.organization_id);
+        if (updErr) throw new Error(updErr.message);
+      } else {
+        await import("@/lib/automation/actions/add-tag");
+        const { getAction } = await import("@/lib/automation/actions");
+        const acao = getAction("add_tag");
+        if (!acao) throw new Error("add_tag_nao_registrada");
+        const resultado = await acao.execute(
+          {
+            admin,
+            organizationId: item.organization_id,
+            ruleId: ator,
+            ruleName: "Fluxo de follow-up",
+            // Sem evento raiz: a origem fica "indisponível", nunca inventada.
+            event: {} as never,
+            context: alvo.tabela === "crm_leads" ? { lead: alvo.linha } : { contact: alvo.linha },
+            requestId: ator,
+          },
+          { tags },
+        );
+        if (resultado.status === "failed") throw new Error(resultado.error ?? "add_tag_failed");
+        mudou = ((resultado.detail as { added?: string[] } | undefined)?.added ?? []).map(String);
+        if (mudou.length === 0) return;
+      }
+      void audit({
+        action: "followup.flow_tags_changed",
+        organizationId: item.organization_id,
+        resourceType: alvo.tabela === "crm_leads" ? "crm_lead" : "contact",
+        resourceId: alvoId,
+        requestId: ator,
+        metadata: { enrollment_id: item.enrollment_id, operacao: item.config.operacao ?? "adicionar", tags: mudou },
+      });
     },
     async abrirAvisoRecuperacaoEsgotada(item) {
       // ── A GUARDA DE ANONIMIZAÇÃO DESTA PORTA (issue #701) ──
