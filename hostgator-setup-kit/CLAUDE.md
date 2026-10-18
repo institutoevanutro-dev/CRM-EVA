@@ -75,6 +75,26 @@ discordarem, vale o guia; quando o guia e `install.sh` discordarem, vale o insta
    Supabase grátis não faz sozinho) e explique que atualizar é pela tela (menu → rodapé → "Nova
    versão"); `bash hostgator-setup-kit/update.sh` é o caminho manual, com backup antes.
 
+## Instalando para um cliente: nome, funil de clínica e outro site no mesmo servidor
+
+- **Nome da organização, sem passar pelo assistente.** Antes de rodar o instalador, ponha no `.env`
+  `ORG_NAME="Nome do cliente"` (sem ele: `Minha Empresa`), ou passe na frente do comando:
+  `ORG_NAME="Nome do cliente" ORG_NICHO=clinica bash hostgator-setup-kit/install.sh`. Com
+  `ORG_NICHO=clinica`, a organização nasce com o funil "Agendamentos" do pacote de clínica e com o
+  onboarding feito. `ORG_NAME` vale na criação: trocar depois e rodar o instalador de novo cria
+  **outra** organização; para renomear, use Configurações › Organização.
+- **O que o instalador não conhece fica.** `SIGNUP_MODE`, o login pela Conta (`CONTA_URL`,
+  `EVALINK_*`) e qualquer linha posta à mão no `.env` sobrevivem a rodar o `install.sh` de novo.
+- **Outro site no mesmo servidor** (só com `REVERSE_PROXY=caddy`): grave `sites/<nome>.caddy` ao
+  lado do `docker-compose.prod.yml`, nunca no `Caddyfile` (a pasta fica fora do git e nenhuma
+  atualização encosta nela). Rode `caddy validate` antes de recarregar: um arquivo quebrado ali
+  impede o Caddy de subir no próximo reinício e derruba o HTTPS do CRM.
+
+  ```bash
+  docker compose -f docker-compose.prod.yml exec caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+  docker compose -f docker-compose.prod.yml exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+  ```
+
 ## Quando der problema (você resolve)
 
 | sintoma | primeiro passo |
