@@ -29,20 +29,9 @@ chmod 600 "$BACKUP_DIR/db-$ts.sql.gz"
 c_grn "✓ banco: $(du -h "$BACKUP_DIR/db-$ts.sql.gz" | awk '{print $1}')"
 
 step "Snapshot das sessões do WhatsApp → $BACKUP_DIR/waha-$ts.tgz"
-# O nome do volume vem do contêiner que o USA, nunca de `dc config --volumes`:
-# esse imprime o nome CURTO (`waha-data`), e `docker run -v waha-data:...` CRIA
-# em silêncio um volume vazio com esse nome. Foi o que aconteceu numa VPS real:
-# de 2026-09-24 em diante todo waha-*.tgz tinha 87 bytes, o script dizia "✓" e
-# a retenção de 14 apagou o último backup bom. Sem contêiner no ar, o nome que o
-# compose dá: <projeto>_waha-data.
+# Nome real do volume (não o curto `waha-data`) — ver volume_waha_do_projeto.
 waha_ok=1
-waha_ctr="$(docker ps -aq --filter "label=com.docker.compose.project=$(nome_do_projeto_atual)" \
-  --filter "label=com.docker.compose.service=waha" 2>/dev/null | head -1 || true)"
-vol=""
-[ -z "$waha_ctr" ] || vol="$(docker inspect -f \
-  '{{range .Mounts}}{{if eq .Destination "/app/.sessions"}}{{.Name}}{{end}}{{end}}' \
-  "$waha_ctr" 2>/dev/null || true)"
-vol="${vol:-$(nome_do_projeto_atual)_waha-data}"
+vol="$(volume_waha_do_projeto)"
 arq="$BACKUP_DIR/waha-$ts.tgz"
 if ! docker volume inspect "$vol" >/dev/null 2>&1; then
   waha_ok=0

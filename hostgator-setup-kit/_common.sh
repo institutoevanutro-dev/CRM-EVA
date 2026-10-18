@@ -57,6 +57,23 @@ nome_do_projeto_atual() {
   printf '%s' "${COMPOSE_PROJECT_NAME:-$(nome_do_projeto_compose "${PROJECT_DIR:-$PWD}")}"
 }
 
+# Nome do volume das sessões do WhatsApp. Vem do contêiner que o USA, nunca de
+# `dc config --volumes`: esse imprime o nome CURTO (`waha-data`), e
+# `docker run -v waha-data:...` CRIA em silêncio um volume vazio com esse nome.
+# Foi o que aconteceu numa VPS real: de 2026-09-24 em diante todo waha-*.tgz do
+# backup.sh tinha 87 bytes, e o restore.sh devolvia as sessões a um volume que
+# ninguém montava. Sem contêiner no ar, o nome que o compose dá:
+# <projeto>_waha-data. Usado por backup.sh e restore.sh.
+volume_waha_do_projeto() {
+  local ctr vol=""
+  ctr="$(docker ps -aq --filter "label=com.docker.compose.project=$(nome_do_projeto_atual)" \
+    --filter "label=com.docker.compose.service=waha" 2>/dev/null | head -1 || true)"
+  [ -z "$ctr" ] || vol="$(docker inspect -f \
+    '{{range .Mounts}}{{if eq .Destination "/app/.sessions"}}{{.Name}}{{end}}{{end}}' \
+    "$ctr" 2>/dev/null || true)"
+  printf '%s' "${vol:-$(nome_do_projeto_atual)_waha-data}"
+}
+
 # ── Quem é o DONO deste projeto Docker ───────────────────────────────────────
 #
 # Duas cópias do repo na mesma VPS — o clone de produção e um de teste ao lado —
