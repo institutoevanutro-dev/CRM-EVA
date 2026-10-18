@@ -146,6 +146,12 @@ export function TemplatesClient({ canShare, currentUserId }: Props) {
                             {template.owner_user_id ? (
                               <Badge variant="neutral">{t("Pessoal")}</Badge>
                             ) : null}
+                            {/* A resposta rápida com imagem se anuncia na lista. */}
+                            {template.midias && template.midias.length > 0 ? (
+                              <Badge variant="neutral">
+                                {t("Imagens")} {template.midias.length}
+                              </Badge>
+                            ) : null}
                           </div>
                           <p className="line-clamp-2 text-sm text-text-muted">
                             {pedacosDoTexto(template.body).map((p, i) =>

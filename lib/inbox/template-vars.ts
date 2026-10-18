@@ -24,6 +24,7 @@
  *    devolve `""`: quem chama não envia (o passo é pulado).
  */
 import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
+import type { MidiaDeTemplate } from "@/lib/templates/midias";
 
 export type TemplateContact = Pick<ContatoNomeavel, "name" | "display_name"> & {
   phone_number?: string | null;
@@ -91,6 +92,26 @@ export function motivoDoCuringaLiteral(body: string, contact: TemplateContact): 
     return variavel === "nome" || variavel === "primeiro_nome";
   });
   return sobrouNome ? MOTIVO_CURINGA_LITERAL : null;
+}
+
+/** O que uma resposta rápida guarda além do texto (portado do original, DeskcommCRM PR #2704). */
+export interface RespostaRapida {
+  id?: string;
+  body: string;
+  /** `undefined`/`null` em linha antiga e em teste — os dois são "só texto". */
+  midias?: readonly MidiaDeTemplate[] | null;
+}
+
+/**
+ * O que a escolha da resposta rápida entrega ao compositor: o corpo interpolado
+ * (a legenda da PRIMEIRA imagem quando há mídia) e as imagens do template, numa
+ * lista NOVA (o compositor mexe na fila; a do cache do React Query não muda).
+ */
+export function payloadDeUso(
+  template: RespostaRapida,
+  contact: TemplateContact,
+): { texto: string; midias: MidiaDeTemplate[] } {
+  return { texto: interpolateTemplate(template.body, contact), midias: [...(template.midias ?? [])] };
 }
 
 const texto = (valor: string | null | undefined) => (typeof valor === "string" ? valor.trim() : "");
