@@ -10188,6 +10188,18 @@ export const DICIONARIO: Traducoes = {
   },
   "Salvar frases": { es: "Guardar frases" },
   "Frases salvas.": { es: "Frases guardadas." },
+  // A chave "Médico sem RQE" da aba Comentários (migration 0381).
+  "Médico sem RQE": { es: "Médico sin RQE" },
+  "Ligada, a IA nunca chama ninguém de especialista ou nutrólogo nas respostas aos comentários. Desligue se o médico da clínica tem RQE ou se a clínica não é médica, como uma clínica odontológica.": {
+    es: "Activada, la IA nunca llama a nadie especialista o nutriólogo en las respuestas a los comentarios. Desactívela si el médico de la clínica tiene RQE o si la clínica no es médica, como una clínica odontológica.",
+  },
+  "Não foi possível carregar a regra. Atualize a página para tentar de novo.": {
+    es: "No fue posible cargar la regla. Actualice la página para intentarlo de nuevo.",
+  },
+  "Regra salva.": { es: "Regla guardada." },
+  "Não foi possível ler a regra.": { es: "No fue posible leer la regla." },
+  "Não foi possível salvar a regra.": { es: "No fue posible guardar la regla." },
+  "Só um administrador pode mudar esta regra.": { es: "Solo un administrador puede cambiar esta regla." },
   "A resposta JÁ FOI publicada no Instagram, mas não deu para atualizar aqui. Não publique de novo — isso enviaria uma segunda resposta.": {
     es: "La respuesta YA FUE publicada en Instagram, pero no se pudo actualizar aquí. No publiques de nuevo — eso enviaría una segunda respuesta.",
   },

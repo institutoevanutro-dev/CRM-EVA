@@ -37,6 +37,7 @@ import { test, expect, type Page } from "@playwright/test";
 
 import { APP_SECRET, IG_ACCOUNT_ID } from "../../scripts/seed-e2e-instagram";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
+import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), ".superpowers", "evidence", "comentarios-do-instagram");
@@ -301,6 +302,9 @@ test("\"quanto custa\": Direct sai, NADA é publicado em público, e continua es
   await expect(item).toHaveCount(1);
   await expect(item.getByText(/Motivo:\s*preço/)).toBeVisible();
   await expect(item.getByRole("button", { name: /Publicar/i })).toBeVisible();
+  // A chave da regra do RQE é só do administrador: o gerente não a vê. A lista
+  // já carregou (asserção acima), então o cabeçalho está desenhado.
+  await expect(page.getByRole("button", { name: /Médico sem RQE/i })).toHaveCount(0);
   await page.screenshot({ path: path.join(EVIDENCIA, "02-preco-esperando-voce.png"), fullPage: true });
 
   // A caixa onde o dono escreve o texto que acabou de sair. Provada aqui, na
@@ -370,4 +374,58 @@ test("nova regra: escolhe o vídeo na lista do perfil, sem colar o id do post", 
     })
     .toMatchObject({ channel_session_id: sessaoId });
   await page.screenshot({ path: path.join(EVIDENCIA, "06-regra-criada-pela-lista.png"), fullPage: true });
+});
+
+/**
+ * Deixa a organização do e2e sem a chave `medico_sem_rqe`, como ela nasceu.
+ * Ler e regravar `settings` aqui é fixture de teste: o e2e roda com um worker
+ * só, e no produto a escrita é sempre pela função do banco.
+ */
+async function organizacaoSemARegraDoRqe(): Promise<void> {
+  const { data, error } = await db.from("organizations").select("settings").eq("id", creds.org_id).single();
+  if (error) throw new Error(`organizations: ${error.message}`);
+  const settings = { ...(data as { settings: Record<string, unknown> }).settings };
+  delete settings.medico_sem_rqe;
+  const { error: erroDeEscrita } = await db
+    .from("organizations")
+    .update({ settings } as never)
+    .eq("id", creds.org_id);
+  if (erroDeEscrita) throw new Error(`organizations: ${erroDeEscrita.message}`);
+}
+
+test("médico sem RQE: o administrador desliga a regra, e ela continua desligada depois de recarregar", async ({
+  page,
+}) => {
+  await organizacaoSemARegraDoRqe();
+  try {
+    await loginComoAdmin(page, lerCreds());
+    await page.goto("/app/inbox?filter=comentarios");
+
+    await page.getByRole("button", { name: /Médico sem RQE/i }).click();
+    const chave = page.getByRole("switch", { name: /Médico sem RQE/i });
+    // Organização que nunca mexeu: ligada, o comportamento de antes da regra existir.
+    await expect(chave).toHaveAttribute("aria-checked", "true");
+    await page.screenshot({ path: path.join(EVIDENCIA, "07-medico-sem-rqe-ligada.png"), fullPage: true });
+
+    await chave.click();
+    await expect(page.getByText(/Regra salva/i)).toBeVisible();
+    await expect(chave).toHaveAttribute("aria-checked", "false");
+
+    // O banco guardou o BOOLEANO, a única forma que desliga a regra.
+    await expect
+      .poll(async () => {
+        const { data } = await db.from("organizations").select("settings").eq("id", creds.org_id).single();
+        return (data as { settings: Record<string, unknown> }).settings.medico_sem_rqe;
+      })
+      .toBe(false);
+
+    // Recarrega: o estado volta do banco, não da tela.
+    await page.reload();
+    await page.getByRole("button", { name: /Médico sem RQE/i }).click();
+    await expect(page.getByRole("switch", { name: /Médico sem RQE/i })).toHaveAttribute("aria-checked", "false");
+    await page.screenshot({ path: path.join(EVIDENCIA, "08-medico-sem-rqe-desligada.png"), fullPage: true });
+  } finally {
+    // O banco do e2e é dividido com as outras specs: a organização volta ao padrão.
+    await organizacaoSemARegraDoRqe();
+  }
 });

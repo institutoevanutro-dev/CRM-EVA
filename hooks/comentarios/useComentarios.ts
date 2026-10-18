@@ -199,3 +199,30 @@ export function useDecidirPalavra() {
     onError: showApiError,
   });
 }
+
+/** A chave "Médico sem RQE" (migration 0381): `ligada` já vem resolvida pela rota. */
+const CHAVE_REGRA_DO_RQE = ["instagram-comment-regra-do-rqe"] as const;
+
+export function useRegraDoRqe() {
+  return useQuery({
+    queryKey: CHAVE_REGRA_DO_RQE,
+    queryFn: () =>
+      apiClient
+        .get<{ data: { ligada: boolean } }>("/api/v1/comentarios/regra-do-rqe")
+        .then((r) => r.data),
+  });
+}
+
+export function useSalvarRegraDoRqe() {
+  const qc = useQueryClient();
+  const t = useT();
+  return useMutation({
+    mutationFn: (ligada: boolean) =>
+      apiClient.put<{ data: { ligada: boolean } }>("/api/v1/comentarios/regra-do-rqe", { ligada }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: CHAVE_REGRA_DO_RQE });
+      toast.success(t("Regra salva."));
+    },
+    onError: showApiError,
+  });
+}
