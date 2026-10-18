@@ -253,6 +253,18 @@ ok "aceita OpenAI vazia (é opcional)"           pass   v_openai    ""
 ok "rejeita senha curta"                        reject v_password  "1234567"        "muito curta"
 ok "aceita senha de 8+"                         pass   v_password  "12345678"
 
+
+echo "organização da instalação (ORG_NAME e ORG_NICHO)"
+ok "aceita o nome padrão"                    pass   v_org_name  "Minha Empresa"
+ok "aceita nome com acento e apóstrofo"      pass   v_org_name  "Clínica D'Ávila"
+ok "rejeita nome de 1 caractere"             reject v_org_name  "A"                "de 2 a 80"
+ok "rejeita nome de 81 caracteres"           reject v_org_name  "$(printf 'a%.0s' $(seq 1 81))" "de 2 a 80"
+ok "rejeita nome com quebra de linha"        reject v_org_name  $'Clínica\nNova'   "quebra de linha"
+ok "rejeita nome sem letra nem número"       reject v_org_name  "--"               "letra de A a Z"
+ok "aceita nicho vazio (o funil de pedidos)" pass   v_org_nicho ""
+ok "aceita o nicho clinica"                  pass   v_org_nicho "clinica"
+ok "rejeita nicho desconhecido"              reject v_org_nicho "odonto"           "aceita só"
+
 echo "rede fora do ar: o sentinela 000 (issue #190)"
 # O dublê de curl das outras seções é `printf 200` INCONDICIONAL, então o ramo
 # `000` de todos os seis validadores nunca era exercitado por nenhum caso — e foi
@@ -2234,6 +2246,94 @@ STUB
 ) || fail=1
 rm -rf "$TMP_SEM_IA"
 
+
+echo "integração: --yes com ORG_NAME e ORG_NICHO no .env, e o que o instalador não conhece fica"
+# A instalação de uma clínica chega com o .env escrito por quem instala: o nome
+# da organização, o nicho, e chaves que o install.sh não conhece (SIGNUP_MODE,
+# o login pela Conta). O bloco que escreve o .env TRUNCA o arquivo, e o que
+# salva as chaves alheias é o laço de preservação: este cenário o cobra com
+# valores de verdade, em DUAS rodadas, porque a segunda lê o .env que a
+# primeira escreveu, que é o caminho de quem roda o instalador de novo.
+#
+# O SQL da etapa 8 é capturado pelo dublê: é a prova de que o ORG_NAME do .env
+# chega a sql_da_organizacao com a aspa dobrada. O que esse SQL FAZ num banco de
+# verdade é medido em tests/invariants/install-organizacao.test.ts.
+TMP_ORG="$(mktemp -d)"
+(
+  montar_vps "$TMP_ORG" "crmclinica" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$DOCKER_LOG"
+case " $* " in
+  # O psql da etapa 8 é o único com ON_ERROR_STOP=1 por ÚLTIMO argumento: é ele
+  # que lê o SQL da organização pelo stdin.
+  *" psql "*" ON_ERROR_STOP=1 ") cat >> "$SQL_LOG" ;;
+esac
+case "$1" in
+  compose) case "$*" in *" exec "*) printf 'healthy\n{"data":{"status":"healthy"}}\n' ;; esac; exit 0 ;;
+esac
+exit 0
+STUB
+  SQL_LOG="$TMP_ORG/sql.log"
+  rodar_de_novo() {  # roda sobre o .env que estiver no disco, sem reescrevê-lo
+    : > "$VPS_LOG"; : > "$SQL_LOG"
+    (cd "$VPS_PROJ" && env PATH="$VPS_RAIZ/bin:$PATH" DOCKER_LOG="$VPS_LOG" \
+      CRONTAB_SANDBOX="$CRONTAB_SANDBOX" SUPABASE_ACCESS_TOKEN= SQL_LOG="$SQL_LOG" \
+      bash "$VPS_RAIZ/install.sh" --yes 2>&1 || true) | sed -E 's/\x1b\[[0-9;]*m//g'
+  }
+  printf '%s\n' "$BASE_ENV" > "$VPS_PROJ/.env"
+  cat >> "$VPS_PROJ/.env" <<'ENV'
+ORG_NAME="Clínica D'Ávila"
+ORG_NICHO="clinica"
+SIGNUP_MODE='so_convite'
+CONTA_URL='https://conta.exemplo.test'
+EVALINK_CLIENT_ID='crm-de-teste'
+EVALINK_CLIENT_SECRET='segredo-de-teste'
+EVALINK_SEGREDO_AVISO='aviso-de-teste-com-mais-de-32-caracteres'
+EVALINK_ORG_PADRAO='00000000-0000-4000-8000-000000000001'
+ENV
+  for rodada in 1 2; do
+    saida="$(rodar_de_novo)"
+    if ! printf '%s' "$saida" | grep -q 'Instalação concluída'; then
+      printf '  ✗ rodada %s não chegou à tela final (cenário inconclusivo): %s\n' "$rodada" \
+        "$(printf '%s' "$saida" | grep -v '^$' | tail -1)"; exit 1
+    fi
+    for par in "SIGNUP_MODE=so_convite" "CONTA_URL=https://conta.exemplo.test" \
+               "EVALINK_CLIENT_ID=crm-de-teste" "EVALINK_CLIENT_SECRET=segredo-de-teste" \
+               "EVALINK_SEGREDO_AVISO=aviso-de-teste-com-mais-de-32-caracteres" \
+               "EVALINK_ORG_PADRAO=00000000-0000-4000-8000-000000000001" \
+               "ORG_NAME=Clínica D'Ávila" "ORG_NICHO=clinica"; do
+      chave="${par%%=*}"; esperado="${par#*=}"
+      if [ "$(valor_no_env "$VPS_PROJ/.env" "$chave")" != "$esperado" ]; then
+        printf '  ✗ rodada %s: %s virou [%s], esperava [%s]\n' "$rodada" "$chave" \
+          "$(valor_no_env "$VPS_PROJ/.env" "$chave")" "$esperado"; exit 1
+      fi
+      if [ "$(grep -c "^${chave}=" "$VPS_PROJ/.env")" != 1 ]; then
+        printf '  ✗ rodada %s: %s aparece %s vez(es) no .env, esperava 1\n' "$rodada" "$chave" \
+          "$(grep -c "^${chave}=" "$VPS_PROJ/.env")"; exit 1
+      fi
+    done
+    if ! grep -qF "v_nome text := 'Clínica D''Ávila';" "$SQL_LOG"; then
+      printf '  ✗ rodada %s: o SQL da etapa 8 não levou o ORG_NAME do .env com a aspa dobrada\n' "$rodada"; exit 1
+    fi
+    if ! grep -qx '  if true then' "$SQL_LOG"; then
+      printf '  ✗ rodada %s: ORG_NICHO=clinica não ligou o funil de clínica no SQL\n' "$rodada"; exit 1
+    fi
+  done
+  printf '  ✓ SIGNUP_MODE, CONTA_URL e EVALINK_* sobrevivem a duas rodadas, sem duplicar\n'
+  printf '  ✓ ORG_NAME e ORG_NICHO vão do .env ao SQL da organização, com a aspa dobrada\n'
+
+  # Nicho desconhecido para ANTES de tudo: nem proxy, nem banco, nem up -d.
+  printf '%s\nORG_NICHO="odonto"\n' "$BASE_ENV" > "$VPS_PROJ/.env"
+  saida="$(rodar_de_novo)"
+  if ! printf '%s' "$saida" | grep -q 'ORG_NICHO aceita só'; then
+    printf '  ✗ ORG_NICHO=odonto passou sem recusa\n'; exit 1
+  fi
+  if grep -q -- '-p 80:80' "$VPS_LOG" || grep -qE '^compose .*up -d' "$VPS_LOG"; then
+    printf '  ✗ recusou o ORG_NICHO, mas só depois de mexer no servidor\n'; exit 1
+  fi
+  printf '  ✓ ORG_NICHO desconhecido é recusado antes de qualquer coisa\n'
+) || fail=1
+rm -rf "$TMP_ORG"
 
 echo "integração: instalação NOVA numa VPS com Traefik em modo host"
 # O install.sh roda contra um `docker` dublê que imita a Hostinger: 80/443
