@@ -29,6 +29,7 @@ import {
   type ChannelSessionRef,
 } from "@/lib/channels";
 import { motivoDaRecusaPorEspecialidade } from "@/lib/comentarios/especialidade";
+import { regraDoRqeDaOrganizacao } from "@/lib/comentarios/regra-do-rqe";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { logger } from "@/lib/logger";
@@ -69,13 +70,15 @@ export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
   // `sugestao_de_resposta`, a tela pré-preenche o rascunho com ELE MESMO, e
   // sem esta conferência o clique em Publicar mandava pro Instagram sem
   // reconferir nada (um clique publicava "nutrólogo" no nome de um médico
-  // sem RQE). Roda ANTES de qualquer leitura de banco — recusa é barata.
-  const motivoDaRecusa = motivoDaRecusaPorEspecialidade(parsed.data.texto);
+  // sem RQE). A regra é da organização (`settings.medico_sem_rqe`, migration
+  // 0381): é a primeira leitura de banco da rota, e ausente ou ilegível vale
+  // ligada.
+  const supabase = await createClient();
+  const medicoSemRqe = await regraDoRqeDaOrganizacao(supabase, org.orgId);
+  const motivoDaRecusa = motivoDaRecusaPorEspecialidade(parsed.data.texto, medicoSemRqe);
   if (motivoDaRecusa) {
     return fail("validation_failed", t(motivoDaRecusa), 422, { requestId });
   }
-
-  const supabase = await createClient();
 
   const { data: comentario, error: erroLeitura } = await supabase
     .from("instagram_comments")

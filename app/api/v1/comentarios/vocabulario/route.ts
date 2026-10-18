@@ -8,7 +8,9 @@
  *
  * A rota RECONFERE que a palavra não é de gatilho. A tela já não oferece
  * essas palavras, mas a tela não é a régua: um POST à mão não pode liberar
- * "custa" nem "nutrologo".
+ * "custa", nem "nutrologo" enquanto a regra do RQE da organização estiver
+ * ligada (`settings.medico_sem_rqe`, migration 0381; ausente vale ligada).
+ * Desligada, título de especialidade deixa de ser gatilho, aqui e na lista.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
@@ -18,6 +20,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { candidatosDoHistorico } from "@/lib/comentarios/candidatos";
+import { regraDoRqeDaOrganizacao } from "@/lib/comentarios/regra-do-rqe";
 import { ehTokenDeGatilho } from "@/lib/comentarios/seguranca";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -42,7 +45,7 @@ export async function GET(): Promise<Response> {
   const { org } = authz;
   const supabase = await createClient();
 
-  const [{ data: decididas, error: erroV }, { data: respondidos, error: erroC }] = await Promise.all([
+  const [{ data: decididas, error: erroV }, { data: respondidos, error: erroC }, medicoSemRqe] = await Promise.all([
     supabase
       .from("instagram_comment_vocabulario")
       .select("palavra, aprovada")
@@ -55,6 +58,9 @@ export async function GET(): Promise<Response> {
       .eq("situacao", "respondido_manualmente")
       .order("comentado_em", { ascending: false })
       .limit(TETO_DE_COMENTARIOS),
+    // A regra do RQE decide se título de especialidade é gatilho (e não pode
+    // ser oferecido) ou palavra comum.
+    regraDoRqeDaOrganizacao(supabase, org.orgId),
   ]);
 
   if (erroV || erroC) {
@@ -74,7 +80,7 @@ export async function GET(): Promise<Response> {
 
   return ok(
     {
-      candidatos: candidatosDoHistorico(textos, new Set(lista.map((d) => d.palavra))),
+      candidatos: candidatosDoHistorico(textos, new Set(lista.map((d) => d.palavra)), medicoSemRqe),
       decididas: lista,
     },
     { requestId },
@@ -104,7 +110,11 @@ export async function POST(req: NextRequest): Promise<Response> {
     return fail("validation_failed", t("Isso precisa ser uma palavra só."), 422, { requestId });
   }
 
-  if (ehTokenDeGatilho(palavra)) {
+  const supabase = await createClient();
+
+  // Com a regra do RQE desligada nesta organização, "especialista" deixa de
+  // ser gatilho e pode ser liberada; preço, saúde e agendamento, nunca.
+  if (ehTokenDeGatilho(palavra, await regraDoRqeDaOrganizacao(supabase, org.orgId))) {
     return fail(
       "validation_failed",
       t("Essa palavra toca um assunto que sempre passa por você."),
@@ -112,8 +122,6 @@ export async function POST(req: NextRequest): Promise<Response> {
       { requestId },
     );
   }
-
-  const supabase = await createClient();
   const { error } = await supabase
     .from("instagram_comment_vocabulario")
     .upsert(

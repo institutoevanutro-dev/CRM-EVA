@@ -41,6 +41,8 @@ const FRASES_QUE_SALVAM = [
   "SUPABASE_ACCESS_TOKEN", // o caminho que configura os links dos e-mails
   "OpenRouter", // os três provedores, não só a Anthropic
   "SENTRY_DSN=off", // telemetria com consentimento (issue #668)
+  "ORG_NAME", // o nome da organização do cliente, sem passar pelo assistente
+  "caddy validate", // um site extra quebrado em sites/ derruba o HTTPS no próximo reinício
 ];
 
 /** Afirmações que já foram verdade e o código contradiz hoje. */

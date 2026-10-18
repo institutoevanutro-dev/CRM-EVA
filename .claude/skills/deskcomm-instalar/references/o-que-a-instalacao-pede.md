@@ -41,6 +41,23 @@ projeto** e preenche as quatro sozinho (`hostgator-setup-kit/supabase-provision.
 | `RESEND_API_KEY` + `RESEND_FROM_EMAIL` | envio de e-mail **desligado**: o convite mostra o link de aceite na própria tela; o export de LGPD fica pendente. O remetente precisa ser de um domínio **verificado** na Resend, senão toda tentativa falha com mensagem opaca |
 | Telemetria (sem pergunta) | nasce desligada: `SENTRY_DSN=off` ou vazio não envia nada. Só liga com o DSN do Sentry do próprio operador no `.env`. |
 
+## Sem pergunta: o que vem pronto no `.env` (ou no ambiente)
+
+Para quem instala para um cliente. Nenhuma das duas é perguntada na entrevista; quando o `.env` e o
+ambiente trazem a mesma chave, vale o `.env`.
+
+| chave | o que faz | se faltar |
+|---|---|---|
+| `ORG_NAME` | o nome da organização que o instalador cria (2 a 80 caracteres, com ao menos uma letra ou número). O endereço interno (slug) sai dele: sem acento, minúsculo, hífen no lugar do resto, até 40 caracteres (`Clínica D'Ávila` vira `clinica-d-avila`) | `Minha Empresa`, como sempre |
+| `ORG_NICHO` | `clinica`: o funil "Agendamentos" do pacote de clínica no lugar do de pedidos, e a organização nasce com o onboarding feito. Só troca o funil de pedidos que a instalação semeou; se ele já tem negócio, o instalador avisa e deixa como está | o funil de pedidos e o assistente de onboarding |
+
+`ORG_NAME` vale na criação: trocar depois e rodar o instalador de novo cria **outra** organização.
+Para renomear, use Configurações › Organização.
+
+O instalador reescreve o `.env` a partir da lista de chaves que ele conhece e **preserva** as que
+não conhece: `SIGNUP_MODE`, `CONTA_URL`, `EVALINK_*` ou qualquer linha posta à mão voltam no fim do
+arquivo, com o mesmo valor.
+
 ## O que o instalador gera sozinho (não peça)
 
 `INTERNAL_SECRET`, `INTERNAL_CRON_SECRET`, chaves de cifra (CPF, credenciais de IA, WAHA próprio,

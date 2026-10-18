@@ -36644,6 +36644,89 @@ grant execute on function public.fn_agente_atende_no_numero(uuid, uuid, uuid) to
 notify pgrst, 'reload schema';
 -- ---- fim: cada agente declara em quais números atende (migration 0380) ----
 
+-- ---- nome da apresentação e regra do RQE (migration 0381) ----
+-- Derivado de supabase/migrations/20261017220000_0381_etapa_a_crm.sql (o
+-- porquê inteiro está no cabeçalho de lá). Duas peças:
+--
+-- 1. `platform_branding.nome_da_apresentacao`: o título da página "Sobre"
+--    (`/legal/about`); vazia, a página usa o nome da marca da instalação.
+--    Nasce num bloco que confere o catálogo antes e, só no comando que a cria
+--    e só se a instalação já tem organização, grava 'CRM Eva', o título fixo
+--    que a página de toda instalação existente mostra hoje. Instalação nova
+--    roda este apêndice antes de existir organização e fica vazia; nenhuma
+--    reaplicação toca a coluna depois. Sem a linha id=1, a semeadura a cria
+--    com `seeded_from_env = true`, para o .env ainda completá-la.
+--    Por desenho, a coluna só muda por SQL: ainda não há tela que a edite.
+-- 2. `fn_definir_medico_sem_rqe`: grava `organizations.settings.medico_sem_rqe`
+--    (só admin, com suporte de escrita e MFA provada; desenho da 0360). Quem
+--    lê é `lib/comentarios/regra-do-rqe.ts`; ausente vale ligada.
+--
+-- ANTES do bloco da VARREDURA anon, que é de propósito o último a criar
+-- função (`tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`).
+do $$
+begin
+  if not exists (
+    select 1
+      from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'platform_branding'
+       and column_name = 'nome_da_apresentacao'
+  ) then
+    alter table public.platform_branding add column nome_da_apresentacao text;
+    if exists (select 1 from public.organizations) then
+      insert into public.platform_branding (id, seeded_from_env, nome_da_apresentacao)
+      values (1, true, 'CRM Eva')
+      on conflict (id) do update set nome_da_apresentacao = excluded.nome_da_apresentacao;
+    end if;
+  end if;
+end $$;
+
+comment on column public.platform_branding.nome_da_apresentacao is
+  'Título da página Sobre (/legal/about). Vazia: a página usa o nome da marca da instalação. '
+  'Semeada uma vez com o título antigo, fixo no código, quando a coluna nasceu numa instalação '
+  'que já tinha organização (migration 0381). Lida por lib/legal/nome-da-apresentacao.ts.';
+
+create or replace function public.fn_definir_medico_sem_rqe(
+  p_organization_id uuid,
+  p_ligada boolean
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if auth.uid() is null
+     or p_organization_id is null
+     or p_ligada is null
+     or not public.fn_role_at_least(p_organization_id, 'admin')
+     or not public.fn_support_write_allowed(p_organization_id) then
+    raise exception 'medico_sem_rqe_forbidden' using errcode = '42501';
+  end if;
+  if not public.fn_session_mfa_proven() then
+    raise exception 'medico_sem_rqe_mfa_required' using errcode = '42501';
+  end if;
+
+  update public.organizations
+     set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{medico_sem_rqe}', to_jsonb(p_ligada), true)
+   where id = p_organization_id;
+  if not found then
+    raise exception 'organization_not_found' using errcode = 'P0002';
+  end if;
+end $$;
+
+comment on function public.fn_definir_medico_sem_rqe(uuid, boolean) is
+  'Liga ou desliga a regra do RQE dos comentários do Instagram de uma organização '
+  '(organizations.settings.medico_sem_rqe, migration 0381). Só admin da própria organização, '
+  'com escrita de suporte permitida e MFA provada. Ausente ou não booleano vale ligada: quem lê é '
+  'lib/comentarios/regra-do-rqe.ts. Medido em tests/invariants/apresentacao-e-regra-do-rqe.test.ts.';
+
+revoke execute on function public.fn_definir_medico_sem_rqe(uuid, boolean) from public, anon;
+grant  execute on function public.fn_definir_medico_sem_rqe(uuid, boolean) to authenticated;
+
+notify pgrst, 'reload schema';
+-- ---- fim: nome da apresentação e regra do RQE (migration 0381) ----
+
 -- ---- link de mídia só do próprio dono e mensagens só de quem vê a conversa (migration 0382) ----
 -- Derivado de supabase/migrations/20261017200000_0382_midia_do_dono_e_mensagens_de_quem_ve.sql
 -- (o porquê inteiro está no cabeçalho de lá; auditoria de 17/10, CRM-1 e CRM-2).

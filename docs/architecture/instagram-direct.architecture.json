@@ -131,6 +131,13 @@
       "col": 4,
       "type": "database",
       "label": "contacts.inbox_hidden_at → conversations.contato_oculto (gatilhos); só o servidor escreve a marca"
+    },
+    {
+      "id": "regra_do_rqe",
+      "lane": "humano",
+      "col": 7,
+      "type": "ui",
+      "label": "Médico sem RQE (Inbox › Comentários, só administrador): organizations.settings.medico_sem_rqe, ausente vale ligada (0381)"
     }
   ],
   "edges": [
@@ -259,6 +266,24 @@
       "from": "contato_oculto",
       "to": "comentario_worker",
       "label": "comentário de autor oculto vira ignorado, sem resposta"
+    },
+    {
+      "id": "e22",
+      "from": "regra_do_rqe",
+      "to": "comentario_worker",
+      "label": "ligada: especialidade é gatilho, a resposta não leva título e o prompt proíbe; desligada, nada disso (lida uma vez por rodada)"
+    },
+    {
+      "id": "e23",
+      "from": "regra_do_rqe",
+      "to": "vocabulario_da_ia",
+      "label": "desligada: especialista e nutrólogo podem ser liberadas"
+    },
+    {
+      "id": "e24",
+      "from": "regra_do_rqe",
+      "to": "aba_comentarios",
+      "label": "Publicar recusa título de especialidade só com a regra ligada"
     }
   ]
 }

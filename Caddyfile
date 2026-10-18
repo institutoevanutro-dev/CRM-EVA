@@ -5,6 +5,15 @@
 	email {$ACME_EMAIL}
 }
 
+# Sites extras servidos por este mesmo Caddy (ex.: o site da Conta, o login
+# único, que o site-caddy.sh dela grava aqui). Só entram os arquivos *.caddy da
+# pasta sites/, ao lado do docker-compose.prod.yml, que fica fora do git: o que
+# mora nela é desta instalação, e nenhuma atualização encosta nela.
+# Pasta vazia não muda nada. Um arquivo quebrado ali impede o Caddy de subir na
+# próxima reinicialização, e com ele cai o HTTPS do CRM: rode caddy validate
+# antes de recarregar.
+import /etc/caddy/sites/*.caddy
+
 {$DOMAIN} {
 	encode gzip
 

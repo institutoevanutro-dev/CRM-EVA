@@ -109,6 +109,12 @@ Se precisar do modo sem perguntas (`--yes` com `.env` pronto), duas armadilhas m
 - escreva `SENTRY_DSN=off` se a pessoa **não** quer enviar relatórios de erro. Com o `.env` copiado
   do exemplo, a pergunta de telemetria não aparece e a instalação sai enviando (issue #668).
 
+Instalando para um cliente, duas chaves sem pergunta vão no `.env`: `ORG_NAME` (o nome da
+organização; sem ele, "Minha Empresa") e `ORG_NICHO=clinica` (funil de agendamentos e onboarding já
+feito). Chave que o instalador não conhece, como `SIGNUP_MODE`, continua no `.env` depois dele.
+Detalhe em `references/o-que-a-instalacao-pede.md`. Outro site no mesmo servidor vai na pasta
+`sites/`, com `caddy validate` antes de recarregar: `references/scripts-do-kit.md`.
+
 A chave de IA é **opcional** (issue #670, resolvida): dá para instalar sem conta em provedor de IA
 e cadastrar depois em IA › Credenciais — a tela final da instalação lembra quem pulou, com o
 caminho. Se a pessoa já tiver a chave em mãos, ótimo: ela é validada na hora.

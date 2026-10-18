@@ -10,10 +10,12 @@ import {
   useCanaisDoInstagram,
   usePublicacoesDosPerfis,
 } from "@/hooks/comentarios/useComentarios";
+import { roleAtLeast } from "@/lib/auth/types";
 import { ListaDeComentarios } from "./ListaDeComentarios";
 import { FormularioDeRegra } from "./FormularioDeRegra";
 import { FrasesDeAbertura } from "./FrasesDeAbertura";
 import { PalavrasDaIa } from "./PalavrasDaIa";
+import { RegraDoRqe } from "./RegraDoRqe";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -34,6 +36,10 @@ export function ComentariosPainel() {
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [mostrarFrases, setMostrarFrases] = useState(false);
   const [mostrarPalavras, setMostrarPalavras] = useState(false);
+  const [mostrarRegraDoRqe, setMostrarRegraDoRqe] = useState(false);
+  // A regra do RQE é só do administrador: a rota e a função do banco recusam
+  // os outros papéis, e a tela não oferece o que vai ser recusado.
+  const ehAdmin = roleAtLeast(activeOrg?.role, "admin");
   // CRÍTICO 2: qual mídia abriu o formulário — `undefined` quando é "Nova
   // regra" solto (sem partir de um comentário da lista); string vazia é um
   // valor válido de mediaId, então null/undefined marcam "não veio de lá".
@@ -53,7 +59,12 @@ export function ComentariosPainel() {
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <h2 className="text-sm font-semibold text-text">{t("Comentários")}</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {ehAdmin && (
+            <Button variant="ghost" size="sm" onClick={() => setMostrarRegraDoRqe((v) => !v)}>
+              {mostrarRegraDoRqe ? t("Fechar") : t("Médico sem RQE")}
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => setMostrarPalavras((v) => !v)}>
             {mostrarPalavras ? t("Fechar") : t("Palavras da IA")}
           </Button>
@@ -69,6 +80,11 @@ export function ComentariosPainel() {
           </Button>
         </div>
       </div>
+      {ehAdmin && mostrarRegraDoRqe && (
+        <div className="border-b border-border">
+          <RegraDoRqe />
+        </div>
+      )}
       {mostrarFrases && (
         <div className="border-b border-border">
           <FrasesDeAbertura />

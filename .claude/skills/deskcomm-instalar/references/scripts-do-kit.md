@@ -28,6 +28,24 @@ dois arquivos — senão o contêiner sobe sem as etiquetas de roteamento e o do
 docker compose -f docker-compose.prod.yml -f docker-compose.traefik.yml --env-file .env up -d app
 ```
 
+## Outro site no mesmo Caddy: a pasta `sites/`
+
+Com `REVERSE_PROXY=caddy`, o Caddy do kit importa todo arquivo `*.caddy` da pasta `sites/`, ao lado
+do `docker-compose.prod.yml`. É ali, e não no `Caddyfile`, que mora um site que não é o CRM: a pasta
+fica fora do git e nenhuma atualização encosta nela. Com o Traefik ou o Nginx Proxy Manager da
+hospedagem a pasta não é usada, e o site extra se configura no proxy dela.
+
+Depois de gravar ou mudar um arquivo, confira com `caddy validate` e só então recarregue:
+
+```bash
+docker compose -f docker-compose.prod.yml exec caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+docker compose -f docker-compose.prod.yml exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+```
+
+`Valid configuration` no primeiro é o sinal para o segundo. Um arquivo quebrado o `reload` recusa, e
+o Caddy segue com o que tinha; mas no próximo reinício (atualização, reboot) ele não sobe, e o HTTPS
+do CRM cai junto. Conserte ou apague o arquivo antes de sair.
+
 ## Validar um valor sem instalar
 
 O instalador expõe seus validadores como biblioteca — útil para conferir uma connection string ou

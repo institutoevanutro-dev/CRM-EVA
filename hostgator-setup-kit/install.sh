@@ -763,6 +763,196 @@ sb_carrega_credenciais() {
   done <<<"$1"
 }
 
+# ── A organização que o instalador cria ─────────────────────────────────────
+# ORG_NAME e ORG_NICHO não são perguntas da entrevista: chegam pelo ambiente ou
+# pelo .env, escritos por quem instala para um cliente. Pergunta nova em FIELDS
+# deslocaria a fila posicional de respostas de test-validators.sh, e o leigo que
+# instala para si não precisa delas. Sem as duas, nada muda: a organização nasce
+# "Minha Empresa", com o funil de pedidos, e o dono passa pelo assistente de
+# onboarding.
+#
+# O nome padrão é o mesmo texto de NOME_PLACEHOLDER_DA_INSTALACAO
+# (lib/instalacao/ambiente.ts), que o assistente usa para reconhecer o nome
+# provisório e oferecer a troca.
+ORG_NAME_PADRAO="Minha Empresa"
+
+# O funil "Agendamentos" do pacote "clinica" do onboarding, já no formato que
+# public.fn_aplicar_quadro_do_onboarding grava. É CÓPIA: a fonte é
+# lib/onboarding/pacotes-de-funil.ts, convertida por etapasParaGravar
+# (lib/onboarding/proposta-de-funil.ts), e
+# tests/unit/install-funil-de-clinica.test.ts reprova as duas divergindo.
+# Fica numa linha só, entre aspas simples: é assim que o teste a encontra, e
+# aspa simples aqui dentro quebraria o literal do SQL (o teste também cobra).
+FUNIL_DE_CLINICA='{"nome":"Agendamentos","slug":"agendamentos","etapas":[{"nome":"Novo contato","slug":"novo-contato","position":1000,"is_won":false,"is_lost":false,"agent_stage_hint":"new"},{"nome":"Já respondi","slug":"ja-respondi","position":2000,"is_won":false,"is_lost":false,"agent_stage_hint":"contacted"},{"nome":"Entendendo o caso","slug":"entendendo-o-caso","position":3000,"is_won":false,"is_lost":false,"agent_stage_hint":"qualifying"},{"nome":"Quer agendar","slug":"quer-agendar","position":4000,"is_won":false,"is_lost":false,"agent_stage_hint":"qualified"},{"nome":"Escolhendo horário","slug":"escolhendo-horario","position":5000,"is_won":false,"is_lost":false,"agent_stage_hint":"negotiating"},{"nome":"Consulta marcada","slug":"consulta-marcada","position":6000,"is_won":true,"is_lost":false,"agent_stage_hint":"won"},{"nome":"Não vai marcar","slug":"nao-vai-marcar","position":7000,"is_won":false,"is_lost":true,"agent_stage_hint":"lost"}]}'
+
+# O nome vira display_name e legal_name da organização, e dele sai o slug. De 2
+# a 80 caracteres, numa linha só, com ao menos uma letra de A a Z ou um número:
+# sem isso o slug sairia vazio. ${#1} conta bytes num terminal em locale C, o
+# que só torna o teto mais apertado para nome com muito acento.
+v_org_name() {
+  case "$1" in
+    *[[:cntrl:]]*)
+      echo "ORG_NAME não pode ter quebra de linha nem caractere de controle."; return 1;;
+  esac
+  # O nome entra num bloco SQL marcado com $organizacao$: um "$" no nome poderia
+  # fechar o bloco e fazer o resto rodar como SQL solto. Nenhum "$" passa.
+  case "$1" in
+    *\$*) echo "ORG_NAME não pode ter o caractere \$: o nome da organização vai para um bloco SQL."; return 1;;
+  esac
+  if [ "${#1}" -lt 2 ] || [ "${#1}" -gt 80 ]; then
+    echo "ORG_NAME precisa ter de 2 a 80 caracteres: é o nome da organização que aparece no CRM."
+    return 1
+  fi
+  case "$1" in
+    *[A-Za-z0-9]*) return 0;;
+  esac
+  echo "ORG_NAME precisa ter ao menos uma letra de A a Z ou um número: o endereço interno da organização sai dele."
+  return 1
+}
+
+# Só "clinica" por enquanto. Vazio = o funil de pedidos e o assistente de
+# onboarding, como sempre foi.
+v_org_nicho() {
+  case "$1" in ''|clinica) return 0;; esac
+  echo "ORG_NICHO aceita só \"clinica\" (ou vazio, para o funil padrão). Veio: \"$1\"."
+  return 1
+}
+
+# O SQL que cria (ou reencontra) a organização e promove o dono, na etapa 8.
+#
+# É função, e não um heredoc solto lá embaixo, para o teste de banco
+# (tests/invariants/install-organizacao.test.ts) mandar ESTE texto a um
+# Postgres de verdade, com o mesmo escape que a instalação usa: a aspa simples
+# do nome dobrada ("D'Ávila" vira 'D''Ávila'). O padrão e a troca vêm de
+# variável pelo mesmo motivo do load_env (_common.sh): o bash 3.2 do macOS não
+# tira as aspas literais de dentro de ${...//...}.
+#
+# O corpo do DO usa o marcador $organizacao$, e não $$: um nome com "$$" no
+# meio fecharia o bloco antes da hora.
+sql_da_organizacao() {
+  local aspa="'" duas="''" clinica=false
+  local nome="${ORG_NAME:-$ORG_NAME_PADRAO}"
+  local nome_sql="${nome//$aspa/$duas}"
+  case "${ORG_NICHO:-}" in clinica) clinica=true;; esac
+  cat <<SQL
+do \$organizacao\$
+declare
+  v_org uuid; v_uid uuid; v_slug text; v_funil uuid; v_res jsonb;
+  v_nome text := '${nome_sql}';
+  v_quadro jsonb := '${FUNIL_DE_CLINICA}';
+begin
+  select id into v_uid from auth.users where email = '${OWNER_EMAIL}';
+  if v_uid is null then
+    raise exception 'usuário % não encontrado no auth.users (a criação no Auth falhou?)', '${OWNER_EMAIL}';
+  end if;
+  -- O endereço interno (slug) sai do NOME, aqui no banco: sem acento, minúsculo,
+  -- o que não é letra nem número vira hífen, sem hífen nas pontas, até 40
+  -- caracteres. "Minha Empresa" dá minha-empresa, o mesmo de sempre. A ordem é
+  -- a do slugify de scripts/bootstrap-owner.ts (apara, depois corta em 40), com
+  -- um rtrim no fim porque o corte pode deixar um hífen na ponta.
+  v_slug := rtrim(left(btrim(regexp_replace(lower(translate(v_nome,
+              'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑáàâãäéèêëíìîïóòôõöúùûüçñ',
+              'AAAAAEEEEIIIIOOOOOUUUUCNaaaaaeeeeiiiiooooouuuucn')),
+            '[^a-z0-9]+', '-', 'g'), '-'), 40), '-');
+  -- Achada pelo slug: rodar de novo com o mesmo ORG_NAME reencontra a mesma
+  -- organização. O nome dela não é regravado, porque quem o trocou pela tela
+  -- manda mais que uma resposta repetida no .env.
+  select id into v_org from public.organizations where slug = v_slug;
+  if v_org is null then
+    -- locale aqui, e não só no usuário dono: é a organização que responde
+    -- pelos convidados que ainda não existem. Quem entra sem preferência
+    -- própria cai neste valor, então gravar só no dono entregaria o sistema em
+    -- português para todo mundo que ele convidasse numa instalação em espanhol.
+    insert into public.organizations (slug, display_name, legal_name, locale, created_by)
+    values (v_slug, v_nome, v_nome, '${APP_LOCALE:-pt-BR}', v_uid)
+    returning id into v_org;
+  else
+    -- Re-execução do instalador com outra resposta: quem rodou de novo para
+    -- trocar o idioma esperaria que trocasse. Só mexe se a organização ainda
+    -- estiver no padrão — se alguém já escolheu pela tela, a escolha dela vale
+    -- mais que uma resposta repetida no terminal.
+    update public.organizations
+       set locale = '${APP_LOCALE:-pt-BR}'
+     where id = v_org and coalesce(locale, 'pt-BR') = 'pt-BR';
+  end if;
+  -- O provedor que a pessoa ESCOLHEU passa a valer no banco. O trigger
+  -- fn_seed_org_llm_defaults semeia 'anthropic' fixo — o que estava certo
+  -- enquanto a Anthropic era a única chave que este script pedia. Desde que
+  -- ele pergunta qual IA vai atender, ignorar a resposta significava: quem
+  -- escolhe OpenRouter instala, cadastra a chave, e todo caminho que passa
+  -- pelo agent-engine resolve 'anthropic' — sem chave da Anthropic, erro de
+  -- "IA não configurada" em tudo, mandando cadastrar a chave que ele decidiu
+  -- não usar. Só o provider: o modelo padrão fica com o que o trigger semeou
+  -- até alguém escolher em Agente de IA -> Provedores, porque adivinhar um id
+  -- de modelo de outro provedor aqui seria inventar um valor não verificado.
+  if '${AI_PROVIDER}' not in ('', 'anthropic') then
+    update public.organizations
+       set settings = jsonb_set(
+             coalesce(settings, '{}'::jsonb), '{llm,provider}',
+             to_jsonb('${AI_PROVIDER}'::text), true)
+     where id = v_org;
+  end if;
+  insert into public.user_organizations (user_id, organization_id, role, accepted_at)
+  values (v_uid, v_org, 'admin', now())
+  on conflict (user_id, organization_id) do update set role='admin', revoked_at=null;
+  if not exists (select 1 from public.platform_admins where user_id=v_uid and revoked_at is null) then
+    -- ⚠️ ATENÇÃO: este heredoc NÃO é citado, então o bash expande crase aqui
+    -- dentro. Crase em volta de nome de coluna vira substituição de comando e o
+    -- instalador morre com "command not found" no meio da criação do dono.
+    -- Medido: a primeira versão deste comentário usava crase e a suíte do kit
+    -- reprovou em três casos. Nome de coluna aqui vai sem crase.
+    --
+    -- mfa_required EXPLÍCITO, contra o default "true" da coluna — a MESMA razão
+    -- que scripts/bootstrap-owner.ts:201 já documenta, e que este INSERT não
+    -- acompanhou.
+    --
+    -- Medido numa instalação self-host recém-feita por este script:
+    --
+    --   select column_default from information_schema.columns
+    --    where table_name='platform_admins' and column_name='mfa_required';
+    --   -> true
+    --
+    -- Como o INSERT abaixo não informava a coluna, TODA instalação nascia
+    -- exigindo TOTP do dono. lib/auth/politica-mfa.ts passou a LER essa coluna
+    -- (antes o gate olhava só is_platform_admin), e o cabeçalho dele registra
+    -- que o cadastro virou opcional exatamente para acabar com o bloqueador de
+    -- tela cheia logo depois do onboarding — "segurança que expulsa o usuário na
+    -- primeira tela não protege ninguém".
+    --
+    -- Ou seja: o defeito que a mudança de doutrina eliminou continuava vivo pelo
+    -- caminho do instalador, que é justamente o caminho de TODO self-hoster. O
+    -- bootstrap-owner.ts estava certo; este INSERT é que ficou para trás.
+    --
+    -- false e não omitir: quem quiser exigir liga em Configurações › Segurança,
+    -- e a decisão fica visível na linha em vez de herdada de um default.
+    insert into public.platform_admins (user_id, granted_by, scope, mfa_required, reason)
+    values (v_uid, v_uid, 'full', false, 'Bootstrap inicial do self-host');
+  end if;
+  -- ORG_NICHO=clinica: o funil do pacote de clínica do onboarding troca o de
+  -- pedidos que o gatilho semeou, e a organização nasce com o onboarding feito,
+  -- como no importador de clínicas (lib/importador-de-clinicas/importar.ts).
+  -- Só troca o funil SEMEADO (slug pedidos): numa segunda rodada ele já é o de
+  -- clínica, e um funil escolhido ou montado pela tela não é do instalador. Um
+  -- funil com negócios, ou com etapa usada por webhook, a própria função recusa,
+  -- e aqui isso vira aviso, não erro: a organização e o dono seguem valendo.
+  if ${clinica} then
+    select id into v_funil
+      from public.crm_pipelines
+     where organization_id = v_org and is_default and not is_archived and slug = 'pedidos';
+    if v_funil is not null then
+      v_res := public.fn_aplicar_quadro_do_onboarding(
+        v_org, v_funil, v_quadro->>'nome', v_quadro->>'slug', v_quadro->'etapas');
+      if not coalesce((v_res->>'ok')::boolean, false) then
+        raise warning 'Funil de clínica não aplicado (%). O funil atual ficou como estava.', v_res->>'motivo';
+      end if;
+    end if;
+    update public.organizations set onboarded_at = now()
+     where id = v_org and onboarded_at is null;
+  end if;
+end \$organizacao\$;
+SQL
+}
+
 # Carrega só as funções acima, sem instalar nada — é assim que
 # `test-validators.sh` exercita os validadores:  INSTALL_SH_LIB=1 . install.sh
 if [ "${INSTALL_SH_LIB:-}" = "1" ]; then trap - EXIT; return 0; fi
@@ -887,6 +1077,18 @@ if [ -f "$PARTIAL_FILE" ]; then
   # dizendo que N respostas foram guardadas — lê como defeito do instalador.
   c_dim "  (o token do Supabase é de conta e nunca entra no rascunho: ele é perguntado de novo. Enter pula)"
 fi
+
+# ── A organização que este instalador vai criar ─────────────────────────────
+# ORG_NAME e ORG_NICHO chegam pelo ambiente ou pelo .env (o load_env acima já
+# os trouxe; quando os dois têm a chave, vale o .env, como em toda chave).
+# Conferidos AQUI, antes do proxy e do Supabase: um valor errado descoberto no
+# fim seria trabalho jogado fora.
+ORG_NAME="${ORG_NAME:-$ORG_NAME_PADRAO}"
+ORG_NICHO="${ORG_NICHO:-}"
+if ! _org_msg="$(v_org_name "$ORG_NAME")"; then die "$_org_msg"; fi
+if ! _org_msg="$(v_org_nicho "$ORG_NICHO")"; then die "$_org_msg"; fi
+unset _org_msg
+
 
 # ── Proxy reverso: quem está com as portas 80 e 443? ────────────────────────
 # Fica AQUI, logo depois de ler o .env e ANTES de qualquer coisa cara: era a
@@ -1600,6 +1802,12 @@ esac
   printf '# Endereço de suporte que o CLIENTE FINAL vê (conta suspensa, cobrança).\n'
   printf '# Vazio = a tela não mostra endereço nenhum.\n'
   envq SUPPORT_EMAIL "${SUPPORT_EMAIL:-}"
+  printf '# A organização que o install.sh cria. ORG_NAME vale na CRIAÇÃO: trocá-lo\n'
+  printf '# aqui e rodar de novo cria OUTRA organização (renomeie em Configurações ›\n'
+  printf '# Organização). ORG_NICHO: vazio (funil de pedidos) ou "clinica" (funil de\n'
+  printf '# agendamentos, sem o assistente de onboarding).\n'
+  envq ORG_NAME "$ORG_NAME"
+  envq ORG_NICHO "$ORG_NICHO"
   # AGENDA · GOOGLE CALENDAR — gravadas VAZIAS, e de propósito NÃO perguntadas.
   #
   # Sem as duas a Agenda funciona inteira: some o botão "Conectar Google" e a
@@ -1977,94 +2185,16 @@ curl -fsS -X POST "${NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users" \
   -d "{\"email\":\"${OWNER_EMAIL}\",\"password\":\"${OWNER_PASSWORD}\",\"email_confirm\":true,\"user_metadata\":{\"locale\":\"${APP_LOCALE:-pt-BR}\"}}" \
   >/dev/null 2>&1 || true
 
-# 2) Resolve o id direto do auth.users e cria org + membership + platform_admin.
-#    Resolver o uid DENTRO do SQL evita parsing frágil de JSON e funciona tanto para
-#    usuário recém-criado quanto para um que já existia (re-execução).
-docker run --rm -i postgres:17-alpine psql "$(url_do_schema)" -v ON_ERROR_STOP=1 <<SQL \
+# 2) Resolve o id direto do auth.users e cria (ou reencontra) a organização, o
+#    vínculo e o platform_admin, com o SQL de sql_da_organizacao (lá em cima,
+#    junto dos validadores). Resolver o uid DENTRO do SQL evita parsing frágil de
+#    JSON e funciona tanto para usuário recém-criado quanto para um que já
+#    existia (re-execução).
+sql_da_organizacao | docker run --rm -i postgres:17-alpine psql "$(url_do_schema)" -v ON_ERROR_STOP=1 \
   && c_grn "✓ dono criado e promovido a super-admin" \
   || die "Não consegui promover o admin. Confira a service_role key, a URL e a connection string do Supabase.
      Este passo lê auth.users e escreve em public: num Supabase próprio ele precisa do dono do
      banco — declare SUPABASE_DB_ADMIN_URL e rode de novo."
-do \$\$
-declare v_org uuid; v_uid uuid;
-begin
-  select id into v_uid from auth.users where email = '${OWNER_EMAIL}';
-  if v_uid is null then
-    raise exception 'usuário % não encontrado no auth.users (a criação no Auth falhou?)', '${OWNER_EMAIL}';
-  end if;
-  select id into v_org from public.organizations where slug='minha-empresa';
-  if v_org is null then
-    -- locale aqui, e não só no usuário dono: é a organização que responde
-    -- pelos convidados que ainda não existem. Quem entra sem preferência
-    -- própria cai neste valor, então gravar só no dono entregaria o sistema em
-    -- português para todo mundo que ele convidasse numa instalação em espanhol.
-    insert into public.organizations (slug, display_name, legal_name, locale, created_by)
-    values ('minha-empresa','Minha Empresa','Minha Empresa','${APP_LOCALE:-pt-BR}', v_uid)
-    returning id into v_org;
-  else
-    -- Re-execução do instalador com outra resposta: quem rodou de novo para
-    -- trocar o idioma esperaria que trocasse. Só mexe se a organização ainda
-    -- estiver no padrão — se alguém já escolheu pela tela, a escolha dela vale
-    -- mais que uma resposta repetida no terminal.
-    update public.organizations
-       set locale = '${APP_LOCALE:-pt-BR}'
-     where id = v_org and coalesce(locale, 'pt-BR') = 'pt-BR';
-  end if;
-  -- O provedor que a pessoa ESCOLHEU passa a valer no banco. O trigger
-  -- fn_seed_org_llm_defaults semeia 'anthropic' fixo — o que estava certo
-  -- enquanto a Anthropic era a única chave que este script pedia. Desde que
-  -- ele pergunta qual IA vai atender, ignorar a resposta significava: quem
-  -- escolhe OpenRouter instala, cadastra a chave, e todo caminho que passa
-  -- pelo agent-engine resolve 'anthropic' — sem chave da Anthropic, erro de
-  -- "IA não configurada" em tudo, mandando cadastrar a chave que ele decidiu
-  -- não usar. Só o provider: o modelo padrão fica com o que o trigger semeou
-  -- até alguém escolher em Agente de IA -> Provedores, porque adivinhar um id
-  -- de modelo de outro provedor aqui seria inventar um valor não verificado.
-  if '${AI_PROVIDER}' not in ('', 'anthropic') then
-    update public.organizations
-       set settings = jsonb_set(
-             coalesce(settings, '{}'::jsonb), '{llm,provider}',
-             to_jsonb('${AI_PROVIDER}'::text), true)
-     where id = v_org;
-  end if;
-  insert into public.user_organizations (user_id, organization_id, role, accepted_at)
-  values (v_uid, v_org, 'admin', now())
-  on conflict (user_id, organization_id) do update set role='admin', revoked_at=null;
-  if not exists (select 1 from public.platform_admins where user_id=v_uid and revoked_at is null) then
-    -- ⚠️ ATENÇÃO: este heredoc NÃO é citado, então o bash expande crase aqui
-    -- dentro. Crase em volta de nome de coluna vira substituição de comando e o
-    -- instalador morre com "command not found" no meio da criação do dono.
-    -- Medido: a primeira versão deste comentário usava crase e a suíte do kit
-    -- reprovou em três casos. Nome de coluna aqui vai sem crase.
-    --
-    -- mfa_required EXPLÍCITO, contra o default "true" da coluna — a MESMA razão
-    -- que scripts/bootstrap-owner.ts:201 já documenta, e que este INSERT não
-    -- acompanhou.
-    --
-    -- Medido numa instalação self-host recém-feita por este script:
-    --
-    --   select column_default from information_schema.columns
-    --    where table_name='platform_admins' and column_name='mfa_required';
-    --   -> true
-    --
-    -- Como o INSERT abaixo não informava a coluna, TODA instalação nascia
-    -- exigindo TOTP do dono. lib/auth/politica-mfa.ts passou a LER essa coluna
-    -- (antes o gate olhava só is_platform_admin), e o cabeçalho dele registra
-    -- que o cadastro virou opcional exatamente para acabar com o bloqueador de
-    -- tela cheia logo depois do onboarding — "segurança que expulsa o usuário na
-    -- primeira tela não protege ninguém".
-    --
-    -- Ou seja: o defeito que a mudança de doutrina eliminou continuava vivo pelo
-    -- caminho do instalador, que é justamente o caminho de TODO self-hoster. O
-    -- bootstrap-owner.ts estava certo; este INSERT é que ficou para trás.
-    --
-    -- false e não omitir: quem quiser exigir liga em Configurações › Segurança,
-    -- e a decisão fica visível na linha em vez de herdada de um default.
-    insert into public.platform_admins (user_id, granted_by, scope, mfa_required, reason)
-    values (v_uid, v_uid, 'full', false, 'Bootstrap inicial do self-host');
-  end if;
-end \$\$;
-SQL
 
 # ── 9. Sobe a stack ─────────────────────────────────────────────────────────
 fase 4 "Colocando o CRM no ar"
@@ -2084,6 +2214,11 @@ if ! dc pull; then
   c_ylw "⚠ Não consegui puxar todas as imagens do registro."
   c_ylw "  Sigo assim mesmo: o que faltar é construído aqui (mais lento, mesmo resultado)."
 fi
+# A pasta dos sites extras do Caddy (o import /etc/caddy/sites/*.caddy do
+# Caddyfile), que o compose monta no contêiner. Criada aqui, antes do up -d,
+# ela nasce com o dono desta instalação; sem isto quem a criaria, vazia, seria
+# o próprio Docker, como root.
+mkdir -p "$PROJECT_DIR/sites"
 dc up -d
 c_grn "✓ containers no ar"
 

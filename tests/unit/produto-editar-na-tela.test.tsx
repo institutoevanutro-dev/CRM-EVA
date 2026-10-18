@@ -67,3 +67,32 @@ describe("editar produto", () => {
     expect(screen.queryByTestId("editar-CONS")).toBeNull();
   });
 });
+
+/**
+ * ITEM QUE VEM DA PRECIFICAÇÃO: o aviso e o selo usam o nome do módulo.
+ *
+ * O módulo de preços aparece para a clínica como "Precificação". O nome interno
+ * do sistema de origem (o valor `origem = "precificaeva"` e o `data-testid` do
+ * aviso) é identificador e não sai na tela; que ele não volte a aparecer em TEXTO
+ * é a catraca de `tests/unit/branding.test.ts`. O que só este caso mede é a
+ * gramática: "do" virou "da", "no" virou "na".
+ */
+describe("item que vem da Precificação", () => {
+  const DA_PRECIFICACAO: Produto = { ...PRODUTO, origem: "precificaeva" };
+
+  it("a lista marca o preço como vindo da Precificação", () => {
+    render(<ProdutosClient inicial={[DA_PRECIFICACAO]} podeEditar textos={TEXTOS} />);
+    expect(screen.getByText(/preço da Precificação/)).toBeInTheDocument();
+  });
+
+  it("o aviso do formulário concorda em gênero: da, da e na Precificação", async () => {
+    const user = userEvent.setup();
+    window.scrollTo = vi.fn();
+    render(<ProdutosClient inicial={[DA_PRECIFICACAO]} podeEditar textos={TEXTOS} />);
+
+    await user.click(screen.getByTestId("editar-CONS"));
+    expect(screen.getByTestId("produto-do-precificaeva")).toHaveTextContent(
+      "Este item vem da Precificação. Nome, categoria, preço, custo e situação são atualizados de lá a cada hora: o que mudar aqui volta ao valor da Precificação. Para mudar o preço, altere na Precificação.",
+    );
+  });
+});

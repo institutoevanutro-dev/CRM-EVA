@@ -781,6 +781,10 @@ export const AUDIT_ACTIONS = [
   // (tela_do_contato | inbox) e, pelo Inbox, a conversa de onde veio o gesto.
   "contact.inbox_hidden",
   "contact.inbox_unhidden",
+  // migration 0381: o administrador ligou ou desligou a regra do RQE dos
+  // comentários do Instagram (`settings.medico_sem_rqe`). `resourceId` é a
+  // organização; metadata: ligada.
+  "comment.regra_do_rqe_alterada",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

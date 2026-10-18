@@ -69,6 +69,7 @@
     { "id": "caixaentrada", "lane": "humano", "col": 8, "type": "frontend", "label": "A caixa de entrada do cliente", "sublabel": "convite, confirmação de conta, recuperação de senha, aviso de SLA" },
     { "id": "autenticador", "lane": "humano", "col": 8, "type": "frontend", "label": "O app autenticador, no celular", "sublabel": "issuer=<marca>. Trocar o issuer NÃO reescreve fator já cadastrado" },
     { "id": "titular", "lane": "humano", "col": 8, "type": "frontend", "label": "O titular de dados (Art. 18 II)", "sublabel": "recebe o link do export e o relatório — e nele lê o CONTROLADOR, não a marca de quem vende" },
+    { "id": "sobre", "lane": "humano", "col": 8, "type": "frontend", "label": "/legal/about (pública)", "sublabel": "h1 e título da aba = nome da apresentação · o formato do título é o que o Google verificou, então só o nome varia" },
 
     { "id": "updatebranding", "lane": "escrita", "col": 2, "type": "api", "label": "updateBranding (server action)", "sublabel": "gate is_platform_admin + admin client + invalidarMarcaDaInstalacao()" },
     { "id": "updateorg", "lane": "escrita", "col": 2, "type": "api", "label": "updateMarcaDaOrganizacao (server action)", "sublabel": "RPC atômica: SELECT→spread→UPDATE no mesmo jsonb perderia visibility_mode" },
@@ -89,6 +90,7 @@
     { "id": "css", "lane": "resolver", "col": 6, "type": "service", "label": "lib/branding/css.ts", "sublabel": "serialização com allowlist: emite --color-brand e a família do accent — NUNCA --color-bg" },
     { "id": "saida", "lane": "resolver", "col": 6, "type": "service", "label": "lib/branding/saida.ts", "sublabel": "marcaDaSaida(orgId|null) → um hex + uma frente legível · tema CLARO sempre · NUNCA LANÇA" },
     { "id": "barra", "lane": "resolver", "col": 6, "type": "service", "label": "lib/branding/barra-do-navegador.ts", "sublabel": "os 2 hexes do themeColor, importados de REGUA_DO_PRODUTO (eram cópia em 3 arquivos)" },
+    { "id": "nomeapresentacao", "lane": "resolver", "col": 7, "type": "service", "label": "lib/legal/nome-da-apresentacao.ts", "sublabel": "nomeDaApresentacao() · coluna própria, FORA do COLUNAS de instalacao.ts · memo TTL 30s · falha não é memoizada · NUNCA LANÇA" },
 
     { "id": "layout", "lane": "saida", "col": 7, "type": "frontend", "label": "app/layout.tsx", "sublabel": "<EstiloDaMarca/> no <head> + generateMetadata (título com template) + viewport" },
     { "id": "applayout", "lane": "saida", "col": 7, "type": "frontend", "label": "app/app/layout.tsx", "sublabel": "<EstiloDaMarcaDaOrganizacao/> escopado em [data-marca-org] — não alcança /login" },
@@ -166,7 +168,11 @@
     { "id": "e61", "from": "bucketlogos", "to": "resolver", "label": "logoDaCamada(): o ARQUIVO vence a URL colada; urlPublicaDoLogo deriva a URL do caminho + host em runtime" },
     { "id": "e62", "from": "rotalogo", "to": "auditlog", "label": "reusa platform_branding.updated / org.branding_updated — código de ação novo não responderia pergunta nova" },
     { "id": "e63", "from": "layout", "to": "marcacliente", "label": "a MESMA marcaResolvida() do título e do CSS desce por prop, no payload do RSC — mesma rota de user/activeOrg" },
-    { "id": "e64", "from": "marcacliente", "to": "interface", "label": "useMarcaDaInstalacao(): SSR e hidratação leem o mesmo objeto, então o logo do revendedor não troca de elemento no meio do caminho" }
+    { "id": "e64", "from": "marcacliente", "to": "interface", "label": "useMarcaDaInstalacao(): SSR e hidratação leem o mesmo objeto, então o logo do revendedor não troca de elemento no meio do caminho" },
+    { "id": "e65", "from": "platformbranding", "to": "nomeapresentacao", "label": "select próprio de nome_da_apresentacao, fora do select de instalacao.ts: 42703 numa coluna ausente perderia a marca do banco em toda tela" },
+    { "id": "e66", "from": "saida", "to": "nomeapresentacao", "label": "coluna vazia, ausente ou ilegível: marcaDaSaida(null).nome, o nome da marca da instalação" },
+    { "id": "e67", "from": "nomeapresentacao", "to": "sobre", "label": "o <h1> e o título da aba de /legal/about; instalação que já existia foi semeada com o nome que o Google verificou, então a página dela não muda" },
+    { "id": "e68", "from": "sobre", "to": "aba", "label": "título no formato que o Google verificou, herdando o sufixo de marca do layout raiz" }
   ],
   "cards": [
     {

@@ -56,6 +56,9 @@
  *      POR COMENTÁRIO (`comment.replied_by_ai`, C-2) — é o único caminho que
  *      gera texto novo e o único com exposição de CFM; sem essa trilha,
  *      ninguém sabe qual comentário, qual texto, que horas.
+ *      As travas de especialidade e a frase do CFM no prompt seguem a regra
+ *      do RQE da organização (`settings.medico_sem_rqe`, migration 0381),
+ *      lida uma vez por rodada; ausente ou ilegível vale ligada.
  *
  * Um comentário que lança em qualquer ponto do processamento (I-9) vira log e
  * a rodada segue para o próximo — sem isso, o mais antigo (que é sempre o
@@ -70,6 +73,7 @@
 import { contatoOcultoDoInbox } from "@/lib/contacts/ocultar-do-inbox";
 import { aplicarRegra, enviarPrivadaDeGatilho, type AdminDaAcao, type Desfecho } from "@/lib/comentarios/acao";
 import { motivoDaRecusaPorEspecialidade } from "@/lib/comentarios/especialidade";
+import { regraDoRqeDaOrganizacao } from "@/lib/comentarios/regra-do-rqe";
 import { regraQueCasa, type RegraDeComentario } from "@/lib/comentarios/regra";
 import { abreConversa, chaveDoGatilho, frasesDeGatilho, type FrasesDeGatilho } from "@/lib/comentarios/gatilho-direct";
 import { ehObviamenteSeguro, ehTokenDeGatilho, GATILHO_SEM_PADRAO_SEGURO } from "@/lib/comentarios/seguranca";
@@ -116,12 +120,15 @@ export interface AdminDoWorker extends AdminDaAcao, AdminDaVoz {
   organizacoesComComentariosNovos(): Promise<string[]>;
   /** `situacao='novo'` DESTA organização, mais antigos primeiro, até `teto`. */
   comentariosNovos(organizationId: string, teto: number): Promise<ComentarioNovo[]>;
-  /** As palavras que o dono liberou nesta organização. Lida UMA vez por rodada. */
-  palavrasAprovadas(organizationId: string): Promise<ReadonlySet<string>>;
+  /**
+   * As palavras que o dono liberou nesta organização. Lida UMA vez por rodada.
+   * `medicoSemRqe` decide se título de especialidade sai da lista como gatilho.
+   */
+  palavrasAprovadas(organizationId: string, medicoSemRqe?: boolean): Promise<ReadonlySet<string>>;
   /** Regras ativas desta mídia, nesta organização. */
   regrasDaMidia(organizationId: string, mediaId: string): Promise<RegraDeComentario[]>;
   /** Pede à IA o texto de resposta. Lança se o modelo falhar, recusar por orçamento, ou não estiver configurado. */
-  gerarResposta(comentario: ComentarioNovo, perfil: PerfilDeVoz): Promise<string>;
+  gerarResposta(comentario: ComentarioNovo, perfil: PerfilDeVoz, medicoSemRqe?: boolean): Promise<string>;
   /** Publica a resposta pública gerada pela IA (fora do caminho de regra). */
   publicarResposta(comentario: ComentarioNovo, texto: string): Promise<{ replyId: string | null }>;
   /**
@@ -150,6 +157,12 @@ export interface AdminDoWorker extends AdminDaAcao, AdminDaVoz {
   autorOcultoDoInbox?(organizationId: string, autorIgsid: string): Promise<boolean>;
   /** `ignorado`, com o motivo: o comentário sai da fila sem resposta nenhuma. */
   marcarIgnorado?(comentarioId: string, motivo: string): Promise<void>;
+  /**
+   * A regra do RQE desta organização (`settings.medico_sem_rqe`, migration
+   * 0381). Opcional: o dublê de teste que não a declara vale ligada, que é o
+   * comportamento de antes de a regra existir.
+   */
+  regraDoRqe?(organizationId: string): Promise<boolean>;
 }
 
 /** Mesmo prazo do lease que `reivindicar` usa (round real, ver `construirAdminDaAcaoReal`). */
@@ -167,16 +180,17 @@ const TETO_TAMANHO_DA_RESPOSTA_GERADA = 300;
  * especialidade.ts`, COMPARTILHADA com `POST /:id/publicar` — achado da
  * revisão final: só existir aqui deixava o clique humano (que pré-preenche
  * com esta MESMA sugestão recusada, em `sugestao_de_resposta`) publicar sem
- * reconferir nada.
+ * reconferir nada. Com a regra do RQE da organização desligada, a trava de
+ * especialidade não recusa.
  */
-function motivoDaRecusaDaResposta(texto: string): string | null {
+function motivoDaRecusaDaResposta(texto: string, medicoSemRqe: boolean): string | null {
   if (!texto || texto.trim() === "") return "a IA gerou uma resposta vazia";
   if (texto.length > TETO_TAMANHO_DA_RESPOSTA_GERADA) return "resposta longa demais para publicar sozinha";
 
   const normalizado = normalizarTexto(texto);
   if (normalizado.includes("http")) return "resposta contém link";
   if (/r\$/u.test(normalizado)) return "resposta contém preço";
-  return motivoDaRecusaPorEspecialidade(texto);
+  return motivoDaRecusaPorEspecialidade(texto, medicoSemRqe);
 }
 
 /**
@@ -281,9 +295,13 @@ async function abrirConversaSeForIntencaoDeCompra(
  */
 type AprovadasDaRodada = { palavras: ReadonlySet<string>; leituraFalhou: boolean };
 
-async function aprovadasDaRodada(admin: AdminDoWorker, organizationId: string): Promise<AprovadasDaRodada> {
+async function aprovadasDaRodada(
+  admin: AdminDoWorker,
+  organizationId: string,
+  medicoSemRqe: boolean,
+): Promise<AprovadasDaRodada> {
   try {
-    return { palavras: await admin.palavrasAprovadas(organizationId), leituraFalhou: false };
+    return { palavras: await admin.palavrasAprovadas(organizationId, medicoSemRqe), leituraFalhou: false };
   } catch (err) {
     logger.error("[comentarios-worker] não deu para ler as palavras liberadas", {
       organizationId,
@@ -299,6 +317,7 @@ async function processarUmComentario(
   agora: Date,
   perfilCache: Map<string, PerfilDeVoz | null>,
   { palavras: aprovadas, leituraFalhou }: AprovadasDaRodada,
+  medicoSemRqe: boolean,
 ): Promise<"atendido" | "esperando" | "pulado"> {
   // I-3: repesque de um comentário que uma rodada anterior (ou esta mesma,
   // por corrida) já tocou. Ver o cabeçalho do arquivo.
@@ -365,7 +384,7 @@ async function processarUmComentario(
 
   if (!(await admin.reivindicar(c.id))) return "pulado"; // outra rodada já pegou
 
-  const veredito = ehObviamenteSeguro(c.texto, aprovadas);
+  const veredito = ehObviamenteSeguro(c.texto, aprovadas, medicoSemRqe);
   if (!veredito.seguro) {
     // O rótulo vai PURO para a abertura de conversa: ela decide por
     // `abreConversa(gatilho)`, e um sufixo faria preço e agendamento
@@ -400,7 +419,7 @@ async function processarUmComentario(
 
   let textoGerado: string;
   try {
-    textoGerado = await admin.gerarResposta(c, perfil);
+    textoGerado = await admin.gerarResposta(c, perfil, medicoSemRqe);
   } catch (err) {
     logger.error("[comentarios-worker] geração da resposta pela IA falhou", {
       comentarioId: c.id,
@@ -410,7 +429,7 @@ async function processarUmComentario(
     return "esperando";
   }
 
-  const motivoDaRecusa = motivoDaRecusaDaResposta(textoGerado);
+  const motivoDaRecusa = motivoDaRecusaDaResposta(textoGerado, medicoSemRqe);
   if (motivoDaRecusa) {
     await marcarEsperandoAuditado(admin, c, motivoDaRecusa, textoGerado);
     return "esperando";
@@ -454,12 +473,15 @@ export async function processarComentariosNovos(
 
   for (const organizationId of organizacoes) {
     const comentarios = await admin.comentariosNovos(organizationId, teto);
+    // A regra do RQE é da organização: uma leitura por rodada, como as
+    // aprovadas. Sem o método, ou com a leitura falhando, vale ligada.
+    const medicoSemRqe = admin.regraDoRqe ? await admin.regraDoRqe(organizationId).catch(() => true) : true;
     // Uma leitura por organização e por rodada, não uma por comentário.
-    const aprovadas = await aprovadasDaRodada(admin, organizationId);
+    const aprovadas = await aprovadasDaRodada(admin, organizationId, medicoSemRqe);
 
     for (const c of comentarios) {
       try {
-        const resultado = await processarUmComentario(admin, c, agora, perfilCache, aprovadas);
+        const resultado = await processarUmComentario(admin, c, agora, perfilCache, aprovadas, medicoSemRqe);
         if (resultado === "atendido") atendidos++;
         else if (resultado === "esperando") esperando++;
         // "pulado" não conta em nenhum dos dois — reflete corrida normal ou
@@ -681,6 +703,13 @@ function construirAdminDaVozReal(admin: AdminSupabase): AdminDaVoz {
 }
 
 /**
+ * A frase da regra do RQE no prompt, igual à de antes de a regra ser por
+ * organização. Sai inteira quando a organização desligou a regra.
+ */
+const PROMPT_DO_RQE =
+  ", nunca chame o dono de nutrólogo, nutrologista, especialista ou qualquer título de especialidade — ele é médico (CFM), sem RQE";
+
+/**
  * I-10: passa pelo SEAM único de chamada de LLM (`runModelCall`) — a mesma
  * camada que agente, classificadores e compaction usam. Antes disto,
  * `generateText` direto não gravava `llm_calls` (o gasto não aparecia na tela
@@ -691,12 +720,16 @@ function construirAdminDaVozReal(admin: AdminSupabase): AdminDaVoz {
  * e respeita o teto da organização. Orçamento estourado é só mais um erro
  * capturado por `processarUmComentario` → `esperando_voce`.
  */
-async function gerarRespostaReal(comentario: ComentarioNovo, perfil: PerfilDeVoz): Promise<string> {
+async function gerarRespostaReal(
+  comentario: ComentarioNovo,
+  perfil: PerfilDeVoz,
+  medicoSemRqe = true,
+): Promise<string> {
   const system =
     `Você escreve UMA resposta pública curta a um comentário de Instagram, no lugar do dono da conta, imitando o jeito dele.\n` +
     `Tratamento: ${perfil.tratamento}. Emojis que ele costuma usar: ${perfil.emojis.slice(0, 5).join(" ") || "nenhum em especial"}.\n` +
     `Frases dele para se inspirar (não copie literalmente): ${perfil.frases.slice(0, 5).map((f) => `"${f}"`).join(", ")}.\n` +
-    `Regras inegociáveis: nunca mencione preço, nunca inclua link, nunca chame o dono de nutrólogo, nutrologista, especialista ou qualquer título de especialidade — ele é médico (CFM), sem RQE. Uma frase curta, sem emoji em excesso.`;
+    `Regras inegociáveis: nunca mencione preço, nunca inclua link${medicoSemRqe ? PROMPT_DO_RQE : ""}. Uma frase curta, sem emoji em excesso.`;
 
   const chamada = await runModelCall(getRequestPool(), llmEdgeConfigFromEnv(env), {
     tenantId: comentario.organizationId,
@@ -732,7 +765,7 @@ export function construirAdminDoWorkerReal(admin: AdminSupabase): AdminDoWorker 
       }
       return [...new Set((data ?? []).map((row) => (row as { organization_id: string }).organization_id))];
     },
-    async palavrasAprovadas(organizationId) {
+    async palavrasAprovadas(organizationId, medicoSemRqe = true) {
       const { data, error } = await admin
         .from("instagram_comment_vocabulario")
         .select("palavra")
@@ -750,8 +783,11 @@ export function construirAdminDoWorkerReal(admin: AdminSupabase): AdminDoWorker 
       return new Set(
         (data ?? [])
           .map((r) => (r as { palavra: string }).palavra)
-          .filter((p) => !ehTokenDeGatilho(p)),
+          .filter((p) => !ehTokenDeGatilho(p, medicoSemRqe)),
       );
+    },
+    async regraDoRqe(organizationId) {
+      return regraDoRqeDaOrganizacao(admin, organizationId);
     },
     async comentariosNovos(organizationId, teto) {
       const { data, error } = await admin

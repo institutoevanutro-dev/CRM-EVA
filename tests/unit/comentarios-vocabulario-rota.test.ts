@@ -29,12 +29,14 @@ const USUARIO = "dddddddd-0000-4000-8000-000000000001";
 let comentariosRespondidos: string[];
 let decididasNoBanco: Array<{ palavra: string; aprovada: boolean }>;
 let upserts: Array<Record<string, unknown>>;
+let settingsDaOrganizacao: Record<string, unknown>;
 
 beforeEach(() => {
   vi.clearAllMocks();
   comentariosRespondidos = [];
   decididasNoBanco = [];
   upserts = [];
+  settingsDaOrganizacao = {};
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
     org: { orgId: ORG },
@@ -45,6 +47,9 @@ beforeEach(() => {
     from: (tabela: string) => ({
       select: () => ({
         eq: () => {
+          if (tabela === "organizations") {
+            return { maybeSingle: async () => ({ data: { settings: settingsDaOrganizacao }, error: null }) };
+          }
           if (tabela === "instagram_comment_vocabulario") {
             return { order: async () => ({ data: decididasNoBanco, error: null }) };
           }
@@ -149,5 +154,42 @@ describe("POST", () => {
     const e = auditSpy.mock.calls[0]![0] as Record<string, unknown>;
     expect(e.action).toBe("comment.vocabulary_decided");
     expect(e.metadata).toMatchObject({ palavra: "didatico", aprovada: true });
+  });
+});
+
+describe("regra do RQE da organização (0381)", () => {
+  it("desligada: libera 'especialista', que com ela ligada é recusada", async () => {
+    settingsDaOrganizacao = { medico_sem_rqe: false };
+
+    const res = await POST(pedido({ palavra: "Especialista", aprovada: true }));
+
+    expect(res.status).toBe(200);
+    expect(upserts[0]).toMatchObject({ palavra: "especialista", aprovada: true, organization_id: ORG });
+  });
+
+  it("desligada não libera preço: 'custa' continua recusada", async () => {
+    settingsDaOrganizacao = { medico_sem_rqe: false };
+
+    expect((await POST(pedido({ palavra: "custa", aprovada: true }))).status).toBe(422);
+    expect(upserts).toEqual([]);
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ["sem a chave", {}],
+    ['com a string "false"', { medico_sem_rqe: "false" }],
+    ["com null", { medico_sem_rqe: null }],
+  ])("%s vale ligada: 'especialista' é recusada", async (_caso, settings) => {
+    settingsDaOrganizacao = settings;
+
+    expect((await POST(pedido({ palavra: "especialista", aprovada: true }))).status).toBe(422);
+    expect(upserts).toEqual([]);
+  });
+
+  it("GET oferece 'especialista' só com a regra desligada", async () => {
+    comentariosRespondidos = ["melhor especialista"];
+    expect((await (await GET()).json()).data.candidatos).toEqual([]);
+
+    settingsDaOrganizacao = { medico_sem_rqe: false };
+    expect((await (await GET()).json()).data.candidatos).toEqual([{ palavra: "especialista", vezes: 1 }]);
   });
 });

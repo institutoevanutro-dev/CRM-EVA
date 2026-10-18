@@ -1140,3 +1140,190 @@ describe("catraca de host de terceiro no código que embarca", () => {
     expect(arquivosVarridos("app").some((f) => f.startsWith("app/design"))).toBe(false);
   });
 });
+
+/**
+ * A QUARTA catraca: o nome da instalação de origem no código que embarca.
+ *
+ * O produto nasceu dentro de uma instalação, e o nome dela escorreu para o código
+ * de produção: título de página, rótulo de integração, aviso de tela. Quem instala
+ * numa clínica nova abre a primeira tela e lê o nome de outra casa. A catraca de
+ * marca (a de `deskcomm`, mais acima) não vê isso, porque o nome é outro; esta
+ * varre os MESMOS arquivos, com os mesmos filtros, atrás dele.
+ *
+ * O QUE CONTA, em qualquer caixa:
+ *  - `eva` como palavra inteira ("CRM Eva", "Prontuário EVA");
+ *  - `precificaeva`, `prontuario_eva` e `institutoeva`, que são o nome colado a
+ *    outra palavra (módulo, variável de ambiente, valor gravado, namespace).
+ *
+ * O QUE NÃO CONTA: "EvaLink" e "Eva Link", que são o nome do login pela Conta e
+ * pertencem ao produto, e qualquer palavra que só contenha as letras ("evaluate",
+ * "relevante", "nueva").
+ *
+ * ⚠️ SEM `\b`. O `\b` do JavaScript é ASCII: trata "é" e "ç" como fronteira, e
+ * contaria "Eva" dentro de "çeva". Os olhares explícitos de baixo tratam como
+ * letra qualquer letra, de qualquer alfabeto, com ou sem acento.
+ *
+ * MECANISMO. Cada arquivo com ocorrência precisa de uma entrada em `EVA_CONGELADA`
+ * com a CONTAGEM exata. Arquivo novo reprova; contagem maior reprova; contagem
+ * menor também reprova, e a correção é baixar a linha (ou apagá-la, se zerou): é
+ * assim que a lista só encolhe. O que sobra nela é identificador interno, que NÃO
+ * aparece na tela e que renomear quebraria quem já está instalado: o módulo e as
+ * variáveis `PRECIFICAEVA_*` (estão no `.env` de quem ligou a integração) e o valor
+ * gravado no banco (`origem = 'precificaeva'`, `prontuario_eva`).
+ *
+ * FRONTEIRA, declarada: comentário não conta (não chega ao usuário), `app/design`
+ * fica fora (mesma razão da catraca de marca) e identificador em camelCase com o
+ * nome no meio (`nomeEva`) não é pego, porque a letra colada o torna parte de uma
+ * palavra maior. O `_` conta como letra pela mesma razão: `EVA_X` e `x_eva` são
+ * identificador de código, não palavra, e o padrão de palavra solta não os pega.
+ * O alcance são os arquivos `.ts` e `.tsx`, sem teste, das cinco raízes de
+ * `RAIZES_VARRIDAS` (`app`, `components`, `hooks`, `lib`, `workers`): CSS, JSON,
+ * Markdown e SQL ficam fora. A régua pega o nome onde um LEITOR o encontra.
+ */
+const NOME_DA_INSTALACAO_DE_ORIGEM: readonly RegExp[] = [
+  /(?<![\p{L}\p{N}_])eva(?![\p{L}\p{N}_])(?!\s*link)/giu,
+  /precificaeva/giu,
+  /prontuario_eva/giu,
+  /institutoeva/giu,
+];
+
+/** Uma entrada por ocorrência, em minúsculas e em ordem, como `marcasNoTexto`. */
+function evasNoTexto(fonte: string): string[] {
+  const achadas: string[] = [];
+  for (const linha of linhasQueContam(fonte)) {
+    for (const padrao of NOME_DA_INSTALACAO_DE_ORIGEM) {
+      for (const casada of linha.matchAll(padrao)) achadas.push(casada[0].toLowerCase());
+    }
+  }
+  return achadas.sort();
+}
+
+/**
+ * Arquivo → quantas ocorrências ele PODE ter. Só identificador interno.
+ *
+ * Para recontar sem acreditar neste bloco, esvazie a lista: o caso "nenhum
+ * arquivo novo carrega o nome" imprime a contagem real de cada arquivo.
+ */
+const EVA_CONGELADA: Readonly<Record<string, number>> = {
+  // O módulo da integração de preços: nomes de função e de tipo, a constante
+  // `ORIGEM_PRECIFICAEVA`, o valor `"precificaeva"` que ele grava em
+  // `catalog_products.origem` e a mensagem de erro que ele lança (só o operador
+  // a lê, no log do scheduler).
+  "lib/integrations/precificaeva/catalogo.ts": 32,
+  // A rota do cron: o import do módulo, as três variáveis `PRECIFICAEVA_*` e a
+  // resposta 503 do scheduler ("Integração PrecificaEva indisponível.").
+  "app/api/v1/cron/precificaeva-catalogo/route.ts": 8,
+  // `origem === "precificaeva"` em quatro lugares e o `data-testid` do aviso: o
+  // valor que o banco guarda e o seletor que os testes usam. Nenhum é texto de tela.
+  "app/app/products/_client.tsx": 5,
+  // `PRECIFICAEVA_URL`, `PRECIFICAEVA_TOKEN` e `PRECIFICAEVA_ORGANIZATION_ID`:
+  // variáveis que já estão no `.env` de quem ligou a integração.
+  "lib/env.ts": 3,
+  // `case "prontuario_eva"`: o valor que a coluna do banco guarda.
+  "lib/inicio/paineis.ts": 1,
+};
+
+describe("catraca do nome da instalação de origem no código que embarca", () => {
+  const alvos = RAIZES_VARRIDAS.flatMap((raiz) => arquivosVarridos(raiz, { comTeste: false }));
+  /** arquivo → ocorrências, só dos arquivos que têm alguma. */
+  const encontrado = new Map<string, number>();
+  for (const arquivo of alvos) {
+    const n = evasNoTexto(fs.readFileSync(path.join(RAIZ, arquivo), "utf8")).length;
+    if (n > 0) encontrado.set(arquivo, n);
+  }
+
+  it("a varredura alcança o código que embarca; senão o resto não prova nada", () => {
+    // Medido: mais de 2100 arquivos na `main`, sem os de teste e sem `app/design`.
+    // Os pisos têm folga de propósito, e valem para o dia em que alguém "otimizar"
+    // a varredura e ela parar de descer em alguma pasta.
+    expect(alvos.length).toBeGreaterThan(1500);
+    expect(alvos.filter((f) => f.endsWith(".ts")).length).toBeGreaterThan(1000);
+    expect(alvos.filter((f) => f.endsWith(".tsx")).length).toBeGreaterThan(400);
+    for (const raiz of RAIZES_VARRIDAS) {
+      expect(
+        alvos.some((f) => f.startsWith(`${raiz}/`)),
+        `${raiz}/ não devolveu arquivo nenhum`,
+      ).toBe(true);
+    }
+    expect(alvos.filter((f) => /\.(test|spec)\.tsx?$/.test(f))).toEqual([]);
+    expect(alvos.some((f) => f.startsWith("app/design"))).toBe(false);
+  });
+
+  it("pega o nome onde um leitor o encontra, em qualquer caixa", () => {
+    // Controle positivo: sem ele, uma regex que nunca casa deixaria a lista
+    // congelada igual a si mesma e a catraca passaria olhando para o nada.
+    expect(evasNoTexto("<h1>CRM Eva</h1>")).toEqual(["eva"]);
+    expect(evasNoTexto('{ label: "Prontuário EVA: pesquisar" }')).toEqual(["eva"]);
+    expect(evasNoTexto("o preço vem da EVA.")).toEqual(["eva"]);
+    expect(evasNoTexto("CRM-EVA")).toEqual(["eva"]);
+    expect(evasNoTexto("const { PRECIFICAEVA_URL } = env;")).toEqual(["precificaeva"]);
+    expect(evasNoTexto('p.origem === "PrecificaEva"')).toEqual(["precificaeva"]);
+    expect(evasNoTexto('case "prontuario_eva":')).toEqual(["prontuario_eva"]);
+    expect(evasNoTexto('const dono = "institutoevanutro-dev";')).toEqual(["institutoeva"]);
+  });
+
+  it("não pega o nome do login do produto nem palavra que só contém as letras", () => {
+    // O login pela Conta se chama EvaLink: é do produto, não de uma instalação.
+    expect(evasNoTexto("Entrar com o EvaLink")).toEqual([]);
+    expect(evasNoTexto("Entrar com o Eva Link")).toEqual([]);
+    expect(evasNoTexto("Entrar com o Eva   Link")).toEqual([]);
+    expect(evasNoTexto("evalink_login")).toEqual([]);
+    expect(evasNoTexto("EVALINK_ORG_PADRAO")).toEqual([]);
+    // Palavras comuns que contêm "eva".
+    for (const palavra of ["evaluate", "levar", "relevante", "nueva", "revalidar", "elevação"]) {
+      expect(evasNoTexto(`const x = "${palavra}";`), palavra).toEqual([]);
+    }
+    // Acento ao lado é letra: o `\b` do JS contaria "Eva" dentro destas duas.
+    expect(evasNoTexto("çeva")).toEqual([]);
+    expect(evasNoTexto("evaç")).toEqual([]);
+  });
+
+  it("não conta comentário, mas não confunde o `//` de uma URL com comentário", () => {
+    expect(evasNoTexto("  // fala do CRM Eva")).toEqual([]);
+    expect(evasNoTexto(" * fala do CRM Eva")).toEqual([]);
+    expect(evasNoTexto('const u = "https://exemplo.test/eva";')).toEqual(["eva"]);
+  });
+
+  it("nenhum arquivo novo carrega o nome", () => {
+    const novos = [...encontrado]
+      .filter(([arquivo]) => !(arquivo in EVA_CONGELADA))
+      .map(([arquivo, n]) => `  ${arquivo}: ${n} ocorrência(s)`)
+      .sort();
+    expect(
+      novos,
+      "O nome de outra instalação apareceu em arquivo novo do código que embarca (a imagem que o\n" +
+        "cliente instala). Tire do código: use o nome da marca (branding(), marcaDaSaida()) ou a\n" +
+        "palavra neutra do produto. Se for identificador interno que renomear quebraria quem já\n" +
+        "instalou (variável de ambiente, valor gravado no banco), declare em EVA_CONGELADA, com a\n" +
+        "contagem e o porquê num comentário.",
+    ).toEqual([]);
+  });
+
+  it("nenhum arquivo congelado ganhou ocorrência", () => {
+    const cresceram = Object.entries(EVA_CONGELADA)
+      .map(([arquivo, congelado]) => ({ arquivo, congelado, atual: encontrado.get(arquivo) ?? 0 }))
+      .filter(({ atual, congelado }) => atual > congelado);
+    expect(
+      cresceram.map(
+        ({ arquivo, congelado, atual }) =>
+          `  ${arquivo}: tem ${atual}, a lista permite ${congelado}`,
+      ),
+      "Arquivo congelado ganhou ocorrência do nome de outra instalação. A lista só encolhe: " +
+        "tire a ocorrência nova do código.",
+    ).toEqual([]);
+  });
+
+  it("nenhum arquivo congelado perdeu ocorrência sem a lista acompanhar", () => {
+    const encolheram = Object.entries(EVA_CONGELADA)
+      .map(([arquivo, congelado]) => ({ arquivo, congelado, atual: encontrado.get(arquivo) ?? 0 }))
+      .filter(({ atual, congelado }) => atual < congelado);
+    expect(
+      encolheram.map(
+        ({ arquivo, congelado, atual }) =>
+          `  ${arquivo}: tem ${atual}, a lista ainda diz ${congelado}. ` +
+          (atual === 0 ? "Apague a linha." : `Baixe a linha para ${atual}.`),
+      ),
+      "A dívida encolheu: atualize EVA_CONGELADA. É o que obriga a lista a só diminuir.",
+    ).toEqual([]);
+  });
+});

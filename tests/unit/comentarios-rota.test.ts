@@ -59,6 +59,8 @@ interface EstadoFake {
   insercoesDeRegra: Array<Record<string, unknown>>;
   /** Simula o UPDATE do desfecho falhando MESMO com a linha existindo — o caso do achado 1. */
   forcarErroDeEscrita?: boolean;
+  /** `organizations.settings` da organização do teste (a regra do RQE mora aqui). */
+  settingsDaOrg?: Record<string, unknown>;
 }
 
 function clienteFalso(estado: EstadoFake): unknown {
@@ -163,6 +165,21 @@ function clienteFalso(estado: EstadoFake): unknown {
             data: linha ? { id: "regra-1", ...linha } : null,
             error: null,
           }),
+        };
+        return cadeia;
+      }
+      if (tabela === "organizations") {
+        const filtros: Array<[string, unknown]> = [];
+        const cadeia = {
+          select: () => cadeia,
+          eq: (col: string, val: unknown) => {
+            filtros.push([col, val]);
+            return cadeia;
+          },
+          maybeSingle: async () => {
+            const porId = filtros.find(([c]) => c === "id")?.[1];
+            return { data: porId === ORG ? { settings: estado.settingsDaOrg ?? {} } : null, error: null };
+          },
         };
         return cadeia;
       }
@@ -511,5 +528,29 @@ describe("POST /api/v1/comentarios/regras — exige papel manager+", () => {
     expect(auditSpy).toHaveBeenCalledWith(
       expect.objectContaining({ action: "instagram_comment_rule.created", organizationId: ORG }),
     );
+  });
+});
+
+describe("POST /api/v1/comentarios/:id/publicar: regra do RQE da organização (0381)", () => {
+  it("desligada: o texto com título de especialidade é publicado", async () => {
+    vi.mocked(requireRole).mockResolvedValue(autorizacaoOk("agent"));
+    const estado = { ...estadoPadrao(), settingsDaOrg: { medico_sem_rqe: false } };
+
+    const res = await publicar(estado, { texto: "O nutrólogo agradece" });
+
+    expect(res.status).toBe(200);
+    expect(responderComentarioSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ texto: "O nutrólogo agradece" }),
+    );
+  });
+
+  it('valor que não é booleano ("false" em texto) vale ligada: 422, sem publicar', async () => {
+    vi.mocked(requireRole).mockResolvedValue(autorizacaoOk("agent"));
+    const estado = { ...estadoPadrao(), settingsDaOrg: { medico_sem_rqe: "false" } };
+
+    const res = await publicar(estado, { texto: "O nutrólogo agradece" });
+
+    expect(res.status).toBe(422);
+    expect(responderComentarioSpy).not.toHaveBeenCalled();
   });
 });
