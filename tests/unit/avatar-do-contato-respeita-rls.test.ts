@@ -24,10 +24,27 @@ vi.mock("@/lib/auth/server", () => ({
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () => ({ from: () => consulta(linhaVisivelPelaRls) })),
 }));
+/** Organizações vivas (a consulta de `organizations` é por id). */
+const ORGS_VIVAS = new Set(["org1", "org2", "22222222-2222-4222-8222-222222222222"]);
+const APAGADA = "99999999-9999-4999-8999-999999999999";
+
+function consultaDeOrg() {
+  let id = "";
+  const q = {
+    select: () => q,
+    eq: (_c: string, v: string) => ((id = v), q),
+    maybeSingle: async () => ({ data: ORGS_VIVAS.has(id) ? { id } : null, error: null }),
+  };
+  return q;
+}
+
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: vi.fn(() => ({
     // A service role enxerga tudo — é por isso que não pode decidir o acesso.
-    from: () => consulta({ avatar_storage_path: "org1/avatars/c1.jpg", is_anonymized: false }),
+    from: (t: string) =>
+      t === "organizations"
+        ? consultaDeOrg()
+        : consulta({ avatar_storage_path: "org1/avatars/c1.jpg", is_anonymized: false }),
     storage: { from: () => ({ createSignedUrl }) },
   })),
 }));
@@ -63,10 +80,18 @@ describe("GET /api/v1/contacts/[id]/avatar", () => {
     ["de outro contato", "org1/avatars/c2.jpg"],
     ["fora de avatars", "org1/conv1/c1.jpg"],
     ["que sai da pasta com ..", "org1/avatars/c1.jpg/../../org2/avatars/c1.jpg"],
+    ["de outra organização VIVA (uuid)", "22222222-2222-4222-8222-222222222222/avatars/c9.jpg"],
   ])("caminho %s → 404, sem assinar nada", async (_nome, caminho) => {
     linhaVisivelPelaRls = { avatar_storage_path: caminho, is_anonymized: false };
     const r = await pedir();
     expect(r.status).toBe(404);
     expect(createSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("caminho legado de organização APAGADA (dados migrados) → 307", async () => {
+    linhaVisivelPelaRls = { avatar_storage_path: `${APAGADA}/avatars/c-antigo.jpg`, is_anonymized: false };
+    const r = await pedir();
+    expect(r.status).toBe(307);
+    expect(createSignedUrl).toHaveBeenCalledWith(`${APAGADA}/avatars/c-antigo.jpg`, expect.any(Number));
   });
 });

@@ -23,6 +23,7 @@ import {
 import { variantesDoItem } from "@/lib/midias/esquemas";
 import { BUCKET_DA_BIBLIOTECA } from "@/lib/midias/termo";
 import { cabecalhosDeMidia } from "@/lib/messaging/media/servir";
+import { eCaminhoDeOrganizacaoApagada } from "@/lib/messaging/media/caminho-legado";
 import { isMessageMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -129,13 +130,15 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (msg.media_storage_path) {
     // A coluna é gravável pela sessão: só assina arquivo desta organização e
     // desta mensagem (CRM-1). Fora disso é 404, sem cair no fallback.
+    // Exceção: caminho legado de organização apagada (dados migrados).
+    const admin = createAdminClient();
     if (
-      !isMessageMediaPathOwnedBy(msg.media_storage_path, activeOrg.orgId, msg.conversation_id, msg.id)
+      !isMessageMediaPathOwnedBy(msg.media_storage_path, activeOrg.orgId, msg.conversation_id, msg.id) &&
+      !(await eCaminhoDeOrganizacaoApagada(admin, msg.media_storage_path))
     ) {
       logger.warn("messages.media.path_fora_da_mensagem", { message_id: messageId });
       return fail("not_found", t("Mensagem sem mídia."), 404, { requestId });
     }
-    const admin = createAdminClient();
     const { data: signed, error: signErr } = await admin.storage
       .from("whatsapp-media")
       .createSignedUrl(msg.media_storage_path, SIGNED_URL_TTL_S);

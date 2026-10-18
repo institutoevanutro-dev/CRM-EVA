@@ -10,7 +10,8 @@ Correções de segurança da auditoria de 17/10:
   da LGPD só é gerado para o arquivo daquela mensagem, daquele contato ou
   daquele pedido, na organização de quem pede. Um endereço de arquivo de outra
   conversa ou de outra organização gravado na linha passa a responder
-  "não encontrado";
+  "não encontrado". Mídia e foto de dados migrados de uma organização que já
+  foi apagada continuam abrindo;
 - o banco recusa, na escrita feita com a sessão de um usuário, endereço de
   mídia fora da conversa da própria mensagem e qualquer foto de contato (quem
   grava a foto é o servidor);

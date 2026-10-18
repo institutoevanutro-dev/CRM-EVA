@@ -22,6 +22,8 @@ const ITEM = "44444444-4444-4444-8444-444444444444";
 const MSG = "55555555-5555-4555-8555-555555555555";
 const CONV = "66666666-6666-4666-8666-666666666666";
 const OUTRA_CONV = "77777777-7777-4777-8777-777777777777";
+/** Organização que não existe mais (dados dela foram migrados para ORG). */
+const APAGADA = "88888888-8888-4888-8888-888888888888";
 
 type Linha = Record<string, unknown>;
 
@@ -76,7 +78,8 @@ function montar(opts: {
     from: () => tabela([msg]),
   } as never);
   vi.mocked(createAdminClient).mockReturnValue({
-    from: () => tabela([item]),
+    // As organizações VIVAS: ORG e OUTRA. Qualquer outro prefixo é de org apagada.
+    from: (t: string) => (t === "organizations" ? tabela([{ id: ORG }, { id: OUTRA }]) : tabela([item])),
     storage: {
       from: (b: string) => (
         buckets.push(b),
@@ -197,9 +200,18 @@ describe("GET /messages/[id]/media com caminho gravado na mensagem", () => {
     ["de outra mensagem em outra conversa", `${ORG}/${OUTRA_CONV}/${ITEM}.jpg`],
     ["que sai da conversa com ..", `${ORG}/${CONV}/../../${OUTRA}/${CONV}/x.jpg`],
     ["sem conversa", `${ORG}/a.ogg`],
+    ["de org apagada, mas com ..", `${APAGADA}/../${OUTRA}/x.jpg`],
+    ["de org apagada, com segmento a mais", `${APAGADA}/${CONV}/sub/x.jpg`],
   ])("arquivo %s: 404 e nada assinado", async (_nome, caminho) => {
     const { assinados } = montar({ itemId: null, caminhoGravado: caminho });
     expect((await chamar()).status).toBe(404);
     expect(assinados).toEqual([]);
+  });
+
+  it("caminho legado de organização APAGADA (dados migrados com a service role): 302", async () => {
+    const legado = `${APAGADA}/${OUTRA_CONV}/${ITEM}.jpg`;
+    const { assinados } = montar({ itemId: null, caminhoGravado: legado });
+    expect((await chamar()).status).toBe(302);
+    expect(assinados).toEqual([legado]);
   });
 });
