@@ -24,7 +24,6 @@
  *    devolve `""`: quem chama não envia (o passo é pulado).
  */
 import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
-import type { MidiaDeTemplate } from "@/lib/templates/midias";
 
 export type TemplateContact = Pick<ContatoNomeavel, "name" | "display_name"> & {
   phone_number?: string | null;
@@ -98,20 +97,20 @@ export function motivoDoCuringaLiteral(body: string, contact: TemplateContact): 
 export interface RespostaRapida {
   id?: string;
   body: string;
-  /** `undefined`/`null` em linha antiga e em teste — os dois são "só texto". */
-  midias?: readonly MidiaDeTemplate[] | null;
+  /** Itens da Biblioteca de mídia, na ordem. `undefined`/`null`/`[]` = só texto. */
+  media_item_ids?: readonly string[] | null;
 }
 
 /**
  * O que a escolha da resposta rápida entrega ao compositor: o corpo interpolado
- * (a legenda da PRIMEIRA imagem quando há mídia) e as imagens do template, numa
+ * (a legenda da PRIMEIRA imagem quando há imagem) e os itens da biblioteca, numa
  * lista NOVA (o compositor mexe na fila; a do cache do React Query não muda).
  */
 export function payloadDeUso(
   template: RespostaRapida,
   contact: TemplateContact,
-): { texto: string; midias: MidiaDeTemplate[] } {
-  return { texto: interpolateTemplate(template.body, contact), midias: [...(template.midias ?? [])] };
+): { texto: string; midias: string[] } {
+  return { texto: interpolateTemplate(template.body, contact), midias: [...(template.media_item_ids ?? [])] };
 }
 
 const texto = (valor: string | null | undefined) => (typeof valor === "string" ? valor.trim() : "");

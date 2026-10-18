@@ -1,15 +1,14 @@
 /**
- * 0383 — A RESPOSTA RÁPIDA LEVA IMAGEM, E A SESSÃO NÃO APONTA O TEMPLATE PARA
- * ARQUIVO DE OUTRO LUGAR.
+ * 0383 — A RESPOSTA RÁPIDA LEVA IMAGENS DA BIBLIOTECA DE MÍDIA.
  *
- * `message_templates.midias` é gravável pela sessão (RLS `message_templates_write`)
- * e o arquivo é aberto pela service role, sem RLS. As rotas conferem o caminho;
- * este arquivo prova a segunda camada, no banco (mesmo desenho da 0382):
+ * `message_templates.media_item_ids` aponta para `media_library_items`. O banco
+ * garante, para qualquer escrita (sessão ou service role):
  *
- *   - na escrita com sessão, todo `storage_path` é
- *     `{org}/templates/{id}/{uuid}.(jpg|png)` da PRÓPRIA linha;
- *   - o teto de 5 imagens vale para todo mundo;
- *   - o servidor (service role) grava; template só de texto segue igual.
+ *   - o item existe e é da MESMA organização da resposta, sem repetição;
+ *   - no máximo 5;
+ *   - item em uso por resposta da organização não é apagado — inclusive quando a
+ *     resposta é PESSOAL de outro usuário (invisível a quem apaga pela RLS);
+ *   - apagar a organização inteira continua passando (cascade).
  *
  * Nasce VERMELHO sem a 0383: a coluna não existe.
  *
@@ -21,81 +20,95 @@ import { GOV_AGENT_A, GOV_ORG, seedGov, sql, writeCountAs, writeErrorAs } from "
 
 const id = (n: number) => `b0e0b000-0383-4000-8000-${String(n).padStart(12, "0")}`;
 const TEMPLATE = id(1);
-const OUTRO_TEMPLATE = id(2);
 const OUTRA_ORG = id(900);
-const ARQ = "0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b";
-const ERRO = "midia_do_template_fora_do_template";
+const ITEM = id(10);
+const ITEM_2 = id(11);
+const ITEM_LIVRE = id(12);
+const ITEM_DE_OUTRA_ORG = id(910);
+const ERRO = "midia_da_resposta_rapida_fora_da_biblioteca";
 
-const midias = (...caminhos: string[]) =>
-  `'${JSON.stringify(caminhos.map((c) => ({ storage_path: c, media_mime: "image/jpeg", media_size_bytes: 10 })))}'::jsonb`;
-const doTemplate = (tpl = TEMPLATE, org = GOV_ORG) => `${org}/templates/${tpl}/${ARQ}.jpg`;
+const arr = (...ids: string[]) => `array[${ids.map((x) => `'${x}'`).join(",")}]::uuid[]`;
+const idsDe = (tpl: string) => sql(`select media_item_ids::text from public.message_templates where id = '${tpl}';`);
 
 beforeAll(() => {
   seedGov();
   sql(`
-    insert into public.message_templates (id, organization_id, owner_user_id, title, body)
-    values ('${TEMPLATE}', '${GOV_ORG}', '${GOV_AGENT_A}', 'Oi', 'Olá!')
+    insert into public.organizations (id, slug, legal_name, display_name)
+    values ('${OUTRA_ORG}', 'org-0383', 'Outra 0383', 'Outra 0383') on conflict (id) do nothing;
+    insert into public.media_library_items (id, organization_id, title, contains_person) values
+      ('${ITEM}', '${GOV_ORG}', 'Item 1', false),
+      ('${ITEM_2}', '${GOV_ORG}', 'Item 2', false),
+      ('${ITEM_LIVRE}', '${GOV_ORG}', 'Livre', false),
+      ('${id(13)}', '${GOV_ORG}', 'Item 13', false),
+      ('${id(14)}', '${GOV_ORG}', 'Item 14', false),
+      ('${id(15)}', '${GOV_ORG}', 'Item 15', false),
+      ('${ITEM_DE_OUTRA_ORG}', '${OUTRA_ORG}', 'Da outra', false)
     on conflict (id) do nothing;
+    insert into public.message_templates (id, organization_id, owner_user_id, title, body)
+    values ('${TEMPLATE}', '${GOV_ORG}', '${GOV_AGENT_A}', 'Oi', 'Olá!') on conflict (id) do nothing;
   `);
 });
 
-describe("0383 — a sessão não aponta o template para arquivo fora dele", () => {
-  it.each([
-    ["de outra organização", doTemplate(TEMPLATE, OUTRA_ORG)],
-    ["de outro template", doTemplate(OUTRO_TEMPLATE)],
-    ["de uma conversa", `${GOV_ORG}/${id(3)}/x.jpg`],
-    ["que sai do prefixo com ..", `${GOV_ORG}/templates/${TEMPLATE}/../${OUTRO_TEMPLATE}/${ARQ}.jpg`],
-    ["com extensão que não é imagem", `${GOV_ORG}/templates/${TEMPLATE}/${ARQ}.svg`],
-  ])("UPDATE com caminho %s", (_nome, caminho) => {
+describe("0383 — a resposta só aponta para item da biblioteca da própria organização", () => {
+  it("sessão: item de OUTRA organização é recusado", () => {
     const erro = writeErrorAs(
       GOV_AGENT_A,
-      `update public.message_templates set midias = ${midias(caminho)} where id = '${TEMPLATE}'`,
-    );
-    expect(erro, "a sessão gravou um caminho fora do template").toContain(ERRO);
-    expect(sql(`select midias::text from public.message_templates where id = '${TEMPLATE}';`)).toBe("[]");
-  });
-
-  it("INSERT já com arquivo de outra organização", () => {
-    const erro = writeErrorAs(
-      GOV_AGENT_A,
-      `insert into public.message_templates (id, organization_id, owner_user_id, title, body, midias)
-       values ('${OUTRO_TEMPLATE}', '${GOV_ORG}', '${GOV_AGENT_A}', 'X', 'Y', ${midias(doTemplate(OUTRO_TEMPLATE, OUTRA_ORG))})`,
+      `update public.message_templates set media_item_ids = ${arr(ITEM_DE_OUTRA_ORG)} where id = '${TEMPLATE}'`,
     );
     expect(erro).toContain(ERRO);
+    expect(idsDe(TEMPLATE)).toBe("{}");
   });
 
-  it("item que não é objeto com storage_path é recusado", () => {
-    const erro = writeErrorAs(
-      GOV_AGENT_A,
-      `update public.message_templates set midias = '["${doTemplate()}"]'::jsonb where id = '${TEMPLATE}'`,
+  it("service role: item de outra organização também é recusado", () => {
+    expect(() => sql(`update public.message_templates set media_item_ids = ${arr(ITEM_DE_OUTRA_ORG)} where id = '${TEMPLATE}';`)).toThrow(
+      new RegExp(ERRO),
     );
-    expect(erro).toContain(ERRO);
+  });
+
+  it("id que não existe, ou repetido, é recusado", () => {
+    expect(writeErrorAs(GOV_AGENT_A, `update public.message_templates set media_item_ids = ${arr(id(999))} where id = '${TEMPLATE}'`)).toContain(ERRO);
+    expect(writeErrorAs(GOV_AGENT_A, `update public.message_templates set media_item_ids = ${arr(ITEM, ITEM)} where id = '${TEMPLATE}'`)).toContain(ERRO);
+  });
+
+  it("no máximo 5", () => {
+    const seis = [id(10), id(11), id(12), id(13), id(14), id(15)];
+    expect(() => sql(`update public.message_templates set media_item_ids = ${arr(...seis)} where id = '${TEMPLATE}';`)).toThrow(
+      /media_item_ids_maxima/,
+    );
+  });
+
+  it("a sessão grava itens da própria organização, e a ordem fica", () => {
+    expect(
+      writeCountAs(GOV_AGENT_A, `update public.message_templates set media_item_ids = ${arr(ITEM_2, ITEM)} where id = '${TEMPLATE}'`),
+    ).toBe(1);
+    expect(idsDe(TEMPLATE)).toBe(`{${ITEM_2},${ITEM}}`);
   });
 });
 
-describe("0383 — o que tinha de funcionar", () => {
-  it("a sessão grava o arquivo do PRÓPRIO template (é o que a remoção pelo PATCH faz)", () => {
-    expect(
-      writeCountAs(GOV_AGENT_A, `update public.message_templates set midias = ${midias(doTemplate())} where id = '${TEMPLATE}'`),
-    ).toBe(1);
-    expect(writeCountAs(GOV_AGENT_A, `update public.message_templates set midias = '[]'::jsonb where id = '${TEMPLATE}'`)).toBe(1);
+describe("0383 — item em uso não é apagado da biblioteca", () => {
+  it("apagar item usado por resposta (pessoal de outro usuário) é recusado; o livre sai", () => {
+    expect(() => sql(`delete from public.media_library_items where id = '${ITEM}';`)).toThrow(/midia_em_resposta_rapida/);
+    expect(sql(`select count(*) from public.media_library_items where id = '${ITEM}';`)).toBe("1");
+    sql(`delete from public.media_library_items where id = '${ITEM_LIVRE}';`);
+    expect(sql(`select count(*) from public.media_library_items where id = '${ITEM_LIVRE}';`)).toBe("0");
   });
 
-  it("editar só o texto de um template com imagem não confere de novo", () => {
-    sql(`update public.message_templates set midias = ${midias(doTemplate())} where id = '${TEMPLATE}';`);
-    expect(writeCountAs(GOV_AGENT_A, `update public.message_templates set body = 'Novo' where id = '${TEMPLATE}'`)).toBe(1);
+  it("tirar o item da resposta libera o apagar", () => {
+    sql(`update public.message_templates set media_item_ids = ${arr(ITEM_2)} where id = '${TEMPLATE}';`);
+    sql(`delete from public.media_library_items where id = '${ITEM}';`);
+    expect(sql(`select count(*) from public.media_library_items where id = '${ITEM}';`)).toBe("0");
   });
 
-  it("o servidor (service role) grava; o teto de 5 vale para todos", () => {
-    const seis = Array.from({ length: 6 }, (_, i) => `${GOV_ORG}/templates/${TEMPLATE}/0b0b0b0b-0b0b-4b0b-8b0b-00000000000${i}.jpg`);
-    expect(() => sql(`update public.message_templates set midias = ${midias(...seis)} where id = '${TEMPLATE}';`)).toThrow(
-      /message_templates_midias_maxima/,
-    );
-    sql(`update public.message_templates set midias = ${midias(...seis.slice(0, 5))} where id = '${TEMPLATE}';`);
-    expect(sql(`select jsonb_array_length(midias) from public.message_templates where id = '${TEMPLATE}';`)).toBe("5");
+  it("apagar a ORGANIZAÇÃO inteira passa (resposta e item saem juntos)", () => {
+    sql(`
+      insert into public.message_templates (id, organization_id, owner_user_id, title, body, media_item_ids)
+      values ('${id(920)}', '${OUTRA_ORG}', null, 'X', 'Y', ${arr(ITEM_DE_OUTRA_ORG)});
+    `);
+    sql(`delete from public.organizations where id = '${OUTRA_ORG}';`);
+    expect(sql(`select count(*) from public.media_library_items where id = '${ITEM_DE_OUTRA_ORG}';`)).toBe("0");
   });
 
-  it("template sem imagem nasce com lista vazia", () => {
-    expect(sql(`select count(*) from public.message_templates where midias is null;`)).toBe("0");
+  it("resposta sem imagem segue com lista vazia", () => {
+    expect(sql(`select count(*) from public.message_templates where media_item_ids is null;`)).toBe("0");
   });
 });

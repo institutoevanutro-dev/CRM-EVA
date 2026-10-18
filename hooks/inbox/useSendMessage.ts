@@ -12,6 +12,8 @@ interface SendArgs {
   media_mime?: string;
   media_storage_path?: string;
   media_size_bytes?: number;
+  /** Item da Biblioteca de mídia: o handler resolve o arquivo e confere o termo. */
+  media_library_item_id?: string;
   type?: string;
   /**
    * Definição aprovada — o caminho de volta quando a janela de 24h fechou. A
@@ -38,7 +40,7 @@ export function useSendMessage() {
     mutationFn: async (input: SendArgs) =>
       apiClient.post<{ data: Message }>("/api/v1/messages", input),
     onMutate: async (args) => {
-      if (args.media_storage_path || args.media_url || args.type === "contact") return {};
+      if (args.media_storage_path || args.media_url || args.media_library_item_id || args.type === "contact") return {};
 
       const queryKey = ["messages", args.conversation_id];
       await qc.cancelQueries({ queryKey });

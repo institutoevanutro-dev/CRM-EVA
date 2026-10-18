@@ -322,10 +322,6 @@ export const AUDIT_ACTIONS = [
   "followup_enrollment.step_skipped",
   "template.created",
   "template.updated",
-  // O operador carregou uma imagem na resposta rápida (POST
-  // /message-templates/:id/midias). A remoção vive em `template.updated`
-  // (metadata `removidas`) e `template.deleted`.
-  "template.media_added",
   "template.deleted",
   "auth.signup_requested",
   "auth.signup_failed",

@@ -1,19 +1,21 @@
 ---
 impacto: capacidade_nova
 secao: adicionado
-titulo: Resposta rápida com imagem, sincronização do Google que termina em agendas grandes e etiquetas de regras simultâneas que não se apagam
+titulo: Resposta rápida com imagens da biblioteca, sincronização do Google que termina em agendas grandes e etiquetas de regras simultâneas que não se apagam
 ---
 
 Portado do projeto original (DeskcommCRM), com três mudanças de banco
 (migrations 0383, 0385 e 0386):
 
-- a resposta rápida aceita até 5 imagens (JPG ou PNG, até 5 MB cada),
-  carregadas pela própria equipe em Respostas rápidas. Ao escolher a resposta
-  no atendimento, as imagens aparecem em prévia com o texto como legenda, e
-  saem pelo mesmo envio de mídia de sempre (janela, ritmo e opt-out valem).
-  As imagens ficam no armazenamento privado do sistema; uma resposta só pode
-  apontar para imagens dela mesma. Respostas só de texto não mudam (PR #2704
-  de @webtecnica; a trava de caminho no banco é acréscimo nosso);
+- a resposta rápida pode levar até 5 imagens da Biblioteca de mídia (a mesma
+  dos agentes e dos acompanhamentos). Em Respostas rápidas, quem é gerente
+  escolhe as imagens da biblioteca ou envia uma nova, que entra na biblioteca.
+  No atendimento, ao escolher a resposta, as imagens aparecem em prévia com o
+  texto como legenda e saem pelo envio de mídia da biblioteca, que confere o
+  termo de uso de imagem: imagem sem termo válido é pulada com aviso e as
+  outras seguem. Uma mídia em uso por resposta rápida não pode ser apagada da
+  biblioteca até sair da resposta. Respostas só de texto não mudam (PR #2704
+  de @webtecnica, adaptado para a biblioteca);
 - a sincronização com o Google Agenda termina em agendas grandes: cada página
   é gravada de uma vez, o cache guarda só os próximos 90 dias e a leitura da
   lista de agendas que falha espera 15 minutos antes de tentar de novo. A

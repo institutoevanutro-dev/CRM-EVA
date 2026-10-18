@@ -1,107 +1,128 @@
 -- ============================================================================
--- 0383 — A RESPOSTA RÁPIDA LEVA IMAGEM DO PRÓPRIO OPERADOR
--- Portado do projeto original (DeskcommCRM, PR #2704 de @webtecnica; 0643 lá),
--- com a guarda de caminho deste fork (mesmo desenho da 0382).
+-- 0383 — A RESPOSTA RÁPIDA LEVA IMAGENS DA BIBLIOTECA DE MÍDIA
+-- Portado e adaptado do projeto original (DeskcommCRM, PR #2704 de @webtecnica;
+-- 0643 lá). Lá a resposta guardava arquivos próprios; aqui ela APONTA para
+-- itens da Biblioteca de mídia (`media_library_items`, migration 0326) — a
+-- mesma que agentes e acompanhamentos usam, com o mesmo termo de uso de imagem
+-- conferido no envio e o mesmo bucket privado `media-library`.
 --
 -- ─── A coluna ────────────────────────────────────────────────────────────────
 --
--- `message_templates.midias jsonb` guarda a DESCRIÇÃO das imagens do template
--- (`storage_path`, `media_mime`, `media_size_bytes` — os mesmos `media_*` de
--- `messages` que o envio de mídia consome). Os BYTES moram no bucket PRIVADO
--- `whatsapp-media`, no prefixo `{org}/templates/{template}/{uuid}.(jpg|png)`,
--- gerado pela rota `POST /api/v1/message-templates/:id/midias` (service role),
--- nunca aceito do cliente. Quem lê é a rota `GET .../midias/:indice`, que
--- confere o caminho e devolve os bytes pela própria origem (sem URL pública).
--- Uma coluna e não uma tabela de filhas: a lista é lida e reescrita inteira.
--- O default `[]` cobre as linhas atuais — template só de texto sai como antes.
--- Teto de 5 imagens também no banco (`message_templates_midias_maxima`).
+-- `message_templates.media_item_ids uuid[]`: até 5 itens, na ordem em que saem.
+-- Um array e não uma tabela de ligação: a lista é lida e reescrita inteira, num
+-- UPDATE só (o PATCH da tela), e a ordem é a do próprio array. Default `{}`:
+-- toda resposta existente continua só de texto, nenhuma linha muda.
 --
--- ─── A guarda de caminho (o que este fork acrescenta) ──────────────────────
+-- ─── A organização do item é a da resposta (gatilho na escrita) ─────────────
 --
--- A coluna é gravável pelo PostgREST com a sessão (RLS `message_templates_write`)
--- e o arquivo é aberto por service role, SEM RLS. Sem guarda, uma sessão
--- gravaria em `midias` o caminho de um arquivo de OUTRA organização e a rota de
--- leitura o serviria (ou a remoção o apagaria). As rotas já conferem
--- (`midiaPertenceAoTemplate`), e o banco segura a mesma régua para quem fala
--- direto com o PostgREST: na escrita COM SESSÃO, todo `storage_path` de
--- `midias` tem de ser `{org}/templates/{id}/{uuid}.(jpg|png)` da PRÓPRIA linha
--- (42501 `midia_do_template_fora_do_template`). Service role, motor e
--- migrations passam — a mesma régua da `fn_midia_da_mensagem_e_da_conversa`
--- (0382). Nenhum dado existente é tocado (a coluna nasce vazia).
+-- `fn_midias_da_resposta_rapida_conferir` (invoker): todo id tem de existir em
+-- `media_library_items` DA MESMA organização da linha, sem repetição (42501
+-- `midia_da_resposta_rapida_fora_da_biblioteca`). Vale para qualquer escrita —
+-- sessão, service role ou migration. Pela sessão a RLS da biblioteca já
+-- esconde item de outra organização; o filtro explícito por `organization_id`
+-- fecha também o service role.
 --
--- O expurgo de órfãos de `whatsapp-media` (`fn_enfileirar_midia_vencida`) já
--- não alcança `{org}/templates/` — nada a mudar ali.
+-- ─── Apagar item em uso é recusado (gatilho na biblioteca) ──────────────────
+--
+-- `fn_midia_em_resposta_rapida_nao_sai` (`security definer`, porque resposta
+-- PESSOAL de outro usuário é invisível pela RLS a quem apaga): apagar um item
+-- que alguma resposta da organização usa levanta 23503
+-- `midia_em_resposta_rapida`. Escolhido em vez de "pular a imagem que sumiu":
+-- a resposta mudaria o que a equipe envia sem ninguém ter mexido nela, e o
+-- aviso só apareceria no meio do atendimento. Recusar diz a quem apaga, na
+-- hora, o que depende do item. (Termo vencido ou revogado continua sendo
+-- recusado no ENVIO, item a item, com aviso — isso não se resolve aqui.)
+-- Quando a ORGANIZAÇÃO é apagada (cascade), a linha dela já não existe e o
+-- gatilho deixa o item sair: a resposta sai pelo mesmo cascade.
 --
 -- Idempotente: `add column if not exists`, constraint criada só quando falta,
--- `create or replace` na função e nos gatilhos.
+-- `create or replace` nas funções e nos gatilhos.
 -- ============================================================================
 
 alter table public.message_templates
-  add column if not exists midias jsonb not null default '[]';
+  add column if not exists media_item_ids uuid[] not null default '{}';
 
 -- Só cria quando falta: reaplicar (`update.sh`) não derruba a constraint nem
--- por um comando (`reaplicar-o-baseline-nao-abre-janela.test.ts`). Sem `case`
--- de propósito: o `pg_get_constraintdef` o quebra em linhas e cega a varredura
--- de vocabulário. Um não-array é recusado do mesmo jeito (violação ou erro).
+-- por um comando (`reaplicar-o-baseline-nao-abre-janela.test.ts`).
 do $janela$ begin
   if not exists (select 1 from pg_constraint
-                  where conname = 'message_templates_midias_maxima'
+                  where conname = 'message_templates_media_item_ids_maxima'
                     and conrelid = 'public.message_templates'::regclass) then
     alter table public.message_templates
-      add constraint message_templates_midias_maxima
-      check (jsonb_typeof(midias) = 'array' and jsonb_array_length(midias) <= 5);
+      add constraint message_templates_media_item_ids_maxima
+      check (cardinality(media_item_ids) <= 5);
   end if;
 end $janela$;
 
-create or replace function public.fn_midia_do_template_e_do_template()
+create index if not exists idx_message_templates_media_item_ids
+  on public.message_templates using gin (media_item_ids)
+  where media_item_ids <> '{}';
+
+create or replace function public.fn_midias_da_resposta_rapida_conferir()
 returns trigger
 language plpgsql
 set search_path = ''
 as $$
-declare
-  v_prefixo text := new.organization_id::text || '/templates/' || new.id::text || '/';
-  v_item jsonb;
-  v_caminho text;
 begin
-  if auth.uid() is null and current_user not in ('authenticated', 'anon') then
-    return new;
+  if cardinality(new.media_item_ids) <> (select count(distinct x) from unnest(new.media_item_ids) x)
+     or exists (
+       select 1 from unnest(new.media_item_ids) x
+        where not exists (
+          select 1 from public.media_library_items m
+           where m.id = x and m.organization_id = new.organization_id)) then
+    raise exception 'midia_da_resposta_rapida_fora_da_biblioteca' using errcode = '42501';
   end if;
-  -- Não-array: quem recusa é o CHECK `message_templates_midias_maxima`.
-  if jsonb_typeof(new.midias) is distinct from 'array' then
-    return new;
-  end if;
-  for v_item in select * from jsonb_array_elements(new.midias) loop
-    v_caminho := case when jsonb_typeof(v_item) = 'object' then v_item ->> 'storage_path' end;
-    if v_caminho is null
-       or left(v_caminho, length(v_prefixo)) is distinct from v_prefixo
-       or substr(v_caminho, length(v_prefixo) + 1)
-          !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png)$' then
-      raise exception 'midia_do_template_fora_do_template' using errcode = '42501';
-    end if;
-  end loop;
   return new;
 end $$;
 
-comment on function public.fn_midia_do_template_e_do_template() is
-  'Guarda de message_templates (migration 0383): na escrita com sessão, todo storage_path de midias é '
-  '{org}/templates/{id}/{uuid}.(jpg|png) da própria linha; 42501 midia_do_template_fora_do_template. Service role, '
-  'motor e migrations passam. Provado em tests/invariants/midia-da-resposta-rapida.test.ts.';
+comment on function public.fn_midias_da_resposta_rapida_conferir() is
+  'Guarda de message_templates (migration 0383): todo id de media_item_ids é item da Biblioteca de mídia da MESMA '
+  'organização, sem repetição; 42501 midia_da_resposta_rapida_fora_da_biblioteca. '
+  'Provado em tests/invariants/midia-da-resposta-rapida.test.ts.';
 
-revoke execute on function public.fn_midia_do_template_e_do_template() from public, anon, authenticated;
+revoke execute on function public.fn_midias_da_resposta_rapida_conferir() from public, anon, authenticated;
 
-create or replace trigger trg_midia_do_template_insert
+create or replace trigger trg_midias_da_resposta_rapida_insert
   before insert on public.message_templates
   for each row
-  when (new.midias is distinct from '[]'::jsonb)
-  execute function public.fn_midia_do_template_e_do_template();
+  when (new.media_item_ids <> '{}')
+  execute function public.fn_midias_da_resposta_rapida_conferir();
 
-create or replace trigger trg_midia_do_template_update
+create or replace trigger trg_midias_da_resposta_rapida_update
   before update on public.message_templates
   for each row
-  when (new.midias is distinct from '[]'::jsonb
-        and (old.midias is distinct from new.midias
-             or old.organization_id is distinct from new.organization_id
-             or old.id is distinct from new.id))
-  execute function public.fn_midia_do_template_e_do_template();
+  when (new.media_item_ids <> '{}'
+        and (old.media_item_ids is distinct from new.media_item_ids
+             or old.organization_id is distinct from new.organization_id))
+  execute function public.fn_midias_da_resposta_rapida_conferir();
+
+create or replace function public.fn_midia_em_resposta_rapida_nao_sai()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if exists (select 1 from public.organizations o where o.id = old.organization_id)
+     and exists (
+       select 1 from public.message_templates t
+        where t.organization_id = old.organization_id
+          and t.media_item_ids @> array[old.id]) then
+    raise exception 'midia_em_resposta_rapida' using errcode = '23503';
+  end if;
+  return old;
+end $$;
+
+comment on function public.fn_midia_em_resposta_rapida_nao_sai() is
+  'Guarda de media_library_items (migration 0383): item usado por resposta rápida da organização não é apagado '
+  '(23503 midia_em_resposta_rapida); apagar a organização inteira passa. '
+  'Provado em tests/invariants/midia-da-resposta-rapida.test.ts.';
+
+revoke execute on function public.fn_midia_em_resposta_rapida_nao_sai() from public, anon, authenticated;
+
+create or replace trigger trg_midia_em_resposta_rapida_nao_sai
+  before delete on public.media_library_items
+  for each row
+  execute function public.fn_midia_em_resposta_rapida_nao_sai();
 
 notify pgrst, 'reload schema';

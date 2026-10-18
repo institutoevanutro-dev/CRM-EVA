@@ -147,9 +147,9 @@ export function TemplatesClient({ canShare, currentUserId }: Props) {
                               <Badge variant="neutral">{t("Pessoal")}</Badge>
                             ) : null}
                             {/* A resposta rápida com imagem se anuncia na lista. */}
-                            {template.midias && template.midias.length > 0 ? (
+                            {template.media_item_ids && template.media_item_ids.length > 0 ? (
                               <Badge variant="neutral">
-                                {t("Imagens")} {template.midias.length}
+                                {t("Imagens")} {template.media_item_ids.length}
                               </Badge>
                             ) : null}
                           </div>

@@ -142,6 +142,16 @@ export async function DELETE(_req: NextRequest, ctx: Ctx): Promise<Response> {
     .eq("id", id)
     .select("id, title, variants")
     .maybeSingle();
+  // Item em uso por resposta rápida não sai (gatilho da migration 0383): a
+  // resposta mudaria o que a equipe envia sem ninguém ter mexido nela.
+  if (error?.code === "23503" && error.message.includes("midia_em_resposta_rapida")) {
+    return fail(
+      "state_conflict",
+      t("Esta mídia está em uma resposta rápida. Tire-a da resposta antes de apagar."),
+      409,
+      { requestId },
+    );
+  }
   if (error) return fail("internal_error", t("Erro ao apagar a mídia."), 500, { requestId });
   if (!item) return fail("not_found", t("Mídia não encontrada."), 404, { requestId });
 

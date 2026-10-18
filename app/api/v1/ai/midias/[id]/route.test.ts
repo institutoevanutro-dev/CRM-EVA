@@ -188,4 +188,13 @@ describe("DELETE /api/v1/ai/midias/:id", () => {
     expect((await DELETE(del(), ctx)).status).toBe(404);
     expect(h.remover).not.toHaveBeenCalled();
   });
+  // Migration 0383: o gatilho recusa apagar item usado por resposta rápida.
+  it("item em uso por resposta rápida: 409 legível, nada removido nem auditado", async () => {
+    banco(() => ({ data: null, error: { code: "23503", message: "midia_em_resposta_rapida" } }));
+    const r = await DELETE(del(), ctx);
+    expect(r.status).toBe(409);
+    expect((await r.json()).error.message).toContain("resposta rápida");
+    expect(h.remover).not.toHaveBeenCalled();
+    expect(h.audit).not.toHaveBeenCalled();
+  });
 });
