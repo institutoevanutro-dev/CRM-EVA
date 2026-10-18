@@ -33,7 +33,8 @@ import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
 import { useConversationTagVocabulary } from "@/hooks/inbox/useConversationTags";
 import { useConversationCounts } from "@/hooks/inbox/useConversationCounts";
-import type { Role, VisibilityMode } from "@/lib/auth/types";
+import { roleAtLeast, type Role, type VisibilityMode } from "@/lib/auth/types";
+import { SeletorDeAtendente } from "@/components/inbox/SeletorDeAtendente";
 
 export type InboxTab =
   | "unassigned"
@@ -124,6 +125,22 @@ export interface InboxFiltersValue {
   tag?: string | readonly string[];
   /** E ou OU entre as etiquetas escolhidas (#1274). `e` é o padrão. */
   tagMode?: ModoDeEtiqueta;
+  /**
+   * Só as conversas deste atendente (id do usuário). Filtro de GERENTE para cima;
+   * ausente = todas. A aba Minhas já é "as minhas", então ali ele não vale.
+   */
+  assigned_to?: string;
+}
+
+/**
+ * Trocar de aba, por QUALQUER caminho (a faixa ou o menu "Mais"). Minhas já é
+ * "só as minhas": um atendente escolhido antes não vale ali, e seguir com ele
+ * deixaria as outras abas contando o atendente com o seletor escondido.
+ *
+ * Portado do projeto original (DeskcommCRM, PR #2982 de @wellpelomundo).
+ */
+export function comAba(value: InboxFiltersValue, tab: InboxTab): InboxFiltersValue {
+  return { ...value, tab, ...(tab === "mine" ? { assigned_to: undefined } : {}) };
 }
 
 interface Props {
@@ -195,12 +212,17 @@ export function InboxFilters({ value, onChange }: Props) {
   // manda o atendente procurar trabalho que não existe — a regra já estava escrita
   // na rota; faltava alcançar os filtros ao lado da aba.
   const { data: counts } = useConversationCounts(activeOrg?.orgId ?? null, {
+    assigned_to: value.assigned_to,
     unread: value.onlyUnread,
     tag: etiquetas,
     tagMode: value.tagMode,
     channel_session_id: value.channel_session_id,
     canal: value.canal,
   });
+
+  // Filtro por ATENDENTE: só para gerente ou acima (a lista de quem atende é da
+  // gestão; o atendente comum continua vendo só o escopo dele, que a RLS impõe).
+  const mostrarSeletorDeAtendente = roleAtLeast(activeOrg?.role, "manager") && value.tab !== "mine";
 
   const tabs = activeOrg
     ? visibleInboxTabs(activeOrg.role, activeOrg.visibility_mode)
@@ -569,6 +591,13 @@ export function InboxFilters({ value, onChange }: Props) {
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
+
+            {mostrarSeletorDeAtendente && (
+              <SeletorDeAtendente
+                value={value.assigned_to}
+                onChange={(atendente) => onChange({ ...value, assigned_to: atendente })}
+              />
+            )}
         </div>
       </div>
       )}
@@ -597,7 +626,7 @@ export function InboxFilters({ value, onChange }: Props) {
           380px, e a segunda linha só aparece onde a primeira não dá conta. */}
       <Tabs
         value={value.tab}
-        onValueChange={(v) => onChange({ ...value, tab: v as InboxTab })}
+        onValueChange={(v) => onChange(comAba(value, v as InboxTab))}
         className="px-3"
       >
         <TabsList className="h-auto w-full flex-wrap justify-start gap-x-3 gap-y-1 rounded-none bg-transparent p-0">
@@ -648,7 +677,7 @@ export function InboxFilters({ value, onChange }: Props) {
                   return (
                     <DropdownMenuItem
                       key={tab}
-                      onSelect={() => onChange({ ...value, tab })}
+                      onSelect={() => onChange(comAba(value, tab))}
                       className="justify-between gap-6 text-xs"
                     >
                       {t(meta.label)}
