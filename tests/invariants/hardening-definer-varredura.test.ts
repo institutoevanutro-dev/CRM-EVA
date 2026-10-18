@@ -164,6 +164,15 @@ const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
       "manager/agent/viewer, admin de outra organização, sem sessão, service_role e aal1 com fator.",
   },
   {
+    fn: "fn_definir_medico_sem_rqe(uuid,boolean)",
+    razao:
+      "PUT app/api/v1/comentarios/regra-do-rqe/route.ts chama com createClient da sessão; " +
+      "auth.uid() exige admin da própria organização, suporte de escrita e MFA comprovado " +
+      "antes de gravar settings.medico_sem_rqe. " +
+      "tests/invariants/apresentacao-e-regra-do-rqe.test.ts prova admin próprio, negação de " +
+      "agent, admin de outra organização, sem sessão, service_role, anon e aal1 com fator.",
+  },
+  {
     fn: "emit_event(text,text,uuid,jsonb,jsonb,uuid)",
     razao:
       "Server Actions chamam com a sessão do usuário " +
