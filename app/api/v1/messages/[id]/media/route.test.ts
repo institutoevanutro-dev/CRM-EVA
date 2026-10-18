@@ -20,6 +20,10 @@ const ORG = "22222222-2222-4222-8222-222222222222";
 const OUTRA = "33333333-3333-4333-8333-333333333333";
 const ITEM = "44444444-4444-4444-8444-444444444444";
 const MSG = "55555555-5555-4555-8555-555555555555";
+const CONV = "66666666-6666-4666-8666-666666666666";
+const OUTRA_CONV = "77777777-7777-4777-8777-777777777777";
+/** Organização que não existe mais (dados dela foram migrados para ORG). */
+const APAGADA = "88888888-8888-4888-8888-888888888888";
 
 type Linha = Record<string, unknown>;
 
@@ -51,6 +55,7 @@ function montar(opts: {
   const msg = {
     id: MSG,
     organization_id: opts.msgOrg ?? ORG,
+    conversation_id: CONV,
     media_url: null,
     media_mime: "image/png",
     media_storage_path: opts.caminhoGravado ?? null,
@@ -73,7 +78,8 @@ function montar(opts: {
     from: () => tabela([msg]),
   } as never);
   vi.mocked(createAdminClient).mockReturnValue({
-    from: () => tabela([item]),
+    // As organizações VIVAS: ORG e OUTRA. Qualquer outro prefixo é de org apagada.
+    from: (t: string) => (t === "organizations" ? tabela([{ id: ORG }, { id: OUTRA }]) : tabela([item])),
     storage: {
       from: (b: string) => (
         buckets.push(b),
@@ -162,7 +168,7 @@ describe("GET /messages/[id]/media quando o armazenamento não assina o link", (
   it("o erro sai no log estruturado, com a mensagem de quem é, e não em console.error", async () => {
     const solto = vi.spyOn(console, "error").mockImplementation(() => {});
     const estruturado = vi.spyOn(logger, "error").mockImplementation(() => {});
-    montar({ itemId: null, caminhoGravado: `${ORG}/a.ogg`, falhaAoAssinar: "bucket fora do ar" });
+    montar({ itemId: null, caminhoGravado: `${ORG}/${CONV}/${MSG}.ogg`, falhaAoAssinar: "bucket fora do ar" });
 
     expect((await chamar()).status).toBe(404);
     expect(estruturado).toHaveBeenCalledWith("messages.media.sign_failed", {
@@ -170,5 +176,42 @@ describe("GET /messages/[id]/media quando o armazenamento não assina o link", (
       erro: "bucket fora do ar",
     });
     expect(solto).not.toHaveBeenCalled();
+  });
+});
+
+// Auditoria 17/10 (CRM-1): `media_storage_path` é gravável pela sessão; a rota
+// só assina arquivo desta organização e desta mensagem.
+describe("GET /messages/[id]/media com caminho gravado na mensagem", () => {
+  it("arquivo da conversa da mensagem: 302", async () => {
+    const { assinados } = montar({ itemId: null, caminhoGravado: `${ORG}/${CONV}/out-abc.jpg` });
+    expect((await chamar()).status).toBe(302);
+    expect(assinados).toEqual([`${ORG}/${CONV}/out-abc.jpg`]);
+  });
+
+  it("arquivo desta mensagem que ficou com a conversa antiga (unificação): 302", async () => {
+    const { assinados } = montar({ itemId: null, caminhoGravado: `${ORG}/${OUTRA_CONV}/${MSG}.jpg` });
+    expect((await chamar()).status).toBe(302);
+    expect(assinados).toEqual([`${ORG}/${OUTRA_CONV}/${MSG}.jpg`]);
+  });
+
+  it.each([
+    ["de outra organização", `${OUTRA}/${CONV}/${MSG}.jpg`],
+    ["de outra conversa", `${ORG}/${OUTRA_CONV}/out-abc.jpg`],
+    ["de outra mensagem em outra conversa", `${ORG}/${OUTRA_CONV}/${ITEM}.jpg`],
+    ["que sai da conversa com ..", `${ORG}/${CONV}/../../${OUTRA}/${CONV}/x.jpg`],
+    ["sem conversa", `${ORG}/a.ogg`],
+    ["de org apagada, mas com ..", `${APAGADA}/../${OUTRA}/x.jpg`],
+    ["de org apagada, com segmento a mais", `${APAGADA}/${CONV}/sub/x.jpg`],
+  ])("arquivo %s: 404 e nada assinado", async (_nome, caminho) => {
+    const { assinados } = montar({ itemId: null, caminhoGravado: caminho });
+    expect((await chamar()).status).toBe(404);
+    expect(assinados).toEqual([]);
+  });
+
+  it("caminho legado de organização APAGADA (dados migrados com a service role): 302", async () => {
+    const legado = `${APAGADA}/${OUTRA_CONV}/${ITEM}.jpg`;
+    const { assinados } = montar({ itemId: null, caminhoGravado: legado });
+    expect((await chamar()).status).toBe(302);
+    expect(assinados).toEqual([legado]);
   });
 });

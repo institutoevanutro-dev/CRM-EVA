@@ -1,5 +1,7 @@
 import type { EventHandler, EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { marcaDaSaida } from "@/lib/branding/saida";
+import { eCaminhoDeOrganizacaoApagada } from "@/lib/messaging/media/caminho-legado";
+import { isAvatarPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { montarPayloadDeInbound, truncar } from "./push_payload";
 import { enviarPushAoUsuario, enviarPushAQuemVeAConversa, enviarPushDaOrg } from "./web_push";
@@ -62,7 +64,12 @@ async function handleInbound(row: EventRow): Promise<HandlerResult> {
     // trocá-lo por "Sem nome" pioraria o título sem ninguém pedir.
     const rotulo = rotuloDoContato(c);
     contactName = rotulo === SEM_NOME ? null : rotulo;
-    if (c?.avatar_storage_path && !c.is_anonymized) {
+    if (
+      c?.avatar_storage_path &&
+      !c.is_anonymized &&
+      (isAvatarPathOwnedBy(c.avatar_storage_path, row.organization_id, contactId) ||
+        (await eCaminhoDeOrganizacaoApagada(admin, c.avatar_storage_path)))
+    ) {
       const { data: signed } = await admin.storage
         .from("whatsapp-media")
         .createSignedUrl(c.avatar_storage_path, 300);

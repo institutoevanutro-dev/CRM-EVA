@@ -18,6 +18,8 @@ import type { NextRequest } from "next/server";
 
 import { fail } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { eCaminhoDeOrganizacaoApagada } from "@/lib/messaging/media/caminho-legado";
+import { isAvatarPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -77,8 +79,18 @@ export async function GET(
     return new Response(null, { status: 404 });
   }
 
-  // Service role só para ASSINAR — o acesso já foi decidido acima.
+  // A coluna é gravável pela sessão: só assina a foto DESTE contato, desta
+  // organização (CRM-1), ou o caminho legado de organização apagada (dados
+  // migrados). Fora disso é "sem foto".
   const admin = createAdminClient();
+  if (
+    !isAvatarPathOwnedBy(row.avatar_storage_path, activeOrg.orgId, id) &&
+    !(await eCaminhoDeOrganizacaoApagada(admin, row.avatar_storage_path))
+  ) {
+    return new Response(null, { status: 404 });
+  }
+
+  // Service role só para ASSINAR — o acesso já foi decidido acima.
   const { data: signed, error } = await admin.storage
     .from("whatsapp-media")
     .createSignedUrl(row.avatar_storage_path, SIGNED_TTL_SECONDS);

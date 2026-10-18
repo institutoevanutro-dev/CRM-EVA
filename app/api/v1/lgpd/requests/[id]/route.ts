@@ -79,7 +79,10 @@ export async function GET(
 
   if ((request.status === "completed" || request.status === "pending_review") && request.result) {
     const result = request.result as Record<string, unknown>;
-    const pdfPath = typeof result.pdf_path === "string" ? result.pdf_path : null;
+    // `result` é gravável pela sessão do admin (policy lgpd_requests_admin_write):
+    // só assina o caminho que o worker grava para ESTE pedido (CRM-1).
+    const pdfPath =
+      result.pdf_path === `${orgId}/${request.id}/report.pdf` ? result.pdf_path : null;
 
     if (pdfPath) {
       const { data: signedData, error: signErr } = await admin.storage
