@@ -1,4 +1,5 @@
 import webpush from "web-push";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
@@ -88,10 +89,45 @@ export async function enviarPushAoUsuario(
     logger.warn("push_subscriptions_user_list_failed", { detail: error.message });
     return { sent: 0, gone: 0 };
   }
-  return enviarPushDaOrg(organizationId, payload, {
+  return enviarPushDaOrg(organizationId, payload, inscricoesJaFiltradas(admin, (data ?? []) as PushSubRow[]));
+}
+
+/**
+ * Push de mensagem recebida: só às inscrições de quem PODE VER a conversa.
+ *
+ * Quem decide é `fn_can_view_conversation` (a RLS de `conversations`), avaliada
+ * para cada inscrito por `fn_push_inscricoes_que_veem_a_conversa` (migration
+ * 0378) — a regra não é repetida aqui. Falha na leitura não envia a ninguém:
+ * aviso a menos se recupera abrindo o Inbox; nome e prévia de paciente na tela
+ * de quem não podia ver, não.
+ *
+ * Portado do projeto original (DeskcommCRM, PR #2590 de @melgarafael).
+ */
+export async function enviarPushAQuemVeAConversa(
+  organizationId: string,
+  conversationId: string,
+  payload: PushPayload,
+  admin: Pick<SupabaseClient, "rpc" | "from"> = createAdminClient(),
+): Promise<{ sent: number; gone: number }> {
+  if (!vapidPronto()) return { sent: 0, gone: 0 };
+  const { data, error } = await admin.rpc("fn_push_inscricoes_que_veem_a_conversa", {
+    p_org: organizationId,
+    p_conversation: conversationId,
+  });
+  if (error) {
+    logger.warn("push_subscriptions_visible_list_failed", { detail: error.message });
+    return { sent: 0, gone: 0 };
+  }
+  const linhas = (Array.isArray(data) ? data : []) as PushSubRow[];
+  return enviarPushDaOrg(organizationId, payload, inscricoesJaFiltradas(admin, linhas));
+}
+
+/** Lista já filtrada para `enviarPushDaOrg`; a faxina de inscrição morta (404/410) segue indo ao banco. */
+function inscricoesJaFiltradas(admin: Pick<SupabaseClient, "from">, rows: PushSubRow[]): AdminLike {
+  return {
     from: (table: string) => ({
       select: () => ({
-        eq: async () => ({ data: (data ?? []) as PushSubRow[], error: null }),
+        eq: async () => ({ data: rows, error: null }),
       }),
       delete: () => ({
         eq: async (col: string, val: string) => {
@@ -100,5 +136,5 @@ export async function enviarPushAoUsuario(
         },
       }),
     }),
-  });
+  };
 }

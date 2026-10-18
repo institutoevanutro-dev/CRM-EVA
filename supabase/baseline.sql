@@ -36488,6 +36488,162 @@ grant execute on function public.fn_inicio_resumo_da_clinica(uuid, timestamptz, 
 notify pgrst, 'reload schema';
 -- ---- fim: Visão da clínica (migration 0376) ----
 
+-- ---- o aviso de mensagem nova vai só a quem pode ver a conversa (migration 0378) ----
+-- Derivado de supabase/migrations/20261017190000_0378_push_so_a_quem_ve_a_conversa.sql
+-- (o porquê inteiro está no cabeçalho de lá). Porte do original #2590 (0612 lá).
+-- O push de `message.received` sai só às inscrições de quem `fn_can_view_conversation`
+-- deixaria abrir a conversa; a função avalia a régua da RLS por inscrito, sem copiá-la.
+-- Entra ANTES da VARREDURA anon porque cria função. Só o service role executa.
+-- Quem mede a regra: `tests/invariants/push-so-a-quem-ve-a-conversa.test.ts`.
+create or replace function public.fn_push_inscricoes_que_veem_a_conversa(
+  p_org uuid,
+  p_conversation uuid
+) returns table (id uuid, user_id uuid, endpoint text, p256dh text, auth text)
+language plpgsql volatile security definer
+set search_path = public
+as $$
+#variable_conflict use_column
+declare
+  v_assigned uuid;
+  v_user uuid;
+  v_claims text := current_setting('request.jwt.claims', true);
+  v_claim text := current_setting('request.jwt.claim', true);
+  v_sub text := current_setting('request.jwt.claim.sub', true);
+begin
+  select c.assigned_to_user_id into v_assigned
+    from public.conversations c
+   where c.id = p_conversation and c.organization_id = p_org;
+  if not found then
+    return;
+  end if;
+
+  -- auth.uid()/auth.jwt() leem estas três; só `claims` carrega o inscrito.
+  perform set_config('request.jwt.claim', '', true);
+  perform set_config('request.jwt.claim.sub', '', true);
+  for v_user in
+    select distinct s.user_id from public.push_subscriptions s where s.organization_id = p_org
+     order by s.user_id
+  loop
+    perform set_config('request.jwt.claims', jsonb_build_object('sub', v_user)::text, true);
+    if public.fn_can_view_conversation(p_org, v_assigned) then
+      return query
+        select s.id, s.user_id, s.endpoint, s.p256dh, s.auth
+          from public.push_subscriptions s
+         where s.organization_id = p_org and s.user_id = v_user;
+    end if;
+  end loop;
+
+  perform set_config('request.jwt.claims', coalesce(v_claims, ''), true);
+  perform set_config('request.jwt.claim', coalesce(v_claim, ''), true);
+  perform set_config('request.jwt.claim.sub', coalesce(v_sub, ''), true);
+end;
+$$;
+
+revoke execute on function public.fn_push_inscricoes_que_veem_a_conversa(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.fn_push_inscricoes_que_veem_a_conversa(uuid, uuid) to service_role;
+-- ---- fim: o aviso de mensagem nova vai só a quem pode ver a conversa (migration 0378) ----
+
+-- ---- cada agente declara em quais números atende (migration 0380) ----
+-- Derivado de supabase/migrations/20261017192000_0380_agente_declara_em_quais_numeros_atende.sql
+-- (o porquê inteiro está no cabeçalho de lá). Porte ADAPTADO do original #2854 (0665 lá):
+-- aqui a tabela é uma lista de PERMISSÃO por agente. Nenhuma linha = todos os números
+-- (o padrão; nada é escrito). Entra ANTES da VARREDURA anon porque cria função, e a
+-- tabela vem antes da função porque o corpo `language sql` é validado na criação.
+-- Quem mede: `tests/invariants/agente-declara-em-quais-numeros-atende.test.ts`.
+create table if not exists public.ai_agent_channel_sessions (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  agent_id uuid not null,
+  channel_session_id uuid not null,
+  created_by uuid,
+  created_at timestamptz not null default now(),
+  constraint ai_agent_channel_sessions_unico unique (agent_id, channel_session_id)
+);
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'ai_agent_channel_sessions_agent_org_fk') then
+    alter table public.ai_agent_channel_sessions
+      add constraint ai_agent_channel_sessions_agent_org_fk
+      foreign key (organization_id, agent_id)
+      references public.ai_agents (organization_id, id)
+      on delete cascade;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'ai_agent_channel_sessions_channel_org_fk') then
+    alter table public.ai_agent_channel_sessions
+      add constraint ai_agent_channel_sessions_channel_org_fk
+      foreign key (organization_id, channel_session_id)
+      references public.channel_sessions (organization_id, id)
+      on delete restrict;
+  end if;
+end $$;
+
+comment on table public.ai_agent_channel_sessions is
+  'Em quais números (channel_sessions) cada agente PODE atender. Nenhuma linha para o agente = todos os números (o padrão). Lida por fn_agente_atende_no_numero.';
+
+create index if not exists idx_ai_agent_channel_sessions_agente
+  on public.ai_agent_channel_sessions (organization_id, agent_id);
+
+alter table public.ai_agent_channel_sessions enable row level security;
+
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_agent_channel_sessions' and policyname = 'tenant_isolation_ai_agent_channel_sessions_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '0a3cf5a1a82e2e205584811dffe10fc8') then
+drop policy if exists tenant_isolation_ai_agent_channel_sessions_select on public.ai_agent_channel_sessions;
+create policy tenant_isolation_ai_agent_channel_sessions_select on public.ai_agent_channel_sessions
+  for select using (organization_id in (select public.fn_user_org_ids()));
+end if;
+end $politica$;
+
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_agent_channel_sessions' and policyname = 'tenant_isolation_ai_agent_channel_sessions_write'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '628e5cd808b30ee4637d2081d7c49f32') then
+drop policy if exists tenant_isolation_ai_agent_channel_sessions_write on public.ai_agent_channel_sessions;
+create policy tenant_isolation_ai_agent_channel_sessions_write on public.ai_agent_channel_sessions
+  for all using (
+    organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'admin')
+  ) with check (
+    organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'admin')
+  );
+end if;
+end $politica$;
+
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ai_agent_channel_sessions' and policyname = 'mfa_provada'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ab0fa06ce55c36b1e73a0bcdeb77ed4f') then
+drop policy if exists mfa_provada on public.ai_agent_channel_sessions;
+create policy mfa_provada on public.ai_agent_channel_sessions as restrictive for all to authenticated
+  using ((select public.fn_session_mfa_proven())) with check ((select public.fn_session_mfa_proven()));
+end if;
+end $politica$;
+
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
+revoke all on public.ai_agent_channel_sessions from anon, authenticated;
+grant select on public.ai_agent_channel_sessions to authenticated;
+grant all on public.ai_agent_channel_sessions to service_role;
+end $janela$;
+
+create or replace function public.fn_agente_atende_no_numero(p_org uuid, p_agent uuid, p_session uuid)
+returns boolean
+language sql stable
+set search_path = public
+as $$
+  select not exists (
+           select 1 from public.ai_agent_channel_sessions n
+            where n.organization_id = p_org and n.agent_id = p_agent)
+      or exists (
+           select 1 from public.ai_agent_channel_sessions n
+            where n.organization_id = p_org and n.agent_id = p_agent and n.channel_session_id = p_session);
+$$;
+
+revoke execute on function public.fn_agente_atende_no_numero(uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.fn_agente_atende_no_numero(uuid, uuid, uuid) to service_role;
+
+notify pgrst, 'reload schema';
+-- ---- fim: cada agente declara em quais números atende (migration 0380) ----
+
 -- ---- link de mídia só do próprio dono e mensagens só de quem vê a conversa (migration 0382) ----
 -- Derivado de supabase/migrations/20261017200000_0382_midia_do_dono_e_mensagens_de_quem_ve.sql
 -- (o porquê inteiro está no cabeçalho de lá; auditoria de 17/10, CRM-1 e CRM-2).
@@ -36574,6 +36730,7 @@ create or replace trigger trg_foto_do_contato_so_o_servidor_update
              or old.id is distinct from new.id))
   execute function public.fn_foto_do_contato_so_o_servidor();
 -- ---- fim: link de mídia só do próprio dono e mensagens só de quem vê a conversa (migration 0382) ----
+
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
@@ -36992,3 +37149,23 @@ notify pgrst, 'reload schema';
 -- Nenhuma função nova, tabela, coluna ou constraint.
 -- Quem mede a regra: `tests/invariants/pos-consulta-canal-fixado.test.ts`.
 -- ---- fim: o acompanhamento de consulta escolhe por qual número sai (migration 0377) ----
+
+-- ---- origem do negócio segue o canal da conversa (migration 0379) ----
+-- Derivado de supabase/migrations/20261017191000_0379_origem_do_negocio_segue_o_canal_da_conversa.sql
+-- (critério e o que não se toca: cabeçalho de lá). Porte do original #2199 (0531 lá).
+-- Negócio que nasceu de conversa do Instagram gravado com source = 'whatsapp'
+-- passa a ter o canal da conversa. Só dados, idempotente; não cria função.
+-- Quem mede: `tests/invariants/origem-do-negocio-segue-o-canal-da-conversa.test.ts`.
+update public.crm_leads l
+   set source = c.channel
+  from public.crm_lead_activities a
+  join public.conversations c
+    on c.organization_id = a.organization_id
+   and c.id = a.source_id
+ where a.organization_id = l.organization_id
+   and a.lead_id = l.id
+   and a.type = 'lead_created'
+   and a.source_module = 'canal.ingest'
+   and c.channel in ('instagram', 'facebook')
+   and l.source = 'whatsapp';
+-- ---- fim: origem do negócio segue o canal da conversa (migration 0379) ----

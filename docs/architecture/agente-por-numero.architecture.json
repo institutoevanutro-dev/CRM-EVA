@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Cada agente declara em quais números atende",
+    "subtitle": "Lista de permissão por agente (migration 0380): sem linha = todos os números",
+    "output": "agente-por-numero.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "Pessoa" },
+    { "id": "app", "label": "Aplicativo" },
+    { "id": "db", "label": "Banco" }
+  ],
+  "mainPath": ["rota", "declaracao", "regua", "drain", "turno"],
+  "nodes": [
+    { "id": "rota", "lane": "humano", "col": 0, "type": "ui", "label": "PUT /api/v1/ai/agents/:id/numeros (admin)" },
+    { "id": "declaracao", "lane": "db", "col": 1, "type": "database", "label": "ai_agent_channel_sessions (FK composta, RLS)" },
+    { "id": "trilha", "lane": "db", "col": 1, "type": "database", "label": "api_audit_log: ai_agent.numbers_changed" },
+    { "id": "regua", "lane": "db", "col": 2, "type": "database", "label": "fn_agente_atende_no_numero" },
+    { "id": "drain", "lane": "app", "col": 3, "type": "service", "label": "Portão de custo do drain" },
+    { "id": "roteador", "lane": "app", "col": 3, "type": "service", "label": "Roteador do número: membros e fallback" },
+    { "id": "turno", "lane": "app", "col": 4, "type": "service", "label": "Turno: agente do número, ou silêncio (numero_recusado)" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "rota", "to": "declaracao", "label": "acrescenta, depois tira" },
+    { "id": "e2", "from": "rota", "to": "trilha", "label": "antes e depois" },
+    { "id": "e3", "from": "declaracao", "to": "regua", "label": "nenhuma linha = todos" },
+    { "id": "e4", "from": "regua", "to": "drain", "label": "abre o turno só se alguém atende" },
+    { "id": "e5", "from": "regua", "to": "roteador", "label": "oferece só quem atende no número" },
+    { "id": "e6", "from": "roteador", "to": "turno", "label": "agente escolhido" },
+    { "id": "e7", "from": "drain", "to": "turno", "label": "job" }
+  ]
+}

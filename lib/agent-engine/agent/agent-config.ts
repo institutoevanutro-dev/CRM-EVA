@@ -245,6 +245,9 @@ export async function loadPublishedAgentConfig(
        -- dispatcher nativo do CRM — pausar = despublicar).
        and v.status = 'published'
        and v.channel_session_id = $2
+       -- O agente que declarou outros números não atende neste (migration
+       -- 0380). Sem declaração = todos os números, como antes.
+       and public.fn_agente_atende_no_numero(a.organization_id, a.id, $2)
      -- Quem está NO AR vem antes de qualquer pausado: sem isto um pausado de
      -- prioridade maior calava o número inteiro, com outro agente publicado nele
      -- (porte de upstream #2376). O pausado segue vindo quando é o
@@ -269,7 +272,15 @@ export async function loadPublishedAgentConfigById(
   db: pg.Pool,
   organizationId: string,
   agentId: string,
+  /**
+   * O número do turno. Com ele, o agente que declarou OUTROS números volta
+   * `null` aqui (migration 0380) — quem chama trata como "sem versão
+   * publicada" e segue a régua dele. Sem ele, nada muda (supervisor, operador).
+   */
+  channelSessionId?: string,
 ): Promise<PublishedAgentConfig | null> {
+  const noNumero =
+    channelSessionId === undefined ? '' : '\n       and public.fn_agente_atende_no_numero(a.organization_id, a.id, $3)';
   const { rows } = await db.query<Row>(
     `select ${SELECT_AGENT_CONFIG_COLUMNS}
      from ai_agents a
@@ -277,8 +288,8 @@ export async function loadPublishedAgentConfigById(
      where a.organization_id = $1
        and a.archived_at is null
        and v.status = 'published'
-       and a.id = $2`,
-    [organizationId, agentId],
+       and a.id = $2${noNumero}`,
+    channelSessionId === undefined ? [organizationId, agentId] : [organizationId, agentId, channelSessionId],
   );
   const r = rows[0];
   if (r === undefined) return null;
@@ -324,6 +335,6 @@ export async function loadConversationAgentConfig(
     [organizationId, conversationId, channelId],
   );
   return rows[0]?.active_ai_agent_id
-    ? loadPublishedAgentConfigById(pool, organizationId, rows[0].active_ai_agent_id)
+    ? loadPublishedAgentConfigById(pool, organizationId, rows[0].active_ai_agent_id, channelId)
     : loadPublishedAgentConfig(pool, organizationId, channelId);
 }

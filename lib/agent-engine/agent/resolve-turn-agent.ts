@@ -118,7 +118,14 @@ export interface TurnAgentResolution {
     | 'no_match'
     | 'classifier_failed'
     /** A conversa nasceu de uma campanha que declarou agente (migration 0267). */
-    | 'campanha';
+    | 'campanha'
+    /**
+     * Ninguém resolveu, e foi a declaração de números (migration 0380) que tirou
+     * deste número TODO agente que o atenderia. O turno não cai no agente
+     * genérico: a declaração disse que aqui a IA não fala. Ver
+     * `resolveConversationTurn`.
+     */
+    | 'numero_recusado';
   /**
    * Todos os membros do roteador e o modo dele, sempre que a decisão veio de um
    * roteador (`routerId !== null`). É o que o turno precisa para oferecer
@@ -195,7 +202,9 @@ export async function resolveTurnAgent(
     const _agenteDaCampanha = deps.agenteDaCampanha ?? agenteDaCampanhaDaConversa;
     const idDaCampanha = await _agenteDaCampanha(db, input.tenantId, input.conversationId);
     if (idDaCampanha !== null) {
-      const config = await _loadAgentById(db, input.tenantId, idDaCampanha);
+      // Com o número: o agente da campanha que declarou OUTROS números não
+      // fala neste (migration 0380) — volta null e segue a régua do número.
+      const config = await _loadAgentById(db, input.tenantId, idDaCampanha, input.channelSessionId);
       if (config !== null) {
         return { config, routerId: null, intentName: null, confidence: null, outcome: 'campanha' };
       }
@@ -446,11 +455,55 @@ export async function resolveConversationTurn(
     signalRow !== null && (signalRow.body !== null || (signalRow.media_derived_text ?? '').trim() !== '')
       ? corpoDaMensagem(signalRow)
       : null;
-  return resolveTurnAgent(db, llmCfg, {
+  const resolucao = await resolveTurnAgent(db, llmCfg, {
     ...input,
     signal,
     stickyAgentId: rows[0]?.active_ai_agent_id ?? null,
     stickyIntent: rows[0]?.active_intent ?? null,
     stickySetAt: rows[0]?.active_agent_set_at ?? null,
   }, deps);
+  if (resolucao.config !== null) return resolucao;
+  return (await numeroFechadoPelaDeclaracao(db, input.tenantId, input.channelSessionId))
+    ? { config: null, routerId: null, intentName: null, confidence: null, outcome: 'numero_recusado' }
+    : resolucao;
+}
+
+/**
+ * `config: null` vira o agente GENÉRICO no turno (régua 5). Isso não pode
+ * reabrir um número que a declaração fechou (migration 0380): se todo agente
+ * ligado a este número — versão publicada nele, membro ou fallback do roteador
+ * dele — declarou OUTROS números, e nenhum ligado o aceita, a resposta é
+ * silêncio. Basta UM ligado que aceite o número para a régua 5 seguir como
+ * sempre. O desenho de "ligado" é o do portão de custo (`drain.ts`).
+ *
+ * Só roda quando nada resolveu, então o caminho comum não paga a consulta.
+ * Falha de leitura conta como "não fechado": é o comportamento de antes.
+ */
+async function numeroFechadoPelaDeclaracao(
+  db: pg.Pool,
+  organizationId: string,
+  channelSessionId: string,
+): Promise<boolean> {
+  try {
+    const { rows } = await db.query<{ fechado: boolean | null }>(
+      `with ligados as (
+         select public.fn_agente_atende_no_numero(a.organization_id, a.id, $2) as atende
+           from ai_agents a
+           join ai_agent_versions v on v.id = a.published_version_id and v.status = 'published'
+          where a.organization_id = $1 and a.archived_at is null
+            and (v.channel_session_id = $2
+                 or exists (select 1 from ai_routers r
+                             where r.organization_id = $1 and r.channel_session_id = $2 and r.is_active
+                               and (r.fallback_agent_id = a.id
+                                    or exists (select 1 from ai_router_members m
+                                                where m.organization_id = $1 and m.router_id = r.id
+                                                  and m.agent_id = a.id))))
+       )
+       select bool_or(not atende) and not bool_or(atende) as fechado from ligados`,
+      [organizationId, channelSessionId],
+    );
+    return rows?.[0]?.fechado === true;
+  } catch {
+    return false;
+  }
 }

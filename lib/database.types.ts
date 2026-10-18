@@ -596,6 +596,33 @@ export type Database = {
           },
         ]
       }
+      ai_agent_channel_sessions: {
+        Row: {
+          agent_id: string
+          channel_session_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          agent_id: string
+          channel_session_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          agent_id?: string
+          channel_session_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id?: string
+        }
+        Relationships: []
+      }
       ai_agent_runs: {
         Row: {
           abort_reason: string | null
@@ -8063,6 +8090,10 @@ export type Database = {
       fn_google_resolve: { Args: { p_org: string; p_id: string; p_revision: string; p_local_revision: string; p_etag: string | null; p_choice: string }; Returns: undefined }
       fn_google_counts_for_conflicts: { Args: { p_org: string; p_connection: string; p_calendar: string }; Returns: boolean }
       fn_google_coverage: { Args: { p_org: string; p_owner: string; p_start: string; p_end: string }; Returns: boolean }
+      fn_agente_atende_no_numero: {
+        Args: { p_agent: string; p_org: string; p_session: string }
+        Returns: boolean
+      }
       fn_agenda_ocupacao_google_do_dono: {
         Args: { p_org: string; p_owner: string; p_de: string; p_ate: string }
         Returns: { starts_at: string; ends_at: string; transparency: string; status: string; connection_status: string }[]
@@ -8545,6 +8576,16 @@ export type Database = {
           p_pointer: string
         }
         Returns: string
+      }
+      fn_push_inscricoes_que_veem_a_conversa: {
+        Args: { p_conversation: string; p_org: string }
+        Returns: {
+          auth: string
+          endpoint: string
+          id: string
+          p256dh: string
+          user_id: string
+        }[]
       }
       fn_role_at_least: {
         Args: { p_min: string; p_org: string }

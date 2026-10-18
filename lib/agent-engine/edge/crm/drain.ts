@@ -285,6 +285,8 @@ async function processEvent(
          join ai_agent_versions v on v.id = a.published_version_id
          where a.organization_id = $1 and a.archived_at is null
            and v.status = 'published' and v.channel_session_id = $2
+           -- Quem declarou OUTROS números não conta aqui (migration 0380).
+           and public.fn_agente_atende_no_numero(a.organization_id, a.id, $2)
        ) as tem_agente,
        exists(
          select 1 from ai_routers r
@@ -306,6 +308,7 @@ async function processEvent(
                join ai_agent_versions fv on fv.id = fa.published_version_id
                where fa.id = r.fallback_agent_id and fa.organization_id = $1
                  and fa.archived_at is null and fv.status = 'published'
+                 and public.fn_agente_atende_no_numero(fa.organization_id, fa.id, $2)
              )
              or exists (
                select 1 from ai_router_members m
@@ -313,6 +316,7 @@ async function processEvent(
                join ai_agent_versions mv on mv.id = ma.published_version_id
                where m.router_id = r.id and ma.organization_id = $1
                  and ma.archived_at is null and mv.status = 'published'
+                 and public.fn_agente_atende_no_numero(ma.organization_id, ma.id, $2)
              )
            )
        ) as tem_roteador`,
@@ -382,6 +386,7 @@ async function processEvent(
   const {rows:assistance}=await pool.query<{available:boolean}>(`select exists(
     select 1 from ai_agents a join ai_agent_versions v on v.organization_id=a.organization_id and v.id=a.published_version_id
     where a.organization_id=$1 and a.archived_at is null and a.operation_mode='assisted' and v.status='published'
+    and public.fn_agente_atende_no_numero(a.organization_id,a.id,$2)
     and(v.channel_session_id=$2 or exists(select 1 from ai_routers r where r.organization_id=a.organization_id and r.channel_session_id=$2 and r.is_active and(r.fallback_agent_id=a.id or exists(select 1 from ai_router_members m where m.organization_id=r.organization_id and m.router_id=r.id and m.agent_id=a.id))))) as available`,[event.organization_id,p.channel_session_id]);
   const canAssist=assistance[0]?.available===true;
   try {
