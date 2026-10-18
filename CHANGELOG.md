@@ -8,6 +8,27 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.23.1] — 2026-10-18
+
+### Corrigido
+
+- **Link de mídia e foto só do próprio dono, e mensagens só alteradas por quem vê a conversa** Correções de segurança da auditoria de 17/10:
+
+  - o link da mídia de uma mensagem, da foto de um contato e do PDF de um pedido
+    da LGPD só é gerado para o arquivo daquela mensagem, daquele contato ou
+    daquele pedido, na organização de quem pede. Um endereço de arquivo de outra
+    conversa ou de outra organização gravado na linha passa a responder
+    "não encontrado". Mídia e foto de dados migrados de uma organização que já
+    foi apagada continuam abrindo;
+  - o banco recusa, na escrita feita com a sessão de um usuário, endereço de
+    mídia fora da conversa da própria mensagem e qualquer foto de contato (quem
+    grava a foto é o servidor);
+  - uma pessoa da equipe só altera mensagem de conversa que ela consegue ver, e
+    só apaga o eco do próprio envio, que é o que o sistema já fazia.
+
+  Nada a fazer na VPS: a migration 0382 entra pelo baseline na atualização
+  normal. Nenhuma variável nova.
+
 ## [4.23.0] — 2026-10-18
 
 ### Adicionado
@@ -7684,7 +7705,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.23.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.23.1...HEAD
+[4.23.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.23.0...v4.23.1
 [4.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.22.1...v4.23.0
 [4.22.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.22.0...v4.22.1
 [4.22.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.21.0...v4.22.0
