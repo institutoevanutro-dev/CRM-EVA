@@ -38,10 +38,12 @@ APP_ORIGIN="http://app:3000"
 # já deixaria o token vencer. É barata: só toca conexão perto de expirar, e
 # rodada vazia não audita.
 #
-# SYNC a cada 15 min, e NÃO na mesma cadência. Os custos são diferentes: renovar
-# é uma requisição por conexão que está vencendo; sincronizar é uma por
-# calendário, sempre. Colar as duas obrigaria a escolher entre renovar raro
-# demais (e a agenda morre) ou sincronizar caro demais (e gasta cota do cliente).
+# SYNC a cada minuto. Uma página incompleta deixa o próximo passo imediatamente
+# elegível no banco; o cron frequente drena a paginação de uma agenda grande sem
+# esperar 15 min por página. Agenda sem trabalho continua espaçada pela própria
+# RPC, que marca a próxima leitura 15 min depois de concluir — a cota do Google
+# por hora fica medida em tests/unit/agenda-google-cota-por-hora.test.ts. A
+# renovação segue a cada 10 min: outro custo, outro prazo.
 #
 # ⚠️ E o comentário fica AQUI, fora da string: dentro de CRONS= ele não seria
 # comentário, seria DADO — e crase em prosa dentro de aspas duplas o shell
@@ -73,7 +75,7 @@ CRONS="
 # O CATÁLOGO. Preço nasce no PrecificaEva; de hora em hora o CRM copia o que mudou.
 17 * * * *|60|api/v1/cron/precificaeva-catalogo
 */10 * * * *|60|api/v1/cron/agenda-google-refresh
-*/15 * * * *|90|api/v1/cron/agenda-google-sync
+* * * * *|90|api/v1/cron/agenda-google-sync
 # A IDA. Cadência mais curta que a volta de propósito: quem marcou pela tela
 # espera ver o compromisso no celular dele em minutos, e a ida é barata (só
 # manda o que mudou). A volta é cara — varre calendário inteiro — e por isso
