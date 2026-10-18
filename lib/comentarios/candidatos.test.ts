@@ -63,6 +63,12 @@ describe("candidatosDoHistorico", () => {
       expect(r, p).not.toContain(p);
     }
   });
+
+  it("com a regra do RQE desligada, título de especialidade vira candidato; preço continua fora", () => {
+    const textos = ["melhor especialista", "quanto custa"];
+    expect(candidatosDoHistorico(textos, nada, false)).toEqual([{ palavra: "especialista", vezes: 1 }]);
+    expect(candidatosDoHistorico(textos, nada)).toEqual([]);
+  });
 });
 
 /**
@@ -122,4 +128,14 @@ describe("ida e volta: aprovar o que a tela oferece não pode liberar assunto se
     expect([...oferecidas].sort()).toEqual(["didatico", "fantastico"]);
     expect(ehObviamenteSeguro(elogio, oferecidas)).toEqual({ seguro: true });
   });
+
+  // Com a regra do RQE desligada, só especialidade deixa de ser sensível: a ida
+  // e volta continua barrando preço, saúde e agendamento.
+  it.each(sensiveis.filter((texto) => !/especialist|nutrolog/.test(texto)))(
+    '"%s" continua precisando de humano com a regra do RQE desligada',
+    (texto) => {
+      const oferecidas = new Set(candidatosDoHistorico([texto], new Set(), false).map((c) => c.palavra));
+      expect(ehObviamenteSeguro(texto, oferecidas, false).seguro).toBe(false);
+    },
+  );
 });

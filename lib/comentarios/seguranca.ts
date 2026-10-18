@@ -89,6 +89,14 @@ const GATILHOS: ReadonlyArray<[string, RegExp]> = [
   ],
 ];
 
+/**
+ * Os gatilhos com a regra do RQE DESLIGADA na organização
+ * (`lib/comentarios/regra-do-rqe.ts`): todos menos "especialidade". Derivado
+ * uma vez, aqui, e não por comentário; os radicais e os pedaços de cada
+ * variante também (`radicaisDe`, `componentesDe`).
+ */
+const GATILHOS_SEM_RQE = GATILHOS.filter(([gatilho]) => gatilho !== "especialidade");
+
 /** Emoji "de verdade" — inclui variation selector (❤️), ZWJ e tom de pele (👨🏽‍⚕️). */
 const EMOJI_CLASSE =
   "\\p{Extended_Pictographic}\\p{Emoji_Presentation}\\u{FE0F}\\u{200D}\\u{1F3FB}-\\u{1F3FF}";
@@ -131,7 +139,9 @@ function semMarcacoes(texto: string): string {
  * - COMO_CHAMAM_O_DONO: só o tratamento social. **Nunca título de
  *   especialidade** ("nutrólogo", "especialista") — o dono não tem RQE, e
  *   essa linha NÃO entra aqui de propósito (fica coberta por `GATILHOS`,
- *   categoria "especialidade", que roda antes desta lista).
+ *   categoria "especialidade", que roda antes desta lista). Com a regra do
+ *   RQE desligada na organização, a categoria sai e o título continua fora
+ *   desta lista: reprova pelo vocabulário até o dono liberar a palavra.
  */
 const ELOGIO = [
   "top", "amei", "amo", "adoro", "adorei", "parabens", "show", "sensacional",
@@ -199,27 +209,38 @@ export function ehTokenConhecido(token: string): boolean {
  * por "sem padrão seguro reconhecido", porque "valores" não está no
  * vocabulário e nunca poderá entrar.
  */
-const RADICAIS_DE_GATILHO: readonly string[] = GATILHOS.flatMap(([, padrao]) =>
-  padrao.source
-    .replace(/^\\b\(/, "")
-    .replace(/\)\\b$/, "")
-    .split("|")
-    .filter((alt) => !alt.includes("\\s+"))
-    .map((alt) => alt.replace(/\\w\*$/, ""))
-    // O corte do plural irregular: "promocao" → "promoc" cobre a palavra E o
-    // plural, porque `startsWith` só pede o prefixo comum aos dois.
-    .map((radical) => radical.replace(/(?:ao|em)$/u, "")),
-);
+function radicaisDe(gatilhos: typeof GATILHOS): readonly string[] {
+  return gatilhos.flatMap(([, padrao]) =>
+    padrao.source
+      .replace(/^\\b\(/, "")
+      .replace(/\)\\b$/, "")
+      .split("|")
+      .filter((alt) => !alt.includes("\\s+"))
+      .map((alt) => alt.replace(/\\w\*$/, ""))
+      // O corte do plural irregular: "promocao" → "promoc" cobre a palavra E o
+      // plural, porque `startsWith` só pede o prefixo comum aos dois.
+      .map((radical) => radical.replace(/(?:ao|em)$/u, "")),
+  );
+}
+const RADICAIS_DE_GATILHO = radicaisDe(GATILHOS);
+const RADICAIS_SEM_RQE = radicaisDe(GATILHOS_SEM_RQE);
 
 /**
  * O token, sozinho, casa algum dos seis gatilhos? Usado para NUNCA oferecer
  * palavra de gatilho ao dono: pedir que ele libere "custa" enquanto limpa a
  * fila é pedir que desarme a própria proteção sem perceber.
+ *
+ * `medicoSemRqe` é a regra da organização (`lib/comentarios/regra-do-rqe.ts`).
+ * Desligada, os radicais e os pedaços da categoria "especialidade" saem da
+ * conta, e o dono pode liberar "especialista". O padrão é ligada: quem não
+ * passar a regra fica no lado seguro.
  */
-export function ehTokenDeGatilho(token: string): boolean {
+export function ehTokenDeGatilho(token: string, medicoSemRqe = true): boolean {
+  const radicais = medicoSemRqe ? RADICAIS_DE_GATILHO : RADICAIS_SEM_RQE;
+  const componentes = medicoSemRqe ? COMPONENTES_DE_GATILHO : COMPONENTES_SEM_RQE;
   return (
-    RADICAIS_DE_GATILHO.some((radical) => token.startsWith(radical)) ||
-    COMPONENTES_DE_GATILHO.some((c) => c.test(token))
+    radicais.some((radical) => token.startsWith(radical)) ||
+    componentes.some((c) => c.test(token))
   );
 }
 
@@ -230,14 +251,18 @@ export function ehTokenDeGatilho(token: string): boolean {
  * trava roda sobre o texto inteiro), mas oferecê-lo ao dono é oferecer a
  * metade de uma proteção, então nunca se oferece.
  */
-const COMPONENTES_DE_GATILHO: readonly RegExp[] = GATILHOS.flatMap(([, padrao]) => {
-  const miolo = padrao.source.replace(/^\\b\(/, "").replace(/\)\\b$/, "");
-  return miolo
-    .split("|")
-    .filter((alt) => alt.includes("\\s+"))
-    .flatMap((alt) => alt.split("\\s+"))
-    .map((pedaco) => new RegExp(`^(?:${pedaco})$`, "u"));
-});
+function componentesDe(gatilhos: typeof GATILHOS): readonly RegExp[] {
+  return gatilhos.flatMap(([, padrao]) => {
+    const miolo = padrao.source.replace(/^\\b\(/, "").replace(/\)\\b$/, "");
+    return miolo
+      .split("|")
+      .filter((alt) => alt.includes("\\s+"))
+      .flatMap((alt) => alt.split("\\s+"))
+      .map((pedaco) => new RegExp(`^(?:${pedaco})$`, "u"));
+  });
+}
+const COMPONENTES_DE_GATILHO = componentesDe(GATILHOS);
+const COMPONENTES_SEM_RQE = componentesDe(GATILHOS_SEM_RQE);
 
 /** Tokens do texto, já sem marcação e normalizados: a MESMA régua da trava. */
 export function tokensParaAnalise(texto: string): string[] {
@@ -273,10 +298,17 @@ const NENHUMA_APROVADA: ReadonlySet<string> = new Set();
  * conjunto (alocaria um `Set` por comentário). Palavra fora dessa forma, como
  * "Fantástico", nunca casa: ninguém recebe erro e a aprendizagem fica morta em
  * silêncio. Quem grava (Tarefa 5) e quem lê (Tarefa 6) garantem a forma.
+ *
+ * `medicoSemRqe` é a regra da organização (`lib/comentarios/regra-do-rqe.ts`,
+ * migration 0381). Ligada, que é o padrão, a categoria "especialidade" barra
+ * como sempre. Desligada, ela sai da conta: título de especialidade passa a
+ * reprovar só pelo vocabulário, até o dono liberar a palavra. As outras cinco
+ * categorias não mudam.
  */
 export function ehObviamenteSeguro(
   texto: string | null,
   aprovadas: ReadonlySet<string> = NENHUMA_APROVADA,
+  medicoSemRqe = true,
 ): Veredito {
   if (!texto || texto.trim() === "") {
     return { seguro: false, gatilho: "vazio" };
@@ -304,7 +336,7 @@ export function ehObviamenteSeguro(
   const paraGatilhos = normalizarTexto(texto)
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
-  for (const [gatilho, padrao] of GATILHOS) {
+  for (const [gatilho, padrao] of medicoSemRqe ? GATILHOS : GATILHOS_SEM_RQE) {
     if (padrao.test(paraGatilhos)) {
       return { seguro: false, gatilho };
     }

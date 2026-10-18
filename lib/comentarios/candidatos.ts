@@ -7,6 +7,8 @@
  *
  * Palavra de gatilho NUNCA é oferecida: oferecê-la seria pedir ao dono que
  * desarme a própria proteção num momento em que ele está apenas limpando a fila.
+ * `medicoSemRqe` é a regra da organização (`lib/comentarios/regra-do-rqe.ts`):
+ * desligada, título de especialidade deixa de ser gatilho e pode ser oferecido.
  *
  * Puro: recebe os textos e o que já foi decidido, devolve a lista. Quem
  * consulta o banco é a rota.
@@ -22,6 +24,7 @@ export interface Candidato {
 export function candidatosDoHistorico(
   textosRespondidos: readonly string[],
   jaDecididas: ReadonlySet<string>,
+  medicoSemRqe = true,
 ): Candidato[] {
   const contagem = new Map<string, number>();
 
@@ -30,7 +33,7 @@ export function candidatosDoHistorico(
     const noComentario = new Set(tokensParaAnalise(texto));
     for (const token of noComentario) {
       if (ehTokenConhecido(token)) continue;
-      if (ehTokenDeGatilho(token)) continue;
+      if (ehTokenDeGatilho(token, medicoSemRqe)) continue;
       if (jaDecididas.has(token)) continue;
       contagem.set(token, (contagem.get(token) ?? 0) + 1);
     }

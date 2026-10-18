@@ -22,8 +22,15 @@ import { normalizarTexto } from "@/lib/opt-out/deteccao";
 
 export const RADICAIS_DE_ESPECIALIDADE = ["nutrolog", "especialist", "especializ", "especialidad"];
 
-/** `null` = o texto não menciona título de especialidade. */
-export function motivoDaRecusaPorEspecialidade(texto: string): string | null {
+/**
+ * `null` = pode publicar: o texto não menciona título de especialidade, ou a
+ * organização desligou a regra do RQE (`medicoSemRqe = false`, migration 0381,
+ * lida por `lib/comentarios/regra-do-rqe.ts`). O padrão é ligada: quem não
+ * passar a regra fica no lado seguro, que é o comportamento de antes de ela
+ * ser por organização.
+ */
+export function motivoDaRecusaPorEspecialidade(texto: string, medicoSemRqe = true): string | null {
+  if (!medicoSemRqe) return null;
   const normalizado = normalizarTexto(texto);
   for (const radical of RADICAIS_DE_ESPECIALIDADE) {
     if (new RegExp(`\\b${radical}`, "u").test(normalizado)) {

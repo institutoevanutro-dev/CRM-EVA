@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ehObviamenteSeguro, ehTokenDeGatilho } from "./seguranca";
+import { GATILHO_SEM_PADRAO_SEGURO, ehObviamenteSeguro, ehTokenDeGatilho } from "./seguranca";
 
 const inseguros: [string, string][] = [
   ["quanto custa?", "preço"], ["qual o valor da consulta", "preço"], ["tem desconto?", "preço"],
@@ -301,4 +301,52 @@ describe("C-1: ehTokenDeGatilho casa por RADICAL", () => {
     expect(v.seguro).toBe(false);
     if (!v.seguro) expect(v.gatilho).toBe("sem padrão seguro reconhecido");
   });
+});
+
+// ── regra do RQE desligada na organização (migration 0381) ──────────────────
+describe("regra do RQE desligada (medicoSemRqe = false)", () => {
+  it("'especialidade' deixa de barrar: o título reprova só pelo vocabulário", () => {
+    for (const texto of ["você é nutrólogo", "melhor especialista", "qual seu rqe"]) {
+      expect(ehObviamenteSeguro(texto, undefined, false), texto).toEqual({
+        seguro: false,
+        gatilho: GATILHO_SEM_PADRAO_SEGURO,
+      });
+    }
+  });
+
+  it("com a palavra liberada pelo dono, o elogio com título passa; com a regra ligada, não", () => {
+    expect(ehObviamenteSeguro("melhor especialista", new Set(["especialista"]), false)).toEqual({ seguro: true });
+    expect(ehObviamenteSeguro("melhor especialista", new Set(["especialista"]))).toEqual({
+      seguro: false,
+      gatilho: "especialidade",
+    });
+  });
+
+  it.each(inseguros.filter(([, categoria]) => categoria !== "especialidade"))(
+    "%s continua precisando de você (%s)",
+    (texto, categoria) => {
+      expect(ehObviamenteSeguro(texto, undefined, false)).toEqual({ seguro: false, gatilho: categoria });
+    },
+  );
+
+  it("explícita como ligada, é igual ao padrão", () => {
+    expect(ehObviamenteSeguro("você é nutrólogo?", undefined, true)).toEqual(ehObviamenteSeguro("você é nutrólogo?"));
+  });
+});
+
+describe("ehTokenDeGatilho com a regra do RQE desligada", () => {
+  it.each(["especialista", "especialistas", "especialidade", "nutrologo", "nutrologos", "rqe", "voce", "medico"])(
+    "%s deixa de ser gatilho, e com a regra ligada continua sendo",
+    (token) => {
+      expect(ehTokenDeGatilho(token, false)).toBe(false);
+      expect(ehTokenDeGatilho(token)).toBe(true);
+    },
+  );
+
+  it.each(["valores", "custa", "doses", "dores", "agendar", "promocoes", "quanto"])(
+    "%s continua gatilho com a regra desligada",
+    (token) => {
+      expect(ehTokenDeGatilho(token, false)).toBe(true);
+    },
+  );
 });

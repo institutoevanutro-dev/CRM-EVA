@@ -765,3 +765,145 @@ it("I-3 — palavra de gatilho já gravada no banco não entra no conjunto da ro
   expect(aprovadas.has("valores")).toBe(false);
   expect(aprovadas.has("doses")).toBe(false);
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// Regra do RQE por organização (migration 0381). O dublê que não declara
+// `regraDoRqe` vale ligada: é por isso que todos os casos acima seguem iguais.
+// ───────────────────────────────────────────────────────────────────────────
+
+it("regra do RQE desligada: a resposta que fala em especialista é publicada", async () => {
+  fake.comentarios = [{ ...comentario, texto: "top!" }];
+  fake.textoGerado = "Somos especialistas em nutrição";
+  fake.regraDoRqe = async () => false;
+
+  await processarComentariosNovos(fake, agora);
+
+  expect(linha().situacao).toBe("respondido_pela_ia");
+  expect(fake.publicacoes).toEqual([{ id: "IC-1", texto: "Somos especialistas em nutrição" }]);
+});
+
+it("regra do RQE ligada: 'melhor especialista' espera você, mesmo com a palavra liberada", async () => {
+  fake.comentarios = [{ ...comentario, texto: "melhor especialista" }];
+  fake.aprovadas = new Set(["especialista"]);
+
+  await processarComentariosNovos(fake, agora);
+
+  expect(linha().situacao).toBe("esperando_voce");
+  expect(linha().motivo_do_toque).toBe("especialidade");
+  expect(fake.publicacoes).toEqual([]);
+});
+
+it("regra do RQE desligada: 'melhor especialista' com a palavra liberada sai pela IA", async () => {
+  fake.comentarios = [{ ...comentario, texto: "melhor especialista" }];
+  fake.aprovadas = new Set(["especialista"]);
+  fake.regraDoRqe = async () => false;
+
+  await processarComentariosNovos(fake, agora);
+
+  expect(linha().situacao).toBe("respondido_pela_ia");
+  expect(fake.publicacoes).toHaveLength(1);
+});
+
+it("regra do RQE: lida uma vez por organização e passada à leitura das aprovadas e à geração", async () => {
+  const leituras: string[] = [];
+  const pedidosDeAprovadas: Array<[string, boolean | undefined]> = [];
+  const regrasNaGeracao: Array<boolean | undefined> = [];
+  fake.regraDoRqe = async (org) => {
+    leituras.push(org);
+    return false;
+  };
+  fake.palavrasAprovadas = async (org, regra) => {
+    pedidosDeAprovadas.push([org, regra]);
+    return new Set<string>();
+  };
+  fake.gerarResposta = async (_c, _p, regra) => {
+    regrasNaGeracao.push(regra);
+    return "Que bom que gostou!";
+  };
+  fake.comentarios = [
+    { ...comentario, id: "IC-1", texto: "top!" },
+    { ...comentario, id: "IC-2", externalId: "C-2", texto: "amei" },
+  ];
+
+  await processarComentariosNovos(fake, agora);
+
+  expect(leituras).toEqual(["org"]);
+  expect(pedidosDeAprovadas).toEqual([["org", false]]);
+  expect(regrasNaGeracao).toEqual([false, false]);
+});
+
+it("regra do RQE: leitura que falha vale ligada (o lado seguro)", async () => {
+  fake.regraDoRqe = async () => {
+    throw new Error("banco fora do ar");
+  };
+  fake.comentarios = [{ ...comentario, texto: "top!" }];
+  fake.textoGerado = "Somos especialistas em nutrição";
+
+  await processarComentariosNovos(fake, agora);
+
+  expect(linha().situacao).toBe("esperando_voce");
+  expect(fake.publicacoes).toHaveLength(0);
+});
+
+it("regra do RQE: o prompt leva a frase do CFM só com a regra ligada, igual à de antes", async () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adminReal = construirAdminDoWorkerReal({} as any);
+  const sistemaDe = (i: number) =>
+    (llmMocks.runModelCall.mock.calls[i] as unknown as [unknown, unknown, { system: string }])[2].system;
+
+  await adminReal.gerarResposta({ ...comentario, texto: "top!" }, perfilPadrao);
+  await adminReal.gerarResposta({ ...comentario, texto: "top!" }, perfilPadrao, true);
+  await adminReal.gerarResposta({ ...comentario, texto: "top!" }, perfilPadrao, false);
+
+  // O texto de hoje, letra por letra: a regra ligada não pode mudar o prompt.
+  const fraseDeHoje =
+    "Regras inegociáveis: nunca mencione preço, nunca inclua link, nunca chame o dono de nutrólogo, nutrologista, especialista ou qualquer título de especialidade — ele é médico (CFM), sem RQE. Uma frase curta, sem emoji em excesso.";
+  expect(sistemaDe(0)).toContain(fraseDeHoje);
+  expect(sistemaDe(1)).toBe(sistemaDe(0));
+  expect(sistemaDe(2)).toContain(
+    "Regras inegociáveis: nunca mencione preço, nunca inclua link. Uma frase curta, sem emoji em excesso.",
+  );
+  expect(sistemaDe(2)).not.toMatch(/RQE|CFM|especialista|nutr[oó]logo/);
+});
+
+it("regra do RQE desligada: a leitura das aprovadas deixa passar título de especialidade, e continua tirando preço", async () => {
+  const gravadas = [{ palavra: "especialista" }, { palavra: "valores" }, { palavra: "didatico" }];
+  const chain: Record<string, unknown> = {};
+  chain.select = () => chain;
+  chain.eq = () => chain;
+  chain.then = (resolve: (v: unknown) => unknown) => resolve({ data: gravadas, error: null });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adminReal = construirAdminDoWorkerReal({ from: () => chain } as any);
+
+  expect([...(await adminReal.palavrasAprovadas("org-x", false))].sort()).toEqual(["didatico", "especialista"]);
+  expect([...(await adminReal.palavrasAprovadas("org-x"))].sort()).toEqual(["didatico"]);
+});
+
+it("regra do RQE: o admin real lê settings da organização pedida, e só o booleano false desliga", async () => {
+  const tabelas: string[] = [];
+  const filtros: Array<[string, unknown]> = [];
+  let settings: unknown = { medico_sem_rqe: false };
+  const chain: Record<string, unknown> = {};
+  chain.select = () => chain;
+  chain.eq = (coluna: string, valor: unknown) => {
+    filtros.push([coluna, valor]);
+    return chain;
+  };
+  chain.maybeSingle = async () => ({ data: { settings }, error: null });
+
+  const adminReal = construirAdminDoWorkerReal({
+    from: (tabela: string) => {
+      tabelas.push(tabela);
+      return chain;
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+
+  expect(await adminReal.regraDoRqe!("org-x")).toBe(false);
+  expect(tabelas).toEqual(["organizations"]);
+  expect(filtros).toEqual([["id", "org-x"]]);
+
+  settings = { medico_sem_rqe: "false" };
+  expect(await adminReal.regraDoRqe!("org-x")).toBe(true);
+});

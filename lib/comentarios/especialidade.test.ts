@@ -16,4 +16,15 @@ describe("motivoDaRecusaPorEspecialidade — trava de RQE compartilhada (worker 
   it("não recusa texto sem menção a especialidade", () => {
     expect(motivoDaRecusaPorEspecialidade("Que bom que gostou! 🌿")).toBeNull();
   });
+
+  it.each([
+    "Obrigado! Os nutrólogos agradecem",
+    "Somos especialistas em nutrição",
+    "Sou nutrologista, obrigado",
+    "Essa é a nossa especialidade",
+    "Fiz especialização nisso",
+  ])("com a regra do RQE desligada na organização, '%s' pode ser publicado", (texto) => {
+    expect(motivoDaRecusaPorEspecialidade(texto, false)).toBeNull();
+    expect(motivoDaRecusaPorEspecialidade(texto, true)).not.toBeNull();
+  });
 });
