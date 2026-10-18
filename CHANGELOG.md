@@ -8,6 +8,38 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.25.0] — 2026-10-18
+
+### Adicionado
+
+- **Espera do follow-up pode contar do dia da consulta** No passo de espera do follow-up, "Contar a partir de" ganhou a opção "Do dia
+  da consulta (manhã do dia)". Com ela, uma espera de 7 dias termina à
+  meia-noite do sétimo dia depois da consulta, no fuso da organização, e não no
+  mesmo horário da consulta. Assim, se o número só envia de manhã, o check-in sai
+  na manhã do dia 7, e não na manhã do dia 8. As opções que já existiam
+  continuam iguais.
+
+- **Conversa parada com uma pessoa pode voltar à IA sozinha, e o acompanhamento passa a mover o card no funil e pôr ou tirar etiqueta** Portado do projeto original (DeskcommCRM):
+
+  - em Configurações › Distribuição de atendimento dá para ligar um prazo (de 5
+    minutos a 24 horas) para a conversa que ficou com uma pessoa voltar ao
+    agente de IA sozinha, quando ninguém da equipe deu mais sinal — nem assumiu,
+    nem respondeu pela tela ou pelo celular. O tempo conta do último sinal. A
+    volta é a mesma do botão "Devolver": as travas saem, o acompanhamento pausado
+    retoma e a linha do tempo diz que foi o prazo. Só devolve onde há agente
+    publicado que atenda naquele número (respeitando a lista de números de cada
+    agente) e nunca devolve contato marcado como "sempre atendimento humano" nem
+    quem pediu para parar. A devolução não manda mensagem: a IA só responde à
+    próxima mensagem do cliente, com a janela de envio e o ritmo de sempre.
+    **Desligado por padrão**, inclusive em quem já tem o sistema: nada muda até
+    alguém ligar (PR #1133 de @Gervanno);
+  - o acompanhamento ganhou duas caixas que não falam com o cliente: "Mover lead
+    no funil" (leva o card para a etapa escolhida do mesmo funil, pelo mesmo
+    caminho do quadro) e "Etiqueta do lead" (põe ou tira etiquetas do negócio;
+    sem negócio, do contato). Tirar etiqueta é acréscimo nosso. A publicação
+    recusa a caixa sem etapa ativa ou sem etiqueta. Fluxos já publicados não
+    mudam (PR #2181 de @webtecnica).
+
 ## [4.24.0] — 2026-10-18
 
 ### Adicionado
@@ -7725,7 +7757,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.24.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.25.0...HEAD
+[4.25.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.24.0...v4.25.0
 [4.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.23.1...v4.24.0
 [4.23.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.23.0...v4.23.1
 [4.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.22.1...v4.23.0
