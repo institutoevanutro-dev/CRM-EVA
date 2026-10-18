@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 
-import { Play, Clock, GitBranch, Brain, ChatCircle, ArrowsClockwise, PaperPlaneTilt, Flag } from "@/lib/ui/icons";
+import { Play, Clock, GitBranch, Brain, ChatCircle, ArrowsClockwise, PaperPlaneTilt, Flag, Funnel, Tag } from "@/lib/ui/icons";
 import type { FlowNode, NodeType } from "@/lib/followup/graph-schema";
 import { RESULTADOS_DO_FIM } from "@/lib/followup/vocabulario";
 
@@ -98,6 +98,26 @@ export const NODE_VISUALS: Record<NodeType, NodeVisual> = {
     defaultLabel: "Enviar mensagem",
     defaultConfig: () => ({ mode: "ai_message", prompt_hint: "Configure esta etapa." }),
   },
+  // Ações sem mensagem (portado do projeto original, DeskcommCRM PR #2181). O
+  // config nasce vazio de propósito: o publish é quem exige a escolha.
+  move_lead: {
+    type: "move_lead",
+    paletteLabel: "Mover lead no funil",
+    icon: Funnel,
+    chipClassName: "bg-info-bg text-info-fg",
+    borderClassName: "border-l-info",
+    defaultLabel: "Mover card de etapa",
+    defaultConfig: () => ({ stage_id: "" }),
+  },
+  edit_lead_tag: {
+    type: "edit_lead_tag",
+    paletteLabel: "Etiqueta do lead",
+    icon: Tag,
+    chipClassName: "bg-accent-soft text-accent",
+    borderClassName: "border-l-accent-500",
+    defaultLabel: "Pôr etiqueta no lead",
+    defaultConfig: () => ({ tags: [], operacao: "adicionar" }),
+  },
   end: {
     type: "end",
     paletteLabel: "Fim",
@@ -165,6 +185,15 @@ export function describeNodeConfig(
       if (c.mode === "text") return c.body;
       if (c.mode === "media") return t("Mídia da biblioteca");
       return t("Template fixo");
+    }
+    case "move_lead": {
+      const c = config as ConfigOf<"move_lead">;
+      return c.stage_id ? t("move o card para outra etapa do funil") : t("sem etapa de destino");
+    }
+    case "edit_lead_tag": {
+      const c = config as ConfigOf<"edit_lead_tag">;
+      if (!c.tags.length) return t("sem etiqueta escolhida");
+      return `${c.operacao === "remover" ? t("tira:") : t("põe:")} ${c.tags.join(", ")}`;
     }
     case "end": {
       const c = config as ConfigOf<"end">;

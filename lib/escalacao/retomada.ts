@@ -60,6 +60,15 @@ export type RetomadaFalha =
   /** Não deu para ler a marca do contato; sem ela não se devolve nada (fail-closed). */
   | "contact_state_unreadable";
 
+/**
+ * De onde veio a devolução. Ausente = alguém clicou (tela ou tool do agente).
+ * `automatica` = o prazo de `settings.routing.handoff_return_after_minutes`
+ * venceu sem sinal humano (cron `handoff-devolucao`) — o rastro tem de dizer
+ * isso, senão a linha do tempo mostra "devolvido" sem ninguém ter devolvido.
+ * Portado do projeto original (DeskcommCRM, PR #1133 de @Gervanno).
+ */
+export type OrigemDaRetomada = { automatica: { minutos: number } };
+
 export type RetomadaResultado =
   | {
       ok: true;
@@ -84,7 +93,7 @@ interface ConversaRow {
 
 export async function devolverAtendimentoAoAgente(
   deps: RetomadaDeps,
-  input: { conversationId: string },
+  input: { conversationId: string; origem?: OrigemDaRetomada },
 ): Promise<RetomadaResultado> {
   const { supabase, organizationId } = deps;
 
@@ -199,7 +208,10 @@ export async function devolverAtendimentoAoAgente(
     await autorizarContatoParaIA(supabase, {
       organizationId,
       contactId: conv.contact_id,
-      reason: "retomada_manual",
+      // A automática entra como regra de automação — é o que ela é —, não como
+      // "manual": `ai_authorized_reason` é lido por quem investiga por que a IA
+      // voltou a falar com um contato.
+      reason: input.origem ? "automacao:devolucao_apos_prazo" : "retomada_manual",
     });
   }
 
@@ -244,7 +256,13 @@ export async function devolverAtendimentoAoAgente(
   // `handoff_triggered` e a volta não emitia nada, então a linha do tempo mostrava
   // o cliente saindo para uma pessoa e nunca voltando.
   if (conv.contact_id !== null) {
-    await emitirAtividadeDeRetomada(deps, conv.contact_id, input.conversationId, continuidade);
+    await emitirAtividadeDeRetomada(
+      deps,
+      conv.contact_id,
+      input.conversationId,
+      continuidade,
+      input.origem,
+    );
   }
 
   await audit({
@@ -260,6 +278,7 @@ export async function devolverAtendimentoAoAgente(
       houve_atendimento_humano: continuidade.houveAtendimentoHumano,
       decisoes: continuidade.decisoes.length,
       notas: continuidade.notas.length,
+      ...(input.origem ? { automatica: true, apos_minutos: input.origem.automatica.minutos } : {}),
     },
   });
 
@@ -327,6 +346,7 @@ async function emitirAtividadeDeRetomada(
   contactId: string,
   conversationId: string,
   continuidade: ContinuidadeHumana,
+  origem?: OrigemDaRetomada,
 ): Promise<void> {
   const { data: leadsData } = await deps.supabase
     .from("crm_leads")
@@ -355,13 +375,16 @@ async function emitirAtividadeDeRetomada(
     sourceModule: "escalacao.retomada",
     sourceId: conversationId,
     actor: deps.actor,
-    reason: continuidade.houveAtendimentoHumano
-      ? "Atendimento devolvido ao agente com o registro do que a equipe decidiu"
-      : "Atendimento devolvido ao agente",
+    reason: origem
+      ? `Atendimento devolvido ao agente automaticamente após ${origem.automatica.minutos} min sem resposta da equipe`
+      : continuidade.houveAtendimentoHumano
+        ? "Atendimento devolvido ao agente com o registro do que a equipe decidiu"
+        : "Atendimento devolvido ao agente",
     payload: {
       conversation_id: conversationId,
       decisoes: continuidade.decisoes.length,
       notas: continuidade.notas.length,
+      ...(origem ? { automatica: true, apos_minutos: origem.automatica.minutos } : {}),
     },
   });
   if (!resultado.ok) {

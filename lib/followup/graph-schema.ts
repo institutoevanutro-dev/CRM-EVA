@@ -13,6 +13,12 @@ export const NODE_TYPES = [
   'match_reply',
   'repeat',
   'action',
+  // Ações que NÃO falam com o cliente: `move_lead` move o card para outra etapa
+  // (o mesmo escritor de etapa do quadro e das automações) e `edit_lead_tag`
+  // põe ou tira etiqueta do negócio. Portado e adaptado do projeto original
+  // (DeskcommCRM, PR #2181 de @webtecnica).
+  'move_lead',
+  'edit_lead_tag',
   'end',
 ] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
@@ -321,6 +327,32 @@ export const endConfigSchema = z.strictObject({
  * Flow node schema — discriminated union based on node type.
  * Each node type has its specific config schema.
  */
+/**
+ * Nó `move_lead` — mover o card para outra etapa do MESMO funil. Só a etapa:
+ * quem recusa troca de funil é a casa (`moveLeadHandler` devolve
+ * `pipeline_immutable_use_clone`). `stage_id` aceita vazio porque o rascunho
+ * salva trabalho pela metade; quem exige a escolha é o `validate-publish`.
+ */
+export const moveLeadConfigSchema = z.strictObject({
+  stage_id: z.string().max(64),
+});
+
+/** O que a caixa de etiqueta faz: põe (merge idempotente) ou tira. */
+export const OPERACOES_DE_TAG = ['adicionar', 'remover'] as const;
+
+/**
+ * Nó `edit_lead_tag` — põe ou tira etiquetas do negócio (sem negócio, do
+ * contato). Os MESMOS limites do schema de webhook: até 10 tags de até 60
+ * caracteres. Lista vazia é rascunho; o publish recusa (`tag_ausente`).
+ * `operacao` omitida = `adicionar` (o comportamento do original).
+ */
+export const editLeadTagConfigSchema = z.strictObject({
+  tags: z
+    .array(z.string().max(60, 'Tag muito longa: máximo de 60 caracteres.'))
+    .max(10, 'No máximo 10 tags por caixa.'),
+  operacao: z.enum(OPERACOES_DE_TAG).optional(),
+});
+
 export const flowNodeSchema = z.discriminatedUnion('type', [
   // Trigger node: entry point, no config
   z.strictObject({
@@ -396,6 +428,28 @@ export const flowNodeSchema = z.discriminatedUnion('type', [
       y: z.number(),
     }),
     config: actionConfigSchema,
+  }),
+  // Ação sem mensagem: move o card para outra etapa do funil
+  z.strictObject({
+    id: z.string().min(1),
+    type: z.literal('move_lead'),
+    label: z.string().min(1).max(60),
+    position: z.strictObject({
+      x: z.number(),
+      y: z.number(),
+    }),
+    config: moveLeadConfigSchema,
+  }),
+  // Ação sem mensagem: põe ou tira etiqueta do negócio
+  z.strictObject({
+    id: z.string().min(1),
+    type: z.literal('edit_lead_tag'),
+    label: z.string().min(1).max(60),
+    position: z.strictObject({
+      x: z.number(),
+      y: z.number(),
+    }),
+    config: editLeadTagConfigSchema,
   }),
   // End node: terminal state
   z.strictObject({

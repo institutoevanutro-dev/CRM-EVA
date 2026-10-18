@@ -57,6 +57,8 @@ import { ClassifyNode } from "./nodes/ClassifyNode";
 import { MatchReplyNode } from "./nodes/MatchReplyNode";
 import { RepeatNode } from "./nodes/RepeatNode";
 import { ActionNode } from "./nodes/ActionNode";
+import { EditLeadTagNode } from "./nodes/EditLeadTagNode";
+import { MoveLeadNode } from "./nodes/MoveLeadNode";
 import { EndNode } from "./nodes/EndNode";
 
 const EMPTY_GRAPH: FlowGraph = { nodes: [], edges: [] };
@@ -72,6 +74,8 @@ const nodeTypes: NodeTypes = {
   match_reply: MatchReplyNode,
   repeat: RepeatNode,
   action: ActionNode,
+  move_lead: MoveLeadNode,
+  edit_lead_tag: EditLeadTagNode,
   end: EndNode,
 };
 
