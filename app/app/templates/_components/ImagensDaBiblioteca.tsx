@@ -74,7 +74,7 @@ export function ImagensDaBiblioteca({
             const url = item?.variantes.find((v) => v.mime.startsWith("image/"))?.url ?? null;
             return (
               <li key={id} className="flex items-center gap-2 text-sm">
-                {url ? <img src={url} alt="" className="size-10 rounded border border-border object-cover" /> : null}
+                {url ? <img src={url} alt="" className="size-10 rounded-md border border-border object-cover" /> : null}
                 <span className="min-w-0 flex-1 truncate">
                   {item ? item.title : t("Mídia da biblioteca")}
                   {item && item.situacao !== "pronta" ? (
@@ -86,7 +86,7 @@ export function ImagensDaBiblioteca({
                   disabled={disabled}
                   onClick={() => onChange(valor.filter((x) => x !== id))}
                   aria-label={t("Remover imagem")}
-                  className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+                  className="rounded-md p-0.5 text-muted-foreground hover:text-foreground"
                 >
                   <X className="size-3.5" aria-hidden />
                 </button>

@@ -668,6 +668,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         }}
       />
       <RespostaComImagensDialog
+        key={`${respostaComImagens?.templateId ?? ""}:${respostaComImagens?.imagens.length ?? 0}:${respostaComImagens?.legenda ?? ""}`}
         templateId={respostaComImagens?.templateId ?? null}
         imagens={respostaComImagens?.imagens ?? []}
         legendaInicial={respostaComImagens?.legenda ?? ""}
@@ -676,14 +677,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           setRespostaComImagens(null);
           if (legenda) textoDeVoltaAoCampo(legenda);
         }}
-        onRemove={(itemId) => {
+        onRemove={(itemId, legenda) => {
           const r = respostaComImagens;
           if (!r) return;
           const imagens = r.imagens.filter((i) => i.itemId !== itemId);
-          if (imagens.length > 0) return setRespostaComImagens({ ...r, imagens });
+          // A legenda editada sobrevive à troca da fila.
+          if (imagens.length > 0) return setRespostaComImagens({ ...r, imagens, legenda });
           // A última imagem saiu: a resposta vira texto no campo, como no cancelar.
           setRespostaComImagens(null);
-          if (r.legenda) textoDeVoltaAoCampo(r.legenda);
+          if (legenda) textoDeVoltaAoCampo(legenda);
         }}
         onSend={(legenda) => void enviarRespostaComImagens(legenda)}
       />

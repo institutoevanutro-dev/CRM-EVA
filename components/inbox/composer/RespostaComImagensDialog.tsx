@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,7 +18,7 @@ interface Props {
   legendaInicial: string;
   sending: boolean;
   onCancel: (legenda: string) => void;
-  onRemove: (itemId: string) => void;
+  onRemove: (itemId: string, legenda: string) => void;
   onSend: (legenda: string) => void;
 }
 
@@ -38,8 +38,8 @@ export function RespostaComImagensDialog({
   onSend,
 }: Props) {
   const t = useT();
+  // Quem chama remonta o diálogo (`key`) quando a fila ou a legenda mudam por fora.
   const [legenda, setLegenda] = useState(legendaInicial);
-  useEffect(() => setLegenda(legendaInicial), [legendaInicial, templateId]);
   if (!templateId || imagens.length === 0) return null;
 
   return (
@@ -58,7 +58,7 @@ export function RespostaComImagensDialog({
               />
               <button
                 type="button"
-                onClick={() => onRemove(img.itemId)}
+                onClick={() => onRemove(img.itemId, legenda)}
                 disabled={sending}
                 aria-label={t("Remover imagem")}
                 className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-background px-1 text-xs text-muted-foreground hover:text-foreground"

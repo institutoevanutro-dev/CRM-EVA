@@ -105,3 +105,18 @@ describe("Composer · resposta rápida com imagens da biblioteca", () => {
     expect(send).not.toHaveBeenCalled();
   });
 });
+
+describe("Composer · falha que não é recusa do item", () => {
+  beforeEach(() => send.mockReset());
+
+  it("a fila para, a prévia fica com o que faltou e a legenda já enviada não repete", async () => {
+    send.mockResolvedValueOnce({}).mockRejectedValueOnce(new ApiError(500, "internal_error", undefined, "", ""));
+    escolher();
+    await enviar();
+    expect(screen.getByTestId("imagens-da-resposta").querySelectorAll("img")).toHaveLength(1);
+    expect(screen.getByLabelText("Legenda")).toHaveValue("");
+    send.mockResolvedValue({});
+    await enviar();
+    expect(send.mock.calls[2]![0]).toEqual({ conversation_id: "conv-1", type: "image", media_library_item_id: ITEM_B });
+  });
+});
