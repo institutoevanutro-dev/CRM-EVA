@@ -124,6 +124,16 @@ describe("PUT", () => {
     expect(auditSpy).not.toHaveBeenCalled();
   });
 
+  it("organização que não existe mais: a função devolve P0002 e a rota responde 404, sem auditar", async () => {
+    erroDaRpc = { code: "P0002", message: "organization_not_found" };
+
+    const res = await PUT(pedido(JSON.stringify({ ligada: false })));
+
+    expect(res.status).toBe(404);
+    expect((await res.json()).error.code).toBe("not_found");
+    expect(auditSpy).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["ligada como texto", JSON.stringify({ ligada: "false" })],
     ["sem ligada", JSON.stringify({})],

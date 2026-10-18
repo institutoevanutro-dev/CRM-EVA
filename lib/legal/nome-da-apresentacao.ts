@@ -37,6 +37,8 @@
  * regra de `instalacao.ts`): promover uma falha a fato deixaria o nome errado na
  * página por até 30s depois de o banco voltar.
  */
+import { cache } from "react";
+
 import { marcaDaSaida } from "@/lib/branding/saida";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -86,8 +88,13 @@ async function daColuna(): Promise<string | null> {
   }
 }
 
-export async function nomeDaApresentacao(): Promise<string> {
+/**
+ * `cache` do React, como em `lib/auth/server.ts`: o `generateMetadata` e a página
+ * de `/legal/about` chamam os dois na mesma requisição e dividem uma leitura só.
+ * Fora de um render de servidor o `cache` só repassa a chamada.
+ */
+export const nomeDaApresentacao = cache(async (): Promise<string> => {
   const nome = await daColuna();
   if (nome) return nome;
   return (await marcaDaSaida(null)).nome;
-}
+});

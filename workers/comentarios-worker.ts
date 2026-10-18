@@ -703,6 +703,13 @@ function construirAdminDaVozReal(admin: AdminSupabase): AdminDaVoz {
 }
 
 /**
+ * A frase da regra do RQE no prompt, igual à de antes de a regra ser por
+ * organização. Sai inteira quando a organização desligou a regra.
+ */
+const PROMPT_DO_RQE =
+  ", nunca chame o dono de nutrólogo, nutrologista, especialista ou qualquer título de especialidade — ele é médico (CFM), sem RQE";
+
+/**
  * I-10: passa pelo SEAM único de chamada de LLM (`runModelCall`) — a mesma
  * camada que agente, classificadores e compaction usam. Antes disto,
  * `generateText` direto não gravava `llm_calls` (o gasto não aparecia na tela
@@ -713,13 +720,6 @@ function construirAdminDaVozReal(admin: AdminSupabase): AdminDaVoz {
  * e respeita o teto da organização. Orçamento estourado é só mais um erro
  * capturado por `processarUmComentario` → `esperando_voce`.
  */
-/**
- * A frase da regra do RQE no prompt, igual à de antes de a regra ser por
- * organização. Sai inteira quando a organização desligou a regra.
- */
-const PROMPT_DO_RQE =
-  ", nunca chame o dono de nutrólogo, nutrologista, especialista ou qualquer título de especialidade — ele é médico (CFM), sem RQE";
-
 async function gerarRespostaReal(
   comentario: ComentarioNovo,
   perfil: PerfilDeVoz,

@@ -15,6 +15,7 @@
 -- operador atualizou. Numa instalação nova o apêndice do baseline roda antes de
 -- existir organização, e a coluna fica vazia. Depois de criada, nenhuma
 -- reaplicação a toca: o valor passa a ser de quem administra a instalação.
+-- Por desenho, ela só muda por SQL: ainda não há tela que a edite.
 --
 -- A linha id=1 só existe depois que a marca foi gravada (pelo .env no primeiro
 -- render, ou pela tela). Quando falta, a semeadura a cria com marca vazia e

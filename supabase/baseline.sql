@@ -36656,6 +36656,7 @@ notify pgrst, 'reload schema';
 --    roda este apêndice antes de existir organização e fica vazia; nenhuma
 --    reaplicação toca a coluna depois. Sem a linha id=1, a semeadura a cria
 --    com `seeded_from_env = true`, para o .env ainda completá-la.
+--    Por desenho, a coluna só muda por SQL: ainda não há tela que a edite.
 -- 2. `fn_definir_medico_sem_rqe`: grava `organizations.settings.medico_sem_rqe`
 --    (só admin, com suporte de escrita e MFA provada; desenho da 0360). Quem
 --    lê é `lib/comentarios/regra-do-rqe.ts`; ausente vale ligada.

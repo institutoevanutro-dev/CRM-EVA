@@ -219,7 +219,10 @@ export function useSalvarRegraDoRqe() {
   return useMutation({
     mutationFn: (ligada: boolean) =>
       apiClient.put<{ data: { ligada: boolean } }>("/api/v1/comentarios/regra-do-rqe", { ligada }),
-    onSuccess: () => {
+    onSuccess: (r) => {
+      // Grava a resposta antes de invalidar: sem isto a chave volta à posição
+      // antiga até o refetch chegar.
+      qc.setQueryData(CHAVE_REGRA_DO_RQE, r.data);
       qc.invalidateQueries({ queryKey: CHAVE_REGRA_DO_RQE });
       toast.success(t("Regra salva."));
     },

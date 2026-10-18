@@ -78,8 +78,10 @@ discordarem, vale o guia; quando o guia e `install.sh` discordarem, vale o insta
 ## Instalando para um cliente: nome, funil de clínica e outro site no mesmo servidor
 
 - **Nome da organização, sem passar pelo assistente.** Antes de rodar o instalador, ponha no `.env`
-  `ORG_NAME="Nome do cliente"` (sem ele: `Minha Empresa`), ou passe na frente do comando:
-  `ORG_NAME="Nome do cliente" ORG_NICHO=clinica bash hostgator-setup-kit/install.sh`. Com
+  `ORG_NAME="Nome do cliente"` (sem ele: `Minha Empresa`) e, para clínica, `ORG_NICHO=clinica`.
+  É no `.env`, não na frente do comando: quando o `.env` tem a chave, ele vence o ambiente, e o
+  próprio instalador grava `ORG_NAME` no `.env` na primeira rodada. O caractere `$` no nome é
+  recusado (o nome vai para um bloco SQL). Com
   `ORG_NICHO=clinica`, a organização nasce com o funil "Agendamentos" do pacote de clínica e com o
   onboarding feito. `ORG_NAME` vale na criação: trocar depois e rodar o instalador de novo cria
   **outra** organização; para renomear, use Configurações › Organização.

@@ -1174,7 +1174,11 @@ describe("catraca de host de terceiro no código que embarca", () => {
  * FRONTEIRA, declarada: comentário não conta (não chega ao usuário), `app/design`
  * fica fora (mesma razão da catraca de marca) e identificador em camelCase com o
  * nome no meio (`nomeEva`) não é pego, porque a letra colada o torna parte de uma
- * palavra maior. A régua pega o nome onde um LEITOR o encontra.
+ * palavra maior. O `_` conta como letra pela mesma razão: `EVA_X` e `x_eva` são
+ * identificador de código, não palavra, e o padrão de palavra solta não os pega.
+ * O alcance são os arquivos `.ts` e `.tsx`, sem teste, das cinco raízes de
+ * `RAIZES_VARRIDAS` (`app`, `components`, `hooks`, `lib`, `workers`): CSS, JSON,
+ * Markdown e SQL ficam fora. A régua pega o nome onde um LEITOR o encontra.
  */
 const NOME_DA_INSTALACAO_DE_ORIGEM: readonly RegExp[] = [
   /(?<![\p{L}\p{N}_])eva(?![\p{L}\p{N}_])(?!\s*link)/giu,
