@@ -6068,26 +6068,49 @@ end if;
 end $politica$;
 do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
 if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'messages' and policyname = 'messages_update'
-    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '28c451fefc8b5c81b3dcf153c9218e82') then
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '454aeec9498ed39f20d994bc017998e0') then
+-- (migration 0382, CRM-2) Só quem VÊ a conversa reescreve a mensagem dela.
+-- Trocado no lugar para a reaplicação não passar pela versão aberta.
 drop policy if exists "messages_update" on public.messages;
 create policy "messages_update" on public.messages
   for update using (
-    (organization_id in (select public.fn_user_org_ids()))
-    or public.fn_is_platform_admin()
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and exists (
+          select 1 from public.conversations c
+           where c.id = messages.conversation_id
+             and c.organization_id = messages.organization_id
+             and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+        ))
   ) with check (
-    (organization_id in (select public.fn_user_org_ids()))
-    or public.fn_is_platform_admin()
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and exists (
+          select 1 from public.conversations c
+           where c.id = messages.conversation_id
+             and c.organization_id = messages.organization_id
+             and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+        ))
   );
 end if;
 end $politica$;
 do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
 if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'messages' and policyname = 'messages_delete'
-    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '343057efbb2f342fa9b6d6c717473c45') then
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '17bced0c2c5a87247d0336cd93e16727') then
+-- (migration 0382, CRM-2) Com sessão, só o eco do próprio envio, numa conversa
+-- que se vê (`removerEcoDoProprioEnvio`). Trocado no lugar, como o UPDATE.
 drop policy if exists "messages_delete" on public.messages;
 create policy "messages_delete" on public.messages
   for delete using (
-    (organization_id in (select public.fn_user_org_ids()))
-    or public.fn_is_platform_admin()
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and sent_via = 'external_device'
+        and exists (
+          select 1 from public.conversations c
+           where c.id = messages.conversation_id
+             and c.organization_id = messages.organization_id
+             and public.fn_can_view_conversation(c.organization_id, c.assigned_to_user_id)
+        ))
   );
 end if;
 end $politica$;
@@ -36464,6 +36487,93 @@ grant execute on function public.fn_inicio_resumo_da_clinica(uuid, timestamptz, 
 
 notify pgrst, 'reload schema';
 -- ---- fim: Visão da clínica (migration 0376) ----
+
+-- ---- link de mídia só do próprio dono e mensagens só de quem vê a conversa (migration 0382) ----
+-- Derivado de supabase/migrations/20261017200000_0382_midia_do_dono_e_mensagens_de_quem_ve.sql
+-- (o porquê inteiro está no cabeçalho de lá; auditoria de 17/10, CRM-1 e CRM-2).
+--
+-- CRM-2: `messages_update` e `messages_delete` NÃO estão aqui, de propósito: a
+-- troca foi feita no lugar, no bloco `do $politica$` da migration 0035 acima,
+-- para a reaplicação não recriar a versão aberta por um intervalo
+-- (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`).
+--
+-- CRM-1: os gatilhos que conferem o caminho gravado pela sessão.
+create or replace function public.fn_midia_da_mensagem_e_da_conversa()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_prefixo text := new.organization_id::text || '/' || new.conversation_id::text || '/';
+  v_arquivo text := substr(new.media_storage_path, length(v_prefixo) + 1);
+begin
+  if auth.uid() is null and current_user not in ('authenticated', 'anon') then
+    return new;
+  end if;
+  if left(new.media_storage_path, length(v_prefixo)) is distinct from v_prefixo
+     or v_arquivo !~ '^[A-Za-z0-9._-]+$'
+     or v_arquivo in ('.', '..') then
+    raise exception 'midia_da_mensagem_fora_da_conversa' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+comment on function public.fn_midia_da_mensagem_e_da_conversa() is
+  'Guarda de messages (migration 0382): na escrita com sessão, media_storage_path novo é {org}/{conversa}/{arquivo} '
+  'da própria linha (regra de isMediaPathOwnedBy); 42501 midia_da_mensagem_fora_da_conversa. Service role, motor e '
+  'migrations passam. Provado em tests/invariants/caminho-de-midia-gravado-pela-sessao.test.ts.';
+
+revoke execute on function public.fn_midia_da_mensagem_e_da_conversa() from public, anon, authenticated;
+
+create or replace trigger trg_midia_da_mensagem_e_da_conversa_insert
+  before insert on public.messages
+  for each row
+  when (new.media_storage_path is not null)
+  execute function public.fn_midia_da_mensagem_e_da_conversa();
+
+create or replace trigger trg_midia_da_mensagem_e_da_conversa_update
+  before update on public.messages
+  for each row
+  when (new.media_storage_path is not null
+        and (old.media_storage_path is distinct from new.media_storage_path
+             or old.conversation_id is distinct from new.conversation_id
+             or old.organization_id is distinct from new.organization_id))
+  execute function public.fn_midia_da_mensagem_e_da_conversa();
+
+create or replace function public.fn_foto_do_contato_so_o_servidor()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if auth.uid() is not null or current_user in ('authenticated', 'anon') then
+    raise exception 'foto_do_contato_so_o_servidor' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+comment on function public.fn_foto_do_contato_so_o_servidor() is
+  'Guarda de contacts (migration 0382): sessão nenhuma grava avatar_storage_path não nulo (42501 '
+  'foto_do_contato_so_o_servidor); quem grava é o cron contact-avatars, com service role. Zerar é livre. '
+  'Provado em tests/invariants/caminho-de-midia-gravado-pela-sessao.test.ts.';
+
+revoke execute on function public.fn_foto_do_contato_so_o_servidor() from public, anon, authenticated;
+
+create or replace trigger trg_foto_do_contato_so_o_servidor_insert
+  before insert on public.contacts
+  for each row
+  when (new.avatar_storage_path is not null)
+  execute function public.fn_foto_do_contato_so_o_servidor();
+
+create or replace trigger trg_foto_do_contato_so_o_servidor_update
+  before update on public.contacts
+  for each row
+  when (new.avatar_storage_path is not null
+        and (old.avatar_storage_path is distinct from new.avatar_storage_path
+             or old.organization_id is distinct from new.organization_id
+             or old.id is distinct from new.id))
+  execute function public.fn_foto_do_contato_so_o_servidor();
+-- ---- fim: link de mídia só do próprio dono e mensagens só de quem vê a conversa (migration 0382) ----
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

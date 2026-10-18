@@ -55,4 +55,18 @@ describe("GET /api/v1/contacts/[id]/avatar", () => {
     expect(r.status).toBe(307);
     expect(r.headers.get("location")).toBe("https://storage/x");
   });
+
+  // Auditoria 17/10 (CRM-1): `avatar_storage_path` é gravável pela sessão. A
+  // service role só assina a foto DESTE contato, desta organização.
+  it.each([
+    ["de outra organização", "org2/avatars/c1.jpg"],
+    ["de outro contato", "org1/avatars/c2.jpg"],
+    ["fora de avatars", "org1/conv1/c1.jpg"],
+    ["que sai da pasta com ..", "org1/avatars/c1.jpg/../../org2/avatars/c1.jpg"],
+  ])("caminho %s → 404, sem assinar nada", async (_nome, caminho) => {
+    linhaVisivelPelaRls = { avatar_storage_path: caminho, is_anonymized: false };
+    const r = await pedir();
+    expect(r.status).toBe(404);
+    expect(createSignedUrl).not.toHaveBeenCalled();
+  });
 });

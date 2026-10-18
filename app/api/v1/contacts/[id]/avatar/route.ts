@@ -18,6 +18,7 @@ import type { NextRequest } from "next/server";
 
 import { fail } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { isAvatarPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -71,7 +72,13 @@ export async function GET(
     .maybeSingle();
 
   const row = contato as { avatar_storage_path?: string | null; is_anonymized?: boolean } | null;
-  if (!row?.avatar_storage_path || row.is_anonymized) {
+  // A coluna é gravável pela sessão: só assina a foto DESTE contato, desta
+  // organização (CRM-1). Caminho de outro contato ou outra org é "sem foto".
+  if (
+    !row?.avatar_storage_path ||
+    row.is_anonymized ||
+    !isAvatarPathOwnedBy(row.avatar_storage_path, activeOrg.orgId, id)
+  ) {
     // 404 e não erro: "sem foto" é o estado normal da maioria dos contatos, e o
     // <AvatarFallback> das iniciais assume sozinho.
     return new Response(null, { status: 404 });

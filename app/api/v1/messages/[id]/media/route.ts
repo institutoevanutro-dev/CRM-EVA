@@ -23,6 +23,7 @@ import {
 import { variantesDoItem } from "@/lib/midias/esquemas";
 import { BUCKET_DA_BIBLIOTECA } from "@/lib/midias/termo";
 import { cabecalhosDeMidia } from "@/lib/messaging/media/servir";
+import { isMessageMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -59,7 +60,7 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const { data: msg, error } = await supabase
     .from("messages")
     .select(
-      "id, media_url, media_mime, media_storage_path, channel_session_id, media_library_item_id, metadata",
+      "id, conversation_id, media_url, media_mime, media_storage_path, channel_session_id, media_library_item_id, metadata",
     )
     .eq("id", messageId)
     .eq("organization_id", activeOrg.orgId)
@@ -126,6 +127,14 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   }
 
   if (msg.media_storage_path) {
+    // A coluna é gravável pela sessão: só assina arquivo desta organização e
+    // desta mensagem (CRM-1). Fora disso é 404, sem cair no fallback.
+    if (
+      !isMessageMediaPathOwnedBy(msg.media_storage_path, activeOrg.orgId, msg.conversation_id, msg.id)
+    ) {
+      logger.warn("messages.media.path_fora_da_mensagem", { message_id: messageId });
+      return fail("not_found", t("Mensagem sem mídia."), 404, { requestId });
+    }
     const admin = createAdminClient();
     const { data: signed, error: signErr } = await admin.storage
       .from("whatsapp-media")
