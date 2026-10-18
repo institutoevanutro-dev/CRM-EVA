@@ -8,6 +8,26 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.24.0] — 2026-10-18
+
+### Adicionado
+
+- **O Caddy do kit serve outros sites pela pasta sites/, sem mexer no Caddyfile** Quem usa o Caddy do kit (`REVERSE_PROXY=caddy`) pode servir outro site no mesmo servidor gravando um arquivo `sites/<nome>.caddy` ao lado do `docker-compose.prod.yml`. O Caddyfile importa todo `*.caddy` dessa pasta, que fica fora do git: nenhuma atualização encosta no que está nela, ao contrário de um bloco escrito à mão no Caddyfile. Antes de recarregar, confira com `docker compose -f docker-compose.prod.yml exec caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile`, porque um arquivo quebrado na pasta impede o Caddy de subir no próximo reinício. A atualização cria a pasta vazia e nada mais muda. Com o Traefik ou o Nginx Proxy Manager da hospedagem, a pasta não é usada.
+
+- **O instalador cria a organização com o nome do cliente e, para clínica, com o funil de agendamentos** Quem instala para um cliente pode pôr no `.env` o nome da organização (`ORG_NAME`) e o nicho (`ORG_NICHO=clinica`) antes de rodar o `install.sh`. A organização nasce com esse nome, e o endereço interno sai sem acento (`Clínica D'Ávila` vira `clinica-d-avila`). Com o nicho de clínica, o funil "Agendamentos" do assistente de onboarding substitui o de pedidos e o dono entra direto no CRM, sem o assistente. Rodar o instalador de novo reencontra a mesma organização e não mexe num funil que já tem negócio. Sem as duas chaves nada muda: a organização continua nascendo "Minha Empresa", com o funil de pedidos. Chaves que o instalador não conhece, como `SIGNUP_MODE`, seguem preservadas quando ele roda de novo.
+
+- **Comentários do Instagram ganham a chave Médico sem RQE** Na aba Comentários do Inbox, o administrador agora vê a chave "Médico sem
+  RQE". Ligada, que é como toda organização já está, nada muda: a IA nunca chama
+  ninguém de especialista ou nutrólogo nas respostas aos comentários, e
+  comentário sobre especialidade continua esperando você. Desligue quando o
+  médico da clínica tem RQE ou quando a clínica não é médica, como uma clínica
+  odontológica: a IA deixa de evitar essas palavras, e você pode liberá-las em
+  "Palavras da IA". Preço, saúde e agendamento continuam sempre com você.
+
+### Alterado
+
+- **Os rótulos do prontuário e da tabela de preços dizem só Prontuário e Precificação** Em Chaves de integração, os dois escopos do prontuário passam a se chamar "Prontuário: pesquisar cadastro de contatos" e "Prontuário: criar e atualizar cadastro de contatos", sem o nome de um sistema de outra instalação colado atrás. Em Produtos, o selo dos itens que vêm da tabela de preços passa a dizer "preço da Precificação", e o aviso da edição fala em Precificação. Só o texto mudou: os escopos, as permissões das chaves já criadas, a sincronização e as variáveis do `.env` continuam iguais.
+
 ## [4.23.1] — 2026-10-18
 
 ### Corrigido
@@ -7705,7 +7725,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.23.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.24.0...HEAD
+[4.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.23.1...v4.24.0
 [4.23.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.23.0...v4.23.1
 [4.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.22.1...v4.23.0
 [4.22.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.22.0...v4.22.1
