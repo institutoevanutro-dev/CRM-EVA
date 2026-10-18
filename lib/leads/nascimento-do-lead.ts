@@ -58,7 +58,7 @@ import { contatoEClienteParaOFunil } from "@/lib/contacts/cliente-pela-agenda";
 import { ehIdentificadorTecnico, rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
 
 import { emitLeadActivity } from "./activity-emitter";
-import { rotuloDoCanal } from "./activity-vocabulary";
+import { rotuloDoCanal, sourceDoCanal } from "./activity-vocabulary";
 
 /**
  * O rótulo que aparece no card do funil quando o lead nasceu de um clique em
@@ -98,7 +98,7 @@ export interface DadosDoNascimento {
   nomeDoContato: string | null;
   /**
    * De onde o negócio nasceu, quando NÃO é a mensagem recebida (padrão:
-   * `source` "whatsapp", motivo "primeira mensagem recebida no ..."). Hoje só
+   * `source` = o canal da conversa, motivo "primeira mensagem recebida no ..."). Hoje só
    * a conversa que começa pelo celular conectado usa (DeskcommCRM #2543).
    */
   origem?: { source: string; motivo: string };
@@ -417,8 +417,12 @@ export async function garantirLeadDaConversa(
     p_title: titulo,
     // A campanha ganha: quem montou a lista sabe de onde o card veio. Sem ela,
     // vale a regra de antes — anúncio mantém a origem do contato, e o resto
-    // nasce "whatsapp".
-    p_source: marca ? marca.source : rotuloDeAnuncio ? contato!.source : (dados.origem?.source ?? "whatsapp"),
+    // nasce com o CANAL da conversa ("instagram"; "whatsapp" no padrão).
+    p_source: marca
+      ? marca.source
+      : rotuloDeAnuncio
+        ? contato!.source
+        : (dados.origem?.source ?? sourceDoCanal(canal)),
     p_source_metadata: marca
       ? marca.source_metadata
       : rotuloDeAnuncio

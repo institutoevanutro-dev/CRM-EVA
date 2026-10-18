@@ -332,6 +332,18 @@ export function rotuloDoCanal(canal: string | null | undefined): string {
 }
 
 /**
+ * O `crm_leads.source` do negócio que nasce de uma conversa deste canal: o
+ * próprio canal (`instagram`), e WhatsApp para o que o vocabulário não conhece.
+ * Sem isto o negócio do direct do Instagram nascia com `source = 'whatsapp'` e
+ * todo relatório por origem o contava no lugar errado (migration 0379).
+ *
+ * Portado do projeto original (DeskcommCRM, PR #2199 de @paulolimajr77).
+ */
+export function sourceDoCanal(canal: string | null | undefined): string {
+  return canal != null && Object.hasOwn(ROTULO_DE_CANAL, canal) ? canal : "whatsapp";
+}
+
+/**
  * Rótulo para exibir. Aceita `string` porque o banco tem histórico anterior a
  * este vocabulário — o que não se pode é ESCREVER fora dele.
  *
