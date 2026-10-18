@@ -31,14 +31,13 @@ WAHA_TAR="${DUMP/db-/waha-}"
 WAHA_TAR="${WAHA_TAR%.sql.gz}.tgz"
 if [ -f "$WAHA_TAR" ]; then
   step "Restaurando sessões do WhatsApp de $WAHA_TAR"
-  vol="$(dc config --volumes 2>/dev/null | grep -m1 waha-data || echo '')"
-  proj="$(basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')"
-  vol="${vol:-${proj}_waha-data}"
+  # Nome real do volume, o que o contêiner monta — ver volume_waha_do_projeto.
+  vol="$(volume_waha_do_projeto)"
   WAHA_DIR="$(cd "$(dirname "$WAHA_TAR")" && pwd)"
   WAHA_FILE="$(basename "$WAHA_TAR")"
   docker run --rm -v "${vol}:/data" -v "${WAHA_DIR}:/in:ro" alpine:3.20 \
     sh -c "rm -rf /data/* && tar xzf /in/${WAHA_FILE} -C /data" \
-    && c_grn "✓ sessões do WhatsApp restauradas" || c_ylw "⚠ Falha ao restaurar sessões do WhatsApp"
+    && c_grn "✓ sessões do WhatsApp restauradas ($vol)" || c_ylw "⚠ Falha ao restaurar sessões do WhatsApp"
 fi
 
 c_ylw "Reinicie o app: docker compose $(dc_files) restart app"
