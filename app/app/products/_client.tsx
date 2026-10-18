@@ -303,7 +303,7 @@ export function ProdutosClient({
           ) : null}
           {editando?.origem === "precificaeva" ? (
             <p className="mb-3 rounded-md border border-warning/40 bg-warning-bg p-2 text-sm text-warning-fg" data-testid="produto-do-precificaeva">
-              {t("Este item vem do PrecificaEva. Nome, categoria, preço, custo e situação são atualizados de lá a cada hora: o que mudar aqui volta ao valor do PrecificaEva. Para mudar o preço, altere no PrecificaEva.")}
+              {t("Este item vem da Precificação. Nome, categoria, preço, custo e situação são atualizados de lá a cada hora: o que mudar aqui volta ao valor da Precificação. Para mudar o preço, altere na Precificação.")}
             </p>
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
@@ -429,7 +429,7 @@ export function ProdutosClient({
                   {p.controla_estoque
                     ? ` · ${p.quantidade} ${t("em estoque")}`
                     : ` · ${t("sem controle de estoque")}`}
-                  {p.origem === "precificaeva" ? ` · ${t("preço do PrecificaEva")}` : ""}
+                  {p.origem === "precificaeva" ? ` · ${t("preço da Precificação")}` : ""}
                 </p>
               </div>
               <span className="shrink-0 tabular-nums font-medium">

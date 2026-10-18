@@ -21,10 +21,10 @@ Ligada pela metade responde 503 (o operador precisa ver). Erro remoto responde 5
 
 ## Verificação
 1. Configurar as três variáveis e esperar a rodada (ou chamar o cron com o segredo interno).
-2. Em Produtos, conferir os itens com "preço do PrecificaEva" e os preços iguais aos do PrecificaEva.
+2. Em Produtos, conferir os itens com "preço da Precificação" e os preços iguais aos do PrecificaEva.
 3. Mudar um preço no PrecificaEva e conferir no CRM na rodada seguinte.
 
 Sem migration. Auditoria: uma linha `catalog_product.synced` por rodada com efeito (contagens no metadata).
 
 ## Living System Checklist
-Entrada: função `tabela-precos` do PrecificaEva. Saída: `catalog_products`, que o agente de IA e a agenda leem. Registro: `catalog_product.synced` só quando algo muda. Porta: Produtos (selo "preço do PrecificaEva" e aviso na edição). Falha: 503 no log do scheduler; o catálogo fica com os últimos preços. Configuração ausente: rodada pulada.
+Entrada: função `tabela-precos` do PrecificaEva. Saída: `catalog_products`, que o agente de IA e a agenda leem. Registro: `catalog_product.synced` só quando algo muda. Porta: Produtos (selo "preço da Precificação" e aviso na edição). Falha: 503 no log do scheduler; o catálogo fica com os últimos preços. Configuração ausente: rodada pulada.
