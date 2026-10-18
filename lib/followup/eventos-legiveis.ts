@@ -127,6 +127,8 @@ const TIPO_DO_NO: Record<FlowNode["type"], string> = {
   match_reply: "Resposta (texto)",
   repeat: "Repetição",
   action: "Mensagem",
+  move_lead: "Mover no funil",
+  edit_lead_tag: "Etiqueta",
   end: "Fim",
 };
 
@@ -186,6 +188,17 @@ export function resumoDoNo(node: FlowNode): NoDoDossie {
                 ? "envia uma imagem ou vídeo da biblioteca"
                 : "envia uma mensagem de modelo pronto",
       };
+    case "move_lead":
+      return { ...base, resumo: "move o card para outra etapa do funil — sem mensagem ao cliente" };
+    case "edit_lead_tag": {
+      const verbo = node.config.operacao === "remover" ? "tira" : "põe";
+      return {
+        ...base,
+        resumo: node.config.tags.length
+          ? `${verbo} a(s) etiqueta(s) ${node.config.tags.join(", ")} — sem mensagem ao cliente`
+          : "mexe em etiqueta, ainda sem etiqueta escolhida — sem mensagem ao cliente",
+      };
+    }
     case "end":
       return { ...base, resumo: `encerra — ${DESFECHO[node.config.outcome] ?? node.config.outcome}` };
   }

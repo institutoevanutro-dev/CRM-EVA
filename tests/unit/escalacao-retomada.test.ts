@@ -15,7 +15,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { audit } from "@/lib/audit";
-import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
+import { devolverAtendimentoAoAgente, type OrigemDaRetomada } from "@/lib/escalacao/retomada";
 import type { Actor } from "@/lib/api/handlers/types";
 
 vi.mock("@/lib/audit", () => ({ audit: vi.fn().mockResolvedValue(undefined) }));
@@ -176,7 +176,12 @@ function novaCaptura(): Captura {
   return { updates: [], inserts: [], rpc: [] };
 }
 
-async function retomar(cenario: CenarioBanco, cap: Captura, actor: Actor = USUARIO) {
+async function retomar(
+  cenario: CenarioBanco,
+  cap: Captura,
+  actor: Actor = USUARIO,
+  origem?: OrigemDaRetomada,
+) {
   return devolverAtendimentoAoAgente(
     {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -185,7 +190,7 @@ async function retomar(cenario: CenarioBanco, cap: Captura, actor: Actor = USUAR
       actor,
       requestId: "req-1",
     },
-    { conversationId: CONV },
+    { conversationId: CONV, origem },
   );
 }
 
@@ -325,6 +330,25 @@ describe("devolver o atendimento ao agente", () => {
       actor_kind: "user",
       performed_by_user_id: ATENDENTE,
     });
+  });
+
+  // Portado do projeto original (DeskcommCRM, PR #1133 de @Gervanno).
+  it("devolução automática (prazo vencido): o rastro diz que foi o prazo, não uma pessoa", async () => {
+    const cap = novaCaptura();
+    const cron: Actor = { type: "webhook_source", id: "cron:handoff-devolucao" };
+    const res = await retomar(cenarioComAtendimentoHumano(), cap, cron, { automatica: { minutos: 60 } });
+    expect(res.ok).toBe(true);
+    expect(cap.updates.filter((u) => u.tabela === "contacts")).toContainEqual(
+      expect.objectContaining({
+        valores: expect.objectContaining({ ai_authorized_reason: "automacao:devolucao_apos_prazo" }),
+      }),
+    );
+    expect(cap.updates.find((u) => u.tabela === "conversations")?.valores).toMatchObject({
+      bot_silenced_until: null,
+      assignee_kind: "ai",
+    });
+    const atividade = cap.inserts.find((i) => i.tabela === "crm_lead_activities");
+    expect(JSON.stringify(atividade?.valores)).toContain("automaticamente após 60 min");
   });
 
   it("negócio ambíguo não vira atividade no card errado", async () => {

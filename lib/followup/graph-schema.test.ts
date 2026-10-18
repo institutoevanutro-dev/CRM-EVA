@@ -33,6 +33,8 @@ describe('graph-schema', () => {
         'match_reply',
         'repeat',
         'action',
+        'move_lead',
+        'edit_lead_tag',
         'end',
       ]);
     });

@@ -338,6 +338,9 @@ export const AUDIT_ACTIONS = [
   "conversation.snoozed",
   "conversation.snooze_cancelled",
   "conversation.snooze_watcher_run",
+  // Rodada do cron que devolve ao agente o atendimento parado além do prazo da
+  // organização — só quando devolveu (ou falhou) alguma.
+  "conversation.handoff_auto_return_run",
   "conversation.note_added",
   "conversation.note_deleted",
   "ai.case_replied",
@@ -368,6 +371,10 @@ export const AUDIT_ACTIONS = [
   // de código próprio para não somar duas grandezas no mesmo relatório.
   "followup.scheduled",
   "followup.cancelled",
+  // Ações sem mensagem de um fluxo de follow-up: o card mudou de etapa ou a
+  // etiqueta foi posta/tirada pelo fluxo (só quando houve mudança).
+  "followup.flow_lead_moved",
+  "followup.flow_tags_changed",
   "lead.reactivation_proposed",
   // A marca da INSTALAÇÃO (nome, logo, cor, selo) trocada em `platform_branding`
   // — mutação de plataforma, não de tenant, e por isso sem `organization_id`.

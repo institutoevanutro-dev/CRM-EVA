@@ -841,6 +841,18 @@ export function processNode(input: {
       };
     }
 
+    case "move_lead":
+    case "edit_lead_tag": {
+      // Passagem no relógio: o nó avança pela aresta única e quem ESCREVE (etapa
+      // ou etiqueta) é o motor ao aplicar o `advance`, guardado pelo
+      // idempotency_key do evento do passo — replay do tick não escreve duas
+      // vezes. Nenhuma mensagem sai daqui. Portado do projeto original
+      // (DeskcommCRM, PR #2181 de @webtecnica).
+      const edge = selectEdge(edges, node.id, { type: "always" });
+      if (!edge) return { kind: "fail", error: `${node.type} node "${node.id}" has no outbound edge` };
+      return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
+    }
+
     case "end": {
       if (node.config.outcome === "custom") {
         return { kind: "complete", outcome: null, cancel_reason: node.config.note };

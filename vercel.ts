@@ -23,6 +23,7 @@ const config: VercelConfig = {
     { path: "/api/v1/cron/comentarios-worker", schedule: "* * * * *" },
     { path: "/api/v1/cron/storage-redaction", schedule: "*/5 * * * *" },
     { path: "/api/v1/cron/snooze-watcher", schedule: "*/5 * * * *" },
+    { path: "/api/v1/cron/handoff-devolucao", schedule: "*/5 * * * *" },
     { path: "/api/v1/cron/campaign-worker", schedule: "* * * * *" },
     { path: "/api/v1/cron/webhook-log-retention", schedule: "*/5 * * * *" },
     { path: "/api/v1/cron/channel-health", schedule: "*/5 * * * *" },
