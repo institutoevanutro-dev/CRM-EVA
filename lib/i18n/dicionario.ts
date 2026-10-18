@@ -476,6 +476,7 @@ export const DICIONARIO: Traducoes = {
   "Contar a partir de": { es: "Contar a partir de" },
   "Do passo anterior": { es: "Desde el paso anterior" },
   "Da data da consulta (pós-consulta)": { es: "Desde la fecha de la cita (posconsulta)" },
+  "Do dia da consulta (manhã do dia)": { es: "Desde el día de la cita (mañana del día)" },
   "Da criação da reserva (fluxo de sinal)": { es: "Desde la creación de la reserva (flujo de seña)" },
   "Toda espera com esta opção conta da mesma data: numa régua de 7, 15, 30 e 45 dias, escreva 7, 15, 30 e 45 — não a diferença para a espera anterior.": {
     es: "Toda espera con esta opción cuenta desde la misma fecha: en una secuencia de 7, 15, 30 y 45 días, escriba 7, 15, 30 y 45, no la diferencia con la espera anterior.",

@@ -389,6 +389,13 @@ export function createPgAdminClient(pool: pg.Pool): TurnBridgeAdminClient {
       );
       return rows[0]?.at?.toISOString() ?? null;
     },
+    async loadOrgTimezone(orgId) {
+      const { rows } = await pool.query<{ timezone: string | null }>(
+        `select timezone from organizations where id=$1`,
+        [orgId],
+      );
+      return rows[0]?.timezone ?? null;
+    },
     async loadLeadFacts(orgId, contactId) {
       const { rows: leads } = await pool.query<{
         stage_id: string | null;

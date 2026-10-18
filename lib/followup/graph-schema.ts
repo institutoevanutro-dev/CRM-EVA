@@ -84,11 +84,14 @@ export const edgeBranchIdSchema = z
   });
 
 /** Âncora de uma espera fixa: o instante do compromisso de onde ela conta. */
-export type AppointmentAnchor = 'appointment_created_at' | 'appointment_starts_at';
+export const APPOINTMENT_ANCHORS = ['appointment_created_at', 'appointment_starts_at', 'appointment_day'] as const;
+export type AppointmentAnchor = (typeof APPOINTMENT_ANCHORS)[number];
 /** Coluna de `calendar_appointments` que cada âncora lê. Mapa fechado: o SQL nunca recebe texto do grafo. */
 export const COLUNA_DA_ANCORA = {
   appointment_created_at: 'created_at',
   appointment_starts_at: 'starts_at',
+  // Mesma coluna; o corte no início do dia (fuso da organização) é do motor.
+  appointment_day: 'starts_at',
 } as const satisfies Record<AppointmentAnchor, string>;
 
 /**
@@ -107,8 +110,11 @@ export const waitConfigSchema = z
       // MESMA âncora — numa régua 7/15/30/45 dias depois da consulta, cada nó
       // diz o seu dia (7, 15, 30, 45), não a diferença para o anterior.
       //   appointment_created_at — quando a reserva foi feita (fluxo de sinal);
-      //   appointment_starts_at  — a data da consulta (pós-consulta, 0373).
-      anchor: z.enum(['appointment_created_at', 'appointment_starts_at']).optional(),
+      //   appointment_starts_at  — a data da consulta (pós-consulta, 0373);
+      //   appointment_day        — o INÍCIO do dia da consulta, no fuso da
+      //     organização: N dias depois cai na madrugada do dia N, e a janela do
+      //     número solta o envio na manhã desse mesmo dia (não no dia N+1).
+      anchor: z.enum(APPOINTMENT_ANCHORS).optional(),
     }),
     z.strictObject({
       mode: z.literal('smart'),

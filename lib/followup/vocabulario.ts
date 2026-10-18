@@ -470,6 +470,7 @@ export const MODOS_DE_ESPERA: Record<ModoDeEspera, string> = {
 /** De onde a espera fixa conta. Âncora é absoluta: toda espera com ela conta da mesma data. */
 export const ANCORAS_DA_ESPERA: Record<AppointmentAnchor, string> = {
   appointment_starts_at: "Da data da consulta (pós-consulta)",
+  appointment_day: "Do dia da consulta (manhã do dia)",
   appointment_created_at: "Da criação da reserva (fluxo de sinal)",
 };
 
