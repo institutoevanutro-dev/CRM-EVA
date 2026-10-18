@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   BACKOFF_MS,
   actionTurnCompleted,
+  fimDaEsperaAncorada,
   occupancyEventCount,
   pisoDoInboundDaEspera,
   processNode,
@@ -316,6 +317,76 @@ describe("processNode — wait (fixed)", () => {
     expect(processNode({ ...base, clock: dia10, waitElapsed: true })).toEqual({ kind: "wait", next_eval_at: alvo });
     // No dia 15 segue.
     expect(processNode({ ...base, clock: () => alvo, waitElapsed: true, wokeEarly: true })).toMatchObject({ kind: "advance", next_node_id: "n2" });
+  });
+
+  describe("âncora appointment_day (dia da consulta, fuso da organização)", () => {
+    const DIA = 86_400_000;
+    // Qua 21/10/2026 15:00 em São Paulo (UTC-3, sem horário de verão).
+    const consulta = "2026-10-21T18:00:00.000Z";
+    const espera = (dias: number): FlowNode => ({ ...node, config: { mode: "fixed", duration_ms: dias * DIA, anchor: "appointment_day" } });
+    const base = { edges, enrollment: enrollment({ appointment_id: "appt-1" }), lead: lead(), appointmentAnchorAt: consulta, appointmentTimezone: "America/Sao_Paulo" };
+    const naConsulta = () => new Date(consulta);
+
+    it("consulta às 15:00 + 7 dias termina às 00:00 locais do dia 28/10, não às 15:00", () => {
+      expect(processNode({ ...base, node: espera(7), clock: naConsulta, waitElapsed: false }))
+        .toEqual({ kind: "wait", next_eval_at: new Date("2026-10-28T03:00:00.000Z") });
+    });
+
+    it("régua 7/15/30/45/75 cai sempre à meia-noite local do dia N", () => {
+      const esperado: Record<number, string> = {
+        7: "2026-10-28T03:00:00.000Z",
+        15: "2026-11-05T03:00:00.000Z",
+        30: "2026-11-20T03:00:00.000Z",
+        45: "2026-12-05T03:00:00.000Z",
+        75: "2027-01-04T03:00:00.000Z",
+      };
+      for (const [dias, iso] of Object.entries(esperado)) {
+        expect(processNode({ ...base, node: espera(Number(dias)), clock: naConsulta, waitElapsed: false }))
+          .toEqual({ kind: "wait", next_eval_at: new Date(iso) });
+      }
+    });
+
+    it("consulta às 23:30 locais ainda é aquele dia (em UTC já é o dia seguinte)", () => {
+      // 23:30 de 21/10 em SP = 02:30Z de 22/10.
+      expect(fimDaEsperaAncorada("appointment_day", new Date("2026-10-22T02:30:00.000Z"), 7 * DIA, "America/Sao_Paulo"))
+        .toBe(Date.parse("2026-10-28T03:00:00.000Z"));
+    });
+
+    it("usa o fuso pedido, não -03:00 fixo: Asia/Tokyo", () => {
+      // 21/10 15:00 em Tóquio (UTC+9) = 06:00Z; dia 28/10 00:00 JST = 27/10 15:00Z.
+      expect(fimDaEsperaAncorada("appointment_day", new Date("2026-10-21T06:00:00.000Z"), 7 * DIA, "Asia/Tokyo"))
+        .toBe(Date.parse("2026-10-27T15:00:00.000Z"));
+      // 00:30 de 22/10 em Tóquio (= 21/10 15:30Z): o dia é 22, não 21.
+      expect(fimDaEsperaAncorada("appointment_day", new Date("2026-10-21T15:30:00.000Z"), 7 * DIA, "Asia/Tokyo"))
+        .toBe(Date.parse("2026-10-28T15:00:00.000Z"));
+    });
+
+    it("soma dias de calendário através do horário de verão (America/New_York)", () => {
+      // 01/11/2026 é o fim do DST em NY. Consulta 30/10 10:00 EDT; +7 dias = 06/11 00:00 EST (05:00Z), não 04:00Z.
+      expect(fimDaEsperaAncorada("appointment_day", new Date("2026-10-30T14:00:00.000Z"), 7 * DIA, "America/New_York"))
+        .toBe(Date.parse("2026-11-06T05:00:00.000Z"));
+    });
+
+    it("sem fuso informado cai em America/Sao_Paulo", () => {
+      expect(fimDaEsperaAncorada("appointment_day", new Date(consulta), 7 * DIA)).toBe(Date.parse("2026-10-28T03:00:00.000Z"));
+    });
+
+    it("as outras âncoras não mudam: âncora + duração", () => {
+      expect(fimDaEsperaAncorada("appointment_starts_at", new Date(consulta), 7 * DIA, "Asia/Tokyo")).toBe(Date.parse(consulta) + 7 * DIA);
+      expect(fimDaEsperaAncorada("appointment_created_at", new Date(consulta), 40 * 60_000, "Asia/Tokyo")).toBe(Date.parse(consulta) + 40 * 60_000);
+    });
+
+    it("alvo já passado: termina agora", () => {
+      const tarde = new Date("2026-11-10T12:00:00.000Z");
+      expect(processNode({ ...base, node: espera(7), clock: () => tarde, waitElapsed: false })).toEqual({ kind: "wait", next_eval_at: tarde });
+    });
+
+    it("resposta antecipada volta a estacionar no MESMO instante (meia-noite do dia N)", () => {
+      const alvo = new Date("2026-11-05T03:00:00.000Z");
+      const dia10 = () => new Date("2026-10-31T13:00:00.000Z");
+      expect(processNode({ ...base, node: espera(15), clock: dia10, waitElapsed: true, wokeEarly: true })).toEqual({ kind: "wait", next_eval_at: alvo });
+      expect(processNode({ ...base, node: espera(15), clock: () => alvo, waitElapsed: true, wokeEarly: true })).toMatchObject({ kind: "advance", next_node_id: "n2" });
+    });
   });
 
   it("espera SEM âncora continua sendo cortada pela resposta (comportamento de sempre)", () => {
