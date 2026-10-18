@@ -422,8 +422,23 @@ export async function horariosLivresDaOrg(
     nomesDasUnidades = Object.fromEntries((unidades ?? []).map((u) => [String(u.id), String(u.name)]));
   }
 
-  let googleCoberturaParcial = true;
-  try { googleCoberturaParcial = Boolean(await googleRpc(supabase, "fn_google_coverage", { p_org: organizationId, p_owner: donoId, p_start: params.de.toISOString(), p_end: params.ate.toISOString() })); } catch { /* leitura incerta não afirma cobertura */ }
+  // A grade semanal inclui dias passados no começo do recorte, mas a cobertura
+  // do Google começa em torno de agora. O passado não oferece horário e não deve
+  // manter o aviso aceso para os dias futuros que a cobertura atende. A régua
+  // (`fn_google_coverage`, com o frescor de `last_sync_at`) não muda: só o
+  // trecho perguntado deixa de incluir o passado. Portado do original (#2978).
+  const inicioDaCobertura = Math.max(params.de.getTime(), params.agora.getTime());
+  let googleCoberturaParcial = params.ate.getTime() > inicioDaCobertura;
+  if (googleCoberturaParcial) {
+    try {
+      googleCoberturaParcial = Boolean(await googleRpc(supabase, "fn_google_coverage", {
+        p_org: organizationId,
+        p_owner: donoId,
+        p_start: new Date(inicioDaCobertura).toISOString(),
+        p_end: params.ate.toISOString(),
+      }));
+    } catch { /* leitura incerta não afirma cobertura */ }
+  }
   return {
     ok: true,
     googleCoberturaParcial,

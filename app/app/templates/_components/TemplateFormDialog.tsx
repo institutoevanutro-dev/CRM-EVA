@@ -22,6 +22,8 @@ import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
 
+import { ImagensDaBiblioteca } from "./ImagensDaBiblioteca";
+
 const TEMPLATES_KEY = ["message-templates"];
 
 interface Props {
@@ -36,6 +38,7 @@ interface CreateInput {
   body: string;
   shortcut?: string;
   shared?: boolean;
+  media_item_ids?: string[];
 }
 
 interface UpdateInput {
@@ -43,6 +46,7 @@ interface UpdateInput {
   title: string;
   body: string;
   shortcut: string | null;
+  media_item_ids?: string[];
 }
 
 export function TemplateFormDialog({ open, onOpenChange, canShare, template }: Props) {
@@ -52,6 +56,8 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
   const [body, setBody] = React.useState("");
   const [shortcut, setShortcut] = React.useState("");
   const [shared, setShared] = React.useState(false);
+  /** Itens da Biblioteca de mídia, na ordem (migration 0383). */
+  const [imagens, setImagens] = React.useState<string[]>([]);
 
   const qc = useQueryClient();
   const create = useMutation({
@@ -74,6 +80,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
     setBody(template?.body ?? "");
     setShortcut(template?.shortcut ?? "");
     setShared(template ? template.owner_user_id === null : false);
+    setImagens(template?.media_item_ids ?? []);
   }, [open, template]);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -85,6 +92,8 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
           title,
           body,
           shortcut: shortcut.trim() || null,
+          // A biblioteca é de manager+: quem não a vê não reescreve a lista.
+          ...(canShare ? { media_item_ids: imagens } : {}),
         });
         toast.success(t("Resposta atualizada."));
       } else {
@@ -93,6 +102,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
           body,
           shortcut: shortcut.trim() || undefined,
           shared: canShare ? shared : false,
+          ...(canShare && imagens.length ? { media_item_ids: imagens } : {}),
         });
         toast.success(t("Resposta criada."));
       }
@@ -156,6 +166,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
               {t("No Inbox, digite / e o atalho para achar esta resposta (ex.: /oi).")}
             </p>
           </div>
+          {canShare && <ImagensDaBiblioteca valor={imagens} onChange={setImagens} disabled={pending} />}
           {canShare && (
             <div className="flex items-center gap-2">
               <Switch

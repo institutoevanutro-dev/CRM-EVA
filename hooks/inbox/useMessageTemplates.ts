@@ -9,6 +9,8 @@ export interface MessageTemplate {
   body: string;
   shortcut: string | null;
   owner_user_id: string | null;
+  /** Itens da Biblioteca de mídia que saem com o texto (migration 0383); ausente = só texto. */
+  media_item_ids?: string[] | null;
 }
 
 /** Onda 5: templates de script (pessoais + compartilhados) para o slash-menu do composer. */

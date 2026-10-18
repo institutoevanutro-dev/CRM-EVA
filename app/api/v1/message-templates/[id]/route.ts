@@ -18,7 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
-const COLS = "id, organization_id, owner_user_id, title, body, shortcut, created_by_user_id, created_at, updated_at";
+const COLS = "id, organization_id, owner_user_id, title, body, shortcut, media_item_ids, created_by_user_id, created_at, updated_at";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -52,6 +52,10 @@ export async function PATCH(req: NextRequest, { params }: RouteParams): Promise<
     .eq("organization_id", org.orgId)
     .select(COLS)
     .single();
+  // O gatilho da 0383: item que não é da Biblioteca de mídia desta organização.
+  if (error?.code === "42501" && error.message.includes("midia_da_resposta_rapida_fora_da_biblioteca")) {
+    return fail("validation_failed", t("Imagem que não está na Biblioteca de mídia."), 422, { requestId });
+  }
   if (error || !data) return fail("not_found", t("Template não encontrado."), 404, { requestId });
 
   void audit({

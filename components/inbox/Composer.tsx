@@ -13,6 +13,10 @@ import { PaperPlaneTilt, Sparkle } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
 import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentPreviewDialog";
+import {
+  RespostaComImagensDialog,
+  type ImagemDaResposta,
+} from "@/components/inbox/composer/RespostaComImagensDialog";
 import { ContactPickerDialog } from "@/components/inbox/composer/ContactPickerDialog";
 import { AudioRecorder } from "@/components/inbox/composer/AudioRecorder";
 import { ReplyReviewPanel } from "@/components/inbox/composer/ReplyReviewPanel";
@@ -27,8 +31,10 @@ import { imagemDoClipboard } from "@/lib/inbox/clipboard-image";
 import {
   interpolateTemplate,
   motivoDoCuringaLiteral,
+  payloadDeUso,
   type TemplateContact,
 } from "@/lib/inbox/template-vars";
+import { ApiError } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 import { classeDaFaixa, useRevelacao } from "@/hooks/inbox/useRevelacao";
 import { resolveSharedContact } from "@/lib/messaging/contact-card";
@@ -111,6 +117,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const t = useT();
   const [text, setText] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  /**
+   * A resposta rápida com imagens da Biblioteca de mídia escolhida, à espera da
+   * prévia (portado do original, DeskcommCRM PR #2704). O texto vira legenda.
+   */
+  const [respostaComImagens, setRespostaComImagens] = useState<{
+    templateId: string;
+    legenda: string;
+    imagens: ImagemDaResposta[];
+  } | null>(null);
   /**
    * O modo em que o arquivo foi ESCOLHIDO, congelado na escolha — e não o modo
    * em que o diálogo está aberto agora. Sem isto, um anexo escolhido em "Nota
@@ -238,7 +253,22 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   }
 
   function applyTemplate(t: MessageTemplate) {
-    const filled = interpolateTemplate(t.body, contact ?? {});
+    const payload = payloadDeUso(t, contact ?? {});
+    // Com imagens, em resposta ao cliente e com envio liberado: prévia com as
+    // imagens e o texto como legenda. Nota interna, ou resposta barrada, segue
+    // só com o texto no campo (item da biblioteca não vai para nota).
+    if (payload.midias.length > 0 && mode === "reply" && !respostaBarrada) {
+      // O "/atalho" digitado sai do campo: o texto agora mora na legenda.
+      setText("");
+      setMenuDismissed(true);
+      setRespostaComImagens({
+        templateId: t.id,
+        legenda: payload.texto,
+        imagens: payload.midias.map((itemId, indice) => ({ itemId, indice })),
+      });
+      return;
+    }
+    const filled = payload.texto;
     setText(filled);
     setMenuDismissed(true);
     const ta = taRef.current;
@@ -248,6 +278,63 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       ta.selectionStart = ta.selectionEnd = filled.length;
       autoresize();
     });
+  }
+
+  /** Devolve o texto ao campo (cancelar a prévia não perde o que foi escolhido). */
+  function textoDeVoltaAoCampo(conteudo: string) {
+    setText(conteudo);
+    const ta = taRef.current;
+    if (!ta) return;
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = conteudo.length;
+      autoresize();
+    });
+  }
+
+  /**
+   * Envia as imagens da resposta rápida UMA A UMA, pelo envio de item da
+   * biblioteca (`media_library_item_id`), que resolve o arquivo e confere o
+   * termo de uso de imagem. A legenda vai com a primeira que SAIR. Item que o
+   * servidor recusa (sem termo, termo vencido, sem arquivo) é PULADO com o
+   * aviso do próprio envio, e as outras seguem; qualquer outra falha para a
+   * fila e deixa a prévia aberta com o que faltou. Se nenhuma imagem saiu, o
+   * texto sai sozinho — ele não some junto com elas.
+   */
+  async function enviarRespostaComImagens(legenda: string) {
+    const atual = respostaComImagens;
+    if (!atual) return;
+    let legendaPendente = legenda;
+    const restantes = [...atual.imagens];
+    while (restantes.length > 0) {
+      const img = restantes[0]!;
+      try {
+        await send.mutateAsync({
+          conversation_id: conversationId,
+          type: "image",
+          media_library_item_id: img.itemId,
+          ...(legendaPendente ? { body: legendaPendente } : {}),
+        });
+        legendaPendente = "";
+      } catch (err) {
+        const pulavel = err instanceof ApiError && err.status === 422;
+        if (!pulavel) {
+          setRespostaComImagens({ ...atual, legenda: legendaPendente, imagens: restantes });
+          return;
+        }
+      }
+      restantes.shift();
+    }
+    if (legendaPendente) {
+      try {
+        await send.mutateAsync({ conversation_id: conversationId, body: legendaPendente });
+      } catch {
+        setRespostaComImagens(null);
+        textoDeVoltaAoCampo(legendaPendente);
+        return;
+      }
+    }
+    setRespostaComImagens(null);
   }
 
   /**
@@ -579,6 +666,28 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             return;
           }
         }}
+      />
+      <RespostaComImagensDialog
+        key={`${respostaComImagens?.templateId ?? ""}:${respostaComImagens?.imagens.length ?? 0}:${respostaComImagens?.legenda ?? ""}`}
+        templateId={respostaComImagens?.templateId ?? null}
+        imagens={respostaComImagens?.imagens ?? []}
+        legendaInicial={respostaComImagens?.legenda ?? ""}
+        sending={send.isPending}
+        onCancel={(legenda) => {
+          setRespostaComImagens(null);
+          if (legenda) textoDeVoltaAoCampo(legenda);
+        }}
+        onRemove={(itemId, legenda) => {
+          const r = respostaComImagens;
+          if (!r) return;
+          const imagens = r.imagens.filter((i) => i.itemId !== itemId);
+          // A legenda editada sobrevive à troca da fila.
+          if (imagens.length > 0) return setRespostaComImagens({ ...r, imagens, legenda });
+          // A última imagem saiu: a resposta vira texto no campo, como no cancelar.
+          setRespostaComImagens(null);
+          if (legenda) textoDeVoltaAoCampo(legenda);
+        }}
+        onSend={(legenda) => void enviarRespostaComImagens(legenda)}
       />
       <ContactPickerDialog
         open={contactPickerOpen}

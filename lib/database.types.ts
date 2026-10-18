@@ -2607,6 +2607,7 @@ export type Database = {
       calendar_connections: {
         Row: {
           calendar_selection_revision: number
+          catalog_retry_at: string | null
           account_email: string
           created_at: string
           id: string
@@ -2625,6 +2626,7 @@ export type Database = {
         }
         Insert: {
           calendar_selection_revision?: number
+          catalog_retry_at?: string | null
           account_email: string
           created_at?: string
           id?: string
@@ -2643,6 +2645,7 @@ export type Database = {
         }
         Update: {
           calendar_selection_revision?: number
+          catalog_retry_at?: string | null
           account_email?: string
           created_at?: string
           id?: string
@@ -8083,6 +8086,7 @@ export type Database = {
 
       fn_google_appointment: { Args: { p_org: string; p_id: string; p_action: string; p_args?: Json }; Returns: Json }
       fn_google_calendar: { Args: { p_org: string; p_id: string; p_action: string; p_args?: Json }; Returns: Json }
+      fn_google_calendar_page_batch: { Args: { p_org: string; p_id: string; p_args: Json }; Returns: Json }
       fn_google_calendar_fence: { Args: { p_org: string; p_id: string; p_claim: Json; p_cursor?: Json }; Returns: undefined }
       fn_google_catalog: { Args: { p_org: string; p_connection: string; p_items: Json; p_revision: string }; Returns: undefined }
       fn_google_selection: { Args: { p_org: string; p_revisions: Json; p_sources: string[]; p_destination: string }; Returns: undefined }

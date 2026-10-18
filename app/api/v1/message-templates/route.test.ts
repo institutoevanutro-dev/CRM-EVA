@@ -166,3 +166,43 @@ describe("POST /api/v1/message-templates — idempotência", () => {
     expect(db.recibos).toHaveLength(0);
   });
 });
+
+// Migration 0383: imagens da resposta rápida são itens da Biblioteca de mídia.
+describe("POST /api/v1/message-templates — imagens da biblioteca", () => {
+  const ITEM = "b7c30000-0000-4000-8000-0000000000aa";
+
+  it("grava a lista de itens na ordem pedida", async () => {
+    const db = banco();
+    const r = await POST(req({ ...CORPO, media_item_ids: [ITEM] }));
+    expect(r.status).toBe(201);
+    expect(db.templates[0]).toMatchObject({ media_item_ids: [ITEM] });
+  });
+
+  it("sem imagens: a lista nasce vazia (só texto, como antes)", async () => {
+    const db = banco();
+    await POST(req(CORPO));
+    expect(db.templates[0]).toMatchObject({ media_item_ids: [] });
+  });
+
+  it("item que o gatilho recusa (de outra organização): 422 legível, sem auditoria", async () => {
+    h.from.mockImplementation(() => ({
+      insert: () => ({
+        select: () => ({
+          single: async () => ({
+            data: null,
+            error: { code: "42501", message: "midia_da_resposta_rapida_fora_da_biblioteca" },
+          }),
+        }),
+      }),
+    }));
+    const r = await POST(req({ ...CORPO, media_item_ids: [ITEM] }));
+    expect(r.status).toBe(422);
+    expect(h.audit).not.toHaveBeenCalled();
+  });
+
+  it("caminho de arquivo no lugar de id, repetição ou mais de 5: recusado pelo schema", async () => {
+    banco();
+    expect((await POST(req({ ...CORPO, media_item_ids: ["org/templates/x.jpg"] }))).status).toBe(422);
+    expect((await POST(req({ ...CORPO, media_item_ids: [ITEM, ITEM] }))).status).toBe(422);
+  });
+});

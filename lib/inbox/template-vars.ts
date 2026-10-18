@@ -93,6 +93,26 @@ export function motivoDoCuringaLiteral(body: string, contact: TemplateContact): 
   return sobrouNome ? MOTIVO_CURINGA_LITERAL : null;
 }
 
+/** O que uma resposta rápida guarda além do texto (portado do original, DeskcommCRM PR #2704). */
+export interface RespostaRapida {
+  id?: string;
+  body: string;
+  /** Itens da Biblioteca de mídia, na ordem. `undefined`/`null`/`[]` = só texto. */
+  media_item_ids?: readonly string[] | null;
+}
+
+/**
+ * O que a escolha da resposta rápida entrega ao compositor: o corpo interpolado
+ * (a legenda da PRIMEIRA imagem quando há imagem) e os itens da biblioteca, numa
+ * lista NOVA (o compositor mexe na fila; a do cache do React Query não muda).
+ */
+export function payloadDeUso(
+  template: RespostaRapida,
+  contact: TemplateContact,
+): { texto: string; midias: string[] } {
+  return { texto: interpolateTemplate(template.body, contact), midias: [...(template.media_item_ids ?? [])] };
+}
+
 const texto = (valor: string | null | undefined) => (typeof valor === "string" ? valor.trim() : "");
 
 export function interpolateTemplate(

@@ -20,8 +20,11 @@ import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
+
+/** O gatilho da 0383 recusou: imagem que não é item da biblioteca desta organização. */
+class MidiaForaDaBiblioteca extends Error {}
 const COLS =
-  "id, organization_id, owner_user_id, title, body, shortcut, created_by_user_id, created_at, updated_at";
+  "id, organization_id, owner_user_id, title, body, shortcut, media_item_ids, created_by_user_id, created_at, updated_at";
 /** Tag do endpoint no recibo de idempotência. Muda de rota muda de recibo. */
 const ENDPOINT = "/api/v1/message-templates";
 
@@ -60,7 +63,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       details: parsed.error.flatten().fieldErrors as Record<string, unknown>,
     });
   }
-  const { title, body, shortcut, shared } = parsed.data;
+  const { title, body, shortcut, shared, media_item_ids } = parsed.data;
   // Compartilhado exige manager+. requireRole já resolveu o role efetivo do
   // banco em org.role — reusar em vez de uma 2ª chamada/RPC. A RLS with_check
   // barra de qualquer forma; isto só dá um erro claro antes do insert.
@@ -91,10 +94,15 @@ export async function POST(req: NextRequest): Promise<Response> {
         title,
         body,
         shortcut: shortcut ?? null,
+        // Itens da Biblioteca de mídia (0383): o banco confere que são desta org.
+        media_item_ids: media_item_ids ?? [],
         created_by_user_id: user.id,
       })
       .select(COLS)
       .single();
+    if (error?.code === "42501" && error.message.includes("midia_da_resposta_rapida_fora_da_biblioteca")) {
+      throw new MidiaForaDaBiblioteca();
+    }
     if (error || !data) throw new Error("Erro ao criar template.");
 
     void audit({
@@ -114,7 +122,10 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (chave === null) {
     try {
       return ok(await criar(), { requestId, status: 201 });
-    } catch {
+    } catch (err) {
+      if (err instanceof MidiaForaDaBiblioteca) {
+        return fail("validation_failed", t("Imagem que não está na Biblioteca de mídia."), 422, { requestId });
+      }
       return fail("internal_error", "Erro ao criar template.", 500, { requestId });
     }
   }
@@ -138,7 +149,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
 
     return ok(desfecho.resposta, { requestId, status: 201 });
-  } catch {
+  } catch (err) {
+    if (err instanceof MidiaForaDaBiblioteca) {
+      return fail("validation_failed", t("Imagem que não está na Biblioteca de mídia."), 422, { requestId });
+    }
     return fail("internal_error", "Erro ao criar template.", 500, { requestId });
   }
 }
