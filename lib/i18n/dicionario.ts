@@ -5228,6 +5228,11 @@ export const DICIONARIO: Traducoes = {
   "Buscar conversas": { es: "Buscar conversaciones" },
   "Filtrar por número de WhatsApp": { es: "Filtrar por número de WhatsApp" },
   "Filtrar por tag": { es: "Filtrar por etiqueta" },
+  "O número de WhatsApp escolhido não existe nesta organização. Recarregue a página e escolha de novo.": {
+    es: "El número de WhatsApp elegido no existe en esta organización. Recarga la página y elige de nuevo.",
+  },
+  "Filtrar por atendente": { es: "Filtrar por agente" },
+  "Atendente removido": { es: "Agente eliminado" },
   Anonimizado: { es: "Anonimizado" },
   "Entrou por": { es: "Entró por" },
   "Posição": { es: "Posición" },

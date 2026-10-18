@@ -190,6 +190,13 @@ beforeAll(() => {
             values (v_org, 's', 'hard');
         end if;
 
+        -- 0380: a declaração de números de um agente da org, no número da semente.
+        if not exists (select 1 from public.ai_agent_channel_sessions where organization_id = v_org) then
+          select id into v_agent from public.ai_agents where organization_id = v_org limit 1;
+          insert into public.ai_agent_channel_sessions (organization_id, agent_id, channel_session_id)
+            values (v_org, v_agent, v_sess);
+        end if;
+
         if not exists (select 1 from public.ai_routers where organization_id = v_org) then
           insert into public.ai_routers (organization_id, name, channel_session_id)
             values (v_org, 'RLS Invariant Router', v_sess);
@@ -416,6 +423,9 @@ export const TABLES = [
   "campaigns",
   "campaign_templates",
   "campaign_channel_sessions",
+  // migration 0380 — em quais números cada agente atende. Vazar diria ao
+  // vizinho quais números a organização tem e onde a IA fala.
+  "ai_agent_channel_sessions",
 ] as const;
 
 describe("RLS tenant isolation (fn_user_org_ids pattern)", () => {

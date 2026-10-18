@@ -1,8 +1,10 @@
 import type { EventHandler, EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { marcaDaSaida } from "@/lib/branding/saida";
+import { eCaminhoDeOrganizacaoApagada } from "@/lib/messaging/media/caminho-legado";
+import { isAvatarPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { montarPayloadDeInbound, truncar } from "./push_payload";
-import { enviarPushAoUsuario, enviarPushDaOrg } from "./web_push";
+import { enviarPushAoUsuario, enviarPushAQuemVeAConversa, enviarPushDaOrg } from "./web_push";
 import { vapidPronto } from "./vapid";
 import { pushDoAvisoDaCentral } from "./push-dos-avisos";
 import type { PushPayload } from "./push_payload";
@@ -14,6 +16,11 @@ export const WEB_PUSH_INBOUND_KEY = "web-push-inbound.v1";
 async function handleInbound(row: EventRow): Promise<HandlerResult> {
   const conversationId =
     (typeof row.payload.conversation_id === "string" ? row.payload.conversation_id : null) ?? null;
+  // Sem conversa não há como saber quem pode vê-la: ninguém recebe. Antes o
+  // aviso ia à organização inteira, com nome e prévia do paciente.
+  if (!conversationId) {
+    return { consumer_key: WEB_PUSH_INBOUND_KEY, status: "skipped", detail: "sem_conversa" };
+  }
   const previewRaw = row.payload.body_preview;
   const preview = typeof previewRaw === "string" && previewRaw.trim() ? previewRaw : "Nova mensagem";
   const type = typeof row.payload.type === "string" ? row.payload.type : "text";
@@ -57,7 +64,12 @@ async function handleInbound(row: EventRow): Promise<HandlerResult> {
     // trocá-lo por "Sem nome" pioraria o título sem ninguém pedir.
     const rotulo = rotuloDoContato(c);
     contactName = rotulo === SEM_NOME ? null : rotulo;
-    if (c?.avatar_storage_path && !c.is_anonymized) {
+    if (
+      c?.avatar_storage_path &&
+      !c.is_anonymized &&
+      (isAvatarPathOwnedBy(c.avatar_storage_path, row.organization_id, contactId) ||
+        (await eCaminhoDeOrganizacaoApagada(admin, c.avatar_storage_path)))
+    ) {
       const { data: signed } = await admin.storage
         .from("whatsapp-media")
         .createSignedUrl(c.avatar_storage_path, 300);
@@ -71,7 +83,9 @@ async function handleInbound(row: EventRow): Promise<HandlerResult> {
     contactName,
     icon,
   });
-  const { sent } = await enviarPushDaOrg(row.organization_id, payload);
+  // Só a quem a RLS de `conversations` deixaria abrir a conversa (migration
+  // 0378): nome e prévia de paciente não chegam à tela de quem não a vê.
+  const { sent } = await enviarPushAQuemVeAConversa(row.organization_id, conversationId, payload);
   return { consumer_key: WEB_PUSH_INBOUND_KEY, status: "ok", detail: `sent:${sent}` };
 }
 

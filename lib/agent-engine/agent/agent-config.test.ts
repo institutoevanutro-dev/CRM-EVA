@@ -76,3 +76,24 @@ describe('loadPublishedAgentConfigById', () => {
     expect(cfg?.ragSimilarityThreshold).toBe(0.8);
   });
 });
+
+// Migration 0380 — portado e adaptado do original (DeskcommCRM, PR #2854 de @webtecnica).
+// O comportamento contra o banco real está em
+// tests/invariants/agente-declara-em-quais-numeros-atende.test.ts; aqui, a
+// costura: as duas portas perguntam a régua do número.
+describe('declaração de números (0380)', () => {
+  it('o agente do número só vale se atende NESTE número', async () => {
+    const pool = poolWith(baseRow);
+    await loadPublishedAgentConfig(pool, 'org1', 'cs1');
+    const [sql] = (pool.query as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    expect(sql).toMatch(/fn_agente_atende_no_numero\(a\.organization_id, a\.id, \$2\)/);
+  });
+
+  it('por id, com o número do turno, a régua entra com ele', async () => {
+    const pool = poolWith(baseRow);
+    await loadPublishedAgentConfigById(pool, 'org1', 'a1', 'cs1');
+    const [sql, params] = (pool.query as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, unknown[]];
+    expect(params).toEqual(['org1', 'a1', 'cs1']);
+    expect(sql).toMatch(/fn_agente_atende_no_numero\(a\.organization_id, a\.id, \$3\)/);
+  });
+});

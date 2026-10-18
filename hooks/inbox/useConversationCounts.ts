@@ -44,6 +44,8 @@ export interface FiltrosDaContagem {
   channel_session_id?: string;
   /** "Só Instagram" / "Só WhatsApp" — mutuamente exclusivo com channel_session_id. */
   canal?: "instagram" | "whatsapp";
+  /** O atendente escolhido pelo gerente — as contagens olham só as dele. */
+  assigned_to?: string;
 }
 
 /**
@@ -65,6 +67,7 @@ export function useConversationCounts(
   if (filtros.tagMode === "ou") qs.set("modo", "ou");
   if (filtros.channel_session_id) qs.set("channel_session_id", filtros.channel_session_id);
   if (filtros.canal) qs.set("canal", filtros.canal);
+  if (filtros.assigned_to) qs.set("assigned_to", filtros.assigned_to);
   const sufixo = qs.toString();
 
   return useQuery({

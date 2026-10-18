@@ -28,6 +28,46 @@ export function isMediaPathOwnedBy(path: string, orgId: string, conversationId: 
   return /^[A-Za-z0-9._-]+$/.test(arquivo) && arquivo !== "." && arquivo !== "..";
 }
 
+/**
+ * Posse do arquivo GRAVADO numa mensagem, conferida antes de a service role
+ * assiná-lo (auditoria 17/10, CRM-1). A coluna é gravável pela sessão; sem
+ * isto, um caminho de outra conversa — ou de outra organização — gravado na
+ * própria mensagem virava link assinado.
+ *
+ * Duas formas legítimas: arquivo da conversa da mensagem (envio, `out-*`), ou
+ * arquivo nomeado pelo id DESTA mensagem (`storagePathFor`) na mesma
+ * organização. A segunda cobre a mensagem que a unificação de conversas
+ * (baseline, "B2. Merge de conversas") mudou de conversa depois de a mídia
+ * descer: o caminho ficou com a conversa antiga, e o nome do arquivo, que é o
+ * id da própria mensagem, não se forja apontando para o arquivo de outra.
+ */
+export function isMessageMediaPathOwnedBy(
+  path: string,
+  orgId: string,
+  conversationId: string,
+  messageId: string,
+): boolean {
+  if (isMediaPathOwnedBy(path, orgId, conversationId)) return true;
+  const [org, conversa, arquivo, ...resto] = path.split("/");
+  return (
+    resto.length === 0 &&
+    org === orgId &&
+    !!conversa &&
+    isMediaPathOwnedBy(path, orgId, conversa) &&
+    !!arquivo &&
+    arquivo.startsWith(`${messageId}.`)
+  );
+}
+
+/** A foto do contato é `{org}/avatars/{contato}.{ext}` (cron contact-avatars). */
+export function isAvatarPathOwnedBy(path: string, orgId: string, contactId: string): boolean {
+  return (
+    isMediaPathOwnedBy(path, orgId, "avatars") &&
+    /^[A-Za-z0-9]+$/.test(path.slice(`${orgId}/avatars/${contactId}.`.length)) &&
+    path.startsWith(`${orgId}/avatars/${contactId}.`)
+  );
+}
+
 const DOCUMENT_MIMES = new Set([
   "application/pdf",
   "application/msword",
