@@ -39,7 +39,16 @@ test.describe("documentos legais", () => {
     const res = await page.goto("/legal/about");
     expect(res?.status()).toBe(200);
     expect(new URL(page.url()).pathname).toBe("/legal/about");
-    await expect(page.getByRole("heading", { name: "CRM Eva", exact: true })).toBeVisible();
+    // O banco do e2e é o baseline fresco: sem `nome_da_apresentacao` e sem marca
+    // configurada (nem `APP_NAME`), o título é o nome padrão do produto. O nome de
+    // outra instalação não pode vazar para quem instala.
+    const titulo = page.getByRole("heading", { level: 1 });
+    await expect(titulo).toHaveText("DeskcommCRM");
+    await expect(titulo).not.toContainText(/eva/i);
+    // O formato do título da aba é o que o Google verificou (nome, travessão,
+    // Apresentação), com o sufixo da marca que o layout raiz acrescenta. O travessão
+    // é o U+2014 de propósito: um hífen ou um traço médio não é o mesmo título.
+    await expect(page).toHaveTitle("DeskcommCRM \u2014 Apresentação · DeskcommCRM");
     await expect(page.getByRole("heading", { name: /integração opcional com o google agenda/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /política de privacidade/i })).toHaveAttribute("href", "/legal/privacy");
     await expect(page.getByRole("link", { name: /termos de uso/i })).toHaveAttribute("href", "/legal/terms");

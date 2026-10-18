@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { nomeDaApresentacao } from "@/lib/legal/nome-da-apresentacao";
 import { resolverOperador } from "@/lib/legal/operador";
 import { createClient } from "@/lib/supabase/server";
 import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
@@ -8,10 +9,17 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "CRM Eva — Apresentação" };
+
+// O travessão do título é proposital e fica: o Google verificou esta página com o
+// formato "nome, travessão, Apresentação", e mudar o formato reabre a verificação.
+// Só o nome, antes do travessão, vem da instalação.
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: `${await nomeDaApresentacao()} — Apresentação` };
+}
 
 export default async function AboutPage() {
   const op = await resolverOperador();
+  const nome = await nomeDaApresentacao();
   const supabase = await createClient();
   const {
     data: { user },
@@ -24,7 +32,7 @@ export default async function AboutPage() {
   return (
     <>
       <header className="space-y-3">
-        <h1 className="text-3xl font-semibold tracking-tight">CRM Eva</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{nome}</h1>
         <p className="text-base text-muted-foreground">
           {t("Organização do atendimento, dos contatos e da agenda da equipe profissional.")}
         </p>
