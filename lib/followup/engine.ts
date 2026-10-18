@@ -19,6 +19,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { idsDoContatoEGemeos } from "@/lib/channels/contato-por-telefone";
 import { logger } from "@/lib/logger";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { indiceDaVariante } from "@/lib/agent-engine/agent/reentry-template";
 
 import { COLUNA_DA_ANCORA, flowGraphSchema, type AppointmentAnchor, type FlowGraph, type FlowNode, type ReplySaveTo } from "./graph-schema";
@@ -131,6 +132,8 @@ export interface AdminClient {
   countFutureAppointments?(orgId: string, contactId: string): Promise<number>;
   /** Só exigido por uma espera fixa ancorada no compromisso. */
   loadAppointmentAnchor?(orgId: string, appointmentId: string, contactId: string, anchor: AppointmentAnchor): Promise<string | null>;
+  /** `organizations.timezone` cru. Só exigido pela âncora `appointment_day`; ausente/inválido cai em `FUSO_PADRAO`. */
+  loadOrgTimezone?(orgId: string): Promise<string | null>;
   loadLeadFacts(orgId: string, contactId: string): Promise<{
     lead_stage: string | null;
     tags: string[];
@@ -762,6 +765,9 @@ async function processEnrollment(
       ? await db.loadAppointmentAnchor(enrollment.organization_id, enrollment.appointment_id, enrollment.contact_id, node.config.anchor)
       : null
     : undefined;
+  const appointmentTimezone = node.type === "wait" && node.config.mode === "fixed" && node.config.anchor === "appointment_day"
+    ? fusoUtilizavel(await db.loadOrgTimezone?.(enrollment.organization_id))
+    : undefined;
 
   const result = processNode({
     node,
@@ -771,6 +777,7 @@ async function processEnrollment(
     clock,
     waitElapsed,
     appointmentAnchorAt,
+    appointmentTimezone,
     wokeEarly,
     lastInboundBody,
     respondeuSemTexto,
@@ -899,6 +906,11 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
       if (error) throw new Error(error.message);
       const valor = (data as Record<string, unknown> | null)?.[coluna];
       return typeof valor === "string" ? valor : null;
+    },
+    async loadOrgTimezone(orgId) {
+      const { data, error } = await admin.from("organizations").select("timezone").eq("id", orgId).maybeSingle();
+      if (error) throw new Error(error.message);
+      return (data as { timezone: string | null } | null)?.timezone ?? null;
     },
     async loadLeadFacts(orgId, contactId) {
       const [{ data: lead, error: leadErr }, { data: contact, error: contactErr }] = await Promise.all([

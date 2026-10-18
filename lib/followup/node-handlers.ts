@@ -4,8 +4,11 @@ import type { ServiceBoundary } from "@/lib/atendimento/fronteira";
  * `engine.ts` owns the tick/DB orchestration; this file only decides "given
  * this node + these facts, what happens next" so it's testable without Postgres.
  */
+import { instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
+import { FUSO_PADRAO } from "@/lib/tempo/fusos";
+
 import { NO_REPLY_BRANCH_ID, REPEAT_BODY_BRANCH_ID, REPEAT_DONE_BRANCH_ID, nodeBranches } from "./graph-schema";
-import type { FlowEdge, FlowNode, ReplySaveTo } from "./graph-schema";
+import type { AppointmentAnchor, FlowEdge, FlowNode, ReplySaveTo } from "./graph-schema";
 import { parseReplyCount } from "./parse-count";
 import { clampEspera, esperaPlanejadaDe, type EsperaAdaptativa } from "./timing-plan";
 import { fraseDeConfirmacao } from "./vocabulario";
@@ -482,6 +485,32 @@ function evaluateCondition(
   return config.combinator === "and" ? results.every(Boolean) : results.some(Boolean);
 }
 
+const DIA_MS = 86_400_000;
+
+/**
+ * Fim (epoch ms) de uma espera fixa ancorada no compromisso.
+ *
+ * `appointment_day` conta do INÍCIO do dia da consulta no fuso da organização,
+ * e soma os dias como dias de CALENDÁRIO (00:00 local do dia N), não como
+ * N×24h: num fuso com horário de verão, N×24h desde a meia-noite cai às 23:00
+ * da véspera ou à 01:00. O resto da duração que não fecha dia inteiro soma em
+ * ms depois. As demais âncoras: `âncora + duração`, como sempre.
+ */
+export function fimDaEsperaAncorada(
+  anchor: AppointmentAnchor,
+  anchorAt: Date,
+  durationMs: number,
+  fuso: string = FUSO_PADRAO,
+): number {
+  if (anchor !== "appointment_day") return anchorAt.getTime() + durationMs;
+  const p = partesNoFuso(anchorAt, fuso);
+  const dias = Math.floor(durationMs / DIA_MS);
+  // Date.UTC normaliza o estouro do mês (31 + 7) antes de virar hora de parede.
+  const d = new Date(Date.UTC(p.ano, p.mes - 1, p.dia + dias));
+  const meiaNoite = instanteDe({ ano: d.getUTCFullYear(), mes: d.getUTCMonth() + 1, dia: d.getUTCDate() }, fuso);
+  return meiaNoite.getTime() + (durationMs - dias * DIA_MS);
+}
+
 /**
  * Pure per-node decision. `waitElapsed` is resolved by the engine (via
  * `resolveWaitPhase` against real events) BEFORE calling this — optional so
@@ -504,6 +533,8 @@ export function processNode(input: {
   waitElapsed?: boolean;
   /** Instante da âncora (criação da reserva ou início da consulta), lido da agenda somente para espera ancorada. */
   appointmentAnchorAt?: string | null;
+  /** Fuso da organização, já validado. Só a âncora `appointment_day` lê. */
+  appointmentTimezone?: string;
   wokeEarly?: boolean;
   /** Last inbound `messages.body` for this contact/conversation — engine loads on `match_reply` + wokeEarly. */
   lastInboundBody?: string;
@@ -594,7 +625,9 @@ export function processNode(input: {
       // reprocesso a encurtam. Enquanto o instante não chegou, volta a estacionar
       // nele. Quem quiser que a resposta encerre o fluxo usa `cancel_on_reply`.
       if (node.config.mode === "fixed" && node.config.anchor && (wokeEarly || waitElapsed)) {
-        const alvo = input.appointmentAnchorAt ? Date.parse(input.appointmentAnchorAt) + node.config.duration_ms : NaN;
+        const alvo = input.appointmentAnchorAt
+          ? fimDaEsperaAncorada(node.config.anchor, new Date(input.appointmentAnchorAt), node.config.duration_ms, input.appointmentTimezone)
+          : NaN;
         if (Number.isFinite(alvo) && clock().getTime() < alvo) {
           return { kind: "wait", next_eval_at: new Date(alvo) };
         }
@@ -629,7 +662,8 @@ export function processNode(input: {
           if (!enrollment.appointment_id || !anchorAt || !Number.isFinite(anchorAt.getTime())) {
             return { kind: "fail", error: `${node.config.anchor} unavailable for anchored wait` };
           }
-          return { kind: "wait", next_eval_at: new Date(Math.max(clock().getTime(), anchorAt.getTime() + durationMs)) };
+          const alvo = fimDaEsperaAncorada(node.config.anchor, anchorAt, durationMs, input.appointmentTimezone);
+          return { kind: "wait", next_eval_at: new Date(Math.max(clock().getTime(), alvo)) };
         }
         return { kind: "wait", next_eval_at: new Date(clock().getTime() + durationMs) };
       }
