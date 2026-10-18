@@ -794,6 +794,11 @@ v_org_name() {
     *[[:cntrl:]]*)
       echo "ORG_NAME não pode ter quebra de linha nem caractere de controle."; return 1;;
   esac
+  # O nome entra num bloco SQL marcado com $organizacao$: um "$" no nome poderia
+  # fechar o bloco e fazer o resto rodar como SQL solto. Nenhum "$" passa.
+  case "$1" in
+    *\$*) echo "ORG_NAME não pode ter o caractere \$: o nome da organização vai para um bloco SQL."; return 1;;
+  esac
   if [ "${#1}" -lt 2 ] || [ "${#1}" -gt 80 ]; then
     echo "ORG_NAME precisa ter de 2 a 80 caracteres: é o nome da organização que aparece no CRM."
     return 1

@@ -146,12 +146,23 @@ describe("install.sh · a organização da instalação, num banco de verdade", 
 
   it.each([
     ["Clínica Ñandú Peña", "clinica-nandu-pena"],
-    // "$$" fecharia um bloco DO marcado com $$; a barra e a aspa entram como texto.
-    ["Tudo por R$ 1,99 $$ D'Or \\ fim", "tudo-por-r-1-99-d-or-fim"],
+    // A barra e a aspa entram como texto.
+    ["Tudo por 1,99 D'Or \\ fim", "tudo-por-1-99-d-or-fim"],
     // O corte em 40 cai num hífen, que o rtrim tira.
     ["Aaaaaaaaa Bbbbbbbbb Ccccccccc Ddddddddd Eeeee", "aaaaaaaaa-bbbbbbbbb-ccccccccc-ddddddddd"],
   ])("o nome %j vira o slug %s, e o nome é gravado exato", (nome, slug) => {
     instalar(`dono-${slug}@invariant.test`, { ORG_NAME: nome });
     expect(organizacao(slug)).toBe(`${nome}|${nome}|false`);
+  });
+
+  it("um nome com o marcador $organizacao$ é recusado pelo validador, antes de chegar ao SQL", () => {
+    const nome = "X$organizacao$; drop table x; do $organizacao$ select 1";
+    let recusou = false;
+    try {
+      execFileSync("bash", ["-c", 'INSTALL_SH_LIB=1 . "$1"; v_org_name "$2"', "_", INSTALL, nome], { encoding: "utf8" });
+    } catch {
+      recusou = true;
+    }
+    expect(recusou, "v_org_name aceitou um nome com $").toBe(true);
   });
 });
