@@ -63,6 +63,8 @@ import { logger } from "@/lib/logger";
 import { carregarPausaPorRespostaHumanaMs } from "@/lib/escalacao/pausa-por-resposta-humana";
 import { devolverIdOriginalAoEcoDeOutraConversa } from "@/lib/messaging/eco-em-outra-conversa";
 import { previaDaMensagem } from "@/lib/messaging/previa-da-mensagem";
+import { aplicarAssinatura, configAssinatura, linhaDeAssinatura } from "@/lib/messaging/assinatura";
+import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Message } from "@/lib/types/messaging";
 
@@ -368,6 +370,32 @@ function extendBotSilence(current: string | null, now: string, pausaMs: number):
   return candidate.toISOString();
 }
 
+/**
+ * A linha de assinatura deste envio, ou `null`. Assina atendente (`user`) e IA
+ * (`ai_agent`); integração por token, automação e a sequência de follow-up do
+ * CRM (`api_token`/`webhook_source`) e o lembrete transacional da agenda
+ * (`meetingDelivery`) ficam de fora. Nunca lança: a assinatura não pode
+ * derrubar um envio — na dúvida, a mensagem sai sem nome.
+ */
+async function assinaturaDoEnvio(supabase: SB, ctx: HandlerCtx): Promise<string | null> {
+  const origem = ctx.actor.type === "user" ? "user" : ctx.actor.type === "ai_agent" && !ctx.meetingDelivery ? "ai" : null;
+  if (!origem) return null;
+  try {
+    const { data } = await supabase
+      .from("organizations")
+      .select("settings")
+      .eq("id", ctx.organization_id)
+      .maybeSingle();
+    const config = configAssinatura((data as { settings?: unknown } | null)?.settings);
+    if (origem === "ai") return linhaDeAssinatura(config, "ai");
+    if (!config.humanos) return null;
+    const nome = (await nomesDosAtendentes([ctx.actor.id])).get(ctx.actor.id) ?? null;
+    return linhaDeAssinatura(config, "user", nome);
+  } catch {
+    return null;
+  }
+}
+
 export async function sendMessageHandler(
   supabase: SB,
   ctx: HandlerCtx,
@@ -583,6 +611,12 @@ export async function sendMessageHandler(
 
   let outboundBody = input.body ?? null;
   let outboundMetadata: Record<string, unknown> = { ...(input.metadata ?? {}) };
+
+  // Assinatura do emissor (opt-in por organização, desligada por padrão). Entra
+  // SÓ no texto que vai ao canal; `messages.body` guarda o que foi escrito.
+  // Portado do projeto original (DeskcommCRM, PR #2079 de @webtecnica).
+  const assinatura = await assinaturaDoEnvio(supabase, ctx);
+  const corpoDoCanal = (texto: string | null): string | null => aplicarAssinatura(assinatura, texto) ?? null;
 
   if (input.type === "contact") {
     const sharedId = input.metadata?.shared_contact_id;
@@ -1043,7 +1077,7 @@ export async function sendMessageHandler(
             url: signed.signedUrl,
             mime: input.media_mime ?? "application/octet-stream",
             filename,
-            caption: input.body ?? null,
+            caption: corpoDoCanal(input.body ?? null),
           },
           // O id que a PLATAFORMA conhece, lido da linha citada agora — não uma
           // cópia guardada no envio, que poderia divergir da linha.
@@ -1072,7 +1106,7 @@ export async function sendMessageHandler(
             url: signed.signedUrl,
             mime: midiaDaBiblioteca.variante.mime,
             filename,
-            caption: input.body ?? null,
+            caption: corpoDoCanal(input.body ?? null),
           },
           replyToExternalId: idDaCitadaNoCanal,
         }));
@@ -1116,7 +1150,7 @@ export async function sendMessageHandler(
           providerConversationId: c.provider_conversation_id,
           etiquetaHumana,
           kind: input.type,
-          body: input.body ?? "",
+          body: corpoDoCanal(input.body ?? "") ?? "",
           replyToExternalId: idDaCitadaNoCanal,
         }));
       }

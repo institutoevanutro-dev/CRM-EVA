@@ -37,6 +37,8 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({ storage: { from: () => ({ createSignedUrl: vi.fn() }) } }),
 }));
 vi.mock('@/lib/audit', () => ({ audit: vi.fn(async () => {}) }));
+const nomes = vi.hoisted(() => ({ mapa: new Map<string, string | null>() }));
+vi.mock('@/lib/users/nome-do-atendente', () => ({ nomesDosAtendentes: async () => nomes.mapa }));
 
 const ORG = '11111111-1111-4111-8111-111111111111';
 const CONV = '22222222-2222-4222-8222-222222222222';
@@ -148,7 +150,7 @@ function makeSupabase(botSilencedUntil: string | null, snapshot?: () => Record<s
     },
     rpc: async () => ({ data: snapshot ? snapshot() : { organization_id: ORG, contact_id: CONTACT, conversation_id: CONV, service_revision: 1, demanda_id: null, demanda_revision: null, status: "open", demanda_fechada_em: null }, error: null }),
   };
-  return { supabase: client as unknown as SupabaseClient, patches };
+  return { supabase: client as unknown as SupabaseClient, patches, mensagensInseridas };
 }
 
 const input = { conversation_id: CONV, type: 'text', body: 'oi' } as SendMessageInput;
@@ -361,4 +363,59 @@ it("ação de automação conserva origem durante pacing e dois envios vigentes 
     expect(aviso.avisado).toBe(true);
     expect(hits.filter((url) => url.endsWith("/sendText"))).toHaveLength(4);
   } finally { await new Promise<void>((resolve) => receiver.close(() => resolve())); }
+});
+
+/**
+ * A assinatura do emissor sai pela cadeia de envio — portado do DeskcommCRM
+ * (PR #2079 de @webtecnica). O canal recebe `*Nome*\ntexto`; `messages.body`
+ * guarda o texto como foi escrito; desligada (o padrão), nada muda.
+ */
+describe('sendMessageHandler — assinatura do emissor (opt-in)', () => {
+  const corpoEnviado = () => {
+    const chamadas = (fetch as unknown as { mock: { calls: Array<[unknown, { body?: string }?]> } }).mock.calls;
+    const envio = chamadas.find(([url]) => String(url).includes('/api/sendText'));
+    return (JSON.parse(String(envio?.[1]?.body ?? '{}')) as { text?: string }).text;
+  };
+  const LIGADA = { assinatura_mensagens: { humanos: true, ia: true, nome_ia: 'Assistente Eva' } };
+  const IA: HandlerCtx = { organization_id: ORG, actor: { type: 'ai_agent', id: AGENT_RUN, role: 'agent' }, requestId: 'req-ass-ia', serviceBoundary: { organization_id: ORG, contact_id: CONTACT, conversation_id: CONV, service_revision: 1, demanda_id: null, demanda_revision: null } };
+  const HUMANO: HandlerCtx = { organization_id: ORG, actor: { type: 'user', id: USER }, requestId: 'req-ass-user' };
+
+  afterEach(() => nomes.mapa.clear());
+
+  it('padrão (sem config): o canal recebe o texto como foi escrito', async () => {
+    wahaConfigured();
+    const { supabase } = makeSupabase(null);
+    await sendMessageHandler(supabase, HUMANO, input);
+    expect(corpoEnviado()).toBe('oi');
+  });
+
+  it('ligada + atendente: o canal recebe o nome com iniciais em maiúscula; o banco guarda só o texto', async () => {
+    wahaConfigured();
+    nomes.mapa.set(USER, 'maria da silva');
+    const { supabase, mensagensInseridas } = makeSupabase(null, undefined, LIGADA);
+    await sendMessageHandler(supabase, HUMANO, input);
+    expect(corpoEnviado()).toBe('*Maria Da Silva*\noi');
+    expect(mensagensInseridas[0]?.body).toBe('oi');
+  });
+
+  it('ligada + IA: assina com o nome configurado da IA', async () => {
+    wahaConfigured();
+    const { supabase } = makeSupabase(null, undefined, LIGADA);
+    await sendMessageHandler(supabase, IA, input);
+    expect(corpoEnviado()).toBe('*Assistente Eva*\noi');
+  });
+
+  it('ligada + automação (webhook_source): não assina', async () => {
+    wahaConfigured();
+    const { supabase } = makeSupabase(null, undefined, LIGADA);
+    await sendMessageHandler(supabase, { organization_id: ORG, actor: { type: 'webhook_source', id: 'regra-1' }, requestId: 'req-ass-auto' }, input);
+    expect(corpoEnviado()).toBe('oi');
+  });
+
+  it('ligada + atendente sem nome resolvido: sai sem assinatura, nunca com nome vazio', async () => {
+    wahaConfigured();
+    const { supabase } = makeSupabase(null, undefined, LIGADA);
+    await sendMessageHandler(supabase, HUMANO, input);
+    expect(corpoEnviado()).toBe('oi');
+  });
 });
