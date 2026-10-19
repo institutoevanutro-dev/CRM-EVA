@@ -9335,6 +9335,16 @@ export const DICIONARIO: Traducoes = {
   "Payload inválido.": { es: "Payload inválido." },
   "Produto não encontrado.": { es: "Producto no encontrado." },
   "Query inválida.": { es: "Query inválida." },
+  // ─── A etapa avisa na Central (migration 0387, portado do DeskcommCRM PR #1813) ───
+  "Negócio entrou em": { es: "Negocio entró en" },
+  "Abra o negócio para dar o próximo passo. Este aviso foi pedido na configuração da etapa.": { es: "Abre el negocio para dar el siguiente paso. Este aviso se pidió en la configuración de la etapa." },
+  "Avisar a equipe na Central quando um negócio entrar aqui": { es: "Avisar al equipo en la Central cuando un negocio entre aquí" },
+  "Avisar a equipe na Central quando um negócio entrar em": { es: "Avisar al equipo en la Central cuando un negocio entre en" },
+  // ─── Relatório por canal (migration 0388, portado do DeskcommCRM PR #2504) ───
+  "Por canal": { es: "Por canal" },
+  "Erro ao carregar os canais.": { es: "Error al cargar los canales." },
+  "Janela de {dias} dias: o relatório por canal cobre no máximo {maximo} dias.": { es: "Ventana de {dias} días: el informe por canal cubre como máximo {maximo} días." },
+  "Sem atividade no período.": { es: "Sin actividad en el período." },
   "Responsável não é um atendente ativo desta organização.": { es: "El responsable no es un agente activo de esta organización." },
   "Retomada de contato descartada — decisão registrada": { es: "Reanudación de contacto descartada — decisión registrada" },
   "Salve este token agora — ele não será mostrado novamente.": { es: "Guarda este token ahora — no se mostrará de nuevo." },

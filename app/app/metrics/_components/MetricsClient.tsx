@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { useAttendantMetrics, type AttendantMetric } from "@/hooks/metrics/useAttendantMetrics";
 import { AtritoPanel } from "./AtritoPanel";
+import { CanaisPanel } from "./CanaisPanel";
 import { useTeamMembers } from "@/hooks/team/useTeamMembers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -162,6 +163,11 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Relatório por canal (migration 0388): o mesmo período e o mesmo
+          filtro de atendente, agora pelo NÚMERO. Leitura de gestão: só para
+          quem compara a equipe (a rota também exige gerente). */}
+      {canCompare ? <CanaisPanel owner={selectedOwner} /> : null}
     </div>
   );
 }

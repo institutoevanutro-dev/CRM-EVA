@@ -4184,6 +4184,7 @@ export type Database = {
       crm_stages: {
         Row: {
           agent_stage_hint: string | null
+          avisar_na_central: boolean
           blocks_followups: boolean
           color: string | null
           created_at: string
@@ -4205,6 +4206,7 @@ export type Database = {
         }
         Insert: {
           agent_stage_hint?: string | null
+          avisar_na_central?: boolean
           blocks_followups?: boolean
           color?: string | null
           created_at?: string
@@ -4226,6 +4228,7 @@ export type Database = {
         }
         Update: {
           agent_stage_hint?: string | null
+          avisar_na_central?: boolean
           blocks_followups?: boolean
           color?: string | null
           created_at?: string
@@ -8312,6 +8315,10 @@ export type Database = {
         Returns: Json
       }
       fn_attendant_metrics: {
+        Args: { p_from: string; p_org: string; p_owner?: string; p_to: string }
+        Returns: Json
+      }
+      fn_channel_metrics: {
         Args: { p_from: string; p_org: string; p_owner?: string; p_to: string }
         Returns: Json
       }
