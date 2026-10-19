@@ -37288,11 +37288,21 @@ alter table public.ad_conversion_dispatches
   add column if not exists sent_at timestamptz,
   add column if not exists error_code text;
 
-alter table public.ad_conversion_dispatches
-  drop constraint if exists ad_conversion_dispatches_alvo;
-alter table public.ad_conversion_dispatches
-  add constraint ad_conversion_dispatches_alvo
-  check (lead_id is not null or appointment_id is not null);
+-- Criada só quando falta: drop + add abriria uma janela sem a regra a cada
+-- reaplicação do baseline (`reaplicar-o-baseline-nao-abre-janela.test.ts`).
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'ad_conversion_dispatches_alvo'
+       and conrelid = 'public.ad_conversion_dispatches'::regclass
+  ) then
+    alter table public.ad_conversion_dispatches
+      add constraint ad_conversion_dispatches_alvo
+      check (lead_id is not null or appointment_id is not null);
+  end if;
+end
+$$;
 
 -- Dedup ANTES do índice único (doutrina de migrations §8): fica a linha
 -- enviada, e entre iguais a mais recente.
