@@ -249,6 +249,15 @@ const envSchema = z.object({
   BOT_LOOP_REPEAT_WINDOW_MS: z.coerce.number().int().positive().default(600_000),
   BOT_LOOP_AI_BURST_MAX: z.coerce.number().int().positive().default(20),
   BOT_LOOP_AI_BURST_WINDOW_MS: z.coerce.number().int().positive().default(300_000),
+  // Guarda de repetição (`guardrails/repeticao-na-conversa.ts`): no turno de
+  // resposta, a IA não manda de novo, na MESMA conversa, uma fala quase igual
+  // (Jaccard >= SIMILARITY sobre palavras sem acento, pontuação e o nome do
+  // contato) a uma das LAST_N últimas dela dentro de WINDOW_MS. Mensagem com menos
+  // de MIN_TOKENS palavras nunca é pulada. WINDOW_MS=0 desliga.
+  AI_REPEAT_GUARD_WINDOW_MS: z.coerce.number().int().min(0).default(1_800_000),
+  AI_REPEAT_GUARD_SIMILARITY: z.coerce.number().min(0).max(1).default(0.8),
+  AI_REPEAT_GUARD_MIN_TOKENS: z.coerce.number().int().min(1).default(4),
+  AI_REPEAT_GUARD_LAST_N: z.coerce.number().int().min(1).default(5),
 });
 
 export type Env = z.infer<typeof envSchema>;

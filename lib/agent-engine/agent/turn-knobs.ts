@@ -56,5 +56,11 @@ export function turnKnobsFromEnv(env: Env): InboundTurnKnobs {
       rajadaIaMax: env.BOT_LOOP_AI_BURST_MAX,
       janelaRajadaMs: env.BOT_LOOP_AI_BURST_WINDOW_MS,
     },
+    repeticao: {
+      janelaMs: env.AI_REPEAT_GUARD_WINDOW_MS,
+      limiar: env.AI_REPEAT_GUARD_SIMILARITY,
+      minTokens: env.AI_REPEAT_GUARD_MIN_TOKENS,
+      ultimas: env.AI_REPEAT_GUARD_LAST_N,
+    },
   };
 }

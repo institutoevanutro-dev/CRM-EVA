@@ -192,6 +192,12 @@ import {
   turnoMudoPedeCorrecao,
   turnoMudoPorCorte,
 } from './turno-mudo';
+import {
+  MENSAGEM_DE_REPETICAO,
+  REPETICAO_PADRAO,
+  repetiuNaConversa,
+  type RepeticaoKnobs,
+} from '../guardrails/repeticao-na-conversa';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 import { resolveActiveLeadForContact, type LeadCandidate } from '@/lib/leads/active-lead';
 import { recalculaScoreDoLead } from '@/lib/leads/score-writer';
@@ -1251,6 +1257,8 @@ export interface InboundTurnKnobs {
   allowlistTtlMs?: number;
   /** Disjuntor do laço bot-com-bot (`robo-do-outro-lado.ts`). Ausente = defaults. */
   botLoop?: RoboKnobs;
+  /** Guarda de repetição na conversa (`repeticao-na-conversa.ts`). Ausente = defaults. */
+  repeticao?: RepeticaoKnobs;
 }
 
 /** Default de `allowlistTtlMs` (21 dias) para testes que omitem o knob. */
@@ -3650,6 +3658,31 @@ async function executarTurnoDoAgente(
                 'NÃO chame send_message de novo neste turno — encerre agora. O próximo turno lê a conversa inteira e responde a tudo de uma vez.',
             },
           };
+        }
+        // REPETIÇÃO NA CONVERSA: quase a mesma fala da IA já saiu nesta conversa há
+        // pouco (o "OK" do paciente respondido três vezes com a mesma frase, produção
+        // 19/10/2026). PULO SILENCIOSO, não veto: `ok: true`, nada sai, e o modelo é
+        // mandado encerrar — veto o faria reescrever a mesma ideia. Só aqui, no texto
+        // livre do `inbound_turn`; ver `repeticao-na-conversa.ts`. Conta como tentativa
+        // de envio (`tentativasDeEnvio` acima), então o turno mudo não pede correção.
+        if (!preview && liveJob().kind === 'inbound_turn') {
+          const repeticao = await repetiuNaConversa(pool, {
+            organizationId: tenantId,
+            conversationId: input.conversationId,
+            candidata: body,
+            nomeDoContato: effectiveContext.contact.name,
+            agora: clock(),
+            knobs: deps.knobs.repeticao ?? REPETICAO_PADRAO,
+            log: runLog,
+          });
+          if (repeticao.repetida) {
+            runLog.info('envio pulado: a IA repetiria a própria mensagem nesta conversa', {
+              job_id: liveJob().id,
+              conversation_id: input.conversationId,
+              similaridade: Number(repeticao.similaridade.toFixed(2)),
+            });
+            return { ok: true, status: 'nao_enviada_repetida', message: MENSAGEM_DE_REPETICAO };
+          }
         }
         // F4-04: sinaliza (independente do gate F4-01/F4-08) se ESTA candidata é uma
         // promessa fora de tabela — usado só para correlacionar com o jailbreak no fim do
