@@ -133,7 +133,8 @@ describe("turno de fluxo — texto fixo", () => {
     const { pool } = fakePool({ horas: 2 });
     const d = deps();
     await criarHandler(d.deps)(job({ fixed_body: "oi" }), pool, ctx);
-    expect(isLeadInHandoff).toHaveBeenCalledWith(expect.anything(), ORG, LEAD);
+    // Passo fixo: só o silêncio conta, não a marca "sempre atendimento humano".
+    expect(isLeadInHandoff).toHaveBeenCalledWith(expect.anything(), ORG, LEAD, { ignorarTravaDoContato: true });
     expect(runBeforeSend).toHaveBeenCalledTimes(1);
     expect(resultado(d.complete)).toEqual({ kind: "sent" });
   });

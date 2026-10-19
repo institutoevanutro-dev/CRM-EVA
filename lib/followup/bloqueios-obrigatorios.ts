@@ -15,13 +15,21 @@
  *
  * SEMPRE VALEM (corretos em qualquer nicho, sem configuração):
  *   - opt-out (`contacts.is_blocked`) e contato anonimizado;
- *   - atendimento humano pedido/em curso: `force_human`, bot silenciado, conversa
- *     atribuída a uma pessoa (`assignee_kind='user'`) ou uma pessoa da equipe que
- *     respondeu depois da última mensagem do contato (composer ou celular). O
- *     gate de elegibilidade já barrava `assignee_kind='user'` no modo IA e no
- *     atalho; o texto fixo e o modelo pelo worker passaram a barrar também. Com
+ *   - atendimento humano em curso: bot silenciado, conversa atribuída a uma
+ *     pessoa (`assignee_kind='user'`) ou uma pessoa da equipe que respondeu
+ *     depois da última mensagem do contato (composer ou celular). O gate de
+ *     elegibilidade já barrava `assignee_kind='user'` no modo IA e no atalho; o
+ *     texto fixo e o modelo pelo worker passaram a barrar também. Com
  *     `handoff_policy='allow'` ("Permitir durante handoff"), atribuição e resposta
- *     humana não barram — só o pedido explícito (`force_human`/bot silenciado);
+ *     humana não barram — só o bot silenciado;
+ *   - `force_human` ("sempre atendimento humano", que `ai_opt_out` mantém
+ *     ligado) cala SÓ A IA (decisão do dono, 18-19/10/2026). Passo de texto
+ *     fixo, modelo de mensagem e mídia da biblioteca saem para esse contato; o
+ *     passo que chama o modelo (`ai_message`) é PULADO — visível no histórico —
+ *     e o fluxo segue para o próximo nó. Pular, e não encerrar: encerrar
+ *     levaria junto as mensagens fixas que vêm depois (ex.: a sequência
+ *     pós-consulta de 7/15/30/45/75 dias), que é exatamente o que o dono quer
+ *     que chegue. Ver `TipoDoPasso`;
  *   - negócio em etapa que invalida follow-up (`crm_stages.blocks_followups`,
  *     ex.: comprovante em conferência);
  *   - resposta do contato depois do último envio, quando o fluxo cancela na
@@ -269,6 +277,72 @@ export type MotivoDoBloqueio =
  */
 export const PRAZO_DO_SINAL_MINUTOS = 60;
 
+/**
+ * Quem escreve o passo: `fixo` = texto do operador (texto fixo, modelo de
+ * mensagem, mídia da biblioteca, confirmação do `match_reply`, modelo de
+ * reserva); `ia` = o modelo escreve (`ai_message`). Só muda uma coisa: o
+ * `force_human` do contato barra `ia` e deixa passar `fixo`.
+ */
+export type TipoDoPasso = 'fixo' | 'ia';
+
+/**
+ * O tipo do passo pelo payload do `followup_turn` (`turnPayloadExtras` em
+ * `engine.ts`): qualquer corpo pronto é `fixo`; sem corpo pronto, o modelo
+ * escreve.
+ */
+export function tipoDoPassoDoFluxo(payload: {
+  fixed_body?: unknown;
+  template_id?: unknown;
+  media_id?: unknown;
+}): TipoDoPasso {
+  return typeof payload.fixed_body === 'string' ||
+    typeof payload.template_id === 'string' ||
+    typeof payload.media_id === 'string'
+    ? 'fixo'
+    : 'ia';
+}
+
+/**
+ * O job é um passo de FLUXO com texto do operador? Só `followup_turn` de uma
+ * inscrição, de envio, com corpo pronto. A re-entrada legada (sem inscrição) e
+ * o passo de IA ficam de fora.
+ */
+export function ehPassoFixoDoFluxo(kind: string | undefined, payload: Record<string, unknown> | null | undefined): boolean {
+  return (
+    kind === 'followup_turn' &&
+    payload != null &&
+    typeof payload.followup_enrollment_id === 'string' &&
+    payload.purpose === 'send_message' &&
+    tipoDoPassoDoFluxo(payload) === 'fixo'
+  );
+}
+
+/**
+ * A mesma pergunta relendo o job no banco — para quem recebe só um aviso de
+ * quem chama (`runBeforeSend`) e não pode confiar num booleano para soltar uma
+ * trava.
+ */
+export async function jobEhPassoFixoDoFluxo(
+  db: Pick<pg.Pool, 'query'>,
+  input: { organizationId: string; contactId: string; jobId: string },
+): Promise<boolean> {
+  const { rows } = await db.query<{ kind: string; payload: Record<string, unknown> | null }>(
+    'select kind, payload from job_queue where organization_id = $1 and id = $2 and contact_id = $3',
+    [input.organizationId, input.jobId, input.contactId],
+  );
+  return rows[0] !== undefined && ehPassoFixoDoFluxo(rows[0].kind, rows[0].payload);
+}
+
+/** Motivos que pulam ESTE passo e deixam o fluxo seguir. */
+export type MotivoDoPulo = 'fora_das_24h_do_instagram' | 'atendimento_humano';
+
+/** O texto do passo pulado, gravado no evento `action_pulado`. */
+export const TEXTO_DO_PULO: Record<MotivoDoPulo, string> = {
+  fora_das_24h_do_instagram: 'Passo pulado: fora das 24h do Instagram.',
+  atendimento_humano:
+    "Passo pulado: o contato está marcado como 'sempre atendimento humano', e a IA não escreve para ele. As mensagens fixas da sequência seguem.",
+};
+
 export type DecisaoDoEnvio =
   | { envia: true }
   /** Não envia AGORA e reagenda para a abertura da janela. */
@@ -284,7 +358,7 @@ export type DecisaoDoEnvio =
    * Não envia ESTE passo e o fluxo segue para o próximo nó. Nem cancela (a
    * sequência ainda faz sentido) nem adia (esperar não reabre a janela).
    */
-  | { envia: false; motivo: 'fora_das_24h_do_instagram'; pula: true };
+  | { envia: false; motivo: MotivoDoPulo; pula: true };
 
 function cancelaNaResposta(triggerConfig: unknown): boolean {
   return (
@@ -304,11 +378,15 @@ function etapaDoGatilho(triggerConfig: unknown): string | null {
  * A ordem é de gravidade, e a primeira que casar decide: irrevogáveis (opt-out,
  * anonimizado) antes de tudo; a janela por último, porque só ela adia em vez de
  * impedir — adiar um envio que outra regra proíbe só empurraria o veto.
+ *
+ * `passo` ausente vale `ia`: quem não diz o que envia é tratado como a IA, e o
+ * `force_human` cala — o erro barato é pular, não falar.
  */
 export function decidirEnvio(
   fatos: FatosDoEnvio,
   config: ConfigDosBloqueios | null,
   agora: Date,
+  passo: TipoDoPasso = 'ia',
 ): DecisaoDoEnvio {
   if (config === null) return { envia: false, motivo: 'configuracao_invalida', invalida: false };
   if (fatos.enrollment.status !== 'active' && fatos.enrollment.status !== 'waiting_reply') {
@@ -323,7 +401,9 @@ export function decidirEnvio(
   // com motivo errado no worker, ou rechecando até morrer no atalho.
   const humanoSemPedido =
     fatos.handoff_policy !== 'allow' && (fatos.conversa.atribuida_a_pessoa || fatos.conversa.humano_respondeu);
-  if (fatos.contato.force_human || fatos.conversa.bot_silenciado || humanoSemPedido) {
+  // `force_human` sozinho NÃO entra aqui: ele cala só a IA, e é decidido no
+  // fim (pula o passo de IA). O handoff de verdade grava também o silêncio.
+  if (fatos.conversa.bot_silenciado || humanoSemPedido) {
     return { envia: false, motivo: 'atendimento_humano', invalida: true };
   }
   // O gate do canal (modo de teste, autorização por origem): a MESMA regra pura
@@ -393,8 +473,12 @@ export function decidirEnvio(
     if (anterior) return { envia: false, motivo: 'sequencia_concorrente', invalida: true };
   }
   // Depois de tudo que encerra a sequência (ela não deve seguir, pulando ou
-  // não) e antes da janela da organização: o canal já não aceita o envio, e
-  // adiar não resolve.
+  // não) e antes da janela da organização: a IA não escreve para quem é
+  // "sempre atendimento humano", e adiar não muda isso.
+  if (passo === 'ia' && fatos.contato.force_human) {
+    return { envia: false, motivo: 'atendimento_humano', pula: true };
+  }
+  // Mesmo lugar: o canal já não aceita o envio, e adiar não resolve.
   const fimAuto = fatos.fim_da_janela_automatica === null ? null : Date.parse(fatos.fim_da_janela_automatica);
   if (fimAuto !== null && agora.getTime() >= fimAuto) {
     return { envia: false, motivo: 'fora_das_24h_do_instagram', pula: true };
@@ -440,7 +524,7 @@ export const TEXTO_DO_BLOQUEIO: Record<MotivoDoBloqueio, string> = {
   prazo_do_sinal_vencido: 'Sequência encerrada: o prazo do lembrete de sinal (T+60 ou início da consulta) venceu.',
   fora_da_janela_sem_encaixe:
     'Sequência encerrada: a próxima janela comercial só abre depois do prazo do sinal — não adiado, suprimido.',
-  fora_das_24h_do_instagram: 'Passo pulado: fora das 24h do Instagram.',
+  fora_das_24h_do_instagram: TEXTO_DO_PULO.fora_das_24h_do_instagram,
 };
 
 /**
@@ -694,8 +778,9 @@ export async function conferirAntesDoEnvio(
   pool: Pick<pg.Pool, 'query'>,
   input: { organizationId: string; contactId: string; conversationId: string; enrollmentId: string },
   agora: Date,
+  passo: TipoDoPasso = 'ia',
 ): Promise<DecisaoDoEnvio> {
   const leitura = await lerFatosDoEnvio(pool, input);
   if (!leitura.ok) return { envia: false, motivo: 'nao_verificavel', invalida: false };
-  return decidirEnvio(leitura.fatos, leitura.config, agora);
+  return decidirEnvio(leitura.fatos, leitura.config, agora, passo);
 }

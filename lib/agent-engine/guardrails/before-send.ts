@@ -74,6 +74,7 @@ import { detectarVazamentoInterno, renderVetoDeVazamento } from './vazamento-int
 // adapter — e com ele o cliente HTTP do canal — para dentro do worker.
 import { capabilitiesOf, DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabilities';
 import { isWindowOpen } from './messaging-window';
+import { jobEhPassoFixoDoFluxo } from '@/lib/followup/bloqueios-obrigatorios';
 import type { ChannelProvider } from '@/lib/channels/capabilities';
 
 /** O que os gates enxergam — carregado UMA vez sob o lock, por tentativa de envio. */
@@ -1010,6 +1011,14 @@ export interface RunBeforeSendArgs {
   /** `contacts.is_blocked` lido no get_lead_context deste turno; OR com a leitura direta da fonte no gate stop. */
   optedOutThisTurn: boolean;
   /**
+   * Aviso de quem chama: a tentativa é um passo de FLUXO com texto do operador
+   * (texto fixo, modelo, mídia). Se o job (`jobId`), RELIDO sob o lock,
+   * confirma, o `force_human` do contato não para o envio — ele cala só a IA
+   * (decisão do dono, ver `TipoDoPasso` em `lib/followup/bloqueios-obrigatorios.ts`).
+   * `is_blocked` (STOP) para sempre. Sem `jobId`, ou job que não confirma, nada muda.
+   */
+  passoFixoDoFluxo?: boolean;
+  /**
    * Agente do turno (`ai_agents.id`), quando o chamador o conhece. Sem ele a
    * atividade de veto entra como 'system' — com o lastro do trace, mas sem
    * afirmar QUAL agente decidiu calar. Opcional de propósito: nem todo caminho
@@ -1245,11 +1254,19 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
         replyPolicy?.body !== args.body)
     )
       throw new Error('reply_scope_mismatch');
+    const passoFixoConfirmado =
+      args.passoFixoDoFluxo === true &&
+      args.jobId !== undefined &&
+      (await jobEhPassoFixoDoFluxo(client, {
+        organizationId: args.tenantId,
+        contactId: args.leadId,
+        jobId: args.jobId,
+      }));
     const stop = await readStopFlags(
       client,
       args.tenantId,
       args.leadId,
-      meetingPolicy?.humanCommand === true || replyPolicy !== null,
+      meetingPolicy?.humanCommand === true || replyPolicy !== null || passoFixoConfirmado,
     );
     const bloqueado = args.optedOutThisTurn || stop.bloqueado;
     const optedOut = bloqueado || stop.comHumano;
@@ -1483,6 +1500,7 @@ async function readStopFlags(
   db: Queryable,
   organizationId: string,
   contactId: string,
+  /** Só `is_blocked` para: o comando Meet, a resposta aprovada e o passo fixo de fluxo confirmado. */
   humanMeetingCommand = false,
 ): Promise<{ bloqueado: boolean; comHumano: boolean }> {
   // O predicado da parada continua UM só e no SQL (`is_blocked or force_human`);
