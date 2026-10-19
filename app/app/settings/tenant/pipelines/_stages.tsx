@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -518,6 +519,20 @@ export function StagesSection({
                 em={etapa.last_change_at ?? null}
                 className={`etapa-autoria-${etapa.id}`}
               />
+
+              {/* O momento que pede ação da equipe nem sempre é o ganho, e quem
+                  sabe qual etapa é essa é a organização (migration 0387,
+                  portado do projeto original, PR #1813). */}
+              <label className="flex items-center gap-2 text-xs text-text-muted">
+                <Switch
+                  checked={etapa.avisar_na_central === true}
+                  onCheckedChange={(v) => aplicar(etapa.id, { avisar_na_central: v })}
+                  disabled={ocupado}
+                  aria-label={`${t("Avisar a equipe na Central quando um negócio entrar em")} «${etapa.name}»`}
+                  data-testid={`avisar-${etapa.id}`}
+                />
+                {t("Avisar a equipe na Central quando um negócio entrar aqui")}
+              </label>
 
               {passo && (
                 <p className="text-xs text-text-muted" data-testid={`passo-de-${etapa.id}`}>
