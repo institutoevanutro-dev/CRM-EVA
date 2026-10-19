@@ -7,10 +7,13 @@
  * conversa assumida à mão ("Assumir" na tela, o claim de um caso) não emite
  * esse evento, e o passo do fluxo chegava ao envio com uma pessoa no comando.
  *
- * "Pessoa no comando" é a MESMA régua que barra o envio: `isLeadInHandoff`
- * (contato em `force_human` ou IA silenciada agora). Assumir, atribuir e
- * transferir gravam silêncio `infinity`; a atribuição pelo rodízio
- * (`p_reason = 'routing'`) não cala a IA e por isso não conta aqui.
+ * "Pessoa no comando" é a régua do envio, `isLeadInHandoff`, SEM o
+ * `force_human` do contato: IA silenciada agora. Assumir, atribuir e
+ * transferir gravam silêncio `infinity` (o handoff da IA grava os dois); a
+ * atribuição pelo rodízio (`p_reason = 'routing'`) não cala a IA e por isso não
+ * conta aqui. O `force_human` sozinho é a marca "sempre atendimento humano":
+ * cala só a IA, não é ninguém no comando (decisão do dono, 18-19/10/2026). O
+ * passo fixo segue e o de IA é pulado — quem decide é `decidirEnvio`.
  *
  * `pause` ADIA o passo, e não grava `paused_handoff`. Esta checagem é uma
  * fotografia, e `paused_handoff` só sai por `ai.handoff_resolved`, que só o
@@ -41,7 +44,7 @@ export async function aplicarPessoaNoComandoAoTurno(
   },
   agora: Date,
 ): Promise<DesfechoDaPessoaNoComando> {
-  if (!(await isLeadInHandoff(pool, alvo.organizationId, alvo.contactId))) return null;
+  if (!(await isLeadInHandoff(pool, alvo.organizationId, alvo.contactId, { ignorarTravaDoContato: true }))) return null;
 
   const { rows } = await pool.query<{
     status: string;
@@ -69,7 +72,7 @@ export async function aplicarPessoaNoComandoAoTurno(
 
   if (politica === 'pause') {
     const teto = agora.getTime() + ACTION_RECHECK_MAX_MS;
-    // Silêncio sem fim (`infinity`), já vencido ou ausente (a trava é `force_human`): confere de novo no teto.
+    // Silêncio sem fim (`infinity`) ou já vencido entre as duas leituras: confere de novo no teto.
     const fim = linha.fim_do_silencio_ms ?? teto;
     return { kind: 'adiada', ate: new Date(fim > agora.getTime() ? Math.min(fim, teto) : teto) };
   }

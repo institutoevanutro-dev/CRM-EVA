@@ -39,7 +39,10 @@ import { assertServiceBoundarySupabase } from "@/lib/atendimento/origem";
  *   2. O atraso é do FLUXO, não deste produtor: o nó de espera existe, e a tela
  *      manda começar por ele. Quem monta o fluxo decide quanto esperar.
  *   3. A cadeia de envio do follow-up passa por `runBeforeSend`, que lê
- *      `force_human` — quem assumiu de verdade não é atropelado. **NÃO coberto,
+ *      `force_human` — quem assumiu de verdade não é atropelado. (Desde
+ *      19/10/2026 o passo FIXO de fluxo não para em `force_human` sozinho, que é
+ *      a marca "sempre atendimento humano" e cala só a IA; o silêncio que o
+ *      handoff grava junto continua barrando, em `decidirEnvio`.) **NÃO coberto,
  *      e medido:** `conversations.assignee_kind='user'` e `bot_silenced_until`
  *      NÃO são lidos por essa cadeia. Se o atendente pegou a conversa sem
  *      levantar `force_human`, esta defesa não pega.

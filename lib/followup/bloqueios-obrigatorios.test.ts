@@ -13,7 +13,10 @@ import {
   OUTCOME_DO_BLOQUEIO,
   conferirAntesDoEnvio,
   TEXTO_DO_BLOQUEIO,
+  TEXTO_DO_PULO,
   decidirEnvio,
+  ehPassoFixoDoFluxo,
+  tipoDoPassoDoFluxo,
   dentroDaJanela,
   lerConfigDosBloqueios,
   lerFatosDoEnvio,
@@ -56,6 +59,8 @@ function fatos(p: Partial<FatosDoEnvio> = {}): FatosDoEnvio {
     ...p,
   };
 }
+
+const HUMANO_ENCERRA = { envia: false, motivo: 'atendimento_humano', invalida: true };
 
 const JANELA_DA_CLINICA: NonNullable<ConfigDosBloqueios['janela']> = {
   timezone: 'America/Sao_Paulo',
@@ -108,10 +113,6 @@ describe('decidirEnvio — sempre valem', () => {
       expect(decidirEnvio(fatos({ conversa: { ...limpa, bot_silenciado: true } }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA))
         .toEqual(HUMANO);
     });
-    it('force_human no contato', () => {
-      const f = fatos({ contato: { is_blocked: false, force_human: true, is_anonymized: false } });
-      expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual(HUMANO);
-    });
     it('conversa atribuída a uma pessoa', () => {
       expect(decidirEnvio(fatos({ conversa: { ...limpa, atribuida_a_pessoa: true } }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA))
         .toEqual(HUMANO);
@@ -120,17 +121,76 @@ describe('decidirEnvio — sempre valem', () => {
       expect(decidirEnvio(fatos({ conversa: { ...limpa, humano_respondeu: true } }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA))
         .toEqual(HUMANO);
     });
-    it('"Permitir durante handoff" (allow) ignora atribuição e resposta humana, mas não o pedido de humano', () => {
-      const allow = (conversa: typeof limpa, force_human = false) =>
-        decidirEnvio(
-          fatos({ handoff_policy: 'allow', conversa, contato: { is_blocked: false, force_human, is_anonymized: false } }),
-          CONFIG_SEM_BLOQUEIOS_OPCIONAIS,
-          QUARTA_MANHA,
-        );
+    it('"Permitir durante handoff" (allow) ignora atribuição e resposta humana, mas não o bot silenciado', () => {
+      const allow = (conversa: typeof limpa) =>
+        decidirEnvio(fatos({ handoff_policy: 'allow', conversa }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA);
       expect(allow({ ...limpa, atribuida_a_pessoa: true })).toEqual({ envia: true });
       expect(allow({ ...limpa, humano_respondeu: true })).toEqual({ envia: true });
-      expect(allow(limpa, true)).toEqual(HUMANO);
       expect(allow({ ...limpa, bot_silenciado: true })).toEqual(HUMANO);
+    });
+  });
+
+  // Decisão do dono (18-19/10/2026): "sempre atendimento humano" (`force_human`,
+  // que `ai_opt_out` mantém ligado) cala SÓ A IA. O defeito: a sequência
+  // pós-consulta (mensagens fixas de 7/15/30/45/75 dias) era encerrada com
+  // "uma pessoa da equipe está atendendo", mesmo com `handoff_policy='allow'`.
+  describe("force_human ('sempre atendimento humano') cala só a IA", () => {
+    const SEMPRE_HUMANO = { is_blocked: false, force_human: true, is_anonymized: false };
+    const PULA_IA = { envia: false, motivo: 'atendimento_humano', pula: true };
+    const limpa = { bot_silenciado: false, atribuida_a_pessoa: false, humano_respondeu: false };
+
+    for (const handoff_policy of ['pause', 'cancel', 'allow'] as const) {
+      it(`${handoff_policy}: passo fixo ENVIA; passo de IA é pulado e o fluxo segue`, () => {
+        const f = fatos({ handoff_policy, contato: SEMPRE_HUMANO });
+        expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA, 'fixo')).toEqual({ envia: true });
+        expect(decidirEnvio(f, TUDO_LIGADO, QUARTA_MANHA, 'fixo')).toEqual({ envia: true });
+        expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA, 'ia')).toEqual(PULA_IA);
+        // Sem dizer o tipo, vale IA: quem não diz o que envia não fala com esse contato.
+        expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toEqual(PULA_IA);
+      });
+    }
+
+    it('controle: sem force_human, os dois tipos enviam', () => {
+      for (const passo of ['fixo', 'ia'] as const) {
+        expect(decidirEnvio(fatos(), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA, passo)).toEqual({ envia: true });
+      }
+    });
+
+    it('o que encerra continua encerrando, para os dois tipos: STOP, anonimizado, oculto, bot silenciado, pessoa atendendo sem allow', () => {
+      for (const passo of ['fixo', 'ia'] as const) {
+        const d = (p: Partial<FatosDoEnvio>) => decidirEnvio(fatos({ ...p }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA, passo);
+        expect(d({ contato: { ...SEMPRE_HUMANO, is_blocked: true } })).toEqual({ envia: false, motivo: 'opt_out', invalida: true });
+        expect(d({ contato: { ...SEMPRE_HUMANO, is_anonymized: true } })).toEqual({ envia: false, motivo: 'contato_anonimizado', invalida: true });
+        expect(d({ contato: { ...SEMPRE_HUMANO, oculto: true } })).toEqual({ envia: false, motivo: 'contato_oculto', invalida: true });
+        expect(d({ contato: SEMPRE_HUMANO, conversa: { ...limpa, bot_silenciado: true } })).toEqual(HUMANO_ENCERRA);
+        expect(d({ contato: SEMPRE_HUMANO, conversa: { ...limpa, atribuida_a_pessoa: true } })).toEqual(HUMANO_ENCERRA);
+        expect(d({ contato: SEMPRE_HUMANO, handoff_policy: 'allow', conversa: { ...limpa, bot_silenciado: true } })).toEqual(HUMANO_ENCERRA);
+      }
+    });
+
+    it('a janela da organização ainda adia o passo fixo', () => {
+      const f = fatos({ contato: SEMPRE_HUMANO });
+      const noite = new Date('2026-09-16T23:00:00.000Z');
+      expect(decidirEnvio(f, TUDO_LIGADO, noite, 'fixo')).toMatchObject({ envia: false, motivo: 'fora_da_janela' });
+    });
+
+    it('o pulo tem texto próprio, que não diz "sequência encerrada"', () => {
+      expect(TEXTO_DO_PULO.atendimento_humano).toContain('Passo pulado');
+      expect(TEXTO_DO_PULO.atendimento_humano).not.toContain('encerrada');
+    });
+
+    it('o tipo do passo sai do payload do job', () => {
+      expect(tipoDoPassoDoFluxo({ fixed_body: 'Oi' })).toBe('fixo');
+      expect(tipoDoPassoDoFluxo({ template_id: 't' })).toBe('fixo');
+      expect(tipoDoPassoDoFluxo({ media_id: 'm' })).toBe('fixo');
+      expect(tipoDoPassoDoFluxo({})).toBe('ia');
+      const fixo = { followup_enrollment_id: 'e', purpose: 'send_message', fixed_body: 'Oi' };
+      expect(ehPassoFixoDoFluxo('followup_turn', fixo)).toBe(true);
+      expect(ehPassoFixoDoFluxo('followup_turn', { ...fixo, fixed_body: undefined, prompt_hint: 'x' })).toBe(false);
+      expect(ehPassoFixoDoFluxo('followup_turn', { ...fixo, followup_enrollment_id: undefined })).toBe(false);
+      expect(ehPassoFixoDoFluxo('followup_turn', { ...fixo, purpose: 'classify' })).toBe(false);
+      expect(ehPassoFixoDoFluxo('agent_turn', fixo)).toBe(false);
+      expect(ehPassoFixoDoFluxo('followup_turn', null)).toBe(false);
     });
   });
 

@@ -18,6 +18,7 @@ import {
   MOTIVO_TEXTO_VAZIO_SEM_VALOR,
   OUTCOME_DO_BLOQUEIO,
   TEXTO_DO_BLOQUEIO,
+  TEXTO_DO_PULO,
   conferirAntesDoEnvio,
 } from "@/lib/followup/bloqueios-obrigatorios";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
@@ -132,6 +133,8 @@ export async function enviarTextoFixoPendente(
         getRequestPool(),
         { organizationId: job.organization_id as string, contactId, conversationId, enrollmentId },
         new Date(),
+        // Só texto fixo chega aqui (o `continue` acima): o `force_human` não o barra.
+        "fixo",
       );
       if (!decisao.envia) {
         logger.info("[followup] texto fixo barrado por bloqueio obrigatório", {
@@ -139,9 +142,9 @@ export async function enviarTextoFixoPendente(
           enrollment_id: enrollmentId,
           motivo: decisao.motivo,
         });
-        if (decisao.motivo === "fora_das_24h_do_instagram") {
+        if ("pula" in decisao) {
           await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {
-            kind: "pulado", reason: TEXTO_DO_BLOQUEIO.fora_das_24h_do_instagram,
+            kind: "pulado", reason: TEXTO_DO_PULO[decisao.motivo],
           },undefined,job.id,jobClaim);
           await settle(job.organization_id,job.id,jobClaim.acquired_at,true);
           continue;

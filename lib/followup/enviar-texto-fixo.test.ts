@@ -212,6 +212,8 @@ describe("enviarTextoFixoPendente · a mesma decisão de envio do worker", () =>
       expect.anything(),
       { organizationId: "org-1", contactId: "contact-1", conversationId: "conv-1", enrollmentId: "enr-1" },
       expect.any(Date),
+      // Só texto fixo é drenado aqui: "sempre atendimento humano" não o barra.
+      "fixo",
     );
   });
 

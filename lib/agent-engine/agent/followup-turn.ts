@@ -46,7 +46,10 @@ import {
   MOTIVO_TEXTO_VAZIO_SEM_VALOR,
   OUTCOME_DO_BLOQUEIO,
   TEXTO_DO_BLOQUEIO,
+  TEXTO_DO_PULO,
   conferirAntesDoEnvio,
+  ehPassoFixoDoFluxo,
+  tipoDoPassoDoFluxo,
   type DecisaoDoEnvio,
 } from '../../followup/bloqueios-obrigatorios';
 import { ERRO_FORA_DAS_24H } from '../edge/crm/send-ledger';
@@ -555,15 +558,18 @@ async function runFlowDrivenTurn(
     // tick do fluxo viu quando enfileirou. Não dependem da supervisão ter rodado.
     // Falha fechada: sem conseguir conferir, não envia. É a MESMA decisão do
     // atalho do texto fixo (`lib/followup/enviar-texto-fixo.ts`).
+    // Texto fixo, modelo e mídia são do operador; sem corpo pronto, o modelo
+    // escreve. O `force_human` do contato cala só o segundo (ver `TipoDoPasso`).
     const bloqueio = await conferirAntesDoEnvio(
       pool,
       { organizationId: target.tenantId, contactId: target.leadId, conversationId: target.conversationId, enrollmentId },
       clock(),
+      tipoDoPassoDoFluxo(job.payload),
     );
     // Aplica um veredito que não envia — o mesmo para o passo e para a reserva.
     const aplicarBloqueio = async (b: Exclude<DecisaoDoEnvio, { envia: true }>): Promise<void> => {
       runLog.info('envio do fluxo barrado por bloqueio obrigatório', { motivo: b.motivo });
-      if (b.motivo === 'fora_das_24h_do_instagram') {
+      if ('pula' in b) {
         // Pula ESTE passo e o fluxo segue: nem cancela, nem reagenda, nem reenvia.
         await complete(pool, {
           jobId: job.id,
@@ -571,7 +577,7 @@ async function runFlowDrivenTurn(
           organizationId: target.tenantId,
           enrollmentId,
           nodeId,
-          result: { kind: 'pulado', reason: TEXTO_DO_BLOQUEIO.fora_das_24h_do_instagram },
+          result: { kind: 'pulado', reason: TEXTO_DO_PULO[b.motivo] },
         });
         return;
       }
@@ -937,8 +943,14 @@ async function sendFixedOutbound(
 > {
   const { tenantId, leadId, channelSessionId, conversationId } = target;
   const runLog = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, lead_id: leadId });
+  // Passo de FLUXO com texto do operador (texto fixo, modelo, mídia): o
+  // `force_human` do contato não o barra — ele cala só a IA (ver `TipoDoPasso`
+  // em `bloqueios-obrigatorios.ts`). Opt-out, silêncio e dono humano continuam
+  // barrando. Sai do job, não de quem chama: a reserva (job de passo de IA) e a
+  // re-entrada determinística (sem inscrição) seguem como eram.
+  const passoFixoDoFluxo = ehPassoFixoDoFluxo(job.kind, job.payload);
 
-  if (await isLeadInHandoff(pool, tenantId, leadId)) {
+  if (await isLeadInHandoff(pool, tenantId, leadId, { ignorarTravaDoContato: passoFixoDoFluxo })) {
     runLog.info('envio fixo pulado — lead silenciado (handoff/opt-out)', { kind: job.kind });
     return "skipped";
   }
@@ -978,6 +990,7 @@ async function sendFixedOutbound(
       // Sem legenda, toda mídia teria o mesmo corpo vazio e colidiria no spinning.
       ...(mediaLibraryItemId !== undefined && body.trim() === '' ? { enforceSpinning: false } : {}),
       optedOutThisTurn,
+      ...(passoFixoDoFluxo ? { passoFixoDoFluxo: true } : {}),
       crmDailyLimit: null,
       now: clock(),
       sleep: deps.sleep,
@@ -1122,6 +1135,9 @@ async function tentarModeloDeReserva(
     pool,
     { organizationId: target.tenantId, contactId: target.leadId, conversationId: target.conversationId, enrollmentId: input.enrollmentId },
     clock(),
+    // A reserva é do passo de IA: para quem é "sempre atendimento humano" o
+    // passo inteiro é pulado, como se a IA nunca tivesse tentado.
+    'ia',
   );
   if (!bloqueio.envia) {
     await aplicarBloqueio(bloqueio);
