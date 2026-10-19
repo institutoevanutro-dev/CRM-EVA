@@ -12,7 +12,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
-import type { CredencialDeConversao, PlataformaDeAnuncio } from "./types";
+import { EVENTO_AGENDOU, type CredencialDeConversao, type NomeDoEvento, type PlataformaDeAnuncio } from "./types";
 
 export type MotivoSemCredencial =
   | "sem_conexao"
@@ -26,6 +26,8 @@ export type LeituraDeCredencial =
 
 interface Linha {
   enabled: boolean;
+  deposit_paid_enabled: boolean | null;
+  google_deposit_paid_conversion_action_id: string | null;
   dataset_id: string | null;
   access_token_encrypted: string | null;
   test_event_code: string | null;
@@ -39,7 +41,7 @@ interface Linha {
 }
 
 const COLUNAS =
-  "enabled, dataset_id, access_token_encrypted, test_event_code, google_customer_id, " +
+  "enabled, deposit_paid_enabled, google_deposit_paid_conversion_action_id, dataset_id, access_token_encrypted, test_event_code, google_customer_id, " +
   "google_login_customer_id, google_conversion_action_id, google_oauth_client_id, " +
   "google_oauth_client_secret_encrypted, google_refresh_token_encrypted, google_developer_token_encrypted";
 
@@ -47,6 +49,12 @@ export async function lerCredencial(
   admin: SupabaseClient,
   organizationId: string,
   plataforma: PlataformaDeAnuncio,
+  /**
+   * Cada evento é ligado à parte: `enabled` é o do agendamento (o nome antigo
+   * ficou), `deposit_paid_enabled` o do sinal pago. No Google, cada evento tem a
+   * sua ação de conversão, e a credencial devolvida já leva a do evento.
+   */
+  evento: NomeDoEvento,
 ): Promise<LeituraDeCredencial> {
   const { data, error } = await admin
     .from("ad_platform_connections")
@@ -61,7 +69,10 @@ export async function lerCredencial(
   }
   if (!data) return { ok: false, motivo: "sem_conexao" };
   const linha = data as unknown as Linha;
-  if (!linha.enabled) return { ok: false, motivo: "conexao_desabilitada" };
+  const agendou = evento === EVENTO_AGENDOU;
+  if (!(agendou ? linha.enabled : linha.deposit_paid_enabled === true)) {
+    return { ok: false, motivo: "conexao_desabilitada" };
+  }
 
   const decifra = async (v: string | null) => (v ? decryptWebhookSecret(admin, v) : null);
 
@@ -80,9 +91,10 @@ export async function lerCredencial(
     };
   }
 
+  const acao = agendou ? linha.google_conversion_action_id : linha.google_deposit_paid_conversion_action_id;
   if (
     !linha.google_customer_id ||
-    !linha.google_conversion_action_id ||
+    !acao ||
     !linha.google_oauth_client_id ||
     !linha.google_oauth_client_secret_encrypted ||
     !linha.google_refresh_token_encrypted ||
@@ -102,7 +114,7 @@ export async function lerCredencial(
       plataforma,
       customerId: linha.google_customer_id,
       loginCustomerId: linha.google_login_customer_id,
-      conversionActionId: linha.google_conversion_action_id,
+      conversionActionId: acao,
       clientId: linha.google_oauth_client_id,
       clientSecret,
       refreshToken,

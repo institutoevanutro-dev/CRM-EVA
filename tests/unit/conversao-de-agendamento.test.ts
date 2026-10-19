@@ -1,5 +1,6 @@
 /**
- * O aviso de agendamento para Meta e Google — as regras que quebram calado.
+ * Os avisos de agendamento e de sinal pago para Meta e Google — as regras que
+ * quebram calado.
  *
  * Nenhuma chamada sai para a rede: `fetch` é substituído em todo caso, e o
  * banco é um fake em memória que guarda o livro-razão e os avisos da Central.
@@ -18,6 +19,7 @@ import {
   MAX_TENTATIVAS,
 } from "@/lib/conversoes/agendamento.handler";
 import { lerPreferencias, settingsComPreferencias } from "@/lib/conversoes/preferencias";
+import { conversaoDeSinalPagoHandler } from "@/lib/conversoes/sinal-pago.handler";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { lerResultadoDoUpload, montarCorpoGoogle } from "@/lib/plataformas-de-anuncio/google/conversions";
 import {
@@ -41,6 +43,9 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 const ORG = "11111111-1111-4111-8111-111111111111";
 const AGENDAMENTO = "22222222-2222-4222-8222-222222222222";
 const CONTATO = "33333333-3333-4333-8333-333333333333";
+const NEGOCIO = "44444444-4444-4444-8444-444444444444";
+const ETAPA_SINAL = "55555555-5555-4555-8555-555555555555";
+const ETAPA_OUTRA = "66666666-6666-4666-8666-666666666666";
 
 // ─── vetores ────────────────────────────────────────────────────────────────
 
@@ -90,7 +95,7 @@ describe("normalização e hash, por plataforma", () => {
 
 const conversaoBase: ConversaoDeAgendamento = {
   organizationId: ORG,
-  agendamentoId: AGENDAMENTO,
+  alvoId: AGENDAMENTO,
   evento: "Schedule",
   eventoId: idDoEvento(ORG, AGENDAMENTO, "Schedule"),
   ocorridoEm: new Date("2026-10-19T12:00:00Z"),
@@ -172,6 +177,7 @@ describe("o corpo enviado é uma lista fechada", () => {
 
 interface Banco {
   compromisso: Record<string, unknown> | null;
+  lead: Record<string, unknown> | null;
   contato: Record<string, unknown> | null;
   settings: Record<string, unknown>;
   conexoes: Record<string, Record<string, unknown>>;
@@ -193,6 +199,7 @@ function fakeAdmin() {
         filtros.every(([k, v]) => l[k] === v) && (!ids || ids.includes(l.id));
       const resolver = async (unico: boolean) => {
         if (tabela === "calendar_appointments") return { data: banco.compromisso, error: null };
+        if (tabela === "crm_leads") return { data: banco.lead, error: null };
         if (tabela === "contacts") return { data: banco.contato, error: null };
         if (tabela === "organizations") return { data: { settings: banco.settings }, error: null };
         if (tabela === "ad_platform_connections") {
@@ -208,7 +215,8 @@ function fakeAdmin() {
         // ad_conversion_dispatches
         if (op === "insert") {
           const linha: Record<string, unknown> = { id: `l${++seq}`, next_attempt_at: null, ...valores };
-          if (banco.livro.some((l) => l.appointment_id === linha.appointment_id && l.platform === linha.platform))
+          const alvo = (l: Record<string, unknown>) => `${l.appointment_id ?? ""}:${l.lead_id ?? ""}:${l.event_name}`;
+          if (banco.livro.some((l) => alvo(l) === alvo(linha) && l.platform === linha.platform))
             return { data: null, error: { code: "23505", message: "dup" } };
           banco.livro.push(linha);
           return { data: { id: linha.id }, error: null };
@@ -298,6 +306,7 @@ beforeEach(() => {
       inbox_hidden_at: null,
       source_metadata: { ad_platform: "meta_ads", ad_source_id: "ID_DO_ANUNCIO", ad_raw: { sourceId: "ID_DO_ANUNCIO" } },
     },
+    lead: { id: NEGOCIO, contact_id: CONTATO },
     settings: {},
     conexoes: { meta_ads: { ...conexaoMeta } },
     livro: [],
@@ -438,5 +447,154 @@ describe("leituras", () => {
       outra: 1,
       conversoes: { somente_de_anuncio: false },
     });
+  });
+});
+
+// ─── o segundo evento: sinal pago ───────────────────────────────────────────
+
+function mudouDeEtapa(para = ETAPA_SINAL, de: string | null = ETAPA_OUTRA): EventRow {
+  return {
+    id: "evt-etapa",
+    organization_id: ORG,
+    event_type: "lead.stage_changed",
+    entity_kind: "crm_lead",
+    entity_id: NEGOCIO,
+    payload: { from_stage_id: de, to_stage_id: para, stage_name: "Sinal pago · Botox" },
+    metadata: {},
+    consumed_by: [],
+    attempts: 0,
+    created_at: "2026-10-19T15:00:00.000Z",
+  };
+}
+
+const comEtapa = (extra: Partial<{ somenteDeAnuncio: boolean }> = {}) =>
+  settingsComPreferencias({}, { etapasDeSinalPago: [ETAPA_SINAL], ...extra });
+
+describe("sinal pago", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date("2026-10-19T15:05:00Z"), toFake: ["Date"] });
+    banco.conexoes = { meta_ads: { ...conexaoMeta, enabled: false, deposit_paid_enabled: true } };
+    banco.settings = comEtapa();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("escuta a mudança de etapa do negócio", () => {
+    expect(conversaoDeSinalPagoHandler.events).toEqual(["lead.stage_changed"]);
+  });
+
+  it("desligado por padrão: sem etapa marcada, ou sem o interruptor do sinal, nada sai", async () => {
+    const rede = redeQueResponde();
+    banco.settings = {};
+    expect((await conversaoDeSinalPagoHandler.handle(mudouDeEtapa())).detail).toBe("etapa_nao_e_sinal_pago");
+
+    banco.settings = comEtapa();
+    // Só o agendamento ligado: o sinal pago não vai junto.
+    banco.conexoes = { meta_ads: { ...conexaoMeta } };
+    await conversaoDeSinalPagoHandler.handle(mudouDeEtapa());
+    expect(rede).not.toHaveBeenCalled();
+    expect(banco.livro).toEqual([]);
+  });
+
+  it("e o interruptor do sinal não liga o agendamento", async () => {
+    const rede = redeQueResponde();
+    await conversaoDeAgendamentoHandler.handle(evento());
+    expect(rede).not.toHaveBeenCalled();
+  });
+
+  it("etapa que não está marcada não conta", async () => {
+    const rede = redeQueResponde();
+    const r = await conversaoDeSinalPagoHandler.handle(mudouDeEtapa(ETAPA_OUTRA, null));
+    expect(r).toMatchObject({ status: "skipped", detail: "etapa_nao_e_sinal_pago" });
+    expect(rede).not.toHaveBeenCalled();
+  });
+
+  it("Meta: CompleteRegistration, sem valor, sem etapa, na hora da entrada na etapa", async () => {
+    redeQueResponde();
+    await conversaoDeSinalPagoHandler.handle(mudouDeEtapa());
+    expect(corpos).toHaveLength(1);
+    const corpo = JSON.parse(corpos[0]!) as Record<string, unknown>;
+    const ev = (corpo.data as Record<string, unknown>[])[0]!;
+    expect(Object.keys(ev).sort()).toEqual(["action_source", "event_id", "event_name", "event_time", "user_data"]);
+    expect(ev.event_name).toBe("CompleteRegistration");
+    expect(ev.event_id).toBe(idDoEvento(ORG, NEGOCIO, "CompleteRegistration"));
+    expect(ev.event_time).toBe(Math.floor(Date.parse("2026-10-19T15:00:00Z") / 1000));
+    expect(chaves(corpo).filter((k) => PROIBIDAS.test(k) && k !== "event_name")).toEqual([]);
+    for (const proibido of [ETAPA_SINAL, NEGOCIO, "Sinal pago", "Botox", "5511988887777"]) {
+      expect(corpos[0]).not.toContain(proibido);
+    }
+    expect(banco.livro[0]).toMatchObject({
+      status: "sent",
+      lead_id: NEGOCIO,
+      platform: "meta_ads",
+      event_name: "CompleteRegistration",
+    });
+    expect(banco.livro[0]).not.toHaveProperty("appointment_id");
+  });
+
+  it("uma vez por negócio e plataforma: sair e voltar para a etapa não reenvia", async () => {
+    const rede = redeQueResponde();
+    await conversaoDeSinalPagoHandler.handle(mudouDeEtapa());
+    await conversaoDeSinalPagoHandler.handle(mudouDeEtapa(ETAPA_OUTRA, ETAPA_SINAL));
+    await conversaoDeSinalPagoHandler.handle(mudouDeEtapa());
+    expect(rede).toHaveBeenCalledTimes(1);
+    expect(banco.livro).toHaveLength(1);
+  });
+
+  it("o agendamento e o sinal do mesmo paciente são linhas separadas no livro", async () => {
+    banco.conexoes.meta_ads = { ...conexaoMeta, enabled: true, deposit_paid_enabled: true };
+    redeQueResponde();
+    await conversaoDeAgendamentoHandler.handle(evento());
+    await conversaoDeSinalPagoHandler.handle(mudouDeEtapa());
+    expect(banco.livro.map((l) => l.event_name).sort()).toEqual(["CompleteRegistration", "Schedule"]);
+  });
+
+  it("Google: vai para a ação de conversão do SINAL, não a do agendamento", async () => {
+    banco.settings = comEtapa({ somenteDeAnuncio: false });
+    banco.conexoes = {
+      google_ads: { ...conexaoGoogle, enabled: false, deposit_paid_enabled: true, google_deposit_paid_conversion_action_id: "555" },
+    };
+    redeQueResponde();
+    await conversaoDeSinalPagoHandler.handle(mudouDeEtapa());
+    const upload = corpos.find((c) => c.includes("conversionAction"))!;
+    expect(upload).toContain("conversionActions/555");
+    expect(upload).not.toContain("conversionActions/987");
+    expect(upload).not.toContain("conversionValue");
+  });
+
+  it("Google sem a ação do sinal: credencial incompleta, nada sai", async () => {
+    banco.settings = comEtapa({ somenteDeAnuncio: false });
+    banco.conexoes = { google_ads: { ...conexaoGoogle, deposit_paid_enabled: true } };
+    const rede = redeQueResponde();
+    const r = await conversaoDeSinalPagoHandler.handle(mudouDeEtapa());
+    expect(r.detail).toContain("google_ads:credencial_incompleta");
+    expect(rede).not.toHaveBeenCalled();
+  });
+
+  it("mesmas exclusões e mesma regra de origem do agendamento", async () => {
+    const rede = redeQueResponde();
+    banco.contato = { ...banco.contato!, ai_opt_out: true };
+    expect((await conversaoDeSinalPagoHandler.handle(mudouDeEtapa())).detail).toBe("sempre_atendimento_humano");
+    banco.contato = { ...banco.contato!, ai_opt_out: false, source_metadata: {} };
+    expect((await conversaoDeSinalPagoHandler.handle(mudouDeEtapa())).detail).toBe("meta_ads:fora_da_origem,google_ads:fora_da_origem");
+    expect(rede).not.toHaveBeenCalled();
+  });
+
+  it("etapa desmarcada enquanto esperava nova tentativa: encerra sem enviar", async () => {
+    redeQueResponde(false);
+    expect((await conversaoDeSinalPagoHandler.handle(mudouDeEtapa())).status).toBe("retry");
+    banco.settings = {};
+    const rede = redeQueResponde();
+    await conversaoDeSinalPagoHandler.handle(mudouDeEtapa());
+    expect(rede).not.toHaveBeenCalled();
+    expect(banco.livro[0]).toMatchObject({ status: "skipped", reason: "etapa_nao_e_sinal_pago" });
+  });
+
+  it("as etapas nascem vazias e sobrevivem a lixo", () => {
+    expect(lerPreferencias(undefined).etapasDeSinalPago).toEqual([]);
+    expect(lerPreferencias({ conversoes: { etapas_de_sinal_pago: ["não-é-uuid"] } }).etapasDeSinalPago).toEqual([]);
+    expect(lerPreferencias({ conversoes: { etapas_de_sinal_pago: [ETAPA_SINAL] } }).etapasDeSinalPago).toEqual([ETAPA_SINAL]);
+    // Gravar uma preferência não apaga a outra.
+    const s = settingsComPreferencias(settingsComPreferencias({}, { somenteDeAnuncio: false }), { etapasDeSinalPago: [ETAPA_SINAL] });
+    expect(lerPreferencias(s)).toEqual({ somenteDeAnuncio: false, etapasDeSinalPago: [ETAPA_SINAL] });
   });
 });

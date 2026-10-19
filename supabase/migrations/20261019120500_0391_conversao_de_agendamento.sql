@@ -1,8 +1,8 @@
--- 0391 · Avisar Meta e Google quando um paciente agenda — e só isso.
+-- 0391 · Avisar Meta e Google quando um paciente agenda e quando paga o sinal — e só isso.
 --
 -- O eixo de conversões (0213) nasceu para a VENDA: `lead.won` virava `Purchase`
 -- com valor. Este passo troca o evento por um só, "agendou", e o deixa
--- desligado por organização. O valor, o nome da etapa e qualquer coisa sobre o
+-- desligado por organização. Depois veio o segundo, "o sinal foi pago". O valor, o nome da etapa e qualquer coisa sobre o
 -- atendimento deixam de sair: numa clínica eles dizem o que o paciente foi
 -- tratar.
 --
@@ -15,6 +15,10 @@
 --      e código de erro, com índice único por (agendamento, plataforma, evento).
 --   4. `agent_inbox_items` ganha o kind `ad_conversion_failing`, com um aviso
 --      aberto por organização.
+--   5. O segundo evento, "sinal pago": interruptor próprio por plataforma
+--      (`deposit_paid_enabled`) e ação de conversão própria no Google.
+--   6. O livro-razão passa a ter uma linha por (negócio, plataforma, evento);
+--      o índice antigo da 0213, sem plataforma, sai.
 --
 -- Nenhuma função nova. Nenhuma tabela nova. As duas tabelas seguem deny-all.
 
@@ -150,5 +154,40 @@ comment on column public.ad_conversion_dispatches.error_code is
 create unique index if not exists agent_inbox_ad_conversion_failing_aberto
   on public.agent_inbox_items (organization_id)
   where kind = 'ad_conversion_failing' and status = 'open';
+
+-- 5. O SEGUNDO evento: o sinal foi pago (entrada do negócio numa etapa que
+--    quem administra marcou como "sinal pago"). Ligado à parte, por
+--    plataforma, e DESLIGADO por padrão. `enabled` continua sendo o do
+--    agendamento. No Google, cada evento tem a sua ação de conversão.
+alter table public.ad_platform_connections
+  add column if not exists deposit_paid_enabled boolean not null default false,
+  add column if not exists google_deposit_paid_conversion_action_id text;
+
+comment on column public.ad_platform_connections.deposit_paid_enabled is
+  'Avisar a plataforma quando o sinal é pago (migration 0391). Independente de enabled, que é o aviso de agendamento. Padrão desligado.';
+comment on column public.ad_platform_connections.google_deposit_paid_conversion_action_id is
+  'Ação de conversão do Google Ads que recebe o sinal pago (migration 0391). Separada da do agendamento.';
+
+-- 6. Um aviso de sinal pago por (negócio, plataforma, evento). O índice da
+--    0213 era (negócio, evento), SEM a plataforma: com Meta e Google ligados,
+--    o segundo envio do mesmo negócio bateria nele. Ele sai; o novo inclui a
+--    plataforma. Dedup antes, pela mesma regra do agendamento (inofensivo: o
+--    índice antigo já era mais estrito que o novo).
+drop index if exists public.ad_conversion_dispatches_lead_event_uk;
+
+delete from public.ad_conversion_dispatches a
+ using (
+   select id, row_number() over (
+            partition by organization_id, lead_id, platform, event_name
+            order by (status = 'sent') desc, attempted_at desc, id desc
+          ) as n
+     from public.ad_conversion_dispatches
+    where lead_id is not null
+ ) d
+ where a.id = d.id and d.n > 1;
+
+create unique index if not exists ad_conversion_dispatches_negocio_uk
+  on public.ad_conversion_dispatches (organization_id, lead_id, platform, event_name)
+  where lead_id is not null;
 
 notify pgrst, 'reload schema';

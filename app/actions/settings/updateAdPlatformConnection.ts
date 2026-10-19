@@ -13,7 +13,7 @@ import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 /**
  * Conectar a conta de anúncios (Meta ou Google Ads) para receber o aviso de
- * agendamento — pela tela. Desligado até alguém ligar aqui.
+ * agendamento e o de sinal pago, cada um com o seu interruptor — pela tela. Desligado até alguém ligar aqui.
  *
  * ─── O que isto fecha (invariante 6 da doutrina de restrição de canal) ──────
  *
@@ -76,22 +76,42 @@ const metaSchema = z.object({
   access_token: segredo(20),
   /** Enquanto preenchido, os eventos vão como teste e não contam. */
   test_event_code: z.string().trim().max(64).nullable().optional(),
+  /** O aviso de agendamento. */
   enabled: z.boolean(),
+  /** O aviso de sinal pago — ligado à parte. */
+  deposit_paid_enabled: z.boolean(),
 });
 
 const googleSchema = z.object({
   platform: z.literal("google_ads"),
   customer_id: digitos(6, 12),
   login_customer_id: z.union([digitos(6, 12), z.literal("")]).nullable().optional(),
-  conversion_action_id: digitos(1, 20),
+  /** Uma ação de conversão por evento; só a do evento ligado é obrigatória. */
+  conversion_action_id: z.union([digitos(1, 20), z.literal("")]).nullable().optional(),
+  deposit_paid_conversion_action_id: z.union([digitos(1, 20), z.literal("")]).nullable().optional(),
   client_id: z.string().trim().min(10).max(200),
   client_secret: segredo(8),
   refresh_token: segredo(10),
   developer_token: segredo(10),
   enabled: z.boolean(),
+  deposit_paid_enabled: z.boolean(),
 });
 
-const entradaSchema = z.discriminatedUnion("platform", [metaSchema, googleSchema]);
+const entradaSchema = z
+  .discriminatedUnion("platform", [metaSchema, googleSchema])
+  .superRefine((v, ctx) => {
+    if (v.platform !== "google_ads") return;
+    if (v.enabled && !v.conversion_action_id) {
+      ctx.addIssue({ code: "custom", path: ["conversion_action_id"], message: "obrigatório com o agendamento ligado" });
+    }
+    if (v.deposit_paid_enabled && !v.deposit_paid_conversion_action_id) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["deposit_paid_conversion_action_id"],
+        message: "obrigatório com o sinal pago ligado",
+      });
+    }
+  });
 
 export type AdPlatformConnectionInput = z.input<typeof entradaSchema>;
 
@@ -121,6 +141,7 @@ export async function updateAdPlatformConnection(
     organization_id: activeOrg.orgId,
     platform: entrada.platform,
     enabled: entrada.enabled,
+    deposit_paid_enabled: entrada.deposit_paid_enabled,
     updated_by: authUser.id,
   };
   // Cada segredo preenchido é cifrado; sem cifra o save RECUSA (nunca em claro).
@@ -134,6 +155,7 @@ export async function updateAdPlatformConnection(
     metadata = {
       platform: entrada.platform,
       enabled: entrada.enabled,
+      deposit_paid_enabled: entrada.deposit_paid_enabled,
       dataset_id: entrada.dataset_id,
       token_trocado: Boolean(entrada.access_token),
       em_teste: Boolean(entrada.test_event_code?.trim()),
@@ -141,7 +163,8 @@ export async function updateAdPlatformConnection(
   } else {
     valores.google_customer_id = entrada.customer_id;
     valores.google_login_customer_id = entrada.login_customer_id || null;
-    valores.google_conversion_action_id = entrada.conversion_action_id;
+    valores.google_conversion_action_id = entrada.conversion_action_id || null;
+    valores.google_deposit_paid_conversion_action_id = entrada.deposit_paid_conversion_action_id || null;
     valores.google_oauth_client_id = entrada.client_id;
     segredos.push(
       ["google_oauth_client_secret_encrypted", entrada.client_secret],
@@ -151,8 +174,10 @@ export async function updateAdPlatformConnection(
     metadata = {
       platform: entrada.platform,
       enabled: entrada.enabled,
+      deposit_paid_enabled: entrada.deposit_paid_enabled,
       customer_id: entrada.customer_id,
-      conversion_action_id: entrada.conversion_action_id,
+      conversion_action_id: entrada.conversion_action_id || null,
+      deposit_paid_conversion_action_id: entrada.deposit_paid_conversion_action_id || null,
       // O QUE mudou, jamais o valor.
       segredos_trocados: segredos.filter(([, v]) => Boolean(v)).map(([coluna]) => coluna),
     };

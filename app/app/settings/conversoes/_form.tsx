@@ -1,7 +1,9 @@
 "use client";
 
 /**
- * Os formulários de Conversões: a preferência da organização e as duas conexões.
+ * Os formulários de Conversões: as preferências da organização (origem e
+ * etapas de sinal pago) e as duas conexões, cada uma com um interruptor por
+ * evento.
  *
  * ── Por que os campos de segredo nascem VAZIOS e isso não é um bug ──────────
  *
@@ -117,12 +119,83 @@ export function PreferenciaDeOrigem({ somenteDeAnuncio, idioma }: { somenteDeAnu
   );
 }
 
+export interface EtapaParaEscolher {
+  id: string;
+  /** Nome que o operador deu à etapa e ao funil: aparece só aqui, nunca sai para plataforma. */
+  nome: string;
+  funil: string;
+}
+
+export function EtapasDeSinalPago({
+  etapas,
+  marcadas,
+  idioma,
+}: {
+  etapas: EtapaParaEscolher[];
+  marcadas: string[];
+  idioma: Idioma;
+}) {
+  const { t, isPending, salvar } = useSalvar(idioma);
+  const [escolhidas, setEscolhidas] = useState<string[]>(marcadas);
+  const alternar = (id: string, ligada: boolean) =>
+    setEscolhidas((atual) => (ligada ? [...atual, id] : atual.filter((x) => x !== id)));
+
+  return (
+    <Card className="p-6">
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          salvar(() => updatePreferenciasDeConversao({ etapas_de_sinal_pago: escolhidas }));
+        }}
+      >
+        <div className="flex flex-col gap-1">
+          <h2 className="text-lg font-semibold">{t("Etapas que querem dizer sinal pago")}</h2>
+          <p className="text-sm text-muted-foreground">
+            {t(
+              "Quando um negócio entra numa etapa marcada aqui, o sistema avisa as plataformas em que o sinal pago estiver ligado. Uma vez por negócio; sair da etapa depois não manda nada. O nome da etapa nunca sai.",
+            )}
+          </p>
+        </div>
+        {etapas.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("Nenhuma etapa de funil cadastrada.")}</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {etapas.map((etapa) => (
+              <li key={etapa.id}>
+                <label className="flex items-center gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4"
+                    checked={escolhidas.includes(etapa.id)}
+                    onChange={(e) => alternar(etapa.id, e.target.checked)}
+                  />
+                  <span>
+                    {etapa.nome}
+                    <span className="text-muted-foreground"> · {etapa.funil}</span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div>
+          <Button type="submit" disabled={isPending}>
+            {isPending ? t("Salvando…") : t("Salvar etapas")}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
 export function FormularioMeta({ estado, idioma }: { estado: EstadoMeta; idioma: Idioma }) {
   const { t, isPending, salvar } = useSalvar(idioma);
   const [datasetId, setDatasetId] = useState(estado.datasetId ?? "");
   const [token, setToken] = useState("");
   const [codigoDeTeste, setCodigoDeTeste] = useState(estado.testEventCode ?? "");
   const [habilitada, setHabilitada] = useState(estado.habilitada);
+  const [sinalPago, setSinalPago] = useState(estado.sinalPagoHabilitado);
   const podeSalvar = datasetId.trim().length >= 5 && (estado.temToken || token.trim().length >= 20);
 
   return (
@@ -139,6 +212,7 @@ export function FormularioMeta({ estado, idioma }: { estado: EstadoMeta; idioma:
                 access_token: token.trim() || undefined,
                 test_event_code: codigoDeTeste.trim() || null,
                 enabled: habilitada,
+                deposit_paid_enabled: sinalPago,
               }),
             () => setToken(""),
           );
@@ -177,6 +251,13 @@ export function FormularioMeta({ estado, idioma }: { estado: EstadoMeta; idioma:
           onChange={setHabilitada}
           ajuda={t("Ao desligar, o envio para na hora, inclusive o que estava esperando nova tentativa, e a credencial continua gravada.")}
         />
+        <Ligar
+          id="meta_deposit_paid_enabled"
+          rotulo={t("Avisar a Meta quando o sinal for pago")}
+          ligado={sinalPago}
+          onChange={setSinalPago}
+          ajuda={t("Vai como o evento padrão CompleteRegistration, sem valor. Só sai para as etapas marcadas acima.")}
+        />
         <div>
           <Button type="submit" disabled={isPending || !podeSalvar}>
             {isPending ? t("Salvando…") : t("Salvar Meta")}
@@ -197,10 +278,13 @@ export function FormularioGoogle({ estado, idioma }: { estado: EstadoGoogle; idi
   const [refreshToken, setRefreshToken] = useState("");
   const [developerToken, setDeveloperToken] = useState("");
   const [habilitada, setHabilitada] = useState(estado.habilitada);
+  const [acaoSinal, setAcaoSinal] = useState(estado.conversionActionIdSinalPago ?? "");
+  const [sinalPago, setSinalPago] = useState(estado.sinalPagoHabilitado);
   const gravado = t("Gravado. Deixe em branco para manter.");
   const podeSalvar =
     customerId.trim().length >= 6 &&
-    acao.trim().length >= 1 &&
+    (!habilitada || acao.trim().length >= 1) &&
+    (!sinalPago || acaoSinal.trim().length >= 1) &&
     clientId.trim().length >= 10 &&
     (estado.temClientSecret || clientSecret.trim().length >= 8) &&
     (estado.temRefreshToken || refreshToken.trim().length >= 10) &&
@@ -218,12 +302,14 @@ export function FormularioGoogle({ estado, idioma }: { estado: EstadoGoogle; idi
                 platform: "google_ads",
                 customer_id: customerId.trim(),
                 login_customer_id: loginCustomerId.trim() || null,
-                conversion_action_id: acao.trim(),
+                conversion_action_id: acao.trim() || null,
+                deposit_paid_conversion_action_id: acaoSinal.trim() || null,
                 client_id: clientId.trim(),
                 client_secret: clientSecret.trim() || undefined,
                 refresh_token: refreshToken.trim() || undefined,
                 developer_token: developerToken.trim() || undefined,
                 enabled: habilitada,
+                deposit_paid_enabled: sinalPago,
               }),
             () => {
               setClientSecret("");
@@ -242,6 +328,7 @@ export function FormularioGoogle({ estado, idioma }: { estado: EstadoGoogle; idi
         <Campo id="customer_id" rotulo={t("ID do cliente do Google Ads")} valor={customerId} onChange={setCustomerId} placeholder="123-456-7890" ajuda={t("O número da conta, no canto de cima do Google Ads.")} />
         <Campo id="login_customer_id" rotulo={t("ID da conta administradora (opcional)")} valor={loginCustomerId} onChange={setLoginCustomerId} placeholder="123-456-7890" ajuda={t("Só se o acesso à conta for por uma conta administradora (MCC).")} />
         <Campo id="conversion_action_id" rotulo={t("ID da ação de conversão")} valor={acao} onChange={setAcao} placeholder="987654321" ajuda={t("Só números. Em Metas › Conversões, abra a ação e copie o id do endereço (ctId).")} />
+        <Campo id="deposit_paid_conversion_action_id" rotulo={t("ID da ação de conversão do sinal pago")} valor={acaoSinal} onChange={setAcaoSinal} placeholder="987654322" ajuda={t("Outra ação de conversão, também do tipo importação, só para o sinal pago. Obrigatória se o sinal pago estiver ligado.")} />
         <Campo id="client_id" rotulo={t("ID do cliente OAuth")} valor={clientId} onChange={setClientId} placeholder="…apps.googleusercontent" ajuda={t("Do projeto no Google Cloud que tem a API do Google Ads ligada.")} />
         <Campo id="client_secret" rotulo={t("Chave secreta do cliente OAuth")} valor={clientSecret} onChange={setClientSecret} segredo placeholder={estado.temClientSecret ? gravado : ""} ajuda={t("Guardada criptografada.")} />
         <Campo id="refresh_token" rotulo={t("Token de atualização (refresh token)")} valor={refreshToken} onChange={setRefreshToken} segredo placeholder={estado.temRefreshToken ? gravado : ""} ajuda={t("Gerado com o mesmo cliente OAuth, com o escopo do Google Ads. Guardado criptografado.")} />
@@ -252,6 +339,13 @@ export function FormularioGoogle({ estado, idioma }: { estado: EstadoGoogle; idi
           ligado={habilitada}
           onChange={setHabilitada}
           ajuda={t("Ao desligar, o envio para na hora, inclusive o que estava esperando nova tentativa, e a credencial continua gravada.")}
+        />
+        <Ligar
+          id="google_deposit_paid_enabled"
+          rotulo={t("Avisar o Google Ads quando o sinal for pago")}
+          ligado={sinalPago}
+          onChange={setSinalPago}
+          ajuda={t("Vai para a ação de conversão do sinal pago, sem valor. Só sai para as etapas marcadas acima.")}
         />
         <div>
           <Button type="submit" disabled={isPending || !podeSalvar}>

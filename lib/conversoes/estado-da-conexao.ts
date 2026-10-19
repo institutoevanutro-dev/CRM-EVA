@@ -10,7 +10,12 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { PlataformaDeAnuncio } from "@/lib/plataformas-de-anuncio/types";
+import {
+  EVENTO_AGENDOU,
+  EVENTO_SINAL_PAGO,
+  type NomeDoEvento,
+  type PlataformaDeAnuncio,
+} from "@/lib/plataformas-de-anuncio/types";
 import { lerPreferencias, type PreferenciasDeConversao } from "./preferencias";
 
 export interface EstadoMeta {
@@ -18,6 +23,7 @@ export interface EstadoMeta {
   temToken: boolean;
   habilitada: boolean;
   testEventCode: string | null;
+  sinalPagoHabilitado: boolean;
 }
 
 export interface EstadoGoogle {
@@ -29,10 +35,14 @@ export interface EstadoGoogle {
   temRefreshToken: boolean;
   temDeveloperToken: boolean;
   habilitada: boolean;
+  conversionActionIdSinalPago: string | null;
+  sinalPagoHabilitado: boolean;
 }
 
 export interface EnvioDeAgendamento {
-  agendamentoId: string;
+  evento: NomeDoEvento;
+  /** O agendamento (evento `Schedule`) ou o negócio (sinal pago). */
+  alvoId: string;
   plataforma: PlataformaDeAnuncio;
   status: string;
   motivo: string | null;
@@ -49,6 +59,9 @@ export interface EstadoDasConversoes {
   enviados: number;
 }
 
+/** Os eventos de hoje. Linha antiga de venda (`Purchase`, 0213) não aparece. */
+const EVENTOS: NomeDoEvento[] = [EVENTO_AGENDOU, EVENTO_SINAL_PAGO];
+
 export async function lerEstadoDasConversoes(
   admin: SupabaseClient,
   organizationId: string,
@@ -58,7 +71,7 @@ export async function lerEstadoDasConversoes(
       .from("ad_platform_connections")
       // Os bytea entram só para virar booleano aqui dentro; o valor morre nesta função.
       .select(
-        "platform, enabled, dataset_id, test_event_code, access_token_encrypted, google_customer_id, " +
+        "platform, enabled, deposit_paid_enabled, google_deposit_paid_conversion_action_id, dataset_id, test_event_code, access_token_encrypted, google_customer_id, " +
           "google_login_customer_id, google_conversion_action_id, google_oauth_client_id, " +
           "google_oauth_client_secret_encrypted, google_refresh_token_encrypted, google_developer_token_encrypted",
       )
@@ -66,16 +79,16 @@ export async function lerEstadoDasConversoes(
     admin.from("organizations").select("settings").eq("id", organizationId).maybeSingle(),
     admin
       .from("ad_conversion_dispatches")
-      .select("appointment_id, platform, status, reason, error_code, attempts, attempted_at")
+      .select("event_name, appointment_id, lead_id, platform, status, reason, error_code, attempts, attempted_at")
       .eq("organization_id", organizationId)
-      .not("appointment_id", "is", null)
+      .in("event_name", EVENTOS)
       .order("attempted_at", { ascending: false })
       .limit(20),
     admin
       .from("ad_conversion_dispatches")
       .select("id", { count: "exact", head: true })
       .eq("organization_id", organizationId)
-      .not("appointment_id", "is", null)
+      .in("event_name", EVENTOS)
       .eq("status", "sent"),
   ]);
 
@@ -90,6 +103,7 @@ export async function lerEstadoDasConversoes(
       temToken: Boolean(meta.access_token_encrypted),
       habilitada: meta.enabled === true,
       testEventCode: s(meta.test_event_code),
+      sinalPagoHabilitado: meta.deposit_paid_enabled === true,
     },
     google: {
       customerId: s(google.google_customer_id),
@@ -100,10 +114,13 @@ export async function lerEstadoDasConversoes(
       temRefreshToken: Boolean(google.google_refresh_token_encrypted),
       temDeveloperToken: Boolean(google.google_developer_token_encrypted),
       habilitada: google.enabled === true,
+      conversionActionIdSinalPago: s(google.google_deposit_paid_conversion_action_id),
+      sinalPagoHabilitado: google.deposit_paid_enabled === true,
     },
     preferencias: lerPreferencias((org.data as { settings?: unknown } | null)?.settings),
     envios: ((envios.data ?? []) as Record<string, unknown>[]).map((l) => ({
-      agendamentoId: String(l.appointment_id),
+      evento: l.event_name as NomeDoEvento,
+      alvoId: String(l.event_name === EVENTO_AGENDOU ? l.appointment_id : l.lead_id),
       plataforma: l.platform as PlataformaDeAnuncio,
       status: String(l.status),
       motivo: s(l.reason),
@@ -122,6 +139,7 @@ export const MOTIVO_LEGIVEL: Record<string, string> = {
     "A plataforma recusou. Confira o identificador, o token e a ação de conversão no formulário acima.",
   sem_resposta: "A plataforma não respondeu depois de várias tentativas. Confira a conexão.",
   agendamento_cancelado: "O agendamento foi cancelado antes do envio. Nada foi enviado.",
+  etapa_nao_e_sinal_pago: "A etapa deixou de contar como sinal pago antes do envio. Nada foi enviado.",
   fora_da_origem: "O paciente não veio de anúncio desta plataforma. Nada foi enviado.",
   sem_conexao: "Nenhuma conta conectada para esta plataforma. Nada foi enviado.",
   conexao_desabilitada: "O envio estava desligado. Nada foi enviado.",

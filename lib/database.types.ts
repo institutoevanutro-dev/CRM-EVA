@@ -378,6 +378,7 @@ export type Database = {
       ad_platform_connections: {
         Row: {
           google_conversion_action_id: string | null
+          google_deposit_paid_conversion_action_id: string | null
           google_customer_id: string | null
           google_developer_token_encrypted: string | null
           google_login_customer_id: string | null
@@ -387,6 +388,7 @@ export type Database = {
           access_token_encrypted: string | null
           created_at: string
           dataset_id: string | null
+          deposit_paid_enabled: boolean
           enabled: boolean
           id: string
           organization_id: string
@@ -397,6 +399,7 @@ export type Database = {
         }
         Insert: {
           google_conversion_action_id?: string | null
+          google_deposit_paid_conversion_action_id?: string | null
           google_customer_id?: string | null
           google_developer_token_encrypted?: string | null
           google_login_customer_id?: string | null
@@ -406,6 +409,7 @@ export type Database = {
           access_token_encrypted?: string | null
           created_at?: string
           dataset_id?: string | null
+          deposit_paid_enabled?: boolean
           enabled?: boolean
           id?: string
           organization_id: string
@@ -416,6 +420,7 @@ export type Database = {
         }
         Update: {
           google_conversion_action_id?: string | null
+          google_deposit_paid_conversion_action_id?: string | null
           google_customer_id?: string | null
           google_developer_token_encrypted?: string | null
           google_login_customer_id?: string | null
@@ -425,6 +430,7 @@ export type Database = {
           access_token_encrypted?: string | null
           created_at?: string
           dataset_id?: string | null
+          deposit_paid_enabled?: boolean
           enabled?: boolean
           id?: string
           organization_id?: string

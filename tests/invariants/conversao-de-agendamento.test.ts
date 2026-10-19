@@ -1,12 +1,14 @@
 /**
- * O AVISO DE AGENDAMENTO (migration 0391), CONTRA O POSTGRES REAL.
+ * OS AVISOS DE AGENDAMENTO E DE SINAL PAGO (migration 0391), CONTRA O POSTGRES REAL.
  *
  * Prova: as colunas novas existem e os segredos do Google são bytea; as duas
  * tabelas seguem fora do alcance de anon e authenticated (nem a própria
  * organização lê pelo client de sessão); um envio por (agendamento, plataforma)
  * no banco; a linha precisa de um alvo; apagar o compromisso leva a linha junto;
  * o kind novo da Central entra, com um aberto por organização; e reaplicar o
- * bloco do baseline não desliga de novo uma conexão que alguém ligou.
+ * bloco do baseline não desliga de novo uma conexão que alguém ligou. E, para o
+ * sinal pago: o interruptor nasce desligado, e o livro aceita um envio por
+ * (negócio, plataforma, evento) — o índice antigo da 0213, sem plataforma, sumiu.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -107,6 +109,9 @@ afterAll(async () => {
     await pool.query(`delete from ad_conversion_dispatches where organization_id=$1`, [t.org]);
     await pool.query(`delete from ad_platform_connections where organization_id=$1`, [t.org]);
     await pool.query(`delete from calendar_appointments where organization_id=$1`, [t.org]);
+    await pool.query(`delete from crm_leads where organization_id=$1`, [t.org]);
+    await pool.query(`delete from crm_stages where organization_id=$1`, [t.org]);
+    await pool.query(`delete from crm_pipelines where organization_id=$1`, [t.org]);
     await pool.query(`delete from contacts where organization_id=$1`, [t.org]);
     await pool.query(`delete from user_organizations where organization_id=$1`, [t.org]);
     await pool.query(`delete from organizations where id=$1`, [t.org]);
@@ -207,5 +212,54 @@ describe("conversão de agendamento (0391)", () => {
       [B.org],
     );
     expect(rows[0].enabled).toBe(true);
+  });
+
+  it("sinal pago: interruptor e ação do Google próprios, desligado por padrão", async () => {
+    const { rows } = await pool.query<{ column_name: string; data_type: string; column_default: string | null; is_nullable: string }>(
+      `select column_name, data_type, column_default, is_nullable from information_schema.columns
+        where table_schema='public' and table_name='ad_platform_connections'
+          and column_name in ('deposit_paid_enabled','google_deposit_paid_conversion_action_id')`,
+    );
+    const col = Object.fromEntries(rows.map((r) => [r.column_name, r]));
+    expect(col.deposit_paid_enabled).toMatchObject({ data_type: "boolean", column_default: "false", is_nullable: "NO" });
+    expect(col.google_deposit_paid_conversion_action_id).toMatchObject({ data_type: "text" });
+    const lida = await pool.query(
+      `select deposit_paid_enabled from ad_platform_connections where organization_id=$1 and platform='meta_ads'`,
+      [B.org],
+    );
+    expect(lida.rows[0].deposit_paid_enabled).toBe(false);
+  });
+
+  it("sinal pago: um envio por negócio, plataforma e evento — o índice antigo sem plataforma saiu", async () => {
+    const funil = "0391a000-0000-4000-8000-0000000000f1";
+    const etapa = "0391a000-0000-4000-8000-0000000000f2";
+    const negocio = "0391a000-0000-4000-8000-0000000000f3";
+    await pool.query(
+      "insert into crm_pipelines(id,organization_id,name,slug) values($1::uuid,$2,'Funil',$1::text)",
+      [funil, A.org],
+    );
+    await pool.query(
+      "insert into crm_stages(id,organization_id,pipeline_id,name,slug,position) values($1,$2,$3,'Sinal pago','sinal-pago',1)",
+      [etapa, A.org, funil],
+    );
+    await pool.query(
+      "insert into crm_leads(id,organization_id,pipeline_id,stage_id,title,contact_id) values($1,$2,$3,$4,'Negócio',$5)",
+      [negocio, A.org, funil, etapa, A.contato],
+    );
+    const sinal = (plataforma: string, evento = "CompleteRegistration") =>
+      pool.query(
+        `insert into ad_conversion_dispatches(organization_id,lead_id,platform,event_name,status) values($1,$2,$3,$4,'sent')`,
+        [A.org, negocio, plataforma, evento],
+      );
+    await sinal("meta_ads");
+    await sinal("google_ads");
+    expect(await codigoDoErro(() => sinal("meta_ads"))).toBe("23505");
+    await sinal("meta_ads", "Purchase");
+
+    const { rows } = await pool.query<{ indexname: string }>(
+      `select indexname from pg_indexes where schemaname='public' and tablename='ad_conversion_dispatches'
+          and indexname in ('ad_conversion_dispatches_lead_event_uk','ad_conversion_dispatches_negocio_uk')`,
+    );
+    expect(rows.map((r) => r.indexname)).toEqual(["ad_conversion_dispatches_negocio_uk"]);
   });
 });

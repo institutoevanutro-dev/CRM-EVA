@@ -201,7 +201,7 @@ async function enviar(
   logger.warn("[conversoes.google] envio recusado", {
     status: resposta.status,
     statusDoGoogle,
-    agendamentoId: conversao.agendamentoId,
+    alvoId: conversao.alvoId,
   });
   return classificaHttp(resposta.status, statusDoGoogle);
 }

@@ -121,7 +121,7 @@ async function enviar(
   logger.warn("[conversoes.meta] envio recusado", {
     status: resposta.status,
     codigo,
-    agendamentoId: conversao.agendamentoId,
+    alvoId: conversao.alvoId,
   });
 
   if (resposta.status === 429 || resposta.status >= 500) {

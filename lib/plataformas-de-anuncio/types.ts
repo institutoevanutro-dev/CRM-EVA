@@ -19,14 +19,21 @@
 export type PlataformaDeAnuncio = "meta_ads" | "google_ads";
 
 /**
- * O ÚNICO evento que sai desta casa para uma plataforma de anúncio: um paciente
- * agendou. `Schedule` é o nome do evento padrão da Meta; no Google o evento é a
- * ação de conversão que a organização escolheu.
+ * Os DOIS eventos que saem desta casa para uma plataforma de anúncio, cada um
+ * ligado à parte por plataforma:
  *
- * Venda (`Purchase`) saiu de propósito (migration 0391): o valor e a etapa, numa
- * clínica, dizem o que o paciente foi tratar.
+ *  - `Schedule` — um paciente AGENDOU (evento padrão da Meta);
+ *  - `CompleteRegistration` — o SINAL foi pago, o momento em que a clínica
+ *    considera o paciente fechado. Evento padrão da Meta que não exige valor:
+ *    `Purchase` exige `value` e `currency`, e valor numa clínica diz o que o
+ *    paciente foi tratar.
+ *
+ * No Google o evento é a ação de conversão que a organização escolheu para cada
+ * um. Venda com valor saiu de propósito (migration 0391).
  */
-export type NomeDoEvento = "Schedule";
+export const EVENTO_AGENDOU = "Schedule";
+export const EVENTO_SINAL_PAGO = "CompleteRegistration";
+export type NomeDoEvento = typeof EVENTO_AGENDOU | typeof EVENTO_SINAL_PAGO;
 
 /**
  * Um agendamento pronto para sair — no formato da CASA, não no da plataforma.
@@ -38,16 +45,16 @@ export type NomeDoEvento = "Schedule";
  */
 export interface ConversaoDeAgendamento {
   organizationId: string;
-  /** Só para log e livro-razão. Nunca vai no corpo enviado. */
-  agendamentoId: string;
+  /** O agendamento (`Schedule`) ou o negócio (`CompleteRegistration`). Só para log e livro-razão; nunca vai no corpo enviado. */
+  alvoId: string;
   evento: NomeDoEvento;
   /**
    * Deduplicação na plataforma, e não se reverte: SHA-256 de
-   * `organização:agendamento:evento`, cortado em 32 hex. A mesma entrada dá o
+   * `organização:alvo:evento`, cortado em 32 hex. A mesma entrada dá o
    * mesmo id, então reenviar nunca conta duas vezes lá do outro lado.
    */
   eventoId: string;
-  /** Quando o paciente agendou (criação do compromisso), não quando o worker rodou. */
+  /** Quando aconteceu (criação do compromisso, ou entrada na etapa do sinal), não quando o worker rodou. */
   ocorridoEm: Date;
   /** E.164 com `+`, ainda em claro: cada transporte normaliza e hasheia do seu jeito. */
   telefone: string | null;
