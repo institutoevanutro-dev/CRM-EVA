@@ -12,7 +12,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 /**
- * Conectar a conta de anúncios para receber as vendas de volta — pela tela.
+ * Conectar a conta de anúncios (Meta ou Google Ads) para receber o aviso de
+ * agendamento — pela tela. Desligado até alguém ligar aqui.
  *
  * ─── O que isto fecha (invariante 6 da doutrina de restrição de canal) ──────
  *
@@ -56,31 +57,43 @@ export type UpdateAdPlatformConnectionResult =
       details?: unknown;
     };
 
-const entradaSchema = z.object({
-  /**
-   * Só `meta_ads` hoje. `google_ads` fica FORA do enum de propósito: aceitar o
-   * cadastro de uma plataforma sem transporte deixaria o operador colar um token
-   * e esperar conversões que nunca sairiam — e o livro-razão diria
-   * `plataforma_sem_transporte` sem que ele tivesse como entender por quê.
-   */
+const digitos = (min: number, max: number) =>
+  z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/-/g, ""))
+    .pipe(z.string().regex(new RegExp(`^\\d{${min},${max}}$`), "só dígitos"));
+
+/**
+ * Segredo OPCIONAL: vazio = "mantenha o que está gravado", NUNCA "apague". Um
+ * salvamento distraído não pode derrubar o envio. Para PARAR existe `enabled`.
+ */
+const segredo = (min: number) => z.string().trim().min(min).max(2000).optional();
+
+const metaSchema = z.object({
   platform: z.literal("meta_ads"),
-  dataset_id: z.string().trim().min(5).max(64).regex(/^\d+$/, "só dígitos"),
-  /**
-   * OPCIONAL: permite corrigir o dataset sem redigitar o token, que a tela nunca
-   * mostra de volta. Vazio = "mantenha o que está gravado", NUNCA "apague" — um
-   * salvamento distraído não pode derrubar o reporte de vendas.
-   *
-   * Para PARAR de enviar existe o switch `enabled`, que pausa e preserva a
-   * credencial. Remover a conexão de vez ainda não tem caminho pela tela (ver a
-   * lacuna anotada em `app/app/settings/conversoes/_form.tsx`).
-   */
-  access_token: z.string().trim().min(20).max(1000).optional(),
+  dataset_id: digitos(5, 32),
+  access_token: segredo(20),
   /** Enquanto preenchido, os eventos vão como teste e não contam. */
   test_event_code: z.string().trim().max(64).nullable().optional(),
   enabled: z.boolean(),
 });
 
-export type AdPlatformConnectionInput = z.infer<typeof entradaSchema>;
+const googleSchema = z.object({
+  platform: z.literal("google_ads"),
+  customer_id: digitos(6, 12),
+  login_customer_id: z.union([digitos(6, 12), z.literal("")]).nullable().optional(),
+  conversion_action_id: digitos(1, 20),
+  client_id: z.string().trim().min(10).max(200),
+  client_secret: segredo(8),
+  refresh_token: segredo(10),
+  developer_token: segredo(10),
+  enabled: z.boolean(),
+});
+
+const entradaSchema = z.discriminatedUnion("platform", [metaSchema, googleSchema]);
+
+export type AdPlatformConnectionInput = z.input<typeof entradaSchema>;
 
 export async function updateAdPlatformConnection(
   input: AdPlatformConnectionInput,
@@ -98,32 +111,62 @@ export async function updateAdPlatformConnection(
   if (!escreveComoPlatformAdmin(authUser) && ROLE_RANK[activeOrg.role] < ROLE_RANK.admin) {
     return { ok: false, error: "forbidden_role" };
   }
-  // Depois do papel, pelo mesmo motivo de `updateMarcaDaOrganizacao.ts`: quem
-  // nem tem o papel recebe a verdade sobre ele, não uma cobrança de segundo fator.
+  // Depois do papel: quem nem tem o papel recebe a verdade sobre ele.
   if (await mfaEmDivida()) return { ok: false, error: "mfa_required" };
 
   const admin = createAdminClient();
+  const entrada = parsed.data;
 
   const valores: Record<string, unknown> = {
     organization_id: activeOrg.orgId,
-    platform: parsed.data.platform,
-    dataset_id: parsed.data.dataset_id,
-    test_event_code: parsed.data.test_event_code?.trim() || null,
-    enabled: parsed.data.enabled,
+    platform: entrada.platform,
+    enabled: entrada.enabled,
     updated_by: authUser.id,
   };
+  // Cada segredo preenchido é cifrado; sem cifra o save RECUSA (nunca em claro).
+  const segredos: Array<[string, string | undefined]> = [];
+  let metadata: Record<string, unknown>;
 
-  if (parsed.data.access_token) {
-    const cifrado = await encryptWebhookSecret(admin, parsed.data.access_token);
-    if (!cifrado) return { ok: false, error: "cifra_indisponivel" };
-    valores.access_token_encrypted = cifrado;
+  if (entrada.platform === "meta_ads") {
+    valores.dataset_id = entrada.dataset_id;
+    valores.test_event_code = entrada.test_event_code?.trim() || null;
+    segredos.push(["access_token_encrypted", entrada.access_token]);
+    metadata = {
+      platform: entrada.platform,
+      enabled: entrada.enabled,
+      dataset_id: entrada.dataset_id,
+      token_trocado: Boolean(entrada.access_token),
+      em_teste: Boolean(entrada.test_event_code?.trim()),
+    };
+  } else {
+    valores.google_customer_id = entrada.customer_id;
+    valores.google_login_customer_id = entrada.login_customer_id || null;
+    valores.google_conversion_action_id = entrada.conversion_action_id;
+    valores.google_oauth_client_id = entrada.client_id;
+    segredos.push(
+      ["google_oauth_client_secret_encrypted", entrada.client_secret],
+      ["google_refresh_token_encrypted", entrada.refresh_token],
+      ["google_developer_token_encrypted", entrada.developer_token],
+    );
+    metadata = {
+      platform: entrada.platform,
+      enabled: entrada.enabled,
+      customer_id: entrada.customer_id,
+      conversion_action_id: entrada.conversion_action_id,
+      // O QUE mudou, jamais o valor.
+      segredos_trocados: segredos.filter(([, v]) => Boolean(v)).map(([coluna]) => coluna),
+    };
   }
 
-  // `upsert` e não `update`: a linha não existe em quem nunca conectou, e um
-  // `update` casaria zero linhas devolvendo SUCESSO — a tela diria "salvo" e nada
-  // seria gravado. É o modo de falha que a #144 mediu em `organizations`, e a
-  // defesa é não escrever a query que o permite. O `onConflict` é o índice único
-  // `(organization_id, platform)` da 0204.
+  for (const [coluna, valor] of segredos) {
+    if (!valor) continue;
+    const cifrado = await encryptWebhookSecret(admin, valor);
+    if (!cifrado) return { ok: false, error: "cifra_indisponivel" };
+    valores[coluna] = cifrado;
+  }
+
+  // `upsert`: a linha não existe em quem nunca conectou, e um `update` casaria
+  // zero linhas devolvendo SUCESSO. `onConflict` é o índice único da 0213.
   const { error } = await admin
     .from("ad_platform_connections")
     .upsert(valores, { onConflict: "organization_id,platform" });
@@ -140,15 +183,7 @@ export async function updateAdPlatformConnection(
     requestId: hdrs.get("x-request-id") ?? undefined,
     ip: hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
     userAgent: hdrs.get("user-agent") ?? undefined,
-    metadata: {
-      platform: parsed.data.platform,
-      enabled: parsed.data.enabled,
-      // O QUE mudou, jamais o valor. O dataset id pode ir (é identificador, não
-      // segredo); o token não entra nem em metadata.
-      dataset_id: parsed.data.dataset_id,
-      token_trocado: Boolean(parsed.data.access_token),
-      em_teste: Boolean(parsed.data.test_event_code?.trim()),
-    },
+    metadata,
   });
 
   revalidatePath("/app/settings/conversoes");

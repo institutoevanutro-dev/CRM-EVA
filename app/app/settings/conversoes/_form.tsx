@@ -1,29 +1,19 @@
 "use client";
 
 /**
- * O formulário da conexão com a conta de anúncios.
+ * Os formulários de Conversões: a preferência da organização e as duas conexões.
  *
- * ── Por que o campo do token nasce VAZIO e isso não é um bug ─────────────────
+ * ── Por que os campos de segredo nascem VAZIOS e isso não é um bug ──────────
  *
- * A tela nunca recebe o token — `lerEstadoDaConexao` devolve só um booleano.
- * Então o input vazio significa "mantenha o que está gravado", e o placeholder
- * diz isso com todas as letras. Pré-preencher com o valor real o colocaria no
- * HTML de uma página que o browser cacheia, e o segredo passaria a viver em
- * disco de cliente. Mesmo contrato da tela do Google (`/admin/google`).
+ * A tela nunca recebe segredo — `lerEstadoDasConversoes` devolve só booleanos.
+ * O input vazio significa "mantenha o que está gravado", e o placeholder diz
+ * isso. Pré-preencher poria o segredo no HTML de uma página que o browser
+ * cacheia.
  *
  * ── O switch pausa; NÃO existe remover ──────────────────────────────────────
  *
- * Desligar interrompe o envio e mantém a credencial gravada — é o que o texto
- * ao lado do switch diz, e é tudo o que esta tela faz. Pausar sem apagar é
- * deliberado: quem só queria parar por uma semana não deveria ter de conseguir
- * um token novo na plataforma, porque o caminho de volta é o passo caro.
- *
- * ⚠️ LACUNA CONHECIDA: remover a conexão não tem superfície. Não há botão de
- * desconectar, e a única saída hoje é DELETE na tabela — o que contraria o
- * invariante 6 da doutrina de restrição de canal, que cobra tela para ver e
- * tela para MUDAR todo estado configurável. Fica registrado aqui em vez de
- * virar comentário que descreve um botão inexistente: até existir, este texto
- * é a única coisa que impede alguém de procurar o botão na tela.
+ * Desligar interrompe o envio, inclusive o que estava esperando nova tentativa,
+ * e mantém a credencial. Remover a conexão de vez ainda não tem superfície.
  */
 
 import { useState, useTransition } from "react";
@@ -31,20 +21,16 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { updateAdPlatformConnection } from "@/app/actions/settings/updateAdPlatformConnection";
+import { updatePreferenciasDeConversao } from "@/app/actions/settings/updatePreferenciasDeConversao";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import type { EstadoGoogle, EstadoMeta } from "@/lib/conversoes/estado-da-conexao";
 import { traduzir } from "@/lib/i18n/dicionario";
 import type { Idioma } from "@/lib/i18n/idiomas";
-import type { EstadoDaConexao } from "@/lib/conversoes/estado-da-conexao";
 
-/**
- * Cada recusa vira uma frase que diz O QUE FAZER. `cifra_indisponivel` é a que
- * mais importa acertar: é problema de INSTALAÇÃO, e um texto genérico mandaria o
- * admin do tenant refazer um cadastro que já está certo, para falhar igual.
- */
 const ERRO_EM_PORTUGUES: Record<string, string> = {
   validation_failed: "Confira os campos: algum valor não está no formato esperado.",
   unauthenticated: "Sua sessão expirou. Entre de novo.",
@@ -56,115 +42,221 @@ const ERRO_EM_PORTUGUES: Record<string, string> = {
   erro_ao_gravar: "Não consegui gravar agora. Tente de novo em instantes.",
 };
 
-export function FormularioDeConversoes({
-  estado,
-  idioma,
-}: {
-  estado: EstadoDaConexao;
-  idioma: Idioma;
-}) {
+function useSalvar(idioma: Idioma) {
   const t = (texto: string) => traduzir(texto, idioma);
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-
-  const [datasetId, setDatasetId] = useState(estado.datasetId ?? "");
-  const [token, setToken] = useState("");
-  const [codigoDeTeste, setCodigoDeTeste] = useState(estado.testEventCode ?? "");
-  const [habilitada, setHabilitada] = useState(estado.habilitada);
-
-  // Ligar sem nunca ter gravado token deixaria a conexão "ativa" e o livro-razão
-  // acumulando `credencial_incompleta` — barrar aqui explica antes de acontecer.
-  const podeSalvar = datasetId.trim().length >= 5 && (estado.temToken || token.trim().length >= 20);
-
-  function salvar(evento: React.FormEvent) {
-    evento.preventDefault();
+  function salvar(acao: () => Promise<{ ok: true } | { ok: false; error: string }>, depois?: () => void) {
     startTransition(async () => {
-      const resultado = await updateAdPlatformConnection({
-        platform: "meta_ads",
-        dataset_id: datasetId.trim(),
-        access_token: token.trim() || undefined,
-        test_event_code: codigoDeTeste.trim() || null,
-        enabled: habilitada,
-      });
-
+      const resultado = await acao();
       if (resultado.ok) {
-        setToken("");
-        toast.success(t("Conexão salva."));
+        depois?.();
+        toast.success(t("Salvo."));
         router.refresh();
         return;
       }
       toast.error(t(ERRO_EM_PORTUGUES[resultado.error] ?? "Não consegui salvar agora."));
     });
   }
+  return { t, isPending, salvar };
+}
+
+function Campo(props: {
+  id: string;
+  rotulo: string;
+  valor: string;
+  onChange: (v: string) => void;
+  ajuda: string;
+  placeholder?: string;
+  segredo?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={props.id}>{props.rotulo}</Label>
+      <Input
+        id={props.id}
+        type={props.segredo ? "password" : "text"}
+        autoComplete="off"
+        value={props.valor}
+        onChange={(e) => props.onChange(e.target.value)}
+        placeholder={props.placeholder}
+      />
+      <p className="text-xs text-muted-foreground">{props.ajuda}</p>
+    </div>
+  );
+}
+
+function Ligar(props: { id: string; rotulo: string; ligado: boolean; onChange: (v: boolean) => void; ajuda: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-md border p-4">
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={props.id}>{props.rotulo}</Label>
+        <p className="text-xs text-muted-foreground">{props.ajuda}</p>
+      </div>
+      <Switch id={props.id} checked={props.ligado} onCheckedChange={props.onChange} />
+    </div>
+  );
+}
+
+export function PreferenciaDeOrigem({ somenteDeAnuncio, idioma }: { somenteDeAnuncio: boolean; idioma: Idioma }) {
+  const { t, isPending, salvar } = useSalvar(idioma);
+  return (
+    <Card className="p-6">
+      <Ligar
+        id="somente_de_anuncio"
+        rotulo={t("Só pacientes que vieram de anúncio")}
+        ligado={somenteDeAnuncio}
+        onChange={(v) => {
+          if (!isPending) salvar(() => updatePreferenciasDeConversao({ somente_de_anuncio: v }));
+        }}
+        ajuda={t(
+          "Ligado (o padrão): só sai o agendamento de quem chegou por um anúncio daquela plataforma. Desligado: todo agendamento com telefone sai para as plataformas ligadas abaixo.",
+        )}
+      />
+    </Card>
+  );
+}
+
+export function FormularioMeta({ estado, idioma }: { estado: EstadoMeta; idioma: Idioma }) {
+  const { t, isPending, salvar } = useSalvar(idioma);
+  const [datasetId, setDatasetId] = useState(estado.datasetId ?? "");
+  const [token, setToken] = useState("");
+  const [codigoDeTeste, setCodigoDeTeste] = useState(estado.testEventCode ?? "");
+  const [habilitada, setHabilitada] = useState(estado.habilitada);
+  const podeSalvar = datasetId.trim().length >= 5 && (estado.temToken || token.trim().length >= 20);
 
   return (
     <Card className="p-6">
-      <form onSubmit={salvar} className="flex flex-col gap-5">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="dataset_id">{t("Identificador do destino de conversões")}</Label>
-          <Input
-            id="dataset_id"
-            inputMode="numeric"
-            value={datasetId}
-            onChange={(e) => setDatasetId(e.target.value)}
-            placeholder="123456789012345"
-          />
-          <p className="text-xs text-muted-foreground">
-            {t("Só números. Você encontra no gerenciador de anúncios, na fonte de dados que recebe as conversões.")}
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="access_token">{t("Token de acesso")}</Label>
-          <Input
-            id="access_token"
-            type="password"
-            autoComplete="off"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder={
-              estado.temToken
-                ? t("Gravado. Deixe em branco para manter.")
-                : t("Cole o token gerado na plataforma")
-            }
-          />
-          <p className="text-xs text-muted-foreground">
-            {t("Guardado criptografado. Ele nunca volta para esta tela depois de salvo.")}
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="test_event_code">{t("Código de teste (opcional)")}</Label>
-          <Input
-            id="test_event_code"
-            value={codigoDeTeste}
-            onChange={(e) => setCodigoDeTeste(e.target.value)}
-            placeholder="TEST12345"
-          />
-          <p className="text-xs text-muted-foreground">
-            {t("Enquanto preenchido, as vendas vão marcadas como teste e não contam para a otimização. Apague quando terminar de conferir.")}
-          </p>
-        </div>
-
-        <div className="flex items-center justify-between rounded-md border p-4">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="enabled">{t("Reportar vendas automaticamente")}</Label>
-            <p className="text-xs text-muted-foreground">
-              {t("Desligar pausa o envio e mantém a credencial gravada.")}
-            </p>
-          </div>
-          <Switch id="enabled" checked={habilitada} onCheckedChange={setHabilitada} />
-        </div>
-
-        <div className="flex items-center gap-3">
+      <form
+        className="flex flex-col gap-5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          salvar(
+            () =>
+              updateAdPlatformConnection({
+                platform: "meta_ads",
+                dataset_id: datasetId.trim(),
+                access_token: token.trim() || undefined,
+                test_event_code: codigoDeTeste.trim() || null,
+                enabled: habilitada,
+              }),
+            () => setToken(""),
+          );
+        }}
+      >
+        <h2 className="text-lg font-semibold">Meta</h2>
+        <Campo
+          id="dataset_id"
+          rotulo={t("Identificador do conjunto de dados (pixel)")}
+          valor={datasetId}
+          onChange={setDatasetId}
+          placeholder="123456789012345"
+          ajuda={t("Só números. Fica no Gerenciador de Eventos, na fonte de dados que recebe as conversões.")}
+        />
+        <Campo
+          id="access_token"
+          rotulo={t("Token de acesso da API de Conversões")}
+          valor={token}
+          onChange={setToken}
+          segredo
+          placeholder={estado.temToken ? t("Gravado. Deixe em branco para manter.") : t("Cole o token gerado na plataforma")}
+          ajuda={t("Guardado criptografado. Ele nunca volta para esta tela depois de salvo.")}
+        />
+        <Campo
+          id="test_event_code"
+          rotulo={t("Código de teste (opcional)")}
+          valor={codigoDeTeste}
+          onChange={setCodigoDeTeste}
+          placeholder="TEST12345"
+          ajuda={t("Enquanto preenchido, os agendamentos vão marcados como teste e não contam para a otimização. Apague quando terminar de conferir.")}
+        />
+        <Ligar
+          id="meta_enabled"
+          rotulo={t("Avisar a Meta quando um paciente agendar")}
+          ligado={habilitada}
+          onChange={setHabilitada}
+          ajuda={t("Ao desligar, o envio para na hora, inclusive o que estava esperando nova tentativa, e a credencial continua gravada.")}
+        />
+        <div>
           <Button type="submit" disabled={isPending || !podeSalvar}>
-            {isPending ? t("Salvando…") : t("Salvar conexão")}
+            {isPending ? t("Salvando…") : t("Salvar Meta")}
           </Button>
-          {!podeSalvar && (
-            <span className="text-xs text-muted-foreground">
-              {t("Preencha o identificador e o token para poder salvar.")}
-            </span>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+export function FormularioGoogle({ estado, idioma }: { estado: EstadoGoogle; idioma: Idioma }) {
+  const { t, isPending, salvar } = useSalvar(idioma);
+  const [customerId, setCustomerId] = useState(estado.customerId ?? "");
+  const [loginCustomerId, setLoginCustomerId] = useState(estado.loginCustomerId ?? "");
+  const [acao, setAcao] = useState(estado.conversionActionId ?? "");
+  const [clientId, setClientId] = useState(estado.clientId ?? "");
+  const [clientSecret, setClientSecret] = useState("");
+  const [refreshToken, setRefreshToken] = useState("");
+  const [developerToken, setDeveloperToken] = useState("");
+  const [habilitada, setHabilitada] = useState(estado.habilitada);
+  const gravado = t("Gravado. Deixe em branco para manter.");
+  const podeSalvar =
+    customerId.trim().length >= 6 &&
+    acao.trim().length >= 1 &&
+    clientId.trim().length >= 10 &&
+    (estado.temClientSecret || clientSecret.trim().length >= 8) &&
+    (estado.temRefreshToken || refreshToken.trim().length >= 10) &&
+    (estado.temDeveloperToken || developerToken.trim().length >= 10);
+
+  return (
+    <Card className="p-6">
+      <form
+        className="flex flex-col gap-5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          salvar(
+            () =>
+              updateAdPlatformConnection({
+                platform: "google_ads",
+                customer_id: customerId.trim(),
+                login_customer_id: loginCustomerId.trim() || null,
+                conversion_action_id: acao.trim(),
+                client_id: clientId.trim(),
+                client_secret: clientSecret.trim() || undefined,
+                refresh_token: refreshToken.trim() || undefined,
+                developer_token: developerToken.trim() || undefined,
+                enabled: habilitada,
+              }),
+            () => {
+              setClientSecret("");
+              setRefreshToken("");
+              setDeveloperToken("");
+            },
+          );
+        }}
+      >
+        <h2 className="text-lg font-semibold">Google Ads</h2>
+        <p className="text-sm text-muted-foreground">
+          {t(
+            "Vai como conversão aprimorada para leads: o Google casa pelo telefone criptografado. A ação de conversão precisa ser do tipo importação.",
           )}
+        </p>
+        <Campo id="customer_id" rotulo={t("ID do cliente do Google Ads")} valor={customerId} onChange={setCustomerId} placeholder="123-456-7890" ajuda={t("O número da conta, no canto de cima do Google Ads.")} />
+        <Campo id="login_customer_id" rotulo={t("ID da conta administradora (opcional)")} valor={loginCustomerId} onChange={setLoginCustomerId} placeholder="123-456-7890" ajuda={t("Só se o acesso à conta for por uma conta administradora (MCC).")} />
+        <Campo id="conversion_action_id" rotulo={t("ID da ação de conversão")} valor={acao} onChange={setAcao} placeholder="987654321" ajuda={t("Só números. Em Metas › Conversões, abra a ação e copie o id do endereço (ctId).")} />
+        <Campo id="client_id" rotulo={t("ID do cliente OAuth")} valor={clientId} onChange={setClientId} placeholder="…apps.googleusercontent" ajuda={t("Do projeto no Google Cloud que tem a API do Google Ads ligada.")} />
+        <Campo id="client_secret" rotulo={t("Chave secreta do cliente OAuth")} valor={clientSecret} onChange={setClientSecret} segredo placeholder={estado.temClientSecret ? gravado : ""} ajuda={t("Guardada criptografada.")} />
+        <Campo id="refresh_token" rotulo={t("Token de atualização (refresh token)")} valor={refreshToken} onChange={setRefreshToken} segredo placeholder={estado.temRefreshToken ? gravado : ""} ajuda={t("Gerado com o mesmo cliente OAuth, com o escopo do Google Ads. Guardado criptografado.")} />
+        <Campo id="developer_token" rotulo={t("Token de desenvolvedor")} valor={developerToken} onChange={setDeveloperToken} segredo placeholder={estado.temDeveloperToken ? gravado : ""} ajuda={t("Na Central de API da conta administradora. Guardado criptografado.")} />
+        <Ligar
+          id="google_enabled"
+          rotulo={t("Avisar o Google Ads quando um paciente agendar")}
+          ligado={habilitada}
+          onChange={setHabilitada}
+          ajuda={t("Ao desligar, o envio para na hora, inclusive o que estava esperando nova tentativa, e a credencial continua gravada.")}
+        />
+        <div>
+          <Button type="submit" disabled={isPending || !podeSalvar}>
+            {isPending ? t("Salvando…") : t("Salvar Google Ads")}
+          </Button>
         </div>
       </form>
     </Card>

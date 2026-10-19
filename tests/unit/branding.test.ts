@@ -882,6 +882,20 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "endpoint de token do OAuth do Google — o par de `accounts.google.com` no fluxo de autorização da agenda.",
   },
+  "googleads.googleapis.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint da API do Google Ads (`lib/plataformas-de-anuncio/google/conversions.ts`, `uploadClickConversions`): o aviso de agendamento da migration 0391. Contrato do Google.",
+  },
+  "gmail.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "não é chamada de rede: é a regra de normalização de e-mail do Google Ads (tirar os pontos do usuário em gmail.com antes do hash), em `lib/plataformas-de-anuncio/identificadores.ts`.",
+  },
+  "googlemail.com": {
+    categoria: "FORNECEDOR",
+    motivo: "o par de `gmail.com` na mesma regra de normalização do Google Ads.",
+  },
   "accounts.google.com": {
     categoria: "FORNECEDOR",
     motivo:

@@ -86,6 +86,9 @@ export type InboxKind =
   // Nomes do upstream (0500), para o porte do Jev usar os mesmos kinds.
   | 'jev_pedido_de_humano'
   | 'jev_parar_de_receber'
+  // (migration 0391) O aviso de agendamento à plataforma de anúncio parou de
+  // sair. Um aberto por organização; nenhum dado do paciente no texto.
+  | 'ad_conversion_failing'
   | 'other';
 
 export interface InboxItemRow {
