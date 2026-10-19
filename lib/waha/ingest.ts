@@ -24,6 +24,7 @@ import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
 import { extrairAtribuicaoWaha } from "@/lib/waha/atribuicao-de-anuncio";
+import { semAssinatura } from "@/lib/messaging/assinatura";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ackToStatus } from "@/lib/types/messaging";
 import type { WahaEnvelope, WahaPayload } from "@/lib/waha/envelope";
@@ -107,7 +108,11 @@ async function ehEcoDeEnvioNosso(
       if ((l.type ?? "chat") !== "chat") return true;
       continue;
     }
-    if (corpo.length > 0 && (l.body ?? "").trim() === corpo) return true;
+    // Com a assinatura do emissor ligada, o eco traz `*Nome*\ntexto` e a linha
+    // guarda `texto`: sem tirar a linha do nome, o eco do próprio envio assinado
+    // seria lido como digitação no celular e calaria a IA (PR #2079 do original).
+    const gravado = (l.body ?? "").trim();
+    if (corpo.length > 0 && (gravado === corpo || gravado === semAssinatura(corpo).trim())) return true;
   }
   return false;
 }

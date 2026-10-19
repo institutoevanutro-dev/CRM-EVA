@@ -53,6 +53,8 @@ export const bodySchema = z
     depois_de: z.string().min(1).nullable().optional(),
     esfria_em_horas: z.number().int().min(1).max(720).nullable().optional(),
     color: corDaEtapaSchema.optional(),
+    /** Negócio que entra nesta etapa abre um aviso na Central (migration 0387). */
+    avisar_na_central: z.boolean().optional(),
   })
   .strict()
   .refine((b) => Object.keys(b).length > 0, { message: "Nada para alterar." });

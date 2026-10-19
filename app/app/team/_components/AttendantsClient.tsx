@@ -53,12 +53,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Clock, Plus, Trash } from "@/lib/ui/icons";
+import { Clock, Copy, Plus, Trash } from "@/lib/ui/icons";
+import {
+  copiarParaDiasUteis,
+  podeCopiarParaDiasUteis,
+  resumoDaJornada,
+  ROTULOS_DOS_DIAS,
+} from "@/lib/agenda/editor-de-jornada";
 import { apiClient } from "@/lib/api/client";
 
 interface UnidadeDaAgenda { id: string; name: string; active: boolean }
 
-const DOW_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+/** A mesma fonte do resumo do que foi publicado (`lib/agenda/editor-de-jornada`). */
+const DOW_LABELS: readonly string[] = ROTULOS_DOS_DIAS;
 
 const MODE_LABELS: Record<(typeof ROUTING_MODES)[number], string> = {
   manual: "Manual (atendente puxa da fila)",
@@ -138,8 +145,16 @@ function StatusBadge({ attendant, now }: { attendant: Attendant; now: Date }) {
   );
 }
 
-/** Editor de janela de horário (schedule tz-aware) de um atendente. */
-function ScheduleDialog({
+/**
+ * Editor de janela de horário (schedule tz-aware) de um atendente.
+ *
+ * O botão copia as faixas do dia-modelo para os outros dias úteis, e o resumo
+ * depois de salvar mostra o que SAIU GRAVADO (lido do retorno da gravação) — o
+ * diálogo só fecha quando a pessoa pede. Antes, quem preenchia só a segunda
+ * achava que tinha publicado a semana. Portado do projeto original
+ * (DeskcommCRM, PR #2460 de @webtecnica).
+ */
+export function ScheduleDialog({
   attendant,
   open,
   onOpenChange,
@@ -149,7 +164,8 @@ function ScheduleDialog({
   attendant: Attendant;
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  onSave: (windows: ScheduleWindow[], timezone: string) => void;
+  /** Devolve as janelas que o SERVIDOR guardou — é daqui que o resumo lê. */
+  onSave: (windows: ScheduleWindow[], timezone: string) => Promise<ScheduleWindow[]>;
   isPending: boolean;
 }) {
   const t = useT();
@@ -157,6 +173,24 @@ function ScheduleDialog({
   const [timezone, setTimezone] = useState(initial?.timezone || "America/Sao_Paulo");
   const [windows, setWindows] = useState<ScheduleWindow[]>(initial?.windows ?? []);
   const [unidades, setUnidades] = useState<UnidadeDaAgenda[]>([]);
+  // O que o servidor guardou no último "Salvar". O resumo vale só para o
+  // rascunho gravado: mexeu depois, o resumo sai e o "Salvar" volta.
+  const [gravacao, setGravacao] = useState<{
+    rascunho: ScheduleWindow[];
+    timezone: string;
+    janelas: ScheduleWindow[];
+  } | null>(null);
+  const publicado =
+    gravacao && gravacao.rascunho === windows && gravacao.timezone === timezone ? gravacao.janelas : null;
+  const podeCopiar = podeCopiarParaDiasUteis(windows);
+
+  async function salvar() {
+    try {
+      setGravacao({ rascunho: windows, timezone, janelas: await onSave(windows, timezone) });
+    } catch {
+      // O erro já virou toast no hook e o diálogo fica ABERTO.
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -206,7 +240,7 @@ function ScheduleDialog({
               </p>
             ) : null}
             {windows.map((w, i) => (
-              <div key={i} className="grid items-center gap-2 sm:grid-cols-[90px_minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,1.3fr)_auto]">
+              <div key={i} data-testid="janela" data-dow={w.dow} className="grid items-center gap-2 sm:grid-cols-[90px_minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,1.3fr)_auto]">
                 <Select
                   value={String(w.dow)}
                   onValueChange={(v) =>
@@ -284,16 +318,56 @@ function ScheduleDialog({
             >
               <Plus size={16} className="mr-1" /> Adicionar janela
             </Button>
+            {/* Copia no RASCUNHO: ainda dá para ajustar ou cancelar antes de salvar.
+                Desligado sem janela ou se a cópia passaria do limite da rota (50). */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-2"
+              disabled={!podeCopiar}
+              title={
+                podeCopiar || windows.length === 0
+                  ? undefined
+                  : t("Limite de 50 janelas por atendente: remova algumas antes de copiar.")
+              }
+              onClick={() => setWindows((ws) => copiarParaDiasUteis(ws))}
+            >
+              <Copy size={16} className="mr-1" /> {t("Copiar estes horários para os outros dias úteis")}
+            </Button>
           </div>
         </div>
 
+        {/* A região de status fica sempre montada: leitor de tela anuncia a
+            mudança numa região que já existia. */}
+        <div role="status">
+          {publicado ? (
+            <div data-testid="resumo-publicado" className="space-y-1 rounded-md border p-3">
+              <p className="text-sm font-medium">{t("Publicado")}</p>
+              <ul className="text-sm text-muted-foreground">
+                {resumoDaJornada(publicado, t).map((linha) => (
+                  <li key={linha}>{linha}</li>
+                ))}
+              </ul>
+              <p className="text-xs text-muted-foreground">
+                {t("É isto que ficou gravado — confira os dias e os horários antes de sair.")}
+              </p>
+            </div>
+          ) : null}
+        </div>
+
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button disabled={isPending} onClick={() => onSave(windows, timezone)}>
-            Salvar
-          </Button>
+          {publicado ? (
+            <Button onClick={() => onOpenChange(false)}>{t("Fechar")}</Button>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={() => onOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button disabled={isPending} onClick={salvar}>
+                Salvar
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -546,6 +620,7 @@ export function AttendantsClient({ canManage }: Props) {
                             onClick={() => setScheduleFor(a)}
                           >
                             <Clock size={16} />
+                            <span className="ml-1 hidden lg:inline">{t("Editar")}</span>
                           </Button>
                         ) : null}
                       </div>
@@ -584,12 +659,15 @@ export function AttendantsClient({ canManage }: Props) {
           open={!!scheduleFor}
           onOpenChange={(o) => !o && setScheduleFor(null)}
           isPending={patch.isPending}
-          onSave={(windows, timezone) =>
-            patch.mutate(
-              { userId: scheduleFor.userId, patch: { schedule: { timezone, windows } } },
-              { onSuccess: () => setScheduleFor(null) },
-            )
-          }
+          onSave={async (windows, timezone) => {
+            // `mutateAsync`: o resumo lê o RETORNO da gravação, e o diálogo não
+            // fecha sozinho no sucesso — a pessoa confere antes de sair.
+            const resposta = await patch.mutateAsync({
+              userId: scheduleFor.userId,
+              patch: { schedule: { timezone, windows } },
+            });
+            return resposta?.data?.schedule?.windows ?? [];
+          }}
         />
       ) : null}
     </div>

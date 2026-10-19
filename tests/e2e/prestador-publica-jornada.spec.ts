@@ -119,6 +119,10 @@ test("o gerente publica a jornada do prestador numa unidade, sem pô-lo no rotea
   await page.getByRole("option", { name: nomeUnidade }).click();
   await page.screenshot({ path: "evidence/equipe/prestador-editor-jornada.png", fullPage: true });
   await dialogo.getByRole("button", { name: "Salvar" }).click();
+  // Desde o porte do #2460 o diálogo NÃO fecha sozinho no sucesso: ele mostra o
+  // que o servidor gravou e espera a pessoa conferir e pedir "Fechar".
+  await expect(dialogo.getByTestId("resumo-publicado")).toContainText("08:00–18:00", { timeout: 10_000 });
+  await dialogo.getByRole("button", { name: "Fechar", exact: true }).click();
   await expect(dialogo).toBeHidden({ timeout: 10_000 });
 
   await expect(linha, "o resumo da jornada não atualizou depois de salvar").toContainText("08:00–18:00", {

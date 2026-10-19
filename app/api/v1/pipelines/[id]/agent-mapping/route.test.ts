@@ -271,6 +271,8 @@ describe("GET /api/v1/pipelines/[id]/agent-mapping", () => {
       is_lost: false,
       esfria_em_horas: null,
       color: null,
+      // Etapa sem a marca (ou anterior à migration 0387): o aviso fica desligado.
+      avisar_na_central: false,
       last_change_actor_kind: null,
       last_change_at: null,
     });

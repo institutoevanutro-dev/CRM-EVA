@@ -21,7 +21,14 @@ import { ContactPickerDialog } from "@/components/inbox/composer/ContactPickerDi
 import { AudioRecorder } from "@/components/inbox/composer/AudioRecorder";
 import { ReplyReviewPanel } from "@/components/inbox/composer/ReplyReviewPanel";
 import { EmojiButton } from "@/components/inbox/composer/EmojiButton";
+import {
+  MentionMenu,
+  opcoesDeMencao,
+  resolverMencao,
+  type OpcaoDeMencao,
+} from "@/components/inbox/composer/MentionMenu";
 import { resolveSlash, TemplateMenu } from "@/components/inbox/composer/TemplateMenu";
+import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useCreateNote } from "@/hooks/inbox/useCreateNote";
 import { useMessageTemplates, type MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
 import { X } from "lucide-react";
@@ -35,6 +42,7 @@ import {
   type TemplateContact,
 } from "@/lib/inbox/template-vars";
 import { ApiError } from "@/lib/api/types";
+import { embutirMencoes, podarMencoes, type MencaoEscolhida } from "@/lib/notifications/mentions";
 import { cn } from "@/lib/utils";
 import { classeDaFaixa, useRevelacao } from "@/hooks/inbox/useRevelacao";
 import { resolveSharedContact } from "@/lib/messaging/contact-card";
@@ -137,6 +145,16 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [menuDismissed, setMenuDismissed] = useState(false);
   const [mode, setMode] = useState<"reply" | "note">("reply");
   /**
+   * Menção de atendente em nota interna (portado do DeskcommCRM, PRs #2461,
+   * #2489 e #2586 de @webtecnica e @Tong-bit-art). `caret` porque o `@` é
+   * relativo ao cursor; `mencoes` é o que foi ESCOLHIDO na lista — o campo
+   * mostra o nome, e o id entra só quando o corpo sai (`embutirMencoes`).
+   */
+  const [caret, setCaret] = useState(0);
+  const [mencoes, setMencoes] = useState<MencaoEscolhida[]>([]);
+  const [mencaoDispensada, setMencaoDispensada] = useState(false);
+  const [mencaoIndice, setMencaoIndice] = useState(0);
+  /**
    * A FAIXA DE CIMA DO CAMPO (assistência do agente + Responder/Nota interna)
    * fica recolhida até ser pedida — pelo mouse, pelo foco ou pelo botão de
    * faísca ao lado do emoji. Ela comia ~70px da conversa o tempo todo, e no
@@ -164,6 +182,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const templates = useMessageTemplates();
   const slash = resolveSlash(text);
   const menuOpen = mode === "reply" && slash.open && !menuDismissed;
+
+  // SÓ em nota: menção no campo de resposta sairia para o cliente.
+  const gatilho = mode === "note" && !mencaoDispensada ? resolverMencao(text, caret) : null;
+  const membros = useAssignableMembers(gatilho !== null);
+  const opcoes = gatilho ? opcoesDeMencao(membros.data ?? [], gatilho.query, t("Atendente")) : [];
+  const mencaoAberta = gatilho !== null;
+  const opcaoAtual = opcoes[mencaoIndice] ?? opcoes[0];
 
   useImperativeHandle(ref, () => ({
     focus: () => taRef.current?.focus(),
@@ -204,6 +229,25 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
   }
 
+  /** Escolhe da lista e escreve o NOME no campo; o id entra só ao salvar. */
+  function escolherMencao(opcao: OpcaoDeMencao): void {
+    const gatilhoAqui = resolverMencao(text, caret);
+    if (!gatilhoAqui) return;
+    const inserido = `@${opcao.rotulo} `;
+    setText(text.slice(0, gatilhoAqui.start) + inserido + text.slice(caret));
+    setMencoes((atual) => [...atual, { id: opcao.membro.user_id, nome: opcao.rotulo }]);
+    const pos = gatilhoAqui.start + inserido.length;
+    setCaret(pos);
+    setMencaoIndice(0);
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(pos, pos);
+      autoresize();
+    });
+  }
+
   function handleSubmit() {
     const body = text.trim();
     if (!body || (mode === "note" ? isDisabled : envioBarrado)) return;
@@ -211,14 +255,30 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     setText("");
     requestAnimationFrame(() => autoresize());
 
+    // Se a pessoa já começou a próxima resposta, preserve os dois textos.
+    const restaurar = (current: string) => (current ? `${body}\n${current}` : body);
     const restoreOnError = () => {
-      // Se a pessoa já começou a próxima resposta, preserve os dois textos.
-      setText((current) => (current ? `${body}\n${current}` : body));
+      setText(restaurar);
       requestAnimationFrame(() => autoresize());
     };
 
     if (mode === "note") {
-      createNote.mutate({ conversation_id: conversationId, body }, { onError: restoreOnError });
+      // As escolhas DESTA nota: o campo segue editável durante o envio.
+      const mencoesEnviadas = mencoes;
+      createNote.mutate(
+        { conversation_id: conversationId, body: embutirMencoes(body, mencoes) },
+        {
+          onError: () => {
+            restoreOnError();
+            const restaurado = restaurar(taRef.current?.value ?? "");
+            setMencoes((atual) =>
+              podarMencoes(restaurado, [...mencoesEnviadas, ...atual.filter((m) => !mencoesEnviadas.includes(m))]),
+            );
+          },
+          // Só as escolhas DESTA nota: a lista pode já ter a menção da próxima.
+          onSuccess: () => setMencoes((atual) => atual.filter((m) => !mencoesEnviadas.includes(m))),
+        },
+      );
       return;
     }
     const citadaNoEnvio = respondendo?.id ?? null;
@@ -368,6 +428,33 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       setMenuDismissed(true);
       return;
     }
+    // Com a lista de menções aberta, Enter escolhe — não envia.
+    if (mencaoAberta) {
+      if (e.key === "Escape") {
+        setMencaoDispensada(true);
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMencaoIndice((i) => (opcoes.length ? (i + 1) % opcoes.length : 0));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMencaoIndice((i) => (opcoes.length ? (i - 1 + opcoes.length) % opcoes.length : 0));
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (opcaoAtual) escolherMencao(opcaoAtual);
+        return;
+      }
+      if (e.key === "Tab" && opcaoAtual) {
+        e.preventDefault();
+        escolherMencao(opcaoAtual);
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (menuOpen) return; // deixa o Enter pro menu; não envia /query como mensagem
@@ -398,6 +485,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           templates={templates.data ?? []}
           onPick={applyTemplate}
           onClose={() => setMenuDismissed(true)}
+        />
+        <MentionMenu
+          open={mencaoAberta}
+          opcoes={opcoes}
+          indice={opcaoAtual ? opcoes.indexOf(opcaoAtual) : 0}
+          onPick={escolherMencao}
         />
         <div
           {...ferramentas.painelProps}
@@ -546,9 +639,17 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             value={text}
             onChange={(e) => {
               setText(e.target.value);
+              const pos = e.target.selectionStart ?? e.target.value.length;
+              setCaret(pos);
+              setMencaoIndice(0);
+              // A escolha que sumiu do texto sai da lista agora: senão roubava
+              // o `@Nome` de um homônimo e notificava a pessoa errada.
+              setMencoes((atual) => podarMencoes(e.target.value, atual));
               if (!resolveSlash(e.target.value).open) setMenuDismissed(false);
+              if (!resolverMencao(e.target.value, pos)) setMencaoDispensada(false);
               autoresize();
             }}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             rows={1}

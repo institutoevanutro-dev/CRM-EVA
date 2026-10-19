@@ -108,6 +108,8 @@ export async function enviarPushAQuemVeAConversa(
   conversationId: string,
   payload: PushPayload,
   admin: Pick<SupabaseClient, "rpc" | "from"> = createAdminClient(),
+  /** Restringe a estes usuários (a menção vai só ao mencionado — se ele vê). */
+  soUsuarios?: readonly string[],
 ): Promise<{ sent: number; gone: number }> {
   if (!vapidPronto()) return { sent: 0, gone: 0 };
   const { data, error } = await admin.rpc("fn_push_inscricoes_que_veem_a_conversa", {
@@ -118,7 +120,9 @@ export async function enviarPushAQuemVeAConversa(
     logger.warn("push_subscriptions_visible_list_failed", { detail: error.message });
     return { sent: 0, gone: 0 };
   }
-  const linhas = (Array.isArray(data) ? data : []) as PushSubRow[];
+  // A função do banco devolve também o `user_id` de cada inscrição (0378).
+  const todas = (Array.isArray(data) ? data : []) as Array<PushSubRow & { user_id?: string }>;
+  const linhas = soUsuarios ? todas.filter((l) => !!l.user_id && soUsuarios.includes(l.user_id)) : todas;
   return enviarPushDaOrg(organizationId, payload, inscricoesJaFiltradas(admin, linhas));
 }
 

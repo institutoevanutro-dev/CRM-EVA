@@ -39,6 +39,7 @@
     { "id": "turno", "lane": "gasta", "col": 3, "type": "service", "label": "runAgentTurn", "sublabel": "o turno INTEIRO dentro da escolta — inclui classifyStage e maybeCompact" },
     { "id": "legado", "lane": "gasta", "col": 4, "type": "service", "label": "ai-response-worker", "sublabel": "caminho pré-engine (org sem versão publicada) · veto DEPOIS de G1/G4" },
     { "id": "fila", "lane": "gasta", "col": 5, "type": "service", "label": "agent-worker/main.ts", "sublabel": "erro terminal → cancelJob, não failJob (não afoga a Central em job_dead)" },
+    { "id": "midia", "lane": "gasta", "col": 6, "type": "service", "label": "media-derive-worker (describeImage)", "sublabel": "visão de foto, de PDF escaneado e de cada quadro de vídeo, fora do runModelCall · recusa → marcador de mídia não lida" },
 
     { "id": "budgets", "lane": "dados", "col": 1, "type": "database", "label": "ai_budgets", "sublabel": "enforcement_mode (default off) · enforcement_effective_at · escrita só por service role (0160)" },
     { "id": "regua", "lane": "dados", "col": 2, "type": "database", "label": "fn_gasto_de_ia_do_mes(uuid)", "sublabel": "a definição ÚNICA de gasto · security invoker, revogada de anon/authenticated" },
@@ -97,7 +98,9 @@
     { "id": "e43", "from": "kpis", "to": "saude", "label": "o alerta leva para a tela que tem o número real" },
     { "id": "e44", "from": "card", "to": "usoapi", "label": "a mesma tela: custo, chamadas, turnos e cache do período" },
     { "id": "e45", "from": "usoapi", "to": "usofn", "label": "RPC, security invoker: a RLS isola, p_org é defesa em profundidade" },
-    { "id": "e46", "from": "usofn", "to": "llmcalls", "label": "sum(cost_cents) por dia e por purpose; turnos = jobs com agent_turn ok" }
+    { "id": "e46", "from": "usofn", "to": "llmcalls", "label": "sum(cost_cents) por dia e por purpose; turnos = jobs com agent_turn ok" },
+    { "id": "e47", "from": "midia", "to": "runmodel", "label": "a visão passa pelo MESMO gate; a transcrição pelo serviço fica fora (custo null)" },
+    { "id": "e48", "from": "midia", "to": "llmcalls", "label": "visao_de_imagem grava tokens e custo e soma no gasto do mês; transcricao_de_audio grava custo null" }
   ],
   "cards": [
     {
