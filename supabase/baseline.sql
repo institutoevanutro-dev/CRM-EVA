@@ -10617,6 +10617,10 @@ alter table public.agent_inbox_items
     -- (áudio transcrito depois da resposta). Só aviso; nunca bloqueia.
     'jev_pedido_de_humano',
     'jev_parar_de_receber',
+    -- (migration 0391) O aviso de agendamento à plataforma de anúncio parou de
+    -- sair: recusado ou sem resposta depois de todas as tentativas. Um aberto
+    -- por organização. Entra NESTA lista (bloco único por constraint, #159).
+    'ad_conversion_failing',
     'other'
   ));
 
@@ -21871,18 +21875,11 @@ create table if not exists public.ad_conversion_dispatches (
   updated_at timestamptz not null default now()
 );
 
--- Dedup ANTES do índice único (doutrina de migrations §8): num clone que já
--- tenha rodado uma versão sem o índice, duas linhas para o mesmo par fariam o
--- `update.sh` quebrar aqui. Mantém a mais recente, que é o estado atual.
-delete from public.ad_conversion_dispatches a
-  using public.ad_conversion_dispatches b
- where a.organization_id = b.organization_id
-   and a.lead_id = b.lead_id
-   and a.event_name = b.event_name
-   and a.attempted_at < b.attempted_at;
-
-create unique index if not exists ad_conversion_dispatches_lead_event_uk
-  on public.ad_conversion_dispatches (organization_id, lead_id, event_name);
+-- O índice único por negócio mora no bloco da migration 0391, já com a
+-- plataforma: (organization_id, lead_id, platform, event_name). O da 0213, sem
+-- plataforma, não é mais criado aqui — recriá-lo a cada `update.sh` apagaria,
+-- pelo dedup que vinha junto, o envio de uma plataforma quando a outra também
+-- enviou para o mesmo negócio.
 
 create index if not exists ad_conversion_dispatches_org_status_idx
   on public.ad_conversion_dispatches (organization_id, status, attempted_at desc);
@@ -37425,6 +37422,150 @@ grant execute on function public.fn_channel_metrics(uuid, timestamptz, timestamp
 
 notify pgrst, 'reload schema';
 -- ---- fim: relatório por canal (migration 0388) ----
+
+
+-- ---- conversão de agendamento para Meta e Google (migration 0391) ----
+--
+-- Idempotente e auto-curativo: o `update.sh` re-aplica este arquivo inteiro num
+-- banco existente e SEM `ON_ERROR_STOP`. Nenhuma função nova, então nenhum
+-- EXECUTE a revogar. As duas tabelas continuam deny-all: RLS ligada, zero policy,
+-- grants revogados de anon/authenticated (0213). Só o servidor as alcança.
+--
+-- O ÚNICO evento que sai é "um paciente agendou". Nada de etapa, procedimento,
+-- tipo de consulta, profissional, observação, nome ou valor. O que vai: telefone
+-- (e e-mail, se houver) em SHA-256, a hora do agendamento, um id de evento que
+-- não se reverte e, quando o contato tiver, o identificador do clique.
+
+-- 1. A conexão que estava ligada para a VENDA não passa a mandar agendamento
+--    sem alguém decidir. Roda só na PRIMEIRA aplicação: a guarda é a coluna do
+--    Google ainda não existir. Reaplicar depois nunca desliga nada.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'ad_platform_connections'
+       and column_name = 'google_customer_id'
+  ) then
+    update public.ad_platform_connections set enabled = false where enabled;
+  end if;
+end
+$$;
+
+-- 2. O Google na mesma linha por plataforma (o índice único é
+--    (organization_id, platform)). Os segredos em bytea, cifrados por
+--    fn_encrypt_oauth, como o token da Meta. O resto é identificador de conta.
+alter table public.ad_platform_connections
+  add column if not exists google_customer_id text,
+  add column if not exists google_login_customer_id text,
+  add column if not exists google_conversion_action_id text,
+  add column if not exists google_oauth_client_id text,
+  add column if not exists google_oauth_client_secret_encrypted bytea,
+  add column if not exists google_refresh_token_encrypted bytea,
+  add column if not exists google_developer_token_encrypted bytea;
+
+comment on column public.ad_platform_connections.google_refresh_token_encrypted is
+  'Refresh token OAuth do Google Ads da organização (migration 0391), cifrado por fn_encrypt_oauth. Nunca volta para a tela.';
+comment on column public.ad_platform_connections.google_developer_token_encrypted is
+  'Developer token da API do Google Ads (migration 0391), cifrado por fn_encrypt_oauth.';
+comment on column public.ad_platform_connections.google_oauth_client_secret_encrypted is
+  'Segredo do cliente OAuth usado para renovar o refresh token (migration 0391), cifrado por fn_encrypt_oauth.';
+
+-- 3. O livro-razão passa a ter uma linha por (agendamento, plataforma). A linha
+--    antiga, de venda, continua com lead_id; a nova nasce com appointment_id.
+--    Nenhuma coluna guarda dado do paciente: status, motivo, código de erro,
+--    tentativas e horários.
+alter table public.ad_conversion_dispatches alter column lead_id drop not null;
+
+alter table public.ad_conversion_dispatches
+  add column if not exists appointment_id uuid
+    references public.calendar_appointments(id) on delete cascade,
+  add column if not exists attempts integer not null default 0,
+  add column if not exists next_attempt_at timestamptz,
+  add column if not exists sent_at timestamptz,
+  add column if not exists error_code text;
+
+-- Criada só quando falta: drop + add abriria uma janela sem a regra a cada
+-- reaplicação do baseline (`reaplicar-o-baseline-nao-abre-janela.test.ts`).
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'ad_conversion_dispatches_alvo'
+       and conrelid = 'public.ad_conversion_dispatches'::regclass
+  ) then
+    alter table public.ad_conversion_dispatches
+      add constraint ad_conversion_dispatches_alvo
+      check (lead_id is not null or appointment_id is not null);
+  end if;
+end
+$$;
+
+-- Dedup ANTES do índice único (doutrina de migrations §8): fica a linha
+-- enviada, e entre iguais a mais recente.
+delete from public.ad_conversion_dispatches a
+ using (
+   select id, row_number() over (
+            partition by organization_id, appointment_id, platform, event_name
+            order by (status = 'sent') desc, attempted_at desc, id desc
+          ) as n
+     from public.ad_conversion_dispatches
+    where appointment_id is not null
+ ) d
+ where a.id = d.id and d.n > 1;
+
+create unique index if not exists ad_conversion_dispatches_agendamento_uk
+  on public.ad_conversion_dispatches (organization_id, appointment_id, platform, event_name)
+  where appointment_id is not null;
+
+comment on column public.ad_conversion_dispatches.appointment_id is
+  'O agendamento que gerou o aviso (migration 0391). Um aviso por agendamento e plataforma: o índice único parcial impede o segundo envio.';
+comment on column public.ad_conversion_dispatches.error_code is
+  'Código curto do erro (HTTP ou da plataforma). Nunca a resposta inteira, que pode repetir dado enviado.';
+
+-- 4. O aviso na Central quando o envio para de sair: um aberto por organização.
+--    O kind entra na lista ÚNICA de agent_inbox_items_kind_check, lá em cima.
+create unique index if not exists agent_inbox_ad_conversion_failing_aberto
+  on public.agent_inbox_items (organization_id)
+  where kind = 'ad_conversion_failing' and status = 'open';
+
+-- 5. O SEGUNDO evento: o sinal foi pago (entrada do negócio numa etapa que
+--    quem administra marcou como "sinal pago"). Ligado à parte, por
+--    plataforma, e DESLIGADO por padrão. `enabled` continua sendo o do
+--    agendamento. No Google, cada evento tem a sua ação de conversão.
+alter table public.ad_platform_connections
+  add column if not exists deposit_paid_enabled boolean not null default false,
+  add column if not exists google_deposit_paid_conversion_action_id text;
+
+comment on column public.ad_platform_connections.deposit_paid_enabled is
+  'Avisar a plataforma quando o sinal é pago (migration 0391). Independente de enabled, que é o aviso de agendamento. Padrão desligado.';
+comment on column public.ad_platform_connections.google_deposit_paid_conversion_action_id is
+  'Ação de conversão do Google Ads que recebe o sinal pago (migration 0391). Separada da do agendamento.';
+
+-- 6. Um aviso de sinal pago por (negócio, plataforma, evento). O índice da
+--    0213 era (negócio, evento), SEM a plataforma: com Meta e Google ligados,
+--    o segundo envio do mesmo negócio bateria nele. Ele sai; o novo inclui a
+--    plataforma. Dedup antes, pela mesma regra do agendamento (inofensivo: o
+--    índice antigo já era mais estrito que o novo).
+drop index if exists public.ad_conversion_dispatches_lead_event_uk;
+
+delete from public.ad_conversion_dispatches a
+ using (
+   select id, row_number() over (
+            partition by organization_id, lead_id, platform, event_name
+            order by (status = 'sent') desc, attempted_at desc, id desc
+          ) as n
+     from public.ad_conversion_dispatches
+    where lead_id is not null
+ ) d
+ where a.id = d.id and d.n > 1;
+
+create unique index if not exists ad_conversion_dispatches_negocio_uk
+  on public.ad_conversion_dispatches (organization_id, lead_id, platform, event_name)
+  where lead_id is not null;
+
+notify pgrst, 'reload schema';
+-- ---- fim: conversão de agendamento (migration 0391) ----
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----

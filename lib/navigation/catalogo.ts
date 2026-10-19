@@ -719,7 +719,7 @@ export const NAV_CATALOG = [
     href: "/app/settings/conversoes",
     label: "Conversões",
     description:
-      "Devolver ao anúncio as vendas que ele trouxe, para ele aprender a procurar mais clientes parecidos.",
+      "Avisar a Meta e o Google Ads quando um paciente agenda (desligado até você ligar).",
     icon: "ChartLineUp",
     group: "organizacao",
     section: "Sua empresa",

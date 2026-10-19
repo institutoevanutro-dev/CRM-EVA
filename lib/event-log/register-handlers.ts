@@ -23,7 +23,8 @@ import { mediaDeriveHandler } from "@/workers/media-derive-worker.handler";
 import { metaHistoryHandler } from "@/workers/meta-history-worker.handler";
 import { metaStateSyncHandler } from "@/workers/meta-state-sync-worker.handler";
 import { webPushInboundHandler } from "@/lib/notifications/push.handler";
-import { conversaoDeVendaHandler } from "@/lib/conversoes/envio.handler";
+import { conversaoDeAgendamentoHandler } from "@/lib/conversoes/agendamento.handler";
+import { conversaoDeSinalPagoHandler } from "@/lib/conversoes/sinal-pago.handler";
 import { supervisaoAcionamentoHumanoHandler } from "@/lib/supervisao/acionamento-humano.handler";
 import { registerHandler } from "@/lib/event-log/dispatcher";
 
@@ -59,9 +60,10 @@ export function ensureHandlersRegistered(): void {
   registerHandler(metaHistoryHandler);
   registerHandler(metaStateSyncHandler);
   registerHandler(webPushInboundHandler);
-  // Por último: reportar a venda ao anúncio é o consumidor mais externo do
-  // fechamento — depende de rede de terceiro e não pode atrasar quem escreve
-  // no banco. Falha dele nunca segura os handlers acima.
-  registerHandler(conversaoDeVendaHandler);
+  // Por último: avisar o anúncio de que um paciente agendou é o consumidor
+  // mais externo da Agenda — depende de rede de terceiro e não pode atrasar
+  // quem escreve no banco. Falha dele nunca segura os handlers acima.
+  registerHandler(conversaoDeAgendamentoHandler);
+  registerHandler(conversaoDeSinalPagoHandler);
   _registered = true;
 }
