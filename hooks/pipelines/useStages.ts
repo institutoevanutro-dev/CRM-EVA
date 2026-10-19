@@ -43,6 +43,8 @@ export interface PatchDeEtapa {
   esfria_em_horas?: number | null;
   /** Faixa no topo da coluna do quadro (`#rrggbb`). `null` = sem cor. */
   color?: string | null;
+  /** Negócio que entra nesta etapa abre um aviso na Central (migration 0387). */
+  avisar_na_central?: boolean;
 }
 
 function useReler(pipelineId: string) {

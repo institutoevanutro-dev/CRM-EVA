@@ -51,7 +51,7 @@ export interface DepsDeEtapa {
 
 /** As colunas que a tela e as regras usam. `position` entra: a reordenação calcula em cima dela. */
 const COLUNAS =
-  "id, name, slug, position, is_won, is_lost, is_archived, agent_stage_hint, last_change_actor_kind, last_change_at, expected_duration_hours, color";
+  "id, name, slug, position, is_won, is_lost, is_archived, agent_stage_hint, last_change_actor_kind, last_change_at, expected_duration_hours, color, avisar_na_central";
 
 /** A etapa como sai para quem lê — inclui a autoria da última mudança de configuração. */
 export interface EtapaVisivel {
@@ -68,6 +68,8 @@ export interface EtapaVisivel {
   esfria_em_horas: number | null;
   /** Faixa no topo da coluna do quadro (`#rrggbb`). `null` = sem cor. */
   color: string | null;
+  /** Negócio que entra aqui abre um aviso na Central (migration 0387). */
+  avisar_na_central: boolean;
   /** `user` | `ai` | `system` — `null` nas etapas anteriores a esta coluna. */
   last_change_actor_kind: string | null;
   last_change_at: string | null;
@@ -76,6 +78,7 @@ export interface EtapaVisivel {
 type EtapaLida = EtapaEditavel & {
   expected_duration_hours?: number | null;
   color?: string | null;
+  avisar_na_central?: boolean | null;
   last_change_actor_kind: string | null;
   last_change_at: string | null;
 };
@@ -130,6 +133,7 @@ export function corpo(etapas: EtapaLida[]): { etapas: EtapaVisivel[] } {
         is_lost: e.is_lost,
         esfria_em_horas: e.expected_duration_hours ?? null,
         color: e.color ?? null,
+        avisar_na_central: e.avisar_na_central === true,
         last_change_actor_kind: e.last_change_actor_kind ?? null,
         last_change_at: e.last_change_at ?? null,
       })),
@@ -313,6 +317,8 @@ export interface PedidoDeEdicao {
    * pelo CHECK de `crm_stages.color`). `null` tira a cor.
    */
   color?: string | null;
+  /** Liga ou desliga o aviso na Central para quem entra nesta etapa (0387). */
+  avisar_na_central?: boolean;
 }
 
 export async function atualizarEtapa(
@@ -368,11 +374,13 @@ export async function atualizarEtapa(
     position?: number;
     expected_duration_hours?: number | null;
     color?: string | null;
+    avisar_na_central?: boolean;
   } = {};
   if (pedido.name !== undefined) patchDoAlvo.name = pedido.name.trim();
   if (pedido.esfria_em_horas !== undefined)
     patchDoAlvo.expected_duration_hours = pedido.esfria_em_horas;
   if (pedido.color !== undefined) patchDoAlvo.color = pedido.color;
+  if (pedido.avisar_na_central !== undefined) patchDoAlvo.avisar_na_central = pedido.avisar_na_central;
 
   if (pedido.depois_de !== undefined) {
     // Só as ativas compõem a régua: arquivada não ocupa lugar no quadro.

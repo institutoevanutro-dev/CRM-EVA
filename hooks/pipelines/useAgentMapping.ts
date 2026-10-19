@@ -28,6 +28,8 @@ export interface EtapaDoFunil {
   esfria_em_horas?: number | null;
   /** Faixa no topo da coluna do quadro (`#rrggbb`). `null` = sem cor. */
   color?: string | null;
+  /** Negócio que entra aqui abre um aviso na Central (migration 0387). */
+  avisar_na_central?: boolean;
   /** Quem mexeu nesta etapa por último (migration 0101). `null` antes dela. */
   last_change_actor_kind?: string | null;
   last_change_at?: string | null;

@@ -101,6 +101,8 @@ type EtapaComAutoria = EtapaDoMapa & {
   expected_duration_hours?: number | null;
   /** Mesma razão: a cor gravada pelo PATCH volta para a tela por esta leitura. */
   color?: string | null;
+  /** Mesma razão: a marca de aviso na Central volta para a tela (migration 0387). */
+  avisar_na_central?: boolean | null;
 };
 
 async function lerFunil(
@@ -123,7 +125,7 @@ async function lerFunil(
     // consulta só para ela seria um round-trip por render numa tela de
     // configuração — e um caminho a mais para a lista e a autoria divergirem.
     .select(
-      "id, name, is_won, is_lost, agent_stage_hint, last_change_actor_kind, last_change_at, expected_duration_hours, color",
+      "id, name, is_won, is_lost, agent_stage_hint, last_change_actor_kind, last_change_at, expected_duration_hours, color, avisar_na_central",
     )
     .eq("organization_id", orgId)
     .eq("pipeline_id", pipelineId)
@@ -158,6 +160,7 @@ function corpo(etapas: EtapaComAutoria[]) {
       is_lost: e.is_lost,
       esfria_em_horas: e.expected_duration_hours ?? null,
       color: e.color ?? null,
+      avisar_na_central: e.avisar_na_central === true,
       last_change_actor_kind: e.last_change_actor_kind ?? null,
       last_change_at: e.last_change_at ?? null,
     })),
