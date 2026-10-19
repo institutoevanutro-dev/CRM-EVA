@@ -11,6 +11,7 @@ import { DocumentCard } from "@/components/inbox/media/DocumentCard";
 import { ImageMedia } from "@/components/inbox/media/ImageMedia";
 import { VideoMedia } from "@/components/inbox/media/VideoMedia";
 import { kindFromMime } from "@/lib/messaging/media/upload-validation";
+import { partesDoCorpo } from "@/lib/notifications/mentions";
 
 /**
  * O anexo da nota interna (#1863, F3).
@@ -100,7 +101,21 @@ export function NoteCard({ note, onDelete }: Props) {
         {/* Nota só de anexo (imagem colada sem legenda) chega com `body` vazio:
             renderizar o `<p>` assim mesmo deixaria um parágrafo fantasma de
             altura nula entre o arquivo e a hora. */}
-        {note.body && <p className="mt-1 whitespace-pre-wrap wrap-anywhere leading-snug">{note.body}</p>}
+        {/* A menção gravada pelo autocompletar sai como `@Ana Lima` realçada,
+            nunca como o token com o id (portado do projeto original, PR #2461). */}
+        {note.body && (
+          <p className="mt-1 whitespace-pre-wrap wrap-anywhere leading-snug">
+            {partesDoCorpo(note.body).map((parte, i) =>
+              parte.mencao ? (
+                <span key={i} className="rounded-sm bg-warning/25 px-0.5 font-semibold">
+                  {`@${parte.mencao.nome}`}
+                </span>
+              ) : (
+                <span key={i}>{parte.texto}</span>
+              ),
+            )}
+          </p>
+        )}
         <div className="mt-1 text-right text-[10px] opacity-70">{time}</div>
       </div>
     </div>

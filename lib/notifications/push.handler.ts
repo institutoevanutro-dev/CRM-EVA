@@ -163,14 +163,31 @@ export const webPushInboundHandler: EventHandler = {
       const toUserId = typeof row.payload.to_user_id === "string" ? row.payload.to_user_id : null;
       const conversationId =
         typeof row.payload.conversation_id === "string" ? row.payload.conversation_id : null;
+      if (!toUserId) {
+        return { consumer_key: WEB_PUSH_INBOUND_KEY, status: "skipped", detail: "sem_destinatario" };
+      }
+      // Sem conversa não há como saber se o mencionado pode vê-la: ninguém recebe.
+      if (!conversationId) {
+        return { consumer_key: WEB_PUSH_INBOUND_KEY, status: "skipped", detail: "sem_conversa" };
+      }
       const preview =
         typeof row.payload.body_preview === "string" ? row.payload.body_preview : "Você foi mencionado";
-      return enviarParaUsuario(row.organization_id, toUserId, {
-        title: "Você foi mencionado",
-        body: truncar(preview),
-        tag: conversationId ? `mention:${conversationId}` : "mention",
-        href: conversationId ? `/app/inbox/${conversationId}` : "/app/inbox",
-      });
+      // Mencionado que não pode ver a conversa não recebe aviso nenhum — a
+      // mesma régua da 0378 (`fn_push_inscricoes_que_veem_a_conversa`).
+      // Portado do DeskcommCRM (PR #2592 de @melgarafael).
+      const { sent } = await enviarPushAQuemVeAConversa(
+        row.organization_id,
+        conversationId,
+        {
+          title: "Você foi mencionado",
+          body: truncar(preview),
+          tag: `mention:${conversationId}`,
+          href: `/app/inbox/${conversationId}`,
+        },
+        undefined,
+        [toUserId],
+      );
+      return { consumer_key: WEB_PUSH_INBOUND_KEY, status: "ok", detail: `sent:${sent}` };
     }
 
     const leadId =

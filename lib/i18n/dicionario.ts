@@ -4625,6 +4625,24 @@ export const DICIONARIO: Traducoes = {
   "Distribuição de atendimento salva.": { es: "Distribución de atención guardada." },
   "Não consegui salvar.": { es: "No pude guardar." },
   "Pausa da IA salva.": { es: "Pausa de la IA guardada." },
+  // ─── Assinatura do emissor (portado do DeskcommCRM, PR #2079) ───
+  "Quem fala aparece na mensagem?": { es: "¿Quién habla aparece en el mensaje?" },
+  "Ligado, a mensagem que vai ao cliente ganha o nome de quem fala em negrito, na linha de cima. O histórico do CRM guarda o texto como foi escrito. Campanhas, lembretes e integrações por token não assinam.": { es: "Activado, el mensaje que llega al cliente lleva el nombre de quien habla en negrita, en la primera línea. El historial del CRM guarda el texto tal como se escribió. Las campañas, los recordatorios y las integraciones por token no firman." },
+  "Assinar as mensagens dos atendentes": { es: "Firmar los mensajes de los asesores" },
+  "Cada atendente aparece pelo próprio nome, com as iniciais em maiúscula.": { es: "Cada asesor aparece con su propio nombre, con las iniciales en mayúscula." },
+  "Assinar as mensagens da IA": { es: "Firmar los mensajes de la IA" },
+  "A IA aparece pelo nome abaixo, nunca pelo nome de um atendente.": { es: "La IA aparece con el nombre de abajo, nunca con el nombre de un asesor." },
+  "Nome da IA": { es: "Nombre de la IA" },
+  "Sem asteriscos nem quebra de linha.": { es: "Sin asteriscos ni saltos de línea." },
+  "Salvar assinatura": { es: "Guardar firma" },
+  "Assinatura salva.": { es: "Firma guardada." },
+  // ─── Editor da jornada (portado do DeskcommCRM, PR #2460) ───
+  "Copiar estes horários para os outros dias úteis": { es: "Copiar estos horarios a los otros días hábiles" },
+  "Limite de 50 janelas por atendente: remova algumas antes de copiar.": { es: "Límite de 50 franjas por atendente: elimina algunas antes de copiar." },
+  "É isto que ficou gravado — confira os dias e os horários antes de sair.": { es: "Esto es lo que quedó guardado: revisa los días y los horarios antes de salir." },
+  // ─── Menção de atendente em nota interna (portado do DeskcommCRM, PR #2461) ───
+  "Atendentes para mencionar": { es: "Asesores para mencionar" },
+  "Nenhum atendente encontrado.": { es: "Ningún asesor encontrado." },
   "Salvar pausa": { es: "Guardar pausa" },
   "Quando uma pessoa responde o cliente": { es: "Cuando una persona responde al cliente" },
   "A IA sai da conversa por um tempo para não responder junto. Vale para resposta pelo celular e pela tela, e cada nova resposta recomeça a contagem.": {

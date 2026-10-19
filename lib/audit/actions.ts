@@ -792,6 +792,10 @@ export const AUDIT_ACTIONS = [
   // comentários do Instagram (`settings.medico_sem_rqe`). `resourceId` é a
   // organização; metadata: ligada.
   "comment.regra_do_rqe_alterada",
+  // Assinatura do emissor (portado do DeskcommCRM, PR #2079): quem ligou ou
+  // desligou o nome de quem fala nas mensagens ao cliente. Metadata: humanos,
+  // ia, nome_ia.
+  "settings.message_signature_updated",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -34,6 +34,8 @@ import {
   type ChaveDeOrcamento,
   type ModoDeOrcamento,
 } from "@/lib/agent-engine/edge/llm/orcamento";
+import { PONTO_TRANSCRICAO_DE_AUDIO } from "@/lib/ai/pontos/registro";
+import { ORIGENS_DA_TRANSCRICAO_POR_SERVICO } from "@/lib/messaging/media/transcription";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -157,11 +159,22 @@ export async function getBudgetStatus(orgId: string): Promise<BudgetStatus> {
     // O furo de medição, medido onde ele aparece: chamada do mês sem custo
     // conhecido. `idx_llm_calls_org_time (organization_id, created_at)` serve o
     // filtro; `head: true` não traz linha nenhuma.
+    //
+    // Duas linhas têm `cost_cents` nulo sem que o modelo seja desconhecido: a de
+    // FALHA (o provedor recusou, zero token cobrado) e a de transcrição pelo
+    // SERVIÇO (preço próprio, sem tokens) — sem o corte, toda instalação que
+    // recebe um áudio acenderia o aviso. Transcrição sem origem conta (na
+    // dúvida, avisa). Portado do DeskcommCRM (PR #2129 de @melgarafael).
     admin
       .from("llm_calls")
       .select("id", { count: "exact", head: true })
       .eq("organization_id", orgId)
       .is("cost_cents", null)
+      .eq("status", "ok")
+      .or(
+        `purpose.neq.${PONTO_TRANSCRICAO_DE_AUDIO},origem_da_escolha.is.null,` +
+          `origem_da_escolha.not.in.(${ORIGENS_DA_TRANSCRICAO_POR_SERVICO.join(",")})`,
+      )
       .gte("created_at", inicioDoMesUtc()),
   ]);
 

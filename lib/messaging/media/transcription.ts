@@ -8,6 +8,18 @@ export interface TranscriptionProvider {
   transcribe(audio: Buffer, mime: string): Promise<string>;
 }
 
+/**
+ * As origens da transcrição que chamam `/v1/audio/transcriptions` (abaixo): o
+ * serviço configurado no `.env` da instalação e o padrão pela chave OpenAI.
+ * Esse serviço tem preço próprio, que o sistema não conhece, e não devolve
+ * tokens: a linha em `llm_calls` sai com custo nulo por construção, e é por
+ * esta lista — gravada em `origem_da_escolha` — que o aviso de "preço
+ * desconhecido" a separa de LLM sem preço (`lib/ai/budget/check.ts`).
+ * Portado do DeskcommCRM (PR #2129 de @melgarafael).
+ */
+export const ORIGENS_DA_TRANSCRICAO_POR_SERVICO = ["servico_da_instalacao", "padrao_openai_compativel"] as const;
+export type OrigemDaTranscricao = (typeof ORIGENS_DA_TRANSCRICAO_POR_SERVICO)[number];
+
 export interface TranscriptionCreds {
   apiKey: string;
   model?: string;
