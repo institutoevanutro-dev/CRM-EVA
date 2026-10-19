@@ -8,6 +8,52 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.27.0] — 2026-10-19
+
+### Adicionado
+
+- **A etapa do funil pode avisar a equipe na Central e as Métricas ganham o relatório por número** Portado do projeto original (DeskcommCRM), com duas mudanças de banco
+  (migrations 0387 e 0388):
+
+  - em Configurações › Funis › Etapas, cada etapa ganhou a chave "Avisar a
+    equipe na Central quando um negócio entrar aqui". Ligada, todo negócio que
+    entra nela (arrasto no quadro, automação ou assistente de IA) abre um aviso
+    na Central com o botão "Abrir negócio". O aviso diz só a etapa, nunca o nome
+    ou o telefone do paciente, e não se repete enquanto o anterior do mesmo
+    negócio estiver aberto. Vem desligada em todas as etapas (PR #1813 de @jmpo);
+  - em Métricas, quem é gerente vê o quadro "Por canal": por número ou conexão,
+    quantas conversas foram atribuídas no período, o tempo médio até a primeira
+    resposta de uma pessoa (a IA fica de fora) e quantas ficaram sem resposta.
+    São só totais, sem dado de paciente. A janela vai até 90 dias (PR #2504 de
+    @webtecnica, com o conserto de desempenho do #2554 de @Tong-bit-art).
+
+  A atualização reaplica o baseline: cria a coluna da etapa, a função do
+  relatório e um índice novo em mensagens.
+
+- **Assinatura de quem fala na mensagem, menção de colega na nota interna, cópia dos horários da semana e custo da mídia medido** Portado do projeto original (DeskcommCRM), sem mudança de banco:
+
+  - a mensagem ao cliente pode levar, em negrito na linha de cima, o nome de
+    quem fala: o atendente (com as iniciais em maiúscula) ou a IA (nome
+    configurável, padrão "Assistente Virtual"). Liga em Configurações ›
+    Distribuição de atendimento, separado para atendentes e para a IA, e nasce
+    **desligado**. O histórico do CRM guarda o texto como foi escrito; automação,
+    sequência de acompanhamento do CRM, integração por token e lembrete da
+    agenda não assinam (PR #2079 de @webtecnica);
+  - na nota interna, digitar `@` abre a lista de atendentes e quem é escolhido é
+    o único avisado. O aviso no celular só sai se a pessoa pode ver a conversa
+    (PR #2461 de @webtecnica, com os consertos #2489 e #2586 de @Tong-bit-art e
+    #2592 de @melgarafael);
+  - no horário do atendente (Equipe), um botão copia as faixas do primeiro dia
+    para segunda a sexta, e depois de salvar o diálogo mostra o que ficou
+    gravado (PR #2460 de @webtecnica);
+  - a leitura de imagem e a transcrição de áudio passam a aparecer em Uso de IA.
+    A imagem tem custo pela tabela de preços e passa a somar no gasto do
+    mês: quem usa "parar a IA no limite" pode ver a parada chegar um pouco
+    antes, e com o limite estourado a imagem também não é enviada ao provedor.
+    A transcrição pelo serviço aparece com custo desconhecido. Cada atendimento
+    grava o tempo de espera na fila e a duração (PR #2129 e #2617 de
+    @melgarafael).
+
 ## [4.26.0] — 2026-10-18
 
 ### Adicionado
@@ -7793,7 +7839,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.26.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.27.0...HEAD
+[4.27.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.26.0...v4.27.0
 [4.26.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.25.0...v4.26.0
 [4.25.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.24.0...v4.25.0
 [4.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.23.1...v4.24.0
