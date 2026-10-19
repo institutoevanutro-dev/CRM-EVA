@@ -8,6 +8,47 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.28.0] — 2026-10-19
+
+### Adicionado
+
+- **Avisar a Meta e o Google Ads quando um paciente agenda e quando paga o sinal (vem desligado)** Em Configurações › Conversões dá para ligar, por plataforma e cada um à parte,
+  dois avisos: que um paciente agendou e que o sinal foi pago. O sinal pago é a
+  entrada do negócio numa etapa do funil que quem administra marca na mesma tela
+  (nenhuma vem marcada). Na Meta ele vai como `CompleteRegistration`, sem valor;
+  no Google, para uma ação de conversão própria. Sai só isso: que o evento
+  aconteceu, a hora, um código que não se reverte e o telefone (e o e-mail, se
+  houver) embaralhado com SHA-256. Nome, procedimento, tipo de consulta,
+  profissional, observação, etapa e valor nunca saem. Vem desligado; a opção "só
+  pacientes que vieram de anúncio" vem ligada. Quem tinha o envio de vendas
+  ligado encontra a conexão desligada depois da atualização: o envio de vendas
+  saiu, e mandar estes avisos é uma decisão nova. Contato bloqueado, marcado como
+  sempre atendimento humano, oculto ou anonimizado nunca sai. Cada aviso sai uma
+  vez só; cancelar ou tirar da etapa depois não manda nada. Se o envio parar de
+  sair, abre um aviso na Central.
+
+### Corrigido
+
+- **Mensagem fixa do follow-up chega a quem é "sempre atendimento humano"; só a IA fica calada** A marca "sempre atendimento humano" do contato passou a significar só uma
+  coisa: a IA não conversa com ele. Antes ela também encerrava as sequências de
+  follow-up, mesmo as que só têm mensagens fixas (por exemplo, a sequência
+  pós-consulta de 7, 15, 30, 45 e 75 dias), com o aviso "uma pessoa da equipe
+  está atendendo esta conversa" — inclusive quando o fluxo estava em "Permitir
+  durante handoff".
+
+  Agora:
+
+  - texto fixo, modelo de mensagem e mídia da biblioteca saem normalmente para
+    esse contato;
+  - o passo "mensagem da IA" é pulado, com o motivo no histórico da inscrição, e
+    a sequência segue para o próximo passo em vez de acabar;
+  - continuam valendo como antes: pedido para não receber mensagens (STOP),
+    contato anonimizado ou ocultado, janela de envio, ritmo anti-banimento, IA
+    pausada na conversa e uma pessoa atendendo quando o fluxo não está em
+    "Permitir durante handoff".
+
+  Não há mudança de banco nem nada a fazer na atualização.
+
 ## [4.27.0] — 2026-10-19
 
 ### Adicionado
@@ -7839,7 +7880,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.27.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.28.0...HEAD
+[4.28.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.27.0...v4.28.0
 [4.27.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.26.0...v4.27.0
 [4.26.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.25.0...v4.26.0
 [4.25.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.24.0...v4.25.0
