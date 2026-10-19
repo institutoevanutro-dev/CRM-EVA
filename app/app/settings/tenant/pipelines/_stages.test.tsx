@@ -729,7 +729,7 @@ describe("cor da etapa — a faixa e o tom da coluna no quadro", () => {
   });
 });
 
-describe("StagesSection — a etapa que avisa na Central (migration 0387, portado do DeskcommCRM PR #1813)", () => {
+describe("StagesSection — a etapa que avisa na Central (migration 0387, portado do projeto original, PR #1813)", () => {
   it("a chave vem desligada e ligá-la manda só `avisar_na_central: true` para AQUELA etapa", async () => {
     const user = userEvent.setup();
     vi.mocked(apiClient.patch).mockResolvedValue({ data: { etapas: [] } });
