@@ -64,7 +64,8 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   if ("error" in lido) return fail("internal_error", lido.error?.message ?? "", 500, { requestId });
 
   // Cliente admin: a RLS de `organizations` só deixa platform admin escrever.
-  const { error } = await createAdminClient()
+  const admin = createAdminClient();
+  const { error } = await admin
     .from("organizations")
     .update({ settings: { ...lido.settings, assinatura_mensagens: nova } })
     .eq("id", authz.org.orgId);

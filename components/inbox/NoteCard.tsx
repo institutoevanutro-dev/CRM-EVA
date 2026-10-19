@@ -102,7 +102,7 @@ export function NoteCard({ note, onDelete }: Props) {
             renderizar o `<p>` assim mesmo deixaria um parágrafo fantasma de
             altura nula entre o arquivo e a hora. */}
         {/* A menção gravada pelo autocompletar sai como `@Ana Lima` realçada,
-            nunca como o token com o id (portado do DeskcommCRM, PR #2461). */}
+            nunca como o token com o id (portado do projeto original, PR #2461). */}
         {note.body && (
           <p className="mt-1 whitespace-pre-wrap wrap-anywhere leading-snug">
             {partesDoCorpo(note.body).map((parte, i) =>
