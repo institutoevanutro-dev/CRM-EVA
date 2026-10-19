@@ -4640,6 +4640,9 @@ export const DICIONARIO: Traducoes = {
   "Copiar estes horários para os outros dias úteis": { es: "Copiar estos horarios a los otros días hábiles" },
   "Limite de 50 janelas por atendente: remova algumas antes de copiar.": { es: "Límite de 50 franjas por atendente: elimina algunas antes de copiar." },
   "É isto que ficou gravado — confira os dias e os horários antes de sair.": { es: "Esto es lo que quedó guardado: revisa los días y los horarios antes de salir." },
+  // ─── Menção de atendente em nota interna (portado do DeskcommCRM, PR #2461) ───
+  "Atendentes para mencionar": { es: "Asesores para mencionar" },
+  "Nenhum atendente encontrado.": { es: "Ningún asesor encontrado." },
   "Salvar pausa": { es: "Guardar pausa" },
   "Quando uma pessoa responde o cliente": { es: "Cuando una persona responde al cliente" },
   "A IA sai da conversa por um tempo para não responder junto. Vale para resposta pelo celular e pela tela, e cada nova resposta recomeça a contagem.": {
