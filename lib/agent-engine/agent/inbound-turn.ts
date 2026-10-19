@@ -3670,6 +3670,7 @@ async function executarTurnoDoAgente(
             organizationId: tenantId,
             conversationId: input.conversationId,
             candidata: body,
+            jobId: liveJob().id,
             nomeDoContato: effectiveContext.contact.name,
             agora: clock(),
             knobs: deps.knobs.repeticao ?? REPETICAO_PADRAO,

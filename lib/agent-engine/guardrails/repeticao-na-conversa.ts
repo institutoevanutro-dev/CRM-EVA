@@ -98,6 +98,8 @@ export async function repetiuNaConversa(
     organizationId: string;
     conversationId: string;
     candidata: string;
+    /** O job deste turno: o que ELE já mandou é retry (o ledger cuida), nunca repetição. */
+    jobId?: string;
     nomeDoContato: string | null | undefined;
     agora: Date;
     knobs: RepeticaoKnobs;
@@ -119,6 +121,11 @@ export async function repetiuNaConversa(
           and m.direction = 'outbound' and m.sent_via = 'ai' and m.type = 'text'
           and m.status <> 'failed' and m.body is not null
           and m.sent_at >= $3::timestamptz
+          and not exists (
+            select 1 from send_ledger l
+             where l.organization_id = $1 and l.job_id = $5::uuid
+               and l.id::text = m.metadata->>'idempotency_key'
+          )
         order by m.sent_at desc
         limit $4`,
       [
@@ -126,6 +133,7 @@ export async function repetiuNaConversa(
         args.conversationId,
         new Date(args.agora.getTime() - knobs.janelaMs).toISOString(),
         knobs.ultimas,
+        args.jobId ?? null,
       ],
     );
     return decidirRepeticao({
