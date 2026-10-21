@@ -289,6 +289,11 @@ export type Database = {
 
       ad_conversion_dispatches: {
         Row: {
+          appointment_id: string | null
+          attempts: number
+          error_code: string | null
+          next_attempt_at: string | null
+          sent_at: string | null
           attempted_at: string
           created_at: string
           currency: string | null
@@ -296,7 +301,7 @@ export type Database = {
           event_id: string | null
           event_name: string
           id: string
-          lead_id: string
+          lead_id: string | null
           organization_id: string
           platform: string
           reason: string | null
@@ -305,6 +310,11 @@ export type Database = {
           value_cents: number | null
         }
         Insert: {
+          appointment_id?: string | null
+          attempts?: number
+          error_code?: string | null
+          next_attempt_at?: string | null
+          sent_at?: string | null
           attempted_at?: string
           created_at?: string
           currency?: string | null
@@ -312,7 +322,7 @@ export type Database = {
           event_id?: string | null
           event_name: string
           id?: string
-          lead_id: string
+          lead_id?: string | null
           organization_id: string
           platform: string
           reason?: string | null
@@ -321,6 +331,11 @@ export type Database = {
           value_cents?: number | null
         }
         Update: {
+          appointment_id?: string | null
+          attempts?: number
+          error_code?: string | null
+          next_attempt_at?: string | null
+          sent_at?: string | null
           attempted_at?: string
           created_at?: string
           currency?: string | null
@@ -328,7 +343,7 @@ export type Database = {
           event_id?: string | null
           event_name?: string
           id?: string
-          lead_id?: string
+          lead_id?: string | null
           organization_id?: string
           platform?: string
           reason?: string | null
@@ -337,6 +352,13 @@ export type Database = {
           value_cents?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "ad_conversion_dispatches_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_appointments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ad_conversion_dispatches_lead_id_fkey"
             columns: ["lead_id"]
@@ -355,9 +377,18 @@ export type Database = {
       }
       ad_platform_connections: {
         Row: {
+          google_conversion_action_id: string | null
+          google_deposit_paid_conversion_action_id: string | null
+          google_customer_id: string | null
+          google_developer_token_encrypted: string | null
+          google_login_customer_id: string | null
+          google_oauth_client_id: string | null
+          google_oauth_client_secret_encrypted: string | null
+          google_refresh_token_encrypted: string | null
           access_token_encrypted: string | null
           created_at: string
           dataset_id: string | null
+          deposit_paid_enabled: boolean
           enabled: boolean
           id: string
           organization_id: string
@@ -367,9 +398,18 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          google_conversion_action_id?: string | null
+          google_deposit_paid_conversion_action_id?: string | null
+          google_customer_id?: string | null
+          google_developer_token_encrypted?: string | null
+          google_login_customer_id?: string | null
+          google_oauth_client_id?: string | null
+          google_oauth_client_secret_encrypted?: string | null
+          google_refresh_token_encrypted?: string | null
           access_token_encrypted?: string | null
           created_at?: string
           dataset_id?: string | null
+          deposit_paid_enabled?: boolean
           enabled?: boolean
           id?: string
           organization_id: string
@@ -379,9 +419,18 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          google_conversion_action_id?: string | null
+          google_deposit_paid_conversion_action_id?: string | null
+          google_customer_id?: string | null
+          google_developer_token_encrypted?: string | null
+          google_login_customer_id?: string | null
+          google_oauth_client_id?: string | null
+          google_oauth_client_secret_encrypted?: string | null
+          google_refresh_token_encrypted?: string | null
           access_token_encrypted?: string | null
           created_at?: string
           dataset_id?: string | null
+          deposit_paid_enabled?: boolean
           enabled?: boolean
           id?: string
           organization_id?: string

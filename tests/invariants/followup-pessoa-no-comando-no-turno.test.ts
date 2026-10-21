@@ -12,7 +12,11 @@
  * ## O que este arquivo prende
  *
  * `aplicarPessoaNoComandoAoTurno` aplica a MESMA política na hora do turno, com
- * a régua que barra o envio (`isLeadInHandoff`: `force_human` ou IA silenciada):
+ * a régua que barra o envio sem a trava do contato (`isLeadInHandoff` com
+ * `ignorarTravaDoContato`: IA silenciada). O `force_human` sozinho é a marca
+ * "sempre atendimento humano", que cala só a IA (decisão do dono, 18-19/10/2026):
+ * não é ninguém no comando, e quem decide o passo é `decidirEnvio` (fixo sai,
+ * IA é pulada):
  * - `pause` → o passo é ADIADO (até o silêncio vencer, no máximo 1 h) e nada é
  *   gravado: nunca `paused_handoff`, que só sai por `ai.handoff_resolved` e
  *   ficaria preso depois de Liberar ou de um silêncio que vence sozinho;
@@ -174,11 +178,12 @@ describe("a política de handoff do fluxo na hora do turno, com uma pessoa no co
     await semRastro(s);
   });
 
-  it("force_human: adia pelo teto de 1 h", async () => {
-    const s = await cenario("pause", "force_human");
-    const agora = new Date();
-    expect(await aplicar(s, agora)).toEqual({ kind: "adiada", ate: new Date(agora.getTime() + UMA_HORA) });
-    await semRastro(s);
+  it("force_human sozinho ('sempre atendimento humano') não é pessoa no comando: nada muda, em pause e em cancel", async () => {
+    for (const politica of ["pause", "cancel"] as const) {
+      const s = await cenario(politica, "force_human");
+      expect(await aplicar(s), `${politica}: o passo fixo ficaria preso atrás de uma marca que só cala a IA`).toBeNull();
+      await semRastro(s);
+    }
   });
 
   it("assumida + cancel: a inscrição termina como handoff, idempotente por ocupação do nó", async () => {

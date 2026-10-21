@@ -87,7 +87,17 @@ export function detectAmbiguousOptOut(message: string): boolean {
  * futuro — 'infinity' sempre vale). Lido no INÍCIO do turno, antes de qualquer chamada
  * de modelo. Só o humano (via CRM) libera.
  */
-export async function isLeadInHandoff(db: pg.Pool, tenantId: string, leadId: string): Promise<boolean> {
+export async function isLeadInHandoff(
+  db: pg.Pool,
+  tenantId: string,
+  leadId: string,
+  /**
+   * `ignorarTravaDoContato`: só o silêncio conta, não o `force_human`. Para o
+   * passo fixo de fluxo e para a "pessoa no comando" do turno de fluxo: a marca
+   * "sempre atendimento humano" cala a IA, não é uma pessoa assumindo.
+   */
+  opcoes: { ignorarTravaDoContato?: boolean } = {},
+): Promise<boolean> {
   // Conversa em canal sem IA (Instagram) nasce com bot_silenced_until =
   // 'infinity' para cair na Fila: é ROTEAMENTO, não uma pessoa que assumiu.
   // Esta varredura é do CONTATO inteiro; sem a exclusão, um contato unificado
@@ -96,7 +106,7 @@ export async function isLeadInHandoff(db: pg.Pool, tenantId: string, leadId: str
   // pela recusa do servidor.
   const { rows } = await db.query<{ handoff: boolean }>(
     `select (
-       c.force_human
+       ${opcoes.ignorarTravaDoContato === true ? 'false' : 'c.force_human'}
        or exists (
          select 1 from conversations v
          where v.organization_id = $1 and v.contact_id = c.id

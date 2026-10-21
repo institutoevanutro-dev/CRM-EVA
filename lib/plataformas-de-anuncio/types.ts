@@ -5,123 +5,112 @@
  *
  * A doutrina de restrição de canal (`docs/doctrine/restricao-de-canal.md`,
  * invariante 1) diz que nenhuma feature nomeia um provider. `lib/channels/` é a
- * fronteira onde os nomes podem viver — mas CANAL, nesta casa, é o que ENTREGA
- * MENSAGEM a um contato, e é governado por capabilities que descrevem o que a
- * plataforma permite dizer: janela de 24h, template aprovado, risco de ban,
- * intervalo mínimo por destinatário.
+ * fronteira de quem ENTREGA MENSAGEM. Reportar conversão não tem janela,
+ * template, ban nem destinatário, e os dois eixos são independentes: dá para
+ * receber lead de anúncio num número servido por qualquer transporte. Então:
+ * segunda fronteira, mesma catraca (`scripts/lint-channels.ts`, `ALLOWED`).
  *
- * Reportar conversão não tem nenhuma dessas físicas. Não há janela, não há
- * template, não há ban, não há destinatário. Uma linha em `CHANNEL_CAPABILITIES`
- * que respondesse "não se aplica" às sete colunas afirmaria que isto é canal
- * quando não é — e o invariante 2 (toda restrição declara ORIGEM e FÍSICA)
- * viraria formulário preenchido com nada.
- *
- * E há o motivo concreto, que é o que decide: os dois eixos são INDEPENDENTES.
- * Uma organização pode receber lead de anúncio clique-para-WhatsApp num número
- * servido por qualquer transporte de mensagem. Pendurar conversões em
- * `lib/channels/` amarraria "reportar venda" a "ter canal oficial conectado".
- *
- * Então: segunda fronteira, mesma natureza, mesma catraca. `scripts/lint-channels.ts`
- * ganhou uma entrada em `ALLOWED` para este diretório — não uma exceção de
- * feature, que é o que o lint existe para impedir.
- *
- * ─── O que NÃO pode aparecer fora daqui ─────────────────────────────────────
- *
- * O nome do endpoint, o formato do payload, o nome dos campos da plataforma.
- * `meta_ads` PODE: é o slug da plataforma no vocabulário que a 0164 já criou
- * (`PlataformaDeAnuncio` em `lib/leads/atribuicao-de-anuncio.ts`), e o padrão de
- * `scripts/lint-channels.pattern.ts` não o proíbe — ele proíbe nome de
- * TRANSPORTE (`meta_cloud`, `graph.facebook.com`), que é outra coisa.
+ * O nome do endpoint e o formato do payload só aparecem dentro de `meta/` e
+ * `google/`. `meta_ads`/`google_ads` podem aparecer fora: são slugs de
+ * plataforma (0164), não de transporte.
  */
 
-/**
- * A plataforma que hospeda o anúncio.
- *
- * Declarado aqui e não importado de `lib/leads/`: a feature descreve a
- * atribuição que ela CAPTUROU; esta fronteira descreve para onde se pode
- * REPORTAR. Os dois conjuntos coincidem hoje e não têm por que coincidir sempre
- * — existe plataforma que atribui e não recebe conversão de volta.
- */
+/** A plataforma que hospeda o anúncio. */
 export type PlataformaDeAnuncio = "meta_ads" | "google_ads";
 
-/** Só `Purchase` hoje. `Lead` é a Fase 2 e entra quando `lead.created` for consumido. */
-export type NomeDoEvento = "Purchase";
+/**
+ * Os DOIS eventos que saem desta casa para uma plataforma de anúncio, cada um
+ * ligado à parte por plataforma:
+ *
+ *  - `Schedule` — um paciente AGENDOU (evento padrão da Meta);
+ *  - `CompleteRegistration` — o SINAL foi pago, o momento em que a clínica
+ *    considera o paciente fechado. Evento padrão da Meta que não exige valor:
+ *    `Purchase` exige `value` e `currency`, e valor numa clínica diz o que o
+ *    paciente foi tratar.
+ *
+ * No Google o evento é a ação de conversão que a organização escolheu para cada
+ * um. Venda com valor saiu de propósito (migration 0391).
+ */
+export const EVENTO_AGENDOU = "Schedule";
+export const EVENTO_SINAL_PAGO = "CompleteRegistration";
+export type NomeDoEvento = typeof EVENTO_AGENDOU | typeof EVENTO_SINAL_PAGO;
 
 /**
- * Uma conversão pronta para sair — no formato da CASA, não no da plataforma.
+ * Um agendamento pronto para sair — no formato da CASA, não no da plataforma.
  *
- * Quem monta isto (`lib/conversoes/`) não sabe que campo vira o quê no fio. Quem
- * traduz (o transporte) não sabe de onde veio nem por que foi decidido enviar.
+ * ⚠️ ESTA É A LISTA FECHADA DO QUE PODE SAIR. Não há campo de nome, etapa,
+ * procedimento, tipo de consulta, profissional, observação ou valor, e o teste
+ * `tests/unit/conversao-de-agendamento.test.ts` reprova o corpo enviado que
+ * carregar qualquer coisa além disto.
  */
-export interface ConversaoOffline {
+export interface ConversaoDeAgendamento {
   organizationId: string;
-  leadId: string;
+  /** O agendamento (`Schedule`) ou o negócio (`CompleteRegistration`). Só para log e livro-razão; nunca vai no corpo enviado. */
+  alvoId: string;
   evento: NomeDoEvento;
   /**
-   * Deduplicação, determinística: `<leadId>:<evento>`.
-   *
-   * A plataforma descarta a segunda cópia com o mesmo par (id, evento). É a
-   * SEGUNDA camada — a primeira é o índice único do livro-razão. Duas porque
-   * contar a mesma venda duas vezes envenena o otimizador e não tem sintoma:
-   * o algoritmo passa a perseguir um público que comprou metade do que parece.
+   * Deduplicação na plataforma, e não se reverte: SHA-256 de
+   * `organização:alvo:evento`, cortado em 32 hex. A mesma entrada dá o
+   * mesmo id, então reenviar nunca conta duas vezes lá do outro lado.
    */
   eventoId: string;
-  /**
-   * QUANDO a venda aconteceu (o `closed_at` do lead), nunca quando o worker
-   * acordou. A plataforma recusa evento velho demais, e carimbar `now()` faria
-   * um backlog de drain virar atribuição errada em vez de erro visível.
-   */
+  /** Quando aconteceu (criação do compromisso, ou entrada na etapa do sinal), não quando o worker rodou. */
   ocorridoEm: Date;
-  /** O clique que originou a conversa — `ad_source_id` do contato (0164). */
-  cliqueDeOrigem: string;
-  /** E.164 sem `+`, ainda EM CLARO: o hash é responsabilidade do transporte. */
+  /** E.164 com `+`, ainda em claro: cada transporte normaliza e hasheia do seu jeito. */
   telefone: string | null;
-  valorCentavos: number;
-  moeda: string;
+  /** Em claro, só quando o contato tem. Cada transporte normaliza e hasheia. */
+  email: string | null;
+  /** `ctwa_clid` do anúncio clique-para-WhatsApp, quando o contato tem. */
+  cliqueMeta: string | null;
+  /** `gclid`, quando o contato tem. Hoje nenhum caminho o captura. */
+  cliqueGoogle: string | null;
 }
 
 /**
- * O resultado, com a FÍSICA da falha declarada — não um booleano.
- *
- * Invariante 2 da doutrina: a origem da restrição decide o que fazer quando ela
- * barra. Aqui isso vira três desfechos com tratamentos que não se substituem:
+ * O resultado, com a FÍSICA da falha declarada:
  *
  *  - `ok`          → gravado como enviado, nunca reenviado.
- *  - `transitorio` → rede, 5xx, throttle. O drain reagenda SEM contar tentativa;
- *                    amanhã funciona sozinho e ninguém precisa ser avisado.
- *  - `permanente`  → token inválido, dataset errado, evento velho demais.
- *                    Reagendar não conserta: alguém tem de mexer na configuração.
- *                    Vira linha `error` no livro-razão, que a tela mostra.
+ *  - `transitorio` → rede, 5xx, cota. Tenta de novo com espera crescente.
+ *  - `permanente`  → token inválido, conta errada, evento velho demais.
+ *                    Reagendar não conserta: vira aviso na Central.
  *
- * Fundir os dois últimos em "falhou" produziria ou retry infinito de um problema
- * humano, ou alarme para uma instabilidade que se resolve sozinha. Os dois erros
- * já foram cometidos nesta casa em outros módulos.
+ * `codigo` é curto e vai para o livro-razão. A mensagem da plataforma NÃO vai:
+ * ela pode repetir dado que foi enviado.
  */
 export type ResultadoDeEnvio =
-  | { tipo: "ok"; detalhe?: string }
-  | { tipo: "transitorio"; detalhe: string; tentarEmMs?: number }
-  | { tipo: "permanente"; detalhe: string };
+  | { tipo: "ok" }
+  | { tipo: "transitorio"; codigo: string }
+  | { tipo: "permanente"; codigo: string };
 
-/** As credenciais que o transporte precisa, já decifradas. */
-export interface CredencialDeConversao {
+/** Credenciais da Meta, já decifradas. */
+export interface CredencialMeta {
+  plataforma: "meta_ads";
   datasetId: string;
   accessToken: string;
   /** Preenchido = envio marcado como teste, não conta para otimização. */
   testEventCode: string | null;
 }
 
-/**
- * O contrato que todo transporte de conversão cumpre.
- *
- * `google_ads` não implementa nenhum hoje — e a ausência é DECLARADA no
- * registry, não deduzida do silêncio (invariante 4).
- */
-export interface TransporteDeConversao {
-  plataforma: PlataformaDeAnuncio;
-  enviar(
-    credencial: CredencialDeConversao,
-    conversao: ConversaoOffline,
-  ): Promise<ResultadoDeEnvio>;
+/** Credenciais do Google Ads, já decifradas. */
+export interface CredencialGoogle {
+  plataforma: "google_ads";
+  /** Só dígitos. */
+  customerId: string;
+  /** Conta administradora (MCC) por onde se entra, quando houver. Só dígitos. */
+  loginCustomerId: string | null;
+  conversionActionId: string;
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+  developerToken: string;
+}
+
+export type CredencialDeConversao = CredencialMeta | CredencialGoogle;
+
+/** O contrato que todo transporte de conversão cumpre. */
+export interface TransporteDeConversao<C extends CredencialDeConversao = CredencialDeConversao> {
+  plataforma: C["plataforma"];
+  enviar(credencial: C, conversao: ConversaoDeAgendamento): Promise<ResultadoDeEnvio>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

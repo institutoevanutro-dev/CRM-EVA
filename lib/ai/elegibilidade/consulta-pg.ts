@@ -45,6 +45,11 @@ export async function decidirElegibilidadeDaConversa(
     ttlMs: number;
     /** Pedido por um follow-up: o silêncio de roteamento (canal sem IA) não conta. */
     followup?: boolean;
+    /**
+     * Passo fixo de fluxo: o `force_human` do contato ("sempre atendimento
+     * humano") cala só a IA e não entra na conta. Silêncio e dono humano entram.
+     */
+    ignorarTravaDoContato?: boolean;
   },
 ): Promise<DecisaoDeElegibilidade | null> {
   const { rows } = await pool.query<LinhaDeElegibilidade>(
@@ -75,7 +80,7 @@ export async function decidirElegibilidadeDaConversa(
       aiGateMode: r.channel_metadata?.ai_gate_mode,
       aiTestPhoneNumbers: r.channel_metadata?.ai_test_phone_numbers,
       contactPhoneNumber: r.phone_number,
-      forceHuman: r.force_human,
+      forceHuman: input.ignorarTravaDoContato === true ? false : r.force_human,
       assigneeKind: r.assignee_kind,
       botSilencedUntil: r.bot_silenced_until,
       aiAuthorizedAt: r.ai_authorized_at,
@@ -104,10 +109,12 @@ export async function pessoaNoComandoDaConversa(
   pool: Parameters<typeof decidirElegibilidadeDaConversa>[0],
   alvo: { organizationId: string; conversationId: string },
   kind: string | undefined,
+  opcoes: { ignorarTravaDoContato?: boolean } = {},
 ): Promise<string | null> {
   if (kind !== undefined && A_MANDO_DE_PESSOA.has(kind)) return null;
   const elegib = await decidirElegibilidadeDaConversa(pool, {
     ...alvo,
+    ...(opcoes.ignorarTravaDoContato === true ? { ignorarTravaDoContato: true } : {}),
     agora: new Date(),
     ttlMs: ttlDaAutorizacaoMs(process.env),
     // Mesma exceção do começo do turno: silêncio de canal sem IA é roteamento.

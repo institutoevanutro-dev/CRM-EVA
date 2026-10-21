@@ -9,6 +9,7 @@ import { StaleServiceBoundaryError } from '@/lib/atendimento/fronteira';
 import { requireCurrentAutonomousTurn, requireCurrentServiceBoundary } from '@/lib/atendimento/fronteira-server';
 import { parseServiceBoundary } from '@/lib/atendimento/fronteira';
 import { pessoaNoComandoDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
+import { ehPassoFixoDoFluxo } from '@/lib/followup/bloqueios-obrigatorios';
 /**
  * Borda de saída pós-fusão: envio de mensagem SEMPRE via `sendMessageHandler` do
  * próprio app (app/api/v1/messages/_handler.ts) — o handler insere a linha
@@ -139,6 +140,7 @@ async function pessoaAssumiuAConversa(
   db: Queryable,
   input: Pick<SendMessageInput, 'tenantId' | 'conversationId'>,
   kind: string | undefined,
+  payload: Record<string, unknown> | undefined,
 ): Promise<string | null> {
   // A regra mora em `pessoaNoComandoDaConversa`: as ferramentas de escrita do
   // turno (`guardServiceTools`) perguntam a mesma coisa.
@@ -146,6 +148,9 @@ async function pessoaAssumiuAConversa(
     db,
     { organizationId: input.tenantId, conversationId: input.conversationId },
     kind,
+    // Passo fixo de fluxo (lido do JOB, não de quem chama): o `force_human` do
+    // contato cala só a IA. Silêncio e dono humano seguem valendo.
+    { ignorarTravaDoContato: ehPassoFixoDoFluxo(kind, payload) },
   );
 }
 
@@ -183,7 +188,7 @@ export async function sendTurnMessage(
     locked_by: input.jobClaim?.worker_id ?? null,
     claim_acquired_at: input.jobClaim?.acquired_at,
   });
-  const motivo = await pessoaAssumiuAConversa(db, input, sourceJobs[0]?.kind);
+  const motivo = await pessoaAssumiuAConversa(db, input, sourceJobs[0]?.kind, sourceJobs[0]?.payload);
   if (motivo !== null) return { kind: 'human_took_over', motivo };
   const proactiveContext =
     sourceJobs[0]?.kind === 'followup_turn' && input.leadId
