@@ -104,6 +104,19 @@ describe("signUp — a tela precisa saber se a sessão já veio aberta", () => {
 
     expect(res).toEqual({ ok: false, error: "signup_failed" });
   });
+
+  it("GoTrue sem SMTP: \"Error sending confirmation email\" vira `email_indisponivel`, não \"tente novamente\"", async () => {
+    // Portado do projeto original (DeskcommCRM, PR #3060 de @rafaelcesardev).
+    signUpDoProvedor.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { message: "Error sending confirmation email", status: 500 },
+    });
+
+    const { signUp } = await import("./signUp");
+    const res = await signUp(entrada());
+
+    expect(res).toEqual({ ok: false, error: "email_indisponivel" });
+  });
 });
 
 /**

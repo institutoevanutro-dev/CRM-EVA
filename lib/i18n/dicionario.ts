@@ -7274,6 +7274,12 @@ export const DICIONARIO: Traducoes = {
   "Esta instalação aceita cadastro apenas por convite. Peça um convite a quem administra o sistema.": {
     es: "Esta instalación acepta registro solo por invitación. Pide una invitación a quien administra el sistema.",
   },
+  "Não conseguimos enviar o e-mail de confirmação, porque o envio de e-mails desta instalação não está configurado. Tentar de novo não resolve: avise quem convidou você.": {
+    es: "No pudimos enviar el correo de confirmación, porque el envío de correos de esta instalación no está configurado. Intentarlo de nuevo no lo resuelve: avisa a quien te invitó.",
+  },
+  "Não conseguimos enviar o e-mail de confirmação, porque o envio de e-mails desta instalação não está configurado. Tentar de novo não resolve: avise quem administra o sistema.": {
+    es: "No pudimos enviar el correo de confirmación, porque el envío de correos de esta instalación no está configurado. Intentarlo de nuevo no lo resuelve: avisa a quien administra el sistema.",
+  },
   "Sua conta foi confirmada, mas esta instalação aceita cadastro apenas por convite — então não criamos uma empresa para você. Peça um convite a quem administra o sistema; o link dele já traz tudo o que falta.": {
     es: "Tu cuenta fue confirmada, pero esta instalación acepta registro solo por invitación — así que no creamos una empresa para ti. Pide una invitación a quien administra el sistema; su enlace ya trae todo lo que falta.",
   },
