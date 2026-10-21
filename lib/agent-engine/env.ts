@@ -258,6 +258,9 @@ const envSchema = z.object({
   AI_REPEAT_GUARD_SIMILARITY: z.coerce.number().min(0).max(1).default(0.8),
   AI_REPEAT_GUARD_MIN_TOKENS: z.coerce.number().int().min(1).default(4),
   AI_REPEAT_GUARD_LAST_N: z.coerce.number().int().min(1).default(5),
+  // Frase curta que sai no lugar da repetida (no máximo 1 por conversa na janela;
+  // se repetir de novo, abre caso). Variantes separadas por `|`. `off` = só cala, sem frase nem caso.
+  AI_REPEAT_GUARD_FALLBACK: z.string().default('Ficou alguma dúvida sobre isso?'),
 });
 
 export type Env = z.infer<typeof envSchema>;

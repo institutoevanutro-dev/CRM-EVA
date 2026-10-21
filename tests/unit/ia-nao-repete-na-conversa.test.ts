@@ -13,7 +13,10 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  CASO_DE_REPETICAO,
   decidirRepeticao,
+  decidirSaidaDaRepeticao,
+  fraseDeRepeticaoJaSaiu,
   normalizarParaRepeticao,
   primeiroNomeDoContato,
   REPETICAO_PADRAO,
@@ -175,6 +178,13 @@ describe("fiação — onde a guarda vale e onde não vale", () => {
     expect(guarda).toBeLessThan(corpo.indexOf("runBeforeSend("));
     expect(corpo.slice(0, guarda)).toMatch(/if \(!preview && liveJob\(\)\.kind === 'inbound_turn'\) \{\s*const repeticao = await $/);
     expect(corpo).toMatch(/return \{ ok: true, status: 'nao_enviada_repetida', message: MENSAGEM_DE_REPETICAO \}/);
+    // A frase curta entra no lugar do corpo ANTES da cadeia: opt-out, anti-ban e janela valem para ela.
+    expect(corpo.indexOf("body = saida.texto")).toBeGreaterThan(guarda);
+    expect(corpo.indexOf("body = saida.texto")).toBeLessThan(corpo.indexOf("runBeforeSend("));
+    // Na 2ª repetição, caso para a equipe com a fonte da guarda.
+    expect(corpo).toMatch(/openCase\([\s\S]*CASO_DE_REPETICAO[\s\S]*source: 'guardrail_autofallback'/);
+    // Depois que a guarda agiu, nenhum outro send_message do turno sai.
+    expect(corpo.indexOf("if (repeticaoEncerrouOTurno)")).toBeLessThan(corpo.indexOf("formatarParaWhatsApp("));
     // Conta como tentativa: o turno mudo não pede correção a quem decidiu calar.
     expect(corpo.indexOf("tentativasDeEnvio += 1")).toBeLessThan(guarda);
   });
@@ -202,6 +212,98 @@ describe("knobs", () => {
       SUPABASE_SERVICE_ROLE_KEY: "x",
     } as unknown as NodeJS.ProcessEnv);
     expect(turnKnobsFromEnv(env).repeticao).toEqual(REPETICAO_PADRAO);
-    expect(REPETICAO_PADRAO).toEqual({ janelaMs: 1_800_000, limiar: 0.8, minTokens: 4, ultimas: 5 });
+    expect(REPETICAO_PADRAO).toEqual({
+      janelaMs: 1_800_000,
+      limiar: 0.8,
+      minTokens: 4,
+      ultimas: 5,
+      frases: ["Ficou alguma dúvida sobre isso?"],
+    });
+  });
+
+  it("FALLBACK aceita variantes com |, vazio é o padrão e off desliga a frase", () => {
+    const base = {
+      SUPABASE_DB_URL: "postgres://u:p@localhost:5432/db",
+      NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321",
+      SUPABASE_SERVICE_ROLE_KEY: "x",
+    };
+    const com = (v: string) =>
+      turnKnobsFromEnv(loadEnv({ ...base, AI_REPEAT_GUARD_FALLBACK: v } as unknown as NodeJS.ProcessEnv)).repeticao?.frases;
+    expect(com("Ficou alguma dúvida? | Posso te ajudar em mais algo?")).toEqual([
+      "Ficou alguma dúvida?",
+      "Posso te ajudar em mais algo?",
+    ]);
+    expect(com("")).toEqual(["Ficou alguma dúvida sobre isso?"]);
+    expect(com("off")).toEqual([]);
+  });
+});
+
+// ── no lugar da repetida: frase curta 1x, depois caso ─────────────────────
+
+describe("o que sai no lugar da mensagem repetida", () => {
+  const FRASES = ["Ficou alguma dúvida sobre isso?"];
+
+  it("⭐ 1ª repetição na janela: sai a frase curta fixa", () => {
+    expect(decidirSaidaDaRepeticao({ frases: FRASES, fraseJaSaiu: false, conversationId: "c1" })).toEqual({
+      acao: "frase",
+      texto: "Ficou alguma dúvida sobre isso?",
+    });
+  });
+
+  it("⭐ repetiu de novo com a frase já enviada na janela: caso para a equipe, nenhuma frase", () => {
+    expect(decidirSaidaDaRepeticao({ frases: FRASES, fraseJaSaiu: true, conversationId: "c1" })).toEqual({ acao: "caso" });
+  });
+
+  it("sem frase configurada, ou leitura falhou: só cala (comportamento anterior)", () => {
+    expect(decidirSaidaDaRepeticao({ frases: [], fraseJaSaiu: false, conversationId: "c1" })).toEqual({ acao: "silencio" });
+    expect(decidirSaidaDaRepeticao({ frases: [" "], fraseJaSaiu: true, conversationId: "c1" })).toEqual({ acao: "silencio" });
+    expect(decidirSaidaDaRepeticao({ frases: FRASES, fraseJaSaiu: null, conversationId: "c1" })).toEqual({ acao: "silencio" });
+  });
+
+  it("com variantes, a escolha é estável por conversa", () => {
+    const v = ["A dúvida?", "B dúvida?", "C dúvida?"];
+    const um = decidirSaidaDaRepeticao({ frases: v, fraseJaSaiu: false, conversationId: "conv-x" });
+    expect(decidirSaidaDaRepeticao({ frases: v, fraseJaSaiu: false, conversationId: "conv-x" })).toEqual(um);
+    const vistas = new Set(
+      ["a", "b", "c", "d", "e", "f", "g", "h"].map((id) => {
+        const s = decidirSaidaDaRepeticao({ frases: v, fraseJaSaiu: false, conversationId: id });
+        return s.acao === "frase" ? s.texto : "";
+      }),
+    );
+    expect(vistas.size).toBeGreaterThan(1);
+  });
+
+  it("o caso explica o laço sem prometer nada ao cliente", () => {
+    expect(CASO_DE_REPETICAO.title.length).toBeGreaterThan(0);
+    expect(CASO_DE_REPETICAO.summary).toContain("Nada repetido foi enviado");
+  });
+});
+
+describe("fraseDeRepeticaoJaSaiu — lê só falas da IA na janela", () => {
+  const log = { warn: vi.fn(), info: vi.fn() } as never;
+  const agora = new Date("2026-10-21T12:00:00Z");
+
+  it("acha a frase mesmo com caixa, pontuação e emoji diferentes", async () => {
+    const pool = { query: vi.fn().mockResolvedValue({ rows: [{ body: "Outra coisa" }, { body: "ficou alguma duvida sobre isso 😊" }] }) };
+    expect(
+      await fraseDeRepeticaoJaSaiu(pool, { organizationId: "o", conversationId: "c", agora, knobs: REPETICAO_PADRAO, log }),
+    ).toBe(true);
+    const [sql, params] = pool.query.mock.calls[0]!;
+    expect(sql).toContain("m.sent_via = 'ai'");
+    expect(params).toEqual(["o", "c", new Date(agora.getTime() - REPETICAO_PADRAO.janelaMs).toISOString()]);
+  });
+
+  it("frase ausente na janela: false", async () => {
+    const pool = { query: vi.fn().mockResolvedValue({ rows: [{ body: "Perfeito, combinado então" }] }) };
+    expect(
+      await fraseDeRepeticaoJaSaiu(pool, { organizationId: "o", conversationId: "c", agora, knobs: REPETICAO_PADRAO, log }),
+    ).toBe(false);
+  });
+
+  it("falha de leitura: null (o turno só cala, nunca manda a frase às cegas)", async () => {
+    const pool = { query: vi.fn().mockRejectedValue(new Error("boom")) };
+    expect(
+      await fraseDeRepeticaoJaSaiu(pool, { organizationId: "o", conversationId: "c", agora, knobs: REPETICAO_PADRAO, log }),
+    ).toBeNull();
   });
 });

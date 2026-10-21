@@ -13,9 +13,16 @@
  * reescreve com outras palavras e manda. Aqui a pergunta é outra: ESTA conversa
  * já recebeu da IA quase a mesma frase há pouco?
  *
- * O desfecho não é veto: é PULO SILENCIOSO. Nada sai, o `send_message` devolve
+ * O desfecho não é veto: o texto do modelo NÃO sai, o `send_message` devolve
  * `ok: true` com status próprio, e o modelo é instruído a encerrar. Veto ensina a
  * reescrever, e reescrever a mesma ideia é exatamente o defeito.
+ *
+ * No lugar do texto barrado sai uma FRASE CURTA FIXA (decisão do dono, 21/10/2026:
+ * silêncio depois de um "ok" também soa a robô). Fixa e configurável, nunca do
+ * modelo: escrita pelo modelo, ela mesma cairia na guarda. Ela segue pela cadeia
+ * inteira (opt-out, anti-ban, janela), como qualquer envio. No máximo uma por
+ * conversa dentro da janela; se a IA repetir de novo nesse intervalo, a frase não
+ * sai outra vez: abre caso para a equipe, porque a conversa travou num laço.
  *
  * Escopo (decidido no ponto de chamada, `inbound-turn.ts`): só o texto livre do
  * modelo no `inbound_turn`. Follow-up de texto fixo, template, mídia, o turno de
@@ -41,6 +48,8 @@ export interface RepeticaoKnobs {
   minTokens: number;
   /** Quantas falas da IA, das mais recentes, entram na comparação. */
   ultimas: number;
+  /** Frase curta que sai no lugar da repetida (variantes). Vazia = só cala, sem frase nem caso. */
+  frases: readonly string[];
 }
 
 export const REPETICAO_PADRAO: RepeticaoKnobs = {
@@ -48,6 +57,7 @@ export const REPETICAO_PADRAO: RepeticaoKnobs = {
   limiar: 0.8,
   minTokens: 4,
   ultimas: 5,
+  frases: ['Ficou alguma dúvida sobre isso?'],
 };
 
 function semAcento(texto: string): string {
@@ -155,3 +165,74 @@ export const MENSAGEM_DE_REPETICAO =
   'Você já mandou quase esta mesma mensagem nesta conversa há pouco; ela NÃO foi enviada de novo. ' +
   'Não reenvie nem reformule a mesma ideia. Se a pessoa só confirmou (ok, aguardo, por gentileza), ' +
   'encerre o turno sem responder. Só chame send_message se tiver algo NOVO a dizer.';
+
+export type SaidaDaRepeticao =
+  | { acao: 'frase'; texto: string }
+  | { acao: 'caso' }
+  | { acao: 'silencio' };
+
+/**
+ * Decisão PURA do que fazer com a repetição barrada. `fraseJaSaiu`: alguma das
+ * frases saiu da IA nesta conversa dentro da janela (`null` = a leitura falhou).
+ * A variante é escolhida pela conversa, estável, para o mesmo número não mandar
+ * sempre a mesma frase a conversas diferentes (o spinning do número mede isso).
+ */
+export function decidirSaidaDaRepeticao(input: {
+  frases: readonly string[];
+  fraseJaSaiu: boolean | null;
+  conversationId: string;
+}): SaidaDaRepeticao {
+  const frases = input.frases.map((f) => f.trim()).filter((f) => f !== '');
+  // Sem frase configurada, ou sem saber se ela já saiu: o comportamento antigo.
+  if (frases.length === 0 || input.fraseJaSaiu === null) return { acao: 'silencio' };
+  if (input.fraseJaSaiu) return { acao: 'caso' };
+  let h = 0;
+  for (const ch of input.conversationId) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return { acao: 'frase', texto: frases[h % frases.length]! };
+}
+
+/** Alguma das frases já saiu da IA nesta conversa dentro da janela? `null` se a leitura falhou. */
+export async function fraseDeRepeticaoJaSaiu(
+  pool: Pick<pg.Pool, 'query'>,
+  args: {
+    organizationId: string;
+    conversationId: string;
+    agora: Date;
+    knobs: RepeticaoKnobs;
+    log: Logger;
+  },
+): Promise<boolean | null> {
+  const alvos = new Set(args.knobs.frases.map((f) => normalizarParaRepeticao(f, null)).filter((f) => f !== ''));
+  if (alvos.size === 0) return false;
+  try {
+    const { rows } = await pool.query<{ body: string }>(
+      `select m.body
+         from messages m
+        where m.organization_id = $1 and m.conversation_id = $2
+          and m.direction = 'outbound' and m.sent_via = 'ai' and m.type = 'text'
+          and m.status <> 'failed' and m.body is not null
+          and m.sent_at >= $3::timestamptz`,
+      [args.organizationId, args.conversationId, new Date(args.agora.getTime() - args.knobs.janelaMs).toISOString()],
+    );
+    return rows.some((r) => alvos.has(normalizarParaRepeticao(r.body, null)));
+  } catch (err) {
+    args.log.warn('checagem da frase de repetição falhou — o turno só cala', {
+      error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+    });
+    return null;
+  }
+}
+
+/** O que o modelo lê quando a repetição voltou e a conversa foi para a equipe. */
+export const MENSAGEM_DO_CASO_DE_REPETICAO =
+  'Você ia repetir de novo a mesma mensagem nesta conversa; ela NÃO foi enviada, e a conversa foi passada para a equipe. ' +
+  'Encerre o turno agora, sem chamar send_message.';
+
+/** O caso que a equipe recebe quando a IA entra em laço de repetição. */
+export const CASO_DE_REPETICAO = {
+  title: 'A IA estava repetindo a mesma resposta',
+  summary:
+    'Na mesma conversa, a IA tentou mandar de novo quase a mesma mensagem, mesmo depois da frase curta perguntando se ficou alguma dúvida. ' +
+    'Nada repetido foi enviado ao cliente.',
+  blocker: 'Uma pessoa precisa ler a conversa e responder o cliente.',
+} as const;
