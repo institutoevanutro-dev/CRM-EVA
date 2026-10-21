@@ -41,7 +41,6 @@ export function CaseDetail({ caseId }: { caseId: string | null }) {
         <div>
           <h2 className="text-base font-semibold">{data.contact_name ?? t("Contato sem nome")}</h2>
           <p className="text-xs text-muted-foreground">{data.contact_phone ?? t("Sem telefone")}</p>
-          {/* Portado do projeto original (DeskcommCRM, PR #3082 de @valterhjr). */}
           <Link className="text-xs underline underline-offset-4" href={`/app/inbox/${data.conversation_id}`}>
             {t("Ver conversa")}
           </Link>
