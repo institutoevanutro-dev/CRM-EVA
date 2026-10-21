@@ -8,6 +8,21 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.31.0] — 2026-10-21
+
+### Corrigido
+
+- **A IA não retoma mais conversa por causa de um "obrigada" ou de mensagem antiga** Quem ligou "a IA volta quando o cliente escreve durante a pausa e ninguém
+  responde" via a IA voltar para conversas que já tinham terminado: na primeira
+  rodada, 10 de 12 retomadas eram despedidas ("obrigada", "beleza", "ta bom",
+  figurinha), algumas de 9 horas atrás. Agora a IA não volta quando tudo o que o
+  cliente escreveu desde a última resposta é só agradecimento, despedida,
+  figurinha, reação ou emoji, nem quando a última mensagem dele tem mais de 4
+  horas. As 4 horas podem ser trocadas (de 1 a 24)
+  no mesmo cartão de Configurações › Distribuição de atendimento. Pergunta,
+  áudio e qualquer outra mensagem continuam fazendo a IA responder. Quem não
+  ligou a retomada não vê diferença.
+
 ## [4.30.0] — 2026-10-21
 
 ### Adicionado
@@ -7972,7 +7987,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.30.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.31.0...HEAD
+[4.31.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.30.0...v4.31.0
 [4.30.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.29.0...v4.30.0
 [4.29.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.28.1...v4.29.0
 [4.28.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.28.0...v4.28.1
