@@ -3,7 +3,8 @@
  *
  * Pipeline (per org, per batch run):
  *   1. List conversations where usable_for_rag=true AND status='resolved'
- *      AND usable_for_rag_marked_at > sinceTs
+ *      AND o momento de ELEGIBILIDADE (a marcação OU a resolução, o que veio
+ *      por último) está dentro de `sinceTs` — ver o comentário da query.
  *   2. For each conversation:
  *      a. Load messages (filtered by org_id), build "Cliente: ...\nAtendente: ..."
  *      b. Run anonymize() (CPF / email / phone / CEP / PT-BR first names)
@@ -154,14 +155,24 @@ export async function ingestConversationsBatch(
   }
 
   // 1. Pull eligible conversations.
+  //
+  // A janela olha o momento em que a conversa ficou ELEGÍVEL (marcada em
+  // `usable_for_rag` E resolvida), e não só a hora da marcação. Marcar uma
+  // conversa ABERTA e resolvê-la mais de 24 h depois deixava o selo "Exemplo
+  // para a IA" nela e nenhum lote a pegava nunca. `status_changed_at` é o
+  // instante da ÚLTIMA transição de status; com `status='resolved'` no filtro,
+  // é o momento da resolução. O `or` cobre as duas ordens. O portão de
+  // reingestão segue sendo só `rag_review_status is null`. Portado do projeto
+  // original (DeskcommCRM, PR #3071 de @Tong-bit-art).
+  const since = sinceTs.toISOString();
   const { data: convRows, error: convErr } = await admin
     .from("conversations")
     .select("id, organization_id")
     .eq("organization_id", organizationId)
     .eq("usable_for_rag", true)
     .eq("status", "resolved")
-    .gt("usable_for_rag_marked_at", sinceTs.toISOString())
     .is("rag_review_status", null)
+    .or(`usable_for_rag_marked_at.gt.${since},status_changed_at.gt.${since}`)
     .limit(cap);
 
   if (convErr) {
