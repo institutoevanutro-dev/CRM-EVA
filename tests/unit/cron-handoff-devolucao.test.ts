@@ -21,6 +21,7 @@ const VENCIDA = "44444444-4444-4444-8444-444444444444";
 const min = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
 
 const devolver = vi.fn();
+const despachar = vi.fn();
 const auditar = vi.fn();
 let acessosAoBanco = 0;
 let banco: Record<string, unknown[]>;
@@ -30,6 +31,9 @@ vi.mock("@/lib/audit", () => ({ audit: (...a: unknown[]) => auditar(...a) }));
 vi.mock("@/lib/logger", () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } }));
 vi.mock("@/lib/escalacao/retomada", () => ({
   devolverAtendimentoAoAgente: (...a: unknown[]) => devolver(...a),
+}));
+vi.mock("@/lib/channels/pos-entrada", () => ({
+  pedirDespachoDoAgente: (...a: unknown[]) => despachar(...a),
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
@@ -44,7 +48,12 @@ vi.mock("@/lib/supabase/admin", () => ({
         is: () => chain,
         eq: () => chain,
         or: () => chain,
-        limit: () => resolver(),
+        gt: () => chain,
+        neq: () => chain,
+        order: () => chain,
+        limit: () => chain,
+        maybeSingle: () =>
+          Promise.resolve({ data: (banco[tabela] ?? [])[0] ?? null, error: null }),
         then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => resolver().then(res, rej),
       };
       return chain;
@@ -82,6 +91,8 @@ function conversa(minutosParada: number, extra: Record<string, unknown> = {}): R
 
 beforeEach(() => {
   devolver.mockReset();
+  despachar.mockReset();
+  despachar.mockResolvedValue(true);
   auditar.mockReset();
   acessosAoBanco = 0;
   devolver.mockResolvedValue({ ok: true, conversationId: VENCIDA, jaEstavaComOAgente: false });
@@ -93,6 +104,7 @@ beforeEach(() => {
     ],
     ai_routers: [],
     ai_agent_channel_sessions: [],
+    messages: [{ id: "88888888-8888-4888-8888-888888888888" }],
   };
 });
 
@@ -126,7 +138,8 @@ describe("cron handoff-devolucao", () => {
     banco.organizations = [{ id: ORG, settings: { routing: { mode: "manual" } } }];
     await chamar();
     expect(devolver).not.toHaveBeenCalled();
-    expect(acessosAoBanco).toBe(1);
+    // Uma leitura de `organizations` por passada; nenhuma de conversas.
+    expect(acessosAoBanco).toBe(2);
   });
 
   it("o agente declarou atender só em OUTRO número: aqui não há quem atenda, não devolve", async () => {
@@ -164,5 +177,74 @@ describe("cron handoff-devolucao", () => {
     const r2 = (await (await chamar()).json()) as { data: { falhas: number } };
     expect(r2.data.falhas).toBe(1);
     expect(auditar).toHaveBeenCalledTimes(1);
+  });
+
+  describe("segunda passada — cliente sem resposta durante a pausa", () => {
+    const CONTATO = "55555555-5555-4555-8555-555555555555";
+    function pausada(minutosSemResposta: number, extra: Record<string, unknown> = {}): Record<string, unknown> {
+      return {
+        ...conversa(400),
+        contact_id: CONTATO,
+        status: "open",
+        assignee_kind: "ai",
+        bot_silenced_until: new Date(Date.now() + 300 * 60_000).toISOString(),
+        last_handoff_reason: "Atendimento manual pelo canal (resposta fora do CRM)",
+        last_outbound_at: min(400),
+        last_inbound_at: min(minutosSemResposta),
+        awaiting_since: min(minutosSemResposta),
+        contacts: { is_blocked: false, ai_opt_out: false, force_human: false },
+        ...extra,
+      };
+    }
+
+    beforeEach(() => {
+      banco.organizations = [{ id: ORG, settings: { atendimento: { pausa_cliente_sem_resposta_min: 15 } } }];
+    });
+
+    it("passou dos N minutos: devolve pela função do botão E pede a resposta da mensagem pendente", async () => {
+      banco.conversations = [pausada(20)];
+      const res = await chamar();
+      expect(res.status).toBe(200);
+      expect(devolver).toHaveBeenCalledTimes(1);
+      expect(devolver.mock.calls[0]?.[1]).toEqual({ conversationId: VENCIDA, origem: { automatica: { minutos: 15 } } });
+      expect(despachar).toHaveBeenCalledTimes(1);
+      expect(despachar.mock.calls[0]?.[1]).toMatchObject({
+        organizationId: ORG,
+        conversationId: VENCIDA,
+        contactId: CONTATO,
+        channelSessionId: SESSAO,
+        messageId: "88888888-8888-4888-8888-888888888888",
+      });
+      const corpo = (await res.json()) as { data: { cliente_sem_resposta_na_pausa: { retomadas: number } } };
+      expect(corpo.data.cliente_sem_resposta_na_pausa.retomadas).toBe(1);
+      expect(auditar).toHaveBeenCalledTimes(1);
+      expect(auditar.mock.calls[0]?.[0]).toMatchObject({ action: "conversation.handoff_auto_return_run" });
+    });
+
+    it("dentro dos N minutos: nada acontece e a rodada não audita", async () => {
+      banco.conversations = [pausada(10)];
+      await chamar();
+      expect(devolver).not.toHaveBeenCalled();
+      expect(despachar).not.toHaveBeenCalled();
+      expect(auditar).not.toHaveBeenCalled();
+    });
+
+    it("a devolução foi recusada: não pede despacho nenhum", async () => {
+      banco.conversations = [pausada(20)];
+      devolver.mockResolvedValueOnce({ ok: false, erro: "contato_sempre_humano" });
+      await chamar();
+      expect(despachar).not.toHaveBeenCalled();
+      expect(auditar).not.toHaveBeenCalled();
+    });
+
+    it("devolveu mas o despacho falhou: conta como falha e audita a rodada", async () => {
+      banco.conversations = [pausada(20)];
+      despachar.mockResolvedValueOnce(false);
+      const corpo = (await (await chamar()).json()) as {
+        data: { cliente_sem_resposta_na_pausa: { retomadas: number; falhas: number } };
+      };
+      expect(corpo.data.cliente_sem_resposta_na_pausa).toMatchObject({ retomadas: 0, falhas: 1 });
+      expect(auditar).toHaveBeenCalledTimes(1);
+    });
   });
 });

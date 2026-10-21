@@ -15,6 +15,7 @@
 import type pg from 'pg';
 
 import { phoneLookupVariants } from '@/lib/channels/phone-variants';
+import { MOTIVO_DA_PAUSA_DE_LIGACAO } from '@/lib/escalacao/devolucao-automatica';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 import { motivoDaChamadaEmPortugues } from '@/lib/wacalls/motivo-da-chamada';
 
@@ -48,7 +49,8 @@ export interface WacallsSessionMap {
  * `contacts.force_human`: aquilo tranca o contato inteiro, e uma ligação não é
  * um bloqueio.
  */
-const MOTIVO_DO_SILENCIO = 'Ligação de voz em andamento';
+// O cron `handoff-devolucao` lê este motivo para NÃO retomar durante a ligação.
+const MOTIVO_DO_SILENCIO = MOTIVO_DA_PAUSA_DE_LIGACAO;
 
 /**
  * Teto do silêncio — anti-morte, não estimativa de duração.

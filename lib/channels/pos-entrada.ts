@@ -403,9 +403,14 @@ async function abrirDemanda(admin: Admin, entrada: EntradaDeMensagem): Promise<v
  * O payload é o MESMO dos dois canais, campo a campo. Um payload por canal
  * faria o consumidor adivinhar de quem veio — e o consumidor é um só
  * (`lib/agent-engine/edge/crm/drain.ts`).
+ *
+ * Exportado para o cron `handoff-devolucao`, que pede de novo a resposta da
+ * mensagem que chegou durante a pausa: o despacho dela foi descartado pelo
+ * drain (conversa silenciada), e devolver a conversa sozinho não a responde.
+ * Devolve se o pedido foi gravado.
  */
-async function pedirDespachoDoAgente(admin: Admin, entrada: EntradaDeMensagem): Promise<void> {
-  if (!entrada.messageId) return;
+export async function pedirDespachoDoAgente(admin: Admin, entrada: EntradaDeMensagem): Promise<boolean> {
+  if (!entrada.messageId) return false;
 
   const { error } = await admin.rpc("emit_event" as never, {
     p_event_type: "ai_agent.dispatch_requested",
@@ -429,5 +434,7 @@ async function pedirDespachoDoAgente(admin: Admin, entrada: EntradaDeMensagem): 
       origem: entrada.origem,
       detail: error.message.slice(0, 160),
     });
+    return false;
   }
+  return true;
 }

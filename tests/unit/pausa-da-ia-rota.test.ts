@@ -82,7 +82,7 @@ describe("PATCH /api/v1/settings/atendimento/pausa-da-ia", () => {
     comoGerente();
     const res = await PATCH(pedido({ minutos: 120 }));
     expect(res.status).toBe(200);
-    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 120 });
+    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 120, cliente_sem_resposta_min: null });
     expect(leituras).toEqual([["id", ORG]]);
     expect(updates).toHaveLength(1);
     expect(updates[0]!.filtro).toEqual(["id", ORG]);
@@ -109,6 +109,9 @@ describe("PATCH /api/v1/settings/atendimento/pausa-da-ia", () => {
     ["texto", { minutos: "120" }],
     ["sem o campo", {}],
     ["organização no corpo", { minutos: 60, organization_id: "outra" }],
+    ["espera abaixo de 5 minutos", { cliente_sem_resposta_min: 4 }],
+    ["espera acima de 240 minutos", { cliente_sem_resposta_min: 241 }],
+    ["espera em texto", { cliente_sem_resposta_min: "15" }],
   ])("recusa %s com 422, sem gravar nem auditar", async (_nome, corpo) => {
     comoGerente();
     const res = await PATCH(pedido(corpo));
@@ -122,7 +125,7 @@ describe("PATCH /api/v1/settings/atendimento/pausa-da-ia", () => {
     banco.linha = { settings: { atendimento: { pausa_ia_resposta_humana_min: 120 } } };
     const res = await PATCH(pedido({ minutos: 120 }));
     expect(res.status).toBe(200);
-    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 120 });
+    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 120, cliente_sem_resposta_min: null });
     expect(updates).toEqual([]);
     expect(auditSpy).not.toHaveBeenCalled();
   });
@@ -133,6 +136,42 @@ describe("PATCH /api/v1/settings/atendimento/pausa-da-ia", () => {
     expect((await PATCH(pedido({ minutos: 5 }))).status).toBe(200);
     expect((await PATCH(pedido({ minutos: 1440 }))).status).toBe(200);
     expect(updates).toHaveLength(2);
+  });
+
+  it("só a espera do cliente sem resposta: liga sem mexer na pausa, e audita só ela", async () => {
+    comoGerente();
+    banco.linha = { settings: { atendimento: { pausa_ia_resposta_humana_min: 720, outra: 1 } } };
+    const res = await PATCH(pedido({ cliente_sem_resposta_min: 15 }));
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 720, cliente_sem_resposta_min: 15 });
+    expect(updates).toHaveLength(1);
+    expect(updates[0]!.linha.settings).toEqual({
+      atendimento: { pausa_ia_resposta_humana_min: 720, outra: 1, pausa_cliente_sem_resposta_min: 15 },
+    });
+    expect(auditSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "atendimento.pausa_da_ia_changed",
+        organizationId: ORG,
+        metadata: { cliente_sem_resposta_de_min: null, cliente_sem_resposta_para_min: 15 },
+      }),
+    );
+  });
+
+  it("null desliga a espera; os dois campos juntos gravam numa escrita só", async () => {
+    comoGerente();
+    banco.linha = { settings: { atendimento: { pausa_cliente_sem_resposta_min: 15 } } };
+    const res = await PATCH(pedido({ minutos: 60, cliente_sem_resposta_min: null }));
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 60, cliente_sem_resposta_min: null });
+    expect(updates).toHaveLength(1);
+    expect(updates[0]!.linha.settings).toEqual({
+      atendimento: { pausa_cliente_sem_resposta_min: null, pausa_ia_resposta_humana_min: 60 },
+    });
+    expect(auditSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: { de_min: 5, para_min: 60, cliente_sem_resposta_de_min: 15, cliente_sem_resposta_para_min: null },
+      }),
+    );
   });
 
   it("organização não encontrada: 500, e nada é gravado por cima", async () => {

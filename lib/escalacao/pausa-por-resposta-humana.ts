@@ -38,13 +38,53 @@ function objetoSimples(v: unknown): Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }
 
-/** Os `settings` com a pausa trocada, e SÓ ela: o resto do jsonb sobrevive. */
-export function settingsComPausaPorRespostaHumana(settings: unknown, minutos: number): Record<string, unknown> {
+/** Os `settings` com `atendimento.<chave>` trocada, e SÓ ela: o resto do jsonb sobrevive. */
+function settingsComAtendimento(settings: unknown, chave: string, valor: unknown): Record<string, unknown> {
   // Só objeto simples é espalhado: espalhar uma string ou um array gravaria
   // chaves "0", "1"... no jsonb.
   const atual = objetoSimples(settings);
   const atendimento = objetoSimples(atual.atendimento);
-  return { ...atual, atendimento: { ...atendimento, pausa_ia_resposta_humana_min: minutos } };
+  return { ...atual, atendimento: { ...atendimento, [chave]: valor } };
+}
+
+/** Os `settings` com a pausa trocada, e SÓ ela: o resto do jsonb sobrevive. */
+export function settingsComPausaPorRespostaHumana(settings: unknown, minutos: number): Record<string, unknown> {
+  return settingsComAtendimento(settings, "pausa_ia_resposta_humana_min", minutos);
+}
+
+// ─── A IA retoma quando o cliente fica sem resposta durante a pausa ─────────
+//
+// `organizations.settings.atendimento.pausa_cliente_sem_resposta_min`: se o
+// cliente escreve DURANTE a pausa e ninguém da equipe responde em N minutos, o
+// cron `handoff-devolucao` devolve a conversa ao agente e pede a resposta da
+// mensagem pendente. Regra em `lib/escalacao/devolucao-automatica.ts`
+// (`avaliarRetomadaPorClienteSemResposta`).
+//
+// DESLIGADO por padrão (ausente/nulo/fora da faixa): sem a chave, a pausa
+// segue valendo até vencer, como sempre. Medido em produção (21/10/2026): a
+// recepção respondeu às 09:21, pausa de 12 h, o paciente escreveu às 15:35 e
+// ficou horas sem resposta — ninguém da equipe viu, e a IA estava calada.
+
+export const CLIENTE_SEM_RESPOSTA_MINIMO_MIN = 5;
+export const CLIENTE_SEM_RESPOSTA_MAXIMO_MIN = 240;
+
+export const clienteSemRespostaSchema = z
+  .number()
+  .int()
+  .min(CLIENTE_SEM_RESPOSTA_MINIMO_MIN)
+  .max(CLIENTE_SEM_RESPOSTA_MAXIMO_MIN);
+
+/** Minutos de espera em vigor, ou `null` = desligado. Nunca lança. */
+export function lerClienteSemRespostaMin(settings: unknown): number | null {
+  const bruto = (settings as { atendimento?: { pausa_cliente_sem_resposta_min?: unknown } } | null | undefined)
+    ?.atendimento?.pausa_cliente_sem_resposta_min;
+  const r = clienteSemRespostaSchema.safeParse(bruto);
+  return r.success ? r.data : null;
+}
+
+/** Os `settings` com a espera trocada (`null` desliga), e SÓ ela. */
+export function settingsComClienteSemResposta(settings: unknown, minutos: number | null): Record<string, unknown> {
+  return settingsComAtendimento(settings, "pausa_cliente_sem_resposta_min", minutos);
 }
 
 /**
