@@ -282,7 +282,7 @@ export type MotivoDeNaoRetomar =
  */
 export const IDADE_MAXIMA_PADRAO_HORAS = 4;
 
-/** A última mensagem do cliente, lida pelo cron antes de decidir. */
+/** Uma mensagem do cliente ainda sem resposta, lida pelo cron antes de decidir. */
 export interface UltimaEntrada {
   type: string | null;
   body: string | null;
@@ -348,14 +348,24 @@ export function ehSoDespedida(m: UltimaEntrada): boolean {
 }
 
 /**
- * `ultima` é a última mensagem do cliente. O cron avalia duas vezes: sem ela
+ * TODAS as mensagens pendentes são despedida? Uma só que não seja ("qual o
+ * horário?" antes do "obrigada") e o cliente ainda espera resposta. Lista vazia
+ * = `false`: sem prova de que é despedida, a regra fica do lado de responder.
+ */
+export function todasSaoDespedida(pendentes: readonly UltimaEntrada[]): boolean {
+  return pendentes.length > 0 && pendentes.every(ehSoDespedida);
+}
+
+/**
+ * `pendentes` são as mensagens do cliente depois da última saída (o cron lê
+ * até 10, a mais nova primeiro). O cron avalia duas vezes: sem elas
  * (filtro barato, sem consulta) e, para quem passou, com ela — só então decide.
  * Ausente = a regra da despedida não é aplicada.
  */
 export function avaliarRetomadaPorClienteSemResposta(
   c: ConversaEmPausa,
   sel: SelecaoDaPausa,
-  ultima?: UltimaEntrada,
+  pendentes?: readonly UltimaEntrada[],
 ): { retomar: true; minutos: number } | { retomar: false; motivo: MotivoDeNaoRetomar } {
   const minutos = sel.esperaPorOrg.get(c.organization_id);
   if (minutos === undefined) return { retomar: false, motivo: "sem_ajuste" };
@@ -382,7 +392,7 @@ export function avaliarRetomadaPorClienteSemResposta(
   const desde = epoch(c.awaiting_since);
   const esperaDesde = desde !== null && desde > saida ? desde : entrada;
   if (sel.agoraMs - esperaDesde < minutos * 60_000) return { retomar: false, motivo: "dentro_da_espera" };
-  if (ultima !== undefined && ehSoDespedida(ultima)) return { retomar: false, motivo: "so_despedida" };
+  if (pendentes !== undefined && todasSaoDespedida(pendentes)) return { retomar: false, motivo: "so_despedida" };
   return { retomar: true, minutos };
 }
 

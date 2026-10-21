@@ -5,6 +5,7 @@ import {
   MOTIVO_DA_PAUSA_DE_LIGACAO,
   avaliarRetomadaPorClienteSemResposta,
   ehSoDespedida,
+  todasSaoDespedida,
   selecionarClientesSemResposta,
   type ConversaEmPausa,
   type SelecaoDaPausa,
@@ -260,7 +261,38 @@ describe("ehSoDespedida — a última mensagem só encerra a conversa", () => {
 });
 
 function motivo2(c: ConversaEmPausa, ultima: { type: string | null; body: string | null }) {
-  const r = avaliarRetomadaPorClienteSemResposta(c, sel(), ultima);
+  const r = avaliarRetomadaPorClienteSemResposta(c, sel(), [ultima]);
+  return r.retomar ? "retoma" : r.motivo;
+}
+
+describe("todasSaoDespedida — vale o conjunto pendente, não só a última", () => {
+  const t = (body: string) => ({ type: "text", body });
+
+  it("'qual o horário?' seguido de 'obrigada': ainda espera resposta, retoma", () => {
+    // a mais nova primeiro, como o cron lê
+    const pendentes = [t("obrigada"), t("qual o horário?")];
+    expect(todasSaoDespedida(pendentes)).toBe(false);
+    expect(avaliarRetomadaPorClienteSemResposta(conversa(), sel(), pendentes)).toEqual({ retomar: true, minutos: 15 });
+  });
+
+  it("'obrigada' + figurinha: tudo despedida, fica na pausa", () => {
+    const pendentes = [{ type: "sticker", body: null }, t("obrigada")];
+    expect(todasSaoDespedida(pendentes)).toBe(true);
+    expect(motivoCom(pendentes)).toBe("so_despedida");
+  });
+
+  it("lista vazia não prova despedida: a regra fica do lado de responder", () => {
+    expect(todasSaoDespedida([])).toBe(false);
+    expect(motivoCom([])).toBe("retoma");
+  });
+
+  it("sem a lista (filtro barato do cron) a regra da despedida não se aplica", () => {
+    expect(motivo(conversa())).toBe("retoma");
+  });
+});
+
+function motivoCom(pendentes: Array<{ type: string | null; body: string | null }>) {
+  const r = avaliarRetomadaPorClienteSemResposta(conversa(), sel(), pendentes);
   return r.retomar ? "retoma" : r.motivo;
 }
 

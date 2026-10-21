@@ -24,6 +24,8 @@ const devolver = vi.fn();
 const despachar = vi.fn();
 const auditar = vi.fn();
 let acessosAoBanco = 0;
+/** As chamadas encadeadas na leitura de `messages`, para provar filtro e teto. */
+let consultasDeMensagens: Array<Array<[string, unknown[]]>> = [];
 let banco: Record<string, unknown[]>;
 
 vi.mock("@/lib/env", () => ({ env: { INTERNAL_CRON_SECRET: "segredo-do-cron", INTERNAL_SECRET: "" } }));
@@ -39,6 +41,14 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (tabela: string) => {
       acessosAoBanco++;
+      const registro: Array<[string, unknown[]]> = [];
+      if (tabela === "messages") consultasDeMensagens.push(registro);
+      const anota =
+        (nome: string) =>
+        (...args: unknown[]) => {
+          registro.push([nome, args]);
+          return chain;
+        };
       const resolver = () => Promise.resolve({ data: banco[tabela] ?? [], error: null });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const chain: any = {
@@ -48,10 +58,10 @@ vi.mock("@/lib/supabase/admin", () => ({
         is: () => chain,
         eq: () => chain,
         or: () => chain,
-        gt: () => chain,
+        gt: anota("gt"),
         neq: () => chain,
         order: () => chain,
-        limit: () => chain,
+        limit: anota("limit"),
         maybeSingle: () =>
           Promise.resolve({ data: (banco[tabela] ?? [])[0] ?? null, error: null }),
         then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => resolver().then(res, rej),
@@ -95,6 +105,7 @@ beforeEach(() => {
   despachar.mockResolvedValue(true);
   auditar.mockReset();
   acessosAoBanco = 0;
+  consultasDeMensagens = [];
   devolver.mockResolvedValue({ ok: true, conversationId: VENCIDA, jaEstavaComOAgente: false });
   banco = {
     organizations: [{ id: ORG, settings: { routing: { handoff_return_after_minutes: 60 } } }],
@@ -229,13 +240,47 @@ describe("cron handoff-devolucao", () => {
       expect(auditar).not.toHaveBeenCalled();
     });
 
+    it("lê só as mensagens depois da última saída, no máximo 10", async () => {
+      const c = pausada(20);
+      banco.conversations = [c];
+      await chamar();
+      expect(consultasDeMensagens).toHaveLength(1);
+      expect(consultasDeMensagens[0]).toContainEqual(["gt", ["created_at", c.last_outbound_at]]);
+      expect(consultasDeMensagens[0]).toContainEqual(["limit", [10]]);
+    });
+
+    it("'qual o horário?' antes do 'obrigada': retoma e despacha a mais nova", async () => {
+      banco.conversations = [pausada(20)];
+      banco.messages = [
+        { id: "nova", type: "text", body: "obrigada" },
+        { id: "velha", type: "text", body: "qual o horário?" },
+      ];
+      await chamar();
+      expect(devolver).toHaveBeenCalledTimes(1);
+      expect(despachar.mock.calls[0]?.[1]).toMatchObject({ messageId: "nova" });
+    });
+
+    it("leitura vazia: falha, segue na pausa e nada é despachado", async () => {
+      banco.conversations = [pausada(20)];
+      banco.messages = [];
+      const corpo = (await (await chamar()).json()) as {
+        data: { cliente_sem_resposta_na_pausa: { retomadas: number; falhas: number } };
+      };
+      expect(corpo.data.cliente_sem_resposta_na_pausa).toMatchObject({ retomadas: 0, falhas: 1 });
+      expect(devolver).not.toHaveBeenCalled();
+      expect(despachar).not.toHaveBeenCalled();
+    });
+
     it("a última mensagem é só despedida: fica na pausa, não despacha e a rodada não audita", async () => {
       banco.conversations = [pausada(20)];
-      for (const m of [
-        { id: "m1", type: "text", body: "obrigada! 🙏" },
-        { id: "m2", type: "sticker", body: null },
+      for (const lista of [
+        [{ id: "m1", type: "text", body: "obrigada! 🙏" }],
+        [
+          { id: "m2", type: "sticker", body: null },
+          { id: "m1", type: "text", body: "obrigada" },
+        ],
       ]) {
-        banco.messages = [m];
+        banco.messages = lista;
         const corpo = (await (await chamar()).json()) as {
           data: { cliente_sem_resposta_na_pausa: { retomadas: number; despedidas: number } };
         };

@@ -61,6 +61,9 @@ export const dynamic = "force-dynamic";
 /** Teto de conversas lidas por rodada; o que sobrar entra na próxima. */
 const SCAN_LIMIT = 500;
 
+/** Mensagens pendentes lidas por conversa retomável, para a regra da despedida. */
+const PENDENTES_LIDAS = 10;
+
 const ATOR_DO_CRON = { type: "webhook_source", id: "cron:handoff-devolucao" } as const;
 
 export interface DevolucaoResultado {
@@ -271,31 +274,38 @@ export async function retomarClientesSemRespostaNaPausa(
   let despedidas = 0;
   let falhas = 0;
   for (const { conversa, minutos } of selecionadas) {
-    // A mensagem pendente: a inbound mais nova, na mesma ordem do anti-backlog
-    // do drain — que só aceita o despacho da última. Lida ANTES de decidir:
-    // despedida ("obrigada", figurinha) não tira a conversa da pausa.
-    const { data: msg, error: msgErr } = await admin
+    // As mensagens do cliente depois da última saída, a mais nova primeiro (a
+    // mesma ordem do anti-backlog do drain, que só aceita o despacho da
+    // última). Lidas ANTES de decidir: se TODAS forem despedida ("obrigada",
+    // figurinha), a conversa fica na pausa; "qual o horário?" seguido de
+    // "obrigada" ainda espera resposta. Teto de 10 por conversa.
+    let consulta = admin
       .from("messages")
       .select("id, type, body")
       .eq("organization_id", conversa.organization_id)
       .eq("conversation_id", conversa.id)
-      .eq("direction", "inbound")
+      .eq("direction", "inbound");
+    if (conversa.last_outbound_at) consulta = consulta.gt("created_at", conversa.last_outbound_at);
+    const { data: msgs, error: msgErr } = await consulta
       .order("sent_at", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const ultima = msg as { id: string; type: string | null; body: string | null } | null;
-    if (msgErr || ultima === null) {
+      .limit(PENDENTES_LIDAS);
+    const pendentes = (msgs ?? []) as Array<{ id: string; type: string | null; body: string | null }>;
+    const ultima = pendentes[0];
+    // Lista vazia com `last_inbound_at > last_outbound_at` é leitura
+    // inconsistente: sem a mensagem não há o que despachar, então é falha e a
+    // conversa segue na pausa (a próxima rodada tenta de novo).
+    if (msgErr || ultima === undefined) {
       falhas++;
       logger.error("[handoff-devolucao] mensagem pendente ilegível — conversa segue na pausa", {
         conversation_id: conversa.id,
         organization_id: conversa.organization_id,
-        detalhe: msgErr?.message ?? "sem inbound",
+        detalhe: msgErr?.message ?? "sem inbound depois da última saída",
         requestId,
       });
       continue;
     }
-    if (!avaliarRetomadaPorClienteSemResposta(conversa, selecao, ultima).retomar) {
+    if (!avaliarRetomadaPorClienteSemResposta(conversa, selecao, pendentes).retomar) {
       despedidas++;
       continue;
     }

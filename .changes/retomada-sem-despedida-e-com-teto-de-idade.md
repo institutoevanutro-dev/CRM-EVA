@@ -7,9 +7,10 @@ titulo: A IA não retoma mais conversa por causa de um "obrigada" ou de mensagem
 Quem ligou "a IA volta quando o cliente escreve durante a pausa e ninguém
 responde" via a IA voltar para conversas que já tinham terminado: na primeira
 rodada, 10 de 12 retomadas eram despedidas ("obrigada", "beleza", "ta bom",
-figurinha), algumas de 9 horas atrás. Agora a IA não volta quando a última
-mensagem do cliente é só agradecimento, despedida, figurinha, reação ou emoji,
-nem quando ela tem mais de 4 horas. As 4 horas podem ser trocadas (de 1 a 24)
+figurinha), algumas de 9 horas atrás. Agora a IA não volta quando tudo o que o
+cliente escreveu desde a última resposta é só agradecimento, despedida,
+figurinha, reação ou emoji, nem quando a última mensagem dele tem mais de 4
+horas. As 4 horas podem ser trocadas (de 1 a 24)
 no mesmo cartão de Configurações › Distribuição de atendimento. Pergunta,
 áudio e qualquer outra mensagem continuam fazendo a IA responder. Quem não
 ligou a retomada não vê diferença.
