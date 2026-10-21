@@ -8,6 +8,24 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.28.1] — 2026-10-21
+
+### Corrigido
+
+- **A IA não responde a cada "ok" com a mesma frase** Quando o cliente mandava só uma confirmação ("ok", "no aguardo", "por
+  gentileza"), às vezes várias seguidas, a IA respondia cada uma com quase a mesma
+  mensagem, e o cliente desconfiava que falava com um robô. Agora, no turno de
+  resposta, uma mensagem da IA quase igual a uma que ela mandou na mesma conversa
+  nos últimos 30 minutos não sai. No lugar dela sai uma frase curta fixa ("Ficou
+  alguma dúvida sobre isso?"), no máximo uma vez por conversa nesse intervalo; se
+  a IA tentar repetir de novo, a conversa vai para a equipe com um caso aberto.
+  A frase passa pelas mesmas proteções de qualquer envio (opt-out, anti-ban,
+  janela). Mensagens curtas, como "Perfeito!", continuam saindo. Follow-ups,
+  templates, mídias e o aviso de passagem para a equipe não mudam. Os limites e a
+  frase têm padrão e podem ser ajustados no `.env` (`AI_REPEAT_GUARD_*`; a frase
+  em `AI_REPEAT_GUARD_FALLBACK`, com variantes separadas por `|`, ou `off` para
+  só calar), sem precisar mexer em nada para atualizar.
+
 ## [4.28.0] — 2026-10-19
 
 ### Adicionado
@@ -7880,7 +7898,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.28.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.28.1...HEAD
+[4.28.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.28.0...v4.28.1
 [4.28.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.27.0...v4.28.0
 [4.27.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.26.0...v4.27.0
 [4.26.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.25.0...v4.26.0
