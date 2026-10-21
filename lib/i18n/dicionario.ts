@@ -4726,6 +4726,12 @@ export const DICIONARIO: Traducoes = {
   "Atendentes para mencionar": { es: "Asesores para mencionar" },
   "Nenhum atendente encontrado.": { es: "Ningún asesor encontrado." },
   "Salvar pausa": { es: "Guardar pausa" },
+  "A IA só responde mensagem do cliente de até (horas)": {
+    es: "La IA solo responde mensajes del cliente de hasta (horas)",
+  },
+  "De 1 a 24 horas (padrão 4). Mensagem mais antiga que isso fica para a equipe. Agradecimento, despedida e figurinha nunca fazem a IA voltar.": {
+    es: "De 1 a 24 horas (predeterminado 4). Los mensajes más antiguos quedan para el equipo. Agradecimientos, despedidas y stickers nunca hacen volver a la IA.",
+  },
   "Se o cliente escrever durante a pausa e ninguém responder, a IA volta em (minutos)": {
     es: "Si el cliente escribe durante la pausa y nadie responde, la IA vuelve en (minutos)",
   },

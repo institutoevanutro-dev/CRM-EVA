@@ -13,18 +13,30 @@ import { Label } from "@/components/ui/label";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import {
+  CLIENTE_SEM_RESPOSTA_MAX_HORAS_MAXIMO,
+  CLIENTE_SEM_RESPOSTA_MAX_HORAS_MINIMO,
   CLIENTE_SEM_RESPOSTA_MAXIMO_MIN,
   CLIENTE_SEM_RESPOSTA_MINIMO_MIN,
   PAUSA_MAXIMA_MIN,
   PAUSA_MINIMA_MIN,
 } from "@/lib/escalacao/pausa-por-resposta-humana";
 
-export function PausaDaIaForm({ initial, initialEspera }: { initial: number; initialEspera: number | null }) {
+export function PausaDaIaForm({
+  initial,
+  initialEspera,
+  initialMaxHoras,
+}: {
+  initial: number;
+  initialEspera: number | null;
+  initialMaxHoras: number;
+}) {
   const t = useT();
   const [minutos, setMinutos] = useState(String(initial));
   const [salvo, setSalvo] = useState(initial);
   const [espera, setEspera] = useState(initialEspera === null ? "" : String(initialEspera));
   const [esperaSalva, setEsperaSalva] = useState(initialEspera);
+  const [maxHoras, setMaxHoras] = useState(String(initialMaxHoras));
+  const [maxHorasSalvo, setMaxHorasSalvo] = useState(initialMaxHoras);
   const [isPending, startTransition] = useTransition();
 
   const valor = Number(minutos);
@@ -37,17 +49,25 @@ export function PausaDaIaForm({ initial, initialEspera }: { initial: number; ini
       valorEspera >= CLIENTE_SEM_RESPOSTA_MINIMO_MIN &&
       valorEspera <= CLIENTE_SEM_RESPOSTA_MAXIMO_MIN);
 
+  const valorMaxHoras = Number(maxHoras);
+  const maxHorasValido =
+    Number.isInteger(valorMaxHoras) &&
+    valorMaxHoras >= CLIENTE_SEM_RESPOSTA_MAX_HORAS_MINIMO &&
+    valorMaxHoras <= CLIENTE_SEM_RESPOSTA_MAX_HORAS_MAXIMO;
+
   function salvar(e: React.FormEvent) {
     e.preventDefault();
-    if (!valido || !esperaValida) return;
+    if (!valido || !esperaValida || !maxHorasValido) return;
     startTransition(async () => {
       try {
         await apiClient.patch("/api/v1/settings/atendimento/pausa-da-ia", {
           minutos: valor,
           cliente_sem_resposta_min: valorEspera,
+          cliente_sem_resposta_max_horas: valorMaxHoras,
         });
         setSalvo(valor);
         setEsperaSalva(valorEspera);
+        setMaxHorasSalvo(valorMaxHoras);
         toast.success(t("Pausa da IA salva."));
       } catch (err) {
         toast.error(err instanceof Error ? t(err.message) : t("Não consegui salvar."));
@@ -116,9 +136,41 @@ export function PausaDaIaForm({ initial, initialEspera }: { initial: number; ini
             )}
           </p>
         </div>
+        <div className="max-w-sm space-y-1">
+          <Label htmlFor="pausa_cliente_sem_resposta_max_horas">
+            {t("A IA só responde mensagem do cliente de até (horas)")}
+          </Label>
+          <Input
+            id="pausa_cliente_sem_resposta_max_horas"
+            type="number"
+            inputMode="numeric"
+            step={1}
+            min={CLIENTE_SEM_RESPOSTA_MAX_HORAS_MINIMO}
+            max={CLIENTE_SEM_RESPOSTA_MAX_HORAS_MAXIMO}
+            value={maxHoras}
+            disabled={isPending || valorEspera === null}
+            aria-invalid={!maxHorasValido}
+            aria-describedby="pausa_cliente_sem_resposta_max_horas_ajuda"
+            onChange={(e) => setMaxHoras(e.target.value)}
+          />
+          <p
+            id="pausa_cliente_sem_resposta_max_horas_ajuda"
+            className={`text-xs ${maxHorasValido ? "text-muted-foreground" : "text-destructive"}`}
+          >
+            {t(
+              "De 1 a 24 horas (padrão 4). Mensagem mais antiga que isso fica para a equipe. Agradecimento, despedida e figurinha nunca fazem a IA voltar.",
+            )}
+          </p>
+        </div>
         <Button
           type="submit"
-          disabled={isPending || !valido || !esperaValida || (valor === salvo && valorEspera === esperaSalva)}
+          disabled={
+            isPending ||
+            !valido ||
+            !esperaValida ||
+            !maxHorasValido ||
+            (valor === salvo && valorEspera === esperaSalva && valorMaxHoras === maxHorasSalvo)
+          }
         >
           {isPending ? t("Salvando…") : t("Salvar pausa")}
         </Button>

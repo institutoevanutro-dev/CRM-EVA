@@ -42,6 +42,7 @@
  *
  * Portado e adaptado do projeto original (DeskcommCRM, PR #1133 de @Gervanno).
  */
+import { normalizarTexto } from "@/lib/opt-out/deteccao";
 
 /** Piso e teto do prazo, em minutos. Abaixo de 5 a IA volta no meio da digitação. */
 export const PRAZO_MIN_MINUTOS = 5;
@@ -248,6 +249,11 @@ export interface ConversaEmPausa extends Omit<ConversaEmHandoff, "contacts"> {
 export interface SelecaoDaPausa {
   /** `organization_id` → minutos de espera (`lerClienteSemRespostaMin`). */
   esperaPorOrg: ReadonlyMap<string, number>;
+  /**
+   * `organization_id` → idade máxima da mensagem pendente, em horas
+   * (`lerClienteSemRespostaMaxHoras`). Ausente = `IDADE_MAXIMA_PADRAO_HORAS`.
+   */
+  maxHorasPorOrg?: ReadonlyMap<string, number>;
   sessoesComAgente: ReadonlyMap<string, ReadonlySet<string>>;
   agoraMs: number;
 }
@@ -263,11 +269,93 @@ export type MotivoDeNaoRetomar =
   | "contato_com_humano"
   | "sessao_sem_agente"
   | "sem_mensagem_pendente"
-  | "dentro_da_espera";
+  | "pendente_antiga"
+  | "dentro_da_espera"
+  | "so_despedida";
 
+/**
+ * Teto de idade da mensagem pendente, padrão de quem ligou a retomada sem
+ * escolher. Medido na primeira rodada em produção (4.30.0): 12 conversas
+ * retomadas, 10 eram despedidas, algumas de 9 h atrás — a IA calou em 9 e
+ * mandou "Até já!" para uma figurinha. Mensagem velha assim não é cliente
+ * esperando; é conversa que terminou.
+ */
+export const IDADE_MAXIMA_PADRAO_HORAS = 4;
+
+/** A última mensagem do cliente, lida pelo cron antes de decidir. */
+export interface UltimaEntrada {
+  type: string | null;
+  body: string | null;
+}
+
+/**
+ * Agradecimento e despedida curtos — frases inteiras, já normalizadas (sem
+ * acento, minúsculas, sem pontuação). A mensagem só é "despedida" se for feita
+ * SÓ destas frases (e de `ENCHIMENTO`): uma palavra de fora ("mas", "quero",
+ * "qual") e ela é conversa.
+ */
+const DESPEDIDAS: readonly string[][] = [
+  "obrigado", "obrigada", "obrigadao", "obrigadinha", "obrigadinho", "brigado", "brigada", "obg", "grato", "grata",
+  "valeu", "vlw", "beleza", "blz", "ok", "okk", "okay", "ta bom", "tabom", "ta", "certo", "tudo certo",
+  "combinado", "ate amanha", "ate mais", "ate logo", "ate breve", "tchau", "de nada", "para voce tambem",
+  "pra voce tambem", "pra vc tambem", "vc tambem", "voce tambem", "perfeito", "show", "top", "otimo", "joia",
+  // "bom dia"/"boa noite" ficam de fora de propósito: sozinhos abrem conversa tão
+  // bem quanto fecham, e na dúvida a regra responde.
+].map((f) => f.split(" "));
+
+/** Palavras que acompanham a despedida sem mudar o sentido ("muito obrigada", "ok então"). */
+const ENCHIMENTO = new Set(["muito", "mto", "mt", "entao", "viu", "sim", "e", "a", "o", "tudo", "de", "novo", "mesmo", "demais"]);
+
+/** Acima disto (em palavras, depois de normalizar) não é despedida, é conversa. */
+const PALAVRAS_MAXIMAS_DA_DESPEDIDA = 6;
+
+/**
+ * A última mensagem do cliente é SÓ um encerramento? Figurinha, reação, texto
+ * só de emoji, ou agradecimento/despedida curto ("obrigada!", "ta bom 👍",
+ * "beleza, até amanhã"). Determinística, sem modelo. Conservadora para o lado
+ * de responder: pergunta (`?`), frase com palavra de fora da lista ou com mais
+ * de 6 palavras NÃO é despedida — "ok, mas qual o horário?" é conversa. Áudio,
+ * imagem, documento e o resto: não é despedida (pode ser qualquer coisa).
+ */
+export function ehSoDespedida(m: UltimaEntrada): boolean {
+  if (m.type === "sticker" || m.type === "reaction") return true;
+  if (m.type !== null && m.type !== "text") return false;
+  const bruto = m.body ?? "";
+  if (bruto.includes("?")) return false;
+  const palavras = normalizarTexto(bruto)
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    // "obrigadaaa", "valeuuu", "okkkk": letra repetida 3+ vezes vira uma.
+    .replace(/(\p{L})\1{2,}/gu, "$1")
+    .split(/\s+/)
+    .filter((p) => p !== "");
+  // Só emoji / pontuação (ou vazio): nada a responder.
+  if (palavras.length === 0) return true;
+  if (palavras.length > PALAVRAS_MAXIMAS_DA_DESPEDIDA) return false;
+  let achouDespedida = false;
+  let i = 0;
+  while (i < palavras.length) {
+    const frase = DESPEDIDAS.filter((f) => f.every((p, k) => palavras[i + k] === p)).sort((a, b) => b.length - a.length)[0];
+    if (frase) {
+      achouDespedida = true;
+      i += frase.length;
+    } else if (ENCHIMENTO.has(palavras[i]!)) {
+      i++;
+    } else {
+      return false;
+    }
+  }
+  return achouDespedida;
+}
+
+/**
+ * `ultima` é a última mensagem do cliente. O cron avalia duas vezes: sem ela
+ * (filtro barato, sem consulta) e, para quem passou, com ela — só então decide.
+ * Ausente = a regra da despedida não é aplicada.
+ */
 export function avaliarRetomadaPorClienteSemResposta(
   c: ConversaEmPausa,
   sel: SelecaoDaPausa,
+  ultima?: UltimaEntrada,
 ): { retomar: true; minutos: number } | { retomar: false; motivo: MotivoDeNaoRetomar } {
   const minutos = sel.esperaPorOrg.get(c.organization_id);
   if (minutos === undefined) return { retomar: false, motivo: "sem_ajuste" };
@@ -286,12 +374,15 @@ export function avaliarRetomadaPorClienteSemResposta(
   const entrada = epoch(c.last_inbound_at);
   const saida = epoch(c.last_outbound_at) ?? Number.NEGATIVE_INFINITY;
   if (entrada === null || entrada <= saida) return { retomar: false, motivo: "sem_mensagem_pendente" };
+  const maxHoras = sel.maxHorasPorOrg?.get(c.organization_id) ?? IDADE_MAXIMA_PADRAO_HORAS;
+  if (sel.agoraMs - entrada > maxHoras * 3_600_000) return { retomar: false, motivo: "pendente_antiga" };
   // A espera conta da PRIMEIRA mensagem sem resposta: quem insiste não volta
   // para o fim da fila. `awaiting_since` anterior à última saída é resto do
   // atendimento passado — aí vale a própria última mensagem.
   const desde = epoch(c.awaiting_since);
   const esperaDesde = desde !== null && desde > saida ? desde : entrada;
   if (sel.agoraMs - esperaDesde < minutos * 60_000) return { retomar: false, motivo: "dentro_da_espera" };
+  if (ultima !== undefined && ehSoDespedida(ultima)) return { retomar: false, motivo: "so_despedida" };
   return { retomar: true, minutos };
 }
 

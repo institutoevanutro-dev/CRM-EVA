@@ -104,7 +104,7 @@ beforeEach(() => {
     ],
     ai_routers: [],
     ai_agent_channel_sessions: [],
-    messages: [{ id: "88888888-8888-4888-8888-888888888888" }],
+    messages: [{ id: "88888888-8888-4888-8888-888888888888", type: "text", body: "Qual o horário de amanhã?" }],
   };
 });
 
@@ -227,6 +227,50 @@ describe("cron handoff-devolucao", () => {
       expect(devolver).not.toHaveBeenCalled();
       expect(despachar).not.toHaveBeenCalled();
       expect(auditar).not.toHaveBeenCalled();
+    });
+
+    it("a última mensagem é só despedida: fica na pausa, não despacha e a rodada não audita", async () => {
+      banco.conversations = [pausada(20)];
+      for (const m of [
+        { id: "m1", type: "text", body: "obrigada! 🙏" },
+        { id: "m2", type: "sticker", body: null },
+      ]) {
+        banco.messages = [m];
+        const corpo = (await (await chamar()).json()) as {
+          data: { cliente_sem_resposta_na_pausa: { retomadas: number; despedidas: number } };
+        };
+        expect(corpo.data.cliente_sem_resposta_na_pausa).toMatchObject({ retomadas: 0, despedidas: 1 });
+      }
+      expect(devolver).not.toHaveBeenCalled();
+      expect(despachar).not.toHaveBeenCalled();
+      expect(auditar).not.toHaveBeenCalled();
+    });
+
+    it("áudio pendente retoma (pode dizer qualquer coisa)", async () => {
+      banco.conversations = [pausada(20)];
+      banco.messages = [{ id: "m3", type: "audio", body: null }];
+      await chamar();
+      expect(devolver).toHaveBeenCalledTimes(1);
+      expect(despachar.mock.calls[0]?.[1]).toMatchObject({ messageId: "m3" });
+    });
+
+    it("mensagem de 5 h atrás (teto padrão 4 h): não retoma", async () => {
+      banco.conversations = [pausada(300)];
+      await chamar();
+      expect(devolver).not.toHaveBeenCalled();
+      expect(auditar).not.toHaveBeenCalled();
+    });
+
+    it("o teto vem da organização: com 6 h, a de 5 h retoma", async () => {
+      banco.organizations = [
+        {
+          id: ORG,
+          settings: { atendimento: { pausa_cliente_sem_resposta_min: 15, pausa_cliente_sem_resposta_max_horas: 6 } },
+        },
+      ];
+      banco.conversations = [pausada(300)];
+      await chamar();
+      expect(devolver).toHaveBeenCalledTimes(1);
     });
 
     it("a devolução foi recusada: não pede despacho nenhum", async () => {

@@ -82,7 +82,7 @@ describe("PATCH /api/v1/settings/atendimento/pausa-da-ia", () => {
     comoGerente();
     const res = await PATCH(pedido({ minutos: 120 }));
     expect(res.status).toBe(200);
-    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 120, cliente_sem_resposta_min: null });
+    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 120, cliente_sem_resposta_min: null, cliente_sem_resposta_max_horas: 4 });
     expect(leituras).toEqual([["id", ORG]]);
     expect(updates).toHaveLength(1);
     expect(updates[0]!.filtro).toEqual(["id", ORG]);
@@ -112,6 +112,9 @@ describe("PATCH /api/v1/settings/atendimento/pausa-da-ia", () => {
     ["espera abaixo de 5 minutos", { cliente_sem_resposta_min: 4 }],
     ["espera acima de 240 minutos", { cliente_sem_resposta_min: 241 }],
     ["espera em texto", { cliente_sem_resposta_min: "15" }],
+    ["idade máxima 0 h", { cliente_sem_resposta_max_horas: 0 }],
+    ["idade máxima acima de 24 h", { cliente_sem_resposta_max_horas: 25 }],
+    ["idade máxima fracionada", { cliente_sem_resposta_max_horas: 2.5 }],
   ])("recusa %s com 422, sem gravar nem auditar", async (_nome, corpo) => {
     comoGerente();
     const res = await PATCH(pedido(corpo));
@@ -125,7 +128,7 @@ describe("PATCH /api/v1/settings/atendimento/pausa-da-ia", () => {
     banco.linha = { settings: { atendimento: { pausa_ia_resposta_humana_min: 120 } } };
     const res = await PATCH(pedido({ minutos: 120 }));
     expect(res.status).toBe(200);
-    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 120, cliente_sem_resposta_min: null });
+    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 120, cliente_sem_resposta_min: null, cliente_sem_resposta_max_horas: 4 });
     expect(updates).toEqual([]);
     expect(auditSpy).not.toHaveBeenCalled();
   });
@@ -143,7 +146,7 @@ describe("PATCH /api/v1/settings/atendimento/pausa-da-ia", () => {
     banco.linha = { settings: { atendimento: { pausa_ia_resposta_humana_min: 720, outra: 1 } } };
     const res = await PATCH(pedido({ cliente_sem_resposta_min: 15 }));
     expect(res.status).toBe(200);
-    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 720, cliente_sem_resposta_min: 15 });
+    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 720, cliente_sem_resposta_min: 15, cliente_sem_resposta_max_horas: 4 });
     expect(updates).toHaveLength(1);
     expect(updates[0]!.linha.settings).toEqual({
       atendimento: { pausa_ia_resposta_humana_min: 720, outra: 1, pausa_cliente_sem_resposta_min: 15 },
@@ -162,7 +165,7 @@ describe("PATCH /api/v1/settings/atendimento/pausa-da-ia", () => {
     banco.linha = { settings: { atendimento: { pausa_cliente_sem_resposta_min: 15 } } };
     const res = await PATCH(pedido({ minutos: 60, cliente_sem_resposta_min: null }));
     expect(res.status).toBe(200);
-    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 60, cliente_sem_resposta_min: null });
+    expect(((await res.json()) as { data: unknown }).data).toEqual({ minutos: 60, cliente_sem_resposta_min: null, cliente_sem_resposta_max_horas: 4 });
     expect(updates).toHaveLength(1);
     expect(updates[0]!.linha.settings).toEqual({
       atendimento: { pausa_cliente_sem_resposta_min: null, pausa_ia_resposta_humana_min: 60 },
@@ -172,6 +175,36 @@ describe("PATCH /api/v1/settings/atendimento/pausa-da-ia", () => {
         metadata: { de_min: 5, para_min: 60, cliente_sem_resposta_de_min: 15, cliente_sem_resposta_para_min: null },
       }),
     );
+  });
+
+  it("só a idade máxima: grava ela, audita de/para, e o padrão 4 conta como valor atual", async () => {
+    comoGerente();
+    banco.linha = { settings: { atendimento: { pausa_cliente_sem_resposta_min: 15 } } };
+    const res = await PATCH(pedido({ cliente_sem_resposta_max_horas: 2 }));
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { data: unknown }).data).toEqual({
+      minutos: 5,
+      cliente_sem_resposta_min: 15,
+      cliente_sem_resposta_max_horas: 2,
+    });
+    expect(updates).toHaveLength(1);
+    expect(updates[0]!.linha.settings).toEqual({
+      atendimento: { pausa_cliente_sem_resposta_min: 15, pausa_cliente_sem_resposta_max_horas: 2 },
+    });
+    expect(auditSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "atendimento.pausa_da_ia_changed",
+        metadata: { cliente_sem_resposta_max_de_horas: 4, cliente_sem_resposta_max_para_horas: 2 },
+      }),
+    );
+  });
+
+  it("idade máxima igual ao padrão em vigor: nada grava nem audita", async () => {
+    comoGerente();
+    const res = await PATCH(pedido({ cliente_sem_resposta_max_horas: 4 }));
+    expect(res.status).toBe(200);
+    expect(updates).toEqual([]);
+    expect(auditSpy).not.toHaveBeenCalled();
   });
 
   it("organização não encontrada: 500, e nada é gravado por cima", async () => {
