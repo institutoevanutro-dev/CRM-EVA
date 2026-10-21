@@ -8,6 +8,47 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.30.0] — 2026-10-21
+
+### Adicionado
+
+- **A IA retoma a conversa quando o cliente escreve durante a pausa e ninguém responde (vem desligado)** Quando alguém da equipe responde o cliente (pelo celular ou pela tela), a IA
+  sai da conversa pelo tempo da pausa. Se o cliente escrevesse nesse meio-tempo e
+  ninguém respondesse, ele ficava esperando até a pausa acabar — que pode durar
+  horas. Em Configurações › Distribuição de atendimento há agora um campo novo:
+  "Se o cliente escrever durante a pausa e ninguém responder, a IA volta em
+  (minutos)", de 5 a 240. Passado esse tempo sem resposta, a IA devolve a
+  conversa para si e responde a mensagem pendente. Vem em branco (desligado):
+  quem não preencher continua como antes. Não vale para conversa assumida pelo
+  botão de assumir, para ligação de voz em andamento, para contato bloqueado ou
+  marcado como sempre atendimento humano, nem para número sem agente publicado.
+
+### Corrigido
+
+- **Pós-consulta continua com a IA pausada (só as mensagens fixas)** A sequência de acompanhamento de consulta (gatilho "presença confirmada" ou
+  "falta") acabava inteira, com o aviso "uma pessoa da equipe está atendendo
+  esta conversa", sempre que a IA estava pausada na conversa: depois de passar
+  para atendimento humano, de alguém clicar em "Assumir" ou da pausa que vem
+  depois da resposta de uma pessoa. As mensagens de 7, 15, 30, 45 e 75 dias
+  nunca chegavam ao paciente.
+
+  Agora, nos fluxos com gatilho de consulta e "Permitir durante handoff":
+
+  - texto fixo, modelo de mensagem e mídia da biblioteca saem mesmo com a IA
+    pausada;
+  - o passo "mensagem da IA" é pulado, com o motivo no histórico da inscrição, e
+    a sequência segue para o próximo passo;
+  - continuam valendo como antes: pedido para não receber mensagens (STOP),
+    contato anonimizado ou ocultado, janela de envio, ritmo anti-banimento e
+    "cancelar quando o contato responder".
+
+  Não muda nada para os outros fluxos: o follow-up de lead (silêncio, etapa,
+  manual) continua parando quando uma pessoa assume a conversa, e os fluxos em
+  "Pausar durante handoff" ou "Cancelar durante handoff" continuam pausando ou
+  encerrando, também os de consulta.
+
+  Não há mudança de banco nem nada a fazer na atualização.
+
 ## [4.29.0] — 2026-10-21
 
 ### Corrigido
@@ -7931,7 +7972,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.29.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.30.0...HEAD
+[4.30.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.29.0...v4.30.0
 [4.29.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.28.1...v4.29.0
 [4.28.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.28.0...v4.28.1
 [4.28.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.27.0...v4.28.0
