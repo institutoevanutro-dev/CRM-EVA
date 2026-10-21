@@ -11,6 +11,15 @@
  *
  * Organização sem o prazo ligado: nada acontece.
  *
+ * SEGUNDA PASSADA — o cliente que escreveu durante a pausa por resposta humana
+ * (`bot_silenced_until` finito) e ficou sem resposta: com
+ * `settings.atendimento.pausa_cliente_sem_resposta_min` ligado (desligado por
+ * padrão), passados N minutos sem ninguém responder, devolve a conversa ao
+ * agente pela MESMA função e pede de novo o despacho da mensagem pendente
+ * (`pedirDespachoDoAgente`). O pedido é necessário: o despacho original dela foi
+ * descartado pelo drain, que não enfileira turno de conversa silenciada — e
+ * `devolverAtendimentoAoAgente` só solta as travas, não responde ninguém.
+ *
  * A cada 5 minutos: o prazo mínimo é 5 min, e cinco minutos de atraso sobre o
  * prazo escolhido não mudam nada para quem espera há uma hora.
  *
@@ -26,16 +35,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { env } from "@/lib/env";
+import { pedirDespachoDoAgente } from "@/lib/channels/pos-entrada";
 import {
   lerPrazoDeDevolucaoMinutos,
   numerosComQuemAtenda,
+  selecionarClientesSemResposta,
   selecionarVencidas,
   type AgentePublicado,
   type ConversaEmHandoff,
+  type ConversaEmPausa,
   type NumeroDeclarado,
   type RoteadorAtivo,
 } from "@/lib/escalacao/devolucao-automatica";
-import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
+import { lerClienteSemRespostaMin } from "@/lib/escalacao/pausa-por-resposta-humana";
+import { devolverAtendimentoAoAgente, type RetomadaResultado } from "@/lib/escalacao/retomada";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -51,6 +64,24 @@ export interface DevolucaoResultado {
   examinadas: number;
   devolvidas: number;
   falhas: number;
+}
+
+export interface RetomadaNaPausaResultado {
+  organizacoes: number;
+  examinadas: number;
+  retomadas: number;
+  falhas: number;
+}
+
+/**
+ * Corrida benigna: alguém assumiu entre a leitura e a escrita (o UPDATE casou
+ * 0 linhas e volta SEM `detalhe`) — a pessoa ganhou. Os outros pontos que
+ * devolvem `assignment_conflict` carregam a mensagem do banco e são falha de
+ * verdade. A marca "sempre humano" lida agora (corrida com a tela) também não
+ * é falha: é a recusa certa.
+ */
+function recusaBenigna(r: Extract<RetomadaResultado, { ok: false }>): boolean {
+  return (r.erro === "assignment_conflict" && r.detalhe === undefined) || r.erro === "contato_sempre_humano";
 }
 
 async function prazosPorOrganizacao(admin: SupabaseClient): Promise<Map<string, number>> {
@@ -163,13 +194,7 @@ export async function devolverHandoffsVencidos(
       devolvidas++;
       continue;
     }
-    // Corrida benigna: alguém assumiu entre a leitura e a escrita (o UPDATE casou
-    // 0 linhas e volta SEM `detalhe`) — a pessoa ganhou. Os outros pontos que
-    // devolvem `assignment_conflict` carregam a mensagem do banco e são falha
-    // de verdade. A marca "sempre humano" lida agora (corrida com a tela) também
-    // não é falha: é a recusa certa.
-    if (r.erro === "assignment_conflict" && r.detalhe === undefined) continue;
-    if (r.erro === "contato_sempre_humano") continue;
+    if (recusaBenigna(r)) continue;
     falhas++;
     logger.error("[handoff-devolucao] devolução falhou", {
       conversation_id: conversa.id,
@@ -183,6 +208,118 @@ export async function devolverHandoffsVencidos(
   return { organizacoes: prazoPorOrg.size, examinadas: conversas.length, devolvidas, falhas };
 }
 
+async function esperasPorOrganizacao(admin: SupabaseClient): Promise<Map<string, number>> {
+  const { data, error } = await admin
+    .from("organizations")
+    .select("id, settings")
+    .not("settings->atendimento->pausa_cliente_sem_resposta_min", "is", null);
+  if (error) throw new Error(`organizations: ${error.message}`);
+  const esperas = new Map<string, number>();
+  for (const row of (data ?? []) as Array<{ id: string; settings: unknown }>) {
+    const minutos = lerClienteSemRespostaMin(row.settings);
+    if (minutos !== null) esperas.set(row.id, minutos);
+  }
+  return esperas;
+}
+
+/** A segunda passada: o cliente que escreveu durante a pausa e ficou sem resposta. */
+export async function retomarClientesSemRespostaNaPausa(
+  admin: SupabaseClient,
+  requestId: string,
+  agora: Date = new Date(),
+): Promise<RetomadaNaPausaResultado> {
+  const esperaPorOrg = await esperasPorOrganizacao(admin);
+  if (esperaPorOrg.size === 0) return { organizacoes: 0, examinadas: 0, retomadas: 0, falhas: 0 };
+  const orgIds = [...esperaPorOrg.keys()];
+
+  // Só a pausa FINITA e vigente, sem dono humano; a regra pura confere o resto.
+  const { data, error } = await admin
+    .from("conversations")
+    .select(
+      "id, organization_id, contact_id, channel_session_id, status, assignee_kind, assigned_to_user_id, assigned_at, bot_silenced_until, last_handoff_at, last_handoff_reason, last_inbound_at, last_outbound_at, awaiting_since, status_changed_at, contacts!conversations_contact_id_fkey(is_blocked, ai_opt_out, force_human)",
+    )
+    .in("organization_id", orgIds)
+    .in("status", ["open", "pending", "claimed", "ai_handling"])
+    .is("assigned_to_user_id", null)
+    .gt("bot_silenced_until", agora.toISOString())
+    .neq("bot_silenced_until", "infinity")
+    .limit(SCAN_LIMIT);
+  if (error) throw new Error(`conversations: ${error.message}`);
+  const conversas = (data ?? []) as unknown as ConversaEmPausa[];
+
+  const selecionadas = selecionarClientesSemResposta(conversas, {
+    esperaPorOrg,
+    sessoesComAgente: await sessoesComAgente(admin, orgIds),
+    agoraMs: agora.getTime(),
+  });
+
+  let retomadas = 0;
+  let falhas = 0;
+  for (const { conversa, minutos } of selecionadas) {
+    const r = await devolverAtendimentoAoAgente(
+      { supabase: admin, organizationId: conversa.organization_id, actor: ATOR_DO_CRON, requestId },
+      { conversationId: conversa.id, origem: { automatica: { minutos } } },
+    );
+    if (!r.ok) {
+      if (recusaBenigna(r)) continue;
+      falhas++;
+      logger.error("[handoff-devolucao] retomada na pausa falhou", {
+        conversation_id: conversa.id,
+        organization_id: conversa.organization_id,
+        erro: r.erro,
+        detalhe: r.detalhe,
+        requestId,
+      });
+      continue;
+    }
+
+    // A mensagem pendente: a inbound mais nova, na mesma ordem do anti-backlog
+    // do drain — que só aceita o despacho da última.
+    const { data: msg, error: msgErr } = await admin
+      .from("messages")
+      .select("id")
+      .eq("organization_id", conversa.organization_id)
+      .eq("conversation_id", conversa.id)
+      .eq("direction", "inbound")
+      .order("sent_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const messageId = (msg as { id: string } | null)?.id ?? null;
+    const pedido =
+      !msgErr &&
+      messageId !== null &&
+      conversa.contact_id !== null &&
+      conversa.channel_session_id !== null &&
+      (await pedirDespachoDoAgente(admin as Parameters<typeof pedirDespachoDoAgente>[0], {
+        organizationId: conversa.organization_id,
+        contactId: conversa.contact_id,
+        conversationId: conversa.id,
+        messageId,
+        channelSessionId: conversa.channel_session_id,
+        texto: null,
+        nomeDoContato: null,
+        requestId,
+        origem: "cron:handoff-devolucao",
+      }));
+    if (pedido) {
+      retomadas++;
+      continue;
+    }
+    // A conversa JÁ voltou ao agente; a próxima mensagem do cliente será
+    // respondida. Esta ficou sem — é falha, e aparece na rodada.
+    falhas++;
+    logger.error("[handoff-devolucao] retomou, mas o despacho da mensagem pendente falhou", {
+      conversation_id: conversa.id,
+      organization_id: conversa.organization_id,
+      detalhe: msgErr?.message ?? (messageId === null ? "sem inbound" : "emit falhou"),
+      requestId,
+    });
+  }
+
+  return { organizacoes: esperaPorOrg.size, examinadas: conversas.length, retomadas, falhas };
+}
+
 async function handle(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
 
@@ -194,8 +331,11 @@ async function handle(req: NextRequest): Promise<Response> {
   }
 
   let resultado: DevolucaoResultado;
+  let naPausa: RetomadaNaPausaResultado;
   try {
-    resultado = await devolverHandoffsVencidos(createAdminClient(), requestId);
+    const admin = createAdminClient();
+    resultado = await devolverHandoffsVencidos(admin, requestId);
+    naPausa = await retomarClientesSemRespostaNaPausa(admin, requestId);
   } catch (err) {
     logger.error("[handoff-devolucao] varredura falhou", {
       error: err instanceof Error ? err.message : String(err),
@@ -206,17 +346,17 @@ async function handle(req: NextRequest): Promise<Response> {
 
   // Cada devolução já audita por conversa (`ai.reactivated_by_agent`). A linha
   // da rodada diz que foi o prazo — e só existe quando houve efeito.
-  if (resultado.devolvidas > 0 || resultado.falhas > 0) {
+  if (resultado.devolvidas > 0 || resultado.falhas > 0 || naPausa.retomadas > 0 || naPausa.falhas > 0) {
     void audit({
       action: "conversation.handoff_auto_return_run",
       organizationId: null,
       bypassedRls: true,
-      metadata: { ...resultado },
+      metadata: { ...resultado, cliente_sem_resposta_na_pausa: { ...naPausa } },
       requestId,
     });
   }
 
-  return ok(resultado, { requestId });
+  return ok({ ...resultado, cliente_sem_resposta_na_pausa: naPausa }, { requestId });
 }
 
 export async function GET(req: NextRequest): Promise<Response> {

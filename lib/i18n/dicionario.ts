@@ -4726,6 +4726,12 @@ export const DICIONARIO: Traducoes = {
   "Atendentes para mencionar": { es: "Asesores para mencionar" },
   "Nenhum atendente encontrado.": { es: "Ningún asesor encontrado." },
   "Salvar pausa": { es: "Guardar pausa" },
+  "Se o cliente escrever durante a pausa e ninguém responder, a IA volta em (minutos)": {
+    es: "Si el cliente escribe durante la pausa y nadie responde, la IA vuelve en (minutos)",
+  },
+  "De 5 a 240 minutos. Deixe em branco para desligar: aí a IA só volta quando a pausa acabar. Não vale para conversa assumida pelo botão de assumir.": {
+    es: "De 5 a 240 minutos. Déjelo en blanco para desactivar: así la IA solo vuelve cuando termina la pausa. No aplica a conversaciones tomadas con el botón de asumir.",
+  },
   "Quando uma pessoa responde o cliente": { es: "Cuando una persona responde al cliente" },
   "A IA sai da conversa por um tempo para não responder junto. Vale para resposta pelo celular e pela tela, e cada nova resposta recomeça a contagem.": {
     es: "La IA sale de la conversación por un tiempo para no responder a la vez. Vale para respuestas desde el celular y desde la pantalla, y cada nueva respuesta reinicia la cuenta.",

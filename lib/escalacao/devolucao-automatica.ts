@@ -32,7 +32,9 @@
  *   devolvê-lo mudaria a fila humana à toa.
  * - **Conversa encerrada.** Encerrar é decisão, não abandono.
  * - **Pausa por resposta pelo celular** (`bot_silenced_until` finito): vence
- *   sozinha. Só entra quem está com humano de forma durável.
+ *   sozinha. Só entra quem está com humano de forma durável. A exceção é o
+ *   cliente que escreve DURANTE essa pausa e fica sem resposta — ver
+ *   `avaliarRetomadaPorClienteSemResposta`, no fim deste arquivo.
  *
  * A devolução NÃO envia mensagem: só solta as travas. A próxima resposta da IA
  * nasce da próxima mensagem do cliente e passa pelos portões de sempre (janela
@@ -207,6 +209,100 @@ export function selecionarVencidas(
   for (const conversa of conversas) {
     const r = avaliarDevolucao(conversa, sel);
     if (r.devolver) out.push({ conversa, minutos: r.minutos });
+  }
+  return out;
+}
+
+// ─── O cliente escreveu durante a pausa e ninguém respondeu ─────────────────
+//
+// A pausa por resposta humana (`bot_silenced_until` FINITO, ver
+// `atendimento-manual.ts`) cala a IA até vencer — e pode durar até 24 h. Se o
+// cliente escreve nesse meio-tempo e ninguém da equipe responde, ele fica
+// esperando: a IA não pode, e a mensagem dele não aparece para ninguém como
+// pendente de ação. Medido em produção (21/10/2026): resposta pelo celular às
+// 09:21, pausa de 12 h, paciente escreveu às 15:35 e ficou horas sem resposta.
+//
+// Com `settings.atendimento.pausa_cliente_sem_resposta_min` ligado (desligado
+// por padrão), passados N minutos da mensagem do cliente SEM saída nenhuma
+// depois dela, o cron `handoff-devolucao` devolve a conversa ao agente pela
+// função do botão e pede a resposta da mensagem pendente.
+//
+// Fica de fora, além das travas da devolução por prazo: humano DURÁVEL (alguém
+// clicou "assumir" — a pausa ali é decisão, não esquecimento), conversa sem
+// pausa vigente (a pausa vencida já devolveu a IA) e a pausa de LIGAÇÃO de voz
+// em andamento (`lib/wacalls/events-bridge.ts`: há uma pessoa falando com o
+// cliente agora; a mensagem escrita durante a ligação não está "sem resposta").
+
+/** O `last_handoff_reason` que a ligação de voz grava (`lib/wacalls/events-bridge.ts`). */
+export const MOTIVO_DA_PAUSA_DE_LIGACAO = "Ligação de voz em andamento";
+
+export interface ConversaEmPausa extends Omit<ConversaEmHandoff, "contacts"> {
+  contact_id: string | null;
+  last_inbound_at: string | null;
+  /** Desde quando o cliente espera (a mensagem DELE mais antiga sem resposta). */
+  awaiting_since: string | null;
+  last_handoff_reason: string | null;
+  contacts?: { is_blocked: boolean | null; ai_opt_out: boolean | null; force_human: boolean | null } | null;
+}
+
+export interface SelecaoDaPausa {
+  /** `organization_id` → minutos de espera (`lerClienteSemRespostaMin`). */
+  esperaPorOrg: ReadonlyMap<string, number>;
+  sessoesComAgente: ReadonlyMap<string, ReadonlySet<string>>;
+  agoraMs: number;
+}
+
+export type MotivoDeNaoRetomar =
+  | "sem_ajuste"
+  | "humano_duravel"
+  | "sem_pausa_vigente"
+  | "ligacao_em_andamento"
+  | "status_nao_devolvivel"
+  | "contato_sempre_humano"
+  | "contato_bloqueado"
+  | "contato_com_humano"
+  | "sessao_sem_agente"
+  | "sem_mensagem_pendente"
+  | "dentro_da_espera";
+
+export function avaliarRetomadaPorClienteSemResposta(
+  c: ConversaEmPausa,
+  sel: SelecaoDaPausa,
+): { retomar: true; minutos: number } | { retomar: false; motivo: MotivoDeNaoRetomar } {
+  const minutos = sel.esperaPorOrg.get(c.organization_id);
+  if (minutos === undefined) return { retomar: false, motivo: "sem_ajuste" };
+  if (estaComHumanoDuravel(c)) return { retomar: false, motivo: "humano_duravel" };
+  const silencio = epoch(c.bot_silenced_until);
+  if (silencio === null || silencio <= sel.agoraMs) return { retomar: false, motivo: "sem_pausa_vigente" };
+  if (c.last_handoff_reason === MOTIVO_DA_PAUSA_DE_LIGACAO) return { retomar: false, motivo: "ligacao_em_andamento" };
+  if (!STATUS_DEVOLVIVEIS.has(c.status ?? "")) return { retomar: false, motivo: "status_nao_devolvivel" };
+  if (c.contacts?.ai_opt_out === true) return { retomar: false, motivo: "contato_sempre_humano" };
+  if (c.contacts?.is_blocked === true) return { retomar: false, motivo: "contato_bloqueado" };
+  if (c.contacts?.force_human === true) return { retomar: false, motivo: "contato_com_humano" };
+  const sessoes = sel.sessoesComAgente.get(c.organization_id);
+  if (!c.channel_session_id || !sessoes?.has(c.channel_session_id)) {
+    return { retomar: false, motivo: "sessao_sem_agente" };
+  }
+  const entrada = epoch(c.last_inbound_at);
+  const saida = epoch(c.last_outbound_at) ?? Number.NEGATIVE_INFINITY;
+  if (entrada === null || entrada <= saida) return { retomar: false, motivo: "sem_mensagem_pendente" };
+  // A espera conta da PRIMEIRA mensagem sem resposta: quem insiste não volta
+  // para o fim da fila. `awaiting_since` anterior à última saída é resto do
+  // atendimento passado — aí vale a própria última mensagem.
+  const desde = epoch(c.awaiting_since);
+  const esperaDesde = desde !== null && desde > saida ? desde : entrada;
+  if (sel.agoraMs - esperaDesde < minutos * 60_000) return { retomar: false, motivo: "dentro_da_espera" };
+  return { retomar: true, minutos };
+}
+
+export function selecionarClientesSemResposta(
+  conversas: readonly ConversaEmPausa[],
+  sel: SelecaoDaPausa,
+): Array<{ conversa: ConversaEmPausa; minutos: number }> {
+  const out: Array<{ conversa: ConversaEmPausa; minutos: number }> = [];
+  for (const conversa of conversas) {
+    const r = avaliarRetomadaPorClienteSemResposta(conversa, sel);
+    if (r.retomar) out.push({ conversa, minutos: r.minutos });
   }
   return out;
 }
