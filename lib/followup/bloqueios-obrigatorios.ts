@@ -21,7 +21,10 @@
  *     elegibilidade já barrava `assignee_kind='user'` no modo IA e no atalho; o
  *     texto fixo e o modelo pelo worker passaram a barrar também. Com
  *     `handoff_policy='allow'` ("Permitir durante handoff"), atribuição e resposta
- *     humana não barram — só o bot silenciado;
+ *     humana não barram — só o bot silenciado. Exceção (decisão do dono,
+ *     21/10/2026): no fluxo de gatilho de consulta com `allow`, nem o bot
+ *     silenciado barra a mensagem FIXA; o passo de IA é pulado e o fluxo segue
+ *     (`fixasIgnoramAPausaDaIA`);
  *   - `force_human` ("sempre atendimento humano", que `ai_opt_out` mantém
  *     ligado) cala SÓ A IA (decisão do dono, 18-19/10/2026). Passo de texto
  *     fixo, modelo de mensagem e mídia da biblioteca saem para esse contato; o
@@ -333,14 +336,79 @@ export async function jobEhPassoFixoDoFluxo(
   return rows[0] !== undefined && ehPassoFixoDoFluxo(rows[0].kind, rows[0].payload);
 }
 
+/**
+ * Gatilhos de CONSULTA (`triggerConfigSchema`): o fluxo nasce de um evento da
+ * agenda — presença confirmada (`appointment_attended`, o pós-consulta) ou falta
+ * (`appointment_no_show`) —, não de uma conversa. Lista fechada, de propósito:
+ * gatilho novo de consulta entra aqui por decisão, não por prefixo.
+ */
+const GATILHOS_DE_CONSULTA: ReadonlySet<unknown> = new Set(['appointment_attended', 'appointment_no_show']);
+
+/**
+ * As mensagens FIXAS deste fluxo continuam saindo com a IA pausada na conversa
+ * (`bot_silenced_until` no futuro: o `infinity` do handoff da IA ou do
+ * "Assumir", e a pausa depois da resposta de uma pessoa)? Decisão do dono,
+ * 21/10/2026: sim no acompanhamento de consulta ("DR. ANDRÉ | Pós-consulta").
+ *
+ * Duas condições, as duas lidas do pointer no banco (nunca de quem chama):
+ *
+ *   - gatilho de consulta. O follow-up de LEAD (silêncio, etapa, manual,
+ *     webhook, caso, fim de conversa) continua acabando quando uma pessoa
+ *     assume — é o comportamento desejado: a sequência de reaquecimento não
+ *     fala por cima de quem está atendendo;
+ *   - `handoff_policy = 'allow'` ("Permitir durante handoff"). Com `pause` ou
+ *     `cancel` o operador escolheu parar durante o atendimento humano, e essa
+ *     escolha vale também para o pós-consulta (a pessoa no comando adia ou
+ *     encerra antes de chegar aqui, `pessoa-no-comando-no-turno.ts`).
+ *
+ * O passo de IA desses fluxos continua calado: é pulado e a sequência segue.
+ *
+ * ponytail: regra fixa por gatilho, sem opção por fluxo na tela. Vira campo de
+ * `trigger_config` quando alguém precisar de um pós-consulta que pare na pausa
+ * (com `allow`) ou de um follow-up de lead que não pare.
+ */
+export function fixasIgnoramAPausaDaIA(triggerConfig: unknown, handoffPolicy: unknown): boolean {
+  return (
+    handoffPolicy === 'allow' &&
+    typeof triggerConfig === 'object' &&
+    triggerConfig !== null &&
+    GATILHOS_DE_CONSULTA.has((triggerConfig as { kind?: unknown }).kind)
+  );
+}
+
+/**
+ * O job é passo FIXO de um fluxo cujas mensagens fixas ignoram a pausa da IA?
+ * O tipo do passo sai do job (lido sob a trava por quem chama); gatilho e
+ * política saem do pointer da inscrição, relidos aqui. Para as portas que não
+ * recebem os fatos de `decidirEnvio`: o topo de `sendFixedOutbound` e o envio
+ * bolha a bolha (`sendTurnMessage`).
+ */
+export async function passoFixoIgnoraPausaDaIA(
+  // Só `query`: o envio bolha a bolha chama com o que tiver na mão (`Queryable`).
+  db: { query<R extends pg.QueryResultRow>(text: string, values?: unknown[]): Promise<pg.QueryResult<R>> },
+  input: { organizationId: string; contactId: string | null; kind: string | undefined; payload: Record<string, unknown> | null | undefined },
+): Promise<boolean> {
+  if (input.contactId === null || !ehPassoFixoDoFluxo(input.kind, input.payload)) return false;
+  const { rows } = await db.query<{ trigger_config: unknown; handoff_policy: string | null }>(
+    `select p.trigger_config, p.handoff_policy
+       from followup_enrollments e
+       join followup_flow_pointers p on p.id = e.pointer_id and p.organization_id = e.organization_id
+      where e.organization_id = $1 and e.id = $2 and e.contact_id = $3`,
+    [input.organizationId, input.payload!.followup_enrollment_id, input.contactId],
+  );
+  return rows[0] !== undefined && fixasIgnoramAPausaDaIA(rows[0].trigger_config, rows[0].handoff_policy);
+}
+
 /** Motivos que pulam ESTE passo e deixam o fluxo seguir. */
-export type MotivoDoPulo = 'fora_das_24h_do_instagram' | 'atendimento_humano';
+export type MotivoDoPulo = 'fora_das_24h_do_instagram' | 'atendimento_humano' | 'ia_pausada';
 
 /** O texto do passo pulado, gravado no evento `action_pulado`. */
 export const TEXTO_DO_PULO: Record<MotivoDoPulo, string> = {
   fora_das_24h_do_instagram: 'Passo pulado: fora das 24h do Instagram.',
   atendimento_humano:
     "Passo pulado: o contato está marcado como 'sempre atendimento humano', e a IA não escreve para ele. As mensagens fixas da sequência seguem.",
+  ia_pausada:
+    'Passo pulado: a IA está pausada nesta conversa (uma pessoa da equipe está no atendimento). As mensagens fixas da sequência seguem.',
 };
 
 export type DecisaoDoEnvio =
@@ -403,7 +471,10 @@ export function decidirEnvio(
     fatos.handoff_policy !== 'allow' && (fatos.conversa.atribuida_a_pessoa || fatos.conversa.humano_respondeu);
   // `force_human` sozinho NÃO entra aqui: ele cala só a IA, e é decidido no
   // fim (pula o passo de IA). O handoff de verdade grava também o silêncio.
-  if (fatos.conversa.bot_silenciado || humanoSemPedido) {
+  // No acompanhamento de consulta com `allow`, o silêncio também só cala a IA
+  // (`fixasIgnoramAPausaDaIA`): decidido no fim, como o `force_human`.
+  const pausaSoCalaAIA = fixasIgnoramAPausaDaIA(fatos.trigger_config, fatos.handoff_policy);
+  if ((fatos.conversa.bot_silenciado && !pausaSoCalaAIA) || humanoSemPedido) {
     return { envia: false, motivo: 'atendimento_humano', invalida: true };
   }
   // O gate do canal (modo de teste, autorização por origem): a MESMA regra pura
@@ -477,6 +548,10 @@ export function decidirEnvio(
   // "sempre atendimento humano", e adiar não muda isso.
   if (passo === 'ia' && fatos.contato.force_human) {
     return { envia: false, motivo: 'atendimento_humano', pula: true };
+  }
+  // Só chega aqui silenciada quando `pausaSoCalaAIA`: a mensagem fixa segue, a IA não.
+  if (passo === 'ia' && fatos.conversa.bot_silenciado) {
+    return { envia: false, motivo: 'ia_pausada', pula: true };
   }
   // Mesmo lugar: o canal já não aceita o envio, e adiar não resolve.
   const fimAuto = fatos.fim_da_janela_automatica === null ? null : Date.parse(fatos.fim_da_janela_automatica);
