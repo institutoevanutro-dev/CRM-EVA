@@ -8,6 +8,8 @@
  * quantos minutos a IA retoma a conversa em que o cliente escreveu durante a
  * pausa e ninguém respondeu (`null` desliga; ausente não mexe). O corpo aceita
  * um campo, o outro ou os dois; `{ minutos }` sozinho segue como sempre.
+ * `cliente_sem_resposta_max_horas` (1..24, padrão 4) é a idade máxima da
+ * mensagem do cliente que essa retomada ainda responde.
  *
  * Gate = manager+, o mesmo da tela onde o campo mora (Distribuição de
  * atendimento). A escrita vai pelo admin client pelo motivo descrito em
@@ -24,11 +26,14 @@ import { ApiError } from "@/lib/api/types";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import {
+  clienteSemRespostaMaxHorasSchema,
   clienteSemRespostaSchema,
+  lerClienteSemRespostaMaxHoras,
   lerClienteSemRespostaMin,
   lerPausaPorRespostaHumanaMin,
   pausaPorRespostaHumanaSchema,
   settingsComClienteSemResposta,
+  settingsComClienteSemRespostaMaxHoras,
   settingsComPausaPorRespostaHumana,
 } from "@/lib/escalacao/pausa-por-resposta-humana";
 import { requireSupportWrite } from "@/lib/impersonate/support";
@@ -41,10 +46,15 @@ const corpoSchema = z
   .strictObject({
     minutos: pausaPorRespostaHumanaSchema.optional(),
     cliente_sem_resposta_min: clienteSemRespostaSchema.nullable().optional(),
+    cliente_sem_resposta_max_horas: clienteSemRespostaMaxHorasSchema.optional(),
   })
-  .refine((c) => c.minutos !== undefined || c.cliente_sem_resposta_min !== undefined, {
-    message: "informe minutos ou cliente_sem_resposta_min",
-  });
+  .refine(
+    (c) =>
+      c.minutos !== undefined ||
+      c.cliente_sem_resposta_min !== undefined ||
+      c.cliente_sem_resposta_max_horas !== undefined,
+    { message: "informe minutos, cliente_sem_resposta_min ou cliente_sem_resposta_max_horas" },
+  );
 
 export async function PATCH(req: NextRequest): Promise<Response> {
   const supportDenied = await requireSupportWrite();
@@ -83,16 +93,20 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   const esperaAnterior = lerClienteSemRespostaMin(orgRow.settings);
   const minutos = input.minutos ?? anterior;
   const espera = input.cliente_sem_resposta_min === undefined ? esperaAnterior : input.cliente_sem_resposta_min;
-  const estado = { minutos, cliente_sem_resposta_min: espera };
+  const maxHorasAnterior = lerClienteSemRespostaMaxHoras(orgRow.settings);
+  const maxHoras = input.cliente_sem_resposta_max_horas ?? maxHorasAnterior;
+  const estado = { minutos, cliente_sem_resposta_min: espera, cliente_sem_resposta_max_horas: maxHoras };
 
   // Mesmo valor que já vale: nada mudou, então não grava nem audita.
   const mudouPausa = minutos !== anterior;
   const mudouEspera = espera !== esperaAnterior;
-  if (!mudouPausa && !mudouEspera) return ok(estado, { requestId });
+  const mudouMaxHoras = maxHoras !== maxHorasAnterior;
+  if (!mudouPausa && !mudouEspera && !mudouMaxHoras) return ok(estado, { requestId });
 
   let settings: unknown = orgRow.settings;
   if (mudouPausa) settings = settingsComPausaPorRespostaHumana(settings, minutos);
   if (mudouEspera) settings = settingsComClienteSemResposta(settings, espera);
+  if (mudouMaxHoras) settings = settingsComClienteSemRespostaMaxHoras(settings, maxHoras);
 
   const { error: updErr } = await supabase
     .from("organizations")
@@ -110,6 +124,9 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     metadata: {
       ...(mudouPausa ? { de_min: anterior, para_min: minutos } : {}),
       ...(mudouEspera ? { cliente_sem_resposta_de_min: esperaAnterior, cliente_sem_resposta_para_min: espera } : {}),
+      ...(mudouMaxHoras
+        ? { cliente_sem_resposta_max_de_horas: maxHorasAnterior, cliente_sem_resposta_max_para_horas: maxHoras }
+        : {}),
     },
   });
 

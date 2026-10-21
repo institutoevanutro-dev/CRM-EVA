@@ -82,6 +82,36 @@ export function lerClienteSemRespostaMin(settings: unknown): number | null {
   return r.success ? r.data : null;
 }
 
+/**
+ * Idade máxima, em horas, da mensagem do cliente que a retomada ainda responde
+ * (`atendimento.pausa_cliente_sem_resposta_max_horas`). Só vale com a retomada
+ * ligada. Ausente ou fora de 1..24 = 4 h. Mensagem mais velha que isso é
+ * conversa que terminou, não cliente esperando (medido na 4.30.0: retomadas de
+ * 9 h atrás, quase todas despedidas).
+ */
+export const CLIENTE_SEM_RESPOSTA_MAX_HORAS_PADRAO = 4;
+export const CLIENTE_SEM_RESPOSTA_MAX_HORAS_MINIMO = 1;
+export const CLIENTE_SEM_RESPOSTA_MAX_HORAS_MAXIMO = 24;
+
+export const clienteSemRespostaMaxHorasSchema = z
+  .number()
+  .int()
+  .min(CLIENTE_SEM_RESPOSTA_MAX_HORAS_MINIMO)
+  .max(CLIENTE_SEM_RESPOSTA_MAX_HORAS_MAXIMO);
+
+/** Horas em vigor. Nunca lança; ausente/torto/fora da faixa = padrão. */
+export function lerClienteSemRespostaMaxHoras(settings: unknown): number {
+  const bruto = (settings as { atendimento?: { pausa_cliente_sem_resposta_max_horas?: unknown } } | null | undefined)
+    ?.atendimento?.pausa_cliente_sem_resposta_max_horas;
+  const r = clienteSemRespostaMaxHorasSchema.safeParse(bruto);
+  return r.success ? r.data : CLIENTE_SEM_RESPOSTA_MAX_HORAS_PADRAO;
+}
+
+/** Os `settings` com a idade máxima trocada, e SÓ ela. */
+export function settingsComClienteSemRespostaMaxHoras(settings: unknown, horas: number): Record<string, unknown> {
+  return settingsComAtendimento(settings, "pausa_cliente_sem_resposta_max_horas", horas);
+}
+
 /** Os `settings` com a espera trocada (`null` desliga), e SÓ ela. */
 export function settingsComClienteSemResposta(settings: unknown, minutos: number | null): Record<string, unknown> {
   return settingsComAtendimento(settings, "pausa_cliente_sem_resposta_min", minutos);

@@ -20,7 +20,11 @@ import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
-import { lerClienteSemRespostaMin, lerPausaPorRespostaHumanaMin } from "@/lib/escalacao/pausa-por-resposta-humana";
+import {
+  lerClienteSemRespostaMaxHoras,
+  lerClienteSemRespostaMin,
+  lerPausaPorRespostaHumanaMin,
+} from "@/lib/escalacao/pausa-por-resposta-humana";
 import { DEFAULT_VISIBILITY_MODE, ROLE_RANK, type VisibilityMode } from "@/lib/auth/types";
 import { routingConfigSchema } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
@@ -86,6 +90,7 @@ export default async function AtendimentoSettingsPage() {
           <PausaDaIaForm
             initial={lerPausaPorRespostaHumanaMin(data?.settings)}
             initialEspera={lerClienteSemRespostaMin(data?.settings)}
+            initialMaxHoras={lerClienteSemRespostaMaxHoras(data?.settings)}
           />
           <ChannelRoutingForm initial={channels} />
           <AssinaturaForm initial={{ humanos: assinatura.humanos, ia: assinatura.ia, nome_ia: assinatura.nomeIa }} />
