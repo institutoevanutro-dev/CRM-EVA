@@ -9,7 +9,7 @@ import { StaleServiceBoundaryError } from '@/lib/atendimento/fronteira';
 import { requireCurrentAutonomousTurn, requireCurrentServiceBoundary } from '@/lib/atendimento/fronteira-server';
 import { parseServiceBoundary } from '@/lib/atendimento/fronteira';
 import { pessoaNoComandoDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
-import { ehPassoFixoDoFluxo } from '@/lib/followup/bloqueios-obrigatorios';
+import { ehPassoFixoDoFluxo, passoFixoIgnoraPausaDaIA } from '@/lib/followup/bloqueios-obrigatorios';
 /**
  * Borda de saída pós-fusão: envio de mensagem SEMPRE via `sendMessageHandler` do
  * próprio app (app/api/v1/messages/_handler.ts) — o handler insere a linha
@@ -138,10 +138,21 @@ export type TurnSendOutcome = SendOutcome | { kind: 'human_took_over'; motivo: s
  */
 async function pessoaAssumiuAConversa(
   db: Queryable,
-  input: Pick<SendMessageInput, 'tenantId' | 'conversationId'>,
+  input: Pick<SendMessageInput, 'tenantId' | 'conversationId' | 'leadId'>,
   kind: string | undefined,
   payload: Record<string, unknown> | undefined,
 ): Promise<string | null> {
+  // Acompanhamento de consulta com `allow` (`fixasIgnoramAPausaDaIA`): o passo
+  // fixo não para em nenhum veto de pessoa — silêncio, dono humano, force_human.
+  // Lido do job e do pointer no banco; contato oculto e allowlist seguem valendo.
+  if (await passoFixoIgnoraPausaDaIA(db, { organizationId: input.tenantId, contactId: input.leadId, kind, payload })) {
+    return pessoaNoComandoDaConversa(
+      db,
+      { organizationId: input.tenantId, conversationId: input.conversationId },
+      kind,
+      { ignorarPausaDaIA: true },
+    );
+  }
   // A regra mora em `pessoaNoComandoDaConversa`: as ferramentas de escrita do
   // turno (`guardServiceTools`) perguntam a mesma coisa.
   return pessoaNoComandoDaConversa(

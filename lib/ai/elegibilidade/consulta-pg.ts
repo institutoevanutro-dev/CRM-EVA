@@ -50,6 +50,12 @@ export async function decidirElegibilidadeDaConversa(
      * humano") cala só a IA e não entra na conta. Silêncio e dono humano entram.
      */
     ignorarTravaDoContato?: boolean;
+    /**
+     * Passo fixo do acompanhamento de consulta com `allow`
+     * (`fixasIgnoramAPausaDaIA`): nenhum dos três vetos de pessoa entra
+     * (`force_human`, silêncio, dono humano). Oculto e allowlist entram.
+     */
+    ignorarPausaDaIA?: boolean;
   },
 ): Promise<DecisaoDeElegibilidade | null> {
   const { rows } = await pool.query<LinhaDeElegibilidade>(
@@ -80,9 +86,9 @@ export async function decidirElegibilidadeDaConversa(
       aiGateMode: r.channel_metadata?.ai_gate_mode,
       aiTestPhoneNumbers: r.channel_metadata?.ai_test_phone_numbers,
       contactPhoneNumber: r.phone_number,
-      forceHuman: input.ignorarTravaDoContato === true ? false : r.force_human,
-      assigneeKind: r.assignee_kind,
-      botSilencedUntil: r.bot_silenced_until,
+      forceHuman: input.ignorarTravaDoContato === true || input.ignorarPausaDaIA === true ? false : r.force_human,
+      assigneeKind: input.ignorarPausaDaIA === true ? null : r.assignee_kind,
+      botSilencedUntil: input.ignorarPausaDaIA === true ? null : r.bot_silenced_until,
       aiAuthorizedAt: r.ai_authorized_at,
       agora: input.agora,
       ttlMs: input.ttlMs,
@@ -109,12 +115,13 @@ export async function pessoaNoComandoDaConversa(
   pool: Parameters<typeof decidirElegibilidadeDaConversa>[0],
   alvo: { organizationId: string; conversationId: string },
   kind: string | undefined,
-  opcoes: { ignorarTravaDoContato?: boolean } = {},
+  opcoes: { ignorarTravaDoContato?: boolean; ignorarPausaDaIA?: boolean } = {},
 ): Promise<string | null> {
   if (kind !== undefined && A_MANDO_DE_PESSOA.has(kind)) return null;
   const elegib = await decidirElegibilidadeDaConversa(pool, {
     ...alvo,
     ...(opcoes.ignorarTravaDoContato === true ? { ignorarTravaDoContato: true } : {}),
+    ...(opcoes.ignorarPausaDaIA === true ? { ignorarPausaDaIA: true } : {}),
     agora: new Date(),
     ttlMs: ttlDaAutorizacaoMs(process.env),
     // Mesma exceção do começo do turno: silêncio de canal sem IA é roteamento.

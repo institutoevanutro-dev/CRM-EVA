@@ -49,6 +49,7 @@ import {
   TEXTO_DO_PULO,
   conferirAntesDoEnvio,
   ehPassoFixoDoFluxo,
+  passoFixoIgnoraPausaDaIA,
   tipoDoPassoDoFluxo,
   type DecisaoDoEnvio,
 } from '../../followup/bloqueios-obrigatorios';
@@ -949,8 +950,13 @@ async function sendFixedOutbound(
   // barrando. Sai do job, não de quem chama: a reserva (job de passo de IA) e a
   // re-entrada determinística (sem inscrição) seguem como eram.
   const passoFixoDoFluxo = ehPassoFixoDoFluxo(job.kind, job.payload);
+  // Acompanhamento de consulta com `allow`: a pausa da IA também não barra o
+  // passo fixo (`fixasIgnoramAPausaDaIA`). Gatilho e política relidos do banco.
+  const ignoraPausa =
+    passoFixoDoFluxo &&
+    (await passoFixoIgnoraPausaDaIA(pool, { organizationId: tenantId, contactId: leadId, kind: job.kind, payload: job.payload }));
 
-  if (await isLeadInHandoff(pool, tenantId, leadId, { ignorarTravaDoContato: passoFixoDoFluxo })) {
+  if (!ignoraPausa && (await isLeadInHandoff(pool, tenantId, leadId, { ignorarTravaDoContato: passoFixoDoFluxo }))) {
     runLog.info('envio fixo pulado — lead silenciado (handoff/opt-out)', { kind: job.kind });
     return "skipped";
   }
