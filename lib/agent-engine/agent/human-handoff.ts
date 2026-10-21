@@ -259,12 +259,14 @@ function linhaDoAviso(aviso: { avisado: boolean; porque?: string } | undefined):
 
 /** Whitelist EXATA do payload da tool (mesmo padrão .strict() da F2-10/F3-02). */
 export const requestHumanHandoffInputSchema = z.strictObject({
+  motivo_codigo: z.enum(['requested_human', 'critical_stage']).optional(),
   reason: z.string().min(1).max(500).optional(),
 });
 
 const PAYLOAD_TEACHING =
-  'Campo aceito: reason (por que passar ao humano) — opcional, nada além. Lead, organização e ' +
-  'conversa vêm do runtime, nunca do payload da tool.';
+  'Campos aceitos: motivo_codigo (requested_human para pedido de uma pessoa; critical_stage para ' +
+  'uma etapa do atendimento que exige finalização humana) e reason (por que passar ao humano), ' +
+  'ambos opcionais, nada além. Lead, organização e conversa vêm do runtime, nunca do payload da tool.';
 
 export type RequestHumanHandoffResult =
   | { ok: true; status: 'handoff_solicitado'; message: string }
@@ -295,8 +297,13 @@ export async function applyRequestHumanHandoff(
     return { ok: false, error: { code: 'invalid_payload', message: `payload inválido em request_human_handoff (${zodIssuesSummary(parsed.error)}). ${PAYLOAD_TEACHING}` } };
   }
 
+  // Ausente = comportamento legado (`requested_human`). O código só classifica
+  // a passagem quando a IA não escreveu o motivo: não escolhe destino nem muda
+  // as condições do handoff. Portado do projeto original (DeskcommCRM, PR #3068
+  // de @vitor-licassali), sem o briefing da passagem, que este fork não tem.
+  const motivoCodigo = parsed.data.motivo_codigo ?? 'requested_human';
   await performHumanHandoff(db, ids, {
-    reason: parsed.data.reason ?? 'requested_human',
+    reason: parsed.data.reason ?? motivoCodigo,
     conversationSummary: opts.conversationSummary,
     ...(opts.avisoAoLead !== undefined ? { avisoAoLead: opts.avisoAoLead } : {}),
     log: opts.log,

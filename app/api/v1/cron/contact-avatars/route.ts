@@ -18,13 +18,36 @@
  * entra antes de quem só está desatualizado. O rosto que falta incomoda mais
  * que o rosto velho.
  *
+ * DE QUAL CONEXÃO
+ * A foto vem da conexão por onde o contato FALA, e não de qualquer conexão
+ * ativa da empresa. Antes, a rota escolhia a primeira `channel_sessions`
+ * `WORKING` da organização, sem ordem e sem ligação com o contato: com dois
+ * números de WhatsApp, a foto era pedida ao número que talvez nunca tenha
+ * falado com a pessoa (e foto com privacidade "só contatos" não aparece para
+ * ele). Agora, para cada contato, lê a conversa mais recente dele, pega a
+ * sessão dessa conversa (só se `WORKING` e não arquivada) e pede a foto ao
+ * adapter dela. Quem TEM conversa não cai para outra conexão.
+ *
+ * Contato SEM conversa (importação, POST /contacts, webhook de entrada) não
+ * tem conversa para indicar a conexão: só para ele, vale a primeira conexão
+ * `WORKING` da empresa, em ordem de criação, cujo canal busca foto.
+ * Portado do projeto original (DeskcommCRM, PR #3110 de @paulolimajr77).
+ *
  * Auth: Bearer INTERNAL_SECRET (fail-closed), igual aos demais crons.
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
-import { DEFAULT_CHANNEL_PROVIDER, getAdapter, providersComFotoDePerfil, type ChannelProvider } from "@/lib/channels";
+import {
+  CHANNEL_SESSION_REF_COLUMNS,
+  DEFAULT_CHANNEL_PROVIDER,
+  getAdapter,
+  providersComFotoDePerfil,
+  resolveSessionRef,
+  type ChannelProvider,
+  type ChannelSessionRef,
+} from "@/lib/channels";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -69,6 +92,13 @@ function chatIdDoContato(c: ContactRow): string | null {
 }
 
 type Admin = ReturnType<typeof createAdminClient>;
+type SessaoComEstado = ChannelSessionRef & { status: string | null; archived_at: string | null };
+
+/** A sessão serve para pedir foto agora: ativa, não arquivada e com `sessionRef`. */
+function sessaoUtil(s: SessaoComEstado | null | undefined): ChannelSessionRef | null {
+  if (!s || s.archived_at || s.status !== "WORKING") return null;
+  return resolveSessionRef(s) ? s : null;
+}
 type AlvoDaFoto = { id: string; organization_id: string };
 
 /**
@@ -190,6 +220,8 @@ async function handle(req: NextRequest): Promise<Response> {
   }
 
   const rows = (contatos ?? []) as ContactRow[];
+  // ponytail: cache por rodada (SCAN_LIMIT contatos); guarda também o "nenhuma serve" (null).
+  const sessaoDaEmpresa = new Map<string, ChannelSessionRef | null>();
   let atualizados = 0;
   let semFoto = 0;
   let falhas = 0;
@@ -205,46 +237,52 @@ async function handle(req: NextRequest): Promise<Response> {
     }
 
     try {
-      const { data: sessao } = await admin
-        .from("channel_sessions")
-        .select("waha_session_name, provider")
+      const { data: conversa } = await admin
+        .from("conversations")
+        .select(`channel_sessions:channel_session_id (${CHANNEL_SESSION_REF_COLUMNS}, status, archived_at)`)
         .eq("organization_id", c.organization_id)
-        .eq("status", "WORKING")
-        // Sem o filtro, a linha de chamada de voz (spec 18) — que nasce
-        // `WORKING` ao parear — podia ganhar este `limit(1)` sem ordenação e
-        // devolver `waha_session_name` nulo: a foto de todo mundo parava de
-        // atualizar em silêncio, com o carimbo "sem foto" parecendo "este
-        // contato não tem foto".
-        //
-        // E só canal que BUSCA foto de contato de telefone: a conta do Instagram
-        // é canal de mensagem, mas não tem `fetchProfilePictureUrl` — a foto
-        // dela vem do perfil gravado na identidade (passo do Instagram abaixo).
-        .in("provider", [...providersComFotoDePerfil()])
+        .eq("contact_id", c.id)
+        .order("last_message_at", { ascending: false, nullsFirst: false })
         .limit(1)
         .maybeSingle();
-      const ref = (sessao as { waha_session_name?: string | null } | null)?.waha_session_name;
-      if (!ref) {
-        await carimbarFoto(admin, c, null);
-        semFoto++;
-        continue;
+
+      let sessao: ChannelSessionRef | null;
+      if (conversa === null) {
+        // Contato SEM conversa: a primeira conexão da empresa que busca foto.
+        if (!sessaoDaEmpresa.has(c.organization_id)) {
+          const { data: sessoes } = await admin
+            .from("channel_sessions")
+            .select(`${CHANNEL_SESSION_REF_COLUMNS}, status, archived_at`)
+            .eq("organization_id", c.organization_id)
+            .eq("status", "WORKING")
+            .is("archived_at", null)
+            // Só canal que BUSCA foto de contato de telefone: a linha de voz e
+            // a conta do Instagram ficam de fora (a foto do Instagram vem do
+            // perfil gravado na identidade, passo abaixo).
+            .in("provider", [...providersComFotoDePerfil()])
+            .order("created_at", { ascending: true });
+          const primeira = ((sessoes ?? []) as unknown as SessaoComEstado[]).map(sessaoUtil).find(Boolean);
+          sessaoDaEmpresa.set(c.organization_id, primeira ?? null);
+        }
+        sessao = sessaoDaEmpresa.get(c.organization_id) ?? null;
+      } else {
+        sessao = sessaoUtil((conversa as unknown as { channel_sessions?: SessaoComEstado | null }).channel_sessions);
       }
 
       // Pelo adapter, nunca falando com o canal direto: a doutrina
       // `restricao-de-canal` proíbe nomear provider fora de lib/channels/, e o
       // `pnpm lint:channels` reprova o build se acontecer. Testar a PRESENÇA do
       // método é como se pergunta "este canal sabe fazer isso?".
-      const adapter = getAdapter(
-        (sessao as { provider?: ChannelProvider | null } | null)?.provider ??
-          DEFAULT_CHANNEL_PROVIDER,
-      );
-      if (!adapter.fetchProfilePictureUrl) {
+      const adapter = sessao ? getAdapter((sessao.provider ?? DEFAULT_CHANNEL_PROVIDER) as ChannelProvider) : null;
+      if (!sessao || !adapter?.fetchProfilePictureUrl) {
+        // Quem tem conversa numa conexão parada não cai para outra: carimba.
         await carimbarFoto(admin, c, null);
         semFoto++;
         continue;
       }
       const profilePictureURL = await adapter.fetchProfilePictureUrl({
         organizationId: c.organization_id,
-        sessionRef: ref,
+        sessionRef: resolveSessionRef(sessao),
         recipient: chatId,
       });
       // Sem URL = contato sem foto ou com privacidade fechada: estado normal.

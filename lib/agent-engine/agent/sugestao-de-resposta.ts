@@ -120,3 +120,19 @@ export function motivoDaFalha(erro: unknown): MotivoDaFalha {
     acionavel: false,
   };
 }
+
+/**
+ * O texto da sugestão que terminou `failed`, pelo `error_code` gravado.
+ *
+ * `no_candidate` é a prévia que terminou sem nenhuma resposta proposta. Pode
+ * ser DECISÃO (ex.: a saudação automática do WhatsApp Business de quem foi
+ * abordado) OU parada (texto solto, saída cortada, passos esgotados). O código
+ * não distingue os dois, então o texto não culpa a configuração e também não
+ * afirma que foi decisão. Portado do projeto original (DeskcommCRM, PR #3092
+ * de @paulolimajr77), adaptado: este fork não tem o mapa de vetos do original.
+ */
+export function textoDaSugestaoQueFalhou(codigo: string | null | undefined): string {
+  if (codigo === "no_candidate")
+    return "O agente terminou sem propor uma resposta. Pode ter sido uma decisão (por exemplo, diante de uma mensagem automática) ou a geração ter parado antes da resposta. Se esperava uma, gere de novo; senão, não há nada a enviar.";
+  return "Confira a configuração do agente e tente gerar novamente.";
+}

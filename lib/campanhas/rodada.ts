@@ -165,12 +165,7 @@ export async function rodarUmaRodadaDeCampanha(
       total.pulados += r.pulados;
       total.concluidas += r.concluidas;
       detalhes.push(`${campanha.id.slice(0, 8)}:${r.detalhe}`);
-      // Só ocupa o número quem de fato enviou: campanha parada por ritmo não
-      // pode impedir a campanha seguinte do mesmo número de ser avaliada... mas
-      // se o veto foi do CANAL, a seguinte receberia o mesmo veto. Ocupar em
-      // ambos os casos economiza a consulta; o que não pode é ocupar quando a
-      // campanha só CONCLUIU (aí o número está livre de verdade).
-      if (r.concluidas === 0) numerosAtendidos.add(campanha.channel_session_id);
+      if (ocupaONumero(r)) numerosAtendidos.add(campanha.channel_session_id);
     } catch (err) {
       const motivo = err instanceof Error ? err.message : String(err);
       logger.warn("[campanha] rodada falhou", { campanha: campanha.id, motivo });
@@ -237,6 +232,27 @@ interface DestinatarioRow {
     is_anonymized: boolean;
     consent: unknown;
   } | null;
+}
+
+/**
+ * A campanha avaliada nesta rodada ocupa o número para as seguintes?
+ *
+ * Só ocupa quem usou o número (enviou, ou pulou um destinatário no caminho) ou
+ * foi vetado pelo CANAL: a seguinte do mesmo número receberia o mesmo veto, e
+ * ocupar economiza a consulta. NÃO ocupa quem parou pelo ritmo DELA (`ritmo:*`
+ * — teto diário/horário, intervalo, janela da campanha), quem só está
+ * esperando `next_attempt_at` (`aguardando`) nem quem concluiu: nesses casos o
+ * número segue livre, e a campanha seguinte tem o próprio ritmo.
+ *
+ * A regra era `concluidas === 0`: a campanha mais antiga batia o teto do dia
+ * cedo e a seguinte do mesmo número não mandava nada até a primeira terminar.
+ * Portado do projeto original (DeskcommCRM, PR #3107 de @RenanzitoIA).
+ */
+export function ocupaONumero(r: { concluidas: number; detalhe: string }): boolean {
+  if (r.concluidas > 0) return false;
+  if (r.detalhe.startsWith("ritmo:")) return false;
+  if (r.detalhe === "aguardando" || r.detalhe === "ja_concluida") return false;
+  return true;
 }
 
 async function rodarUmaCampanha(

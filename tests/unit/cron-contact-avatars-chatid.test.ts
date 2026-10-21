@@ -22,6 +22,11 @@ const LID = "142704667287623";
 
 /** O contato do lote — cada teste ajusta antes de chamar. */
 let linhaDoContato: Record<string, unknown> = {};
+/** A conversa mais recente do contato (null = contato sem conversa). */
+const CONVERSA_NA_SESSAO_DE_TESTE = {
+  channel_sessions: { provider: "waha", waha_session_name: "sessao-de-teste", status: "WORKING", archived_at: null },
+};
+let conversaDoContato: unknown = CONVERSA_NA_SESSAO_DE_TESTE;
 /** Endereços que o cron pediu ao canal. */
 const pedidos: string[] = [];
 
@@ -34,6 +39,8 @@ const filtrosDeSessao: [string, unknown][] = [];
 
 vi.mock("@/lib/channels", () => ({
   DEFAULT_CHANNEL_PROVIDER: "waha",
+  CHANNEL_SESSION_REF_COLUMNS: "provider, waha_session_name",
+  resolveSessionRef: (session: { waha_session_name: string }) => session.waha_session_name,
   providersComFotoDePerfil: () => ["waha"],
   getAdapter: () => ({
     fetchProfilePictureUrl: async (input: { recipient: string }) => {
@@ -50,7 +57,11 @@ vi.mock("@/lib/supabase/admin", () => ({
         const dados =
           tabela === "contacts"
             ? [linhaDoContato]
-            : { waha_session_name: "sessao-de-teste", provider: "waha" };
+            : tabela === "conversations"
+              ? conversaDoContato
+              : tabela === "channel_sessions"
+                ? [{ waha_session_name: "sessao-de-teste", provider: "waha", status: "WORKING", archived_at: null }]
+                : null;
         const proxy: Record<string, unknown> = new Proxy(
           {},
           {
@@ -163,8 +174,9 @@ describe("cron de fotos: qual endereço vai ao canal", () => {
 });
 
 describe("cron de fotos: só sessão cujo canal busca foto de contato de telefone", () => {
-  it("a sessão vem só dos providers com foto de perfil (a conta do Instagram fica de fora)", async () => {
+  it("contato sem conversa: a sessão da empresa vem só dos providers com foto de perfil (a conta do Instagram fica de fora)", async () => {
     filtrosDeSessao.length = 0;
+    conversaDoContato = null;
     linhaDoContato = {
       id: CONTATO,
       organization_id: ORG,
@@ -177,5 +189,6 @@ describe("cron de fotos: só sessão cujo canal busca foto de contato de telefon
     await chamar();
 
     expect(filtrosDeSessao).toEqual([["provider", ["waha"]]]);
+    conversaDoContato = CONVERSA_NA_SESSAO_DE_TESTE;
   });
 });

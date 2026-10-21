@@ -54,7 +54,14 @@ export type SignUpResult =
         | "rate_limited"
         | "signup_failed"
         | "somente_convite"
-        | "conta_ja_existe";
+        | "conta_ja_existe"
+        /**
+         * `email_indisponivel`: o provedor de auth não conseguiu mandar o
+         * e-mail de confirmação: é a instalação sem e-mail configurado no
+         * serviço de login, não um soluço. Tentar de novo nunca funciona; quem
+         * resolve é quem administra.
+         */
+        | "email_indisponivel";
       details?: Record<string, unknown>;
     };
 
@@ -205,6 +212,12 @@ export async function signUp(
       ip,
       userAgent,
     });
+    // GoTrue sem SMTP devolve 500 "Error sending confirmation email", e a tela
+    // mandava "Tente novamente", o que nunca podia dar certo. Não fura a
+    // anti-enumeração: conta que já existe recebe sucesso ofuscado sem e-mail,
+    // então nunca chega aqui. Portado do projeto original (DeskcommCRM, PR
+    // #3060 de @rafaelcesardev).
+    if (/error sending/i.test(error.message)) return { ok: false, error: "email_indisponivel" };
     return { ok: false, error: "signup_failed" };
   }
 
