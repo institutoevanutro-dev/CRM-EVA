@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useT } from "@/hooks/i18n/useT";
-import { sugestaoParaMostrar } from "@/lib/agent-engine/agent/sugestao-de-resposta";
+import { sugestaoParaMostrar, textoDaSugestaoQueFalhou } from "@/lib/agent-engine/agent/sugestao-de-resposta";
 type Draft = {
   id: string;
   revision: string;
@@ -195,7 +195,7 @@ export function ReplyReviewPanel({
           )}
           {draft.status === "failed" && (
             <p className="text-xs">
-              {t("Confira a configuração do agente e tente gerar novamente.")}
+              {t(textoDaSugestaoQueFalhou(draft.error_code))}
             </p>
           )}
         </>

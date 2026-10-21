@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   motivoDaFalha,
   sugestaoParaMostrar,
+  textoDaSugestaoQueFalhou,
 } from "@/lib/agent-engine/agent/sugestao-de-resposta";
 
 /**
@@ -139,5 +140,32 @@ describe("a rota não volta a engolir a causa", () => {
     // Guarda de vacuidade: se a expressão parasse de casar com qualquer coisa,
     // o caso de cima ficaria verde para sempre, inclusive com o defeito de volta.
     expect(/catch\s*\{/.test("try { x() } catch { }")).toBe(true);
+  });
+});
+
+describe("a sugestão que terminou sem resposta proposta", () => {
+  it("⛔ 'o agente terminou sem propor resposta' (no_candidate) não vira erro de configuração", () => {
+    // Caso real no original: a abordagem recebeu a saudação automática do
+    // WhatsApp Business e o agente, certo, não respondeu. O painel dizia
+    // "Confira a configuração do agente". Mas no_candidate também nasce de
+    // parada, então o texto não afirma a decisão: oferece gerar de novo.
+    // Portado do projeto original (DeskcommCRM, PR #3092 de @paulolimajr77).
+    const texto = textoDaSugestaoQueFalhou("no_candidate");
+    expect(texto).toMatch(/sem propor uma resposta/);
+    expect(texto).toMatch(/gere de novo/);
+    expect(texto).not.toMatch(/configura|falhou|erro/i);
+    // O código é contrato do motor: se o nome mudar lá, este caso deixa de valer.
+    const motor = fs.readFileSync(path.join(__dirname, "../../lib/agent-engine/agent/inbound-turn.ts"), "utf8");
+    expect(motor).toMatch(/code: 'no_candidate'/);
+  });
+
+  it("CONTROLE: falha de geração e código ausente seguem no texto de configuração", () => {
+    expect(textoDaSugestaoQueFalhou("generation_failed")).toMatch(/configuração do agente/);
+    expect(textoDaSugestaoQueFalhou(null)).toMatch(/configuração do agente/);
+  });
+
+  it("o painel usa o código gravado, não a frase fixa", () => {
+    const painel = fs.readFileSync(path.join(__dirname, "../../components/inbox/composer/ReplyReviewPanel.tsx"), "utf8");
+    expect(painel).toMatch(/textoDaSugestaoQueFalhou\(draft\.error_code\)/);
   });
 });

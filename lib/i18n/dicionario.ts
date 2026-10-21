@@ -406,6 +406,9 @@ export const DICIONARIO: Traducoes = {
   "Confira a configuração do agente e tente gerar novamente.": {
     es: "Revisa la configuración del agente e intenta generar de nuevo.",
   },
+  "O agente terminou sem propor uma resposta. Pode ter sido uma decisão (por exemplo, diante de uma mensagem automática) ou a geração ter parado antes da resposta. Se esperava uma, gere de novo; senão, não há nada a enviar.": {
+    es: "El agente terminó sin proponer una respuesta. Pudo ser una decisión (por ejemplo, ante un mensaje automático) o que la generación se detuviera antes de la respuesta. Si esperabas una, genera de nuevo; si no, no hay nada que enviar.",
+  },
   "Operação do agente": { es: "Operación del agente" },
   "Modo de operação": { es: "Modo de operación" },
   "Assistido: revisar antes de enviar": { es: "Asistido: revisar antes de enviar" },
