@@ -192,6 +192,16 @@ import {
   turnoMudoPedeCorrecao,
   turnoMudoPorCorte,
 } from './turno-mudo';
+import {
+  CASO_DE_REPETICAO,
+  decidirSaidaDaRepeticao,
+  fraseDeRepeticaoJaSaiu,
+  MENSAGEM_DE_REPETICAO,
+  MENSAGEM_DO_CASO_DE_REPETICAO,
+  REPETICAO_PADRAO,
+  repetiuNaConversa,
+  type RepeticaoKnobs,
+} from '../guardrails/repeticao-na-conversa';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 import { resolveActiveLeadForContact, type LeadCandidate } from '@/lib/leads/active-lead';
 import { recalculaScoreDoLead } from '@/lib/leads/score-writer';
@@ -1251,6 +1261,8 @@ export interface InboundTurnKnobs {
   allowlistTtlMs?: number;
   /** Disjuntor do laço bot-com-bot (`robo-do-outro-lado.ts`). Ausente = defaults. */
   botLoop?: RoboKnobs;
+  /** Guarda de repetição na conversa (`repeticao-na-conversa.ts`). Ausente = defaults. */
+  repeticao?: RepeticaoKnobs;
 }
 
 /** Default de `allowlistTtlMs` (21 dias) para testes que omitem o knob. */
@@ -2971,6 +2983,9 @@ async function executarTurnoDoAgente(
   // Spec 15 (Wave 4 lê este flag): true quando open_human_case abriu um caso NESTE
   // turno — aqui só declara e seta; o consumo (ex.: guardrail de promessa) é da Wave 4.
   let openedCaseThisTurn = false;
+  // A guarda de repetição já agiu neste turno (frase curta saiu ou caso abriu):
+  // nenhum outro send_message do modelo sai depois disso.
+  let repeticaoEncerrouOTurno = false;
   // true quando open_human_case foi RECUSADO neste turno e nada depois registrou a
   // pendência (abertura ou provide_case_update). Lido pelo `casePromiseGate`: um caso
   // aberto de OUTRO assunto não sustenta a promessa sobre a pendência recusada
@@ -3562,11 +3577,14 @@ async function executarTurnoDoAgente(
       ...AGENT_TOOL_DEFS.send_message,
       execute: async ({ body: corpoDoModelo }) => {
         tentativasDeEnvio += 1;
+        if (repeticaoEncerrouOTurno) {
+          return { ok: true, status: 'nao_enviada_repetida', message: MENSAGEM_DE_REPETICAO };
+        }
         // O texto sai no formato do WhatsApp — sem `\n` literal nem
         // `**negrito**` de Markdown na tela do cliente. Antes de qualquer gate,
         // para que o corpo vazio, as bolhas e a pausa humana meçam o que sai.
         // Ver `formato-whatsapp.ts`.
-        const body = formatarParaWhatsApp(corpoDoModelo);
+        let body = formatarParaWhatsApp(corpoDoModelo);
         // CORPO VAZIO NÃO SAI. O schema garante min(1) no argumento, mas um `\n`
         // ou espaço passa e chegava ao canal como bolha em branco (medido no
         // original, 2026-09-19). Recusar aqui devolve ao modelo para reescrever.
@@ -3650,6 +3668,73 @@ async function executarTurnoDoAgente(
                 'NÃO chame send_message de novo neste turno — encerre agora. O próximo turno lê a conversa inteira e responde a tudo de uma vez.',
             },
           };
+        }
+        // REPETIÇÃO NA CONVERSA: quase a mesma fala da IA já saiu nesta conversa há
+        // pouco (o "OK" do paciente respondido três vezes com a mesma frase, produção
+        // 19/10/2026). PULO SILENCIOSO, não veto: `ok: true`, nada sai, e o modelo é
+        // mandado encerrar — veto o faria reescrever a mesma ideia. Só aqui, no texto
+        // livre do `inbound_turn`; ver `repeticao-na-conversa.ts`. Conta como tentativa
+        // de envio (`tentativasDeEnvio` acima), então o turno mudo não pede correção.
+        if (!preview && liveJob().kind === 'inbound_turn') {
+          const repeticao = await repetiuNaConversa(pool, {
+            organizationId: tenantId,
+            conversationId: input.conversationId,
+            candidata: body,
+            jobId: liveJob().id,
+            nomeDoContato: effectiveContext.contact.name,
+            agora: clock(),
+            knobs: deps.knobs.repeticao ?? REPETICAO_PADRAO,
+            log: runLog,
+          });
+          if (repeticao.repetida) {
+            // O texto do modelo não sai. No lugar: a frase curta fixa (1ª vez na
+            // janela) ou um caso para a equipe (a repetição voltou: laço). Sem
+            // frase configurada, ou sem saber se ela já saiu, só cala.
+            const knobsRep = deps.knobs.repeticao ?? REPETICAO_PADRAO;
+            const saida = decidirSaidaDaRepeticao({
+              frases: knobsRep.frases,
+              conversationId: input.conversationId,
+              fraseJaSaiu: await fraseDeRepeticaoJaSaiu(pool, {
+                organizationId: tenantId,
+                conversationId: input.conversationId,
+                agora: clock(),
+                knobs: knobsRep,
+                log: runLog,
+              }),
+            });
+            // A repetição barrada fica no log com o desfecho: o turno não foi mudo,
+            // foi uma decisão da guarda.
+            runLog.info('repetição barrada: a IA repetiria a própria mensagem nesta conversa', {
+              job_id: liveJob().id,
+              conversation_id: input.conversationId,
+              similaridade: Number(repeticao.similaridade.toFixed(2)),
+              desfecho: saida.acao,
+            });
+            if (saida.acao === 'caso' && agentConfig !== null) {
+              repeticaoEncerrouOTurno = true;
+              try {
+                const res = await openCase(
+                  pool,
+                  { tenantId, conversationId: input.conversationId, agentId: agentConfig.agentId },
+                  { ...CASO_DE_REPETICAO, contextSnapshot: buildCaseContextSnapshot(), source: 'guardrail_autofallback' },
+                );
+                if (res.ok) {
+                  openedCaseThisTurn = true;
+                  moverParaHandoffBestEffort('repeticao_na_conversa');
+                }
+              } catch (err) {
+                noteRunError(err instanceof Error ? err : new Error(String(err)));
+              }
+              return { ok: true, status: 'nao_enviada_repetida', message: MENSAGEM_DO_CASO_DE_REPETICAO };
+            }
+            if (saida.acao !== 'frase') {
+              return { ok: true, status: 'nao_enviada_repetida', message: MENSAGEM_DE_REPETICAO };
+            }
+            // A frase segue pelo MESMO caminho de envio daqui para baixo: opt-out,
+            // anti-ban, janela e o resto da cadeia valem para ela como para qualquer texto.
+            repeticaoEncerrouOTurno = true;
+            body = saida.texto;
+          }
         }
         // F4-04: sinaliza (independente do gate F4-01/F4-08) se ESTA candidata é uma
         // promessa fora de tabela — usado só para correlacionar com o jailbreak no fim do
