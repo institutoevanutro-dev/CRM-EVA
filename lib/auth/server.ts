@@ -175,25 +175,38 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
   // ⚠️ Nada de ponto e vírgula em comentário DENTRO da cadeia abaixo: o teste
   // `organizacao-ativa-e-deterministica` lê a consulta do `.from` até o
   // primeiro `;`, e um em prosa esconde os `.order()` dele.
-  const [{ data: paRow, error: paErro }, { data: rawMemberships, error: membErro }] =
-    await Promise.all([
-      supabase
-        .from("platform_admins")
-        .select("user_id, scope, revoked_at")
-        .eq("user_id", user.id)
-        .is("revoked_at", null)
-        .maybeSingle(),
-      supabase
-        .from("user_organizations")
-        .select(
-          "organization_id, role, interface_settings, accepted_at, ultima_ativacao_em, organizations(display_name, locale, timezone)",
-        )
-        .eq("user_id", user.id)
-        .is("revoked_at", null)
-        .order("ultima_ativacao_em", { ascending: false, nullsFirst: false })
-        .order("accepted_at", { ascending: true, nullsFirst: true })
-        .order("organization_id", { ascending: true }),
-    ]);
+  //
+  // O contexto de acompanhamento entra no MESMO lote: a RPC depende só do JWT,
+  // que já foi validado pelo `getUser` acima, e não do resultado das duas
+  // consultas. Em fila, ela somava mais uma ida ao banco a TODA tela de `/app`.
+  // A falha dela continua lançando, e DEPOIS da checagem das permissões, como
+  // antes: por isso ela é capturada aqui e relançada lá embaixo.
+  const [
+    { data: paRow, error: paErro },
+    { data: rawMemberships, error: membErro },
+    leituraDoSuporte,
+  ] = await Promise.all([
+    supabase
+      .from("platform_admins")
+      .select("user_id, scope, revoked_at")
+      .eq("user_id", user.id)
+      .is("revoked_at", null)
+      .maybeSingle(),
+    supabase
+      .from("user_organizations")
+      .select(
+        "organization_id, role, interface_settings, accepted_at, ultima_ativacao_em, organizations(display_name, locale, timezone)",
+      )
+      .eq("user_id", user.id)
+      .is("revoked_at", null)
+      .order("ultima_ativacao_em", { ascending: false, nullsFirst: false })
+      .order("accepted_at", { ascending: true, nullsFirst: true })
+      .order("organization_id", { ascending: true }),
+    readSupportContext(supabase).then(
+      (contexto) => ({ ok: true as const, contexto }),
+      (erro: unknown) => ({ ok: false as const, erro }),
+    ),
+  ]);
 
   /**
    * FALHA ALTO, não baixo.
@@ -241,7 +254,8 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
     };
   });
 
-  const support = await readSupportContext(supabase);
+  if (!leituraDoSuporte.ok) throw leituraDoSuporte.erro;
+  const support = leituraDoSuporte.contexto;
   const fullName = (user.user_metadata?.full_name as string | undefined) ?? null;
   const avatarUrl = (user.user_metadata?.avatar_url as string | undefined) ?? null;
   const locale = (user.user_metadata?.locale as string | undefined) ?? null;
@@ -355,24 +369,29 @@ export const requiresMfa = cache(
   ): Promise<boolean> => {
     const admin = createAdminClient();
 
+    // As duas políticas são independentes — a da plataforma e a da empresa —, e
+    // por isso são lidas JUNTAS. Em fila, o dono da instalação (que é platform
+    // admin) pagava duas idas ao banco a cada tela de `/app`.
+    const [linhaDaPlataforma, linhaDaEmpresa] = await Promise.all([
+      isPlatformAdmin && userId
+        ? admin
+            .from("platform_admins")
+            .select("mfa_required")
+            .eq("user_id", userId)
+            .is("revoked_at", null)
+            .maybeSingle()
+        : null,
+      orgId ? admin.from("organizations").select("settings").eq("id", orgId).maybeSingle() : null,
+    ]);
+
     let plataformaExige: boolean | null = null;
-    if (isPlatformAdmin && userId) {
-      const { data } = await admin
-        .from("platform_admins")
-        .select("mfa_required")
-        .eq("user_id", userId)
-        .is("revoked_at", null)
-        .maybeSingle();
-      plataformaExige = (data?.mfa_required as boolean | undefined) ?? null;
+    if (linhaDaPlataforma) {
+      plataformaExige = (linhaDaPlataforma.data?.mfa_required as boolean | undefined) ?? null;
     }
 
     let empresaExige = false;
-    if (orgId) {
-      const { data } = await admin
-        .from("organizations")
-        .select("settings")
-        .eq("id", orgId)
-        .maybeSingle();
+    if (orgId && linhaDaEmpresa) {
+      const { data } = linhaDaEmpresa;
       empresaExige = empresaExigeMfa(data?.settings);
     }
 
