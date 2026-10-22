@@ -1,4 +1,4 @@
-<!-- traduzido-de: docs/white-label.md@e1d374bb48e0 -->
+<!-- traduzido-de: docs/white-label.md@2612127f0a86 -->
 
 [🇧🇷 Português](white-label.md) · [🇺🇸 English](white-label.en.md) · 🇪🇸 Español
 
@@ -15,6 +15,8 @@ La licencia es MIT: puedes modificarlo, alojarlo para terceros, revenderlo y cob
 **Desde la pantalla, y sin reiniciar nada.** En `/admin/marca` cambias el **nombre del sistema** y el **color de la marca**. Guardas, recargas, y la interfaz entera ya está repintada — la barra lateral, los botones, el anillo de foco, el título de la pestaña y el icono del navegador.
 
 El color es **derivado**, no aplicado en crudo: de un hex salen once tonos en los dos temas (claro y oscuro), con un piso de contraste calculado por papel y por superficie. Si el color que elegiste quedaría ilegible como texto de botón en el tema oscuro, el sistema recorre los peldaños necesarios y la pantalla **te muestra** en qué tono va a aterrizar cada cosa, antes de guardar. Nada de "elegí amarillo y el botón quedó blanco sobre blanco".
+
+Para no empezar de cero, la pantalla ofrece **seis paletas predefinidas** como atajo: Verde y dorado, Azul petróleo, Vino, Grafito, Terracota y Lavanda. Un clic rellena el color de la marca con el color principal de la paleta, y todo lo demás sigue igual: la pantalla muestra los tonos antes de guardar, y nada se graba hasta que hagas clic en Guardar. El color libre sigue funcionando: escribe cualquier código de color y la pantalla indica "Color libre". Las mismas muestras aparecen en la marca de cada organización (`/app/settings/marca`).
 
 **El logo también.** En la misma pantalla **subes el archivo** — PNG o JPG, hasta 512 KB. Va al almacenamiento de tu propia instalación y pasa a valer al instante, sin reiniciar nada y sin que tengas que alojar la imagen en ningún sitio. Altura fija y ancho libre, para no deformar un arte de cualquier proporción; sin logo, el nombre aparece como texto.
 

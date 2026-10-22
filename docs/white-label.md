@@ -14,6 +14,8 @@ A licença é MIT: você pode modificar, hospedar para terceiros, revender e cob
 
 A cor é **derivada**, não aplicada crua: de um hex saem onze tons nos dois temas (claro e escuro), com um piso de contraste calculado por papel e por superfície. Se a cor que você escolheu ficaria ilegível como texto de botão no tema escuro, o sistema anda os degraus necessários e a tela **te mostra** em qual tom cada coisa vai pousar, antes de salvar. Nada de "escolhi amarelo e o botão ficou branco no branco".
 
+Para não começar do zero, a tela oferece **seis paletas prontas** como atalho: Verde e dourado, Azul-petróleo, Vinho, Grafite, Terracota e Lavanda. Um clique preenche a cor da marca com a cor principal da paleta, e o resto segue igual: a tela mostra os tons antes de salvar, e nada é gravado até você clicar em Salvar. A cor livre continua valendo: digite qualquer código de cor e a tela indica "Cor livre". As mesmas amostras aparecem na marca de cada organização (`/app/settings/marca`).
+
 **O logo também.** Na mesma tela você **sobe o arquivo** — PNG ou JPG, até 512 KB. Ele vai para o storage da sua própria instalação e passa a valer na hora, sem reiniciar nada e sem você hospedar imagem em lugar nenhum. Altura fixa e largura livre, para não distorcer arte de proporção qualquer; sem logo, o nome aparece como texto.
 
 O arquivo é aceito **pelos bytes, não pela extensão**. Renomear um `.svg` para `.png` não engana: o sistema lê o conteúdo, recusa e diz por quê. Isso não é preciosismo — SVG é XML e pode carregar script, que executaria se alguém abrisse a imagem direto pelo endereço dela, num bucket que é público por necessidade.

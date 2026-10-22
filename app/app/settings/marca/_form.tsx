@@ -23,6 +23,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { updateMarcaDaOrganizacao } from "@/app/actions/settings/updateMarcaDaOrganizacao";
+import { AmostrasDePaleta } from "@/components/branding/AmostrasDePaleta";
 import { CampoDeLogo } from "@/components/branding/CampoDeLogo";
 import { TiraDeTons, type ItemDaLegenda } from "@/components/branding/TiraDeTons";
 import { Button } from "@/components/ui/button";
@@ -276,6 +277,7 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
 
         <div className="space-y-2">
           <Label htmlFor="org_accent_hex">{t("Cor da sua marca")}</Label>
+          <AmostrasDePaleta hex={hex} onEscolher={setHex} />
           <div className="flex items-center gap-3">
             {/* Atalho, nunca o controle principal: o seletor do navegador escolhe
                 UM pixel e não mostra o que o sistema faz com ele. Quem ensina é a

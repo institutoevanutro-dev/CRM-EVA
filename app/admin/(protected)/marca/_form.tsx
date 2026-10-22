@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { updateBranding } from "@/app/actions/settings/updateBranding";
+import { AmostrasDePaleta } from "@/components/branding/AmostrasDePaleta";
 import { CampoDeLogo } from "@/components/branding/CampoDeLogo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -264,6 +265,7 @@ export function FormularioDaMarca({
       <Card className="space-y-4 p-6">
         <div className="space-y-2">
           <Label htmlFor="accent_hex">{t("Cor da marca")}</Label>
+          <AmostrasDePaleta hex={hex} onEscolher={setHex} />
           <div className="flex items-center gap-3">
             {/* Atalho, nunca o controle principal: o seletor do navegador escolhe
                 UM pixel e não mostra o que o sistema faz com ele. Quem ensina é a

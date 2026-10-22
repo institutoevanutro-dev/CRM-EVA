@@ -666,6 +666,7 @@ jobs:
         interface-por-vinculo.spec.ts
         olhar-telas-do-epico.spec.ts
         marca-logo.spec.ts
+        marca-paletas.spec.ts
         logo-moldura-no-tema-escuro.spec.ts
         historico-de-captacao.spec.ts
         inbox-quem-manda.spec.ts

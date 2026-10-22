@@ -1,4 +1,4 @@
-<!-- traduzido-de: docs/white-label.md@e1d374bb48e0 -->
+<!-- traduzido-de: docs/white-label.md@2612127f0a86 -->
 
 [🇧🇷 Português](white-label.md) · 🇺🇸 English · [🇪🇸 Español](white-label.es.md)
 
@@ -15,6 +15,8 @@ The license is MIT: you may modify it, host it for third parties, resell it and 
 **From the screen, and without restarting anything.** In `/admin/marca` you change the **system name** and the **brand color**. You save, you reload, and the whole interface is already repainted — the sidebar, the buttons, the focus ring, the tab title and the browser icon.
 
 The color is **derived**, not applied raw: one hex yields eleven shades in both themes (light and dark), with a contrast floor computed per role and per surface. If the color you picked would be illegible as button text in the dark theme, the system walks the steps it needs and the screen **shows you** which shade each thing will land on, before you save. None of that "I picked yellow and the button turned white on white".
+
+To avoid starting from scratch, the screen offers **six ready palettes** as shortcuts: Verde e dourado (green and gold), Azul-petróleo (petrol blue), Vinho (wine), Grafite (graphite), Terracota (terracotta) and Lavanda (lavender). One click fills the brand color with the palette's main color, and everything else stays the same: the screen shows the shades before you save, and nothing is stored until you click Save. A free color still works: type any color code and the screen says "Cor livre" (free color). The same swatches appear on each organization's brand screen (`/app/settings/marca`).
 
 **The logo too.** On the same screen you **upload the file** — PNG or JPG, up to 512 KB. It goes to your own installation's storage and takes effect right away, with no restart and without you hosting an image anywhere. Fixed height, free width, so that artwork of any proportion is not distorted; with no logo, the name shows up as text.
 
