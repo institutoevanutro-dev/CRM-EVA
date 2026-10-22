@@ -200,7 +200,23 @@ export type ActivityType =
    * linha do tempo da VENDA; o card novo recebe `moved_from_pipeline`. Fora da
    * lista positiva de `fn_update_last_activity_at`: ninguém falou com o cliente.
    */
-  | "post_sale_opened";
+  | "post_sale_opened"
+  /**
+   * O TELEFONE ENTROU SOZINHO NA FICHA (#2593).
+   *
+   * A exceção da spec 17 §4b — o dado ouvido é proposto, não gravado — só vale
+   * para o telefone de um cadastro SEM número, e só com a opção da organização
+   * ligada (`organizations.settings.crm.telefone_de_ficha_vazia`). Sem esta
+   * linha, o número apareceria no cadastro e o ÚNICO registro seria a auditoria
+   * (`contact.field_auto_applied`), que não tem tela: quem opera lê a timeline,
+   * e "isso entrou sozinho" é exatamente o que ele precisa saber para não
+   * achar que alguém digitou.
+   *
+   * Emitida por `registrarTelefoneAplicadoNaTimeline` — junto e não dentro do
+   * UPDATE do telefone, porque a linha é rastro: falhar nela não pode desfazer
+   * a escrita que ela descreve.
+   */
+  | "contact_field_auto_applied";
 
 export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   lead_created: "Entrou pelo WhatsApp",
@@ -308,6 +324,10 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   subject_transferred: "Atendimento passou para outro assunto",
   contact_city_tag_changed: "Etiqueta de cidade atualizada pelo endereço",
   post_sale_opened: "Pós-venda aberto",
+  // Rótulo que diz DUAS coisas de uma vez: que entrou sozinho (e não por
+  // digitação de alguém) e de onde veio. Só assim quem lê a linha do tempo não
+  // vai procurar quem foi que digitou o número.
+  contact_field_auto_applied: "Telefone informado pelo cliente aplicado automaticamente",
 };
 
 /** Quando o tipo é legado/desconhecido, a linha ainda é honesta — sem jargão. */

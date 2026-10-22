@@ -28,9 +28,11 @@ import { useContact } from "@/hooks/contacts/useContact";
 import { useUnblockContact } from "@/hooks/contacts/useUnblockContact";
 import { useAlwaysHumanContact } from "@/hooks/contacts/useAlwaysHumanContact";
 import { useReiniciarTeste } from "@/hooks/contacts/useReiniciarTeste";
+import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
+import { canonicalTagsDoFunil } from "@/lib/contacts/etiquetas";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { TimelineView } from "@/components/contacts/TimelineView";
 import { EditContactDialog } from "@/components/contacts/EditContactDialog";
@@ -65,6 +67,11 @@ export function ContactDetailClient({ contactId }: Props) {
   // As DEFINIÇÕES continuam no funil (`crm_pipelines.settings.fields[]`) — só o
   // VALOR mora no contato. `camposDoFunil` é o mesmo leitor que o Kanban usa.
   const pipelineQuery = useDefaultPipeline(Boolean(activeOrg));
+  // As duas fontes do autocompletar de etiquetas (issue #2732). Os dois hooks
+  // ficam ANTES dos early returns pelo mesmo motivo do `desbloquear` abaixo:
+  // chamá-los depois mudaria a ordem dos hooks entre renderizações.
+  const vocabularioDeEtiquetas = useContactTagVocabulary(activeOrg?.orgId ?? null);
+  const canonicalTags = canonicalTagsDoFunil(pipelineQuery.data?.pipeline.settings ?? null);
   const [editOpen, setEditOpen] = useState(false);
   const [anonOpen, setAnonOpen] = useState(false);
   // Desfazer o descadastro é o override da regra W-02 — só admin, e auditado.
@@ -422,6 +429,8 @@ export function ContactDetailClient({ contactId }: Props) {
         open={editOpen}
         onOpenChange={setEditOpen}
         customFieldDefs={camposDoFunil(pipelineQuery.data?.pipeline.settings ?? null)}
+        vocabulario={vocabularioDeEtiquetas.data}
+        canonicalTags={canonicalTags}
       />
       <AnonymizeDialog contactId={contactId} open={anonOpen} onOpenChange={setAnonOpen} />
     </div>

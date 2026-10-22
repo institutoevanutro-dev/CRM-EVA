@@ -15,7 +15,7 @@ import {
   MODOS_DE_ETIQUETA,
 } from "@/lib/inbox/marcador-da-conversa";
 
-const PHONE_REGEX = /^\+\d{8,15}$/;
+export const PHONE_REGEX = /^\+\d{8,15}$/;
 const CPF_DIGITS = /^\d{11}$/;
 
 /**

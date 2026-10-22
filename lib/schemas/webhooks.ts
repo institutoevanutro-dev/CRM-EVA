@@ -8,6 +8,8 @@
  */
 import { z } from "zod";
 
+import { conditionSchema, conditionsSchema } from "@/lib/automation/conditions";
+
 /**
  * Os gatilhos que o motor reconhece, e a entidade que cada um tem que trazer.
  *
@@ -55,11 +57,9 @@ export const TRIGGER_EVENTS = Object.keys(ENTIDADE_ESPERADA_POR_GATILHO) as [
   ...GatilhoDeAutomacao[],
 ];
 
-export const conditionSchema = z.object({
-  field: z.string().min(1).max(200),
-  op: z.enum(["eq", "neq", "contains"]),
-  value: z.string().max(500),
-});
+// Uma fonte para o avaliador e para a porta da API (#2727): os operadores e o
+// grupo `all`/`any` do topo moram em `lib/automation/conditions.ts`.
+export { conditionSchema };
 
 export const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("create_or_move_lead"), config: z.object({ pipeline_id: z.string().uuid(), stage_id: z.string().uuid() }) }),
@@ -150,7 +150,7 @@ export const updateWebhookSourceSchema = createWebhookSourceSchema.partial().ext
 export const createAutomationRuleSchema = z.object({
   name: z.string().min(1).max(120),
   trigger_event: z.enum(TRIGGER_EVENTS),
-  conditions: z.array(conditionSchema).max(10).default([]),
+  conditions: conditionsSchema.default([]),
   actions: z.array(actionSchema).min(1).max(10),
 });
 export const updateAutomationRuleSchema = createAutomationRuleSchema.partial().extend({

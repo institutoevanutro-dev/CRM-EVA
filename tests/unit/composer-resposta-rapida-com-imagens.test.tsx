@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -50,7 +50,8 @@ function escolher() {
   );
   const campo = screen.getByLabelText(/mensagem/i) as HTMLTextAreaElement;
   fireEvent.change(campo, { target: { value: "/cat" } });
-  fireEvent.click(screen.getByText("Catálogo"));
+  // Dentro do menu do `/`: a barra de respostas rápidas (#2833) mostra o mesmo título.
+  fireEvent.click(within(screen.getByRole("listbox")).getByText("Catálogo"));
   return campo;
 }
 

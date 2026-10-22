@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
 import { useDeleteContact } from "@/hooks/contacts/useDeleteContact";
+import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
 import type { ContactOrderBy } from "@/lib/schemas/contacts";
 import type { Contact } from "@/lib/types/contacts";
 import {
@@ -116,7 +117,11 @@ function SortableHead({
 export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
-  const regrasDeCliente = regrasDeClienteDe(useActiveOrg());
+  const orgAtiva = useActiveOrg();
+  const regrasDeCliente = regrasDeClienteDe(orgAtiva);
+  // O autocompletar de etiquetas do diálogo de edição (#2732): o mesmo
+  // vocabulário da ficha. O caminho rápido não traz as `canonical_tags` do funil.
+  const vocabularioDeEtiquetas = useContactTagVocabulary(orgAtiva?.orgId ?? null);
   const del = useDeleteContact();
   const [alvo, setAlvo] = useState<Contact | null>(null);
   // Editar pela linha, sem abrir a ficha. Sem `customFieldDefs`: os campos do
@@ -349,6 +354,7 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
         onOpenChange={(aberto) => {
           if (!aberto) setContatoEmEdicao(null);
         }}
+        vocabulario={vocabularioDeEtiquetas.data}
       />
     )}
     </>

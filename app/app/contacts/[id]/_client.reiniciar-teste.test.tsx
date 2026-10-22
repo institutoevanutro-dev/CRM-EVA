@@ -25,6 +25,8 @@ vi.mock("@/hooks/auth/AuthProvider", () => ({
   useAuth: () => ({ user: { is_platform_admin: false }, activeOrg: { role } }),
 }));
 vi.mock("@/hooks/pipelines/useDefaultPipeline", () => ({ useDefaultPipeline: () => ({ data: null }) }));
+// O autocompletar de etiquetas da ficha (#2732) lê o vocabulário da organização.
+vi.mock("@/hooks/contacts/useContactTagVocabulary", () => ({ useContactTagVocabulary: () => ({ data: [] }) }));
 vi.mock("@/lib/leads/campos-do-funil", () => ({ camposDoFunil: () => [] }));
 vi.mock("@/components/contacts/TimelineView", () => ({ TimelineView: () => null }));
 vi.mock("@/components/contacts/EditContactDialog", () => ({ EditContactDialog: () => null }));

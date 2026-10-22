@@ -2,7 +2,11 @@ import { beforeEach, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({ required: false, enrolled: true, aal: "aal1" }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(url); } }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
-  auth: { getUser: async () => ({ data: { user: { id: "admin" } } }), mfa: {
+  // `isMfaEnrolled` lê `user.factors` da mesma ida do `getUser` (#3122).
+  auth: { getUser: async () => ({
+    data: { user: { id: "admin", factors: state.enrolled ? [{ factor_type: "totp", status: "verified" }] : [] } },
+    error: null,
+  }), mfa: {
     listFactors: async () => ({ data: { totp: state.enrolled ? [{ status: "verified" }] : [] }, error: null }),
     getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: state.aal }, error: null }),
   } },
