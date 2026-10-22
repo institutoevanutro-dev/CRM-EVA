@@ -21,7 +21,7 @@ import {
 import { lerPreferencias, settingsComPreferencias } from "@/lib/conversoes/preferencias";
 import { conversaoDeSinalPagoHandler } from "@/lib/conversoes/sinal-pago.handler";
 import type { EventRow } from "@/lib/event-log/dispatcher";
-import { lerResultadoDoUpload, montarCorpoGoogle } from "@/lib/plataformas-de-anuncio/google/conversions";
+import { lerResultadoDoUpload, montarCorpoGoogle, transporteGoogle } from "@/lib/plataformas-de-anuncio/google/conversions";
 import {
   emailHashGoogle,
   emailHashMeta,
@@ -316,6 +316,24 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+describe("developer token (aposentado pelo Google em 09/09/2026)", () => {
+  afterEach(() => vi.restoreAllMocks());
+  function cabecalhosDoUpload(spy: ReturnType<typeof redeQueResponde>): Record<string, string> {
+    const chamada = spy.mock.calls.find(([u]) => String(u).includes("uploadClickConversions"))!;
+    return (chamada[1] as RequestInit).headers as Record<string, string>;
+  }
+  it("sem token gravado: envia sem o cabeçalho", async () => {
+    const spy = redeQueResponde();
+    await transporteGoogle.enviar({ ...google, developerToken: null }, conversaoBase);
+    expect(cabecalhosDoUpload(spy)).not.toHaveProperty("developer-token");
+  });
+  it("com token gravado: ainda manda o cabeçalho", async () => {
+    const spy = redeQueResponde();
+    await transporteGoogle.enviar(google, conversaoBase);
+    expect(cabecalhosDoUpload(spy)["developer-token"]).toBe("d");
+  });
+});
+
 describe("o handler", () => {
   it("escuta só agendamento criado e confirmado", () => {
     expect(conversaoDeAgendamentoHandler.events).toEqual(["appointment.created", "appointment.confirmed"]);
@@ -395,6 +413,14 @@ describe("o handler", () => {
     await conversaoDeAgendamentoHandler.handle(evento("appointment.confirmed"));
     expect(rede.mock.calls.map(([u]) => String(u)).some((u) => u.includes("googleads"))).toBe(true);
     expect(banco.livro.map((l) => l.status)).toEqual(["sent", "sent"]);
+  });
+
+  it("Google sem developer token gravado: a credencial vale e a conversão sai", async () => {
+    banco.conexoes.google_ads = { ...conexaoGoogle, google_developer_token_encrypted: null };
+    banco.settings = settingsComPreferencias({}, { somenteDeAnuncio: false });
+    const rede = redeQueResponde();
+    await conversaoDeAgendamentoHandler.handle(evento());
+    expect(rede.mock.calls.map(([u]) => String(u)).some((u) => u.includes("uploadClickConversions"))).toBe(true);
   });
 
   it("desligar a conexão para o que estava esperando nova tentativa", async () => {
