@@ -581,6 +581,8 @@ export function CRMSidePanel({ conversation }: Props) {
   const contact = conversation?.contacts ?? null;
   const contactId = contact?.id ?? null;
   const [desfechoDraft, setDesfechoDraft] = useState<DesfechoDraft | null>(null);
+  const [demandasFixas, setDemandasFixas] = useState(false);
+  const [demandasSobMouse, setDemandasSobMouse] = useState(false);
   // A saída do filtro produz null enquanto o detalhe carrega. O rascunho não
   // some nessa lacuna; outra conversa/contato real o descarta, sem expô-lo.
   useEffect(() => {
@@ -702,6 +704,8 @@ export function CRMSidePanel({ conversation }: Props) {
 
   const tags = contact?.tags ?? [];
   const displayName = rotuloDoContato(contact, t);
+  const desfechoEmCurso = Boolean(conversation && desfechoDraft?.conversationId === conversation.id);
+  const demandasVisiveis = demandasFixas || demandasSobMouse || desfechoEmCurso;
 
   // `erro` PRIMEIRO, e não é detalhe: as três listas voltam a `null` quando a
   // leitura falha, e este derivado lê `null` como "ainda não chegou". Sem esta
@@ -725,10 +729,35 @@ export function CRMSidePanel({ conversation }: Props) {
 
   return (
     <aside className="flex h-full flex-col gap-4 overflow-y-auto border-l border-border bg-background p-4">
-      <section data-testid="inbox-demandas">
+      {/* RECOLHIDA por padrão (pedido da clínica, 22/10): abre ao passar o mouse
+          ou com o foco do teclado, e um clique a deixa fixa. Fica aberta
+          enquanto houver um desfecho sendo escrito, para o formulário não sumir. */}
+      <section
+        data-testid="inbox-demandas"
+        onMouseEnter={() => setDemandasSobMouse(true)}
+        onMouseLeave={() => setDemandasSobMouse(false)}
+        onFocus={() => setDemandasSobMouse(true)}
+        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDemandasSobMouse(false); }}
+      >
         <h3 className="text-xs font-semibold text-text">
-          {t("Demandas abertas")}
+          <button
+            type="button"
+            aria-expanded={demandasVisiveis}
+            aria-controls="inbox-demandas-lista"
+            onClick={() => setDemandasFixas((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 text-left"
+          >
+            <span>
+              {t("Demandas abertas")}
+              {demandas && demandas.length > 0 ? ` (${demandas.length})` : ""}
+              {demandas?.some((d) => !d.proximo_passo) ? ` · ${t("sem próximo passo")}` : ""}
+            </span>
+            <span aria-hidden className="text-muted-foreground">{demandasVisiveis ? "▴" : "▾"}</span>
+          </button>
         </h3>
+        {/* `hidden` em vez de desmontar: o rascunho de próximo passo e de
+            desfecho sobrevive ao recolher. */}
+        <div id="inbox-demandas-lista" hidden={!demandasVisiveis}>
         {sectionsLoading ? (
           <Skeleton className="mt-2 h-14 w-full" />
         ) : demandas && demandas.length > 0 ? (
@@ -781,6 +810,7 @@ export function CRMSidePanel({ conversation }: Props) {
             onTentarDeNovo={() => setTentativa((n) => n + 1)}
           />
         )}
+        </div>
       </section>
 
       {/* O COMBINADO DO ATENDIMENTO (porte do upstream #2842): a tarefa nasce
