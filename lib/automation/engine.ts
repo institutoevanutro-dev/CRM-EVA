@@ -16,7 +16,7 @@ import type { ServiceBoundary } from "@/lib/atendimento/fronteira";
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
-import { evaluateConditions, type RuleCondition } from "@/lib/automation/conditions";
+import { evaluateConditions, type Conditions } from "@/lib/automation/conditions";
 import { getAction } from "@/lib/automation/actions";
 import type { ActionResultDetail } from "@/lib/automation/types";
 import { audit } from "@/lib/audit";
@@ -30,7 +30,7 @@ const EXPECTED_ENTITY_KIND: Record<string, string> = ENTIDADE_ESPERADA_POR_GATIL
 interface RuleRow {
   id: string;
   name: string;
-  conditions: RuleCondition[];
+  conditions: Conditions;
   actions: Array<{ type: string; config?: Record<string, unknown> }>;
 }
 

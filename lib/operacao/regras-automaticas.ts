@@ -22,6 +22,7 @@
  */
 import { ApiError } from "@/lib/api/types";
 import { audit } from "@/lib/audit";
+import { contarCondicoes, type Conditions } from "@/lib/automation/conditions";
 import { autoriaDaMudanca } from "@/lib/operacao/autoria";
 import type { DepsDaOperacao } from "@/lib/operacao/entradas-automaticas";
 
@@ -48,7 +49,10 @@ function semConfig(linha: Record<string, unknown>): RegraVisivel {
   const acoes = Array.isArray(linha.actions)
     ? (linha.actions as Array<{ type?: unknown }>).map((a) => String(a?.type ?? "desconhecida"))
     : [];
-  const condicoes = Array.isArray(linha.conditions) ? linha.conditions.length : 0;
+  // `conditions` é a lista antiga OU um grupo `{all|any}` (#2727). Contar por
+  // `.length` devolvia 0 para `{any:[…]}` — um objeto não tem comprimento —, e a
+  // tela dizia "sem condições" para uma regra com duas.
+  const condicoes = contarCondicoes((linha.conditions ?? []) as Conditions);
   return {
     id: linha.id as string,
     name: linha.name as string,
