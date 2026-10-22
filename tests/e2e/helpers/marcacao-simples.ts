@@ -1,6 +1,31 @@
 import { expect, type Page } from "@playwright/test";
 
 /**
+ * Os ids da lista de profissionais, DEPOIS de ela carregar.
+ *
+ * A lista vem de `/api/v1/agenda/pessoas` e chega depois de o modal abrir: até
+ * lá o campo tem só "Escolha o profissional". Ler na hora da abertura devolvia
+ * vazio, e a primeira versão destas funções reprovou no CI exatamente assim
+ * (nenhum `selectOption` chegou a rodar). Na tela real a pessoa só escolhe
+ * quando os nomes aparecem; aqui, espera-se o mesmo.
+ */
+async function idsDosProfissionais(page: Page): Promise<string[]> {
+  const profissional = page.getByTestId("profissional-da-marcacao");
+  await expect(profissional).toBeVisible({ timeout: 20_000 });
+  const ler = async () =>
+    (await profissional.locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).filter(
+      Boolean,
+    );
+  await expect
+    .poll(async () => (await ler()).length, {
+      timeout: 20_000,
+      message: "a lista de profissionais do modal não carregou",
+    })
+    .toBeGreaterThan(0);
+  return ler();
+}
+
+/**
  * No modal simples de marcação o PROCEDIMENTO só se escolhe depois do
  * PROFISSIONAL, e só entre os que ele atende (`lib/agenda/marcacao-simples.ts`).
  * Esta função faz o que a recepção faz: escolhe o profissional que atende o
@@ -14,10 +39,8 @@ export async function escolherProfissionalEProcedimento(
 ): Promise<void> {
   const profissional = page.getByTestId("profissional-da-marcacao");
   const lista = page.getByTestId("procedimento-da-marcacao");
-  await expect(profissional).toBeVisible({ timeout: 15_000 });
-  const candidatos = donoId
-    ? [donoId]
-    : (await profissional.locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).filter(Boolean);
+  const todos = await idsDosProfissionais(page);
+  const candidatos = donoId ? [donoId] : todos;
   for (const id of candidatos) {
     await profissional.selectOption(id);
     // Só as opções de PRIMEIRO nível: as do grupo "de outros profissionais"
@@ -39,10 +62,7 @@ export async function escolherProfissionalEProcedimento(
  */
 export async function procedimentosOferecidos(page: Page): Promise<string[]> {
   const profissional = page.getByTestId("profissional-da-marcacao");
-  await expect(profissional).toBeVisible({ timeout: 20_000 });
-  const ids = (
-    await profissional.locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))
-  ).filter(Boolean);
+  const ids = await idsDosProfissionais(page);
   const nomes = new Set<string>();
   for (const id of ids) {
     await profissional.selectOption(id);
