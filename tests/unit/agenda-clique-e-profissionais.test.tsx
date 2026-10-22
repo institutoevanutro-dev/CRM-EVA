@@ -130,6 +130,36 @@ vi.mock("@/components/agenda/PainelDeMarcacao", () => ({
   ),
 }));
 
+/**
+ * A marcação NOVA mora no modal simples (`MarcacaoSimples`); o dublê mostra o
+ * que ele recebeu: o horário do bloco, o profissional e o procedimento.
+ */
+vi.mock("@/components/agenda/MarcacaoSimples", () => ({
+  MarcacaoSimples: (props: {
+    horarioInicial?: { instante: string; rotulo: string };
+    profissionalId: string;
+    tipoId: string;
+    onConfirmar: (m: { instante: string; endereco: string; observacao: string }) => unknown;
+  }) => (
+    <div
+      data-testid="painel-dublê"
+      data-instante={props.horarioInicial?.instante ?? ""}
+      data-rotulo={props.horarioInicial?.rotulo ?? ""}
+      data-profissional={props.profissionalId}
+      data-tipo={props.tipoId}
+    >
+      <button
+        type="button"
+        onClick={() =>
+          props.onConfirmar({ instante: props.horarioInicial!.instante, endereco: "", observacao: "" })
+        }
+      >
+        confirmar
+      </button>
+    </div>
+  ),
+}));
+
 const TIPOS = [
   { id: "tipo-1", nome: "Consulta", duracaoMin: 30, donoId: "p-ana", localKind: null, localDetalhes: null },
 ];
@@ -199,7 +229,8 @@ describe("clicar num horário vazio abre o Novo agendamento já preenchido", () 
     // 14:30 em São Paulo: o começo da célula, nunca o minuto do ponteiro.
     expect(painel).toHaveAttribute("data-instante", new Date(`${QUARTA}T14:30:00-03:00`).toISOString());
     expect(painel).toHaveAttribute("data-rotulo", "14:30");
-    expect(painel).toHaveAttribute("data-responsavel", "Bia");
+    expect(painel).toHaveAttribute("data-profissional", "p-bia");
+    expect(painel).toHaveAttribute("data-tipo", "tipo-1");
 
     fireEvent.click(screen.getByRole("button", { name: "confirmar" }));
     expect(marcar).toHaveBeenCalledWith(
@@ -211,7 +242,7 @@ describe("clicar num horário vazio abre o Novo agendamento já preenchido", () 
     );
   });
 
-  it("sem pessoa única no filtro, o dono continua o do tipo (nada de owner no POST)", async () => {
+  it("sem pessoa única no filtro, o profissional é o dono do tipo, e o POST o leva explícito", async () => {
     montar();
     fireEvent.click(avatar("p-bia"));
     fireEvent.click(avatar("p-caio"));
@@ -219,9 +250,11 @@ describe("clicar num horário vazio abre o Novo agendamento já preenchido", () 
 
     fireEvent.click(screen.getByTestId(`bloco-${QUARTA}-09:00`));
     const painel = await screen.findByTestId("painel-dublê");
-    expect(painel).toHaveAttribute("data-responsavel", "Ana");
+    // O modal mostra o profissional, então a marcação vai para QUEM ele mostra:
+    // o mesmo dono que a rota resolveria pelo tipo, agora escrito no pedido.
+    expect(painel).toHaveAttribute("data-profissional", "p-ana");
     fireEvent.click(screen.getByRole("button", { name: "confirmar" }));
-    expect(marcar.mock.calls[0]![0]).not.toHaveProperty("owner_user_id", expect.anything());
+    expect(marcar.mock.calls[0]![0]).toHaveProperty("owner_user_id", "p-ana");
   });
 
   it("horário com compromisso em cima não abre marcação nova", () => {

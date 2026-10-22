@@ -11,6 +11,7 @@ import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page, type TestInfo } from "@playwright/test";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
+import { escolherProfissionalEProcedimento } from "./helpers/marcacao-simples";
 import { enviarTextoFixoPendente } from "../../lib/followup/enviar-texto-fixo";
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
@@ -301,7 +302,7 @@ test("Inbox marca cliente/conversa; detalhe antigo confirma presença com evidê
   await page.keyboard.press("Escape");
   const days = await irParaASemanaSeguinte(page);
   await page.getByRole("button", { name: /novo agendamento/i }).click();
-  await page.getByRole("button", { name: /^Consulta de presença/ }).click();
+  await escolherProfissionalEProcedimento(page, /^Consulta de presença/);
   await escolherDiaDesenhado(page, days);
   await page.locator('[data-testid^="horario-"]').first().click();
   const posted = page.waitForResponse(

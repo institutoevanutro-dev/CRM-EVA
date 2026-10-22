@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { test, expect } from "@playwright/test";
 
 import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
+import { escolherProfissionalEProcedimento } from "./helpers/marcacao-simples";
 import { esperarAgenda } from "./helpers/tela-agenda";
 
 /**
@@ -102,7 +103,7 @@ async function marcarUm(
   await page.getByRole("button", { name: /novo agendamento/i }).click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId("tipos-de-agendamento")).toBeVisible({ timeout: 10_000 });
-  await page.getByRole("button", { name: new RegExp(`^${tipoNome}`) }).click();
+  await escolherProfissionalEProcedimento(page, new RegExp(`^${tipoNome}`));
   await escolherDiaDesenhado(page, dias);
   const horario = page.locator('[data-testid^="horario-"]').first();
   await expect(horario).toBeVisible({ timeout: 15_000 });

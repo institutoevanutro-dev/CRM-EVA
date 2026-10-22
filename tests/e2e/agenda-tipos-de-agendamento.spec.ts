@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { test, expect } from "@playwright/test";
+import { procedimentosOferecidos } from "./helpers/marcacao-simples";
 import { esperarAgenda, esperarTela } from "./helpers/tela-agenda";
 
 /**
@@ -137,11 +138,11 @@ test("crio um tipo COM responsável, e ele passa a ser marcável na Agenda", asy
   await esperarAgenda(page, 20_000);
   await page.getByRole("button", { name: /novo agendamento/i }).click();
   await expect(page.getByTestId("tipos-de-agendamento")).toBeVisible({ timeout: 15_000 });
-  await expect(
-    page.getByRole("button", { name: new RegExp(`^${nome}`) }),
+  expect(
+    await procedimentosOferecidos(page),
     "o tipo foi criado em Configurações e não apareceu na tela de marcar — " +
       "configurar e usar ficaram em mundos separados",
-  ).toBeVisible({ timeout: 15_000 });
+  ).toContain(nome);
 });
 
 test("o tipo NASCE com responsável — e quem escolhe 'Definir depois' recebe a saída", async ({
@@ -297,10 +298,7 @@ test("desativar tira o tipo da tela de marcar, e reativar o traz de volta", asyn
   await page.goto("/app/agenda");
   await page.getByRole("button", { name: /novo agendamento/i }).click();
   await expect(page.getByTestId("tipos-de-agendamento")).toBeVisible({ timeout: 15_000 });
-  await expect(
-    page.getByRole("button", { name: new RegExp(`^${nome}`) }),
-    "tipo desativado continua oferecido para marcar",
-  ).toHaveCount(0);
+  expect(await procedimentosOferecidos(page), "tipo desativado continua oferecido para marcar").not.toContain(nome);
 
   // ─── A VOLTA ────────────────────────────────────────────────────────────
   //
@@ -324,10 +322,7 @@ test("desativar tira o tipo da tela de marcar, e reativar o traz de volta", asyn
   await page.goto("/app/agenda");
   await page.getByRole("button", { name: /novo agendamento/i }).click();
   await expect(page.getByTestId("tipos-de-agendamento")).toBeVisible({ timeout: 15_000 });
-  await expect(
-    page.getByRole("button", { name: new RegExp(`^${nome}`) }),
-    "reativei o tipo e ele não voltou para a tela de marcar",
-  ).toHaveCount(1);
+  expect(await procedimentosOferecidos(page), "reativei o tipo e ele não voltou para a tela de marcar").toContain(nome);
 });
 
 test("ligo o aviso do compromisso pela tela, e ele fica ligado", async ({ page }) => {
