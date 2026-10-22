@@ -8,6 +8,22 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.33.0] — 2026-10-22
+
+### Adicionado
+
+- **Paletas prontas na tela de marca** Nas telas de marca da instalação e da empresa, seis paletas prontas (Verde e dourado, Azul-petróleo, Vinho, Grafite,
+  Terracota e Lavanda) preenchem a cor da marca com um clique. A cor livre continua: quem digita um código de cor vê
+  "Cor livre". Nada muda para quem não abrir a tela.
+
+### Alterado
+
+- **Novo agendamento num modal simples, com aba para bloquear horário** O "Novo agendamento" da Agenda virou um modal compacto em duas colunas, que cabe na tela de um notebook sem rolar. A ordem é a da recepção: primeiro o profissional, depois o procedimento (a lista mostra só os procedimentos daquele profissional e os que não têm responsável, com a duração de cada um), depois o paciente, o dia e o horário livre. O fim do atendimento é calculado pela duração e aparece no resumo antes de confirmar. E-mail do convidado e endereço ficaram em "Mais opções". Clicar num horário vazio da grade abre o modal com profissional, procedimento, dia e hora já preenchidos.
+
+  A segunda aba, "Bloquear horário", fecha uma faixa de horas ou o dia inteiro de um profissional, num dia ou num período de dias, com comentário opcional, e lista os bloqueios ativos dele com o botão Excluir. Ela grava no mesmo lugar da tela "Dias fora da rotina" das configurações da Agenda: o horário bloqueado deixa de ser oferecido pela tela e pela IA, e o que já estava marcado continua marcado. Quem não é gestor bloqueia só a própria agenda.
+
+  Remarcar continua no painel lateral de antes. Para o filtro de procedimentos funcionar, cada procedimento precisa ter o profissional responsável preenchido em Configurações › Agenda; procedimento sem responsável aparece para todos. Nada a fazer na atualização.
+
 ## [4.32.1] — 2026-10-22
 
 ### Corrigido
@@ -8059,7 +8075,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.32.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.0...HEAD
+[4.33.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.32.1...v4.33.0
 [4.32.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.32.0...v4.32.1
 [4.32.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.31.1...v4.32.0
 [4.31.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.31.0...v4.31.1
