@@ -102,7 +102,8 @@ export interface CredencialGoogle {
   clientId: string;
   clientSecret: string;
   refreshToken: string;
-  developerToken: string;
+  /** Opcional: o Google aposentou o developer token em 09/09/2026 e ignora o cabeçalho. */
+  developerToken: string | null;
 }
 
 export type CredencialDeConversao = CredencialMeta | CredencialGoogle;

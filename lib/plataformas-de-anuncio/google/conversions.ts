@@ -11,8 +11,8 @@
  * ─── A credencial é da ORGANIZAÇÃO, não da instalação ────────────────────────
  *
  * Diferente do upstream, que usa um app OAuth da instalação e um fluxo de
- * consentimento. Aqui a organização cola developer token, cliente OAuth e
- * refresh token na tela, todos cifrados. Não há escopo novo no app OAuth da
+ * consentimento. Aqui a organização cola cliente OAuth e refresh token (o
+ * developer token é opcional desde 09/09/2026) na tela, todos cifrados. Não há escopo novo no app OAuth da
  * Agenda: pedir `adwords` lá reabriria a verificação dele no Google.
  *
  * ─── Sem `gclid` é normal ───────────────────────────────────────────────────
@@ -173,9 +173,11 @@ async function enviar(
 
   const headers: Record<string, string> = {
     authorization: `Bearer ${token.token}`,
-    "developer-token": credencial.developerToken,
     "content-type": "application/json",
   };
+  // Só quando gravado: o Google ignora o cabeçalho desde 09/09/2026 e avisou
+  // que uma versão futura da API vai recusá-lo.
+  if (credencial.developerToken) headers["developer-token"] = credencial.developerToken;
   if (credencial.loginCustomerId) headers["login-customer-id"] = credencial.loginCustomerId;
 
   let resposta: Response;

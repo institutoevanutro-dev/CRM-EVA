@@ -288,7 +288,8 @@ export function FormularioGoogle({ estado, idioma }: { estado: EstadoGoogle; idi
     clientId.trim().length >= 10 &&
     (estado.temClientSecret || clientSecret.trim().length >= 8) &&
     (estado.temRefreshToken || refreshToken.trim().length >= 10) &&
-    (estado.temDeveloperToken || developerToken.trim().length >= 10);
+    // Opcional: o Google aposentou o developer token em 09/09/2026.
+    (developerToken.trim().length === 0 || developerToken.trim().length >= 10);
 
   return (
     <Card className="p-6">
@@ -332,7 +333,7 @@ export function FormularioGoogle({ estado, idioma }: { estado: EstadoGoogle; idi
         <Campo id="client_id" rotulo={t("ID do cliente OAuth")} valor={clientId} onChange={setClientId} placeholder="…apps.googleusercontent" ajuda={t("Do projeto no Google Cloud que tem a API do Google Ads ligada.")} />
         <Campo id="client_secret" rotulo={t("Chave secreta do cliente OAuth")} valor={clientSecret} onChange={setClientSecret} segredo placeholder={estado.temClientSecret ? gravado : ""} ajuda={t("Guardada criptografada.")} />
         <Campo id="refresh_token" rotulo={t("Token de atualização (refresh token)")} valor={refreshToken} onChange={setRefreshToken} segredo placeholder={estado.temRefreshToken ? gravado : ""} ajuda={t("Gerado com o mesmo cliente OAuth, com o escopo do Google Ads. Guardado criptografado.")} />
-        <Campo id="developer_token" rotulo={t("Token de desenvolvedor")} valor={developerToken} onChange={setDeveloperToken} segredo placeholder={estado.temDeveloperToken ? gravado : ""} ajuda={t("Na Central de API da conta administradora. Guardado criptografado.")} />
+        <Campo id="developer_token" rotulo={t("Token de desenvolvedor (opcional)")} valor={developerToken} onChange={setDeveloperToken} segredo placeholder={estado.temDeveloperToken ? gravado : ""} ajuda={t("Pode deixar em branco: o Google não exige mais este token desde setembro de 2026. Só preencha se a sua conta ainda pedir. Guardado criptografado.")} />
         <Ligar
           id="google_enabled"
           rotulo={t("Avisar o Google Ads quando um paciente agendar")}

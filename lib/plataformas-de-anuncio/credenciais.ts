@@ -97,17 +97,18 @@ export async function lerCredencial(
     !acao ||
     !linha.google_oauth_client_id ||
     !linha.google_oauth_client_secret_encrypted ||
-    !linha.google_refresh_token_encrypted ||
-    !linha.google_developer_token_encrypted
+    !linha.google_refresh_token_encrypted
   ) {
     return { ok: false, motivo: "credencial_incompleta" };
   }
   const [clientSecret, refreshToken, developerToken] = await Promise.all([
     decifra(linha.google_oauth_client_secret_encrypted),
     decifra(linha.google_refresh_token_encrypted),
+    // Opcional: o Google aposentou o developer token em 09/09/2026.
     decifra(linha.google_developer_token_encrypted),
   ]);
-  if (!clientSecret || !refreshToken || !developerToken) return { ok: false, motivo: "cifra_indisponivel" };
+  if (!clientSecret || !refreshToken) return { ok: false, motivo: "cifra_indisponivel" };
+  if (linha.google_developer_token_encrypted && !developerToken) return { ok: false, motivo: "cifra_indisponivel" };
   return {
     ok: true,
     credencial: {
