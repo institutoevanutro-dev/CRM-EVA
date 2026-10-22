@@ -749,6 +749,9 @@ export const DICIONARIO: Traducoes = {
   Radar: { es: "Radar" },
   "Respostas rápidas": { es: "Respuestas rápidas" },
   "Prepara no compositor: você revisa e envia": { es: "Lo prepara en el editor: tú revisas y envías" },
+  "Buscar resposta": { es: "Buscar respuesta" },
+  "sem próximo passo": { es: "sin próximo paso" },
+  "Nenhuma resposta com esse nome.": { es: "Ninguna respuesta con ese nombre." },
   Contatos: { es: "Contactos" },
   // A CHAVE É O TEXTO PT-BR, então renomear um rótulo no registro de navegação
   // sem mexer aqui NÃO quebra teste nenhum — degrada em silêncio: `traduzir()`

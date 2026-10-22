@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -242,11 +242,33 @@ describe("painel do inbox — demandas abertas", () => {
 vi.mock("@/hooks/auth/AuthProvider", () => ({ useAuth: () => ({ user: { support: null } }) }));
 
 
+describe("demandas abertas — recolhida por padrão", () => {
+  it("nasce recolhida, abre com o mouse e fecha ao sair; o clique fixa", async () => {
+    get.mockResolvedValue({ data: RESPOSTA });
+    renderPainel();
+    const titulo = await screen.findByRole("button", { name: /Demandas abertas/ });
+    expect(titulo).toHaveAttribute("aria-expanded", "false");
+    await screen.findByText(/Demandas abertas \(\d+\)/);
+    expect(screen.queryByRole("button", { name: "Encerrar demanda" })).toBeNull();
+    const secao = screen.getByTestId("inbox-demandas");
+    fireEvent.mouseEnter(secao);
+    expect(titulo).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByRole("button", { name: "Encerrar demanda" }).length).toBeGreaterThan(0);
+    fireEvent.mouseLeave(secao);
+    expect(titulo).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(titulo);
+    fireEvent.mouseLeave(secao);
+    expect(titulo).toHaveAttribute("aria-expanded", "true");
+  });
+});
+
 describe("desfecho — rascunho atravessa somente lacuna transitória do mesmo contexto", () => {
   const resposta = (revision: number) => ({ ...RESPOSTA, demandas: [{ ...RESPOSTA.demandas[0], revision }] });
   it("null→mesma conversa conserva escolha e revisão observada; conflito não renova CAS", async () => {
     get.mockResolvedValue({ data: resposta(1) });
     const view = renderPainel();
+    // A seção nasce recolhida; o clique no título a deixa fixa aberta.
+    await userEvent.click(await screen.findByRole("button", { name: /Demandas abertas/ }));
     await userEvent.click(await screen.findByRole("button", { name: "Encerrar demanda" }));
     await userEvent.selectOptions(screen.getByLabelText("Desfecho da demanda"), "perdida");
     view.mudarConversa(null);
@@ -268,6 +290,8 @@ describe("desfecho — rascunho atravessa somente lacuna transitória do mesmo c
   it.each(["conversa", "contato"])("troca real de %s descarta rascunho, sem exibir nem reutilizar", async (kind) => {
     get.mockResolvedValue({ data: resposta(1) });
     const view = renderPainel();
+    // A seção nasce recolhida; o clique no título a deixa fixa aberta.
+    await userEvent.click(await screen.findByRole("button", { name: /Demandas abertas/ }));
     await userEvent.click(await screen.findByRole("button", { name: "Encerrar demanda" }));
     await userEvent.selectOptions(screen.getByLabelText("Desfecho da demanda"), "perdida");
     view.mudarConversa(null);

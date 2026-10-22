@@ -8,6 +8,19 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.32.1] — 2026-10-22
+
+### Corrigido
+
+- **A barra de respostas rápidas e as demandas abertas ficam recolhidas no Inbox** Com dezenas de respostas rápidas cadastradas, a barra de botões da 4.32.0 ocupava o Inbox
+  inteiro e escondia a conversa. Agora ela nasce fechada, num botão "Respostas rápidas (N)":
+  aberta, tem busca pelo título e altura limitada com rolagem, e fecha sozinha depois que você
+  escolhe uma resposta.
+
+  No painel da direita, "Demandas abertas" também nasce recolhida, com a contagem e o aviso
+  "sem próximo passo" no título. Ela abre ao passar o mouse (ou com o teclado), e um clique no
+  título a deixa fixa aberta. Enquanto um desfecho está sendo escrito, ela não fecha.
+
 ## [4.32.0] — 2026-10-22
 
 ### Adicionado
@@ -8046,7 +8059,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.32.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.32.1...HEAD
+[4.32.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.32.0...v4.32.1
 [4.32.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.31.1...v4.32.0
 [4.31.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.31.0...v4.31.1
 [4.31.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.30.0...v4.31.0

@@ -50,21 +50,34 @@ function montar() {
   return screen.getByLabelText(/mensagem/i) as HTMLTextAreaElement;
 }
 
+function abrir() {
+  fireEvent.click(screen.getByRole("button", { name: /Respostas rápidas \(2\)/ }));
+  return screen.getByTestId("barra-de-recursos");
+}
+
 describe("Composer · barra de respostas rápidas", () => {
   beforeEach(() => {
     send.mockReset();
     sendAsync.mockReset();
   });
 
-  it("mostra um botão por resposta cadastrada", () => {
+  it("nasce fechada: nenhum botão de resposta até abrir", () => {
     montar();
-    const barra = screen.getByTestId("barra-de-recursos");
+    expect(screen.queryByTestId("barra-de-recursos")).toBeNull();
+  });
+
+  it("aberta, mostra um botão por resposta e a busca filtra pelo título", () => {
+    montar();
+    const barra = abrir();
     expect(within(barra).getAllByRole("button").map((b) => b.textContent)).toEqual(["Boas vindas", "Catálogo"]);
+    fireEvent.change(screen.getByLabelText("Buscar resposta"), { target: { value: "catá" } });
+    expect(within(screen.getByTestId("barra-de-recursos")).getAllByRole("button").map((b) => b.textContent)).toEqual(["Catálogo"]);
   });
 
   it("texto: o corpo interpolado cai no campo, editável, e nada é enviado", () => {
     const campo = montar();
-    fireEvent.click(within(screen.getByTestId("barra-de-recursos")).getByText("Boas vindas"));
+    fireEvent.click(within(abrir()).getByText("Boas vindas"));
+    expect(screen.queryByTestId("barra-de-recursos")).toBeNull();
     expect(campo.value).toBe("Oi Ana, tudo bem?");
     expect(send).not.toHaveBeenCalled();
     expect(sendAsync).not.toHaveBeenCalled();
@@ -72,7 +85,7 @@ describe("Composer · barra de respostas rápidas", () => {
 
   it("com imagem: abre a prévia do `/` com a legenda, e nada é enviado", () => {
     const campo = montar();
-    fireEvent.click(within(screen.getByTestId("barra-de-recursos")).getByText("Catálogo"));
+    fireEvent.click(within(abrir()).getByText("Catálogo"));
     expect(screen.getByTestId("imagens-da-resposta").querySelectorAll("img")).toHaveLength(1);
     expect(screen.getByLabelText("Legenda")).toHaveValue("Veja, Ana!");
     expect(campo.value).toBe("");
