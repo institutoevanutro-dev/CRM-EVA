@@ -1,4 +1,6 @@
 "use client";
+import { useState } from "react";
+
 import { useT } from "@/hooks/i18n/useT";
 import type { MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
 
@@ -14,6 +16,10 @@ import type { MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
  * Portado e adaptado do projeto original (DeskcommCRM, PR #2847 de
  * @webtecnica): lá a resposta também podia ser de ÁUDIO, com arquivo próprio
  * por resposta; aqui a mídia vem da Biblioteca, que só guarda imagem e vídeo.
+ *
+ * Nasce FECHADA: com dezenas de respostas cadastradas, a barra aberta ocupava o
+ * Inbox inteiro (relato da clínica, 22/10). Aberta, tem busca e altura limitada
+ * com rolagem; escolher uma resposta fecha de novo.
  */
 interface Props {
   respostas: readonly MessageTemplate[];
@@ -23,27 +29,64 @@ interface Props {
 
 export function BarraDeRecursos({ respostas, onEscolher, disabled = false }: Props) {
   const t = useT();
+  const [aberta, setAberta] = useState(false);
+  const [busca, setBusca] = useState("");
   if (respostas.length === 0) return null;
+  const termo = busca.trim().toLocaleLowerCase("pt-BR");
+  const visiveis = termo
+    ? respostas.filter((r) => r.title.toLocaleLowerCase("pt-BR").includes(termo))
+    : respostas;
   return (
-    <div
-      data-testid="barra-de-recursos"
-      role="toolbar"
-      aria-label={t("Respostas rápidas")}
-      className="mb-1.5 flex flex-wrap gap-1"
-    >
-      {respostas.map((resposta) => (
-        <button
-          key={resposta.id}
-          type="button"
-          disabled={disabled}
-          data-recurso-id={resposta.id}
-          onClick={() => onEscolher(resposta)}
-          title={t("Prepara no compositor: você revisa e envia")}
-          className="rounded-full border border-border bg-muted/60 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-50"
-        >
-          {resposta.title}
-        </button>
-      ))}
+    <div className="mb-1.5">
+      <button
+        type="button"
+        aria-expanded={aberta}
+        aria-controls="barra-de-recursos"
+        onClick={() => setAberta((v) => !v)}
+        className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+      >
+        {t("Respostas rápidas")} ({respostas.length}) {aberta ? "▴" : "▾"}
+      </button>
+      {aberta && (
+        <div className="mt-1.5 flex flex-col gap-1.5">
+          <input
+            type="search"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder={t("Buscar resposta")}
+            aria-label={t("Buscar resposta")}
+            className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm"
+          />
+          <div
+            id="barra-de-recursos"
+            data-testid="barra-de-recursos"
+            role="toolbar"
+            aria-label={t("Respostas rápidas")}
+            className="flex max-h-24 flex-wrap gap-1 overflow-y-auto"
+          >
+            {visiveis.map((resposta) => (
+              <button
+                key={resposta.id}
+                type="button"
+                disabled={disabled}
+                data-recurso-id={resposta.id}
+                onClick={() => {
+                  onEscolher(resposta);
+                  setAberta(false);
+                  setBusca("");
+                }}
+                title={t("Prepara no compositor: você revisa e envia")}
+                className="rounded-full border border-border bg-muted/60 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                {resposta.title}
+              </button>
+            ))}
+            {visiveis.length === 0 && (
+              <p className="text-xs text-muted-foreground">{t("Nenhuma resposta com esse nome.")}</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

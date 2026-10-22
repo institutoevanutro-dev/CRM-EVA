@@ -168,6 +168,8 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     await page.waitForURL(/\/app(?:\/|$)/);
     await abrirConversa(page, conversation);
     const panel = page.getByTestId("inbox-demandas");
+    // A seção nasce recolhida (22/10); o clique no título a fixa aberta.
+    await panel.getByRole("button", { name: /Demandas abertas/ }).click();
     await expect(panel.getByText("Demanda vigente neste canal")).toBeVisible();
     await expect(page.getByTestId("inbox-memoria")).toContainText("Preferência de horário");
     // DoD 12 para a issue #908: o rótulo do botão que CRIA o lead provado pela
@@ -209,6 +211,7 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     await expect(panel.getByText("Demanda vigente neste canal")).toBeVisible();
     await page.goto("/app/inbox?filter=unassigned");
     await page.getByText("Voltei para novo atendimento", { exact: true }).first().click();
+    await page.getByTestId("inbox-demandas").getByRole("button", { name: /Demandas abertas/ }).click();
     await expect(
       page.getByTestId("inbox-demandas").getByText("Demanda vigente neste canal"),
     ).toBeVisible();
