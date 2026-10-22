@@ -281,8 +281,14 @@ export const crmSettingsSchema = z
   .object({
     cliente_pela_agenda: z.boolean().catch(false),
     paciente_pelo_cadastro: z.boolean().catch(false),
+    /**
+     * `telefone_de_ficha_vazia` (#2593): o telefone que o cliente diz numa
+     * conversa entra SOZINHO na ficha SEM número, sem a fila de proposta da
+     * spec 17 §4b. NASCE DESLIGADA: só o booleano `true` liga.
+     */
+    telefone_de_ficha_vazia: z.boolean().catch(false),
   })
-  .catch({ cliente_pela_agenda: false, paciente_pelo_cadastro: false });
+  .catch({ cliente_pela_agenda: false, paciente_pelo_cadastro: false, telefone_de_ficha_vazia: false });
 
 function crmDe(settings: unknown): z.infer<typeof crmSettingsSchema> {
   const crm =
@@ -295,6 +301,21 @@ function crmDe(settings: unknown): z.infer<typeof crmSettingsSchema> {
 /** A regra "cliente pela agenda" está ligada nesta organização? Nunca lança. */
 export function clientePelaAgendaLigado(settings: unknown): boolean {
   return crmDe(settings).cliente_pela_agenda === true;
+}
+
+/**
+ * O interruptor de #2593 está ligado nesta organização? **Desligado por
+ * padrão**, e nunca lança.
+ *
+ * A régua é "SÓ O BOOLEANO `true` LIGA": ausente, `false`, a string `"true"`,
+ * `1`, array ou qualquer lixo é DESLIGADO. É deliberadamente o mais
+ * conservador dos dois lados — quem atualizar o produto sem abrir a tela
+ * continua com a regra da spec 17 §4b intacta (o dado ouvido é proposto, não
+ * gravado), e um `settings` torto nunca liga uma escrita automática por
+ * acidente.
+ */
+export function telefoneDeFichaVaziaLigado(settings: unknown): boolean {
+  return crmDe(settings).telefone_de_ficha_vazia === true;
 }
 
 /** A regra "paciente pelo cadastro" está ligada nesta organização? Nunca lança. */
