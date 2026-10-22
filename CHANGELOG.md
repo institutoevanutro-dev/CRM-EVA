@@ -8,6 +8,56 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.32.0] — 2026-10-22
+
+### Adicionado
+
+- **As etiquetas em "Editar contato" passam a sugerir as que já existem na empresa** O campo de etiquetas de "Editar contato" deixou de ser texto livre separado por vírgula. Vale na ficha e no atalho de edição da lista. Ao digitar, ele sugere as etiquetas já usadas na empresa, e na ficha também as etiquetas padrão do funil. Escolher uma sugestão grava a grafia que já existe: se a empresa já tem "são paulo", digitar "sao paulo" grava "são paulo" em vez de criar outra etiqueta. Texto que não casa com nenhuma etiqueta conhecida vira etiqueta nova, para qualquer papel, ao confirmar com Enter ou com "Criar etiqueta". Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #2831 de @webtecnica).
+
+- **As condições das automações ganham "não contém", "está vazio", "está preenchido", comparação por número/data e o grupo "qualquer uma"** Uma regra de automação só sabia perguntar "é", "não é" e "contém", e sempre exigia TODAS as condições ao mesmo tempo. Agora a tela oferece, além desses, os operadores "não contém", "está vazio", "está preenchido", "maior que", "maior ou igual a", "menor que" e "menor ou igual a", e um seletor por grupo que combina por "todas as condições" ou "qualquer uma das condições". O recorte por número e por data funciona: em texto, a comparação de maior/menor usa a ordem do próprio texto, o que faz a data no formato ISO-8601 (`2026-09-14`) ordenar certo.
+
+  A semântica de campo que a pessoa não preencheu ficou explícita: `neq` ("não é") deixou de ser verdade quando o campo está AUSENTE — era o defeito que fazia "crianças ≠ 0" disparar para quem nem tinha o campo preenchido. Quem quer "não preencheu" usa "está vazio"; quem quer "não é X e está preenchido" combina "está preenchido" com "não é". A lista simples que já estava gravada continua sendo lida como "todas", e nada muda no banco. O que NÃO é neutro: a regra que já existe com "não é" num campo que pode estar ausente passa a não disparar nesses casos — está no aviso abaixo.
+
+  **Para quem tem regras ou agentes próprios:** Revise as regras que usam "não é" (`neq`) num campo que pode estar AUSENTE (nulo, ou nunca preenchido): elas disparavam quando o campo não estava preenchido e agora não disparam mais. Para voltar a pegar o "não preencheu", troque a condição por "está vazio"; para "não é X e está preenchido", use "está preenchido" junto do "não é X". Em campo cujo valor é texto vazio nada muda — ali o `neq` continua igual.
+
+  Não volte para a versão anterior DEPOIS de gravar uma regra "qualquer uma": a versão antiga não conhece o formato de grupo e a leitura das condições dela estoura ao avaliar, o que derruba as automações daquele gatilho inteiro — não só a regra nova. Se precisar voltar, desfaça antes as regras "qualquer uma" pelo formulário.
+
+  Portado do projeto original (DeskcommCRM, PR #2858 de @webtecnica, refs #2727). No CRM da clínica, as condições aparecem no formulário de regra de Automações (o editor visual de caixas do original não existe aqui).
+
+- **Respostas rápidas viram botões de um clique no Inbox** O compositor do Inbox ganha uma barra com um botão por resposta rápida cadastrada. O clique não envia nada: o texto cai no campo para o atendente revisar, e a resposta com imagens da Biblioteca de mídia abre a mesma prévia do atalho `/`, com o texto como legenda. Nada a fazer na atualização.
+
+  Portado e adaptado do projeto original (DeskcommCRM, PR #2847 de @webtecnica). No original a resposta rápida também pode ser de áudio, com arquivo próprio; aqui a mídia da resposta vem da Biblioteca de mídia, que guarda só imagem e vídeo, então a resposta de áudio ficou de fora.
+
+- **O telefone que o cliente informa pode entrar sozinho na ficha sem número** Nova opção em Configurações › Distribuição de atendimento. Ligada, quando o cliente diz o telefone na conversa e a ficha dele está sem número, o número é gravado na hora, em formato internacional, sem esperar alguém conferir. Isso faz o lembrete de agendamento chegar a quem antes ficava sem ele. A opção vem desligada, e só um administrador da organização pode ligá-la. Ela nunca troca o número de quem já tem um, e os outros dados (e-mail, nome, data de nascimento) continuam indo para conferência. Toda gravação fica na auditoria e, quando o contato tem um negócio aberto, também aparece na linha do tempo dele. Na atualização não há nada a fazer.
+
+  Portado do projeto original (DeskcommCRM, PR #2643 de @webtecnica), a partir do relato de @kristhianlumai-lgtm (#2593). Vale para contato vindo do Instagram sem telefone: o número que a pessoa escrever na conversa entra na ficha, se a opção estiver ligada. Se o número já for de outro contato, ele continua como proposta para conferência.
+
+### Alterado
+
+- **As telas do CRM abrem mais depressa, com menos esperas pelo banco a cada clique** Antes de desenhar qualquer tela, o CRM confere quem está logado e a política de verificação em duas etapas. Duas dessas leituras ao banco esperavam umas pelas outras sem precisar umas das outras; agora saem juntas. Com o banco fora da VPS (Supabase na nuvem), cada espera dessas custa de 100 a 250 ms. Nada muda no que a tela mostra.
+
+  Portado do projeto original (DeskcommCRM, PR #3117 de @SrPascoa).
+
+- **As telas do CRM deixam de consultar o login duas vezes só para conferir a verificação em duas etapas** Ao abrir uma tela, o CRM perguntava duas vezes ao servidor de autenticação quem está logado: uma para saber quem é a pessoa e outra para saber se ela tem a verificação em duas etapas cadastrada. A resposta era a mesma; agora a segunda pergunta reaproveita a primeira. Com o banco fora da VPS, é uma espera e um pedido a menos por tela, e a regra da verificação em duas etapas não muda.
+
+  Portado do projeto original (DeskcommCRM, PR #3122 de @SrPascoa).
+
+### Corrigido
+
+- **As campanhas respeitam o intervalo do número também quando dividem números no rodízio** Quando duas campanhas compartilhavam um número no rodízio, esse número podia mandar duas mensagens de campanha no mesmo minuto, uma de cada campanha. E se o assistente tinha acabado de responder alguém por aquele número, a campanha podia sair logo em seguida, sem esperar o intervalo mínimo entre mensagens que você configurou para o número. Agora cada número manda no máximo uma mensagem de campanha por rodada, seja ele o principal ou um dos vinculados, e só depois de cumprido o intervalo dele. Um número que ainda está no intervalo, ou que já mandou nesta rodada por outra campanha, fica fora do rodízio só nessa rodada: a campanha usa outro número dela que esteja livre e, se não houver nenhum, tenta de novo na rodada seguinte. Isso vale também quando esse número é o principal da outra campanha. Duas campanhas com o mesmo número principal continuam como antes: a mais antiga tem a vez em cada rodada. Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3136 de @melgarafael).
+
+- **O filtro de palavras do agente passa a valer** Na tela do agente, o campo "Só responder quando a mensagem falar de algo específico" era gravado e nunca consultado: o agente respondia a tudo. Agora, no modo automático, a IA não responde a uma mensagem que não tenha nenhuma das palavras configuradas. Isso vale para cada mensagem, inclusive no meio de uma conversa que o agente já começou: se ele perguntou o produto e o cliente respondeu "camiseta azul" sem nenhuma das palavras, essa resposta fica sem retorno (a issue #3142 discute fazer o filtro valer só para a entrada do agente). A mensagem continua na conversa, mas não gera aviso na Central; só a vê quem abrir a conversa. Pedido de atendente, pedido para parar de receber mensagens e áudio ou imagem ainda sem transcrição continuam passando, mesmo sem a palavra. No modo assistido, nada muda.
+
+  Fora do horário de funcionamento do agente, pedido de atendente e pedido para parar passam a ser tratados quando a mensagem chega, desde que a janela de envio do número esteja aberta (por padrão, das 7h às 22h). Fora dessa janela, eles esperam ela abrir, como antes.
+
+  Portado do projeto original (DeskcommCRM, PR #2696 de @webtecnica), a partir do relato de @FelipeMartini (#2679). No CRM da clínica, a resposta pronta também só sai quando a mensagem passa no filtro.
+
+  **Para quem tem regras ou agentes próprios:** Se algum agente seu tem esse campo preenchido, ele vai passar a ficar calado em toda mensagem sem uma das palavras, inclusive no meio da conversa. Antes de atualizar, confira o campo na tela de cada agente. Se não quiser o filtro, deixe-o em branco e publique a versão de novo.
+
 ## [4.31.1] — 2026-10-22
 
 ### Corrigido
@@ -7996,7 +8046,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.31.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.32.0...HEAD
+[4.32.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.31.1...v4.32.0
 [4.31.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.31.0...v4.31.1
 [4.31.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.30.0...v4.31.0
 [4.30.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.29.0...v4.30.0
