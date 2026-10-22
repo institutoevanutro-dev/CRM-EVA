@@ -1,5 +1,5 @@
 ---
-impacto: exige_acao
+impacto: nada_mudou
 secao: corrigido
 titulo: O filtro de palavras do agente passa a valer
 ---
@@ -10,6 +10,4 @@ Fora do horário de funcionamento do agente, pedido de atendente e pedido para p
 
 Portado do projeto original (DeskcommCRM, PR #2696 de @webtecnica), a partir do relato de @FelipeMartini (#2679). No CRM da clínica, a resposta pronta também só sai quando a mensagem passa no filtro.
 
-## Requer atenção
-
-Se algum agente seu tem esse campo preenchido, ele vai passar a ficar calado em toda mensagem sem uma das palavras, inclusive no meio da conversa. Antes de atualizar, confira o campo na tela de cada agente. Se não quiser o filtro, deixe-o em branco e publique a versão de novo.
+**Para quem tem regras ou agentes próprios:** Se algum agente seu tem esse campo preenchido, ele vai passar a ficar calado em toda mensagem sem uma das palavras, inclusive no meio da conversa. Antes de atualizar, confira o campo na tela de cada agente. Se não quiser o filtro, deixe-o em branco e publique a versão de novo.
