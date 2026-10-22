@@ -28,7 +28,8 @@ describe("paletas do guia de marca", () => {
   });
 
   it("paletaDaCor devolve null para outra cor, vazio ou texto que não é cor", () => {
-    for (const v of ["#506d48", "", "#12", "vinho", "#zzzzzz", "#6b2738"]) expect(paletaDaCor(v)).toBeNull();
+    for (const v of ["#506d48", "", "#12", "vinho", "#zzzzzz", "#6b2738"])
+      expect(paletaDaCor(v)).toBeNull();
   });
 
   it("cada principal passa nos pisos de contraste do CRM nos dois temas", () => {

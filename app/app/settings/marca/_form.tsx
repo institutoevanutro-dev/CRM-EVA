@@ -23,6 +23,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { updateMarcaDaOrganizacao } from "@/app/actions/settings/updateMarcaDaOrganizacao";
+import { AmostrasDePaleta } from "@/components/branding/AmostrasDePaleta";
 import { CampoDeLogo } from "@/components/branding/CampoDeLogo";
 import { TiraDeTons, type ItemDaLegenda } from "@/components/branding/TiraDeTons";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cssDaMarca, ESCOPO_DA_ORGANIZACAO } from "@/lib/branding/css";
 import { avisosDaMarca, type Aviso, type DistanciaAteSuaCor, type Tom } from "@/lib/branding/linguagem";
-import { AmostrasDePaleta } from "@/components/branding/AmostrasDePaleta";
 import { ehHexValido, K, normalizarHex } from "@/lib/branding/rampa";
 import { REGUA_DO_PRODUTO } from "@/lib/branding/regua-do-produto";
 import {

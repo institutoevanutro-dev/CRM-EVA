@@ -13,7 +13,10 @@ describe("AmostrasDePaleta", () => {
     expect(botoes).toHaveLength(6);
     for (const b of botoes) expect(b).toHaveAttribute("type", "button");
     expect(screen.getByRole("button", { name: /Vinho/ })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /Grafite/ })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: /Grafite/ })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
     expect(screen.queryByText("Cor livre")).toBeNull();
   });
 
@@ -48,7 +51,8 @@ describe("AmostrasDePaleta", () => {
     for (const v of ["", "#12", "xyz", "#6b273"]) {
       rerender(<AmostrasDePaleta hex={v} onEscolher={() => {}} />);
       expect(screen.queryByText("Cor livre")).toBeNull();
-      for (const b of screen.getAllByRole("button")) expect(b).toHaveAttribute("aria-pressed", "false");
+      for (const b of screen.getAllByRole("button"))
+        expect(b).toHaveAttribute("aria-pressed", "false");
     }
   });
 });

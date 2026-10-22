@@ -8,7 +8,13 @@ import { ehHexValido } from "@/lib/branding/rampa";
  * As 6 paletas do guia de marca como atalho da cor da marca. Só preenche o campo: gravar continua sendo o botão
  * da tela. A amostra marcada sai da cor do campo, nunca de estado próprio.
  */
-export function AmostrasDePaleta({ hex, onEscolher }: { hex: string; onEscolher: (hex: string) => void }) {
+export function AmostrasDePaleta({
+  hex,
+  onEscolher,
+}: {
+  hex: string;
+  onEscolher: (hex: string) => void;
+}) {
   const t = useT();
   const atual = paletaDaCor(hex);
   const livre = atual === null && ehHexValido(hex);
@@ -21,7 +27,7 @@ export function AmostrasDePaleta({ hex, onEscolher }: { hex: string; onEscolher:
             type="button"
             aria-pressed={atual === p.id}
             onClick={() => onEscolher(p.principal)}
-            className="flex items-center gap-2 rounded-sm border border-border px-3 py-1.5 text-sm hover:bg-surface-elevated focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg aria-pressed:border-accent aria-pressed:font-medium"
+            className="flex items-center gap-2 rounded-sm border border-border px-3 py-1.5 text-sm hover:bg-surface-elevated focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-hidden aria-pressed:border-accent aria-pressed:font-medium"
           >
             <span
               aria-hidden

@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { updateBranding } from "@/app/actions/settings/updateBranding";
+import { AmostrasDePaleta } from "@/components/branding/AmostrasDePaleta";
 import { CampoDeLogo } from "@/components/branding/CampoDeLogo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cssDaMarca } from "@/lib/branding/css";
-import { AmostrasDePaleta } from "@/components/branding/AmostrasDePaleta";
 import { ehHexValido, K, normalizarHex } from "@/lib/branding/rampa";
 import { REGUA_DO_PRODUTO } from "@/lib/branding/regua-do-produto";
 import { resolverMarca } from "@/lib/branding/resolve";

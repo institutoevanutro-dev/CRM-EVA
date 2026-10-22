@@ -5,7 +5,8 @@ import { ehHexValido, normalizarHex } from "@/lib/branding/rampa";
  * (`accent_hex`), e o CRM deriva o resto. Fundo e destaque do guia não têm onde morar aqui.
  * A paleta não é gravada; sai da cor gravada por `paletaDaCor`.
  */
-export type IdDaPaleta = "verde-dourado" | "azul-petroleo" | "vinho" | "grafite" | "terracota" | "lavanda";
+export type IdDaPaleta =
+  "verde-dourado" | "azul-petroleo" | "vinho" | "grafite" | "terracota" | "lavanda";
 export type Paleta = { readonly id: IdDaPaleta; readonly nome: string; readonly principal: string };
 
 export const PALETAS: readonly Paleta[] = [
