@@ -31,6 +31,7 @@ import { resolveSlash, TemplateMenu } from "@/components/inbox/composer/Template
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useCreateNote } from "@/hooks/inbox/useCreateNote";
 import { useMessageTemplates, type MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
+import { BarraDeRecursos } from "@/components/inbox/composer/BarraDeRecursos";
 import { X } from "lucide-react";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
 import { useUploadMedia, type DestinoDoUpload } from "@/hooks/inbox/useUploadMedia";
@@ -585,6 +586,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           >
             {t("Contato sem nome no CRM: {{nome}}/{{primeiro_nome}} ficaram literais no texto. Edite antes de enviar.")}
           </p>
+        )}
+        {/* A BARRA DE RESPOSTAS RÁPIDAS (#2833): um botão por título. O clique
+            NÃO envia: entrega a resposta ao MESMO `applyTemplate` do `/`. */}
+        {mode === "reply" && (
+          <BarraDeRecursos
+            respostas={templates.data ?? []}
+            disabled={respostaBarrada}
+            onEscolher={applyTemplate}
+          />
         )}
         <div className="flex items-end gap-2">
           {/* O "+" existe nos DOIS modos: em "Nota interna" a nota aceita anexo
