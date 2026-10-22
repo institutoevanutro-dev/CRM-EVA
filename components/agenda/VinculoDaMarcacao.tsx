@@ -41,10 +41,17 @@ export function VinculoDaMarcacao({
   contactId,
   conversationId,
   onChange,
+  compacto = false,
 }: {
   contactId: string;
   conversationId: string;
   onChange: (contact: string, conversation: string) => void;
+  /**
+   * A versão do modal simples de marcação: sem caixa em volta, rótulo
+   * "Paciente" e a lista de resultados flutuando sobre o formulário em vez de
+   * empurrá-lo para baixo.
+   */
+  compacto?: boolean;
 }) {
   const t = useT();
   const listaId = useId();
@@ -101,9 +108,9 @@ export function VinculoDaMarcacao({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border p-3">
-      <label className="block">
-        {t("Buscar cliente")}
+    <div className={compacto ? "relative space-y-1.5" : "space-y-3 rounded-lg border p-3"}>
+      <label className={compacto ? "block text-xs font-medium text-text-muted" : "block"}>
+        {compacto ? t("Paciente") : t("Buscar cliente")}
         <input
           ref={campo}
           role="combobox"
@@ -112,7 +119,12 @@ export function VinculoDaMarcacao({
           aria-controls={listaId}
           aria-activedescendant={mostrarLista ? `${listaId}-${ativo}` : undefined}
           autoComplete="off"
-          className="mt-1 w-full rounded-md border bg-surface p-2"
+          className={
+            compacto
+              ? "mt-1 h-10 w-full rounded-md border border-border bg-surface px-2.5 text-sm font-normal text-text outline-hidden focus:border-accent"
+              : "mt-1 w-full rounded-md border bg-surface p-2"
+          }
+          placeholder={compacto ? t("Buscar pelo nome ou telefone") : undefined}
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -146,7 +158,11 @@ export function VinculoDaMarcacao({
         id={listaId}
         role="listbox"
         hidden={!mostrarLista}
-        className="max-h-64 overflow-y-auto rounded-md border bg-surface"
+        className={
+          compacto
+            ? "absolute inset-x-0 z-30 max-h-56 overflow-y-auto rounded-md border bg-surface shadow-lg"
+            : "max-h-64 overflow-y-auto rounded-md border bg-surface"
+        }
       >
         {mostrarLista
           ? contatos.map((c, i) => (
@@ -183,7 +199,7 @@ export function VinculoDaMarcacao({
         </div>
       ) : null}
       <div>
-        <p className="text-sm font-medium">{t("Quem será atendido")}</p>
+        {compacto ? null : <p className="text-sm font-medium">{t("Quem será atendido")}</p>}
         {contactId ? (
           <div
             data-testid="paciente-escolhido"
@@ -212,7 +228,7 @@ export function VinculoDaMarcacao({
             </button>
           </div>
         ) : (
-          <p className="mt-1 text-sm text-text-muted" data-testid="sem-paciente">
+          <p className={compacto ? "text-xs text-text-subtle" : "mt-1 text-sm text-text-muted"} data-testid="sem-paciente">
             {t("Compromisso pessoal, sem cliente")}
           </p>
         )}

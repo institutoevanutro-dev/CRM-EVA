@@ -11,6 +11,7 @@ import { ANCORA, AGENDAMENTOS, HORARIOS_POR_DIA, PESSOAS } from "@/components/ag
 import { FiltroDePessoas } from "@/components/agenda/FiltroDePessoas";
 import { GradeDaAgenda } from "@/components/agenda/GradeDaAgenda";
 import { HistoricoDaAgenda } from "@/components/agenda/HistoricoDaAgenda";
+import { MarcacaoSimples } from "@/components/agenda/MarcacaoSimples";
 import { PainelDeMarcacao } from "@/components/agenda/PainelDeMarcacao";
 import { corDaTrilha, TRILHAS } from "@/components/agenda/paleta";
 import type { VisaoDaAgenda } from "@/components/agenda/tipos";
@@ -45,6 +46,51 @@ function Secao({
       </div>
       {children}
     </section>
+  );
+}
+
+/** Procedimentos de mentira: um de cada dono e um sem dono (aparece para todos). */
+const PROCEDIMENTOS = [
+  { id: "t-aval", nome: "Avaliação facial", duracaoMin: 45, donoId: "ana", localDetalhes: null },
+  { id: "t-ret", nome: "Retorno", duracaoMin: 30, donoId: "bruno", localDetalhes: null },
+  { id: "t-apl", nome: "Aplicação intramuscular", duracaoMin: 15, donoId: null, localDetalhes: null },
+];
+
+/** O modal simples de marcar, solto na página para ser julgado sem abrir nada. */
+function MarcacaoSimplesDaVitrine() {
+  const [profissional, setProfissional] = React.useState("ana");
+  const [tipo, setTipo] = React.useState("t-aval");
+  return (
+    <div data-testid="vitrine-marcacao-simples" className="max-w-[880px] overflow-hidden rounded-lg border border-border bg-surface pt-4 shadow-sm">
+      <MarcacaoSimples
+        ancora={ANCORA}
+        agora={ANCORA}
+        usuarioId="ana"
+        pessoas={PESSOAS}
+        tipos={PROCEDIMENTOS}
+        profissionalId={profissional}
+        onProfissional={setProfissional}
+        tipoId={tipo}
+        onTipo={setTipo}
+        contactId=""
+        conversationId=""
+        onVinculo={() => undefined}
+        unidades={[]}
+        unidadeId=""
+        onUnidade={() => undefined}
+        fuso={Intl.DateTimeFormat().resolvedOptions().timeZone}
+        horariosPorDia={HORARIOS_POR_DIA}
+        publicouHorarios
+        erroAoCarregar={false}
+        fusoSuposto={false}
+        onMesVisivel={() => undefined}
+        mesCarregado={ANCORA}
+        permiteEncaixe
+        podeBloquearDeOutros
+        onConfirmar={() => Promise.resolve()}
+        onVerNaAgenda={() => undefined}
+      />
+    </div>
   );
 }
 
@@ -197,6 +243,14 @@ export function VitrineDaAgenda() {
           horariosPorDia={HORARIOS_POR_DIA}
           quemSeraAtendido={{ nome: "Marina Alves", aceitaMensagem: true }}
         />
+      </Secao>
+
+      <Secao
+        id="marcacao-simples"
+        titulo="O modal simples de marcar"
+        descricao="Duas abas, Novo agendamento e Bloquear horário. Primeiro o profissional, depois o procedimento que ele atende, o paciente, o dia e o horário livre; o fim sai da duração do procedimento."
+      >
+        <MarcacaoSimplesDaVitrine />
       </Secao>
 
       <Secao

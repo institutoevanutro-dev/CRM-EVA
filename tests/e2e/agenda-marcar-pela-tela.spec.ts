@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { test, expect } from "@playwright/test";
 
 import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
+import { escolherProfissionalEProcedimento } from "./helpers/marcacao-simples";
 import { esperarAgenda } from "./helpers/tela-agenda";
 
 /**
@@ -72,7 +73,7 @@ const RAIZ = path.resolve(__dirname, "../..");
 interface Creds {
   password: string;
   users: Record<string, { email: string } | undefined>;
-  agenda?: { tipo_nome: string; tipo_slug: string };
+  agenda?: { tipo_nome: string; tipo_slug: string; dono_user_id?: string };
 }
 
 function lerCreds(): Creds {
@@ -167,7 +168,7 @@ test("marcar um horário pela tela e vê-lo aparecer na grade — sem recarregar
   // se o seletor sumir, o painel volta a "Atendimento" e o horário marcado deixa
   // de casar com a jornada do tipo do seed.
   await expect(page.getByTestId("tipos-de-agendamento")).toBeVisible({ timeout: 10_000 });
-  await page.getByRole("button", { name: new RegExp(`^${creds.agenda.tipo_nome}`) }).click();
+  await escolherProfissionalEProcedimento(page, new RegExp(`^${creds.agenda.tipo_nome}`), creds.agenda.dono_user_id);
 
   try {
     await escolherDiaDesenhado(page, diasDaSemana);

@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 
 import { escolherUltimoDiaCheio } from "./helpers/agenda-semana-integra";
+import { escolherProfissionalEProcedimento } from "./helpers/marcacao-simples";
 import { esperarAgenda } from "./helpers/tela-agenda";
 
 /**
@@ -41,7 +42,7 @@ test.describe.configure({ timeout: 180_000 });
 interface Creds {
   password: string;
   users: Record<string, { email: string } | undefined>;
-  agenda?: { tipo_nome: string };
+  agenda?: { tipo_nome: string; dono_user_id?: string };
 }
 
 function lerCreds(): Creds {
@@ -73,7 +74,7 @@ test("marcar, clicar em 'Ver na agenda', e ENCONTRAR o compromisso na grade", as
   await page.getByRole("button", { name: /Novo agendamento/i }).click();
   // O tipo do seed, e não o primeiro da lista: só ele tem jornada publicada.
   await expect(page.getByTestId("tipos-de-agendamento")).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: new RegExp(`^${creds.agenda!.tipo_nome}`) }).click();
+  await escolherProfissionalEProcedimento(page, new RegExp(`^${creds.agenda!.tipo_nome}`), creds.agenda!.dono_user_id);
 
   // O ÚLTIMO dia disponível, de propósito: quanto mais longe da semana corrente,
   // mais o defeito aparece. Com o primeiro dia (quase sempre nesta semana) a

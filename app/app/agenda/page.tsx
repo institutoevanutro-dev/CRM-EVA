@@ -276,6 +276,9 @@ export default async function AgendaPage() {
       // leitura, que `resolveActiveOrg` resolve como `viewer` — levaria 403. A
       // tela esconder é cortesia: quem decide segue sendo a rota.
       podeMarcar={ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent}
+      // Bloquear a agenda de OUTRA pessoa é de manager+, a mesma régua da rota
+      // de exceções; abaixo disso a aba de bloqueio só oferece a própria agenda.
+      podeBloquearDeOutros={ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager}
       tiposIniciais={(tipos ?? []).map((t) => ({
         id: t.id,
         nome: t.name,

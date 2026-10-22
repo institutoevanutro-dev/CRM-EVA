@@ -19,10 +19,15 @@ describe("endereço e observação existem na marcação e chegam ao compromisso
   const get = readFileSync("app/api/v1/agenda/agendamentos/[id]/route.ts", "utf8");
 
   it("a tela de marcar tem os dois campos, e só na criação", () => {
-    const bloco = tela.slice(tela.indexOf('data-testid="endereco-do-compromisso"') - 1500, tela.indexOf("<PainelDeMarcacao"));
-    expect(bloco).toContain("{!remarcandoId ? (");
-    expect(bloco).toContain('data-testid="endereco-do-compromisso"');
-    expect(bloco).toContain('data-testid="observacao-do-compromisso"');
+    // Desde o modal simples, os campos moram em `MarcacaoSimples`, que só é
+    // montado para a marcação NOVA (`open={marcando && !remarcandoId}`); remarcar
+    // segue no painel lateral, sem eles.
+    const modal = readFileSync("components/agenda/MarcacaoSimples.tsx", "utf8");
+    expect(modal).toContain('data-testid="endereco-do-compromisso"');
+    expect(modal).toContain('data-testid="observacao-do-compromisso"');
+    expect(tela).toContain("<Dialog open={marcando && !remarcandoId}");
+    const remarcar = tela.slice(tela.indexOf("<Sheet open={marcando && Boolean(remarcandoId)}"));
+    expect(remarcar.slice(0, remarcar.indexOf("</Sheet>"))).not.toContain("endereco-do-compromisso");
   });
 
   it("o POST manda location_details e description, não notes", () => {

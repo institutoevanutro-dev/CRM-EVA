@@ -44,7 +44,7 @@ import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 
-type Excecao = {
+export type Excecao = {
   id: string;
   user_id: string;
   exception_date: string;
@@ -65,7 +65,7 @@ const DIA_INTEIRO = { start_minute: 0, end_minute: 1440 };
 const TETO_DA_REPETICAO = 53;
 
 /** "0..1440" vira "o dia todo"; o resto vira "09:00–12:00". */
-function faixa(e: Excecao, t: (s: string) => string): string {
+export function faixa(e: Excecao, t: (s: string) => string): string {
   if (e.start_minute === 0 && e.end_minute === 1440) return t("o dia todo");
   const hhmm = (m: number) =>
     `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -90,7 +90,7 @@ function datasSemanais(inicio: string, ate: string, teto: number): string[] {
 }
 
 /** "14:00" vira 840 — o caminho inverso do `faixa` acima. */
-function emMinutos(hhmm: string): number {
+export function emMinutos(hhmm: string): number {
   const [h = "0", m = "0"] = hhmm.split(":");
   return Number(h) * 60 + Number(m);
 }

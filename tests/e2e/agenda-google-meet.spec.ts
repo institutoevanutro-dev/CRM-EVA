@@ -9,6 +9,7 @@ import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { reconcileAppointment } from "../../lib/agenda/google/sync-executor";
 import { createMeetDeliveryHandler } from "../../lib/agent-engine/agent/meet-delivery";
 import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
+import { escolherProfissionalEProcedimento } from "./helpers/marcacao-simples";
 import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
 
 const credentials = credenciaisSupabaseDeTeste();
@@ -182,7 +183,7 @@ async function book(page: Page, f: Fixture) {
   await page.keyboard.press("Escape");
   const days = await irParaASemanaSeguinte(page);
   await page.getByRole("button", { name: /novo agendamento/i }).click();
-  await page.getByRole("button", { name: /^Consulta Meet/ }).click();
+  await escolherProfissionalEProcedimento(page, /^Consulta Meet/);
   await escolherDiaDesenhado(page, days);
   await page.locator('[data-testid^="horario-"]').first().click();
   const response = page.waitForResponse(
