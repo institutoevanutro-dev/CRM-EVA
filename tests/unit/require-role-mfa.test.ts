@@ -43,11 +43,18 @@ function montarStub({ role, temFator, aal }: Cenario) {
   return {
     rpc: vi.fn(async () => ({ data: role, error: null })),
     auth: {
+      // Os fatores vêm do `getUser()` — a mesma ida ao GoTrue que `loadAuthUser`
+      // faz (`sessaoDaRequisicao` em lib/auth/server.ts).
+      getUser: vi.fn(async () => ({
+        data: {
+          user: {
+            id: USER_ID,
+            factors: temFator ? [{ id: "f1", factor_type: "totp", status: "verified" }] : [],
+          },
+        },
+        error: null,
+      })),
       mfa: {
-        listFactors: vi.fn(async () => ({
-          data: { totp: temFator ? [{ id: "f1", status: "verified" }] : [] },
-          error: null,
-        })),
         getAuthenticatorAssuranceLevel: vi.fn(async () => ({
           data: { currentLevel: aal, nextLevel: temFator ? "aal2" : aal },
           error: null,
