@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cssDaMarca, ESCOPO_DA_ORGANIZACAO } from "@/lib/branding/css";
 import { avisosDaMarca, type Aviso, type DistanciaAteSuaCor, type Tom } from "@/lib/branding/linguagem";
+import { AmostrasDePaleta } from "@/components/branding/AmostrasDePaleta";
 import { ehHexValido, K, normalizarHex } from "@/lib/branding/rampa";
 import { REGUA_DO_PRODUTO } from "@/lib/branding/regua-do-produto";
 import {
@@ -276,6 +277,7 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
 
         <div className="space-y-2">
           <Label htmlFor="org_accent_hex">{t("Cor da sua marca")}</Label>
+          <AmostrasDePaleta hex={hex} onEscolher={setHex} />
           <div className="flex items-center gap-3">
             {/* Atalho, nunca o controle principal: o seletor do navegador escolhe
                 UM pixel e não mostra o que o sistema faz com ele. Quem ensina é a

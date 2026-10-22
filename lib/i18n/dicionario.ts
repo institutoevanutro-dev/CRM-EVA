@@ -3611,6 +3611,13 @@ export const DICIONARIO: Traducoes = {
     es: "Déjalo en blanco para volver al nombre predeterminado. Este nombre ya aparece en el título de la pestaña del navegador, en los menús laterales, en los emails que el sistema envía (para las empresas que no definieron un nombre propio), en la app de verificación en dos pasos y en el archivo de códigos de recuperación que el usuario descarga. Todavía NO llega a las pantallas de entrada y registro ni a las de la configuración inicial: esas siguen con el nombre grabado en el archivo de instalación del servidor hasta la próxima actualización del stack.",
   },
   "Cor da marca": { es: "Color de la marca" },
+  "Paletas prontas": { es: "Paletas listas" },
+  "Cor livre": { es: "Color libre" },
+  "Verde e dourado": { es: "Verde y dorado" },
+  "Azul-petróleo": { es: "Azul petróleo" },
+  "Vinho": { es: "Vino" },
+  "Terracota": { es: "Terracota" },
+  "Lavanda": { es: "Lavanda" },
   "Escolher a cor visualmente": { es: "Elegir el color visualmente" },
   "Use um código de cor como #7a5cd6.": { es: "Usa un código de color como #7a5cd6." },
   "Deixe em branco para voltar à cor padrão do sistema.": {
