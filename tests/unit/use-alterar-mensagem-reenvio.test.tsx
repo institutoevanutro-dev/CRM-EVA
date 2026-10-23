@@ -92,6 +92,18 @@ describe("reenvio que o canal recusou de novo", () => {
     expect(descricao).toBe("Este número foi excluído da Central de Conexões.");
   });
 
+  it("número sem conexão (queued com o motivo): avisa que não saiu, porque não sai sozinha depois", async () => {
+    post.mockResolvedValueOnce({
+      data: { status: "queued", error_code: null, metadata: { queued_reason: "channel_session_not_working" } },
+    });
+    const { hook } = setup();
+    await reenviar(hook);
+    expect(toastErro).toHaveBeenCalledTimes(1);
+    const [titulo, opcoes] = toastErro.mock.calls[0] as [string, { description: string }];
+    expect(titulo).toBe("A mensagem não saiu de novo.");
+    expect(opcoes.description).toBe("Não enviada: sem conexão");
+  });
+
   it("reenvio aceito (queued/sent) não dispara aviso: a bolha muda sozinha", async () => {
     post.mockResolvedValueOnce({ data: { status: "queued", error_code: null } });
     const { hook } = setup();

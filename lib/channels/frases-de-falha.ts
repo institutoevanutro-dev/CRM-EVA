@@ -25,14 +25,14 @@
 export const FRASES_DE_FALHA: Record<string, string> = {
   // Sessão do canal fora de WORKING — o número está desconectado.
   channel_session_not_working:
-    "O número escolhido não está conectado no momento. Reconecte em Conexões — a mensagem sai sozinha quando ele voltar.",
+    "O número escolhido não está conectado no momento. Reconecte em Conexões: a mensagem sai sozinha quando ele voltar.",
   // Credencial do transporte ausente no ambiente da instalação.
   waha_not_configured: "A conexão de WhatsApp ainda não foi configurada nesta instalação.",
   meta_not_configured: "A conexão de WhatsApp ainda não foi configurada nesta instalação.",
   zernio_not_configured: "A conexão de WhatsApp ainda não foi configurada nesta instalação.",
   // Credencial da sessão gravada, mas que não decifra (chave mestra trocada, GUC ausente).
   meta_creds_decrypt_failed:
-    "A credencial desta conexão não pôde ser lida nesta instalação. Reconecte em Conexões — a mensagem sai sozinha quando ela voltar.",
+    "A credencial desta conexão não pôde ser lida nesta instalação. Reconecte em Conexões: a mensagem sai sozinha quando ela voltar.",
   // Canal excluído da Central de Conexões (migration 0106).
   channel_archived:
     "Esse número foi excluído da Central de Conexões. Escolha outro número nesta automação.",

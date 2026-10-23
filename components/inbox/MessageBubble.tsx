@@ -187,8 +187,10 @@ export const MessageBubble = memo(function MessageBubble({
   // cru do canal fica fora daqui — ele pode trazer endereço interno do serviço.
   const motivoDaFalha = motivoDaFalhaDaMensagem(message, t);
   // Encaminhar vale para qualquer mensagem com conteúdo — recebida ou enviada.
-  // Só não se encaminha o que foi apagado: o conteúdo saiu do ar de propósito.
-  const podeEncaminhar = Boolean(onEncaminhar) && !apagada;
+  // Não se encaminha o que foi apagado (o conteúdo saiu do ar de propósito), o
+  // cartão de contato (o servidor recusa, ver `motivoParaNaoEncaminhar`) nem a
+  // bolha otimista, que ainda não tem linha no banco para ser lida.
+  const podeEncaminhar = Boolean(onEncaminhar) && !apagada && !isContact && !message.metadata?._optimistic;
   const aiGenerated = isAiGeneratedMessage(message.metadata);
   const citations = extractCitations(message.metadata);
   const showCitationButton =

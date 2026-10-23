@@ -4128,8 +4128,8 @@ export const DICIONARIO: Traducoes = {
     es: "El mensaje está en la cola y sale en cuanto el canal lo acepte.",
   },
   // ─── lib/channels/frases-de-falha.ts (texto de tela por código do adapter) ───
-  "O número escolhido não está conectado no momento. Reconecte em Conexões — a mensagem sai sozinha quando ele voltar.": {
-    es: "El número elegido no está conectado en este momento. Reconéctalo en Conexiones — el mensaje sale solo cuando vuelva.",
+  "O número escolhido não está conectado no momento. Reconecte em Conexões: a mensagem sai sozinha quando ele voltar.": {
+    es: "El número elegido no está conectado en este momento. Reconéctalo en Conexiones: el mensaje sale solo cuando vuelva.",
   },
   "A conexão de WhatsApp ainda não foi configurada nesta instalação.": {
     es: "La conexión de WhatsApp todavía no fue configurada en esta instalación.",
@@ -11267,12 +11267,12 @@ export const DICIONARIO: Traducoes = {
   "A janela de 24 horas fechou. Envie um modelo aprovado ou aguarde o cliente escrever.": {
     es: "La ventana de 24 horas se cerró. Envía una plantilla aprobada o espera a que el cliente escriba.",
   },
-  "Esta mensagem não pode ser reenviada.": { es: "Este mensaje no se puede reenviar." },
+  "Esta mensagem não pode ser reenviada.": { es: "Este mensaje no se puede volver a enviar." },
   "Confirme antes de enviar de novo.": { es: "Confirma antes de enviar de nuevo." },
-  "Esta mensagem já está sendo reenviada.": { es: "Este mensaje ya se está reenviando." },
+  "Esta mensagem já está sendo reenviada.": { es: "Este mensaje ya se está volviendo a enviar." },
   "Muitas tentativas seguidas. Tente em um minuto.": { es: "Demasiados intentos seguidos. Intenta en un minuto." },
   "Mensagem não encontrada.": { es: "Mensaje no encontrado." },
-  "A credencial desta conexão não pôde ser lida nesta instalação. Reconecte em Conexões — a mensagem sai sozinha quando ela voltar.": {
+  "A credencial desta conexão não pôde ser lida nesta instalação. Reconecte em Conexões: a mensagem sai sozinha quando ela voltar.": {
     es: "La credencial de esta conexión no se pudo leer en esta instalación. Vuelve a conectar en Conexiones: el mensaje sale solo cuando vuelva.",
   },
   // Portes 23/10, grupo B (PR #3279): a bolha apagada diz quem apagou.
@@ -11297,6 +11297,9 @@ export const DICIONARIO: Traducoes = {
     es: "No pude preparar el contenido multimedia de este mensaje para reenviarlo. Inténtalo de nuevo en unos instantes.",
   },
   "Esta mídia não pode ser encaminhada.": { es: "Este contenido multimedia no se puede reenviar." },
+  "A mensagem foi para a conversa, mas não saiu: o número está sem conexão.": {
+    es: "El mensaje fue a la conversación, pero no salió: el número está sin conexión.",
+  },
   "Só é possível encaminhar mensagens de texto ou mídia.": { es: "Solo se pueden reenviar mensajes de texto o multimedia." },
   // Portes 23/10, grupo B (PR #3336): o motivo da falha numa frase só (bolha, reenvio,
   // encaminhamento e modelo). As frases da plataforma oficial e as que o envio grava.
@@ -11397,9 +11400,6 @@ export const DICIONARIO: Traducoes = {
   "Telefone deve ter DDD + número (ex.: 11999998888) ou o formato E.164 (+5511999998888)": {
     es: "El teléfono debe tener código de área + número (ej.: 11999998888) o el formato E.164 (+5511999998888)",
   },
-  // Portes 23/10, grupo D (PR #3197): CPF ou e-mail repetido responde 409 contact_exists.
-  "Já existe um contato com este CPF.": { es: "Ya existe un contacto con este CPF." },
-  "Já existe um contato com este e-mail.": { es: "Ya existe un contacto con este correo electrónico." },
   // Portes 23/10, grupo F (PR #3339): gerar códigos de recuperação sem mostrar o código cru do erro.
   "Gerar códigos de recuperação não está disponível nesta instalação.": {
     es: "Generar códigos de recuperación no está disponible en esta instalación.",
@@ -11408,6 +11408,9 @@ export const DICIONARIO: Traducoes = {
     es: "Active la verificación en dos pasos antes de generar los códigos.",
   },
   "Não foi possível gerar os códigos. Tente de novo.": { es: "No se pudieron generar los códigos. Intente de nuevo." },
+  // Portes 23/10, grupo D (PR #3197): CPF ou e-mail repetido responde 409 contact_exists.
+  "Já existe um contato com este CPF.": { es: "Ya existe un contacto con este CPF." },
+  "Já existe um contato com este e-mail.": { es: "Ya existe un contacto con este correo electrónico." },
   // Portes 23/10, grupo D (PR #2834): o e-mail da automação para uma pessoa da equipe.
   "E-mail de uma pessoa da equipe": { es: "Correo de una persona del equipo" },
   "Pessoa da equipe": { es: "Persona del equipo" },

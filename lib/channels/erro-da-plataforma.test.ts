@@ -76,10 +76,13 @@ describe("recusaDoEnvioDeModelo: o prefixo que o envio de modelo grava", () => {
 describe("a tela da conversa: desfecho do parceiro com código sem frase nossa", () => {
   const t = (s: string) => s;
   it.each([
-    "131000 — Something went wrong — Message failed to send due to an unknown error.",
-    "131053 — Media upload error — Unable to download the media.",
-  ])("%s: o texto gravado, não 'Confira a conexão'", (texto) => {
-    expect(motivoDaFalhaDaMensagem({ error_code: "zernio_error", error_message: texto }, t)).toBe(texto);
+    [
+      "131000 — Something went wrong — Message failed to send due to an unknown error.",
+      "131000: Something went wrong. Message failed to send due to an unknown error.",
+    ],
+    ["131053 — Media upload error — Unable to download the media.", "131053: Media upload error. Unable to download the media."],
+  ])("%s: o texto gravado, não 'Confira a conexão', e sem o nosso travessão", (texto, naTela) => {
+    expect(motivoDaFalhaDaMensagem({ error_code: "zernio_error", error_message: texto }, t)).toBe(naTela);
   });
 
   it("código com frase nossa: a frase (controle)", () => {

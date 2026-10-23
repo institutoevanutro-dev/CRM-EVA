@@ -48,6 +48,14 @@ export function EncaminharDialog({
 }: Props) {
   const t = useT();
   const [busca, setBusca] = useState("");
+  // Fechar zera a busca por QUALQUER caminho (Cancelar, o X, o encaminhamento
+  // que deu certo e o pai que fecha): reabrir noutra mensagem sem a lupa antiga.
+  // Ajuste durante o render, o padrão do React para estado que segue uma prop.
+  const [abertoAntes, setAbertoAntes] = useState(open);
+  if (abertoAntes !== open) {
+    setAbertoAntes(open);
+    if (!open) setBusca("");
+  }
 
   const destinos = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -66,11 +74,7 @@ export function EncaminharDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={(aberto) => {
-        // Fechar zera a busca: reabrir noutra mensagem sem a lupa antiga.
-        if (!aberto) setBusca("");
-        onOpenChange(aberto);
-      }}
+      onOpenChange={onOpenChange}
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>

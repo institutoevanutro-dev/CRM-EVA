@@ -82,6 +82,14 @@ export const ApiErrorCodes = {
   reenvio_indisponivel: "reenvio_indisponivel",
   confirmacao_necessaria: "confirmacao_necessaria",
   reenvio_em_curso: "reenvio_em_curso",
+  // POST /api/v1/messages/{id}/forward (lib/inbox/encaminhar-mensagem.ts): a origem não tem o que
+  // encaminhar (apagada, sem conteúdo, cartão de contato, mídia que não chegou) ou o destino não é desta organização.
+  nao_encaminhavel: "nao_encaminhavel",
+  destino_invalido: "destino_invalido",
+  // GET /api/v1/messages/{id}/media?formato=aac: o conversor do processo está cheio (503 com Retry-After)
+  // ou o ffmpeg não converteu (502).
+  conversor_ocupado: "conversor_ocupado",
+  conversao_indisponivel: "conversao_indisponivel",
   invalid_state_transition: "invalid_state_transition",
   invalid_owner: "invalid_owner", // novo dono não é membro ativo agent+ da org (bulk assign, G3-04)
   trigger_kind_not_implemented: "trigger_kind_not_implemented", // publish de followup-flow com kind sem motor de enrollment (stage_change/conversation_end)

@@ -213,6 +213,22 @@ describe("encaminhar: o toast diz a verdade sobre o desfecho", () => {
     expect(toastError.mock.calls[0]![0]).toBe(esperado);
   });
 
+  it("número sem conexão (201 com queued e o motivo): toast de erro, nunca \"encaminhada\"", async () => {
+    post.mockResolvedValueOnce({
+      data: { status: "queued", error_code: null, metadata: { queued_reason: "channel_session_not_working" } },
+    });
+    const { result } = renderHook(() => useEncaminharMensagem(), { wrapper });
+
+    await act(async () => {
+      result.current.mutate(vars);
+    });
+
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalledWith(
+      "A mensagem foi para a conversa, mas não saiu: o número está sem conexão.",
+    );
+  });
+
   it("envio ENTREGUE: toast de sucesso, sem toast de erro", async () => {
     post.mockResolvedValueOnce({ data: { status: "sent" } });
     const { result } = renderHook(() => useEncaminharMensagem(), { wrapper });

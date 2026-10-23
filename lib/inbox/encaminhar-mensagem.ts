@@ -26,6 +26,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { ApiError } from "@/lib/api/types";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
+import { estadoDaJanela } from "@/lib/channels/janela";
 import {
   resolverMidiaDoEncaminhamento,
   type MidiaParaEncaminhar,
@@ -75,6 +76,9 @@ export type MotivoNaoEncaminhavel =
 
 export function motivoParaNaoEncaminhar(origem: MensagemDeOrigem): MotivoNaoEncaminhavel | null {
   if (origem.revoked_at) return "apagada";
+  // Cartão de contato não é texto nem mídia: o recebido viraria o vCard cru (com
+  // o telefone de um terceiro) num texto, e o enviado pelo CRM nem tem corpo.
+  if (origem.type === "contact") return "sem_conteudo";
   // Sem texto e sem mídia NENHUMA: não há o que transportar.
   if (!origem.body && !origem.media_url && !origem.media_storage_path) return "sem_conteudo";
   return null;
@@ -144,11 +148,16 @@ async function lerOrigem(supabase: SB, ctx: HandlerCtx, messageId: string): Prom
  * O destino tem de ser uma conversa DESTA organização, e isso é conferido ANTES
  * de copiar qualquer objeto: o id vem do corpo do pedido, e a cópia usa service
  * role. O canal do destino (arquivado, desconectado) quem confere é o envio.
+ *
+ * A janela de 24h do canal oficial é conferida AQUI, como no reenvio: o handler
+ * do fork só a confere para envio de token e de agente (o composer barra o
+ * humano na tela). Sem isto o texto livre saía, a plataforma recusava depois
+ * (131047), e a tela já tinha dito "Mensagem encaminhada.".
  */
 async function validarDestino(supabase: SB, ctx: HandlerCtx, conversationIdDestino: string): Promise<void> {
   const { data, error } = await supabase
     .from("conversations")
-    .select("id")
+    .select("id, last_inbound_at, channel_sessions:channel_session_id(provider)")
     .eq("id", conversationIdDestino)
     .eq("organization_id", ctx.organization_id)
     .maybeSingle();
@@ -160,6 +169,20 @@ async function validarDestino(supabase: SB, ctx: HandlerCtx, conversationIdDesti
       undefined,
       ctx.requestId,
       traduzir("Escolha uma conversa de destino desta organização.", ctx.idioma ?? "pt-BR"),
+    );
+  }
+  const destino = data as { last_inbound_at?: string | null; channel_sessions?: { provider?: string | null } | null };
+  const janela = estadoDaJanela(destino.channel_sessions?.provider, destino.last_inbound_at ?? null, new Date());
+  if (janela.tipo === "fechada" && janela.regra === "modelo") {
+    throw new ApiError(
+      422,
+      "janela_fechada",
+      undefined,
+      ctx.requestId,
+      traduzir(
+        "A janela de 24 horas fechou. Envie um modelo aprovado ou aguarde o cliente escrever.",
+        ctx.idioma ?? "pt-BR",
+      ),
     );
   }
 }

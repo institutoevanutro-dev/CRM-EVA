@@ -23,7 +23,14 @@ export function useAlterarMensagem(conversationId: string | null) {
   // servidor, e depois de um "não" a bolha tem de mostrar o estado real.
   const reenviar = useMutation({
     mutationFn: ({ id, confirmado }: { id: string; confirmado: boolean }) =>
-      apiClient.post<{ data: { status: string; error_code: string | null; error_message: string | null } }>(
+      apiClient.post<{
+        data: {
+          status: string;
+          error_code: string | null;
+          error_message: string | null;
+          metadata?: Record<string, unknown> | null;
+        };
+      }>(
         `/api/v1/messages/${id}/retry`,
         confirmado ? { confirmado: true } : {},
       ),
@@ -32,6 +39,12 @@ export function useAlterarMensagem(conversationId: string | null) {
     // não ter feito nada (WhatsApp fora do ar).
     onSuccess: (res) => {
       const msg = res?.data;
+      // Número sem conexão: a linha volta para `queued` com o motivo, e mensagem
+      // de pessoa não sai sozinha depois (o vigia do fork só reenvia a da IA).
+      if (msg?.status === "queued" && msg.metadata?.queued_reason) {
+        toast.error(t("A mensagem não saiu de novo."), { description: t("Não enviada: sem conexão") });
+        return;
+      }
       if (msg?.status !== "failed") return;
       toast.error(t("A mensagem não saiu de novo."), { description: motivoDaFalhaDaMensagem(msg, t) });
     },

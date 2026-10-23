@@ -199,6 +199,43 @@ describe("encaminhar mensagem — mesmo caminho de envio do Inbox", () => {
     expect(enviado).not.toHaveBeenCalled();
   });
 
+  it("destino no WhatsApp oficial com a janela de 24h fechada recusa ANTES de enviar (422 janela_fechada)", async () => {
+    const tresDiasAtras = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const { supabase } = fakeSupabase({
+      destino: { id: DESTINO_CONV, last_inbound_at: tresDiasAtras, channel_sessions: { provider: "meta_cloud" } },
+    });
+
+    await expect(
+      encaminharMensagem(supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV }),
+    ).rejects.toMatchObject({ status: 422, code: "janela_fechada" });
+    expect(enviado).not.toHaveBeenCalled();
+  });
+
+  it("CONTROLE: oficial com a janela aberta encaminha, e WhatsApp por QR não tem janela", async () => {
+    enviado.mockImplementation(async (_sb: unknown, _ctx: unknown, input: { conversation_id: string; body?: string }) =>
+      mensagemEnviada(input.conversation_id, input.body ?? null),
+    );
+    const agorinha = new Date(Date.now() - 60 * 1000).toISOString();
+    const aberta = fakeSupabase({
+      destino: { id: DESTINO_CONV, last_inbound_at: agorinha, channel_sessions: { provider: "meta_cloud" } },
+    });
+    await encaminharMensagem(aberta.supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV });
+    const antiga = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const qr = fakeSupabase({
+      destino: { id: DESTINO_CONV, last_inbound_at: antiga, channel_sessions: { provider: "waha" } },
+    });
+    await encaminharMensagem(qr.supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV });
+    expect(enviado).toHaveBeenCalledTimes(2);
+  });
+
+  it("cartão de contato não é encaminhado: nem o vCard cru do recebido, nem o enviado sem corpo", async () => {
+    const recebido = fakeSupabase({ origem: origemValida({ type: "contact", body: "BEGIN:VCARD\nTEL:+5511900000000\nEND:VCARD" }) });
+    await expect(
+      encaminharMensagem(recebido.supabase, ctx, { messageId: ORIGEM_ID, conversationIdDestino: DESTINO_CONV }),
+    ).rejects.toMatchObject({ status: 422, code: "nao_encaminhavel" });
+    expect(enviado).not.toHaveBeenCalled();
+  });
+
   it("a recusa é um ApiError com mensagem legível, nunca um silêncio", async () => {
     const { supabase } = fakeSupabase({ destino: null });
     let capturado: unknown;

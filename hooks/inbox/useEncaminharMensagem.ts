@@ -116,6 +116,13 @@ export function useEncaminharMensagem() {
       // encaminhada." enquanto o destino não recebia nada: quem encaminhou fica
       // na conversa de origem e não vê o selo "Falhou" do fio de destino.
       const linha = resposta?.data;
+      // Número sem conexão: o envio do fork deixa a linha em `queued` com o
+      // motivo, e nada a tira de lá sozinho para mensagem de pessoa (o vigia só
+      // reenvia a da IA). Dizer "encaminhada" aqui seria mentir.
+      if (linha?.status === "queued" && linha.metadata?.queued_reason) {
+        toast.error(t("A mensagem foi para a conversa, mas não saiu: o número está sem conexão."));
+        return;
+      }
       if (linha?.status === "failed") {
         toast.error(
           t("Não foi possível encaminhar: {motivo}").replace(

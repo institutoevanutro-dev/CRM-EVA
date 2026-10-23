@@ -50,6 +50,7 @@ vi.mock("@/lib/supabase/server", () => ({
         select: () => q,
         update: (payload: Record<string, unknown>) => { chamada.op = "update"; chamada.payload = payload; return q; },
         eq: (col: string, val: unknown) => { chamada.eqs.push([col, val]); return q; },
+        is: (col: string, val: unknown) => { chamada.eqs.push([col, val]); return q; },
         maybeSingle: async () => {
           if (table === "conversations") return { data: state.conversa, error: null };
           if (chamada.op === "select") return { data: state.linha, error: null };
@@ -229,6 +230,24 @@ describe("POST /api/v1/messages/{id}/retry", () => {
     expect(move!.eqs).toEqual(expect.arrayContaining([["id", id], ["organization_id", "org-1"]]));
     expect(corpo.data.sent_at).toBe(move!.payload!.sent_at);
     expect(corpo.data.sent_at).not.toBe("2026-10-21T10:00:00.000Z");
+  });
+
+  it("falhou de novo: o id do canal do primeiro envio volta para a linha", async () => {
+    state.linha = { ...state.linha, external_id: "id-do-canal-velho" };
+    state.handler.mockImplementation(async () => ({ ...state.linha, external_id: null, status: "failed" }));
+    const res = await POST(req({ confirmado: true }), ctx());
+    const [, restaura] = updates();
+    expect(restaura!.payload).toEqual({ external_id: "id-do-canal-velho" });
+    expect(restaura!.eqs).toEqual(
+      expect.arrayContaining([["id", id], ["organization_id", "org-1"], ["status", "failed"], ["external_id", null]]),
+    );
+    expect((await res.json()).data.external_id).toBe("id-do-canal-velho");
+  });
+
+  it("CONTROLE: sem id do canal antes, nada a restaurar", async () => {
+    state.handler.mockImplementation(async () => ({ ...state.linha, external_id: null, status: "failed" }));
+    await POST(req(), ctx());
+    expect(updates(), "só a trava").toHaveLength(1);
   });
 
   it("o que ficou na fila de novo mantém a hora e o lugar", async () => {

@@ -76,8 +76,10 @@ export function motivoDaFalhaDaMensagem(
   // O desfecho do canal parceiro grava `<código> — <título> — <explicação>`: para
   // código sem frase nossa, a explicação é a pista — a frase do canal (passo 3)
   // mandaria conferir uma conexão que funciona.
+  // O separador é NOSSO (o travessão do `explicacaoDoErro`), e a tela não mostra
+  // travessão: vira "código: título. explicação". O texto gravado não muda.
   if (daPlataforma !== null && gravado.startsWith(`${daPlataforma} — `) && !SINAL_DE_TEXTO_CRU.test(gravado)) {
-    return gravado.slice(0, 300);
+    return gravado.replace(" — ", ": ").replaceAll(" — ", ". ").slice(0, 300);
   }
   if (recusa) {
     const { codigo: codigoDaRecusa, textoDoProvedor } = recusa;

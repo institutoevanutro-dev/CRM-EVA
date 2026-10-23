@@ -164,6 +164,18 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     return fail(err.code, err.message, err.status, { requestId });
   }
 
+  // Não saiu de novo (falhou ou ficou na fila): o id do canal do PRIMEIRO envio
+  // volta para a linha. A trava o tirou para reconhecer o eco deste envio, e sem
+  // ele o ack atrasado e a citação daquele envio (que pode ter chegado, é o caso
+  // "confirmar") deixavam de achar a mensagem. Só se ninguém gravou outro id.
+  if ((message.status === "failed" || message.status === "queued") && lida.external_id && !message.external_id) {
+    const { error: erroAoRestaurar } = await supabase.from("messages")
+      .update({ external_id: lida.external_id })
+      .eq("id", id).eq("organization_id", orgId)
+      .eq("status", message.status).is("external_id", null);
+    if (!erroAoRestaurar) message = { ...message, external_id: lida.external_id };
+  }
+
   // Só o envio ACEITO vai para o fim do fio: no WhatsApp do cliente ele chega
   // agora. O que ficou na fila ou falhou de novo não saiu, e mantém a hora e o
   // lugar de antes — senão cada toque com o canal caído mudaria a hora exibida.
