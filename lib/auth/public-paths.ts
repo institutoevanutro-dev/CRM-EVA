@@ -11,6 +11,7 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/api\/v1\/integrations\/financeiro\/contacts\/[0-9a-f-]+$/i,
   /^\/api\/v1\/integrations\/marketing\/report$/,
   /^\/api\/v1\/integrations\/marketing\/financeiro-totais$/,
+  /^\/api\/v1\/integrations\/marketing\/funil-por-origem$/,
   /^\/$/,
   /^\/login(\/.*)?$/,
   /^\/signup$/,
