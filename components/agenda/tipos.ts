@@ -59,6 +59,12 @@ export type Agendamento = {
   titulo: string;
   /** Quem vai ser atendido. Ausente em ocupação vinda do Google. */
   quemSeraAtendido?: string;
+  /**
+   * O cadastro de quem vai ser atendido ainda não tem nome completo
+   * (`faltaNomeCompleto`). Acontece quando a IA, a API ou o Google marcam: só o
+   * modal pede o nome antes. A grade avisa, e o painel do compromisso completa.
+   */
+  faltaNomeCompleto?: boolean;
   /** Quem atende — é dele a cor do bloco. */
   responsavelId: string;
   /** ISO-8601. */

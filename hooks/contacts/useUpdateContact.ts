@@ -24,6 +24,10 @@ export function useUpdateContact(id: string) {
       // depois, e o chip recém-aplicado sumia da tela pelo filtro local, não
       // porque a lista tivesse sido relida. Sem `orgId`: casa por prefixo.
       qc.invalidateQueries({ queryKey: ["contact-tag-vocabulary"] });
+      // A Agenda mostra o nome do contato e avisa quando falta o nome completo
+      // (a grade, o painel do compromisso e a busca de paciente do modal). Sem
+      // isto, completar o nome deixava o aviso na tela até recarregar.
+      qc.invalidateQueries({ queryKey: ["agenda"] });
     },
   });
 }

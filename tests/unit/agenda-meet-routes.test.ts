@@ -99,7 +99,8 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 it("detalhe consulta o telefone real e formata o destino no idioma de quem lê", async () => {
   const { createAdminClient } = await import("@/lib/supabase/admin");
   const { GET } = await import("@/app/api/v1/agenda/agendamentos/[id]/route");
-  const contact = { name: null, locale: "pt-BR", phone_number: "+5511999999999" };
+  // `display_name` existe em `contacts`: o detalhe o lê para avisar quando falta o nome completo.
+  const contact = { name: null, display_name: null, locale: "pt-BR", phone_number: "+5511999999999" };
   const from = (table: string) => {
     let error: { code: string } | null = null;
     const data =

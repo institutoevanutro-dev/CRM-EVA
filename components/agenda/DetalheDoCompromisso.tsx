@@ -4,7 +4,15 @@ import { SincronizacaoDoCompromisso, type SyncDetail } from "./SincronizacaoDoCo
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api/client";
+import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
+import {
+  ehNomeCompleto,
+  faltaNomeCompleto,
+  nomeCompletoLimpo,
+  sugestaoDeNomeCompleto,
+} from "@/lib/contacts/rotulo-do-contato";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
@@ -12,6 +20,7 @@ import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
 import { ExcluirCompromisso } from "./ExcluirCompromisso";
+import { NomeCompletoDoPaciente } from "./NomeCompletoDoPaciente";
 
 type Detalhe = {
   meeting?: MeetingDetail | null;
@@ -37,6 +46,8 @@ type Detalhe = {
   exclusion_reason?: string | null;
   revision: number;
   contact_id: string | null;
+  /** Os dois nomes do contato: o do cadastro e o do WhatsApp. */
+  contato?: { name: string | null; display_name: string | null } | null;
   conversation_id: string | null;
   outcome_source_kind: string | null;
   outcome_recorded_at: string | null;
@@ -68,12 +79,15 @@ export function DetalheDoCompromisso({
   onClose,
   podeEditar = true,
   podeExcluir = false,
+  podeCompletarNome = false,
 }: {
   id: string | null;
   onClose: () => void;
   podeEditar?: boolean;
   /** Gerente ou admin: o piso de `POST .../excluir`. A rota decide; isto é cortesia. */
   podeExcluir?: boolean;
+  /** `agent`+: o piso de `PATCH /api/v1/contacts/[id]`, que grava o nome completo. */
+  podeCompletarNome?: boolean;
 }) {
   const t = useT();
   const tagDoIdioma = useTagDeIdioma();
@@ -82,6 +96,7 @@ export function DetalheDoCompromisso({
   const [reason, setReason] = useState("");
   const [draftRevision, setDraftRevision] = useState<number | null>(null);
   const [conflict, setConflict] = useState(false);
+  const [nomeEditado, setNomeEditado] = useState<string | null>(null);
   const query = useQuery({
     queryKey: ["agenda", "detalhe", id],
     enabled: !!id,
@@ -90,6 +105,13 @@ export function DetalheDoCompromisso({
       (await apiClient.get<{ data: Detalhe }>(`/api/v1/agenda/agendamentos/${id}`)).data,
   });
   const a = query.data;
+  // Marcado pela IA, pela API ou pelo Google para quem só tem o nome do
+  // WhatsApp: o modal de marcar pede o nome antes, esses caminhos não. O aviso
+  // mora aqui, com o campo para completar, e some quando o cadastro é relido.
+  const faltaNome =
+    Boolean(a?.contact_id && a.contato && a.status !== "cancelled" && !a.excluded_at) && faltaNomeCompleto(a?.contato);
+  const nomeCompleto = nomeEditado ?? sugestaoDeNomeCompleto(a?.contato);
+  const gravarNome = useUpdateContact(a?.contact_id ?? "");
   const formatoDeData =
     a &&
     new Intl.DateTimeFormat(tagDoIdioma, {
@@ -212,6 +234,43 @@ export function DetalheDoCompromisso({
                 )[a.status] ?? a.status,
               )}
             </p>
+            {faltaNome ? (
+              <div
+                role="status"
+                data-testid="falta-nome-completo"
+                className="space-y-3 rounded-lg border border-warning/40 bg-warning-bg p-3"
+              >
+                <div>
+                  <p className="text-sm font-semibold">{t("Falta o nome completo")}</p>
+                  <p className="text-sm text-text-muted">
+                    {t("Sem o nome completo no cadastro, o prontuário não abre o atendimento.")}
+                  </p>
+                </div>
+                {podeCompletarNome ? (
+                  <>
+                    <NomeCompletoDoPaciente id="nome-completo-do-compromisso" valor={nomeCompleto} onValor={setNomeEditado} />
+                    <Button
+                      size="sm"
+                      data-testid="salvar-nome-completo"
+                      disabled={!ehNomeCompleto(nomeCompleto) || gravarNome.isPending}
+                      onClick={() =>
+                        gravarNome.mutate(
+                          { name: nomeCompletoLimpo(nomeCompleto) },
+                          {
+                            onSuccess: () => {
+                              setNomeEditado(null);
+                              toast.success(t("Nome completo salvo."));
+                            },
+                          },
+                        )
+                      }
+                    >
+                      {gravarNome.isPending ? t("Salvando…") : t("Salvar nome")}
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             {a.contact_id ? (
               <Link href={`/app/contacts/${a.contact_id}`} className="underline">
                 {t("Ver contato")}
