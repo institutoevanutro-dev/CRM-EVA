@@ -70,6 +70,12 @@ vi.mock("@/lib/supabase/admin", () => ({
       select: () => chain(tabela, "select"),
       update: (payload: unknown) => chain(tabela, "update", payload),
     }),
+    // (porte do original #3317) o cron passou a emitir `contact.phone_added`
+    // quando a varredura preenche a ficha vazia: o dublê precisa do `rpc`, senão
+    // a rota estoura `admin.rpc is not a function` por um motivo que não tem
+    // nada a ver com o que este arquivo vigia. A emissão em si é coberta em
+    // `tests/unit/contacts/telefone-ganho-no-cron.test.ts`.
+    rpc: async () => ({ data: "evt-1", error: null }),
   }),
 }));
 
