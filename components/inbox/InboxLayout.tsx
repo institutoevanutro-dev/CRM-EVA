@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth, usePermission } from "@/hooks/auth/AuthProvider";
@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
+import { togglePainelDoContato } from "@/app/actions/inbox/togglePainelDoContato";
 import { buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
 import { APARENCIA_PADRAO } from "@/lib/inbox/aparencia-da-conversa";
@@ -167,11 +168,27 @@ const CLASSE_DA_DIVISORIA =
 const CLASSE_DO_FIO =
   "w-px bg-border transition-colors group-hover:bg-primary group-focus-visible:w-0.5 group-focus-visible:bg-primary";
 
+/**
+ * A largura do trilho do painel do contato RECOLHIDO (porte do original #3043):
+ * o que sobra dele é um trilho estreito com o botão de expandir, e a conversa
+ * recebe o resto da largura que era da ficha.
+ */
+const LARGURA_DO_TRILHO_DO_PAINEL = "2.75rem";
+
 interface InboxLayoutProps {
   initialSelectedId?: string | null;
+  /**
+   * O painel do contato começa recolhido? Vem do cookie lido no SERVIDOR
+   * (`app/app/inbox/page.tsx`), como o `sidebar_collapsed` do menu da esquerda:
+   * é o que evita o painel nascer aberto e pular para trilho na hidratação.
+   */
+  painelRecolhidoInicial?: boolean;
 }
 
-export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {}) {
+export function InboxLayout({
+  initialSelectedId = null,
+  painelRecolhidoInicial = false,
+}: InboxLayoutProps = {}) {
   const t = useT();
   const { activeOrg, user } = useAuth();
   const supportReadonly = user.support?.access_mode === "support_readonly";
@@ -219,6 +236,21 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const [helpOpen, setHelpOpen] = useState(false);
   /** A ficha do contato como painel deslizante — só existe abaixo do `xl`. */
   const [fichaAberta, setFichaAberta] = useState(false);
+  /**
+   * O PAINEL DO CONTATO RECOLHIDO (porte do original #3043). O estado é da
+   * TELA porque quem redistribui a largura é a grade; o painel só desenha o
+   * controle. Nasce do cookie lido no servidor e cada clique grava pelo server
+   * action, o mesmo caminho do `toggleSidebar`; o estado local dá o retorno
+   * imediato do clique, sem esperar a volta do servidor.
+   */
+  const [painelRecolhido, setPainelRecolhido] = useState(painelRecolhidoInicial);
+  const alternarPainelDoContato = useCallback(() => {
+    setPainelRecolhido(!painelRecolhido);
+    // O action recebe o estado ATUAL, como o `toggleSidebar`.
+    startTransition(() => {
+      void togglePainelDoContato(painelRecolhido);
+    });
+  }, [painelRecolhido]);
   /**
    * A busca dentro da conversa pertence à CONVERSA em que foi aberta. Guardar o
    * id junto fecha a busca em qualquer troca (clique, atalho j/k, voltar do
@@ -523,7 +555,9 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
     faixa && larguras
       ? {
           gridTemplateColumns: faixa.temFicha
-            ? `${larguras.lista}px minmax(0,1fr) ${larguras.ficha}px`
+            ? // Recolhido, o trilho entra no lugar da ficha; a largura ajustada
+              // da ficha não se perde, volta inteira quando o painel reabre.
+              `${larguras.lista}px minmax(0,1fr) ${painelRecolhido ? LARGURA_DO_TRILHO_DO_PAINEL : `${larguras.ficha}px`}`
             : `${larguras.lista}px minmax(0,1fr)`,
         }
       : undefined;
@@ -651,7 +685,14 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
     <div
       ref={gradeRef}
       style={estiloDaGrade}
-      className="relative grid h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[272px_1fr_296px] 2xl:grid-cols-[300px_1fr_320px]"
+      className={cn(
+        "relative grid h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full grid-cols-1 md:grid-cols-[300px_1fr]",
+        // Recolhido (porte do #3043), a terceira trilha vira o trilho do botão
+        // de expandir. Literais inteiros: o Tailwind precisa deles para gerar o CSS.
+        painelRecolhido
+          ? "xl:grid-cols-[272px_1fr_2.75rem] 2xl:grid-cols-[300px_1fr_2.75rem]"
+          : "xl:grid-cols-[272px_1fr_296px] 2xl:grid-cols-[300px_1fr_320px]",
+      )}
       /*
        * O ESTADO DO TEMPO REAL, LEGÍVEL DE FORA — mesmo par que o dossiê do lead
        * já publica (`LeadDossier`), e pela mesma razão: quando a entrega morre,
@@ -876,7 +917,11 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       </div>
 
       <div className="hidden h-full min-h-0 xl:block">
-        <CRMSidePanel conversation={selectedConversation} />
+        <CRMSidePanel
+          conversation={selectedConversation}
+          recolhido={painelRecolhido}
+          onAlternarRecolhido={alternarPainelDoContato}
+        />
       </div>
 
       {/*
@@ -910,7 +955,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
           >
             <span aria-hidden className={CLASSE_DO_FIO} />
           </span>
-          {faixa?.temFicha && (
+          {faixa?.temFicha && !painelRecolhido && (
             <span
               role="separator"
               aria-orientation="vertical"

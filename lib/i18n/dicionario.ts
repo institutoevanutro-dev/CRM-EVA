@@ -11228,6 +11228,9 @@ export const DICIONARIO: Traducoes = {
   "Opções de resposta": { es: "Opciones de respuesta" },
   "Nome, telefone ou última msg.": { es: "Nombre, teléfono o último msj." },
   "Suas organizações": { es: "Tus organizaciones" },
+  // Portes 23/10, grupo A (PR #3043): recolher o painel do contato no Inbox.
+  "Recolher painel do contato": { es: "Contraer panel del contacto" },
+  "Expandir painel do contato": { es: "Expandir panel del contacto" },
 };
 
 /**

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { InboxLayout } from "@/components/inbox/InboxLayout";
@@ -37,5 +38,9 @@ export default async function InboxPage({
     );
   }
   const { id } = await searchParams;
-  return <InboxLayout initialSelectedId={id ?? null} />;
+  // Lida AQUI, no servidor, pelo mesmo motivo do `sidebar_collapsed`
+  // (`app/app/layout.tsx`): sem isto o painel do contato nasce aberto e só
+  // recolhe depois da hidratação.
+  const painelRecolhido = (await cookies()).get("inbox_painel_recolhido")?.value === "1";
+  return <InboxLayout initialSelectedId={id ?? null} painelRecolhidoInicial={painelRecolhido} />;
 }

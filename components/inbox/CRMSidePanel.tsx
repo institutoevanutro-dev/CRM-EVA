@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { Tag, Receipt, Users, ArrowRight, CaretDown } from "@/lib/ui/icons";
+import { Tag, Receipt, Users, ArrowRight, CaretDown, CaretDoubleLeft, CaretDoubleRight } from "@/lib/ui/icons";
 import { apiClient } from "@/lib/api/client";
 import { marcarReleitura } from "@/lib/audit/releitura";
 import { toast } from "sonner";
@@ -37,6 +37,18 @@ import { phoneForDisplay } from "@/lib/channels/phone-variants";
 
 interface Props {
   conversation: ConversationWithContact | null;
+  /**
+   * O painel inteiro recolhido (porte do original #3043): desenha só o trilho
+   * com o botão de expandir, e a grade (`InboxLayout`) devolve a largura à
+   * conversa.
+   */
+  recolhido?: boolean;
+  /**
+   * O clique do controle de recolher. Só a coluna do desktop o passa: o painel
+   * do celular abre num `Sheet`, que já tem o próprio gesto de fechar, e por
+   * isso o controle é OPCIONAL (como o `showCollapseControl` da barra lateral).
+   */
+  onAlternarRecolhido?: () => void;
 }
 
 interface LeadRow {
@@ -573,7 +585,34 @@ function CamposDoFunil({
   );
 }
 
-export function CRMSidePanel({ conversation }: Props) {
+/**
+ * O CONTROLE DE RECOLHER O PAINEL INTEIRO (porte do original #3043).
+ *
+ * Mesmo ícone e mesmo verbo do recolher do menu da esquerda
+ * (`components/shell/Sidebar.tsx`): `CaretDoubleLeft` recolhe,
+ * `CaretDoubleRight` expande, "Recolher"/"Expandir" no rótulo. O que muda é o
+ * ALVO na frase: são dois recolhedores na mesma tela, e um leitor de tela que
+ * ouvisse "Recolher" nos dois não saberia qual.
+ */
+function BotaoDeRecolherDoPainel({ recolhido, onAlternar }: { recolhido: boolean; onAlternar: () => void }) {
+  const t = useT();
+  const rotulo = recolhido ? t("Expandir painel do contato") : t("Recolher painel do contato");
+  return (
+    <button
+      type="button"
+      onClick={onAlternar}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+      aria-label={rotulo}
+      aria-expanded={!recolhido}
+      title={rotulo}
+      data-testid="inbox-recolher-painel"
+    >
+      {recolhido ? <CaretDoubleRight size={16} aria-hidden /> : <CaretDoubleLeft size={16} aria-hidden />}
+    </button>
+  );
+}
+
+export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolhido }: Props) {
   const { user } = useAuth();
   const readonly = user.support?.access_mode === "support_readonly";
   const localeDaData = useLocaleDeData();
@@ -735,9 +774,28 @@ export function CRMSidePanel({ conversation }: Props) {
     [erro, summaryContactId, contactId, leads, orders, activities, demandas],
   );
 
+  // RECOLHIDO (porte do #3043): só o trilho, com a porta de volta. Sem o
+  // controle (o `Sheet` do celular) o trilho não teria saída, então ali o
+  // painel desenha inteiro, como sempre.
+  if (recolhido && onAlternarRecolhido) {
+    return (
+      <aside
+        className="flex h-full flex-col items-center border-l border-border bg-background py-2"
+        data-testid="inbox-painel-recolhido"
+      >
+        <BotaoDeRecolherDoPainel recolhido onAlternar={onAlternarRecolhido} />
+      </aside>
+    );
+  }
+
   if (!conversation) {
     return (
-      <aside className="flex h-full items-center justify-center border-l border-border p-4 text-center text-xs text-muted-foreground">
+      <aside className="relative flex h-full items-center justify-center border-l border-border p-4 text-center text-xs text-muted-foreground">
+        {onAlternarRecolhido && (
+          <div className="absolute top-2 right-2">
+            <BotaoDeRecolherDoPainel recolhido={false} onAlternar={onAlternarRecolhido} />
+          </div>
+        )}
         {t("Selecione uma conversa para ver detalhes do contato.")}
       </aside>
     );
@@ -745,6 +803,14 @@ export function CRMSidePanel({ conversation }: Props) {
 
   return (
     <aside className="flex h-full flex-col gap-4 overflow-y-auto border-l border-border bg-background p-4">
+      {/* O controle de recolher, no alto (porte do #3043). `sticky` para não
+          rolar junto com o conteúdo; `-mx-4 -mt-4` encostam a faixa nas bordas
+          cancelando o padding do <aside>. */}
+      {onAlternarRecolhido && (
+        <div className="sticky top-0 z-10 -mx-4 -mt-4 flex shrink-0 justify-end border-b border-border bg-background px-2 py-1">
+          <BotaoDeRecolherDoPainel recolhido={false} onAlternar={onAlternarRecolhido} />
+        </div>
+      )}
       {/* RECOLHIDA por padrão (pedido da clínica, 22/10): abre quando o mouse
           PARA sobre o título (300 ms) e fecha ao sair da seção; o clique no
           título abre e fecha de verdade. Fica aberta enquanto houver um
