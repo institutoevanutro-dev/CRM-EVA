@@ -16,11 +16,15 @@ import {
   CASO_DE_REPETICAO,
   decidirRepeticao,
   decidirSaidaDaRepeticao,
+  ehConfirmacaoCurta,
+  falaAntesDaEntrada,
   fraseDeRepeticaoJaSaiu,
   normalizarParaRepeticao,
   primeiroNomeDoContato,
   REPETICAO_PADRAO,
   repetiuNaConversa,
+  terminaEmPerguntaReal,
+  ultimaEntradaDoCliente,
 } from "@/lib/agent-engine/guardrails/repeticao-na-conversa";
 import { loadEnv } from "@/lib/agent-engine/env";
 import { turnKnobsFromEnv } from "@/lib/agent-engine/agent/turn-knobs";
@@ -215,6 +219,7 @@ describe("knobs", () => {
     expect(REPETICAO_PADRAO).toEqual({
       janelaMs: 1_800_000,
       limiar: 0.8,
+      limiarAposConfirmacao: 0.5,
       minTokens: 4,
       ultimas: 5,
       frases: ["Ficou alguma dúvida sobre isso?"],
@@ -305,5 +310,220 @@ describe("fraseDeRepeticaoJaSaiu — lê só falas da IA na janela", () => {
     expect(
       await fraseDeRepeticaoJaSaiu(pool, { organizationId: "o", conversationId: "c", agora, knobs: REPETICAO_PADRAO, log }),
     ).toBeNull();
+  });
+});
+
+// ── depois de "ok"/"sim": o modelo parafraseia, e o limiar aperta ─────────
+
+describe("paráfrase depois de uma confirmação curta (limiar 0.5)", () => {
+  const txt = (body: string) => ({ type: "text", body });
+  const apos = (candidata: string, recentes: string[], body: string) =>
+    decidirRepeticao({ candidata, recentes, primeiroNome: "Chris", knobs: K, ultimaEntrada: txt(body) });
+
+  // Equivalentes fictícios dos dois padrões medidos em produção (23/10/2026).
+  const RESERVA_1 = "Assim que o financeiro confirmar o comprovante, eu sigo com você para fechar a reserva, combinado?";
+  const RESERVA_2 = "Assim que o financeiro confirmar, eu sigo por aqui com você pra fechar sua reserva, tá bom?";
+  const EXAME_1 = "Vou confirmar a validade do pedido de exames com a equipe e te passo a informação correta";
+  const EXAME_2 = "Vou checar com a equipe a validade do seu pedido de exames e te passo a informação correta, tá?";
+  const EXAME_3 = "Já estou confirmando com a equipe a validade do pedido de exames e te passo a informação certinha";
+
+  it("as paráfrases ficam abaixo de 0.8: sem a confirmação, a regra geral as deixa passar", () => {
+    expect(decide(RESERVA_2, [RESERVA_1]).repetida).toBe(false);
+    expect(decide(EXAME_2, [EXAME_1]).repetida).toBe(false);
+  });
+
+  it.each(["Ok", "sim", "Sim!", "ok obrigada", "No aguardo", "Por gentileza", "👍"])(
+    "⭐ depois de %j a paráfrase é barrada",
+    (body) => {
+      expect(apos(RESERVA_2, [RESERVA_1], body).repetida).toBe(true);
+      expect(apos(EXAME_2, [EXAME_1], body).repetida).toBe(true);
+      expect(apos(EXAME_3, [EXAME_2, EXAME_1], body).repetida).toBe(true);
+    },
+  );
+
+  it.each(["E qual o valor da reserva?", "ok, mas e se o financeiro não confirmar hoje", "Mandei o comprovante agora"])(
+    "última entrada %j não é confirmação: vale o 0.8 e a paráfrase passa",
+    (body) => {
+      expect(apos(RESERVA_2, [RESERVA_1], body).repetida).toBe(false);
+    },
+  );
+
+  it("resposta de fato diferente depois de um ok passa (Jaccard < 0.5)", () => {
+    expect(apos("O financeiro confirmou: sua reserva está fechada para sexta às 14h.", [RESERVA_1], "ok").repetida).toBe(
+      false,
+    );
+  });
+
+  it("curta (menos de minTokens) passa mesmo depois de ok", () => {
+    expect(apos("Combinado, Chris!", ["Combinado!"], "ok").repetida).toBe(false);
+  });
+
+  it("áudio, imagem e documento não contam como confirmação", () => {
+    for (const type of ["audio", "image", "document"]) {
+      expect(ehConfirmacaoCurta({ type, body: "ok" })).toBe(false);
+    }
+    expect(ehConfirmacaoCurta(null)).toBe(false);
+  });
+
+  it("o limiar apertado nunca afrouxa o geral", () => {
+    const knobs = { ...K, limiarAposConfirmacao: 0.95 };
+    const r = decidirRepeticao({ candidata: EXAME_1, recentes: [EXAME_1], primeiroNome: null, knobs, ultimaEntrada: txt("ok") });
+    expect(r.repetida).toBe(true);
+  });
+
+  it("⭐ depois de uma resposta barrada pelo ok, a pergunta nova do cliente destrava a próxima resposta", () => {
+    // Turno 1: cliente disse "ok"; a paráfrase é barrada.
+    expect(apos(RESERVA_2, [RESERVA_1], "ok").repetida).toBe(true);
+    // Turno 2: o cliente pergunta. A última entrada já não é confirmação: 0.8.
+    const resposta = "Assim que o financeiro confirmar, eu sigo com você e te passo o valor da reserva, combinado?";
+    expect(apos(resposta, [RESERVA_1], "e quanto fica a reserva?").repetida).toBe(false);
+    // A mesma resposta, se o cliente só tivesse dito "ok", seria barrada.
+    expect(apos(resposta, [RESERVA_1], "ok").repetida).toBe(true);
+  });
+
+  it("a última entrada sai do transcript do turno (a mais recente inbound; sem type = texto)", () => {
+    expect(
+      ultimaEntradaDoCliente([
+        { direction: "inbound", body: "qual o valor?" },
+        { direction: "outbound", body: RESERVA_1 },
+        { direction: "inbound", body: "Ok" },
+        { direction: "outbound", body: "x" },
+      ]),
+    ).toEqual({ type: "text", body: "Ok" });
+    expect(ultimaEntradaDoCliente([{ direction: "inbound", body: "[audio]", type: "audio" }])).toEqual({
+      type: "audio",
+      body: "[audio]",
+    });
+    expect(ultimaEntradaDoCliente([])).toBeNull();
+  });
+
+  it("repetiuNaConversa repassa a última entrada à decisão", async () => {
+    const pool = { query: vi.fn().mockResolvedValue({ rows: [{ body: RESERVA_1 }] }) };
+    const base = {
+      organizationId: "o",
+      conversationId: "c",
+      candidata: RESERVA_2,
+      nomeDoContato: "Chris",
+      agora: new Date(),
+      knobs: K,
+      log: { warn: vi.fn() } as never,
+    };
+    expect((await repetiuNaConversa(pool, { ...base, ultimaEntrada: txt("ok") })).repetida).toBe(true);
+    expect((await repetiuNaConversa(pool, { ...base, ultimaEntrada: txt("qual o valor?") })).repetida).toBe(false);
+  });
+
+  it("o knob vem do env, validado de 0 a 1", () => {
+    const base = {
+      SUPABASE_DB_URL: "postgres://u:p@localhost:5432/db",
+      NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321",
+      SUPABASE_SERVICE_ROLE_KEY: "x",
+    };
+    const com = (v: string) =>
+      turnKnobsFromEnv(
+        loadEnv({ ...base, AI_REPEAT_GUARD_SIMILARITY_APOS_CONFIRMACAO: v } as unknown as NodeJS.ProcessEnv),
+      ).repeticao?.limiarAposConfirmacao;
+    expect(com("0.6")).toBe(0.6);
+    expect(() => com("1.5")).toThrow();
+  });
+
+  it("a fiação passa a última entrada do transcript do turno", () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "lib/agent-engine/agent/inbound-turn.ts"), "utf8");
+    expect(src).toContain("ultimaEntrada: ultimaEntradaDoCliente(effectiveContext.messages)");
+  });
+});
+
+// ── a fala confirmada era pergunta de verdade: o eco é a resposta certa ───
+
+describe("pergunta de verdade → \"sim\" → resposta que ecoa a pergunta: passa", () => {
+  const apos = (candidata: string, falaAnterior: string, body: string, recentes = [falaAnterior]) =>
+    decidirRepeticao({
+      candidata,
+      recentes,
+      primeiroNome: "Chris",
+      knobs: K,
+      ultimaEntrada: { type: "text", body },
+      falaAnterior,
+    });
+
+  it("⭐ marcar avaliação: a confirmação do agendamento sai", () => {
+    const pergunta = "Posso marcar sua avaliação para quinta às 10h na unidade 1?";
+    const pronto = "Pronto, marquei sua avaliação para quinta às 10h na unidade 1!";
+    expect(apos(pronto, pergunta, "sim").repetida).toBe(false);
+    // Controle: se a fala confirmada fosse afirmação, o eco seria barrado.
+    expect(apos(pronto, "Vou marcar sua avaliação para quinta.", "sim", [pergunta]).repetida).toBe(true);
+  });
+
+  it("⭐ \"Quer que eu te mande o link?\" → \"por favor\" → o link sai", () => {
+    const pergunta = "Quer que eu te mande o link da sua consulta por aqui?";
+    const link = "Pronto, te mandei o link da sua consulta por aqui: exemplo.test";
+    expect(apos(link, pergunta, "por favor").repetida).toBe(false);
+    // Controle: sem a pergunta antes, o eco (Jaccard 0.5) seria barrado.
+    expect(apos(link, "Te mando o link da sua consulta por aqui.", "por favor", [pergunta]).repetida).toBe(true);
+  });
+
+  it("⭐ os padrões de hoje continuam barrados (muleta \"combinado?\" e afirmação)", () => {
+    const r1 = "Assim que o financeiro confirmar o comprovante, eu sigo com você para fechar a reserva, combinado?";
+    const r2 = "Assim que o financeiro confirmar, eu sigo por aqui com você pra fechar sua reserva, tá bom?";
+    expect(apos(r2, r1, "Ok").repetida).toBe(true);
+    const e1 = "Vou confirmar a validade do pedido de exames com a equipe e te passo a informação correta";
+    const e2 = "Vou checar com a equipe a validade do seu pedido de exames e te passo a informação correta, tá?";
+    expect(apos(e2, e1, "sim").repetida).toBe(true);
+  });
+
+  it("a fala confirmada é a nossa última ANTES das entradas do cliente", () => {
+    expect(
+      falaAntesDaEntrada([
+        { direction: "outbound", body: "antiga" },
+        { direction: "inbound", body: "oi" },
+        { direction: "outbound", body: "Posso marcar quinta?" },
+        { direction: "inbound", body: "sim" },
+        { direction: "inbound", body: "obrigada" },
+      ]),
+    ).toBe("Posso marcar quinta?");
+    expect(falaAntesDaEntrada([{ direction: "inbound", body: "sim" }])).toBeNull();
+    expect(falaAntesDaEntrada([])).toBeNull();
+  });
+
+  it("a fiação passa a fala confirmada do transcript do turno", () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "lib/agent-engine/agent/inbound-turn.ts"), "utf8");
+    expect(src).toContain("falaAnterior: falaAntesDaEntrada(effectiveContext.messages)");
+  });
+});
+
+describe("terminaEmPerguntaReal — pergunta-muleta não é pergunta", () => {
+  it.each([
+    "Assim que eu tiver a validação, te explico como seguimos, combinado?",
+    "Te passo certinho por aqui, tudo bem?",
+    "Já deixei com a equipe, ok?",
+    "Te aviso amanhã, tá?",
+    "Te aviso amanhã, ta?",
+    "Fica para sexta, tá bom?",
+    "Mando à tarde, certo?",
+    "Remarco para segunda, pode ser?",
+    "Seguimos assim, beleza?",
+    "Então fica assim, fechado?",
+    "A equipe te liga, né?",
+    "Combinado, Chris?",
+    "Te passo amanhã, combinado, Chris? 😊",
+    "Te passo amanhã, Combinado ?🙏",
+    "Vou confirmar com a equipe e te passo a informação correta",
+    "Perfeito!",
+    "",
+  ])("%j: não", (t) => {
+    expect(terminaEmPerguntaReal(t, "Chris")).toBe(false);
+  });
+
+  it.each([
+    "Posso marcar sua avaliação para quinta às 10h na unidade 1?",
+    "Quer que eu te mande o link?",
+    "Tudo certo por aqui. Qual horário fica melhor para você?",
+    "Combinado! Prefere manhã ou tarde? 😊",
+    "Chris, você já fez esse exame antes?",
+  ])("%j: sim", (t) => {
+    expect(terminaEmPerguntaReal(t, "Chris")).toBe(true);
+  });
+
+  it("sem nome do contato, o nome no fim deixa a pergunta como real (lado seguro: não aperta)", () => {
+    expect(terminaEmPerguntaReal("Combinado, Chris?", null)).toBe(true);
   });
 });
