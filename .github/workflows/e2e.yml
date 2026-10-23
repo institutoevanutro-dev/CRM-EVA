@@ -9,9 +9,10 @@ name: e2e
 # é a quarta fonte da mesma verdade, e as três anteriores já divergiram — este
 # cabeçalho dizia "29 de 33" quando o disco tinha 45 e o job rodava 44.
 #
-# A execução é dividida em DUAS invocações do playwright de propósito: o
-# limitador de login do produto é por IP (60/300s) e no CI todos os specs vêm do
-# mesmo 127.0.0.1. Ver o comentário do passo "E2E — parte N de 4".
+# A execução é dividida em PARTES, uma invocação do playwright por job da
+# matrix, de propósito: o limitador de login do produto é por IP (60/300s) e no
+# CI todos os specs vêm do mesmo 127.0.0.1. Ver o comentário do passo
+# "E2E — parte N de M".
 #
 # É CHECK OBRIGATÓRIO. A régua, para reconferir em vez de acreditar nesta linha:
 #   $ gh api repos/melgarafael/DeskcommCRM/branches/main/protection \
@@ -108,7 +109,7 @@ jobs:
       # uma rodada por parte.
       fail-fast: false
       matrix:
-        parte: [1, 2, 3, 4]
+        parte: [1, 2, 3, 4, 5, 6]
     # ─────────────────────────────────────────────────────────────────────────
     # A COBERTURA DEIXA DE SER PROSA DIGITADA À MÃO.
     #
@@ -134,7 +135,7 @@ jobs:
     # `next start` tem de subir com `RESEND_API_KEY`, `RESEND_FROM_EMAIL` e
     # `RESEND_BASE_URL` definidos, e o ambiente desta suíte roda SEM envio de
     # e-mail de propósito: é o estado de um primeiro deploy, e é o que a irmã
-    # `lgpd-pedido-sem-email-vira-revisao-pendente` (PARTE_3) mede todo dia. Ligar
+    # `lgpd-pedido-sem-email-vira-revisao-pendente` (PARTE_5) mede todo dia. Ligar
     # o envio por causa desta spec trocaria o ambiente de TODAS as outras.
     #
     # O gate de todo dia do caminho com e-mail é `workers/lgpd-export-worker.test.ts`
@@ -412,6 +413,8 @@ jobs:
       # dizia de quem era o compromisso. Entra na PARTE_2 e não na 1 porque é AQUI que mora
       # o molde dela, `agente-organiza-operacao`; o comentário antigo dizia PARTE_1 e estava
       # errado sobre o próprio vizinho.
+      # (Desde 2026-10-23 ela roda na PARTE_5, no bloco das agendas que saiu da PARTE_2, e o
+      # molde ficou na PARTE_2. Molde é código, não estado: ela sempre rodou ANTES dele.)
       # `relogio-http-cron-externo` entrou na PARTE_1 em 2026-08-28, e a escolha da
       # parte é o cuidado que ela exige: o tick que ela dispara é GLOBAL por
       # natureza — ele roda as tarefas de minuto da instalação inteira, não só as
@@ -428,19 +431,14 @@ jobs:
       #
       # Se um dia uma spec de follow-up entrar na PARTE_1 com nome depois de
       # `relogio-`, é aqui que se olha: ou ela vai para a PARTE_2, ou esta vai.
+      # Vale também para spec de follow-up com `test.use({ trace: "on" })`, seja
+      # qual for o nome: trace ligado a tira da ordem por caminho e a faz rodar
+      # em bloco, antes ou depois de todas (ver o bloco das partes 5 e 6).
       SPECS_PARTE_2: >-
-        agente-marca-consulta.spec.ts
         painel-inicio.spec.ts
         inicio-por-pessoa.spec.ts
-        agenda-marcar-pela-tela.spec.ts
-        agenda-remarcar-e-cancelar.spec.ts
-        agenda-excluir-lancado-por-engano.spec.ts
-        agenda-bloquear-horario-do-profissional.spec.ts
-        agenda-clique-e-profissionais.spec.ts
-        agenda-tipos-de-agendamento.spec.ts
         cliente-pela-agenda.spec.ts
         paciente-pelo-cadastro.spec.ts
-        agenda-grade-interativa.spec.ts
         agente-novo-e-uso.spec.ts
         agente-organiza-operacao.spec.ts
         central-de-avisos-capacidades.spec.ts
@@ -456,22 +454,11 @@ jobs:
         followup-tempo-adaptativo.spec.ts
         gatilho-de-etapa.spec.ts
         gatilho-de-caso.spec.ts
-        agenda-ocupacao-do-google-na-grade.spec.ts
-        agenda-ocupacao-do-google-no-historico.spec.ts
         followup-publicado-abre-no-construtor.spec.ts
         automacao-diz-a-verdade.spec.ts
         automacao-telefone-ganho-e-email.spec.ts
         pos-venda-ao-ganhar.spec.ts
-        acervo-de-conhecimento.spec.ts
-        agenda-kit-visual.spec.ts
-        agenda-conectar-google.spec.ts
-        agenda-painel-cabe-na-tela.spec.ts
-        agenda-ver-na-agenda.spec.ts
-        agenda-escopo-da-organizacao.spec.ts
-        agenda-caminho-ate-os-horarios.spec.ts
         prestador-publica-jornada.spec.ts
-        agenda-google-volta-do-consentimento.spec.ts
-        agenda-google-volta-nao-desloga.spec.ts
         qa-l12-funil.spec.ts
         instagram-receber.spec.ts instagram-responder.spec.ts
         instagram-contato-unico.spec.ts comentarios-do-instagram.spec.ts
@@ -609,7 +596,8 @@ jobs:
       #
       # Entra na PARTE_2 ao lado de `agente-marca-consulta` porque as duas usam
       # `seed-e2e-agenda.ts` — e cada uma o chama por si, para nenhuma depender
-      # da ordem em que a outra rodou.
+      # da ordem em que a outra rodou. (Desde 2026-10-23 as duas rodam juntas
+      # na PARTE_5.)
       # para dirigir, e a condição que a exclui deixa de existir. Enquanto isso,
       # rodá-la no CI custaria um job para exercitar um `skip`.
       #
@@ -663,19 +651,9 @@ jobs:
         agenda-google-sync.spec.ts
         agenda-google-meet.spec.ts
         encerramento-atendimento.spec.ts
-        interface-por-vinculo.spec.ts
-        olhar-telas-do-epico.spec.ts
-        marca-logo.spec.ts
-        marca-paletas.spec.ts
-        logo-moldura-no-tema-escuro.spec.ts
         historico-de-captacao.spec.ts
-        inbox-quem-manda.spec.ts
-        inbox-rotulo-de-origem.spec.ts
         i18n-espanhol-na-tela.spec.ts
         inbox-abas-espelham-o-comando.spec.ts
-        moeda-da-organizacao.spec.ts
-        limpeza-de-midia-opt-in.spec.ts
-        sons-dos-avisos.spec.ts
         aviso-de-credito-do-provedor.spec.ts
         busca-na-conversa.spec.ts
         etapa-pela-conversa.spec.ts
@@ -683,8 +661,6 @@ jobs:
         inbox-busca-e-filtros-dizem-a-verdade.spec.ts
         entrar-com-evalink.spec.ts
         funil-arquivado-volta-pela-tela.spec.ts
-        lgpd-pedido-sem-email-vira-revisao-pendente.spec.ts
-        lgpd-registrar-pedido-pela-tela.spec.ts
 
       # ─── PARTE 4 — nasceu em 2026-10-01, pelo mesmo motivo que a 3 ─────────
       #
@@ -725,18 +701,138 @@ jobs:
       # Para remedir: o roteiro no topo desta seção (`gh run view --job ... --log`)
       # e, por spec, o delta de timestamp entre linhas `✓ N [chromium] › ...`.
       SPECS_PARTE_4: >-
-        navegacao.spec.ts painel-do-funil.spec.ts prova-painel-provedores.spec.ts
-        reiniciar-teste.spec.ts
-        organizacoes-criacao-convite-e-cache.spec.ts
-        pipelines-gestao.spec.ts cor-da-etapa.spec.ts inbox-divisorias-e-troca-de-funil.spec.ts inbox-conversa-em-pdf.spec.ts qa-agente-usa-as-maos.spec.ts qa-equipe-pinta-na-hora.spec.ts
+        biblioteca-de-midias.spec.ts
+        cor-da-etapa.spec.ts
         funil-visao-calendario.spec.ts
-        qa-l12-agenda-contatos.spec.ts qa-l12-tags-radar.spec.ts qa-selo-no-funil-usado.spec.ts
-        qa-sugestao-rejeitada-e-motivo.spec.ts qa-telas-descobertas-w4.spec.ts qa-titulos-das-telas.spec.ts
+        inbox-aparencia-e-acoes-sob-demanda.spec.ts
+        inbox-conversa-em-pdf.spec.ts
+        inbox-divisorias-e-troca-de-funil.spec.ts
+        inbox-em-lote-e-iniciar-conversa.spec.ts
         motivo-do-publicar-na-tela.spec.ts
-        biblioteca-de-midias.spec.ts respostas-prontas.spec.ts retorno-anti-morte.spec.ts roteamento-por-canal.spec.ts suporte-temporario.spec.ts
-        tarefa-com-responsavel.spec.ts troca-de-organizacao-tem-volta.spec.ts voz-desligada-por-padrao.spec.ts
-        tarefas-no-card-do-negocio.spec.ts inbox-em-lote-e-iniciar-conversa.spec.ts inbox-aparencia-e-acoes-sob-demanda.spec.ts
-        voz-primeiro-pareamento.spec.ts webhooks.spec.ts zona-de-perigo-apaga-dados-de-teste.spec.ts
+        navegacao.spec.ts
+        organizacoes-criacao-convite-e-cache.spec.ts
+        painel-do-funil.spec.ts
+
+      # ─── PARTES 5 E 6: nasceram em 2026-10-23, medidas antes do corte ─────
+      #
+      # Medido em 6 runs verdes de 23/10 (39935650313, 39937212325,
+      # 39943438023, 39956569293, 39959995035, 39960185140), com o instrumento
+      # do bloco da parte 4 (relógio entre linhas do `--reporter=list`) e a
+      # mediana de cada spec:
+      #
+      #   setup (até "Running N tests"): 4,6 a 6,6 min, mediana 5,9
+      #   parte 1: 11,0 min de Playwright → job 14 a 23 min
+      #   parte 2: 17,0 min de Playwright → job 20 a 24 min
+      #   parte 3: 19,5 min de Playwright → job 22 a 28 min
+      #   parte 4: 21,5 min de Playwright → job 25 a 28 min
+      #
+      # O gatilho dos cancelamentos não foi spec lenta. De 21 a 23/10, 19 jobs
+      # foram cancelados no teto, e nos 19 "Instalar o browser" levou de 8 a
+      # 12 min em vez de 0,4. No da parte 2 do PR #380, o apt do `--with-deps`
+      # baixou 25,9 MB de azure.archive.ubuntu.com a 41,5 kB/s. No período, 26
+      # de 255 jobs pagaram esse passo acima de 2 min. Parte de 25 a 28 min
+      # estoura com qualquer apt lento; parte de ~18 min aguenta o típico (+8 a
+      # +11 min). O pior medido (+11,8) ainda estoura a parte mais pesada: esse
+      # conserto é do passo de instalação, não da partição.
+      #
+      # ⚠️ A ORDEM DE EXECUÇÃO NÃO É SÓ POR CAMINHO. O Playwright 1.63 agrupa
+      # os arquivos por worker hash ANTES de ordenar por caminho, e
+      # `test.use({ trace: "on" })` muda o hash (trace é opção de worker). As
+      # specs com trace ligado rodam em bloco: primeiro, se a primeira spec da
+      # parte em ordem alfabética tiver trace; senão, por último. Medido nos
+      # logs: na parte 3 as seis com trace rodam antes de
+      # `aviso-de-credito-do-provedor`, e na 4 `roteamento-por-canal` rodava
+      # depois de `zona-de-perigo-`. Para saber quem tem trace hoje:
+      #
+      #   grep -l 'test.use({.*trace' tests/e2e/*.spec.ts
+      #
+      # O corte é por BLOCOS CONTÍGUOS dessa ordem real, nunca spec avulsa, e
+      # as listas 4, 5 e 6 estão escritas na ordem em que rodam:
+      #
+      #   - parte 5 = a cabeça da parte 2 (`acervo-de-conhecimento` até
+      #     `agente-marca-consulta`, 19 specs, 4,3 min) e, depois dela, a cauda
+      #     da parte 3 (`inbox-quem-manda` até `sons-dos-avisos`, 12 specs,
+      #     7,1 min). A cabeça roda primeiro, em banco limpo e na mesma ordem de
+      #     antes; a cauda vem inteira depois, porque todo nome da cabeça é menor
+      #     que todo nome dela e nenhuma das duas tem trace;
+      #   - parte 6 = a cauda da parte 4 (`pipelines-gestao` até
+      #     `roteamento-por-canal`, 22 specs, 10,0 min), em banco limpo.
+      #
+      # As partes 3 e 4 ficaram com a cabeça, que roda com os mesmos
+      # predecessores de antes. A parte 2 ficou com a cauda, que passa a começar
+      # em banco limpo em `agente-novo-e-uso` (a fixture que ela pede vem do
+      # passo "Semear as fixtures", que roda em toda parte). A parte 1 não mudou,
+      # e com ela a restrição do `relogio-`.
+      #
+      # Uma fronteira nova, conferida por leitura: `organizacoes-` (parte 4) e
+      # `qa-agente-usa-as-maos` (parte 6) se separaram, e o bloco de 01/10
+      # registra que uma rodava antes da outra. Não há dependência entre elas:
+      # `organizacoes-` grava `platform_admins` só para os usuários que ela
+      # mesma cria, e `qa-agente-` só exige `e2e-admin` como admin de tenant
+      # puro, que é o estado de um banco limpo.
+      #
+      # Seis e não sete: em seis, o melhor corte por blocos contíguos põe a
+      # parte mais pesada em 12,7 min de Playwright; em sete, em 11,1, por mais
+      # um setup de ~6 min a cada run.
+      #
+      # Previsão pela mediana por spec (a rodada deste PR é que mede):
+      #   parte 1 11,1 · 2 12,7 · 3 12,5 · 4 11,5 · 5 11,3 · 6 10,0 min
+      #   → pior job ≈ 18,6 min com o setup mediano. O teto FICA em 30.
+      SPECS_PARTE_5: >-
+        acervo-de-conhecimento.spec.ts
+        agenda-bloquear-horario-do-profissional.spec.ts
+        agenda-caminho-ate-os-horarios.spec.ts
+        agenda-clique-e-profissionais.spec.ts
+        agenda-conectar-google.spec.ts
+        agenda-escopo-da-organizacao.spec.ts
+        agenda-excluir-lancado-por-engano.spec.ts
+        agenda-google-volta-do-consentimento.spec.ts
+        agenda-google-volta-nao-desloga.spec.ts
+        agenda-grade-interativa.spec.ts
+        agenda-kit-visual.spec.ts
+        agenda-marcar-pela-tela.spec.ts
+        agenda-ocupacao-do-google-na-grade.spec.ts
+        agenda-ocupacao-do-google-no-historico.spec.ts
+        agenda-painel-cabe-na-tela.spec.ts
+        agenda-remarcar-e-cancelar.spec.ts
+        agenda-tipos-de-agendamento.spec.ts
+        agenda-ver-na-agenda.spec.ts
+        agente-marca-consulta.spec.ts
+        inbox-quem-manda.spec.ts
+        inbox-rotulo-de-origem.spec.ts
+        interface-por-vinculo.spec.ts
+        lgpd-pedido-sem-email-vira-revisao-pendente.spec.ts
+        lgpd-registrar-pedido-pela-tela.spec.ts
+        limpeza-de-midia-opt-in.spec.ts
+        logo-moldura-no-tema-escuro.spec.ts
+        marca-logo.spec.ts
+        marca-paletas.spec.ts
+        moeda-da-organizacao.spec.ts
+        olhar-telas-do-epico.spec.ts
+        sons-dos-avisos.spec.ts
+      SPECS_PARTE_6: >-
+        pipelines-gestao.spec.ts
+        prova-painel-provedores.spec.ts
+        qa-agente-usa-as-maos.spec.ts
+        qa-equipe-pinta-na-hora.spec.ts
+        qa-l12-agenda-contatos.spec.ts
+        qa-l12-tags-radar.spec.ts
+        qa-selo-no-funil-usado.spec.ts
+        qa-sugestao-rejeitada-e-motivo.spec.ts
+        qa-telas-descobertas-w4.spec.ts
+        qa-titulos-das-telas.spec.ts
+        reiniciar-teste.spec.ts
+        respostas-prontas.spec.ts
+        retorno-anti-morte.spec.ts
+        suporte-temporario.spec.ts
+        tarefa-com-responsavel.spec.ts
+        tarefas-no-card-do-negocio.spec.ts
+        troca-de-organizacao-tem-volta.spec.ts
+        voz-desligada-por-padrao.spec.ts
+        voz-primeiro-pareamento.spec.ts
+        webhooks.spec.ts
+        zona-de-perigo-apaga-dados-de-teste.spec.ts
+        roteamento-por-canal.spec.ts
 
       FORA_DO_CI: >-
         vps-fresh-onboarding.spec.ts
@@ -999,10 +1095,10 @@ jobs:
       # workers, dois specs gerando o mesmo código no mesmo intervalo de 30s
       # fazem o segundo ser recusado como replay. Foi o que derrubava a
       # `reset-password-mfa` (issue #80): ela passa sozinha e falha em paralelo.
-      - name: E2E — parte ${{ matrix.parte }} de 4
+      - name: E2E — parte ${{ matrix.parte }} de ${{ strategy.job-total }}
         run: |
           set -euo pipefail
-          # A lista sai da matrix, e as duas variáveis continuam existindo no
+          # A lista sai da matrix, e as variáveis continuam existindo no
           # `env:` do job porque é DELAS que `e2e-cobertura-completa.test.ts` lê
           # a cobertura. Ler por indireção aqui e não duplicar a lista mantém
           # UMA fonte por parte.
@@ -1011,6 +1107,8 @@ jobs:
             2) LISTA="$SPECS_PARTE_2" ;;
             3) LISTA="$SPECS_PARTE_3" ;;
             4) LISTA="$SPECS_PARTE_4" ;;
+            5) LISTA="$SPECS_PARTE_5" ;;
+            6) LISTA="$SPECS_PARTE_6" ;;
             *) echo "::error::parte ${{ matrix.parte }} sem lista"; exit 1 ;;
           esac
           # Falha alto se a variável vier vazia: sem isto, um typo no nome faria
@@ -1058,7 +1156,7 @@ jobs:
   #
   # A branch protection da `main` exige um check chamado exatamente `e2e`
   # (medido: verify, build-and-size, invariants, e2e, imagens-ok). Jobs de
-  # matrix se chamam `e2e-parte (1)` e `e2e-parte (2)` — se o job das partes
+  # matrix se chamam `e2e-parte (N)` — se o job das partes
   # tivesse ficado com o nome `e2e`, a proteção passaria a esperar para sempre
   # um check que nenhum run produz, e NENHUM PR mergearia. Este agregador é o
   # mesmo padrão do `imagens-ok` em `publish-image.yml`.
@@ -1130,7 +1228,7 @@ jobs:
                       dentro { exit }
                     ' .github/workflows/e2e.yml | grep -oE "[a-z0-9-]+\.spec\.ts" | sort -u; }
           NO_DISCO=$(ls tests/e2e/*.spec.ts | wc -l | tr -d " ")
-          RODOU=$( { bloco SPECS_PARTE_1; bloco SPECS_PARTE_2; bloco SPECS_PARTE_3; bloco SPECS_PARTE_4; } | sort -u | wc -l | tr -d " ")
+          RODOU=$( { bloco SPECS_PARTE_1; bloco SPECS_PARTE_2; bloco SPECS_PARTE_3; bloco SPECS_PARTE_4; bloco SPECS_PARTE_5; bloco SPECS_PARTE_6; } | sort -u | wc -l | tr -d " ")
           FORA_LISTA=$(bloco FORA_DO_CI)
           FORA=$(echo "$FORA_LISTA" | grep -c . || true)
           # E o recorte passa a ter CONTROLE, não só um piso.
