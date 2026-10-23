@@ -2186,6 +2186,35 @@ function turnoVaiFalarComOLead(job: JobRow): boolean {
   return purpose === undefined || purpose === 'send_message';
 }
 
+/**
+ * O MESMO job já gravou uma decisão de roteamento? (DeskcommCRM #3143)
+ *
+ * `rescheduleJob` NÃO cria outro job: o adiamento pela janela de funcionamento do
+ * agente (que roda DEPOIS do roteador) devolve a MESMA linha de `job_queue` para
+ * 'pending', e a reexecução roda com o mesmo `job_id`. Quem escreve às 19h para um
+ * agente 8h-18h é roteado às 19h e de novo às 8h; sem esta pergunta, cada passagem
+ * insere uma linha em `ai_router_decisions` e o painel que conta roteamento
+ * (`app/api/v1/ai/evolution`) lê o dobro para um job que teve uma decisão só.
+ *
+ * `desde` é a criação do job (a decisão nunca é anterior a ele): sem índice com
+ * `job_id`, é o limite que faz a consulta entrar pelo índice de `created_at`.
+ * Erro de leitura sobe: quem chama degrada aberto e grava como antes.
+ */
+async function decisaoDeRoteamentoDoJobJaGravada(
+  pool: pg.Pool,
+  organizationId: string,
+  jobId: string,
+  desde: Date,
+): Promise<boolean> {
+  const { rows } = await pool.query(
+    `select 1 from ai_router_decisions
+      where organization_id = $1 and job_id = $2 and created_at >= $3
+      limit 1`,
+    [organizationId, jobId, desde],
+  );
+  return rows.length > 0;
+}
+
 async function executarTurnoDoAgente(
   deps: InboundTurnDeps,
   job: JobRow | null,
@@ -2479,6 +2508,22 @@ async function executarTurnoDoAgente(
   // trocou o dono e deixou a linha do destino. Gravar de novo seria uma segunda
   // decisão para a mesma mensagem.
   if (!preview && routed.routerId !== null && input.passagem === undefined) {
+    // UM TURNO, UMA DECISÃO (DeskcommCRM #3143): o turno adiado pela janela do
+    // agente volta como o MESMO job, e a decisão da primeira passagem é reusada.
+    // A guarda é de telemetria e degrada ABERTO: leitura que falha grava como antes.
+    let decisaoJaGravada = false;
+    try {
+      decisaoJaGravada = await decisaoDeRoteamentoDoJobJaGravada(
+        pool,
+        tenantId,
+        liveJob().id,
+        liveJob().created_at,
+      );
+    } catch (err) {
+      runLog.warn('não consegui conferir a decisão de roteamento deste job — gravando como antes', {
+        error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
+      });
+    }
     try {
       if (agentConfig !== null) {
         await pool.query(
@@ -2488,21 +2533,23 @@ async function executarTurnoDoAgente(
           [tenantId, input.conversationId, agentConfig.agentId, routed.intentName],
         );
       }
-      await pool.query(
-        `insert into ai_router_decisions
-           (organization_id, router_id, conversation_id, intent_name, confidence, agent_id, outcome, job_id)
-         values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [
-          tenantId,
-          routed.routerId,
-          input.conversationId,
-          routed.intentName,
-          routed.confidence,
-          agentConfig?.agentId ?? null,
-          routed.outcome,
-          liveJob().id,
-        ],
-      );
+      if (!decisaoJaGravada) {
+        await pool.query(
+          `insert into ai_router_decisions
+             (organization_id, router_id, conversation_id, intent_name, confidence, agent_id, outcome, job_id)
+           values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            tenantId,
+            routed.routerId,
+            input.conversationId,
+            routed.intentName,
+            routed.confidence,
+            agentConfig?.agentId ?? null,
+            routed.outcome,
+            liveJob().id,
+          ],
+        );
+      }
     } catch (err) {
       runLog.warn('decisão do router não gravada', {
         error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
