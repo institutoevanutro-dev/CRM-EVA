@@ -116,6 +116,12 @@ describe("a assistência do agente só ocupa a tela com sugestão (#3234)", () =
     expect(botoesDeSugerir()).toHaveLength(1);
     // E com sugestão na tela a faixa fica presa aberta (o alternador trava).
     expect(screen.getByRole("button", { name: "Opções de resposta" })).toBeDisabled();
+    // Com o teclado do celular aberto, o bloco sai da frente (#3191): a regra é
+    // CSS do marcador da camada da conversa, e só abaixo do `md`.
+    expect(screen.getByTestId("sugestao-sai-com-teclado").className).toContain(
+      "max-md:group-data-[teclado-aberto]/conversa:hidden",
+    );
+    expect(screen.getByTestId("sugestao-sai-com-teclado").contains(bloco())).toBe(true);
   });
 
   it("CONTROLE: rascunho preparando e rascunho aprovado também mantêm o bloco", async () => {

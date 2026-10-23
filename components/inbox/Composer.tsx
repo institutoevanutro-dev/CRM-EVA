@@ -524,9 +524,17 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           )}
         >
         {/* O bloco só existe COM sugestão (#3234): sem ela, quem oferece o gesto
-            é o ícone "Sugerir resposta" da linha de ações, lá embaixo. */}
+            é o ícone "Sugerir resposta" da linha de ações, lá embaixo. Com o
+            teclado virtual aberto (#3191), ele sai da frente: num iPhone sobram
+            ~250px de tela, e o fio da conversa vale mais. O marcador é da camada
+            da conversa (`useAlturaVisivel`); o `max-md:` deixa o computador igual. */}
         {mode === "reply" && sugestao && (
-          <ReplyReviewPanel conversationId={conversationId} disabled={isDisabled} />
+          <div
+            data-testid="sugestao-sai-com-teclado"
+            className="max-md:group-data-[teclado-aberto]/conversa:hidden"
+          >
+            <ReplyReviewPanel conversationId={conversationId} disabled={isDisabled} />
+          </div>
         )}
         <div className="flex gap-1">
           <button
