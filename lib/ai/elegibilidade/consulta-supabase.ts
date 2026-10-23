@@ -40,8 +40,11 @@ interface ConversaEmbed {
     ai_authorized_at: string | null;
     phone_number: string | null;
     inbox_hidden_at?: string | null;
+    /** `contacts.tags`: a régua de contato interno (#2353 do original). */
+    tags?: string[] | null;
   } | null;
   channel_sessions: { metadata: Record<string, unknown> | null; provider?: string | null } | null;
+  organizations?: { settings?: unknown } | null;
 }
 
 /**
@@ -62,7 +65,7 @@ export async function decidirElegibilidadeDaConversaViaSupabase(
   const { data, error } = await admin
     .from("conversations")
     .select(
-      "bot_silenced_until, assignee_kind, contacts:contact_id(force_human, ai_authorized_at, phone_number, inbox_hidden_at), channel_sessions:channel_session_id(metadata, provider)",
+      "bot_silenced_until, assignee_kind, contacts:contact_id(force_human, ai_authorized_at, phone_number, inbox_hidden_at, tags), channel_sessions:channel_session_id(metadata, provider), organizations:organization_id(settings)",
     )
     .eq("organization_id", input.organizationId)
     .eq("id", input.conversationId)
@@ -82,6 +85,8 @@ export async function decidirElegibilidadeDaConversaViaSupabase(
       aiTestPhoneNumbers: row.channel_sessions?.metadata?.["ai_test_phone_numbers"] ?? null,
       contactPhoneNumber: row.contacts?.phone_number ?? null,
       forceHuman: row.contacts?.force_human ?? false,
+      contactTags: row.contacts?.tags ?? null,
+      orgSettings: row.organizations?.settings,
       assigneeKind: row.assignee_kind,
       botSilencedUntil: row.bot_silenced_until,
       aiAuthorizedAt: row.contacts?.ai_authorized_at ?? null,

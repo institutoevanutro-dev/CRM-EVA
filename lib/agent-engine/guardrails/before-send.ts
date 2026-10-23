@@ -76,6 +76,9 @@ import { capabilitiesOf, DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabil
 import { isWindowOpen } from './messaging-window';
 import { jobEhPassoFixoDoFluxo } from '@/lib/followup/bloqueios-obrigatorios';
 import type { ChannelProvider } from '@/lib/channels/capabilities';
+// A régua de contato interno (#2353 do original) na forma SQL: o `stop` é um
+// caminho de envio que não passa pelo gate de elegibilidade.
+import { sqlContatoInterno } from '@/lib/contacts/tags-internas';
 
 /** O que os gates enxergam — carregado UMA vez sob o lock, por tentativa de envio. */
 export interface GateContext {
@@ -93,6 +96,11 @@ export interface GateContext {
    * mesmo; muda o código do trace, para a tela não chamar transferência de opt-out.
    */
   comHumano?: boolean;
+  /**
+   * O STOP veio da etiqueta de contato INTERNO (#2353 do original), sem bloqueio.
+   * O veto é o mesmo; muda o código, porque contato interno não é opt-out.
+   */
+  contatoInterno?: boolean;
   /**
    * Canal desta tentativa. Nenhum gate pergunta QUEM é o provider (invariante 1
    * de `docs/doctrine/restricao-de-canal.md`) — só o entrega a `capabilitiesOf`
@@ -339,7 +347,16 @@ export interface Gate {
 const stopGate: Gate = {
   name: 'stop',
   evaluate: (ctx) =>
-    ctx.optedOut && ctx.comHumano === true
+    ctx.optedOut && ctx.contatoInterno === true
+      ? {
+          pass: false,
+          code: 'contato_interno',
+          reason:
+            'este contato é INTERNO (tem uma etiqueta da lista de contatos internos da ' +
+            'organização) — não recebe atendimento automático, como numa conversa em ' +
+            '"Assumir"; encerre o turno sem tentar de novo.',
+        }
+      : ctx.optedOut && ctx.comHumano === true
       ? {
           pass: false,
           code: 'conversa_com_humano',
@@ -1269,7 +1286,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       meetingPolicy?.humanCommand === true || replyPolicy !== null || passoFixoConfirmado,
     );
     const bloqueado = args.optedOutThisTurn || stop.bloqueado;
-    const optedOut = bloqueado || stop.comHumano;
+    const optedOut = bloqueado || stop.comHumano || stop.contatoInterno;
     const pacingCfg = await loadChannelKnobs(
       client,
       args.tenantId,
@@ -1317,6 +1334,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       body: args.body,
       optedOut,
       comHumano: !bloqueado && stop.comHumano,
+      contatoInterno: !bloqueado && stop.contatoInterno,
       provider,
       messagingWindow: { lastInboundAt, ...(args.isTemplate === true ? { isTemplate: true } : {}) },
       pacing: {
@@ -1496,23 +1514,43 @@ export async function loadChannelProvider(
   return provider === undefined ? DEFAULT_CHANNEL_PROVIDER : (provider as ChannelProvider);
 }
 
-async function readStopFlags(
+/**
+ * Exportada para a suíte de invariantes medir o predicado REAL contra Postgres
+ * (`tests/invariants/contato-interno-barra-o-envio.test.ts`).
+ */
+export async function readStopFlags(
   db: Queryable,
   organizationId: string,
   contactId: string,
   /** Só `is_blocked` para: o comando Meet, a resposta aprovada e o passo fixo de fluxo confirmado. */
   humanMeetingCommand = false,
-): Promise<{ bloqueado: boolean; comHumano: boolean }> {
-  // O predicado da parada continua UM só e no SQL (`is_blocked or force_human`);
-  // `is_blocked` vem ao lado só para o trace saber QUAL das duas travas vetou.
-  const { rows } = await db.query<{ is_blocked: boolean; stopped: boolean }>(
+): Promise<{ bloqueado: boolean; comHumano: boolean; contatoInterno: boolean }> {
+  // O predicado da parada continua UM só e no SQL (`is_blocked or force_human`,
+  // mais a etiqueta de contato interno, #2353 do original); `is_blocked` e
+  // `contato_interno` vêm ao lado só para o trace saber QUAL trava vetou. O
+  // `cross join lateral` avalia a régua da etiqueta UMA vez por linha.
+  //
+  // O ramo do comando humano NÃO lê a etiqueta: contato interno segue recebendo o
+  // que uma PESSOA manda (é a promessa da feature). O passo fixo de fluxo, que
+  // também usa esse ramo, é barrado antes por `isLeadInHandoff`; a exceção é o
+  // acompanhamento de consulta com "Permitir durante handoff", que pula aquela
+  // guarda de propósito e segue mandando as fixas.
+  const { rows } = await db.query<{ is_blocked: boolean; stopped: boolean; contato_interno?: boolean }>(
     humanMeetingCommand
       ? 'select is_blocked, is_blocked as stopped from contacts where organization_id = $1 and id = $2'
-      : 'select is_blocked, (is_blocked or force_human) as stopped from contacts where organization_id = $1 and id = $2',
+      : `select is_blocked, (is_blocked or force_human or i.contato_interno) as stopped, i.contato_interno
+           from contacts
+           cross join lateral (select (${sqlContatoInterno('contacts')}) as contato_interno) i
+          where organization_id = $1 and id = $2`,
     [organizationId, contactId],
   );
   const bloqueado = rows[0]?.is_blocked === true;
-  return { bloqueado, comHumano: !bloqueado && rows[0]?.stopped === true };
+  const contatoInterno = !bloqueado && rows[0]?.contato_interno === true;
+  return {
+    bloqueado,
+    contatoInterno,
+    comHumano: !bloqueado && !contatoInterno && rows[0]?.stopped === true,
+  };
 }
 
 /**

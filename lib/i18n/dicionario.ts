@@ -37,6 +37,20 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  // Configurações › Etiquetas: contato interno (#2353 do original).
+  "Etiquetas de contato interno": { es: "Etiquetas de contacto interno" },
+  "Para equipe, sócio, família ou fornecedor. O contato com uma destas etiquetas não vira card no funil e não recebe mensagens automáticas da IA nem dos acompanhamentos. A conversa continua normal no Inbox, e a equipe responde por lá como sempre. Uma etiqueta por linha.": {
+    es: "Para equipo, socio, familia o proveedor. El contacto con una de estas etiquetas no se convierte en tarjeta en el embudo y no recibe mensajes automáticos de la IA ni de los seguimientos. La conversación sigue normal en el Inbox, y el equipo responde allí como siempre. Una etiqueta por línea.",
+  },
+  "Em branco, nenhum contato é interno, como antes.": { es: "En blanco, ningún contacto es interno, como antes." },
+  "Lista salva.": { es: "Lista guardada." },
+  "Confira a lista: alguma etiqueta passou do tamanho ou do limite.": {
+    es: "Revisa la lista: alguna etiqueta superó el tamaño o el límite.",
+  },
+  "Só um gerente ou administrador pode mudar esta lista.": {
+    es: "Solo un gerente o administrador puede cambiar esta lista.",
+  },
+  "Não consegui salvar agora.": { es: "No pude guardar ahora." },
   // Agenda: modal simples de marcação e aba de bloqueio.
   "Marque um atendimento ou bloqueie um horário da agenda.": { es: "Agende una atención o bloquee un horario de la agenda." },
   "A partir de": { es: "A partir del" },
@@ -58,6 +72,16 @@ export const DICIONARIO: Traducoes = {
   "Escolha o procedimento": { es: "Elija el procedimiento" },
   "Escolha antes o profissional": { es: "Elija antes el profesional" },
   "Procedimentos de outros profissionais": { es: "Procedimientos de otros profesionales" },
+  // Agenda: nome completo do paciente, que o prontuário pede para abrir o atendimento.
+  "Nome completo do paciente": { es: "Nombre completo del paciente" },
+  "Vai para o cadastro do paciente. Confira nome e sobrenome.": { es: "Va al registro del paciente. Revise nombre y apellido." },
+  "Escreva nome e sobrenome.": { es: "Escriba nombre y apellido." },
+  "Complete o nome do paciente para marcar.": { es: "Complete el nombre del paciente para agendar." },
+  "Falta o nome completo": { es: "Falta el nombre completo" },
+  "falta o nome completo": { es: "falta el nombre completo" },
+  "Sem o nome completo no cadastro, o prontuário não abre o atendimento.": { es: "Sin el nombre completo en el registro, la historia clínica no abre la atención." },
+  "Salvar nome": { es: "Guardar nombre" },
+  "Nome completo salvo.": { es: "Nombre completo guardado." },
   "Mais opções": { es: "Más opciones" },
   "Endereço inválido. Confira antes de marcar.": { es: "Dirección inválida. Revísela antes de agendar." },
   "Data": { es: "Fecha" },

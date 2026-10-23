@@ -791,6 +791,7 @@ jobs:
         agenda-grade-interativa.spec.ts
         agenda-kit-visual.spec.ts
         agenda-marcar-pela-tela.spec.ts
+        agenda-nome-completo.spec.ts
         agenda-ocupacao-do-google-na-grade.spec.ts
         agenda-ocupacao-do-google-no-historico.spec.ts
         agenda-painel-cabe-na-tela.spec.ts

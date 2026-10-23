@@ -4,6 +4,7 @@ import {
   AI_ALLOWLIST_TTL_DAYS_DEFAULT,
   decidirElegibilidade,
   lerModoDoGate,
+  montarEstadoDeElegibilidade,
   ttlDaAutorizacaoMs,
   type EstadoDeElegibilidade,
 } from "./gate";
@@ -15,6 +16,7 @@ const base: EstadoDeElegibilidade = {
   contatoOculto: false,
   modo: "open",
   forceHuman: false,
+  contatoInterno: false,
   botSilencedUntil: null,
   assigneeKind: "ai",
   aiAuthorizedAt: null,
@@ -197,5 +199,53 @@ describe("ttlDaAutorizacaoMs", () => {
   });
   it("respeita o valor configurado", () => {
     expect(ttlDaAutorizacaoMs({ AI_ALLOWLIST_TTL_DAYS: "7" })).toBe(7 * DIA);
+  });
+});
+
+describe("#2353 do original · contato interno não é atendido pela IA", () => {
+  it("contato interno → NÃO responde, com motivo 'contato_interno' e sem bloqueio por allowlist", () => {
+    const d = decidirElegibilidade({ ...base, modo: "open", contatoInterno: true });
+    expect(d).toEqual({ permite: false, motivo: "contato_interno", bloqueioPorAllowlist: false });
+  });
+
+  it("como 'Assumir' (conversa_de_humano), o bloqueioPorAllowlist é false: não gasta job nem vira erro", () => {
+    const interno = decidirElegibilidade({ ...base, modo: "allowlist", contatoInterno: true });
+    const humano = decidirElegibilidade({ ...base, modo: "allowlist", assigneeKind: "user" });
+    expect(interno.bloqueioPorAllowlist).toBe(humano.bloqueioPorAllowlist);
+    expect(interno.bloqueioPorAllowlist).toBe(false);
+  });
+
+  it("ordem declarada: um veto mais duro (force_human) vence o contato interno", () => {
+    const d = decidirElegibilidade({ ...base, modo: "open", contatoInterno: true, forceHuman: true });
+    expect(d.motivo).toBe("force_human");
+  });
+
+  it("regressão: contato SEM a tag segue sendo atendido com o gate aberto", () => {
+    const d = decidirElegibilidade({ ...base, modo: "open", contatoInterno: false });
+    expect(d).toEqual({ permite: true, motivo: "gate_aberto", bloqueioPorAllowlist: false });
+  });
+
+  const montar = (extra: { contactTags?: string[]; orgSettings?: unknown; tagsInternas?: string[] }) =>
+    montarEstadoDeElegibilidade({
+      aiGate: "open",
+      forceHuman: false,
+      assigneeKind: null,
+      botSilencedUntil: null,
+      aiAuthorizedAt: null,
+      agora: AGORA,
+      ttlMs: DIA,
+      ...extra,
+    });
+
+  it("montarEstadoDeElegibilidade: a tag interna cruza com settings.crm.internal_contact_tags", () => {
+    expect(montar({ contactTags: [" Interno "], orgSettings: { crm: { internal_contact_tags: ["interno"] } } }).contatoInterno).toBe(true);
+    expect(montar({ contactTags: ["interno"], orgSettings: {} }).contatoInterno).toBe(false);
+    expect(montar({ contactTags: ["interno"], orgSettings: { crm: { internal_contact_tags: "interno" } } }).contatoInterno).toBe(false);
+    // Sem a leitura (meet, chamador antigo), ninguém é interno: o comportamento de antes.
+    expect(montar({ contactTags: ["interno"] }).contatoInterno).toBe(false);
+  });
+
+  it("a lista já lida (`tagsInternas`) vence o settings, para quem decide muitos contatos da mesma org", () => {
+    expect(montar({ contactTags: ["equipe"], tagsInternas: ["equipe"], orgSettings: {} }).contatoInterno).toBe(true);
   });
 });

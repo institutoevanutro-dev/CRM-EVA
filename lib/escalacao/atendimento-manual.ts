@@ -170,7 +170,12 @@ export async function pausarIaPorAtendimentoManual(
           : silenciadaAte;
     if (atualMs >= proposto.getTime()) return false;
 
-    const { error: updErr } = await admin
+    // A LINHA VOLTA (#534 do original). Um UPDATE pode devolver `error: null` sem
+    // ter tocado em nada (corrida com um DELETE entre a leitura acima e esta
+    // escrita). Sem ler de volta, a função dizia "pausei" com o banco intacto, e a
+    // IA voltava a falar por cima de quem atende. `select("id")` torna a pausa
+    // OBSERVÁVEL: sem linha afetada, não houve pausa.
+    const { data: afetadas, error: updErr } = await admin
       .from("conversations")
       .update({
         bot_silenced_until: proposto.toISOString(),
@@ -178,13 +183,25 @@ export async function pausarIaPorAtendimentoManual(
         last_handoff_reason: MOTIVO,
       })
       .eq("organization_id", input.organizationId)
-      .eq("id", input.conversationId);
+      .eq("id", input.conversationId)
+      .select("id");
 
     if (updErr) {
       logger.warn("[atendimento-manual] pausa da IA não gravada", {
         organization_id: input.organizationId,
         conversation_id: input.conversationId,
         detail: updErr.message.slice(0, 160),
+      });
+      return false;
+    }
+
+    // Zero linhas é o mesmo que erro: o `error` fica `null` e só a contagem
+    // denuncia. Segue o contrato: devolve `false`, nunca lança.
+    if ((afetadas?.length ?? 0) === 0) {
+      logger.warn("[atendimento-manual] pausa da IA não gravada — nenhuma linha afetada", {
+        organization_id: input.organizationId,
+        conversation_id: input.conversationId,
+        rows: 0,
       });
       return false;
     }

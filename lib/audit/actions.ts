@@ -349,6 +349,11 @@ export const AUDIT_ACTIONS = [
   // Rodada do cron que devolve ao agente o atendimento parado além do prazo da
   // organização — só quando devolveu (ou falhou) alguma.
   "conversation.handoff_auto_return_run",
+  // A devolução AO RODÍZIO (#2985 do original, fatia 1): a conversa que o rodízio
+  // entregou e ninguém respondeu volta para a fila, e a pessoa fica fora dela
+  // por 24 h. Uma linha por conversa devolvida e uma por rodada com efeito.
+  "conversation.returned_to_routing_queue",
+  "conversation.routing_return_run",
   "conversation.note_added",
   "conversation.note_deleted",
   "ai.case_replied",
@@ -636,6 +641,10 @@ export const AUDIT_ACTIONS = [
   // "Cliente pela agenda" ligada ou desligada (migration 0262). Ligar reescreve
   // etiquetas de toda a organização; metadata leva as contagens.
   "crm.cliente_pela_agenda_alterado",
+  // A lista de etiquetas de contato INTERNO (#2353 do original) mudou: muda o que
+  // vira card no funil e o que a IA responde. "Desde quando a equipe parou de
+  // virar lead?" só tem resposta aqui.
+  "crm.tags_internas_alteradas",
   // "Paciente pelo cadastro" ligada ou desligada (migration 0360). Não reescreve
   // contato nenhum, mas muda em que funil nasce o card de quem tem cadastro de
   // paciente; metadata leva quantos contatos a regra alcançava naquele momento.

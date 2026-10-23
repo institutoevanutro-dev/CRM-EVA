@@ -68,7 +68,7 @@ import { googleRpc } from "./google/sync-store";
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
+import { faltaNomeCompleto, nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
 
 import { diaLocalISO } from "./fuso";
 import { horariosLivres, type ExcecaoDeData, type Slot } from "./horarios-livres";
@@ -573,6 +573,12 @@ export interface AgendamentoListado {
   donoId: string | null;
   contatoId: string | null;
   contatoNome: string | null;
+  /**
+   * O cadastro do contato ainda não tem nome completo (`faltaNomeCompleto`):
+   * o prontuário não abre o atendimento. É a TELA que lê, para avisar a
+   * recepção; a ferramenta da IA mapeia os campos um a um e não o repassa.
+   */
+  contatoSemNomeCompleto?: boolean;
 }
 
 export interface ParametrosDaLista {
@@ -632,6 +638,11 @@ function contatoDoEmbed(
   c: ContatoNomeavel | ContatoNomeavel[] | null | undefined,
 ): string | null {
   return nomeDoContato(Array.isArray(c) ? (c[0] ?? null) : c);
+}
+
+/** O mesmo embed, para a pergunta do prontuário: o cadastro tem nome completo? */
+function semNomeCompletoNoEmbed(c: ContatoNomeavel | ContatoNomeavel[] | null | undefined): boolean {
+  return faltaNomeCompleto(Array.isArray(c) ? (c[0] ?? null) : c);
 }
 
 export async function listaAgendamentos(
@@ -788,6 +799,7 @@ export async function listaAgendamentos(
       // produto lê, e a MESMA decisão de nome — `lib/contacts/rotulo-do-contato.ts`,
       // não um precedente copiado de outro arquivo.
       contatoNome: contatoDoEmbed(l.contacts),
+      contatoSemNomeCompleto: l.contact_id ? semNomeCompletoNoEmbed(l.contacts) : false,
     })),
   };
 }

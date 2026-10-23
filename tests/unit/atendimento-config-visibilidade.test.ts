@@ -91,10 +91,39 @@ describe("config de atendimento — routing + visibilidade na mesma porta", () =
     // O contrato v1 já estava publicado. Se o corpo de antes deixasse de valer,
     // a mudança seria quebra de API disfarçada de feature nova.
     const antigo = { mode: "round_robin", max_retries: 3, backoff_seconds: 30 };
-    // O corpo antigo não conhece o prazo de devolução: no PATCH ele fica
-    // OMITIDO (e a mescla preserva o que vale), no schema do jsonb ele é null.
-    const { handoff_return_after_minutes: _padrao, ...semPrazo } = routingConfigSchema.parse(antigo);
+    // O corpo antigo não conhece o prazo de devolução nem a devolução AO RODÍZIO
+    // (DeskcommCRM #2985): no PATCH eles ficam OMITIDOS (e a mescla preserva o
+    // que vale), no schema do jsonb eles são null.
+    const {
+      handoff_return_after_minutes: _padrao,
+      unanswered_return_minutes: _devolveAoRodizio,
+      ...semPrazo
+    } = routingConfigSchema.parse(antigo);
     expect(atendimentoConfigPatchSchema.parse(antigo)).toEqual(semPrazo);
+  });
+
+  it("corpo SEM unanswered_return_minutes preserva a devolução ao rodízio que já valia", () => {
+    // A omissão não pode LIGAR a regra para quem nunca a configurou nem
+    // DESLIGAR quem já a tinha ligada.
+    const atual = { routing: { mode: "manual", unanswered_return_minutes: 45 } };
+    const proximo = proximoSettings(atual, { mode: "round_robin", max_retries: 5, backoff_seconds: 60 });
+    expect((proximo.routing as { unanswered_return_minutes: number | null }).unanswered_return_minutes).toBe(45);
+    const semConfigurar = proximoSettings(
+      { routing: { mode: "manual" } },
+      { mode: "round_robin", max_retries: 5, backoff_seconds: 60 },
+    );
+    expect((semConfigurar.routing as { unanswered_return_minutes: unknown }).unanswered_return_minutes).toBeNull();
+  });
+
+  it("unanswered_return_minutes: grava o valor, null desliga, fora da faixa é recusado", () => {
+    const base = { mode: "manual", max_retries: 5, backoff_seconds: 60 };
+    const com60 = proximoSettings({ routing: { mode: "manual" } }, { ...base, unanswered_return_minutes: 60 });
+    expect((com60.routing as { unanswered_return_minutes: unknown }).unanswered_return_minutes).toBe(60);
+    const nulo = proximoSettings(com60, { ...base, unanswered_return_minutes: null });
+    expect((nulo.routing as { unanswered_return_minutes: unknown }).unanswered_return_minutes).toBeNull();
+    for (const fora of [4, 1441, 7.5]) {
+      expect(() => atendimentoConfigPatchSchema.parse({ ...base, unanswered_return_minutes: fora })).toThrow();
+    }
   });
 
   it("corpo SEM handoff_return_after_minutes preserva o prazo que já valia", () => {

@@ -27,6 +27,9 @@ interface LinhaDeElegibilidade {
   ai_authorized_at: Date | string | null;
   phone_number: string | null;
   provider: string | null;
+  /** `contacts.tags` e `organizations.settings`: a régua de contato interno (#2353). */
+  contact_tags: string[] | null;
+  org_settings: unknown;
 }
 
 /**
@@ -67,8 +70,11 @@ export async function decidirElegibilidadeDaConversa(
        cv.bot_silenced_until        as bot_silenced_until,
        ct.ai_authorized_at          as ai_authorized_at,
        ct.phone_number              as phone_number,
-       cs.provider                  as provider
+       cs.provider                  as provider,
+       ct.tags                      as contact_tags,
+       o.settings                   as org_settings
      from conversations cv
+     join organizations o on o.id = cv.organization_id
      join contacts ct
        on ct.id = cv.contact_id and ct.organization_id = cv.organization_id
      join channel_sessions cs
@@ -87,6 +93,9 @@ export async function decidirElegibilidadeDaConversa(
       aiTestPhoneNumbers: r.channel_metadata?.ai_test_phone_numbers,
       contactPhoneNumber: r.phone_number,
       forceHuman: input.ignorarTravaDoContato === true || input.ignorarPausaDaIA === true ? false : r.force_human,
+      // A etiqueta interna NÃO é trava de pessoa: vale também no passo fixo.
+      contactTags: r.contact_tags,
+      orgSettings: r.org_settings,
       assigneeKind: input.ignorarPausaDaIA === true ? null : r.assignee_kind,
       botSilencedUntil: input.ignorarPausaDaIA === true ? null : r.bot_silenced_until,
       aiAuthorizedAt: r.ai_authorized_at,

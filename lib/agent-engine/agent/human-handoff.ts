@@ -25,6 +25,7 @@ import type pg from 'pg';
 
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { ehOptOutProvavel } from '@/lib/opt-out/deteccao';
+import { sqlContatoInterno } from '@/lib/contacts/tags-internas';
 import { PROVIDERS_COM_SILENCIO_DE_ROTEAMENTO } from '@/lib/channels/capabilities';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 
@@ -66,6 +67,216 @@ export function detectHumanHandoffRequest(message: string): boolean {
   return HUMAN_HANDOFF_PATTERNS.some((re) => re.test(normalized));
 }
 
+/**
+ * ═══ A GUARDA CONTRA O MENU DO ROBÔ DO OUTRO LADO (issue 3106) ═══
+ *
+ * O defeito medido: a empresa abordada responde à nossa primeira mensagem com o
+ * menu automático dela ("1 - Ver produtos · 4 - Falar com um atendente"), o
+ * primeiro padrão casa o rótulo da QUARTA OPÇÃO, o turno avisa o robô ("Claro!
+ * Já estou chamando alguém da equipe…"), marca `force_human`, joga a conversa na
+ * Fila e abre demanda — e o modelo nunca vê a mensagem. Cada caso vira trabalho
+ * manual, e o autor mediu dois na mesma semana.
+ *
+ * A FRASE continua casando: `HUMAN_HANDOFF_PATTERNS` não muda, porque um pedido
+ * de verdade precisa ser reconhecido sempre. O que muda é a LEITURA do
+ * casamento — antes de passar a conversa, o turno pergunta se o que casou é fala
+ * de GENTE. As três marcas abaixo dizem quando NÃO é, e todas se decidem sobre o
+ * que o turno JÁ tem em memória (o mesmo histórico que o modelo lê), sem
+ * consulta nova e sem relógio do banco:
+ *
+ *   1. MENU — o texto é um menu E o pedido casado é UMA DAS OPÇÕES dele (o item
+ *      numerado "4 - Falar com um atendente", ou um menu que pede "digite o
+ *      número" e traz opções numeradas): o rótulo casado não é um pedido;
+ *   2. MARCA DE ROBÔ — o texto se DECLARA automação ("sou o assistente
+ *      virtual", "esta é uma mensagem automática"): quem escreve isso não é quem
+ *      pede uma pessoa. Citar o robô não basta — quem reclama do NOSSO bot cita;
+ *   3. JANELA DA ABERTURA — a mensagem chegou segundos depois da mensagem NOSSA
+ *      que ABRIU a conversa (o disparo da Prospecção/campanha): é a saudação
+ *      automática de quem recebeu o disparo, antes de qualquer pessoa escrever.
+ *
+ * O que a guarda barra NÃO é silêncio: o turno segue para o MODELO, que vê a
+ * mensagem e já sabe reconhecer robô — é a decisão do desenho do autor da issue.
+ * E se o robô insistir (o mesmo menu de novo e de novo), quem para o laço é o
+ * disjuntor de `robo-do-outro-lado.ts`, que roda ANTES desta guarda no turno e
+ * passa a conversa calado: as duas peças se completam, e esta não o substitui.
+ * E ela erra para o lado de DEIXAR PASSAR: sem histórico, sem casamento ou com
+ * data ilegível, a resposta é "é de gente" e a passagem acontece — `force_human`
+ * é irrevogável (regra dura 2), e só marca de automação o justifica barrar.
+ */
+
+/**
+ * Uma mensagem do histórico do turno, como a guarda a lê.
+ *
+ * ESTRUTURAL de propósito: a guarda é pura e não arrasta o edge do CRM para
+ * dentro do detector determinístico. O `LeadContextMessage` que o turno carrega
+ * casa por estrutura, sem adaptador — e `sent_at` é lido com defensividade
+ * porque há fixture (e há turno sem relógio) que não o traz.
+ */
+export interface MensagemDoHistorico {
+  direction: 'inbound' | 'outbound';
+  body: string;
+  sent_at?: string;
+}
+
+/**
+ * Quantos segundos depois da NOSSA abertura a resposta ainda é a saudação
+ * automática do outro lado.
+ *
+ * Teto CURTO de propósito: quem recebeu um disparo e responde por si costuma
+ * levar minutos; um robô responde no mesmo minuto. Passado o minuto, a guarda
+ * desta marca para de agir — e as marcas 1 e 2 seguem valendo para o menu.
+ */
+const SEGUNDOS_DA_SAUDACAO_AUTOMATICA = 60;
+
+/**
+ * Onde começa um ITEM de menu: quebra de linha, ou o separador com espaço dos
+ * dois lados (" / ", " | ", " • ") do menu de uma linha só — o da issue é
+ * "1-Médicos / 2-Terapias / 3-Exames / 4-Falar com um atendente". O espaço é
+ * exigido para que a data "12/10" não vire dois itens.
+ */
+const SEPARADOR_DE_ITEM = /\n|\s[/|•]\s/;
+
+/**
+ * Rótulos de OPÇÃO numerada: "1 - …", "2)", "3.", "*4*. Só no começo de um ITEM
+ * (ver `SEPARADOR_DE_ITEM`), não números soltos no meio de uma frase: quem
+ * escreve "chegou em 2 minutos" não está montando um menu.
+ */
+const OPCAO_NUMERADA = /(?:^|\n|\s[/|•]\s)\s*\*{0,2}\d{1,2}\s*[-–—.)\]]|\*\d{1,2}\*|\d\ufe0f?\u20e3/g;
+
+/** O mesmo rótulo, perguntado a UM item já separado (sem `g`: `test` sem estado). */
+const ITEM_NUMERADO = /^\s*\*{0,2}\d{1,2}\s*[-–—.)\]]|\*\d{1,2}\*|\d\ufe0f?\u20e3/;
+
+/**
+ * Como um menu PEDE a escolha. "digite o número", "responda com a opção",
+ * "selecione uma opção", "menu de opções" — a moldura que transforma uma frase
+ * de passagem em RÓTULO de menu.
+ */
+const INSTRUCOES_DE_MENU: readonly RegExp[] = [
+  /\bdigite\s+(?:o\s+|a\s+)?(?:numero|opcao|palavra)\b/,
+  /\b(?:responda|responde|escolha|escolhe|selecione|seleciona|aperte|toque)\s+(?:com\s+)?(?:o\s+|a\s+|um\s+|uma\s+)?(?:numero|opcao|palavra)\b/,
+  /\bopcao\s+desejada\b/,
+  /\bmenu\s+(?:de\s+opcoes|abaixo|acima|principal)\b/,
+  /\b(?:as|nas)\s+opcoes\s+(?:abaixo|acima|ao\s+lado)\b/,
+];
+
+/**
+ * Marcas em que a própria mensagem se declara AUTOMAÇÃO. Lista CURTA e
+ * deliberada: só entra o que uma pessoa não escreve sobre si ao pedir uma
+ * pessoa passar a conversa — por isso só AUTODECLARAÇÃO ("sou o…", "esta é
+ * uma…"), nunca a menção solta. "esse assistente virtual não resolve nada",
+ * "cansei de mensagem automática de vocês" e "aqui é o bot de novo?" são gente
+ * reclamando do NOSSO robô, e têm de passar — como "não sou um robô", que é
+ * gente provando que é gente.
+ */
+const MARCAS_DE_ROBO: readonly RegExp[] = [
+  /(?<!\bnao\s+)\bsou\s+(?:o|a|um|uma)\s+(?:assistente\s+(?:virtual|digital)|robo|bot)\b/,
+  /\best[ae]\s+(?:e\s+uma\s+(?:mensagem|resposta)\s+automatica|(?:mensagem|resposta)\s+e\s+automatica)\b/,
+];
+
+/**
+ * A mensagem é um MENU de opções numeradas? (marca 1)
+ *
+ * Duas linhas numeradas, OU uma instrução explícita de escolha. O limiar de duas
+ * é a diferença entre um menu e uma frase que cita "opção 4"; `HUMAN_HANDOFF_
+ * PATTERNS` casa os dois, e é o menu que não pode virar passagem.
+ */
+export function ehMenuDeOpcoesNumeradas(mensagem: string): boolean {
+  if (mensagem.trim() === '') return false;
+  const normalizada = normalize(mensagem);
+  if (INSTRUCOES_DE_MENU.some((re) => re.test(normalizada))) return true;
+  const opcoes = normalizada.match(OPCAO_NUMERADA);
+  return opcoes !== null && new Set(opcoes.map((o) => o.replace(/\D/gu, ''))).size >= 2;
+}
+
+/**
+ * O pedido casado é UMA OPÇÃO do menu? (marca 1, a que a guarda usa)
+ *
+ * Ser menu não basta: uma pessoa que numera as próprias dúvidas ("1. o preço /
+ * 2. o prazo / quero falar com um atendente") escreve um "menu" e pede gente
+ * numa linha sem número; e quem reclama do nosso ("não sei qual a opção
+ * desejada") cita a instrução sem montar opção nenhuma. Por isso, além de ser
+ * menu, exige uma das duas: o pedido cai num ITEM numerado, ou há instrução de
+ * menu JUNTO com pelo menos uma opção numerada.
+ */
+export function pedidoEhOpcaoDoMenu(mensagem: string): boolean {
+  if (!ehMenuDeOpcoesNumeradas(mensagem)) return false;
+  const normalizada = normalize(mensagem);
+  const numerados = normalizada.split(SEPARADOR_DE_ITEM).filter((item) => ITEM_NUMERADO.test(item));
+  if (numerados.some((item) => HUMAN_HANDOFF_PATTERNS.some((re) => re.test(item)))) return true;
+  return numerados.length > 0 && INSTRUCOES_DE_MENU.some((re) => re.test(normalizada));
+}
+
+/**
+ * A mensagem se declara automação? (marca 2)
+ *
+ * `false` para vazio e para o que não casa nada — o turno pergunta isto a TODA
+ * mensagem pendente, e a maioria é fala de gente.
+ */
+export function ehMensagemDeRobo(mensagem: string): boolean {
+  if (mensagem.trim() === '') return false;
+  const normalizada = normalize(mensagem);
+  return MARCAS_DE_ROBO.some((re) => re.test(normalizada));
+}
+
+/**
+ * A mensagem chegou na janela em que o ROBÔ do outro lado responde sozinho?
+ * (marca 3)
+ *
+ * Exige as três coisas, porque cada uma sozinha é fraca:
+ *
+ *   • a PRIMEIRA mensagem do histórico é NOSSA — a conversa nasceu de um disparo
+ *     nosso (Prospecção/campanha), e não de alguém que procurou a empresa;
+ *   • a mensagem avaliada é a ocorrência MAIS RECENTE daquele texto no histórico
+ *     (as pendentes são a cauda do histórico; sem ocorrência, não há o que medir);
+ *   • a distância até a nossa abertura cabe em `SEGUNDOS_DA_SAUDACAO_AUTOMATICA`.
+ *
+ * Data ilegível ou ausente desliga a marca (devolve `false`): a passagem
+ * continua acontecendo, que é o lado seguro.
+ */
+export function chegouNaJanelaDaSaudacaoAutomatica(
+  mensagem: string,
+  historico: readonly MensagemDoHistorico[],
+): boolean {
+  const abertura = historico[0];
+  if (abertura === undefined || abertura.direction !== 'outbound') return false;
+
+  const corpo = mensagem.trim();
+  let avaliada: MensagemDoHistorico | null = null;
+  for (let i = historico.length - 1; i >= 0; i -= 1) {
+    const m = historico[i];
+    if (m !== undefined && m.direction === 'inbound' && m.body.trim() === corpo) {
+      avaliada = m;
+      break;
+    }
+  }
+  if (avaliada === null) return false;
+
+  const t0 = typeof abertura.sent_at === 'string' ? Date.parse(abertura.sent_at) : NaN;
+  const t1 = typeof avaliada.sent_at === 'string' ? Date.parse(avaliada.sent_at) : NaN;
+  if (!Number.isFinite(t0) || !Number.isFinite(t1)) return false;
+
+  const segundos = (t1 - t0) / 1000;
+  return segundos >= 0 && segundos <= SEGUNDOS_DA_SAUDACAO_AUTOMATICA;
+}
+
+/**
+ * A resposta que casou um padrão de pedido de humano é de um ROBÔ? (issue 3106)
+ *
+ * É a pergunta que o turno faz ANTES de passar a conversa: `true` = o casamento
+ * veio de menu/automação, e o turno segue para o modelo; `false` = é fala de
+ * gente (ou não há evidência em contrário), e a passagem determinística acontece
+ * como sempre.
+ */
+export function ehRespostaDeRobo(
+  mensagem: string,
+  historico: readonly MensagemDoHistorico[] = [],
+): boolean {
+  if (mensagem.trim() === '') return false;
+  if (pedidoEhOpcaoDoMenu(mensagem)) return true;
+  if (ehMensagemDeRobo(mensagem)) return true;
+  return chegouNaJanelaDaSaudacaoAutomatica(mensagem, historico);
+}
+
 
 /**
  * True se a última mensagem do lead SUGERE opt-out. A regra mora em
@@ -86,6 +297,12 @@ export function detectAmbiguousOptOut(message: string): boolean {
  * setado no contato OU alguma conversa dele ainda está silenciada (bot_silenced_until no
  * futuro — 'infinity' sempre vale). Lido no INÍCIO do turno, antes de qualquer chamada
  * de modelo. Só o humano (via CRM) libera.
+ *
+ * A MESMA guarda barra o CONTATO INTERNO (#2353 do original): quem tem uma etiqueta
+ * da lista da organização (`organizations.settings.crm.internal_contact_tags`) não
+ * recebe atendimento automático, nem o passo fixo de fluxo (`ignorarTravaDoContato`
+ * não a solta: ela não é trava de pessoa). Entra pela forma SQL da régua única
+ * (`lib/contacts/tags-internas.ts`), porque este predicado é SQL direto.
  */
 export async function isLeadInHandoff(
   db: pg.Pool,
@@ -107,6 +324,7 @@ export async function isLeadInHandoff(
   const { rows } = await db.query<{ handoff: boolean }>(
     `select (
        ${opcoes.ignorarTravaDoContato === true ? 'false' : 'c.force_human'}
+       or ${sqlContatoInterno('c')}
        or exists (
          select 1 from conversations v
          where v.organization_id = $1 and v.contact_id = c.id
@@ -265,8 +483,8 @@ export const requestHumanHandoffInputSchema = z.strictObject({
 
 const PAYLOAD_TEACHING =
   'Campos aceitos: motivo_codigo (requested_human para pedido de uma pessoa; critical_stage para ' +
-  'uma etapa do atendimento que exige finalização humana) e reason (por que passar ao humano), ' +
-  'ambos opcionais, nada além. Lead, organização e conversa vêm do runtime, nunca do payload da tool.';
+  'uma etapa do atendimento que exige finalização humana; sem ele, a passagem fica como ' +
+  'low_confidence) e reason (por que passar ao humano), ambos opcionais, nada além. Lead, organização e conversa vêm do runtime, nunca do payload da tool.';
 
 export type RequestHumanHandoffResult =
   | { ok: true; status: 'handoff_solicitado'; message: string }
@@ -297,11 +515,17 @@ export async function applyRequestHumanHandoff(
     return { ok: false, error: { code: 'invalid_payload', message: `payload inválido em request_human_handoff (${zodIssuesSummary(parsed.error)}). ${PAYLOAD_TEACHING}` } };
   }
 
-  // Ausente = comportamento legado (`requested_human`). O código só classifica
-  // a passagem quando a IA não escreveu o motivo: não escolhe destino nem muda
-  // as condições do handoff. Portado do projeto original (DeskcommCRM, PR #3068
-  // de @vitor-licassali), sem o briefing da passagem, que este fork não tem.
-  const motivoCodigo = parsed.data.motivo_codigo ?? 'requested_human';
+  // O código só classifica a passagem quando a IA não escreveu o motivo: não
+  // escolhe destino nem muda as condições do handoff. Portado do projeto original
+  // (PR #3068 de @vitor-licassali), sem o briefing da passagem, que
+  // este fork não tem.
+  //
+  // ⚠️ AUSENTE NÃO É "O CLIENTE PEDIU" (#3310 do original). Era `?? 'requested_human'`,
+  // e a passagem que o próprio modelo decidiu (faltou informação, regra do prompt)
+  // ficava gravada em `last_handoff_reason` e no aviso da Central como pedido do
+  // cliente. `low_confidence` diz o que houve sem afirmar nada sobre o cliente;
+  // quem de fato pediu uma pessoa vem com `motivo_codigo: 'requested_human'`.
+  const motivoCodigo = parsed.data.motivo_codigo ?? 'low_confidence';
   await performHumanHandoff(db, ids, {
     reason: parsed.data.reason ?? motivoCodigo,
     conversationSummary: opts.conversationSummary,

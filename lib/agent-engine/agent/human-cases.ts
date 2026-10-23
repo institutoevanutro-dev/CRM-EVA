@@ -161,6 +161,41 @@ export type OpenCaseResult =
   | { ok: false; error: { code: string; message: string } };
 
 /**
+ * A FRASE AO CLIENTE quando o pedido novo entra num caso que JÁ estava aberto
+ * (#3097 do original).
+ *
+ * Ela existe porque a alternativa era a IA improvisar, e o que ela improvisava
+ * era "a equipe foi acionada", que é FALSO neste caminho: a nota (`agent_noted`)
+ * entra na linha do tempo do caso antigo e não avisa ninguém. Quando a equipe já
+ * resolveu o assunto direto na conversa sem fechar o caso, ninguém volta a olhar
+ * para ele, e o cliente ficava esperando quem nunca foi chamado. A frase diz só o
+ * que é verdade: o pedido foi anotado. Sem prazo, sem "alguém vai responder".
+ */
+export const FRASE_AO_CLIENTE_EM_PEDIDO_SOBRE_CASO_ABERTO =
+  'anotei seu pedido aqui na nossa conversa; por enquanto não consigo te dar um prazo.';
+
+/**
+ * O que o modelo lê no resultado de `open_human_case` quando a pendência entrou
+ * num caso do mesmo assunto que já aguardava a equipe (`merged`).
+ *
+ * No original a guarda RECUSAVA o pedido novo e a recusa virou instrução (#3097).
+ * Aqui o pedido não é recusado: entra no caso aberto como nota. O efeito é o mesmo
+ * (ninguém é avisado AGORA), então a instrução é a mesma. Antes, este caminho
+ * levava junto a frase de disponibilidade (`expectativaDeAtendimento`), que com
+ * alguém online autoriza "alguém continua o atendimento em seguida": a promessa
+ * que o relato flagrou.
+ */
+export function instrucaoDePedidoNoCasoAberto(): string {
+  return (
+    'já havia um caso deste assunto aguardando a equipe, e a pendência foi anotada nele (nenhum caso novo). ' +
+    'A equipe NÃO foi avisada deste pedido novo: nada saiu para ninguém agora. NÃO diga ao cliente que a ' +
+    'equipe foi acionada, avisada ou que o pedido foi encaminhado, e não prometa prazo nem que alguém vai ' +
+    'responder por causa dele. Responda ao cliente apenas neste espírito: ' +
+    `"${FRASE_AO_CLIENTE_EM_PEDIDO_SOBRE_CASO_ABERTO}" e continue a conversa normalmente.`
+  );
+}
+
+/**
  * Abre o caso: INSERT agent_cases(status='awaiting_human') + INSERT
  * agent_case_events(kind='opened') em UM statement atômico.
  *

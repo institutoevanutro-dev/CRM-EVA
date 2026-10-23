@@ -20,7 +20,7 @@ import { beginServiceAtOrigin, assertServiceBoundarySupabase } from "@/lib/atend
  */
 import { z } from "zod";
 
-import { triggerHandoff } from "@/lib/ai/handoff/orchestrator";
+import { triggerHandoff, type HandoffReason } from "@/lib/ai/handoff/orchestrator";
 import { loadEligibleAttendants } from "@/lib/routing/eligibles";
 import { selectRoundRobin } from "@/lib/routing/decide";
 import { getQueuePosition } from "@/lib/routing/queue";
@@ -29,7 +29,21 @@ import type { McpToolDefinition } from "../types";
 
 const inputShape = {
   conversation_id: z.string().uuid(),
-  reason: z.string().min(1).max(500).default("requested_human"),
+  /**
+   * SEM DEFAULT (#3310 do original). Era `.default("requested_human")`, e o agente
+   * externo que passava a conversa sem declarar o motivo (ou com o próprio texto)
+   * gravava "o cliente pediu uma pessoa", e o cliente recebia a abertura de quem
+   * pediu um humano. Agora o texto vira código por `motivoDoAgenteExterno`.
+   */
+  reason: z
+    .string()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe(
+      'código do motivo ou texto livre. Envie exatamente "requested_human" quando o cliente pedir uma pessoa; ' +
+        "sem isso a passagem fica registrada como low_confidence (o assistente não resolveu sozinho).",
+    ),
   urgency: z.enum(["low", "normal", "high"]).default("normal"),
   /** Atendente alvo opcional: só atribui se elegível agora; senão cai no rodízio G5. */
   target_user_id: z.string().uuid().optional(),
@@ -43,7 +57,7 @@ export const crmRequestHumanHandoff: McpToolDefinition<typeof inputShape> = {
     "destino pelo roteamento G5: atende o target_user_id se elegível agora, senão rodízio " +
     "entre os disponíveis; sem ninguém elegível vai para a fila. Registra activity + " +
     "event_log + audit. Retorna assigned_to OU queued+position. Use quando o cliente pedir " +
-    "atendente humano ou o agente identificar limite da automação.",
+    "atendente humano (reason \"requested_human\") ou o agente identificar limite da automação.",
   inputSchema: inputShape,
   category: "handoff",
   requiresRole: "agent",
@@ -82,12 +96,12 @@ export const crmRequestHumanHandoff: McpToolDefinition<typeof inputShape> = {
       serviceBoundary: boundary,
       conversationId: input.conversation_id,
       organizationId: ctx.organizationId,
-      reason: "requested_human",
+      reason: motivoDoAgenteExterno(input.reason),
       leadId,
       metadata: {
         source: "ai_agent",
         urgency: input.urgency,
-        original_reason: input.reason,
+        ...(input.reason !== undefined ? { original_reason: input.reason } : {}),
         ...(ctx.actor.type === "ai_agent" ? { run_id: ctx.actor.id } : {}),
         ...(input.metadata ?? {}),
       },
@@ -172,3 +186,30 @@ export const crmRequestHumanHandoff: McpToolDefinition<typeof inputShape> = {
     };
   },
 };
+
+/**
+ * Os motivos que um agente externo pode DECLARAR. `orcamento_de_ia` fica fora: é
+ * o sistema quem grava, quando o teto de gasto para a IA.
+ */
+const MOTIVOS_DO_AGENTE_EXTERNO: readonly HandoffReason[] = [
+  "requested_human",
+  "low_sentiment",
+  "low_confidence",
+  "critical_stage",
+  "legal_mention",
+  "refund_mention",
+];
+
+/**
+ * O `reason` do agente externo no vocabulário do orquestrador. Texto livre, ausente
+ * ou motivo que ele não pode declarar vira `low_confidence` ("o assistente não
+ * resolveu sozinho"), nunca `requested_human`: só o pedido escrito com todas as
+ * letras afirma que o cliente pediu uma pessoa (#3310 do original). O texto
+ * inteiro não se perde: segue em `metadata.original_reason`.
+ */
+export function motivoDoAgenteExterno(texto: string | null | undefined): HandoffReason {
+  const bruto = (texto ?? "").trim();
+  return (MOTIVOS_DO_AGENTE_EXTERNO as readonly string[]).includes(bruto)
+    ? (bruto as HandoffReason)
+    : "low_confidence";
+}

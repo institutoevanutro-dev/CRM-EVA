@@ -6,12 +6,13 @@ import { useT } from "@/hooks/i18n/useT";
 import { NewContactDialog } from "@/components/contacts/NewContactDialog";
 import { nomeDoContato, rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
-type Contato = {
+export type ContatoDaMarcacao = {
   id: string;
   name: string | null;
   display_name: string | null;
   phone_number: string | null;
 };
+type Contato = ContatoDaMarcacao;
 type Vinculos = {
   // `name` é nulo em todo contato que veio do WhatsApp — o nome está em
   // `display_name`. Por isso o rótulo sai de `rotuloDoContato`, nunca de `name`.
@@ -41,11 +42,18 @@ export function VinculoDaMarcacao({
   contactId,
   conversationId,
   onChange,
+  onContato,
   compacto = false,
 }: {
   contactId: string;
   conversationId: string;
   onChange: (contact: string, conversation: string) => void;
+  /**
+   * O cadastro de quem está escolhido, assim que ele chega (`null` sem ninguém
+   * ou enquanto carrega). O modal precisa dele para saber se falta o nome
+   * completo, inclusive quando o paciente veio pronto da conversa (`?contato=`).
+   */
+  onContato?: (contato: ContatoDaMarcacao | null) => void;
   /**
    * A versão do modal simples de marcação: sem caixa em volta, rótulo
    * "Paciente" e a lista de resultados flutuando sobre o formulário em vez de
@@ -71,6 +79,9 @@ export function VinculoDaMarcacao({
   });
   const contatos = query.data?.contacts ?? [];
   const escolhido = contactId ? contatos.find((c) => c.id === contactId) : undefined;
+  useEffect(() => {
+    onContato?.(escolhido ?? null);
+  }, [escolhido, onContato]);
 
   // Quem marca horário costuma estar com a pessoa na frente, e ela nem sempre
   // já é contato. Sem esta saída o fluxo PARA aqui: teria que abandonar a

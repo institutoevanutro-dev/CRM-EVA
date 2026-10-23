@@ -14,13 +14,14 @@
     { "id": "conferencia", "lane": "operacao", "col": 4, "type": "frontend", "label": "Auditoria existente do CRM e status do cadastro no Prontuário" }
   ],
   "edges": [
-    { "id": "e1", "from": "ficha", "to": "contato", "label": "cadastro mestre" },
+    { "id": "e1", "from": "ficha", "to": "contato", "label": "cadastro mestre; o Novo agendamento grava o nome completo antes de marcar" },
     { "id": "e2", "from": "contato", "to": "leitura", "label": "organização e contato ativo; decifra e reconfirma revisão" },
     { "id": "e3", "from": "tokens", "to": "leitura", "label": "dois escopos obrigatórios; Bearer só no servidor" },
     { "id": "e4", "from": "leitura", "to": "consumidor", "label": "HTTPS no-store; nenhum CPF em erros/listagens; compromisso autorizado separa description e notes" },
     { "id": "e5", "from": "leitura", "to": "auditoria", "label": "ator, recurso e sucesso; nenhum valor pessoal" },
     { "id": "e6", "from": "auditoria", "to": "conferencia", "label": "trilha de leitura" },
     { "id": "e7", "from": "consumidor", "to": "conferencia", "label": "resultado ou ação necessária" },
-    { "id": "e8", "from": "conferencia", "to": "ficha", "label": "conferir origem quando houver divergência" }
+    { "id": "e8", "from": "conferencia", "to": "ficha", "label": "conferir origem quando houver divergência" },
+    { "id": "e9", "from": "contato", "to": "ficha", "label": "sem nome completo (marcado pela IA, API ou Google): a grade e o painel do compromisso avisam e completam" }
   ]
 }

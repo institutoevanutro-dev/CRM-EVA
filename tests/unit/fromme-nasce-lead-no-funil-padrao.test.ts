@@ -118,6 +118,8 @@ function makeAdmin(c: Cena, opcoes: Opcoes = {}) {
     let selectCols = "";
     const filtros: Record<string, unknown> = {};
     let mode: "select" | "insert" | "update" = "select";
+    /** Esta consulta é a DECISÃO de eco (a única que filtra `sent_via` por lista)? */
+    let decisaoDeEco = false;
 
     const resposta = (): { data: unknown; error: null } => {
       if (name === "messages" && mode === "select") {
@@ -160,7 +162,10 @@ function makeAdmin(c: Cena, opcoes: Opcoes = {}) {
         filtros[col] = val;
         return chain;
       },
-      in: () => chain,
+      in: (col?: string) => {
+        if (col === "sent_via") decisaoDeEco = true;
+        return chain;
+      },
       limit: () => chain,
       // `ehEcoDeEnvioNosso` consulta com `.is(...).in(...).gte(...)`, e a
       // re-checagem pós-insert filtra por `neq`. Sem estes elos a cadeia
@@ -173,10 +178,25 @@ function makeAdmin(c: Cena, opcoes: Opcoes = {}) {
       maybeSingle: () => Promise.resolve(resposta()),
       then: (r: (v: unknown) => unknown) =>
         Promise.resolve(
-          // A consulta de `ehEcoDeEnvioNosso` termina em `.limit(20)` e é
-          // aguardada direto: é ela que lê o envio em voo.
-          name === "messages" && selectCols === "id, body, type" && c.ecoEmVoo
-            ? { data: [{ id: "nossa-em-voo", body: envelopeFromMe.payload.body, type: "text" }], error: null }
+          // A consulta de `ehEcoDeEnvioNosso` é a ÚNICA leitura de `messages` que
+          // filtra `sent_via` por lista, e é aguardada direto (o `.limit(20)`).
+          // O rastro é esse, e não a lista de colunas do `select`: desde o
+          // DeskcommCRM #3165 a decisão lê `external_id` na MESMA consulta.
+          name === "messages" && mode === "select" && decisaoDeEco && c.ecoEmVoo
+            ? {
+                data: [
+                  // Envio NOSSO em voo: sem id do canal e `queued`. O `type`
+                  // espelha o do payload, como antes (o ramo de mídia da guarda).
+                  {
+                    id: "nossa-em-voo",
+                    body: envelopeFromMe.payload.body,
+                    type: envelopeFromMe.payload.type,
+                    external_id: null,
+                    status: "queued",
+                  },
+                ],
+                error: null,
+              }
             : { data: null, error: null },
         ).then(r),
     };

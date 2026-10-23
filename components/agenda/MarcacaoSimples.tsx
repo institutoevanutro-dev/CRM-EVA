@@ -6,17 +6,25 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { dataDeParede, instanteDe } from "@/lib/agenda/fuso";
 import { fimDoHorario, outrosProcedimentos, procedimentosDoProfissional } from "@/lib/agenda/marcacao-simples";
 import { ApiError } from "@/lib/api/types";
+import {
+  ehNomeCompleto,
+  faltaNomeCompleto,
+  nomeCompletoLimpo,
+  sugestaoDeNomeCompleto,
+} from "@/lib/contacts/rotulo-do-contato";
 import { CaretLeft, CaretRight, CheckCircle, Warning } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 
 import { BloqueioDeHorario } from "./BloqueioDeHorario";
+import { NomeCompletoDoPaciente } from "./NomeCompletoDoPaciente";
 import type { HorarioLivre, Pessoa } from "./tipos";
-import { VinculoDaMarcacao } from "./VinculoDaMarcacao";
+import { type ContatoDaMarcacao, VinculoDaMarcacao } from "./VinculoDaMarcacao";
 
 /**
  * O "Novo agendamento" simples, no molde do que a clínica já usava: um modal
@@ -148,6 +156,23 @@ export function MarcacaoSimples({
   const convidadoLimpo = convidado.trim();
   const convidadoInvalido = convidadoLimpo.length > 0 && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(convidadoLimpo);
 
+  // NOME COMPLETO: o prontuário abre o atendimento pelo nome do CADASTRO e
+  // recusa sem ele. Paciente que só tem o nome do WhatsApp ganha o campo, já
+  // preenchido com ele, e o Confirmar espera até a recepção conferir. O cadastro
+  // vem do `VinculoDaMarcacao` (é ele que busca o contato); enquanto não chega,
+  // não dá para dizer que o nome está completo, e o Confirmar espera também.
+  const [contato, setContato] = React.useState<ContatoDaMarcacao | null>(null);
+  const doPaciente = contactId && contato?.id === contactId ? contato : null;
+  const cadastroCarregado = !contactId || doPaciente !== null;
+  const pedeNome = doPaciente !== null && faltaNomeCompleto(doPaciente);
+  // O nome digitado vale para AQUELE paciente: trocar de paciente volta à
+  // sugestão do novo, senão o nome de um viajaria para o cadastro do outro.
+  const [nomeEditado, setNomeEditado] = React.useState<{ contactId: string; valor: string } | null>(null);
+  const nomeCompleto =
+    nomeEditado && nomeEditado.contactId === contactId ? nomeEditado.valor : sugestaoDeNomeCompleto(doPaciente);
+  const nomeResolvido = !pedeNome || ehNomeCompleto(nomeCompleto);
+  const gravarNome = useUpdateContact(contactId);
+
   const parede = (iso: string): Date => (fuso ? dataDeParede(new Date(iso), fuso) : new Date(iso));
 
   // Trocar profissional ou procedimento muda as vagas: o horário escolhido
@@ -212,13 +237,17 @@ export function MarcacaoSimples({
     setHorario({ instante, rotulo: `${partesDaHora[1]}:${partesDaHora[2]}` });
   };
 
-  const pronto = Boolean(profissionalId && tipo && horario && !convidadoInvalido);
+  const pronto = Boolean(profissionalId && tipo && horario && !convidadoInvalido && cadastroCarregado && nomeResolvido);
   const tempo = marcado ? "marcado" : horario ? "confirmando" : tipo ? "escolhendo-horario" : "escolhendo-dia";
 
   const confirmar = async () => {
     if (!horario || !pronto) return;
     setEnviando(true);
     try {
+      // O nome vai ANTES do agendamento, pelo caminho de sempre da ficha
+      // (`PATCH /api/v1/contacts/[id]`, auditado como `contact.updated`). Se a
+      // gravação for recusada, nada é marcado: a recusa aparece no rodapé.
+      if (pedeNome) await gravarNome.mutateAsync({ name: nomeCompletoLimpo(nomeCompleto) });
       await onConfirmar({
         instante: horario.instante,
         convidado: convidadoLimpo || undefined,
@@ -368,7 +397,21 @@ export function MarcacaoSimples({
                 </select>
               </div>
 
-              <VinculoDaMarcacao compacto contactId={contactId} conversationId={conversationId} onChange={onVinculo} />
+              <VinculoDaMarcacao
+                compacto
+                contactId={contactId}
+                conversationId={conversationId}
+                onChange={onVinculo}
+                onContato={setContato}
+              />
+
+              {pedeNome ? (
+                <NomeCompletoDoPaciente
+                  id="nome-completo-da-marcacao"
+                  valor={nomeCompleto}
+                  onValor={(valor) => setNomeEditado({ contactId, valor })}
+                />
+              ) : null}
 
               {unidades.some((u) => u.active) ? (
                 <div>
@@ -648,6 +691,11 @@ export function MarcacaoSimples({
               ) : (
                 <p className="text-text-subtle">{t("Escolha profissional, procedimento, dia e horário.")}</p>
               )}
+              {!nomeResolvido ? (
+                <p data-testid="falta-nome-na-marcacao" className="mt-1 text-xs text-warning">
+                  {t("Complete o nome do paciente para marcar.")}
+                </p>
+              ) : null}
               {recusa && horario && recusa.instante === horario.instante ? (
                 <p data-testid="recusa-da-marcacao" role="alert" className="mt-1 flex gap-1.5 text-xs text-text">
                   <Warning size={14} weight="fill" className="mt-0.5 shrink-0 text-warning" aria-hidden />
