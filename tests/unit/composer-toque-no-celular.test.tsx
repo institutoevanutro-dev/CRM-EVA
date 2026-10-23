@@ -112,10 +112,10 @@ describe("campo e alvos pensados para o toque (porte do #3191)", () => {
     expect(c).toContain("min-w-0");
   });
 
-  it("Enviar, Anexar e a porta da faixa herdam os 44px do size=icon", () => {
+  it("Enviar, Anexar, Sugerir resposta e a porta da faixa herdam os 44px do size=icon", () => {
     renderComposer();
     fireEvent.change(campo(), { target: { value: "oi" } });
-    for (const nome of ["Enviar", "Anexar", "Opções de resposta"]) {
+    for (const nome of ["Enviar", "Anexar", "Sugerir resposta", "Opções de resposta"]) {
       const botao = screen.getByRole("button", { name: nome });
       expect(classes(botao), nome).toContain("h-11");
       expect(classes(botao), nome).not.toContain("h-9");

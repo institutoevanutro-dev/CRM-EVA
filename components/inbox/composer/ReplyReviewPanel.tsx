@@ -26,8 +26,8 @@ export function ReplyReviewPanel({
     qc = useQueryClient(),
     key = chaveDosRascunhos(conversationId);
   // A MESMA consulta que o `Composer` usa para decidir se este bloco existe:
-  // uma chave, um cache, dois leitores.
-  const { sugestao: draft } = useRascunhoAssistido(conversationId);
+  // uma chave, um cache, dois leitores. Quem sonda a cada 4s é o `Composer`.
+  const { sugestao: draft } = useRascunhoAssistido(conversationId, true, false);
   const [edits, setEdits] = useState<Record<string, string>>({}),
     [feedback, setFeedback] = useState(""),
     [busy, setBusy] = useState(false),

@@ -39,8 +39,12 @@ export function chaveDosRascunhos(conversationId: string) {
  * `ativo` desliga a consulta em NOTA (lá não há sugestão de resposta) e no
  * compositor bloqueado: o `GET` exige papel `agent`, e quem só lê levaria 403 a
  * cada 4s.
+ *
+ * `sondar` é de UM leitor só (o `Composer`): cada observador da mesma chave tem
+ * o próprio relógio de `refetchInterval`, e dois relógios davam dois GET a cada
+ * 4s. O painel lê o mesmo cache sem relógio próprio.
  */
-export function useRascunhoAssistido(conversationId: string, ativo = true) {
+export function useRascunhoAssistido(conversationId: string, ativo = true, sondar = true) {
   const qc = useQueryClient();
   const chave = chaveDosRascunhos(conversationId);
   const query = useQuery({
@@ -50,7 +54,7 @@ export function useRascunhoAssistido(conversationId: string, ativo = true) {
         `/api/v1/conversations/${conversationId}/draft-reply`,
       ),
     enabled: ativo,
-    refetchInterval: ativo ? 4000 : false,
+    refetchInterval: ativo && sondar ? 4000 : false,
     retry: false,
   });
   return {
