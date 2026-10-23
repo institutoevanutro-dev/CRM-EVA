@@ -1,6 +1,7 @@
 "use client";
 
 import { useT } from "@/hooks/i18n/useT";
+import { rotuloDoAtendente } from "@/lib/users/rotulo-do-atendente";
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -311,7 +312,7 @@ function SendEmailForm({ config, onChange }: FormProps<SendEmailConfig>) {
             <SelectContent>
               {(membros ?? []).map((m) => (
                 <SelectItem key={m.user_id} value={m.user_id}>
-                  {m.full_name ?? m.user_id.slice(0, 8)}
+                  {rotuloDoAtendente(m.full_name, t)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -501,7 +502,7 @@ function AssignOwnerForm({ config, onChange }: FormProps<{ user_id: string }>) {
         <SelectContent>
           {(members ?? []).map((m) => (
             <SelectItem key={m.user_id} value={m.user_id}>
-              {m.full_name ?? m.user_id.slice(0, 8)}
+              {rotuloDoAtendente(m.full_name, t)}
             </SelectItem>
           ))}
         </SelectContent>

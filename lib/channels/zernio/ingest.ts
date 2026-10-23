@@ -132,6 +132,7 @@ export async function ingestZernioInbound(
         .from("contacts")
         .update({ phone_number: telefone })
         .eq("id", existente.contact_id)
+        .eq("organization_id", input.organizationId)
         .is("phone_number", null)
         .select("id");
       if (((afetadas as { id: string }[] | null) ?? []).length > 0) {
@@ -407,6 +408,7 @@ async function upsertContact(
       .from("contacts")
       .update({ phone_number: telefone })
       .eq("id", contactId)
+      .eq("organization_id", organizationId)
       .is("phone_number", null)
       .select("id");
     if (((afetadas as { id: string }[] | null) ?? []).length > 0) {
