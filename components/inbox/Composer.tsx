@@ -689,7 +689,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             // linhas cortadas dentro do campo de uma linha (medido pelo
             // `scrollHeight` no e2e). O texto digitado continua quebrando.
             className={cn(
-              "max-h-40 min-h-10 flex-1 resize-none rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-ellipsis",
+              // `text-base` no celular (porte do #3190): com menos de 16px o
+              // iPhone amplia a página ao focar o campo.
+              "max-h-40 min-h-10 flex-1 resize-none rounded-xl border border-border bg-surface px-3.5 py-2.5 text-base text-ellipsis md:text-sm",
               "placeholder:truncate placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-hidden",
             )}
             disabled={mode === "note" ? isDisabled : respostaBarrada}

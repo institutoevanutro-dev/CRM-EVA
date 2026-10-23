@@ -42,6 +42,7 @@ import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
 import { togglePainelDoContato } from "@/app/actions/inbox/togglePainelDoContato";
 import { buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
+import { useAlturaVisivel } from "@/lib/ui/altura-visivel";
 import { APARENCIA_PADRAO } from "@/lib/inbox/aparencia-da-conversa";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import {
@@ -74,12 +75,104 @@ import {
  *
  * Com uma pergunta só, "as duas escondidas" deixa de ser representável.
  * `md:flex` em ambas: no desktop as duas colunas convivem e a regra não vale.
+ *
+ * CONVERSA EM TELA CHEIA (porte do original #3190). Escolhida, a conversa vira
+ * uma camada `fixed` abaixo do `md`, em vez de um layout novo:
+ *
+ *   - `z-[45]` cobre o TopBar (z-30) sem que ninguém o edite, e fica abaixo
+ *     das faixas de cima e dos portais Radix (z-50);
+ *   - o topo desconta `--faixas-de-cima`: o aviso de canal caído é o único
+ *     sinal de "nada entra nem sai" quando só há um número;
+ *   - `--vv-topo`/`--vv-altura` (`useAlturaVisivel`) colam a camada na área
+ *     visível com o teclado aberto; sem eles vale o `100dvh`;
+ *   - a área segura de baixo sai quando o teclado abre, porque aí o indicador
+ *     de home não está na tela.
+ *
+ * A lista fica `invisible`, e não `hidden`: sai da frente, do foco e da
+ * árvore de acessibilidade, mas guarda a rolagem para quando a pessoa voltar.
+ * Nenhum ancestral pode ter `transform`/`filter`/`contain`: isso quebraria o
+ * `fixed`.
  */
+const CAMADA_DA_CONVERSA = [
+  "max-md:fixed max-md:inset-x-0 max-md:z-[45] max-md:bg-background",
+  "max-md:top-[max(var(--vv-topo,0px),var(--faixas-de-cima,0px))]",
+  "max-md:h-[calc(var(--vv-topo,0px)+var(--vv-altura,100dvh)-max(var(--vv-topo,0px),var(--faixas-de-cima,0px)))]",
+  "max-md:pt-[env(safe-area-inset-top)] max-md:pb-[env(safe-area-inset-bottom)] max-md:data-[teclado-aberto]:pb-0",
+].join(" ");
+
 export function colunasDoCelular(temSelecao: boolean): { lista: string; conversa: string } {
   return {
-    lista: temSelecao ? "hidden md:flex" : "flex",
-    conversa: temSelecao ? "flex" : "hidden md:flex",
+    lista: temSelecao ? "max-md:invisible flex" : "flex",
+    conversa: temSelecao ? `flex ${CAMADA_DA_CONVERSA}` : "hidden md:flex",
   };
+}
+
+/** A marca que o Inbox põe na entrada do histórico: conversas abertas desde a lista. */
+const MARCA_DO_INBOX = "inboxProfundidade";
+
+/**
+ * Abaixo do `md` (o `max-md:` do Tailwind, 48rem) a lista e a conversa são
+ * telas separadas, e só ali a seleção entra no histórico (`handleSelect`). No
+ * computador as duas convivem e a seleção segue sendo estado da tela, como
+ * sempre foi neste fork.
+ */
+function telaDeCelular(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(max-width: 47.99rem)").matches === true;
+}
+
+/**
+ * VOLTAR DESFAZ O PASSO, EM VEZ DE EMPILHAR (porte do original #3190).
+ *
+ * Abrir a partir da lista empilha uma entrada com profundidade 1; abrir outra
+ * conversa a partir dessa soma 1 (o j/k, por exemplo). Voltar anda a
+ * profundidade inteira para trás, e o `popstate` devolve a lista pela URL
+ * (`idNaUrl`): o gesto do sistema e o botão "‹ Conversas" passam a concordar.
+ *
+ * Sem marca (link direto, clique no aviso) voltar troca a entrada no lugar, e
+ * trocar de conversa também: a pilha não cresce, e o gesto do sistema não
+ * reabre a conversa que a pessoa acabou de fechar.
+ *
+ * Uma navegação do próprio Next (`router.push`) DESCARTA a marca, porque o
+ * roteador grava o próprio estado por cima: a entrada nasce sem marca e o "‹"
+ * troca no lugar. É o preço de não reabrir conversa, não um laço.
+ *
+ * O Next 16 copia o estado interno dele para dentro do objeto passado ao
+ * `pushState` (`copyNextJsInternalHistoryState`), então a marca sobrevive.
+ * Devolve `"pelo-historico"` quando quem troca a seleção é o `popstate`.
+ */
+export function navegarNoInbox(
+  url: string,
+  de: string | null,
+  para: string | null,
+): "trocou" | "pelo-historico" {
+  const historia = window.history;
+  const marca: unknown = (historia.state as Record<string, unknown> | null)?.[MARCA_DO_INBOX];
+  const profundidade = typeof marca === "number" && marca > 0 ? marca : 0;
+  if (para !== null) {
+    const proxima = de === null ? 1 : profundidade > 0 ? profundidade + 1 : 0;
+    if (proxima > 0) historia.pushState({ [MARCA_DO_INBOX]: proxima }, "", url);
+    else historia.replaceState(null, "", url);
+    return "trocou";
+  }
+  if (profundidade > 0) {
+    historia.go(-profundidade);
+    return "pelo-historico";
+  }
+  historia.replaceState(null, "", url);
+  return "trocou";
+}
+
+/**
+ * A LISTA ESCONDIDA NÃO GUARDA O FOCO. No celular a lista fica `invisible`
+ * atrás da conversa, e no Safari do iPhone tocar num botão não tira o foco do
+ * campo: a busca seguiria focada, com o teclado aberto, filtrando uma lista
+ * que ninguém vê. Só age com a lista de fato escondida: no computador ela
+ * segue visível e o foco (do teclado, inclusive) fica onde a pessoa o deixou.
+ */
+export function soltarFocoEscondido(lista: HTMLElement | null): void {
+  const ativo = document.activeElement;
+  if (!lista || !(ativo instanceof HTMLElement) || !lista.contains(ativo)) return;
+  if (getComputedStyle(lista).visibility === "hidden") ativo.blur();
 }
 
 /**
@@ -205,6 +298,7 @@ export function InboxLayout({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const tab = parseFilterParam(searchParams.get("filter"));
+  const idNaUrl = searchParams.get("id");
 
   // tab vive na URL (?filter=); os demais filtros são estado local de sessão.
   const [aux, setAux] = useState<Omit<InboxFiltersValue, "tab">>({
@@ -270,6 +364,19 @@ export function InboxLayout({
    * quem MOSTRA é o composer — são irmãos, e o estado comum é do pai.
    */
   const [respondendo, setRespondendo] = useState<ConversationMensagem | null>(null);
+  /**
+   * A URL TAMBÉM TROCA A CONVERSA (porte do original #3190): o voltar do
+   * celular devolve a lista pelo `popstate`, e um link para `?id=` com o Inbox
+   * já aberto abre a conversa dele. Ajuste durante o render, o padrão do React
+   * para estado que segue outro valor. No computador o Inbox não escreve `?id=`,
+   * então aqui só chega navegação de fora.
+   */
+  const [idNaUrlVisto, setIdNaUrlVisto] = useState(idNaUrl);
+  if (idNaUrlVisto !== idNaUrl) {
+    setIdNaUrlVisto(idNaUrl);
+    setSelectedId(idNaUrl);
+    setRespondendo(null);
+  }
 
   /**
    * A ORG tem automático de pé? Sobe para cá porque agora é a ABA que precisa —
@@ -365,6 +472,14 @@ export function InboxLayout({
     needsFetch && !single.isPending && !single.data && isNotFound(single.error);
 
   const colunas = colunasDoCelular(Boolean(selectedId));
+  // O teclado do celular, medido só com conversa aberta (ver `colunasDoCelular`).
+  const conversaRef = useRef<HTMLDivElement | null>(null);
+  const tecladoAberto = useAlturaVisivel(conversaRef, Boolean(selectedId));
+  const listaRef = useRef<HTMLDivElement | null>(null);
+  // Depois de pintar: só então a lista já está `invisible` (ver `soltarFocoEscondido`).
+  useEffect(() => {
+    if (selectedId) soltarFocoEscondido(listaRef.current);
+  }, [selectedId]);
 
   const claim = useClaimConversation();
   const close = useCloseConversation();
@@ -397,16 +512,25 @@ export function InboxLayout({
   // É um SUPERCONJUNTO do `handleSelect` do upstream — o tipo dele não aceita
   // `null`, e sem isso o botão de voltar não teria o que chamar.
   //
-  // A seleção NÃO vive na URL (só o `?filter=` vive) — então este voltar é
-  // estado local, e o botão de voltar do navegador não desfaz a seleção. É a
-  // limitação conhecida deste caminho; trocar por URL mudaria o deep-link de
-  // conversa, que hoje entra por `initialSelectedId` vindo da rota.
+  // NO CELULAR a seleção entra no histórico (porte do original #3190): abrir
+  // pela lista empilha `?id=`, e o "‹ Conversas" e o gesto de voltar do sistema
+  // desfazem esse passo (`navegarNoInbox`), em vez de o gesto sair do Inbox. No
+  // computador a seleção continua sendo estado da tela, como sempre foi aqui: o
+  // voltar do navegador não passeia pelas conversas clicadas.
   const handleSelect = useCallback((id: string | null) => {
-    setSelectedId(id);
     // Sem isto, escolher "responder" numa conversa e trocar para outra levaria
     // a citação junto — e a resposta sairia citando mensagem de outro cliente.
     setRespondendo(null);
-  }, []);
+    if (id !== selectedId && telaDeCelular()) {
+      const params = new URLSearchParams(searchParams.toString());
+      if (id) params.set("id", id);
+      else params.delete("id");
+      const query = params.toString();
+      // Voltar pela história deixa a troca para o `popstate` (ver `idNaUrl`).
+      if (navegarNoInbox(query ? `${pathname}?${query}` : pathname, selectedId, id) === "pelo-historico") return;
+    }
+    setSelectedId(id);
+  }, [selectedId, searchParams, pathname]);
   const handleVisibleChange = useCallback((ids: string[]) => setVisibleIds(ids), []);
   const handleFocusReply = useCallback(() => composerRef.current?.focus(), []);
   const handleClaim = useCallback(() => {
@@ -672,7 +796,7 @@ export function InboxLayout({
   // `InboxFilters` segue no topo para poder trocar de aba de volta.
   if (filterValue.tab === "comentarios") {
     return (
-      <div className="flex h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full flex-col">
+      <div className="flex h-[calc(100dvh-var(--faixas-de-cima,0px)-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full flex-col">
         <InboxFilters value={filterValue} onChange={setFilterValue} />
         <div className="min-h-0 flex-1 overflow-hidden">
           <ComentariosPainel />
@@ -705,7 +829,7 @@ export function InboxLayout({
       ref={gradeRef}
       style={estiloDaGrade}
       className={cn(
-        "relative grid h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full grid-cols-1 md:grid-cols-[300px_1fr]",
+        "relative grid h-[calc(100dvh-var(--faixas-de-cima,0px)-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full grid-cols-1 md:grid-cols-[300px_1fr]",
         // Recolhido (porte do #3043), a terceira trilha vira o trilho do botão
         // de expandir. Literais inteiros: o Tailwind precisa deles para gerar o CSS.
         painelRecolhido
@@ -749,6 +873,7 @@ export function InboxLayout({
         `md` — onde as duas colunas cabem juntas e a regra não se aplica.
       */}
       <div
+        ref={listaRef}
         className={cn(
           "h-full min-h-0 flex-col border-r border-border md:flex",
           colunas.lista,
@@ -810,8 +935,10 @@ export function InboxLayout({
         voltar, porque ele morava dentro do ramo da conversa carregada.
       */}
       <div
+        ref={conversaRef}
+        data-teclado-aberto={tecladoAberto ? "" : undefined}
         className={cn(
-          "h-full min-h-0 min-w-0 flex-col md:flex",
+          "group/conversa h-full min-h-0 min-w-0 flex-col md:flex",
           colunas.conversa,
         )}
       >
@@ -823,10 +950,12 @@ export function InboxLayout({
         */}
         {selectedId && (
           <div className="flex items-center gap-1 border-b border-border px-1 py-1 md:hidden">
+            {/* Sem `h-9`: o `size="sm"` já dá 44px abaixo do `lg`, a altura de
+                dedo (porte do #3190). Esta barra só existe abaixo do `md`. */}
             <Button
               variant="ghost"
               size="sm"
-              className="h-9 gap-1 px-2"
+              className="gap-1 px-2"
               onClick={() => handleSelect(null)}
             >
               <CaretLeft size={16} />
@@ -834,7 +963,7 @@ export function InboxLayout({
             </Button>
             <div className="flex-1" />
             {selectedConversation && (
-              <Button variant="ghost" size="sm" className="h-9 gap-1 px-2 xl:hidden" onClick={() => setFichaAberta(true)}>
+              <Button variant="ghost" size="sm" className="gap-1 px-2 xl:hidden" onClick={() => setFichaAberta(true)}>
                 <IdentificationCard size={16} />
                 {t("Ficha")}
               </Button>
@@ -871,7 +1000,8 @@ export function InboxLayout({
                 <input
                   type="search"
                   autoFocus
-                  className="min-w-0 flex-1 bg-transparent py-1 text-sm outline-hidden placeholder:text-muted-foreground"
+                  // 16px no celular: menos que isso o iPhone amplia a página no foco.
+                  className="min-w-0 flex-1 bg-transparent py-1 text-base outline-hidden placeholder:text-muted-foreground md:text-sm"
                   aria-label={t("Buscar nas mensagens carregadas")}
                   placeholder={t("Buscar nas mensagens carregadas")}
                   value={busca.termo}

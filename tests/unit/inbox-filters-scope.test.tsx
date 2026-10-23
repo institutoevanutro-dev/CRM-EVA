@@ -238,3 +238,19 @@ describe("InboxFilters — seletor de número e o filtro órfão", () => {
     expect(screen.queryByText("Número removido")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * A BUSCA DA LISTA COM 16px NO CELULAR (porte do original #3190): com menos, o
+ * Safari do iPhone amplia a página ao focar o campo. O jsdom não aplica CSS;
+ * aqui fica a guarda da classe.
+ */
+describe("busca da lista no celular", () => {
+  it("usa text-base abaixo do md e os 13px de antes a partir dele", () => {
+    render(<InboxFilters value={VALUE} onChange={() => {}} />);
+    const classes = screen.getByRole("textbox", { name: "Buscar conversas" }).className.split(/\s+/);
+    expect(classes).toContain("text-base");
+    expect(classes).toContain("md:text-[13px]");
+    expect(classes).not.toContain("text-sm");
+    expect(classes).not.toContain("text-[13px]");
+  });
+});

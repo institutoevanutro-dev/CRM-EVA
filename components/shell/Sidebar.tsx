@@ -289,7 +289,10 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
   return (
     <aside
       className={cn(
-        "fundo-lateral sticky top-0 z-30 flex h-screen shrink-0 flex-col text-sidebar-fg shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)] transition-[width] duration-200",
+        // O topo e a altura descontam `--faixas-de-cima` (porte do original
+        // #3190): as faixas grudam em `top-0` com z-50, e uma barra em `top-0`
+        // passaria por baixo delas, com o pé (Sair) abaixo da borda da tela.
+        "fundo-lateral sticky top-[var(--faixas-de-cima,0px)] z-30 flex h-[calc(100dvh-var(--faixas-de-cima,0px))] shrink-0 flex-col text-sidebar-fg shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)] transition-[width] duration-200",
         collapsed ? "w-16" : "w-64",
       )}
     >

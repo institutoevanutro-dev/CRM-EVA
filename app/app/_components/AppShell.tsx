@@ -17,7 +17,11 @@ export function AppShell({ sidebarCollapsed, children }: AppShellProps) {
   useCrmAlerts();
   useNotifyOpenFromServiceWorker();
   return (
-    <div className="flex min-h-screen w-full bg-background">
+    // Menos `--faixas-de-cima` (publicada por `FaixasDeCima`, porte do original
+    // #3190): as faixas do topo ficam ACIMA da casca, e sem o desconto o
+    // documento media a tela mais a faixa, rolável justo quando o WhatsApp está
+    // desconectado. `dvh` acompanha a barra do navegador do celular.
+    <div className="flex min-h-[calc(100dvh-var(--faixas-de-cima,0px))] w-full bg-background">
       <BarraDeProgressoNavegacao />
       <div className="hidden md:block">
         <Sidebar collapsed={sidebarCollapsed} />
@@ -41,7 +45,7 @@ export function AppShell({ sidebarCollapsed, children }: AppShellProps) {
         SEGUNDA medida da mesma coisa — a que discordava e deixava a barra por
         cima da lista.
       */}
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+      <div className="flex min-h-[calc(100dvh-var(--faixas-de-cima,0px))] min-w-0 flex-1 flex-col">
         <TopBar />
         <main className="flex-1 overflow-auto p-6">{children}</main>
       </div>
