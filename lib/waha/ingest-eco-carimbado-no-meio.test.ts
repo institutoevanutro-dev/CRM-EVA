@@ -233,6 +233,9 @@ function banco(opcoes: { carimbarDepoisDaLeitura?: number; carimbo?: Carimbo } =
       const enc: Record<string, unknown> = { error: null };
       enc.eq = () => enc;
       enc.in = () => enc;
+      // A pausa termina o UPDATE com `select("id")` e confere a linha (#534).
+      enc.select = () => enc;
+      enc.then = (ok: (v: unknown) => unknown) => Promise.resolve(ok({ data: [{ id: "conversa-1" }], error: null }));
       return enc;
     },
   });
