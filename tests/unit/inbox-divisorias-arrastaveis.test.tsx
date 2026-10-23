@@ -67,7 +67,20 @@ vi.mock("@/hooks/inbox/useClaimConversation", () => ({
 vi.mock("@/hooks/inbox/useCloseConversation", () => ({
   useCloseConversation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
-vi.mock("@/components/inbox/CRMSidePanel", () => ({ CRMSidePanel: () => null }));
+// O painel é uma sonda: só desenha o botão de recolher/expandir, que é o que o
+// layout entrega a ele (porte do #3043). Sem conteúdo, como antes.
+vi.mock("@/components/inbox/CRMSidePanel", () => ({
+  CRMSidePanel: ({ onAlternarRecolhido }: { onAlternarRecolhido?: () => void }) =>
+    onAlternarRecolhido ? (
+      <button type="button" onClick={onAlternarRecolhido}>
+        alternar painel
+      </button>
+    ) : null,
+}));
+// O clique grava a preferência por server action; aqui ela não sai do teste.
+vi.mock("@/app/actions/inbox/togglePainelDoContato", () => ({
+  togglePainelDoContato: vi.fn(async () => undefined),
+}));
 vi.mock("@/components/inbox/ConversationList", () => ({ ConversationList: () => null }));
 vi.mock("@/components/inbox/InboxFilters", () => ({ InboxFilters: () => null }));
 vi.mock("@/components/inbox/ChatThread", () => ({ ChatThread: () => null }));
@@ -167,6 +180,20 @@ describe("a regra pura — limites, piso da conversa e memória por faixa", () =
     ).toEqual({ lista: LIMITES_LISTA.max, ficha: LIMITES_FICHA.min });
   });
 
+  it("com o painel recolhido a lista alcança MAIS; aberto, o teto de hoje não muda (#3152)", () => {
+    // Mesmo pedido de arrasto (bem além do teto), mesmo container. A única
+    // diferença é o painel recolhido, que chega aqui como `temFicha: false`.
+    const pedido = { lista: 900, ficha: 296, larguraContainer: 1040 };
+    const aberto = resolverLarguras({ ...pedido, temFicha: true });
+    const recolhido = resolverLarguras({ ...pedido, temFicha: false });
+
+    expect(recolhido.lista).toBeGreaterThan(aberto.lista);
+    expect(recolhido.lista).toBe(LIMITES_LISTA.max);
+    // Aberto, nada muda: o piso da conversa segue mandando.
+    expect(aberto).toEqual({ lista: 1040 - 296 - CONVERSA_MINIMA, ficha: 296 });
+    expect(1040 - aberto.lista - aberto.ficha).toBe(CONVERSA_MINIMA);
+  });
+
   it("grava e lê POR FAIXA: notebook e monitor grande não brigam pela mesma chave", () => {
     const storage = storageFalso();
     gravarLarguras(storage, "md", { lista: 500, ficha: 300 });
@@ -248,11 +275,11 @@ function janelaEm(largura: number): void {
   Object.defineProperty(window, "innerWidth", { value: largura, configurable: true, writable: true });
 }
 
-function montar() {
+function montar(props: { painelRecolhidoInicial?: boolean } = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <InboxLayout />
+      <InboxLayout {...props} />
     </QueryClientProvider>,
   );
 }
@@ -417,6 +444,71 @@ describe("no layout — duas divisorias arrastáveis (#2579)", () => {
     expect(lista).toHaveAttribute("aria-valuenow", String(1040 - 296 - CONVERSA_MINIMA));
     expect(ficha).toHaveAttribute("aria-valuenow", "296");
     expect(grade().style.gridTemplateColumns).toBe("324px minmax(0,1fr) 296px");
+  });
+
+  it("recolhido o divisor da lista aproveita o espaço da ficha; aberto, o teto é o de hoje (#3152)", async () => {
+    // Recolhido: a ficha vira trilho e a alça dela some; resta só a da lista.
+    const recolhida = montar({ painelRecolhidoInicial: true });
+    const listaRecolhida = await alca(0);
+    expect(screen.queryAllByRole("separator")).toHaveLength(1);
+
+    // O MESMO arrasto (bem além do teto), nos dois estados do painel.
+    fireEvent.pointerDown(listaRecolhida, { button: 0, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 900 });
+    const maxRecolhido = Number(listaRecolhida.getAttribute("aria-valuenow"));
+    fireEvent.pointerUp(window);
+    recolhida.unmount();
+    window.localStorage.clear();
+
+    montar();
+    const listaAberta = await alca(0);
+    fireEvent.pointerDown(listaAberta, { button: 0, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 900 });
+    const maxAberto = Number(listaAberta.getAttribute("aria-valuenow"));
+    fireEvent.pointerUp(window);
+
+    expect(maxRecolhido).toBeGreaterThan(maxAberto);
+    expect(maxRecolhido).toBe(LIMITES_LISTA.max);
+    expect(maxAberto).toBe(1040 - 296 - CONVERSA_MINIMA);
+  });
+
+  it("a seta também usa o teto do painel recolhido (#3152)", async () => {
+    window.localStorage.setItem(CHAVE_XL, JSON.stringify({ lista: 512, ficha: 296 }));
+    montar({ painelRecolhidoInicial: true });
+    const lista = await alca(0);
+    expect(lista).toHaveAttribute("aria-valuenow", "512");
+    fireEvent.keyDown(lista, { key: "ArrowRight" });
+    // 528 passa do teto próprio da lista: trava em 520, não no piso da conversa.
+    expect(lista).toHaveAttribute("aria-valuenow", String(LIMITES_LISTA.max));
+  });
+
+  it("a largura salva grande é limitada pelo teto do estado ATUAL do painel (#3152)", async () => {
+    // Mesma largura salva (520, esticada com o painel recolhido) nos dois estados.
+    window.localStorage.setItem(CHAVE_XL, JSON.stringify({ lista: 520, ficha: 296 }));
+
+    const aberta = montar();
+    expect(await alca(0)).toHaveAttribute("aria-valuenow", String(1040 - 296 - CONVERSA_MINIMA));
+    aberta.unmount();
+
+    montar({ painelRecolhidoInicial: true });
+    expect(await alca(0)).toHaveAttribute("aria-valuenow", String(LIMITES_LISTA.max));
+  });
+
+  it("alternar o painel na mesma tela re-resolve a largura salva (#3152)", async () => {
+    // O cuidado das deps do efeito: sem re-resolver ao reabrir, os 520 salvos
+    // com o painel recolhido seriam aplicados crus e roubariam a conversa.
+    window.localStorage.setItem(CHAVE_XL, JSON.stringify({ lista: 520, ficha: 296 }));
+    montar({ painelRecolhidoInicial: true });
+    const lista = await alca(0);
+    expect(lista).toHaveAttribute("aria-valuenow", String(LIMITES_LISTA.max));
+
+    fireEvent.click(screen.getByRole("button", { name: "alternar painel" }));
+    expect(alcaAgora(0)).toHaveAttribute("aria-valuenow", String(1040 - 296 - CONVERSA_MINIMA));
+    expect(grade().style.gridTemplateColumns).toBe("324px minmax(0,1fr) 296px");
+
+    fireEvent.click(screen.getByRole("button", { name: "alternar painel" }));
+    expect(alcaAgora(0)).toHaveAttribute("aria-valuenow", String(LIMITES_LISTA.max));
+    expect(grade().style.gridTemplateColumns).toBe("520px minmax(0,1fr) 2.75rem");
   });
 
   it("a faixa errada não rouba a largura da outra: xl salvo não mexe no md", async () => {

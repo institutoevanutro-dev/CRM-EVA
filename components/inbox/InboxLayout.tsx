@@ -517,6 +517,18 @@ export function InboxLayout({
     setLarguras(proximas);
   }, []);
 
+  /**
+   * A FICHA OCUPA ESPAÇO AGORA? (porte do original #3152)
+   *
+   * Recolhida, a terceira trilha é o trilho de 44px, não a ficha; sem isto o
+   * teto da lista continuava o de ficha ABERTA e arrastar a lista não
+   * aproveitava nada do espaço liberado. Com o painel aberto o valor é o de
+   * sempre (`faixa.temFicha`). Não contar o trilho é medido: na faixa `xl` o
+   * container tem no mínimo ~992px, e com a lista no teto (520) a conversa
+   * fica em 992 - 520 - 44 = 428px, acima do piso de 420.
+   */
+  const fichaOcupaEspaco = faixa?.temFicha === true && !painelRecolhido;
+
   const larguraDaGrade = (): number => {
     const grade = gradeRef.current;
     return grade ? grade.getBoundingClientRect().width : 0;
@@ -528,6 +540,11 @@ export function InboxLayout({
   // dois extremos; por isso a releitura acontece também DENTRO da faixa (o
   // original só relia ao trocar de faixa, e encolher a janela deixava a
   // conversa abaixo do piso). Sem nada salvo, `null` = padrão do CSS.
+  //
+  // `painelRecolhido` entra nas deps (porte do #3152): recolher ou abrir o
+  // painel muda o teto da lista. Uma largura esticada com o painel recolhido
+  // seria aplicada crua ao reabrir e roubaria a conversa; re-resolvendo aqui,
+  // quem limita continua sendo o `resolverLarguras`, nunca a chave salva.
   useEffect(() => {
     const medir = () => {
       const atual = faixaDaLargura(window.innerWidth);
@@ -538,7 +555,7 @@ export function InboxLayout({
           ? resolverLarguras({
               ...salvas,
               larguraContainer: gradeRef.current?.getBoundingClientRect().width ?? 0,
-              temFicha: atual.temFicha,
+              temFicha: atual.temFicha && !painelRecolhido,
             })
           : null,
       );
@@ -546,7 +563,7 @@ export function InboxLayout({
     medir();
     window.addEventListener("resize", medir);
     return () => window.removeEventListener("resize", medir);
-  }, [aplicarLarguras]);
+  }, [aplicarLarguras, painelRecolhido]);
 
   /** O que vale AGORA na tela: o ajuste salvo, ou o padrão da faixa. */
   const efetivas: LargurasDoInbox | null = larguras ?? (faixa ? largurasPadrao(faixa) : null);
@@ -574,7 +591,9 @@ export function InboxLayout({
     evento.stopPropagation();
     evento.currentTarget.setPointerCapture?.(evento.pointerId);
     const base = largurasRef.current ?? efetivas;
-    const temFicha = faixa.temFicha;
+    // O mesmo teto da resolução ao montar (porte do #3152): o arraste não
+    // pode discordar da tela.
+    const temFicha = fichaOcupaEspaco;
     const faixaAtual = faixa;
 
     const aoMover = (movimento: PointerEvent) => {
@@ -610,7 +629,7 @@ export function InboxLayout({
     evento.preventDefault();
     const base = { ...(largurasRef.current ?? efetivas), [coluna]: proximo };
     aplicarLarguras(
-      resolverLarguras({ ...base, larguraContainer: larguraDaGrade(), temFicha: faixa.temFicha }),
+      resolverLarguras({ ...base, larguraContainer: larguraDaGrade(), temFicha: fichaOcupaEspaco }),
     );
     gravarLarguras(armazenamentoDoNavegador(), faixa.id, largurasRef.current);
   };
