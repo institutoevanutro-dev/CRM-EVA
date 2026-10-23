@@ -30,3 +30,17 @@ O navegador só fala com `/api/crm` do painel, protegido pela sessão existente.
 4. Com um anúncio de teste cujo `source_id` tenha sido capturado, confirmar o ID da campanha, o contato e a venda vinculada. Verificar também um contato orgânico, um paciente não vinculado, um pagamento estornado e uma conta Meta em outra moeda.
 
 Há logins independentes entre aplicações. Não há envio automático de conversão financeira à Meta por este relatório; a rotina de conversão existente no CRM usa o estado do negócio no próprio CRM e deve ser tratada separadamente para evitar dupla contagem.
+
+## Funil por origem (`/api/v1/integrations/marketing/funil-por-origem`)
+
+Mesma credencial (`x-integracao-token`), organização, limite e janela de 90 dias. Devolve, por origem (`meta`, `google`,
+`indicacao`, `organico`, sempre as quatro), quantos leads, agendamentos, sinais pagos e ganhos houve no período, a receita
+dos ganhos (`receita_cents`, texto de dígitos) e quantos ganhos vieram sem valor. Regras em
+`lib/integrations/marketing/funil-por-origem.ts`; o painel de anúncios calcula custo por agendamento, por sinal e retorno.
+
+- **Origem é do contato:** anúncio da Meta ou do Google (`source_metadata.ad_platform`, primeiro toque); senão "Indicação"
+  como etiqueta ou origem de algum lead do contato; senão orgânico. Google não é capturado hoje (o site não guarda o `gclid`).
+- **Data do evento:** leads por `created_at` (sem a importação marcada `importacao_planilha`); agendamentos pelo
+  `created_at` do primeiro da cadeia de remarcação, sem a agenda importada e sem o lançado por engano; sinais pela entrada
+  numa etapa marcada como sinal pago em Configurações › Conversões; ganhos e receita por `closed_at`.
+- **Limite:** planilha importada com coluna "origem" própria não deixa marca no lead e conta como lead do dia da importação.
