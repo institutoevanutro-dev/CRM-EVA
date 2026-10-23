@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.34.0] — 2026-10-23
+
+### Adicionado
+
+- **O painel de anúncios lê o funil por origem** Rota nova de integração, só de leitura e só com totais: quantos leads, agendamentos, sinais pagos e ganhos (com a receita)
+  vieram de anúncio da Meta, do Google, de indicação e do orgânico num período. Usa a mesma chave do relatório de marketing;
+  nada muda para quem não configurou essa chave.
+
 ## [4.33.2] — 2026-10-23
 
 ### Corrigido
@@ -8105,7 +8113,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.2...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.0...HEAD
+[4.34.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.2...v4.34.0
 [4.33.2]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.1...v4.33.2
 [4.33.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.0...v4.33.1
 [4.33.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.32.1...v4.33.0
