@@ -175,7 +175,7 @@ A janela de 24h da Meta (envio proativo só com template aprovado fora da janela
 **ACs principais.**
 - Recebimento de cada um dos 10 tipos é persistido com `type` correto e payload parseado
 - Outbound de imagem com upload + URL assinada passa por WAHA e chega no cliente em <10s p95
-- Mensagem revogada pelo cliente é marcada `is_revoked=true` na thread, com timestamp original preservado
+- Mensagem revogada é marcada (`revoked_at`) na thread, com o timestamp original preservado; a bolha fica cinza, diz quem apagou (o contato, na recebida; o atendente, na enviada) e não mostra o texto em nenhum dos dois sentidos. Quem apaga pelo **aplicativo do WhatsApp** deixa trilha de auditoria (`message.revoked_in_channel`: o evento, com direção, conversa e `external_id`, nunca o corpo); a reentrega do mesmo evento não duplica a trilha (o ingest só registra a linha que ainda não estava apagada)
 
 ### 3.6 Mídia via Supabase Storage
 

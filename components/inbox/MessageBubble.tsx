@@ -295,6 +295,11 @@ export const MessageBubble = memo(function MessageBubble({
                     : "rounded-br-sm bg-[var(--bolha-enviada-fundo,var(--primary))] text-[var(--bolha-enviada-texto,var(--primary-foreground))]",
               ),
           isFailed && "border border-destructive",
+          // Apagada sai das cores da DIREÇÃO e vai para o CINZA: a diferença
+          // entre o que foi apagado e o que está vivo tem de ser vista de
+          // relance, e o fundo é justamente o que diz de quem é a mensagem —
+          // trocá-lo é o ponto. (Porte do DeskcommCRM #3279.)
+          apagada && "bg-muted/60 text-muted-foreground ring-1 ring-border",
           // A marca da busca é ANEL, não cor de fundo: o fundo já diz de quem é
           // a mensagem, e trocá-lo apagaria essa leitura justo na bolha achada.
           searchMatch && "ring-2 ring-foreground ring-offset-2 ring-offset-background",
@@ -355,8 +360,11 @@ export const MessageBubble = memo(function MessageBubble({
           // Nem corpo nem mídia: o anexo apagado também sai. Em itálico e
           // esmaecido porque não é texto de ninguém — é o CRM narrando o que
           // aconteceu com aquele lugar da conversa.
-          <p className="whitespace-pre-wrap wrap-anywhere italic leading-snug opacity-60">
-            {t("Esta mensagem foi apagada")}
+          // O marcador diz QUEM apagou: a recebida, o contato; a enviada, a
+          // equipe (pelo celular do número). O texto continua fora da tela nos
+          // dois sentidos.
+          <p className="whitespace-pre-wrap wrap-anywhere italic leading-snug opacity-80">
+            {isOutbound ? t("Esta mensagem foi apagada pelo atendente") : t("Esta mensagem foi apagada pelo contato")}
           </p>
         ) : (
           <>
@@ -392,7 +400,8 @@ export const MessageBubble = memo(function MessageBubble({
           className={cn(
             "mt-1 flex items-center justify-end gap-1 text-[10px]",
             // Só o balão da equipe é escuro; o do automático é claro e pede texto escuro.
-            isOutbound && message.sent_via !== "ai"
+            // A apagada é cinza: o carimbo claro da equipe sumiria nela.
+            !apagada && isOutbound && message.sent_via !== "ai"
               ? "text-[var(--bolha-enviada-texto,var(--primary-foreground))]"
               : "text-muted-foreground",
           )}

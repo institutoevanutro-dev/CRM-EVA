@@ -128,6 +128,9 @@ export const AUDIT_ACTIONS = [
   "message.recover_stuck_run",
   // Reenvio de mensagem que falhou, na mesma linha (POST /api/v1/messages/{id}/retry).
   "message.retried",
+  // A revogação chegou pelo CANAL: o autor apagou no aplicativo do WhatsApp.
+  // É a única trilha de quem apaga sem passar por tela nenhuma (DeskcommCRM #3277).
+  "message.revoked_in_channel",
   "contact.blocked",
   // O pedido de descadastro é do cliente e o padrão é irreversível — mas a
   // regra W-02 do catálogo de negócio prevê o override: admin desbloqueia à

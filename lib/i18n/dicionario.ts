@@ -11276,6 +11276,9 @@ export const DICIONARIO: Traducoes = {
   "A credencial desta conexão não pôde ser lida nesta instalação. Reconecte em Conexões — a mensagem sai sozinha quando ela voltar.": {
     es: "La credencial de esta conexión no se pudo leer en esta instalación. Vuelve a conectar en Conexiones: el mensaje sale solo cuando vuelva.",
   },
+  // Portes 23/10, grupo B (PR #3279): a bolha apagada diz quem apagou.
+  "Esta mensagem foi apagada pelo contato": { es: "Este mensaje fue eliminado por el contacto" },
+  "Esta mensagem foi apagada pelo atendente": { es: "Este mensaje fue eliminado por el agente" },
 };
 
 /**
