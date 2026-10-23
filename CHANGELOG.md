@@ -8,6 +8,54 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.35.0] — 2026-10-23
+
+### Adicionado
+
+- **A marcação pede o nome completo de quem só tem o nome do WhatsApp** O prontuário só abre o atendimento com o nome completo no cadastro do paciente, e muitas consultas eram marcadas para quem tinha apenas o nome do perfil do WhatsApp, que costuma ser o primeiro nome ou um apelido. No dia da consulta, o atendimento não abria.
+
+  No "Novo agendamento" da Agenda, quando o paciente escolhido não tem nome completo no cadastro, aparece o campo "Nome completo do paciente", já preenchido com o nome do WhatsApp, para a recepção conferir e completar. Com uma palavra só, o Confirmar não libera. Ao confirmar, o nome vai para o cadastro do paciente, com o registro na auditoria como qualquer edição da ficha, e só depois o agendamento é criado. "Compromisso pessoal, sem cliente" continua igual.
+
+  O que a IA, a API ou o Google marcam não passa por essa tela e continua sendo aceito, para não atrapalhar o atendimento. Esses compromissos aparecem na grade da Agenda com um sinal de atenção ("Falta o nome completo"), e o painel do compromisso mostra o aviso com o campo para completar o nome ali mesmo. Nada a fazer na atualização.
+
+- **Etiquetas de contato interno, para equipe, família e fornecedor não virarem negócio nem receberem a IA** Em Configurações › Etiquetas há um bloco novo, "Etiquetas de contato interno". O contato com uma dessas etiquetas (por exemplo `equipe`, `familia`, `fornecedor`) não vira card no funil, não é atendido pela IA e não recebe as mensagens automáticas dos acompanhamentos. A conversa continua no Inbox, e a equipe responde por lá como sempre, inclusive com resposta aprovada e link de reunião. A lista nasce vazia: até alguém preencher, nada muda. Duas observações: quem já tinha card aberto continua com ele (a etiqueta só impede o próximo), e os acompanhamentos de consulta configurados como "Permitir durante handoff" continuam mandando as mensagens fixas, como fazem hoje para quem está em atendimento humano. As campanhas não olham esta lista. Só gerente ou administrador muda a lista, e cada mudança fica na auditoria.
+
+  Portado do projeto original (DeskcommCRM, PR #2857 de @webtecnica).
+
+### Corrigido
+
+- **A mensagem que o CRM acabou de enviar não pausa mais a IA como se alguém tivesse respondido pelo celular** O WhatsApp devolve ao CRM uma cópia de cada mensagem que sai pelo número. Em dois casos essa cópia deixava de ser reconhecida como nossa e era lida como "uma pessoa respondeu pelo celular": a conversa ficava com "Automático pausado" pelo prazo configurado (5 minutos, por padrão) e ainda tentava nascer no funil como conversa começada pelo celular. O primeiro caso era a cópia que chega de novo depois que o envio já foi dado como enviado, mas sem o código da mensagem gravado. O segundo era a confirmação do envio chegar exatamente enquanto a cópia estava sendo processada. Agora as duas situações são reconhecidas como mensagem do próprio CRM. Mensagem digitada de verdade no aparelho continua pausando a IA, como antes. Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3162 e PR #3208 de @webtecnica).
+
+- **O menu automático de outra empresa não passa mais a conversa para uma pessoa** Quando do outro lado da conversa responde um atendimento automático com menu de opções, como "1 - Agendar consulta ... 4 - Falar com um atendente", a opção "Falar com um atendente" era lida como pedido de uma pessoa: a IA respondia ao robô que ia chamar a equipe, a conversa ia para a Fila e abria uma demanda à toa. Agora a mensagem segue para a IA, que reconhece o menu e responde como sempre. O mesmo vale para a mensagem que se apresenta como assistente virtual ou como mensagem automática, e para a resposta que chega no primeiro minuto depois de uma mensagem nossa que abriu a conversa (por exemplo, uma campanha): nesse caso a IA lê a mensagem e decide se chama alguém. Fora disso, o pedido de uma pessoa continua passando a conversa na hora, e a palavra-chave de passagem que você configurou no agente também. Se o robô do outro lado repetir a mesma mensagem, a proteção contra conversa com robô continua parando a IA, como antes. Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3189 de @webtecnica).
+
+- **O PARAR que vem depois de uma assinatura em negrito passa a bloquear o contato** Quando quem escreve para a clínica é outra empresa com vários atendentes no WhatsApp Business, a mensagem costuma chegar com a assinatura em negrito na primeira linha (por exemplo, `*Amanda:*`) e o texto na segunda. Se o texto era `PARAR`, o pedido não era reconhecido: o contato não era bloqueado e a IA continuava respondendo. Agora a primeira linha em negrito terminada em dois pontos é tratada como assinatura e o resto da mensagem é conferido pela mesma regra de sempre; a mensagem inteira também continua sendo conferida. As frases de paciente que não são pedido de parar (como "tem como parar a dor?") continuam sem bloquear ninguém, com ou sem assinatura. Limite conhecido: um rótulo em negrito com dois pontos seguido de uma palavra de saída (`*Remédio:*` e depois `parar?`) é lido como assinatura e bloqueia, porque não dá para distinguir de um nome. Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3158 de @webtecnica).
+
+- **Quem pede para parar de receber mensagens tem as demandas abertas encerradas** Quando o contato pedia para parar de receber mensagens, o CRM já bloqueava o contato e levava o negócio aberto para perdido com o motivo "Pediu para não receber mensagens". As demandas abertas dele, porém, continuavam abertas e seguiam aparecendo como pendência, convidando a equipe a retomar um atendimento que já tinha acabado. Agora o mesmo pedido também encerra as demandas abertas desse contato, com o desfecho "encerrada pelo cliente", pelo mesmo caminho do botão de encerrar da tela. Demandas já encerradas não são tocadas, e o encerramento fica registrado na auditoria como feito pelo sistema. Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3309 de @webtecnica).
+
+- **A conversa passada para a equipe não é mais registrada como opt-out nem como pedido do cliente** O aviso de resposta não enviada já dizia "a conversa está com a equipe" em vez de opt-out desde a versão de 11/10. Faltavam dois lugares. O primeiro era o link de reunião do Google Meet: quando a conversa estava com a equipe (inclusive para contatos marcados como "Sempre atendimento humano"), a entrega era registrada como barrada por uma "trava de segurança" genérica; agora fica registrada como barrada porque a conversa está com a equipe. O segundo era o motivo da passagem: quando a própria IA decidia passar a conversa para uma pessoa sem dizer por quê (faltou informação, ou a regra do prompt mandava), o motivo era gravado como "o cliente pediu uma pessoa", e era isso que aparecia no aviso da Central. Agora fica gravado como "a IA não resolveu sozinha", e o pedido do cliente continua aparecendo como pedido quando ele de fato pediu. O mesmo vale para agentes externos ligados pelo MCP. A IA continua parada nessas conversas exatamente como antes, até alguém usar "Devolver ao automático". Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3318 de @webtecnica), partes 1 e 2. No CRM da clínica a distinção da conversa com a equipe já existia com outro código (`conversa_com_humano`).
+
+- **A IA não diz mais que a equipe foi acionada quando o pedido só foi anotado num caso já aberto** Quando o cliente fazia um pedido novo numa conversa que já tinha um caso do mesmo assunto esperando a equipe, o pedido era anotado nesse caso, sem avisar ninguém. Mesmo assim, se havia alguém da equipe disponível, a IA era autorizada a dizer que alguém continuaria o atendimento em seguida. Quando a equipe já tinha resolvido o assunto direto na conversa sem fechar o caso, ninguém voltava a olhar para ele, e o cliente ficava esperando por quem nunca foi chamado. Agora, nesse caminho, a IA é instruída a não dizer que a equipe foi acionada ou avisada e a não prometer prazo: ela diz que anotou o pedido. O pedido continua anotado no caso aberto, e o primeiro pedido de cada assunto continua abrindo o caso como antes. Para não perder esses pedidos, vale fechar na tela de casos o caso que a equipe já resolveu. Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3173 de @webtecnica), adaptado ao caso por assunto do CRM da clínica.
+
+- **Transferir a conversa leva junto o negócio aberto do contato, e assumir dá dono ao negócio sem responsável** Ao transferir uma conversa no Inbox para outra pessoa, só o responsável da conversa mudava: o negócio aberto daquele contato no funil continuava com o responsável antigo, ou sem nenhum, e quem recebeu o atendimento não achava o card no filtro "Responsável". Agora a transferência também passa o negócio aberto do contato para a nova pessoa, como se a troca fosse feita na tela do negócio. Se o contato tem mais de um negócio aberto, nenhum é alterado (escolher entre eles fica com a equipe); sem negócio aberto, nenhum card é criado; e se o card já era de quem passou a atender, nada é regravado. Assumir a conversa (inclusive por "Iniciar conversa" e "Continuar por outro número") só dá dono a um negócio aberto que ainda não tem responsável: nunca tira o card de um colega nem de um agente de IA. A regra de visibilidade do funil continua valendo: na visibilidade padrão (cada atendente vê os seus e os sem responsável), quando uma atendente transfere para outra, o negócio não vai junto, porque pela tela do funil ela também não poderia passá-lo; vai junto quando quem transfere é gerente ou administrador, ou quando todos veem tudo. Quando o negócio muda de responsável por aqui, sai o mesmo aviso e o mesmo evento de "negócio atribuído" da troca pela tela, inclusive para webhooks e automações que escutam esse evento. Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3216 de @webtecnica).
+
+- **A mensagem que chega fora do horário do agente não conta duas vezes no roteamento** Quando a mensagem do paciente chegava fora do horário de funcionamento do agente (por exemplo, 19h para um agente que atende das 8h às 18h), a resposta era adiada para a abertura, mas o roteador já tinha escolhido o agente e gravado essa decisão. Na abertura, o roteador escolhia de novo e a mesma mensagem aparecia duas vezes nos números de roteamento da tela de evolução da IA. Agora a decisão da primeira vez é reaproveitada: uma mensagem, uma decisão. A resposta ao paciente não muda. Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3215 de @webtecnica).
+
 ## [4.34.2] — 2026-10-23
 
 ### Corrigido
@@ -8136,7 +8184,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.2...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.35.0...HEAD
+[4.35.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.2...v4.35.0
 [4.34.2]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.1...v4.34.2
 [4.34.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.0...v4.34.1
 [4.34.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.2...v4.34.0
