@@ -13,6 +13,10 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/api/v1/integrations/marketing/financeiro-totais")).toBe(true);
     expect(isPublicPath("/api/v1/integrations/marketing/financeiro-totais/extra")).toBe(false);
   });
+  it("o funil por origem do painel também atravessa o proxy (a credencial é conferida na rota), sem sub-path", () => {
+    expect(isPublicPath("/api/v1/integrations/marketing/funil-por-origem")).toBe(true);
+    expect(isPublicPath("/api/v1/integrations/marketing/funil-por-origem/extra")).toBe(false);
+  });
   it("as rotas que o financeiro chama por Bearer atravessam o proxy, sem sub-path de carona", () => {
     expect(isPublicPath("/api/v1/integrations/financeiro/contacts/11111111-1111-4111-8111-111111111111")).toBe(true);
     expect(isPublicPath("/api/v1/integrations/financeiro")).toBe(false);
