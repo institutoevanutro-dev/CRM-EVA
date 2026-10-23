@@ -202,6 +202,7 @@ import {
   REPETICAO_PADRAO,
   repetiuNaConversa,
   type RepeticaoKnobs,
+  ultimaEntradaDoCliente,
 } from '../guardrails/repeticao-na-conversa';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 import { resolveActiveLeadForContact, type LeadCandidate } from '@/lib/leads/active-lead';
@@ -3751,6 +3752,7 @@ async function executarTurnoDoAgente(
             candidata: body,
             jobId: liveJob().id,
             nomeDoContato: effectiveContext.contact.name,
+            ultimaEntrada: ultimaEntradaDoCliente(effectiveContext.messages),
             agora: clock(),
             knobs: deps.knobs.repeticao ?? REPETICAO_PADRAO,
             log: runLog,
