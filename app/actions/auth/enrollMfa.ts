@@ -30,7 +30,8 @@ export async function enrollMfa(): Promise<EnrollMfaResult> {
   const { data: existing, error: listErr } = await supabase.auth.mfa.listFactors();
   // Sem a lista não dá para saber se a conta já tem fator: recusa em vez de
   // tratar como primeiro cadastro.
-  if (listErr) return { ok: false, error: "enroll_failed", message: listErr.message };
+  // Sem `message`: o texto do provedor vem em inglês, e a tela tem a frase dela.
+  if (listErr) return { ok: false, error: "enroll_failed" };
 
   // Quem JÁ tem fator verificado só cadastra outro depois de provar o atual
   // nesta sessão (`aal2` exato). Um fator novo confirmado sobe a sessão para

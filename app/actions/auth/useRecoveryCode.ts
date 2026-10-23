@@ -8,7 +8,9 @@ import { z } from "zod";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit, isServiceRoleConfigured } from "@/lib/audit";
+import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
 import { hashRecoveryCode, normalizeRecoveryCode } from "@/lib/auth/recovery-codes";
+import { logger } from "@/lib/logger";
 
 export type UseRecoveryCodeResult =
   | { ok: false; error: "invalid_or_used" }
@@ -26,7 +28,12 @@ const inputSchema = z.object({
  *
  * Security:
  *  - 200ms artificial delay on miss (timing leak protection).
- *  - hashRecoveryCode: the same bytea literal the actions write (see the helper).
+ *  - Rate limit por IP e por conta (`AUTH_LIMITS.recovery_code`) antes de
+ *    listar usuários: a porta é pública, e um acerto apaga o autenticador.
+ *  - hashRecoveryCode: the same bytea literal the actions write (see the helper),
+ *    bound to the user id.
+ *  - A queima é condicional (`used_at is null`) e exige UMA linha: dois pedidos
+ *    simultâneos com o mesmo código não entram os dois.
  *  - Audit emits with masked code (`AB****YZ`).
  */
 export async function useRecoveryCode(
@@ -48,14 +55,19 @@ export async function useRecoveryCode(
   }
 
   if (!isServiceRoleConfigured()) {
-    console.warn(
-      "[useRecoveryCode] SUPABASE_SERVICE_ROLE_KEY not configured — recovery flow unavailable",
-    );
+    logger.warn("[useRecoveryCode] SUPABASE_SERVICE_ROLE_KEY not configured: recovery flow unavailable");
     return { ok: false, error: "service_unavailable" };
   }
 
   const admin = createAdminClient();
   const { email, code } = parsed.data;
+
+  // Barrado responde igual a código errado: dizer "muitas tentativas" só para
+  // quem tem conta revelaria quais e-mails existem.
+  if (await authRateLimited("recovery_code", email, AUTH_LIMITS.recovery_code)) {
+    await delay(200);
+    return { ok: false, error: "invalid_or_used" };
+  }
 
   // 1) Resolve user by email via admin API. Generic error if missing.
   const { data: list, error: listErr } = await admin.auth.admin.listUsers({
@@ -73,7 +85,7 @@ export async function useRecoveryCode(
   }
 
   // 2) Find an unused recovery code matching the hash.
-  const codeHash = hashRecoveryCode(code);
+  const codeHash = hashRecoveryCode(targetUser.id, code);
   const { data: row, error: rowErr } = await admin
     .from("user_recovery_codes")
     .select("id, used_at")
@@ -88,12 +100,17 @@ export async function useRecoveryCode(
     return { ok: false, error: "invalid_or_used" };
   }
 
-  // 3) Burn it.
-  const { error: updErr } = await admin
+  // 3) Burn it, só se ninguém queimou antes (dois pedidos com o mesmo código
+  // leem a linha livre ao mesmo tempo; só um pode passar daqui).
+  const { data: queimadas, error: updErr } = await admin
     .from("user_recovery_codes")
     .update({ used_at: new Date().toISOString(), used_ip: ip })
-    .eq("id", row.id);
-  if (updErr) {
+    .eq("id", row.id)
+    .eq("user_id", targetUser.id)
+    .is("used_at", null)
+    .select("id");
+  if (updErr || (queimadas?.length ?? 0) !== 1) {
+    await delay(200);
     return { ok: false, error: "invalid_or_used" };
   }
 
@@ -106,7 +123,9 @@ export async function useRecoveryCode(
       await admin.auth.admin.mfa.deleteFactor({ userId: targetUser.id, id: f.id });
     }
   } catch (err) {
-    console.error("[useRecoveryCode] failed to delete factors", err);
+    logger.error("[useRecoveryCode] failed to delete factors", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     // Non-fatal: user still gets a recovery_used redirect; on next login the
     // residual factor would block them, but seeded user has no factor anyway.
   }

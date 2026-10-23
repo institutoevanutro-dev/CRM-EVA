@@ -79,8 +79,13 @@ async function postgrest(entrada: RequestInfo | URL, init?: RequestInit): Promis
     }
     if (metodo === "PATCH") {
       const mudanca = JSON.parse(String(init?.body)) as { used_at: string };
-      for (const l of banco.linhas.filter(casa)) l.used_at = mudanca.used_at;
-      return new Response(null, { status: 204 });
+      const tocadas = banco.linhas.filter(casa);
+      for (const l of tocadas) l.used_at = mudanca.used_at;
+      // `.update().select("id")` pede a representação: devolve as linhas que o filtro alcançou.
+      return new Response(JSON.stringify(tocadas.map((l) => ({ id: l.id }))), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     }
     const achadas = banco.linhas.filter(casa).map((l) => ({ id: l.id, used_at: l.used_at }));
     return new Response(JSON.stringify(achadas), { status: 200, headers: { "content-type": "application/json" } });
@@ -98,13 +103,22 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => ({ get: () => null })) }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined), isServiceRoleConfigured: () => true }));
 vi.mock("@/lib/auth/server", () => ({ sessionAal: async () => "aal2" }));
+const limite = vi.hoisted(() => ({ barrado: false, chamadas: [] as Array<string | null> }));
+vi.mock("@/lib/auth/rate-limit", () => ({
+  AUTH_LIMITS: { recovery_code: { ip: 20, id: 5, windowSec: 900 } },
+  authRateLimited: vi.fn(async (_acao: string, id: string | null) => {
+    limite.chamadas.push(id);
+    return limite.barrado;
+  }),
+}));
+const listUsers = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (t: string) => cliente.from(t),
     auth: {
       admin: {
-        listUsers: async () => ({ data: { users: [{ id: "eu", email: "eu@exemplo.com" }] }, error: null }),
+        listUsers,
         mfa: { listFactors: async () => ({ data: { factors: [] }, error: null }), deleteFactor: async () => ({ error: null }) },
       },
     },
@@ -113,8 +127,9 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 import { regenerateRecoveryCodes } from "@/app/actions/settings/regenerateRecoveryCodes";
 import { useRecoveryCode as consumirCodigo } from "@/app/actions/auth/useRecoveryCode";
+import { hashRecoveryCode } from "@/lib/auth/recovery-codes";
 
-const usar = (code: string) => consumirCodigo({ email: "eu@exemplo.com", code });
+const usar = (code: string, email = "eu@exemplo.com") => consumirCodigo({ email, code });
 const entrou = () => vi.mocked(redirect).mock.calls.some(([u]) => String(u).startsWith("/login?recovery_used=1"));
 
 async function emitir(): Promise<string[]> {
@@ -126,6 +141,18 @@ async function emitir(): Promise<string[]> {
 beforeEach(() => {
   vi.stubEnv("INTERNAL_SECRET", "segredo-da-instalacao");
   banco.linhas = [];
+  limite.barrado = false;
+  limite.chamadas = [];
+  listUsers.mockReset();
+  listUsers.mockResolvedValue({
+    data: {
+      users: [
+        { id: "eu", email: "eu@exemplo.com" },
+        { id: "colega", email: "colega@exemplo.com" },
+      ],
+    },
+    error: null,
+  });
   vi.mocked(redirect).mockClear();
   vi.mocked(createClient).mockResolvedValue({
     auth: {
@@ -169,13 +196,56 @@ describe("código de recuperação: gerar e usar", () => {
     ["o texto JSON do Buffer (o que a versão anterior gravava)", (c: string) => Buffer.from(JSON.stringify(createHash("sha256").update(c).digest()), "utf8")],
     ["o sha256 cru do código", (c: string) => createHash("sha256").update(c).digest()],
     ["o sha256 com o prefixo, sem o segredo", (c: string) => createHash("sha256").update(`recovery-code:v2:${c}`).digest()],
-    ["o HMAC com outro segredo", (c: string) => createHmac("sha256", "outro-segredo").update(`recovery-code:v2:${c}`).digest()],
+    ["o HMAC com outro segredo", (c: string) => createHmac("sha256", "outro-segredo").update(`recovery-code:v2:eu:${c}`).digest()],
+    // A forma do original (#3339): o HMAC sem o id da pessoa. No fork ela não
+    // vale, porque é a que se deixaria copiar de uma conta para outra.
+    ["o HMAC sem o id da pessoa", (c: string) => createHmac("sha256", "segredo-da-instalacao").update(`recovery-code:v2:${c}`).digest()],
   ])("código gravado na forma antiga — %s — continua recusado", async (_nome, formaAntiga) => {
     const codigo = "KQ7MXP3T";
     banco.linhas.push({ id: "antiga", user_id: "eu", code_hash: formaAntiga(codigo), used_at: null });
     expect(await usar(codigo)).toEqual({ ok: false, error: "invalid_or_used" });
     expect(entrou()).toBe(false);
     expect(banco.linhas[0]!.used_at).toBeNull();
+  });
+
+  // O ataque que o id no HMAC fecha: a policy `recovery_codes_self` deixa a
+  // sessão de quem tem a SENHA da colega gravar linhas para ela. Quem copia
+  // para a conta dela o hash de um código da PRÓPRIA conta (que ele conhece em
+  // claro) não consegue entrar com esse código na conta dela.
+  it("o hash de um código de outra conta, copiado para esta, não vale", async () => {
+    const meus = await emitir();
+    const copiado = banco.linhas[0]!.code_hash;
+    banco.linhas.push({ id: "copiada", user_id: "colega", code_hash: copiado, used_at: null });
+
+    expect(await usar(meus[0]!, "colega@exemplo.com")).toEqual({ ok: false, error: "invalid_or_used" });
+    expect(entrou()).toBe(false);
+    expect(banco.linhas.find((l) => l.id === "copiada")!.used_at).toBeNull();
+    // E o mesmo código continua valendo na conta que o emitiu.
+    expect(await usar(meus[0]!)).toBeUndefined();
+    expect(entrou()).toBe(true);
+  });
+
+  it("o hash leva o id da pessoa: o mesmo código dá valores diferentes em contas diferentes", () => {
+    expect(hashRecoveryCode("eu", "KQ7MXP3T")).not.toBe(hashRecoveryCode("colega", "KQ7MXP3T"));
+    expect(hashRecoveryCode("eu", "kq7m-xp3t")).toBe(hashRecoveryCode("eu", "KQ7MXP3T"));
+  });
+
+  it("dois pedidos ao mesmo tempo com o mesmo código: só um entra", async () => {
+    const codigos = await emitir();
+    const resultados = await Promise.all([usar(codigos[5]!), usar(codigos[5]!)]);
+    expect(resultados.filter((r) => r === undefined)).toHaveLength(1);
+    expect(resultados.filter((r) => r !== undefined)).toEqual([{ ok: false, error: "invalid_or_used" }]);
+    expect(vi.mocked(redirect).mock.calls.filter(([u]) => String(u).startsWith("/login?recovery_used=1"))).toHaveLength(1);
+  });
+
+  it("barrado pelo limite de tentativas, recusa igual a código errado e nem lista as contas", async () => {
+    const codigos = await emitir();
+    limite.barrado = true;
+    expect(await usar(codigos[0]!)).toEqual({ ok: false, error: "invalid_or_used" });
+    expect(entrou()).toBe(false);
+    expect(listUsers).not.toHaveBeenCalled();
+    expect(limite.chamadas).toEqual(["eu@exemplo.com"]);
+    expect(banco.linhas.every((l) => l.used_at === null)).toBe(true);
   });
 
   it("sem o segredo da instalação, regenerar recusa sem gravar nada", async () => {

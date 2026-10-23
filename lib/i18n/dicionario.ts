@@ -11400,6 +11400,14 @@ export const DICIONARIO: Traducoes = {
   // Portes 23/10, grupo D (PR #3197): CPF ou e-mail repetido responde 409 contact_exists.
   "Já existe um contato com este CPF.": { es: "Ya existe un contacto con este CPF." },
   "Já existe um contato com este e-mail.": { es: "Ya existe un contacto con este correo electrónico." },
+  // Portes 23/10, grupo F (PR #3339): gerar códigos de recuperação sem mostrar o código cru do erro.
+  "Gerar códigos de recuperação não está disponível nesta instalação.": {
+    es: "Generar códigos de recuperación no está disponible en esta instalación.",
+  },
+  "Ative a verificação em duas etapas antes de gerar os códigos.": {
+    es: "Active la verificación en dos pasos antes de generar los códigos.",
+  },
+  "Não foi possível gerar os códigos. Tente de novo.": { es: "No se pudieron generar los códigos. Intente de nuevo." },
   // Portes 23/10, grupo D (PR #2834): o e-mail da automação para uma pessoa da equipe.
   "E-mail de uma pessoa da equipe": { es: "Correo de una persona del equipo" },
   "Pessoa da equipe": { es: "Persona del equipo" },

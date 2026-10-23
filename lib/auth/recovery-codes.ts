@@ -49,10 +49,22 @@ export function normalizeRecoveryCode(input: string): string {
  * antigos precisam ser gerados de novo). Trocar o `INTERNAL_SECRET` invalida os
  * códigos emitidos. Sem o segredo, lança: melhor recusar o fluxo que gravar um
  * valor que qualquer um calcula.
+ *
+ * O id da pessoa entra no HMAC (diferença deliberada do original #3339). No
+ * fork a migration que tira de `authenticated` a escrita em
+ * `user_recovery_codes` (a 0755 do original) ainda não entrou, e a policy
+ * `recovery_codes_self` deixa cada sessão gravar linhas para si mesma. Sem o id
+ * no HMAC, quem tem conta na instalação lia os hashes dos PRÓPRIOS códigos e,
+ * com a senha de outra pessoa, gravava um deles na conta dela: o código em
+ * claro, que ele conhece, apagava o autenticador dela. Com o id, o hash de uma
+ * conta não vale em nenhuma outra, e forjar um exige o segredo.
  */
-export function hashRecoveryCode(code: string): string {
+export function hashRecoveryCode(userId: string, code: string): string {
   const segredo = process.env.INTERNAL_SECRET?.trim();
   if (!segredo) throw new Error("INTERNAL_SECRET ausente: códigos de recuperação indisponíveis");
-  const mac = createHmac("sha256", segredo).update(`recovery-code:v2:${normalizeRecoveryCode(code)}`).digest("hex");
+  if (!userId) throw new Error("hashRecoveryCode: id da pessoa ausente");
+  const mac = createHmac("sha256", segredo)
+    .update(`recovery-code:v2:${userId}:${normalizeRecoveryCode(code)}`)
+    .digest("hex");
   return `\\x${mac}`;
 }

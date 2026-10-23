@@ -47,7 +47,8 @@ export async function confirmMfaEnroll(
   const { data: fatores, error: listErr } = await supabase.auth.mfa.listFactors();
   // Sem a lista não dá para saber se a conta já tem fator: recusa em vez de
   // tratar como primeiro cadastro.
-  if (listErr) return { ok: false, error: "challenge_failed", message: listErr.message };
+  // Sem `message`: o texto do provedor vem em inglês, e a tela tem a frase dela.
+  if (listErr) return { ok: false, error: "challenge_failed" };
   const temFatorVerificado = fatores?.all?.some(
     (f) => f.factor_type === "totp" && f.status === "verified",
   );
@@ -62,7 +63,7 @@ export async function confirmMfaEnroll(
   // Gerados antes do desafio pelo mesmo motivo: se o hash não puder ser feito
   // (sem o INTERNAL_SECRET), a falha vem antes de o fator ficar ativo.
   const codes = generateRecoveryCodes();
-  const rows = codes.map((c) => ({ user_id: user.id, code_hash: hashRecoveryCode(c) }));
+  const rows = codes.map((c) => ({ user_id: user.id, code_hash: hashRecoveryCode(user.id, c) }));
 
   const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({
     factorId,

@@ -44,7 +44,7 @@ export async function regenerateRecoveryCodes(): Promise<RegenerateRecoveryCodes
 
   // O hash lança sem o INTERNAL_SECRET: antes de apagar os códigos atuais.
   const codes = generateRecoveryCodes();
-  const rows = codes.map((c) => ({ user_id: user.id, code_hash: hashRecoveryCode(c) }));
+  const rows = codes.map((c) => ({ user_id: user.id, code_hash: hashRecoveryCode(user.id, c) }));
 
   const admin = createAdminClient();
   const { error: delErr } = await admin.from("user_recovery_codes").delete().eq("user_id", user.id);

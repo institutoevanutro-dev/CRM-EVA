@@ -64,4 +64,14 @@ describe("Configurações › Segurança: regenerar sem o código desta sessão"
     await waitFor(() => expect(toastErro).toHaveBeenCalledTimes(1));
     expect(navegar).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["service_unavailable", "Gerar códigos de recuperação não está disponível nesta instalação."],
+    ["mfa_not_enrolled", "Ative a verificação em duas etapas antes de gerar os códigos."],
+    ['duplicate key value violates unique constraint "idx_recovery_unique"', "Não foi possível gerar os códigos. Tente de novo."],
+  ])("o erro %s vira frase, nunca o código cru", async (erro, frase) => {
+    regenerar.mockResolvedValue({ ok: false, error: erro });
+    await regenerarNaTela();
+    await waitFor(() => expect(toastErro).toHaveBeenCalledWith(frase));
+  });
 });
