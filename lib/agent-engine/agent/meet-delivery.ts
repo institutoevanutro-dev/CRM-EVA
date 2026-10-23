@@ -125,14 +125,7 @@ export function createMeetDeliveryHandler(deps: {
           },
         });
         if (result.status === "vetoed") {
-          const reason =
-            result.code === "contato_bloqueado"
-              ? "opt_out"
-              : result.code.startsWith("lgpd_")
-                ? "lgpd"
-                : result.code === "messaging_window_closed"
-                  ? "limits"
-                  : "guardrail";
+          const reason = motivoDoBloqueioDaEntrega(result.code);
           await settle(result.nextAllowedAt ? "queued" : `blocked:${reason}`, result.nextAllowedAt);
           return;
         }
@@ -163,6 +156,21 @@ export function createMeetDeliveryHandler(deps: {
       );
     }
   };
+}
+
+/**
+ * O código do veto do `runBeforeSend` no vocabulário de `fn_meet_delivery_settle`
+ * (`blocked:<motivo>`). A lista do banco é FECHADA: motivo fora dela lança
+ * `meet_reason_invalid`, o settle cai no `retry` e a entrega termina `failed`.
+ */
+export function motivoDoBloqueioDaEntrega(code: string): string {
+  if (code === "contato_bloqueado") return "opt_out";
+  // A conversa está com a equipe (`force_human` sem bloqueio): não é opt-out, e
+  // `force_human` é o nome exato, já na lista do banco (DeskcommCRM #3310).
+  if (code === "conversa_com_humano") return "force_human";
+  if (code.startsWith("lgpd_")) return "lgpd";
+  if (code === "messaging_window_closed") return "limits";
+  return "guardrail";
 }
 
 export function meetingDeliveryBody(

@@ -8,6 +8,9 @@
  *
  * Portado do projeto original (DeskcommCRM, PR #3068 de @vitor-licassali),
  * adaptado: este fork não tem o briefing nem o registro da passagem.
+ *
+ * Desde o DeskcommCRM #3310 (PR #3318), AUSENTE grava `low_confidence`: a
+ * passagem que o próprio modelo decidiu não é registrada como pedido do cliente.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
@@ -44,7 +47,7 @@ describe("o motivo da passagem acionada pela ferramenta", () => {
   });
 
   it.each([
-    { payload: {}, gravado: "requested_human" },
+    { payload: {}, gravado: "low_confidence" },
     { payload: { reason: "Texto do chamador antigo" }, gravado: "Texto do chamador antigo" },
     { payload: { motivo_codigo: "requested_human" }, gravado: "requested_human" },
     { payload: { motivo_codigo: "critical_stage" }, gravado: "critical_stage" },
@@ -73,6 +76,7 @@ describe("o motivo da passagem acionada pela ferramenta", () => {
     expect(descricao).toContain("requested_human");
     expect(descricao).toContain("critical_stage");
     expect(descricao).toContain("Não use critical_stage só porque o cliente mencionou agendamento");
+    expect(descricao).toContain("low_confidence");
     expect(Object.keys(forma).sort()).toEqual(Object.keys(requestHumanHandoffInputSchema.shape).sort());
   });
 });

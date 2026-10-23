@@ -360,7 +360,9 @@ export const AGENT_TOOL_DEFS = {
             'código do motivo: requested_human quando o cliente pede uma pessoa; critical_stage ' +
               'quando uma etapa exige finalização humana (ex.: concluir um agendamento já coletado). ' +
               'Não use critical_stage só porque o cliente mencionou agendamento. ' +
-              'Sem este campo, mantém requested_human. Não altera as condições para encaminhar.',
+              'Sem este campo, a passagem fica registrada como low_confidence (você não resolveu ' +
+              'sozinho); quando o cliente pedir uma pessoa, informe requested_human. ' +
+              'Não altera as condições para encaminhar.',
           ),
         reason: z.string().optional().describe('por que passar ao humano (curto)'),
       })

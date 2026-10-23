@@ -475,8 +475,8 @@ export const requestHumanHandoffInputSchema = z.strictObject({
 
 const PAYLOAD_TEACHING =
   'Campos aceitos: motivo_codigo (requested_human para pedido de uma pessoa; critical_stage para ' +
-  'uma etapa do atendimento que exige finalização humana) e reason (por que passar ao humano), ' +
-  'ambos opcionais, nada além. Lead, organização e conversa vêm do runtime, nunca do payload da tool.';
+  'uma etapa do atendimento que exige finalização humana; sem ele, a passagem fica como ' +
+  'low_confidence) e reason (por que passar ao humano), ambos opcionais, nada além. Lead, organização e conversa vêm do runtime, nunca do payload da tool.';
 
 export type RequestHumanHandoffResult =
   | { ok: true; status: 'handoff_solicitado'; message: string }
@@ -507,11 +507,17 @@ export async function applyRequestHumanHandoff(
     return { ok: false, error: { code: 'invalid_payload', message: `payload inválido em request_human_handoff (${zodIssuesSummary(parsed.error)}). ${PAYLOAD_TEACHING}` } };
   }
 
-  // Ausente = comportamento legado (`requested_human`). O código só classifica
-  // a passagem quando a IA não escreveu o motivo: não escolhe destino nem muda
-  // as condições do handoff. Portado do projeto original (DeskcommCRM, PR #3068
-  // de @vitor-licassali), sem o briefing da passagem, que este fork não tem.
-  const motivoCodigo = parsed.data.motivo_codigo ?? 'requested_human';
+  // O código só classifica a passagem quando a IA não escreveu o motivo: não
+  // escolhe destino nem muda as condições do handoff. Portado do projeto original
+  // (DeskcommCRM, PR #3068 de @vitor-licassali), sem o briefing da passagem, que
+  // este fork não tem.
+  //
+  // ⚠️ AUSENTE NÃO É "O CLIENTE PEDIU" (DeskcommCRM #3310). Era `?? 'requested_human'`,
+  // e a passagem que o próprio modelo decidiu (faltou informação, regra do prompt)
+  // ficava gravada em `last_handoff_reason` e no aviso da Central como pedido do
+  // cliente. `low_confidence` diz o que houve sem afirmar nada sobre o cliente;
+  // quem de fato pediu uma pessoa vem com `motivo_codigo: 'requested_human'`.
+  const motivoCodigo = parsed.data.motivo_codigo ?? 'low_confidence';
   await performHumanHandoff(db, ids, {
     reason: parsed.data.reason ?? motivoCodigo,
     conversationSummary: opts.conversationSummary,
